@@ -1,14 +1,25 @@
 import { handleChat } from "./handler";
 import { MockLLMProvider } from "./mock-provider";
+import { createRateLimiter } from "./rate-limiter";
+
+interface Env {
+	RATE_LIMIT_KV: KVNamespace;
+}
 
 const provider = new MockLLMProvider();
 
 export default {
-	async fetch(request: Request): Promise<Response> {
+	async fetch(request: Request, env: Env): Promise<Response> {
 		const url = new URL(request.url);
 		if (url.pathname === "/chat") {
-			return handleChat(request, provider);
+			const rateLimiter = createRateLimiter({
+				kv: env.RATE_LIMIT_KV,
+				// In production, set this to the daily spend cap.
+				// Use a large number for the smoke/dev worker so all calls succeed.
+				dailyCapLimit: 10_000,
+			});
+			return handleChat(request, { provider, rateLimiter });
 		}
 		return new Response("ok");
 	},
-} satisfies ExportedHandler;
+} satisfies ExportedHandler<Env>;

@@ -36,11 +36,17 @@ async function streamResponse(
 		body: JSON.stringify({ message }),
 	});
 
-	if (!response.ok || !response.body) return;
+	if (!response.body) return;
+
+	// HTTP 429 means a rate or daily-cap limit was hit.
+	// The body is still a valid SSE stream with a `cap-hit` event containing
+	// the in-character "AIs are sleeping" message — render it as-is.
+	const isCapHit = response.status === 429;
 
 	const reader = response.body.getReader();
 	const decoder = new TextDecoder();
 	let buffer = "";
+	let currentEvent = "";
 
 	while (true) {
 		const { done, value } = await reader.read();
@@ -53,10 +59,21 @@ async function streamResponse(
 		buffer = parts.pop() ?? "";
 
 		for (const part of parts) {
+			currentEvent = "";
 			for (const line of part.split("\n")) {
-				if (line.startsWith("data: ")) {
+				if (line.startsWith("event: ")) {
+					currentEvent = line.slice("event: ".length).trim();
+				} else if (line.startsWith("data: ")) {
 					const token = line.slice("data: ".length);
 					if (token === "[DONE]") return;
+
+					if (currentEvent === "cap-hit" || isCapHit) {
+						// Render the in-character sleeping message with a distinct style
+						output.textContent = token;
+						output.setAttribute("data-cap-hit", "true");
+						return;
+					}
+
 					output.textContent = (output.textContent ?? "") + token;
 				}
 			}
