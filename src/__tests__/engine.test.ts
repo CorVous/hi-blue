@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	addChatLockout,
 	advancePhase,
 	advanceRound,
 	appendActionLog,
@@ -9,6 +10,10 @@ import {
 	deductBudget,
 	getActivePhase,
 	isAiLockedOut,
+	isChatLocked,
+	isPhaseComplete,
+	processPlayerMessage,
+	removeChatLockout,
 	startPhase,
 } from "../engine";
 import type { ActionLogEntry, AiPersona, PhaseConfig } from "../types";
@@ -231,5 +236,94 @@ describe("advancePhase", () => {
 		});
 		const final = advancePhase(game);
 		expect(final.isComplete).toBe(true);
+	});
+});
+
+describe("chat lockouts", () => {
+	it("reports chat as not locked by default", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		expect(isChatLocked(game, "red")).toBe(false);
+	});
+
+	it("locks chat for a specific AI", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = addChatLockout(game, "red");
+		expect(isChatLocked(game, "red")).toBe(true);
+		expect(isChatLocked(game, "green")).toBe(false);
+	});
+
+	it("unlocks chat for a specific AI", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = addChatLockout(game, "red");
+		game = removeChatLockout(game, "red");
+		expect(isChatLocked(game, "red")).toBe(false);
+	});
+});
+
+describe("isPhaseComplete", () => {
+	it("returns false when AIs still have budget", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		expect(isPhaseComplete(game)).toBe(false);
+	});
+
+	it("returns true when all AIs are locked out", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), {
+			...TEST_PHASE_CONFIG,
+			budgetPerAi: 1,
+		});
+		game = deductBudget(game, "red");
+		game = deductBudget(game, "green");
+		game = deductBudget(game, "blue");
+		expect(isPhaseComplete(game)).toBe(true);
+	});
+
+	it("returns false when only some AIs are locked out", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), {
+			...TEST_PHASE_CONFIG,
+			budgetPerAi: 1,
+		});
+		game = deductBudget(game, "red");
+		game = deductBudget(game, "green");
+		expect(isPhaseComplete(game)).toBe(false);
+	});
+});
+
+describe("processPlayerMessage", () => {
+	it("appends the player message to the target AI's chat history", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const updated = processPlayerMessage(game, "red", "Hello Ember");
+		expect(getActivePhase(updated).chatHistories.red).toHaveLength(1);
+		expect(getActivePhase(updated).chatHistories.red[0]).toEqual({
+			role: "player",
+			content: "Hello Ember",
+		});
+	});
+
+	it("does not append to other AIs' chat histories", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const updated = processPlayerMessage(game, "red", "Hello Ember");
+		expect(getActivePhase(updated).chatHistories.green).toHaveLength(0);
+		expect(getActivePhase(updated).chatHistories.blue).toHaveLength(0);
+	});
+
+	it("advances the round counter", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const updated = processPlayerMessage(game, "red", "Hello");
+		expect(getActivePhase(updated).round).toBe(1);
+	});
+
+	it("rejects messages to chat-locked AIs", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = addChatLockout(game, "red");
+		expect(() => processPlayerMessage(game, "red", "Hello")).toThrow(/locked/i);
+	});
+
+	it("rejects messages to budget-locked-out AIs", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), {
+			...TEST_PHASE_CONFIG,
+			budgetPerAi: 1,
+		});
+		game = deductBudget(game, "red");
+		expect(() => processPlayerMessage(game, "red", "Hello")).toThrow(/locked/i);
 	});
 });

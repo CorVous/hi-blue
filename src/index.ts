@@ -1,12 +1,20 @@
 export type { AiContext } from "./context-builder";
 export { buildAiContext } from "./context-builder";
-export type { DispatchResult, ValidationResult } from "./dispatcher";
+export type {
+	DispatchResult,
+	ProcessRoundResult,
+	ValidationResult,
+} from "./dispatcher";
 export {
 	dispatchAiTurn,
 	executeToolCall,
+	processRound,
 	validateToolCall,
 } from "./dispatcher";
+export type { AiSaveData, EndgameSave } from "./endgame";
+export { serializeEndgame } from "./endgame";
 export {
+	addChatLockout,
 	advancePhase,
 	advanceRound,
 	appendActionLog,
@@ -15,6 +23,10 @@ export {
 	createGame,
 	deductBudget,
 	getActivePhase,
+	isChatLocked,
+	isPhaseComplete,
+	processPlayerMessage,
+	removeChatLockout,
 	startPhase,
 } from "./engine";
 export type {
@@ -35,3 +47,4 @@ export type {
 	WorldItem,
 	WorldState,
 } from "./types";
+export { ALL_AI_IDS } from "./types";
