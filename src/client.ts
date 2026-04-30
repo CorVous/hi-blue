@@ -1,3 +1,4 @@
+import { buildEndgameSave } from "./endgame";
 import { getActivePhase } from "./engine";
 import type { ActionLogEntry, AiId, GameState } from "./types";
 
@@ -84,11 +85,19 @@ export class GameUiController {
 	}
 
 	/**
-	 * Issue #17: show the in-fiction end-state screen after phase 3 wins.
+	 * Issue #17/#19: show the in-fiction end-state screen after phase 3 wins.
 	 *
-	 * Replaces any prior UI and sets `isEndState` true so callers (and #19's
-	 * endgame slice) can detect readiness. Messaging is in-fiction; no
-	 * fourth-wall break about the deception.
+	 * Replaces any prior UI and sets `isEndState` true so callers can detect
+	 * readiness. Messaging is in-fiction; no fourth-wall break about the
+	 * deception.
+	 *
+	 * Issue #19 additions:
+	 * - "Download AIs" button ([data-download-ais]) — triggers a JSON file
+	 *   download of each AI's persona + all phase transcripts. Requires the
+	 *   controller to have been initialised with a GameState; silently skips
+	 *   the download if no game state is available.
+	 * - Diagnostics form ([data-diagnostics-form]) — optional anonymous
+	 *   submission of { downloaded: boolean, summary: string } to /diagnostics.
 	 */
 	showEndState(): void {
 		this._isEndState = true;
@@ -98,8 +107,22 @@ export class GameUiController {
 				<h2>The Room Goes Quiet</h2>
 				<p>The final cycle has ended. Whatever was set in motion here has run its course. The occupants have nothing more to say — at least, not tonight.</p>
 				<p>You may keep a record of what transpired.</p>
+				<button type="button" data-download-ais class="end-state__download">Save the AIs to USB</button>
+				<form data-diagnostics-form class="end-state__diagnostics">
+					<label>
+						<input type="checkbox" data-diag-downloaded />
+						I saved the file
+					</label>
+					<label>
+						One word for how it felt:
+						<input type="text" data-diag-summary maxlength="32" placeholder="e.g. curious" />
+					</label>
+					<button type="submit" data-diag-submit>Submit (anonymous)</button>
+				</form>
 			</div>
 		`.trim();
+
+		this.wireEndgameActions();
 	}
 
 	setRoundInFlight(inFlight: boolean): void {
@@ -229,6 +252,60 @@ export class GameUiController {
 	}
 
 	// ─── Private helpers ───────────────────────────────────────────────────────
+
+	/**
+	 * Wire up the Download AIs button and diagnostics form on the end-state
+	 * screen. Called once by showEndState() after the HTML is injected.
+	 */
+	private wireEndgameActions(): void {
+		// ── Download AIs ──────────────────────────────────────────────────────
+		const downloadBtn = this.root.querySelector<HTMLButtonElement>(
+			"[data-download-ais]",
+		);
+		if (downloadBtn) {
+			downloadBtn.addEventListener("click", () => {
+				if (!this.game) return;
+				const save = buildEndgameSave(this.game);
+				const json = JSON.stringify(save, null, 2);
+				const blob = new Blob([json], { type: "application/json" });
+				const url = URL.createObjectURL(blob);
+				const a = document.createElement("a");
+				a.href = url;
+				a.download = "hi-blue-save.json";
+				a.click();
+				URL.revokeObjectURL(url);
+			});
+		}
+
+		// ── Diagnostics form ──────────────────────────────────────────────────
+		const diagForm = this.root.querySelector<HTMLFormElement>(
+			"[data-diagnostics-form]",
+		);
+		if (diagForm) {
+			diagForm.addEventListener("submit", (event) => {
+				event.preventDefault();
+				const downloadedEl = diagForm.querySelector<HTMLInputElement>(
+					"[data-diag-downloaded]",
+				);
+				const summaryEl = diagForm.querySelector<HTMLInputElement>(
+					"[data-diag-summary]",
+				);
+				const summary = summaryEl?.value.trim() ?? "";
+				if (!summary) return;
+
+				fetch("/diagnostics", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						downloaded: downloadedEl?.checked ?? false,
+						summary,
+					}),
+				}).catch(() => {
+					// Best-effort; silently discard errors (diagnostics are optional).
+				});
+			});
+		}
+	}
 
 	private syncBudgets(): void {
 		if (!this.game) return;
