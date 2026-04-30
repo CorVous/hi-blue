@@ -1,4 +1,4 @@
-import type { AiId, GameState, ChatMessage } from "./types";
+import type { AiId, ChatMessage, GameState } from "./types";
 import { ALL_AI_IDS } from "./types";
 
 export interface AiSaveData {
