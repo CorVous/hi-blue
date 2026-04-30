@@ -1,5 +1,5 @@
 import { getActivePhase } from "./engine";
-import type { AiId, GameState } from "./types";
+import type { ActionLogEntry, AiId, GameState } from "./types";
 
 // Re-export for consumers
 export type { GameState };
@@ -12,6 +12,7 @@ const AI_IDS: AiId[] = ["red", "green", "blue"];
  * Responsibilities:
  * - Render three chat panels (one per AI) with name and budget.
  * - Render a target-AI selector and player input form.
+ * - Render an action log panel visible to the player.
  * - Disable input while a round is in flight; re-enable when complete.
  * - Append chat messages to the correct panel.
  * - Show lockout notices in locked-out panels.
@@ -31,6 +32,7 @@ export class GameUiController {
 	render(): void {
 		this.root.innerHTML = buildShell(this.game);
 		this.syncBudgets();
+		this.syncActionLog();
 	}
 
 	setRoundInFlight(inFlight: boolean): void {
@@ -66,10 +68,6 @@ export class GameUiController {
 	 * Surface a cap-hit (HTTP 429) sleeping-AIs banner.
 	 * If `aiId` is given, the banner is rendered in that panel only;
 	 * otherwise it's rendered in every panel (global rate-limit case).
-	 *
-	 * This is the GameUiController-shaped equivalent of the cap-hit handling
-	 * introduced in issue #14 for the legacy single-panel client. It will be
-	 * wired up once the controller talks to the proxy directly.
 	 */
 	showCapHit(message: string, aiId?: AiId): void {
 		const targets: AiId[] = aiId ? [aiId] : AI_IDS;
@@ -83,9 +81,22 @@ export class GameUiController {
 		}
 	}
 
+	/**
+	 * Append a new action log entry to the action log panel.
+	 */
+	appendActionLogEntry(entry: ActionLogEntry): void {
+		const logPanel = this.root.querySelector("[data-action-log]");
+		if (!logPanel) return;
+		const item = document.createElement("div");
+		item.setAttribute("data-action-log-entry", entry.type);
+		item.textContent = `[Round ${entry.round}] ${entry.description}`;
+		logPanel.appendChild(item);
+	}
+
 	updateGame(game: GameState): void {
 		this.game = game;
 		this.syncBudgets();
+		this.syncActionLog();
 	}
 
 	getState(): GameState {
@@ -103,6 +114,20 @@ export class GameUiController {
 			if (budgetEl) {
 				budgetEl.textContent = String(phase.budgets[aiId].remaining);
 			}
+		}
+	}
+
+	private syncActionLog(): void {
+		const logPanel = this.root.querySelector("[data-action-log]");
+		if (!logPanel) return;
+		// Clear and re-render the full action log
+		logPanel.innerHTML = "";
+		const phase = getActivePhase(this.game);
+		for (const entry of phase.actionLog) {
+			const item = document.createElement("div");
+			item.setAttribute("data-action-log-entry", entry.type);
+			item.textContent = `[Round ${entry.round}] ${entry.description}`;
+			logPanel.appendChild(item);
 		}
 	}
 }
@@ -133,6 +158,7 @@ function buildShell(game: GameState): string {
 <div class="game-panels">
 ${panelsHtml}
 </div>
+<aside class="action-log" data-action-log></aside>
 <form class="player-form" data-player-form>
   <select data-target-select>
     ${selectorOptions}

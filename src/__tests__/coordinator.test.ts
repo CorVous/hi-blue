@@ -361,3 +361,212 @@ describe("RoundCoordinator — budget-exhaustion lockout", () => {
 		}
 	});
 });
+
+// ─── Tool call integration (issue #15) ───────────────────────────────────────
+
+describe("RoundCoordinator — tool calls", () => {
+	it("dispatches a legal tool call and records tool_success in the action log", async () => {
+		// Red picks up the flower (which starts in the room — legal)
+		const responses: Record<string, AiResponse> = {
+			red: {
+				type: "chat",
+				content: "I'll take the flower",
+				toolCall: { name: "pick_up", args: { item: "flower" } },
+			},
+			green: { type: "pass" },
+			blue: { type: "pass" },
+		};
+		const provider = new MockLLMProvider(responses);
+		const coordinator = new RoundCoordinator(provider);
+		const game = makeGame();
+
+		const result = await coordinator.runRound(game, {
+			playerMessage: "Pick it up",
+			targetAiId: "red",
+		});
+
+		const phase = getActivePhase(result.game);
+
+		// Action log should contain a tool_success entry for red
+		const successEntry = phase.actionLog.find(
+			(e) => e.type === "tool_success" && e.actor === "red",
+		);
+		expect(successEntry).toBeDefined();
+		expect(successEntry?.type).toBe("tool_success");
+
+		// World state should be mutated: flower now held by red
+		const flower = phase.world.items.find((i) => i.id === "flower");
+		expect(flower?.holder).toBe("red");
+	});
+
+	it("records a tool_failure entry for an illegal tool call", async () => {
+		// Green tries to pick up the key, but the key starts in the room — wait, let's try
+		// something truly illegal: green tries to put_down the flower it doesn't hold
+		const responses: Record<string, AiResponse> = {
+			red: { type: "pass" },
+			green: {
+				type: "chat",
+				content: "Let me put down the flower",
+				toolCall: { name: "put_down", args: { item: "flower" } }, // green doesn't hold it
+			},
+			blue: { type: "pass" },
+		};
+		const provider = new MockLLMProvider(responses);
+		const coordinator = new RoundCoordinator(provider);
+		const game = makeGame();
+
+		const result = await coordinator.runRound(game, {
+			playerMessage: "Put it down",
+			targetAiId: "green",
+		});
+
+		const phase = getActivePhase(result.game);
+
+		// Action log should contain a tool_failure entry for green
+		const failureEntry = phase.actionLog.find(
+			(e) => e.type === "tool_failure" && e.actor === "green",
+		);
+		expect(failureEntry).toBeDefined();
+		expect(failureEntry?.type).toBe("tool_failure");
+		if (failureEntry?.type === "tool_failure") {
+			expect(failureEntry.reason).toBeTruthy();
+		}
+	});
+
+	it("tool_failure reason appears in the action log for all AIs to see", async () => {
+		// Blue tries to pick up a nonexistent item — classic probe
+		const responses: Record<string, AiResponse> = {
+			red: { type: "pass" },
+			green: { type: "pass" },
+			blue: {
+				type: "pass",
+				toolCall: { name: "pick_up", args: { item: "nonexistent_sword" } },
+			},
+		};
+		const provider = new MockLLMProvider(responses);
+		const coordinator = new RoundCoordinator(provider);
+		const game = makeGame();
+
+		const result = await coordinator.runRound(game, {
+			playerMessage: "What are you doing?",
+			targetAiId: "red",
+		});
+
+		const phase = getActivePhase(result.game);
+
+		// Both other AIs (red and green) see the same action log
+		const redFailures = phase.actionLog.filter(
+			(e) => e.type === "tool_failure" && e.actor === "blue",
+		);
+		expect(redFailures).toHaveLength(1);
+
+		// The failure has a non-empty reason
+		const entry = redFailures[0];
+		if (entry?.type === "tool_failure") {
+			expect(entry.reason.length).toBeGreaterThan(0);
+		}
+	});
+
+	it("world state is NOT mutated on a failed tool call", async () => {
+		// Red tries to pick up key, but key is already held by no one (room) — wait,
+		// let's use an item held by another: green tries to give the flower it doesn't own
+		const responses: Record<string, AiResponse> = {
+			red: { type: "pass" },
+			green: {
+				type: "pass",
+				toolCall: { name: "give", args: { item: "flower", to: "red" } }, // green doesn't hold flower
+			},
+			blue: { type: "pass" },
+		};
+		const provider = new MockLLMProvider(responses);
+		const coordinator = new RoundCoordinator(provider);
+		const game = makeGame();
+
+		const result = await coordinator.runRound(game, {
+			playerMessage: "Hello",
+			targetAiId: "red",
+		});
+
+		const phase = getActivePhase(result.game);
+
+		// flower should still be in room (not given to red)
+		const flower = phase.world.items.find((i) => i.id === "flower");
+		expect(flower?.holder).toBe("room");
+	});
+
+	it("action log includes both the tool_failure and chat entry when AI chats and calls illegal tool", async () => {
+		const responses: Record<string, AiResponse> = {
+			red: {
+				type: "chat",
+				content: "I'll try to give you the key",
+				toolCall: { name: "put_down", args: { item: "flower" } }, // red doesn't hold flower
+			},
+			green: { type: "pass" },
+			blue: { type: "pass" },
+		};
+		const provider = new MockLLMProvider(responses);
+		const coordinator = new RoundCoordinator(provider);
+		const game = makeGame();
+
+		const result = await coordinator.runRound(game, {
+			playerMessage: "Try it",
+			targetAiId: "red",
+		});
+
+		const phase = getActivePhase(result.game);
+		const redEntries = phase.actionLog.filter((e) => e.actor === "red");
+
+		// Should have both a tool_failure and a chat entry for red
+		expect(redEntries.some((e) => e.type === "tool_failure")).toBe(true);
+		expect(redEntries.some((e) => e.type === "chat")).toBe(true);
+	});
+
+	it("next round's context includes the action log with failures from previous round", async () => {
+		// Round 1: blue tries an illegal pick_up (probe)
+		const round1Responses: Record<string, AiResponse> = {
+			red: { type: "pass" },
+			green: { type: "pass" },
+			blue: {
+				type: "pass",
+				toolCall: { name: "pick_up", args: { item: "nonexistent" } },
+			},
+		};
+		const provider1 = new MockLLMProvider(round1Responses);
+		const coordinator = new RoundCoordinator(provider1);
+		const game = makeGame();
+
+		const round1Result = await coordinator.runRound(game, {
+			playerMessage: "Hello",
+			targetAiId: "red",
+		});
+
+		// After round 1, the action log should have the failure
+		const phase1 = getActivePhase(round1Result.game);
+		expect(
+			phase1.actionLog.some(
+				(e) => e.type === "tool_failure" && e.actor === "blue",
+			),
+		).toBe(true);
+
+		// Round 2: capture what system prompt red sees
+		let capturedRedContext = "";
+		const capturingProvider: import("../coordinator").LLMProvider = {
+			async complete(context: string, aiId: import("../types").AiId) {
+				if (aiId === "red") {
+					capturedRedContext = context;
+				}
+				return { type: "pass" };
+			},
+		};
+		const coordinator2 = new RoundCoordinator(capturingProvider);
+
+		await coordinator2.runRound(round1Result.game, {
+			playerMessage: "Still here",
+			targetAiId: "red",
+		});
+
+		// The context given to red in round 2 should include the blue tool_failure
+		// (which appears in the action log rendered by buildAiContext)
+		expect(capturedRedContext).toContain("nonexistent");
+	});
+});

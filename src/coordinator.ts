@@ -1,7 +1,7 @@
 import { buildAiContext } from "./context-builder";
 import { dispatchAiTurn } from "./dispatcher";
 import { advanceRound, appendChat, isAiLockedOut } from "./engine";
-import type { AiId, AiTurnAction, GameState } from "./types";
+import type { AiId, AiTurnAction, GameState, ToolCall } from "./types";
 
 // ─── LLM Provider interface ───────────────────────────────────────────────────
 
@@ -9,6 +9,8 @@ export interface AiResponse {
 	type: "chat" | "whisper" | "pass";
 	content?: string;
 	target?: AiId;
+	/** Optional tool call the AI wants to make alongside its chat/pass. */
+	toolCall?: ToolCall;
 }
 
 export interface LLMProvider {
@@ -151,21 +153,28 @@ function appendPlayerMessage(
 }
 
 function responseToAction(response: AiResponse, aiId: AiId): AiTurnAction {
+	const base: AiTurnAction = { aiId };
+
+	// Attach tool call if present
+	if (response.toolCall) {
+		base.toolCall = response.toolCall;
+	}
+
 	switch (response.type) {
 		case "chat":
 			return {
-				aiId,
+				...base,
 				chat: { target: "player", content: response.content ?? "" },
 			};
 		case "whisper":
 			return {
-				aiId,
+				...base,
 				whisper: {
 					target: response.target ?? "green",
 					content: response.content ?? "",
 				},
 			};
 		default:
-			return { aiId, pass: true };
+			return { ...base, pass: !response.toolCall };
 	}
 }

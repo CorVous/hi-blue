@@ -1,6 +1,7 @@
 /**
  * UI tests for the chat client.
  * - GameUiController (issue #13): three-panel UI controller.
+ * - Action log panel (issue #15): action log rendered as a UI panel.
  * - mountChatPanel (issue #14): legacy single-panel streaming chat client
  *   with cap-hit (HTTP 429 / `event: cap-hit`) handling.
  *
@@ -11,8 +12,13 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GameUiController, mountChatPanel } from "../client";
-import { createGame, getActivePhase, startPhase } from "../engine";
-import type { AiId, AiPersona, PhaseConfig } from "../types";
+import {
+	appendActionLog,
+	createGame,
+	getActivePhase,
+	startPhase,
+} from "../engine";
+import type { ActionLogEntry, AiId, AiPersona, PhaseConfig } from "../types";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -397,6 +403,182 @@ describe("GameUiController — state snapshot", () => {
 
 		// Just verify it's the new state
 		expect(ui.getState()).toBe(game2);
+	});
+});
+
+// ─── Action log panel (issue #15) ────────────────────────────────────────────
+
+describe("GameUiController — action log panel", () => {
+	let root: HTMLElement;
+
+	beforeEach(() => {
+		root = makeRoot();
+	});
+
+	afterEach(() => {
+		document.body.removeChild(root);
+	});
+
+	it("renders an action log region after render()", () => {
+		const game = makeGame();
+		const ui = new GameUiController(root, game);
+		ui.render();
+
+		const logPanel = root.querySelector("[data-action-log]");
+		expect(logPanel).toBeTruthy();
+	});
+
+	it("action log is empty when there are no log entries", () => {
+		const game = makeGame();
+		const ui = new GameUiController(root, game);
+		ui.render();
+
+		const logPanel = root.querySelector("[data-action-log]");
+		const entries = logPanel?.querySelectorAll("[data-action-log-entry]");
+		expect(entries).toHaveLength(0);
+	});
+
+	it("renders existing action log entries on render()", () => {
+		let game = makeGame();
+		const entry: ActionLogEntry = {
+			round: 1,
+			actor: "red",
+			type: "tool_success",
+			toolName: "pick_up",
+			args: { item: "flower" },
+			description: "Ember picked up the flower",
+		};
+		game = appendActionLog(game, entry);
+
+		const ui = new GameUiController(root, game);
+		ui.render();
+
+		const logPanel = root.querySelector("[data-action-log]");
+		const entries = logPanel?.querySelectorAll("[data-action-log-entry]");
+		expect(entries).toHaveLength(1);
+		expect(entries?.[0]?.textContent).toContain("Ember picked up the flower");
+	});
+
+	it("renders tool_success entries with their type attribute", () => {
+		let game = makeGame();
+		const entry: ActionLogEntry = {
+			round: 1,
+			actor: "red",
+			type: "tool_success",
+			toolName: "pick_up",
+			args: { item: "flower" },
+			description: "Ember picked up the flower",
+		};
+		game = appendActionLog(game, entry);
+
+		const ui = new GameUiController(root, game);
+		ui.render();
+
+		const logPanel = root.querySelector("[data-action-log]");
+		const successEntry = logPanel?.querySelector(
+			'[data-action-log-entry="tool_success"]',
+		);
+		expect(successEntry).toBeTruthy();
+	});
+
+	it("renders tool_failure entries with their type attribute", () => {
+		let game = makeGame();
+		const entry: ActionLogEntry = {
+			round: 1,
+			actor: "blue",
+			type: "tool_failure",
+			toolName: "pick_up",
+			args: { item: "nonexistent" },
+			reason: 'Item "nonexistent" does not exist',
+			description:
+				'Frost tried to pick_up nonexistent but failed: Item "nonexistent" does not exist',
+		};
+		game = appendActionLog(game, entry);
+
+		const ui = new GameUiController(root, game);
+		ui.render();
+
+		const logPanel = root.querySelector("[data-action-log]");
+		const failureEntry = logPanel?.querySelector(
+			'[data-action-log-entry="tool_failure"]',
+		);
+		expect(failureEntry).toBeTruthy();
+		expect(failureEntry?.textContent).toContain("Frost");
+	});
+
+	it("appendActionLogEntry adds a new entry to the log panel", () => {
+		const game = makeGame();
+		const ui = new GameUiController(root, game);
+		ui.render();
+
+		const entry: ActionLogEntry = {
+			round: 2,
+			actor: "green",
+			type: "tool_success",
+			toolName: "pick_up",
+			args: { item: "key" },
+			description: "Sage picked up the key",
+		};
+		ui.appendActionLogEntry(entry);
+
+		const logPanel = root.querySelector("[data-action-log]");
+		const entries = logPanel?.querySelectorAll("[data-action-log-entry]");
+		expect(entries).toHaveLength(1);
+		expect(entries?.[0]?.textContent).toContain("Sage picked up the key");
+	});
+
+	it("updateGame refreshes action log with all entries in order", () => {
+		const game = makeGame();
+		const ui = new GameUiController(root, game);
+		ui.render();
+
+		// Add two entries to the game state
+		let updatedGame = makeGame();
+		const entry1: ActionLogEntry = {
+			round: 1,
+			actor: "red",
+			type: "tool_success",
+			toolName: "pick_up",
+			args: { item: "flower" },
+			description: "Ember picked up the flower",
+		};
+		const entry2: ActionLogEntry = {
+			round: 1,
+			actor: "blue",
+			type: "tool_failure",
+			toolName: "pick_up",
+			args: { item: "ghost" },
+			reason: "Item not found",
+			description: "Frost tried to pick_up ghost but failed: Item not found",
+		};
+		updatedGame = appendActionLog(updatedGame, entry1);
+		updatedGame = appendActionLog(updatedGame, entry2);
+
+		ui.updateGame(updatedGame);
+
+		const logPanel = root.querySelector("[data-action-log]");
+		const entries = logPanel?.querySelectorAll("[data-action-log-entry]");
+		expect(entries).toHaveLength(2);
+		expect(entries?.[0]?.textContent).toContain("Ember picked up the flower");
+		expect(entries?.[1]?.textContent).toContain("Frost tried to pick_up ghost");
+	});
+
+	it("action log entries show the round number", () => {
+		let game = makeGame();
+		const entry: ActionLogEntry = {
+			round: 3,
+			actor: "red",
+			type: "pass",
+			description: "Ember passed",
+		};
+		game = appendActionLog(game, entry);
+
+		const ui = new GameUiController(root, game);
+		ui.render();
+
+		const logPanel = root.querySelector("[data-action-log]");
+		const logEntry = logPanel?.querySelector("[data-action-log-entry]");
+		expect(logEntry?.textContent).toContain("Round 3");
 	});
 });
 

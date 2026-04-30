@@ -1,4 +1,4 @@
-export { GameUiController } from "./client";
+export { GameUiController, mountChatPanel } from "./client";
 export type { AiContext } from "./context-builder";
 export { buildAiContext } from "./context-builder";
 export type {
