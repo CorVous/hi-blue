@@ -1,5 +1,16 @@
 {
-  "devDependencies": {
-    "@ai-hero/sandcastle": "^0.5.6"
-  }
+	"scripts": {
+		"lint": "biome ci .",
+		"typecheck": "tsgo --noEmit",
+		"test": "vitest run",
+		"prepare": "husky"
+	},
+	"devDependencies": {
+		"@ai-hero/sandcastle": "^0.5.6",
+		"@biomejs/biome": "^2.4.13",
+		"@typescript/native-preview": "7.0.0-dev.20260430.1",
+		"husky": "^9.1.7",
+		"typescript": "^6.0.3",
+		"vitest": "^4.1.5"
+	}
 }
