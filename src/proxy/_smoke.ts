@@ -1,4 +1,4 @@
-import { handleChat } from "./handler";
+import { handleChat, handleDiagnostics } from "./handler";
 import { MockLLMProvider } from "./mock-provider";
 import { createRateLimiter } from "./rate-limiter";
 
@@ -19,6 +19,9 @@ export default {
 				dailyCapLimit: 10_000,
 			});
 			return handleChat(request, { provider, rateLimiter });
+		}
+		if (url.pathname === "/diagnostics") {
+			return handleDiagnostics(request);
 		}
 		return new Response("ok");
 	},
