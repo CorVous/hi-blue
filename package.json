@@ -7,6 +7,7 @@
 	},
 	"packageManager": "pnpm@10.33.2",
 	"scripts": {
+		"sandcastle": "npx tsx .sandcastle/main.mts",
 		"lint": "biome ci .",
 		"typecheck": "tsgo --noEmit -p tsconfig.json && tsgo --noEmit -p src/proxy/tsconfig.json",
 		"test": "vitest run",
