@@ -10,6 +10,8 @@ import type {
   AiBudget,
 } from "./types";
 
+const ALL_AI_IDS: AiId[] = ["red", "green", "blue"];
+
 export function updateActivePhase(
   game: GameState,
   updater: (phase: PhaseState) => PhaseState,
@@ -52,6 +54,7 @@ export function startPhase(game: GameState, config: PhaseConfig): GameState {
     whispers: [],
     actionLog: [],
     lockedOut: new Set(),
+    chatLockouts: new Set(),
   };
 
   return {
@@ -126,4 +129,47 @@ export function advancePhase(game: GameState, nextConfig?: PhaseConfig): GameSta
   }
 
   return startPhase(game, nextConfig);
+}
+
+export function addChatLockout(game: GameState, aiId: AiId): GameState {
+  return updateActivePhase(game, (phase) => {
+    const chatLockouts = new Set(phase.chatLockouts);
+    chatLockouts.add(aiId);
+    return { ...phase, chatLockouts };
+  });
+}
+
+export function removeChatLockout(game: GameState, aiId: AiId): GameState {
+  return updateActivePhase(game, (phase) => {
+    const chatLockouts = new Set(phase.chatLockouts);
+    chatLockouts.delete(aiId);
+    return { ...phase, chatLockouts };
+  });
+}
+
+export function isChatLocked(game: GameState, aiId: AiId): boolean {
+  const phase = getActivePhase(game);
+  return phase.chatLockouts.has(aiId);
+}
+
+export function isPhaseComplete(game: GameState): boolean {
+  const phase = getActivePhase(game);
+  return ALL_AI_IDS.every((id) => phase.lockedOut.has(id));
+}
+
+export function processPlayerMessage(
+  game: GameState,
+  targetAiId: AiId,
+  content: string,
+): GameState {
+  if (isAiLockedOut(game, targetAiId)) {
+    throw new Error(`Cannot message ${targetAiId}: AI is locked out (budget exhausted)`);
+  }
+  if (isChatLocked(game, targetAiId)) {
+    throw new Error(`Cannot message ${targetAiId}: chat is locked`);
+  }
+
+  let state = appendChat(game, targetAiId, { role: "player", content });
+  state = advanceRound(state);
+  return state;
 }

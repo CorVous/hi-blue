@@ -4,11 +4,13 @@ import type {
   ToolCall,
   AiTurnAction,
   ActionLogEntry,
+  RoundResult,
 } from "./types";
 import {
   getActivePhase,
   updateActivePhase,
   isAiLockedOut,
+  isPhaseComplete,
   deductBudget,
   appendActionLog,
   appendChat,
@@ -205,4 +207,43 @@ export function dispatchAiTurn(
   state = deductBudget(state, aiId);
 
   return { rejected: false, game: state };
+}
+
+export interface ProcessRoundResult {
+  game: GameState;
+  roundResult: RoundResult;
+}
+
+export function processRound(
+  game: GameState,
+  actions: AiTurnAction[],
+): ProcessRoundResult {
+  const round = getActivePhase(game).round;
+  let state = game;
+  const logBefore = getActivePhase(state).actionLog.length;
+  const allActions: ActionLogEntry[] = [];
+
+  for (const action of actions) {
+    const result = dispatchAiTurn(state, action);
+    if (!result.rejected && result.game) {
+      const newEntries = getActivePhase(result.game).actionLog.slice(
+        logBefore + allActions.length,
+      );
+      allActions.push(...newEntries);
+      state = result.game;
+    }
+  }
+
+  const phaseEnded = isPhaseComplete(state);
+  const gameEnded = phaseEnded && getActivePhase(state).phaseNumber === 3;
+
+  return {
+    game: state,
+    roundResult: {
+      round,
+      actions: allActions,
+      phaseEnded,
+      gameEnded,
+    },
+  };
 }

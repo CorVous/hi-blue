@@ -67,6 +67,7 @@ export interface PhaseState {
   whispers: WhisperMessage[];
   actionLog: ActionLogEntry[];
   lockedOut: Set<AiId>;
+  chatLockouts: Set<AiId>;
 }
 
 export interface GameState {

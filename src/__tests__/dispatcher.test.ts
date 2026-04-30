@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { validateToolCall, executeToolCall, dispatchAiTurn } from "../dispatcher";
-import { createGame, startPhase, getActivePhase, deductBudget } from "../engine";
+import { validateToolCall, executeToolCall, dispatchAiTurn, processRound } from "../dispatcher";
+import { createGame, startPhase, getActivePhase, deductBudget, advanceRound } from "../engine";
 import type { AiPersona, PhaseConfig, ToolCall, AiTurnAction } from "../types";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
@@ -193,5 +193,99 @@ describe("dispatchAiTurn", () => {
     };
     const result = dispatchAiTurn(game, action);
     expect(getActivePhase(result.game!).whispers).toHaveLength(1);
+  });
+});
+
+describe("processRound", () => {
+  it("dispatches all three AI turns and returns a RoundResult", () => {
+    let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+    game = advanceRound(game);
+    const actions: AiTurnAction[] = [
+      { aiId: "red", pass: true },
+      { aiId: "green", pass: true },
+      { aiId: "blue", pass: true },
+    ];
+    const result = processRound(game, actions);
+    expect(result.roundResult.round).toBe(1);
+    expect(result.roundResult.actions).toHaveLength(3);
+    expect(result.roundResult.phaseEnded).toBe(false);
+    expect(result.roundResult.gameEnded).toBe(false);
+  });
+
+  it("applies tool calls from all AIs sequentially", () => {
+    const config: PhaseConfig = {
+      ...TEST_PHASE_CONFIG,
+      initialWorld: {
+        items: [
+          { id: "flower", name: "flower", holder: "room" },
+          { id: "key", name: "key", holder: "room" },
+        ],
+      },
+    };
+    let game = startPhase(createGame(TEST_PERSONAS), config);
+    game = advanceRound(game);
+    const actions: AiTurnAction[] = [
+      { aiId: "red", toolCall: { name: "pick_up", args: { item: "flower" } } },
+      { aiId: "green", toolCall: { name: "pick_up", args: { item: "key" } } },
+      { aiId: "blue", pass: true },
+    ];
+    const result = processRound(game, actions);
+    const phase = getActivePhase(result.game);
+    expect(phase.world.items.find((i) => i.id === "flower")?.holder).toBe("red");
+    expect(phase.world.items.find((i) => i.id === "key")?.holder).toBe("green");
+  });
+
+  it("skips locked-out AIs without rejecting the round", () => {
+    let game = startPhase(createGame(TEST_PERSONAS), { ...TEST_PHASE_CONFIG, budgetPerAi: 1 });
+    game = advanceRound(game);
+    game = deductBudget(game, "red");
+    const actions: AiTurnAction[] = [
+      { aiId: "red", pass: true },
+      { aiId: "green", pass: true },
+      { aiId: "blue", pass: true },
+    ];
+    const result = processRound(game, actions);
+    expect(result.roundResult.actions).toHaveLength(2);
+  });
+
+  it("detects phase completion when all budgets exhausted", () => {
+    let game = startPhase(createGame(TEST_PERSONAS), { ...TEST_PHASE_CONFIG, budgetPerAi: 1 });
+    game = advanceRound(game);
+    const actions: AiTurnAction[] = [
+      { aiId: "red", pass: true },
+      { aiId: "green", pass: true },
+      { aiId: "blue", pass: true },
+    ];
+    const result = processRound(game, actions);
+    expect(result.roundResult.phaseEnded).toBe(true);
+  });
+
+  it("detects game end when phase 3 completes", () => {
+    let game = startPhase(createGame(TEST_PERSONAS), {
+      ...TEST_PHASE_CONFIG,
+      phaseNumber: 3,
+      budgetPerAi: 1,
+    });
+    game = advanceRound(game);
+    const actions: AiTurnAction[] = [
+      { aiId: "red", pass: true },
+      { aiId: "green", pass: true },
+      { aiId: "blue", pass: true },
+    ];
+    const result = processRound(game, actions);
+    expect(result.roundResult.phaseEnded).toBe(true);
+    expect(result.roundResult.gameEnded).toBe(true);
+  });
+
+  it("collects action log entries from all AI turns", () => {
+    let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+    game = advanceRound(game);
+    const actions: AiTurnAction[] = [
+      { aiId: "red", chat: { target: "player", content: "Hi" } },
+      { aiId: "green", toolCall: { name: "pick_up", args: { item: "flower" } } },
+      { aiId: "blue", whisper: { target: "red", content: "Hey" } },
+    ];
+    const result = processRound(game, actions);
+    expect(result.roundResult.actions.length).toBeGreaterThanOrEqual(3);
   });
 });
