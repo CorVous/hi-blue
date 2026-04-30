@@ -9,6 +9,8 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
     steps:
       - uses: actions/checkout@v4
 
@@ -23,5 +25,5 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: No-op check
-        run: echo ok
+      - name: Lint
+        run: pnpm lint --reporter=github

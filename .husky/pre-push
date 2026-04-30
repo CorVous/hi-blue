@@ -1,1 +1,1 @@
-# pre-push checks will be added by later slices
+pnpm lint

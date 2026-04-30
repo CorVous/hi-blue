@@ -15,6 +15,6 @@ corepack enable && pnpm install
 
 | Command | Description |
 | ------- | ----------- |
-| _TBD_   | Lint        |
+| `pnpm lint` | Lint        |
 | _TBD_   | Typecheck   |
 | _TBD_   | Test        |
