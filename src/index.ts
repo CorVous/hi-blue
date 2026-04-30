@@ -16,6 +16,7 @@ export type {
   AiTurnAction,
   RoundResult,
 } from "./types";
+export { ALL_AI_IDS } from "./types";
 
 export {
   createGame,

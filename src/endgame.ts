@@ -1,4 +1,5 @@
 import type { AiId, GameState, ChatMessage } from "./types";
+import { ALL_AI_IDS } from "./types";
 
 export interface AiSaveData {
   id: AiId;
@@ -11,8 +12,6 @@ export interface EndgameSave {
   ais: AiSaveData[];
   phasesPlayed: number;
 }
-
-const ALL_AI_IDS: AiId[] = ["red", "green", "blue"];
 
 export function serializeEndgame(game: GameState): EndgameSave {
   const ais: AiSaveData[] = ALL_AI_IDS.map((id) => {

@@ -9,8 +9,7 @@ import type {
   WhisperMessage,
   AiBudget,
 } from "./types";
-
-const ALL_AI_IDS: AiId[] = ["red", "green", "blue"];
+import { ALL_AI_IDS } from "./types";
 
 export function updateActivePhase(
   game: GameState,

@@ -1,5 +1,7 @@
 export type AiId = "red" | "green" | "blue";
 
+export const ALL_AI_IDS: AiId[] = ["red", "green", "blue"];
+
 export interface AiPersona {
   id: AiId;
   name: string;

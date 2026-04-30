@@ -220,17 +220,14 @@ export function processRound(
 ): ProcessRoundResult {
   const round = getActivePhase(game).round;
   let state = game;
-  const logBefore = getActivePhase(state).actionLog.length;
   const allActions: ActionLogEntry[] = [];
 
   for (const action of actions) {
+    const logLength = getActivePhase(state).actionLog.length;
     const result = dispatchAiTurn(state, action);
     if (!result.rejected && result.game) {
-      const newEntries = getActivePhase(result.game).actionLog.slice(
-        logBefore + allActions.length,
-      );
-      allActions.push(...newEntries);
       state = result.game;
+      allActions.push(...getActivePhase(state).actionLog.slice(logLength));
     }
   }
 
