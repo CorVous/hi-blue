@@ -10,6 +10,15 @@ import type {
   AiBudget,
 } from "./types";
 
+export function updateActivePhase(
+  game: GameState,
+  updater: (phase: PhaseState) => PhaseState,
+): GameState {
+  const phases = [...game.phases];
+  phases[phases.length - 1] = updater({ ...phases[phases.length - 1] });
+  return { ...game, phases };
+}
+
 export function createGame(personas: Record<string, AiPersona>): GameState {
   return {
     currentPhase: 1,
@@ -57,11 +66,10 @@ export function getActivePhase(game: GameState): PhaseState {
 }
 
 export function advanceRound(game: GameState): GameState {
-  const phases = [...game.phases];
-  const active = { ...phases[phases.length - 1] };
-  active.round = active.round + 1;
-  phases[phases.length - 1] = active;
-  return { ...game, phases };
+  return updateActivePhase(game, (phase) => ({
+    ...phase,
+    round: phase.round + 1,
+  }));
 }
 
 export function isAiLockedOut(game: GameState, aiId: AiId): boolean {
@@ -70,30 +78,25 @@ export function isAiLockedOut(game: GameState, aiId: AiId): boolean {
 }
 
 export function deductBudget(game: GameState, aiId: AiId): GameState {
-  const phases = [...game.phases];
-  const active = { ...phases[phases.length - 1] };
-  const budgets = { ...active.budgets };
-  const budget = { ...budgets[aiId] };
-  budget.remaining = Math.max(0, budget.remaining - 1);
-  budgets[aiId] = budget;
-
-  const lockedOut = new Set(active.lockedOut);
-  if (budget.remaining === 0) {
-    lockedOut.add(aiId);
-  }
-
-  active.budgets = budgets;
-  active.lockedOut = lockedOut;
-  phases[phases.length - 1] = active;
-  return { ...game, phases };
+  return updateActivePhase(game, (phase) => {
+    const remaining = Math.max(0, phase.budgets[aiId].remaining - 1);
+    const lockedOut = new Set(phase.lockedOut);
+    if (remaining === 0) {
+      lockedOut.add(aiId);
+    }
+    return {
+      ...phase,
+      budgets: { ...phase.budgets, [aiId]: { ...phase.budgets[aiId], remaining } },
+      lockedOut,
+    };
+  });
 }
 
 export function appendActionLog(game: GameState, entry: ActionLogEntry): GameState {
-  const phases = [...game.phases];
-  const active = { ...phases[phases.length - 1] };
-  active.actionLog = [...active.actionLog, entry];
-  phases[phases.length - 1] = active;
-  return { ...game, phases };
+  return updateActivePhase(game, (phase) => ({
+    ...phase,
+    actionLog: [...phase.actionLog, entry],
+  }));
 }
 
 export function appendChat(
@@ -101,28 +104,23 @@ export function appendChat(
   aiId: AiId,
   message: ChatMessage,
 ): GameState {
-  const phases = [...game.phases];
-  const active = { ...phases[phases.length - 1] };
-  const chatHistories = { ...active.chatHistories };
-  chatHistories[aiId] = [...chatHistories[aiId], message];
-  active.chatHistories = chatHistories;
-  phases[phases.length - 1] = active;
-  return { ...game, phases };
+  return updateActivePhase(game, (phase) => ({
+    ...phase,
+    chatHistories: {
+      ...phase.chatHistories,
+      [aiId]: [...phase.chatHistories[aiId], message],
+    },
+  }));
 }
 
 export function appendWhisper(game: GameState, whisper: WhisperMessage): GameState {
-  const phases = [...game.phases];
-  const active = { ...phases[phases.length - 1] };
-  active.whispers = [...active.whispers, whisper];
-  phases[phases.length - 1] = active;
-  return { ...game, phases };
+  return updateActivePhase(game, (phase) => ({
+    ...phase,
+    whispers: [...phase.whispers, whisper],
+  }));
 }
 
 export function advancePhase(game: GameState, nextConfig?: PhaseConfig): GameState {
-  if (game.currentPhase >= 3 && !nextConfig) {
-    return { ...game, isComplete: true };
-  }
-
   if (!nextConfig) {
     return { ...game, isComplete: true };
   }

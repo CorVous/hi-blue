@@ -7,6 +7,7 @@ import type {
 } from "./types";
 import {
   getActivePhase,
+  updateActivePhase,
   isAiLockedOut,
   deductBudget,
   appendActionLog,
@@ -79,34 +80,28 @@ export function executeToolCall(
   aiId: AiId,
   call: ToolCall,
 ): GameState {
-  const phases = [...game.phases];
-  const active = { ...phases[phases.length - 1] };
-  const world = { ...active.world, items: active.world.items.map((i) => ({ ...i })) };
+  return updateActivePhase(game, (phase) => {
+    const items = phase.world.items.map((i) => ({ ...i }));
 
-  switch (call.name) {
-    case "pick_up": {
-      const item = world.items.find((i) => i.id === call.args.item)!;
-      item.holder = aiId;
-      break;
+    switch (call.name) {
+      case "pick_up": {
+        items.find((i) => i.id === call.args.item)!.holder = aiId;
+        break;
+      }
+      case "put_down": {
+        items.find((i) => i.id === call.args.item)!.holder = "room";
+        break;
+      }
+      case "give": {
+        items.find((i) => i.id === call.args.item)!.holder = call.args.to as AiId;
+        break;
+      }
+      case "use":
+        break;
     }
-    case "put_down": {
-      const item = world.items.find((i) => i.id === call.args.item)!;
-      item.holder = "room";
-      break;
-    }
-    case "give": {
-      const item = world.items.find((i) => i.id === call.args.item)!;
-      item.holder = call.args.to as AiId;
-      break;
-    }
-    case "use": {
-      break;
-    }
-  }
 
-  active.world = world;
-  phases[phases.length - 1] = active;
-  return { ...game, phases };
+    return { ...phase, world: { ...phase.world, items } };
+  });
 }
 
 function describeToolCall(game: GameState, aiId: AiId, call: ToolCall): string {
@@ -174,7 +169,7 @@ export function dispatchAiTurn(
       round,
       actor: aiId,
       type: "chat",
-      target: action.chat.target as AiId,
+      target: action.chat.target,
       description: `${game.personas[aiId].name} spoke to ${action.chat.target}`,
     };
     state = appendActionLog(state, entry);
