@@ -15,7 +15,14 @@ export default defineConfig({
 			},
 			{
 				extends: true,
-				plugins: [cloudflareTest({ main: "./src/proxy/_smoke.ts" })],
+				plugins: [
+					cloudflareTest({
+						main: "./src/proxy/_smoke.ts",
+						miniflare: {
+							kvNamespaces: ["RATE_LIMIT_KV"],
+						},
+					}),
+				],
 				test: {
 					name: "workers",
 					include: ["src/proxy/**/*.test.ts"],

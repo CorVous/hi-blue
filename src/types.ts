@@ -61,6 +61,22 @@ export interface PhaseConfig {
 	budgetPerAi: number;
 }
 
+/**
+ * Mid-phase chat-lockout state.
+ * Distinct from budget-exhaustion lockout (PhaseState.lockedOut).
+ * Only one AI can be chat-locked at a time, for a fixed number of rounds.
+ * During a chat-lockout the affected AI continues to take turns (LLM called,
+ * whispers and tool calls processed) — only the player→AI chat channel is
+ * gated from the player's perspective.
+ */
+export interface ChatLockout {
+	aiId: AiId;
+	/** Number of rounds remaining before the lockout resolves. */
+	roundsRemaining: number;
+	/** In-character message shown to the player when the lockout starts. */
+	message: string;
+}
+
 export interface PhaseState {
 	phaseNumber: 1 | 2 | 3;
 	objective: string;
@@ -71,7 +87,13 @@ export interface PhaseState {
 	chatHistories: Record<AiId, ChatMessage[]>;
 	whispers: WhisperMessage[];
 	actionLog: ActionLogEntry[];
+	/** Budget-exhaustion lockout set — AIs that can no longer act at all. */
 	lockedOut: Set<AiId>;
+	/**
+	 * Mid-phase chat-lockout — a single AI whose player-facing chat channel
+	 * is temporarily disabled. Null when no lockout is active.
+	 */
+	chatLockout: ChatLockout | null;
 }
 
 export interface GameState {

@@ -3,6 +3,7 @@ import type {
 	AiBudget,
 	AiId,
 	AiPersona,
+	ChatLockout,
 	ChatMessage,
 	GameState,
 	PhaseConfig,
@@ -54,6 +55,7 @@ export function startPhase(game: GameState, config: PhaseConfig): GameState {
 		whispers: [],
 		actionLog: [],
 		lockedOut: new Set(),
+		chatLockout: null,
 	};
 
 	return {
@@ -131,6 +133,38 @@ export function appendWhisper(
 		...phase,
 		whispers: [...phase.whispers, whisper],
 	}));
+}
+
+// ─── Chat-lockout helpers ─────────────────────────────────────────────────────
+
+export function setChatLockout(
+	game: GameState,
+	lockout: ChatLockout | null,
+): GameState {
+	return updateActivePhase(game, (phase) => ({
+		...phase,
+		chatLockout: lockout,
+	}));
+}
+
+export function getChatLockout(game: GameState): ChatLockout | null {
+	return getActivePhase(game).chatLockout;
+}
+
+/**
+ * Decrements the chat-lockout round counter. If it reaches zero, clears the
+ * lockout. Should be called once per round at the end of the round.
+ */
+export function tickChatLockout(game: GameState): GameState {
+	const lockout = getChatLockout(game);
+	if (!lockout) return game;
+	if (lockout.roundsRemaining <= 1) {
+		return setChatLockout(game, null);
+	}
+	return setChatLockout(game, {
+		...lockout,
+		roundsRemaining: lockout.roundsRemaining - 1,
+	});
 }
 
 export function advancePhase(

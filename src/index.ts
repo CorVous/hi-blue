@@ -1,5 +1,15 @@
+export { GameUiController } from "./client";
 export type { AiContext } from "./context-builder";
 export { buildAiContext } from "./context-builder";
+export type {
+	AiResponse,
+	AiRoundResponse,
+	LLMProvider,
+	RoundCoordinatorOptions,
+	RoundInput,
+	RoundOutput,
+} from "./coordinator";
+export { MockLLMProvider, RoundCoordinator } from "./coordinator";
 export type { DispatchResult, ValidationResult } from "./dispatcher";
 export {
 	dispatchAiTurn,
@@ -15,7 +25,10 @@ export {
 	createGame,
 	deductBudget,
 	getActivePhase,
+	getChatLockout,
+	setChatLockout,
 	startPhase,
+	tickChatLockout,
 } from "./engine";
 export type {
 	ActionLogEntry,
@@ -23,6 +36,7 @@ export type {
 	AiId,
 	AiPersona,
 	AiTurnAction,
+	ChatLockout,
 	ChatMessage,
 	GameState,
 	PhaseConfig,
