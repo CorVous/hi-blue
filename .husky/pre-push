@@ -1,1 +1,1 @@
-# pre-push checks will be added by later slices
+ANTHROPIC_API_KEY=ci-invalid-key pnpm run lint && pnpm run typecheck && pnpm run test

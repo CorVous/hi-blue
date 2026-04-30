@@ -9,6 +9,10 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+
+    env:
+      ANTHROPIC_API_KEY: ci-invalid-key
+
     steps:
       - uses: actions/checkout@v4
 
@@ -20,8 +24,16 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile
 
-      - name: No-op check
-        run: echo ok
+      - name: Lint
+        if: ${{ !cancelled() }}
+        run: pnpm run lint
+
+      - name: Typecheck
+        if: ${{ !cancelled() }}
+        run: pnpm run typecheck
+
+      - name: Test
+        if: ${{ !cancelled() }}
+        run: pnpm run test
