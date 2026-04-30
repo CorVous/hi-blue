@@ -1,0 +1,1 @@
+ANTHROPIC_API_KEY=ci-invalid-key pnpm run lint && pnpm run typecheck && pnpm run test
