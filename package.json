@@ -1,5 +1,17 @@
 {
+  "name": "hi-blue",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "packageManager": "pnpm@10.33.2",
+  "scripts": {
+    "prepare": "husky"
+  },
   "devDependencies": {
-    "@ai-hero/sandcastle": "^0.5.6"
+    "@ai-hero/sandcastle": "^0.5.6",
+    "husky": "^9.1.7"
   }
 }
