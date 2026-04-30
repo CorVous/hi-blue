@@ -5,6 +5,7 @@ export type {
 	AiResponse,
 	AiRoundResponse,
 	LLMProvider,
+	RoundCoordinatorOptions,
 	RoundInput,
 	RoundOutput,
 } from "./coordinator";
@@ -24,7 +25,10 @@ export {
 	createGame,
 	deductBudget,
 	getActivePhase,
+	getChatLockout,
+	setChatLockout,
 	startPhase,
+	tickChatLockout,
 } from "./engine";
 export type {
 	ActionLogEntry,
@@ -32,6 +36,7 @@ export type {
 	AiId,
 	AiPersona,
 	AiTurnAction,
+	ChatLockout,
 	ChatMessage,
 	GameState,
 	PhaseConfig,

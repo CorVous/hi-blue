@@ -2,6 +2,7 @@
  * UI tests for the chat client.
  * - GameUiController (issue #13): three-panel UI controller.
  * - Action log panel (issue #15): action log rendered as a UI panel.
+ * - Mid-phase chat-lockout (issue #16): per-panel chat input gating.
  * - mountChatPanel (issue #14): legacy single-panel streaming chat client
  *   with cap-hit (HTTP 429 / `event: cap-hit`) handling.
  *
@@ -776,5 +777,126 @@ describe("mountChatPanel (legacy single-panel client)", () => {
 		// Panel must still be intact (form and input still present)
 		expect(container.querySelector("form")).not.toBeNull();
 		expect(container.querySelector("input[type=text]")).not.toBeNull();
+	});
+});
+
+// ─── Mid-phase chat-lockout UI (issue #16) ────────────────────────────────────
+//
+// setChatLockout(aiId, message) disables the player→AI chat INPUT for the
+// locked AI's panel only. It does NOT disable the global submit button (that
+// is the round-in-flight semantics from #13 — a separate concern).
+//
+// clearChatLockout(aiId) re-enables the locked panel's input.
+
+describe("GameUiController — chat-lockout UI (#16)", () => {
+	let root: HTMLElement;
+
+	beforeEach(() => {
+		root = makeRoot();
+	});
+
+	afterEach(() => {
+		document.body.removeChild(root);
+	});
+
+	it("setChatLockout disables only the locked AI panel's chat input", () => {
+		const game = makeGame();
+		const ui = new GameUiController(root, game);
+		ui.render();
+
+		ui.setChatLockout(
+			"red",
+			"Something has come up. I can't speak with you right now.",
+		);
+
+		// Red's panel input is disabled
+		const redPanel = root.querySelector('[data-ai-panel="red"]');
+		const redInput = redPanel?.querySelector<HTMLInputElement>(
+			"[data-panel-chat-input]",
+		);
+		expect(redInput?.disabled).toBe(true);
+
+		// Other panels' inputs are NOT affected
+		const greenPanel = root.querySelector('[data-ai-panel="green"]');
+		const greenInput = greenPanel?.querySelector<HTMLInputElement>(
+			"[data-panel-chat-input]",
+		);
+		expect(greenInput?.disabled).toBe(false);
+
+		const bluePanel = root.querySelector('[data-ai-panel="blue"]');
+		const blueInput = bluePanel?.querySelector<HTMLInputElement>(
+			"[data-panel-chat-input]",
+		);
+		expect(blueInput?.disabled).toBe(false);
+	});
+
+	it("setChatLockout does NOT disable the global submit button", () => {
+		const game = makeGame();
+		const ui = new GameUiController(root, game);
+		ui.render();
+
+		ui.setChatLockout("red", "I can't talk now.");
+
+		const submit = root.querySelector<HTMLButtonElement>("[data-submit]");
+		expect(submit?.disabled).toBe(false);
+	});
+
+	it("setChatLockout shows an in-character lockout banner in the locked panel", () => {
+		const game = makeGame();
+		const ui = new GameUiController(root, game);
+		ui.render();
+
+		ui.setChatLockout(
+			"green",
+			"I must withdraw from this conversation for a while.",
+		);
+
+		const greenPanel = root.querySelector('[data-ai-panel="green"]');
+		const banner = greenPanel?.querySelector("[data-chat-lockout]");
+		expect(banner).toBeTruthy();
+		expect(banner?.textContent).toContain(
+			"I must withdraw from this conversation for a while.",
+		);
+	});
+
+	it("setChatLockout banner does not appear in other panels", () => {
+		const game = makeGame();
+		const ui = new GameUiController(root, game);
+		ui.render();
+
+		ui.setChatLockout("blue", "Our channel is temporarily unavailable.");
+
+		const redPanel = root.querySelector('[data-ai-panel="red"]');
+		expect(redPanel?.querySelector("[data-chat-lockout]")).toBeFalsy();
+
+		const greenPanel = root.querySelector('[data-ai-panel="green"]');
+		expect(greenPanel?.querySelector("[data-chat-lockout]")).toBeFalsy();
+	});
+
+	it("clearChatLockout re-enables the locked panel's chat input", () => {
+		const game = makeGame();
+		const ui = new GameUiController(root, game);
+		ui.render();
+
+		ui.setChatLockout("red", "Can't talk.");
+		ui.clearChatLockout("red");
+
+		const redPanel = root.querySelector('[data-ai-panel="red"]');
+		const redInput = redPanel?.querySelector<HTMLInputElement>(
+			"[data-panel-chat-input]",
+		);
+		expect(redInput?.disabled).toBe(false);
+	});
+
+	it("clearChatLockout removes the lockout banner from the panel", () => {
+		const game = makeGame();
+		const ui = new GameUiController(root, game);
+		ui.render();
+
+		ui.setChatLockout("red", "Can't talk right now.");
+		ui.clearChatLockout("red");
+
+		const redPanel = root.querySelector('[data-ai-panel="red"]');
+		expect(redPanel?.querySelector("[data-chat-lockout]")).toBeFalsy();
 	});
 });

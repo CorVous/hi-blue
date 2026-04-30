@@ -16,6 +16,7 @@ const AI_IDS: AiId[] = ["red", "green", "blue"];
  * - Disable input while a round is in flight; re-enable when complete.
  * - Append chat messages to the correct panel.
  * - Show lockout notices in locked-out panels.
+ * - Manage per-panel mid-phase chat-lockouts (issue #16).
  * - Keep the current GameState and expose it via getState().
  */
 export class GameUiController {
@@ -68,6 +69,10 @@ export class GameUiController {
 	 * Surface a cap-hit (HTTP 429) sleeping-AIs banner.
 	 * If `aiId` is given, the banner is rendered in that panel only;
 	 * otherwise it's rendered in every panel (global rate-limit case).
+	 *
+	 * This is the GameUiController-shaped equivalent of the cap-hit handling
+	 * introduced in issue #14 for the legacy single-panel client. It will be
+	 * wired up once the controller talks to the proxy directly.
 	 */
 	showCapHit(message: string, aiId?: AiId): void {
 		const targets: AiId[] = aiId ? [aiId] : AI_IDS;
@@ -91,6 +96,55 @@ export class GameUiController {
 		item.setAttribute("data-action-log-entry", entry.type);
 		item.textContent = `[Round ${entry.round}] ${entry.description}`;
 		logPanel.appendChild(item);
+	}
+
+	/**
+	 * Enables a mid-phase chat-lockout for a single AI's panel.
+	 *
+	 * Distinct from budget-exhaustion lockout (setRoundInFlight / showLockout):
+	 * - Only disables the per-panel chat input for the locked AI.
+	 * - Does NOT disable the global submit button (that is round-in-flight
+	 *   semantics from #13).
+	 * - Shows a personality-consistent in-character banner inside the panel.
+	 *
+	 * Resolves by calling clearChatLockout(aiId).
+	 */
+	setChatLockout(aiId: AiId, message: string): void {
+		const panel = this.root.querySelector(`[data-ai-panel="${aiId}"]`);
+		if (!panel) return;
+
+		// Disable the per-panel chat input
+		const input = panel.querySelector<HTMLInputElement>(
+			"[data-panel-chat-input]",
+		);
+		if (input) input.disabled = true;
+
+		// Remove any previous banner before adding a new one
+		panel.querySelector("[data-chat-lockout]")?.remove();
+
+		// Show in-character lockout banner
+		const banner = document.createElement("div");
+		banner.setAttribute("data-chat-lockout", "true");
+		banner.textContent = message;
+		panel.appendChild(banner);
+	}
+
+	/**
+	 * Resolves a chat-lockout for the given AI's panel.
+	 * Re-enables the per-panel chat input and removes the lockout banner.
+	 */
+	clearChatLockout(aiId: AiId): void {
+		const panel = this.root.querySelector(`[data-ai-panel="${aiId}"]`);
+		if (!panel) return;
+
+		// Re-enable the per-panel chat input
+		const input = panel.querySelector<HTMLInputElement>(
+			"[data-panel-chat-input]",
+		);
+		if (input) input.disabled = false;
+
+		// Remove lockout banner
+		panel.querySelector("[data-chat-lockout]")?.remove();
 	}
 
 	updateGame(game: GameState): void {
@@ -147,6 +201,7 @@ function buildShell(game: GameState): string {
     <span class="chat-panel__budget">Budget: <span data-budget>${budget.remaining}</span>/${budget.total}</span>
   </header>
   <div class="chat-panel__log" data-chat-log></div>
+  <input type="text" data-panel-chat-input class="chat-panel__input" placeholder="Message ${persona.name}…" />
 </section>`;
 	}).join("\n");
 
