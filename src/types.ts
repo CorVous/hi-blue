@@ -1,7 +1,5 @@
 export type AiId = "red" | "green" | "blue";
 
-export const ALL_AI_IDS: AiId[] = ["red", "green", "blue"];
-
 export interface AiPersona {
 	id: AiId;
 	name: string;
@@ -74,7 +72,6 @@ export interface PhaseState {
 	whispers: WhisperMessage[];
 	actionLog: ActionLogEntry[];
 	lockedOut: Set<AiId>;
-	chatLockouts: Set<AiId>;
 }
 
 export interface GameState {
