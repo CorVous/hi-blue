@@ -2,5 +2,13 @@
 	"name": "hi-blue-proxy",
 	"main": "src/proxy/_smoke.ts",
 	"compatibility_date": "2025-12-01",
-	"compatibility_flags": ["nodejs_compat"]
+	"compatibility_flags": ["nodejs_compat"],
+	"kv_namespaces": [
+		{
+			// Per-IP rate-limit counters and global daily-spend cap.
+			// Create with: wrangler kv namespace create RATE_LIMIT_KV
+			"binding": "RATE_LIMIT_KV",
+			"id": "PLACEHOLDER_REPLACE_WITH_REAL_KV_ID"
+		}
+	]
 }
