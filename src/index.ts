@@ -1,5 +1,14 @@
+export { GameUiController, mountChatPanel } from "./client";
 export type { AiContext } from "./context-builder";
 export { buildAiContext } from "./context-builder";
+export type {
+	AiResponse,
+	AiRoundResponse,
+	LLMProvider,
+	RoundInput,
+	RoundOutput,
+} from "./coordinator";
+export { MockLLMProvider, RoundCoordinator } from "./coordinator";
 export type { DispatchResult, ValidationResult } from "./dispatcher";
 export {
 	dispatchAiTurn,
