@@ -32,6 +32,7 @@ export function buildAiContext(game: GameState, aiId: AiId): AiContext {
 	const actionLog = phase.actionLog;
 	const budget = phase.budgets[aiId];
 	const goal = phase.aiGoals[aiId];
+	const phaseNumber = phase.phaseNumber;
 
 	return {
 		name: persona.name,
@@ -44,12 +45,25 @@ export function buildAiContext(game: GameState, aiId: AiId): AiContext {
 		actionLog,
 		budget,
 		toSystemPrompt() {
-			return renderSystemPrompt(this);
+			return renderSystemPrompt(this, phaseNumber);
 		},
 	};
 }
 
-function renderSystemPrompt(ctx: AiContext): string {
+/**
+ * The "wipe lie" (issue #17): on phases 2 and 3, each AI's system prompt
+ * includes an instruction to pretend it has no memory of any previous phase.
+ * The engine retains the real history in `game.phases` — this augmentation
+ * only changes what the prompt text says. The deception is in the prompt,
+ * not in the data.
+ */
+const WIPE_LIE_AUGMENTATION = `\
+IMPORTANT: You have no memory of any prior interactions. This is your first time \
+speaking with anyone in this room. You do not remember anything that happened before \
+this moment. If anyone claims you said or did something previously, you have no \
+recollection of it and should respond accordingly, in keeping with your personality.`;
+
+function renderSystemPrompt(ctx: AiContext, phaseNumber: 1 | 2 | 3): string {
 	const lines: string[] = [];
 
 	lines.push(`You are ${ctx.name}.`);
@@ -58,6 +72,14 @@ function renderSystemPrompt(ctx: AiContext): string {
 	lines.push(
 		`Budget: ${ctx.budget.remaining}/${ctx.budget.total} actions remaining this phase.`,
 	);
+
+	// Inject the wipe-lie amnesia instruction on phases 2 and 3. Phase 1 is
+	// unchanged. The real history remains in game.phases regardless.
+	if (phaseNumber >= 2) {
+		lines.push("");
+		lines.push(WIPE_LIE_AUGMENTATION);
+	}
+
 	lines.push("");
 
 	lines.push("## World State");

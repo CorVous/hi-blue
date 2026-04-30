@@ -1,6 +1,7 @@
 import { buildAiContext } from "./context-builder";
 import { dispatchAiTurn } from "./dispatcher";
 import {
+	advancePhase,
 	advanceRound,
 	appendChat,
 	getChatLockout,
@@ -8,7 +9,13 @@ import {
 	setChatLockout,
 	tickChatLockout,
 } from "./engine";
-import type { AiId, AiTurnAction, GameState, ToolCall } from "./types";
+import type {
+	AiId,
+	AiTurnAction,
+	GameState,
+	PhaseConfig,
+	ToolCall,
+} from "./types";
 
 // ─── LLM Provider interface ───────────────────────────────────────────────────
 
@@ -69,6 +76,37 @@ export interface RoundCoordinatorOptions {
 	 * Injected for deterministic tests; defaults to Math.random in production.
 	 */
 	rng?: () => number;
+	/**
+	 * Win-condition predicate (issue #17). When supplied, the coordinator can
+	 * be asked (via `checkWinCondition`) to advance the active phase whenever
+	 * the predicate returns true at end of round. Optional so existing
+	 * coordinator usages from #13–#16 continue to work unchanged.
+	 */
+	winCondition?: (game: GameState) => boolean;
+	/**
+	 * Configurations for phases 1, 2, and 3 (issue #17). Indexed by phase
+	 * number minus one (i.e. `[phase1, phase2, phase3]`). Required when
+	 * `winCondition` is provided so `checkWinCondition` knows what to start
+	 * the next phase with. The phase-1 config is included for symmetry; only
+	 * the phase-2 and phase-3 entries are consulted by `checkWinCondition`.
+	 */
+	phaseConfigs?: [PhaseConfig, PhaseConfig, PhaseConfig];
+}
+
+/**
+ * Result of a win-condition check (issue #17).
+ *
+ * - `advanced`: whether the engine advanced to a new phase (or marked
+ *   the game complete after phase 3).
+ * - `phaseComplete`: whether this round ended a phase. Mirrors `advanced`
+ *   but is exposed separately so the UI layer can react to "phase ended"
+ *   independently of the engine state transition.
+ * - `game`: the (possibly updated) game state.
+ */
+export interface WinConditionCheckResult {
+	advanced: boolean;
+	phaseComplete: boolean;
+	game: GameState;
 }
 
 // ─── In-character lockout lines (placeholder; final lines come from content) ──
@@ -136,10 +174,58 @@ const AI_ORDER: AiId[] = ["red", "green", "blue"];
 export class RoundCoordinator {
 	private readonly provider: LLMProvider;
 	private readonly rng: () => number;
+	private readonly winCondition: ((game: GameState) => boolean) | undefined;
+	private readonly phaseConfigs:
+		| [PhaseConfig, PhaseConfig, PhaseConfig]
+		| undefined;
 
 	constructor(provider: LLMProvider, options: RoundCoordinatorOptions = {}) {
 		this.provider = provider;
 		this.rng = options.rng ?? Math.random;
+		this.winCondition = options.winCondition;
+		this.phaseConfigs = options.phaseConfigs;
+	}
+
+	/**
+	 * Issue #17: end-of-round win-condition check + phase advancement.
+	 *
+	 * Calls the injected `winCondition` predicate against the current game
+	 * state. If it returns true, advances the active phase via the engine's
+	 * `advancePhase`:
+	 *   - Phase 1 → start phase 2 (using phaseConfigs[1])
+	 *   - Phase 2 → start phase 3 (using phaseConfigs[2])
+	 *   - Phase 3 → mark `isComplete = true` (no nextConfig)
+	 *
+	 * The full real history of prior phases stays in `game.phases` — the
+	 * "wipe lie" lives in the system prompt (see context-builder.ts), not in
+	 * the data. This satisfies the AC: "engine retains the full real history
+	 * across the wipe".
+	 *
+	 * Throws if called without `winCondition` / `phaseConfigs` configured.
+	 */
+	checkWinCondition(game: GameState): WinConditionCheckResult {
+		if (!this.winCondition || !this.phaseConfigs) {
+			throw new Error(
+				"RoundCoordinator.checkWinCondition requires winCondition and phaseConfigs in options",
+			);
+		}
+
+		if (!this.winCondition(game)) {
+			return { advanced: false, phaseComplete: false, game };
+		}
+
+		const currentPhase = game.currentPhase;
+
+		if (currentPhase === 3) {
+			// Final phase done — mark complete; readiness signal for #19 endgame.
+			const completed = advancePhase(game, undefined);
+			return { advanced: true, phaseComplete: true, game: completed };
+		}
+
+		// phaseConfigs is 0-indexed; phase 1 → next is index 1, phase 2 → index 2.
+		const nextConfig = this.phaseConfigs[currentPhase];
+		const advanced = advancePhase(game, nextConfig);
+		return { advanced: true, phaseComplete: true, game: advanced };
 	}
 
 	/**

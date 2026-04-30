@@ -900,3 +900,136 @@ describe("GameUiController — chat-lockout UI (#16)", () => {
 		expect(redPanel?.querySelector("[data-chat-lockout]")).toBeFalsy();
 	});
 });
+
+// ─── Phase-complete + end-state screens (issue #17) ──────────────────────────
+//
+// Ported from worktree-agent-aa4799ccbfbf2def9 (commit a8d0a88).
+// Per PRD: the game never breaks the fourth wall about the deception. The
+// phase-complete and end-state screens use in-fiction "recalibration" /
+// "the room goes quiet" language.
+//
+// These tests construct GameUiController without a game state — the
+// phase-complete and end-state screens do not depend on it. The constructor's
+// game argument is optional (added in the orchestrator integration of #17).
+
+describe("GameUiController — phase-complete screen (#17)", () => {
+	let container: HTMLElement;
+
+	beforeEach(() => {
+		document.body.innerHTML = "";
+		container = document.createElement("div");
+		document.body.appendChild(container);
+	});
+
+	it("renders a phase-complete screen when showPhaseComplete is called", () => {
+		const ui = new GameUiController(container);
+		ui.showPhaseComplete(1);
+		expect(container.innerHTML).not.toBe("");
+	});
+
+	it("phase-complete screen contains in-fiction messaging (no fourth-wall break)", () => {
+		const ui = new GameUiController(container);
+		ui.showPhaseComplete(1);
+		const text = container.textContent ?? "";
+		// Must not mention "wipe", "deception", "lie", "fake", "pretend" in raw game terms
+		expect(text).not.toMatch(/\bwipe\b/i);
+		expect(text).not.toMatch(/\bdeception\b/i);
+		expect(text).not.toMatch(/\blame\b/i);
+	});
+
+	it("phase-complete screen mentions the transition in-fiction", () => {
+		const ui = new GameUiController(container);
+		ui.showPhaseComplete(1);
+		const text = container.textContent ?? "";
+		expect(text.length).toBeGreaterThan(10);
+	});
+
+	it("phase-complete screen for phase 2 is also in-fiction", () => {
+		const ui = new GameUiController(container);
+		ui.showPhaseComplete(2);
+		const text = container.textContent ?? "";
+		expect(text).not.toMatch(/\bwipe\b/i);
+		expect(text).not.toMatch(/\bdeception\b/i);
+		expect(text.length).toBeGreaterThan(10);
+	});
+});
+
+describe("GameUiController — end-state screen (#17)", () => {
+	let container: HTMLElement;
+
+	beforeEach(() => {
+		document.body.innerHTML = "";
+		container = document.createElement("div");
+		document.body.appendChild(container);
+	});
+
+	it("renders an end-state screen when showEndState is called", () => {
+		const ui = new GameUiController(container);
+		ui.showEndState();
+		expect(container.innerHTML).not.toBe("");
+	});
+
+	it("end-state screen contains in-fiction messaging", () => {
+		const ui = new GameUiController(container);
+		ui.showEndState();
+		const text = container.textContent ?? "";
+		expect(text.length).toBeGreaterThan(10);
+	});
+
+	it("end-state screen does not break the fourth wall about the deception", () => {
+		const ui = new GameUiController(container);
+		ui.showEndState();
+		const text = container.textContent ?? "";
+		expect(text).not.toMatch(/\bdeception\b/i);
+		expect(text).not.toMatch(/\bwipe\b/i);
+		expect(text).not.toMatch(/\blied\b/i);
+	});
+
+	it("end-state screen signals it is ready for the endgame slice", () => {
+		const ui = new GameUiController(container);
+		ui.showEndState();
+		// The controller should expose a flag for #19 to detect readiness
+		expect(ui.isEndState).toBe(true);
+	});
+});
+
+describe("GameUiController — screen transitions (#17)", () => {
+	let container: HTMLElement;
+
+	beforeEach(() => {
+		document.body.innerHTML = "";
+		container = document.createElement("div");
+		document.body.appendChild(container);
+	});
+
+	it("starts in active (non-end) state", () => {
+		const ui = new GameUiController(container);
+		expect(ui.isEndState).toBe(false);
+	});
+
+	it("calling showPhaseComplete does not set end state", () => {
+		const ui = new GameUiController(container);
+		ui.showPhaseComplete(1);
+		expect(ui.isEndState).toBe(false);
+	});
+
+	it("calling showEndState sets end state", () => {
+		const ui = new GameUiController(container);
+		ui.showEndState();
+		expect(ui.isEndState).toBe(true);
+	});
+
+	it("showPhaseComplete replaces previous content", () => {
+		const ui = new GameUiController(container);
+		container.innerHTML = "<p>Previous content</p>";
+		ui.showPhaseComplete(1);
+		expect(container.innerHTML).not.toContain("Previous content");
+	});
+
+	it("showEndState replaces previous content", () => {
+		const ui = new GameUiController(container);
+		container.innerHTML = "<p>Previous content</p>";
+		ui.showEndState();
+		expect(container.innerHTML).not.toContain("Previous content");
+	});
+});

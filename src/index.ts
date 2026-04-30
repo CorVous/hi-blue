@@ -8,6 +8,7 @@ export type {
 	RoundCoordinatorOptions,
 	RoundInput,
 	RoundOutput,
+	WinConditionCheckResult,
 } from "./coordinator";
 export { MockLLMProvider, RoundCoordinator } from "./coordinator";
 export type { DispatchResult, ValidationResult } from "./dispatcher";

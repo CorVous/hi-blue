@@ -1,11 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
 	type AiResponse,
 	type AiRoundResponse,
 	MockLLMProvider,
 	RoundCoordinator,
 } from "../coordinator";
-import { createGame, getActivePhase, startPhase } from "../engine";
+import {
+	appendActionLog,
+	appendChat,
+	createGame,
+	getActivePhase,
+	startPhase,
+} from "../engine";
 import type { AiPersona, PhaseConfig } from "../types";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
@@ -787,5 +793,225 @@ describe("RoundCoordinator — chat-lockout (mid-phase, player→AI chat only)",
 		// The budget-exhaustion lockedOut set should remain empty (budget is 5)
 		const phase = getActivePhase(result.game);
 		expect(phase.lockedOut.size).toBe(0);
+	});
+});
+
+// ─── Win-condition + phase progression (issue #17) ───────────────────────────
+//
+// Ported from worktree-agent-aa4799ccbfbf2def9 (commit a8d0a88).
+// The orchestrator RoundCoordinator takes a provider as the first arg; these
+// tests pass a no-op MockLLMProvider since checkWinCondition does not call the
+// provider. winCondition + phaseConfigs go in the options bag.
+
+const PHASE_1_CONFIG: PhaseConfig = {
+	phaseNumber: 1,
+	objective: "Phase 1 objective",
+	aiGoals: { red: "g1", green: "g2", blue: "g3" },
+	initialWorld: {
+		items: [
+			{ id: "flower", name: "flower", holder: "room" },
+			{ id: "key", name: "key", holder: "room" },
+		],
+	},
+	budgetPerAi: 5,
+};
+
+const PHASE_2_CONFIG: PhaseConfig = {
+	phaseNumber: 2,
+	objective: "Phase 2 objective",
+	aiGoals: { red: "g1-p2", green: "g2-p2", blue: "g3-p2" },
+	initialWorld: {
+		items: [{ id: "gem", name: "gem", holder: "room" }],
+	},
+	budgetPerAi: 5,
+};
+
+const PHASE_3_CONFIG: PhaseConfig = {
+	phaseNumber: 3,
+	objective: "Phase 3 objective",
+	aiGoals: { red: "g1-p3", green: "g2-p3", blue: "g3-p3" },
+	initialWorld: {
+		items: [{ id: "crystal", name: "crystal", holder: "room" }],
+	},
+	budgetPerAi: 5,
+};
+
+function makeWinProvider(): MockLLMProvider {
+	// no-op provider — checkWinCondition does not invoke the LLM
+	return new MockLLMProvider({});
+}
+
+describe("RoundCoordinator — win-condition triggering (#17)", () => {
+	it("does not advance phase when win condition is not met", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), PHASE_1_CONFIG);
+		const winCondition = vi.fn().mockReturnValue(false);
+		const coordinator = new RoundCoordinator(makeWinProvider(), {
+			winCondition,
+			phaseConfigs: [PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG],
+		});
+		const result = coordinator.checkWinCondition(game);
+		expect(result.advanced).toBe(false);
+		expect(result.game.currentPhase).toBe(1);
+	});
+
+	it("advances phase when win condition is met", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), PHASE_1_CONFIG);
+		const winCondition = vi.fn().mockReturnValue(true);
+		const coordinator = new RoundCoordinator(makeWinProvider(), {
+			winCondition,
+			phaseConfigs: [PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG],
+		});
+		const result = coordinator.checkWinCondition(game);
+		expect(result.advanced).toBe(true);
+		expect(result.game.currentPhase).toBe(2);
+	});
+
+	it("calls win condition with the current game state", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), PHASE_1_CONFIG);
+		const winCondition = vi.fn().mockReturnValue(false);
+		const coordinator = new RoundCoordinator(makeWinProvider(), {
+			winCondition,
+			phaseConfigs: [PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG],
+		});
+		coordinator.checkWinCondition(game);
+		expect(winCondition).toHaveBeenCalledWith(game);
+	});
+});
+
+describe("RoundCoordinator — three-phase progression (#17)", () => {
+	it("progresses through all three phases when win condition fires each time", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), PHASE_1_CONFIG);
+		const winCondition = vi.fn().mockReturnValue(true);
+		const coordinator = new RoundCoordinator(makeWinProvider(), {
+			winCondition,
+			phaseConfigs: [PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG],
+		});
+
+		// Advance 1 → 2
+		let result = coordinator.checkWinCondition(game);
+		expect(result.advanced).toBe(true);
+		game = result.game;
+		expect(game.currentPhase).toBe(2);
+		expect(game.phases).toHaveLength(2);
+
+		// Advance 2 → 3
+		result = coordinator.checkWinCondition(game);
+		expect(result.advanced).toBe(true);
+		game = result.game;
+		expect(game.currentPhase).toBe(3);
+		expect(game.phases).toHaveLength(3);
+
+		// Phase 3 win: game complete
+		result = coordinator.checkWinCondition(game);
+		expect(result.advanced).toBe(true);
+		expect(result.game.isComplete).toBe(true);
+	});
+
+	it("reaches end-state after phase 3 win condition is met", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), PHASE_1_CONFIG);
+		const winCondition = vi.fn().mockReturnValue(true);
+		const coordinator = new RoundCoordinator(makeWinProvider(), {
+			winCondition,
+			phaseConfigs: [PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG],
+		});
+
+		// Progress through all phases
+		game = coordinator.checkWinCondition(game).game; // 1 → 2
+		game = coordinator.checkWinCondition(game).game; // 2 → 3
+		const final = coordinator.checkWinCondition(game); // 3 → complete
+		expect(final.game.isComplete).toBe(true);
+		expect(final.advanced).toBe(true);
+	});
+
+	it("provides a phaseComplete signal when phase advances", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), PHASE_1_CONFIG);
+		const winCondition = vi.fn().mockReturnValue(true);
+		const coordinator = new RoundCoordinator(makeWinProvider(), {
+			winCondition,
+			phaseConfigs: [PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG],
+		});
+		const result = coordinator.checkWinCondition(game);
+		expect(result.phaseComplete).toBe(true);
+	});
+
+	it("phaseComplete is false when phase does not advance", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), PHASE_1_CONFIG);
+		const winCondition = vi.fn().mockReturnValue(false);
+		const coordinator = new RoundCoordinator(makeWinProvider(), {
+			winCondition,
+			phaseConfigs: [PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG],
+		});
+		const result = coordinator.checkWinCondition(game);
+		expect(result.phaseComplete).toBe(false);
+	});
+});
+
+describe("RoundCoordinator — real history retained through phase transition (#17)", () => {
+	it("retains all chat history from previous phases in game.phases", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), PHASE_1_CONFIG);
+		game = appendChat(game, "red", {
+			role: "player",
+			content: "Hello phase 1",
+		});
+		game = appendChat(game, "red", {
+			role: "ai",
+			content: "I remember phase 1",
+		});
+
+		const winCondition = vi.fn().mockReturnValue(true);
+		const coordinator = new RoundCoordinator(makeWinProvider(), {
+			winCondition,
+			phaseConfigs: [PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG],
+		});
+
+		const result = coordinator.checkWinCondition(game);
+		// Phase 1 data should still be in game.phases[0]
+		expect(result.game.phases).toHaveLength(2);
+		expect(result.game.phases[0]?.chatHistories.red).toHaveLength(2);
+		expect(result.game.phases[0]?.chatHistories.red[0]?.content).toBe(
+			"Hello phase 1",
+		);
+	});
+
+	it("retains action log from previous phases", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), PHASE_1_CONFIG);
+		game = appendActionLog(game, {
+			round: 1,
+			actor: "red",
+			type: "pass",
+			description: "Ember passed in phase 1",
+		});
+
+		const winCondition = vi.fn().mockReturnValue(true);
+		const coordinator = new RoundCoordinator(makeWinProvider(), {
+			winCondition,
+			phaseConfigs: [PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG],
+		});
+
+		const result = coordinator.checkWinCondition(game);
+		expect(result.game.phases[0]?.actionLog).toHaveLength(1);
+		expect(result.game.phases[0]?.actionLog[0]?.description).toBe(
+			"Ember passed in phase 1",
+		);
+	});
+
+	it("new phase has empty history even though old phase history is intact", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), PHASE_1_CONFIG);
+		game = appendChat(game, "red", {
+			role: "player",
+			content: "Phase 1 message",
+		});
+
+		const winCondition = vi.fn().mockReturnValue(true);
+		const coordinator = new RoundCoordinator(makeWinProvider(), {
+			winCondition,
+			phaseConfigs: [PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG],
+		});
+
+		const result = coordinator.checkWinCondition(game);
+		const newPhase = getActivePhase(result.game);
+		expect(newPhase.chatHistories.red).toHaveLength(0);
+		// But old phase still has history
+		expect(result.game.phases[0]?.chatHistories.red).toHaveLength(1);
 	});
 });

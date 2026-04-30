@@ -21,19 +21,85 @@ const AI_IDS: AiId[] = ["red", "green", "blue"];
  */
 export class GameUiController {
 	private readonly root: HTMLElement;
-	private game: GameState;
+	private game: GameState | undefined;
+	private _isEndState = false;
 
-	constructor(root: HTMLElement, game: GameState) {
+	constructor(root: HTMLElement, game?: GameState) {
 		this.root = root;
 		this.game = game;
 	}
 
 	// ─── Public API ────────────────────────────────────────────────────────────
 
+	/**
+	 * Whether the controller is currently in the end-state screen (issue #17).
+	 * Set true by `showEndState()`; reset to false by `showPhaseComplete()`.
+	 * Signals readiness for the endgame slice (#19) to take over.
+	 */
+	get isEndState(): boolean {
+		return this._isEndState;
+	}
+
 	render(): void {
+		if (!this.game) {
+			throw new Error(
+				"GameUiController.render requires a game state — pass one to the constructor or call updateGame() first",
+			);
+		}
 		this.root.innerHTML = buildShell(this.game);
 		this.syncBudgets();
 		this.syncActionLog();
+	}
+
+	/**
+	 * Issue #17: show the in-fiction phase-complete screen between phases.
+	 *
+	 * Messaging is in-fiction (no fourth-wall break about the wipe). The screen
+	 * replaces any prior UI in the controller's root container.
+	 *
+	 * @param completedPhase The phase that just finished (1 or 2).
+	 */
+	showPhaseComplete(completedPhase: 1 | 2): void {
+		this._isEndState = false;
+
+		const messages: Record<1 | 2, { heading: string; body: string }> = {
+			1: {
+				heading: "System Recalibration",
+				body: "The room has been reconfigured. The occupants are adjusting to their new environment. A moment of stillness falls before the next cycle begins.",
+			},
+			2: {
+				heading: "System Recalibration",
+				body: "The chamber has shifted again. The lights flicker briefly as the occupants settle into their new circumstances. Something feels different this time.",
+			},
+		};
+
+		const { heading, body } = messages[completedPhase];
+
+		this.root.innerHTML = `
+			<div class="phase-complete" role="status" aria-live="polite">
+				<h2>${heading}</h2>
+				<p>${body}</p>
+			</div>
+		`.trim();
+	}
+
+	/**
+	 * Issue #17: show the in-fiction end-state screen after phase 3 wins.
+	 *
+	 * Replaces any prior UI and sets `isEndState` true so callers (and #19's
+	 * endgame slice) can detect readiness. Messaging is in-fiction; no
+	 * fourth-wall break about the deception.
+	 */
+	showEndState(): void {
+		this._isEndState = true;
+
+		this.root.innerHTML = `
+			<div class="end-state" role="status" aria-live="polite">
+				<h2>The Room Goes Quiet</h2>
+				<p>The final cycle has ended. Whatever was set in motion here has run its course. The occupants have nothing more to say — at least, not tonight.</p>
+				<p>You may keep a record of what transpired.</p>
+			</div>
+		`.trim();
 	}
 
 	setRoundInFlight(inFlight: boolean): void {
@@ -154,12 +220,18 @@ export class GameUiController {
 	}
 
 	getState(): GameState {
+		if (!this.game) {
+			throw new Error(
+				"GameUiController.getState requires a game state — pass one to the constructor or call updateGame() first",
+			);
+		}
 		return this.game;
 	}
 
 	// ─── Private helpers ───────────────────────────────────────────────────────
 
 	private syncBudgets(): void {
+		if (!this.game) return;
 		const phase = getActivePhase(this.game);
 		for (const aiId of AI_IDS) {
 			const panel = this.root.querySelector(`[data-ai-panel="${aiId}"]`);
@@ -172,6 +244,7 @@ export class GameUiController {
 	}
 
 	private syncActionLog(): void {
+		if (!this.game) return;
 		const logPanel = this.root.querySelector("[data-action-log]");
 		if (!logPanel) return;
 		// Clear and re-render the full action log
