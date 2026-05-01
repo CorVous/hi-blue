@@ -152,6 +152,76 @@ export default {
 			});
 		}
 
+		if (url.pathname === "/diagnostics" && request.method === "POST") {
+			// Per-IP rate limit applies (same helper, same KV namespace).
+			// No daily LLM cap — this endpoint makes no LLM calls.
+			const ip = getClientIp(request);
+			const ipRateLimit = parseInt(env.IP_RATE_LIMIT ?? "100", 10);
+			const ipWindowSecs = parseInt(env.IP_RATE_WINDOW_SECS ?? "60", 10);
+
+			const ipResult = await incrementAndCheckIpRate(env.RATE_LIMIT_KV, ip, {
+				limitPerWindow: ipRateLimit,
+				windowSecs: ipWindowSecs,
+			});
+			if (!ipResult.allowed) {
+				return new Response("Too Many Requests", { status: 429 });
+			}
+
+			let body: { downloaded?: unknown; summary?: unknown };
+			try {
+				body = (await request.json()) as {
+					downloaded?: unknown;
+					summary?: unknown;
+				};
+			} catch {
+				return new Response(
+					JSON.stringify({ ok: false, error: "Invalid JSON" }),
+					{ status: 400, headers: { "Content-Type": "application/json" } },
+				);
+			}
+
+			const { downloaded, summary } = body;
+
+			if (typeof downloaded !== "boolean") {
+				return new Response(
+					JSON.stringify({
+						ok: false,
+						error: "downloaded must be a boolean",
+					}),
+					{ status: 400, headers: { "Content-Type": "application/json" } },
+				);
+			}
+
+			const SUMMARY_RE = /^[A-Za-z]{1,32}$/;
+			if (typeof summary !== "string" || !SUMMARY_RE.test(summary)) {
+				return new Response(
+					JSON.stringify({
+						ok: false,
+						error:
+							"summary must be a single word of 1–32 letters (A-Za-z only)",
+					}),
+					{ status: 400, headers: { "Content-Type": "application/json" } },
+				);
+			}
+
+			// Store the diagnostic record in KV.
+			// Key format: "diag:<YYYY-MM-DD>:<uuid>" for easy listing by date.
+			// TTL: none — diagnostics are small and we want them long-lived.
+			const dateKey = new Date().toISOString().slice(0, 10);
+			const diagKey = `diag:${dateKey}:${crypto.randomUUID()}`;
+			const record = JSON.stringify({
+				downloaded,
+				summary,
+				ts: new Date().toISOString(),
+			});
+			await env.RATE_LIMIT_KV.put(diagKey, record);
+
+			return new Response(JSON.stringify({ ok: true }), {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			});
+		}
+
 		return new Response("Not found", { status: 404 });
 	},
 } satisfies ExportedHandler<Env>;
