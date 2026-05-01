@@ -118,7 +118,7 @@ export function renderChatPage(): string {
                 var line = lines[i];
                 if (!line.startsWith('data: ')) continue;
                 var data = line.slice(6);
-                if (data === '[DONE]') {
+                if (data === '[DONE]' || data === '[CAP_HIT]') {
                   sendBtn.disabled = false;
                   return;
                 }

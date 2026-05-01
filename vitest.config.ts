@@ -15,7 +15,20 @@ export default defineConfig({
 			},
 			{
 				extends: true,
-				plugins: [cloudflareTest({ main: "./src/proxy/_smoke.ts" })],
+				plugins: [
+					cloudflareTest({
+						main: "./src/proxy/_smoke.ts",
+						miniflare: {
+							kvNamespaces: ["RATE_LIMIT_KV"],
+							// Small limits so tests can exercise edges without many requests.
+							bindings: {
+								IP_RATE_LIMIT: "2",
+								IP_RATE_WINDOW_SECS: "60",
+								DAILY_CAP: "4",
+							},
+						},
+					}),
+				],
 				test: {
 					name: "workers",
 					include: ["src/proxy/**/*.test.ts"],
