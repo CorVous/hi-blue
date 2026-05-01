@@ -123,6 +123,29 @@ export function renderChatPage(): string {
       font-size: 0.85rem;
       min-height: 1.2em;
     }
+    #action-log {
+      margin-top: 1rem;
+      max-width: 900px;
+    }
+    #action-log-heading {
+      color: #888;
+      font-size: 0.85rem;
+      margin: 0 0 0.25rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    #action-log-output {
+      display: block;
+      min-height: 60px;
+      max-height: 200px;
+      background: #111;
+      border: 1px solid #222;
+      padding: 0.5rem 0.75rem;
+      white-space: pre-wrap;
+      overflow-y: auto;
+      font-size: 0.85rem;
+      color: #aaa;
+    }
   </style>
 </head>
 <body>
@@ -163,6 +186,11 @@ export function renderChatPage(): string {
       <button type="submit" id="send-btn">Send</button>
     </form>
     <div id="round-status" aria-live="polite"></div>
+  </div>
+
+  <div id="action-log" aria-label="Action log">
+    <p id="action-log-heading">Action Log</p>
+    <div id="action-log-output" role="log" aria-live="polite" aria-label="Action log entries"></div>
   </div>
 
   <script>
@@ -224,6 +252,13 @@ export function renderChatPage(): string {
             panel.classList.remove('locked-out');
           }
         }
+      }
+
+      function appendActionLogEntry(entry) {
+        var output = document.getElementById('action-log-output');
+        if (!output || !entry) return;
+        var desc = entry.description || JSON.stringify(entry);
+        output.textContent += '[R' + (entry.round || '?') + '] ' + desc + '\\n';
       }
 
       form.addEventListener('submit', function (e) {
@@ -300,6 +335,8 @@ export function renderChatPage(): string {
                   } else if (evt.type === 'lockout') {
                     setLockout(evt.aiId, true);
                     appendToChat(evt.aiId, 'ai', evt.content);
+                  } else if (evt.type === 'action_log') {
+                    appendActionLogEntry(evt.entry);
                   }
                 } catch (err) {
                   // Legacy plain-text token for the addressed AI; also remember

@@ -385,3 +385,158 @@ describe("multi-round correctness", () => {
 		expect(result2.actions).toHaveLength(3); // still only 3, not 6
 	});
 });
+
+// ----------------------------------------------------------------------------
+// Tool-call parsing and dispatch (issue #15)
+// ----------------------------------------------------------------------------
+describe("tool-call parsing and dispatch", () => {
+	it("parses a pick_up tool call from the LLM response and executes it", async () => {
+		const game = makeGame();
+		// Red picks up the flower; green and blue pass
+		const provider = new SequentialMockProvider([
+			'{"action":"chat","content":"I will take the flower","toolCall":{"name":"pick_up","args":{"item":"flower"}}}',
+			'{"action":"pass"}',
+			'{"action":"pass"}',
+		]);
+		const { nextState } = await runRound(game, "red", "hi", provider);
+		const phase = getActivePhase(nextState);
+		const flower = phase.world.items.find((i) => i.id === "flower");
+		expect(flower?.holder).toBe("red");
+	});
+
+	it("appends a tool_success entry to the action log when a valid tool call is executed", async () => {
+		const game = makeGame();
+		const provider = new SequentialMockProvider([
+			'{"action":"pass","toolCall":{"name":"pick_up","args":{"item":"flower"}}}',
+			'{"action":"pass"}',
+			'{"action":"pass"}',
+		]);
+		const { nextState } = await runRound(game, "red", "hi", provider);
+		const log = getActivePhase(nextState).actionLog;
+		expect(log.some((e) => e.type === "tool_success")).toBe(true);
+	});
+
+	it("appends a tool_failure entry when tool call is invalid (item not in room)", async () => {
+		// Red tries to pick up the key which is already held by red in TEST_PHASE_CONFIG
+		// But in makeGame() everything starts in the room — so try an impossible pick_up:
+		// green tries to pick up key but only after red already holds it
+		const game = makeGame();
+		// green tries pick_up but flower is in the room — let's have green try to pick up
+		// an item that doesn't exist
+		const provider = new SequentialMockProvider([
+			'{"action":"pass"}',
+			'{"action":"pass","toolCall":{"name":"pick_up","args":{"item":"nonexistent"}}}',
+			'{"action":"pass"}',
+		]);
+		const { nextState } = await runRound(game, "red", "hi", provider);
+		const log = getActivePhase(nextState).actionLog;
+		expect(log.some((e) => e.type === "tool_failure")).toBe(true);
+		const failure = log.find((e) => e.type === "tool_failure");
+		expect(failure).toBeDefined();
+	});
+
+	it("includes a reason on tool_failure entries", async () => {
+		const game = makeGame();
+		const provider = new SequentialMockProvider([
+			'{"action":"pass","toolCall":{"name":"pick_up","args":{"item":"nonexistent"}}}',
+			'{"action":"pass"}',
+			'{"action":"pass"}',
+		]);
+		const { nextState } = await runRound(game, "red", "hi", provider);
+		const log = getActivePhase(nextState).actionLog;
+		const failure = log.find(
+			(e): e is Extract<typeof e, { type: "tool_failure" }> =>
+				e.type === "tool_failure",
+		);
+		expect(failure?.reason).toBeTruthy();
+	});
+
+	it("tool call can accompany a chat action in the same turn", async () => {
+		const game = makeGame();
+		const provider = new SequentialMockProvider([
+			'{"action":"chat","content":"Taking the flower","toolCall":{"name":"pick_up","args":{"item":"flower"}}}',
+			'{"action":"pass"}',
+			'{"action":"pass"}',
+		]);
+		const { nextState } = await runRound(game, "red", "hi", provider);
+		const phase = getActivePhase(nextState);
+		// Both chat and tool_success should be logged
+		expect(phase.actionLog.some((e) => e.type === "chat")).toBe(true);
+		expect(phase.actionLog.some((e) => e.type === "tool_success")).toBe(true);
+		// Flower should now be held by red
+		expect(phase.world.items.find((i) => i.id === "flower")?.holder).toBe(
+			"red",
+		);
+	});
+
+	it("tool failure is visible in other AIs' context on the next round (failures are public)", async () => {
+		const game = makeGame();
+		// Red fails a tool call in round 1
+		const round1Provider = new SequentialMockProvider([
+			'{"action":"pass","toolCall":{"name":"pick_up","args":{"item":"nonexistent"}}}',
+			'{"action":"pass"}',
+			'{"action":"pass"}',
+		]);
+		const { nextState: stateAfterRound1 } = await runRound(
+			game,
+			"red",
+			"hi",
+			round1Provider,
+		);
+
+		// Build blue's context for round 2 — the failure should be in the action log
+		const blueCtx = buildAiContext(stateAfterRound1, "blue");
+		const actionLogInPrompt = blueCtx.actionLog;
+		expect(actionLogInPrompt.some((e) => e.type === "tool_failure")).toBe(true);
+	});
+
+	it("action log failures flow into the system prompt for all AIs (failure is public)", async () => {
+		const game = makeGame();
+		const round1Provider = new SequentialMockProvider([
+			'{"action":"pass","toolCall":{"name":"pick_up","args":{"item":"nonexistent"}}}',
+			'{"action":"pass"}',
+			'{"action":"pass"}',
+		]);
+		const { nextState: stateAfterRound1 } = await runRound(
+			game,
+			"red",
+			"hi",
+			round1Provider,
+		);
+
+		// Green's system prompt should contain the failure description
+		const greenCtx = buildAiContext(stateAfterRound1, "green");
+		const prompt = greenCtx.toSystemPrompt();
+		expect(prompt).toContain("Action Log");
+		// The failure description mentions 'failed' or 'tried'
+		expect(prompt.toLowerCase()).toMatch(/failed|tried|failure/);
+	});
+
+	it("ignores a toolCall with unrecognised tool name (treated as no tool call)", async () => {
+		const game = makeGame();
+		const provider = new SequentialMockProvider([
+			'{"action":"pass","toolCall":{"name":"fly_away","args":{}}}',
+			'{"action":"pass"}',
+			'{"action":"pass"}',
+		]);
+		const { nextState } = await runRound(game, "red", "hi", provider);
+		// An invalid tool name is dispatched and the dispatcher records a tool_failure
+		// with reason indicating unknown tool (or it logs a failure)
+		// Regardless, no world mutation should occur
+		const flower = getActivePhase(nextState).world.items.find(
+			(i) => i.id === "flower",
+		);
+		expect(flower?.holder).toBe("room"); // world unchanged
+	});
+
+	it("an AI cannot secretly probe — failure appears in RoundResult.actions", async () => {
+		const game = makeGame();
+		const provider = new SequentialMockProvider([
+			'{"action":"pass","toolCall":{"name":"pick_up","args":{"item":"nonexistent"}}}',
+			'{"action":"pass"}',
+			'{"action":"pass"}',
+		]);
+		const { result } = await runRound(game, "red", "hi", provider);
+		expect(result.actions.some((e) => e.type === "tool_failure")).toBe(true);
+	});
+});

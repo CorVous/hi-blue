@@ -351,3 +351,161 @@ describe("client-side structured SSE events", () => {
 		expect(chatRed?.textContent).toContain(lockoutContent);
 	});
 });
+
+// ----------------------------------------------------------------------------
+// Action log panel (issue #15)
+// ----------------------------------------------------------------------------
+describe("action log panel HTML structure", () => {
+	let doc: Document;
+
+	beforeEach(() => {
+		doc = mountPage(renderChatPage());
+	});
+
+	it("renders an action log panel element", () => {
+		const panel = doc.getElementById("action-log");
+		expect(panel).not.toBeNull();
+	});
+
+	it("action log panel has a heading or label", () => {
+		const heading = doc.querySelector(
+			"[aria-label='Action log'], #action-log-heading, #action-log",
+		);
+		expect(heading).not.toBeNull();
+	});
+
+	it("renders an action log output element for appending entries", () => {
+		const output = doc.getElementById("action-log-output");
+		expect(output).not.toBeNull();
+	});
+});
+
+describe("client-side action_log SSE event", () => {
+	it("appends a tool_success entry to the action log panel", async () => {
+		document.body.innerHTML = renderChatPage();
+
+		const entry = {
+			round: 1,
+			actor: "red",
+			type: "tool_success",
+			toolName: "pick_up",
+			args: { item: "flower" },
+			description: "Ember picked up the flower",
+		};
+
+		const events = [
+			`data: ${JSON.stringify({ type: "action_log", entry })}\n\n`,
+			"data: [DONE]\n\n",
+		].join("");
+
+		const encoder = new TextEncoder();
+		const encoded = encoder.encode(events);
+		let offset = 0;
+
+		const mockReader = {
+			read: vi.fn().mockImplementation(async () => {
+				if (offset < encoded.length) {
+					const chunk = encoded.slice(offset, offset + encoded.length);
+					offset = encoded.length;
+					return { done: false, value: chunk };
+				}
+				return { done: true, value: undefined };
+			}),
+			releaseLock: vi.fn(),
+		};
+
+		const mockFetch = vi.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
+			body: { getReader: () => mockReader },
+		});
+
+		const scriptContent = renderChatPage().match(
+			/<script>([\s\S]*?)<\/script>/,
+		)?.[1];
+		const fn = new Function("fetch", scriptContent as string);
+		fn(mockFetch);
+
+		const form = document.getElementById("chat-form") as HTMLFormElement;
+		const textarea = document.getElementById(
+			"message-input",
+		) as HTMLTextAreaElement;
+		textarea.value = "hi";
+
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+
+		await new Promise((resolve) => setTimeout(resolve, 50));
+
+		const actionLogOutput = document.getElementById("action-log-output");
+		expect(actionLogOutput?.textContent).toContain(
+			"Ember picked up the flower",
+		);
+	});
+
+	it("appends a tool_failure entry to the action log panel", async () => {
+		document.body.innerHTML = renderChatPage();
+
+		const entry = {
+			round: 1,
+			actor: "green",
+			type: "tool_failure",
+			toolName: "pick_up",
+			args: { item: "ghost" },
+			reason: 'Item "ghost" does not exist',
+			description:
+				'Sage tried to pick_up ghost but failed: Item "ghost" does not exist',
+		};
+
+		const events = [
+			`data: ${JSON.stringify({ type: "action_log", entry })}\n\n`,
+			"data: [DONE]\n\n",
+		].join("");
+
+		const encoder = new TextEncoder();
+		const encoded = encoder.encode(events);
+		let offset = 0;
+
+		const mockReader = {
+			read: vi.fn().mockImplementation(async () => {
+				if (offset < encoded.length) {
+					const chunk = encoded.slice(offset, offset + encoded.length);
+					offset = encoded.length;
+					return { done: false, value: chunk };
+				}
+				return { done: true, value: undefined };
+			}),
+			releaseLock: vi.fn(),
+		};
+
+		const mockFetch = vi.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
+			body: { getReader: () => mockReader },
+		});
+
+		const scriptContent = renderChatPage().match(
+			/<script>([\s\S]*?)<\/script>/,
+		)?.[1];
+		const fn = new Function("fetch", scriptContent as string);
+		fn(mockFetch);
+
+		const form = document.getElementById("chat-form") as HTMLFormElement;
+		const textarea = document.getElementById(
+			"message-input",
+		) as HTMLTextAreaElement;
+		textarea.value = "hi";
+
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+
+		await new Promise((resolve) => setTimeout(resolve, 50));
+
+		const actionLogOutput = document.getElementById("action-log-output");
+		expect(actionLogOutput?.textContent).toContain(
+			"Sage tried to pick_up ghost",
+		);
+	});
+});

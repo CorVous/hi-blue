@@ -53,17 +53,44 @@ export interface RunRoundResult {
  *   { "action": "whisper", "target": "<aiId>", "content": "…" }
  *   { "action": "pass" }
  *
+ * An optional toolCall field may accompany any action:
+ *   { "action": "chat", "content": "…", "toolCall": { "name": "pick_up", "args": { "item": "flower" } } }
+ *
  * Anything unparseable or with an unrecognised action falls back to pass.
+ * An unrecognised toolCall.name is passed through; the dispatcher will
+ * validate and log a tool_failure with reason "Unknown tool".
  */
 export function parseAiResponse(aiId: AiId, raw: string): AiTurnAction {
 	try {
 		const parsed = JSON.parse(raw.trim()) as Record<string, unknown>;
+
+		// Parse optional toolCall field
+		let toolCall: AiTurnAction["toolCall"] | undefined;
+		if (parsed.toolCall && typeof parsed.toolCall === "object") {
+			const tc = parsed.toolCall as Record<string, unknown>;
+			if (typeof tc.name === "string" && tc.name.length > 0) {
+				const args =
+					tc.args && typeof tc.args === "object"
+						? (tc.args as Record<string, string>)
+						: {};
+				// Cast to ToolName — dispatcher will reject unknown names via validateToolCall
+				toolCall = {
+					name: tc.name as import("./types").ToolName,
+					args,
+				};
+			}
+		}
+
 		switch (parsed.action) {
 			case "chat": {
 				const content =
 					typeof parsed.content === "string" ? parsed.content.trim() : "";
 				if (content) {
-					return { aiId, chat: { target: "player", content } };
+					return {
+						aiId,
+						chat: { target: "player", content },
+						...(toolCall ? { toolCall } : {}),
+					};
 				}
 				break;
 			}
@@ -72,14 +99,22 @@ export function parseAiResponse(aiId: AiId, raw: string): AiTurnAction {
 				const content =
 					typeof parsed.content === "string" ? parsed.content.trim() : "";
 				if (target && content && AI_ORDER.includes(target) && target !== aiId) {
-					return { aiId, whisper: { target, content } };
+					return {
+						aiId,
+						whisper: { target, content },
+						...(toolCall ? { toolCall } : {}),
+					};
 				}
 				break;
 			}
 			case "pass":
-				return { aiId, pass: true };
+				return { aiId, pass: true, ...(toolCall ? { toolCall } : {}) };
 			default:
 				break;
+		}
+		// If we have a toolCall but the action was unrecognised, still dispatch it
+		if (toolCall) {
+			return { aiId, pass: true, toolCall };
 		}
 	} catch {
 		// not JSON — fall through to pass
