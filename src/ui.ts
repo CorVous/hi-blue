@@ -338,6 +338,55 @@ export function renderChatPage(): string {
       font-size: 0.85rem;
       color: #aaa;
     }
+    #endgame-overlay {
+      display: none;
+    }
+    h1 { color: #4a9eff; margin: 0 0 0.5rem; }
+    #endgame-overlay #endgame-screen {
+      max-width: 600px;
+    }
+    #endgame-overlay #endgame-subtitle {
+      color: #888;
+      margin: 0 0 2rem;
+      font-size: 0.95rem;
+    }
+    #endgame-overlay .endgame-section {
+      margin-bottom: 1.5rem;
+      border: 1px solid #222;
+      padding: 1rem;
+      background: #111;
+    }
+    #endgame-overlay .endgame-section h2 {
+      margin: 0 0 0.75rem;
+      font-size: 1rem;
+      color: #4a9eff;
+    }
+    #endgame-overlay .endgame-section p {
+      margin: 0 0 0.75rem;
+      color: #aaa;
+      font-size: 0.9rem;
+    }
+    #endgame-overlay #diagnostics-status {
+      color: #6bff6b;
+      font-size: 0.85rem;
+      margin-top: 0.5rem;
+      min-height: 1.2em;
+    }
+    #endgame-overlay #download-status {
+      color: #6bff6b;
+      font-size: 0.85rem;
+      margin-top: 0.5rem;
+      min-height: 1.2em;
+    }
+    input[type="text"] {
+      background: #111;
+      color: #e0e0e0;
+      border: 1px solid #444;
+      padding: 0.4rem 0.6rem;
+      font-family: monospace;
+      font-size: 0.95rem;
+      width: 200px;
+    }
   </style>
 </head>
 <body>
@@ -385,10 +434,15 @@ export function renderChatPage(): string {
     <div id="action-log-output" role="log" aria-live="polite" aria-label="Action log entries"></div>
   </div>
 
+  <div id="endgame-overlay" aria-hidden="true">
+    ${renderEndgameSection().replace(/<script>[\s\S]*?<\/script>/, "")}
+  </div>
+
   <script>
     (function () {
       var addressedAi = 'red';
       var roundInFlight = false;
+      var gameEnded = false;
 
       var form = document.getElementById('chat-form');
       var input = document.getElementById('message-input');
@@ -603,6 +657,23 @@ export function renderChatPage(): string {
                     if (gameOutput) {
                       gameOutput.textContent += '--- Game ended ---\\n';
                     }
+                    // Reveal the endgame overlay and hide the chat container.
+                    // Terminal event — idempotent; once set, gameEnded stays true
+                    // and subsequent events cannot un-hide the chat.
+                    if (!gameEnded) {
+                      gameEnded = true;
+                      var chatContainer = document.getElementById('game-panels');
+                      var inputArea = document.getElementById('input-area');
+                      var actionLog = document.getElementById('action-log');
+                      var overlay = document.getElementById('endgame-overlay');
+                      if (chatContainer) chatContainer.style.display = 'none';
+                      if (inputArea) inputArea.style.display = 'none';
+                      if (actionLog) actionLog.style.display = 'none';
+                      if (overlay) {
+                        overlay.style.display = 'block';
+                        overlay.setAttribute('aria-hidden', 'false');
+                      }
+                    }
                   }
                 } catch (err) {
                   // Legacy plain-text token (smoke worker emits these).
@@ -627,6 +698,64 @@ export function renderChatPage(): string {
           setRoundInFlight(false);
         });
       });
+
+      // ── Endgame overlay: button handlers ─────────────────────────────────
+      // These mirror the handlers in renderEndgameSection's standalone script,
+      // but wired up here since the endgame script tag is stripped from the
+      // inline overlay to keep a single <script> block on the chat page.
+      (function () {
+        var downloaded = false;
+
+        var downloadBtn = document.getElementById('download-ais-btn');
+        var downloadStatus = document.getElementById('download-status');
+        if (downloadBtn && downloadStatus) {
+          downloadBtn.addEventListener('click', function () {
+            var payloadAttr = downloadBtn.getAttribute('data-save-payload');
+            var payload = payloadAttr ? payloadAttr : JSON.stringify({ version: 1, ais: [] });
+            var blob = new Blob([payload], { type: 'application/json' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = 'hi-blue-save.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            downloaded = true;
+            downloadStatus.textContent = 'Saved.';
+            downloadBtn.disabled = true;
+          });
+        }
+
+        var submitBtn = document.getElementById('submit-diagnostics-btn');
+        var summaryInput = document.getElementById('diagnostics-summary');
+        var diagnosticsStatus = document.getElementById('diagnostics-status');
+        if (submitBtn && summaryInput && diagnosticsStatus) {
+          submitBtn.addEventListener('click', function () {
+            var summary = summaryInput.value.trim();
+            if (!summary) {
+              diagnosticsStatus.textContent = 'Please enter a one-word summary first.';
+              return;
+            }
+            submitBtn.disabled = true;
+            fetch('/diagnostics', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ downloaded: downloaded, summary: summary }),
+            }).then(function (res) {
+              if (res.ok) {
+                diagnosticsStatus.textContent = 'Diagnostics submitted. Thank you.';
+              } else {
+                diagnosticsStatus.textContent = 'Submission failed (' + res.status + ').';
+                submitBtn.disabled = false;
+              }
+            }).catch(function (err) {
+              diagnosticsStatus.textContent = 'Network error: ' + err.message;
+              submitBtn.disabled = false;
+            });
+          });
+        }
+      })();
     })();
   </script>
 </body>

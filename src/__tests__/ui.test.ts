@@ -854,10 +854,35 @@ describe("endgame page HTML structure", () => {
 	});
 });
 
-describe("renderChatPage does not render endgame elements", () => {
-	it("chat page does not have the download-ais button", () => {
+describe("renderChatPage endgame overlay (issue #32)", () => {
+	it("chat page contains an endgame overlay container", () => {
 		const doc = mountPage(renderChatPage());
-		expect(doc.getElementById("download-ais-btn")).toBeNull();
+		expect(doc.getElementById("endgame-overlay")).not.toBeNull();
+	});
+
+	it("endgame overlay is initially hidden via display:none style", () => {
+		const html = renderChatPage();
+		// The overlay must declare display:none in the stylesheet
+		expect(html).toMatch(/#endgame-overlay\s*\{[^}]*display\s*:\s*none/);
+	});
+
+	it("endgame overlay contains the endgame section fragment", () => {
+		const doc = mountPage(renderChatPage());
+		const overlay = doc.getElementById("endgame-overlay");
+		expect(overlay).not.toBeNull();
+		expect(overlay?.querySelector("#endgame-screen")).not.toBeNull();
+	});
+
+	it("endgame overlay contains the Download AIs button from renderEndgameSection", () => {
+		const doc = mountPage(renderChatPage());
+		const overlay = doc.getElementById("endgame-overlay");
+		expect(overlay?.querySelector("#download-ais-btn")).not.toBeNull();
+	});
+
+	it("endgame overlay is initially aria-hidden", () => {
+		const doc = mountPage(renderChatPage());
+		const overlay = doc.getElementById("endgame-overlay");
+		expect(overlay?.getAttribute("aria-hidden")).toBe("true");
 	});
 });
 
@@ -1165,5 +1190,92 @@ describe("client-side game_ended SSE event", () => {
 		const actionLogOutput = document.getElementById("action-log-output");
 		expect(actionLogOutput).not.toBeNull();
 		expect(actionLogOutput?.textContent?.length).toBeGreaterThan(0);
+	});
+});
+
+// ----------------------------------------------------------------------------
+// game_ended overlay reveal (issue #32)
+// ----------------------------------------------------------------------------
+
+describe("client-side game_ended overlay reveal", () => {
+	it("reveals the endgame overlay on game_ended event", async () => {
+		document.body.innerHTML = renderChatPage();
+
+		await runSseScenario([
+			`data: ${JSON.stringify({ type: "game_ended" })}\n\n`,
+			"data: [DONE]\n\n",
+		]);
+
+		const overlay = document.getElementById("endgame-overlay") as HTMLElement;
+		expect(overlay).not.toBeNull();
+		expect(overlay.style.display).toBe("block");
+	});
+
+	it("hides the game-panels container on game_ended event", async () => {
+		document.body.innerHTML = renderChatPage();
+
+		await runSseScenario([
+			`data: ${JSON.stringify({ type: "game_ended" })}\n\n`,
+			"data: [DONE]\n\n",
+		]);
+
+		const gamePanels = document.getElementById("game-panels") as HTMLElement;
+		expect(gamePanels).not.toBeNull();
+		expect(gamePanels.style.display).toBe("none");
+	});
+
+	it("hides the input-area container on game_ended event", async () => {
+		document.body.innerHTML = renderChatPage();
+
+		await runSseScenario([
+			`data: ${JSON.stringify({ type: "game_ended" })}\n\n`,
+			"data: [DONE]\n\n",
+		]);
+
+		const inputArea = document.getElementById("input-area") as HTMLElement;
+		expect(inputArea).not.toBeNull();
+		expect(inputArea.style.display).toBe("none");
+	});
+
+	it("sets aria-hidden=false on the overlay after game_ended", async () => {
+		document.body.innerHTML = renderChatPage();
+
+		await runSseScenario([
+			`data: ${JSON.stringify({ type: "game_ended" })}\n\n`,
+			"data: [DONE]\n\n",
+		]);
+
+		const overlay = document.getElementById("endgame-overlay") as HTMLElement;
+		expect(overlay.getAttribute("aria-hidden")).toBe("false");
+	});
+
+	it("receiving multiple game_ended events does not break anything (idempotent)", async () => {
+		document.body.innerHTML = renderChatPage();
+
+		await runSseScenario([
+			`data: ${JSON.stringify({ type: "game_ended" })}\n\n`,
+			`data: ${JSON.stringify({ type: "game_ended" })}\n\n`,
+			"data: [DONE]\n\n",
+		]);
+
+		const overlay = document.getElementById("endgame-overlay") as HTMLElement;
+		expect(overlay.style.display).toBe("block");
+		const gamePanels = document.getElementById("game-panels") as HTMLElement;
+		expect(gamePanels.style.display).toBe("none");
+	});
+
+	it("a phase_advanced event after game_ended does not re-show the chat", async () => {
+		document.body.innerHTML = renderChatPage();
+
+		await runSseScenario([
+			`data: ${JSON.stringify({ type: "game_ended" })}\n\n`,
+			`data: ${JSON.stringify({ type: "phase_advanced", phase: 4, objective: "Epilogue" })}\n\n`,
+			"data: [DONE]\n\n",
+		]);
+
+		const gamePanels = document.getElementById("game-panels") as HTMLElement;
+		expect(gamePanels.style.display).toBe("none");
+		const overlay = document.getElementById("endgame-overlay") as HTMLElement;
+		expect(overlay.style.display).toBe("block");
 	});
 });
