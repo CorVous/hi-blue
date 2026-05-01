@@ -8,6 +8,7 @@ import type { ActionLogEntry } from "../types";
 import {
 	renderActionLogPanel,
 	renderChatPage,
+	renderPhaseCompleteOverlay,
 	renderThreePanelPage,
 } from "../ui.js";
 
@@ -548,5 +549,122 @@ describe("chat-lockout UI events (three-panel page)", () => {
 			'[data-ai-panel="blue"]',
 		) as HTMLElement;
 		expect(panelAfter.getAttribute("data-chat-lockout")).toBeNull();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Phase-complete overlay
+// ---------------------------------------------------------------------------
+
+describe("renderPhaseCompleteOverlay", () => {
+	it("returns an HTML string containing a 'Continue' button", () => {
+		const html = renderPhaseCompleteOverlay(2);
+		const doc = mountPage(`<html><body>${html}</body></html>`);
+		const btn = doc.querySelector("button[data-phase-continue]");
+		expect(btn).not.toBeNull();
+	});
+
+	it("renders with the hidden attribute so it starts invisible", () => {
+		const html = renderPhaseCompleteOverlay(2);
+		const doc = mountPage(`<html><body>${html}</body></html>`);
+		const overlay = doc.querySelector("[data-phase-complete-overlay]");
+		expect(overlay).not.toBeNull();
+		expect(overlay?.hasAttribute("hidden")).toBe(true);
+	});
+
+	it("contains in-fiction copy (no fourth-wall break)", () => {
+		const html = renderPhaseCompleteOverlay(2);
+		// Must have some in-fiction text
+		expect(html.toLowerCase()).toContain("memory");
+		// Must NOT expose the deception
+		expect(html).not.toContain("AIs are being told to lie");
+		expect(html).not.toContain("pretend");
+	});
+
+	it("renderPhaseCompleteOverlay(3) renders with phase-3 context", () => {
+		const html = renderPhaseCompleteOverlay(3);
+		const doc = mountPage(`<html><body>${html}</body></html>`);
+		const overlay = doc.querySelector("[data-phase-complete-overlay]");
+		expect(overlay).not.toBeNull();
+	});
+});
+
+describe("phase-complete SSE event (three-panel page)", () => {
+	function getThreePanelScript(): string {
+		const scriptContent = renderThreePanelPage().match(
+			/<script>([\s\S]*?)<\/script>/,
+		)?.[1];
+		if (!scriptContent) throw new Error("No script found in three-panel page");
+		return scriptContent;
+	}
+
+	function mountThreePanelWithOverlayAndSseLines(sseLines: string[]): void {
+		document.body.innerHTML =
+			renderThreePanelPage() + renderPhaseCompleteOverlay(2);
+		const sseBody = sseLines.join("");
+		const encoder = new TextEncoder();
+		const encoded = encoder.encode(sseBody);
+		let offset = 0;
+
+		const mockReader = {
+			read: vi.fn().mockImplementation(async () => {
+				if (offset < encoded.length) {
+					const chunk = encoded.slice(offset, offset + encoded.length);
+					offset = encoded.length;
+					return { done: false, value: chunk };
+				}
+				return { done: true, value: undefined };
+			}),
+			releaseLock: vi.fn(),
+		};
+
+		const mockFetch = vi.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
+			body: { getReader: () => mockReader },
+		});
+
+		const fn = new Function("fetch", getThreePanelScript());
+		fn(mockFetch);
+	}
+
+	async function submitForm(targetAi: string, message: string): Promise<void> {
+		const form = document.getElementById("chat-form") as HTMLFormElement;
+		const textarea = document.getElementById(
+			"message-input",
+		) as HTMLTextAreaElement;
+		const selector = document.getElementById(
+			"ai-selector",
+		) as HTMLSelectElement;
+		textarea.value = message;
+		selector.value = targetAi;
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 50));
+	}
+
+	it("phase-complete:2 SSE event removes the hidden attribute from the overlay", async () => {
+		mountThreePanelWithOverlayAndSseLines([
+			"data: phase-complete:2\n\n",
+			"data: [DONE]\n\n",
+		]);
+		await submitForm("red", "hi");
+
+		const overlay = document.querySelector(
+			"[data-phase-complete-overlay]",
+		) as HTMLElement;
+		expect(overlay).not.toBeNull();
+		expect(overlay.hasAttribute("hidden")).toBe(false);
+	});
+
+	it("game-complete SSE event sets data-game-complete on the body", async () => {
+		mountThreePanelWithOverlayAndSseLines([
+			"data: game-complete\n\n",
+			"data: [DONE]\n\n",
+		]);
+		await submitForm("red", "hi");
+
+		expect(document.body.hasAttribute("data-game-complete")).toBe(true);
 	});
 });
