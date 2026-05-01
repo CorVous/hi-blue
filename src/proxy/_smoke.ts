@@ -8,11 +8,7 @@ import {
 	incrementAndCheckDailyCap,
 	incrementAndCheckIpRate,
 } from "./rate-limit";
-import {
-	renderEndgameScreen,
-	renderPhaseCompleteOverlay,
-	renderThreePanelPage,
-} from "./ui";
+import { renderThreePanelPage } from "./ui";
 
 /**
  * Environment bindings for the proxy worker.
@@ -239,11 +235,14 @@ export default {
 		const url = new URL(request.url);
 
 		if (url.pathname === "/") {
-			const html =
-				renderThreePanelPage() +
-				renderPhaseCompleteOverlay(2) +
-				renderEndgameScreen();
-			return new Response(html, {
+			// Overlay/endgame markup is intentionally omitted: those renderers
+			// carry an inline `display:flex` that overrides the `hidden`
+			// attribute, so including them on initial load makes the endgame
+			// screen cover the three-panel layout. They can be reintroduced
+			// once their inline-style/hidden interaction is fixed; for now
+			// the default phase config has no winCondition, so the SSE pump
+			// never emits the corresponding lifecycle events anyway.
+			return new Response(renderThreePanelPage(), {
 				headers: { "Content-Type": "text/html; charset=utf-8" },
 			});
 		}
