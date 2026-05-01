@@ -29,6 +29,7 @@ import type {
 	AiTurnAction,
 	GameState,
 	RoundResult,
+	ToolName,
 } from "./types";
 
 const AI_ORDER: AiId[] = ["red", "green", "blue"];
@@ -75,7 +76,7 @@ export function parseAiResponse(aiId: AiId, raw: string): AiTurnAction {
 						: {};
 				// Cast to ToolName — dispatcher will reject unknown names via validateToolCall
 				toolCall = {
-					name: tc.name as import("./types").ToolName,
+					name: tc.name as ToolName,
 					args,
 				};
 			}
