@@ -341,3 +341,31 @@ describe("response parsing", () => {
 		expect(log.filter((e) => e.type === "pass")).toHaveLength(3);
 	});
 });
+
+// ----------------------------------------------------------------------------
+// Multi-round correctness
+// ----------------------------------------------------------------------------
+describe("multi-round correctness", () => {
+	it("RoundResult.actions contains only entries from the current round, not prior rounds", async () => {
+		const game = makeGame();
+		const provider = new MockLLMProvider('{"action":"pass"}');
+		// Round 1
+		const { nextState: state1, result: result1 } = await runRound(
+			game,
+			"red",
+			"first message",
+			provider,
+		);
+		expect(result1.actions).toHaveLength(3); // 3 pass entries
+
+		// Round 2: the cumulative actionLog now has 3 prior entries.
+		// result2.actions must contain only round-2 entries, not the prior 3.
+		const { result: result2 } = await runRound(
+			state1,
+			"green",
+			"second message",
+			provider,
+		);
+		expect(result2.actions).toHaveLength(3); // still only 3, not 6
+	});
+});

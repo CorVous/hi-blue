@@ -123,6 +123,11 @@ export async function runRound(
 	// *current* round + 1 (we advance at the end), but we use pre-advance
 	// value because advanceRound happens after all AI turns.
 	const roundNumber = getActivePhase(state).round + 1;
+
+	// Snapshot how many log entries already exist before this round starts.
+	// The phase actionLog is cumulative across rounds, so we must offset into
+	// it correctly when slicing new entries after each AI acts.
+	const logOffsetBeforeRound = getActivePhase(state).actionLog.length;
 	const roundActions: ActionLogEntry[] = [];
 
 	// 2. Each AI acts in turn
@@ -159,9 +164,13 @@ export async function runRound(
 		const dispatchResult = dispatchAiTurn(state, action);
 		state = dispatchResult.game;
 
-		// Collect the action log entries added by this dispatch
+		// Collect only the entries added by this dispatch. The log is cumulative
+		// across rounds, so offset by both the pre-round baseline and the entries
+		// we've already collected within this round.
 		const phase = getActivePhase(state);
-		for (const entry of phase.actionLog.slice(roundActions.length)) {
+		for (const entry of phase.actionLog.slice(
+			logOffsetBeforeRound + roundActions.length,
+		)) {
 			roundActions.push(entry);
 		}
 	}
