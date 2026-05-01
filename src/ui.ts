@@ -412,6 +412,11 @@ export function renderChatPage(): string {
       cursor: pointer;
     }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .lockout-notice {
+      color: #555;
+      font-style: italic;
+      font-size: 0.85rem;
+    }
   </style>
 </head>
 <body>
