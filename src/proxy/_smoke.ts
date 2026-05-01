@@ -1,7 +1,7 @@
 import type { LLMProvider } from "./llm-provider";
 import { MockLLMProvider } from "./llm-provider";
 import { capHitStream, checkAndCharge, configFromEnv } from "./rate-guard";
-import { renderChatPage } from "./ui";
+import { renderChatPage, renderEndgamePage } from "./ui";
 
 /** Shape of the bindings/env this Worker expects. */
 interface Env {
@@ -53,6 +53,17 @@ export default {
 
 		if (url.pathname === "/") {
 			return new Response(renderChatPage(), {
+				headers: { "Content-Type": "text/html; charset=utf-8" },
+			});
+		}
+
+		// ── Dev affordance: standalone endgame screen (issue #30) ─────────────
+		// Stub persona data is hard-coded here; no KV, no fixtures file.
+		// This route is intentionally a developer-only convenience, not
+		// player-facing — the PRD gates it off in production via env flag
+		// (gating not yet implemented; will be added in a follow-up slice).
+		if (url.pathname === "/endgame" && request.method === "GET") {
+			return new Response(renderEndgamePage(), {
 				headers: { "Content-Type": "text/html; charset=utf-8" },
 			});
 		}
