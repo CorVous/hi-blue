@@ -122,6 +122,12 @@ export function renderChatPage(): string {
                   sendBtn.disabled = false;
                   return;
                 }
+                if (data === '[CAP_HIT]') {
+                  // Server rate-limit or daily-cap: the preceding token is the
+                  // in-character sleeping message already appended above.
+                  sendBtn.disabled = false;
+                  return;
+                }
                 output.textContent += data.replace(/\\\\n/g, '\\n');
               }
               return pump();
