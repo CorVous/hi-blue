@@ -1,4 +1,10 @@
 export { GameUiController, mountChatPanel } from "./client";
+export {
+	budgetLockoutLines,
+	chatLockoutLines,
+	personas,
+	phaseConfigs,
+} from "./content";
 export type { AiContext } from "./context-builder";
 export { buildAiContext } from "./context-builder";
 export type {

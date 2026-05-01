@@ -1,3 +1,4 @@
+import { budgetLockoutLines, chatLockoutLines } from "./content";
 import { buildAiContext } from "./context-builder";
 import { dispatchAiTurn } from "./dispatcher";
 import {
@@ -109,30 +110,7 @@ export interface WinConditionCheckResult {
 	game: GameState;
 }
 
-// ─── In-character lockout lines (placeholder; final lines come from content) ──
-
-/**
- * Budget-exhaustion in-character lockout lines.
- * Used when an AI has spent all its phase budget.
- */
-const LOCKOUT_LINES: Record<AiId, string> = {
-	red: "I need a moment to collect myself. Perhaps later.",
-	green: "My thoughts are spent for now. I must rest.",
-	blue: "Sufficient for this phase. I have nothing further to add.",
-};
-
-/**
- * Mid-phase chat-lockout in-character lines.
- * Used when the random chat-lockout event fires, disabling player→AI chat
- * for this AI for a fixed number of rounds. The AI itself keeps acting.
- *
- * Placeholder copy — final lines come from the content slice.
- */
-const CHAT_LOCKOUT_LINES: Record<AiId, string> = {
-	red: "Something has come up. I can't speak with you right now — find another way.",
-	green: "I must withdraw from this conversation for a while. Seek the others.",
-	blue: "Our channel is temporarily unavailable. Route around me.",
-};
+// ─── Coordinator constants ────────────────────────────────────────────────────
 
 /** Probability that a chat-lockout fires at the start of a round (when none is active). */
 const CHAT_LOCKOUT_PROBABILITY = 0.3;
@@ -252,7 +230,7 @@ export class RoundCoordinator {
 			state = setChatLockout(state, {
 				aiId: newlyLockedAiId,
 				roundsRemaining: CHAT_LOCKOUT_DURATION,
-				message: CHAT_LOCKOUT_LINES[newlyLockedAiId],
+				message: chatLockoutLines[newlyLockedAiId],
 			});
 		}
 
@@ -269,7 +247,7 @@ export class RoundCoordinator {
 				aiResponses.push({
 					aiId,
 					lockedOut: true,
-					lockoutMessage: LOCKOUT_LINES[aiId],
+					lockoutMessage: budgetLockoutLines[aiId],
 				});
 				continue;
 			}
@@ -303,7 +281,7 @@ export class RoundCoordinator {
 				roundResponse.chatLockedOut = true;
 				// Only attach the lockout message on the first round (when it was just triggered)
 				if (newlyLockedAiId === aiId) {
-					roundResponse.chatLockoutMessage = CHAT_LOCKOUT_LINES[aiId];
+					roundResponse.chatLockoutMessage = chatLockoutLines[aiId];
 				}
 			} else if (response.type === "chat" && response.content) {
 				roundResponse.chatContent = response.content;
