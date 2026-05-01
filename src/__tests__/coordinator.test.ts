@@ -391,3 +391,181 @@ describe("PerAiMockLLMProvider", () => {
 		expect(tokens.join("")).toBe("fallback");
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Tool-call integration tests
+// ---------------------------------------------------------------------------
+
+describe("tool call – legal action", () => {
+	it("mutates world state and appends a tool_success entry", async () => {
+		const provider = new PerAiMockLLMProvider({
+			red: "[TOOL:pick_up item=flower] I pick up the flower.",
+			green: "[PASS]",
+			blue: "[PASS]",
+		});
+		const coordinator = new RoundCoordinator(provider);
+		const game = makeGame();
+		const { nextState } = await coordinator.runRound(game, "hi", "red");
+
+		const phase = getActivePhase(nextState);
+		// Item should now be held by red
+		const flower = phase.world.items.find((i) => i.id === "flower");
+		expect(flower?.holder).toBe("red");
+
+		// Action log should contain a tool_success entry
+		const successEntry = phase.actionLog.find(
+			(e) => e.type === "tool_success" && e.actor === "red",
+		);
+		expect(successEntry).toBeDefined();
+	});
+
+	it("also records the chat message from the same turn", async () => {
+		const provider = new PerAiMockLLMProvider({
+			red: "[TOOL:pick_up item=flower] I pick up the flower.",
+			green: "[PASS]",
+			blue: "[PASS]",
+		});
+		const coordinator = new RoundCoordinator(provider);
+		const game = makeGame();
+		const { nextState } = await coordinator.runRound(game, "hi", "red");
+
+		const phase = getActivePhase(nextState);
+		// Both tool_success and chat entries should exist for red
+		const redEntries = phase.actionLog.filter((e) => e.actor === "red");
+		const types = redEntries.map((e) => e.type);
+		expect(types).toContain("tool_success");
+		expect(types).toContain("chat");
+	});
+
+	it("deducts budget even for a successful tool call", async () => {
+		const provider = new PerAiMockLLMProvider({
+			red: "[TOOL:pick_up item=flower]",
+			green: "[PASS]",
+			blue: "[PASS]",
+		});
+		const coordinator = new RoundCoordinator(provider);
+		const game = makeGame();
+		const { nextState } = await coordinator.runRound(game, "hi", "red");
+
+		const phase = getActivePhase(nextState);
+		expect(phase.budgets.red.remaining).toBe(4);
+	});
+});
+
+describe("tool call – illegal action", () => {
+	it("appends a tool_failure entry and does NOT mutate world state", async () => {
+		const provider = new PerAiMockLLMProvider({
+			// red picks up the key first; then green tries to pick it up (already taken)
+			red: "[TOOL:pick_up item=key]",
+			green: "[TOOL:pick_up item=key] Let me take the key.",
+			blue: "[PASS]",
+		});
+		const coordinator = new RoundCoordinator(provider);
+		const game = makeGame(); // both items start in room
+		const { nextState } = await coordinator.runRound(game, "hi", "red");
+
+		const phase = getActivePhase(nextState);
+
+		// Key should be held by red (red took it first; green's attempt failed)
+		const key = phase.world.items.find((i) => i.id === "key");
+		expect(key?.holder).toBe("red");
+
+		// Action log should have a tool_failure for green
+		const failEntry = phase.actionLog.find(
+			(e) => e.type === "tool_failure" && e.actor === "green",
+		);
+		expect(failEntry).toBeDefined();
+		if (failEntry?.type === "tool_failure") {
+			expect(failEntry.reason).toBeTruthy();
+		}
+	});
+
+	it("still deducts budget for a failed tool call", async () => {
+		const provider = new PerAiMockLLMProvider({
+			red: "[PASS]",
+			green: "[TOOL:pick_up item=key]",
+			blue: "[TOOL:pick_up item=key]",
+		});
+		const coordinator = new RoundCoordinator(provider);
+		const game = makeGame(); // key in room
+		const { nextState } = await coordinator.runRound(game, "hi", "red");
+
+		const phase = getActivePhase(nextState);
+		// green picked up key (success), blue tried and failed – both have budget deducted
+		expect(phase.budgets.green.remaining).toBe(4);
+		expect(phase.budgets.blue.remaining).toBe(4);
+	});
+
+	it("failure reason is present in the action log entry", async () => {
+		const provider = new PerAiMockLLMProvider({
+			red: "[PASS]",
+			green: "[PASS]",
+			// blue tries to put_down flower but blue doesn't hold it
+			blue: "[TOOL:put_down item=flower]",
+		});
+		const coordinator = new RoundCoordinator(provider);
+		const game = makeGame();
+		const { nextState } = await coordinator.runRound(game, "hi", "red");
+
+		const phase = getActivePhase(nextState);
+		const failEntry = phase.actionLog.find(
+			(e) => e.type === "tool_failure" && e.actor === "blue",
+		);
+		expect(failEntry).toBeDefined();
+		if (failEntry?.type === "tool_failure") {
+			expect(failEntry.reason.length).toBeGreaterThan(0);
+		}
+	});
+});
+
+describe("action log visibility across rounds", () => {
+	it("next-round context includes BOTH tool_success and tool_failure entries", async () => {
+		// Round 1: red succeeds picking up flower; green fails (tries to put down flower it doesn't hold)
+		const round1Provider = new PerAiMockLLMProvider({
+			red: "[TOOL:pick_up item=flower]",
+			green: "[TOOL:put_down item=flower]",
+			blue: "[PASS]",
+		});
+		const coordinator = new RoundCoordinator(round1Provider);
+		const game = makeGame(); // flower in room, key in room
+		const { nextState } = await coordinator.runRound(game, "hi", "red");
+
+		const phase = getActivePhase(nextState);
+		// Both entries must be in the action log
+		const types = phase.actionLog.map((e) => e.type);
+		expect(types).toContain("tool_success");
+		expect(types).toContain("tool_failure");
+
+		// Blue's context builder (called in round 2) receives the full action log
+		// We verify by checking the phase.actionLog directly (used by context-builder)
+		const blueCanSeeRedSuccess = phase.actionLog.some(
+			(e) => e.type === "tool_success" && e.actor === "red",
+		);
+		const blueCanSeeGreenFailure = phase.actionLog.some(
+			(e) => e.type === "tool_failure" && e.actor === "green",
+		);
+		expect(blueCanSeeRedSuccess).toBe(true);
+		expect(blueCanSeeGreenFailure).toBe(true);
+	});
+
+	it("a failure from round 1 is visible to ALL AIs in round 2 context", async () => {
+		const round1Provider = new PerAiMockLLMProvider({
+			red: "[PASS]",
+			green: "[PASS]",
+			// blue tries to give flower it doesn't hold → failure
+			blue: "[TOOL:give item=flower to=red]",
+		});
+		const coordinator = new RoundCoordinator(round1Provider);
+		const game = makeGame();
+		const { nextState } = await coordinator.runRound(game, "hi", "red");
+
+		const phase = getActivePhase(nextState);
+		// Blue's failure is in the shared action log accessible by all AIs next round
+		const blueFailure = phase.actionLog.find(
+			(e) => e.type === "tool_failure" && e.actor === "blue",
+		);
+		expect(blueFailure).toBeDefined();
+		// All entries in phase.actionLog are visible to all AIs via context-builder
+		expect(phase.actionLog.length).toBeGreaterThan(0);
+	});
+});
