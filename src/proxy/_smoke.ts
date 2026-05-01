@@ -2,6 +2,15 @@ import type { LLMProvider } from "./llm-provider";
 import { MockLLMProvider } from "./llm-provider";
 import { capHitStream, checkAndCharge, configFromEnv } from "./rate-guard";
 import { renderChatPage } from "./ui";
+import {
+	buildSessionCookie,
+	createSession,
+	getSession,
+	parseSessionCookie,
+} from "../session-store";
+import { encodeRoundResult, serialiseSseEvents } from "../round-result-encoder";
+import { getActivePhase } from "../engine";
+import type { AiId, PhaseConfig } from "../types";
 
 /** Shape of the bindings/env this Worker expects. */
 interface Env {
@@ -46,6 +55,27 @@ function sseStream(provider: LLMProvider, message: string): ReadableStream {
 		},
 	});
 }
+
+/**
+ * Default phase config used when creating a new game session.
+ * Three AIs, each with budget 5, no win condition (play continues indefinitely).
+ */
+const DEFAULT_PHASE_CONFIG: PhaseConfig = {
+	phaseNumber: 1,
+	objective: "Navigate the room, gather clues, and uncover the truth.",
+	aiGoals: {
+		red: "Hold the flower at phase end.",
+		green: "Ensure items are evenly distributed.",
+		blue: "Hold the key at phase end.",
+	},
+	initialWorld: {
+		items: [
+			{ id: "flower", name: "flower", holder: "room" },
+			{ id: "key", name: "key", holder: "room" },
+		],
+	},
+	budgetPerAi: 5,
+};
 
 export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
@@ -101,6 +131,118 @@ export default {
 					"X-Content-Type-Options": "nosniff",
 				},
 			});
+		}
+
+		// ── POST /game/new ────────────────────────────────────────────────────
+		// Creates a new game session and sets the session cookie.
+		if (url.pathname === "/game/new" && request.method === "POST") {
+			const { sessionId } = createSession(DEFAULT_PHASE_CONFIG);
+			return new Response(JSON.stringify({ ok: true }), {
+				status: 200,
+				headers: {
+					"Content-Type": "application/json",
+					"Set-Cookie": buildSessionCookie(sessionId),
+				},
+			});
+		}
+
+		// ── POST /game/turn ────────────────────────────────────────────────────
+		// Runs one round for the active session and streams SSE events.
+		if (url.pathname === "/game/turn" && request.method === "POST") {
+			// Parse body: { addressedAi, message }
+			let body: { addressedAi?: string; message?: string };
+			try {
+				body = (await request.json()) as {
+					addressedAi?: string;
+					message?: string;
+				};
+			} catch {
+				return new Response("Invalid JSON", { status: 400 });
+			}
+
+			const { addressedAi, message } = body;
+			if (!message || typeof message !== "string") {
+				return new Response("Missing message", { status: 400 });
+			}
+			const validAiIds: AiId[] = ["red", "green", "blue"];
+			if (
+				!addressedAi ||
+				!validAiIds.includes(addressedAi as AiId)
+			) {
+				return new Response("Missing or invalid addressedAi", { status: 400 });
+			}
+
+			// ── Rate-limit / daily-cap guard ────────────────────────────────
+			const clientIp = request.headers.get("CF-Connecting-IP") ?? "unknown";
+			const guard = await checkAndCharge(
+				env.RATE_GUARD_KV,
+				clientIp,
+				Date.now(),
+				configFromEnv(env),
+			);
+			if (!guard.allowed) {
+				return new Response(capHitStream(guard.reason), {
+					headers: {
+						"Content-Type": "text/event-stream",
+						"Cache-Control": "no-cache",
+						"X-Content-Type-Options": "nosniff",
+						"X-Cap-Hit": guard.reason,
+					},
+				});
+			}
+			// ── End guard ───────────────────────────────────────────────────
+
+			// Look up or create the session
+			const sessionId = parseSessionCookie(request.headers.get("Cookie"));
+			let session = sessionId ? getSession(sessionId) : undefined;
+
+			// If no valid session, auto-create one (fallback for requests
+			// that skipped /game/new — e.g. direct test callers).
+			let newSessionId: string | undefined;
+			if (!session) {
+				const created = createSession(DEFAULT_PHASE_CONFIG);
+				session = created.session;
+				newSessionId = created.sessionId;
+			}
+
+			const capturedSession = session;
+			const provider = createProvider(env);
+
+			const responseHeaders: Record<string, string> = {
+				"Content-Type": "text/event-stream",
+				"Cache-Control": "no-cache",
+				"X-Content-Type-Options": "nosniff",
+			};
+			if (newSessionId) {
+				responseHeaders["Set-Cookie"] = buildSessionCookie(newSessionId);
+			}
+
+			const stream = new ReadableStream({
+				async start(controller) {
+					const enc = new TextEncoder();
+					try {
+						const { result, completions } = await capturedSession.submitMessage(
+							addressedAi as AiId,
+							message,
+							provider,
+						);
+
+						// Get the phase state after the round (session mutated in place)
+						const phaseAfter = getActivePhase(capturedSession.getState());
+
+						// Encode and stream all events
+						const events = encodeRoundResult(result, completions, phaseAfter);
+						const payload = serialiseSseEvents(events);
+						controller.enqueue(enc.encode(payload));
+						controller.enqueue(enc.encode("data: [DONE]\n\n"));
+						controller.close();
+					} catch (err) {
+						controller.error(err);
+					}
+				},
+			});
+
+			return new Response(stream, { headers: responseHeaders });
 		}
 
 		if (url.pathname === "/diagnostics") {
