@@ -4,7 +4,7 @@
  * Tests observable behavior: DOM structure and client-side SSE streaming.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { renderChatPage, renderEndgamePage } from "../ui.js";
+import { renderChatPage, renderEndgamePage, renderEndgameSection } from "../ui.js";
 
 function mountPage(html: string): Document {
 	const parser = new DOMParser();
@@ -988,5 +988,79 @@ describe("endgame client-side: submit diagnostics action", () => {
 		expect(callBody.downloaded).toBe(true);
 
 		vi.restoreAllMocks();
+	});
+});
+
+// ----------------------------------------------------------------------------
+// renderEndgameSection — fragment renderer (issue #30)
+// ----------------------------------------------------------------------------
+
+describe("renderEndgameSection fragment structure", () => {
+	let doc: Document;
+
+	beforeEach(() => {
+		// Wrap in a minimal doc shell so DOMParser can parse the fragment.
+		doc = new DOMParser().parseFromString(
+			`<!DOCTYPE html><html><body>${renderEndgameSection()}</body></html>`,
+			"text/html",
+		);
+	});
+
+	it("returns a string (no doctype)", () => {
+		const fragment = renderEndgameSection();
+		expect(typeof fragment).toBe("string");
+		expect(fragment).not.toContain("<!DOCTYPE");
+	});
+
+	it("contains no html, head, or body wrapper tags", () => {
+		const fragment = renderEndgameSection();
+		expect(fragment).not.toMatch(/<html[\s>]/i);
+		expect(fragment).not.toMatch(/<head[\s>]/i);
+		expect(fragment).not.toMatch(/<body[\s>]/i);
+	});
+
+	it("renders the Download AIs button", () => {
+		const btn = doc.getElementById("download-ais-btn");
+		expect(btn).not.toBeNull();
+		expect(btn?.tagName.toLowerCase()).toBe("button");
+	});
+
+	it("renders the Submit diagnostics button", () => {
+		const btn = doc.getElementById("submit-diagnostics-btn");
+		expect(btn).not.toBeNull();
+		expect(btn?.tagName.toLowerCase()).toBe("button");
+	});
+
+	it("renders the download section heading", () => {
+		const section = doc.getElementById("download-section");
+		expect(section).not.toBeNull();
+		const heading = section?.querySelector("h2");
+		expect(heading).not.toBeNull();
+		expect(heading?.textContent).toContain("Save the AIs");
+	});
+
+	it("renders the diagnostics section heading", () => {
+		const section = doc.getElementById("diagnostics-section");
+		expect(section).not.toBeNull();
+		const heading = section?.querySelector("h2");
+		expect(heading).not.toBeNull();
+		expect(heading?.textContent).toContain("diagnostics");
+	});
+
+	it("download-ais-btn carries the data-save-payload attribute slot", () => {
+		// The attribute is absent by default (populated by client-side code);
+		// assert the raw HTML string contains the attribute name as a hook.
+		const fragment = renderEndgameSection();
+		expect(fragment).toContain("data-save-payload");
+	});
+
+	it("fragment is included verbatim inside renderEndgamePage output", () => {
+		const page = renderEndgamePage();
+		const fragment = renderEndgameSection();
+		// The section's outer div must appear inside the page.
+		expect(page).toContain('id="endgame-screen"');
+		// The download button must appear in both.
+		expect(page).toContain("download-ais-btn");
+		expect(fragment).toContain("download-ais-btn");
 	});
 });

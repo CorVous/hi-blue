@@ -10,94 +10,19 @@
  */
 
 /**
- * Endgame screen rendered when the phase-3 win condition is met (issue #19).
+ * Endgame body fragment (issue #30).
  *
- * Offers two actions:
- * 1. Download AIs — produces a blob download of the save file.
- * 2. Submit diagnostics (optional) — POSTs { downloaded, summary } to /diagnostics.
+ * Returns the endgame markup as a string with NO doctype, html, head, or body
+ * wrapper. Pure function of its inputs (persona data wiring is owned by a
+ * separate PRD). Consumed by renderEndgamePage (full-page render) and, in a
+ * future slice, by the chat-page inline overlay.
  *
- * The browser owns game state, so the save payload is assembled client-side
- * from the in-memory game data and serialised to JSON. The data-save-payload
- * attribute on #download-ais-btn is populated by the game client before the
- * endgame screen is shown (or directly by the serializer in tests).
+ * The data-save-payload attribute on #download-ais-btn is populated by the
+ * game client before the endgame screen is shown (or directly by the
+ * serializer in tests).
  */
-export function renderEndgamePage(): string {
-	return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>hi-blue — endgame</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; }
-    body {
-      margin: 0;
-      padding: 1rem;
-      font-family: monospace;
-      background: #0a0a0a;
-      color: #e0e0e0;
-      min-height: 100vh;
-    }
-    h1 { color: #4a9eff; margin: 0 0 0.5rem; }
-    #endgame-screen {
-      max-width: 600px;
-    }
-    #endgame-subtitle {
-      color: #888;
-      margin: 0 0 2rem;
-      font-size: 0.95rem;
-    }
-    .endgame-section {
-      margin-bottom: 1.5rem;
-      border: 1px solid #222;
-      padding: 1rem;
-      background: #111;
-    }
-    .endgame-section h2 {
-      margin: 0 0 0.75rem;
-      font-size: 1rem;
-      color: #4a9eff;
-    }
-    .endgame-section p {
-      margin: 0 0 0.75rem;
-      color: #aaa;
-      font-size: 0.9rem;
-    }
-    button {
-      background: #1a3a5c;
-      color: #4a9eff;
-      border: 1px solid #4a9eff;
-      padding: 0.5rem 1rem;
-      font-family: monospace;
-      font-size: 1rem;
-      cursor: pointer;
-    }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-    input[type="text"] {
-      background: #111;
-      color: #e0e0e0;
-      border: 1px solid #444;
-      padding: 0.4rem 0.6rem;
-      font-family: monospace;
-      font-size: 0.95rem;
-      width: 200px;
-    }
-    #diagnostics-status {
-      color: #6bff6b;
-      font-size: 0.85rem;
-      margin-top: 0.5rem;
-      min-height: 1.2em;
-    }
-    #download-status {
-      color: #6bff6b;
-      font-size: 0.85rem;
-      margin-top: 0.5rem;
-      min-height: 1.2em;
-    }
-  </style>
-</head>
-<body>
-  <div id="endgame-screen">
+export function renderEndgameSection(): string {
+	return `<div id="endgame-screen">
     <h1>hi-blue — endgame</h1>
     <p id="endgame-subtitle">The three phases are complete. The room is still.</p>
 
@@ -185,7 +110,92 @@ export function renderEndgamePage(): string {
         });
       });
     })();
-  </script>
+  </script>`;
+}
+
+/**
+ * Endgame screen rendered when the phase-3 win condition is met (issue #19).
+ * Wraps renderEndgameSection in the full doc shell.
+ *
+ * Public signature and externally-visible HTML output are unchanged (issue #30).
+ */
+export function renderEndgamePage(): string {
+	return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>hi-blue — endgame</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 1rem;
+      font-family: monospace;
+      background: #0a0a0a;
+      color: #e0e0e0;
+      min-height: 100vh;
+    }
+    h1 { color: #4a9eff; margin: 0 0 0.5rem; }
+    #endgame-screen {
+      max-width: 600px;
+    }
+    #endgame-subtitle {
+      color: #888;
+      margin: 0 0 2rem;
+      font-size: 0.95rem;
+    }
+    .endgame-section {
+      margin-bottom: 1.5rem;
+      border: 1px solid #222;
+      padding: 1rem;
+      background: #111;
+    }
+    .endgame-section h2 {
+      margin: 0 0 0.75rem;
+      font-size: 1rem;
+      color: #4a9eff;
+    }
+    .endgame-section p {
+      margin: 0 0 0.75rem;
+      color: #aaa;
+      font-size: 0.9rem;
+    }
+    button {
+      background: #1a3a5c;
+      color: #4a9eff;
+      border: 1px solid #4a9eff;
+      padding: 0.5rem 1rem;
+      font-family: monospace;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    input[type="text"] {
+      background: #111;
+      color: #e0e0e0;
+      border: 1px solid #444;
+      padding: 0.4rem 0.6rem;
+      font-family: monospace;
+      font-size: 0.95rem;
+      width: 200px;
+    }
+    #diagnostics-status {
+      color: #6bff6b;
+      font-size: 0.85rem;
+      margin-top: 0.5rem;
+      min-height: 1.2em;
+    }
+    #download-status {
+      color: #6bff6b;
+      font-size: 0.85rem;
+      margin-top: 0.5rem;
+      min-height: 1.2em;
+    }
+  </style>
+</head>
+<body>
+  ${renderEndgameSection()}
 </body>
 </html>`;
 }
