@@ -131,3 +131,73 @@ describe("rate-guard integration via /chat", () => {
 		expect(text).not.toContain("[CAP_HIT]");
 	});
 });
+
+describe("POST /diagnostics endpoint (issue #19)", () => {
+	it("accepts a valid diagnostics payload and returns 200", async () => {
+		const response = await SELF.fetch("https://example.com/diagnostics", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ downloaded: true, summary: "curious" }),
+		});
+
+		expect(response.status).toBe(200);
+	});
+
+	it("accepts downloaded=false and a different summary word", async () => {
+		const response = await SELF.fetch("https://example.com/diagnostics", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ downloaded: false, summary: "confused" }),
+		});
+
+		expect(response.status).toBe(200);
+	});
+
+	it("returns 400 when the body is not valid JSON", async () => {
+		const response = await SELF.fetch("https://example.com/diagnostics", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: "not-json",
+		});
+
+		expect(response.status).toBe(400);
+	});
+
+	it("returns 400 when 'downloaded' field is missing", async () => {
+		const response = await SELF.fetch("https://example.com/diagnostics", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ summary: "curious" }),
+		});
+
+		expect(response.status).toBe(400);
+	});
+
+	it("returns 400 when 'summary' field is missing", async () => {
+		const response = await SELF.fetch("https://example.com/diagnostics", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ downloaded: true }),
+		});
+
+		expect(response.status).toBe(400);
+	});
+
+	it("returns 400 when 'summary' is not a string", async () => {
+		const response = await SELF.fetch("https://example.com/diagnostics", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ downloaded: true, summary: 42 }),
+		});
+
+		expect(response.status).toBe(400);
+	});
+
+	it("returns 405 for non-POST methods on /diagnostics", async () => {
+		const response = await SELF.fetch("https://example.com/diagnostics", {
+			method: "GET",
+		});
+
+		expect(response.status).toBe(405);
+	});
+});
