@@ -64,12 +64,6 @@ class CompletionCapturingProvider implements LLMProvider {
 	}
 }
 
-export interface AiPersonas {
-	red: { name: string; personality: string; goal: string; budgetPerPhase: number };
-	green: { name: string; personality: string; goal: string; budgetPerPhase: number };
-	blue: { name: string; personality: string; goal: string; budgetPerPhase: number };
-}
-
 export class GameSession {
 	private state: GameState;
 

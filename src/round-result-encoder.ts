@@ -125,11 +125,9 @@ export function encodeRoundResult(
 			events.push({ type: "budget", aiId, remaining: budget.remaining });
 		}
 
-		// lockout — if AI just became budget-locked (remaining === 0)
-		if (isLockedOut && !completion) {
-			// Already emitted the lockout event above
-		} else if (isLockedOut && completion) {
-			// AI exhausted budget this round (had a turn but now locked)
+		// If the AI exhausted its budget this round (had a turn but is now locked),
+		// emit a lockout event after the turn block.
+		if (isLockedOut && completion) {
 			events.push({
 				type: "lockout",
 				aiId,
