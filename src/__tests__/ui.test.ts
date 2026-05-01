@@ -4,7 +4,7 @@
  * Tests observable behavior: DOM structure and client-side SSE streaming.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { renderChatPage } from "../ui.js";
+import { renderChatPage, renderThreePanelPage } from "../ui.js";
 
 function mountPage(html: string): Document {
 	const parser = new DOMParser();
@@ -42,6 +42,63 @@ describe("chat page HTML structure", () => {
 	it("includes a submit button", () => {
 		const btn = doc.querySelector("button[type='submit']");
 		expect(btn).not.toBeNull();
+	});
+});
+
+describe("three-panel layout", () => {
+	let doc: Document;
+
+	beforeEach(() => {
+		doc = mountPage(renderThreePanelPage());
+	});
+
+	it("renders three chat panel sections, one per AI", () => {
+		const panels = doc.querySelectorAll("[data-ai-panel]");
+		expect(panels.length).toBe(3);
+	});
+
+	it("each panel is labeled with an AI color (red, green, blue)", () => {
+		const html = renderThreePanelPage();
+		expect(html).toContain('data-ai-panel="red"');
+		expect(html).toContain('data-ai-panel="green"');
+		expect(html).toContain('data-ai-panel="blue"');
+	});
+
+	it("renders an AI selector so the player can pick which AI to address", () => {
+		const selector = doc.querySelector("[data-ai-selector]");
+		expect(selector).not.toBeNull();
+	});
+
+	it("the AI selector has options for red, green, and blue", () => {
+		const html = renderThreePanelPage();
+		expect(html).toContain('value="red"');
+		expect(html).toContain('value="green"');
+		expect(html).toContain('value="blue"');
+	});
+
+	it("each panel shows a budget counter element", () => {
+		const budgetEls = doc.querySelectorAll("[data-budget]");
+		expect(budgetEls.length).toBe(3);
+	});
+
+	it("each panel has an output area for AI messages", () => {
+		const outputs = doc.querySelectorAll("[data-chat-output]");
+		expect(outputs.length).toBe(3);
+	});
+
+	it("renders a single shared send button", () => {
+		const btns = doc.querySelectorAll("button[type='submit']");
+		expect(btns.length).toBe(1);
+	});
+
+	it("renders a shared message textarea", () => {
+		const textarea = doc.querySelector("textarea");
+		expect(textarea).not.toBeNull();
+	});
+
+	it("send button starts enabled", () => {
+		const btn = doc.querySelector("button[type='submit']") as HTMLButtonElement;
+		expect(btn?.disabled).toBe(false);
 	});
 });
 
