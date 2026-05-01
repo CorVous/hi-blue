@@ -61,6 +61,12 @@ export interface PhaseConfig {
 	budgetPerAi: number;
 }
 
+export interface ChatLockout {
+	aiId: AiId;
+	startRound: number;
+	endRound: number;
+}
+
 export interface PhaseState {
 	phaseNumber: 1 | 2 | 3;
 	objective: string;
@@ -72,6 +78,7 @@ export interface PhaseState {
 	whispers: WhisperMessage[];
 	actionLog: ActionLogEntry[];
 	lockedOut: Set<AiId>;
+	chatLockout?: ChatLockout;
 }
 
 export interface GameState {

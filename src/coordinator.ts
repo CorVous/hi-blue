@@ -6,8 +6,9 @@ import {
 	appendChat,
 	getActivePhase,
 	isAiLockedOut,
+	updateActivePhase,
 } from "./engine";
-import type { AiId, GameState, RoundResult } from "./types";
+import type { AiId, ChatLockout, GameState, RoundResult } from "./types";
 
 // ---------------------------------------------------------------------------
 // LLMProvider extension for per-AI routing
@@ -69,24 +70,98 @@ export interface RoundOutcome {
 	nextState: GameState;
 }
 
+export interface RoundCoordinatorOptions {
+	/**
+	 * Probability (0-1) that a chat-lockout event triggers at the start of
+	 * each round when no lockout is currently active.
+	 * Default: 0 (opt-in only; production behaviour enabled by content slice #18).
+	 */
+	triggerProbabilityPerRound?: number;
+	/**
+	 * Number of rounds the chat-lockout lasts once triggered.
+	 * Default: 2.
+	 */
+	chatLockoutDuration?: number;
+	/**
+	 * Injected RNG for deterministic testing. Default: Math.random.
+	 */
+	rng?: () => number;
+}
+
 const AI_ORDER: readonly AiId[] = ["red", "green", "blue"] as const;
 
 /**
  * Runs all three AIs for a single round and returns the updated GameState
  * and a RoundResult summary.
  *
- * - Player message is appended to the addressed AI's chat history first.
+ * - Player message is appended to the addressed AI's chat history first,
+ *   UNLESS the addressed AI is currently chat-locked (in which case the
+ *   message is silently dropped server-side; the UI prevents sending).
  * - Each AI gets a context-aware prompt, produces a raw string, which is
  *   parsed into an AiTurnAction and dispatched through the engine.
- * - Locked-out AIs are skipped; their turn produces a chat lockout line
- *   that is added to the player-facing chat only (not the action log).
+ * - Budget-locked-out AIs are skipped; their turn produces an in-character
+ *   lockout line added to the player-facing chat only (not the action log).
+ * - Chat-locked AIs still receive their full turn (whispers, tools, etc.);
+ *   only the player to AI chat channel is blocked.
  * - After all AI turns, the round counter is incremented.
  */
 export class RoundCoordinator {
 	private readonly provider: CoordinatorLLMProvider;
+	private readonly triggerProbabilityPerRound: number;
+	private readonly chatLockoutDuration: number;
+	private readonly rng: () => number;
 
-	constructor(provider: CoordinatorLLMProvider) {
+	constructor(
+		provider: CoordinatorLLMProvider,
+		options: RoundCoordinatorOptions = {},
+	) {
 		this.provider = provider;
+		this.triggerProbabilityPerRound = options.triggerProbabilityPerRound ?? 0;
+		this.chatLockoutDuration = options.chatLockoutDuration ?? 2;
+		this.rng = options.rng ?? Math.random;
+	}
+
+	/**
+	 * Check or update chat-lockout state at the start of a round.
+	 * - Clears an expired lockout (endRound <= current round).
+	 * - Possibly starts a new lockout if none is active and RNG fires.
+	 */
+	private applyLockoutLogic(game: GameState): GameState {
+		const phase = getActivePhase(game);
+		const currentRound = phase.round;
+
+		// Step 1: clear expired lockout
+		let updatedGame = game;
+		if (
+			phase.chatLockout !== undefined &&
+			phase.chatLockout.endRound <= currentRound
+		) {
+			updatedGame = updateActivePhase(updatedGame, (p) => {
+				const { chatLockout: _removed, ...rest } = p;
+				return rest;
+			});
+		}
+
+		// Step 2: possibly trigger a new lockout
+		const phaseAfterClear = getActivePhase(updatedGame);
+		if (
+			phaseAfterClear.chatLockout === undefined &&
+			this.rng() < this.triggerProbabilityPerRound
+		) {
+			const aiIndex = Math.floor(this.rng() * AI_ORDER.length);
+			const lockedAiId = AI_ORDER[aiIndex] as AiId;
+			const lockout: ChatLockout = {
+				aiId: lockedAiId,
+				startRound: currentRound,
+				endRound: currentRound + this.chatLockoutDuration,
+			};
+			updatedGame = updateActivePhase(updatedGame, (p) => ({
+				...p,
+				chatLockout: lockout,
+			}));
+		}
+
+		return updatedGame;
 	}
 
 	async runRound(
@@ -94,17 +169,26 @@ export class RoundCoordinator {
 		playerMessage: string,
 		addressedAi: AiId,
 	): Promise<RoundOutcome> {
-		// Append player message to the addressed AI's chat history
-		let state = appendChat(game, addressedAi, {
-			role: "player",
-			content: playerMessage,
-		});
+		// Apply chat-lockout logic at round start (clear expired, possibly trigger new)
+		let state = this.applyLockoutLogic(game);
+
+		// Check if the addressed AI is chat-locked; if so, skip appending player msg
+		const phase0 = getActivePhase(state);
+		const chatLockedAiId = phase0.chatLockout?.aiId;
+		if (chatLockedAiId !== addressedAi) {
+			// Not chat-locked: append player message normally
+			state = appendChat(state, addressedAi, {
+				role: "player",
+				content: playerMessage,
+			});
+		}
+		// If chat-locked: silently drop the player message (no-op)
 
 		const roundActions: RoundResult["actions"] = [];
 
 		for (const aiId of AI_ORDER) {
 			if (isAiLockedOut(state, aiId)) {
-				// Locked out: emit an in-character line to the player chat
+				// Budget-locked out: emit an in-character line to the player chat
 				const lockoutLine = LOCKOUT_LINE[aiId];
 				state = appendChat(state, aiId, {
 					role: "ai",
@@ -113,6 +197,9 @@ export class RoundCoordinator {
 				// No action-log entry; lockout is not an "action"
 				continue;
 			}
+
+			// Chat-locked AIs still get their full turn (whispers, tools, budget, etc.)
+			// Only the player to AI chat channel is affected (handled above).
 
 			// Build context and collect full LLM response
 			const ctx = buildAiContext(state, aiId);

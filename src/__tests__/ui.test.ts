@@ -276,3 +276,113 @@ describe("client-side SSE streaming", () => {
 		expect(sendBtn.disabled).toBe(false);
 	});
 });
+
+describe("chat-lockout UI events (three-panel page)", () => {
+	function getThreePanelScript(): string {
+		const scriptContent = renderThreePanelPage().match(
+			/<script>([\s\S]*?)<\/script>/,
+		)?.[1];
+		if (!scriptContent) throw new Error("No script found in three-panel page");
+		return scriptContent;
+	}
+
+	function mountThreePanelWithSseLines(sseLines: string[]): void {
+		document.body.innerHTML = renderThreePanelPage();
+		const sseBody = sseLines.join("");
+		const encoder = new TextEncoder();
+		const encoded = encoder.encode(sseBody);
+		let offset = 0;
+
+		const mockReader = {
+			read: vi.fn().mockImplementation(async () => {
+				if (offset < encoded.length) {
+					const chunk = encoded.slice(offset, offset + encoded.length);
+					offset = encoded.length;
+					return { done: false, value: chunk };
+				}
+				return { done: true, value: undefined };
+			}),
+			releaseLock: vi.fn(),
+		};
+
+		const mockFetch = vi.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
+			body: { getReader: () => mockReader },
+		});
+
+		const fn = new Function("fetch", getThreePanelScript());
+		fn(mockFetch);
+	}
+
+	async function submitThreePanelForm(
+		targetAi: string,
+		message: string,
+	): Promise<void> {
+		const form = document.getElementById("chat-form") as HTMLFormElement;
+		const textarea = document.getElementById(
+			"message-input",
+		) as HTMLTextAreaElement;
+		const selector = document.getElementById(
+			"ai-selector",
+		) as HTMLSelectElement;
+		textarea.value = message;
+		selector.value = targetAi;
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 50));
+	}
+
+	it("chat-lockout SSE event sets data-chat-lockout attribute on the locked panel", async () => {
+		mountThreePanelWithSseLines([
+			"data: chat-lockout:red:...I find I have nothing more to say.\n\n",
+			"data: [DONE]\n\n",
+		]);
+		await submitThreePanelForm("red", "hi");
+
+		const panel = document.querySelector(
+			'[data-ai-panel="red"]',
+		) as HTMLElement;
+		expect(panel.getAttribute("data-chat-lockout")).toBe("true");
+	});
+
+	it("chat-lockout SSE event shows an in-character lockout notice in the locked panel", async () => {
+		mountThreePanelWithSseLines([
+			"data: chat-lockout:green:...I have said all I can for the moment.\n\n",
+			"data: [DONE]\n\n",
+		]);
+		await submitThreePanelForm("green", "hi");
+
+		const notice = document.querySelector(
+			'[data-lockout-notice="green"]',
+		) as HTMLElement;
+		expect(notice).not.toBeNull();
+		expect(notice.textContent).toContain("I have said all I can");
+	});
+
+	it("chat-lockout-clear SSE event removes the lockout attribute from the panel", async () => {
+		// Round 1: apply lockout
+		mountThreePanelWithSseLines([
+			"data: chat-lockout:blue:...My thoughts have run their course.\n\n",
+			"data: [DONE]\n\n",
+		]);
+		await submitThreePanelForm("blue", "hi");
+		const panel = document.querySelector(
+			'[data-ai-panel="blue"]',
+		) as HTMLElement;
+		expect(panel.getAttribute("data-chat-lockout")).toBe("true");
+
+		// Round 2: clear lockout -- remount with fresh script keeping same DOM panel
+		mountThreePanelWithSseLines([
+			"data: chat-lockout-clear:blue\n\n",
+			"data: [DONE]\n\n",
+		]);
+		await submitThreePanelForm("blue", "hi again");
+
+		const panelAfter = document.querySelector(
+			'[data-ai-panel="blue"]',
+		) as HTMLElement;
+		expect(panelAfter.getAttribute("data-chat-lockout")).toBeNull();
+	});
+});

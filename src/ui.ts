@@ -241,6 +241,34 @@ export function renderThreePanelPage(): string {
                       var budgetEl = getBudgetEl(budgetParts[0]);
                       if (budgetEl) budgetEl.textContent = 'budget: ' + budgetParts[1];
                     }
+                  } else if (evtType === 'chat-lockout') {
+                    // "chat-lockout:<aiId>:<message>"
+                    var lockoutColon = evtData.indexOf(':');
+                    if (lockoutColon !== -1) {
+                      var lockoutAi = evtData.slice(0, lockoutColon);
+                      var lockoutMsg = evtData.slice(lockoutColon + 1);
+                      var lockoutPanel = document.querySelector('[data-ai-panel="' + lockoutAi + '"]');
+                      if (lockoutPanel) {
+                        lockoutPanel.setAttribute('data-chat-lockout', 'true');
+                        var existing = lockoutPanel.querySelector('[data-lockout-notice="' + lockoutAi + '"]');
+                        if (!existing) {
+                          var notice = document.createElement('p');
+                          notice.setAttribute('data-lockout-notice', lockoutAi);
+                          notice.className = 'lockout-notice';
+                          notice.textContent = lockoutMsg;
+                          lockoutPanel.appendChild(notice);
+                        }
+                      }
+                    }
+                  } else if (evtType === 'chat-lockout-clear') {
+                    // "chat-lockout-clear:<aiId>"
+                    var clearAi = evtData;
+                    var clearPanel = document.querySelector('[data-ai-panel="' + clearAi + '"]');
+                    if (clearPanel) {
+                      clearPanel.removeAttribute('data-chat-lockout');
+                      var noticeEl = clearPanel.querySelector('[data-lockout-notice="' + clearAi + '"]');
+                      if (noticeEl) noticeEl.remove();
+                    }
                   }
                 }
               }
@@ -318,6 +346,11 @@ export function renderChatPage(): string {
       cursor: pointer;
     }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .lockout-notice {
+      color: #555;
+      font-style: italic;
+      font-size: 0.85rem;
+    }
   </style>
 </head>
 <body>
