@@ -417,12 +417,8 @@ describe("tool-call parsing and dispatch", () => {
 	});
 
 	it("appends a tool_failure entry when tool call is invalid (item not in room)", async () => {
-		// Red tries to pick up the key which is already held by red in TEST_PHASE_CONFIG
-		// But in makeGame() everything starts in the room — so try an impossible pick_up:
-		// green tries to pick up key but only after red already holds it
+		// Green tries to pick up an item that does not exist.
 		const game = makeGame();
-		// green tries pick_up but flower is in the room — let's have green try to pick up
-		// an item that doesn't exist
 		const provider = new SequentialMockProvider([
 			'{"action":"pass"}',
 			'{"action":"pass","toolCall":{"name":"pick_up","args":{"item":"nonexistent"}}}',
@@ -512,7 +508,7 @@ describe("tool-call parsing and dispatch", () => {
 		expect(prompt.toLowerCase()).toMatch(/failed|tried|failure/);
 	});
 
-	it("ignores a toolCall with unrecognised tool name (treated as no tool call)", async () => {
+	it("records a tool_failure for an unrecognised tool name and leaves world unchanged", async () => {
 		const game = makeGame();
 		const provider = new SequentialMockProvider([
 			'{"action":"pass","toolCall":{"name":"fly_away","args":{}}}',
@@ -520,13 +516,14 @@ describe("tool-call parsing and dispatch", () => {
 			'{"action":"pass"}',
 		]);
 		const { nextState } = await runRound(game, "red", "hi", provider);
-		// An invalid tool name is dispatched and the dispatcher records a tool_failure
-		// with reason indicating unknown tool (or it logs a failure)
-		// Regardless, no world mutation should occur
+		const log = getActivePhase(nextState).actionLog;
+		// Unknown tool name flows through to the dispatcher which records tool_failure
+		expect(log.some((e) => e.type === "tool_failure")).toBe(true);
+		// World must not be mutated
 		const flower = getActivePhase(nextState).world.items.find(
 			(i) => i.id === "flower",
 		);
-		expect(flower?.holder).toBe("room"); // world unchanged
+		expect(flower?.holder).toBe("room");
 	});
 
 	it("an AI cannot secretly probe — failure appears in RoundResult.actions", async () => {
