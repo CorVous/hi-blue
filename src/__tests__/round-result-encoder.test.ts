@@ -8,20 +8,19 @@
  *   ai_start, token, ai_end, budget, lockout,
  *   chat_lockout, chat_lockout_resolved, action_log
  */
-import { beforeEach, describe, expect, it } from "vitest";
-import {
-	type SseEvent,
-	encodeRoundResult,
-	splitIntoWordChunks,
-} from "../round-result-encoder";
+import { describe, expect, it } from "vitest";
 import {
 	createGame,
 	deductBudget,
 	getActivePhase,
 	startPhase,
-	triggerChatLockout,
 } from "../engine";
-import type { AiId, AiPersona, PhaseConfig, RoundResult } from "../types";
+import {
+	encodeRoundResult,
+	type SseEvent,
+	splitIntoWordChunks,
+} from "../round-result-encoder";
+import type { AiPersona, PhaseConfig, RoundResult } from "../types";
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -60,7 +59,9 @@ const PHASE_CONFIG: PhaseConfig = {
 	budgetPerAi: 5,
 };
 
-function makePhase(mutate?: (g: ReturnType<typeof startPhase>) => ReturnType<typeof startPhase>) {
+function makePhase(
+	mutate?: (g: ReturnType<typeof startPhase>) => ReturnType<typeof startPhase>,
+) {
 	let game = startPhase(createGame(TEST_PERSONAS), PHASE_CONFIG);
 	if (mutate) game = mutate(game);
 	return getActivePhase(game);
@@ -126,19 +127,25 @@ describe("encodeRoundResult — ai_start, token, ai_end sequence", () => {
 
 		// Red should appear first
 		const redStart = events.findIndex(
-			(e) => e.type === "ai_start" && (e as { type: string; aiId: string }).aiId === "red",
+			(e) =>
+				e.type === "ai_start" &&
+				(e as { type: string; aiId: string }).aiId === "red",
 		);
 		expect(redStart).toBeGreaterThanOrEqual(0);
 
 		// Green should appear after red
 		const greenStart = events.findIndex(
-			(e) => e.type === "ai_start" && (e as { type: string; aiId: string }).aiId === "green",
+			(e) =>
+				e.type === "ai_start" &&
+				(e as { type: string; aiId: string }).aiId === "green",
 		);
 		expect(greenStart).toBeGreaterThan(redStart);
 
 		// Blue should appear after green
 		const blueStart = events.findIndex(
-			(e) => e.type === "ai_start" && (e as { type: string; aiId: string }).aiId === "blue",
+			(e) =>
+				e.type === "ai_start" &&
+				(e as { type: string; aiId: string }).aiId === "blue",
 		);
 		expect(blueStart).toBeGreaterThan(greenStart);
 	});
@@ -150,7 +157,9 @@ describe("encodeRoundResult — ai_start, token, ai_end sequence", () => {
 
 		const events = encodeRoundResult(result, completions, phase);
 
-		const tokenEvents = events.filter((e): e is Extract<SseEvent, { type: "token" }> => e.type === "token");
+		const tokenEvents = events.filter(
+			(e): e is Extract<SseEvent, { type: "token" }> => e.type === "token",
+		);
 		const text = tokenEvents.map((t) => t.text).join("");
 		expect(text).toContain("hello world");
 		expect(text).toContain("one two");
@@ -177,17 +186,23 @@ describe("encodeRoundResult — ai_start, token, ai_end sequence", () => {
 
 		// Find red's block
 		const redStartIdx = events.findIndex(
-			(e) => e.type === "ai_start" && (e as { type: string; aiId: string }).aiId === "red",
+			(e) =>
+				e.type === "ai_start" &&
+				(e as { type: string; aiId: string }).aiId === "red",
 		);
 		const greenStartIdx = events.findIndex(
-			(e) => e.type === "ai_start" && (e as { type: string; aiId: string }).aiId === "green",
+			(e) =>
+				e.type === "ai_start" &&
+				(e as { type: string; aiId: string }).aiId === "green",
 		);
 
 		// Token events for red should be between redStart and greenStart
 		const redBlock = events.slice(redStartIdx, greenStartIdx);
 		const hasAiEnd = redBlock.some((e) => e.type === "ai_end");
 		const tokenTexts = redBlock
-			.filter((e): e is Extract<SseEvent, { type: "token" }> => e.type === "token")
+			.filter(
+				(e): e is Extract<SseEvent, { type: "token" }> => e.type === "token",
+			)
 			.map((e) => e.text)
 			.join("");
 		expect(hasAiEnd).toBe(true);
@@ -484,8 +499,7 @@ describe("encodeRoundResult — token pacing", () => {
 		const events = encodeRoundResult(result, completions, phase);
 
 		const tokenEvents = events.filter(
-			(e): e is Extract<SseEvent, { type: "token" }> =>
-				e.type === "token",
+			(e): e is Extract<SseEvent, { type: "token" }> => e.type === "token",
 		);
 		// Should have more than one token event for red's "one two three"
 		// (other AIs contribute their own tokens too)

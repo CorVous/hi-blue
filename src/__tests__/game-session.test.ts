@@ -11,10 +11,10 @@
  *   - Locked-out AI completions are empty strings
  */
 import { describe, expect, it } from "vitest";
+import { getActivePhase } from "../engine";
 import { GameSession } from "../game-session";
 import type { LLMProvider } from "../proxy/llm-provider";
 import { MockLLMProvider } from "../proxy/llm-provider";
-import { getActivePhase } from "../engine";
 import type { PhaseConfig } from "../types";
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -85,16 +85,17 @@ describe("GameSession — message routing", () => {
 		// Red should have the player message
 		expect(
 			phase.chatHistories.red.some(
-				(m) => m.role === "player" && m.content.includes("Secret message for Ember"),
+				(m) =>
+					m.role === "player" && m.content.includes("Secret message for Ember"),
 			),
 		).toBe(true);
 		// Green and blue should NOT have it
-		expect(
-			phase.chatHistories.green.some((m) => m.role === "player"),
-		).toBe(false);
-		expect(
-			phase.chatHistories.blue.some((m) => m.role === "player"),
-		).toBe(false);
+		expect(phase.chatHistories.green.some((m) => m.role === "player")).toBe(
+			false,
+		);
+		expect(phase.chatHistories.blue.some((m) => m.role === "player")).toBe(
+			false,
+		);
 	});
 
 	it("routing changes per round — second message goes to different AI", async () => {
@@ -191,7 +192,11 @@ describe("GameSession — completions map", () => {
 
 		// Round 2 — all AIs are locked, coordinator skips them
 		const provider2 = new MockLLMProvider('{"action":"pass"}');
-		const { completions } = await session.submitMessage("red", "round 2", provider2);
+		const { completions } = await session.submitMessage(
+			"red",
+			"round 2",
+			provider2,
+		);
 
 		// Locked AIs should have empty completions
 		expect(completions.red).toBe("");

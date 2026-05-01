@@ -1,16 +1,16 @@
-import type { LLMProvider } from "./llm-provider";
-import { MockLLMProvider } from "./llm-provider";
-import { capHitStream, checkAndCharge, configFromEnv } from "./rate-guard";
-import { renderChatPage, renderEndgamePage } from "./ui";
+import { getActivePhase } from "../engine";
+import { encodeRoundResult, serialiseSseEvents } from "../round-result-encoder";
 import {
 	buildSessionCookie,
 	createSession,
 	getSession,
 	parseSessionCookie,
 } from "../session-store";
-import { encodeRoundResult, serialiseSseEvents } from "../round-result-encoder";
-import { getActivePhase } from "../engine";
 import type { AiId, PhaseConfig } from "../types";
+import type { LLMProvider } from "./llm-provider";
+import { MockLLMProvider } from "./llm-provider";
+import { capHitStream, checkAndCharge, configFromEnv } from "./rate-guard";
+import { renderChatPage, renderEndgamePage } from "./ui";
 
 /** Shape of the bindings/env this Worker expects. */
 interface Env {
@@ -176,10 +176,7 @@ export default {
 				return new Response("Missing message", { status: 400 });
 			}
 			const validAiIds: AiId[] = ["red", "green", "blue"];
-			if (
-				!addressedAi ||
-				!validAiIds.includes(addressedAi as AiId)
-			) {
+			if (!addressedAi || !validAiIds.includes(addressedAi as AiId)) {
 				return new Response("Missing or invalid addressedAi", { status: 400 });
 			}
 

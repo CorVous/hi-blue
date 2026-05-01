@@ -31,7 +31,9 @@ function generateSessionId(): string {
  * Parse the session cookie value from a Cookie header string.
  * Returns undefined if the cookie is absent.
  */
-export function parseSessionCookie(cookieHeader: string | null): string | undefined {
+export function parseSessionCookie(
+	cookieHeader: string | null,
+): string | undefined {
 	if (!cookieHeader) return undefined;
 	for (const part of cookieHeader.split(";")) {
 		const [name, value] = part.trim().split("=");

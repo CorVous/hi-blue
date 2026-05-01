@@ -4,7 +4,11 @@
  * Tests observable behavior: DOM structure and client-side SSE streaming.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { renderChatPage, renderEndgamePage, renderEndgameSection } from "../ui.js";
+import {
+	renderChatPage,
+	renderEndgamePage,
+	renderEndgameSection,
+} from "../ui.js";
 
 function mountPage(html: string): Document {
 	const parser = new DOMParser();

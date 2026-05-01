@@ -21,14 +21,10 @@
  * call's output is intercepted and stored.
  */
 
+import { createGame, getActivePhase, startPhase } from "./engine";
 import type { LLMProvider } from "./proxy/llm-provider";
-import { runRound } from "./round-coordinator";
 import type { ChatLockoutConfig } from "./round-coordinator";
-import {
-	createGame,
-	getActivePhase,
-	startPhase,
-} from "./engine";
+import { runRound } from "./round-coordinator";
 import type { AiId, GameState, PhaseConfig, RoundResult } from "./types";
 
 const AI_ORDER: AiId[] = ["red", "green", "blue"];
