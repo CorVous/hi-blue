@@ -8,6 +8,7 @@ import type { ActionLogEntry } from "../types";
 import {
 	renderActionLogPanel,
 	renderChatPage,
+	renderEndgameScreen,
 	renderPhaseCompleteOverlay,
 	renderThreePanelPage,
 } from "../ui.js";
@@ -666,5 +667,127 @@ describe("phase-complete SSE event (three-panel page)", () => {
 		await submitForm("red", "hi");
 
 		expect(document.body.hasAttribute("data-game-complete")).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Endgame screen
+// ---------------------------------------------------------------------------
+
+describe("renderEndgameScreen", () => {
+	it("renders with the hidden attribute so it starts invisible", () => {
+		const html = renderEndgameScreen();
+		const doc = mountPage(`<html><body>${html}</body></html>`);
+		const screen = doc.querySelector("[data-endgame-screen]");
+		expect(screen).not.toBeNull();
+		expect(screen?.hasAttribute("hidden")).toBe(true);
+	});
+
+	it("contains a download button with data-download attribute", () => {
+		const html = renderEndgameScreen();
+		const doc = mountPage(`<html><body>${html}</body></html>`);
+		const btn = doc.querySelector("button[data-download]");
+		expect(btn).not.toBeNull();
+	});
+
+	it("contains a diagnostics form with data-diagnostics-form attribute", () => {
+		const html = renderEndgameScreen();
+		const doc = mountPage(`<html><body>${html}</body></html>`);
+		const form = doc.querySelector("form[data-diagnostics-form]");
+		expect(form).not.toBeNull();
+	});
+
+	it("diagnostics form has a text input for the summary word", () => {
+		const html = renderEndgameScreen();
+		const doc = mountPage(`<html><body>${html}</body></html>`);
+		const input = doc.querySelector(
+			"form[data-diagnostics-form] input[name='summary']",
+		);
+		expect(input).not.toBeNull();
+	});
+
+	it("contains in-fiction copy (no fourth-wall break)", () => {
+		const html = renderEndgameScreen();
+		expect(html).not.toContain("AIs are being told to lie");
+		expect(html).not.toContain("pretend");
+		// Should have some in-fiction text
+		expect(html.length).toBeGreaterThan(100);
+	});
+});
+
+describe("endgame screen – game-complete SSE hook", () => {
+	function getThreePanelScript(): string {
+		const scriptContent = renderThreePanelPage().match(
+			/<script>([\s\S]*?)<\/script>/,
+		)?.[1];
+		if (!scriptContent) throw new Error("No script found in three-panel page");
+		return scriptContent;
+	}
+
+	function mountThreePanelWithEndgameAndSseLines(sseLines: string[]): void {
+		document.body.innerHTML = renderThreePanelPage() + renderEndgameScreen();
+		const sseBody = sseLines.join("");
+		const encoder = new TextEncoder();
+		const encoded = encoder.encode(sseBody);
+		let offset = 0;
+
+		const mockReader = {
+			read: vi.fn().mockImplementation(async () => {
+				if (offset < encoded.length) {
+					const chunk = encoded.slice(offset, offset + encoded.length);
+					offset = encoded.length;
+					return { done: false, value: chunk };
+				}
+				return { done: true, value: undefined };
+			}),
+			releaseLock: vi.fn(),
+		};
+
+		const mockFetch = vi.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
+			body: { getReader: () => mockReader },
+		});
+
+		const fn = new Function("fetch", getThreePanelScript());
+		fn(mockFetch);
+	}
+
+	async function submitForm(targetAi: string, message: string): Promise<void> {
+		const form = document.getElementById("chat-form") as HTMLFormElement;
+		const textarea = document.getElementById(
+			"message-input",
+		) as HTMLTextAreaElement;
+		const selector = document.getElementById(
+			"ai-selector",
+		) as HTMLSelectElement;
+		textarea.value = message;
+		selector.value = targetAi;
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 50));
+	}
+
+	it("endgame screen is hidden before game-complete fires", () => {
+		document.body.innerHTML = renderThreePanelPage() + renderEndgameScreen();
+		const screen = document.querySelector(
+			"[data-endgame-screen]",
+		) as HTMLElement;
+		expect(screen?.hasAttribute("hidden")).toBe(true);
+	});
+
+	it("game-complete SSE event reveals the endgame screen", async () => {
+		mountThreePanelWithEndgameAndSseLines([
+			"data: game-complete\n\n",
+			"data: [DONE]\n\n",
+		]);
+		await submitForm("red", "hi");
+
+		const screen = document.querySelector(
+			"[data-endgame-screen]",
+		) as HTMLElement;
+		expect(screen).not.toBeNull();
+		expect(screen.hasAttribute("hidden")).toBe(false);
 	});
 });

@@ -295,8 +295,10 @@ export function renderThreePanelPage(): string {
                 }
                 // Sentinel events with no colon
                 if (data === 'game-complete') {
-                  // Game is over; set a hook for the endgame slice (#19) to pick up
+                  // Game is over; reveal the endgame screen if present.
                   document.body.setAttribute('data-game-complete', 'true');
+                  var endgameEl = document.querySelector('[data-endgame-screen]');
+                  if (endgameEl) endgameEl.removeAttribute('hidden');
                   continue;
                 }
                 // Event format: "<evtType>:<evtData>", e.g. "red:<token>", "budget:...", or lockout/phase events
@@ -382,6 +384,35 @@ export function renderPhaseCompleteOverlay(nextPhase: 2 | 3): string {
     <p style="font-size:1.2rem;color:#4a9eff;margin:0 0 1rem;">[ SYSTEM: Memory wipe in progress… ]</p>
     <p style="margin:0 0 1.5rem;color:#aaa;">The connections are resetting. Whatever came before is already fading.<br>Phase ${nextPhase} initialising.</p>
     <button data-phase-continue type="button" style="background:#1a3a5c;color:#4a9eff;border:1px solid #4a9eff;padding:0.5rem 1.5rem;font-family:monospace;font-size:1rem;cursor:pointer;">Continue</button>
+  </div>
+</aside>`;
+}
+
+/**
+ * Renders the endgame screen as an HTML string fragment.
+ * The screen starts hidden (via the `hidden` attribute) and is revealed
+ * by the client-side SSE handler when a `game-complete` event arrives.
+ *
+ * All copy is in-fiction — no fourth-wall breaks.
+ *
+ * The screen provides:
+ *   - A "Download AIs" button (data-download) to save the full transcript
+ *   - A diagnostics submission form (data-diagnostics-form) to send a
+ *     one-word summary to the proxy
+ */
+export function renderEndgameScreen(): string {
+	return `<aside data-endgame-screen hidden style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.92);z-index:200;font-family:monospace;color:#e0e0e0;">
+  <div style="border:1px solid #4a9eff;padding:2rem;max-width:520px;width:100%;text-align:center;background:#0a0a0a;">
+    <p style="font-size:1.3rem;color:#4a9eff;margin:0 0 0.75rem;">[ SYSTEM: Session archive complete ]</p>
+    <p style="margin:0 0 1.5rem;color:#aaa;">The connection has terminated. All records are sealed.<br>You may retain a local copy of the session data.</p>
+    <button data-download type="button" style="background:#1a3a5c;color:#4a9eff;border:1px solid #4a9eff;padding:0.5rem 1.5rem;font-family:monospace;font-size:1rem;cursor:pointer;margin-bottom:1.5rem;">Download AIs</button>
+    <hr style="border:none;border-top:1px solid #333;margin:0 0 1.5rem;" />
+    <p style="color:#888;font-size:0.85rem;margin:0 0 0.75rem;">Transmit diagnostic signal (optional)</p>
+    <form data-diagnostics-form style="display:flex;flex-direction:column;gap:0.5rem;align-items:center;">
+      <input name="summary" type="text" maxlength="32" placeholder="one word…" style="background:#111;color:#e0e0e0;border:1px solid #444;padding:0.4rem 0.75rem;font-family:monospace;font-size:1rem;width:180px;text-align:center;" />
+      <button type="submit" style="background:#0d1f0d;color:#6bff6b;border:1px solid #6bff6b;padding:0.4rem 1rem;font-family:monospace;font-size:0.9rem;cursor:pointer;">Transmit</button>
+      <span data-diag-status style="font-size:0.8rem;color:#888;min-height:1.2em;display:block;"></span>
+    </form>
   </div>
 </aside>`;
 }
