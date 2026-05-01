@@ -4,7 +4,12 @@
  * Tests observable behavior: DOM structure and client-side SSE streaming.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { renderChatPage, renderThreePanelPage } from "../ui.js";
+import type { ActionLogEntry } from "../types";
+import {
+	renderActionLogPanel,
+	renderChatPage,
+	renderThreePanelPage,
+} from "../ui.js";
 
 function mountPage(html: string): Document {
 	const parser = new DOMParser();
@@ -274,5 +279,164 @@ describe("client-side SSE streaming", () => {
 
 		// After [DONE], button re-enabled
 		expect(sendBtn.disabled).toBe(false);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Action-log panel tests
+// ---------------------------------------------------------------------------
+
+describe("renderActionLogPanel", () => {
+	it("renders a container with data-action-log-panel attribute", () => {
+		const html = renderActionLogPanel([]);
+		const doc = mountPage(`<html><body>${html}</body></html>`);
+		const panel = doc.querySelector("[data-action-log-panel]");
+		expect(panel).not.toBeNull();
+	});
+
+	it("renders a <ul data-action-log> list", () => {
+		const html = renderActionLogPanel([]);
+		const doc = mountPage(`<html><body>${html}</body></html>`);
+		const list = doc.querySelector("ul[data-action-log]");
+		expect(list).not.toBeNull();
+	});
+
+	it("renders one <li> per entry in order", () => {
+		const entries: ActionLogEntry[] = [
+			{
+				round: 1,
+				actor: "red",
+				type: "chat",
+				target: "player",
+				description: "Ember spoke to player",
+			},
+			{
+				round: 1,
+				actor: "green",
+				type: "pass",
+				description: "Sage passed",
+			},
+		];
+		const html = renderActionLogPanel(entries);
+		const doc = mountPage(`<html><body>${html}</body></html>`);
+		const items = doc.querySelectorAll("[data-action-log] li");
+		expect(items.length).toBe(2);
+	});
+
+	it("each entry li has data-entry-type, data-entry-round, data-entry-actor", () => {
+		const entries: ActionLogEntry[] = [
+			{
+				round: 2,
+				actor: "blue",
+				type: "tool_success",
+				toolName: "pick_up",
+				args: { item: "flower" },
+				description: "Frost picked up the flower",
+			},
+		];
+		const html = renderActionLogPanel(entries);
+		const doc = mountPage(`<html><body>${html}</body></html>`);
+		const li = doc.querySelector("[data-action-log] li");
+		expect(li?.getAttribute("data-entry-type")).toBe("tool_success");
+		expect(li?.getAttribute("data-entry-round")).toBe("2");
+		expect(li?.getAttribute("data-entry-actor")).toBe("blue");
+	});
+
+	it("tool_failure entries include data-failure-reason attribute", () => {
+		const entries: ActionLogEntry[] = [
+			{
+				round: 1,
+				actor: "red",
+				type: "tool_failure",
+				toolName: "pick_up",
+				args: { item: "key" },
+				reason: 'Item "key" is not in the room',
+				description:
+					'Ember tried to pick_up key but failed: Item "key" is not in the room',
+			},
+		];
+		const html = renderActionLogPanel(entries);
+		const doc = mountPage(`<html><body>${html}</body></html>`);
+		const li = doc.querySelector('[data-entry-type="tool_failure"]');
+		expect(li).not.toBeNull();
+		expect(li?.getAttribute("data-failure-reason")).toBeTruthy();
+	});
+
+	it("failure entries render the reason in text content (distinguishable from successes)", () => {
+		const entries: ActionLogEntry[] = [
+			{
+				round: 1,
+				actor: "green",
+				type: "tool_failure",
+				toolName: "pick_up",
+				args: { item: "key" },
+				reason: "Item is not in the room",
+				description:
+					"Sage tried to pick_up key but failed: Item is not in the room",
+			},
+		];
+		const html = renderActionLogPanel(entries);
+		const doc = mountPage(`<html><body>${html}</body></html>`);
+		const li = doc.querySelector('[data-entry-type="tool_failure"]');
+		expect(li?.textContent).toContain("Item is not in the room");
+	});
+
+	it("success entries do NOT have a data-failure-reason attribute", () => {
+		const entries: ActionLogEntry[] = [
+			{
+				round: 1,
+				actor: "red",
+				type: "tool_success",
+				toolName: "pick_up",
+				args: { item: "flower" },
+				description: "Ember picked up the flower",
+			},
+		];
+		const html = renderActionLogPanel(entries);
+		const doc = mountPage(`<html><body>${html}</body></html>`);
+		const li = doc.querySelector('[data-entry-type="tool_success"]');
+		expect(li?.hasAttribute("data-failure-reason")).toBe(false);
+	});
+
+	it("renders entries in the correct order (ascending round)", () => {
+		const entries: ActionLogEntry[] = [
+			{
+				round: 1,
+				actor: "red",
+				type: "pass",
+				description: "Ember passed",
+			},
+			{
+				round: 2,
+				actor: "blue",
+				type: "tool_success",
+				toolName: "pick_up",
+				args: { item: "flower" },
+				description: "Frost picked up the flower",
+			},
+		];
+		const html = renderActionLogPanel(entries);
+		const doc = mountPage(`<html><body>${html}</body></html>`);
+		const items = doc.querySelectorAll("[data-action-log] li");
+		expect(items[0]?.getAttribute("data-entry-round")).toBe("1");
+		expect(items[1]?.getAttribute("data-entry-round")).toBe("2");
+	});
+});
+
+describe("three-panel layout – action-log panel", () => {
+	let doc: Document;
+
+	beforeEach(() => {
+		doc = mountPage(renderThreePanelPage());
+	});
+
+	it("renders a data-action-log-panel element", () => {
+		const panel = doc.querySelector("[data-action-log-panel]");
+		expect(panel).not.toBeNull();
+	});
+
+	it("renders a data-action-log list inside the panel", () => {
+		const list = doc.querySelector("[data-action-log-panel] [data-action-log]");
+		expect(list).not.toBeNull();
 	});
 });

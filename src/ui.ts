@@ -3,6 +3,42 @@
  * Plain HTML + vanilla JS, no framework.
  * Lives in src/ (not src/proxy/) so it can be tested under jsdom.
  */
+import type { ActionLogEntry } from "./types";
+
+/**
+ * Renders an action-log panel as an HTML string fragment.
+ * Accepts an array of ActionLogEntry objects to render; passing an empty array
+ * renders the panel with an empty list (which the client can populate via JS).
+ *
+ * Each entry is rendered as a <li> with:
+ *   - data-entry-type="tool_success|tool_failure|chat|whisper|pass"
+ *   - data-entry-round="<round>"
+ *   - data-entry-actor="<actor>"
+ *   - For tool_failure: data-failure-reason="<reason>"
+ *   - Human-readable description text
+ */
+export function renderActionLogPanel(entries: ActionLogEntry[]): string {
+	const items = entries
+		.map((entry) => {
+			const attrs = [
+				`data-entry-type="${entry.type}"`,
+				`data-entry-round="${entry.round}"`,
+				`data-entry-actor="${entry.actor}"`,
+			];
+			if (entry.type === "tool_failure") {
+				attrs.push(`data-failure-reason="${entry.reason}"`);
+			}
+			return `<li ${attrs.join(" ")}>[Round ${entry.round}] ${entry.description}${entry.type === "tool_failure" ? ` (${entry.reason})` : ""}</li>`;
+		})
+		.join("\n      ");
+
+	return `<div data-action-log-panel>
+    <div class="log-header">Action Log</div>
+    <ul data-action-log>
+      ${items}
+    </ul>
+  </div>`;
+}
 
 /**
  * Three-panel layout: one chat panel per AI (red, green, blue).
@@ -116,6 +152,30 @@ export function renderThreePanelPage(): string {
       font-style: italic;
       font-size: 0.85rem;
     }
+    [data-action-log-panel] {
+      border: 1px solid #333;
+      padding: 0.75rem;
+      background: #0d0d0d;
+    }
+    .log-header {
+      font-size: 0.85rem;
+      color: #888;
+      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    [data-action-log] {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      font-size: 0.85rem;
+    }
+    [data-action-log] li[data-entry-type="tool_failure"] {
+      color: #ff6b6b;
+    }
+    [data-action-log] li[data-entry-type="tool_success"] {
+      color: #6bff6b;
+    }
   </style>
 </head>
 <body>
@@ -144,6 +204,12 @@ export function renderThreePanelPage(): string {
         </div>
         <output data-chat-output="blue" aria-live="polite"></output>
       </div>
+    </div>
+
+    <div data-action-log-panel>
+      <div class="log-header">Action Log</div>
+      <ul data-action-log aria-label="Action log">
+      </ul>
     </div>
 
     <form id="chat-form">
@@ -227,7 +293,7 @@ export function renderThreePanelPage(): string {
                   setInputDisabled(false);
                   return;
                 }
-                // Event format: "<aiId>:<content>" or budget updates
+                // Event format: "<aiId>:<content>", "budget:...", or lockout events
                 var colonIdx = data.indexOf(':');
                 if (colonIdx !== -1) {
                   var evtType = data.slice(0, colonIdx);
@@ -240,6 +306,34 @@ export function renderThreePanelPage(): string {
                     if (budgetParts.length >= 2) {
                       var budgetEl = getBudgetEl(budgetParts[0]);
                       if (budgetEl) budgetEl.textContent = 'budget: ' + budgetParts[1];
+                    }
+                  } else if (evtType === 'chat-lockout') {
+                    // "chat-lockout:<aiId>:<message>"
+                    var lockoutColon = evtData.indexOf(':');
+                    if (lockoutColon !== -1) {
+                      var lockoutAi = evtData.slice(0, lockoutColon);
+                      var lockoutMsg = evtData.slice(lockoutColon + 1);
+                      var lockoutPanel = document.querySelector('[data-ai-panel="' + lockoutAi + '"]');
+                      if (lockoutPanel) {
+                        lockoutPanel.setAttribute('data-chat-lockout', 'true');
+                        var existing = lockoutPanel.querySelector('[data-lockout-notice="' + lockoutAi + '"]');
+                        if (!existing) {
+                          var notice = document.createElement('p');
+                          notice.setAttribute('data-lockout-notice', lockoutAi);
+                          notice.className = 'lockout-notice';
+                          notice.textContent = lockoutMsg;
+                          lockoutPanel.appendChild(notice);
+                        }
+                      }
+                    }
+                  } else if (evtType === 'chat-lockout-clear') {
+                    // "chat-lockout-clear:<aiId>"
+                    var clearAi = evtData;
+                    var clearPanel = document.querySelector('[data-ai-panel="' + clearAi + '"]');
+                    if (clearPanel) {
+                      clearPanel.removeAttribute('data-chat-lockout');
+                      var noticeEl = clearPanel.querySelector('[data-lockout-notice="' + clearAi + '"]');
+                      if (noticeEl) noticeEl.remove();
                     }
                   }
                 }
