@@ -558,11 +558,12 @@ export function renderChatPage(): string {
                     appendActionLogEntry(evt.entry);
                   }
                 } catch (err) {
-                  // Legacy plain-text token for the addressed AI; also remember
-                  // it in case the next sentinel is [CAP_HIT].
+                  // Legacy plain-text token (smoke worker emits these).
+                  // Also remember it in case the next sentinel is [CAP_HIT].
                   lastRawData = data;
-                  if (currentAi) {
-                    appendToChat(currentAi, 'ai', data.replace(/\\\\n/g, '\\n'));
+                  var targetAi = currentAi || addressedAi;
+                  if (targetAi) {
+                    appendToChat(targetAi, 'ai', data.replace(/\\\\n/g, '\\n'));
                   }
                 }
               }
