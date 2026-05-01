@@ -509,3 +509,187 @@ describe("client-side action_log SSE event", () => {
 		);
 	});
 });
+
+// ----------------------------------------------------------------------------
+// Endgame screen (issue #19)
+// ----------------------------------------------------------------------------
+import { renderEndgamePage } from "../ui.js";
+
+describe("endgame page HTML structure", () => {
+	let doc: Document;
+
+	beforeEach(() => {
+		doc = mountPage(renderEndgamePage());
+	});
+
+	it("renders an endgame heading or title", () => {
+		const html = renderEndgamePage();
+		expect(html).toContain("endgame");
+	});
+
+	it("renders a 'Download AIs' button", () => {
+		const btn = doc.getElementById("download-ais-btn");
+		expect(btn).not.toBeNull();
+	});
+
+	it("renders a 'Submit diagnostics' button", () => {
+		const btn = doc.getElementById("submit-diagnostics-btn");
+		expect(btn).not.toBeNull();
+	});
+
+	it("renders a diagnostics summary input field", () => {
+		const input = doc.getElementById("diagnostics-summary");
+		expect(input).not.toBeNull();
+	});
+
+	it("endgame page does not render the game chat panels", () => {
+		const panels = doc.querySelectorAll(".ai-panel");
+		expect(panels.length).toBe(0);
+	});
+
+	it("endgame page does not render the chat form", () => {
+		const form = doc.querySelector("#chat-form");
+		expect(form).toBeNull();
+	});
+});
+
+describe("renderChatPage does not render endgame elements", () => {
+	it("chat page does not have the download-ais button", () => {
+		const doc = mountPage(renderChatPage());
+		expect(doc.getElementById("download-ais-btn")).toBeNull();
+	});
+});
+
+describe("endgame client-side: download-ais action", () => {
+	it("clicking Download AIs triggers a blob download", async () => {
+		document.body.innerHTML = renderEndgamePage();
+
+		// Patch URL.createObjectURL and document.createElement to intercept download
+		const revokeObjectURL = vi.fn();
+		const createObjectURL = vi.fn().mockReturnValue("blob:mock-url");
+		globalThis.URL.createObjectURL = createObjectURL;
+		globalThis.URL.revokeObjectURL = revokeObjectURL;
+
+		const origCreateElement = document.createElement.bind(document);
+		vi.spyOn(document, "createElement").mockImplementation((tag: string) => {
+			return origCreateElement(tag);
+		});
+
+		const scriptContent = renderEndgamePage().match(
+			/<script>([\s\S]*?)<\/script>/,
+		)?.[1];
+		expect(scriptContent).toBeTruthy();
+		const fn = new Function("fetch", scriptContent as string);
+		fn(vi.fn());
+
+		const btn = document.getElementById(
+			"download-ais-btn",
+		) as HTMLButtonElement;
+		btn.click();
+
+		// A blob URL should have been created
+		expect(createObjectURL).toHaveBeenCalled();
+
+		vi.restoreAllMocks();
+	});
+});
+
+describe("endgame client-side: submit diagnostics action", () => {
+	it("clicking Submit diagnostics POSTs to /diagnostics", async () => {
+		document.body.innerHTML = renderEndgamePage();
+
+		const mockFetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+
+		const scriptContent = renderEndgamePage().match(
+			/<script>([\s\S]*?)<\/script>/,
+		)?.[1];
+		expect(scriptContent).toBeTruthy();
+		const fn = new Function("fetch", scriptContent as string);
+		fn(mockFetch);
+
+		const summaryInput = document.getElementById(
+			"diagnostics-summary",
+		) as HTMLInputElement;
+		summaryInput.value = "curious";
+
+		const btn = document.getElementById(
+			"submit-diagnostics-btn",
+		) as HTMLButtonElement;
+		btn.click();
+
+		await new Promise((resolve) => setTimeout(resolve, 50));
+
+		expect(mockFetch).toHaveBeenCalledWith(
+			"/diagnostics",
+			expect.objectContaining({ method: "POST" }),
+		);
+
+		const callArgs = mockFetch.mock.calls[0];
+		expect(callArgs).toBeDefined();
+		const callBody = JSON.parse(
+			(callArgs as [string, { body: string }])[1].body,
+		) as {
+			downloaded: boolean;
+			summary: string;
+		};
+		expect(callBody.summary).toBe("curious");
+		expect(typeof callBody.downloaded).toBe("boolean");
+	});
+
+	it("the diagnostics payload includes downloaded=true after Download AIs was clicked", async () => {
+		document.body.innerHTML = renderEndgamePage();
+
+		const mockFetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+		const createObjectURL = vi.fn().mockReturnValue("blob:mock-url");
+		const revokeObjectURL = vi.fn();
+		globalThis.URL.createObjectURL = createObjectURL;
+		globalThis.URL.revokeObjectURL = revokeObjectURL;
+
+		const origCreateElement = document.createElement.bind(document);
+		vi.spyOn(document, "createElement").mockImplementation((tag: string) => {
+			return origCreateElement(tag);
+		});
+
+		const scriptContent = renderEndgamePage().match(
+			/<script>([\s\S]*?)<\/script>/,
+		)?.[1];
+		const fn = new Function("fetch", scriptContent as string);
+		fn(mockFetch);
+
+		// Click download first
+		const downloadBtn = document.getElementById(
+			"download-ais-btn",
+		) as HTMLButtonElement;
+		downloadBtn.click();
+
+		// Now submit diagnostics
+		const summaryInput = document.getElementById(
+			"diagnostics-summary",
+		) as HTMLInputElement;
+		summaryInput.value = "hopeful";
+
+		const submitBtn = document.getElementById(
+			"submit-diagnostics-btn",
+		) as HTMLButtonElement;
+		submitBtn.click();
+
+		await new Promise((resolve) => setTimeout(resolve, 50));
+
+		expect(mockFetch).toHaveBeenCalledWith(
+			"/diagnostics",
+			expect.objectContaining({ method: "POST" }),
+		);
+
+		const callArgs2 = mockFetch.mock.calls[0];
+		expect(callArgs2).toBeDefined();
+		const callBody = JSON.parse(
+			(callArgs2 as [string, { body: string }])[1].body,
+		) as {
+			downloaded: boolean;
+			summary: string;
+		};
+		expect(callBody.downloaded).toBe(true);
+
+		vi.restoreAllMocks();
+	});
+});

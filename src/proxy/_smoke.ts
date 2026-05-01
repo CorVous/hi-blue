@@ -103,6 +103,40 @@ export default {
 			});
 		}
 
+		if (url.pathname === "/diagnostics") {
+			if (request.method !== "POST") {
+				return new Response("Method Not Allowed", { status: 405 });
+			}
+
+			let body: unknown;
+			try {
+				body = await request.json();
+			} catch {
+				return new Response("Invalid JSON", { status: 400 });
+			}
+
+			const payload = body as Record<string, unknown>;
+
+			if (typeof payload.downloaded !== "boolean") {
+				return new Response("Missing or invalid field: downloaded", {
+					status: 400,
+				});
+			}
+			if (typeof payload.summary !== "string" || payload.summary.length === 0) {
+				return new Response("Missing or invalid field: summary", {
+					status: 400,
+				});
+			}
+
+			// v1 taxonomy is intentionally minimal (TBD per PRD).
+			// Log the payload; a future iteration can persist to KV.
+			console.log(
+				`[diagnostics] downloaded=${payload.downloaded} summary=${payload.summary}`,
+			);
+
+			return new Response(null, { status: 200 });
+		}
+
 		return new Response("Not found", { status: 404 });
 	},
 } satisfies ExportedHandler<Env>;

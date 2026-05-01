@@ -8,6 +8,188 @@
  * Input is disabled while a round is in flight.
  * Each panel shows remaining budget for that AI.
  */
+
+/**
+ * Endgame screen rendered when the phase-3 win condition is met (issue #19).
+ *
+ * Offers two actions:
+ * 1. Download AIs — produces a blob download of the save file.
+ * 2. Submit diagnostics (optional) — POSTs { downloaded, summary } to /diagnostics.
+ *
+ * The browser owns game state, so the save payload is assembled client-side
+ * from the in-memory game data and serialised to JSON. The data-save-payload
+ * attribute on #download-ais-btn is populated by the game client before the
+ * endgame screen is shown (or directly by the serializer in tests).
+ */
+export function renderEndgamePage(): string {
+	return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>hi-blue — endgame</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 1rem;
+      font-family: monospace;
+      background: #0a0a0a;
+      color: #e0e0e0;
+      min-height: 100vh;
+    }
+    h1 { color: #4a9eff; margin: 0 0 0.5rem; }
+    #endgame-screen {
+      max-width: 600px;
+    }
+    #endgame-subtitle {
+      color: #888;
+      margin: 0 0 2rem;
+      font-size: 0.95rem;
+    }
+    .endgame-section {
+      margin-bottom: 1.5rem;
+      border: 1px solid #222;
+      padding: 1rem;
+      background: #111;
+    }
+    .endgame-section h2 {
+      margin: 0 0 0.75rem;
+      font-size: 1rem;
+      color: #4a9eff;
+    }
+    .endgame-section p {
+      margin: 0 0 0.75rem;
+      color: #aaa;
+      font-size: 0.9rem;
+    }
+    button {
+      background: #1a3a5c;
+      color: #4a9eff;
+      border: 1px solid #4a9eff;
+      padding: 0.5rem 1rem;
+      font-family: monospace;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    input[type="text"] {
+      background: #111;
+      color: #e0e0e0;
+      border: 1px solid #444;
+      padding: 0.4rem 0.6rem;
+      font-family: monospace;
+      font-size: 0.95rem;
+      width: 200px;
+    }
+    #diagnostics-status {
+      color: #6bff6b;
+      font-size: 0.85rem;
+      margin-top: 0.5rem;
+      min-height: 1.2em;
+    }
+    #download-status {
+      color: #6bff6b;
+      font-size: 0.85rem;
+      margin-top: 0.5rem;
+      min-height: 1.2em;
+    }
+  </style>
+</head>
+<body>
+  <div id="endgame-screen">
+    <h1>hi-blue — endgame</h1>
+    <p id="endgame-subtitle">The three phases are complete. The room is still.</p>
+
+    <div class="endgame-section" id="download-section">
+      <h2>Save the AIs to USB</h2>
+      <p>Download a file containing each AI's persona and the full transcript of your time together.</p>
+      <button type="button" id="download-ais-btn">Download AIs</button>
+      <div id="download-status" aria-live="polite"></div>
+    </div>
+
+    <div class="endgame-section" id="diagnostics-section">
+      <h2>Submit anonymous diagnostics</h2>
+      <p>Optional. Help the developer understand how the game landed. No identifying data is collected.</p>
+      <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+        <input
+          type="text"
+          id="diagnostics-summary"
+          placeholder="one word (e.g. curious)"
+          aria-label="One-word engagement summary"
+          maxlength="30"
+        />
+        <button type="button" id="submit-diagnostics-btn">Submit diagnostics</button>
+      </div>
+      <div id="diagnostics-status" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var downloaded = false;
+
+      // ── Download AIs ──────────────────────────────────────────────────────
+      var downloadBtn = document.getElementById('download-ais-btn');
+      var downloadStatus = document.getElementById('download-status');
+
+      downloadBtn.addEventListener('click', function () {
+        // Retrieve the save payload from the data attribute if present,
+        // otherwise produce a minimal placeholder so the button always works.
+        var payloadAttr = downloadBtn.getAttribute('data-save-payload');
+        var payload = payloadAttr ? payloadAttr : JSON.stringify({ version: 1, ais: [] });
+
+        var blob = new Blob([payload], { type: 'application/json' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'hi-blue-save.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        downloaded = true;
+        downloadStatus.textContent = 'Saved.';
+        downloadBtn.disabled = true;
+      });
+
+      // ── Submit diagnostics ────────────────────────────────────────────────
+      var submitBtn = document.getElementById('submit-diagnostics-btn');
+      var summaryInput = document.getElementById('diagnostics-summary');
+      var diagnosticsStatus = document.getElementById('diagnostics-status');
+
+      submitBtn.addEventListener('click', function () {
+        var summary = summaryInput.value.trim();
+        if (!summary) {
+          diagnosticsStatus.textContent = 'Please enter a one-word summary first.';
+          return;
+        }
+
+        submitBtn.disabled = true;
+
+        fetch('/diagnostics', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ downloaded: downloaded, summary: summary }),
+        }).then(function (res) {
+          if (res.ok) {
+            diagnosticsStatus.textContent = 'Diagnostics submitted. Thank you.';
+          } else {
+            diagnosticsStatus.textContent = 'Submission failed (' + res.status + ').';
+            submitBtn.disabled = false;
+          }
+        }).catch(function (err) {
+          diagnosticsStatus.textContent = 'Network error: ' + err.message;
+          submitBtn.disabled = false;
+        });
+      });
+    })();
+  </script>
+</body>
+</html>`;
+}
+
 export function renderChatPage(): string {
 	return `<!DOCTYPE html>
 <html lang="en">
@@ -227,7 +409,11 @@ export function renderChatPage(): string {
         roundInFlight = val;
         sendBtn.disabled = val;
         input.disabled = val;
-        selectorBtns.forEach(function (b) { b.disabled = val; });
+        selectorBtns.forEach(function (b) {
+          // Keep chat-locked selector buttons disabled even when round ends.
+          if (!val && b.getAttribute('data-chat-locked')) return;
+          b.disabled = val;
+        });
         roundStatus.textContent = val ? 'Round in progress…' : '';
       }
 
@@ -259,6 +445,31 @@ export function renderChatPage(): string {
         if (!output || !entry) return;
         var desc = entry.description || JSON.stringify(entry);
         output.textContent += '[R' + (entry.round || '?') + '] ' + desc + '\\n';
+      }
+
+      /**
+       * Apply or clear a player-chat lockout for a single AI.
+       *
+       * This is DISTINCT from the budget-exhaustion lockout (setLockout /
+       * evt.type === 'lockout') which greys the panel to signal the AI has
+       * stopped acting.  A chat lockout only disables the *player's* selector
+       * button for that AI — the AI continues to take turns, whisper, and use
+       * tools.  The selector button carries a data-chat-locked attribute so
+       * setRoundInFlight can restore the correct disabled state after the round.
+       */
+      function setChatLockout(aiId, locked) {
+        var btn = document.getElementById('select-' + aiId);
+        if (!btn) return;
+        if (locked) {
+          btn.disabled = true;
+          btn.setAttribute('data-chat-locked', '1');
+        } else {
+          btn.removeAttribute('data-chat-locked');
+          // Only re-enable if no round is currently in flight
+          if (!roundInFlight) {
+            btn.disabled = false;
+          }
+        }
       }
 
       form.addEventListener('submit', function (e) {
@@ -335,6 +546,14 @@ export function renderChatPage(): string {
                   } else if (evt.type === 'lockout') {
                     setLockout(evt.aiId, true);
                     appendToChat(evt.aiId, 'ai', evt.content);
+                  } else if (evt.type === 'chat_lockout') {
+                    // Player-chat lockout: disable selector button + show message.
+                    // The AI keeps acting; only the player's channel is cut.
+                    setChatLockout(evt.aiId, true);
+                    appendToChat(evt.aiId, 'ai', evt.message);
+                  } else if (evt.type === 'chat_lockout_resolved') {
+                    // Lockout expired: re-enable selector button for this AI.
+                    setChatLockout(evt.aiId, false);
                   } else if (evt.type === 'action_log') {
                     appendActionLogEntry(evt.entry);
                   }
