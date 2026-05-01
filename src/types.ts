@@ -53,12 +53,24 @@ export interface AiBudget {
 	total: number;
 }
 
+/**
+ * A predicate that determines whether the win condition for a phase has been met.
+ * Evaluated at the end of each round by the RoundCoordinator.
+ * The engine never calls this directly — it is injected via PhaseConfig.
+ */
+export type WinCondition = (phase: PhaseState, world: WorldState) => boolean;
+
 export interface PhaseConfig {
 	phaseNumber: 1 | 2 | 3;
 	objective: string;
 	aiGoals: Record<AiId, string>;
 	initialWorld: WorldState;
 	budgetPerAi: number;
+	/**
+	 * Optional win-condition predicate. When omitted, the phase never ends
+	 * automatically (useful for tests that don't need phase progression).
+	 */
+	winCondition?: WinCondition;
 }
 
 export interface ChatLockout {

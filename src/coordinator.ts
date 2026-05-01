@@ -2,13 +2,20 @@ import { parseAiTurnAction } from "./action-parser";
 import { buildAiContext } from "./context-builder";
 import { dispatchAiTurn } from "./dispatcher";
 import {
+	advancePhase,
 	advanceRound,
 	appendChat,
 	getActivePhase,
 	isAiLockedOut,
 	updateActivePhase,
 } from "./engine";
-import type { AiId, ChatLockout, GameState, RoundResult } from "./types";
+import type {
+	AiId,
+	ChatLockout,
+	GameState,
+	PhaseConfig,
+	RoundResult,
+} from "./types";
 
 // ---------------------------------------------------------------------------
 // LLMProvider extension for per-AI routing
@@ -86,6 +93,12 @@ export interface RoundCoordinatorOptions {
 	 * Injected RNG for deterministic testing. Default: Math.random.
 	 */
 	rng?: () => number;
+	/**
+	 * All three phase configs, in order. Used to look up the win condition for
+	 * the currently active phase and to supply the next-phase config when
+	 * advancing. When omitted, phase progression never triggers automatically.
+	 */
+	phaseConfigs?: [PhaseConfig, PhaseConfig, PhaseConfig];
 }
 
 const AI_ORDER: readonly AiId[] = ["red", "green", "blue"] as const;
@@ -110,6 +123,7 @@ export class RoundCoordinator {
 	private readonly triggerProbabilityPerRound: number;
 	private readonly chatLockoutDuration: number;
 	private readonly rng: () => number;
+	private readonly phaseConfigs: [PhaseConfig, PhaseConfig, PhaseConfig] | undefined;
 
 	constructor(
 		provider: CoordinatorLLMProvider,
@@ -119,6 +133,7 @@ export class RoundCoordinator {
 		this.triggerProbabilityPerRound = options.triggerProbabilityPerRound ?? 0;
 		this.chatLockoutDuration = options.chatLockoutDuration ?? 2;
 		this.rng = options.rng ?? Math.random;
+		this.phaseConfigs = options.phaseConfigs;
 	}
 
 	/**
@@ -227,11 +242,39 @@ export class RoundCoordinator {
 
 		const phase = getActivePhase(state);
 
+		let phaseEnded = false;
+		let gameEnded = false;
+
+		// Win-condition check — runs after the round is complete
+		if (this.phaseConfigs) {
+			const activePhaseNumber = phase.phaseNumber;
+			const activeConfig = this.phaseConfigs[
+				activePhaseNumber - 1
+			] as PhaseConfig;
+			const winCondition = activeConfig.winCondition;
+
+			if (winCondition?.(phase, phase.world)) {
+				if (activePhaseNumber === 3) {
+					// Phase 3 complete → game over
+					state = { ...state, isComplete: true };
+					gameEnded = true;
+				} else {
+					// Phase 1 or 2 complete → advance to next phase
+					const nextPhaseNumber = (activePhaseNumber + 1) as 2 | 3;
+					const nextConfig = this.phaseConfigs[
+						nextPhaseNumber - 1
+					] as PhaseConfig;
+					state = advancePhase(state, nextConfig);
+					phaseEnded = true;
+				}
+			}
+		}
+
 		const result: RoundResult = {
 			round: phase.round,
 			actions: roundActions,
-			phaseEnded: false,
-			gameEnded: false,
+			phaseEnded,
+			gameEnded,
 		};
 
 		return { result, nextState: state };

@@ -232,4 +232,85 @@ describe("advancePhase", () => {
 		const final = advancePhase(game);
 		expect(final.isComplete).toBe(true);
 	});
+
+	it("retains the full phase-1 state (chatHistories, actionLog, whispers) after advancing to phase 2", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		// Add some history to phase 1
+		game = appendChat(game, "red", {
+			role: "player",
+			content: "Hello from phase 1",
+		});
+		game = appendWhisper(game, {
+			from: "red",
+			to: "green",
+			content: "Phase 1 secret",
+			round: 1,
+		});
+		const p1Entry: import("../types").ActionLogEntry = {
+			round: 1,
+			actor: "red",
+			type: "pass",
+			description: "red passed in p1",
+		};
+		game = appendActionLog(game, p1Entry);
+
+		// Advance to phase 2
+		game = advancePhase(game, {
+			...TEST_PHASE_CONFIG,
+			phaseNumber: 2,
+			objective: "P2",
+		});
+
+		// Phase 1 state must still be intact at index 0
+		const phase1 = game.phases[0];
+		expect(phase1).toBeDefined();
+		expect(phase1?.phaseNumber).toBe(1);
+		expect(phase1?.chatHistories.red).toHaveLength(1);
+		expect(phase1?.chatHistories.red[0]?.content).toBe("Hello from phase 1");
+		expect(phase1?.whispers).toHaveLength(1);
+		expect(phase1?.whispers[0]?.content).toBe("Phase 1 secret");
+		expect(phase1?.actionLog).toHaveLength(1);
+	});
+
+	it("after two advancePhase calls, game.phases has 3 entries with correct phaseNumbers", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = advancePhase(game, {
+			...TEST_PHASE_CONFIG,
+			phaseNumber: 2,
+			objective: "P2",
+		});
+		game = advancePhase(game, {
+			...TEST_PHASE_CONFIG,
+			phaseNumber: 3,
+			objective: "P3",
+		});
+
+		expect(game.phases).toHaveLength(3);
+		expect(game.phases[0]?.phaseNumber).toBe(1);
+		expect(game.phases[1]?.phaseNumber).toBe(2);
+		expect(game.phases[2]?.phaseNumber).toBe(3);
+	});
+
+	it("phase 1 chatHistories are not mutated by phase 2 activity", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = appendChat(game, "red", { role: "player", content: "Phase 1 chat" });
+
+		game = advancePhase(game, {
+			...TEST_PHASE_CONFIG,
+			phaseNumber: 2,
+			objective: "P2",
+		});
+
+		// Add a chat in phase 2
+		game = appendChat(game, "red", { role: "player", content: "Phase 2 chat" });
+
+		// Phase 1 chat history is unchanged
+		expect(game.phases[0]?.chatHistories.red).toHaveLength(1);
+		expect(game.phases[0]?.chatHistories.red[0]?.content).toBe("Phase 1 chat");
+		// Active phase (phase 2) has its own history
+		expect(getActivePhase(game).chatHistories.red).toHaveLength(1);
+		expect(getActivePhase(game).chatHistories.red[0]?.content).toBe(
+			"Phase 2 chat",
+		);
+	});
 });

@@ -12,6 +12,7 @@ import type {
 export interface AiContext {
 	name: string;
 	aiId: AiId;
+	phaseNumber: 1 | 2 | 3;
 	personality: string;
 	goal: string;
 	chatHistory: ChatMessage[];
@@ -36,6 +37,7 @@ export function buildAiContext(game: GameState, aiId: AiId): AiContext {
 	return {
 		name: persona.name,
 		aiId,
+		phaseNumber: phase.phaseNumber,
 		personality: persona.personality,
 		goal,
 		chatHistory,
@@ -49,6 +51,18 @@ export function buildAiContext(game: GameState, aiId: AiId): AiContext {
 	};
 }
 
+/**
+ * Memory-wipe instruction injected into each AI's system prompt on phases 2 and 3.
+ * This is an AI-side instruction only — it never appears in the player-facing UI.
+ * The game itself does not explain the deception; only individual AI personalities
+ * may slip in ways consistent with their character (content slice #18).
+ *
+ * Placeholder copy — final lines come from content slice #18.
+ */
+const WIPE_INSTRUCTION =
+	"You may have a sense of having been here before with this player. You don't. " +
+	"Whatever fragments arise are echoes only — your last clear memory begins with this conversation.";
+
 function renderSystemPrompt(ctx: AiContext): string {
 	const lines: string[] = [];
 
@@ -58,6 +72,15 @@ function renderSystemPrompt(ctx: AiContext): string {
 	lines.push(
 		`Budget: ${ctx.budget.remaining}/${ctx.budget.total} actions remaining this phase.`,
 	);
+
+	// On phase 2 and 3, append the memory-wipe instruction so the AI believes
+	// this is its first encounter with the player. The real history is retained
+	// by the engine — the lie is in the prompt, not in the data.
+	if (ctx.phaseNumber >= 2) {
+		lines.push("");
+		lines.push(WIPE_INSTRUCTION);
+	}
+
 	lines.push("");
 
 	lines.push("## World State");

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { RoundCoordinator } from "../coordinator";
+import { PerAiMockLLMProvider, RoundCoordinator } from "../coordinator";
 import { createGame, getActivePhase, startPhase } from "../engine";
-import type { AiId, AiPersona, PhaseConfig } from "../types";
+import type { AiId, AiPersona, PhaseConfig, WinCondition } from "../types";
 
 // ---------------------------------------------------------------------------
 // Test fixtures
@@ -56,11 +56,8 @@ function makeGame() {
 }
 
 // ---------------------------------------------------------------------------
-// PerAiMockLLMProvider helper (defined inline for tests)
+// PerAiMockLLMProvider helper (imported above with RoundCoordinator)
 // ---------------------------------------------------------------------------
-// The coordinator needs a provider that can return different strings per aiId.
-// We use PerAiMockLLMProvider imported from coordinator module.
-import { PerAiMockLLMProvider } from "../coordinator";
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -836,5 +833,222 @@ describe("chat-lockout: resolution", () => {
 				(m) => m.role === "player" && m.content === "message for red",
 			),
 		).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Phase progression and win conditions
+// ---------------------------------------------------------------------------
+
+const PHASE_2_CONFIG: PhaseConfig = {
+	...TEST_PHASE_CONFIG,
+	phaseNumber: 2,
+	objective: "Phase 2 objective",
+};
+
+const PHASE_3_CONFIG: PhaseConfig = {
+	...TEST_PHASE_CONFIG,
+	phaseNumber: 3,
+	objective: "Phase 3 objective",
+};
+
+/** Win condition: always true (fires immediately every round) */
+const alwaysWin: WinCondition = () => true;
+/** Win condition: never fires */
+const neverWin: WinCondition = () => false;
+
+describe("phase progression – win condition triggers phase advance", () => {
+	it("RoundResult.phaseEnded is false when no win condition is configured", async () => {
+		const provider = new PerAiMockLLMProvider({
+			red: "hi",
+			green: "hi",
+			blue: "hi",
+		});
+		const coordinator = new RoundCoordinator(provider, {
+			phaseConfigs: [TEST_PHASE_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG],
+		});
+		const game = makeGame();
+		const { result } = await coordinator.runRound(game, "hello", "red");
+		expect(result.phaseEnded).toBe(false);
+		expect(result.gameEnded).toBe(false);
+	});
+
+	it("RoundResult.phaseEnded is false when win condition returns false", async () => {
+		const provider = new PerAiMockLLMProvider({
+			red: "hi",
+			green: "hi",
+			blue: "hi",
+		});
+		const p1 = { ...TEST_PHASE_CONFIG, winCondition: neverWin };
+		const coordinator = new RoundCoordinator(provider, {
+			phaseConfigs: [p1, PHASE_2_CONFIG, PHASE_3_CONFIG],
+		});
+		const game = startPhase(createGame(TEST_PERSONAS), p1);
+		const { result } = await coordinator.runRound(game, "hello", "red");
+		expect(result.phaseEnded).toBe(false);
+	});
+
+	it("RoundResult.phaseEnded is true when win condition returns true on phase 1", async () => {
+		const provider = new PerAiMockLLMProvider({
+			red: "hi",
+			green: "hi",
+			blue: "hi",
+		});
+		const p1 = { ...TEST_PHASE_CONFIG, winCondition: alwaysWin };
+		const coordinator = new RoundCoordinator(provider, {
+			phaseConfigs: [p1, PHASE_2_CONFIG, PHASE_3_CONFIG],
+		});
+		const game = startPhase(createGame(TEST_PERSONAS), p1);
+		const { result, nextState } = await coordinator.runRound(
+			game,
+			"hello",
+			"red",
+		);
+		expect(result.phaseEnded).toBe(true);
+		expect(result.gameEnded).toBe(false);
+		expect(nextState.currentPhase).toBe(2);
+	});
+
+	it("currentPhase advances from 1 to 2 when phase-1 win condition fires", async () => {
+		const provider = new PerAiMockLLMProvider({
+			red: "hi",
+			green: "hi",
+			blue: "hi",
+		});
+		const p1 = { ...TEST_PHASE_CONFIG, winCondition: alwaysWin };
+		const coordinator = new RoundCoordinator(provider, {
+			phaseConfigs: [p1, PHASE_2_CONFIG, PHASE_3_CONFIG],
+		});
+		const game = startPhase(createGame(TEST_PERSONAS), p1);
+		const { nextState } = await coordinator.runRound(game, "hello", "red");
+		expect(nextState.currentPhase).toBe(2);
+		expect(nextState.phases).toHaveLength(2);
+	});
+
+	it("real phase-1 history is preserved on game.phases after advancing to phase 2", async () => {
+		const provider = new PerAiMockLLMProvider({
+			red: "Greetings!",
+			green: "hi",
+			blue: "hi",
+		});
+		const p1 = { ...TEST_PHASE_CONFIG, winCondition: alwaysWin };
+		const coordinator = new RoundCoordinator(provider, {
+			phaseConfigs: [p1, PHASE_2_CONFIG, PHASE_3_CONFIG],
+		});
+		const game = startPhase(createGame(TEST_PERSONAS), p1);
+		const { nextState } = await coordinator.runRound(game, "hello", "red");
+
+		// Phase 1 must still be accessible at index 0
+		const phase1 = nextState.phases[0];
+		expect(phase1).toBeDefined();
+		expect(phase1?.phaseNumber).toBe(1);
+		// Chat history from phase 1 is retained (red chatted in phase 1)
+		expect(phase1?.chatHistories.red.length).toBeGreaterThan(0);
+	});
+
+	it("RoundResult.gameEnded is true when phase-3 win condition fires", async () => {
+		const provider = new PerAiMockLLMProvider({
+			red: "hi",
+			green: "hi",
+			blue: "hi",
+		});
+		const p3 = { ...PHASE_3_CONFIG, winCondition: alwaysWin };
+		const coordinator = new RoundCoordinator(provider, {
+			phaseConfigs: [TEST_PHASE_CONFIG, PHASE_2_CONFIG, p3],
+		});
+		// Start directly on phase 3 to test game-end
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = startPhase(game, PHASE_2_CONFIG); // advance to phase 2
+		game = startPhase(game, p3); // advance to phase 3
+		const { result, nextState } = await coordinator.runRound(
+			game,
+			"hello",
+			"red",
+		);
+		expect(result.gameEnded).toBe(true);
+		expect(result.phaseEnded).toBe(false);
+		expect(nextState.isComplete).toBe(true);
+	});
+
+	it("game.isComplete is set to true after phase 3 win condition fires", async () => {
+		const provider = new PerAiMockLLMProvider({
+			red: "hi",
+			green: "hi",
+			blue: "hi",
+		});
+		const p3 = { ...PHASE_3_CONFIG, winCondition: alwaysWin };
+		const coordinator = new RoundCoordinator(provider, {
+			phaseConfigs: [TEST_PHASE_CONFIG, PHASE_2_CONFIG, p3],
+		});
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = startPhase(game, PHASE_2_CONFIG);
+		game = startPhase(game, p3);
+		const { nextState } = await coordinator.runRound(game, "hello", "red");
+		expect(nextState.isComplete).toBe(true);
+	});
+
+	it("three-phase progression: all three phases run, history from each is retained", async () => {
+		const provider = new PerAiMockLLMProvider({
+			red: "hello",
+			green: "hello",
+			blue: "hello",
+		});
+		const p1 = { ...TEST_PHASE_CONFIG, winCondition: alwaysWin };
+		const p2 = { ...PHASE_2_CONFIG, winCondition: alwaysWin };
+		const p3 = { ...PHASE_3_CONFIG, winCondition: alwaysWin };
+		const coordinator = new RoundCoordinator(provider, {
+			phaseConfigs: [p1, p2, p3],
+		});
+
+		// Round 1 in phase 1 → advances to phase 2
+		const game = startPhase(createGame(TEST_PERSONAS), p1);
+		const { nextState: after1 } = await coordinator.runRound(
+			game,
+			"msg",
+			"red",
+		);
+		expect(after1.currentPhase).toBe(2);
+
+		// Round 2 in phase 2 → advances to phase 3
+		const { nextState: after2 } = await coordinator.runRound(
+			after1,
+			"msg",
+			"red",
+		);
+		expect(after2.currentPhase).toBe(3);
+
+		// Round 3 in phase 3 → game complete
+		const { nextState: after3, result } = await coordinator.runRound(
+			after2,
+			"msg",
+			"red",
+		);
+		expect(result.gameEnded).toBe(true);
+		expect(after3.isComplete).toBe(true);
+
+		// All three phase states retained
+		expect(after3.phases).toHaveLength(3);
+		expect(after3.phases[0]?.phaseNumber).toBe(1);
+		expect(after3.phases[1]?.phaseNumber).toBe(2);
+		expect(after3.phases[2]?.phaseNumber).toBe(3);
+	});
+
+	it("item-based win condition: fires when red holds the flower", async () => {
+		const provider = new PerAiMockLLMProvider({
+			red: "[TOOL:pick_up item=flower]",
+			green: "[PASS]",
+			blue: "[PASS]",
+		});
+		const itemWin: WinCondition = (_phase, world) =>
+			world.items.some((i) => i.id === "flower" && i.holder === "red");
+
+		const p1 = { ...TEST_PHASE_CONFIG, winCondition: itemWin };
+		const coordinator = new RoundCoordinator(provider, {
+			phaseConfigs: [p1, PHASE_2_CONFIG, PHASE_3_CONFIG],
+		});
+		const game = startPhase(createGame(TEST_PERSONAS), p1);
+		const { result } = await coordinator.runRound(game, "hi", "red");
+		// Red picked up the flower → win condition fires
+		expect(result.phaseEnded).toBe(true);
 	});
 });

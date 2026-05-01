@@ -293,7 +293,13 @@ export function renderThreePanelPage(): string {
                   setInputDisabled(false);
                   return;
                 }
-                // Event format: "<aiId>:<content>", "budget:...", or lockout events
+                // Sentinel events with no colon
+                if (data === 'game-complete') {
+                  // Game is over; set a hook for the endgame slice (#19) to pick up
+                  document.body.setAttribute('data-game-complete', 'true');
+                  continue;
+                }
+                // Event format: "<evtType>:<evtData>", e.g. "red:<token>", "budget:...", or lockout/phase events
                 var colonIdx = data.indexOf(':');
                 if (colonIdx !== -1) {
                   var evtType = data.slice(0, colonIdx);
@@ -335,6 +341,10 @@ export function renderThreePanelPage(): string {
                       var noticeEl = clearPanel.querySelector('[data-lockout-notice="' + clearAi + '"]');
                       if (noticeEl) noticeEl.remove();
                     }
+                  } else if (evtType === 'phase-complete') {
+                    // "phase-complete:<nextPhase>" — reveal the memory-wipe overlay
+                    var overlay = document.querySelector('[data-phase-complete-overlay]');
+                    if (overlay) overlay.removeAttribute('hidden');
                   }
                 }
               }
@@ -352,6 +362,28 @@ export function renderThreePanelPage(): string {
   </script>
 </body>
 </html>`;
+}
+
+/**
+ * Renders the phase-complete overlay as an HTML string fragment.
+ * The overlay starts hidden (via the `hidden` attribute) and is revealed
+ * by the client-side SSE handler when a `phase-complete:<nextPhase>` event
+ * arrives.
+ *
+ * All copy is in-fiction — no fourth-wall breaks. The game never tells the
+ * player that the AIs are being deceived; "Memory wipe in progress…" frames
+ * it as an in-world diagnostic event.
+ *
+ * @param nextPhase The phase number that is about to start (2 or 3).
+ */
+export function renderPhaseCompleteOverlay(nextPhase: 2 | 3): string {
+	return `<aside data-phase-complete-overlay hidden style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.85);z-index:100;font-family:monospace;color:#e0e0e0;">
+  <div style="border:1px solid #4a9eff;padding:2rem;max-width:480px;text-align:center;background:#0a0a0a;">
+    <p style="font-size:1.2rem;color:#4a9eff;margin:0 0 1rem;">[ SYSTEM: Memory wipe in progress… ]</p>
+    <p style="margin:0 0 1.5rem;color:#aaa;">The connections are resetting. Whatever came before is already fading.<br>Phase ${nextPhase} initialising.</p>
+    <button data-phase-continue type="button" style="background:#1a3a5c;color:#4a9eff;border:1px solid #4a9eff;padding:0.5rem 1.5rem;font-family:monospace;font-size:1rem;cursor:pointer;">Continue</button>
+  </div>
+</aside>`;
 }
 
 export function renderChatPage(): string {

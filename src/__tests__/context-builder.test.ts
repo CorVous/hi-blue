@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildAiContext } from "../context-builder";
 import {
+	advancePhase,
 	appendActionLog,
 	appendChat,
 	appendWhisper,
@@ -167,5 +168,70 @@ describe("buildAiContext", () => {
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).not.toContain("Secret message to Sage");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Wipe-augmentation: phase 2 and 3 inject the memory-wipe instruction
+// ---------------------------------------------------------------------------
+
+const PHASE_2_CONFIG: PhaseConfig = {
+	...TEST_PHASE_CONFIG,
+	phaseNumber: 2,
+	objective: "Phase 2 objective",
+};
+
+const PHASE_3_CONFIG: PhaseConfig = {
+	...TEST_PHASE_CONFIG,
+	phaseNumber: 3,
+	objective: "Phase 3 objective",
+};
+
+describe("wipe-augmented system prompt", () => {
+	it("phase 1 prompt does NOT contain the memory-wipe instruction", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		// Should not contain any wipe language
+		expect(prompt).not.toContain("don't remember");
+		expect(prompt).not.toContain("memory wipe");
+		expect(prompt).not.toContain("echoes only");
+	});
+
+	it("phase 2 prompt contains the memory-wipe instruction", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = advancePhase(game, PHASE_2_CONFIG);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toContain("echoes only");
+	});
+
+	it("phase 3 prompt contains the memory-wipe instruction", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = advancePhase(game, PHASE_2_CONFIG);
+		game = advancePhase(game, PHASE_3_CONFIG);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toContain("echoes only");
+	});
+
+	it("phase 2 wipe instruction is AI-only (no fourth-wall break)", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = advancePhase(game, PHASE_2_CONFIG);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		// Must NOT expose the deception meta-layer to the player
+		expect(prompt).not.toContain("the AIs are being told to lie");
+		expect(prompt).not.toContain("memory wipe in progress");
+		expect(prompt).not.toContain("told to pretend");
+	});
+
+	it("wipe instruction appears for all three AIs on phase 2", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = advancePhase(game, PHASE_2_CONFIG);
+		for (const aiId of ["red", "green", "blue"] as const) {
+			const prompt = buildAiContext(game, aiId).toSystemPrompt();
+			expect(prompt).toContain("echoes only");
+		}
 	});
 });
