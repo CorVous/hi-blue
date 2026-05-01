@@ -33,6 +33,16 @@ interface Env {
 	TOKEN_PACE_MS?: string;
 }
 
+/**
+ * Per-AI multipliers on TOKEN_PACE_MS to give each AI a distinct typing rhythm.
+ * Lower = faster. Red is impulsive, blue is deliberate, green sits between.
+ */
+const AI_TYPING_SPEED: Record<AiId, number> = {
+	red: 0.7,
+	green: 1.0,
+	blue: 1.4,
+};
+
 function createProvider(env: Env): LLMProvider {
 	if (env.LLM_PROVIDER === "anthropic") {
 		// Not yet wired — needs dynamic import + ANTHROPIC_API_KEY before use.
@@ -233,12 +243,22 @@ export default {
 						const phaseAfter = getActivePhase(capturedSession.getState());
 						const events = encodeRoundResult(result, completions, phaseAfter);
 
+						let speakingAi: AiId | null = null;
 						for (const event of events) {
 							controller.enqueue(
 								enc.encode(`data: ${JSON.stringify(event)}\n\n`),
 							);
-							if (event.type === "token" && tokenPaceMs > 0) {
-								const jittered = tokenPaceMs * (0.5 + Math.random());
+							if (event.type === "ai_start") {
+								speakingAi = event.aiId;
+							} else if (event.type === "ai_end") {
+								speakingAi = null;
+							} else if (
+								event.type === "token" &&
+								tokenPaceMs > 0 &&
+								speakingAi
+							) {
+								const speed = AI_TYPING_SPEED[speakingAi];
+								const jittered = tokenPaceMs * speed * (0.5 + Math.random());
 								await new Promise((r) => setTimeout(r, jittered));
 							}
 						}
