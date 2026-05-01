@@ -424,6 +424,25 @@ export function renderChatPage(): string {
         output.textContent += prefix + content + '\\n';
       }
 
+      // Streaming-token helpers: tokens append with no newline,
+      // a single newline is added when the message ends.
+      var streamingAis = {};
+      function appendStreamToken(aiId, text) {
+        var output = document.getElementById('chat-' + aiId);
+        if (!output) return;
+        output.textContent += text;
+        streamingAis[aiId] = true;
+      }
+      function endStreamedMessage(aiId) {
+        if (!streamingAis[aiId]) return;
+        var output = document.getElementById('chat-' + aiId);
+        if (output) output.textContent += '\\n';
+        delete streamingAis[aiId];
+      }
+      function endAllStreamedMessages() {
+        for (var id in streamingAis) endStreamedMessage(id);
+      }
+
       function updateBudget(aiId, remaining) {
         var el = document.getElementById('budget-' + aiId);
         if (el) el.textContent = 'Budget: ' + remaining;
@@ -505,6 +524,7 @@ export function renderChatPage(): string {
           function pump() {
             return reader.read().then(function (chunk) {
               if (chunk.done) {
+                endAllStreamedMessages();
                 setRoundInFlight(false);
                 return;
               }
@@ -516,13 +536,17 @@ export function renderChatPage(): string {
                 if (!line.startsWith('data: ')) continue;
                 var data = line.slice(6);
                 if (data === '[DONE]') {
+                  endAllStreamedMessages();
                   setRoundInFlight(false);
                   return;
                 }
                 if (data === '[CAP_HIT]') {
                   // Server rate-limit or daily-cap hit. The preceding raw
                   // data line is the in-character sleeping message — surface
-                  // it on every panel since the cap is global.
+                  // it on every panel since the cap is global. Discard any
+                  // partial stream — the message we just streamed was the
+                  // sleeping notice, not real AI output.
+                  streamingAis = {};
                   var capMsg = lastRawData
                     ? lastRawData.replace(/\\\\n/g, '\\n')
                     : 'The AIs have gone to sleep for the night.';
@@ -538,8 +562,9 @@ export function renderChatPage(): string {
                   if (evt.type === 'ai_start') {
                     currentAi = evt.aiId;
                   } else if (evt.type === 'token' && currentAi) {
-                    appendToChat(currentAi, 'ai', evt.text.replace(/\\\\n/g, '\\n'));
+                    appendStreamToken(currentAi, evt.text.replace(/\\\\n/g, '\\n'));
                   } else if (evt.type === 'ai_end') {
+                    if (currentAi) endStreamedMessage(currentAi);
                     currentAi = null;
                   } else if (evt.type === 'budget') {
                     updateBudget(evt.aiId, evt.remaining);
@@ -558,11 +583,12 @@ export function renderChatPage(): string {
                     appendActionLogEntry(evt.entry);
                   }
                 } catch (err) {
-                  // Legacy plain-text token for the addressed AI; also remember
-                  // it in case the next sentinel is [CAP_HIT].
+                  // Legacy plain-text token (smoke worker emits these).
+                  // Also remember it in case the next sentinel is [CAP_HIT].
                   lastRawData = data;
-                  if (currentAi) {
-                    appendToChat(currentAi, 'ai', data.replace(/\\\\n/g, '\\n'));
+                  var targetAi = currentAi || addressedAi;
+                  if (targetAi) {
+                    appendStreamToken(targetAi, data.replace(/\\\\n/g, '\\n'));
                   }
                 }
               }

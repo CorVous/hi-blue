@@ -353,6 +353,136 @@ describe("client-side structured SSE events", () => {
 });
 
 // ----------------------------------------------------------------------------
+// Smoke-worker plain-text SSE compatibility (issue #12 regression)
+// ----------------------------------------------------------------------------
+describe("client-side legacy plain-text SSE tokens", () => {
+	it("appends plain-text tokens to the addressed AI panel when no ai_start is sent", async () => {
+		document.body.innerHTML = renderChatPage();
+
+		// This mirrors exactly what src/proxy/_smoke.ts emits: raw
+		// "data: <token>\n\n" frames with no surrounding ai_start/ai_end.
+		const events = [
+			"data: Hello\n\n",
+			"data:  \n\n",
+			"data: world\n\n",
+			"data: [DONE]\n\n",
+		].join("");
+
+		const encoder = new TextEncoder();
+		const encoded = encoder.encode(events);
+		let offset = 0;
+
+		const mockReader = {
+			read: vi.fn().mockImplementation(async () => {
+				if (offset < encoded.length) {
+					const chunk = encoded.slice(offset, offset + encoded.length);
+					offset = encoded.length;
+					return { done: false, value: chunk };
+				}
+				return { done: true, value: undefined };
+			}),
+			releaseLock: vi.fn(),
+		};
+
+		const mockFetch = vi.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
+			body: { getReader: () => mockReader },
+		});
+
+		const scriptContent = renderChatPage().match(
+			/<script>([\s\S]*?)<\/script>/,
+		)?.[1];
+		const fn = new Function("fetch", scriptContent as string);
+		fn(mockFetch);
+
+		const form = document.getElementById("chat-form") as HTMLFormElement;
+		const textarea = document.getElementById(
+			"message-input",
+		) as HTMLTextAreaElement;
+		textarea.value = "hi";
+
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+
+		await new Promise((resolve) => setTimeout(resolve, 50));
+
+		// Default addressedAi is 'red', so the smoke worker's plain-text
+		// tokens must land in chat-red. Other panels stay empty.
+		const chatRed = document.getElementById("chat-red");
+		// Tokens render as one continuous line (no per-token newlines),
+		// closed by a single trailing newline once [DONE] arrives.
+		expect(chatRed?.textContent).toContain("Hello world");
+		expect(chatRed?.textContent).not.toContain("Hello\n");
+		expect(chatRed?.textContent?.endsWith("Hello world\n")).toBe(true);
+
+		const chatGreen = document.getElementById("chat-green");
+		const chatBlue = document.getElementById("chat-blue");
+		expect(chatGreen?.textContent ?? "").not.toContain("Hello");
+		expect(chatBlue?.textContent ?? "").not.toContain("Hello");
+	});
+
+	it("structured token events also render as one continuous line", async () => {
+		document.body.innerHTML = renderChatPage();
+
+		const events = [
+			`data: ${JSON.stringify({ type: "ai_start", aiId: "green" })}\n\n`,
+			`data: ${JSON.stringify({ type: "token", text: "one " })}\n\n`,
+			`data: ${JSON.stringify({ type: "token", text: "two " })}\n\n`,
+			`data: ${JSON.stringify({ type: "token", text: "three" })}\n\n`,
+			`data: ${JSON.stringify({ type: "ai_end" })}\n\n`,
+			"data: [DONE]\n\n",
+		].join("");
+
+		const encoder = new TextEncoder();
+		const encoded = encoder.encode(events);
+		let offset = 0;
+
+		const mockReader = {
+			read: vi.fn().mockImplementation(async () => {
+				if (offset < encoded.length) {
+					const chunk = encoded.slice(offset, offset + encoded.length);
+					offset = encoded.length;
+					return { done: false, value: chunk };
+				}
+				return { done: true, value: undefined };
+			}),
+			releaseLock: vi.fn(),
+		};
+
+		const mockFetch = vi.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
+			body: { getReader: () => mockReader },
+		});
+
+		const scriptContent = renderChatPage().match(
+			/<script>([\s\S]*?)<\/script>/,
+		)?.[1];
+		const fn = new Function("fetch", scriptContent as string);
+		fn(mockFetch);
+
+		const form = document.getElementById("chat-form") as HTMLFormElement;
+		const textarea = document.getElementById(
+			"message-input",
+		) as HTMLTextAreaElement;
+		textarea.value = "hi";
+
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+
+		await new Promise((resolve) => setTimeout(resolve, 50));
+
+		const chatGreen = document.getElementById("chat-green");
+		expect(chatGreen?.textContent).toContain("one two three");
+		expect(chatGreen?.textContent).not.toContain("one \ntwo");
+		expect(chatGreen?.textContent?.endsWith("one two three\n")).toBe(true);
+	});
+});
+
+// ----------------------------------------------------------------------------
 // Action log panel (issue #15)
 // ----------------------------------------------------------------------------
 describe("action log panel HTML structure", () => {
