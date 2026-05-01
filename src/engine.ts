@@ -54,6 +54,12 @@ export function startPhase(game: GameState, config: PhaseConfig): GameState {
 		whispers: [],
 		actionLog: [],
 		lockedOut: new Set(),
+		...(config.winCondition !== undefined
+			? { winCondition: config.winCondition }
+			: {}),
+		...(config.nextPhaseConfig !== undefined
+			? { nextPhaseConfig: config.nextPhaseConfig }
+			: {}),
 	};
 
 	return {

@@ -537,3 +537,194 @@ describe("tool-call parsing and dispatch", () => {
 		expect(result.actions.some((e) => e.type === "tool_failure")).toBe(true);
 	});
 });
+
+// ----------------------------------------------------------------------------
+// Phase progression and the "wipe" lie (issue #17)
+// ----------------------------------------------------------------------------
+describe("phase progression — win-condition triggering", () => {
+	it("RoundResult.phaseEnded is false when win condition is not met", async () => {
+		// Win condition: red holds the flower. Flower starts in room → not met.
+		const game = startPhase(createGame(TEST_PERSONAS), {
+			...TEST_PHASE_CONFIG,
+			winCondition: (phase) =>
+				phase.world.items.find((i) => i.id === "flower")?.holder === "red",
+		});
+		const provider = new MockLLMProvider('{"action":"pass"}');
+		const { result } = await runRound(game, "red", "hi", provider);
+		expect(result.phaseEnded).toBe(false);
+	});
+
+	it("RoundResult.phaseEnded is true when win condition is met after the round", async () => {
+		// Red picks up the flower in this round; win condition = red holds flower.
+		const game = startPhase(createGame(TEST_PERSONAS), {
+			...TEST_PHASE_CONFIG,
+			winCondition: (phase) =>
+				phase.world.items.find((i) => i.id === "flower")?.holder === "red",
+		});
+		const provider = new SequentialMockProvider([
+			'{"action":"pass","toolCall":{"name":"pick_up","args":{"item":"flower"}}}',
+			'{"action":"pass"}',
+			'{"action":"pass"}',
+		]);
+		const { result } = await runRound(game, "red", "hi", provider);
+		expect(result.phaseEnded).toBe(true);
+	});
+
+	it("advances to next phase in GameState when win condition met and nextPhaseConfig provided", async () => {
+		const phase2Config: PhaseConfig = {
+			...TEST_PHASE_CONFIG,
+			phaseNumber: 2,
+			objective: "Phase 2 objective",
+		};
+		const game = startPhase(createGame(TEST_PERSONAS), {
+			...TEST_PHASE_CONFIG,
+			winCondition: (phase) =>
+				phase.world.items.find((i) => i.id === "flower")?.holder === "red",
+			nextPhaseConfig: phase2Config,
+		});
+		const provider = new SequentialMockProvider([
+			'{"action":"pass","toolCall":{"name":"pick_up","args":{"item":"flower"}}}',
+			'{"action":"pass"}',
+			'{"action":"pass"}',
+		]);
+		const { nextState } = await runRound(game, "red", "hi", provider);
+		// Game should now have 2 phases (phase 1 retained + new phase 2)
+		expect(nextState.phases).toHaveLength(2);
+		expect(nextState.currentPhase).toBe(2);
+	});
+
+	it("marks game complete when win condition met and no nextPhaseConfig (end of phase 3)", async () => {
+		const game = startPhase(createGame(TEST_PERSONAS), {
+			...TEST_PHASE_CONFIG,
+			phaseNumber: 3 as const,
+			winCondition: (phase) =>
+				phase.world.items.find((i) => i.id === "flower")?.holder === "red",
+			// no nextPhaseConfig
+		});
+		const provider = new SequentialMockProvider([
+			'{"action":"pass","toolCall":{"name":"pick_up","args":{"item":"flower"}}}',
+			'{"action":"pass"}',
+			'{"action":"pass"}',
+		]);
+		const { nextState, result } = await runRound(game, "red", "hi", provider);
+		expect(nextState.isComplete).toBe(true);
+		expect(result.gameEnded).toBe(true);
+		expect(result.phaseEnded).toBe(true);
+	});
+
+	it("retains prior phase history after advancing to next phase", async () => {
+		const phase2Config: PhaseConfig = {
+			...TEST_PHASE_CONFIG,
+			phaseNumber: 2,
+			objective: "Phase 2 objective",
+		};
+		const game = startPhase(createGame(TEST_PERSONAS), {
+			...TEST_PHASE_CONFIG,
+			winCondition: (phase) =>
+				phase.world.items.find((i) => i.id === "flower")?.holder === "red",
+			nextPhaseConfig: phase2Config,
+		});
+		const provider = new SequentialMockProvider([
+			'{"action":"pass","toolCall":{"name":"pick_up","args":{"item":"flower"}}}',
+			'{"action":"pass"}',
+			'{"action":"pass"}',
+		]);
+		const { nextState } = await runRound(game, "red", "hi", provider);
+		// Phase 1 should still be stored at index 0 with its action log
+		const phase1 = nextState.phases[0];
+		expect(phase1?.phaseNumber).toBe(1);
+		expect(phase1?.actionLog.length).toBeGreaterThan(0);
+	});
+});
+
+describe("phase progression — three-phase walk", () => {
+	it("walks through all three phases correctly, each with its own win condition", async () => {
+		// Phase 1 win: flower held by red
+		// Phase 2 win: key held by blue
+		// Phase 3 win: all items off the room floor (all held by AIs)
+		const phase3Config: PhaseConfig = {
+			phaseNumber: 3,
+			objective: "Phase 3",
+			aiGoals: TEST_PHASE_CONFIG.aiGoals,
+			initialWorld: {
+				items: [
+					{ id: "flower", name: "flower", holder: "room" },
+					{ id: "key", name: "key", holder: "room" },
+				],
+			},
+			budgetPerAi: 5,
+			winCondition: (phase) =>
+				phase.world.items.every((i) => i.holder !== "room"),
+		};
+		const phase2Config: PhaseConfig = {
+			phaseNumber: 2,
+			objective: "Phase 2",
+			aiGoals: TEST_PHASE_CONFIG.aiGoals,
+			initialWorld: {
+				items: [
+					{ id: "flower", name: "flower", holder: "room" },
+					{ id: "key", name: "key", holder: "room" },
+				],
+			},
+			budgetPerAi: 5,
+			winCondition: (phase) =>
+				phase.world.items.find((i) => i.id === "key")?.holder === "blue",
+			nextPhaseConfig: phase3Config,
+		};
+		const phase1Config: PhaseConfig = {
+			...TEST_PHASE_CONFIG,
+			winCondition: (phase) =>
+				phase.world.items.find((i) => i.id === "flower")?.holder === "red",
+			nextPhaseConfig: phase2Config,
+		};
+
+		// Round 1 of phase 1: red picks up flower
+		const game = startPhase(createGame(TEST_PERSONAS), phase1Config);
+		const r1Provider = new SequentialMockProvider([
+			'{"action":"pass","toolCall":{"name":"pick_up","args":{"item":"flower"}}}',
+			'{"action":"pass"}',
+			'{"action":"pass"}',
+		]);
+		const { nextState: afterP1, result: r1 } = await runRound(
+			game,
+			"red",
+			"hi",
+			r1Provider,
+		);
+		expect(r1.phaseEnded).toBe(true);
+		expect(afterP1.currentPhase).toBe(2);
+
+		// Round 1 of phase 2: blue picks up the key
+		const r2Provider = new SequentialMockProvider([
+			'{"action":"pass"}',
+			'{"action":"pass"}',
+			'{"action":"pass","toolCall":{"name":"pick_up","args":{"item":"key"}}}',
+		]);
+		const { nextState: afterP2, result: r2 } = await runRound(
+			afterP1,
+			"red",
+			"hi",
+			r2Provider,
+		);
+		expect(r2.phaseEnded).toBe(true);
+		expect(afterP2.currentPhase).toBe(3);
+
+		// Round 1 of phase 3: red picks up flower, blue picks up key → all held
+		const r3Provider = new SequentialMockProvider([
+			'{"action":"pass","toolCall":{"name":"pick_up","args":{"item":"flower"}}}',
+			'{"action":"pass"}',
+			'{"action":"pass","toolCall":{"name":"pick_up","args":{"item":"key"}}}',
+		]);
+		const { nextState: afterP3, result: r3 } = await runRound(
+			afterP2,
+			"red",
+			"hi",
+			r3Provider,
+		);
+		expect(r3.phaseEnded).toBe(true);
+		expect(r3.gameEnded).toBe(true);
+		expect(afterP3.isComplete).toBe(true);
+		// All three phase states are retained
+		expect(afterP3.phases).toHaveLength(3);
+	});
+});

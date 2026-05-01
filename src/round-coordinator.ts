@@ -16,6 +16,7 @@
 import { buildAiContext } from "./context-builder";
 import { dispatchAiTurn } from "./dispatcher";
 import {
+	advancePhase,
 	advanceRound,
 	appendActionLog,
 	appendChat,
@@ -211,10 +212,20 @@ export async function runRound(
 	// 3. Advance the round counter
 	state = advanceRound(state);
 
+	// 4. Check win condition against the post-round phase state.
+	//    If met, advance to the next phase (or mark game complete).
+	const activePhaseAfterRound = getActivePhase(state);
+	let phaseEnded = false;
+
+	if (activePhaseAfterRound.winCondition?.(activePhaseAfterRound)) {
+		phaseEnded = true;
+		state = advancePhase(state, activePhaseAfterRound.nextPhaseConfig);
+	}
+
 	const result: RoundResult = {
-		round: getActivePhase(state).round, // post-advance value = completed round number
+		round: activePhaseAfterRound.round, // post-advance value = completed round number
 		actions: roundActions,
-		phaseEnded: false,
+		phaseEnded,
 		gameEnded: state.isComplete,
 	};
 

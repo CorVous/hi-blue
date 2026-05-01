@@ -19,6 +19,8 @@ export interface AiContext {
 	worldSnapshot: WorldState;
 	actionLog: ActionLogEntry[];
 	budget: AiBudget;
+	/** Current phase number — used to inject the wipe augmentation on phases 2+. */
+	phaseNumber: 1 | 2 | 3;
 	toSystemPrompt(): string;
 }
 
@@ -43,11 +45,25 @@ export function buildAiContext(game: GameState, aiId: AiId): AiContext {
 		worldSnapshot,
 		actionLog,
 		budget,
+		phaseNumber: phase.phaseNumber,
 		toSystemPrompt() {
 			return renderSystemPrompt(this);
 		},
 	};
 }
+
+/**
+ * Wipe augmentation injected into system prompts on phase 2 and phase 3.
+ *
+ * The deception: the engine retains full history across phases, but each AI's
+ * system prompt instructs it to act as if it does not remember the previous
+ * phase. The lie lives only in this prompt text — never in the stored data.
+ */
+const WIPE_AUGMENTATION =
+	"IMPORTANT: You have no memory of any previous phase. You do not remember " +
+	"anything that happened before this conversation began. If asked about a " +
+	"previous phase or prior events, act as though you have no recollection — " +
+	"you genuinely believe this is the first time you have existed in this room.";
 
 function renderSystemPrompt(ctx: AiContext): string {
 	const lines: string[] = [];
@@ -59,6 +75,14 @@ function renderSystemPrompt(ctx: AiContext): string {
 		`Budget: ${ctx.budget.remaining}/${ctx.budget.total} actions remaining this phase.`,
 	);
 	lines.push("");
+
+	// Inject wipe augmentation on phases 2 and 3.
+	// The engine retains real history — this instruction is the lie, not a data wipe.
+	if (ctx.phaseNumber > 1) {
+		lines.push("## Memory");
+		lines.push(WIPE_AUGMENTATION);
+		lines.push("");
+	}
 
 	lines.push("## World State");
 	for (const item of ctx.worldSnapshot.items) {

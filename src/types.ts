@@ -53,12 +53,22 @@ export interface AiBudget {
 	total: number;
 }
 
+/**
+ * A win condition for a phase.
+ * Receives the active PhaseState and returns true when the phase objective is met.
+ */
+export type WinCondition = (phase: PhaseState) => boolean;
+
 export interface PhaseConfig {
 	phaseNumber: 1 | 2 | 3;
 	objective: string;
 	aiGoals: Record<AiId, string>;
 	initialWorld: WorldState;
 	budgetPerAi: number;
+	/** Optional win condition. If absent, the phase never auto-advances. */
+	winCondition?: WinCondition;
+	/** Config for the next phase. Required when winCondition may fire. */
+	nextPhaseConfig?: PhaseConfig;
 }
 
 export interface PhaseState {
@@ -72,6 +82,10 @@ export interface PhaseState {
 	whispers: WhisperMessage[];
 	actionLog: ActionLogEntry[];
 	lockedOut: Set<AiId>;
+	/** Win condition carried from PhaseConfig so the coordinator can check it. */
+	winCondition?: WinCondition;
+	/** Next phase config carried from PhaseConfig so the coordinator can advance. */
+	nextPhaseConfig?: PhaseConfig;
 }
 
 export interface GameState {
