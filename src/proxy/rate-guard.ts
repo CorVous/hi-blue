@@ -5,7 +5,7 @@
  *
  * 1. Per-IP token-bucket rate-limit
  *    Key: `rl:<ip>`
- *    Value: JSON { tokens: number, lastRefill: number (unix-ms) }
+ *    Value: JSON { tokens: number, lastRefillMs: number (unix-ms) }
  *    TTL: RATE_LIMIT_WINDOW_SEC seconds
  *
  *    On each request we refill tokens proportionally to elapsed time, then
@@ -88,7 +88,9 @@ export async function checkAndCharge(
 	const currentSpend = rawSpend === null ? 0 : Number(rawSpend);
 
 	if (currentSpend + cfg.estimatedCostPerRequest > cfg.dailyCapMax) {
-		// Roll back the token consumption — we're not going to serve this request
+		// Best-effort rollback of the token consumption — KV has no atomic
+		// compare-and-swap, so under concurrent requests the rollback may
+		// overwrite a newer bucket state. Acceptable for this use-case.
 		bucket.tokens += 1;
 		await kv.put(bucketKey, JSON.stringify(bucket), {
 			expirationTtl: cfg.rateLimitWindowSec,
