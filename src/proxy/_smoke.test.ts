@@ -44,6 +44,63 @@ describe("proxy worker smoke", () => {
 		expect(html).toContain("<textarea");
 		expect(html).toContain("<output");
 	});
+
+	it("GET / renders the three-panel layout", async () => {
+		const response = await SELF.fetch("https://example.com/");
+		const html = await response.text();
+		expect(html).toContain('data-ai-panel="red"');
+		expect(html).toContain('data-ai-panel="green"');
+		expect(html).toContain('data-ai-panel="blue"');
+		expect(html).toContain("data-ai-selector");
+	});
+
+	it("POST /round streams per-AI SSE events ending with [DONE]", async () => {
+		const response = await SELF.fetch("https://example.com/round", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": "10.2.0.1",
+			},
+			body: JSON.stringify({ message: "hi", target: "red" }),
+		});
+
+		expect(response.status).toBe(200);
+		expect(response.headers.get("Content-Type")).toContain("text/event-stream");
+
+		const text = await response.text();
+		// The mock provider's response is parsed as a chat to the player, so the
+		// addressed AI ("red") emits a chat event; the others either emit chat
+		// events or pass — at minimum we expect a budget readout for all three.
+		expect(text).toContain("data: red:");
+		expect(text).toContain("data: budget:red:");
+		expect(text).toContain("data: budget:green:");
+		expect(text).toContain("data: budget:blue:");
+		expect(text).toContain("data: [DONE]");
+	});
+
+	it("POST /round rejects invalid target", async () => {
+		const response = await SELF.fetch("https://example.com/round", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": "10.2.0.2",
+			},
+			body: JSON.stringify({ message: "hi", target: "yellow" }),
+		});
+		expect(response.status).toBe(400);
+	});
+
+	it("POST /round rejects missing message", async () => {
+		const response = await SELF.fetch("https://example.com/round", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": "10.2.0.3",
+			},
+			body: JSON.stringify({ target: "red" }),
+		});
+		expect(response.status).toBe(400);
+	});
 });
 
 // ---------------------------------------------------------------------------
