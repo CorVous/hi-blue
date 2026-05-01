@@ -34,7 +34,7 @@ export class MockLLMProvider implements LLMProvider {
 /**
  * Anthropic Claude Haiku provider (real, via fetch).
  * Requires ANTHROPIC_API_KEY in env.
- * Only used when LLM_PROVIDER=anthropic; never imported in test paths.
+ * Never instantiated in tests — createProvider() throws before reaching this.
  */
 export class AnthropicProvider implements LLMProvider {
 	private readonly apiKey: string;

@@ -4,9 +4,9 @@ import { renderChatPage } from "./ui";
 
 function createProvider(env: Record<string, string | undefined>): LLMProvider {
 	if (env.LLM_PROVIDER === "anthropic") {
-		// Dynamic import so tests never pull in the real provider path
+		// Not yet wired — needs dynamic import + ANTHROPIC_API_KEY before use.
 		throw new Error(
-			"Anthropic provider requires ANTHROPIC_API_KEY; import AnthropicProvider from ./llm-provider",
+			"Anthropic provider not yet wired; set LLM_PROVIDER=mock or wire AnthropicProvider dynamically",
 		);
 	}
 	return new MockLLMProvider(
@@ -24,8 +24,9 @@ function sseStream(provider: LLMProvider, message: string): ReadableStream {
 					controller.enqueue(encoder.encode(`data: ${escaped}\n\n`));
 				}
 				controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-			} finally {
 				controller.close();
+			} catch (err) {
+				controller.error(err);
 			}
 		},
 	});
@@ -57,9 +58,7 @@ export default {
 				return new Response("Missing message", { status: 400 });
 			}
 
-			const provider = createProvider(
-				env as Record<string, string | undefined>,
-			);
+			const provider = createProvider(env);
 			const stream = sseStream(provider, message);
 
 			return new Response(stream, {

@@ -33,8 +33,7 @@ describe("chat page HTML structure", () => {
 		expect(output).not.toBeNull();
 	});
 
-	it("form action posts to /chat", () => {
-		// The form uses fetch('/chat') in the script, verified by script presence
+	it("inline script targets /chat endpoint", () => {
 		const html = renderChatPage();
 		expect(html).toContain("/chat");
 	});

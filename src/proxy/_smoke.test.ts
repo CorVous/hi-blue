@@ -2,7 +2,7 @@ import { SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
 describe("proxy worker smoke", () => {
-	it("returns ok for unknown routes", async () => {
+	it("returns 404 for unknown routes", async () => {
 		const response = await SELF.fetch("https://example.com/unknown");
 		expect(response.status).toBe(404);
 	});
