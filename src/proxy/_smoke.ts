@@ -43,24 +43,6 @@ function createProvider(env: Env): LLMProvider {
 	);
 }
 
-function sseStream(provider: LLMProvider, message: string): ReadableStream {
-	return new ReadableStream({
-		async start(controller) {
-			const encoder = new TextEncoder();
-			try {
-				for await (const token of provider.streamCompletion(message)) {
-					const escaped = token.replace(/\n/g, "\\n");
-					controller.enqueue(encoder.encode(`data: ${escaped}\n\n`));
-				}
-				controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-				controller.close();
-			} catch (err) {
-				controller.error(err);
-			}
-		},
-	});
-}
-
 /**
  * Default phase config used when creating a new game session.
  * Three AIs, each with budget 5, no win condition (play continues indefinitely).
@@ -137,52 +119,6 @@ export default {
 		if (url.pathname === "/endgame" && request.method === "GET") {
 			return new Response(renderEndgamePage(), {
 				headers: { "Content-Type": "text/html; charset=utf-8" },
-			});
-		}
-
-		if (url.pathname === "/chat" && request.method === "POST") {
-			let body: { message?: string };
-			try {
-				body = (await request.json()) as { message?: string };
-			} catch {
-				return new Response("Invalid JSON", { status: 400 });
-			}
-
-			const { message } = body;
-			if (!message || typeof message !== "string") {
-				return new Response("Missing message", { status: 400 });
-			}
-
-			// ── Rate-limit / daily-cap guard ──────────────────────────────
-			// Short-circuit BEFORE constructing or calling the LLM provider.
-			const clientIp = request.headers.get("CF-Connecting-IP") ?? "unknown";
-			const guard = await checkAndCharge(
-				env.RATE_GUARD_KV,
-				clientIp,
-				Date.now(),
-				configFromEnv(env),
-			);
-			if (!guard.allowed) {
-				return new Response(capHitStream(guard.reason), {
-					headers: {
-						"Content-Type": "text/event-stream",
-						"Cache-Control": "no-cache",
-						"X-Content-Type-Options": "nosniff",
-						"X-Cap-Hit": guard.reason,
-					},
-				});
-			}
-			// ── End guard ─────────────────────────────────────────────────
-
-			const provider = createProvider(env);
-			const stream = sseStream(provider, message);
-
-			return new Response(stream, {
-				headers: {
-					"Content-Type": "text/event-stream",
-					"Cache-Control": "no-cache",
-					"X-Content-Type-Options": "nosniff",
-				},
 			});
 		}
 

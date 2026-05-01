@@ -576,7 +576,7 @@ export function renderChatPage(): string {
         input.value = '';
         setRoundInFlight(true);
 
-        fetch('/chat', {
+        fetch('/game/turn', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message: message, addressedAi: addressedAi }),

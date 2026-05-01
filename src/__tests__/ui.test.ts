@@ -74,9 +74,9 @@ describe("chat page HTML structure", () => {
 		expect(panels.length).toBe(3);
 	});
 
-	it("inline script targets /chat endpoint", () => {
+	it("inline script targets /game/turn endpoint", () => {
 		const html = renderChatPage();
-		expect(html).toContain("/chat");
+		expect(html).toContain("/game/turn");
 	});
 
 	it("includes a submit button", () => {
