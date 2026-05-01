@@ -238,7 +238,8 @@ export default {
 								enc.encode(`data: ${JSON.stringify(event)}\n\n`),
 							);
 							if (event.type === "token" && tokenPaceMs > 0) {
-								await new Promise((r) => setTimeout(r, tokenPaceMs));
+								const jittered = tokenPaceMs * (0.5 + Math.random());
+								await new Promise((r) => setTimeout(r, jittered));
 							}
 						}
 						controller.enqueue(enc.encode("data: [DONE]\n\n"));
