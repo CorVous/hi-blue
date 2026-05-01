@@ -119,11 +119,6 @@ export async function runRound(
 		content: playerMessage,
 	});
 
-	// The round number that will be recorded in action log entries is the
-	// *current* round + 1 (we advance at the end), but we use pre-advance
-	// value because advanceRound happens after all AI turns.
-	const roundNumber = getActivePhase(state).round + 1;
-
 	// Snapshot how many log entries already exist before this round starts.
 	// The phase actionLog is cumulative across rounds, so we must offset into
 	// it correctly when slicing new entries after each AI acts.
@@ -133,14 +128,16 @@ export async function runRound(
 	// 2. Each AI acts in turn
 	for (const aiId of AI_ORDER) {
 		if (isAiLockedOut(state, aiId)) {
-			// Emit in-character lockout line — no LLM call, no budget deduction
+			// Emit in-character lockout line — no LLM call, no budget deduction.
+			// Use getActivePhase(state).round for consistency with dispatchAiTurn,
+			// which also reads the pre-advance phase.round value.
 			const lockoutContent = LOCKOUT_LINES[aiId];
 			state = appendChat(state, aiId, {
 				role: "ai",
 				content: lockoutContent,
 			});
 			const entry: ActionLogEntry = {
-				round: roundNumber,
+				round: getActivePhase(state).round,
 				actor: aiId,
 				type: "chat",
 				target: "player",
@@ -179,7 +176,7 @@ export async function runRound(
 	state = advanceRound(state);
 
 	const result: RoundResult = {
-		round: roundNumber,
+		round: getActivePhase(state).round, // post-advance value = completed round number
 		actions: roundActions,
 		phaseEnded: false,
 		gameEnded: state.isComplete,

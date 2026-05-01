@@ -316,6 +316,22 @@ describe("budget-exhaustion lockout", () => {
 		expect(getActivePhase(nextState).budgets.green.remaining).toBe(4);
 		expect(getActivePhase(nextState).budgets.blue.remaining).toBe(4);
 	});
+
+	it("lockout and non-lockout entries in the same round share the same round number", async () => {
+		// Pre-exhaust red's budget so it's locked out before the round
+		let game = makeGame();
+		for (let i = 0; i < 5; i++) {
+			game = deductBudget(game, "red");
+		}
+
+		const provider = new MockLLMProvider('{"action":"pass"}');
+		const { nextState } = await runRound(game, "green", "hi", provider);
+
+		const log = getActivePhase(nextState).actionLog;
+		// All entries in this round must carry the same round number
+		const roundNumbers = new Set(log.map((e) => e.round));
+		expect(roundNumbers.size).toBe(1);
+	});
 });
 
 // ----------------------------------------------------------------------------
