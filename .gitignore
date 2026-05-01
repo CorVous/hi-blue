@@ -8,6 +8,9 @@ build/
 *.tsbuildinfo
 .cache/
 
+# Ralph loop worktrees
+.ralph-worktrees/
+
 # Logs
 *.log
 npm-debug.log*
