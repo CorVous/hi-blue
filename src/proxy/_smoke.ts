@@ -1,8 +1,23 @@
 import type { LLMProvider } from "./llm-provider";
 import { MockLLMProvider } from "./llm-provider";
+import { capHitStream, checkAndCharge, configFromEnv } from "./rate-guard";
 import { renderChatPage } from "./ui";
 
-function createProvider(env: Record<string, string | undefined>): LLMProvider {
+/** Shape of the bindings/env this Worker expects. */
+interface Env {
+	/** KV namespace backing the rate-limit and daily-cap guards. */
+	RATE_GUARD_KV: KVNamespace;
+	/** Optional: set to "anthropic" to use the real provider. */
+	LLM_PROVIDER?: string;
+	ANTHROPIC_API_KEY?: string;
+	/** Rate-guard configuration knobs (all optional; defaults in configFromEnv). */
+	RATE_LIMIT_MAX?: string;
+	RATE_LIMIT_WINDOW_SEC?: string;
+	ESTIMATED_COST_PER_REQUEST?: string;
+	DAILY_CAP_MAX?: string;
+}
+
+function createProvider(env: Env): LLMProvider {
 	if (env.LLM_PROVIDER === "anthropic") {
 		// Not yet wired — needs dynamic import + ANTHROPIC_API_KEY before use.
 		throw new Error(
@@ -33,10 +48,7 @@ function sseStream(provider: LLMProvider, message: string): ReadableStream {
 }
 
 export default {
-	async fetch(
-		request: Request,
-		env: Record<string, string | undefined>,
-	): Promise<Response> {
+	async fetch(request: Request, env: Env): Promise<Response> {
 		const url = new URL(request.url);
 
 		if (url.pathname === "/") {
@@ -58,6 +70,27 @@ export default {
 				return new Response("Missing message", { status: 400 });
 			}
 
+			// ── Rate-limit / daily-cap guard ──────────────────────────────
+			// Short-circuit BEFORE constructing or calling the LLM provider.
+			const clientIp = request.headers.get("CF-Connecting-IP") ?? "unknown";
+			const guard = await checkAndCharge(
+				env.RATE_GUARD_KV,
+				clientIp,
+				Date.now(),
+				configFromEnv(env),
+			);
+			if (!guard.allowed) {
+				return new Response(capHitStream(guard.reason), {
+					headers: {
+						"Content-Type": "text/event-stream",
+						"Cache-Control": "no-cache",
+						"X-Content-Type-Options": "nosniff",
+						"X-Cap-Hit": guard.reason,
+					},
+				});
+			}
+			// ── End guard ─────────────────────────────────────────────────
+
 			const provider = createProvider(env);
 			const stream = sseStream(provider, message);
 
@@ -72,4 +105,4 @@ export default {
 
 		return new Response("Not found", { status: 404 });
 	},
-} satisfies ExportedHandler<Record<string, string | undefined>>;
+} satisfies ExportedHandler<Env>;

@@ -252,6 +252,9 @@ export function renderChatPage(): string {
           var buf = '';
           // accumulate per-AI streamed tokens
           var currentAi = null;
+          // Track the most recent raw (non-structured) data line so that if
+          // [CAP_HIT] follows we can surface the in-character sleeping message.
+          var lastRawData = '';
 
           function pump() {
             return reader.read().then(function (chunk) {
@@ -271,7 +274,15 @@ export function renderChatPage(): string {
                   return;
                 }
                 if (data === '[CAP_HIT]') {
-                  // Server rate-limit or daily-cap hit — surface in-character.
+                  // Server rate-limit or daily-cap hit. The preceding raw
+                  // data line is the in-character sleeping message — surface
+                  // it on every panel since the cap is global.
+                  var capMsg = lastRawData
+                    ? lastRawData.replace(/\\\\n/g, '\\n')
+                    : 'The AIs have gone to sleep for the night.';
+                  ['red', 'green', 'blue'].forEach(function (id) {
+                    appendToChat(id, 'ai', capMsg);
+                  });
                   setRoundInFlight(false);
                   return;
                 }
@@ -291,7 +302,9 @@ export function renderChatPage(): string {
                     appendToChat(evt.aiId, 'ai', evt.content);
                   }
                 } catch (err) {
-                  // Legacy plain-text token for the addressed AI
+                  // Legacy plain-text token for the addressed AI; also remember
+                  // it in case the next sentinel is [CAP_HIT].
+                  lastRawData = data;
                   if (currentAi) {
                     appendToChat(currentAi, 'ai', data.replace(/\\\\n/g, '\\n'));
                   }
