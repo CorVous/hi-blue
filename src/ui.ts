@@ -14,15 +14,24 @@
  *
  * Returns the endgame markup as a string with NO doctype, html, head, or body
  * wrapper. Pure function of its inputs (persona data wiring is owned by a
- * separate PRD). Consumed by renderEndgamePage (full-page render) and, in a
- * future slice, by the chat-page inline overlay.
+ * separate PRD). Consumed by renderEndgamePage (full-page render) and by the
+ * chat-page inline overlay (issue #32).
  *
  * The data-save-payload attribute on #download-ais-btn is populated by the
  * game client before the endgame screen is shown (or directly by the
  * serializer in tests).
+ *
+ * @param inlineScript - When false, the trailing <script> block is omitted.
+ *   Use this when embedding the fragment inside a page that supplies its own
+ *   button handlers (e.g. the chat-page overlay).  Defaults to true so that
+ *   standalone callers (renderEndgamePage) are unaffected.
  */
-export function renderEndgameSection(): string {
-	return `<div id="endgame-screen">
+export function renderEndgameSection({
+	inlineScript = true,
+}: {
+	inlineScript?: boolean;
+} = {}): string {
+	const fragment = `<div id="endgame-screen">
     <h1>hi-blue — endgame</h1>
     <p id="endgame-subtitle">The three phases are complete. The room is still.</p>
 
@@ -48,7 +57,8 @@ export function renderEndgameSection(): string {
       </div>
       <div id="diagnostics-status" aria-live="polite"></div>
     </div>
-  </div>
+  </div>`;
+	const script = `
 
   <script>
     (function () {
@@ -111,6 +121,7 @@ export function renderEndgameSection(): string {
       });
     })();
   </script>`;
+	return inlineScript ? fragment + script : fragment;
 }
 
 /**
@@ -435,7 +446,7 @@ export function renderChatPage(): string {
   </div>
 
   <div id="endgame-overlay" aria-hidden="true">
-    ${renderEndgameSection().replace(/<script>[\s\S]*?<\/script>/, "")}
+    ${renderEndgameSection({ inlineScript: false })}
   </div>
 
   <script>
