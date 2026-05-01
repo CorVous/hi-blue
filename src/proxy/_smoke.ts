@@ -1,5 +1,5 @@
 import { getActivePhase } from "../engine";
-import { encodeRoundResult, serialiseSseEvents } from "../round-result-encoder";
+import { encodeRoundResult } from "../round-result-encoder";
 import {
 	buildSessionCookie,
 	createSession,
@@ -29,6 +29,8 @@ interface Env {
 	 * POST /game/new. Must NOT be set in production wrangler.jsonc.
 	 */
 	ENABLE_TEST_MODES?: string;
+	/** Per-token delay in ms for the /game/turn stream. Defaults to 60ms; set "0" in tests. */
+	TOKEN_PACE_MS?: string;
 }
 
 function createProvider(env: Env): LLMProvider {
@@ -217,6 +219,7 @@ export default {
 				responseHeaders["Set-Cookie"] = buildSessionCookie(newSessionId);
 			}
 
+			const tokenPaceMs = Number(env.TOKEN_PACE_MS ?? "60");
 			const stream = new ReadableStream({
 				async start(controller) {
 					const enc = new TextEncoder();
@@ -227,13 +230,17 @@ export default {
 							provider,
 						);
 
-						// Get the phase state after the round (session mutated in place)
 						const phaseAfter = getActivePhase(capturedSession.getState());
-
-						// Encode and stream all events
 						const events = encodeRoundResult(result, completions, phaseAfter);
-						const payload = serialiseSseEvents(events);
-						controller.enqueue(enc.encode(payload));
+
+						for (const event of events) {
+							controller.enqueue(
+								enc.encode(`data: ${JSON.stringify(event)}\n\n`),
+							);
+							if (event.type === "token" && tokenPaceMs > 0) {
+								await new Promise((r) => setTimeout(r, tokenPaceMs));
+							}
+						}
 						controller.enqueue(enc.encode("data: [DONE]\n\n"));
 						controller.close();
 					} catch (err) {

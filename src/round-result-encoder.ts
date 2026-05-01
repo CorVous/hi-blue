@@ -178,11 +178,3 @@ export function encodeRoundResult(
 
 	return events;
 }
-
-/**
- * Serialise a sequence of SSE events into the SSE wire format string.
- * Each event becomes:  data: <JSON>\n\n
- */
-export function serialiseSseEvents(events: SseEvent[]): string {
-	return events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join("");
-}

@@ -21,7 +21,7 @@ export default defineConfig({
 						configPath: "./wrangler.jsonc",
 						miniflare: {
 							kvNamespaces: ["RATE_GUARD_KV"],
-							bindings: { ENABLE_TEST_MODES: "1" },
+							bindings: { ENABLE_TEST_MODES: "1", TOKEN_PACE_MS: "0" },
 						},
 					}),
 				],
