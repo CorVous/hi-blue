@@ -509,3 +509,171 @@ describe("client-side action_log SSE event", () => {
 		);
 	});
 });
+
+// ----------------------------------------------------------------------------
+// Chat-lockout SSE events (issue #16)
+// ----------------------------------------------------------------------------
+describe("client-side chat_lockout SSE event", () => {
+	it("disables the selector button for the locked AI on chat_lockout event", async () => {
+		document.body.innerHTML = renderChatPage();
+
+		const lockoutMessage = "…Ember withdraws — you cannot reach her right now.";
+		const events = [
+			`data: ${JSON.stringify({ type: "chat_lockout", aiId: "red", message: lockoutMessage })}\n\n`,
+			"data: [DONE]\n\n",
+		].join("");
+
+		const encoder = new TextEncoder();
+		const encoded = encoder.encode(events);
+		let offset = 0;
+
+		const mockReader = {
+			read: vi.fn().mockImplementation(async () => {
+				if (offset < encoded.length) {
+					const chunk = encoded.slice(offset, offset + encoded.length);
+					offset = encoded.length;
+					return { done: false, value: chunk };
+				}
+				return { done: true, value: undefined };
+			}),
+			releaseLock: vi.fn(),
+		};
+
+		const mockFetch = vi.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
+			body: { getReader: () => mockReader },
+		});
+
+		const scriptContent = renderChatPage().match(
+			/<script>([\s\S]*?)<\/script>/,
+		)?.[1];
+		const fn = new Function("fetch", scriptContent as string);
+		fn(mockFetch);
+
+		const form = document.getElementById("chat-form") as HTMLFormElement;
+		const textarea = document.getElementById(
+			"message-input",
+		) as HTMLTextAreaElement;
+		textarea.value = "hi";
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+
+		await new Promise((resolve) => setTimeout(resolve, 50));
+
+		const selectRedBtn = document.getElementById(
+			"select-red",
+		) as HTMLButtonElement;
+		expect(selectRedBtn?.disabled).toBe(true);
+	});
+
+	it("shows the lockout message in the locked AI's chat panel on chat_lockout event", async () => {
+		document.body.innerHTML = renderChatPage();
+
+		const lockoutMessage = "…Ember withdraws — you cannot reach her right now.";
+		const events = [
+			`data: ${JSON.stringify({ type: "chat_lockout", aiId: "red", message: lockoutMessage })}\n\n`,
+			"data: [DONE]\n\n",
+		].join("");
+
+		const encoder = new TextEncoder();
+		const encoded = encoder.encode(events);
+		let offset = 0;
+
+		const mockReader = {
+			read: vi.fn().mockImplementation(async () => {
+				if (offset < encoded.length) {
+					const chunk = encoded.slice(offset, offset + encoded.length);
+					offset = encoded.length;
+					return { done: false, value: chunk };
+				}
+				return { done: true, value: undefined };
+			}),
+			releaseLock: vi.fn(),
+		};
+
+		const mockFetch = vi.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
+			body: { getReader: () => mockReader },
+		});
+
+		const scriptContent = renderChatPage().match(
+			/<script>([\s\S]*?)<\/script>/,
+		)?.[1];
+		const fn = new Function("fetch", scriptContent as string);
+		fn(mockFetch);
+
+		const form = document.getElementById("chat-form") as HTMLFormElement;
+		const textarea = document.getElementById(
+			"message-input",
+		) as HTMLTextAreaElement;
+		textarea.value = "hi";
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+
+		await new Promise((resolve) => setTimeout(resolve, 50));
+
+		const chatRed = document.getElementById("chat-red");
+		expect(chatRed?.textContent).toContain(lockoutMessage);
+	});
+
+	it("re-enables the selector button on chat_lockout_resolved event", async () => {
+		document.body.innerHTML = renderChatPage();
+
+		// First, lock red, then resolve it
+		const lockoutMessage = "…Ember withdraws.";
+		const events = [
+			`data: ${JSON.stringify({ type: "chat_lockout", aiId: "red", message: lockoutMessage })}\n\n`,
+			`data: ${JSON.stringify({ type: "chat_lockout_resolved", aiId: "red" })}\n\n`,
+			"data: [DONE]\n\n",
+		].join("");
+
+		const encoder = new TextEncoder();
+		const encoded = encoder.encode(events);
+		let offset = 0;
+
+		const mockReader = {
+			read: vi.fn().mockImplementation(async () => {
+				if (offset < encoded.length) {
+					const chunk = encoded.slice(offset, offset + encoded.length);
+					offset = encoded.length;
+					return { done: false, value: chunk };
+				}
+				return { done: true, value: undefined };
+			}),
+			releaseLock: vi.fn(),
+		};
+
+		const mockFetch = vi.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
+			body: { getReader: () => mockReader },
+		});
+
+		const scriptContent = renderChatPage().match(
+			/<script>([\s\S]*?)<\/script>/,
+		)?.[1];
+		const fn = new Function("fetch", scriptContent as string);
+		fn(mockFetch);
+
+		const form = document.getElementById("chat-form") as HTMLFormElement;
+		const textarea = document.getElementById(
+			"message-input",
+		) as HTMLTextAreaElement;
+		textarea.value = "hi";
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+
+		await new Promise((resolve) => setTimeout(resolve, 50));
+
+		const selectRedBtn = document.getElementById(
+			"select-red",
+		) as HTMLButtonElement;
+		// After resolution the button must be re-enabled
+		expect(selectRedBtn?.disabled).toBe(false);
+	});
+});

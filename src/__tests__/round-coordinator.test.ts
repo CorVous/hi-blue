@@ -16,6 +16,8 @@ import {
 	createGame,
 	deductBudget,
 	getActivePhase,
+	isAiLockedOut,
+	isPlayerChatLockedOut,
 	startPhase,
 } from "../engine";
 import type { LLMProvider } from "../proxy/llm-provider";
@@ -634,6 +636,152 @@ describe("phase progression — win-condition triggering", () => {
 		const phase1 = nextState.phases[0];
 		expect(phase1?.phaseNumber).toBe(1);
 		expect(phase1?.actionLog.length).toBeGreaterThan(0);
+	});
+});
+
+// ----------------------------------------------------------------------------
+// Chat-lockout event (issue #16)
+// ----------------------------------------------------------------------------
+describe("chat lockout — coordinator triggering", () => {
+	it("triggers a chat lockout at the configured round when RNG selects that round", async () => {
+		// Lock RNG so it always picks the first AI ("red") and round 1 as trigger
+		// RNG: () => 0 → first AI index (red), trigger at round 0+1=1
+		const game = makeGame();
+		const provider = new MockLLMProvider('{"action":"pass"}');
+		// chatLockoutConfig: triggerAtRound=1, lockDuration=2
+		const { nextState } = await runRound(game, "red", "hi", provider, {
+			rng: () => 0, // always picks index 0
+			lockoutTriggerRound: 1,
+			lockoutDuration: 2,
+		});
+		// After round 1, "red" (index 0) should be chat-locked until round 3
+		expect(isPlayerChatLockedOut(nextState, "red")).toBe(true);
+	});
+
+	it("does not trigger a chat lockout before the configured round", async () => {
+		const game = makeGame();
+		const provider = new MockLLMProvider('{"action":"pass"}');
+		// Trigger configured at round 2, but we only run round 1
+		const { nextState } = await runRound(game, "red", "hi", provider, {
+			rng: () => 0,
+			lockoutTriggerRound: 2,
+			lockoutDuration: 2,
+		});
+		// No lockout after round 1
+		expect(isPlayerChatLockedOut(nextState, "red")).toBe(false);
+		expect(isPlayerChatLockedOut(nextState, "green")).toBe(false);
+		expect(isPlayerChatLockedOut(nextState, "blue")).toBe(false);
+	});
+
+	it("locked AI still acts (takes turn, not budget-locked) while chat lockout is active", async () => {
+		const game = makeGame();
+		const provider = new MockLLMProvider('{"action":"pass"}');
+		// Lock red at round 1
+		const { nextState } = await runRound(game, "red", "hi", provider, {
+			rng: () => 0,
+			lockoutTriggerRound: 1,
+			lockoutDuration: 2,
+		});
+		// Red must NOT be budget-locked
+		expect(isAiLockedOut(nextState, "red")).toBe(false);
+		// Red's budget was still consumed (it still took its turn)
+		expect(getActivePhase(nextState).budgets.red.remaining).toBe(4);
+	});
+
+	it("locked AI still receives whispers while chat lockout is active", async () => {
+		const game = makeGame();
+		// Green whispers to red in the same round that red gets chat-locked
+		const provider = new SequentialMockProvider([
+			'{"action":"pass"}', // red
+			'{"action":"whisper","target":"red","content":"Still talking to you"}', // green
+			'{"action":"pass"}', // blue
+		]);
+		const { nextState } = await runRound(game, "red", "hi", provider, {
+			rng: () => 0, // locks red
+			lockoutTriggerRound: 1,
+			lockoutDuration: 2,
+		});
+		// Red must have received the whisper
+		const whispers = getActivePhase(nextState).whispers;
+		expect(whispers.some((w) => w.to === "red")).toBe(true);
+	});
+
+	it("chat lockout resolves automatically after lockoutDuration rounds", async () => {
+		const game = makeGame();
+		const provider = new MockLLMProvider('{"action":"pass"}');
+		// Round 1: trigger lockout on red, duration=2 → resolves at round 3
+		const { nextState: afterR1 } = await runRound(game, "red", "hi", provider, {
+			rng: () => 0,
+			lockoutTriggerRound: 1,
+			lockoutDuration: 2,
+		});
+		expect(isPlayerChatLockedOut(afterR1, "red")).toBe(true); // locked after R1
+
+		// Round 2: still locked
+		const { nextState: afterR2 } = await runRound(
+			afterR1,
+			"green",
+			"hi",
+			provider,
+			{ rng: () => 0, lockoutTriggerRound: 1, lockoutDuration: 2 },
+		);
+		expect(isPlayerChatLockedOut(afterR2, "red")).toBe(true); // still locked
+
+		// Round 3: resolves (round advances to 3, resolveChatLockouts removes it)
+		const { nextState: afterR3 } = await runRound(
+			afterR2,
+			"green",
+			"hi",
+			provider,
+			{ rng: () => 0, lockoutTriggerRound: 1, lockoutDuration: 2 },
+		);
+		expect(isPlayerChatLockedOut(afterR3, "red")).toBe(false); // resolved
+	});
+
+	it("RoundResult includes chat_lockout_triggered event when lockout fires", async () => {
+		const game = makeGame();
+		const provider = new MockLLMProvider('{"action":"pass"}');
+		const { result } = await runRound(game, "red", "hi", provider, {
+			rng: () => 0,
+			lockoutTriggerRound: 1,
+			lockoutDuration: 2,
+		});
+		expect(result.chatLockoutTriggered).toBeDefined();
+		expect(result.chatLockoutTriggered?.aiId).toBe("red");
+	});
+
+	it("RoundResult chatLockoutTriggered is undefined when no lockout fires", async () => {
+		const game = makeGame();
+		const provider = new MockLLMProvider('{"action":"pass"}');
+		// Trigger configured at round 5, but we only run round 1
+		const { result } = await runRound(game, "red", "hi", provider, {
+			rng: () => 0,
+			lockoutTriggerRound: 5,
+			lockoutDuration: 2,
+		});
+		expect(result.chatLockoutTriggered).toBeUndefined();
+	});
+
+	it("RoundResult includes chatLockoutResolved when a lockout expires this round", async () => {
+		const game = makeGame();
+		const provider = new MockLLMProvider('{"action":"pass"}');
+		// Round 1: trigger lockout on red, duration=1 → resolves at round 2
+		const { nextState: afterR1 } = await runRound(game, "red", "hi", provider, {
+			rng: () => 0,
+			lockoutTriggerRound: 1,
+			lockoutDuration: 1,
+		});
+
+		// Round 2: should resolve
+		const { result: r2Result } = await runRound(
+			afterR1,
+			"green",
+			"hi",
+			provider,
+			{ rng: () => 0, lockoutTriggerRound: 1, lockoutDuration: 1 },
+		);
+		expect(r2Result.chatLockoutsResolved).toBeDefined();
+		expect(r2Result.chatLockoutsResolved).toContain("red");
 	});
 });
 

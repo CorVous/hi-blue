@@ -227,7 +227,11 @@ export function renderChatPage(): string {
         roundInFlight = val;
         sendBtn.disabled = val;
         input.disabled = val;
-        selectorBtns.forEach(function (b) { b.disabled = val; });
+        selectorBtns.forEach(function (b) {
+          // Keep chat-locked selector buttons disabled even when round ends.
+          if (!val && b.getAttribute('data-chat-locked')) return;
+          b.disabled = val;
+        });
         roundStatus.textContent = val ? 'Round in progress…' : '';
       }
 
@@ -259,6 +263,31 @@ export function renderChatPage(): string {
         if (!output || !entry) return;
         var desc = entry.description || JSON.stringify(entry);
         output.textContent += '[R' + (entry.round || '?') + '] ' + desc + '\\n';
+      }
+
+      /**
+       * Apply or clear a player-chat lockout for a single AI.
+       *
+       * This is DISTINCT from the budget-exhaustion lockout (setLockout /
+       * evt.type === 'lockout') which greys the panel to signal the AI has
+       * stopped acting.  A chat lockout only disables the *player's* selector
+       * button for that AI — the AI continues to take turns, whisper, and use
+       * tools.  The selector button carries a data-chat-locked attribute so
+       * setRoundInFlight can restore the correct disabled state after the round.
+       */
+      function setChatLockout(aiId, locked) {
+        var btn = document.getElementById('select-' + aiId);
+        if (!btn) return;
+        if (locked) {
+          btn.disabled = true;
+          btn.setAttribute('data-chat-locked', '1');
+        } else {
+          btn.removeAttribute('data-chat-locked');
+          // Only re-enable if no round is currently in flight
+          if (!roundInFlight) {
+            btn.disabled = false;
+          }
+        }
       }
 
       form.addEventListener('submit', function (e) {
@@ -335,6 +364,14 @@ export function renderChatPage(): string {
                   } else if (evt.type === 'lockout') {
                     setLockout(evt.aiId, true);
                     appendToChat(evt.aiId, 'ai', evt.content);
+                  } else if (evt.type === 'chat_lockout') {
+                    // Player-chat lockout: disable selector button + show message.
+                    // The AI keeps acting; only the player's channel is cut.
+                    setChatLockout(evt.aiId, true);
+                    appendToChat(evt.aiId, 'ai', evt.message);
+                  } else if (evt.type === 'chat_lockout_resolved') {
+                    // Lockout expired: re-enable selector button for this AI.
+                    setChatLockout(evt.aiId, false);
                   } else if (evt.type === 'action_log') {
                     appendActionLogEntry(evt.entry);
                   }

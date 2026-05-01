@@ -22,6 +22,8 @@ import {
 	appendChat,
 	getActivePhase,
 	isAiLockedOut,
+	resolveChatLockouts,
+	triggerChatLockout,
 } from "./engine";
 import type { LLMProvider } from "./proxy/llm-provider";
 import type {
@@ -35,12 +37,38 @@ import type {
 
 const AI_ORDER: AiId[] = ["red", "green", "blue"];
 
-/** Placeholder in-character lines shown when an AI is locked out. */
+/** Placeholder in-character lines shown when an AI is locked out (budget). */
 const LOCKOUT_LINES: Record<AiId, string> = {
 	red: "…I've said all I can say for now. The fire in me has burned low.",
 	green: "…I must sit quietly. There is nothing more I can offer this phase.",
 	blue: "…My calculations are complete. I will not speak further.",
 };
+
+/**
+ * In-character lines shown to the player when their chat channel to an AI is
+ * temporarily locked out (distinct from budget-exhaustion lockout).
+ * Final copy comes from slice #18; these are placeholders.
+ */
+const CHAT_LOCKOUT_LINES: Record<AiId, string> = {
+	red: "…The flames have gone quiet. Ember withdraws — you cannot reach her right now.",
+	green: "…Sage has turned inward. This channel is closed for a time.",
+	blue: "…Frost has gone silent. Your messages cannot reach him just now.",
+};
+
+/**
+ * Configuration for the mid-phase chat-lockout event.
+ *
+ * Inject this into `runRound` to make randomness deterministic in tests.
+ *
+ * @param rng              Returns a value in [0, 1). Used to pick which AI to lock.
+ * @param lockoutTriggerRound  The round number (post-advance) at which to fire the lockout.
+ * @param lockoutDuration  How many rounds the lockout lasts (resolves after this many).
+ */
+export interface ChatLockoutConfig {
+	rng: () => number;
+	lockoutTriggerRound: number;
+	lockoutDuration: number;
+}
 
 export interface RunRoundResult {
 	nextState: GameState;
@@ -143,12 +171,16 @@ async function collectCompletion(
  * @param addressed  The AI the player's message is directed at.
  * @param playerMessage  The player's raw message text.
  * @param provider  LLM provider (real or mock).
+ * @param chatLockoutConfig  Optional config for the mid-phase chat-lockout event.
+ *   When provided, the coordinator will trigger a lockout at `lockoutTriggerRound`
+ *   using `rng` to select which AI to lock, lasting `lockoutDuration` rounds.
  */
 export async function runRound(
 	game: GameState,
 	addressed: AiId,
 	playerMessage: string,
 	provider: LLMProvider,
+	chatLockoutConfig?: ChatLockoutConfig,
 ): Promise<RunRoundResult> {
 	// 1. Record player message in the addressed AI's history
 	let state = appendChat(game, addressed, {
@@ -212,7 +244,43 @@ export async function runRound(
 	// 3. Advance the round counter
 	state = advanceRound(state);
 
-	// 4. Check win condition against the post-round phase state.
+	// 4. Mid-phase chat-lockout: trigger at the configured round, resolve expired ones.
+	let chatLockoutTriggered: RoundResult["chatLockoutTriggered"] | undefined;
+	let chatLockoutsResolved: AiId[] | undefined;
+
+	if (chatLockoutConfig) {
+		const { rng, lockoutTriggerRound, lockoutDuration } = chatLockoutConfig;
+		const currentRound = getActivePhase(state).round;
+
+		// Trigger a new lockout if this is the designated round and no lockout
+		// is already active for any AI (we lock at most one AI per phase).
+		const alreadyHasLockout = getActivePhase(state).chatLockouts.size > 0;
+		if (currentRound === lockoutTriggerRound && !alreadyHasLockout) {
+			const aiIndex = Math.floor(rng() * AI_ORDER.length);
+			const targetAi = AI_ORDER[aiIndex] as AiId;
+			const resolveAtRound = currentRound + lockoutDuration;
+			state = triggerChatLockout(state, targetAi, resolveAtRound);
+			chatLockoutTriggered = {
+				aiId: targetAi,
+				message: CHAT_LOCKOUT_LINES[targetAi],
+			};
+		}
+
+		// Resolve any lockouts that have expired this round.
+		const phaseBefore = getActivePhase(state);
+		const expiredAis: AiId[] = [];
+		for (const [aiId, resolveAtRound] of phaseBefore.chatLockouts) {
+			if (phaseBefore.round >= resolveAtRound) {
+				expiredAis.push(aiId);
+			}
+		}
+		if (expiredAis.length > 0) {
+			state = resolveChatLockouts(state);
+			chatLockoutsResolved = expiredAis;
+		}
+	}
+
+	// 5. Check win condition against the post-round phase state.
 	//    If met, advance to the next phase (or mark game complete).
 	const activePhaseAfterRound = getActivePhase(state);
 	let phaseEnded = false;
@@ -227,6 +295,8 @@ export async function runRound(
 		actions: roundActions,
 		phaseEnded,
 		gameEnded: state.isComplete,
+		...(chatLockoutTriggered !== undefined ? { chatLockoutTriggered } : {}),
+		...(chatLockoutsResolved !== undefined ? { chatLockoutsResolved } : {}),
 	};
 
 	return { nextState: state, result };
