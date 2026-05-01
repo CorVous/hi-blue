@@ -488,6 +488,134 @@ describe("encodeRoundResult — event ordering", () => {
 	});
 });
 
+// ── phase_advanced ────────────────────────────────────────────────────────────
+
+describe("encodeRoundResult — phase_advanced event", () => {
+	it("emits a phase_advanced event when phaseEnded=true and gameEnded=false", () => {
+		// phase_advanced uses phaseAfter to get the new phase number and objective
+		const PHASE2_CONFIG: PhaseConfig = {
+			phaseNumber: 2,
+			objective: "Phase 2 objective",
+			aiGoals: { red: "r2", green: "g2", blue: "b2" },
+			initialWorld: { items: [] },
+			budgetPerAi: 5,
+		};
+		let game = startPhase(createGame(TEST_PERSONAS), PHASE2_CONFIG);
+		const phaseAfter = getActivePhase(game);
+
+		const result = makePassResult({ phaseEnded: true, gameEnded: false });
+		const completions = { red: "r", green: "g", blue: "b" };
+
+		const events = encodeRoundResult(result, completions, phaseAfter);
+
+		const phaseEvent = events.find(
+			(e): e is Extract<SseEvent, { type: "phase_advanced" }> =>
+				e.type === "phase_advanced",
+		);
+		expect(phaseEvent).toBeDefined();
+		expect(phaseEvent?.phase).toBe(2);
+		expect(phaseEvent?.objective).toBe("Phase 2 objective");
+	});
+
+	it("does NOT emit phase_advanced when phaseEnded=false", () => {
+		const phase = makePhase();
+		const result = makePassResult({ phaseEnded: false, gameEnded: false });
+		const completions = { red: "r", green: "g", blue: "b" };
+
+		const events = encodeRoundResult(result, completions, phase);
+
+		expect(events.find((e) => e.type === "phase_advanced")).toBeUndefined();
+	});
+
+	it("does NOT emit phase_advanced when phaseEnded=true but gameEnded=true", () => {
+		const phase = makePhase();
+		const result = makePassResult({ phaseEnded: true, gameEnded: true });
+		const completions = { red: "r", green: "g", blue: "b" };
+
+		const events = encodeRoundResult(result, completions, phase);
+
+		expect(events.find((e) => e.type === "phase_advanced")).toBeUndefined();
+	});
+
+	it("phase_advanced event comes after action_log and chat_lockout events", () => {
+		const PHASE2_CONFIG: PhaseConfig = {
+			phaseNumber: 2,
+			objective: "Phase 2 objective",
+			aiGoals: { red: "r2", green: "g2", blue: "b2" },
+			initialWorld: { items: [] },
+			budgetPerAi: 5,
+		};
+		let game = startPhase(createGame(TEST_PERSONAS), PHASE2_CONFIG);
+		const phaseAfter = getActivePhase(game);
+
+		const result = makePassResult({
+			phaseEnded: true,
+			gameEnded: false,
+			chatLockoutTriggered: { aiId: "red", message: "locked" },
+		});
+		const completions = { red: "r", green: "g", blue: "b" };
+
+		const events = encodeRoundResult(result, completions, phaseAfter);
+
+		const chatLockoutIdx = events.findIndex((e) => e.type === "chat_lockout");
+		const phaseAdvancedIdx = events.findIndex((e) => e.type === "phase_advanced");
+
+		expect(phaseAdvancedIdx).toBeGreaterThan(chatLockoutIdx);
+	});
+});
+
+// ── game_ended ────────────────────────────────────────────────────────────────
+
+describe("encodeRoundResult — game_ended event", () => {
+	it("emits a game_ended event when gameEnded=true", () => {
+		const phase = makePhase();
+		const result = makePassResult({ phaseEnded: true, gameEnded: true });
+		const completions = { red: "r", green: "g", blue: "b" };
+
+		const events = encodeRoundResult(result, completions, phase);
+
+		const gameEndedEvent = events.find((e) => e.type === "game_ended");
+		expect(gameEndedEvent).toBeDefined();
+	});
+
+	it("does NOT emit game_ended when gameEnded=false", () => {
+		const phase = makePhase();
+		const result = makePassResult({ phaseEnded: false, gameEnded: false });
+		const completions = { red: "r", green: "g", blue: "b" };
+
+		const events = encodeRoundResult(result, completions, phase);
+
+		expect(events.find((e) => e.type === "game_ended")).toBeUndefined();
+	});
+
+	it("game_ended event comes after phase-related events", () => {
+		const phase = makePhase();
+		const result = makePassResult({ phaseEnded: true, gameEnded: true });
+		const completions = { red: "r", green: "g", blue: "b" };
+
+		const events = encodeRoundResult(result, completions, phase);
+
+		const lastActionLogIdx = events.reduce(
+			(last, e, i) => (e.type === "action_log" ? i : last),
+			-1,
+		);
+		const gameEndedIdx = events.findIndex((e) => e.type === "game_ended");
+
+		expect(gameEndedIdx).toBeGreaterThan(lastActionLogIdx);
+	});
+
+	it("emits game_ended but NOT phase_advanced when gameEnded=true", () => {
+		const phase = makePhase();
+		const result = makePassResult({ phaseEnded: true, gameEnded: true });
+		const completions = { red: "r", green: "g", blue: "b" };
+
+		const events = encodeRoundResult(result, completions, phase);
+
+		expect(events.find((e) => e.type === "game_ended")).toBeDefined();
+		expect(events.find((e) => e.type === "phase_advanced")).toBeUndefined();
+	});
+});
+
 // ── word pacing ───────────────────────────────────────────────────────────────
 
 describe("encodeRoundResult — token pacing", () => {

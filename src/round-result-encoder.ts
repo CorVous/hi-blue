@@ -22,6 +22,8 @@
  *   chat_lockout         — { type, aiId, message }
  *   chat_lockout_resolved — { type, aiId }
  *   action_log — { type, entry }
+ *   phase_advanced — { type, phase, objective }
+ *   game_ended     — { type }
  */
 
 import type { AiId, PhaseState, RoundResult } from "./types";
@@ -38,7 +40,9 @@ export type SseEvent =
 	| { type: "lockout"; aiId: AiId; content: string }
 	| { type: "chat_lockout"; aiId: AiId; message: string }
 	| { type: "chat_lockout_resolved"; aiId: AiId }
-	| { type: "action_log"; entry: RoundResult["actions"][number] };
+	| { type: "action_log"; entry: RoundResult["actions"][number] }
+	| { type: "phase_advanced"; phase: 1 | 2 | 3; objective: string }
+	| { type: "game_ended" };
 
 const AI_ORDER: AiId[] = ["red", "green", "blue"];
 
@@ -155,6 +159,21 @@ export function encodeRoundResult(
 		for (const aiId of result.chatLockoutsResolved) {
 			events.push({ type: "chat_lockout_resolved", aiId });
 		}
+	}
+
+	// phase_advanced — emitted when the phase advanced but the game is not over.
+	// phaseAfter is the new phase state when phaseEnded is true, so read from it.
+	if (result.phaseEnded && !result.gameEnded) {
+		events.push({
+			type: "phase_advanced",
+			phase: phaseAfter.phaseNumber,
+			objective: phaseAfter.objective,
+		});
+	}
+
+	// game_ended — terminal signal emitted when the game is complete.
+	if (result.gameEnded) {
+		events.push({ type: "game_ended" });
 	}
 
 	return events;

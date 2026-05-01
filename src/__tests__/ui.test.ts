@@ -1068,3 +1068,102 @@ describe("renderEndgameSection fragment structure", () => {
 		expect(fragment).toContain("download-ais-btn");
 	});
 });
+
+// ----------------------------------------------------------------------------
+// phase_advanced and game_ended SSE events (issue #31)
+// ----------------------------------------------------------------------------
+
+/** Helper: build a mock SSE stream, run the page script, submit the form. */
+async function runSseScenario(
+	sseEvents: string[],
+): Promise<void> {
+	const body = sseEvents.join("");
+	const encoder = new TextEncoder();
+	const encoded = encoder.encode(body);
+	let offset = 0;
+
+	const mockReader = {
+		read: vi.fn().mockImplementation(async () => {
+			if (offset < encoded.length) {
+				const chunk = encoded.slice(offset, offset + encoded.length);
+				offset = encoded.length;
+				return { done: false, value: chunk };
+			}
+			return { done: true, value: undefined };
+		}),
+		releaseLock: vi.fn(),
+	};
+
+	const mockFetch = vi.fn().mockResolvedValue({
+		ok: true,
+		status: 200,
+		body: { getReader: () => mockReader },
+	});
+
+	const scriptContent = renderChatPage().match(
+		/<script>([\s\S]*?)<\/script>/,
+	)?.[1];
+	const fn = new Function("fetch", scriptContent as string);
+	fn(mockFetch);
+
+	const form = document.getElementById("chat-form") as HTMLFormElement;
+	const textarea = document.getElementById("message-input") as HTMLTextAreaElement;
+	textarea.value = "hi";
+	form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+
+	await new Promise((resolve) => setTimeout(resolve, 50));
+}
+
+describe("client-side phase_advanced SSE event", () => {
+	it("adds a phase marker to the action log on phase_advanced event", async () => {
+		document.body.innerHTML = renderChatPage();
+
+		await runSseScenario([
+			`data: ${JSON.stringify({ type: "phase_advanced", phase: 2, objective: "Uncover the conspiracy" })}\n\n`,
+			"data: [DONE]\n\n",
+		]);
+
+		const actionLogOutput = document.getElementById("action-log-output");
+		expect(actionLogOutput?.textContent).toContain("Phase 2");
+		expect(actionLogOutput?.textContent).toContain("Uncover the conspiracy");
+	});
+
+	it("phase marker includes the phase number in the action log", async () => {
+		document.body.innerHTML = renderChatPage();
+
+		await runSseScenario([
+			`data: ${JSON.stringify({ type: "phase_advanced", phase: 3, objective: "Final reckoning" })}\n\n`,
+			"data: [DONE]\n\n",
+		]);
+
+		const actionLogOutput = document.getElementById("action-log-output");
+		expect(actionLogOutput?.textContent).toContain("Phase 3");
+	});
+});
+
+describe("client-side game_ended SSE event", () => {
+	it("adds a game-ended marker to the action log on game_ended event", async () => {
+		document.body.innerHTML = renderChatPage();
+
+		await runSseScenario([
+			`data: ${JSON.stringify({ type: "game_ended" })}\n\n`,
+			"data: [DONE]\n\n",
+		]);
+
+		const actionLogOutput = document.getElementById("action-log-output");
+		expect(actionLogOutput?.textContent).toContain("Game ended");
+	});
+
+	it("game-ended marker appears in action log output element", async () => {
+		document.body.innerHTML = renderChatPage();
+
+		await runSseScenario([
+			`data: ${JSON.stringify({ type: "game_ended" })}\n\n`,
+			"data: [DONE]\n\n",
+		]);
+
+		const actionLogOutput = document.getElementById("action-log-output");
+		expect(actionLogOutput).not.toBeNull();
+		expect(actionLogOutput?.textContent?.length).toBeGreaterThan(0);
+	});
+});

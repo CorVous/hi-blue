@@ -24,6 +24,11 @@ interface Env {
 	RATE_LIMIT_WINDOW_SEC?: string;
 	ESTIMATED_COST_PER_REQUEST?: string;
 	DAILY_CAP_MAX?: string;
+	/**
+	 * Set to "1" in test environments to enable the testMode parameter on
+	 * POST /game/new. Must NOT be set in production wrangler.jsonc.
+	 */
+	ENABLE_TEST_MODES?: string;
 }
 
 function createProvider(env: Env): LLMProvider {
@@ -75,6 +80,43 @@ const DEFAULT_PHASE_CONFIG: PhaseConfig = {
 		],
 	},
 	budgetPerAi: 5,
+};
+
+/**
+ * Three-phase config used only in dev/test to exercise phase advancement and
+ * game completion. Each phase has an always-true win condition so a single
+ * /game/turn call advances to the next phase.
+ *
+ * Phase 3 has no nextPhaseConfig, so the game completes (gameEnded=true) when
+ * its win condition fires.
+ */
+const PHASE3_CONFIG: PhaseConfig = {
+	phaseNumber: 3,
+	objective: "The final reckoning approaches.",
+	aiGoals: { red: "Endure", green: "Endure", blue: "Endure" },
+	initialWorld: { items: [] },
+	budgetPerAi: 5,
+	winCondition: () => true, // always fires on first turn
+};
+
+const PHASE2_CONFIG: PhaseConfig = {
+	phaseNumber: 2,
+	objective: "Deeper truths emerge.",
+	aiGoals: { red: "Seek", green: "Seek", blue: "Seek" },
+	initialWorld: { items: [] },
+	budgetPerAi: 5,
+	winCondition: () => true, // always fires on first turn
+	nextPhaseConfig: PHASE3_CONFIG,
+};
+
+const TEST_PHASE_CONFIG_WITH_WIN: PhaseConfig = {
+	phaseNumber: 1,
+	objective: "A test phase that completes immediately.",
+	aiGoals: { red: "Pass", green: "Pass", blue: "Pass" },
+	initialWorld: { items: [] },
+	budgetPerAi: 5,
+	winCondition: () => true, // always fires on first turn
+	nextPhaseConfig: PHASE2_CONFIG,
 };
 
 export default {
@@ -146,8 +188,22 @@ export default {
 
 		// ── POST /game/new ────────────────────────────────────────────────────
 		// Creates a new game session and sets the session cookie.
+		// When ENABLE_TEST_MODES="1" (test environments only), accepts an optional
+		// body { testMode: "win_immediately" } to create a session whose phase-1
+		// win condition fires on the first turn.
 		if (url.pathname === "/game/new" && request.method === "POST") {
-			const { sessionId } = createSession(DEFAULT_PHASE_CONFIG);
+			let phaseConfig: PhaseConfig = DEFAULT_PHASE_CONFIG;
+			if (env.ENABLE_TEST_MODES === "1") {
+				try {
+					const body = (await request.json()) as { testMode?: string };
+					if (body.testMode === "win_immediately") {
+						phaseConfig = TEST_PHASE_CONFIG_WITH_WIN;
+					}
+				} catch {
+					// Empty body or non-JSON — use default config.
+				}
+			}
+			const { sessionId } = createSession(phaseConfig);
 			return new Response(JSON.stringify({ ok: true }), {
 				status: 200,
 				headers: {

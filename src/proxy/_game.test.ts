@@ -313,3 +313,117 @@ describe("rate-guard integration via /game/turn", () => {
 		expect(text).not.toContain("[CAP_HIT]");
 	});
 });
+
+// ── phase_advanced and game_ended SSE events (issue #31) ─────────────────────
+
+describe("phase_advanced SSE event via /game/turn", () => {
+	it("emits a phase_advanced event on the first turn when win condition fires", async () => {
+		// Create a session whose phase-1 win condition always fires
+		const newResp = await SELF.fetch("https://example.com/game/new", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ testMode: "win_immediately" }),
+		});
+		expect(newResp.status).toBe(200);
+		const cookieValue = (newResp.headers.get("Set-Cookie") ?? "").split(";")[0] ?? "";
+
+		const turnResp = await SELF.fetch("https://example.com/game/turn", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Cookie: cookieValue,
+			},
+			body: JSON.stringify({ addressedAi: "red", message: "hi" }),
+		});
+
+		expect(turnResp.status).toBe(200);
+		const text = await turnResp.text();
+		expect(text).toContain('"type":"phase_advanced"');
+	});
+
+	it("phase_advanced payload includes the new phase number and objective", async () => {
+		const newResp = await SELF.fetch("https://example.com/game/new", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ testMode: "win_immediately" }),
+		});
+		const cookieValue = (newResp.headers.get("Set-Cookie") ?? "").split(";")[0] ?? "";
+
+		const turnResp = await SELF.fetch("https://example.com/game/turn", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Cookie: cookieValue,
+			},
+			body: JSON.stringify({ addressedAi: "red", message: "hi" }),
+		});
+
+		const text = await turnResp.text();
+		// Extract and parse the phase_advanced event
+		const lines = text.split("\n");
+		const phaseAdvancedLine = lines.find((l) => l.includes('"type":"phase_advanced"'));
+		expect(phaseAdvancedLine).toBeDefined();
+
+		const eventData = JSON.parse(phaseAdvancedLine!.replace(/^data: /, "")) as {
+			type: string;
+			phase: number;
+			objective: string;
+		};
+		expect(eventData.type).toBe("phase_advanced");
+		expect(typeof eventData.phase).toBe("number");
+		expect(typeof eventData.objective).toBe("string");
+		expect(eventData.objective.length).toBeGreaterThan(0);
+	});
+});
+
+describe("game_ended SSE event via /game/turn", () => {
+	it("emits a game_ended event when phase 3 win condition fires", async () => {
+		// Create a session with win_immediately — phase 1 fires on turn 1,
+		// advancing to phase 2, which fires on turn 2, advancing to phase 3,
+		// which fires on turn 3, completing the game.
+		const newResp = await SELF.fetch("https://example.com/game/new", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ testMode: "win_immediately" }),
+		});
+		const cookieValue = (newResp.headers.get("Set-Cookie") ?? "").split(";")[0] ?? "";
+
+		// Turn 1: phase 1 → phase 2 (phase_advanced expected)
+		const turn1 = await SELF.fetch("https://example.com/game/turn", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Cookie: cookieValue },
+			body: JSON.stringify({ addressedAi: "red", message: "turn 1" }),
+		});
+		const text1 = await turn1.text();
+		expect(text1).toContain('"type":"phase_advanced"');
+
+		// Turn 2: phase 2 → phase 3 (phase_advanced expected)
+		const turn2 = await SELF.fetch("https://example.com/game/turn", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Cookie: cookieValue },
+			body: JSON.stringify({ addressedAi: "red", message: "turn 2" }),
+		});
+		const text2 = await turn2.text();
+		expect(text2).toContain('"type":"phase_advanced"');
+
+		// Turn 3: phase 3 win condition fires → game_ended
+		const turn3 = await SELF.fetch("https://example.com/game/turn", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Cookie: cookieValue },
+			body: JSON.stringify({ addressedAi: "red", message: "turn 3" }),
+		});
+		const text3 = await turn3.text();
+		expect(text3).toContain('"type":"game_ended"');
+	});
+
+	it("does NOT emit game_ended on a normal turn without win condition", async () => {
+		const turnResp = await SELF.fetch("https://example.com/game/turn", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ addressedAi: "red", message: "hello" }),
+		});
+
+		const text = await turnResp.text();
+		expect(text).not.toContain('"type":"game_ended"');
+	});
+});

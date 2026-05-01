@@ -591,6 +591,18 @@ export function renderChatPage(): string {
                     setChatLockout(evt.aiId, false);
                   } else if (evt.type === 'action_log') {
                     appendActionLogEntry(evt.entry);
+                  } else if (evt.type === 'phase_advanced') {
+                    // Phase boundary: add a visible marker to the action log.
+                    var phaseOutput = document.getElementById('action-log-output');
+                    if (phaseOutput) {
+                      phaseOutput.textContent += '--- Phase ' + evt.phase + ' begins: ' + evt.objective + ' ---\\n';
+                    }
+                  } else if (evt.type === 'game_ended') {
+                    // Game complete: add a visible marker to the action log.
+                    var gameOutput = document.getElementById('action-log-output');
+                    if (gameOutput) {
+                      gameOutput.textContent += '--- Game ended ---\\n';
+                    }
                   }
                 } catch (err) {
                   // Legacy plain-text token (smoke worker emits these).
