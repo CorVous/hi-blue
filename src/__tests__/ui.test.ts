@@ -1074,9 +1074,7 @@ describe("renderEndgameSection fragment structure", () => {
 // ----------------------------------------------------------------------------
 
 /** Helper: build a mock SSE stream, run the page script, submit the form. */
-async function runSseScenario(
-	sseEvents: string[],
-): Promise<void> {
+async function runSseScenario(sseEvents: string[]): Promise<void> {
 	const body = sseEvents.join("");
 	const encoder = new TextEncoder();
 	const encoded = encoder.encode(body);
@@ -1107,7 +1105,9 @@ async function runSseScenario(
 	fn(mockFetch);
 
 	const form = document.getElementById("chat-form") as HTMLFormElement;
-	const textarea = document.getElementById("message-input") as HTMLTextAreaElement;
+	const textarea = document.getElementById(
+		"message-input",
+	) as HTMLTextAreaElement;
 	textarea.value = "hi";
 	form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
 

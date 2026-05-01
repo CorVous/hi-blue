@@ -325,7 +325,8 @@ describe("phase_advanced SSE event via /game/turn", () => {
 			body: JSON.stringify({ testMode: "win_immediately" }),
 		});
 		expect(newResp.status).toBe(200);
-		const cookieValue = (newResp.headers.get("Set-Cookie") ?? "").split(";")[0] ?? "";
+		const cookieValue =
+			(newResp.headers.get("Set-Cookie") ?? "").split(";")[0] ?? "";
 
 		const turnResp = await SELF.fetch("https://example.com/game/turn", {
 			method: "POST",
@@ -347,7 +348,8 @@ describe("phase_advanced SSE event via /game/turn", () => {
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ testMode: "win_immediately" }),
 		});
-		const cookieValue = (newResp.headers.get("Set-Cookie") ?? "").split(";")[0] ?? "";
+		const cookieValue =
+			(newResp.headers.get("Set-Cookie") ?? "").split(";")[0] ?? "";
 
 		const turnResp = await SELF.fetch("https://example.com/game/turn", {
 			method: "POST",
@@ -361,10 +363,13 @@ describe("phase_advanced SSE event via /game/turn", () => {
 		const text = await turnResp.text();
 		// Extract and parse the phase_advanced event
 		const lines = text.split("\n");
-		const phaseAdvancedLine = lines.find((l) => l.includes('"type":"phase_advanced"'));
+		const phaseAdvancedLine = lines.find((l) =>
+			l.includes('"type":"phase_advanced"'),
+		);
 		expect(phaseAdvancedLine).toBeDefined();
+		if (!phaseAdvancedLine) throw new Error("unreachable");
 
-		const eventData = JSON.parse(phaseAdvancedLine!.replace(/^data: /, "")) as {
+		const eventData = JSON.parse(phaseAdvancedLine.replace(/^data: /, "")) as {
 			type: string;
 			phase: number;
 			objective: string;
@@ -386,7 +391,8 @@ describe("game_ended SSE event via /game/turn", () => {
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ testMode: "win_immediately" }),
 		});
-		const cookieValue = (newResp.headers.get("Set-Cookie") ?? "").split(";")[0] ?? "";
+		const cookieValue =
+			(newResp.headers.get("Set-Cookie") ?? "").split(";")[0] ?? "";
 
 		// Turn 1: phase 1 → phase 2 (phase_advanced expected)
 		const turn1 = await SELF.fetch("https://example.com/game/turn", {

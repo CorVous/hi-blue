@@ -500,7 +500,7 @@ describe("encodeRoundResult — phase_advanced event", () => {
 			initialWorld: { items: [] },
 			budgetPerAi: 5,
 		};
-		let game = startPhase(createGame(TEST_PERSONAS), PHASE2_CONFIG);
+		const game = startPhase(createGame(TEST_PERSONAS), PHASE2_CONFIG);
 		const phaseAfter = getActivePhase(game);
 
 		const result = makePassResult({ phaseEnded: true, gameEnded: false });
@@ -545,7 +545,7 @@ describe("encodeRoundResult — phase_advanced event", () => {
 			initialWorld: { items: [] },
 			budgetPerAi: 5,
 		};
-		let game = startPhase(createGame(TEST_PERSONAS), PHASE2_CONFIG);
+		const game = startPhase(createGame(TEST_PERSONAS), PHASE2_CONFIG);
 		const phaseAfter = getActivePhase(game);
 
 		const result = makePassResult({
@@ -558,7 +558,9 @@ describe("encodeRoundResult — phase_advanced event", () => {
 		const events = encodeRoundResult(result, completions, phaseAfter);
 
 		const chatLockoutIdx = events.findIndex((e) => e.type === "chat_lockout");
-		const phaseAdvancedIdx = events.findIndex((e) => e.type === "phase_advanced");
+		const phaseAdvancedIdx = events.findIndex(
+			(e) => e.type === "phase_advanced",
+		);
 
 		expect(phaseAdvancedIdx).toBeGreaterThan(chatLockoutIdx);
 	});
