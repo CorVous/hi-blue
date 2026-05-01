@@ -123,7 +123,9 @@ export class RoundCoordinator {
 	private readonly triggerProbabilityPerRound: number;
 	private readonly chatLockoutDuration: number;
 	private readonly rng: () => number;
-	private readonly phaseConfigs: [PhaseConfig, PhaseConfig, PhaseConfig] | undefined;
+	private readonly phaseConfigs:
+		| [PhaseConfig, PhaseConfig, PhaseConfig]
+		| undefined;
 
 	constructor(
 		provider: CoordinatorLLMProvider,
