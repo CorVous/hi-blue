@@ -45,7 +45,6 @@ describe("PERSONAS", () => {
 	] as const)("%s persona has all extended flavor fields present", (aiId) => {
 		const p = PERSONAS[aiId];
 		expect(p.budgetExhaustionLine).toBeTruthy();
-		expect(p.chatLockoutLine).toBeTruthy();
 	});
 });
 

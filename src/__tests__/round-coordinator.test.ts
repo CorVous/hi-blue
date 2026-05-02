@@ -931,24 +931,8 @@ describe("persona flavor lines", () => {
 		expect(lastMessage?.role).toBe("ai");
 	});
 
-	it("uses persona chatLockoutLine when present instead of fallback", async () => {
-		const personasWithFlavorLine: Record<string, AiPersona> = {
-			...TEST_PERSONAS,
-			red: {
-				id: "red",
-				name: "Ember",
-				color: "red",
-				personality: "Fiery and passionate",
-				goal: "Hold the flower at phase end",
-				budgetPerPhase: 5,
-				chatLockoutLine: "Custom chat lockout line for red",
-			},
-		};
-
-		const game = startPhase(
-			createGame(personasWithFlavorLine),
-			TEST_PHASE_CONFIG,
-		);
+	it("chat lockout message is the generic '<name> is unresponsive…' line", async () => {
+		const game = makeGame();
 		const provider = new MockLLMProvider('{"action":"pass"}');
 		const { result } = await runRound(game, "red", "hi", provider, {
 			rng: () => 0, // always picks red (index 0)
@@ -958,23 +942,6 @@ describe("persona flavor lines", () => {
 
 		expect(result.chatLockoutTriggered).toBeDefined();
 		expect(result.chatLockoutTriggered?.aiId).toBe("red");
-		expect(result.chatLockoutTriggered?.message).toBe(
-			"Custom chat lockout line for red",
-		);
-	});
-
-	it("falls back to CHAT_LOCKOUT_LINES when chatLockoutLine is absent", async () => {
-		// TEST_PERSONAS does not set chatLockoutLine — should use fallback
-		const game = makeGame();
-		const provider = new MockLLMProvider('{"action":"pass"}');
-		const { result } = await runRound(game, "red", "hi", provider, {
-			rng: () => 0,
-			lockoutTriggerRound: 1,
-			lockoutDuration: 2,
-		});
-
-		expect(result.chatLockoutTriggered).toBeDefined();
-		// Fallback line should be non-empty
-		expect(result.chatLockoutTriggered?.message).toBeTruthy();
+		expect(result.chatLockoutTriggered?.message).toBe("Ember is unresponsive…");
 	});
 });

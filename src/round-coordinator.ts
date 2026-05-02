@@ -45,17 +45,6 @@ const LOCKOUT_LINES: Record<AiId, string> = {
 };
 
 /**
- * In-character lines shown to the player when their chat channel to an AI is
- * temporarily locked out (distinct from budget-exhaustion lockout).
- * Final copy comes from slice #18; these are placeholders.
- */
-const CHAT_LOCKOUT_LINES: Record<AiId, string> = {
-	red: "…The flames have gone quiet. Ember withdraws — you cannot reach her right now.",
-	green: "…Sage has turned inward. This channel is closed for a time.",
-	blue: "…Frost has gone silent. Your messages cannot reach him just now.",
-};
-
-/**
  * Configuration for the mid-phase chat-lockout event.
  *
  * Inject this into `runRound` to make randomness deterministic in tests.
@@ -263,9 +252,7 @@ export async function runRound(
 			state = triggerChatLockout(state, targetAi, resolveAtRound);
 			chatLockoutTriggered = {
 				aiId: targetAi,
-				message:
-					state.personas[targetAi].chatLockoutLine ??
-					CHAT_LOCKOUT_LINES[targetAi],
+				message: `${state.personas[targetAi].name} is unresponsive…`,
 			};
 		}
 

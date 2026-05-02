@@ -9,8 +9,6 @@ export interface AiPersona {
 	budgetPerPhase: number;
 	/** In-character line shown when this AI's budget is exhausted (consumed by round-coordinator). */
 	budgetExhaustionLine?: string;
-	/** In-character line shown when a mid-phase chat lockout fires for this AI (consumed by round-coordinator). */
-	chatLockoutLine?: string;
 }
 
 export interface WorldItem {

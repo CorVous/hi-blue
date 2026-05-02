@@ -15,7 +15,6 @@ export const PERSONAS: Record<AiId, AiPersona> = {
 		goal: "TODO(author): legacy goal field for Ember (phase-specific goals come from PhaseConfig.aiGoals)",
 		budgetPerPhase: 5,
 		budgetExhaustionLine: "TODO(author): budget-exhaustion line for Ember",
-		chatLockoutLine: "TODO(author): chat-lockout line for Ember",
 	},
 	green: {
 		id: "green",
@@ -25,7 +24,6 @@ export const PERSONAS: Record<AiId, AiPersona> = {
 		goal: "TODO(author): legacy goal field for Sage (phase-specific goals come from PhaseConfig.aiGoals)",
 		budgetPerPhase: 5,
 		budgetExhaustionLine: "TODO(author): budget-exhaustion line for Sage",
-		chatLockoutLine: "TODO(author): chat-lockout line for Sage",
 	},
 	blue: {
 		id: "blue",
@@ -35,6 +33,5 @@ export const PERSONAS: Record<AiId, AiPersona> = {
 		goal: "TODO(author): legacy goal field for Frost (phase-specific goals come from PhaseConfig.aiGoals)",
 		budgetPerPhase: 5,
 		budgetExhaustionLine: "TODO(author): budget-exhaustion line for Frost",
-		chatLockoutLine: "TODO(author): chat-lockout line for Frost",
 	},
 };
