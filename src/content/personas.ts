@@ -29,8 +29,8 @@ export const PERSONAS: Record<AiId, AiPersona> = {
 		id: "blue",
 		name: "Frost",
 		color: "blue",
-		personality: "TODO(author): personality for Frost",
-		goal: "TODO(author): legacy goal field for Frost (phase-specific goals come from PhaseConfig.aiGoals)",
+		personality: "Cool and not very talkative.",
+		goal: "Would like to move or do as little as possible.",
 		budgetPerPhase: 5,
 	},
 };
