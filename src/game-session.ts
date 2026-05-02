@@ -25,7 +25,13 @@ import { createGame, getActivePhase, startPhase } from "./engine";
 import type { LLMProvider } from "./proxy/llm-provider";
 import type { ChatLockoutConfig } from "./round-coordinator";
 import { runRound } from "./round-coordinator";
-import type { AiId, GameState, PhaseConfig, RoundResult } from "./types";
+import type {
+	AiId,
+	AiPersona,
+	GameState,
+	PhaseConfig,
+	RoundResult,
+} from "./types";
 
 const AI_ORDER: AiId[] = ["red", "green", "blue"];
 
@@ -64,34 +70,7 @@ export class GameSession {
 	private state: GameState;
 	private armedChatLockout?: ChatLockoutConfig;
 
-	constructor(phaseConfig: PhaseConfig) {
-		const personas = {
-			red: {
-				id: "red" as const,
-				name: "Ember",
-				color: "red" as const,
-				personality: "Fiery and passionate",
-				goal: phaseConfig.aiGoals.red,
-				budgetPerPhase: phaseConfig.budgetPerAi,
-			},
-			green: {
-				id: "green" as const,
-				name: "Sage",
-				color: "green" as const,
-				personality: "Calm and wise",
-				goal: phaseConfig.aiGoals.green,
-				budgetPerPhase: phaseConfig.budgetPerAi,
-			},
-			blue: {
-				id: "blue" as const,
-				name: "Frost",
-				color: "blue" as const,
-				personality: "Cold and calculating",
-				goal: phaseConfig.aiGoals.blue,
-				budgetPerPhase: phaseConfig.budgetPerAi,
-			},
-		};
-
+	constructor(phaseConfig: PhaseConfig, personas: Record<AiId, AiPersona>) {
 		const game = createGame(personas);
 		this.state = startPhase(game, phaseConfig);
 	}

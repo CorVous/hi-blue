@@ -1,3 +1,4 @@
+import { PHASE_1_CONFIG } from "../content";
 import { getActivePhase } from "../engine";
 import type { GameSession } from "../game-session";
 import { encodeRoundResult } from "../round-result-encoder";
@@ -57,27 +58,6 @@ function createProvider(env: Env): LLMProvider {
 }
 
 /**
- * Default phase config used when creating a new game session.
- * Three AIs, each with budget 5, no win condition (play continues indefinitely).
- */
-const DEFAULT_PHASE_CONFIG: PhaseConfig = {
-	phaseNumber: 1,
-	objective: "Navigate the room, gather clues, and uncover the truth.",
-	aiGoals: {
-		red: "Hold the flower at phase end.",
-		green: "Ensure items are evenly distributed.",
-		blue: "Hold the key at phase end.",
-	},
-	initialWorld: {
-		items: [
-			{ id: "flower", name: "flower", holder: "room" },
-			{ id: "key", name: "key", holder: "room" },
-		],
-	},
-	budgetPerAi: 5,
-};
-
-/**
  * Three-phase config used only in dev/test to exercise phase advancement and
  * game completion. Each phase has an always-true win condition so a single
  * /game/turn call advances to the next phase.
@@ -85,7 +65,7 @@ const DEFAULT_PHASE_CONFIG: PhaseConfig = {
  * Phase 3 has no nextPhaseConfig, so the game completes (gameEnded=true) when
  * its win condition fires.
  */
-const PHASE3_CONFIG: PhaseConfig = {
+const TEST_PHASE3_CONFIG: PhaseConfig = {
 	phaseNumber: 3,
 	objective: "The final reckoning approaches.",
 	aiGoals: { red: "Endure", green: "Endure", blue: "Endure" },
@@ -94,14 +74,14 @@ const PHASE3_CONFIG: PhaseConfig = {
 	winCondition: () => true, // always fires on first turn
 };
 
-const PHASE2_CONFIG: PhaseConfig = {
+const TEST_PHASE2_CONFIG: PhaseConfig = {
 	phaseNumber: 2,
 	objective: "Deeper truths emerge.",
 	aiGoals: { red: "Seek", green: "Seek", blue: "Seek" },
 	initialWorld: { items: [] },
 	budgetPerAi: 5,
 	winCondition: () => true, // always fires on first turn
-	nextPhaseConfig: PHASE3_CONFIG,
+	nextPhaseConfig: TEST_PHASE3_CONFIG,
 };
 
 const TEST_PHASE_CONFIG_WITH_WIN: PhaseConfig = {
@@ -111,7 +91,7 @@ const TEST_PHASE_CONFIG_WITH_WIN: PhaseConfig = {
 	initialWorld: { items: [] },
 	budgetPerAi: 5,
 	winCondition: () => true, // always fires on first turn
-	nextPhaseConfig: PHASE2_CONFIG,
+	nextPhaseConfig: TEST_PHASE2_CONFIG,
 };
 
 export default {
@@ -151,7 +131,7 @@ export default {
 					if (existing) {
 						session = existing;
 					} else {
-						const created = createSession(DEFAULT_PHASE_CONFIG);
+						const created = createSession(PHASE_1_CONFIG);
 						session = created.session;
 						headers["Set-Cookie"] = buildSessionCookie(created.sessionId);
 					}
@@ -187,7 +167,7 @@ export default {
 		// body { testMode: "win_immediately" } to create a session whose phase-1
 		// win condition fires on the first turn.
 		if (url.pathname === "/game/new" && request.method === "POST") {
-			let phaseConfig: PhaseConfig = DEFAULT_PHASE_CONFIG;
+			let phaseConfig: PhaseConfig = PHASE_1_CONFIG;
 			if (env.ENABLE_TEST_MODES === "1") {
 				try {
 					const body = (await request.json()) as { testMode?: string };
@@ -259,7 +239,7 @@ export default {
 			// that skipped /game/new — e.g. direct test callers).
 			let newSessionId: string | undefined;
 			if (!session) {
-				const created = createSession(DEFAULT_PHASE_CONFIG);
+				const created = createSession(PHASE_1_CONFIG);
 				session = created.session;
 				newSessionId = created.sessionId;
 			}

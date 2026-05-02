@@ -11,6 +11,7 @@
  * KV persistence is out of scope for v1 (single-instance Wrangler dev).
  */
 
+import { PERSONAS } from "./content";
 import { GameSession } from "./game-session";
 import type { PhaseConfig } from "./types";
 
@@ -53,7 +54,7 @@ export function createSession(phaseConfig: PhaseConfig): {
 	sessionId: string;
 } {
 	const sessionId = generateSessionId();
-	const session = new GameSession(phaseConfig);
+	const session = new GameSession(phaseConfig, PERSONAS);
 	sessions.set(sessionId, session);
 	return { session, sessionId };
 }
