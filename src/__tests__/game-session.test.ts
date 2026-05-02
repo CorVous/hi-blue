@@ -15,9 +15,37 @@ import { getActivePhase } from "../engine";
 import { GameSession } from "../game-session";
 import type { LLMProvider } from "../proxy/llm-provider";
 import { MockLLMProvider } from "../proxy/llm-provider";
-import type { PhaseConfig } from "../types";
+import type { AiPersona, PhaseConfig } from "../types";
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
+
+/** Minimal test personas — prose quality is irrelevant here. */
+const TEST_PERSONAS: Record<string, AiPersona> = {
+	red: {
+		id: "red",
+		name: "Ember",
+		color: "red",
+		personality: "Test personality red",
+		goal: "Test goal red",
+		budgetPerPhase: 5,
+	},
+	green: {
+		id: "green",
+		name: "Sage",
+		color: "green",
+		personality: "Test personality green",
+		goal: "Test goal green",
+		budgetPerPhase: 5,
+	},
+	blue: {
+		id: "blue",
+		name: "Frost",
+		color: "blue",
+		personality: "Test personality blue",
+		goal: "Test goal blue",
+		budgetPerPhase: 5,
+	},
+};
 
 const PHASE_CONFIG: PhaseConfig = {
 	phaseNumber: 1,
@@ -56,7 +84,7 @@ class SequentialMockProvider implements LLMProvider {
 
 describe("GameSession construction", () => {
 	it("creates a session with an active phase", () => {
-		const session = new GameSession(PHASE_CONFIG);
+		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
 		const state = session.getState();
 		expect(state.phases).toHaveLength(1);
 		expect(state.currentPhase).toBe(1);
@@ -64,7 +92,7 @@ describe("GameSession construction", () => {
 	});
 
 	it("initial budgets match the phase config", () => {
-		const session = new GameSession(PHASE_CONFIG);
+		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
 		const phase = getActivePhase(session.getState());
 		expect(phase.budgets.red.remaining).toBe(5);
 		expect(phase.budgets.green.remaining).toBe(5);
@@ -76,7 +104,7 @@ describe("GameSession construction", () => {
 
 describe("GameSession — message routing", () => {
 	it("player message appears in only the addressed AI's chat history", async () => {
-		const session = new GameSession(PHASE_CONFIG);
+		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
 		const provider = new MockLLMProvider('{"action":"pass"}');
 
 		await session.submitMessage("red", "Secret message for Ember", provider);
@@ -99,7 +127,7 @@ describe("GameSession — message routing", () => {
 	});
 
 	it("routing changes per round — second message goes to different AI", async () => {
-		const session = new GameSession(PHASE_CONFIG);
+		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
 		const provider = new MockLLMProvider('{"action":"pass"}');
 
 		await session.submitMessage("red", "for red", provider);
@@ -123,7 +151,7 @@ describe("GameSession — message routing", () => {
 
 describe("GameSession — state mutation across rounds", () => {
 	it("round counter advances after each submitMessage call", async () => {
-		const session = new GameSession(PHASE_CONFIG);
+		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
 		const provider = new MockLLMProvider('{"action":"pass"}');
 
 		await session.submitMessage("red", "hi", provider);
@@ -134,7 +162,7 @@ describe("GameSession — state mutation across rounds", () => {
 	});
 
 	it("budget decrements for all AIs after each round", async () => {
-		const session = new GameSession(PHASE_CONFIG);
+		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
 		const provider = new MockLLMProvider('{"action":"pass"}');
 
 		await session.submitMessage("red", "hi", provider);
@@ -146,7 +174,7 @@ describe("GameSession — state mutation across rounds", () => {
 	});
 
 	it("second round builds on first round's state", async () => {
-		const session = new GameSession(PHASE_CONFIG);
+		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
 		// Red picks up flower in round 1
 		const provider1 = new SequentialMockProvider([
 			'{"action":"pass","toolCall":{"name":"pick_up","args":{"item":"flower"}}}',
@@ -169,7 +197,7 @@ describe("GameSession — state mutation across rounds", () => {
 
 describe("GameSession — completions map", () => {
 	it("completions map contains the completion text for each AI", async () => {
-		const session = new GameSession(PHASE_CONFIG);
+		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
 		const provider = new SequentialMockProvider([
 			'{"action":"chat","content":"I am Ember"}',
 			'{"action":"chat","content":"I am Sage"}',
@@ -185,7 +213,10 @@ describe("GameSession — completions map", () => {
 
 	it("completions map has empty string for a budget-locked AI", async () => {
 		// Create session with budget=1 so red exhausts after round 1
-		const session = new GameSession({ ...PHASE_CONFIG, budgetPerAi: 1 });
+		const session = new GameSession(
+			{ ...PHASE_CONFIG, budgetPerAi: 1 },
+			TEST_PERSONAS,
+		);
 		const provider1 = new MockLLMProvider('{"action":"pass"}');
 		// Round 1 — all AIs act, budgets go to 0 → all locked out
 		await session.submitMessage("red", "round 1", provider1);
@@ -205,7 +236,7 @@ describe("GameSession — completions map", () => {
 	});
 
 	it("completions only for non-locked AIs are non-empty", async () => {
-		const session = new GameSession(PHASE_CONFIG);
+		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
 		const provider = new SequentialMockProvider([
 			'{"action":"pass"}', // red
 			'{"action":"pass"}', // green
@@ -225,7 +256,7 @@ describe("GameSession — completions map", () => {
 
 describe("GameSession — result from submitMessage", () => {
 	it("result.round is 1 after the first call", async () => {
-		const session = new GameSession(PHASE_CONFIG);
+		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
 		const provider = new MockLLMProvider('{"action":"pass"}');
 
 		const { result } = await session.submitMessage("red", "hi", provider);
@@ -233,7 +264,7 @@ describe("GameSession — result from submitMessage", () => {
 	});
 
 	it("result.actions contains entries from all three AIs", async () => {
-		const session = new GameSession(PHASE_CONFIG);
+		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
 		const provider = new MockLLMProvider('{"action":"pass"}');
 
 		const { result } = await session.submitMessage("red", "hi", provider);
@@ -243,7 +274,7 @@ describe("GameSession — result from submitMessage", () => {
 	});
 
 	it("chat lockout is reflected in result.chatLockoutTriggered", async () => {
-		const session = new GameSession(PHASE_CONFIG);
+		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
 		const provider = new MockLLMProvider('{"action":"pass"}');
 
 		const { result } = await session.submitMessage("red", "hi", provider, {
@@ -261,11 +292,14 @@ describe("GameSession — result from submitMessage", () => {
 
 describe("GameSession — phase advancement", () => {
 	it("phaseEnded is false when win condition not met", async () => {
-		const session = new GameSession({
-			...PHASE_CONFIG,
-			winCondition: (phase) =>
-				phase.world.items.find((i) => i.id === "flower")?.holder === "red",
-		});
+		const session = new GameSession(
+			{
+				...PHASE_CONFIG,
+				winCondition: (phase) =>
+					phase.world.items.find((i) => i.id === "flower")?.holder === "red",
+			},
+			TEST_PERSONAS,
+		);
 		const provider = new MockLLMProvider('{"action":"pass"}');
 
 		const { result } = await session.submitMessage("red", "hi", provider);
@@ -273,11 +307,14 @@ describe("GameSession — phase advancement", () => {
 	});
 
 	it("phaseEnded is true when win condition is met this round", async () => {
-		const session = new GameSession({
-			...PHASE_CONFIG,
-			winCondition: (phase) =>
-				phase.world.items.find((i) => i.id === "flower")?.holder === "red",
-		});
+		const session = new GameSession(
+			{
+				...PHASE_CONFIG,
+				winCondition: (phase) =>
+					phase.world.items.find((i) => i.id === "flower")?.holder === "red",
+			},
+			TEST_PERSONAS,
+		);
 		const provider = new SequentialMockProvider([
 			'{"action":"pass","toolCall":{"name":"pick_up","args":{"item":"flower"}}}',
 			'{"action":"pass"}',

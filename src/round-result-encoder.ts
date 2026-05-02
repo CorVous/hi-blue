@@ -26,7 +26,7 @@
  *   game_ended     — { type }
  */
 
-import type { AiId, PhaseState, RoundResult } from "./types";
+import type { AiId, AiPersona, PhaseState, RoundResult } from "./types";
 
 /**
  * A single structured SSE event ready to be serialised as
@@ -45,17 +45,6 @@ export type SseEvent =
 	| { type: "game_ended" };
 
 const AI_ORDER: AiId[] = ["red", "green", "blue"];
-
-/**
- * In-character lines shown for budget-exhaustion lockout.
- * Must match the lines in round-coordinator.ts — kept separate here so the
- * encoder can emit them independently from the coordinator.
- */
-const LOCKOUT_LINES: Record<AiId, string> = {
-	red: "…I've said all I can say for now. The fire in me has burned low.",
-	green: "…I must sit quietly. There is nothing more I can offer this phase.",
-	blue: "…My calculations are complete. I will not speak further.",
-};
 
 /**
  * Split a string into word-level chunks for paced token emission.
@@ -90,13 +79,19 @@ export function splitIntoWordChunks(text: string): string[] {
  *                       itself is authoritative in result.actions.
  * @param phaseAfter     The PhaseState after the round (for budget reads and
  *                       lockout state). Pass the active phase from nextState.
+ * @param personas       The personas record (for AI display names in
+ *                       budget-exhaustion lockout messages).
  */
 export function encodeRoundResult(
 	result: RoundResult,
 	completions: Partial<Record<AiId, string>>,
 	phaseAfter: PhaseState,
+	personas: Record<AiId, AiPersona>,
 ): SseEvent[] {
 	const events: SseEvent[] = [];
+
+	const lockoutContent = (aiId: AiId): string =>
+		`${personas[aiId].name} is unresponsive…`;
 
 	for (const aiId of AI_ORDER) {
 		const completion = completions[aiId] ?? "";
@@ -110,7 +105,7 @@ export function encodeRoundResult(
 			events.push({
 				type: "lockout",
 				aiId,
-				content: LOCKOUT_LINES[aiId],
+				content: lockoutContent(aiId),
 			});
 		} else {
 			// Emit paced token events from the buffered completion string
@@ -135,7 +130,7 @@ export function encodeRoundResult(
 			events.push({
 				type: "lockout",
 				aiId,
-				content: LOCKOUT_LINES[aiId],
+				content: lockoutContent(aiId),
 			});
 		}
 	}

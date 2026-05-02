@@ -793,7 +793,11 @@ describe("phase progression — three-phase walk", () => {
 		const phase3Config: PhaseConfig = {
 			phaseNumber: 3,
 			objective: "Phase 3",
-			aiGoals: TEST_PHASE_CONFIG.aiGoals,
+			aiGoals: {
+				red: "Hold the flower at phase end",
+				green: "Ensure items are evenly distributed",
+				blue: "Hold the key at phase end",
+			},
 			initialWorld: {
 				items: [
 					{ id: "flower", name: "flower", holder: "room" },
@@ -807,7 +811,11 @@ describe("phase progression — three-phase walk", () => {
 		const phase2Config: PhaseConfig = {
 			phaseNumber: 2,
 			objective: "Phase 2",
-			aiGoals: TEST_PHASE_CONFIG.aiGoals,
+			aiGoals: {
+				red: "Hold the flower at phase end",
+				green: "Ensure items are evenly distributed",
+				blue: "Hold the key at phase end",
+			},
 			initialWorld: {
 				items: [
 					{ id: "flower", name: "flower", holder: "room" },
@@ -874,5 +882,40 @@ describe("phase progression — three-phase walk", () => {
 		expect(afterP3.isComplete).toBe(true);
 		// All three phase states are retained
 		expect(afterP3.phases).toHaveLength(3);
+	});
+});
+
+// ----------------------------------------------------------------------------
+// Generic '<name> is unresponsive…' lockout messages (issue #18)
+// ----------------------------------------------------------------------------
+describe("lockout messages", () => {
+	it("budget-exhaustion lockout chat message is '<name> is unresponsive…'", async () => {
+		let game = makeGame();
+		for (let i = 0; i < 5; i++) {
+			game = deductBudget(game, "red");
+		}
+		expect(getActivePhase(game).lockedOut.has("red")).toBe(true);
+
+		const provider = new MockLLMProvider('{"action":"pass"}');
+		const { nextState } = await runRound(game, "green", "hi", provider);
+
+		const redHistory = getActivePhase(nextState).chatHistories.red;
+		const lastMessage = redHistory[redHistory.length - 1];
+		expect(lastMessage?.role).toBe("ai");
+		expect(lastMessage?.content).toBe("Ember is unresponsive…");
+	});
+
+	it("chat-lockout message is '<name> is unresponsive…'", async () => {
+		const game = makeGame();
+		const provider = new MockLLMProvider('{"action":"pass"}');
+		const { result } = await runRound(game, "red", "hi", provider, {
+			rng: () => 0, // always picks red (index 0)
+			lockoutTriggerRound: 1,
+			lockoutDuration: 2,
+		});
+
+		expect(result.chatLockoutTriggered).toBeDefined();
+		expect(result.chatLockoutTriggered?.aiId).toBe("red");
+		expect(result.chatLockoutTriggered?.message).toBe("Ember is unresponsive…");
 	});
 });
