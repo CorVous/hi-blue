@@ -1,25 +1,25 @@
 {
-  "name": "hi-blue-proxy",
-  "main": "src/proxy/_smoke.ts",
-  "compatibility_date": "2025-12-01",
-  "compatibility_flags": ["nodejs_compat"],
-  "kv_namespaces": [
-    {
-      // Backing store for per-IP rate-limit buckets and the global daily spend cap.
-      // In production: create with `wrangler kv namespace create RATE_GUARD_KV`
-      // In tests: vitest-pool-workers provides an in-process KV implementation.
-      "binding": "RATE_GUARD_KV",
-      "id": "rate-guard-kv-placeholder-replace-in-production",
-    },
-  ],
-  "vars": {
-    // Per-IP token-bucket: max tokens (= max burst requests per window).
-    "RATE_LIMIT_MAX": "20",
-    // Window over which the token bucket fully refills, in seconds.
-    "RATE_LIMIT_WINDOW_SEC": "60",
-    // Estimated cost unit per request (same unit as DAILY_CAP_MAX).
-    "ESTIMATED_COST_PER_REQUEST": "1",
-    // Global daily request budget (units match ESTIMATED_COST_PER_REQUEST).
-    "DAILY_CAP_MAX": "1000",
-  },
+	"name": "hi-blue-proxy",
+	"main": "src/proxy/_smoke.ts",
+	"compatibility_date": "2025-12-01",
+	"compatibility_flags": ["nodejs_compat"],
+	"kv_namespaces": [
+		{
+			// Backing store for per-IP rate-limit buckets and the global daily spend cap.
+			// In production: create with `wrangler kv namespace create RATE_GUARD_KV`
+			// In tests: vitest-pool-workers provides an in-process KV implementation.
+			"binding": "RATE_GUARD_KV",
+			"id": "rate-guard-kv-placeholder-replace-in-production"
+		}
+	],
+	"vars": {
+		// Per-IP token-bucket: max tokens (= max burst requests per window).
+		"RATE_LIMIT_MAX": "20",
+		// Window over which the token bucket fully refills, in seconds.
+		"RATE_LIMIT_WINDOW_SEC": "60",
+		// Estimated cost unit per request (same unit as DAILY_CAP_MAX).
+		"ESTIMATED_COST_PER_REQUEST": "1",
+		// Global daily request budget (units match ESTIMATED_COST_PER_REQUEST).
+		"DAILY_CAP_MAX": "1000"
+	}
 }
