@@ -200,7 +200,8 @@ export async function runRound(
 			// Emit in-character lockout line — no LLM call, no budget deduction.
 			// Use getActivePhase(state).round for consistency with dispatchAiTurn,
 			// which also reads the pre-advance phase.round value.
-			const lockoutContent = LOCKOUT_LINES[aiId];
+			const lockoutContent =
+				state.personas[aiId].budgetExhaustionLine ?? LOCKOUT_LINES[aiId];
 			state = appendChat(state, aiId, {
 				role: "ai",
 				content: lockoutContent,
@@ -262,7 +263,9 @@ export async function runRound(
 			state = triggerChatLockout(state, targetAi, resolveAtRound);
 			chatLockoutTriggered = {
 				aiId: targetAi,
-				message: CHAT_LOCKOUT_LINES[targetAi],
+				message:
+					state.personas[targetAi].chatLockoutLine ??
+					CHAT_LOCKOUT_LINES[targetAi],
 			};
 		}
 

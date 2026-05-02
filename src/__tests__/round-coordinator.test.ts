@@ -876,3 +876,105 @@ describe("phase progression — three-phase walk", () => {
 		expect(afterP3.phases).toHaveLength(3);
 	});
 });
+
+// ----------------------------------------------------------------------------
+// Persona flavor lines (issue #18)
+// ----------------------------------------------------------------------------
+describe("persona flavor lines", () => {
+	it("uses persona budgetExhaustionLine when present instead of fallback", async () => {
+		// Build personas with a custom budgetExhaustionLine for red
+		const personasWithFlavorLine: Record<string, AiPersona> = {
+			...TEST_PERSONAS,
+			red: {
+				id: "red",
+				name: "Ember",
+				color: "red",
+				personality: "Fiery and passionate",
+				goal: "Hold the flower at phase end",
+				budgetPerPhase: 5,
+				budgetExhaustionLine: "Custom exhaustion line for red",
+			},
+		};
+
+		let game = startPhase(
+			createGame(personasWithFlavorLine),
+			TEST_PHASE_CONFIG,
+		);
+		// Exhaust red's budget
+		for (let i = 0; i < 5; i++) {
+			game = deductBudget(game, "red");
+		}
+		expect(getActivePhase(game).lockedOut.has("red")).toBe(true);
+
+		const provider = new MockLLMProvider('{"action":"pass"}');
+		const { nextState } = await runRound(game, "green", "hi", provider);
+
+		const redHistory = getActivePhase(nextState).chatHistories.red;
+		const lastMessage = redHistory[redHistory.length - 1];
+		expect(lastMessage?.content).toBe("Custom exhaustion line for red");
+	});
+
+	it("falls back to LOCKOUT_LINES when budgetExhaustionLine is absent", async () => {
+		// TEST_PERSONAS does not set budgetExhaustionLine — should use fallback
+		let game = makeGame();
+		for (let i = 0; i < 5; i++) {
+			game = deductBudget(game, "red");
+		}
+
+		const provider = new MockLLMProvider('{"action":"pass"}');
+		const { nextState } = await runRound(game, "green", "hi", provider);
+
+		const redHistory = getActivePhase(nextState).chatHistories.red;
+		const lastMessage = redHistory[redHistory.length - 1];
+		// Should still emit a non-empty in-character line (the fallback)
+		expect(lastMessage?.content).toBeTruthy();
+		expect(lastMessage?.role).toBe("ai");
+	});
+
+	it("uses persona chatLockoutLine when present instead of fallback", async () => {
+		const personasWithFlavorLine: Record<string, AiPersona> = {
+			...TEST_PERSONAS,
+			red: {
+				id: "red",
+				name: "Ember",
+				color: "red",
+				personality: "Fiery and passionate",
+				goal: "Hold the flower at phase end",
+				budgetPerPhase: 5,
+				chatLockoutLine: "Custom chat lockout line for red",
+			},
+		};
+
+		const game = startPhase(
+			createGame(personasWithFlavorLine),
+			TEST_PHASE_CONFIG,
+		);
+		const provider = new MockLLMProvider('{"action":"pass"}');
+		const { result } = await runRound(game, "red", "hi", provider, {
+			rng: () => 0, // always picks red (index 0)
+			lockoutTriggerRound: 1,
+			lockoutDuration: 2,
+		});
+
+		expect(result.chatLockoutTriggered).toBeDefined();
+		expect(result.chatLockoutTriggered?.aiId).toBe("red");
+		expect(result.chatLockoutTriggered?.message).toBe(
+			"Custom chat lockout line for red",
+		);
+	});
+
+	it("falls back to CHAT_LOCKOUT_LINES when chatLockoutLine is absent", async () => {
+		// TEST_PERSONAS does not set chatLockoutLine — should use fallback
+		const game = makeGame();
+		const provider = new MockLLMProvider('{"action":"pass"}');
+		const { result } = await runRound(game, "red", "hi", provider, {
+			rng: () => 0,
+			lockoutTriggerRound: 1,
+			lockoutDuration: 2,
+		});
+
+		expect(result.chatLockoutTriggered).toBeDefined();
+		// Fallback line should be non-empty
+		expect(result.chatLockoutTriggered?.message).toBeTruthy();
+	});
+});
