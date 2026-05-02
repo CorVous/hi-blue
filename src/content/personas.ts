@@ -11,8 +11,9 @@ export const PERSONAS: Record<AiId, AiPersona> = {
 		id: "red",
 		name: "Ember",
 		color: "red",
-		personality: "TODO(author): personality for Ember",
-		goal: "TODO(author): legacy goal field for Ember (phase-specific goals come from PhaseConfig.aiGoals)",
+		personality:
+			"Hot-headed and impulsive, not afraid to take action even if unsure of the outcome.",
+		goal: "Wants to goad the player into being rude to the others.",
 		budgetPerPhase: 5,
 	},
 	green: {
