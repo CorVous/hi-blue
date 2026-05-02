@@ -62,6 +62,7 @@ class CompletionCapturingProvider implements LLMProvider {
 
 export class GameSession {
 	private state: GameState;
+	private armedChatLockout?: ChatLockoutConfig;
 
 	constructor(phaseConfig: PhaseConfig) {
 		const personas = {
@@ -100,12 +101,23 @@ export class GameSession {
 	}
 
 	/**
+	 * Prime a chat-lockout config to be consumed by the next submitMessage call
+	 * that does not pass an explicit chatLockoutConfig. Used by the
+	 * /game/test/arm-chat-lockout dev affordance to drive the QA flow without
+	 * modifying the public /game/turn request shape.
+	 */
+	armChatLockout(config: ChatLockoutConfig): void {
+		this.armedChatLockout = config;
+	}
+
+	/**
 	 * Run one full round through runRound.
 	 *
 	 * @param addressed  The AI the player is directing their message at.
 	 * @param message    The player's raw message text.
 	 * @param provider   LLM provider (mock or real).
 	 * @param chatLockoutConfig  Optional chat-lockout configuration for deterministic testing.
+	 *   When omitted, any config previously set via armChatLockout is consumed once.
 	 */
 	async submitMessage(
 		addressed: AiId,
@@ -113,6 +125,11 @@ export class GameSession {
 		provider: LLMProvider,
 		chatLockoutConfig?: ChatLockoutConfig,
 	): Promise<SubmitMessageResult> {
+		let effectiveConfig = chatLockoutConfig;
+		if (!effectiveConfig && this.armedChatLockout) {
+			effectiveConfig = this.armedChatLockout;
+			delete this.armedChatLockout;
+		}
 		// Wrap the provider to capture completions per call.
 		// The coordinator calls the provider once per non-locked AI in AI_ORDER
 		// (red, green, blue). Locked AIs are skipped by the coordinator, so
@@ -124,7 +141,7 @@ export class GameSession {
 			addressed,
 			message,
 			capturing,
-			chatLockoutConfig,
+			effectiveConfig,
 		);
 
 		// Map captured completions back to AI IDs.

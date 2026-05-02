@@ -1,4 +1,5 @@
 import { getActivePhase } from "../engine";
+import type { GameSession } from "../game-session";
 import { encodeRoundResult } from "../round-result-encoder";
 import {
 	buildSessionCookie,
@@ -118,9 +119,55 @@ export default {
 		const url = new URL(request.url);
 
 		if (url.pathname === "/") {
-			return new Response(renderChatPage(), {
-				headers: { "Content-Type": "text/html; charset=utf-8" },
-			});
+			const headers: Record<string, string> = {
+				"Content-Type": "text/html; charset=utf-8",
+			};
+
+			// ── Dev affordances on the chat page (gated on ENABLE_TEST_MODES) ──
+			// ?winImmediately=1 — replace any current session with one whose
+			//   three phases each have an always-true win condition, so each
+			//   /game/turn advances the phase and the third one ends the game.
+			// ?lockout=1        — arm a chat-lockout (red, 2 rounds) for the
+			//   next /game/turn on the active session. Drives issue #29 QA.
+			// Both query params are silently ignored in production.
+			const testModesEnabled = env.ENABLE_TEST_MODES === "1";
+			const wantsWinImmediately =
+				testModesEnabled && url.searchParams.get("winImmediately") === "1";
+			const wantsLockout =
+				testModesEnabled && url.searchParams.get("lockout") === "1";
+
+			if (wantsWinImmediately || wantsLockout) {
+				let session: GameSession;
+				if (wantsWinImmediately) {
+					// Always create a fresh session — the test phase config is
+					// fundamentally different from any existing session's, and
+					// matches the semantics of POST /game/new with testMode set.
+					const created = createSession(TEST_PHASE_CONFIG_WITH_WIN);
+					session = created.session;
+					headers["Set-Cookie"] = buildSessionCookie(created.sessionId);
+				} else {
+					const sessionId = parseSessionCookie(request.headers.get("Cookie"));
+					const existing = sessionId ? getSession(sessionId) : undefined;
+					if (existing) {
+						session = existing;
+					} else {
+						const created = createSession(DEFAULT_PHASE_CONFIG);
+						session = created.session;
+						headers["Set-Cookie"] = buildSessionCookie(created.sessionId);
+					}
+				}
+
+				if (wantsLockout) {
+					const currentRound = getActivePhase(session.getState()).round;
+					session.armChatLockout({
+						rng: () => 0,
+						lockoutTriggerRound: currentRound + 1,
+						lockoutDuration: 2,
+					});
+				}
+			}
+
+			return new Response(renderChatPage(), { headers });
 		}
 
 		// ── Dev affordance: standalone endgame screen (issue #30) ─────────────

@@ -21,24 +21,24 @@ The items below require eyes-on-screen judgement. Run the smoke worker locally (
 
 ### Live game flow — the full path
 
-- [ ] Open the smoke worker root and confirm three AI panels render and update independently as a round plays out (panels do not block each other serially) — issue #29, commit `7ff7b9a`.
-- [ ] Send a message to a specific AI and confirm the addressed AI's panel responds; the other two AIs do not receive the player message in their visible histories — issue #29, commit `7ff7b9a`.
-- [ ] Watch token streaming and confirm the word-by-word pacing reads as "the AI is talking" rather than dumping or jittering — issue #29, commit `7ff7b9a`.
-- [ ] Cross a phase boundary in a real session and confirm the action-log entry / status marker for `phase_advanced` is legible (the marker is intentionally minimal — overlay-style phase transitions are a future concern) — issue #31, commit `82c013d`.
-- [ ] Complete phase 3's win condition in a real session and confirm the chat container hides and the endgame overlay takes over **without** a URL change or page reload — issue #32, commit `91c4def`.
-- [ ] After the overlay reveals, confirm the page feels like an ending rather than a paused game (the "moment of completion" feel) — issue #32, commit `91c4def`.
-- [ ] Reload the page after the overlay has revealed and confirm the experience is acceptable (current behaviour: session resumes; if the round produces no further `game_ended` event the chat is visible again — flag this as a follow-up if it feels wrong) — issue #32, commit `91c4def`.
+- [x] Open the smoke worker root and confirm three AI panels render and update independently as a round plays out (panels do not block each other serially) — issue #29, commit `7ff7b9a`.
+- [x] Send a message to a specific AI and confirm the addressed AI's panel responds; the other two AIs do not receive the player message in their visible histories — issue #29, commit `7ff7b9a`.
+- [x] Watch token streaming and confirm the word-by-word pacing reads as "the AI is talking" rather than dumping or jittering — issue #29, commit `7ff7b9a`.
+- [x] Cross a phase boundary in a real session and confirm the action-log entry / status marker for `phase_advanced` is legible (the marker is intentionally minimal — overlay-style phase transitions are a future concern) — issue #31, commit `82c013d`.
+- [x] Complete phase 3's win condition in a real session and confirm the chat container hides and the endgame overlay takes over **without** a URL change or page reload — issue #32, commit `91c4def`.
+- [x] After the overlay reveals, confirm the page feels like an ending rather than a paused game (the "moment of completion" feel) — issue #32, commit `91c4def`.
+- [x] Reload the page after the overlay has revealed and confirm the experience is acceptable (current behaviour: session resumes; if the round produces no further `game_ended` event the chat is visible again — flag this as a follow-up if it feels wrong) — issue #32, commit `91c4def`.
 
 ### Dev `/endgame` route — layout sanity
 
-- [ ] Hit `GET /endgame` directly and confirm the endgame screen layout, copy, and button placement read correctly without any game state — issue #30, commit `d74012f`.
-- [ ] Confirm the standalone route's stub persona data does not look like real production content (it should be obviously placeholder — this route is a developer affordance) — issue #30, commit `d74012f`.
+- [x] Hit `GET /endgame` directly and confirm the endgame screen layout, copy, and button placement read correctly without any game state — issue #30, commit `d74012f`.
+- [x] Confirm the standalone route's stub persona data does not look like real production content (it should be obviously placeholder — this route is a developer affordance) — issue #30, commit `d74012f`.
 
 ### Cross-cutting
 
 - [ ] Trigger a chat lockout mid-session and confirm the disabled selector state and in-character lockout message are legible; confirm the locked AI still receives whispers and takes turns — issue #29, commit `7ff7b9a`.
 - [ ] Kill the worker mid-round (network plug substitute) and confirm the UI degrades gracefully rather than wedging — issue #29, commit `7ff7b9a`.
-- [ ] Hit the daily-cap rate guard while the new `/game/turn` endpoint is in flight and confirm the `[CAP_HIT]` short-circuit produces the same UX as the existing `/chat` route — issue #29, commit `7ff7b9a`.
+- [x] Hit the daily-cap rate guard while the new `/game/turn` endpoint is in flight and confirm the `[CAP_HIT]` short-circuit produces the same UX as the existing `/chat` route — issue #29, commit `7ff7b9a`.
 
 ## Code review (optional)
 

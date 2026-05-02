@@ -270,6 +270,7 @@ export function renderChatPage(): string {
     .ai-panel[data-ai="green"] .ai-chat-output { border: 1px solid #103a10; }
     .ai-panel[data-ai="blue"] .ai-chat-output  { border: 1px solid #101030; }
     .ai-panel.locked-out .ai-chat-output { opacity: 0.5; }
+    .ai-panel.chat-locked .ai-chat-output { opacity: 0.6; }
     .ai-panel.addressed {
       outline: 2px solid #e0e0e0;
       outline-offset: 2px;
@@ -553,12 +554,15 @@ export function renderChatPage(): string {
        */
       function setChatLockout(aiId, locked) {
         var btn = document.getElementById('select-' + aiId);
+        var panel = document.getElementById('panel-' + aiId);
         if (!btn) return;
         if (locked) {
           btn.disabled = true;
           btn.setAttribute('data-chat-locked', '1');
+          if (panel) panel.classList.add('chat-locked');
         } else {
           btn.removeAttribute('data-chat-locked');
+          if (panel) panel.classList.remove('chat-locked');
           // Only re-enable if no round is currently in flight
           if (!roundInFlight) {
             btn.disabled = false;
