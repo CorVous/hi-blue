@@ -96,18 +96,8 @@ describe("phase configs — initialWorld", () => {
 		["PHASE_1_CONFIG", PHASE_1_CONFIG],
 		["PHASE_2_CONFIG", PHASE_2_CONFIG],
 		["PHASE_3_CONFIG", PHASE_3_CONFIG],
-	] as const)("%s initialWorld has at least 2 items", (_name, cfg) => {
-		expect(cfg.initialWorld.items.length).toBeGreaterThanOrEqual(2);
-	});
-});
-
-describe("phase configs — win conditions", () => {
-	it.each([
-		["PHASE_1_CONFIG", PHASE_1_CONFIG],
-		["PHASE_2_CONFIG", PHASE_2_CONFIG],
-		["PHASE_3_CONFIG", PHASE_3_CONFIG],
-	] as const)("%s has a winCondition defined", (_name, cfg) => {
-		expect(cfg.winCondition).toBeDefined();
+	] as const)("%s initialWorld is a WorldState", (_name, cfg) => {
+		expect(Array.isArray(cfg.initialWorld.items)).toBe(true);
 	});
 });
 

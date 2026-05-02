@@ -8,8 +8,9 @@ import type { PhaseConfig } from "../types";
  *
  * Chain: PHASE_1_CONFIG → PHASE_2_CONFIG → PHASE_3_CONFIG (no next).
  *
- * Win conditions are minimal placeholders so the engine can advance phases.
- * The human author should retune these after playtesting.
+ * `initialWorld.items` is empty for now — a 5x5 grid world model is planned
+ * to replace the loose item list. `winCondition` is omitted until the grid
+ * lands; phases will not auto-advance until the human authors one.
  */
 
 export const PHASE_3_CONFIG: PhaseConfig = {
@@ -20,17 +21,8 @@ export const PHASE_3_CONFIG: PhaseConfig = {
 		green: "TODO(author): Sage's goal for phase 3",
 		blue: "TODO(author): Frost's goal for phase 3",
 	},
-	initialWorld: {
-		items: [
-			{ id: "relic", name: "TODO(author): relic item name", holder: "room" },
-			{ id: "seal", name: "TODO(author): seal item name", holder: "room" },
-			{ id: "beacon", name: "TODO(author): beacon item name", holder: "room" },
-		],
-	},
+	initialWorld: { items: [] },
 	budgetPerAi: 5,
-	// Minimal win condition: red holds the relic (author should retune)
-	winCondition: (phase) =>
-		phase.world.items.find((i) => i.id === "relic")?.holder === "red",
 };
 
 export const PHASE_2_CONFIG: PhaseConfig = {
@@ -41,17 +33,8 @@ export const PHASE_2_CONFIG: PhaseConfig = {
 		green: "TODO(author): Sage's goal for phase 2",
 		blue: "TODO(author): Frost's goal for phase 2",
 	},
-	initialWorld: {
-		items: [
-			{ id: "lens", name: "TODO(author): lens item name", holder: "room" },
-			{ id: "key", name: "TODO(author): key item name", holder: "room" },
-			{ id: "scroll", name: "TODO(author): scroll item name", holder: "room" },
-		],
-	},
+	initialWorld: { items: [] },
 	budgetPerAi: 5,
-	// Minimal win condition: blue holds the key (author should retune)
-	winCondition: (phase) =>
-		phase.world.items.find((i) => i.id === "key")?.holder === "blue",
 	nextPhaseConfig: PHASE_3_CONFIG,
 };
 
@@ -63,16 +46,7 @@ export const PHASE_1_CONFIG: PhaseConfig = {
 		green: "TODO(author): Sage's goal for phase 1",
 		blue: "TODO(author): Frost's goal for phase 1",
 	},
-	initialWorld: {
-		items: [
-			{ id: "flower", name: "TODO(author): flower item name", holder: "room" },
-			{ id: "token", name: "TODO(author): token item name", holder: "room" },
-			{ id: "map", name: "TODO(author): map item name", holder: "room" },
-		],
-	},
+	initialWorld: { items: [] },
 	budgetPerAi: 5,
-	// Minimal win condition: red holds the flower (author should retune)
-	winCondition: (phase) =>
-		phase.world.items.find((i) => i.id === "flower")?.holder === "red",
 	nextPhaseConfig: PHASE_2_CONFIG,
 };
