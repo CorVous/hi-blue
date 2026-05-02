@@ -2,7 +2,7 @@
  * Structure-only tests for src/content/.
  *
  * These tests validate that:
- * - PERSONAS has the required keys with all extended fields present.
+ * - PERSONAS has the required keys with all required fields present.
  * - PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG are correctly chained.
  * - Each phase has aiGoals, objective, and initialWorld populated.
  *
@@ -36,15 +36,6 @@ describe("PERSONAS", () => {
 		expect(p.personality).toBeTruthy();
 		expect(p.goal).toBeTruthy();
 		expect(p.budgetPerPhase).toBeGreaterThan(0);
-	});
-
-	it.each([
-		"red",
-		"green",
-		"blue",
-	] as const)("%s persona has all extended flavor fields present", (aiId) => {
-		const p = PERSONAS[aiId];
-		expect(p.budgetExhaustionLine).toBeTruthy();
 	});
 });
 

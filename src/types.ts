@@ -7,8 +7,6 @@ export interface AiPersona {
 	personality: string;
 	goal: string;
 	budgetPerPhase: number;
-	/** In-character line shown when this AI's budget is exhausted (consumed by round-coordinator). */
-	budgetExhaustionLine?: string;
 }
 
 export interface WorldItem {

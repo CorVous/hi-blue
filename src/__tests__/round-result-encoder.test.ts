@@ -20,11 +20,11 @@ import {
 	type SseEvent,
 	splitIntoWordChunks,
 } from "../round-result-encoder";
-import type { AiPersona, PhaseConfig, RoundResult } from "../types";
+import type { AiId, AiPersona, PhaseConfig, RoundResult } from "../types";
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
 
-const TEST_PERSONAS: Record<string, AiPersona> = {
+const TEST_PERSONAS: Record<AiId, AiPersona> = {
 	red: {
 		id: "red",
 		name: "Ember",
@@ -123,7 +123,7 @@ describe("encodeRoundResult — ai_start, token, ai_end sequence", () => {
 			blue: "Calculating",
 		};
 
-		const events = encodeRoundResult(result, completions, phase);
+		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
 		// Red should appear first
 		const redStart = events.findIndex(
@@ -155,7 +155,7 @@ describe("encodeRoundResult — ai_start, token, ai_end sequence", () => {
 		const result = makePassResult();
 		const completions = { red: "hello world", green: "one two", blue: "abc" };
 
-		const events = encodeRoundResult(result, completions, phase);
+		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
 		const tokenEvents = events.filter(
 			(e): e is Extract<SseEvent, { type: "token" }> => e.type === "token",
@@ -171,7 +171,7 @@ describe("encodeRoundResult — ai_start, token, ai_end sequence", () => {
 		const result = makePassResult();
 		const completions = { red: "r", green: "g", blue: "b" };
 
-		const events = encodeRoundResult(result, completions, phase);
+		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
 		expect(events.filter((e) => e.type === "ai_start")).toHaveLength(3);
 		expect(events.filter((e) => e.type === "ai_end")).toHaveLength(3);
@@ -182,7 +182,7 @@ describe("encodeRoundResult — ai_start, token, ai_end sequence", () => {
 		const result = makePassResult();
 		const completions = { red: "hello world", green: "", blue: "" };
 
-		const events = encodeRoundResult(result, completions, phase);
+		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
 		// Find red's block
 		const redStartIdx = events.findIndex(
@@ -218,7 +218,7 @@ describe("encodeRoundResult — budget events", () => {
 		const result = makePassResult();
 		const completions = { red: "r", green: "g", blue: "b" };
 
-		const events = encodeRoundResult(result, completions, phase);
+		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
 		const budgetEvents = events.filter(
 			(e): e is Extract<SseEvent, { type: "budget" }> => e.type === "budget",
@@ -240,7 +240,7 @@ describe("encodeRoundResult — budget events", () => {
 		const result = makePassResult();
 		const completions = { red: "r", green: "g", blue: "b" };
 
-		const events = encodeRoundResult(result, completions, phase);
+		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
 		const redBudget = events.find(
 			(e): e is Extract<SseEvent, { type: "budget" }> =>
@@ -259,7 +259,7 @@ describe("encodeRoundResult — lockout events (budget-exhaustion)", () => {
 		// No completion for red (budget locked)
 		const completions = { red: "", green: "g", blue: "b" };
 
-		const events = encodeRoundResult(result, completions, phase);
+		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
 		const lockout = events.find(
 			(e): e is Extract<SseEvent, { type: "lockout" }> =>
@@ -274,7 +274,7 @@ describe("encodeRoundResult — lockout events (budget-exhaustion)", () => {
 		const result = makePassResult();
 		const completions = { red: "I am speaking", green: "g", blue: "b" };
 
-		const events = encodeRoundResult(result, completions, phase);
+		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
 		// Red should have no lockout event when it has a completion
 		const redLockout = events.find(
@@ -299,7 +299,7 @@ describe("encodeRoundResult — lockout events (budget-exhaustion)", () => {
 		// Red had a completion (acted this turn) but is now locked
 		const completions = { red: "my last words", green: "g", blue: "b" };
 
-		const events = encodeRoundResult(result, completions, phase);
+		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
 		const lockoutEvent = events.find(
 			(e): e is Extract<SseEvent, { type: "lockout" }> =>
@@ -334,7 +334,7 @@ describe("encodeRoundResult — action_log events", () => {
 		});
 		const completions = { red: "r", green: "g", blue: "b" };
 
-		const events = encodeRoundResult(result, completions, phase);
+		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
 		const logEvents = events.filter(
 			(e): e is Extract<SseEvent, { type: "action_log" }> =>
@@ -362,7 +362,7 @@ describe("encodeRoundResult — action_log events", () => {
 		});
 		const completions = { red: "r", green: "g", blue: "b" };
 
-		const events = encodeRoundResult(result, completions, phase);
+		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
 		const logEvents = events.filter(
 			(e): e is Extract<SseEvent, { type: "action_log" }> =>
@@ -389,7 +389,7 @@ describe("encodeRoundResult — chat_lockout event", () => {
 		});
 		const completions = { red: "r", green: "g", blue: "b" };
 
-		const events = encodeRoundResult(result, completions, phase);
+		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
 		const lockoutEvent = events.find(
 			(e): e is Extract<SseEvent, { type: "chat_lockout" }> =>
@@ -405,7 +405,7 @@ describe("encodeRoundResult — chat_lockout event", () => {
 		const result = makePassResult(); // no chatLockoutTriggered
 		const completions = { red: "r", green: "g", blue: "b" };
 
-		const events = encodeRoundResult(result, completions, phase);
+		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
 		expect(events.find((e) => e.type === "chat_lockout")).toBeUndefined();
 	});
@@ -421,7 +421,7 @@ describe("encodeRoundResult — chat_lockout_resolved event", () => {
 		});
 		const completions = { red: "r", green: "g", blue: "b" };
 
-		const events = encodeRoundResult(result, completions, phase);
+		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
 		const resolvedEvents = events.filter(
 			(e): e is Extract<SseEvent, { type: "chat_lockout_resolved" }> =>
@@ -438,7 +438,7 @@ describe("encodeRoundResult — chat_lockout_resolved event", () => {
 		const result = makePassResult(); // no chatLockoutsResolved
 		const completions = { red: "r", green: "g", blue: "b" };
 
-		const events = encodeRoundResult(result, completions, phase);
+		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
 		expect(
 			events.find((e) => e.type === "chat_lockout_resolved"),
@@ -454,7 +454,7 @@ describe("encodeRoundResult — event ordering", () => {
 		const result = makePassResult();
 		const completions = { red: "r", green: "g", blue: "b" };
 
-		const events = encodeRoundResult(result, completions, phase);
+		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
 		const lastBudgetIdx = events.reduce(
 			(last, e, i) => (e.type === "budget" ? i : last),
@@ -474,7 +474,7 @@ describe("encodeRoundResult — event ordering", () => {
 		});
 		const completions = { red: "r", green: "g", blue: "b" };
 
-		const events = encodeRoundResult(result, completions, phase);
+		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
 		const lastActionLogIdx = events.reduce(
 			(last, e, i) => (e.type === "action_log" ? i : last),
@@ -506,7 +506,12 @@ describe("encodeRoundResult — phase_advanced event", () => {
 		const result = makePassResult({ phaseEnded: true, gameEnded: false });
 		const completions = { red: "r", green: "g", blue: "b" };
 
-		const events = encodeRoundResult(result, completions, phaseAfter);
+		const events = encodeRoundResult(
+			result,
+			completions,
+			phaseAfter,
+			TEST_PERSONAS,
+		);
 
 		const phaseEvent = events.find(
 			(e): e is Extract<SseEvent, { type: "phase_advanced" }> =>
@@ -522,7 +527,7 @@ describe("encodeRoundResult — phase_advanced event", () => {
 		const result = makePassResult({ phaseEnded: false, gameEnded: false });
 		const completions = { red: "r", green: "g", blue: "b" };
 
-		const events = encodeRoundResult(result, completions, phase);
+		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
 		expect(events.find((e) => e.type === "phase_advanced")).toBeUndefined();
 	});
@@ -532,7 +537,7 @@ describe("encodeRoundResult — phase_advanced event", () => {
 		const result = makePassResult({ phaseEnded: true, gameEnded: true });
 		const completions = { red: "r", green: "g", blue: "b" };
 
-		const events = encodeRoundResult(result, completions, phase);
+		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
 		expect(events.find((e) => e.type === "phase_advanced")).toBeUndefined();
 	});
@@ -555,7 +560,12 @@ describe("encodeRoundResult — phase_advanced event", () => {
 		});
 		const completions = { red: "r", green: "g", blue: "b" };
 
-		const events = encodeRoundResult(result, completions, phaseAfter);
+		const events = encodeRoundResult(
+			result,
+			completions,
+			phaseAfter,
+			TEST_PERSONAS,
+		);
 
 		const chatLockoutIdx = events.findIndex((e) => e.type === "chat_lockout");
 		const phaseAdvancedIdx = events.findIndex(
@@ -574,7 +584,7 @@ describe("encodeRoundResult — game_ended event", () => {
 		const result = makePassResult({ phaseEnded: true, gameEnded: true });
 		const completions = { red: "r", green: "g", blue: "b" };
 
-		const events = encodeRoundResult(result, completions, phase);
+		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
 		const gameEndedEvent = events.find((e) => e.type === "game_ended");
 		expect(gameEndedEvent).toBeDefined();
@@ -585,7 +595,7 @@ describe("encodeRoundResult — game_ended event", () => {
 		const result = makePassResult({ phaseEnded: false, gameEnded: false });
 		const completions = { red: "r", green: "g", blue: "b" };
 
-		const events = encodeRoundResult(result, completions, phase);
+		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
 		expect(events.find((e) => e.type === "game_ended")).toBeUndefined();
 	});
@@ -595,7 +605,7 @@ describe("encodeRoundResult — game_ended event", () => {
 		const result = makePassResult({ phaseEnded: true, gameEnded: true });
 		const completions = { red: "r", green: "g", blue: "b" };
 
-		const events = encodeRoundResult(result, completions, phase);
+		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
 		const lastActionLogIdx = events.reduce(
 			(last, e, i) => (e.type === "action_log" ? i : last),
@@ -611,7 +621,7 @@ describe("encodeRoundResult — game_ended event", () => {
 		const result = makePassResult({ phaseEnded: true, gameEnded: true });
 		const completions = { red: "r", green: "g", blue: "b" };
 
-		const events = encodeRoundResult(result, completions, phase);
+		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
 		expect(events.find((e) => e.type === "game_ended")).toBeDefined();
 		expect(events.find((e) => e.type === "phase_advanced")).toBeUndefined();
@@ -626,7 +636,7 @@ describe("encodeRoundResult — token pacing", () => {
 		const result = makePassResult();
 		const completions = { red: "one two three", green: "g", blue: "b" };
 
-		const events = encodeRoundResult(result, completions, phase);
+		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
 		const tokenEvents = events.filter(
 			(e): e is Extract<SseEvent, { type: "token" }> => e.type === "token",
@@ -645,7 +655,7 @@ describe("encodeRoundResult — token pacing", () => {
 		const result = makePassResult();
 		const completions = { red: "hello", green: "world", blue: "frost" };
 
-		const events = encodeRoundResult(result, completions, phase);
+		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
 		const tokenEvents = events.filter(
 			(e): e is Extract<SseEvent, { type: "token" }> => e.type === "token",

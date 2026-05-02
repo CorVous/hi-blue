@@ -37,13 +37,6 @@ import type {
 
 const AI_ORDER: AiId[] = ["red", "green", "blue"];
 
-/** Placeholder in-character lines shown when an AI is locked out (budget). */
-const LOCKOUT_LINES: Record<AiId, string> = {
-	red: "…I've said all I can say for now. The fire in me has burned low.",
-	green: "…I must sit quietly. There is nothing more I can offer this phase.",
-	blue: "…My calculations are complete. I will not speak further.",
-};
-
 /**
  * Configuration for the mid-phase chat-lockout event.
  *
@@ -186,11 +179,10 @@ export async function runRound(
 	// 2. Each AI acts in turn
 	for (const aiId of AI_ORDER) {
 		if (isAiLockedOut(state, aiId)) {
-			// Emit in-character lockout line — no LLM call, no budget deduction.
+			// Emit lockout line — no LLM call, no budget deduction.
 			// Use getActivePhase(state).round for consistency with dispatchAiTurn,
 			// which also reads the pre-advance phase.round value.
-			const lockoutContent =
-				state.personas[aiId].budgetExhaustionLine ?? LOCKOUT_LINES[aiId];
+			const lockoutContent = `${state.personas[aiId].name} is unresponsive…`;
 			state = appendChat(state, aiId, {
 				role: "ai",
 				content: lockoutContent,

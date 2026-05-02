@@ -268,7 +268,12 @@ export default {
 						);
 
 						const phaseAfter = getActivePhase(capturedSession.getState());
-						const events = encodeRoundResult(result, completions, phaseAfter);
+						const events = encodeRoundResult(
+							result,
+							completions,
+							phaseAfter,
+							capturedSession.getState().personas,
+						);
 
 						let speakingAi: AiId | null = null;
 						for (const event of events) {

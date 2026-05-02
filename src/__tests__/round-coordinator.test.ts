@@ -878,29 +878,11 @@ describe("phase progression — three-phase walk", () => {
 });
 
 // ----------------------------------------------------------------------------
-// Persona flavor lines (issue #18)
+// Generic '<name> is unresponsive…' lockout messages (issue #18)
 // ----------------------------------------------------------------------------
-describe("persona flavor lines", () => {
-	it("uses persona budgetExhaustionLine when present instead of fallback", async () => {
-		// Build personas with a custom budgetExhaustionLine for red
-		const personasWithFlavorLine: Record<string, AiPersona> = {
-			...TEST_PERSONAS,
-			red: {
-				id: "red",
-				name: "Ember",
-				color: "red",
-				personality: "Fiery and passionate",
-				goal: "Hold the flower at phase end",
-				budgetPerPhase: 5,
-				budgetExhaustionLine: "Custom exhaustion line for red",
-			},
-		};
-
-		let game = startPhase(
-			createGame(personasWithFlavorLine),
-			TEST_PHASE_CONFIG,
-		);
-		// Exhaust red's budget
+describe("lockout messages", () => {
+	it("budget-exhaustion lockout chat message is '<name> is unresponsive…'", async () => {
+		let game = makeGame();
 		for (let i = 0; i < 5; i++) {
 			game = deductBudget(game, "red");
 		}
@@ -911,27 +893,11 @@ describe("persona flavor lines", () => {
 
 		const redHistory = getActivePhase(nextState).chatHistories.red;
 		const lastMessage = redHistory[redHistory.length - 1];
-		expect(lastMessage?.content).toBe("Custom exhaustion line for red");
-	});
-
-	it("falls back to LOCKOUT_LINES when budgetExhaustionLine is absent", async () => {
-		// TEST_PERSONAS does not set budgetExhaustionLine — should use fallback
-		let game = makeGame();
-		for (let i = 0; i < 5; i++) {
-			game = deductBudget(game, "red");
-		}
-
-		const provider = new MockLLMProvider('{"action":"pass"}');
-		const { nextState } = await runRound(game, "green", "hi", provider);
-
-		const redHistory = getActivePhase(nextState).chatHistories.red;
-		const lastMessage = redHistory[redHistory.length - 1];
-		// Should still emit a non-empty in-character line (the fallback)
-		expect(lastMessage?.content).toBeTruthy();
 		expect(lastMessage?.role).toBe("ai");
+		expect(lastMessage?.content).toBe("Ember is unresponsive…");
 	});
 
-	it("chat lockout message is the generic '<name> is unresponsive…' line", async () => {
+	it("chat-lockout message is '<name> is unresponsive…'", async () => {
 		const game = makeGame();
 		const provider = new MockLLMProvider('{"action":"pass"}');
 		const { result } = await runRound(game, "red", "hi", provider, {
