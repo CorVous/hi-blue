@@ -1,10 +1,12 @@
 import type { PhaseConfig } from "../types";
+import { PHASE_GOAL_POOL } from "./goal-pool";
 
 /**
  * Canonical phase configurations for the three-phase game.
  *
- * All prose fields are TODO(author) placeholders — the human author will
- * replace these after the scaffolding is merged.
+ * Per-phase goals are drawn at phase start from the shared `PHASE_GOAL_POOL`.
+ * Personalities (and the persona-level cross-game goal) live in `personas.ts`
+ * and are stable across all three phases.
  *
  * Chain: PHASE_1_CONFIG → PHASE_2_CONFIG → PHASE_3_CONFIG (no next).
  *
@@ -16,11 +18,7 @@ import type { PhaseConfig } from "../types";
 export const PHASE_3_CONFIG: PhaseConfig = {
 	phaseNumber: 3,
 	objective: "get the key in the keyhole",
-	aiGoals: {
-		red: "TODO(author): Ember's goal for phase 3",
-		green: "TODO(author): Sage's goal for phase 3",
-		blue: "TODO(author): Frost's goal for phase 3",
-	},
+	aiGoalPool: PHASE_GOAL_POOL,
 	initialWorld: { items: [] },
 	budgetPerAi: 5,
 };
@@ -28,11 +26,7 @@ export const PHASE_3_CONFIG: PhaseConfig = {
 export const PHASE_2_CONFIG: PhaseConfig = {
 	phaseNumber: 2,
 	objective: "get the key in the keyhole",
-	aiGoals: {
-		red: "TODO(author): Ember's goal for phase 2",
-		green: "TODO(author): Sage's goal for phase 2",
-		blue: "TODO(author): Frost's goal for phase 2",
-	},
+	aiGoalPool: PHASE_GOAL_POOL,
 	initialWorld: { items: [] },
 	budgetPerAi: 5,
 	nextPhaseConfig: PHASE_3_CONFIG,
@@ -41,11 +35,7 @@ export const PHASE_2_CONFIG: PhaseConfig = {
 export const PHASE_1_CONFIG: PhaseConfig = {
 	phaseNumber: 1,
 	objective: "get the key in the keyhole",
-	aiGoals: {
-		red: "TODO(author): Ember's goal for phase 1",
-		green: "TODO(author): Sage's goal for phase 1",
-		blue: "TODO(author): Frost's goal for phase 1",
-	},
+	aiGoalPool: PHASE_GOAL_POOL,
 	initialWorld: { items: [] },
 	budgetPerAi: 5,
 	nextPhaseConfig: PHASE_2_CONFIG,

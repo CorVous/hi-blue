@@ -10,6 +10,31 @@ import type {
 	WhisperMessage,
 } from "./types";
 
+/**
+ * Resolve the per-AI goals for a phase. If `config.aiGoals` is provided, use
+ * it directly; otherwise draw three independent goals (with replacement) from
+ * `config.aiGoalPool`.
+ */
+function resolveAiGoals(
+	config: PhaseConfig,
+	rng: () => number,
+): Record<AiId, string> {
+	if (config.aiGoals) return { ...config.aiGoals };
+	const pool = config.aiGoalPool;
+	if (!pool || pool.length === 0) {
+		throw new Error(
+			"PhaseConfig must provide either aiGoals or a non-empty aiGoalPool",
+		);
+	}
+	const draw = (): string => {
+		const idx = Math.floor(rng() * pool.length);
+		// `pool` is non-empty and idx is in [0, pool.length); the bang is safe.
+		// biome-ignore lint/style/noNonNullAssertion: bounded index into non-empty array
+		return pool[idx]!;
+	};
+	return { red: draw(), green: draw(), blue: draw() };
+}
+
 export function updateActivePhase(
 	game: GameState,
 	updater: (phase: PhaseState) => PhaseState,
@@ -30,7 +55,11 @@ export function createGame(personas: Record<string, AiPersona>): GameState {
 	};
 }
 
-export function startPhase(game: GameState, config: PhaseConfig): GameState {
+export function startPhase(
+	game: GameState,
+	config: PhaseConfig,
+	rng: () => number = Math.random,
+): GameState {
 	const budgets: Record<AiId, AiBudget> = {
 		red: { remaining: config.budgetPerAi, total: config.budgetPerAi },
 		green: { remaining: config.budgetPerAi, total: config.budgetPerAi },
@@ -43,10 +72,12 @@ export function startPhase(game: GameState, config: PhaseConfig): GameState {
 		blue: [],
 	};
 
+	const aiGoals = resolveAiGoals(config, rng);
+
 	const phase: PhaseState = {
 		phaseNumber: config.phaseNumber,
 		objective: config.objective,
-		aiGoals: { ...config.aiGoals },
+		aiGoals,
 		round: 0,
 		world: structuredClone(config.initialWorld),
 		budgets,

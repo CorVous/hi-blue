@@ -793,7 +793,11 @@ describe("phase progression — three-phase walk", () => {
 		const phase3Config: PhaseConfig = {
 			phaseNumber: 3,
 			objective: "Phase 3",
-			aiGoals: TEST_PHASE_CONFIG.aiGoals,
+			aiGoals: {
+				red: "Hold the flower at phase end",
+				green: "Ensure items are evenly distributed",
+				blue: "Hold the key at phase end",
+			},
 			initialWorld: {
 				items: [
 					{ id: "flower", name: "flower", holder: "room" },
@@ -807,7 +811,11 @@ describe("phase progression — three-phase walk", () => {
 		const phase2Config: PhaseConfig = {
 			phaseNumber: 2,
 			objective: "Phase 2",
-			aiGoals: TEST_PHASE_CONFIG.aiGoals,
+			aiGoals: {
+				red: "Hold the flower at phase end",
+				green: "Ensure items are evenly distributed",
+				blue: "Hold the key at phase end",
+			},
 			initialWorld: {
 				items: [
 					{ id: "flower", name: "flower", holder: "room" },

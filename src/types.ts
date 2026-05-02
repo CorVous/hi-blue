@@ -62,7 +62,19 @@ export type WinCondition = (phase: PhaseState) => boolean;
 export interface PhaseConfig {
 	phaseNumber: 1 | 2 | 3;
 	objective: string;
-	aiGoals: Record<AiId, string>;
+	/**
+	 * Pre-assigned per-AI goals. If provided, used as-is.
+	 * If absent, `aiGoalPool` must be provided and `startPhase` will randomly
+	 * draw one goal per AI from the pool (independent draws — same goal can
+	 * be assigned to multiple AIs in one phase).
+	 */
+	aiGoals?: Record<AiId, string>;
+	/**
+	 * Optional pool of candidate goals. Used when `aiGoals` is not provided.
+	 * Must contain at least one entry. `startPhase` performs three independent
+	 * uniform draws (with replacement) — one per AI — at phase start.
+	 */
+	aiGoalPool?: string[];
 	initialWorld: WorldState;
 	budgetPerAi: number;
 	/** Optional win condition. If absent, the phase never auto-advances. */

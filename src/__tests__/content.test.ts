@@ -15,6 +15,7 @@ import {
 	PHASE_1_CONFIG,
 	PHASE_2_CONFIG,
 	PHASE_3_CONFIG,
+	PHASE_GOAL_POOL,
 } from "../content";
 
 // ── Personas ──────────────────────────────────────────────────────────────────
@@ -79,15 +80,26 @@ describe("phase configs — objectives", () => {
 	});
 });
 
-describe("phase configs — aiGoals", () => {
+describe("phase configs — aiGoalPool", () => {
 	it.each([
 		["PHASE_1_CONFIG", PHASE_1_CONFIG],
 		["PHASE_2_CONFIG", PHASE_2_CONFIG],
 		["PHASE_3_CONFIG", PHASE_3_CONFIG],
-	] as const)("%s has truthy aiGoals for red, green, blue", (_name, cfg) => {
-		expect(cfg.aiGoals.red).toBeTruthy();
-		expect(cfg.aiGoals.green).toBeTruthy();
-		expect(cfg.aiGoals.blue).toBeTruthy();
+	] as const)("%s references the shared PHASE_GOAL_POOL", (_name, cfg) => {
+		expect(cfg.aiGoalPool).toBe(PHASE_GOAL_POOL);
+	});
+});
+
+describe("PHASE_GOAL_POOL", () => {
+	it("contains at least one goal", () => {
+		expect(PHASE_GOAL_POOL.length).toBeGreaterThanOrEqual(1);
+	});
+
+	it("every entry is a non-empty string", () => {
+		for (const goal of PHASE_GOAL_POOL) {
+			expect(typeof goal).toBe("string");
+			expect(goal.length).toBeGreaterThan(0);
+		}
 	});
 });
 
@@ -113,10 +125,11 @@ describe("acceptance-criteria counts", () => {
 		expect(phases).toHaveLength(3);
 	});
 
-	it("9 aiGoals total (3 per phase × 3 phases)", () => {
+	it("all 3 phases share the global PHASE_GOAL_POOL (per-AI goals drawn at phase start)", () => {
 		const phases = [PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG];
-		const totalGoals = phases.flatMap((p) => Object.values(p.aiGoals)).length;
-		expect(totalGoals).toBe(9);
+		for (const p of phases) {
+			expect(p.aiGoalPool).toBe(PHASE_GOAL_POOL);
+		}
 	});
 
 	it("3 objectives", () => {

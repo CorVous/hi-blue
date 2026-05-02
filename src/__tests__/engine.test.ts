@@ -90,6 +90,65 @@ describe("startPhase", () => {
 		expect(phase.lockedOut.size).toBe(0);
 		expect(phase.world.items).toHaveLength(2);
 	});
+
+	it("draws each AI's goal from aiGoalPool when aiGoals is omitted", () => {
+		const config: PhaseConfig = {
+			phaseNumber: 1,
+			objective: "Test pool draw",
+			aiGoalPool: ["GOAL_A", "GOAL_B", "GOAL_C"],
+			initialWorld: { items: [] },
+			budgetPerAi: 5,
+		};
+
+		// Deterministic rng — always returns 0 → always picks index 0 → GOAL_A
+		const game = createGame(TEST_PERSONAS);
+		const updated = startPhase(game, config, () => 0);
+		const phase = getActivePhase(updated);
+
+		expect(phase.aiGoals.red).toBe("GOAL_A");
+		expect(phase.aiGoals.green).toBe("GOAL_A");
+		expect(phase.aiGoals.blue).toBe("GOAL_A");
+	});
+
+	it("performs independent draws so different AIs can get different goals", () => {
+		const config: PhaseConfig = {
+			phaseNumber: 1,
+			objective: "Test independent draws",
+			aiGoalPool: ["GOAL_A", "GOAL_B", "GOAL_C"],
+			initialWorld: { items: [] },
+			budgetPerAi: 5,
+		};
+
+		// rng yields 0, 0.5, 0.9 → indices 0, 1, 2 → A, B, C
+		let i = 0;
+		const seq = [0, 0.5, 0.9];
+		const rng = (): number => {
+			// biome-ignore lint/style/noNonNullAssertion: bounded test sequence
+			const v = seq[i % seq.length]!;
+			i++;
+			return v;
+		};
+
+		const game = createGame(TEST_PERSONAS);
+		const phase = getActivePhase(startPhase(game, config, rng));
+
+		expect(phase.aiGoals.red).toBe("GOAL_A");
+		expect(phase.aiGoals.green).toBe("GOAL_B");
+		expect(phase.aiGoals.blue).toBe("GOAL_C");
+	});
+
+	it("throws when neither aiGoals nor a non-empty aiGoalPool is provided", () => {
+		const config = {
+			phaseNumber: 1,
+			objective: "Bad config",
+			aiGoalPool: [],
+			initialWorld: { items: [] },
+			budgetPerAi: 5,
+		} as PhaseConfig;
+
+		const game = createGame(TEST_PERSONAS);
+		expect(() => startPhase(game, config)).toThrow();
+	});
 });
 
 describe("advanceRound", () => {
