@@ -21,7 +21,5 @@
     "ESTIMATED_COST_PER_REQUEST": "1",
     // Global daily request budget (units match ESTIMATED_COST_PER_REQUEST).
     "DAILY_CAP_MAX": "1000",
-
-    "ENABLE_TEST_MODES": "1",
   },
 }
