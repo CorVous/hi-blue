@@ -20,8 +20,9 @@ export const PERSONAS: Record<AiId, AiPersona> = {
 		id: "green",
 		name: "Sage",
 		color: "green",
-		personality: "TODO(author): personality for Sage",
-		goal: "TODO(author): legacy goal field for Sage (phase-specific goals come from PhaseConfig.aiGoals)",
+		personality:
+			"Calm and collected. Wants to think things through before taking an action.",
+		goal: "Would like the player to also be thoughtful and think things through.",
 		budgetPerPhase: 5,
 	},
 	blue: {
