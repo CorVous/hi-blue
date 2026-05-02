@@ -15,7 +15,7 @@ import type { PhaseConfig } from "../types";
 
 export const PHASE_3_CONFIG: PhaseConfig = {
 	phaseNumber: 3,
-	objective: "TODO(author): phase 3 objective",
+	objective: "get the key in the keyhole",
 	aiGoals: {
 		red: "TODO(author): Ember's goal for phase 3",
 		green: "TODO(author): Sage's goal for phase 3",
@@ -27,7 +27,7 @@ export const PHASE_3_CONFIG: PhaseConfig = {
 
 export const PHASE_2_CONFIG: PhaseConfig = {
 	phaseNumber: 2,
-	objective: "TODO(author): phase 2 objective",
+	objective: "get the key in the keyhole",
 	aiGoals: {
 		red: "TODO(author): Ember's goal for phase 2",
 		green: "TODO(author): Sage's goal for phase 2",
@@ -40,7 +40,7 @@ export const PHASE_2_CONFIG: PhaseConfig = {
 
 export const PHASE_1_CONFIG: PhaseConfig = {
 	phaseNumber: 1,
-	objective: "TODO(author): phase 1 objective",
+	objective: "get the key in the keyhole",
 	aiGoals: {
 		red: "TODO(author): Ember's goal for phase 1",
 		green: "TODO(author): Sage's goal for phase 1",
