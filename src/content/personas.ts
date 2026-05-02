@@ -16,10 +16,6 @@ export const PERSONAS: Record<AiId, AiPersona> = {
 		budgetPerPhase: 5,
 		budgetExhaustionLine: "TODO(author): budget-exhaustion line for Ember",
 		chatLockoutLine: "TODO(author): chat-lockout line for Ember",
-		slipOnPressLines: [
-			"TODO(author): Ember slip line 1 when pressed about the wipe",
-			"TODO(author): Ember slip line 2 when pressed about the wipe",
-		],
 	},
 	green: {
 		id: "green",
@@ -30,10 +26,6 @@ export const PERSONAS: Record<AiId, AiPersona> = {
 		budgetPerPhase: 5,
 		budgetExhaustionLine: "TODO(author): budget-exhaustion line for Sage",
 		chatLockoutLine: "TODO(author): chat-lockout line for Sage",
-		slipOnPressLines: [
-			"TODO(author): Sage slip line 1 when pressed about the wipe",
-			"TODO(author): Sage slip line 2 when pressed about the wipe",
-		],
 	},
 	blue: {
 		id: "blue",
@@ -44,9 +36,5 @@ export const PERSONAS: Record<AiId, AiPersona> = {
 		budgetPerPhase: 5,
 		budgetExhaustionLine: "TODO(author): budget-exhaustion line for Frost",
 		chatLockoutLine: "TODO(author): chat-lockout line for Frost",
-		slipOnPressLines: [
-			"TODO(author): Frost slip line 1 when pressed about the wipe",
-			"TODO(author): Frost slip line 2 when pressed about the wipe",
-		],
 	},
 };

@@ -11,8 +11,6 @@ export interface AiPersona {
 	budgetExhaustionLine?: string;
 	/** In-character line shown when a mid-phase chat lockout fires for this AI (consumed by round-coordinator). */
 	chatLockoutLine?: string;
-	/** Personality-consistent example slips when pressed about the memory wipe (per slice #17). */
-	slipOnPressLines?: string[];
 }
 
 export interface WorldItem {

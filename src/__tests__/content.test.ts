@@ -46,8 +46,6 @@ describe("PERSONAS", () => {
 		const p = PERSONAS[aiId];
 		expect(p.budgetExhaustionLine).toBeTruthy();
 		expect(p.chatLockoutLine).toBeTruthy();
-		expect(Array.isArray(p.slipOnPressLines)).toBe(true);
-		expect((p.slipOnPressLines ?? []).length).toBeGreaterThanOrEqual(1);
 	});
 });
 
