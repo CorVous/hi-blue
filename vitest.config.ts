@@ -15,7 +15,16 @@ export default defineConfig({
 			},
 			{
 				extends: true,
-				plugins: [cloudflareTest({ main: "./src/proxy/_smoke.ts" })],
+				plugins: [
+					cloudflareTest({
+						main: "./src/proxy/_smoke.ts",
+						configPath: "./wrangler.jsonc",
+						miniflare: {
+							kvNamespaces: ["RATE_GUARD_KV"],
+							bindings: { ENABLE_TEST_MODES: "1", TOKEN_PACE_MS: "0" },
+						},
+					}),
+				],
 				test: {
 					name: "workers",
 					include: ["src/proxy/**/*.test.ts"],

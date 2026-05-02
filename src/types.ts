@@ -53,12 +53,22 @@ export interface AiBudget {
 	total: number;
 }
 
+/**
+ * A win condition for a phase.
+ * Receives the active PhaseState and returns true when the phase objective is met.
+ */
+export type WinCondition = (phase: PhaseState) => boolean;
+
 export interface PhaseConfig {
 	phaseNumber: 1 | 2 | 3;
 	objective: string;
 	aiGoals: Record<AiId, string>;
 	initialWorld: WorldState;
 	budgetPerAi: number;
+	/** Optional win condition. If absent, the phase never auto-advances. */
+	winCondition?: WinCondition;
+	/** Config for the next phase. Required when winCondition may fire. */
+	nextPhaseConfig?: PhaseConfig;
 }
 
 export interface PhaseState {
@@ -71,7 +81,20 @@ export interface PhaseState {
 	chatHistories: Record<AiId, ChatMessage[]>;
 	whispers: WhisperMessage[];
 	actionLog: ActionLogEntry[];
+	/** Budget-exhaustion lockout: prevents the AI from acting at all. */
 	lockedOut: Set<AiId>;
+	/**
+	 * Player-chat lockout: maps an AI's id to the round number at which the
+	 * lockout resolves (resolves when phase.round >= resolveAtRound).
+	 * While active the player cannot address messages to that AI; the AI
+	 * continues to receive whispers, take turns, and call tools normally.
+	 * Semantically distinct from `lockedOut` (budget-exhaustion).
+	 */
+	chatLockouts: Map<AiId, number>;
+	/** Win condition carried from PhaseConfig so the coordinator can check it. */
+	winCondition?: WinCondition;
+	/** Next phase config carried from PhaseConfig so the coordinator can advance. */
+	nextPhaseConfig?: PhaseConfig;
 }
 
 export interface GameState {
@@ -107,4 +130,14 @@ export interface RoundResult {
 	actions: ActionLogEntry[];
 	phaseEnded: boolean;
 	gameEnded: boolean;
+	/**
+	 * Set when a chat lockout was triggered this round.
+	 * Contains the AI that was locked out and the in-character message to show.
+	 */
+	chatLockoutTriggered?: { aiId: AiId; message: string };
+	/**
+	 * List of AI ids whose chat lockouts resolved (expired) at the end of this
+	 * round. Empty / undefined when nothing resolved.
+	 */
+	chatLockoutsResolved?: AiId[];
 }

@@ -54,6 +54,13 @@ export function startPhase(game: GameState, config: PhaseConfig): GameState {
 		whispers: [],
 		actionLog: [],
 		lockedOut: new Set(),
+		chatLockouts: new Map(),
+		...(config.winCondition !== undefined
+			? { winCondition: config.winCondition }
+			: {}),
+		...(config.nextPhaseConfig !== undefined
+			? { nextPhaseConfig: config.nextPhaseConfig }
+			: {}),
 	};
 
 	return {
@@ -142,4 +149,57 @@ export function advancePhase(
 	}
 
 	return startPhase(game, nextConfig);
+}
+
+/**
+ * Trigger a player-chat lockout for the given AI.
+ *
+ * @param resolveAtRound  The round number at which the lockout expires.
+ *   The lockout is active while `phase.round < resolveAtRound`.
+ *   It resolves (is removed) when `phase.round >= resolveAtRound`.
+ */
+export function triggerChatLockout(
+	game: GameState,
+	aiId: AiId,
+	resolveAtRound: number,
+): GameState {
+	return updateActivePhase(game, (phase) => {
+		const chatLockouts = new Map(phase.chatLockouts);
+		chatLockouts.set(aiId, resolveAtRound);
+		return { ...phase, chatLockouts };
+	});
+}
+
+/**
+ * Returns true when the player's chat channel to the given AI is currently
+ * locked out (i.e. `phase.chatLockouts` has an entry for `aiId` that has
+ * not yet expired).
+ *
+ * Distinct from `isAiLockedOut` (budget-exhaustion): a chat-locked AI still
+ * takes turns, whispers, and calls tools.
+ */
+export function isPlayerChatLockedOut(game: GameState, aiId: AiId): boolean {
+	const phase = getActivePhase(game);
+	const resolveAtRound = phase.chatLockouts.get(aiId);
+	if (resolveAtRound === undefined) return false;
+	return phase.round < resolveAtRound;
+}
+
+/**
+ * Remove all chat lockouts whose `resolveAtRound` has been reached
+ * (i.e. `phase.round >= resolveAtRound`).
+ *
+ * Call this after `advanceRound` so that a lockout set to resolve at round N
+ * is cleared when `phase.round === N`.
+ */
+export function resolveChatLockouts(game: GameState): GameState {
+	return updateActivePhase(game, (phase) => {
+		const chatLockouts = new Map<AiId, number>();
+		for (const [aiId, resolveAtRound] of phase.chatLockouts) {
+			if (phase.round < resolveAtRound) {
+				chatLockouts.set(aiId, resolveAtRound);
+			}
+		}
+		return { ...phase, chatLockouts };
+	});
 }
