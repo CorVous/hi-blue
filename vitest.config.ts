@@ -28,6 +28,7 @@ export default defineConfig({
 								PER_IP_DAILY_TOKEN_MAX: "20000",
 								GLOBAL_DAILY_TOKEN_MAX: "1000000",
 								PRE_CHARGE_ESTIMATE: "4000",
+								ALLOWED_ORIGINS: "https://app.example,http://localhost:5173",
 							},
 						},
 					}),
