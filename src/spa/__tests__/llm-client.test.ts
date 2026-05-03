@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+	CapHitError,
 	PERSONA_PLACEHOLDER,
+	parseCapHitFromResponse,
 	resolveLLMTarget,
 	streamChat,
 } from "../llm-client.js";
@@ -33,6 +35,23 @@ function makeFetchResponse(
 		status: ok ? 200 : 500,
 		statusText: ok ? "OK" : "Internal Server Error",
 		body,
+		headers: { get: () => null },
+	} as unknown as Response;
+}
+
+function make429Response(
+	body: unknown,
+	retryAfter: string | null = null,
+): Response {
+	return {
+		ok: false,
+		status: 429,
+		statusText: "Too Many Requests",
+		headers: {
+			get: (name: string) =>
+				name.toLowerCase() === "retry-after" ? retryAfter : null,
+		},
+		json: () => Promise.resolve(body),
 	} as unknown as Response;
 }
 
@@ -90,6 +109,88 @@ describe("resolveLLMTarget", () => {
 
 		expect(result?.url).toBe(WORKER_COMPLETIONS_URL);
 		expect(result?.headers).not.toHaveProperty("Authorization");
+	});
+});
+
+describe("parseCapHitFromResponse", () => {
+	it("returns null for non-429 response", async () => {
+		const response = {
+			status: 200,
+			headers: { get: () => null },
+		} as unknown as Response;
+		await expect(parseCapHitFromResponse(response)).resolves.toBeNull();
+	});
+
+	it("returns CapHitError with per-ip-daily reason", async () => {
+		const response = make429Response({
+			error: {
+				message: "daily cap hit",
+				type: "rate_limit_exceeded",
+				code: "per-ip-daily",
+			},
+		});
+		const err = await parseCapHitFromResponse(response);
+		expect(err).toBeInstanceOf(CapHitError);
+		expect(err?.reason).toBe("per-ip-daily");
+		expect(err?.message).toBe("daily cap hit");
+		expect(err?.status).toBe(429);
+		expect(err?.retryAfterSec).toBeNull();
+	});
+
+	it("returns CapHitError with global-daily reason", async () => {
+		const response = make429Response({
+			error: {
+				message: "global cap hit",
+				type: "rate_limit_exceeded",
+				code: "global-daily",
+			},
+		});
+		const err = await parseCapHitFromResponse(response);
+		expect(err).toBeInstanceOf(CapHitError);
+		expect(err?.reason).toBe("global-daily");
+	});
+
+	it("parses Retry-After header into retryAfterSec", async () => {
+		const response = make429Response(
+			{
+				error: {
+					message: "cap hit",
+					type: "rate_limit_exceeded",
+					code: "per-ip-daily",
+				},
+			},
+			"3600",
+		);
+		const err = await parseCapHitFromResponse(response);
+		expect(err?.retryAfterSec).toBe(3600);
+	});
+
+	it("falls back to reason:unknown when body is malformed JSON", async () => {
+		const response: Response = {
+			ok: false,
+			status: 429,
+			statusText: "Too Many Requests",
+			headers: { get: () => null },
+			json: () => Promise.reject(new SyntaxError("bad json")),
+		} as unknown as Response;
+		const err = await parseCapHitFromResponse(response);
+		expect(err).toBeInstanceOf(CapHitError);
+		expect(err?.reason).toBe("unknown");
+		expect(err?.retryAfterSec).toBeNull();
+	});
+
+	it("falls back to reason:unknown when 429 body lacks rate_limit_exceeded type", async () => {
+		const response = make429Response({ error: { type: "other_error" } });
+		const err = await parseCapHitFromResponse(response);
+		expect(err).toBeInstanceOf(CapHitError);
+		expect(err?.reason).toBe("unknown");
+	});
+
+	it("falls back to reason:unknown when 429 body has no error field", async () => {
+		const response = make429Response({ message: "too many requests" });
+		const err = await parseCapHitFromResponse(response);
+		expect(err).toBeInstanceOf(CapHitError);
+		expect(err?.reason).toBe("unknown");
 	});
 });
 
@@ -182,6 +283,70 @@ describe("streamChat", () => {
 	});
 
 	it("throws on non-ok response with HTTP status", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValue(makeFetchResponse(makeSSEStream([]), false)),
+		);
+		vi.stubGlobal("localStorage", {
+			getItem: vi.fn().mockReturnValue(null),
+		});
+
+		await expect(
+			streamChat({ message: "test", onDelta: vi.fn() }),
+		).rejects.toThrow(/HTTP 500/);
+	});
+
+	it("throws CapHitError when fetch returns 429 with rate_limit_exceeded body", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValue(
+				make429Response(
+					{
+						error: {
+							message: "per-ip cap hit",
+							type: "rate_limit_exceeded",
+							code: "per-ip-daily",
+						},
+					},
+					"86400",
+				),
+			),
+		);
+		vi.stubGlobal("localStorage", {
+			getItem: vi.fn().mockReturnValue(null),
+		});
+
+		const err = await streamChat({ message: "test", onDelta: vi.fn() }).catch(
+			(e: unknown) => e,
+		);
+		expect(err).toBeInstanceOf(CapHitError);
+		const capErr = err as CapHitError;
+		expect(capErr.reason).toBe("per-ip-daily");
+		expect(capErr.retryAfterSec).toBe(86400);
+		expect(capErr.status).toBe(429);
+	});
+
+	it("throws CapHitError with reason:unknown when 429 body is malformed", async () => {
+		const response: Response = {
+			ok: false,
+			status: 429,
+			statusText: "Too Many Requests",
+			headers: { get: () => null },
+			json: () => Promise.reject(new SyntaxError("bad json")),
+		} as unknown as Response;
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+		vi.stubGlobal("localStorage", {
+			getItem: vi.fn().mockReturnValue(null),
+		});
+
+		const err = await streamChat({ message: "test", onDelta: vi.fn() }).catch(
+			(e: unknown) => e,
+		);
+		expect(err).toBeInstanceOf(CapHitError);
+		expect((err as CapHitError).reason).toBe("unknown");
+	});
+
+	it("still throws generic HTTP error for non-429 failures", async () => {
 		vi.stubGlobal(
 			"fetch",
 			vi.fn().mockResolvedValue(makeFetchResponse(makeSSEStream([]), false)),

@@ -11,6 +11,12 @@ const INDEX_BODY_HTML = `
     <button id="send" type="submit">Send</button>
   </form>
   <pre id="output"></pre>
+  <section id="cap-hit" hidden>
+    <h2>the AIs are sleeping</h2>
+    <pre class="cap-hit-body">the AIs are sleeping.
+come back tomorrow — they wake at midnight UTC.</pre>
+    <p class="cap-hit-byok"><a href="#/byok" data-byok-placeholder>or paste your own OpenRouter key to keep playing — coming soon.</a></p>
+  </section>
 </main>
 <script type="module" src="./assets/index.js"></script>
 `;
@@ -169,5 +175,155 @@ describe("renderHome (home route)", () => {
 
 		expect(promptInput.value).toBe("");
 		expect(outputEl.textContent).toBe("");
+	});
+
+	it("reveals #cap-hit section when fetch returns 429", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValue({
+				ok: false,
+				status: 429,
+				statusText: "Too Many Requests",
+				headers: {
+					get: (name: string) =>
+						name.toLowerCase() === "retry-after" ? "86400" : null,
+				},
+				json: () =>
+					Promise.resolve({
+						error: {
+							message: "per-ip cap hit",
+							type: "rate_limit_exceeded",
+							code: "per-ip-daily",
+						},
+					}),
+			}),
+		);
+
+		vi.resetModules();
+		const { renderHome } = await import("../routes/home.js");
+		renderHome(getEl<HTMLElement>("main"));
+
+		const form = getEl<HTMLFormElement>("#composer");
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		promptInput.value = "hello";
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+
+		await new Promise((resolve) => setTimeout(resolve, 50));
+
+		const capHitEl = getEl<HTMLElement>("#cap-hit");
+		expect(capHitEl.hidden).toBe(false);
+	});
+
+	it("re-enables send button after 429", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValue({
+				ok: false,
+				status: 429,
+				statusText: "Too Many Requests",
+				headers: { get: () => null },
+				json: () =>
+					Promise.resolve({
+						error: {
+							message: "cap hit",
+							type: "rate_limit_exceeded",
+							code: "per-ip-daily",
+						},
+					}),
+			}),
+		);
+
+		vi.resetModules();
+		const { renderHome } = await import("../routes/home.js");
+		renderHome(getEl<HTMLElement>("main"));
+
+		const form = getEl<HTMLFormElement>("#composer");
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		const sendBtn = getEl<HTMLButtonElement>("#send");
+		promptInput.value = "hello";
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+
+		await new Promise((resolve) => setTimeout(resolve, 50));
+
+		expect(sendBtn.disabled).toBe(false);
+	});
+
+	it("hides #cap-hit and resumes normal play on next submit after cap resets", async () => {
+		const encoder = new TextEncoder();
+		const sseData = `data: ${JSON.stringify({ choices: [{ delta: { content: "recovered!" } }] })}\n\ndata: [DONE]\n\n`;
+
+		const fetchMock = vi
+			.fn()
+			// First call: 429
+			.mockResolvedValueOnce({
+				ok: false,
+				status: 429,
+				statusText: "Too Many Requests",
+				headers: { get: () => null },
+				json: () =>
+					Promise.resolve({
+						error: {
+							message: "cap hit",
+							type: "rate_limit_exceeded",
+							code: "per-ip-daily",
+						},
+					}),
+			})
+			// Second call: 200 OK with normal SSE stream
+			.mockResolvedValueOnce({
+				ok: true,
+				status: 200,
+				statusText: "OK",
+				body: new ReadableStream<Uint8Array>({
+					start(controller) {
+						controller.enqueue(encoder.encode(sseData));
+						controller.close();
+					},
+				}),
+			});
+
+		vi.stubGlobal("fetch", fetchMock);
+
+		vi.resetModules();
+		const { renderHome } = await import("../routes/home.js");
+		renderHome(getEl<HTMLElement>("main"));
+
+		const form = getEl<HTMLFormElement>("#composer");
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		const capHitEl = getEl<HTMLElement>("#cap-hit");
+		const outputEl = getEl<HTMLPreElement>("#output");
+
+		// First submit — triggers 429 cap-hit screen
+		promptInput.value = "first message";
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 50));
+
+		expect(capHitEl.hidden).toBe(false);
+
+		// Second submit — cap has reset, normal 200 response
+		promptInput.value = "second message";
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 50));
+
+		expect(capHitEl.hidden).toBe(true);
+		expect(outputEl.textContent).toBe("recovered!");
+	});
+
+	it("BYOK placeholder anchor points at #/byok", () => {
+		vi.resetModules();
+
+		const anchor = document.querySelector<HTMLAnchorElement>(
+			"[data-byok-placeholder]",
+		);
+		expect(anchor).not.toBeNull();
+		expect(anchor?.getAttribute("href")).toBe("#/byok");
 	});
 });
