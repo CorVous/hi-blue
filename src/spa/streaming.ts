@@ -1,30 +1,8 @@
-export async function streamCompletion(opts: {
-	baseUrl: string;
-	message: string;
-	signal?: AbortSignal;
-	onDelta: (text: string) => void;
-}): Promise<void> {
-	const { baseUrl, message, signal, onDelta } = opts;
-
-	const response = await fetch(`${baseUrl}/v1/chat/completions`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({
-			messages: [{ role: "user", content: message }],
-			stream: true,
-		}),
-		...(signal != null ? { signal } : {}),
-	});
-
-	if (!response.ok) {
-		throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-	}
-
-	if (!response.body) {
-		throw new Error("Response body is null");
-	}
-
-	const reader = response.body.getReader();
+export async function parseSSEStream(
+	body: ReadableStream<Uint8Array>,
+	onDelta: (text: string) => void,
+): Promise<void> {
+	const reader = body.getReader();
 	const decoder = new TextDecoder();
 	let buffer = "";
 
