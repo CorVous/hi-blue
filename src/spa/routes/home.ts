@@ -1,4 +1,4 @@
-import { streamCompletion } from "../streaming.js";
+import { streamChat } from "../llm-client.js";
 
 export function renderHome(root: HTMLElement): void {
 	const form = root.ownerDocument.querySelector<HTMLFormElement>("#composer");
@@ -18,8 +18,7 @@ export function renderHome(root: HTMLElement): void {
 		outputEl.textContent = "";
 		sendBtn.disabled = true;
 
-		streamCompletion({
-			baseUrl: __WORKER_BASE_URL__,
+		streamChat({
 			message,
 			onDelta: (text) => {
 				outputEl.textContent += text;
