@@ -9,7 +9,8 @@
 			// In production: create with `wrangler kv namespace create RATE_GUARD_KV`
 			// In tests: vitest-pool-workers provides an in-process KV implementation.
 			"binding": "RATE_GUARD_KV",
-			"id": "rate-guard-kv-placeholder-replace-in-production"
+			"id": "95ce5559c2894b1eb6bb95c25897a0c3",
+			"remote": true
 		}
 	],
 	// Secrets (not committed here — provision via `wrangler secret put <NAME>`):
