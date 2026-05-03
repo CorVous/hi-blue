@@ -11,10 +11,10 @@
  *   - Locked-out AI completions are empty strings
  */
 import { describe, expect, it } from "vitest";
+import type { LLMProvider } from "../../../proxy/llm-provider";
+import { MockLLMProvider } from "../../../proxy/llm-provider";
 import { getActivePhase } from "../engine";
 import { GameSession } from "../game-session";
-import type { LLMProvider } from "../proxy/llm-provider";
-import { MockLLMProvider } from "../proxy/llm-provider";
 import type { AiPersona, PhaseConfig } from "../types";
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────

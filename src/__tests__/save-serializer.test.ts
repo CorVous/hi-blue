@@ -9,15 +9,15 @@
  * The payload must be stable for round-tripping.
  */
 import { describe, expect, it } from "vitest";
+import { serializeGameSave } from "../save-serializer";
 import {
 	advancePhase,
 	appendChat,
 	appendWhisper,
 	createGame,
 	startPhase,
-} from "../engine";
-import { serializeGameSave } from "../save-serializer";
-import type { AiPersona, PhaseConfig } from "../types";
+} from "../spa/game/engine";
+import type { AiPersona, PhaseConfig } from "../spa/game/types";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {

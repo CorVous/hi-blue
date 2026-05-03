@@ -6,8 +6,8 @@ import {
 	appendWhisper,
 	createGame,
 	startPhase,
-} from "../engine";
-import type { ActionLogEntry, AiPersona, PhaseConfig } from "../types";
+} from "../spa/game/engine";
+import type { ActionLogEntry, AiPersona, PhaseConfig } from "../spa/game/types";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {

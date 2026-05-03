@@ -16,7 +16,7 @@ export {
 	deductBudget,
 	getActivePhase,
 	startPhase,
-} from "./engine";
+} from "./spa/game/engine";
 export type {
 	ActionLogEntry,
 	AiBudget,
@@ -34,4 +34,4 @@ export type {
 	WhisperMessage,
 	WorldItem,
 	WorldState,
-} from "./types";
+} from "./spa/game/types";

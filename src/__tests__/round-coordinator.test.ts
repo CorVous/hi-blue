@@ -12,6 +12,9 @@
  */
 import { describe, expect, it } from "vitest";
 import { buildAiContext } from "../context-builder";
+import type { LLMProvider } from "../proxy/llm-provider";
+import { MockLLMProvider } from "../proxy/llm-provider";
+import { runRound } from "../round-coordinator";
 import {
 	createGame,
 	deductBudget,
@@ -19,11 +22,8 @@ import {
 	isAiLockedOut,
 	isPlayerChatLockedOut,
 	startPhase,
-} from "../engine";
-import type { LLMProvider } from "../proxy/llm-provider";
-import { MockLLMProvider } from "../proxy/llm-provider";
-import { runRound } from "../round-coordinator";
-import type { AiPersona, PhaseConfig } from "../types";
+} from "../spa/game/engine";
+import type { AiPersona, PhaseConfig } from "../spa/game/types";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {

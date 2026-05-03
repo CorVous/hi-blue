@@ -6,14 +6,14 @@ import {
 	getActivePhase,
 	isAiLockedOut,
 	updateActivePhase,
-} from "./engine";
+} from "./spa/game/engine";
 import type {
 	ActionLogEntry,
 	AiId,
 	AiTurnAction,
 	GameState,
 	ToolCall,
-} from "./types";
+} from "./spa/game/types";
 
 export interface ValidationResult {
 	valid: boolean;

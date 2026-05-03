@@ -3,6 +3,7 @@ import {
 	PERSONA_PLACEHOLDER,
 	resolveLLMTarget,
 	streamChat,
+	streamCompletion,
 } from "../llm-client.js";
 
 // Provide __WORKER_BASE_URL__ global before importing the module
@@ -193,5 +194,63 @@ describe("streamChat", () => {
 		await expect(
 			streamChat({ message: "test", onDelta: vi.fn() }),
 		).rejects.toThrow(/HTTP 500/);
+	});
+});
+
+describe("streamCompletion", () => {
+	beforeEach(() => {
+		vi.stubGlobal("fetch", vi.fn());
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("forwards messages[] verbatim without prepending a placeholder", async () => {
+		const mockFetch = vi
+			.fn()
+			.mockResolvedValue(
+				makeFetchResponse(makeSSEStream([`data: [DONE]\n\n`])),
+			);
+		vi.stubGlobal("fetch", mockFetch);
+		vi.stubGlobal("localStorage", {
+			getItem: vi.fn().mockReturnValue(null),
+		});
+
+		const customMessages = [
+			{ role: "system" as const, content: "You are a custom assistant." },
+			{ role: "user" as const, content: "hello" },
+		];
+
+		await streamCompletion({ messages: customMessages, onDelta: vi.fn() });
+
+		const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+		const body = JSON.parse(init.body as string);
+		expect(body.messages).toEqual(customMessages);
+		// Ensure the PERSONA_PLACEHOLDER is NOT injected
+		expect(JSON.stringify(body.messages)).not.toContain(PERSONA_PLACEHOLDER);
+	});
+
+	it("POSTs to OpenRouter with Authorization when BYOK key is set", async () => {
+		const mockFetch = vi
+			.fn()
+			.mockResolvedValue(
+				makeFetchResponse(makeSSEStream([`data: [DONE]\n\n`])),
+			);
+		vi.stubGlobal("fetch", mockFetch);
+		vi.stubGlobal("localStorage", {
+			getItem: vi.fn().mockReturnValue("sk-byok-key"),
+		});
+
+		await streamCompletion({
+			messages: [{ role: "user", content: "hello" }],
+			onDelta: vi.fn(),
+		});
+
+		const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+		expect(url).toBe(OPENROUTER_URL);
+		expect((init.headers as Record<string, string>).Authorization).toBe(
+			"Bearer sk-byok-key",
+		);
 	});
 });

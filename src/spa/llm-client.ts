@@ -34,18 +34,18 @@ export function resolveLLMTarget(): {
 	};
 }
 
-export async function streamChat(opts: {
-	message: string;
+export interface OpenAiMessage {
+	role: "system" | "user" | "assistant";
+	content: string;
+}
+
+export async function streamCompletion(opts: {
+	messages: OpenAiMessage[];
 	signal?: AbortSignal;
 	onDelta: (text: string) => void;
 }): Promise<void> {
-	const { message, signal, onDelta } = opts;
+	const { messages, signal, onDelta } = opts;
 	const { url, headers } = resolveLLMTarget();
-
-	const messages = [
-		{ role: "system", content: PERSONA_PLACEHOLDER },
-		{ role: "user", content: message },
-	];
 
 	const response = await fetch(url, {
 		method: "POST",
@@ -63,4 +63,19 @@ export async function streamChat(opts: {
 	}
 
 	await parseSSEStream(response.body, onDelta);
+}
+
+export async function streamChat(opts: {
+	message: string;
+	signal?: AbortSignal;
+	onDelta: (text: string) => void;
+}): Promise<void> {
+	return streamCompletion({
+		messages: [
+			{ role: "system", content: PERSONA_PLACEHOLDER },
+			{ role: "user", content: opts.message },
+		],
+		...(opts.signal != null ? { signal: opts.signal } : {}),
+		onDelta: opts.onDelta,
+	});
 }

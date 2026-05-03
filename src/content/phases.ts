@@ -1,4 +1,4 @@
-import type { PhaseConfig } from "../types";
+import type { PhaseConfig } from "../spa/game/types";
 import { PHASE_GOAL_POOL } from "./goal-pool";
 
 /**

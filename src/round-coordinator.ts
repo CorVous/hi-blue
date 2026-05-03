@@ -15,6 +15,7 @@
 
 import { buildAiContext } from "./context-builder";
 import { dispatchAiTurn } from "./dispatcher";
+import type { LLMProvider } from "./proxy/llm-provider";
 import {
 	advancePhase,
 	advanceRound,
@@ -24,8 +25,7 @@ import {
 	isAiLockedOut,
 	resolveChatLockouts,
 	triggerChatLockout,
-} from "./engine";
-import type { LLMProvider } from "./proxy/llm-provider";
+} from "./spa/game/engine";
 import type {
 	ActionLogEntry,
 	AiId,
@@ -33,7 +33,7 @@ import type {
 	GameState,
 	RoundResult,
 	ToolName,
-} from "./types";
+} from "./spa/game/types";
 
 const AI_ORDER: AiId[] = ["red", "green", "blue"];
 
