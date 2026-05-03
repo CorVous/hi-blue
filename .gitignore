@@ -23,6 +23,7 @@ pnpm-debug.log*
 .env
 .env.local
 .env.*.local
+.dev.vars
 
 # Editors / IDE
 .vscode/

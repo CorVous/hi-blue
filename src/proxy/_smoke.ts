@@ -11,6 +11,7 @@ import {
 import type { AiId, PhaseConfig } from "../types";
 import type { LLMProvider } from "./llm-provider";
 import { MockLLMProvider } from "./llm-provider";
+import { handleChatCompletions } from "./openai-proxy";
 import { capHitStream, checkAndCharge, configFromEnv } from "./rate-guard";
 import { renderChatPage, renderEndgamePage } from "./ui";
 
@@ -21,6 +22,12 @@ interface Env {
 	/** Optional: set to "anthropic" to use the real provider. */
 	LLM_PROVIDER?: string;
 	ANTHROPIC_API_KEY?: string;
+	/**
+	 * Secret for the OpenRouter API. Provision via:
+	 *   wrangler secret put OPENROUTER_API_KEY
+	 * Intentionally not committed in vars.
+	 */
+	OPENROUTER_API_KEY?: string;
 	/** Rate-guard configuration knobs (all optional; defaults in configFromEnv). */
 	RATE_LIMIT_MAX?: string;
 	RATE_LIMIT_WINDOW_SEC?: string;
@@ -159,6 +166,13 @@ export default {
 			return new Response(renderEndgamePage(), {
 				headers: { "Content-Type": "text/html; charset=utf-8" },
 			});
+		}
+
+		// ── POST /v1/chat/completions ─────────────────────────────────────────────
+		// OpenAI-compatible endpoint: pins model to z-ai/glm-4.7-flash and
+		// forwards the request to OpenRouter. Streams the response back unchanged.
+		if (url.pathname === "/v1/chat/completions" && request.method === "POST") {
+			return handleChatCompletions(request, env);
 		}
 
 		// ── POST /game/new ────────────────────────────────────────────────────
