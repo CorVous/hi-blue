@@ -679,4 +679,68 @@ describe("rate-guard integration — POST /v1/chat/completions", () => {
 				?.include_usage,
 		).toBe(true);
 	});
+
+	// ── smoke regression: stream-failure refund must persist to KV ──────────────
+	// Reproduces the bug from attempt-1 smoke: the fire-and-forget
+	// upstream.body.pipeTo(...).catch(async () => refundFull(...)) races against
+	// worker-context teardown, so the KV put is cancelled and the counter stays
+	// at seeded + preCharge instead of being refunded to seeded.
+	it("stream failure mid-flight: per-IP counter is refunded back to seeded value (ctx.waitUntil fix)", async () => {
+		const ip = "14.0.0.1";
+		const seeded = 7_000;
+		// Pre-seed the per-IP counter so we can tell whether a refund happened
+		const now = Date.now();
+		await kv().put(perIpKey(ip, now), String(seeded), {
+			expirationTtl: 25 * 3600,
+		});
+
+		// Build an upstream response whose body errors mid-stream (no data sent)
+		const erroringStream = new ReadableStream({
+			start(controller) {
+				// Immediately error the stream to simulate a mid-flight upstream failure
+				controller.error(new Error("upstream disconnected mid-stream"));
+			},
+		});
+
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockImplementation(() =>
+				Promise.resolve(
+					new Response(erroringStream, {
+						status: 200,
+						headers: { "Content-Type": "text/event-stream" },
+					}),
+				),
+			),
+		);
+
+		const resp = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": ip,
+			},
+			body: JSON.stringify({
+				messages: [{ role: "user", content: "hi" }],
+				stream: true,
+			}),
+		});
+
+		// Drain the client-side response — the erroring stream will throw here;
+		// we catch it since we only care about the KV state afterwards.
+		try {
+			await resp.text();
+		} catch {
+			// expected: the upstream stream error propagates to the client reader
+		}
+
+		// Allow ctx.waitUntil promises to settle
+		await new Promise((r) => setTimeout(r, 100));
+
+		const ipVal = await kv().get(perIpKey(ip, Date.now()));
+		// The pre-charge (4000) was added on top of seeded (7000) → 11000.
+		// After the stream error the full pre-charge must be refunded → back to 7000.
+		// Without ctx.waitUntil the KV put is cancelled and counter stays at 11000.
+		expect(Number(ipVal)).toBe(seeded);
+	});
 });

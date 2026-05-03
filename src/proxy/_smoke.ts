@@ -100,7 +100,11 @@ const TEST_PHASE_CONFIG_WITH_WIN: PhaseConfig = {
 };
 
 export default {
-	async fetch(request: Request, env: Env): Promise<Response> {
+	async fetch(
+		request: Request,
+		env: Env,
+		ctx: ExecutionContext,
+	): Promise<Response> {
 		const url = new URL(request.url);
 
 		if (url.pathname === "/") {
@@ -170,7 +174,7 @@ export default {
 		// OpenAI-compatible endpoint: pins model to z-ai/glm-4.7-flash and
 		// forwards the request to OpenRouter. Streams the response back unchanged.
 		if (url.pathname === "/v1/chat/completions" && request.method === "POST") {
-			return handleChatCompletions(request, env, env.RATE_GUARD_KV);
+			return handleChatCompletions(request, env, env.RATE_GUARD_KV, ctx);
 		}
 
 		// ── POST /game/new ────────────────────────────────────────────────────

@@ -39,6 +39,7 @@ export async function handleChatCompletions(
 		PRE_CHARGE_ESTIMATE?: string;
 	},
 	kv: KVNamespace,
+	ctx: ExecutionContext,
 ): Promise<Response> {
 	// 1. Require the API key
 	if (!env.OPENROUTER_API_KEY) {
@@ -213,7 +214,7 @@ export async function handleChatCompletions(
 				}
 			}
 		},
-		async flush(controller) {
+		flush(controller) {
 			// Process any remaining buffered text
 			const remaining = sseBuffer.trim();
 			if (remaining.startsWith("data:")) {
@@ -232,21 +233,25 @@ export async function handleChatCompletions(
 				}
 			}
 
-			if (totalTokens !== undefined) {
-				await reconcile(kv, ip, nowMs, guard.preCharged, totalTokens);
-			} else {
-				await refundFull(kv, ip, nowMs, guard.preCharged);
-			}
+			// Wrap the KV work in ctx.waitUntil so the puts survive client disconnect
+			const kvWork =
+				totalTokens !== undefined
+					? reconcile(kv, ip, nowMs, guard.preCharged, totalTokens)
+					: refundFull(kv, ip, nowMs, guard.preCharged);
+			ctx.waitUntil(kvWork);
 
 			controller.terminate();
 		},
 	});
 
-	// Pipe upstream body through transform; handle read errors with refund
+	// Pipe upstream body through transform; handle read errors with refund.
+	// Wrap in ctx.waitUntil so the KV put survives client disconnect.
 	if (upstream.body) {
-		upstream.body.pipeTo(writable).catch(async () => {
-			await refundFull(kv, ip, nowMs, guard.preCharged);
-		});
+		ctx.waitUntil(
+			upstream.body.pipeTo(writable).catch(() => {
+				return refundFull(kv, ip, nowMs, guard.preCharged);
+			}),
+		);
 	} else {
 		// No body — close the writable immediately so flush fires
 		const writer = writable.getWriter();
