@@ -6,7 +6,7 @@
  *
  * Patterns follow the existing _smoke.test.ts conventions.
  */
-import { env, reset, SELF } from "cloudflare:test";
+import { reset, SELF } from "cloudflare:test";
 import { afterEach, describe, expect, it } from "vitest";
 
 afterEach(async () => {
@@ -239,78 +239,6 @@ describe("POST /game/turn", () => {
 			body: JSON.stringify({ addressedAi: "blue", message: "hello" }),
 		});
 		expect(blueResp.status).toBe(200);
-	});
-});
-
-// ── Rate-guard integration via /game/turn ─────────────────────────────────────
-
-describe("rate-guard integration via /game/turn", () => {
-	it("returns [CAP_HIT] SSE event when IP is rate-limited", async () => {
-		// Seed a fully-exhausted token bucket for test IP.
-		const kv = (env as Record<string, KVNamespace>)
-			.RATE_GUARD_KV as KVNamespace;
-		await kv.put(
-			"rl:10.0.0.10",
-			JSON.stringify({ tokens: 0, lastRefillMs: Date.now() }),
-			{ expirationTtl: 60 },
-		);
-
-		const response = await SELF.fetch("https://example.com/game/turn", {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"CF-Connecting-IP": "10.0.0.10",
-			},
-			body: JSON.stringify({ addressedAi: "red", message: "hello" }),
-		});
-
-		expect(response.status).toBe(200);
-		expect(response.headers.get("Content-Type")).toContain("text/event-stream");
-		expect(response.headers.get("X-Cap-Hit")).toBe("rate-limit");
-
-		const text = await response.text();
-		expect(text).toContain("[CAP_HIT]");
-		expect(text).not.toContain("[DONE]");
-	});
-
-	it("returns [CAP_HIT] SSE event when daily cap is exceeded", async () => {
-		const today = new Date().toISOString().slice(0, 10);
-		const kv = (env as Record<string, KVNamespace>)
-			.RATE_GUARD_KV as KVNamespace;
-		await kv.put(`daily:${today}`, "1000", { expirationTtl: 25 * 60 * 60 });
-
-		const response = await SELF.fetch("https://example.com/game/turn", {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"CF-Connecting-IP": "10.0.0.11",
-			},
-			body: JSON.stringify({ addressedAi: "red", message: "hello" }),
-		});
-
-		expect(response.headers.get("X-Cap-Hit")).toBe("daily-cap");
-
-		const text = await response.text();
-		expect(text).toContain("[CAP_HIT]");
-		expect(text).not.toContain("[DONE]");
-	});
-
-	it("allows the request and returns [DONE] when neither limit is hit", async () => {
-		const response = await SELF.fetch("https://example.com/game/turn", {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"CF-Connecting-IP": "10.0.0.12",
-			},
-			body: JSON.stringify({ addressedAi: "red", message: "hello" }),
-		});
-
-		expect(response.status).toBe(200);
-		expect(response.headers.get("X-Cap-Hit")).toBeNull();
-
-		const text = await response.text();
-		expect(text).toContain("[DONE]");
-		expect(text).not.toContain("[CAP_HIT]");
 	});
 });
 

@@ -7,9 +7,10 @@
  * the test runner in vitest-pool-workers, so the stub is observable inside
  * the worker.
  */
-import { reset, SELF } from "cloudflare:test";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { env, reset, SELF } from "cloudflare:test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OPENROUTER_URL, PINNED_MODEL } from "./openai-proxy";
+import { globalKey, perIpKey } from "./rate-guard";
 
 const ENDPOINT = "https://example.com/v1/chat/completions";
 
@@ -303,3 +304,383 @@ describe("POST /v1/chat/completions — method guard", () => {
 		expect(resp.status).toBe(404);
 	});
 });
+
+// ── 9. Rate-guard integration — POST /v1/chat/completions ────────────────────
+
+function kv(): KVNamespace {
+	return (env as Record<string, KVNamespace>).RATE_GUARD_KV as KVNamespace;
+}
+
+// Fixed timestamp for deterministic UTC-day keys
+const _DAY_MS = new Date("2026-05-01T12:00:00Z").getTime();
+
+// Tight caps for testing
+const PER_IP_CAP = 20_000;
+const PRE_CHARGE = 4_000;
+
+describe("rate-guard integration — POST /v1/chat/completions", () => {
+	beforeEach(async () => {
+		// Clear KV before each test
+		const ns = kv();
+		const listed = await ns.list();
+		await Promise.all(listed.keys.map((k) => ns.delete(k.name)));
+	});
+
+	it("per-IP cap-hit returns 429 with error.code === 'per-ip-daily', upstream not called", async () => {
+		// Exhaust the per-IP counter
+		const ip = "5.5.5.5";
+		const today = new Date().toISOString().slice(0, 10);
+		const ipK = `tok:ip:${today}:${ip}`;
+		await kv().put(ipK, String(PER_IP_CAP - PRE_CHARGE + 1), {
+			expirationTtl: 25 * 3600,
+		});
+
+		const mockFetch = vi.fn();
+		vi.stubGlobal("fetch", mockFetch);
+
+		const resp = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": ip,
+			},
+			body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+		});
+
+		expect(resp.status).toBe(429);
+		const body = (await resp.json()) as {
+			error: { type: string; code: string };
+		};
+		expect(body.error.type).toBe("rate_limit_exceeded");
+		expect(body.error.code).toBe("per-ip-daily");
+		// Upstream must not have been called
+		expect(mockFetch).not.toHaveBeenCalled();
+	});
+
+	it("global cap-hit returns 429 with error.code === 'global-daily'", async () => {
+		const today = new Date().toISOString().slice(0, 10);
+		const gK = `tok:global:${today}`;
+		await kv().put(gK, String(1_000_000 - PRE_CHARGE + 1), {
+			expirationTtl: 25 * 3600,
+		});
+
+		vi.stubGlobal("fetch", vi.fn());
+
+		const resp = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": "6.6.6.6",
+			},
+			body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+		});
+
+		expect(resp.status).toBe(429);
+		const body = (await resp.json()) as {
+			error: { code: string };
+		};
+		expect(body.error.code).toBe("global-daily");
+	});
+
+	it("happy path streaming: stub upstream with usage=1500, counters reconcile to 1500", async () => {
+		const ip = "7.7.7.7";
+		const ssePayload =
+			'data: {"usage":{"total_tokens":1500}}\n\ndata: [DONE]\n\n';
+
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockImplementation(() =>
+				Promise.resolve(
+					new Response(ssePayload, {
+						status: 200,
+						headers: { "Content-Type": "text/event-stream" },
+					}),
+				),
+			),
+		);
+
+		const resp = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": ip,
+			},
+			body: JSON.stringify({
+				messages: [{ role: "user", content: "hi" }],
+				stream: true,
+			}),
+		});
+
+		expect(resp.status).toBe(200);
+		// Consume the stream so TransformStream flush fires
+		await resp.text();
+
+		// Give the flush microtask time to complete
+		await new Promise((r) => setTimeout(r, 50));
+
+		const today = new Date().toISOString().slice(0, 10);
+		const ipK = `tok:ip:${today}:${ip}`;
+		const gK = `tok:global:${today}`;
+		const [ipVal, gVal] = await Promise.all([kv().get(ipK), kv().get(gK)]);
+
+		expect(Number(ipVal)).toBe(1500);
+		expect(Number(gVal)).toBe(1500);
+	});
+
+	it("over-charge accepted: stub upstream usage=9000, counters stay at pre-charge (4000)", async () => {
+		const ip = "8.8.8.8";
+		const ssePayload =
+			'data: {"usage":{"total_tokens":9000}}\n\ndata: [DONE]\n\n';
+
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockImplementation(() =>
+				Promise.resolve(
+					new Response(ssePayload, {
+						status: 200,
+						headers: { "Content-Type": "text/event-stream" },
+					}),
+				),
+			),
+		);
+
+		const resp = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": ip,
+			},
+			body: JSON.stringify({
+				messages: [{ role: "user", content: "hi" }],
+				stream: true,
+			}),
+		});
+
+		await resp.text();
+		await new Promise((r) => setTimeout(r, 50));
+
+		const today = new Date().toISOString().slice(0, 10);
+		const ipK = `tok:ip:${today}:${ip}`;
+		const ipVal = await kv().get(ipK);
+		// Over-charge: counter remains at preCharge, no additional debit
+		expect(Number(ipVal)).toBe(PRE_CHARGE);
+	});
+
+	it("upstream non-2xx returns 502 to client and counters return to 0", async () => {
+		const ip = "9.9.9.9";
+
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockImplementation(() =>
+				Promise.resolve(
+					new Response("Internal Server Error", {
+						status: 500,
+						headers: { "Content-Type": "text/plain" },
+					}),
+				),
+			),
+		);
+
+		const resp = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": ip,
+			},
+			body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+		});
+
+		expect(resp.status).toBe(502);
+
+		const today = new Date().toISOString().slice(0, 10);
+		const ipK = `tok:ip:${today}:${ip}`;
+		const gK = `tok:global:${today}`;
+		const [ipVal, gVal] = await Promise.all([kv().get(ipK), kv().get(gK)]);
+		expect(Number(ipVal)).toBe(0);
+		expect(Number(gVal)).toBe(0);
+	});
+
+	it("upstream fetch throws returns 502 and counters return to 0", async () => {
+		const ip = "10.0.0.1";
+
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockRejectedValue(new Error("Network error")),
+		);
+
+		const resp = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": ip,
+			},
+			body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+		});
+
+		expect(resp.status).toBe(502);
+
+		const today = new Date().toISOString().slice(0, 10);
+		const ipK = `tok:ip:${today}:${ip}`;
+		const gK = `tok:global:${today}`;
+		const [ipVal, gVal] = await Promise.all([kv().get(ipK), kv().get(gK)]);
+		expect(Number(ipVal)).toBe(0);
+		expect(Number(gVal)).toBe(0);
+	});
+
+	it("multi-IP isolation: IP A capped does not affect IP B", async () => {
+		const ipA = "11.0.0.1";
+		const ipB = "11.0.0.2";
+		const today = new Date().toISOString().slice(0, 10);
+		const ipAKey = `tok:ip:${today}:${ipA}`;
+		// Exhaust IP A
+		await kv().put(ipAKey, String(PER_IP_CAP - PRE_CHARGE + 1), {
+			expirationTtl: 25 * 3600,
+		});
+
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockImplementation(() =>
+				Promise.resolve(
+					new Response("{}", {
+						status: 200,
+						headers: { "Content-Type": "application/json" },
+					}),
+				),
+			),
+		);
+
+		const respA = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": ipA,
+			},
+			body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+		});
+
+		const respB = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": ipB,
+			},
+			body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+		});
+
+		expect(respA.status).toBe(429);
+		expect(respB.status).toBe(200);
+	});
+
+	it("non-streaming JSON response: reconcile from body usage.total_tokens", async () => {
+		const ip = "12.0.0.1";
+		const jsonBody = JSON.stringify({ usage: { total_tokens: 800 } });
+
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockImplementation(() =>
+				Promise.resolve(
+					new Response(jsonBody, {
+						status: 200,
+						headers: { "Content-Type": "application/json" },
+					}),
+				),
+			),
+		);
+
+		const resp = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": ip,
+			},
+			body: JSON.stringify({
+				messages: [{ role: "user", content: "hi" }],
+				stream: false,
+			}),
+		});
+
+		expect(resp.status).toBe(200);
+
+		const today = new Date().toISOString().slice(0, 10);
+		const ipK = `tok:ip:${today}:${ip}`;
+		const gK = `tok:global:${today}`;
+		const [ipVal, gVal] = await Promise.all([kv().get(ipK), kv().get(gK)]);
+		expect(Number(ipVal)).toBe(800);
+		expect(Number(gVal)).toBe(800);
+	});
+
+	it("streaming with no usage chunk results in full refund (counters at 0)", async () => {
+		const ip = "13.0.0.1";
+		// SSE with no usage data
+		const ssePayload = "data: {}\n\ndata: [DONE]\n\n";
+
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockImplementation(() =>
+				Promise.resolve(
+					new Response(ssePayload, {
+						status: 200,
+						headers: { "Content-Type": "text/event-stream" },
+					}),
+				),
+			),
+		);
+
+		const resp = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": ip,
+			},
+			body: JSON.stringify({
+				messages: [{ role: "user", content: "hi" }],
+				stream: true,
+			}),
+		});
+
+		await resp.text();
+		await new Promise((r) => setTimeout(r, 50));
+
+		const today = new Date().toISOString().slice(0, 10);
+		const ipK = `tok:ip:${today}:${ip}`;
+		const gK = `tok:global:${today}`;
+		const [ipVal, gVal] = await Promise.all([kv().get(ipK), kv().get(gK)]);
+		expect(Number(ipVal)).toBe(0);
+		expect(Number(gVal)).toBe(0);
+	});
+
+	it("outbound body has stream_options.include_usage === true when stream:true", async () => {
+		let capturedBody: Record<string, unknown> | undefined;
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockImplementation(async (_url: string, init: RequestInit) => {
+				capturedBody = JSON.parse(init.body as string) as Record<
+					string,
+					unknown
+				>;
+				return new Response("data: [DONE]\n\n", {
+					status: 200,
+					headers: { "Content-Type": "text/event-stream" },
+				});
+			}),
+		);
+
+		await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				messages: [{ role: "user", content: "hi" }],
+				stream: true,
+			}),
+		});
+
+		expect(
+			(capturedBody?.stream_options as Record<string, unknown> | undefined)
+				?.include_usage,
+		).toBe(true);
+	});
+});
+
+// Keep perIpKey / globalKey imports used above (silence unused-import linters)
+void perIpKey;
+void globalKey;
