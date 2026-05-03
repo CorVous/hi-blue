@@ -12,7 +12,6 @@ import type { AiId, PhaseConfig } from "../types";
 import type { LLMProvider } from "./llm-provider";
 import { MockLLMProvider } from "./llm-provider";
 import { handleChatCompletions } from "./openai-proxy";
-import { capHitStream, checkAndCharge, configFromEnv } from "./rate-guard";
 import { renderChatPage, renderEndgamePage } from "./ui";
 
 /** Shape of the bindings/env this Worker expects. */
@@ -28,11 +27,10 @@ interface Env {
 	 * Intentionally not committed in vars.
 	 */
 	OPENROUTER_API_KEY?: string;
-	/** Rate-guard configuration knobs (all optional; defaults in configFromEnv). */
-	RATE_LIMIT_MAX?: string;
-	RATE_LIMIT_WINDOW_SEC?: string;
-	ESTIMATED_COST_PER_REQUEST?: string;
-	DAILY_CAP_MAX?: string;
+	/** Token-guard configuration knobs (all optional; defaults in configFromEnv). */
+	PER_IP_DAILY_TOKEN_MAX?: string;
+	GLOBAL_DAILY_TOKEN_MAX?: string;
+	PRE_CHARGE_ESTIMATE?: string;
 	/**
 	 * Set to "1" in test environments to enable the testMode parameter on
 	 * POST /game/new. Must NOT be set in production wrangler.jsonc.
@@ -102,7 +100,11 @@ const TEST_PHASE_CONFIG_WITH_WIN: PhaseConfig = {
 };
 
 export default {
-	async fetch(request: Request, env: Env): Promise<Response> {
+	async fetch(
+		request: Request,
+		env: Env,
+		ctx: ExecutionContext,
+	): Promise<Response> {
 		const url = new URL(request.url);
 
 		if (url.pathname === "/") {
@@ -172,7 +174,7 @@ export default {
 		// OpenAI-compatible endpoint: pins model to z-ai/glm-4.7-flash and
 		// forwards the request to OpenRouter. Streams the response back unchanged.
 		if (url.pathname === "/v1/chat/completions" && request.method === "POST") {
-			return handleChatCompletions(request, env);
+			return handleChatCompletions(request, env, env.RATE_GUARD_KV, ctx);
 		}
 
 		// ── POST /game/new ────────────────────────────────────────────────────
@@ -224,26 +226,6 @@ export default {
 			if (!addressedAi || !validAiIds.includes(addressedAi as AiId)) {
 				return new Response("Missing or invalid addressedAi", { status: 400 });
 			}
-
-			// ── Rate-limit / daily-cap guard ────────────────────────────────
-			const clientIp = request.headers.get("CF-Connecting-IP") ?? "unknown";
-			const guard = await checkAndCharge(
-				env.RATE_GUARD_KV,
-				clientIp,
-				Date.now(),
-				configFromEnv(env),
-			);
-			if (!guard.allowed) {
-				return new Response(capHitStream(guard.reason), {
-					headers: {
-						"Content-Type": "text/event-stream",
-						"Cache-Control": "no-cache",
-						"X-Content-Type-Options": "nosniff",
-						"X-Cap-Hit": guard.reason,
-					},
-				});
-			}
-			// ── End guard ───────────────────────────────────────────────────
 
 			// Look up or create the session
 			const sessionId = parseSessionCookie(request.headers.get("Cookie"));

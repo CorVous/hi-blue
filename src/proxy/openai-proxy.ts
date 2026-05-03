@@ -1,3 +1,11 @@
+import {
+	configFromEnv,
+	preCharge,
+	rateLimitResponse,
+	reconcile,
+	refundFull,
+} from "./rate-guard";
+
 export const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 export const PINNED_MODEL = "z-ai/glm-4.7-flash";
@@ -24,7 +32,14 @@ export function openAiError(
 
 export async function handleChatCompletions(
 	request: Request,
-	env: { OPENROUTER_API_KEY?: string },
+	env: {
+		OPENROUTER_API_KEY?: string;
+		PER_IP_DAILY_TOKEN_MAX?: string;
+		GLOBAL_DAILY_TOKEN_MAX?: string;
+		PRE_CHARGE_ESTIMATE?: string;
+	},
+	kv: KVNamespace,
+	ctx: ExecutionContext,
 ): Promise<Response> {
 	// 1. Require the API key
 	if (!env.OPENROUTER_API_KEY) {
@@ -61,10 +76,35 @@ export async function handleChatCompletions(
 		);
 	}
 
-	// 4. Pin the model
-	const modifiedBody = { ...body, model: PINNED_MODEL };
+	// 4. Rate-guard: pre-charge at request start
+	const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
+	const nowMs = Date.now();
+	const cfg = configFromEnv(env);
+	const guard = await preCharge(kv, ip, nowMs, cfg);
+	if (!guard.allowed) {
+		return rateLimitResponse(guard.reason, nowMs);
+	}
 
-	// 5. Forward to OpenRouter
+	// 5. Pin the model
+	const isStream = body.stream === true;
+
+	// Force stream_options.include_usage=true when streaming so OpenRouter
+	// emits the usage chunk and we can reconcile from actual token count.
+	const modifiedBody: Record<string, unknown> = {
+		...body,
+		model: PINNED_MODEL,
+	};
+	if (isStream) {
+		modifiedBody.stream_options = {
+			...(typeof body.stream_options === "object" &&
+			body.stream_options !== null
+				? (body.stream_options as Record<string, unknown>)
+				: {}),
+			include_usage: true,
+		};
+	}
+
+	// 6. Forward to OpenRouter
 	let upstream: Response;
 	try {
 		upstream = await fetch(OPENROUTER_URL, {
@@ -76,6 +116,8 @@ export async function handleChatCompletions(
 			body: JSON.stringify(modifiedBody),
 		});
 	} catch (err) {
+		// Network failure — full refund before returning error
+		await refundFull(kv, ip, nowMs, guard.preCharged);
 		const message =
 			err instanceof Error
 				? err.message
@@ -83,8 +125,9 @@ export async function handleChatCompletions(
 		return openAiError(502, "upstream_error", message);
 	}
 
-	// 6. Non-2xx from upstream → 502
+	// 7. Non-2xx from upstream → refund + 502
 	if (!upstream.ok) {
+		await refundFull(kv, ip, nowMs, guard.preCharged);
 		return openAiError(
 			502,
 			"upstream_error",
@@ -92,10 +135,130 @@ export async function handleChatCompletions(
 		);
 	}
 
-	// 7. Stream response back unchanged
+	// 8a. Non-streaming: read full body, reconcile from usage, return
+	if (!isStream) {
+		let responseText: string;
+		try {
+			responseText = await upstream.text();
+		} catch {
+			await refundFull(kv, ip, nowMs, guard.preCharged);
+			return openAiError(
+				502,
+				"upstream_error",
+				"Failed to read upstream response",
+			);
+		}
+
+		// Try to extract usage.total_tokens
+		let actualTokens: number | undefined;
+		try {
+			const parsed = JSON.parse(responseText) as {
+				usage?: { total_tokens?: number };
+			};
+			if (typeof parsed.usage?.total_tokens === "number") {
+				actualTokens = parsed.usage.total_tokens;
+			}
+		} catch {
+			// Not JSON — treat as missing usage
+		}
+
+		if (actualTokens !== undefined) {
+			await reconcile(kv, ip, nowMs, guard.preCharged, actualTokens);
+		} else {
+			await refundFull(kv, ip, nowMs, guard.preCharged);
+		}
+
+		const contentType =
+			upstream.headers.get("Content-Type") ?? "application/octet-stream";
+		return new Response(responseText, {
+			status: upstream.status,
+			headers: { "Content-Type": contentType },
+		});
+	}
+
+	// 8b. Streaming: tee the response, parse SSE for usage, reconcile on close
 	const contentType =
 		upstream.headers.get("Content-Type") ?? "application/octet-stream";
-	return new Response(upstream.body, {
+
+	// Side-channel accumulator for SSE text
+	let sseBuffer = "";
+	let totalTokens: number | undefined;
+
+	const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>({
+		transform(chunk, controller) {
+			// Pass bytes through unchanged
+			controller.enqueue(chunk);
+
+			// Accumulate text on the side for usage parsing
+			sseBuffer += new TextDecoder().decode(chunk);
+
+			// Parse complete SSE lines from buffer
+			const lines = sseBuffer.split("\n");
+			// Keep the last (possibly incomplete) line in buffer
+			sseBuffer = lines.pop() ?? "";
+
+			for (const line of lines) {
+				const trimmed = line.trim();
+				if (!trimmed.startsWith("data:")) continue;
+				const data = trimmed.slice(5).trim();
+				if (data === "[DONE]") continue;
+				try {
+					const parsed = JSON.parse(data) as {
+						usage?: { total_tokens?: number };
+					};
+					if (typeof parsed.usage?.total_tokens === "number") {
+						totalTokens = parsed.usage.total_tokens;
+					}
+				} catch {
+					// Non-JSON SSE line — skip
+				}
+			}
+		},
+		flush(controller) {
+			// Process any remaining buffered text
+			const remaining = sseBuffer.trim();
+			if (remaining.startsWith("data:")) {
+				const data = remaining.slice(5).trim();
+				if (data !== "[DONE]") {
+					try {
+						const parsed = JSON.parse(data) as {
+							usage?: { total_tokens?: number };
+						};
+						if (typeof parsed.usage?.total_tokens === "number") {
+							totalTokens = parsed.usage.total_tokens;
+						}
+					} catch {
+						// ignore
+					}
+				}
+			}
+
+			// Wrap the KV work in ctx.waitUntil so the puts survive client disconnect
+			const kvWork =
+				totalTokens !== undefined
+					? reconcile(kv, ip, nowMs, guard.preCharged, totalTokens)
+					: refundFull(kv, ip, nowMs, guard.preCharged);
+			ctx.waitUntil(kvWork);
+
+			controller.terminate();
+		},
+	});
+
+	// Pipe upstream body through transform; handle read errors with refund.
+	// Wrap in ctx.waitUntil so the KV put survives client disconnect.
+	if (upstream.body) {
+		ctx.waitUntil(
+			upstream.body.pipeTo(writable).catch(() => {
+				return refundFull(kv, ip, nowMs, guard.preCharged);
+			}),
+		);
+	} else {
+		// No body — close the writable immediately so flush fires
+		const writer = writable.getWriter();
+		await writer.close();
+	}
+
+	return new Response(readable, {
 		status: upstream.status,
 		headers: { "Content-Type": contentType },
 	});

@@ -7,9 +7,10 @@
  * the test runner in vitest-pool-workers, so the stub is observable inside
  * the worker.
  */
-import { reset, SELF } from "cloudflare:test";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { env, reset, SELF } from "cloudflare:test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OPENROUTER_URL, PINNED_MODEL } from "./openai-proxy";
+import { globalKey, perIpKey } from "./rate-guard";
 
 const ENDPOINT = "https://example.com/v1/chat/completions";
 
@@ -301,5 +302,445 @@ describe("POST /v1/chat/completions — method guard", () => {
 	it("PUT /v1/chat/completions returns 404 (falls through to catch-all)", async () => {
 		const resp = await SELF.fetch(ENDPOINT, { method: "PUT" });
 		expect(resp.status).toBe(404);
+	});
+});
+
+// ── 9. Rate-guard integration — POST /v1/chat/completions ────────────────────
+
+function kv(): KVNamespace {
+	return (env as Record<string, KVNamespace>).RATE_GUARD_KV as KVNamespace;
+}
+
+// Tight caps for testing (must match vitest.config.ts bindings)
+const PER_IP_CAP = 20_000;
+const PRE_CHARGE = 4_000;
+
+describe("rate-guard integration — POST /v1/chat/completions", () => {
+	beforeEach(async () => {
+		// Clear KV before each test
+		const ns = kv();
+		const listed = await ns.list();
+		await Promise.all(listed.keys.map((k) => ns.delete(k.name)));
+	});
+
+	it("per-IP cap-hit returns 429 with error.code === 'per-ip-daily', upstream not called", async () => {
+		// Exhaust the per-IP counter
+		const ip = "5.5.5.5";
+		const ipK = perIpKey(ip, Date.now());
+		await kv().put(ipK, String(PER_IP_CAP - PRE_CHARGE + 1), {
+			expirationTtl: 25 * 3600,
+		});
+
+		const mockFetch = vi.fn();
+		vi.stubGlobal("fetch", mockFetch);
+
+		const resp = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": ip,
+			},
+			body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+		});
+
+		expect(resp.status).toBe(429);
+		const body = (await resp.json()) as {
+			error: { type: string; code: string };
+		};
+		expect(body.error.type).toBe("rate_limit_exceeded");
+		expect(body.error.code).toBe("per-ip-daily");
+		// Upstream must not have been called
+		expect(mockFetch).not.toHaveBeenCalled();
+	});
+
+	it("global cap-hit returns 429 with error.code === 'global-daily'", async () => {
+		const gK = globalKey(Date.now());
+		await kv().put(gK, String(1_000_000 - PRE_CHARGE + 1), {
+			expirationTtl: 25 * 3600,
+		});
+
+		vi.stubGlobal("fetch", vi.fn());
+
+		const resp = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": "6.6.6.6",
+			},
+			body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+		});
+
+		expect(resp.status).toBe(429);
+		const body = (await resp.json()) as {
+			error: { code: string };
+		};
+		expect(body.error.code).toBe("global-daily");
+	});
+
+	it("happy path streaming: stub upstream with usage=1500, counters reconcile to 1500", async () => {
+		const ip = "7.7.7.7";
+		const ssePayload =
+			'data: {"usage":{"total_tokens":1500}}\n\ndata: [DONE]\n\n';
+
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockImplementation(() =>
+				Promise.resolve(
+					new Response(ssePayload, {
+						status: 200,
+						headers: { "Content-Type": "text/event-stream" },
+					}),
+				),
+			),
+		);
+
+		const resp = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": ip,
+			},
+			body: JSON.stringify({
+				messages: [{ role: "user", content: "hi" }],
+				stream: true,
+			}),
+		});
+
+		expect(resp.status).toBe(200);
+		// Consume the stream so TransformStream flush fires
+		await resp.text();
+
+		// Give the flush microtask time to complete
+		await new Promise((r) => setTimeout(r, 50));
+
+		const now = Date.now();
+		const [ipVal, gVal] = await Promise.all([
+			kv().get(perIpKey(ip, now)),
+			kv().get(globalKey(now)),
+		]);
+
+		expect(Number(ipVal)).toBe(1500);
+		expect(Number(gVal)).toBe(1500);
+	});
+
+	it("over-charge accepted: stub upstream usage=9000, counters stay at pre-charge (4000)", async () => {
+		const ip = "8.8.8.8";
+		const ssePayload =
+			'data: {"usage":{"total_tokens":9000}}\n\ndata: [DONE]\n\n';
+
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockImplementation(() =>
+				Promise.resolve(
+					new Response(ssePayload, {
+						status: 200,
+						headers: { "Content-Type": "text/event-stream" },
+					}),
+				),
+			),
+		);
+
+		const resp = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": ip,
+			},
+			body: JSON.stringify({
+				messages: [{ role: "user", content: "hi" }],
+				stream: true,
+			}),
+		});
+
+		await resp.text();
+		await new Promise((r) => setTimeout(r, 50));
+
+		const ipVal = await kv().get(perIpKey(ip, Date.now()));
+		// Over-charge: counter remains at preCharge, no additional debit
+		expect(Number(ipVal)).toBe(PRE_CHARGE);
+	});
+
+	it("upstream non-2xx returns 502 to client and counters return to 0", async () => {
+		const ip = "9.9.9.9";
+
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockImplementation(() =>
+				Promise.resolve(
+					new Response("Internal Server Error", {
+						status: 500,
+						headers: { "Content-Type": "text/plain" },
+					}),
+				),
+			),
+		);
+
+		const resp = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": ip,
+			},
+			body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+		});
+
+		expect(resp.status).toBe(502);
+
+		const now = Date.now();
+		const [ipVal, gVal] = await Promise.all([
+			kv().get(perIpKey(ip, now)),
+			kv().get(globalKey(now)),
+		]);
+		expect(Number(ipVal)).toBe(0);
+		expect(Number(gVal)).toBe(0);
+	});
+
+	it("upstream fetch throws returns 502 and counters return to 0", async () => {
+		const ip = "10.0.0.1";
+
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockRejectedValue(new Error("Network error")),
+		);
+
+		const resp = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": ip,
+			},
+			body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+		});
+
+		expect(resp.status).toBe(502);
+
+		const now = Date.now();
+		const [ipVal, gVal] = await Promise.all([
+			kv().get(perIpKey(ip, now)),
+			kv().get(globalKey(now)),
+		]);
+		expect(Number(ipVal)).toBe(0);
+		expect(Number(gVal)).toBe(0);
+	});
+
+	it("multi-IP isolation: IP A capped does not affect IP B", async () => {
+		const ipA = "11.0.0.1";
+		const ipB = "11.0.0.2";
+		// Exhaust IP A
+		await kv().put(
+			perIpKey(ipA, Date.now()),
+			String(PER_IP_CAP - PRE_CHARGE + 1),
+			{
+				expirationTtl: 25 * 3600,
+			},
+		);
+
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockImplementation(() =>
+				Promise.resolve(
+					new Response("{}", {
+						status: 200,
+						headers: { "Content-Type": "application/json" },
+					}),
+				),
+			),
+		);
+
+		const respA = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": ipA,
+			},
+			body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+		});
+
+		const respB = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": ipB,
+			},
+			body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+		});
+
+		expect(respA.status).toBe(429);
+		expect(respB.status).toBe(200);
+	});
+
+	it("non-streaming JSON response: reconcile from body usage.total_tokens", async () => {
+		const ip = "12.0.0.1";
+		const jsonBody = JSON.stringify({ usage: { total_tokens: 800 } });
+
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockImplementation(() =>
+				Promise.resolve(
+					new Response(jsonBody, {
+						status: 200,
+						headers: { "Content-Type": "application/json" },
+					}),
+				),
+			),
+		);
+
+		const resp = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": ip,
+			},
+			body: JSON.stringify({
+				messages: [{ role: "user", content: "hi" }],
+				stream: false,
+			}),
+		});
+
+		expect(resp.status).toBe(200);
+
+		const now = Date.now();
+		const [ipVal, gVal] = await Promise.all([
+			kv().get(perIpKey(ip, now)),
+			kv().get(globalKey(now)),
+		]);
+		expect(Number(ipVal)).toBe(800);
+		expect(Number(gVal)).toBe(800);
+	});
+
+	it("streaming with no usage chunk results in full refund (counters at 0)", async () => {
+		const ip = "13.0.0.1";
+		// SSE with no usage data
+		const ssePayload = "data: {}\n\ndata: [DONE]\n\n";
+
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockImplementation(() =>
+				Promise.resolve(
+					new Response(ssePayload, {
+						status: 200,
+						headers: { "Content-Type": "text/event-stream" },
+					}),
+				),
+			),
+		);
+
+		const resp = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": ip,
+			},
+			body: JSON.stringify({
+				messages: [{ role: "user", content: "hi" }],
+				stream: true,
+			}),
+		});
+
+		await resp.text();
+		await new Promise((r) => setTimeout(r, 50));
+
+		const now = Date.now();
+		const [ipVal, gVal] = await Promise.all([
+			kv().get(perIpKey(ip, now)),
+			kv().get(globalKey(now)),
+		]);
+		expect(Number(ipVal)).toBe(0);
+		expect(Number(gVal)).toBe(0);
+	});
+
+	it("outbound body has stream_options.include_usage === true when stream:true", async () => {
+		let capturedBody: Record<string, unknown> | undefined;
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockImplementation(async (_url: string, init: RequestInit) => {
+				capturedBody = JSON.parse(init.body as string) as Record<
+					string,
+					unknown
+				>;
+				return new Response("data: [DONE]\n\n", {
+					status: 200,
+					headers: { "Content-Type": "text/event-stream" },
+				});
+			}),
+		);
+
+		await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				messages: [{ role: "user", content: "hi" }],
+				stream: true,
+			}),
+		});
+
+		expect(
+			(capturedBody?.stream_options as Record<string, unknown> | undefined)
+				?.include_usage,
+		).toBe(true);
+	});
+
+	// ── smoke regression: stream-failure refund must persist to KV ──────────────
+	// Reproduces the bug from attempt-1 smoke: the fire-and-forget
+	// upstream.body.pipeTo(...).catch(async () => refundFull(...)) races against
+	// worker-context teardown, so the KV put is cancelled and the counter stays
+	// at seeded + preCharge instead of being refunded to seeded.
+	it("stream failure mid-flight: per-IP counter is refunded back to seeded value (ctx.waitUntil fix)", async () => {
+		const ip = "14.0.0.1";
+		const seeded = 7_000;
+		// Pre-seed the per-IP counter so we can tell whether a refund happened
+		const now = Date.now();
+		await kv().put(perIpKey(ip, now), String(seeded), {
+			expirationTtl: 25 * 3600,
+		});
+
+		// Build an upstream response whose body errors mid-stream (no data sent)
+		const erroringStream = new ReadableStream({
+			start(controller) {
+				// Immediately error the stream to simulate a mid-flight upstream failure
+				controller.error(new Error("upstream disconnected mid-stream"));
+			},
+		});
+
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockImplementation(() =>
+				Promise.resolve(
+					new Response(erroringStream, {
+						status: 200,
+						headers: { "Content-Type": "text/event-stream" },
+					}),
+				),
+			),
+		);
+
+		const resp = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": ip,
+			},
+			body: JSON.stringify({
+				messages: [{ role: "user", content: "hi" }],
+				stream: true,
+			}),
+		});
+
+		// Drain the client-side response — the erroring stream will throw here;
+		// we catch it since we only care about the KV state afterwards.
+		try {
+			await resp.text();
+		} catch {
+			// expected: the upstream stream error propagates to the client reader
+		}
+
+		// Allow ctx.waitUntil promises to settle
+		await new Promise((r) => setTimeout(r, 100));
+
+		const ipVal = await kv().get(perIpKey(ip, Date.now()));
+		// The pre-charge (4000) was added on top of seeded (7000) → 11000.
+		// After the stream error the full pre-charge must be refunded → back to 7000.
+		// Without ctx.waitUntil the KV put is cancelled and counter stays at 11000.
+		expect(Number(ipVal)).toBe(seeded);
 	});
 });

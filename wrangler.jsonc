@@ -5,7 +5,7 @@
 	"compatibility_flags": ["nodejs_compat"],
 	"kv_namespaces": [
 		{
-			// Backing store for per-IP rate-limit buckets and the global daily spend cap.
+			// per-IP and global daily token counters (issue #37)
 			// In production: create with `wrangler kv namespace create RATE_GUARD_KV`
 			// In tests: vitest-pool-workers provides an in-process KV implementation.
 			"binding": "RATE_GUARD_KV",
@@ -15,13 +15,11 @@
 	// Secrets (not committed here — provision via `wrangler secret put <NAME>`):
 	//   OPENROUTER_API_KEY — API key for OpenRouter (POST /v1/chat/completions)
 	"vars": {
-		// Per-IP token-bucket: max tokens (= max burst requests per window).
-		"RATE_LIMIT_MAX": "20",
-		// Window over which the token bucket fully refills, in seconds.
-		"RATE_LIMIT_WINDOW_SEC": "60",
-		// Estimated cost unit per request (same unit as DAILY_CAP_MAX).
-		"ESTIMATED_COST_PER_REQUEST": "1",
-		// Global daily request budget (units match ESTIMATED_COST_PER_REQUEST).
-		"DAILY_CAP_MAX": "1000"
+		// Per-IP daily token ceiling (issue #37).
+		"PER_IP_DAILY_TOKEN_MAX": "20000",
+		// Global daily wallet token ceiling (issue #37).
+		"GLOBAL_DAILY_TOKEN_MAX": "1000000",
+		// Tokens pre-charged at request start, before stream completes (issue #37).
+		"PRE_CHARGE_ESTIMATE": "4000"
 	}
 }

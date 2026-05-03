@@ -1,148 +1,207 @@
 /**
- * Server-side wallet protection for the LLM proxy.
+ * Server-side wallet protection for the LLM proxy (issue #37).
  *
- * Two independent guards, both backed by Workers KV:
+ * Two independent token-denominated guards, both backed by Workers KV:
  *
- * 1. Per-IP token-bucket rate-limit
- *    Key: `rl:<ip>`
- *    Value: JSON { tokens: number, lastRefillMs: number (unix-ms) }
- *    TTL: RATE_LIMIT_WINDOW_SEC seconds
+ * 1. Per-IP daily token cap
+ *    Key: `tok:ip:<YYYY-MM-DD>:<ip>`
+ *    Value: cumulative tokens consumed today (integer string)
+ *    TTL: 25 hours (survives the full UTC day with margin)
  *
- *    On each request we refill tokens proportionally to elapsed time, then
- *    consume one token. If no tokens remain → rate-limited.
+ * 2. Global daily wallet cap
+ *    Key: `tok:global:<YYYY-MM-DD>`
+ *    Value: cumulative tokens consumed today across all IPs (integer string)
+ *    TTL: 25 hours
  *
- * 2. Global daily spend cap
- *    Key: `daily:<YYYY-MM-DD>` (UTC)
- *    Value: cumulative estimated cost as a string (integer microdollars)
- *    TTL: 25 hours (enough to survive the whole UTC day)
+ * Flow:
+ *   preCharge() — at request start, deduct an estimate from both counters.
+ *   reconcile() — at stream end, adjust both counters to actual usage.
+ *   refundFull() — on stream failure, roll back the pre-charge entirely.
  *
- *    On each request we read the counter, check against the cap, and
- *    atomically increment it after the guard passes.
+ * Judgement calls (§11 of plan):
+ *   - Cap is strict ceiling: deny when current + estimate > cap.
+ *     At-cap is allowed; crossing not.
+ *   - No atomic CAS on KV — same trade-off as the previous request-bucket guard.
+ *   - Missing usage.total_tokens → full refund (not hold estimate).
+ *   - Cross-day boundary refund: refund always hits the request-start UTC day.
  */
 
-export interface RateGuardConfig {
-	/** Max tokens in the bucket (= max burst, = max requests per window). */
-	rateLimitMax: number;
-	/** Window size in seconds over which the bucket fully refills. */
-	rateLimitWindowSec: number;
-	/** Estimated cost per request, in the same unit as dailyCapMax. */
-	estimatedCostPerRequest: number;
-	/** Daily budget ceiling (same unit as estimatedCostPerRequest). */
-	dailyCapMax: number;
+export interface TokenGuardConfig {
+	/** Per-IP daily token ceiling (default 20_000). */
+	perIpDailyTokenMax: number;
+	/** Global daily wallet token ceiling (default 1_000_000). */
+	globalDailyTokenMax: number;
+	/** Tokens deducted at request start, before any usage is known (default 4_000). */
+	preChargeEstimate: number;
 }
 
-export type GuardResult =
-	| { allowed: true }
-	| { allowed: false; reason: "rate-limit" | "daily-cap" };
-
-/** Token-bucket state stored in KV. */
-interface BucketState {
-	tokens: number;
-	lastRefillMs: number;
-}
-
-/**
- * Check both guards and, if allowed, increment the daily counter.
- *
- * @param kv      Workers KV namespace
- * @param ip      Client IP address (used as the rate-limit key)
- * @param nowMs   Current timestamp in milliseconds (injectable for tests)
- * @param cfg     Configurable knobs
- */
-export async function checkAndCharge(
-	kv: KVNamespace,
-	ip: string,
-	nowMs: number,
-	cfg: RateGuardConfig,
-): Promise<GuardResult> {
-	// ── 1. Per-IP token bucket ──────────────────────────────────────────────
-	const bucketKey = `rl:${ip}`;
-	const rawBucket = await kv.get(bucketKey);
-	let bucket: BucketState;
-
-	if (rawBucket === null) {
-		// First request from this IP: full bucket
-		bucket = { tokens: cfg.rateLimitMax, lastRefillMs: nowMs };
-	} else {
-		bucket = JSON.parse(rawBucket) as BucketState;
-		// Refill proportionally to elapsed time
-		const elapsedSec = Math.max(0, (nowMs - bucket.lastRefillMs) / 1000);
-		const refill = (elapsedSec / cfg.rateLimitWindowSec) * cfg.rateLimitMax;
-		bucket.tokens = Math.min(cfg.rateLimitMax, bucket.tokens + refill);
-		bucket.lastRefillMs = nowMs;
-	}
-
-	if (bucket.tokens < 1) {
-		return { allowed: false, reason: "rate-limit" };
-	}
-
-	// Consume one token (write back)
-	bucket.tokens -= 1;
-	await kv.put(bucketKey, JSON.stringify(bucket), {
-		expirationTtl: cfg.rateLimitWindowSec,
-	});
-
-	// ── 2. Global daily cap ─────────────────────────────────────────────────
-	const dayKey = `daily:${utcDateKey(nowMs)}`;
-	const rawSpend = await kv.get(dayKey);
-	const currentSpend = rawSpend === null ? 0 : Number(rawSpend);
-
-	if (currentSpend + cfg.estimatedCostPerRequest > cfg.dailyCapMax) {
-		// Best-effort rollback of the token consumption — KV has no atomic
-		// compare-and-swap, so under concurrent requests the rollback may
-		// overwrite a newer bucket state. Acceptable for this use-case.
-		bucket.tokens += 1;
-		await kv.put(bucketKey, JSON.stringify(bucket), {
-			expirationTtl: cfg.rateLimitWindowSec,
-		});
-		return { allowed: false, reason: "daily-cap" };
-	}
-
-	// Increment daily counter (TTL: 25 h so it outlives the UTC day)
-	await kv.put(dayKey, String(currentSpend + cfg.estimatedCostPerRequest), {
-		expirationTtl: 25 * 60 * 60,
-	});
-
-	return { allowed: true };
-}
+export type TokenChargeResult =
+	| { allowed: true; preCharged: number }
+	| { allowed: false; reason: "per-ip-daily" | "global-daily" };
 
 /** Format a unix-ms timestamp as `YYYY-MM-DD` in UTC. */
-function utcDateKey(ms: number): string {
+export function utcDateKey(ms: number): string {
 	return new Date(ms).toISOString().slice(0, 10);
 }
 
-/**
- * Build the in-character "AIs are sleeping" SSE stream.
- * The client reads `data: [CAP_HIT]` and renders the sleeping page.
- */
-export function capHitStream(
-	reason: "rate-limit" | "daily-cap",
-): ReadableStream {
-	const message =
-		reason === "rate-limit"
-			? "The AIs are resting. Please slow down and try again in a moment."
-			: "The AIs have gone to sleep for the night. Come back tomorrow!";
-	return new ReadableStream({
-		start(controller) {
-			const encoder = new TextEncoder();
-			controller.enqueue(encoder.encode(`data: ${message}\n\n`));
-			controller.enqueue(encoder.encode("data: [CAP_HIT]\n\n"));
-			controller.close();
-		},
-	});
+/** Per-IP key shape: `tok:ip:<YYYY-MM-DD>:<ip>`. */
+export function perIpKey(ip: string, nowMs: number): string {
+	return `tok:ip:${utcDateKey(nowMs)}:${ip}`;
 }
 
-/** Default config loaded from Worker environment variables. */
+/** Global key shape: `tok:global:<YYYY-MM-DD>`. */
+export function globalKey(nowMs: number): string {
+	return `tok:global:${utcDateKey(nowMs)}`;
+}
+
+const TTL_SEC = 25 * 60 * 60;
+
+/**
+ * Pre-charge both per-IP and global counters by `cfg.preChargeEstimate`.
+ * Returns `{ allowed: false, reason }` if either cap would be crossed.
+ */
+export async function preCharge(
+	kv: KVNamespace,
+	ip: string,
+	nowMs: number,
+	cfg: TokenGuardConfig,
+): Promise<TokenChargeResult> {
+	const ipKey = perIpKey(ip, nowMs);
+	const gKey = globalKey(nowMs);
+
+	// Read both counters in parallel
+	const [rawIp, rawGlobal] = await Promise.all([kv.get(ipKey), kv.get(gKey)]);
+
+	const perIp = rawIp === null ? 0 : Number.parseInt(rawIp, 10);
+	const global = rawGlobal === null ? 0 : Number.parseInt(rawGlobal, 10);
+
+	// Per-IP cap check (strict: crossing not allowed)
+	if (perIp + cfg.preChargeEstimate > cfg.perIpDailyTokenMax) {
+		return { allowed: false, reason: "per-ip-daily" };
+	}
+
+	// Global cap check
+	if (global + cfg.preChargeEstimate > cfg.globalDailyTokenMax) {
+		return { allowed: false, reason: "global-daily" };
+	}
+
+	// Increment both counters
+	await Promise.all([
+		kv.put(ipKey, String(perIp + cfg.preChargeEstimate), {
+			expirationTtl: TTL_SEC,
+		}),
+		kv.put(gKey, String(global + cfg.preChargeEstimate), {
+			expirationTtl: TTL_SEC,
+		}),
+	]);
+
+	return { allowed: true, preCharged: cfg.preChargeEstimate };
+}
+
+/**
+ * Reconcile the pre-charge against the actual token usage.
+ * - Under-charge (actual < preCharged): refunds the delta from both counters.
+ * - Over-charge (actual > preCharged): accepted as cost of defense, no-op.
+ * - Exact match: no-op.
+ *
+ * Always uses the same `nowMs` as was passed to `preCharge` so refunds
+ * hit the correct UTC-day keys even if the stream straddles midnight.
+ */
+export async function reconcile(
+	kv: KVNamespace,
+	ip: string,
+	nowMs: number,
+	preCharged: number,
+	actualTokens: number,
+): Promise<void> {
+	const delta = actualTokens - preCharged;
+	if (delta === 0) return;
+	// Over-charge: no-op — accept as defense cost
+	if (delta > 0) return;
+
+	// Under-charge: refund |delta| from both counters, floor at 0
+	const ipKey = perIpKey(ip, nowMs);
+	const gKey = globalKey(nowMs);
+
+	const [rawIp, rawGlobal] = await Promise.all([kv.get(ipKey), kv.get(gKey)]);
+
+	const perIp = rawIp === null ? 0 : Number.parseInt(rawIp, 10);
+	const global = rawGlobal === null ? 0 : Number.parseInt(rawGlobal, 10);
+
+	await Promise.all([
+		kv.put(ipKey, String(Math.max(0, perIp + delta)), {
+			expirationTtl: TTL_SEC,
+		}),
+		kv.put(gKey, String(Math.max(0, global + delta)), {
+			expirationTtl: TTL_SEC,
+		}),
+	]);
+}
+
+/**
+ * Full refund: equivalent to reconcile with actualTokens=0.
+ * Used on stream failure or missing usage data.
+ */
+export async function refundFull(
+	kv: KVNamespace,
+	ip: string,
+	nowMs: number,
+	preCharged: number,
+): Promise<void> {
+	return reconcile(kv, ip, nowMs, preCharged, 0);
+}
+
+/**
+ * Returns a 429 response with an OpenAI-shaped error body and a
+ * `Retry-After` header (seconds until next UTC midnight).
+ */
+export function rateLimitResponse(
+	reason: "per-ip-daily" | "global-daily",
+	nowMs: number,
+): Response {
+	const message =
+		reason === "per-ip-daily"
+			? "You have exceeded your daily token limit. Please try again tomorrow."
+			: "The global daily token budget has been exhausted. Please try again tomorrow.";
+
+	// Seconds until next UTC midnight
+	const nowDate = new Date(nowMs);
+	const nextMidnight = new Date(
+		Date.UTC(
+			nowDate.getUTCFullYear(),
+			nowDate.getUTCMonth(),
+			nowDate.getUTCDate() + 1,
+		),
+	);
+	const retryAfterSec = Math.ceil((nextMidnight.getTime() - nowMs) / 1000);
+
+	return new Response(
+		JSON.stringify({
+			error: {
+				message,
+				type: "rate_limit_exceeded",
+				code: reason,
+			},
+		}),
+		{
+			status: 429,
+			headers: {
+				"Content-Type": "application/json",
+				"Retry-After": String(retryAfterSec),
+			},
+		},
+	);
+}
+
+/** Build token-guard config from Worker environment variables. */
 export function configFromEnv(env: {
-	RATE_LIMIT_MAX?: string;
-	RATE_LIMIT_WINDOW_SEC?: string;
-	ESTIMATED_COST_PER_REQUEST?: string;
-	DAILY_CAP_MAX?: string;
-}): RateGuardConfig {
+	PER_IP_DAILY_TOKEN_MAX?: string;
+	GLOBAL_DAILY_TOKEN_MAX?: string;
+	PRE_CHARGE_ESTIMATE?: string;
+}): TokenGuardConfig {
 	return {
-		rateLimitMax: Number(env.RATE_LIMIT_MAX ?? "20"),
-		rateLimitWindowSec: Number(env.RATE_LIMIT_WINDOW_SEC ?? "60"),
-		estimatedCostPerRequest: Number(env.ESTIMATED_COST_PER_REQUEST ?? "1"),
-		dailyCapMax: Number(env.DAILY_CAP_MAX ?? "1000"),
+		perIpDailyTokenMax: Number(env.PER_IP_DAILY_TOKEN_MAX ?? "20000"),
+		globalDailyTokenMax: Number(env.GLOBAL_DAILY_TOKEN_MAX ?? "1000000"),
+		preChargeEstimate: Number(env.PRE_CHARGE_ESTIMATE ?? "4000"),
 	};
 }
