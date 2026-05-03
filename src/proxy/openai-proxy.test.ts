@@ -311,10 +311,7 @@ function kv(): KVNamespace {
 	return (env as Record<string, KVNamespace>).RATE_GUARD_KV as KVNamespace;
 }
 
-// Fixed timestamp for deterministic UTC-day keys
-const _DAY_MS = new Date("2026-05-01T12:00:00Z").getTime();
-
-// Tight caps for testing
+// Tight caps for testing (must match vitest.config.ts bindings)
 const PER_IP_CAP = 20_000;
 const PRE_CHARGE = 4_000;
 
@@ -329,8 +326,7 @@ describe("rate-guard integration — POST /v1/chat/completions", () => {
 	it("per-IP cap-hit returns 429 with error.code === 'per-ip-daily', upstream not called", async () => {
 		// Exhaust the per-IP counter
 		const ip = "5.5.5.5";
-		const today = new Date().toISOString().slice(0, 10);
-		const ipK = `tok:ip:${today}:${ip}`;
+		const ipK = perIpKey(ip, Date.now());
 		await kv().put(ipK, String(PER_IP_CAP - PRE_CHARGE + 1), {
 			expirationTtl: 25 * 3600,
 		});
@@ -358,8 +354,7 @@ describe("rate-guard integration — POST /v1/chat/completions", () => {
 	});
 
 	it("global cap-hit returns 429 with error.code === 'global-daily'", async () => {
-		const today = new Date().toISOString().slice(0, 10);
-		const gK = `tok:global:${today}`;
+		const gK = globalKey(Date.now());
 		await kv().put(gK, String(1_000_000 - PRE_CHARGE + 1), {
 			expirationTtl: 25 * 3600,
 		});
@@ -418,10 +413,11 @@ describe("rate-guard integration — POST /v1/chat/completions", () => {
 		// Give the flush microtask time to complete
 		await new Promise((r) => setTimeout(r, 50));
 
-		const today = new Date().toISOString().slice(0, 10);
-		const ipK = `tok:ip:${today}:${ip}`;
-		const gK = `tok:global:${today}`;
-		const [ipVal, gVal] = await Promise.all([kv().get(ipK), kv().get(gK)]);
+		const now = Date.now();
+		const [ipVal, gVal] = await Promise.all([
+			kv().get(perIpKey(ip, now)),
+			kv().get(globalKey(now)),
+		]);
 
 		expect(Number(ipVal)).toBe(1500);
 		expect(Number(gVal)).toBe(1500);
@@ -459,9 +455,7 @@ describe("rate-guard integration — POST /v1/chat/completions", () => {
 		await resp.text();
 		await new Promise((r) => setTimeout(r, 50));
 
-		const today = new Date().toISOString().slice(0, 10);
-		const ipK = `tok:ip:${today}:${ip}`;
-		const ipVal = await kv().get(ipK);
+		const ipVal = await kv().get(perIpKey(ip, Date.now()));
 		// Over-charge: counter remains at preCharge, no additional debit
 		expect(Number(ipVal)).toBe(PRE_CHARGE);
 	});
@@ -492,10 +486,11 @@ describe("rate-guard integration — POST /v1/chat/completions", () => {
 
 		expect(resp.status).toBe(502);
 
-		const today = new Date().toISOString().slice(0, 10);
-		const ipK = `tok:ip:${today}:${ip}`;
-		const gK = `tok:global:${today}`;
-		const [ipVal, gVal] = await Promise.all([kv().get(ipK), kv().get(gK)]);
+		const now = Date.now();
+		const [ipVal, gVal] = await Promise.all([
+			kv().get(perIpKey(ip, now)),
+			kv().get(globalKey(now)),
+		]);
 		expect(Number(ipVal)).toBe(0);
 		expect(Number(gVal)).toBe(0);
 	});
@@ -519,10 +514,11 @@ describe("rate-guard integration — POST /v1/chat/completions", () => {
 
 		expect(resp.status).toBe(502);
 
-		const today = new Date().toISOString().slice(0, 10);
-		const ipK = `tok:ip:${today}:${ip}`;
-		const gK = `tok:global:${today}`;
-		const [ipVal, gVal] = await Promise.all([kv().get(ipK), kv().get(gK)]);
+		const now = Date.now();
+		const [ipVal, gVal] = await Promise.all([
+			kv().get(perIpKey(ip, now)),
+			kv().get(globalKey(now)),
+		]);
 		expect(Number(ipVal)).toBe(0);
 		expect(Number(gVal)).toBe(0);
 	});
@@ -530,12 +526,14 @@ describe("rate-guard integration — POST /v1/chat/completions", () => {
 	it("multi-IP isolation: IP A capped does not affect IP B", async () => {
 		const ipA = "11.0.0.1";
 		const ipB = "11.0.0.2";
-		const today = new Date().toISOString().slice(0, 10);
-		const ipAKey = `tok:ip:${today}:${ipA}`;
 		// Exhaust IP A
-		await kv().put(ipAKey, String(PER_IP_CAP - PRE_CHARGE + 1), {
-			expirationTtl: 25 * 3600,
-		});
+		await kv().put(
+			perIpKey(ipA, Date.now()),
+			String(PER_IP_CAP - PRE_CHARGE + 1),
+			{
+				expirationTtl: 25 * 3600,
+			},
+		);
 
 		vi.stubGlobal(
 			"fetch",
@@ -601,10 +599,11 @@ describe("rate-guard integration — POST /v1/chat/completions", () => {
 
 		expect(resp.status).toBe(200);
 
-		const today = new Date().toISOString().slice(0, 10);
-		const ipK = `tok:ip:${today}:${ip}`;
-		const gK = `tok:global:${today}`;
-		const [ipVal, gVal] = await Promise.all([kv().get(ipK), kv().get(gK)]);
+		const now = Date.now();
+		const [ipVal, gVal] = await Promise.all([
+			kv().get(perIpKey(ip, now)),
+			kv().get(globalKey(now)),
+		]);
 		expect(Number(ipVal)).toBe(800);
 		expect(Number(gVal)).toBe(800);
 	});
@@ -641,10 +640,11 @@ describe("rate-guard integration — POST /v1/chat/completions", () => {
 		await resp.text();
 		await new Promise((r) => setTimeout(r, 50));
 
-		const today = new Date().toISOString().slice(0, 10);
-		const ipK = `tok:ip:${today}:${ip}`;
-		const gK = `tok:global:${today}`;
-		const [ipVal, gVal] = await Promise.all([kv().get(ipK), kv().get(gK)]);
+		const now = Date.now();
+		const [ipVal, gVal] = await Promise.all([
+			kv().get(perIpKey(ip, now)),
+			kv().get(globalKey(now)),
+		]);
 		expect(Number(ipVal)).toBe(0);
 		expect(Number(gVal)).toBe(0);
 	});
@@ -680,7 +680,3 @@ describe("rate-guard integration — POST /v1/chat/completions", () => {
 		).toBe(true);
 	});
 });
-
-// Keep perIpKey / globalKey imports used above (silence unused-import linters)
-void perIpKey;
-void globalKey;
