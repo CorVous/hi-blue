@@ -23,6 +23,9 @@ importers:
       '@typescript/native-preview':
         specifier: 7.0.0-dev.20260430.1
         version: 7.0.0-dev.20260430.1
+      esbuild:
+        specifier: ^0.27.3
+        version: 0.27.3
       husky:
         specifier: ^9.1.7
         version: 9.1.7

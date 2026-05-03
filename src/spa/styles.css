@@ -1,0 +1,62 @@
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	padding: 0;
+	height: 100%;
+	font-family: system-ui, sans-serif;
+}
+
+main {
+	display: flex;
+	flex-direction: column;
+	gap: 1rem;
+	padding: 1.5rem;
+	max-width: 720px;
+	margin: 0 auto;
+}
+
+#composer {
+	display: flex;
+	gap: 0.5rem;
+}
+
+#prompt {
+	flex: 1;
+	padding: 0.5rem 0.75rem;
+	font-size: 1rem;
+	border: 1px solid #ccc;
+	border-radius: 4px;
+}
+
+#send {
+	padding: 0.5rem 1rem;
+	font-size: 1rem;
+	cursor: pointer;
+	border: 1px solid #888;
+	border-radius: 4px;
+	background: #f0f0f0;
+}
+
+#send:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+#output {
+	white-space: pre-wrap;
+	word-break: break-word;
+	font-family: monospace;
+	font-size: 0.9rem;
+	line-height: 1.5;
+	padding: 1rem;
+	background: #f8f8f8;
+	border: 1px solid #ddd;
+	border-radius: 4px;
+	min-height: 4rem;
+}
