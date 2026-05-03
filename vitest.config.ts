@@ -21,7 +21,11 @@ export default defineConfig({
 						configPath: "./wrangler.jsonc",
 						miniflare: {
 							kvNamespaces: ["RATE_GUARD_KV"],
-							bindings: { ENABLE_TEST_MODES: "1", TOKEN_PACE_MS: "0" },
+							bindings: {
+								ENABLE_TEST_MODES: "1",
+								TOKEN_PACE_MS: "0",
+								OPENROUTER_API_KEY: "test-openrouter-key",
+							},
 						},
 					}),
 				],

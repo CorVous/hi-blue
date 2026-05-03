@@ -12,6 +12,8 @@
 			"id": "rate-guard-kv-placeholder-replace-in-production"
 		}
 	],
+	// Secrets (not committed here — provision via `wrangler secret put <NAME>`):
+	//   OPENROUTER_API_KEY — API key for OpenRouter (POST /v1/chat/completions)
 	"vars": {
 		// Per-IP token-bucket: max tokens (= max burst requests per window).
 		"RATE_LIMIT_MAX": "20",
