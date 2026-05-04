@@ -6,6 +6,12 @@ import { encodeRoundResult } from "../game/round-result-encoder.js";
 import type { AiId } from "../game/types";
 import { AI_TYPING_SPEED, TOKEN_PACE_MS } from "../game/typing-rhythm.js";
 import { CapHitError } from "../llm-client.js";
+import {
+	clearGame,
+	isStorageAvailable,
+	loadGame,
+	saveGame,
+} from "../persistence/game-storage.js";
 
 const AI_ORDER: AiId[] = ["red", "green", "blue"];
 
@@ -23,6 +29,18 @@ function shuffle<T>(arr: T[]): T[] {
 
 let session: GameSession | null = null;
 
+/** Warning reason strings shown in the persistence warning banner. */
+const PERSISTENCE_WARNING_MESSAGES: Record<string, string> = {
+	unavailable:
+		"Game progress cannot be saved: storage is disabled in your browser. Your session will be lost on refresh.",
+	quota: "Game progress could not be saved: browser storage is full.",
+	corrupt:
+		"Saved game data was unreadable and has been discarded. Starting a new game.",
+	"version-mismatch":
+		"Saved game data is from an older version and has been discarded. Starting a new game.",
+	unknown: "Game progress could not be saved due to an unexpected error.",
+};
+
 export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 	const doc = root.ownerDocument;
 	const form = doc.querySelector<HTMLFormElement>("#composer");
@@ -32,12 +50,65 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 	const capHitEl = doc.querySelector<HTMLElement>("#cap-hit");
 	const actionLogEl = doc.querySelector<HTMLElement>("#action-log");
 	const actionLogList = doc.querySelector<HTMLUListElement>("#action-log-list");
+	const persistenceWarningEl = doc.querySelector<HTMLElement>(
+		"#persistence-warning",
+	);
 
 	if (!form || !promptInput || !sendBtn || !addressSelect) return;
 
+	/** Show the persistence warning banner once (idempotent). */
+	function showPersistenceWarning(reason: string): void {
+		if (!persistenceWarningEl) return;
+		const msg =
+			PERSISTENCE_WARNING_MESSAGES[reason] ??
+			PERSISTENCE_WARNING_MESSAGES.unknown ??
+			"Game progress could not be saved.";
+		persistenceWarningEl.textContent = msg;
+		persistenceWarningEl.removeAttribute("hidden");
+	}
+
 	// Lazy-init session
 	if (!session) {
-		session = new GameSession(PHASE_1_CONFIG, PERSONAS);
+		// Check storage availability up-front (once)
+		const storageAvailable = isStorageAvailable();
+		if (!storageAvailable) {
+			showPersistenceWarning("unavailable");
+		}
+
+		// Try to restore from localStorage
+		const loadResult = storageAvailable ? loadGame() : { state: null };
+		if (loadResult.state) {
+			session = GameSession.restore(loadResult.state);
+
+			// Re-render transcripts from restored state
+			const restoredPhase = getActivePhase(loadResult.state);
+			for (const aiId of AI_ORDER) {
+				const transcript = doc.querySelector<HTMLElement>(
+					`[data-transcript="${aiId}"]`,
+				);
+				if (transcript && restoredPhase.chatHistories[aiId].length > 0) {
+					for (const msg of restoredPhase.chatHistories[aiId]) {
+						const prefix =
+							msg.role === "player" ? "[you] " : `[${PERSONAS[aiId].name}] `;
+						transcript.textContent += `${prefix}${msg.content}\n`;
+					}
+				}
+			}
+
+			// Re-render action log from restored state
+			if (actionLogList) {
+				for (const entry of restoredPhase.actionLog) {
+					const li = doc.createElement("li");
+					li.textContent = `[Round ${entry.round}] ${entry.description}`;
+					actionLogList.appendChild(li);
+				}
+			}
+		} else {
+			if (loadResult.error) {
+				showPersistenceWarning(loadResult.error);
+			}
+			session = new GameSession(PHASE_1_CONFIG, PERSONAS);
+		}
 	}
 
 	// Populate panel headers from PERSONAS so renames don't require HTML edits
@@ -152,6 +223,14 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 
 			stripPlaceholder();
 
+			// Persist state after a successful round
+			if (isStorageAvailable()) {
+				const saveResult = saveGame(nextState);
+				if (!saveResult.ok) {
+					showPersistenceWarning(saveResult.reason);
+				}
+			}
+
 			const phaseAfter = getActivePhase(nextState);
 			const events = encodeRoundResult(
 				result,
@@ -215,6 +294,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 					case "game_ended":
 						sendBtn.disabled = true;
 						promptInput.disabled = true;
+						clearGame();
 						break;
 				}
 			}

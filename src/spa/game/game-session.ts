@@ -75,6 +75,18 @@ export class GameSession {
 		this.state = startPhase(game, phaseConfig);
 	}
 
+	/**
+	 * Restore a GameSession from a pre-existing GameState (e.g. loaded from
+	 * localStorage). Bypasses initial `startPhase` — the state is used as-is.
+	 */
+	static restore(state: GameState): GameSession {
+		// Use Object.create to bypass the constructor while still getting an
+		// instance of GameSession.
+		const session = Object.create(GameSession.prototype) as GameSession;
+		session.state = state;
+		return session;
+	}
+
 	getState(): GameState {
 		return this.state;
 	}
