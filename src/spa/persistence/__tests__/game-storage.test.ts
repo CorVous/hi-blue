@@ -218,6 +218,19 @@ describe("loadGame", () => {
 		expect(result.state?.currentPhase).toBe(1);
 		expect(result.state?.phases).toHaveLength(1);
 	});
+
+	it("returns error: corrupt (not unavailable) when schemaVersion is valid but game structure is malformed", () => {
+		// Valid JSON, correct schemaVersion, but game.phases is not an array
+		const malformed = JSON.stringify({
+			schemaVersion: 1,
+			savedAt: new Date().toISOString(),
+			game: { currentPhase: 1, isComplete: false, personas: {}, phases: null },
+		});
+		localStorage.setItem(STORAGE_KEY, malformed);
+		const result = loadGame();
+		expect(result.state).toBeNull();
+		expect(result.error).toBe("corrupt");
+	});
 });
 
 describe("saveGame", () => {

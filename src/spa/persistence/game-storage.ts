@@ -207,7 +207,12 @@ export function loadGame(): LoadResult {
 		}
 
 		const persisted = parsed as PersistedGame;
-		const state = deserializeGameState(persisted);
+		let state: GameState;
+		try {
+			state = deserializeGameState(persisted);
+		} catch {
+			return { state: null, error: "corrupt" };
+		}
 		return { state };
 	} catch {
 		return { state: null, error: "unavailable" };
