@@ -5,6 +5,9 @@ vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 
 // Matches the body content of src/spa/index.html
 const INDEX_BODY_HTML = `
+<header>
+  <button id="byok-cog" type="button" aria-label="Settings" title="Settings">⚙</button>
+</header>
 <main>
   <form id="composer">
     <input id="prompt" type="text" placeholder="Enter a message…" autocomplete="off" />
@@ -18,6 +21,24 @@ come back tomorrow — they wake at midnight UTC.</pre>
     <p class="cap-hit-byok"><a href="#/byok" data-byok-placeholder>or paste your own OpenRouter key to keep playing — coming soon.</a></p>
   </section>
 </main>
+<dialog id="byok-dialog" aria-labelledby="byok-title">
+  <form method="dialog" id="byok-form">
+    <h2 id="byok-title">OpenRouter API Key</h2>
+    <p id="byok-mode-line"></p>
+    <label for="byok-key-input">API key</label>
+    <input id="byok-key-input" type="password" autocomplete="off" spellcheck="false" />
+    <p id="byok-status" role="status" aria-live="polite"></p>
+    <div id="byok-buttons">
+      <button id="byok-validate-save" type="button">Validate &amp; save</button>
+      <button id="byok-save-unverified" type="button" hidden>Save unverified</button>
+      <button id="byok-revalidate" type="button" hidden>Re-validate</button>
+      <button id="byok-replace" type="button" hidden>Replace key</button>
+      <button id="byok-clear" type="button" hidden>Clear key &amp; use free tier</button>
+    </div>
+    <p id="byok-clear-helper" hidden>Returns to the daily-capped free tier. Your key isn't sent anywhere on clear — just removed from this browser.</p>
+    <button id="byok-close" type="button" aria-label="Close">Close</button>
+  </form>
+</dialog>
 <script type="module" src="./assets/index.js"></script>
 `;
 

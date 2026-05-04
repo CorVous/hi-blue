@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { PINNED_MODEL } from "../../model.js";
 import {
 	CapHitError,
 	PERSONA_PLACEHOLDER,
@@ -358,5 +359,41 @@ describe("streamChat", () => {
 		await expect(
 			streamChat({ message: "test", onDelta: vi.fn() }),
 		).rejects.toThrow(/HTTP 500/);
+	});
+
+	it("sends model: PINNED_MODEL on the free-tier path", async () => {
+		const mockFetch = vi
+			.fn()
+			.mockResolvedValue(
+				makeFetchResponse(makeSSEStream([`data: [DONE]\n\n`])),
+			);
+		vi.stubGlobal("fetch", mockFetch);
+		vi.stubGlobal("localStorage", {
+			getItem: vi.fn().mockReturnValue(null),
+		});
+
+		await streamChat({ message: "hello", onDelta: vi.fn() });
+
+		const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+		expect(JSON.parse(init.body as string).model).toBe("z-ai/glm-4.7-flash");
+		expect(JSON.parse(init.body as string).model).toBe(PINNED_MODEL);
+	});
+
+	it("sends model: PINNED_MODEL on the BYOK path", async () => {
+		const mockFetch = vi
+			.fn()
+			.mockResolvedValue(
+				makeFetchResponse(makeSSEStream([`data: [DONE]\n\n`])),
+			);
+		vi.stubGlobal("fetch", mockFetch);
+		vi.stubGlobal("localStorage", {
+			getItem: vi.fn().mockReturnValue("sk-byok-key"),
+		});
+
+		await streamChat({ message: "hello", onDelta: vi.fn() });
+
+		const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+		expect(JSON.parse(init.body as string).model).toBe("z-ai/glm-4.7-flash");
+		expect(JSON.parse(init.body as string).model).toBe(PINNED_MODEL);
 	});
 });

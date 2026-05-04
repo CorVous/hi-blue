@@ -1,3 +1,4 @@
+import { PINNED_MODEL } from "../model.js";
 import { parseSSEStream } from "./streaming.js";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
@@ -118,7 +119,7 @@ export async function streamChat(opts: {
 	const response = await fetch(url, {
 		method: "POST",
 		headers,
-		body: JSON.stringify({ messages, stream: true }),
+		body: JSON.stringify({ model: PINNED_MODEL, messages, stream: true }),
 		...(signal != null ? { signal } : {}),
 	});
 

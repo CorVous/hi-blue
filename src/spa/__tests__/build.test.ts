@@ -37,4 +37,13 @@ describe("src/spa/index.html asset references", () => {
 			/id="cap-hit"[^>]*hidden|hidden[^>]*id="cap-hit"/,
 		);
 	});
+
+	it('index.html contains a <dialog id="byok-dialog">', () => {
+		expect(html as string).toContain('id="byok-dialog"');
+	});
+
+	it("index.html contains a cog button #byok-cog with the ⚙ glyph", () => {
+		expect(html as string).toContain('id="byok-cog"');
+		expect(html as string).toContain("⚙");
+	});
 });
