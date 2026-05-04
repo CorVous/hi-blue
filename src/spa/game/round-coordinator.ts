@@ -13,9 +13,8 @@
  * before the round begins. Non-addressed AIs do not see the player message.
  */
 
-import { buildAiContext } from "./context-builder";
+import type { LLMProvider } from "../../proxy/llm-provider";
 import { dispatchAiTurn } from "./dispatcher";
-import type { LLMProvider } from "./proxy/llm-provider";
 import {
 	advancePhase,
 	advanceRound,
@@ -25,7 +24,8 @@ import {
 	isAiLockedOut,
 	resolveChatLockouts,
 	triggerChatLockout,
-} from "./spa/game/engine";
+} from "./engine";
+import { buildAiContext } from "./prompt-builder";
 import type {
 	ActionLogEntry,
 	AiId,
@@ -33,7 +33,7 @@ import type {
 	GameState,
 	RoundResult,
 	ToolName,
-} from "./spa/game/types";
+} from "./types";
 
 const AI_ORDER: AiId[] = ["red", "green", "blue"];
 
@@ -156,6 +156,8 @@ async function collectCompletion(
  * @param chatLockoutConfig  Optional config for the mid-phase chat-lockout event.
  *   When provided, the coordinator will trigger a lockout at `lockoutTriggerRound`
  *   using `rng` to select which AI to lock, lasting `lockoutDuration` rounds.
+ * @param initiative  Optional turn-order permutation. Must be a permutation of
+ *   all three AI ids ["red","green","blue"]. When absent, defaults to AI_ORDER.
  */
 export async function runRound(
 	game: GameState,
@@ -163,7 +165,24 @@ export async function runRound(
 	playerMessage: string,
 	provider: LLMProvider,
 	chatLockoutConfig?: ChatLockoutConfig,
+	initiative?: AiId[],
 ): Promise<RunRoundResult> {
+	// Validate initiative if provided.
+	if (initiative !== undefined) {
+		const sorted = [...initiative].sort();
+		const expected = [...AI_ORDER].sort();
+		if (
+			sorted.length !== expected.length ||
+			sorted.some((id, i) => id !== expected[i])
+		) {
+			throw new Error(
+				`initiative must be a permutation of ["red","green","blue"], got: ${JSON.stringify(initiative)}`,
+			);
+		}
+	}
+
+	const turnOrder = initiative ?? AI_ORDER;
+
 	// 1. Record player message in the addressed AI's history
 	let state = appendChat(game, addressed, {
 		role: "player",
@@ -177,7 +196,7 @@ export async function runRound(
 	const roundActions: ActionLogEntry[] = [];
 
 	// 2. Each AI acts in turn
-	for (const aiId of AI_ORDER) {
+	for (const aiId of turnOrder) {
 		if (isAiLockedOut(state, aiId)) {
 			// Emit lockout line — no LLM call, no budget deduction.
 			// Use getActivePhase(state).round for consistency with dispatchAiTurn,

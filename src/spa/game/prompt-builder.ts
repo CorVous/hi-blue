@@ -1,4 +1,4 @@
-import { getActivePhase } from "./spa/game/engine";
+import { getActivePhase } from "./engine";
 import type {
 	ActionLogEntry,
 	AiBudget,
@@ -7,7 +7,7 @@ import type {
 	GameState,
 	WhisperMessage,
 	WorldState,
-} from "./spa/game/types";
+} from "./types";
 
 export interface AiContext {
 	name: string;

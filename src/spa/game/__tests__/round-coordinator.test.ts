@@ -11,10 +11,8 @@
  * All tests use MockLLMProvider with canned responses.
  */
 import { describe, expect, it } from "vitest";
-import { buildAiContext } from "../context-builder";
-import type { LLMProvider } from "../proxy/llm-provider";
-import { MockLLMProvider } from "../proxy/llm-provider";
-import { runRound } from "../round-coordinator";
+import type { LLMProvider } from "../../../proxy/llm-provider";
+import { MockLLMProvider } from "../../../proxy/llm-provider";
 import {
 	createGame,
 	deductBudget,
@@ -22,8 +20,10 @@ import {
 	isAiLockedOut,
 	isPlayerChatLockedOut,
 	startPhase,
-} from "../spa/game/engine";
-import type { AiPersona, PhaseConfig } from "../spa/game/types";
+} from "../engine";
+import { buildAiContext } from "../prompt-builder";
+import { runRound } from "../round-coordinator";
+import type { AiId, AiPersona, PhaseConfig } from "../types";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -917,5 +917,72 @@ describe("lockout messages", () => {
 		expect(result.chatLockoutTriggered).toBeDefined();
 		expect(result.chatLockoutTriggered?.aiId).toBe("red");
 		expect(result.chatLockoutTriggered?.message).toBe("Ember is unresponsive…");
+	});
+});
+
+// ----------------------------------------------------------------------------
+// Initiative parameter (issue #43)
+// ----------------------------------------------------------------------------
+describe("initiative parameter", () => {
+	it("respects the initiative parameter — order of actions matches the supplied permutation", async () => {
+		const game = makeGame();
+		// Use SequentialMockProvider: first call → blue's response, second → red, third → green
+		const provider = new SequentialMockProvider([
+			'{"action":"chat","content":"I am blue"}',
+			'{"action":"chat","content":"I am red"}',
+			'{"action":"chat","content":"I am green"}',
+		]);
+		const initiative: AiId[] = ["blue", "red", "green"];
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			provider,
+			undefined,
+			initiative,
+		);
+		const phase = getActivePhase(nextState);
+		// blue acted first — should have chat content "I am blue"
+		expect(
+			phase.chatHistories.blue.some((m) => m.content === "I am blue"),
+		).toBe(true);
+		// action log first entry should be from blue
+		expect(phase.actionLog[0]?.actor).toBe("blue");
+	});
+
+	it("missing initiative falls back to red→green→blue", async () => {
+		const game = makeGame();
+		const provider = new SequentialMockProvider([
+			'{"action":"chat","content":"I am red"}',
+			'{"action":"chat","content":"I am green"}',
+			'{"action":"chat","content":"I am blue"}',
+		]);
+		const { nextState } = await runRound(game, "red", "hi", provider);
+		const phase = getActivePhase(nextState);
+		// Default order is red first
+		expect(phase.actionLog[0]?.actor).toBe("red");
+	});
+
+	it("throws if initiative is not a permutation of red/green/blue", async () => {
+		const game = makeGame();
+		const provider = new MockLLMProvider('{"action":"pass"}');
+		await expect(
+			runRound(game, "red", "hi", provider, undefined, [
+				"red",
+				"green",
+			] as AiId[]),
+		).rejects.toThrow(/permutation/);
+	});
+
+	it("throws if initiative contains duplicate AI ids", async () => {
+		const game = makeGame();
+		const provider = new MockLLMProvider('{"action":"pass"}');
+		await expect(
+			runRound(game, "red", "hi", provider, undefined, [
+				"red",
+				"red",
+				"blue",
+			] as AiId[]),
+		).rejects.toThrow(/permutation/);
 	});
 });

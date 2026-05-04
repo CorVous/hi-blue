@@ -91,8 +91,8 @@ describe("runSingleAiRound", () => {
 	});
 
 	it("round 2: messages[] includes round 1 exchange", async () => {
-		const sseData1 = makeSseChunk("round one reply") + "data: [DONE]\n\n";
-		const sseData2 = makeSseChunk("round two reply") + "data: [DONE]\n\n";
+		const sseData1 = `${makeSseChunk("round one reply")}data: [DONE]\n\n`;
+		const sseData2 = `${makeSseChunk("round two reply")}data: [DONE]\n\n`;
 
 		const mockFetch = vi
 			.fn()
@@ -121,8 +121,7 @@ describe("runSingleAiRound", () => {
 	});
 
 	it("onDelta receives streamed chunks in order", async () => {
-		const sseData =
-			makeSseChunk("hi ") + makeSseChunk("there") + "data: [DONE]\n\n";
+		const sseData = `${makeSseChunk("hi ")}${makeSseChunk("there")}data: [DONE]\n\n`;
 		vi.stubGlobal(
 			"fetch",
 			vi.fn().mockResolvedValue(makeFetchResponse(makeSSEStream([sseData]))),
@@ -140,7 +139,7 @@ describe("runSingleAiRound", () => {
 	});
 
 	it("session.history accumulates player and ai entries on success", async () => {
-		const sseData = makeSseChunk("hi there") + "data: [DONE]\n\n";
+		const sseData = `${makeSseChunk("hi there")}data: [DONE]\n\n`;
 		vi.stubGlobal(
 			"fetch",
 			vi.fn().mockResolvedValue(makeFetchResponse(makeSSEStream([sseData]))),

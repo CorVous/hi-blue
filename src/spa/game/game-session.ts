@@ -22,9 +22,9 @@
  */
 
 import type { LLMProvider } from "../../proxy/llm-provider";
-import type { ChatLockoutConfig } from "../../round-coordinator";
-import { runRound } from "../../round-coordinator";
 import { createGame, getActivePhase, startPhase } from "./engine";
+import type { ChatLockoutConfig } from "./round-coordinator";
+import { runRound } from "./round-coordinator";
 import type {
 	AiId,
 	AiPersona,
@@ -97,12 +97,15 @@ export class GameSession {
 	 * @param provider   LLM provider (mock or real).
 	 * @param chatLockoutConfig  Optional chat-lockout configuration for deterministic testing.
 	 *   When omitted, any config previously set via armChatLockout is consumed once.
+	 * @param initiative  Optional turn-order permutation for this round.
+	 *   Must be a permutation of all three AI ids. When absent, coordinator uses default order.
 	 */
 	async submitMessage(
 		addressed: AiId,
 		message: string,
 		provider: LLMProvider,
 		chatLockoutConfig?: ChatLockoutConfig,
+		initiative?: AiId[],
 	): Promise<SubmitMessageResult> {
 		let effectiveConfig = chatLockoutConfig;
 		if (!effectiveConfig && this.armedChatLockout) {
@@ -110,10 +113,12 @@ export class GameSession {
 			delete this.armedChatLockout;
 		}
 		// Wrap the provider to capture completions per call.
-		// The coordinator calls the provider once per non-locked AI in AI_ORDER
-		// (red, green, blue). Locked AIs are skipped by the coordinator, so
-		// the capture array may have fewer entries than 3.
+		// The coordinator calls the provider once per non-locked AI in turn order.
+		// Locked AIs are skipped by the coordinator, so the capture array may have
+		// fewer entries than 3.
 		const capturing = new CompletionCapturingProvider(provider);
+
+		const turnOrder = initiative ?? AI_ORDER;
 
 		const { nextState, result } = await runRound(
 			this.state,
@@ -121,15 +126,16 @@ export class GameSession {
 			message,
 			capturing,
 			effectiveConfig,
+			initiative,
 		);
 
 		// Map captured completions back to AI IDs.
-		// The coordinator processes AI_ORDER and skips locked-out AIs. We need
+		// The coordinator processes turnOrder and skips locked-out AIs. We need
 		// to match call-order index to AI ID accounting for lockouts.
 		const phaseBeforeRound = getActivePhase(this.state);
 		const completions: Partial<Record<AiId, string>> = {};
 		let captureIdx = 0;
-		for (const aiId of AI_ORDER) {
+		for (const aiId of turnOrder) {
 			if (phaseBeforeRound.lockedOut.has(aiId)) {
 				// This AI was skipped by the coordinator — no completion
 				completions[aiId] = "";
