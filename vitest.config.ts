@@ -20,6 +20,7 @@ export default defineConfig({
 						main: "./src/proxy/_smoke.ts",
 						configPath: "./wrangler.jsonc",
 						miniflare: {
+							compatibilityDate: "2026-05-03",
 							kvNamespaces: ["RATE_GUARD_KV"],
 							bindings: {
 								ENABLE_TEST_MODES: "1",
