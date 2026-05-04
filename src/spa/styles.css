@@ -189,6 +189,83 @@ main {
 	text-decoration: underline;
 }
 
+/* Phase banner: shown at phase transitions */
+#phase-banner {
+	padding: 0.6rem 1rem;
+	background: #1a2a3a;
+	color: #4a9eff;
+	border: 1px solid #2458a0;
+	border-radius: 4px;
+	font-family: monospace;
+	font-size: 0.9rem;
+	animation: phase-banner-fade-in 0.4s ease;
+}
+
+@keyframes phase-banner-fade-in {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	#phase-banner {
+		animation: none;
+	}
+}
+
+/* Endgame screen */
+#endgame {
+	display: flex;
+	flex-direction: column;
+	gap: 1rem;
+	max-width: 600px;
+	margin: 0 auto;
+	font-family: monospace;
+}
+
+#endgame h2 {
+	margin: 0;
+	color: #4a9eff;
+	font-size: 1.1rem;
+}
+
+#endgame-subtitle {
+	color: #888;
+	font-size: 0.95rem;
+}
+
+.endgame-section {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	padding: 1rem;
+	background: #111;
+	border: 1px solid #222;
+	border-radius: 4px;
+}
+
+#endgame .endgame-section h3 {
+	margin: 0;
+	font-size: 1rem;
+	color: #4a9eff;
+}
+
+.endgame-section p {
+	margin: 0;
+	color: #aaa;
+	font-size: 0.9rem;
+}
+
+#download-status,
+#diagnostics-status {
+	color: #6bff6b;
+	font-size: 0.85rem;
+	min-height: 1.2em;
+}
+
 [hidden] {
 	display: none;
 }

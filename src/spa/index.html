@@ -11,6 +11,7 @@
 		  <button id="byok-cog" type="button" aria-label="Settings" title="Settings">⚙</button>
 		</header>
 		<main>
+		  <div id="phase-banner" hidden></div>
 		  <div id="panels">
 		    <article class="ai-panel" data-ai="red">
 		      <header class="panel-header">
@@ -54,6 +55,23 @@ come back tomorrow — they wake at midnight UTC.</pre>
 		    <h3>Action Log (debug)</h3>
 		    <ul id="action-log-list"></ul>
 		  </aside>
+		  <section id="endgame" hidden>
+		    <h2>hi-blue — endgame</h2>
+		    <div id="endgame-subtitle">The three phases are complete. The room is still.</div>
+		    <div class="endgame-section">
+		      <h3>Save the AIs to USB</h3>
+		      <p>Download a file containing each AI's persona and the full transcript of your time together.</p>
+		      <button type="button" id="download-ais-btn">Download AIs</button>
+		      <output id="download-status" aria-live="polite"></output>
+		    </div>
+		    <div class="endgame-section">
+		      <h3>Submit anonymous diagnostics</h3>
+		      <p>Optional. Help the developer understand how the game landed. No identifying data is collected.</p>
+		      <input type="text" id="diagnostics-summary" placeholder="one word (e.g. curious)" aria-label="One-word engagement summary" maxlength="30" />
+		      <button type="button" id="submit-diagnostics-btn">Submit diagnostics</button>
+		      <output id="diagnostics-status" aria-live="polite"></output>
+		    </div>
+		  </section>
 		</main>
 		<dialog id="byok-dialog" aria-labelledby="byok-title">
 		  <form method="dialog" id="byok-form">
