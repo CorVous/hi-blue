@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PINNED_MODEL } from "../../model.js";
+import { TOOL_DEFINITIONS } from "../game/tool-registry.js";
 import {
 	CapHitError,
 	PERSONA_PLACEHOLDER,
@@ -8,7 +9,6 @@ import {
 	streamChat,
 	streamCompletion,
 } from "../llm-client.js";
-import { TOOL_DEFINITIONS } from "../game/tool-registry.js";
 
 // Provide __WORKER_BASE_URL__ global before importing the module
 // biome-ignore lint/suspicious/noExplicitAny: stubbing a build-time constant
@@ -549,9 +549,7 @@ describe("streamCompletion — tools field", () => {
 
 		const mockFetch = vi
 			.fn()
-			.mockResolvedValue(
-				makeFetchResponse(makeSSEStream([toolCallChunk])),
-			);
+			.mockResolvedValue(makeFetchResponse(makeSSEStream([toolCallChunk])));
 		vi.stubGlobal("fetch", mockFetch);
 		vi.stubGlobal("localStorage", {
 			getItem: vi.fn().mockReturnValue(null),

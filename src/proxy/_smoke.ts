@@ -7,8 +7,11 @@ import {
 } from "../session-store";
 import { getActivePhase } from "../spa/game/engine";
 import type { GameSession } from "../spa/game/game-session";
+import type {
+	OpenAiMessage,
+	RoundLLMProvider,
+} from "../spa/game/round-llm-provider";
 import { encodeRoundResult } from "../spa/game/round-result-encoder";
-import type { OpenAiMessage, RoundLLMProvider } from "../spa/game/round-llm-provider";
 import type { AiId, PhaseConfig } from "../spa/game/types";
 import { AI_TYPING_SPEED } from "../spa/game/typing-rhythm";
 import {

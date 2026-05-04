@@ -51,7 +51,8 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 		type: "function",
 		function: {
 			name: "put_down",
-			description: "Put down an item you are currently holding. Places it in the room.",
+			description:
+				"Put down an item you are currently holding. Places it in the room.",
 			parameters: {
 				type: "object",
 				properties: {

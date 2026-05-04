@@ -1,11 +1,8 @@
 import { PINNED_MODEL } from "../model.js";
+import type { OpenAiMessage } from "./game/round-llm-provider.js";
+import type { OpenAiTool } from "./game/tool-registry.js";
 import type { ToolCallResult } from "./streaming.js";
 import { parseSSEStream } from "./streaming.js";
-import type { OpenAiTool } from "./game/tool-registry.js";
-import type {
-	OpenAiMessage,
-	OpenAiToolCall,
-} from "./game/round-llm-provider.js";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const LOCALSTORAGE_KEY = "openrouter_key";
@@ -111,7 +108,10 @@ export function resolveLLMTarget(): {
 
 // Re-export the message types from round-llm-provider (canonical definition)
 // and OpenAiTool from tool-registry so callers can import from one place.
-export type { OpenAiMessage, OpenAiToolCall } from "./game/round-llm-provider.js";
+export type {
+	OpenAiMessage,
+	OpenAiToolCall,
+} from "./game/round-llm-provider.js";
 export type { OpenAiTool } from "./game/tool-registry.js";
 
 export async function streamCompletion(opts: {

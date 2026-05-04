@@ -31,7 +31,7 @@ import {
 import { buildOpenAiMessages } from "./openai-message-builder";
 import { buildAiContext } from "./prompt-builder";
 import type { RoundLLMProvider } from "./round-llm-provider";
-import { TOOL_DEFINITIONS, parseToolCallArguments } from "./tool-registry";
+import { parseToolCallArguments, TOOL_DEFINITIONS } from "./tool-registry";
 import type {
 	ActionLogEntry,
 	AiId,
@@ -167,8 +167,8 @@ export async function runRound(
 
 		// Handle tool call (take first tool call if present)
 		let toolCallId: string | undefined;
-		if (toolCalls.length > 0) {
-			const tc = toolCalls[0]!;
+		const [tc] = toolCalls;
+		if (tc !== undefined) {
 			toolCallId = tc.id;
 			const parseResult = parseToolCallArguments(
 				tc.name as ToolName,
@@ -216,7 +216,7 @@ export async function runRound(
 		}
 
 		// Handle assistant text (chat or pass)
-		if (assistantText && assistantText.trim()) {
+		if (assistantText?.trim()) {
 			action.chat = { target: "player", content: assistantText };
 		} else if (!action.toolCall) {
 			// No text and no valid tool call → pass

@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-	TOOL_DEFINITIONS,
-	parseToolCallArguments,
-} from "../tool-registry";
+import { parseToolCallArguments, TOOL_DEFINITIONS } from "../tool-registry";
 
 describe("TOOL_DEFINITIONS", () => {
 	it("lists exactly the four tools: pick_up, put_down, give, use", () => {
@@ -63,7 +60,10 @@ describe("parseToolCallArguments", () => {
 	});
 
 	it("parses valid give arguments", () => {
-		const result = parseToolCallArguments("give", '{"item":"flower","to":"blue"}');
+		const result = parseToolCallArguments(
+			"give",
+			'{"item":"flower","to":"blue"}',
+		);
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.args).toEqual({ item: "flower", to: "blue" });
@@ -103,7 +103,7 @@ describe("parseToolCallArguments", () => {
 	});
 
 	it("returns ok:false with /required/i reason when 'item' is missing for pick_up", () => {
-		const result = parseToolCallArguments("pick_up", '{}');
+		const result = parseToolCallArguments("pick_up", "{}");
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
 			expect(result.reason).toMatch(/required/i);

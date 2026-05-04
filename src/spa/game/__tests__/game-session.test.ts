@@ -12,12 +12,12 @@
  *   - Tool roundtrip persistence across rounds
  */
 import { describe, expect, it } from "vitest";
+import type { OpenAiMessage } from "../../llm-client";
 import { getActivePhase } from "../engine";
 import { GameSession } from "../game-session";
+import type { RoundLLMProvider } from "../round-llm-provider";
 import { MockRoundLLMProvider } from "../round-llm-provider";
 import type { AiPersona, PhaseConfig } from "../types";
-import type { OpenAiMessage } from "../../llm-client";
-import type { RoundLLMProvider } from "../round-llm-provider";
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -99,7 +99,11 @@ describe("GameSession — message routing", () => {
 	it("player message appears in only the addressed AI's chat history", async () => {
 		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
 
-		await session.submitMessage("red", "Secret message for Ember", makePassProvider());
+		await session.submitMessage(
+			"red",
+			"Secret message for Ember",
+			makePassProvider(),
+		);
 
 		const phase = getActivePhase(session.getState());
 		expect(
@@ -108,8 +112,12 @@ describe("GameSession — message routing", () => {
 					m.role === "player" && m.content.includes("Secret message for Ember"),
 			),
 		).toBe(true);
-		expect(phase.chatHistories.green.some((m) => m.role === "player")).toBe(false);
-		expect(phase.chatHistories.blue.some((m) => m.role === "player")).toBe(false);
+		expect(phase.chatHistories.green.some((m) => m.role === "player")).toBe(
+			false,
+		);
+		expect(phase.chatHistories.blue.some((m) => m.role === "player")).toBe(
+			false,
+		);
 	});
 
 	it("routing changes per round — second message goes to different AI", async () => {
@@ -244,14 +252,22 @@ describe("GameSession — result from submitMessage", () => {
 	it("result.round is 1 after the first call", async () => {
 		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
 
-		const { result } = await session.submitMessage("red", "hi", makePassProvider());
+		const { result } = await session.submitMessage(
+			"red",
+			"hi",
+			makePassProvider(),
+		);
 		expect(result.round).toBe(1);
 	});
 
 	it("result.actions contains entries from all three AIs", async () => {
 		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
 
-		const { result } = await session.submitMessage("red", "hi", makePassProvider());
+		const { result } = await session.submitMessage(
+			"red",
+			"hi",
+			makePassProvider(),
+		);
 
 		const actors = new Set(result.actions.map((a) => a.actor));
 		expect(actors.size).toBe(3);
@@ -260,11 +276,16 @@ describe("GameSession — result from submitMessage", () => {
 	it("chat lockout is reflected in result.chatLockoutTriggered", async () => {
 		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
 
-		const { result } = await session.submitMessage("red", "hi", makePassProvider(), {
-			rng: () => 0,
-			lockoutTriggerRound: 1,
-			lockoutDuration: 2,
-		});
+		const { result } = await session.submitMessage(
+			"red",
+			"hi",
+			makePassProvider(),
+			{
+				rng: () => 0,
+				lockoutTriggerRound: 1,
+				lockoutDuration: 2,
+			},
+		);
 
 		expect(result.chatLockoutTriggered).toBeDefined();
 		expect(result.chatLockoutTriggered?.aiId).toBe("red");
@@ -284,7 +305,11 @@ describe("GameSession — phase advancement", () => {
 			TEST_PERSONAS,
 		);
 
-		const { result } = await session.submitMessage("red", "hi", makePassProvider());
+		const { result } = await session.submitMessage(
+			"red",
+			"hi",
+			makePassProvider(),
+		);
 		expect(result.phaseEnded).toBe(false);
 	});
 
@@ -355,13 +380,21 @@ describe("GameSession — tool roundtrip persistence", () => {
 
 		// Should contain an assistant message with tool_calls from round 1
 		const assistantWithToolCalls = redRound2Messages.find(
-			(m): m is Extract<typeof m, { role: "assistant"; tool_calls?: unknown[] }> =>
+			(
+				m,
+			): m is Extract<
+				typeof m,
+				{ role: "assistant"; tool_calls?: unknown[] }
+			> =>
 				m.role === "assistant" &&
 				"tool_calls" in m &&
 				Array.isArray((m as Record<string, unknown>).tool_calls),
 		);
 		expect(assistantWithToolCalls).toBeDefined();
-		if (assistantWithToolCalls?.role === "assistant" && assistantWithToolCalls.tool_calls) {
+		if (
+			assistantWithToolCalls?.role === "assistant" &&
+			assistantWithToolCalls.tool_calls
+		) {
 			expect(assistantWithToolCalls.tool_calls[0]).toMatchObject({
 				id: "call_r1",
 				function: { name: "pick_up" },

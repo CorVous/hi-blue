@@ -20,7 +20,7 @@
  * so the message builder can re-inject them for the next round.
  */
 
-import { createGame, getActivePhase, startPhase } from "./engine";
+import { createGame, startPhase } from "./engine";
 import type { ChatLockoutConfig } from "./round-coordinator";
 import { runRound } from "./round-coordinator";
 import type { RoundLLMProvider } from "./round-llm-provider";
@@ -100,7 +100,11 @@ export class GameSession {
 			completions[aiId] = text;
 		};
 
-		const { nextState, result, toolRoundtrip: newToolRoundtrip } = await runRound(
+		const {
+			nextState,
+			result,
+			toolRoundtrip: newToolRoundtrip,
+		} = await runRound(
 			this.state,
 			addressed,
 			message,

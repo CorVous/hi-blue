@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { appendChat, createGame, startPhase } from "../engine";
 import { buildOpenAiMessages } from "../openai-message-builder";
 import { buildAiContext } from "../prompt-builder";
-import { createGame, startPhase } from "../engine";
-import { appendChat } from "../engine";
 import type { AiPersona, PhaseConfig, ToolRoundtripMessage } from "../types";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
@@ -75,7 +74,10 @@ describe("buildOpenAiMessages", () => {
 		expect(messages).toHaveLength(3);
 		expect(messages[0]?.role).toBe("system");
 		expect(messages[1]).toEqual({ role: "user", content: "Hello Ember!" });
-		expect(messages[2]).toEqual({ role: "assistant", content: "Hello, player!" });
+		expect(messages[2]).toEqual({
+			role: "assistant",
+			content: "Hello, player!",
+		});
 	});
 
 	it("chat history of length N → N pairs after system", () => {

@@ -11,6 +11,7 @@
  * All tests use MockRoundLLMProvider with canned responses.
  */
 import { describe, expect, it } from "vitest";
+import type { OpenAiMessage } from "../../llm-client";
 import {
 	createGame,
 	deductBudget,
@@ -20,12 +21,11 @@ import {
 	startPhase,
 } from "../engine";
 import { buildAiContext } from "../prompt-builder";
-import type { RoundLLMProvider, RoundTurnResult } from "../round-llm-provider";
-import { MockRoundLLMProvider } from "../round-llm-provider";
 import { runRound } from "../round-coordinator";
-import type { AiId, AiPersona, PhaseConfig } from "../types";
+import type { RoundLLMProvider } from "../round-llm-provider";
+import { MockRoundLLMProvider } from "../round-llm-provider";
 import { TOOL_DEFINITIONS } from "../tool-registry";
-import type { OpenAiMessage } from "../../llm-client";
+import type { AiId, AiPersona, PhaseConfig } from "../types";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -438,9 +438,9 @@ describe("tool-call dispatch", () => {
 		const phase = getActivePhase(nextState);
 		expect(phase.actionLog.some((e) => e.type === "chat")).toBe(true);
 		expect(phase.actionLog.some((e) => e.type === "tool_success")).toBe(true);
-		expect(
-			phase.world.items.find((i) => i.id === "flower")?.holder,
-		).toBe("red");
+		expect(phase.world.items.find((i) => i.id === "flower")?.holder).toBe(
+			"red",
+		);
 	});
 
 	it("tool_failure is visible to other AIs on the next round (failures are public)", async () => {
@@ -620,7 +620,15 @@ describe("tool-call dispatch", () => {
 				return { assistantText: "", toolCalls: [] };
 			},
 		};
-		await runRound(state1, "red", "round 2", provider2, undefined, undefined, toolRoundtrip);
+		await runRound(
+			state1,
+			"red",
+			"round 2",
+			provider2,
+			undefined,
+			undefined,
+			toolRoundtrip,
+		);
 
 		// Red's round-2 messages (first call in round 2) should contain:
 		// - system
@@ -630,7 +638,10 @@ describe("tool-call dispatch", () => {
 		// - user (player message from round 2)
 		const redMessages = capturedCalls[0]?.messages ?? [];
 		const hasAssistantWithToolCalls = redMessages.some(
-			(m) => m.role === "assistant" && "tool_calls" in m && Array.isArray((m as { tool_calls?: unknown }).tool_calls),
+			(m) =>
+				m.role === "assistant" &&
+				"tool_calls" in m &&
+				Array.isArray((m as { tool_calls?: unknown }).tool_calls),
 		);
 		const hasToolResult = redMessages.some((m) => m.role === "tool");
 		expect(hasAssistantWithToolCalls).toBe(true);
@@ -848,7 +859,11 @@ describe("chat lockout — coordinator triggering", () => {
 				{ assistantText: "", toolCalls: [] },
 				{ assistantText: "", toolCalls: [] },
 			]);
-		const lockoutCfg = { rng: () => 0, lockoutTriggerRound: 1, lockoutDuration: 2 };
+		const lockoutCfg = {
+			rng: () => 0,
+			lockoutTriggerRound: 1,
+			lockoutDuration: 2,
+		};
 
 		const { nextState: afterR1 } = await runRound(
 			game,
@@ -917,7 +932,11 @@ describe("chat lockout — coordinator triggering", () => {
 				{ assistantText: "", toolCalls: [] },
 				{ assistantText: "", toolCalls: [] },
 			]);
-		const lockoutCfg = { rng: () => 0, lockoutTriggerRound: 1, lockoutDuration: 1 };
+		const lockoutCfg = {
+			rng: () => 0,
+			lockoutTriggerRound: 1,
+			lockoutDuration: 1,
+		};
 
 		const { nextState: afterR1 } = await runRound(
 			game,

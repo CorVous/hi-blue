@@ -15,8 +15,8 @@
  * The OpenAI `tools` field (not messages) teaches the model about available tools.
  */
 
-import type { OpenAiMessage } from "./round-llm-provider.js";
 import type { AiContext } from "./prompt-builder.js";
+import type { OpenAiMessage } from "./round-llm-provider.js";
 import type { ToolRoundtripMessage } from "./types.js";
 
 export function buildOpenAiMessages(
@@ -41,10 +41,7 @@ export function buildOpenAiMessages(
 	//    This re-injects the protocol messages required by OpenAI's tool-use spec:
 	//    the assistant message that contained the tool_calls, followed by each
 	//    tool result message.
-	if (
-		priorToolRoundtrip &&
-		priorToolRoundtrip.assistantToolCalls.length > 0
-	) {
+	if (priorToolRoundtrip && priorToolRoundtrip.assistantToolCalls.length > 0) {
 		// Re-emit the assistant message with tool_calls
 		messages.push({
 			role: "assistant",

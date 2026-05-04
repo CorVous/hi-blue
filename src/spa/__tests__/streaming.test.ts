@@ -123,7 +123,12 @@ describe("parseSSEStream — tool_call delta assembly", () => {
 				{
 					delta: {
 						tool_calls: [
-							{ index: 0, id: "call_abc", type: "function", function: { name: "pick_up", arguments: "" } },
+							{
+								index: 0,
+								id: "call_abc",
+								type: "function",
+								function: { name: "pick_up", arguments: "" },
+							},
 						],
 					},
 				},
@@ -171,8 +176,18 @@ describe("parseSSEStream — tool_call delta assembly", () => {
 				{
 					delta: {
 						tool_calls: [
-							{ index: 0, id: "call_1", type: "function", function: { name: "pick_up", arguments: '{"item":"flower"}' } },
-							{ index: 1, id: "call_2", type: "function", function: { name: "put_down", arguments: '{"item":"key"}' } },
+							{
+								index: 0,
+								id: "call_1",
+								type: "function",
+								function: { name: "pick_up", arguments: '{"item":"flower"}' },
+							},
+							{
+								index: 1,
+								id: "call_2",
+								type: "function",
+								function: { name: "put_down", arguments: '{"item":"key"}' },
+							},
 						],
 					},
 					finish_reason: "tool_calls",
@@ -181,11 +196,8 @@ describe("parseSSEStream — tool_call delta assembly", () => {
 		})}\n\ndata: [DONE]\n\n`;
 
 		const calls: ToolCallResult[] = [];
-		await parseSSEStream(
-			makeSSEStream([chunk]),
-			vi.fn(),
-			undefined,
-			(c) => calls.push(c),
+		await parseSSEStream(makeSSEStream([chunk]), vi.fn(), undefined, (c) =>
+			calls.push(c),
 		);
 
 		expect(calls).toHaveLength(2);
@@ -217,7 +229,12 @@ describe("parseSSEStream — tool_call delta assembly", () => {
 					{
 						delta: {
 							tool_calls: [
-								{ index: 0, id: "call_x", type: "function", function: { name: "pick_up", arguments: '{"item":"flower"}' } },
+								{
+									index: 0,
+									id: "call_x",
+									type: "function",
+									function: { name: "pick_up", arguments: '{"item":"flower"}' },
+								},
 							],
 						},
 						finish_reason: "tool_calls",
@@ -242,27 +259,27 @@ describe("parseSSEStream — tool_call delta assembly", () => {
 
 	it("finish_reason:tool_calls flushes a partial (incomplete arguments) call", async () => {
 		// The model may emit finish_reason before [DONE]
-		const sseData =
-			`data: ${JSON.stringify({
-				choices: [
-					{
-						delta: {
-							tool_calls: [
-								{ index: 0, id: "call_y", type: "function", function: { name: "use", arguments: '{"item":"wand"}' } },
-							],
-						},
-						finish_reason: "tool_calls",
+		const sseData = `data: ${JSON.stringify({
+			choices: [
+				{
+					delta: {
+						tool_calls: [
+							{
+								index: 0,
+								id: "call_y",
+								type: "function",
+								function: { name: "use", arguments: '{"item":"wand"}' },
+							},
+						],
 					},
-				],
-			})}\n\n` +
-			`data: [DONE]\n\n`;
+					finish_reason: "tool_calls",
+				},
+			],
+		})}\n\ndata: [DONE]\n\n`;
 
 		const calls: ToolCallResult[] = [];
-		await parseSSEStream(
-			makeSSEStream([sseData]),
-			vi.fn(),
-			undefined,
-			(c) => calls.push(c),
+		await parseSSEStream(makeSSEStream([sseData]), vi.fn(), undefined, (c) =>
+			calls.push(c),
 		);
 
 		expect(calls).toHaveLength(1);
@@ -271,26 +288,29 @@ describe("parseSSEStream — tool_call delta assembly", () => {
 	});
 
 	it("[DONE] flushes assembled tool calls even without finish_reason:tool_calls", async () => {
-		const sseData =
-			`data: ${JSON.stringify({
-				choices: [
-					{
-						delta: {
-							tool_calls: [
-								{ index: 0, id: "call_z", type: "function", function: { name: "give", arguments: '{"item":"key","to":"blue"}' } },
-							],
-						},
+		const sseData = `data: ${JSON.stringify({
+			choices: [
+				{
+					delta: {
+						tool_calls: [
+							{
+								index: 0,
+								id: "call_z",
+								type: "function",
+								function: {
+									name: "give",
+									arguments: '{"item":"key","to":"blue"}',
+								},
+							},
+						],
 					},
-				],
-			})}\n\n` +
-			`data: [DONE]\n\n`;
+				},
+			],
+		})}\n\ndata: [DONE]\n\n`;
 
 		const calls: ToolCallResult[] = [];
-		await parseSSEStream(
-			makeSSEStream([sseData]),
-			vi.fn(),
-			undefined,
-			(c) => calls.push(c),
+		await parseSSEStream(makeSSEStream([sseData]), vi.fn(), undefined, (c) =>
+			calls.push(c),
 		);
 
 		expect(calls).toHaveLength(1);
