@@ -20,16 +20,29 @@ export function renderHome(root: HTMLElement): void {
 		if (capHitEl) capHitEl.hidden = true;
 
 		promptInput.value = "";
-		outputEl.textContent = "";
+		outputEl.textContent = "thinking…";
 		sendBtn.disabled = true;
+		let placeholderShown = true;
 
 		streamChat({
 			message,
 			onDelta: (text) => {
+				if (placeholderShown) {
+					outputEl.textContent = "";
+					placeholderShown = false;
+				}
 				outputEl.textContent += text;
+			},
+			onReasoning: () => {
+				// Keep the placeholder visible while only reasoning deltas arrive
 			},
 		})
 			.catch((err: unknown) => {
+				// Clear the placeholder on error so it doesn't linger
+				if (placeholderShown) {
+					outputEl.textContent = "";
+					placeholderShown = false;
+				}
 				if (
 					err instanceof CapHitError ||
 					(err as { status?: number }).status === 429
@@ -38,6 +51,11 @@ export function renderHome(root: HTMLElement): void {
 				}
 			})
 			.finally(() => {
+				// If no content deltas arrived at all, strip the placeholder
+				if (placeholderShown) {
+					outputEl.textContent = "";
+					placeholderShown = false;
+				}
 				sendBtn.disabled = false;
 			});
 	});

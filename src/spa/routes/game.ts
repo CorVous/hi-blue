@@ -27,13 +27,33 @@ export function renderGame(root: HTMLElement): void {
 		// Append the user's turn + a fresh AI label (don't clear — accumulate transcript)
 		outputEl.textContent += `\n[you] ${message}\n[${session.persona.name}] `;
 
+		// Show "thinking…" placeholder while waiting for first content delta
+		const placeholderStart = outputEl.textContent.length;
+		outputEl.textContent += "thinking…";
+		let placeholderShown = true;
+
 		runSingleAiRound({
 			session,
 			message,
 			onDelta: (text) => {
+				if (placeholderShown) {
+					outputEl.textContent = outputEl.textContent.slice(
+						0,
+						placeholderStart,
+					);
+					placeholderShown = false;
+				}
 				outputEl.textContent += text;
 			},
+			onReasoning: () => {
+				// Keep the placeholder visible while only reasoning deltas arrive
+			},
 		}).finally(() => {
+			// If no content deltas arrived at all, strip the placeholder
+			if (placeholderShown) {
+				outputEl.textContent = outputEl.textContent.slice(0, placeholderStart);
+				placeholderShown = false;
+			}
 			sendBtn.disabled = false;
 		});
 	});

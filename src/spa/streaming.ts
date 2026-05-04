@@ -1,6 +1,7 @@
 export async function parseSSEStream(
 	body: ReadableStream<Uint8Array>,
 	onDelta: (text: string) => void,
+	onReasoning?: (text: string) => void,
 ): Promise<void> {
 	const reader = body.getReader();
 	const decoder = new TextDecoder();
@@ -28,6 +29,10 @@ export async function parseSSEStream(
 						const content = parsed?.choices?.[0]?.delta?.content;
 						if (typeof content === "string" && content.length > 0) {
 							onDelta(content);
+						}
+						const reasoning = parsed?.choices?.[0]?.delta?.reasoning;
+						if (typeof reasoning === "string" && reasoning.length > 0) {
+							onReasoning?.(reasoning);
 						}
 					} catch {
 						// Ignore malformed JSON chunks
