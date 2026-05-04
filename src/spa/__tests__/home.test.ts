@@ -346,4 +346,67 @@ describe("renderHome (home route)", () => {
 		expect(anchor).not.toBeNull();
 		expect(anchor?.getAttribute("href")).toBe("#/byok");
 	});
+
+	it("shows 'thinking…' placeholder during reasoning phase, then replaces it with the answer", async () => {
+		const encoder = new TextEncoder();
+		const captured: {
+			controller: ReadableStreamDefaultController<Uint8Array> | null;
+		} = { controller: null };
+
+		const stream = new ReadableStream<Uint8Array>({
+			start(controller) {
+				captured.controller = controller;
+			},
+		});
+
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				statusText: "OK",
+				body: stream,
+			}),
+		);
+
+		vi.resetModules();
+		const { renderHome } = await import("../routes/home.js");
+
+		renderHome(getEl<HTMLElement>("main"));
+
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		const form = getEl<HTMLFormElement>("#composer");
+		const output = getEl<HTMLPreElement>("#output");
+
+		promptInput.value = "hello";
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+
+		// Give a tick for the fetch call
+		await new Promise((resolve) => setTimeout(resolve, 10));
+
+		// At this point only reasoning chunks arrive — placeholder should be visible
+		captured.controller?.enqueue(
+			encoder.encode(
+				`data: ${JSON.stringify({ choices: [{ delta: { reasoning: "thinking…" } }] })}\n\n`,
+			),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 10));
+
+		expect(output.textContent).toContain("thinking…");
+
+		// Now send a content delta — placeholder should be replaced
+		captured.controller?.enqueue(
+			encoder.encode(
+				`data: ${JSON.stringify({ choices: [{ delta: { content: "here is the answer" } }] })}\n\ndata: [DONE]\n\n`,
+			),
+		);
+		captured.controller?.close();
+
+		await new Promise((resolve) => setTimeout(resolve, 50));
+
+		expect(output.textContent).toContain("here is the answer");
+		expect(output.textContent).not.toContain("thinking…");
+	});
 });

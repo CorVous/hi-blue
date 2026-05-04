@@ -20,6 +20,7 @@ export interface RunRoundOptions {
 	message: string;
 	signal?: AbortSignal;
 	onDelta: (text: string) => void;
+	onReasoning?: (text: string) => void;
 }
 
 /**
@@ -32,7 +33,7 @@ export interface RunRoundOptions {
  * 6. Return the full assistant text
  */
 export async function runSingleAiRound(opts: RunRoundOptions): Promise<string> {
-	const { session, message, signal, onDelta } = opts;
+	const { session, message, signal, onDelta, onReasoning } = opts;
 
 	const systemMessage: OpenAiMessage = {
 		role: "system",
@@ -67,6 +68,7 @@ export async function runSingleAiRound(opts: RunRoundOptions): Promise<string> {
 			fullResponse += text;
 			onDelta(text);
 		},
+		...(onReasoning != null ? { onReasoning } : {}),
 	});
 
 	// Only mutate history after successful stream

@@ -455,4 +455,29 @@ describe("streamCompletion", () => {
 			"Bearer sk-byok-key",
 		);
 	});
+
+	it("forwards reasoning deltas to onReasoning callback", async () => {
+		const reasoningChunk = `data: ${JSON.stringify({ choices: [{ delta: { reasoning: "internal thought" } }] })}\n\n`;
+		const contentChunk = `data: ${JSON.stringify({ choices: [{ delta: { content: "final answer" } }] })}\n\n`;
+		const sseData = `${reasoningChunk}${contentChunk}data: [DONE]\n\n`;
+
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValue(makeFetchResponse(makeSSEStream([sseData]))),
+		);
+		vi.stubGlobal("localStorage", { getItem: vi.fn().mockReturnValue(null) });
+
+		const onDelta = vi.fn();
+		const onReasoning = vi.fn();
+		await streamCompletion({
+			messages: [{ role: "user", content: "hello" }],
+			onDelta,
+			onReasoning,
+		});
+
+		expect(onReasoning).toHaveBeenCalledTimes(1);
+		expect(onReasoning).toHaveBeenCalledWith("internal thought");
+		expect(onDelta).toHaveBeenCalledTimes(1);
+		expect(onDelta).toHaveBeenCalledWith("final answer");
+	});
 });

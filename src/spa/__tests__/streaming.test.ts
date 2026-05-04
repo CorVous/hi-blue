@@ -73,4 +73,39 @@ describe("parseSSEStream", () => {
 
 		expect(onDelta).not.toHaveBeenCalled();
 	});
+
+	it("invokes onReasoning for delta.reasoning chunks and not onDelta", async () => {
+		const reasoningChunk1 = `data: ${JSON.stringify({ choices: [{ delta: { reasoning: "let me think" } }] })}\n\n`;
+		const reasoningChunk2 = `data: ${JSON.stringify({ choices: [{ delta: { reasoning: " about this" } }] })}\n\n`;
+		const contentChunk = `data: ${JSON.stringify({ choices: [{ delta: { content: "answer" } }] })}\n\n`;
+		const doneChunk = `data: [DONE]\n\n`;
+
+		const sseData =
+			reasoningChunk1 + reasoningChunk2 + contentChunk + doneChunk;
+
+		const onDelta = vi.fn();
+		const onReasoning = vi.fn();
+		await parseSSEStream(makeSSEStream([sseData]), onDelta, onReasoning);
+
+		expect(onReasoning).toHaveBeenCalledTimes(2);
+		expect(onReasoning).toHaveBeenNthCalledWith(1, "let me think");
+		expect(onReasoning).toHaveBeenNthCalledWith(2, " about this");
+		expect(onDelta).toHaveBeenCalledTimes(1);
+		expect(onDelta).toHaveBeenCalledWith("answer");
+	});
+
+	it("works without onReasoning — reasoning chunks are silently ignored", async () => {
+		const reasoningChunk = `data: ${JSON.stringify({ choices: [{ delta: { reasoning: "internal thought" } }] })}\n\n`;
+		const contentChunk = `data: ${JSON.stringify({ choices: [{ delta: { content: "hi" } }] })}\n\n`;
+		const doneChunk = `data: [DONE]\n\n`;
+
+		const sseData = reasoningChunk + contentChunk + doneChunk;
+
+		const onDelta = vi.fn();
+		// Call without third argument — must not throw
+		await parseSSEStream(makeSSEStream([sseData]), onDelta);
+
+		expect(onDelta).toHaveBeenCalledTimes(1);
+		expect(onDelta).toHaveBeenCalledWith("hi");
+	});
 });

@@ -112,8 +112,9 @@ export async function streamCompletion(opts: {
 	messages: OpenAiMessage[];
 	signal?: AbortSignal;
 	onDelta: (text: string) => void;
+	onReasoning?: (text: string) => void;
 }): Promise<void> {
-	const { messages, signal, onDelta } = opts;
+	const { messages, signal, onDelta, onReasoning } = opts;
 	const { url, headers } = resolveLLMTarget();
 
 	const response = await fetch(url, {
@@ -133,13 +134,14 @@ export async function streamCompletion(opts: {
 		throw new Error("Response body is null");
 	}
 
-	await parseSSEStream(response.body, onDelta);
+	await parseSSEStream(response.body, onDelta, onReasoning);
 }
 
 export async function streamChat(opts: {
 	message: string;
 	signal?: AbortSignal;
 	onDelta: (text: string) => void;
+	onReasoning?: (text: string) => void;
 }): Promise<void> {
 	return streamCompletion({
 		messages: [
@@ -148,5 +150,6 @@ export async function streamChat(opts: {
 		],
 		...(opts.signal != null ? { signal: opts.signal } : {}),
 		onDelta: opts.onDelta,
+		...(opts.onReasoning != null ? { onReasoning: opts.onReasoning } : {}),
 	});
 }
