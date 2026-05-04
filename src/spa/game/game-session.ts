@@ -15,22 +15,22 @@
  * token events — the round coordinator buffers per AI before parsing, and
  * we re-expose that buffer here so the encoder can pace it.
  *
- * Implementation note: we need the per-AI completion strings that the
- * coordinator produces internally. To capture them without modifying
- * round-coordinator.ts, we wrap the provider passed to runRound so that each
- * call's output is intercepted and stored.
+ * Per-AI tool roundtrip (the OpenAI assistant tool_calls + tool result messages
+ * from the previous round) is persisted here and passed into each runRound call
+ * so the message builder can re-inject them for the next round.
  */
 
-import type { LLMProvider } from "../../proxy/llm-provider";
 import { createGame, getActivePhase, startPhase } from "./engine";
 import type { ChatLockoutConfig } from "./round-coordinator";
 import { runRound } from "./round-coordinator";
+import type { RoundLLMProvider } from "./round-llm-provider";
 import type {
 	AiId,
 	AiPersona,
 	GameState,
 	PhaseConfig,
 	RoundResult,
+	ToolRoundtripMessage,
 } from "./types";
 
 const AI_ORDER: AiId[] = ["red", "green", "blue"];
@@ -42,33 +42,11 @@ export interface SubmitMessageResult {
 	nextState: GameState;
 }
 
-/**
- * A provider wrapper that intercepts each completion stream and records
- * the full text per-call in call order (red → green → blue).
- */
-class CompletionCapturingProvider implements LLMProvider {
-	private inner: LLMProvider;
-	private callIndex = 0;
-	readonly captured: string[] = [];
-
-	constructor(inner: LLMProvider) {
-		this.inner = inner;
-	}
-
-	async *streamCompletion(prompt: string): AsyncIterable<string> {
-		const parts: string[] = [];
-		for await (const token of this.inner.streamCompletion(prompt)) {
-			parts.push(token);
-			yield token;
-		}
-		this.captured[this.callIndex] = parts.join("");
-		this.callIndex++;
-	}
-}
-
 export class GameSession {
 	private state: GameState;
 	private armedChatLockout?: ChatLockoutConfig;
+	/** Per-AI tool roundtrip from the last round, fed back in as prior context. */
+	private toolRoundtrip: Partial<Record<AiId, ToolRoundtripMessage>> = {};
 
 	constructor(phaseConfig: PhaseConfig, personas: Record<AiId, AiPersona>) {
 		const game = createGame(personas);
@@ -94,7 +72,7 @@ export class GameSession {
 	 *
 	 * @param addressed  The AI the player is directing their message at.
 	 * @param message    The player's raw message text.
-	 * @param provider   LLM provider (mock or real).
+	 * @param provider   RoundLLMProvider (mock or real BrowserLLMProvider).
 	 * @param chatLockoutConfig  Optional chat-lockout configuration for deterministic testing.
 	 *   When omitted, any config previously set via armChatLockout is consumed once.
 	 * @param initiative  Optional turn-order permutation for this round.
@@ -103,7 +81,7 @@ export class GameSession {
 	async submitMessage(
 		addressed: AiId,
 		message: string,
-		provider: LLMProvider,
+		provider: RoundLLMProvider,
 		chatLockoutConfig?: ChatLockoutConfig,
 		initiative?: AiId[],
 	): Promise<SubmitMessageResult> {
@@ -112,40 +90,43 @@ export class GameSession {
 			effectiveConfig = this.armedChatLockout;
 			delete this.armedChatLockout;
 		}
-		// Wrap the provider to capture completions per call.
-		// The coordinator calls the provider once per non-locked AI in turn order.
-		// Locked AIs are skipped by the coordinator, so the capture array may have
-		// fewer entries than 3.
-		const capturing = new CompletionCapturingProvider(provider);
 
 		const turnOrder = initiative ?? AI_ORDER;
 
-		const { nextState, result } = await runRound(
+		// Capture completions per AI via the completionSink parameter.
+		// The coordinator calls the sink once per AI (empty string for locked-out AIs).
+		const completions: Partial<Record<AiId, string>> = {};
+		const completionSink = (aiId: AiId, text: string): void => {
+			completions[aiId] = text;
+		};
+
+		const { nextState, result, toolRoundtrip: newToolRoundtrip } = await runRound(
 			this.state,
 			addressed,
 			message,
-			capturing,
+			provider,
 			effectiveConfig,
 			initiative,
+			this.toolRoundtrip,
+			completionSink,
 		);
 
-		// Map captured completions back to AI IDs.
-		// The coordinator processes turnOrder and skips locked-out AIs. We need
-		// to match call-order index to AI ID accounting for lockouts.
-		const phaseBeforeRound = getActivePhase(this.state);
-		const completions: Partial<Record<AiId, string>> = {};
-		let captureIdx = 0;
+		// Fill in empty string for AIs whose completions weren't captured
+		// (only possible if the sink was never called, shouldn't happen normally)
 		for (const aiId of turnOrder) {
-			if (phaseBeforeRound.lockedOut.has(aiId)) {
-				// This AI was skipped by the coordinator — no completion
+			if (!(aiId in completions)) {
 				completions[aiId] = "";
-			} else {
-				completions[aiId] = capturing.captured[captureIdx] ?? "";
-				captureIdx++;
 			}
 		}
 
+		// Update state and tool roundtrip
 		this.state = nextState;
+		// Merge: keep only the AIs that had tool calls this round; clear others
+		// (each round's tool roundtrip is independent — only the most recent matters)
+		this.toolRoundtrip = {};
+		for (const [aiId, roundtrip] of Object.entries(newToolRoundtrip)) {
+			this.toolRoundtrip[aiId as AiId] = roundtrip;
+		}
 
 		return { result, completions, nextState };
 	}

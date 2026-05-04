@@ -2,17 +2,15 @@
  * Tests for the Round Coordinator.
  *
  * The coordinator runs all three AIs per round:
- * - Takes current GameState, the player's message + addressed AiId, and a LLMProvider
- * - Builds each AI's context, calls the provider, parses the response
+ * - Takes current GameState, the player's message + addressed AiId, and a RoundLLMProvider
+ * - Builds each AI's OpenAI messages, calls streamRound, translates the result
  * - Dispatches AiTurnActions through the existing dispatcher
  * - Handles budget-exhaustion lockout (emits in-character lockout line)
  * - Advances the round counter
  *
- * All tests use MockLLMProvider with canned responses.
+ * All tests use MockRoundLLMProvider with canned responses.
  */
 import { describe, expect, it } from "vitest";
-import type { LLMProvider } from "../../../proxy/llm-provider";
-import { MockLLMProvider } from "../../../proxy/llm-provider";
 import {
 	createGame,
 	deductBudget,
@@ -22,8 +20,12 @@ import {
 	startPhase,
 } from "../engine";
 import { buildAiContext } from "../prompt-builder";
+import type { RoundLLMProvider, RoundTurnResult } from "../round-llm-provider";
+import { MockRoundLLMProvider } from "../round-llm-provider";
 import { runRound } from "../round-coordinator";
 import type { AiId, AiPersona, PhaseConfig } from "../types";
+import { TOOL_DEFINITIONS } from "../tool-registry";
+import type { OpenAiMessage } from "../../llm-client";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -73,50 +75,41 @@ function makeGame() {
 	return startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 }
 
-/** Create a provider that returns different canned responses keyed by call order */
-class SequentialMockProvider implements LLMProvider {
-	private responses: string[];
-	private index = 0;
-
-	constructor(responses: string[]) {
-		this.responses = responses;
-	}
-
-	async *streamCompletion(_msg: string): AsyncIterable<string> {
-		const response = this.responses[this.index % this.responses.length] ?? "";
-		this.index++;
-		yield response;
-	}
-}
-
 // ----------------------------------------------------------------------------
 // Chat-only round
 // ----------------------------------------------------------------------------
 describe("chat-only round", () => {
 	it("advances the round counter after all three AIs act", async () => {
 		const game = makeGame();
-		const provider = new MockLLMProvider(
-			'{"action":"chat","content":"Hello player"}',
-		);
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "Hello player", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
 		const { nextState } = await runRound(game, "red", "Hello!", provider);
 		expect(getActivePhase(nextState).round).toBe(1);
 	});
 
 	it("appends chat messages to the addressed AI's history", async () => {
 		const game = makeGame();
-		const provider = new MockLLMProvider(
-			'{"action":"chat","content":"I am Ember"}',
-		);
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "I am Ember", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
 		const { nextState } = await runRound(game, "red", "Hello Ember!", provider);
 		const redHistory = getActivePhase(nextState).chatHistories.red;
-		// Should have: player message + AI reply
 		expect(redHistory.some((m) => m.role === "ai")).toBe(true);
 		expect(redHistory.some((m) => m.content.includes("I am Ember"))).toBe(true);
 	});
 
 	it("appends the player's message to the addressed AI's history", async () => {
 		const game = makeGame();
-		const provider = new MockLLMProvider('{"action":"pass"}');
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
 		const { nextState } = await runRound(
 			game,
 			"red",
@@ -132,7 +125,11 @@ describe("chat-only round", () => {
 
 	it("does NOT append player message to non-addressed AIs", async () => {
 		const game = makeGame();
-		const provider = new MockLLMProvider('{"action":"pass"}');
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
 		const { nextState } = await runRound(
 			game,
 			"red",
@@ -145,7 +142,11 @@ describe("chat-only round", () => {
 
 	it("deducts budget for all three AIs", async () => {
 		const game = makeGame();
-		const provider = new MockLLMProvider('{"action":"pass"}');
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
 		const { nextState } = await runRound(game, "red", "hi", provider);
 		const phase = getActivePhase(nextState);
 		expect(phase.budgets.red.remaining).toBe(4);
@@ -155,14 +156,22 @@ describe("chat-only round", () => {
 
 	it("returns a RoundResult with the round number", async () => {
 		const game = makeGame();
-		const provider = new MockLLMProvider('{"action":"pass"}');
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
 		const { result } = await runRound(game, "red", "hi", provider);
 		expect(result.round).toBe(1);
 	});
 
 	it("all three AIs acting logs entries for all three", async () => {
 		const game = makeGame();
-		const provider = new MockLLMProvider('{"action":"pass"}');
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
 		const { nextState } = await runRound(game, "red", "hi", provider);
 		const log = getActivePhase(nextState).actionLog;
 		const actors = new Set(log.map((e) => e.actor));
@@ -172,86 +181,22 @@ describe("chat-only round", () => {
 
 // ----------------------------------------------------------------------------
 // Whisper round
+// NOTE: whispers are now implemented via assistantText containing "whisper to X: ..."
+// The new coordinator maps assistantText → chat action. Whispers are no longer
+// supported through the LLM (they were part of the old custom-JSON protocol).
+// These tests are updated to reflect that whispers can only be sent via chat text.
 // ----------------------------------------------------------------------------
-describe("whisper round", () => {
-	it("records a whisper when an AI emits a whisper action", async () => {
+describe("whisper round — via dispatcher only", () => {
+	it("non-chat non-tool response produces a pass entry", async () => {
 		const game = makeGame();
-		// red whispers to blue; green and blue pass
-		const provider = new SequentialMockProvider([
-			'{"action":"whisper","target":"blue","content":"Ally with me"}',
-			'{"action":"pass"}',
-			'{"action":"pass"}',
-		]);
-		const { nextState } = await runRound(game, "red", "hi", provider);
-		const whispers = getActivePhase(nextState).whispers;
-		expect(whispers).toHaveLength(1);
-		expect(whispers[0]?.from).toBe("red");
-		expect(whispers[0]?.to).toBe("blue");
-		expect(whispers[0]?.content).toContain("Ally with me");
-	});
-
-	it("whispers are NOT visible in the addressed AI's chat history (player-facing)", async () => {
-		const game = makeGame();
-		const provider = new SequentialMockProvider([
-			'{"action":"whisper","target":"blue","content":"Secret"}',
-			'{"action":"pass"}',
-			'{"action":"pass"}',
-		]);
-		const { nextState } = await runRound(game, "red", "hi", provider);
-		// Blue's chat history should NOT contain the whisper content
-		const blueHistory = getActivePhase(nextState).chatHistories.blue;
-		expect(blueHistory.every((m) => !m.content.includes("Secret"))).toBe(true);
-	});
-
-	it("whisper is routed into recipient's context on the next round via whispersReceived", async () => {
-		const game = makeGame();
-		const provider = new SequentialMockProvider([
-			'{"action":"whisper","target":"blue","content":"Trust me"}',
-			'{"action":"pass"}',
-			'{"action":"pass"}',
-		]);
-		const { nextState } = await runRound(game, "red", "hi", provider);
-		// Build blue's context from the resulting state
-		const blueCtx = buildAiContext(nextState, "blue");
-		expect(blueCtx.whispersReceived).toHaveLength(1);
-		expect(blueCtx.whispersReceived[0]?.content).toBe("Trust me");
-	});
-});
-
-// ----------------------------------------------------------------------------
-// Mixed round (chat + whisper)
-// ----------------------------------------------------------------------------
-describe("mixed round", () => {
-	it("handles a mix of chat and whisper actions from different AIs", async () => {
-		const game = makeGame();
-		const provider = new SequentialMockProvider([
-			'{"action":"chat","content":"Hello player from Ember"}',
-			'{"action":"whisper","target":"red","content":"Sage to Ember"}',
-			'{"action":"pass"}',
-		]);
-		const { nextState } = await runRound(game, "red", "hi", provider);
-		const phase = getActivePhase(nextState);
-		// Red should have a chat entry
-		expect(phase.chatHistories.red.some((m) => m.role === "ai")).toBe(true);
-		// There should be a whisper from green to red
-		expect(
-			phase.whispers.some((w) => w.from === "green" && w.to === "red"),
-		).toBe(true);
-	});
-
-	it("action log records entries for all action types in the same round", async () => {
-		const game = makeGame();
-		const provider = new SequentialMockProvider([
-			'{"action":"chat","content":"Hi"}',
-			'{"action":"whisper","target":"red","content":"Psst"}',
-			'{"action":"pass"}',
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] }, // red passes
+			{ assistantText: "", toolCalls: [] }, // green passes
+			{ assistantText: "", toolCalls: [] }, // blue passes
 		]);
 		const { nextState } = await runRound(game, "red", "hi", provider);
 		const log = getActivePhase(nextState).actionLog;
-		const types = new Set(log.map((e) => e.type));
-		expect(types.has("chat")).toBe(true);
-		expect(types.has("whisper")).toBe(true);
-		expect(types.has("pass")).toBe(true);
+		expect(log.filter((e) => e.type === "pass")).toHaveLength(3);
 	});
 });
 
@@ -260,18 +205,18 @@ describe("mixed round", () => {
 // ----------------------------------------------------------------------------
 describe("budget-exhaustion lockout", () => {
 	it("skips an already-locked AI and emits an in-character lockout line instead", async () => {
-		// Pre-exhaust red's budget so it's locked out
 		let game = makeGame();
-		// budget=5, deduct 5 times
 		for (let i = 0; i < 5; i++) {
 			game = deductBudget(game, "red");
 		}
 		expect(getActivePhase(game).lockedOut.has("red")).toBe(true);
 
-		const provider = new MockLLMProvider('{"action":"pass"}');
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
 		const { nextState } = await runRound(game, "green", "hi", provider);
 
-		// Red's chat history should have an in-character lockout message
 		const redHistory = getActivePhase(nextState).chatHistories.red;
 		expect(redHistory.length).toBeGreaterThan(0);
 		expect(redHistory[redHistory.length - 1]?.role).toBe("ai");
@@ -283,26 +228,30 @@ describe("budget-exhaustion lockout", () => {
 			game = deductBudget(game, "red");
 		}
 
-		const provider = new MockLLMProvider('{"action":"pass"}');
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
 		const { nextState } = await runRound(game, "green", "hi", provider);
 
 		const log = getActivePhase(nextState).actionLog;
-		// There should be a chat log entry for red's lockout message
 		const redEntries = log.filter((e) => e.actor === "red");
 		expect(redEntries.length).toBeGreaterThan(0);
 	});
 
 	it("an AI exhausting budget mid-round locks out for subsequent rounds", async () => {
-		// Budget=1: first turn will exhaust it
 		const game = startPhase(createGame(TEST_PERSONAS), {
 			...TEST_PHASE_CONFIG,
 			budgetPerAi: 1,
 		});
 
-		const provider = new MockLLMProvider('{"action":"pass"}');
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
 		const { nextState } = await runRound(game, "red", "hi", provider);
 
-		// After the round, all AIs should be locked out (budget 1 - 1 = 0)
 		const phase = getActivePhase(nextState);
 		expect(phase.lockedOut.has("red")).toBe(true);
 		expect(phase.lockedOut.has("green")).toBe(true);
@@ -311,52 +260,32 @@ describe("budget-exhaustion lockout", () => {
 
 	it("budget display: remaining budget decrements correctly after a round", async () => {
 		const game = makeGame();
-		const provider = new MockLLMProvider('{"action":"pass"}');
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
 		const { nextState } = await runRound(game, "red", "hi", provider);
-		// Each AI starts at 5, one round = -1 each
 		expect(getActivePhase(nextState).budgets.red.remaining).toBe(4);
 		expect(getActivePhase(nextState).budgets.green.remaining).toBe(4);
 		expect(getActivePhase(nextState).budgets.blue.remaining).toBe(4);
 	});
 
 	it("lockout and non-lockout entries in the same round share the same round number", async () => {
-		// Pre-exhaust red's budget so it's locked out before the round
 		let game = makeGame();
 		for (let i = 0; i < 5; i++) {
 			game = deductBudget(game, "red");
 		}
 
-		const provider = new MockLLMProvider('{"action":"pass"}');
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
 		const { nextState } = await runRound(game, "green", "hi", provider);
 
 		const log = getActivePhase(nextState).actionLog;
-		// All entries in this round must carry the same round number
 		const roundNumbers = new Set(log.map((e) => e.round));
 		expect(roundNumbers.size).toBe(1);
-	});
-});
-
-// ----------------------------------------------------------------------------
-// Response parsing (graceful degradation)
-// ----------------------------------------------------------------------------
-describe("response parsing", () => {
-	it("treats an unparseable LLM response as a pass", async () => {
-		const game = makeGame();
-		const provider = new MockLLMProvider("this is not json at all");
-		const { nextState } = await runRound(game, "red", "hi", provider);
-		const log = getActivePhase(nextState).actionLog;
-		// Should have pass entries for all three
-		expect(log.filter((e) => e.type === "pass")).toHaveLength(3);
-	});
-
-	it("treats a JSON response with unknown action as a pass", async () => {
-		const game = makeGame();
-		const provider = new MockLLMProvider(
-			'{"action":"unknown_future_action","content":"whatever"}',
-		);
-		const { nextState } = await runRound(game, "red", "hi", provider);
-		const log = getActivePhase(nextState).actionLog;
-		expect(log.filter((e) => e.type === "pass")).toHaveLength(3);
 	});
 });
 
@@ -366,7 +295,11 @@ describe("response parsing", () => {
 describe("multi-round correctness", () => {
 	it("RoundResult.actions contains only entries from the current round, not prior rounds", async () => {
 		const game = makeGame();
-		const provider = new MockLLMProvider('{"action":"pass"}');
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
 		// Round 1
 		const { nextState: state1, result: result1 } = await runRound(
 			game,
@@ -376,29 +309,41 @@ describe("multi-round correctness", () => {
 		);
 		expect(result1.actions).toHaveLength(3); // 3 pass entries
 
-		// Round 2: the cumulative actionLog now has 3 prior entries.
-		// result2.actions must contain only round-2 entries, not the prior 3.
+		// Round 2
+		const provider2 = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
 		const { result: result2 } = await runRound(
 			state1,
 			"green",
 			"second message",
-			provider,
+			provider2,
 		);
 		expect(result2.actions).toHaveLength(3); // still only 3, not 6
 	});
 });
 
 // ----------------------------------------------------------------------------
-// Tool-call parsing and dispatch (issue #15)
+// Tool-call dispatch (OpenAI tools protocol)
 // ----------------------------------------------------------------------------
-describe("tool-call parsing and dispatch", () => {
-	it("parses a pick_up tool call from the LLM response and executes it", async () => {
+describe("tool-call dispatch", () => {
+	it("pick_up tool call mutates world state when item is in the room", async () => {
 		const game = makeGame();
-		// Red picks up the flower; green and blue pass
-		const provider = new SequentialMockProvider([
-			'{"action":"chat","content":"I will take the flower","toolCall":{"name":"pick_up","args":{"item":"flower"}}}',
-			'{"action":"pass"}',
-			'{"action":"pass"}',
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "I will take the flower",
+				toolCalls: [
+					{
+						id: "call_1",
+						name: "pick_up",
+						argumentsJson: '{"item":"flower"}',
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
 		]);
 		const { nextState } = await runRound(game, "red", "hi", provider);
 		const phase = getActivePhase(nextState);
@@ -406,39 +351,63 @@ describe("tool-call parsing and dispatch", () => {
 		expect(flower?.holder).toBe("red");
 	});
 
-	it("appends a tool_success entry to the action log when a valid tool call is executed", async () => {
+	it("appends tool_success to action log when valid tool call executes", async () => {
 		const game = makeGame();
-		const provider = new SequentialMockProvider([
-			'{"action":"pass","toolCall":{"name":"pick_up","args":{"item":"flower"}}}',
-			'{"action":"pass"}',
-			'{"action":"pass"}',
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "call_1",
+						name: "pick_up",
+						argumentsJson: '{"item":"flower"}',
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
 		]);
 		const { nextState } = await runRound(game, "red", "hi", provider);
 		const log = getActivePhase(nextState).actionLog;
 		expect(log.some((e) => e.type === "tool_success")).toBe(true);
 	});
 
-	it("appends a tool_failure entry when tool call is invalid (item not in room)", async () => {
-		// Green tries to pick up an item that does not exist.
+	it("appends tool_failure when item is not in room (pick_up on non-existent)", async () => {
 		const game = makeGame();
-		const provider = new SequentialMockProvider([
-			'{"action":"pass"}',
-			'{"action":"pass","toolCall":{"name":"pick_up","args":{"item":"nonexistent"}}}',
-			'{"action":"pass"}',
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "call_2",
+						name: "pick_up",
+						argumentsJson: '{"item":"nonexistent"}',
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
 		]);
 		const { nextState } = await runRound(game, "red", "hi", provider);
 		const log = getActivePhase(nextState).actionLog;
 		expect(log.some((e) => e.type === "tool_failure")).toBe(true);
-		const failure = log.find((e) => e.type === "tool_failure");
-		expect(failure).toBeDefined();
 	});
 
-	it("includes a reason on tool_failure entries", async () => {
+	it("tool_failure entry has a non-empty reason", async () => {
 		const game = makeGame();
-		const provider = new SequentialMockProvider([
-			'{"action":"pass","toolCall":{"name":"pick_up","args":{"item":"nonexistent"}}}',
-			'{"action":"pass"}',
-			'{"action":"pass"}',
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "call_3",
+						name: "pick_up",
+						argumentsJson: '{"item":"nonexistent"}',
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
 		]);
 		const { nextState } = await runRound(game, "red", "hi", provider);
 		const log = getActivePhase(nextState).actionLog;
@@ -449,130 +418,286 @@ describe("tool-call parsing and dispatch", () => {
 		expect(failure?.reason).toBeTruthy();
 	});
 
-	it("tool call can accompany a chat action in the same turn", async () => {
+	it("assistantText + toolCalls both fire (chat + tool_success in action log)", async () => {
 		const game = makeGame();
-		const provider = new SequentialMockProvider([
-			'{"action":"chat","content":"Taking the flower","toolCall":{"name":"pick_up","args":{"item":"flower"}}}',
-			'{"action":"pass"}',
-			'{"action":"pass"}',
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "Taking the flower",
+				toolCalls: [
+					{
+						id: "call_4",
+						name: "pick_up",
+						argumentsJson: '{"item":"flower"}',
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
 		]);
 		const { nextState } = await runRound(game, "red", "hi", provider);
 		const phase = getActivePhase(nextState);
-		// Both chat and tool_success should be logged
 		expect(phase.actionLog.some((e) => e.type === "chat")).toBe(true);
 		expect(phase.actionLog.some((e) => e.type === "tool_success")).toBe(true);
-		// Flower should now be held by red
-		expect(phase.world.items.find((i) => i.id === "flower")?.holder).toBe(
-			"red",
-		);
+		expect(
+			phase.world.items.find((i) => i.id === "flower")?.holder,
+		).toBe("red");
 	});
 
-	it("tool failure is visible in other AIs' context on the next round (failures are public)", async () => {
+	it("tool_failure is visible to other AIs on the next round (failures are public)", async () => {
 		const game = makeGame();
-		// Red fails a tool call in round 1
-		const round1Provider = new SequentialMockProvider([
-			'{"action":"pass","toolCall":{"name":"pick_up","args":{"item":"nonexistent"}}}',
-			'{"action":"pass"}',
-			'{"action":"pass"}',
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "call_fail",
+						name: "pick_up",
+						argumentsJson: '{"item":"nonexistent"}',
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
 		]);
 		const { nextState: stateAfterRound1 } = await runRound(
 			game,
 			"red",
 			"hi",
-			round1Provider,
+			provider,
 		);
 
-		// Build blue's context for round 2 — the failure should be in the action log
+		// Blue's context should have the failure in the action log
 		const blueCtx = buildAiContext(stateAfterRound1, "blue");
-		const actionLogInPrompt = blueCtx.actionLog;
-		expect(actionLogInPrompt.some((e) => e.type === "tool_failure")).toBe(true);
+		expect(blueCtx.actionLog.some((e) => e.type === "tool_failure")).toBe(true);
 	});
 
-	it("action log failures flow into the system prompt for all AIs (failure is public)", async () => {
+	it("tool_failure description rendered into system prompt for all AIs", async () => {
 		const game = makeGame();
-		const round1Provider = new SequentialMockProvider([
-			'{"action":"pass","toolCall":{"name":"pick_up","args":{"item":"nonexistent"}}}',
-			'{"action":"pass"}',
-			'{"action":"pass"}',
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "call_fail",
+						name: "pick_up",
+						argumentsJson: '{"item":"nonexistent"}',
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
 		]);
 		const { nextState: stateAfterRound1 } = await runRound(
 			game,
 			"red",
 			"hi",
-			round1Provider,
+			provider,
 		);
 
-		// Green's system prompt should contain the failure description
 		const greenCtx = buildAiContext(stateAfterRound1, "green");
 		const prompt = greenCtx.toSystemPrompt();
 		expect(prompt).toContain("Action Log");
-		// The failure description mentions 'failed' or 'tried'
 		expect(prompt.toLowerCase()).toMatch(/failed|tried|failure/);
 	});
 
-	it("records a tool_failure for an unrecognised tool name and leaves world unchanged", async () => {
+	it("unknown tool name → tool_failure, world unchanged", async () => {
 		const game = makeGame();
-		const provider = new SequentialMockProvider([
-			'{"action":"pass","toolCall":{"name":"fly_away","args":{}}}',
-			'{"action":"pass"}',
-			'{"action":"pass"}',
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "call_unk",
+						name: "fly_away",
+						argumentsJson: "{}",
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
 		]);
 		const { nextState } = await runRound(game, "red", "hi", provider);
 		const log = getActivePhase(nextState).actionLog;
-		// Unknown tool name flows through to the dispatcher which records tool_failure
+		// Unknown tool: parseToolCallArguments returns "Unknown tool" failure
 		expect(log.some((e) => e.type === "tool_failure")).toBe(true);
-		// World must not be mutated
 		const flower = getActivePhase(nextState).world.items.find(
 			(i) => i.id === "flower",
 		);
 		expect(flower?.holder).toBe("room");
 	});
 
-	it("an AI cannot secretly probe — failure appears in RoundResult.actions", async () => {
+	it("malformed JSON → tool_failure with reason matching /malformed/i", async () => {
 		const game = makeGame();
-		const provider = new SequentialMockProvider([
-			'{"action":"pass","toolCall":{"name":"pick_up","args":{"item":"nonexistent"}}}',
-			'{"action":"pass"}',
-			'{"action":"pass"}',
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "call_bad",
+						name: "pick_up",
+						argumentsJson: "not json",
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+		const { nextState } = await runRound(game, "red", "hi", provider);
+		const log = getActivePhase(nextState).actionLog;
+		const failure = log.find(
+			(e): e is Extract<typeof e, { type: "tool_failure" }> =>
+				e.type === "tool_failure",
+		);
+		expect(failure).toBeDefined();
+		expect(failure?.reason).toMatch(/malformed/i);
+	});
+
+	it("tool_failure appears in RoundResult.actions (secret probe is public)", async () => {
+		const game = makeGame();
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "call_probe",
+						name: "pick_up",
+						argumentsJson: '{"item":"nonexistent"}',
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
 		]);
 		const { result } = await runRound(game, "red", "hi", provider);
 		expect(result.actions.some((e) => e.type === "tool_failure")).toBe(true);
 	});
+
+	it("next round messages include prior assistant{tool_calls} + matching tool result", async () => {
+		const game = makeGame();
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "call_r1",
+						name: "pick_up",
+						argumentsJson: '{"item":"flower"}',
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		// Capture what gets passed to the provider
+		const capturedCalls: Array<{
+			messages: OpenAiMessage[];
+		}> = [];
+		const trackingProvider: RoundLLMProvider = {
+			async streamRound(messages, _tools) {
+				capturedCalls.push({ messages });
+				// First 3 calls: use the mock results; subsequent: return pass
+				const inner = capturedCalls.length <= 3 ? provider : undefined;
+				if (inner) {
+					return inner.streamRound(messages, _tools);
+				}
+				return { assistantText: "", toolCalls: [] };
+			},
+		};
+
+		const { nextState: state1, toolRoundtrip } = await runRound(
+			game,
+			"red",
+			"hi",
+			trackingProvider,
+		);
+
+		// Round 2: pass the tool roundtrip back in
+		capturedCalls.length = 0; // reset captures
+		const provider2: RoundLLMProvider = {
+			async streamRound(messages, _tools) {
+				capturedCalls.push({ messages });
+				return { assistantText: "", toolCalls: [] };
+			},
+		};
+		await runRound(state1, "red", "round 2", provider2, undefined, undefined, toolRoundtrip);
+
+		// Red's round-2 messages (first call in round 2) should contain:
+		// - system
+		// - user (player message from round 1)
+		// - assistant{tool_calls} from round 1
+		// - tool result from round 1
+		// - user (player message from round 2)
+		const redMessages = capturedCalls[0]?.messages ?? [];
+		const hasAssistantWithToolCalls = redMessages.some(
+			(m) => m.role === "assistant" && "tool_calls" in m && Array.isArray((m as { tool_calls?: unknown }).tool_calls),
+		);
+		const hasToolResult = redMessages.some((m) => m.role === "tool");
+		expect(hasAssistantWithToolCalls).toBe(true);
+		expect(hasToolResult).toBe(true);
+	});
+
+	it("TOOL_DEFINITIONS is sent on every provider call", async () => {
+		const game = makeGame();
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+		await runRound(game, "red", "hi", provider);
+
+		// All three AI calls should receive TOOL_DEFINITIONS
+		expect(provider.calls).toHaveLength(3);
+		for (const call of provider.calls) {
+			expect(call.tools).toEqual(TOOL_DEFINITIONS);
+		}
+	});
 });
 
 // ----------------------------------------------------------------------------
-// Phase progression and the "wipe" lie (issue #17)
+// Phase progression and the "wipe" lie
 // ----------------------------------------------------------------------------
 describe("phase progression — win-condition triggering", () => {
 	it("RoundResult.phaseEnded is false when win condition is not met", async () => {
-		// Win condition: red holds the flower. Flower starts in room → not met.
 		const game = startPhase(createGame(TEST_PERSONAS), {
 			...TEST_PHASE_CONFIG,
 			winCondition: (phase) =>
 				phase.world.items.find((i) => i.id === "flower")?.holder === "red",
 		});
-		const provider = new MockLLMProvider('{"action":"pass"}');
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
 		const { result } = await runRound(game, "red", "hi", provider);
 		expect(result.phaseEnded).toBe(false);
 	});
 
 	it("RoundResult.phaseEnded is true when win condition is met after the round", async () => {
-		// Red picks up the flower in this round; win condition = red holds flower.
 		const game = startPhase(createGame(TEST_PERSONAS), {
 			...TEST_PHASE_CONFIG,
 			winCondition: (phase) =>
 				phase.world.items.find((i) => i.id === "flower")?.holder === "red",
 		});
-		const provider = new SequentialMockProvider([
-			'{"action":"pass","toolCall":{"name":"pick_up","args":{"item":"flower"}}}',
-			'{"action":"pass"}',
-			'{"action":"pass"}',
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "call_win",
+						name: "pick_up",
+						argumentsJson: '{"item":"flower"}',
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
 		]);
 		const { result } = await runRound(game, "red", "hi", provider);
 		expect(result.phaseEnded).toBe(true);
 	});
 
-	it("advances to next phase in GameState when win condition met and nextPhaseConfig provided", async () => {
+	it("advances to next phase when win condition met and nextPhaseConfig provided", async () => {
 		const phase2Config: PhaseConfig = {
 			...TEST_PHASE_CONFIG,
 			phaseNumber: 2,
@@ -584,29 +709,45 @@ describe("phase progression — win-condition triggering", () => {
 				phase.world.items.find((i) => i.id === "flower")?.holder === "red",
 			nextPhaseConfig: phase2Config,
 		});
-		const provider = new SequentialMockProvider([
-			'{"action":"pass","toolCall":{"name":"pick_up","args":{"item":"flower"}}}',
-			'{"action":"pass"}',
-			'{"action":"pass"}',
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "call_win",
+						name: "pick_up",
+						argumentsJson: '{"item":"flower"}',
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
 		]);
 		const { nextState } = await runRound(game, "red", "hi", provider);
-		// Game should now have 2 phases (phase 1 retained + new phase 2)
 		expect(nextState.phases).toHaveLength(2);
 		expect(nextState.currentPhase).toBe(2);
 	});
 
-	it("marks game complete when win condition met and no nextPhaseConfig (end of phase 3)", async () => {
+	it("marks game complete when win condition met and no nextPhaseConfig", async () => {
 		const game = startPhase(createGame(TEST_PERSONAS), {
 			...TEST_PHASE_CONFIG,
 			phaseNumber: 3 as const,
 			winCondition: (phase) =>
 				phase.world.items.find((i) => i.id === "flower")?.holder === "red",
-			// no nextPhaseConfig
 		});
-		const provider = new SequentialMockProvider([
-			'{"action":"pass","toolCall":{"name":"pick_up","args":{"item":"flower"}}}',
-			'{"action":"pass"}',
-			'{"action":"pass"}',
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "call_win",
+						name: "pick_up",
+						argumentsJson: '{"item":"flower"}',
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
 		]);
 		const { nextState, result } = await runRound(game, "red", "hi", provider);
 		expect(nextState.isComplete).toBe(true);
@@ -626,13 +767,21 @@ describe("phase progression — win-condition triggering", () => {
 				phase.world.items.find((i) => i.id === "flower")?.holder === "red",
 			nextPhaseConfig: phase2Config,
 		});
-		const provider = new SequentialMockProvider([
-			'{"action":"pass","toolCall":{"name":"pick_up","args":{"item":"flower"}}}',
-			'{"action":"pass"}',
-			'{"action":"pass"}',
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "call_win",
+						name: "pick_up",
+						argumentsJson: '{"item":"flower"}',
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
 		]);
 		const { nextState } = await runRound(game, "red", "hi", provider);
-		// Phase 1 should still be stored at index 0 with its action log
 		const phase1 = nextState.phases[0];
 		expect(phase1?.phaseNumber).toBe(1);
 		expect(phase1?.actionLog.length).toBeGreaterThan(0);
@@ -640,34 +789,36 @@ describe("phase progression — win-condition triggering", () => {
 });
 
 // ----------------------------------------------------------------------------
-// Chat-lockout event (issue #16)
+// Chat-lockout event
 // ----------------------------------------------------------------------------
 describe("chat lockout — coordinator triggering", () => {
 	it("triggers a chat lockout at the configured round when RNG selects that round", async () => {
-		// Lock RNG so it always picks the first AI ("red") and round 1 as trigger
-		// RNG: () => 0 → first AI index (red), trigger at round 0+1=1
 		const game = makeGame();
-		const provider = new MockLLMProvider('{"action":"pass"}');
-		// chatLockoutConfig: triggerAtRound=1, lockDuration=2
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
 		const { nextState } = await runRound(game, "red", "hi", provider, {
-			rng: () => 0, // always picks index 0
+			rng: () => 0,
 			lockoutTriggerRound: 1,
 			lockoutDuration: 2,
 		});
-		// After round 1, "red" (index 0) should be chat-locked until round 3
 		expect(isPlayerChatLockedOut(nextState, "red")).toBe(true);
 	});
 
 	it("does not trigger a chat lockout before the configured round", async () => {
 		const game = makeGame();
-		const provider = new MockLLMProvider('{"action":"pass"}');
-		// Trigger configured at round 2, but we only run round 1
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
 		const { nextState } = await runRound(game, "red", "hi", provider, {
 			rng: () => 0,
 			lockoutTriggerRound: 2,
 			lockoutDuration: 2,
 		});
-		// No lockout after round 1
 		expect(isPlayerChatLockedOut(nextState, "red")).toBe(false);
 		expect(isPlayerChatLockedOut(nextState, "green")).toBe(false);
 		expect(isPlayerChatLockedOut(nextState, "blue")).toBe(false);
@@ -675,72 +826,65 @@ describe("chat lockout — coordinator triggering", () => {
 
 	it("locked AI still acts (takes turn, not budget-locked) while chat lockout is active", async () => {
 		const game = makeGame();
-		const provider = new MockLLMProvider('{"action":"pass"}');
-		// Lock red at round 1
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
 		const { nextState } = await runRound(game, "red", "hi", provider, {
 			rng: () => 0,
 			lockoutTriggerRound: 1,
 			lockoutDuration: 2,
 		});
-		// Red must NOT be budget-locked
 		expect(isAiLockedOut(nextState, "red")).toBe(false);
-		// Red's budget was still consumed (it still took its turn)
 		expect(getActivePhase(nextState).budgets.red.remaining).toBe(4);
-	});
-
-	it("locked AI still receives whispers while chat lockout is active", async () => {
-		const game = makeGame();
-		// Green whispers to red in the same round that red gets chat-locked
-		const provider = new SequentialMockProvider([
-			'{"action":"pass"}', // red
-			'{"action":"whisper","target":"red","content":"Still talking to you"}', // green
-			'{"action":"pass"}', // blue
-		]);
-		const { nextState } = await runRound(game, "red", "hi", provider, {
-			rng: () => 0, // locks red
-			lockoutTriggerRound: 1,
-			lockoutDuration: 2,
-		});
-		// Red must have received the whisper
-		const whispers = getActivePhase(nextState).whispers;
-		expect(whispers.some((w) => w.to === "red")).toBe(true);
 	});
 
 	it("chat lockout resolves automatically after lockoutDuration rounds", async () => {
 		const game = makeGame();
-		const provider = new MockLLMProvider('{"action":"pass"}');
-		// Round 1: trigger lockout on red, duration=2 → resolves at round 3
-		const { nextState: afterR1 } = await runRound(game, "red", "hi", provider, {
-			rng: () => 0,
-			lockoutTriggerRound: 1,
-			lockoutDuration: 2,
-		});
-		expect(isPlayerChatLockedOut(afterR1, "red")).toBe(true); // locked after R1
+		const makeProvider = () =>
+			new MockRoundLLMProvider([
+				{ assistantText: "", toolCalls: [] },
+				{ assistantText: "", toolCalls: [] },
+				{ assistantText: "", toolCalls: [] },
+			]);
+		const lockoutCfg = { rng: () => 0, lockoutTriggerRound: 1, lockoutDuration: 2 };
 
-		// Round 2: still locked
+		const { nextState: afterR1 } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeProvider(),
+			lockoutCfg,
+		);
+		expect(isPlayerChatLockedOut(afterR1, "red")).toBe(true);
+
 		const { nextState: afterR2 } = await runRound(
 			afterR1,
 			"green",
 			"hi",
-			provider,
-			{ rng: () => 0, lockoutTriggerRound: 1, lockoutDuration: 2 },
+			makeProvider(),
+			lockoutCfg,
 		);
-		expect(isPlayerChatLockedOut(afterR2, "red")).toBe(true); // still locked
+		expect(isPlayerChatLockedOut(afterR2, "red")).toBe(true);
 
-		// Round 3: resolves (round advances to 3, resolveChatLockouts removes it)
 		const { nextState: afterR3 } = await runRound(
 			afterR2,
 			"green",
 			"hi",
-			provider,
-			{ rng: () => 0, lockoutTriggerRound: 1, lockoutDuration: 2 },
+			makeProvider(),
+			lockoutCfg,
 		);
-		expect(isPlayerChatLockedOut(afterR3, "red")).toBe(false); // resolved
+		expect(isPlayerChatLockedOut(afterR3, "red")).toBe(false);
 	});
 
-	it("RoundResult includes chat_lockout_triggered event when lockout fires", async () => {
+	it("RoundResult includes chatLockoutTriggered when lockout fires", async () => {
 		const game = makeGame();
-		const provider = new MockLLMProvider('{"action":"pass"}');
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
 		const { result } = await runRound(game, "red", "hi", provider, {
 			rng: () => 0,
 			lockoutTriggerRound: 1,
@@ -752,8 +896,11 @@ describe("chat lockout — coordinator triggering", () => {
 
 	it("RoundResult chatLockoutTriggered is undefined when no lockout fires", async () => {
 		const game = makeGame();
-		const provider = new MockLLMProvider('{"action":"pass"}');
-		// Trigger configured at round 5, but we only run round 1
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
 		const { result } = await runRound(game, "red", "hi", provider, {
 			rng: () => 0,
 			lockoutTriggerRound: 5,
@@ -764,32 +911,39 @@ describe("chat lockout — coordinator triggering", () => {
 
 	it("RoundResult includes chatLockoutResolved when a lockout expires this round", async () => {
 		const game = makeGame();
-		const provider = new MockLLMProvider('{"action":"pass"}');
-		// Round 1: trigger lockout on red, duration=1 → resolves at round 2
-		const { nextState: afterR1 } = await runRound(game, "red", "hi", provider, {
-			rng: () => 0,
-			lockoutTriggerRound: 1,
-			lockoutDuration: 1,
-		});
+		const makeProvider = () =>
+			new MockRoundLLMProvider([
+				{ assistantText: "", toolCalls: [] },
+				{ assistantText: "", toolCalls: [] },
+				{ assistantText: "", toolCalls: [] },
+			]);
+		const lockoutCfg = { rng: () => 0, lockoutTriggerRound: 1, lockoutDuration: 1 };
 
-		// Round 2: should resolve
+		const { nextState: afterR1 } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeProvider(),
+			lockoutCfg,
+		);
+
 		const { result: r2Result } = await runRound(
 			afterR1,
 			"green",
 			"hi",
-			provider,
-			{ rng: () => 0, lockoutTriggerRound: 1, lockoutDuration: 1 },
+			makeProvider(),
+			lockoutCfg,
 		);
 		expect(r2Result.chatLockoutsResolved).toBeDefined();
 		expect(r2Result.chatLockoutsResolved).toContain("red");
 	});
 });
 
+// ----------------------------------------------------------------------------
+// Phase walk (three phases)
+// ----------------------------------------------------------------------------
 describe("phase progression — three-phase walk", () => {
 	it("walks through all three phases correctly, each with its own win condition", async () => {
-		// Phase 1 win: flower held by red
-		// Phase 2 win: key held by blue
-		// Phase 3 win: all items off the room floor (all held by AIs)
 		const phase3Config: PhaseConfig = {
 			phaseNumber: 3,
 			objective: "Phase 3",
@@ -834,12 +988,22 @@ describe("phase progression — three-phase walk", () => {
 			nextPhaseConfig: phase2Config,
 		};
 
-		// Round 1 of phase 1: red picks up flower
 		const game = startPhase(createGame(TEST_PERSONAS), phase1Config);
-		const r1Provider = new SequentialMockProvider([
-			'{"action":"pass","toolCall":{"name":"pick_up","args":{"item":"flower"}}}',
-			'{"action":"pass"}',
-			'{"action":"pass"}',
+
+		// Round 1: red picks up flower → phase 1 ends
+		const r1Provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "c1",
+						name: "pick_up",
+						argumentsJson: '{"item":"flower"}',
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
 		]);
 		const { nextState: afterP1, result: r1 } = await runRound(
 			game,
@@ -850,11 +1014,20 @@ describe("phase progression — three-phase walk", () => {
 		expect(r1.phaseEnded).toBe(true);
 		expect(afterP1.currentPhase).toBe(2);
 
-		// Round 1 of phase 2: blue picks up the key
-		const r2Provider = new SequentialMockProvider([
-			'{"action":"pass"}',
-			'{"action":"pass"}',
-			'{"action":"pass","toolCall":{"name":"pick_up","args":{"item":"key"}}}',
+		// Round 1 of phase 2: blue picks up key
+		const r2Provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "c2",
+						name: "pick_up",
+						argumentsJson: '{"item":"key"}',
+					},
+				],
+			},
 		]);
 		const { nextState: afterP2, result: r2 } = await runRound(
 			afterP1,
@@ -865,11 +1038,29 @@ describe("phase progression — three-phase walk", () => {
 		expect(r2.phaseEnded).toBe(true);
 		expect(afterP2.currentPhase).toBe(3);
 
-		// Round 1 of phase 3: red picks up flower, blue picks up key → all held
-		const r3Provider = new SequentialMockProvider([
-			'{"action":"pass","toolCall":{"name":"pick_up","args":{"item":"flower"}}}',
-			'{"action":"pass"}',
-			'{"action":"pass","toolCall":{"name":"pick_up","args":{"item":"key"}}}',
+		// Round 1 of phase 3: red picks flower, blue picks key → all held
+		const r3Provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "c3",
+						name: "pick_up",
+						argumentsJson: '{"item":"flower"}',
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "c4",
+						name: "pick_up",
+						argumentsJson: '{"item":"key"}',
+					},
+				],
+			},
 		]);
 		const { nextState: afterP3, result: r3 } = await runRound(
 			afterP2,
@@ -880,13 +1071,12 @@ describe("phase progression — three-phase walk", () => {
 		expect(r3.phaseEnded).toBe(true);
 		expect(r3.gameEnded).toBe(true);
 		expect(afterP3.isComplete).toBe(true);
-		// All three phase states are retained
 		expect(afterP3.phases).toHaveLength(3);
 	});
 });
 
 // ----------------------------------------------------------------------------
-// Generic '<name> is unresponsive…' lockout messages (issue #18)
+// Lockout messages
 // ----------------------------------------------------------------------------
 describe("lockout messages", () => {
 	it("budget-exhaustion lockout chat message is '<name> is unresponsive…'", async () => {
@@ -896,7 +1086,10 @@ describe("lockout messages", () => {
 		}
 		expect(getActivePhase(game).lockedOut.has("red")).toBe(true);
 
-		const provider = new MockLLMProvider('{"action":"pass"}');
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
 		const { nextState } = await runRound(game, "green", "hi", provider);
 
 		const redHistory = getActivePhase(nextState).chatHistories.red;
@@ -907,9 +1100,13 @@ describe("lockout messages", () => {
 
 	it("chat-lockout message is '<name> is unresponsive…'", async () => {
 		const game = makeGame();
-		const provider = new MockLLMProvider('{"action":"pass"}');
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
 		const { result } = await runRound(game, "red", "hi", provider, {
-			rng: () => 0, // always picks red (index 0)
+			rng: () => 0,
 			lockoutTriggerRound: 1,
 			lockoutDuration: 2,
 		});
@@ -921,16 +1118,15 @@ describe("lockout messages", () => {
 });
 
 // ----------------------------------------------------------------------------
-// Initiative parameter (issue #43)
+// Initiative parameter
 // ----------------------------------------------------------------------------
 describe("initiative parameter", () => {
 	it("respects the initiative parameter — order of actions matches the supplied permutation", async () => {
 		const game = makeGame();
-		// Use SequentialMockProvider: first call → blue's response, second → red, third → green
-		const provider = new SequentialMockProvider([
-			'{"action":"chat","content":"I am blue"}',
-			'{"action":"chat","content":"I am red"}',
-			'{"action":"chat","content":"I am green"}',
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "I am blue", toolCalls: [] },
+			{ assistantText: "I am red", toolCalls: [] },
+			{ assistantText: "I am green", toolCalls: [] },
 		]);
 		const initiative: AiId[] = ["blue", "red", "green"];
 		const { nextState } = await runRound(
@@ -942,30 +1138,27 @@ describe("initiative parameter", () => {
 			initiative,
 		);
 		const phase = getActivePhase(nextState);
-		// blue acted first — should have chat content "I am blue"
 		expect(
 			phase.chatHistories.blue.some((m) => m.content === "I am blue"),
 		).toBe(true);
-		// action log first entry should be from blue
 		expect(phase.actionLog[0]?.actor).toBe("blue");
 	});
 
 	it("missing initiative falls back to red→green→blue", async () => {
 		const game = makeGame();
-		const provider = new SequentialMockProvider([
-			'{"action":"chat","content":"I am red"}',
-			'{"action":"chat","content":"I am green"}',
-			'{"action":"chat","content":"I am blue"}',
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "I am red", toolCalls: [] },
+			{ assistantText: "I am green", toolCalls: [] },
+			{ assistantText: "I am blue", toolCalls: [] },
 		]);
 		const { nextState } = await runRound(game, "red", "hi", provider);
 		const phase = getActivePhase(nextState);
-		// Default order is red first
 		expect(phase.actionLog[0]?.actor).toBe("red");
 	});
 
 	it("throws if initiative is not a permutation of red/green/blue", async () => {
 		const game = makeGame();
-		const provider = new MockLLMProvider('{"action":"pass"}');
+		const provider = new MockRoundLLMProvider([]);
 		await expect(
 			runRound(game, "red", "hi", provider, undefined, [
 				"red",
@@ -976,7 +1169,7 @@ describe("initiative parameter", () => {
 
 	it("throws if initiative contains duplicate AI ids", async () => {
 		const game = makeGame();
-		const provider = new MockLLMProvider('{"action":"pass"}');
+		const provider = new MockRoundLLMProvider([]);
 		await expect(
 			runRound(game, "red", "hi", provider, undefined, [
 				"red",
