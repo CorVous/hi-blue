@@ -131,8 +131,9 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		let placeholderShown = true;
 		const stripPlaceholder = (): void => {
 			if (!placeholderShown || !addressedTranscript) return;
-			addressedTranscript.textContent =
-				(addressedTranscript.textContent ?? "").slice(0, placeholderStart);
+			addressedTranscript.textContent = (
+				addressedTranscript.textContent ?? ""
+			).slice(0, placeholderStart);
 			placeholderShown = false;
 		};
 
