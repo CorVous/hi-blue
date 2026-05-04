@@ -16,7 +16,7 @@ import type {
 	ChatMessage,
 	GameState,
 	WhisperMessage,
-} from "./types";
+} from "./spa/game/types";
 
 export interface PhaseTranscript {
 	phaseNumber: 1 | 2 | 3;

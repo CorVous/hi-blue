@@ -12,8 +12,8 @@
  */
 
 import { PERSONAS } from "./content";
-import { GameSession } from "./game-session";
-import type { PhaseConfig } from "./types";
+import { GameSession } from "./spa/game/game-session";
+import type { PhaseConfig } from "./spa/game/types";
 
 const SESSION_COOKIE = "hi-blue-session";
 

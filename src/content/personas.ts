@@ -1,4 +1,4 @@
-import type { AiId, AiPersona } from "../types";
+import type { AiId, AiPersona } from "../spa/game/types";
 
 /**
  * Canonical persona definitions for the three AIs.

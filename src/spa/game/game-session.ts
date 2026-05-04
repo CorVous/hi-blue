@@ -21,10 +21,10 @@
  * call's output is intercepted and stored.
  */
 
+import type { LLMProvider } from "../../proxy/llm-provider";
+import type { ChatLockoutConfig } from "../../round-coordinator";
+import { runRound } from "../../round-coordinator";
 import { createGame, getActivePhase, startPhase } from "./engine";
-import type { LLMProvider } from "./proxy/llm-provider";
-import type { ChatLockoutConfig } from "./round-coordinator";
-import { runRound } from "./round-coordinator";
 import type {
 	AiId,
 	AiPersona,

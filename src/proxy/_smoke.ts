@@ -1,6 +1,4 @@
 import { PHASE_1_CONFIG } from "../content";
-import { getActivePhase } from "../engine";
-import type { GameSession } from "../game-session";
 import { encodeRoundResult } from "../round-result-encoder";
 import {
 	buildSessionCookie,
@@ -8,7 +6,9 @@ import {
 	getSession,
 	parseSessionCookie,
 } from "../session-store";
-import type { AiId, PhaseConfig } from "../types";
+import { getActivePhase } from "../spa/game/engine";
+import type { GameSession } from "../spa/game/game-session";
+import type { AiId, PhaseConfig } from "../spa/game/types";
 import {
 	buildPreflightResponse,
 	parseAllowedOrigins,
