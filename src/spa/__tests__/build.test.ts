@@ -27,4 +27,14 @@ describe("src/spa/index.html asset references", () => {
 	it('script tag uses type="module"', () => {
 		expect(html as string).toContain('type="module"');
 	});
+
+	it('contains cap-hit section with id="cap-hit"', () => {
+		expect(html as string).toContain('id="cap-hit"');
+	});
+
+	it("cap-hit section has hidden attribute", () => {
+		expect(html as string).toMatch(
+			/id="cap-hit"[^>]*hidden|hidden[^>]*id="cap-hit"/,
+		);
+	});
 });

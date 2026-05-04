@@ -60,3 +60,48 @@ main {
 	border-radius: 4px;
 	min-height: 4rem;
 }
+
+#cap-hit {
+	font-family: monospace;
+	padding: 1rem;
+	background: #0a0a0a;
+	color: #c8c8c8;
+	border: 1px solid #333;
+	border-radius: 4px;
+	line-height: 1.6;
+}
+
+#cap-hit h2 {
+	margin: 0 0 0.75rem;
+	font-size: 1rem;
+	font-weight: normal;
+	color: #e0e0e0;
+	font-family: monospace;
+}
+
+.cap-hit-body {
+	margin: 0 0 0.75rem;
+	white-space: pre-wrap;
+	font-family: monospace;
+	font-size: 0.9rem;
+	color: #c8c8c8;
+}
+
+.cap-hit-byok {
+	margin: 0;
+	font-size: 0.85rem;
+}
+
+.cap-hit-byok a {
+	color: #7eb8d4;
+	text-decoration: none;
+	font-family: monospace;
+}
+
+.cap-hit-byok a:hover {
+	text-decoration: underline;
+}
+
+[hidden] {
+	display: none !important;
+}

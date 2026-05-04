@@ -3,6 +3,74 @@ import { parseSSEStream } from "./streaming.js";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const LOCALSTORAGE_KEY = "openrouter_key";
 
+export class CapHitError extends Error {
+	readonly status = 429 as const;
+	readonly reason: "per-ip-daily" | "global-daily" | "unknown";
+	readonly retryAfterSec: number | null;
+
+	constructor(opts: {
+		message: string;
+		reason: "per-ip-daily" | "global-daily" | "unknown";
+		retryAfterSec: number | null;
+	}) {
+		super(opts.message);
+		this.name = "CapHitError";
+		this.reason = opts.reason;
+		this.retryAfterSec = opts.retryAfterSec;
+	}
+}
+
+export async function parseCapHitFromResponse(
+	response: Response,
+): Promise<CapHitError | null> {
+	if (response.status !== 429) return null;
+
+	const retryAfterHeader = response.headers?.get("Retry-After");
+	const retryAfterSec =
+		retryAfterHeader != null ? Number(retryAfterHeader) : null;
+
+	let body: unknown;
+	try {
+		body = await response.json();
+	} catch {
+		return new CapHitError({
+			message: "rate limit exceeded",
+			reason: "unknown",
+			retryAfterSec,
+		});
+	}
+
+	const err =
+		body != null &&
+		typeof body === "object" &&
+		"error" in body &&
+		body.error != null &&
+		typeof body.error === "object"
+			? (body.error as Record<string, unknown>)
+			: null;
+
+	if (!err || err.type !== "rate_limit_exceeded") {
+		return new CapHitError({
+			message: "rate limit exceeded",
+			reason: "unknown",
+			retryAfterSec,
+		});
+	}
+
+	const code = err.code;
+	const reason: "per-ip-daily" | "global-daily" | "unknown" =
+		code === "per-ip-daily"
+			? "per-ip-daily"
+			: code === "global-daily"
+				? "global-daily"
+				: "unknown";
+
+	const message =
+		typeof err.message === "string" ? err.message : "rate limit exceeded";
+
+	return new CapHitError({ message, reason, retryAfterSec });
+}
+
 export const PERSONA_PLACEHOLDER =
 	"[placeholder persona — replaced by real persona content in #43]";
 
@@ -55,6 +123,8 @@ export async function streamChat(opts: {
 	});
 
 	if (!response.ok) {
+		const capHit = await parseCapHitFromResponse(response);
+		if (capHit) throw capHit;
 		throw new Error(`HTTP ${response.status}: ${response.statusText}`);
 	}
 
