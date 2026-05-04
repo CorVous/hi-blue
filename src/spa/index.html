@@ -11,17 +11,48 @@
 		  <button id="byok-cog" type="button" aria-label="Settings" title="Settings">⚙</button>
 		</header>
 		<main>
+		  <div id="panels">
+		    <article class="ai-panel" data-ai="red">
+		      <header class="panel-header">
+		        <span class="panel-name"></span>
+		        <span class="panel-budget" data-budget=""></span>
+		      </header>
+		      <div class="transcript" data-transcript="red"></div>
+		    </article>
+		    <article class="ai-panel" data-ai="green">
+		      <header class="panel-header">
+		        <span class="panel-name"></span>
+		        <span class="panel-budget" data-budget=""></span>
+		      </header>
+		      <div class="transcript" data-transcript="green"></div>
+		    </article>
+		    <article class="ai-panel" data-ai="blue">
+		      <header class="panel-header">
+		        <span class="panel-name"></span>
+		        <span class="panel-budget" data-budget=""></span>
+		      </header>
+		      <div class="transcript" data-transcript="blue"></div>
+		    </article>
+		  </div>
 		  <form id="composer">
+		    <select id="address" aria-label="Address AI">
+		      <option value="red">Ember (red)</option>
+		      <option value="green">Sage (green)</option>
+		      <option value="blue">Frost (blue)</option>
+		    </select>
 		    <input id="prompt" type="text" placeholder="Enter a message…" autocomplete="off" />
 		    <button id="send" type="submit">Send</button>
 		  </form>
-		  <pre id="output"></pre>
 		  <section id="cap-hit" hidden>
 		    <h2>the AIs are sleeping</h2>
 		    <pre class="cap-hit-body">the AIs are sleeping.
 come back tomorrow — they wake at midnight UTC.</pre>
 		    <p class="cap-hit-byok"><a href="#/byok" data-byok-placeholder>or paste your own OpenRouter key to keep playing — coming soon.</a></p>
 		  </section>
+		  <aside id="action-log" hidden>
+		    <h3>Action Log (debug)</h3>
+		    <ul id="action-log-list"></ul>
+		  </aside>
 		</main>
 		<dialog id="byok-dialog" aria-labelledby="byok-title">
 		  <form method="dialog" id="byok-form">

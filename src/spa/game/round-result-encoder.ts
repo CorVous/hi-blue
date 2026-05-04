@@ -26,12 +26,7 @@
  *   game_ended     — { type }
  */
 
-import type {
-	AiId,
-	AiPersona,
-	PhaseState,
-	RoundResult,
-} from "./spa/game/types";
+import type { AiId, AiPersona, PhaseState, RoundResult } from "./types";
 
 /**
  * A single structured SSE event ready to be serialised as

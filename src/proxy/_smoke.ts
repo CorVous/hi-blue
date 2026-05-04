@@ -1,5 +1,4 @@
 import { PHASE_1_CONFIG } from "../content";
-import { encodeRoundResult } from "../round-result-encoder";
 import {
 	buildSessionCookie,
 	createSession,
@@ -8,7 +7,9 @@ import {
 } from "../session-store";
 import { getActivePhase } from "../spa/game/engine";
 import type { GameSession } from "../spa/game/game-session";
+import { encodeRoundResult } from "../spa/game/round-result-encoder";
 import type { AiId, PhaseConfig } from "../spa/game/types";
+import { AI_TYPING_SPEED } from "../spa/game/typing-rhythm";
 import {
 	buildPreflightResponse,
 	parseAllowedOrigins,
@@ -52,16 +53,6 @@ interface Env {
 	 */
 	ALLOWED_ORIGINS?: string;
 }
-
-/**
- * Per-AI multipliers on TOKEN_PACE_MS to give each AI a distinct typing rhythm.
- * Lower = faster. Red is impulsive, blue is deliberate, green sits between.
- */
-const AI_TYPING_SPEED: Record<AiId, number> = {
-	red: 0.7,
-	green: 1.0,
-	blue: 1.4,
-};
 
 function createProvider(env: Env): LLMProvider {
 	if (env.LLM_PROVIDER === "anthropic") {

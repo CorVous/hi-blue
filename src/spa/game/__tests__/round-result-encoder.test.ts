@@ -10,22 +10,17 @@
  */
 import { describe, expect, it } from "vitest";
 import {
-	encodeRoundResult,
-	type SseEvent,
-	splitIntoWordChunks,
-} from "../round-result-encoder";
-import {
 	createGame,
 	deductBudget,
 	getActivePhase,
 	startPhase,
-} from "../spa/game/engine";
-import type {
-	AiId,
-	AiPersona,
-	PhaseConfig,
-	RoundResult,
-} from "../spa/game/types";
+} from "../engine";
+import {
+	encodeRoundResult,
+	type SseEvent,
+	splitIntoWordChunks,
+} from "../round-result-encoder";
+import type { AiId, AiPersona, PhaseConfig, RoundResult } from "../types";
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
 

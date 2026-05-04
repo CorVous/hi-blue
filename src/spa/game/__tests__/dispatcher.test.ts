@@ -9,13 +9,8 @@ import {
 	deductBudget,
 	getActivePhase,
 	startPhase,
-} from "../spa/game/engine";
-import type {
-	AiPersona,
-	AiTurnAction,
-	PhaseConfig,
-	ToolCall,
-} from "../spa/game/types";
+} from "../engine";
+import type { AiPersona, AiTurnAction, PhaseConfig, ToolCall } from "../types";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {

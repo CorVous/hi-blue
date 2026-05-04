@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { buildAiContext } from "../context-builder";
 import {
 	appendActionLog,
 	appendChat,
 	appendWhisper,
 	createGame,
 	startPhase,
-} from "../spa/game/engine";
-import type { ActionLogEntry, AiPersona, PhaseConfig } from "../spa/game/types";
+} from "../engine";
+import { buildAiContext } from "../prompt-builder";
+import type { ActionLogEntry, AiPersona, PhaseConfig } from "../types";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {

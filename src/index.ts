@@ -1,11 +1,9 @@
-export type { AiContext } from "./context-builder";
-export { buildAiContext } from "./context-builder";
-export type { DispatchResult, ValidationResult } from "./dispatcher";
+export type { DispatchResult, ValidationResult } from "./spa/game/dispatcher";
 export {
 	dispatchAiTurn,
 	executeToolCall,
 	validateToolCall,
-} from "./dispatcher";
+} from "./spa/game/dispatcher";
 export {
 	advancePhase,
 	advanceRound,
@@ -17,6 +15,8 @@ export {
 	getActivePhase,
 	startPhase,
 } from "./spa/game/engine";
+export type { AiContext } from "./spa/game/prompt-builder";
+export { buildAiContext } from "./spa/game/prompt-builder";
 export type {
 	ActionLogEntry,
 	AiBudget,
