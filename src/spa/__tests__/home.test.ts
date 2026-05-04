@@ -35,7 +35,6 @@ come back tomorrow — they wake at midnight UTC.</pre>
       <button id="byok-replace" type="button" hidden>Replace key</button>
       <button id="byok-clear" type="button" hidden>Clear key &amp; use free tier</button>
     </div>
-    <p id="byok-clear-helper" hidden>Returns to the daily-capped free tier. Your key isn't sent anywhere on clear — just removed from this browser.</p>
     <button id="byok-close" type="button" aria-label="Close">Close</button>
   </form>
 </dialog>

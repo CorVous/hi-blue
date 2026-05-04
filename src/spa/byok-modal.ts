@@ -128,7 +128,6 @@ function renderModalState(): void {
 	const revalidateBtn = getEl("byok-revalidate");
 	const replaceBtn = getEl("byok-replace");
 	const clearBtn = getEl("byok-clear");
-	const clearHelper = getEl("byok-clear-helper");
 
 	if (!modeLine || !keyInput || !statusEl) return;
 
@@ -158,7 +157,6 @@ function renderModalState(): void {
 		if (revalidateBtn) revalidateBtn.hidden = false;
 		if (replaceBtn) replaceBtn.hidden = false;
 		if (clearBtn) clearBtn.hidden = false;
-		if (clearHelper) clearHelper.hidden = false;
 	} else {
 		// No key mode
 		modeLine.textContent =
@@ -171,7 +169,6 @@ function renderModalState(): void {
 		if (revalidateBtn) revalidateBtn.hidden = true;
 		if (replaceBtn) replaceBtn.hidden = true;
 		if (clearBtn) clearBtn.hidden = true;
-		if (clearHelper) clearHelper.hidden = true;
 	}
 }
 
@@ -277,7 +274,6 @@ export function initByokModal(): void {
 			const revalidateBtn2 = getEl("byok-revalidate");
 			const replaceBtn2 = getEl("byok-replace");
 			const clearBtn = getEl("byok-clear");
-			const clearHelper = getEl("byok-clear-helper");
 			if (!keyInput) return;
 
 			keyInput.value = "";
@@ -289,7 +285,6 @@ export function initByokModal(): void {
 			if (revalidateBtn2) revalidateBtn2.hidden = true;
 			if (replaceBtn2) replaceBtn2.hidden = true;
 			if (clearBtn) clearBtn.hidden = true;
-			if (clearHelper) clearHelper.hidden = true;
 		});
 	}
 
