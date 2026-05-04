@@ -1,3 +1,4 @@
+import { PINNED_MODEL } from "../model.js";
 import {
 	configFromEnv,
 	preCharge,
@@ -6,9 +7,9 @@ import {
 	refundFull,
 } from "./rate-guard";
 
-export const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+export { PINNED_MODEL };
 
-export const PINNED_MODEL = "z-ai/glm-4.7-flash";
+export const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 export function openAiError(
 	status: number,
