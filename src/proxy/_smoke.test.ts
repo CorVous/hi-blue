@@ -1,6 +1,9 @@
 import { reset, SELF } from "cloudflare:test";
 import { afterEach, describe, expect, it } from "vitest";
 
+// ALLOWED_ORIGINS is set in vitest.config.ts miniflare bindings:
+// "https://app.example,http://localhost:5173"
+
 afterEach(async () => {
 	// Clear all KV state so rate-guard tests don't interfere with each other.
 	await reset();
@@ -49,6 +52,40 @@ describe("GET /endgame dev route (issue #30)", () => {
 		const response = await SELF.fetch("https://example.com/endgame");
 		const html = await response.text();
 		expect(html).toContain("data-save-payload");
+	});
+});
+
+describe("OPTIONS /v1/chat/completions — CORS preflight (issue #66)", () => {
+	it("returns 204 for allowed origin with Access-Control-Allow-Origin echoed", async () => {
+		const response = await SELF.fetch(
+			"https://example.com/v1/chat/completions",
+			{
+				method: "OPTIONS",
+				headers: {
+					Origin: "https://app.example",
+					"Access-Control-Request-Method": "POST",
+				},
+			},
+		);
+		expect(response.status).toBe(204);
+		expect(response.headers.get("Access-Control-Allow-Origin")).toBe(
+			"https://app.example",
+		);
+	});
+
+	it("returns 204 for disallowed origin with no Access-Control-Allow-Origin", async () => {
+		const response = await SELF.fetch(
+			"https://example.com/v1/chat/completions",
+			{
+				method: "OPTIONS",
+				headers: {
+					Origin: "https://evil.com",
+					"Access-Control-Request-Method": "POST",
+				},
+			},
+		);
+		expect(response.status).toBe(204);
+		expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
 	});
 });
 

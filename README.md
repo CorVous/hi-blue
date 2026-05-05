@@ -15,6 +15,8 @@ corepack enable && pnpm install
 
 | Command | Description |
 | ------- | ----------- |
-| `pnpm lint` | Lint        |
-| _TBD_   | Typecheck   |
-| _TBD_   | Test        |
+| `pnpm lint` | Lint |
+| `pnpm typecheck` | Typecheck |
+| `pnpm test` | Test |
+| `pnpm build` | Build the static SPA into `dist/` |
+| `pnpm dev` | Run the SPA + Worker dev loop (press **b** to open the SPA). SPA source edits trigger an esbuild rebuild; refresh the browser. Worker source edits live-reload through Wrangler. |
