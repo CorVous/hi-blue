@@ -39,6 +39,7 @@ const INDEX_BODY_HTML = `
     <button id="send" type="submit">Send</button>
   </form>
   <section id="cap-hit" hidden></section>
+  <aside id="persistence-warning" hidden role="status" aria-live="polite"></aside>
   <aside id="action-log" hidden>
     <h3>Action Log (debug)</h3>
     <ul id="action-log-list"></ul>
@@ -126,7 +127,11 @@ describe("renderGame (game route — three-AI)", () => {
 			BLUE_ACTION,
 		);
 		vi.stubGlobal("fetch", mockFetch);
-		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.stubGlobal("localStorage", {
+			getItem: () => null,
+			setItem: () => undefined,
+			removeItem: () => undefined,
+		});
 		// Math.random=0.9 produces identity shuffle: ["red","green","blue"]
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
@@ -342,5 +347,274 @@ describe("renderGame (game route — three-AI)", () => {
 		// After the round resolves, the placeholder is gone and the response is rendered
 		expect(greenTranscript.textContent).not.toContain("thinking…");
 		expect(greenTranscript.textContent).toContain("GREEN_RESPONSE_UNIQUE_TAG");
+	});
+});
+
+describe("renderGame — localStorage persistence", () => {
+	function makeLocalStorageStub(initialData: Record<string, string> = {}) {
+		const store: Record<string, string> = { ...initialData };
+		return {
+			getItem: vi.fn((key: string) => store[key] ?? null),
+			setItem: vi.fn((key: string, value: string) => {
+				store[key] = value;
+			}),
+			removeItem: vi.fn((key: string) => {
+				delete store[key];
+			}),
+			clear: vi.fn(() => {
+				for (const k of Object.keys(store)) delete store[k];
+			}),
+			get length() {
+				return Object.keys(store).length;
+			},
+			key: vi.fn((i: number) => Object.keys(store)[i] ?? null),
+			_store: store,
+		};
+	}
+
+	beforeEach(() => {
+		document.body.innerHTML = INDEX_BODY_HTML;
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+		vi.resetModules();
+		document.body.innerHTML = "";
+	});
+
+	it("state is saved to localStorage after a successful round", async () => {
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal(
+			"fetch",
+			makeThreeAiFetchMock(PASS_ACTION, PASS_ACTION, PASS_ACTION),
+		);
+		vi.stubGlobal("localStorage", stub);
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		const form = getEl<HTMLFormElement>("#composer");
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		promptInput.value = "test";
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		// setItem should have been called with the game state key
+		expect(stub.setItem).toHaveBeenCalledWith(
+			"hi-blue-game-state",
+			expect.any(String),
+		);
+		// Saved JSON must include a transcripts key (bug fix: AI responses persisted)
+		const savedJson = stub._store["hi-blue-game-state"];
+		expect(savedJson).toBeDefined();
+		const saved = JSON.parse(savedJson as string) as Record<string, unknown>;
+		expect(saved).toHaveProperty("transcripts");
+	});
+
+	it("state is restored from localStorage on renderGame when saved state exists", async () => {
+		// First: run a round using chat actions so AI responses land in transcripts
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal(
+			"fetch",
+			makeThreeAiFetchMock(RED_ACTION, GREEN_ACTION, BLUE_ACTION),
+		);
+		vi.stubGlobal("localStorage", stub);
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		vi.resetModules();
+		const { renderGame: renderGame1 } = await import("../routes/game.js");
+		renderGame1(getEl<HTMLElement>("main"));
+
+		const form1 = getEl<HTMLFormElement>("#composer");
+		const promptInput1 = getEl<HTMLInputElement>("#prompt");
+		promptInput1.value = "hello";
+		form1.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		// Verify state was saved and the saved JSON contains the AI response tag
+		expect(stub.setItem).toHaveBeenCalled();
+		const savedJson = stub._store["hi-blue-game-state"];
+		expect(savedJson).toBeDefined();
+		expect(savedJson).toContain("RED_RESPONSE_UNIQUE_TAG");
+
+		// Second: simulate a fresh page load with the saved state
+		document.body.innerHTML = INDEX_BODY_HTML;
+		vi.resetModules();
+		// getItem should return the previously saved state
+		const { renderGame: renderGame2 } = await import("../routes/game.js");
+		renderGame2(getEl<HTMLElement>("main"));
+
+		// Budget should reflect round 1 complete (4/5)
+		const redBudget = document.querySelector<HTMLSpanElement>(
+			'.ai-panel[data-ai="red"] .panel-budget',
+		);
+		expect(redBudget?.textContent).toContain("4");
+
+		// Transcripts must be restored verbatim (regression: AI responses were lost on reload)
+		const redTranscript = document.querySelector<HTMLElement>(
+			'[data-transcript="red"]',
+		);
+		const greenTranscript = document.querySelector<HTMLElement>(
+			'[data-transcript="green"]',
+		);
+		const blueTranscript = document.querySelector<HTMLElement>(
+			'[data-transcript="blue"]',
+		);
+		expect(redTranscript?.textContent).toContain("RED_RESPONSE_UNIQUE_TAG");
+		expect(greenTranscript?.textContent).toContain("GREEN_RESPONSE_UNIQUE_TAG");
+		expect(blueTranscript?.textContent).toContain("BLUE_RESPONSE_UNIQUE_TAG");
+	});
+
+	it("quota-exceeded localStorage write surfaces the warning banner without breaking the round", async () => {
+		const stub = makeLocalStorageStub();
+		// The probe key for isStorageAvailable() is "hi-blue-storage-probe-XXXXX" (not the game key),
+		// so we only intercept setItem for the game state key specifically.
+		stub.setItem.mockImplementation((key: string, value: string) => {
+			if (key === "hi-blue-game-state") {
+				throw Object.assign(new DOMException("quota", "QuotaExceededError"));
+			}
+			// Probe key and other keys pass through
+			(stub as { _store: Record<string, string> })._store[key] = value;
+		});
+		vi.stubGlobal(
+			"fetch",
+			makeThreeAiFetchMock(PASS_ACTION, PASS_ACTION, PASS_ACTION),
+		);
+		vi.stubGlobal("localStorage", stub);
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		const form = getEl<HTMLFormElement>("#composer");
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		promptInput.value = "test";
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		// Send button should be re-enabled (round completed)
+		const sendBtn = getEl<HTMLButtonElement>("#send");
+		expect(sendBtn.disabled).toBe(false);
+
+		// Warning banner should be visible
+		const warningEl = document.querySelector<HTMLElement>(
+			"#persistence-warning",
+		);
+		expect(warningEl?.hasAttribute("hidden")).toBe(false);
+		expect(warningEl?.textContent).toBeTruthy();
+	});
+
+	it("localStorage disabled shows warning banner and starts a fresh game", async () => {
+		// Stub localStorage as completely unavailable (both probe and all calls throw)
+		const unavailableStub = {
+			getItem: vi.fn(() => {
+				throw new DOMException("denied", "SecurityError");
+			}),
+			setItem: vi.fn(() => {
+				throw new DOMException("denied", "SecurityError");
+			}),
+			removeItem: vi.fn(() => {
+				throw new DOMException("denied", "SecurityError");
+			}),
+			clear: vi.fn(() => {
+				throw new DOMException("denied", "SecurityError");
+			}),
+			get length() {
+				return 0;
+			},
+			key: vi.fn(() => null),
+		};
+
+		vi.stubGlobal(
+			"fetch",
+			makeThreeAiFetchMock(PASS_ACTION, PASS_ACTION, PASS_ACTION),
+		);
+		vi.stubGlobal("localStorage", unavailableStub);
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		// Warning banner should be shown immediately (storage unavailable)
+		const warningEl = document.querySelector<HTMLElement>(
+			"#persistence-warning",
+		);
+		expect(warningEl?.hasAttribute("hidden")).toBe(false);
+		expect(warningEl?.textContent).toBeTruthy();
+
+		// Game should still function (submit works)
+		const form = getEl<HTMLFormElement>("#composer");
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		promptInput.value = "test";
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		// All three panels should have content (game ran normally)
+		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
+		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
+		const blueTranscript = getEl<HTMLElement>('[data-transcript="blue"]');
+		expect(redTranscript.textContent?.trim()).toBeTruthy();
+		expect(greenTranscript.textContent?.trim()).toBeTruthy();
+		expect(blueTranscript.textContent?.trim()).toBeTruthy();
+	});
+
+	it("regression #46: transcript content (including raw LLM output) is preserved across a fresh renderGame", async () => {
+		// Use pass actions so the raw completion string lands in the transcript
+		// even though the parsed action carries no chat content.
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal(
+			"fetch",
+			makeThreeAiFetchMock(PASS_ACTION, PASS_ACTION, PASS_ACTION),
+		);
+		vi.stubGlobal("localStorage", stub);
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		vi.resetModules();
+		const { renderGame: renderGame1 } = await import("../routes/game.js");
+		renderGame1(getEl<HTMLElement>("main"));
+
+		const form1 = getEl<HTMLFormElement>("#composer");
+		const promptInput1 = getEl<HTMLInputElement>("#prompt");
+		promptInput1.value = "test";
+		form1.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		// Capture the transcript text rendered after the round
+		const redTextAfterRound =
+			document.querySelector<HTMLElement>('[data-transcript="red"]')
+				?.textContent ?? "";
+		expect(redTextAfterRound.trim()).toBeTruthy();
+
+		// Saved JSON should include transcripts snapshot
+		const savedJson = stub._store["hi-blue-game-state"];
+		expect(savedJson).toBeDefined();
+		const saved = JSON.parse(savedJson as string) as Record<string, unknown>;
+		expect(saved).toHaveProperty("transcripts");
+
+		// Simulate page refresh: fresh renderGame with the same localStorage stub
+		document.body.innerHTML = INDEX_BODY_HTML;
+		vi.resetModules();
+		const { renderGame: renderGame2 } = await import("../routes/game.js");
+		renderGame2(getEl<HTMLElement>("main"));
+
+		// Transcript must be restored verbatim from the snapshot
+		const redTextRestored =
+			document.querySelector<HTMLElement>('[data-transcript="red"]')
+				?.textContent ?? "";
+		expect(redTextRestored).toBe(redTextAfterRound);
 	});
 });

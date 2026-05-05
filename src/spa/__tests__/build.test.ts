@@ -46,4 +46,14 @@ describe("src/spa/index.html asset references", () => {
 		expect(html as string).toContain('id="byok-cog"');
 		expect(html as string).toContain("⚙");
 	});
+
+	it('contains persistence-warning aside with id="persistence-warning"', () => {
+		expect(html as string).toContain('id="persistence-warning"');
+	});
+
+	it("persistence-warning aside has hidden attribute", () => {
+		expect(html as string).toMatch(
+			/id="persistence-warning"[^>]*hidden|hidden[^>]*id="persistence-warning"/,
+		);
+	});
 });
