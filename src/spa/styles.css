@@ -217,7 +217,7 @@ main {
 }
 
 /* Endgame screen */
-#endgame {
+#endgame:not([hidden]) {
 	display: flex;
 	flex-direction: column;
 	gap: 1rem;
