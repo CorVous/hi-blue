@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ToolCallResult } from "../streaming.js";
 import { parseSSEStream } from "../streaming.js";
 
 // __WORKER_BASE_URL__ is a build-time constant; provide a stub for tests
@@ -107,5 +108,212 @@ describe("parseSSEStream", () => {
 
 		expect(onDelta).toHaveBeenCalledTimes(1);
 		expect(onDelta).toHaveBeenCalledWith("hi");
+	});
+});
+
+describe("parseSSEStream — tool_call delta assembly", () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("assembles a single tool call across three SSE chunks", async () => {
+		// Chunk 1: first fragment with id and name
+		const chunk1 = `data: ${JSON.stringify({
+			choices: [
+				{
+					delta: {
+						tool_calls: [
+							{
+								index: 0,
+								id: "call_abc",
+								type: "function",
+								function: { name: "pick_up", arguments: "" },
+							},
+						],
+					},
+				},
+			],
+		})}\n\n`;
+		// Chunk 2: more arguments
+		const chunk2 = `data: ${JSON.stringify({
+			choices: [
+				{
+					delta: {
+						tool_calls: [{ index: 0, function: { arguments: '{"item' } }],
+					},
+				},
+			],
+		})}\n\n`;
+		// Chunk 3: finish arguments and finish_reason
+		const chunk3 = `data: ${JSON.stringify({
+			choices: [
+				{
+					delta: {
+						tool_calls: [{ index: 0, function: { arguments: '":"flower"}' } }],
+					},
+					finish_reason: "tool_calls",
+				},
+			],
+		})}\n\ndata: [DONE]\n\n`;
+
+		const calls: ToolCallResult[] = [];
+		await parseSSEStream(
+			makeSSEStream([chunk1, chunk2, chunk3]),
+			vi.fn(),
+			undefined,
+			(c) => calls.push(c),
+		);
+
+		expect(calls).toHaveLength(1);
+		expect(calls[0]?.id).toBe("call_abc");
+		expect(calls[0]?.name).toBe("pick_up");
+		expect(calls[0]?.argumentsJson).toBe('{"item":"flower"}');
+	});
+
+	it("assembles two distinct tool calls (index:0 and index:1)", async () => {
+		const chunk = `data: ${JSON.stringify({
+			choices: [
+				{
+					delta: {
+						tool_calls: [
+							{
+								index: 0,
+								id: "call_1",
+								type: "function",
+								function: { name: "pick_up", arguments: '{"item":"flower"}' },
+							},
+							{
+								index: 1,
+								id: "call_2",
+								type: "function",
+								function: { name: "put_down", arguments: '{"item":"key"}' },
+							},
+						],
+					},
+					finish_reason: "tool_calls",
+				},
+			],
+		})}\n\ndata: [DONE]\n\n`;
+
+		const calls: ToolCallResult[] = [];
+		await parseSSEStream(makeSSEStream([chunk]), vi.fn(), undefined, (c) =>
+			calls.push(c),
+		);
+
+		expect(calls).toHaveLength(2);
+		expect(calls[0]?.name).toBe("pick_up");
+		expect(calls[1]?.name).toBe("put_down");
+	});
+
+	it("content-only response does not invoke onToolCall", async () => {
+		const sseData =
+			`data: ${JSON.stringify({ choices: [{ delta: { content: "hello" } }] })}\n\n` +
+			`data: [DONE]\n\n`;
+
+		const onToolCall = vi.fn();
+		await parseSSEStream(
+			makeSSEStream([sseData]),
+			vi.fn(),
+			undefined,
+			onToolCall,
+		);
+
+		expect(onToolCall).not.toHaveBeenCalled();
+	});
+
+	it("content + tool_call response invokes both onDelta and onToolCall", async () => {
+		const sseData =
+			`data: ${JSON.stringify({ choices: [{ delta: { content: "I'll pick it up" } }] })}\n\n` +
+			`data: ${JSON.stringify({
+				choices: [
+					{
+						delta: {
+							tool_calls: [
+								{
+									index: 0,
+									id: "call_x",
+									type: "function",
+									function: { name: "pick_up", arguments: '{"item":"flower"}' },
+								},
+							],
+						},
+						finish_reason: "tool_calls",
+					},
+				],
+			})}\n\n` +
+			`data: [DONE]\n\n`;
+
+		const deltas: string[] = [];
+		const calls: ToolCallResult[] = [];
+		await parseSSEStream(
+			makeSSEStream([sseData]),
+			(t) => deltas.push(t),
+			undefined,
+			(c) => calls.push(c),
+		);
+
+		expect(deltas).toEqual(["I'll pick it up"]);
+		expect(calls).toHaveLength(1);
+		expect(calls[0]?.name).toBe("pick_up");
+	});
+
+	it("finish_reason:tool_calls flushes a partial (incomplete arguments) call", async () => {
+		// The model may emit finish_reason before [DONE]
+		const sseData = `data: ${JSON.stringify({
+			choices: [
+				{
+					delta: {
+						tool_calls: [
+							{
+								index: 0,
+								id: "call_y",
+								type: "function",
+								function: { name: "use", arguments: '{"item":"wand"}' },
+							},
+						],
+					},
+					finish_reason: "tool_calls",
+				},
+			],
+		})}\n\ndata: [DONE]\n\n`;
+
+		const calls: ToolCallResult[] = [];
+		await parseSSEStream(makeSSEStream([sseData]), vi.fn(), undefined, (c) =>
+			calls.push(c),
+		);
+
+		expect(calls).toHaveLength(1);
+		expect(calls[0]?.name).toBe("use");
+		expect(calls[0]?.argumentsJson).toBe('{"item":"wand"}');
+	});
+
+	it("[DONE] flushes assembled tool calls even without finish_reason:tool_calls", async () => {
+		const sseData = `data: ${JSON.stringify({
+			choices: [
+				{
+					delta: {
+						tool_calls: [
+							{
+								index: 0,
+								id: "call_z",
+								type: "function",
+								function: {
+									name: "give",
+									arguments: '{"item":"key","to":"blue"}',
+								},
+							},
+						],
+					},
+				},
+			],
+		})}\n\ndata: [DONE]\n\n`;
+
+		const calls: ToolCallResult[] = [];
+		await parseSSEStream(makeSSEStream([sseData]), vi.fn(), undefined, (c) =>
+			calls.push(c),
+		);
+
+		expect(calls).toHaveLength(1);
+		expect(calls[0]?.name).toBe("give");
 	});
 });

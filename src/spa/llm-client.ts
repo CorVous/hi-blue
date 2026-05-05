@@ -1,4 +1,7 @@
 import { PINNED_MODEL } from "../model.js";
+import type { OpenAiMessage } from "./game/round-llm-provider.js";
+import type { OpenAiTool } from "./game/tool-registry.js";
+import type { ToolCallResult } from "./streaming.js";
 import { parseSSEStream } from "./streaming.js";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
@@ -103,24 +106,41 @@ export function resolveLLMTarget(): {
 	};
 }
 
-export interface OpenAiMessage {
-	role: "system" | "user" | "assistant";
-	content: string;
-}
+// Re-export the message types from round-llm-provider (canonical definition)
+// and OpenAiTool from tool-registry so callers can import from one place.
+export type {
+	OpenAiMessage,
+	OpenAiToolCall,
+} from "./game/round-llm-provider.js";
+export type { OpenAiTool } from "./game/tool-registry.js";
 
 export async function streamCompletion(opts: {
 	messages: OpenAiMessage[];
 	signal?: AbortSignal;
 	onDelta: (text: string) => void;
 	onReasoning?: (text: string) => void;
+	tools?: OpenAiTool[];
+	onToolCall?: (call: ToolCallResult) => void;
 }): Promise<void> {
-	const { messages, signal, onDelta, onReasoning } = opts;
+	const { messages, signal, onDelta, onReasoning, tools, onToolCall } = opts;
 	const { url, headers } = resolveLLMTarget();
+
+	const bodyObj: Record<string, unknown> = {
+		model: PINNED_MODEL,
+		messages,
+		stream: true,
+	};
+
+	// Only include tools/tool_choice when tools are provided (do not send empty array)
+	if (tools && tools.length > 0) {
+		bodyObj.tools = tools;
+		bodyObj.tool_choice = "auto";
+	}
 
 	const response = await fetch(url, {
 		method: "POST",
 		headers,
-		body: JSON.stringify({ model: PINNED_MODEL, messages, stream: true }),
+		body: JSON.stringify(bodyObj),
 		...(signal != null ? { signal } : {}),
 	});
 
@@ -134,7 +154,7 @@ export async function streamCompletion(opts: {
 		throw new Error("Response body is null");
 	}
 
-	await parseSSEStream(response.body, onDelta, onReasoning);
+	await parseSSEStream(response.body, onDelta, onReasoning, onToolCall);
 }
 
 export async function streamChat(opts: {

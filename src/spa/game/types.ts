@@ -137,6 +137,25 @@ export interface AiTurnAction {
 	pass?: boolean;
 }
 
+/**
+ * Captures the tool-call / result pair from a single AI turn, used to
+ * re-inject the assistant's tool_calls message + the tool result message
+ * into the next round's messages array (per OpenAI tool-use protocol).
+ */
+export interface ToolRoundtripMessage {
+	assistantToolCalls: Array<{
+		id: string;
+		name: string;
+		argumentsJson: string;
+	}>;
+	toolResults: Array<{
+		tool_call_id: string;
+		success: boolean;
+		description: string;
+		reason?: string;
+	}>;
+}
+
 export interface RoundResult {
 	round: number;
 	actions: ActionLogEntry[];

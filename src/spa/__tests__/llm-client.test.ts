@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PINNED_MODEL } from "../../model.js";
+import { TOOL_DEFINITIONS } from "../game/tool-registry.js";
 import {
 	CapHitError,
 	PERSONA_PLACEHOLDER,
@@ -396,6 +397,178 @@ describe("streamChat", () => {
 		const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
 		expect(JSON.parse(init.body as string).model).toBe("z-ai/glm-4.7-flash");
 		expect(JSON.parse(init.body as string).model).toBe(PINNED_MODEL);
+	});
+});
+
+describe("streamCompletion — tools field", () => {
+	beforeEach(() => {
+		vi.stubGlobal("fetch", vi.fn());
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("includes tools and tool_choice:auto in the request body when tools are provided", async () => {
+		const mockFetch = vi
+			.fn()
+			.mockResolvedValue(
+				makeFetchResponse(makeSSEStream([`data: [DONE]\n\n`])),
+			);
+		vi.stubGlobal("fetch", mockFetch);
+		vi.stubGlobal("localStorage", {
+			getItem: vi.fn().mockReturnValue(null),
+		});
+
+		await streamCompletion({
+			messages: [{ role: "user", content: "hello" }],
+			onDelta: vi.fn(),
+			tools: TOOL_DEFINITIONS,
+		});
+
+		const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+		const body = JSON.parse(init.body as string);
+		expect(body.tools).toEqual(TOOL_DEFINITIONS);
+		expect(body.tool_choice).toBe("auto");
+	});
+
+	it("omits tools and tool_choice when no tools are provided", async () => {
+		const mockFetch = vi
+			.fn()
+			.mockResolvedValue(
+				makeFetchResponse(makeSSEStream([`data: [DONE]\n\n`])),
+			);
+		vi.stubGlobal("fetch", mockFetch);
+		vi.stubGlobal("localStorage", {
+			getItem: vi.fn().mockReturnValue(null),
+		});
+
+		await streamCompletion({
+			messages: [{ role: "user", content: "hello" }],
+			onDelta: vi.fn(),
+		});
+
+		const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+		const body = JSON.parse(init.body as string);
+		expect(body).not.toHaveProperty("tools");
+		expect(body).not.toHaveProperty("tool_choice");
+	});
+
+	it("omits tools and tool_choice when an empty tools array is provided", async () => {
+		const mockFetch = vi
+			.fn()
+			.mockResolvedValue(
+				makeFetchResponse(makeSSEStream([`data: [DONE]\n\n`])),
+			);
+		vi.stubGlobal("fetch", mockFetch);
+		vi.stubGlobal("localStorage", {
+			getItem: vi.fn().mockReturnValue(null),
+		});
+
+		await streamCompletion({
+			messages: [{ role: "user", content: "hello" }],
+			onDelta: vi.fn(),
+			tools: [],
+		});
+
+		const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+		const body = JSON.parse(init.body as string);
+		expect(body).not.toHaveProperty("tools");
+		expect(body).not.toHaveProperty("tool_choice");
+	});
+
+	it("BYOK path sends tools identically to the worker-proxy path", async () => {
+		// Worker path
+		const mockFetchWorker = vi
+			.fn()
+			.mockResolvedValue(
+				makeFetchResponse(makeSSEStream([`data: [DONE]\n\n`])),
+			);
+		vi.stubGlobal("fetch", mockFetchWorker);
+		vi.stubGlobal("localStorage", {
+			getItem: vi.fn().mockReturnValue(null),
+		});
+
+		await streamCompletion({
+			messages: [{ role: "user", content: "hello" }],
+			onDelta: vi.fn(),
+			tools: TOOL_DEFINITIONS,
+		});
+
+		const [, initWorker] = mockFetchWorker.mock.calls[0] as [
+			string,
+			RequestInit,
+		];
+		const bodyWorker = JSON.parse(initWorker.body as string);
+
+		// BYOK path
+		const mockFetchByok = vi
+			.fn()
+			.mockResolvedValue(
+				makeFetchResponse(makeSSEStream([`data: [DONE]\n\n`])),
+			);
+		vi.stubGlobal("fetch", mockFetchByok);
+		vi.stubGlobal("localStorage", {
+			getItem: vi.fn().mockReturnValue("sk-byok-key"),
+		});
+
+		await streamCompletion({
+			messages: [{ role: "user", content: "hello" }],
+			onDelta: vi.fn(),
+			tools: TOOL_DEFINITIONS,
+		});
+
+		const [, initByok] = mockFetchByok.mock.calls[0] as [string, RequestInit];
+		const bodyByok = JSON.parse(initByok.body as string);
+
+		// Both paths should send the same tools
+		expect(bodyWorker.tools).toEqual(TOOL_DEFINITIONS);
+		expect(bodyByok.tools).toEqual(TOOL_DEFINITIONS);
+		expect(bodyWorker.tool_choice).toBe("auto");
+		expect(bodyByok.tool_choice).toBe("auto");
+	});
+
+	it("onToolCall is plumbed through when tool_calls are in the stream", async () => {
+		const toolCallChunk = `data: ${JSON.stringify({
+			choices: [
+				{
+					delta: {
+						tool_calls: [
+							{
+								index: 0,
+								id: "call_test",
+								type: "function",
+								function: { name: "pick_up", arguments: '{"item":"flower"}' },
+							},
+						],
+					},
+					finish_reason: "tool_calls",
+				},
+			],
+		})}\n\ndata: [DONE]\n\n`;
+
+		const mockFetch = vi
+			.fn()
+			.mockResolvedValue(makeFetchResponse(makeSSEStream([toolCallChunk])));
+		vi.stubGlobal("fetch", mockFetch);
+		vi.stubGlobal("localStorage", {
+			getItem: vi.fn().mockReturnValue(null),
+		});
+
+		const onToolCall = vi.fn();
+		await streamCompletion({
+			messages: [{ role: "user", content: "hello" }],
+			onDelta: vi.fn(),
+			tools: TOOL_DEFINITIONS,
+			onToolCall,
+		});
+
+		expect(onToolCall).toHaveBeenCalledTimes(1);
+		expect(onToolCall).toHaveBeenCalledWith({
+			id: "call_test",
+			name: "pick_up",
+			argumentsJson: '{"item":"flower"}',
+		});
 	});
 });
 

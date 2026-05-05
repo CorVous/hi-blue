@@ -7,6 +7,10 @@ import {
 } from "../session-store";
 import { getActivePhase } from "../spa/game/engine";
 import type { GameSession } from "../spa/game/game-session";
+import type {
+	OpenAiMessage,
+	RoundLLMProvider,
+} from "../spa/game/round-llm-provider";
 import { encodeRoundResult } from "../spa/game/round-result-encoder";
 import type { AiId, PhaseConfig } from "../spa/game/types";
 import { AI_TYPING_SPEED } from "../spa/game/typing-rhythm";
@@ -15,10 +19,24 @@ import {
 	parseAllowedOrigins,
 	withCorsHeaders,
 } from "./cors";
-import type { LLMProvider } from "./llm-provider";
-import { MockLLMProvider } from "./llm-provider";
 import { handleChatCompletions } from "./openai-proxy";
 import { renderChatPage, renderEndgamePage } from "./ui";
+
+/** Simple server-side mock that returns a canned assistant text per round. */
+class ServerMockRoundProvider implements RoundLLMProvider {
+	private readonly response: string;
+
+	constructor(response: string) {
+		this.response = response;
+	}
+
+	async streamRound(
+		_messages: OpenAiMessage[],
+		_tools: unknown[],
+	): Promise<{ assistantText: string; toolCalls: [] }> {
+		return { assistantText: this.response, toolCalls: [] };
+	}
+}
 
 /** Shape of the bindings/env this Worker expects. */
 interface Env {
@@ -54,14 +72,8 @@ interface Env {
 	ALLOWED_ORIGINS?: string;
 }
 
-function createProvider(env: Env): LLMProvider {
-	if (env.LLM_PROVIDER === "anthropic") {
-		// Not yet wired — needs dynamic import + ANTHROPIC_API_KEY before use.
-		throw new Error(
-			"Anthropic provider not yet wired; set LLM_PROVIDER=mock or wire AnthropicProvider dynamically",
-		);
-	}
-	return new MockLLMProvider(
+function createProvider(_env: Env): RoundLLMProvider {
+	return new ServerMockRoundProvider(
 		"Hello! I am an AI assistant. How can I help you?",
 	);
 }
