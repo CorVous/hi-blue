@@ -80,13 +80,23 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		if (loadResult.state) {
 			session = GameSession.restore(loadResult.state);
 
+			const restored = loadResult as {
+				state: NonNullable<(typeof loadResult)["state"]>;
+				transcripts: Partial<Record<AiId, string>>;
+			};
+
 			// Re-render transcripts from restored state
 			const restoredPhase = getActivePhase(loadResult.state);
 			for (const aiId of AI_ORDER) {
 				const transcript = doc.querySelector<HTMLElement>(
 					`[data-transcript="${aiId}"]`,
 				);
-				if (transcript && restoredPhase.chatHistories[aiId].length > 0) {
+				if (!transcript) continue;
+				if (typeof restored.transcripts[aiId] === "string") {
+					// Verbatim restore from persisted transcript snapshot
+					transcript.textContent = restored.transcripts[aiId];
+				} else if (restoredPhase.chatHistories[aiId].length > 0) {
+					// Fallback: synthesise from chatHistories (legacy saves)
 					for (const msg of restoredPhase.chatHistories[aiId]) {
 						const prefix =
 							msg.role === "player" ? "[you] " : `[${PERSONAS[aiId].name}] `;
@@ -223,14 +233,6 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 
 			stripPlaceholder();
 
-			// Persist state after a successful round
-			if (isStorageAvailable()) {
-				const saveResult = saveGame(nextState);
-				if (!saveResult.ok) {
-					showPersistenceWarning(saveResult.reason);
-				}
-			}
-
 			const phaseAfter = getActivePhase(nextState);
 			const events = encodeRoundResult(
 				result,
@@ -240,6 +242,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 			);
 
 			let speakingAi: AiId | null = null;
+			let gameEnded = false;
 
 			for (const event of events) {
 				switch (event.type) {
@@ -292,10 +295,25 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 						break;
 
 					case "game_ended":
+						gameEnded = true;
 						sendBtn.disabled = true;
 						promptInput.disabled = true;
 						clearGame();
 						break;
+				}
+			}
+
+			// Persist state after the encoder render loop completes, so the full
+			// rendered transcripts (including raw LLM completions) are captured.
+			if (!gameEnded && isStorageAvailable()) {
+				const transcripts: Partial<Record<AiId, string>> = {};
+				for (const aiId of AI_ORDER) {
+					const el = getTranscript(aiId);
+					if (el) transcripts[aiId] = el.textContent ?? "";
+				}
+				const saveResult = saveGame(nextState, transcripts);
+				if (!saveResult.ok) {
+					showPersistenceWarning(saveResult.reason);
 				}
 			}
 		} catch (err) {

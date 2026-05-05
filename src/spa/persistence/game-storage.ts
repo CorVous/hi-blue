@@ -64,6 +64,7 @@ export interface PersistedGame {
 	schemaVersion: typeof STORAGE_SCHEMA_VERSION;
 	savedAt: string;
 	game: PersistedGameState;
+	transcripts?: Partial<Record<AiId, string>>;
 }
 
 // ── Phase config lookup by number ─────────────────────────────────────────────
@@ -172,7 +173,11 @@ export function deserializeGameState(persisted: PersistedGame): GameState {
 // ── Load / Save / Clear ───────────────────────────────────────────────────────
 
 export type LoadResult =
-	| { state: GameState; error?: never }
+	| {
+			state: GameState;
+			transcripts: Partial<Record<AiId, string>>;
+			error?: never;
+	  }
 	| { state: null; error: "unavailable" | "corrupt" | "version-mismatch" }
 	| { state: null; error?: never };
 
@@ -213,7 +218,15 @@ export function loadGame(): LoadResult {
 		} catch {
 			return { state: null, error: "corrupt" };
 		}
-		return { state };
+		// Default transcripts to {} when the field is absent or not a plain object
+		const rawTranscripts = asObj.transcripts;
+		const transcripts: Partial<Record<AiId, string>> =
+			rawTranscripts !== null &&
+			typeof rawTranscripts === "object" &&
+			!Array.isArray(rawTranscripts)
+				? (rawTranscripts as Partial<Record<AiId, string>>)
+				: {};
+		return { state, transcripts };
 	} catch {
 		return { state: null, error: "unavailable" };
 	}
@@ -227,9 +240,15 @@ export type SaveResult =
  * Attempt to save game state to localStorage.
  * Handles quota-exceeded and privacy-mode errors gracefully.
  */
-export function saveGame(state: GameState): SaveResult {
+export function saveGame(
+	state: GameState,
+	transcripts: Partial<Record<AiId, string>>,
+): SaveResult {
 	try {
-		const persisted = serializeGameState(state);
+		const persisted: PersistedGame = {
+			...serializeGameState(state),
+			transcripts,
+		};
 		localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted));
 		return { ok: true };
 	} catch (err) {

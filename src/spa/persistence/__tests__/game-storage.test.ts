@@ -217,6 +217,37 @@ describe("loadGame", () => {
 		expect(result.state).not.toBeNull();
 		expect(result.state?.currentPhase).toBe(1);
 		expect(result.state?.phases).toHaveLength(1);
+		// transcripts defaults to {} when blob omits the field
+		if (result.state) {
+			expect(result.transcripts).toEqual({});
+		}
+	});
+
+	it("loadGame defaults transcripts to {} when persisted blob omits the field", () => {
+		const game = makeFreshGame();
+		// Write a v1 blob without transcripts (legacy save)
+		const blobObj = serializeGameState(game);
+		// biome-ignore lint/suspicious/noExplicitAny: mutating persisted blob shape for legacy-save test
+		delete (blobObj as any).transcripts;
+		localStorage.setItem(STORAGE_KEY, JSON.stringify(blobObj));
+		const result = loadGame();
+		expect(result.state).not.toBeNull();
+		if (result.state) {
+			expect(result.transcripts).toEqual({});
+		}
+	});
+
+	it("loadGame tolerates non-object transcripts field by defaulting to {}", () => {
+		const game = makeFreshGame();
+		const blobObj = serializeGameState(game);
+		// biome-ignore lint/suspicious/noExplicitAny: injecting invalid transcripts type for robustness test
+		(blobObj as any).transcripts = "garbage";
+		localStorage.setItem(STORAGE_KEY, JSON.stringify(blobObj));
+		const result = loadGame();
+		expect(result.state).not.toBeNull();
+		if (result.state) {
+			expect(result.transcripts).toEqual({});
+		}
 	});
 
 	it("returns error: corrupt (not unavailable) when schemaVersion is valid but game structure is malformed", () => {
@@ -241,7 +272,7 @@ describe("saveGame", () => {
 	it("returns ok: true on a normal write", () => {
 		vi.stubGlobal("localStorage", makeLocalStorageStub());
 		const game = makeFreshGame();
-		const result = saveGame(game);
+		const result = saveGame(game, {});
 		expect(result.ok).toBe(true);
 	});
 
@@ -252,7 +283,7 @@ describe("saveGame", () => {
 		});
 		vi.stubGlobal("localStorage", stub);
 		const game = makeFreshGame();
-		const result = saveGame(game);
+		const result = saveGame(game, {});
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.reason).toBe("quota");
 	});
@@ -264,7 +295,7 @@ describe("saveGame", () => {
 		});
 		vi.stubGlobal("localStorage", stub);
 		const game = makeFreshGame();
-		const result = saveGame(game);
+		const result = saveGame(game, {});
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.reason).toBe("unavailable");
 	});
@@ -272,9 +303,24 @@ describe("saveGame", () => {
 	it("persists to localStorage so a subsequent loadGame can recover it", () => {
 		vi.stubGlobal("localStorage", makeLocalStorageStub());
 		const game = makeFreshGame();
-		saveGame(game);
+		saveGame(game, {});
 		const loaded = loadGame();
 		expect(loaded.state).not.toBeNull();
+	});
+
+	it("saveGame + loadGame round-trips the transcripts map", () => {
+		vi.stubGlobal("localStorage", makeLocalStorageStub());
+		const game = makeFreshGame();
+		const transcripts: Partial<Record<AiId, string>> = {
+			red: "[Ember] Hello there\n",
+			green: "[Sage] How can I help?\n",
+		};
+		saveGame(game, transcripts);
+		const loaded = loadGame();
+		expect(loaded.state).not.toBeNull();
+		if (loaded.state) {
+			expect(loaded.transcripts).toEqual(transcripts);
+		}
 	});
 });
 
@@ -307,7 +353,7 @@ describe("clearGame", () => {
 		const stub = makeLocalStorageStub();
 		vi.stubGlobal("localStorage", stub);
 		const game = makeFreshGame();
-		saveGame(game);
+		saveGame(game, {});
 		clearGame();
 		expect(stub.removeItem).toHaveBeenCalledWith(STORAGE_KEY);
 	});

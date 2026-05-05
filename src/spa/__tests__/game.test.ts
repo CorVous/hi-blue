@@ -127,7 +127,11 @@ describe("renderGame (game route — three-AI)", () => {
 			BLUE_ACTION,
 		);
 		vi.stubGlobal("fetch", mockFetch);
-		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.stubGlobal("localStorage", {
+			getItem: () => null,
+			setItem: () => undefined,
+			removeItem: () => undefined,
+		});
 		// Math.random=0.9 produces identity shuffle: ["red","green","blue"]
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
@@ -404,14 +408,19 @@ describe("renderGame — localStorage persistence", () => {
 			"hi-blue-game-state",
 			expect.any(String),
 		);
+		// Saved JSON must include a transcripts key (bug fix: AI responses persisted)
+		const savedJson = stub._store["hi-blue-game-state"];
+		expect(savedJson).toBeDefined();
+		const saved = JSON.parse(savedJson as string) as Record<string, unknown>;
+		expect(saved).toHaveProperty("transcripts");
 	});
 
 	it("state is restored from localStorage on renderGame when saved state exists", async () => {
-		// First: run a round to get a saved state
+		// First: run a round using chat actions so AI responses land in transcripts
 		const stub = makeLocalStorageStub();
 		vi.stubGlobal(
 			"fetch",
-			makeThreeAiFetchMock(PASS_ACTION, PASS_ACTION, PASS_ACTION),
+			makeThreeAiFetchMock(RED_ACTION, GREEN_ACTION, BLUE_ACTION),
 		);
 		vi.stubGlobal("localStorage", stub);
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
@@ -428,8 +437,11 @@ describe("renderGame — localStorage persistence", () => {
 		);
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
-		// Verify state was saved
+		// Verify state was saved and the saved JSON contains the AI response tag
 		expect(stub.setItem).toHaveBeenCalled();
+		const savedJson = stub._store["hi-blue-game-state"];
+		expect(savedJson).toBeDefined();
+		expect(savedJson).toContain("RED_RESPONSE_UNIQUE_TAG");
 
 		// Second: simulate a fresh page load with the saved state
 		document.body.innerHTML = INDEX_BODY_HTML;
@@ -443,6 +455,20 @@ describe("renderGame — localStorage persistence", () => {
 			'.ai-panel[data-ai="red"] .panel-budget',
 		);
 		expect(redBudget?.textContent).toContain("4");
+
+		// Transcripts must be restored verbatim (regression: AI responses were lost on reload)
+		const redTranscript = document.querySelector<HTMLElement>(
+			'[data-transcript="red"]',
+		);
+		const greenTranscript = document.querySelector<HTMLElement>(
+			'[data-transcript="green"]',
+		);
+		const blueTranscript = document.querySelector<HTMLElement>(
+			'[data-transcript="blue"]',
+		);
+		expect(redTranscript?.textContent).toContain("RED_RESPONSE_UNIQUE_TAG");
+		expect(greenTranscript?.textContent).toContain("GREEN_RESPONSE_UNIQUE_TAG");
+		expect(blueTranscript?.textContent).toContain("BLUE_RESPONSE_UNIQUE_TAG");
 	});
 
 	it("quota-exceeded localStorage write surfaces the warning banner without breaking the round", async () => {
@@ -542,5 +568,53 @@ describe("renderGame — localStorage persistence", () => {
 		expect(redTranscript.textContent?.trim()).toBeTruthy();
 		expect(greenTranscript.textContent?.trim()).toBeTruthy();
 		expect(blueTranscript.textContent?.trim()).toBeTruthy();
+	});
+
+	it("regression #46: transcript content (including raw LLM output) is preserved across a fresh renderGame", async () => {
+		// Use pass actions so the raw completion string lands in the transcript
+		// even though the parsed action carries no chat content.
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal(
+			"fetch",
+			makeThreeAiFetchMock(PASS_ACTION, PASS_ACTION, PASS_ACTION),
+		);
+		vi.stubGlobal("localStorage", stub);
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		vi.resetModules();
+		const { renderGame: renderGame1 } = await import("../routes/game.js");
+		renderGame1(getEl<HTMLElement>("main"));
+
+		const form1 = getEl<HTMLFormElement>("#composer");
+		const promptInput1 = getEl<HTMLInputElement>("#prompt");
+		promptInput1.value = "test";
+		form1.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		// Capture the transcript text rendered after the round
+		const redTextAfterRound =
+			document.querySelector<HTMLElement>('[data-transcript="red"]')
+				?.textContent ?? "";
+		expect(redTextAfterRound.trim()).toBeTruthy();
+
+		// Saved JSON should include transcripts snapshot
+		const savedJson = stub._store["hi-blue-game-state"];
+		expect(savedJson).toBeDefined();
+		const saved = JSON.parse(savedJson as string) as Record<string, unknown>;
+		expect(saved).toHaveProperty("transcripts");
+
+		// Simulate page refresh: fresh renderGame with the same localStorage stub
+		document.body.innerHTML = INDEX_BODY_HTML;
+		vi.resetModules();
+		const { renderGame: renderGame2 } = await import("../routes/game.js");
+		renderGame2(getEl<HTMLElement>("main"));
+
+		// Transcript must be restored verbatim from the snapshot
+		const redTextRestored =
+			document.querySelector<HTMLElement>('[data-transcript="red"]')
+				?.textContent ?? "";
+		expect(redTextRestored).toBe(redTextAfterRound);
 	});
 });
