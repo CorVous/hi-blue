@@ -11,6 +11,56 @@ export type EventsFactory = (
 ) => SseEvent[] | Promise<SseEvent[]>;
 
 /**
+ * Build a minimal OpenAI-compatible SSE body that streams the given word
+ * chunks as delta content events, followed by a [DONE] sentinel.
+ *
+ * Wire format mirrors what src/proxy/openai-proxy.ts forwards from OpenRouter:
+ *   data: {"choices":[{"delta":{"content":"<text>"},"finish_reason":null}]}\n\n
+ *   data: [DONE]\n\n
+ */
+export function wordsToOpenAiSseBody(words: string[]): string {
+	const lines: string[] = words.map(
+		(word) =>
+			`data: ${JSON.stringify({ choices: [{ delta: { content: word }, finish_reason: null }] })}\n\n`,
+	);
+	lines.push("data: [DONE]\n\n");
+	return lines.join("");
+}
+
+/**
+ * Register a Playwright route stub for the /v1/chat/completions endpoint that
+ * responds with a synthetic streaming OpenAI SSE body built from the given word
+ * chunks. The SPA's own token-pacing loop (TOKEN_PACE_MS × AI_TYPING_SPEED) will
+ * produce observable inter-token delays in the transcript after the fetch completes.
+ *
+ * @param page     The Playwright Page to install the route on.
+ * @param words    Word-level chunks to stream as `delta.content` events.
+ *
+ * @remarks
+ * - Matches **\/v1/chat/completions so it covers the worker-proxied URL.
+ * - The stub is installed as a last-route-wins Playwright route; calling it
+ *   again replaces the previous stub because Playwright prepends new routes.
+ * - Only intercepts requests fired from the page context (SPA fetch). See
+ *   stubGameTurn remarks for full gotchas.
+ */
+export async function streamChatCompletion(
+	page: Page,
+	words: string[],
+): Promise<void> {
+	await page.route("**/v1/chat/completions", async (route) => {
+		await route.fulfill({
+			status: 200,
+			headers: {
+				"Content-Type": "text/event-stream",
+				"Cache-Control": "no-cache",
+				"X-Content-Type-Options": "nosniff",
+			},
+			body: wordsToOpenAiSseBody(words),
+		});
+	});
+}
+
+/**
  * Register a Playwright route stub for the game/turn endpoint that responds
  * with a synthetic SSE body.
  *
