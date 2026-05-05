@@ -1,5 +1,7 @@
 # Ralph QA Checklist — Rounds 1–3 merged into `claude/review-issues-ralph-loop-dt49w`
 
+> Items with an automated equivalent live in `e2e/`; run `pnpm test:e2e`.
+
 Final integration smoke: ✅ passed — `pnpm lint` clean, `pnpm typecheck` clean, 269/269 tests pass on the merged tip.
 
 > Issues #29, #30, #31, #32 below are still **open**. After you merge the round PR into the long-lived branch, run the close-out agent (`close.md`) to close them with commit references.

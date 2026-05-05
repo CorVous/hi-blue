@@ -37,3 +37,8 @@ pnpm-debug.log*
 .AppleDouble
 .LSOverride
 Thumbs.db
+
+# Playwright
+/playwright-report/
+/test-results/
+/playwright/.cache/
