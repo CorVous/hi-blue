@@ -3,6 +3,13 @@
 	"main": "src/proxy/_smoke.ts",
 	"compatibility_date": "2025-12-01",
 	"compatibility_flags": ["nodejs_compat"],
+	// Static assets (SPA). Wrangler serves matching paths from dist/ first;
+	// unmatched paths fall through to the Worker fetch handler (API routes).
+	// Run `pnpm build` before `wrangler dev` so the dist/ directory exists.
+	"assets": {
+		"directory": "./dist",
+		"not_found_handling": "single-page-application"
+	},
 	"kv_namespaces": [
 		{
 			// per-IP and global daily token counters (issue #37)
