@@ -618,3 +618,75 @@ describe("renderGame — localStorage persistence", () => {
 		expect(redTextRestored).toBe(redTextAfterRound);
 	});
 });
+
+describe("renderGame — chat_lockout event", () => {
+	beforeEach(() => {
+		document.body.innerHTML = INDEX_BODY_HTML;
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+		vi.resetModules();
+		document.body.innerHTML = "";
+	});
+
+	it("chat_lockout appends the lockout message to the locked AI's transcript", async () => {
+		vi.stubGlobal(
+			"fetch",
+			makeThreeAiFetchMock(PASS_ACTION, PASS_ACTION, PASS_ACTION),
+		);
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		vi.resetModules();
+
+		// Import GameSession first so the spy is in place before renderGame
+		// creates a session from the same module registry.
+		const { GameSession } = await import("../game/game-session.js");
+		// Capture the original before spying to avoid infinite recursion.
+		const originalSubmit = GameSession.prototype.submitMessage;
+		vi.spyOn(GameSession.prototype, "submitMessage").mockImplementation(
+			async function (
+				this: InstanceType<typeof GameSession>,
+				...args: Parameters<InstanceType<typeof GameSession>["submitMessage"]>
+			) {
+				// Call the real implementation to get a valid nextState.
+				const real = await originalSubmit.apply(this, args);
+				// Inject a chatLockoutTriggered into the result so the encoder
+				// emits a chat_lockout SSE event, exercising the SPA branch.
+				return {
+					...real,
+					result: {
+						...real.result,
+						chatLockoutTriggered: {
+							aiId: "red" as const,
+							message: "Ember is unresponsive…",
+						},
+					},
+				};
+			},
+		);
+
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		const form = getEl<HTMLFormElement>("#composer");
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		promptInput.value = "hello";
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		// The chat_lockout event should have appended the message to red's transcript.
+		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
+		expect(redTranscript.textContent).toContain("[Ember is unresponsive…]");
+
+		// The address selector option for red should be disabled.
+		const redOption = document.querySelector<HTMLOptionElement>(
+			'#address option[value="red"]',
+		);
+		expect(redOption?.disabled).toBe(true);
+	});
+});

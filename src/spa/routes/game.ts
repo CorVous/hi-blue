@@ -275,6 +275,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 
 					case "chat_lockout":
 						setChatLockout(event.aiId, true);
+						appendToTranscript(event.aiId, `[${event.message}]\n`);
 						break;
 
 					case "chat_lockout_resolved":
