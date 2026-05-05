@@ -25,6 +25,10 @@ export type EventsFactory = (
  * - Response headers mirror src/proxy/_smoke.ts lines 281-283 verbatim.
  * - Last-route-wins: calling stubGameTurn again on the same page replaces the
  *   previous stub because Playwright prepends new routes.
+ * - Only intercepts requests fired from the page context (SPA fetch, navigation,
+ *   form submits). `page.request.*` calls bypass `page.route` — to exercise this
+ *   stub from a spec, trigger /game/turn through the SPA flow or via
+ *   `page.evaluate(() => fetch("/game/turn", …))`. See docs/agents/testing.md.
  */
 export async function stubGameTurn(
 	page: Page,
