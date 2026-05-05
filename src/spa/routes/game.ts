@@ -1,6 +1,6 @@
 import { PERSONAS, PHASE_1_CONFIG } from "../../content";
 import { BrowserLLMProvider } from "../game/browser-llm-provider.js";
-import { getActivePhase } from "../game/engine.js";
+import { getActivePhase, updateActivePhase } from "../game/engine.js";
 import { GameSession } from "../game/game-session.js";
 import { encodeRoundResult } from "../game/round-result-encoder.js";
 import type { AiId } from "../game/types";
@@ -28,6 +28,57 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 let session: GameSession | null = null;
+
+/**
+ * Apply SPA-side test affordances from URL search params.
+ *
+ * Only honoured when `__WORKER_BASE_URL__` is `"http://localhost:8787"` (local
+ * dev), so these params are silently inert in production.
+ *
+ * - `winImmediately=1`: inject `winCondition: () => true` into the active
+ *   phase of the current session (only the per-session PhaseState is mutated —
+ *   the global PhaseConfig is untouched).
+ * - `lockout=1`: arm a chat-lockout for `red`, 2 rounds, effective next round.
+ *   Matches the legacy worker semantics from `src/proxy/_smoke.ts`.
+ *
+ * Returns the (possibly replaced) GameSession to use going forward.
+ */
+export function applyTestAffordances(
+	s: GameSession,
+	searchParams: URLSearchParams,
+): GameSession {
+	// Gate: only apply in local dev (not production)
+	if (__WORKER_BASE_URL__ !== "http://localhost:8787") return s;
+
+	const wantsWinImmediately = searchParams.get("winImmediately") === "1";
+	const wantsLockout = searchParams.get("lockout") === "1";
+
+	if (!wantsWinImmediately && !wantsLockout) return s;
+
+	let active = s;
+
+	if (wantsWinImmediately) {
+		// Inject winCondition: () => true into the active phase (session-local only).
+		// GameSession.restore() creates a fresh session from an existing GameState,
+		// bypassing the constructor so no new startPhase is called.
+		const newState = updateActivePhase(active.getState(), (phase) => ({
+			...phase,
+			winCondition: () => true,
+		}));
+		active = GameSession.restore(newState);
+	}
+
+	if (wantsLockout) {
+		const currentRound = getActivePhase(active.getState()).round;
+		active.armChatLockout({
+			rng: () => 0,
+			lockoutTriggerRound: currentRound + 1,
+			lockoutDuration: 2,
+		});
+	}
+
+	return active;
+}
 
 /** Warning reason strings shown in the persistence warning banner. */
 const PERSISTENCE_WARNING_MESSAGES: Record<string, string> = {
@@ -119,6 +170,16 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 			}
 			session = new GameSession(PHASE_1_CONFIG, PERSONAS);
 		}
+
+		// Apply SPA-side test affordances from location.search (e.g. ?winImmediately=1
+		// or ?lockout=1). These are gated inside applyTestAffordances to only fire
+		// when __WORKER_BASE_URL__ === "http://localhost:8787" (local dev).
+		// Note: we use location.search (not the hash params) because these flags are
+		// intended to be set on the page URL itself, matching the legacy worker pattern.
+		session = applyTestAffordances(
+			session,
+			new URLSearchParams(location.search),
+		);
 	}
 
 	// Populate panel headers from PERSONAS so renames don't require HTML edits
