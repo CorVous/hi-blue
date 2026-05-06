@@ -44,7 +44,6 @@ The items below require eyes-on-screen judgement. Run the smoke worker locally (
 
 ## Code review (optional)
 
-- [ ] Sanity-check the `ENABLE_TEST_MODES` gating around `testMode: "win_immediately"` in `POST /game/new`. The reviewer found this was unconditionally active in the first cut; confirm the binding is only set in `vitest.config.ts` (miniflare) and not in `wrangler.jsonc` — issue #31, commit `82c013d`. **SPA affordance:** `?winImmediately=1` on `http://localhost:8787/?winImmediately=1` now injects `winCondition: () => true` into the active session's phase config at SPA boot (gated to local dev only via `__WORKER_BASE_URL__` check). The smoke worker's old `GET /` handler for this param has been removed (issue #91).
 - [ ] Look at `renderEndgameSection({ inlineScript: false })` in `renderChatPage` and decide whether the overlay's hoisted button handlers in the chat-page IIFE are the right long-term seam, or whether the endgame fragment should own its own behaviour via a separate dispatcher module — issue #32, commit `91c4def`.
 
 ## Notes on what was deferred

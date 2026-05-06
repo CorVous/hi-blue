@@ -1,49 +1,14 @@
-import { PHASE_1_CONFIG } from "../content";
-import {
-	buildSessionCookie,
-	createSession,
-	getSession,
-	parseSessionCookie,
-} from "../session-store";
-import { getActivePhase } from "../spa/game/engine";
-import type {
-	OpenAiMessage,
-	RoundLLMProvider,
-} from "../spa/game/round-llm-provider";
-import { encodeRoundResult } from "../spa/game/round-result-encoder";
-import type { AiId, PhaseConfig } from "../spa/game/types";
-import { AI_TYPING_SPEED } from "../spa/game/typing-rhythm";
 import {
 	buildPreflightResponse,
 	parseAllowedOrigins,
 	withCorsHeaders,
 } from "./cors";
 import { handleChatCompletions } from "./openai-proxy";
-import { renderChatPage, renderEndgamePage } from "./ui";
-
-/** Simple server-side mock that returns a canned assistant text per round. */
-class ServerMockRoundProvider implements RoundLLMProvider {
-	private readonly response: string;
-
-	constructor(response: string) {
-		this.response = response;
-	}
-
-	async streamRound(
-		_messages: OpenAiMessage[],
-		_tools: unknown[],
-	): Promise<{ assistantText: string; toolCalls: [] }> {
-		return { assistantText: this.response, toolCalls: [] };
-	}
-}
 
 /** Shape of the bindings/env this Worker expects. */
 interface Env {
 	/** KV namespace backing the rate-limit and daily-cap guards. */
 	RATE_GUARD_KV: KVNamespace;
-	/** Optional: set to "anthropic" to use the real provider. */
-	LLM_PROVIDER?: string;
-	ANTHROPIC_API_KEY?: string;
 	/**
 	 * Secret for the OpenRouter API. Provision via:
 	 *   wrangler secret put OPENROUTER_API_KEY
@@ -55,13 +20,6 @@ interface Env {
 	GLOBAL_DAILY_TOKEN_MAX?: string;
 	PRE_CHARGE_ESTIMATE?: string;
 	/**
-	 * Set to "1" in test environments to enable the testMode parameter on
-	 * POST /game/new. Must NOT be set in production wrangler.jsonc.
-	 */
-	ENABLE_TEST_MODES?: string;
-	/** Per-token delay in ms for the /game/turn stream. Defaults to 60ms; set "0" in tests. */
-	TOKEN_PACE_MS?: string;
-	/**
 	 * Comma-separated list of allowed CORS origins for POST /v1/chat/completions.
 	 * Example (wrangler.jsonc): "https://corvous.github.io"
 	 * For local dev, set additional origins in .dev.vars or via:
@@ -69,50 +27,15 @@ interface Env {
 	 * without committing local ports to the production config.
 	 */
 	ALLOWED_ORIGINS?: string;
+	/**
+	 * Static-assets binding automatically provided by Cloudflare when an
+	 * `assets` block is declared in wrangler.jsonc. Used to delegate any
+	 * request that is not an API route so that the assets binding can serve
+	 * matching static files or fall back to dist/index.html via
+	 * not_found_handling: single-page-application.
+	 */
+	ASSETS: Fetcher;
 }
-
-function createProvider(_env: Env): RoundLLMProvider {
-	return new ServerMockRoundProvider(
-		"Hello! I am an AI assistant. How can I help you?",
-	);
-}
-
-/**
- * Three-phase config used only in dev/test to exercise phase advancement and
- * game completion. Each phase has an always-true win condition so a single
- * /game/turn call advances to the next phase.
- *
- * Phase 3 has no nextPhaseConfig, so the game completes (gameEnded=true) when
- * its win condition fires.
- */
-const TEST_PHASE3_CONFIG: PhaseConfig = {
-	phaseNumber: 3,
-	objective: "The final reckoning approaches.",
-	aiGoals: { red: "Endure", green: "Endure", blue: "Endure" },
-	initialWorld: { items: [] },
-	budgetPerAi: 5,
-	winCondition: () => true, // always fires on first turn
-};
-
-const TEST_PHASE2_CONFIG: PhaseConfig = {
-	phaseNumber: 2,
-	objective: "Deeper truths emerge.",
-	aiGoals: { red: "Seek", green: "Seek", blue: "Seek" },
-	initialWorld: { items: [] },
-	budgetPerAi: 5,
-	winCondition: () => true, // always fires on first turn
-	nextPhaseConfig: TEST_PHASE3_CONFIG,
-};
-
-const TEST_PHASE_CONFIG_WITH_WIN: PhaseConfig = {
-	phaseNumber: 1,
-	objective: "A test phase that completes immediately.",
-	aiGoals: { red: "Pass", green: "Pass", blue: "Pass" },
-	initialWorld: { items: [] },
-	budgetPerAi: 5,
-	winCondition: () => true, // always fires on first turn
-	nextPhaseConfig: TEST_PHASE2_CONFIG,
-};
 
 export default {
 	async fetch(
@@ -121,25 +44,6 @@ export default {
 		ctx: ExecutionContext,
 	): Promise<Response> {
 		const url = new URL(request.url);
-
-		if (url.pathname === "/") {
-			const headers: Record<string, string> = {
-				"Content-Type": "text/html; charset=utf-8",
-			};
-
-			return new Response(renderChatPage(), { headers });
-		}
-
-		// ── Dev affordance: standalone endgame screen (issue #30) ─────────────
-		// Stub persona data is hard-coded here; no KV, no fixtures file.
-		// This route is intentionally a developer-only convenience, not
-		// player-facing — the PRD gates it off in production via env flag
-		// (gating not yet implemented; will be added in a follow-up slice).
-		if (url.pathname === "/endgame" && request.method === "GET") {
-			return new Response(renderEndgamePage(), {
-				headers: { "Content-Type": "text/html; charset=utf-8" },
-			});
-		}
 
 		// ── OPTIONS /v1/chat/completions — CORS preflight ────────────────────────
 		// Handles browser preflight requests before the actual POST.
@@ -164,130 +68,6 @@ export default {
 				ctx,
 			);
 			return withCorsHeaders(resp, request, allowed);
-		}
-
-		// ── POST /game/new ────────────────────────────────────────────────────
-		// Creates a new game session and sets the session cookie.
-		// When ENABLE_TEST_MODES="1" (test environments only), accepts an optional
-		// body { testMode: "win_immediately" } to create a session whose phase-1
-		// win condition fires on the first turn.
-		if (url.pathname === "/game/new" && request.method === "POST") {
-			let phaseConfig: PhaseConfig = PHASE_1_CONFIG;
-			if (env.ENABLE_TEST_MODES === "1") {
-				try {
-					const body = (await request.json()) as { testMode?: string };
-					if (body.testMode === "win_immediately") {
-						phaseConfig = TEST_PHASE_CONFIG_WITH_WIN;
-					}
-				} catch {
-					// Empty body or non-JSON — use default config.
-				}
-			}
-			const { sessionId } = createSession(phaseConfig);
-			return new Response(JSON.stringify({ ok: true }), {
-				status: 200,
-				headers: {
-					"Content-Type": "application/json",
-					"Set-Cookie": buildSessionCookie(sessionId),
-				},
-			});
-		}
-
-		// ── POST /game/turn ────────────────────────────────────────────────────
-		// Runs one round for the active session and streams SSE events.
-		if (url.pathname === "/game/turn" && request.method === "POST") {
-			// Parse body: { addressedAi, message }
-			let body: { addressedAi?: string; message?: string };
-			try {
-				body = (await request.json()) as {
-					addressedAi?: string;
-					message?: string;
-				};
-			} catch {
-				return new Response("Invalid JSON", { status: 400 });
-			}
-
-			const { addressedAi, message } = body;
-			if (!message || typeof message !== "string") {
-				return new Response("Missing message", { status: 400 });
-			}
-			const validAiIds: AiId[] = ["red", "green", "blue"];
-			if (!addressedAi || !validAiIds.includes(addressedAi as AiId)) {
-				return new Response("Missing or invalid addressedAi", { status: 400 });
-			}
-
-			// Look up or create the session
-			const sessionId = parseSessionCookie(request.headers.get("Cookie"));
-			let session = sessionId ? getSession(sessionId) : undefined;
-
-			// If no valid session, auto-create one (fallback for requests
-			// that skipped /game/new — e.g. direct test callers).
-			let newSessionId: string | undefined;
-			if (!session) {
-				const created = createSession(PHASE_1_CONFIG);
-				session = created.session;
-				newSessionId = created.sessionId;
-			}
-
-			const capturedSession = session;
-			const provider = createProvider(env);
-
-			const responseHeaders: Record<string, string> = {
-				"Content-Type": "text/event-stream",
-				"Cache-Control": "no-cache",
-				"X-Content-Type-Options": "nosniff",
-			};
-			if (newSessionId) {
-				responseHeaders["Set-Cookie"] = buildSessionCookie(newSessionId);
-			}
-
-			const tokenPaceMs = Number(env.TOKEN_PACE_MS ?? "60");
-			const stream = new ReadableStream({
-				async start(controller) {
-					const enc = new TextEncoder();
-					try {
-						const { result, completions } = await capturedSession.submitMessage(
-							addressedAi as AiId,
-							message,
-							provider,
-						);
-
-						const phaseAfter = getActivePhase(capturedSession.getState());
-						const events = encodeRoundResult(
-							result,
-							completions,
-							phaseAfter,
-							capturedSession.getState().personas,
-						);
-
-						let speakingAi: AiId | null = null;
-						for (const event of events) {
-							controller.enqueue(
-								enc.encode(`data: ${JSON.stringify(event)}\n\n`),
-							);
-							if (event.type === "ai_start") {
-								speakingAi = event.aiId;
-							} else if (event.type === "ai_end") {
-								speakingAi = null;
-							} else if (
-								event.type === "token" &&
-								tokenPaceMs > 0 &&
-								speakingAi
-							) {
-								const speed = AI_TYPING_SPEED[speakingAi];
-								const jittered = tokenPaceMs * speed * (0.5 + Math.random());
-								await new Promise((r) => setTimeout(r, jittered));
-							}
-						}
-						controller.enqueue(enc.encode("data: [DONE]\n\n"));
-						controller.close();
-					} catch (err) {
-						controller.error(err);
-					}
-				},
-			});
-
-			return new Response(stream, { headers: responseHeaders });
 		}
 
 		if (url.pathname === "/diagnostics") {
@@ -324,6 +104,10 @@ export default {
 			return new Response(null, { status: 200 });
 		}
 
-		return new Response("Not found", { status: 404 });
+		// Delegate to the assets binding for any unmatched path. This allows
+		// the assets binding's not_found_handling: single-page-application to
+		// serve dist/index.html for SPA client-side routes (e.g. /endgame)
+		// instead of the Worker returning a hard 404.
+		return env.ASSETS.fetch(request);
 	},
 } satisfies ExportedHandler<Env>;

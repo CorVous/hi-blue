@@ -28,8 +28,6 @@ export default defineConfig({
 							compatibilityDate: "2026-05-03",
 							kvNamespaces: ["RATE_GUARD_KV"],
 							bindings: {
-								ENABLE_TEST_MODES: "1",
-								TOKEN_PACE_MS: "0",
 								OPENROUTER_API_KEY: "test-openrouter-key",
 								PER_IP_DAILY_TOKEN_MAX: "20000",
 								GLOBAL_DAILY_TOKEN_MAX: "1000000",

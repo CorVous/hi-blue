@@ -71,9 +71,9 @@ export class GameSession {
 
 	/**
 	 * Prime a chat-lockout config to be consumed by the next submitMessage call
-	 * that does not pass an explicit chatLockoutConfig. Used by the
-	 * /game/test/arm-chat-lockout dev affordance to drive the QA flow without
-	 * modifying the public /game/turn request shape.
+	 * that does not pass an explicit chatLockoutConfig. Used by the SPA's
+	 * applyTestAffordances (?lockout=1) to arm a lockout without modifying the
+	 * submitMessage call signature.
 	 */
 	armChatLockout(config: ChatLockoutConfig): void {
 		this.armedChatLockout = config;

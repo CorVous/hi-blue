@@ -4,8 +4,7 @@
  * The browser-side LLM provider interface used by the round coordinator.
  * Returns a structured result per AI turn: assistant text content + any tool calls.
  *
- * This replaces the old `LLMProvider.streamCompletion(prompt)` interface which
- * yielded raw tokens from a custom-JSON action prompt. The new interface:
+ * The new interface:
  *   1. Accepts a pre-built OpenAI messages array (not a raw prompt string)
  *   2. Accepts the tools array to send with each request
  *   3. Returns a structured { assistantText, toolCalls } result

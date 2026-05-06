@@ -8,7 +8,12 @@
 	// Run `pnpm build` before `wrangler dev` so the dist/ directory exists.
 	"assets": {
 		"directory": "./dist",
-		"not_found_handling": "single-page-application"
+		"not_found_handling": "single-page-application",
+		// Expose the assets binding as env.ASSETS so the Worker can delegate
+		// unmatched paths via env.ASSETS.fetch(request) — required for the
+		// not_found_handling: single-page-application fallback to fire on
+		// client-side routes such as /endgame.
+		"binding": "ASSETS"
 	},
 	"kv_namespaces": [
 		{
