@@ -65,9 +65,12 @@ The wedge-shaped region of cells an AI can see each turn: 1 cell directly in fro
 **Facing**:
 The cardinal direction (N/S/E/W) an AI is currently looking. Part of the AI's state alongside `(row, col)`. Updated by `go(direction)` (move and face) and `look(direction)` (face without moving).
 
-**Cone event delta**:
-The per-AI per-turn "what happened in your cone since your last turn" section of the system prompt. Each AI sees only events that occurred within their own cone — the only cross-AI signal channel besides whispers and chat. Replaces the broadcast action log that an earlier design had.
-_Avoid_: Action log (deprecated; do not reintroduce).
+**Conversation log**:
+The single chronological per-AI per-phase section of the system prompt that interleaves voice-chat, whispers received, and **Witnessed event**s — all tagged by round. The AI's complete phase memory: nothing the AI has experienced this phase exists outside this log. Replaces both the broadcast action log of an earlier design and the once-considered separate "events in your cone" section.
+_Avoid_: Action log (deprecated; do not reintroduce), event delta, transcript.
+
+**Witnessed event**:
+A single line in the **Conversation log** describing something an AI saw happen inside their **Cone**. Rendered second-person: `You watch *xxxx [verb]…` for movement / pick-up / put-down / give, and the `{actor}`-substituted use-outcome flavor string for `use`. `examine` produces no Witnessed event (it is a private query, not an observable physical act).
 
 ## Relationships
 
