@@ -5,11 +5,13 @@
 	"compatibility_flags": ["nodejs_compat"],
 	// Build the SPA before wrangler bundles the Worker. Runs on every
 	// `wrangler dev` / `wrangler deploy`, so the dist/ directory always
-	// exists when the assets binding loads. For fast iteration (incremental
-	// SPA rebuilds via esbuild watch), use `pnpm dev` instead, which pairs
+	// exists when the assets binding loads. `watch_dir` re-runs the build
+	// when SPA sources change during `wrangler dev`. For faster incremental
+	// SPA rebuilds (esbuild watch), use `pnpm dev` instead, which pairs
 	// `pnpm build:watch` with `wrangler dev`.
 	"build": {
-		"command": "pnpm build"
+		"command": "pnpm build",
+		"watch_dir": "src/spa"
 	},
 	// Static assets (SPA). Wrangler serves matching paths from dist/ first;
 	// unmatched paths fall through to the Worker fetch handler (API routes).
