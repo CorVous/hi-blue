@@ -17,8 +17,7 @@ export function parseFirstMention(
 	personaNamesToId: ReadonlyMap<string, AiId>,
 ): AiId | null {
 	const re = /(?:^|\s)@([A-Za-z][A-Za-z0-9]*)/g;
-	let match: RegExpExecArray | null;
-	while ((match = re.exec(text)) !== null) {
+	for (const match of text.matchAll(re)) {
 		const raw = match[1];
 		if (!raw) continue;
 		// Strip a single trailing punctuation character if present.

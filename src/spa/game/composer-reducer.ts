@@ -23,7 +23,6 @@ export interface ComposerState {
 export function deriveComposerState(input: ComposerInput): ComposerState {
 	const { text, lockouts, personaNamesToId } = input;
 	const addressee = parseFirstMention(text, personaNamesToId);
-	const sendEnabled =
-		addressee !== null && lockouts.get(addressee) !== true;
+	const sendEnabled = addressee !== null && lockouts.get(addressee) !== true;
 	return { addressee, sendEnabled };
 }

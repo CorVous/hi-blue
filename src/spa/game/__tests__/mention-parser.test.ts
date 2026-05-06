@@ -29,7 +29,7 @@ describe("parseFirstMention", () => {
 		["@", null],
 		["@Ember", "red"],
 		["@Frost", "blue"],
-	])('parseFirstMention(%j) → %j', (text, expected) => {
+	])("parseFirstMention(%j) → %j", (text, expected) => {
 		expect(parseFirstMention(text, nameMap)).toBe(expected);
 	});
 });
