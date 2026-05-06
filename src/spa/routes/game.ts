@@ -314,7 +314,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		sendBtn.disabled = true;
 
 		// Append player's message to the addressed panel
-		appendToTranscript(addressed, `\n[you] ${message}\n`);
+		appendToTranscript(addressed, `[you] ${message}\n`);
 
 		// Show a "thinking…" placeholder in the addressed panel while the
 		// first live delta arrives. Stripped on the first onAiDelta call;
