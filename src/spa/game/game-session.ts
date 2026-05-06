@@ -89,6 +89,9 @@ export class GameSession {
 	 *   When omitted, any config previously set via armChatLockout is consumed once.
 	 * @param initiative  Optional turn-order permutation for this round.
 	 *   Must be a permutation of all three AI ids. When absent, coordinator uses default order.
+	 * @param onAiDelta  Optional per-AI live-delta callback. Fires synchronously inside
+	 *   the SSE parser loop for each text chunk arriving from the wire.
+	 *   Never called for locked-out AIs or mock providers that ignore onDelta.
 	 */
 	async submitMessage(
 		addressed: AiId,
@@ -96,6 +99,7 @@ export class GameSession {
 		provider: RoundLLMProvider,
 		chatLockoutConfig?: ChatLockoutConfig,
 		initiative?: AiId[],
+		onAiDelta?: (aiId: AiId, text: string) => void,
 	): Promise<SubmitMessageResult> {
 		let effectiveConfig = chatLockoutConfig;
 		if (!effectiveConfig && this.armedChatLockout) {
@@ -125,6 +129,7 @@ export class GameSession {
 			initiative,
 			this.toolRoundtrip,
 			completionSink,
+			onAiDelta,
 		);
 
 		// Fill in empty string for AIs whose completions weren't captured

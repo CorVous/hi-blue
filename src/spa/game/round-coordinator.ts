@@ -85,6 +85,9 @@ export interface RunRoundResult {
  *   by OpenAI's tool-use spec.
  * @param completionSink  Optional per-AI sink for the assistant text produced
  *   by each LLM call. Used by GameSession to capture completions for pacing.
+ * @param onAiDelta  Optional per-AI live-delta callback. Fires synchronously
+ *   inside the SSE parser loop for each text chunk arriving from the wire.
+ *   Never called for locked-out AIs or mock providers that ignore onDelta.
  */
 export async function runRound(
 	game: GameState,
@@ -95,6 +98,7 @@ export async function runRound(
 	initiative?: AiId[],
 	priorToolRoundtrip?: Partial<Record<AiId, ToolRoundtripMessage>>,
 	completionSink?: (aiId: AiId, text: string) => void,
+	onAiDelta?: (aiId: AiId, text: string) => void,
 ): Promise<RunRoundResult> {
 	// Validate initiative if provided.
 	if (initiative !== undefined) {
@@ -157,6 +161,7 @@ export async function runRound(
 		const { assistantText, toolCalls } = await provider.streamRound(
 			messages,
 			TOOL_DEFINITIONS,
+			onAiDelta ? (text) => onAiDelta(aiId, text) : undefined,
 		);
 
 		// Capture completion text

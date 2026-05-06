@@ -1198,3 +1198,115 @@ describe("initiative parameter", () => {
 		).rejects.toThrow(/permutation/);
 	});
 });
+
+// ----------------------------------------------------------------------------
+// onAiDelta callback routing (issue #102)
+// ----------------------------------------------------------------------------
+describe("runRound — onAiDelta callback", () => {
+	it("fires onAiDelta with (aiId, text) for each delta from a live provider", async () => {
+		const game = makeGame();
+
+		// Hand-rolled provider that synchronously calls onDelta with two fragments.
+		const liveProvider: RoundLLMProvider = {
+			async streamRound(_messages, _tools, onDelta) {
+				onDelta?.("frag1 ");
+				onDelta?.("frag2");
+				return { assistantText: "frag1 frag2", toolCalls: [] };
+			},
+		};
+
+		const received: Array<[AiId, string]> = [];
+		const onAiDelta = (aiId: AiId, text: string): void => {
+			received.push([aiId, text]);
+		};
+
+		const initiative: AiId[] = ["red", "green", "blue"];
+		await runRound(
+			game,
+			"red",
+			"hello",
+			liveProvider,
+			undefined,
+			initiative,
+			undefined,
+			undefined,
+			onAiDelta,
+		);
+
+		// Each AI should have fired two deltas, in initiative order.
+		expect(received).toHaveLength(6);
+		expect(received[0]).toEqual(["red", "frag1 "]);
+		expect(received[1]).toEqual(["red", "frag2"]);
+		expect(received[2]).toEqual(["green", "frag1 "]);
+		expect(received[3]).toEqual(["green", "frag2"]);
+		expect(received[4]).toEqual(["blue", "frag1 "]);
+		expect(received[5]).toEqual(["blue", "frag2"]);
+	});
+
+	it("does not invoke onAiDelta for locked-out AIs", async () => {
+		// Exhaust budget (budgetPerAi=1) so all AIs lock out after round 1.
+		let state = startPhase(createGame(TEST_PERSONAS), {
+			...TEST_PHASE_CONFIG,
+			budgetPerAi: 1,
+		});
+		// Deduct budget 1× per AI to reach remaining=0 → lockedOut.
+		for (const aiId of ["red", "green", "blue"] as AiId[]) {
+			state = deductBudget(state, aiId);
+		}
+		expect(getActivePhase(state).lockedOut.has("red")).toBe(true);
+		expect(getActivePhase(state).lockedOut.has("green")).toBe(true);
+		expect(getActivePhase(state).lockedOut.has("blue")).toBe(true);
+
+		const liveProvider: RoundLLMProvider = {
+			async streamRound(_messages, _tools, onDelta) {
+				onDelta?.("should not fire");
+				return { assistantText: "should not fire", toolCalls: [] };
+			},
+		};
+
+		const received: Array<[AiId, string]> = [];
+		await runRound(
+			state,
+			"red",
+			"hi",
+			liveProvider,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			(aiId, text) => {
+				received.push([aiId, text]);
+			},
+		);
+
+		// All AIs locked — no deltas.
+		expect(received).toHaveLength(0);
+	});
+
+	it("MockRoundLLMProvider ignores onDelta — no live deltas fired", async () => {
+		const game = makeGame();
+		const mockProvider = new MockRoundLLMProvider([
+			{ assistantText: "red reply", toolCalls: [] },
+			{ assistantText: "green reply", toolCalls: [] },
+			{ assistantText: "blue reply", toolCalls: [] },
+		]);
+
+		const received: Array<[AiId, string]> = [];
+		await runRound(
+			game,
+			"red",
+			"hi",
+			mockProvider,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			(aiId, text) => {
+				received.push([aiId, text]);
+			},
+		);
+
+		// MockRoundLLMProvider ignores onDelta — no deltas.
+		expect(received).toHaveLength(0);
+	});
+});
