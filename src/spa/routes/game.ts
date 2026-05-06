@@ -47,16 +47,35 @@ function isDevHost(): boolean {
 }
 
 /**
+ * Recursively deep-clone a PhaseConfig chain, overriding `winCondition` to
+ * `() => true` at every level.
+ *
+ * Only the config objects are cloned — the `initialWorld` and `aiGoals` values
+ * are shallow-copied (they are plain data with no function members that need
+ * patching). The original configs are never mutated.
+ */
+function patchPhaseChain(config: PhaseConfig): PhaseConfig {
+	return {
+		...config,
+		winCondition: () => true,
+		...(config.nextPhaseConfig !== undefined
+			? { nextPhaseConfig: patchPhaseChain(config.nextPhaseConfig) }
+			: {}),
+	};
+}
+
+/**
  * Apply SPA-side test affordances from URL search params.
  *
  * Only honoured when the SPA is served by `pnpm wrangler dev` (see
  * `isDevHost`). Silently inert in any other host.
  *
- * - `winImmediately=1`: inject `winCondition: () => true` into the active
- *   phase of the current session, AND chain a synthesised three-phase walk
- *   (phase-2-with-true-win → phase-3-with-true-win) so the three-phase
- *   end-to-end acceptance criteria complete. Only the per-session PhaseState
- *   is mutated — the global PhaseConfig is untouched.
+ * - `winImmediately=1`: recursively patch the real phase chain reachable from
+ *   the active phase, injecting `winCondition: () => true` into the active
+ *   phase AND every phase reachable via `nextPhaseConfig`. This uses the real
+ *   PHASE_1 → PHASE_2 → PHASE_3 config chain (deep-cloned; originals are
+ *   untouched). A cold-start `goto("/?winImmediately=1")` followed by three
+ *   submitted messages will reliably reach `game_ended`.
  * - `lockout=1`: arm a chat-lockout for `red`, 2 rounds, effective next round.
  *   Matches the legacy worker semantics from `src/proxy/_smoke.ts`.
  *
@@ -77,35 +96,16 @@ export function applyTestAffordances(
 	let active = s;
 
 	if (wantsWinImmediately) {
-		// Synthesise a three-phase chain where every win condition fires immediately.
-		// These configs mirror TEST_PHASE_CONFIG_WITH_WIN in src/proxy/_smoke.ts but
-		// are applied only to the session-local PhaseState — the global PHASE_1_CONFIG
-		// is not modified.
-		const testPhase3Config: PhaseConfig = {
-			phaseNumber: 3,
-			objective: "The final reckoning approaches.",
-			aiGoals: { red: "Endure", green: "Endure", blue: "Endure" },
-			initialWorld: { items: [] },
-			budgetPerAi: 5,
-			winCondition: () => true,
-		};
-
-		const testPhase2Config: PhaseConfig = {
-			phaseNumber: 2,
-			objective: "Deeper truths emerge.",
-			aiGoals: { red: "Seek", green: "Seek", blue: "Seek" },
-			initialWorld: { items: [] },
-			budgetPerAi: 5,
-			winCondition: () => true,
-			nextPhaseConfig: testPhase3Config,
-		};
-
-		// Inject winCondition: () => true AND nextPhaseConfig into the active phase
-		// so the engine will chain through phases 2 and 3.
+		// Patch the real phase chain: inject winCondition: () => true into the
+		// active phase AND every phase reachable via nextPhaseConfig.
+		// patchPhaseChain deep-clones each config level so the global
+		// PHASE_1_CONFIG (and its linked configs) are never mutated.
 		const newState = updateActivePhase(active.getState(), (phase) => ({
 			...phase,
 			winCondition: () => true,
-			nextPhaseConfig: testPhase2Config,
+			...(phase.nextPhaseConfig !== undefined
+				? { nextPhaseConfig: patchPhaseChain(phase.nextPhaseConfig) }
+				: {}),
 		}));
 		active = GameSession.restore(newState);
 	}

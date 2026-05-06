@@ -395,7 +395,7 @@ describe("renderGame (game route — three-AI)", () => {
 		const phaseBanner = getEl<HTMLElement>("#phase-banner");
 		expect(phaseBanner.hasAttribute("hidden")).toBe(false);
 		expect(phaseBanner.textContent).toContain("Phase 2");
-		expect(phaseBanner.textContent).toContain("Deeper truths emerge.");
+		expect(phaseBanner.textContent).toContain("get the key in the keyhole");
 
 		// All transcripts should have been cleared and repopulated with a separator
 		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
