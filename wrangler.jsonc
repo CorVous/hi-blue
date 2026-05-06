@@ -6,9 +6,7 @@
 	// Build the SPA before wrangler bundles the Worker. Runs on every
 	// `wrangler dev` / `wrangler deploy`, so the dist/ directory always
 	// exists when the assets binding loads. `watch_dir` re-runs the build
-	// when SPA sources change during `wrangler dev`. For faster incremental
-	// SPA rebuilds (esbuild watch), use `pnpm dev` instead, which pairs
-	// `pnpm build:watch` with `wrangler dev`.
+	// when SPA sources change during `wrangler dev`.
 	"build": {
 		"command": "pnpm build",
 		"watch_dir": "src/spa"
