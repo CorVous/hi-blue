@@ -27,8 +27,17 @@ test("game state and transcripts persist across mid-round reload", async ({
 	await expect(page.locator("#send")).toBeEnabled();
 	await page.click("#send");
 
-	// Wait for the send button to re-enable (round completed)
-	await expect(page.locator("#send")).toBeEnabled({ timeout: 15_000 });
+	// Wait for the round to complete and the save to land. The save runs AFTER
+	// the encoder loop processes all events, so we poll localStorage directly
+	// rather than the transcript (which fills via live deltas earlier).
+	// (Post-#107 the send button does NOT re-enable after submit because the
+	// prompt is cleared and an empty prompt has no @mention → sendEnabled=false.)
+	await expect
+		.poll(
+			() => page.evaluate(() => localStorage.getItem("hi-blue-game-state")),
+			{ timeout: 15_000 },
+		)
+		.not.toBeNull();
 
 	// ── Assert localStorage was written ────────────────────────────────────────
 
