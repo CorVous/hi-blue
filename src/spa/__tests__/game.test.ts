@@ -136,6 +136,46 @@ describe("renderGame (game route — three-AI)", () => {
 		document.body.innerHTML = "";
 	});
 
+	it("regression #71: player chat message is not prepended with a newline", async () => {
+		const mockFetch = makeThreeAiFetchMock(
+			PASS_ACTION,
+			PASS_ACTION,
+			PASS_ACTION,
+		);
+		vi.stubGlobal("fetch", mockFetch);
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		const form = getEl<HTMLFormElement>("#composer");
+		const addressSelect = getEl<HTMLSelectElement>("#address");
+		addressSelect.value = "red";
+		promptInput.value = "first message";
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
+		// First message must not be preceded by a blank line.
+		expect(redTranscript.textContent ?? "").not.toMatch(/^\n/);
+		expect(redTranscript.textContent ?? "").toMatch(/^\[you\] first message/);
+
+		// Send a second message to the same panel and ensure no double-newline gap
+		// appears between the prior content and the new "[you] …" line.
+		promptInput.value = "second message";
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		expect(redTranscript.textContent ?? "").not.toMatch(/\n\n\[you\]/);
+	});
+
 	it("after one submit, all three transcript panels have content", async () => {
 		const mockFetch = makeThreeAiFetchMock(
 			RED_ACTION,
