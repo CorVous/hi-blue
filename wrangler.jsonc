@@ -3,9 +3,16 @@
 	"main": "src/proxy/_smoke.ts",
 	"compatibility_date": "2025-12-01",
 	"compatibility_flags": ["nodejs_compat"],
+	// Build the SPA before wrangler bundles the Worker. Runs on every
+	// `wrangler dev` / `wrangler deploy`, so the dist/ directory always
+	// exists when the assets binding loads. For fast iteration (incremental
+	// SPA rebuilds via esbuild watch), use `pnpm dev` instead, which pairs
+	// `pnpm build:watch` with `wrangler dev`.
+	"build": {
+		"command": "pnpm build"
+	},
 	// Static assets (SPA). Wrangler serves matching paths from dist/ first;
 	// unmatched paths fall through to the Worker fetch handler (API routes).
-	// Run `pnpm build` before `wrangler dev` so the dist/ directory exists.
 	"assets": {
 		"directory": "./dist",
 		"not_found_handling": "single-page-application",
