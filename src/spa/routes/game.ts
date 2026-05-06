@@ -156,7 +156,15 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 
 	// Dev-only: ?think=0 disables the model's thinking step (OpenRouter
 	// reasoning.enabled=false). Gated to wrangler-dev host (see isDevHost).
-	const effectiveParams = params ?? new URLSearchParams(location.search);
+	//
+	// Merge hash-query-string params (from the router) with location.search
+	// params so flags like ?think=0, ?lockout=1, ?winImmediately=1 work whether
+	// they appear in the search string (e.g. "/?lockout=1") or after the hash
+	// (e.g. "/#/?lockout=1"). Hash params win on conflict.
+	const effectiveParams = new URLSearchParams(location.search);
+	if (params) {
+		for (const [k, v] of params) effectiveParams.set(k, v);
+	}
 	const disableReasoning = isDevHost() && effectiveParams.get("think") === "0";
 
 	/** Show the persistence warning banner once (idempotent). */
@@ -253,7 +261,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 	}
 
 	// Debug toggle: show action log if ?debug=1
-	const debug = params?.get("debug") === "1";
+	const debug = effectiveParams.get("debug") === "1";
 	if (actionLogEl) {
 		if (debug) {
 			actionLogEl.removeAttribute("hidden");
