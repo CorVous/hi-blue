@@ -221,6 +221,8 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		// Roll initiative for this round
 		const initiative = shuffle(AI_ORDER);
 
+		let gameEnded = false;
+
 		try {
 			const provider = new BrowserLLMProvider();
 			const { result, completions, nextState } = await session.submitMessage(
@@ -242,7 +244,6 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 			);
 
 			let speakingAi: AiId | null = null;
-			let gameEnded = false;
 
 			for (const event of events) {
 				switch (event.type) {
@@ -323,7 +324,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 			}
 		} finally {
 			stripPlaceholder();
-			sendBtn.disabled = false;
+			if (!gameEnded) sendBtn.disabled = false;
 		}
 	});
 }
