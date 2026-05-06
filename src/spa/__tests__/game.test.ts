@@ -394,7 +394,7 @@ describe("renderGame (game route — three-AI)", () => {
 		const phaseBanner = getEl<HTMLElement>("#phase-banner");
 		expect(phaseBanner.hasAttribute("hidden")).toBe(false);
 		expect(phaseBanner.textContent).toContain("Phase 2");
-		expect(phaseBanner.textContent).toContain("Deeper truths emerge.");
+		expect(phaseBanner.textContent).toContain("get the key in the keyhole");
 
 		// All transcripts should have been cleared and repopulated with a separator
 		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
@@ -1125,5 +1125,108 @@ describe("renderGame — mention-based addressing", () => {
 		promptInput.value = "@Sage hi";
 		promptInput.dispatchEvent(new Event("input"));
 		expect(sendBtn.disabled).toBe(true);
+	});
+});
+
+describe("renderGame — URL param sourcing", () => {
+	beforeEach(() => {
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		document.body.innerHTML = INDEX_BODY_HTML;
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+		vi.resetModules();
+		document.body.innerHTML = "";
+	});
+
+	it("search-only: ?winImmediately=1 in location.search (router passes empty params) triggers phase_advanced on first submit", async () => {
+		// Router always passes a non-null URLSearchParams, but it may be empty
+		// when the flag is in location.search rather than the hash query string.
+		vi.stubGlobal("location", {
+			search: "?winImmediately=1",
+			origin: "http://localhost:8787",
+			hash: "",
+		});
+		const mockFetch = makeThreeAiFetchMock(
+			PASS_ACTION,
+			PASS_ACTION,
+			PASS_ACTION,
+		);
+		vi.stubGlobal("fetch", mockFetch);
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		// Router passes empty URLSearchParams (hash had no query string)
+		renderGame(getEl<HTMLElement>("main"), new URLSearchParams());
+
+		const form = getEl<HTMLFormElement>("#composer");
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		// Post-#107: submit handler requires a valid @mention; without one,
+		// deriveComposerState returns sendEnabled=false and the submit no-ops.
+		promptInput.value = "@Ember go";
+		// Dispatch input so the SPA's listener updates the composer state.
+		promptInput.dispatchEvent(new Event("input", { bubbles: true }));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		// Phase banner should be visible — winImmediately fired from location.search
+		const phaseBanner = getEl<HTMLElement>("#phase-banner");
+		expect(phaseBanner.hasAttribute("hidden")).toBe(false);
+		expect(phaseBanner.textContent).toContain("Phase 2");
+	});
+
+	it("hash-only: debug=1 in hash params (no location.search) shows action log", async () => {
+		vi.stubGlobal("location", {
+			search: "",
+			origin: "http://localhost:8787",
+			hash: "#/?debug=1",
+		});
+		const mockFetch = makeThreeAiFetchMock(
+			PASS_ACTION,
+			PASS_ACTION,
+			PASS_ACTION,
+		);
+		vi.stubGlobal("fetch", mockFetch);
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		// Router parses debug=1 from the hash and passes it as params
+		renderGame(getEl<HTMLElement>("main"), new URLSearchParams("debug=1"));
+
+		const actionLog = getEl<HTMLElement>("#action-log");
+		expect(actionLog.hasAttribute("hidden")).toBe(false);
+	});
+
+	it("conflict: location.search has debug=1 but hash params have debug=0 → hash wins, log is hidden", async () => {
+		vi.stubGlobal("location", {
+			search: "?debug=1",
+			origin: "http://localhost:8787",
+			hash: "#/?debug=0",
+		});
+		const mockFetch = makeThreeAiFetchMock(
+			PASS_ACTION,
+			PASS_ACTION,
+			PASS_ACTION,
+		);
+		vi.stubGlobal("fetch", mockFetch);
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		// Router passes debug=0 from the hash; location.search has debug=1
+		renderGame(getEl<HTMLElement>("main"), new URLSearchParams("debug=0"));
+
+		const actionLog = getEl<HTMLElement>("#action-log");
+		// Hash wins: debug=0 → log must remain hidden
+		expect(actionLog.hasAttribute("hidden")).toBe(true);
 	});
 });
