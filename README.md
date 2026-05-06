@@ -27,7 +27,7 @@ corepack enable && pnpm install
 | `pnpm typecheck` | Typecheck |
 | `pnpm test` | Test |
 | `pnpm build` | Build the static SPA into `dist/` |
-| `pnpm dev` | Run the SPA + Worker dev loop (press **b** to open the SPA). SPA source edits trigger an esbuild rebuild; refresh the browser. Worker source edits live-reload through Wrangler. |
+| `pnpm dev` | Run the SPA + Worker dev loop via `wrangler dev` (press **b** to open the SPA). SPA edits under `src/spa` re-trigger the build; Worker edits live-reload through Wrangler. |
 | `pnpm test:e2e` | Run Playwright integration tests (see below). |
 
 ## Integration tests (Playwright)

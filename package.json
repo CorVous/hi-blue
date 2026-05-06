@@ -8,8 +8,7 @@
 	"packageManager": "pnpm@10.33.2",
 	"scripts": {
 		"build": "node scripts/build-spa.mjs",
-		"build:watch": "node scripts/build-spa.mjs --watch",
-		"dev": "pnpm build && concurrently -k -n spa,worker -c blue,magenta \"pnpm build:watch\" \"wrangler dev\"",
+		"dev": "wrangler dev",
 		"sandcastle": "npx tsx .sandcastle/main.mts",
 		"lint": "biome ci .",
 		"typecheck": "tsgo --noEmit -p tsconfig.json && tsgo --noEmit -p src/proxy/tsconfig.json",
@@ -32,7 +31,6 @@
 		"@cloudflare/vitest-pool-workers": "0.15.1",
 		"@cloudflare/workers-types": "4.20260430.1",
 		"@typescript/native-preview": "7.0.0-dev.20260430.1",
-		"concurrently": "^9.1.2",
 		"esbuild": "^0.27.3",
 		"husky": "^9.1.7",
 		"jsdom": "29.1.1",
