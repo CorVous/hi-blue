@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,7 +10,19 @@ const root = path.resolve(__dirname, "..");
 const WORKER_BASE_URL = process.env.WORKER_BASE_URL ?? "http://localhost:8787";
 const watchMode = process.argv.includes("--watch");
 
-console.log(`Building SPA with WORKER_BASE_URL=${WORKER_BASE_URL}`);
+const COMMIT_SHA = (() => {
+	try {
+		return execSync("git rev-parse --short HEAD", { cwd: root })
+			.toString()
+			.trim();
+	} catch {
+		return "unknown";
+	}
+})();
+
+console.log(
+	`Building SPA with WORKER_BASE_URL=${WORKER_BASE_URL} COMMIT_SHA=${COMMIT_SHA}`,
+);
 
 // Ensure dist/ and dist/assets/ exist
 await fs.mkdir(path.join(root, "dist", "assets"), { recursive: true });
@@ -42,6 +55,7 @@ const ctx = await esbuild.context({
 	loader: { ".css": "css" },
 	define: {
 		__WORKER_BASE_URL__: JSON.stringify(WORKER_BASE_URL),
+		__COMMIT_SHA__: JSON.stringify(COMMIT_SHA),
 	},
 	plugins: [copyHtmlPlugin],
 });
