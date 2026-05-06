@@ -27,6 +27,14 @@ interface Env {
 	 * without committing local ports to the production config.
 	 */
 	ALLOWED_ORIGINS?: string;
+	/**
+	 * Static-assets binding automatically provided by Cloudflare when an
+	 * `assets` block is declared in wrangler.jsonc. Used to delegate any
+	 * request that is not an API route so that the assets binding can serve
+	 * matching static files or fall back to dist/index.html via
+	 * not_found_handling: single-page-application.
+	 */
+	ASSETS: Fetcher;
 }
 
 export default {
@@ -96,6 +104,10 @@ export default {
 			return new Response(null, { status: 200 });
 		}
 
-		return new Response("Not found", { status: 404 });
+		// Delegate to the assets binding for any unmatched path. This allows
+		// the assets binding's not_found_handling: single-page-application to
+		// serve dist/index.html for SPA client-side routes (e.g. /endgame)
+		// instead of the Worker returning a hard 404.
+		return env.ASSETS.fetch(request);
 	},
 } satisfies ExportedHandler<Env>;

@@ -9,12 +9,14 @@ afterEach(async () => {
 	await reset();
 });
 
-describe("proxy worker smoke", () => {
-	it("returns 404 for unknown routes", async () => {
-		const response = await SELF.fetch("https://example.com/unknown");
-		expect(response.status).toBe(404);
-	});
-});
+// NOTE: The "returns 404 for unknown routes" test was removed in the fix for
+// issue #48. Unmatched paths are now delegated to env.ASSETS.fetch(request)
+// so the Worker itself no longer returns 404 — the assets binding handles the
+// response (static asset or SPA fallback via not_found_handling:
+// single-page-application). vitest-pool-workers does not provide an ASSETS
+// binding, so testing the delegation behaviour here would require a mock
+// Fetcher; since the behaviour is verified by the wrangler dev smoke probe,
+// the test is omitted rather than adding a brittle stub.
 
 describe("OPTIONS /v1/chat/completions — CORS preflight (issue #66)", () => {
 	it("returns 204 for allowed origin with Access-Control-Allow-Origin echoed", async () => {
