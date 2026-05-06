@@ -1245,10 +1245,10 @@ describe("runRound — onAiDelta callback", () => {
 
 	it("does not invoke onAiDelta for locked-out AIs", async () => {
 		// Exhaust budget (budgetPerAi=1) so all AIs lock out after round 1.
-		let state = startPhase(
-			createGame(TEST_PERSONAS),
-			{ ...TEST_PHASE_CONFIG, budgetPerAi: 1 },
-		);
+		let state = startPhase(createGame(TEST_PERSONAS), {
+			...TEST_PHASE_CONFIG,
+			budgetPerAi: 1,
+		});
 		// Deduct budget 1× per AI to reach remaining=0 → lockedOut.
 		for (const aiId of ["red", "green", "blue"] as AiId[]) {
 			state = deductBudget(state, aiId);
@@ -1265,9 +1265,19 @@ describe("runRound — onAiDelta callback", () => {
 		};
 
 		const received: Array<[AiId, string]> = [];
-		await runRound(state, "red", "hi", liveProvider, undefined, undefined, undefined, undefined, (aiId, text) => {
-			received.push([aiId, text]);
-		});
+		await runRound(
+			state,
+			"red",
+			"hi",
+			liveProvider,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			(aiId, text) => {
+				received.push([aiId, text]);
+			},
+		);
 
 		// All AIs locked — no deltas.
 		expect(received).toHaveLength(0);
