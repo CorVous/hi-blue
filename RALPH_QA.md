@@ -38,13 +38,13 @@ The items below require eyes-on-screen judgement. Run the smoke worker locally (
 
 ### Cross-cutting
 
-- [ ] Trigger a chat lockout mid-session and confirm the disabled selector state and in-character lockout message are legible; confirm the locked AI still receives whispers and takes turns — issue #29, commit `7ff7b9a`.
+- [ ] Trigger a chat lockout mid-session and confirm the disabled selector state and in-character lockout message are legible; confirm the locked AI still receives whispers and takes turns — issue #29, commit `7ff7b9a`. **To arm lockout in local dev:** open `http://localhost:8787/?lockout=1` — the SPA reads this param on boot and calls `armChatLockout` (red, 2 rounds) for the next round. (Previously this was handled by the smoke worker's `GET /` handler, which is unreachable when wrangler v4 assets serve `dist/index.html` directly — see issue #91.)
 - [ ] Kill the worker mid-round (network plug substitute) and confirm the UI degrades gracefully rather than wedging — issue #29, commit `7ff7b9a`.
 - [x] Hit the daily-cap rate guard while the new `/game/turn` endpoint is in flight and confirm the `[CAP_HIT]` short-circuit produces the same UX as the existing `/chat` route — issue #29, commit `7ff7b9a`.
 
 ## Code review (optional)
 
-- [ ] Sanity-check the `ENABLE_TEST_MODES` gating around `testMode: "win_immediately"` in `POST /game/new`. The reviewer found this was unconditionally active in the first cut; confirm the binding is only set in `vitest.config.ts` (miniflare) and not in `wrangler.jsonc` — issue #31, commit `82c013d`.
+- [ ] Sanity-check the `ENABLE_TEST_MODES` gating around `testMode: "win_immediately"` in `POST /game/new`. The reviewer found this was unconditionally active in the first cut; confirm the binding is only set in `vitest.config.ts` (miniflare) and not in `wrangler.jsonc` — issue #31, commit `82c013d`. **SPA affordance:** `?winImmediately=1` on `http://localhost:8787/?winImmediately=1` now injects `winCondition: () => true` into the active session's phase config at SPA boot (gated to local dev only via `__WORKER_BASE_URL__` check). The smoke worker's old `GET /` handler for this param has been removed (issue #91).
 - [ ] Look at `renderEndgameSection({ inlineScript: false })` in `renderChatPage` and decide whether the overlay's hoisted button handlers in the chat-page IIFE are the right long-term seam, or whether the endgame fragment should own its own behaviour via a separate dispatcher module — issue #32, commit `91c4def`.
 
 ## Notes on what was deferred
