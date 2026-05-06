@@ -29,10 +29,28 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 /**
+ * True when the SPA is being served by `pnpm wrangler dev` (SPA + worker
+ * co-served on http://localhost:8787). Any other host — production
+ * GitHub Pages, a separate static server pointed at the local worker —
+ * fails this check, so the dev affordances stay inert.
+ *
+ * The build-time-constant half (`__WORKER_BASE_URL__ === "http://localhost:8787"`)
+ * is defence in depth: it disables affordances for any production-targeted
+ * build even if a future deploy somehow co-serves SPA + worker on one origin.
+ */
+function isDevHost(): boolean {
+	return (
+		__WORKER_BASE_URL__ === "http://localhost:8787" &&
+		typeof location !== "undefined" &&
+		location.origin === __WORKER_BASE_URL__
+	);
+}
+
+/**
  * Apply SPA-side test affordances from URL search params.
  *
- * Only honoured when `__WORKER_BASE_URL__` is `"http://localhost:8787"` (local
- * dev), so these params are silently inert in production.
+ * Only honoured when the SPA is served by `pnpm wrangler dev` (see
+ * `isDevHost`). Silently inert in any other host.
  *
  * - `winImmediately=1`: inject `winCondition: () => true` into the active
  *   phase of the current session, AND chain a synthesised three-phase walk
@@ -48,8 +66,8 @@ export function applyTestAffordances(
 	s: GameSession,
 	searchParams: URLSearchParams,
 ): GameSession {
-	// Gate: only apply in local dev (not production)
-	if (__WORKER_BASE_URL__ !== "http://localhost:8787") return s;
+	// Gate: only apply when wrangler dev is the host
+	if (!isDevHost()) return s;
 
 	const wantsWinImmediately = searchParams.get("winImmediately") === "1";
 	const wantsLockout = searchParams.get("lockout") === "1";
@@ -137,11 +155,9 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 	if (!form || !promptInput || !sendBtn || !addressSelect) return;
 
 	// Dev-only: ?think=0 disables the model's thinking step (OpenRouter
-	// reasoning.enabled=false). Gated to local dev — silently inert in prod.
+	// reasoning.enabled=false). Gated to wrangler-dev host (see isDevHost).
 	const effectiveParams = params ?? new URLSearchParams(location.search);
-	const disableReasoning =
-		__WORKER_BASE_URL__ === "http://localhost:8787" &&
-		effectiveParams.get("think") === "0";
+	const disableReasoning = isDevHost() && effectiveParams.get("think") === "0";
 
 	/** Show the persistence warning banner once (idempotent). */
 	function showPersistenceWarning(reason: string): void {

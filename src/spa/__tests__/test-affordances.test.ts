@@ -139,6 +139,28 @@ describe("applyTestAffordances — winImmediately=1", () => {
 			vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		}
 	});
+
+	it("is a no-op when location.origin differs from __WORKER_BASE_URL__ (separate-host gate)", () => {
+		// Simulate the SPA being served from a separate static host while
+		// __WORKER_BASE_URL__ still points at the local worker — this is the
+		// "not wrangler dev" case the new gate is meant to lock out.
+		vi.stubGlobal("location", {
+			origin: "http://localhost:5173",
+			search: "",
+		});
+		try {
+			const session = makeSession();
+			const result = applyTestAffordances(
+				session,
+				new URLSearchParams("winImmediately=1"),
+			);
+			expect(result).toBe(session);
+			expect(getActivePhase(result.getState()).winCondition).toBeUndefined();
+		} finally {
+			vi.unstubAllGlobals();
+			vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		}
+	});
 });
 
 // ── lockout=1 ────────────────────────────────────────────────────────────────
