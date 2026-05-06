@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { newWinImmediatelyGame, stubChatCompletions } from "./helpers/index";
+import { stubChatCompletions } from "./helpers/index";
 
 /**
  * The three distinct completions served to the three AIs.  Since the SPA
@@ -17,9 +17,9 @@ test("addressed message lands only on red panel; all three panels render progres
 	const pageErrors: Error[] = [];
 	page.on("pageerror", (err) => pageErrors.push(err));
 
-	// 1. Navigate and set up a real game session via the worker.
-	await page.goto("/");
-	await newWinImmediatelyGame(page);
+	// 1. Navigate with ?winImmediately=1 so the SPA injects a win condition
+	//    into the active phase on boot.
+	await page.goto("/?winImmediately=1");
 
 	// 2. Stub /v1/chat/completions — the SPA calls this once per AI per round.
 	//    Return a distinct completion on each successive call using a factory.

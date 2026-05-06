@@ -19,7 +19,7 @@ export default defineConfig({
 	],
 	webServer: {
 		command:
-			"pnpm build && pnpm exec wrangler dev --local --port 8787 --var ENABLE_TEST_MODES:1 --var OPENROUTER_API_KEY:test-key",
+			"pnpm build && pnpm exec wrangler dev --local --port 8787 --var OPENROUTER_API_KEY:test-key",
 		url: "http://localhost:8787",
 		reuseExistingServer: !process.env.CI,
 		timeout: 120_000,

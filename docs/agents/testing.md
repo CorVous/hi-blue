@@ -31,7 +31,7 @@ Playwright has two HTTP contexts that share a cookie jar but route differently:
 #### Stubbing LLM calls: use `stubChatCompletions`
 
 The SPA's `BrowserLLMProvider` (via `src/spa/llm-client.ts`) calls
-`${__WORKER_BASE_URL__}/v1/chat/completions` — **not** `/game/turn`. Use
+`${__WORKER_BASE_URL__}/v1/chat/completions`. Use
 `stubChatCompletions` from `e2e/helpers` to intercept these:
 
 ```ts
@@ -58,5 +58,3 @@ observable inter-token animation after the fetch resolves — the stub does
 needs lower-level control, use `page.evaluate(() => fetch(...))` so the fetch
 runs inside the page's runtime. Calling `page.request.post("/v1/chat/completions", …)`
 will silently miss the stub and hit the real worker.
-
-`newWinImmediatelyGame` (in `e2e/helpers/factories.ts`) uses `page.request.post("/game/new", …)` deliberately — it wants the real worker, not a stub, and only needs the response cookie in the BrowserContext jar.

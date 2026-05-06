@@ -14,45 +14,6 @@ describe("proxy worker smoke", () => {
 		const response = await SELF.fetch("https://example.com/unknown");
 		expect(response.status).toBe(404);
 	});
-
-	it("GET / serves HTML with a chat form", async () => {
-		const response = await SELF.fetch("https://example.com/");
-		expect(response.status).toBe(200);
-		expect(response.headers.get("Content-Type")).toContain("text/html");
-
-		const html = await response.text();
-		expect(html).toContain("<form");
-		expect(html).toContain("<textarea");
-		expect(html).toContain("<output");
-	});
-});
-
-describe("GET /endgame dev route (issue #30)", () => {
-	it("returns 200 with Content-Type text/html", async () => {
-		const response = await SELF.fetch("https://example.com/endgame");
-		expect(response.status).toBe(200);
-		expect(response.headers.get("Content-Type")).toContain("text/html");
-	});
-
-	it("body contains endgame markers: download button and diagnostics button", async () => {
-		const response = await SELF.fetch("https://example.com/endgame");
-		const html = await response.text();
-		expect(html).toContain("download-ais-btn");
-		expect(html).toContain("submit-diagnostics-btn");
-	});
-
-	it("body contains endgame section headings", async () => {
-		const response = await SELF.fetch("https://example.com/endgame");
-		const html = await response.text();
-		expect(html).toContain("Save the AIs");
-		expect(html).toContain("diagnostics");
-	});
-
-	it("body carries the data-save-payload attribute slot", async () => {
-		const response = await SELF.fetch("https://example.com/endgame");
-		const html = await response.text();
-		expect(html).toContain("data-save-payload");
-	});
 });
 
 describe("OPTIONS /v1/chat/completions — CORS preflight (issue #66)", () => {
