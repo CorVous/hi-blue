@@ -1,11 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// Provide globals before importing the module
-vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-
 // Matches the body content of src/spa/index.html (three-panel layout)
 const INDEX_BODY_HTML = `
 <main>
+  <div id="phase-banner" hidden></div>
   <div id="panels">
     <article class="ai-panel" data-ai="red">
       <header class="panel-header">
@@ -44,6 +42,21 @@ const INDEX_BODY_HTML = `
     <h3>Action Log (debug)</h3>
     <ul id="action-log-list"></ul>
   </aside>
+  <section id="endgame" hidden>
+    <h2>hi-blue — endgame</h2>
+    <div id="endgame-subtitle">The three phases are complete. The room is still.</div>
+    <div class="endgame-section">
+      <h3>Save the AIs to USB</h3>
+      <button type="button" id="download-ais-btn">Download AIs</button>
+      <output id="download-status" aria-live="polite"></output>
+    </div>
+    <div class="endgame-section">
+      <h3>Submit anonymous diagnostics</h3>
+      <input type="text" id="diagnostics-summary" placeholder="one word (e.g. curious)" maxlength="30" />
+      <button type="button" id="submit-diagnostics-btn">Submit diagnostics</button>
+      <output id="diagnostics-status" aria-live="polite"></output>
+    </div>
+  </section>
 </main>
 <script type="module" src="./assets/index.js"></script>
 `;
@@ -111,11 +124,14 @@ const BLUE_ACTION = '{"action":"chat","content":"BLUE_RESPONSE_UNIQUE_TAG"}';
 
 describe("renderGame (game route — three-AI)", () => {
 	beforeEach(() => {
+		// Must be set before each test since vi.unstubAllGlobals() in afterEach removes it
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		document.body.innerHTML = INDEX_BODY_HTML;
 	});
 
 	afterEach(() => {
 		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
 		vi.resetModules();
 		document.body.innerHTML = "";
 	});
@@ -348,6 +364,266 @@ describe("renderGame (game route — three-AI)", () => {
 		expect(greenTranscript.textContent).not.toContain("thinking…");
 		expect(greenTranscript.textContent).toContain("GREEN_RESPONSE_UNIQUE_TAG");
 	});
+
+	it("phase_advanced shows banner with new objective and clears transcripts", async () => {
+		// winImmediately=1: first submit fires winCondition → phase_advanced event
+		const mockFetch = makeThreeAiFetchMock(
+			PASS_ACTION,
+			PASS_ACTION,
+			PASS_ACTION,
+		);
+		vi.stubGlobal("fetch", mockFetch);
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(
+			getEl<HTMLElement>("main"),
+			new URLSearchParams("winImmediately=1"),
+		);
+
+		const form = getEl<HTMLFormElement>("#composer");
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		promptInput.value = "go";
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		// Phase banner should be visible with the phase 2 objective
+		const phaseBanner = getEl<HTMLElement>("#phase-banner");
+		expect(phaseBanner.hasAttribute("hidden")).toBe(false);
+		expect(phaseBanner.textContent).toContain("Phase 2");
+		expect(phaseBanner.textContent).toContain("Deeper truths emerge.");
+
+		// All transcripts should have been cleared and repopulated with a separator
+		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
+		expect(redTranscript.textContent).toContain("--- Phase 2 begins:");
+		// No content from the previous phase should remain
+		expect(redTranscript.textContent).not.toContain("[you]");
+	});
+
+	it("after three-phase win condition, endgame screen shown and chat hidden; download button has parseable GameSave", async () => {
+		// Three submits to exhaust all three phases (winImmediately=1)
+		// Each submit calls fetch 3 times → 9 total fetches
+		const mockFetch = vi.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
+			statusText: "OK",
+			body: makeAiSseStream(PASS_ACTION),
+		});
+		vi.stubGlobal("fetch", mockFetch);
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(
+			getEl<HTMLElement>("main"),
+			new URLSearchParams("winImmediately=1"),
+		);
+
+		const form = getEl<HTMLFormElement>("#composer");
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+
+		// Submit 1: phase 1 → phase 2 (phase_advanced)
+		promptInput.value = "one";
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		// Submit 2: phase 2 → phase 3 (phase_advanced)
+		promptInput.value = "two";
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		// Submit 3: phase 3 → game_ended
+		promptInput.value = "three";
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		// Chat panels and composer should be hidden
+		const panelsEl = document.querySelector<HTMLElement>("#panels");
+		const composerEl = document.querySelector<HTMLElement>("#composer");
+		expect(panelsEl?.hidden).toBe(true);
+		expect(composerEl?.hidden).toBe(true);
+
+		// Endgame screen should be visible
+		const endgameEl = getEl<HTMLElement>("#endgame");
+		expect(endgameEl.hasAttribute("hidden")).toBe(false);
+
+		// Download button should have parseable save payload with three personas
+		const downloadBtn = getEl<HTMLButtonElement>("#download-ais-btn");
+		const saveJson = downloadBtn.dataset.savePayload;
+		expect(saveJson).toBeTruthy();
+		const save = JSON.parse(saveJson as string);
+		expect(save.version).toBe(1);
+		expect(save.ais).toHaveLength(3);
+	});
+
+	it("clicking download button triggers blob download, disables button, shows 'Saved.'", async () => {
+		// Drive to game_ended
+		const mockFetch = vi.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
+			statusText: "OK",
+			body: makeAiSseStream(PASS_ACTION),
+		});
+		vi.stubGlobal("fetch", mockFetch);
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		const createObjectURLSpy = vi
+			.spyOn(URL, "createObjectURL")
+			.mockReturnValue("blob:http://localhost/test");
+		const revokeObjectURLSpy = vi
+			.spyOn(URL, "revokeObjectURL")
+			.mockReturnValue(undefined);
+
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(
+			getEl<HTMLElement>("main"),
+			new URLSearchParams("winImmediately=1"),
+		);
+
+		const form = getEl<HTMLFormElement>("#composer");
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+
+		for (const msg of ["one", "two", "three"]) {
+			promptInput.value = msg;
+			form.dispatchEvent(
+				new Event("submit", { bubbles: true, cancelable: true }),
+			);
+			await new Promise((resolve) => setTimeout(resolve, 300));
+		}
+
+		const downloadBtn = getEl<HTMLButtonElement>("#download-ais-btn");
+		const downloadStatus = getEl<HTMLElement>("#download-status");
+
+		expect(downloadBtn.disabled).toBe(false);
+		downloadBtn.click();
+
+		expect(createObjectURLSpy).toHaveBeenCalledTimes(1);
+		expect(revokeObjectURLSpy).toHaveBeenCalledTimes(1);
+		expect(downloadBtn.disabled).toBe(true);
+		expect(downloadStatus.textContent).toBe("Saved.");
+	});
+
+	it("clicking submit-diagnostics with empty summary shows validation message and does NOT POST", async () => {
+		// Drive to game_ended
+		const mockFetch = vi.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
+			statusText: "OK",
+			body: makeAiSseStream(PASS_ACTION),
+		});
+		vi.stubGlobal("fetch", mockFetch);
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(
+			getEl<HTMLElement>("main"),
+			new URLSearchParams("winImmediately=1"),
+		);
+
+		const form = getEl<HTMLFormElement>("#composer");
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+
+		for (const msg of ["one", "two", "three"]) {
+			promptInput.value = msg;
+			form.dispatchEvent(
+				new Event("submit", { bubbles: true, cancelable: true }),
+			);
+			await new Promise((resolve) => setTimeout(resolve, 300));
+		}
+
+		const callCountBeforeDiagnostics = mockFetch.mock.calls.length;
+
+		const submitDiagnosticsBtn = getEl<HTMLButtonElement>(
+			"#submit-diagnostics-btn",
+		);
+		const diagnosticsStatus = getEl<HTMLElement>("#diagnostics-status");
+
+		// Leave summary empty and click — should show validation message
+		submitDiagnosticsBtn.click();
+		expect(diagnosticsStatus.textContent).toContain(
+			"Please enter a one-word summary first.",
+		);
+		// No extra fetch calls
+		expect(mockFetch.mock.calls.length).toBe(callCountBeforeDiagnostics);
+	});
+
+	it("clicking submit-diagnostics with a summary POSTs to /diagnostics with mode: no-cors", async () => {
+		// Drive to game_ended
+		const mockFetch = vi.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
+			statusText: "OK",
+			body: makeAiSseStream(PASS_ACTION),
+		});
+		vi.stubGlobal("fetch", mockFetch);
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(
+			getEl<HTMLElement>("main"),
+			new URLSearchParams("winImmediately=1"),
+		);
+
+		const form = getEl<HTMLFormElement>("#composer");
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+
+		for (const msg of ["one", "two", "three"]) {
+			promptInput.value = msg;
+			form.dispatchEvent(
+				new Event("submit", { bubbles: true, cancelable: true }),
+			);
+			await new Promise((resolve) => setTimeout(resolve, 300));
+		}
+
+		const callCountBeforeDiagnostics = mockFetch.mock.calls.length;
+
+		const submitDiagnosticsBtn = getEl<HTMLButtonElement>(
+			"#submit-diagnostics-btn",
+		);
+		const diagnosticsStatusEl = getEl<HTMLElement>("#diagnostics-status");
+		const diagnosticsSummaryInput = getEl<HTMLInputElement>(
+			"#diagnostics-summary",
+		);
+
+		diagnosticsSummaryInput.value = "curious";
+		submitDiagnosticsBtn.click();
+
+		// Allow the fetch to settle
+		await new Promise((resolve) => setTimeout(resolve, 50));
+
+		// One extra fetch call for diagnostics
+		expect(mockFetch.mock.calls.length).toBe(callCountBeforeDiagnostics + 1);
+		const [diagnosticsUrl, diagnosticsOptions] = mockFetch.mock.calls[
+			callCountBeforeDiagnostics
+		] as [string, RequestInit];
+		expect(diagnosticsUrl).toBe("http://localhost:8787/diagnostics");
+		expect(diagnosticsOptions.method).toBe("POST");
+		expect(diagnosticsOptions.mode).toBe("no-cors");
+		const body = JSON.parse(diagnosticsOptions.body as string) as {
+			summary: string;
+			downloaded: boolean;
+		};
+		expect(body.summary).toBe("curious");
+
+		expect(diagnosticsStatusEl.textContent).toBe("Diagnostics submitted.");
+	});
 });
 
 describe("renderGame — localStorage persistence", () => {
@@ -373,11 +649,14 @@ describe("renderGame — localStorage persistence", () => {
 	}
 
 	beforeEach(() => {
+		// Must be set before each test since vi.unstubAllGlobals() in afterEach removes it
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		document.body.innerHTML = INDEX_BODY_HTML;
 	});
 
 	afterEach(() => {
 		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
 		vi.resetModules();
 		document.body.innerHTML = "";
 	});
@@ -621,11 +900,14 @@ describe("renderGame — localStorage persistence", () => {
 
 describe("renderGame — chat_lockout event", () => {
 	beforeEach(() => {
+		// Must be set before each test since vi.unstubAllGlobals() in afterEach removes it
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		document.body.innerHTML = INDEX_BODY_HTML;
 	});
 
 	afterEach(() => {
 		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
 		vi.resetModules();
 		document.body.innerHTML = "";
 	});

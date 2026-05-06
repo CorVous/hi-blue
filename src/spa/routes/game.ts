@@ -1,9 +1,10 @@
 import { PERSONAS, PHASE_1_CONFIG } from "../../content";
+import { serializeGameSave } from "../../save-serializer.js";
 import { BrowserLLMProvider } from "../game/browser-llm-provider.js";
 import { getActivePhase, updateActivePhase } from "../game/engine.js";
 import { GameSession } from "../game/game-session.js";
 import { encodeRoundResult } from "../game/round-result-encoder.js";
-import type { AiId } from "../game/types";
+import type { AiId, PhaseConfig } from "../game/types";
 import { AI_TYPING_SPEED, TOKEN_PACE_MS } from "../game/typing-rhythm.js";
 import { CapHitError } from "../llm-client.js";
 import {
@@ -27,17 +28,35 @@ function shuffle<T>(arr: T[]): T[] {
 	return out;
 }
 
-let session: GameSession | null = null;
+/**
+ * True when the SPA is being served by `pnpm wrangler dev` (SPA + worker
+ * co-served on http://localhost:8787). Any other host — production
+ * GitHub Pages, a separate static server pointed at the local worker —
+ * fails this check, so the dev affordances stay inert.
+ *
+ * The build-time-constant half (`__WORKER_BASE_URL__ === "http://localhost:8787"`)
+ * is defence in depth: it disables affordances for any production-targeted
+ * build even if a future deploy somehow co-serves SPA + worker on one origin.
+ */
+function isDevHost(): boolean {
+	return (
+		__WORKER_BASE_URL__ === "http://localhost:8787" &&
+		typeof location !== "undefined" &&
+		location.origin === __WORKER_BASE_URL__
+	);
+}
 
 /**
  * Apply SPA-side test affordances from URL search params.
  *
- * Only honoured when `__WORKER_BASE_URL__` is `"http://localhost:8787"` (local
- * dev), so these params are silently inert in production.
+ * Only honoured when the SPA is served by `pnpm wrangler dev` (see
+ * `isDevHost`). Silently inert in any other host.
  *
  * - `winImmediately=1`: inject `winCondition: () => true` into the active
- *   phase of the current session (only the per-session PhaseState is mutated —
- *   the global PhaseConfig is untouched).
+ *   phase of the current session, AND chain a synthesised three-phase walk
+ *   (phase-2-with-true-win → phase-3-with-true-win) so the three-phase
+ *   end-to-end acceptance criteria complete. Only the per-session PhaseState
+ *   is mutated — the global PhaseConfig is untouched.
  * - `lockout=1`: arm a chat-lockout for `red`, 2 rounds, effective next round.
  *   Matches the legacy worker semantics from `src/proxy/_smoke.ts`.
  *
@@ -47,8 +66,8 @@ export function applyTestAffordances(
 	s: GameSession,
 	searchParams: URLSearchParams,
 ): GameSession {
-	// Gate: only apply in local dev (not production)
-	if (__WORKER_BASE_URL__ !== "http://localhost:8787") return s;
+	// Gate: only apply when wrangler dev is the host
+	if (!isDevHost()) return s;
 
 	const wantsWinImmediately = searchParams.get("winImmediately") === "1";
 	const wantsLockout = searchParams.get("lockout") === "1";
@@ -58,12 +77,35 @@ export function applyTestAffordances(
 	let active = s;
 
 	if (wantsWinImmediately) {
-		// Inject winCondition: () => true into the active phase (session-local only).
-		// GameSession.restore() creates a fresh session from an existing GameState,
-		// bypassing the constructor so no new startPhase is called.
+		// Synthesise a three-phase chain where every win condition fires immediately.
+		// These configs mirror TEST_PHASE_CONFIG_WITH_WIN in src/proxy/_smoke.ts but
+		// are applied only to the session-local PhaseState — the global PHASE_1_CONFIG
+		// is not modified.
+		const testPhase3Config: PhaseConfig = {
+			phaseNumber: 3,
+			objective: "The final reckoning approaches.",
+			aiGoals: { red: "Endure", green: "Endure", blue: "Endure" },
+			initialWorld: { items: [] },
+			budgetPerAi: 5,
+			winCondition: () => true,
+		};
+
+		const testPhase2Config: PhaseConfig = {
+			phaseNumber: 2,
+			objective: "Deeper truths emerge.",
+			aiGoals: { red: "Seek", green: "Seek", blue: "Seek" },
+			initialWorld: { items: [] },
+			budgetPerAi: 5,
+			winCondition: () => true,
+			nextPhaseConfig: testPhase3Config,
+		};
+
+		// Inject winCondition: () => true AND nextPhaseConfig into the active phase
+		// so the engine will chain through phases 2 and 3.
 		const newState = updateActivePhase(active.getState(), (phase) => ({
 			...phase,
 			winCondition: () => true,
+			nextPhaseConfig: testPhase2Config,
 		}));
 		active = GameSession.restore(newState);
 	}
@@ -92,6 +134,11 @@ const PERSISTENCE_WARNING_MESSAGES: Record<string, string> = {
 	unknown: "Game progress could not be saved due to an unexpected error.",
 };
 
+/** Guards against duplicate game_ended events re-binding handlers. */
+let gameEnded = false;
+
+let session: GameSession | null = null;
+
 export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 	const doc = root.ownerDocument;
 	const form = doc.querySelector<HTMLFormElement>("#composer");
@@ -106,6 +153,11 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 	);
 
 	if (!form || !promptInput || !sendBtn || !addressSelect) return;
+
+	// Dev-only: ?think=0 disables the model's thinking step (OpenRouter
+	// reasoning.enabled=false). Gated to wrangler-dev host (see isDevHost).
+	const effectiveParams = params ?? new URLSearchParams(location.search);
+	const disableReasoning = isDevHost() && effectiveParams.get("think") === "0";
 
 	/** Show the persistence warning banner once (idempotent). */
 	function showPersistenceWarning(reason: string): void {
@@ -176,10 +228,10 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		// when __WORKER_BASE_URL__ === "http://localhost:8787" (local dev).
 		// Note: we use location.search (not the hash params) because these flags are
 		// intended to be set on the page URL itself, matching the legacy worker pattern.
-		session = applyTestAffordances(
-			session,
-			new URLSearchParams(location.search),
-		);
+		session = applyTestAffordances(session, effectiveParams);
+
+		// Reset module-level gameEnded flag on fresh session init
+		gameEnded = false;
 	}
 
 	// Populate panel headers from PERSONAS so renames don't require HTML edits
@@ -282,10 +334,13 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		// Roll initiative for this round
 		const initiative = shuffle(AI_ORDER);
 
-		let gameEnded = false;
+		// Round-local ended flag (distinct from module-level gameEnded)
+		let roundGameEnded = false;
 
 		try {
-			const provider = new BrowserLLMProvider();
+			const provider = new BrowserLLMProvider(
+				disableReasoning ? { disableReasoning: true } : {},
+			);
 			const { result, completions, nextState } = await session.submitMessage(
 				addressed,
 				message,
@@ -353,22 +408,155 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 						}
 						break;
 
-					case "phase_advanced":
-						// TODO(#45): phase progression UI
+					case "phase_advanced": {
+						// Show phase banner
+						const phaseBannerEl =
+							doc.querySelector<HTMLElement>("#phase-banner");
+						if (phaseBannerEl) {
+							phaseBannerEl.textContent = `Phase ${event.phase}: ${event.objective}`;
+							phaseBannerEl.removeAttribute("hidden");
+						}
+						// Clear all transcript panels
+						for (const aid of AI_ORDER) {
+							const tEl = getTranscript(aid);
+							if (tEl) tEl.textContent = "";
+						}
+						// Refresh budget displays from new phase
+						const currentSession = session;
+						if (currentSession) {
+							const newPhase = getActivePhase(currentSession.getState());
+							for (const aid of AI_ORDER) {
+								const panel = doc.querySelector<HTMLElement>(
+									`.ai-panel[data-ai="${aid}"]`,
+								);
+								if (!panel) continue;
+								const budgetEl =
+									panel.querySelector<HTMLSpanElement>(".panel-budget");
+								if (budgetEl) {
+									const b = newPhase.budgets[aid];
+									budgetEl.dataset.budget = String(b.remaining);
+									budgetEl.textContent = `${b.remaining}/${b.total}`;
+								}
+								// Re-enable chat-locked options that were carried over
+								const option = addressSelect?.querySelector<HTMLOptionElement>(
+									`option[value="${aid}"]`,
+								);
+								if (option) option.disabled = false;
+							}
+						}
+						// Append phase separator to each transcript
+						for (const aid of AI_ORDER) {
+							appendToTranscript(
+								aid,
+								`--- Phase ${event.phase} begins: ${event.objective} ---\n`,
+							);
+						}
 						break;
+					}
 
-					case "game_ended":
+					case "game_ended": {
+						if (gameEnded) break;
 						gameEnded = true;
+						roundGameEnded = true;
+
 						sendBtn.disabled = true;
 						promptInput.disabled = true;
+
+						// Clear persisted game state on game-end
 						clearGame();
+
+						// Hide game UI
+						const panelsEl = doc.querySelector<HTMLElement>("#panels");
+						const composerEl = doc.querySelector<HTMLElement>("#composer");
+						const capHitSection = doc.querySelector<HTMLElement>("#cap-hit");
+						const actionLogSection =
+							doc.querySelector<HTMLElement>("#action-log");
+						const endgameEl = doc.querySelector<HTMLElement>("#endgame");
+						if (panelsEl) panelsEl.hidden = true;
+						if (composerEl) composerEl.hidden = true;
+						if (capHitSection) capHitSection.hidden = true;
+						if (actionLogSection) actionLogSection.hidden = true;
+
+						// Show endgame screen
+						if (endgameEl) endgameEl.removeAttribute("hidden");
+
+						// Serialize and stash save payload
+						const downloadBtn =
+							doc.querySelector<HTMLButtonElement>("#download-ais-btn");
+						const downloadStatusEl =
+							doc.querySelector<HTMLElement>("#download-status");
+						if (downloadBtn && session) {
+							const savePayload = JSON.stringify(
+								serializeGameSave(session.getState()),
+							);
+							downloadBtn.dataset.savePayload = savePayload;
+
+							downloadBtn.addEventListener("click", () => {
+								const payload = downloadBtn.dataset.savePayload ?? "{}";
+								const blob = new Blob([payload], {
+									type: "application/json",
+								});
+								const url = URL.createObjectURL(blob);
+								const a = doc.createElement("a");
+								a.href = url;
+								a.download = "hi-blue-save.json";
+								doc.body.appendChild(a);
+								a.click();
+								doc.body.removeChild(a);
+								URL.revokeObjectURL(url);
+								downloadBtn.disabled = true;
+								if (downloadStatusEl) downloadStatusEl.textContent = "Saved.";
+							});
+						}
+
+						// Wire diagnostics submit
+						const submitDiagnosticsBtn = doc.querySelector<HTMLButtonElement>(
+							"#submit-diagnostics-btn",
+						);
+						const diagnosticsSummaryInput = doc.querySelector<HTMLInputElement>(
+							"#diagnostics-summary",
+						);
+						const diagnosticsStatusEl = doc.querySelector<HTMLElement>(
+							"#diagnostics-status",
+						);
+						if (
+							submitDiagnosticsBtn &&
+							diagnosticsSummaryInput &&
+							diagnosticsStatusEl
+						) {
+							submitDiagnosticsBtn.addEventListener("click", () => {
+								const summary = diagnosticsSummaryInput.value.trim();
+								if (!summary) {
+									diagnosticsStatusEl.textContent =
+										"Please enter a one-word summary first.";
+									return;
+								}
+								const downloaded = downloadBtn?.disabled ?? false;
+								fetch(`${__WORKER_BASE_URL__}/diagnostics`, {
+									method: "POST",
+									headers: { "Content-Type": "application/json" },
+									body: JSON.stringify({ downloaded, summary }),
+									mode: "no-cors",
+								})
+									.then(() => {
+										diagnosticsStatusEl.textContent = "Diagnostics submitted.";
+									})
+									.catch(() => {
+										diagnosticsStatusEl.textContent = "Diagnostics submitted.";
+									});
+							});
+						}
+
+						// Reset session so a route re-entry produces a fresh game
+						session = null;
 						break;
+					}
 				}
 			}
 
 			// Persist state after the encoder render loop completes, so the full
 			// rendered transcripts (including raw LLM completions) are captured.
-			if (!gameEnded && isStorageAvailable()) {
+			if (!roundGameEnded && isStorageAvailable()) {
 				const transcripts: Partial<Record<AiId, string>> = {};
 				for (const aiId of AI_ORDER) {
 					const el = getTranscript(aiId);
@@ -386,7 +574,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 			}
 		} finally {
 			stripPlaceholder();
-			if (!gameEnded) sendBtn.disabled = false;
+			if (!roundGameEnded) sendBtn.disabled = false;
 		}
 	});
 }
