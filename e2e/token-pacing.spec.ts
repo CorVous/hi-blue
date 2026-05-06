@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { streamChatCompletion } from "./helpers";
+import { stubChatCompletions } from "./helpers";
 
 // Word chunks yielded for every AI call.  Red gets these tokens and we
 // sample its transcript; green / blue responses use the same stub so all
@@ -62,7 +62,7 @@ test("token streaming arrives word-by-word, not as a single dump", async ({
 	page.on("pageerror", (err) => pageErrors.push(err));
 
 	// Stub every /v1/chat/completions call (one per AI per round).
-	await streamChatCompletion(page, WORDS);
+	await stubChatCompletions(page, WORDS);
 
 	await page.goto("/");
 

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { newWinImmediatelyGame } from "./helpers/index";
+import { newWinImmediatelyGame, stubChatCompletions } from "./helpers/index";
 
 /**
  * The three distinct completions served to the three AIs.  Since the SPA
@@ -8,27 +8,6 @@ import { newWinImmediatelyGame } from "./helpers/index";
  * each completion appears in exactly one of the three transcripts.
  */
 const COMPLETIONS = ["alpha beta gamma", "one two", "x y z"] as const;
-
-/**
- * Build an OpenAI-streaming SSE body for a single completion string.
- * Each word is emitted as a separate delta chunk, ending with [DONE].
- */
-function openAiSseBody(text: string): string {
-	const words = text.split(" ");
-	const lines: string[] = [];
-	for (const word of words) {
-		const chunk = JSON.stringify({
-			choices: [{ delta: { content: `${word} ` }, finish_reason: null }],
-		});
-		lines.push(`data: ${chunk}\n\n`);
-	}
-	// Trim trailing space from last token via a final empty-content chunk then DONE
-	lines.push(
-		`data: ${JSON.stringify({ choices: [{ delta: { content: "" }, finish_reason: "stop" }] })}\n\n`,
-	);
-	lines.push("data: [DONE]\n\n");
-	return lines.join("");
-}
 
 type LenPair = { red: number; green: number };
 
@@ -43,20 +22,12 @@ test("addressed message lands only on red panel; all three panels render progres
 	await newWinImmediatelyGame(page);
 
 	// 2. Stub /v1/chat/completions — the SPA calls this once per AI per round.
-	//    Return a distinct completion on each successive call.
+	//    Return a distinct completion on each successive call using a factory.
 	let callIndex = 0;
-	await page.route("**/v1/chat/completions", async (route) => {
-		const completion =
-			COMPLETIONS[callIndex % COMPLETIONS.length] ?? COMPLETIONS[0];
+	await stubChatCompletions(page, () => {
+		const text = COMPLETIONS[callIndex % COMPLETIONS.length] ?? COMPLETIONS[0];
 		callIndex++;
-		await route.fulfill({
-			status: 200,
-			headers: {
-				"Content-Type": "text/event-stream",
-				"Cache-Control": "no-cache",
-			},
-			body: openAiSseBody(completion as string),
-		});
+		return (text as string).split(" ").map((w) => `${w} `);
 	});
 
 	// 3. Address red, fill prompt.
