@@ -121,8 +121,17 @@ export async function streamCompletion(opts: {
 	onReasoning?: (text: string) => void;
 	tools?: OpenAiTool[];
 	onToolCall?: (call: ToolCallResult) => void;
+	disableReasoning?: boolean;
 }): Promise<void> {
-	const { messages, signal, onDelta, onReasoning, tools, onToolCall } = opts;
+	const {
+		messages,
+		signal,
+		onDelta,
+		onReasoning,
+		tools,
+		onToolCall,
+		disableReasoning,
+	} = opts;
 	const { url, headers } = resolveLLMTarget();
 
 	const bodyObj: Record<string, unknown> = {
@@ -135,6 +144,13 @@ export async function streamCompletion(opts: {
 	if (tools && tools.length > 0) {
 		bodyObj.tools = tools;
 		bodyObj.tool_choice = "auto";
+	}
+
+	// OpenRouter Reasoning Tokens API: { enabled: false } skips the model's
+	// thinking step entirely (vs. { exclude: true } which still thinks but
+	// hides the trace). Used by the ?think=0 dev affordance.
+	if (disableReasoning) {
+		bodyObj.reasoning = { enabled: false };
 	}
 
 	const response = await fetch(url, {

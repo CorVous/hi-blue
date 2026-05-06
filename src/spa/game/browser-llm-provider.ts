@@ -17,6 +17,12 @@ import type {
 import type { OpenAiTool } from "./tool-registry.js";
 
 export class BrowserLLMProvider implements RoundLLMProvider {
+	private readonly disableReasoning: boolean;
+
+	constructor(opts: { disableReasoning?: boolean } = {}) {
+		this.disableReasoning = opts.disableReasoning ?? false;
+	}
+
 	async streamRound(
 		messages: OpenAiMessage[],
 		tools: OpenAiTool[],
@@ -33,6 +39,7 @@ export class BrowserLLMProvider implements RoundLLMProvider {
 			onToolCall: (call) => {
 				toolCalls.push(call);
 			},
+			...(this.disableReasoning ? { disableReasoning: true } : {}),
 		});
 
 		return {

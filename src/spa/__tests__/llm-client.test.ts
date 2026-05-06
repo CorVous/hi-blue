@@ -653,4 +653,43 @@ describe("streamCompletion", () => {
 		expect(onDelta).toHaveBeenCalledTimes(1);
 		expect(onDelta).toHaveBeenCalledWith("final answer");
 	});
+
+	it("includes reasoning:{enabled:false} in the body when disableReasoning is set", async () => {
+		const mockFetch = vi
+			.fn()
+			.mockResolvedValue(
+				makeFetchResponse(makeSSEStream([`data: [DONE]\n\n`])),
+			);
+		vi.stubGlobal("fetch", mockFetch);
+		vi.stubGlobal("localStorage", { getItem: vi.fn().mockReturnValue(null) });
+
+		await streamCompletion({
+			messages: [{ role: "user", content: "hello" }],
+			onDelta: vi.fn(),
+			disableReasoning: true,
+		});
+
+		const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+		const body = JSON.parse(init.body as string);
+		expect(body.reasoning).toEqual({ enabled: false });
+	});
+
+	it("omits the reasoning field when disableReasoning is unset", async () => {
+		const mockFetch = vi
+			.fn()
+			.mockResolvedValue(
+				makeFetchResponse(makeSSEStream([`data: [DONE]\n\n`])),
+			);
+		vi.stubGlobal("fetch", mockFetch);
+		vi.stubGlobal("localStorage", { getItem: vi.fn().mockReturnValue(null) });
+
+		await streamCompletion({
+			messages: [{ role: "user", content: "hello" }],
+			onDelta: vi.fn(),
+		});
+
+		const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+		const body = JSON.parse(init.body as string);
+		expect(body).not.toHaveProperty("reasoning");
+	});
 });

@@ -136,6 +136,13 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 
 	if (!form || !promptInput || !sendBtn || !addressSelect) return;
 
+	// Dev-only: ?think=0 disables the model's thinking step (OpenRouter
+	// reasoning.enabled=false). Gated to local dev — silently inert in prod.
+	const effectiveParams = params ?? new URLSearchParams(location.search);
+	const disableReasoning =
+		__WORKER_BASE_URL__ === "http://localhost:8787" &&
+		effectiveParams.get("think") === "0";
+
 	/** Show the persistence warning banner once (idempotent). */
 	function showPersistenceWarning(reason: string): void {
 		if (!persistenceWarningEl) return;
@@ -205,10 +212,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		// when __WORKER_BASE_URL__ === "http://localhost:8787" (local dev).
 		// Note: we use location.search (not the hash params) because these flags are
 		// intended to be set on the page URL itself, matching the legacy worker pattern.
-		session = applyTestAffordances(
-			session,
-			params ?? new URLSearchParams(location.search),
-		);
+		session = applyTestAffordances(session, effectiveParams);
 
 		// Reset module-level gameEnded flag on fresh session init
 		gameEnded = false;
@@ -318,7 +322,9 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		let roundGameEnded = false;
 
 		try {
-			const provider = new BrowserLLMProvider();
+			const provider = new BrowserLLMProvider(
+				disableReasoning ? { disableReasoning: true } : {},
+			);
 			const { result, completions, nextState } = await session.submitMessage(
 				addressed,
 				message,
