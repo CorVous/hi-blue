@@ -47,7 +47,10 @@ The noun describing where this phase takes place ("abandoned subway station", "s
 _Avoid_: Level, scene, location.
 
 **Content Pack**:
-The structured per-phase output of the LLM content-pack call: setting-flavored names, examine descriptions, and use outcomes for every entity in the phase (objective objects, objective spaces, interesting objects, obstacles). Generated once at game start for all 3 phases in a single batched call.
+The structured per-phase output of the LLM content-pack call: setting-flavored names, examine descriptions, use outcomes, and **Placement flavor** for every entity in the phase (objective objects, objective spaces, interesting objects, obstacles). Generated once at game start for all 3 phases in a single batched call. Each objective object carries an explicit `pairsWithSpaceId` field for engine win-checks; the prose tell in the `examineDescription` is the AI-discoverable channel, kept independent of the engine field.
+
+**Placement flavor**:
+A per-objective-pair flavor string in the **Content Pack** that fires when an objective object is `put_down` on its matching objective space — the moment a pair gets satisfied. Distinct from `useOutcome` (which fires on `use(item)` and has no mechanical effect). Renders as the actor's tool-result and a **Witnessed event** for in-cone observers, with `{actor}` substitution.
 
 **Objective Pair**:
 A pair of (objective object, objective space) — the object must end up on its specific space to count toward win. A phase has K objective pairs (K is rolled from a hand-authored range per phase). The `examineDescription` of an objective object names the space it belongs on.
