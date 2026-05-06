@@ -337,6 +337,25 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		// Round-local ended flag (distinct from module-level gameEnded)
 		let roundGameEnded = false;
 
+		// Track AIs that have received at least one live delta from the wire.
+		// When an AI is in this set, the encoder skips re-appending token text
+		// (it's already painted live) but still awaits pace() for timing shape.
+		const liveAis = new Set<AiId>();
+		// Track first-delta-seen per AI to emit the persona prefix exactly once.
+		const firstDeltaSeen = new Set<AiId>();
+
+		const onAiDelta = (aiId: AiId, text: string): void => {
+			if (!firstDeltaSeen.has(aiId)) {
+				firstDeltaSeen.add(aiId);
+				// Strip "thinking…" on first live delta for any AI — before painting.
+				stripPlaceholder();
+				// Emit persona prefix live (encoder will skip it for this AI).
+				appendToTranscript(aiId, `[${PERSONAS[aiId].name}] `);
+				liveAis.add(aiId);
+			}
+			appendToTranscript(aiId, text);
+		};
+
 		try {
 			const provider = new BrowserLLMProvider(
 				disableReasoning ? { disableReasoning: true } : {},
@@ -347,8 +366,11 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 				provider,
 				undefined,
 				initiative,
+				onAiDelta,
 			);
 
+			// Safety-net strip: if no live deltas arrived (mock provider, all AIs
+			// locked out, or first delta hasn't fired yet), strip placeholder now.
 			stripPlaceholder();
 
 			const phaseAfter = getActivePhase(nextState);
@@ -365,12 +387,22 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 				switch (event.type) {
 					case "ai_start":
 						speakingAi = event.aiId;
-						appendToTranscript(event.aiId, `[${PERSONAS[event.aiId].name}] `);
+						if (!liveAis.has(event.aiId)) {
+							// Not live — emit persona prefix now (synthetic path).
+							appendToTranscript(event.aiId, `[${PERSONAS[event.aiId].name}] `);
+						}
+						// If live, prefix was already painted; just track speakingAi.
 						break;
 
 					case "token":
 						if (speakingAi) {
-							appendToTranscript(speakingAi, event.text);
+							if (!liveAis.has(speakingAi)) {
+								// Synthetic path: append token and pace.
+								appendToTranscript(speakingAi, event.text);
+							}
+							// Live path: text already painted; still await pace() so the
+							// overall timing shape is preserved (important for token-pacing
+							// tests and consistent UI behaviour).
 							await pace(speakingAi);
 						}
 						break;

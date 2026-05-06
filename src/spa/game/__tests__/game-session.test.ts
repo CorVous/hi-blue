@@ -342,6 +342,68 @@ describe("GameSession — phase advancement", () => {
 	});
 });
 
+// ── onAiDelta propagation (issue #102) ──────────────────────────────────────
+
+describe("GameSession — onAiDelta propagation", () => {
+	it("fires onAiDelta for each delta emitted by a live provider", async () => {
+		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
+
+		// Hand-rolled provider that synchronously calls onDelta with two fragments.
+		const liveProvider: RoundLLMProvider = {
+			async streamRound(_messages, _tools, onDelta) {
+				onDelta?.("chunk1 ");
+				onDelta?.("chunk2");
+				return { assistantText: "chunk1 chunk2", toolCalls: [] };
+			},
+		};
+
+		const received: Array<[string, string]> = [];
+		await session.submitMessage(
+			"red",
+			"hi",
+			liveProvider,
+			undefined,
+			["red", "green", "blue"],
+			(aiId, text) => {
+				received.push([aiId, text]);
+			},
+		);
+
+		// 3 AIs × 2 fragments = 6 delta calls, in initiative order.
+		expect(received).toHaveLength(6);
+		expect(received[0]).toEqual(["red", "chunk1 "]);
+		expect(received[1]).toEqual(["red", "chunk2"]);
+		expect(received[2]).toEqual(["green", "chunk1 "]);
+		expect(received[3]).toEqual(["green", "chunk2"]);
+		expect(received[4]).toEqual(["blue", "chunk1 "]);
+		expect(received[5]).toEqual(["blue", "chunk2"]);
+	});
+
+	it("does not invoke onAiDelta when MockRoundLLMProvider is used", async () => {
+		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "hello", toolCalls: [] },
+			{ assistantText: "world", toolCalls: [] },
+			{ assistantText: "foo", toolCalls: [] },
+		]);
+
+		const received: Array<[string, string]> = [];
+		await session.submitMessage(
+			"red",
+			"hi",
+			provider,
+			undefined,
+			undefined,
+			(aiId, text) => {
+				received.push([aiId, text]);
+			},
+		);
+
+		// MockRoundLLMProvider ignores onDelta — no live deltas.
+		expect(received).toHaveLength(0);
+	});
+});
+
 // ── Tool roundtrip persistence across rounds ────────────────────────────────
 
 describe("GameSession — tool roundtrip persistence", () => {

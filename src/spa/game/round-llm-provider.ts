@@ -41,6 +41,7 @@ export interface RoundLLMProvider {
 	streamRound(
 		messages: OpenAiMessage[],
 		tools: OpenAiTool[],
+		onDelta?: (text: string) => void,
 	): Promise<RoundTurnResult>;
 }
 
@@ -76,6 +77,7 @@ export class MockRoundLLMProvider implements RoundLLMProvider {
 	async streamRound(
 		messages: OpenAiMessage[],
 		tools: OpenAiTool[],
+		_onDelta?: (text: string) => void,
 	): Promise<RoundTurnResult> {
 		this.calls.push({ messages, tools });
 		const raw =

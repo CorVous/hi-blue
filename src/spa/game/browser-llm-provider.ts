@@ -26,6 +26,7 @@ export class BrowserLLMProvider implements RoundLLMProvider {
 	async streamRound(
 		messages: OpenAiMessage[],
 		tools: OpenAiTool[],
+		onDelta?: (text: string) => void,
 	): Promise<RoundTurnResult> {
 		const textParts: string[] = [];
 		const toolCalls: RoundTurnResult["toolCalls"] = [];
@@ -35,6 +36,7 @@ export class BrowserLLMProvider implements RoundLLMProvider {
 			tools,
 			onDelta: (text) => {
 				textParts.push(text);
+				onDelta?.(text);
 			},
 			onToolCall: (call) => {
 				toolCalls.push(call);
