@@ -139,12 +139,18 @@ test("DIAGNOSTIC: observe wire vs DOM timeline during streaming", async ({
 	await page.goto("/");
 	await expect(page.locator('article.ai-panel[data-ai="red"]')).toBeVisible();
 
-	await page.selectOption("#address", "red");
-	await page.fill("#prompt", "Hello");
+	await page.fill("#prompt", "@Ember Hello");
 	await page.click("#send");
 
-	// Wait until the round fully completes (send re-enables) plus a small grace.
-	await expect(page.locator("#send")).toBeEnabled({ timeout: 30_000 });
+	// Wait until all three SSE streams complete. (Post-#107 the send button no
+	// longer re-enables after submit because the prompt is cleared and an empty
+	// prompt has no @mention.)
+	await expect
+		.poll(() => samples.filter((s) => s.kind === "fetch_done").length, {
+			timeout: 30_000,
+		})
+		.toBeGreaterThanOrEqual(3);
+	// Small grace for the encoder pacing loop to finish painting after the wire.
 	await page.waitForTimeout(300);
 
 	// ── Print the full timeline so the diagnosis is visible in CI logs ────

@@ -17,15 +17,14 @@ test("chat lockout disables the red AI option and appends an in-character lockou
 	//    for red (2 rounds) effective on the next round.
 	await page.goto("/?lockout=1");
 
-	// 3. Submit one message.
-	await page.fill("#prompt", "hello");
+	// 3. Submit one message addressed to red (@Ember).
+	await page.fill("#prompt", "@Ember hello");
+	await expect(page.locator("#send")).toBeEnabled();
 	await page.click("#send");
 
-	// 4a. Wait for the red option to become disabled (chat_lockout event
-	//     processed by the SPA's round-coordinator render loop).
-	await expect(page.locator('#address option[value="red"]')).toBeDisabled({
-		timeout: 30_000,
-	});
+	// 4a. Wait for the chat_lockout to take effect: typing @Ember should disable Send.
+	await page.fill("#prompt", "@Ember hi");
+	await expect(page.locator("#send")).toBeDisabled({ timeout: 30_000 });
 
 	// 4b. Red transcript ends with the in-character lockout line (appended by
 	//     the chat_lockout event handler in game.ts: "[${event.message}]\n").

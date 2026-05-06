@@ -71,9 +71,9 @@ test("token streaming arrives word-by-word, not as a single dump", async ({
 	// Ensure the game page is ready.
 	await expect(page.locator('article.ai-panel[data-ai="red"]')).toBeVisible();
 
-	// ── Submit a message addressed to red ────────────────────────────────────
-	await page.selectOption("#address", "red");
-	await page.fill("#prompt", "Hello");
+	// ── Submit a message addressed to red via @Ember mention ────────────────
+	await page.fill("#prompt", "@Ember Hello");
+	await expect(page.locator("#send")).toBeEnabled();
 
 	const redTranscript = page.locator('[data-transcript="red"]');
 
@@ -86,7 +86,7 @@ test("token streaming arrives word-by-word, not as a single dump", async ({
 	// With live streaming, "thinking…" is stripped on the first live delta and
 	// replaced immediately by the AI's persona prefix + content. We wait for
 	// thinking… to disappear and the transcript to grow past the player message.
-	const playerMsg = `\n[you] Hello\n`;
+	const playerMsg = `\n[you] @Ember Hello\n`;
 	const afterPlayerLength = baselineText.length + playerMsg.length;
 
 	// Wait for thinking… to clear (first live delta strips it).
@@ -108,9 +108,13 @@ test("token streaming arrives word-by-word, not as a single dump", async ({
 	const snap0 = (await redTranscript.textContent()) ?? "";
 
 	// ── Wait for the round to fully complete ────────────────────────────────
-	// The encoder pacing loop still runs (pace() awaits) but skips re-appending
-	// text for live AIs. Send re-enables only after the loop finishes.
-	await expect(page.locator("#send")).toBeEnabled({ timeout: 20_000 });
+	// Wait for red's full token stream to land. The encoder pacing loop still
+	// runs (pace() awaits) but skips re-appending text for live AIs. (Post-#107
+	// the send button no longer re-enables after submit because the prompt is
+	// cleared and an empty prompt has no @mention.)
+	await expect(redTranscript).toContainText(EXPECTED_TOKENS, {
+		timeout: 20_000,
+	});
 	const snapFinal = (await redTranscript.textContent()) ?? "";
 
 	// ── Assertions ────────────────────────────────────────────────────────────

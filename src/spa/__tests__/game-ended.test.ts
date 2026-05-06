@@ -89,11 +89,6 @@ const INDEX_BODY_HTML = `
     </article>
   </div>
   <form id="composer">
-    <select id="address" aria-label="Address AI">
-      <option value="red">Ember (red)</option>
-      <option value="green">Sage (green)</option>
-      <option value="blue">Frost (blue)</option>
-    </select>
     <input id="prompt" type="text" placeholder="Enter a message…" autocomplete="off" />
     <button id="send" type="submit">Send</button>
   </form>
@@ -138,7 +133,8 @@ describe("renderGame — game_ended disables #send permanently (regression #89)"
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
-		promptInput.value = "finish the game";
+		promptInput.value = "@Sage finish the game";
+		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);

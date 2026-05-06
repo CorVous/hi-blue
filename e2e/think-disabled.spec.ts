@@ -33,7 +33,8 @@ test("?think=0 adds reasoning:{enabled:false} to chat-completions requests", asy
 
 	await page.goto("/?think=0");
 
-	await page.fill("#prompt", "hello");
+	await page.fill("#prompt", "@Sage hello");
+	await expect(page.locator("#send")).toBeEnabled();
 	await page.click("#send");
 
 	// Wait for at least one chat-completions request to land.
@@ -67,7 +68,8 @@ test("without ?think=0, requests do NOT include the reasoning field", async ({
 
 	await page.goto("/");
 
-	await page.fill("#prompt", "hello");
+	await page.fill("#prompt", "@Sage hello");
+	await expect(page.locator("#send")).toBeEnabled();
 	await page.click("#send");
 
 	await expect.poll(() => observedBodies.length).toBeGreaterThan(0);

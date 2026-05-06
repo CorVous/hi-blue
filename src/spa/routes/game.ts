@@ -1,8 +1,10 @@
 import { PERSONAS, PHASE_1_CONFIG } from "../../content";
 import { serializeGameSave } from "../../save-serializer.js";
 import { BrowserLLMProvider } from "../game/browser-llm-provider.js";
+import { deriveComposerState } from "../game/composer-reducer.js";
 import { getActivePhase, updateActivePhase } from "../game/engine.js";
 import { GameSession } from "../game/game-session.js";
+import { buildPersonaNameMap } from "../game/mention-parser.js";
 import { encodeRoundResult } from "../game/round-result-encoder.js";
 import type { AiId, PhaseConfig } from "../game/types";
 import { AI_TYPING_SPEED, TOKEN_PACE_MS } from "../game/typing-rhythm.js";
@@ -144,7 +146,6 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 	const form = doc.querySelector<HTMLFormElement>("#composer");
 	const promptInput = doc.querySelector<HTMLInputElement>("#prompt");
 	const sendBtn = doc.querySelector<HTMLButtonElement>("#send");
-	const addressSelect = doc.querySelector<HTMLSelectElement>("#address");
 	const capHitEl = doc.querySelector<HTMLElement>("#cap-hit");
 	const actionLogEl = doc.querySelector<HTMLElement>("#action-log");
 	const actionLogList = doc.querySelector<HTMLUListElement>("#action-log-list");
@@ -152,7 +153,31 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		"#persistence-warning",
 	);
 
-	if (!form || !promptInput || !sendBtn || !addressSelect) return;
+	if (!form || !promptInput || !sendBtn) return;
+
+	// Mention-based addressing state
+	const personaNamesToId = buildPersonaNameMap(PERSONAS);
+	const lockouts: Map<AiId, boolean> = new Map([
+		["red", false],
+		["green", false],
+		["blue", false],
+	]);
+	let roundInFlight = false;
+
+	// promptInput and sendBtn are guaranteed non-null (checked above).
+	const _promptInput = promptInput;
+	const _sendBtn = sendBtn;
+
+	function refreshComposerState(): void {
+		const { sendEnabled } = deriveComposerState({
+			text: _promptInput.value,
+			lockouts,
+			personaNamesToId,
+		});
+		_sendBtn.disabled = !sendEnabled || roundInFlight;
+	}
+
+	promptInput.addEventListener("input", refreshComposerState);
 
 	// Dev-only: ?think=0 disables the model's thinking step (OpenRouter
 	// reasoning.enabled=false). Gated to wrangler-dev host (see isDevHost).
@@ -238,9 +263,19 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		// intended to be set on the page URL itself, matching the legacy worker pattern.
 		session = applyTestAffordances(session, effectiveParams);
 
+		// Hydrate lockouts from the active phase's chatLockouts map so that
+		// a reload preserves the Send-disabled state for locked-out AIs.
+		const activePhaseForLockouts = getActivePhase(session.getState());
+		for (const aiId of AI_ORDER) {
+			lockouts.set(aiId, activePhaseForLockouts.chatLockouts.has(aiId));
+		}
+
 		// Reset module-level gameEnded flag on fresh session init
 		gameEnded = false;
 	}
+
+	// Set initial composer state (Send starts disabled until a valid @mention).
+	refreshComposerState();
 
 	// Populate panel headers from PERSONAS so renames don't require HTML edits
 	for (const aiId of AI_ORDER) {
@@ -304,21 +339,29 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		budgetEl.textContent = `${remaining}/${total}`;
 	}
 
-	// Helper: update chat lockout status in dropdown
+	// Helper: update chat lockout status in the lockouts map
 	function setChatLockout(aiId: AiId, locked: boolean): void {
-		const option = addressSelect?.querySelector<HTMLOptionElement>(
-			`option[value="${aiId}"]`,
-		);
-		if (option) option.disabled = locked;
+		lockouts.set(aiId, locked);
+		refreshComposerState();
 	}
 
 	form.addEventListener("submit", async (evt) => {
 		evt.preventDefault();
-		const message = promptInput.value.trim();
-		if (!message || !session) return;
+		if (!session) return;
 
-		const addressed = addressSelect.value as AiId;
+		const { sendEnabled, addressee } = deriveComposerState({
+			text: promptInput.value,
+			lockouts,
+			personaNamesToId,
+		});
+		if (!sendEnabled || !addressee) return;
+
+		const message = promptInput.value.trim();
+		if (!message) return;
+
+		const addressed = addressee;
 		promptInput.value = "";
+		roundInFlight = true;
 		sendBtn.disabled = true;
 
 		// Append player's message to the addressed panel
@@ -475,12 +518,10 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 									budgetEl.dataset.budget = String(b.remaining);
 									budgetEl.textContent = `${b.remaining}/${b.total}`;
 								}
-								// Re-enable chat-locked options that were carried over
-								const option = addressSelect?.querySelector<HTMLOptionElement>(
-									`option[value="${aid}"]`,
-								);
-								if (option) option.disabled = false;
+								// Re-enable chat-locked AIs that were carried over
+								lockouts.set(aid, false);
 							}
+							refreshComposerState();
 						}
 						// Append phase separator to each transcript
 						for (const aid of AI_ORDER) {
@@ -612,7 +653,8 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 			}
 		} finally {
 			stripPlaceholder();
-			if (!roundGameEnded) sendBtn.disabled = false;
+			roundInFlight = false;
+			if (!roundGameEnded) refreshComposerState();
 		}
 	});
 }

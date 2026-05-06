@@ -30,9 +30,8 @@ test("addressed message lands only on red panel; all three panels render progres
 		return (text as string).split(" ").map((w) => `${w} `);
 	});
 
-	// 3. Address red, fill prompt.
-	const message = "hello red panel";
-	await page.selectOption("#address", "red");
+	// 3. Fill prompt with @Ember mention to address red.
+	const message = "@Ember hello red panel";
 	await page.fill("#prompt", message);
 
 	// 4. Install an in-page sampler that collects (red, green) transcript
@@ -98,7 +97,7 @@ test("addressed message lands only on red panel; all three panels render progres
 		.textContent();
 
 	// 9. [you] message appears in red transcript exactly once.
-	expect(redTranscript ?? "").toContain(`[you] ${message}`);
+	expect(redTranscript ?? "").toContain(`[you] @Ember hello red panel`);
 	// Exactly once: splitting on "[you]" gives exactly two parts.
 	expect((redTranscript ?? "").split("[you]").length).toBe(2);
 
