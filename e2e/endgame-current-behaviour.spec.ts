@@ -107,11 +107,11 @@ test("game_ended disables composer and clears storage", async ({ page }) => {
 	// 4. Capture URL before submitting (proves URL stability below).
 	const urlBefore = page.url();
 
-	// 5. Submit one message addressed to red. Because winCondition always
+	// 5. Submit one message addressed to red (@Ember). Because winCondition always
 	//    returns true and phase 3 has no nextPhaseConfig, advancePhase sets
 	//    isComplete=true → game_ended event → composer disabled.
-	await page.selectOption("#address", "red");
-	await page.fill("#prompt", "hello");
+	await page.fill("#prompt", "@Ember hello");
+	await expect(page.locator("#send")).toBeEnabled();
 	await page.click("#send");
 
 	// 6. Wait for game_ended handler to fire: #send must become disabled.

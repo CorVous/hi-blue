@@ -139,8 +139,7 @@ test("DIAGNOSTIC: observe wire vs DOM timeline during streaming", async ({
 	await page.goto("/");
 	await expect(page.locator('article.ai-panel[data-ai="red"]')).toBeVisible();
 
-	await page.selectOption("#address", "red");
-	await page.fill("#prompt", "Hello");
+	await page.fill("#prompt", "@Ember Hello");
 	await page.click("#send");
 
 	// Wait until the round fully completes (send re-enables) plus a small grace.

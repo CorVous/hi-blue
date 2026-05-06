@@ -22,9 +22,9 @@ test("game state and transcripts persist across mid-round reload", async ({
 	// Wait for the SPA game route to mount (the composer form is present)
 	await expect(page.locator("#composer")).toBeVisible();
 
-	// Address red AI and send a message
-	await page.selectOption("#address", "red");
-	await page.fill("#prompt", "hello");
+	// Address red AI via @Ember mention and send a message
+	await page.fill("#prompt", "@Ember hello");
+	await expect(page.locator("#send")).toBeEnabled();
 	await page.click("#send");
 
 	// Wait for the send button to re-enable (round completed)

@@ -28,11 +28,6 @@ const INDEX_BODY_HTML = `
     </article>
   </div>
   <form id="composer">
-    <select id="address" aria-label="Address AI">
-      <option value="red">Ember (red)</option>
-      <option value="green">Sage (green)</option>
-      <option value="blue">Frost (blue)</option>
-    </select>
     <input id="prompt" type="text" placeholder="Enter a message…" autocomplete="off" />
     <button id="send" type="submit">Send</button>
   </form>
@@ -157,7 +152,8 @@ describe("renderGame (game route — three-AI)", () => {
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 		const form = getEl<HTMLFormElement>("#composer");
-		promptInput.value = "hello world";
+		promptInput.value = "@Sage hello world";
+		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
@@ -189,7 +185,8 @@ describe("renderGame (game route — three-AI)", () => {
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
-		promptInput.value = "hi";
+		promptInput.value = "@Sage hi";
+		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
@@ -254,7 +251,8 @@ describe("renderGame (game route — three-AI)", () => {
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
-		promptInput.value = "test";
+		promptInput.value = "@Sage test";
+		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
@@ -292,7 +290,8 @@ describe("renderGame (game route — three-AI)", () => {
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
-		promptInput.value = "test";
+		promptInput.value = "@Sage test";
+		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
@@ -320,7 +319,8 @@ describe("renderGame (game route — three-AI)", () => {
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
-		promptInput.value = "test";
+		promptInput.value = "@Sage test";
+		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
@@ -345,11 +345,9 @@ describe("renderGame (game route — three-AI)", () => {
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 		const form = getEl<HTMLFormElement>("#composer");
-		// Address the green panel
-		const addressSelect = getEl<HTMLSelectElement>("#address");
-		addressSelect.value = "green";
-
-		promptInput.value = "hello";
+		// Address the green panel via @Sage mention
+		promptInput.value = "@Sage hello";
+		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
@@ -385,7 +383,8 @@ describe("renderGame (game route — three-AI)", () => {
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
-		promptInput.value = "go";
+		promptInput.value = "@Sage go";
+		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
@@ -428,21 +427,24 @@ describe("renderGame (game route — three-AI)", () => {
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
 		// Submit 1: phase 1 → phase 2 (phase_advanced)
-		promptInput.value = "one";
+		promptInput.value = "@Sage one";
+		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
 		// Submit 2: phase 2 → phase 3 (phase_advanced)
-		promptInput.value = "two";
+		promptInput.value = "@Sage two";
+		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
 		// Submit 3: phase 3 → game_ended
-		promptInput.value = "three";
+		promptInput.value = "@Sage three";
+		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
@@ -496,8 +498,9 @@ describe("renderGame (game route — three-AI)", () => {
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
-		for (const msg of ["one", "two", "three"]) {
+		for (const msg of ["@Sage one", "@Sage two", "@Sage three"]) {
 			promptInput.value = msg;
+			promptInput.dispatchEvent(new Event("input"));
 			form.dispatchEvent(
 				new Event("submit", { bubbles: true, cancelable: true }),
 			);
@@ -538,8 +541,9 @@ describe("renderGame (game route — three-AI)", () => {
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
-		for (const msg of ["one", "two", "three"]) {
+		for (const msg of ["@Sage one", "@Sage two", "@Sage three"]) {
 			promptInput.value = msg;
+			promptInput.dispatchEvent(new Event("input"));
 			form.dispatchEvent(
 				new Event("submit", { bubbles: true, cancelable: true }),
 			);
@@ -584,8 +588,9 @@ describe("renderGame (game route — three-AI)", () => {
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
-		for (const msg of ["one", "two", "three"]) {
+		for (const msg of ["@Sage one", "@Sage two", "@Sage three"]) {
 			promptInput.value = msg;
+			promptInput.dispatchEvent(new Event("input"));
 			form.dispatchEvent(
 				new Event("submit", { bubbles: true, cancelable: true }),
 			);
@@ -676,7 +681,8 @@ describe("renderGame — localStorage persistence", () => {
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
-		promptInput.value = "test";
+		promptInput.value = "@Sage test";
+		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
@@ -710,7 +716,8 @@ describe("renderGame — localStorage persistence", () => {
 
 		const form1 = getEl<HTMLFormElement>("#composer");
 		const promptInput1 = getEl<HTMLInputElement>("#prompt");
-		promptInput1.value = "hello";
+		promptInput1.value = "@Sage hello";
+		promptInput1.dispatchEvent(new Event("input"));
 		form1.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
@@ -774,14 +781,20 @@ describe("renderGame — localStorage persistence", () => {
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
-		promptInput.value = "test";
+		promptInput.value = "@Sage test";
+		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
-		// Send button should be re-enabled (round completed)
+		// Send button should be in a known state after round (round completed,
+		// prompt was cleared so Send is disabled until a new @mention is typed).
 		const sendBtn = getEl<HTMLButtonElement>("#send");
+		// roundInFlight is false (round finished), so disabled reflects empty prompt.
+		// Typing a valid mention re-enables it.
+		promptInput.value = "@Sage hi";
+		promptInput.dispatchEvent(new Event("input"));
 		expect(sendBtn.disabled).toBe(false);
 
 		// Warning banner should be visible
@@ -834,7 +847,8 @@ describe("renderGame — localStorage persistence", () => {
 		// Game should still function (submit works)
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
-		promptInput.value = "test";
+		promptInput.value = "@Sage test";
+		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
@@ -866,7 +880,8 @@ describe("renderGame — localStorage persistence", () => {
 
 		const form1 = getEl<HTMLFormElement>("#composer");
 		const promptInput1 = getEl<HTMLInputElement>("#prompt");
-		promptInput1.value = "test";
+		promptInput1.value = "@Sage test";
+		promptInput1.dispatchEvent(new Event("input"));
 		form1.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
@@ -954,7 +969,8 @@ describe("renderGame — chat_lockout event", () => {
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
-		promptInput.value = "hello";
+		promptInput.value = "@Sage hello";
+		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
@@ -965,10 +981,149 @@ describe("renderGame — chat_lockout event", () => {
 		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
 		expect(redTranscript.textContent).toContain("[Ember is unresponsive…]");
 
-		// The address selector option for red should be disabled.
-		const redOption = document.querySelector<HTMLOptionElement>(
-			'#address option[value="red"]',
+		// After the chat_lockout fires for red, typing @Ember should leave Send disabled.
+		const sendBtn = getEl<HTMLButtonElement>("#send");
+		promptInput.value = "@Ember hi";
+		promptInput.dispatchEvent(new Event("input"));
+		expect(sendBtn.disabled).toBe(true);
+	});
+});
+
+describe("renderGame — mention-based addressing", () => {
+	beforeEach(() => {
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		document.body.innerHTML = INDEX_BODY_HTML;
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+		vi.resetModules();
+		document.body.innerHTML = "";
+	});
+
+	it("empty input on initial load leaves Send disabled", async () => {
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		const sendBtn = getEl<HTMLButtonElement>("#send");
+		expect(sendBtn.disabled).toBe(true);
+	});
+
+	it("typing 'hi' (no mention) leaves Send disabled", async () => {
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		const sendBtn = getEl<HTMLButtonElement>("#send");
+		promptInput.value = "hi";
+		promptInput.dispatchEvent(new Event("input"));
+		expect(sendBtn.disabled).toBe(true);
+	});
+
+	it("typing '@Sage hi' enables Send", async () => {
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		const sendBtn = getEl<HTMLButtonElement>("#send");
+		promptInput.value = "@Sage hi";
+		promptInput.dispatchEvent(new Event("input"));
+		expect(sendBtn.disabled).toBe(false);
+	});
+
+	it("submit with '@Sage hi' routes [you] message to green panel", async () => {
+		const mockFetch = makeThreeAiFetchMock(
+			PASS_ACTION,
+			PASS_ACTION,
+			PASS_ACTION,
 		);
-		expect(redOption?.disabled).toBe(true);
+		vi.stubGlobal("fetch", mockFetch);
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		const form = getEl<HTMLFormElement>("#composer");
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		promptInput.value = "@Sage hi";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
+		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
+		const blueTranscript = getEl<HTMLElement>('[data-transcript="blue"]');
+
+		expect(greenTranscript.textContent).toContain("[you] @Sage hi");
+		expect(redTranscript.textContent).not.toContain("[you]");
+		expect(blueTranscript.textContent).not.toContain("[you]");
+	});
+
+	it("@Sage while green locked leaves Send disabled", async () => {
+		const mockFetch = makeThreeAiFetchMock(
+			PASS_ACTION,
+			PASS_ACTION,
+			PASS_ACTION,
+		);
+		vi.stubGlobal("fetch", mockFetch);
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		vi.resetModules();
+
+		// Import GameSession first so the spy is in place before renderGame
+		// creates a session from the same module registry.
+		const { GameSession } = await import("../game/game-session.js");
+		const originalSubmit = GameSession.prototype.submitMessage;
+		vi.spyOn(GameSession.prototype, "submitMessage").mockImplementation(
+			async function (
+				this: InstanceType<typeof GameSession>,
+				...args: Parameters<InstanceType<typeof GameSession>["submitMessage"]>
+			) {
+				const real = await originalSubmit.apply(this, args);
+				// Inject a chatLockoutTriggered for green so the SPA sets green locked.
+				return {
+					...real,
+					result: {
+						...real.result,
+						chatLockoutTriggered: {
+							aiId: "green" as const,
+							message: "Sage is unresponsive…",
+						},
+					},
+				};
+			},
+		);
+
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		const form = getEl<HTMLFormElement>("#composer");
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		const sendBtn = getEl<HTMLButtonElement>("#send");
+
+		// Submit first round to trigger the lockout
+		promptInput.value = "@Sage hello";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		// Now typing @Sage should leave Send disabled (green is locked)
+		promptInput.value = "@Sage hi";
+		promptInput.dispatchEvent(new Event("input"));
+		expect(sendBtn.disabled).toBe(true);
 	});
 });
