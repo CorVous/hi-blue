@@ -4,8 +4,8 @@
  * Pure function: translates a RoundResult plus per-AI buffered completion
  * strings into a flat sequence of SSE event payloads.
  *
- * The encoder is the single source of truth for the SSE wire format. Every
- * event type the chat-page renderer understands is emitted here.
+ * The encoder is the single source of truth for the event wire format. Every
+ * event type the SPA's game route handler understands is emitted here.
  *
  * Token streaming is paced word-by-word from the buffered completion string.
  * This is a deliberate v1 cheat — the round coordinator buffers the full
@@ -13,7 +13,7 @@
  * the UI a progressive streaming feel. When a real streaming provider lands,
  * this function can accept token iterables directly.
  *
- * Event types emitted (matching what src/ui.ts consumes):
+ * Event types emitted (consumed by src/spa/routes/game.ts):
  *   ai_start   — { type, aiId }
  *   token      — { type, text }
  *   ai_end     — { type }
