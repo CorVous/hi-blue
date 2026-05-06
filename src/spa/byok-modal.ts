@@ -131,6 +131,18 @@ function renderModalState(): void {
 
 	if (!modeLine || !keyInput || !statusEl) return;
 
+	const buildInfo = getEl("byok-build-info");
+	if (buildInfo) {
+		const isDev =
+			__WORKER_BASE_URL__ === "http://localhost:8787" &&
+			typeof location !== "undefined" &&
+			location.origin === __WORKER_BASE_URL__;
+		if (isDev) {
+			buildInfo.textContent = `Commit ${__COMMIT_SHA__}`;
+			buildInfo.hidden = false;
+		}
+	}
+
 	const key = readKey();
 	const meta = readMeta();
 
