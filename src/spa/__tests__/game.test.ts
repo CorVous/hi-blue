@@ -649,11 +649,14 @@ describe("renderGame — localStorage persistence", () => {
 	}
 
 	beforeEach(() => {
+		// Must be set before each test since vi.unstubAllGlobals() in afterEach removes it
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		document.body.innerHTML = INDEX_BODY_HTML;
 	});
 
 	afterEach(() => {
 		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
 		vi.resetModules();
 		document.body.innerHTML = "";
 	});
@@ -897,11 +900,14 @@ describe("renderGame — localStorage persistence", () => {
 
 describe("renderGame — chat_lockout event", () => {
 	beforeEach(() => {
+		// Must be set before each test since vi.unstubAllGlobals() in afterEach removes it
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		document.body.innerHTML = INDEX_BODY_HTML;
 	});
 
 	afterEach(() => {
 		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
 		vi.resetModules();
 		document.body.innerHTML = "";
 	});
