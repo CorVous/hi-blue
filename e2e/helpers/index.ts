@@ -1,7 +1,7 @@
 export { newWinImmediatelyGame } from "./factories";
 export {
-	type WordsFactory,
 	streamChatCompletion,
 	stubChatCompletions,
+	type WordsFactory,
 	wordsToOpenAiSseBody,
 } from "./stubs";

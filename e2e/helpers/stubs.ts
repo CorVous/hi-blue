@@ -4,9 +4,7 @@ import type { Page, Request } from "@playwright/test";
  * A factory function that produces word chunks for a `/v1/chat/completions`
  * response, optionally inspecting the intercepted request.  May be async.
  */
-export type WordsFactory = (
-	request: Request,
-) => string[] | Promise<string[]>;
+export type WordsFactory = (request: Request) => string[] | Promise<string[]>;
 
 /**
  * Build a minimal OpenAI-compatible SSE body that streams the given word
