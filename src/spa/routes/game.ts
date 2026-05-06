@@ -316,9 +316,9 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		// Append player's message to the addressed panel
 		appendToTranscript(addressed, `\n[you] ${message}\n`);
 
-		// Show a global "thinking…" placeholder in the addressed panel while
-		// the round runs (round-coordinator buffers all three AI responses
-		// before the encoder splits them into per-panel token events).
+		// Show a "thinking…" placeholder in the addressed panel while the
+		// first live delta arrives. Stripped on the first onAiDelta call;
+		// the safety-net strip after submitMessage handles mock/locked-AI paths.
 		const addressedTranscript = getTranscript(addressed);
 		const placeholderStart = addressedTranscript?.textContent?.length ?? 0;
 		if (addressedTranscript) addressedTranscript.textContent += "thinking…";
@@ -357,9 +357,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		};
 
 		try {
-			const provider = new BrowserLLMProvider(
-				disableReasoning ? { disableReasoning: true } : {},
-			);
+			const provider = new BrowserLLMProvider({ disableReasoning });
 			const { result, completions, nextState } = await session.submitMessage(
 				addressed,
 				message,
