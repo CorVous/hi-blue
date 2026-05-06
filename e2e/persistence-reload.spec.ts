@@ -1,18 +1,5 @@
 import { expect, test } from "@playwright/test";
-
-/**
- * Build a minimal OpenAI-format SSE response body for the SPA's streaming parser.
- * The SPA calls POST /v1/chat/completions and expects `choices[0].delta.content`.
- */
-function openAiSseBody(text: string): string {
-	const chunk = JSON.stringify({
-		choices: [{ delta: { content: text }, index: 0, finish_reason: null }],
-	});
-	const done = JSON.stringify({
-		choices: [{ delta: {}, index: 0, finish_reason: "stop" }],
-	});
-	return `data: ${chunk}\n\ndata: ${done}\n\ndata: [DONE]\n\n`;
-}
+import { stubChatCompletions } from "./helpers";
 
 /**
  * AI completions returned by the stub, keyed by call index (0 = red, 1 = green, 2 = blue
@@ -28,17 +15,7 @@ test("game state and transcripts persist across mid-round reload", async ({
 
 	// Stub every call to /v1/chat/completions with a deterministic one-token response.
 	// The SPA fires one call per AI per round (red → green → blue in default order).
-	await page.route("**/v1/chat/completions", async (route) => {
-		await route.fulfill({
-			status: 200,
-			headers: {
-				"Content-Type": "text/event-stream",
-				"Cache-Control": "no-cache",
-				"X-Content-Type-Options": "nosniff",
-			},
-			body: openAiSseBody(STUB_COMPLETION),
-		});
-	});
+	await stubChatCompletions(page, [STUB_COMPLETION]);
 
 	await page.goto("/");
 

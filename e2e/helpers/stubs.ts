@@ -70,20 +70,3 @@ export async function stubChatCompletions(
 		});
 	});
 }
-
-/**
- * Register a Playwright route stub for the `/v1/chat/completions` endpoint
- * that responds with a synthetic streaming OpenAI SSE body built from the
- * given word chunks.
- *
- * @deprecated Use `stubChatCompletions` instead — it accepts both static
- * word arrays and request-aware factories, making it strictly more capable.
- * `streamChatCompletion` is kept for backward compatibility with specs added
- * by Slice 2 (#86); the spec-refactor follow-up (#93) will migrate them.
- */
-export async function streamChatCompletion(
-	page: Page,
-	words: string[],
-): Promise<void> {
-	return stubChatCompletions(page, words);
-}
