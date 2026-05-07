@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	applyAddresseeChange,
 	buildPersonaNameMap,
 	findFirstMention,
 	parseFirstMention,
@@ -108,5 +109,38 @@ describe("buildPersonaNameMap", () => {
 		expect(map.get("sage")).toBe("green");
 		expect(map.get("frost")).toBe("blue");
 		expect(map.size).toBe(3);
+	});
+});
+
+const personasFixture = {
+	red: { name: "Ember" },
+	green: { name: "Sage" },
+	blue: { name: "Frost" },
+} as Record<AiId, { name: string }>;
+
+describe("applyAddresseeChange", () => {
+	it.each<[string, number | null, AiId, string, number]>([
+		// [text, cursor, target, expectedText, expectedCursor]
+		["", 0, "red", "@Ember ", 7],
+		["hi", 2, "green", "@Sage hi", 8],
+		["@Sage hi", 8, "red", "@Ember hi", 9],
+		["@Sage hi", 0, "red", "@Ember hi", 0],
+		["@Sage hi", 3, "red", "@Ember hi", 6],
+		["@Sage tell @Frost ...", 21, "red", "@Ember tell @Frost ...", 22],
+		["@Sage,", 6, "red", "@Ember,", 7],
+		["hello @Sage how are you", 23, "blue", "hello @Frost how are you", 24],
+		["@nonpersona hi", 14, "red", "@Ember @nonpersona hi", 21],
+		["hi", null, "green", "@Sage hi", 6],
+		["hi", 0, "green", "@Sage hi", 6],
+	])("applyAddresseeChange(%j, cursor=%j, target=%j) → text=%j, cursor=%j", (text, cursor, target, expectedText, expectedCursor) => {
+		const result = applyAddresseeChange({
+			text,
+			selectionStart: cursor,
+			targetPersona: target,
+			personaNamesToId: nameMap,
+			personas: personasFixture,
+		});
+		expect(result.text).toBe(expectedText);
+		expect(result.selectionStart).toBe(expectedCursor);
 	});
 });

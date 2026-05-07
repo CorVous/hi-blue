@@ -4,7 +4,10 @@ import { BrowserLLMProvider } from "../game/browser-llm-provider.js";
 import { deriveComposerState } from "../game/composer-reducer.js";
 import { getActivePhase, updateActivePhase } from "../game/engine.js";
 import { GameSession } from "../game/game-session.js";
-import { buildPersonaNameMap } from "../game/mention-parser.js";
+import {
+	applyAddresseeChange,
+	buildPersonaNameMap,
+} from "../game/mention-parser.js";
 import { encodeRoundResult } from "../game/round-result-encoder.js";
 import type { AiId, PhaseConfig } from "../game/types";
 import { AI_TYPING_SPEED, TOKEN_PACE_MS } from "../game/typing-rhythm.js";
@@ -293,6 +296,36 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 			budgetEl.dataset.budget = String(budget.remaining);
 			budgetEl.textContent = `${budget.remaining}/${budget.total}`;
 		}
+	}
+
+	// Panel-click → addressee mention mutation (issue #108)
+	for (const aiId of AI_ORDER) {
+		const panel = doc.querySelector<HTMLElement>(
+			`.ai-panel[data-ai="${aiId}"]`,
+		);
+		if (!panel) continue;
+		panel.addEventListener("click", () => {
+			const targetAi = panel.dataset.ai as AiId | undefined;
+			if (!targetAi) return;
+			if (lockouts.get(targetAi) === true) return;
+			const result = applyAddresseeChange({
+				text: _promptInput.value,
+				selectionStart: _promptInput.selectionStart,
+				targetPersona: targetAi,
+				personaNamesToId,
+				personas: PERSONAS,
+			});
+			_promptInput.value = result.text;
+			try {
+				_promptInput.setSelectionRange(
+					result.selectionStart,
+					result.selectionStart,
+				);
+			} catch {
+				/* ignore */
+			}
+			refreshComposerState();
+		});
 	}
 
 	// Debug toggle: show action log if ?debug=1
