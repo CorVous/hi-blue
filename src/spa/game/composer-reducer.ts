@@ -50,8 +50,13 @@ const NULL_VISUAL: Pick<
  *   or null when there is no addressee or addressee is not locked.
  */
 export function deriveComposerState(input: ComposerInput): ComposerState {
-	const { text, lockouts, personaNamesToId, personaColors, personaDisplayNames } =
-		input;
+	const {
+		text,
+		lockouts,
+		personaNamesToId,
+		personaColors,
+		personaDisplayNames,
+	} = input;
 
 	// Derive lockedPanels from the lockouts map (entries where locked === true).
 	const lockedPanels: Set<AiId> = new Set();

@@ -245,7 +245,8 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		}
 
 		// Inline lockout error element
-		const lockoutErrorEl = doc.querySelector<HTMLOutputElement>("#lockout-error");
+		const lockoutErrorEl =
+			doc.querySelector<HTMLOutputElement>("#lockout-error");
 		if (lockoutErrorEl) {
 			if (state.lockoutError) {
 				lockoutErrorEl.textContent = state.lockoutError;

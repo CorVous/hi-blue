@@ -1887,7 +1887,10 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 	});
 
 	/** Helper: inject a chatLockoutTriggered for a given aiId via submitMessage spy. */
-	async function setupLockoutMock(aiId: "red" | "green" | "blue", message: string) {
+	async function setupLockoutMock(
+		aiId: "red" | "green" | "blue",
+		message: string,
+	) {
 		const { GameSession } = await import("../game/game-session.js");
 		const originalSubmit = GameSession.prototype.submitMessage;
 		vi.spyOn(GameSession.prototype, "submitMessage").mockImplementation(
@@ -1925,7 +1928,9 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 
 		promptInput.value = "@Sage hello";
 		promptInput.dispatchEvent(new Event("input"));
-		form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
 		const redPanel = getEl<HTMLElement>('.ai-panel[data-ai="red"]');
@@ -1959,7 +1964,9 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 		// Submit to trigger the lockout
 		promptInput.value = "@Sage hello";
 		promptInput.dispatchEvent(new Event("input"));
-		form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
 		// Type @Sage hi while green is locked
@@ -2030,7 +2037,9 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 		// Round 1: lock green
 		promptInput.value = "@Sage hello";
 		promptInput.dispatchEvent(new Event("input"));
-		form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
 		// Verify green is locked
@@ -2040,7 +2049,9 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 		// Round 2 via @Ember: resolve green lockout
 		promptInput.value = "@Ember hi";
 		promptInput.dispatchEvent(new Event("input"));
-		form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
 		// Green panel should no longer be locked
@@ -2076,7 +2087,9 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 		// Trigger lockout
 		promptInput.value = "@Sage hello";
 		promptInput.dispatchEvent(new Event("input"));
-		form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
 		// Clear input (empty text)

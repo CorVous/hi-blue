@@ -101,14 +101,6 @@ main {
 	background: rgba(36, 88, 160, 0.1);
 }
 
-.ai-panel.panel--locked {
-	opacity: 0.45;
-	filter: grayscale(0.7);
-	pointer-events: none;
-}
-.ai-panel.panel--locked .panel-header {
-	opacity: 0.9;
-}
 .lockout-error {
 	color: #b83232;
 	font-size: 0.85rem;
@@ -165,6 +157,15 @@ main {
 
 .ai-panel[data-ai="blue"] .panel-header {
 	background: #2458a0;
+}
+
+.ai-panel.panel--locked {
+	opacity: 0.45;
+	filter: grayscale(0.7);
+	pointer-events: none;
+}
+.ai-panel.panel--locked .panel-header {
+	opacity: 0.9;
 }
 
 .panel-budget {
