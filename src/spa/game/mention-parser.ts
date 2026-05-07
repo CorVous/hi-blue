@@ -9,6 +9,8 @@ export interface MentionMatch {
 	aiId: AiId;
 	/** Index of the `@` character in `text`. */
 	start: number;
+	/** End of `@Name` (excludes any trailing punctuation). Use this for the highlight range. */
+	nameEnd: number;
 	/** One past the last consumed character: end of name, or end of a single trailing punctuation char if one immediately follows. */
 	end: number;
 }
@@ -38,14 +40,15 @@ export function findFirstMention(
 			// The `@` is at match.index + (full-match-length - raw.length - 1).
 			const fullMatch = match[0];
 			const start = (match.index ?? 0) + fullMatch.length - raw.length - 1;
-			let end = start + 1 + raw.length; // 1 for '@'
+			const nameEnd = start + 1 + raw.length; // 1 for '@', excludes trailing punct
+			let end = nameEnd;
 			// Consume a single trailing punctuation character immediately after the
 			// name so that "@Sage," treats the comma as part of the token and the
 			// body-after-mention computation does not surface bare punctuation.
 			if (/[.,!?;:]/.test(text[end] ?? "")) {
 				end += 1;
 			}
-			return { aiId: id, start, end };
+			return { aiId: id, start, nameEnd, end };
 		}
 	}
 	return null;
@@ -160,6 +163,24 @@ export function buildPersonaNameMap(
 		{ name: string },
 	][]) {
 		map.set(persona.name.toLowerCase(), id);
+	}
+	return map;
+}
+
+/**
+ * Builds an AiId → color string map from a personas record.
+ * Color values are sourced from the persona's `color` field (not the AiId key),
+ * so a future palette swap only requires persona-record updates, not JS changes.
+ */
+export function buildPersonaColorMap(
+	personas: Record<AiId, { color: string }>,
+): Map<AiId, string> {
+	const map = new Map<AiId, string>();
+	for (const [id, persona] of Object.entries(personas) as [
+		AiId,
+		{ color: string },
+	][]) {
+		map.set(id, persona.color);
 	}
 	return map;
 }

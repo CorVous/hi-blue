@@ -6,6 +6,7 @@ import { getActivePhase, updateActivePhase } from "../game/engine.js";
 import { GameSession } from "../game/game-session.js";
 import {
 	applyAddresseeChange,
+	buildPersonaColorMap,
 	buildPersonaNameMap,
 } from "../game/mention-parser.js";
 import { encodeRoundResult } from "../game/round-result-encoder.js";
@@ -160,6 +161,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 
 	// Mention-based addressing state
 	const personaNamesToId = buildPersonaNameMap(PERSONAS);
+	const personaColors = buildPersonaColorMap(PERSONAS);
 	const lockouts: Map<AiId, boolean> = new Map([
 		["red", false],
 		["green", false],
@@ -171,16 +173,75 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 	const _promptInput = promptInput;
 	const _sendBtn = sendBtn;
 
+	// Overlay for mention highlight rendering.
+	const overlay = doc.querySelector<HTMLElement>("#prompt-overlay");
+
+	/** Remove any class on `el` that starts with `prefix`, then add `${prefix}${value}` if non-null. */
+	function setColorClass(
+		el: HTMLElement,
+		prefix: string,
+		value: string | null,
+	): void {
+		for (const cls of [...el.classList]) {
+			if (cls.startsWith(prefix)) el.classList.remove(cls);
+		}
+		if (value != null) el.classList.add(`${prefix}${value}`);
+	}
+
+	/** Rebuild the overlay's DOM to reflect the current text and highlight range. */
+	function rebuildOverlay(
+		ov: HTMLElement | null,
+		text: string,
+		highlight: { start: number; end: number; color: string } | null,
+	): void {
+		if (!ov) return;
+		// Remove all children.
+		while (ov.firstChild) ov.removeChild(ov.firstChild);
+		if (!highlight) {
+			ov.appendChild(doc.createTextNode(text));
+			return;
+		}
+		const { start, end, color } = highlight;
+		if (start > 0) {
+			ov.appendChild(doc.createTextNode(text.slice(0, start)));
+		}
+		const span = doc.createElement("span");
+		span.className = `mention-highlight mention--${color}`;
+		span.appendChild(doc.createTextNode(text.slice(start, end)));
+		ov.appendChild(span);
+		if (end < text.length) {
+			ov.appendChild(doc.createTextNode(text.slice(end)));
+		}
+	}
+
 	function refreshComposerState(): void {
-		const { sendEnabled } = deriveComposerState({
+		const state = deriveComposerState({
 			text: _promptInput.value,
 			lockouts,
 			personaNamesToId,
+			personaColors,
 		});
-		_sendBtn.disabled = !sendEnabled || roundInFlight;
+		_sendBtn.disabled = !state.sendEnabled || roundInFlight;
+		setColorClass(_promptInput, "composer-border--", state.borderColor);
+		for (const aiId of AI_ORDER) {
+			const panel = doc.querySelector<HTMLElement>(
+				`.ai-panel[data-ai="${aiId}"]`,
+			);
+			if (!panel) continue;
+			const isAddressed = state.panelHighlight === aiId;
+			panel.classList.toggle("panel--addressed", isAddressed);
+			const color = personaColors.get(aiId);
+			if (color)
+				panel.classList.toggle(`panel--addressed-${color}`, isAddressed);
+		}
+		rebuildOverlay(overlay, _promptInput.value, state.mentionHighlight);
+		if (overlay) overlay.scrollLeft = _promptInput.scrollLeft;
 	}
 
 	promptInput.addEventListener("input", refreshComposerState);
+	promptInput.addEventListener("scroll", () => {
+		if (overlay) overlay.scrollLeft = _promptInput.scrollLeft;
+	});
 
 	// Dev-only: ?think=0 disables the model's thinking step (OpenRouter
 	// reasoning.enabled=false). Gated to wrangler-dev host (see isDevHost).
@@ -386,6 +447,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 			text: promptInput.value,
 			lockouts,
 			personaNamesToId,
+			personaColors,
 		});
 		if (!sendEnabled || !addressee) return;
 

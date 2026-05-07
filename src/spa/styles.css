@@ -26,12 +26,79 @@ main {
 	gap: 0.5rem;
 }
 
-#prompt {
+.prompt-wrap {
+	position: relative;
 	flex: 1;
+	display: block;
+}
+
+#prompt-overlay {
+	position: absolute;
+	inset: 0;
+	padding: 0.5rem 0.75rem;
+	font: inherit;
+	font-size: 1rem;
+	pointer-events: none;
+	white-space: pre;
+	overflow: hidden;
+	color: #222;
+	border: 1px solid transparent;
+	border-radius: 4px;
+	background: transparent;
+}
+
+#prompt {
+	position: relative;
+	z-index: 1;
+	color: transparent;
+	caret-color: #222;
+	background: transparent;
+	width: 100%;
 	padding: 0.5rem 0.75rem;
 	font-size: 1rem;
 	border: 1px solid #ccc;
 	border-radius: 4px;
+}
+
+#prompt.composer-border--red {
+	border-color: #b83232;
+}
+#prompt.composer-border--green {
+	border-color: #2e7a3e;
+}
+#prompt.composer-border--blue {
+	border-color: #2458a0;
+}
+
+.ai-panel.panel--addressed {
+	box-shadow: 0 0 0 2px var(--addressed-color, #888);
+}
+.ai-panel.panel--addressed.panel--addressed-red {
+	--addressed-color: #b83232;
+}
+.ai-panel.panel--addressed.panel--addressed-green {
+	--addressed-color: #2e7a3e;
+}
+.ai-panel.panel--addressed.panel--addressed-blue {
+	--addressed-color: #2458a0;
+}
+
+.mention-highlight {
+	font-weight: bold;
+	padding: 0 1px;
+	border-radius: 2px;
+}
+.mention-highlight.mention--red {
+	color: #b83232;
+	background: rgba(184, 50, 50, 0.1);
+}
+.mention-highlight.mention--green {
+	color: #2e7a3e;
+	background: rgba(46, 122, 62, 0.1);
+}
+.mention-highlight.mention--blue {
+	color: #2458a0;
+	background: rgba(36, 88, 160, 0.1);
 }
 
 #send {
