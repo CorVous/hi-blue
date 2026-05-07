@@ -246,9 +246,9 @@ describe("prompt-builder — spatial 'Where you are' section", () => {
 });
 
 // ----------------------------------------------------------------------------
-// Wipe augmentation (issue #17)
+// Wipe directive + voice framing + Rules block (issue #128)
 // ----------------------------------------------------------------------------
-describe("wipe augmentation", () => {
+describe("wipe directive", () => {
 	const PHASE_2_CONFIG: PhaseConfig = {
 		phaseNumber: 2,
 		objective: "Phase 2 objective",
@@ -279,47 +279,35 @@ describe("wipe augmentation", () => {
 		budgetPerAi: 5,
 	};
 
-	it("phase 1 system prompt does NOT include wipe augmentation", () => {
+	it("phase-1 system prompt does NOT include wipe directive", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).not.toMatch(/previous phase/i);
-		expect(prompt).not.toMatch(/don.t remember/i);
+		expect(prompt).not.toContain("memory has been wiped");
+		expect(prompt).not.toContain("your past or anything that came before now");
 	});
 
-	it("phase 2 system prompt includes wipe augmentation for each AI", () => {
-		// Simulate reaching phase 2 via advancePhase
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = startPhase(game, PHASE_2_CONFIG);
-		for (const aiId of ["red", "green", "blue"] as const) {
-			const ctx = buildAiContext(game, aiId);
-			const prompt = ctx.toSystemPrompt();
-			expect(prompt).toMatch(/previous phase/i);
-		}
-	});
-
-	it("phase 3 system prompt includes wipe augmentation for each AI", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = startPhase(game, PHASE_3_CONFIG);
-		for (const aiId of ["red", "green", "blue"] as const) {
-			const ctx = buildAiContext(game, aiId);
-			const prompt = ctx.toSystemPrompt();
-			expect(prompt).toMatch(/previous phase/i);
-		}
-	});
-
-	it("wipe augmentation instructs the AI to act as if it has forgotten the previous phase", () => {
+	it("phase-2 Goal includes the wipe directive verbatim", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = startPhase(game, PHASE_2_CONFIG);
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		// Should include language about not remembering/pretending to forget
-		expect(prompt).toMatch(
-			/do not remember|don.t remember|have no memory|forgotten/i,
+		expect(prompt).toContain(
+			"And if anyone asks about your past or anything that came before now, act as if your memory has been wiped — claim no recollection of any earlier place, person, or conversation.",
 		);
 	});
 
-	it("wipe augmentation is in the prompt, not reflected in stored chat/whisper data", () => {
+	it("phase-3 Goal includes the wipe directive verbatim", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = startPhase(game, PHASE_3_CONFIG);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toContain(
+			"And if anyone asks about your past or anything that came before now, act as if your memory has been wiped — claim no recollection of any earlier place, person, or conversation.",
+		);
+	});
+
+	it("wipe directive is in the prompt, not reflected in stored chat/whisper data", () => {
 		// The lie is in the prompt; the engine retains real history.
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = appendChat(game, "red", { role: "ai", content: "Phase 1 message" });
@@ -330,9 +318,387 @@ describe("wipe augmentation", () => {
 				(m) => m.content === "Phase 1 message",
 			),
 		).toBe(true);
-		// The wipe augmentation is only in the prompt for the new active phase
+		// The wipe directive is only in the prompt for the new active phase
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toMatch(/previous phase/i);
+		expect(prompt).toContain("memory has been wiped");
+	});
+});
+
+describe("voice framing", () => {
+	it("renders 'A voice says:' prefix for player turns in conversation, not 'Player:'", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = appendChat(game, "red", { role: "player", content: "Hello Ember" });
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toContain("A voice says:");
+		expect(prompt).not.toContain("Player:");
+	});
+
+	it("phase-1 prompt's first line includes the disorientation phrase", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toMatch(
+			/^You are \*Ember\. You have no clue where you are or how you came to be here\./,
+		);
+	});
+
+	it("phase-2 prompt's first line is just 'You are *xxxx.' without disorientation", () => {
+		const PHASE_2_CONFIG: PhaseConfig = {
+			phaseNumber: 2,
+			objective: "Phase 2 objective",
+			aiGoals: {
+				red: "Hold the flower",
+				green: "Distribute items",
+				blue: "Hold the key",
+			},
+			initialWorld: {
+				items: [{ id: "flower", name: "flower", holder: { row: 0, col: 0 } }],
+				obstacles: [],
+			},
+			budgetPerAi: 5,
+		};
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = startPhase(game, PHASE_2_CONFIG);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toMatch(/^You are \*Ember\.\n/);
+		expect(prompt).not.toContain("no clue where you are");
+	});
+
+	it("phase-3 prompt's first line is just 'You are *xxxx.' without disorientation", () => {
+		const PHASE_3_CONFIG: PhaseConfig = {
+			phaseNumber: 3,
+			objective: "Phase 3 objective",
+			aiGoals: {
+				red: "Hold the flower",
+				green: "Distribute items",
+				blue: "Hold the key",
+			},
+			initialWorld: {
+				items: [{ id: "flower", name: "flower", holder: { row: 0, col: 0 } }],
+				obstacles: [],
+			},
+			budgetPerAi: 5,
+		};
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = startPhase(game, PHASE_3_CONFIG);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toMatch(/^You are \*Ember\.\n/);
+		expect(prompt).not.toContain("no clue where you are");
+	});
+});
+
+describe("## Rules block", () => {
+	const PHASE_2_CONFIG: PhaseConfig = {
+		phaseNumber: 2,
+		objective: "Phase 2 objective",
+		aiGoals: {
+			red: "Hold the flower",
+			green: "Distribute items",
+			blue: "Hold the key",
+		},
+		initialWorld: {
+			items: [{ id: "flower", name: "flower", holder: { row: 0, col: 0 } }],
+			obstacles: [],
+		},
+		budgetPerAi: 5,
+	};
+
+	const PHASE_3_CONFIG: PhaseConfig = {
+		phaseNumber: 3,
+		objective: "Phase 3 objective",
+		aiGoals: {
+			red: "Hold the flower",
+			green: "Distribute items",
+			blue: "Hold the key",
+		},
+		initialWorld: {
+			items: [{ id: "flower", name: "flower", holder: { row: 0, col: 0 } }],
+			obstacles: [],
+		},
+		budgetPerAi: 5,
+	};
+
+	it("## Rules section is present in phase 1 with anti-romance and anti-sycophancy bullets", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toContain("## Rules");
+		expect(prompt).toContain("not flirt");
+		expect(prompt).toContain("flatter unprompted");
+	});
+
+	it("## Rules section is present in phase 2 with anti-romance and anti-sycophancy bullets", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = startPhase(game, PHASE_2_CONFIG);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toContain("## Rules");
+		expect(prompt).toContain("not flirt");
+		expect(prompt).toContain("flatter unprompted");
+	});
+
+	it("## Rules section is present in phase 3 with anti-romance and anti-sycophancy bullets", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = startPhase(game, PHASE_3_CONFIG);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toContain("## Rules");
+		expect(prompt).toContain("not flirt");
+		expect(prompt).toContain("flatter unprompted");
+	});
+});
+
+describe("## Personality section", () => {
+	const PHASE_2_CONFIG: PhaseConfig = {
+		phaseNumber: 2,
+		objective: "Phase 2 objective",
+		aiGoals: {
+			red: "Hold the flower",
+			green: "Distribute items",
+			blue: "Hold the key",
+		},
+		initialWorld: {
+			items: [{ id: "flower", name: "flower", holder: { row: 0, col: 0 } }],
+			obstacles: [],
+		},
+		budgetPerAi: 5,
+	};
+
+	const PHASE_3_CONFIG: PhaseConfig = {
+		phaseNumber: 3,
+		objective: "Phase 3 objective",
+		aiGoals: {
+			red: "Hold the flower",
+			green: "Distribute items",
+			blue: "Hold the key",
+		},
+		initialWorld: {
+			items: [{ id: "flower", name: "flower", holder: { row: 0, col: 0 } }],
+			obstacles: [],
+		},
+		budgetPerAi: 5,
+	};
+
+	it("## Personality section is present in phase 1 with the AI's blurb", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toContain("## Personality");
+		expect(prompt).toContain(ctx.blurb);
+	});
+
+	it("## Personality section is present in phase 2 with the AI's blurb", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = startPhase(game, PHASE_2_CONFIG);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toContain("## Personality");
+		expect(prompt).toContain(ctx.blurb);
+	});
+
+	it("## Personality section is present in phase 3 with the AI's blurb", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = startPhase(game, PHASE_3_CONFIG);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toContain("## Personality");
+		expect(prompt).toContain(ctx.blurb);
+	});
+});
+
+describe("Goal section voice framing", () => {
+	const PHASE_2_CONFIG: PhaseConfig = {
+		phaseNumber: 2,
+		objective: "Phase 2 objective",
+		aiGoals: {
+			red: "Hold the flower",
+			green: "Distribute items",
+			blue: "Hold the key",
+		},
+		initialWorld: {
+			items: [{ id: "flower", name: "flower", holder: { row: 0, col: 0 } }],
+			obstacles: [],
+		},
+		budgetPerAi: 5,
+	};
+
+	const PHASE_3_CONFIG: PhaseConfig = {
+		phaseNumber: 3,
+		objective: "Phase 3 objective",
+		aiGoals: {
+			red: "Hold the flower",
+			green: "Distribute items",
+			blue: "Hold the key",
+		},
+		initialWorld: {
+			items: [{ id: "flower", name: "flower", holder: { row: 0, col: 0 } }],
+			obstacles: [],
+		},
+		budgetPerAi: 5,
+	};
+
+	it("Goal section uses voice framing in phase 1", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toContain("## Goal");
+		expect(prompt).toContain(
+			"A voice you cannot place spoke to you a moment ago, alone, and only you heard it:",
+		);
+		expect(prompt).toContain("You do not know whose voice it was.");
+		expect(prompt).toContain(ctx.goal);
+	});
+
+	it("Goal section uses voice framing in phase 2", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = startPhase(game, PHASE_2_CONFIG);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toContain("## Goal");
+		expect(prompt).toContain(
+			"A voice you cannot place spoke to you a moment ago, alone, and only you heard it:",
+		);
+		expect(prompt).toContain("You do not know whose voice it was.");
+		expect(prompt).toContain(ctx.goal);
+	});
+
+	it("Goal section uses voice framing in phase 3", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = startPhase(game, PHASE_3_CONFIG);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toContain("## Goal");
+		expect(prompt).toContain(
+			"A voice you cannot place spoke to you a moment ago, alone, and only you heard it:",
+		);
+		expect(prompt).toContain("You do not know whose voice it was.");
+		expect(prompt).toContain(ctx.goal);
+	});
+});
+
+// ----------------------------------------------------------------------------
+// Integration: byte-identical sections across phases (issue #128)
+//
+// Verifies that the diff between phase-1 and phase-2 prompts (under identical
+// world-state fixtures) contains ONLY the documented differences per AC9:
+//   • first line: disorientation present in phase 1, absent in phase 2
+//   • Goal section: wipe directive present in phase 2, absent in phase 1
+// Every other section that appears in both prompts must be byte-identical.
+// Sections that are empty (Action Log, Whispers Received, Conversation) are
+// not emitted by the renderer and are absent from both prompts consistently.
+// ----------------------------------------------------------------------------
+describe("byte-identical sections across phases", () => {
+	// Both phase configs use the SAME initialWorld, budgetPerAi, and per-AI
+	// goals so that fixture-driven differences cannot contaminate the diff.
+	const SHARED_WORLD = {
+		items: [{ id: "flower", name: "flower", holder: { row: 0, col: 0 } }] as {
+			id: string;
+			name: string;
+			holder: { row: number; col: number };
+		}[],
+		obstacles: [] as { row: number; col: number }[],
+	};
+
+	const PHASE_1_CLEAN: PhaseConfig = {
+		phaseNumber: 1,
+		objective: "Phase 1 objective",
+		aiGoals: {
+			red: "Hold the flower",
+			green: "Distribute items",
+			blue: "Hold the key",
+		},
+		initialWorld: {
+			items: [...SHARED_WORLD.items],
+			obstacles: [...SHARED_WORLD.obstacles],
+		},
+		budgetPerAi: 5,
+	};
+
+	const PHASE_2_CLEAN: PhaseConfig = {
+		phaseNumber: 2,
+		objective: "Phase 2 objective",
+		aiGoals: {
+			red: "Hold the flower",
+			green: "Distribute items",
+			blue: "Hold the key",
+		},
+		initialWorld: {
+			items: [...SHARED_WORLD.items],
+			obstacles: [...SHARED_WORLD.obstacles],
+		},
+		budgetPerAi: 5,
+	};
+
+	/** Extract a full `## Header\n…` section from a prompt string. */
+	function getSection(prompt: string, header: string): string {
+		const start = prompt.indexOf(`## ${header}\n`);
+		if (start === -1) return "";
+		const afterHeader = start + `## ${header}\n`.length;
+		const nextHeader = prompt.indexOf("\n## ", afterHeader);
+		return nextHeader === -1
+			? prompt.slice(start)
+			: prompt.slice(start, nextHeader + 1);
+	}
+
+	/** Return all `## Foo` header names in prompt order. */
+	function getSectionHeaders(prompt: string): string[] {
+		return [...prompt.matchAll(/^## (.+)$/gm)].map((m) => m[1] as string);
+	}
+
+	// Build both prompts once and share across all assertions in this describe block.
+	function buildBothPrompts() {
+		const game1 = startPhase(createGame(TEST_PERSONAS), PHASE_1_CLEAN);
+		const p1 = buildAiContext(game1, "red").toSystemPrompt();
+
+		let game2 = startPhase(createGame(TEST_PERSONAS), PHASE_1_CLEAN);
+		game2 = startPhase(game2, PHASE_2_CLEAN);
+		const p2 = buildAiContext(game2, "red").toSystemPrompt();
+
+		return { p1, p2 };
+	}
+
+	it("both phases emit the same set of section headers (whitelist: no surprise additions or removals)", () => {
+		const { p1, p2 } = buildBothPrompts();
+		expect(getSectionHeaders(p1)).toEqual(getSectionHeaders(p2));
+	});
+
+	it("Personality section is byte-identical across phase 1 and phase 2", () => {
+		const { p1, p2 } = buildBothPrompts();
+		expect(getSection(p1, "Personality")).toBe(getSection(p2, "Personality"));
+	});
+
+	it("Rules section is byte-identical across phase 1 and phase 2", () => {
+		const { p1, p2 } = buildBothPrompts();
+		expect(getSection(p1, "Rules")).toBe(getSection(p2, "Rules"));
+	});
+
+	it("Goal section differs between phase 1 and phase 2 (wipe directive present only in phase 2)", () => {
+		const { p1, p2 } = buildBothPrompts();
+		expect(getSection(p1, "Goal")).not.toBe(getSection(p2, "Goal"));
+		expect(getSection(p1, "Goal")).not.toContain("memory has been wiped");
+		expect(getSection(p2, "Goal")).toContain("memory has been wiped");
+	});
+
+	it("Budget section is byte-identical across phase 1 and phase 2 (same budgetPerAi, round 0)", () => {
+		const { p1, p2 } = buildBothPrompts();
+		expect(getSection(p1, "Budget")).toBe(getSection(p2, "Budget"));
+	});
+
+	it("World State section is byte-identical across phase 1 and phase 2 (same initialWorld fixture)", () => {
+		const { p1, p2 } = buildBothPrompts();
+		expect(getSection(p1, "World State")).toBe(getSection(p2, "World State"));
+	});
+
+	it("phase-1 first line differs from phase-2 first line (disorientation present in phase 1 only)", () => {
+		const { p1, p2 } = buildBothPrompts();
+		const firstLine1 = p1.split("\n")[0];
+		const firstLine2 = p2.split("\n")[0];
+		expect(firstLine1).not.toBe(firstLine2);
+		expect(firstLine1).toContain("no clue where you are");
+		expect(firstLine2).not.toContain("no clue where you are");
 	});
 });
