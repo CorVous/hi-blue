@@ -1144,7 +1144,7 @@ describe("renderGame — panel-click addressee", () => {
 		document.body.innerHTML = "";
 	});
 
-	it("empty input + click red panel → '@Ember ', Send enabled", async () => {
+	it("empty input + click red panel → '@Ember ', Send stays disabled (no body)", async () => {
 		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
@@ -1158,7 +1158,8 @@ describe("renderGame — panel-click addressee", () => {
 		redPanel.click();
 
 		expect(promptInput.value).toBe("@Ember ");
-		expect(sendBtn.disabled).toBe(false);
+		// Per #110: addressee prefix alone is not enough to enable Send.
+		expect(sendBtn.disabled).toBe(true);
 	});
 
 	it("'@Sage hi' in input + click red panel → '@Ember hi'", async () => {
