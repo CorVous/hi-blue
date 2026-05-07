@@ -290,6 +290,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		const span = doc.createElement("span");
 		span.className = "mention-highlight";
 		span.style.setProperty("--panel-color", color);
+		span.style.color = color;
 		span.appendChild(doc.createTextNode(text.slice(start, end)));
 		ov.appendChild(span);
 		if (end < text.length) {
