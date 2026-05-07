@@ -1371,7 +1371,10 @@ describe("renderGame — URL param sourcing", () => {
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
 		// Router parses debug=1 from the hash and passes it as params
-		await renderGame(getEl<HTMLElement>("main"), new URLSearchParams("debug=1"));
+		await renderGame(
+			getEl<HTMLElement>("main"),
+			new URLSearchParams("debug=1"),
+		);
 
 		const actionLog = getEl<HTMLElement>("#action-log");
 		expect(actionLog.hasAttribute("hidden")).toBe(false);
@@ -1395,7 +1398,10 @@ describe("renderGame — URL param sourcing", () => {
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
 		// Router passes debug=0 from the hash; location.search has debug=1
-		await renderGame(getEl<HTMLElement>("main"), new URLSearchParams("debug=0"));
+		await renderGame(
+			getEl<HTMLElement>("main"),
+			new URLSearchParams("debug=0"),
+		);
 
 		const actionLog = getEl<HTMLElement>("#action-log");
 		// Hash wins: debug=0 → log must remain hidden

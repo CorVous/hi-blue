@@ -108,7 +108,8 @@ export async function generatePersonas(
 		const tuple = tuples[i] as (typeof tuples)[number];
 		const name = tuple.id;
 		const color = colors[i] as string;
-		const blurb = blurbMap.get(name) ?? buildBlurb(tuple.temperaments, tuple.personaGoal);
+		const blurb =
+			blurbMap.get(name) ?? buildBlurb(tuple.temperaments, tuple.personaGoal);
 		personas[name] = {
 			id: name,
 			name,

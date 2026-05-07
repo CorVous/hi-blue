@@ -7,14 +7,14 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CapHitError } from "../../llm-client.js";
+import type { SynthesisInput } from "../llm-synthesis-provider.js";
 import {
 	BrowserSynthesisProvider,
 	buildSynthesisUserMessage,
 	MockSynthesisProvider,
-	SynthesisError,
 	SYNTHESIS_SYSTEM_PROMPT,
+	SynthesisError,
 } from "../llm-synthesis-provider.js";
-import type { SynthesisInput } from "../llm-synthesis-provider.js";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -198,7 +198,10 @@ describe("BrowserSynthesisProvider", () => {
 
 	it("parses content when present and returns blurbs", async () => {
 		const payload = { personas: CANNED_PERSONAS };
-		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(makeJsonFetchResponse(payload)));
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValue(makeJsonFetchResponse(payload)),
+		);
 
 		const provider = new BrowserSynthesisProvider();
 		const result = await provider.synthesizePersonas(THREE_INPUTS);
@@ -222,10 +225,15 @@ describe("BrowserSynthesisProvider", () => {
 		const fetchMock = vi
 			.fn()
 			.mockResolvedValueOnce(
-				new Response(JSON.stringify({ choices: [{ message: { content: "not-json{{{", reasoning: null } }] }), {
-					status: 200,
-					headers: { "Content-Type": "application/json" },
-				}),
+				new Response(
+					JSON.stringify({
+						choices: [{ message: { content: "not-json{{{", reasoning: null } }],
+					}),
+					{
+						status: 200,
+						headers: { "Content-Type": "application/json" },
+					},
+				),
 			)
 			.mockResolvedValueOnce(makeJsonFetchResponse(payload));
 
@@ -237,15 +245,13 @@ describe("BrowserSynthesisProvider", () => {
 	});
 
 	it("throws CapHitError immediately on 429 without retry", async () => {
-		const fetchMock = vi
-			.fn()
-			.mockResolvedValue(makeCapHitResponse());
+		const fetchMock = vi.fn().mockResolvedValue(makeCapHitResponse());
 
 		vi.stubGlobal("fetch", fetchMock);
 		const provider = new BrowserSynthesisProvider();
-		await expect(provider.synthesizePersonas(THREE_INPUTS)).rejects.toBeInstanceOf(
-			CapHitError,
-		);
+		await expect(
+			provider.synthesizePersonas(THREE_INPUTS),
+		).rejects.toBeInstanceOf(CapHitError);
 		// Only one attempt — no retry on CapHitError
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
@@ -257,33 +263,42 @@ describe("BrowserSynthesisProvider", () => {
 			});
 		vi.stubGlobal(
 			"fetch",
-			vi.fn().mockImplementation(() =>
-				Promise.resolve(new Response(makeBody(), { status: 200 })),
-			),
+			vi
+				.fn()
+				.mockImplementation(() =>
+					Promise.resolve(new Response(makeBody(), { status: 200 })),
+				),
 		);
 		const provider = new BrowserSynthesisProvider();
-		await expect(provider.synthesizePersonas(THREE_INPUTS)).rejects.toBeInstanceOf(
-			SynthesisError,
-		);
+		await expect(
+			provider.synthesizePersonas(THREE_INPUTS),
+		).rejects.toBeInstanceOf(SynthesisError);
 	});
 
 	it("throws SynthesisError when JSON shape is missing personas array", async () => {
 		const makeBody = () =>
 			JSON.stringify({
 				choices: [
-					{ message: { content: JSON.stringify({ wrong: "shape" }), reasoning: null } },
+					{
+						message: {
+							content: JSON.stringify({ wrong: "shape" }),
+							reasoning: null,
+						},
+					},
 				],
 			});
 		vi.stubGlobal(
 			"fetch",
-			vi.fn().mockImplementation(() =>
-				Promise.resolve(new Response(makeBody(), { status: 200 })),
-			),
+			vi
+				.fn()
+				.mockImplementation(() =>
+					Promise.resolve(new Response(makeBody(), { status: 200 })),
+				),
 		);
 		const provider = new BrowserSynthesisProvider();
-		await expect(provider.synthesizePersonas(THREE_INPUTS)).rejects.toBeInstanceOf(
-			SynthesisError,
-		);
+		await expect(
+			provider.synthesizePersonas(THREE_INPUTS),
+		).rejects.toBeInstanceOf(SynthesisError);
 	});
 
 	it("throws SynthesisError when response contains unexpected ids", async () => {
@@ -295,19 +310,26 @@ describe("BrowserSynthesisProvider", () => {
 		const makeBody = () =>
 			JSON.stringify({
 				choices: [
-					{ message: { content: JSON.stringify({ personas: badPersonas }), reasoning: null } },
+					{
+						message: {
+							content: JSON.stringify({ personas: badPersonas }),
+							reasoning: null,
+						},
+					},
 				],
 			});
 		vi.stubGlobal(
 			"fetch",
-			vi.fn().mockImplementation(() =>
-				Promise.resolve(new Response(makeBody(), { status: 200 })),
-			),
+			vi
+				.fn()
+				.mockImplementation(() =>
+					Promise.resolve(new Response(makeBody(), { status: 200 })),
+				),
 		);
 		const provider = new BrowserSynthesisProvider();
-		await expect(provider.synthesizePersonas(THREE_INPUTS)).rejects.toBeInstanceOf(
-			SynthesisError,
-		);
+		await expect(
+			provider.synthesizePersonas(THREE_INPUTS),
+		).rejects.toBeInstanceOf(SynthesisError);
 	});
 
 	it("throws SynthesisError when response is missing an expected id", async () => {
@@ -319,19 +341,26 @@ describe("BrowserSynthesisProvider", () => {
 		const makeBody = () =>
 			JSON.stringify({
 				choices: [
-					{ message: { content: JSON.stringify({ personas: incompletePersonas }), reasoning: null } },
+					{
+						message: {
+							content: JSON.stringify({ personas: incompletePersonas }),
+							reasoning: null,
+						},
+					},
 				],
 			});
 		vi.stubGlobal(
 			"fetch",
-			vi.fn().mockImplementation(() =>
-				Promise.resolve(new Response(makeBody(), { status: 200 })),
-			),
+			vi
+				.fn()
+				.mockImplementation(() =>
+					Promise.resolve(new Response(makeBody(), { status: 200 })),
+				),
 		);
 		const provider = new BrowserSynthesisProvider();
-		await expect(provider.synthesizePersonas(THREE_INPUTS)).rejects.toBeInstanceOf(
-			SynthesisError,
-		);
+		await expect(
+			provider.synthesizePersonas(THREE_INPUTS),
+		).rejects.toBeInstanceOf(SynthesisError);
 	});
 
 	it("on two consecutive transient failures, throws on the second", async () => {
@@ -347,9 +376,9 @@ describe("BrowserSynthesisProvider", () => {
 
 		vi.stubGlobal("fetch", fetchMock);
 		const provider = new BrowserSynthesisProvider();
-		await expect(provider.synthesizePersonas(THREE_INPUTS)).rejects.toBeInstanceOf(
-			SynthesisError,
-		);
+		await expect(
+			provider.synthesizePersonas(THREE_INPUTS),
+		).rejects.toBeInstanceOf(SynthesisError);
 		// Two attempts (first + one retry)
 		expect(fetchMock).toHaveBeenCalledTimes(2);
 	});

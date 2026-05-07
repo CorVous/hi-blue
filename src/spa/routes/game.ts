@@ -10,9 +10,9 @@ import {
 } from "../bbs-chrome.js";
 import { BrowserLLMProvider } from "../game/browser-llm-provider.js";
 import { deriveComposerState } from "../game/composer-reducer.js";
-import { BrowserSynthesisProvider } from "../game/llm-synthesis-provider.js";
 import { getActivePhase, updateActivePhase } from "../game/engine.js";
 import { GameSession } from "../game/game-session.js";
+import { BrowserSynthesisProvider } from "../game/llm-synthesis-provider.js";
 import {
 	applyAddresseeChange,
 	buildPersonaColorMap,
@@ -209,7 +209,10 @@ let gameEnded = false;
 
 let session: GameSession | null = null;
 
-export function renderGame(root: HTMLElement, params?: URLSearchParams): Promise<void> {
+export function renderGame(
+	root: HTMLElement,
+	params?: URLSearchParams,
+): Promise<void> {
 	const doc = root.ownerDocument;
 	const form = doc.querySelector<HTMLFormElement>("#composer");
 	const promptInput = doc.querySelector<HTMLInputElement>("#prompt");
@@ -502,7 +505,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): Promise
 						initPanelChrome(panel, persona);
 						const budgetEl =
 							panel.querySelector<HTMLSpanElement>(".panel-budget");
-						const phase = getActivePhase(session!.getState());
+						const phase = activePhaseForLockouts;
 						if (budgetEl) {
 							const budget = phase.budgets[aiId];
 							if (budget) {

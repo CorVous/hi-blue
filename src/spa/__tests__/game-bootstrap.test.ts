@@ -4,7 +4,7 @@
  * Tests: seeded RNG + mock LLM → synthesis call → blurbs in session state.
  * Also covers the persistence round-trip for LLM-shaped blurbs.
  */
-import { describe, expect, it, vi, afterEach, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { STATIC_PERSONAS } from "./fixtures/static-personas";
 
 // Pin to static personas so panel data-ai attributes are stable
@@ -85,7 +85,11 @@ describe("renderGame — async new-game bootstrap", () => {
 	});
 
 	it("after awaiting renderGame, panels are initialized with persona handles", async () => {
-		vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => undefined, removeItem: () => undefined });
+		vi.stubGlobal("localStorage", {
+			getItem: () => null,
+			setItem: () => undefined,
+			removeItem: () => undefined,
+		});
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
@@ -93,9 +97,15 @@ describe("renderGame — async new-game bootstrap", () => {
 		await renderGame(getEl<HTMLElement>("main"));
 
 		// STATIC_PERSONAS uses red/green/blue as ids, Ember/Sage/Frost as names
-		const redPanel = document.querySelector<HTMLElement>('.ai-panel[data-ai="red"]');
-		const greenPanel = document.querySelector<HTMLElement>('.ai-panel[data-ai="green"]');
-		const bluePanel = document.querySelector<HTMLElement>('.ai-panel[data-ai="blue"]');
+		const redPanel = document.querySelector<HTMLElement>(
+			'.ai-panel[data-ai="red"]',
+		);
+		const greenPanel = document.querySelector<HTMLElement>(
+			'.ai-panel[data-ai="green"]',
+		);
+		const bluePanel = document.querySelector<HTMLElement>(
+			'.ai-panel[data-ai="blue"]',
+		);
 
 		expect(redPanel).toBeTruthy();
 		expect(greenPanel).toBeTruthy();
@@ -118,7 +128,11 @@ describe("renderGame — async new-game bootstrap", () => {
 			};
 		});
 
-		vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => undefined, removeItem: () => undefined });
+		vi.stubGlobal("localStorage", {
+			getItem: () => null,
+			setItem: () => undefined,
+			removeItem: () => undefined,
+		});
 
 		const { renderGame } = await import("../routes/game.js");
 		// renderGame starts the async IIFE but doesn't throw synchronously;
@@ -138,7 +152,11 @@ describe("renderGame — async new-game bootstrap", () => {
 	it("form submit is a no-op before session resolves (no crash)", async () => {
 		// This test verifies that submitting the form before async init completes
 		// doesn't crash the page — the handler returns early when !session.
-		vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => undefined, removeItem: () => undefined });
+		vi.stubGlobal("localStorage", {
+			getItem: () => null,
+			setItem: () => undefined,
+			removeItem: () => undefined,
+		});
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
@@ -149,9 +167,10 @@ describe("renderGame — async new-game bootstrap", () => {
 			const actual = await importOriginal<typeof import("../../content")>();
 			return {
 				...actual,
-				generatePersonas: () => new Promise<typeof STATIC_PERSONAS>((resolve) => {
-					resolvePersonas = resolve;
-				}),
+				generatePersonas: () =>
+					new Promise<typeof STATIC_PERSONAS>((resolve) => {
+						resolvePersonas = resolve;
+					}),
 			};
 		});
 
@@ -164,7 +183,9 @@ describe("renderGame — async new-game bootstrap", () => {
 		promptInput.value = "@Sage hello";
 		promptInput.dispatchEvent(new Event("input"));
 		expect(() => {
-			form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+			form.dispatchEvent(
+				new Event("submit", { bubbles: true, cancelable: true }),
+			);
 		}).not.toThrow();
 
 		// Now let personas resolve
@@ -203,7 +224,8 @@ describe("persistence — LLM-shaped blurb round-trips verbatim", () => {
 				color: "#81b29a",
 				temperaments: ["meticulous", "meticulous"] as [string, string],
 				personaGoal: "Ensure items are evenly distributed.",
-				blurb: "You are intensely meticulous. Ensure items are evenly distributed.",
+				blurb:
+					"You are intensely meticulous. Ensure items are evenly distributed.",
 				budgetPerPhase: 5,
 			},
 			blue: {
@@ -217,14 +239,18 @@ describe("persistence — LLM-shaped blurb round-trips verbatim", () => {
 			},
 		};
 
-		const game = startPhase(createGame(personasWithLlmBlurb), PHASE_1_CONFIG, () => 0);
+		const game = startPhase(
+			createGame(personasWithLlmBlurb),
+			PHASE_1_CONFIG,
+			() => 0,
+		);
 		const persisted = serializeGameState(game);
 		const restored = deserializeGameState(persisted);
 
 		// The LLM blurb must survive the round-trip byte-for-byte
-		expect(restored.personas["red"]?.blurb).toBe(LLM_BLURB);
+		expect(restored.personas.red?.blurb).toBe(LLM_BLURB);
 		// Shorter template blurbs also survive intact
-		expect(restored.personas["green"]?.blurb).toBe(
+		expect(restored.personas.green?.blurb).toBe(
 			"You are intensely meticulous. Ensure items are evenly distributed.",
 		);
 	});

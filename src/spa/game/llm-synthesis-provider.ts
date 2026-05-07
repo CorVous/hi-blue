@@ -27,10 +27,15 @@ Return ONLY valid JSON with this exact shape (no markdown, no preamble):
 {"personas": [{"id": "<input id>", "blurb": "<text>"}, ...]}\n\nEcho the input id field verbatim. The array must contain exactly one entry per input persona, in any order.`;
 
 export function buildSynthesisUserMessage(
-	input: Array<{ id: string; temperaments: [string, string]; personaGoal: string }>,
+	input: Array<{
+		id: string;
+		temperaments: [string, string];
+		personaGoal: string;
+	}>,
 ): string {
-	const items = input.map((p) =>
-		`id: ${JSON.stringify(p.id)}, temperaments: [${JSON.stringify(p.temperaments[0])}, ${JSON.stringify(p.temperaments[1])}], personaGoal: ${JSON.stringify(p.personaGoal)}`,
+	const items = input.map(
+		(p) =>
+			`id: ${JSON.stringify(p.id)}, temperaments: [${JSON.stringify(p.temperaments[0])}, ${JSON.stringify(p.temperaments[1])}], personaGoal: ${JSON.stringify(p.personaGoal)}`,
 	);
 	return `Synthesize blurbs for these personas:\n${items.join("\n")}`;
 }
