@@ -1,6 +1,6 @@
 # Ralph QA Checklist — Rounds 1–3 merged into `claude/review-issues-ralph-loop-dt49w`
 
-> Items with an automated equivalent live in `e2e/`; run `pnpm test:e2e`.
+> Items with an automated equivalent live in `e2e/`; run `pnpm smoke`.
 
 Final integration smoke: ✅ passed — `pnpm lint` clean, `pnpm typecheck` clean, 269/269 tests pass on the merged tip.
 
