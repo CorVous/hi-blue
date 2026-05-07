@@ -24,8 +24,141 @@ export function wordsToOpenAiSseBody(words: string[]): string {
 }
 
 /**
+ * Extract persona ids from a synthesis user-message content string.
+ * The synthesis user message format is: `id: "xxxx", temperaments: ...`
+ * Ids are exactly 4 lowercase alphanumeric characters.
+ */
+function extractInputIds(content: string): string[] {
+	return Array.from(
+		content.matchAll(/id:\s*"([a-z0-9]{4})"/g),
+		(m) => m[1] ?? "",
+	).filter(Boolean);
+}
+
+export type SynthesisStubOptions = {
+	/** Generate a blurb for a given persona id. Defaults to `id => \`Stub blurb for ${id}.\`` */
+	blurb?: (id: string) => string;
+};
+
+/**
+ * Register a Playwright route stub that handles the persona synthesis
+ * JSON-mode `/v1/chat/completions` call.  It parses the request body,
+ * extracts persona ids from the user message, and returns a canned
+ * `{ choices: [{ message: { content: JSON.stringify({ personas: [...] }) } }] }`
+ * response that echoes each input id verbatim.
+ *
+ * Non-synthesis (SSE/streaming) requests are forwarded via `route.fallback()`.
+ */
+export async function stubPersonaSynthesis(
+	page: Page,
+	options?: SynthesisStubOptions,
+): Promise<void> {
+	const blurbFn = options?.blurb ?? ((id: string) => `Stub blurb for ${id}.`);
+	await page.route("**/v1/chat/completions", async (route, request) => {
+		let parsed: unknown = null;
+		try {
+			parsed = JSON.parse(request.postData() ?? "null");
+		} catch {
+			// ignore parse error
+		}
+		const body = parsed as {
+			stream?: boolean;
+			response_format?: unknown;
+			messages?: Array<{ content?: string }>;
+		} | null;
+		const isJsonMode =
+			body !== null && (body.stream === false || body.response_format != null);
+		if (isJsonMode) {
+			const ids = extractInputIds(body?.messages?.[1]?.content ?? "");
+			const content = JSON.stringify({
+				personas: ids.map((id) => ({ id, blurb: blurbFn(id) })),
+			});
+			await route.fulfill({
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ choices: [{ message: { content } }] }),
+			});
+			return;
+		}
+		await route.fallback();
+	});
+}
+
+export type NewGameLLMOptions = {
+	sse: string[] | WordsFactory;
+	synthesis?: SynthesisStubOptions;
+};
+
+/**
+ * Combined stub that handles both the persona synthesis JSON call and the
+ * gameplay SSE streaming call in a single `page.route` registration.
+ *
+ * Distinguishes calls by request body:
+ *   - `stream === false` or `response_format` present → synthesis JSON response
+ *   - otherwise → SSE streaming response
+ */
+export async function stubNewGameLLM(
+	page: Page,
+	opts: NewGameLLMOptions,
+): Promise<void> {
+	const blurbFn =
+		opts.synthesis?.blurb ?? ((id: string) => `Stub blurb for ${id}.`);
+	const wordsOrFactory = opts.sse;
+
+	await page.route("**/v1/chat/completions", async (route, request) => {
+		let parsed: unknown = null;
+		try {
+			parsed = JSON.parse(request.postData() ?? "null");
+		} catch {
+			// ignore parse error
+		}
+		const body = parsed as {
+			stream?: boolean;
+			response_format?: unknown;
+			messages?: Array<{ content?: string }>;
+		} | null;
+		const isJsonMode =
+			body !== null && (body.stream === false || body.response_format != null);
+
+		if (isJsonMode) {
+			const ids = extractInputIds(body?.messages?.[1]?.content ?? "");
+			const content = JSON.stringify({
+				personas: ids.map((id) => ({ id, blurb: blurbFn(id) })),
+			});
+			await route.fulfill({
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ choices: [{ message: { content } }] }),
+			});
+			return;
+		}
+
+		// SSE path
+		const words =
+			typeof wordsOrFactory === "function"
+				? await wordsOrFactory(request)
+				: wordsOrFactory;
+		await route.fulfill({
+			status: 200,
+			headers: {
+				"Content-Type": "text/event-stream",
+				"Cache-Control": "no-cache",
+				"X-Content-Type-Options": "nosniff",
+			},
+			body: wordsToOpenAiSseBody(words),
+		});
+	});
+}
+
+/**
  * Register a Playwright route stub for the `/v1/chat/completions` endpoint
  * that responds with a synthetic streaming OpenAI SSE body.
+ *
+ * Also handles the persona synthesis JSON-mode call (stream === false or
+ * response_format present) by returning a canned JSON response that echoes
+ * the input persona ids verbatim.  This means every existing spec that calls
+ * `stubChatCompletions` continues to work even when the SPA fires the
+ * synthesis call first.
  *
  * The SPA's `BrowserLLMProvider` (via `src/spa/llm-client.ts`) calls
  * `${__WORKER_BASE_URL__}/v1/chat/completions` — this is the correct endpoint
@@ -54,6 +187,34 @@ export async function stubChatCompletions(
 	wordsOrFactory: string[] | WordsFactory,
 ): Promise<void> {
 	await page.route("**/v1/chat/completions", async (route, request) => {
+		let parsed: unknown = null;
+		try {
+			parsed = JSON.parse(request.postData() ?? "null");
+		} catch {
+			// ignore parse error
+		}
+		const body = parsed as {
+			stream?: boolean;
+			response_format?: unknown;
+			messages?: Array<{ content?: string }>;
+		} | null;
+		const isJsonMode =
+			body !== null && (body.stream === false || body.response_format != null);
+
+		if (isJsonMode) {
+			// Synthesis path — echo input ids with canned blurbs
+			const ids = extractInputIds(body?.messages?.[1]?.content ?? "");
+			const content = JSON.stringify({
+				personas: ids.map((id) => ({ id, blurb: `Stub blurb for ${id}.` })),
+			});
+			await route.fulfill({
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ choices: [{ message: { content } }] }),
+			});
+			return;
+		}
+
 		const words =
 			typeof wordsOrFactory === "function"
 				? await wordsOrFactory(request)

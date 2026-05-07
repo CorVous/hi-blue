@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { stubChatCompletions } from "./helpers";
+import { getAiHandles, stubChatCompletions } from "./helpers";
 
 /**
  * E2E Slice 4 — game_ended current behaviour (issue #80, simplified by #101)
@@ -14,7 +14,7 @@ import { stubChatCompletions } from "./helpers";
  * --------------------------------
  * `?winImmediately=1` (#101) recursively patches the real PHASE_1 → PHASE_2 →
  * PHASE_3 config chain, injecting `winCondition: () => true` at every level.
- * A cold-start `goto("/?winImmediately=1")` followed by three `@Ember`-addressed
+ * A cold-start `goto("/?winImmediately=1")` followed by three @<name>-addressed
  * messages (one per phase) reliably reaches `game_ended` without any
  * localStorage pre-seeding.
  *
@@ -38,33 +38,36 @@ test("game_ended disables composer and clears storage", async ({ page }) => {
 	// Wait for SPA mount.
 	await expect(page.locator("#composer")).toBeVisible();
 
-	// 3. Capture URL before submitting (proves URL stability below).
+	// 3. Read AI handles dynamically (set after synthesis completes).
+	const { names } = await getAiHandles(page);
+
+	// 4. Capture URL before submitting (proves URL stability below).
 	const urlBefore = page.url();
 
-	// Helper: fill prompt with an @Ember mention, wait for Send to enable, click.
+	// Helper: fill prompt with a mention of ids[0], wait for Send to enable, click.
 	async function submitMessage(text: string): Promise<void> {
 		await page.fill("#prompt", text);
 		await expect(page.locator("#send")).toBeEnabled();
 		await page.click("#send");
 	}
 
-	// 4. Round 1 — phase 1 ends; wait for phase banner to advance to Phase 2.
-	await submitMessage("@Ember hello");
+	// 5. Round 1 — phase 1 ends; wait for phase banner to advance to Phase 2.
+	await submitMessage(`@${names[0]} hello`);
 	await expect(page.locator("#phase-banner")).toContainText("Phase 2", {
 		timeout: 30_000,
 	});
 
-	// 5. Round 2 — phase 2 ends; wait for phase banner to advance to Phase 3.
-	await submitMessage("@Ember hello");
+	// 6. Round 2 — phase 2 ends; wait for phase banner to advance to Phase 3.
+	await submitMessage(`@${names[0]} hello`);
 	await expect(page.locator("#phase-banner")).toContainText("Phase 3", {
 		timeout: 30_000,
 	});
 
-	// 6. Round 3 — phase 3 ends; game_ended fires → #send permanently disabled.
-	await submitMessage("@Ember hello");
+	// 7. Round 3 — phase 3 ends; game_ended fires → #send permanently disabled.
+	await submitMessage(`@${names[0]} hello`);
 	await expect(page.locator("#send")).toBeDisabled({ timeout: 30_000 });
 
-	// 7. Assert all acceptance criteria.
+	// 8. Assert all acceptance criteria.
 
 	// #send disabled
 	await expect(page.locator("#send")).toBeDisabled();

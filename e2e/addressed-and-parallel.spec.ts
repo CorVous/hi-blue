@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { stubChatCompletions } from "./helpers/index";
+import { getAiHandles, stubChatCompletions } from "./helpers/index";
 
 /**
  * The three distinct completions served to the three AIs.  Since the SPA
@@ -9,9 +9,7 @@ import { stubChatCompletions } from "./helpers/index";
  */
 const COMPLETIONS = ["alpha beta gamma", "one two", "x y z"] as const;
 
-type LenPair = { red: number; green: number };
-
-test("addressed message lands only on red panel; all three panels render progressively", async ({
+test("addressed message lands only on first panel; all three panels render progressively", async ({
 	page,
 }) => {
 	const pageErrors: Error[] = [];
@@ -30,50 +28,61 @@ test("addressed message lands only on red panel; all three panels render progres
 		return (text as string).split(" ").map((w) => `${w} `);
 	});
 
-	// 3. Fill prompt with @Ember mention to address red.
-	const message = "@Ember hello red panel";
+	// 3. Read AI handles dynamically (set after synthesis completes).
+	const { ids, names } = await getAiHandles(page);
+
+	// 4. Fill prompt with first AI's mention to address ids[0].
+	const message = `@${names[0]} hello first panel`;
 	await page.fill("#prompt", message);
 
-	// 4. Install an in-page sampler that collects (red, green) transcript
+	// 5. Install an in-page sampler that collects (ids[0], ids[1]) transcript
 	//    lengths every 30 ms.  We read the results back after streaming ends.
-	await page.evaluate(() => {
+	await page.evaluate((aiIds: string[]) => {
 		(window as unknown as Record<string, unknown>).__lenSamples = [];
 		(window as unknown as Record<string, unknown>).__lenSampleId = setInterval(
 			() => {
 				const r =
-					document.querySelector('[data-transcript="red"]')?.textContent
+					document.querySelector(`[data-transcript="${aiIds[0]}"]`)?.textContent
 						?.length ?? 0;
 				const g =
-					document.querySelector('[data-transcript="green"]')?.textContent
+					document.querySelector(`[data-transcript="${aiIds[1]}"]`)?.textContent
 						?.length ?? 0;
 				(
-					(window as unknown as Record<string, unknown>)
-						.__lenSamples as LenPair[]
-				).push({ red: r, green: g });
+					(window as unknown as Record<string, unknown>).__lenSamples as Array<{
+						first: number;
+						second: number;
+					}>
+				).push({ first: r, second: g });
 			},
 			30,
 		);
-	});
+	}, ids);
 
-	// 5. Click send — triggers the SPA round flow.
+	// 6. Click send — triggers the SPA round flow.
 	await page.click("#send");
 
-	// 6. Wait for all three panels to show their completion text.
+	// 7. Wait for all three panels to show their completion text.
 	//    Each AI gets a distinct completion; wait until the third one appears.
 	await page.waitForFunction(
-		(completions: readonly string[]) => {
-			const texts = ["red", "green", "blue"].map(
+		({
+			completions,
+			aiIds,
+		}: {
+			completions: readonly string[];
+			aiIds: string[];
+		}) => {
+			const texts = aiIds.map(
 				(ai) =>
 					document.querySelector(`[data-transcript="${ai}"]`)?.textContent ??
 					"",
 			);
 			return completions.every((c) => texts.some((t) => t.includes(c)));
 		},
-		COMPLETIONS,
+		{ completions: COMPLETIONS, aiIds: ids },
 		{ timeout: 30_000 },
 	);
 
-	// 7. Stop sampler and retrieve snapshots.
+	// 8. Stop sampler and retrieve snapshots.
 	await page.evaluate(() => {
 		clearInterval(
 			(window as unknown as Record<string, unknown>)
@@ -82,34 +91,37 @@ test("addressed message lands only on red panel; all three panels render progres
 	});
 	const samples = await page.evaluate(
 		() =>
-			(window as unknown as Record<string, unknown>).__lenSamples as LenPair[],
+			(window as unknown as Record<string, unknown>).__lenSamples as Array<{
+				first: number;
+				second: number;
+			}>,
 	);
 
-	// 8. Gather transcript content.
-	const redTranscript = await page
-		.locator('[data-transcript="red"]')
+	// 9. Gather transcript content.
+	const firstTranscript = await page
+		.locator(`[data-transcript="${ids[0]}"]`)
 		.textContent();
-	const greenTranscript = await page
-		.locator('[data-transcript="green"]')
+	const secondTranscript = await page
+		.locator(`[data-transcript="${ids[1]}"]`)
 		.textContent();
-	const blueTranscript = await page
-		.locator('[data-transcript="blue"]')
+	const thirdTranscript = await page
+		.locator(`[data-transcript="${ids[2]}"]`)
 		.textContent();
 
-	// 9. player message appears in red transcript exactly once.
-	expect(redTranscript ?? "").toContain(`> @Ember hello red panel`);
+	// 10. player message appears in first transcript exactly once.
+	expect(firstTranscript ?? "").toContain(`> @${names[0]} hello first panel`);
 	// Exactly once: splitting on "> @" gives exactly two parts.
-	expect((redTranscript ?? "").split("> @").length).toBe(2);
+	expect((firstTranscript ?? "").split("> @").length).toBe(2);
 
-	// 10. green and blue do NOT contain "> @" (no player line).
-	expect(greenTranscript ?? "").not.toContain("> @");
-	expect(blueTranscript ?? "").not.toContain("> @");
+	// 11. second and third do NOT contain "> @" (no player line).
+	expect(secondTranscript ?? "").not.toContain("> @");
+	expect(thirdTranscript ?? "").not.toContain("> @");
 
-	// 11. Each distinct completion appears in exactly one transcript.
+	// 12. Each distinct completion appears in exactly one transcript.
 	const transcripts = [
-		redTranscript ?? "",
-		greenTranscript ?? "",
-		blueTranscript ?? "",
+		firstTranscript ?? "",
+		secondTranscript ?? "",
+		thirdTranscript ?? "",
 	];
 	for (const completion of COMPLETIONS) {
 		const count = transcripts.filter((t) => t.includes(completion)).length;
@@ -119,18 +131,18 @@ test("addressed message lands only on red panel; all three panels render progres
 		).toBe(1);
 	}
 
-	// 12. Progressive rendering: at least one sample must have both red and
-	//     green non-empty with different lengths.  This arises naturally once
+	// 13. Progressive rendering: at least one sample must have both first and
+	//     second non-empty with different lengths.  This arises naturally once
 	//     one panel finishes streaming and the next is mid-stream.
 	const divergentSample = samples.find(
-		(s) => s.red > 0 && s.green > 0 && s.red !== s.green,
+		(s) => s.first > 0 && s.second > 0 && s.first !== s.second,
 	);
 	expect(
 		divergentSample,
-		`Expected a sample where red and green both have non-zero but different ` +
+		`Expected a sample where first and second panels both have non-zero but different ` +
 			`lengths. Samples: ${JSON.stringify(samples.slice(0, 20))}`,
 	).toBeDefined();
 
-	// 13. No page errors.
+	// 14. No page errors.
 	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
 });

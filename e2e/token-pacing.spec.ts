@@ -1,8 +1,8 @@
 import { expect, test } from "@playwright/test";
-import { stubChatCompletions } from "./helpers";
+import { getAiHandles, stubChatCompletions } from "./helpers";
 
-// Word chunks yielded for every AI call.  Red gets these tokens and we
-// sample its transcript; green / blue responses use the same stub so all
+// Word chunks yielded for every AI call.  First AI gets these tokens and we
+// sample its transcript; second / third responses use the same stub so all
 // three LLM calls resolve quickly.
 // 20 words × ≈42 ms/word (TOKEN_PACE_MS 60 × red-speed 0.7 × avg 1.0)
 // ≈ 840 ms total display window — well beyond the 500 ms sample point.
@@ -29,7 +29,7 @@ const WORDS = [
 	"twenty.",
 ];
 
-// The expected final text appended to red's transcript by the token loop.
+// The expected final text appended to the first AI's transcript by the token loop.
 // game.ts prepends "[<PersonaName>] " before token emission and appends "\n"
 // on ai_end.  We only assert the token portion here.
 const EXPECTED_TOKENS = WORDS.join("");
@@ -37,7 +37,7 @@ const EXPECTED_TOKENS = WORDS.join("");
 /**
  * E2E Slice 2 — Token delivery
  *
- * Verifies that the SPA delivers AI content to `[data-transcript="red"]`
+ * Verifies that the SPA delivers AI content to `[data-transcript="<ids[0]>"]`
  * correctly when the completion SSE body arrives in a single chunk
  * (as `route.fulfill` does — the entire body is delivered at once).
  *
@@ -68,17 +68,22 @@ test("token streaming arrives word-by-word, not as a single dump", async ({
 
 	await page.goto("/");
 
-	// Ensure the game page is ready.
-	await expect(page.locator('article.ai-panel[data-ai="red"]')).toBeVisible();
+	// Read AI handles dynamically (set after synthesis completes).
+	const { ids, names } = await getAiHandles(page);
 
-	// ── Submit a message addressed to red via @Ember mention ────────────────
-	await page.fill("#prompt", "@Ember Hello");
+	// Ensure the game page is ready.
+	await expect(
+		page.locator(`article.ai-panel[data-ai="${ids[0]}"]`),
+	).toBeVisible();
+
+	// ── Submit a message addressed to ids[0] ─────────────────────────────────────
+	await page.fill("#prompt", `@${names[0]} Hello`);
 	await expect(page.locator("#send")).toBeEnabled();
 
-	const redTranscript = page.locator('[data-transcript="red"]');
+	const firstTranscript = page.locator(`[data-transcript="${ids[0]}"]`);
 
 	// Capture pre-submit baseline length.
-	const baselineText = (await redTranscript.textContent()) ?? "";
+	const baselineText = (await firstTranscript.textContent()) ?? "";
 
 	await page.click("#send");
 
@@ -86,11 +91,13 @@ test("token streaming arrives word-by-word, not as a single dump", async ({
 	// With live streaming, "thinking…" is stripped on the first live delta and
 	// replaced immediately by the AI's persona prefix + content. We wait for
 	// thinking… to disappear and the transcript to grow past the player message.
-	const playerMsg = `\n> @Ember Hello\n`;
+	const playerMsg = `\n> @${names[0]} Hello\n`;
 	const afterPlayerLength = baselineText.length + playerMsg.length;
 
 	// Wait for thinking… to clear (first live delta strips it).
-	await expect(redTranscript).not.toHaveText(/thinking…/, { timeout: 15_000 });
+	await expect(firstTranscript).not.toHaveText(/thinking…/, {
+		timeout: 15_000,
+	});
 
 	// Poll until at least one token character arrives after the player message.
 	await page.waitForFunction(
@@ -98,24 +105,24 @@ test("token streaming arrives word-by-word, not as a single dump", async ({
 			const el = document.querySelector(selector);
 			return el != null && (el.textContent ?? "").length > minLen;
 		},
-		{ selector: '[data-transcript="red"]', minLen: afterPlayerLength },
+		{ selector: `[data-transcript="${ids[0]}"]`, minLen: afterPlayerLength },
 		{ timeout: 10_000 },
 	);
 
 	// snap0: capture transcript immediately after first content arrives.
 	// With live streaming + route.fulfill the entire AI response is already
 	// there at this point (all deltas fire synchronously in one SSE read).
-	const snap0 = (await redTranscript.textContent()) ?? "";
+	const snap0 = (await firstTranscript.textContent()) ?? "";
 
 	// ── Wait for the round to fully complete ────────────────────────────────
-	// Wait for red's full token stream to land. The encoder pacing loop still
-	// runs (pace() awaits) but skips re-appending text for live AIs. (Post-#107
-	// the send button no longer re-enables after submit because the prompt is
-	// cleared and an empty prompt has no @mention.)
-	await expect(redTranscript).toContainText(EXPECTED_TOKENS, {
+	// Wait for the first AI's full token stream to land. The encoder pacing loop
+	// still runs (pace() awaits) but skips re-appending text for live AIs.
+	// (Post-#107 the send button no longer re-enables after submit because the
+	// prompt is cleared and an empty prompt has no @mention.)
+	await expect(firstTranscript).toContainText(EXPECTED_TOKENS, {
 		timeout: 20_000,
 	});
-	const snapFinal = (await redTranscript.textContent()) ?? "";
+	const snapFinal = (await firstTranscript.textContent()) ?? "";
 
 	// ── Assertions ────────────────────────────────────────────────────────────
 

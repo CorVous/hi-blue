@@ -22,13 +22,14 @@
  */
 
 import { expect, test } from "@playwright/test";
+import { getAiHandles } from "./helpers";
 
 // 5 chunks per AI × 200ms = 1.0s per stream × 3 AIs = ~3.0s total wire time.
 const CHUNK_INTERVAL_MS = 200;
 const CHUNKS_PER_AI: Record<string, string[]> = {
-	"call-1": ["alpha ", "beta ", "gamma ", "delta ", "epsilon."],
-	"call-2": ["uno ", "dos ", "tres ", "quatro ", "cinco."],
-	"call-3": ["one ", "two ", "three ", "four ", "five."],
+	"call-2": ["alpha ", "beta ", "gamma ", "delta ", "epsilon."],
+	"call-3": ["uno ", "dos ", "tres ", "quatro ", "cinco."],
+	"call-4": ["one ", "two ", "three ", "four ", "five."],
 };
 
 interface DiagSample {
@@ -54,11 +55,19 @@ test("DIAGNOSTIC: observe wire vs DOM timeline during streaming", async ({
 		}
 	});
 
-	// addInitScript runs before any page script. We monkey-patch fetch to
-	// intercept /v1/chat/completions and return a real ReadableStream-backed
-	// Response whose chunks emit at known intervals.
+	// addInitScript runs before any page script. We monkey-patch fetch to:
+	// (a) Handle the synthesis JSON-mode call (stream===false or response_format
+	//     present) by echoing back a canned personas response.
+	// (b) For SSE streaming calls, return a real ReadableStream-backed Response
+	//     whose chunks emit at known intervals.
 	await page.addInitScript(
-		({ chunkSets, intervalMs }) => {
+		({
+			chunkSets,
+			intervalMs,
+		}: {
+			chunkSets: Record<string, string[]>;
+			intervalMs: number;
+		}) => {
 			const t0 = performance.now();
 			function diag(payload: Record<string, unknown>): void {
 				const t = Math.round(performance.now() - t0);
@@ -66,16 +75,23 @@ test("DIAGNOSTIC: observe wire vs DOM timeline during streaming", async ({
 			}
 
 			// MutationObserver on each transcript — fires whenever textContent grows.
-			// We install it once DOM is ready.
+			// We install it once DOM is ready. Panels get data-transcript set
+			// dynamically after synthesis, so we observe all [data-transcript] elements
+			// by watching the document for new elements.
 			window.addEventListener("DOMContentLoaded", () => {
-				for (const ai of ["red", "green", "blue"]) {
-					const el = document.querySelector(`[data-transcript="${ai}"]`);
-					if (!el) continue;
+				const observedTranscripts = new Set<Element>();
+				function observeTranscript(el: Element): void {
+					if (observedTranscripts.has(el)) return;
+					observedTranscripts.add(el);
+					const tag =
+						(el as HTMLElement).dataset.transcript ??
+						el.getAttribute("data-transcript") ??
+						"?";
 					let lastLen = el.textContent?.length ?? 0;
 					new MutationObserver(() => {
 						const len = el.textContent?.length ?? 0;
 						if (len !== lastLen) {
-							diag({ kind: "dom", tag: ai, detail: `len=${len}` });
+							diag({ kind: "dom", tag, detail: `len=${len}` });
 							lastLen = len;
 						}
 					}).observe(el, {
@@ -84,6 +100,37 @@ test("DIAGNOSTIC: observe wire vs DOM timeline during streaming", async ({
 						subtree: true,
 					});
 				}
+
+				// Observe transcript elements that exist or appear later
+				for (const el of document.querySelectorAll("[data-transcript]")) {
+					observeTranscript(el);
+				}
+				new MutationObserver((mutations) => {
+					for (const m of mutations) {
+						for (const node of m.addedNodes) {
+							if (node instanceof Element) {
+								if (node.hasAttribute("data-transcript"))
+									observeTranscript(node);
+								for (const el of node.querySelectorAll("[data-transcript]")) {
+									observeTranscript(el);
+								}
+							}
+						}
+						// Also handle attribute changes on existing elements
+						if (
+							m.type === "attributes" &&
+							m.attributeName === "data-transcript" &&
+							m.target instanceof Element
+						) {
+							observeTranscript(m.target);
+						}
+					}
+				}).observe(document.body, {
+					childList: true,
+					subtree: true,
+					attributes: true,
+					attributeFilter: ["data-transcript"],
+				});
 			});
 
 			let callIdx = 0;
@@ -101,8 +148,45 @@ test("DIAGNOSTIC: observe wire vs DOM timeline during streaming", async ({
 
 				callIdx += 1;
 				const tag = `call-${callIdx}`;
+
+				// Detect synthesis call (stream===false or response_format present)
+				let isSynthesis = false;
+				try {
+					const body = JSON.parse(
+						typeof init?.body === "string" ? init.body : "",
+					) as {
+						stream?: boolean;
+						response_format?: unknown;
+						messages?: Array<{ content?: string }>;
+					};
+					isSynthesis = body.stream === false || body.response_format != null;
+					if (isSynthesis) {
+						// Echo back persona ids with canned blurbs
+						const content2 = body.messages?.[1]?.content ?? "";
+						const ids: string[] = Array.from(
+							content2.matchAll(/id:\s*"([a-z0-9]{4})"/g),
+							(m) => m[1] ?? "",
+						).filter(Boolean);
+						const personas = ids.map((id) => ({
+							id,
+							blurb: `Stub blurb for ${id}.`,
+						}));
+						const responseBody = JSON.stringify({
+							choices: [{ message: { content: JSON.stringify({ personas }) } }],
+						});
+						return Promise.resolve(
+							new Response(responseBody, {
+								status: 200,
+								headers: { "Content-Type": "application/json" },
+							}),
+						);
+					}
+				} catch {
+					// ignore parse errors
+				}
+
 				const chunks =
-					(chunkSets as Record<string, string[]>)[tag] ?? chunkSets["call-1"];
+					(chunkSets as Record<string, string[]>)[tag] ?? chunkSets["call-2"];
 				diag({ kind: "fetch", tag });
 
 				const encoder = new TextEncoder();
@@ -137,14 +221,18 @@ test("DIAGNOSTIC: observe wire vs DOM timeline during streaming", async ({
 	);
 
 	await page.goto("/");
-	await expect(page.locator('article.ai-panel[data-ai="red"]')).toBeVisible();
 
-	await page.fill("#prompt", "@Ember Hello");
+	// Wait for synthesis to complete and panels to get dynamic data-ai attributes.
+	const { ids, names } = await getAiHandles(page);
+
+	await page.fill("#prompt", `@${names[0]} Hello`);
 	await page.click("#send");
 
 	// Wait until all three SSE streams complete. (Post-#107 the send button no
 	// longer re-enables after submit because the prompt is cleared and an empty
 	// prompt has no @mention.)
+	// The synthesis call is call-1, so streaming starts at call-2. We need 3
+	// fetch_done events (calls 2, 3, 4).
 	await expect
 		.poll(() => samples.filter((s) => s.kind === "fetch_done").length, {
 			timeout: 30_000,
@@ -184,6 +272,11 @@ test("DIAGNOSTIC: observe wire vs DOM timeline during streaming", async ({
 	console.log(
 		`firstFetch=${firstFetchT}ms  firstFetchDone=${firstFetchDoneT}ms  lastFetchDone=${lastFetchDoneT}ms  liveGrowthEvents=${liveGrowthEvents.length}`,
 	);
+
+	// Verify that ids are 4-char procedural handles (validates synthesis stub wiring)
+	for (const id of ids) {
+		expect(id).toMatch(/^[a-z0-9]{4}$/);
+	}
 
 	// LIVE-STREAMING ASSERTION (expected to FAIL on current code):
 	// At least one panel should grow with real content WHILE another AI's
