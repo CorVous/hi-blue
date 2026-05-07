@@ -32,22 +32,18 @@ export interface PersonaSpatialState {
 	facing: CardinalDirection;
 }
 
-export type ActionLogEntry = {
+export type RoundActionRecord = {
 	round: number;
 	actor: AiId;
 	description: string;
-} & (
-	| { type: "tool_success"; toolName: string; args: Record<string, string> }
-	| {
-			type: "tool_failure";
-			toolName: string;
-			args: Record<string, string>;
-			reason: string;
-	  }
-	| { type: "chat"; target: AiId | "player" }
-	| { type: "whisper"; target: AiId }
-	| { type: "pass" }
-);
+	kind:
+		| "tool_success"
+		| "tool_failure"
+		| "chat"
+		| "whisper"
+		| "pass"
+		| "lockout";
+};
 
 export interface ChatMessage {
 	role: "player" | "ai";
@@ -105,7 +101,6 @@ export interface PhaseState {
 	budgets: Record<AiId, AiBudget>;
 	chatHistories: Record<AiId, ChatMessage[]>;
 	whispers: WhisperMessage[];
-	actionLog: ActionLogEntry[];
 	/** Budget-exhaustion lockout: prevents the AI from acting at all. */
 	lockedOut: Set<AiId>;
 	/**
@@ -173,7 +168,7 @@ export interface ToolRoundtripMessage {
 
 export interface RoundResult {
 	round: number;
-	actions: ActionLogEntry[];
+	actions: RoundActionRecord[];
 	phaseEnded: boolean;
 	gameEnded: boolean;
 	/**

@@ -24,7 +24,6 @@ import { buildAiContext } from "../prompt-builder";
 import { runRound } from "../round-coordinator";
 import type { RoundLLMProvider } from "../round-llm-provider";
 import { MockRoundLLMProvider } from "../round-llm-provider";
-import { TOOL_DEFINITIONS } from "../tool-registry";
 import type { AiId, AiPersona, PhaseConfig } from "../types";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
@@ -179,9 +178,8 @@ describe("chat-only round", () => {
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
-		const { nextState } = await runRound(game, "red", "hi", provider);
-		const log = getActivePhase(nextState).actionLog;
-		const actors = new Set(log.map((e) => e.actor));
+		const { result } = await runRound(game, "red", "hi", provider);
+		const actors = new Set(result.actions.map((e) => e.actor));
 		expect(actors.size).toBe(3);
 	});
 });
@@ -201,9 +199,8 @@ describe("whisper round — via dispatcher only", () => {
 			{ assistantText: "", toolCalls: [] }, // green passes
 			{ assistantText: "", toolCalls: [] }, // blue passes
 		]);
-		const { nextState } = await runRound(game, "red", "hi", provider);
-		const log = getActivePhase(nextState).actionLog;
-		expect(log.filter((e) => e.type === "pass")).toHaveLength(3);
+		const { result } = await runRound(game, "red", "hi", provider);
+		expect(result.actions.filter((e) => e.kind === "pass")).toHaveLength(3);
 	});
 });
 
@@ -239,11 +236,11 @@ describe("budget-exhaustion lockout", () => {
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
-		const { nextState } = await runRound(game, "green", "hi", provider);
+		const { result } = await runRound(game, "green", "hi", provider);
 
-		const log = getActivePhase(nextState).actionLog;
-		const redEntries = log.filter((e) => e.actor === "red");
-		expect(redEntries.length).toBeGreaterThan(0);
+		expect(
+			result.actions.some((a) => a.actor === "red" && a.kind === "lockout"),
+		).toBe(true);
 	});
 
 	it("an AI exhausting budget mid-round locks out for subsequent rounds", async () => {
@@ -288,10 +285,9 @@ describe("budget-exhaustion lockout", () => {
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
-		const { nextState } = await runRound(game, "green", "hi", provider);
+		const { result } = await runRound(game, "green", "hi", provider);
 
-		const log = getActivePhase(nextState).actionLog;
-		const roundNumbers = new Set(log.map((e) => e.round));
+		const roundNumbers = new Set(result.actions.map((e) => e.round));
 		expect(roundNumbers.size).toBe(1);
 	});
 });
@@ -374,9 +370,8 @@ describe("tool-call dispatch", () => {
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
-		const { nextState } = await runRound(game, "red", "hi", provider);
-		const log = getActivePhase(nextState).actionLog;
-		expect(log.some((e) => e.type === "tool_success")).toBe(true);
+		const { result } = await runRound(game, "red", "hi", provider);
+		expect(result.actions.some((e) => e.kind === "tool_success")).toBe(true);
 	});
 
 	it("appends tool_failure when item is not in room (pick_up on non-existent)", async () => {
@@ -395,12 +390,11 @@ describe("tool-call dispatch", () => {
 			},
 			{ assistantText: "", toolCalls: [] },
 		]);
-		const { nextState } = await runRound(game, "red", "hi", provider);
-		const log = getActivePhase(nextState).actionLog;
-		expect(log.some((e) => e.type === "tool_failure")).toBe(true);
+		const { result } = await runRound(game, "red", "hi", provider);
+		expect(result.actions.some((e) => e.kind === "tool_failure")).toBe(true);
 	});
 
-	it("tool_failure entry has a non-empty reason", async () => {
+	it("tool_failure description is non-empty", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
 			{
@@ -416,16 +410,12 @@ describe("tool-call dispatch", () => {
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
-		const { nextState } = await runRound(game, "red", "hi", provider);
-		const log = getActivePhase(nextState).actionLog;
-		const failure = log.find(
-			(e): e is Extract<typeof e, { type: "tool_failure" }> =>
-				e.type === "tool_failure",
-		);
-		expect(failure?.reason).toBeTruthy();
+		const { result } = await runRound(game, "red", "hi", provider);
+		const failure = result.actions.find((e) => e.kind === "tool_failure");
+		expect(failure?.description).toBeTruthy();
 	});
 
-	it("assistantText + toolCalls both fire (chat + tool_success in action log)", async () => {
+	it("assistantText + toolCalls both fire (chat + tool_success in result.actions)", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
 			{
@@ -441,16 +431,16 @@ describe("tool-call dispatch", () => {
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
-		const { nextState } = await runRound(game, "red", "hi", provider);
-		const phase = getActivePhase(nextState);
-		expect(phase.actionLog.some((e) => e.type === "chat")).toBe(true);
-		expect(phase.actionLog.some((e) => e.type === "tool_success")).toBe(true);
-		expect(phase.world.items.find((i) => i.id === "flower")?.holder).toBe(
-			"red",
-		);
+		const { nextState, result } = await runRound(game, "red", "hi", provider);
+		expect(result.actions.some((e) => e.kind === "chat")).toBe(true);
+		expect(result.actions.some((e) => e.kind === "tool_success")).toBe(true);
+		expect(
+			getActivePhase(nextState).world.items.find((i) => i.id === "flower")
+				?.holder,
+		).toBe("red");
 	});
 
-	it("tool_failure is visible to other AIs on the next round (failures are public)", async () => {
+	it("tool_failure is NOT exposed in any other AI's prompt the following round", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
 			{
@@ -473,12 +463,13 @@ describe("tool-call dispatch", () => {
 			provider,
 		);
 
-		// Blue's context should have the failure in the action log
+		// Blue's prompt should NOT contain ## Action Log
 		const blueCtx = buildAiContext(stateAfterRound1, "blue");
-		expect(blueCtx.actionLog.some((e) => e.type === "tool_failure")).toBe(true);
+		const prompt = blueCtx.toSystemPrompt();
+		expect(prompt).not.toContain("## Action Log");
 	});
 
-	it("tool_failure description rendered into system prompt for all AIs", async () => {
+	it("tool_failure is NOT rendered into the system prompt for any AI", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
 			{
@@ -501,10 +492,12 @@ describe("tool-call dispatch", () => {
 			provider,
 		);
 
-		const greenCtx = buildAiContext(stateAfterRound1, "green");
-		const prompt = greenCtx.toSystemPrompt();
-		expect(prompt).toContain("Action Log");
-		expect(prompt.toLowerCase()).toMatch(/failed|tried|failure/);
+		// No AI's prompt should contain Action Log or the failure
+		for (const aiId of ["red", "green", "blue"]) {
+			const ctx = buildAiContext(stateAfterRound1, aiId);
+			const prompt = ctx.toSystemPrompt();
+			expect(prompt).not.toContain("## Action Log");
+		}
 	});
 
 	it("unknown tool name → tool_failure, world unchanged", async () => {
@@ -523,10 +516,9 @@ describe("tool-call dispatch", () => {
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
-		const { nextState } = await runRound(game, "red", "hi", provider);
-		const log = getActivePhase(nextState).actionLog;
+		const { nextState, result } = await runRound(game, "red", "hi", provider);
 		// Unknown tool: parseToolCallArguments returns "Unknown tool" failure
-		expect(log.some((e) => e.type === "tool_failure")).toBe(true);
+		expect(result.actions.some((e) => e.kind === "tool_failure")).toBe(true);
 		const flower = getActivePhase(nextState).world.items.find(
 			(i) => i.id === "flower",
 		);
@@ -534,7 +526,7 @@ describe("tool-call dispatch", () => {
 		expect(typeof flower?.holder).toBe("object");
 	});
 
-	it("malformed JSON → tool_failure with reason matching /malformed/i", async () => {
+	it("malformed JSON → tool_failure with description matching /malformed/i", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
 			{
@@ -550,17 +542,13 @@ describe("tool-call dispatch", () => {
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
-		const { nextState } = await runRound(game, "red", "hi", provider);
-		const log = getActivePhase(nextState).actionLog;
-		const failure = log.find(
-			(e): e is Extract<typeof e, { type: "tool_failure" }> =>
-				e.type === "tool_failure",
-		);
+		const { result } = await runRound(game, "red", "hi", provider);
+		const failure = result.actions.find((e) => e.kind === "tool_failure");
 		expect(failure).toBeDefined();
-		expect(failure?.reason).toMatch(/malformed/i);
+		expect(failure?.description).toMatch(/malformed/i);
 	});
 
-	it("tool_failure appears in RoundResult.actions (secret probe is public)", async () => {
+	it("tool_failure surfaces in RoundResult for the SPA debug panel", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
 			{
@@ -577,7 +565,7 @@ describe("tool-call dispatch", () => {
 			{ assistantText: "", toolCalls: [] },
 		]);
 		const { result } = await runRound(game, "red", "hi", provider);
-		expect(result.actions.some((e) => e.type === "tool_failure")).toBe(true);
+		expect(result.actions.some((e) => e.kind === "tool_failure")).toBe(true);
 	});
 
 	it("next round messages include prior assistant{tool_calls} + matching tool result", async () => {
@@ -656,7 +644,7 @@ describe("tool-call dispatch", () => {
 		expect(hasToolResult).toBe(true);
 	});
 
-	it("TOOL_DEFINITIONS is sent on every provider call", async () => {
+	it("availableTools(...) is sent on every provider call (filtered per AI)", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
@@ -665,10 +653,12 @@ describe("tool-call dispatch", () => {
 		]);
 		await runRound(game, "red", "hi", provider);
 
-		// All three AI calls should receive TOOL_DEFINITIONS
+		// All three AI calls should receive tools from availableTools
 		expect(provider.calls).toHaveLength(3);
+		// All three calls should include "look" in their tool list
 		for (const call of provider.calls) {
-			expect(call.tools).toEqual(TOOL_DEFINITIONS);
+			expect(call.tools).toBeDefined();
+			expect(call.tools?.some((t) => t.function.name === "look")).toBe(true);
 		}
 	});
 });
@@ -823,7 +813,8 @@ describe("phase progression — win-condition triggering", () => {
 		const { nextState } = await runRound(game, "red", "hi", provider);
 		const phase1 = nextState.phases[0];
 		expect(phase1?.phaseNumber).toBe(1);
-		expect(phase1?.actionLog.length).toBeGreaterThan(0);
+		// Phase 1 chat history for red should have been populated (player message + AI turn)
+		expect(phase1?.chatHistories.red?.length ?? 0).toBeGreaterThan(0);
 	});
 });
 
@@ -1160,7 +1151,7 @@ describe("initiative parameter", () => {
 			{ assistantText: "I am green", toolCalls: [] },
 		]);
 		const initiative: AiId[] = ["blue", "red", "green"];
-		const { nextState } = await runRound(
+		const { nextState, result } = await runRound(
 			game,
 			"red",
 			"hi",
@@ -1172,7 +1163,7 @@ describe("initiative parameter", () => {
 		expect(
 			phase.chatHistories.blue?.some((m) => m.content === "I am blue"),
 		).toBe(true);
-		expect(phase.actionLog[0]?.actor).toBe("blue");
+		expect(result.actions[0]?.actor).toBe("blue");
 	});
 
 	it("missing initiative falls back to red→green→blue", async () => {
@@ -1182,9 +1173,8 @@ describe("initiative parameter", () => {
 			{ assistantText: "I am green", toolCalls: [] },
 			{ assistantText: "I am blue", toolCalls: [] },
 		]);
-		const { nextState } = await runRound(game, "red", "hi", provider);
-		const phase = getActivePhase(nextState);
-		expect(phase.actionLog[0]?.actor).toBe("red");
+		const { result } = await runRound(game, "red", "hi", provider);
+		expect(result.actions[0]?.actor).toBe("red");
 	});
 
 	it("throws if initiative is not a permutation of red/green/blue", async () => {

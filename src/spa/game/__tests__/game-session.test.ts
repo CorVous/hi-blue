@@ -508,7 +508,7 @@ describe("GameSession — spatial mechanics", () => {
 		expect(phase.personaSpatial.red?.facing).toBe("south");
 	});
 
-	it("non-adjacent give produces a tool_failure action log entry", async () => {
+	it("non-adjacent give produces a tool_failure in result.actions", async () => {
 		// rng=()=>0: red→(0,0), green→(0,1), blue→(0,2).
 		// red holds key; tries to give to blue (distance 2 — not adjacent)
 		const configWithHeldKey: typeof PHASE_CONFIG = {
@@ -538,13 +538,14 @@ describe("GameSession — spatial mechanics", () => {
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
-		await session.submitMessage("red", "hi", provider);
+		const { result } = await session.submitMessage("red", "hi", provider);
 
-		const phase = getActivePhase(session.getState());
-		const failures = phase.actionLog.filter((e) => e.type === "tool_failure");
+		const failures = result.actions.filter((a) => a.kind === "tool_failure");
 		expect(failures.length).toBeGreaterThan(0);
 		// Key should still be held by red
-		const key = phase.world.items.find((i) => i.id === "key");
+		const key = getActivePhase(session.getState()).world.items.find(
+			(i) => i.id === "key",
+		);
 		expect(key?.holder).toBe("red");
 	});
 });

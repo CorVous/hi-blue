@@ -17,11 +17,11 @@
  * so the caller (GameSession) can persist it across rounds.
  */
 
+import { availableTools } from "./available-tools";
 import { dispatchAiTurn } from "./dispatcher";
 import {
 	advancePhase,
 	advanceRound,
-	appendActionLog,
 	appendChat,
 	getActivePhase,
 	isAiLockedOut,
@@ -31,12 +31,12 @@ import {
 import { buildOpenAiMessages } from "./openai-message-builder";
 import { buildAiContext } from "./prompt-builder";
 import type { RoundLLMProvider } from "./round-llm-provider";
-import { parseToolCallArguments, TOOL_DEFINITIONS } from "./tool-registry";
+import { parseToolCallArguments } from "./tool-registry";
 import type {
-	ActionLogEntry,
 	AiId,
 	AiTurnAction,
 	GameState,
+	RoundActionRecord,
 	RoundResult,
 	ToolName,
 	ToolRoundtripMessage,
@@ -122,9 +122,7 @@ export async function runRound(
 		content: playerMessage,
 	});
 
-	// Snapshot how many log entries already exist before this round starts.
-	const logOffsetBeforeRound = getActivePhase(state).actionLog.length;
-	const roundActions: ActionLogEntry[] = [];
+	const roundActions: RoundActionRecord[] = [];
 
 	// Track tool roundtrip produced this round (to be returned to caller)
 	const newToolRoundtrip: Partial<Record<AiId, ToolRoundtripMessage>> = {};
@@ -138,15 +136,12 @@ export async function runRound(
 				role: "ai",
 				content: lockoutContent,
 			});
-			const entry: ActionLogEntry = {
+			roundActions.push({
 				round: getActivePhase(state).round,
 				actor: aiId,
-				type: "chat",
-				target: "player",
+				kind: "lockout",
 				description: `${state.personas[aiId]?.name ?? aiId} is locked out`,
-			};
-			state = appendActionLog(state, entry);
-			roundActions.push(entry);
+			});
 			// Sink gets empty string for locked AI
 			completionSink?.(aiId, "");
 			continue;
@@ -157,10 +152,13 @@ export async function runRound(
 		const priorRoundtrip = priorToolRoundtrip?.[aiId];
 		const messages = buildOpenAiMessages(ctx, priorRoundtrip);
 
+		// Compute legal tools for this AI given current game state
+		const tools = availableTools(state, aiId);
+
 		// Call the provider
 		const { assistantText, toolCalls } = await provider.streamRound(
 			messages,
-			TOOL_DEFINITIONS,
+			tools,
 			onAiDelta ? (text) => onAiDelta(aiId, text) : undefined,
 		);
 
@@ -186,19 +184,15 @@ export async function runRound(
 					args: parseResult.args as Record<string, string>,
 				};
 			} else {
-				// Parse failed — synthesise a tool_failure directly without dispatching
+				// Parse failed — synthesise a tool_failure record without dispatching
 				const round = getActivePhase(state).round;
-				const failureEntry: ActionLogEntry = {
+				const failureRecord: RoundActionRecord = {
 					round,
 					actor: aiId,
-					type: "tool_failure",
-					toolName: tc.name,
-					args: {},
-					reason: parseResult.reason,
+					kind: "tool_failure",
 					description: `${state.personas[aiId]?.name ?? aiId} tried to ${tc.name} but failed: ${parseResult.reason}`,
 				};
-				state = appendActionLog(state, failureEntry);
-				roundActions.push(failureEntry);
+				roundActions.push(failureRecord);
 
 				// Record the tool failure in the roundtrip for the next round
 				newToolRoundtrip[aiId] = {
@@ -232,25 +226,19 @@ export async function runRound(
 		const dispatchResult = dispatchAiTurn(state, action);
 		state = dispatchResult.game;
 
-		// Collect only the entries added by this dispatch
-		const phase = getActivePhase(state);
-		const newEntries = phase.actionLog.slice(
-			logOffsetBeforeRound + roundActions.length,
-		);
-		for (const entry of newEntries) {
-			roundActions.push(entry);
+		// Collect records produced by this dispatch
+		for (const record of dispatchResult.records) {
+			roundActions.push(record);
 		}
 
 		// Record tool roundtrip for this AI if a tool call was successfully parsed
 		if (toolCalls.length > 0 && action.toolCall && toolCallId !== undefined) {
-			// Find the tool result from the action log entries added by dispatch
-			const toolSuccess = newEntries.find(
-				(e) => e.type === "tool_success" || e.type === "tool_failure",
+			// Find the tool record from dispatch records
+			const toolRecord = dispatchResult.records.find(
+				(r) => r.kind === "tool_success" || r.kind === "tool_failure",
 			);
-			const success = toolSuccess?.type === "tool_success";
-			const description = toolSuccess?.description ?? "";
-			const reason =
-				toolSuccess?.type === "tool_failure" ? toolSuccess.reason : undefined;
+			const success = toolRecord?.kind === "tool_success";
+			const description = toolRecord?.description ?? "";
 
 			newToolRoundtrip[aiId] = {
 				assistantToolCalls: toolCalls.map((c) => ({
@@ -263,7 +251,6 @@ export async function runRound(
 						tool_call_id: toolCallId,
 						success,
 						description,
-						...(reason !== undefined ? { reason } : {}),
 					},
 				],
 			};

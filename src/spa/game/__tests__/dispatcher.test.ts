@@ -290,11 +290,10 @@ describe("dispatchAiTurn", () => {
 		const result = dispatchAiTurn(game, action);
 		expect(result.rejected).toBe(false);
 		expect(getActivePhase(result.game).budgets.red?.remaining).toBe(4);
-		expect(getActivePhase(result.game).actionLog).toHaveLength(1);
-		expect(getActivePhase(result.game).actionLog[0]?.type).toBe("pass");
+		expect(result.records[0]?.kind).toBe("pass");
 	});
 
-	it("logs a failed tool call in the action log", () => {
+	it("invalid pick_up produces tool_failure record, world unchanged", () => {
 		const game = makeGame();
 		// green is at (0,1); key is held by red (not in green's cell)
 		const action: AiTurnAction = {
@@ -303,11 +302,15 @@ describe("dispatchAiTurn", () => {
 		};
 		const result = dispatchAiTurn(game, action);
 		expect(result.rejected).toBe(false);
-		const log = getActivePhase(result.game).actionLog;
-		expect(log.some((e) => e.type === "tool_failure")).toBe(true);
+		expect(result.records[0]?.kind).toBe("tool_failure");
+		// World unchanged — key still held by red
+		const key = getActivePhase(result.game).world.items.find(
+			(i) => i.id === "key",
+		);
+		expect(key?.holder).toBe("red");
 	});
 
-	it("executes a valid tool call and logs success", () => {
+	it("valid pick_up produces tool_success record and mutates world", () => {
 		const game = makeGame();
 		// red at (0,0), flower at (0,0)
 		const action: AiTurnAction = {
@@ -316,13 +319,14 @@ describe("dispatchAiTurn", () => {
 		};
 		const result = dispatchAiTurn(game, action);
 		expect(result.rejected).toBe(false);
-		const phase = getActivePhase(result.game);
-		expect(phase.actionLog.some((e) => e.type === "tool_success")).toBe(true);
-		const flower = phase.world.items.find((i) => i.id === "flower");
+		expect(result.records[0]?.kind).toBe("tool_success");
+		const flower = getActivePhase(result.game).world.items.find(
+			(i) => i.id === "flower",
+		);
 		expect(flower?.holder).toBe("red");
 	});
 
-	it("go appends a tool_success action log entry and updates position", () => {
+	it("go produces tool_success record and updates position", () => {
 		const game = makeGame();
 		// red at (0,0), going south
 		const action: AiTurnAction = {
@@ -331,14 +335,13 @@ describe("dispatchAiTurn", () => {
 		};
 		const result = dispatchAiTurn(game, action);
 		expect(result.rejected).toBe(false);
-		const phase = getActivePhase(result.game);
-		expect(phase.actionLog.some((e) => e.type === "tool_success")).toBe(true);
-		const spatial = phase.personaSpatial.red;
+		expect(result.records[0]?.kind).toBe("tool_success");
+		const spatial = getActivePhase(result.game).personaSpatial.red;
 		expect(spatial?.position).toEqual({ row: 1, col: 0 });
 		expect(spatial?.facing).toBe("south");
 	});
 
-	it("give at distance > 1 produces tool_failure log entry", () => {
+	it("give at distance > 1 produces tool_failure record, item still held", () => {
 		const game = makeGame();
 		// red at (0,0), blue at (0,2) — distance 2, not adjacent
 		const action: AiTurnAction = {
@@ -347,8 +350,12 @@ describe("dispatchAiTurn", () => {
 		};
 		const result = dispatchAiTurn(game, action);
 		expect(result.rejected).toBe(false);
-		const log = getActivePhase(result.game).actionLog;
-		expect(log.some((e) => e.type === "tool_failure")).toBe(true);
+		expect(result.records[0]?.kind).toBe("tool_failure");
+		// Key still held by red
+		const key = getActivePhase(result.game).world.items.find(
+			(i) => i.id === "key",
+		);
+		expect(key?.holder).toBe("red");
 	});
 
 	it("appends chat messages to the correct history", () => {

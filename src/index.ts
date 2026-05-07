@@ -7,7 +7,6 @@ export {
 export {
 	advancePhase,
 	advanceRound,
-	appendActionLog,
 	appendChat,
 	appendWhisper,
 	createGame,
@@ -18,7 +17,6 @@ export {
 export type { AiContext } from "./spa/game/prompt-builder";
 export { buildAiContext } from "./spa/game/prompt-builder";
 export type {
-	ActionLogEntry,
 	AiBudget,
 	AiId,
 	AiPersona,
@@ -27,6 +25,7 @@ export type {
 	GameState,
 	PhaseConfig,
 	PhaseState,
+	RoundActionRecord,
 	RoundResult,
 	ToolCall,
 	ToolName,

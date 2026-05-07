@@ -1,6 +1,5 @@
 import { CARDINAL_DIRECTIONS, GRID_COLS, GRID_ROWS } from "./direction.js";
 import type {
-	ActionLogEntry,
 	AiBudget,
 	AiId,
 	AiPersona,
@@ -135,7 +134,6 @@ export function startPhase(
 		budgets,
 		chatHistories,
 		whispers: [],
-		actionLog: [],
 		lockedOut: new Set(),
 		chatLockouts: new Map(),
 		personaSpatial,
@@ -190,16 +188,6 @@ export function deductBudget(game: GameState, aiId: AiId): GameState {
 			lockedOut,
 		};
 	});
-}
-
-export function appendActionLog(
-	game: GameState,
-	entry: ActionLogEntry,
-): GameState {
-	return updateActivePhase(game, (phase) => ({
-		...phase,
-		actionLog: [...phase.actionLog, entry],
-	}));
 }
 
 export function appendChat(
