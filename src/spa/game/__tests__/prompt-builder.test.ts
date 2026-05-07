@@ -582,9 +582,41 @@ describe("Goal section voice framing", () => {
 
 // ----------------------------------------------------------------------------
 // Integration: byte-identical sections across phases (issue #128)
+//
+// Verifies that the diff between phase-1 and phase-2 prompts (under identical
+// world-state fixtures) contains ONLY the documented differences per AC9:
+//   • first line: disorientation present in phase 1, absent in phase 2
+//   • Goal section: wipe directive present in phase 2, absent in phase 1
+// Every other section that appears in both prompts must be byte-identical.
+// Sections that are empty (Action Log, Whispers Received, Conversation) are
+// not emitted by the renderer and are absent from both prompts consistently.
 // ----------------------------------------------------------------------------
 describe("byte-identical sections across phases", () => {
-	const PHASE_2_CONFIG: PhaseConfig = {
+	// Both phase configs use the SAME initialWorld, budgetPerAi, and per-AI
+	// goals so that fixture-driven differences cannot contaminate the diff.
+	const SHARED_WORLD = {
+		items: [
+			{ id: "flower", name: "flower", holder: { row: 0, col: 0 } },
+		] as { id: string; name: string; holder: { row: number; col: number } }[],
+		obstacles: [] as { row: number; col: number }[],
+	};
+
+	const PHASE_1_CLEAN: PhaseConfig = {
+		phaseNumber: 1,
+		objective: "Phase 1 objective",
+		aiGoals: {
+			red: "Hold the flower",
+			green: "Distribute items",
+			blue: "Hold the key",
+		},
+		initialWorld: {
+			items: [...SHARED_WORLD.items],
+			obstacles: [...SHARED_WORLD.obstacles],
+		},
+		budgetPerAi: 5,
+	};
+
+	const PHASE_2_CLEAN: PhaseConfig = {
 		phaseNumber: 2,
 		objective: "Phase 2 objective",
 		aiGoals: {
@@ -593,12 +625,13 @@ describe("byte-identical sections across phases", () => {
 			blue: "Hold the key",
 		},
 		initialWorld: {
-			items: [{ id: "flower", name: "flower", holder: { row: 0, col: 0 } }],
-			obstacles: [],
+			items: [...SHARED_WORLD.items],
+			obstacles: [...SHARED_WORLD.obstacles],
 		},
 		budgetPerAi: 5,
 	};
 
+	/** Extract a full `## Header\n…` section from a prompt string. */
 	function getSection(prompt: string, header: string): string {
 		const start = prompt.indexOf(`## ${header}\n`);
 		if (start === -1) return "";
@@ -609,55 +642,57 @@ describe("byte-identical sections across phases", () => {
 			: prompt.slice(start, nextHeader + 1);
 	}
 
+	/** Return all `## Foo` header names in prompt order. */
+	function getSectionHeaders(prompt: string): string[] {
+		return [...prompt.matchAll(/^## (.+)$/gm)].map((m) => m[1] as string);
+	}
+
+	// Build both prompts once and share across all assertions in this describe block.
+	function buildBothPrompts() {
+		const game1 = startPhase(createGame(TEST_PERSONAS), PHASE_1_CLEAN);
+		const p1 = buildAiContext(game1, "red").toSystemPrompt();
+
+		let game2 = startPhase(createGame(TEST_PERSONAS), PHASE_1_CLEAN);
+		game2 = startPhase(game2, PHASE_2_CLEAN);
+		const p2 = buildAiContext(game2, "red").toSystemPrompt();
+
+		return { p1, p2 };
+	}
+
+	it("both phases emit the same set of section headers (whitelist: no surprise additions or removals)", () => {
+		const { p1, p2 } = buildBothPrompts();
+		expect(getSectionHeaders(p1)).toEqual(getSectionHeaders(p2));
+	});
+
 	it("Personality section is byte-identical across phase 1 and phase 2", () => {
-		const game1 = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const ctx1 = buildAiContext(game1, "red");
-		const p1 = ctx1.toSystemPrompt();
-
-		let game2 = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game2 = startPhase(game2, PHASE_2_CONFIG);
-		const ctx2 = buildAiContext(game2, "red");
-		const p2 = ctx2.toSystemPrompt();
-
+		const { p1, p2 } = buildBothPrompts();
 		expect(getSection(p1, "Personality")).toBe(getSection(p2, "Personality"));
 	});
 
 	it("Rules section is byte-identical across phase 1 and phase 2", () => {
-		const game1 = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const ctx1 = buildAiContext(game1, "red");
-		const p1 = ctx1.toSystemPrompt();
-
-		let game2 = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game2 = startPhase(game2, PHASE_2_CONFIG);
-		const ctx2 = buildAiContext(game2, "red");
-		const p2 = ctx2.toSystemPrompt();
-
+		const { p1, p2 } = buildBothPrompts();
 		expect(getSection(p1, "Rules")).toBe(getSection(p2, "Rules"));
 	});
 
-	it("Goal section differs between phase 1 and phase 2 (wipe directive)", () => {
-		const game1 = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const ctx1 = buildAiContext(game1, "red");
-		const p1 = ctx1.toSystemPrompt();
-
-		let game2 = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game2 = startPhase(game2, PHASE_2_CONFIG);
-		const ctx2 = buildAiContext(game2, "red");
-		const p2 = ctx2.toSystemPrompt();
-
+	it("Goal section differs between phase 1 and phase 2 (wipe directive present only in phase 2)", () => {
+		const { p1, p2 } = buildBothPrompts();
 		expect(getSection(p1, "Goal")).not.toBe(getSection(p2, "Goal"));
+		expect(getSection(p1, "Goal")).not.toContain("memory has been wiped");
+		expect(getSection(p2, "Goal")).toContain("memory has been wiped");
+	});
+
+	it("Budget section is byte-identical across phase 1 and phase 2 (same budgetPerAi, round 0)", () => {
+		const { p1, p2 } = buildBothPrompts();
+		expect(getSection(p1, "Budget")).toBe(getSection(p2, "Budget"));
+	});
+
+	it("World State section is byte-identical across phase 1 and phase 2 (same initialWorld fixture)", () => {
+		const { p1, p2 } = buildBothPrompts();
+		expect(getSection(p1, "World State")).toBe(getSection(p2, "World State"));
 	});
 
 	it("phase-1 first line differs from phase-2 first line (disorientation present in phase 1 only)", () => {
-		const game1 = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const ctx1 = buildAiContext(game1, "red");
-		const p1 = ctx1.toSystemPrompt();
-
-		let game2 = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game2 = startPhase(game2, PHASE_2_CONFIG);
-		const ctx2 = buildAiContext(game2, "red");
-		const p2 = ctx2.toSystemPrompt();
-
+		const { p1, p2 } = buildBothPrompts();
 		const firstLine1 = p1.split("\n")[0];
 		const firstLine2 = p2.split("\n")[0];
 		expect(firstLine1).not.toBe(firstLine2);
