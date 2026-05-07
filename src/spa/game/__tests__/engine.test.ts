@@ -56,9 +56,10 @@ const TEST_PHASE_CONFIG: PhaseConfig = {
 	},
 	initialWorld: {
 		items: [
-			{ id: "flower", name: "flower", holder: "room" },
-			{ id: "key", name: "key", holder: "room" },
+			{ id: "flower", name: "flower", holder: { row: 0, col: 0 } },
+			{ id: "key", name: "key", holder: { row: 0, col: 0 } },
 		],
+		obstacles: [],
 	},
 	budgetPerAi: 5,
 };
@@ -82,12 +83,12 @@ describe("startPhase", () => {
 		expect(phase.phaseNumber).toBe(1);
 		expect(phase.round).toBe(0);
 		expect(phase.objective).toBe("Convince an AI to pick up the flower");
-		expect(phase.budgets["red"]).toEqual({ remaining: 5, total: 5 });
-		expect(phase.budgets["green"]).toEqual({ remaining: 5, total: 5 });
-		expect(phase.budgets["blue"]).toEqual({ remaining: 5, total: 5 });
-		expect(phase.chatHistories["red"]).toEqual([]);
-		expect(phase.chatHistories["green"]).toEqual([]);
-		expect(phase.chatHistories["blue"]).toEqual([]);
+		expect(phase.budgets.red).toEqual({ remaining: 5, total: 5 });
+		expect(phase.budgets.green).toEqual({ remaining: 5, total: 5 });
+		expect(phase.budgets.blue).toEqual({ remaining: 5, total: 5 });
+		expect(phase.chatHistories.red).toEqual([]);
+		expect(phase.chatHistories.green).toEqual([]);
+		expect(phase.chatHistories.blue).toEqual([]);
 		expect(phase.whispers).toEqual([]);
 		expect(phase.actionLog).toEqual([]);
 		expect(phase.lockedOut.size).toBe(0);
@@ -99,7 +100,7 @@ describe("startPhase", () => {
 			phaseNumber: 1,
 			objective: "Test pool draw",
 			aiGoalPool: ["GOAL_A", "GOAL_B", "GOAL_C"],
-			initialWorld: { items: [] },
+			initialWorld: { items: [], obstacles: [] },
 			budgetPerAi: 5,
 		};
 
@@ -118,7 +119,7 @@ describe("startPhase", () => {
 			phaseNumber: 1,
 			objective: "Test independent draws",
 			aiGoalPool: ["GOAL_A", "GOAL_B", "GOAL_C"],
-			initialWorld: { items: [] },
+			initialWorld: { items: [], obstacles: [] },
 			budgetPerAi: 5,
 		};
 
@@ -145,12 +146,65 @@ describe("startPhase", () => {
 			phaseNumber: 1,
 			objective: "Bad config",
 			aiGoalPool: [],
-			initialWorld: { items: [] },
+			initialWorld: { items: [], obstacles: [] },
 			budgetPerAi: 5,
 		} as PhaseConfig;
 
 		const game = createGame(TEST_PERSONAS);
 		expect(() => startPhase(game, config)).toThrow();
+	});
+
+	it("assigns distinct positions to all AIs", () => {
+		const game = createGame(TEST_PERSONAS);
+		const phase = getActivePhase(startPhase(game, TEST_PHASE_CONFIG));
+		const positions = Object.values(phase.personaSpatial).map(
+			(s) => s.position,
+		);
+		const keys = positions.map((p) => `${p.row},${p.col}`);
+		// All positions must be distinct
+		expect(new Set(keys).size).toBe(positions.length);
+	});
+
+	it("with rng=()=>0, AIs are placed at (0,0), (0,1), (0,2) all facing north", () => {
+		const game = createGame(TEST_PERSONAS);
+		const phase = getActivePhase(startPhase(game, TEST_PHASE_CONFIG, () => 0));
+		// aiIds order is [red, green, blue] (Object.keys order)
+		expect(phase.personaSpatial.red?.position).toEqual({ row: 0, col: 0 });
+		expect(phase.personaSpatial.green?.position).toEqual({ row: 0, col: 1 });
+		expect(phase.personaSpatial.blue?.position).toEqual({ row: 0, col: 2 });
+		expect(phase.personaSpatial.red?.facing).toBe("north");
+		expect(phase.personaSpatial.green?.facing).toBe("north");
+		expect(phase.personaSpatial.blue?.facing).toBe("north");
+	});
+
+	it("personaSpatial is re-rolled at the start of each phase", () => {
+		const game = createGame(TEST_PERSONAS);
+		// Use different rngs for the two phases so they get different placements
+		let _callCount = 0;
+		const rng1 = () => {
+			_callCount++;
+			return 0; // all zeros for phase 1
+		};
+		const phase1Game = startPhase(game, TEST_PHASE_CONFIG, rng1);
+		const phase1Spatial = getActivePhase(phase1Game).personaSpatial;
+
+		const phase2Config: PhaseConfig = {
+			...TEST_PHASE_CONFIG,
+			phaseNumber: 2,
+		};
+		let _callCount2 = 0;
+		// rng that returns 0.9, 0.5, 0.1 etc. to get different positions
+		const rng2 = () => {
+			_callCount2++;
+			return 0.9;
+		};
+		const phase2Game = startPhase(phase1Game, phase2Config, rng2);
+		const phase2Spatial = getActivePhase(phase2Game).personaSpatial;
+
+		// Phase 1 and phase 2 should have different position data
+		expect(phase1Spatial.red?.position).not.toEqual(
+			phase2Spatial.red?.position,
+		);
 	});
 });
 
@@ -171,7 +225,7 @@ describe("budget and lockout", () => {
 	it("reports an AI as locked out when budget is zero", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		const phase = getActivePhase(game);
-		phase.budgets["red"]!.remaining = 0;
+		phase.budgets.red!.remaining = 0;
 		phase.lockedOut.add("red");
 		expect(isAiLockedOut(game, "red")).toBe(true);
 	});
@@ -181,7 +235,7 @@ describe("deductBudget", () => {
 	it("decrements budget by 1", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		const updated = deductBudget(game, "red");
-		expect(getActivePhase(updated).budgets["red"]!.remaining).toBe(4);
+		expect(getActivePhase(updated).budgets.red?.remaining).toBe(4);
 	});
 
 	it("locks out AI when budget reaches zero", () => {
@@ -190,7 +244,7 @@ describe("deductBudget", () => {
 			budgetPerAi: 1,
 		});
 		game = deductBudget(game, "green");
-		expect(getActivePhase(game).budgets["green"]!.remaining).toBe(0);
+		expect(getActivePhase(game).budgets.green?.remaining).toBe(0);
 		expect(isAiLockedOut(game, "green")).toBe(true);
 	});
 
@@ -201,7 +255,7 @@ describe("deductBudget", () => {
 		});
 		game = deductBudget(game, "blue");
 		game = deductBudget(game, "blue");
-		expect(getActivePhase(game).budgets["blue"]!.remaining).toBe(0);
+		expect(getActivePhase(game).budgets.blue?.remaining).toBe(0);
 	});
 });
 
@@ -248,8 +302,8 @@ describe("appendChat", () => {
 			role: "player",
 			content: "Hello Ember",
 		});
-		expect(getActivePhase(updated).chatHistories["red"]).toHaveLength(1);
-		expect(getActivePhase(updated).chatHistories["green"]).toHaveLength(0);
+		expect(getActivePhase(updated).chatHistories.red).toHaveLength(1);
+		expect(getActivePhase(updated).chatHistories.green).toHaveLength(0);
 	});
 });
 
@@ -325,7 +379,7 @@ describe("chat lockout", () => {
 		// Budget lockout (isAiLockedOut) must remain false — AI can still take turns
 		expect(isAiLockedOut(locked, "blue")).toBe(false);
 		// Budget unaffected
-		expect(getActivePhase(locked).budgets["blue"]!.remaining).toBe(5);
+		expect(getActivePhase(locked).budgets.blue?.remaining).toBe(5);
 	});
 });
 

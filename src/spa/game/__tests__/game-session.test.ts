@@ -61,9 +61,10 @@ const PHASE_CONFIG: PhaseConfig = {
 	},
 	initialWorld: {
 		items: [
-			{ id: "flower", name: "flower", holder: "room" },
-			{ id: "key", name: "key", holder: "room" },
+			{ id: "flower", name: "flower", holder: { row: 0, col: 0 } },
+			{ id: "key", name: "key", holder: { row: 0, col: 0 } },
 		],
+		obstacles: [],
 	},
 	budgetPerAi: 5,
 };
@@ -90,9 +91,9 @@ describe("GameSession construction", () => {
 	it("initial budgets match the phase config", () => {
 		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
 		const phase = getActivePhase(session.getState());
-		expect(phase.budgets["red"]!.remaining).toBe(5);
-		expect(phase.budgets["green"]!.remaining).toBe(5);
-		expect(phase.budgets["blue"]!.remaining).toBe(5);
+		expect(phase.budgets.red?.remaining).toBe(5);
+		expect(phase.budgets.green?.remaining).toBe(5);
+		expect(phase.budgets.blue?.remaining).toBe(5);
 	});
 });
 
@@ -110,15 +111,15 @@ describe("GameSession — message routing", () => {
 
 		const phase = getActivePhase(session.getState());
 		expect(
-			phase.chatHistories["red"]?.some(
+			phase.chatHistories.red?.some(
 				(m) =>
 					m.role === "player" && m.content.includes("Secret message for Ember"),
 			),
 		).toBe(true);
-		expect(phase.chatHistories["green"]?.some((m) => m.role === "player")).toBe(
+		expect(phase.chatHistories.green?.some((m) => m.role === "player")).toBe(
 			false,
 		);
-		expect(phase.chatHistories["blue"]?.some((m) => m.role === "player")).toBe(
+		expect(phase.chatHistories.blue?.some((m) => m.role === "player")).toBe(
 			false,
 		);
 	});
@@ -131,12 +132,12 @@ describe("GameSession — message routing", () => {
 
 		const phase = getActivePhase(session.getState());
 		expect(
-			phase.chatHistories["green"]?.some(
+			phase.chatHistories.green?.some(
 				(m) => m.role === "player" && m.content.includes("for green"),
 			),
 		).toBe(true);
 		expect(
-			phase.chatHistories["red"]?.filter((m) => m.role === "player"),
+			phase.chatHistories.red?.filter((m) => m.role === "player"),
 		).toHaveLength(1);
 	});
 });
@@ -160,13 +161,14 @@ describe("GameSession — state mutation across rounds", () => {
 		await session.submitMessage("red", "hi", makePassProvider());
 
 		const phase = getActivePhase(session.getState());
-		expect(phase.budgets["red"]!.remaining).toBe(4);
-		expect(phase.budgets["green"]!.remaining).toBe(4);
-		expect(phase.budgets["blue"]!.remaining).toBe(4);
+		expect(phase.budgets.red?.remaining).toBe(4);
+		expect(phase.budgets.green?.remaining).toBe(4);
+		expect(phase.budgets.blue?.remaining).toBe(4);
 	});
 
 	it("second round builds on first round's state", async () => {
-		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
+		// rng=()=>0 places red at (0,0) where flower starts
+		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS, () => 0);
 
 		// Red picks up flower in round 1
 		const provider1 = new MockRoundLLMProvider([
@@ -317,6 +319,7 @@ describe("GameSession — phase advancement", () => {
 	});
 
 	it("phaseEnded is true when win condition is met this round", async () => {
+		// rng=()=>0 places red at (0,0) where flower starts
 		const session = new GameSession(
 			{
 				...PHASE_CONFIG,
@@ -324,6 +327,7 @@ describe("GameSession — phase advancement", () => {
 					phase.world.items.find((i) => i.id === "flower")?.holder === "red",
 			},
 			TEST_PERSONAS,
+			() => 0,
 		);
 		const provider = new MockRoundLLMProvider([
 			{
@@ -411,7 +415,8 @@ describe("GameSession — onAiDelta propagation", () => {
 
 describe("GameSession — tool roundtrip persistence", () => {
 	it("two-round scenario: round-2 Red messages include round-1 assistant tool_call + tool result", async () => {
-		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
+		// rng=()=>0 places red at (0,0) where flower starts
+		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS, () => 0);
 
 		// Round 1: Red emits a tool_call (pick_up flower)
 		const round1Provider = new MockRoundLLMProvider([
@@ -472,5 +477,74 @@ describe("GameSession — tool roundtrip persistence", () => {
 		if (toolResult?.role === "tool") {
 			expect(toolResult.tool_call_id).toBe("call_r1");
 		}
+	});
+});
+
+// ── Spatial mechanics (issue #123) ──────────────────────────────────────────
+
+describe("GameSession — spatial mechanics", () => {
+	it("go updates personaSpatial position and facing across rounds", async () => {
+		// rng=()=>0 places red at (0,0) facing north
+		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS, () => 0);
+		const phase0 = getActivePhase(session.getState());
+		expect(phase0.personaSpatial.red?.position).toEqual({ row: 0, col: 0 });
+		expect(phase0.personaSpatial.red?.facing).toBe("north");
+
+		// Red moves south; green and blue pass
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{ id: "go1", name: "go", argumentsJson: '{"direction":"south"}' },
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+		await session.submitMessage("red", "hi", provider);
+
+		const phase = getActivePhase(session.getState());
+		expect(phase.personaSpatial.red?.position).toEqual({ row: 1, col: 0 });
+		expect(phase.personaSpatial.red?.facing).toBe("south");
+	});
+
+	it("non-adjacent give produces a tool_failure action log entry", async () => {
+		// rng=()=>0: red→(0,0), green→(0,1), blue→(0,2).
+		// red holds key; tries to give to blue (distance 2 — not adjacent)
+		const configWithHeldKey: typeof PHASE_CONFIG = {
+			...PHASE_CONFIG,
+			initialWorld: {
+				items: [
+					{ id: "flower", name: "flower", holder: { row: 0, col: 0 } },
+					{ id: "key", name: "key", holder: "red" as const },
+				],
+				obstacles: [],
+			},
+		};
+		const session = new GameSession(configWithHeldKey, TEST_PERSONAS, () => 0);
+
+		// red at (0,0), blue at (0,2) → distance 2
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "give1",
+						name: "give",
+						argumentsJson: '{"item":"key","to":"blue"}',
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+		await session.submitMessage("red", "hi", provider);
+
+		const phase = getActivePhase(session.getState());
+		const failures = phase.actionLog.filter((e) => e.type === "tool_failure");
+		expect(failures.length).toBeGreaterThan(0);
+		// Key should still be held by red
+		const key = phase.world.items.find((i) => i.id === "key");
+		expect(key?.holder).toBe("red");
 	});
 });

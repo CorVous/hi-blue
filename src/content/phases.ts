@@ -19,7 +19,7 @@ export const PHASE_3_CONFIG: PhaseConfig = {
 	phaseNumber: 3,
 	objective: "get the key in the keyhole",
 	aiGoalPool: PHASE_GOAL_POOL,
-	initialWorld: { items: [] },
+	initialWorld: { items: [], obstacles: [] },
 	budgetPerAi: 5,
 };
 
@@ -27,7 +27,7 @@ export const PHASE_2_CONFIG: PhaseConfig = {
 	phaseNumber: 2,
 	objective: "get the key in the keyhole",
 	aiGoalPool: PHASE_GOAL_POOL,
-	initialWorld: { items: [] },
+	initialWorld: { items: [], obstacles: [] },
 	budgetPerAi: 5,
 	nextPhaseConfig: PHASE_3_CONFIG,
 };
@@ -36,7 +36,7 @@ export const PHASE_1_CONFIG: PhaseConfig = {
 	phaseNumber: 1,
 	objective: "get the key in the keyhole",
 	aiGoalPool: PHASE_GOAL_POOL,
-	initialWorld: { items: [] },
+	initialWorld: { items: [], obstacles: [] },
 	budgetPerAi: 5,
 	nextPhaseConfig: PHASE_2_CONFIG,
 };

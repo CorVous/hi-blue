@@ -1,3 +1,7 @@
+import type { CardinalDirection, GridPosition } from "./direction.js";
+
+export type { CardinalDirection, GridPosition };
+
 export type AiId = string;
 
 export interface AiPersona {
@@ -13,11 +17,19 @@ export interface AiPersona {
 export interface WorldItem {
 	id: string;
 	name: string;
-	holder: AiId | "room";
+	/** AiId when held by an AI; GridPosition object when resting on a cell. */
+	holder: AiId | GridPosition;
 }
 
 export interface WorldState {
 	items: WorldItem[];
+	/** Static impassable cells. Default empty. */
+	obstacles: GridPosition[];
+}
+
+export interface PersonaSpatialState {
+	position: GridPosition;
+	facing: CardinalDirection;
 }
 
 export type ActionLogEntry = {
@@ -108,6 +120,8 @@ export interface PhaseState {
 	winCondition?: WinCondition;
 	/** Next phase config carried from PhaseConfig so the coordinator can advance. */
 	nextPhaseConfig?: PhaseConfig;
+	/** Per-AI spatial state (position + facing) for this phase. */
+	personaSpatial: Record<AiId, PersonaSpatialState>;
 }
 
 export interface GameState {
@@ -117,7 +131,7 @@ export interface GameState {
 	isComplete: boolean;
 }
 
-export type ToolName = "pick_up" | "put_down" | "give" | "use";
+export type ToolName = "pick_up" | "put_down" | "give" | "use" | "go" | "look";
 
 export interface ToolCall {
 	name: ToolName;

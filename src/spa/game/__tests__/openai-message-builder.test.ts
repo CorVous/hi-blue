@@ -44,9 +44,10 @@ const PHASE_CONFIG: PhaseConfig = {
 	},
 	initialWorld: {
 		items: [
-			{ id: "flower", name: "flower", holder: "room" },
-			{ id: "key", name: "key", holder: "room" },
+			{ id: "flower", name: "flower", holder: { row: 0, col: 0 } },
+			{ id: "key", name: "key", holder: { row: 0, col: 0 } },
 		],
+		obstacles: [],
 	},
 	budgetPerAi: 5,
 };

@@ -49,9 +49,10 @@ const TEST_PHASE_CONFIG: PhaseConfig = {
 	},
 	initialWorld: {
 		items: [
-			{ id: "flower", name: "flower", holder: "room" },
-			{ id: "key", name: "key", holder: "room" },
+			{ id: "flower", name: "flower", holder: { row: 0, col: 0 } },
+			{ id: "key", name: "key", holder: { row: 0, col: 0 } },
 		],
+		obstacles: [],
 	},
 	budgetPerAi: 5,
 };
@@ -176,6 +177,75 @@ describe("buildAiContext", () => {
 });
 
 // ----------------------------------------------------------------------------
+// "Where you are" section (issue #123)
+// ----------------------------------------------------------------------------
+describe("prompt-builder — spatial 'Where you are' section", () => {
+	it("includes '## Where you are' section in the system prompt", () => {
+		// rng=()=>0 places red at (0,0) facing north
+		const game = startPhase(
+			createGame(TEST_PERSONAS),
+			TEST_PHASE_CONFIG,
+			() => 0,
+		);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toContain("## Where you are");
+	});
+
+	it("reports actor's position and facing in the prompt", () => {
+		// rng=()=>0 places red at (0,0) facing north
+		const game = startPhase(
+			createGame(TEST_PERSONAS),
+			TEST_PHASE_CONFIG,
+			() => 0,
+		);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toMatch(/row 0.*col 0/i);
+		expect(prompt).toMatch(/north/i);
+	});
+
+	it("lists items in the actor's cell under 'Where you are'", () => {
+		// rng=()=>0 places red at (0,0); flower and key are both at (0,0)
+		const game = startPhase(
+			createGame(TEST_PERSONAS),
+			TEST_PHASE_CONFIG,
+			() => 0,
+		);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		// Items in red's cell should be listed
+		expect(prompt).toContain("flower");
+		expect(prompt).toContain("key");
+	});
+
+	it("lists other AIs' positions in the prompt", () => {
+		// rng=()=>0: red→(0,0), green→(0,1), blue→(0,2)
+		const game = startPhase(
+			createGame(TEST_PERSONAS),
+			TEST_PHASE_CONFIG,
+			() => 0,
+		);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		// Other AIs' ids should appear
+		expect(prompt).toContain("green");
+		expect(prompt).toContain("blue");
+	});
+
+	it("includes '## World Inventory' section", () => {
+		const game = startPhase(
+			createGame(TEST_PERSONAS),
+			TEST_PHASE_CONFIG,
+			() => 0,
+		);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toContain("## World Inventory");
+	});
+});
+
+// ----------------------------------------------------------------------------
 // Wipe augmentation (issue #17)
 // ----------------------------------------------------------------------------
 describe("wipe augmentation", () => {
@@ -188,7 +258,8 @@ describe("wipe augmentation", () => {
 			blue: "Hold the key",
 		},
 		initialWorld: {
-			items: [{ id: "flower", name: "flower", holder: "room" }],
+			items: [{ id: "flower", name: "flower", holder: { row: 0, col: 0 } }],
+			obstacles: [],
 		},
 		budgetPerAi: 5,
 	};
@@ -202,7 +273,8 @@ describe("wipe augmentation", () => {
 			blue: "Hold the key",
 		},
 		initialWorld: {
-			items: [{ id: "flower", name: "flower", holder: "room" }],
+			items: [{ id: "flower", name: "flower", holder: { row: 0, col: 0 } }],
+			obstacles: [],
 		},
 		budgetPerAi: 5,
 	};
@@ -254,7 +326,7 @@ describe("wipe augmentation", () => {
 		game = startPhase(game, PHASE_2_CONFIG);
 		// Phase 1 data is still in game.phases[0]
 		expect(
-			game.phases[0]?.chatHistories["red"]?.some(
+			game.phases[0]?.chatHistories.red?.some(
 				(m) => m.content === "Phase 1 message",
 			),
 		).toBe(true);
