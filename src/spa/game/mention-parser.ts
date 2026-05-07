@@ -184,3 +184,21 @@ export function buildPersonaColorMap(
 	}
 	return map;
 }
+
+/**
+ * Builds an AiId → display name string map from a personas record.
+ * Used by the composer reducer to look up a persona's display name when
+ * generating inline lockout error text.
+ */
+export function buildPersonaDisplayNameMap(
+	personas: Record<AiId, { name: string }>,
+): Map<AiId, string> {
+	const map = new Map<AiId, string>();
+	for (const [id, persona] of Object.entries(personas) as [
+		AiId,
+		{ name: string },
+	][]) {
+		map.set(id, persona.name);
+	}
+	return map;
+}

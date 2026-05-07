@@ -76,6 +76,13 @@ main {
 	background: color-mix(in srgb, var(--panel-color, #888) 15%, transparent);
 }
 
+.lockout-error {
+	color: #b83232;
+	font-size: 0.85rem;
+	align-self: center;
+	padding: 0 0.5rem;
+}
+
 #send {
 	padding: 0.5rem 1rem;
 	font-size: 1rem;
@@ -121,6 +128,15 @@ main {
 
 .ai-panel .panel-header {
 	background: var(--panel-color);
+}
+
+.ai-panel.panel--locked {
+	opacity: 0.45;
+	filter: grayscale(0.7);
+	pointer-events: none;
+}
+.ai-panel.panel--locked .panel-header {
+	opacity: 0.9;
 }
 
 .panel-budget {

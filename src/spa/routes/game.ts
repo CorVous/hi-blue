@@ -7,6 +7,7 @@ import { GameSession } from "../game/game-session.js";
 import {
 	applyAddresseeChange,
 	buildPersonaColorMap,
+	buildPersonaDisplayNameMap,
 	buildPersonaNameMap,
 } from "../game/mention-parser.js";
 import { encodeRoundResult } from "../game/round-result-encoder.js";
@@ -163,9 +164,11 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 
 	if (!form || !promptInput || !sendBtn) return;
 
-	// Mention-based addressing state — built lazily after session init below
+	// Mention-based addressing state — built lazily after session init below,
+	// since persona handles are procedurally generated per session.
 	let personaNamesToId: ReturnType<typeof buildPersonaNameMap>;
 	let personaColors: ReturnType<typeof buildPersonaColorMap>;
+	let personaDisplayNames: ReturnType<typeof buildPersonaDisplayNameMap>;
 	const lockouts: Map<AiId, boolean> = new Map();
 	let roundInFlight = false;
 
@@ -213,15 +216,18 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 	}
 
 	function refreshComposerState(): void {
-		if (!personaNamesToId || !personaColors) return;
+		if (!personaNamesToId || !personaColors || !personaDisplayNames) return;
 		const state = deriveComposerState({
 			text: _promptInput.value,
 			lockouts,
 			personaNamesToId,
 			personaColors,
+			personaDisplayNames,
 		});
 		_sendBtn.disabled = !state.sendEnabled || roundInFlight;
 		setPanelColor(_promptInput, state.borderColor);
+
+		// Panel addressing + lockout muting
 		for (const aiId of personaColors.keys()) {
 			const panel = doc.querySelector<HTMLElement>(
 				`.ai-panel[data-ai="${aiId}"]`,
@@ -229,7 +235,24 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 			if (!panel) continue;
 			const isAddressed = state.panelHighlight === aiId;
 			panel.classList.toggle("panel--addressed", isAddressed);
+			const isLocked = state.lockedPanels.has(aiId);
+			panel.classList.toggle("panel--locked", isLocked);
+			panel.setAttribute("aria-disabled", isLocked ? "true" : "false");
 		}
+
+		// Inline lockout error element
+		const lockoutErrorEl =
+			doc.querySelector<HTMLOutputElement>("#lockout-error");
+		if (lockoutErrorEl) {
+			if (state.lockoutError) {
+				lockoutErrorEl.textContent = state.lockoutError;
+				lockoutErrorEl.removeAttribute("hidden");
+			} else {
+				lockoutErrorEl.textContent = "";
+				lockoutErrorEl.setAttribute("hidden", "");
+			}
+		}
+
 		rebuildOverlay(overlay, _promptInput.value, state.mentionHighlight);
 		if (overlay) overlay.scrollLeft = _promptInput.scrollLeft;
 	}
@@ -331,6 +354,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		const runtimePersonas = session.getState().personas;
 		personaNamesToId = buildPersonaNameMap(runtimePersonas);
 		personaColors = buildPersonaColorMap(runtimePersonas);
+		personaDisplayNames = buildPersonaDisplayNameMap(runtimePersonas);
 
 		// Hydrate lockouts from the active phase's chatLockouts map so that
 		// a reload preserves the Send-disabled state for locked-out AIs.
@@ -460,6 +484,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 			lockouts,
 			personaNamesToId,
 			personaColors,
+			personaDisplayNames,
 		});
 		if (!sendEnabled || !addressee) return;
 
