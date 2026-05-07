@@ -74,50 +74,50 @@ describe("COLOR_PALETTE", () => {
 
 // ── generatePersonas ──────────────────────────────────────────────────────────
 
-describe("generatePersonas", () => {
-	it("produces exactly 3 personas", () => {
-		const personas = generatePersonas(() => 0.5);
+describe("generatePersonas — template fallback (no llm)", () => {
+	it("produces exactly 3 personas", async () => {
+		const personas = await generatePersonas(() => 0.5);
 		expect(Object.keys(personas)).toHaveLength(3);
 	});
 
-	it("persona names are 4-char [a-z0-9] strings", () => {
-		const personas = generatePersonas(() => 0);
+	it("persona names are 4-char [a-z0-9] strings", async () => {
+		const personas = await generatePersonas(() => 0);
 		for (const [id, p] of Object.entries(personas)) {
 			expect(id).toMatch(/^[a-z0-9]{4}$/);
 			expect(p.name).toBe(id);
 		}
 	});
 
-	it("persona colors are hex strings from the palette", () => {
-		const personas = generatePersonas(() => 0.5);
+	it("persona colors are hex strings from the palette", async () => {
+		const personas = await generatePersonas(() => 0.5);
 		for (const p of Object.values(personas)) {
 			expect(p.color).toMatch(/^#[0-9a-f]{6}$/i);
 		}
 	});
 
-	it("all 3 personas have distinct names", () => {
-		const personas = generatePersonas();
+	it("all 3 personas have distinct names", async () => {
+		const personas = await generatePersonas();
 		const names = Object.keys(personas);
 		expect(new Set(names).size).toBe(3);
 	});
 
-	it("all 3 personas have distinct colors", () => {
-		const personas = generatePersonas(() => Math.random());
+	it("all 3 personas have distinct colors", async () => {
+		const personas = await generatePersonas(() => Math.random());
 		const colors = Object.values(personas).map((p) => p.color);
 		expect(new Set(colors).size).toBe(3);
 	});
 
-	it("each persona has a blurb string", () => {
-		const personas = generatePersonas(() => 0);
+	it("each persona has a blurb string", async () => {
+		const personas = await generatePersonas(() => 0);
 		for (const p of Object.values(personas)) {
 			expect(typeof p.blurb).toBe("string");
 			expect(p.blurb.length).toBeGreaterThan(0);
 		}
 	});
 
-	it("intensification path: same temperament twice yields 'intensely' blurb", () => {
+	it("intensification path: same temperament twice yields 'intensely' blurb", async () => {
 		// Seed that returns 0 always — same index for both temperament draws
-		const personas = generatePersonas(() => 0);
+		const personas = await generatePersonas(() => 0);
 		const firstPersona = Object.values(personas)[0];
 		if (!firstPersona) throw new Error("no persona");
 		expect(firstPersona.temperaments[0]).toBe(firstPersona.temperaments[1]);
