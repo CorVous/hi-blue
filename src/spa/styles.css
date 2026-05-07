@@ -415,6 +415,7 @@ main {
 	gap: 6px;
 	border-top: 1px dashed rgba(255, 180, 84, 0.2);
 	padding: 12px 0 2px;
+	margin-top: 10px;
 }
 
 .prompt-prefix {
