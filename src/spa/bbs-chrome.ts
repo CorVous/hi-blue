@@ -76,10 +76,15 @@ export function formatTopInfoLeft(i: TopInfoInputs): string {
 	return `SESSION ${i.sessionId} · PHASE ${phase} · TURN ${turn}`;
 }
 
+/** Prefix portion of the topinfo right cell — the "● connection stable"
+ * trailer is appended at the call site as a span so it can carry its own
+ * green color. Kept here so the daemons-online wording stays in one place. */
 export function formatTopInfoRight(i: TopInfoInputs): string {
 	const word = i.daemonsOnline === 1 ? "daemon" : "daemons";
-	return `[${i.daemonsOnline} ${word} online] · ● connection stable`;
+	return `[${i.daemonsOnline} ${word} online] · `;
 }
+
+export const TOPINFO_RIGHT_OK_TEXT = "● connection stable";
 
 const SESSION_ID_KEY = "hi-blue:session-id";
 

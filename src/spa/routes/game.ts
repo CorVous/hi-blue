@@ -6,6 +6,7 @@ import {
 	formatTopInfoRight,
 	getOrMintSessionId,
 	initPanelChrome,
+	TOPINFO_RIGHT_OK_TEXT,
 } from "../bbs-chrome.js";
 import { BrowserLLMProvider } from "../game/browser-llm-provider.js";
 import { deriveComposerState } from "../game/composer-reducer.js";
@@ -548,6 +549,10 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		};
 		topinfoLeftEl.textContent = formatTopInfoLeft(inputs);
 		topinfoRightEl.textContent = formatTopInfoRight(inputs);
+		const okSpan = doc.createElement("span");
+		okSpan.className = "ok";
+		okSpan.textContent = TOPINFO_RIGHT_OK_TEXT;
+		topinfoRightEl.appendChild(okSpan);
 	}
 
 	refreshTopInfo();
