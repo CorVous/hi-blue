@@ -38,10 +38,11 @@ function transcriptName(name: string): string {
 const AI_PREFIX_RE = /^> \*(\S+) /;
 
 /** Render a saved transcript string into the given element by parsing
- * lines and wrapping player lines (`> you …`) in `.msg-you` spans and
- * AI prefix portions (`> *<handle> `) in `.msg-prefix` spans tinted with
- * the persona's color. The remainder of each line is appended as a plain
- * text node (amber). Replaces any existing children. */
+ * lines and wrapping AI prefix portions (`> *<handle> `) in `.msg-prefix`
+ * spans tinted with the persona's color and other `> ` lines (player
+ * messages, format `> <msg>`) in `.msg-you` spans. The remainder of an
+ * AI line is appended as a plain text node (amber). Replaces any
+ * existing children. */
 function renderRestoredTranscript(
 	transcript: HTMLElement,
 	saved: string,
@@ -54,13 +55,6 @@ function renderRestoredTranscript(
 	// own segments so we can preserve the exact original text.
 	const lines = saved.split(/(?<=\n)/);
 	for (const line of lines) {
-		if (line.startsWith("> you ")) {
-			const span = doc.createElement("span");
-			span.className = "msg-you";
-			span.textContent = line;
-			transcript.appendChild(span);
-			continue;
-		}
 		const m = AI_PREFIX_RE.exec(line);
 		if (m?.[1]) {
 			const handle = m[1];
@@ -77,6 +71,13 @@ function renderRestoredTranscript(
 			transcript.appendChild(prefix);
 			const rest = line.slice(prefixText.length);
 			if (rest) transcript.appendChild(doc.createTextNode(rest));
+			continue;
+		}
+		if (line.startsWith("> ")) {
+			const span = doc.createElement("span");
+			span.className = "msg-you";
+			span.textContent = line;
+			transcript.appendChild(span);
 			continue;
 		}
 		transcript.appendChild(doc.createTextNode(line));
@@ -415,7 +416,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 						if (msg.role === "player") {
 							const span = doc.createElement("span");
 							span.className = "msg-you";
-							span.textContent = `> you ${msg.content}\n`;
+							span.textContent = `> ${msg.content}\n`;
 							transcript.appendChild(span);
 						} else {
 							const prefixSpan = doc.createElement("span");
@@ -586,11 +587,20 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		return doc.querySelector<HTMLElement>(`[data-transcript="${aiId}"]`);
 	}
 
+	// Helper: scroll the transcript's parent (the .scroll container) to
+	// the bottom so newly appended content stays in view.
+	function scrollToBottom(transcriptEl: HTMLElement | null): void {
+		const scrollEl = transcriptEl?.parentElement;
+		if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
+	}
+
 	// Helper: append plain text (amber default) as a text node — preserves
 	// any existing element children (.msg-you, .msg-prefix) in the transcript.
 	function appendToTranscript(aiId: AiId, text: string): void {
 		const el = getTranscript(aiId);
-		if (el) el.appendChild(doc.createTextNode(text));
+		if (!el) return;
+		el.appendChild(doc.createTextNode(text));
+		scrollToBottom(el);
 	}
 
 	// Helper: append a player line wrapped in a .msg-you span (warm white).
@@ -601,6 +611,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		span.className = "msg-you";
 		span.textContent = text;
 		el.appendChild(span);
+		scrollToBottom(el);
 	}
 
 	// Helper: append an AI persona-prefix span (`> *<handle> `) tinted with
@@ -614,6 +625,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		if (color) span.style.setProperty("--prefix-color", color);
 		span.textContent = `> *${transcriptName(personaName)} `;
 		el.appendChild(span);
+		scrollToBottom(el);
 	}
 
 	// Helper: pace token emission
@@ -667,7 +679,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		sendBtn.disabled = true;
 
 		// Append player's message to the addressed panel
-		appendPlayerLine(addressed, `> you ${message}\n`);
+		appendPlayerLine(addressed, `> ${message}\n`);
 
 		// Show a "thinking…" placeholder in the addressed panel while the
 		// first live delta arrives. Stripped on the first onAiDelta call;
@@ -676,7 +688,10 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		const placeholderEl = doc.createElement("span");
 		placeholderEl.className = "msg-placeholder";
 		placeholderEl.textContent = "thinking…";
-		if (addressedTranscript) addressedTranscript.appendChild(placeholderEl);
+		if (addressedTranscript) {
+			addressedTranscript.appendChild(placeholderEl);
+			scrollToBottom(addressedTranscript);
+		}
 		const stripPlaceholder = (): void => {
 			if (placeholderEl.parentNode) placeholderEl.remove();
 		};
