@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
-import { stubChatCompletions } from "./helpers";
+import { getAiHandles, stubChatCompletions } from "./helpers";
 
-test("chat lockout disables the red AI option and appends an in-character lockout line", async ({
+test("chat lockout disables the first AI option and appends an in-character lockout line", async ({
 	page,
 }) => {
 	const pageErrors: Error[] = [];
@@ -14,30 +14,34 @@ test("chat lockout disables the red AI option and appends an in-character lockou
 	await stubChatCompletions(page, ["greetings"]);
 
 	// 2. Navigate with ?lockout=1 so applyTestAffordances() arms a chat-lockout
-	//    for red (2 rounds) effective on the next round.
+	//    for ids[0] (first AI in Object.keys order, rng: () => 0) effective on
+	//    the next round.
 	await page.goto("/?lockout=1");
 
-	// 3. Submit one message addressed to red (@Ember).
-	await page.fill("#prompt", "@Ember hello");
+	// 3. Read AI handles dynamically (set after synthesis completes).
+	const { ids, names } = await getAiHandles(page);
+
+	// 4. Submit one message addressed to ids[0].
+	await page.fill("#prompt", `@${names[0]} hello`);
 	await expect(page.locator("#send")).toBeEnabled();
 	await page.click("#send");
 
-	// 4a. Wait for the chat_lockout to take effect: typing @Ember should disable Send.
-	await page.fill("#prompt", "@Ember hi");
+	// 5a. Wait for the chat_lockout to take effect: typing @<name[0]> should
+	//     disable Send.
+	await page.fill("#prompt", `@${names[0]} hi`);
 	await expect(page.locator("#send")).toBeDisabled({ timeout: 30_000 });
 
-	// 4b. Red transcript ends with the in-character lockout line (appended by
+	// 5b. First AI transcript ends with the in-character lockout line (appended by
 	//     the chat_lockout event handler in game.ts: "[${event.message}]\n").
-	//     The exact persona name is "Ember" (from src/content/personas.ts).
-	const redTranscript = page.locator('[data-transcript="red"]');
-	await expect(redTranscript).toContainText(/[\w]+ is unresponsive…/);
+	const firstTranscript = page.locator(`[data-transcript="${ids[0]}"]`);
+	await expect(firstTranscript).toContainText(/[\w]+ is unresponsive…/);
 
-	// 4c. Green and blue transcripts contain a normal AI response line.
-	const greenTranscript = page.locator('[data-transcript="green"]');
-	const blueTranscript = page.locator('[data-transcript="blue"]');
-	await expect(greenTranscript).toContainText("greetings");
-	await expect(blueTranscript).toContainText("greetings");
+	// 5c. Second and third transcripts contain a normal AI response line.
+	const secondTranscript = page.locator(`[data-transcript="${ids[1]}"]`);
+	const thirdTranscript = page.locator(`[data-transcript="${ids[2]}"]`);
+	await expect(secondTranscript).toContainText("greetings");
+	await expect(thirdTranscript).toContainText("greetings");
 
-	// 4d. No page errors.
+	// 5d. No page errors.
 	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
 });

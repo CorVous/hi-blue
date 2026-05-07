@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { stubChatCompletions } from "./helpers";
+import { getAiHandles, stubChatCompletions } from "./helpers";
 
 /**
  * `?think=0` is a wrangler-dev-only affordance that adds
@@ -33,7 +33,9 @@ test("?think=0 adds reasoning:{enabled:false} to chat-completions requests", asy
 
 	await page.goto("/?think=0");
 
-	await page.fill("#prompt", "@Sage hello");
+	const { names } = await getAiHandles(page);
+
+	await page.fill("#prompt", `@${names[1]} hello`);
 	await expect(page.locator("#send")).toBeEnabled();
 	await page.click("#send");
 
@@ -68,7 +70,9 @@ test("without ?think=0, requests do NOT include the reasoning field", async ({
 
 	await page.goto("/");
 
-	await page.fill("#prompt", "@Sage hello");
+	const { names } = await getAiHandles(page);
+
+	await page.fill("#prompt", `@${names[1]} hello`);
 	await expect(page.locator("#send")).toBeEnabled();
 	await page.click("#send");
 
