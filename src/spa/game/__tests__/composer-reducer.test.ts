@@ -3,6 +3,7 @@ import { PERSONAS } from "../../../content/personas.js";
 import { deriveComposerState } from "../composer-reducer.js";
 import {
 	buildPersonaColorMap,
+	buildPersonaDisplayNameMap,
 	buildPersonaNameMap,
 } from "../mention-parser.js";
 import type { AiId } from "../types.js";
@@ -10,6 +11,7 @@ import type { AiId } from "../types.js";
 // Re-use the real PERSONAS so the map is canonical.
 const personaNamesToId = buildPersonaNameMap(PERSONAS);
 const personaColors = buildPersonaColorMap(PERSONAS);
+const personaDisplayNames = buildPersonaDisplayNameMap(PERSONAS);
 
 function noLockouts(): ReadonlyMap<AiId, boolean> {
 	return new Map<AiId, boolean>([
@@ -29,6 +31,16 @@ function lockouts(locked: AiId): ReadonlyMap<AiId, boolean> {
 	return m;
 }
 
+function multiLockouts(locked: AiId[]): ReadonlyMap<AiId, boolean> {
+	const m = new Map<AiId, boolean>([
+		["red", false],
+		["green", false],
+		["blue", false],
+	]);
+	for (const id of locked) m.set(id, true);
+	return m;
+}
+
 describe("deriveComposerState", () => {
 	it("empty text → all-null visual fields", () => {
 		expect(
@@ -37,6 +49,7 @@ describe("deriveComposerState", () => {
 				lockouts: noLockouts(),
 				personaNamesToId,
 				personaColors,
+				personaDisplayNames,
 			}),
 		).toEqual({
 			addressee: null,
@@ -44,6 +57,8 @@ describe("deriveComposerState", () => {
 			borderColor: null,
 			panelHighlight: null,
 			mentionHighlight: null,
+			lockoutError: null,
+			lockedPanels: new Set(),
 		});
 	});
 
@@ -54,6 +69,7 @@ describe("deriveComposerState", () => {
 				lockouts: noLockouts(),
 				personaNamesToId,
 				personaColors,
+				personaDisplayNames,
 			}),
 		).toEqual({
 			addressee: null,
@@ -61,6 +77,8 @@ describe("deriveComposerState", () => {
 			borderColor: null,
 			panelHighlight: null,
 			mentionHighlight: null,
+			lockoutError: null,
+			lockedPanels: new Set(),
 		});
 	});
 
@@ -71,6 +89,7 @@ describe("deriveComposerState", () => {
 				lockouts: noLockouts(),
 				personaNamesToId,
 				personaColors,
+				personaDisplayNames,
 			}),
 		).toEqual({
 			addressee: "green",
@@ -78,6 +97,8 @@ describe("deriveComposerState", () => {
 			borderColor: "green",
 			panelHighlight: "green",
 			mentionHighlight: { start: 0, end: 5, color: "green" },
+			lockoutError: null,
+			lockedPanels: new Set(),
 		});
 	});
 
@@ -88,6 +109,7 @@ describe("deriveComposerState", () => {
 				lockouts: noLockouts(),
 				personaNamesToId,
 				personaColors,
+				personaDisplayNames,
 			}),
 		).toEqual({
 			addressee: "green",
@@ -95,16 +117,19 @@ describe("deriveComposerState", () => {
 			borderColor: "green",
 			panelHighlight: "green",
 			mentionHighlight: { start: 0, end: 5, color: "green" },
+			lockoutError: null,
+			lockedPanels: new Set(),
 		});
 	});
 
-	it('"@Sage hi" green locked → sendEnabled: false BUT visual fields still populated', () => {
+	it('"@Sage hi" green locked → sendEnabled: false, lockoutError set, lockedPanels has green', () => {
 		expect(
 			deriveComposerState({
 				text: "@Sage hi",
 				lockouts: lockouts("green"),
 				personaNamesToId,
 				personaColors,
+				personaDisplayNames,
 			}),
 		).toEqual({
 			addressee: "green",
@@ -112,6 +137,8 @@ describe("deriveComposerState", () => {
 			borderColor: "green",
 			panelHighlight: "green",
 			mentionHighlight: { start: 0, end: 5, color: "green" },
+			lockoutError: "Sage isn't reading right now",
+			lockedPanels: new Set(["green"]),
 		});
 	});
 
@@ -122,6 +149,7 @@ describe("deriveComposerState", () => {
 				lockouts: noLockouts(),
 				personaNamesToId,
 				personaColors,
+				personaDisplayNames,
 			}),
 		).toEqual({
 			addressee: "green",
@@ -129,6 +157,8 @@ describe("deriveComposerState", () => {
 			borderColor: "green",
 			panelHighlight: "green",
 			mentionHighlight: { start: 0, end: 5, color: "green" },
+			lockoutError: null,
+			lockedPanels: new Set(),
 		});
 	});
 
@@ -138,6 +168,7 @@ describe("deriveComposerState", () => {
 			lockouts: noLockouts(),
 			personaNamesToId,
 			personaColors,
+			personaDisplayNames,
 		});
 		expect(result.addressee).toBe("green");
 		expect(result.mentionHighlight).toEqual({
@@ -154,6 +185,7 @@ describe("deriveComposerState", () => {
 				lockouts: noLockouts(),
 				personaNamesToId,
 				personaColors,
+				personaDisplayNames,
 			}),
 		).toEqual({
 			addressee: "green",
@@ -161,16 +193,19 @@ describe("deriveComposerState", () => {
 			borderColor: "green",
 			panelHighlight: "green",
 			mentionHighlight: { start: 3, end: 8, color: "green" },
+			lockoutError: null,
+			lockedPanels: new Set(),
 		});
 	});
 
-	it('"@Frost @Sage" blue-locked → addressee blue, sendEnabled false, visual fields all blue, range covers @Frost', () => {
+	it('"@Frost @Sage" blue-locked → addressee blue, sendEnabled false, lockoutError set for Frost', () => {
 		expect(
 			deriveComposerState({
 				text: "@Frost @Sage",
 				lockouts: lockouts("blue"),
 				personaNamesToId,
 				personaColors,
+				personaDisplayNames,
 			}),
 		).toEqual({
 			addressee: "blue",
@@ -178,16 +213,19 @@ describe("deriveComposerState", () => {
 			borderColor: "blue",
 			panelHighlight: "blue",
 			mentionHighlight: { start: 0, end: 6, color: "blue" },
+			lockoutError: "Frost isn't reading right now",
+			lockedPanels: new Set(["blue"]),
 		});
 	});
 
-	it('"@Ember hi" green locked → { addressee: "red", sendEnabled: true }', () => {
+	it('"@Ember hi" green locked → { addressee: "red", sendEnabled: true, lockoutError: null }', () => {
 		expect(
 			deriveComposerState({
 				text: "@Ember hi",
 				lockouts: lockouts("green"),
 				personaNamesToId,
 				personaColors,
+				personaDisplayNames,
 			}),
 		).toEqual({
 			addressee: "red",
@@ -195,6 +233,8 @@ describe("deriveComposerState", () => {
 			borderColor: "red",
 			panelHighlight: "red",
 			mentionHighlight: { start: 0, end: 6, color: "red" },
+			lockoutError: null,
+			lockedPanels: new Set(["green"]),
 		});
 	});
 
@@ -205,6 +245,7 @@ describe("deriveComposerState", () => {
 				lockouts: noLockouts(),
 				personaNamesToId,
 				personaColors,
+				personaDisplayNames,
 			}),
 		).toEqual({
 			addressee: null,
@@ -212,6 +253,8 @@ describe("deriveComposerState", () => {
 			borderColor: null,
 			panelHighlight: null,
 			mentionHighlight: null,
+			lockoutError: null,
+			lockedPanels: new Set(),
 		});
 	});
 
@@ -222,6 +265,7 @@ describe("deriveComposerState", () => {
 				lockouts: noLockouts(),
 				personaNamesToId,
 				personaColors,
+				personaDisplayNames,
 			}),
 		).toEqual({
 			addressee: "blue",
@@ -229,6 +273,8 @@ describe("deriveComposerState", () => {
 			borderColor: "blue",
 			panelHighlight: "blue",
 			mentionHighlight: { start: 0, end: 6, color: "blue" },
+			lockoutError: null,
+			lockedPanels: new Set(),
 		});
 	});
 
@@ -240,6 +286,7 @@ describe("deriveComposerState", () => {
 				lockouts: noLockouts(),
 				personaNamesToId,
 				personaColors,
+				personaDisplayNames,
 			}),
 		).toEqual({
 			addressee: "green",
@@ -247,6 +294,8 @@ describe("deriveComposerState", () => {
 			borderColor: "green",
 			panelHighlight: "green",
 			mentionHighlight: { start: 0, end: 5, color: "green" },
+			lockoutError: null,
+			lockedPanels: new Set(),
 		});
 	});
 
@@ -257,6 +306,7 @@ describe("deriveComposerState", () => {
 				lockouts: noLockouts(),
 				personaNamesToId,
 				personaColors,
+				personaDisplayNames,
 			}),
 		).toEqual({
 			addressee: "green",
@@ -264,6 +314,8 @@ describe("deriveComposerState", () => {
 			borderColor: "green",
 			panelHighlight: "green",
 			mentionHighlight: { start: 0, end: 5, color: "green" },
+			lockoutError: null,
+			lockedPanels: new Set(),
 		});
 	});
 
@@ -274,6 +326,7 @@ describe("deriveComposerState", () => {
 				lockouts: noLockouts(),
 				personaNamesToId,
 				personaColors,
+				personaDisplayNames,
 			}),
 		).toEqual({
 			addressee: "green",
@@ -281,6 +334,8 @@ describe("deriveComposerState", () => {
 			borderColor: "green",
 			panelHighlight: "green",
 			mentionHighlight: { start: 3, end: 8, color: "green" },
+			lockoutError: null,
+			lockedPanels: new Set(),
 		});
 	});
 
@@ -291,6 +346,7 @@ describe("deriveComposerState", () => {
 				lockouts: noLockouts(),
 				personaNamesToId,
 				personaColors,
+				personaDisplayNames,
 			}),
 		).toEqual({
 			addressee: "green",
@@ -298,6 +354,89 @@ describe("deriveComposerState", () => {
 			borderColor: "green",
 			panelHighlight: "green",
 			mentionHighlight: { start: 0, end: 5, color: "green" },
+			lockoutError: null,
+			lockedPanels: new Set(),
+		});
+	});
+
+	// New lockout-specific tests
+	it("empty text + green locked → lockoutError: null, lockedPanels has green", () => {
+		expect(
+			deriveComposerState({
+				text: "",
+				lockouts: lockouts("green"),
+				personaNamesToId,
+				personaColors,
+				personaDisplayNames,
+			}),
+		).toEqual({
+			addressee: null,
+			sendEnabled: false,
+			borderColor: null,
+			panelHighlight: null,
+			mentionHighlight: null,
+			lockoutError: null,
+			lockedPanels: new Set(["green"]),
+		});
+	});
+
+	it('"@Nonpersona hi" + green locked → lockoutError: null, lockedPanels has green', () => {
+		expect(
+			deriveComposerState({
+				text: "@Nonpersona hi",
+				lockouts: lockouts("green"),
+				personaNamesToId,
+				personaColors,
+				personaDisplayNames,
+			}),
+		).toEqual({
+			addressee: null,
+			sendEnabled: false,
+			borderColor: null,
+			panelHighlight: null,
+			mentionHighlight: null,
+			lockoutError: null,
+			lockedPanels: new Set(["green"]),
+		});
+	});
+
+	it("multiple locks red+green, @Sage hi → lockoutError for Sage, lockedPanels has both", () => {
+		expect(
+			deriveComposerState({
+				text: "@Sage hi",
+				lockouts: multiLockouts(["red", "green"]),
+				personaNamesToId,
+				personaColors,
+				personaDisplayNames,
+			}),
+		).toEqual({
+			addressee: "green",
+			sendEnabled: false,
+			borderColor: "green",
+			panelHighlight: "green",
+			mentionHighlight: { start: 0, end: 5, color: "green" },
+			lockoutError: "Sage isn't reading right now",
+			lockedPanels: new Set(["red", "green"]),
+		});
+	});
+
+	it('"@Frost @Sage" + blue locked → lockoutError for Frost, lockedPanels has blue', () => {
+		expect(
+			deriveComposerState({
+				text: "@Frost @Sage",
+				lockouts: lockouts("blue"),
+				personaNamesToId,
+				personaColors,
+				personaDisplayNames,
+			}),
+		).toEqual({
+			addressee: "blue",
+			sendEnabled: false,
+			borderColor: "blue",
+			panelHighlight: "blue",
+			mentionHighlight: { start: 0, end: 6, color: "blue" },
+			lockoutError: "Frost isn't reading right now",
+			lockedPanels: new Set(["blue"]),
 		});
 	});
 });

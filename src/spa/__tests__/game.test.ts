@@ -32,6 +32,7 @@ const INDEX_BODY_HTML = `
       <div id="prompt-overlay" aria-hidden="true"></div>
       <input id="prompt" type="text" placeholder="Enter a message…" autocomplete="off" />
     </div>
+    <output id="lockout-error" class="lockout-error" role="status" aria-live="polite" hidden></output>
     <button id="send" type="submit">Send</button>
   </form>
   <section id="cap-hit" hidden></section>
@@ -1869,5 +1870,225 @@ describe("visual feedback for active addressee", () => {
 		const span = overlay.querySelector(".mention-highlight");
 		expect(span?.textContent).toBe("@Sage");
 		expect(span?.classList.contains("mention--green")).toBe(true);
+	});
+});
+
+describe("renderGame — chat lockout visual affordances (panel muting + inline error)", () => {
+	beforeEach(() => {
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		document.body.innerHTML = INDEX_BODY_HTML;
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+		vi.resetModules();
+		document.body.innerHTML = "";
+	});
+
+	/** Helper: inject a chatLockoutTriggered for a given aiId via submitMessage spy. */
+	async function setupLockoutMock(aiId: "red" | "green" | "blue", message: string) {
+		const { GameSession } = await import("../game/game-session.js");
+		const originalSubmit = GameSession.prototype.submitMessage;
+		vi.spyOn(GameSession.prototype, "submitMessage").mockImplementation(
+			async function (
+				this: InstanceType<typeof GameSession>,
+				...args: Parameters<InstanceType<typeof GameSession>["submitMessage"]>
+			) {
+				const real = await originalSubmit.apply(this, args);
+				return {
+					...real,
+					result: {
+						...real.result,
+						chatLockoutTriggered: { aiId, message },
+					},
+				};
+			},
+		);
+	}
+
+	it("chat_lockout fires → locked panel gains panel--locked and aria-disabled=true", async () => {
+		vi.stubGlobal(
+			"fetch",
+			makeThreeAiFetchMock(PASS_ACTION, PASS_ACTION, PASS_ACTION),
+		);
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		await setupLockoutMock("red", "Ember is unresponsive…");
+
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		const form = getEl<HTMLFormElement>("#composer");
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+
+		promptInput.value = "@Sage hello";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		const redPanel = getEl<HTMLElement>('.ai-panel[data-ai="red"]');
+		expect(redPanel.classList.contains("panel--locked")).toBe(true);
+		expect(redPanel.getAttribute("aria-disabled")).toBe("true");
+
+		// Green and blue panels should NOT be locked
+		const greenPanel = getEl<HTMLElement>('.ai-panel[data-ai="green"]');
+		const bluePanel = getEl<HTMLElement>('.ai-panel[data-ai="blue"]');
+		expect(greenPanel.classList.contains("panel--locked")).toBe(false);
+		expect(bluePanel.classList.contains("panel--locked")).toBe(false);
+	});
+
+	it("type @Sage while green locked → Send disabled, #lockout-error visible with text containing 'Sage'", async () => {
+		vi.stubGlobal(
+			"fetch",
+			makeThreeAiFetchMock(PASS_ACTION, PASS_ACTION, PASS_ACTION),
+		);
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		await setupLockoutMock("green", "Sage is unresponsive…");
+
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		const form = getEl<HTMLFormElement>("#composer");
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		const sendBtn = getEl<HTMLButtonElement>("#send");
+
+		// Submit to trigger the lockout
+		promptInput.value = "@Sage hello";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		// Type @Sage hi while green is locked
+		promptInput.value = "@Sage hi";
+		promptInput.dispatchEvent(new Event("input"));
+
+		expect(sendBtn.disabled).toBe(true);
+
+		const lockoutError = getEl<HTMLOutputElement>("#lockout-error");
+		expect(lockoutError.hasAttribute("hidden")).toBe(false);
+		expect(lockoutError.textContent).toContain("Sage");
+	});
+
+	it("chat_lockout_resolved mid-draft → muting clears, #lockout-error hidden, Send re-enables when @Sage re-typed", async () => {
+		// First round: inject lockout for green
+		// Second round: inject lockout_resolved for green via mock
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		const { GameSession } = await import("../game/game-session.js");
+		const originalSubmit = GameSession.prototype.submitMessage;
+		let callCount = 0;
+		vi.spyOn(GameSession.prototype, "submitMessage").mockImplementation(
+			async function (
+				this: InstanceType<typeof GameSession>,
+				...args: Parameters<InstanceType<typeof GameSession>["submitMessage"]>
+			) {
+				const real = await originalSubmit.apply(this, args);
+				callCount++;
+				if (callCount === 1) {
+					// First call: lock green
+					return {
+						...real,
+						result: {
+							...real.result,
+							chatLockoutTriggered: {
+								aiId: "green" as const,
+								message: "Sage is unresponsive…",
+							},
+						},
+					};
+				}
+				// Second call: resolve green lockout
+				return {
+					...real,
+					result: {
+						...real.result,
+						chatLockoutsResolved: ["green" as const],
+					},
+				};
+			},
+		);
+
+		const mockFetch = vi.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
+			statusText: "OK",
+			body: makeAiSseStream(PASS_ACTION),
+		});
+		vi.stubGlobal("fetch", mockFetch);
+
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		const form = getEl<HTMLFormElement>("#composer");
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+
+		// Round 1: lock green
+		promptInput.value = "@Sage hello";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		// Verify green is locked
+		const greenPanel = getEl<HTMLElement>('.ai-panel[data-ai="green"]');
+		expect(greenPanel.classList.contains("panel--locked")).toBe(true);
+
+		// Round 2 via @Ember: resolve green lockout
+		promptInput.value = "@Ember hi";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		// Green panel should no longer be locked
+		expect(greenPanel.classList.contains("panel--locked")).toBe(false);
+
+		// Type @Sage again: should now enable Send and hide error
+		promptInput.value = "@Sage hi";
+		promptInput.dispatchEvent(new Event("input"));
+
+		const sendBtn = getEl<HTMLButtonElement>("#send");
+		expect(sendBtn.disabled).toBe(false);
+
+		const lockoutError = getEl<HTMLOutputElement>("#lockout-error");
+		expect(lockoutError.hasAttribute("hidden")).toBe(true);
+	});
+
+	it("empty input + green locked → green panel muted but #lockout-error stays hidden", async () => {
+		vi.stubGlobal(
+			"fetch",
+			makeThreeAiFetchMock(PASS_ACTION, PASS_ACTION, PASS_ACTION),
+		);
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		await setupLockoutMock("green", "Sage is unresponsive…");
+
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		const form = getEl<HTMLFormElement>("#composer");
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+
+		// Trigger lockout
+		promptInput.value = "@Sage hello";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		// Clear input (empty text)
+		promptInput.value = "";
+		promptInput.dispatchEvent(new Event("input"));
+
+		// Green panel is muted (locked)
+		const greenPanel = getEl<HTMLElement>('.ai-panel[data-ai="green"]');
+		expect(greenPanel.classList.contains("panel--locked")).toBe(true);
+
+		// Error element is hidden (no addressee)
+		const lockoutError = getEl<HTMLOutputElement>("#lockout-error");
+		expect(lockoutError.hasAttribute("hidden")).toBe(true);
 	});
 });
