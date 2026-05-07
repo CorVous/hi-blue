@@ -36,14 +36,18 @@ function drawSpatialPlacements(
 		// Pick a random index from [i, cells.length)
 		const j = i + Math.floor(rng() * (cells.length - i));
 		// Swap cells[i] and cells[j]
+		// biome-ignore lint/style/noNonNullAssertion: bounded index into non-empty array
 		const tmp = cells[i]!;
+		// biome-ignore lint/style/noNonNullAssertion: bounded index into non-empty array
 		cells[i] = cells[j]!;
 		cells[j] = tmp;
 
 		// Pick a random facing
 		const facingIdx = Math.floor(rng() * CARDINAL_DIRECTIONS.length);
+		// biome-ignore lint/style/noNonNullAssertion: bounded index into non-empty array
 		const facing: CardinalDirection = CARDINAL_DIRECTIONS[facingIdx]!;
 
+		// biome-ignore lint/style/noNonNullAssertion: bounded index into non-empty array
 		result[aiIds[i]!] = { position: cells[i]!, facing };
 	}
 	return result;

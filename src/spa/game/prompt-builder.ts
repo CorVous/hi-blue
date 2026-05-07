@@ -1,3 +1,4 @@
+import { formatPosition } from "./direction.js";
 import { getActivePhase } from "./engine";
 import type {
 	ActionLogEntry,
@@ -80,10 +81,6 @@ function facingLabel(facing: CardinalDirection): string {
 	return facing.charAt(0).toUpperCase() + facing.slice(1);
 }
 
-function posLabel(pos: GridPosition): string {
-	return `(row ${pos.row}, col ${pos.col})`;
-}
-
 function renderSystemPrompt(ctx: AiContext): string {
 	const lines: string[] = [];
 
@@ -109,7 +106,7 @@ function renderSystemPrompt(ctx: AiContext): string {
 	lines.push("## Where you are");
 	if (actorSpatial) {
 		lines.push(
-			`Position: ${posLabel(actorSpatial.position)}, facing ${facingLabel(actorSpatial.facing)}`,
+			`Position: ${formatPosition(actorSpatial.position)}, facing ${facingLabel(actorSpatial.facing)}`,
 		);
 
 		// Items in actor's current cell
@@ -140,7 +137,7 @@ function renderSystemPrompt(ctx: AiContext): string {
 				const other = ctx.personaSpatial[otherId];
 				if (other) {
 					lines.push(
-						`  - ${otherId}: ${posLabel(other.position)}, facing ${facingLabel(other.facing)}`,
+						`  - ${otherId}: ${formatPosition(other.position)}, facing ${facingLabel(other.facing)}`,
 					);
 				}
 			}
@@ -167,7 +164,7 @@ function renderSystemPrompt(ctx: AiContext): string {
 	if (groundItems.length > 0) {
 		for (const item of groundItems) {
 			const pos = item.holder as GridPosition;
-			lines.push(`- ${item.name}: on the ground at ${posLabel(pos)}`);
+			lines.push(`- ${item.name}: on the ground at ${formatPosition(pos)}`);
 		}
 	}
 	if (heldItems.length === 0 && groundItems.length === 0) {

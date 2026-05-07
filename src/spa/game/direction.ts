@@ -59,3 +59,8 @@ export function manhattan(a: GridPosition, b: GridPosition): number {
 export function areAdjacent4(a: GridPosition, b: GridPosition): boolean {
 	return manhattan(a, b) === 1;
 }
+
+/** Format a GridPosition as a labeled string for LLM-facing output. */
+export function formatPosition(pos: GridPosition): string {
+	return `(row ${pos.row}, col ${pos.col})`;
+}

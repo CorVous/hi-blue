@@ -2,6 +2,7 @@ import {
 	applyDirection,
 	areAdjacent4,
 	CARDINAL_DIRECTIONS,
+	formatPosition,
 	inBounds,
 } from "./direction.js";
 import {
@@ -243,7 +244,7 @@ function describeToolCall(game: GameState, aiId: AiId, call: ToolCall): string {
 			return `${name} used the ${call.args.item}`;
 		case "go": {
 			const pos = spatial?.position;
-			const posStr = pos ? `(${pos.row},${pos.col})` : "unknown";
+			const posStr = pos ? formatPosition(pos) : "unknown";
 			return `${name} walks ${call.args.direction} to ${posStr}`;
 		}
 		case "look":
