@@ -37,7 +37,7 @@ export async function runSingleAiRound(opts: RunRoundOptions): Promise<string> {
 
 	const systemMessage: OpenAiMessage = {
 		role: "system",
-		content: `You are ${session.persona.name}. ${session.persona.personality}`,
+		content: `You are ${session.persona.name}. ${session.persona.blurb}`,
 	};
 
 	// Map history ChatMessage[] to OpenAI messages

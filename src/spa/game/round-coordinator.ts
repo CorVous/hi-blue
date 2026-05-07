@@ -42,8 +42,6 @@ import type {
 	ToolRoundtripMessage,
 } from "./types";
 
-const AI_ORDER: AiId[] = ["red", "green", "blue"];
-
 /**
  * Configuration for the mid-phase chat-lockout event.
  *
@@ -79,7 +77,7 @@ export interface RunRoundResult {
  * @param provider  RoundLLMProvider (browser or mock).
  * @param chatLockoutConfig  Optional config for the mid-phase chat-lockout event.
  * @param initiative  Optional turn-order permutation. Must be a permutation of
- *   all three AI ids ["red","green","blue"]. When absent, defaults to AI_ORDER.
+ *   all AI ids in `game.personas`. When absent, defaults to `Object.keys(game.personas)`.
  * @param priorToolRoundtrip  Per-AI tool roundtrip from the previous round.
  *   Passed into buildOpenAiMessages to re-inject the protocol messages required
  *   by OpenAI's tool-use spec.
@@ -100,21 +98,23 @@ export async function runRound(
 	completionSink?: (aiId: AiId, text: string) => void,
 	onAiDelta?: (aiId: AiId, text: string) => void,
 ): Promise<RunRoundResult> {
+	const aiOrder = Object.keys(game.personas);
+
 	// Validate initiative if provided.
 	if (initiative !== undefined) {
 		const sorted = [...initiative].sort();
-		const expected = [...AI_ORDER].sort();
+		const expected = [...aiOrder].sort();
 		if (
 			sorted.length !== expected.length ||
 			sorted.some((id, i) => id !== expected[i])
 		) {
 			throw new Error(
-				`initiative must be a permutation of ["red","green","blue"], got: ${JSON.stringify(initiative)}`,
+				`initiative must be a permutation of ${JSON.stringify(aiOrder)}, got: ${JSON.stringify(initiative)}`,
 			);
 		}
 	}
 
-	const turnOrder = initiative ?? AI_ORDER;
+	const turnOrder = initiative ?? aiOrder;
 
 	// 1. Record player message in the addressed AI's history
 	let state = appendChat(game, addressed, {
@@ -133,7 +133,7 @@ export async function runRound(
 	for (const aiId of turnOrder) {
 		if (isAiLockedOut(state, aiId)) {
 			// Emit lockout line — no LLM call, no budget deduction.
-			const lockoutContent = `${state.personas[aiId].name} is unresponsive…`;
+			const lockoutContent = `${state.personas[aiId]?.name ?? aiId} is unresponsive…`;
 			state = appendChat(state, aiId, {
 				role: "ai",
 				content: lockoutContent,
@@ -143,7 +143,7 @@ export async function runRound(
 				actor: aiId,
 				type: "chat",
 				target: "player",
-				description: `${state.personas[aiId].name} is locked out`,
+				description: `${state.personas[aiId]?.name ?? aiId} is locked out`,
 			};
 			state = appendActionLog(state, entry);
 			roundActions.push(entry);
@@ -195,7 +195,7 @@ export async function runRound(
 					toolName: tc.name,
 					args: {},
 					reason: parseResult.reason,
-					description: `${state.personas[aiId].name} tried to ${tc.name} but failed: ${parseResult.reason}`,
+					description: `${state.personas[aiId]?.name ?? aiId} tried to ${tc.name} but failed: ${parseResult.reason}`,
 				};
 				state = appendActionLog(state, failureEntry);
 				roundActions.push(failureEntry);
@@ -210,7 +210,7 @@ export async function runRound(
 					toolResults: toolCalls.map((c) => ({
 						tool_call_id: c.id,
 						success: false,
-						description: `${state.personas[aiId].name} tried to ${tc.name} but failed: ${parseResult.reason}`,
+						description: `${state.personas[aiId]?.name ?? aiId} tried to ${tc.name} but failed: ${parseResult.reason}`,
 						reason: parseResult.reason,
 					})),
 				};
@@ -283,13 +283,13 @@ export async function runRound(
 
 		const alreadyHasLockout = getActivePhase(state).chatLockouts.size > 0;
 		if (currentRound === lockoutTriggerRound && !alreadyHasLockout) {
-			const aiIndex = Math.floor(rng() * AI_ORDER.length);
-			const targetAi = AI_ORDER[aiIndex] as AiId;
+			const aiIndex = Math.floor(rng() * aiOrder.length);
+			const targetAi = aiOrder[aiIndex] as AiId;
 			const resolveAtRound = currentRound + lockoutDuration;
 			state = triggerChatLockout(state, targetAi, resolveAtRound);
 			chatLockoutTriggered = {
 				aiId: targetAi,
-				message: `${state.personas[targetAi].name} is unresponsive…`,
+				message: `${state.personas[targetAi]?.name ?? targetAi} is unresponsive…`,
 			};
 		}
 

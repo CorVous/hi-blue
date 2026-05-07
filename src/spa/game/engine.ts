@@ -18,6 +18,7 @@ import type {
 function resolveAiGoals(
 	config: PhaseConfig,
 	rng: () => number,
+	aiIds: string[],
 ): Record<AiId, string> {
 	if (config.aiGoals) return { ...config.aiGoals };
 	const pool = config.aiGoalPool;
@@ -32,7 +33,11 @@ function resolveAiGoals(
 		// biome-ignore lint/style/noNonNullAssertion: bounded index into non-empty array
 		return pool[idx]!;
 	};
-	return { red: draw(), green: draw(), blue: draw() };
+	const goals: Record<AiId, string> = {};
+	for (const aiId of aiIds) {
+		goals[aiId] = draw();
+	}
+	return goals;
 }
 
 export function updateActivePhase(
@@ -60,19 +65,22 @@ export function startPhase(
 	config: PhaseConfig,
 	rng: () => number = Math.random,
 ): GameState {
-	const budgets: Record<AiId, AiBudget> = {
-		red: { remaining: config.budgetPerAi, total: config.budgetPerAi },
-		green: { remaining: config.budgetPerAi, total: config.budgetPerAi },
-		blue: { remaining: config.budgetPerAi, total: config.budgetPerAi },
-	};
+	const aiIds = Object.keys(game.personas);
 
-	const chatHistories: Record<AiId, ChatMessage[]> = {
-		red: [],
-		green: [],
-		blue: [],
-	};
+	const budgets: Record<AiId, AiBudget> = {};
+	for (const aiId of aiIds) {
+		budgets[aiId] = {
+			remaining: config.budgetPerAi,
+			total: config.budgetPerAi,
+		};
+	}
 
-	const aiGoals = resolveAiGoals(config, rng);
+	const chatHistories: Record<AiId, ChatMessage[]> = {};
+	for (const aiId of aiIds) {
+		chatHistories[aiId] = [];
+	}
+
+	const aiGoals = resolveAiGoals(config, rng, aiIds);
 
 	const phase: PhaseState = {
 		phaseNumber: config.phaseNumber,
@@ -121,7 +129,9 @@ export function isAiLockedOut(game: GameState, aiId: AiId): boolean {
 
 export function deductBudget(game: GameState, aiId: AiId): GameState {
 	return updateActivePhase(game, (phase) => {
-		const remaining = Math.max(0, phase.budgets[aiId].remaining - 1);
+		const current = phase.budgets[aiId];
+		if (!current) return phase;
+		const remaining = Math.max(0, current.remaining - 1);
 		const lockedOut = new Set(phase.lockedOut);
 		if (remaining === 0) {
 			lockedOut.add(aiId);
@@ -130,7 +140,7 @@ export function deductBudget(game: GameState, aiId: AiId): GameState {
 			...phase,
 			budgets: {
 				...phase.budgets,
-				[aiId]: { ...phase.budgets[aiId], remaining },
+				[aiId]: { total: current.total, remaining },
 			},
 			lockedOut,
 		};
@@ -156,7 +166,7 @@ export function appendChat(
 		...phase,
 		chatHistories: {
 			...phase.chatHistories,
-			[aiId]: [...phase.chatHistories[aiId], message],
+			[aiId]: [...(phase.chatHistories[aiId] ?? []), message],
 		},
 	}));
 }

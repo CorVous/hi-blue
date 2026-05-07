@@ -12,6 +12,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // Provide globals before importing the module
 vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 
+import { STATIC_PERSONAS } from "./fixtures/static-personas";
+
+// Pin generatePersonas to a static fixture so panel/transcript hookups
+// keyed by red/green/blue continue to work in this regression test.
+vi.mock("../../content", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("../../content")>();
+	return {
+		...actual,
+		generatePersonas: () => STATIC_PERSONAS,
+	};
+});
+
 // ---------------------------------------------------------------------------
 // Module-level mock: GameSession always returns gameEnded:true so we don't
 // need a real win-condition in the phase config.
@@ -35,7 +47,7 @@ const FAKE_GAME_STATE = {
 	isComplete: true,
 	currentPhase: 1,
 	phases: [FAKE_PHASE_STATE],
-	personas: {},
+	personas: STATIC_PERSONAS,
 };
 
 const GAME_ENDED_RESULT = {

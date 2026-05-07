@@ -11,9 +11,10 @@ const WORKER_COMPLETIONS_URL = "http://localhost:8787/v1/chat/completions";
 const TEST_PERSONA: AiPersona = {
 	id: "blue",
 	name: "Frost",
-	color: "blue",
-	personality: "Cool and not very talkative.",
-	goal: "Would like to move or do as little as possible.",
+	color: "#5fa8d3",
+	temperaments: ["laconic", "diffident"],
+	personaGoal: "Hold the key at phase end.",
+	blurb: "You are laconic and diffident. Hold the key at phase end.",
 	budgetPerPhase: 5,
 };
 

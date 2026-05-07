@@ -29,6 +29,7 @@ export class BrowserLLMProvider implements RoundLLMProvider {
 		onDelta?: (text: string) => void,
 	): Promise<RoundTurnResult> {
 		const textParts: string[] = [];
+		const reasoningParts: string[] = [];
 		const toolCalls: RoundTurnResult["toolCalls"] = [];
 
 		await streamCompletion({
@@ -38,15 +39,16 @@ export class BrowserLLMProvider implements RoundLLMProvider {
 				textParts.push(text);
 				onDelta?.(text);
 			},
+			onReasoning: (text) => {
+				reasoningParts.push(text);
+			},
 			onToolCall: (call) => {
 				toolCalls.push(call);
 			},
 			...(this.disableReasoning ? { disableReasoning: true } : {}),
 		});
 
-		return {
-			assistantText: textParts.join(""),
-			toolCalls,
-		};
+		const assistantText = textParts.join("") || reasoningParts.join("");
+		return { assistantText, toolCalls };
 	}
 }

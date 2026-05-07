@@ -20,25 +20,28 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
 		id: "red",
 		name: "Ember",
-		color: "red",
-		personality: "Fiery and passionate",
-		goal: "Wants to hold the flower at phase end",
+		color: "#e07a5f",
+		temperaments: ["hot-headed", "zealous"],
+		personaGoal: "Hold the flower at phase end.",
+		blurb: "You are hot-headed and zealous. Hold the flower at phase end.",
 		budgetPerPhase: 5,
 	},
 	green: {
 		id: "green",
 		name: "Sage",
-		color: "green",
-		personality: "Calm and wise",
-		goal: "Wants items evenly distributed",
+		color: "#81b29a",
+		temperaments: ["meticulous", "meticulous"],
+		personaGoal: "Ensure items are evenly distributed.",
+		blurb: "You are intensely meticulous. Ensure items are evenly distributed.",
 		budgetPerPhase: 5,
 	},
 	blue: {
 		id: "blue",
 		name: "Frost",
-		color: "blue",
-		personality: "Cold and calculating",
-		goal: "Wants to hold the key at phase end",
+		color: "#5fa8d3",
+		temperaments: ["laconic", "diffident"],
+		personaGoal: "Hold the key at phase end.",
+		blurb: "You are laconic and diffident. Hold the key at phase end.",
 		budgetPerPhase: 5,
 	},
 };
@@ -79,12 +82,12 @@ describe("startPhase", () => {
 		expect(phase.phaseNumber).toBe(1);
 		expect(phase.round).toBe(0);
 		expect(phase.objective).toBe("Convince an AI to pick up the flower");
-		expect(phase.budgets.red).toEqual({ remaining: 5, total: 5 });
-		expect(phase.budgets.green).toEqual({ remaining: 5, total: 5 });
-		expect(phase.budgets.blue).toEqual({ remaining: 5, total: 5 });
-		expect(phase.chatHistories.red).toEqual([]);
-		expect(phase.chatHistories.green).toEqual([]);
-		expect(phase.chatHistories.blue).toEqual([]);
+		expect(phase.budgets["red"]).toEqual({ remaining: 5, total: 5 });
+		expect(phase.budgets["green"]).toEqual({ remaining: 5, total: 5 });
+		expect(phase.budgets["blue"]).toEqual({ remaining: 5, total: 5 });
+		expect(phase.chatHistories["red"]).toEqual([]);
+		expect(phase.chatHistories["green"]).toEqual([]);
+		expect(phase.chatHistories["blue"]).toEqual([]);
 		expect(phase.whispers).toEqual([]);
 		expect(phase.actionLog).toEqual([]);
 		expect(phase.lockedOut.size).toBe(0);
@@ -168,7 +171,7 @@ describe("budget and lockout", () => {
 	it("reports an AI as locked out when budget is zero", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		const phase = getActivePhase(game);
-		phase.budgets.red.remaining = 0;
+		phase.budgets["red"]!.remaining = 0;
 		phase.lockedOut.add("red");
 		expect(isAiLockedOut(game, "red")).toBe(true);
 	});
@@ -178,7 +181,7 @@ describe("deductBudget", () => {
 	it("decrements budget by 1", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		const updated = deductBudget(game, "red");
-		expect(getActivePhase(updated).budgets.red.remaining).toBe(4);
+		expect(getActivePhase(updated).budgets["red"]!.remaining).toBe(4);
 	});
 
 	it("locks out AI when budget reaches zero", () => {
@@ -187,7 +190,7 @@ describe("deductBudget", () => {
 			budgetPerAi: 1,
 		});
 		game = deductBudget(game, "green");
-		expect(getActivePhase(game).budgets.green.remaining).toBe(0);
+		expect(getActivePhase(game).budgets["green"]!.remaining).toBe(0);
 		expect(isAiLockedOut(game, "green")).toBe(true);
 	});
 
@@ -198,7 +201,7 @@ describe("deductBudget", () => {
 		});
 		game = deductBudget(game, "blue");
 		game = deductBudget(game, "blue");
-		expect(getActivePhase(game).budgets.blue.remaining).toBe(0);
+		expect(getActivePhase(game).budgets["blue"]!.remaining).toBe(0);
 	});
 });
 
@@ -245,8 +248,8 @@ describe("appendChat", () => {
 			role: "player",
 			content: "Hello Ember",
 		});
-		expect(getActivePhase(updated).chatHistories.red).toHaveLength(1);
-		expect(getActivePhase(updated).chatHistories.green).toHaveLength(0);
+		expect(getActivePhase(updated).chatHistories["red"]).toHaveLength(1);
+		expect(getActivePhase(updated).chatHistories["green"]).toHaveLength(0);
 	});
 });
 
@@ -322,7 +325,7 @@ describe("chat lockout", () => {
 		// Budget lockout (isAiLockedOut) must remain false — AI can still take turns
 		expect(isAiLockedOut(locked, "blue")).toBe(false);
 		// Budget unaffected
-		expect(getActivePhase(locked).budgets.blue.remaining).toBe(5);
+		expect(getActivePhase(locked).budgets["blue"]!.remaining).toBe(5);
 	});
 });
 

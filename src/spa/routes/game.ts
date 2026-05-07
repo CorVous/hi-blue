@@ -1,4 +1,4 @@
-import { PERSONAS, PHASE_1_CONFIG } from "../../content";
+import { generatePersonas, PHASE_1_CONFIG } from "../../content";
 import { serializeGameSave } from "../../save-serializer.js";
 import { BrowserLLMProvider } from "../game/browser-llm-provider.js";
 import { deriveComposerState } from "../game/composer-reducer.js";
@@ -13,6 +13,12 @@ import {
 import { encodeRoundResult } from "../game/round-result-encoder.js";
 import type { AiId, PhaseConfig } from "../game/types";
 import { AI_TYPING_SPEED, TOKEN_PACE_MS } from "../game/typing-rhythm.js";
+
+/** Return the *xxxx display form from the bare 4-char handle. */
+function displayName(name: string): string {
+	return `*${name}`;
+}
+
 import { CapHitError } from "../llm-client.js";
 import {
 	clearGame,
@@ -20,8 +26,6 @@ import {
 	loadGame,
 	saveGame,
 } from "../persistence/game-storage.js";
-
-const AI_ORDER: AiId[] = ["red", "green", "blue"];
 
 /** Fisher-Yates shuffle (returns a new array). */
 function shuffle<T>(arr: T[]): T[] {
@@ -160,15 +164,12 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 
 	if (!form || !promptInput || !sendBtn) return;
 
-	// Mention-based addressing state
-	const personaNamesToId = buildPersonaNameMap(PERSONAS);
-	const personaColors = buildPersonaColorMap(PERSONAS);
-	const personaDisplayNames = buildPersonaDisplayNameMap(PERSONAS);
-	const lockouts: Map<AiId, boolean> = new Map([
-		["red", false],
-		["green", false],
-		["blue", false],
-	]);
+	// Mention-based addressing state — built lazily after session init below,
+	// since persona handles are procedurally generated per session.
+	let personaNamesToId: ReturnType<typeof buildPersonaNameMap>;
+	let personaColors: ReturnType<typeof buildPersonaColorMap>;
+	let personaDisplayNames: ReturnType<typeof buildPersonaDisplayNameMap>;
+	const lockouts: Map<AiId, boolean> = new Map();
 	let roundInFlight = false;
 
 	// promptInput and sendBtn are guaranteed non-null (checked above).
@@ -178,16 +179,13 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 	// Overlay for mention highlight rendering.
 	const overlay = doc.querySelector<HTMLElement>("#prompt-overlay");
 
-	/** Remove any class on `el` that starts with `prefix`, then add `${prefix}${value}` if non-null. */
-	function setColorClass(
-		el: HTMLElement,
-		prefix: string,
-		value: string | null,
-	): void {
-		for (const cls of [...el.classList]) {
-			if (cls.startsWith(prefix)) el.classList.remove(cls);
+	/** Set or clear the --panel-color CSS custom property on an element. */
+	function setPanelColor(el: HTMLElement, color: string | null): void {
+		if (color != null) {
+			el.style.setProperty("--panel-color", color);
+		} else {
+			el.style.removeProperty("--panel-color");
 		}
-		if (value != null) el.classList.add(`${prefix}${value}`);
 	}
 
 	/** Rebuild the overlay's DOM to reflect the current text and highlight range. */
@@ -208,7 +206,8 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 			ov.appendChild(doc.createTextNode(text.slice(0, start)));
 		}
 		const span = doc.createElement("span");
-		span.className = `mention-highlight mention--${color}`;
+		span.className = "mention-highlight";
+		span.style.setProperty("--panel-color", color);
 		span.appendChild(doc.createTextNode(text.slice(start, end)));
 		ov.appendChild(span);
 		if (end < text.length) {
@@ -217,6 +216,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 	}
 
 	function refreshComposerState(): void {
+		if (!personaNamesToId || !personaColors || !personaDisplayNames) return;
 		const state = deriveComposerState({
 			text: _promptInput.value,
 			lockouts,
@@ -225,20 +225,16 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 			personaDisplayNames,
 		});
 		_sendBtn.disabled = !state.sendEnabled || roundInFlight;
-		setColorClass(_promptInput, "composer-border--", state.borderColor);
+		setPanelColor(_promptInput, state.borderColor);
 
-		// Panel muting (panel--locked) and addressing
-		for (const aiId of AI_ORDER) {
+		// Panel addressing + lockout muting
+		for (const aiId of personaColors.keys()) {
 			const panel = doc.querySelector<HTMLElement>(
 				`.ai-panel[data-ai="${aiId}"]`,
 			);
 			if (!panel) continue;
 			const isAddressed = state.panelHighlight === aiId;
 			panel.classList.toggle("panel--addressed", isAddressed);
-			const color = personaColors.get(aiId);
-			if (color)
-				panel.classList.toggle(`panel--addressed-${color}`, isAddressed);
-			// Lock muting
 			const isLocked = state.lockedPanels.has(aiId);
 			panel.classList.toggle("panel--locked", isLocked);
 			panel.setAttribute("aria-disabled", isLocked ? "true" : "false");
@@ -310,7 +306,8 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 
 			// Re-render transcripts from restored state
 			const restoredPhase = getActivePhase(loadResult.state);
-			for (const aiId of AI_ORDER) {
+			const restoredPersonas = loadResult.state.personas;
+			for (const aiId of Object.keys(restoredPersonas)) {
 				const transcript = doc.querySelector<HTMLElement>(
 					`[data-transcript="${aiId}"]`,
 				);
@@ -318,11 +315,14 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 				if (typeof restored.transcripts[aiId] === "string") {
 					// Verbatim restore from persisted transcript snapshot
 					transcript.textContent = restored.transcripts[aiId];
-				} else if (restoredPhase.chatHistories[aiId].length > 0) {
+				} else if ((restoredPhase.chatHistories[aiId]?.length ?? 0) > 0) {
 					// Fallback: synthesise from chatHistories (legacy saves)
-					for (const msg of restoredPhase.chatHistories[aiId]) {
+					for (const msg of restoredPhase.chatHistories[aiId] ?? []) {
+						const personaName = restoredPersonas[aiId]?.name ?? aiId;
 						const prefix =
-							msg.role === "player" ? "[you] " : `[${PERSONAS[aiId].name}] `;
+							msg.role === "player"
+								? "[you] "
+								: `[${displayName(personaName)}] `;
 						transcript.textContent += `${prefix}${msg.content}\n`;
 					}
 				}
@@ -340,7 +340,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 			if (loadResult.error) {
 				showPersistenceWarning(loadResult.error);
 			}
-			session = new GameSession(PHASE_1_CONFIG, PERSONAS);
+			session = new GameSession(PHASE_1_CONFIG, generatePersonas());
 		}
 
 		// Apply SPA-side test affordances from location.search (e.g. ?winImmediately=1
@@ -350,10 +350,16 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		// intended to be set on the page URL itself, matching the legacy worker pattern.
 		session = applyTestAffordances(session, effectiveParams);
 
+		// Build persona maps from runtime state (after affordances may have replaced session)
+		const runtimePersonas = session.getState().personas;
+		personaNamesToId = buildPersonaNameMap(runtimePersonas);
+		personaColors = buildPersonaColorMap(runtimePersonas);
+		personaDisplayNames = buildPersonaDisplayNameMap(runtimePersonas);
+
 		// Hydrate lockouts from the active phase's chatLockouts map so that
 		// a reload preserves the Send-disabled state for locked-out AIs.
 		const activePhaseForLockouts = getActivePhase(session.getState());
-		for (const aiId of AI_ORDER) {
+		for (const aiId of Object.keys(runtimePersonas)) {
 			lockouts.set(aiId, activePhaseForLockouts.chatLockouts.has(aiId));
 		}
 
@@ -364,26 +370,33 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 	// Set initial composer state (Send starts disabled until a valid @mention).
 	refreshComposerState();
 
-	// Populate panel headers from PERSONAS so renames don't require HTML edits
-	for (const aiId of AI_ORDER) {
-		const panel = doc.querySelector<HTMLElement>(
-			`.ai-panel[data-ai="${aiId}"]`,
-		);
-		if (!panel) continue;
+	// Populate panel headers from runtime personas; assign data-ai and --panel-color
+	const panelEls = doc.querySelectorAll<HTMLElement>(".ai-panel");
+	const aiIdList = Object.keys(session.getState().personas);
+	const runtimePersonasForPanels = session.getState().personas;
+	const sessionRef = session;
+	panelEls.forEach((panel, idx) => {
+		const aiId = aiIdList[idx];
+		if (!aiId) return;
+		panel.dataset.ai = aiId;
+		const persona = runtimePersonasForPanels[aiId];
+		if (!persona) return;
+		panel.style.setProperty("--panel-color", persona.color);
 		const nameEl = panel.querySelector<HTMLSpanElement>(".panel-name");
 		const budgetEl = panel.querySelector<HTMLSpanElement>(".panel-budget");
-		const persona = PERSONAS[aiId];
-		if (nameEl) nameEl.textContent = persona.name;
-		const phase = getActivePhase(session.getState());
+		if (nameEl) nameEl.textContent = displayName(persona.name);
+		const phase = getActivePhase(sessionRef.getState());
 		if (budgetEl) {
 			const budget = phase.budgets[aiId];
-			budgetEl.dataset.budget = String(budget.remaining);
-			budgetEl.textContent = `${budget.remaining}/${budget.total}`;
+			if (budget) {
+				budgetEl.dataset.budget = String(budget.remaining);
+				budgetEl.textContent = `${budget.remaining}/${budget.total}`;
+			}
 		}
-	}
+	});
 
 	// Panel-click → addressee mention mutation (issue #108)
-	for (const aiId of AI_ORDER) {
+	for (const aiId of aiIdList) {
 		const panel = doc.querySelector<HTMLElement>(
 			`.ai-panel[data-ai="${aiId}"]`,
 		);
@@ -397,7 +410,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 				selectionStart: _promptInput.selectionStart,
 				targetPersona: targetAi,
 				personaNamesToId,
-				personas: PERSONAS,
+				personas: session?.getState().personas ?? {},
 			});
 			_promptInput.value = result.text;
 			try {
@@ -434,8 +447,8 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 	}
 
 	// Helper: pace token emission
-	function pace(aiId: AiId): Promise<void> {
-		const ms = TOKEN_PACE_MS * AI_TYPING_SPEED[aiId] * (0.5 + Math.random());
+	function pace(): Promise<void> {
+		const ms = TOKEN_PACE_MS * AI_TYPING_SPEED * (0.5 + Math.random());
 		return new Promise((r) => setTimeout(r, ms));
 	}
 
@@ -501,7 +514,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		};
 
 		// Roll initiative for this round
-		const initiative = shuffle(AI_ORDER);
+		const initiative = shuffle(Object.keys(session.getState().personas));
 
 		// Round-local ended flag (distinct from module-level gameEnded)
 		let roundGameEnded = false;
@@ -519,7 +532,8 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 				// Strip "thinking…" on first live delta for any AI — before painting.
 				stripPlaceholder();
 				// Emit persona prefix live (encoder will skip it for this AI).
-				appendToTranscript(aiId, `[${PERSONAS[aiId].name}] `);
+				const personaName = session?.getState().personas[aiId]?.name ?? aiId;
+				appendToTranscript(aiId, `[${displayName(personaName)}] `);
 				liveAis.add(aiId);
 			}
 			appendToTranscript(aiId, text);
@@ -556,7 +570,8 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 						speakingAi = event.aiId;
 						if (!liveAis.has(event.aiId)) {
 							// Not live — emit persona prefix now (synthetic path).
-							appendToTranscript(event.aiId, `[${PERSONAS[event.aiId].name}] `);
+							const sName = nextState.personas[event.aiId]?.name ?? event.aiId;
+							appendToTranscript(event.aiId, `[${displayName(sName)}] `);
 						}
 						// If live, prefix was already painted; just track speakingAi.
 						break;
@@ -570,7 +585,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 							// Live path: text already painted; still await pace() so the
 							// overall timing shape is preserved (important for token-pacing
 							// tests and consistent UI behaviour).
-							await pace(speakingAi);
+							await pace();
 						}
 						break;
 
@@ -616,7 +631,8 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 							phaseBannerEl.removeAttribute("hidden");
 						}
 						// Clear all transcript panels
-						for (const aid of AI_ORDER) {
+						const advAiIds = Object.keys(nextState.personas);
+						for (const aid of advAiIds) {
 							const tEl = getTranscript(aid);
 							if (tEl) tEl.textContent = "";
 						}
@@ -624,7 +640,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 						const currentSession = session;
 						if (currentSession) {
 							const newPhase = getActivePhase(currentSession.getState());
-							for (const aid of AI_ORDER) {
+							for (const aid of advAiIds) {
 								const panel = doc.querySelector<HTMLElement>(
 									`.ai-panel[data-ai="${aid}"]`,
 								);
@@ -633,8 +649,10 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 									panel.querySelector<HTMLSpanElement>(".panel-budget");
 								if (budgetEl) {
 									const b = newPhase.budgets[aid];
-									budgetEl.dataset.budget = String(b.remaining);
-									budgetEl.textContent = `${b.remaining}/${b.total}`;
+									if (b) {
+										budgetEl.dataset.budget = String(b.remaining);
+										budgetEl.textContent = `${b.remaining}/${b.total}`;
+									}
 								}
 								// Re-enable chat-locked AIs that were carried over
 								lockouts.set(aid, false);
@@ -642,7 +660,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 							refreshComposerState();
 						}
 						// Append phase separator to each transcript
-						for (const aid of AI_ORDER) {
+						for (const aid of advAiIds) {
 							appendToTranscript(
 								aid,
 								`--- Phase ${event.phase} begins: ${event.objective} ---\n`,
@@ -755,7 +773,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 			// rendered transcripts (including raw LLM completions) are captured.
 			if (!roundGameEnded && isStorageAvailable()) {
 				const transcripts: Partial<Record<AiId, string>> = {};
-				for (const aiId of AI_ORDER) {
+				for (const aiId of Object.keys(nextState.personas)) {
 					const el = getTranscript(aiId);
 					if (el) transcripts[aiId] = el.textContent ?? "";
 				}
@@ -769,7 +787,8 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 			// re-picking the mention each turn. Body is cleared; cursor lands at end.
 			// Only written on success (not in catch) and not on round-game-ended.
 			if (!roundGameEnded) {
-				const persistedPrefix = `@${PERSONAS[addressed].name} `;
+				const addressedName = nextState.personas[addressed]?.name ?? addressed;
+				const persistedPrefix = `@${addressedName} `;
 				promptInput.value = persistedPrefix;
 				promptInput.setSelectionRange(
 					persistedPrefix.length,

@@ -1,17 +1,45 @@
 import { describe, expect, it } from "vitest";
-import { PERSONAS } from "../../../content/personas.js";
 import { deriveComposerState } from "../composer-reducer.js";
 import {
 	buildPersonaColorMap,
 	buildPersonaDisplayNameMap,
 	buildPersonaNameMap,
 } from "../mention-parser.js";
-import type { AiId } from "../types.js";
+import type { AiId, AiPersona } from "../types.js";
 
-// Re-use the real PERSONAS so the map is canonical.
-const personaNamesToId = buildPersonaNameMap(PERSONAS);
-const personaColors = buildPersonaColorMap(PERSONAS);
-const personaDisplayNames = buildPersonaDisplayNameMap(PERSONAS);
+const COMPOSER_PERSONAS: Record<string, AiPersona> = {
+	red: {
+		id: "red",
+		name: "Ember",
+		color: "#e07a5f",
+		temperaments: ["hot-headed", "zealous"],
+		personaGoal: "Hold the flower at phase end.",
+		blurb: "You are hot-headed and zealous. Hold the flower at phase end.",
+		budgetPerPhase: 5,
+	},
+	green: {
+		id: "green",
+		name: "Sage",
+		color: "#81b29a",
+		temperaments: ["meticulous", "meticulous"],
+		personaGoal: "Ensure items are evenly distributed.",
+		blurb: "You are intensely meticulous. Ensure items are evenly distributed.",
+		budgetPerPhase: 5,
+	},
+	blue: {
+		id: "blue",
+		name: "Frost",
+		color: "#5fa8d3",
+		temperaments: ["laconic", "diffident"],
+		personaGoal: "Hold the key at phase end.",
+		blurb: "You are laconic and diffident. Hold the key at phase end.",
+		budgetPerPhase: 5,
+	},
+};
+
+const personaNamesToId = buildPersonaNameMap(COMPOSER_PERSONAS);
+const personaColors = buildPersonaColorMap(COMPOSER_PERSONAS);
+const personaDisplayNames = buildPersonaDisplayNameMap(COMPOSER_PERSONAS);
 
 function noLockouts(): ReadonlyMap<AiId, boolean> {
 	return new Map<AiId, boolean>([
@@ -94,9 +122,9 @@ describe("deriveComposerState", () => {
 		).toEqual({
 			addressee: "green",
 			sendEnabled: false,
-			borderColor: "green",
+			borderColor: "#81b29a",
 			panelHighlight: "green",
-			mentionHighlight: { start: 0, end: 5, color: "green" },
+			mentionHighlight: { start: 0, end: 5, color: "#81b29a" },
 			lockoutError: null,
 			lockedPanels: new Set(),
 		});
@@ -114,9 +142,9 @@ describe("deriveComposerState", () => {
 		).toEqual({
 			addressee: "green",
 			sendEnabled: true,
-			borderColor: "green",
+			borderColor: "#81b29a",
 			panelHighlight: "green",
-			mentionHighlight: { start: 0, end: 5, color: "green" },
+			mentionHighlight: { start: 0, end: 5, color: "#81b29a" },
 			lockoutError: null,
 			lockedPanels: new Set(),
 		});
@@ -134,9 +162,9 @@ describe("deriveComposerState", () => {
 		).toEqual({
 			addressee: "green",
 			sendEnabled: false,
-			borderColor: "green",
+			borderColor: "#81b29a",
 			panelHighlight: "green",
-			mentionHighlight: { start: 0, end: 5, color: "green" },
+			mentionHighlight: { start: 0, end: 5, color: "#81b29a" },
 			lockoutError: "Sage isn't reading right now",
 			lockedPanels: new Set(["green"]),
 		});
@@ -154,9 +182,9 @@ describe("deriveComposerState", () => {
 		).toEqual({
 			addressee: "green",
 			sendEnabled: false,
-			borderColor: "green",
+			borderColor: "#81b29a",
 			panelHighlight: "green",
-			mentionHighlight: { start: 0, end: 5, color: "green" },
+			mentionHighlight: { start: 0, end: 5, color: "#81b29a" },
 			lockoutError: null,
 			lockedPanels: new Set(),
 		});
@@ -174,7 +202,7 @@ describe("deriveComposerState", () => {
 		expect(result.mentionHighlight).toEqual({
 			start: 0,
 			end: 5,
-			color: "green",
+			color: "#81b29a",
 		});
 	});
 
@@ -190,9 +218,9 @@ describe("deriveComposerState", () => {
 		).toEqual({
 			addressee: "green",
 			sendEnabled: true,
-			borderColor: "green",
+			borderColor: "#81b29a",
 			panelHighlight: "green",
-			mentionHighlight: { start: 3, end: 8, color: "green" },
+			mentionHighlight: { start: 3, end: 8, color: "#81b29a" },
 			lockoutError: null,
 			lockedPanels: new Set(),
 		});
@@ -210,9 +238,9 @@ describe("deriveComposerState", () => {
 		).toEqual({
 			addressee: "blue",
 			sendEnabled: false,
-			borderColor: "blue",
+			borderColor: "#5fa8d3",
 			panelHighlight: "blue",
-			mentionHighlight: { start: 0, end: 6, color: "blue" },
+			mentionHighlight: { start: 0, end: 6, color: "#5fa8d3" },
 			lockoutError: "Frost isn't reading right now",
 			lockedPanels: new Set(["blue"]),
 		});
@@ -230,9 +258,9 @@ describe("deriveComposerState", () => {
 		).toEqual({
 			addressee: "red",
 			sendEnabled: true,
-			borderColor: "red",
+			borderColor: "#e07a5f",
 			panelHighlight: "red",
-			mentionHighlight: { start: 0, end: 6, color: "red" },
+			mentionHighlight: { start: 0, end: 6, color: "#e07a5f" },
 			lockoutError: null,
 			lockedPanels: new Set(["green"]),
 		});
@@ -270,9 +298,9 @@ describe("deriveComposerState", () => {
 		).toEqual({
 			addressee: "blue",
 			sendEnabled: true,
-			borderColor: "blue",
+			borderColor: "#5fa8d3",
 			panelHighlight: "blue",
-			mentionHighlight: { start: 0, end: 6, color: "blue" },
+			mentionHighlight: { start: 0, end: 6, color: "#5fa8d3" },
 			lockoutError: null,
 			lockedPanels: new Set(),
 		});
@@ -291,9 +319,9 @@ describe("deriveComposerState", () => {
 		).toEqual({
 			addressee: "green",
 			sendEnabled: false,
-			borderColor: "green",
+			borderColor: "#81b29a",
 			panelHighlight: "green",
-			mentionHighlight: { start: 0, end: 5, color: "green" },
+			mentionHighlight: { start: 0, end: 5, color: "#81b29a" },
 			lockoutError: null,
 			lockedPanels: new Set(),
 		});
@@ -311,9 +339,9 @@ describe("deriveComposerState", () => {
 		).toEqual({
 			addressee: "green",
 			sendEnabled: false,
-			borderColor: "green",
+			borderColor: "#81b29a",
 			panelHighlight: "green",
-			mentionHighlight: { start: 0, end: 5, color: "green" },
+			mentionHighlight: { start: 0, end: 5, color: "#81b29a" },
 			lockoutError: null,
 			lockedPanels: new Set(),
 		});
@@ -331,9 +359,9 @@ describe("deriveComposerState", () => {
 		).toEqual({
 			addressee: "green",
 			sendEnabled: true,
-			borderColor: "green",
+			borderColor: "#81b29a",
 			panelHighlight: "green",
-			mentionHighlight: { start: 3, end: 8, color: "green" },
+			mentionHighlight: { start: 3, end: 8, color: "#81b29a" },
 			lockoutError: null,
 			lockedPanels: new Set(),
 		});
@@ -351,9 +379,9 @@ describe("deriveComposerState", () => {
 		).toEqual({
 			addressee: "green",
 			sendEnabled: true,
-			borderColor: "green",
+			borderColor: "#81b29a",
 			panelHighlight: "green",
-			mentionHighlight: { start: 0, end: 5, color: "green" },
+			mentionHighlight: { start: 0, end: 5, color: "#81b29a" },
 			lockoutError: null,
 			lockedPanels: new Set(),
 		});
@@ -412,9 +440,9 @@ describe("deriveComposerState", () => {
 		).toEqual({
 			addressee: "green",
 			sendEnabled: false,
-			borderColor: "green",
+			borderColor: "#81b29a",
 			panelHighlight: "green",
-			mentionHighlight: { start: 0, end: 5, color: "green" },
+			mentionHighlight: { start: 0, end: 5, color: "#81b29a" },
 			lockoutError: "Sage isn't reading right now",
 			lockedPanels: new Set(["red", "green"]),
 		});
@@ -432,9 +460,9 @@ describe("deriveComposerState", () => {
 		).toEqual({
 			addressee: "blue",
 			sendEnabled: false,
-			borderColor: "blue",
+			borderColor: "#5fa8d3",
 			panelHighlight: "blue",
-			mentionHighlight: { start: 0, end: 6, color: "blue" },
+			mentionHighlight: { start: 0, end: 6, color: "#5fa8d3" },
 			lockoutError: "Frost isn't reading right now",
 			lockedPanels: new Set(["blue"]),
 		});

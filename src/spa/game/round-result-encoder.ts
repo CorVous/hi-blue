@@ -44,8 +44,6 @@ export type SseEvent =
 	| { type: "phase_advanced"; phase: 1 | 2 | 3; objective: string }
 	| { type: "game_ended" };
 
-const AI_ORDER: AiId[] = ["red", "green", "blue"];
-
 /**
  * Split a string into word-level chunks for paced token emission.
  * Each "word" carries any trailing whitespace so re-joining is lossless.
@@ -91,9 +89,9 @@ export function encodeRoundResult(
 	const events: SseEvent[] = [];
 
 	const lockoutContent = (aiId: AiId): string =>
-		`${personas[aiId].name} is unresponsive…`;
+		`${personas[aiId]?.name ?? aiId} is unresponsive…`;
 
-	for (const aiId of AI_ORDER) {
+	for (const aiId of Object.keys(personas)) {
 		const completion = completions[aiId] ?? "";
 		const isLockedOut = phaseAfter.lockedOut.has(aiId);
 

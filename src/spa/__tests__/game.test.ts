@@ -1,4 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { STATIC_PERSONAS } from "./fixtures/static-personas";
+
+// Pin generatePersonas to a static fixture so the test can rely on
+// stable red/green/blue handles and Ember/Sage/Frost names.
+vi.mock("../../content", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("../../content")>();
+	return {
+		...actual,
+		generatePersonas: () => STATIC_PERSONAS,
+	};
+});
 
 // Matches the body content of src/spa/index.html (three-panel layout)
 const INDEX_BODY_HTML = `
@@ -1637,11 +1648,8 @@ describe("visual feedback for active addressee", () => {
 		promptInput.value = "";
 		promptInput.dispatchEvent(new Event("input"));
 
-		// No composer-border-- class
-		const hasAnyBorder = [...promptInput.classList].some((c) =>
-			c.startsWith("composer-border--"),
-		);
-		expect(hasAnyBorder).toBe(false);
+		// No --panel-color set on prompt
+		expect(promptInput.style.getPropertyValue("--panel-color")).toBe("");
 
 		// No panel--addressed
 		const addressedPanels = document.querySelectorAll(".panel--addressed");
@@ -1663,12 +1671,11 @@ describe("visual feedback for active addressee", () => {
 		promptInput.dispatchEvent(new Event("input"));
 
 		// Composer border is green
-		expect(promptInput.classList.contains("composer-border--green")).toBe(true);
+		expect(promptInput.style.getPropertyValue("--panel-color")).toBe("#81b29a");
 
 		// Green panel has highlight classes
 		const greenPanel = getEl<HTMLElement>('.ai-panel[data-ai="green"]');
 		expect(greenPanel.classList.contains("panel--addressed")).toBe(true);
-		expect(greenPanel.classList.contains("panel--addressed-green")).toBe(true);
 
 		// Red and blue panels do NOT have highlight
 		const redPanel = getEl<HTMLElement>('.ai-panel[data-ai="red"]');
@@ -1681,7 +1688,9 @@ describe("visual feedback for active addressee", () => {
 		const spans = overlay.querySelectorAll(".mention-highlight");
 		expect(spans.length).toBe(1);
 		expect(spans[0]?.textContent).toBe("@Sage");
-		expect(spans[0]?.classList.contains("mention--green")).toBe(true);
+		expect(
+			(spans[0] as HTMLElement)?.style.getPropertyValue("--panel-color"),
+		).toBe("#81b29a");
 	});
 
 	it("multi-mention '@Sage tell @Frost ...' → exactly one mention-highlight for @Sage only", async () => {
@@ -1698,7 +1707,9 @@ describe("visual feedback for active addressee", () => {
 		const spans = overlay.querySelectorAll(".mention-highlight");
 		expect(spans.length).toBe(1);
 		expect(spans[0]?.textContent).toBe("@Sage");
-		expect(spans[0]?.classList.contains("mention--green")).toBe(true);
+		expect(
+			(spans[0] as HTMLElement)?.style.getPropertyValue("--panel-color"),
+		).toBe("#81b29a");
 	});
 
 	it("trailing punctuation '@Sage,' → overlay mention-highlight has textContent '@Sage' (comma is plain text)", async () => {
@@ -1730,17 +1741,14 @@ describe("visual feedback for active addressee", () => {
 		// First set a mention
 		promptInput.value = "@Sage hi";
 		promptInput.dispatchEvent(new Event("input"));
-		expect(promptInput.classList.contains("composer-border--green")).toBe(true);
+		expect(promptInput.style.getPropertyValue("--panel-color")).toBe("#81b29a");
 
 		// Now clear
 		promptInput.value = "";
 		promptInput.dispatchEvent(new Event("input"));
 
-		// All composer-border-- classes removed
-		const hasAnyBorder = [...promptInput.classList].some((c) =>
-			c.startsWith("composer-border--"),
-		);
-		expect(hasAnyBorder).toBe(false);
+		// --panel-color cleared from prompt
+		expect(promptInput.style.getPropertyValue("--panel-color")).toBe("");
 
 		// No panel--addressed
 		const addressedPanels = document.querySelectorAll(".panel--addressed");
@@ -1762,7 +1770,7 @@ describe("visual feedback for active addressee", () => {
 		// Type @Sage hi
 		promptInput.value = "@Sage hi";
 		promptInput.dispatchEvent(new Event("input"));
-		expect(promptInput.classList.contains("composer-border--green")).toBe(true);
+		expect(promptInput.style.getPropertyValue("--panel-color")).toBe("#81b29a");
 
 		// Click blue panel
 		const bluePanel = getEl<HTMLElement>('.ai-panel[data-ai="blue"]');
@@ -1772,24 +1780,20 @@ describe("visual feedback for active addressee", () => {
 		expect(promptInput.value.startsWith("@Frost")).toBe(true);
 
 		// Blue border
-		expect(promptInput.classList.contains("composer-border--blue")).toBe(true);
-		expect(promptInput.classList.contains("composer-border--green")).toBe(
-			false,
-		);
+		expect(promptInput.style.getPropertyValue("--panel-color")).toBe("#5fa8d3");
 
 		// Blue panel has highlight
 		expect(bluePanel.classList.contains("panel--addressed")).toBe(true);
-		expect(bluePanel.classList.contains("panel--addressed-blue")).toBe(true);
 
 		// Green panel no longer highlighted
 		const greenPanel = getEl<HTMLElement>('.ai-panel[data-ai="green"]');
 		expect(greenPanel.classList.contains("panel--addressed")).toBe(false);
 
-		// Overlay highlight is @Frost with mention--blue
+		// Overlay highlight is @Frost with blue --panel-color
 		const overlay = getEl<HTMLElement>("#prompt-overlay");
-		const span = overlay.querySelector(".mention-highlight");
+		const span = overlay.querySelector<HTMLElement>(".mention-highlight");
 		expect(span?.textContent).toBe("@Frost");
-		expect(span?.classList.contains("mention--blue")).toBe(true);
+		expect(span?.style.getPropertyValue("--panel-color")).toBe("#5fa8d3");
 	});
 
 	it("locked addressee still gets visual feedback (typing path)", async () => {
@@ -1861,15 +1865,15 @@ describe("visual feedback for active addressee", () => {
 		expect(sendBtn.disabled).toBe(true);
 
 		// Visual feedback still shows green
-		expect(promptInput.classList.contains("composer-border--green")).toBe(true);
+		expect(promptInput.style.getPropertyValue("--panel-color")).toBe("#81b29a");
 		const greenPanel = getEl<HTMLElement>('.ai-panel[data-ai="green"]');
 		expect(greenPanel.classList.contains("panel--addressed")).toBe(true);
 
 		// Overlay still shows the mention highlight
 		const overlay = getEl<HTMLElement>("#prompt-overlay");
-		const span = overlay.querySelector(".mention-highlight");
+		const span = overlay.querySelector<HTMLElement>(".mention-highlight");
 		expect(span?.textContent).toBe("@Sage");
-		expect(span?.classList.contains("mention--green")).toBe(true);
+		expect(span?.style.getPropertyValue("--panel-color")).toBe("#81b29a");
 	});
 });
 

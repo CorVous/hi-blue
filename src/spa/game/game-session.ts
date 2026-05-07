@@ -33,8 +33,6 @@ import type {
 	ToolRoundtripMessage,
 } from "./types";
 
-const AI_ORDER: AiId[] = ["red", "green", "blue"];
-
 export interface SubmitMessageResult {
 	result: RoundResult;
 	/** Buffered completion string per AI (empty string for locked-out AIs). */
@@ -107,7 +105,7 @@ export class GameSession {
 			delete this.armedChatLockout;
 		}
 
-		const turnOrder = initiative ?? AI_ORDER;
+		const turnOrder = initiative ?? Object.keys(this.state.personas);
 
 		// Capture completions per AI via the completionSink parameter.
 		// The coordinator calls the sink once per AI (empty string for locked-out AIs).
