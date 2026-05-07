@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	applyAddresseeChange,
+	buildPersonaColorMap,
 	buildPersonaNameMap,
 	findFirstMention,
 	parseFirstMention,
@@ -40,50 +41,65 @@ describe("parseFirstMention", () => {
 });
 
 describe("findFirstMention", () => {
-	it('"@Sage" → { aiId: "green", start: 0, end: 5 }', () => {
+	it('"@Sage" → { aiId: "green", start: 0, nameEnd: 5, end: 5 }', () => {
 		expect(findFirstMention("@Sage", nameMap)).toEqual({
 			aiId: "green",
 			start: 0,
+			nameEnd: 5,
 			end: 5,
 		});
 	});
 
-	it('"@Sage hi" → { aiId: "green", start: 0, end: 5 }', () => {
+	it('"@Sage hi" → { aiId: "green", start: 0, nameEnd: 5, end: 5 }', () => {
 		expect(findFirstMention("@Sage hi", nameMap)).toEqual({
 			aiId: "green",
 			start: 0,
+			nameEnd: 5,
 			end: 5,
 		});
 	});
 
-	it('"hi @Sage" → { aiId: "green", start: 3, end: 8 }', () => {
+	it('"hi @Sage" → { aiId: "green", start: 3, nameEnd: 8, end: 8 }', () => {
 		expect(findFirstMention("hi @Sage", nameMap)).toEqual({
 			aiId: "green",
 			start: 3,
+			nameEnd: 8,
 			end: 8,
 		});
 	});
 
-	it('"@sage" (lowercase) → { aiId: "green", start: 0, end: 5 }', () => {
+	it('"@sage" (lowercase) → { aiId: "green", start: 0, nameEnd: 5, end: 5 }', () => {
 		expect(findFirstMention("@sage", nameMap)).toEqual({
 			aiId: "green",
 			start: 0,
+			nameEnd: 5,
 			end: 5,
 		});
 	});
 
-	it('"@Sage," → end includes the comma (end: 6)', () => {
+	it('"@Sage," → nameEnd: 5 (excludes comma), end: 6 (includes comma)', () => {
 		expect(findFirstMention("@Sage,", nameMap)).toEqual({
 			aiId: "green",
 			start: 0,
+			nameEnd: 5,
 			end: 6,
 		});
 	});
 
-	it('"@Frost @Sage" → first match is Frost (blue)', () => {
+	it('"hi @Sage." → nameEnd: 8 (excludes period), end: 9 (includes period)', () => {
+		expect(findFirstMention("hi @Sage.", nameMap)).toEqual({
+			aiId: "green",
+			start: 3,
+			nameEnd: 8,
+			end: 9,
+		});
+	});
+
+	it('"@Frost @Sage" → first match is Frost (blue), nameEnd: 6, end: 6', () => {
 		expect(findFirstMention("@Frost @Sage", nameMap)).toEqual({
 			aiId: "blue",
 			start: 0,
+			nameEnd: 6,
 			end: 6,
 		});
 	});
@@ -109,6 +125,37 @@ describe("buildPersonaNameMap", () => {
 		expect(map.get("sage")).toBe("green");
 		expect(map.get("frost")).toBe("blue");
 		expect(map.size).toBe(3);
+	});
+});
+
+describe("buildPersonaColorMap", () => {
+	it("maps each AiId to the persona's color value (not the id key)", () => {
+		// Use distinct color values that differ from the AiId keys
+		// so a wrong implementation that returns the key is immediately caught.
+		const personas = {
+			red: { color: "crimson" },
+			green: { color: "lime" },
+			blue: { color: "cyan" },
+		} as Record<AiId, { color: string }>;
+		const map = buildPersonaColorMap(personas);
+		expect(map.get("red")).toBe("crimson");
+		expect(map.get("green")).toBe("lime");
+		expect(map.get("blue")).toBe("cyan");
+		expect(map.size).toBe(3);
+	});
+
+	it("returns the color string from the persona record, not the AiId key", () => {
+		// If implementation mistakenly returns the key instead of persona.color,
+		// these assertions will fail.
+		const personas = {
+			red: { color: "tomato" },
+			green: { color: "forest" },
+			blue: { color: "ocean" },
+		} as Record<AiId, { color: string }>;
+		const map = buildPersonaColorMap(personas);
+		expect(map.get("red")).not.toBe("red");
+		expect(map.get("green")).not.toBe("green");
+		expect(map.get("blue")).not.toBe("blue");
 	});
 });
 
