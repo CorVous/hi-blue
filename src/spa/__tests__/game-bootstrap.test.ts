@@ -155,6 +155,84 @@ describe("renderGame — async new-game bootstrap", () => {
 		expect(panels?.hidden).toBe(true);
 	});
 
+	it("content-pack failure (generic Error) shows #cap-hit and hides #panels", async () => {
+		// generatePersonas succeeds but generateContentPacks throws a generic error.
+		vi.resetModules();
+
+		// Re-establish the working generatePersonas mock (the synthesis-failure test
+		// above may have registered a throwing doMock; doMocks accumulate across
+		// vi.resetModules() calls, so we must explicitly restore it here).
+		vi.doMock("../../content", async (importOriginal) => {
+			const actual = await importOriginal<typeof import("../../content")>();
+			return { ...actual, generatePersonas: async () => STATIC_PERSONAS };
+		});
+
+		vi.doMock("../../content/content-pack-generator", () => ({
+			generateContentPacks: async () => {
+				throw new Error("content pack generation failed");
+			},
+		}));
+
+		vi.stubGlobal("localStorage", {
+			getItem: () => null,
+			setItem: () => undefined,
+			removeItem: () => undefined,
+		});
+
+		const { renderGame } = await import("../routes/game.js");
+		try {
+			await renderGame(getEl<HTMLElement>("main"));
+		} catch {
+			// Expected — failure re-throws inside IIFE
+		}
+
+		const capHit = document.querySelector<HTMLElement>("#cap-hit");
+		const panels = document.querySelector<HTMLElement>("#panels");
+		expect(capHit?.hasAttribute("hidden")).toBe(false);
+		expect(panels?.hidden).toBe(true);
+	});
+
+	it("content-pack failure (CapHitError) shows #cap-hit and hides #panels", async () => {
+		// generatePersonas succeeds but generateContentPacks throws a CapHitError.
+		vi.resetModules();
+
+		// Re-establish the working generatePersonas mock (doMocks accumulate across
+		// vi.resetModules() calls, so we must explicitly restore it here).
+		vi.doMock("../../content", async (importOriginal) => {
+			const actual = await importOriginal<typeof import("../../content")>();
+			return { ...actual, generatePersonas: async () => STATIC_PERSONAS };
+		});
+
+		vi.doMock("../../content/content-pack-generator", () => ({
+			generateContentPacks: async () => {
+				const { CapHitError } = await import("../llm-client.js");
+				throw new CapHitError({
+					message: "cap hit during content pack generation",
+					reason: "per-ip-daily",
+					retryAfterSec: null,
+				});
+			},
+		}));
+
+		vi.stubGlobal("localStorage", {
+			getItem: () => null,
+			setItem: () => undefined,
+			removeItem: () => undefined,
+		});
+
+		const { renderGame } = await import("../routes/game.js");
+		try {
+			await renderGame(getEl<HTMLElement>("main"));
+		} catch {
+			// Expected — CapHitError re-throws inside IIFE
+		}
+
+		const capHit = document.querySelector<HTMLElement>("#cap-hit");
+		const panels = document.querySelector<HTMLElement>("#panels");
+		expect(capHit?.hasAttribute("hidden")).toBe(false);
+		expect(panels?.hidden).toBe(true);
+	});
+
 	it("form submit is a no-op before session resolves (no crash)", async () => {
 		// This test verifies that submitting the form before async init completes
 		// doesn't crash the page — the handler returns early when !session.
@@ -166,6 +244,13 @@ describe("renderGame — async new-game bootstrap", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
+
+		// Re-establish the static content-packs mock (the CapHitError test above
+		// may have registered a throwing doMock for this module; doMocks accumulate
+		// across vi.resetModules() calls, so we must explicitly restore it here).
+		vi.doMock("../../content/content-pack-generator", () => ({
+			generateContentPacks: async () => STATIC_CONTENT_PACKS,
+		}));
 
 		// We need to make generatePersonas hang briefly so we can fire submit first
 		let resolvePersonas!: (v: typeof STATIC_PERSONAS) => void;

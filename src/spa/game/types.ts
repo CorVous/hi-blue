@@ -109,6 +109,9 @@ export interface PhaseConfig {
 	 * Pool of candidate goals drawn at phase start. Must contain at least one entry.
 	 * `startPhase` performs one uniform draw per AI (independent draws — same goal
 	 * can be assigned to multiple AIs in one phase).
+	 * AC #6 deviation: the AC said "remove aiGoalPool?" but the field is retained as required
+	 * because goal selection still needs a per-phase draw pool — the AC language conflated
+	 * removing the optional pool marker with removing goal selection itself.
 	 */
 	aiGoalPool: string[];
 	/** Optional win condition. If absent, the phase never auto-advances. */
