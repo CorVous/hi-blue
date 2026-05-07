@@ -28,7 +28,10 @@ const INDEX_BODY_HTML = `
     </article>
   </div>
   <form id="composer">
-    <input id="prompt" type="text" placeholder="Enter a message…" autocomplete="off" />
+    <div class="prompt-wrap">
+      <div id="prompt-overlay" aria-hidden="true"></div>
+      <input id="prompt" type="text" placeholder="Enter a message…" autocomplete="off" />
+    </div>
     <button id="send" type="submit">Send</button>
   </form>
   <section id="cap-hit" hidden></section>
@@ -1228,5 +1231,201 @@ describe("renderGame — URL param sourcing", () => {
 		const actionLog = getEl<HTMLElement>("#action-log");
 		// Hash wins: debug=0 → log must remain hidden
 		expect(actionLog.hasAttribute("hidden")).toBe(true);
+	});
+});
+
+describe("renderGame — visual feedback for active addressee (issue #109)", () => {
+	beforeEach(() => {
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		document.body.innerHTML = INDEX_BODY_HTML;
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+		vi.resetModules();
+		document.body.innerHTML = "";
+	});
+
+	it("empty input → no composer-border-- class; no panel--addressed; overlay empty", async () => {
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		const prompt = getEl<HTMLInputElement>("#prompt");
+		const overlay = getEl<HTMLElement>("#prompt-overlay");
+
+		// No composer-border--* class
+		expect([...prompt.classList].some((c) => c.startsWith("composer-border--"))).toBe(false);
+
+		// No panel--addressed on any panel
+		for (const ai of ["red", "green", "blue"]) {
+			const panel = document.querySelector<HTMLElement>(`.ai-panel[data-ai="${ai}"]`);
+			expect(panel?.classList.contains("panel--addressed")).toBe(false);
+		}
+
+		// Overlay has no highlight span
+		expect(overlay.querySelector(".mention-highlight")).toBeNull();
+	});
+
+	it("typing '@Sage hi' → composer-border--green; green panel highlighted; overlay has @Sage span", async () => {
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		const prompt = getEl<HTMLInputElement>("#prompt");
+		const overlay = getEl<HTMLElement>("#prompt-overlay");
+
+		prompt.value = "@Sage hi";
+		prompt.dispatchEvent(new Event("input"));
+
+		// Composer border
+		expect(prompt.classList.contains("composer-border--green")).toBe(true);
+		expect(prompt.classList.contains("composer-border--red")).toBe(false);
+		expect(prompt.classList.contains("composer-border--blue")).toBe(false);
+
+		// Panel highlights
+		const greenPanel = document.querySelector<HTMLElement>('.ai-panel[data-ai="green"]');
+		const redPanel = document.querySelector<HTMLElement>('.ai-panel[data-ai="red"]');
+		const bluePanel = document.querySelector<HTMLElement>('.ai-panel[data-ai="blue"]');
+		expect(greenPanel?.classList.contains("panel--addressed")).toBe(true);
+		expect(greenPanel?.classList.contains("panel--addressed-green")).toBe(true);
+		expect(redPanel?.classList.contains("panel--addressed")).toBe(false);
+		expect(bluePanel?.classList.contains("panel--addressed")).toBe(false);
+
+		// Overlay mention highlight
+		const span = overlay.querySelector<HTMLElement>(".mention-highlight");
+		expect(span).not.toBeNull();
+		expect(span?.classList.contains("mention--green")).toBe(true);
+		expect(span?.textContent).toBe("@Sage");
+	});
+
+	it("multi-mention '@Sage tell @Frost ...' → only @Sage highlighted in overlay", async () => {
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		const prompt = getEl<HTMLInputElement>("#prompt");
+		const overlay = getEl<HTMLElement>("#prompt-overlay");
+
+		prompt.value = "@Sage tell @Frost ...";
+		prompt.dispatchEvent(new Event("input"));
+
+		const spans = overlay.querySelectorAll(".mention-highlight");
+		expect(spans).toHaveLength(1);
+		expect(spans[0]?.textContent).toBe("@Sage");
+	});
+
+	it("clearing input → all visual classes removed", async () => {
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		const prompt = getEl<HTMLInputElement>("#prompt");
+
+		// First set a valid mention
+		prompt.value = "@Sage hi";
+		prompt.dispatchEvent(new Event("input"));
+
+		// Then clear
+		prompt.value = "";
+		prompt.dispatchEvent(new Event("input"));
+
+		// No composer-border--* class
+		expect([...prompt.classList].some((c) => c.startsWith("composer-border--"))).toBe(false);
+
+		for (const ai of ["red", "green", "blue"]) {
+			const panel = document.querySelector<HTMLElement>(`.ai-panel[data-ai="${ai}"]`);
+			expect(panel?.classList.contains("panel--addressed")).toBe(false);
+		}
+	});
+
+	it("locked addressee still shows visual highlight", async () => {
+		const mockFetch = makeThreeAiFetchMock(PASS_ACTION, PASS_ACTION, PASS_ACTION);
+		vi.stubGlobal("fetch", mockFetch);
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		vi.resetModules();
+
+		const { GameSession } = await import("../game/game-session.js");
+		const originalSubmit = GameSession.prototype.submitMessage;
+		vi.spyOn(GameSession.prototype, "submitMessage").mockImplementation(
+			async function (
+				this: InstanceType<typeof GameSession>,
+				...args: Parameters<InstanceType<typeof GameSession>["submitMessage"]>
+			) {
+				const real = await originalSubmit.apply(this, args);
+				return {
+					...real,
+					result: {
+						...real.result,
+						chatLockoutTriggered: { aiId: "green" as const, message: "Sage is unresponsive…" },
+					},
+				};
+			},
+		);
+
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		const form = getEl<HTMLFormElement>("#composer");
+		const prompt = getEl<HTMLInputElement>("#prompt");
+		const sendBtn = getEl<HTMLButtonElement>("#send");
+
+		// Trigger lockout
+		prompt.value = "@Sage hello";
+		prompt.dispatchEvent(new Event("input"));
+		form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		// Now type @Sage again — send disabled but visual highlight still active
+		prompt.value = "@Sage hi";
+		prompt.dispatchEvent(new Event("input"));
+
+		expect(sendBtn.disabled).toBe(true);
+		const prompt2 = getEl<HTMLInputElement>("#prompt");
+		expect(prompt2.classList.contains("composer-border--green")).toBe(true);
+		const greenPanel = document.querySelector<HTMLElement>('.ai-panel[data-ai="green"]');
+		expect(greenPanel?.classList.contains("panel--addressed")).toBe(true);
+	});
+
+	it("panel-click rewrites mention and updates visual highlight", async () => {
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		const prompt = getEl<HTMLInputElement>("#prompt");
+
+		// Start with @Sage
+		prompt.value = "@Sage hi";
+		prompt.dispatchEvent(new Event("input"));
+		expect(prompt.classList.contains("composer-border--green")).toBe(true);
+
+		// Click blue panel
+		const bluePanel = document.querySelector<HTMLElement>('.ai-panel[data-ai="blue"]');
+		bluePanel?.click();
+
+		// Input value should start with @Frost
+		expect(prompt.value.startsWith("@Frost")).toBe(true);
+
+		// Border should switch to blue
+		expect(prompt.classList.contains("composer-border--blue")).toBe(true);
+		expect(prompt.classList.contains("composer-border--green")).toBe(false);
+
+		// Blue panel highlighted
+		expect(bluePanel?.classList.contains("panel--addressed")).toBe(true);
+		expect(bluePanel?.classList.contains("panel--addressed-blue")).toBe(true);
+
+		// Overlay mention is @Frost
+		const overlay = getEl<HTMLElement>("#prompt-overlay");
+		const span = overlay.querySelector<HTMLElement>(".mention-highlight");
+		expect(span?.textContent).toBe("@Frost");
+		expect(span?.classList.contains("mention--blue")).toBe(true);
 	});
 });

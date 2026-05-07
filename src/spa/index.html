@@ -36,7 +36,10 @@
 		    </article>
 		  </div>
 		  <form id="composer">
-		    <input id="prompt" type="text" placeholder="Enter a message…" autocomplete="off" />
+		    <div class="prompt-wrap">
+		      <div id="prompt-overlay" aria-hidden="true"></div>
+		      <input id="prompt" type="text" placeholder="Enter a message…" autocomplete="off" />
+		    </div>
 		    <button id="send" type="submit">Send</button>
 		  </form>
 		  <section id="cap-hit" hidden>

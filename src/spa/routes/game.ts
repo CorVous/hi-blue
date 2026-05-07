@@ -4,7 +4,7 @@ import { BrowserLLMProvider } from "../game/browser-llm-provider.js";
 import { deriveComposerState } from "../game/composer-reducer.js";
 import { getActivePhase, updateActivePhase } from "../game/engine.js";
 import { GameSession } from "../game/game-session.js";
-import { buildPersonaNameMap } from "../game/mention-parser.js";
+import { buildPersonaColorMap, buildPersonaNameMap } from "../game/mention-parser.js";
 import { encodeRoundResult } from "../game/round-result-encoder.js";
 import type { AiId, PhaseConfig } from "../game/types";
 import { AI_TYPING_SPEED, TOKEN_PACE_MS } from "../game/typing-rhythm.js";
@@ -136,6 +136,28 @@ const PERSISTENCE_WARNING_MESSAGES: Record<string, string> = {
 	unknown: "Game progress could not be saved due to an unexpected error.",
 };
 
+/**
+ * Rewrites the leading @mention in the input value to `@name `.
+ *
+ * If `input.value` starts with `@<Token>` (optionally followed by a single
+ * space), that prefix is replaced with `@name `.  Otherwise `@name ` is
+ * prepended.  The caret is placed at end-of-text.
+ */
+export function rewriteLeadingMention(
+	input: HTMLInputElement,
+	name: string,
+): void {
+	const current = input.value;
+	const prefix = `@${name} `;
+	if (/^@[A-Za-z][A-Za-z0-9]*\s?/.test(current)) {
+		input.value = current.replace(/^@[A-Za-z][A-Za-z0-9]*\s?/, prefix);
+	} else {
+		input.value = prefix + current;
+	}
+	// Move caret to end.
+	input.selectionStart = input.selectionEnd = input.value.length;
+}
+
 /** Guards against duplicate game_ended events re-binding handlers. */
 let gameEnded = false;
 
@@ -157,6 +179,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 
 	// Mention-based addressing state
 	const personaNamesToId = buildPersonaNameMap(PERSONAS);
+	const personaColors = buildPersonaColorMap(PERSONAS);
 	const lockouts: Map<AiId, boolean> = new Map([
 		["red", false],
 		["green", false],
@@ -168,16 +191,82 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 	const _promptInput = promptInput;
 	const _sendBtn = sendBtn;
 
+	// Overlay element for mention highlight (may be absent in legacy test DOM).
+	const overlay = doc.querySelector<HTMLElement>("#prompt-overlay");
+
+	/** Helper: replace any class matching prefix+* with prefix+value (or just remove). */
+	function setColorClass(
+		el: Element,
+		prefix: string,
+		value: string | null,
+	): void {
+		for (const cls of [...el.classList]) {
+			if (cls.startsWith(prefix)) el.classList.remove(cls);
+		}
+		if (value !== null) el.classList.add(`${prefix}${value}`);
+	}
+
+	/** Rebuild the overlay's child nodes to highlight the mention range. */
+	function rebuildOverlay(
+		text: string,
+		highlight: { start: number; end: number; color: string } | null,
+	): void {
+		if (!overlay) return;
+		// Clear existing children.
+		while (overlay.firstChild) overlay.removeChild(overlay.firstChild);
+		if (highlight === null) {
+			overlay.appendChild(doc.createTextNode(text));
+		} else {
+			const { start, end, color } = highlight;
+			if (start > 0) {
+				overlay.appendChild(doc.createTextNode(text.slice(0, start)));
+			}
+			const span = doc.createElement("span");
+			span.className = `mention-highlight mention--${color}`;
+			span.textContent = text.slice(start, end);
+			overlay.appendChild(span);
+			if (end < text.length) {
+				overlay.appendChild(doc.createTextNode(text.slice(end)));
+			}
+		}
+		// Keep horizontal scroll in sync so long text doesn't desync.
+		overlay.scrollLeft = _promptInput.scrollLeft;
+	}
+
 	function refreshComposerState(): void {
-		const { sendEnabled } = deriveComposerState({
+		const state = deriveComposerState({
 			text: _promptInput.value,
 			lockouts,
 			personaNamesToId,
+			personaColors,
 		});
-		_sendBtn.disabled = !sendEnabled || roundInFlight;
+		_sendBtn.disabled = !state.sendEnabled || roundInFlight;
+
+		// Composer border.
+		setColorClass(_promptInput, "composer-border--", state.borderColor);
+
+		// Panel highlight.
+		for (const aiId of AI_ORDER) {
+			const panel = doc.querySelector<HTMLElement>(
+				`.ai-panel[data-ai="${aiId}"]`,
+			);
+			if (!panel) continue;
+			const isAddressed = state.panelHighlight === aiId;
+			panel.classList.toggle("panel--addressed", isAddressed);
+			const color = personaColors.get(aiId) ?? null;
+			// Always clear any previous addressed-color class, then set the new one.
+			setColorClass(panel, "panel--addressed-", isAddressed ? color : null);
+		}
+
+		// Mention overlay.
+		rebuildOverlay(_promptInput.value, state.mentionHighlight);
 	}
 
 	promptInput.addEventListener("input", refreshComposerState);
+	// Keep overlay in sync when the user scrolls a long input.
+	promptInput.addEventListener("scroll", () => {
+		if (overlay) overlay.scrollLeft = _promptInput.scrollLeft;
+	});
 
 	// Dev-only: ?think=0 disables the model's thinking step (OpenRouter
 	// reasoning.enabled=false). Gated to wrangler-dev host (see isDevHost).
@@ -295,6 +384,20 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		}
 	}
 
+	// Panel-click: rewrite leading @Mention in the composer.
+	for (const aiId of AI_ORDER) {
+		const panel = doc.querySelector<HTMLElement>(
+			`.ai-panel[data-ai="${aiId}"]`,
+		);
+		if (!panel) continue;
+		const persona = PERSONAS[aiId];
+		panel.addEventListener("click", () => {
+			rewriteLeadingMention(_promptInput, persona.name);
+			_promptInput.dispatchEvent(new Event("input", { bubbles: true }));
+			_promptInput.focus();
+		});
+	}
+
 	// Debug toggle: show action log if ?debug=1
 	const debug = effectiveParams.get("debug") === "1";
 	if (actionLogEl) {
@@ -353,6 +456,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 			text: promptInput.value,
 			lockouts,
 			personaNamesToId,
+			personaColors,
 		});
 		if (!sendEnabled || !addressee) return;
 
