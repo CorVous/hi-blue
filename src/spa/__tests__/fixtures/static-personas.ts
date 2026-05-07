@@ -1,12 +1,11 @@
-import type { AiId, AiPersona } from "../spa/game/types";
+import type { AiId, AiPersona } from "../../game/types";
 
 /**
- * Canonical persona definitions for the three AIs.
- *
- * All prose fields are TODO(author) placeholders — the human author will
- * replace these after the scaffolding is merged.
+ * Static red/green/blue personas used by tests that pin DOM panels by
+ * `data-ai="red|green|blue"`. Production uses procedurally generated handles —
+ * see `src/content/persona-generator.ts`.
  */
-export const PERSONAS: Record<AiId, AiPersona> = {
+export const STATIC_PERSONAS: Record<AiId, AiPersona> = {
 	red: {
 		id: "red",
 		name: "Ember",

@@ -77,7 +77,7 @@ export interface RunRoundResult {
  * @param provider  RoundLLMProvider (browser or mock).
  * @param chatLockoutConfig  Optional config for the mid-phase chat-lockout event.
  * @param initiative  Optional turn-order permutation. Must be a permutation of
- *   all three AI ids ["red","green","blue"]. When absent, defaults to AI_ORDER.
+ *   all AI ids in `game.personas`. When absent, defaults to `Object.keys(game.personas)`.
  * @param priorToolRoundtrip  Per-AI tool roundtrip from the previous round.
  *   Passed into buildOpenAiMessages to re-inject the protocol messages required
  *   by OpenAI's tool-use spec.

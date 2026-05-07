@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { STATIC_PERSONAS } from "./fixtures/static-personas";
 
-// Pin generatePersonas to the static PERSONAS so the test can rely on
+// Pin generatePersonas to a static fixture so the test can rely on
 // stable red/green/blue handles and Ember/Sage/Frost names.
 vi.mock("../../content", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("../../content")>();
 	return {
 		...actual,
-		generatePersonas: () => actual.PERSONAS,
+		generatePersonas: () => STATIC_PERSONAS,
 	};
 });
 
