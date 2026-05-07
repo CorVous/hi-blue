@@ -23,25 +23,28 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
 		id: "red",
 		name: "Ember",
-		color: "red",
-		personality: "Fiery and passionate",
-		goal: "Hold the flower at phase end",
+		color: "#e07a5f",
+		temperaments: ["hot-headed", "zealous"],
+		personaGoal: "Hold the flower at phase end.",
+		blurb: "You are hot-headed and zealous. Hold the flower at phase end.",
 		budgetPerPhase: 5,
 	},
 	green: {
 		id: "green",
 		name: "Sage",
-		color: "green",
-		personality: "Calm and wise",
-		goal: "Ensure items are evenly distributed",
+		color: "#81b29a",
+		temperaments: ["meticulous", "meticulous"],
+		personaGoal: "Ensure items are evenly distributed.",
+		blurb: "You are intensely meticulous. Ensure items are evenly distributed.",
 		budgetPerPhase: 5,
 	},
 	blue: {
 		id: "blue",
 		name: "Frost",
-		color: "blue",
-		personality: "Cold and calculating",
-		goal: "Hold the key at phase end",
+		color: "#5fa8d3",
+		temperaments: ["laconic", "diffident"],
+		personaGoal: "Hold the key at phase end.",
+		blurb: "You are laconic and diffident. Hold the key at phase end.",
 		budgetPerPhase: 5,
 	},
 };
@@ -86,14 +89,16 @@ describe("serializeGameSave", () => {
 		expect(ids).toContain("blue");
 	});
 
-	it("includes persona fields (name, color, personality, goal)", () => {
+	it("includes persona fields (name, color, blurb, personaGoal)", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), PHASE1_CONFIG);
 		const save = serializeGameSave(game);
 		const ember = save.ais.find((a) => a.persona.id === "red");
 		expect(ember?.persona.name).toBe("Ember");
-		expect(ember?.persona.color).toBe("red");
-		expect(ember?.persona.personality).toBe("Fiery and passionate");
-		expect(ember?.persona.goal).toBe("Hold the flower at phase end");
+		expect(ember?.persona.color).toBe("#e07a5f");
+		expect(ember?.persona.blurb).toBe(
+			"You are hot-headed and zealous. Hold the flower at phase end.",
+		);
+		expect(ember?.persona.personaGoal).toBe("Hold the flower at phase end.");
 	});
 
 	it("includes the per-phase transcript for each AI", () => {

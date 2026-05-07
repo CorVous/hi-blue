@@ -377,7 +377,6 @@ describe("streamChat", () => {
 		await streamChat({ message: "hello", onDelta: vi.fn() });
 
 		const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
-		expect(JSON.parse(init.body as string).model).toBe("z-ai/glm-4.7-flash");
 		expect(JSON.parse(init.body as string).model).toBe(PINNED_MODEL);
 	});
 
@@ -395,7 +394,6 @@ describe("streamChat", () => {
 		await streamChat({ message: "hello", onDelta: vi.fn() });
 
 		const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
-		expect(JSON.parse(init.body as string).model).toBe("z-ai/glm-4.7-flash");
 		expect(JSON.parse(init.body as string).model).toBe(PINNED_MODEL);
 	});
 });

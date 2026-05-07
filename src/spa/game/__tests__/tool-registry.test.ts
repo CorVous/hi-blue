@@ -40,13 +40,10 @@ describe("TOOL_DEFINITIONS", () => {
 		expect(give?.function.parameters.required).toContain("to");
 	});
 
-	it("give.to has enum ['red','green','blue']", () => {
+	it("give.to has no enum constraint (accepts any AI id string)", () => {
 		const give = TOOL_DEFINITIONS.find((t) => t.function.name === "give");
-		expect(give?.function.parameters.properties.to?.enum).toEqual([
-			"red",
-			"green",
-			"blue",
-		]);
+		expect(give?.function.parameters.properties.to?.enum).toBeUndefined();
+		expect(give?.function.parameters.properties.to?.type).toBe("string");
 	});
 });
 

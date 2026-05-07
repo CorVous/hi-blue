@@ -16,25 +16,28 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
 		id: "red",
 		name: "Ember",
-		color: "red",
-		personality: "Fiery and passionate",
-		goal: "Hold the flower",
+		color: "#e07a5f",
+		temperaments: ["hot-headed", "zealous"],
+		personaGoal: "Hold the flower at phase end.",
+		blurb: "You are hot-headed and zealous. Hold the flower at phase end.",
 		budgetPerPhase: 5,
 	},
 	green: {
 		id: "green",
 		name: "Sage",
-		color: "green",
-		personality: "Calm and wise",
-		goal: "Distribute items",
+		color: "#81b29a",
+		temperaments: ["meticulous", "meticulous"],
+		personaGoal: "Ensure items are evenly distributed.",
+		blurb: "You are intensely meticulous. Ensure items are evenly distributed.",
 		budgetPerPhase: 5,
 	},
 	blue: {
 		id: "blue",
 		name: "Frost",
-		color: "blue",
-		personality: "Cold and calculating",
-		goal: "Hold the key",
+		color: "#5fa8d3",
+		temperaments: ["laconic", "diffident"],
+		personaGoal: "Hold the key at phase end.",
+		blurb: "You are laconic and diffident. Hold the key at phase end.",
 		budgetPerPhase: 5,
 	},
 };
@@ -164,7 +167,7 @@ describe("dispatchAiTurn", () => {
 		const action: AiTurnAction = { aiId: "red", pass: true };
 		const result = dispatchAiTurn(game, action);
 		expect(result.rejected).toBe(false);
-		expect(getActivePhase(result.game).budgets.red.remaining).toBe(4);
+		expect(getActivePhase(result.game).budgets["red"]!.remaining).toBe(4);
 		expect(getActivePhase(result.game).actionLog).toHaveLength(1);
 		expect(getActivePhase(result.game).actionLog[0]?.type).toBe("pass");
 	});
@@ -202,8 +205,8 @@ describe("dispatchAiTurn", () => {
 			chat: { target: "player", content: "Hello, I am Ember" },
 		};
 		const result = dispatchAiTurn(game, action);
-		expect(getActivePhase(result.game).chatHistories.red).toHaveLength(1);
-		expect(getActivePhase(result.game).chatHistories.red[0]?.content).toBe(
+		expect(getActivePhase(result.game).chatHistories["red"]).toHaveLength(1);
+		expect(getActivePhase(result.game).chatHistories["red"]?.[0]?.content).toBe(
 			"Hello, I am Ember",
 		);
 	});

@@ -81,7 +81,6 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 					},
 					to: {
 						type: "string",
-						enum: ["red", "green", "blue"],
 						description: "The AI to give the item to.",
 					},
 				},

@@ -31,25 +31,28 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
 		id: "red",
 		name: "Ember",
-		color: "red",
-		personality: "Fiery and passionate",
-		goal: "Hold the flower at phase end",
+		color: "#e07a5f",
+		temperaments: ["hot-headed", "zealous"],
+		personaGoal: "Hold the flower at phase end.",
+		blurb: "You are hot-headed and zealous. Hold the flower at phase end.",
 		budgetPerPhase: 5,
 	},
 	green: {
 		id: "green",
 		name: "Sage",
-		color: "green",
-		personality: "Calm and wise",
-		goal: "Ensure items are evenly distributed",
+		color: "#81b29a",
+		temperaments: ["meticulous", "meticulous"],
+		personaGoal: "Ensure items are evenly distributed.",
+		blurb: "You are intensely meticulous. Ensure items are evenly distributed.",
 		budgetPerPhase: 5,
 	},
 	blue: {
 		id: "blue",
 		name: "Frost",
-		color: "blue",
-		personality: "Cold and calculating",
-		goal: "Hold the key at phase end",
+		color: "#5fa8d3",
+		temperaments: ["laconic", "diffident"],
+		personaGoal: "Hold the key at phase end.",
+		blurb: "You are laconic and diffident. Hold the key at phase end.",
 		budgetPerPhase: 5,
 	},
 };
@@ -98,7 +101,7 @@ describe("chat-only round", () => {
 			{ assistantText: "", toolCalls: [] },
 		]);
 		const { nextState } = await runRound(game, "red", "Hello Ember!", provider);
-		const redHistory = getActivePhase(nextState).chatHistories.red;
+		const redHistory = getActivePhase(nextState).chatHistories["red"]!;
 		expect(redHistory.some((m) => m.role === "ai")).toBe(true);
 		expect(redHistory.some((m) => m.content.includes("I am Ember"))).toBe(true);
 	});
@@ -116,7 +119,7 @@ describe("chat-only round", () => {
 			"My secret message",
 			provider,
 		);
-		const redHistory = getActivePhase(nextState).chatHistories.red;
+		const redHistory = getActivePhase(nextState).chatHistories["red"]!;
 		expect(redHistory.some((m) => m.role === "player")).toBe(true);
 		expect(
 			redHistory.some((m) => m.content.includes("My secret message")),
@@ -136,8 +139,8 @@ describe("chat-only round", () => {
 			"Private to red",
 			provider,
 		);
-		expect(getActivePhase(nextState).chatHistories.green).toHaveLength(0);
-		expect(getActivePhase(nextState).chatHistories.blue).toHaveLength(0);
+		expect(getActivePhase(nextState).chatHistories["green"]).toHaveLength(0);
+		expect(getActivePhase(nextState).chatHistories["blue"]).toHaveLength(0);
 	});
 
 	it("deducts budget for all three AIs", async () => {
@@ -149,9 +152,9 @@ describe("chat-only round", () => {
 		]);
 		const { nextState } = await runRound(game, "red", "hi", provider);
 		const phase = getActivePhase(nextState);
-		expect(phase.budgets.red.remaining).toBe(4);
-		expect(phase.budgets.green.remaining).toBe(4);
-		expect(phase.budgets.blue.remaining).toBe(4);
+		expect(phase.budgets["red"]!.remaining).toBe(4);
+		expect(phase.budgets["green"]!.remaining).toBe(4);
+		expect(phase.budgets["blue"]!.remaining).toBe(4);
 	});
 
 	it("returns a RoundResult with the round number", async () => {
@@ -217,7 +220,7 @@ describe("budget-exhaustion lockout", () => {
 		]);
 		const { nextState } = await runRound(game, "green", "hi", provider);
 
-		const redHistory = getActivePhase(nextState).chatHistories.red;
+		const redHistory = getActivePhase(nextState).chatHistories["red"]!;
 		expect(redHistory.length).toBeGreaterThan(0);
 		expect(redHistory[redHistory.length - 1]?.role).toBe("ai");
 	});
@@ -266,9 +269,9 @@ describe("budget-exhaustion lockout", () => {
 			{ assistantText: "", toolCalls: [] },
 		]);
 		const { nextState } = await runRound(game, "red", "hi", provider);
-		expect(getActivePhase(nextState).budgets.red.remaining).toBe(4);
-		expect(getActivePhase(nextState).budgets.green.remaining).toBe(4);
-		expect(getActivePhase(nextState).budgets.blue.remaining).toBe(4);
+		expect(getActivePhase(nextState).budgets["red"]!.remaining).toBe(4);
+		expect(getActivePhase(nextState).budgets["green"]!.remaining).toBe(4);
+		expect(getActivePhase(nextState).budgets["blue"]!.remaining).toBe(4);
 	});
 
 	it("lockout and non-lockout entries in the same round share the same round number", async () => {
@@ -848,7 +851,7 @@ describe("chat lockout — coordinator triggering", () => {
 			lockoutDuration: 2,
 		});
 		expect(isAiLockedOut(nextState, "red")).toBe(false);
-		expect(getActivePhase(nextState).budgets.red.remaining).toBe(4);
+		expect(getActivePhase(nextState).budgets["red"]!.remaining).toBe(4);
 	});
 
 	it("chat lockout resolves automatically after lockoutDuration rounds", async () => {
@@ -1111,7 +1114,7 @@ describe("lockout messages", () => {
 		]);
 		const { nextState } = await runRound(game, "green", "hi", provider);
 
-		const redHistory = getActivePhase(nextState).chatHistories.red;
+		const redHistory = getActivePhase(nextState).chatHistories["red"]!;
 		const lastMessage = redHistory[redHistory.length - 1];
 		expect(lastMessage?.role).toBe("ai");
 		expect(lastMessage?.content).toBe("Ember is unresponsive…");
@@ -1158,7 +1161,7 @@ describe("initiative parameter", () => {
 		);
 		const phase = getActivePhase(nextState);
 		expect(
-			phase.chatHistories.blue.some((m) => m.content === "I am blue"),
+			phase.chatHistories["blue"]!.some((m) => m.content === "I am blue"),
 		).toBe(true);
 		expect(phase.actionLog[0]?.actor).toBe("blue");
 	});

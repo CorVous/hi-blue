@@ -1,11 +1,12 @@
-export type AiId = "red" | "green" | "blue";
+export type AiId = string;
 
 export interface AiPersona {
 	id: AiId;
 	name: string;
-	color: AiId;
-	personality: string;
-	goal: string;
+	color: string;
+	temperaments: [string, string];
+	personaGoal: string;
+	blurb: string;
 	budgetPerPhase: number;
 }
 

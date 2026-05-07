@@ -1,0 +1,18 @@
+export const TEMPERAMENT_POOL: string[] = [
+	"hot-headed",
+	"taciturn",
+	"meticulous",
+	"erratic",
+	"sycophantic",
+	"melancholic",
+	"glib",
+	"pedantic",
+	"effusive",
+	"sardonic",
+	"mercurial",
+	"diffident",
+	"zealous",
+	"laconic",
+	"verbose",
+	"capricious",
+];

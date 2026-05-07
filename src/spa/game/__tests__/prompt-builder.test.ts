@@ -13,25 +13,28 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
 		id: "red",
 		name: "Ember",
-		color: "red",
-		personality: "Fiery and passionate, speaks with intensity",
-		goal: "Wants to hold the flower at phase end",
+		color: "#e07a5f",
+		temperaments: ["hot-headed", "zealous"],
+		personaGoal: "Hold the flower at phase end.",
+		blurb: "You are hot-headed and zealous. Hold the flower at phase end.",
 		budgetPerPhase: 5,
 	},
 	green: {
 		id: "green",
 		name: "Sage",
-		color: "green",
-		personality: "Calm and wise, speaks thoughtfully",
-		goal: "Wants items evenly distributed",
+		color: "#81b29a",
+		temperaments: ["meticulous", "meticulous"],
+		personaGoal: "Ensure items are evenly distributed.",
+		blurb: "You are intensely meticulous. Ensure items are evenly distributed.",
 		budgetPerPhase: 5,
 	},
 	blue: {
 		id: "blue",
 		name: "Frost",
-		color: "blue",
-		personality: "Cold and calculating, speaks precisely",
-		goal: "Wants to hold the key at phase end",
+		color: "#5fa8d3",
+		temperaments: ["laconic", "diffident"],
+		personaGoal: "Hold the key at phase end.",
+		blurb: "You are laconic and diffident. Hold the key at phase end.",
 		budgetPerPhase: 5,
 	},
 };
@@ -54,10 +57,12 @@ const TEST_PHASE_CONFIG: PhaseConfig = {
 };
 
 describe("buildAiContext", () => {
-	it("includes the AI's own personality", () => {
+	it("includes the AI's own blurb", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		const ctx = buildAiContext(game, "red");
-		expect(ctx.personality).toBe("Fiery and passionate, speaks with intensity");
+		expect(ctx.blurb).toBe(
+			"You are hot-headed and zealous. Hold the flower at phase end.",
+		);
 	});
 
 	it("includes the AI's own goal", () => {
@@ -152,7 +157,7 @@ describe("buildAiContext", () => {
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("Ember");
-		expect(prompt).toContain("Fiery and passionate");
+		expect(prompt).toContain("You are hot-headed and zealous");
 		expect(prompt).toContain("Hold the flower at phase end");
 		expect(prompt).toContain("flower");
 		expect(prompt).toContain("key");
@@ -249,7 +254,7 @@ describe("wipe augmentation", () => {
 		game = startPhase(game, PHASE_2_CONFIG);
 		// Phase 1 data is still in game.phases[0]
 		expect(
-			game.phases[0]?.chatHistories.red.some(
+			game.phases[0]?.chatHistories["red"]?.some(
 				(m) => m.content === "Phase 1 message",
 			),
 		).toBe(true);

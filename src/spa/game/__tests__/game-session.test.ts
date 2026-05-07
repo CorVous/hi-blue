@@ -25,25 +25,28 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
 		id: "red",
 		name: "Ember",
-		color: "red",
-		personality: "Test personality red",
-		goal: "Test goal red",
+		color: "#e07a5f",
+		temperaments: ["hot-headed", "zealous"],
+		personaGoal: "Hold the flower at phase end.",
+		blurb: "You are hot-headed and zealous. Hold the flower at phase end.",
 		budgetPerPhase: 5,
 	},
 	green: {
 		id: "green",
 		name: "Sage",
-		color: "green",
-		personality: "Test personality green",
-		goal: "Test goal green",
+		color: "#81b29a",
+		temperaments: ["meticulous", "meticulous"],
+		personaGoal: "Ensure items are evenly distributed.",
+		blurb: "You are intensely meticulous. Ensure items are evenly distributed.",
 		budgetPerPhase: 5,
 	},
 	blue: {
 		id: "blue",
 		name: "Frost",
-		color: "blue",
-		personality: "Test personality blue",
-		goal: "Test goal blue",
+		color: "#5fa8d3",
+		temperaments: ["laconic", "diffident"],
+		personaGoal: "Hold the key at phase end.",
+		blurb: "You are laconic and diffident. Hold the key at phase end.",
 		budgetPerPhase: 5,
 	},
 };
@@ -87,9 +90,9 @@ describe("GameSession construction", () => {
 	it("initial budgets match the phase config", () => {
 		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
 		const phase = getActivePhase(session.getState());
-		expect(phase.budgets.red.remaining).toBe(5);
-		expect(phase.budgets.green.remaining).toBe(5);
-		expect(phase.budgets.blue.remaining).toBe(5);
+		expect(phase.budgets["red"]!.remaining).toBe(5);
+		expect(phase.budgets["green"]!.remaining).toBe(5);
+		expect(phase.budgets["blue"]!.remaining).toBe(5);
 	});
 });
 
@@ -107,15 +110,15 @@ describe("GameSession — message routing", () => {
 
 		const phase = getActivePhase(session.getState());
 		expect(
-			phase.chatHistories.red.some(
+			phase.chatHistories["red"]?.some(
 				(m) =>
 					m.role === "player" && m.content.includes("Secret message for Ember"),
 			),
 		).toBe(true);
-		expect(phase.chatHistories.green.some((m) => m.role === "player")).toBe(
+		expect(phase.chatHistories["green"]?.some((m) => m.role === "player")).toBe(
 			false,
 		);
-		expect(phase.chatHistories.blue.some((m) => m.role === "player")).toBe(
+		expect(phase.chatHistories["blue"]?.some((m) => m.role === "player")).toBe(
 			false,
 		);
 	});
@@ -128,12 +131,12 @@ describe("GameSession — message routing", () => {
 
 		const phase = getActivePhase(session.getState());
 		expect(
-			phase.chatHistories.green.some(
+			phase.chatHistories["green"]?.some(
 				(m) => m.role === "player" && m.content.includes("for green"),
 			),
 		).toBe(true);
 		expect(
-			phase.chatHistories.red.filter((m) => m.role === "player"),
+			phase.chatHistories["red"]?.filter((m) => m.role === "player"),
 		).toHaveLength(1);
 	});
 });
@@ -157,9 +160,9 @@ describe("GameSession — state mutation across rounds", () => {
 		await session.submitMessage("red", "hi", makePassProvider());
 
 		const phase = getActivePhase(session.getState());
-		expect(phase.budgets.red.remaining).toBe(4);
-		expect(phase.budgets.green.remaining).toBe(4);
-		expect(phase.budgets.blue.remaining).toBe(4);
+		expect(phase.budgets["red"]!.remaining).toBe(4);
+		expect(phase.budgets["green"]!.remaining).toBe(4);
+		expect(phase.budgets["blue"]!.remaining).toBe(4);
 	});
 
 	it("second round builds on first round's state", async () => {

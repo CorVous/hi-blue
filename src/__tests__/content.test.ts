@@ -1,42 +1,127 @@
 /**
  * Structure-only tests for src/content/.
  *
- * These tests validate that:
- * - PERSONAS has the required keys with all required fields present.
+ * Validates:
+ * - Content pools (TEMPERAMENT_POOL, PERSONA_GOAL_POOL, COLOR_PALETTE) have
+ *   the correct types and sizes.
+ * - generatePersonas() produces three distinct personas.
  * - PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG are correctly chained.
- * - Each phase has aiGoals, objective, and initialWorld populated.
- *
- * NOTE: Prose quality is NOT tested here — all strings may be TODO placeholders.
- * AC counting: 3 personas, 3 phases, 9 goals (3 per phase × 3), 3 objectives, 3 world states.
+ * - Each phase has aiGoalPool, objective, and initialWorld populated.
  */
 import { describe, expect, it } from "vitest";
 import {
-	PERSONAS,
+	COLOR_PALETTE,
+	generatePersonas,
+	PERSONA_GOAL_POOL,
 	PHASE_1_CONFIG,
 	PHASE_2_CONFIG,
 	PHASE_3_CONFIG,
 	PHASE_GOAL_POOL,
+	TEMPERAMENT_POOL,
 } from "../content";
 
-// ── Personas ──────────────────────────────────────────────────────────────────
+// ── Content pools ─────────────────────────────────────────────────────────────
 
-describe("PERSONAS", () => {
-	it("has exactly the three AI keys", () => {
-		expect(Object.keys(PERSONAS).sort()).toEqual(["blue", "green", "red"]);
+describe("TEMPERAMENT_POOL", () => {
+	it("has at least 12 entries", () => {
+		expect(TEMPERAMENT_POOL.length).toBeGreaterThanOrEqual(12);
 	});
 
-	it.each([
-		"red",
-		"green",
-		"blue",
-	] as const)("%s persona has all required base fields", (aiId) => {
-		const p = PERSONAS[aiId];
-		expect(p.id).toBe(aiId);
-		expect(p.name).toBeTruthy();
-		expect(p.color).toBe(aiId);
-		expect(p.personality).toBeTruthy();
-		expect(p.goal).toBeTruthy();
-		expect(p.budgetPerPhase).toBeGreaterThan(0);
+	it("has at most 20 entries", () => {
+		expect(TEMPERAMENT_POOL.length).toBeLessThanOrEqual(20);
+	});
+
+	it("every entry is a non-empty string", () => {
+		for (const t of TEMPERAMENT_POOL) {
+			expect(typeof t).toBe("string");
+			expect(t.length).toBeGreaterThan(0);
+		}
+	});
+});
+
+describe("PERSONA_GOAL_POOL", () => {
+	it("has at least 10 entries", () => {
+		expect(PERSONA_GOAL_POOL.length).toBeGreaterThanOrEqual(10);
+	});
+
+	it("has at most 15 entries", () => {
+		expect(PERSONA_GOAL_POOL.length).toBeLessThanOrEqual(15);
+	});
+
+	it("every entry is a non-empty string", () => {
+		for (const g of PERSONA_GOAL_POOL) {
+			expect(typeof g).toBe("string");
+			expect(g.length).toBeGreaterThan(0);
+		}
+	});
+});
+
+describe("COLOR_PALETTE", () => {
+	it("has at least 10 entries", () => {
+		expect(COLOR_PALETTE.length).toBeGreaterThanOrEqual(10);
+	});
+
+	it("has at most 12 entries", () => {
+		expect(COLOR_PALETTE.length).toBeLessThanOrEqual(12);
+	});
+
+	it("every entry is a valid lowercase hex color", () => {
+		for (const c of COLOR_PALETTE) {
+			expect(c).toMatch(/^#[0-9a-f]{6}$/i);
+		}
+	});
+});
+
+// ── generatePersonas ──────────────────────────────────────────────────────────
+
+describe("generatePersonas", () => {
+	it("produces exactly 3 personas", () => {
+		const personas = generatePersonas(() => 0.5);
+		expect(Object.keys(personas)).toHaveLength(3);
+	});
+
+	it("persona names are 4-char [a-z0-9] strings", () => {
+		const personas = generatePersonas(() => 0);
+		for (const [id, p] of Object.entries(personas)) {
+			expect(id).toMatch(/^[a-z0-9]{4}$/);
+			expect(p.name).toBe(id);
+		}
+	});
+
+	it("persona colors are hex strings from the palette", () => {
+		const personas = generatePersonas(() => 0.5);
+		for (const p of Object.values(personas)) {
+			expect(p.color).toMatch(/^#[0-9a-f]{6}$/i);
+		}
+	});
+
+	it("all 3 personas have distinct names", () => {
+		const personas = generatePersonas();
+		const names = Object.keys(personas);
+		expect(new Set(names).size).toBe(3);
+	});
+
+	it("all 3 personas have distinct colors", () => {
+		const personas = generatePersonas(() => Math.random());
+		const colors = Object.values(personas).map((p) => p.color);
+		expect(new Set(colors).size).toBe(3);
+	});
+
+	it("each persona has a blurb string", () => {
+		const personas = generatePersonas(() => 0);
+		for (const p of Object.values(personas)) {
+			expect(typeof p.blurb).toBe("string");
+			expect(p.blurb.length).toBeGreaterThan(0);
+		}
+	});
+
+	it("intensification path: same temperament twice yields 'intensely' blurb", () => {
+		// Seed that returns 0 always — same index for both temperament draws
+		const personas = generatePersonas(() => 0);
+		const firstPersona = Object.values(personas)[0];
+		if (!firstPersona) throw new Error("no persona");
+		expect(firstPersona.temperaments[0]).toBe(firstPersona.temperaments[1]);
+		expect(firstPersona.blurb).toContain("intensely");
 	});
 });
 
@@ -113,13 +198,7 @@ describe("phase configs — initialWorld", () => {
 	});
 });
 
-// ── AC counts ─────────────────────────────────────────────────────────────────
-
 describe("acceptance-criteria counts", () => {
-	it("3 personas total", () => {
-		expect(Object.keys(PERSONAS)).toHaveLength(3);
-	});
-
 	it("3 phase configs", () => {
 		const phases = [PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG];
 		expect(phases).toHaveLength(3);

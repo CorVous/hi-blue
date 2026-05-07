@@ -35,7 +35,7 @@ import type {
 // ── Schema version ────────────────────────────────────────────────────────────
 
 export const STORAGE_KEY = "hi-blue-game-state";
-export const STORAGE_SCHEMA_VERSION = 1 as const;
+export const STORAGE_SCHEMA_VERSION = 2 as const;
 
 // ── Persisted shape ───────────────────────────────────────────────────────────
 
@@ -104,11 +104,9 @@ function serializePhaseState(phase: PhaseState): PersistedPhaseState {
 		round: phase.round,
 		world: structuredClone(phase.world),
 		budgets: { ...phase.budgets },
-		chatHistories: {
-			red: [...phase.chatHistories.red],
-			green: [...phase.chatHistories.green],
-			blue: [...phase.chatHistories.blue],
-		},
+		chatHistories: Object.fromEntries(
+			Object.entries(phase.chatHistories).map(([k, v]) => [k, [...v]]),
+		) as Record<string, import("../game/types.js").ChatMessage[]>,
 		whispers: [...phase.whispers],
 		actionLog: [...phase.actionLog],
 		lockedOut: Array.from(phase.lockedOut) as AiId[],
@@ -142,11 +140,12 @@ function deserializePhaseState(persisted: PersistedPhaseState): PhaseState {
 		round: persisted.round,
 		world: structuredClone(persisted.world),
 		budgets: { ...persisted.budgets },
-		chatHistories: {
-			red: [...(persisted.chatHistories.red ?? [])],
-			green: [...(persisted.chatHistories.green ?? [])],
-			blue: [...(persisted.chatHistories.blue ?? [])],
-		},
+		chatHistories: Object.fromEntries(
+			Object.entries(persisted.chatHistories).map(([k, v]) => [
+				k,
+				[...(v ?? [])],
+			]),
+		) as Record<string, ChatMessage[]>,
 		whispers: [...persisted.whispers],
 		actionLog: [...persisted.actionLog],
 		lockedOut: new Set<AiId>(persisted.lockedOut),

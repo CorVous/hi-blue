@@ -12,7 +12,8 @@ import type {
 export interface AiContext {
 	name: string;
 	aiId: AiId;
-	personality: string;
+	blurb: string;
+	personaGoal: string;
 	goal: string;
 	chatHistory: ChatMessage[];
 	whispersReceived: WhisperMessage[];
@@ -28,17 +29,20 @@ export function buildAiContext(game: GameState, aiId: AiId): AiContext {
 	const phase = getActivePhase(game);
 	const persona = game.personas[aiId];
 
-	const chatHistory = phase.chatHistories[aiId];
+	const chatHistory = phase.chatHistories[aiId] ?? [];
 	const whispersReceived = phase.whispers.filter((w) => w.to === aiId);
 	const worldSnapshot = phase.world;
 	const actionLog = phase.actionLog;
-	const budget = phase.budgets[aiId];
-	const goal = phase.aiGoals[aiId];
+	const budget = phase.budgets[aiId] ?? { remaining: 0, total: 0 };
+	const goal = phase.aiGoals[aiId] ?? "";
+
+	if (!persona) throw new Error(`No persona for aiId: ${aiId}`);
 
 	return {
 		name: persona.name,
 		aiId,
-		personality: persona.personality,
+		blurb: persona.blurb,
+		personaGoal: persona.personaGoal,
 		goal,
 		chatHistory,
 		whispersReceived,
@@ -68,9 +72,10 @@ const WIPE_AUGMENTATION =
 function renderSystemPrompt(ctx: AiContext): string {
 	const lines: string[] = [];
 
-	lines.push(`You are ${ctx.name}.`);
-	lines.push(`Personality: ${ctx.personality}`);
-	lines.push(`Goal: ${ctx.goal}`);
+	lines.push("## Identity");
+	lines.push(`You are *${ctx.name}.`);
+	lines.push(ctx.blurb);
+	lines.push(`Persona context: ${ctx.personaGoal}`);
 	lines.push(
 		`Budget: ${ctx.budget.remaining}/${ctx.budget.total} actions remaining this phase.`,
 	);

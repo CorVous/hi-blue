@@ -11,7 +11,6 @@
  */
 
 import type {
-	AiId,
 	AiPersona,
 	ChatMessage,
 	GameState,
@@ -36,8 +35,6 @@ export interface GameSave {
 	ais: AiSaveEntry[];
 }
 
-const AI_ORDER: AiId[] = ["red", "green", "blue"];
-
 /**
  * Serialize a GameState into a save-file payload.
  *
@@ -45,8 +42,9 @@ const AI_ORDER: AiId[] = ["red", "green", "blue"];
  * any point, though the intent is to call it at game completion.
  */
 export function serializeGameSave(game: GameState): GameSave {
-	const ais: AiSaveEntry[] = AI_ORDER.map((aiId) => {
-		const persona = game.personas[aiId];
+	const ais: AiSaveEntry[] = Object.keys(game.personas).map((aiId) => {
+		// biome-ignore lint/style/noNonNullAssertion: key comes from Object.keys so always defined
+		const persona = game.personas[aiId]!;
 
 		const phases: PhaseTranscript[] = game.phases.map((phase) => {
 			const chatHistory = phase.chatHistories[aiId] ?? [];

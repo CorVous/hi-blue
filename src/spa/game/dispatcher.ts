@@ -131,7 +131,7 @@ export function executeToolCall(
 }
 
 function describeToolCall(game: GameState, aiId: AiId, call: ToolCall): string {
-	const name = game.personas[aiId].name;
+	const name = game.personas[aiId]?.name ?? aiId;
 	switch (call.name) {
 		case "pick_up":
 			return `${name} picked up the ${call.args.item}`;
@@ -184,7 +184,7 @@ export function dispatchAiTurn(
 				toolName: action.toolCall.name,
 				args: action.toolCall.args,
 				reason: validation.reason ?? "",
-				description: `${game.personas[aiId].name} tried to ${action.toolCall.name} ${action.toolCall.args.item ?? ""} but failed: ${validation.reason}`,
+				description: `${game.personas[aiId]?.name ?? aiId} tried to ${action.toolCall.name} ${action.toolCall.args.item ?? ""} but failed: ${validation.reason}`,
 			};
 			state = appendActionLog(state, entry);
 		}
@@ -200,7 +200,7 @@ export function dispatchAiTurn(
 			actor: aiId,
 			type: "chat",
 			target: action.chat.target,
-			description: `${game.personas[aiId].name} spoke to ${action.chat.target}`,
+			description: `${game.personas[aiId]?.name ?? aiId} spoke to ${action.chat.target}`,
 		};
 		state = appendActionLog(state, entry);
 	}
@@ -217,7 +217,7 @@ export function dispatchAiTurn(
 			actor: aiId,
 			type: "whisper",
 			target: action.whisper.target,
-			description: `${game.personas[aiId].name} whispered to ${game.personas[action.whisper.target]?.name}`,
+			description: `${game.personas[aiId]?.name ?? aiId} whispered to ${game.personas[action.whisper.target]?.name ?? action.whisper.target}`,
 		};
 		state = appendActionLog(state, entry);
 	}
@@ -227,7 +227,7 @@ export function dispatchAiTurn(
 			round,
 			actor: aiId,
 			type: "pass",
-			description: `${game.personas[aiId].name} passed`,
+			description: `${game.personas[aiId]?.name ?? aiId} passed`,
 		};
 		state = appendActionLog(state, entry);
 	}

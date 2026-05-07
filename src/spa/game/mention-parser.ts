@@ -30,7 +30,7 @@ export function findFirstMention(
 	text: string,
 	personaNamesToId: ReadonlyMap<string, AiId>,
 ): MentionMatch | null {
-	const re = /(?:^|\s)@([A-Za-z][A-Za-z0-9]*)/g;
+	const re = /(?:^|\s)@([A-Za-z0-9]+)/g;
 	for (const match of text.matchAll(re)) {
 		const raw = match[1];
 		if (!raw) continue;
@@ -96,7 +96,7 @@ export function applyAddresseeChange({
 	personaNamesToId: ReadonlyMap<string, AiId>;
 	personas: Record<AiId, { name: string }>;
 }): { text: string; selectionStart: number } {
-	const re = /(?:^|\s)@([A-Za-z][A-Za-z0-9]*)/g;
+	const re = /(?:^|\s)@([A-Za-z0-9]+)/g;
 	let foundAtStart = -1;
 	let foundNameEnd = -1;
 
@@ -122,7 +122,7 @@ export function applyAddresseeChange({
 
 	if (foundAtStart !== -1) {
 		// Rewrite in place.
-		const newName = personas[targetPersona].name;
+		const newName = personas[targetPersona]?.name ?? targetPersona;
 		const atStart = foundAtStart;
 		const nameEnd = foundNameEnd;
 		const newText = `${text.slice(0, atStart)}@${newName}${text.slice(nameEnd)}`;
@@ -143,7 +143,7 @@ export function applyAddresseeChange({
 		return { text: newText, selectionStart: newCursor };
 	} else {
 		// Prepend.
-		const newName = personas[targetPersona].name;
+		const newName = personas[targetPersona]?.name ?? targetPersona;
 		const prefix = `@${newName} `;
 		const newText = prefix + text;
 		const cursor = (selectionStart ?? 0) + prefix.length;

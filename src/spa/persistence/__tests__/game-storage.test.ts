@@ -1,7 +1,38 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PERSONAS, PHASE_1_CONFIG } from "../../../content/index.js";
+import { PHASE_1_CONFIG } from "../../../content/index.js";
 import { createGame, startPhase } from "../../game/engine.js";
-import type { AiId, GameState } from "../../game/types.js";
+import type { AiId, AiPersona, GameState } from "../../game/types.js";
+
+const TEST_PERSONAS: Record<string, AiPersona> = {
+	red: {
+		id: "red",
+		name: "Ember",
+		color: "#e07a5f",
+		temperaments: ["hot-headed", "zealous"],
+		personaGoal: "Hold the flower at phase end.",
+		blurb: "You are hot-headed and zealous. Hold the flower at phase end.",
+		budgetPerPhase: 5,
+	},
+	green: {
+		id: "green",
+		name: "Sage",
+		color: "#81b29a",
+		temperaments: ["meticulous", "meticulous"],
+		personaGoal: "Ensure items are evenly distributed.",
+		blurb: "You are intensely meticulous. Ensure items are evenly distributed.",
+		budgetPerPhase: 5,
+	},
+	blue: {
+		id: "blue",
+		name: "Frost",
+		color: "#5fa8d3",
+		temperaments: ["laconic", "diffident"],
+		personaGoal: "Hold the key at phase end.",
+		blurb: "You are laconic and diffident. Hold the key at phase end.",
+		budgetPerPhase: 5,
+	},
+};
+
 import {
 	clearGame,
 	deserializeGameState,
@@ -16,7 +47,7 @@ import {
 
 /** Build a fresh phase-1 game state using the canonical config. */
 function makeFreshGame(): GameState {
-	const game = createGame(PERSONAS);
+	const game = createGame(TEST_PERSONAS);
 	// Use a fixed rng so goals are deterministic in tests
 	return startPhase(game, PHASE_1_CONFIG, () => 0);
 }
@@ -146,10 +177,10 @@ describe("serializeGameState / deserializeGameState", () => {
 		const restored = deserializeGameState(persisted);
 		const rp = restored.phases[0];
 
-		expect(rp?.chatHistories.red).toEqual([
+		expect(rp?.chatHistories["red"]).toEqual([
 			{ role: "player", content: "hello red" },
 		]);
-		expect(rp?.chatHistories.green).toEqual([
+		expect(rp?.chatHistories["green"]).toEqual([
 			{ role: "ai", content: "green reply" },
 		]);
 		expect(rp?.whispers[0]).toEqual({
@@ -168,7 +199,7 @@ describe("serializeGameState / deserializeGameState", () => {
 			name: "The Key",
 			holder: "room",
 		});
-		expect(rp?.budgets.red).toEqual({ remaining: 3, total: 5 });
+		expect(rp?.budgets["red"]).toEqual({ remaining: 3, total: 5 });
 	});
 });
 
@@ -253,7 +284,7 @@ describe("loadGame", () => {
 	it("returns error: corrupt (not unavailable) when schemaVersion is valid but game structure is malformed", () => {
 		// Valid JSON, correct schemaVersion, but game.phases is not an array
 		const malformed = JSON.stringify({
-			schemaVersion: 1,
+			schemaVersion: 2,
 			savedAt: new Date().toISOString(),
 			game: { currentPhase: 1, isComplete: false, personas: {}, phases: null },
 		});
