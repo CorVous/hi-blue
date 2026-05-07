@@ -92,6 +92,21 @@ Wait for it to commit and return.
 Spawn the reviewer with `.claude/skills/ralph-loop/review.md`, substituting
 `{{BRANCH}}`, `{{SOURCE_BRANCH}}`, `{{TEST_COMMANDS}}`. Drop `{{WORKTREE}}`.
 Pass the planner's `{{PLAN}}` as context so it can check fidelity.
+
+**Override: the reviewer is read-only and test-only.** Append these
+instructions to its task, which take precedence over anything in
+`review.md`:
+
+  - You may read files, inspect the diff, and run the typecheck / unit-test
+    commands in `{{TEST_COMMANDS}}`. That's it.
+  - Do NOT edit, create, or delete any files. Do NOT run `git add`,
+    `git commit`, `git restore`, or any other mutating git command. Skip
+    the clarity-pass edits and the commit step entirely.
+  - If you find issues — missing deliverables, failing tests, clarity
+    problems, correctness or security concerns — describe them in the
+    `REJECTED:` feedback so the implementer can fix them on the next
+    attempt. Do not fix them yourself.
+
 Ask it to end its response with exactly one of:
 
   ```
