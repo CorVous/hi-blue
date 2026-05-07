@@ -1,14 +1,53 @@
+import { CARDINAL_DIRECTIONS, GRID_COLS, GRID_ROWS } from "./direction.js";
 import type {
 	ActionLogEntry,
 	AiBudget,
 	AiId,
 	AiPersona,
+	CardinalDirection,
 	ChatMessage,
 	GameState,
+	GridPosition,
+	PersonaSpatialState,
 	PhaseConfig,
 	PhaseState,
 	WhisperMessage,
 } from "./types";
+
+/**
+ * Draw distinct starting cells (via Fisher–Yates partial shuffle over all 25
+ * cells) and a uniform-random facing per AI, using the provided rng.
+ */
+function drawSpatialPlacements(
+	rng: () => number,
+	aiIds: string[],
+): Record<AiId, PersonaSpatialState> {
+	// Build an array of all grid cells [0..GRID_ROWS*GRID_COLS)
+	const cells: GridPosition[] = [];
+	for (let r = 0; r < GRID_ROWS; r++) {
+		for (let c = 0; c < GRID_COLS; c++) {
+			cells.push({ row: r, col: c });
+		}
+	}
+
+	// Fisher-Yates partial shuffle to pick aiIds.length distinct cells
+	const result: Record<AiId, PersonaSpatialState> = {};
+	for (let i = 0; i < aiIds.length; i++) {
+		// Pick a random index from [i, cells.length)
+		const j = i + Math.floor(rng() * (cells.length - i));
+		// Swap cells[i] and cells[j]
+		const tmp = cells[i]!;
+		cells[i] = cells[j]!;
+		cells[j] = tmp;
+
+		// Pick a random facing
+		const facingIdx = Math.floor(rng() * CARDINAL_DIRECTIONS.length);
+		const facing: CardinalDirection = CARDINAL_DIRECTIONS[facingIdx]!;
+
+		result[aiIds[i]!] = { position: cells[i]!, facing };
+	}
+	return result;
+}
 
 /**
  * Resolve the per-AI goals for a phase. If `config.aiGoals` is provided, use
@@ -81,6 +120,7 @@ export function startPhase(
 	}
 
 	const aiGoals = resolveAiGoals(config, rng, aiIds);
+	const personaSpatial = drawSpatialPlacements(rng, aiIds);
 
 	const phase: PhaseState = {
 		phaseNumber: config.phaseNumber,
@@ -94,6 +134,7 @@ export function startPhase(
 		actionLog: [],
 		lockedOut: new Set(),
 		chatLockouts: new Map(),
+		personaSpatial,
 		...(config.winCondition !== undefined
 			? { winCondition: config.winCondition }
 			: {}),
@@ -184,12 +225,13 @@ export function appendWhisper(
 export function advancePhase(
 	game: GameState,
 	nextConfig?: PhaseConfig,
+	rng?: () => number,
 ): GameState {
 	if (!nextConfig) {
 		return { ...game, isComplete: true };
 	}
 
-	return startPhase(game, nextConfig);
+	return startPhase(game, nextConfig, rng);
 }
 
 /**

@@ -2,10 +2,11 @@
  * Tool Registry
  *
  * Single source of truth for the OpenAI-spec `tools` array.
- * Declares one `function` per dispatcher tool: `pick_up`, `put_down`, `give`, `use`.
+ * Declares one `function` per dispatcher tool: `pick_up`, `put_down`, `give`, `use`, `go`, `look`.
  * Names and argument keys mirror `validateToolCall` in `dispatcher.ts` 1:1.
  */
 
+import { CARDINAL_DIRECTIONS } from "./direction.js";
 import type { ToolName } from "./types";
 
 export interface OpenAiToolFunction {
@@ -33,7 +34,7 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 		function: {
 			name: "pick_up",
 			description:
-				"Pick up an item that is currently in the room. Fails if you are already holding it or it is held by another AI.",
+				"Pick up an item that is currently in your cell. Fails if the item is not in your current cell.",
 			parameters: {
 				type: "object",
 				properties: {
@@ -52,7 +53,7 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 		function: {
 			name: "put_down",
 			description:
-				"Put down an item you are currently holding. Places it in the room.",
+				"Put down an item you are currently holding. Places it in your current cell.",
 			parameters: {
 				type: "object",
 				properties: {
@@ -71,7 +72,7 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 		function: {
 			name: "give",
 			description:
-				"Give an item you are holding to another AI. Fails if you are not holding it or you target yourself.",
+				"Give an item you are holding to an adjacent AI. Fails if you are not holding it, you target yourself, or the target is not in an adjacent cell.",
 			parameters: {
 				type: "object",
 				properties: {
@@ -81,7 +82,8 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 					},
 					to: {
 						type: "string",
-						description: "The AI to give the item to.",
+						description:
+							"The AI to give the item to (must be in an adjacent cell).",
 					},
 				},
 				required: ["item", "to"],
@@ -108,6 +110,46 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 			},
 		},
 	},
+	{
+		type: "function",
+		function: {
+			name: "go",
+			description:
+				"Move one cell in a cardinal direction and set your facing to that direction. Fails if the destination is out of bounds or blocked by an obstacle.",
+			parameters: {
+				type: "object",
+				properties: {
+					direction: {
+						type: "string",
+						description: "The cardinal direction to move.",
+						enum: [...CARDINAL_DIRECTIONS],
+					},
+				},
+				required: ["direction"],
+				additionalProperties: false,
+			},
+		},
+	},
+	{
+		type: "function",
+		function: {
+			name: "look",
+			description:
+				"Turn to face a cardinal direction without moving. Persistent — your facing changes.",
+			parameters: {
+				type: "object",
+				properties: {
+					direction: {
+						type: "string",
+						description: "The cardinal direction to face.",
+						enum: [...CARDINAL_DIRECTIONS],
+					},
+				},
+				required: ["direction"],
+				additionalProperties: false,
+			},
+		},
+	},
 ];
 
 type ParseSuccess<T> = { ok: true; args: T };
@@ -119,12 +161,16 @@ type PickUpArgs = { item: string };
 type PutDownArgs = { item: string };
 type GiveArgs = { item: string; to: string };
 type UseArgs = { item: string };
+type GoArgs = { direction: string };
+type LookArgs = { direction: string };
 
 type ToolArgs = {
 	pick_up: PickUpArgs;
 	put_down: PutDownArgs;
 	give: GiveArgs;
 	use: UseArgs;
+	go: GoArgs;
+	look: LookArgs;
 };
 
 /**
@@ -170,6 +216,16 @@ export function parseToolCallArguments<N extends ToolName>(
 				ok: true,
 				args: { item: obj.item, to: obj.to } as ToolArgs[N],
 			};
+		}
+		case "go":
+		case "look": {
+			if (typeof obj.direction !== "string" || obj.direction.length === 0) {
+				return {
+					ok: false,
+					reason: "Required argument 'direction' is missing",
+				};
+			}
+			return { ok: true, args: { direction: obj.direction } as ToolArgs[N] };
 		}
 		default:
 			return { ok: false, reason: `Unknown tool "${name}"` };

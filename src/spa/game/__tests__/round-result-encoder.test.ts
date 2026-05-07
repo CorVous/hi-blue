@@ -58,7 +58,7 @@ const PHASE_CONFIG: PhaseConfig = {
 	phaseNumber: 1,
 	objective: "Test phase",
 	aiGoals: { red: "r", green: "g", blue: "b" },
-	initialWorld: { items: [] },
+	initialWorld: { items: [], obstacles: [] },
 	budgetPerAi: 5,
 };
 
@@ -500,7 +500,7 @@ describe("encodeRoundResult — phase_advanced event", () => {
 			phaseNumber: 2,
 			objective: "Phase 2 objective",
 			aiGoals: { red: "r2", green: "g2", blue: "b2" },
-			initialWorld: { items: [] },
+			initialWorld: { items: [], obstacles: [] },
 			budgetPerAi: 5,
 		};
 		const game = startPhase(createGame(TEST_PERSONAS), PHASE2_CONFIG);
@@ -550,7 +550,7 @@ describe("encodeRoundResult — phase_advanced event", () => {
 			phaseNumber: 2,
 			objective: "Phase 2 objective",
 			aiGoals: { red: "r2", green: "g2", blue: "b2" },
-			initialWorld: { items: [] },
+			initialWorld: { items: [], obstacles: [] },
 			budgetPerAi: 5,
 		};
 		const game = startPhase(createGame(TEST_PERSONAS), PHASE2_CONFIG);

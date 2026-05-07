@@ -46,9 +46,13 @@ export class GameSession {
 	/** Per-AI tool roundtrip from the last round, fed back in as prior context. */
 	private toolRoundtrip: Partial<Record<AiId, ToolRoundtripMessage>> = {};
 
-	constructor(phaseConfig: PhaseConfig, personas: Record<AiId, AiPersona>) {
+	constructor(
+		phaseConfig: PhaseConfig,
+		personas: Record<AiId, AiPersona>,
+		rng?: () => number,
+	) {
 		const game = createGame(personas);
-		this.state = startPhase(game, phaseConfig);
+		this.state = startPhase(game, phaseConfig, rng);
 	}
 
 	/**

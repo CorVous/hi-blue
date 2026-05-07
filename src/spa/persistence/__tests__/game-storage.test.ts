@@ -163,7 +163,8 @@ describe("serializeGameState / deserializeGameState", () => {
 				},
 			],
 			world: {
-				items: [{ id: "key", name: "The Key", holder: "room" as const }],
+				items: [{ id: "key", name: "The Key", holder: { row: 0, col: 0 } }],
+				obstacles: [],
 			},
 			budgets: {
 				red: { remaining: 3, total: 5 },
@@ -177,10 +178,10 @@ describe("serializeGameState / deserializeGameState", () => {
 		const restored = deserializeGameState(persisted);
 		const rp = restored.phases[0];
 
-		expect(rp?.chatHistories["red"]).toEqual([
+		expect(rp?.chatHistories.red).toEqual([
 			{ role: "player", content: "hello red" },
 		]);
-		expect(rp?.chatHistories["green"]).toEqual([
+		expect(rp?.chatHistories.green).toEqual([
 			{ role: "ai", content: "green reply" },
 		]);
 		expect(rp?.whispers[0]).toEqual({
@@ -197,9 +198,84 @@ describe("serializeGameState / deserializeGameState", () => {
 		expect(rp?.world.items[0]).toEqual({
 			id: "key",
 			name: "The Key",
-			holder: "room",
+			holder: { row: 0, col: 0 },
 		});
-		expect(rp?.budgets["red"]).toEqual({ remaining: 3, total: 5 });
+		expect(rp?.budgets.red).toEqual({ remaining: 3, total: 5 });
+	});
+
+	it("round-trips personaSpatial (position + facing)", () => {
+		const game = makeFreshGame();
+		const phase = game.phases[0];
+		if (!phase) throw new Error("no phase");
+		const modifiedPhase = {
+			...phase,
+			personaSpatial: {
+				red: { position: { row: 2, col: 3 }, facing: "east" as const },
+				green: { position: { row: 1, col: 1 }, facing: "south" as const },
+				blue: { position: { row: 4, col: 4 }, facing: "west" as const },
+			},
+		};
+		const modified = { ...game, phases: [modifiedPhase] };
+
+		const persisted = serializeGameState(modified);
+		const restored = deserializeGameState(persisted);
+		const rp = restored.phases[0];
+
+		expect(rp?.personaSpatial.red).toEqual({
+			position: { row: 2, col: 3 },
+			facing: "east",
+		});
+		expect(rp?.personaSpatial.green).toEqual({
+			position: { row: 1, col: 1 },
+			facing: "south",
+		});
+		expect(rp?.personaSpatial.blue).toEqual({
+			position: { row: 4, col: 4 },
+			facing: "west",
+		});
+	});
+
+	it("round-trips obstacles array", () => {
+		const game = makeFreshGame();
+		const phase = game.phases[0];
+		if (!phase) throw new Error("no phase");
+		const modifiedPhase = {
+			...phase,
+			world: {
+				...phase.world,
+				obstacles: [
+					{ row: 0, col: 0 },
+					{ row: 2, col: 4 },
+				],
+			},
+		};
+		const modified = { ...game, phases: [modifiedPhase] };
+
+		const persisted = serializeGameState(modified);
+		const restored = deserializeGameState(persisted);
+		const rp = restored.phases[0];
+
+		expect(rp?.world.obstacles).toEqual([
+			{ row: 0, col: 0 },
+			{ row: 2, col: 4 },
+		]);
+	});
+});
+
+describe("loadGame — schema version", () => {
+	beforeEach(() => {
+		vi.stubGlobal("localStorage", makeLocalStorageStub());
+	});
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("returns error: version-mismatch when schemaVersion is 2 (old)", () => {
+		const bad = JSON.stringify({ schemaVersion: 2, savedAt: "", game: {} });
+		localStorage.setItem(STORAGE_KEY, bad);
+		const result = loadGame();
+		expect(result.state).toBeNull();
+		expect(result.error).toBe("version-mismatch");
 	});
 });
 
@@ -284,7 +360,7 @@ describe("loadGame", () => {
 	it("returns error: corrupt (not unavailable) when schemaVersion is valid but game structure is malformed", () => {
 		// Valid JSON, correct schemaVersion, but game.phases is not an array
 		const malformed = JSON.stringify({
-			schemaVersion: 2,
+			schemaVersion: 3,
 			savedAt: new Date().toISOString(),
 			game: { currentPhase: 1, isComplete: false, personas: {}, phases: null },
 		});

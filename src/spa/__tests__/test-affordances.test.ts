@@ -61,7 +61,7 @@ const PHASE_CONFIG: PhaseConfig = {
 		green: "Distribute evenly",
 		blue: "Hold the key",
 	},
-	initialWorld: { items: [] },
+	initialWorld: { items: [], obstacles: [] },
 	budgetPerAi: 5,
 	// No winCondition — phase never auto-advances by default
 };
@@ -174,7 +174,7 @@ describe("applyTestAffordances — winImmediately=1", () => {
 			phaseNumber: 3,
 			objective: "Objective C",
 			aiGoals: { red: "r", green: "g", blue: "b" },
-			initialWorld: { items: [] },
+			initialWorld: { items: [], obstacles: [] },
 			budgetPerAi: 5,
 			// No winCondition, no nextPhaseConfig
 		};
@@ -182,7 +182,7 @@ describe("applyTestAffordances — winImmediately=1", () => {
 			phaseNumber: 2,
 			objective: "Objective B",
 			aiGoals: { red: "r", green: "g", blue: "b" },
-			initialWorld: { items: [] },
+			initialWorld: { items: [], obstacles: [] },
 			budgetPerAi: 5,
 			nextPhaseConfig: configC,
 		};
@@ -190,7 +190,7 @@ describe("applyTestAffordances — winImmediately=1", () => {
 			phaseNumber: 1,
 			objective: "Objective A",
 			aiGoals: { red: "r", green: "g", blue: "b" },
-			initialWorld: { items: [] },
+			initialWorld: { items: [], obstacles: [] },
 			budgetPerAi: 5,
 			nextPhaseConfig: configB,
 		};
@@ -288,14 +288,14 @@ describe("applyTestAffordances — winImmediately=1 three-round chain reaches ga
 			phaseNumber: 3,
 			objective: "Phase 3 objective",
 			aiGoals: { red: "r", green: "g", blue: "b" },
-			initialWorld: { items: [] },
+			initialWorld: { items: [], obstacles: [] },
 			budgetPerAi: 5,
 		};
 		const phase2Config: PhaseConfig = {
 			phaseNumber: 2,
 			objective: "Phase 2 objective",
 			aiGoals: { red: "r", green: "g", blue: "b" },
-			initialWorld: { items: [] },
+			initialWorld: { items: [], obstacles: [] },
 			budgetPerAi: 5,
 			nextPhaseConfig: phase3Config,
 		};
@@ -303,7 +303,7 @@ describe("applyTestAffordances — winImmediately=1 three-round chain reaches ga
 			phaseNumber: 1,
 			objective: "Phase 1 objective",
 			aiGoals: { red: "r", green: "g", blue: "b" },
-			initialWorld: { items: [] },
+			initialWorld: { items: [], obstacles: [] },
 			budgetPerAi: 5,
 			nextPhaseConfig: phase2Config,
 		};

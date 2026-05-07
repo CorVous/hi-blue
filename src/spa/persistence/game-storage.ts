@@ -26,6 +26,7 @@ import type {
 	AiPersona,
 	ChatMessage,
 	GameState,
+	PersonaSpatialState,
 	PhaseConfig,
 	PhaseState,
 	WhisperMessage,
@@ -35,7 +36,7 @@ import type {
 // ── Schema version ────────────────────────────────────────────────────────────
 
 export const STORAGE_KEY = "hi-blue-game-state";
-export const STORAGE_SCHEMA_VERSION = 2 as const;
+export const STORAGE_SCHEMA_VERSION = 3 as const;
 
 // ── Persisted shape ───────────────────────────────────────────────────────────
 
@@ -51,6 +52,7 @@ export interface PersistedPhaseState {
 	actionLog: ActionLogEntry[];
 	lockedOut: AiId[];
 	chatLockouts: Array<[AiId, number]>;
+	personaSpatial: Record<AiId, PersonaSpatialState>;
 }
 
 export interface PersistedGameState {
@@ -113,6 +115,7 @@ function serializePhaseState(phase: PhaseState): PersistedPhaseState {
 		chatLockouts: Array.from(phase.chatLockouts.entries()) as Array<
 			[AiId, number]
 		>,
+		personaSpatial: structuredClone(phase.personaSpatial),
 	};
 }
 
@@ -150,6 +153,7 @@ function deserializePhaseState(persisted: PersistedPhaseState): PhaseState {
 		actionLog: [...persisted.actionLog],
 		lockedOut: new Set<AiId>(persisted.lockedOut),
 		chatLockouts: new Map<AiId, number>(persisted.chatLockouts),
+		personaSpatial: structuredClone(persisted.personaSpatial ?? {}),
 		// Re-attach function fields from canonical config
 		...(config?.winCondition !== undefined
 			? { winCondition: config.winCondition }
