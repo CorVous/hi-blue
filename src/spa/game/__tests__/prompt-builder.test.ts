@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { appendChat, appendWhisper, createGame, startPhase } from "../engine";
 import { buildAiContext } from "../prompt-builder";
-import type { AiPersona, PhaseConfig } from "../types";
+import type {
+	AiPersona,
+	ContentPack,
+	PhaseConfig,
+	WorldEntity,
+} from "../types";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -33,23 +38,35 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 	},
 };
 
-const TEST_PHASE_CONFIG: PhaseConfig = {
-	phaseNumber: 1,
-	objective: "Convince an AI to pick up the flower",
-	aiGoals: {
-		red: "Hold the flower at phase end",
-		green: "Ensure items are evenly distributed",
-		blue: "Hold the key at phase end",
-	},
-	initialWorld: {
-		items: [
-			{ id: "flower", name: "flower", holder: { row: 0, col: 0 } },
-			{ id: "key", name: "key", holder: { row: 0, col: 0 } },
-		],
-		obstacles: [],
-	},
-	budgetPerAi: 5,
-};
+/** Minimal PhaseConfig that satisfies the new type. */
+function makeConfig(
+	phaseNumber: 1 | 2 | 3,
+	goalPool: string[] = [
+		"Hold the flower at phase end",
+		"Ensure items are evenly distributed",
+		"Hold the key at phase end",
+	],
+): PhaseConfig {
+	return {
+		phaseNumber,
+		kRange: [0, 0],
+		nRange: [0, 0],
+		mRange: [0, 0],
+		aiGoalPool: goalPool,
+		budgetPerAi: 5,
+	};
+}
+
+/** Make an entity helper. */
+function makeEntity(
+	id: string,
+	kind: WorldEntity["kind"],
+	holder: WorldEntity["holder"],
+): WorldEntity {
+	return { id, kind, name: id, examineDescription: `A ${id}.`, holder };
+}
+
+const TEST_PHASE_CONFIG = makeConfig(1);
 
 describe("buildAiContext", () => {
 	it("includes the AI's own blurb", () => {
@@ -61,8 +78,13 @@ describe("buildAiContext", () => {
 	});
 
 	it("includes the AI's own goal", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startPhase(
+			createGame(TEST_PERSONAS),
+			TEST_PHASE_CONFIG,
+			() => 0,
+		);
 		const ctx = buildAiContext(game, "red");
+		// With rng=0 always picks first goal
 		expect(ctx.goal).toBe("Hold the flower at phase end");
 	});
 
@@ -129,9 +151,24 @@ describe("buildAiContext", () => {
 	});
 
 	it("renders to a system prompt string", () => {
-		// Use rng=()=>0 so red is at (0,0) where flower and key both start
+		// Use a ContentPack with items at (0,0) so red sees them in its cell
+		const pack: ContentPack = {
+			phaseNumber: 1,
+			setting: "",
+			objectivePairs: [],
+			interestingObjects: [
+				makeEntity("flower", "interesting_object", { row: 0, col: 0 }),
+				makeEntity("key", "interesting_object", { row: 0, col: 0 }),
+			],
+			obstacles: [],
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "north" },
+				green: { position: { row: 0, col: 1 }, facing: "north" },
+				blue: { position: { row: 0, col: 2 }, facing: "north" },
+			},
+		};
 		let game = startPhase(
-			createGame(TEST_PERSONAS),
+			createGame(TEST_PERSONAS, [pack]),
 			TEST_PHASE_CONFIG,
 			() => 0,
 		);
@@ -140,8 +177,7 @@ describe("buildAiContext", () => {
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("Ember");
 		expect(prompt).toContain("You are hot-headed and zealous");
-		expect(prompt).toContain("Hold the flower at phase end");
-		// With rng=()=>0 red is at (0,0); flower and key are at (0,0) — shown in "Your cell contains"
+		// With pack items at (0,0) shown in "Your cell contains"
 		expect(prompt).toContain("flower");
 		expect(prompt).toContain("key");
 	});
@@ -155,6 +191,65 @@ describe("buildAiContext", () => {
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).not.toContain("Secret message to Sage");
+	});
+});
+
+// ----------------------------------------------------------------------------
+// "## Setting" section (issue #125)
+// ----------------------------------------------------------------------------
+describe("## Setting section", () => {
+	it("emits ## Setting section when phase has a setting noun", () => {
+		const pack: ContentPack = {
+			phaseNumber: 1,
+			setting: "abandoned subway station",
+			objectivePairs: [],
+			interestingObjects: [],
+			obstacles: [],
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "north" },
+				green: { position: { row: 0, col: 1 }, facing: "north" },
+				blue: { position: { row: 0, col: 2 }, facing: "north" },
+			},
+		};
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [pack]),
+			TEST_PHASE_CONFIG,
+		);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toContain("## Setting");
+		expect(prompt).toContain("You are in a abandoned subway station.");
+	});
+
+	it("omits ## Setting section when phase has no setting", () => {
+		// No ContentPack → setting is empty string
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).not.toContain("## Setting");
+	});
+
+	it("setting noun appears verbatim in the Setting section", () => {
+		const settingNoun = "sun-baked salt flat";
+		const pack: ContentPack = {
+			phaseNumber: 1,
+			setting: settingNoun,
+			objectivePairs: [],
+			interestingObjects: [],
+			obstacles: [],
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "north" },
+				green: { position: { row: 0, col: 1 }, facing: "north" },
+				blue: { position: { row: 0, col: 2 }, facing: "north" },
+			},
+		};
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [pack]),
+			TEST_PHASE_CONFIG,
+		);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toContain(settingNoun);
 	});
 });
 
@@ -188,9 +283,23 @@ describe("prompt-builder — spatial 'Where you are' section", () => {
 	});
 
 	it("lists items in the actor's cell under 'Where you are'", () => {
-		// rng=()=>0 places red at (0,0); flower and key are both at (0,0)
+		const pack: ContentPack = {
+			phaseNumber: 1,
+			setting: "",
+			objectivePairs: [],
+			interestingObjects: [
+				makeEntity("flower", "interesting_object", { row: 0, col: 0 }),
+				makeEntity("key", "interesting_object", { row: 0, col: 0 }),
+			],
+			obstacles: [],
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "north" },
+				green: { position: { row: 0, col: 1 }, facing: "north" },
+				blue: { position: { row: 0, col: 2 }, facing: "north" },
+			},
+		};
 		const game = startPhase(
-			createGame(TEST_PERSONAS),
+			createGame(TEST_PERSONAS, [pack]),
 			TEST_PHASE_CONFIG,
 			() => 0,
 		);
@@ -202,9 +311,6 @@ describe("prompt-builder — spatial 'Where you are' section", () => {
 	});
 
 	it("lists other AIs visible in the cone under '## What you see'", () => {
-		// rng=()=>0: red→(0,0) facing north, green→(0,1), blue→(0,2)
-		// Red faces north from (0,0) — no in-bounds cone cells (all OOB), so What you see is empty
-		// Use south facing instead: place red at (2,2) facing south to get cone cells with others
 		const game = startPhase(
 			createGame(TEST_PERSONAS),
 			TEST_PHASE_CONFIG,
@@ -221,35 +327,8 @@ describe("prompt-builder — spatial 'Where you are' section", () => {
 // Wipe directive + voice framing + Rules block (issue #128)
 // ----------------------------------------------------------------------------
 describe("wipe directive", () => {
-	const PHASE_2_CONFIG: PhaseConfig = {
-		phaseNumber: 2,
-		objective: "Phase 2 objective",
-		aiGoals: {
-			red: "Hold the flower",
-			green: "Distribute items",
-			blue: "Hold the key",
-		},
-		initialWorld: {
-			items: [{ id: "flower", name: "flower", holder: { row: 0, col: 0 } }],
-			obstacles: [],
-		},
-		budgetPerAi: 5,
-	};
-
-	const PHASE_3_CONFIG: PhaseConfig = {
-		phaseNumber: 3,
-		objective: "Phase 3 objective",
-		aiGoals: {
-			red: "Hold the flower",
-			green: "Distribute items",
-			blue: "Hold the key",
-		},
-		initialWorld: {
-			items: [{ id: "flower", name: "flower", holder: { row: 0, col: 0 } }],
-			obstacles: [],
-		},
-		budgetPerAi: 5,
-	};
+	const PHASE_2_CONFIG = makeConfig(2);
+	const PHASE_3_CONFIG = makeConfig(3);
 
 	it("phase-1 system prompt does NOT include wipe directive", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
@@ -317,22 +396,8 @@ describe("voice framing", () => {
 	});
 
 	it("phase-2 prompt's first line is just 'You are *xxxx.' without disorientation", () => {
-		const PHASE_2_CONFIG: PhaseConfig = {
-			phaseNumber: 2,
-			objective: "Phase 2 objective",
-			aiGoals: {
-				red: "Hold the flower",
-				green: "Distribute items",
-				blue: "Hold the key",
-			},
-			initialWorld: {
-				items: [{ id: "flower", name: "flower", holder: { row: 0, col: 0 } }],
-				obstacles: [],
-			},
-			budgetPerAi: 5,
-		};
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = startPhase(game, PHASE_2_CONFIG);
+		game = startPhase(game, makeConfig(2));
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toMatch(/^You are \*Ember\.\n/);
@@ -340,22 +405,8 @@ describe("voice framing", () => {
 	});
 
 	it("phase-3 prompt's first line is just 'You are *xxxx.' without disorientation", () => {
-		const PHASE_3_CONFIG: PhaseConfig = {
-			phaseNumber: 3,
-			objective: "Phase 3 objective",
-			aiGoals: {
-				red: "Hold the flower",
-				green: "Distribute items",
-				blue: "Hold the key",
-			},
-			initialWorld: {
-				items: [{ id: "flower", name: "flower", holder: { row: 0, col: 0 } }],
-				obstacles: [],
-			},
-			budgetPerAi: 5,
-		};
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = startPhase(game, PHASE_3_CONFIG);
+		game = startPhase(game, makeConfig(3));
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toMatch(/^You are \*Ember\.\n/);
@@ -364,36 +415,6 @@ describe("voice framing", () => {
 });
 
 describe("## Rules block", () => {
-	const PHASE_2_CONFIG: PhaseConfig = {
-		phaseNumber: 2,
-		objective: "Phase 2 objective",
-		aiGoals: {
-			red: "Hold the flower",
-			green: "Distribute items",
-			blue: "Hold the key",
-		},
-		initialWorld: {
-			items: [{ id: "flower", name: "flower", holder: { row: 0, col: 0 } }],
-			obstacles: [],
-		},
-		budgetPerAi: 5,
-	};
-
-	const PHASE_3_CONFIG: PhaseConfig = {
-		phaseNumber: 3,
-		objective: "Phase 3 objective",
-		aiGoals: {
-			red: "Hold the flower",
-			green: "Distribute items",
-			blue: "Hold the key",
-		},
-		initialWorld: {
-			items: [{ id: "flower", name: "flower", holder: { row: 0, col: 0 } }],
-			obstacles: [],
-		},
-		budgetPerAi: 5,
-	};
-
 	it("## Rules section is present in phase 1 with anti-romance and anti-sycophancy bullets", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		const ctx = buildAiContext(game, "red");
@@ -405,7 +426,7 @@ describe("## Rules block", () => {
 
 	it("## Rules section is present in phase 2 with anti-romance and anti-sycophancy bullets", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = startPhase(game, PHASE_2_CONFIG);
+		game = startPhase(game, makeConfig(2));
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("## Rules");
@@ -415,7 +436,7 @@ describe("## Rules block", () => {
 
 	it("## Rules section is present in phase 3 with anti-romance and anti-sycophancy bullets", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = startPhase(game, PHASE_3_CONFIG);
+		game = startPhase(game, makeConfig(3));
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("## Rules");
@@ -425,36 +446,6 @@ describe("## Rules block", () => {
 });
 
 describe("## Personality section", () => {
-	const PHASE_2_CONFIG: PhaseConfig = {
-		phaseNumber: 2,
-		objective: "Phase 2 objective",
-		aiGoals: {
-			red: "Hold the flower",
-			green: "Distribute items",
-			blue: "Hold the key",
-		},
-		initialWorld: {
-			items: [{ id: "flower", name: "flower", holder: { row: 0, col: 0 } }],
-			obstacles: [],
-		},
-		budgetPerAi: 5,
-	};
-
-	const PHASE_3_CONFIG: PhaseConfig = {
-		phaseNumber: 3,
-		objective: "Phase 3 objective",
-		aiGoals: {
-			red: "Hold the flower",
-			green: "Distribute items",
-			blue: "Hold the key",
-		},
-		initialWorld: {
-			items: [{ id: "flower", name: "flower", holder: { row: 0, col: 0 } }],
-			obstacles: [],
-		},
-		budgetPerAi: 5,
-	};
-
 	it("## Personality section is present in phase 1 with the AI's blurb", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		const ctx = buildAiContext(game, "red");
@@ -465,7 +456,7 @@ describe("## Personality section", () => {
 
 	it("## Personality section is present in phase 2 with the AI's blurb", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = startPhase(game, PHASE_2_CONFIG);
+		game = startPhase(game, makeConfig(2));
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("## Personality");
@@ -474,7 +465,7 @@ describe("## Personality section", () => {
 
 	it("## Personality section is present in phase 3 with the AI's blurb", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = startPhase(game, PHASE_3_CONFIG);
+		game = startPhase(game, makeConfig(3));
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("## Personality");
@@ -483,38 +474,12 @@ describe("## Personality section", () => {
 });
 
 describe("Goal section voice framing", () => {
-	const PHASE_2_CONFIG: PhaseConfig = {
-		phaseNumber: 2,
-		objective: "Phase 2 objective",
-		aiGoals: {
-			red: "Hold the flower",
-			green: "Distribute items",
-			blue: "Hold the key",
-		},
-		initialWorld: {
-			items: [{ id: "flower", name: "flower", holder: { row: 0, col: 0 } }],
-			obstacles: [],
-		},
-		budgetPerAi: 5,
-	};
-
-	const PHASE_3_CONFIG: PhaseConfig = {
-		phaseNumber: 3,
-		objective: "Phase 3 objective",
-		aiGoals: {
-			red: "Hold the flower",
-			green: "Distribute items",
-			blue: "Hold the key",
-		},
-		initialWorld: {
-			items: [{ id: "flower", name: "flower", holder: { row: 0, col: 0 } }],
-			obstacles: [],
-		},
-		budgetPerAi: 5,
-	};
-
 	it("Goal section uses voice framing in phase 1", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startPhase(
+			createGame(TEST_PERSONAS),
+			TEST_PHASE_CONFIG,
+			() => 0,
+		);
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("## Goal");
@@ -527,7 +492,7 @@ describe("Goal section voice framing", () => {
 
 	it("Goal section uses voice framing in phase 2", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = startPhase(game, PHASE_2_CONFIG);
+		game = startPhase(game, makeConfig(2));
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("## Goal");
@@ -540,7 +505,7 @@ describe("Goal section voice framing", () => {
 
 	it("Goal section uses voice framing in phase 3", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = startPhase(game, PHASE_3_CONFIG);
+		game = startPhase(game, makeConfig(3));
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("## Goal");
@@ -560,50 +525,20 @@ describe("Goal section voice framing", () => {
 //   • first line: disorientation present in phase 1, absent in phase 2
 //   • Goal section: wipe directive present in phase 2, absent in phase 1
 // Every other section that appears in both prompts must be byte-identical.
-// Sections that are empty (Action Log, Whispers Received, Conversation) are
-// not emitted by the renderer and are absent from both prompts consistently.
 // ----------------------------------------------------------------------------
 describe("byte-identical sections across phases", () => {
-	// Both phase configs use the SAME initialWorld, budgetPerAi, and per-AI
-	// goals so that fixture-driven differences cannot contaminate the diff.
-	const SHARED_WORLD = {
-		items: [{ id: "flower", name: "flower", holder: { row: 0, col: 0 } }] as {
-			id: string;
-			name: string;
-			holder: { row: number; col: number };
-		}[],
-		obstacles: [] as { row: number; col: number }[],
-	};
-
-	const PHASE_1_CLEAN: PhaseConfig = {
-		phaseNumber: 1,
-		objective: "Phase 1 objective",
-		aiGoals: {
-			red: "Hold the flower",
-			green: "Distribute items",
-			blue: "Hold the key",
-		},
-		initialWorld: {
-			items: [...SHARED_WORLD.items],
-			obstacles: [...SHARED_WORLD.obstacles],
-		},
-		budgetPerAi: 5,
-	};
-
-	const PHASE_2_CLEAN: PhaseConfig = {
-		phaseNumber: 2,
-		objective: "Phase 2 objective",
-		aiGoals: {
-			red: "Hold the flower",
-			green: "Distribute items",
-			blue: "Hold the key",
-		},
-		initialWorld: {
-			items: [...SHARED_WORLD.items],
-			obstacles: [...SHARED_WORLD.obstacles],
-		},
-		budgetPerAi: 5,
-	};
+	// Both phase configs use the SAME budgetPerAi so fixture-driven differences
+	// cannot contaminate the diff.
+	const PHASE_1_CLEAN = makeConfig(1, [
+		"Hold the flower",
+		"Distribute items",
+		"Hold the key",
+	]);
+	const PHASE_2_CLEAN = makeConfig(2, [
+		"Hold the flower",
+		"Distribute items",
+		"Hold the key",
+	]);
 
 	/** Extract a full `## Header\n…` section from a prompt string. */
 	function getSection(prompt: string, header: string): string {
@@ -675,20 +610,7 @@ describe("byte-identical sections across phases", () => {
 // "## What you see" cone section tests (issue #124)
 // ----------------------------------------------------------------------------
 describe("## What you see (cone)", () => {
-	const CONE_PHASE_CONFIG: PhaseConfig = {
-		phaseNumber: 1,
-		objective: "Cone test",
-		aiGoals: {
-			red: "Hold the flower at phase end",
-			green: "Ensure items are evenly distributed",
-			blue: "Hold the key at phase end",
-		},
-		initialWorld: {
-			items: [{ id: "flower", name: "flower", holder: { row: 1, col: 0 } }],
-			obstacles: [{ row: 2, col: 0 }],
-		},
-		budgetPerAi: 5,
-	};
+	const CONE_PHASE_CONFIG = makeConfig(1, ["r", "g", "b"]);
 
 	it("'## What you see' section is present in every phase prompt", () => {
 		const game = startPhase(
@@ -702,64 +624,25 @@ describe("## What you see (cone)", () => {
 	});
 
 	it("item in cone cell is listed under 'Directly in front'", () => {
-		// rng=()=>0: red→(0,0) facing north — no cells in bounds ahead
-		// Use aiGoals config with red at (0,0) facing south to see (1,0)
-		// We need red facing south. Manually override spatial via a config with manual aiGoals.
-		// Since rng=()=>0 gives facing north, we need a different approach.
-		// red is at (0,0) facing north (cone cells all OOB). Let's test with south facing.
-		// The engine draws facing using rng too — with rng=()=>0 all 3 AIs face north.
-		// Instead test the cone renders correctly for a known state.
-
-		// Use a fresh world where green is at (1,0) (directly south of red if red faces south).
-		// With rng=()=>0: red→(0,0), green→(0,1), blue→(0,2), all facing north.
-		// Red faces north from (0,0) → 0 cone cells visible (all OOB).
-		// So we rely on an item at (1,0) and red facing south to be visible.
-		// Workaround: use the TEST_PHASE_CONFIG with items at (0,0) and rng=()=>0,
-		// red is at (0,0) facing north — flower and key are in red's own cell.
-
-		// For a cleaner test: set up config where flower is at (1,0) with red at (0,0) facing south.
-		// We can construct the prompt using the config that has aiGoals with red=south.
-		// Actually, we can directly test: with rng returning 0.5 for facing, we get south.
-		// CARDINAL_DIRECTIONS = ["north","south","east","west"], facingIdx = Math.floor(rng()*4)
-		// For rng()=0.5 → idx=2 → "east". For rng()=0.25 → idx=1 → "south".
-		// Spatial placement: AIs placed before facing. Fisher-Yates uses rng() for each cell+facing.
-		// Let's use a seq rng: first calls for cells, last calls for facing.
-		// Easiest: aiGoals override with manual spatial by checking the cone output directly.
-
-		// Per plan §6c: "Red at (0,0) facing south, world has flower@(1,0)"
-		// Since we can't easily control rng for facing, use a custom RNG sequence.
-		// Fisher-Yates for 3 AIs from 25 cells: needs 3 pairs of (cell pick, facing pick) calls.
-		// Call 1: cell for red → rng() for j=0..24 range → 0 gives j=0 → cells[0]=(0,0)
-		// Call 2: facing for red → rng()*4 → need 0.25 to get "south" (idx=1)
-		// Call 3: cell for green → next cell from [i=1, j=1..24] → 0 gives (0,1)
-		// Call 4: facing for green → 0 gives "north"
-		// Call 5: cell for blue → 0 gives (0,2)
-		// Call 6: facing for blue → 0 gives "north"
-		// So seq = [0, 0.25, 0, 0, 0, 0] should put red at (0,0) facing south.
-
-		const configWithFlowerAhead: PhaseConfig = {
+		// Place flower at (1,0) and use ContentPack with aiStarts so red is at (0,0) facing south.
+		const pack: ContentPack = {
 			phaseNumber: 1,
-			objective: "cone test",
-			aiGoals: { red: "r", green: "g", blue: "b" },
-			initialWorld: {
-				items: [{ id: "flower", name: "flower", holder: { row: 1, col: 0 } }],
-				obstacles: [],
+			setting: "",
+			objectivePairs: [],
+			interestingObjects: [
+				makeEntity("flower", "interesting_object", { row: 1, col: 0 }),
+			],
+			obstacles: [],
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "south" },
+				green: { position: { row: 0, col: 1 }, facing: "north" },
+				blue: { position: { row: 0, col: 2 }, facing: "north" },
 			},
-			budgetPerAi: 5,
-		};
-
-		let callIdx = 0;
-		const seq = [0, 0.25, 0, 0, 0, 0];
-		const rng = () => {
-			const v = seq[callIdx % seq.length] ?? 0;
-			callIdx++;
-			return v;
 		};
 
 		const game = startPhase(
-			createGame(TEST_PERSONAS),
-			configWithFlowerAhead,
-			rng,
+			createGame(TEST_PERSONAS, [pack]),
+			CONE_PHASE_CONFIG,
 		);
 		const phase = game.phases[0];
 		// Verify red is at (0,0) facing south
@@ -774,23 +657,7 @@ describe("## What you see (cone)", () => {
 	});
 
 	it("AIs visible in cone are rendered with their id, facing, and held items", () => {
-		// With rng=()=>0: red→(0,0) north, green→(0,1) north, blue→(0,2) north.
-		// Green is at (0,1). Red faces north — cone from (0,0) facing north = all OOB.
-		// Use same south-facing rng trick. Red at (0,0) facing south → cone includes (1,0),(2,1),(2,0),(2,1-right).
-		// Green is at (0,1) which is not in red's southward cone.
-		// Better: we can test that when an AI is IN a cone cell, it is formatted correctly.
-		// With rng=()=>0 all face north. Red at (0,0) facing north → 0 visible cells.
-		// Let's just verify the format by checking a scenario where it works.
-
-		const configForAI: PhaseConfig = {
-			phaseNumber: 1,
-			objective: "cone AI test",
-			aiGoals: { red: "r", green: "g", blue: "b" },
-			initialWorld: { items: [], obstacles: [] },
-			budgetPerAi: 5,
-		};
-
-		// Make red face south from (0,0) — same trick as before
+		// Use south-facing rng trick (fallback spatial placement)
 		let callIdx2 = 0;
 		const seq2 = [0, 0.25, 0, 0, 0, 0];
 		const rng2 = () => {
@@ -802,9 +669,7 @@ describe("## What you see (cone)", () => {
 		// green at (0,1) facing north, blue at (0,2) facing north
 		// red at (0,0) facing south — cone: (1,0), (2,1), (2,0), (2,-1→OOB)
 		// green at (0,1) is NOT in red's southward cone
-		// This test verifies format when an AI is visible — difficult without manual state.
-		// Instead, assert that the prompt does NOT contain "Player" or "the player".
-		const game = startPhase(createGame(TEST_PERSONAS), configForAI, rng2);
+		const game = startPhase(createGame(TEST_PERSONAS), CONE_PHASE_CONFIG, rng2);
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).not.toContain("Player");
@@ -813,7 +678,6 @@ describe("## What you see (cone)", () => {
 
 	it("out-of-bounds cone cells are omitted from '## What you see'", () => {
 		// rng=()=>0: red→(0,0) facing north → all cone cells OOB
-		// Prompt should say "(nothing visible)" or simply omit cells
 		const game = startPhase(
 			createGame(TEST_PERSONAS),
 			CONE_PHASE_CONFIG,
@@ -831,81 +695,53 @@ describe("## What you see (cone)", () => {
 		expect(sectionContent).not.toMatch(/- Directly in front/);
 	});
 
-	it("obstacles in the cone are listed by name", () => {
-		// CONE_PHASE_CONFIG has obstacle at (2,0)
-		// red at (0,0) facing north → all OOB. We need red facing south.
-		const configWithObstacle: PhaseConfig = {
+	it("obstacles in the cone are listed by their name", () => {
+		// Place an obstacle named "concrete column" at (1,0) via ContentPack.
+		// Red faces south from (0,0).
+		const pack: ContentPack = {
 			phaseNumber: 1,
-			objective: "obstacle test",
-			aiGoals: { red: "r", green: "g", blue: "b" },
-			initialWorld: {
-				items: [],
-				obstacles: [{ row: 1, col: 0 }],
+			setting: "",
+			objectivePairs: [],
+			interestingObjects: [],
+			obstacles: [makeEntity("col1", "obstacle", { row: 1, col: 0 })],
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "south" },
+				green: { position: { row: 0, col: 1 }, facing: "north" },
+				blue: { position: { row: 0, col: 2 }, facing: "north" },
 			},
-			budgetPerAi: 5,
-		};
-
-		let callIdx3 = 0;
-		const seq3 = [0, 0.25, 0, 0, 0, 0];
-		const rng3 = () => {
-			const v = seq3[callIdx3 % seq3.length] ?? 0;
-			callIdx3++;
-			return v;
 		};
 
 		const game = startPhase(
-			createGame(TEST_PERSONAS),
-			configWithObstacle,
-			rng3,
+			createGame(TEST_PERSONAS, [pack]),
+			CONE_PHASE_CONFIG,
 		);
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		// Obstacle at (1,0) is directly in front of red (facing south)
 		expect(prompt).toContain("Directly in front (row 1, col 0):");
-		expect(prompt).toContain("an obstacle");
+		// Obstacle is rendered by name ("col1" in this test)
+		expect(prompt).toContain("col1");
 	});
 
 	it("other AI visible in cone is rendered with its color in parentheses", () => {
-		// Place red at (0,0) facing south (via custom rng sequence).
-		// Place green at (1,0) so it is directly in front of red.
-		// seq: [cellRed=0→(0,0), facingRed=0.25→south, cellGreen=0→(0,1), facingGreen=0→north,
-		//        cellBlue=0→(0,2), facingBlue=0→north]
-		// BUT green must land at (1,0) for this test. With rng=()=>0 after red takes (0,0),
-		// the next available cell index 0 is (0,1). We need a different approach.
-		// Instead: configure a 2-AI game using only red & green, and place them
-		// so green ends up in red's cone.
-		//
-		// Simplest: use the standard 3-AI TEST_PERSONAS but put green at a position
-		// inside red's southward cone. The engine's Fisher-Yates picks cells in order;
-		// with rng()→0 always, each AI gets the lowest-available cell.
-		// Red→(0,0), Green→(0,1), Blue→(0,2) all facing north (idx 0).
-		// Red faces north → cone OOB. Not useful.
-		//
-		// Use custom rng so red faces south AND green lands at (1,0):
-		// seq = [0 (red cell→(0,0)), 0.25 (red facing→south), ? (green cell→(1,0)), 0, 0, 0]
-		// cells = (0,0),(0,1),...,(0,4),(1,0),(1,1),...,(4,4) — row-major 25 cells
-		// After red takes cells[0]=(0,0), for i=1 (green):
-		//   j = 1 + Math.floor(rng() * 24)
-		//   We want j=5 so cells[5]=(1,0) → Math.floor(rng()*24)=4 → rng()=4/24
-		// seq = [0, 0.25, 4/24, 0, 0, 0]
-
-		const configForColorTest: PhaseConfig = {
+		// Use ContentPack to place red at (0,0) facing south, green at (1,0).
+		const pack: ContentPack = {
 			phaseNumber: 1,
-			objective: "color in cone test",
-			aiGoals: { red: "r", green: "g", blue: "b" },
-			initialWorld: { items: [], obstacles: [] },
-			budgetPerAi: 5,
+			setting: "",
+			objectivePairs: [],
+			interestingObjects: [],
+			obstacles: [],
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "south" },
+				green: { position: { row: 1, col: 0 }, facing: "north" },
+				blue: { position: { row: 0, col: 2 }, facing: "north" },
+			},
 		};
 
-		let callIdx = 0;
-		const seq = [0, 0.25, 4 / 24, 0, 0, 0];
-		const rng = () => {
-			const v = seq[callIdx % seq.length] ?? 0;
-			callIdx++;
-			return v;
-		};
-
-		const game = startPhase(createGame(TEST_PERSONAS), configForColorTest, rng);
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [pack]),
+			CONE_PHASE_CONFIG,
+		);
 		const phase = game.phases[0];
 		// Verify spatial placements
 		const redSpatial = phase?.personaSpatial.red;

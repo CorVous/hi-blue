@@ -22,7 +22,7 @@
  *   chat_lockout         — { type, aiId, message }
  *   chat_lockout_resolved — { type, aiId }
  *   action_log — { type, entry }
- *   phase_advanced — { type, phase, objective }
+ *   phase_advanced — { type, phase, setting }
  *   game_ended     — { type }
  */
 
@@ -41,7 +41,7 @@ export type SseEvent =
 	| { type: "chat_lockout"; aiId: AiId; message: string }
 	| { type: "chat_lockout_resolved"; aiId: AiId }
 	| { type: "action_log"; entry: RoundResult["actions"][number] }
-	| { type: "phase_advanced"; phase: 1 | 2 | 3; objective: string }
+	| { type: "phase_advanced"; phase: 1 | 2 | 3; setting: string }
 	| { type: "game_ended" };
 
 /**
@@ -160,7 +160,7 @@ export function encodeRoundResult(
 		events.push({
 			type: "phase_advanced",
 			phase: phaseAfter.phaseNumber,
-			objective: phaseAfter.objective,
+			setting: phaseAfter.setting,
 		});
 	}
 

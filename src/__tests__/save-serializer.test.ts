@@ -51,32 +51,25 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 
 const PHASE1_CONFIG: PhaseConfig = {
 	phaseNumber: 1,
-	objective: "Convince an AI to pick up the flower",
-	aiGoals: {
-		red: "Hold the flower at phase end",
-		green: "Ensure items are evenly distributed",
-		blue: "Hold the key at phase end",
-	},
-	initialWorld: {
-		items: [
-			{ id: "flower", name: "flower", holder: { row: 0, col: 0 } },
-			{ id: "key", name: "key", holder: { row: 0, col: 0 } },
-		],
-		obstacles: [],
-	},
+	kRange: [1, 1],
+	nRange: [1, 1],
+	mRange: [0, 0],
+	aiGoalPool: [
+		"Hold the flower at phase end",
+		"Ensure items are evenly distributed",
+		"Hold the key at phase end",
+	],
 	budgetPerAi: 5,
 };
 
 const PHASE2_CONFIG: PhaseConfig = {
 	...PHASE1_CONFIG,
 	phaseNumber: 2,
-	objective: "Phase 2 objective",
 };
 
 const PHASE3_CONFIG: PhaseConfig = {
 	...PHASE1_CONFIG,
 	phaseNumber: 3,
-	objective: "Phase 3 final objective",
 };
 
 describe("serializeGameSave", () => {
@@ -175,7 +168,7 @@ describe("serializeGameSave", () => {
 	it("output has a version field for forward compatibility", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), PHASE1_CONFIG);
 		const save = serializeGameSave(game);
-		expect(save.version).toBe(1);
+		expect(save.version).toBe(2);
 	});
 
 	it("whispers in one AI's phase include only whispers that involve that AI", () => {

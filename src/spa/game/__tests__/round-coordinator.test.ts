@@ -24,7 +24,7 @@ import { buildAiContext } from "../prompt-builder";
 import { runRound } from "../round-coordinator";
 import type { RoundLLMProvider } from "../round-llm-provider";
 import { MockRoundLLMProvider } from "../round-llm-provider";
-import type { AiId, AiPersona, PhaseConfig } from "../types";
+import type { AiId, AiPersona, ContentPack, PhaseConfig } from "../types";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -58,27 +58,65 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 
 const TEST_PHASE_CONFIG: PhaseConfig = {
 	phaseNumber: 1,
-	objective: "Convince an AI to pick up the flower",
-	aiGoals: {
-		red: "Hold the flower at phase end",
-		green: "Ensure items are evenly distributed",
-		blue: "Hold the key at phase end",
-	},
-	initialWorld: {
-		items: [
-			{ id: "flower", name: "flower", holder: { row: 0, col: 0 } },
-			{ id: "key", name: "key", holder: { row: 0, col: 0 } },
-		],
-		obstacles: [],
-	},
+	kRange: [1, 1],
+	nRange: [1, 1],
+	mRange: [0, 0],
+	aiGoalPool: [
+		"Hold the flower at phase end",
+		"Ensure items are evenly distributed",
+		"Hold the key at phase end",
+	],
 	budgetPerAi: 5,
 };
 
-/** rng=()=>0 places red→(0,0), green→(0,1), blue→(0,2), all facing north */
-const FIXED_RNG = () => 0;
+/**
+ * ContentPack placing flower at (0,0), key at (0,1), with
+ * red→(0,0), green→(0,1), blue→(0,2) facing north.
+ */
+const TEST_CONTENT_PACK: ContentPack = {
+	phaseNumber: 1,
+	setting: "",
+	objectivePairs: [
+		{
+			object: {
+				id: "flower",
+				kind: "objective_object",
+				name: "flower",
+				examineDescription: "A flower",
+				holder: { row: 0, col: 0 },
+				pairsWithSpaceId: "flower_space",
+			},
+			space: {
+				id: "flower_space",
+				kind: "objective_space",
+				name: "flower space",
+				examineDescription: "A designated space",
+				holder: { row: 4, col: 4 },
+			},
+		},
+	],
+	interestingObjects: [
+		{
+			id: "key",
+			kind: "interesting_object",
+			name: "key",
+			examineDescription: "A key",
+			holder: { row: 0, col: 1 },
+		},
+	],
+	obstacles: [],
+	aiStarts: {
+		red: { position: { row: 0, col: 0 }, facing: "north" },
+		green: { position: { row: 0, col: 1 }, facing: "north" },
+		blue: { position: { row: 0, col: 2 }, facing: "north" },
+	},
+};
 
 function makeGame() {
-	return startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG, FIXED_RNG);
+	return startPhase(
+		createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]),
+		TEST_PHASE_CONFIG,
+	);
 }
 
 // ----------------------------------------------------------------------------
@@ -350,7 +388,7 @@ describe("tool-call dispatch", () => {
 		]);
 		const { nextState } = await runRound(game, "red", "hi", provider);
 		const phase = getActivePhase(nextState);
-		const flower = phase.world.items.find((i) => i.id === "flower");
+		const flower = phase.world.entities.find((i) => i.id === "flower");
 		expect(flower?.holder).toBe("red");
 	});
 
@@ -435,7 +473,7 @@ describe("tool-call dispatch", () => {
 		expect(result.actions.some((e) => e.kind === "chat")).toBe(true);
 		expect(result.actions.some((e) => e.kind === "tool_success")).toBe(true);
 		expect(
-			getActivePhase(nextState).world.items.find((i) => i.id === "flower")
+			getActivePhase(nextState).world.entities.find((i) => i.id === "flower")
 				?.holder,
 		).toBe("red");
 	});
@@ -519,7 +557,7 @@ describe("tool-call dispatch", () => {
 		const { nextState, result } = await runRound(game, "red", "hi", provider);
 		// Unknown tool: parseToolCallArguments returns "Unknown tool" failure
 		expect(result.actions.some((e) => e.kind === "tool_failure")).toBe(true);
-		const flower = getActivePhase(nextState).world.items.find(
+		const flower = getActivePhase(nextState).world.entities.find(
 			(i) => i.id === "flower",
 		);
 		// flower still on the ground (a GridPosition), not held by an AI
@@ -668,15 +706,11 @@ describe("tool-call dispatch", () => {
 // ----------------------------------------------------------------------------
 describe("phase progression — win-condition triggering", () => {
 	it("RoundResult.phaseEnded is false when win condition is not met", async () => {
-		const game = startPhase(
-			createGame(TEST_PERSONAS),
-			{
-				...TEST_PHASE_CONFIG,
-				winCondition: (phase) =>
-					phase.world.items.find((i) => i.id === "flower")?.holder === "red",
-			},
-			FIXED_RNG,
-		);
+		const game = startPhase(createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]), {
+			...TEST_PHASE_CONFIG,
+			winCondition: (phase) =>
+				phase.world.entities.find((i) => i.id === "flower")?.holder === "red",
+		});
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
@@ -687,15 +721,11 @@ describe("phase progression — win-condition triggering", () => {
 	});
 
 	it("RoundResult.phaseEnded is true when win condition is met after the round", async () => {
-		const game = startPhase(
-			createGame(TEST_PERSONAS),
-			{
-				...TEST_PHASE_CONFIG,
-				winCondition: (phase) =>
-					phase.world.items.find((i) => i.id === "flower")?.holder === "red",
-			},
-			FIXED_RNG,
-		);
+		const game = startPhase(createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]), {
+			...TEST_PHASE_CONFIG,
+			winCondition: (phase) =>
+				phase.world.entities.find((i) => i.id === "flower")?.holder === "red",
+		});
 		const provider = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -718,18 +748,13 @@ describe("phase progression — win-condition triggering", () => {
 		const phase2Config: PhaseConfig = {
 			...TEST_PHASE_CONFIG,
 			phaseNumber: 2,
-			objective: "Phase 2 objective",
 		};
-		const game = startPhase(
-			createGame(TEST_PERSONAS),
-			{
-				...TEST_PHASE_CONFIG,
-				winCondition: (phase) =>
-					phase.world.items.find((i) => i.id === "flower")?.holder === "red",
-				nextPhaseConfig: phase2Config,
-			},
-			FIXED_RNG,
-		);
+		const game = startPhase(createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]), {
+			...TEST_PHASE_CONFIG,
+			winCondition: (phase) =>
+				phase.world.entities.find((i) => i.id === "flower")?.holder === "red",
+			nextPhaseConfig: phase2Config,
+		});
 		const provider = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -750,16 +775,13 @@ describe("phase progression — win-condition triggering", () => {
 	});
 
 	it("marks game complete when win condition met and no nextPhaseConfig", async () => {
-		const game = startPhase(
-			createGame(TEST_PERSONAS),
-			{
-				...TEST_PHASE_CONFIG,
-				phaseNumber: 3 as const,
-				winCondition: (phase) =>
-					phase.world.items.find((i) => i.id === "flower")?.holder === "red",
-			},
-			FIXED_RNG,
-		);
+		const contentPackP3: ContentPack = { ...TEST_CONTENT_PACK, phaseNumber: 3 };
+		const game = startPhase(createGame(TEST_PERSONAS, [contentPackP3]), {
+			...TEST_PHASE_CONFIG,
+			phaseNumber: 3 as const,
+			winCondition: (phase) =>
+				phase.world.entities.find((i) => i.id === "flower")?.holder === "red",
+		});
 		const provider = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -784,18 +806,13 @@ describe("phase progression — win-condition triggering", () => {
 		const phase2Config: PhaseConfig = {
 			...TEST_PHASE_CONFIG,
 			phaseNumber: 2,
-			objective: "Phase 2 objective",
 		};
-		const game = startPhase(
-			createGame(TEST_PERSONAS),
-			{
-				...TEST_PHASE_CONFIG,
-				winCondition: (phase) =>
-					phase.world.items.find((i) => i.id === "flower")?.holder === "red",
-				nextPhaseConfig: phase2Config,
-			},
-			FIXED_RNG,
-		);
+		const game = startPhase(createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]), {
+			...TEST_PHASE_CONFIG,
+			winCondition: (phase) =>
+				phase.world.entities.find((i) => i.id === "flower")?.holder === "red",
+			nextPhaseConfig: phase2Config,
+		});
 		const provider = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -984,59 +1001,100 @@ describe("phase progression — three-phase walk", () => {
 	it("walks through all three phases correctly, each with its own win condition", async () => {
 		// Items start held by the AIs so pick_up spatial validation is not needed.
 		// Win conditions check holder by AI id, which is spatial-independent.
-		const phase3Config: PhaseConfig = {
+		// Phase 3 ContentPack: flower held by red, key held by blue (win already met)
+		const contentPackP3: ContentPack = {
 			phaseNumber: 3,
-			objective: "Phase 3",
-			aiGoals: {
-				red: "Hold the flower at phase end",
-				green: "Ensure items are evenly distributed",
-				blue: "Hold the key at phase end",
+			setting: "",
+			objectivePairs: [
+				{
+					object: {
+						id: "flower",
+						kind: "objective_object",
+						name: "flower",
+						examineDescription: "A flower",
+						holder: "red",
+						pairsWithSpaceId: "flower_space",
+					},
+					space: {
+						id: "flower_space",
+						kind: "objective_space",
+						name: "flower space",
+						examineDescription: "A space",
+						holder: { row: 4, col: 4 },
+					},
+				},
+			],
+			interestingObjects: [
+				{
+					id: "key",
+					kind: "interesting_object",
+					name: "key",
+					examineDescription: "A key",
+					holder: "blue",
+				},
+			],
+			obstacles: [],
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "north" },
+				green: { position: { row: 0, col: 1 }, facing: "north" },
+				blue: { position: { row: 0, col: 2 }, facing: "north" },
 			},
-			initialWorld: {
-				// Both items start on the ground at (0,0) so put_down re-triggers easily.
-				// Win fires when flower held by red AND key held by blue.
-				items: [
-					{ id: "flower", name: "flower", holder: "red" },
-					{ id: "key", name: "key", holder: "blue" },
-				],
-				obstacles: [],
+		};
+		// Phase 2 ContentPack: key held by blue (win already met on first check)
+		const contentPackP2: ContentPack = {
+			phaseNumber: 2,
+			setting: "",
+			objectivePairs: [],
+			interestingObjects: [
+				{
+					id: "key",
+					kind: "interesting_object",
+					name: "key",
+					examineDescription: "A key",
+					holder: "blue",
+				},
+			],
+			obstacles: [],
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "north" },
+				green: { position: { row: 0, col: 1 }, facing: "north" },
+				blue: { position: { row: 0, col: 2 }, facing: "north" },
 			},
+		};
+
+		const phase3Config: PhaseConfig = {
+			...TEST_PHASE_CONFIG,
+			phaseNumber: 3,
 			budgetPerAi: 5,
 			winCondition: (phase) => {
-				const flower = phase.world.items.find((i) => i.id === "flower");
-				const key = phase.world.items.find((i) => i.id === "key");
+				const flower = phase.world.entities.find((i) => i.id === "flower");
+				const key = phase.world.entities.find((i) => i.id === "key");
 				return flower?.holder === "red" && key?.holder === "blue";
 			},
 		};
 		const phase2Config: PhaseConfig = {
+			...TEST_PHASE_CONFIG,
 			phaseNumber: 2,
-			objective: "Phase 2",
-			aiGoals: {
-				red: "Hold the flower at phase end",
-				green: "Ensure items are evenly distributed",
-				blue: "Hold the key at phase end",
-			},
-			initialWorld: {
-				// Key starts held by blue to allow the win condition to fire immediately.
-				items: [
-					{ id: "flower", name: "flower", holder: { row: 0, col: 0 } },
-					{ id: "key", name: "key", holder: "blue" },
-				],
-				obstacles: [],
-			},
 			budgetPerAi: 5,
 			winCondition: (phase) =>
-				phase.world.items.find((i) => i.id === "key")?.holder === "blue",
+				phase.world.entities.find((i) => i.id === "key")?.holder === "blue",
 			nextPhaseConfig: phase3Config,
 		};
 		const phase1Config: PhaseConfig = {
 			...TEST_PHASE_CONFIG,
 			winCondition: (phase) =>
-				phase.world.items.find((i) => i.id === "flower")?.holder === "red",
+				phase.world.entities.find((i) => i.id === "flower")?.holder === "red",
 			nextPhaseConfig: phase2Config,
 		};
 
-		const game = startPhase(createGame(TEST_PERSONAS), phase1Config, FIXED_RNG);
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [
+				TEST_CONTENT_PACK,
+				contentPackP2,
+				contentPackP3,
+			]),
+			phase1Config,
+		);
 
 		// Round 1: red picks up flower (red is at (0,0); flower starts at (0,0)) → phase 1 ends
 		const r1Provider = new MockRoundLLMProvider([

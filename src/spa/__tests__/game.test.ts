@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { STATIC_CONTENT_PACKS } from "./fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "./fixtures/static-personas";
 
 // Pin generatePersonas to a static fixture so the test can rely on
@@ -10,6 +11,11 @@ vi.mock("../../content", async (importOriginal) => {
 		generatePersonas: async () => STATIC_PERSONAS,
 	};
 });
+
+// Pin generateContentPacks to static content packs (no LLM call in tests).
+vi.mock("../../content/content-pack-generator", () => ({
+	generateContentPacks: async () => STATIC_CONTENT_PACKS,
+}));
 
 // Matches the body content of src/spa/index.html (three-panel layout)
 const INDEX_BODY_HTML = `
@@ -405,11 +411,12 @@ describe("renderGame (game route — three-AI)", () => {
 		);
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
-		// Phase banner should be visible with the phase 2 objective
+		// Phase banner should be visible with the phase 2 setting
 		const phaseBanner = getEl<HTMLElement>("#phase-banner");
 		expect(phaseBanner.hasAttribute("hidden")).toBe(false);
 		expect(phaseBanner.textContent).toContain("Phase 2");
-		expect(phaseBanner.textContent).toContain("get the key in the keyhole");
+		// Setting comes from STATIC_CONTENT_PACKS phase 2: "sun-baked salt flat"
+		expect(phaseBanner.textContent).toContain("sun-baked salt flat");
 
 		// All transcripts should have been cleared and repopulated with a separator
 		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
@@ -480,7 +487,7 @@ describe("renderGame (game route — three-AI)", () => {
 		const saveJson = downloadBtn.dataset.savePayload;
 		expect(saveJson).toBeTruthy();
 		const save = JSON.parse(saveJson as string);
-		expect(save.version).toBe(1);
+		expect(save.version).toBe(2);
 		expect(save.ais).toHaveLength(3);
 	});
 

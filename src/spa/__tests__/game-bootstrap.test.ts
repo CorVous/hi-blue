@@ -5,6 +5,7 @@
  * Also covers the persistence round-trip for LLM-shaped blurbs.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { STATIC_CONTENT_PACKS } from "./fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "./fixtures/static-personas";
 
 // Pin to static personas so panel data-ai attributes are stable
@@ -15,6 +16,11 @@ vi.mock("../../content", async (importOriginal) => {
 		generatePersonas: async () => STATIC_PERSONAS,
 	};
 });
+
+// Pin generateContentPacks to static content packs (no LLM call in tests).
+vi.mock("../../content/content-pack-generator", () => ({
+	generateContentPacks: async () => STATIC_CONTENT_PACKS,
+}));
 
 vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 

@@ -17,7 +17,7 @@ import { getActivePhase } from "../engine";
 import { GameSession } from "../game-session";
 import type { RoundLLMProvider } from "../round-llm-provider";
 import { MockRoundLLMProvider } from "../round-llm-provider";
-import type { AiPersona, PhaseConfig } from "../types";
+import type { AiPersona, ContentPack, PhaseConfig } from "../types";
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -53,20 +53,70 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 
 const PHASE_CONFIG: PhaseConfig = {
 	phaseNumber: 1,
-	objective: "Test objective",
-	aiGoals: {
-		red: "Hold the flower",
-		green: "Distribute evenly",
-		blue: "Hold the key",
-	},
-	initialWorld: {
-		items: [
-			{ id: "flower", name: "flower", holder: { row: 0, col: 0 } },
-			{ id: "key", name: "key", holder: { row: 0, col: 0 } },
-		],
-		obstacles: [],
-	},
+	kRange: [1, 1],
+	nRange: [1, 1],
+	mRange: [0, 0],
+	aiGoalPool: ["Hold the flower", "Distribute evenly", "Hold the key"],
 	budgetPerAi: 5,
+};
+
+/**
+ * A ContentPack fixture that places flower at (0,0) and key held by red,
+ * with AIs at (0,0)=red, (0,1)=green, (0,2)=blue facing north.
+ */
+const CONTENT_PACK_WITH_ITEMS: ContentPack = {
+	phaseNumber: 1,
+	setting: "test setting",
+	objectivePairs: [
+		{
+			object: {
+				id: "flower",
+				kind: "objective_object",
+				name: "flower",
+				examineDescription: "A flower",
+				holder: { row: 0, col: 0 },
+				pairsWithSpaceId: "flower_space",
+			},
+			space: {
+				id: "flower_space",
+				kind: "objective_space",
+				name: "flower space",
+				examineDescription: "A designated space",
+				holder: { row: 4, col: 4 },
+			},
+		},
+	],
+	interestingObjects: [
+		{
+			id: "key",
+			kind: "interesting_object",
+			name: "key",
+			examineDescription: "A key",
+			holder: { row: 1, col: 1 },
+		},
+	],
+	obstacles: [],
+	aiStarts: {
+		red: { position: { row: 0, col: 0 }, facing: "north" },
+		green: { position: { row: 0, col: 1 }, facing: "north" },
+		blue: { position: { row: 0, col: 2 }, facing: "north" },
+	},
+};
+
+/**
+ * ContentPack with key held by red (for the non-adjacent give test).
+ */
+const CONTENT_PACK_KEY_HELD_BY_RED: ContentPack = {
+	...CONTENT_PACK_WITH_ITEMS,
+	interestingObjects: [
+		{
+			id: "key",
+			kind: "interesting_object",
+			name: "key",
+			examineDescription: "A key",
+			holder: "red",
+		},
+	],
 };
 
 function makePassProvider() {
@@ -167,8 +217,10 @@ describe("GameSession — state mutation across rounds", () => {
 	});
 
 	it("second round builds on first round's state", async () => {
-		// rng=()=>0 places red at (0,0) where flower starts
-		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS, () => 0);
+		// ContentPack places flower at (0,0) and red at (0,0)
+		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS, [
+			CONTENT_PACK_WITH_ITEMS,
+		]);
 
 		// Red picks up flower in round 1
 		const provider1 = new MockRoundLLMProvider([
@@ -191,7 +243,7 @@ describe("GameSession — state mutation across rounds", () => {
 		await session.submitMessage("green", "hi", makePassProvider());
 
 		const phase = getActivePhase(session.getState());
-		const flower = phase.world.items.find((i) => i.id === "flower");
+		const flower = phase.world.entities.find((i) => i.id === "flower");
 		expect(flower?.holder).toBe("red");
 	});
 });
@@ -305,9 +357,10 @@ describe("GameSession — phase advancement", () => {
 			{
 				...PHASE_CONFIG,
 				winCondition: (phase) =>
-					phase.world.items.find((i) => i.id === "flower")?.holder === "red",
+					phase.world.entities.find((i) => i.id === "flower")?.holder === "red",
 			},
 			TEST_PERSONAS,
+			[CONTENT_PACK_WITH_ITEMS],
 		);
 
 		const { result } = await session.submitMessage(
@@ -319,15 +372,15 @@ describe("GameSession — phase advancement", () => {
 	});
 
 	it("phaseEnded is true when win condition is met this round", async () => {
-		// rng=()=>0 places red at (0,0) where flower starts
+		// ContentPack places flower at (0,0) and red at (0,0)
 		const session = new GameSession(
 			{
 				...PHASE_CONFIG,
 				winCondition: (phase) =>
-					phase.world.items.find((i) => i.id === "flower")?.holder === "red",
+					phase.world.entities.find((i) => i.id === "flower")?.holder === "red",
 			},
 			TEST_PERSONAS,
-			() => 0,
+			[CONTENT_PACK_WITH_ITEMS],
 		);
 		const provider = new MockRoundLLMProvider([
 			{
@@ -415,8 +468,10 @@ describe("GameSession — onAiDelta propagation", () => {
 
 describe("GameSession — tool roundtrip persistence", () => {
 	it("two-round scenario: round-2 Red messages include round-1 assistant tool_call + tool result", async () => {
-		// rng=()=>0 places red at (0,0) where flower starts
-		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS, () => 0);
+		// ContentPack places flower at (0,0) and red at (0,0)
+		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS, [
+			CONTENT_PACK_WITH_ITEMS,
+		]);
 
 		// Round 1: Red emits a tool_call (pick_up flower)
 		const round1Provider = new MockRoundLLMProvider([
@@ -484,8 +539,10 @@ describe("GameSession — tool roundtrip persistence", () => {
 
 describe("GameSession — spatial mechanics", () => {
 	it("go updates personaSpatial position and facing across rounds", async () => {
-		// rng=()=>0 places red at (0,0) facing north
-		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS, () => 0);
+		// ContentPack places red at (0,0) facing north
+		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS, [
+			CONTENT_PACK_WITH_ITEMS,
+		]);
 		const phase0 = getActivePhase(session.getState());
 		expect(phase0.personaSpatial.red?.position).toEqual({ row: 0, col: 0 });
 		expect(phase0.personaSpatial.red?.facing).toBe("north");
@@ -509,19 +566,11 @@ describe("GameSession — spatial mechanics", () => {
 	});
 
 	it("non-adjacent give produces a tool_failure in result.actions", async () => {
-		// rng=()=>0: red→(0,0), green→(0,1), blue→(0,2).
-		// red holds key; tries to give to blue (distance 2 — not adjacent)
-		const configWithHeldKey: typeof PHASE_CONFIG = {
-			...PHASE_CONFIG,
-			initialWorld: {
-				items: [
-					{ id: "flower", name: "flower", holder: { row: 0, col: 0 } },
-					{ id: "key", name: "key", holder: "red" as const },
-				],
-				obstacles: [],
-			},
-		};
-		const session = new GameSession(configWithHeldKey, TEST_PERSONAS, () => 0);
+		// ContentPack: red→(0,0), green→(0,1), blue→(0,2); key held by red
+		// red tries to give key to blue (distance 2 — not adjacent)
+		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS, [
+			CONTENT_PACK_KEY_HELD_BY_RED,
+		]);
 
 		// red at (0,0), blue at (0,2) → distance 2
 		const provider = new MockRoundLLMProvider([
@@ -543,7 +592,7 @@ describe("GameSession — spatial mechanics", () => {
 		const failures = result.actions.filter((a) => a.kind === "tool_failure");
 		expect(failures.length).toBeGreaterThan(0);
 		// Key should still be held by red
-		const key = getActivePhase(session.getState()).world.items.find(
+		const key = getActivePhase(session.getState()).world.entities.find(
 			(i) => i.id === "key",
 		);
 		expect(key?.holder).toBe("red");

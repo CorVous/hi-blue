@@ -14,17 +14,45 @@ export interface AiPersona {
 	budgetPerPhase: number;
 }
 
-export interface WorldItem {
+export type WorldEntityKind =
+	| "objective_object"
+	| "objective_space"
+	| "interesting_object"
+	| "obstacle";
+
+export interface WorldEntity {
 	id: string;
+	kind: WorldEntityKind;
 	name: string;
-	/** AiId when held by an AI; GridPosition object when resting on a cell. */
+	examineDescription: string;
+	/** useOutcome: returned to AI when they use(item). Present on all non-obstacle kinds. */
+	useOutcome?: string;
+	/** For objective_object: the id of the objective_space this object pairs with. */
+	pairsWithSpaceId?: string;
+	/** For objective_object: flavor string with {actor} substitution, fires on put_down match. */
+	placementFlavor?: string;
+	/** AiId when held by an AI; GridPosition when resting on a cell. */
 	holder: AiId | GridPosition;
 }
 
 export interface WorldState {
-	items: WorldItem[];
-	/** Static impassable cells. Default empty. */
-	obstacles: GridPosition[];
+	entities: WorldEntity[];
+}
+
+/** A matched pair of (objective_object, objective_space). */
+export interface ObjectivePair {
+	object: WorldEntity;
+	space: WorldEntity;
+}
+
+/** Per-phase content pack: setting-flavored names, descriptions, outcomes, and placed entities. */
+export interface ContentPack {
+	phaseNumber: 1 | 2 | 3;
+	setting: string;
+	objectivePairs: ObjectivePair[];
+	interestingObjects: WorldEntity[];
+	obstacles: WorldEntity[];
+	aiStarts: Record<AiId, PersonaSpatialState>;
 }
 
 export interface PersonaSpatialState {
@@ -70,22 +98,19 @@ export type WinCondition = (phase: PhaseState) => boolean;
 
 export interface PhaseConfig {
 	phaseNumber: 1 | 2 | 3;
-	objective: string;
-	/**
-	 * Pre-assigned per-AI goals. If provided, used as-is.
-	 * If absent, `aiGoalPool` must be provided and `startPhase` will randomly
-	 * draw one goal per AI from the pool (independent draws — same goal can
-	 * be assigned to multiple AIs in one phase).
-	 */
-	aiGoals?: Record<AiId, string>;
-	/**
-	 * Optional pool of candidate goals. Used when `aiGoals` is not provided.
-	 * Must contain at least one entry. `startPhase` performs three independent
-	 * uniform draws (with replacement) — one per AI — at phase start.
-	 */
-	aiGoalPool?: string[];
-	initialWorld: WorldState;
+	/** Roll k (objective pairs) per phase. */
+	kRange: [number, number];
+	/** Roll n (interesting objects) per phase. */
+	nRange: [number, number];
+	/** Roll m (obstacles) per phase. */
+	mRange: [number, number];
 	budgetPerAi: number;
+	/**
+	 * Pool of candidate goals drawn at phase start. Must contain at least one entry.
+	 * `startPhase` performs one uniform draw per AI (independent draws — same goal
+	 * can be assigned to multiple AIs in one phase).
+	 */
+	aiGoalPool: string[];
 	/** Optional win condition. If absent, the phase never auto-advances. */
 	winCondition?: WinCondition;
 	/** Config for the next phase. Required when winCondition may fire. */
@@ -94,7 +119,10 @@ export interface PhaseConfig {
 
 export interface PhaseState {
 	phaseNumber: 1 | 2 | 3;
-	objective: string;
+	/** Setting noun for this phase (e.g. "abandoned subway station"). */
+	setting: string;
+	/** The full content pack for this phase. */
+	contentPack: ContentPack;
 	aiGoals: Record<AiId, string>;
 	round: number;
 	world: WorldState;
@@ -124,6 +152,8 @@ export interface GameState {
 	phases: PhaseState[];
 	personas: Record<AiId, AiPersona>;
 	isComplete: boolean;
+	/** All three content packs generated at game start. */
+	contentPacks: ContentPack[];
 }
 
 export type ToolName = "pick_up" | "put_down" | "give" | "use" | "go" | "look";

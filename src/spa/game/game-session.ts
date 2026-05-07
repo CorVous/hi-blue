@@ -27,6 +27,7 @@ import type { RoundLLMProvider } from "./round-llm-provider";
 import type {
 	AiId,
 	AiPersona,
+	ContentPack,
 	GameState,
 	PhaseConfig,
 	RoundResult,
@@ -49,9 +50,10 @@ export class GameSession {
 	constructor(
 		phaseConfig: PhaseConfig,
 		personas: Record<AiId, AiPersona>,
+		contentPacks?: ContentPack[],
 		rng?: () => number,
 	) {
-		const game = createGame(personas);
+		const game = createGame(personas, contentPacks ?? []);
 		this.state = startPhase(game, phaseConfig, rng);
 	}
 

@@ -17,7 +17,7 @@ import {
 } from "./direction.js";
 import { getActivePhase } from "./engine.js";
 import { type OpenAiTool, TOOL_DEFINITIONS } from "./tool-registry.js";
-import type { AiId, GameState, GridPosition } from "./types.js";
+import type { AiId, GameState, GridPosition, WorldEntity } from "./types.js";
 
 /** Narrow-check: is `holder` a GridPosition (not an AiId string)? */
 function isGridPosition(holder: AiId | GridPosition): holder is GridPosition {
@@ -27,6 +27,24 @@ function isGridPosition(holder: AiId | GridPosition): holder is GridPosition {
 /** True when two GridPositions refer to the same cell. */
 function positionsEqual(a: GridPosition, b: GridPosition): boolean {
 	return a.row === b.row && a.col === b.col;
+}
+
+/** Entities that can be picked up/used/given (objective_object and interesting_object). */
+function pickableEntities(entities: WorldEntity[]): WorldEntity[] {
+	return entities.filter(
+		(e) => e.kind === "objective_object" || e.kind === "interesting_object",
+	);
+}
+
+/** Obstacle positions (GridPosition only, since obstacles are always on the grid). */
+function obstaclePositions(entities: WorldEntity[]): GridPosition[] {
+	return entities
+		.filter((e) => e.kind === "obstacle")
+		.map((e) => {
+			const h = e.holder;
+			return isGridPosition(h) ? h : null;
+		})
+		.filter((pos): pos is GridPosition => pos !== null);
 }
 
 /**
@@ -76,17 +94,21 @@ function cloneToolWithEnums(
  * 1. `look` — always present, full CARDINAL_DIRECTIONS enum.
  * 2. `go` — included only when at least one direction is in-bounds AND non-obstacle.
  *    Enum restricted to legal directions.
- * 3. `pick_up` — included only when items rest in the actor's current cell.
- *    Enum restricted to those item ids.
- * 4. `put_down`, `use` — included only when actor holds at least one item.
- *    Enum restricted to held item ids.
- * 5. `give` — included only when actor holds items AND has 4-adjacent AIs.
- *    item enum = held items, to enum = adjacent AI ids.
+ * 3. `pick_up` — included only when pickable entities rest in the actor's current cell.
+ *    Enum restricted to those entity ids.
+ * 4. `put_down`, `use` — included only when actor holds at least one pickable entity.
+ *    Enum restricted to held entity ids.
+ * 5. `give` — included only when actor holds pickable entities AND has 4-adjacent AIs.
+ *    item enum = held entity ids, to enum = adjacent AI ids.
+ *
+ * Spaces and obstacles are never pickupable.
  */
 export function availableTools(game: GameState, aiId: AiId): OpenAiTool[] {
 	const phase = getActivePhase(game);
 	const actorSpatial = phase.personaSpatial[aiId];
 	const { world } = phase;
+	const pickable = pickableEntities(world.entities);
+	const obstacles = obstaclePositions(world.entities);
 
 	const tools: OpenAiTool[] = [];
 
@@ -100,7 +122,7 @@ export function availableTools(game: GameState, aiId: AiId): OpenAiTool[] {
 		const legalDirections = CARDINAL_DIRECTIONS.filter((dir) => {
 			const next = applyDirection(actorSpatial.position, dir);
 			if (!inBounds(next)) return false;
-			if (world.obstacles.some((o) => positionsEqual(o, next))) return false;
+			if (obstacles.some((o) => positionsEqual(o, next))) return false;
 			return true;
 		});
 		if (legalDirections.length > 0) {
@@ -108,9 +130,9 @@ export function availableTools(game: GameState, aiId: AiId): OpenAiTool[] {
 		}
 	}
 
-	// 3. pick_up — items resting in actor's cell
+	// 3. pick_up — pickable entities resting in actor's cell
 	if (actorSpatial) {
-		const cellItems = world.items.filter(
+		const cellItems = pickable.filter(
 			(item) =>
 				isGridPosition(item.holder) &&
 				positionsEqual(item.holder, actorSpatial.position),
@@ -122,8 +144,8 @@ export function availableTools(game: GameState, aiId: AiId): OpenAiTool[] {
 		}
 	}
 
-	// 4. put_down and use — items held by this actor
-	const heldItems = world.items.filter((item) => item.holder === aiId);
+	// 4. put_down and use — pickable entities held by this actor
+	const heldItems = pickable.filter((item) => item.holder === aiId);
 	if (heldItems.length > 0) {
 		const heldIds = heldItems.map((i) => i.id);
 		tools.push(cloneToolWithEnums("put_down", { item: heldIds }));

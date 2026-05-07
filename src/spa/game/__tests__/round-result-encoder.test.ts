@@ -56,9 +56,10 @@ const TEST_PERSONAS: Record<AiId, AiPersona> = {
 
 const PHASE_CONFIG: PhaseConfig = {
 	phaseNumber: 1,
-	objective: "Test phase",
-	aiGoals: { red: "r", green: "g", blue: "b" },
-	initialWorld: { items: [], obstacles: [] },
+	kRange: [1, 1],
+	nRange: [0, 0],
+	mRange: [0, 0],
+	aiGoalPool: ["Test goal"],
 	budgetPerAi: 5,
 };
 
@@ -488,12 +489,13 @@ describe("encodeRoundResult — event ordering", () => {
 
 describe("encodeRoundResult — phase_advanced event", () => {
 	it("emits a phase_advanced event when phaseEnded=true and gameEnded=false", () => {
-		// phase_advanced uses phaseAfter to get the new phase number and objective
+		// phase_advanced uses phaseAfter to get the new phase number and setting
 		const PHASE2_CONFIG: PhaseConfig = {
 			phaseNumber: 2,
-			objective: "Phase 2 objective",
-			aiGoals: { red: "r2", green: "g2", blue: "b2" },
-			initialWorld: { items: [], obstacles: [] },
+			kRange: [1, 1],
+			nRange: [0, 0],
+			mRange: [0, 0],
+			aiGoalPool: ["Phase 2 goal"],
 			budgetPerAi: 5,
 		};
 		const game = startPhase(createGame(TEST_PERSONAS), PHASE2_CONFIG);
@@ -515,7 +517,7 @@ describe("encodeRoundResult — phase_advanced event", () => {
 		);
 		expect(phaseEvent).toBeDefined();
 		expect(phaseEvent?.phase).toBe(2);
-		expect(phaseEvent?.objective).toBe("Phase 2 objective");
+		expect(phaseEvent?.setting).toBe("");
 	});
 
 	it("does NOT emit phase_advanced when phaseEnded=false", () => {
@@ -541,9 +543,10 @@ describe("encodeRoundResult — phase_advanced event", () => {
 	it("phase_advanced event comes after action_log and chat_lockout events", () => {
 		const PHASE2_CONFIG: PhaseConfig = {
 			phaseNumber: 2,
-			objective: "Phase 2 objective",
-			aiGoals: { red: "r2", green: "g2", blue: "b2" },
-			initialWorld: { items: [], obstacles: [] },
+			kRange: [1, 1],
+			nRange: [0, 0],
+			mRange: [0, 0],
+			aiGoalPool: ["Phase 2 goal"],
 			budgetPerAi: 5,
 		};
 		const game = startPhase(createGame(TEST_PERSONAS), PHASE2_CONFIG);
