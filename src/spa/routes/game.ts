@@ -28,9 +28,59 @@ import {
 	saveGame,
 } from "../persistence/game-storage.js";
 
-/** Lowercased persona name for transcript prefixes (`> ember <msg>`). */
+/** Lowercased persona name for transcript prefixes (`> *ember <msg>`). */
 function transcriptName(name: string): string {
 	return name.toLowerCase();
+}
+
+/** Match an AI prefix at the start of a line: `> *<handle> ` (handle is
+ * non-whitespace). Capture group 1 is the lowercased handle. */
+const AI_PREFIX_RE = /^> \*(\S+) /;
+
+/** Render a saved transcript string into the given element by parsing
+ * lines and wrapping player lines (`> you …`) in `.msg-you` spans and
+ * AI prefix portions (`> *<handle> `) in `.msg-prefix` spans tinted with
+ * the persona's color. The remainder of each line is appended as a plain
+ * text node (amber). Replaces any existing children. */
+function renderRestoredTranscript(
+	transcript: HTMLElement,
+	saved: string,
+	personas: Record<string, { name: string; color: string }>,
+): void {
+	const doc = transcript.ownerDocument;
+	transcript.textContent = "";
+	if (!saved) return;
+	// Split on \n boundaries while keeping the trailing newlines as their
+	// own segments so we can preserve the exact original text.
+	const lines = saved.split(/(?<=\n)/);
+	for (const line of lines) {
+		if (line.startsWith("> you ")) {
+			const span = doc.createElement("span");
+			span.className = "msg-you";
+			span.textContent = line;
+			transcript.appendChild(span);
+			continue;
+		}
+		const m = AI_PREFIX_RE.exec(line);
+		if (m?.[1]) {
+			const handle = m[1];
+			const persona = Object.values(personas).find(
+				(p) => p.name.toLowerCase() === handle,
+			);
+			const prefixText = `> *${handle} `;
+			const prefix = doc.createElement("span");
+			prefix.className = "msg-prefix";
+			if (persona?.color) {
+				prefix.style.setProperty("--prefix-color", persona.color);
+			}
+			prefix.textContent = prefixText;
+			transcript.appendChild(prefix);
+			const rest = line.slice(prefixText.length);
+			if (rest) transcript.appendChild(doc.createTextNode(rest));
+			continue;
+		}
+		transcript.appendChild(doc.createTextNode(line));
+	}
 }
 
 /** Fisher-Yates shuffle (returns a new array). */
@@ -349,17 +399,34 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 				const transcript = panel.querySelector<HTMLElement>(".transcript");
 				if (!transcript) return;
 				if (typeof restored.transcripts[aiId] === "string") {
-					// Verbatim restore from persisted transcript snapshot
-					transcript.textContent = restored.transcripts[aiId];
+					// Verbatim restore from persisted transcript snapshot —
+					// re-wrap player lines and AI-prefix portions for coloring.
+					renderRestoredTranscript(
+						transcript,
+						restored.transcripts[aiId],
+						restoredPersonas,
+					);
 				} else if ((restoredPhase.chatHistories[aiId]?.length ?? 0) > 0) {
-					// Fallback: synthesise from chatHistories (legacy saves)
+					// Fallback: synthesise from chatHistories (legacy saves).
+					transcript.textContent = "";
+					const persona = restoredPersonas[aiId];
+					const personaName = persona?.name ?? aiId;
 					for (const msg of restoredPhase.chatHistories[aiId] ?? []) {
-						const personaName = restoredPersonas[aiId]?.name ?? aiId;
-						const prefix =
-							msg.role === "player"
-								? "> you "
-								: `> ${transcriptName(personaName)} `;
-						transcript.textContent += `${prefix}${msg.content}\n`;
+						if (msg.role === "player") {
+							const span = doc.createElement("span");
+							span.className = "msg-you";
+							span.textContent = `> you ${msg.content}\n`;
+							transcript.appendChild(span);
+						} else {
+							const prefixSpan = doc.createElement("span");
+							prefixSpan.className = "msg-prefix";
+							if (persona?.color) {
+								prefixSpan.style.setProperty("--prefix-color", persona.color);
+							}
+							prefixSpan.textContent = `> *${transcriptName(personaName)} `;
+							transcript.appendChild(prefixSpan);
+							transcript.appendChild(doc.createTextNode(`${msg.content}\n`));
+						}
 					}
 				}
 			});
@@ -429,6 +496,14 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 			}
 		}
 	});
+
+	// Populate the input placeholder with the runtime handles, e.g.
+	// `@Ember | @Sage | @Frost …` (test fixtures) or
+	// `@a4b2 | @9bx2 | @cd3f …` (production).
+	const handles = Object.values(session.getState().personas)
+		.map((p) => `@${p.name}`)
+		.join(" | ");
+	if (handles) _promptInput.placeholder = `${handles} …`;
 
 	// One-time chrome: ASCII banner + initial top-info row.
 	const bannerEl = doc.querySelector<HTMLElement>("#banner");
@@ -511,10 +586,34 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		return doc.querySelector<HTMLElement>(`[data-transcript="${aiId}"]`);
 	}
 
-	// Helper: append text to a transcript
+	// Helper: append plain text (amber default) as a text node — preserves
+	// any existing element children (.msg-you, .msg-prefix) in the transcript.
 	function appendToTranscript(aiId: AiId, text: string): void {
 		const el = getTranscript(aiId);
-		if (el) el.textContent += text;
+		if (el) el.appendChild(doc.createTextNode(text));
+	}
+
+	// Helper: append a player line wrapped in a .msg-you span (warm white).
+	function appendPlayerLine(aiId: AiId, text: string): void {
+		const el = getTranscript(aiId);
+		if (!el) return;
+		const span = doc.createElement("span");
+		span.className = "msg-you";
+		span.textContent = text;
+		el.appendChild(span);
+	}
+
+	// Helper: append an AI persona-prefix span (`> *<handle> `) tinted with
+	// the persona's color. The trailing space is included in the span.
+	function appendAiPrefix(aiId: AiId, personaName: string): void {
+		const el = getTranscript(aiId);
+		if (!el) return;
+		const span = doc.createElement("span");
+		span.className = "msg-prefix";
+		const color = session?.getState().personas[aiId]?.color;
+		if (color) span.style.setProperty("--prefix-color", color);
+		span.textContent = `> *${transcriptName(personaName)} `;
+		el.appendChild(span);
 	}
 
 	// Helper: pace token emission
@@ -568,21 +667,18 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		sendBtn.disabled = true;
 
 		// Append player's message to the addressed panel
-		appendToTranscript(addressed, `> you ${message}\n`);
+		appendPlayerLine(addressed, `> you ${message}\n`);
 
 		// Show a "thinking…" placeholder in the addressed panel while the
 		// first live delta arrives. Stripped on the first onAiDelta call;
 		// the safety-net strip after submitMessage handles mock/locked-AI paths.
 		const addressedTranscript = getTranscript(addressed);
-		const placeholderStart = addressedTranscript?.textContent?.length ?? 0;
-		if (addressedTranscript) addressedTranscript.textContent += "thinking…";
-		let placeholderShown = true;
+		const placeholderEl = doc.createElement("span");
+		placeholderEl.className = "msg-placeholder";
+		placeholderEl.textContent = "thinking…";
+		if (addressedTranscript) addressedTranscript.appendChild(placeholderEl);
 		const stripPlaceholder = (): void => {
-			if (!placeholderShown || !addressedTranscript) return;
-			addressedTranscript.textContent = (
-				addressedTranscript.textContent ?? ""
-			).slice(0, placeholderStart);
-			placeholderShown = false;
+			if (placeholderEl.parentNode) placeholderEl.remove();
 		};
 
 		// Roll initiative for this round
@@ -605,7 +701,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 				stripPlaceholder();
 				// Emit persona prefix live (encoder will skip it for this AI).
 				const personaName = session?.getState().personas[aiId]?.name ?? aiId;
-				appendToTranscript(aiId, `> ${transcriptName(personaName)} `);
+				appendAiPrefix(aiId, personaName);
 				liveAis.add(aiId);
 			}
 			appendToTranscript(aiId, text);
@@ -643,7 +739,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 						if (!liveAis.has(event.aiId)) {
 							// Not live — emit persona prefix now (synthetic path).
 							const sName = nextState.personas[event.aiId]?.name ?? event.aiId;
-							appendToTranscript(event.aiId, `> ${transcriptName(sName)} `);
+							appendAiPrefix(event.aiId, sName);
 						}
 						// If live, prefix was already painted; just track speakingAi.
 						break;
