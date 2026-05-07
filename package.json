@@ -13,8 +13,8 @@
 		"lint": "biome ci .",
 		"typecheck": "tsgo --noEmit -p tsconfig.json && tsgo --noEmit -p src/proxy/tsconfig.json",
 		"test": "vitest run",
-		"test:e2e": "playwright test",
-		"test:e2e:ui": "playwright test --ui",
+		"smoke": "playwright test",
+		"smoke:ui": "playwright test --ui",
 		"prepare": "husky"
 	},
 	"pnpm": {

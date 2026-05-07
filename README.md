@@ -28,9 +28,9 @@ corepack enable && pnpm install
 | `pnpm test` | Test |
 | `pnpm build` | Build the static SPA into `dist/` |
 | `pnpm dev` | Run the SPA + Worker dev loop via `wrangler dev` (press **b** to open the SPA). SPA edits under `src/spa` re-trigger the build; Worker edits live-reload through Wrangler. |
-| `pnpm test:e2e` | Run Playwright integration tests (see below). |
+| `pnpm smoke` | Run the Playwright integration / smoke suite (see below). |
 
-## Integration tests (Playwright)
+## Smoke suite (Playwright)
 
 One-time browser install (after `pnpm install`):
 
@@ -41,7 +41,7 @@ pnpm exec playwright install chromium
 Run the suite:
 
 ```sh
-pnpm test:e2e
+pnpm smoke
 ```
 
 The `webServer` config in `playwright.config.ts` automatically runs `pnpm build` and then `wrangler dev --port 8787` before the tests start. No manual dev server needed.
