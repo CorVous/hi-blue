@@ -460,7 +460,7 @@ main {
 	caret-color: var(--amber);
 	font-family: inherit;
 	font-size: 13px;
-	text-shadow: inherit;
+	text-shadow: none;
 	padding: 2px 0;
 }
 
