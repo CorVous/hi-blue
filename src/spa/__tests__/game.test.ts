@@ -7,7 +7,7 @@ vi.mock("../../content", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("../../content")>();
 	return {
 		...actual,
-		generatePersonas: () => STATIC_PERSONAS,
+		generatePersonas: async () => STATIC_PERSONAS,
 	};
 });
 
@@ -163,7 +163,7 @@ describe("renderGame (game route — three-AI)", () => {
 
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 		const form = getEl<HTMLFormElement>("#composer");
@@ -196,7 +196,7 @@ describe("renderGame (game route — three-AI)", () => {
 
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -237,13 +237,13 @@ describe("renderGame (game route — three-AI)", () => {
 		const { renderGame } = await import("../routes/game.js");
 
 		// Without debug param: action log should be hidden
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 		const actionLog = getEl<HTMLElement>("#action-log");
 		expect(actionLog.hasAttribute("hidden")).toBe(true);
 
 		// With debug=1: action log should be visible
 		const params = new URLSearchParams("debug=1");
-		renderGame(getEl<HTMLElement>("main"), params);
+		await renderGame(getEl<HTMLElement>("main"), params);
 		expect(actionLog.hasAttribute("hidden")).toBe(false);
 	});
 
@@ -262,7 +262,7 @@ describe("renderGame (game route — three-AI)", () => {
 
 		// Show debug so we can verify entries
 		const params = new URLSearchParams("debug=1");
-		renderGame(getEl<HTMLElement>("main"), params);
+		await renderGame(getEl<HTMLElement>("main"), params);
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -289,7 +289,7 @@ describe("renderGame (game route — three-AI)", () => {
 
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		// Initial budgets should show 5
 		const redBudget = document.querySelector<HTMLSpanElement>(
@@ -330,7 +330,7 @@ describe("renderGame (game route — three-AI)", () => {
 
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -356,7 +356,7 @@ describe("renderGame (game route — three-AI)", () => {
 
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 		const form = getEl<HTMLFormElement>("#composer");
@@ -391,7 +391,7 @@ describe("renderGame (game route — three-AI)", () => {
 
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(
+		await renderGame(
 			getEl<HTMLElement>("main"),
 			new URLSearchParams("winImmediately=1"),
 		);
@@ -433,7 +433,7 @@ describe("renderGame (game route — three-AI)", () => {
 
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(
+		await renderGame(
 			getEl<HTMLElement>("main"),
 			new URLSearchParams("winImmediately=1"),
 		);
@@ -505,7 +505,7 @@ describe("renderGame (game route — three-AI)", () => {
 
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(
+		await renderGame(
 			getEl<HTMLElement>("main"),
 			new URLSearchParams("winImmediately=1"),
 		);
@@ -548,7 +548,7 @@ describe("renderGame (game route — three-AI)", () => {
 
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(
+		await renderGame(
 			getEl<HTMLElement>("main"),
 			new URLSearchParams("winImmediately=1"),
 		);
@@ -595,7 +595,7 @@ describe("renderGame (game route — three-AI)", () => {
 
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(
+		await renderGame(
 			getEl<HTMLElement>("main"),
 			new URLSearchParams("winImmediately=1"),
 		);
@@ -692,7 +692,7 @@ describe("renderGame — localStorage persistence", () => {
 
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -727,7 +727,7 @@ describe("renderGame — localStorage persistence", () => {
 
 		vi.resetModules();
 		const { renderGame: renderGame1 } = await import("../routes/game.js");
-		renderGame1(getEl<HTMLElement>("main"));
+		await renderGame1(getEl<HTMLElement>("main"));
 
 		const form1 = getEl<HTMLFormElement>("#composer");
 		const promptInput1 = getEl<HTMLInputElement>("#prompt");
@@ -749,7 +749,7 @@ describe("renderGame — localStorage persistence", () => {
 		vi.resetModules();
 		// getItem should return the previously saved state
 		const { renderGame: renderGame2 } = await import("../routes/game.js");
-		renderGame2(getEl<HTMLElement>("main"));
+		await renderGame2(getEl<HTMLElement>("main"));
 
 		// Budget should reflect round 1 complete (4/5)
 		const redBudget = document.querySelector<HTMLSpanElement>(
@@ -792,7 +792,7 @@ describe("renderGame — localStorage persistence", () => {
 
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -850,7 +850,7 @@ describe("renderGame — localStorage persistence", () => {
 
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		// Warning banner should be shown immediately (storage unavailable)
 		const warningEl = document.querySelector<HTMLElement>(
@@ -891,7 +891,7 @@ describe("renderGame — localStorage persistence", () => {
 
 		vi.resetModules();
 		const { renderGame: renderGame1 } = await import("../routes/game.js");
-		renderGame1(getEl<HTMLElement>("main"));
+		await renderGame1(getEl<HTMLElement>("main"));
 
 		const form1 = getEl<HTMLFormElement>("#composer");
 		const promptInput1 = getEl<HTMLInputElement>("#prompt");
@@ -918,7 +918,7 @@ describe("renderGame — localStorage persistence", () => {
 		document.body.innerHTML = INDEX_BODY_HTML;
 		vi.resetModules();
 		const { renderGame: renderGame2 } = await import("../routes/game.js");
-		renderGame2(getEl<HTMLElement>("main"));
+		await renderGame2(getEl<HTMLElement>("main"));
 
 		// Transcript must be restored verbatim from the snapshot
 		const redTextRestored =
@@ -980,7 +980,7 @@ describe("renderGame — chat_lockout event", () => {
 		);
 
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -1021,7 +1021,7 @@ describe("renderGame — mention-based addressing", () => {
 		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const sendBtn = getEl<HTMLButtonElement>("#send");
 		expect(sendBtn.disabled).toBe(true);
@@ -1031,7 +1031,7 @@ describe("renderGame — mention-based addressing", () => {
 		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 		const sendBtn = getEl<HTMLButtonElement>("#send");
@@ -1044,7 +1044,7 @@ describe("renderGame — mention-based addressing", () => {
 		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 		const sendBtn = getEl<HTMLButtonElement>("#send");
@@ -1065,7 +1065,7 @@ describe("renderGame — mention-based addressing", () => {
 
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -1122,7 +1122,7 @@ describe("renderGame — mention-based addressing", () => {
 		);
 
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -1163,7 +1163,7 @@ describe("renderGame — panel-click addressee", () => {
 		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 		const sendBtn = getEl<HTMLButtonElement>("#send");
@@ -1181,7 +1181,7 @@ describe("renderGame — panel-click addressee", () => {
 		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 		const redPanel = getEl<HTMLElement>('.ai-panel[data-ai="red"]');
@@ -1197,7 +1197,7 @@ describe("renderGame — panel-click addressee", () => {
 		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 		const redPanel = getEl<HTMLElement>('.ai-panel[data-ai="red"]');
@@ -1213,7 +1213,7 @@ describe("renderGame — panel-click addressee", () => {
 		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 		const redPanel = getEl<HTMLElement>('.ai-panel[data-ai="red"]');
@@ -1261,7 +1261,7 @@ describe("renderGame — panel-click addressee", () => {
 		);
 
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -1287,7 +1287,7 @@ describe("renderGame — panel-click addressee", () => {
 		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 		const bluePanel = getEl<HTMLElement>('.ai-panel[data-ai="blue"]');
@@ -1333,7 +1333,7 @@ describe("renderGame — URL param sourcing", () => {
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
 		// Router passes empty URLSearchParams (hash had no query string)
-		renderGame(getEl<HTMLElement>("main"), new URLSearchParams());
+		await renderGame(getEl<HTMLElement>("main"), new URLSearchParams());
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -1371,7 +1371,10 @@ describe("renderGame — URL param sourcing", () => {
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
 		// Router parses debug=1 from the hash and passes it as params
-		renderGame(getEl<HTMLElement>("main"), new URLSearchParams("debug=1"));
+		await renderGame(
+			getEl<HTMLElement>("main"),
+			new URLSearchParams("debug=1"),
+		);
 
 		const actionLog = getEl<HTMLElement>("#action-log");
 		expect(actionLog.hasAttribute("hidden")).toBe(false);
@@ -1395,7 +1398,10 @@ describe("renderGame — URL param sourcing", () => {
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
 		// Router passes debug=0 from the hash; location.search has debug=1
-		renderGame(getEl<HTMLElement>("main"), new URLSearchParams("debug=0"));
+		await renderGame(
+			getEl<HTMLElement>("main"),
+			new URLSearchParams("debug=0"),
+		);
 
 		const actionLog = getEl<HTMLElement>("#action-log");
 		// Hash wins: debug=0 → log must remain hidden
@@ -1420,7 +1426,7 @@ describe("renderGame — addressee persistence after send", () => {
 		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 		const sendBtn = getEl<HTMLButtonElement>("#send");
@@ -1441,7 +1447,7 @@ describe("renderGame — addressee persistence after send", () => {
 
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -1472,7 +1478,7 @@ describe("renderGame — addressee persistence after send", () => {
 
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -1507,7 +1513,7 @@ describe("renderGame — addressee persistence after send", () => {
 
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -1552,7 +1558,7 @@ describe("renderGame — addressee persistence after send", () => {
 
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -1603,7 +1609,7 @@ describe("renderGame — addressee persistence after send", () => {
 		);
 
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -1640,7 +1646,7 @@ describe("visual feedback for active addressee", () => {
 		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
@@ -1664,7 +1670,7 @@ describe("visual feedback for active addressee", () => {
 		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 		promptInput.value = "@Sage hi";
@@ -1697,7 +1703,7 @@ describe("visual feedback for active addressee", () => {
 		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 		promptInput.value = "@Sage tell @Frost ...";
@@ -1716,7 +1722,7 @@ describe("visual feedback for active addressee", () => {
 		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 		promptInput.value = "@Sage,";
@@ -1734,7 +1740,7 @@ describe("visual feedback for active addressee", () => {
 		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
@@ -1763,7 +1769,7 @@ describe("visual feedback for active addressee", () => {
 		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
@@ -1843,7 +1849,7 @@ describe("visual feedback for active addressee", () => {
 		vi.stubGlobal("fetch", mockFetch);
 
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -1925,7 +1931,7 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 		await setupLockoutMock("red", "Ember is unresponsive…");
 
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -1959,7 +1965,7 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 		await setupLockoutMock("green", "Sage is unresponsive…");
 
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -2033,7 +2039,7 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 		vi.stubGlobal("fetch", mockFetch);
 
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -2083,7 +2089,7 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 		await setupLockoutMock("green", "Sage is unresponsive…");
 
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");

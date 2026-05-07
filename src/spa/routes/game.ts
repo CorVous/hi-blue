@@ -12,6 +12,7 @@ import { BrowserLLMProvider } from "../game/browser-llm-provider.js";
 import { deriveComposerState } from "../game/composer-reducer.js";
 import { getActivePhase, updateActivePhase } from "../game/engine.js";
 import { GameSession } from "../game/game-session.js";
+import { BrowserSynthesisProvider } from "../game/llm-synthesis-provider.js";
 import {
 	applyAddresseeChange,
 	buildPersonaColorMap,
@@ -208,7 +209,10 @@ let gameEnded = false;
 
 let session: GameSession | null = null;
 
-export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
+export function renderGame(
+	root: HTMLElement,
+	params?: URLSearchParams,
+): Promise<void> {
 	const doc = root.ownerDocument;
 	const form = doc.querySelector<HTMLFormElement>("#composer");
 	const promptInput = doc.querySelector<HTMLInputElement>("#prompt");
@@ -220,7 +224,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		"#persistence-warning",
 	);
 
-	if (!form || !promptInput || !sendBtn) return;
+	if (!form || !promptInput || !sendBtn) return Promise.resolve();
 
 	// Mention-based addressing state — built lazily after session init below,
 	// since persona handles are procedurally generated per session.
@@ -371,6 +375,10 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		persistenceWarningEl.removeAttribute("hidden");
 	}
 
+	// Promise that resolves when session init is complete (async new-game path).
+	// Undefined for the restore path (sync).
+	let asyncInitPromise: Promise<void> | undefined;
+
 	// Lazy-init session
 	if (!session) {
 		// Check storage availability up-front (once)
@@ -455,67 +463,151 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 			if (loadResult.error) {
 				showPersistenceWarning(loadResult.error);
 			}
-			session = new GameSession(PHASE_1_CONFIG, generatePersonas());
+			// Async bootstrap: generatePersonas now requires an LLM call.
+			// session remains null until the promise resolves; the form submit
+			// handler early-returns when session is null, so clicks before
+			// synthesis completes are silently dropped (safe).
+			asyncInitPromise = (async () => {
+				try {
+					const personas = await generatePersonas(
+						Math.random,
+						new BrowserSynthesisProvider({ disableReasoning }),
+					);
+					session = new GameSession(PHASE_1_CONFIG, personas);
+
+					// Apply SPA-side test affordances from location.search
+					session = applyTestAffordances(session, effectiveParams);
+
+					// Build persona maps from runtime state
+					const runtimePersonas = session.getState().personas;
+					personaNamesToId = buildPersonaNameMap(runtimePersonas);
+					personaColors = buildPersonaColorMap(runtimePersonas);
+					personaDisplayNames = buildPersonaDisplayNameMap(runtimePersonas);
+
+					// Hydrate lockouts
+					const activePhaseForLockouts = getActivePhase(session.getState());
+					for (const aiId of Object.keys(runtimePersonas)) {
+						lockouts.set(aiId, activePhaseForLockouts.chatLockouts.has(aiId));
+					}
+
+					gameEnded = false;
+
+					// Populate panels now that session is available
+					const panelElsAsync = doc.querySelectorAll<HTMLElement>(".ai-panel");
+					const aiIdListAsync = Object.keys(runtimePersonas);
+					panelElsAsync.forEach((panel, idx) => {
+						const aiId = aiIdListAsync[idx];
+						if (!aiId) return;
+						panel.dataset.ai = aiId;
+						const persona = runtimePersonas[aiId];
+						if (!persona) return;
+						panel.style.setProperty("--panel-color", persona.color);
+						initPanelChrome(panel, persona);
+						const budgetEl =
+							panel.querySelector<HTMLSpanElement>(".panel-budget");
+						const phase = activePhaseForLockouts;
+						if (budgetEl) {
+							const budget = phase.budgets[aiId];
+							if (budget) {
+								budgetEl.dataset.budget = String(budget.remaining);
+								budgetEl.textContent = `${budget.remaining}/${budget.total}`;
+							}
+						}
+					});
+
+					const handlesAsync = Object.values(runtimePersonas)
+						.map((p) => `@${p.name}`)
+						.join(" | ");
+					if (handlesAsync) _promptInput.placeholder = `${handlesAsync} …`;
+
+					// Register panel-click handlers now that panels have data-ai set.
+					registerPanelClickHandlers(aiIdListAsync);
+
+					refreshComposerState();
+					refreshTopInfo();
+				} catch (err) {
+					// Funnel synthesis failure through the "AIs are sleeping" panel —
+					// same UX path as CapHitError during gameplay.
+					if (capHitEl) capHitEl.removeAttribute("hidden");
+					const panelsEl = doc.querySelector<HTMLElement>("#panels");
+					if (panelsEl) panelsEl.hidden = true;
+					_sendBtn.disabled = true;
+					_promptInput.disabled = true;
+					// Re-throw to surface in console for debugging.
+					throw err;
+				}
+			})();
 		}
 
-		// Apply SPA-side test affordances from location.search (e.g. ?winImmediately=1
-		// or ?lockout=1). These are gated inside applyTestAffordances to only fire
-		// when __WORKER_BASE_URL__ === "http://localhost:8787" (local dev).
-		// Note: we use location.search (not the hash params) because these flags are
-		// intended to be set on the page URL itself, matching the legacy worker pattern.
-		session = applyTestAffordances(session, effectiveParams);
+		// Synchronous post-init: only runs for the restore path (session is set).
+		// The async new-game path handles this block inside its IIFE above.
+		if (session !== null) {
+			// Apply SPA-side test affordances from location.search (e.g. ?winImmediately=1
+			// or ?lockout=1). These are gated inside applyTestAffordances to only fire
+			// when __WORKER_BASE_URL__ === "http://localhost:8787" (local dev).
+			// Note: we use location.search (not the hash params) because these flags are
+			// intended to be set on the page URL itself, matching the legacy worker pattern.
+			session = applyTestAffordances(session, effectiveParams);
 
-		// Build persona maps from runtime state (after affordances may have replaced session)
-		const runtimePersonas = session.getState().personas;
-		personaNamesToId = buildPersonaNameMap(runtimePersonas);
-		personaColors = buildPersonaColorMap(runtimePersonas);
-		personaDisplayNames = buildPersonaDisplayNameMap(runtimePersonas);
+			// Build persona maps from runtime state (after affordances may have replaced session)
+			const runtimePersonas = session.getState().personas;
+			personaNamesToId = buildPersonaNameMap(runtimePersonas);
+			personaColors = buildPersonaColorMap(runtimePersonas);
+			personaDisplayNames = buildPersonaDisplayNameMap(runtimePersonas);
 
-		// Hydrate lockouts from the active phase's chatLockouts map so that
-		// a reload preserves the Send-disabled state for locked-out AIs.
-		const activePhaseForLockouts = getActivePhase(session.getState());
-		for (const aiId of Object.keys(runtimePersonas)) {
-			lockouts.set(aiId, activePhaseForLockouts.chatLockouts.has(aiId));
+			// Hydrate lockouts from the active phase's chatLockouts map so that
+			// a reload preserves the Send-disabled state for locked-out AIs.
+			const activePhaseForLockouts = getActivePhase(session.getState());
+			for (const aiId of Object.keys(runtimePersonas)) {
+				lockouts.set(aiId, activePhaseForLockouts.chatLockouts.has(aiId));
+			}
+
+			// Reset module-level gameEnded flag on fresh session init
+			gameEnded = false;
 		}
-
-		// Reset module-level gameEnded flag on fresh session init
-		gameEnded = false;
 	}
 
 	// Set initial composer state (Send starts disabled until a valid @mention).
 	refreshComposerState();
 
-	// Populate panel headers, ASCII border chrome, --panel-color, and budgets.
-	const panelEls = doc.querySelectorAll<HTMLElement>(".ai-panel");
-	const aiIdList = Object.keys(session.getState().personas);
-	const runtimePersonasForPanels = session.getState().personas;
-	const sessionRef = session;
-	panelEls.forEach((panel, idx) => {
-		const aiId = aiIdList[idx];
-		if (!aiId) return;
-		panel.dataset.ai = aiId;
-		const persona = runtimePersonasForPanels[aiId];
-		if (!persona) return;
-		panel.style.setProperty("--panel-color", persona.color);
-		initPanelChrome(panel, persona);
-		const budgetEl = panel.querySelector<HTMLSpanElement>(".panel-budget");
-		const phase = getActivePhase(sessionRef.getState());
-		if (budgetEl) {
-			const budget = phase.budgets[aiId];
-			if (budget) {
-				budgetEl.dataset.budget = String(budget.remaining);
-				budgetEl.textContent = `${budget.remaining}/${budget.total}`;
-			}
-		}
-	});
+	// For the sync restore path session is already set; for the async new-game
+	// path session is still null here (the IIFE above handles panel init).
+	const aiIdList: string[] =
+		session !== null ? Object.keys(session.getState().personas) : [];
 
-	// Populate the input placeholder with the runtime handles, e.g.
-	// `@Ember | @Sage | @Frost …` (test fixtures) or
-	// `@a4b2 | @9bx2 | @cd3f …` (production).
-	const handles = Object.values(session.getState().personas)
-		.map((p) => `@${p.name}`)
-		.join(" | ");
-	if (handles) _promptInput.placeholder = `${handles} …`;
+	// Populate panel headers, ASCII border chrome, --panel-color, and budgets.
+	// Skipped for the async new-game path (handled inside the IIFE above).
+	if (session !== null) {
+		const panelEls = doc.querySelectorAll<HTMLElement>(".ai-panel");
+		const runtimePersonasForPanels = session.getState().personas;
+		const sessionRef = session;
+		panelEls.forEach((panel, idx) => {
+			const aiId = aiIdList[idx];
+			if (!aiId) return;
+			panel.dataset.ai = aiId;
+			const persona = runtimePersonasForPanels[aiId];
+			if (!persona) return;
+			panel.style.setProperty("--panel-color", persona.color);
+			initPanelChrome(panel, persona);
+			const budgetEl = panel.querySelector<HTMLSpanElement>(".panel-budget");
+			const phase = getActivePhase(sessionRef.getState());
+			if (budgetEl) {
+				const budget = phase.budgets[aiId];
+				if (budget) {
+					budgetEl.dataset.budget = String(budget.remaining);
+					budgetEl.textContent = `${budget.remaining}/${budget.total}`;
+				}
+			}
+		});
+
+		// Populate the input placeholder with the runtime handles, e.g.
+		// `@Ember | @Sage | @Frost …` (test fixtures) or
+		// `@a4b2 | @9bx2 | @cd3f …` (production).
+		const handles = Object.values(session.getState().personas)
+			.map((p) => `@${p.name}`)
+			.join(" | ");
+		if (handles) _promptInput.placeholder = `${handles} …`;
+	}
 
 	// One-time chrome: ASCII banner + initial top-info row.
 	const bannerEl = doc.querySelector<HTMLElement>("#banner");
@@ -557,35 +649,44 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 
 	refreshTopInfo();
 
-	// Panel-click → addressee mention mutation (issue #108)
-	for (const aiId of aiIdList) {
-		const panel = doc.querySelector<HTMLElement>(
-			`.ai-panel[data-ai="${aiId}"]`,
-		);
-		if (!panel) continue;
-		panel.addEventListener("click", () => {
-			const targetAi = panel.dataset.ai as AiId | undefined;
-			if (!targetAi) return;
-			if (lockouts.get(targetAi) === true) return;
-			const result = applyAddresseeChange({
-				text: _promptInput.value,
-				selectionStart: _promptInput.selectionStart,
-				targetPersona: targetAi,
-				personaNamesToId,
-				personas: session?.getState().personas ?? {},
+	/** Register panel-click → addressee mention handlers for the given AI ids.
+	 * Called synchronously for the restore path (session is set immediately),
+	 * or from inside the async IIFE for the new-game path (after session resolves). */
+	function registerPanelClickHandlers(ids: string[]): void {
+		for (const aiId of ids) {
+			const panel = doc.querySelector<HTMLElement>(
+				`.ai-panel[data-ai="${aiId}"]`,
+			);
+			if (!panel) continue;
+			panel.addEventListener("click", () => {
+				const targetAi = panel.dataset.ai as AiId | undefined;
+				if (!targetAi) return;
+				if (lockouts.get(targetAi) === true) return;
+				const result = applyAddresseeChange({
+					text: _promptInput.value,
+					selectionStart: _promptInput.selectionStart,
+					targetPersona: targetAi,
+					personaNamesToId,
+					personas: session?.getState().personas ?? {},
+				});
+				_promptInput.value = result.text;
+				try {
+					_promptInput.setSelectionRange(
+						result.selectionStart,
+						result.selectionStart,
+					);
+				} catch {
+					/* ignore */
+				}
+				refreshComposerState();
 			});
-			_promptInput.value = result.text;
-			try {
-				_promptInput.setSelectionRange(
-					result.selectionStart,
-					result.selectionStart,
-				);
-			} catch {
-				/* ignore */
-			}
-			refreshComposerState();
-		});
+		}
 	}
+
+	// For the restore path, aiIdList is non-empty and handlers are registered now.
+	// For the async new-game path, aiIdList is empty here; handlers are registered
+	// inside the IIFE above after session resolves.
+	registerPanelClickHandlers(aiIdList);
 
 	// Debug toggle: show action log if ?debug=1
 	const debug = effectiveParams.get("debug") === "1";
@@ -1008,4 +1109,8 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 			}
 		}
 	});
+
+	// Return the async init promise so callers can await session readiness.
+	// For the restore path (sync), returns an already-resolved promise.
+	return asyncInitPromise ?? Promise.resolve();
 }

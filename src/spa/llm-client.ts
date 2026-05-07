@@ -173,6 +173,76 @@ export async function streamCompletion(opts: {
 	await parseSSEStream(response.body, onDelta, onReasoning, onToolCall);
 }
 
+export interface JsonCompletionResult {
+	content: string | null;
+	reasoning: string | null;
+}
+
+export async function chatCompletionJson(opts: {
+	messages: OpenAiMessage[];
+	disableReasoning?: boolean;
+}): Promise<JsonCompletionResult> {
+	const { messages, disableReasoning } = opts;
+	const { url, headers } = resolveLLMTarget();
+
+	const bodyObj: Record<string, unknown> = {
+		model: PINNED_MODEL,
+		messages,
+		stream: false,
+		response_format: { type: "json_object" },
+	};
+
+	if (disableReasoning) {
+		bodyObj.reasoning = { enabled: false };
+	}
+
+	const response = await fetch(url, {
+		method: "POST",
+		headers,
+		body: JSON.stringify(bodyObj),
+	});
+
+	if (!response.ok) {
+		const capHit = await parseCapHitFromResponse(response);
+		if (capHit) throw capHit;
+		throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+	}
+
+	let body: unknown;
+	try {
+		body = await response.json();
+	} catch {
+		throw new Error("chatCompletionJson: failed to parse response JSON");
+	}
+
+	const msg =
+		body != null &&
+		typeof body === "object" &&
+		"choices" in body &&
+		Array.isArray((body as Record<string, unknown>).choices)
+			? ((body as Record<string, unknown>).choices as unknown[])[0]
+			: null;
+
+	const message =
+		msg != null &&
+		typeof msg === "object" &&
+		"message" in (msg as Record<string, unknown>)
+			? ((msg as Record<string, unknown>).message as Record<string, unknown>)
+			: null;
+
+	const content =
+		message != null && typeof message.content === "string"
+			? message.content
+			: null;
+
+	const reasoning =
+		message != null && typeof message.reasoning === "string"
+			? message.reasoning
+			: null;
+
+	return { content, reasoning };
+}
+
 export async function streamChat(opts: {
 	message: string;
 	signal?: AbortSignal;

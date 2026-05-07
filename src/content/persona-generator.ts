@@ -1,3 +1,4 @@
+import type { LlmSynthesisProvider } from "../spa/game/llm-synthesis-provider.js";
 import { COLOR_PALETTE } from "./color-palette.js";
 import { PERSONA_GOAL_POOL } from "./persona-goal-pool.js";
 import { TEMPERAMENT_POOL } from "./temperament-pool.js";
@@ -54,9 +55,10 @@ function drawWithReplacement<T>(pool: T[], rng: () => number): T {
 	return pool[Math.floor(rng() * pool.length)]!;
 }
 
-export function generatePersonas(
+export async function generatePersonas(
 	rng: () => number = Math.random,
-): Record<string, import("../spa/game/types.js").AiPersona> {
+	llm?: LlmSynthesisProvider,
+): Promise<Record<string, import("../spa/game/types.js").AiPersona>> {
 	const takenNames = new Set<string>();
 	const names: string[] = [];
 	for (let i = 0; i < PERSONA_COUNT; i++) {
@@ -75,22 +77,45 @@ export function generatePersonas(
 	}
 	const colors = shuffled.slice(0, PERSONA_COUNT) as [string, string, string];
 
-	const personas: Record<string, import("../spa/game/types.js").AiPersona> = {};
+	const tuples: Array<{
+		id: string;
+		temperaments: [string, string];
+		personaGoal: string;
+	}> = [];
 	for (let i = 0; i < PERSONA_COUNT; i++) {
 		const name = names[i] as string;
-		const color = colors[i] as string;
 		const temperaments: [string, string] = [
 			drawWithReplacement(TEMPERAMENT_POOL, rng),
 			drawWithReplacement(TEMPERAMENT_POOL, rng),
 		];
 		const personaGoal = drawWithReplacement(PERSONA_GOAL_POOL, rng);
-		const blurb = buildBlurb(temperaments, personaGoal);
+		tuples.push({ id: name, temperaments, personaGoal });
+	}
+
+	// Synthesize blurbs: LLM path when provider supplied, template fallback otherwise.
+	let blurbMap: Map<string, string>;
+	if (llm) {
+		const result = await llm.synthesizePersonas(tuples);
+		blurbMap = new Map(result.personas.map((p) => [p.id, p.blurb]));
+	} else {
+		blurbMap = new Map(
+			tuples.map((t) => [t.id, buildBlurb(t.temperaments, t.personaGoal)]),
+		);
+	}
+
+	const personas: Record<string, import("../spa/game/types.js").AiPersona> = {};
+	for (let i = 0; i < PERSONA_COUNT; i++) {
+		const tuple = tuples[i] as (typeof tuples)[number];
+		const name = tuple.id;
+		const color = colors[i] as string;
+		const blurb =
+			blurbMap.get(name) ?? buildBlurb(tuple.temperaments, tuple.personaGoal);
 		personas[name] = {
 			id: name,
 			name,
 			color,
-			temperaments,
-			personaGoal,
+			temperaments: tuple.temperaments,
+			personaGoal: tuple.personaGoal,
 			blurb,
 			budgetPerPhase: 5,
 		};

@@ -19,6 +19,8 @@ import {
 	PHASE_GOAL_POOL,
 	TEMPERAMENT_POOL,
 } from "../content";
+import type { SynthesisInput } from "../spa/game/llm-synthesis-provider.js";
+import { MockSynthesisProvider } from "../spa/game/llm-synthesis-provider.js";
 
 // ── Content pools ─────────────────────────────────────────────────────────────
 
@@ -74,50 +76,50 @@ describe("COLOR_PALETTE", () => {
 
 // ── generatePersonas ──────────────────────────────────────────────────────────
 
-describe("generatePersonas", () => {
-	it("produces exactly 3 personas", () => {
-		const personas = generatePersonas(() => 0.5);
+describe("generatePersonas — template fallback (no llm)", () => {
+	it("produces exactly 3 personas", async () => {
+		const personas = await generatePersonas(() => 0.5);
 		expect(Object.keys(personas)).toHaveLength(3);
 	});
 
-	it("persona names are 4-char [a-z0-9] strings", () => {
-		const personas = generatePersonas(() => 0);
+	it("persona names are 4-char [a-z0-9] strings", async () => {
+		const personas = await generatePersonas(() => 0);
 		for (const [id, p] of Object.entries(personas)) {
 			expect(id).toMatch(/^[a-z0-9]{4}$/);
 			expect(p.name).toBe(id);
 		}
 	});
 
-	it("persona colors are hex strings from the palette", () => {
-		const personas = generatePersonas(() => 0.5);
+	it("persona colors are hex strings from the palette", async () => {
+		const personas = await generatePersonas(() => 0.5);
 		for (const p of Object.values(personas)) {
 			expect(p.color).toMatch(/^#[0-9a-f]{6}$/i);
 		}
 	});
 
-	it("all 3 personas have distinct names", () => {
-		const personas = generatePersonas();
+	it("all 3 personas have distinct names", async () => {
+		const personas = await generatePersonas();
 		const names = Object.keys(personas);
 		expect(new Set(names).size).toBe(3);
 	});
 
-	it("all 3 personas have distinct colors", () => {
-		const personas = generatePersonas(() => Math.random());
+	it("all 3 personas have distinct colors", async () => {
+		const personas = await generatePersonas(() => Math.random());
 		const colors = Object.values(personas).map((p) => p.color);
 		expect(new Set(colors).size).toBe(3);
 	});
 
-	it("each persona has a blurb string", () => {
-		const personas = generatePersonas(() => 0);
+	it("each persona has a blurb string", async () => {
+		const personas = await generatePersonas(() => 0);
 		for (const p of Object.values(personas)) {
 			expect(typeof p.blurb).toBe("string");
 			expect(p.blurb.length).toBeGreaterThan(0);
 		}
 	});
 
-	it("intensification path: same temperament twice yields 'intensely' blurb", () => {
+	it("intensification path: same temperament twice yields 'intensely' blurb", async () => {
 		// Seed that returns 0 always — same index for both temperament draws
-		const personas = generatePersonas(() => 0);
+		const personas = await generatePersonas(() => 0);
 		const firstPersona = Object.values(personas)[0];
 		if (!firstPersona) throw new Error("no persona");
 		expect(firstPersona.temperaments[0]).toBe(firstPersona.temperaments[1]);
@@ -221,5 +223,77 @@ describe("acceptance-criteria counts", () => {
 		const phases = [PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG];
 		const worlds = phases.map((p) => p.initialWorld);
 		expect(worlds).toHaveLength(3);
+	});
+});
+
+// ── generatePersonas — LLM path ───────────────────────────────────────────────
+
+describe("generatePersonas — LLM path", () => {
+	it("passes all 3 persona tuples in a single batched call", async () => {
+		const mockProvider = new MockSynthesisProvider(
+			(input: SynthesisInput[]) => ({
+				personas: input.map((p) => ({ id: p.id, blurb: `BLURB_${p.id}` })),
+			}),
+		);
+
+		await generatePersonas(() => 0.5, mockProvider);
+
+		expect(mockProvider.calls).toHaveLength(1);
+	});
+
+	it("returned record has exactly 3 entries with blurbs matching canned values", async () => {
+		const mockProvider = new MockSynthesisProvider(
+			(input: SynthesisInput[]) => ({
+				personas: input.map((p) => ({ id: p.id, blurb: `BLURB_${p.id}` })),
+			}),
+		);
+
+		const personas = await generatePersonas(() => 0.5, mockProvider);
+
+		expect(Object.keys(personas)).toHaveLength(3);
+		for (const [id, persona] of Object.entries(personas)) {
+			expect(persona.blurb).toBe(`BLURB_${id}`);
+		}
+	});
+
+	it("input to mock contains 3-element array of {id, temperaments, personaGoal} tuples", async () => {
+		const mockProvider = new MockSynthesisProvider(
+			(input: SynthesisInput[]) => ({
+				personas: input.map((p) => ({ id: p.id, blurb: `BLURB_${p.id}` })),
+			}),
+		);
+
+		await generatePersonas(() => 0.5, mockProvider);
+
+		const callInput = mockProvider.calls[0];
+		expect(callInput).toHaveLength(3);
+		for (const tuple of callInput ?? []) {
+			expect(typeof tuple.id).toBe("string");
+			expect(Array.isArray(tuple.temperaments)).toBe(true);
+			expect(tuple.temperaments).toHaveLength(2);
+			expect(typeof tuple.personaGoal).toBe("string");
+		}
+	});
+
+	it("makes exactly one batched call, not one per persona (AC #7)", async () => {
+		const mockProvider = new MockSynthesisProvider(
+			(input: SynthesisInput[]) => ({
+				personas: input.map((p, i) => ({
+					id: p.id,
+					blurb: ["BLURB_A", "BLURB_B", "BLURB_C"][i] ?? "BLURB_UNKNOWN",
+				})),
+			}),
+		);
+
+		const personas = await generatePersonas(() => 0.5, mockProvider);
+
+		// One call for all three, not three separate calls
+		expect(mockProvider.calls.length).toBe(1);
+
+		// Blurbs match canned values in positional order
+		const values = Object.values(personas);
+		expect(values[0]?.blurb).toBe("BLURB_A");
+		expect(values[1]?.blurb).toBe("BLURB_B");
+		expect(values[2]?.blurb).toBe("BLURB_C");
 	});
 });

@@ -20,7 +20,7 @@ vi.mock("../../content", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("../../content")>();
 	return {
 		...actual,
-		generatePersonas: () => STATIC_PERSONAS,
+		generatePersonas: async () => STATIC_PERSONAS,
 	};
 });
 
@@ -141,7 +141,7 @@ describe("renderGame — game_ended disables #send permanently (regression #89)"
 
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		renderGame(getEl<HTMLElement>("main"));
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
