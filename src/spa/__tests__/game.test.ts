@@ -1131,6 +1131,159 @@ describe("renderGame — mention-based addressing", () => {
 	});
 });
 
+describe("renderGame — panel-click addressee", () => {
+	beforeEach(() => {
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		document.body.innerHTML = INDEX_BODY_HTML;
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+		vi.resetModules();
+		document.body.innerHTML = "";
+	});
+
+	it("empty input + click red panel → '@Ember ', Send enabled", async () => {
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		const sendBtn = getEl<HTMLButtonElement>("#send");
+		const redPanel = getEl<HTMLElement>('.ai-panel[data-ai="red"]');
+
+		expect(promptInput.value).toBe("");
+		redPanel.click();
+
+		expect(promptInput.value).toBe("@Ember ");
+		expect(sendBtn.disabled).toBe(false);
+	});
+
+	it("'@Sage hi' in input + click red panel → '@Ember hi'", async () => {
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		const redPanel = getEl<HTMLElement>('.ai-panel[data-ai="red"]');
+
+		promptInput.value = "@Sage hi";
+		promptInput.dispatchEvent(new Event("input"));
+		redPanel.click();
+
+		expect(promptInput.value).toBe("@Ember hi");
+	});
+
+	it("multi-mention '@Sage tell @Frost go' + click red → only first mention replaced", async () => {
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		const redPanel = getEl<HTMLElement>('.ai-panel[data-ai="red"]');
+
+		promptInput.value = "@Sage tell @Frost go";
+		promptInput.dispatchEvent(new Event("input"));
+		redPanel.click();
+
+		expect(promptInput.value).toBe("@Ember tell @Frost go");
+	});
+
+	it("cursor is preserved after mention mutation (after the mention)", async () => {
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		const redPanel = getEl<HTMLElement>('.ai-panel[data-ai="red"]');
+
+		promptInput.value = "@Sage hi";
+		// Simulate cursor at end (position 8)
+		promptInput.setSelectionRange(8, 8);
+		redPanel.click();
+
+		// "@Ember hi" length is 9; cursor was at 8 (after @Sage hi), delta = 1 → 9
+		expect(promptInput.selectionStart).toBe(9);
+	});
+
+	it("clicking a locked panel is a no-op (input unchanged)", async () => {
+		vi.stubGlobal(
+			"fetch",
+			makeThreeAiFetchMock(PASS_ACTION, PASS_ACTION, PASS_ACTION),
+		);
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		vi.resetModules();
+
+		// Import GameSession first to set up the spy before renderGame
+		const { GameSession } = await import("../game/game-session.js");
+		const originalSubmit = GameSession.prototype.submitMessage;
+		vi.spyOn(GameSession.prototype, "submitMessage").mockImplementation(
+			async function (
+				this: InstanceType<typeof GameSession>,
+				...args: Parameters<InstanceType<typeof GameSession>["submitMessage"]>
+			) {
+				const real = await originalSubmit.apply(this, args);
+				// Lock out red
+				return {
+					...real,
+					result: {
+						...real.result,
+						chatLockoutTriggered: {
+							aiId: "red" as const,
+							message: "Ember is unresponsive…",
+						},
+					},
+				};
+			},
+		);
+
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		const form = getEl<HTMLFormElement>("#composer");
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+
+		// Trigger one round to lock out red
+		promptInput.value = "@Sage hello";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		// Now click red panel — should be no-op because red is locked
+		promptInput.value = "";
+		const redPanel = getEl<HTMLElement>('.ai-panel[data-ai="red"]');
+		redPanel.click();
+
+		// Input should remain empty (red is locked out)
+		expect(promptInput.value).toBe("");
+	});
+
+	it("'@Nonpersona hi' + click blue → prepends '@Frost '", async () => {
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		const bluePanel = getEl<HTMLElement>('.ai-panel[data-ai="blue"]');
+
+		promptInput.value = "@nonpersona hi";
+		promptInput.dispatchEvent(new Event("input"));
+		bluePanel.click();
+
+		expect(promptInput.value).toBe("@Frost @nonpersona hi");
+	});
+});
+
 describe("renderGame — URL param sourcing", () => {
 	beforeEach(() => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");

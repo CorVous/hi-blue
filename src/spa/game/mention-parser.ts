@@ -71,6 +71,85 @@ export function parseFirstMention(
 }
 
 /**
+ * Applies an addressee change to the composer text by either rewriting an
+ * existing first mention in-place or prepending a new mention.
+ *
+ * Rules:
+ * a. If a valid first mention is found, rewrite it with the target persona's
+ *    name. Cursor delta is applied based on position relative to the mention.
+ * b. If no valid mention is found, prepend "@<name> " to the text.
+ *    Cursor shifts by the prefix length.
+ */
+export function applyAddresseeChange({
+	text,
+	selectionStart,
+	targetPersona,
+	personaNamesToId,
+	personas,
+}: {
+	text: string;
+	selectionStart: number | null;
+	targetPersona: AiId;
+	personaNamesToId: ReadonlyMap<string, AiId>;
+	personas: Record<AiId, { name: string }>;
+}): { text: string; selectionStart: number } {
+	const re = /(?:^|\s)@([A-Za-z][A-Za-z0-9]*)/g;
+	let foundAtStart = -1;
+	let foundNameEnd = -1;
+
+	for (const match of text.matchAll(re)) {
+		const raw = match[1];
+		if (!raw) continue;
+		// Strip a single trailing punctuation character if present.
+		const name = /[.,!?;:]$/.test(raw) ? raw.slice(0, -1) : raw;
+		const id = personaNamesToId.get(name.toLowerCase());
+		if (id !== undefined) {
+			// matchIndex is the start of the full match (which may include a
+			// leading space). The @ is immediately after any leading whitespace.
+			const matchIndex = match.index ?? 0;
+			const atStart =
+				matchIndex + (match[0].startsWith("@") ? 0 : match[0].indexOf("@"));
+			// nameEnd is the index after the raw capture (before trailing punct).
+			const nameEnd = atStart + 1 + name.length;
+			foundAtStart = atStart;
+			foundNameEnd = nameEnd;
+			break;
+		}
+	}
+
+	if (foundAtStart !== -1) {
+		// Rewrite in place.
+		const newName = personas[targetPersona].name;
+		const atStart = foundAtStart;
+		const nameEnd = foundNameEnd;
+		const newText =
+			text.slice(0, atStart) + `@${newName}` + text.slice(nameEnd);
+		const delta = 1 + newName.length - (nameEnd - atStart);
+
+		let newCursor: number;
+		if (selectionStart === null) {
+			newCursor = newText.length;
+		} else if (selectionStart <= atStart) {
+			newCursor = selectionStart;
+		} else if (selectionStart >= nameEnd) {
+			newCursor = selectionStart + delta;
+		} else {
+			// Cursor inside the mention → move to end of new name.
+			newCursor = atStart + 1 + newName.length;
+		}
+
+		return { text: newText, selectionStart: newCursor };
+	} else {
+		// Prepend.
+		const newName = personas[targetPersona].name;
+		const prefix = `@${newName} `;
+		const newText = prefix + text;
+		const cursor = (selectionStart ?? 0) + prefix.length;
+		return { text: newText, selectionStart: cursor };
+	}
+}
+
+/**
  * Builds a lowercased name → AiId map from a personas record.
  */
 export function buildPersonaNameMap(
