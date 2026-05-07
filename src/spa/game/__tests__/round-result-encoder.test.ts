@@ -75,9 +75,9 @@ function makePassResult(overrides?: Partial<RoundResult>): RoundResult {
 	return {
 		round: 1,
 		actions: [
-			{ round: 1, actor: "red", type: "pass", description: "Ember passed" },
-			{ round: 1, actor: "green", type: "pass", description: "Sage passed" },
-			{ round: 1, actor: "blue", type: "pass", description: "Frost passed" },
+			{ round: 1, actor: "red", kind: "pass", description: "Ember passed" },
+			{ round: 1, actor: "green", kind: "pass", description: "Sage passed" },
+			{ round: 1, actor: "blue", kind: "pass", description: "Frost passed" },
 		],
 		phaseEnded: false,
 		gameEnded: false,
@@ -322,15 +322,13 @@ describe("encodeRoundResult — action_log events", () => {
 				{
 					round: 1,
 					actor: "red",
-					type: "tool_success",
-					toolName: "pick_up",
-					args: { item: "flower" },
+					kind: "tool_success",
 					description: "Ember picked up the flower",
 				},
 				{
 					round: 1,
 					actor: "green",
-					type: "pass",
+					kind: "pass",
 					description: "Sage passed",
 				},
 			],
@@ -344,8 +342,8 @@ describe("encodeRoundResult — action_log events", () => {
 				e.type === "action_log",
 		);
 		expect(logEvents).toHaveLength(2);
-		expect(logEvents[0]?.entry.type).toBe("tool_success");
-		expect(logEvents[1]?.entry.type).toBe("pass");
+		expect(logEvents[0]?.entry.kind).toBe("tool_success");
+		expect(logEvents[1]?.entry.kind).toBe("pass");
 	});
 
 	it("includes tool_failure entries in action_log events", () => {
@@ -355,10 +353,7 @@ describe("encodeRoundResult — action_log events", () => {
 				{
 					round: 1,
 					actor: "red",
-					type: "tool_failure",
-					toolName: "pick_up",
-					args: { item: "ghost" },
-					reason: "Item does not exist",
+					kind: "tool_failure",
 					description: "Ember tried to pick up ghost but failed",
 				},
 			],
@@ -371,11 +366,9 @@ describe("encodeRoundResult — action_log events", () => {
 			(e): e is Extract<SseEvent, { type: "action_log" }> =>
 				e.type === "action_log",
 		);
-		const failure = logEvents.find((e) => e.entry.type === "tool_failure");
+		const failure = logEvents.find((e) => e.entry.kind === "tool_failure");
 		expect(failure).toBeDefined();
-		if (failure?.entry.type === "tool_failure") {
-			expect(failure.entry.reason).toBe("Item does not exist");
-		}
+		expect(failure?.entry.kind).toBe("tool_failure");
 	});
 });
 

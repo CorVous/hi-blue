@@ -6,7 +6,6 @@ import {
 	inBounds,
 } from "./direction.js";
 import {
-	appendActionLog,
 	appendChat,
 	appendWhisper,
 	deductBudget,
@@ -15,12 +14,12 @@ import {
 	updateActivePhase,
 } from "./engine";
 import type {
-	ActionLogEntry,
 	AiId,
 	AiTurnAction,
 	CardinalDirection,
 	GameState,
 	GridPosition,
+	RoundActionRecord,
 	ToolCall,
 } from "./types";
 
@@ -33,6 +32,8 @@ export interface DispatchResult {
 	rejected: boolean;
 	reason?: string;
 	game: GameState;
+	/** Records produced by this dispatch (0..N per call). */
+	records: RoundActionRecord[];
 }
 
 /** Narrow-check: is `holder` a GridPosition (not an AiId string)? */
@@ -265,36 +266,31 @@ export function dispatchAiTurn(
 			rejected: true,
 			reason: `${aiId} is locked out (budget exhausted)`,
 			game,
+			records: [],
 		};
 	}
 
 	let state = game;
 	const round = getActivePhase(state).round;
+	const records: RoundActionRecord[] = [];
 
 	if (action.toolCall) {
 		const validation = validateToolCall(state, aiId, action.toolCall);
 		if (validation.valid) {
 			state = executeToolCall(state, aiId, action.toolCall);
-			const entry: ActionLogEntry = {
+			records.push({
 				round,
 				actor: aiId,
-				type: "tool_success",
-				toolName: action.toolCall.name,
-				args: action.toolCall.args,
+				kind: "tool_success",
 				description: describeToolCall(state, aiId, action.toolCall),
-			};
-			state = appendActionLog(state, entry);
+			});
 		} else {
-			const entry: ActionLogEntry = {
+			records.push({
 				round,
 				actor: aiId,
-				type: "tool_failure",
-				toolName: action.toolCall.name,
-				args: action.toolCall.args,
-				reason: validation.reason ?? "",
+				kind: "tool_failure",
 				description: `${game.personas[aiId]?.name ?? aiId} tried to ${action.toolCall.name} ${action.toolCall.args.item ?? action.toolCall.args.direction ?? ""} but failed: ${validation.reason}`,
-			};
-			state = appendActionLog(state, entry);
+			});
 		}
 	}
 
@@ -303,14 +299,12 @@ export function dispatchAiTurn(
 			role: "ai",
 			content: action.chat.content,
 		});
-		const entry: ActionLogEntry = {
+		records.push({
 			round,
 			actor: aiId,
-			type: "chat",
-			target: action.chat.target,
+			kind: "chat",
 			description: `${game.personas[aiId]?.name ?? aiId} spoke to ${action.chat.target}`,
-		};
-		state = appendActionLog(state, entry);
+		});
 	}
 
 	if (action.whisper) {
@@ -320,27 +314,24 @@ export function dispatchAiTurn(
 			content: action.whisper.content,
 			round,
 		});
-		const entry: ActionLogEntry = {
+		records.push({
 			round,
 			actor: aiId,
-			type: "whisper",
-			target: action.whisper.target,
+			kind: "whisper",
 			description: `${game.personas[aiId]?.name ?? aiId} whispered to ${game.personas[action.whisper.target]?.name ?? action.whisper.target}`,
-		};
-		state = appendActionLog(state, entry);
+		});
 	}
 
 	if (action.pass && !action.toolCall && !action.chat && !action.whisper) {
-		const entry: ActionLogEntry = {
+		records.push({
 			round,
 			actor: aiId,
-			type: "pass",
+			kind: "pass",
 			description: `${game.personas[aiId]?.name ?? aiId} passed`,
-		};
-		state = appendActionLog(state, entry);
+		});
 	}
 
 	state = deductBudget(state, aiId);
 
-	return { rejected: false, game: state };
+	return { rejected: false, game: state, records };
 }

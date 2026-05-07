@@ -1,7 +1,7 @@
+import { projectCone } from "./cone-projector.js";
 import { formatPosition } from "./direction.js";
 import { getActivePhase } from "./engine";
 import type {
-	ActionLogEntry,
 	AiBudget,
 	AiId,
 	CardinalDirection,
@@ -22,7 +22,6 @@ export interface AiContext {
 	chatHistory: ChatMessage[];
 	whispersReceived: WhisperMessage[];
 	worldSnapshot: WorldState;
-	actionLog: ActionLogEntry[];
 	budget: AiBudget;
 	/** Current phase number — used to inject the wipe directive on phases 2+. */
 	phaseNumber: 1 | 2 | 3;
@@ -38,7 +37,6 @@ export function buildAiContext(game: GameState, aiId: AiId): AiContext {
 	const chatHistory = phase.chatHistories[aiId] ?? [];
 	const whispersReceived = phase.whispers.filter((w) => w.to === aiId);
 	const worldSnapshot = phase.world;
-	const actionLog = phase.actionLog;
 	const budget = phase.budgets[aiId] ?? { remaining: 0, total: 0 };
 	const goal = phase.aiGoals[aiId] ?? "";
 	const personaSpatial = phase.personaSpatial;
@@ -54,7 +52,6 @@ export function buildAiContext(game: GameState, aiId: AiId): AiContext {
 		chatHistory,
 		whispersReceived,
 		worldSnapshot,
-		actionLog,
 		budget,
 		phaseNumber: phase.phaseNumber,
 		personaSpatial,
@@ -84,6 +81,16 @@ const WIPE_DIRECTIVE =
 
 function facingLabel(facing: CardinalDirection): string {
 	return facing.charAt(0).toUpperCase() + facing.slice(1);
+}
+
+/** True when `holder` is a GridPosition (not an AiId string). */
+function isGridPosition(holder: AiId | GridPosition): holder is GridPosition {
+	return typeof holder === "object" && holder !== null;
+}
+
+/** True when two GridPositions refer to the same cell. */
+function positionsEqual(a: GridPosition, b: GridPosition): boolean {
+	return a.row === b.row && a.col === b.col;
 }
 
 function renderSystemPrompt(ctx: AiContext): string {
@@ -119,14 +126,7 @@ function renderSystemPrompt(ctx: AiContext): string {
 	);
 	lines.push("");
 
-	// Budget section.
-	lines.push("## Budget");
-	lines.push(
-		`${ctx.budget.remaining}/${ctx.budget.total} actions remaining this phase.`,
-	);
-	lines.push("");
-
-	// Spatial "Where you are" section
+	// "Where you are" section — includes budget (folded in per plan §5).
 	const actorSpatial = ctx.personaSpatial[ctx.aiId];
 	lines.push("## Where you are");
 	if (actorSpatial) {
@@ -134,76 +134,102 @@ function renderSystemPrompt(ctx: AiContext): string {
 			`Position: ${formatPosition(actorSpatial.position)}, facing ${facingLabel(actorSpatial.facing)}`,
 		);
 
-		// Items in actor's current cell
+		// Held items
+		const heldItems = ctx.worldSnapshot.items.filter(
+			(item) => item.holder === ctx.aiId,
+		);
+		if (heldItems.length > 0) {
+			lines.push(`You are holding: ${heldItems.map((i) => i.name).join(", ")}`);
+		} else {
+			lines.push("You are holding: nothing");
+		}
+
+		// Items resting in actor's own cell
 		const cellItems = ctx.worldSnapshot.items.filter((item) => {
 			const h = item.holder;
-			return (
-				typeof h === "object" &&
-				h !== null &&
-				h.row === actorSpatial.position.row &&
-				h.col === actorSpatial.position.col
-			);
+			return isGridPosition(h) && positionsEqual(h, actorSpatial.position);
 		});
 		if (cellItems.length > 0) {
 			lines.push(
-				`Items in your cell: ${cellItems.map((i) => i.name).join(", ")}`,
+				`Your cell contains: ${cellItems.map((i) => i.name).join(", ")}`,
 			);
 		} else {
-			lines.push("Items in your cell: none");
+			lines.push("Your cell contains: nothing");
 		}
 
-		// Other AIs' positions and facings
-		const otherAiIds = Object.keys(ctx.personaSpatial).filter(
-			(id) => id !== ctx.aiId,
+		lines.push(
+			`Budget: ${ctx.budget.remaining}/${ctx.budget.total} actions remaining this phase.`,
 		);
-		if (otherAiIds.length > 0) {
-			lines.push("Other AIs:");
-			for (const otherId of otherAiIds) {
-				const other = ctx.personaSpatial[otherId];
-				if (other) {
-					lines.push(
-						`  - ${otherId}: ${formatPosition(other.position)}, facing ${facingLabel(other.facing)}`,
-					);
-				}
+	} else {
+		lines.push("(no spatial data)");
+		lines.push(
+			`Budget: ${ctx.budget.remaining}/${ctx.budget.total} actions remaining this phase.`,
+		);
+	}
+	lines.push("");
+
+	// "What you see" section — cone projection.
+	lines.push("## What you see");
+	if (actorSpatial) {
+		const coneCells = projectCone(actorSpatial.position, actorSpatial.facing);
+		// Skip own cell (first entry) — it's covered by "Where you are"
+		const viewCells = coneCells.filter((c) => !c.isOwnCell);
+		for (const cell of viewCells) {
+			const { position, phrasing } = cell;
+
+			// Build contents of this cell
+			const contentParts: string[] = [];
+
+			// 1. Other AIs in this cell
+			for (const [otherId, otherSpatial] of Object.entries(
+				ctx.personaSpatial,
+			)) {
+				if (otherId === ctx.aiId) continue;
+				if (!positionsEqual(otherSpatial.position, position)) continue;
+				// Format: "the AI *<id>, facing <Dir>, holding <items|nothing>"
+				const heldByOther = ctx.worldSnapshot.items
+					.filter((item) => item.holder === otherId)
+					.map((item) => item.name);
+				const holdingStr =
+					heldByOther.length > 0 ? heldByOther.join(", ") : "nothing";
+				contentParts.push(
+					`the AI *${otherId}, facing ${facingLabel(otherSpatial.facing)}, holding ${holdingStr}`,
+				);
 			}
+
+			// 2. Items resting on this cell
+			const cellItems = ctx.worldSnapshot.items.filter((item) => {
+				const h = item.holder;
+				return isGridPosition(h) && positionsEqual(h, position);
+			});
+			if (cellItems.length > 0) {
+				contentParts.push(cellItems.map((i) => i.name).join(", "));
+			}
+
+			// 3. Obstacles in this cell
+			const hasObstacle = ctx.worldSnapshot.obstacles.some((o) =>
+				positionsEqual(o, position),
+			);
+			if (hasObstacle) {
+				contentParts.push("an obstacle");
+			}
+
+			const contents =
+				contentParts.length > 0 ? contentParts.join("; ") : "nothing";
+
+			// Capitalise the phrasing for display
+			const label = phrasing.charAt(0).toUpperCase() + phrasing.slice(1);
+			lines.push(
+				`- ${label} (row ${position.row}, col ${position.col}): ${contents}`,
+			);
+		}
+		if (viewCells.length === 0) {
+			lines.push("(nothing visible)");
 		}
 	} else {
 		lines.push("(no spatial data)");
 	}
 	lines.push("");
-
-	// World Inventory: held items + items in other cells
-	lines.push("## World Inventory");
-	const heldItems = ctx.worldSnapshot.items.filter(
-		(item) => typeof item.holder === "string",
-	);
-	const groundItems = ctx.worldSnapshot.items.filter((item) => {
-		const h = item.holder;
-		return typeof h === "object" && h !== null;
-	});
-	if (heldItems.length > 0) {
-		for (const item of heldItems) {
-			lines.push(`- ${item.name}: held by ${item.holder as string}`);
-		}
-	}
-	if (groundItems.length > 0) {
-		for (const item of groundItems) {
-			const pos = item.holder as GridPosition;
-			lines.push(`- ${item.name}: on the ground at ${formatPosition(pos)}`);
-		}
-	}
-	if (heldItems.length === 0 && groundItems.length === 0) {
-		lines.push("(no items in world)");
-	}
-	lines.push("");
-
-	if (ctx.actionLog.length > 0) {
-		lines.push("## Action Log");
-		for (const entry of ctx.actionLog) {
-			lines.push(`- [Round ${entry.round}] ${entry.description}`);
-		}
-		lines.push("");
-	}
 
 	if (ctx.whispersReceived.length > 0) {
 		lines.push("## Whispers Received");

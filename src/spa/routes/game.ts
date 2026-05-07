@@ -442,14 +442,7 @@ export function renderGame(
 				}
 			});
 
-			// Re-render action log from restored state
-			if (actionLogList) {
-				for (const entry of restoredPhase.actionLog) {
-					const li = doc.createElement("li");
-					li.textContent = `[Round ${entry.round}] ${entry.description}`;
-					actionLogList.appendChild(li);
-				}
-			}
+			// Action log is populated from live SSE events only (no reload restore).
 
 			// Scroll restored transcripts to the bottom on first paint so the
 			// most recent messages are visible after a page refresh. Deferred

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
 	advancePhase,
 	advanceRound,
-	appendActionLog,
 	appendChat,
 	appendWhisper,
 	createGame,
@@ -14,7 +13,7 @@ import {
 	startPhase,
 	triggerChatLockout,
 } from "../engine";
-import type { ActionLogEntry, AiPersona, PhaseConfig } from "../types";
+import type { AiPersona, PhaseConfig } from "../types";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -90,7 +89,6 @@ describe("startPhase", () => {
 		expect(phase.chatHistories.green).toEqual([]);
 		expect(phase.chatHistories.blue).toEqual([]);
 		expect(phase.whispers).toEqual([]);
-		expect(phase.actionLog).toEqual([]);
 		expect(phase.lockedOut.size).toBe(0);
 		expect(phase.world.items).toHaveLength(2);
 	});
@@ -256,42 +254,6 @@ describe("deductBudget", () => {
 		game = deductBudget(game, "blue");
 		game = deductBudget(game, "blue");
 		expect(getActivePhase(game).budgets.blue?.remaining).toBe(0);
-	});
-});
-
-describe("appendActionLog", () => {
-	it("appends an entry to the action log", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const entry: ActionLogEntry = {
-			round: 1,
-			actor: "red",
-			type: "tool_success",
-			toolName: "pick_up",
-			args: { item: "flower" },
-			description: "Ember picked up the flower",
-		};
-		const updated = appendActionLog(game, entry);
-		expect(getActivePhase(updated).actionLog).toHaveLength(1);
-		expect(getActivePhase(updated).actionLog[0]).toEqual(entry);
-	});
-
-	it("preserves existing entries when appending", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const entry1: ActionLogEntry = {
-			round: 1,
-			actor: "red",
-			type: "pass",
-			description: "Ember passed",
-		};
-		const entry2: ActionLogEntry = {
-			round: 1,
-			actor: "green",
-			type: "pass",
-			description: "Sage passed",
-		};
-		game = appendActionLog(game, entry1);
-		game = appendActionLog(game, entry2);
-		expect(getActivePhase(game).actionLog).toHaveLength(2);
 	});
 });
 

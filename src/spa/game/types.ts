@@ -49,6 +49,23 @@ export type ActionLogEntry = {
 	| { type: "pass" }
 );
 
+/**
+ * Slimmer record type used in RoundResult.actions (replaces ActionLogEntry
+ * on the cross-boundary shape so the SSE encoder can emit debug events).
+ */
+export type RoundActionRecord = {
+	round: number;
+	actor: AiId;
+	description: string;
+	kind:
+		| "tool_success"
+		| "tool_failure"
+		| "chat"
+		| "whisper"
+		| "pass"
+		| "lockout";
+};
+
 export interface ChatMessage {
 	role: "player" | "ai";
 	content: string;
@@ -105,7 +122,6 @@ export interface PhaseState {
 	budgets: Record<AiId, AiBudget>;
 	chatHistories: Record<AiId, ChatMessage[]>;
 	whispers: WhisperMessage[];
-	actionLog: ActionLogEntry[];
 	/** Budget-exhaustion lockout: prevents the AI from acting at all. */
 	lockedOut: Set<AiId>;
 	/**
@@ -173,7 +189,7 @@ export interface ToolRoundtripMessage {
 
 export interface RoundResult {
 	round: number;
-	actions: ActionLogEntry[];
+	actions: RoundActionRecord[];
 	phaseEnded: boolean;
 	gameEnded: boolean;
 	/**

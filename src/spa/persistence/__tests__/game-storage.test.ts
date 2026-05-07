@@ -140,7 +140,7 @@ describe("serializeGameState / deserializeGameState", () => {
 		expect(restoredPhase?.nextPhaseConfig?.phaseNumber).toBe(2);
 	});
 
-	it("round-trips chat histories, whispers, action log, world items, budgets", () => {
+	it("round-trips chat histories, whispers, world items, budgets", () => {
 		const game = makeFreshGame();
 		const phase = game.phases[0];
 		if (!phase) throw new Error("no phase");
@@ -153,14 +153,6 @@ describe("serializeGameState / deserializeGameState", () => {
 			},
 			whispers: [
 				{ from: "red" as AiId, to: "blue" as AiId, content: "psst", round: 1 },
-			],
-			actionLog: [
-				{
-					round: 1,
-					actor: "red" as AiId,
-					type: "pass" as const,
-					description: "passed",
-				},
 			],
 			world: {
 				items: [{ id: "key", name: "The Key", holder: { row: 0, col: 0 } }],
@@ -189,11 +181,6 @@ describe("serializeGameState / deserializeGameState", () => {
 			to: "blue",
 			content: "psst",
 			round: 1,
-		});
-		expect(rp?.actionLog[0]).toMatchObject({
-			round: 1,
-			actor: "red",
-			type: "pass",
 		});
 		expect(rp?.world.items[0]).toEqual({
 			id: "key",
@@ -272,6 +259,14 @@ describe("loadGame — schema version", () => {
 
 	it("returns error: version-mismatch when schemaVersion is 2 (old)", () => {
 		const bad = JSON.stringify({ schemaVersion: 2, savedAt: "", game: {} });
+		localStorage.setItem(STORAGE_KEY, bad);
+		const result = loadGame();
+		expect(result.state).toBeNull();
+		expect(result.error).toBe("version-mismatch");
+	});
+
+	it("returns error: version-mismatch when schemaVersion is 3 (pre-v4 schema without actionLog removal)", () => {
+		const bad = JSON.stringify({ schemaVersion: 3, savedAt: "", game: {} });
 		localStorage.setItem(STORAGE_KEY, bad);
 		const result = loadGame();
 		expect(result.state).toBeNull();
@@ -358,9 +353,9 @@ describe("loadGame", () => {
 	});
 
 	it("returns error: corrupt (not unavailable) when schemaVersion is valid but game structure is malformed", () => {
-		// Valid JSON, correct schemaVersion, but game.phases is not an array
+		// Valid JSON, correct schemaVersion (4), but game.phases is not an array
 		const malformed = JSON.stringify({
-			schemaVersion: 3,
+			schemaVersion: 4,
 			savedAt: new Date().toISOString(),
 			game: { currentPhase: 1, isComplete: false, personas: {}, phases: null },
 		});
