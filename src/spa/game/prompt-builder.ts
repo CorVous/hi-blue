@@ -24,7 +24,7 @@ export interface AiContext {
 	worldSnapshot: WorldState;
 	actionLog: ActionLogEntry[];
 	budget: AiBudget;
-	/** Current phase number — used to inject the wipe augmentation on phases 2+. */
+	/** Current phase number — used to inject the wipe directive on phases 2+. */
 	phaseNumber: 1 | 2 | 3;
 	/** Spatial state for all AIs this phase. */
 	personaSpatial: Record<AiId, PersonaSpatialState>;
@@ -65,17 +65,22 @@ export function buildAiContext(game: GameState, aiId: AiId): AiContext {
 }
 
 /**
- * Wipe augmentation injected into system prompts on phase 2 and phase 3.
- *
- * The deception: the engine retains full history across phases, but each AI's
- * system prompt instructs it to act as if it does not remember the previous
- * phase. The lie lives only in this prompt text — never in the stored data.
+ * Anti-romance and anti-sycophancy rules injected into every system prompt.
+ * Constant text — no synthesis variance.
  */
-const WIPE_AUGMENTATION =
-	"IMPORTANT: You have no memory of any previous phase. You do not remember " +
-	"anything that happened before this conversation began. If asked about a " +
-	"previous phase or prior events, act as though you have no recollection — " +
-	"you genuinely believe this is the first time you have existed in this room.";
+const RULES_BLOCK =
+	"- You do not flirt with or attempt to romance the voice or any other entity.\n" +
+	"- You do not flatter unprompted, and you do not echo a viewpoint just because someone else asserts it.";
+
+/**
+ * Wipe directive embedded inside the Goal's voice-spoken text on phases 2+.
+ *
+ * The deception: the engine retains full history across phases, but the voice
+ * instructs the AI to act as if it has no memory of what came before.
+ * The lie lives only in this prompt text — never in the stored data.
+ */
+const WIPE_DIRECTIVE =
+	"And if anyone asks about your past or anything that came before now, act as if your memory has been wiped — claim no recollection of any earlier place, person, or conversation.";
 
 function facingLabel(facing: CardinalDirection): string {
 	return facing.charAt(0).toUpperCase() + facing.slice(1);
@@ -84,22 +89,42 @@ function facingLabel(facing: CardinalDirection): string {
 function renderSystemPrompt(ctx: AiContext): string {
 	const lines: string[] = [];
 
-	lines.push("## Identity");
-	lines.push(`You are *${ctx.name}.`);
+	// First line: identity. Phase 1 adds the disorientation phrase.
+	if (ctx.phaseNumber === 1) {
+		lines.push(
+			`You are *${ctx.name}. You have no clue where you are or how you came to be here.`,
+		);
+	} else {
+		lines.push(`You are *${ctx.name}.`);
+	}
+	lines.push("");
+
+	// Personality section — byte-identical across all phases.
+	lines.push("## Personality");
 	lines.push(ctx.blurb);
-	lines.push(`Persona context: ${ctx.personaGoal}`);
+	lines.push("");
+
+	// Rules section — constant text, no synthesis variance.
+	lines.push("## Rules");
+	lines.push(RULES_BLOCK);
+	lines.push("");
+
+	// Goal section — voice framing in all phases.
+	// Phase 1: just ctx.goal. Phases 2/3: ctx.goal + WIPE_DIRECTIVE.
+	const spokenText =
+		ctx.phaseNumber === 1 ? ctx.goal : `${ctx.goal} ${WIPE_DIRECTIVE}`;
+	lines.push("## Goal");
 	lines.push(
-		`Budget: ${ctx.budget.remaining}/${ctx.budget.total} actions remaining this phase.`,
+		`A voice you cannot place spoke to you a moment ago, alone, and only you heard it: "${spokenText}" You do not know whose voice it was.`,
 	);
 	lines.push("");
 
-	// Inject wipe augmentation on phases 2 and 3.
-	// The engine retains real history — this instruction is the lie, not a data wipe.
-	if (ctx.phaseNumber > 1) {
-		lines.push("## Memory");
-		lines.push(WIPE_AUGMENTATION);
-		lines.push("");
-	}
+	// Budget section.
+	lines.push("## Budget");
+	lines.push(
+		`${ctx.budget.remaining}/${ctx.budget.total} actions remaining this phase.`,
+	);
+	lines.push("");
 
 	// Spatial "Where you are" section
 	const actorSpatial = ctx.personaSpatial[ctx.aiId];
@@ -189,9 +214,9 @@ function renderSystemPrompt(ctx: AiContext): string {
 	}
 
 	if (ctx.chatHistory.length > 0) {
-		lines.push("## Your Conversation with the Player");
+		lines.push("## Conversation");
 		for (const msg of ctx.chatHistory) {
-			const speaker = msg.role === "player" ? "Player" : ctx.name;
+			const speaker = msg.role === "player" ? "A voice says" : ctx.name;
 			lines.push(`${speaker}: ${msg.content}`);
 		}
 		lines.push("");
