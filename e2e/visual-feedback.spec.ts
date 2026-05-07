@@ -104,7 +104,7 @@ test("clearing input removes all visual classes and overlay highlights", async (
 	}
 
 	// No overlay highlight spans
-	await expect(
-		page.locator("#prompt-overlay .mention-highlight"),
-	).toHaveCount(0);
+	await expect(page.locator("#prompt-overlay .mention-highlight")).toHaveCount(
+		0,
+	);
 });

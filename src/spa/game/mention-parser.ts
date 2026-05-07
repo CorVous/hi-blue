@@ -34,8 +34,9 @@ export function findFirstMention(
 		const name = /[.,!?;:]$/.test(raw) ? raw.slice(0, -1) : raw;
 		const id = personaNamesToId.get(name.toLowerCase());
 		if (id !== undefined) {
-			// start is the index of "@" in the full text
-			const start = match.index! + match[0].indexOf("@");
+			// matchAll always populates match.index for each result.
+			const matchIndex = match.index ?? 0;
+			const start = matchIndex + match[0].indexOf("@");
 			const end = start + 1 + name.length;
 			return { aiId: id, start, end };
 		}

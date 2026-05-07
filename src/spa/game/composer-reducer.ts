@@ -69,7 +69,6 @@ export function deriveComposerState(input: ComposerInput): ComposerState {
 		sendEnabled,
 		borderColor: color,
 		panelHighlight: aiId,
-		mentionHighlight:
-			color !== null ? { start, end, color } : null,
+		mentionHighlight: color !== null ? { start, end, color } : null,
 	};
 }

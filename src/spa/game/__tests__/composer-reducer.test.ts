@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { PERSONAS } from "../../../content/personas.js";
 import { deriveComposerState } from "../composer-reducer.js";
-import { buildPersonaColorMap, buildPersonaNameMap } from "../mention-parser.js";
+import {
+	buildPersonaColorMap,
+	buildPersonaNameMap,
+} from "../mention-parser.js";
 import type { AiId } from "../types.js";
 
 // Re-use the real PERSONAS so the map is canonical.
@@ -27,7 +30,7 @@ function lockouts(locked: AiId): ReadonlyMap<AiId, boolean> {
 }
 
 describe("deriveComposerState", () => {
-	it('empty text → all fields null/false', () => {
+	it("empty text → all fields null/false", () => {
 		expect(
 			deriveComposerState({
 				text: "",

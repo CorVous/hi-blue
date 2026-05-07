@@ -1257,11 +1257,15 @@ describe("renderGame — visual feedback for active addressee (issue #109)", () 
 		const overlay = getEl<HTMLElement>("#prompt-overlay");
 
 		// No composer-border--* class
-		expect([...prompt.classList].some((c) => c.startsWith("composer-border--"))).toBe(false);
+		expect(
+			[...prompt.classList].some((c) => c.startsWith("composer-border--")),
+		).toBe(false);
 
 		// No panel--addressed on any panel
 		for (const ai of ["red", "green", "blue"]) {
-			const panel = document.querySelector<HTMLElement>(`.ai-panel[data-ai="${ai}"]`);
+			const panel = document.querySelector<HTMLElement>(
+				`.ai-panel[data-ai="${ai}"]`,
+			);
 			expect(panel?.classList.contains("panel--addressed")).toBe(false);
 		}
 
@@ -1287,9 +1291,15 @@ describe("renderGame — visual feedback for active addressee (issue #109)", () 
 		expect(prompt.classList.contains("composer-border--blue")).toBe(false);
 
 		// Panel highlights
-		const greenPanel = document.querySelector<HTMLElement>('.ai-panel[data-ai="green"]');
-		const redPanel = document.querySelector<HTMLElement>('.ai-panel[data-ai="red"]');
-		const bluePanel = document.querySelector<HTMLElement>('.ai-panel[data-ai="blue"]');
+		const greenPanel = document.querySelector<HTMLElement>(
+			'.ai-panel[data-ai="green"]',
+		);
+		const redPanel = document.querySelector<HTMLElement>(
+			'.ai-panel[data-ai="red"]',
+		);
+		const bluePanel = document.querySelector<HTMLElement>(
+			'.ai-panel[data-ai="blue"]',
+		);
 		expect(greenPanel?.classList.contains("panel--addressed")).toBe(true);
 		expect(greenPanel?.classList.contains("panel--addressed-green")).toBe(true);
 		expect(redPanel?.classList.contains("panel--addressed")).toBe(false);
@@ -1336,16 +1346,24 @@ describe("renderGame — visual feedback for active addressee (issue #109)", () 
 		prompt.dispatchEvent(new Event("input"));
 
 		// No composer-border--* class
-		expect([...prompt.classList].some((c) => c.startsWith("composer-border--"))).toBe(false);
+		expect(
+			[...prompt.classList].some((c) => c.startsWith("composer-border--")),
+		).toBe(false);
 
 		for (const ai of ["red", "green", "blue"]) {
-			const panel = document.querySelector<HTMLElement>(`.ai-panel[data-ai="${ai}"]`);
+			const panel = document.querySelector<HTMLElement>(
+				`.ai-panel[data-ai="${ai}"]`,
+			);
 			expect(panel?.classList.contains("panel--addressed")).toBe(false);
 		}
 	});
 
 	it("locked addressee still shows visual highlight", async () => {
-		const mockFetch = makeThreeAiFetchMock(PASS_ACTION, PASS_ACTION, PASS_ACTION);
+		const mockFetch = makeThreeAiFetchMock(
+			PASS_ACTION,
+			PASS_ACTION,
+			PASS_ACTION,
+		);
 		vi.stubGlobal("fetch", mockFetch);
 		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
@@ -1364,7 +1382,10 @@ describe("renderGame — visual feedback for active addressee (issue #109)", () 
 					...real,
 					result: {
 						...real.result,
-						chatLockoutTriggered: { aiId: "green" as const, message: "Sage is unresponsive…" },
+						chatLockoutTriggered: {
+							aiId: "green" as const,
+							message: "Sage is unresponsive…",
+						},
 					},
 				};
 			},
@@ -1380,7 +1401,9 @@ describe("renderGame — visual feedback for active addressee (issue #109)", () 
 		// Trigger lockout
 		prompt.value = "@Sage hello";
 		prompt.dispatchEvent(new Event("input"));
-		form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
 		// Now type @Sage again — send disabled but visual highlight still active
@@ -1390,7 +1413,9 @@ describe("renderGame — visual feedback for active addressee (issue #109)", () 
 		expect(sendBtn.disabled).toBe(true);
 		const prompt2 = getEl<HTMLInputElement>("#prompt");
 		expect(prompt2.classList.contains("composer-border--green")).toBe(true);
-		const greenPanel = document.querySelector<HTMLElement>('.ai-panel[data-ai="green"]');
+		const greenPanel = document.querySelector<HTMLElement>(
+			'.ai-panel[data-ai="green"]',
+		);
 		expect(greenPanel?.classList.contains("panel--addressed")).toBe(true);
 	});
 
@@ -1408,7 +1433,9 @@ describe("renderGame — visual feedback for active addressee (issue #109)", () 
 		expect(prompt.classList.contains("composer-border--green")).toBe(true);
 
 		// Click blue panel
-		const bluePanel = document.querySelector<HTMLElement>('.ai-panel[data-ai="blue"]');
+		const bluePanel = document.querySelector<HTMLElement>(
+			'.ai-panel[data-ai="blue"]',
+		);
 		bluePanel?.click();
 
 		// Input value should start with @Frost

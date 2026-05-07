@@ -4,7 +4,10 @@ import { BrowserLLMProvider } from "../game/browser-llm-provider.js";
 import { deriveComposerState } from "../game/composer-reducer.js";
 import { getActivePhase, updateActivePhase } from "../game/engine.js";
 import { GameSession } from "../game/game-session.js";
-import { buildPersonaColorMap, buildPersonaNameMap } from "../game/mention-parser.js";
+import {
+	buildPersonaColorMap,
+	buildPersonaNameMap,
+} from "../game/mention-parser.js";
 import { encodeRoundResult } from "../game/round-result-encoder.js";
 import type { AiId, PhaseConfig } from "../game/types";
 import { AI_TYPING_SPEED, TOKEN_PACE_MS } from "../game/typing-rhythm.js";
