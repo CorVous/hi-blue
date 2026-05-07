@@ -27,6 +27,8 @@ export interface AiContext {
 	phaseNumber: 1 | 2 | 3;
 	/** Spatial state for all AIs this phase. */
 	personaSpatial: Record<AiId, PersonaSpatialState>;
+	/** Color for each AI, keyed by AiId — used in cone rendering. */
+	personaColors: Record<AiId, string>;
 	toSystemPrompt(): string;
 }
 
@@ -43,6 +45,10 @@ export function buildAiContext(game: GameState, aiId: AiId): AiContext {
 
 	if (!persona) throw new Error(`No persona for aiId: ${aiId}`);
 
+	const personaColors: Record<AiId, string> = Object.fromEntries(
+		Object.entries(game.personas).map(([id, p]) => [id, p.color]),
+	);
+
 	return {
 		name: persona.name,
 		aiId,
@@ -55,6 +61,7 @@ export function buildAiContext(game: GameState, aiId: AiId): AiContext {
 		budget,
 		phaseNumber: phase.phaseNumber,
 		personaSpatial,
+		personaColors,
 		toSystemPrompt() {
 			return renderSystemPrompt(this);
 		},
@@ -192,8 +199,9 @@ function renderSystemPrompt(ctx: AiContext): string {
 					.map((item) => item.name);
 				const holdingStr =
 					heldByOther.length > 0 ? heldByOther.join(", ") : "nothing";
+				const otherColor = ctx.personaColors[otherId] ?? "unknown";
 				contentParts.push(
-					`the AI *${otherId}, facing ${facingLabel(otherSpatial.facing)}, holding ${holdingStr}`,
+					`the AI *${otherId} (${otherColor}), facing ${facingLabel(otherSpatial.facing)}, holding ${holdingStr}`,
 				);
 			}
 

@@ -865,6 +865,62 @@ describe("## What you see (cone)", () => {
 		expect(prompt).toContain("an obstacle");
 	});
 
+	it("other AI visible in cone is rendered with its color in parentheses", () => {
+		// Place red at (0,0) facing south (via custom rng sequence).
+		// Place green at (1,0) so it is directly in front of red.
+		// seq: [cellRed=0→(0,0), facingRed=0.25→south, cellGreen=0→(0,1), facingGreen=0→north,
+		//        cellBlue=0→(0,2), facingBlue=0→north]
+		// BUT green must land at (1,0) for this test. With rng=()=>0 after red takes (0,0),
+		// the next available cell index 0 is (0,1). We need a different approach.
+		// Instead: configure a 2-AI game using only red & green, and place them
+		// so green ends up in red's cone.
+		//
+		// Simplest: use the standard 3-AI TEST_PERSONAS but put green at a position
+		// inside red's southward cone. The engine's Fisher-Yates picks cells in order;
+		// with rng()→0 always, each AI gets the lowest-available cell.
+		// Red→(0,0), Green→(0,1), Blue→(0,2) all facing north (idx 0).
+		// Red faces north → cone OOB. Not useful.
+		//
+		// Use custom rng so red faces south AND green lands at (1,0):
+		// seq = [0 (red cell→(0,0)), 0.25 (red facing→south), ? (green cell→(1,0)), 0, 0, 0]
+		// cells = (0,0),(0,1),...,(0,4),(1,0),(1,1),...,(4,4) — row-major 25 cells
+		// After red takes cells[0]=(0,0), for i=1 (green):
+		//   j = 1 + Math.floor(rng() * 24)
+		//   We want j=5 so cells[5]=(1,0) → Math.floor(rng()*24)=4 → rng()=4/24
+		// seq = [0, 0.25, 4/24, 0, 0, 0]
+
+		const configForColorTest: PhaseConfig = {
+			phaseNumber: 1,
+			objective: "color in cone test",
+			aiGoals: { red: "r", green: "g", blue: "b" },
+			initialWorld: { items: [], obstacles: [] },
+			budgetPerAi: 5,
+		};
+
+		let callIdx = 0;
+		const seq = [0, 0.25, 4 / 24, 0, 0, 0];
+		const rng = () => {
+			const v = seq[callIdx % seq.length] ?? 0;
+			callIdx++;
+			return v;
+		};
+
+		const game = startPhase(createGame(TEST_PERSONAS), configForColorTest, rng);
+		const phase = game.phases[0];
+		// Verify spatial placements
+		const redSpatial = phase?.personaSpatial.red;
+		const greenSpatial = phase?.personaSpatial.green;
+		expect(redSpatial?.position).toEqual({ row: 0, col: 0 });
+		expect(redSpatial?.facing).toBe("south");
+		expect(greenSpatial?.position).toEqual({ row: 1, col: 0 });
+
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+
+		// green's color is "#81b29a" from TEST_PERSONAS — constant, safe to assert directly
+		expect(prompt).toContain("*green (#81b29a)");
+	});
+
 	it("prompt no longer contains '## Action Log' for any fixture state", () => {
 		const game = startPhase(
 			createGame(TEST_PERSONAS),

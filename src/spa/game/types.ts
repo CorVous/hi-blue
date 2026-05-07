@@ -32,27 +32,6 @@ export interface PersonaSpatialState {
 	facing: CardinalDirection;
 }
 
-export type ActionLogEntry = {
-	round: number;
-	actor: AiId;
-	description: string;
-} & (
-	| { type: "tool_success"; toolName: string; args: Record<string, string> }
-	| {
-			type: "tool_failure";
-			toolName: string;
-			args: Record<string, string>;
-			reason: string;
-	  }
-	| { type: "chat"; target: AiId | "player" }
-	| { type: "whisper"; target: AiId }
-	| { type: "pass" }
-);
-
-/**
- * Slimmer record type used in RoundResult.actions (replaces ActionLogEntry
- * on the cross-boundary shape so the SSE encoder can emit debug events).
- */
 export type RoundActionRecord = {
 	round: number;
 	actor: AiId;
