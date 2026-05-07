@@ -96,14 +96,14 @@ test("addressed message lands only on red panel; all three panels render progres
 		.locator('[data-transcript="blue"]')
 		.textContent();
 
-	// 9. [you] message appears in red transcript exactly once.
-	expect(redTranscript ?? "").toContain(`[you] @Ember hello red panel`);
-	// Exactly once: splitting on "[you]" gives exactly two parts.
-	expect((redTranscript ?? "").split("[you]").length).toBe(2);
+	// 9. player message appears in red transcript exactly once.
+	expect(redTranscript ?? "").toContain(`> @Ember hello red panel`);
+	// Exactly once: splitting on "> @" gives exactly two parts.
+	expect((redTranscript ?? "").split("> @").length).toBe(2);
 
-	// 10. green and blue do NOT contain [you].
-	expect(greenTranscript ?? "").not.toContain("[you]");
-	expect(blueTranscript ?? "").not.toContain("[you]");
+	// 10. green and blue do NOT contain "> @" (no player line).
+	expect(greenTranscript ?? "").not.toContain("> @");
+	expect(blueTranscript ?? "").not.toContain("> @");
 
 	// 11. Each distinct completion appears in exactly one transcript.
 	const transcripts = [

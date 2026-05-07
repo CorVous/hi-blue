@@ -67,10 +67,10 @@ test("typing '@Sage hi' enables Send and submits to green transcript only", asyn
 		.locator('[data-transcript="blue"]')
 		.textContent();
 
-	// [you] message appears only in green.
-	expect(greenTranscript ?? "").toContain("[you] @Sage hi");
-	expect(redTranscript ?? "").not.toContain("[you]");
-	expect(blueTranscript ?? "").not.toContain("[you]");
+	// player message appears only in green.
+	expect(greenTranscript ?? "").toContain("> @Sage hi");
+	expect(redTranscript ?? "").not.toContain("> @");
+	expect(blueTranscript ?? "").not.toContain("> @");
 
 	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
 });

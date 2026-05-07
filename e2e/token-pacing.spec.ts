@@ -86,7 +86,7 @@ test("token streaming arrives word-by-word, not as a single dump", async ({
 	// With live streaming, "thinking…" is stripped on the first live delta and
 	// replaced immediately by the AI's persona prefix + content. We wait for
 	// thinking… to disappear and the transcript to grow past the player message.
-	const playerMsg = `\n[you] @Ember Hello\n`;
+	const playerMsg = `\n> @Ember Hello\n`;
 	const afterPlayerLength = baselineText.length + playerMsg.length;
 
 	// Wait for thinking… to clear (first live delta strips it).

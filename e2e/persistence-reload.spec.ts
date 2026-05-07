@@ -63,7 +63,7 @@ test("game state and transcripts persist across mid-round reload", async ({
 		.textContent();
 	expect(preReloadTranscript).toBeTruthy();
 	// The player's message must appear in the transcript
-	expect(preReloadTranscript).toContain("[you]");
+	expect(preReloadTranscript).toContain("> @");
 	// The stub completion must appear in the addressed panel
 	expect(preReloadTranscript).toContain(STUB_COMPLETION);
 
@@ -85,7 +85,7 @@ test("game state and transcripts persist across mid-round reload", async ({
 	const postReloadTranscript = await page
 		.locator('[data-transcript="red"]')
 		.textContent();
-	expect(postReloadTranscript).toContain("[you]");
+	expect(postReloadTranscript).toContain("> @");
 	expect(postReloadTranscript).toContain(STUB_COMPLETION);
 	expect(postReloadTranscript).toBe(preReloadTranscript);
 

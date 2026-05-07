@@ -172,7 +172,7 @@ test("DIAGNOSTIC: observe wire vs DOM timeline during streaming", async ({
 
 	// Count DOM growth events that happen DURING the stream window of any AI.
 	// Filter out the initial "thinking…" placeholder by requiring growth past
-	// length 30 (player msg "[you] Hello" + "thinking…" ≈ 22 chars).
+	// length 30 (player msg "> Hello" + "thinking…" ≈ 18 chars).
 	const liveGrowthEvents = samples.filter(
 		(s) =>
 			s.kind === "dom" &&
