@@ -7,6 +7,7 @@ import { GameSession } from "../game/game-session.js";
 import {
 	applyAddresseeChange,
 	buildPersonaColorMap,
+	buildPersonaDisplayNameMap,
 	buildPersonaNameMap,
 } from "../game/mention-parser.js";
 import { encodeRoundResult } from "../game/round-result-encoder.js";
@@ -162,6 +163,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 	// Mention-based addressing state
 	const personaNamesToId = buildPersonaNameMap(PERSONAS);
 	const personaColors = buildPersonaColorMap(PERSONAS);
+	const personaDisplayNames = buildPersonaDisplayNameMap(PERSONAS);
 	const lockouts: Map<AiId, boolean> = new Map([
 		["red", false],
 		["green", false],
@@ -220,9 +222,12 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 			lockouts,
 			personaNamesToId,
 			personaColors,
+			personaDisplayNames,
 		});
 		_sendBtn.disabled = !state.sendEnabled || roundInFlight;
 		setColorClass(_promptInput, "composer-border--", state.borderColor);
+
+		// Panel muting (panel--locked) and addressing
 		for (const aiId of AI_ORDER) {
 			const panel = doc.querySelector<HTMLElement>(
 				`.ai-panel[data-ai="${aiId}"]`,
@@ -233,7 +238,25 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 			const color = personaColors.get(aiId);
 			if (color)
 				panel.classList.toggle(`panel--addressed-${color}`, isAddressed);
+			// Lock muting
+			const isLocked = state.lockedPanels.has(aiId);
+			panel.classList.toggle("panel--locked", isLocked);
+			panel.setAttribute("aria-disabled", isLocked ? "true" : "false");
 		}
+
+		// Inline lockout error element
+		const lockoutErrorEl =
+			doc.querySelector<HTMLOutputElement>("#lockout-error");
+		if (lockoutErrorEl) {
+			if (state.lockoutError) {
+				lockoutErrorEl.textContent = state.lockoutError;
+				lockoutErrorEl.removeAttribute("hidden");
+			} else {
+				lockoutErrorEl.textContent = "";
+				lockoutErrorEl.setAttribute("hidden", "");
+			}
+		}
+
 		rebuildOverlay(overlay, _promptInput.value, state.mentionHighlight);
 		if (overlay) overlay.scrollLeft = _promptInput.scrollLeft;
 	}
@@ -448,6 +471,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 			lockouts,
 			personaNamesToId,
 			personaColors,
+			personaDisplayNames,
 		});
 		if (!sendEnabled || !addressee) return;
 
