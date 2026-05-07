@@ -440,6 +440,15 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 					actionLogList.appendChild(li);
 				}
 			}
+
+			// Scroll restored transcripts to the bottom on first paint so the
+			// most recent messages are visible after a page refresh. Deferred
+			// via rAF so layout (scrollHeight) is computed before we assign.
+			requestAnimationFrame(() => {
+				for (const panel of restorePanelEls) {
+					scrollToBottom(panel.querySelector<HTMLElement>(".transcript"));
+				}
+			});
 		} else {
 			if (loadResult.error) {
 				showPersistenceWarning(loadResult.error);
