@@ -360,7 +360,6 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		if (!message) return;
 
 		const addressed = addressee;
-		promptInput.value = "";
 		roundInFlight = true;
 		sendBtn.disabled = true;
 
@@ -645,6 +644,19 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 				if (!saveResult.ok) {
 					showPersistenceWarning(saveResult.reason);
 				}
+			}
+
+			// Persist the addressee prefix so threaded conversations don't require
+			// re-picking the mention each turn. Body is cleared; cursor lands at end.
+			// Only written on success (not in catch) and not on round-game-ended.
+			if (!roundGameEnded) {
+				const persistedPrefix = `@${PERSONAS[addressed].name} `;
+				promptInput.value = persistedPrefix;
+				promptInput.setSelectionRange(
+					persistedPrefix.length,
+					persistedPrefix.length,
+				);
+				promptInput.focus();
 			}
 		} catch (err) {
 			stripPlaceholder();

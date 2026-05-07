@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildPersonaNameMap, parseFirstMention } from "../mention-parser.js";
+import {
+	buildPersonaNameMap,
+	findFirstMention,
+	parseFirstMention,
+} from "../mention-parser.js";
 import type { AiId } from "../types.js";
 
 // Build a minimal name→id map for the three canonical personas.
@@ -31,6 +35,64 @@ describe("parseFirstMention", () => {
 		["@Frost", "blue"],
 	])("parseFirstMention(%j) → %j", (text, expected) => {
 		expect(parseFirstMention(text, nameMap)).toBe(expected);
+	});
+});
+
+describe("findFirstMention", () => {
+	it('"@Sage" → { aiId: "green", start: 0, end: 5 }', () => {
+		expect(findFirstMention("@Sage", nameMap)).toEqual({
+			aiId: "green",
+			start: 0,
+			end: 5,
+		});
+	});
+
+	it('"@Sage hi" → { aiId: "green", start: 0, end: 5 }', () => {
+		expect(findFirstMention("@Sage hi", nameMap)).toEqual({
+			aiId: "green",
+			start: 0,
+			end: 5,
+		});
+	});
+
+	it('"hi @Sage" → { aiId: "green", start: 3, end: 8 }', () => {
+		expect(findFirstMention("hi @Sage", nameMap)).toEqual({
+			aiId: "green",
+			start: 3,
+			end: 8,
+		});
+	});
+
+	it('"@sage" (lowercase) → { aiId: "green", start: 0, end: 5 }', () => {
+		expect(findFirstMention("@sage", nameMap)).toEqual({
+			aiId: "green",
+			start: 0,
+			end: 5,
+		});
+	});
+
+	it('"@Sage," → end includes the comma (end: 6)', () => {
+		expect(findFirstMention("@Sage,", nameMap)).toEqual({
+			aiId: "green",
+			start: 0,
+			end: 6,
+		});
+	});
+
+	it('"@Frost @Sage" → first match is Frost (blue)', () => {
+		expect(findFirstMention("@Frost @Sage", nameMap)).toEqual({
+			aiId: "blue",
+			start: 0,
+			end: 6,
+		});
+	});
+
+	it('"hello world" → null', () => {
+		expect(findFirstMention("hello world", nameMap)).toBeNull();
+	});
+
+	it('"@Nonpersona" → null', () => {
+		expect(findFirstMention("@Nonpersona", nameMap)).toBeNull();
 	});
 });
 

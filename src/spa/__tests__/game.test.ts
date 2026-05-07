@@ -1121,6 +1121,9 @@ describe("renderGame — mention-based addressing", () => {
 		);
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
+		// After a successful send with green locked, the persisted prefix is written.
+		expect(promptInput.value).toBe("@Sage ");
+
 		// Now typing @Sage should leave Send disabled (green is locked)
 		promptInput.value = "@Sage hi";
 		promptInput.dispatchEvent(new Event("input"));
@@ -1228,5 +1231,225 @@ describe("renderGame — URL param sourcing", () => {
 		const actionLog = getEl<HTMLElement>("#action-log");
 		// Hash wins: debug=0 → log must remain hidden
 		expect(actionLog.hasAttribute("hidden")).toBe(true);
+	});
+});
+
+describe("renderGame — addressee persistence after send", () => {
+	beforeEach(() => {
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		document.body.innerHTML = INDEX_BODY_HTML;
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+		vi.resetModules();
+		document.body.innerHTML = "";
+	});
+
+	it("first-load: input empty and Send disabled (#107 preserved)", async () => {
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		const sendBtn = getEl<HTMLButtonElement>("#send");
+
+		expect(promptInput.value).toBe("");
+		expect(sendBtn.disabled).toBe(true);
+	});
+
+	it("after a successful send: input contains '@Sage ' and Send is disabled", async () => {
+		const mockFetch = makeThreeAiFetchMock(
+			PASS_ACTION,
+			PASS_ACTION,
+			PASS_ACTION,
+		);
+		vi.stubGlobal("fetch", mockFetch);
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		const form = getEl<HTMLFormElement>("#composer");
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		const sendBtn = getEl<HTMLButtonElement>("#send");
+
+		promptInput.value = "@Sage hello";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		expect(promptInput.value).toBe("@Sage ");
+		expect(promptInput.selectionStart).toBe(6);
+		expect(promptInput.selectionEnd).toBe(6);
+		expect(sendBtn.disabled).toBe(true);
+	});
+
+	it("typing body text after a successful send re-enables Send", async () => {
+		const mockFetch = makeThreeAiFetchMock(
+			PASS_ACTION,
+			PASS_ACTION,
+			PASS_ACTION,
+		);
+		vi.stubGlobal("fetch", mockFetch);
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		const form = getEl<HTMLFormElement>("#composer");
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		const sendBtn = getEl<HTMLButtonElement>("#send");
+
+		promptInput.value = "@Sage hello";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		// Send disabled after first send (only prefix remains)
+		expect(sendBtn.disabled).toBe(true);
+
+		// Typing body text after the persisted prefix re-enables Send
+		promptInput.value = "@Sage how are you";
+		promptInput.dispatchEvent(new Event("input"));
+		expect(sendBtn.disabled).toBe(false);
+	});
+
+	it("two-message conversation: same addressee persists across turns, both in transcript", async () => {
+		const mockFetch = vi.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
+			statusText: "OK",
+			body: makeAiSseStream(PASS_ACTION),
+		});
+		vi.stubGlobal("fetch", mockFetch);
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		const form = getEl<HTMLFormElement>("#composer");
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+
+		// First turn
+		promptInput.value = "@Sage hello";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		// Prefix persists after first send
+		expect(promptInput.value).toBe("@Sage ");
+
+		// Second turn: extend the persisted prefix
+		promptInput.value = "@Sage how are you";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		// Prefix persists again after second send
+		expect(promptInput.value).toBe("@Sage ");
+
+		// Both messages should be in the green transcript
+		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
+		expect(greenTranscript.textContent).toContain("[you] @Sage hello");
+		expect(greenTranscript.textContent).toContain("[you] @Sage how are you");
+	});
+
+	it("canonical-name normalization: @sage (lowercase) → '@Sage ' after send", async () => {
+		const mockFetch = makeThreeAiFetchMock(
+			PASS_ACTION,
+			PASS_ACTION,
+			PASS_ACTION,
+		);
+		vi.stubGlobal("fetch", mockFetch);
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		const form = getEl<HTMLFormElement>("#composer");
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+
+		promptInput.value = "@sage hi";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		// Should use canonical name from PERSONAS (Sage, not sage)
+		expect(promptInput.value).toBe("@Sage ");
+	});
+
+	it("locked-AI at round-completion: mention prefix persists but Send stays disabled", async () => {
+		const mockFetch = makeThreeAiFetchMock(
+			PASS_ACTION,
+			PASS_ACTION,
+			PASS_ACTION,
+		);
+		vi.stubGlobal("fetch", mockFetch);
+		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		vi.resetModules();
+
+		// Inject chatLockoutTriggered for green so the SPA sets green locked.
+		const { GameSession } = await import("../game/game-session.js");
+		const originalSubmit = GameSession.prototype.submitMessage;
+		vi.spyOn(GameSession.prototype, "submitMessage").mockImplementation(
+			async function (
+				this: InstanceType<typeof GameSession>,
+				...args: Parameters<InstanceType<typeof GameSession>["submitMessage"]>
+			) {
+				const real = await originalSubmit.apply(this, args);
+				return {
+					...real,
+					result: {
+						...real.result,
+						chatLockoutTriggered: {
+							aiId: "green" as const,
+							message: "Sage is unresponsive…",
+						},
+					},
+				};
+			},
+		);
+
+		const { renderGame } = await import("../routes/game.js");
+		renderGame(getEl<HTMLElement>("main"));
+
+		const form = getEl<HTMLFormElement>("#composer");
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		const sendBtn = getEl<HTMLButtonElement>("#send");
+
+		promptInput.value = "@Sage hello";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		// Prefix persists even when green is locked
+		expect(promptInput.value).toBe("@Sage ");
+		// Send must be disabled: green is locked and no body text
+		expect(sendBtn.disabled).toBe(true);
 	});
 });
