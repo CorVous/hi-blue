@@ -46,14 +46,14 @@ describe("deriveComposerState", () => {
 		).toEqual({ addressee: null, sendEnabled: false });
 	});
 
-	it('"@Sage" no lockouts → { addressee: "green", sendEnabled: true }', () => {
+	it('"@Sage" no lockouts → { addressee: "green", sendEnabled: false } (no body)', () => {
 		expect(
 			deriveComposerState({
 				text: "@Sage",
 				lockouts: noLockouts(),
 				personaNamesToId,
 			}),
-		).toEqual({ addressee: "green", sendEnabled: true });
+		).toEqual({ addressee: "green", sendEnabled: false });
 	});
 
 	it('"@Sage hi" no lockouts → { addressee: "green", sendEnabled: true }', () => {
@@ -96,14 +96,14 @@ describe("deriveComposerState", () => {
 		).toEqual({ addressee: null, sendEnabled: false });
 	});
 
-	it('"@Sage," no lockouts → { addressee: "green", sendEnabled: true }', () => {
+	it('"@Sage," no lockouts → { addressee: "green", sendEnabled: false } (no body after comma-stripped mention)', () => {
 		expect(
 			deriveComposerState({
 				text: "@Sage,",
 				lockouts: noLockouts(),
 				personaNamesToId,
 			}),
-		).toEqual({ addressee: "green", sendEnabled: true });
+		).toEqual({ addressee: "green", sendEnabled: false });
 	});
 
 	it('"@Frost @Sage" no lockouts → { addressee: "blue", sendEnabled: true }', () => {
@@ -124,5 +124,56 @@ describe("deriveComposerState", () => {
 				personaNamesToId,
 			}),
 		).toEqual({ addressee: "blue", sendEnabled: false });
+	});
+
+	// Body-after-mention rule: persisted prefix cases
+	it('"@Sage " (trailing space only) → { addressee: "green", sendEnabled: false }', () => {
+		expect(
+			deriveComposerState({
+				text: "@Sage ",
+				lockouts: noLockouts(),
+				personaNamesToId,
+			}),
+		).toEqual({ addressee: "green", sendEnabled: false });
+	});
+
+	it('"@Sage  " (two trailing spaces) → { addressee: "green", sendEnabled: false }', () => {
+		expect(
+			deriveComposerState({
+				text: "@Sage  ",
+				lockouts: noLockouts(),
+				personaNamesToId,
+			}),
+		).toEqual({ addressee: "green", sendEnabled: false });
+	});
+
+	it('"hi @Sage" → { addressee: "green", sendEnabled: true } (body before mention)', () => {
+		expect(
+			deriveComposerState({
+				text: "hi @Sage",
+				lockouts: noLockouts(),
+				personaNamesToId,
+			}),
+		).toEqual({ addressee: "green", sendEnabled: true });
+	});
+
+	it('"hi @Sage there" → { addressee: "green", sendEnabled: true } (body on both sides)', () => {
+		expect(
+			deriveComposerState({
+				text: "hi @Sage there",
+				lockouts: noLockouts(),
+				personaNamesToId,
+			}),
+		).toEqual({ addressee: "green", sendEnabled: true });
+	});
+
+	it('"@sage hi" (lowercase mention) → { addressee: "green", sendEnabled: true }', () => {
+		expect(
+			deriveComposerState({
+				text: "@sage hi",
+				lockouts: noLockouts(),
+				personaNamesToId,
+			}),
+		).toEqual({ addressee: "green", sendEnabled: true });
 	});
 });

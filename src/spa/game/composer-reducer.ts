@@ -1,4 +1,4 @@
-import { parseFirstMention } from "./mention-parser.js";
+import { findFirstMention } from "./mention-parser.js";
 import type { AiId } from "./types.js";
 
 export interface ComposerInput {
@@ -18,11 +18,18 @@ export interface ComposerState {
  *
  * - `addressee` is the first valid @mention in the text.
  * - `sendEnabled` is true only when `addressee` is non-null AND the
- *   addressed AI is not chat-locked.
+ *   addressed AI is not chat-locked AND there is non-empty body text
+ *   outside the mention token.
  */
 export function deriveComposerState(input: ComposerInput): ComposerState {
 	const { text, lockouts, personaNamesToId } = input;
-	const addressee = parseFirstMention(text, personaNamesToId);
-	const sendEnabled = addressee !== null && lockouts.get(addressee) !== true;
+	const match = findFirstMention(text, personaNamesToId);
+	if (match === null) return { addressee: null, sendEnabled: false };
+
+	const { aiId: addressee, start, end } = match;
+	// Body is everything except the @Name token itself.
+	const bodyAfterMention = (text.slice(0, start) + text.slice(end)).trim();
+	const sendEnabled =
+		lockouts.get(addressee) !== true && bodyAfterMention.length > 0;
 	return { addressee, sendEnabled };
 }
