@@ -1,5 +1,12 @@
 import { generatePersonas, PHASE_1_CONFIG } from "../../content";
 import { serializeGameSave } from "../../save-serializer.js";
+import {
+	BANNER,
+	formatTopInfoLeft,
+	formatTopInfoRight,
+	getOrMintSessionId,
+	initPanelChrome,
+} from "../bbs-chrome.js";
 import { BrowserLLMProvider } from "../game/browser-llm-provider.js";
 import { deriveComposerState } from "../game/composer-reducer.js";
 import { getActivePhase, updateActivePhase } from "../game/engine.js";
@@ -13,12 +20,6 @@ import {
 import { encodeRoundResult } from "../game/round-result-encoder.js";
 import type { AiId, PhaseConfig } from "../game/types";
 import { AI_TYPING_SPEED, TOKEN_PACE_MS } from "../game/typing-rhythm.js";
-
-/** Return the *xxxx display form from the bare 4-char handle. */
-function displayName(name: string): string {
-	return `*${name}`;
-}
-
 import { CapHitError } from "../llm-client.js";
 import {
 	clearGame,
@@ -26,6 +27,11 @@ import {
 	loadGame,
 	saveGame,
 } from "../persistence/game-storage.js";
+
+/** Lowercased persona name for transcript prefixes (`> ember <msg>`). */
+function transcriptName(name: string): string {
+	return name.toLowerCase();
+}
 
 /** Fisher-Yates shuffle (returns a new array). */
 function shuffle<T>(arr: T[]): T[] {
@@ -179,6 +185,31 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 	// Overlay for mention highlight rendering.
 	const overlay = doc.querySelector<HTMLElement>("#prompt-overlay");
 
+	// Prompt-target indicator inside the BBS-style command-line prefix.
+	const promptTargetEl = doc.querySelector<HTMLElement>(".prompt-target");
+
+	/** Update the `/<handle>` indicator beside `guest@hi-blue.bbs:` from the
+	 * current addressee. `null` resets to dim `/???`. */
+	function refreshPromptTarget(addressee: AiId | null): void {
+		if (!promptTargetEl) return;
+		if (addressee == null) {
+			promptTargetEl.textContent = "/???";
+			promptTargetEl.classList.remove("is-set");
+			promptTargetEl.style.removeProperty("--target-color");
+			return;
+		}
+		const personas = session?.getState().personas ?? {};
+		const persona = personas[addressee];
+		const handle = persona?.name ?? addressee;
+		promptTargetEl.textContent = `/${handle}`;
+		promptTargetEl.classList.add("is-set");
+		if (persona?.color) {
+			promptTargetEl.style.setProperty("--target-color", persona.color);
+		} else {
+			promptTargetEl.style.removeProperty("--target-color");
+		}
+	}
+
 	/** Set or clear the --panel-color CSS custom property on an element. */
 	function setPanelColor(el: HTMLElement, color: string | null): void {
 		if (color != null) {
@@ -255,6 +286,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 
 		rebuildOverlay(overlay, _promptInput.value, state.mentionHighlight);
 		if (overlay) overlay.scrollLeft = _promptInput.scrollLeft;
+		refreshPromptTarget(state.addressee);
 	}
 
 	promptInput.addEventListener("input", refreshComposerState);
@@ -304,14 +336,18 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 				transcripts: Partial<Record<AiId, string>>;
 			};
 
-			// Re-render transcripts from restored state
+			// Re-render transcripts from restored state. Map aiIds to panels by
+			// slot order — matches the panel-init loop below; needed because the
+			// HTML scaffold has empty data-transcript attributes that get filled
+			// in at panel-init time.
 			const restoredPhase = getActivePhase(loadResult.state);
 			const restoredPersonas = loadResult.state.personas;
-			for (const aiId of Object.keys(restoredPersonas)) {
-				const transcript = doc.querySelector<HTMLElement>(
-					`[data-transcript="${aiId}"]`,
-				);
-				if (!transcript) continue;
+			const restorePanelEls = doc.querySelectorAll<HTMLElement>(".ai-panel");
+			Object.keys(restoredPersonas).forEach((aiId, idx) => {
+				const panel = restorePanelEls[idx];
+				if (!panel) return;
+				const transcript = panel.querySelector<HTMLElement>(".transcript");
+				if (!transcript) return;
 				if (typeof restored.transcripts[aiId] === "string") {
 					// Verbatim restore from persisted transcript snapshot
 					transcript.textContent = restored.transcripts[aiId];
@@ -321,12 +357,12 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 						const personaName = restoredPersonas[aiId]?.name ?? aiId;
 						const prefix =
 							msg.role === "player"
-								? "[you] "
-								: `[${displayName(personaName)}] `;
+								? "> you "
+								: `> ${transcriptName(personaName)} `;
 						transcript.textContent += `${prefix}${msg.content}\n`;
 					}
 				}
-			}
+			});
 
 			// Re-render action log from restored state
 			if (actionLogList) {
@@ -370,7 +406,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 	// Set initial composer state (Send starts disabled until a valid @mention).
 	refreshComposerState();
 
-	// Populate panel headers from runtime personas; assign data-ai and --panel-color
+	// Populate panel headers, ASCII border chrome, --panel-color, and budgets.
 	const panelEls = doc.querySelectorAll<HTMLElement>(".ai-panel");
 	const aiIdList = Object.keys(session.getState().personas);
 	const runtimePersonasForPanels = session.getState().personas;
@@ -382,9 +418,8 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		const persona = runtimePersonasForPanels[aiId];
 		if (!persona) return;
 		panel.style.setProperty("--panel-color", persona.color);
-		const nameEl = panel.querySelector<HTMLSpanElement>(".panel-name");
+		initPanelChrome(panel, persona);
 		const budgetEl = panel.querySelector<HTMLSpanElement>(".panel-budget");
-		if (nameEl) nameEl.textContent = displayName(persona.name);
 		const phase = getActivePhase(sessionRef.getState());
 		if (budgetEl) {
 			const budget = phase.budgets[aiId];
@@ -394,6 +429,42 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 			}
 		}
 	});
+
+	// One-time chrome: ASCII banner + initial top-info row.
+	const bannerEl = doc.querySelector<HTMLElement>("#banner");
+	if (bannerEl && !bannerEl.textContent) bannerEl.textContent = BANNER;
+	const sessionId = getOrMintSessionId();
+	const topinfoLeftEl = doc.querySelector<HTMLElement>("#topinfo-left");
+	const topinfoRightEl = doc.querySelector<HTMLElement>("#topinfo-right");
+
+	function refreshTopInfo(): void {
+		if (!session) return;
+		if (!topinfoLeftEl || !topinfoRightEl) return;
+		const state = session.getState();
+		const phase = getActivePhase(state);
+		// Walk the nextPhaseConfig chain from PHASE_1_CONFIG to count total phases.
+		let total = 1;
+		let cursor: PhaseConfig | undefined = PHASE_1_CONFIG.nextPhaseConfig;
+		while (cursor) {
+			total += 1;
+			cursor = cursor.nextPhaseConfig;
+		}
+		const personas = state.personas;
+		const daemons = Object.keys(personas).filter(
+			(id) => !phase.chatLockouts.has(id),
+		).length;
+		const inputs = {
+			sessionId,
+			phaseNumber: phase.phaseNumber,
+			totalPhases: total,
+			turn: phase.round,
+			daemonsOnline: daemons,
+		};
+		topinfoLeftEl.textContent = formatTopInfoLeft(inputs);
+		topinfoRightEl.textContent = formatTopInfoRight(inputs);
+	}
+
+	refreshTopInfo();
 
 	// Panel-click → addressee mention mutation (issue #108)
 	for (const aiId of aiIdList) {
@@ -473,6 +544,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 	function setChatLockout(aiId: AiId, locked: boolean): void {
 		lockouts.set(aiId, locked);
 		refreshComposerState();
+		refreshTopInfo();
 	}
 
 	form.addEventListener("submit", async (evt) => {
@@ -496,7 +568,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		sendBtn.disabled = true;
 
 		// Append player's message to the addressed panel
-		appendToTranscript(addressed, `[you] ${message}\n`);
+		appendToTranscript(addressed, `> you ${message}\n`);
 
 		// Show a "thinking…" placeholder in the addressed panel while the
 		// first live delta arrives. Stripped on the first onAiDelta call;
@@ -533,7 +605,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 				stripPlaceholder();
 				// Emit persona prefix live (encoder will skip it for this AI).
 				const personaName = session?.getState().personas[aiId]?.name ?? aiId;
-				appendToTranscript(aiId, `[${displayName(personaName)}] `);
+				appendToTranscript(aiId, `> ${transcriptName(personaName)} `);
 				liveAis.add(aiId);
 			}
 			appendToTranscript(aiId, text);
@@ -571,7 +643,7 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 						if (!liveAis.has(event.aiId)) {
 							// Not live — emit persona prefix now (synthetic path).
 							const sName = nextState.personas[event.aiId]?.name ?? event.aiId;
-							appendToTranscript(event.aiId, `[${displayName(sName)}] `);
+							appendToTranscript(event.aiId, `> ${transcriptName(sName)} `);
 						}
 						// If live, prefix was already painted; just track speakingAi.
 						break;
@@ -804,7 +876,10 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 		} finally {
 			stripPlaceholder();
 			roundInFlight = false;
-			if (!roundGameEnded) refreshComposerState();
+			if (!roundGameEnded) {
+				refreshComposerState();
+				refreshTopInfo();
+			}
 		}
 	});
 }

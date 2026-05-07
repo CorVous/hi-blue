@@ -415,7 +415,7 @@ describe("renderGame (game route — three-AI)", () => {
 		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
 		expect(redTranscript.textContent).toContain("--- Phase 2 begins:");
 		// No content from the previous phase should remain
-		expect(redTranscript.textContent).not.toContain("[you]");
+		expect(redTranscript.textContent).not.toContain("> you");
 	});
 
 	it("after three-phase win condition, endgame screen shown and chat hidden; download button has parseable GameSave", async () => {
@@ -1053,7 +1053,7 @@ describe("renderGame — mention-based addressing", () => {
 		expect(sendBtn.disabled).toBe(false);
 	});
 
-	it("submit with '@Sage hi' routes [you] message to green panel", async () => {
+	it("submit with '@Sage hi' routes '> you' message to green panel", async () => {
 		const mockFetch = makeThreeAiFetchMock(
 			PASS_ACTION,
 			PASS_ACTION,
@@ -1080,9 +1080,9 @@ describe("renderGame — mention-based addressing", () => {
 		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
 		const blueTranscript = getEl<HTMLElement>('[data-transcript="blue"]');
 
-		expect(greenTranscript.textContent).toContain("[you] @Sage hi");
-		expect(redTranscript.textContent).not.toContain("[you]");
-		expect(blueTranscript.textContent).not.toContain("[you]");
+		expect(greenTranscript.textContent).toContain("> you @Sage hi");
+		expect(redTranscript.textContent).not.toContain("> you");
+		expect(blueTranscript.textContent).not.toContain("> you");
 	});
 
 	it("@Sage while green locked leaves Send disabled", async () => {
@@ -1536,8 +1536,8 @@ describe("renderGame — addressee persistence after send", () => {
 
 		// Both messages should be in the green transcript
 		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
-		expect(greenTranscript.textContent).toContain("[you] @Sage hello");
-		expect(greenTranscript.textContent).toContain("[you] @Sage how are you");
+		expect(greenTranscript.textContent).toContain("> you @Sage hello");
+		expect(greenTranscript.textContent).toContain("> you @Sage how are you");
 	});
 
 	it("canonical-name normalization: @sage (lowercase) → '@Sage ' after send", async () => {

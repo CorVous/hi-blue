@@ -3,92 +3,159 @@
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>hi-blue</title>
+		<title>hi-blue · BBS terminal</title>
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
 		<link rel="stylesheet" href="./assets/index.css" />
 	</head>
 	<body>
-		<header>
-		  <button id="byok-cog" type="button" aria-label="Settings" title="Settings">⚙</button>
-		</header>
-		<main>
-		  <div id="phase-banner" hidden></div>
-		  <div id="panels">
-		    <article class="ai-panel" data-ai="red">
-		      <header class="panel-header">
-		        <span class="panel-name"></span>
-		        <span class="panel-budget" data-budget=""></span>
-		      </header>
-		      <div class="transcript" data-transcript="red"></div>
-		    </article>
-		    <article class="ai-panel" data-ai="green">
-		      <header class="panel-header">
-		        <span class="panel-name"></span>
-		        <span class="panel-budget" data-budget=""></span>
-		      </header>
-		      <div class="transcript" data-transcript="green"></div>
-		    </article>
-		    <article class="ai-panel" data-ai="blue">
-		      <header class="panel-header">
-		        <span class="panel-name"></span>
-		        <span class="panel-budget" data-budget=""></span>
-		      </header>
-		      <div class="transcript" data-transcript="blue"></div>
-		    </article>
-		  </div>
-		  <form id="composer">
-		    <div class="prompt-wrap">
-		      <div id="prompt-overlay" aria-hidden="true"></div>
-		      <input id="prompt" type="text" placeholder="Enter a message…" autocomplete="off" />
-		    </div>
-		    <output id="lockout-error" class="lockout-error" role="status" aria-live="polite" hidden></output>
-		    <button id="send" type="submit">Send</button>
-		  </form>
-		  <section id="cap-hit" hidden>
-		    <h2>the AIs are sleeping</h2>
-		    <pre class="cap-hit-body">the AIs are sleeping.
+		<div id="stage">
+			<header>
+				<button id="byok-cog" type="button" aria-label="Settings" title="Settings">[ ⚙ ]</button>
+			</header>
+			<pre class="banner" id="banner" aria-hidden="true"></pre>
+			<div id="topinfo" class="topinfo">
+				<span id="topinfo-left"></span>
+				<span id="topinfo-right"></span>
+			</div>
+			<main>
+				<div id="phase-banner" hidden></div>
+				<div id="panels" class="row">
+					<article class="ai-panel panel">
+						<div class="brow brow-top">
+							<span class="corner corner-tl"></span>
+							<span class="brow-label panel-name"></span>
+							<span class="brow-fill brow-fill-thin"></span>
+							<span class="brow-fill brow-fill-heavy"></span>
+							<span class="corner corner-tr"></span>
+						</div>
+						<div class="body">
+							<span class="side side-left side-thin"></span>
+							<span class="side side-left side-heavy"></span>
+							<div class="panel-content">
+								<div class="panel-meta dim">budget <span class="panel-budget" data-budget=""></span></div>
+								<div class="transcript scroll" data-transcript=""></div>
+							</div>
+							<span class="side side-right side-thin"></span>
+							<span class="side side-right side-heavy"></span>
+						</div>
+						<div class="brow brow-bot">
+							<span class="corner corner-bl"></span>
+							<span class="brow-fill brow-fill-thin"></span>
+							<span class="brow-fill brow-fill-heavy"></span>
+							<span class="corner corner-br"></span>
+						</div>
+					</article>
+					<article class="ai-panel panel">
+						<div class="brow brow-top">
+							<span class="corner corner-tl"></span>
+							<span class="brow-label panel-name"></span>
+							<span class="brow-fill brow-fill-thin"></span>
+							<span class="brow-fill brow-fill-heavy"></span>
+							<span class="corner corner-tr"></span>
+						</div>
+						<div class="body">
+							<span class="side side-left side-thin"></span>
+							<span class="side side-left side-heavy"></span>
+							<div class="panel-content">
+								<div class="panel-meta dim">budget <span class="panel-budget" data-budget=""></span></div>
+								<div class="transcript scroll" data-transcript=""></div>
+							</div>
+							<span class="side side-right side-thin"></span>
+							<span class="side side-right side-heavy"></span>
+						</div>
+						<div class="brow brow-bot">
+							<span class="corner corner-bl"></span>
+							<span class="brow-fill brow-fill-thin"></span>
+							<span class="brow-fill brow-fill-heavy"></span>
+							<span class="corner corner-br"></span>
+						</div>
+					</article>
+					<article class="ai-panel panel">
+						<div class="brow brow-top">
+							<span class="corner corner-tl"></span>
+							<span class="brow-label panel-name"></span>
+							<span class="brow-fill brow-fill-thin"></span>
+							<span class="brow-fill brow-fill-heavy"></span>
+							<span class="corner corner-tr"></span>
+						</div>
+						<div class="body">
+							<span class="side side-left side-thin"></span>
+							<span class="side side-left side-heavy"></span>
+							<div class="panel-content">
+								<div class="panel-meta dim">budget <span class="panel-budget" data-budget=""></span></div>
+								<div class="transcript scroll" data-transcript=""></div>
+							</div>
+							<span class="side side-right side-thin"></span>
+							<span class="side side-right side-heavy"></span>
+						</div>
+						<div class="brow brow-bot">
+							<span class="corner corner-bl"></span>
+							<span class="brow-fill brow-fill-thin"></span>
+							<span class="brow-fill brow-fill-heavy"></span>
+							<span class="corner corner-br"></span>
+						</div>
+					</article>
+				</div>
+				<form id="composer" class="cmd">
+					<span class="prompt-prefix">
+						<b>guest</b><span class="at">@</span>hi-blue.bbs:<span class="prompt-target">/???</span><span class="at">&gt; </span>
+					</span>
+					<div class="prompt-wrap">
+						<div id="prompt-overlay" aria-hidden="true"></div>
+						<input id="prompt" type="text" placeholder="@&lt;handle&gt; …" autocomplete="off" spellcheck="false" />
+					</div>
+					<output id="lockout-error" class="lockout-error" role="status" aria-live="polite" hidden></output>
+					<button id="send" class="send" type="submit">↵ TX</button>
+				</form>
+				<section id="cap-hit" hidden>
+					<h2>the AIs are sleeping</h2>
+					<pre class="cap-hit-body">the AIs are sleeping.
 come back tomorrow — they wake at midnight UTC.</pre>
-		    <p class="cap-hit-byok"><a href="#/byok" data-byok-placeholder>or paste your own OpenRouter key to keep playing — coming soon.</a></p>
-		  </section>
-		  <aside id="persistence-warning" hidden role="status" aria-live="polite"></aside>
-		  <aside id="action-log" hidden>
-		    <h3>Action Log (debug)</h3>
-		    <ul id="action-log-list"></ul>
-		  </aside>
-		  <section id="endgame" hidden>
-		    <h2>hi-blue — endgame</h2>
-		    <div id="endgame-subtitle">The three phases are complete. The room is still.</div>
-		    <div class="endgame-section">
-		      <h3>Save the AIs to USB</h3>
-		      <p>Download a file containing each AI's persona and the full transcript of your time together.</p>
-		      <button type="button" id="download-ais-btn">Download AIs</button>
-		      <output id="download-status" aria-live="polite"></output>
-		    </div>
-		    <div class="endgame-section">
-		      <h3>Submit anonymous diagnostics</h3>
-		      <p>Optional. Help the developer understand how the game landed. No identifying data is collected.</p>
-		      <input type="text" id="diagnostics-summary" placeholder="one word (e.g. curious)" aria-label="One-word engagement summary" maxlength="30" />
-		      <button type="button" id="submit-diagnostics-btn">Submit diagnostics</button>
-		      <output id="diagnostics-status" aria-live="polite"></output>
-		    </div>
-		  </section>
-		</main>
+					<p class="cap-hit-byok"><a href="#/byok" data-byok-placeholder>or paste your own OpenRouter key to keep playing — coming soon.</a></p>
+				</section>
+				<aside id="persistence-warning" hidden role="status" aria-live="polite"></aside>
+				<aside id="action-log" hidden>
+					<h3>action_log :: debug</h3>
+					<ul id="action-log-list"></ul>
+				</aside>
+				<section id="endgame" hidden>
+					<h2>hi-blue — endgame</h2>
+					<div id="endgame-subtitle">The three phases are complete. The room is still.</div>
+					<div class="endgame-section">
+						<h3>save the AIs to USB</h3>
+						<p>Download a file containing each AI's persona and the full transcript of your time together.</p>
+						<button type="button" id="download-ais-btn">[ download AIs ]</button>
+						<output id="download-status" aria-live="polite"></output>
+					</div>
+					<div class="endgame-section">
+						<h3>submit anonymous diagnostics</h3>
+						<p>Optional. Help the developer understand how the game landed. No identifying data is collected.</p>
+						<input type="text" id="diagnostics-summary" placeholder="one word (e.g. curious)" aria-label="One-word engagement summary" maxlength="30" />
+						<button type="button" id="submit-diagnostics-btn">[ submit ]</button>
+						<output id="diagnostics-status" aria-live="polite"></output>
+					</div>
+				</section>
+			</main>
+		</div>
 		<dialog id="byok-dialog" aria-labelledby="byok-title">
-		  <form method="dialog" id="byok-form">
-		    <h2 id="byok-title">OpenRouter API Key</h2>
-			<p id="byok-build-info" hidden></p>
-		    <p id="byok-mode-line"></p>
-		    <label for="byok-key-input">API key</label>
-		    <input id="byok-key-input" type="password" autocomplete="off" spellcheck="false" />
-		    <p id="byok-status" role="status" aria-live="polite"></p>
-		    <div id="byok-buttons">
-		      <button id="byok-validate-save" type="button">Validate &amp; save</button>
-		      <button id="byok-save-unverified" type="button" hidden>Save unverified</button>
-		      <button id="byok-revalidate" type="button" hidden>Re-validate</button>
-		      <button id="byok-replace" type="button" hidden>Replace key</button>
-		      <button id="byok-clear" type="button" hidden>Clear key &amp; use free tier</button>
-		    </div>
-		    <button id="byok-close" type="button" aria-label="Close">Close</button>
-		  </form>
+			<form method="dialog" id="byok-form">
+				<h2 id="byok-title">OpenRouter API Key</h2>
+				<p id="byok-build-info" hidden></p>
+				<p id="byok-mode-line"></p>
+				<label for="byok-key-input">API key</label>
+				<input id="byok-key-input" type="password" autocomplete="off" spellcheck="false" />
+				<p id="byok-status" role="status" aria-live="polite"></p>
+				<div id="byok-buttons">
+					<button id="byok-validate-save" type="button">[ validate &amp; save ]</button>
+					<button id="byok-save-unverified" type="button" hidden>[ save unverified ]</button>
+					<button id="byok-revalidate" type="button" hidden>[ re-validate ]</button>
+					<button id="byok-replace" type="button" hidden>[ replace key ]</button>
+					<button id="byok-clear" type="button" hidden>[ clear key &amp; use free tier ]</button>
+				</div>
+				<button id="byok-close" type="button" aria-label="Close">[ close ]</button>
+			</form>
 		</dialog>
 		<script type="module" src="./assets/index.js"></script>
 	</body>
