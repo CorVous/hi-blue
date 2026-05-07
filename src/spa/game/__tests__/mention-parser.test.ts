@@ -119,15 +119,7 @@ const personasFixture = {
 } as Record<AiId, { name: string }>;
 
 describe("applyAddresseeChange", () => {
-	it.each<
-		[
-			string,
-			number | null,
-			AiId,
-			string,
-			number,
-		]
-	>([
+	it.each<[string, number | null, AiId, string, number]>([
 		// [text, cursor, target, expectedText, expectedCursor]
 		["", 0, "red", "@Ember ", 7],
 		["hi", 2, "green", "@Sage hi", 8],
@@ -140,18 +132,15 @@ describe("applyAddresseeChange", () => {
 		["@nonpersona hi", 14, "red", "@Ember @nonpersona hi", 21],
 		["hi", null, "green", "@Sage hi", 6],
 		["hi", 0, "green", "@Sage hi", 6],
-	])(
-		"applyAddresseeChange(%j, cursor=%j, target=%j) → text=%j, cursor=%j",
-		(text, cursor, target, expectedText, expectedCursor) => {
-			const result = applyAddresseeChange({
-				text,
-				selectionStart: cursor,
-				targetPersona: target,
-				personaNamesToId: nameMap,
-				personas: personasFixture,
-			});
-			expect(result.text).toBe(expectedText);
-			expect(result.selectionStart).toBe(expectedCursor);
-		},
-	);
+	])("applyAddresseeChange(%j, cursor=%j, target=%j) → text=%j, cursor=%j", (text, cursor, target, expectedText, expectedCursor) => {
+		const result = applyAddresseeChange({
+			text,
+			selectionStart: cursor,
+			targetPersona: target,
+			personaNamesToId: nameMap,
+			personas: personasFixture,
+		});
+		expect(result.text).toBe(expectedText);
+		expect(result.selectionStart).toBe(expectedCursor);
+	});
 });

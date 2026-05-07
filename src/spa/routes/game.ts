@@ -300,7 +300,9 @@ export function renderGame(root: HTMLElement, params?: URLSearchParams): void {
 
 	// Panel-click → addressee mention mutation (issue #108)
 	for (const aiId of AI_ORDER) {
-		const panel = doc.querySelector<HTMLElement>(`.ai-panel[data-ai="${aiId}"]`);
+		const panel = doc.querySelector<HTMLElement>(
+			`.ai-panel[data-ai="${aiId}"]`,
+		);
 		if (!panel) continue;
 		panel.addEventListener("click", () => {
 			const targetAi = panel.dataset.ai as AiId | undefined;

@@ -122,8 +122,7 @@ export function applyAddresseeChange({
 		const newName = personas[targetPersona].name;
 		const atStart = foundAtStart;
 		const nameEnd = foundNameEnd;
-		const newText =
-			text.slice(0, atStart) + `@${newName}` + text.slice(nameEnd);
+		const newText = `${text.slice(0, atStart)}@${newName}${text.slice(nameEnd)}`;
 		const delta = 1 + newName.length - (nameEnd - atStart);
 
 		let newCursor: number;
