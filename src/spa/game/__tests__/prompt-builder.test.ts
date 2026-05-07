@@ -595,9 +595,11 @@ describe("byte-identical sections across phases", () => {
 	// Both phase configs use the SAME initialWorld, budgetPerAi, and per-AI
 	// goals so that fixture-driven differences cannot contaminate the diff.
 	const SHARED_WORLD = {
-		items: [
-			{ id: "flower", name: "flower", holder: { row: 0, col: 0 } },
-		] as { id: string; name: string; holder: { row: number; col: number } }[],
+		items: [{ id: "flower", name: "flower", holder: { row: 0, col: 0 } }] as {
+			id: string;
+			name: string;
+			holder: { row: number; col: number };
+		}[],
 		obstacles: [] as { row: number; col: number }[],
 	};
 
