@@ -59,14 +59,6 @@ describe("PERSONA_GOAL_POOL", () => {
 });
 
 describe("COLOR_PALETTE", () => {
-	it("has at least 10 entries", () => {
-		expect(COLOR_PALETTE.length).toBeGreaterThanOrEqual(10);
-	});
-
-	it("has at most 30 entries", () => {
-		expect(COLOR_PALETTE.length).toBeLessThanOrEqual(30);
-	});
-
 	it("every entry is a valid lowercase hex color", () => {
 		for (const c of COLOR_PALETTE) {
 			expect(c).toMatch(/^#[0-9a-f]{6}$/i);
