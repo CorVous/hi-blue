@@ -85,7 +85,6 @@ body::before {
 header {
 	display: flex;
 	justify-content: flex-end;
-	margin-top: -4px;
 }
 
 #byok-cog {
@@ -95,7 +94,7 @@ header {
 	font-family: inherit;
 	font-size: 13px;
 	letter-spacing: 0.18em;
-	padding: 2px 8px;
+	padding: 0;
 	cursor: pointer;
 	text-shadow: inherit;
 }
