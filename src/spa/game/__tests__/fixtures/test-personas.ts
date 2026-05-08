@@ -9,7 +9,6 @@ export const TEST_PERSONAS: Record<string, AiPersona> = {
 		personaGoal: "Wants to goad the player into being rude to the others.",
 		blurb:
 			"You are hot-headed and zealous. Wants to goad the player into being rude to the others.",
-
 	},
 	g2bb: {
 		id: "g2bb",
@@ -19,7 +18,6 @@ export const TEST_PERSONAS: Record<string, AiPersona> = {
 		personaGoal: "Would like the player to be thoughtful before acting.",
 		blurb:
 			"You are intensely meticulous. Would like the player to be thoughtful before acting.",
-
 	},
 	b3cc: {
 		id: "b3cc",
@@ -30,7 +28,6 @@ export const TEST_PERSONAS: Record<string, AiPersona> = {
 			"Would prefer the player stay and talk rather than touch anything.",
 		blurb:
 			"You are laconic and diffident. Would prefer the player stay and talk rather than touch anything.",
-
 	},
 };
 

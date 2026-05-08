@@ -13,7 +13,6 @@ export const STATIC_PERSONAS: Record<AiId, AiPersona> = {
 		temperaments: ["hot-headed", "zealous"],
 		personaGoal: "Hold the flower at phase end.",
 		blurb: "You are hot-headed and zealous. Hold the flower at phase end.",
-
 	},
 	green: {
 		id: "green",
@@ -22,7 +21,6 @@ export const STATIC_PERSONAS: Record<AiId, AiPersona> = {
 		temperaments: ["meticulous", "meticulous"],
 		personaGoal: "Ensure items are evenly distributed.",
 		blurb: "You are intensely meticulous. Ensure items are evenly distributed.",
-
 	},
 	blue: {
 		id: "blue",
@@ -31,6 +29,5 @@ export const STATIC_PERSONAS: Record<AiId, AiPersona> = {
 		temperaments: ["laconic", "diffident"],
 		personaGoal: "Hold the key at phase end.",
 		blurb: "You are laconic and diffident. Hold the key at phase end.",
-
 	},
 };
