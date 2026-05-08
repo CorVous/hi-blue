@@ -77,7 +77,15 @@ function buildSynthesisResponseBody(
 ): string {
 	const ids = extractInputIds(body?.messages?.[1]?.content ?? "");
 	const content = JSON.stringify({
-		personas: ids.map((id) => ({ id, blurb: blurbFn(id) })),
+		personas: ids.map((id) => ({
+			id,
+			blurb: blurbFn(id),
+			voiceExamples: [
+				`Stub voice 1 for ${id}.`,
+				`Stub voice 2 for ${id}.`,
+				`Stub voice 3 for ${id}.`,
+			],
+		})),
 	});
 	return JSON.stringify({ choices: [{ message: { content } }] });
 }
