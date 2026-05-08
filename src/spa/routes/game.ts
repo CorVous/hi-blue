@@ -742,38 +742,28 @@ export function renderGame(
 		return div;
 	}
 
-	// Helper: return the current open msg-line (last child whose text
-	// hasn't been terminated by a `\n`), creating a fresh one if needed.
-	// Use for streaming tokens that continue an in-progress line.
-	function getOrCreateMsgLine(transcript: HTMLElement): HTMLElement {
-		const last = transcript.lastElementChild as HTMLElement | null;
-		if (
-			last?.classList.contains("msg-line") &&
-			!(last.textContent ?? "").endsWith("\n")
-		) {
-			return last;
-		}
-		return startMsgLine(transcript);
-	}
-
-	// Helper: append plain text (amber default), tracking msg-line boundaries
-	// so a streamed `\n` closes the current line and subsequent text starts
-	// a fresh one. Preserves existing .msg-you / .msg-prefix children.
-	function appendToTranscript(aiId: AiId, text: string): void {
+	// Helper: append streamed AI tokens to the current AI message's msg-line.
+	// Embedded `\n` characters do NOT split into new msg-lines — the entire
+	// AI message stays in one msg-line so strip-card preview can render it
+	// as a single ellipsis-truncated line. The line opened by appendAiPrefix
+	// is the target; if missing for any reason, a fallback line is opened.
+	function appendAiTokens(aiId: AiId, text: string): void {
 		const el = getTranscript(aiId);
 		if (!el) return;
-		let remaining = text;
-		while (remaining.length > 0) {
-			const line = getOrCreateMsgLine(el);
-			const nlIdx = remaining.indexOf("\n");
-			if (nlIdx === -1) {
-				line.appendChild(doc.createTextNode(remaining));
-				remaining = "";
-			} else {
-				line.appendChild(doc.createTextNode(remaining.slice(0, nlIdx + 1)));
-				remaining = remaining.slice(nlIdx + 1);
-			}
-		}
+		const last = el.lastElementChild as HTMLElement | null;
+		const line = last?.classList.contains("msg-line") ? last : startMsgLine(el);
+		line.appendChild(doc.createTextNode(text));
+		scrollToBottom(el);
+	}
+
+	// Helper: append a system-generated line (phase separator, lockout text,
+	// error brackets) as its own .msg-line block. Always opens a fresh line
+	// — never merges into an in-progress AI message.
+	function appendStandaloneLine(aiId: AiId, text: string): void {
+		const el = getTranscript(aiId);
+		if (!el) return;
+		const line = startMsgLine(el);
+		line.appendChild(doc.createTextNode(text));
 		scrollToBottom(el);
 	}
 
@@ -893,7 +883,7 @@ export function renderGame(
 				appendAiPrefix(aiId, personaName);
 				liveAis.add(aiId);
 			}
-			appendToTranscript(aiId, text);
+			appendAiTokens(aiId, text);
 		};
 
 		try {
@@ -937,7 +927,7 @@ export function renderGame(
 						if (speakingAi) {
 							if (!liveAis.has(speakingAi)) {
 								// Synthetic path: append token and pace.
-								appendToTranscript(speakingAi, event.text);
+								appendAiTokens(speakingAi, event.text);
 							}
 							// Live path: text already painted; still await pace() so the
 							// overall timing shape is preserved (important for token-pacing
@@ -948,7 +938,7 @@ export function renderGame(
 
 					case "ai_end":
 						if (speakingAi) {
-							appendToTranscript(speakingAi, "\n");
+							appendAiTokens(speakingAi, "\n");
 						}
 						speakingAi = null;
 						break;
@@ -958,12 +948,12 @@ export function renderGame(
 						break;
 
 					case "lockout":
-						appendToTranscript(event.aiId, `[${event.content}]\n`);
+						appendStandaloneLine(event.aiId, `[${event.content}]\n`);
 						break;
 
 					case "chat_lockout":
 						setChatLockout(event.aiId, true);
-						appendToTranscript(event.aiId, `[${event.message}]\n`);
+						appendStandaloneLine(event.aiId, `[${event.message}]\n`);
 						break;
 
 					case "chat_lockout_resolved":
@@ -1018,7 +1008,7 @@ export function renderGame(
 						}
 						// Append phase separator to each transcript
 						for (const aid of advAiIds) {
-							appendToTranscript(
+							appendStandaloneLine(
 								aid,
 								`--- Phase ${event.phase} begins: ${event.setting} ---\n`,
 							);

@@ -69,6 +69,55 @@ test("bento layout: panels have non-zero geometry inside their grid cells", asyn
 	expect(addressed[2]?.w).toBeGreaterThan(100);
 });
 
+test("strip-card label: panel-name renders on the TOP edge, not the bottom", async ({
+	page,
+}) => {
+	await stubChatCompletions(page, ["hi"]);
+	await page.goto("/");
+	const handles = await getAiHandles(page);
+
+	// Address middle panel so panels[0] and panels[2] are strip cards.
+	await page.locator("#prompt").fill(`${handles.mention(1)} hello`);
+	await page.waitForFunction(
+		() => document.querySelectorAll(".panel--addressed").length === 1,
+	);
+
+	const labels = await page.evaluate(() => {
+		const all = Array.from(
+			document.querySelectorAll<HTMLElement>("article.ai-panel"),
+		);
+		return all.map((p) => {
+			const top = p.querySelector<HTMLElement>(".brow-top .panel-name");
+			const bot = p.querySelector<HTMLElement>(".brow-bot .panel-name");
+			return {
+				addressed: p.classList.contains("panel--addressed"),
+				topVisible: top ? getComputedStyle(top).display !== "none" : false,
+				topText: top?.textContent ?? "",
+				botVisible: bot ? getComputedStyle(bot).display !== "none" : false,
+				botText: bot?.textContent ?? "",
+			};
+		});
+	});
+
+	// Strip cards (indices 0 and 2): label on TOP, not on bottom.
+	for (const idx of [0, 2]) {
+		const l = labels[idx];
+		if (!l) throw new Error(`no label probe for index ${idx}`);
+		expect(l.addressed).toBe(false);
+		expect(l.topVisible).toBe(true);
+		expect(l.topText).toMatch(/^\*\S+ :: @\S+$/);
+		expect(l.botVisible).toBe(false);
+	}
+
+	// Main panel (addressed): label still on bottom.
+	const main = labels[1];
+	if (!main) throw new Error("no main probe");
+	expect(main.addressed).toBe(true);
+	expect(main.topVisible).toBe(false);
+	expect(main.botVisible).toBe(true);
+	expect(main.botText).toMatch(/^\*\S+ :: @\S+$/);
+});
+
 test("strip-card preview: latest line visible + per-line ellipsis", async ({
 	page,
 }) => {
@@ -186,6 +235,52 @@ test("strip-card preview: latest line visible + per-line ellipsis", async ({
 		return line ? getComputedStyle(line).whiteSpace : null;
 	}, handles.ids[1]);
 	expect(mainWhiteSpace).toBe("pre-wrap");
+});
+
+test("strip-card preview: streamed AI tokens with embedded \\n stay in one msg-line", async ({
+	page,
+}) => {
+	// Stream a multi-line AI response. Even though the SSE body emits two
+	// hard \n characters mid-message, the entire AI message must collapse
+	// into a single .msg-line so the strip-card preview shows one line.
+	await stubChatCompletions(page, [
+		"first line of message\nsecond line\nthird",
+	]);
+	await page.goto("/");
+	const handles = await getAiHandles(page);
+
+	// Send a message addressed to panel 0 so it streams there.
+	await page.locator("#prompt").fill(`${handles.mention(0)} hi`);
+	await page.locator("#send").click();
+
+	// Wait for the response to land in panel 0's transcript.
+	const transcript = page.locator(`[data-transcript="${handles.ids[0]}"]`);
+	await expect(transcript).toContainText("third");
+
+	const lineShape = await page.evaluate((aiId) => {
+		const t = document.querySelector<HTMLElement>(
+			`[data-transcript="${aiId}"]`,
+		);
+		const lines = Array.from(
+			t?.querySelectorAll<HTMLElement>(".msg-line") ?? [],
+		);
+		// Find the AI message line (the one with .msg-prefix).
+		const aiLine = lines.find((l) => l.querySelector(".msg-prefix"));
+		return {
+			lineCount: lines.length,
+			aiLineText: aiLine?.textContent ?? "",
+			// Total msg-lines that contain msg-prefix (= number of AI messages).
+			aiMessageCount: lines.filter((l) => l.querySelector(".msg-prefix"))
+				.length,
+		};
+	}, handles.ids[0]);
+
+	// Exactly one AI message → exactly one msg-line for it.
+	expect(lineShape.aiMessageCount).toBe(1);
+	// All three lines of content are in that one msg-line.
+	expect(lineShape.aiLineText).toContain("first line of message");
+	expect(lineShape.aiLineText).toContain("second line");
+	expect(lineShape.aiLineText).toContain("third");
 });
 
 test("mobile header: HI-BLUE title visible left, cog right; compact topinfo", async ({

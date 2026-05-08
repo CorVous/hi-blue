@@ -268,6 +268,13 @@ main {
 	content: " ]──";
 }
 
+/* Panel label normally lives on the bottom edge; the top-edge copy is
+   hidden by default and only shown for strip cards in the bento layout
+   (see the <=720px media query). */
+.brow-top .panel-name {
+	display: none;
+}
+
 .ai-panel.panel--addressed .brow-label::before {
 	content: "══[ ";
 }
@@ -899,6 +906,16 @@ main {
 		text-overflow: ellipsis;
 	}
 
+	/* Strip-card panels surface the daemon name on the TOP edge so the
+	   label is visible above the bottom-anchored transcript preview. */
+	.ai-panel .brow-top .panel-name {
+		display: inline-block;
+	}
+
+	.ai-panel .brow-bot .panel-name {
+		display: none;
+	}
+
 	.ai-panel.panel--addressed,
 	#panels:not(:has(.panel--addressed)) > .ai-panel:first-child {
 		grid-row: 1;
@@ -930,6 +947,23 @@ main {
 		white-space: pre-wrap;
 		overflow: visible;
 		text-overflow: clip;
+	}
+
+	/* Main panel keeps its label on the bottom edge. */
+	.ai-panel.panel--addressed .brow-top .panel-name,
+	#panels:not(:has(.panel--addressed))
+		> .ai-panel:first-child
+		.brow-top
+		.panel-name {
+		display: none;
+	}
+
+	.ai-panel.panel--addressed .brow-bot .panel-name,
+	#panels:not(:has(.panel--addressed))
+		> .ai-panel:first-child
+		.brow-bot
+		.panel-name {
+		display: inline-block;
 	}
 
 	.cmd {
