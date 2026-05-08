@@ -892,35 +892,48 @@ export function renderGame(
 		// Append the (mention-stripped) player message to the addressed panel.
 		appendPlayerLine(addressed, `> ${message}\n`);
 
-		// Per-daemon braille spinners. Each persona gets a .msg-placeholder
-		// span ticking through BRAILLE_FRAMES; stripped per-daemon on first
+		// Per-daemon braille spinners shown in the panel border, next to the
+		// daemon name. Each persona gets a `.panel-spinner` span appended to
+		// every `.panel-name` element in its panel (top + bottom brow). The
+		// spinner ticks through BRAILLE_FRAMES; stripped per-daemon on first
 		// delta, en-masse on safety-net / catch / finally.
 		const BRAILLE_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 		const SPINNER_INTERVAL_MS = 80;
 		const spinners = new Map<
 			AiId,
-			{ el: HTMLElement; intervalId: ReturnType<typeof setInterval> }
+			{ els: HTMLElement[]; intervalId: ReturnType<typeof setInterval> }
 		>();
 		for (const aiId of Object.keys(session.getState().personas) as AiId[]) {
-			const transcript = getTranscript(aiId);
-			if (!transcript) continue;
-			const el = doc.createElement("span");
-			el.className = "msg-placeholder";
-			el.textContent = BRAILLE_FRAMES[0] ?? "";
-			transcript.appendChild(el);
-			scrollToBottom(transcript);
+			const panel = doc.querySelector<HTMLElement>(
+				`.ai-panel[data-ai="${aiId}"]`,
+			);
+			if (!panel) continue;
+			const els: HTMLElement[] = [];
+			for (const labelEl of panel.querySelectorAll<HTMLElement>(
+				".panel-name",
+			)) {
+				const sp = doc.createElement("span");
+				sp.className = "panel-spinner";
+				sp.textContent = ` ${BRAILLE_FRAMES[0] ?? ""}`;
+				labelEl.appendChild(sp);
+				els.push(sp);
+			}
+			if (els.length === 0) continue;
 			let frame = 0;
 			const intervalId = setInterval(() => {
 				frame = (frame + 1) % BRAILLE_FRAMES.length;
-				el.textContent = BRAILLE_FRAMES[frame] ?? "";
+				const text = ` ${BRAILLE_FRAMES[frame] ?? ""}`;
+				for (const sp of els) sp.textContent = text;
 			}, SPINNER_INTERVAL_MS);
-			spinners.set(aiId, { el, intervalId });
+			spinners.set(aiId, { els, intervalId });
 		}
 		const stripSpinner = (aiId: AiId): void => {
 			const s = spinners.get(aiId);
 			if (!s) return;
 			clearInterval(s.intervalId);
-			if (s.el.parentNode) s.el.remove();
+			for (const el of s.els) {
+				if (el.parentNode) el.remove();
+			}
 			spinners.delete(aiId);
 		};
 		const stripAllSpinners = (): void => {

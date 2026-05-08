@@ -428,8 +428,8 @@ main {
 		color-mix(in srgb, var(--prefix-color, var(--amber)) 60%, transparent);
 }
 
-.transcript .msg-placeholder {
-	color: var(--amber-dim);
+.brow-label .panel-spinner {
+	color: var(--panel-color);
 }
 
 .scroll::-webkit-scrollbar {

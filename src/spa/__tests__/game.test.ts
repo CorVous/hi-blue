@@ -378,26 +378,32 @@ describe("renderGame (game route — three-AI)", () => {
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 
-		// Synchronously after submit, every daemon's transcript has a spinner.
-		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
-		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
-		const blueTranscript = getEl<HTMLElement>('[data-transcript="blue"]');
-		expect(redTranscript.querySelector(".msg-placeholder")).not.toBeNull();
-		expect(greenTranscript.querySelector(".msg-placeholder")).not.toBeNull();
-		expect(blueTranscript.querySelector(".msg-placeholder")).not.toBeNull();
+		// Synchronously after submit, every daemon's panel border carries
+		// at least one .panel-spinner span next to the .panel-name label.
+		const redPanel = getEl<HTMLElement>('.ai-panel[data-ai="red"]');
+		const greenPanel = getEl<HTMLElement>('.ai-panel[data-ai="green"]');
+		const bluePanel = getEl<HTMLElement>('.ai-panel[data-ai="blue"]');
+		expect(redPanel.querySelector(".panel-name .panel-spinner")).not.toBeNull();
+		expect(
+			greenPanel.querySelector(".panel-name .panel-spinner"),
+		).not.toBeNull();
+		expect(
+			bluePanel.querySelector(".panel-name .panel-spinner"),
+		).not.toBeNull();
 
 		// Input is reset to "*Sage " immediately on send (not after the round).
 		expect(promptInput.value).toBe("*Sage ");
 		// Player line shows the stripped body (no leading mention).
+		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
 		expect(greenTranscript.textContent).toContain("> hello");
 		expect(greenTranscript.textContent).not.toContain("> *Sage hello");
 
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
-		// After the round resolves, no placeholders remain anywhere
-		expect(redTranscript.querySelector(".msg-placeholder")).toBeNull();
-		expect(greenTranscript.querySelector(".msg-placeholder")).toBeNull();
-		expect(blueTranscript.querySelector(".msg-placeholder")).toBeNull();
+		// After the round resolves, no spinners remain on any panel.
+		expect(redPanel.querySelector(".panel-spinner")).toBeNull();
+		expect(greenPanel.querySelector(".panel-spinner")).toBeNull();
+		expect(bluePanel.querySelector(".panel-spinner")).toBeNull();
 		expect(greenTranscript.textContent).toContain("GREEN_RESPONSE_UNIQUE_TAG");
 	});
 
