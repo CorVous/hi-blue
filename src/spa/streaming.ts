@@ -4,11 +4,17 @@ export interface ToolCallResult {
 	argumentsJson: string;
 }
 
+export interface UsageInfo {
+	cost?: number;
+	total_tokens?: number;
+}
+
 export async function parseSSEStream(
 	body: ReadableStream<Uint8Array>,
 	onDelta: (text: string) => void,
 	onReasoning?: (text: string) => void,
 	onToolCall?: (call: ToolCallResult) => void,
+	onUsage?: (usage: UsageInfo) => void,
 ): Promise<void> {
 	const reader = body.getReader();
 	const decoder = new TextDecoder();
@@ -102,6 +108,21 @@ export async function parseSSEStream(
 						const finishReason = parsed?.choices?.[0]?.finish_reason;
 						if (finishReason === "tool_calls") {
 							flushToolCalls();
+						}
+
+						// Final chunk from OpenRouter (with usage:{include:true})
+						// has empty choices and a populated usage object.
+						const usage = parsed?.usage;
+						if (onUsage && usage && typeof usage === "object") {
+							const cost =
+								typeof usage.cost === "number" ? usage.cost : undefined;
+							const total_tokens =
+								typeof usage.total_tokens === "number"
+									? usage.total_tokens
+									: undefined;
+							if (cost !== undefined || total_tokens !== undefined) {
+								onUsage({ cost, total_tokens });
+							}
 						}
 					} catch {
 						// Ignore malformed JSON chunks

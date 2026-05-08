@@ -193,12 +193,12 @@ function renderSystemPrompt(ctx: AiContext): string {
 		}
 
 		lines.push(
-			`Budget: ${ctx.budget.remaining}/${ctx.budget.total} actions remaining this phase.`,
+			`Budget: $${Math.max(0, ctx.budget.remaining).toFixed(5)} of API spend remaining this phase.`,
 		);
 	} else {
 		lines.push("(no spatial data)");
 		lines.push(
-			`Budget: ${ctx.budget.remaining}/${ctx.budget.total} actions remaining this phase.`,
+			`Budget: $${Math.max(0, ctx.budget.remaining).toFixed(5)} of API spend remaining this phase.`,
 		);
 	}
 	lines.push("");

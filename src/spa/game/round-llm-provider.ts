@@ -34,6 +34,9 @@ export type OpenAiMessage =
 export interface RoundTurnResult {
 	assistantText: string;
 	toolCalls: Array<{ id: string; name: string; argumentsJson: string }>;
+	// USD cost of this LLM request, populated from OpenRouter's usage.cost
+	// when available. Absent in mocks/tests that don't model spend.
+	costUsd?: number;
 }
 
 export interface RoundLLMProvider {

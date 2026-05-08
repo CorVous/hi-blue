@@ -526,7 +526,7 @@ export function renderGame(
 							const budget = phase.budgets[aiId];
 							if (budget) {
 								budgetEl.dataset.budget = String(budget.remaining);
-								budgetEl.textContent = `${budget.remaining}/${budget.total}`;
+								budgetEl.textContent = `$${Math.max(0, budget.remaining).toFixed(5)}`;
 							}
 						}
 					});
@@ -611,7 +611,7 @@ export function renderGame(
 				const budget = phase.budgets[aiId];
 				if (budget) {
 					budgetEl.dataset.budget = String(budget.remaining);
-					budgetEl.textContent = `${budget.remaining}/${budget.total}`;
+					budgetEl.textContent = `$${Math.max(0, budget.remaining).toFixed(5)}`;
 				}
 			}
 		});
@@ -774,13 +774,8 @@ export function renderGame(
 		if (!panel) return;
 		const budgetEl = panel.querySelector<HTMLSpanElement>(".panel-budget");
 		if (!budgetEl) return;
-		// session is guaranteed non-null here (checked at top of renderGame)
-		const currentSession = session;
-		if (!currentSession) return;
-		const phase = getActivePhase(currentSession.getState());
-		const total = phase.budgets[aiId]?.total ?? 5;
 		budgetEl.dataset.budget = String(remaining);
-		budgetEl.textContent = `${remaining}/${total}`;
+		budgetEl.textContent = `$${Math.max(0, remaining).toFixed(5)}`;
 	}
 
 	// Helper: update chat lockout status in the lockouts map
@@ -966,7 +961,7 @@ export function renderGame(
 									const b = newPhase.budgets[aid];
 									if (b) {
 										budgetEl.dataset.budget = String(b.remaining);
-										budgetEl.textContent = `${b.remaining}/${b.total}`;
+										budgetEl.textContent = `$${Math.max(0, b.remaining).toFixed(5)}`;
 									}
 								}
 								// Re-enable chat-locked AIs that were carried over

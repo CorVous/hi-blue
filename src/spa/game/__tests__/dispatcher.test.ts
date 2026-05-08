@@ -444,11 +444,11 @@ describe("dispatchAiTurn", () => {
 			game,
 			{
 				...TEST_PHASE_CONFIG,
-				budgetPerAi: 1,
+				budgetPerAi: 0.01,
 			},
 			FIXED_RNG,
 		);
-		game = deductBudget(game, "red");
+		game = deductBudget(game, "red", 0.01);
 		const action: AiTurnAction = { aiId: "red", pass: true };
 		const result = dispatchAiTurn(game, action);
 		expect(result.rejected).toBe(true);
@@ -458,9 +458,12 @@ describe("dispatchAiTurn", () => {
 	it("processes a pass action and deducts budget", () => {
 		const game = makeGame();
 		const action: AiTurnAction = { aiId: "red", pass: true };
-		const result = dispatchAiTurn(game, action);
+		const result = dispatchAiTurn(game, action, { costUsd: 1 });
 		expect(result.rejected).toBe(false);
-		expect(getActivePhase(result.game).budgets.red?.remaining).toBe(4);
+		expect(getActivePhase(result.game).budgets.red?.remaining).toBeCloseTo(
+			4,
+			10,
+		);
 		expect(result.records[0]?.kind).toBe("pass");
 	});
 
@@ -670,8 +673,11 @@ describe("dispatchAiTurn", () => {
 			aiId: "red",
 			toolCall: { name: "examine", args: { item: "key" } },
 		};
-		const result = dispatchAiTurn(game, action);
-		expect(getActivePhase(result.game).budgets.red?.remaining).toBe(4);
+		const result = dispatchAiTurn(game, action, { costUsd: 1 });
+		expect(getActivePhase(result.game).budgets.red?.remaining).toBeCloseTo(
+			4,
+			10,
+		);
 	});
 
 	it("put_down of objective_object on a non-matching cell yields default description", () => {

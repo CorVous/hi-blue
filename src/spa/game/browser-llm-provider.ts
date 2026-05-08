@@ -31,6 +31,7 @@ export class BrowserLLMProvider implements RoundLLMProvider {
 		const textParts: string[] = [];
 		const reasoningParts: string[] = [];
 		const toolCalls: RoundTurnResult["toolCalls"] = [];
+		let costUsd: number | undefined;
 
 		await streamCompletion({
 			messages,
@@ -45,10 +46,17 @@ export class BrowserLLMProvider implements RoundLLMProvider {
 			onToolCall: (call) => {
 				toolCalls.push(call);
 			},
+			onUsage: (usage) => {
+				if (typeof usage.cost === "number") costUsd = usage.cost;
+			},
 			...(this.disableReasoning ? { disableReasoning: true } : {}),
 		});
 
 		const assistantText = textParts.join("") || reasoningParts.join("");
-		return { assistantText, toolCalls };
+		return {
+			assistantText,
+			toolCalls,
+			...(costUsd !== undefined ? { costUsd } : {}),
+		};
 	}
 }

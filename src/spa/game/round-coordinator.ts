@@ -156,7 +156,7 @@ export async function runRound(
 		const tools = availableTools(state, aiId);
 
 		// Call the provider
-		const { assistantText, toolCalls } = await provider.streamRound(
+		const { assistantText, toolCalls, costUsd } = await provider.streamRound(
 			messages,
 			tools,
 			onAiDelta ? (text) => onAiDelta(aiId, text) : undefined,
@@ -223,7 +223,11 @@ export async function runRound(
 		}
 
 		// Dispatch through the existing dispatcher
-		const dispatchResult = dispatchAiTurn(state, action);
+		const dispatchResult = dispatchAiTurn(
+			state,
+			action,
+			costUsd !== undefined ? { costUsd } : {},
+		);
 		state = dispatchResult.game;
 
 		// Collect records produced by this dispatch (examine produces none)

@@ -202,13 +202,17 @@ export function isAiLockedOut(game: GameState, aiId: AiId): boolean {
 	return phase.lockedOut.has(aiId);
 }
 
-export function deductBudget(game: GameState, aiId: AiId): GameState {
+export function deductBudget(
+	game: GameState,
+	aiId: AiId,
+	costUsd: number,
+): GameState {
 	return updateActivePhase(game, (phase) => {
 		const current = phase.budgets[aiId];
 		if (!current) return phase;
-		const remaining = Math.max(0, current.remaining - 1);
+		const remaining = current.remaining - costUsd;
 		const lockedOut = new Set(phase.lockedOut);
-		if (remaining === 0) {
+		if (remaining <= 0) {
 			lockedOut.add(aiId);
 		}
 		return {
