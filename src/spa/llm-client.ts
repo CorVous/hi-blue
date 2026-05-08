@@ -114,6 +114,11 @@ export type {
 } from "./game/round-llm-provider.js";
 export type { OpenAiTool } from "./game/tool-registry.js";
 
+export interface UsageInfo {
+	cost?: number;
+	total_tokens?: number;
+}
+
 export async function streamCompletion(opts: {
 	messages: OpenAiMessage[];
 	signal?: AbortSignal;
@@ -121,6 +126,7 @@ export async function streamCompletion(opts: {
 	onReasoning?: (text: string) => void;
 	tools?: OpenAiTool[];
 	onToolCall?: (call: ToolCallResult) => void;
+	onUsage?: (usage: UsageInfo) => void;
 	disableReasoning?: boolean;
 }): Promise<void> {
 	const {
@@ -130,6 +136,7 @@ export async function streamCompletion(opts: {
 		onReasoning,
 		tools,
 		onToolCall,
+		onUsage,
 		disableReasoning,
 	} = opts;
 	const { url, headers } = resolveLLMTarget();
@@ -138,6 +145,11 @@ export async function streamCompletion(opts: {
 		model: PINNED_MODEL,
 		messages,
 		stream: true,
+		// OpenRouter: include usage (with cost in USD) on the final SSE chunk.
+		usage: { include: true },
+		// Required so OpenRouter actually emits the usage chunk on streamed
+		// responses. Proxy injects this too, but BYOK bypasses the proxy.
+		stream_options: { include_usage: true },
 	};
 
 	// Only include tools/tool_choice when tools are provided (do not send empty array)
@@ -170,7 +182,13 @@ export async function streamCompletion(opts: {
 		throw new Error("Response body is null");
 	}
 
-	await parseSSEStream(response.body, onDelta, onReasoning, onToolCall);
+	await parseSSEStream(
+		response.body,
+		onDelta,
+		onReasoning,
+		onToolCall,
+		onUsage,
+	);
 }
 
 export interface JsonCompletionResult {

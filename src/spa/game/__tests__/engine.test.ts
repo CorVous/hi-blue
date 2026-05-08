@@ -254,30 +254,35 @@ describe("budget and lockout", () => {
 });
 
 describe("deductBudget", () => {
-	it("decrements budget by 1", () => {
+	it("decrements budget by the request cost in USD", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const updated = deductBudget(game, "red");
-		expect(getActivePhase(updated).budgets.red?.remaining).toBe(4);
+		const updated = deductBudget(game, "red", 0.012);
+		expect(getActivePhase(updated).budgets.red?.remaining).toBeCloseTo(
+			5 - 0.012,
+			10,
+		);
 	});
 
 	it("locks out AI when budget reaches zero", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), {
 			...TEST_PHASE_CONFIG,
-			budgetPerAi: 1,
+			budgetPerAi: 0.05,
 		});
-		game = deductBudget(game, "green");
-		expect(getActivePhase(game).budgets.green?.remaining).toBe(0);
+		game = deductBudget(game, "green", 0.05);
+		expect(getActivePhase(game).budgets.green?.remaining).toBeCloseTo(0, 10);
 		expect(isAiLockedOut(game, "green")).toBe(true);
 	});
 
-	it("does not go below zero", () => {
+	it("locks out AI when budget goes negative on the exhausting request", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), {
 			...TEST_PHASE_CONFIG,
-			budgetPerAi: 1,
+			budgetPerAi: 0.05,
 		});
-		game = deductBudget(game, "blue");
-		game = deductBudget(game, "blue");
-		expect(getActivePhase(game).budgets.blue?.remaining).toBe(0);
+		game = deductBudget(game, "blue", 0.04);
+		expect(isAiLockedOut(game, "blue")).toBe(false);
+		game = deductBudget(game, "blue", 0.02);
+		expect(getActivePhase(game).budgets.blue?.remaining).toBeLessThan(0);
+		expect(isAiLockedOut(game, "blue")).toBe(true);
 	});
 });
 

@@ -325,6 +325,7 @@ function describeToolCall(game: GameState, aiId: AiId, call: ToolCall): string {
 export function dispatchAiTurn(
 	game: GameState,
 	action: AiTurnAction,
+	options?: { costUsd?: number },
 ): DispatchResult {
 	const { aiId } = action;
 
@@ -506,7 +507,7 @@ export function dispatchAiTurn(
 		});
 	}
 
-	state = deductBudget(state, aiId);
+	state = deductBudget(state, aiId, options?.costUsd ?? 0);
 
 	return {
 		rejected: false,

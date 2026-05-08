@@ -205,15 +205,20 @@ describe("GameSession — state mutation across rounds", () => {
 		expect(getActivePhase(session.getState()).round).toBe(2);
 	});
 
-	it("budget decrements for all AIs after each round", async () => {
+	it("budget decrements for all AIs by the round's request cost", async () => {
 		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
 
-		await session.submitMessage("red", "hi", makePassProvider());
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [], costUsd: 1 },
+			{ assistantText: "", toolCalls: [], costUsd: 1 },
+			{ assistantText: "", toolCalls: [], costUsd: 1 },
+		]);
+		await session.submitMessage("red", "hi", provider);
 
 		const phase = getActivePhase(session.getState());
-		expect(phase.budgets.red?.remaining).toBe(4);
-		expect(phase.budgets.green?.remaining).toBe(4);
-		expect(phase.budgets.blue?.remaining).toBe(4);
+		expect(phase.budgets.red?.remaining).toBeCloseTo(4, 10);
+		expect(phase.budgets.green?.remaining).toBeCloseTo(4, 10);
+		expect(phase.budgets.blue?.remaining).toBeCloseTo(4, 10);
 	});
 
 	it("second round builds on first round's state", async () => {

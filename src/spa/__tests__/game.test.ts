@@ -98,9 +98,14 @@ function makeSSEStream(chunks: string[]): ReadableStream<Uint8Array> {
 /**
  * Creates an SSE response body that yields a single JSON action as an OpenAI delta event.
  * The runRound coordinator collects all delta tokens into one string and parses as JSON.
+ *
+ * Includes a final usage chunk (mimicking OpenRouter with usage:{include:true}) so
+ * the budget-deduction path sees a non-zero cost.
  */
 function makeAiSseStream(jsonAction: string): ReadableStream<Uint8Array> {
-	const sseData = `data: ${JSON.stringify({ choices: [{ delta: { content: jsonAction } }] })}\n\ndata: [DONE]\n\n`;
+	const deltaChunk = `data: ${JSON.stringify({ choices: [{ delta: { content: jsonAction } }] })}\n\n`;
+	const usageChunk = `data: ${JSON.stringify({ choices: [], usage: { cost: 0.01, total_tokens: 100 } })}\n\n`;
+	const sseData = `${deltaChunk}${usageChunk}data: [DONE]\n\n`;
 	return makeSSEStream([sseData]);
 }
 
@@ -758,11 +763,11 @@ describe("renderGame — localStorage persistence", () => {
 		const { renderGame: renderGame2 } = await import("../routes/game.js");
 		await renderGame2(getEl<HTMLElement>("main"));
 
-		// Budget should reflect round 1 complete (4/5)
+		// Budget should reflect round 1 complete: $0.05 - $0.01 cost = $0.04000
 		const redBudget = document.querySelector<HTMLSpanElement>(
 			'.ai-panel[data-ai="red"] .panel-budget',
 		);
-		expect(redBudget?.textContent).toContain("4");
+		expect(redBudget?.textContent).toBe("$0.04000");
 
 		// Transcripts must be restored verbatim (regression: AI responses were lost on reload)
 		const redTranscript = document.querySelector<HTMLElement>(

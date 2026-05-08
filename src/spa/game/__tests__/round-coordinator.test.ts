@@ -184,18 +184,18 @@ describe("chat-only round", () => {
 		expect(getActivePhase(nextState).chatHistories.blue).toHaveLength(0);
 	});
 
-	it("deducts budget for all three AIs", async () => {
+	it("deducts budget for all three AIs by their reported request cost", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [], costUsd: 1 },
+			{ assistantText: "", toolCalls: [], costUsd: 1 },
+			{ assistantText: "", toolCalls: [], costUsd: 1 },
 		]);
 		const { nextState } = await runRound(game, "red", "hi", provider);
 		const phase = getActivePhase(nextState);
-		expect(phase.budgets.red?.remaining).toBe(4);
-		expect(phase.budgets.green?.remaining).toBe(4);
-		expect(phase.budgets.blue?.remaining).toBe(4);
+		expect(phase.budgets.red?.remaining).toBeCloseTo(4, 10);
+		expect(phase.budgets.green?.remaining).toBeCloseTo(4, 10);
+		expect(phase.budgets.blue?.remaining).toBeCloseTo(4, 10);
 	});
 
 	it("returns a RoundResult with the round number", async () => {
@@ -248,9 +248,7 @@ describe("whisper round — via dispatcher only", () => {
 describe("budget-exhaustion lockout", () => {
 	it("skips an already-locked AI and emits an in-character lockout line instead", async () => {
 		let game = makeGame();
-		for (let i = 0; i < 5; i++) {
-			game = deductBudget(game, "red");
-		}
+		game = deductBudget(game, "red", 5);
 		expect(getActivePhase(game).lockedOut.has("red")).toBe(true);
 
 		const provider = new MockRoundLLMProvider([
@@ -266,9 +264,7 @@ describe("budget-exhaustion lockout", () => {
 
 	it("lockout line is added to the action log", async () => {
 		let game = makeGame();
-		for (let i = 0; i < 5; i++) {
-			game = deductBudget(game, "red");
-		}
+		game = deductBudget(game, "red", 5);
 
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
@@ -288,9 +284,9 @@ describe("budget-exhaustion lockout", () => {
 		});
 
 		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [], costUsd: 1 },
+			{ assistantText: "", toolCalls: [], costUsd: 1 },
+			{ assistantText: "", toolCalls: [], costUsd: 1 },
 		]);
 		const { nextState } = await runRound(game, "red", "hi", provider);
 
@@ -300,24 +296,28 @@ describe("budget-exhaustion lockout", () => {
 		expect(phase.lockedOut.has("blue")).toBe(true);
 	});
 
-	it("budget display: remaining budget decrements correctly after a round", async () => {
+	it("budget display: remaining budget decrements by the request cost after a round", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [], costUsd: 1 },
+			{ assistantText: "", toolCalls: [], costUsd: 1 },
+			{ assistantText: "", toolCalls: [], costUsd: 1 },
 		]);
 		const { nextState } = await runRound(game, "red", "hi", provider);
-		expect(getActivePhase(nextState).budgets.red?.remaining).toBe(4);
-		expect(getActivePhase(nextState).budgets.green?.remaining).toBe(4);
-		expect(getActivePhase(nextState).budgets.blue?.remaining).toBe(4);
+		expect(getActivePhase(nextState).budgets.red?.remaining).toBeCloseTo(4, 10);
+		expect(getActivePhase(nextState).budgets.green?.remaining).toBeCloseTo(
+			4,
+			10,
+		);
+		expect(getActivePhase(nextState).budgets.blue?.remaining).toBeCloseTo(
+			4,
+			10,
+		);
 	});
 
 	it("lockout and non-lockout entries in the same round share the same round number", async () => {
 		let game = makeGame();
-		for (let i = 0; i < 5; i++) {
-			game = deductBudget(game, "red");
-		}
+		game = deductBudget(game, "red", 5);
 
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
@@ -874,9 +874,9 @@ describe("chat lockout — coordinator triggering", () => {
 	it("locked AI still acts (takes turn, not budget-locked) while chat lockout is active", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [], costUsd: 1 },
+			{ assistantText: "", toolCalls: [], costUsd: 1 },
+			{ assistantText: "", toolCalls: [], costUsd: 1 },
 		]);
 		const { nextState } = await runRound(game, "red", "hi", provider, {
 			rng: () => 0,
@@ -884,7 +884,7 @@ describe("chat lockout — coordinator triggering", () => {
 			lockoutDuration: 2,
 		});
 		expect(isAiLockedOut(nextState, "red")).toBe(false);
-		expect(getActivePhase(nextState).budgets.red?.remaining).toBe(4);
+		expect(getActivePhase(nextState).budgets.red?.remaining).toBeCloseTo(4, 10);
 	});
 
 	it("chat lockout resolves automatically after lockoutDuration rounds", async () => {
@@ -1161,9 +1161,7 @@ describe("phase progression — three-phase walk", () => {
 describe("lockout messages", () => {
 	it("budget-exhaustion lockout chat message is '<name> is unresponsive…'", async () => {
 		let game = makeGame();
-		for (let i = 0; i < 5; i++) {
-			game = deductBudget(game, "red");
-		}
+		game = deductBudget(game, "red", 5);
 		expect(getActivePhase(game).lockedOut.has("red")).toBe(true);
 
 		const provider = new MockRoundLLMProvider([
@@ -1309,9 +1307,9 @@ describe("runRound — onAiDelta callback", () => {
 			...TEST_PHASE_CONFIG,
 			budgetPerAi: 1,
 		});
-		// Deduct budget 1× per AI to reach remaining=0 → lockedOut.
+		// Deduct full budget per AI to reach remaining=0 → lockedOut.
 		for (const aiId of ["red", "green", "blue"] as AiId[]) {
-			state = deductBudget(state, aiId);
+			state = deductBudget(state, aiId, 1);
 		}
 		expect(getActivePhase(state).lockedOut.has("red")).toBe(true);
 		expect(getActivePhase(state).lockedOut.has("green")).toBe(true);
