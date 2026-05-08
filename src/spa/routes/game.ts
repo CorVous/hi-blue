@@ -281,12 +281,12 @@ export function renderGame(
 	// Prompt-target indicator inside the BBS-style command-line prefix.
 	const promptTargetEl = doc.querySelector<HTMLElement>(".prompt-target");
 
-	/** Update the `/<handle>` indicator beside `guest@hi-blue.bbs:` from the
-	 * current addressee. `null` resets to dim `/???`. */
+	/** Update the `/*<handle>` indicator beside `guest@hi-blue.bbs:` from the
+	 * current addressee. `null` resets to dim `/?????`. */
 	function refreshPromptTarget(addressee: AiId | null): void {
 		if (!promptTargetEl) return;
 		if (addressee == null) {
-			promptTargetEl.textContent = "/???";
+			promptTargetEl.textContent = "/?????";
 			promptTargetEl.classList.remove("is-set");
 			promptTargetEl.style.removeProperty("--target-color");
 			return;
@@ -294,7 +294,7 @@ export function renderGame(
 		const personas = session?.getState().personas ?? {};
 		const persona = personas[addressee];
 		const handle = persona?.name ?? addressee;
-		promptTargetEl.textContent = `/${handle}`;
+		promptTargetEl.textContent = `/*${handle}`;
 		promptTargetEl.classList.add("is-set");
 		if (persona?.color) {
 			promptTargetEl.style.setProperty("--target-color", persona.color);
