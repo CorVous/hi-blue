@@ -6,6 +6,11 @@
  *
  * Collects the full assistant text and all tool calls from the SSE stream
  * and returns them together as a `RoundTurnResult`.
+ *
+ * Reasoning is disabled by default for routine daemon turns — GLM-4.7's
+ * thinking trace adds 1–4K tokens of latency per turn for little roleplay
+ * benefit (see `docs/prompting/glm-4.7-guide.md`). Construct with
+ * `{ disableReasoning: false }` to opt back into the thinking step.
  */
 
 import { streamCompletion } from "../llm-client.js";
@@ -20,7 +25,7 @@ export class BrowserLLMProvider implements RoundLLMProvider {
 	private readonly disableReasoning: boolean;
 
 	constructor(opts: { disableReasoning?: boolean } = {}) {
-		this.disableReasoning = opts.disableReasoning ?? false;
+		this.disableReasoning = opts.disableReasoning ?? true;
 	}
 
 	async streamRound(
@@ -49,7 +54,7 @@ export class BrowserLLMProvider implements RoundLLMProvider {
 			onUsage: (usage) => {
 				if (typeof usage.cost === "number") costUsd = usage.cost;
 			},
-			...(this.disableReasoning ? { disableReasoning: true } : {}),
+			disableReasoning: this.disableReasoning,
 		});
 
 		const assistantText = textParts.join("") || reasoningParts.join("");
