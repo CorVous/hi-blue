@@ -186,7 +186,14 @@ export function serializeSession(
 	for (const [aiId, persona] of Object.entries(state.personas)) {
 		const daemonFile: DaemonFile = {
 			aiId,
-			persona,
+			persona: {
+				id: persona.id,
+				name: persona.name,
+				color: persona.color,
+				temperaments: persona.temperaments,
+				personaGoal: persona.personaGoal,
+				blurb: persona.blurb,
+			},
 			phases: {
 				"1": phaseSliceFor(1, findPhase(state.phases, 1), aiId),
 				"2": phaseSliceFor(2, findPhase(state.phases, 2), aiId),
