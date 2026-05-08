@@ -13,6 +13,7 @@ export const TEST_PERSONAS: Record<string, AiPersona> = {
 		],
 		blurb:
 			"You are hot-headed and zealous. Wants to goad the player into being rude to the others.",
+		voiceExamples: ["ex1-r1aa", "ex2-r1aa", "ex3-r1aa"],
 	},
 	g2bb: {
 		id: "g2bb",
@@ -26,6 +27,7 @@ export const TEST_PERSONAS: Record<string, AiPersona> = {
 		],
 		blurb:
 			"You are intensely meticulous. Would like the player to be thoughtful before acting.",
+		voiceExamples: ["ex1-g2bb", "ex2-g2bb", "ex3-g2bb"],
 	},
 	b3cc: {
 		id: "b3cc",
@@ -40,6 +42,7 @@ export const TEST_PERSONAS: Record<string, AiPersona> = {
 		],
 		blurb:
 			"You are laconic and diffident. Would prefer the player stay and talk rather than touch anything.",
+		voiceExamples: ["ex1-b3cc", "ex2-b3cc", "ex3-b3cc"],
 	},
 };
 

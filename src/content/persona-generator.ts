@@ -51,6 +51,23 @@ export function buildBlurb(
 	return `${temperamentSentence} ${personaGoal}`;
 }
 
+/**
+ * Fallback voice examples for the offline (no-LLM) path.
+ * Intentionally low-quality — exists only so the type stays satisfied.
+ * The real value comes from the LLM synthesis path.
+ */
+export function buildFallbackVoiceExamples(tuple: {
+	temperaments: [string, string];
+	personaGoal: string;
+}): string[] {
+	const [t1, t2] = tuple.temperaments;
+	return [
+		`Something ${t1} just to set a tone.`,
+		`A ${t2} remark in the same breath.`,
+		`One more line that sounds the same.`,
+	];
+}
+
 function drawWithReplacement<T>(pool: T[], rng: () => number): T {
 	// biome-ignore lint/style/noNonNullAssertion: bounded index into non-empty array
 	return pool[Math.floor(rng() * pool.length)]!;
@@ -101,14 +118,25 @@ export async function generatePersonas(
 		});
 	}
 
-	// Synthesize blurbs: LLM path when provider supplied, template fallback otherwise.
-	let blurbMap: Map<string, string>;
+	// Synthesize blurbs and voice examples: LLM path when provider supplied, template fallback otherwise.
+	let synthesisMap: Map<string, { blurb: string; voiceExamples: string[] }>;
 	if (llm) {
 		const result = await llm.synthesizePersonas(tuples);
-		blurbMap = new Map(result.personas.map((p) => [p.id, p.blurb]));
+		synthesisMap = new Map(
+			result.personas.map((p) => [
+				p.id,
+				{ blurb: p.blurb, voiceExamples: p.voiceExamples },
+			]),
+		);
 	} else {
-		blurbMap = new Map(
-			tuples.map((t) => [t.id, buildBlurb(t.temperaments, t.personaGoal)]),
+		synthesisMap = new Map(
+			tuples.map((t) => [
+				t.id,
+				{
+					blurb: buildBlurb(t.temperaments, t.personaGoal),
+					voiceExamples: buildFallbackVoiceExamples(t),
+				},
+			]),
 		);
 	}
 
@@ -117,8 +145,11 @@ export async function generatePersonas(
 		const tuple = tuples[i] as (typeof tuples)[number];
 		const name = tuple.id;
 		const color = colors[i] as string;
+		const synthesized = synthesisMap.get(name);
 		const blurb =
-			blurbMap.get(name) ?? buildBlurb(tuple.temperaments, tuple.personaGoal);
+			synthesized?.blurb ?? buildBlurb(tuple.temperaments, tuple.personaGoal);
+		const voiceExamples =
+			synthesized?.voiceExamples ?? buildFallbackVoiceExamples(tuple);
 		personas[name] = {
 			id: name,
 			name,
@@ -127,6 +158,7 @@ export async function generatePersonas(
 			personaGoal: tuple.personaGoal,
 			typingQuirks: tuple.typingQuirks,
 			blurb,
+			voiceExamples,
 		};
 	}
 	return personas;

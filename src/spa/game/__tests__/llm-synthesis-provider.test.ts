@@ -36,9 +36,21 @@ const INPUT_C: SynthesisInput = {
 const THREE_INPUTS = [INPUT_A, INPUT_B, INPUT_C];
 
 const CANNED_PERSONAS = [
-	{ id: "a1b2", blurb: "You are stoic and precise." },
-	{ id: "c3d4", blurb: "You are intensely impulsive." },
-	{ id: "e5f6", blurb: "You are gentle and wry." },
+	{
+		id: "a1b2",
+		blurb: "You are stoic and precise.",
+		voiceExamples: ["voice1-a1b2", "voice2-a1b2", "voice3-a1b2"],
+	},
+	{
+		id: "c3d4",
+		blurb: "You are intensely impulsive.",
+		voiceExamples: ["voice1-c3d4", "voice2-c3d4", "voice3-c3d4"],
+	},
+	{
+		id: "e5f6",
+		blurb: "You are gentle and wry.",
+		voiceExamples: ["voice1-e5f6", "voice2-e5f6", "voice3-e5f6"],
+	},
 ];
 
 /** Build a successful non-streaming fetch response with JSON in content. */
@@ -100,7 +112,13 @@ describe("MockSynthesisProvider", () => {
 		let received: SynthesisInput[] | null = null;
 		const provider = new MockSynthesisProvider((input) => {
 			received = input;
-			return { personas: input.map((p) => ({ id: p.id, blurb: "test" })) };
+			return {
+				personas: input.map((p) => ({
+					id: p.id,
+					blurb: "test",
+					voiceExamples: ["ex1", "ex2", "ex3"],
+				})),
+			};
 		});
 		await provider.synthesizePersonas(THREE_INPUTS);
 		expect(received).toEqual(THREE_INPUTS);
@@ -381,5 +399,256 @@ describe("BrowserSynthesisProvider", () => {
 		).rejects.toBeInstanceOf(SynthesisError);
 		// Two attempts (first + one retry)
 		expect(fetchMock).toHaveBeenCalledTimes(2);
+	});
+
+	// ── voiceExamples validation ──────────────────────────────────────────────
+
+	it("throws SynthesisError when voiceExamples field is missing", async () => {
+		const badPersonas = [
+			{ id: "a1b2", blurb: "blurb1" },
+			{ id: "c3d4", blurb: "blurb2" },
+			{ id: "e5f6", blurb: "blurb3" },
+		];
+		const makeBody = () =>
+			JSON.stringify({
+				choices: [
+					{
+						message: {
+							content: JSON.stringify({ personas: badPersonas }),
+							reasoning: null,
+						},
+					},
+				],
+			});
+		vi.stubGlobal(
+			"fetch",
+			vi
+				.fn()
+				.mockImplementation(() =>
+					Promise.resolve(new Response(makeBody(), { status: 200 })),
+				),
+		);
+		const provider = new BrowserSynthesisProvider();
+		await expect(
+			provider.synthesizePersonas(THREE_INPUTS),
+		).rejects.toBeInstanceOf(SynthesisError);
+	});
+
+	it("throws SynthesisError when voiceExamples has length != 3 (length 1)", async () => {
+		const badPersonas = [
+			{ id: "a1b2", blurb: "blurb1", voiceExamples: ["only one"] },
+			{ id: "c3d4", blurb: "blurb2", voiceExamples: ["only one"] },
+			{ id: "e5f6", blurb: "blurb3", voiceExamples: ["only one"] },
+		];
+		const makeBody = () =>
+			JSON.stringify({
+				choices: [
+					{
+						message: {
+							content: JSON.stringify({ personas: badPersonas }),
+							reasoning: null,
+						},
+					},
+				],
+			});
+		vi.stubGlobal(
+			"fetch",
+			vi
+				.fn()
+				.mockImplementation(() =>
+					Promise.resolve(new Response(makeBody(), { status: 200 })),
+				),
+		);
+		const provider = new BrowserSynthesisProvider();
+		await expect(
+			provider.synthesizePersonas(THREE_INPUTS),
+		).rejects.toBeInstanceOf(SynthesisError);
+	});
+
+	it("throws SynthesisError when voiceExamples has length != 3 (length 4)", async () => {
+		const badPersonas = [
+			{
+				id: "a1b2",
+				blurb: "blurb1",
+				voiceExamples: ["one", "two", "three", "four"],
+			},
+			{
+				id: "c3d4",
+				blurb: "blurb2",
+				voiceExamples: ["one", "two", "three", "four"],
+			},
+			{
+				id: "e5f6",
+				blurb: "blurb3",
+				voiceExamples: ["one", "two", "three", "four"],
+			},
+		];
+		const makeBody = () =>
+			JSON.stringify({
+				choices: [
+					{
+						message: {
+							content: JSON.stringify({ personas: badPersonas }),
+							reasoning: null,
+						},
+					},
+				],
+			});
+		vi.stubGlobal(
+			"fetch",
+			vi
+				.fn()
+				.mockImplementation(() =>
+					Promise.resolve(new Response(makeBody(), { status: 200 })),
+				),
+		);
+		const provider = new BrowserSynthesisProvider();
+		await expect(
+			provider.synthesizePersonas(THREE_INPUTS),
+		).rejects.toBeInstanceOf(SynthesisError);
+	});
+
+	it("throws SynthesisError when voiceExamples contains a non-string entry", async () => {
+		const badPersonas = [
+			{ id: "a1b2", blurb: "blurb1", voiceExamples: ["ok", 42, "ok"] },
+			{ id: "c3d4", blurb: "blurb2", voiceExamples: ["ok", "ok", "ok"] },
+			{ id: "e5f6", blurb: "blurb3", voiceExamples: ["ok", "ok", "ok"] },
+		];
+		const makeBody = () =>
+			JSON.stringify({
+				choices: [
+					{
+						message: {
+							content: JSON.stringify({ personas: badPersonas }),
+							reasoning: null,
+						},
+					},
+				],
+			});
+		vi.stubGlobal(
+			"fetch",
+			vi
+				.fn()
+				.mockImplementation(() =>
+					Promise.resolve(new Response(makeBody(), { status: 200 })),
+				),
+		);
+		const provider = new BrowserSynthesisProvider();
+		await expect(
+			provider.synthesizePersonas(THREE_INPUTS),
+		).rejects.toBeInstanceOf(SynthesisError);
+	});
+
+	it("throws SynthesisError when voiceExamples contains an empty string", async () => {
+		const badPersonas = [
+			{ id: "a1b2", blurb: "blurb1", voiceExamples: ["ok", "", "ok"] },
+			{ id: "c3d4", blurb: "blurb2", voiceExamples: ["ok", "ok", "ok"] },
+			{ id: "e5f6", blurb: "blurb3", voiceExamples: ["ok", "ok", "ok"] },
+		];
+		const makeBody = () =>
+			JSON.stringify({
+				choices: [
+					{
+						message: {
+							content: JSON.stringify({ personas: badPersonas }),
+							reasoning: null,
+						},
+					},
+				],
+			});
+		vi.stubGlobal(
+			"fetch",
+			vi
+				.fn()
+				.mockImplementation(() =>
+					Promise.resolve(new Response(makeBody(), { status: 200 })),
+				),
+		);
+		const provider = new BrowserSynthesisProvider();
+		await expect(
+			provider.synthesizePersonas(THREE_INPUTS),
+		).rejects.toBeInstanceOf(SynthesisError);
+	});
+
+	it("returns voiceExamples when valid 3-entry array provided", async () => {
+		const goodPersonas = [
+			{
+				id: "a1b2",
+				blurb: "blurb1",
+				voiceExamples: ["line one.", "line two.", "line three."],
+			},
+			{
+				id: "c3d4",
+				blurb: "blurb2",
+				voiceExamples: ["alpha.", "beta.", "gamma."],
+			},
+			{
+				id: "e5f6",
+				blurb: "blurb3",
+				voiceExamples: ["uno.", "dos.", "tres."],
+			},
+		];
+		const makeBody = () =>
+			JSON.stringify({
+				choices: [
+					{
+						message: {
+							content: JSON.stringify({ personas: goodPersonas }),
+							reasoning: null,
+						},
+					},
+				],
+			});
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValue(new Response(makeBody(), { status: 200 })),
+		);
+		const provider = new BrowserSynthesisProvider();
+		const result = await provider.synthesizePersonas(THREE_INPUTS);
+		const a1b2 = result.personas.find((p) => p.id === "a1b2");
+		expect(a1b2?.voiceExamples).toEqual([
+			"line one.",
+			"line two.",
+			"line three.",
+		]);
+	});
+});
+
+// ── SYNTHESIS_SYSTEM_PROMPT — voiceExamples additions ────────────────────────
+
+describe("SYNTHESIS_SYSTEM_PROMPT — voiceExamples", () => {
+	it("includes 'voiceExamples' JSON token", () => {
+		expect(SYNTHESIS_SYSTEM_PROMPT).toContain('"voiceExamples"');
+	});
+
+	it("mentions exactly 3 voice examples requirement", () => {
+		const lower = SYNTHESIS_SYSTEM_PROMPT.toLowerCase();
+		const mentionsThree =
+			lower.includes("exactly 3") || lower.includes("3 voiceexamples");
+		expect(mentionsThree).toBe(true);
+	});
+
+	it("mentions one sentence constraint", () => {
+		expect(SYNTHESIS_SYSTEM_PROMPT.toLowerCase()).toContain("one sentence");
+	});
+
+	it("prohibits first-person goal descriptions in voice examples", () => {
+		const lower = SYNTHESIS_SYSTEM_PROMPT.toLowerCase();
+		const hasProhibition =
+			lower.includes("first-person") ||
+			lower.includes("first person") ||
+			lower.includes("i want") ||
+			lower.includes("don't say");
+		expect(hasProhibition).toBe(true);
+	});
+
+	it("prohibits name/color/room in voice examples", () => {
+		// The same prohibition block covers both blurbs and voice examples.
+		const lower = SYNTHESIS_SYSTEM_PROMPT.toLowerCase();
+		const hasProhibition =
+			lower.includes("name") ||
+			lower.includes("color") ||
+			lower.includes("room");
+		expect(hasProhibition).toBe(true);
 	});
 });

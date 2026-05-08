@@ -272,7 +272,11 @@ describe("generatePersonas — LLM path", () => {
 	it("passes all 3 persona tuples in a single batched call", async () => {
 		const mockProvider = new MockSynthesisProvider(
 			(input: SynthesisInput[]) => ({
-				personas: input.map((p) => ({ id: p.id, blurb: `BLURB_${p.id}` })),
+				personas: input.map((p) => ({
+					id: p.id,
+					blurb: `BLURB_${p.id}`,
+					voiceExamples: [`voice1-${p.id}`, `voice2-${p.id}`, `voice3-${p.id}`],
+				})),
 			}),
 		);
 
@@ -284,7 +288,11 @@ describe("generatePersonas — LLM path", () => {
 	it("returned record has exactly 3 entries with blurbs matching canned values", async () => {
 		const mockProvider = new MockSynthesisProvider(
 			(input: SynthesisInput[]) => ({
-				personas: input.map((p) => ({ id: p.id, blurb: `BLURB_${p.id}` })),
+				personas: input.map((p) => ({
+					id: p.id,
+					blurb: `BLURB_${p.id}`,
+					voiceExamples: [`voice1-${p.id}`, `voice2-${p.id}`, `voice3-${p.id}`],
+				})),
 			}),
 		);
 
@@ -296,10 +304,36 @@ describe("generatePersonas — LLM path", () => {
 		}
 	});
 
+	it("returned record has voiceExamples plumbed through from LLM result", async () => {
+		const mockProvider = new MockSynthesisProvider(
+			(input: SynthesisInput[]) => ({
+				personas: input.map((p) => ({
+					id: p.id,
+					blurb: `BLURB_${p.id}`,
+					voiceExamples: [`voice1-${p.id}`, `voice2-${p.id}`, `voice3-${p.id}`],
+				})),
+			}),
+		);
+
+		const personas = await generatePersonas(() => 0.5, mockProvider);
+
+		for (const [id, persona] of Object.entries(personas)) {
+			expect(persona.voiceExamples).toEqual([
+				`voice1-${id}`,
+				`voice2-${id}`,
+				`voice3-${id}`,
+			]);
+		}
+	});
+
 	it("input to mock contains 3-element array of {id, temperaments, personaGoal} tuples", async () => {
 		const mockProvider = new MockSynthesisProvider(
 			(input: SynthesisInput[]) => ({
-				personas: input.map((p) => ({ id: p.id, blurb: `BLURB_${p.id}` })),
+				personas: input.map((p) => ({
+					id: p.id,
+					blurb: `BLURB_${p.id}`,
+					voiceExamples: [`voice1-${p.id}`, `voice2-${p.id}`, `voice3-${p.id}`],
+				})),
 			}),
 		);
 
@@ -321,6 +355,7 @@ describe("generatePersonas — LLM path", () => {
 				personas: input.map((p, i) => ({
 					id: p.id,
 					blurb: ["BLURB_A", "BLURB_B", "BLURB_C"][i] ?? "BLURB_UNKNOWN",
+					voiceExamples: [`voice1-${p.id}`, `voice2-${p.id}`, `voice3-${p.id}`],
 				})),
 			}),
 		);
@@ -335,5 +370,16 @@ describe("generatePersonas — LLM path", () => {
 		expect(values[0]?.blurb).toBe("BLURB_A");
 		expect(values[1]?.blurb).toBe("BLURB_B");
 		expect(values[2]?.blurb).toBe("BLURB_C");
+	});
+
+	it("template fallback (no-LLM) produces voiceExamples of length 3 non-empty strings", async () => {
+		const personas = await generatePersonas(() => 0.5);
+		for (const p of Object.values(personas)) {
+			expect(p.voiceExamples).toHaveLength(3);
+			for (const ex of p.voiceExamples) {
+				expect(typeof ex).toBe("string");
+				expect(ex.length).toBeGreaterThan(0);
+			}
+		}
 	});
 });
