@@ -10,13 +10,7 @@ import {
 	buildConversationLog,
 	type ConversationLogInput,
 } from "../conversation-log.js";
-import type {
-	AiPersona,
-	ChatMessage,
-	PhysicalActionRecord,
-	WhisperMessage,
-	WorldEntity,
-} from "../types.js";
+import type { AiPersona, PhysicalActionRecord, WorldEntity } from "../types.js";
 
 // Minimal personas for tests
 const TEST_PERSONAS: Record<string, AiPersona> = {
@@ -293,7 +287,9 @@ describe("buildConversationLog — witnessed pick_up", () => {
 			worldEntities: [makeItem("flower-1", "the Flower")],
 		};
 		const result = buildConversationLog(input, "green", TEST_PERSONAS);
-		expect(result).toEqual(["[Round 1] You watch *red pick up the the Flower."]);
+		expect(result).toEqual([
+			"[Round 1] You watch *red pick up the the Flower.",
+		]);
 	});
 });
 

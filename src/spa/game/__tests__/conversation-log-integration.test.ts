@@ -12,8 +12,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { getActivePhase } from "../engine";
-import { createGame, startPhase } from "../engine";
+import { createGame, getActivePhase, startPhase } from "../engine";
 import { buildAiContext } from "../prompt-builder";
 import { runRound } from "../round-coordinator";
 import { MockRoundLLMProvider } from "../round-llm-provider";
@@ -277,7 +276,9 @@ describe("conversation log integration — use outcome rendering", () => {
 		if (greenPrompt.includes("## Conversation")) {
 			// If green can see it (in cone), verify substitution
 			const lines = greenPrompt.split("\n");
-			const useLine = lines.find((l) => l.includes("lamp") || l.includes("glows"));
+			const useLine = lines.find(
+				(l) => l.includes("lamp") || l.includes("glows"),
+			);
 			if (useLine) {
 				expect(useLine).toContain("*red");
 				expect(useLine).not.toContain("{actor}");

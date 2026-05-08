@@ -349,7 +349,9 @@ export function dispatchAiTurn(
 
 				// Collect all other AIs' spatial states at this moment (snapshot)
 				const witnessSpatial: Record<AiId, PersonaSpatialState> = {};
-				for (const [otherId, spatial] of Object.entries(postPhase.personaSpatial)) {
+				for (const [otherId, spatial] of Object.entries(
+					postPhase.personaSpatial,
+				)) {
 					if (otherId !== aiId) {
 						witnessSpatial[otherId] = spatial;
 					}
@@ -391,8 +393,12 @@ export function dispatchAiTurn(
 						...(call.name === "give" && call.args.to !== undefined
 							? { to: call.args.to as AiId }
 							: {}),
-						...(call.name === "go" ? { direction: call.args.direction as CardinalDirection } : {}),
-						...(useOutcomeRaw !== undefined ? { useOutcome: useOutcomeRaw } : {}),
+						...(call.name === "go"
+							? { direction: call.args.direction as CardinalDirection }
+							: {}),
+						...(useOutcomeRaw !== undefined
+							? { useOutcome: useOutcomeRaw }
+							: {}),
 						...(placementFlavorRaw !== undefined ? { placementFlavorRaw } : {}),
 					};
 

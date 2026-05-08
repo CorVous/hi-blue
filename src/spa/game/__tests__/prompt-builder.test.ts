@@ -861,7 +861,9 @@ describe("unified ## Conversation section (issue #129)", () => {
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		const chatIdx = prompt.indexOf('[Round 0] A voice says: "earlier"');
-		const whisperIdx = prompt.indexOf('[Round 2] *green whispered to you: "later"');
+		const whisperIdx = prompt.indexOf(
+			'[Round 2] *green whispered to you: "later"',
+		);
 		expect(chatIdx).toBeGreaterThanOrEqual(0);
 		expect(whisperIdx).toBeGreaterThanOrEqual(0);
 		expect(chatIdx).toBeLessThan(whisperIdx);

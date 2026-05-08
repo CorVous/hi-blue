@@ -1,6 +1,6 @@
 import { projectCone } from "./cone-projector.js";
-import { buildConversationLog } from "./conversation-log.js";
 import type { ConversationLogInput } from "./conversation-log.js";
+import { buildConversationLog } from "./conversation-log.js";
 import { formatPosition } from "./direction.js";
 import { getActivePhase } from "./engine";
 import type {
@@ -282,7 +282,11 @@ function renderSystemPrompt(ctx: AiContext): string {
 		physicalLog: ctx.physicalLog,
 		worldEntities: ctx.worldSnapshot.entities,
 	};
-	const conversationLines = buildConversationLog(logInput, ctx.aiId, ctx.personas);
+	const conversationLines = buildConversationLog(
+		logInput,
+		ctx.aiId,
+		ctx.personas,
+	);
 	if (conversationLines.length > 0) {
 		lines.push("## Conversation");
 		for (const line of conversationLines) {

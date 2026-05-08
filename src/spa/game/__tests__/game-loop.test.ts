@@ -154,8 +154,16 @@ describe("runSingleAiRound", () => {
 		});
 
 		expect(session.history).toHaveLength(2);
-		expect(session.history[0]).toEqual({ role: "player", content: "hello", round: 0 });
-		expect(session.history[1]).toEqual({ role: "ai", content: "hi there", round: 0 });
+		expect(session.history[0]).toEqual({
+			role: "player",
+			content: "hello",
+			round: 0,
+		});
+		expect(session.history[1]).toEqual({
+			role: "ai",
+			content: "hi there",
+			round: 0,
+		});
 	});
 
 	it("fetch failure → rejects AND session.history is untouched", async () => {
