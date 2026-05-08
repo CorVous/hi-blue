@@ -35,29 +35,40 @@ test("game state and transcripts persist across mid-round reload", async ({
 	// rather than the transcript (which fills via live deltas earlier).
 	// (Post-#107 the send button does NOT re-enable after submit because the
 	// prompt is cleared and an empty prompt has no *mention → sendEnabled=false.)
-	await expect
-		.poll(
-			() => page.evaluate(() => localStorage.getItem("hi-blue-game-state")),
-			{ timeout: 15_000 },
-		)
-		.not.toBeNull();
+	// Post-#172: the commit signal is engine.dat (written last in the strict
+	// write order: meta.json → daemons → whispers.txt → engine.dat).
+	await page.waitForFunction(
+		() => {
+			const sessionId = localStorage.getItem("hi-blue:active-session");
+			if (!sessionId) return false;
+			return (
+				localStorage.getItem(`hi-blue:sessions/${sessionId}/engine.dat`) !==
+				null
+			);
+		},
+		{ timeout: 15_000 },
+	);
 
 	// ── Assert localStorage was written ────────────────────────────────────────
 
-	const raw = await page.evaluate(() =>
-		localStorage.getItem("hi-blue-game-state"),
-	);
-	expect(raw, "localStorage must contain saved game state").not.toBeNull();
+	const { sessionId, metaRaw } = await page.evaluate(() => {
+		const sid = localStorage.getItem("hi-blue:active-session");
+		const meta = sid
+			? localStorage.getItem(`hi-blue:sessions/${sid}/meta.json`)
+			: null;
+		return { sessionId: sid, metaRaw: meta };
+	});
+	expect(sessionId, "active-session pointer must be set").not.toBeNull();
+	expect(metaRaw, "meta.json must be written").not.toBeNull();
 
-	const saved = JSON.parse(raw as string) as {
-		schemaVersion: number;
-		transcripts?: Partial<Record<string, string>>;
+	const meta = JSON.parse(metaRaw as string) as {
+		phase: number;
+		round: number;
+		createdAt: string;
+		lastSavedAt: string;
 	};
-	expect(saved.schemaVersion).toBeGreaterThanOrEqual(1);
-	expect(
-		saved.transcripts?.[ids[0]],
-		"transcripts[ids[0]] must be non-empty after turn 1",
-	).toBeTruthy();
+	expect(meta.phase).toBeGreaterThanOrEqual(1);
+	expect(meta.round).toBeGreaterThanOrEqual(1);
 
 	// ── Capture pre-reload values ───────────────────────────────────────────────
 

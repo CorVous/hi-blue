@@ -256,9 +256,18 @@ test("strip-card preview: restored multi-line AI message stays in one msg-line",
 	const transcript0 = page.locator(`[data-transcript="${handles.ids[0]}"]`);
 	await expect(transcript0).toContainText("third");
 	// Wait for the save to land in localStorage.
-	await expect
-		.poll(() => page.evaluate(() => localStorage.getItem("hi-blue-game-state")))
-		.not.toBeNull();
+	// Post-#172: poll for engine.dat commit signal (written last in strict order).
+	await page.waitForFunction(
+		() => {
+			const sessionId = localStorage.getItem("hi-blue:active-session");
+			if (!sessionId) return false;
+			return (
+				localStorage.getItem(`hi-blue:sessions/${sessionId}/engine.dat`) !==
+				null
+			);
+		},
+		{ timeout: 15_000 },
+	);
 
 	// Reload — this exercises the renderRestoredTranscript path.
 	await page.reload();

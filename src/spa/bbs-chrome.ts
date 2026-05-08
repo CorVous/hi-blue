@@ -105,33 +105,6 @@ export function formatTopInfoRight(i: TopInfoInputs): string {
 
 export const TOPINFO_RIGHT_OK_TEXT = "● connection stable";
 
-const SESSION_ID_KEY = "hi-blue:session-id";
-
-/** Get-or-mint a stable 4-hex session id. Persisted in localStorage so
- * reloads keep the same SESSION value in the topinfo row. Falls back to a
- * random in-memory value when storage is unavailable. */
-export function getOrMintSessionId(): string {
-	let store: Storage | null = null;
-	try {
-		store = typeof localStorage === "undefined" ? null : localStorage;
-	} catch {
-		store = null;
-	}
-	if (store) {
-		try {
-			const existing = store.getItem(SESSION_ID_KEY);
-			if (existing) return existing;
-			const minted = mintSessionId();
-			store.setItem(SESSION_ID_KEY, minted);
-			return minted;
-		} catch {
-			/* fall through */
-		}
-	}
-	return mintSessionId();
-}
-
-function mintSessionId(): string {
-	const r = Math.floor(Math.random() * 0xffff);
-	return `0x${r.toString(16).toUpperCase().padStart(4, "0")}`;
-}
+// Session ID minting has moved to src/spa/persistence/session-storage.ts (mintSessionId).
+// getOrMintSessionId has been retired: the active session pointer is now managed by
+// session-storage.ts and surfaced in game.ts via getActiveSessionId().
