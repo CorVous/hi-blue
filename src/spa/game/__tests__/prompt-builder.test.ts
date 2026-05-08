@@ -15,6 +15,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		color: "#e07a5f",
 		temperaments: ["hot-headed", "zealous"],
 		personaGoal: "Hold the flower at phase end.",
+		typingQuirk: "You lean on ellipses… trailing off mid-thought… rarely landing cleanly.",
 		blurb: "You are hot-headed and zealous. Hold the flower at phase end.",
 		budgetPerPhase: 5,
 	},
@@ -24,6 +25,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		color: "#81b29a",
 		temperaments: ["meticulous", "meticulous"],
 		personaGoal: "Ensure items are evenly distributed.",
+		typingQuirk: "You speak in fragments. Short bursts. Rarely complete sentences.",
 		blurb: "You are intensely meticulous. Ensure items are evenly distributed.",
 		budgetPerPhase: 5,
 	},
@@ -33,6 +35,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		color: "#5fa8d3",
 		temperaments: ["laconic", "diffident"],
 		personaGoal: "Hold the key at phase end.",
+		typingQuirk: "You never use contractions. You will not say \"won't\" or \"can't\" — you say \"will not\" and \"cannot\" every time.",
 		blurb: "You are laconic and diffident. Hold the key at phase end.",
 		budgetPerPhase: 5,
 	},
@@ -927,5 +930,88 @@ describe("unified <conversation> block (issue #129)", () => {
 		expect(convIdx).toBe(tags.length - 1);
 		// No whispers_received block
 		expect(tags).not.toContain("whispers_received");
+	});
+});
+
+// ----------------------------------------------------------------------------
+// "<typing_quirk>" block (issue #167)
+// Per-persona surface signals to prevent voice bleed across daemons.
+// ----------------------------------------------------------------------------
+describe("<typing_quirk> block", () => {
+	it("<typing_quirk> block is present in phase 1 and contains the persona's quirk verbatim", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toContain("<typing_quirk>");
+		expect(prompt).toContain(TEST_PERSONAS.red?.typingQuirk as string);
+	});
+
+	it("<typing_quirk> block is present in phase 2 with the same quirk verbatim", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = startPhase(game, makeConfig(2));
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toContain("<typing_quirk>");
+		expect(prompt).toContain(TEST_PERSONAS.red?.typingQuirk as string);
+	});
+
+	it("<typing_quirk> block is present in phase 3 with the same quirk verbatim", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = startPhase(game, makeConfig(3));
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toContain("<typing_quirk>");
+		expect(prompt).toContain(TEST_PERSONAS.red?.typingQuirk as string);
+	});
+
+	it("each daemon's prompt contains its own quirk and not the other daemons' quirks", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+
+		const redPrompt = buildAiContext(game, "red").toSystemPrompt();
+		expect(redPrompt).toContain(TEST_PERSONAS.red?.typingQuirk as string);
+		expect(redPrompt).not.toContain(TEST_PERSONAS.green?.typingQuirk as string);
+		expect(redPrompt).not.toContain(TEST_PERSONAS.blue?.typingQuirk as string);
+
+		const greenPrompt = buildAiContext(game, "green").toSystemPrompt();
+		expect(greenPrompt).toContain(TEST_PERSONAS.green?.typingQuirk as string);
+		expect(greenPrompt).not.toContain(TEST_PERSONAS.red?.typingQuirk as string);
+		expect(greenPrompt).not.toContain(TEST_PERSONAS.blue?.typingQuirk as string);
+
+		const bluePrompt = buildAiContext(game, "blue").toSystemPrompt();
+		expect(bluePrompt).toContain(TEST_PERSONAS.blue?.typingQuirk as string);
+		expect(bluePrompt).not.toContain(TEST_PERSONAS.red?.typingQuirk as string);
+		expect(bluePrompt).not.toContain(TEST_PERSONAS.green?.typingQuirk as string);
+	});
+
+	it("typing_quirk block is byte-identical across phase 1 and phase 2", () => {
+		const PHASE_1_CLEAN = makeConfig(1, [
+			"Hold the flower",
+			"Distribute items",
+			"Hold the key",
+		]);
+		const PHASE_2_CLEAN = makeConfig(2, [
+			"Hold the flower",
+			"Distribute items",
+			"Hold the key",
+		]);
+
+		function getSection(prompt: string, tag: string): string {
+			const open = `<${tag}>`;
+			const close = `</${tag}>`;
+			const start = prompt.indexOf(open);
+			if (start === -1) return "";
+			const end = prompt.indexOf(close, start);
+			if (end === -1) return "";
+			return prompt.slice(start, end + close.length);
+		}
+
+		const game1 = startPhase(createGame(TEST_PERSONAS), PHASE_1_CLEAN, () => 0);
+		const p1 = buildAiContext(game1, "red").toSystemPrompt();
+
+		let game2 = startPhase(createGame(TEST_PERSONAS), PHASE_1_CLEAN, () => 0);
+		game2 = startPhase(game2, PHASE_2_CLEAN, () => 0);
+		const p2 = buildAiContext(game2, "red").toSystemPrompt();
+
+		expect(getSection(p1, "typing_quirk")).toBe(getSection(p2, "typing_quirk"));
 	});
 });

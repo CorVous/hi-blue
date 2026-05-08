@@ -2,6 +2,7 @@ import type { LlmSynthesisProvider } from "../spa/game/llm-synthesis-provider.js
 import { COLOR_PALETTE } from "./color-palette.js";
 import { PERSONA_GOAL_POOL } from "./persona-goal-pool.js";
 import { TEMPERAMENT_POOL } from "./temperament-pool.js";
+import { TYPING_QUIRK_POOL } from "./typing-quirk-pool.js";
 
 const NAME_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789";
 const NAME_LENGTH = 4;
@@ -55,6 +56,15 @@ function drawWithReplacement<T>(pool: T[], rng: () => number): T {
 	return pool[Math.floor(rng() * pool.length)]!;
 }
 
+function shuffleSlice<T>(pool: readonly T[], n: number, rng: () => number): T[] {
+	const arr = [...pool];
+	for (let i = arr.length - 1; i > 0; i--) {
+		const j = Math.floor(rng() * (i + 1));
+		[arr[i], arr[j]] = [arr[j] as T, arr[i] as T];
+	}
+	return arr.slice(0, n);
+}
+
 export async function generatePersonas(
 	rng: () => number = Math.random,
 	llm?: LlmSynthesisProvider,
@@ -76,6 +86,11 @@ export async function generatePersonas(
 		shuffled[j] = tmp;
 	}
 	const colors = shuffled.slice(0, PERSONA_COUNT) as [string, string, string];
+
+	// Draw PERSONA_COUNT distinct typing quirks without replacement — same RNG,
+	// consumed after the color shuffle to preserve existing seed ordering for
+	// name/color draws.
+	const typingQuirks = shuffleSlice(TYPING_QUIRK_POOL, PERSONA_COUNT, rng) as [string, string, string];
 
 	const tuples: Array<{
 		id: string;
@@ -116,6 +131,7 @@ export async function generatePersonas(
 			color,
 			temperaments: tuple.temperaments,
 			personaGoal: tuple.personaGoal,
+			typingQuirk: typingQuirks[i] as string,
 			blurb,
 			budgetPerPhase: 5,
 		};

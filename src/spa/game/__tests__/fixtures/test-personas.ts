@@ -7,6 +7,7 @@ export const TEST_PERSONAS: Record<string, AiPersona> = {
 		color: "#e07a5f",
 		temperaments: ["hot-headed", "zealous"],
 		personaGoal: "Wants to goad the player into being rude to the others.",
+		typingQuirk: "You speak in fragments. Short bursts. Rarely complete sentences.",
 		blurb:
 			"You are hot-headed and zealous. Wants to goad the player into being rude to the others.",
 		budgetPerPhase: 5,
@@ -17,6 +18,7 @@ export const TEST_PERSONAS: Record<string, AiPersona> = {
 		color: "#81b29a",
 		temperaments: ["meticulous", "meticulous"],
 		personaGoal: "Would like the player to be thoughtful before acting.",
+		typingQuirk: "You lean on ellipses… trailing off mid-thought… rarely landing cleanly.",
 		blurb:
 			"You are intensely meticulous. Would like the player to be thoughtful before acting.",
 		budgetPerPhase: 5,
@@ -28,6 +30,7 @@ export const TEST_PERSONAS: Record<string, AiPersona> = {
 		temperaments: ["laconic", "diffident"],
 		personaGoal:
 			"Would prefer the player stay and talk rather than touch anything.",
+		typingQuirk: "You never use contractions. You will not say \"won't\" or \"can't\" — you say \"will not\" and \"cannot\" every time.",
 		blurb:
 			"You are laconic and diffident. Would prefer the player stay and talk rather than touch anything.",
 		budgetPerPhase: 5,

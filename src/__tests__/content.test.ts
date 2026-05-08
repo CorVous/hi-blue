@@ -18,6 +18,7 @@ import {
 	PHASE_3_CONFIG,
 	PHASE_GOAL_POOL,
 	TEMPERAMENT_POOL,
+	TYPING_QUIRK_POOL,
 } from "../content";
 import type { SynthesisInput } from "../spa/game/llm-synthesis-provider.js";
 import { MockSynthesisProvider } from "../spa/game/llm-synthesis-provider.js";
@@ -63,6 +64,23 @@ describe("COLOR_PALETTE", () => {
 		for (const c of COLOR_PALETTE) {
 			expect(c).toMatch(/^#[0-9a-f]{6}$/i);
 		}
+	});
+});
+
+describe("TYPING_QUIRK_POOL", () => {
+	it("has at least 10 entries", () => {
+		expect(TYPING_QUIRK_POOL.length).toBeGreaterThanOrEqual(10);
+	});
+
+	it("every entry is a non-empty string", () => {
+		for (const q of TYPING_QUIRK_POOL) {
+			expect(typeof q).toBe("string");
+			expect(q.length).toBeGreaterThan(0);
+		}
+	});
+
+	it("every entry differs from every other (no duplicates)", () => {
+		expect(new Set(TYPING_QUIRK_POOL).size).toBe(TYPING_QUIRK_POOL.length);
 	});
 });
 
@@ -116,6 +134,27 @@ describe("generatePersonas — template fallback (no llm)", () => {
 		if (!firstPersona) throw new Error("no persona");
 		expect(firstPersona.temperaments[0]).toBe(firstPersona.temperaments[1]);
 		expect(firstPersona.blurb).toContain("intensely");
+	});
+
+	it("each persona has a non-empty typingQuirk string", async () => {
+		const personas = await generatePersonas(() => 0);
+		for (const p of Object.values(personas)) {
+			expect(typeof p.typingQuirk).toBe("string");
+			expect(p.typingQuirk.length).toBeGreaterThan(0);
+		}
+	});
+
+	it("all 3 personas have distinct typing quirks (drawn without replacement)", async () => {
+		const personas = await generatePersonas(() => Math.random());
+		const quirks = Object.values(personas).map((p) => p.typingQuirk);
+		expect(new Set(quirks).size).toBe(3);
+	});
+
+	it("every typingQuirk is drawn from TYPING_QUIRK_POOL", async () => {
+		const personas = await generatePersonas(() => 0.5);
+		for (const p of Object.values(personas)) {
+			expect(TYPING_QUIRK_POOL).toContain(p.typingQuirk);
+		}
 	});
 });
 

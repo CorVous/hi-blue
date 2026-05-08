@@ -306,6 +306,7 @@ describe("persistence — LLM-shaped blurb round-trips verbatim", () => {
 				color: "#e07a5f",
 				temperaments: ["stoic", "impulsive"] as [string, string],
 				personaGoal: "Examine everything.",
+				typingQuirk: "You speak in fragments. Short bursts. Rarely complete sentences.",
 				blurb: LLM_BLURB,
 				budgetPerPhase: 5,
 			},
@@ -315,6 +316,7 @@ describe("persistence — LLM-shaped blurb round-trips verbatim", () => {
 				color: "#81b29a",
 				temperaments: ["meticulous", "meticulous"] as [string, string],
 				personaGoal: "Ensure items are evenly distributed.",
+				typingQuirk: "You lean on ellipses… trailing off mid-thought… rarely landing cleanly.",
 				blurb:
 					"You are intensely meticulous. Ensure items are evenly distributed.",
 				budgetPerPhase: 5,
@@ -325,6 +327,7 @@ describe("persistence — LLM-shaped blurb round-trips verbatim", () => {
 				color: "#5fa8d3",
 				temperaments: ["laconic", "diffident"] as [string, string],
 				personaGoal: "Hold the key at phase end.",
+				typingQuirk: "You never use contractions. You will not say \"won't\" or \"can't\" — you say \"will not\" and \"cannot\" every time.",
 				blurb: "You are laconic and diffident. Hold the key at phase end.",
 				budgetPerPhase: 5,
 			},

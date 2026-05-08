@@ -14,6 +14,7 @@ const TEST_PERSONA: AiPersona = {
 	color: "#5fa8d3",
 	temperaments: ["laconic", "diffident"],
 	personaGoal: "Hold the key at phase end.",
+	typingQuirk: "You never use contractions. You will not say \"won't\" or \"can't\" — you say \"will not\" and \"cannot\" every time.",
 	blurb: "You are laconic and diffident. Hold the key at phase end.",
 	budgetPerPhase: 5,
 };
