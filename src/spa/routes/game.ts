@@ -12,7 +12,6 @@ import {
 	formatTopInfoLeft,
 	formatTopInfoMobile,
 	formatTopInfoRight,
-	getOrMintSessionId,
 	initPanelChrome,
 	TOPINFO_RIGHT_OK_TEXT,
 } from "../bbs-chrome.js";
@@ -30,15 +29,18 @@ import {
 	findFirstMention,
 } from "../game/mention-parser.js";
 import { encodeRoundResult } from "../game/round-result-encoder.js";
-import type { AiId, PhaseConfig } from "../game/types";
+import type { AiId, GameState, PhaseConfig } from "../game/types";
 import { AI_TYPING_SPEED, TOKEN_PACE_MS } from "../game/typing-rhythm.js";
 import { CapHitError } from "../llm-client.js";
 import {
-	clearGame,
-	isStorageAvailable,
-	loadGame,
-	saveGame,
-} from "../persistence/game-storage.js";
+	clearActiveSession,
+	deleteLegacySaveKey,
+	getActiveSessionId,
+	hasLegacySave,
+	loadActiveSession,
+	mintAndActivateNewSession,
+	saveActiveSession,
+} from "../persistence/session-storage.js";
 
 /** Lowercased persona name for transcript prefixes (`> *ember <msg>`). */
 function transcriptName(name: string): string {
@@ -49,34 +51,6 @@ function transcriptName(name: string): string {
  * (e.g. 0.05 → "5.000¢"). Clamps negatives to zero. */
 function formatBudget(remainingUsd: number): string {
 	return `${(Math.max(0, remainingUsd) * 100).toFixed(3)}¢`;
-}
-
-/** Match an AI prefix at the start of a line: `> *<handle> ` (handle is
- * non-whitespace). Capture group 1 is the lowercased handle. */
-const AI_PREFIX_RE = /^> \*(\S+) /;
-
-/** Sentinel prepended to a serialized player line so the restore parser
- * can route it to the player branch unambiguously. Necessary because
- * player lines and AI prefixes are otherwise structurally identical
- * (`> *<handle> …`) and persona names are lowercase in production, so
- * the legacy "lowercase-vs-mixed-case" guard collapses there. */
-const PLAYER_LINE_SENTINEL = "​";
-
-/** Walk `transcript.children` and emit a textContent-equivalent string
- * with a zero-width-space marker prepended to each player msg-line.
- * AI prefix lines (those whose first child is a `.msg-prefix` span) and
- * standalone system lines pass through unchanged. */
-function serializeTranscript(transcript: HTMLElement): string {
-	const out: string[] = [];
-	for (const child of Array.from(transcript.children)) {
-		if (!(child instanceof HTMLElement)) continue;
-		if (!child.classList.contains("msg-line")) continue;
-		const text = child.textContent ?? "";
-		const firstChild = child.firstElementChild;
-		const isPlayerLine = firstChild?.classList.contains("msg-you") === true;
-		out.push(isPlayerLine ? `${PLAYER_LINE_SENTINEL}${text}` : text);
-	}
-	return out.join("");
 }
 
 /** Build a regex that matches any persona handle (with an optional leading
@@ -141,84 +115,6 @@ function appendMentionAwareText(
 		lastIdx = m.index + matchText.length;
 	}
 	appendChunk(text.slice(lastIdx));
-}
-
-/** Render a saved transcript string into the given element by parsing
- * lines and wrapping each logical message in a `.msg-line` block. AI
- * prefix portions (`> *<handle> `) become `.msg-prefix` spans tinted
- * with the persona's color; player lines (`> <msg>`) become `.msg-you`
- * spans. Lines starting with `[` (bracketed system messages) or `--- `
- * (phase separators) become their own standalone msg-line. Any other
- * orphan amber line is treated as a continuation of the preceding AI
- * msg-line — this matches the live `appendAiTokens` behavior, where an
- * AI response with embedded `\n` collapses into a single msg-line so
- * strip-card mode can render it as one ellipsis-truncated line. */
-function renderRestoredTranscript(
-	transcript: HTMLElement,
-	saved: string,
-	personas: Record<string, { name: string; color: string }>,
-): void {
-	const doc = transcript.ownerDocument;
-	transcript.textContent = "";
-	if (!saved) return;
-	const lines = saved.split(/(?<=\n)/);
-	// Tracks the most recently opened AI msg-line so consecutive orphan
-	// continuation lines (no prefix, not a system marker) can be merged
-	// into it instead of becoming new msg-lines.
-	let currentAiLine: HTMLElement | null = null;
-	const startNewMsgLine = (): HTMLElement => {
-		const el = doc.createElement("div");
-		el.className = "msg-line";
-		transcript.appendChild(el);
-		return el;
-	};
-	for (const rawLine of lines) {
-		// Player lines are persisted with a zero-width-space sentinel so the
-		// parser can disambiguate them from AI prefix lines, which would
-		// otherwise be structurally identical in production (lowercase
-		// persona names collide with the lowercased AI-prefix handle).
-		const isPlayerLine = rawLine.startsWith(PLAYER_LINE_SENTINEL);
-		const line = isPlayerLine ? rawLine.slice(1) : rawLine;
-		if (isPlayerLine) {
-			appendMentionAwareText(startNewMsgLine(), line, personas, "msg-you");
-			currentAiLine = null;
-			continue;
-		}
-		const m = AI_PREFIX_RE.exec(line);
-		const handle = m?.[1];
-		const persona = handle
-			? Object.values(personas).find((p) => p.name.toLowerCase() === handle)
-			: undefined;
-		// Legacy fallback (saves predating the player-line sentinel): only
-		// treat as an AI line when the matched handle resolves to a known
-		// persona. This guard works for capitalized names but collapses for
-		// production lowercase names — those legacy player lines will still
-		// be miscoloured. New saves use the sentinel above and avoid this.
-		if (handle && persona) {
-			const prefixText = `> *${handle} `;
-			const prefix = doc.createElement("span");
-			prefix.className = "msg-prefix";
-			if (persona.color) {
-				prefix.style.setProperty("--prefix-color", persona.color);
-			}
-			prefix.textContent = prefixText;
-			const lineEl = startNewMsgLine();
-			lineEl.appendChild(prefix);
-			const rest = line.slice(prefixText.length);
-			if (rest) appendMentionAwareText(lineEl, rest, personas);
-			currentAiLine = lineEl;
-		} else if (line.startsWith("> ")) {
-			appendMentionAwareText(startNewMsgLine(), line, personas, "msg-you");
-			currentAiLine = null;
-		} else if (line.startsWith("[") || line.startsWith("--- ")) {
-			appendMentionAwareText(startNewMsgLine(), line, personas);
-			currentAiLine = null;
-		} else if (currentAiLine) {
-			appendMentionAwareText(currentAiLine, line, personas);
-		} else {
-			appendMentionAwareText(startNewMsgLine(), line, personas);
-		}
-	}
 }
 
 /** Fisher-Yates shuffle (returns a new array). */
@@ -336,6 +232,8 @@ const PERSISTENCE_WARNING_MESSAGES: Record<string, string> = {
 		"Saved game data was unreadable and has been discarded. Starting a new game.",
 	"version-mismatch":
 		"Saved game data is from an older version and has been discarded. Starting a new game.",
+	"legacy-save-discarded":
+		"Saved game data from an older format has been discarded. Starting a new game.",
 	unknown: "Game progress could not be saved due to an unexpected error.",
 };
 
@@ -517,44 +415,62 @@ export function renderGame(
 
 	// Lazy-init session
 	if (!session) {
-		// Check storage availability up-front (once)
-		const storageAvailable = isStorageAvailable();
-		if (!storageAvailable) {
+		// Feature-detect localStorage availability (SecurityError in privacy mode).
+		let storageAvailable = true;
+		try {
+			const probe = `hi-blue-storage-probe-${Math.random().toString(36).slice(2)}`;
+			localStorage.setItem(probe, "1");
+			localStorage.removeItem(probe);
+		} catch {
+			storageAvailable = false;
 			showPersistenceWarning("unavailable");
 		}
 
-		// Try to restore from localStorage
-		const loadResult = storageAvailable ? loadGame() : { state: null };
-		if (loadResult.state) {
-			session = GameSession.restore(loadResult.state);
+		// Determine boot path from active session pointer + legacy save
+		const activeId = storageAvailable ? getActiveSessionId() : null;
 
-			const restored = loadResult as {
-				state: NonNullable<(typeof loadResult)["state"]>;
-				transcripts: Partial<Record<AiId, string>>;
-			};
+		let restoredState: GameState | null = null;
 
-			// Re-render transcripts from restored state. Map aiIds to panels by
-			// slot order — matches the panel-init loop below; needed because the
-			// HTML scaffold has empty data-transcript attributes that get filled
-			// in at panel-init time.
-			const restoredPhase = getActivePhase(loadResult.state);
-			const restoredPersonas = loadResult.state.personas;
+		if (activeId !== null) {
+			// We have an active session — try to load it
+			const loadResult = loadActiveSession();
+			if (loadResult.kind === "ok") {
+				restoredState = loadResult.state;
+			} else if (loadResult.kind === "broken") {
+				showPersistenceWarning("corrupt");
+				clearActiveSession();
+				mintAndActivateNewSession();
+			} else if (loadResult.kind === "version-mismatch") {
+				showPersistenceWarning("version-mismatch");
+				clearActiveSession();
+				mintAndActivateNewSession();
+			}
+		} else if (storageAvailable && hasLegacySave()) {
+			// Legacy single-key save found — discard it and start fresh
+			showPersistenceWarning("legacy-save-discarded");
+			deleteLegacySaveKey();
+			mintAndActivateNewSession();
+		} else if (storageAvailable) {
+			// No session at all — mint a new one
+			mintAndActivateNewSession();
+		}
+
+		if (restoredState !== null) {
+			session = GameSession.restore(restoredState);
+
+			// Re-render transcripts from restored state using chatHistories fallback.
+			// (The new format stores chat histories in daemon .txt files, not as
+			// serialized transcript HTML, so we always use the chatHistories path.)
+			const restoredPhase = getActivePhase(restoredState);
+			const restoredPersonas = restoredState.personas;
 			const restorePanelEls = doc.querySelectorAll<HTMLElement>(".ai-panel");
 			Object.keys(restoredPersonas).forEach((aiId, idx) => {
 				const panel = restorePanelEls[idx];
 				if (!panel) return;
 				const transcript = panel.querySelector<HTMLElement>(".transcript");
 				if (!transcript) return;
-				if (typeof restored.transcripts[aiId] === "string") {
-					// Verbatim restore from persisted transcript snapshot —
-					// re-wrap player lines and AI-prefix portions for coloring.
-					renderRestoredTranscript(
-						transcript,
-						restored.transcripts[aiId],
-						restoredPersonas,
-					);
-				} else if ((restoredPhase.chatHistories[aiId]?.length ?? 0) > 0) {
-					// Fallback: synthesise from chatHistories (legacy saves).
+				if ((restoredPhase.chatHistories[aiId]?.length ?? 0) > 0) {
+					// Synthesise from chatHistories (stored in daemon .txt files).
 					transcript.textContent = "";
 					const persona = restoredPersonas[aiId];
 					const personaName = persona?.name ?? aiId;
@@ -598,9 +514,6 @@ export function renderGame(
 				}
 			});
 		} else {
-			if (loadResult.error) {
-				showPersistenceWarning(loadResult.error);
-			}
 			// Async bootstrap: generatePersonas now requires an LLM call.
 			// session remains null until the promise resolves; the form submit
 			// handler early-returns when session is null, so clicks before
@@ -765,7 +678,9 @@ export function renderGame(
 	// One-time chrome: ASCII banner + initial top-info row.
 	const bannerEl = doc.querySelector<HTMLElement>("#banner");
 	if (bannerEl && !bannerEl.innerHTML) bannerEl.innerHTML = BANNER;
-	const sessionId = getOrMintSessionId();
+	// Active pointer is guaranteed to be set by the boot path above.
+	const sessionId = getActiveSessionId() ?? "0x????";
+
 	const topinfoLeftEl = doc.querySelector<HTMLElement>("#topinfo-left");
 	const topinfoRightEl = doc.querySelector<HTMLElement>("#topinfo-right");
 	const topinfoMobileEl = doc.querySelector<HTMLElement>("#topinfo-mobile");
@@ -1230,7 +1145,7 @@ export function renderGame(
 						promptInput.disabled = true;
 
 						// Clear persisted game state on game-end
-						clearGame();
+						clearActiveSession();
 
 						// Hide game UI
 						const panelsEl = doc.querySelector<HTMLElement>("#panels");
@@ -1321,15 +1236,11 @@ export function renderGame(
 				}
 			}
 
-			// Persist state after the encoder render loop completes, so the full
-			// rendered transcripts (including raw LLM completions) are captured.
-			if (!roundGameEnded && isStorageAvailable()) {
-				const transcripts: Partial<Record<AiId, string>> = {};
-				for (const aiId of Object.keys(nextState.personas)) {
-					const el = getTranscript(aiId);
-					if (el) transcripts[aiId] = serializeTranscript(el);
-				}
-				const saveResult = saveGame(nextState, transcripts);
+			// Persist state after the encoder render loop completes.
+			// Chat histories are stored in daemon .txt files; the transcript HTML
+			// is not serialized (restores use chatHistories fallback path).
+			if (!roundGameEnded) {
+				const saveResult = saveActiveSession(nextState);
 				if (!saveResult.ok) {
 					showPersistenceWarning(saveResult.reason);
 				}
