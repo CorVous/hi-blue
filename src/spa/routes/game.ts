@@ -888,6 +888,10 @@ export function renderGame(
 			persistedPrefix.length,
 		);
 		promptInput.focus();
+		// Programmatic value-set doesn't fire `input`, so the mention-highlight
+		// overlay would keep showing the previous text. Refresh manually so
+		// the overlay repaints to match the new prefix.
+		refreshComposerState();
 
 		// Append the (mention-stripped) player message to the addressed panel.
 		appendPlayerLine(addressed, `> ${message}\n`);
