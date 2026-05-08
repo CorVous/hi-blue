@@ -23,6 +23,8 @@ export interface AiContext {
 	aiId: AiId;
 	blurb: string;
 	typingQuirks: [string, string];
+	/** Three short in-character utterances; rendered as `<voice_examples>` in the system prompt. */
+	voiceExamples: string[];
 	personaGoal: string;
 	goal: string;
 	setting: string;
@@ -66,6 +68,7 @@ export function buildAiContext(game: GameState, aiId: AiId): AiContext {
 		aiId,
 		blurb: persona.blurb,
 		typingQuirks: persona.typingQuirks,
+		voiceExamples: persona.voiceExamples,
 		personaGoal: persona.personaGoal,
 		goal,
 		setting,
@@ -185,6 +188,17 @@ function renderSystemPrompt(ctx: AiContext): string {
 	lines.push(ctx.typingQuirks[0]);
 	lines.push(ctx.typingQuirks[1]);
 	lines.push("</typing_quirks>");
+	lines.push("");
+
+	// Voice examples — byte-identical across phases. 3 short utterances per persona.
+	// Per the GLM-4.7 prompting guide (docs/prompting/glm-4.7-guide.md §1.4 #2),
+	// few-shot voice examples are the highest-ROI part of a multi-character prompt.
+	// Each example MUST adhere to the persona's typing quirk.
+	lines.push("<voice_examples>");
+	for (const ex of ctx.voiceExamples) {
+		lines.push(`- ${ex}`);
+	}
+	lines.push("</voice_examples>");
 	lines.push("");
 
 	// Goal — voice framing in all phases.

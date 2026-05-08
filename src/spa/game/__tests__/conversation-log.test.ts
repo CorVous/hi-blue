@@ -25,6 +25,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 			"You lean on em-dashes — interrupting yourself mid-sentence — and rarely use commas where a dash would do.",
 		],
 		blurb: "You are hot-headed and zealous.",
+		voiceExamples: ["ex1-red", "ex2-red", "ex3-red"],
 	},
 	green: {
 		id: "green",
@@ -37,6 +38,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 			"You use ALL-CAPS to emphasize the one or two words that MATTER in any given sentence.",
 		],
 		blurb: "You are intensely meticulous.",
+		voiceExamples: ["ex1-green", "ex2-green", "ex3-green"],
 	},
 	blue: {
 		id: "blue",
@@ -49,6 +51,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 			"You end almost every reply with a question, no matter what the topic is — does that make sense?",
 		],
 		blurb: "You are laconic and diffident.",
+		voiceExamples: ["ex1-blue", "ex2-blue", "ex3-blue"],
 	},
 };
 

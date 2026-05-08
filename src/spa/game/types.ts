@@ -12,6 +12,12 @@ export interface AiPersona {
 	personaGoal: string;
 	typingQuirks: [string, string];
 	blurb: string;
+	/**
+	 * Three short, single-sentence in-character utterances synthesized alongside
+	 * the blurb. Rendered into the `<voice_examples>` block in the system prompt.
+	 * Length is exactly 3.
+	 */
+	voiceExamples: string[];
 }
 
 export type WorldEntityKind =

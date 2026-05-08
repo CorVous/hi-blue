@@ -19,6 +19,7 @@ const TEST_PERSONA: AiPersona = {
 		"You end almost every reply with a question, no matter what the topic is — does that make sense?",
 	],
 	blurb: "You are laconic and diffident. Hold the key at phase end.",
+	voiceExamples: ["ex1-blue", "ex2-blue", "ex3-blue"],
 };
 
 function makeSSEStream(chunks: string[]): ReadableStream<Uint8Array> {

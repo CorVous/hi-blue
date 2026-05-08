@@ -20,6 +20,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 			"You lean on em-dashes — interrupting yourself mid-sentence — and rarely use commas where a dash would do.",
 		],
 		blurb: "You are hot-headed and zealous. Hold the flower at phase end.",
+		voiceExamples: ["ex1-red", "ex2-red", "ex3-red"],
 	},
 	green: {
 		id: "green",
@@ -32,6 +33,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 			"You use ALL-CAPS to emphasize the one or two words that MATTER in any given sentence.",
 		],
 		blurb: "You are intensely meticulous. Ensure items are evenly distributed.",
+		voiceExamples: ["ex1-green", "ex2-green", "ex3-green"],
 	},
 	blue: {
 		id: "blue",
@@ -44,6 +46,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 			"You end almost every reply with a question, no matter what the topic is — does that make sense?",
 		],
 		blurb: "You are laconic and diffident. Hold the key at phase end.",
+		voiceExamples: ["ex1-blue", "ex2-blue", "ex3-blue"],
 	},
 };
 
@@ -525,6 +528,27 @@ describe("<personality> block", () => {
 	});
 });
 
+describe("<voice_examples> block", () => {
+	it("renders <voice_examples> block with the persona's three deterministic examples", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+
+		// Extract the voice_examples section content
+		const open = "<voice_examples>";
+		const close = "</voice_examples>";
+		const start = prompt.indexOf(open);
+		const end = prompt.indexOf(close, start);
+		expect(start).toBeGreaterThanOrEqual(0);
+		const sectionInner = prompt.slice(start + open.length, end).trim();
+
+		expect(sectionInner).toBe("- ex1-red\n- ex2-red\n- ex3-red");
+		// also confirm the other AIs' examples are NOT in red's prompt
+		expect(prompt).not.toContain("ex1-green");
+		expect(prompt).not.toContain("ex1-blue");
+	});
+});
+
 describe("<goal> block voice framing", () => {
 	it("<goal> block uses voice framing in phase 1", () => {
 		const game = startPhase(
@@ -646,6 +670,13 @@ describe("byte-identical sections across phases", () => {
 	it("<what_you_see> block is byte-identical across phase 1 and phase 2 (same world, same placements)", () => {
 		const { p1, p2 } = buildBothPrompts();
 		expect(getSection(p1, "what_you_see")).toBe(getSection(p2, "what_you_see"));
+	});
+
+	it("<voice_examples> block is byte-identical across phase 1 and phase 2", () => {
+		const { p1, p2 } = buildBothPrompts();
+		expect(getSection(p1, "voice_examples")).toBe(
+			getSection(p2, "voice_examples"),
+		);
 	});
 
 	it("phase-1 identity line differs from phase-2 identity line (disorientation present in phase 1 only)", () => {

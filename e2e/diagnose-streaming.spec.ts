@@ -172,6 +172,7 @@ test("DIAGNOSTIC: observe wire vs DOM timeline during streaming", async ({
 							const personas = ids.map((id) => ({
 								id,
 								blurb: `Stub blurb for ${id}.`,
+								voiceExamples: [`ex1-${id}`, `ex2-${id}`, `ex3-${id}`],
 							}));
 							content = JSON.stringify({ personas });
 						} else if (

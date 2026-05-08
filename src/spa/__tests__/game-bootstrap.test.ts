@@ -311,6 +311,7 @@ describe("persistence — LLM-shaped blurb round-trips verbatim", () => {
 					"You lean on em-dashes — interrupting yourself mid-sentence — and rarely use commas where a dash would do.",
 				] as [string, string],
 				blurb: LLM_BLURB,
+				voiceExamples: ["ex1-red", "ex2-red", "ex3-red"],
 			},
 			green: {
 				id: "green",
@@ -324,6 +325,7 @@ describe("persistence — LLM-shaped blurb round-trips verbatim", () => {
 				] as [string, string],
 				blurb:
 					"You are intensely meticulous. Ensure items are evenly distributed.",
+				voiceExamples: ["ex1-green", "ex2-green", "ex3-green"],
 			},
 			blue: {
 				id: "blue",
@@ -336,6 +338,7 @@ describe("persistence — LLM-shaped blurb round-trips verbatim", () => {
 					"You end almost every reply with a question, no matter what the topic is — does that make sense?",
 				] as [string, string],
 				blurb: "You are laconic and diffident. Hold the key at phase end.",
+				voiceExamples: ["ex1-blue", "ex2-blue", "ex3-blue"],
 			},
 		};
 
