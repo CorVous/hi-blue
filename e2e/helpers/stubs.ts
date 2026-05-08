@@ -23,6 +23,41 @@ export function wordsToOpenAiSseBody(words: string[]): string {
 	return lines.join("");
 }
 
+// ── Pure helpers (request classification + canned responses) ─────────────────
+
+type ParsedBody = {
+	stream?: boolean;
+	response_format?: unknown;
+	messages?: Array<{ role?: string; content?: string }>;
+} | null;
+
+/** True when a request is an OpenAI JSON-mode (non-streaming) call. */
+function isJsonModeRequest(body: ParsedBody): boolean {
+	return (
+		body !== null && (body.stream === false || body.response_format != null)
+	);
+}
+
+/**
+ * Classify a JSON-mode request by its user-message preamble. Two callers fire
+ * JSON-mode `/v1/chat/completions` at game start:
+ *   - persona synthesis (`Synthesize blurbs for these personas:` …)
+ *   - content-pack generation (`Generate content packs for these phases:` …)
+ *
+ * Returns "unknown" for callers we don't recognise so future additions surface
+ * loudly instead of silently receiving a persona-shaped reply.
+ */
+export function classifyJsonRequest(
+	body: ParsedBody,
+): "synthesis" | "content-pack" | "unknown" {
+	const userMsg = body?.messages?.[1]?.content ?? "";
+	if (userMsg.startsWith("Synthesize blurbs for these personas:"))
+		return "synthesis";
+	if (userMsg.startsWith("Generate content packs for these phases:"))
+		return "content-pack";
+	return "unknown";
+}
+
 /**
  * Extract persona ids from a synthesis user-message content string.
  * The synthesis user message format is: `id: "xxxx", temperaments: ...`
@@ -35,19 +70,166 @@ function extractInputIds(content: string): string[] {
 	).filter(Boolean);
 }
 
+/** Build a synthesis JSON-mode response body that echoes the input ids. */
+function buildSynthesisResponseBody(
+	body: ParsedBody,
+	blurbFn: (id: string) => string,
+): string {
+	const ids = extractInputIds(body?.messages?.[1]?.content ?? "");
+	const content = JSON.stringify({
+		personas: ids.map((id) => ({ id, blurb: blurbFn(id) })),
+	});
+	return JSON.stringify({ choices: [{ message: { content } }] });
+}
+
+type PhaseSpec = {
+	phaseNumber: 1 | 2 | 3;
+	setting: string;
+	k: number;
+	n: number;
+	m: number;
+};
+
+/**
+ * Parse the per-phase `Phase N: setting="…", k=K objective pairs, n=N …`
+ * lines from a content-pack user message.
+ */
+function parseContentPackPhases(userMessage: string): PhaseSpec[] {
+	const re =
+		/Phase\s+(\d+):\s+setting="([^"]*)",\s+k=(\d+)\s+objective pairs,\s+n=(\d+)\s+interesting objects,\s+m=(\d+)\s+obstacles/g;
+	const phases: PhaseSpec[] = [];
+	for (const match of userMessage.matchAll(re)) {
+		const phaseNumber = Number(match[1]);
+		if (phaseNumber !== 1 && phaseNumber !== 2 && phaseNumber !== 3) continue;
+		phases.push({
+			phaseNumber: phaseNumber as 1 | 2 | 3,
+			setting: match[2] ?? "",
+			k: Number(match[3]),
+			n: Number(match[4]),
+			m: Number(match[5]),
+		});
+	}
+	return phases;
+}
+
+/**
+ * Build a content-pack JSON-mode response body that satisfies
+ * `validateContentPacks` (see src/spa/game/content-pack-provider.ts) for the
+ * phases described in the request user message.
+ *
+ * Ids are namespaced by phase + role + index so they remain unique across
+ * all packs in the response. Pairing invariants hold:
+ *   - object.pairsWithSpaceId === paired space.id
+ *   - object.placementFlavor contains the literal "{actor}"
+ */
+function buildContentPackResponseBody(body: ParsedBody): string {
+	const userMsg = body?.messages?.[1]?.content ?? "";
+	const phases = parseContentPackPhases(userMsg);
+	const packs = phases.map((phase) => {
+		const tag = `p${phase.phaseNumber}`;
+		const objectivePairs = Array.from({ length: phase.k }, (_, i) => {
+			const spaceId = `${tag}-spc-${i}`;
+			const objectId = `${tag}-obj-${i}`;
+			return {
+				object: {
+					id: objectId,
+					kind: "objective_object",
+					name: `Stub object ${tag}-${i}`,
+					examineDescription: `Stub objective object paired with ${spaceId}.`,
+					useOutcome: "Nothing happens.",
+					pairsWithSpaceId: spaceId,
+					placementFlavor: "{actor} places it.",
+				},
+				space: {
+					id: spaceId,
+					kind: "objective_space",
+					name: `Stub space ${tag}-${i}`,
+					examineDescription: `Stub objective space ${spaceId}.`,
+				},
+			};
+		});
+		const interestingObjects = Array.from({ length: phase.n }, (_, i) => ({
+			id: `${tag}-int-${i}`,
+			kind: "interesting_object",
+			name: `Stub interesting ${tag}-${i}`,
+			examineDescription: `Stub interesting object ${tag}-int-${i}.`,
+			useOutcome: "Nothing happens.",
+		}));
+		const obstacles = Array.from({ length: phase.m }, (_, i) => ({
+			id: `${tag}-obs-${i}`,
+			kind: "obstacle",
+			name: `Stub obstacle ${tag}-${i}`,
+			examineDescription: `Stub obstacle ${tag}-obs-${i}.`,
+		}));
+		return {
+			phaseNumber: phase.phaseNumber,
+			setting: phase.setting,
+			objectivePairs,
+			interestingObjects,
+			obstacles,
+		};
+	});
+	const content = JSON.stringify({ packs });
+	return JSON.stringify({ choices: [{ message: { content } }] });
+}
+
+function parseRequestBody(request: Request): ParsedBody {
+	try {
+		return JSON.parse(request.postData() ?? "null") as ParsedBody;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Fulfill any JSON-mode `/v1/chat/completions` request with the appropriate
+ * canned reply (synthesis or content-pack). Returns true if handled, false
+ * if the request was not JSON-mode and the caller should handle it itself.
+ *
+ * Throws if the request is JSON-mode but unrecognised — silent persona-shaped
+ * fallbacks were the bug this helper exists to prevent.
+ */
+async function tryFulfillJsonMode(
+	route: Parameters<Parameters<Page["route"]>[1]>[0],
+	body: ParsedBody,
+	blurbFn: (id: string) => string,
+): Promise<boolean> {
+	if (!isJsonModeRequest(body)) return false;
+	const kind = classifyJsonRequest(body);
+	const responseBody =
+		kind === "synthesis"
+			? buildSynthesisResponseBody(body, blurbFn)
+			: kind === "content-pack"
+				? buildContentPackResponseBody(body)
+				: null;
+	if (responseBody === null) {
+		throw new Error(
+			`stubs.ts: unrecognised JSON-mode /v1/chat/completions caller. ` +
+				`User message preamble: ${(body?.messages?.[1]?.content ?? "").slice(0, 80)}`,
+		);
+	}
+	await route.fulfill({
+		status: 200,
+		headers: { "Content-Type": "application/json" },
+		body: responseBody,
+	});
+	return true;
+}
+
+// ── Public stub helpers ──────────────────────────────────────────────────────
+
 export type SynthesisStubOptions = {
 	/** Generate a blurb for a given persona id. Defaults to `id => \`Stub blurb for ${id}.\`` */
 	blurb?: (id: string) => string;
 };
 
 /**
- * Register a Playwright route stub that handles the persona synthesis
- * JSON-mode `/v1/chat/completions` call.  It parses the request body,
- * extracts persona ids from the user message, and returns a canned
- * `{ choices: [{ message: { content: JSON.stringify({ personas: [...] }) } }] }`
- * response that echoes each input id verbatim.
+ * Register a Playwright route stub that handles all JSON-mode
+ * `/v1/chat/completions` calls fired at new-game time:
+ *   - persona synthesis → echoes input ids with canned blurbs
+ *   - content-pack generation → echoes input phase shapes with canned entities
  *
- * Non-synthesis (SSE/streaming) requests are forwarded via `route.fallback()`.
+ * Non-JSON (SSE/streaming) requests are forwarded via `route.fallback()`.
  */
 export async function stubPersonaSynthesis(
 	page: Page,
@@ -55,31 +237,8 @@ export async function stubPersonaSynthesis(
 ): Promise<void> {
 	const blurbFn = options?.blurb ?? ((id: string) => `Stub blurb for ${id}.`);
 	await page.route("**/v1/chat/completions", async (route, request) => {
-		let parsed: unknown = null;
-		try {
-			parsed = JSON.parse(request.postData() ?? "null");
-		} catch {
-			// ignore parse error
-		}
-		const body = parsed as {
-			stream?: boolean;
-			response_format?: unknown;
-			messages?: Array<{ content?: string }>;
-		} | null;
-		const isJsonMode =
-			body !== null && (body.stream === false || body.response_format != null);
-		if (isJsonMode) {
-			const ids = extractInputIds(body?.messages?.[1]?.content ?? "");
-			const content = JSON.stringify({
-				personas: ids.map((id) => ({ id, blurb: blurbFn(id) })),
-			});
-			await route.fulfill({
-				status: 200,
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ choices: [{ message: { content } }] }),
-			});
-			return;
-		}
+		const body = parseRequestBody(request);
+		if (await tryFulfillJsonMode(route, body, blurbFn)) return;
 		await route.fallback();
 	});
 }
@@ -90,12 +249,9 @@ export type NewGameLLMOptions = {
 };
 
 /**
- * Combined stub that handles both the persona synthesis JSON call and the
- * gameplay SSE streaming call in a single `page.route` registration.
- *
- * Distinguishes calls by request body:
- *   - `stream === false` or `response_format` present → synthesis JSON response
- *   - otherwise → SSE streaming response
+ * Combined stub that handles both the new-game JSON-mode calls (persona
+ * synthesis and content-pack generation) and the gameplay SSE streaming
+ * call in a single `page.route` registration.
  */
 export async function stubNewGameLLM(
 	page: Page,
@@ -106,32 +262,8 @@ export async function stubNewGameLLM(
 	const wordsOrFactory = opts.sse;
 
 	await page.route("**/v1/chat/completions", async (route, request) => {
-		let parsed: unknown = null;
-		try {
-			parsed = JSON.parse(request.postData() ?? "null");
-		} catch {
-			// ignore parse error
-		}
-		const body = parsed as {
-			stream?: boolean;
-			response_format?: unknown;
-			messages?: Array<{ content?: string }>;
-		} | null;
-		const isJsonMode =
-			body !== null && (body.stream === false || body.response_format != null);
-
-		if (isJsonMode) {
-			const ids = extractInputIds(body?.messages?.[1]?.content ?? "");
-			const content = JSON.stringify({
-				personas: ids.map((id) => ({ id, blurb: blurbFn(id) })),
-			});
-			await route.fulfill({
-				status: 200,
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ choices: [{ message: { content } }] }),
-			});
-			return;
-		}
+		const body = parseRequestBody(request);
+		if (await tryFulfillJsonMode(route, body, blurbFn)) return;
 
 		// SSE path
 		const words =
@@ -154,11 +286,9 @@ export async function stubNewGameLLM(
  * Register a Playwright route stub for the `/v1/chat/completions` endpoint
  * that responds with a synthetic streaming OpenAI SSE body.
  *
- * Also handles the persona synthesis JSON-mode call (stream === false or
- * response_format present) by returning a canned JSON response that echoes
- * the input persona ids verbatim.  This means every existing spec that calls
- * `stubChatCompletions` continues to work even when the SPA fires the
- * synthesis call first.
+ * Also handles the new-game JSON-mode calls (persona synthesis and
+ * content-pack generation) so existing specs work unmodified even when the
+ * SPA fires the JSON-mode calls before the first SSE request.
  *
  * The SPA's `BrowserLLMProvider` (via `src/spa/llm-client.ts`) calls
  * `${__WORKER_BASE_URL__}/v1/chat/completions` — this is the correct endpoint
@@ -186,34 +316,10 @@ export async function stubChatCompletions(
 	page: Page,
 	wordsOrFactory: string[] | WordsFactory,
 ): Promise<void> {
+	const blurbFn = (id: string) => `Stub blurb for ${id}.`;
 	await page.route("**/v1/chat/completions", async (route, request) => {
-		let parsed: unknown = null;
-		try {
-			parsed = JSON.parse(request.postData() ?? "null");
-		} catch {
-			// ignore parse error
-		}
-		const body = parsed as {
-			stream?: boolean;
-			response_format?: unknown;
-			messages?: Array<{ content?: string }>;
-		} | null;
-		const isJsonMode =
-			body !== null && (body.stream === false || body.response_format != null);
-
-		if (isJsonMode) {
-			// Synthesis path — echo input ids with canned blurbs
-			const ids = extractInputIds(body?.messages?.[1]?.content ?? "");
-			const content = JSON.stringify({
-				personas: ids.map((id) => ({ id, blurb: `Stub blurb for ${id}.` })),
-			});
-			await route.fulfill({
-				status: 200,
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ choices: [{ message: { content } }] }),
-			});
-			return;
-		}
+		const body = parseRequestBody(request);
+		if (await tryFulfillJsonMode(route, body, blurbFn)) return;
 
 		const words =
 			typeof wordsOrFactory === "function"
