@@ -15,7 +15,6 @@ const COMPOSER_PERSONAS: Record<string, AiPersona> = {
 		temperaments: ["hot-headed", "zealous"],
 		personaGoal: "Hold the flower at phase end.",
 		blurb: "You are hot-headed and zealous. Hold the flower at phase end.",
-		budgetPerPhase: 5,
 	},
 	green: {
 		id: "green",
@@ -24,7 +23,6 @@ const COMPOSER_PERSONAS: Record<string, AiPersona> = {
 		temperaments: ["meticulous", "meticulous"],
 		personaGoal: "Ensure items are evenly distributed.",
 		blurb: "You are intensely meticulous. Ensure items are evenly distributed.",
-		budgetPerPhase: 5,
 	},
 	blue: {
 		id: "blue",
@@ -33,7 +31,6 @@ const COMPOSER_PERSONAS: Record<string, AiPersona> = {
 		temperaments: ["laconic", "diffident"],
 		personaGoal: "Hold the key at phase end.",
 		blurb: "You are laconic and diffident. Hold the key at phase end.",
-		budgetPerPhase: 5,
 	},
 };
 

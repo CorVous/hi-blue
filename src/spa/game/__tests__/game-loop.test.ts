@@ -15,7 +15,6 @@ const TEST_PERSONA: AiPersona = {
 	temperaments: ["laconic", "diffident"],
 	personaGoal: "Hold the key at phase end.",
 	blurb: "You are laconic and diffident. Hold the key at phase end.",
-	budgetPerPhase: 5,
 };
 
 function makeSSEStream(chunks: string[]): ReadableStream<Uint8Array> {

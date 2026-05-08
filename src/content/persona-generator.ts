@@ -117,7 +117,6 @@ export async function generatePersonas(
 			temperaments: tuple.temperaments,
 			personaGoal: tuple.personaGoal,
 			blurb,
-			budgetPerPhase: 5,
 		};
 	}
 	return personas;
