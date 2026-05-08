@@ -474,6 +474,10 @@ export function renderGame(
 					const packLLM = new BrowserContentPackProvider({ disableReasoning });
 					const personasPromise = generatePersonas(Math.random, synth);
 					const aiIdsPromise = personasPromise.then((p) => Object.keys(p));
+					// Silence derived-promise unhandled rejection when personasPromise
+					// rejects but packs path returns before awaiting aiIdsPromise; the
+					// rejection still propagates through personasPromise into Promise.all.
+					aiIdsPromise.catch(() => {});
 					const packsPromise = generateContentPacks(
 						Math.random,
 						SETTING_POOL,
