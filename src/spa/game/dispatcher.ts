@@ -23,6 +23,7 @@ import type {
 	ToolCall,
 	WorldEntity,
 } from "./types";
+import { checkPlacementFlavor } from "./win-condition.js";
 
 export interface ValidationResult {
 	valid: boolean;
@@ -306,11 +307,23 @@ export function dispatchAiTurn(
 		const validation = validateToolCall(state, aiId, action.toolCall);
 		if (validation.valid) {
 			state = executeToolCall(state, aiId, action.toolCall);
+			// For put_down, check if the object landed on its paired space.
+			// If so, replace the default description with the per-pair placementFlavor.
+			const activePhase = getActivePhase(state);
+			const flavorDescription =
+				action.toolCall.name === "put_down"
+					? checkPlacementFlavor(
+							action,
+							activePhase.contentPack,
+							activePhase.world,
+						)
+					: null;
 			records.push({
 				round,
 				actor: aiId,
 				kind: "tool_success",
-				description: describeToolCall(state, aiId, action.toolCall),
+				description:
+					flavorDescription ?? describeToolCall(state, aiId, action.toolCall),
 			});
 		} else {
 			records.push({

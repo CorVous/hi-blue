@@ -1,4 +1,5 @@
 import type { PhaseConfig } from "../spa/game/types";
+import { checkWinCondition } from "../spa/game/win-condition";
 import { PHASE_GOAL_POOL } from "./goal-pool";
 
 /**
@@ -13,7 +14,7 @@ import { PHASE_GOAL_POOL } from "./goal-pool";
  * k = objective pairs, n = interesting objects, m = obstacles.
  * The engine rolls k/n/m within the given ranges at game start via generateContentPacks.
  *
- * `winCondition` is omitted — phases do not auto-advance until a win-check is authored.
+ * winCondition: phase advances when all K objective pairs are satisfied (issue #126).
  */
 
 export const PHASE_3_CONFIG: PhaseConfig = {
@@ -23,6 +24,7 @@ export const PHASE_3_CONFIG: PhaseConfig = {
 	mRange: [2, 3],
 	budgetPerAi: 5,
 	aiGoalPool: PHASE_GOAL_POOL,
+	winCondition: (phase) => checkWinCondition(phase.world, phase.contentPack),
 };
 
 export const PHASE_2_CONFIG: PhaseConfig = {
@@ -32,6 +34,7 @@ export const PHASE_2_CONFIG: PhaseConfig = {
 	mRange: [2, 3],
 	budgetPerAi: 5,
 	aiGoalPool: PHASE_GOAL_POOL,
+	winCondition: (phase) => checkWinCondition(phase.world, phase.contentPack),
 	nextPhaseConfig: PHASE_3_CONFIG,
 };
 
@@ -42,5 +45,6 @@ export const PHASE_1_CONFIG: PhaseConfig = {
 	mRange: [1, 2],
 	budgetPerAi: 5,
 	aiGoalPool: PHASE_GOAL_POOL,
+	winCondition: (phase) => checkWinCondition(phase.world, phase.contentPack),
 	nextPhaseConfig: PHASE_2_CONFIG,
 };

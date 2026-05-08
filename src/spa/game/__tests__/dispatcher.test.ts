@@ -481,4 +481,95 @@ describe("dispatchAiTurn", () => {
 		const result = dispatchAiTurn(game, action);
 		expect(getActivePhase(result.game).whispers).toHaveLength(1);
 	});
+
+	it("put_down of objective_object on its matching space yields placementFlavor as description", () => {
+		// Build a pack where gem (held by red at (0,0)) pairs with altar_space (at (0,0))
+		const gemObject: WorldEntity = {
+			id: "gem",
+			kind: "objective_object",
+			name: "gem",
+			examineDescription: "A gem.",
+			holder: "red",
+			pairsWithSpaceId: "altar_space",
+			placementFlavor: "{actor} places the gem on the altar.",
+		};
+		const altarSpace: WorldEntity = {
+			id: "altar_space",
+			kind: "objective_space",
+			name: "altar space",
+			examineDescription: "A pedestal.",
+			holder: { row: 0, col: 0 }, // red's cell
+		};
+		const pack: ContentPack = {
+			phaseNumber: 1,
+			setting: "test",
+			objectivePairs: [{ object: gemObject, space: altarSpace }],
+			interestingObjects: [],
+			obstacles: [],
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "north" },
+				green: { position: { row: 0, col: 1 }, facing: "north" },
+				blue: { position: { row: 0, col: 2 }, facing: "north" },
+			},
+		};
+		let game = createGame(TEST_PERSONAS, [pack]);
+		game = startPhase(game, TEST_PHASE_CONFIG, FIXED_RNG);
+
+		// red is at (0,0) and holds the gem; altar_space is also at (0,0)
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "put_down", args: { item: "gem" } },
+		};
+		const result = dispatchAiTurn(game, action);
+		expect(result.records[0]?.kind).toBe("tool_success");
+		expect(result.records[0]?.description).toBe(
+			"you places the gem on the altar.",
+		);
+	});
+
+	it("put_down of objective_object on a non-matching cell yields default description", () => {
+		// gem held by red (at 0,0), altar_space is at (3,3) — different cell
+		const gemObject: WorldEntity = {
+			id: "gem",
+			kind: "objective_object",
+			name: "gem",
+			examineDescription: "A gem.",
+			holder: "red",
+			pairsWithSpaceId: "altar_space",
+			placementFlavor: "{actor} places the gem on the altar.",
+		};
+		const altarSpace: WorldEntity = {
+			id: "altar_space",
+			kind: "objective_space",
+			name: "altar space",
+			examineDescription: "A pedestal.",
+			holder: { row: 3, col: 3 }, // different from red's cell (0,0)
+		};
+		const pack: ContentPack = {
+			phaseNumber: 1,
+			setting: "test",
+			objectivePairs: [{ object: gemObject, space: altarSpace }],
+			interestingObjects: [],
+			obstacles: [],
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "north" },
+				green: { position: { row: 0, col: 1 }, facing: "north" },
+				blue: { position: { row: 0, col: 2 }, facing: "north" },
+			},
+		};
+		let game = createGame(TEST_PERSONAS, [pack]);
+		game = startPhase(game, TEST_PHASE_CONFIG, FIXED_RNG);
+
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "put_down", args: { item: "gem" } },
+		};
+		const result = dispatchAiTurn(game, action);
+		expect(result.records[0]?.kind).toBe("tool_success");
+		// Should fall back to the default "X put down the Y" description
+		expect(result.records[0]?.description).toMatch(/put down/i);
+		expect(result.records[0]?.description).not.toContain(
+			"places the gem on the altar",
+		);
+	});
 });
