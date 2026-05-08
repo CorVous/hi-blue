@@ -142,6 +142,55 @@ describe("serializeSession / deserializeSession", () => {
 		}
 	});
 
+	it("deserializeSession honours meta.personaOrder when daemon-file key order differs", () => {
+		const game = makeFreshGame();
+		// Capture the canonical order from the original state.
+		const canonicalOrder = Object.keys(game.personas);
+		expect(canonicalOrder.length).toBeGreaterThanOrEqual(2); // sanity: ≥2 personas
+
+		const files = serializeSession(game, NOW, CREATED_AT);
+
+		// Reconstruct daemons in REVERSED key order — this is the scenario localStorage produces.
+		const reversedDaemons: Record<string, string> = {};
+		for (const aiId of [...canonicalOrder].reverse()) {
+			reversedDaemons[aiId] = files.daemons[aiId] as string;
+		}
+
+		const result = deserializeSession({
+			meta: files.meta,
+			daemons: reversedDaemons,
+			whispers: files.whispers,
+			engine: files.engine,
+		});
+		if (result.kind !== "ok") throw new Error(`expected ok, got ${result.kind}`);
+
+		// The fix should restore canonical order regardless of daemon-file key order.
+		expect(Object.keys(result.state.personas)).toEqual(canonicalOrder);
+	});
+
+	it("deserializeSession falls back to daemon-file key order when personaOrder is absent (legacy meta)", () => {
+		const game = makeFreshGame();
+		const canonicalOrder = Object.keys(game.personas);
+
+		const files = serializeSession(game, NOW, CREATED_AT);
+
+		// Strip personaOrder from meta (simulates a hand-edited or pre-personaOrder save).
+		const metaParsed = JSON.parse(files.meta) as Record<string, unknown>;
+		delete metaParsed.personaOrder;
+		const metaWithoutOrder = JSON.stringify(metaParsed, null, 2);
+
+		const result = deserializeSession({
+			meta: metaWithoutOrder,
+			daemons: files.daemons,
+			whispers: files.whispers,
+			engine: files.engine,
+		});
+		if (result.kind !== "ok") throw new Error(`expected ok, got ${result.kind}`);
+
+		// Falls back to daemon-file key order (which equals canonicalOrder in this fixture).
+		expect(Object.keys(result.state.personas)).toEqual(canonicalOrder);
+	});
+
 	it("whispers shape with phase keys 1/2/3", () => {
 		const game = makeFreshGame();
 		const files = serializeSession(game, NOW, CREATED_AT);
