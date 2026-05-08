@@ -1,3 +1,4 @@
+import { projectCone } from "./cone-projector.js";
 import {
 	applyDirection,
 	areAdjacent4,
@@ -39,6 +40,11 @@ export interface DispatchResult {
 	game: GameState;
 	/** Records produced by this dispatch (0..N per call). */
 	records: RoundActionRecord[];
+	/**
+	 * Private tool result for examine — not surfaced to any other AI or action log.
+	 * Only set when the tool call is "examine".
+	 */
+	actorPrivateToolResult?: { description: string; success: boolean };
 }
 
 /** Narrow-check: is `holder` a GridPosition (not an AiId string)? */
@@ -191,6 +197,31 @@ export function validateToolCall(
 			return { valid: true };
 		}
 
+		case "examine": {
+			// Item must exist (any kind: objective_object, interesting_object, obstacle, objective_space)
+			const item = world.entities.find((e) => e.id === call.args.item);
+			if (!item)
+				return {
+					valid: false,
+					reason: `Item "${call.args.item}" does not exist`,
+				};
+			if (!actorSpatial)
+				return { valid: false, reason: "Actor has no spatial state" };
+			// Valid if held by aiId OR resting on a GridPosition inside actor's cone
+			if (item.holder === aiId) return { valid: true };
+			if (isGridPosition(item.holder)) {
+				const cone = projectCone(actorSpatial.position, actorSpatial.facing);
+				const inCone = cone.some((cell) =>
+					positionsEqual(cell.position, item.holder as GridPosition),
+				);
+				if (inCone) return { valid: true };
+			}
+			return {
+				valid: false,
+				reason: `Item "${call.args.item}" is not in your cone or held by you`,
+			};
+		}
+
 		default:
 			return { valid: false, reason: `Unknown tool "${call.name}"` };
 	}
@@ -224,6 +255,9 @@ export function executeToolCall(
 				break;
 			case "use":
 				// No world mutation — useOutcome is returned as the tool result description.
+				break;
+			case "examine":
+				// No world mutation — examineDescription is returned as the tool result description.
 				break;
 			case "go": {
 				if (!actorSpatial) break;
@@ -307,9 +341,29 @@ export function dispatchAiTurn(
 	const round = getActivePhase(state).round;
 	const records: RoundActionRecord[] = [];
 
+	let actorPrivateToolResult:
+		| { description: string; success: boolean }
+		| undefined;
+
 	if (action.toolCall) {
 		const validation = validateToolCall(state, aiId, action.toolCall);
-		if (validation.valid) {
+
+		if (action.toolCall.name === "examine") {
+			if (validation.valid) {
+				const item = getActivePhase(state).world.entities.find(
+					(e) => e.id === action.toolCall!.args.item,
+				);
+				actorPrivateToolResult = {
+					description: item?.examineDescription ?? "",
+					success: true,
+				};
+			} else {
+				actorPrivateToolResult = {
+					description: validation.reason ?? "Examine failed",
+					success: false,
+				};
+			}
+		} else if (validation.valid) {
 			// Snapshot all AIs' spatial state BEFORE execution (used for witness context).
 			// For go: the actor's pre-move state is captured here; post-move state is
 			// captured from the post-execute phase below.
@@ -454,5 +508,10 @@ export function dispatchAiTurn(
 
 	state = deductBudget(state, aiId);
 
-	return { rejected: false, game: state, records };
+	return {
+		rejected: false,
+		game: state,
+		records,
+		...(actorPrivateToolResult !== undefined ? { actorPrivateToolResult } : {}),
+	};
 }

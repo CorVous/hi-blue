@@ -150,6 +150,25 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 			},
 		},
 	},
+	{
+		type: "function",
+		function: {
+			name: "examine",
+			description:
+				"Examine an item to read a detailed description of it. Private — no other AI sees you do this. Available for items in your cone or items you are holding.",
+			parameters: {
+				type: "object",
+				properties: {
+					item: {
+						type: "string",
+						description: "The id of the item to examine.",
+					},
+				},
+				required: ["item"],
+				additionalProperties: false,
+			},
+		},
+	},
 ];
 
 type ParseSuccess<T> = { ok: true; args: T };
@@ -163,6 +182,7 @@ type GiveArgs = { item: string; to: string };
 type UseArgs = { item: string };
 type GoArgs = { direction: string };
 type LookArgs = { direction: string };
+type ExamineArgs = { item: string };
 
 type ToolArgs = {
 	pick_up: PickUpArgs;
@@ -171,6 +191,7 @@ type ToolArgs = {
 	use: UseArgs;
 	go: GoArgs;
 	look: LookArgs;
+	examine: ExamineArgs;
 };
 
 /**
@@ -199,7 +220,8 @@ export function parseToolCallArguments<N extends ToolName>(
 	switch (name) {
 		case "pick_up":
 		case "put_down":
-		case "use": {
+		case "use":
+		case "examine": {
 			if (typeof obj.item !== "string" || obj.item.length === 0) {
 				return { ok: false, reason: "Required argument 'item' is missing" };
 			}

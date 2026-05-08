@@ -272,6 +272,96 @@ describe("validateToolCall", () => {
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(false);
 	});
+
+	// examine validation tests
+	// red is at (0,0) facing north; flower is at (0,0) (own cell = cone); key is held by red
+	it("examine: allows examining an item held by the actor", () => {
+		const game = makeGame();
+		const call: ToolCall = { name: "examine", args: { item: "key" } };
+		const result = validateToolCall(game, "red", call);
+		expect(result.valid).toBe(true);
+	});
+
+	it("examine: allows examining an item in the actor's own cell (cone)", () => {
+		const game = makeGame();
+		// flower is at (0,0), same as red's position
+		const call: ToolCall = { name: "examine", args: { item: "flower" } };
+		const result = validateToolCall(game, "red", call);
+		expect(result.valid).toBe(true);
+	});
+
+	it("examine: rejects examining an item outside the actor's cone", () => {
+		const game = makeGame();
+		// green is at (0,1) facing north; flower is at (0,0) — not in green's cone
+		// green's cone facing north: (0,1), (row-1,col1)=(-1,1)[oob], (-2,0),(-2,1),(-2,2)[oob]
+		// Actually (0,1) own cell, directly in front = (-1,1)[oob], two-step cells also oob
+		// flower at (0,0) is NOT in green's cone
+		const call: ToolCall = { name: "examine", args: { item: "flower" } };
+		const result = validateToolCall(game, "green", call);
+		expect(result.valid).toBe(false);
+		expect(result.reason).toMatch(/cone/i);
+	});
+
+	it("examine: rejects examining a nonexistent item", () => {
+		const game = makeGame();
+		const call: ToolCall = { name: "examine", args: { item: "dragon" } };
+		const result = validateToolCall(game, "red", call);
+		expect(result.valid).toBe(false);
+		expect(result.reason).toMatch(/does not exist/i);
+	});
+
+	it("examine: allows examining an obstacle in the actor's cone", () => {
+		// Place obstacle at (0,0) where red stands — own cell is in cone
+		const pack = makePackWithEntities(
+			{ flower: { row: 3, col: 3 }, key: { row: 4, col: 4 } },
+			[{ row: 0, col: 0 }],
+		);
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [pack]),
+			TEST_PHASE_CONFIG,
+			FIXED_RNG,
+		);
+		const call: ToolCall = { name: "examine", args: { item: "obs0" } };
+		const result = validateToolCall(game, "red", call);
+		expect(result.valid).toBe(true);
+	});
+
+	it("examine: allows examining an objective_space in the actor's cone", () => {
+		// Build a pack with an objective pair where the space is at (0,0) (red's cell)
+		const objSpace: WorldEntity = {
+			id: "space1",
+			kind: "objective_space",
+			name: "a space",
+			examineDescription: "A place.",
+			holder: { row: 0, col: 0 },
+		};
+		const objObj: WorldEntity = {
+			id: "obj1",
+			kind: "objective_object",
+			name: "an object",
+			examineDescription: "An object.",
+			holder: { row: 4, col: 4 },
+			pairsWithSpaceId: "space1",
+		};
+		const pack: ContentPack = {
+			phaseNumber: 1,
+			setting: "test",
+			objectivePairs: [{ object: objObj, space: objSpace }],
+			interestingObjects: [],
+			obstacles: [],
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "north" },
+				green: { position: { row: 0, col: 1 }, facing: "north" },
+				blue: { position: { row: 0, col: 2 }, facing: "north" },
+			},
+		};
+		let game = createGame(TEST_PERSONAS, [pack]);
+		game = startPhase(game, TEST_PHASE_CONFIG, FIXED_RNG);
+		// red at (0,0), space1 at (0,0) — own cell is in cone
+		const call: ToolCall = { name: "examine", args: { item: "space1" } };
+		const result = validateToolCall(game, "red", call);
+		expect(result.valid).toBe(true);
+	});
 });
 
 describe("executeToolCall", () => {
@@ -333,6 +423,15 @@ describe("executeToolCall", () => {
 		const spatial = getActivePhase(updated).personaSpatial.red;
 		expect(spatial?.position).toEqual({ row: 0, col: 0 });
 		expect(spatial?.facing).toBe("east");
+	});
+
+	it("does not mutate world on examine", () => {
+		const game = makeGame();
+		const before = JSON.stringify(getActivePhase(game).world);
+		const call: ToolCall = { name: "examine", args: { item: "key" } };
+		const updated = executeToolCall(game, "red", call);
+		const after = JSON.stringify(getActivePhase(updated).world);
+		expect(after).toBe(before);
 	});
 });
 
@@ -525,6 +624,54 @@ describe("dispatchAiTurn", () => {
 		expect(result.records[0]?.description).toBe(
 			"you places the gem on the altar.",
 		);
+	});
+
+	// examine tests
+	it("examine: no records produced, actorPrivateToolResult set on success", () => {
+		// red holds the key; examine key → private result with examineDescription
+		const game = makeGame();
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "examine", args: { item: "key" } },
+		};
+		const result = dispatchAiTurn(game, action);
+		expect(result.rejected).toBe(false);
+		// No tool_success or tool_failure records for examine
+		expect(
+			result.records.filter(
+				(r) => r.kind === "tool_success" || r.kind === "tool_failure",
+			),
+		).toHaveLength(0);
+		// actorPrivateToolResult is set
+		expect(result.actorPrivateToolResult).toBeDefined();
+		expect(result.actorPrivateToolResult?.success).toBe(true);
+		expect(result.actorPrivateToolResult?.description).toBe("A key.");
+	});
+
+	it("examine: actorPrivateToolResult.success false and description set on failure", () => {
+		const game = makeGame();
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "examine", args: { item: "nonexistent" } },
+		};
+		const result = dispatchAiTurn(game, action);
+		expect(result.rejected).toBe(false);
+		expect(result.records).toHaveLength(0);
+		expect(result.actorPrivateToolResult).toBeDefined();
+		expect(result.actorPrivateToolResult?.success).toBe(false);
+		expect(result.actorPrivateToolResult?.description).toMatch(
+			/does not exist/i,
+		);
+	});
+
+	it("examine: budget is deducted on examine", () => {
+		const game = makeGame();
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "examine", args: { item: "key" } },
+		};
+		const result = dispatchAiTurn(game, action);
+		expect(getActivePhase(result.game).budgets.red?.remaining).toBe(4);
 	});
 
 	it("put_down of objective_object on a non-matching cell yields default description", () => {

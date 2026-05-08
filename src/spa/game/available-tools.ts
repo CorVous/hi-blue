@@ -9,6 +9,7 @@
  * `look` is always present with the full 4-direction enum.
  */
 
+import { projectCone } from "./cone-projector.js";
 import {
 	applyDirection,
 	areAdjacent4,
@@ -168,6 +169,30 @@ export function availableTools(game: GameState, aiId: AiId): OpenAiTool[] {
 					to: adjacentAiIds,
 				}),
 			);
+		}
+	}
+
+	// 6. examine — items in cone (any kind) OR held by this actor
+	if (actorSpatial) {
+		const cone = projectCone(actorSpatial.position, actorSpatial.facing);
+		const conePositions = cone.map((c) => c.position);
+
+		const examineableIds = world.entities
+			.filter((entity) => {
+				// Held by this actor
+				if (entity.holder === aiId) return true;
+				// Resting on a cell inside the cone
+				if (isGridPosition(entity.holder)) {
+					return conePositions.some((pos) =>
+						positionsEqual(pos, entity.holder as GridPosition),
+					);
+				}
+				return false;
+			})
+			.map((e) => e.id);
+
+		if (examineableIds.length > 0) {
+			tools.push(cloneToolWithEnums("examine", { item: examineableIds }));
 		}
 	}
 

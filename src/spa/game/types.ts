@@ -200,7 +200,14 @@ export interface GameState {
 	contentPacks: ContentPack[];
 }
 
-export type ToolName = "pick_up" | "put_down" | "give" | "use" | "go" | "look";
+export type ToolName =
+	| "pick_up"
+	| "put_down"
+	| "give"
+	| "use"
+	| "go"
+	| "look"
+	| "examine";
 
 export interface ToolCall {
 	name: ToolName;

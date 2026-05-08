@@ -1714,3 +1714,271 @@ describe("placement flavor + win condition (issue #126)", () => {
 		expect(nextState.currentPhase).toBe(2);
 	});
 });
+
+// ----------------------------------------------------------------------------
+// examine tool (issue #127)
+// ----------------------------------------------------------------------------
+describe("examine tool", () => {
+	/**
+	 * ContentPack with an objective_object that has pair-tell prose in examineDescription.
+	 * Red starts at (0,0) holding the objective object.
+	 * Green starts at (0,1) facing north — so (0,0) is NOT in green's cone.
+	 */
+	const EXAMINE_PACK: ContentPack = {
+		phaseNumber: 1,
+		setting: "vault",
+		objectivePairs: [
+			{
+				object: {
+					id: "orb",
+					kind: "objective_object",
+					name: "orb",
+					examineDescription:
+						"A swirling orb. It feels drawn toward the stone pedestal.",
+					holder: "red", // red holds orb
+					pairsWithSpaceId: "pedestal",
+					placementFlavor: "{actor} places the orb on the pedestal.",
+				},
+				space: {
+					id: "pedestal",
+					kind: "objective_space",
+					name: "stone pedestal",
+					examineDescription: "A stone pedestal awaiting an offering.",
+					holder: { row: 4, col: 4 },
+				},
+			},
+		],
+		interestingObjects: [],
+		obstacles: [],
+		aiStarts: {
+			red: { position: { row: 0, col: 0 }, facing: "north" },
+			green: { position: { row: 0, col: 1 }, facing: "north" },
+			blue: { position: { row: 0, col: 2 }, facing: "north" },
+		},
+	};
+
+	function makeExamineGame() {
+		return startPhase(
+			createGame(TEST_PERSONAS, [EXAMINE_PACK]),
+			TEST_PHASE_CONFIG,
+		);
+	}
+
+	it("AC #5: examine on objective_object surfaces examineDescription with pair-tell prose to actor's tool result", async () => {
+		const game = makeExamineGame();
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "call_examine",
+						name: "examine",
+						argumentsJson: '{"item":"orb"}',
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const capturedMessages: OpenAiMessage[][] = [];
+		const trackingProvider: RoundLLMProvider = {
+			async streamRound(messages, tools) {
+				capturedMessages.push(messages);
+				return provider.streamRound(messages, tools);
+			},
+		};
+
+		const { toolRoundtrip } = await runRound(
+			game,
+			"red",
+			"hi",
+			trackingProvider,
+		);
+
+		// The actor (red) should have an examine tool result in the roundtrip
+		const redRoundtrip = toolRoundtrip.red;
+		expect(redRoundtrip).toBeDefined();
+		const toolResult = redRoundtrip?.toolResults[0];
+		expect(toolResult).toBeDefined();
+		expect(toolResult?.success).toBe(true);
+		expect(toolResult?.description).toBe(
+			"A swirling orb. It feels drawn toward the stone pedestal.",
+		);
+	});
+
+	it("AC #6: examine produces no entry in result.actions", async () => {
+		const game = makeExamineGame();
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "call_examine",
+						name: "examine",
+						argumentsJson: '{"item":"orb"}',
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const { result } = await runRound(game, "red", "hi", provider);
+
+		// No tool_success or tool_failure record for examine
+		const examineRecord = result.actions.find(
+			(a) => a.kind === "tool_success" || a.kind === "tool_failure",
+		);
+		expect(examineRecord).toBeUndefined();
+	});
+
+	it("AC #6: cone-mate's next-round system prompt does NOT contain examineDescription text", async () => {
+		const game = makeExamineGame();
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "call_examine",
+						name: "examine",
+						argumentsJson: '{"item":"orb"}',
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const { nextState } = await runRound(game, "red", "hi", provider);
+
+		// Green is at (0,1) and could be in cone range; check its prompt
+		for (const aiId of ["green", "blue"] as AiId[]) {
+			const ctx = buildAiContext(nextState, aiId);
+			const prompt = ctx.toSystemPrompt();
+			expect(prompt).not.toContain(
+				"A swirling orb. It feels drawn toward the stone pedestal.",
+			);
+		}
+	});
+
+	it("availableTools includes examine when item is in actor's cone", async () => {
+		// red at (0,0) facing north; orb is held by red → examine should be available
+		const game = makeExamineGame();
+		const capturedTools: Array<Array<{ function: { name: string } }>> = [];
+		const trackingProvider: RoundLLMProvider = {
+			async streamRound(_messages, tools) {
+				capturedTools.push(tools as Array<{ function: { name: string } }>);
+				return { assistantText: "", toolCalls: [] };
+			},
+		};
+
+		await runRound(game, "red", "hi", trackingProvider);
+
+		// Red's tools (first call) should include examine
+		const redTools = capturedTools[0];
+		expect(redTools?.some((t) => t.function.name === "examine")).toBe(true);
+	});
+
+	it("availableTools examine enum lists held items for actor holding an item", async () => {
+		const game = makeExamineGame();
+		let capturedRedTools:
+			| Array<{
+					function: {
+						name: string;
+						parameters: { properties: { item?: { enum?: string[] } } };
+					};
+			  }>
+			| undefined;
+		let callCount = 0;
+		const trackingProvider: RoundLLMProvider = {
+			async streamRound(_messages, tools) {
+				callCount++;
+				if (callCount === 1) {
+					// Red is first in turn order
+					capturedRedTools = tools as typeof capturedRedTools;
+				}
+				return { assistantText: "", toolCalls: [] };
+			},
+		};
+
+		await runRound(game, "red", "hi", trackingProvider, undefined, [
+			"red",
+			"green",
+			"blue",
+		]);
+
+		const examineTool = capturedRedTools?.find(
+			(t) => t.function.name === "examine",
+		);
+		expect(examineTool).toBeDefined();
+		const itemEnum = examineTool?.function.parameters.properties.item?.enum;
+		expect(itemEnum).toContain("orb");
+	});
+
+	it("examine tool roundtrip re-injected into actor's next-round messages", async () => {
+		const game = makeExamineGame();
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "call_examine_r1",
+						name: "examine",
+						argumentsJson: '{"item":"orb"}',
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const { nextState: state1, toolRoundtrip } = await runRound(
+			game,
+			"red",
+			"hi",
+			provider,
+		);
+
+		// Round 2: pass tool roundtrip back in and capture messages
+		const capturedCalls: Array<{ messages: OpenAiMessage[] }> = [];
+		const provider2: RoundLLMProvider = {
+			async streamRound(messages, _tools) {
+				capturedCalls.push({ messages });
+				return { assistantText: "", toolCalls: [] };
+			},
+		};
+
+		await runRound(
+			state1,
+			"red",
+			"round 2",
+			provider2,
+			undefined,
+			["red", "green", "blue"],
+			toolRoundtrip,
+		);
+
+		// Red's round-2 messages should include assistant{tool_calls} + tool result
+		const redMessages = capturedCalls[0]?.messages ?? [];
+		const hasAssistantWithToolCalls = redMessages.some(
+			(m) =>
+				m.role === "assistant" &&
+				"tool_calls" in m &&
+				Array.isArray((m as { tool_calls?: unknown }).tool_calls),
+		);
+		const hasToolResult = redMessages.some((m) => m.role === "tool");
+		expect(hasAssistantWithToolCalls).toBe(true);
+		expect(hasToolResult).toBe(true);
+
+		// The tool result message should contain the examineDescription
+		const toolMsg = redMessages.find((m) => m.role === "tool");
+		const toolMsgContent =
+			toolMsg && "content" in toolMsg
+				? (toolMsg as { content: string }).content
+				: "";
+		expect(toolMsgContent).toContain(
+			"A swirling orb. It feels drawn toward the stone pedestal.",
+		);
+	});
+});
