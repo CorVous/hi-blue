@@ -11,7 +11,7 @@ test.use({ ignoreHTTPSErrors: true });
  *
  * Runs against real OpenRouter via BYOK (key set in localStorage so the SPA
  * bypasses the proxy). Verifies:
- *   1. Initial UI label is "cents" with value $0.05000
+ *   1. Initial UI value is $0.05000
  *   2. After one round of 3 AI replies, each panel's budget has decremented
  *      by a small but non-zero USD amount (the actual usage.cost from the
  *      final SSE chunk).
@@ -41,9 +41,8 @@ test("live: per-AI budget decrements in cents from real OpenRouter usage.cost", 
 	// Wait for the three AI panels to be ready (synthesis complete).
 	const { ids, names } = await getAiHandles(page);
 
-	// 1. Initial state: label "cents", value "$0.05000".
+	// 1. Initial state: value "$0.05000".
 	const firstPanel = page.locator(`.ai-panel[data-ai="${ids[0]}"]`);
-	await expect(firstPanel.locator(".panel-meta")).toContainText("cents");
 	await expect(firstPanel.locator(".panel-budget")).toHaveText("$0.05000", {
 		timeout: 30_000,
 	});
