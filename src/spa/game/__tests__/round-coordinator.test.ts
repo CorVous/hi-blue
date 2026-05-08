@@ -1370,3 +1370,347 @@ describe("runRound — onAiDelta callback", () => {
 		expect(received).toHaveLength(0);
 	});
 });
+
+// ----------------------------------------------------------------------------
+// Placement flavor + phase progression (issue #126)
+// ----------------------------------------------------------------------------
+describe("placement flavor + win condition (issue #126)", () => {
+	/**
+	 * Build a ContentPack with K=1 objective pair.
+	 * gem_obj starts held by red (at 0,0); gem_space is at (0,0).
+	 * When red puts down gem_obj, it lands at (0,0) = gem_space's cell → win.
+	 */
+	const GEM_OBJ_ID = "gem_obj";
+	const GEM_SPACE_ID = "gem_space";
+	const FLAVOR = "{actor} places the gem on the altar.";
+
+	const PHASE1_PACK_K1: ContentPack = {
+		phaseNumber: 1,
+		setting: "temple",
+		objectivePairs: [
+			{
+				object: {
+					id: GEM_OBJ_ID,
+					kind: "objective_object",
+					name: "gem",
+					examineDescription: "A glowing gem.",
+					holder: "red", // held by red initially
+					pairsWithSpaceId: GEM_SPACE_ID,
+					placementFlavor: FLAVOR,
+				},
+				space: {
+					id: GEM_SPACE_ID,
+					kind: "objective_space",
+					name: "altar",
+					examineDescription: "A stone altar.",
+					holder: { row: 0, col: 0 }, // red's starting cell
+				},
+			},
+		],
+		interestingObjects: [],
+		obstacles: [],
+		aiStarts: {
+			red: { position: { row: 0, col: 0 }, facing: "north" },
+			green: { position: { row: 0, col: 1 }, facing: "north" },
+			blue: { position: { row: 0, col: 2 }, facing: "north" },
+		},
+	};
+
+	const PHASE2_PACK: ContentPack = {
+		phaseNumber: 2,
+		setting: "crypt",
+		objectivePairs: [],
+		interestingObjects: [],
+		obstacles: [],
+		aiStarts: {
+			red: { position: { row: 0, col: 0 }, facing: "north" },
+			green: { position: { row: 0, col: 1 }, facing: "north" },
+			blue: { position: { row: 0, col: 2 }, facing: "north" },
+		},
+	};
+
+	const phase2Config: PhaseConfig = {
+		...TEST_PHASE_CONFIG,
+		phaseNumber: 2,
+		winCondition: () => false, // never auto-wins phase 2 in these tests
+	};
+	const phase1ConfigK1: PhaseConfig = {
+		...TEST_PHASE_CONFIG,
+		phaseNumber: 1,
+		kRange: [1, 1],
+		winCondition: (phase) => {
+			// Phase wins when gem_obj is on gem_space's cell (structural check)
+			const obj = phase.world.entities.find((e) => e.id === GEM_OBJ_ID);
+			const spc = phase.world.entities.find((e) => e.id === GEM_SPACE_ID);
+			if (!obj || !spc) return false;
+			const objH = obj.holder;
+			const spcH = spc.holder;
+			if (
+				typeof objH !== "object" ||
+				objH === null ||
+				typeof spcH !== "object" ||
+				spcH === null
+			)
+				return false;
+			return (
+				(objH as { row: number; col: number }).row ===
+					(spcH as { row: number; col: number }).row &&
+				(objH as { row: number; col: number }).col ===
+					(spcH as { row: number; col: number }).col
+			);
+		},
+		nextPhaseConfig: phase2Config,
+	};
+
+	it("K=1: drop on matching space fires placementFlavor in tool_success description", async () => {
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [PHASE1_PACK_K1, PHASE2_PACK]),
+			phase1ConfigK1,
+		);
+		// red is at (0,0) and holds gem_obj; gem_space is also at (0,0)
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "c1",
+						name: "put_down",
+						argumentsJson: `{"item":"${GEM_OBJ_ID}"}`,
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+		const { result } = await runRound(game, "red", "hi", provider);
+		const toolRecord = result.actions.find((a) => a.kind === "tool_success");
+		expect(toolRecord).toBeDefined();
+		// {actor} should be replaced with "you"
+		expect(toolRecord?.description).toBe("you places the gem on the altar.");
+	});
+
+	it("K=1: drop on matching space advances the phase (win condition fires)", async () => {
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [PHASE1_PACK_K1, PHASE2_PACK]),
+			phase1ConfigK1,
+		);
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "c1",
+						name: "put_down",
+						argumentsJson: `{"item":"${GEM_OBJ_ID}"}`,
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+		const { nextState, result } = await runRound(game, "red", "hi", provider);
+		expect(result.phaseEnded).toBe(true);
+		expect(nextState.currentPhase).toBe(2);
+	});
+
+	it("K=1: drop on non-matching cell does NOT fire flavor and does NOT advance phase", async () => {
+		// Rebuild pack so gem_space is at (3,3) — different from red's cell (0,0)
+		const packMismatch: ContentPack = {
+			...PHASE1_PACK_K1,
+			objectivePairs: [
+				{
+					object: {
+						id: GEM_OBJ_ID,
+						kind: "objective_object" as const,
+						name: "gem",
+						examineDescription: "A glowing gem.",
+						holder: "red",
+						pairsWithSpaceId: GEM_SPACE_ID,
+						placementFlavor: FLAVOR,
+					},
+					space: {
+						id: GEM_SPACE_ID,
+						kind: "objective_space" as const,
+						name: "altar",
+						examineDescription: "A stone altar.",
+						holder: { row: 3, col: 3 }, // mismatch
+					},
+				},
+			],
+		};
+		const phase1Mismatch: PhaseConfig = {
+			...phase1ConfigK1,
+			// Win condition checks gem_obj vs gem_space positions
+			winCondition: (phase) => {
+				const obj = phase.world.entities.find((e) => e.id === GEM_OBJ_ID);
+				const spc = phase.world.entities.find((e) => e.id === GEM_SPACE_ID);
+				if (!obj || !spc) return false;
+				const objH = obj.holder;
+				const spcH = spc.holder;
+				if (
+					typeof objH !== "object" ||
+					objH === null ||
+					typeof spcH !== "object" ||
+					spcH === null
+				)
+					return false;
+				return (
+					(objH as { row: number; col: number }).row ===
+						(spcH as { row: number; col: number }).row &&
+					(objH as { row: number; col: number }).col ===
+						(spcH as { row: number; col: number }).col
+				);
+			},
+		};
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [packMismatch, PHASE2_PACK]),
+			phase1Mismatch,
+		);
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "c1",
+						name: "put_down",
+						argumentsJson: `{"item":"${GEM_OBJ_ID}"}`,
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+		const { result, nextState } = await runRound(game, "red", "hi", provider);
+		const toolRecord = result.actions.find((a) => a.kind === "tool_success");
+		// Should NOT contain the flavor text
+		expect(toolRecord?.description).not.toContain(
+			"places the gem on the altar",
+		);
+		// Phase should NOT have ended
+		expect(result.phaseEnded).toBe(false);
+		expect(nextState.currentPhase).toBe(1);
+	});
+
+	it("K=2: placing only one pair does NOT advance phase; placing both does", async () => {
+		// Two objective pairs:
+		//   gem_obj (held by red, at 0,0) → gem_space (at 0,0) [auto-satisfied by put_down]
+		//   orb_obj (at 2,2)              → orb_space (at 2,2) [already satisfied from start]
+		const ORB_OBJ_ID = "orb_obj";
+		const ORB_SPACE_ID = "orb_space";
+
+		const packK2: ContentPack = {
+			phaseNumber: 1,
+			setting: "vault",
+			objectivePairs: [
+				{
+					object: {
+						id: GEM_OBJ_ID,
+						kind: "objective_object",
+						name: "gem",
+						examineDescription: "A gem.",
+						holder: "red", // held by red — not on ground yet
+						pairsWithSpaceId: GEM_SPACE_ID,
+						placementFlavor: "{actor} sets the gem.",
+					},
+					space: {
+						id: GEM_SPACE_ID,
+						kind: "objective_space",
+						name: "gem altar",
+						examineDescription: "Gem altar.",
+						holder: { row: 0, col: 0 },
+					},
+				},
+				{
+					object: {
+						id: ORB_OBJ_ID,
+						kind: "objective_object",
+						name: "orb",
+						examineDescription: "An orb.",
+						holder: { row: 2, col: 2 }, // already on ground at (2,2)
+						pairsWithSpaceId: ORB_SPACE_ID,
+						placementFlavor: "{actor} sets the orb.",
+					},
+					space: {
+						id: ORB_SPACE_ID,
+						kind: "objective_space",
+						name: "orb plinth",
+						examineDescription: "Orb plinth.",
+						holder: { row: 2, col: 2 }, // matches orb_obj position → already satisfied
+					},
+				},
+			],
+			interestingObjects: [],
+			obstacles: [],
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "north" },
+				green: { position: { row: 0, col: 1 }, facing: "north" },
+				blue: { position: { row: 0, col: 2 }, facing: "north" },
+			},
+		};
+
+		const checkBothPairs = (phase: {
+			world: { entities: Array<{ id: string; holder: unknown }> };
+		}): boolean => {
+			const gemObj = phase.world.entities.find((e) => e.id === GEM_OBJ_ID);
+			const gemSpc = phase.world.entities.find((e) => e.id === GEM_SPACE_ID);
+			const orbObj = phase.world.entities.find((e) => e.id === ORB_OBJ_ID);
+			const orbSpc = phase.world.entities.find((e) => e.id === ORB_SPACE_ID);
+			const onCell = (
+				obj: { id: string; holder: unknown } | undefined,
+				spc: { id: string; holder: unknown } | undefined,
+			): boolean => {
+				if (!obj || !spc) return false;
+				const oh = obj.holder;
+				const sh = spc.holder;
+				if (
+					typeof oh !== "object" ||
+					oh === null ||
+					typeof sh !== "object" ||
+					sh === null
+				)
+					return false;
+				return (
+					(oh as { row: number; col: number }).row ===
+						(sh as { row: number; col: number }).row &&
+					(oh as { row: number; col: number }).col ===
+						(sh as { row: number; col: number }).col
+				);
+			};
+			return onCell(gemObj, gemSpc) && onCell(orbObj, orbSpc);
+		};
+
+		const phase1K2Config: PhaseConfig = {
+			...TEST_PHASE_CONFIG,
+			phaseNumber: 1,
+			kRange: [2, 2],
+			winCondition: checkBothPairs,
+			nextPhaseConfig: phase2Config,
+		};
+
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [packK2, PHASE2_PACK]),
+			phase1K2Config,
+		);
+
+		// At game start: orb pair already satisfied; gem pair not (gem_obj held by red).
+		// Win check should fire only AFTER red puts down gem_obj at (0,0).
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "c1",
+						name: "put_down",
+						argumentsJson: `{"item":"${GEM_OBJ_ID}"}`,
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+		const { result, nextState } = await runRound(game, "red", "hi", provider);
+		// Both pairs now satisfied → phase should end
+		expect(result.phaseEnded).toBe(true);
+		expect(nextState.currentPhase).toBe(2);
+	});
+});
