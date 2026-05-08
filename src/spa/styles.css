@@ -104,6 +104,20 @@ header {
 	color: var(--amber);
 }
 
+/* Mobile-only header title — desktop uses the giant ASCII banner instead. */
+.mobile-title {
+	display: none;
+	font-size: 13px;
+	letter-spacing: 0.18em;
+	color: var(--amber);
+	padding: 2px 0;
+}
+
+#topinfo-mobile,
+#topinfo-mobile-status {
+	display: none;
+}
+
 /* Banner */
 .banner {
 	margin: 0;
@@ -254,6 +268,13 @@ main {
 	content: " ]──";
 }
 
+/* Panel label normally lives on the bottom edge; the top-edge copy is
+   hidden by default and only shown for strip cards in the bento layout
+   (see the <=720px media query). */
+.brow-top .panel-name {
+	display: none;
+}
+
 .ai-panel.panel--addressed .brow-label::before {
 	content: "══[ ";
 }
@@ -387,6 +408,13 @@ main {
 	margin-top: auto;
 	white-space: pre-wrap;
 	word-break: break-word;
+}
+
+/* Each transcript line is wrapped in a .msg-line block so strip-card mode
+   can apply per-line nowrap + ellipsis. Desktop inherits pre-wrap from
+   .transcript and behaves identically to the pre-wrapper rendering. */
+.msg-line {
+	display: block;
 }
 
 .transcript .msg-you {
@@ -808,6 +836,25 @@ main {
 		display: none;
 	}
 
+	header {
+		justify-content: space-between;
+		align-items: center;
+	}
+
+	.mobile-title {
+		display: inline;
+	}
+
+	#topinfo-mobile,
+	#topinfo-mobile-status {
+		display: inline;
+	}
+
+	#topinfo-left,
+	#topinfo-right {
+		display: none;
+	}
+
 	.topinfo {
 		font-size: 10px;
 		padding-bottom: 4px;
@@ -817,12 +864,21 @@ main {
 		display: grid;
 		grid-template-rows: minmax(0, 1fr) 88px;
 		grid-template-columns: 1fr 1fr;
-		gap: 6px;
+		/* Row gap is larger so the main panel sits clearly apart from the
+		   strip-card previews; column gap stays tight between the two
+		   side-by-side strip cards. */
+		row-gap: 14px;
+		column-gap: 6px;
 	}
 
 	.ai-panel {
 		grid-row: 2;
 		min-height: 0;
+		/* Reset desktop flex-row sizing: the row is `display: grid` here, so
+		   `flex: 1 1 0; width: 0` from the desktop block would otherwise
+		   collapse panels to zero width inside their grid cells. */
+		flex: initial;
+		width: auto;
 	}
 
 	.ai-panel .panel-meta {
@@ -830,9 +886,38 @@ main {
 	}
 
 	.ai-panel .scroll {
+		position: relative;
 		overflow: hidden;
 		font-size: 11px;
 		padding: 4px 6px;
+	}
+
+	/* Strip-card preview: bottom-anchor the transcript so the most recent
+	   messages stay in view. Position absolute lets the transcript grow
+	   above its container; overflow:hidden on .scroll clips the older
+	   lines off the top. */
+	.ai-panel .transcript {
+		position: absolute;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		margin-top: 0;
+	}
+
+	.ai-panel .msg-line {
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	/* Strip-card panels surface the daemon name on the TOP edge so the
+	   label is visible above the bottom-anchored transcript preview. */
+	.ai-panel .brow-top .panel-name {
+		display: inline-block;
+	}
+
+	.ai-panel .brow-bot .panel-name {
+		display: none;
 	}
 
 	.ai-panel.panel--addressed,
@@ -848,9 +933,41 @@ main {
 
 	.ai-panel.panel--addressed .scroll,
 	#panels:not(:has(.panel--addressed)) > .ai-panel:first-child .scroll {
+		position: static;
 		overflow-y: auto;
 		font-size: inherit;
 		padding: 2px 10px 12px;
+	}
+
+	/* Main panel reverts to the scrollable, in-flow transcript. */
+	.ai-panel.panel--addressed .transcript,
+	#panels:not(:has(.panel--addressed)) > .ai-panel:first-child .transcript {
+		position: static;
+		margin-top: auto;
+	}
+
+	.ai-panel.panel--addressed .msg-line,
+	#panels:not(:has(.panel--addressed)) > .ai-panel:first-child .msg-line {
+		white-space: pre-wrap;
+		overflow: visible;
+		text-overflow: clip;
+	}
+
+	/* Main panel keeps its label on the bottom edge. */
+	.ai-panel.panel--addressed .brow-top .panel-name,
+	#panels:not(:has(.panel--addressed))
+		> .ai-panel:first-child
+		.brow-top
+		.panel-name {
+		display: none;
+	}
+
+	.ai-panel.panel--addressed .brow-bot .panel-name,
+	#panels:not(:has(.panel--addressed))
+		> .ai-panel:first-child
+		.brow-bot
+		.panel-name {
+		display: inline-block;
 	}
 
 	.cmd {
