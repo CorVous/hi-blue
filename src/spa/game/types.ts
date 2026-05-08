@@ -11,7 +11,6 @@ export interface AiPersona {
 	temperaments: [string, string];
 	personaGoal: string;
 	blurb: string;
-	budgetPerPhase: number;
 }
 
 export type WorldEntityKind =

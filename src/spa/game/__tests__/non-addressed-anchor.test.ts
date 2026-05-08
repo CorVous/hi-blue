@@ -26,7 +26,6 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		temperaments: ["hot-headed", "zealous"],
 		personaGoal: "Hold the flower at phase end.",
 		blurb: "You are hot-headed and zealous.",
-		budgetPerPhase: 5,
 	},
 	green: {
 		id: "green",
@@ -35,7 +34,6 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		temperaments: ["meticulous", "meticulous"],
 		personaGoal: "Ensure items are evenly distributed.",
 		blurb: "You are meticulous.",
-		budgetPerPhase: 5,
 	},
 	blue: {
 		id: "blue",
@@ -44,7 +42,6 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		temperaments: ["laconic", "diffident"],
 		personaGoal: "Hold the key at phase end.",
 		blurb: "You are laconic.",
-		budgetPerPhase: 5,
 	},
 };
 

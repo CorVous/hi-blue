@@ -307,7 +307,6 @@ describe("persistence — LLM-shaped blurb round-trips verbatim", () => {
 				temperaments: ["stoic", "impulsive"] as [string, string],
 				personaGoal: "Examine everything.",
 				blurb: LLM_BLURB,
-				budgetPerPhase: 5,
 			},
 			green: {
 				id: "green",
@@ -317,7 +316,6 @@ describe("persistence — LLM-shaped blurb round-trips verbatim", () => {
 				personaGoal: "Ensure items are evenly distributed.",
 				blurb:
 					"You are intensely meticulous. Ensure items are evenly distributed.",
-				budgetPerPhase: 5,
 			},
 			blue: {
 				id: "blue",
@@ -326,7 +324,6 @@ describe("persistence — LLM-shaped blurb round-trips verbatim", () => {
 				temperaments: ["laconic", "diffident"] as [string, string],
 				personaGoal: "Hold the key at phase end.",
 				blurb: "You are laconic and diffident. Hold the key at phase end.",
-				budgetPerPhase: 5,
 			},
 		};
 
