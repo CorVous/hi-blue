@@ -17,7 +17,7 @@ export interface ComposerState {
 	borderColor: string | null;
 	/** AiId whose panel should carry the highlight class, or null. */
 	panelHighlight: AiId | null;
-	/** Highlight range for the first @mention in the overlay, or null. */
+	/** Highlight range for the first *mention in the overlay, or null. */
 	mentionHighlight: { start: number; end: number; color: string } | null;
 	/** Inline error message when the addressed AI is chat-locked, or null. */
 	lockoutError: string | null;
@@ -38,7 +38,7 @@ const NULL_VISUAL: Pick<
  * Derives the composer state (addressee + send button enabled + visual cues)
  * from the current prompt text, the chat-lockout map, and the persona maps.
  *
- * - `addressee` is the first valid @mention in the text.
+ * - `addressee` is the first valid *mention in the text.
  * - `sendEnabled` is true only when `addressee` is non-null AND the
  *   addressed AI is not chat-locked AND there is non-empty body text
  *   outside the mention token.
@@ -76,7 +76,7 @@ export function deriveComposerState(input: ComposerInput): ComposerState {
 	}
 
 	const { aiId: addressee, start, nameEnd, end } = match;
-	// Body is everything except the @Name token itself.
+	// Body is everything except the *Name token itself.
 	const bodyAfterMention = (text.slice(0, start) + text.slice(end)).trim();
 	const isAddresseeLocked = lockedPanels.has(addressee);
 	const sendEnabled = !isAddresseeLocked && bodyAfterMention.length > 0;

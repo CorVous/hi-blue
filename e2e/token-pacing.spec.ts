@@ -77,7 +77,7 @@ test("token streaming arrives word-by-word, not as a single dump", async ({
 	).toBeVisible();
 
 	// ── Submit a message addressed to ids[0] ─────────────────────────────────────
-	await page.fill("#prompt", `@${names[0]} Hello`);
+	await page.fill("#prompt", `*${names[0]} Hello`);
 	await expect(page.locator("#send")).toBeEnabled();
 
 	const firstTranscript = page.locator(`[data-transcript="${ids[0]}"]`);
@@ -91,7 +91,7 @@ test("token streaming arrives word-by-word, not as a single dump", async ({
 	// With live streaming, "thinking…" is stripped on the first live delta and
 	// replaced immediately by the AI's persona prefix + content. We wait for
 	// thinking… to disappear and the transcript to grow past the player message.
-	const playerMsg = `\n> @${names[0]} Hello\n`;
+	const playerMsg = `\n> *${names[0]} Hello\n`;
 	const afterPlayerLength = baselineText.length + playerMsg.length;
 
 	// Wait for thinking… to clear (first live delta strips it).
@@ -118,7 +118,7 @@ test("token streaming arrives word-by-word, not as a single dump", async ({
 	// Wait for the first AI's full token stream to land. The encoder pacing loop
 	// still runs (pace() awaits) but skips re-appending text for live AIs.
 	// (Post-#107 the send button no longer re-enables after submit because the
-	// prompt is cleared and an empty prompt has no @mention.)
+	// prompt is cleared and an empty prompt has no *mention.)
 	await expect(firstTranscript).toContainText(EXPECTED_TOKENS, {
 		timeout: 20_000,
 	});

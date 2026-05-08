@@ -150,7 +150,7 @@ describe("renderGame — game_ended disables #send permanently (regression #89)"
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
-		promptInput.value = "@Sage finish the game";
+		promptInput.value = "*Sage finish the game";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),

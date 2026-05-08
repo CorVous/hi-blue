@@ -2,13 +2,13 @@ import { expect, test } from "@playwright/test";
 import { getAiHandles, stubChatCompletions } from "./helpers";
 
 /**
- * E2E spec for #107: @mention-based addressing replaces the address dropdown.
+ * E2E spec for #107: *mention-based addressing replaces the address dropdown.
  *
  * Verifies:
  * 1. The #address dropdown is gone.
  * 2. On first load, prompt is empty and Send is disabled.
  * 3. Typing "hi" (no mention) leaves Send disabled.
- * 4. Typing "@<name> hi" (using second AI's display name) enables Send and
+ * 4. Typing "*<name> hi" (using second AI's display name) enables Send and
  *    submits to that panel only.
  */
 
@@ -32,7 +32,7 @@ test("typing 'hi' leaves Send disabled", async ({ page }) => {
 	await expect(page.locator("#send")).toBeDisabled();
 });
 
-test("typing '@<ai1> hi' enables Send and submits to that transcript only", async ({
+test("typing '*<ai1> hi' enables Send and submits to that transcript only", async ({
 	page,
 }) => {
 	const pageErrors: Error[] = [];
@@ -44,8 +44,8 @@ test("typing '@<ai1> hi' enables Send and submits to that transcript only", asyn
 
 	const { ids, names } = await getAiHandles(page);
 
-	// Typing "@<name> hi" should enable Send.
-	await page.fill("#prompt", `@${names[1]} hi`);
+	// Typing "*<name> hi" should enable Send.
+	await page.fill("#prompt", `*${names[1]} hi`);
 	await expect(page.locator("#send")).toBeEnabled();
 
 	// Click send and wait for the round to complete.
@@ -72,9 +72,9 @@ test("typing '@<ai1> hi' enables Send and submits to that transcript only", asyn
 		.textContent();
 
 	// player message appears only in addressed panel.
-	expect(addressedTranscript ?? "").toContain(`> @${names[1]} hi`);
-	expect(otherTranscript0 ?? "").not.toContain("> @");
-	expect(otherTranscript2 ?? "").not.toContain("> @");
+	expect(addressedTranscript ?? "").toContain(`> *${names[1]} hi`);
+	expect(otherTranscript0 ?? "").not.toContain(`> *${names[1]}`);
+	expect(otherTranscript2 ?? "").not.toContain(`> *${names[1]}`);
 
 	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
 });

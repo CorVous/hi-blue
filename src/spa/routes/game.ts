@@ -79,15 +79,19 @@ function renderRestoredTranscript(
 	};
 	for (const line of lines) {
 		const m = AI_PREFIX_RE.exec(line);
-		if (m?.[1]) {
-			const handle = m[1];
-			const persona = Object.values(personas).find(
-				(p) => p.name.toLowerCase() === handle,
-			);
+		const handle = m?.[1];
+		const persona = handle
+			? Object.values(personas).find((p) => p.name.toLowerCase() === handle)
+			: undefined;
+		// Only treat as an AI line when the matched handle resolves to a known
+		// persona. Player lines now also start with `> *` (the new mention
+		// glyph), so without this guard a player message like `> *Sage hi`
+		// would be miscoloured as an AI prefix.
+		if (handle && persona) {
 			const prefixText = `> *${handle} `;
 			const prefix = doc.createElement("span");
 			prefix.className = "msg-prefix";
-			if (persona?.color) {
+			if (persona.color) {
 				prefix.style.setProperty("--prefix-color", persona.color);
 			}
 			prefix.textContent = prefixText;
@@ -605,7 +609,7 @@ export function renderGame(
 		}
 	}
 
-	// Set initial composer state (Send starts disabled until a valid @mention).
+	// Set initial composer state (Send starts disabled until a valid *mention).
 	refreshComposerState();
 
 	// For the sync restore path session is already set; for the async new-game
@@ -639,10 +643,10 @@ export function renderGame(
 		});
 
 		// Populate the input placeholder with the runtime handles, e.g.
-		// `@Ember | @Sage | @Frost …` (test fixtures) or
-		// `@a4b2 | @9bx2 | @cd3f …` (production).
+		// `*Ember | *Sage | *Frost …` (test fixtures) or
+		// `*a4b2 | *9bx2 | *cd3f …` (production).
 		const handles = Object.values(session.getState().personas)
-			.map((p) => `@${p.name}`)
+			.map((p) => `*${p.name}`)
 			.join(" | ");
 		if (handles) _promptInput.placeholder = `${handles} …`;
 	}
@@ -1155,7 +1159,7 @@ export function renderGame(
 			// Only written on success (not in catch) and not on round-game-ended.
 			if (!roundGameEnded) {
 				const addressedName = nextState.personas[addressed]?.name ?? addressed;
-				const persistedPrefix = `@${addressedName} `;
+				const persistedPrefix = `*${addressedName} `;
 				promptInput.value = persistedPrefix;
 				promptInput.setSelectionRange(
 					persistedPrefix.length,

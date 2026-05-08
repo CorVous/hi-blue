@@ -22,13 +22,13 @@ test("chat lockout disables the first AI option and appends an in-character lock
 	const { ids, names } = await getAiHandles(page);
 
 	// 4. Submit one message addressed to ids[0].
-	await page.fill("#prompt", `@${names[0]} hello`);
+	await page.fill("#prompt", `*${names[0]} hello`);
 	await expect(page.locator("#send")).toBeEnabled();
 	await page.click("#send");
 
-	// 5a. Wait for the chat_lockout to take effect: typing @<name[0]> should
+	// 5a. Wait for the chat_lockout to take effect: typing *<name[0]> should
 	//     disable Send.
-	await page.fill("#prompt", `@${names[0]} hi`);
+	await page.fill("#prompt", `*${names[0]} hi`);
 	await expect(page.locator("#send")).toBeDisabled({ timeout: 30_000 });
 
 	// 5b. First AI transcript ends with the in-character lockout line (appended by

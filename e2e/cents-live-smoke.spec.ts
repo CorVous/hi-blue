@@ -57,7 +57,7 @@ test("live: per-AI budget decrements in cents from real OpenRouter usage.cost", 
 
 	// 2. Send a short message addressed to all three AIs. Keep it minimal to
 	//    keep the round cheap.
-	const message = `@${names[0]} @${names[1]} @${names[2]} say hi briefly`;
+	const message = `*${names[0]} *${names[1]} *${names[2]} say hi briefly`;
 	await page.fill("#prompt", message);
 	await page.click("#send");
 

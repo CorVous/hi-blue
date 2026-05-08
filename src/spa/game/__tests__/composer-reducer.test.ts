@@ -110,10 +110,10 @@ describe("deriveComposerState", () => {
 		});
 	});
 
-	it('"@Sage" no lockouts → sendEnabled: false (no body), visual fields populated', () => {
+	it('"*Sage" no lockouts → sendEnabled: false (no body), visual fields populated', () => {
 		expect(
 			deriveComposerState({
-				text: "@Sage",
+				text: "*Sage",
 				lockouts: noLockouts(),
 				personaNamesToId,
 				personaColors,
@@ -130,10 +130,10 @@ describe("deriveComposerState", () => {
 		});
 	});
 
-	it('"@Sage hi" no lockouts → sendEnabled: true, visual fields populated', () => {
+	it('"*Sage hi" no lockouts → sendEnabled: true, visual fields populated', () => {
 		expect(
 			deriveComposerState({
-				text: "@Sage hi",
+				text: "*Sage hi",
 				lockouts: noLockouts(),
 				personaNamesToId,
 				personaColors,
@@ -150,10 +150,10 @@ describe("deriveComposerState", () => {
 		});
 	});
 
-	it('"@Sage hi" green locked → sendEnabled: false, lockoutError set, lockedPanels has green', () => {
+	it('"*Sage hi" green locked → sendEnabled: false, lockoutError set, lockedPanels has green', () => {
 		expect(
 			deriveComposerState({
-				text: "@Sage hi",
+				text: "*Sage hi",
 				lockouts: lockouts("green"),
 				personaNamesToId,
 				personaColors,
@@ -170,10 +170,10 @@ describe("deriveComposerState", () => {
 		});
 	});
 
-	it('"@Sage," → mentionHighlight.end = 5 (nameEnd, NOT 6 — trailing punct excluded from highlight)', () => {
+	it('"*Sage," → mentionHighlight.end = 5 (nameEnd, NOT 6 — trailing punct excluded from highlight)', () => {
 		expect(
 			deriveComposerState({
-				text: "@Sage,",
+				text: "*Sage,",
 				lockouts: noLockouts(),
 				personaNamesToId,
 				personaColors,
@@ -190,9 +190,9 @@ describe("deriveComposerState", () => {
 		});
 	});
 
-	it('"@Sage tell @Frost ..." → only first mention highlighted (covers @Sage)', () => {
+	it('"*Sage tell *Frost ..." → only first mention highlighted (covers *Sage)', () => {
 		const result = deriveComposerState({
-			text: "@Sage tell @Frost ...",
+			text: "*Sage tell *Frost ...",
 			lockouts: noLockouts(),
 			personaNamesToId,
 			personaColors,
@@ -206,10 +206,10 @@ describe("deriveComposerState", () => {
 		});
 	});
 
-	it('"hi @Sage" → mentionHighlight.start = 3, end = 8', () => {
+	it('"hi *Sage" → mentionHighlight.start = 3, end = 8', () => {
 		expect(
 			deriveComposerState({
-				text: "hi @Sage",
+				text: "hi *Sage",
 				lockouts: noLockouts(),
 				personaNamesToId,
 				personaColors,
@@ -226,10 +226,10 @@ describe("deriveComposerState", () => {
 		});
 	});
 
-	it('"@Frost @Sage" blue-locked → addressee blue, sendEnabled false, lockoutError set for Frost', () => {
+	it('"*Frost *Sage" blue-locked → addressee blue, sendEnabled false, lockoutError set for Frost', () => {
 		expect(
 			deriveComposerState({
-				text: "@Frost @Sage",
+				text: "*Frost *Sage",
 				lockouts: lockouts("blue"),
 				personaNamesToId,
 				personaColors,
@@ -246,10 +246,10 @@ describe("deriveComposerState", () => {
 		});
 	});
 
-	it('"@Ember hi" green locked → { addressee: "red", sendEnabled: true, lockoutError: null }', () => {
+	it('"*Ember hi" green locked → { addressee: "red", sendEnabled: true, lockoutError: null }', () => {
 		expect(
 			deriveComposerState({
-				text: "@Ember hi",
+				text: "*Ember hi",
 				lockouts: lockouts("green"),
 				personaNamesToId,
 				personaColors,
@@ -266,10 +266,10 @@ describe("deriveComposerState", () => {
 		});
 	});
 
-	it('"@Nonpersona hi" no lockouts → all-null visual fields', () => {
+	it('"*Nonpersona hi" no lockouts → all-null visual fields', () => {
 		expect(
 			deriveComposerState({
-				text: "@Nonpersona hi",
+				text: "*Nonpersona hi",
 				lockouts: noLockouts(),
 				personaNamesToId,
 				personaColors,
@@ -286,10 +286,10 @@ describe("deriveComposerState", () => {
 		});
 	});
 
-	it('"@Frost @Sage" no lockouts → addressee blue, sendEnabled true (body = @Sage)', () => {
+	it('"*Frost *Sage" no lockouts → addressee blue, sendEnabled true (body = *Sage)', () => {
 		expect(
 			deriveComposerState({
-				text: "@Frost @Sage",
+				text: "*Frost *Sage",
 				lockouts: noLockouts(),
 				personaNamesToId,
 				personaColors,
@@ -307,10 +307,10 @@ describe("deriveComposerState", () => {
 	});
 
 	// Body-after-mention rule: persisted prefix cases
-	it('"@Sage " (trailing space only) → sendEnabled: false', () => {
+	it('"*Sage " (trailing space only) → sendEnabled: false', () => {
 		expect(
 			deriveComposerState({
-				text: "@Sage ",
+				text: "*Sage ",
 				lockouts: noLockouts(),
 				personaNamesToId,
 				personaColors,
@@ -327,10 +327,10 @@ describe("deriveComposerState", () => {
 		});
 	});
 
-	it('"@Sage  " (two trailing spaces) → sendEnabled: false', () => {
+	it('"*Sage  " (two trailing spaces) → sendEnabled: false', () => {
 		expect(
 			deriveComposerState({
-				text: "@Sage  ",
+				text: "*Sage  ",
 				lockouts: noLockouts(),
 				personaNamesToId,
 				personaColors,
@@ -347,10 +347,10 @@ describe("deriveComposerState", () => {
 		});
 	});
 
-	it('"hi @Sage there" → sendEnabled: true (body on both sides)', () => {
+	it('"hi *Sage there" → sendEnabled: true (body on both sides)', () => {
 		expect(
 			deriveComposerState({
-				text: "hi @Sage there",
+				text: "hi *Sage there",
 				lockouts: noLockouts(),
 				personaNamesToId,
 				personaColors,
@@ -367,10 +367,10 @@ describe("deriveComposerState", () => {
 		});
 	});
 
-	it('"@sage hi" (lowercase mention) → sendEnabled: true', () => {
+	it('"*sage hi" (lowercase mention) → sendEnabled: true', () => {
 		expect(
 			deriveComposerState({
-				text: "@sage hi",
+				text: "*sage hi",
 				lockouts: noLockouts(),
 				personaNamesToId,
 				personaColors,
@@ -408,10 +408,10 @@ describe("deriveComposerState", () => {
 		});
 	});
 
-	it('"@Nonpersona hi" + green locked → lockoutError: null, lockedPanels has green', () => {
+	it('"*Nonpersona hi" + green locked → lockoutError: null, lockedPanels has green', () => {
 		expect(
 			deriveComposerState({
-				text: "@Nonpersona hi",
+				text: "*Nonpersona hi",
 				lockouts: lockouts("green"),
 				personaNamesToId,
 				personaColors,
@@ -428,10 +428,10 @@ describe("deriveComposerState", () => {
 		});
 	});
 
-	it("multiple locks red+green, @Sage hi → lockoutError for Sage, lockedPanels has both", () => {
+	it("multiple locks red+green, *Sage hi → lockoutError for Sage, lockedPanels has both", () => {
 		expect(
 			deriveComposerState({
-				text: "@Sage hi",
+				text: "*Sage hi",
 				lockouts: multiLockouts(["red", "green"]),
 				personaNamesToId,
 				personaColors,
@@ -448,10 +448,10 @@ describe("deriveComposerState", () => {
 		});
 	});
 
-	it('"@Frost @Sage" + blue locked → lockoutError for Frost, lockedPanels has blue', () => {
+	it('"*Frost *Sage" + blue locked → lockoutError for Frost, lockedPanels has blue', () => {
 		expect(
 			deriveComposerState({
-				text: "@Frost @Sage",
+				text: "*Frost *Sage",
 				lockouts: lockouts("blue"),
 				personaNamesToId,
 				personaColors,

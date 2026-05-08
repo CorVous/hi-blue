@@ -271,7 +271,7 @@ describe("renderGame — async new-game bootstrap", () => {
 		// Fire submit before personas are ready
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
-		promptInput.value = "@Sage hello";
+		promptInput.value = "*Sage hello";
 		promptInput.dispatchEvent(new Event("input"));
 		expect(() => {
 			form.dispatchEvent(

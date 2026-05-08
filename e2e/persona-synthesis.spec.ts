@@ -49,7 +49,7 @@ test("new-game synthesis blurbs land in turn-stream system prompts", async ({
 	}
 
 	// Send a message addressed to the first AI using its display name
-	await page.fill("#prompt", `@${names[0]} hi`);
+	await page.fill("#prompt", `*${names[0]} hi`);
 	await expect(page.locator("#send")).toBeEnabled();
 	await page.click("#send");
 

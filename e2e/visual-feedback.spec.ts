@@ -15,7 +15,7 @@ import { getAiHandles, stubChatCompletions } from "./helpers";
  *  - Clearing the input removes all feedback.
  */
 
-test("typing '@<ai1> hi' → second panel highlighted, overlay mention-highlight span", async ({
+test("typing '*<ai1> hi' → second panel highlighted, overlay mention-highlight span", async ({
 	page,
 }) => {
 	await stubChatCompletions(page, ["hi"]);
@@ -24,7 +24,7 @@ test("typing '@<ai1> hi' → second panel highlighted, overlay mention-highlight
 
 	const { ids, names } = await getAiHandles(page);
 
-	await page.fill("#prompt", `@${names[1]} hi`);
+	await page.fill("#prompt", `*${names[1]} hi`);
 
 	// Second panel has panel--addressed
 	await expect(page.locator(`.ai-panel[data-ai="${ids[1]}"]`)).toHaveClass(
@@ -42,10 +42,10 @@ test("typing '@<ai1> hi' → second panel highlighted, overlay mention-highlight
 	// Overlay has exactly one mention-highlight span with the correct name
 	const highlightSpan = page.locator("#prompt-overlay .mention-highlight");
 	await expect(highlightSpan).toHaveCount(1);
-	await expect(highlightSpan).toHaveText(`@${names[1]}`);
+	await expect(highlightSpan).toHaveText(`*${names[1]}`);
 });
 
-test("after typing '@<ai1> hi', clicking third panel transfers highlight to third panel", async ({
+test("after typing '*<ai1> hi', clicking third panel transfers highlight to third panel", async ({
 	page,
 }) => {
 	await stubChatCompletions(page, ["hi"]);
@@ -55,7 +55,7 @@ test("after typing '@<ai1> hi', clicking third panel transfers highlight to thir
 	const { ids, names } = await getAiHandles(page);
 
 	// Set up second AI mention first
-	await page.fill("#prompt", `@${names[1]} hi`);
+	await page.fill("#prompt", `*${names[1]} hi`);
 	await expect(page.locator(`.ai-panel[data-ai="${ids[1]}"]`)).toHaveClass(
 		/panel--addressed/,
 	);
@@ -63,9 +63,9 @@ test("after typing '@<ai1> hi', clicking third panel transfers highlight to thir
 	// Click the third panel
 	await page.locator(`.ai-panel[data-ai="${ids[2]}"]`).click();
 
-	// Input value should start with @<name of ids[2]>
+	// Input value should start with *<name of ids[2]>
 	const value = await page.locator("#prompt").inputValue();
-	expect(value.startsWith(`@${names[2]}`)).toBe(true);
+	expect(value.startsWith(`*${names[2]}`)).toBe(true);
 
 	// Third panel now has highlight
 	await expect(page.locator(`.ai-panel[data-ai="${ids[2]}"]`)).toHaveClass(
@@ -77,10 +77,10 @@ test("after typing '@<ai1> hi', clicking third panel transfers highlight to thir
 		/panel--addressed/,
 	);
 
-	// Overlay highlight is @<name of ids[2]>
+	// Overlay highlight is *<name of ids[2]>
 	const highlightSpan = page.locator("#prompt-overlay .mention-highlight");
 	await expect(highlightSpan).toHaveCount(1);
-	await expect(highlightSpan).toHaveText(`@${names[2]}`);
+	await expect(highlightSpan).toHaveText(`*${names[2]}`);
 });
 
 test("clearing input removes all visual feedback", async ({ page }) => {
@@ -91,7 +91,7 @@ test("clearing input removes all visual feedback", async ({ page }) => {
 	const { names } = await getAiHandles(page);
 
 	// First set a mention to create visual state
-	await page.fill("#prompt", `@${names[1]} hi`);
+	await page.fill("#prompt", `*${names[1]} hi`);
 	await expect(page.locator(".panel--addressed")).toHaveCount(1);
 
 	// Clear the input
