@@ -427,6 +427,12 @@ main {
 		color-mix(in srgb, var(--prefix-color, var(--amber)) 60%, transparent);
 }
 
+.transcript .msg-mention {
+	color: var(--mention-color, inherit);
+	text-shadow: 0 0 6px
+		color-mix(in srgb, var(--mention-color, var(--amber)) 60%, transparent);
+}
+
 .transcript .msg-placeholder {
 	color: var(--amber-dim);
 }

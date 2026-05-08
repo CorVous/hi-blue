@@ -54,6 +54,70 @@ function formatBudget(remainingUsd: number): string {
  * non-whitespace). Capture group 1 is the lowercased handle. */
 const AI_PREFIX_RE = /^> \*(\S+) /;
 
+/** Build a regex that matches any persona handle (with an optional leading
+ * `*`) as a whole word, case-insensitive. Returns null when no personas
+ * are available so callers can short-circuit. */
+function buildMentionRegex(
+	personas: Record<string, { name: string }>,
+): RegExp | null {
+	const names = Object.values(personas)
+		.map((p) => p.name)
+		.filter((n) => n.length > 0);
+	if (names.length === 0) return null;
+	const escaped = names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+	return new RegExp(`\\*?\\b(?:${escaped.join("|")})\\b`, "gi");
+}
+
+/** Append `text` to `parent`, splitting persona-name occurrences (with an
+ * optional leading `*`) into `.msg-mention` spans tinted with the persona's
+ * color. Non-matching chunks are wrapped in `defaultClass` when provided
+ * (e.g. `msg-you` for player lines), otherwise emitted as bare text nodes
+ * so they inherit the parent's amber color. */
+function appendMentionAwareText(
+	parent: HTMLElement,
+	text: string,
+	personas: Record<string, { name: string; color?: string }>,
+	defaultClass?: string,
+): void {
+	if (!text) return;
+	const doc = parent.ownerDocument;
+	const personaList = Object.values(personas);
+	const appendChunk = (chunk: string): void => {
+		if (!chunk) return;
+		if (defaultClass) {
+			const span = doc.createElement("span");
+			span.className = defaultClass;
+			span.textContent = chunk;
+			parent.appendChild(span);
+		} else {
+			parent.appendChild(doc.createTextNode(chunk));
+		}
+	};
+	const re = buildMentionRegex(personas);
+	if (!re) {
+		appendChunk(text);
+		return;
+	}
+	let lastIdx = 0;
+	for (let m = re.exec(text); m !== null; m = re.exec(text)) {
+		appendChunk(text.slice(lastIdx, m.index));
+		const matchText = m[0];
+		const baseName = matchText.startsWith("*") ? matchText.slice(1) : matchText;
+		const persona = personaList.find(
+			(p) => p.name.toLowerCase() === baseName.toLowerCase(),
+		);
+		const span = doc.createElement("span");
+		span.className = "msg-mention";
+		if (persona?.color) {
+			span.style.setProperty("--mention-color", persona.color);
+		}
+		span.textContent = matchText;
+		parent.appendChild(span);
+		lastIdx = m.index + matchText.length;
+	}
+	appendChunk(text.slice(lastIdx));
+}
+
 /** Render a saved transcript string into the given element by parsing
  * lines and wrapping each logical message in a `.msg-line` block. AI
  * prefix portions (`> *<handle> `) become `.msg-prefix` spans tinted
@@ -104,21 +168,18 @@ function renderRestoredTranscript(
 			const lineEl = startNewMsgLine();
 			lineEl.appendChild(prefix);
 			const rest = line.slice(prefixText.length);
-			if (rest) lineEl.appendChild(doc.createTextNode(rest));
+			if (rest) appendMentionAwareText(lineEl, rest, personas);
 			currentAiLine = lineEl;
 		} else if (line.startsWith("> ")) {
-			const span = doc.createElement("span");
-			span.className = "msg-you";
-			span.textContent = line;
-			startNewMsgLine().appendChild(span);
+			appendMentionAwareText(startNewMsgLine(), line, personas, "msg-you");
 			currentAiLine = null;
 		} else if (line.startsWith("[") || line.startsWith("--- ")) {
-			startNewMsgLine().appendChild(doc.createTextNode(line));
+			appendMentionAwareText(startNewMsgLine(), line, personas);
 			currentAiLine = null;
 		} else if (currentAiLine) {
-			currentAiLine.appendChild(doc.createTextNode(line));
+			appendMentionAwareText(currentAiLine, line, personas);
 		} else {
-			startNewMsgLine().appendChild(doc.createTextNode(line));
+			appendMentionAwareText(startNewMsgLine(), line, personas);
 		}
 	}
 }
@@ -463,10 +524,12 @@ export function renderGame(
 						const lineEl = doc.createElement("div");
 						lineEl.className = "msg-line";
 						if (msg.role === "player") {
-							const span = doc.createElement("span");
-							span.className = "msg-you";
-							span.textContent = `> ${msg.content}\n`;
-							lineEl.appendChild(span);
+							appendMentionAwareText(
+								lineEl,
+								`> ${msg.content}\n`,
+								restoredPersonas,
+								"msg-you",
+							);
 						} else {
 							const prefixSpan = doc.createElement("span");
 							prefixSpan.className = "msg-prefix";
@@ -475,7 +538,11 @@ export function renderGame(
 							}
 							prefixSpan.textContent = `> *${transcriptName(personaName)} `;
 							lineEl.appendChild(prefixSpan);
-							lineEl.appendChild(doc.createTextNode(`${msg.content}\n`));
+							appendMentionAwareText(
+								lineEl,
+								`${msg.content}\n`,
+								restoredPersonas,
+							);
 						}
 						transcript.appendChild(lineEl);
 					}
@@ -777,12 +844,20 @@ export function renderGame(
 	// AI message stays in one msg-line so strip-card preview can render it
 	// as a single ellipsis-truncated line. The line opened by appendAiPrefix
 	// is the target; if missing for any reason, a fallback line is opened.
+	// The accumulated body is stored on the line's dataset so each delta can
+	// re-render the body with mention-aware highlighting from the start.
 	function appendAiTokens(aiId: AiId, text: string): void {
 		const el = getTranscript(aiId);
 		if (!el) return;
 		const last = el.lastElementChild as HTMLElement | null;
 		const line = last?.classList.contains("msg-line") ? last : startMsgLine(el);
-		line.appendChild(doc.createTextNode(text));
+		line.dataset.body = (line.dataset.body ?? "") + text;
+		const personas = session?.getState().personas ?? {};
+		const prefix = line.querySelector<HTMLElement>(":scope > .msg-prefix");
+		while (line.lastChild && line.lastChild !== prefix) {
+			line.removeChild(line.lastChild);
+		}
+		appendMentionAwareText(line, line.dataset.body, personas);
 		scrollToBottom(el);
 	}
 
@@ -793,20 +868,21 @@ export function renderGame(
 		const el = getTranscript(aiId);
 		if (!el) return;
 		const line = startMsgLine(el);
-		line.appendChild(doc.createTextNode(text));
+		const personas = session?.getState().personas ?? {};
+		appendMentionAwareText(line, text, personas);
 		scrollToBottom(el);
 	}
 
 	// Helper: append a player line wrapped in a .msg-you span (warm white)
-	// inside its own .msg-line block.
+	// inside its own .msg-line block. Persona-name mentions inside the
+	// message body are split into .msg-mention spans so they pick up the
+	// addressed daemon's color instead of warm white.
 	function appendPlayerLine(aiId: AiId, text: string): void {
 		const el = getTranscript(aiId);
 		if (!el) return;
 		const line = startMsgLine(el);
-		const span = doc.createElement("span");
-		span.className = "msg-you";
-		span.textContent = text;
-		line.appendChild(span);
+		const personas = session?.getState().personas ?? {};
+		appendMentionAwareText(line, text, personas, "msg-you");
 		scrollToBottom(el);
 	}
 
