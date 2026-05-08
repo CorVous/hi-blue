@@ -1,13 +1,29 @@
 export const COLOR_PALETTE: string[] = [
-	"#e07a5f", // warm orange
-	"#81b29a", // sage green
-	"#5fa8d3", // sky blue
-	"#c89bff", // lavender
-	"#f2cc8f", // muted gold
-	"#ff6b9d", // rose pink
-	"#7eddc1", // mint teal
-	"#ffb86c", // peach
-	"#a3e3a8", // lime green
-	"#9bd0f5", // ice blue
-	"#ffe066", // lemon yellow
+	"#33ff33", // p1 green
+	"#00cccc", // ibm cyan
+	"#cc00cc", // ibm magenta
+	"#7878ff", // commodore blue
+	"#ff7b6b", // rose
+	"#8df27f", // mint
+	"#7fb6ff", // sky
+	"#c8a8ff", // lilac
+	"#ffc89e", // peach
+	"#c8e89a", // pistachio
+	"#e8d49a", // sand
+	"#9ce8c8", // seafoam
+	"#ff3d8a", // hot pink
+	"#3df0ff", // electric
+	"#aaff00", // acid green
+	"#d63dff", // plasma
+	"#ff5a1f", // flame
+	"#fff03d", // lemon
+	"#ff9495", // coral
+	"#fa9d68", // apricot
+	"#e3ad4b", // honey
+	"#adc35e", // chartreuse
+	"#61d19a", // jade
+	"#17d0d8", // turquoise
+	"#a7adff", // periwinkle
+	"#dc9beb", // orchid
+	"#f594c3", // flamingo
 ];
