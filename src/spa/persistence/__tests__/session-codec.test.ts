@@ -21,6 +21,8 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		temperaments: ["hot-headed", "zealous"],
 		personaGoal: "Hold the flower at phase end.",
 		blurb: "You are hot-headed and zealous. Hold the flower at phase end.",
+		typingQuirks: ["fragments", "ALL CAPS"],
+		voiceExamples: ["Now.", "BURN IT.", "Soon, soon."],
 	},
 	green: {
 		id: "green",
@@ -29,6 +31,12 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		temperaments: ["meticulous", "meticulous"],
 		personaGoal: "Ensure items are evenly distributed.",
 		blurb: "You are intensely meticulous. Ensure items are evenly distributed.",
+		typingQuirks: ["ellipses", "no contractions"],
+		voiceExamples: [
+			"I will count again...",
+			"That is not balanced.",
+			"One more sweep through the list.",
+		],
 	},
 	blue: {
 		id: "blue",
@@ -37,6 +45,8 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		temperaments: ["laconic", "diffident"],
 		personaGoal: "Hold the key at phase end.",
 		blurb: "You are laconic and diffident. Hold the key at phase end.",
+		typingQuirks: ["lowercase only", "fragments"],
+		voiceExamples: ["sure.", "if you say so.", "fine."],
 	},
 };
 
@@ -96,14 +106,23 @@ describe("serializeSession / deserializeSession", () => {
 		expect((daemon as any).phases["3"].phaseGoal).toBe("");
 	});
 
-	it("persona block keys exactly id/name/color/temperaments/personaGoal/blurb (no budgetPerPhase)", () => {
+	it("persona block keys are exactly the editable AiPersona surface (no budgetPerPhase)", () => {
 		const game = makeFreshGame();
 		const files = serializeSession(game, NOW, CREATED_AT);
 		// biome-ignore lint/style/noNonNullAssertion: daemons.red always exists for this fixture
 		const daemon = JSON.parse(files.daemons.red!);
 		const personaKeys = Object.keys(daemon.persona).sort();
 		expect(personaKeys).toEqual(
-			["id", "name", "color", "temperaments", "personaGoal", "blurb"].sort(),
+			[
+				"id",
+				"name",
+				"color",
+				"temperaments",
+				"personaGoal",
+				"blurb",
+				"typingQuirks",
+				"voiceExamples",
+			].sort(),
 		);
 	});
 

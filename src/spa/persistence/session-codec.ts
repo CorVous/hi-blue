@@ -202,6 +202,8 @@ export function serializeSession(
 				temperaments: persona.temperaments,
 				personaGoal: persona.personaGoal,
 				blurb: persona.blurb,
+				typingQuirks: persona.typingQuirks,
+				voiceExamples: persona.voiceExamples,
 			},
 			phases: {
 				"1": phaseSliceFor(1, findPhase(state.phases, 1), aiId),

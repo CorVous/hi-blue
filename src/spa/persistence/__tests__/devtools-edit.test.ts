@@ -27,6 +27,8 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		temperaments: ["hot-headed", "zealous"],
 		personaGoal: "Hold the flower at phase end.",
 		blurb: "You are hot-headed and zealous. Hold the flower at phase end.",
+		typingQuirks: ["fragments", "ALL CAPS"],
+		voiceExamples: ["Now.", "BURN IT.", "Soon, soon."],
 	},
 	green: {
 		id: "green",
@@ -35,6 +37,12 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		temperaments: ["meticulous", "meticulous"],
 		personaGoal: "Ensure items are evenly distributed.",
 		blurb: "You are intensely meticulous. Ensure items are evenly distributed.",
+		typingQuirks: ["ellipses", "no contractions"],
+		voiceExamples: [
+			"I will count again...",
+			"That is not balanced.",
+			"One more sweep through the list.",
+		],
 	},
 	blue: {
 		id: "blue",
@@ -43,6 +51,8 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		temperaments: ["laconic", "diffident"],
 		personaGoal: "Hold the key at phase end.",
 		blurb: "You are laconic and diffident. Hold the key at phase end.",
+		typingQuirks: ["lowercase only", "fragments"],
+		voiceExamples: ["sure.", "if you say so.", "fine."],
 	},
 };
 
