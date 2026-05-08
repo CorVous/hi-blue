@@ -859,6 +859,10 @@ main {
 		padding-bottom: 4px;
 	}
 
+	.prompt-prefix .prompt-host {
+		display: none;
+	}
+
 	#panels.row {
 		display: grid;
 		grid-template-rows: minmax(0, 1fr) 88px;
