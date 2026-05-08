@@ -237,6 +237,67 @@ test("strip-card preview: latest line visible + per-line ellipsis", async ({
 	expect(mainWhiteSpace).toBe("pre-wrap");
 });
 
+test("strip-card preview: restored multi-line AI message stays in one msg-line", async ({
+	page,
+}) => {
+	// Regression: renderRestoredTranscript used to split on every `\n`,
+	// so a saved AI message containing internal newlines came back as
+	// multiple .msg-line divs after a reload — each appearing as its own
+	// ellipsis-truncated line in the strip-card preview.
+	await stubChatCompletions(page, [
+		"first line of saved msg\nsecond line\nthird",
+	]);
+	await page.goto("/");
+	const handles = await getAiHandles(page);
+
+	// Send a message addressed to panel 0 so the AI responds there.
+	await page.locator("#prompt").fill(`${handles.mention(0)} hi`);
+	await page.locator("#send").click();
+	const transcript0 = page.locator(`[data-transcript="${handles.ids[0]}"]`);
+	await expect(transcript0).toContainText("third");
+	// Wait for the save to land in localStorage.
+	await expect
+		.poll(() => page.evaluate(() => localStorage.getItem("hi-blue-game-state")))
+		.not.toBeNull();
+
+	// Reload — this exercises the renderRestoredTranscript path.
+	await page.reload();
+	await stubChatCompletions(page, ["restubbed"]);
+	await expect(page.locator("#composer")).toBeVisible();
+	const handles2 = await getAiHandles(page);
+
+	// Demote panel 0 to strip card by addressing panel 1.
+	await page.locator("#prompt").fill(`${handles2.mention(1)} hello`);
+	await page.waitForFunction(
+		() => document.querySelectorAll(".panel--addressed").length === 1,
+	);
+
+	const restored = await page.evaluate((aiId) => {
+		const t = document.querySelector<HTMLElement>(
+			`[data-transcript="${aiId}"]`,
+		);
+		const lines = Array.from(
+			t?.querySelectorAll<HTMLElement>(".msg-line") ?? [],
+		);
+		const aiLines = lines.filter((l) => l.querySelector(".msg-prefix"));
+		const aiLine = aiLines[0];
+		return {
+			aiLineCount: aiLines.length,
+			aiLineText: aiLine?.textContent ?? "",
+			aiLineHeight: aiLine?.getBoundingClientRect().height ?? 0,
+		};
+	}, handles.ids[0]);
+
+	// Exactly one msg-line for the AI message — even though it contains
+	// two internal \n chars in the saved string.
+	expect(restored.aiLineCount).toBe(1);
+	expect(restored.aiLineText).toContain("first line of saved msg");
+	expect(restored.aiLineText).toContain("second line");
+	expect(restored.aiLineText).toContain("third");
+	// nowrap collapses internal \n → one visual line ≈ 16px tall.
+	expect(restored.aiLineHeight).toBeLessThan(22);
+});
+
 test("strip-card preview: streamed AI tokens with embedded \\n stay in one msg-line", async ({
 	page,
 }) => {

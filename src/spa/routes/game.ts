@@ -49,10 +49,15 @@ function transcriptName(name: string): string {
 const AI_PREFIX_RE = /^> \*(\S+) /;
 
 /** Render a saved transcript string into the given element by parsing
- * lines and wrapping each in a `.msg-line` block. AI prefix portions
- * (`> *<handle> `) become `.msg-prefix` spans tinted with the persona's
- * color; player lines (`> <msg>`) become `.msg-you` spans. The per-line
- * wrapper is what enables strip-card mode to apply nowrap+ellipsis. */
+ * lines and wrapping each logical message in a `.msg-line` block. AI
+ * prefix portions (`> *<handle> `) become `.msg-prefix` spans tinted
+ * with the persona's color; player lines (`> <msg>`) become `.msg-you`
+ * spans. Lines starting with `[` (bracketed system messages) or `--- `
+ * (phase separators) become their own standalone msg-line. Any other
+ * orphan amber line is treated as a continuation of the preceding AI
+ * msg-line — this matches the live `appendAiTokens` behavior, where an
+ * AI response with embedded `\n` collapses into a single msg-line so
+ * strip-card mode can render it as one ellipsis-truncated line. */
 function renderRestoredTranscript(
 	transcript: HTMLElement,
 	saved: string,
@@ -62,9 +67,17 @@ function renderRestoredTranscript(
 	transcript.textContent = "";
 	if (!saved) return;
 	const lines = saved.split(/(?<=\n)/);
+	// Tracks the most recently opened AI msg-line so consecutive orphan
+	// continuation lines (no prefix, not a system marker) can be merged
+	// into it instead of becoming new msg-lines.
+	let currentAiLine: HTMLElement | null = null;
+	const startNewMsgLine = (): HTMLElement => {
+		const el = doc.createElement("div");
+		el.className = "msg-line";
+		transcript.appendChild(el);
+		return el;
+	};
 	for (const line of lines) {
-		const lineEl = doc.createElement("div");
-		lineEl.className = "msg-line";
 		const m = AI_PREFIX_RE.exec(line);
 		if (m?.[1]) {
 			const handle = m[1];
@@ -78,18 +91,25 @@ function renderRestoredTranscript(
 				prefix.style.setProperty("--prefix-color", persona.color);
 			}
 			prefix.textContent = prefixText;
+			const lineEl = startNewMsgLine();
 			lineEl.appendChild(prefix);
 			const rest = line.slice(prefixText.length);
 			if (rest) lineEl.appendChild(doc.createTextNode(rest));
+			currentAiLine = lineEl;
 		} else if (line.startsWith("> ")) {
 			const span = doc.createElement("span");
 			span.className = "msg-you";
 			span.textContent = line;
-			lineEl.appendChild(span);
+			startNewMsgLine().appendChild(span);
+			currentAiLine = null;
+		} else if (line.startsWith("[") || line.startsWith("--- ")) {
+			startNewMsgLine().appendChild(doc.createTextNode(line));
+			currentAiLine = null;
+		} else if (currentAiLine) {
+			currentAiLine.appendChild(doc.createTextNode(line));
 		} else {
-			lineEl.appendChild(doc.createTextNode(line));
+			startNewMsgLine().appendChild(doc.createTextNode(line));
 		}
-		transcript.appendChild(lineEl);
 	}
 }
 
