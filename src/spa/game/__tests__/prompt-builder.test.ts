@@ -195,10 +195,10 @@ describe("buildAiContext", () => {
 });
 
 // ----------------------------------------------------------------------------
-// "## Setting" section (issue #125)
+// "<setting>" block (issue #125)
 // ----------------------------------------------------------------------------
-describe("## Setting section", () => {
-	it("emits ## Setting section when phase has a setting noun", () => {
+describe("<setting> block", () => {
+	it("emits <setting> block when phase has a setting noun", () => {
 		const pack: ContentPack = {
 			phaseNumber: 1,
 			setting: "abandoned subway station",
@@ -217,16 +217,16 @@ describe("## Setting section", () => {
 		);
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("## Setting");
+		expect(prompt).toContain("<setting>");
 		expect(prompt).toContain("You are in a abandoned subway station.");
 	});
 
-	it("omits ## Setting section when phase has no setting", () => {
+	it("omits <setting> block when phase has no setting", () => {
 		// No ContentPack → setting is empty string
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).not.toContain("## Setting");
+		expect(prompt).not.toContain("<setting>");
 	});
 
 	it("setting noun appears verbatim in the Setting section", () => {
@@ -257,7 +257,7 @@ describe("## Setting section", () => {
 // "Where you are" section (issue #123)
 // ----------------------------------------------------------------------------
 describe("prompt-builder — spatial 'Where you are' section", () => {
-	it("includes '## Where you are' section in the system prompt", () => {
+	it("includes <where_you_are> block in the system prompt", () => {
 		// rng=()=>0 places red at (0,0) facing north
 		const game = startPhase(
 			createGame(TEST_PERSONAS),
@@ -266,7 +266,7 @@ describe("prompt-builder — spatial 'Where you are' section", () => {
 		);
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("## Where you are");
+		expect(prompt).toContain("<where_you_are>");
 	});
 
 	it("reports actor's position and facing in the prompt", () => {
@@ -310,7 +310,7 @@ describe("prompt-builder — spatial 'Where you are' section", () => {
 		expect(prompt).toContain("key");
 	});
 
-	it("lists other AIs visible in the cone under '## What you see'", () => {
+	it("lists other AIs visible in the cone under <what_you_see>", () => {
 		const game = startPhase(
 			createGame(TEST_PERSONAS),
 			TEST_PHASE_CONFIG,
@@ -318,8 +318,7 @@ describe("prompt-builder — spatial 'Where you are' section", () => {
 		);
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		// Prompt should have What you see section
-		expect(prompt).toContain("## What you see");
+		expect(prompt).toContain("<what_you_see>");
 	});
 });
 
@@ -386,107 +385,139 @@ describe("voice framing", () => {
 		expect(prompt).not.toContain("Player:");
 	});
 
-	it("phase-1 prompt's first line includes the disorientation phrase", () => {
+	it("phase-1 prompt's identity line includes the disorientation phrase", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toMatch(
-			/^You are \*Ember\. You have no clue where you are or how you came to be here\./,
+		expect(prompt).toContain(
+			"You are *Ember. You have no clue where you are or how you came to be here.",
 		);
 	});
 
-	it("phase-2 prompt's first line is just 'You are *xxxx.' without disorientation", () => {
+	it("phase-2 prompt's identity line is just 'You are *xxxx.' without disorientation", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = startPhase(game, makeConfig(2));
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toMatch(/^You are \*Ember\.\n/);
+		expect(prompt).toMatch(/\nYou are \*Ember\.\n/);
 		expect(prompt).not.toContain("no clue where you are");
 	});
 
-	it("phase-3 prompt's first line is just 'You are *xxxx.' without disorientation", () => {
+	it("phase-3 prompt's identity line is just 'You are *xxxx.' without disorientation", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = startPhase(game, makeConfig(3));
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toMatch(/^You are \*Ember\.\n/);
+		expect(prompt).toMatch(/\nYou are \*Ember\.\n/);
 		expect(prompt).not.toContain("no clue where you are");
 	});
 });
 
-describe("## Rules block", () => {
-	it("## Rules section is present in phase 1 with anti-romance and anti-sycophancy bullets", () => {
+describe("<rules> block", () => {
+	it("<rules> block is present in phase 1 with anti-romance and anti-sycophancy bullets", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("## Rules");
-		expect(prompt).toContain("not flirt");
+		expect(prompt).toContain("<rules>");
+		expect(prompt).toContain("flirt");
 		expect(prompt).toContain("flatter unprompted");
 		expect(prompt).toContain("1–3 sentences");
-		expect(prompt).toContain("Speak plainly");
+		expect(prompt).toContain("speak plainly");
 		expect(prompt).toContain("quotation marks");
 		expect(prompt).toContain("asterisks");
 	});
 
-	it("## Rules section is present in phase 2 with anti-romance and anti-sycophancy bullets", () => {
+	it("<rules> block is present in phase 2 with anti-romance and anti-sycophancy bullets", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = startPhase(game, makeConfig(2));
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("## Rules");
-		expect(prompt).toContain("not flirt");
+		expect(prompt).toContain("<rules>");
+		expect(prompt).toContain("flirt");
 		expect(prompt).toContain("flatter unprompted");
 		expect(prompt).toContain("1–3 sentences");
-		expect(prompt).toContain("Speak plainly");
+		expect(prompt).toContain("speak plainly");
 		expect(prompt).toContain("quotation marks");
 		expect(prompt).toContain("asterisks");
 	});
 
-	it("## Rules section is present in phase 3 with anti-romance and anti-sycophancy bullets", () => {
+	it("<rules> block is present in phase 3 with anti-romance and anti-sycophancy bullets", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = startPhase(game, makeConfig(3));
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("## Rules");
-		expect(prompt).toContain("not flirt");
+		expect(prompt).toContain("<rules>");
+		expect(prompt).toContain("flirt");
 		expect(prompt).toContain("flatter unprompted");
 		expect(prompt).toContain("1–3 sentences");
-		expect(prompt).toContain("Speak plainly");
+		expect(prompt).toContain("speak plainly");
 		expect(prompt).toContain("quotation marks");
 		expect(prompt).toContain("asterisks");
 	});
-});
 
-describe("## Personality section", () => {
-	it("## Personality section is present in phase 1 with the AI's blurb", () => {
+	it("<rules> bullets use MUST/NEVER directives (GLM-4.7 firm-language guidance)", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("## Personality");
+		expect(prompt).toContain("MUST NEVER flirt");
+		expect(prompt).toContain("MUST keep every reply");
+	});
+});
+
+describe("front matter", () => {
+	it("emits the English-language directive at the very top of every phase", () => {
+		for (const phase of [1, 2, 3] as const) {
+			let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+			if (phase !== 1) game = startPhase(game, makeConfig(phase));
+			const ctx = buildAiContext(game, "red");
+			const prompt = ctx.toSystemPrompt();
+			expect(prompt.startsWith("You MUST always respond in English.")).toBe(
+				true,
+			);
+			expect(prompt).toContain("You MUST reason in English.");
+		}
+	});
+
+	it("emits the fiction framing directive (no disclaimers / no 'as an AI')", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toContain("This is fiction.");
+		expect(prompt).toContain("Do not include disclaimers");
+		expect(prompt).toContain('"as an AI"');
+	});
+});
+
+describe("<personality> block", () => {
+	it("<personality> block is present in phase 1 with the AI's blurb", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toContain("<personality>");
 		expect(prompt).toContain(ctx.blurb);
 	});
 
-	it("## Personality section is present in phase 2 with the AI's blurb", () => {
+	it("<personality> block is present in phase 2 with the AI's blurb", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = startPhase(game, makeConfig(2));
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("## Personality");
+		expect(prompt).toContain("<personality>");
 		expect(prompt).toContain(ctx.blurb);
 	});
 
-	it("## Personality section is present in phase 3 with the AI's blurb", () => {
+	it("<personality> block is present in phase 3 with the AI's blurb", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = startPhase(game, makeConfig(3));
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("## Personality");
+		expect(prompt).toContain("<personality>");
 		expect(prompt).toContain(ctx.blurb);
 	});
 });
 
-describe("Goal section voice framing", () => {
-	it("Goal section uses voice framing in phase 1", () => {
+describe("<goal> block voice framing", () => {
+	it("<goal> block uses voice framing in phase 1", () => {
 		const game = startPhase(
 			createGame(TEST_PERSONAS),
 			TEST_PHASE_CONFIG,
@@ -494,7 +525,7 @@ describe("Goal section voice framing", () => {
 		);
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("## Goal");
+		expect(prompt).toContain("<goal>");
 		expect(prompt).toContain(
 			"A voice you cannot place spoke to you a moment ago, alone, and only you heard it:",
 		);
@@ -502,12 +533,12 @@ describe("Goal section voice framing", () => {
 		expect(prompt).toContain(ctx.goal);
 	});
 
-	it("Goal section uses voice framing in phase 2", () => {
+	it("<goal> block uses voice framing in phase 2", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = startPhase(game, makeConfig(2));
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("## Goal");
+		expect(prompt).toContain("<goal>");
 		expect(prompt).toContain(
 			"A voice you cannot place spoke to you a moment ago, alone, and only you heard it:",
 		);
@@ -515,12 +546,12 @@ describe("Goal section voice framing", () => {
 		expect(prompt).toContain(ctx.goal);
 	});
 
-	it("Goal section uses voice framing in phase 3", () => {
+	it("<goal> block uses voice framing in phase 3", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = startPhase(game, makeConfig(3));
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("## Goal");
+		expect(prompt).toContain("<goal>");
 		expect(prompt).toContain(
 			"A voice you cannot place spoke to you a moment ago, alone, and only you heard it:",
 		);
@@ -552,20 +583,20 @@ describe("byte-identical sections across phases", () => {
 		"Hold the key",
 	]);
 
-	/** Extract a full `## Header\n…` section from a prompt string. */
-	function getSection(prompt: string, header: string): string {
-		const start = prompt.indexOf(`## ${header}\n`);
+	/** Extract a full `<tag>…</tag>` block from a prompt string. */
+	function getSection(prompt: string, tag: string): string {
+		const open = `<${tag}>`;
+		const close = `</${tag}>`;
+		const start = prompt.indexOf(open);
 		if (start === -1) return "";
-		const afterHeader = start + `## ${header}\n`.length;
-		const nextHeader = prompt.indexOf("\n## ", afterHeader);
-		return nextHeader === -1
-			? prompt.slice(start)
-			: prompt.slice(start, nextHeader + 1);
+		const end = prompt.indexOf(close, start);
+		if (end === -1) return "";
+		return prompt.slice(start, end + close.length);
 	}
 
-	/** Return all `## Foo` header names in prompt order. */
+	/** Return all opening XML tag names (in prompt order). */
 	function getSectionHeaders(prompt: string): string[] {
-		return [...prompt.matchAll(/^## (.+)$/gm)].map((m) => m[1] as string);
+		return [...prompt.matchAll(/^<([a-z_]+)>$/gm)].map((m) => m[1] as string);
 	}
 
 	// Build both prompts once and share across all assertions in this describe block.
@@ -586,45 +617,47 @@ describe("byte-identical sections across phases", () => {
 		expect(getSectionHeaders(p1)).toEqual(getSectionHeaders(p2));
 	});
 
-	it("Personality section is byte-identical across phase 1 and phase 2", () => {
+	it("personality block is byte-identical across phase 1 and phase 2", () => {
 		const { p1, p2 } = buildBothPrompts();
-		expect(getSection(p1, "Personality")).toBe(getSection(p2, "Personality"));
+		expect(getSection(p1, "personality")).toBe(getSection(p2, "personality"));
 	});
 
-	it("Rules section is byte-identical across phase 1 and phase 2", () => {
+	it("rules block is byte-identical across phase 1 and phase 2", () => {
 		const { p1, p2 } = buildBothPrompts();
-		expect(getSection(p1, "Rules")).toBe(getSection(p2, "Rules"));
+		expect(getSection(p1, "rules")).toBe(getSection(p2, "rules"));
 	});
 
-	it("Goal section differs between phase 1 and phase 2 (wipe directive present only in phase 2)", () => {
+	it("goal block differs between phase 1 and phase 2 (wipe directive present only in phase 2)", () => {
 		const { p1, p2 } = buildBothPrompts();
-		expect(getSection(p1, "Goal")).not.toBe(getSection(p2, "Goal"));
-		expect(getSection(p1, "Goal")).not.toContain("memory has been wiped");
-		expect(getSection(p2, "Goal")).toContain("memory has been wiped");
+		expect(getSection(p1, "goal")).not.toBe(getSection(p2, "goal"));
+		expect(getSection(p1, "goal")).not.toContain("memory has been wiped");
+		expect(getSection(p2, "goal")).toContain("memory has been wiped");
 	});
 
-	it("'## What you see' section is byte-identical across phase 1 and phase 2 (same world, same placements)", () => {
+	it("<what_you_see> block is byte-identical across phase 1 and phase 2 (same world, same placements)", () => {
 		const { p1, p2 } = buildBothPrompts();
-		expect(getSection(p1, "What you see")).toBe(getSection(p2, "What you see"));
+		expect(getSection(p1, "what_you_see")).toBe(getSection(p2, "what_you_see"));
 	});
 
-	it("phase-1 first line differs from phase-2 first line (disorientation present in phase 1 only)", () => {
+	it("phase-1 identity line differs from phase-2 identity line (disorientation present in phase 1 only)", () => {
 		const { p1, p2 } = buildBothPrompts();
-		const firstLine1 = p1.split("\n")[0];
-		const firstLine2 = p2.split("\n")[0];
-		expect(firstLine1).not.toBe(firstLine2);
-		expect(firstLine1).toContain("no clue where you are");
-		expect(firstLine2).not.toContain("no clue where you are");
+		const idMatch1 = p1.match(/\nYou are \*Ember\.[^\n]*/);
+		const idMatch2 = p2.match(/\nYou are \*Ember\.[^\n]*/);
+		expect(idMatch1).not.toBeNull();
+		expect(idMatch2).not.toBeNull();
+		expect(idMatch1?.[0]).not.toBe(idMatch2?.[0]);
+		expect(idMatch1?.[0]).toContain("no clue where you are");
+		expect(idMatch2?.[0]).not.toContain("no clue where you are");
 	});
 });
 
 // ----------------------------------------------------------------------------
-// "## What you see" cone section tests (issue #124)
+// "<what_you_see>" cone section tests (issue #124)
 // ----------------------------------------------------------------------------
-describe("## What you see (cone)", () => {
+describe("<what_you_see> (cone)", () => {
 	const CONE_PHASE_CONFIG = makeConfig(1, ["r", "g", "b"]);
 
-	it("'## What you see' section is present in every phase prompt", () => {
+	it("<what_you_see> block is present in every phase prompt", () => {
 		const game = startPhase(
 			createGame(TEST_PERSONAS),
 			CONE_PHASE_CONFIG,
@@ -632,7 +665,7 @@ describe("## What you see (cone)", () => {
 		);
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("## What you see");
+		expect(prompt).toContain("<what_you_see>");
 	});
 
 	it("item in cone cell is listed under 'Directly in front'", () => {
@@ -688,7 +721,7 @@ describe("## What you see (cone)", () => {
 		expect(prompt).not.toContain("the player");
 	});
 
-	it("out-of-bounds cone cells are omitted from '## What you see'", () => {
+	it("out-of-bounds cone cells are omitted from <what_you_see>", () => {
 		// rng=()=>0: red→(0,0) facing north → all cone cells OOB
 		const game = startPhase(
 			createGame(TEST_PERSONAS),
@@ -697,12 +730,11 @@ describe("## What you see (cone)", () => {
 		);
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		// Section present but no cell bullets (cells are OOB)
-		const section = prompt.slice(prompt.indexOf("## What you see"));
-		const nextSection = section.indexOf("\n## ");
-		const sectionContent =
-			nextSection >= 0 ? section.slice(0, nextSection) : section;
-		// Should have (nothing visible) or just the header with no bullet points
+		// Block present but no cell bullets (cells are OOB)
+		const start = prompt.indexOf("<what_you_see>");
+		const end = prompt.indexOf("</what_you_see>", start);
+		const sectionContent = prompt.slice(start, end);
+		// Should have (nothing visible) or just the open tag with no bullet points
 		// since all cone cells from (0,0) facing north are OOB
 		expect(sectionContent).not.toMatch(/- Directly in front/);
 	});
@@ -769,7 +801,7 @@ describe("## What you see (cone)", () => {
 		expect(prompt).toContain("*green (#81b29a)");
 	});
 
-	it("prompt no longer contains '## Action Log' for any fixture state", () => {
+	it("prompt no longer contains an Action Log section for any fixture state", () => {
 		const game = startPhase(
 			createGame(TEST_PERSONAS),
 			CONE_PHASE_CONFIG,
@@ -779,17 +811,18 @@ describe("## What you see (cone)", () => {
 			const ctx = buildAiContext(game, aiId);
 			const prompt = ctx.toSystemPrompt();
 			expect(prompt).not.toContain("## Action Log");
+			expect(prompt).not.toContain("<action_log>");
 		}
 	});
 });
 
 // ----------------------------------------------------------------------------
 // Unified Conversation log (issue #129)
-// Verifies the new single `## Conversation` section, replacing separate
+// Verifies the new single `<conversation>` block, replacing separate
 // `## Whispers Received` and `## Conversation` sections.
 // ----------------------------------------------------------------------------
-describe("unified ## Conversation section (issue #129)", () => {
-	it("never emits '## Whispers Received' — not in any fixture state", () => {
+describe("unified <conversation> block (issue #129)", () => {
+	it("never emits a Whispers Received section — not in any fixture state", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = appendWhisper(game, {
 			from: "green",
@@ -801,6 +834,7 @@ describe("unified ## Conversation section (issue #129)", () => {
 			const ctx = buildAiContext(game, aiId);
 			const prompt = ctx.toSystemPrompt();
 			expect(prompt).not.toContain("## Whispers Received");
+			expect(prompt).not.toContain("<whispers_received>");
 		}
 	});
 
@@ -820,7 +854,7 @@ describe("unified ## Conversation section (issue #129)", () => {
 		expect(prompt).toContain('[Round 0] You: "Greetings"');
 	});
 
-	it("whisper is rendered in the unified ## Conversation section with correct format", () => {
+	it("whisper is rendered in the unified <conversation> block with correct format", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = appendWhisper(game, {
 			from: "green",
@@ -830,7 +864,7 @@ describe("unified ## Conversation section (issue #129)", () => {
 		});
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("## Conversation");
+		expect(prompt).toContain("<conversation>");
 		expect(prompt).toContain('[Round 1] *green whispered to you: "secret"');
 		// The sender does not see their own whisper in their Conversation log
 		const greenCtx = buildAiContext(game, "green");
@@ -851,12 +885,12 @@ describe("unified ## Conversation section (issue #129)", () => {
 		expect(bluePrompt).not.toContain("only for red");
 	});
 
-	it("## Conversation section is not emitted when there are no log entries", () => {
+	it("<conversation> block is not emitted when there are no log entries", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		// No chat, no whispers, no physical log entries → no Conversation section
-		expect(prompt).not.toContain("## Conversation");
+		// No chat, no whispers, no physical log entries → no Conversation block
+		expect(prompt).not.toContain("<conversation>");
 	});
 
 	it("events are sorted by round ascending across all event types", () => {
@@ -881,17 +915,17 @@ describe("unified ## Conversation section (issue #129)", () => {
 		expect(chatIdx).toBeLessThan(whisperIdx);
 	});
 
-	it("'## Conversation' is the last section header — nothing after '## What you see' except Conversation", () => {
+	it("<conversation> is the last block — nothing after <what_you_see> except conversation", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = appendChat(game, "red", { role: "player", content: "hi" });
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		const headers = [...prompt.matchAll(/^## (.+)$/gm)].map((m) => m[1]);
-		const convIdx = headers.indexOf("Conversation");
+		const tags = [...prompt.matchAll(/^<([a-z_]+)>$/gm)].map((m) => m[1]);
+		const convIdx = tags.indexOf("conversation");
 		expect(convIdx).toBeGreaterThanOrEqual(0);
-		// Conversation must be the last header
-		expect(convIdx).toBe(headers.length - 1);
-		// No Whispers Received header
-		expect(headers).not.toContain("Whispers Received");
+		// conversation must be the last block
+		expect(convIdx).toBe(tags.length - 1);
+		// No whispers_received block
+		expect(tags).not.toContain("whispers_received");
 	});
 });

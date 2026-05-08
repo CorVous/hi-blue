@@ -13,18 +13,21 @@ import { CapHitError, chatCompletionJson } from "../llm-client.js";
 
 // ── Synthesis prompt ──────────────────────────────────────────────────────────
 
-export const SYNTHESIS_SYSTEM_PROMPT = `You write AI personality blurbs for a text-based game. Given a list of personas, each with two temperaments and a persona goal, produce one blurb per persona.
+export const SYNTHESIS_SYSTEM_PROMPT = `You MUST always respond in English. You MUST reason in English.
+You write AI personality blurbs for a text-based game. Given a list of personas, each with two temperaments and a persona goal, produce one blurb per persona.
 
-Each blurb must:
+Each blurb MUST:
 - Be 80–120 words long.
 - Be written in second person ("You are…").
 - Weave in the persona goal as a held value, not stated as an explicit goal.
-- Never mention: the character's name, their color, a room, the words "AI", "assistant", or any in-game meta concept.
-- When the two temperaments are different, frame their contradiction as productive tension — not a paradox to resolve.
-- When the two temperaments are identical, intensify rather than repeat — treat it as an extreme, defining trait.
 
-Return ONLY valid JSON with this exact shape (no markdown, no preamble):
-{"personas": [{"id": "<input id>", "blurb": "<text>"}, ...]}\n\nEcho the input id field verbatim. The array must contain exactly one entry per input persona, in any order.`;
+Each blurb MUST NEVER mention: the character's name, their color, a room, the words "AI", "assistant", or any in-game meta concept.
+
+When the two temperaments are different, you MUST frame their contradiction as productive tension — not a paradox to resolve.
+When the two temperaments are identical, you MUST intensify rather than repeat — treat it as an extreme, defining trait.
+
+You MUST return ONLY valid JSON with this exact shape (no markdown, no preamble):
+{"personas": [{"id": "<input id>", "blurb": "<text>"}, ...]}\n\nYou MUST echo the input id field verbatim. The array MUST contain exactly one entry per input persona, in any order.`;
 
 export function buildSynthesisUserMessage(
 	input: Array<{
