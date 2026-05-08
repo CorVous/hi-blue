@@ -44,6 +44,12 @@ function transcriptName(name: string): string {
 	return name.toLowerCase();
 }
 
+/** Format a USD remaining amount as cents for the panel budget display
+ * (e.g. 0.05 → "5.000¢"). Clamps negatives to zero. */
+function formatBudget(remainingUsd: number): string {
+	return `${(Math.max(0, remainingUsd) * 100).toFixed(3)}¢`;
+}
+
 /** Match an AI prefix at the start of a line: `> *<handle> ` (handle is
  * non-whitespace). Capture group 1 is the lowercased handle. */
 const AI_PREFIX_RE = /^> \*(\S+) /;
@@ -552,7 +558,7 @@ export function renderGame(
 							const budget = phase.budgets[aiId];
 							if (budget) {
 								budgetEl.dataset.budget = String(budget.remaining);
-								budgetEl.textContent = `$${Math.max(0, budget.remaining).toFixed(5)}`;
+								budgetEl.textContent = formatBudget(budget.remaining);
 							}
 						}
 					});
@@ -637,7 +643,7 @@ export function renderGame(
 				const budget = phase.budgets[aiId];
 				if (budget) {
 					budgetEl.dataset.budget = String(budget.remaining);
-					budgetEl.textContent = `$${Math.max(0, budget.remaining).toFixed(5)}`;
+					budgetEl.textContent = formatBudget(budget.remaining);
 				}
 			}
 		});
@@ -836,7 +842,7 @@ export function renderGame(
 		const budgetEl = panel.querySelector<HTMLSpanElement>(".panel-budget");
 		if (!budgetEl) return;
 		budgetEl.dataset.budget = String(remaining);
-		budgetEl.textContent = `$${Math.max(0, remaining).toFixed(5)}`;
+		budgetEl.textContent = formatBudget(remaining);
 	}
 
 	// Helper: update chat lockout status in the lockouts map
@@ -1022,7 +1028,7 @@ export function renderGame(
 									const b = newPhase.budgets[aid];
 									if (b) {
 										budgetEl.dataset.budget = String(b.remaining);
-										budgetEl.textContent = `$${Math.max(0, b.remaining).toFixed(5)}`;
+										budgetEl.textContent = formatBudget(b.remaining);
 									}
 								}
 								// Re-enable chat-locked AIs that were carried over
