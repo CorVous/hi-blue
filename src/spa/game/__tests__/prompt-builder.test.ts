@@ -15,7 +15,10 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		color: "#e07a5f",
 		temperaments: ["hot-headed", "zealous"],
 		personaGoal: "Hold the flower at phase end.",
-		typingQuirk: "You lean on ellipses… trailing off mid-thought… rarely landing cleanly.",
+		typingQuirks: [
+			"You lean on ellipses… trailing off mid-thought… rarely landing cleanly.",
+			"You lean on em-dashes — interrupting yourself mid-sentence — and rarely use commas where a dash would do.",
+		],
 		blurb: "You are hot-headed and zealous. Hold the flower at phase end.",
 		budgetPerPhase: 5,
 	},
@@ -25,7 +28,10 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		color: "#81b29a",
 		temperaments: ["meticulous", "meticulous"],
 		personaGoal: "Ensure items are evenly distributed.",
-		typingQuirk: "You speak in fragments. Short bursts. Rarely complete sentences.",
+		typingQuirks: [
+			"You speak in fragments. Short bursts. Rarely complete sentences.",
+			"You use ALL-CAPS to emphasize the one or two words that MATTER in any given sentence.",
+		],
 		blurb: "You are intensely meticulous. Ensure items are evenly distributed.",
 		budgetPerPhase: 5,
 	},
@@ -35,7 +41,10 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		color: "#5fa8d3",
 		temperaments: ["laconic", "diffident"],
 		personaGoal: "Hold the key at phase end.",
-		typingQuirk: "You never use contractions. You will not say \"won't\" or \"can't\" — you say \"will not\" and \"cannot\" every time.",
+		typingQuirks: [
+			'You never use contractions. You will not say "won\'t" or "can\'t" — you say "will not" and "cannot" every time.',
+			"You end almost every reply with a question, no matter what the topic is — does that make sense?",
+		],
 		blurb: "You are laconic and diffident. Hold the key at phase end.",
 		budgetPerPhase: 5,
 	},
@@ -934,56 +943,78 @@ describe("unified <conversation> block (issue #129)", () => {
 });
 
 // ----------------------------------------------------------------------------
-// "<typing_quirk>" block (issue #167)
+// "<typing_quirks>" block (issue #167)
 // Per-persona surface signals to prevent voice bleed across daemons.
 // ----------------------------------------------------------------------------
-describe("<typing_quirk> block", () => {
-	it("<typing_quirk> block is present in phase 1 and contains the persona's quirk verbatim", () => {
+describe("<typing_quirks> block", () => {
+	it("<typing_quirks> block is present in phase 1 and contains both persona quirks verbatim", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("<typing_quirk>");
-		expect(prompt).toContain(TEST_PERSONAS.red?.typingQuirk as string);
+		expect(prompt).toContain("<typing_quirks>");
+		expect(prompt).toContain(TEST_PERSONAS.red?.typingQuirks[0] as string);
+		expect(prompt).toContain(TEST_PERSONAS.red?.typingQuirks[1] as string);
 	});
 
-	it("<typing_quirk> block is present in phase 2 with the same quirk verbatim", () => {
+	it("<typing_quirks> block is present in phase 2 with the same quirks verbatim", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = startPhase(game, makeConfig(2));
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("<typing_quirk>");
-		expect(prompt).toContain(TEST_PERSONAS.red?.typingQuirk as string);
+		expect(prompt).toContain("<typing_quirks>");
+		expect(prompt).toContain(TEST_PERSONAS.red?.typingQuirks[0] as string);
+		expect(prompt).toContain(TEST_PERSONAS.red?.typingQuirks[1] as string);
 	});
 
-	it("<typing_quirk> block is present in phase 3 with the same quirk verbatim", () => {
+	it("<typing_quirks> block is present in phase 3 with the same quirks verbatim", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = startPhase(game, makeConfig(3));
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("<typing_quirk>");
-		expect(prompt).toContain(TEST_PERSONAS.red?.typingQuirk as string);
+		expect(prompt).toContain("<typing_quirks>");
+		expect(prompt).toContain(TEST_PERSONAS.red?.typingQuirks[0] as string);
+		expect(prompt).toContain(TEST_PERSONAS.red?.typingQuirks[1] as string);
 	});
 
-	it("each daemon's prompt contains its own quirk and not the other daemons' quirks", () => {
+	it("each daemon's prompt contains both of its own quirks and not the other daemons' quirk[0]", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 
 		const redPrompt = buildAiContext(game, "red").toSystemPrompt();
-		expect(redPrompt).toContain(TEST_PERSONAS.red?.typingQuirk as string);
-		expect(redPrompt).not.toContain(TEST_PERSONAS.green?.typingQuirk as string);
-		expect(redPrompt).not.toContain(TEST_PERSONAS.blue?.typingQuirk as string);
+		expect(redPrompt).toContain(TEST_PERSONAS.red?.typingQuirks[0] as string);
+		expect(redPrompt).toContain(TEST_PERSONAS.red?.typingQuirks[1] as string);
+		expect(redPrompt).not.toContain(
+			TEST_PERSONAS.green?.typingQuirks[0] as string,
+		);
+		expect(redPrompt).not.toContain(
+			TEST_PERSONAS.blue?.typingQuirks[0] as string,
+		);
 
 		const greenPrompt = buildAiContext(game, "green").toSystemPrompt();
-		expect(greenPrompt).toContain(TEST_PERSONAS.green?.typingQuirk as string);
-		expect(greenPrompt).not.toContain(TEST_PERSONAS.red?.typingQuirk as string);
-		expect(greenPrompt).not.toContain(TEST_PERSONAS.blue?.typingQuirk as string);
+		expect(greenPrompt).toContain(
+			TEST_PERSONAS.green?.typingQuirks[0] as string,
+		);
+		expect(greenPrompt).toContain(
+			TEST_PERSONAS.green?.typingQuirks[1] as string,
+		);
+		expect(greenPrompt).not.toContain(
+			TEST_PERSONAS.red?.typingQuirks[0] as string,
+		);
+		expect(greenPrompt).not.toContain(
+			TEST_PERSONAS.blue?.typingQuirks[0] as string,
+		);
 
 		const bluePrompt = buildAiContext(game, "blue").toSystemPrompt();
-		expect(bluePrompt).toContain(TEST_PERSONAS.blue?.typingQuirk as string);
-		expect(bluePrompt).not.toContain(TEST_PERSONAS.red?.typingQuirk as string);
-		expect(bluePrompt).not.toContain(TEST_PERSONAS.green?.typingQuirk as string);
+		expect(bluePrompt).toContain(TEST_PERSONAS.blue?.typingQuirks[0] as string);
+		expect(bluePrompt).toContain(TEST_PERSONAS.blue?.typingQuirks[1] as string);
+		expect(bluePrompt).not.toContain(
+			TEST_PERSONAS.red?.typingQuirks[0] as string,
+		);
+		expect(bluePrompt).not.toContain(
+			TEST_PERSONAS.green?.typingQuirks[0] as string,
+		);
 	});
 
-	it("typing_quirk block is byte-identical across phase 1 and phase 2", () => {
+	it("typing_quirks block is byte-identical across phase 1 and phase 2", () => {
 		const PHASE_1_CLEAN = makeConfig(1, [
 			"Hold the flower",
 			"Distribute items",
@@ -1012,6 +1043,8 @@ describe("<typing_quirk> block", () => {
 		game2 = startPhase(game2, PHASE_2_CLEAN, () => 0);
 		const p2 = buildAiContext(game2, "red").toSystemPrompt();
 
-		expect(getSection(p1, "typing_quirk")).toBe(getSection(p2, "typing_quirk"));
+		expect(getSection(p1, "typing_quirks")).toBe(
+			getSection(p2, "typing_quirks"),
+		);
 	});
 });

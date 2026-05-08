@@ -10,7 +10,7 @@ export interface AiPersona {
 	color: string;
 	temperaments: [string, string];
 	personaGoal: string;
-	typingQuirk: string;
+	typingQuirks: [string, string];
 	blurb: string;
 	budgetPerPhase: number;
 }

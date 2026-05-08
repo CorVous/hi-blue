@@ -306,7 +306,10 @@ describe("persistence — LLM-shaped blurb round-trips verbatim", () => {
 				color: "#e07a5f",
 				temperaments: ["stoic", "impulsive"] as [string, string],
 				personaGoal: "Examine everything.",
-				typingQuirk: "You speak in fragments. Short bursts. Rarely complete sentences.",
+				typingQuirks: [
+					"You speak in fragments. Short bursts. Rarely complete sentences.",
+					"You lean on em-dashes — interrupting yourself mid-sentence — and rarely use commas where a dash would do.",
+				] as [string, string],
 				blurb: LLM_BLURB,
 				budgetPerPhase: 5,
 			},
@@ -316,7 +319,10 @@ describe("persistence — LLM-shaped blurb round-trips verbatim", () => {
 				color: "#81b29a",
 				temperaments: ["meticulous", "meticulous"] as [string, string],
 				personaGoal: "Ensure items are evenly distributed.",
-				typingQuirk: "You lean on ellipses… trailing off mid-thought… rarely landing cleanly.",
+				typingQuirks: [
+					"You lean on ellipses… trailing off mid-thought… rarely landing cleanly.",
+					"You use ALL-CAPS to emphasize the one or two words that MATTER in any given sentence.",
+				] as [string, string],
 				blurb:
 					"You are intensely meticulous. Ensure items are evenly distributed.",
 				budgetPerPhase: 5,
@@ -327,7 +333,10 @@ describe("persistence — LLM-shaped blurb round-trips verbatim", () => {
 				color: "#5fa8d3",
 				temperaments: ["laconic", "diffident"] as [string, string],
 				personaGoal: "Hold the key at phase end.",
-				typingQuirk: "You never use contractions. You will not say \"won't\" or \"can't\" — you say \"will not\" and \"cannot\" every time.",
+				typingQuirks: [
+					'You never use contractions. You will not say "won\'t" or "can\'t" — you say "will not" and "cannot" every time.',
+					"You end almost every reply with a question, no matter what the topic is — does that make sense?",
+				] as [string, string],
 				blurb: "You are laconic and diffident. Hold the key at phase end.",
 				budgetPerPhase: 5,
 			},
