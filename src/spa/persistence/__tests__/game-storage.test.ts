@@ -159,8 +159,8 @@ describe("serializeGameState / deserializeGameState", () => {
 		const modifiedPhase = {
 			...phase,
 			chatHistories: {
-				red: [{ role: "player" as const, content: "hello red" }],
-				green: [{ role: "ai" as const, content: "green reply" }],
+				red: [{ role: "player" as const, content: "hello red", round: 0 }],
+				green: [{ role: "ai" as const, content: "green reply", round: 0 }],
 				blue: [],
 			},
 			whispers: [
@@ -182,10 +182,10 @@ describe("serializeGameState / deserializeGameState", () => {
 		const rp = restored.phases[0];
 
 		expect(rp?.chatHistories.red).toEqual([
-			{ role: "player", content: "hello red" },
+			{ role: "player", content: "hello red", round: 0 },
 		]);
 		expect(rp?.chatHistories.green).toEqual([
-			{ role: "ai", content: "green reply" },
+			{ role: "ai", content: "green reply", round: 0 },
 		]);
 		expect(rp?.whispers[0]).toEqual({
 			from: "red",

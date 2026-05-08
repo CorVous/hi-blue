@@ -1,14 +1,18 @@
 import { projectCone } from "./cone-projector.js";
+import type { ConversationLogInput } from "./conversation-log.js";
+import { buildConversationLog } from "./conversation-log.js";
 import { formatPosition } from "./direction.js";
 import { getActivePhase } from "./engine";
 import type {
 	AiBudget,
 	AiId,
+	AiPersona,
 	CardinalDirection,
 	ChatMessage,
 	GameState,
 	GridPosition,
 	PersonaSpatialState,
+	PhysicalActionRecord,
 	WhisperMessage,
 	WorldEntity,
 	WorldState,
@@ -31,6 +35,10 @@ export interface AiContext {
 	personaSpatial: Record<AiId, PersonaSpatialState>;
 	/** Color for each AI, keyed by AiId — used in cone rendering. */
 	personaColors: Record<AiId, string>;
+	/** Append-only log of observable physical actions — used for Witnessed event rendering. */
+	physicalLog: PhysicalActionRecord[];
+	/** All personas — used by buildConversationLog for name resolution. */
+	personas: Record<AiId, AiPersona>;
 	toSystemPrompt(): string;
 }
 
@@ -66,6 +74,8 @@ export function buildAiContext(game: GameState, aiId: AiId): AiContext {
 		phaseNumber: phase.phaseNumber,
 		personaSpatial,
 		personaColors,
+		physicalLog: phase.physicalLog,
+		personas: game.personas,
 		toSystemPrompt() {
 			return renderSystemPrompt(this);
 		},
@@ -261,19 +271,26 @@ function renderSystemPrompt(ctx: AiContext): string {
 	}
 	lines.push("");
 
-	if (ctx.whispersReceived.length > 0) {
-		lines.push("## Whispers Received");
-		for (const w of ctx.whispersReceived) {
-			lines.push(`- [Round ${w.round}] ${w.from} whispered: ${w.content}`);
-		}
-		lines.push("");
-	}
-
-	if (ctx.chatHistory.length > 0) {
+	// Unified conversation log — replaces the separate "## Whispers Received"
+	// and "## Conversation" sections. Interleaves voice-chat, whispers received,
+	// and cone-visible witnessed events in chronological round order.
+	const logInput: ConversationLogInput = {
+		chatHistories: { [ctx.aiId]: ctx.chatHistory },
+		// ctx.whispersReceived is already filtered to w.to === aiId;
+		// buildConversationLog re-filters so it's safe to pass as-is.
+		whispers: ctx.whispersReceived,
+		physicalLog: ctx.physicalLog,
+		worldEntities: ctx.worldSnapshot.entities,
+	};
+	const conversationLines = buildConversationLog(
+		logInput,
+		ctx.aiId,
+		ctx.personas,
+	);
+	if (conversationLines.length > 0) {
 		lines.push("## Conversation");
-		for (const msg of ctx.chatHistory) {
-			const speaker = msg.role === "player" ? "A voice says" : ctx.name;
-			lines.push(`${speaker}: ${msg.content}`);
+		for (const line of conversationLines) {
+			lines.push(line);
 		}
 		lines.push("");
 	}

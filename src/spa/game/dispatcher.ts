@@ -7,6 +7,7 @@ import {
 } from "./direction.js";
 import {
 	appendChat,
+	appendPhysicalAction,
 	appendWhisper,
 	deductBudget,
 	getActivePhase,
@@ -19,6 +20,8 @@ import type {
 	CardinalDirection,
 	GameState,
 	GridPosition,
+	PersonaSpatialState,
+	PhysicalActionRecord,
 	RoundActionRecord,
 	ToolCall,
 	WorldEntity,
@@ -267,9 +270,10 @@ function describeToolCall(game: GameState, aiId: AiId, call: ToolCall): string {
 		case "give":
 			return `${name} gave the ${call.args.item} to ${game.personas[call.args.to as AiId]?.name ?? call.args.to}`;
 		case "use": {
-			// Return the entity's useOutcome as the description (flavor string).
+			// Return the entity's useOutcome as the description (flavor string),
+			// with {actor} substituted to "you" (actor's perspective).
 			const item = pickable.find((i) => i.id === call.args.item);
-			if (item?.useOutcome) return item.useOutcome;
+			if (item?.useOutcome) return item.useOutcome.replace(/\{actor\}/g, "you");
 			return `${name} used the ${call.args.item}`;
 		}
 		case "go": {
@@ -306,6 +310,9 @@ export function dispatchAiTurn(
 	if (action.toolCall) {
 		const validation = validateToolCall(state, aiId, action.toolCall);
 		if (validation.valid) {
+			// Snapshot all AIs' spatial state BEFORE execution (used for witness context).
+			// For go: the actor's pre-move state is captured here; post-move state is
+			// captured from the post-execute phase below.
 			state = executeToolCall(state, aiId, action.toolCall);
 			// For put_down, check if the object landed on its paired space.
 			// If so, replace the default description with the per-pair placementFlavor.
@@ -325,6 +332,79 @@ export function dispatchAiTurn(
 				description:
 					flavorDescription ?? describeToolCall(state, aiId, action.toolCall),
 			});
+
+			// Build and append a PhysicalActionRecord for observable physical actions.
+			// look is excluded (facing-change only, not observable); examine doesn't exist yet.
+			const call = action.toolCall;
+			if (
+				call.name === "go" ||
+				call.name === "pick_up" ||
+				call.name === "put_down" ||
+				call.name === "give" ||
+				call.name === "use"
+			) {
+				// Post-execute spatial state — actor has moved for "go", others are unchanged
+				const postPhase = getActivePhase(state);
+				const actorSpatialPost = postPhase.personaSpatial[aiId];
+
+				// Collect all other AIs' spatial states at this moment (snapshot)
+				const witnessSpatial: Record<AiId, PersonaSpatialState> = {};
+				for (const [otherId, spatial] of Object.entries(
+					postPhase.personaSpatial,
+				)) {
+					if (otherId !== aiId) {
+						witnessSpatial[otherId] = spatial;
+					}
+				}
+
+				if (actorSpatialPost) {
+					// Gather optional fields
+					const pickable = pickableEntities(postPhase.world.entities);
+					let useOutcomeRaw: string | undefined;
+					let placementFlavorRaw: string | undefined;
+
+					if (call.name === "use") {
+						const item = pickable.find((i) => i.id === call.args.item);
+						// Store raw (un-substituted) useOutcome for witness rendering
+						useOutcomeRaw = item?.useOutcome;
+					}
+
+					if (call.name === "put_down") {
+						// Find the raw placementFlavor (before {actor} substitution)
+						// by looking at the content pack's object entity definition
+						const itemId = call.args.item;
+						const packObject = activePhase.contentPack.objectivePairs
+							.map((p) => p.object)
+							.find((o) => o.id === itemId);
+						if (packObject?.placementFlavor && flavorDescription) {
+							// flavorDescription is non-null only when the match fired
+							placementFlavorRaw = packObject.placementFlavor;
+						}
+					}
+
+					const physRecord: PhysicalActionRecord = {
+						round,
+						actor: aiId,
+						actorCellAtAction: actorSpatialPost.position,
+						actorFacingAtAction: actorSpatialPost.facing,
+						kind: call.name,
+						witnessSpatial,
+						...(call.args.item !== undefined ? { item: call.args.item } : {}),
+						...(call.name === "give" && call.args.to !== undefined
+							? { to: call.args.to as AiId }
+							: {}),
+						...(call.name === "go"
+							? { direction: call.args.direction as CardinalDirection }
+							: {}),
+						...(useOutcomeRaw !== undefined
+							? { useOutcome: useOutcomeRaw }
+							: {}),
+						...(placementFlavorRaw !== undefined ? { placementFlavorRaw } : {}),
+					};
+
+					state = appendPhysicalAction(state, physRecord);
+				}
+			}
 		} else {
 			records.push({
 				round,

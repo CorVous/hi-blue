@@ -71,9 +71,12 @@ export async function runSingleAiRound(opts: RunRoundOptions): Promise<string> {
 		...(onReasoning != null ? { onReasoning } : {}),
 	});
 
-	// Only mutate history after successful stream
-	session.history.push({ role: "player", content: message });
-	session.history.push({ role: "ai", content: fullResponse });
+	// Only mutate history after successful stream.
+	// game-loop is a legacy single-AI path that doesn't track rounds;
+	// use 0 as a sentinel so the ChatMessage type is satisfied.
+	const nextRound = session.history.length;
+	session.history.push({ role: "player", content: message, round: nextRound });
+	session.history.push({ role: "ai", content: fullResponse, round: nextRound });
 
 	return fullResponse;
 }
