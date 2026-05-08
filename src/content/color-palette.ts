@@ -23,7 +23,6 @@ export const COLOR_PALETTE: string[] = [
 	"#adc35e", // chartreuse
 	"#61d19a", // jade
 	"#17d0d8", // turquoise
-	"#60c2ff", // azure
 	"#a7adff", // periwinkle
 	"#dc9beb", // orchid
 	"#f594c3", // flamingo
