@@ -44,9 +44,103 @@ function transcriptName(name: string): string {
 	return name.toLowerCase();
 }
 
+/** Format a USD remaining amount as cents for the panel budget display
+ * (e.g. 0.05 → "5.000¢"). Clamps negatives to zero. */
+function formatBudget(remainingUsd: number): string {
+	return `${(Math.max(0, remainingUsd) * 100).toFixed(3)}¢`;
+}
+
 /** Match an AI prefix at the start of a line: `> *<handle> ` (handle is
  * non-whitespace). Capture group 1 is the lowercased handle. */
 const AI_PREFIX_RE = /^> \*(\S+) /;
+
+/** Sentinel prepended to a serialized player line so the restore parser
+ * can route it to the player branch unambiguously. Necessary because
+ * player lines and AI prefixes are otherwise structurally identical
+ * (`> *<handle> …`) and persona names are lowercase in production, so
+ * the legacy "lowercase-vs-mixed-case" guard collapses there. */
+const PLAYER_LINE_SENTINEL = "​";
+
+/** Walk `transcript.children` and emit a textContent-equivalent string
+ * with a zero-width-space marker prepended to each player msg-line.
+ * AI prefix lines (those whose first child is a `.msg-prefix` span) and
+ * standalone system lines pass through unchanged. */
+function serializeTranscript(transcript: HTMLElement): string {
+	const out: string[] = [];
+	for (const child of Array.from(transcript.children)) {
+		if (!(child instanceof HTMLElement)) continue;
+		if (!child.classList.contains("msg-line")) continue;
+		const text = child.textContent ?? "";
+		const firstChild = child.firstElementChild;
+		const isPlayerLine = firstChild?.classList.contains("msg-you") === true;
+		out.push(isPlayerLine ? `${PLAYER_LINE_SENTINEL}${text}` : text);
+	}
+	return out.join("");
+}
+
+/** Build a regex that matches any persona handle (with an optional leading
+ * `*`) as a whole word, case-insensitive. Returns null when no personas
+ * are available so callers can short-circuit. */
+function buildMentionRegex(
+	personas: Record<string, { name: string }>,
+): RegExp | null {
+	const names = Object.values(personas)
+		.map((p) => p.name)
+		.filter((n) => n.length > 0);
+	if (names.length === 0) return null;
+	const escaped = names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+	return new RegExp(`\\*?\\b(?:${escaped.join("|")})\\b`, "gi");
+}
+
+/** Append `text` to `parent`, splitting persona-name occurrences (with an
+ * optional leading `*`) into `.msg-mention` spans tinted with the persona's
+ * color. Non-matching chunks are wrapped in `defaultClass` when provided
+ * (e.g. `msg-you` for player lines), otherwise emitted as bare text nodes
+ * so they inherit the parent's amber color. */
+function appendMentionAwareText(
+	parent: HTMLElement,
+	text: string,
+	personas: Record<string, { name: string; color?: string }>,
+	defaultClass?: string,
+): void {
+	if (!text) return;
+	const doc = parent.ownerDocument;
+	const personaList = Object.values(personas);
+	const appendChunk = (chunk: string): void => {
+		if (!chunk) return;
+		if (defaultClass) {
+			const span = doc.createElement("span");
+			span.className = defaultClass;
+			span.textContent = chunk;
+			parent.appendChild(span);
+		} else {
+			parent.appendChild(doc.createTextNode(chunk));
+		}
+	};
+	const re = buildMentionRegex(personas);
+	if (!re) {
+		appendChunk(text);
+		return;
+	}
+	let lastIdx = 0;
+	for (let m = re.exec(text); m !== null; m = re.exec(text)) {
+		appendChunk(text.slice(lastIdx, m.index));
+		const matchText = m[0];
+		const baseName = matchText.startsWith("*") ? matchText.slice(1) : matchText;
+		const persona = personaList.find(
+			(p) => p.name.toLowerCase() === baseName.toLowerCase(),
+		);
+		const span = doc.createElement("span");
+		span.className = "msg-mention";
+		if (persona?.color) {
+			span.style.setProperty("--mention-color", persona.color);
+		}
+		span.textContent = matchText;
+		parent.appendChild(span);
+		lastIdx = m.index + matchText.length;
+	}
+	appendChunk(text.slice(lastIdx));
+}
 
 /** Render a saved transcript string into the given element by parsing
  * lines and wrapping each logical message in a `.msg-line` block. AI
@@ -77,16 +171,28 @@ function renderRestoredTranscript(
 		transcript.appendChild(el);
 		return el;
 	};
-	for (const line of lines) {
+	for (const rawLine of lines) {
+		// Player lines are persisted with a zero-width-space sentinel so the
+		// parser can disambiguate them from AI prefix lines, which would
+		// otherwise be structurally identical in production (lowercase
+		// persona names collide with the lowercased AI-prefix handle).
+		const isPlayerLine = rawLine.startsWith(PLAYER_LINE_SENTINEL);
+		const line = isPlayerLine ? rawLine.slice(1) : rawLine;
+		if (isPlayerLine) {
+			appendMentionAwareText(startNewMsgLine(), line, personas, "msg-you");
+			currentAiLine = null;
+			continue;
+		}
 		const m = AI_PREFIX_RE.exec(line);
 		const handle = m?.[1];
 		const persona = handle
 			? Object.values(personas).find((p) => p.name.toLowerCase() === handle)
 			: undefined;
-		// Only treat as an AI line when the matched handle resolves to a known
-		// persona. Player lines now also start with `> *` (the new mention
-		// glyph), so without this guard a player message like `> *Sage hi`
-		// would be miscoloured as an AI prefix.
+		// Legacy fallback (saves predating the player-line sentinel): only
+		// treat as an AI line when the matched handle resolves to a known
+		// persona. This guard works for capitalized names but collapses for
+		// production lowercase names — those legacy player lines will still
+		// be miscoloured. New saves use the sentinel above and avoid this.
 		if (handle && persona) {
 			const prefixText = `> *${handle} `;
 			const prefix = doc.createElement("span");
@@ -98,21 +204,18 @@ function renderRestoredTranscript(
 			const lineEl = startNewMsgLine();
 			lineEl.appendChild(prefix);
 			const rest = line.slice(prefixText.length);
-			if (rest) lineEl.appendChild(doc.createTextNode(rest));
+			if (rest) appendMentionAwareText(lineEl, rest, personas);
 			currentAiLine = lineEl;
 		} else if (line.startsWith("> ")) {
-			const span = doc.createElement("span");
-			span.className = "msg-you";
-			span.textContent = line;
-			startNewMsgLine().appendChild(span);
+			appendMentionAwareText(startNewMsgLine(), line, personas, "msg-you");
 			currentAiLine = null;
 		} else if (line.startsWith("[") || line.startsWith("--- ")) {
-			startNewMsgLine().appendChild(doc.createTextNode(line));
+			appendMentionAwareText(startNewMsgLine(), line, personas);
 			currentAiLine = null;
 		} else if (currentAiLine) {
-			currentAiLine.appendChild(doc.createTextNode(line));
+			appendMentionAwareText(currentAiLine, line, personas);
 		} else {
-			startNewMsgLine().appendChild(doc.createTextNode(line));
+			appendMentionAwareText(startNewMsgLine(), line, personas);
 		}
 	}
 }
@@ -275,12 +378,12 @@ export function renderGame(
 	// Prompt-target indicator inside the BBS-style command-line prefix.
 	const promptTargetEl = doc.querySelector<HTMLElement>(".prompt-target");
 
-	/** Update the `/<handle>` indicator beside `guest@hi-blue.bbs:` from the
-	 * current addressee. `null` resets to dim `/???`. */
+	/** Update the `/*<handle>` indicator beside `guest@hi-blue.bbs:` from the
+	 * current addressee. `null` resets to dim `/?????`. */
 	function refreshPromptTarget(addressee: AiId | null): void {
 		if (!promptTargetEl) return;
 		if (addressee == null) {
-			promptTargetEl.textContent = "/???";
+			promptTargetEl.textContent = "/?????";
 			promptTargetEl.classList.remove("is-set");
 			promptTargetEl.style.removeProperty("--target-color");
 			return;
@@ -288,7 +391,7 @@ export function renderGame(
 		const personas = session?.getState().personas ?? {};
 		const persona = personas[addressee];
 		const handle = persona?.name ?? addressee;
-		promptTargetEl.textContent = `/${handle}`;
+		promptTargetEl.textContent = `/*${handle}`;
 		promptTargetEl.classList.add("is-set");
 		if (persona?.color) {
 			promptTargetEl.style.setProperty("--target-color", persona.color);
@@ -457,10 +560,12 @@ export function renderGame(
 						const lineEl = doc.createElement("div");
 						lineEl.className = "msg-line";
 						if (msg.role === "player") {
-							const span = doc.createElement("span");
-							span.className = "msg-you";
-							span.textContent = `> ${msg.content}\n`;
-							lineEl.appendChild(span);
+							appendMentionAwareText(
+								lineEl,
+								`> ${msg.content}\n`,
+								restoredPersonas,
+								"msg-you",
+							);
 						} else {
 							const prefixSpan = doc.createElement("span");
 							prefixSpan.className = "msg-prefix";
@@ -469,7 +574,11 @@ export function renderGame(
 							}
 							prefixSpan.textContent = `> *${transcriptName(personaName)} `;
 							lineEl.appendChild(prefixSpan);
-							lineEl.appendChild(doc.createTextNode(`${msg.content}\n`));
+							appendMentionAwareText(
+								lineEl,
+								`${msg.content}\n`,
+								restoredPersonas,
+							);
 						}
 						transcript.appendChild(lineEl);
 					}
@@ -552,7 +661,7 @@ export function renderGame(
 							const budget = phase.budgets[aiId];
 							if (budget) {
 								budgetEl.dataset.budget = String(budget.remaining);
-								budgetEl.textContent = `$${Math.max(0, budget.remaining).toFixed(5)}`;
+								budgetEl.textContent = formatBudget(budget.remaining);
 							}
 						}
 					});
@@ -637,7 +746,7 @@ export function renderGame(
 				const budget = phase.budgets[aiId];
 				if (budget) {
 					budgetEl.dataset.budget = String(budget.remaining);
-					budgetEl.textContent = `$${Math.max(0, budget.remaining).toFixed(5)}`;
+					budgetEl.textContent = formatBudget(budget.remaining);
 				}
 			}
 		});
@@ -771,12 +880,20 @@ export function renderGame(
 	// AI message stays in one msg-line so strip-card preview can render it
 	// as a single ellipsis-truncated line. The line opened by appendAiPrefix
 	// is the target; if missing for any reason, a fallback line is opened.
+	// The accumulated body is stored on the line's dataset so each delta can
+	// re-render the body with mention-aware highlighting from the start.
 	function appendAiTokens(aiId: AiId, text: string): void {
 		const el = getTranscript(aiId);
 		if (!el) return;
 		const last = el.lastElementChild as HTMLElement | null;
 		const line = last?.classList.contains("msg-line") ? last : startMsgLine(el);
-		line.appendChild(doc.createTextNode(text));
+		line.dataset.body = (line.dataset.body ?? "") + text;
+		const personas = session?.getState().personas ?? {};
+		const prefix = line.querySelector<HTMLElement>(":scope > .msg-prefix");
+		while (line.lastChild && line.lastChild !== prefix) {
+			line.removeChild(line.lastChild);
+		}
+		appendMentionAwareText(line, line.dataset.body, personas);
 		scrollToBottom(el);
 	}
 
@@ -787,20 +904,21 @@ export function renderGame(
 		const el = getTranscript(aiId);
 		if (!el) return;
 		const line = startMsgLine(el);
-		line.appendChild(doc.createTextNode(text));
+		const personas = session?.getState().personas ?? {};
+		appendMentionAwareText(line, text, personas);
 		scrollToBottom(el);
 	}
 
 	// Helper: append a player line wrapped in a .msg-you span (warm white)
-	// inside its own .msg-line block.
+	// inside its own .msg-line block. Persona-name mentions inside the
+	// message body are split into .msg-mention spans so they pick up the
+	// addressed daemon's color instead of warm white.
 	function appendPlayerLine(aiId: AiId, text: string): void {
 		const el = getTranscript(aiId);
 		if (!el) return;
 		const line = startMsgLine(el);
-		const span = doc.createElement("span");
-		span.className = "msg-you";
-		span.textContent = text;
-		line.appendChild(span);
+		const personas = session?.getState().personas ?? {};
+		appendMentionAwareText(line, text, personas, "msg-you");
 		scrollToBottom(el);
 	}
 
@@ -836,7 +954,7 @@ export function renderGame(
 		const budgetEl = panel.querySelector<HTMLSpanElement>(".panel-budget");
 		if (!budgetEl) return;
 		budgetEl.dataset.budget = String(remaining);
-		budgetEl.textContent = `$${Math.max(0, remaining).toFixed(5)}`;
+		budgetEl.textContent = formatBudget(remaining);
 	}
 
 	// Helper: update chat lockout status in the lockouts map
@@ -1022,7 +1140,7 @@ export function renderGame(
 									const b = newPhase.budgets[aid];
 									if (b) {
 										budgetEl.dataset.budget = String(b.remaining);
-										budgetEl.textContent = `$${Math.max(0, b.remaining).toFixed(5)}`;
+										budgetEl.textContent = formatBudget(b.remaining);
 									}
 								}
 								// Re-enable chat-locked AIs that were carried over
@@ -1146,7 +1264,7 @@ export function renderGame(
 				const transcripts: Partial<Record<AiId, string>> = {};
 				for (const aiId of Object.keys(nextState.personas)) {
 					const el = getTranscript(aiId);
-					if (el) transcripts[aiId] = el.textContent ?? "";
+					if (el) transcripts[aiId] = serializeTranscript(el);
 				}
 				const saveResult = saveGame(nextState, transcripts);
 				if (!saveResult.ok) {

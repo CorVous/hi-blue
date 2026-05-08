@@ -85,7 +85,6 @@ body::before {
 header {
 	display: flex;
 	justify-content: flex-end;
-	margin-top: -4px;
 }
 
 #byok-cog {
@@ -95,7 +94,7 @@ header {
 	font-family: inherit;
 	font-size: 13px;
 	letter-spacing: 0.18em;
-	padding: 2px 8px;
+	padding: 0;
 	cursor: pointer;
 	text-shadow: inherit;
 }
@@ -426,6 +425,12 @@ main {
 	color: var(--prefix-color, var(--amber));
 	text-shadow: 0 0 6px
 		color-mix(in srgb, var(--prefix-color, var(--amber)) 60%, transparent);
+}
+
+.transcript .msg-mention {
+	color: var(--mention-color, inherit);
+	text-shadow: 0 0 6px
+		color-mix(in srgb, var(--mention-color, var(--amber)) 60%, transparent);
 }
 
 .transcript .msg-placeholder {
@@ -858,6 +863,10 @@ main {
 	.topinfo {
 		font-size: 10px;
 		padding-bottom: 4px;
+	}
+
+	.prompt-prefix .prompt-host {
+		display: none;
 	}
 
 	#panels.row {
