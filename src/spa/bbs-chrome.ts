@@ -89,6 +89,13 @@ export function formatTopInfoLeft(i: TopInfoInputs): string {
 	return `SESSION ${i.sessionId} · PHASE ${phase} · TURN ${turn}`;
 }
 
+/** Compact form rendered into `#topinfo-mobile` for the <=720px bento
+ * layout — drops the labels and the daemons-online/connection trailer. */
+export function formatTopInfoMobile(i: TopInfoInputs): string {
+	const phase = `${String(i.phaseNumber).padStart(2, "0")}/${String(i.totalPhases).padStart(2, "0")}`;
+	return `${i.sessionId} · ${phase} · TRN ${i.turn}`;
+}
+
 /** Prefix portion of the topinfo right cell — the "● connection stable"
  * trailer is appended at the call site as a span so it can carry its own
  * green color. Kept here so the daemons-online wording stays in one place. */

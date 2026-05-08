@@ -187,3 +187,57 @@ test("strip-card preview: latest line visible + per-line ellipsis", async ({
 	}, handles.ids[1]);
 	expect(mainWhiteSpace).toBe("pre-wrap");
 });
+
+test("mobile header: HI-BLUE title visible left, cog right; compact topinfo", async ({
+	page,
+}) => {
+	await stubChatCompletions(page, ["hi"]);
+	await page.goto("/");
+	await getAiHandles(page);
+
+	const probe = await page.evaluate(() => {
+		const title = document.querySelector<HTMLElement>(".mobile-title");
+		const blueSpan = title?.querySelector<HTMLElement>(".banner-blue");
+		const cog = document.querySelector<HTMLElement>("#byok-cog");
+		const titleRect = title?.getBoundingClientRect();
+		const cogRect = cog?.getBoundingClientRect();
+		const titleCs = title ? getComputedStyle(title) : null;
+		const blueCs = blueSpan ? getComputedStyle(blueSpan) : null;
+		const tMobile = document.querySelector<HTMLElement>("#topinfo-mobile");
+		const tLeft = document.querySelector<HTMLElement>("#topinfo-left");
+		const tRight = document.querySelector<HTMLElement>("#topinfo-right");
+		return {
+			titleVisible: titleCs?.display !== "none",
+			titleText: title?.textContent ?? "",
+			titleX: titleRect?.x ?? -1,
+			titleW: titleRect?.width ?? 0,
+			cogX: cogRect?.x ?? -1,
+			blueColor: blueCs?.color ?? null,
+			mobileVisible: tMobile
+				? getComputedStyle(tMobile).display !== "none"
+				: false,
+			mobileText: tMobile?.textContent ?? "",
+			leftHidden: tLeft ? getComputedStyle(tLeft).display === "none" : false,
+			rightHidden: tRight ? getComputedStyle(tRight).display === "none" : false,
+		};
+	});
+
+	expect(probe.titleVisible).toBe(true);
+	expect(probe.titleText).toBe("HI-BLUE");
+	// Title sits left of the cog.
+	expect(probe.titleX).toBeLessThan(probe.cogX);
+	expect(probe.titleW).toBeGreaterThan(0);
+	// "BLUE" inner span is rendered with the blue color (#7fb6ff).
+	expect(probe.blueColor).toBe("rgb(127, 182, 255)");
+
+	// Compact topinfo replaces the long form on mobile.
+	expect(probe.mobileVisible).toBe(true);
+	expect(probe.leftHidden).toBe(true);
+	expect(probe.rightHidden).toBe(true);
+	// Format: "0xXXXX · 01/03 · TRN N" — assert structure with regex.
+	expect(probe.mobileText).toMatch(/^0x[0-9A-F]{4} · \d{2}\/\d{2} · TRN \d+$/);
+	// And it shouldn't include the desktop labels.
+	expect(probe.mobileText).not.toContain("SESSION");
+	expect(probe.mobileText).not.toContain("PHASE");
+	expect(probe.mobileText).not.toContain("daemons");
+});

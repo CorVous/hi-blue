@@ -10,6 +10,7 @@ import { serializeGameSave } from "../../save-serializer.js";
 import {
 	BANNER,
 	formatTopInfoLeft,
+	formatTopInfoMobile,
 	formatTopInfoRight,
 	getOrMintSessionId,
 	initPanelChrome,
@@ -632,6 +633,7 @@ export function renderGame(
 	const sessionId = getOrMintSessionId();
 	const topinfoLeftEl = doc.querySelector<HTMLElement>("#topinfo-left");
 	const topinfoRightEl = doc.querySelector<HTMLElement>("#topinfo-right");
+	const topinfoMobileEl = doc.querySelector<HTMLElement>("#topinfo-mobile");
 
 	function refreshTopInfo(): void {
 		if (!session) return;
@@ -662,6 +664,9 @@ export function renderGame(
 		okSpan.className = "ok";
 		okSpan.textContent = TOPINFO_RIGHT_OK_TEXT;
 		topinfoRightEl.appendChild(okSpan);
+		if (topinfoMobileEl) {
+			topinfoMobileEl.textContent = formatTopInfoMobile(inputs);
+		}
 	}
 
 	refreshTopInfo();

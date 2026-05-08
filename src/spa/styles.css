@@ -104,6 +104,19 @@ header {
 	color: var(--amber);
 }
 
+/* Mobile-only header title — desktop uses the giant ASCII banner instead. */
+.mobile-title {
+	display: none;
+	font-size: 13px;
+	letter-spacing: 0.18em;
+	color: var(--amber);
+	padding: 2px 0;
+}
+
+#topinfo-mobile {
+	display: none;
+}
+
 /* Banner */
 .banner {
 	margin: 0;
@@ -812,6 +825,24 @@ main {
 	}
 
 	.banner {
+		display: none;
+	}
+
+	header {
+		justify-content: space-between;
+		align-items: center;
+	}
+
+	.mobile-title {
+		display: inline;
+	}
+
+	#topinfo-mobile {
+		display: inline;
+	}
+
+	#topinfo-left,
+	#topinfo-right {
 		display: none;
 	}
 
