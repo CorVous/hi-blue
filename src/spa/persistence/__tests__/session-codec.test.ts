@@ -115,7 +115,7 @@ describe("serializeSession / deserializeSession", () => {
 		expect(metaLines[1]).toMatch(/^ {2}/);
 	});
 
-	it("meta has createdAt/lastSavedAt/phase/round", () => {
+	it("meta has createdAt/lastSavedAt/phase/round/personaOrder", () => {
 		const game = makeFreshGame();
 		const files = serializeSession(game, NOW, CREATED_AT);
 		const meta = JSON.parse(files.meta);
@@ -123,6 +123,23 @@ describe("serializeSession / deserializeSession", () => {
 		expect(meta).toHaveProperty("lastSavedAt", NOW);
 		expect(meta).toHaveProperty("phase", 1);
 		expect(meta).toHaveProperty("round", 0);
+		expect(meta).toHaveProperty("personaOrder");
+		expect(Array.isArray(meta.personaOrder)).toBe(true);
+		// Must preserve insertion order of state.personas
+		expect(meta.personaOrder).toEqual(Object.keys(game.personas));
+	});
+
+	it("deserializeSession honours personaOrder from meta (panel ordering preserved)", () => {
+		const game = makeFreshGame();
+		const files = serializeSession(game, NOW, CREATED_AT);
+		const result = deserializeSession(files);
+		expect(result.kind).toBe("ok");
+		if (result.kind === "ok") {
+			// The key order of restored personas must match the original.
+			expect(Object.keys(result.state.personas)).toEqual(
+				Object.keys(game.personas),
+			);
+		}
 	});
 
 	it("whispers shape with phase keys 1/2/3", () => {

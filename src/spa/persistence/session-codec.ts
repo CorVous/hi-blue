@@ -78,6 +78,14 @@ export interface MetaFile {
 	lastSavedAt: string;
 	phase: 1 | 2 | 3;
 	round: number;
+	/**
+	 * Canonical panel order: the aiIds in the order they were assigned to
+	 * the three panel slots at game-start.  Written on every save so that
+	 * restore can reconstruct `state.personas` in the original order even
+	 * though localStorage key-enumeration order is implementation-defined.
+	 * Optional for backward-compat with saves written before this field.
+	 */
+	personaOrder?: string[];
 }
 
 /** Shape of `whispers.txt`. */
@@ -179,6 +187,7 @@ export function serializeSession(
 		lastSavedAt,
 		phase: state.currentPhase,
 		round: activePhase.round,
+		personaOrder: Object.keys(state.personas),
 	};
 
 	// daemons: one file per aiId
@@ -337,10 +346,22 @@ export function deserializeSession(
 		}
 	}
 
-	// Reconstruct personas
+	// Reconstruct personas in canonical panel order.
+	// meta.personaOrder (written since the persona-ordering fix) gives the
+	// original slot assignment; fall back to Object.keys(daemonFiles) for
+	// saves written before that field existed.
+	const personaOrder: string[] =
+		Array.isArray(meta.personaOrder) && meta.personaOrder.length > 0
+			? meta.personaOrder
+			: Object.keys(daemonFiles);
 	const personas: Record<AiId, AiPersona> = {};
+	for (const aiId of personaOrder) {
+		const daemonFile = daemonFiles[aiId];
+		if (daemonFile) personas[aiId] = daemonFile.persona;
+	}
+	// Also include any daemon files not listed in personaOrder (defensive).
 	for (const [aiId, daemonFile] of Object.entries(daemonFiles)) {
-		personas[aiId] = daemonFile.persona;
+		if (!(aiId in personas)) personas[aiId] = daemonFile.persona;
 	}
 
 	// Reconstruct phases from sealed engine + editable daemon/whisper files

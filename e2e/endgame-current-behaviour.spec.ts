@@ -75,9 +75,11 @@ test("game_ended disables composer and clears storage", async ({ page }) => {
 	// #prompt disabled
 	await expect(page.locator("#prompt")).toBeDisabled();
 
-	// localStorage cleared (clearGame() ran inside game_ended handler)
+	// localStorage cleared (clearGame() ran inside game_ended handler).
+	// Post-#172: the active-session pointer key is the canonical "something saved"
+	// indicator — it is removed by clearActiveSession() on game_ended.
 	const stored = await page.evaluate(() =>
-		localStorage.getItem("hi-blue-game-state"),
+		localStorage.getItem("hi-blue:active-session"),
 	);
 	expect(stored, "localStorage must be null after game_ended").toBeNull();
 
