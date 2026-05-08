@@ -181,7 +181,7 @@ describe("conversation log integration — witnessed pick_up", () => {
 		// green's prompt should contain the witnessed pick_up
 		const greenCtx = buildAiContext(nextState, "green");
 		const greenPrompt = greenCtx.toSystemPrompt();
-		expect(greenPrompt).toContain("## Conversation");
+		expect(greenPrompt).toContain("<conversation>");
 		expect(greenPrompt).toContain("You watch *red pick up the Flower.");
 
 		// red's own prompt should NOT have a "You watch *red" line
@@ -273,7 +273,7 @@ describe("conversation log integration — use outcome rendering", () => {
 		const greenCtx = buildAiContext(state2, "green");
 		const greenPrompt = greenCtx.toSystemPrompt();
 		// Green is at (0,0) facing south; red is at (2,0) (two steps ahead) — in green's cone
-		if (greenPrompt.includes("## Conversation")) {
+		if (greenPrompt.includes("<conversation>")) {
 			// If green can see it (in cone), verify substitution
 			const lines = greenPrompt.split("\n");
 			const useLine = lines.find(
@@ -450,7 +450,7 @@ describe("conversation log integration — multi-round chronological order", () 
 		// Verify red's prompt has events in order
 		const redCtx = buildAiContext(state2, "red");
 		const redPrompt = redCtx.toSystemPrompt();
-		expect(redPrompt).toContain("## Conversation");
+		expect(redPrompt).toContain("<conversation>");
 		// Round 0 player message appears before round 1 player message
 		const round0Idx = redPrompt.indexOf("[Round 0] A voice says:");
 		const round1Idx = redPrompt.indexOf("[Round 1] A voice says:");

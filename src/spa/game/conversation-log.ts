@@ -8,7 +8,7 @@
  *   2. Whispers received by the AI
  *   3. Witnessed events derived from physicalLog + cone-visibility
  *
- * Returns a string[] of pre-formatted lines (no leading "## Conversation" header —
+ * Returns a string[] of pre-formatted lines (no leading <conversation> tag —
  * caller adds that). Lines are sorted ascending by round; within a round:
  *   voice-chat → whispers → witnessed events
  *

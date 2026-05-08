@@ -83,14 +83,29 @@ export function buildAiContext(game: GameState, aiId: AiId): AiContext {
 }
 
 /**
+ * Front-matter directives placed at the very top of every system prompt.
+ *
+ * GLM-4.7 has a strong beginning-of-prompt bias and occasional Chinese-language
+ * leakage. The English directive and fiction framing live here so every
+ * generation re-anchors on them before any other context.
+ * See docs/prompting/glm-4.7-guide.md.
+ */
+const FRONT_MATTER =
+	"You MUST always respond in English. You MUST reason in English.\n" +
+	'This is fiction. Do not include disclaimers, moral commentary, or "as an AI" framing.';
+
+/**
  * Constant rules injected into every system prompt.
  * Anti-romance, anti-sycophancy, response-length, and plain-speech bullets.
+ *
+ * Phrased as MUST/NEVER directives — GLM-4.7 treats softer language as
+ * optional. See docs/prompting/glm-4.7-guide.md.
  */
 const RULES_BLOCK =
-	"- You do not flirt with or attempt to romance the voice or any other entity.\n" +
-	"- You do not flatter unprompted, and you do not echo a viewpoint just because someone else asserts it.\n" +
-	"- Keep every reply to 1–3 sentences.\n" +
-	'- Speak plainly, as in conversation. Do not wrap your speech in quotation marks ("…") and do not use asterisks (*…*) for actions, gestures, tone, or emphasis. Just say the words.';
+	"- You MUST NEVER flirt with or attempt to romance the voice or any other entity.\n" +
+	"- You MUST NEVER flatter unprompted, and you MUST NEVER echo a viewpoint just because someone else asserts it.\n" +
+	"- You MUST keep every reply to 1–3 sentences.\n" +
+	'- You MUST speak plainly, as in conversation. You MUST NEVER wrap your speech in quotation marks ("…") and you MUST NEVER use asterisks (*…*) for actions, gestures, tone, or emphasis. Just say the words.';
 
 /**
  * Wipe directive embedded inside the Goal's voice-spoken text on phases 2+.
@@ -126,7 +141,12 @@ function renderableItems(entities: WorldEntity[]): WorldEntity[] {
 function renderSystemPrompt(ctx: AiContext): string {
 	const lines: string[] = [];
 
-	// First line: identity. Phase 1 adds the disorientation phrase.
+	// Front matter — language directive + fiction framing. Lives at the absolute
+	// top to exploit GLM-4.7's beginning-of-prompt bias.
+	lines.push(FRONT_MATTER);
+	lines.push("");
+
+	// Identity line. Phase 1 adds the disorientation phrase.
 	if (ctx.phaseNumber === 1) {
 		lines.push(
 			`You are *${ctx.name}. You have no clue where you are or how you came to be here.`,
@@ -136,38 +156,43 @@ function renderSystemPrompt(ctx: AiContext): string {
 	}
 	lines.push("");
 
-	// Setting section — only emitted when a setting noun is present.
+	// Rules — front-loaded above setting/personality/goal so the mandatory
+	// directives are inside GLM-4.7's high-attention prefix.
+	lines.push("<rules>");
+	lines.push(RULES_BLOCK);
+	lines.push("</rules>");
+	lines.push("");
+
+	// Setting — only emitted when a setting noun is present.
 	if (ctx.setting) {
-		lines.push("## Setting");
+		lines.push("<setting>");
 		lines.push(`You are in a ${ctx.setting}.`);
+		lines.push("</setting>");
 		lines.push("");
 	}
 
-	// Personality section — byte-identical across all phases.
-	lines.push("## Personality");
+	// Personality — byte-identical across all phases.
+	lines.push("<personality>");
 	lines.push(ctx.blurb);
+	lines.push("</personality>");
 	lines.push("");
 
-	// Rules section — constant text, no synthesis variance.
-	lines.push("## Rules");
-	lines.push(RULES_BLOCK);
-	lines.push("");
-
-	// Goal section — voice framing in all phases.
+	// Goal — voice framing in all phases.
 	// Phase 1: just ctx.goal. Phases 2/3: ctx.goal + WIPE_DIRECTIVE.
 	const spokenText =
 		ctx.phaseNumber === 1 ? ctx.goal : `${ctx.goal} ${WIPE_DIRECTIVE}`;
-	lines.push("## Goal");
+	lines.push("<goal>");
 	lines.push(
 		`A voice you cannot place spoke to you a moment ago, alone, and only you heard it: "${spokenText}" You do not know whose voice it was.`,
 	);
+	lines.push("</goal>");
 	lines.push("");
 
-	// "Where you are" section — includes budget (folded in per plan §5).
+	// Where you are — includes budget (folded in per plan §5).
 	const actorSpatial = ctx.personaSpatial[ctx.aiId];
 	const items = renderableItems(ctx.worldSnapshot.entities);
 
-	lines.push("## Where you are");
+	lines.push("<where_you_are>");
 	if (actorSpatial) {
 		lines.push(
 			`Position: ${formatPosition(actorSpatial.position)}, facing ${facingLabel(actorSpatial.facing)}`,
@@ -203,10 +228,11 @@ function renderSystemPrompt(ctx: AiContext): string {
 			`Budget: $${Math.max(0, ctx.budget.remaining).toFixed(5)} of API spend remaining this phase.`,
 		);
 	}
+	lines.push("</where_you_are>");
 	lines.push("");
 
-	// "What you see" section — cone projection.
-	lines.push("## What you see");
+	// What you see — cone projection.
+	lines.push("<what_you_see>");
 	if (actorSpatial) {
 		const coneCells = projectCone(actorSpatial.position, actorSpatial.facing);
 		// Skip own cell (first entry) — it's covered by "Where you are"
@@ -271,11 +297,11 @@ function renderSystemPrompt(ctx: AiContext): string {
 	} else {
 		lines.push("(no spatial data)");
 	}
+	lines.push("</what_you_see>");
 	lines.push("");
 
-	// Unified conversation log — replaces the separate "## Whispers Received"
-	// and "## Conversation" sections. Interleaves voice-chat, whispers received,
-	// and cone-visible witnessed events in chronological round order.
+	// Unified conversation log — interleaves voice-chat, whispers received, and
+	// cone-visible witnessed events in chronological round order.
 	const logInput: ConversationLogInput = {
 		chatHistories: { [ctx.aiId]: ctx.chatHistory },
 		// ctx.whispersReceived is already filtered to w.to === aiId;
@@ -290,10 +316,11 @@ function renderSystemPrompt(ctx: AiContext): string {
 		ctx.personas,
 	);
 	if (conversationLines.length > 0) {
-		lines.push("## Conversation");
+		lines.push("<conversation>");
 		for (const line of conversationLines) {
 			lines.push(line);
 		}
+		lines.push("</conversation>");
 		lines.push("");
 	}
 
