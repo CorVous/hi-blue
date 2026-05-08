@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // Provide globals before importing the module
 vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 
+import { STATIC_CONTENT_PACKS } from "./fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "./fixtures/static-personas";
 
 // Pin generatePersonas to a static fixture so panel/transcript hookups
@@ -23,6 +24,11 @@ vi.mock("../../content", async (importOriginal) => {
 		generatePersonas: async () => STATIC_PERSONAS,
 	};
 });
+
+// Pin generateContentPacks to static content packs (no LLM call in tests).
+vi.mock("../../content/content-pack-generator", () => ({
+	generateContentPacks: async () => STATIC_CONTENT_PACKS,
+}));
 
 // ---------------------------------------------------------------------------
 // Module-level mock: GameSession always returns gameEnded:true so we don't

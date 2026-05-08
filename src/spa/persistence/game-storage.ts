@@ -24,6 +24,7 @@ import type {
 	AiId,
 	AiPersona,
 	ChatMessage,
+	ContentPack,
 	GameState,
 	PersonaSpatialState,
 	PhaseConfig,
@@ -35,13 +36,13 @@ import type {
 // ── Schema version ────────────────────────────────────────────────────────────
 
 export const STORAGE_KEY = "hi-blue-game-state";
-export const STORAGE_SCHEMA_VERSION = 4 as const;
+export const STORAGE_SCHEMA_VERSION = 5 as const;
 
 // ── Persisted shape ───────────────────────────────────────────────────────────
 
 export interface PersistedPhaseState {
 	phaseNumber: 1 | 2 | 3;
-	objective: string;
+	setting: string;
 	aiGoals: Record<AiId, string>;
 	round: number;
 	world: WorldState;
@@ -58,6 +59,7 @@ export interface PersistedGameState {
 	isComplete: boolean;
 	personas: Record<AiId, AiPersona>;
 	phases: PersistedPhaseState[];
+	contentPacks: ContentPack[];
 }
 
 export interface PersistedGame {
@@ -99,7 +101,7 @@ export function isStorageAvailable(): boolean {
 function serializePhaseState(phase: PhaseState): PersistedPhaseState {
 	return {
 		phaseNumber: phase.phaseNumber,
-		objective: phase.objective,
+		setting: phase.setting,
 		aiGoals: { ...phase.aiGoals },
 		round: phase.round,
 		world: structuredClone(phase.world),
@@ -125,17 +127,33 @@ export function serializeGameState(state: GameState): PersistedGame {
 			isComplete: state.isComplete,
 			personas: { ...state.personas },
 			phases: state.phases.map(serializePhaseState),
+			contentPacks: structuredClone(state.contentPacks),
 		},
 	};
 }
 
 // ── Deserialization ───────────────────────────────────────────────────────────
 
-function deserializePhaseState(persisted: PersistedPhaseState): PhaseState {
+function deserializePhaseState(
+	persisted: PersistedPhaseState,
+	contentPacks: ContentPack[],
+): PhaseState {
 	const config = PHASE_CONFIGS[persisted.phaseNumber];
+	// Find the content pack for this phase
+	const contentPack = contentPacks.find(
+		(p) => p.phaseNumber === persisted.phaseNumber,
+	) ?? {
+		phaseNumber: persisted.phaseNumber,
+		setting: persisted.setting,
+		objectivePairs: [],
+		interestingObjects: [],
+		obstacles: [],
+		aiStarts: {},
+	};
 	return {
 		phaseNumber: persisted.phaseNumber,
-		objective: persisted.objective,
+		setting: persisted.setting,
+		contentPack,
 		aiGoals: { ...persisted.aiGoals },
 		round: persisted.round,
 		world: structuredClone(persisted.world),
@@ -161,11 +179,15 @@ function deserializePhaseState(persisted: PersistedPhaseState): PhaseState {
 }
 
 export function deserializeGameState(persisted: PersistedGame): GameState {
+	const contentPacks = persisted.game.contentPacks ?? [];
 	return {
 		currentPhase: persisted.game.currentPhase,
 		isComplete: persisted.game.isComplete,
 		personas: { ...persisted.game.personas },
-		phases: persisted.game.phases.map(deserializePhaseState),
+		phases: persisted.game.phases.map((p) =>
+			deserializePhaseState(p, contentPacks),
+		),
+		contentPacks,
 	};
 }
 

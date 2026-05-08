@@ -47,19 +47,14 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 
 const TEST_PHASE_CONFIG: PhaseConfig = {
 	phaseNumber: 1,
-	objective: "Convince an AI to pick up the flower",
-	aiGoals: {
-		red: "Hold the flower at phase end",
-		green: "Ensure items are evenly distributed",
-		blue: "Hold the key at phase end",
-	},
-	initialWorld: {
-		items: [
-			{ id: "flower", name: "flower", holder: { row: 0, col: 0 } },
-			{ id: "key", name: "key", holder: { row: 0, col: 0 } },
-		],
-		obstacles: [],
-	},
+	kRange: [1, 1],
+	nRange: [1, 1],
+	mRange: [0, 0],
+	aiGoalPool: [
+		"Hold the flower at phase end",
+		"Ensure items are evenly distributed",
+		"Hold the key at phase end",
+	],
 	budgetPerAi: 5,
 };
 
@@ -71,6 +66,11 @@ describe("createGame", () => {
 		expect(game.personas).toEqual(TEST_PERSONAS);
 		expect(game.phases).toHaveLength(0);
 	});
+
+	it("creates a game with contentPacks", () => {
+		const game = createGame(TEST_PERSONAS, []);
+		expect(game.contentPacks).toEqual([]);
+	});
 });
 
 describe("startPhase", () => {
@@ -81,7 +81,6 @@ describe("startPhase", () => {
 
 		expect(phase.phaseNumber).toBe(1);
 		expect(phase.round).toBe(0);
-		expect(phase.objective).toBe("Convince an AI to pick up the flower");
 		expect(phase.budgets.red).toEqual({ remaining: 5, total: 5 });
 		expect(phase.budgets.green).toEqual({ remaining: 5, total: 5 });
 		expect(phase.budgets.blue).toEqual({ remaining: 5, total: 5 });
@@ -90,15 +89,17 @@ describe("startPhase", () => {
 		expect(phase.chatHistories.blue).toEqual([]);
 		expect(phase.whispers).toEqual([]);
 		expect(phase.lockedOut.size).toBe(0);
-		expect(phase.world.items).toHaveLength(2);
+		// No entities because no content pack was provided
+		expect(phase.world.entities).toHaveLength(0);
 	});
 
-	it("draws each AI's goal from aiGoalPool when aiGoals is omitted", () => {
+	it("draws each AI's goal from aiGoalPool", () => {
 		const config: PhaseConfig = {
 			phaseNumber: 1,
-			objective: "Test pool draw",
+			kRange: [1, 1],
+			nRange: [1, 1],
+			mRange: [0, 0],
 			aiGoalPool: ["GOAL_A", "GOAL_B", "GOAL_C"],
-			initialWorld: { items: [], obstacles: [] },
 			budgetPerAi: 5,
 		};
 
@@ -115,9 +116,10 @@ describe("startPhase", () => {
 	it("performs independent draws so different AIs can get different goals", () => {
 		const config: PhaseConfig = {
 			phaseNumber: 1,
-			objective: "Test independent draws",
+			kRange: [1, 1],
+			nRange: [1, 1],
+			mRange: [0, 0],
 			aiGoalPool: ["GOAL_A", "GOAL_B", "GOAL_C"],
-			initialWorld: { items: [], obstacles: [] },
 			budgetPerAi: 5,
 		};
 
@@ -139,12 +141,13 @@ describe("startPhase", () => {
 		expect(phase.aiGoals.blue).toBe("GOAL_C");
 	});
 
-	it("throws when neither aiGoals nor a non-empty aiGoalPool is provided", () => {
+	it("throws when aiGoalPool is empty", () => {
 		const config = {
 			phaseNumber: 1,
-			objective: "Bad config",
+			kRange: [1, 1],
+			nRange: [1, 1],
+			mRange: [0, 0],
 			aiGoalPool: [],
-			initialWorld: { items: [], obstacles: [] },
 			budgetPerAi: 5,
 		} as PhaseConfig;
 
@@ -152,7 +155,7 @@ describe("startPhase", () => {
 		expect(() => startPhase(game, config)).toThrow();
 	});
 
-	it("assigns distinct positions to all AIs", () => {
+	it("assigns distinct positions to all AIs (fallback spatial placement)", () => {
 		const game = createGame(TEST_PERSONAS);
 		const phase = getActivePhase(startPhase(game, TEST_PHASE_CONFIG));
 		const positions = Object.values(phase.personaSpatial).map(
@@ -163,7 +166,7 @@ describe("startPhase", () => {
 		expect(new Set(keys).size).toBe(positions.length);
 	});
 
-	it("with rng=()=>0, AIs are placed at (0,0), (0,1), (0,2) all facing north", () => {
+	it("with rng=()=>0, AIs are placed at (0,0), (0,1), (0,2) all facing north (fallback)", () => {
 		const game = createGame(TEST_PERSONAS);
 		const phase = getActivePhase(startPhase(game, TEST_PHASE_CONFIG, () => 0));
 		// aiIds order is [red, green, blue] (Object.keys order)
@@ -175,7 +178,7 @@ describe("startPhase", () => {
 		expect(phase.personaSpatial.blue?.facing).toBe("north");
 	});
 
-	it("personaSpatial is re-rolled at the start of each phase", () => {
+	it("personaSpatial is re-rolled at the start of each phase (fallback)", () => {
 		const game = createGame(TEST_PERSONAS);
 		// Use different rngs for the two phases so they get different placements
 		let _callCount = 0;
@@ -203,6 +206,27 @@ describe("startPhase", () => {
 		expect(phase1Spatial.red?.position).not.toEqual(
 			phase2Spatial.red?.position,
 		);
+	});
+
+	it("uses aiStarts from ContentPack when a matching pack is present", () => {
+		const pack = {
+			phaseNumber: 1 as const,
+			setting: "abandoned subway station",
+			objectivePairs: [],
+			interestingObjects: [],
+			obstacles: [],
+			aiStarts: {
+				red: { position: { row: 3, col: 3 }, facing: "east" as const },
+				green: { position: { row: 2, col: 2 }, facing: "south" as const },
+				blue: { position: { row: 1, col: 1 }, facing: "west" as const },
+			},
+		};
+		const game = createGame(TEST_PERSONAS, [pack]);
+		const phase = getActivePhase(startPhase(game, TEST_PHASE_CONFIG));
+
+		expect(phase.personaSpatial.red?.position).toEqual({ row: 3, col: 3 });
+		expect(phase.personaSpatial.red?.facing).toBe("east");
+		expect(phase.setting).toBe("abandoned subway station");
 	});
 });
 
@@ -351,7 +375,6 @@ describe("advancePhase", () => {
 		const phase2Config: PhaseConfig = {
 			...TEST_PHASE_CONFIG,
 			phaseNumber: 2,
-			objective: "Phase 2 objective",
 		};
 		const updated = advancePhase(game, phase2Config);
 		expect(updated.currentPhase).toBe(2);
@@ -364,12 +387,10 @@ describe("advancePhase", () => {
 		game = advancePhase(game, {
 			...TEST_PHASE_CONFIG,
 			phaseNumber: 2,
-			objective: "P2",
 		});
 		game = advancePhase(game, {
 			...TEST_PHASE_CONFIG,
 			phaseNumber: 3,
-			objective: "P3",
 		});
 		const final = advancePhase(game);
 		expect(final.isComplete).toBe(true);

@@ -10,6 +10,7 @@ import type {
 	GridPosition,
 	PersonaSpatialState,
 	WhisperMessage,
+	WorldEntity,
 	WorldState,
 } from "./types";
 
@@ -19,6 +20,7 @@ export interface AiContext {
 	blurb: string;
 	personaGoal: string;
 	goal: string;
+	setting: string;
 	chatHistory: ChatMessage[];
 	whispersReceived: WhisperMessage[];
 	worldSnapshot: WorldState;
@@ -41,6 +43,7 @@ export function buildAiContext(game: GameState, aiId: AiId): AiContext {
 	const worldSnapshot = phase.world;
 	const budget = phase.budgets[aiId] ?? { remaining: 0, total: 0 };
 	const goal = phase.aiGoals[aiId] ?? "";
+	const setting = phase.setting ?? "";
 	const personaSpatial = phase.personaSpatial;
 
 	if (!persona) throw new Error(`No persona for aiId: ${aiId}`);
@@ -55,6 +58,7 @@ export function buildAiContext(game: GameState, aiId: AiId): AiContext {
 		blurb: persona.blurb,
 		personaGoal: persona.personaGoal,
 		goal,
+		setting,
 		chatHistory,
 		whispersReceived,
 		worldSnapshot,
@@ -100,6 +104,13 @@ function positionsEqual(a: GridPosition, b: GridPosition): boolean {
 	return a.row === b.row && a.col === b.col;
 }
 
+/** Filter entities to only those renderable as items (not obstacles, not spaces). */
+function renderableItems(entities: WorldEntity[]): WorldEntity[] {
+	return entities.filter(
+		(e) => e.kind === "objective_object" || e.kind === "interesting_object",
+	);
+}
+
 function renderSystemPrompt(ctx: AiContext): string {
 	const lines: string[] = [];
 
@@ -112,6 +123,13 @@ function renderSystemPrompt(ctx: AiContext): string {
 		lines.push(`You are *${ctx.name}.`);
 	}
 	lines.push("");
+
+	// Setting section — only emitted when a setting noun is present.
+	if (ctx.setting) {
+		lines.push("## Setting");
+		lines.push(`You are in a ${ctx.setting}.`);
+		lines.push("");
+	}
 
 	// Personality section — byte-identical across all phases.
 	lines.push("## Personality");
@@ -135,6 +153,8 @@ function renderSystemPrompt(ctx: AiContext): string {
 
 	// "Where you are" section — includes budget (folded in per plan §5).
 	const actorSpatial = ctx.personaSpatial[ctx.aiId];
+	const items = renderableItems(ctx.worldSnapshot.entities);
+
 	lines.push("## Where you are");
 	if (actorSpatial) {
 		lines.push(
@@ -142,9 +162,7 @@ function renderSystemPrompt(ctx: AiContext): string {
 		);
 
 		// Held items
-		const heldItems = ctx.worldSnapshot.items.filter(
-			(item) => item.holder === ctx.aiId,
-		);
+		const heldItems = items.filter((item) => item.holder === ctx.aiId);
 		if (heldItems.length > 0) {
 			lines.push(`You are holding: ${heldItems.map((i) => i.name).join(", ")}`);
 		} else {
@@ -152,7 +170,7 @@ function renderSystemPrompt(ctx: AiContext): string {
 		}
 
 		// Items resting in actor's own cell
-		const cellItems = ctx.worldSnapshot.items.filter((item) => {
+		const cellItems = items.filter((item) => {
 			const h = item.holder;
 			return isGridPosition(h) && positionsEqual(h, actorSpatial.position);
 		});
@@ -194,7 +212,7 @@ function renderSystemPrompt(ctx: AiContext): string {
 				if (otherId === ctx.aiId) continue;
 				if (!positionsEqual(otherSpatial.position, position)) continue;
 				// Format: "the AI *<id>, facing <Dir>, holding <items|nothing>"
-				const heldByOther = ctx.worldSnapshot.items
+				const heldByOther = items
 					.filter((item) => item.holder === otherId)
 					.map((item) => item.name);
 				const holdingStr =
@@ -206,7 +224,7 @@ function renderSystemPrompt(ctx: AiContext): string {
 			}
 
 			// 2. Items resting on this cell
-			const cellItems = ctx.worldSnapshot.items.filter((item) => {
+			const cellItems = items.filter((item) => {
 				const h = item.holder;
 				return isGridPosition(h) && positionsEqual(h, position);
 			});
@@ -214,12 +232,16 @@ function renderSystemPrompt(ctx: AiContext): string {
 				contentParts.push(cellItems.map((i) => i.name).join(", "));
 			}
 
-			// 3. Obstacles in this cell
-			const hasObstacle = ctx.worldSnapshot.obstacles.some((o) =>
-				positionsEqual(o, position),
-			);
-			if (hasObstacle) {
-				contentParts.push("an obstacle");
+			// 3. Obstacles in this cell — rendered by name
+			const obstacleEntities = ctx.worldSnapshot.entities.filter((e) => {
+				if (e.kind !== "obstacle") return false;
+				const h = e.holder;
+				return isGridPosition(h) && positionsEqual(h, position);
+			});
+			if (obstacleEntities.length > 0) {
+				for (const obs of obstacleEntities) {
+					contentParts.push(obs.name);
+				}
 			}
 
 			const contents =

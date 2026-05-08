@@ -1,4 +1,11 @@
-import { generatePersonas, PHASE_1_CONFIG } from "../../content";
+import {
+	generatePersonas,
+	PHASE_1_CONFIG,
+	PHASE_2_CONFIG,
+	PHASE_3_CONFIG,
+	SETTING_POOL,
+} from "../../content";
+import { generateContentPacks } from "../../content/content-pack-generator.js";
 import { serializeGameSave } from "../../save-serializer.js";
 import {
 	BANNER,
@@ -10,6 +17,7 @@ import {
 } from "../bbs-chrome.js";
 import { BrowserLLMProvider } from "../game/browser-llm-provider.js";
 import { deriveComposerState } from "../game/composer-reducer.js";
+import { BrowserContentPackProvider } from "../game/content-pack-provider.js";
 import { getActivePhase, updateActivePhase } from "../game/engine.js";
 import { GameSession } from "../game/game-session.js";
 import { BrowserSynthesisProvider } from "../game/llm-synthesis-provider.js";
@@ -462,11 +470,26 @@ export function renderGame(
 			// synthesis completes are silently dropped (safe).
 			asyncInitPromise = (async () => {
 				try {
-					const personas = await generatePersonas(
+					const synth = new BrowserSynthesisProvider({ disableReasoning });
+					const packLLM = new BrowserContentPackProvider({ disableReasoning });
+					const personasPromise = generatePersonas(Math.random, synth);
+					const aiIdsPromise = personasPromise.then((p) => Object.keys(p));
+					// Silence derived-promise unhandled rejection when personasPromise
+					// rejects but packs path returns before awaiting aiIdsPromise; the
+					// rejection still propagates through personasPromise into Promise.all.
+					aiIdsPromise.catch(() => {});
+					const packsPromise = generateContentPacks(
 						Math.random,
-						new BrowserSynthesisProvider({ disableReasoning }),
+						SETTING_POOL,
+						[PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG],
+						packLLM,
+						aiIdsPromise,
 					);
-					session = new GameSession(PHASE_1_CONFIG, personas);
+					const [personas, contentPacks] = await Promise.all([
+						personasPromise,
+						packsPromise,
+					]);
+					session = new GameSession(PHASE_1_CONFIG, personas, contentPacks);
 
 					// Apply SPA-side test affordances from location.search
 					session = applyTestAffordances(session, effectiveParams);
@@ -919,7 +942,7 @@ export function renderGame(
 						const phaseBannerEl =
 							doc.querySelector<HTMLElement>("#phase-banner");
 						if (phaseBannerEl) {
-							phaseBannerEl.textContent = `Phase ${event.phase}: ${event.objective}`;
+							phaseBannerEl.textContent = `Phase ${event.phase}: ${event.setting}`;
 							phaseBannerEl.removeAttribute("hidden");
 						}
 						// Clear all transcript panels
@@ -955,7 +978,7 @@ export function renderGame(
 						for (const aid of advAiIds) {
 							appendToTranscript(
 								aid,
-								`--- Phase ${event.phase} begins: ${event.objective} ---\n`,
+								`--- Phase ${event.phase} begins: ${event.setting} ---\n`,
 							);
 						}
 						break;

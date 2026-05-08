@@ -31,6 +31,6 @@ export type {
 	ToolName,
 	ToolResult,
 	WhisperMessage,
-	WorldItem,
+	WorldEntity,
 	WorldState,
 } from "./spa/game/types";

@@ -157,13 +157,18 @@ describe("phase configs — chaining", () => {
 	});
 });
 
-describe("phase configs — objectives", () => {
+describe("phase configs — kRange/nRange/mRange", () => {
 	it.each([
 		["PHASE_1_CONFIG", PHASE_1_CONFIG],
 		["PHASE_2_CONFIG", PHASE_2_CONFIG],
 		["PHASE_3_CONFIG", PHASE_3_CONFIG],
-	] as const)("%s has a non-empty objective", (_name, cfg) => {
-		expect(cfg.objective).toBeTruthy();
+	] as const)("%s has valid kRange/nRange/mRange", (_name, cfg) => {
+		expect(cfg.kRange).toHaveLength(2);
+		expect(cfg.nRange).toHaveLength(2);
+		expect(cfg.mRange).toHaveLength(2);
+		expect(cfg.kRange[0]).toBeGreaterThanOrEqual(1);
+		expect(cfg.nRange[0]).toBeGreaterThanOrEqual(0);
+		expect(cfg.mRange[0]).toBeGreaterThanOrEqual(0);
 	});
 });
 
@@ -190,13 +195,15 @@ describe("PHASE_GOAL_POOL", () => {
 	});
 });
 
-describe("phase configs — initialWorld", () => {
+describe("phase configs — ranges", () => {
 	it.each([
 		["PHASE_1_CONFIG", PHASE_1_CONFIG],
 		["PHASE_2_CONFIG", PHASE_2_CONFIG],
 		["PHASE_3_CONFIG", PHASE_3_CONFIG],
-	] as const)("%s initialWorld is a WorldState", (_name, cfg) => {
-		expect(Array.isArray(cfg.initialWorld.items)).toBe(true);
+	] as const)("%s has numeric ranges", (_name, cfg) => {
+		expect(typeof cfg.kRange[0]).toBe("number");
+		expect(typeof cfg.nRange[0]).toBe("number");
+		expect(typeof cfg.mRange[0]).toBe("number");
 	});
 });
 
@@ -213,16 +220,19 @@ describe("acceptance-criteria counts", () => {
 		}
 	});
 
-	it("3 objectives", () => {
+	it("all 3 phases have kRange", () => {
 		const phases = [PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG];
-		const objectives = phases.map((p) => p.objective).filter(Boolean);
-		expect(objectives).toHaveLength(3);
+		for (const p of phases) {
+			expect(p.kRange).toHaveLength(2);
+		}
 	});
 
-	it("3 world states", () => {
+	it("all 3 phases have nRange and mRange", () => {
 		const phases = [PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG];
-		const worlds = phases.map((p) => p.initialWorld);
-		expect(worlds).toHaveLength(3);
+		for (const p of phases) {
+			expect(p.nRange).toHaveLength(2);
+			expect(p.mRange).toHaveLength(2);
+		}
 	});
 });
 

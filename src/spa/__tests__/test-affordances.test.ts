@@ -55,13 +55,10 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 
 const PHASE_CONFIG: PhaseConfig = {
 	phaseNumber: 1,
-	objective: "Test objective",
-	aiGoals: {
-		red: "Hold the flower",
-		green: "Distribute evenly",
-		blue: "Hold the key",
-	},
-	initialWorld: { items: [], obstacles: [] },
+	kRange: [1, 1],
+	nRange: [0, 0],
+	mRange: [0, 0],
+	aiGoalPool: ["Hold the flower", "Distribute evenly", "Hold the key"],
 	budgetPerAi: 5,
 	// No winCondition — phase never auto-advances by default
 };
@@ -172,25 +169,28 @@ describe("applyTestAffordances — winImmediately=1", () => {
 		// Build a 3-deep config chain: a → b → c
 		const configC: PhaseConfig = {
 			phaseNumber: 3,
-			objective: "Objective C",
-			aiGoals: { red: "r", green: "g", blue: "b" },
-			initialWorld: { items: [], obstacles: [] },
+			kRange: [1, 1],
+			nRange: [0, 0],
+			mRange: [0, 0],
+			aiGoalPool: ["r"],
 			budgetPerAi: 5,
 			// No winCondition, no nextPhaseConfig
 		};
 		const configB: PhaseConfig = {
 			phaseNumber: 2,
-			objective: "Objective B",
-			aiGoals: { red: "r", green: "g", blue: "b" },
-			initialWorld: { items: [], obstacles: [] },
+			kRange: [1, 1],
+			nRange: [0, 0],
+			mRange: [0, 0],
+			aiGoalPool: ["r"],
 			budgetPerAi: 5,
 			nextPhaseConfig: configC,
 		};
 		const configA: PhaseConfig = {
 			phaseNumber: 1,
-			objective: "Objective A",
-			aiGoals: { red: "r", green: "g", blue: "b" },
-			initialWorld: { items: [], obstacles: [] },
+			kRange: [1, 1],
+			nRange: [0, 0],
+			mRange: [0, 0],
+			aiGoalPool: ["r"],
 			budgetPerAi: 5,
 			nextPhaseConfig: configB,
 		};
@@ -286,24 +286,27 @@ describe("applyTestAffordances — winImmediately=1 three-round chain reaches ga
 		// Build a 3-deep chain mirroring PHASE_1_CONFIG → PHASE_2_CONFIG → PHASE_3_CONFIG
 		const phase3Config: PhaseConfig = {
 			phaseNumber: 3,
-			objective: "Phase 3 objective",
-			aiGoals: { red: "r", green: "g", blue: "b" },
-			initialWorld: { items: [], obstacles: [] },
+			kRange: [1, 1],
+			nRange: [0, 0],
+			mRange: [0, 0],
+			aiGoalPool: ["r"],
 			budgetPerAi: 5,
 		};
 		const phase2Config: PhaseConfig = {
 			phaseNumber: 2,
-			objective: "Phase 2 objective",
-			aiGoals: { red: "r", green: "g", blue: "b" },
-			initialWorld: { items: [], obstacles: [] },
+			kRange: [1, 1],
+			nRange: [0, 0],
+			mRange: [0, 0],
+			aiGoalPool: ["r"],
 			budgetPerAi: 5,
 			nextPhaseConfig: phase3Config,
 		};
 		const phase1Config: PhaseConfig = {
 			phaseNumber: 1,
-			objective: "Phase 1 objective",
-			aiGoals: { red: "r", green: "g", blue: "b" },
-			initialWorld: { items: [], obstacles: [] },
+			kRange: [1, 1],
+			nRange: [0, 0],
+			mRange: [0, 0],
+			aiGoalPool: ["r"],
 			budgetPerAi: 5,
 			nextPhaseConfig: phase2Config,
 		};

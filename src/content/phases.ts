@@ -10,33 +10,37 @@ import { PHASE_GOAL_POOL } from "./goal-pool";
  *
  * Chain: PHASE_1_CONFIG → PHASE_2_CONFIG → PHASE_3_CONFIG (no next).
  *
- * `initialWorld.items` is empty for now — a 5x5 grid world model is planned
- * to replace the loose item list. `winCondition` is omitted until the grid
- * lands; phases will not auto-advance until the human authors one.
+ * k = objective pairs, n = interesting objects, m = obstacles.
+ * The engine rolls k/n/m within the given ranges at game start via generateContentPacks.
+ *
+ * `winCondition` is omitted — phases do not auto-advance until a win-check is authored.
  */
 
 export const PHASE_3_CONFIG: PhaseConfig = {
 	phaseNumber: 3,
-	objective: "get the key in the keyhole",
-	aiGoalPool: PHASE_GOAL_POOL,
-	initialWorld: { items: [], obstacles: [] },
+	kRange: [2, 3],
+	nRange: [3, 4],
+	mRange: [2, 3],
 	budgetPerAi: 5,
+	aiGoalPool: PHASE_GOAL_POOL,
 };
 
 export const PHASE_2_CONFIG: PhaseConfig = {
 	phaseNumber: 2,
-	objective: "get the key in the keyhole",
-	aiGoalPool: PHASE_GOAL_POOL,
-	initialWorld: { items: [], obstacles: [] },
+	kRange: [2, 2],
+	nRange: [2, 4],
+	mRange: [2, 3],
 	budgetPerAi: 5,
+	aiGoalPool: PHASE_GOAL_POOL,
 	nextPhaseConfig: PHASE_3_CONFIG,
 };
 
 export const PHASE_1_CONFIG: PhaseConfig = {
 	phaseNumber: 1,
-	objective: "get the key in the keyhole",
-	aiGoalPool: PHASE_GOAL_POOL,
-	initialWorld: { items: [], obstacles: [] },
+	kRange: [1, 1],
+	nRange: [2, 3],
+	mRange: [1, 2],
 	budgetPerAi: 5,
+	aiGoalPool: PHASE_GOAL_POOL,
 	nextPhaseConfig: PHASE_2_CONFIG,
 };

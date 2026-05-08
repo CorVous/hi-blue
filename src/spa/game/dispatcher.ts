@@ -21,6 +21,7 @@ import type {
 	GridPosition,
 	RoundActionRecord,
 	ToolCall,
+	WorldEntity,
 } from "./types";
 
 export interface ValidationResult {
@@ -46,6 +47,24 @@ function positionsEqual(a: GridPosition, b: GridPosition): boolean {
 	return a.row === b.row && a.col === b.col;
 }
 
+/** Filter entities to only those that can be picked up / put_down / given / used (not spaces or obstacles). */
+function pickableEntities(entities: WorldEntity[]): WorldEntity[] {
+	return entities.filter(
+		(e) => e.kind === "objective_object" || e.kind === "interesting_object",
+	);
+}
+
+/** Filter entities to obstacle kind for collision checks. */
+function obstaclePositions(entities: WorldEntity[]): GridPosition[] {
+	return entities
+		.filter((e) => e.kind === "obstacle")
+		.map((e) => {
+			const h = e.holder;
+			return isGridPosition(h) ? h : null;
+		})
+		.filter((pos): pos is GridPosition => pos !== null);
+}
+
 export function validateToolCall(
 	game: GameState,
 	aiId: AiId,
@@ -54,10 +73,12 @@ export function validateToolCall(
 	const phase = getActivePhase(game);
 	const { world } = phase;
 	const actorSpatial = phase.personaSpatial[aiId];
+	const pickable = pickableEntities(world.entities);
+	const obstacles = obstaclePositions(world.entities);
 
 	switch (call.name) {
 		case "pick_up": {
-			const item = world.items.find((i) => i.id === call.args.item);
+			const item = pickable.find((i) => i.id === call.args.item);
 			if (!item)
 				return {
 					valid: false,
@@ -80,7 +101,7 @@ export function validateToolCall(
 		}
 
 		case "put_down": {
-			const item = world.items.find((i) => i.id === call.args.item);
+			const item = pickable.find((i) => i.id === call.args.item);
 			if (!item)
 				return {
 					valid: false,
@@ -95,7 +116,7 @@ export function validateToolCall(
 		}
 
 		case "give": {
-			const item = world.items.find((i) => i.id === call.args.item);
+			const item = pickable.find((i) => i.id === call.args.item);
 			if (!item)
 				return {
 					valid: false,
@@ -125,7 +146,7 @@ export function validateToolCall(
 		}
 
 		case "use": {
-			const item = world.items.find((i) => i.id === call.args.item);
+			const item = pickable.find((i) => i.id === call.args.item);
 			if (!item)
 				return {
 					valid: false,
@@ -151,7 +172,7 @@ export function validateToolCall(
 			const next = applyDirection(actorSpatial.position, direction);
 			if (!inBounds(next))
 				return { valid: false, reason: "That direction is out of bounds" };
-			if (world.obstacles.some((o) => positionsEqual(o, next)))
+			if (obstacles.some((o) => positionsEqual(o, next)))
 				return { valid: false, reason: "That cell is blocked by an obstacle" };
 			return { valid: true };
 		}
@@ -177,10 +198,11 @@ export function executeToolCall(
 	call: ToolCall,
 ): GameState {
 	return updateActivePhase(game, (phase) => {
-		const items = phase.world.items.map((i) => ({ ...i }));
+		const entities = phase.world.entities.map((e) => ({ ...e }));
 		const actorSpatial = phase.personaSpatial[aiId];
+		const pickable = pickableEntities(entities);
 
-		const target = items.find((i) => i.id === call.args.item);
+		const target = pickable.find((i) => i.id === call.args.item);
 		switch (call.name) {
 			case "pick_up":
 				if (target) target.holder = aiId;
@@ -197,6 +219,7 @@ export function executeToolCall(
 				if (target) target.holder = call.args.to as AiId;
 				break;
 			case "use":
+				// No world mutation — useOutcome is returned as the tool result description.
 				break;
 			case "go": {
 				if (!actorSpatial) break;
@@ -204,7 +227,7 @@ export function executeToolCall(
 				const nextPos = applyDirection(actorSpatial.position, direction);
 				return {
 					...phase,
-					world: { ...phase.world, items },
+					world: { ...phase.world, entities },
 					personaSpatial: {
 						...phase.personaSpatial,
 						[aiId]: { position: nextPos, facing: direction },
@@ -216,7 +239,7 @@ export function executeToolCall(
 				const direction = call.args.direction as CardinalDirection;
 				return {
 					...phase,
-					world: { ...phase.world, items },
+					world: { ...phase.world, entities },
 					personaSpatial: {
 						...phase.personaSpatial,
 						[aiId]: { ...actorSpatial, facing: direction },
@@ -225,7 +248,7 @@ export function executeToolCall(
 			}
 		}
 
-		return { ...phase, world: { ...phase.world, items } };
+		return { ...phase, world: { ...phase.world, entities } };
 	});
 }
 
@@ -233,6 +256,7 @@ function describeToolCall(game: GameState, aiId: AiId, call: ToolCall): string {
 	const name = game.personas[aiId]?.name ?? aiId;
 	const phase = getActivePhase(game);
 	const spatial = phase.personaSpatial[aiId];
+	const pickable = pickableEntities(phase.world.entities);
 
 	switch (call.name) {
 		case "pick_up":
@@ -241,8 +265,12 @@ function describeToolCall(game: GameState, aiId: AiId, call: ToolCall): string {
 			return `${name} put down the ${call.args.item}`;
 		case "give":
 			return `${name} gave the ${call.args.item} to ${game.personas[call.args.to as AiId]?.name ?? call.args.to}`;
-		case "use":
+		case "use": {
+			// Return the entity's useOutcome as the description (flavor string).
+			const item = pickable.find((i) => i.id === call.args.item);
+			if (item?.useOutcome) return item.useOutcome;
 			return `${name} used the ${call.args.item}`;
+		}
 		case "go": {
 			const pos = spatial?.position;
 			const posStr = pos ? formatPosition(pos) : "unknown";

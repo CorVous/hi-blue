@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PHASE_1_CONFIG } from "../../../content/index.js";
 import { createGame, startPhase } from "../../game/engine.js";
-import type { AiId, AiPersona, GameState } from "../../game/types.js";
+import type {
+	AiId,
+	AiPersona,
+	GameState,
+	WorldEntity,
+} from "../../game/types.js";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -140,10 +145,17 @@ describe("serializeGameState / deserializeGameState", () => {
 		expect(restoredPhase?.nextPhaseConfig?.phaseNumber).toBe(2);
 	});
 
-	it("round-trips chat histories, whispers, world items, budgets", () => {
+	it("round-trips chat histories, whispers, world entities, budgets", () => {
 		const game = makeFreshGame();
 		const phase = game.phases[0];
 		if (!phase) throw new Error("no phase");
+		const keyEntity: WorldEntity = {
+			id: "key",
+			kind: "interesting_object",
+			name: "The Key",
+			examineDescription: "A key",
+			holder: { row: 0, col: 0 },
+		};
 		const modifiedPhase = {
 			...phase,
 			chatHistories: {
@@ -155,8 +167,7 @@ describe("serializeGameState / deserializeGameState", () => {
 				{ from: "red" as AiId, to: "blue" as AiId, content: "psst", round: 1 },
 			],
 			world: {
-				items: [{ id: "key", name: "The Key", holder: { row: 0, col: 0 } }],
-				obstacles: [],
+				entities: [keyEntity],
 			},
 			budgets: {
 				red: { remaining: 3, total: 5 },
@@ -182,7 +193,7 @@ describe("serializeGameState / deserializeGameState", () => {
 			content: "psst",
 			round: 1,
 		});
-		expect(rp?.world.items[0]).toEqual({
+		expect(rp?.world.entities[0]).toMatchObject({
 			id: "key",
 			name: "The Key",
 			holder: { row: 0, col: 0 },
@@ -222,18 +233,30 @@ describe("serializeGameState / deserializeGameState", () => {
 		});
 	});
 
-	it("round-trips obstacles array", () => {
+	it("round-trips obstacle entities", () => {
 		const game = makeFreshGame();
 		const phase = game.phases[0];
 		if (!phase) throw new Error("no phase");
+		const obstacleEntities: WorldEntity[] = [
+			{
+				id: "wall_a",
+				kind: "obstacle",
+				name: "wall",
+				examineDescription: "A solid wall",
+				holder: { row: 0, col: 0 },
+			},
+			{
+				id: "wall_b",
+				kind: "obstacle",
+				name: "wall",
+				examineDescription: "A solid wall",
+				holder: { row: 2, col: 4 },
+			},
+		];
 		const modifiedPhase = {
 			...phase,
 			world: {
-				...phase.world,
-				obstacles: [
-					{ row: 0, col: 0 },
-					{ row: 2, col: 4 },
-				],
+				entities: [...phase.world.entities, ...obstacleEntities],
 			},
 		};
 		const modified = { ...game, phases: [modifiedPhase] };
@@ -242,10 +265,12 @@ describe("serializeGameState / deserializeGameState", () => {
 		const restored = deserializeGameState(persisted);
 		const rp = restored.phases[0];
 
-		expect(rp?.world.obstacles).toEqual([
-			{ row: 0, col: 0 },
-			{ row: 2, col: 4 },
-		]);
+		const restoredObstacles = rp?.world.entities.filter(
+			(e) => e.kind === "obstacle",
+		);
+		expect(restoredObstacles).toHaveLength(2);
+		expect(restoredObstacles?.[0]?.holder).toEqual({ row: 0, col: 0 });
+		expect(restoredObstacles?.[1]?.holder).toEqual({ row: 2, col: 4 });
 	});
 });
 
@@ -353,11 +378,17 @@ describe("loadGame", () => {
 	});
 
 	it("returns error: corrupt (not unavailable) when schemaVersion is valid but game structure is malformed", () => {
-		// Valid JSON, correct schemaVersion (4), but game.phases is not an array
+		// Valid JSON, correct schemaVersion (5), but game.phases is not an array
 		const malformed = JSON.stringify({
-			schemaVersion: 4,
+			schemaVersion: 5,
 			savedAt: new Date().toISOString(),
-			game: { currentPhase: 1, isComplete: false, personas: {}, phases: null },
+			game: {
+				currentPhase: 1,
+				isComplete: false,
+				personas: {},
+				phases: null,
+				contentPacks: [],
+			},
 		});
 		localStorage.setItem(STORAGE_KEY, malformed);
 		const result = loadGame();

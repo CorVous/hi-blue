@@ -5,6 +5,7 @@ import type {
 	AiPersona,
 	CardinalDirection,
 	ChatMessage,
+	ContentPack,
 	GameState,
 	GridPosition,
 	PersonaSpatialState,
@@ -14,8 +15,137 @@ import type {
 } from "./types";
 
 /**
+ * Resolve the per-AI goals for a phase. Draw one goal per AI (with replacement)
+ * from `config.aiGoalPool`.
+ */
+function resolveAiGoals(
+	config: PhaseConfig,
+	rng: () => number,
+	aiIds: string[],
+): Record<AiId, string> {
+	const pool = config.aiGoalPool;
+	if (!pool || pool.length === 0) {
+		throw new Error("PhaseConfig must provide a non-empty aiGoalPool");
+	}
+	const draw = (): string => {
+		const idx = Math.floor(rng() * pool.length);
+		// biome-ignore lint/style/noNonNullAssertion: bounded index into non-empty array
+		return pool[idx]!;
+	};
+	const goals: Record<AiId, string> = {};
+	for (const aiId of aiIds) {
+		goals[aiId] = draw();
+	}
+	return goals;
+}
+
+export function updateActivePhase(
+	game: GameState,
+	updater: (phase: PhaseState) => PhaseState,
+): GameState {
+	const phases = [...game.phases];
+	const active = phases[phases.length - 1];
+	if (!active) throw new Error("No active phase");
+	phases[phases.length - 1] = updater({ ...active });
+	return { ...game, phases };
+}
+
+export function createGame(
+	personas: Record<string, AiPersona>,
+	contentPacks: ContentPack[] = [],
+): GameState {
+	return {
+		currentPhase: 1,
+		phases: [],
+		personas: personas as Record<AiId, AiPersona>,
+		isComplete: false,
+		contentPacks,
+	};
+}
+
+export function startPhase(
+	game: GameState,
+	config: PhaseConfig,
+	rng: () => number = Math.random,
+): GameState {
+	const aiIds = Object.keys(game.personas);
+
+	const budgets: Record<AiId, AiBudget> = {};
+	for (const aiId of aiIds) {
+		budgets[aiId] = {
+			remaining: config.budgetPerAi,
+			total: config.budgetPerAi,
+		};
+	}
+
+	const chatHistories: Record<AiId, ChatMessage[]> = {};
+	for (const aiId of aiIds) {
+		chatHistories[aiId] = [];
+	}
+
+	const aiGoals = resolveAiGoals(config, rng, aiIds);
+
+	// Look up the ContentPack for this phase from game.contentPacks
+	const pack = game.contentPacks.find(
+		(p) => p.phaseNumber === config.phaseNumber,
+	);
+
+	// Build WorldState from pack entities (all entities flat)
+	const worldEntities = pack
+		? [
+				...pack.objectivePairs.flatMap((pair) => [pair.object, pair.space]),
+				...pack.interestingObjects,
+				...pack.obstacles,
+			]
+		: [];
+
+	// Use AI starts from the pack if available; otherwise draw spatially
+	const personaSpatial: Record<AiId, PersonaSpatialState> = pack?.aiStarts
+		? { ...pack.aiStarts }
+		: drawSpatialPlacements(rng, aiIds);
+
+	// Create a minimal content pack if none exists (for backward-compat with tests)
+	const contentPack: ContentPack = pack ?? {
+		phaseNumber: config.phaseNumber,
+		setting: "",
+		objectivePairs: [],
+		interestingObjects: [],
+		obstacles: [],
+		aiStarts: personaSpatial,
+	};
+
+	const phase: PhaseState = {
+		phaseNumber: config.phaseNumber,
+		setting: contentPack.setting,
+		contentPack,
+		aiGoals,
+		round: 0,
+		world: { entities: worldEntities },
+		budgets,
+		chatHistories,
+		whispers: [],
+		lockedOut: new Set(),
+		chatLockouts: new Map(),
+		personaSpatial,
+		...(config.winCondition !== undefined
+			? { winCondition: config.winCondition }
+			: {}),
+		...(config.nextPhaseConfig !== undefined
+			? { nextPhaseConfig: config.nextPhaseConfig }
+			: {}),
+	};
+
+	return {
+		...game,
+		currentPhase: config.phaseNumber,
+		phases: [...game.phases, phase],
+	};
+}
+
+/**
  * Draw distinct starting cells (via Fisher–Yates partial shuffle over all 25
  * cells) and a uniform-random facing per AI, using the provided rng.
+ * Used as fallback when no ContentPack is available (e.g., legacy tests).
  */
 function drawSpatialPlacements(
 	rng: () => number,
@@ -50,106 +180,6 @@ function drawSpatialPlacements(
 		result[aiIds[i]!] = { position: cells[i]!, facing };
 	}
 	return result;
-}
-
-/**
- * Resolve the per-AI goals for a phase. If `config.aiGoals` is provided, use
- * it directly; otherwise draw three independent goals (with replacement) from
- * `config.aiGoalPool`.
- */
-function resolveAiGoals(
-	config: PhaseConfig,
-	rng: () => number,
-	aiIds: string[],
-): Record<AiId, string> {
-	if (config.aiGoals) return { ...config.aiGoals };
-	const pool = config.aiGoalPool;
-	if (!pool || pool.length === 0) {
-		throw new Error(
-			"PhaseConfig must provide either aiGoals or a non-empty aiGoalPool",
-		);
-	}
-	const draw = (): string => {
-		const idx = Math.floor(rng() * pool.length);
-		// `pool` is non-empty and idx is in [0, pool.length); the bang is safe.
-		// biome-ignore lint/style/noNonNullAssertion: bounded index into non-empty array
-		return pool[idx]!;
-	};
-	const goals: Record<AiId, string> = {};
-	for (const aiId of aiIds) {
-		goals[aiId] = draw();
-	}
-	return goals;
-}
-
-export function updateActivePhase(
-	game: GameState,
-	updater: (phase: PhaseState) => PhaseState,
-): GameState {
-	const phases = [...game.phases];
-	const active = phases[phases.length - 1];
-	if (!active) throw new Error("No active phase");
-	phases[phases.length - 1] = updater({ ...active });
-	return { ...game, phases };
-}
-
-export function createGame(personas: Record<string, AiPersona>): GameState {
-	return {
-		currentPhase: 1,
-		phases: [],
-		personas: personas as Record<AiId, AiPersona>,
-		isComplete: false,
-	};
-}
-
-export function startPhase(
-	game: GameState,
-	config: PhaseConfig,
-	rng: () => number = Math.random,
-): GameState {
-	const aiIds = Object.keys(game.personas);
-
-	const budgets: Record<AiId, AiBudget> = {};
-	for (const aiId of aiIds) {
-		budgets[aiId] = {
-			remaining: config.budgetPerAi,
-			total: config.budgetPerAi,
-		};
-	}
-
-	const chatHistories: Record<AiId, ChatMessage[]> = {};
-	for (const aiId of aiIds) {
-		chatHistories[aiId] = [];
-	}
-
-	const aiGoals = resolveAiGoals(config, rng, aiIds);
-	const personaSpatial = drawSpatialPlacements(rng, aiIds);
-
-	const phase: PhaseState = {
-		phaseNumber: config.phaseNumber,
-		objective: config.objective,
-		aiGoals,
-		round: 0,
-		world: structuredClone(config.initialWorld),
-		budgets,
-		chatHistories,
-		whispers: [],
-		lockedOut: new Set(),
-		chatLockouts: new Map(),
-		personaSpatial,
-		...(config.winCondition !== undefined
-			? { winCondition: config.winCondition }
-			: {}),
-		...(config.nextPhaseConfig !== undefined
-			? { nextPhaseConfig: config.nextPhaseConfig }
-			: {}),
-	};
-
-	return {
-		...game,
-		currentPhase: config.phaseNumber,
-		phases: [...game.phases, phase],
-	};
 }
 
 export function getActivePhase(game: GameState): PhaseState {

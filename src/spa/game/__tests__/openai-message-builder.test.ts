@@ -36,19 +36,10 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 
 const PHASE_CONFIG: PhaseConfig = {
 	phaseNumber: 1,
-	objective: "Test",
-	aiGoals: {
-		red: "Hold the flower",
-		green: "Balance items",
-		blue: "Hold the key",
-	},
-	initialWorld: {
-		items: [
-			{ id: "flower", name: "flower", holder: { row: 0, col: 0 } },
-			{ id: "key", name: "key", holder: { row: 0, col: 0 } },
-		],
-		obstacles: [],
-	},
+	kRange: [1, 1],
+	nRange: [0, 0],
+	mRange: [0, 0],
+	aiGoalPool: ["Hold the flower", "Balance items", "Hold the key"],
 	budgetPerAi: 5,
 };
 

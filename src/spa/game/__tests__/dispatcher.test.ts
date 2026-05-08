@@ -10,7 +10,14 @@ import {
 	getActivePhase,
 	startPhase,
 } from "../engine";
-import type { AiPersona, AiTurnAction, PhaseConfig, ToolCall } from "../types";
+import type {
+	AiPersona,
+	AiTurnAction,
+	ContentPack,
+	PhaseConfig,
+	ToolCall,
+	WorldEntity,
+} from "../types";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -48,29 +55,77 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
  *   green → (0,1) facing north  (adjacent to red)
  *   blue  → (0,2) facing north
  *
- * Items:
+ * Entities:
  *   flower → holder: { row:0, col:0 }  (same cell as red)
  *   key    → holder: "red"             (held by red)
  */
 const FIXED_RNG = () => 0;
 
+/** Helper to make a WorldEntity */
+function makeEntity(
+	id: string,
+	kind: WorldEntity["kind"],
+	holder: WorldEntity["holder"],
+	extra: Partial<WorldEntity> = {},
+): WorldEntity {
+	return {
+		id,
+		kind,
+		name: id,
+		examineDescription: `A ${id}.`,
+		holder,
+		useOutcome: `You used the ${id}.`,
+		...extra,
+	};
+}
+
+/** Build a ContentPack for phase 1 with specific entities and AI starts. */
+function makePackWithEntities(
+	entities: {
+		flower: WorldEntity["holder"];
+		key: WorldEntity["holder"];
+	},
+	obstaclePositions: Array<{ row: number; col: number }> = [],
+): ContentPack {
+	const flower = makeEntity("flower", "interesting_object", entities.flower);
+	const key = makeEntity("key", "interesting_object", entities.key);
+	const obstacles = obstaclePositions.map((pos, i) =>
+		makeEntity(`obs${i}`, "obstacle", pos),
+	);
+	return {
+		phaseNumber: 1,
+		setting: "test setting",
+		objectivePairs: [],
+		interestingObjects: [flower, key],
+		obstacles,
+		aiStarts: {
+			red: { position: { row: 0, col: 0 }, facing: "north" },
+			green: { position: { row: 0, col: 1 }, facing: "north" },
+			blue: { position: { row: 0, col: 2 }, facing: "north" },
+		},
+	};
+}
+
 const TEST_PHASE_CONFIG: PhaseConfig = {
 	phaseNumber: 1,
-	objective: "Test objective",
-	aiGoals: { red: "g1", green: "g2", blue: "g3" },
-	initialWorld: {
-		items: [
-			{ id: "flower", name: "flower", holder: { row: 0, col: 0 } },
-			{ id: "key", name: "key", holder: "red" },
-		],
-		obstacles: [],
-	},
+	kRange: [0, 0],
+	nRange: [2, 2],
+	mRange: [0, 0],
+	aiGoalPool: ["g1", "g2", "g3"],
 	budgetPerAi: 5,
 };
 
 /** Create a game with deterministic spatial placement: red→(0,0), green→(0,1), blue→(0,2) */
-function makeGame() {
-	return startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG, FIXED_RNG);
+function makeGame(obstaclePositions: Array<{ row: number; col: number }> = []) {
+	const pack = makePackWithEntities(
+		{
+			flower: { row: 0, col: 0 },
+			key: "red", // held by red
+		},
+		obstaclePositions,
+	);
+	const game = createGame(TEST_PERSONAS, [pack]);
+	return startPhase(game, TEST_PHASE_CONFIG, FIXED_RNG);
 }
 
 describe("validateToolCall", () => {
@@ -173,18 +228,7 @@ describe("validateToolCall", () => {
 	});
 
 	it("rejects go into an obstacle cell", () => {
-		const configWithObstacle: PhaseConfig = {
-			...TEST_PHASE_CONFIG,
-			initialWorld: {
-				...TEST_PHASE_CONFIG.initialWorld,
-				obstacles: [{ row: 1, col: 0 }],
-			},
-		};
-		const game = startPhase(
-			createGame(TEST_PERSONAS),
-			configWithObstacle,
-			FIXED_RNG,
-		);
+		const game = makeGame([{ row: 1, col: 0 }]);
 		// red at (0,0), going south → (1,0), which has an obstacle
 		const call: ToolCall = { name: "go", args: { direction: "south" } };
 		const result = validateToolCall(game, "red", call);
@@ -212,6 +256,22 @@ describe("validateToolCall", () => {
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(false);
 	});
+
+	it("allows use of an item held by the AI", () => {
+		const game = makeGame();
+		// key is held by red
+		const call: ToolCall = { name: "use", args: { item: "key" } };
+		const result = validateToolCall(game, "red", call);
+		expect(result.valid).toBe(true);
+	});
+
+	it("rejects use of an item not held by the AI", () => {
+		const game = makeGame();
+		// flower is on the ground
+		const call: ToolCall = { name: "use", args: { item: "flower" } };
+		const result = validateToolCall(game, "red", call);
+		expect(result.valid).toBe(false);
+	});
 });
 
 describe("executeToolCall", () => {
@@ -219,8 +279,8 @@ describe("executeToolCall", () => {
 		const game = makeGame();
 		const call: ToolCall = { name: "pick_up", args: { item: "flower" } };
 		const updated = executeToolCall(game, "red", call);
-		const item = getActivePhase(updated).world.items.find(
-			(i) => i.id === "flower",
+		const item = getActivePhase(updated).world.entities.find(
+			(e) => e.id === "flower",
 		);
 		expect(item?.holder).toBe("red");
 	});
@@ -230,8 +290,8 @@ describe("executeToolCall", () => {
 		// red at (0,0), key held by red
 		const call: ToolCall = { name: "put_down", args: { item: "key" } };
 		const updated = executeToolCall(game, "red", call);
-		const item = getActivePhase(updated).world.items.find(
-			(i) => i.id === "key",
+		const item = getActivePhase(updated).world.entities.find(
+			(e) => e.id === "key",
 		);
 		expect(item?.holder).toEqual({ row: 0, col: 0 });
 	});
@@ -240,10 +300,19 @@ describe("executeToolCall", () => {
 		const game = makeGame();
 		const call: ToolCall = { name: "give", args: { item: "key", to: "blue" } };
 		const updated = executeToolCall(game, "red", call);
-		const item = getActivePhase(updated).world.items.find(
-			(i) => i.id === "key",
+		const item = getActivePhase(updated).world.entities.find(
+			(e) => e.id === "key",
 		);
 		expect(item?.holder).toBe("blue");
+	});
+
+	it("does not mutate world on use", () => {
+		const game = makeGame();
+		const before = JSON.stringify(getActivePhase(game).world);
+		const call: ToolCall = { name: "use", args: { item: "key" } };
+		const updated = executeToolCall(game, "red", call);
+		const after = JSON.stringify(getActivePhase(updated).world);
+		expect(after).toBe(before);
 	});
 
 	it("updates position and facing on go", () => {
@@ -269,8 +338,11 @@ describe("executeToolCall", () => {
 
 describe("dispatchAiTurn", () => {
 	it("rejects a turn from a locked-out AI", () => {
-		let game = startPhase(
-			createGame(TEST_PERSONAS),
+		let game = createGame(TEST_PERSONAS, [
+			makePackWithEntities({ flower: { row: 0, col: 0 }, key: "red" }),
+		]);
+		game = startPhase(
+			game,
 			{
 				...TEST_PHASE_CONFIG,
 				budgetPerAi: 1,
@@ -304,8 +376,8 @@ describe("dispatchAiTurn", () => {
 		expect(result.rejected).toBe(false);
 		expect(result.records[0]?.kind).toBe("tool_failure");
 		// World unchanged — key still held by red
-		const key = getActivePhase(result.game).world.items.find(
-			(i) => i.id === "key",
+		const key = getActivePhase(result.game).world.entities.find(
+			(e) => e.id === "key",
 		);
 		expect(key?.holder).toBe("red");
 	});
@@ -320,8 +392,8 @@ describe("dispatchAiTurn", () => {
 		const result = dispatchAiTurn(game, action);
 		expect(result.rejected).toBe(false);
 		expect(result.records[0]?.kind).toBe("tool_success");
-		const flower = getActivePhase(result.game).world.items.find(
-			(i) => i.id === "flower",
+		const flower = getActivePhase(result.game).world.entities.find(
+			(e) => e.id === "flower",
 		);
 		expect(flower?.holder).toBe("red");
 	});
@@ -352,10 +424,39 @@ describe("dispatchAiTurn", () => {
 		expect(result.rejected).toBe(false);
 		expect(result.records[0]?.kind).toBe("tool_failure");
 		// Key still held by red
-		const key = getActivePhase(result.game).world.items.find(
-			(i) => i.id === "key",
+		const key = getActivePhase(result.game).world.entities.find(
+			(e) => e.id === "key",
 		);
 		expect(key?.holder).toBe("red");
+	});
+
+	it("use returns tool_success with entity's useOutcome as description", () => {
+		const game = makeGame();
+		// key has useOutcome: "You used the key."
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "use", args: { item: "key" } },
+		};
+		const result = dispatchAiTurn(game, action);
+		expect(result.rejected).toBe(false);
+		expect(result.records[0]?.kind).toBe("tool_success");
+		expect(result.records[0]?.description).toBe("You used the key.");
+		// World is byte-identical before and after use
+		const beforeEntities = JSON.stringify(getActivePhase(game).world.entities);
+		const afterEntities = JSON.stringify(
+			getActivePhase(result.game).world.entities,
+		);
+		expect(afterEntities).toBe(beforeEntities);
+	});
+
+	it("use with unknown id is rejected", () => {
+		const game = makeGame();
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "use", args: { item: "nonexistent" } },
+		};
+		const result = dispatchAiTurn(game, action);
+		expect(result.records[0]?.kind).toBe("tool_failure");
 	});
 
 	it("appends chat messages to the correct history", () => {

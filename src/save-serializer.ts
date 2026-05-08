@@ -6,13 +6,15 @@
  * - Each AI's persona
  * - Each AI's per-phase transcript (chat history + whispers that involve that AI,
  *   grouped by phase)
+ * - All three ContentPacks (setting, entities, placements)
  *
- * The format is versioned (v1) so future schema changes can be detected.
+ * The format is versioned (v2) so future schema changes can be detected.
  */
 
 import type {
 	AiPersona,
 	ChatMessage,
+	ContentPack,
 	GameState,
 	WhisperMessage,
 } from "./spa/game/types";
@@ -30,9 +32,11 @@ export interface AiSaveEntry {
 }
 
 export interface GameSave {
-	/** Schema version. v1 = this shape. */
-	version: 1;
+	/** Schema version. v2 = ContentPack added. */
+	version: 2;
 	ais: AiSaveEntry[];
+	/** All three content packs (generated at game start). */
+	contentPacks: ContentPack[];
 }
 
 /**
@@ -61,5 +65,5 @@ export function serializeGameSave(game: GameState): GameSave {
 		return { persona: { ...persona }, phases };
 	});
 
-	return { version: 1, ais };
+	return { version: 2, ais, contentPacks: game.contentPacks };
 }
