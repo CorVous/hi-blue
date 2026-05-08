@@ -149,8 +149,8 @@ test("DIAGNOSTIC: observe wire vs DOM timeline during streaming", async ({
 				callIdx += 1;
 				const tag = `call-${callIdx}`;
 
-				// Detect synthesis call (stream===false or response_format present)
-				let isSynthesis = false;
+				// Detect JSON-mode calls (synthesis or content-pack) and reply
+				// with the appropriate canned shape. Both fire at new-game time.
 				try {
 					const body = JSON.parse(
 						typeof init?.body === "string" ? init.body : "",
@@ -159,27 +159,83 @@ test("DIAGNOSTIC: observe wire vs DOM timeline during streaming", async ({
 						response_format?: unknown;
 						messages?: Array<{ content?: string }>;
 					};
-					isSynthesis = body.stream === false || body.response_format != null;
-					if (isSynthesis) {
-						// Echo back persona ids with canned blurbs
-						const content2 = body.messages?.[1]?.content ?? "";
-						const ids: string[] = Array.from(
-							content2.matchAll(/id:\s*"([a-z0-9]{4})"/g),
-							(m) => m[1] ?? "",
-						).filter(Boolean);
-						const personas = ids.map((id) => ({
-							id,
-							blurb: `Stub blurb for ${id}.`,
-						}));
-						const responseBody = JSON.stringify({
-							choices: [{ message: { content: JSON.stringify({ personas }) } }],
-						});
-						return Promise.resolve(
-							new Response(responseBody, {
-								status: 200,
-								headers: { "Content-Type": "application/json" },
-							}),
-						);
+					const isJsonMode =
+						body.stream === false || body.response_format != null;
+					if (isJsonMode) {
+						const userMsg = body.messages?.[1]?.content ?? "";
+						let content: string | null = null;
+						if (userMsg.startsWith("Synthesize blurbs for these personas:")) {
+							const ids: string[] = Array.from(
+								userMsg.matchAll(/id:\s*"([a-z0-9]{4})"/g),
+								(m) => m[1] ?? "",
+							).filter(Boolean);
+							const personas = ids.map((id) => ({
+								id,
+								blurb: `Stub blurb for ${id}.`,
+							}));
+							content = JSON.stringify({ personas });
+						} else if (
+							userMsg.startsWith("Generate content packs for these phases:")
+						) {
+							const re =
+								/Phase\s+(\d+):\s+setting="([^"]*)",\s+k=(\d+)\s+objective pairs,\s+n=(\d+)\s+interesting objects,\s+m=(\d+)\s+obstacles/g;
+							const packs = Array.from(userMsg.matchAll(re)).map(
+								(match: RegExpMatchArray) => {
+									const phaseNumber = Number(match[1]);
+									const setting = match[2] ?? "";
+									const k = Number(match[3]);
+									const n = Number(match[4]);
+									const m = Number(match[5]);
+									const tag = `p${phaseNumber}`;
+									return {
+										phaseNumber,
+										setting,
+										objectivePairs: Array.from({ length: k }, (_, i) => ({
+											object: {
+												id: `${tag}-obj-${i}`,
+												kind: "objective_object",
+												name: `Stub object ${tag}-${i}`,
+												examineDescription: `Stub objective object paired with ${tag}-spc-${i}.`,
+												useOutcome: "Nothing happens.",
+												pairsWithSpaceId: `${tag}-spc-${i}`,
+												placementFlavor: "{actor} places it.",
+											},
+											space: {
+												id: `${tag}-spc-${i}`,
+												kind: "objective_space",
+												name: `Stub space ${tag}-${i}`,
+												examineDescription: `Stub objective space ${tag}-spc-${i}.`,
+											},
+										})),
+										interestingObjects: Array.from({ length: n }, (_, i) => ({
+											id: `${tag}-int-${i}`,
+											kind: "interesting_object",
+											name: `Stub interesting ${tag}-${i}`,
+											examineDescription: `Stub interesting object ${tag}-int-${i}.`,
+											useOutcome: "Nothing happens.",
+										})),
+										obstacles: Array.from({ length: m }, (_, i) => ({
+											id: `${tag}-obs-${i}`,
+											kind: "obstacle",
+											name: `Stub obstacle ${tag}-${i}`,
+											examineDescription: `Stub obstacle ${tag}-obs-${i}.`,
+										})),
+									};
+								},
+							);
+							content = JSON.stringify({ packs });
+						}
+						if (content !== null) {
+							const responseBody = JSON.stringify({
+								choices: [{ message: { content } }],
+							});
+							return Promise.resolve(
+								new Response(responseBody, {
+									status: 200,
+									headers: { "Content-Type": "application/json" },
+								}),
+							);
+						}
 					}
 				} catch {
 					// ignore parse errors
