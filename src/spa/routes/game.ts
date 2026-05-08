@@ -27,6 +27,7 @@ import {
 	buildPersonaColorMap,
 	buildPersonaDisplayNameMap,
 	buildPersonaNameMap,
+	findFirstMention,
 } from "../game/mention-parser.js";
 import { encodeRoundResult } from "../game/round-result-encoder.js";
 import type { AiId, PhaseConfig } from "../game/types";
@@ -977,29 +978,88 @@ export function renderGame(
 		});
 		if (!sendEnabled || !addressee) return;
 
-		const message = promptInput.value.trim();
+		const rawMessage = promptInput.value.trim();
+		if (!rawMessage) return;
+
+		// Strip a leading *DaemonName mention from the message so the player
+		// line and the LLM submission carry only the body. Non-leading
+		// mentions are left intact.
+		const leadingMention = findFirstMention(rawMessage, personaNamesToId);
+		const message =
+			leadingMention !== null && leadingMention.start === 0
+				? rawMessage.slice(leadingMention.end).trimStart()
+				: rawMessage;
 		if (!message) return;
 
 		const addressed = addressee;
 		roundInFlight = true;
 		sendBtn.disabled = true;
 
-		// Append player's message to the addressed panel
+		// Reset the input to the addressee prefix at send-time so it clears
+		// immediately rather than waiting for all daemons to finish.
+		const addressedNameNow =
+			session.getState().personas[addressed]?.name ?? addressed;
+		const persistedPrefix = `*${addressedNameNow} `;
+		promptInput.value = persistedPrefix;
+		promptInput.setSelectionRange(
+			persistedPrefix.length,
+			persistedPrefix.length,
+		);
+		promptInput.focus();
+		// Programmatic value-set doesn't fire `input`, so the mention-highlight
+		// overlay would keep showing the previous text. Refresh manually so
+		// the overlay repaints to match the new prefix.
+		refreshComposerState();
+
+		// Append the (mention-stripped) player message to the addressed panel.
 		appendPlayerLine(addressed, `> ${message}\n`);
 
-		// Show a "thinking…" placeholder in the addressed panel while the
-		// first live delta arrives. Stripped on the first onAiDelta call;
-		// the safety-net strip after submitMessage handles mock/locked-AI paths.
-		const addressedTranscript = getTranscript(addressed);
-		const placeholderEl = doc.createElement("span");
-		placeholderEl.className = "msg-placeholder";
-		placeholderEl.textContent = "thinking…";
-		if (addressedTranscript) {
-			addressedTranscript.appendChild(placeholderEl);
-			scrollToBottom(addressedTranscript);
+		// Per-daemon braille spinners shown in the panel border, next to the
+		// daemon name. Each persona gets a `.panel-spinner` span appended to
+		// every `.panel-name` element in its panel (top + bottom brow). The
+		// spinner ticks through BRAILLE_FRAMES; stripped per-daemon on first
+		// delta, en-masse on safety-net / catch / finally.
+		const BRAILLE_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+		const SPINNER_INTERVAL_MS = 80;
+		const spinners = new Map<
+			AiId,
+			{ els: HTMLElement[]; intervalId: ReturnType<typeof setInterval> }
+		>();
+		for (const aiId of Object.keys(session.getState().personas) as AiId[]) {
+			const panel = doc.querySelector<HTMLElement>(
+				`.ai-panel[data-ai="${aiId}"]`,
+			);
+			if (!panel) continue;
+			const els: HTMLElement[] = [];
+			for (const labelEl of panel.querySelectorAll<HTMLElement>(
+				".panel-name",
+			)) {
+				const sp = doc.createElement("span");
+				sp.className = "panel-spinner";
+				sp.textContent = ` ${BRAILLE_FRAMES[0] ?? ""}`;
+				labelEl.appendChild(sp);
+				els.push(sp);
+			}
+			if (els.length === 0) continue;
+			let frame = 0;
+			const intervalId = setInterval(() => {
+				frame = (frame + 1) % BRAILLE_FRAMES.length;
+				const text = ` ${BRAILLE_FRAMES[frame] ?? ""}`;
+				for (const sp of els) sp.textContent = text;
+			}, SPINNER_INTERVAL_MS);
+			spinners.set(aiId, { els, intervalId });
 		}
-		const stripPlaceholder = (): void => {
-			if (placeholderEl.parentNode) placeholderEl.remove();
+		const stripSpinner = (aiId: AiId): void => {
+			const s = spinners.get(aiId);
+			if (!s) return;
+			clearInterval(s.intervalId);
+			for (const el of s.els) {
+				if (el.parentNode) el.remove();
+			}
+			spinners.delete(aiId);
+		};
+		const stripAllSpinners = (): void => {
+			for (const aiId of [...spinners.keys()]) stripSpinner(aiId);
 		};
 
 		// Roll initiative for this round
@@ -1018,8 +1078,8 @@ export function renderGame(
 		const onAiDelta = (aiId: AiId, text: string): void => {
 			if (!firstDeltaSeen.has(aiId)) {
 				firstDeltaSeen.add(aiId);
-				// Strip "thinking…" on first live delta for any AI — before painting.
-				stripPlaceholder();
+				// Strip this daemon's spinner on its first live delta — before painting.
+				stripSpinner(aiId);
 				// Emit persona prefix live (encoder will skip it for this AI).
 				const personaName = session?.getState().personas[aiId]?.name ?? aiId;
 				appendAiPrefix(aiId, personaName);
@@ -1040,8 +1100,8 @@ export function renderGame(
 			);
 
 			// Safety-net strip: if no live deltas arrived (mock provider, all AIs
-			// locked out, or first delta hasn't fired yet), strip placeholder now.
-			stripPlaceholder();
+			// locked out, or first delta hasn't fired yet), strip every spinner now.
+			stripAllSpinners();
 
 			const phaseAfter = getActivePhase(nextState);
 			const events = encodeRoundResult(
@@ -1271,27 +1331,13 @@ export function renderGame(
 					showPersistenceWarning(saveResult.reason);
 				}
 			}
-
-			// Persist the addressee prefix so threaded conversations don't require
-			// re-picking the mention each turn. Body is cleared; cursor lands at end.
-			// Only written on success (not in catch) and not on round-game-ended.
-			if (!roundGameEnded) {
-				const addressedName = nextState.personas[addressed]?.name ?? addressed;
-				const persistedPrefix = `*${addressedName} `;
-				promptInput.value = persistedPrefix;
-				promptInput.setSelectionRange(
-					persistedPrefix.length,
-					persistedPrefix.length,
-				);
-				promptInput.focus();
-			}
 		} catch (err) {
-			stripPlaceholder();
+			stripAllSpinners();
 			if (err instanceof CapHitError && capHitEl) {
 				capHitEl.removeAttribute("hidden");
 			}
 		} finally {
-			stripPlaceholder();
+			stripAllSpinners();
 			roundInFlight = false;
 			if (!roundGameEnded) {
 				refreshComposerState();

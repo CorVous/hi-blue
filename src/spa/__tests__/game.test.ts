@@ -355,7 +355,7 @@ describe("renderGame (game route — three-AI)", () => {
 		expect(mockFetch).toHaveBeenCalledTimes(3);
 	});
 
-	it("shows 'thinking…' placeholder in the addressed panel during the round, stripped after responses arrive", async () => {
+	it("shows per-daemon braille spinners during the round, stripped after responses arrive", async () => {
 		const mockFetch = makeThreeAiFetchMock(
 			RED_ACTION,
 			GREEN_ACTION,
@@ -378,14 +378,32 @@ describe("renderGame (game route — three-AI)", () => {
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 
-		// Synchronously after submit (before fetch resolves), the placeholder is visible
+		// Synchronously after submit, every daemon's panel border carries
+		// at least one .panel-spinner span next to the .panel-name label.
+		const redPanel = getEl<HTMLElement>('.ai-panel[data-ai="red"]');
+		const greenPanel = getEl<HTMLElement>('.ai-panel[data-ai="green"]');
+		const bluePanel = getEl<HTMLElement>('.ai-panel[data-ai="blue"]');
+		expect(redPanel.querySelector(".panel-name .panel-spinner")).not.toBeNull();
+		expect(
+			greenPanel.querySelector(".panel-name .panel-spinner"),
+		).not.toBeNull();
+		expect(
+			bluePanel.querySelector(".panel-name .panel-spinner"),
+		).not.toBeNull();
+
+		// Input is reset to "*Sage " immediately on send (not after the round).
+		expect(promptInput.value).toBe("*Sage ");
+		// Player line shows the stripped body (no leading mention).
 		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
-		expect(greenTranscript.textContent).toContain("thinking…");
+		expect(greenTranscript.textContent).toContain("> hello");
+		expect(greenTranscript.textContent).not.toContain("> *Sage hello");
 
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
-		// After the round resolves, the placeholder is gone and the response is rendered
-		expect(greenTranscript.textContent).not.toContain("thinking…");
+		// After the round resolves, no spinners remain on any panel.
+		expect(redPanel.querySelector(".panel-spinner")).toBeNull();
+		expect(greenPanel.querySelector(".panel-spinner")).toBeNull();
+		expect(bluePanel.querySelector(".panel-spinner")).toBeNull();
 		expect(greenTranscript.textContent).toContain("GREEN_RESPONSE_UNIQUE_TAG");
 	});
 
@@ -1067,7 +1085,7 @@ describe("renderGame — mention-based addressing", () => {
 		expect(sendBtn.disabled).toBe(false);
 	});
 
-	it("submit with '*Sage hi' routes '> *Sage hi' message to green panel", async () => {
+	it("submit with '*Sage hi' routes '> hi' message (mention stripped) to green panel", async () => {
 		const mockFetch = makeThreeAiFetchMock(
 			PASS_ACTION,
 			PASS_ACTION,
@@ -1094,7 +1112,8 @@ describe("renderGame — mention-based addressing", () => {
 		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
 		const blueTranscript = getEl<HTMLElement>('[data-transcript="blue"]');
 
-		expect(greenTranscript.textContent).toContain("> *Sage hi");
+		expect(greenTranscript.textContent).toContain("> hi");
+		expect(greenTranscript.textContent).not.toContain("> *Sage hi");
 		expect(redTranscript.textContent).not.toContain("> *Sage");
 		expect(blueTranscript.textContent).not.toContain("> *Sage");
 	});
@@ -1554,10 +1573,10 @@ describe("renderGame — addressee persistence after send", () => {
 		// Prefix persists again after second send
 		expect(promptInput.value).toBe("*Sage ");
 
-		// Both messages should be in the green transcript
+		// Both messages should be in the green transcript (with leading mention stripped)
 		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
-		expect(greenTranscript.textContent).toContain("> *Sage hello");
-		expect(greenTranscript.textContent).toContain("> *Sage how are you");
+		expect(greenTranscript.textContent).toContain("> hello");
+		expect(greenTranscript.textContent).toContain("> how are you");
 	});
 
 	it("canonical-name normalization: *sage (lowercase) → '*Sage ' after send", async () => {
