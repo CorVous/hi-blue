@@ -36,7 +36,6 @@ When typing quirks are supplied for a persona, each voice example MUST follow th
 You MUST return ONLY valid JSON with this exact shape (no markdown, no preamble):
 {"personas": [{"id": "<input id>", "blurb": "<text>", "voiceExamples": ["<line>", "<line>", "<line>"]}, ...]}\n\nYou MUST echo the input id field verbatim. The array MUST contain exactly one entry per input persona, in any order.`;
 
-// TODO(#167): when typing quirks land, include `typingQuirk` per persona in this user-message payload so the synthesizer leans on it for voice examples.
 export function buildSynthesisUserMessage(
 	input: Array<{
 		id: string;
