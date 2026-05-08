@@ -54,6 +54,30 @@ function formatBudget(remainingUsd: number): string {
  * non-whitespace). Capture group 1 is the lowercased handle. */
 const AI_PREFIX_RE = /^> \*(\S+) /;
 
+/** Sentinel prepended to a serialized player line so the restore parser
+ * can route it to the player branch unambiguously. Necessary because
+ * player lines and AI prefixes are otherwise structurally identical
+ * (`> *<handle> …`) and persona names are lowercase in production, so
+ * the legacy "lowercase-vs-mixed-case" guard collapses there. */
+const PLAYER_LINE_SENTINEL = "​";
+
+/** Walk `transcript.children` and emit a textContent-equivalent string
+ * with a zero-width-space marker prepended to each player msg-line.
+ * AI prefix lines (those whose first child is a `.msg-prefix` span) and
+ * standalone system lines pass through unchanged. */
+function serializeTranscript(transcript: HTMLElement): string {
+	const out: string[] = [];
+	for (const child of Array.from(transcript.children)) {
+		if (!(child instanceof HTMLElement)) continue;
+		if (!child.classList.contains("msg-line")) continue;
+		const text = child.textContent ?? "";
+		const firstChild = child.firstElementChild;
+		const isPlayerLine = firstChild?.classList.contains("msg-you") === true;
+		out.push(isPlayerLine ? `${PLAYER_LINE_SENTINEL}${text}` : text);
+	}
+	return out.join("");
+}
+
 /** Build a regex that matches any persona handle (with an optional leading
  * `*`) as a whole word, case-insensitive. Returns null when no personas
  * are available so callers can short-circuit. */
@@ -147,16 +171,28 @@ function renderRestoredTranscript(
 		transcript.appendChild(el);
 		return el;
 	};
-	for (const line of lines) {
+	for (const rawLine of lines) {
+		// Player lines are persisted with a zero-width-space sentinel so the
+		// parser can disambiguate them from AI prefix lines, which would
+		// otherwise be structurally identical in production (lowercase
+		// persona names collide with the lowercased AI-prefix handle).
+		const isPlayerLine = rawLine.startsWith(PLAYER_LINE_SENTINEL);
+		const line = isPlayerLine ? rawLine.slice(1) : rawLine;
+		if (isPlayerLine) {
+			appendMentionAwareText(startNewMsgLine(), line, personas, "msg-you");
+			currentAiLine = null;
+			continue;
+		}
 		const m = AI_PREFIX_RE.exec(line);
 		const handle = m?.[1];
 		const persona = handle
 			? Object.values(personas).find((p) => p.name.toLowerCase() === handle)
 			: undefined;
-		// Only treat as an AI line when the matched handle resolves to a known
-		// persona. Player lines now also start with `> *` (the new mention
-		// glyph), so without this guard a player message like `> *Sage hi`
-		// would be miscoloured as an AI prefix.
+		// Legacy fallback (saves predating the player-line sentinel): only
+		// treat as an AI line when the matched handle resolves to a known
+		// persona. This guard works for capitalized names but collapses for
+		// production lowercase names — those legacy player lines will still
+		// be miscoloured. New saves use the sentinel above and avoid this.
 		if (handle && persona) {
 			const prefixText = `> *${handle} `;
 			const prefix = doc.createElement("span");
@@ -1228,7 +1264,7 @@ export function renderGame(
 				const transcripts: Partial<Record<AiId, string>> = {};
 				for (const aiId of Object.keys(nextState.personas)) {
 					const el = getTranscript(aiId);
-					if (el) transcripts[aiId] = el.textContent ?? "";
+					if (el) transcripts[aiId] = serializeTranscript(el);
 				}
 				const saveResult = saveGame(nextState, transcripts);
 				if (!saveResult.ok) {
