@@ -10,6 +10,10 @@ A browser game where the player negotiates with three personality-distinct AIs o
 The full per-AI character object: identity (`*xxxx` name, color), two **Temperament**s, a **Persona Goal**, and a synthesized personality blurb. Generated procedurally at game start; stable across the three phases of a single playthrough.
 _Avoid_: Character, AI personality (when referring to the whole object).
 
+**Daemon**:
+The user-facing register for **Persona** — a Persona as it appears in play (occupying a panel, with budget, lockout, conversation log). Code and domain documentation say **Persona**; the BBS chrome and player-facing copy say **Daemon** (e.g. "daemons online" in the topinfo, `*xxxx.txt` files in the **Session** picker). One Daemon per Persona per **Session**.
+_Avoid_: AI (too generic), bot, agent.
+
 **AiId**:
 The 4-character `*xxxx` lowercase-alphanumeric handle (e.g. `*3kw7`). The Persona's stable identifier across the playthrough. Decoupled from color and from any "red/green/blue" notion.
 _Avoid_: "the red AI" — color is rendering, not identity.
