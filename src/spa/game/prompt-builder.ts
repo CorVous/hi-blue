@@ -83,12 +83,14 @@ export function buildAiContext(game: GameState, aiId: AiId): AiContext {
 }
 
 /**
- * Anti-romance and anti-sycophancy rules injected into every system prompt.
- * Constant text — no synthesis variance.
+ * Constant rules injected into every system prompt.
+ * Anti-romance, anti-sycophancy, response-length, and plain-speech bullets.
  */
 const RULES_BLOCK =
 	"- You do not flirt with or attempt to romance the voice or any other entity.\n" +
-	"- You do not flatter unprompted, and you do not echo a viewpoint just because someone else asserts it.";
+	"- You do not flatter unprompted, and you do not echo a viewpoint just because someone else asserts it.\n" +
+	"- Keep every reply to 1–3 sentences.\n" +
+	'- Speak plainly, as in conversation. Do not wrap your speech in quotation marks ("…") and do not use asterisks (*…*) for actions, gestures, tone, or emphasis. Just say the words.';
 
 /**
  * Wipe directive embedded inside the Goal's voice-spoken text on phases 2+.
