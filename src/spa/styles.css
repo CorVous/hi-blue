@@ -864,7 +864,11 @@ main {
 		display: grid;
 		grid-template-rows: minmax(0, 1fr) 88px;
 		grid-template-columns: 1fr 1fr;
-		gap: 6px;
+		/* Row gap is larger so the main panel sits clearly apart from the
+		   strip-card previews; column gap stays tight between the two
+		   side-by-side strip cards. */
+		row-gap: 14px;
+		column-gap: 6px;
 	}
 
 	.ai-panel {
