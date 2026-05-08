@@ -2,6 +2,7 @@ import type { LlmSynthesisProvider } from "../spa/game/llm-synthesis-provider.js
 import { COLOR_PALETTE } from "./color-palette.js";
 import { PERSONA_GOAL_POOL } from "./persona-goal-pool.js";
 import { TEMPERAMENT_POOL } from "./temperament-pool.js";
+import { TYPING_QUIRK_POOL } from "./typing-quirk-pool.js";
 
 const NAME_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789";
 const NAME_LENGTH = 4;
@@ -81,6 +82,7 @@ export async function generatePersonas(
 		id: string;
 		temperaments: [string, string];
 		personaGoal: string;
+		typingQuirks: [string, string];
 	}> = [];
 	for (let i = 0; i < PERSONA_COUNT; i++) {
 		const name = names[i] as string;
@@ -89,7 +91,14 @@ export async function generatePersonas(
 			drawWithReplacement(TEMPERAMENT_POOL, rng),
 		];
 		const personaGoal = drawWithReplacement(PERSONA_GOAL_POOL, rng);
-		tuples.push({ id: name, temperaments, personaGoal });
+		const typingQuirk0 = drawWithReplacement(TYPING_QUIRK_POOL, rng);
+		const typingQuirk1 = drawWithReplacement(TYPING_QUIRK_POOL, rng);
+		tuples.push({
+			id: name,
+			temperaments,
+			personaGoal,
+			typingQuirks: [typingQuirk0, typingQuirk1] as [string, string],
+		});
 	}
 
 	// Synthesize blurbs: LLM path when provider supplied, template fallback otherwise.
@@ -116,6 +125,7 @@ export async function generatePersonas(
 			color,
 			temperaments: tuple.temperaments,
 			personaGoal: tuple.personaGoal,
+			typingQuirks: tuple.typingQuirks,
 			blurb,
 		};
 	}

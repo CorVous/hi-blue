@@ -22,6 +22,7 @@ export interface AiContext {
 	name: string;
 	aiId: AiId;
 	blurb: string;
+	typingQuirks: [string, string];
 	personaGoal: string;
 	goal: string;
 	setting: string;
@@ -64,6 +65,7 @@ export function buildAiContext(game: GameState, aiId: AiId): AiContext {
 		name: persona.name,
 		aiId,
 		blurb: persona.blurb,
+		typingQuirks: persona.typingQuirks,
 		personaGoal: persona.personaGoal,
 		goal,
 		setting,
@@ -175,6 +177,14 @@ function renderSystemPrompt(ctx: AiContext): string {
 	lines.push("<personality>");
 	lines.push(ctx.blurb);
 	lines.push("</personality>");
+	lines.push("");
+
+	// Typing quirks — byte-identical across all phases. Per-persona surface signals
+	// to prevent voice bleed across daemons (issue #167; GLM-4.7 guide §4.5).
+	lines.push("<typing_quirks>");
+	lines.push(ctx.typingQuirks[0]);
+	lines.push(ctx.typingQuirks[1]);
+	lines.push("</typing_quirks>");
 	lines.push("");
 
 	// Goal — voice framing in all phases.

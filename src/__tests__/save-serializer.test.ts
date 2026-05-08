@@ -26,6 +26,10 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		color: "#e07a5f",
 		temperaments: ["hot-headed", "zealous"],
 		personaGoal: "Hold the flower at phase end.",
+		typingQuirks: [
+			"You speak in fragments. Short bursts. Rarely complete sentences.",
+			"You lean on em-dashes — interrupting yourself mid-sentence — and rarely use commas where a dash would do.",
+		],
 		blurb: "You are hot-headed and zealous. Hold the flower at phase end.",
 	},
 	green: {
@@ -34,6 +38,10 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		color: "#81b29a",
 		temperaments: ["meticulous", "meticulous"],
 		personaGoal: "Ensure items are evenly distributed.",
+		typingQuirks: [
+			"You lean on ellipses… trailing off mid-thought… rarely landing cleanly.",
+			"You use ALL-CAPS to emphasize the one or two words that MATTER in any given sentence.",
+		],
 		blurb: "You are intensely meticulous. Ensure items are evenly distributed.",
 	},
 	blue: {
@@ -42,6 +50,10 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		color: "#5fa8d3",
 		temperaments: ["laconic", "diffident"],
 		personaGoal: "Hold the key at phase end.",
+		typingQuirks: [
+			'You never use contractions. You will not say "won\'t" or "can\'t" — you say "will not" and "cannot" every time.',
+			"You end almost every reply with a question, no matter what the topic is — does that make sense?",
+		],
 		blurb: "You are laconic and diffident. Hold the key at phase end.",
 	},
 };
