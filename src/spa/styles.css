@@ -823,6 +823,11 @@ main {
 	.ai-panel {
 		grid-row: 2;
 		min-height: 0;
+		/* Reset desktop flex-row sizing: the row is `display: grid` here, so
+		   `flex: 1 1 0; width: 0` from the desktop block would otherwise
+		   collapse panels to zero width inside their grid cells. */
+		flex: initial;
+		width: auto;
 	}
 
 	.ai-panel .panel-meta {
