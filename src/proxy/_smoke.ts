@@ -15,10 +15,10 @@ interface Env {
 	 * Intentionally not committed in vars.
 	 */
 	OPENROUTER_API_KEY?: string;
-	/** Token-guard configuration knobs (all optional; defaults in configFromEnv). */
-	PER_IP_DAILY_TOKEN_MAX?: string;
-	GLOBAL_DAILY_TOKEN_MAX?: string;
-	PRE_CHARGE_ESTIMATE?: string;
+	/** Cost-guard configuration knobs in micro-USD; all optional, defaults in configFromEnv. */
+	PER_IP_DAILY_MICRO_USD_MAX?: string;
+	GLOBAL_DAILY_MICRO_USD_MAX?: string;
+	PRE_CHARGE_MICRO_USD?: string;
 	/**
 	 * Comma-separated list of allowed CORS origins for POST /v1/chat/completions.
 	 * Example (wrangler.jsonc): "https://corvous.github.io"

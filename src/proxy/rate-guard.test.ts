@@ -1,18 +1,18 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+	type CostGuardConfig,
 	globalKey,
 	perIpKey,
 	preCharge,
 	rateLimitResponse,
 	reconcile,
 	refundFull,
-	type TokenGuardConfig,
 	utcDateKey,
 } from "./rate-guard";
 
 /**
- * Tests for the token-denominated rate-guard (issue #37).
+ * Tests for the cost-denominated rate-guard (units: micro-USD).
  *
  * The KV namespace used here is `RATE_GUARD_KV` — bound in wrangler.jsonc.
  * Tests run inside @cloudflare/vitest-pool-workers, so `env.RATE_GUARD_KV`
@@ -23,22 +23,21 @@ function kv(): KVNamespace {
 	return (env as Record<string, KVNamespace>).RATE_GUARD_KV as KVNamespace;
 }
 
-// Clear KV state before each test so tests are independent
 beforeEach(async () => {
 	const ns = kv();
 	const listed = await ns.list();
 	await Promise.all(listed.keys.map((k) => ns.delete(k.name)));
 });
 
-// Fixed timestamps for deterministic UTC-day keys
 const DAY1_MS = new Date("2026-05-01T12:00:00Z").getTime();
 const DAY2_MS = new Date("2026-05-02T00:00:01Z").getTime();
 
-// Tight caps for test speed
-const CFG: TokenGuardConfig = {
-	perIpDailyTokenMax: 10_000,
-	globalDailyTokenMax: 50_000,
-	preChargeEstimate: 4_000,
+// Tight caps for test speed. Values are in micro-USD; the math is the same
+// shape as the previous token-denominated guard so the assertions still hold.
+const CFG: CostGuardConfig = {
+	perIpDailyMicroUsdMax: 10_000,
+	globalDailyMicroUsdMax: 50_000,
+	preChargeMicroUsd: 4_000,
 };
 
 // ── utcDateKey ────────────────────────────────────────────────────────────────
@@ -60,24 +59,33 @@ describe("utcDateKey", () => {
 	});
 });
 
+// ── key shapes ────────────────────────────────────────────────────────────────
+
+describe("key shapes", () => {
+	it("perIpKey uses cost: namespace", () => {
+		expect(perIpKey("1.2.3.4", DAY1_MS)).toBe("cost:ip:2026-05-01:1.2.3.4");
+	});
+
+	it("globalKey uses cost: namespace", () => {
+		expect(globalKey(DAY1_MS)).toBe("cost:global:2026-05-01");
+	});
+});
+
 // ── preCharge — per-IP ────────────────────────────────────────────────────────
 
 describe("preCharge — per-IP daily cap", () => {
 	it("allows the first request (counter starts at 0)", async () => {
 		const result = await preCharge(kv(), "1.2.3.4", DAY1_MS, CFG);
 		expect(result.allowed).toBe(true);
-		if (result.allowed) expect(result.preCharged).toBe(CFG.preChargeEstimate);
+		if (result.allowed) expect(result.preCharged).toBe(CFG.preChargeMicroUsd);
 	});
 
-	it("allows a request that lands exactly AT the cap (current + estimate === cap)", async () => {
-		// Seed counter to cap - estimate so next preCharge lands exactly at cap
+	it("allows a request that lands exactly AT the cap", async () => {
 		const ipK = perIpKey("1.2.3.4", DAY1_MS);
 		await kv().put(
 			ipK,
-			String(CFG.perIpDailyTokenMax - CFG.preChargeEstimate),
-			{
-				expirationTtl: 25 * 3600,
-			},
+			String(CFG.perIpDailyMicroUsdMax - CFG.preChargeMicroUsd),
+			{ expirationTtl: 25 * 3600 },
 		);
 
 		const result = await preCharge(kv(), "1.2.3.4", DAY1_MS, CFG);
@@ -85,11 +93,10 @@ describe("preCharge — per-IP daily cap", () => {
 	});
 
 	it("denies a request that would cross just over the cap", async () => {
-		// Seed counter to (cap - estimate + 1) so next preCharge crosses cap
 		const ipK = perIpKey("1.2.3.4", DAY1_MS);
 		await kv().put(
 			ipK,
-			String(CFG.perIpDailyTokenMax - CFG.preChargeEstimate + 1),
+			String(CFG.perIpDailyMicroUsdMax - CFG.preChargeMicroUsd + 1),
 			{ expirationTtl: 25 * 3600 },
 		);
 
@@ -102,7 +109,7 @@ describe("preCharge — per-IP daily cap", () => {
 		const ipK = perIpKey("1.2.3.4", DAY1_MS);
 		await kv().put(
 			ipK,
-			String(CFG.perIpDailyTokenMax - CFG.preChargeEstimate + 1),
+			String(CFG.perIpDailyMicroUsdMax - CFG.preChargeMicroUsd + 1),
 			{ expirationTtl: 25 * 3600 },
 		);
 
@@ -110,7 +117,6 @@ describe("preCharge — per-IP daily cap", () => {
 
 		const gK = globalKey(DAY1_MS);
 		const globalVal = await kv().get(gK);
-		// Global counter must remain untouched
 		expect(globalVal).toBeNull();
 	});
 
@@ -118,7 +124,7 @@ describe("preCharge — per-IP daily cap", () => {
 		const ipK = perIpKey("1.1.1.1", DAY1_MS);
 		await kv().put(
 			ipK,
-			String(CFG.perIpDailyTokenMax - CFG.preChargeEstimate + 1),
+			String(CFG.perIpDailyMicroUsdMax - CFG.preChargeMicroUsd + 1),
 			{ expirationTtl: 25 * 3600 },
 		);
 
@@ -130,13 +136,11 @@ describe("preCharge — per-IP daily cap", () => {
 	});
 
 	it("resets on a new UTC day (different day key)", async () => {
-		// Exhaust IP on day 1
 		const ipK = perIpKey("1.2.3.4", DAY1_MS);
-		await kv().put(ipK, String(CFG.perIpDailyTokenMax), {
+		await kv().put(ipK, String(CFG.perIpDailyMicroUsdMax), {
 			expirationTtl: 25 * 3600,
 		});
 
-		// Day 2 has a fresh counter
 		const result = await preCharge(kv(), "1.2.3.4", DAY2_MS, CFG);
 		expect(result.allowed).toBe(true);
 	});
@@ -149,7 +153,7 @@ describe("preCharge — global daily cap", () => {
 		const gK = globalKey(DAY1_MS);
 		await kv().put(
 			gK,
-			String(CFG.globalDailyTokenMax - CFG.preChargeEstimate + 1),
+			String(CFG.globalDailyMicroUsdMax - CFG.preChargeMicroUsd + 1),
 			{ expirationTtl: 25 * 3600 },
 		);
 
@@ -162,10 +166,8 @@ describe("preCharge — global daily cap", () => {
 		const gK = globalKey(DAY1_MS);
 		await kv().put(
 			gK,
-			String(CFG.globalDailyTokenMax - CFG.preChargeEstimate),
-			{
-				expirationTtl: 25 * 3600,
-			},
+			String(CFG.globalDailyMicroUsdMax - CFG.preChargeMicroUsd),
+			{ expirationTtl: 25 * 3600 },
 		);
 
 		const result = await preCharge(kv(), "1.2.3.4", DAY1_MS, CFG);
@@ -173,29 +175,27 @@ describe("preCharge — global daily cap", () => {
 	});
 
 	it("per-IP cap fires before global cap is checked", async () => {
-		// Set per-IP just over and global just over
 		const ipK = perIpKey("1.2.3.4", DAY1_MS);
 		await kv().put(
 			ipK,
-			String(CFG.perIpDailyTokenMax - CFG.preChargeEstimate + 1),
+			String(CFG.perIpDailyMicroUsdMax - CFG.preChargeMicroUsd + 1),
 			{ expirationTtl: 25 * 3600 },
 		);
 		const gK = globalKey(DAY1_MS);
 		await kv().put(
 			gK,
-			String(CFG.globalDailyTokenMax - CFG.preChargeEstimate + 1),
+			String(CFG.globalDailyMicroUsdMax - CFG.preChargeMicroUsd + 1),
 			{ expirationTtl: 25 * 3600 },
 		);
 
 		const result = await preCharge(kv(), "1.2.3.4", DAY1_MS, CFG);
-		// Should be per-ip-daily because per-IP is checked first
 		expect(result.allowed).toBe(false);
 		if (!result.allowed) expect(result.reason).toBe("per-ip-daily");
 	});
 
 	it("resets on a new UTC day", async () => {
 		const gK = globalKey(DAY1_MS);
-		await kv().put(gK, String(CFG.globalDailyTokenMax), {
+		await kv().put(gK, String(CFG.globalDailyMicroUsdMax), {
 			expirationTtl: 25 * 3600,
 		});
 
@@ -208,11 +208,10 @@ describe("preCharge — global daily cap", () => {
 
 describe("reconcile", () => {
 	it("refunds the delta on both counters when actual < preCharged (under-charge)", async () => {
-		// First preCharge sets counters to preChargeEstimate (4000)
 		await preCharge(kv(), "1.2.3.4", DAY1_MS, CFG);
 
-		// Actual usage was 1500 — under-charged by 2500
-		await reconcile(kv(), "1.2.3.4", DAY1_MS, CFG.preChargeEstimate, 1500);
+		// Actual cost was 1500 micro-USD — under-charged by 2500
+		await reconcile(kv(), "1.2.3.4", DAY1_MS, CFG.preChargeMicroUsd, 1500);
 
 		const ipK = perIpKey("1.2.3.4", DAY1_MS);
 		const gK = globalKey(DAY1_MS);
@@ -222,10 +221,9 @@ describe("reconcile", () => {
 		expect(Number(gVal)).toBe(1500);
 	});
 
-	it("is a no-op when actual === preCharged (exact match)", async () => {
+	it("is a no-op when actual === preCharged", async () => {
 		await preCharge(kv(), "1.2.3.4", DAY1_MS, CFG);
 
-		// Record value before reconcile
 		const ipK = perIpKey("1.2.3.4", DAY1_MS);
 		const before = await kv().get(ipK);
 
@@ -233,8 +231,8 @@ describe("reconcile", () => {
 			kv(),
 			"1.2.3.4",
 			DAY1_MS,
-			CFG.preChargeEstimate,
-			CFG.preChargeEstimate,
+			CFG.preChargeMicroUsd,
+			CFG.preChargeMicroUsd,
 		);
 
 		const after = await kv().get(ipK);
@@ -247,16 +245,13 @@ describe("reconcile", () => {
 		const ipK = perIpKey("1.2.3.4", DAY1_MS);
 		const before = await kv().get(ipK);
 
-		// Over-charge: actual = 9000 (estimate was 4000)
-		await reconcile(kv(), "1.2.3.4", DAY1_MS, CFG.preChargeEstimate, 9000);
+		await reconcile(kv(), "1.2.3.4", DAY1_MS, CFG.preChargeMicroUsd, 9000);
 
 		const after = await kv().get(ipK);
-		// Counter must NOT change (no additional debit)
 		expect(after).toBe(before);
 	});
 
 	it("never refunds below zero even if actual < 0 (edge case)", async () => {
-		// Seed a very small counter value (e.g., 100 tokens)
 		const ipK = perIpKey("1.2.3.4", DAY1_MS);
 		const gK = globalKey(DAY1_MS);
 		await Promise.all([
@@ -264,7 +259,6 @@ describe("reconcile", () => {
 			kv().put(gK, "100", { expirationTtl: 25 * 3600 }),
 		]);
 
-		// preCharged=4000, actual=0 → delta=-4000, but counter is only 100
 		await reconcile(kv(), "1.2.3.4", DAY1_MS, 4000, 0);
 
 		const [ipVal, gVal] = await Promise.all([kv().get(ipK), kv().get(gK)]);
@@ -279,7 +273,7 @@ describe("refundFull", () => {
 	it("refunds the entire preCharge from both counters", async () => {
 		await preCharge(kv(), "1.2.3.4", DAY1_MS, CFG);
 
-		await refundFull(kv(), "1.2.3.4", DAY1_MS, CFG.preChargeEstimate);
+		await refundFull(kv(), "1.2.3.4", DAY1_MS, CFG.preChargeMicroUsd);
 
 		const ipK = perIpKey("1.2.3.4", DAY1_MS);
 		const gK = globalKey(DAY1_MS);
@@ -290,18 +284,15 @@ describe("refundFull", () => {
 	});
 
 	it("only refunds the specific IP — other IPs are unaffected", async () => {
-		// Both IPs pre-charge
 		await preCharge(kv(), "1.1.1.1", DAY1_MS, CFG);
 		await preCharge(kv(), "2.2.2.2", DAY1_MS, CFG);
 
-		// Only refund IP A
-		await refundFull(kv(), "1.1.1.1", DAY1_MS, CFG.preChargeEstimate);
+		await refundFull(kv(), "1.1.1.1", DAY1_MS, CFG.preChargeMicroUsd);
 
 		const ipK_B = perIpKey("2.2.2.2", DAY1_MS);
 		const ipVal_B = await kv().get(ipK_B);
 
-		// IP B's counter should still reflect its own pre-charge
-		expect(Number(ipVal_B)).toBe(CFG.preChargeEstimate);
+		expect(Number(ipVal_B)).toBe(CFG.preChargeMicroUsd);
 	});
 });
 
@@ -343,7 +334,6 @@ describe("rateLimitResponse", () => {
 		const retryAfter = Number(resp.headers.get("Retry-After"));
 		expect(Number.isInteger(retryAfter)).toBe(true);
 		expect(retryAfter).toBeGreaterThan(0);
-		// Should be at most 24h = 86400 seconds
 		expect(retryAfter).toBeLessThanOrEqual(86400);
 	});
 });
