@@ -226,34 +226,53 @@ export async function runRound(
 		const dispatchResult = dispatchAiTurn(state, action);
 		state = dispatchResult.game;
 
-		// Collect records produced by this dispatch
+		// Collect records produced by this dispatch (examine produces none)
 		for (const record of dispatchResult.records) {
 			roundActions.push(record);
 		}
 
 		// Record tool roundtrip for this AI if a tool call was successfully parsed
 		if (toolCalls.length > 0 && action.toolCall && toolCallId !== undefined) {
-			// Find the tool record from dispatch records
-			const toolRecord = dispatchResult.records.find(
-				(r) => r.kind === "tool_success" || r.kind === "tool_failure",
-			);
-			const success = toolRecord?.kind === "tool_success";
-			const description = toolRecord?.description ?? "";
+			if (dispatchResult.actorPrivateToolResult !== undefined) {
+				// examine: private result — NOT added to roundActions; only fed back to actor
+				const { description, success } = dispatchResult.actorPrivateToolResult;
+				newToolRoundtrip[aiId] = {
+					assistantToolCalls: toolCalls.map((c) => ({
+						id: c.id,
+						name: c.name,
+						argumentsJson: c.argumentsJson,
+					})),
+					toolResults: [
+						{
+							tool_call_id: toolCallId,
+							success,
+							description,
+						},
+					],
+				};
+			} else {
+				// Normal tool: find the record from dispatch
+				const toolRecord = dispatchResult.records.find(
+					(r) => r.kind === "tool_success" || r.kind === "tool_failure",
+				);
+				const success = toolRecord?.kind === "tool_success";
+				const description = toolRecord?.description ?? "";
 
-			newToolRoundtrip[aiId] = {
-				assistantToolCalls: toolCalls.map((c) => ({
-					id: c.id,
-					name: c.name,
-					argumentsJson: c.argumentsJson,
-				})),
-				toolResults: [
-					{
-						tool_call_id: toolCallId,
-						success,
-						description,
-					},
-				],
-			};
+				newToolRoundtrip[aiId] = {
+					assistantToolCalls: toolCalls.map((c) => ({
+						id: c.id,
+						name: c.name,
+						argumentsJson: c.argumentsJson,
+					})),
+					toolResults: [
+						{
+							tool_call_id: toolCallId,
+							success,
+							description,
+						},
+					],
+				};
+			}
 		}
 	}
 
