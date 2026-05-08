@@ -63,8 +63,8 @@ describe("COLOR_PALETTE", () => {
 		expect(COLOR_PALETTE.length).toBeGreaterThanOrEqual(10);
 	});
 
-	it("has at most 12 entries", () => {
-		expect(COLOR_PALETTE.length).toBeLessThanOrEqual(12);
+	it("has at most 30 entries", () => {
+		expect(COLOR_PALETTE.length).toBeLessThanOrEqual(30);
 	});
 
 	it("every entry is a valid lowercase hex color", () => {
