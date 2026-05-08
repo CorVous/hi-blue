@@ -883,7 +883,10 @@ export function renderGame(
 			session.getState().personas[addressed]?.name ?? addressed;
 		const persistedPrefix = `*${addressedNameNow} `;
 		promptInput.value = persistedPrefix;
-		promptInput.setSelectionRange(persistedPrefix.length, persistedPrefix.length);
+		promptInput.setSelectionRange(
+			persistedPrefix.length,
+			persistedPrefix.length,
+		);
 		promptInput.focus();
 
 		// Append the (mention-stripped) player message to the addressed panel.
