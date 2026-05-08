@@ -770,3 +770,114 @@ describe("## What you see (cone)", () => {
 		}
 	});
 });
+
+// ----------------------------------------------------------------------------
+// Unified Conversation log (issue #129)
+// Verifies the new single `## Conversation` section, replacing separate
+// `## Whispers Received` and `## Conversation` sections.
+// ----------------------------------------------------------------------------
+describe("unified ## Conversation section (issue #129)", () => {
+	it("never emits '## Whispers Received' — not in any fixture state", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = appendWhisper(game, {
+			from: "green",
+			to: "red",
+			content: "psst",
+			round: 1,
+		});
+		for (const aiId of ["red", "green", "blue"]) {
+			const ctx = buildAiContext(game, aiId);
+			const prompt = ctx.toSystemPrompt();
+			expect(prompt).not.toContain("## Whispers Received");
+		}
+	});
+
+	it("voice-chat is formatted with round tag and quotes", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = appendChat(game, "red", { role: "player", content: "Hello Ember" });
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toContain('[Round 0] A voice says: "Hello Ember"');
+	});
+
+	it("AI reply is formatted with round tag and quotes", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = appendChat(game, "red", { role: "ai", content: "Greetings" });
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toContain('[Round 0] You: "Greetings"');
+	});
+
+	it("whisper is rendered in the unified ## Conversation section with correct format", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = appendWhisper(game, {
+			from: "green",
+			to: "red",
+			content: "secret",
+			round: 1,
+		});
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toContain("## Conversation");
+		expect(prompt).toContain('[Round 1] *green whispered to you: "secret"');
+		// The sender does not see their own whisper in their Conversation log
+		const greenCtx = buildAiContext(game, "green");
+		const greenPrompt = greenCtx.toSystemPrompt();
+		expect(greenPrompt).not.toContain("secret");
+	});
+
+	it("whisper does not appear in unrelated AI's conversation", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = appendWhisper(game, {
+			from: "green",
+			to: "red",
+			content: "only for red",
+			round: 0,
+		});
+		const blueCtx = buildAiContext(game, "blue");
+		const bluePrompt = blueCtx.toSystemPrompt();
+		expect(bluePrompt).not.toContain("only for red");
+	});
+
+	it("## Conversation section is not emitted when there are no log entries", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		// No chat, no whispers, no physical log entries → no Conversation section
+		expect(prompt).not.toContain("## Conversation");
+	});
+
+	it("events are sorted by round ascending across all event types", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		// Round 2 whisper then round 0 chat — expect round 0 first
+		game = appendWhisper(game, {
+			from: "green",
+			to: "red",
+			content: "later",
+			round: 2,
+		});
+		game = appendChat(game, "red", { role: "player", content: "earlier" });
+		// chat was appended at round=0 (phase.round is 0 at this point)
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		const chatIdx = prompt.indexOf('[Round 0] A voice says: "earlier"');
+		const whisperIdx = prompt.indexOf('[Round 2] *green whispered to you: "later"');
+		expect(chatIdx).toBeGreaterThanOrEqual(0);
+		expect(whisperIdx).toBeGreaterThanOrEqual(0);
+		expect(chatIdx).toBeLessThan(whisperIdx);
+	});
+
+	it("'## Conversation' is the last section header — nothing after '## What you see' except Conversation", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = appendChat(game, "red", { role: "player", content: "hi" });
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		const headers = [...prompt.matchAll(/^## (.+)$/gm)].map((m) => m[1]);
+		const convIdx = headers.indexOf("Conversation");
+		expect(convIdx).toBeGreaterThanOrEqual(0);
+		// Conversation must be the last header
+		expect(convIdx).toBe(headers.length - 1);
+		// No Whispers Received header
+		expect(headers).not.toContain("Whispers Received");
+	});
+});

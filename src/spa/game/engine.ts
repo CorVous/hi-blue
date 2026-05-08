@@ -11,6 +11,7 @@ import type {
 	PersonaSpatialState,
 	PhaseConfig,
 	PhaseState,
+	PhysicalActionRecord,
 	WhisperMessage,
 } from "./types";
 
@@ -124,6 +125,7 @@ export function startPhase(
 		budgets,
 		chatHistories,
 		whispers: [],
+		physicalLog: [],
 		lockedOut: new Set(),
 		chatLockouts: new Map(),
 		personaSpatial,
@@ -223,14 +225,27 @@ export function deductBudget(game: GameState, aiId: AiId): GameState {
 export function appendChat(
 	game: GameState,
 	aiId: AiId,
-	message: ChatMessage,
+	message: Omit<ChatMessage, "round">,
 ): GameState {
 	return updateActivePhase(game, (phase) => ({
 		...phase,
 		chatHistories: {
 			...phase.chatHistories,
-			[aiId]: [...(phase.chatHistories[aiId] ?? []), message],
+			[aiId]: [
+				...(phase.chatHistories[aiId] ?? []),
+				{ ...message, round: phase.round },
+			],
 		},
+	}));
+}
+
+export function appendPhysicalAction(
+	game: GameState,
+	record: PhysicalActionRecord,
+): GameState {
+	return updateActivePhase(game, (phase) => ({
+		...phase,
+		physicalLog: [...phase.physicalLog, record],
 	}));
 }
 

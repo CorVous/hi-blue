@@ -76,6 +76,45 @@ export type RoundActionRecord = {
 export interface ChatMessage {
 	role: "player" | "ai";
 	content: string;
+	/** Round number in which this message was uttered. */
+	round: number;
+}
+
+/**
+ * A physical action that was observable by other AIs (via cone visibility).
+ * Appended to PhaseState.physicalLog by the dispatcher after each successful tool call.
+ * Does NOT include look (facing-change only, no observable physical event) or examine.
+ */
+export interface PhysicalActionRecord {
+	round: number;
+	actor: AiId;
+	/** The actor's cell at the time the action resolved (post-move for "go"). */
+	actorCellAtAction: GridPosition;
+	/** The actor's facing at the time the action resolved. */
+	actorFacingAtAction: CardinalDirection;
+	/** The observable action kind. */
+	kind: "go" | "pick_up" | "put_down" | "give" | "use";
+	/** Item id (for pick_up, put_down, give, use). */
+	item?: string;
+	/** Recipient AI id (for give). */
+	to?: AiId;
+	/**
+	 * Raw useOutcome string with {actor} token un-substituted (for use).
+	 * Witnesses render this with {actor}→"*<actor>"; actor sees {actor}→"you".
+	 */
+	useOutcome?: string;
+	/**
+	 * Raw placementFlavor string with {actor} token un-substituted (for put_down that
+	 * triggers a pair match). Witnesses render this with {actor}→"*<actor>".
+	 */
+	placementFlavorRaw?: string;
+	/** Direction of movement (for go). */
+	direction?: CardinalDirection;
+	/**
+	 * Snapshot of every other AI's spatial state at the moment this action resolved.
+	 * Used to determine cone-visibility for witnesses without re-walking history.
+	 */
+	witnessSpatial: Record<AiId, PersonaSpatialState>;
 }
 
 export interface WhisperMessage {
@@ -132,6 +171,8 @@ export interface PhaseState {
 	budgets: Record<AiId, AiBudget>;
 	chatHistories: Record<AiId, ChatMessage[]>;
 	whispers: WhisperMessage[];
+	/** Append-only log of observable physical actions for the phase. Used for Witnessed event rendering. */
+	physicalLog: PhysicalActionRecord[];
 	/** Budget-exhaustion lockout: prevents the AI from acting at all. */
 	lockedOut: Set<AiId>;
 	/**

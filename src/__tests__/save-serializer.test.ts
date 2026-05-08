@@ -110,6 +110,7 @@ describe("serializeGameSave", () => {
 		expect(ember?.phases[0]?.chatHistory[0]).toEqual({
 			role: "player",
 			content: "Hello Ember",
+			round: 0,
 		});
 	});
 

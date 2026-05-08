@@ -165,6 +165,8 @@ function deserializePhaseState(
 			]),
 		) as Record<string, ChatMessage[]>,
 		whispers: [...persisted.whispers],
+		// physicalLog is not persisted (derived on-demand for prompts, safe to reset on reload)
+		physicalLog: [],
 		lockedOut: new Set<AiId>(persisted.lockedOut),
 		chatLockouts: new Map<AiId, number>(persisted.chatLockouts),
 		personaSpatial: structuredClone(persisted.personaSpatial ?? {}),
