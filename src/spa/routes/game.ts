@@ -627,7 +627,7 @@ export function renderGame(
 
 	// One-time chrome: ASCII banner + initial top-info row.
 	const bannerEl = doc.querySelector<HTMLElement>("#banner");
-	if (bannerEl && !bannerEl.textContent) bannerEl.textContent = BANNER;
+	if (bannerEl && !bannerEl.innerHTML) bannerEl.innerHTML = BANNER;
 	const sessionId = getOrMintSessionId();
 	const topinfoLeftEl = doc.querySelector<HTMLElement>("#topinfo-left");
 	const topinfoRightEl = doc.querySelector<HTMLElement>("#topinfo-right");

@@ -4,6 +4,7 @@
 	--bg: #0b0700;
 	--amber: #ffb454;
 	--amber-dim: #7a5a2c;
+	--blue: #7fb6ff;
 	--you: #fff5e0;
 	--err: #ff7b6b;
 }
@@ -111,6 +112,13 @@ header {
 	font-size: 13px;
 	letter-spacing: 0;
 	color: var(--amber);
+}
+
+.banner-blue {
+	color: var(--blue);
+	text-shadow:
+		0 0 1px var(--blue),
+		0 0 6px rgba(127, 182, 255, 0.5);
 }
 
 /* Top-info row */

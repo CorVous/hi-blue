@@ -1,20 +1,33 @@
 import type { AiPersona } from "./game/types";
 
-const BANNER_LINES = [
-	"   ██╗  ██╗██╗      ██████╗ ██╗     ██╗   ██╗███████╗",
-	"   ██║  ██║██║      ██╔══██╗██║     ██║   ██║██╔════╝",
-	"   ███████║██║█████╗██████╔╝██║     ██║   ██║█████╗  ",
-	"   ██╔══██║██║╚════╝██╔══██╗██║     ██║   ██║██╔══╝  ",
-	"   ██║  ██║██║      ██████╔╝███████╗╚██████╔╝███████╗   bbs terminal · v0.3 · amber ",
-	"   ╚═╝  ╚═╝╚═╝      ╚═════╝ ╚══════╝ ╚═════╝ ╚══════╝",
+// Each line is split into amber prefix (HI-), blue middle (BLUE block
+// letters), and optional amber suffix (the meta line on row 5). The blue
+// segment is 33 chars wide on every row, so column alignment is preserved.
+const BANNER_SEGMENTS: ReadonlyArray<readonly [string, string, string]> = [
+	["   ██╗  ██╗██╗      ", "██████╗ ██╗     ██╗   ██╗███████╗", ""],
+	["   ██║  ██║██║      ", "██╔══██╗██║     ██║   ██║██╔════╝", ""],
+	["   ███████║██║█████╗", "██████╔╝██║     ██║   ██║█████╗  ", ""],
+	["   ██╔══██║██║╚════╝", "██╔══██╗██║     ██║   ██║██╔══╝  ", ""],
+	[
+		"   ██║  ██║██║      ",
+		"██████╔╝███████╗╚██████╔╝███████╗",
+		"   bbs terminal · v0.3 · amber ",
+	],
+	["   ╚═╝  ╚═╝╚═╝      ", "╚═════╝ ╚══════╝ ╚═════╝ ╚══════╝", ""],
 ] as const;
 
+/** Banner as HTML — the BLUE block letters are wrapped in `.banner-blue`. */
 export const BANNER: string = (() => {
-	const w = Math.max(...BANNER_LINES.map((l) => [...l].length));
-	const pad = (s: string): string => s + " ".repeat(w - [...s].length);
+	const len = (s: string): number => [...s].length;
+	const lineLen = (seg: readonly [string, string, string]): number =>
+		len(seg[0]) + len(seg[1]) + len(seg[2]);
+	const w = Math.max(...BANNER_SEGMENTS.map(lineLen));
 	const top = ` ╔${"═".repeat(w + 2)}╗`;
 	const bot = ` ╚${"═".repeat(w + 2)}╝`;
-	const body = BANNER_LINES.map((l) => ` ║ ${pad(l)} ║`);
+	const body = BANNER_SEGMENTS.map(([a, b, c]) => {
+		const pad = " ".repeat(w - lineLen([a, b, c]));
+		return ` ║ ${a}<span class="banner-blue">${b}</span>${c}${pad} ║`;
+	});
 	return [top, ...body, bot].join("\n");
 })();
 
