@@ -389,6 +389,13 @@ main {
 	word-break: break-word;
 }
 
+/* Each transcript line is wrapped in a .msg-line block so strip-card mode
+   can apply per-line nowrap + ellipsis. Desktop inherits pre-wrap from
+   .transcript and behaves identically to the pre-wrapper rendering. */
+.msg-line {
+	display: block;
+}
+
 .transcript .msg-you {
 	color: var(--you);
 	text-shadow: 0 0 6px rgba(255, 245, 224, 0.5);
@@ -835,9 +842,28 @@ main {
 	}
 
 	.ai-panel .scroll {
+		position: relative;
 		overflow: hidden;
 		font-size: 11px;
 		padding: 4px 6px;
+	}
+
+	/* Strip-card preview: bottom-anchor the transcript so the most recent
+	   messages stay in view. Position absolute lets the transcript grow
+	   above its container; overflow:hidden on .scroll clips the older
+	   lines off the top. */
+	.ai-panel .transcript {
+		position: absolute;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		margin-top: 0;
+	}
+
+	.ai-panel .msg-line {
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
 	.ai-panel.panel--addressed,
@@ -853,9 +879,24 @@ main {
 
 	.ai-panel.panel--addressed .scroll,
 	#panels:not(:has(.panel--addressed)) > .ai-panel:first-child .scroll {
+		position: static;
 		overflow-y: auto;
 		font-size: inherit;
 		padding: 2px 10px 12px;
+	}
+
+	/* Main panel reverts to the scrollable, in-flow transcript. */
+	.ai-panel.panel--addressed .transcript,
+	#panels:not(:has(.panel--addressed)) > .ai-panel:first-child .transcript {
+		position: static;
+		margin-top: auto;
+	}
+
+	.ai-panel.panel--addressed .msg-line,
+	#panels:not(:has(.panel--addressed)) > .ai-panel:first-child .msg-line {
+		white-space: pre-wrap;
+		overflow: visible;
+		text-overflow: clip;
 	}
 
 	.cmd {

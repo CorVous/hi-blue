@@ -48,11 +48,10 @@ function transcriptName(name: string): string {
 const AI_PREFIX_RE = /^> \*(\S+) /;
 
 /** Render a saved transcript string into the given element by parsing
- * lines and wrapping AI prefix portions (`> *<handle> `) in `.msg-prefix`
- * spans tinted with the persona's color and other `> ` lines (player
- * messages, format `> <msg>`) in `.msg-you` spans. The remainder of an
- * AI line is appended as a plain text node (amber). Replaces any
- * existing children. */
+ * lines and wrapping each in a `.msg-line` block. AI prefix portions
+ * (`> *<handle> `) become `.msg-prefix` spans tinted with the persona's
+ * color; player lines (`> <msg>`) become `.msg-you` spans. The per-line
+ * wrapper is what enables strip-card mode to apply nowrap+ellipsis. */
 function renderRestoredTranscript(
 	transcript: HTMLElement,
 	saved: string,
@@ -61,10 +60,10 @@ function renderRestoredTranscript(
 	const doc = transcript.ownerDocument;
 	transcript.textContent = "";
 	if (!saved) return;
-	// Split on \n boundaries while keeping the trailing newlines as their
-	// own segments so we can preserve the exact original text.
 	const lines = saved.split(/(?<=\n)/);
 	for (const line of lines) {
+		const lineEl = doc.createElement("div");
+		lineEl.className = "msg-line";
 		const m = AI_PREFIX_RE.exec(line);
 		if (m?.[1]) {
 			const handle = m[1];
@@ -78,19 +77,18 @@ function renderRestoredTranscript(
 				prefix.style.setProperty("--prefix-color", persona.color);
 			}
 			prefix.textContent = prefixText;
-			transcript.appendChild(prefix);
+			lineEl.appendChild(prefix);
 			const rest = line.slice(prefixText.length);
-			if (rest) transcript.appendChild(doc.createTextNode(rest));
-			continue;
-		}
-		if (line.startsWith("> ")) {
+			if (rest) lineEl.appendChild(doc.createTextNode(rest));
+		} else if (line.startsWith("> ")) {
 			const span = doc.createElement("span");
 			span.className = "msg-you";
 			span.textContent = line;
-			transcript.appendChild(span);
-			continue;
+			lineEl.appendChild(span);
+		} else {
+			lineEl.appendChild(doc.createTextNode(line));
 		}
-		transcript.appendChild(doc.createTextNode(line));
+		transcript.appendChild(lineEl);
 	}
 }
 
@@ -431,11 +429,13 @@ export function renderGame(
 					const persona = restoredPersonas[aiId];
 					const personaName = persona?.name ?? aiId;
 					for (const msg of restoredPhase.chatHistories[aiId] ?? []) {
+						const lineEl = doc.createElement("div");
+						lineEl.className = "msg-line";
 						if (msg.role === "player") {
 							const span = doc.createElement("span");
 							span.className = "msg-you";
 							span.textContent = `> ${msg.content}\n`;
-							transcript.appendChild(span);
+							lineEl.appendChild(span);
 						} else {
 							const prefixSpan = doc.createElement("span");
 							prefixSpan.className = "msg-prefix";
@@ -443,9 +443,10 @@ export function renderGame(
 								prefixSpan.style.setProperty("--prefix-color", persona.color);
 							}
 							prefixSpan.textContent = `> *${transcriptName(personaName)} `;
-							transcript.appendChild(prefixSpan);
-							transcript.appendChild(doc.createTextNode(`${msg.content}\n`));
+							lineEl.appendChild(prefixSpan);
+							lineEl.appendChild(doc.createTextNode(`${msg.content}\n`));
 						}
+						transcript.appendChild(lineEl);
 					}
 				}
 			});
@@ -726,37 +727,78 @@ export function renderGame(
 		if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
 	}
 
-	// Helper: append plain text (amber default) as a text node — preserves
-	// any existing element children (.msg-you, .msg-prefix) in the transcript.
+	// Helper: open a fresh empty `.msg-line` div as a child of the transcript
+	// and return it. Use for events that semantically start a new line
+	// (player message, AI prefix, restored message).
+	function startMsgLine(transcript: HTMLElement): HTMLElement {
+		const div = doc.createElement("div");
+		div.className = "msg-line";
+		transcript.appendChild(div);
+		return div;
+	}
+
+	// Helper: return the current open msg-line (last child whose text
+	// hasn't been terminated by a `\n`), creating a fresh one if needed.
+	// Use for streaming tokens that continue an in-progress line.
+	function getOrCreateMsgLine(transcript: HTMLElement): HTMLElement {
+		const last = transcript.lastElementChild as HTMLElement | null;
+		if (
+			last?.classList.contains("msg-line") &&
+			!(last.textContent ?? "").endsWith("\n")
+		) {
+			return last;
+		}
+		return startMsgLine(transcript);
+	}
+
+	// Helper: append plain text (amber default), tracking msg-line boundaries
+	// so a streamed `\n` closes the current line and subsequent text starts
+	// a fresh one. Preserves existing .msg-you / .msg-prefix children.
 	function appendToTranscript(aiId: AiId, text: string): void {
 		const el = getTranscript(aiId);
 		if (!el) return;
-		el.appendChild(doc.createTextNode(text));
+		let remaining = text;
+		while (remaining.length > 0) {
+			const line = getOrCreateMsgLine(el);
+			const nlIdx = remaining.indexOf("\n");
+			if (nlIdx === -1) {
+				line.appendChild(doc.createTextNode(remaining));
+				remaining = "";
+			} else {
+				line.appendChild(doc.createTextNode(remaining.slice(0, nlIdx + 1)));
+				remaining = remaining.slice(nlIdx + 1);
+			}
+		}
 		scrollToBottom(el);
 	}
 
-	// Helper: append a player line wrapped in a .msg-you span (warm white).
+	// Helper: append a player line wrapped in a .msg-you span (warm white)
+	// inside its own .msg-line block.
 	function appendPlayerLine(aiId: AiId, text: string): void {
 		const el = getTranscript(aiId);
 		if (!el) return;
+		const line = startMsgLine(el);
 		const span = doc.createElement("span");
 		span.className = "msg-you";
 		span.textContent = text;
-		el.appendChild(span);
+		line.appendChild(span);
 		scrollToBottom(el);
 	}
 
 	// Helper: append an AI persona-prefix span (`> *<handle> `) tinted with
-	// the persona's color. The trailing space is included in the span.
+	// the persona's color, opening a fresh .msg-line block for it. The
+	// streaming AI tokens that follow continue inside the same .msg-line
+	// until a `\n` closes the message.
 	function appendAiPrefix(aiId: AiId, personaName: string): void {
 		const el = getTranscript(aiId);
 		if (!el) return;
+		const line = startMsgLine(el);
 		const span = doc.createElement("span");
 		span.className = "msg-prefix";
 		const color = session?.getState().personas[aiId]?.color;
 		if (color) span.style.setProperty("--prefix-color", color);
 		span.textContent = `> *${transcriptName(personaName)} `;
-		el.appendChild(span);
+		line.appendChild(span);
 		scrollToBottom(el);
 	}
 
