@@ -35,10 +35,10 @@
 	// Secrets (not committed here — provision via `wrangler secret put <NAME>`):
 	//   OPENROUTER_API_KEY — API key for OpenRouter (POST /v1/chat/completions)
 	"vars": {
-		// Per-IP daily ceiling, in integer micro-USD (1e-6 USD). 100000 = $0.10.
-		"PER_IP_DAILY_MICRO_USD_MAX": "100000",
-		// Global daily wallet ceiling, in integer micro-USD. 5000000 = $5.00.
-		"GLOBAL_DAILY_MICRO_USD_MAX": "5000000",
+		// Per-IP daily ceiling, in integer micro-USD (1e-6 USD). 1000000 = $1.00.
+		"PER_IP_DAILY_MICRO_USD_MAX": "1000000",
+		// Global daily wallet ceiling, in integer micro-USD. 10000000 = $10.00.
+		"GLOBAL_DAILY_MICRO_USD_MAX": "10000000",
 		// Pre-charge per request, in integer micro-USD. 5000 = $0.005.
 		"PRE_CHARGE_MICRO_USD": "5000",
 		// Comma-separated list of origins allowed to call POST /v1/chat/completions

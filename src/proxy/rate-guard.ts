@@ -32,9 +32,9 @@
  */
 
 export interface CostGuardConfig {
-	/** Per-IP daily ceiling in integer micro-USD (default 100_000 = $0.10). */
+	/** Per-IP daily ceiling in integer micro-USD (default 1_000_000 = $1.00). */
 	perIpDailyMicroUsdMax: number;
-	/** Global daily ceiling in integer micro-USD (default 5_000_000 = $5.00). */
+	/** Global daily ceiling in integer micro-USD (default 10_000_000 = $10.00). */
 	globalDailyMicroUsdMax: number;
 	/** Micro-USD deducted at request start, before actual cost is known
 	 *  (default 5_000 = $0.005). */
@@ -196,8 +196,10 @@ export function configFromEnv(env: {
 	PRE_CHARGE_MICRO_USD?: string;
 }): CostGuardConfig {
 	return {
-		perIpDailyMicroUsdMax: Number(env.PER_IP_DAILY_MICRO_USD_MAX ?? "100000"),
-		globalDailyMicroUsdMax: Number(env.GLOBAL_DAILY_MICRO_USD_MAX ?? "5000000"),
+		perIpDailyMicroUsdMax: Number(env.PER_IP_DAILY_MICRO_USD_MAX ?? "1000000"),
+		globalDailyMicroUsdMax: Number(
+			env.GLOBAL_DAILY_MICRO_USD_MAX ?? "10000000",
+		),
 		preChargeMicroUsd: Number(env.PRE_CHARGE_MICRO_USD ?? "5000"),
 	};
 }
