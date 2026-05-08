@@ -783,11 +783,11 @@ describe("renderGame — localStorage persistence", () => {
 		const { renderGame: renderGame2 } = await import("../routes/game.js");
 		await renderGame2(getEl<HTMLElement>("main"));
 
-		// Budget should reflect round 1 complete: $0.05 - $0.01 cost = $0.04000
+		// Budget should reflect round 1 complete: 5¢ - 1¢ cost = 4.000¢
 		const redBudget = document.querySelector<HTMLSpanElement>(
 			'.ai-panel[data-ai="red"] .panel-budget',
 		);
-		expect(redBudget?.textContent).toBe("$0.04000");
+		expect(redBudget?.textContent).toBe("4.000¢");
 
 		// Transcripts must be restored verbatim (regression: AI responses were lost on reload)
 		const redTranscript = document.querySelector<HTMLElement>(
