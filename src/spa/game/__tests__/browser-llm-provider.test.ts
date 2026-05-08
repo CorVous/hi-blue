@@ -101,3 +101,57 @@ describe("BrowserLLMProvider.streamRound — onDelta callback", () => {
 		vi.restoreAllMocks();
 	});
 });
+
+describe("BrowserLLMProvider — reasoning default (issue #169)", () => {
+	function captureRequestBody(): { getBody: () => Record<string, unknown> } {
+		const fetchMock = vi.fn().mockResolvedValue(
+			new Response(makeSseBody(["ok"]), {
+				status: 200,
+				headers: { "Content-Type": "text/event-stream" },
+			}),
+		);
+		vi.stubGlobal("fetch", fetchMock);
+		return {
+			getBody: () => {
+				const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+				return JSON.parse(String(init?.body)) as Record<string, unknown>;
+			},
+		};
+	}
+
+	it("disables reasoning by default (no opts)", async () => {
+		const { getBody } = captureRequestBody();
+
+		await new BrowserLLMProvider().streamRound([], []);
+
+		expect(getBody().reasoning).toEqual({ enabled: false });
+
+		vi.restoreAllMocks();
+	});
+
+	it("disables reasoning when constructed with { disableReasoning: true }", async () => {
+		const { getBody } = captureRequestBody();
+
+		await new BrowserLLMProvider({ disableReasoning: true }).streamRound(
+			[],
+			[],
+		);
+
+		expect(getBody().reasoning).toEqual({ enabled: false });
+
+		vi.restoreAllMocks();
+	});
+
+	it("omits the reasoning field when constructed with { disableReasoning: false }", async () => {
+		const { getBody } = captureRequestBody();
+
+		await new BrowserLLMProvider({ disableReasoning: false }).streamRound(
+			[],
+			[],
+		);
+
+		expect(getBody()).not.toHaveProperty("reasoning");
+
+		vi.restoreAllMocks();
+	});
+});

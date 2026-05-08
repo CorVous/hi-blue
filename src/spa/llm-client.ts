@@ -160,7 +160,8 @@ export async function streamCompletion(opts: {
 
 	// OpenRouter Reasoning Tokens API: { enabled: false } skips the model's
 	// thinking step entirely (vs. { exclude: true } which still thinks but
-	// hides the trace). Used by the ?think=0 dev affordance.
+	// hides the trace). Daemon turns default to disabled (see
+	// BrowserLLMProvider); the `?think=1` dev affordance opts back in.
 	if (disableReasoning) {
 		bodyObj.reasoning = { enabled: false };
 	}

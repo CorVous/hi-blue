@@ -486,18 +486,19 @@ export function renderGame(
 		if (overlay) overlay.scrollLeft = _promptInput.scrollLeft;
 	});
 
-	// Dev-only: ?think=0 disables the model's thinking step (OpenRouter
-	// reasoning.enabled=false). Gated to wrangler-dev host (see isDevHost).
+	// Reasoning is disabled by default for routine daemon turns (see
+	// BrowserLLMProvider). Dev-only `?think=1` opts the model's thinking
+	// step back on for prompt-tuning. Gated to wrangler-dev (see isDevHost).
 	//
 	// Merge hash-query-string params (from the router) with location.search
-	// params so flags like ?think=0, ?lockout=1, ?winImmediately=1 work whether
+	// params so flags like ?think=1, ?lockout=1, ?winImmediately=1 work whether
 	// they appear in the search string (e.g. "/?lockout=1") or after the hash
 	// (e.g. "/#/?lockout=1"). Hash params win on conflict.
 	const effectiveParams = new URLSearchParams(location.search);
 	if (params) {
 		for (const [k, v] of params) effectiveParams.set(k, v);
 	}
-	const disableReasoning = isDevHost() && effectiveParams.get("think") === "0";
+	const enableReasoning = isDevHost() && effectiveParams.get("think") === "1";
 
 	/** Show the persistence warning banner once (idempotent). */
 	function showPersistenceWarning(reason: string): void {
@@ -606,8 +607,8 @@ export function renderGame(
 			// synthesis completes are silently dropped (safe).
 			asyncInitPromise = (async () => {
 				try {
-					const synth = new BrowserSynthesisProvider({ disableReasoning });
-					const packLLM = new BrowserContentPackProvider({ disableReasoning });
+					const synth = new BrowserSynthesisProvider();
+					const packLLM = new BrowserContentPackProvider();
 					const personasPromise = generatePersonas(Math.random, synth);
 					const aiIdsPromise = personasPromise.then((p) => Object.keys(p));
 					// Silence derived-promise unhandled rejection when personasPromise
@@ -1089,7 +1090,9 @@ export function renderGame(
 		};
 
 		try {
-			const provider = new BrowserLLMProvider({ disableReasoning });
+			const provider = new BrowserLLMProvider({
+				disableReasoning: !enableReasoning,
+			});
 			const { result, completions, nextState } = await session.submitMessage(
 				addressed,
 				message,

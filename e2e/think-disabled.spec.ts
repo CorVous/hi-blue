@@ -2,17 +2,22 @@ import { expect, test } from "@playwright/test";
 import { getAiHandles, stubChatCompletions } from "./helpers";
 
 /**
- * `?think=0` is a wrangler-dev-only affordance that adds
- * `reasoning: { enabled: false }` to every `/v1/chat/completions` request body
- * the SPA POSTs, so the model skips its thinking step entirely.
+ * Routine daemon turns disable reasoning by default — `BrowserLLMProvider`
+ * passes `disableReasoning: true` to `streamCompletion`, which adds
+ * `reasoning: { enabled: false }` to every `/v1/chat/completions` body the
+ * SPA POSTs so GLM-4.7 skips its thinking step entirely.
  *
- * The unit tests in `src/spa/__tests__/llm-client.test.ts` lock the body shape
+ * `?think=1` is a wrangler-dev-only affordance that opts thinking back on
+ * for prompt-tuning.
+ *
+ * The unit tests in `src/spa/__tests__/llm-client.test.ts` and
+ * `src/spa/game/__tests__/browser-llm-provider.test.ts` lock the body shape
  * directly. This e2e spec confirms the wiring all the way through:
- * `?think=0` URL param → `isDevHost()` gate → `BrowserLLMProvider` →
- * `streamCompletion` → request body on the wire.
+ * URL → `isDevHost()` gate → `BrowserLLMProvider` → `streamCompletion` →
+ * request body on the wire.
  */
 
-test("?think=0 adds reasoning:{enabled:false} to chat-completions requests", async ({
+test("default daemon turns add reasoning:{enabled:false} to chat-completions requests", async ({
 	page,
 }) => {
 	const pageErrors: Error[] = [];
@@ -31,7 +36,7 @@ test("?think=0 adds reasoning:{enabled:false} to chat-completions requests", asy
 		return ["greetings"];
 	});
 
-	await page.goto("/?think=0");
+	await page.goto("/");
 
 	const { names } = await getAiHandles(page);
 
@@ -50,7 +55,7 @@ test("?think=0 adds reasoning:{enabled:false} to chat-completions requests", asy
 	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
 });
 
-test("without ?think=0, requests do NOT include the reasoning field", async ({
+test("?think=1 opts back into thinking — requests do NOT include the reasoning field", async ({
 	page,
 }) => {
 	const pageErrors: Error[] = [];
@@ -68,7 +73,7 @@ test("without ?think=0, requests do NOT include the reasoning field", async ({
 		return ["greetings"];
 	});
 
-	await page.goto("/");
+	await page.goto("/?think=1");
 
 	const { names } = await getAiHandles(page);
 
