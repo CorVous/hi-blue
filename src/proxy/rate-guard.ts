@@ -1,41 +1,47 @@
 /**
- * Server-side wallet protection for the LLM proxy (issue #37).
+ * Server-side wallet protection for the LLM proxy.
  *
- * Two independent token-denominated guards, both backed by Workers KV:
+ * Two independent cost-denominated guards (units: micro-USD; 1 USD = 1e6
+ * micro-USD), both backed by Workers KV:
  *
- * 1. Per-IP daily token cap
- *    Key: `tok:ip:<YYYY-MM-DD>:<ip>`
- *    Value: cumulative tokens consumed today (integer string)
+ * 1. Per-IP daily cost cap
+ *    Key: `cost:ip:<YYYY-MM-DD>:<ip>`
+ *    Value: cumulative micro-USD consumed today (integer string)
  *    TTL: 25 hours (survives the full UTC day with margin)
  *
  * 2. Global daily wallet cap
- *    Key: `tok:global:<YYYY-MM-DD>`
- *    Value: cumulative tokens consumed today across all IPs (integer string)
+ *    Key: `cost:global:<YYYY-MM-DD>`
+ *    Value: cumulative micro-USD consumed today across all IPs
  *    TTL: 25 hours
  *
  * Flow:
  *   preCharge() — at request start, deduct an estimate from both counters.
- *   reconcile() — at stream end, adjust both counters to actual usage.
+ *   reconcile() — at stream end, adjust both counters to the request's
+ *                 actual cost (prompt_tokens × prompt_price +
+ *                 completion_tokens × completion_price, rounded up).
  *   refundFull() — on stream failure, roll back the pre-charge entirely.
  *
- * Judgement calls (§11 of plan):
- *   - Cap is strict ceiling: deny when current + estimate > cap.
- *     At-cap is allowed; crossing not.
- *   - No atomic CAS on KV — same trade-off as the previous request-bucket guard.
- *   - Missing usage.total_tokens → full refund (not hold estimate).
- *   - Cross-day boundary refund: refund always hits the request-start UTC day.
+ * Judgement calls:
+ *   - Cap is a strict ceiling: deny when current + estimate > cap. At-cap
+ *     allowed; crossing not.
+ *   - No atomic CAS on KV — same trade-off as the previous request-bucket
+ *     guard. Brief over/under-counting at high concurrency is acceptable.
+ *   - Missing usage in upstream response → full refund (don't hold estimate).
+ *   - Refunds always hit the request-start UTC day even if a stream straddles
+ *     midnight.
  */
 
-export interface TokenGuardConfig {
-	/** Per-IP daily token ceiling (default 20_000). */
-	perIpDailyTokenMax: number;
-	/** Global daily wallet token ceiling (default 1_000_000). */
-	globalDailyTokenMax: number;
-	/** Tokens deducted at request start, before any usage is known (default 4_000). */
-	preChargeEstimate: number;
+export interface CostGuardConfig {
+	/** Per-IP daily ceiling in integer micro-USD (default 100_000 = $0.10). */
+	perIpDailyMicroUsdMax: number;
+	/** Global daily ceiling in integer micro-USD (default 5_000_000 = $5.00). */
+	globalDailyMicroUsdMax: number;
+	/** Micro-USD deducted at request start, before actual cost is known
+	 *  (default 5_000 = $0.005). */
+	preChargeMicroUsd: number;
 }
 
-export type TokenChargeResult =
+export type CostChargeResult =
 	| { allowed: true; preCharged: number }
 	| { allowed: false; reason: "per-ip-daily" | "global-daily" };
 
@@ -44,82 +50,73 @@ export function utcDateKey(ms: number): string {
 	return new Date(ms).toISOString().slice(0, 10);
 }
 
-/** Per-IP key shape: `tok:ip:<YYYY-MM-DD>:<ip>`. */
+/** Per-IP key shape: `cost:ip:<YYYY-MM-DD>:<ip>`. */
 export function perIpKey(ip: string, nowMs: number): string {
-	return `tok:ip:${utcDateKey(nowMs)}:${ip}`;
+	return `cost:ip:${utcDateKey(nowMs)}:${ip}`;
 }
 
-/** Global key shape: `tok:global:<YYYY-MM-DD>`. */
+/** Global key shape: `cost:global:<YYYY-MM-DD>`. */
 export function globalKey(nowMs: number): string {
-	return `tok:global:${utcDateKey(nowMs)}`;
+	return `cost:global:${utcDateKey(nowMs)}`;
 }
 
 const TTL_SEC = 25 * 60 * 60;
 
 /**
- * Pre-charge both per-IP and global counters by `cfg.preChargeEstimate`.
+ * Pre-charge both per-IP and global counters by `cfg.preChargeMicroUsd`.
  * Returns `{ allowed: false, reason }` if either cap would be crossed.
  */
 export async function preCharge(
 	kv: KVNamespace,
 	ip: string,
 	nowMs: number,
-	cfg: TokenGuardConfig,
-): Promise<TokenChargeResult> {
+	cfg: CostGuardConfig,
+): Promise<CostChargeResult> {
 	const ipKey = perIpKey(ip, nowMs);
 	const gKey = globalKey(nowMs);
 
-	// Read both counters in parallel
 	const [rawIp, rawGlobal] = await Promise.all([kv.get(ipKey), kv.get(gKey)]);
 
 	const perIp = rawIp === null ? 0 : Number.parseInt(rawIp, 10);
 	const global = rawGlobal === null ? 0 : Number.parseInt(rawGlobal, 10);
 
-	// Per-IP cap check (strict: crossing not allowed)
-	if (perIp + cfg.preChargeEstimate > cfg.perIpDailyTokenMax) {
+	if (perIp + cfg.preChargeMicroUsd > cfg.perIpDailyMicroUsdMax) {
 		return { allowed: false, reason: "per-ip-daily" };
 	}
 
-	// Global cap check
-	if (global + cfg.preChargeEstimate > cfg.globalDailyTokenMax) {
+	if (global + cfg.preChargeMicroUsd > cfg.globalDailyMicroUsdMax) {
 		return { allowed: false, reason: "global-daily" };
 	}
 
-	// Increment both counters
 	await Promise.all([
-		kv.put(ipKey, String(perIp + cfg.preChargeEstimate), {
+		kv.put(ipKey, String(perIp + cfg.preChargeMicroUsd), {
 			expirationTtl: TTL_SEC,
 		}),
-		kv.put(gKey, String(global + cfg.preChargeEstimate), {
+		kv.put(gKey, String(global + cfg.preChargeMicroUsd), {
 			expirationTtl: TTL_SEC,
 		}),
 	]);
 
-	return { allowed: true, preCharged: cfg.preChargeEstimate };
+	return { allowed: true, preCharged: cfg.preChargeMicroUsd };
 }
 
 /**
- * Reconcile the pre-charge against the actual token usage.
+ * Reconcile the pre-charge against the actual cost (in integer micro-USD).
  * - Under-charge (actual < preCharged): refunds the delta from both counters.
  * - Over-charge (actual > preCharged): accepted as cost of defense, no-op.
  * - Exact match: no-op.
- *
- * Always uses the same `nowMs` as was passed to `preCharge` so refunds
- * hit the correct UTC-day keys even if the stream straddles midnight.
  */
 export async function reconcile(
 	kv: KVNamespace,
 	ip: string,
 	nowMs: number,
 	preCharged: number,
-	actualTokens: number,
+	actualMicroUsd: number,
 ): Promise<void> {
-	const delta = actualTokens - preCharged;
+	const delta = actualMicroUsd - preCharged;
 	if (delta === 0) return;
-	// Over-charge: no-op — accept as defense cost
 	if (delta > 0) return;
 
-	// Under-charge: refund |delta| from both counters, floor at 0
 	const ipKey = perIpKey(ip, nowMs);
 	const gKey = globalKey(nowMs);
 
@@ -139,7 +136,7 @@ export async function reconcile(
 }
 
 /**
- * Full refund: equivalent to reconcile with actualTokens=0.
+ * Full refund: equivalent to reconcile with actualMicroUsd=0.
  * Used on stream failure or missing usage data.
  */
 export async function refundFull(
@@ -161,10 +158,9 @@ export function rateLimitResponse(
 ): Response {
 	const message =
 		reason === "per-ip-daily"
-			? "You have exceeded your daily token limit. Please try again tomorrow."
-			: "The global daily token budget has been exhausted. Please try again tomorrow.";
+			? "You have exceeded your daily spend limit. Please try again tomorrow."
+			: "The global daily budget has been exhausted. Please try again tomorrow.";
 
-	// Seconds until next UTC midnight
 	const nowDate = new Date(nowMs);
 	const nextMidnight = new Date(
 		Date.UTC(
@@ -193,15 +189,15 @@ export function rateLimitResponse(
 	);
 }
 
-/** Build token-guard config from Worker environment variables. */
+/** Build cost-guard config from Worker environment variables. */
 export function configFromEnv(env: {
-	PER_IP_DAILY_TOKEN_MAX?: string;
-	GLOBAL_DAILY_TOKEN_MAX?: string;
-	PRE_CHARGE_ESTIMATE?: string;
-}): TokenGuardConfig {
+	PER_IP_DAILY_MICRO_USD_MAX?: string;
+	GLOBAL_DAILY_MICRO_USD_MAX?: string;
+	PRE_CHARGE_MICRO_USD?: string;
+}): CostGuardConfig {
 	return {
-		perIpDailyTokenMax: Number(env.PER_IP_DAILY_TOKEN_MAX ?? "20000"),
-		globalDailyTokenMax: Number(env.GLOBAL_DAILY_TOKEN_MAX ?? "1000000"),
-		preChargeEstimate: Number(env.PRE_CHARGE_ESTIMATE ?? "4000"),
+		perIpDailyMicroUsdMax: Number(env.PER_IP_DAILY_MICRO_USD_MAX ?? "100000"),
+		globalDailyMicroUsdMax: Number(env.GLOBAL_DAILY_MICRO_USD_MAX ?? "5000000"),
+		preChargeMicroUsd: Number(env.PRE_CHARGE_MICRO_USD ?? "5000"),
 	};
 }

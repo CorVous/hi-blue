@@ -29,9 +29,9 @@ export default defineConfig({
 							kvNamespaces: ["RATE_GUARD_KV"],
 							bindings: {
 								OPENROUTER_API_KEY: "test-openrouter-key",
-								PER_IP_DAILY_TOKEN_MAX: "20000",
-								GLOBAL_DAILY_TOKEN_MAX: "1000000",
-								PRE_CHARGE_ESTIMATE: "4000",
+								PER_IP_DAILY_MICRO_USD_MAX: "20000",
+								GLOBAL_DAILY_MICRO_USD_MAX: "1000000",
+								PRE_CHARGE_MICRO_USD: "4000",
 								ALLOWED_ORIGINS: "https://app.example,http://localhost:5173",
 							},
 						},

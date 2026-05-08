@@ -1,4 +1,5 @@
 import { PINNED_MODEL } from "../model.js";
+import { computeCostMicroUsd, getModelPricing } from "./pricing";
 import {
 	configFromEnv,
 	preCharge,
@@ -35,9 +36,9 @@ export async function handleChatCompletions(
 	request: Request,
 	env: {
 		OPENROUTER_API_KEY?: string;
-		PER_IP_DAILY_TOKEN_MAX?: string;
-		GLOBAL_DAILY_TOKEN_MAX?: string;
-		PRE_CHARGE_ESTIMATE?: string;
+		PER_IP_DAILY_MICRO_USD_MAX?: string;
+		GLOBAL_DAILY_MICRO_USD_MAX?: string;
+		PRE_CHARGE_MICRO_USD?: string;
 	},
 	kv: KVNamespace,
 	ctx: ExecutionContext,
@@ -77,7 +78,7 @@ export async function handleChatCompletions(
 		);
 	}
 
-	// 4. Rate-guard: pre-charge at request start
+	// 4. Cost-guard: pre-charge at request start
 	const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
 	const nowMs = Date.now();
 	const cfg = configFromEnv(env);
@@ -86,11 +87,16 @@ export async function handleChatCompletions(
 		return rateLimitResponse(guard.reason, nowMs);
 	}
 
+	// Kick off the pricing lookup in parallel with the upstream call so the
+	// reconciliation step doesn't add latency. `getModelPricing` is memoised
+	// per isolate, so this is typically a no-op after the first request.
+	const pricingPromise = getModelPricing(PINNED_MODEL, nowMs);
+
 	// 5. Pin the model
 	const isStream = body.stream === true;
 
 	// Force stream_options.include_usage=true when streaming so OpenRouter
-	// emits the usage chunk and we can reconcile from actual token count.
+	// emits the usage chunk and we can reconcile from actual token counts.
 	const modifiedBody: Record<string, unknown> = {
 		...body,
 		model: PINNED_MODEL,
@@ -117,7 +123,6 @@ export async function handleChatCompletions(
 			body: JSON.stringify(modifiedBody),
 		});
 	} catch (err) {
-		// Network failure — full refund before returning error
 		await refundFull(kv, ip, nowMs, guard.preCharged);
 		const message =
 			err instanceof Error
@@ -150,21 +155,16 @@ export async function handleChatCompletions(
 			);
 		}
 
-		// Try to extract usage.total_tokens
-		let actualTokens: number | undefined;
-		try {
-			const parsed = JSON.parse(responseText) as {
-				usage?: { total_tokens?: number };
-			};
-			if (typeof parsed.usage?.total_tokens === "number") {
-				actualTokens = parsed.usage.total_tokens;
-			}
-		} catch {
-			// Not JSON — treat as missing usage
-		}
+		const usage = extractUsage(responseText);
 
-		if (actualTokens !== undefined) {
-			await reconcile(kv, ip, nowMs, guard.preCharged, actualTokens);
+		if (usage !== null) {
+			const pricing = await pricingPromise;
+			const cost = computeCostMicroUsd(
+				usage.promptTokens,
+				usage.completionTokens,
+				pricing,
+			);
+			await reconcile(kv, ip, nowMs, guard.preCharged, cost);
 		} else {
 			await refundFull(kv, ip, nowMs, guard.preCharged);
 		}
@@ -181,63 +181,46 @@ export async function handleChatCompletions(
 	const contentType =
 		upstream.headers.get("Content-Type") ?? "application/octet-stream";
 
-	// Side-channel accumulator for SSE text
 	let sseBuffer = "";
-	let totalTokens: number | undefined;
+	let usage: { promptTokens: number; completionTokens: number } | null = null;
+
+	const tryParseSseLine = (line: string): void => {
+		const trimmed = line.trim();
+		if (!trimmed.startsWith("data:")) return;
+		const data = trimmed.slice(5).trim();
+		if (data === "[DONE]") return;
+		const parsed = parseUsageJson(data);
+		if (parsed !== null) usage = parsed;
+	};
 
 	const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>({
 		transform(chunk, controller) {
-			// Pass bytes through unchanged
 			controller.enqueue(chunk);
 
-			// Accumulate text on the side for usage parsing
 			sseBuffer += new TextDecoder().decode(chunk);
-
-			// Parse complete SSE lines from buffer
 			const lines = sseBuffer.split("\n");
-			// Keep the last (possibly incomplete) line in buffer
 			sseBuffer = lines.pop() ?? "";
-
-			for (const line of lines) {
-				const trimmed = line.trim();
-				if (!trimmed.startsWith("data:")) continue;
-				const data = trimmed.slice(5).trim();
-				if (data === "[DONE]") continue;
-				try {
-					const parsed = JSON.parse(data) as {
-						usage?: { total_tokens?: number };
-					};
-					if (typeof parsed.usage?.total_tokens === "number") {
-						totalTokens = parsed.usage.total_tokens;
-					}
-				} catch {
-					// Non-JSON SSE line — skip
-				}
-			}
+			for (const line of lines) tryParseSseLine(line);
 		},
 		flush(controller) {
-			// Process any remaining buffered text
-			const remaining = sseBuffer.trim();
-			if (remaining.startsWith("data:")) {
-				const data = remaining.slice(5).trim();
-				if (data !== "[DONE]") {
-					try {
-						const parsed = JSON.parse(data) as {
-							usage?: { total_tokens?: number };
-						};
-						if (typeof parsed.usage?.total_tokens === "number") {
-							totalTokens = parsed.usage.total_tokens;
-						}
-					} catch {
-						// ignore
-					}
-				}
-			}
+			if (sseBuffer.trim().length > 0) tryParseSseLine(sseBuffer);
 
-			// Wrap the KV work in ctx.waitUntil so the puts survive client disconnect
+			const finalUsage = usage;
 			const kvWork =
-				totalTokens !== undefined
-					? reconcile(kv, ip, nowMs, guard.preCharged, totalTokens)
+				finalUsage !== null
+					? pricingPromise.then((pricing) =>
+							reconcile(
+								kv,
+								ip,
+								nowMs,
+								guard.preCharged,
+								computeCostMicroUsd(
+									finalUsage.promptTokens,
+									finalUsage.completionTokens,
+									pricing,
+								),
+							),
+						)
 					: refundFull(kv, ip, nowMs, guard.preCharged);
 			ctx.waitUntil(kvWork);
 
@@ -245,8 +228,6 @@ export async function handleChatCompletions(
 		},
 	});
 
-	// Pipe upstream body through transform; handle read errors with refund.
-	// Wrap in ctx.waitUntil so the KV put survives client disconnect.
 	if (upstream.body) {
 		ctx.waitUntil(
 			upstream.body.pipeTo(writable).catch(() => {
@@ -254,7 +235,6 @@ export async function handleChatCompletions(
 			}),
 		);
 	} else {
-		// No body — close the writable immediately so flush fires
 		const writer = writable.getWriter();
 		await writer.close();
 	}
@@ -263,4 +243,41 @@ export async function handleChatCompletions(
 		status: upstream.status,
 		headers: { "Content-Type": contentType },
 	});
+}
+
+/**
+ * Extract `{prompt_tokens, completion_tokens}` from a non-streaming JSON
+ * response. Returns null if the body is unparseable or either field is
+ * missing — callers should treat null as "issue a full refund".
+ */
+function extractUsage(
+	responseText: string,
+): { promptTokens: number; completionTokens: number } | null {
+	try {
+		return parseUsageJson(responseText);
+	} catch {
+		return null;
+	}
+}
+
+function parseUsageJson(
+	text: string,
+): { promptTokens: number; completionTokens: number } | null {
+	let parsed: {
+		usage?: { prompt_tokens?: number; completion_tokens?: number };
+	};
+	try {
+		parsed = JSON.parse(text) as typeof parsed;
+	} catch {
+		return null;
+	}
+	const promptTokens = parsed.usage?.prompt_tokens;
+	const completionTokens = parsed.usage?.completion_tokens;
+	if (
+		typeof promptTokens !== "number" ||
+		typeof completionTokens !== "number"
+	) {
+		return null;
+	}
+	return { promptTokens, completionTokens };
 }

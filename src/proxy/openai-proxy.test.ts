@@ -1,15 +1,21 @@
 /**
- * Tests for POST /v1/chat/completions — OpenRouter proxy (issue #36).
+ * Tests for POST /v1/chat/completions — OpenRouter proxy.
  *
  * Uses SELF.fetch (cloudflare:test) so the full worker route-table is
  * exercised. The outbound fetch to OpenRouter is intercepted via
  * vi.stubGlobal('fetch', ...) — the worker isolate shares globalThis with
  * the test runner in vitest-pool-workers, so the stub is observable inside
  * the worker.
+ *
+ * Pricing is seeded into the in-process cache via _setPricingCacheForTests
+ * so the /models endpoint is never hit during these tests. With prompt and
+ * completion both priced at 1 micro-USD/token, (prompt_tokens +
+ * completion_tokens) maps 1:1 to the micro-USD cost stored in KV.
  */
 import { env, reset, SELF } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OPENROUTER_URL, PINNED_MODEL } from "./openai-proxy";
+import { _setPricingCacheForTests } from "./pricing";
 import { globalKey, perIpKey } from "./rate-guard";
 
 const ENDPOINT = "https://example.com/v1/chat/completions";
@@ -24,11 +30,6 @@ function makeUpstreamMock(
 	status = 200,
 	headers: Record<string, string> = { "Content-Type": "text/event-stream" },
 ): typeof fetch {
-	// Use mockImplementation (not mockResolvedValue) so the Response is
-	// created lazily inside the worker's fetch call — avoids the Cloudflare
-	// Workers cross-request I/O isolation error that fires when a Response
-	// body (ReadableStreamSource) is constructed in the test context and then
-	// consumed in a different request handler context.
 	return vi
 		.fn()
 		.mockImplementation(() =>
@@ -36,8 +37,18 @@ function makeUpstreamMock(
 		);
 }
 
+beforeEach(() => {
+	// 1 micro-USD per token (both prompt and completion) — keeps test math
+	// 1:1 with token counts.
+	_setPricingCacheForTests({
+		promptMicroUsdPerToken: 1,
+		completionMicroUsdPerToken: 1,
+	});
+});
+
 afterEach(async () => {
 	vi.unstubAllGlobals();
+	_setPricingCacheForTests(null);
 	await reset();
 });
 
@@ -140,7 +151,6 @@ describe("POST /v1/chat/completions — auth header forwarding", () => {
 			body: VALID_BODY,
 		});
 
-		// vitest.config.ts sets OPENROUTER_API_KEY = "test-openrouter-key"
 		expect(capturedHeaders?.Authorization).toBe("Bearer test-openrouter-key");
 	});
 });
@@ -173,7 +183,6 @@ describe("POST /v1/chat/completions — upstream URL", () => {
 
 describe("POST /v1/chat/completions — input validation", () => {
 	it("returns 400 invalid_request_error for invalid JSON body", async () => {
-		// No mock needed — handler should reject before calling fetch
 		vi.stubGlobal("fetch", makeUpstreamMock("{}"));
 
 		const resp = await SELF.fetch(ENDPOINT, {
@@ -292,34 +301,30 @@ describe("POST /v1/chat/completions — stream flag passthrough", () => {
 });
 
 // ── 8. Non-POST verbs fall through to ASSETS binding ─────────────────────────
-// NOTE: These tests were updated in the fix for issue #48. GET/PUT requests to
-// /v1/chat/completions are not matched by any API route and fall through to
-// env.ASSETS.fetch(request) — the Worker no longer returns 404 directly.
-// vitest-pool-workers does not provide an ASSETS binding, so exercising these
-// paths in this test suite would throw "Cannot read properties of undefined
-// (reading 'fetch')". The behaviour is verified by the wrangler dev smoke
-// probe; the tests are omitted here rather than adding a brittle stub.
+// GET/PUT requests to /v1/chat/completions are not matched by any API route
+// and fall through to env.ASSETS.fetch(request) — the Worker no longer returns
+// 404 directly. vitest-pool-workers does not provide an ASSETS binding, so
+// exercising those paths here would throw. The behaviour is verified by the
+// wrangler dev smoke probe.
 
-// ── 9. Rate-guard integration — POST /v1/chat/completions ────────────────────
+// ── 9. Cost-guard integration — POST /v1/chat/completions ────────────────────
 
 function kv(): KVNamespace {
 	return (env as Record<string, KVNamespace>).RATE_GUARD_KV as KVNamespace;
 }
 
-// Tight caps for testing (must match vitest.config.ts bindings)
+// Caps in micro-USD; must match vitest.config.ts bindings
 const PER_IP_CAP = 20_000;
 const PRE_CHARGE = 4_000;
 
-describe("rate-guard integration — POST /v1/chat/completions", () => {
+describe("cost-guard integration — POST /v1/chat/completions", () => {
 	beforeEach(async () => {
-		// Clear KV before each test
 		const ns = kv();
 		const listed = await ns.list();
 		await Promise.all(listed.keys.map((k) => ns.delete(k.name)));
 	});
 
 	it("per-IP cap-hit returns 429 with error.code === 'per-ip-daily', upstream not called", async () => {
-		// Exhaust the per-IP counter
 		const ip = "5.5.5.5";
 		const ipK = perIpKey(ip, Date.now());
 		await kv().put(ipK, String(PER_IP_CAP - PRE_CHARGE + 1), {
@@ -344,7 +349,6 @@ describe("rate-guard integration — POST /v1/chat/completions", () => {
 		};
 		expect(body.error.type).toBe("rate_limit_exceeded");
 		expect(body.error.code).toBe("per-ip-daily");
-		// Upstream must not have been called
 		expect(mockFetch).not.toHaveBeenCalled();
 	});
 
@@ -372,10 +376,11 @@ describe("rate-guard integration — POST /v1/chat/completions", () => {
 		expect(body.error.code).toBe("global-daily");
 	});
 
-	it("happy path streaming: stub upstream with usage=1500, counters reconcile to 1500", async () => {
+	it("happy path streaming: upstream usage 500/1000 → counters reconcile to 1500 micro-USD", async () => {
 		const ip = "7.7.7.7";
+		// 1 micro-USD/token × (500 + 1000) = 1500 micro-USD
 		const ssePayload =
-			'data: {"usage":{"total_tokens":1500}}\n\ndata: [DONE]\n\n';
+			'data: {"usage":{"prompt_tokens":500,"completion_tokens":1000}}\n\ndata: [DONE]\n\n';
 
 		vi.stubGlobal(
 			"fetch",
@@ -402,10 +407,7 @@ describe("rate-guard integration — POST /v1/chat/completions", () => {
 		});
 
 		expect(resp.status).toBe(200);
-		// Consume the stream so TransformStream flush fires
 		await resp.text();
-
-		// Give the flush microtask time to complete
 		await new Promise((r) => setTimeout(r, 50));
 
 		const now = Date.now();
@@ -418,10 +420,11 @@ describe("rate-guard integration — POST /v1/chat/completions", () => {
 		expect(Number(gVal)).toBe(1500);
 	});
 
-	it("over-charge accepted: stub upstream usage=9000, counters stay at pre-charge (4000)", async () => {
+	it("over-charge accepted: upstream usage 3000/6000 → counters stay at pre-charge (4000)", async () => {
 		const ip = "8.8.8.8";
+		// 1 micro-USD/token × (3000 + 6000) = 9000 micro-USD, > preCharge of 4000
 		const ssePayload =
-			'data: {"usage":{"total_tokens":9000}}\n\ndata: [DONE]\n\n';
+			'data: {"usage":{"prompt_tokens":3000,"completion_tokens":6000}}\n\ndata: [DONE]\n\n';
 
 		vi.stubGlobal(
 			"fetch",
@@ -451,7 +454,6 @@ describe("rate-guard integration — POST /v1/chat/completions", () => {
 		await new Promise((r) => setTimeout(r, 50));
 
 		const ipVal = await kv().get(perIpKey(ip, Date.now()));
-		// Over-charge: counter remains at preCharge, no additional debit
 		expect(Number(ipVal)).toBe(PRE_CHARGE);
 	});
 
@@ -521,13 +523,10 @@ describe("rate-guard integration — POST /v1/chat/completions", () => {
 	it("multi-IP isolation: IP A capped does not affect IP B", async () => {
 		const ipA = "11.0.0.1";
 		const ipB = "11.0.0.2";
-		// Exhaust IP A
 		await kv().put(
 			perIpKey(ipA, Date.now()),
 			String(PER_IP_CAP - PRE_CHARGE + 1),
-			{
-				expirationTtl: 25 * 3600,
-			},
+			{ expirationTtl: 25 * 3600 },
 		);
 
 		vi.stubGlobal(
@@ -564,9 +563,12 @@ describe("rate-guard integration — POST /v1/chat/completions", () => {
 		expect(respB.status).toBe(200);
 	});
 
-	it("non-streaming JSON response: reconcile from body usage.total_tokens", async () => {
+	it("non-streaming JSON response: reconcile from prompt_tokens + completion_tokens", async () => {
 		const ip = "12.0.0.1";
-		const jsonBody = JSON.stringify({ usage: { total_tokens: 800 } });
+		// 1 micro-USD/token × (300 + 500) = 800 micro-USD
+		const jsonBody = JSON.stringify({
+			usage: { prompt_tokens: 300, completion_tokens: 500 },
+		});
 
 		vi.stubGlobal(
 			"fetch",
@@ -605,7 +607,6 @@ describe("rate-guard integration — POST /v1/chat/completions", () => {
 
 	it("streaming with no usage chunk results in full refund (counters at 0)", async () => {
 		const ip = "13.0.0.1";
-		// SSE with no usage data
 		const ssePayload = "data: {}\n\ndata: [DONE]\n\n";
 
 		vi.stubGlobal(
@@ -675,24 +676,59 @@ describe("rate-guard integration — POST /v1/chat/completions", () => {
 		).toBe(true);
 	});
 
+	it("differentiated pricing: prompt vs completion priced separately", async () => {
+		_setPricingCacheForTests({
+			promptMicroUsdPerToken: 2,
+			completionMicroUsdPerToken: 5,
+		});
+
+		const ip = "15.0.0.1";
+		// 100 prompt × 2 + 200 completion × 5 = 200 + 1000 = 1200 micro-USD
+		const jsonBody = JSON.stringify({
+			usage: { prompt_tokens: 100, completion_tokens: 200 },
+		});
+
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockImplementation(() =>
+				Promise.resolve(
+					new Response(jsonBody, {
+						status: 200,
+						headers: { "Content-Type": "application/json" },
+					}),
+				),
+			),
+		);
+
+		const resp = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": ip,
+			},
+			body: JSON.stringify({
+				messages: [{ role: "user", content: "hi" }],
+				stream: false,
+			}),
+		});
+
+		expect(resp.status).toBe(200);
+
+		const ipVal = await kv().get(perIpKey(ip, Date.now()));
+		expect(Number(ipVal)).toBe(1200);
+	});
+
 	// ── smoke regression: stream-failure refund must persist to KV ──────────────
-	// Reproduces the bug from attempt-1 smoke: the fire-and-forget
-	// upstream.body.pipeTo(...).catch(async () => refundFull(...)) races against
-	// worker-context teardown, so the KV put is cancelled and the counter stays
-	// at seeded + preCharge instead of being refunded to seeded.
 	it("stream failure mid-flight: per-IP counter is refunded back to seeded value (ctx.waitUntil fix)", async () => {
 		const ip = "14.0.0.1";
 		const seeded = 7_000;
-		// Pre-seed the per-IP counter so we can tell whether a refund happened
 		const now = Date.now();
 		await kv().put(perIpKey(ip, now), String(seeded), {
 			expirationTtl: 25 * 3600,
 		});
 
-		// Build an upstream response whose body errors mid-stream (no data sent)
 		const erroringStream = new ReadableStream({
 			start(controller) {
-				// Immediately error the stream to simulate a mid-flight upstream failure
 				controller.error(new Error("upstream disconnected mid-stream"));
 			},
 		});
@@ -721,26 +757,20 @@ describe("rate-guard integration — POST /v1/chat/completions", () => {
 			}),
 		});
 
-		// Drain the client-side response — the erroring stream will throw here;
-		// we catch it since we only care about the KV state afterwards.
 		try {
 			await resp.text();
 		} catch {
 			// expected: the upstream stream error propagates to the client reader
 		}
 
-		// Allow ctx.waitUntil promises to settle
 		await new Promise((r) => setTimeout(r, 100));
 
 		const ipVal = await kv().get(perIpKey(ip, Date.now()));
-		// The pre-charge (4000) was added on top of seeded (7000) → 11000.
-		// After the stream error the full pre-charge must be refunded → back to 7000.
-		// Without ctx.waitUntil the KV put is cancelled and counter stays at 11000.
 		expect(Number(ipVal)).toBe(seeded);
 	});
 });
 
-// ── 10. CORS — OPTIONS preflight (issue #38) ──────────────────────────────────
+// ── 10. CORS — OPTIONS preflight ──────────────────────────────────────────────
 //
 // vitest.config.ts sets ALLOWED_ORIGINS = "https://app.example,http://localhost:5173"
 
@@ -762,7 +792,6 @@ describe("OPTIONS /v1/chat/completions — CORS preflight", () => {
 		expect(resp.headers.get("Access-Control-Allow-Methods")).toBe(
 			"POST, OPTIONS",
 		);
-		// ACAH must echo the custom header sent in Access-Control-Request-Headers
 		expect(resp.headers.get("Access-Control-Allow-Headers")).toBe("X-Test");
 	});
 
@@ -793,7 +822,7 @@ describe("OPTIONS /v1/chat/completions — CORS preflight", () => {
 	});
 });
 
-// ── 11. CORS — POST response headers (issue #38) ─────────────────────────────
+// ── 11. CORS — POST response headers ─────────────────────────────────────────
 
 describe("POST /v1/chat/completions — CORS response headers", () => {
 	it("adds ACAO + Vary: Origin for an allow-listed origin", async () => {
