@@ -162,7 +162,9 @@ describe("serializeSession / deserializeSession", () => {
 			whispers: files.whispers,
 			engine: files.engine,
 		});
-		if (result.kind !== "ok") throw new Error(`expected ok, got ${result.kind}`);
+		if (result.kind !== "ok") {
+			throw new Error(`expected ok, got ${result.kind}`);
+		}
 
 		// The fix should restore canonical order regardless of daemon-file key order.
 		expect(Object.keys(result.state.personas)).toEqual(canonicalOrder);
@@ -185,7 +187,9 @@ describe("serializeSession / deserializeSession", () => {
 			whispers: files.whispers,
 			engine: files.engine,
 		});
-		if (result.kind !== "ok") throw new Error(`expected ok, got ${result.kind}`);
+		if (result.kind !== "ok") {
+			throw new Error(`expected ok, got ${result.kind}`);
+		}
 
 		// Falls back to daemon-file key order (which equals canonicalOrder in this fixture).
 		expect(Object.keys(result.state.personas)).toEqual(canonicalOrder);
