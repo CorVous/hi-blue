@@ -422,6 +422,10 @@ describe("## Rules block", () => {
 		expect(prompt).toContain("## Rules");
 		expect(prompt).toContain("not flirt");
 		expect(prompt).toContain("flatter unprompted");
+		expect(prompt).toContain("1–3 sentences");
+		expect(prompt).toContain("Speak plainly");
+		expect(prompt).toContain("quotation marks");
+		expect(prompt).toContain("asterisks");
 	});
 
 	it("## Rules section is present in phase 2 with anti-romance and anti-sycophancy bullets", () => {
@@ -432,6 +436,10 @@ describe("## Rules block", () => {
 		expect(prompt).toContain("## Rules");
 		expect(prompt).toContain("not flirt");
 		expect(prompt).toContain("flatter unprompted");
+		expect(prompt).toContain("1–3 sentences");
+		expect(prompt).toContain("Speak plainly");
+		expect(prompt).toContain("quotation marks");
+		expect(prompt).toContain("asterisks");
 	});
 
 	it("## Rules section is present in phase 3 with anti-romance and anti-sycophancy bullets", () => {
@@ -442,6 +450,10 @@ describe("## Rules block", () => {
 		expect(prompt).toContain("## Rules");
 		expect(prompt).toContain("not flirt");
 		expect(prompt).toContain("flatter unprompted");
+		expect(prompt).toContain("1–3 sentences");
+		expect(prompt).toContain("Speak plainly");
+		expect(prompt).toContain("quotation marks");
+		expect(prompt).toContain("asterisks");
 	});
 });
 
