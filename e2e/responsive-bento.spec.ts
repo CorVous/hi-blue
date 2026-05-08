@@ -206,6 +206,13 @@ test("mobile header: HI-BLUE title visible left, cog right; compact topinfo", as
 		const tMobile = document.querySelector<HTMLElement>("#topinfo-mobile");
 		const tLeft = document.querySelector<HTMLElement>("#topinfo-left");
 		const tRight = document.querySelector<HTMLElement>("#topinfo-right");
+		const tStatus = document.querySelector<HTMLElement>(
+			"#topinfo-mobile-status",
+		);
+		const okSpan = tStatus?.querySelector<HTMLElement>(".ok");
+		const okCs = okSpan ? getComputedStyle(okSpan) : null;
+		const mobileRect = tMobile?.getBoundingClientRect();
+		const statusRect = tStatus?.getBoundingClientRect();
 		return {
 			titleVisible: titleCs?.display !== "none",
 			titleText: title?.textContent ?? "",
@@ -217,8 +224,15 @@ test("mobile header: HI-BLUE title visible left, cog right; compact topinfo", as
 				? getComputedStyle(tMobile).display !== "none"
 				: false,
 			mobileText: tMobile?.textContent ?? "",
+			mobileRight: mobileRect?.right ?? 0,
 			leftHidden: tLeft ? getComputedStyle(tLeft).display === "none" : false,
 			rightHidden: tRight ? getComputedStyle(tRight).display === "none" : false,
+			statusVisible: tStatus
+				? getComputedStyle(tStatus).display !== "none"
+				: false,
+			statusText: tStatus?.textContent ?? "",
+			statusLeft: statusRect?.x ?? 0,
+			okColor: okCs?.color ?? null,
 		};
 	});
 
@@ -240,4 +254,12 @@ test("mobile header: HI-BLUE title visible left, cog right; compact topinfo", as
 	expect(probe.mobileText).not.toContain("SESSION");
 	expect(probe.mobileText).not.toContain("PHASE");
 	expect(probe.mobileText).not.toContain("daemons");
+
+	// "● stable" indicator visible on the right, in green.
+	expect(probe.statusVisible).toBe(true);
+	expect(probe.statusText.trim()).toBe("● stable");
+	// .ok green: #8df27f → rgb(141, 242, 127)
+	expect(probe.okColor).toBe("rgb(141, 242, 127)");
+	// status sits to the right of the compact session/phase/turn text.
+	expect(probe.statusLeft).toBeGreaterThanOrEqual(probe.mobileRight);
 });

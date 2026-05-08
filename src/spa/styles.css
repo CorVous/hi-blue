@@ -113,7 +113,8 @@ header {
 	padding: 2px 0;
 }
 
-#topinfo-mobile {
+#topinfo-mobile,
+#topinfo-mobile-status {
 	display: none;
 }
 
@@ -837,7 +838,8 @@ main {
 		display: inline;
 	}
 
-	#topinfo-mobile {
+	#topinfo-mobile,
+	#topinfo-mobile-status {
 		display: inline;
 	}
 
