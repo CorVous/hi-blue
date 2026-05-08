@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { appendChat, createGame, startPhase } from "../engine";
-import { buildOpenAiMessages } from "../openai-message-builder";
+import {
+	buildOpenAiMessages,
+	SILENT_VOICE_TURN,
+} from "../openai-message-builder";
 import { buildAiContext } from "../prompt-builder";
 import type { AiPersona, PhaseConfig, ToolRoundtripMessage } from "../types";
 
@@ -227,5 +230,47 @@ describe("buildOpenAiMessages", () => {
 		// No extra messages appended
 		expect(messages).toHaveLength(1); // only system
 		expect(messages.every((m) => m.role !== "tool")).toBe(true);
+	});
+
+	it("non-addressed AI gets a trailing 'The voice is silent.' user turn", () => {
+		let game = makeGame();
+		game = appendChat(game, "red", { role: "player", content: "Hi Ember" });
+		game = appendChat(game, "red", { role: "ai", content: "Hi player" });
+
+		const ctx = buildAiContext(game, "red");
+		// addressed = green: red is NOT the addressee this round.
+		const messages = buildOpenAiMessages(ctx, undefined, "green");
+
+		const last = messages[messages.length - 1];
+		expect(last?.role).toBe("user");
+		expect((last as { content: string }).content).toBe(SILENT_VOICE_TURN);
+	});
+
+	it("addressed AI does not get the silent-voice anchor", () => {
+		let game = makeGame();
+		game = appendChat(game, "red", { role: "player", content: "Hi Ember" });
+		const ctx = buildAiContext(game, "red");
+
+		const messages = buildOpenAiMessages(ctx, undefined, "red");
+		expect(
+			messages.some(
+				(m) =>
+					m.role === "user" &&
+					(m as { content: string }).content === SILENT_VOICE_TURN,
+			),
+		).toBe(false);
+	});
+
+	it("when `addressed` is omitted, no anchor is appended (back-compat)", () => {
+		const game = makeGame();
+		const ctx = buildAiContext(game, "red");
+		const messages = buildOpenAiMessages(ctx, undefined);
+		expect(
+			messages.some(
+				(m) =>
+					m.role === "user" &&
+					(m as { content: string }).content === SILENT_VOICE_TURN,
+			),
+		).toBe(false);
 	});
 });
