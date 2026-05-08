@@ -32,7 +32,7 @@ test("addressed message lands only on first panel; all three panels render progr
 	const { ids, names } = await getAiHandles(page);
 
 	// 4. Fill prompt with first AI's mention to address ids[0].
-	const message = `@${names[0]} hello first panel`;
+	const message = `*${names[0]} hello first panel`;
 	await page.fill("#prompt", message);
 
 	// 5. Click send — triggers the SPA round flow.
@@ -71,13 +71,13 @@ test("addressed message lands only on first panel; all three panels render progr
 		.textContent();
 
 	// 8. player message appears in first transcript exactly once.
-	expect(firstTranscript ?? "").toContain(`> @${names[0]} hello first panel`);
-	// Exactly once: splitting on "> @" gives exactly two parts.
-	expect((firstTranscript ?? "").split("> @").length).toBe(2);
+	expect(firstTranscript ?? "").toContain(`> *${names[0]} hello first panel`);
+	// Exactly once: splitting on the player prefix gives exactly two parts.
+	expect((firstTranscript ?? "").split(`> *${names[0]} hello`).length).toBe(2);
 
-	// 9. second and third do NOT contain "> @" (no player line).
-	expect(secondTranscript ?? "").not.toContain("> @");
-	expect(thirdTranscript ?? "").not.toContain("> @");
+	// 9. second and third do NOT contain the player line.
+	expect(secondTranscript ?? "").not.toContain(`> *${names[0]} hello`);
+	expect(thirdTranscript ?? "").not.toContain(`> *${names[0]} hello`);
 
 	// 10. Each distinct completion appears in exactly one transcript.
 	const transcripts = [

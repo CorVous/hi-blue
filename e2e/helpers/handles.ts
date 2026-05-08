@@ -10,8 +10,8 @@ export type AiHandles = {
  * Wait until 3 `article.ai-panel` elements have non-empty `data-ai` attributes
  * (set after persona synthesis completes) and return the DOM-order ids tuple.
  *
- * Also reads the persona display names from `.panel-name` (format: `*<name> :: @<name>`)
- * so callers can construct `@<name>` mention strings for the composer.
+ * Also reads the persona display names from `.panel-name` (format: `*<name>`)
+ * so callers can construct `*<name>` mention strings for the composer.
  *
  * @param page The Playwright Page to query.
  */
@@ -34,12 +34,12 @@ export async function getAiHandles(page: Page): Promise<AiHandles> {
 			document.querySelectorAll<HTMLElement>("article.ai-panel"),
 		).map((p) => {
 			const id = p.dataset.ai ?? "";
-			// .panel-name text is: `*<name> :: @<name>`, extract the name after `@`
+			// .panel-name text is: `*<name>`, extract the name after `*`
 			const panelNameEl = p.querySelector<HTMLElement>(".panel-name");
 			const raw = panelNameEl?.textContent ?? "";
-			// Format: `*Ember :: @Ember` → extract after `@`
-			const atMatch = /@([A-Za-z0-9]+)/.exec(raw);
-			const name = atMatch?.[1] ?? id;
+			// Format: `*Ember` → extract after `*`
+			const starMatch = /\*([A-Za-z0-9]+)/.exec(raw);
+			const name = starMatch?.[1] ?? id;
 			return { id, name };
 		});
 	});
@@ -54,6 +54,6 @@ export async function getAiHandles(page: Page): Promise<AiHandles> {
 	return {
 		ids,
 		names,
-		mention: (index: number) => `@${names[index] ?? ids[index]}`,
+		mention: (index: number) => `*${names[index] ?? ids[index]}`,
 	};
 }

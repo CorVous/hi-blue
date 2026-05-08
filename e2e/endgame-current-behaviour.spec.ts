@@ -14,12 +14,12 @@ import { getAiHandles, stubChatCompletions } from "./helpers";
  * --------------------------------
  * `?winImmediately=1` (#101) recursively patches the real PHASE_1 → PHASE_2 →
  * PHASE_3 config chain, injecting `winCondition: () => true` at every level.
- * A cold-start `goto("/?winImmediately=1")` followed by three @<name>-addressed
+ * A cold-start `goto("/?winImmediately=1")` followed by three *<name>-addressed
  * messages (one per phase) reliably reaches `game_ended` without any
  * localStorage pre-seeding.
  *
  * Note (post-#107): Send no longer re-enables after a round because the prompt
- * is cleared on submit and the @mention parser sees an empty string. We wait
+ * is cleared on submit and the *mention parser sees an empty string. We wait
  * on `#phase-banner` (set by the encoder's `phase_advanced` event) instead.
  */
 
@@ -52,19 +52,19 @@ test("game_ended disables composer and clears storage", async ({ page }) => {
 	}
 
 	// 5. Round 1 — phase 1 ends; wait for phase banner to advance to Phase 2.
-	await submitMessage(`@${names[0]} hello`);
+	await submitMessage(`*${names[0]} hello`);
 	await expect(page.locator("#phase-banner")).toContainText("Phase 2", {
 		timeout: 30_000,
 	});
 
 	// 6. Round 2 — phase 2 ends; wait for phase banner to advance to Phase 3.
-	await submitMessage(`@${names[0]} hello`);
+	await submitMessage(`*${names[0]} hello`);
 	await expect(page.locator("#phase-banner")).toContainText("Phase 3", {
 		timeout: 30_000,
 	});
 
 	// 7. Round 3 — phase 3 ends; game_ended fires → #send permanently disabled.
-	await submitMessage(`@${names[0]} hello`);
+	await submitMessage(`*${names[0]} hello`);
 	await expect(page.locator("#send")).toBeDisabled({ timeout: 30_000 });
 
 	// 8. Assert all acceptance criteria.

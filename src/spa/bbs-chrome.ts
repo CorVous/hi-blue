@@ -41,8 +41,7 @@ const SIDE_HEAVY = `${"║\n".repeat(200)}`;
  * selection is purely CSS-driven via `.panel--addressed`. */
 export function initPanelChrome(panel: HTMLElement, persona: AiPersona): void {
 	const doc = panel.ownerDocument;
-	const handle = `*${persona.name}`;
-	const label = `${handle} :: @${persona.name}`;
+	const label = `*${persona.name}`;
 
 	for (const el of panel.querySelectorAll<HTMLElement>(".panel-name")) {
 		el.textContent = label;

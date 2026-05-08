@@ -25,8 +25,8 @@ test("game state and transcripts persist across mid-round reload", async ({
 	// Read AI handles dynamically (set after synthesis completes).
 	const { ids, names } = await getAiHandles(page);
 
-	// Address first AI via @<name> mention and send a message
-	await page.fill("#prompt", `@${names[0]} hello`);
+	// Address first AI via *<name> mention and send a message
+	await page.fill("#prompt", `*${names[0]} hello`);
 	await expect(page.locator("#send")).toBeEnabled();
 	await page.click("#send");
 
@@ -34,7 +34,7 @@ test("game state and transcripts persist across mid-round reload", async ({
 	// the encoder loop processes all events, so we poll localStorage directly
 	// rather than the transcript (which fills via live deltas earlier).
 	// (Post-#107 the send button does NOT re-enable after submit because the
-	// prompt is cleared and an empty prompt has no @mention → sendEnabled=false.)
+	// prompt is cleared and an empty prompt has no *mention → sendEnabled=false.)
 	await expect
 		.poll(
 			() => page.evaluate(() => localStorage.getItem("hi-blue-game-state")),
@@ -66,7 +66,7 @@ test("game state and transcripts persist across mid-round reload", async ({
 		.textContent();
 	expect(preReloadTranscript).toBeTruthy();
 	// The player's message must appear in the transcript
-	expect(preReloadTranscript).toContain("> @");
+	expect(preReloadTranscript).toContain(`> *${names[0]}`);
 	// The stub completion must appear in the addressed panel
 	expect(preReloadTranscript).toContain(STUB_COMPLETION);
 
@@ -95,7 +95,7 @@ test("game state and transcripts persist across mid-round reload", async ({
 	const postReloadTranscript = await page
 		.locator(`[data-transcript="${reloadIds[0]}"]`)
 		.textContent();
-	expect(postReloadTranscript).toContain("> @");
+	expect(postReloadTranscript).toContain(`> *${names[0]}`);
 	expect(postReloadTranscript).toContain(STUB_COMPLETION);
 	expect(postReloadTranscript).toBe(preReloadTranscript);
 

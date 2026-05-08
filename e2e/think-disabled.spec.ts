@@ -35,7 +35,7 @@ test("?think=0 adds reasoning:{enabled:false} to chat-completions requests", asy
 
 	const { names } = await getAiHandles(page);
 
-	await page.fill("#prompt", `@${names[1]} hello`);
+	await page.fill("#prompt", `*${names[1]} hello`);
 	await expect(page.locator("#send")).toBeEnabled();
 	await page.click("#send");
 
@@ -72,7 +72,7 @@ test("without ?think=0, requests do NOT include the reasoning field", async ({
 
 	const { names } = await getAiHandles(page);
 
-	await page.fill("#prompt", `@${names[1]} hello`);
+	await page.fill("#prompt", `*${names[1]} hello`);
 	await expect(page.locator("#send")).toBeEnabled();
 	await page.click("#send");
 

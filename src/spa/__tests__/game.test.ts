@@ -178,7 +178,7 @@ describe("renderGame (game route — three-AI)", () => {
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 		const form = getEl<HTMLFormElement>("#composer");
-		promptInput.value = "@Sage hello world";
+		promptInput.value = "*Sage hello world";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
@@ -211,7 +211,7 @@ describe("renderGame (game route — three-AI)", () => {
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
-		promptInput.value = "@Sage hi";
+		promptInput.value = "*Sage hi";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
@@ -277,7 +277,7 @@ describe("renderGame (game route — three-AI)", () => {
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
-		promptInput.value = "@Sage test";
+		promptInput.value = "*Sage test";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
@@ -316,7 +316,7 @@ describe("renderGame (game route — three-AI)", () => {
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
-		promptInput.value = "@Sage test";
+		promptInput.value = "*Sage test";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
@@ -345,7 +345,7 @@ describe("renderGame (game route — three-AI)", () => {
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
-		promptInput.value = "@Sage test";
+		promptInput.value = "*Sage test";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
@@ -371,8 +371,8 @@ describe("renderGame (game route — three-AI)", () => {
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 		const form = getEl<HTMLFormElement>("#composer");
-		// Address the green panel via @Sage mention
-		promptInput.value = "@Sage hello";
+		// Address the green panel via *Sage mention
+		promptInput.value = "*Sage hello";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
@@ -409,7 +409,7 @@ describe("renderGame (game route — three-AI)", () => {
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
-		promptInput.value = "@Sage go";
+		promptInput.value = "*Sage go";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
@@ -427,7 +427,9 @@ describe("renderGame (game route — three-AI)", () => {
 		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
 		expect(redTranscript.textContent).toContain("--- Phase 2 begins:");
 		// No content from the previous phase should remain
-		expect(redTranscript.textContent).not.toContain("> @");
+		expect(redTranscript.textContent).not.toContain("> *Sage");
+		expect(redTranscript.textContent).not.toContain("> *Ember");
+		expect(redTranscript.textContent).not.toContain("> *Frost");
 	});
 
 	it("after three-phase win condition, endgame screen shown and chat hidden; download button has parseable GameSave", async () => {
@@ -454,7 +456,7 @@ describe("renderGame (game route — three-AI)", () => {
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
 		// Submit 1: phase 1 → phase 2 (phase_advanced)
-		promptInput.value = "@Sage one";
+		promptInput.value = "*Sage one";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
@@ -462,7 +464,7 @@ describe("renderGame (game route — three-AI)", () => {
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
 		// Submit 2: phase 2 → phase 3 (phase_advanced)
-		promptInput.value = "@Sage two";
+		promptInput.value = "*Sage two";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
@@ -470,7 +472,7 @@ describe("renderGame (game route — three-AI)", () => {
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
 		// Submit 3: phase 3 → game_ended
-		promptInput.value = "@Sage three";
+		promptInput.value = "*Sage three";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
@@ -525,7 +527,7 @@ describe("renderGame (game route — three-AI)", () => {
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
-		for (const msg of ["@Sage one", "@Sage two", "@Sage three"]) {
+		for (const msg of ["*Sage one", "*Sage two", "*Sage three"]) {
 			promptInput.value = msg;
 			promptInput.dispatchEvent(new Event("input"));
 			form.dispatchEvent(
@@ -568,7 +570,7 @@ describe("renderGame (game route — three-AI)", () => {
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
-		for (const msg of ["@Sage one", "@Sage two", "@Sage three"]) {
+		for (const msg of ["*Sage one", "*Sage two", "*Sage three"]) {
 			promptInput.value = msg;
 			promptInput.dispatchEvent(new Event("input"));
 			form.dispatchEvent(
@@ -615,7 +617,7 @@ describe("renderGame (game route — three-AI)", () => {
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
-		for (const msg of ["@Sage one", "@Sage two", "@Sage three"]) {
+		for (const msg of ["*Sage one", "*Sage two", "*Sage three"]) {
 			promptInput.value = msg;
 			promptInput.dispatchEvent(new Event("input"));
 			form.dispatchEvent(
@@ -708,7 +710,7 @@ describe("renderGame — localStorage persistence", () => {
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
-		promptInput.value = "@Sage test";
+		promptInput.value = "*Sage test";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
@@ -743,7 +745,7 @@ describe("renderGame — localStorage persistence", () => {
 
 		const form1 = getEl<HTMLFormElement>("#composer");
 		const promptInput1 = getEl<HTMLInputElement>("#prompt");
-		promptInput1.value = "@Sage hello";
+		promptInput1.value = "*Sage hello";
 		promptInput1.dispatchEvent(new Event("input"));
 		form1.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
@@ -808,7 +810,7 @@ describe("renderGame — localStorage persistence", () => {
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
-		promptInput.value = "@Sage test";
+		promptInput.value = "*Sage test";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
@@ -820,7 +822,7 @@ describe("renderGame — localStorage persistence", () => {
 		const sendBtn = getEl<HTMLButtonElement>("#send");
 		// roundInFlight is false (round finished), so disabled reflects empty prompt.
 		// Typing a valid mention re-enables it.
-		promptInput.value = "@Sage hi";
+		promptInput.value = "*Sage hi";
 		promptInput.dispatchEvent(new Event("input"));
 		expect(sendBtn.disabled).toBe(false);
 
@@ -874,7 +876,7 @@ describe("renderGame — localStorage persistence", () => {
 		// Game should still function (submit works)
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
-		promptInput.value = "@Sage test";
+		promptInput.value = "*Sage test";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
@@ -907,7 +909,7 @@ describe("renderGame — localStorage persistence", () => {
 
 		const form1 = getEl<HTMLFormElement>("#composer");
 		const promptInput1 = getEl<HTMLInputElement>("#prompt");
-		promptInput1.value = "@Sage test";
+		promptInput1.value = "*Sage test";
 		promptInput1.dispatchEvent(new Event("input"));
 		form1.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
@@ -996,7 +998,7 @@ describe("renderGame — chat_lockout event", () => {
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
-		promptInput.value = "@Sage hello";
+		promptInput.value = "*Sage hello";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
@@ -1008,9 +1010,9 @@ describe("renderGame — chat_lockout event", () => {
 		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
 		expect(redTranscript.textContent).toContain("[Ember is unresponsive…]");
 
-		// After the chat_lockout fires for red, typing @Ember should leave Send disabled.
+		// After the chat_lockout fires for red, typing *Ember should leave Send disabled.
 		const sendBtn = getEl<HTMLButtonElement>("#send");
-		promptInput.value = "@Ember hi";
+		promptInput.value = "*Ember hi";
 		promptInput.dispatchEvent(new Event("input"));
 		expect(sendBtn.disabled).toBe(true);
 	});
@@ -1052,7 +1054,7 @@ describe("renderGame — mention-based addressing", () => {
 		expect(sendBtn.disabled).toBe(true);
 	});
 
-	it("typing '@Sage hi' enables Send", async () => {
+	it("typing '*Sage hi' enables Send", async () => {
 		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
@@ -1060,12 +1062,12 @@ describe("renderGame — mention-based addressing", () => {
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 		const sendBtn = getEl<HTMLButtonElement>("#send");
-		promptInput.value = "@Sage hi";
+		promptInput.value = "*Sage hi";
 		promptInput.dispatchEvent(new Event("input"));
 		expect(sendBtn.disabled).toBe(false);
 	});
 
-	it("submit with '@Sage hi' routes '> @Sage hi' message to green panel", async () => {
+	it("submit with '*Sage hi' routes '> *Sage hi' message to green panel", async () => {
 		const mockFetch = makeThreeAiFetchMock(
 			PASS_ACTION,
 			PASS_ACTION,
@@ -1081,7 +1083,7 @@ describe("renderGame — mention-based addressing", () => {
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
-		promptInput.value = "@Sage hi";
+		promptInput.value = "*Sage hi";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
@@ -1092,12 +1094,12 @@ describe("renderGame — mention-based addressing", () => {
 		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
 		const blueTranscript = getEl<HTMLElement>('[data-transcript="blue"]');
 
-		expect(greenTranscript.textContent).toContain("> @Sage hi");
-		expect(redTranscript.textContent).not.toContain("> @");
-		expect(blueTranscript.textContent).not.toContain("> @");
+		expect(greenTranscript.textContent).toContain("> *Sage hi");
+		expect(redTranscript.textContent).not.toContain("> *Sage");
+		expect(blueTranscript.textContent).not.toContain("> *Sage");
 	});
 
-	it("@Sage while green locked leaves Send disabled", async () => {
+	it("*Sage while green locked leaves Send disabled", async () => {
 		const mockFetch = makeThreeAiFetchMock(
 			PASS_ACTION,
 			PASS_ACTION,
@@ -1141,7 +1143,7 @@ describe("renderGame — mention-based addressing", () => {
 		const sendBtn = getEl<HTMLButtonElement>("#send");
 
 		// Submit first round to trigger the lockout
-		promptInput.value = "@Sage hello";
+		promptInput.value = "*Sage hello";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
@@ -1149,10 +1151,10 @@ describe("renderGame — mention-based addressing", () => {
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
 		// After a successful send with green locked, the persisted prefix is written.
-		expect(promptInput.value).toBe("@Sage ");
+		expect(promptInput.value).toBe("*Sage ");
 
-		// Now typing @Sage should leave Send disabled (green is locked)
-		promptInput.value = "@Sage hi";
+		// Now typing *Sage should leave Send disabled (green is locked)
+		promptInput.value = "*Sage hi";
 		promptInput.dispatchEvent(new Event("input"));
 		expect(sendBtn.disabled).toBe(true);
 	});
@@ -1171,7 +1173,7 @@ describe("renderGame — panel-click addressee", () => {
 		document.body.innerHTML = "";
 	});
 
-	it("empty input + click red panel → '@Ember ', Send stays disabled (no body)", async () => {
+	it("empty input + click red panel → '*Ember ', Send stays disabled (no body)", async () => {
 		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
@@ -1184,12 +1186,12 @@ describe("renderGame — panel-click addressee", () => {
 		expect(promptInput.value).toBe("");
 		redPanel.click();
 
-		expect(promptInput.value).toBe("@Ember ");
+		expect(promptInput.value).toBe("*Ember ");
 		// Per #110: addressee prefix alone is not enough to enable Send.
 		expect(sendBtn.disabled).toBe(true);
 	});
 
-	it("'@Sage hi' in input + click red panel → '@Ember hi'", async () => {
+	it("'*Sage hi' in input + click red panel → '*Ember hi'", async () => {
 		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
@@ -1198,14 +1200,14 @@ describe("renderGame — panel-click addressee", () => {
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 		const redPanel = getEl<HTMLElement>('.ai-panel[data-ai="red"]');
 
-		promptInput.value = "@Sage hi";
+		promptInput.value = "*Sage hi";
 		promptInput.dispatchEvent(new Event("input"));
 		redPanel.click();
 
-		expect(promptInput.value).toBe("@Ember hi");
+		expect(promptInput.value).toBe("*Ember hi");
 	});
 
-	it("multi-mention '@Sage tell @Frost go' + click red → only first mention replaced", async () => {
+	it("multi-mention '*Sage tell *Frost go' + click red → only first mention replaced", async () => {
 		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
@@ -1214,11 +1216,11 @@ describe("renderGame — panel-click addressee", () => {
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 		const redPanel = getEl<HTMLElement>('.ai-panel[data-ai="red"]');
 
-		promptInput.value = "@Sage tell @Frost go";
+		promptInput.value = "*Sage tell *Frost go";
 		promptInput.dispatchEvent(new Event("input"));
 		redPanel.click();
 
-		expect(promptInput.value).toBe("@Ember tell @Frost go");
+		expect(promptInput.value).toBe("*Ember tell *Frost go");
 	});
 
 	it("cursor is preserved after mention mutation (after the mention)", async () => {
@@ -1230,12 +1232,12 @@ describe("renderGame — panel-click addressee", () => {
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 		const redPanel = getEl<HTMLElement>('.ai-panel[data-ai="red"]');
 
-		promptInput.value = "@Sage hi";
+		promptInput.value = "*Sage hi";
 		// Simulate cursor at end (position 8)
 		promptInput.setSelectionRange(8, 8);
 		redPanel.click();
 
-		// "@Ember hi" length is 9; cursor was at 8 (after @Sage hi), delta = 1 → 9
+		// "*Ember hi" length is 9; cursor was at 8 (after *Sage hi), delta = 1 → 9
 		expect(promptInput.selectionStart).toBe(9);
 	});
 
@@ -1279,7 +1281,7 @@ describe("renderGame — panel-click addressee", () => {
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
 		// Trigger one round to lock out red
-		promptInput.value = "@Sage hello";
+		promptInput.value = "*Sage hello";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
@@ -1295,7 +1297,7 @@ describe("renderGame — panel-click addressee", () => {
 		expect(promptInput.value).toBe("");
 	});
 
-	it("'@Nonpersona hi' + click blue → prepends '@Frost '", async () => {
+	it("'*Nonpersona hi' + click blue → prepends '*Frost '", async () => {
 		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
@@ -1304,11 +1306,11 @@ describe("renderGame — panel-click addressee", () => {
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 		const bluePanel = getEl<HTMLElement>('.ai-panel[data-ai="blue"]');
 
-		promptInput.value = "@nonpersona hi";
+		promptInput.value = "*nonpersona hi";
 		promptInput.dispatchEvent(new Event("input"));
 		bluePanel.click();
 
-		expect(promptInput.value).toBe("@Frost @nonpersona hi");
+		expect(promptInput.value).toBe("*Frost *nonpersona hi");
 	});
 });
 
@@ -1351,7 +1353,7 @@ describe("renderGame — URL param sourcing", () => {
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 		// Post-#107: submit handler requires a valid @mention; without one,
 		// deriveComposerState returns sendEnabled=false and the submit no-ops.
-		promptInput.value = "@Ember go";
+		promptInput.value = "*Ember go";
 		// Dispatch input so the SPA's listener updates the composer state.
 		promptInput.dispatchEvent(new Event("input", { bubbles: true }));
 		form.dispatchEvent(
@@ -1447,7 +1449,7 @@ describe("renderGame — addressee persistence after send", () => {
 		expect(sendBtn.disabled).toBe(true);
 	});
 
-	it("after a successful send: input contains '@Sage ' and Send is disabled", async () => {
+	it("after a successful send: input contains '*Sage ' and Send is disabled", async () => {
 		const mockFetch = makeThreeAiFetchMock(
 			PASS_ACTION,
 			PASS_ACTION,
@@ -1465,14 +1467,14 @@ describe("renderGame — addressee persistence after send", () => {
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 		const sendBtn = getEl<HTMLButtonElement>("#send");
 
-		promptInput.value = "@Sage hello";
+		promptInput.value = "*Sage hello";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
-		expect(promptInput.value).toBe("@Sage ");
+		expect(promptInput.value).toBe("*Sage ");
 		expect(promptInput.selectionStart).toBe(6);
 		expect(promptInput.selectionEnd).toBe(6);
 		expect(sendBtn.disabled).toBe(true);
@@ -1496,7 +1498,7 @@ describe("renderGame — addressee persistence after send", () => {
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 		const sendBtn = getEl<HTMLButtonElement>("#send");
 
-		promptInput.value = "@Sage hello";
+		promptInput.value = "*Sage hello";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
@@ -1507,7 +1509,7 @@ describe("renderGame — addressee persistence after send", () => {
 		expect(sendBtn.disabled).toBe(true);
 
 		// Typing body text after the persisted prefix re-enables Send
-		promptInput.value = "@Sage how are you";
+		promptInput.value = "*Sage how are you";
 		promptInput.dispatchEvent(new Event("input"));
 		expect(sendBtn.disabled).toBe(false);
 	});
@@ -1531,7 +1533,7 @@ describe("renderGame — addressee persistence after send", () => {
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
 		// First turn
-		promptInput.value = "@Sage hello";
+		promptInput.value = "*Sage hello";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
@@ -1539,10 +1541,10 @@ describe("renderGame — addressee persistence after send", () => {
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
 		// Prefix persists after first send
-		expect(promptInput.value).toBe("@Sage ");
+		expect(promptInput.value).toBe("*Sage ");
 
 		// Second turn: extend the persisted prefix
-		promptInput.value = "@Sage how are you";
+		promptInput.value = "*Sage how are you";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
@@ -1550,15 +1552,15 @@ describe("renderGame — addressee persistence after send", () => {
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
 		// Prefix persists again after second send
-		expect(promptInput.value).toBe("@Sage ");
+		expect(promptInput.value).toBe("*Sage ");
 
 		// Both messages should be in the green transcript
 		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
-		expect(greenTranscript.textContent).toContain("> @Sage hello");
-		expect(greenTranscript.textContent).toContain("> @Sage how are you");
+		expect(greenTranscript.textContent).toContain("> *Sage hello");
+		expect(greenTranscript.textContent).toContain("> *Sage how are you");
 	});
 
-	it("canonical-name normalization: @sage (lowercase) → '@Sage ' after send", async () => {
+	it("canonical-name normalization: *sage (lowercase) → '*Sage ' after send", async () => {
 		const mockFetch = makeThreeAiFetchMock(
 			PASS_ACTION,
 			PASS_ACTION,
@@ -1575,7 +1577,7 @@ describe("renderGame — addressee persistence after send", () => {
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
-		promptInput.value = "@sage hi";
+		promptInput.value = "*sage hi";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
@@ -1583,7 +1585,7 @@ describe("renderGame — addressee persistence after send", () => {
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
 		// Should use canonical name from PERSONAS (Sage, not sage)
-		expect(promptInput.value).toBe("@Sage ");
+		expect(promptInput.value).toBe("*Sage ");
 	});
 
 	it("locked-AI at round-completion: mention prefix persists but Send stays disabled", async () => {
@@ -1627,7 +1629,7 @@ describe("renderGame — addressee persistence after send", () => {
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 		const sendBtn = getEl<HTMLButtonElement>("#send");
 
-		promptInput.value = "@Sage hello";
+		promptInput.value = "*Sage hello";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
@@ -1635,7 +1637,7 @@ describe("renderGame — addressee persistence after send", () => {
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
 		// Prefix persists even when green is locked
-		expect(promptInput.value).toBe("@Sage ");
+		expect(promptInput.value).toBe("*Sage ");
 		// Send must be disabled: green is locked and no body text
 		expect(sendBtn.disabled).toBe(true);
 	});
@@ -1678,14 +1680,14 @@ describe("visual feedback for active addressee", () => {
 		expect(overlay?.querySelector(".mention-highlight")).toBeNull();
 	});
 
-	it("typing '@Sage hi' → green border, green panel highlight, @Sage span in overlay", async () => {
+	it("typing '*Sage hi' → green border, green panel highlight, *Sage span in overlay", async () => {
 		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
-		promptInput.value = "@Sage hi";
+		promptInput.value = "*Sage hi";
 		promptInput.dispatchEvent(new Event("input"));
 
 		// Composer border is green
@@ -1701,51 +1703,51 @@ describe("visual feedback for active addressee", () => {
 		expect(redPanel.classList.contains("panel--addressed")).toBe(false);
 		expect(bluePanel.classList.contains("panel--addressed")).toBe(false);
 
-		// Overlay has exactly one mention-highlight span with @Sage text and mention--green
+		// Overlay has exactly one mention-highlight span with *Sage text and mention--green
 		const overlay = getEl<HTMLElement>("#prompt-overlay");
 		const spans = overlay.querySelectorAll(".mention-highlight");
 		expect(spans.length).toBe(1);
-		expect(spans[0]?.textContent).toBe("@Sage");
+		expect(spans[0]?.textContent).toBe("*Sage");
 		expect(
 			(spans[0] as HTMLElement)?.style.getPropertyValue("--panel-color"),
 		).toBe("#81b29a");
 	});
 
-	it("multi-mention '@Sage tell @Frost ...' → exactly one mention-highlight for @Sage only", async () => {
+	it("multi-mention '*Sage tell *Frost ...' → exactly one mention-highlight for *Sage only", async () => {
 		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
-		promptInput.value = "@Sage tell @Frost ...";
+		promptInput.value = "*Sage tell *Frost ...";
 		promptInput.dispatchEvent(new Event("input"));
 
 		const overlay = getEl<HTMLElement>("#prompt-overlay");
 		const spans = overlay.querySelectorAll(".mention-highlight");
 		expect(spans.length).toBe(1);
-		expect(spans[0]?.textContent).toBe("@Sage");
+		expect(spans[0]?.textContent).toBe("*Sage");
 		expect(
 			(spans[0] as HTMLElement)?.style.getPropertyValue("--panel-color"),
 		).toBe("#81b29a");
 	});
 
-	it("trailing punctuation '@Sage,' → overlay mention-highlight has textContent '@Sage' (comma is plain text)", async () => {
+	it("trailing punctuation '*Sage,' → overlay mention-highlight has textContent '*Sage' (comma is plain text)", async () => {
 		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
-		promptInput.value = "@Sage,";
+		promptInput.value = "*Sage,";
 		promptInput.dispatchEvent(new Event("input"));
 
 		const overlay = getEl<HTMLElement>("#prompt-overlay");
 		const span = overlay.querySelector(".mention-highlight");
-		expect(span?.textContent).toBe("@Sage");
+		expect(span?.textContent).toBe("*Sage");
 
 		// Comma should be outside the span (in a text node)
-		expect(overlay.textContent).toBe("@Sage,");
+		expect(overlay.textContent).toBe("*Sage,");
 	});
 
 	it("clearing input → all visual feedback removed", async () => {
@@ -1757,7 +1759,7 @@ describe("visual feedback for active addressee", () => {
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
 		// First set a mention
-		promptInput.value = "@Sage hi";
+		promptInput.value = "*Sage hi";
 		promptInput.dispatchEvent(new Event("input"));
 		expect(promptInput.style.getPropertyValue("--panel-color")).toBe("#81b29a");
 
@@ -1777,7 +1779,7 @@ describe("visual feedback for active addressee", () => {
 		expect(overlay.querySelector(".mention-highlight")).toBeNull();
 	});
 
-	it("panel-click transfers highlight: type @Sage hi then click blue panel → blue border, blue panel, @Frost span", async () => {
+	it("panel-click transfers highlight: type *Sage hi then click blue panel → blue border, blue panel, *Frost span", async () => {
 		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
@@ -1785,8 +1787,8 @@ describe("visual feedback for active addressee", () => {
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
-		// Type @Sage hi
-		promptInput.value = "@Sage hi";
+		// Type *Sage hi
+		promptInput.value = "*Sage hi";
 		promptInput.dispatchEvent(new Event("input"));
 		expect(promptInput.style.getPropertyValue("--panel-color")).toBe("#81b29a");
 
@@ -1794,8 +1796,8 @@ describe("visual feedback for active addressee", () => {
 		const bluePanel = getEl<HTMLElement>('.ai-panel[data-ai="blue"]');
 		bluePanel.click();
 
-		// Input value should start with @Frost
-		expect(promptInput.value.startsWith("@Frost")).toBe(true);
+		// Input value should start with *Frost
+		expect(promptInput.value.startsWith("*Frost")).toBe(true);
 
 		// Blue border
 		expect(promptInput.style.getPropertyValue("--panel-color")).toBe("#5fa8d3");
@@ -1807,10 +1809,10 @@ describe("visual feedback for active addressee", () => {
 		const greenPanel = getEl<HTMLElement>('.ai-panel[data-ai="green"]');
 		expect(greenPanel.classList.contains("panel--addressed")).toBe(false);
 
-		// Overlay highlight is @Frost with blue --panel-color
+		// Overlay highlight is *Frost with blue --panel-color
 		const overlay = getEl<HTMLElement>("#prompt-overlay");
 		const span = overlay.querySelector<HTMLElement>(".mention-highlight");
-		expect(span?.textContent).toBe("@Frost");
+		expect(span?.textContent).toBe("*Frost");
 		expect(span?.style.getPropertyValue("--panel-color")).toBe("#5fa8d3");
 	});
 
@@ -1868,15 +1870,15 @@ describe("visual feedback for active addressee", () => {
 		const sendBtn = getEl<HTMLButtonElement>("#send");
 
 		// Submit one round to lock green
-		promptInput.value = "@Sage hello";
+		promptInput.value = "*Sage hello";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
-		// Now type @Sage hi (green is locked)
-		promptInput.value = "@Sage hi";
+		// Now type *Sage hi (green is locked)
+		promptInput.value = "*Sage hi";
 		promptInput.dispatchEvent(new Event("input"));
 
 		// Send disabled (green locked)
@@ -1890,7 +1892,7 @@ describe("visual feedback for active addressee", () => {
 		// Overlay still shows the mention highlight
 		const overlay = getEl<HTMLElement>("#prompt-overlay");
 		const span = overlay.querySelector<HTMLElement>(".mention-highlight");
-		expect(span?.textContent).toBe("@Sage");
+		expect(span?.textContent).toBe("*Sage");
 		expect(span?.style.getPropertyValue("--panel-color")).toBe("#81b29a");
 	});
 });
@@ -1948,7 +1950,7 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
-		promptInput.value = "@Sage hello";
+		promptInput.value = "*Sage hello";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
@@ -1966,7 +1968,7 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 		expect(bluePanel.classList.contains("panel--locked")).toBe(false);
 	});
 
-	it("type @Sage while green locked → Send disabled, #lockout-error visible with text containing 'Sage'", async () => {
+	it("type *Sage while green locked → Send disabled, #lockout-error visible with text containing 'Sage'", async () => {
 		vi.stubGlobal(
 			"fetch",
 			makeThreeAiFetchMock(PASS_ACTION, PASS_ACTION, PASS_ACTION),
@@ -1984,15 +1986,15 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 		const sendBtn = getEl<HTMLButtonElement>("#send");
 
 		// Submit to trigger the lockout
-		promptInput.value = "@Sage hello";
+		promptInput.value = "*Sage hello";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
-		// Type @Sage hi while green is locked
-		promptInput.value = "@Sage hi";
+		// Type *Sage hi while green is locked
+		promptInput.value = "*Sage hi";
 		promptInput.dispatchEvent(new Event("input"));
 
 		expect(sendBtn.disabled).toBe(true);
@@ -2002,7 +2004,7 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 		expect(lockoutError.textContent).toContain("Sage");
 	});
 
-	it("chat_lockout_resolved mid-draft → muting clears, #lockout-error hidden, Send re-enables when @Sage re-typed", async () => {
+	it("chat_lockout_resolved mid-draft → muting clears, #lockout-error hidden, Send re-enables when *Sage re-typed", async () => {
 		// First round: inject lockout for green
 		// Second round: inject lockout_resolved for green via mock
 		vi.stubGlobal("localStorage", { getItem: () => null });
@@ -2057,7 +2059,7 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
 		// Round 1: lock green
-		promptInput.value = "@Sage hello";
+		promptInput.value = "*Sage hello";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
@@ -2068,8 +2070,8 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 		const greenPanel = getEl<HTMLElement>('.ai-panel[data-ai="green"]');
 		expect(greenPanel.classList.contains("panel--locked")).toBe(true);
 
-		// Round 2 via @Ember: resolve green lockout
-		promptInput.value = "@Ember hi";
+		// Round 2 via *Ember: resolve green lockout
+		promptInput.value = "*Ember hi";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
@@ -2079,8 +2081,8 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 		// Green panel should no longer be locked
 		expect(greenPanel.classList.contains("panel--locked")).toBe(false);
 
-		// Type @Sage again: should now enable Send and hide error
-		promptInput.value = "@Sage hi";
+		// Type *Sage again: should now enable Send and hide error
+		promptInput.value = "*Sage hi";
 		promptInput.dispatchEvent(new Event("input"));
 
 		const sendBtn = getEl<HTMLButtonElement>("#send");
@@ -2107,7 +2109,7 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
 		// Trigger lockout
-		promptInput.value = "@Sage hello";
+		promptInput.value = "*Sage hello";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),

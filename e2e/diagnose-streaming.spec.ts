@@ -281,12 +281,12 @@ test("DIAGNOSTIC: observe wire vs DOM timeline during streaming", async ({
 	// Wait for synthesis to complete and panels to get dynamic data-ai attributes.
 	const { ids, names } = await getAiHandles(page);
 
-	await page.fill("#prompt", `@${names[0]} Hello`);
+	await page.fill("#prompt", `*${names[0]} Hello`);
 	await page.click("#send");
 
 	// Wait until all three SSE streams complete. (Post-#107 the send button no
 	// longer re-enables after submit because the prompt is cleared and an empty
-	// prompt has no @mention.)
+	// prompt has no *mention.)
 	// The synthesis call is call-1, so streaming starts at call-2. We need 3
 	// fetch_done events (calls 2, 3, 4).
 	await expect
