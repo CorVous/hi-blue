@@ -884,6 +884,10 @@ main {
 	text-shadow: inherit;
 	caret-color: var(--amber);
 	padding: 2px 0 3px;
+	/* Password masking renders the user's input as `*` characters. JetBrains
+	   Mono ligates `**` and `***` into glyphs that shift the middle asterisk
+	   upward, so a 3-char password visually misaligns. */
+	font-variant-ligatures: none;
 }
 
 .login-field input:focus {

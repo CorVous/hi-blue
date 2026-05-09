@@ -83,6 +83,28 @@ test.describe("mobile viewport", () => {
 	});
 });
 
+test("password input disables ligatures so masked `***` doesn't shift mid-char", async ({
+	page,
+}) => {
+	// JetBrains Mono ligates `**` and `***` into a glyph that raises the middle
+	// asterisk. Since the password is masked to `*`s, three characters of input
+	// would visually misalign without `font-variant-ligatures: none`.
+	const pageErrors: Error[] = [];
+	page.on("pageerror", (err) => pageErrors.push(err));
+
+	await stubChatCompletions(page, ["stub reply"]);
+
+	await page.goto("/?skipDialup=1");
+	await expect(page.locator("#password")).toBeVisible();
+
+	const liga = await page
+		.locator("#password")
+		.evaluate((el) => getComputedStyle(el).fontVariantLigatures);
+	expect(liga).toBe("none");
+
+	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+});
+
 test("[ BEGIN ] is enabled after persona synthesis and content-pack generation complete", async ({
 	page,
 }) => {
