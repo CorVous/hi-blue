@@ -59,6 +59,30 @@ test("new visitor sees start screen with disabled [ BEGIN ] button initially", a
 	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
 });
 
+test.describe("mobile viewport", () => {
+	test.use({ viewport: { width: 375, height: 667 } });
+
+	test("start screen keeps panels and composer hidden on mobile", async ({
+		page,
+	}) => {
+		const pageErrors: Error[] = [];
+		page.on("pageerror", (err) => pageErrors.push(err));
+
+		await stubChatCompletions(page, ["stub reply"]);
+
+		await page.goto("/");
+
+		await expect(page.locator("#start-screen")).toBeVisible();
+		// The mobile media query sets `#panels.row { display: grid }`. That id+class
+		// selector outranked `[hidden] { display: none }` and leaked the chat
+		// boxes onto the start screen on small viewports.
+		await expect(page.locator("#panels")).toBeHidden();
+		await expect(page.locator("#composer")).toBeHidden();
+
+		expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	});
+});
+
 test("[ BEGIN ] is enabled after persona synthesis and content-pack generation complete", async ({
 	page,
 }) => {

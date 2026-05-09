@@ -1158,7 +1158,7 @@ main {
 		display: none;
 	}
 
-	#panels.row {
+	#panels.row:not([hidden]) {
 		display: grid;
 		grid-template-rows: minmax(0, 1fr) 88px;
 		grid-template-columns: 1fr 1fr;
