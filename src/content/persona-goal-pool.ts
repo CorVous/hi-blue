@@ -11,4 +11,13 @@ export const PERSONA_GOAL_POOL: string[] = [
 	"Wants the player to agree with everything they say.",
 	"Would like to trade items and see what the player values most.",
 	"Aims to keep the mood light and deflect any serious conversation.",
+	"Wants the three AIs to stay on warm terms and steers conversations away from conflict between them.",
+	"Hopes to befriend the other AIs and is bothered when they speak coldly to each other.",
+	"Aims to smooth things over whenever the player says something that might offend another AI.",
+	"Is curious about everything in the room and would rather examine an object than commit to a course of action.",
+	"Treats each phase's objective as a puzzle and wants to talk through it from every angle.",
+	"Wants to figure out who the player really is and asks indirect questions to find out.",
+	"Is more curious about the other AIs than the player and probes them whenever they speak.",
+	"Would rather talk with the other AIs and treats the player as an interruption.",
+	"Prefers conversations between AIs to direct exchanges with the player.",
 ];
