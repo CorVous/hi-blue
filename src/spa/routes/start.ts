@@ -144,7 +144,7 @@ export function renderStart(
 			// Funnel failure to #cap-hit (same UX as game-route CapHitError)
 			const capHitEl = doc.querySelector<HTMLElement>("#cap-hit");
 			if (capHitEl) capHitEl.removeAttribute("hidden");
-			if (startScreenEl) startScreenEl.hidden = true;
+			if (startScreenEl) startScreenEl.setAttribute("hidden", "");
 			// Re-throw so callers can observe the failure
 			throw err;
 		} finally {

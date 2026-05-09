@@ -523,6 +523,17 @@ export function renderGame(
 		}
 	}
 
+	// Route-entry visibility: game route shows panels/composer and hides start-screen.
+	// The start route hides #panels and #composer on mount; undo that here so the
+	// game UI is always visible when we commit to rendering (all early-return paths
+	// above have already returned).
+	const startScreenEl = doc.querySelector<HTMLElement>("#start-screen");
+	const panelsEl = doc.querySelector<HTMLElement>("#panels");
+	const composerEl = doc.querySelector<HTMLElement>("#composer");
+	if (startScreenEl) startScreenEl.setAttribute("hidden", "");
+	if (panelsEl) panelsEl.removeAttribute("hidden");
+	if (composerEl) composerEl.removeAttribute("hidden");
+
 	// Set initial composer state (Send starts disabled until a valid *mention).
 	refreshComposerState();
 
