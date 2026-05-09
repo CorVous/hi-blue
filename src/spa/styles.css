@@ -131,14 +131,15 @@ header {
 	text-shadow: none;
 }
 
-/* Each body-row `║` is wrapped in `.banner-side`. Hide the glyph and paint
-   the line via a `::before` that extends slightly past the cell vertically
-   so adjacent rows' overlays overlap into one continuous strip — no font
-   metric guesswork, position is locally anchored to the cell. */
+/* Each body-row `║` is wrapped in `.banner-side`. The span stays display:
+   inline (so its character cell renders identically to the bare `╔`/`╝`
+   corner glyphs in the top/bottom rows — no inline-block layout shift)
+   and hosts an absolute `::before` that paints the line. The line bleeds
+   slightly above and below each cell so adjacent rows' overlays overlap
+   into one continuous strip. */
 .banner-side {
 	color: transparent;
 	position: relative;
-	display: inline-block;
 }
 
 .banner-side::before {
