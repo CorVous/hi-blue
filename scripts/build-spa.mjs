@@ -23,9 +23,7 @@ const COMMIT_SHA = (() => {
 const COMMIT_TIMESTAMP_MS = (() => {
 	try {
 		const seconds = Number.parseInt(
-			execSync("git log -1 --format=%ct HEAD", { cwd: root })
-				.toString()
-				.trim(),
+			execSync("git log -1 --format=%ct HEAD", { cwd: root }).toString().trim(),
 			10,
 		);
 		return Number.isFinite(seconds) ? seconds * 1000 : 0;
