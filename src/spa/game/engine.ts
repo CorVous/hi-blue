@@ -11,8 +11,6 @@ import type {
 	PersonaSpatialState,
 	PhaseConfig,
 	PhaseState,
-	PhysicalActionRecord,
-	WhisperMessage,
 } from "./types";
 
 /**
@@ -123,8 +121,6 @@ export function startPhase(
 		round: 0,
 		world: { entities: worldEntities },
 		budgets,
-		whispers: [],
-		physicalLog: [],
 		conversationLogs,
 		lockedOut: new Set(),
 		chatLockouts: new Map(),
@@ -248,23 +244,52 @@ export function appendChat(
 	});
 }
 
-export function appendPhysicalAction(
+/**
+ * Append an identical `kind: "whisper"` ConversationEntry to both the sender's
+ * and the recipient's per-Daemon conversationLogs in one atomic update.
+ */
+export function appendWhisperEntry(
 	game: GameState,
-	record: PhysicalActionRecord,
+	sender: AiId,
+	recipient: AiId,
+	content: string,
 ): GameState {
-	return updateActivePhase(game, (phase) => ({
-		...phase,
-		physicalLog: [...phase.physicalLog, record],
-	}));
+	return updateActivePhase(game, (phase) => {
+		const entry: ConversationEntry = {
+			kind: "whisper",
+			round: phase.round,
+			from: sender,
+			to: recipient,
+			content,
+		};
+		const senderLog = [...(phase.conversationLogs[sender] ?? []), entry];
+		const recipientLog = [...(phase.conversationLogs[recipient] ?? []), entry];
+		return {
+			...phase,
+			conversationLogs: {
+				...phase.conversationLogs,
+				[sender]: senderLog,
+				[recipient]: recipientLog,
+			},
+		};
+	});
 }
 
-export function appendWhisper(
+/**
+ * Append a `kind: "witnessed-event"` ConversationEntry to a single witness's
+ * per-Daemon log.
+ */
+export function appendWitnessedEvent(
 	game: GameState,
-	whisper: WhisperMessage,
+	witnessId: AiId,
+	entry: Extract<ConversationEntry, { kind: "witnessed-event" }>,
 ): GameState {
 	return updateActivePhase(game, (phase) => ({
 		...phase,
-		whispers: [...phase.whispers, whisper],
+		conversationLogs: {
+			...phase.conversationLogs,
+			[witnessId]: [...(phase.conversationLogs[witnessId] ?? []), entry],
+		},
 	}));
 }
 

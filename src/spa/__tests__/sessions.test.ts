@@ -122,7 +122,6 @@ async function seedOkSession(
 	for (const [aiId, daemonJson] of Object.entries(files.daemons)) {
 		stub._store[`${prefix}${aiId}.txt`] = daemonJson;
 	}
-	stub._store[`${prefix}whispers.txt`] = files.whispers;
 	// biome-ignore lint/style/noNonNullAssertion: serializeSession always returns engine
 	stub._store[`${prefix}engine.dat`] = files.engine!;
 }
@@ -143,7 +142,7 @@ async function seedBrokenSession(
 	for (const [aiId, daemonJson] of Object.entries(files.daemons)) {
 		stub._store[`${prefix}${aiId}.txt`] = daemonJson;
 	}
-	// Intentionally omit engine.dat and whispers.txt to trigger broken state
+	// Intentionally omit engine.dat to trigger broken state
 }
 
 /**
@@ -162,7 +161,6 @@ async function seedVersionMismatchSession(
 	for (const [aiId, daemonJson] of Object.entries(files.daemons)) {
 		stub._store[`${prefix}${aiId}.txt`] = daemonJson;
 	}
-	stub._store[`${prefix}whispers.txt`] = files.whispers;
 	// Write engine.dat with bumped schemaVersion
 	// biome-ignore lint/style/noNonNullAssertion: serializeSession always returns engine
 	const rawJson = deobfuscate(files.engine!);

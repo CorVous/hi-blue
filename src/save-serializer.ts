@@ -4,11 +4,12 @@
  * Takes a completed (or in-progress) GameState and produces a deterministic,
  * JSON-serializable payload containing:
  * - Each AI's persona
- * - Each AI's per-phase transcript (chat history + whispers that involve that AI,
- *   grouped by phase)
+ * - Each AI's per-phase transcript (unified conversationLog including chat,
+ *   whispers, and witnessed events, grouped by phase)
  * - All three ContentPacks (setting, entities, placements)
  *
- * The format is versioned (v2) so future schema changes can be detected.
+ * The format is versioned (v3) so future schema changes can be detected.
+ * v2 → v3: whispers moved inline into conversationLog (per-Daemon logs).
  */
 
 import type {
@@ -16,14 +17,11 @@ import type {
 	ContentPack,
 	ConversationEntry,
 	GameState,
-	WhisperMessage,
 } from "./spa/game/types";
 
 export interface PhaseTranscript {
 	phaseNumber: 1 | 2 | 3;
 	conversationLog: ConversationEntry[];
-	/** Whispers where this AI is either sender or recipient. */
-	whispers: WhisperMessage[];
 }
 
 export interface AiSaveEntry {
@@ -32,8 +30,8 @@ export interface AiSaveEntry {
 }
 
 export interface GameSave {
-	/** Schema version. v2 = ContentPack added. */
-	version: 2;
+	/** Schema version. v3 = whispers moved inline into conversationLog. */
+	version: 3;
 	ais: AiSaveEntry[];
 	/** All three content packs (generated at game start). */
 	contentPacks: ContentPack[];
@@ -52,18 +50,14 @@ export function serializeGameSave(game: GameState): GameSave {
 
 		const phases: PhaseTranscript[] = game.phases.map((phase) => {
 			const conversationLog = phase.conversationLogs[aiId] ?? [];
-			const whispers = phase.whispers.filter(
-				(w) => w.from === aiId || w.to === aiId,
-			);
 			return {
 				phaseNumber: phase.phaseNumber,
 				conversationLog: conversationLog.map((e) => ({ ...e })),
-				whispers: whispers.map((w) => ({ ...w })),
 			};
 		});
 
 		return { persona: { ...persona }, phases };
 	});
 
-	return { version: 2, ais, contentPacks: game.contentPacks };
+	return { version: 3, ais, contentPacks: game.contentPacks };
 }

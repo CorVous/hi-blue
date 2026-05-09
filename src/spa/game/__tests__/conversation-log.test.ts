@@ -1,8 +1,10 @@
 /**
  * Unit tests for conversation-log.ts
  *
- * Tests the pure buildConversationLog function in isolation,
- * covering all event types and edge cases.
+ * Tests the pure buildConversationLog function in isolation.
+ * Cone visibility is resolved at write-time (ADR 0006) — these tests
+ * operate on pre-filtered ConversationEntry[] arrays, just like the
+ * dispatcher provides after its write-time fan-out.
  */
 
 import { describe, expect, it } from "vitest";
@@ -10,7 +12,7 @@ import {
 	buildConversationLog,
 	type ConversationLogInput,
 } from "../conversation-log.js";
-import type { AiPersona, PhysicalActionRecord, WorldEntity } from "../types.js";
+import type { AiPersona, WorldEntity } from "../types.js";
 
 // Minimal personas for tests
 const TEST_PERSONAS: Record<string, AiPersona> = {
@@ -68,8 +70,6 @@ function makeItem(id: string, name: string): WorldEntity {
 function emptyInput(): ConversationLogInput {
 	return {
 		conversationLog: [],
-		whispers: [],
-		physicalLog: [],
 		worldEntities: [],
 	};
 }
@@ -83,15 +83,10 @@ describe("buildConversationLog — empty phase", () => {
 	});
 
 	it("returns empty array for an AI with no events even when others have events", () => {
-		// The caller pre-filters conversationLog to the single AI's entries.
-		// red has no conversation entries, so an empty conversationLog is passed.
 		const input: ConversationLogInput = {
 			conversationLog: [],
-			whispers: [],
-			physicalLog: [],
 			worldEntities: [],
 		};
-		// red has nothing
 		const result = buildConversationLog(input, "red", TEST_PERSONAS);
 		expect(result).toEqual([]);
 	});
@@ -123,9 +118,6 @@ describe("buildConversationLog — voice-chat", () => {
 	});
 
 	it("does not include other AIs' chat messages (caller pre-filters)", () => {
-		// The caller (prompt-builder) passes only the entries for the target AI.
-		// This test verifies that when only red's entries are passed, only red's
-		// messages appear — the per-AI filtering is the caller's responsibility.
 		const input: ConversationLogInput = {
 			...emptyInput(),
 			conversationLog: [
@@ -158,119 +150,72 @@ describe("buildConversationLog — whispers", () => {
 	it("renders whisper received with correct format", () => {
 		const input: ConversationLogInput = {
 			...emptyInput(),
-			whispers: [{ from: "green", to: "red", content: "psst", round: 1 }],
+			conversationLog: [
+				{
+					kind: "whisper",
+					from: "green",
+					to: "red",
+					content: "psst",
+					round: 1,
+				},
+			],
 		};
 		const result = buildConversationLog(input, "red", TEST_PERSONAS);
 		expect(result).toEqual(['[Round 1] *green whispered to you: "psst"']);
 	});
 
-	it("does not render whisper for the sender", () => {
+	it("renders whisper that was sent (sender's log also gets the entry)", () => {
+		// The dispatcher writes the same entry to both sender and recipient.
+		// So sender's log contains a "whisper" entry too.
 		const input: ConversationLogInput = {
 			...emptyInput(),
-			whispers: [{ from: "green", to: "red", content: "psst", round: 1 }],
+			conversationLog: [
+				{
+					kind: "whisper",
+					from: "green",
+					to: "red",
+					content: "psst",
+					round: 1,
+				},
+			],
 		};
-		// green sent the whisper — should NOT appear in green's log
+		// From green's perspective (who sent it), it still renders the same format
 		const result = buildConversationLog(input, "green", TEST_PERSONAS);
-		expect(result).toEqual([]);
-	});
-
-	it("does not render whisper for uninvolved AI", () => {
-		const input: ConversationLogInput = {
-			...emptyInput(),
-			whispers: [{ from: "green", to: "red", content: "psst", round: 1 }],
-		};
-		const result = buildConversationLog(input, "blue", TEST_PERSONAS);
-		expect(result).toEqual([]);
+		expect(result).toHaveLength(1);
+		expect(result[0]).toContain("whispered to you");
 	});
 });
 
 // ── Witnessed events — go ──────────────────────────────────────────────────────
 
 describe("buildConversationLog — witnessed go", () => {
-	it("renders 'You watch *actor walk <dir>' when actor is in witness's cone", () => {
-		// green at (0,0) facing south → cone includes (1,0) (directly in front)
-		// red moves south to (1,0) → in green's cone
-		const record: PhysicalActionRecord = {
-			round: 0,
-			actor: "red",
-			actorCellAtAction: { row: 1, col: 0 }, // post-move
-			actorFacingAtAction: "south",
-			kind: "go",
-			direction: "south",
-			witnessSpatial: {
-				green: { position: { row: 0, col: 0 }, facing: "south" },
-			},
-		};
+	it("renders 'You watch *actor walk <dir>'", () => {
+		// Cone check is write-time: this entry already passed cone check.
 		const input: ConversationLogInput = {
 			...emptyInput(),
-			physicalLog: [record],
+			conversationLog: [
+				{
+					kind: "witnessed-event",
+					round: 0,
+					actor: "red",
+					actionKind: "go",
+					direction: "south",
+				},
+			],
 		};
 		const result = buildConversationLog(input, "green", TEST_PERSONAS);
 		expect(result).toEqual(["[Round 0] You watch *red walk south."]);
 	});
 
-	it("does not render event for actor's own action", () => {
-		const record: PhysicalActionRecord = {
-			round: 0,
-			actor: "red",
-			actorCellAtAction: { row: 1, col: 0 },
-			actorFacingAtAction: "south",
-			kind: "go",
-			direction: "south",
-			witnessSpatial: {
-				green: { position: { row: 0, col: 0 }, facing: "south" },
-			},
-		};
+	it("actor's own action does not produce an entry in actor's log", () => {
+		// Actor's log never gets a witnessed-event for their own action.
+		// This is enforced at write-time in the dispatcher (not read-time here).
+		// Verify that if the log is empty, the result is empty.
 		const input: ConversationLogInput = {
 			...emptyInput(),
-			physicalLog: [record],
+			conversationLog: [], // actor's log has no witnessed-event entry
 		};
-		// red is the actor — should not see their own action as a Witnessed event
 		const result = buildConversationLog(input, "red", TEST_PERSONAS);
-		expect(result).toEqual([]);
-	});
-
-	it("does not render event when actor is outside witness's cone", () => {
-		// green at (0,0) facing north → cone points north (rows -1, -2)
-		// red is at (4,4) — far outside green's northward cone
-		const record: PhysicalActionRecord = {
-			round: 0,
-			actor: "red",
-			actorCellAtAction: { row: 4, col: 4 },
-			actorFacingAtAction: "south",
-			kind: "go",
-			direction: "south",
-			witnessSpatial: {
-				green: { position: { row: 0, col: 0 }, facing: "north" },
-			},
-		};
-		const input: ConversationLogInput = {
-			...emptyInput(),
-			physicalLog: [record],
-		};
-		const result = buildConversationLog(input, "green", TEST_PERSONAS);
-		expect(result).toEqual([]);
-	});
-
-	it("does not render event for AI not in witnessSpatial", () => {
-		// blue is not in witnessSpatial at all
-		const record: PhysicalActionRecord = {
-			round: 0,
-			actor: "red",
-			actorCellAtAction: { row: 1, col: 0 },
-			actorFacingAtAction: "south",
-			kind: "go",
-			direction: "south",
-			witnessSpatial: {
-				green: { position: { row: 0, col: 0 }, facing: "south" },
-				// blue is absent
-			},
-		};
-		const input: ConversationLogInput = {
-			...emptyInput(),
-			physicalLog: [record],
-		};
-		const result = buildConversationLog(input, "blue", TEST_PERSONAS);
 		expect(result).toEqual([]);
 	});
 });
@@ -279,22 +224,17 @@ describe("buildConversationLog — witnessed go", () => {
 
 describe("buildConversationLog — witnessed pick_up", () => {
 	it("renders 'You watch *actor pick up the <item>'", () => {
-		// green at (0,0) facing south → cone includes (1,0)
-		// red at (1,0) picks up flower
-		const record: PhysicalActionRecord = {
-			round: 1,
-			actor: "red",
-			actorCellAtAction: { row: 1, col: 0 },
-			actorFacingAtAction: "north",
-			kind: "pick_up",
-			item: "flower-1",
-			witnessSpatial: {
-				green: { position: { row: 0, col: 0 }, facing: "south" },
-			},
-		};
 		const input: ConversationLogInput = {
 			...emptyInput(),
-			physicalLog: [record],
+			conversationLog: [
+				{
+					kind: "witnessed-event",
+					round: 1,
+					actor: "red",
+					actionKind: "pick_up",
+					item: "flower-1",
+				},
+			],
 			worldEntities: [makeItem("flower-1", "the Flower")],
 		};
 		const result = buildConversationLog(input, "green", TEST_PERSONAS);
@@ -308,70 +248,41 @@ describe("buildConversationLog — witnessed pick_up", () => {
 
 describe("buildConversationLog — witnessed put_down", () => {
 	it("renders 'You watch *actor put down the <item>' for plain put_down", () => {
-		const record: PhysicalActionRecord = {
-			round: 1,
-			actor: "red",
-			actorCellAtAction: { row: 1, col: 0 },
-			actorFacingAtAction: "north",
-			kind: "put_down",
-			item: "key-1",
-			witnessSpatial: {
-				green: { position: { row: 0, col: 0 }, facing: "south" },
-			},
-		};
 		const input: ConversationLogInput = {
 			...emptyInput(),
-			physicalLog: [record],
+			conversationLog: [
+				{
+					kind: "witnessed-event",
+					round: 1,
+					actor: "red",
+					actionKind: "put_down",
+					item: "key-1",
+				},
+			],
 			worldEntities: [makeItem("key-1", "the Key")],
 		};
 		const result = buildConversationLog(input, "green", TEST_PERSONAS);
 		expect(result).toEqual(["[Round 1] You watch *red put down the the Key."]);
 	});
 
-	it("renders placementFlavorRaw verbatim with {actor} substituted to *<actor> for in-cone witness", () => {
-		const record: PhysicalActionRecord = {
-			round: 2,
-			actor: "red",
-			actorCellAtAction: { row: 1, col: 0 },
-			actorFacingAtAction: "north",
-			kind: "put_down",
-			item: "gem-1",
-			placementFlavorRaw: "{actor} sets the gem perfectly in the pedestal.",
-			witnessSpatial: {
-				green: { position: { row: 0, col: 0 }, facing: "south" },
-			},
-		};
+	it("renders placementFlavorRaw verbatim with {actor} substituted to *<actor>", () => {
 		const input: ConversationLogInput = {
 			...emptyInput(),
-			physicalLog: [record],
+			conversationLog: [
+				{
+					kind: "witnessed-event",
+					round: 2,
+					actor: "red",
+					actionKind: "put_down",
+					item: "gem-1",
+					placementFlavorRaw: "{actor} sets the gem perfectly in the pedestal.",
+				},
+			],
 		};
 		const result = buildConversationLog(input, "green", TEST_PERSONAS);
 		expect(result).toEqual([
 			"[Round 2] *red sets the gem perfectly in the pedestal.",
 		]);
-	});
-
-	it("does not render placementFlavorRaw for out-of-cone witness", () => {
-		const record: PhysicalActionRecord = {
-			round: 2,
-			actor: "red",
-			actorCellAtAction: { row: 1, col: 0 },
-			actorFacingAtAction: "north",
-			kind: "put_down",
-			item: "gem-1",
-			placementFlavorRaw: "{actor} sets the gem perfectly in the pedestal.",
-			witnessSpatial: {
-				// blue faces north from (0,0) — cone is (-1,0), (-2,1), (-2,0), (-2,-1) all OOB
-				// so (1,0) is not in blue's cone
-				blue: { position: { row: 0, col: 0 }, facing: "north" },
-			},
-		};
-		const input: ConversationLogInput = {
-			...emptyInput(),
-			physicalLog: [record],
-		};
-		const result = buildConversationLog(input, "blue", TEST_PERSONAS);
-		expect(result).toEqual([]);
 	});
 });
 
@@ -379,46 +290,37 @@ describe("buildConversationLog — witnessed put_down", () => {
 
 describe("buildConversationLog — witnessed give", () => {
 	it("renders give with *<to> when recipient is not the witness", () => {
-		// green at (0,0) facing south sees red at (1,0) give to blue
-		const record: PhysicalActionRecord = {
-			round: 0,
-			actor: "red",
-			actorCellAtAction: { row: 1, col: 0 },
-			actorFacingAtAction: "north",
-			kind: "give",
-			item: "key-1",
-			to: "blue",
-			witnessSpatial: {
-				green: { position: { row: 0, col: 0 }, facing: "south" },
-			},
-		};
 		const input: ConversationLogInput = {
 			...emptyInput(),
-			physicalLog: [record],
+			conversationLog: [
+				{
+					kind: "witnessed-event",
+					round: 0,
+					actor: "red",
+					actionKind: "give",
+					item: "key-1",
+					to: "blue",
+				},
+			],
 			worldEntities: [makeItem("key-1", "Key")],
 		};
 		const result = buildConversationLog(input, "green", TEST_PERSONAS);
 		expect(result).toEqual(["[Round 0] You watch *red give the Key to *blue."]);
 	});
 
-	it("renders give with 'you' when recipient is the witness", () => {
-		// blue at (2,0) facing north sees red give to blue
-		const record: PhysicalActionRecord = {
-			round: 0,
-			actor: "red",
-			actorCellAtAction: { row: 1, col: 0 },
-			actorFacingAtAction: "south",
-			kind: "give",
-			item: "key-1",
-			to: "blue",
-			witnessSpatial: {
-				// blue at (2,0) facing north: cone includes own cell (2,0), (1,0), (0,0), etc.
-				blue: { position: { row: 2, col: 0 }, facing: "north" },
-			},
-		};
+	it("renders give with 'you' when recipient is the witness (aiId)", () => {
 		const input: ConversationLogInput = {
 			...emptyInput(),
-			physicalLog: [record],
+			conversationLog: [
+				{
+					kind: "witnessed-event",
+					round: 0,
+					actor: "red",
+					actionKind: "give",
+					item: "key-1",
+					to: "blue",
+				},
+			],
 			worldEntities: [makeItem("key-1", "Key")],
 		};
 		// blue witnesses red giving to blue — should say "to you"
@@ -431,22 +333,18 @@ describe("buildConversationLog — witnessed give", () => {
 
 describe("buildConversationLog — witnessed use", () => {
 	it("renders useOutcome verbatim with {actor} substituted to *<actor>", () => {
-		// green at (0,0) facing south sees red at (1,0) use item
-		const record: PhysicalActionRecord = {
-			round: 1,
-			actor: "red",
-			actorCellAtAction: { row: 1, col: 0 },
-			actorFacingAtAction: "north",
-			kind: "use",
-			item: "lamp-1",
-			useOutcome: "{actor} activates the lamp and it hums with energy.",
-			witnessSpatial: {
-				green: { position: { row: 0, col: 0 }, facing: "south" },
-			},
-		};
 		const input: ConversationLogInput = {
 			...emptyInput(),
-			physicalLog: [record],
+			conversationLog: [
+				{
+					kind: "witnessed-event",
+					round: 1,
+					actor: "red",
+					actionKind: "use",
+					item: "lamp-1",
+					useOutcome: "{actor} activates the lamp and it hums with energy.",
+				},
+			],
 		};
 		const result = buildConversationLog(input, "green", TEST_PERSONAS);
 		expect(result).toEqual([
@@ -455,47 +353,22 @@ describe("buildConversationLog — witnessed use", () => {
 	});
 
 	it("does NOT prefix use events with 'You watch' — verbatim flavor only", () => {
-		const record: PhysicalActionRecord = {
-			round: 1,
-			actor: "red",
-			actorCellAtAction: { row: 1, col: 0 },
-			actorFacingAtAction: "north",
-			kind: "use",
-			item: "lamp-1",
-			useOutcome: "{actor} does something.",
-			witnessSpatial: {
-				green: { position: { row: 0, col: 0 }, facing: "south" },
-			},
-		};
 		const input: ConversationLogInput = {
 			...emptyInput(),
-			physicalLog: [record],
+			conversationLog: [
+				{
+					kind: "witnessed-event",
+					round: 1,
+					actor: "red",
+					actionKind: "use",
+					item: "lamp-1",
+					useOutcome: "{actor} does something.",
+				},
+			],
 		};
 		const result = buildConversationLog(input, "green", TEST_PERSONAS);
 		expect(result[0]).not.toContain("You watch");
 		expect(result[0]).toContain("*red does something.");
-	});
-
-	it("does not render use event for out-of-cone witness", () => {
-		const record: PhysicalActionRecord = {
-			round: 1,
-			actor: "red",
-			actorCellAtAction: { row: 4, col: 4 },
-			actorFacingAtAction: "north",
-			kind: "use",
-			item: "lamp-1",
-			useOutcome: "{actor} activates the lamp.",
-			witnessSpatial: {
-				// blue at (0,0) facing north — cone only has OOB cells + own cell
-				blue: { position: { row: 0, col: 0 }, facing: "north" },
-			},
-		};
-		const input: ConversationLogInput = {
-			...emptyInput(),
-			physicalLog: [record],
-		};
-		const result = buildConversationLog(input, "blue", TEST_PERSONAS);
-		expect(result).toEqual([]);
 	});
 });
 
@@ -504,91 +377,61 @@ describe("buildConversationLog — witnessed use", () => {
 describe("buildConversationLog — chronological ordering", () => {
 	it("sorts events by round ascending across all types", () => {
 		// Round 2 whisper, round 0 chat, round 1 witnessed event
-		const physRecord: PhysicalActionRecord = {
-			round: 1,
-			actor: "green",
-			actorCellAtAction: { row: 1, col: 0 },
-			actorFacingAtAction: "south",
-			kind: "go",
-			direction: "south",
-			witnessSpatial: {
-				red: { position: { row: 0, col: 0 }, facing: "south" },
-			},
-		};
 		const input: ConversationLogInput = {
 			conversationLog: [
 				{ kind: "chat", role: "player", content: "early msg", round: 0 },
+				{
+					kind: "witnessed-event",
+					round: 1,
+					actor: "green",
+					actionKind: "go",
+					direction: "south",
+				},
+				{
+					kind: "whisper",
+					from: "green",
+					to: "red",
+					content: "late",
+					round: 2,
+				},
 			],
-			whispers: [{ from: "green", to: "red", content: "late", round: 2 }],
-			physicalLog: [physRecord],
 			worldEntities: [],
 		};
 		const result = buildConversationLog(input, "red", TEST_PERSONAS);
 		expect(result).toHaveLength(3);
-		// Round 0 first
 		expect(result[0]).toContain("[Round 0]");
-		// Round 1 second
 		expect(result[1]).toContain("[Round 1]");
-		// Round 2 last
 		expect(result[2]).toContain("[Round 2]");
 	});
 
-	it("within same round: chat before whispers before witnessed events", () => {
-		const physRecord: PhysicalActionRecord = {
-			round: 0,
-			actor: "green",
-			actorCellAtAction: { row: 1, col: 0 },
-			actorFacingAtAction: "south",
-			kind: "go",
-			direction: "south",
-			witnessSpatial: {
-				red: { position: { row: 0, col: 0 }, facing: "south" },
-			},
-		};
+	it("within same round: entries preserve append order (stable sort)", () => {
+		// In the per-Daemon log, entries are appended in turn order.
+		// The sort is stable, so same-round entries keep their insertion order.
 		const input: ConversationLogInput = {
 			conversationLog: [
 				{ kind: "chat", role: "player", content: "chat", round: 0 },
+				{
+					kind: "whisper",
+					from: "green",
+					to: "red",
+					content: "whisper",
+					round: 0,
+				},
+				{
+					kind: "witnessed-event",
+					round: 0,
+					actor: "green",
+					actionKind: "go",
+					direction: "south",
+				},
 			],
-			whispers: [{ from: "green", to: "red", content: "whisper", round: 0 }],
-			physicalLog: [physRecord],
 			worldEntities: [],
 		};
 		const result = buildConversationLog(input, "red", TEST_PERSONAS);
 		expect(result).toHaveLength(3);
-		// chat (0) < whisper (1) < witnessed (2)
+		// Insertion order preserved within same round
 		expect(result[0]).toContain("A voice says");
 		expect(result[1]).toContain("whispered to you");
 		expect(result[2]).toContain("You watch");
-	});
-});
-
-// ── Cone membership edge cases ─────────────────────────────────────────────────
-
-describe("buildConversationLog — cone membership", () => {
-	it("actor's own cell is in the witness's cone (witness can observe own cell events)", () => {
-		// green at (1,0) facing north — own cell (1,0) is in green's cone
-		// red is at (1,0) doing a pick_up — should green see it?
-		// The spec says "actor's cell must be in witness's cone".
-		// Green's cone: own cell (1,0), directly in front (0,0), two steps ahead (all possible)
-		const record: PhysicalActionRecord = {
-			round: 0,
-			actor: "red",
-			actorCellAtAction: { row: 1, col: 0 }, // same as green's cell
-			actorFacingAtAction: "south",
-			kind: "pick_up",
-			item: "flower",
-			witnessSpatial: {
-				green: { position: { row: 1, col: 0 }, facing: "north" },
-			},
-		};
-		const input: ConversationLogInput = {
-			...emptyInput(),
-			physicalLog: [record],
-			worldEntities: [makeItem("flower", "Flower")],
-		};
-		// red is in green's own cell — green's cone includes own cell, so green witnesses this
-		const result = buildConversationLog(input, "green", TEST_PERSONAS);
-		expect(result).toHaveLength(1);
-		expect(result[0]).toContain("*red pick up the Flower");
 	});
 });

@@ -574,7 +574,7 @@ describe("renderGame (game route — three-AI)", () => {
 		const saveJson = downloadBtn.dataset.savePayload;
 		expect(saveJson).toBeTruthy();
 		const save = JSON.parse(saveJson as string);
-		expect(save.version).toBe(2);
+		expect(save.version).toBe(3);
 		expect(save.ais).toHaveLength(3);
 	});
 

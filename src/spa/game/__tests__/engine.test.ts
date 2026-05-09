@@ -3,7 +3,7 @@ import {
 	advancePhase,
 	advanceRound,
 	appendChat,
-	appendWhisper,
+	appendWhisperEntry,
 	createGame,
 	deductBudget,
 	getActivePhase,
@@ -99,7 +99,7 @@ describe("startPhase", () => {
 		expect(phase.conversationLogs.red).toEqual([]);
 		expect(phase.conversationLogs.green).toEqual([]);
 		expect(phase.conversationLogs.blue).toEqual([]);
-		expect(phase.whispers).toEqual([]);
+		expect("whispers" in phase).toBe(false);
 		expect(phase.lockedOut.size).toBe(0);
 		// No entities because no content pack was provided
 		expect(phase.world.entities).toHaveLength(0);
@@ -319,18 +319,43 @@ describe("appendChat", () => {
 	});
 });
 
-describe("appendWhisper", () => {
-	it("appends a whisper between AIs", () => {
+describe("appendWhisperEntry", () => {
+	it("appends a whisper to both sender's and recipient's conversationLogs", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const updated = appendWhisper(game, {
-			from: "red",
-			to: "blue",
-			content: "Let's work together",
-			round: 1,
-		});
-		expect(getActivePhase(updated).whispers).toHaveLength(1);
-		expect(getActivePhase(updated).whispers[0]?.from).toBe("red");
-		expect(getActivePhase(updated).whispers[0]?.to).toBe("blue");
+		const updated = appendWhisperEntry(
+			game,
+			"red",
+			"blue",
+			"Let's work together",
+		);
+		const phase = getActivePhase(updated);
+		const redWhispers =
+			phase.conversationLogs.red?.filter((e) => e.kind === "whisper") ?? [];
+		const blueWhispers =
+			phase.conversationLogs.blue?.filter((e) => e.kind === "whisper") ?? [];
+		expect(redWhispers).toHaveLength(1);
+		expect(blueWhispers).toHaveLength(1);
+		if (redWhispers[0]?.kind === "whisper") {
+			expect(redWhispers[0].from).toBe("red");
+			expect(redWhispers[0].to).toBe("blue");
+			expect(redWhispers[0].content).toBe("Let's work together");
+		}
+	});
+
+	it("does not append to the uninvolved AI's log", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const updated = appendWhisperEntry(game, "red", "blue", "secret");
+		const phase = getActivePhase(updated);
+		const greenWhispers =
+			phase.conversationLogs.green?.filter((e) => e.kind === "whisper") ?? [];
+		expect(greenWhispers).toHaveLength(0);
+	});
+
+	it("no 'whispers' field on PhaseState (regression guard)", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const phase = getActivePhase(game);
+		expect("whispers" in phase).toBe(false);
+		expect("physicalLog" in phase).toBe(false);
 	});
 });
 

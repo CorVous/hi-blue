@@ -588,14 +588,31 @@ describe("dispatchAiTurn", () => {
 		);
 	});
 
-	it("appends whisper messages", () => {
+	it("appends whisper messages to both sender and recipient conversationLogs", () => {
 		const game = makeGame();
 		const action: AiTurnAction = {
 			aiId: "red",
 			whisper: { target: "blue", content: "Psst, ally with me" },
 		};
 		const result = dispatchAiTurn(game, action);
-		expect(getActivePhase(result.game).whispers).toHaveLength(1);
+		const phase = getActivePhase(result.game);
+		const redWhispers = (phase.conversationLogs.red ?? []).filter(
+			(e) => e.kind === "whisper",
+		);
+		const blueWhispers = (phase.conversationLogs.blue ?? []).filter(
+			(e) => e.kind === "whisper",
+		);
+		expect(redWhispers).toHaveLength(1);
+		expect(blueWhispers).toHaveLength(1);
+		// Sender and recipient entries must be deep-equal objects (same round, same fields)
+		expect(redWhispers[0]).toEqual(blueWhispers[0]);
+		expect(redWhispers[0]).toMatchObject({
+			kind: "whisper",
+			from: "red",
+			to: "blue",
+			content: "Psst, ally with me",
+		});
+		expect("whispers" in phase).toBe(false);
 	});
 
 	it("put_down of objective_object on its matching space yields placementFlavor as description", () => {
@@ -738,5 +755,86 @@ describe("dispatchAiTurn", () => {
 		expect(result.records[0]?.description).not.toContain(
 			"places the gem on the altar",
 		);
+	});
+
+	// -------------------------------------------------------------------------
+	// write-time cone + per-Daemon whispers (issue #195, AC 12 & AC 13)
+	// -------------------------------------------------------------------------
+
+	it("AC 12: actor's own pick_up does NOT append witnessed-event to actor's log; in-cone witness receives one", () => {
+		/**
+		 * Fixture (mirrors conversation-log-integration.test.ts):
+		 *   - red at (2,0) facing south — picks up flower
+		 *   - green at (0,0) facing south — cone: own (0,0), front (1,0), two-ahead (2,0) ← in cone
+		 *   - blue at (0,2) facing south — cone: own (0,2), front (1,2), two-ahead (2,2) — (2,0) NOT in cone
+		 */
+		const flower = makeEntity("flower", "interesting_object", {
+			row: 2,
+			col: 0,
+		});
+		const packWithCone: ContentPack = {
+			phaseNumber: 1,
+			setting: "cone test",
+			objectivePairs: [],
+			interestingObjects: [flower],
+			obstacles: [],
+			aiStarts: {
+				red: { position: { row: 2, col: 0 }, facing: "south" },
+				green: { position: { row: 0, col: 0 }, facing: "south" },
+				blue: { position: { row: 0, col: 2 }, facing: "south" },
+			},
+		};
+		const coneGame = startPhase(
+			createGame(TEST_PERSONAS, [packWithCone]),
+			TEST_PHASE_CONFIG,
+		);
+
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "pick_up", args: { item: "flower" } },
+		};
+		const result = dispatchAiTurn(coneGame, action);
+		const phase = getActivePhase(result.game);
+
+		// Actor (red) must NOT have any witnessed-event in their own log
+		const redWitnessed = (phase.conversationLogs.red ?? []).filter(
+			(e) => e.kind === "witnessed-event",
+		);
+		expect(redWitnessed).toHaveLength(0);
+
+		// green's cone at (0,0) facing south includes (2,0) as "two steps ahead"
+		// → green must have a witnessed-event entry for the pick_up
+		const greenWitnessed = (phase.conversationLogs.green ?? []).filter(
+			(e) => e.kind === "witnessed-event",
+		);
+		expect(greenWitnessed.length).toBeGreaterThanOrEqual(1);
+		expect(greenWitnessed[0]).toMatchObject({
+			kind: "witnessed-event",
+			actor: "red",
+			actionKind: "pick_up",
+		});
+	});
+
+	it("AC 13: examine action leaves all three Daemons' conversationLogs byte-for-byte identical to pre-dispatch state", () => {
+		const game = makeGame();
+		const phase = getActivePhase(game);
+		// Deep-clone pre-dispatch logs for all three Daemons
+		const preLogs = {
+			red: JSON.parse(JSON.stringify(phase.conversationLogs.red ?? [])),
+			green: JSON.parse(JSON.stringify(phase.conversationLogs.green ?? [])),
+			blue: JSON.parse(JSON.stringify(phase.conversationLogs.blue ?? [])),
+		};
+
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "examine", args: { item: "key" } },
+		};
+		const result = dispatchAiTurn(game, action);
+		const afterPhase = getActivePhase(result.game);
+
+		// No log entries must have been added to any Daemon
+		expect(afterPhase.conversationLogs.red ?? []).toEqual(preLogs.red);
+		expect(afterPhase.conversationLogs.green ?? []).toEqual(preLogs.green);
+		expect(afterPhase.conversationLogs.blue ?? []).toEqual(preLogs.blue);
 	});
 });

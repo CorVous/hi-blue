@@ -237,40 +237,21 @@ function buildSessionRow(
 		metaLine.textContent = `phase ${info.phase} · turn ${round} · saved ${savedShort}`;
 		rowEl.appendChild(metaLine);
 
-		// Tree lines
+		// Tree lines: 3 daemon .txt files + engine.dat (last)
 		const allFiles: Array<{ glyph: string; label: string }> = [];
 		for (let i = 0; i < info.daemonFiles.length; i++) {
 			const f = info.daemonFiles[i];
 			if (!f) continue;
-			const isLast =
-				i === info.daemonFiles.length - 1 &&
-				info.whispersSize === 0 &&
-				info.engineSize === 0;
 			allFiles.push({
-				glyph: isLast ? "└─" : "├─",
+				glyph: "├─",
 				label: fileLabel(`*${f.name}`, f.size),
 			});
 		}
-		// whispers.txt
-		allFiles.push({
-			glyph: "├─",
-			label: fileLabel("whispers.txt", info.whispersSize),
-		});
-		// engine.dat (last)
+		// engine.dat (last — commit signal)
 		allFiles.push({
 			glyph: "└─",
 			label: fileLabel("engine.dat", info.engineSize),
 		});
-		// Fix last flag — the last item is always engine.dat
-		if (allFiles.length >= 1) {
-			const last = allFiles[allFiles.length - 1];
-			if (last) last.glyph = "└─";
-			// Also fix the item before last (whispers should be ├─ if it's not last)
-			if (allFiles.length >= 2) {
-				const beforeLast = allFiles[allFiles.length - 2];
-				if (beforeLast) beforeLast.glyph = "├─";
-			}
-		}
 		rowEl.appendChild(buildTreeLines(doc, allFiles));
 
 		// Ops buttons

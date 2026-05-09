@@ -12,8 +12,6 @@ import type {
 	GameState,
 	GridPosition,
 	PersonaSpatialState,
-	PhysicalActionRecord,
-	WhisperMessage,
 	WorldEntity,
 	WorldState,
 } from "./types";
@@ -30,7 +28,6 @@ export interface AiContext {
 	setting: string;
 	/** Per-AI conversation log (ConversationEntry[]) for this phase. */
 	conversationLog: ConversationEntry[];
-	whispersReceived: WhisperMessage[];
 	worldSnapshot: WorldState;
 	budget: AiBudget;
 	/** Current phase number — used to inject the wipe directive on phases 2+. */
@@ -39,8 +36,6 @@ export interface AiContext {
 	personaSpatial: Record<AiId, PersonaSpatialState>;
 	/** Color for each AI, keyed by AiId — used in cone rendering. */
 	personaColors: Record<AiId, string>;
-	/** Append-only log of observable physical actions — used for Witnessed event rendering. */
-	physicalLog: PhysicalActionRecord[];
 	/** All personas — used by buildConversationLog for name resolution. */
 	personas: Record<AiId, AiPersona>;
 	toSystemPrompt(): string;
@@ -51,7 +46,6 @@ export function buildAiContext(game: GameState, aiId: AiId): AiContext {
 	const persona = game.personas[aiId];
 
 	const conversationLog = phase.conversationLogs[aiId] ?? [];
-	const whispersReceived = phase.whispers.filter((w) => w.to === aiId);
 	const worldSnapshot = phase.world;
 	const budget = phase.budgets[aiId] ?? { remaining: 0, total: 0 };
 	const goal = phase.aiGoals[aiId] ?? "";
@@ -74,13 +68,11 @@ export function buildAiContext(game: GameState, aiId: AiId): AiContext {
 		goal,
 		setting,
 		conversationLog,
-		whispersReceived,
 		worldSnapshot,
 		budget,
 		phaseNumber: phase.phaseNumber,
 		personaSpatial,
 		personaColors,
-		physicalLog: phase.physicalLog,
 		personas: game.personas,
 		toSystemPrompt() {
 			return renderSystemPrompt(this);
@@ -325,14 +317,10 @@ function renderSystemPrompt(ctx: AiContext): string {
 	lines.push("</what_you_see>");
 	lines.push("");
 
-	// Unified conversation log — interleaves voice-chat, whispers received, and
-	// cone-visible witnessed events in chronological round order.
+	// Unified conversation log — renders per-Daemon conversationLog entries
+	// (chat, whisper, witnessed-event) in chronological round order.
 	const logInput: ConversationLogInput = {
 		conversationLog: ctx.conversationLog,
-		// ctx.whispersReceived is already filtered to w.to === aiId;
-		// buildConversationLog re-filters so it's safe to pass as-is.
-		whispers: ctx.whispersReceived,
-		physicalLog: ctx.physicalLog,
 		worldEntities: ctx.worldSnapshot.entities,
 	};
 	const conversationLines = buildConversationLog(

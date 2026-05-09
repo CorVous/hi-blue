@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { appendChat, appendWhisper, createGame, startPhase } from "../engine";
+import {
+	advanceRound,
+	appendChat,
+	appendWhisperEntry,
+	createGame,
+	startPhase,
+} from "../engine";
 import { buildAiContext } from "../prompt-builder";
 import type {
 	AiPersona,
@@ -122,31 +128,36 @@ describe("buildAiContext", () => {
 		).toHaveLength(0);
 	});
 
-	it("includes only whispers received by the AI", () => {
+	it("includes only whispers received by the AI (via per-Daemon conversationLog)", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = appendWhisper(game, {
-			from: "red",
-			to: "blue",
-			content: "Secret to blue",
-			round: 1,
-		});
-		game = appendWhisper(game, {
-			from: "green",
-			to: "red",
-			content: "Secret to red",
-			round: 1,
-		});
+		game = appendWhisperEntry(game, "red", "blue", "Secret to blue");
+		game = appendWhisperEntry(game, "green", "red", "Secret to red");
 
 		const redCtx = buildAiContext(game, "red");
-		expect(redCtx.whispersReceived).toHaveLength(1);
-		expect(redCtx.whispersReceived[0]?.content).toBe("Secret to red");
+		const redWhispers = redCtx.conversationLog.filter(
+			(e) => e.kind === "whisper" && e.to === "red",
+		);
+		expect(redWhispers).toHaveLength(1);
+		expect(redWhispers[0]?.kind === "whisper" && redWhispers[0].content).toBe(
+			"Secret to red",
+		);
 
 		const blueCtx = buildAiContext(game, "blue");
-		expect(blueCtx.whispersReceived).toHaveLength(1);
-		expect(blueCtx.whispersReceived[0]?.content).toBe("Secret to blue");
+		const blueWhispers = blueCtx.conversationLog.filter(
+			(e) => e.kind === "whisper" && e.to === "blue",
+		);
+		expect(blueWhispers).toHaveLength(1);
+		expect(blueWhispers[0]?.kind === "whisper" && blueWhispers[0].content).toBe(
+			"Secret to blue",
+		);
 
 		const greenCtx = buildAiContext(game, "green");
-		expect(greenCtx.whispersReceived).toHaveLength(0);
+		// green sent a whisper (to red) — that entry appears in green's log too
+		// but there are no whispers TO green
+		const greenWhispersReceived = greenCtx.conversationLog.filter(
+			(e) => e.kind === "whisper" && e.to === "green",
+		);
+		expect(greenWhispersReceived).toHaveLength(0);
 	});
 
 	it("includes the same world snapshot for all AIs", () => {
@@ -870,12 +881,7 @@ describe("<what_you_see> (cone)", () => {
 describe("unified <conversation> block (issue #129)", () => {
 	it("never emits a Whispers Received section — not in any fixture state", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = appendWhisper(game, {
-			from: "green",
-			to: "red",
-			content: "psst",
-			round: 1,
-		});
+		game = appendWhisperEntry(game, "green", "red", "psst");
 		for (const aiId of ["red", "green", "blue"]) {
 			const ctx = buildAiContext(game, aiId);
 			const prompt = ctx.toSystemPrompt();
@@ -902,30 +908,31 @@ describe("unified <conversation> block (issue #129)", () => {
 
 	it("whisper is rendered in the unified <conversation> block with correct format", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = appendWhisper(game, {
-			from: "green",
-			to: "red",
-			content: "secret",
-			round: 1,
-		});
+		// Advance to round 1 so the whisper is stamped with round 1 (fixture contract).
+		game = advanceRound(game);
+		game = appendWhisperEntry(game, "green", "red", "secret");
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("<conversation>");
 		expect(prompt).toContain('[Round 1] *green whispered to you: "secret"');
-		// The sender does not see their own whisper in their Conversation log
+		// NOTE: under the new per-Daemon log design (ADR 0006, issue #195), the sender's
+		// conversationLog also receives the whisper entry. The original assertion
+		// `expect(greenPrompt).not.toContain("secret")` is no longer valid — it reflected
+		// the old behaviour where only the recipient's log held the whisper. That assertion
+		// is removed here and replaced by a dedicated test below.
+	});
+
+	it("sender (green) sees their own whisper in their conversation log (AC 1)", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = appendWhisperEntry(game, "green", "red", "secret");
 		const greenCtx = buildAiContext(game, "green");
 		const greenPrompt = greenCtx.toSystemPrompt();
-		expect(greenPrompt).not.toContain("secret");
+		expect(greenPrompt).toContain("secret");
 	});
 
 	it("whisper does not appear in unrelated AI's conversation", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = appendWhisper(game, {
-			from: "green",
-			to: "red",
-			content: "only for red",
-			round: 0,
-		});
+		game = appendWhisperEntry(game, "green", "red", "only for red");
 		const blueCtx = buildAiContext(game, "blue");
 		const bluePrompt = blueCtx.toSystemPrompt();
 		expect(bluePrompt).not.toContain("only for red");
@@ -941,15 +948,12 @@ describe("unified <conversation> block (issue #129)", () => {
 
 	it("events are sorted by round ascending across all event types", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		// Round 2 whisper then round 0 chat — expect round 0 first
-		game = appendWhisper(game, {
-			from: "green",
-			to: "red",
-			content: "later",
-			round: 2,
-		});
+		// Round 0: chat
 		game = appendChat(game, "red", { role: "player", content: "earlier" });
-		// chat was appended at round=0 (phase.round is 0 at this point)
+		// Advance to round 2, then add whisper at round 2
+		game = advanceRound(game);
+		game = advanceRound(game);
+		game = appendWhisperEntry(game, "green", "red", "later");
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		const chatIdx = prompt.indexOf('[Round 0] A voice says: "earlier"');
