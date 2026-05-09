@@ -186,7 +186,13 @@ test("CapHit during generation surfaces #cap-hit", async ({ page }) => {
 	// Start screen should be hidden when cap-hit is shown
 	await expect(page.locator("#start-screen")).toBeHidden();
 
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	// The SPA intentionally re-throws CapHitError after surfacing #cap-hit (for
+	// dev-console diagnostics). Filter it out before asserting no unexpected errors.
+	const unexpectedErrors = pageErrors.filter((e) => e.name !== "CapHitError");
+	expect(
+		unexpectedErrors,
+		unexpectedErrors.map((e) => e.message).join("\n"),
+	).toEqual([]);
 });
 
 test("refresh during generation re-enters start screen and restarts generation", async ({
