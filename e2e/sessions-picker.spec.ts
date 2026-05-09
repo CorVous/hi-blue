@@ -8,7 +8,7 @@
  *  - [ load ] flow: picker → #/game → topinfo shows session id
  *  - [ dup ] flow: picker → two rows, active pointer unchanged
  *  - [ rm ] confirm/cancel flow
- *  - Sessions-icon (floppy-disk button) click → #/sessions
+ *  - Sessions-icon ([ ls ] button) click → #/sessions
  *  - Broken-session banner: active session with missing engine.dat → #/sessions?reason=broken
  *  - [ + new session ] flow: picker → #/start, new active pointer
  *
@@ -344,7 +344,7 @@ test("sessions-icon click → #/sessions", async ({ page }) => {
 
 	await goToGame(page);
 
-	// Click the floppy-disk button next to the cog
+	// Click the [ ls ] button in the header chrome
 	const sessionsIcon = page.locator("#sessions-icon");
 	await expect(sessionsIcon).toBeVisible();
 	await sessionsIcon.click();

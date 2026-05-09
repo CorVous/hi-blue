@@ -90,7 +90,7 @@ export function formatTopInfoLeft(i: TopInfoInputs): string {
 
 /**
  * Render the left topinfo cell. Sessions picker is reached via the
- * floppy-disk button in the header chrome rather than the topinfo text.
+ * [ ls ] button in the header chrome rather than the topinfo text.
  */
 export function renderTopInfoLeft(el: HTMLElement, i: TopInfoInputs): void {
 	el.textContent = formatTopInfoLeft(i);
