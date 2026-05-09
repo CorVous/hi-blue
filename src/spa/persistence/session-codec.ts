@@ -436,6 +436,7 @@ export function deserializeSession(
 				chatHistories,
 				whispers,
 				physicalLog: [],
+				conversationLogs: {},
 				lockedOut,
 				chatLockouts,
 				personaSpatial,

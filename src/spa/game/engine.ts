@@ -126,6 +126,7 @@ export function startPhase(
 		chatHistories,
 		whispers: [],
 		physicalLog: [],
+		conversationLogs: {},
 		lockedOut: new Set(),
 		chatLockouts: new Map(),
 		personaSpatial,
