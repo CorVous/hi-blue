@@ -429,9 +429,9 @@ export function renderGame(
 				const restoredState = loadResult.state;
 				session = GameSession.restore(restoredState);
 
-				// Re-render transcripts from restored state using chatHistories fallback.
-				// (The new format stores chat histories in daemon .txt files, not as
-				// serialized transcript HTML, so we always use the chatHistories path.)
+				// Re-render transcripts from restored state using conversationLogs.
+				// (The new format stores conversation logs in daemon .txt files, not as
+				// serialized transcript HTML, so we always use the conversationLogs path.)
 				const restoredPhase = getActivePhase(restoredState);
 				const restoredPersonas = restoredState.personas;
 				const restorePanelEls = doc.querySelectorAll<HTMLElement>(".ai-panel");
@@ -440,18 +440,22 @@ export function renderGame(
 					if (!panel) return;
 					const transcript = panel.querySelector<HTMLElement>(".transcript");
 					if (!transcript) return;
-					if ((restoredPhase.chatHistories[aiId]?.length ?? 0) > 0) {
-						// Synthesise from chatHistories (stored in daemon .txt files).
+					const chatEntries = (restoredPhase.conversationLogs[aiId] ?? []).filter(
+						(e) => e.kind === "chat",
+					);
+					if (chatEntries.length > 0) {
+						// Synthesise from conversationLogs (stored in daemon .txt files).
 						transcript.textContent = "";
 						const persona = restoredPersonas[aiId];
 						const personaName = persona?.name ?? aiId;
-						for (const msg of restoredPhase.chatHistories[aiId] ?? []) {
+						for (const entry of chatEntries) {
+							if (entry.kind !== "chat") continue;
 							const lineEl = doc.createElement("div");
 							lineEl.className = "msg-line";
-							if (msg.role === "player") {
+							if (entry.role === "player") {
 								appendMentionAwareText(
 									lineEl,
-									`> ${msg.content}\n`,
+									`> ${entry.content}\n`,
 									restoredPersonas,
 									"msg-you",
 								);
@@ -465,7 +469,7 @@ export function renderGame(
 								lineEl.appendChild(prefixSpan);
 								appendMentionAwareText(
 									lineEl,
-									`${msg.content}\n`,
+									`${entry.content}\n`,
 									restoredPersonas,
 								);
 							}
@@ -1140,8 +1144,8 @@ export function renderGame(
 			}
 
 			// Persist state after the encoder render loop completes.
-			// Chat histories are stored in daemon .txt files; the transcript HTML
-			// is not serialized (restores use chatHistories fallback path).
+			// Conversation logs are stored in daemon .txt files; the transcript HTML
+			// is not serialized (restores use conversationLogs path).
 			if (!roundGameEnded) {
 				const saveResult = saveActiveSession(nextState);
 				if (!saveResult.ok) {

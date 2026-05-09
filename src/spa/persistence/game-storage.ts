@@ -23,8 +23,8 @@ import type {
 	AiBudget,
 	AiId,
 	AiPersona,
-	ChatMessage,
 	ContentPack,
+	ConversationEntry,
 	GameState,
 	PersonaSpatialState,
 	PhaseConfig,
@@ -47,7 +47,7 @@ export interface PersistedPhaseState {
 	round: number;
 	world: WorldState;
 	budgets: Record<AiId, AiBudget>;
-	chatHistories: Record<AiId, ChatMessage[]>;
+	conversationLogs: Record<AiId, ConversationEntry[]>;
 	whispers: WhisperMessage[];
 	lockedOut: AiId[];
 	chatLockouts: Array<[AiId, number]>;
@@ -106,9 +106,9 @@ function serializePhaseState(phase: PhaseState): PersistedPhaseState {
 		round: phase.round,
 		world: structuredClone(phase.world),
 		budgets: { ...phase.budgets },
-		chatHistories: Object.fromEntries(
-			Object.entries(phase.chatHistories).map(([k, v]) => [k, [...v]]),
-		) as Record<string, import("../game/types.js").ChatMessage[]>,
+		conversationLogs: Object.fromEntries(
+			Object.entries(phase.conversationLogs).map(([k, v]) => [k, [...v]]),
+		) as Record<string, ConversationEntry[]>,
 		whispers: [...phase.whispers],
 		lockedOut: Array.from(phase.lockedOut) as AiId[],
 		chatLockouts: Array.from(phase.chatLockouts.entries()) as Array<
@@ -158,16 +158,15 @@ function deserializePhaseState(
 		round: persisted.round,
 		world: structuredClone(persisted.world),
 		budgets: { ...persisted.budgets },
-		chatHistories: Object.fromEntries(
-			Object.entries(persisted.chatHistories).map(([k, v]) => [
+		conversationLogs: Object.fromEntries(
+			Object.entries(persisted.conversationLogs ?? {}).map(([k, v]) => [
 				k,
 				[...(v ?? [])],
 			]),
-		) as Record<string, ChatMessage[]>,
+		) as Record<string, ConversationEntry[]>,
 		whispers: [...persisted.whispers],
 		// physicalLog is not persisted (derived on-demand for prompts, safe to reset on reload)
 		physicalLog: [],
-		conversationLogs: {},
 		lockedOut: new Set<AiId>(persisted.lockedOut),
 		chatLockouts: new Map<AiId, number>(persisted.chatLockouts),
 		personaSpatial: structuredClone(persisted.personaSpatial ?? {}),

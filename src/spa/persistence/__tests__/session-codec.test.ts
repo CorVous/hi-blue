@@ -90,18 +90,18 @@ describe("serializeSession / deserializeSession", () => {
 		expect(daemon.phases).toHaveProperty("3");
 	});
 
-	it("unstarted phases have empty chatHistory and phaseGoal", () => {
+	it("unstarted phases have empty conversationLog and phaseGoal", () => {
 		const game = makeFreshGame();
 		const files = serializeSession(game, NOW, CREATED_AT);
 		// biome-ignore lint/style/noNonNullAssertion: daemons.red always exists for this fixture
 		const daemon = JSON.parse(files.daemons.red!);
 		// Phase 2 and 3 have not started
 		// biome-ignore lint/suspicious/noExplicitAny: daemon is dynamically parsed JSON
-		expect((daemon as any).phases["2"].chatHistory).toEqual([]);
+		expect((daemon as any).phases["2"].conversationLog).toEqual([]);
 		// biome-ignore lint/suspicious/noExplicitAny: daemon is dynamically parsed JSON
 		expect((daemon as any).phases["2"].phaseGoal).toBe("");
 		// biome-ignore lint/suspicious/noExplicitAny: daemon is dynamically parsed JSON
-		expect((daemon as any).phases["3"].chatHistory).toEqual([]);
+		expect((daemon as any).phases["3"].conversationLog).toEqual([]);
 		// biome-ignore lint/suspicious/noExplicitAny: daemon is dynamically parsed JSON
 		expect((daemon as any).phases["3"].phaseGoal).toBe("");
 	});
@@ -256,7 +256,7 @@ describe("serializeSession / deserializeSession", () => {
 		}
 	});
 
-	it("round-trips chat histories", () => {
+	it("round-trips conversation logs", () => {
 		const game = makeFreshGame();
 		const phase = game.phases[0];
 		if (!phase) throw new Error("no phase");
@@ -265,9 +265,9 @@ describe("serializeSession / deserializeSession", () => {
 			phases: [
 				{
 					...phase,
-					chatHistories: {
-						red: [{ role: "player", content: "hello red", round: 0 }],
-						green: [{ role: "ai", content: "green reply", round: 0 }],
+					conversationLogs: {
+						red: [{ kind: "chat", role: "player", content: "hello red", round: 0 }],
+						green: [{ kind: "chat", role: "ai", content: "green reply", round: 0 }],
 						blue: [],
 					},
 				},
@@ -278,11 +278,11 @@ describe("serializeSession / deserializeSession", () => {
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
 			const rp = result.state.phases[0];
-			expect(rp?.chatHistories.red).toEqual([
-				{ role: "player", content: "hello red", round: 0 },
+			expect(rp?.conversationLogs.red).toEqual([
+				{ kind: "chat", role: "player", content: "hello red", round: 0 },
 			]);
-			expect(rp?.chatHistories.green).toEqual([
-				{ role: "ai", content: "green reply", round: 0 },
+			expect(rp?.conversationLogs.green).toEqual([
+				{ kind: "chat", role: "ai", content: "green reply", round: 0 },
 			]);
 		}
 	});

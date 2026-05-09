@@ -95,7 +95,7 @@ const FAKE_PHASE_STATE = {
 	objective: "get the key in the keyhole",
 	round: 1,
 	budgets: { red: AI_BUDGET, green: AI_BUDGET, blue: AI_BUDGET },
-	chatHistories: { red: [], green: [], blue: [] },
+	conversationLogs: { red: [], green: [], blue: [] },
 	whispers: [],
 	lockedOut: new Set<string>(),
 	chatLockouts: new Map<string, number>(),

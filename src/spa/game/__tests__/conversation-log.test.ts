@@ -67,7 +67,7 @@ function makeItem(id: string, name: string): WorldEntity {
 
 function emptyInput(): ConversationLogInput {
 	return {
-		chatHistories: {},
+		conversationLog: [],
 		whispers: [],
 		physicalLog: [],
 		worldEntities: [],
@@ -83,10 +83,10 @@ describe("buildConversationLog — empty phase", () => {
 	});
 
 	it("returns empty array for an AI with no events even when others have events", () => {
+		// The caller pre-filters conversationLog to the single AI's entries.
+		// red has no conversation entries, so an empty conversationLog is passed.
 		const input: ConversationLogInput = {
-			chatHistories: {
-				green: [{ role: "player", content: "hi green", round: 0 }],
-			},
+			conversationLog: [],
 			whispers: [],
 			physicalLog: [],
 			worldEntities: [],
@@ -103,9 +103,7 @@ describe("buildConversationLog — voice-chat", () => {
 	it("renders player message with round tag and quotes", () => {
 		const input: ConversationLogInput = {
 			...emptyInput(),
-			chatHistories: {
-				red: [{ role: "player", content: "Hi", round: 0 }],
-			},
+			conversationLog: [{ kind: "chat", role: "player", content: "Hi", round: 0 }],
 		};
 		const result = buildConversationLog(input, "red", TEST_PERSONAS);
 		expect(result).toEqual(['[Round 0] A voice says: "Hi"']);
@@ -114,37 +112,32 @@ describe("buildConversationLog — voice-chat", () => {
 	it("renders AI reply with round tag and quotes", () => {
 		const input: ConversationLogInput = {
 			...emptyInput(),
-			chatHistories: {
-				red: [{ role: "ai", content: "Hello", round: 0 }],
-			},
+			conversationLog: [{ kind: "chat", role: "ai", content: "Hello", round: 0 }],
 		};
 		const result = buildConversationLog(input, "red", TEST_PERSONAS);
 		expect(result).toEqual(['[Round 0] You: "Hello"']);
 	});
 
-	it("does not include other AIs' chat messages", () => {
+	it("does not include other AIs' chat messages (caller pre-filters)", () => {
+		// The caller (prompt-builder) passes only the entries for the target AI.
+		// This test verifies that when only red's entries are passed, only red's
+		// messages appear — the per-AI filtering is the caller's responsibility.
 		const input: ConversationLogInput = {
 			...emptyInput(),
-			chatHistories: {
-				red: [{ role: "player", content: "red-msg", round: 0 }],
-				green: [{ role: "player", content: "green-msg", round: 0 }],
-			},
+			conversationLog: [{ kind: "chat", role: "player", content: "red-msg", round: 0 }],
 		};
 		const result = buildConversationLog(input, "red", TEST_PERSONAS);
 		expect(result).toHaveLength(1);
 		expect(result[0]).toContain("red-msg");
-		expect(result.join(" ")).not.toContain("green-msg");
 	});
 
 	it("renders multiple messages in order", () => {
 		const input: ConversationLogInput = {
 			...emptyInput(),
-			chatHistories: {
-				red: [
-					{ role: "player", content: "First", round: 0 },
-					{ role: "ai", content: "Second", round: 0 },
-				],
-			},
+			conversationLog: [
+				{ kind: "chat", role: "player", content: "First", round: 0 },
+				{ kind: "chat", role: "ai", content: "Second", round: 0 },
+			],
 		};
 		const result = buildConversationLog(input, "red", TEST_PERSONAS);
 		expect(result).toHaveLength(2);
@@ -517,9 +510,7 @@ describe("buildConversationLog — chronological ordering", () => {
 			},
 		};
 		const input: ConversationLogInput = {
-			chatHistories: {
-				red: [{ role: "player", content: "early msg", round: 0 }],
-			},
+			conversationLog: [{ kind: "chat", role: "player", content: "early msg", round: 0 }],
 			whispers: [{ from: "green", to: "red", content: "late", round: 2 }],
 			physicalLog: [physRecord],
 			worldEntities: [],
@@ -547,9 +538,7 @@ describe("buildConversationLog — chronological ordering", () => {
 			},
 		};
 		const input: ConversationLogInput = {
-			chatHistories: {
-				red: [{ role: "player", content: "chat", round: 0 }],
-			},
+			conversationLog: [{ kind: "chat", role: "player", content: "chat", round: 0 }],
 			whispers: [{ from: "green", to: "red", content: "whisper", round: 0 }],
 			physicalLog: [physRecord],
 			worldEntities: [],

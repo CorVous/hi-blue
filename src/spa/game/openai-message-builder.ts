@@ -6,7 +6,7 @@
  *
  * Message ordering:
  *   1. { role: "system", content: ctx.toSystemPrompt() }
- *   2. One { role: "user" | "assistant", content } pair per turn in ctx.chatHistory
+ *   2. One { role: "user" | "assistant", content } pair per chat entry in ctx.conversationLog
  *   3. If priorToolRoundtrip is provided and non-empty:
  *      - { role: "assistant", content: null, tool_calls: [...] }
  *      - { role: "tool", tool_call_id, content } for each result
@@ -33,11 +33,12 @@ export function buildOpenAiMessages(
 
 	messages.push({ role: "system", content: ctx.toSystemPrompt() });
 
-	for (const msg of ctx.chatHistory) {
-		if (msg.role === "player") {
-			messages.push({ role: "user", content: msg.content });
+	for (const entry of ctx.conversationLog) {
+		if (entry.kind !== "chat") continue;
+		if (entry.role === "player") {
+			messages.push({ role: "user", content: entry.content });
 		} else {
-			messages.push({ role: "assistant", content: msg.content });
+			messages.push({ role: "assistant", content: entry.content });
 		}
 	}
 

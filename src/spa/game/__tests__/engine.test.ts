@@ -96,9 +96,9 @@ describe("startPhase", () => {
 		expect(phase.budgets.red).toEqual({ remaining: 5, total: 5 });
 		expect(phase.budgets.green).toEqual({ remaining: 5, total: 5 });
 		expect(phase.budgets.blue).toEqual({ remaining: 5, total: 5 });
-		expect(phase.chatHistories.red).toEqual([]);
-		expect(phase.chatHistories.green).toEqual([]);
-		expect(phase.chatHistories.blue).toEqual([]);
+		expect(phase.conversationLogs.red).toEqual([]);
+		expect(phase.conversationLogs.green).toEqual([]);
+		expect(phase.conversationLogs.blue).toEqual([]);
 		expect(phase.whispers).toEqual([]);
 		expect(phase.lockedOut.size).toBe(0);
 		// No entities because no content pack was provided
@@ -299,14 +299,21 @@ describe("deductBudget", () => {
 });
 
 describe("appendChat", () => {
-	it("appends a message to the correct AI chat history", () => {
+	it("appends a chat ConversationEntry to the correct AI's conversationLogs", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		const updated = appendChat(game, "red", {
 			role: "player",
 			content: "Hello Ember",
 		});
-		expect(getActivePhase(updated).chatHistories.red).toHaveLength(1);
-		expect(getActivePhase(updated).chatHistories.green).toHaveLength(0);
+		expect(getActivePhase(updated).conversationLogs.red).toHaveLength(1);
+		expect(getActivePhase(updated).conversationLogs.red?.[0]?.kind).toBe("chat");
+		expect(getActivePhase(updated).conversationLogs.green).toHaveLength(0);
+	});
+
+	it("no chatHistories field on PhaseState (regression guard)", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const phase = getActivePhase(game);
+		expect("chatHistories" in phase).toBe(false);
 	});
 });
 

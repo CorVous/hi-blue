@@ -107,13 +107,13 @@ describe("buildAiContext", () => {
 		game = appendChat(game, "green", { role: "player", content: "Hello Sage" });
 
 		const redCtx = buildAiContext(game, "red");
-		expect(redCtx.chatHistory).toHaveLength(2);
+		expect(redCtx.conversationLog.filter((e) => e.kind === "chat")).toHaveLength(2);
 
 		const greenCtx = buildAiContext(game, "green");
-		expect(greenCtx.chatHistory).toHaveLength(1);
+		expect(greenCtx.conversationLog.filter((e) => e.kind === "chat")).toHaveLength(1);
 
 		const blueCtx = buildAiContext(game, "blue");
-		expect(blueCtx.chatHistory).toHaveLength(0);
+		expect(blueCtx.conversationLog.filter((e) => e.kind === "chat")).toHaveLength(0);
 	});
 
 	it("includes only whispers received by the AI", () => {
@@ -376,8 +376,8 @@ describe("wipe directive", () => {
 		game = startPhase(game, PHASE_2_CONFIG);
 		// Phase 1 data is still in game.phases[0]
 		expect(
-			game.phases[0]?.chatHistories.red?.some(
-				(m) => m.content === "Phase 1 message",
+			game.phases[0]?.conversationLogs.red?.some(
+				(e) => e.kind === "chat" && e.content === "Phase 1 message",
 			),
 		).toBe(true);
 		// The wipe directive is only in the prompt for the new active phase

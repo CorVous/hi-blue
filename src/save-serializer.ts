@@ -13,15 +13,15 @@
 
 import type {
 	AiPersona,
-	ChatMessage,
 	ContentPack,
+	ConversationEntry,
 	GameState,
 	WhisperMessage,
 } from "./spa/game/types";
 
 export interface PhaseTranscript {
 	phaseNumber: 1 | 2 | 3;
-	chatHistory: ChatMessage[];
+	conversationLog: ConversationEntry[];
 	/** Whispers where this AI is either sender or recipient. */
 	whispers: WhisperMessage[];
 }
@@ -51,13 +51,13 @@ export function serializeGameSave(game: GameState): GameSave {
 		const persona = game.personas[aiId]!;
 
 		const phases: PhaseTranscript[] = game.phases.map((phase) => {
-			const chatHistory = phase.chatHistories[aiId] ?? [];
+			const conversationLog = phase.conversationLogs[aiId] ?? [];
 			const whispers = phase.whispers.filter(
 				(w) => w.from === aiId || w.to === aiId,
 			);
 			return {
 				phaseNumber: phase.phaseNumber,
-				chatHistory: chatHistory.map((m) => ({ ...m })),
+				conversationLog: conversationLog.map((e) => ({ ...e })),
 				whispers: whispers.map((w) => ({ ...w })),
 			};
 		});
