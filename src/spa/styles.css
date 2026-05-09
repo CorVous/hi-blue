@@ -145,10 +145,10 @@ header {
 .banner-side::before {
 	content: "";
 	position: absolute;
-	/* JBM's `║`/`╔`/`╗` glyphs draw the double-stroke ~1px right of cell
-	   centre, so the painted line is offset (-0.5px instead of -1.5px)
-	   to land axially under the corner glyphs' vertical strokes. */
-	left: calc(50% - 0.5px);
+	/* JBM's `║`/`╔`/`╗` glyphs draw the double-stroke ~0.5px right of
+	   cell centre, so the painted line is shifted by half a pixel
+	   (-1px instead of -1.5px) to land axially under the corners. */
+	left: calc(50% - 1px);
 	width: 3px;
 	/* Tiny vertical bleed: the per-row line-box is 1em tall, but the
 	   `║` glyph leaves a 1-2px gap. 0.1em on each side covers the gap
