@@ -1,11 +1,4 @@
-import {
-	generatePersonas,
-	PHASE_1_CONFIG,
-	PHASE_2_CONFIG,
-	PHASE_3_CONFIG,
-	SETTING_POOL,
-} from "../../content";
-import { generateContentPacks } from "../../content/content-pack-generator.js";
+import { PHASE_1_CONFIG } from "../../content";
 import { serializeGameSave } from "../../save-serializer.js";
 import {
 	BANNER,
@@ -17,10 +10,8 @@ import {
 } from "../bbs-chrome.js";
 import { BrowserLLMProvider } from "../game/browser-llm-provider.js";
 import { deriveComposerState } from "../game/composer-reducer.js";
-import { BrowserContentPackProvider } from "../game/content-pack-provider.js";
 import { getActivePhase, updateActivePhase } from "../game/engine.js";
 import { GameSession } from "../game/game-session.js";
-import { BrowserSynthesisProvider } from "../game/llm-synthesis-provider.js";
 import {
 	applyAddresseeChange,
 	buildPersonaColorMap,
@@ -29,16 +20,13 @@ import {
 	findFirstMention,
 } from "../game/mention-parser.js";
 import { encodeRoundResult } from "../game/round-result-encoder.js";
-import type { AiId, GameState, PhaseConfig } from "../game/types";
+import type { AiId, PhaseConfig } from "../game/types";
 import { AI_TYPING_SPEED, TOKEN_PACE_MS } from "../game/typing-rhythm.js";
 import { CapHitError } from "../llm-client.js";
 import {
 	clearActiveSession,
-	deleteLegacySaveKey,
 	getActiveSessionId,
-	hasLegacySave,
 	loadActiveSession,
-	mintAndActivateNewSession,
 	saveActiveSession,
 } from "../persistence/session-storage.js";
 
@@ -409,11 +397,8 @@ export function renderGame(
 		persistenceWarningEl.removeAttribute("hidden");
 	}
 
-	// Promise that resolves when session init is complete (async new-game path).
-	// Undefined for the restore path (sync).
-	let asyncInitPromise: Promise<void> | undefined;
-
-	// Lazy-init session
+	// Session restore path: load from active session pointer.
+	// If no valid session → redirect to #/start.
 	if (!session) {
 		// Feature-detect localStorage availability (SecurityError in privacy mode).
 		let storageAvailable = true;
@@ -426,187 +411,92 @@ export function renderGame(
 			showPersistenceWarning("unavailable");
 		}
 
-		// Determine boot path from active session pointer + legacy save
-		const activeId = storageAvailable ? getActiveSessionId() : null;
+		if (!storageAvailable) {
+			// Storage unavailable — can't restore or start; redirect to #/start
+			// where user can see an error. (The warning is already shown above.)
+			// For now, allow fall-through with no session so gameplay still works
+			// if the start route already handled this case.
+		} else {
+			const activeId = getActiveSessionId();
+			if (activeId === null) {
+				// No active session pointer → redirect to #/start
+				location.hash = "#/start";
+				return Promise.resolve();
+			}
 
-		let restoredState: GameState | null = null;
-
-		if (activeId !== null) {
-			// We have an active session — try to load it
 			const loadResult = loadActiveSession();
 			if (loadResult.kind === "ok") {
-				restoredState = loadResult.state;
-			} else if (loadResult.kind === "broken") {
-				showPersistenceWarning("corrupt");
+				const restoredState = loadResult.state;
+				session = GameSession.restore(restoredState);
+
+				// Re-render transcripts from restored state using chatHistories fallback.
+				// (The new format stores chat histories in daemon .txt files, not as
+				// serialized transcript HTML, so we always use the chatHistories path.)
+				const restoredPhase = getActivePhase(restoredState);
+				const restoredPersonas = restoredState.personas;
+				const restorePanelEls = doc.querySelectorAll<HTMLElement>(".ai-panel");
+				Object.keys(restoredPersonas).forEach((aiId, idx) => {
+					const panel = restorePanelEls[idx];
+					if (!panel) return;
+					const transcript = panel.querySelector<HTMLElement>(".transcript");
+					if (!transcript) return;
+					if ((restoredPhase.chatHistories[aiId]?.length ?? 0) > 0) {
+						// Synthesise from chatHistories (stored in daemon .txt files).
+						transcript.textContent = "";
+						const persona = restoredPersonas[aiId];
+						const personaName = persona?.name ?? aiId;
+						for (const msg of restoredPhase.chatHistories[aiId] ?? []) {
+							const lineEl = doc.createElement("div");
+							lineEl.className = "msg-line";
+							if (msg.role === "player") {
+								appendMentionAwareText(
+									lineEl,
+									`> ${msg.content}\n`,
+									restoredPersonas,
+									"msg-you",
+								);
+							} else {
+								const prefixSpan = doc.createElement("span");
+								prefixSpan.className = "msg-prefix";
+								if (persona?.color) {
+									prefixSpan.style.setProperty("--prefix-color", persona.color);
+								}
+								prefixSpan.textContent = `> *${transcriptName(personaName)} `;
+								lineEl.appendChild(prefixSpan);
+								appendMentionAwareText(
+									lineEl,
+									`${msg.content}\n`,
+									restoredPersonas,
+								);
+							}
+							transcript.appendChild(lineEl);
+						}
+					}
+				});
+
+				// Action log is populated from live SSE events only (no reload restore).
+
+				// Scroll restored transcripts to the bottom on first paint so the
+				// most recent messages are visible after a page refresh. Deferred
+				// via rAF so layout (scrollHeight) is computed before we assign.
+				requestAnimationFrame(() => {
+					for (const panel of restorePanelEls) {
+						scrollToBottom(panel.querySelector<HTMLElement>(".transcript"));
+					}
+				});
+			} else {
+				// broken or version-mismatch or none — redirect to #/start with reason
+				const reasonParam =
+					loadResult.kind === "version-mismatch"
+						? "version-mismatch"
+						: "broken";
 				clearActiveSession();
-				mintAndActivateNewSession();
-			} else if (loadResult.kind === "version-mismatch") {
-				showPersistenceWarning("version-mismatch");
-				clearActiveSession();
-				mintAndActivateNewSession();
+				location.hash = `#/start?reason=${reasonParam}`;
+				return Promise.resolve();
 			}
-		} else if (storageAvailable && hasLegacySave()) {
-			// Legacy single-key save found — discard it and start fresh
-			showPersistenceWarning("legacy-save-discarded");
-			deleteLegacySaveKey();
-			mintAndActivateNewSession();
-		} else if (storageAvailable) {
-			// No session at all — mint a new one
-			mintAndActivateNewSession();
 		}
 
-		if (restoredState !== null) {
-			session = GameSession.restore(restoredState);
-
-			// Re-render transcripts from restored state using chatHistories fallback.
-			// (The new format stores chat histories in daemon .txt files, not as
-			// serialized transcript HTML, so we always use the chatHistories path.)
-			const restoredPhase = getActivePhase(restoredState);
-			const restoredPersonas = restoredState.personas;
-			const restorePanelEls = doc.querySelectorAll<HTMLElement>(".ai-panel");
-			Object.keys(restoredPersonas).forEach((aiId, idx) => {
-				const panel = restorePanelEls[idx];
-				if (!panel) return;
-				const transcript = panel.querySelector<HTMLElement>(".transcript");
-				if (!transcript) return;
-				if ((restoredPhase.chatHistories[aiId]?.length ?? 0) > 0) {
-					// Synthesise from chatHistories (stored in daemon .txt files).
-					transcript.textContent = "";
-					const persona = restoredPersonas[aiId];
-					const personaName = persona?.name ?? aiId;
-					for (const msg of restoredPhase.chatHistories[aiId] ?? []) {
-						const lineEl = doc.createElement("div");
-						lineEl.className = "msg-line";
-						if (msg.role === "player") {
-							appendMentionAwareText(
-								lineEl,
-								`> ${msg.content}\n`,
-								restoredPersonas,
-								"msg-you",
-							);
-						} else {
-							const prefixSpan = doc.createElement("span");
-							prefixSpan.className = "msg-prefix";
-							if (persona?.color) {
-								prefixSpan.style.setProperty("--prefix-color", persona.color);
-							}
-							prefixSpan.textContent = `> *${transcriptName(personaName)} `;
-							lineEl.appendChild(prefixSpan);
-							appendMentionAwareText(
-								lineEl,
-								`${msg.content}\n`,
-								restoredPersonas,
-							);
-						}
-						transcript.appendChild(lineEl);
-					}
-				}
-			});
-
-			// Action log is populated from live SSE events only (no reload restore).
-
-			// Scroll restored transcripts to the bottom on first paint so the
-			// most recent messages are visible after a page refresh. Deferred
-			// via rAF so layout (scrollHeight) is computed before we assign.
-			requestAnimationFrame(() => {
-				for (const panel of restorePanelEls) {
-					scrollToBottom(panel.querySelector<HTMLElement>(".transcript"));
-				}
-			});
-		} else {
-			// Async bootstrap: generatePersonas now requires an LLM call.
-			// session remains null until the promise resolves; the form submit
-			// handler early-returns when session is null, so clicks before
-			// synthesis completes are silently dropped (safe).
-			asyncInitPromise = (async () => {
-				try {
-					const synth = new BrowserSynthesisProvider();
-					const packLLM = new BrowserContentPackProvider();
-					const personasPromise = generatePersonas(Math.random, synth);
-					const aiIdsPromise = personasPromise.then((p) => Object.keys(p));
-					// Silence derived-promise unhandled rejection when personasPromise
-					// rejects but packs path returns before awaiting aiIdsPromise; the
-					// rejection still propagates through personasPromise into Promise.all.
-					aiIdsPromise.catch(() => {});
-					const packsPromise = generateContentPacks(
-						Math.random,
-						SETTING_POOL,
-						[PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG],
-						packLLM,
-						aiIdsPromise,
-					);
-					const [personas, contentPacks] = await Promise.all([
-						personasPromise,
-						packsPromise,
-					]);
-					session = new GameSession(PHASE_1_CONFIG, personas, contentPacks);
-
-					// Apply SPA-side test affordances from location.search
-					session = applyTestAffordances(session, effectiveParams);
-
-					// Build persona maps from runtime state
-					const runtimePersonas = session.getState().personas;
-					personaNamesToId = buildPersonaNameMap(runtimePersonas);
-					personaColors = buildPersonaColorMap(runtimePersonas);
-					personaDisplayNames = buildPersonaDisplayNameMap(runtimePersonas);
-
-					// Hydrate lockouts
-					const activePhaseForLockouts = getActivePhase(session.getState());
-					for (const aiId of Object.keys(runtimePersonas)) {
-						lockouts.set(aiId, activePhaseForLockouts.chatLockouts.has(aiId));
-					}
-
-					gameEnded = false;
-
-					// Populate panels now that session is available
-					const panelElsAsync = doc.querySelectorAll<HTMLElement>(".ai-panel");
-					const aiIdListAsync = Object.keys(runtimePersonas);
-					panelElsAsync.forEach((panel, idx) => {
-						const aiId = aiIdListAsync[idx];
-						if (!aiId) return;
-						panel.dataset.ai = aiId;
-						const persona = runtimePersonas[aiId];
-						if (!persona) return;
-						panel.style.setProperty("--panel-color", persona.color);
-						initPanelChrome(panel, persona);
-						const budgetEl =
-							panel.querySelector<HTMLSpanElement>(".panel-budget");
-						const phase = activePhaseForLockouts;
-						if (budgetEl) {
-							const budget = phase.budgets[aiId];
-							if (budget) {
-								budgetEl.dataset.budget = String(budget.remaining);
-								budgetEl.textContent = formatBudget(budget.remaining);
-							}
-						}
-					});
-
-					const handlesAsync = Object.values(runtimePersonas)
-						.map((p) => `@${p.name}`)
-						.join(" | ");
-					if (handlesAsync) _promptInput.placeholder = `${handlesAsync} …`;
-
-					// Register panel-click handlers now that panels have data-ai set.
-					registerPanelClickHandlers(aiIdListAsync);
-
-					refreshComposerState();
-					refreshTopInfo();
-				} catch (err) {
-					// Funnel synthesis failure through the "AIs are sleeping" panel —
-					// same UX path as CapHitError during gameplay.
-					if (capHitEl) capHitEl.removeAttribute("hidden");
-					const panelsEl = doc.querySelector<HTMLElement>("#panels");
-					if (panelsEl) panelsEl.hidden = true;
-					_sendBtn.disabled = true;
-					_promptInput.disabled = true;
-					// Re-throw to surface in console for debugging.
-					throw err;
-				}
-			})();
-		}
-
-		// Synchronous post-init: only runs for the restore path (session is set).
-		// The async new-game path handles this block inside its IIFE above.
+		// Synchronous post-init: runs for the restore path (session is set).
 		if (session !== null) {
 			// Apply SPA-side test affordances from location.search (e.g. ?winImmediately=1
 			// or ?lockout=1). These are gated inside applyTestAffordances to only fire
@@ -636,13 +526,10 @@ export function renderGame(
 	// Set initial composer state (Send starts disabled until a valid *mention).
 	refreshComposerState();
 
-	// For the sync restore path session is already set; for the async new-game
-	// path session is still null here (the IIFE above handles panel init).
 	const aiIdList: string[] =
 		session !== null ? Object.keys(session.getState().personas) : [];
 
 	// Populate panel headers, ASCII border chrome, --panel-color, and budgets.
-	// Skipped for the async new-game path (handled inside the IIFE above).
 	if (session !== null) {
 		const panelEls = doc.querySelectorAll<HTMLElement>(".ai-panel");
 		const runtimePersonasForPanels = session.getState().personas;
@@ -722,8 +609,7 @@ export function renderGame(
 	refreshTopInfo();
 
 	/** Register panel-click → addressee mention handlers for the given AI ids.
-	 * Called synchronously for the restore path (session is set immediately),
-	 * or from inside the async IIFE for the new-game path (after session resolves). */
+	 * Called synchronously for the restore path (session is set immediately). */
 	function registerPanelClickHandlers(ids: string[]): void {
 		for (const aiId of ids) {
 			const panel = doc.querySelector<HTMLElement>(
@@ -755,9 +641,6 @@ export function renderGame(
 		}
 	}
 
-	// For the restore path, aiIdList is non-empty and handlers are registered now.
-	// For the async new-game path, aiIdList is empty here; handlers are registered
-	// inside the IIFE above after session resolves.
 	registerPanelClickHandlers(aiIdList);
 
 	// Debug toggle: show action log if ?debug=1
@@ -1260,7 +1143,5 @@ export function renderGame(
 		}
 	});
 
-	// Return the async init promise so callers can await session readiness.
-	// For the restore path (sync), returns an already-resolved promise.
-	return asyncInitPromise ?? Promise.resolve();
+	return Promise.resolve();
 }
