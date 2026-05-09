@@ -356,6 +356,38 @@ test("sessions-icon click → #/sessions", async ({ page }) => {
 	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
 });
 
+test("sessions-icon toggles back to game on second click", async ({ page }) => {
+	const pageErrors: Error[] = [];
+	page.on("pageerror", (err) => pageErrors.push(err));
+
+	await goToGame(page);
+	const sessionsIcon = page.locator("#sessions-icon");
+
+	await sessionsIcon.click();
+	await page.waitForURL(/.*#\/sessions/, { timeout: 10_000 });
+
+	await sessionsIcon.click();
+	await page.waitForURL(/.*#\/game/, { timeout: 10_000 });
+	await expect(page.locator("#composer")).toBeVisible();
+
+	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+});
+
+test("Escape on #/sessions navigates back to game", async ({ page }) => {
+	const pageErrors: Error[] = [];
+	page.on("pageerror", (err) => pageErrors.push(err));
+
+	await goToGame(page);
+	await page.locator("#sessions-icon").click();
+	await page.waitForURL(/.*#\/sessions/, { timeout: 10_000 });
+
+	await page.keyboard.press("Escape");
+	await page.waitForURL(/.*#\/game/, { timeout: 10_000 });
+	await expect(page.locator("#composer")).toBeVisible();
+
+	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+});
+
 test("broken-session banner: active session with missing engine.dat → #/sessions?reason=broken", async ({
 	page,
 }) => {

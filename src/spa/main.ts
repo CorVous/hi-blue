@@ -151,6 +151,22 @@ const sessionsIconBtn =
 	document.querySelector<HTMLButtonElement>("#sessions-icon");
 if (sessionsIconBtn) {
 	sessionsIconBtn.addEventListener("click", () => {
-		location.hash = "#/sessions";
+		// Toggle: if already on the picker, go back to the main screen.
+		// The dispatcher resolves #/game → #/start when no populated session.
+		if (location.hash.startsWith("#/sessions")) {
+			location.hash = "#/game";
+		} else {
+			location.hash = "#/sessions";
+		}
 	});
 }
+
+document.addEventListener("keydown", (e) => {
+	if (e.key !== "Escape") return;
+	if (!location.hash.startsWith("#/sessions")) return;
+	const byokDialog = document.querySelector<HTMLDialogElement>("#byok-dialog");
+	if (byokDialog?.open) return;
+	const tag = (e.target as HTMLElement | null)?.tagName;
+	if (tag === "INPUT" || tag === "TEXTAREA") return;
+	location.hash = "#/game";
+});
