@@ -2,10 +2,10 @@ import { PHASE_1_CONFIG } from "../../content";
 import { serializeGameSave } from "../../save-serializer.js";
 import {
 	BANNER,
-	formatTopInfoLeft,
 	formatTopInfoMobile,
 	formatTopInfoRight,
 	initPanelChrome,
+	renderTopInfoLeft,
 	TOPINFO_RIGHT_OK_TEXT,
 } from "../bbs-chrome.js";
 import { BrowserLLMProvider } from "../game/browser-llm-provider.js";
@@ -523,14 +523,16 @@ export function renderGame(
 		}
 	}
 
-	// Route-entry visibility: game route shows panels/composer and hides start-screen.
-	// The start route hides #panels and #composer on mount; undo that here so the
-	// game UI is always visible when we commit to rendering (all early-return paths
-	// above have already returned).
+	// Route-entry visibility: game route shows panels/composer and hides start-screen
+	// and sessions-screen. The start route hides #panels and #composer on mount;
+	// undo that here so the game UI is always visible when we commit to rendering
+	// (all early-return paths above have already returned).
 	const startScreenEl = doc.querySelector<HTMLElement>("#start-screen");
+	const sessionsScreenEl = doc.querySelector<HTMLElement>("#sessions-screen");
 	const panelsEl = doc.querySelector<HTMLElement>("#panels");
 	const composerEl = doc.querySelector<HTMLElement>("#composer");
 	if (startScreenEl) startScreenEl.setAttribute("hidden", "");
+	if (sessionsScreenEl) sessionsScreenEl.setAttribute("hidden", "");
 	if (panelsEl) panelsEl.removeAttribute("hidden");
 	if (composerEl) composerEl.removeAttribute("hidden");
 
@@ -606,7 +608,7 @@ export function renderGame(
 			turn: phase.round,
 			daemonsOnline: daemons,
 		};
-		topinfoLeftEl.textContent = formatTopInfoLeft(inputs);
+		renderTopInfoLeft(topinfoLeftEl, inputs);
 		topinfoRightEl.textContent = formatTopInfoRight(inputs);
 		const okSpan = doc.createElement("span");
 		okSpan.className = "ok";

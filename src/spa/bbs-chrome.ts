@@ -88,6 +88,14 @@ export function formatTopInfoLeft(i: TopInfoInputs): string {
 	return `SESSION ${i.sessionId} · PHASE ${phase} · TURN ${turn}`;
 }
 
+/**
+ * Render the left topinfo cell. Sessions picker is reached via the
+ * [ ls ] button in the header chrome rather than the topinfo text.
+ */
+export function renderTopInfoLeft(el: HTMLElement, i: TopInfoInputs): void {
+	el.textContent = formatTopInfoLeft(i);
+}
+
 /** Compact form rendered into `#topinfo-mobile` for the <=720px bento
  * layout — drops the labels and the daemons-online/connection trailer. */
 export function formatTopInfoMobile(i: TopInfoInputs): string {
@@ -104,6 +112,28 @@ export function formatTopInfoRight(i: TopInfoInputs): string {
 }
 
 export const TOPINFO_RIGHT_OK_TEXT = "● connection stable";
+
+/** Idempotent: inject the ASCII banner into `#banner` if not already there. */
+export function paintBanner(doc: Document): void {
+	const el = doc.querySelector<HTMLElement>("#banner");
+	if (el && !el.innerHTML) el.innerHTML = BANNER;
+}
+
+/** Populate the three topinfo cells (left / right / mobile) from inputs. */
+export function paintTopInfo(doc: Document, inputs: TopInfoInputs): void {
+	const left = doc.querySelector<HTMLElement>("#topinfo-left");
+	const right = doc.querySelector<HTMLElement>("#topinfo-right");
+	const mobile = doc.querySelector<HTMLElement>("#topinfo-mobile");
+	if (left) left.textContent = formatTopInfoLeft(inputs);
+	if (right) {
+		right.textContent = formatTopInfoRight(inputs);
+		const okSpan = doc.createElement("span");
+		okSpan.className = "ok";
+		okSpan.textContent = TOPINFO_RIGHT_OK_TEXT;
+		right.appendChild(okSpan);
+	}
+	if (mobile) mobile.textContent = formatTopInfoMobile(inputs);
+}
 
 // Session ID minting has moved to src/spa/persistence/session-storage.ts (mintSessionId).
 // getOrMintSessionId has been retired: the active session pointer is now managed by

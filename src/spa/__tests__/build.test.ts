@@ -42,9 +42,9 @@ describe("src/spa/index.html asset references", () => {
 		expect(html as string).toContain('id="byok-dialog"');
 	});
 
-	it("index.html contains a cog button #byok-cog with the ⚙ glyph", () => {
+	it("index.html contains a settings button #byok-cog labelled [ cfg ]", () => {
 		expect(html as string).toContain('id="byok-cog"');
-		expect(html as string).toContain("⚙");
+		expect(html as string).toContain("[ cfg ]");
 	});
 
 	it('contains persistence-warning aside with id="persistence-warning"', () => {

@@ -7,12 +7,18 @@ import {
 	ACTIVE_KEY,
 	clearActiveSession,
 	deleteLegacySaveKey,
+	dupSession,
 	getActiveSessionId,
+	getSessionInfo,
 	hasLegacySave,
 	LEGACY_KEY,
+	listSessions,
 	loadActiveSession,
+	loadSession,
 	mintAndActivateNewSession,
+	mintSession,
 	mintSessionId,
+	rmSession,
 	SESSIONS_PREFIX,
 	saveActiveSession,
 	setActiveSessionId,
@@ -382,6 +388,350 @@ describe("consecutive saves", () => {
 		expect(secondLoad.kind).toBe("ok");
 		if (secondLoad.kind === "ok") {
 			expect(secondLoad.state.currentPhase).toBe(1);
+		}
+	});
+});
+
+// ── listSessions ──────────────────────────────────────────────────────────────
+
+describe("listSessions", () => {
+	beforeEach(() => {
+		vi.stubGlobal("localStorage", makeLocalStorageStub());
+	});
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("returns empty array when no sessions exist", () => {
+		vi.stubGlobal("localStorage", makeLocalStorageStub());
+		expect(listSessions()).toEqual([]);
+	});
+
+	it("returns minted-then-saved session ids", () => {
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		const id1 = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+		const id2 = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+		const ids = listSessions();
+		expect(ids).toContain(id1);
+		expect(ids).toContain(id2);
+		expect(ids).toHaveLength(2);
+	});
+
+	it("ignores ACTIVE_KEY and LEGACY_KEY", () => {
+		const stub = makeLocalStorageStub({
+			[ACTIVE_KEY]: "0xABCD",
+			[LEGACY_KEY]: "{}",
+		});
+		vi.stubGlobal("localStorage", stub);
+		const ids = listSessions();
+		expect(ids).not.toContain(ACTIVE_KEY);
+		expect(ids).not.toContain(LEGACY_KEY);
+		expect(ids).toEqual([]);
+	});
+
+	it("de-duplicates ids that have multiple files", () => {
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		const id = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+		// Multiple files under same id -> should appear only once
+		const ids = listSessions();
+		expect(ids.filter((x) => x === id)).toHaveLength(1);
+	});
+});
+
+// ── loadSession ───────────────────────────────────────────────────────────────
+
+describe("loadSession", () => {
+	beforeEach(() => {
+		vi.stubGlobal("localStorage", makeLocalStorageStub());
+	});
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("returns 'none' for an id with no data", () => {
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		const result = loadSession("0x9999");
+		expect(result.kind).toBe("none");
+	});
+
+	it("returns 'ok' for a saved session", () => {
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		const id = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+		const result = loadSession(id);
+		expect(result.kind).toBe("ok");
+	});
+
+	it("returns 'broken' when engine.dat is missing", () => {
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		const id = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+		delete stub._store[`${SESSIONS_PREFIX}${id}/engine.dat`];
+		const result = loadSession(id);
+		expect(result.kind).toBe("broken");
+	});
+
+	it("returns 'version-mismatch' when schemaVersion is stale", () => {
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		const id = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+		const engineBlob = stub._store[`${SESSIONS_PREFIX}${id}/engine.dat`];
+		if (!engineBlob) throw new Error("engine.dat should exist");
+		const rawJson = deobfuscate(engineBlob);
+		const sealed = JSON.parse(rawJson);
+		sealed.schemaVersion = 999;
+		stub._store[`${SESSIONS_PREFIX}${id}/engine.dat`] = obfuscate(
+			JSON.stringify(sealed),
+		);
+		const result = loadSession(id);
+		expect(result.kind).toBe("version-mismatch");
+	});
+
+	it("does NOT touch the active pointer", () => {
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		const activeId = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+		// Load a different id
+		loadSession("0x1234");
+		expect(getActiveSessionId()).toBe(activeId);
+	});
+});
+
+// ── mintSession ───────────────────────────────────────────────────────────────
+
+describe("mintSession", () => {
+	beforeEach(() => {
+		vi.stubGlobal("localStorage", makeLocalStorageStub());
+	});
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("returns /^0x[0-9A-F]{4}$/ format", () => {
+		vi.stubGlobal("localStorage", makeLocalStorageStub());
+		const id = mintSession();
+		expect(id).toMatch(/^0x[0-9A-F]{4}$/);
+	});
+
+	it("does NOT set the active pointer", () => {
+		vi.stubGlobal("localStorage", makeLocalStorageStub());
+		mintSession();
+		expect(getActiveSessionId()).toBeNull();
+	});
+});
+
+// ── dupSession ────────────────────────────────────────────────────────────────
+
+describe("dupSession", () => {
+	beforeEach(() => {
+		vi.stubGlobal("localStorage", makeLocalStorageStub());
+	});
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("produces a new id distinct from the source", () => {
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		const srcId = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+		const newId = dupSession(srcId);
+		expect(newId).not.toBe(srcId);
+		expect(newId).toMatch(/^0x[0-9A-F]{4}$/);
+	});
+
+	it("new session keys are deep-independent: mutating new engine.dat does not affect original", () => {
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		const srcId = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+		const newId = dupSession(srcId);
+
+		// Corrupt the new session's engine.dat
+		stub._store[`${SESSIONS_PREFIX}${newId}/engine.dat`] = "corrupted";
+
+		// Original should still load ok
+		const origResult = loadSession(srcId);
+		expect(origResult.kind).toBe("ok");
+
+		// New session should be broken
+		const newResult = loadSession(newId);
+		expect(newResult.kind).toBe("broken");
+	});
+
+	it("engine.dat is written LAST (commit signal)", () => {
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		const srcId = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+
+		// Clear the setItem mock so we only track dup writes
+		stub.setItem.mockClear();
+		const newId = dupSession(srcId);
+
+		const calls = stub.setItem.mock.calls.map((c) => c[0] as string);
+		const newPrefix = `${SESSIONS_PREFIX}${newId}/`;
+		const newCalls = calls.filter((k) => k.startsWith(newPrefix));
+		expect(newCalls[newCalls.length - 1]).toMatch(/engine\.dat$/);
+	});
+
+	it("active pointer is unchanged after dup", () => {
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		const srcId = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+		dupSession(srcId);
+		expect(getActiveSessionId()).toBe(srcId);
+	});
+
+	it("throws on broken source session", () => {
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		const srcId = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+		delete stub._store[`${SESSIONS_PREFIX}${srcId}/engine.dat`];
+		expect(() => dupSession(srcId)).toThrow();
+	});
+
+	it("throws on version-mismatch source session", () => {
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		const srcId = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+		const engineBlob = stub._store[`${SESSIONS_PREFIX}${srcId}/engine.dat`];
+		if (!engineBlob) throw new Error("engine.dat should exist");
+		const sealed = JSON.parse(deobfuscate(engineBlob));
+		sealed.schemaVersion = 999;
+		stub._store[`${SESSIONS_PREFIX}${srcId}/engine.dat`] = obfuscate(
+			JSON.stringify(sealed),
+		);
+		expect(() => dupSession(srcId)).toThrow();
+	});
+});
+
+// ── rmSession ─────────────────────────────────────────────────────────────────
+
+describe("rmSession", () => {
+	beforeEach(() => {
+		vi.stubGlobal("localStorage", makeLocalStorageStub());
+	});
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("removes only the named id's keys", () => {
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		const id1 = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+		const id2 = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+
+		rmSession(id1);
+
+		// id1's keys should be gone
+		const remaining = Object.keys(stub._store).filter((k) =>
+			k.startsWith(`${SESSIONS_PREFIX}${id1}/`),
+		);
+		expect(remaining).toHaveLength(0);
+
+		// id2's keys should still be there
+		const id2Keys = Object.keys(stub._store).filter((k) =>
+			k.startsWith(`${SESSIONS_PREFIX}${id2}/`),
+		);
+		expect(id2Keys.length).toBeGreaterThan(0);
+	});
+
+	it("clears active pointer when removing the active session", () => {
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		const id = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+		expect(getActiveSessionId()).toBe(id);
+
+		rmSession(id);
+
+		expect(getActiveSessionId()).toBeNull();
+	});
+
+	it("does NOT clear active pointer when removing a non-active session", () => {
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		const id1 = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+		const id2 = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+		// active is now id2
+		expect(getActiveSessionId()).toBe(id2);
+
+		rmSession(id1);
+
+		// Active pointer should still point to id2
+		expect(getActiveSessionId()).toBe(id2);
+	});
+});
+
+// ── getSessionInfo ────────────────────────────────────────────────────────────
+
+describe("getSessionInfo", () => {
+	beforeEach(() => {
+		vi.stubGlobal("localStorage", makeLocalStorageStub());
+	});
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("returns kind=ok for a valid session", () => {
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		const id = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+		const info = getSessionInfo(id);
+		expect(info.kind).toBe("ok");
+		if (info.kind === "ok") {
+			expect(info.phase).toBe(1);
+			expect(typeof info.lastSavedAt).toBe("string");
+			expect(Array.isArray(info.daemonFiles)).toBe(true);
+			expect(info.daemonFiles.length).toBeGreaterThan(0);
+		}
+	});
+
+	it("returns kind=broken when engine.dat is missing", () => {
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		const id = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+		delete stub._store[`${SESSIONS_PREFIX}${id}/engine.dat`];
+		const info = getSessionInfo(id);
+		expect(info.kind).toBe("broken");
+	});
+
+	it("returns kind=version-mismatch when schemaVersion is stale", () => {
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		const id = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+		const engineBlob = stub._store[`${SESSIONS_PREFIX}${id}/engine.dat`];
+		if (!engineBlob) throw new Error("engine.dat should exist");
+		const sealed = JSON.parse(deobfuscate(engineBlob));
+		sealed.schemaVersion = 999;
+		stub._store[`${SESSIONS_PREFIX}${id}/engine.dat`] = obfuscate(
+			JSON.stringify(sealed),
+		);
+		const info = getSessionInfo(id);
+		expect(info.kind).toBe("version-mismatch");
+		if (info.kind === "version-mismatch") {
+			expect(Array.isArray(info.daemonFiles)).toBe(true);
 		}
 	});
 });

@@ -23,6 +23,7 @@ import {
 } from "./persistence/session-storage.js";
 import { registerRoute, start } from "./router.js";
 import { renderGame } from "./routes/game.js";
+import { renderSessions } from "./routes/sessions.js";
 import { renderStart } from "./routes/start.js";
 
 // ── One-time legacy-save check at boot ────────────────────────────────────────
@@ -54,10 +55,15 @@ type RendererFn = (
 ) => Promise<void> | void;
 
 function withDispatcher(
-	targetHash: "#/start" | "#/game",
+	targetHash: "#/start" | "#/game" | "#/sessions",
 	renderer: RendererFn,
 ): RendererFn {
 	return (root: HTMLElement, params: URLSearchParams) => {
+		// #/sessions opts out of dispatcher redirect logic — render unconditionally.
+		if (targetHash === "#/sessions") {
+			return renderer(root, params);
+		}
+
 		// Read state from storage
 		const activeSessionId = getActiveSessionId();
 		let loadResult = loadActiveSession();
@@ -83,8 +89,9 @@ function withDispatcher(
 				location.hash = "#/game";
 				return;
 			}
-			// Otherwise, fall through to renderer — pass reason (broken, version-mismatch,
-			// legacy-save-discarded) as query param if not already present
+			// Otherwise, fall through to renderer — pass reason (legacy-save-discarded)
+			// as query param if not already present. broken/version-mismatch now route
+			// to #/sessions instead of #/start.
 			let effectiveParams = params;
 			if (!effectiveParams.get("reason")) {
 				if (legacySaveDiscarded) {
@@ -92,25 +99,22 @@ function withDispatcher(
 					effectiveParams.set("reason", "legacy-save-discarded");
 					// Reset flag once consumed
 					legacySaveDiscarded = false;
-				} else if (
-					verdict.reason === "broken" ||
-					verdict.reason === "version-mismatch"
-				) {
-					effectiveParams = new URLSearchParams(params);
-					effectiveParams.set("reason", verdict.reason);
 				}
 			}
 			return renderer(root, effectiveParams);
 		}
 
 		// targetHash === "#/game"
-		// Only render when the session is populated; otherwise redirect to #/start
+		// Only render when the session is populated; otherwise redirect appropriately.
 		if (verdict.reason !== "populated") {
-			const reasonParam =
-				verdict.reason === "broken" || verdict.reason === "version-mismatch"
-					? `?reason=${verdict.reason}`
-					: "";
-			location.hash = `#/start${reasonParam}`;
+			if (
+				verdict.reason === "broken" ||
+				verdict.reason === "version-mismatch"
+			) {
+				location.hash = `#/sessions?reason=${verdict.reason}`;
+			} else {
+				location.hash = "#/start";
+			}
 			return;
 		}
 
@@ -135,5 +139,34 @@ registerRoute(
 	withDispatcher("#/game", (root, params) => renderGame(root, params)),
 );
 
+registerRoute(
+	"#/sessions",
+	withDispatcher("#/sessions", (root, params) => renderSessions(root, params)),
+);
+
 start();
 initByokModal();
+
+const sessionsIconBtn =
+	document.querySelector<HTMLButtonElement>("#sessions-icon");
+if (sessionsIconBtn) {
+	sessionsIconBtn.addEventListener("click", () => {
+		// Toggle: if already on the picker, go back to the main screen.
+		// The dispatcher resolves #/game → #/start when no populated session.
+		if (location.hash.startsWith("#/sessions")) {
+			location.hash = "#/game";
+		} else {
+			location.hash = "#/sessions";
+		}
+	});
+}
+
+document.addEventListener("keydown", (e) => {
+	if (e.key !== "Escape") return;
+	if (!location.hash.startsWith("#/sessions")) return;
+	const byokDialog = document.querySelector<HTMLDialogElement>("#byok-dialog");
+	if (byokDialog?.open) return;
+	const tag = (e.target as HTMLElement | null)?.tagName;
+	if (tag === "INPUT" || tag === "TEXTAREA") return;
+	location.hash = "#/game";
+});
