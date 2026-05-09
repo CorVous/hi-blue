@@ -245,17 +245,29 @@ test("strip-card preview: restored multi-line AI message stays in one msg-line",
 	await page.locator("#send").click();
 	const transcript0 = page.locator(`[data-transcript="${handles.ids[0]}"]`);
 	await expect(transcript0).toContainText("third");
-	// Wait for the save to land in localStorage.
-	// Post-#172: poll for engine.dat commit signal (written last in strict order).
+	// Wait for the round-end save to land in localStorage. engine.dat already
+	// exists from the initial start-save (round=0, empty chatHistories), so
+	// polling for its mere presence races the round-end save. Instead, poll
+	// the addressed AI's daemon file until phase-1 chatHistory has at least
+	// one entry — that pins the AI response into the persisted shape.
 	await page.waitForFunction(
-		() => {
+		(addressedAiId) => {
 			const sessionId = localStorage.getItem("hi-blue:active-session");
 			if (!sessionId) return false;
-			return (
-				localStorage.getItem(`hi-blue:sessions/${sessionId}/engine.dat`) !==
-				null
+			const daemonRaw = localStorage.getItem(
+				`hi-blue:sessions/${sessionId}/${addressedAiId}.txt`,
 			);
+			if (!daemonRaw) return false;
+			try {
+				const daemon = JSON.parse(daemonRaw) as {
+					phases?: { "1"?: { chatHistory?: unknown[] } };
+				};
+				return (daemon.phases?.["1"]?.chatHistory?.length ?? 0) > 0;
+			} catch {
+				return false;
+			}
 		},
+		handles.ids[0],
 		{ timeout: 15_000 },
 	);
 
