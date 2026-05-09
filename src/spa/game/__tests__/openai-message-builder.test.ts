@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { appendChat, createGame, startPhase } from "../engine";
 import {
 	buildOpenAiMessages,
-	SILENT_VOICE_TURN,
+	SILENT_BLUE_TURN,
 } from "../openai-message-builder";
 import { buildAiContext } from "../prompt-builder";
 import type { AiPersona, PhaseConfig, ToolRoundtripMessage } from "../types";
@@ -244,7 +244,7 @@ describe("buildOpenAiMessages", () => {
 		expect(messages.every((m) => m.role !== "tool")).toBe(true);
 	});
 
-	it("non-addressed AI gets a trailing 'The voice is silent.' user turn", () => {
+	it("non-addressed AI gets a trailing 'Blue: ' user turn", () => {
 		let game = makeGame();
 		game = appendChat(game, "red", { role: "player", content: "Hi Ember" });
 		game = appendChat(game, "red", { role: "ai", content: "Hi player" });
@@ -255,7 +255,7 @@ describe("buildOpenAiMessages", () => {
 
 		const last = messages[messages.length - 1];
 		expect(last?.role).toBe("user");
-		expect((last as { content: string }).content).toBe(SILENT_VOICE_TURN);
+		expect((last as { content: string }).content).toBe(SILENT_BLUE_TURN);
 	});
 
 	it("addressed AI does not get the silent-voice anchor", () => {
@@ -268,7 +268,7 @@ describe("buildOpenAiMessages", () => {
 			messages.some(
 				(m) =>
 					m.role === "user" &&
-					(m as { content: string }).content === SILENT_VOICE_TURN,
+					(m as { content: string }).content === SILENT_BLUE_TURN,
 			),
 		).toBe(false);
 	});
@@ -281,7 +281,7 @@ describe("buildOpenAiMessages", () => {
 			messages.some(
 				(m) =>
 					m.role === "user" &&
-					(m as { content: string }).content === SILENT_VOICE_TURN,
+					(m as { content: string }).content === SILENT_BLUE_TURN,
 			),
 		).toBe(false);
 	});

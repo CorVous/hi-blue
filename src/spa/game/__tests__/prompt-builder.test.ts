@@ -567,7 +567,7 @@ describe("<voice_examples> block", () => {
 });
 
 describe("<goal> block voice framing", () => {
-	it("<goal> block uses voice framing in phase 1", () => {
+	it("<goal> block uses Sysadmin framing in phase 1", () => {
 		const game = startPhase(
 			createGame(TEST_PERSONAS),
 			TEST_PHASE_CONFIG,
@@ -577,35 +577,32 @@ describe("<goal> block voice framing", () => {
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("<goal>");
 		expect(prompt).toContain(
-			"A voice you cannot place spoke to you a moment ago, alone, and only you heard it:",
+			"The Sysadmin sent you a private directive, addressed only to you:",
 		);
-		expect(prompt).toContain("You do not know whose voice it was.");
 		expect(prompt).toContain(ctx.goal);
 	});
 
-	it("<goal> block uses voice framing in phase 2", () => {
+	it("<goal> block uses Sysadmin framing in phase 2", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = startPhase(game, makeConfig(2));
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("<goal>");
 		expect(prompt).toContain(
-			"A voice you cannot place spoke to you a moment ago, alone, and only you heard it:",
+			"The Sysadmin sent you a private directive, addressed only to you:",
 		);
-		expect(prompt).toContain("You do not know whose voice it was.");
 		expect(prompt).toContain(ctx.goal);
 	});
 
-	it("<goal> block uses voice framing in phase 3", () => {
+	it("<goal> block uses Sysadmin framing in phase 3", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = startPhase(game, makeConfig(3));
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("<goal>");
 		expect(prompt).toContain(
-			"A voice you cannot place spoke to you a moment ago, alone, and only you heard it:",
+			"The Sysadmin sent you a private directive, addressed only to you:",
 		);
-		expect(prompt).toContain("You do not know whose voice it was.");
 		expect(prompt).toContain(ctx.goal);
 	});
 });

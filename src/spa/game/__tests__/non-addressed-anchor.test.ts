@@ -8,12 +8,12 @@
  * re-responded to it (player symptom: "the other AI acts like I just sent them
  * the last message I sent them again").
  *
- * Fix: append a synthetic `user: "The voice is silent."` turn for any
+ * Fix: append a synthetic `user: "Blue: "` (empty Blue message) turn for any
  * non-addressed daemon, anchoring the current round.
  */
 import { describe, expect, it } from "vitest";
 import { createGame, startPhase } from "../engine";
-import { SILENT_VOICE_TURN } from "../openai-message-builder";
+import { SILENT_BLUE_TURN } from "../openai-message-builder";
 import { runRound } from "../round-coordinator";
 import { MockRoundLLMProvider } from "../round-llm-provider";
 import type { AiId, AiPersona, ContentPack, PhaseConfig } from "../types";
@@ -157,12 +157,12 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 		// Last message anchors the current round.
 		const last = msgs[msgs.length - 1];
 		expect(last?.role).toBe("user");
-		expect((last as { content: string }).content).toBe(SILENT_VOICE_TURN);
+		expect((last as { content: string }).content).toBe(SILENT_BLUE_TURN);
 
 		// And the prior round's user/assistant are still in history but no longer
 		// at the tail.
 		const lastUser = [...msgs].reverse().find((m) => m.role === "user");
-		expect((lastUser as { content: string }).content).toBe(SILENT_VOICE_TURN);
+		expect((lastUser as { content: string }).content).toBe(SILENT_BLUE_TURN);
 		const priorUser = msgs.find(
 			(m) =>
 				m.role === "user" &&
@@ -182,7 +182,7 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 			cyanMsgs.some(
 				(m) =>
 					m.role === "user" &&
-					(m as { content: string }).content === SILENT_VOICE_TURN,
+					(m as { content: string }).content === SILENT_BLUE_TURN,
 			),
 		).toBe(false);
 	});
@@ -204,6 +204,6 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 		const greenMsgs = greenCall!.messages;
 		const last = greenMsgs[greenMsgs.length - 1];
 		expect(last?.role).toBe("user");
-		expect((last as { content: string }).content).toBe(SILENT_VOICE_TURN);
+		expect((last as { content: string }).content).toBe(SILENT_BLUE_TURN);
 	});
 });
