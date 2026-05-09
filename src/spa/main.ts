@@ -146,3 +146,11 @@ registerRoute(
 
 start();
 initByokModal();
+
+const sessionsIconBtn =
+	document.querySelector<HTMLButtonElement>("#sessions-icon");
+if (sessionsIconBtn) {
+	sessionsIconBtn.addEventListener("click", () => {
+		location.hash = "#/sessions";
+	});
+}

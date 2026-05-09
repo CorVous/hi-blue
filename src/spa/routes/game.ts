@@ -615,14 +615,7 @@ export function renderGame(
 		okSpan.textContent = TOPINFO_RIGHT_OK_TEXT;
 		topinfoRightEl.appendChild(okSpan);
 		if (topinfoMobileEl) {
-			// Make mobile topinfo fully clickable via an <a> wrapper
-			while (topinfoMobileEl.firstChild)
-				topinfoMobileEl.removeChild(topinfoMobileEl.firstChild);
-			const mobileLink = doc.createElement("a");
-			mobileLink.className = "session-link";
-			mobileLink.href = "#/sessions";
-			mobileLink.textContent = formatTopInfoMobile(inputs);
-			topinfoMobileEl.appendChild(mobileLink);
+			topinfoMobileEl.textContent = formatTopInfoMobile(inputs);
 		}
 	}
 

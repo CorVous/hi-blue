@@ -89,24 +89,11 @@ export function formatTopInfoLeft(i: TopInfoInputs): string {
 }
 
 /**
- * Render the left topinfo cell as DOM children:
- *   <a class="session-link" href="#/sessions">SESSION 0xXXXX</a> · PHASE NN/NN · TURN N
- *
- * Clears `el` before populating.
+ * Render the left topinfo cell. Sessions picker is reached via the
+ * floppy-disk button in the header chrome rather than the topinfo text.
  */
 export function renderTopInfoLeft(el: HTMLElement, i: TopInfoInputs): void {
-	// Clear existing children
-	while (el.firstChild) el.removeChild(el.firstChild);
-	const doc = el.ownerDocument;
-	const phase = `${String(i.phaseNumber).padStart(2, "0")}/${String(i.totalPhases).padStart(2, "0")}`;
-	const turn = String(i.turn).padStart(1, "0");
-
-	const link = doc.createElement("a");
-	link.className = "session-link";
-	link.href = "#/sessions";
-	link.textContent = `SESSION ${i.sessionId}`;
-	el.appendChild(link);
-	el.appendChild(doc.createTextNode(` · PHASE ${phase} · TURN ${turn}`));
+	el.textContent = formatTopInfoLeft(i);
 }
 
 /** Compact form rendered into `#topinfo-mobile` for the <=720px bento

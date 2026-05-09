@@ -1159,15 +1159,19 @@ main {
 		0 0 8px rgba(255, 180, 84, 0.5);
 }
 
-/* Session link in topinfo */
-.session-link {
+#sessions-icon {
+	background: transparent;
+	border: 0;
 	color: var(--amber-dim);
-	text-decoration: none;
 	font-family: inherit;
+	font-size: 13px;
+	letter-spacing: 0.18em;
+	padding: 0;
+	margin-right: 8px;
+	cursor: pointer;
+	text-shadow: inherit;
 }
 
-.session-link:hover,
-.session-link:focus {
+#sessions-icon:hover {
 	color: var(--amber);
-	text-decoration: underline;
 }

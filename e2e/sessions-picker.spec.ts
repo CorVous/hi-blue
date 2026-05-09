@@ -8,7 +8,7 @@
  *  - [ load ] flow: picker → #/game → topinfo shows session id
  *  - [ dup ] flow: picker → two rows, active pointer unchanged
  *  - [ rm ] confirm/cancel flow
- *  - Topinfo session-link click → #/sessions
+ *  - Sessions-icon (floppy-disk button) click → #/sessions
  *  - Broken-session banner: active session with missing engine.dat → #/sessions?reason=broken
  *  - [ + new session ] flow: picker → #/start, new active pointer
  *
@@ -338,16 +338,16 @@ test("[ rm ] confirm/cancel flow", async ({ page }) => {
 	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
 });
 
-test("topinfo session-link click → #/sessions", async ({ page }) => {
+test("sessions-icon click → #/sessions", async ({ page }) => {
 	const pageErrors: Error[] = [];
 	page.on("pageerror", (err) => pageErrors.push(err));
 
 	await goToGame(page);
 
-	// Click the session link in #topinfo-left
-	const sessionLink = page.locator("#topinfo-left .session-link");
-	await expect(sessionLink).toBeVisible();
-	await sessionLink.click();
+	// Click the floppy-disk button next to the cog
+	const sessionsIcon = page.locator("#sessions-icon");
+	await expect(sessionsIcon).toBeVisible();
+	await sessionsIcon.click();
 
 	// Should navigate to #/sessions
 	await page.waitForURL(/.*#\/sessions/, { timeout: 10_000 });
