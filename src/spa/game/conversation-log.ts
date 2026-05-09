@@ -4,7 +4,7 @@
  * Builds the unified per-AI per-phase Conversation log for the system prompt.
  *
  * Interleaves three streams of events, all tagged by round:
- *   1. Voice-chat messages (player and AI turns from chatHistories)
+ *   1. Voice-chat messages (player and AI turns from conversationLogs)
  *   2. Whispers received by the AI
  *   3. Witnessed events derived from physicalLog + cone-visibility
  *
