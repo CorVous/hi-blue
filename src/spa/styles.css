@@ -129,16 +129,17 @@ header {
 	   frame's `║` columns sit in separate line-boxes and bead under the
 	   inherited body text-shadow. */
 	text-shadow: none;
-	/* Shrink to content so the ::before/::after overlays (positioned
-	   from left/right) land on the actual `║` columns rather than the
-	   far edges of the surrounding grid cell. */
-	width: max-content;
 	position: relative;
 }
 
 /* Paint a continuous double-line over the beaded `║` glyph columns on the
    left and right of the banner body rows. Spans the 6 body rows only —
-   the top (`╔══╗`) and bottom (`╚══╝`) rows keep their corner glyphs. */
+   the top (`╔══╗`) and bottom (`╚══╝`) rows keep their corner glyphs. Both
+   overlays use `left:` (not `right:`) so positioning is independent of the
+   banner element's box width — the `<pre>` may stretch to fill its grid
+   cell, but the `║` glyphs themselves sit at known character offsets from
+   the content's left edge. The fallback 84 matches the current BANNER_W;
+   paintBanner() sets the actual value on the element. */
 .banner::before,
 .banner::after {
 	content: "";
@@ -161,8 +162,8 @@ header {
 }
 
 .banner::after {
-	/* Right `║` is the last column before the trailing space — centre at 0.5ch from right. */
-	right: calc(0.5ch - 1.5px);
+	/* Right `║` is at column (banner-w + 4) — centre at (banner-w + 4.5)ch. */
+	left: calc((var(--banner-w, 84) + 4.5) * 1ch - 1.5px);
 }
 
 .banner-blue {
