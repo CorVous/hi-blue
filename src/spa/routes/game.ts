@@ -235,6 +235,11 @@ const PERSISTENCE_WARNING_MESSAGES: Record<string, string> = {
 let gameEnded = false;
 
 let session: GameSession | null = null;
+/** The session id `session` was last hydrated from. When the active-session
+ * pointer moves (e.g. the user clicks Load on a different session in the
+ * picker), this drifts from `getActiveSessionId()` and the next renderGame
+ * drops the cache so the restore path runs against the new pointer. */
+let cachedSessionId: string | null = null;
 
 export function renderGame(
 	root: HTMLElement,
@@ -252,6 +257,20 @@ export function renderGame(
 	);
 
 	if (!form || !promptInput || !sendBtn) return Promise.resolve();
+
+	// Drop the in-memory session cache if the active-session pointer no longer
+	// matches what we hydrated from. This is what propagates a Load click in
+	// the picker without a page refresh: the click writes a new active id and
+	// re-enters this route, and the restore branch below picks up the new
+	// session instead of re-rendering the stale closure-held one.
+	if (session !== null && cachedSessionId !== getActiveSessionId()) {
+		session = null;
+		cachedSessionId = null;
+		gameEnded = false;
+		// Action log is live-only (no restore), so clear it for parity with
+		// a hard refresh — otherwise entries from the previous session linger.
+		if (actionLogList) actionLogList.textContent = "";
+	}
 
 	// Mention-based addressing state — built lazily after session init below,
 	// since persona handles are procedurally generated per session.
@@ -640,6 +659,7 @@ export function renderGame(
 				// session var lets the recursive call skip both the loading branch
 				// and the localStorage restore path.
 				session = built;
+				cachedSessionId = getActiveSessionId();
 				return renderGame(root, params);
 			})
 			.catch((err: unknown) => {
@@ -698,6 +718,7 @@ export function renderGame(
 			if (loadResult.kind === "ok") {
 				const restoredState = loadResult.state;
 				session = GameSession.restore(restoredState);
+				cachedSessionId = loadResult.sessionId;
 
 				// Re-render transcripts from restored state using conversationLogs.
 				// (The new format stores conversation logs in daemon .txt files, not as
@@ -1422,6 +1443,7 @@ export function renderGame(
 
 						// Reset session so a route re-entry produces a fresh game
 						session = null;
+						cachedSessionId = null;
 						break;
 					}
 				}
