@@ -100,7 +100,7 @@ test("strip-card label: panel-name renders on the TOP edge, not the bottom", asy
 		if (!l) throw new Error(`no label probe for index ${idx}`);
 		expect(l.addressed).toBe(false);
 		expect(l.topVisible).toBe(true);
-		expect(l.topText).toMatch(/^\*\S+ :: @\S+$/);
+		expect(l.topText).toMatch(/^\*\S+$/);
 		expect(l.botVisible).toBe(false);
 	}
 
@@ -110,7 +110,7 @@ test("strip-card label: panel-name renders on the TOP edge, not the bottom", asy
 	expect(main.addressed).toBe(true);
 	expect(main.topVisible).toBe(false);
 	expect(main.botVisible).toBe(true);
-	expect(main.botText).toMatch(/^\*\S+ :: @\S+$/);
+	expect(main.botText).toMatch(/^\*\S+$/);
 });
 
 test("strip-card preview: latest line visible + per-line ellipsis", async ({
