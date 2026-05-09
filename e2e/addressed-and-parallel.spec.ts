@@ -68,14 +68,18 @@ test("addressed message lands only on first panel; all three panels render progr
 		.locator(`[data-transcript="${ids[2]}"]`)
 		.textContent();
 
-	// player message appears in first transcript exactly once.
-	expect(firstTranscript ?? "").toContain(`> *${names[0]} hello first panel`);
+	// Player message appears in the first transcript exactly once. The SPA's
+	// form-submit handler strips the leading `*<handle>` mention before
+	// rendering the player line (see `src/spa/routes/game.ts`: "Append the
+	// (mention-stripped) player message to the addressed panel."), so the
+	// assertion checks for the stripped body, not the original input.
+	expect(firstTranscript ?? "").toContain("> hello first panel");
 	// Exactly once: splitting on the player prefix gives exactly two parts.
-	expect((firstTranscript ?? "").split(`> *${names[0]} hello`).length).toBe(2);
+	expect((firstTranscript ?? "").split("> hello first panel").length).toBe(2);
 
 	// second and third do NOT contain the player line.
-	expect(secondTranscript ?? "").not.toContain(`> *${names[0]} hello`);
-	expect(thirdTranscript ?? "").not.toContain(`> *${names[0]} hello`);
+	expect(secondTranscript ?? "").not.toContain("> hello first panel");
+	expect(thirdTranscript ?? "").not.toContain("> hello first panel");
 
 	// Each distinct completion appears in exactly one transcript.
 	const transcripts = [
