@@ -16,30 +16,22 @@ const BANNER_SEGMENTS: ReadonlyArray<readonly [string, string, string]> = [
 	["   ╚═╝  ╚═╝╚═╝      ", "╚═════╝ ╚══════╝ ╚═════╝ ╚══════╝", ""],
 ] as const;
 
-/** Width of the banner body content, in characters — the longest of
- *  the BANNER_SEGMENTS lineLen values. The full banner row is `w + 5`
- *  chars wide (1 leading space + ║ + space + content[w] + space + ║),
- *  so the right ║ glyph centre sits at column `w + 4.5`. Exposed so
- *  the CSS overlay that paints over the beaded ║ columns can position
- *  itself dynamically rather than hardcoding the column index. */
-export const BANNER_W: number = (() => {
-	const len = (s: string): number => [...s].length;
-	const lineLen = (seg: readonly [string, string, string]): number =>
-		len(seg[0]) + len(seg[1]) + len(seg[2]);
-	return Math.max(...BANNER_SEGMENTS.map(lineLen));
-})();
-
-/** Banner as HTML — the BLUE block letters are wrapped in `.banner-blue`. */
+/** Banner as HTML — the BLUE block letters are wrapped in `.banner-blue`.
+ *  Each body-row `║` is wrapped in `.banner-side` so CSS can hide the
+ *  beaded glyph and paint a continuous double-line via a per-cell
+ *  `::before` that extends slightly past the line-box (overlapping the
+ *  next row's overlay so the strip is seamless). */
 export const BANNER: string = (() => {
 	const len = (s: string): number => [...s].length;
 	const lineLen = (seg: readonly [string, string, string]): number =>
 		len(seg[0]) + len(seg[1]) + len(seg[2]);
-	const w = BANNER_W;
+	const w = Math.max(...BANNER_SEGMENTS.map(lineLen));
 	const top = ` ╔${"═".repeat(w + 2)}╗`;
 	const bot = ` ╚${"═".repeat(w + 2)}╝`;
+	const side = `<span class="banner-side">║</span>`;
 	const body = BANNER_SEGMENTS.map(([a, b, c]) => {
 		const pad = " ".repeat(w - lineLen([a, b, c]));
-		return ` ║ ${a}<span class="banner-blue">${b}</span>${c}${pad} ║`;
+		return ` ${side} ${a}<span class="banner-blue">${b}</span>${c}${pad} ${side}`;
 	});
 	return [top, ...body, bot].join("\n");
 })();
@@ -165,15 +157,10 @@ export function topInfoStatus(state: LoadState): LoadStateStatus {
 	}
 }
 
-/** Idempotent: inject the ASCII banner into `#banner` if not already there.
- *  Sets `--banner-w` so the CSS overlay can position over the right ║ column
- *  (whose left edge is `(BANNER_W + 4) * 1ch` from the .banner left edge). */
+/** Idempotent: inject the ASCII banner into `#banner` if not already there. */
 export function paintBanner(doc: Document): void {
 	const el = doc.querySelector<HTMLElement>("#banner");
-	if (el && !el.innerHTML) {
-		el.innerHTML = BANNER;
-		el.style.setProperty("--banner-w", String(BANNER_W));
-	}
+	if (el && !el.innerHTML) el.innerHTML = BANNER;
 }
 
 /** Populate the three topinfo cells (left / right / mobile) from inputs. */

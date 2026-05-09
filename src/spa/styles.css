@@ -129,24 +129,29 @@ header {
 	   frame's `║` columns sit in separate line-boxes and bead under the
 	   inherited body text-shadow. */
 	text-shadow: none;
-	position: relative;
 }
 
-/* Paint a continuous double-line over the beaded `║` glyph columns on the
-   left and right of the banner body rows. Spans the 6 body rows only —
-   the top (`╔══╗`) and bottom (`╚══╝`) rows keep their corner glyphs. Both
-   overlays use `left:` (not `right:`) so positioning is independent of the
-   banner element's box width — the `<pre>` may stretch to fill its grid
-   cell, but the `║` glyphs themselves sit at known character offsets from
-   the content's left edge. The fallback 84 matches the current BANNER_W;
-   paintBanner() sets the actual value on the element. */
-.banner::before,
-.banner::after {
+/* Each body-row `║` is wrapped in `.banner-side`. Hide the glyph and paint
+   the line via a `::before` that extends slightly past the cell vertically
+   so adjacent rows' overlays overlap into one continuous strip — no font
+   metric guesswork, position is locally anchored to the cell. */
+.banner-side {
+	color: transparent;
+	position: relative;
+	display: inline-block;
+}
+
+.banner-side::before {
 	content: "";
 	position: absolute;
-	top: 1em;
-	bottom: 1em;
+	left: calc(50% - 1.5px);
 	width: 3px;
+	/* Tiny vertical bleed: the per-row line-box is 1em tall, but the
+	   `║` glyph leaves a 1-2px gap. 0.1em on each side covers the gap
+	   and overlaps with neighbours' bleed without intruding into the
+	   `╔══╗` / `╚══╝` rows (whose corner glyphs own those cells). */
+	top: -0.1em;
+	bottom: -0.1em;
 	background: linear-gradient(
 		to right,
 		var(--amber) 0 1px,
@@ -154,16 +159,6 @@ header {
 		var(--amber) 2px 3px
 	);
 	pointer-events: none;
-}
-
-.banner::before {
-	/* Left `║` is at column 1 (after the leading space) — centre at 1.5ch. */
-	left: calc(1.5ch - 1.5px);
-}
-
-.banner::after {
-	/* Right `║` is at column (banner-w + 4) — centre at (banner-w + 4.5)ch. */
-	left: calc((var(--banner-w, 84) + 4.5) * 1ch - 1.5px);
 }
 
 .banner-blue {
