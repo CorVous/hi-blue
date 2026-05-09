@@ -9,7 +9,7 @@ const root = path.resolve(__dirname, "../..");
 const script = path.join(root, "scripts/build-spa.mjs");
 
 describe("build-spa.mjs (one-shot, no --watch)", () => {
-	it("exits with code 0 and creates dist/index.html, dist/assets/index.js, dist/assets/index.css", () => {
+	it("exits with code 0 and emits content-hashed assets referenced from index.html", () => {
 		const result = spawnSync("node", [script], {
 			cwd: root,
 			encoding: "utf-8",
@@ -21,13 +21,15 @@ describe("build-spa.mjs (one-shot, no --watch)", () => {
 			fs.existsSync(path.join(root, "dist/index.html")),
 			"dist/index.html should exist",
 		).toBe(true);
-		expect(
-			fs.existsSync(path.join(root, "dist/assets/index.js")),
-			"dist/assets/index.js should exist",
-		).toBe(true);
-		expect(
-			fs.existsSync(path.join(root, "dist/assets/index.css")),
-			"dist/assets/index.css should exist",
-		).toBe(true);
+
+		const assets = fs.readdirSync(path.join(root, "dist/assets"));
+		const jsName = assets.find((n) => /^index-[A-Z0-9]+\.js$/.test(n));
+		const cssName = assets.find((n) => /^index-[A-Z0-9]+\.css$/.test(n));
+		expect(jsName, "a content-hashed JS bundle should exist").toBeDefined();
+		expect(cssName, "a content-hashed CSS bundle should exist").toBeDefined();
+
+		const html = fs.readFileSync(path.join(root, "dist/index.html"), "utf8");
+		expect(html).toContain(`./assets/${jsName}`);
+		expect(html).toContain(`./assets/${cssName}`);
 	});
 });

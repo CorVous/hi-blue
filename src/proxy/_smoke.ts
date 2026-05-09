@@ -107,7 +107,36 @@ export default {
 		// Delegate to the assets binding for any unmatched path. This allows
 		// the assets binding's not_found_handling: single-page-application to
 		// serve dist/index.html for SPA client-side routes (e.g. /endgame)
-		// instead of the Worker returning a hard 404.
-		return env.ASSETS.fetch(request);
+		// instead of the Worker returning a hard 404. Cache-Control is
+		// rewritten so content-hashed bundles can live in CDN/browser caches
+		// indefinitely while index.html is always revalidated.
+		return withAssetCacheHeaders(url, await env.ASSETS.fetch(request));
 	},
 } satisfies ExportedHandler<Env>;
+
+/**
+ * Rewrite Cache-Control on asset responses based on path:
+ *   /assets/*  → public, max-age=31536000, immutable  (filenames are
+ *                content-hashed by esbuild, so a new commit produces new URLs
+ *                and old URLs remain valid for clients that already hold them)
+ *   everything → no-cache, must-revalidate            (index.html and SPA
+ *                fallback responses; they must always reflect the latest
+ *                hashed bundle names)
+ *
+ * Only successful (2xx) responses are rewritten so error pages keep whatever
+ * caching the asset binding chose.
+ */
+function withAssetCacheHeaders(url: URL, response: Response): Response {
+	if (!response.ok) return response;
+	const headers = new Headers(response.headers);
+	if (url.pathname.startsWith("/assets/")) {
+		headers.set("Cache-Control", "public, max-age=31536000, immutable");
+	} else {
+		headers.set("Cache-Control", "no-cache, must-revalidate");
+	}
+	return new Response(response.body, {
+		status: response.status,
+		statusText: response.statusText,
+		headers,
+	});
+}

@@ -11,8 +11,11 @@
 		"command": "pnpm build",
 		"watch_dir": "src/spa"
 	},
-	// Static assets (SPA). Wrangler serves matching paths from dist/ first;
-	// unmatched paths fall through to the Worker fetch handler (API routes).
+	// Static assets (SPA). The Worker fetch handler runs first for every
+	// request and either handles API routes itself or delegates to the
+	// ASSETS binding. Running the Worker first lets us attach Cache-Control
+	// headers to /assets/* (long, immutable — they're content-hashed) and to
+	// index.html (no-cache — it pins the current hashed bundle).
 	"assets": {
 		"directory": "./dist",
 		"not_found_handling": "single-page-application",
@@ -20,7 +23,8 @@
 		// unmatched paths via env.ASSETS.fetch(request) — required for the
 		// not_found_handling: single-page-application fallback to fire on
 		// client-side routes such as /endgame.
-		"binding": "ASSETS"
+		"binding": "ASSETS",
+		"run_worker_first": true
 	},
 	"kv_namespaces": [
 		{
