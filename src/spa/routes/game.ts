@@ -555,10 +555,10 @@ export function renderGame(
 			if (!stageEl) return;
 			const startTs =
 				typeof performance !== "undefined" ? performance.now() : Date.now();
-			// τ chosen so the bright band reaches ~95% at ~60s (target pack
-			// load time) and ~99% at ~90s, asymptotically capped at 99% so
-			// the panel never visually completes until packs actually resolve.
-			const TAU_MS = 20_000;
+			// τ chosen so the bright band reaches ~95% at ~3 min (target pack
+			// load time) and ~99% at ~4.5 min, asymptotically capped at 99%
+			// so the panel never visually completes until packs actually resolve.
+			const TAU_MS = 60_000;
 			const tick = (): void => {
 				const now =
 					typeof performance !== "undefined" ? performance.now() : Date.now();
