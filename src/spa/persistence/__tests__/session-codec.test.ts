@@ -266,8 +266,12 @@ describe("serializeSession / deserializeSession", () => {
 				{
 					...phase,
 					conversationLogs: {
-						red: [{ kind: "chat", role: "player", content: "hello red", round: 0 }],
-						green: [{ kind: "chat", role: "ai", content: "green reply", round: 0 }],
+						red: [
+							{ kind: "chat", role: "player", content: "hello red", round: 0 },
+						],
+						green: [
+							{ kind: "chat", role: "ai", content: "green reply", round: 0 },
+						],
 						blue: [],
 					},
 				},

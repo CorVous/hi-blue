@@ -440,9 +440,9 @@ export function renderGame(
 					if (!panel) return;
 					const transcript = panel.querySelector<HTMLElement>(".transcript");
 					if (!transcript) return;
-					const chatEntries = (restoredPhase.conversationLogs[aiId] ?? []).filter(
-						(e) => e.kind === "chat",
-					);
+					const chatEntries = (
+						restoredPhase.conversationLogs[aiId] ?? []
+					).filter((e) => e.kind === "chat");
 					if (chatEntries.length > 0) {
 						// Synthesise from conversationLogs (stored in daemon .txt files).
 						transcript.textContent = "";

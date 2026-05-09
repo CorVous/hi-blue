@@ -156,8 +156,14 @@ describe("chat-only round", () => {
 		const { nextState } = await runRound(game, "red", "Hello Ember!", provider);
 		const redLog = getActivePhase(nextState).conversationLogs.red ?? [];
 		const chatEntries = redLog.filter((e) => e.kind === "chat");
-		expect(chatEntries.some((e) => e.kind === "chat" && e.role === "ai")).toBe(true);
-		expect(chatEntries.some((e) => e.kind === "chat" && e.content.includes("I am Ember"))).toBe(true);
+		expect(chatEntries.some((e) => e.kind === "chat" && e.role === "ai")).toBe(
+			true,
+		);
+		expect(
+			chatEntries.some(
+				(e) => e.kind === "chat" && e.content.includes("I am Ember"),
+			),
+		).toBe(true);
 	});
 
 	it("appends the player's message to the addressed AI's history", async () => {
@@ -175,9 +181,13 @@ describe("chat-only round", () => {
 		);
 		const redLog = getActivePhase(nextState).conversationLogs.red ?? [];
 		const chatEntries = redLog.filter((e) => e.kind === "chat");
-		expect(chatEntries.some((e) => e.kind === "chat" && e.role === "player")).toBe(true);
 		expect(
-			chatEntries.some((e) => e.kind === "chat" && e.content.includes("My secret message")),
+			chatEntries.some((e) => e.kind === "chat" && e.role === "player"),
+		).toBe(true);
+		expect(
+			chatEntries.some(
+				(e) => e.kind === "chat" && e.content.includes("My secret message"),
+			),
 		).toBe(true);
 	});
 
@@ -274,7 +284,10 @@ describe("budget-exhaustion lockout", () => {
 		const redLog = getActivePhase(nextState).conversationLogs.red ?? [];
 		const chatEntries = redLog.filter((e) => e.kind === "chat");
 		expect(chatEntries.length).toBeGreaterThan(0);
-		expect(chatEntries[chatEntries.length - 1]?.kind === "chat" && chatEntries[chatEntries.length - 1]?.role).toBe("ai");
+		expect(
+			chatEntries[chatEntries.length - 1]?.kind === "chat" &&
+				chatEntries[chatEntries.length - 1]?.role,
+		).toBe("ai");
 	});
 
 	it("lockout line is added to the action log", async () => {
@@ -1189,7 +1202,9 @@ describe("lockout messages", () => {
 		const chatEntries = redLog.filter((e) => e.kind === "chat");
 		const lastEntry = chatEntries[chatEntries.length - 1];
 		expect(lastEntry?.kind === "chat" && lastEntry.role).toBe("ai");
-		expect(lastEntry?.kind === "chat" && lastEntry.content).toBe("Ember is unresponsive…");
+		expect(lastEntry?.kind === "chat" && lastEntry.content).toBe(
+			"Ember is unresponsive…",
+		);
 	});
 
 	it("chat-lockout message is '<name> is unresponsive…'", async () => {
@@ -2009,7 +2024,12 @@ describe("conversationLogs isolation (AC #10 — #194)", () => {
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
-		const { nextState } = await runRound(game, "red", "private message", provider);
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"private message",
+			provider,
+		);
 		const phase = getActivePhase(nextState);
 
 		// Only red's log should have a player entry
@@ -2053,12 +2073,17 @@ describe("conversationLogs isolation (AC #10 — #194)", () => {
 		);
 		expect(redAiEntries.length).toBeGreaterThanOrEqual(1);
 		expect(
-			redAiEntries.some((e) => e.kind === "chat" && e.content.includes("I am red speaking")),
+			redAiEntries.some(
+				(e) => e.kind === "chat" && e.content.includes("I am red speaking"),
+			),
 		).toBe(true);
 
 		// green and blue should NOT have red's message
 		const greenAiEntries = (phase.conversationLogs.green ?? []).filter(
-			(e) => e.kind === "chat" && e.role === "ai" && e.content === "I am red speaking",
+			(e) =>
+				e.kind === "chat" &&
+				e.role === "ai" &&
+				e.content === "I am red speaking",
 		);
 		expect(greenAiEntries).toHaveLength(0);
 	});

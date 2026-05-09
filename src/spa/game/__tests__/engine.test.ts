@@ -306,7 +306,9 @@ describe("appendChat", () => {
 			content: "Hello Ember",
 		});
 		expect(getActivePhase(updated).conversationLogs.red).toHaveLength(1);
-		expect(getActivePhase(updated).conversationLogs.red?.[0]?.kind).toBe("chat");
+		expect(getActivePhase(updated).conversationLogs.red?.[0]?.kind).toBe(
+			"chat",
+		);
 		expect(getActivePhase(updated).conversationLogs.green).toHaveLength(0);
 	});
 

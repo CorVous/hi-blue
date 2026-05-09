@@ -171,8 +171,22 @@ describe("serializeGameState / deserializeGameState", () => {
 		const modifiedPhase = {
 			...phase,
 			conversationLogs: {
-				red: [{ kind: "chat" as const, role: "player" as const, content: "hello red", round: 0 }],
-				green: [{ kind: "chat" as const, role: "ai" as const, content: "green reply", round: 0 }],
+				red: [
+					{
+						kind: "chat" as const,
+						role: "player" as const,
+						content: "hello red",
+						round: 0,
+					},
+				],
+				green: [
+					{
+						kind: "chat" as const,
+						role: "ai" as const,
+						content: "green reply",
+						round: 0,
+					},
+				],
 				blue: [],
 			},
 			whispers: [

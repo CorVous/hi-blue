@@ -175,15 +175,21 @@ describe("GameSession — message routing", () => {
 		expect(
 			phase.conversationLogs.red?.some(
 				(e) =>
-					e.kind === "chat" && e.role === "player" && e.content.includes("Secret message for Ember"),
+					e.kind === "chat" &&
+					e.role === "player" &&
+					e.content.includes("Secret message for Ember"),
 			),
 		).toBe(true);
-		expect(phase.conversationLogs.green?.some((e) => e.kind === "chat" && e.role === "player")).toBe(
-			false,
-		);
-		expect(phase.conversationLogs.blue?.some((e) => e.kind === "chat" && e.role === "player")).toBe(
-			false,
-		);
+		expect(
+			phase.conversationLogs.green?.some(
+				(e) => e.kind === "chat" && e.role === "player",
+			),
+		).toBe(false);
+		expect(
+			phase.conversationLogs.blue?.some(
+				(e) => e.kind === "chat" && e.role === "player",
+			),
+		).toBe(false);
 	});
 
 	it("routing changes per round — second message goes to different AI", async () => {
@@ -195,11 +201,16 @@ describe("GameSession — message routing", () => {
 		const phase = getActivePhase(session.getState());
 		expect(
 			phase.conversationLogs.green?.some(
-				(e) => e.kind === "chat" && e.role === "player" && e.content.includes("for green"),
+				(e) =>
+					e.kind === "chat" &&
+					e.role === "player" &&
+					e.content.includes("for green"),
 			),
 		).toBe(true);
 		expect(
-			phase.conversationLogs.red?.filter((e) => e.kind === "chat" && e.role === "player"),
+			phase.conversationLogs.red?.filter(
+				(e) => e.kind === "chat" && e.role === "player",
+			),
 		).toHaveLength(1);
 	});
 });

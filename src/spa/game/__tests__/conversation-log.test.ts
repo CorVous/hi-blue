@@ -103,7 +103,9 @@ describe("buildConversationLog — voice-chat", () => {
 	it("renders player message with round tag and quotes", () => {
 		const input: ConversationLogInput = {
 			...emptyInput(),
-			conversationLog: [{ kind: "chat", role: "player", content: "Hi", round: 0 }],
+			conversationLog: [
+				{ kind: "chat", role: "player", content: "Hi", round: 0 },
+			],
 		};
 		const result = buildConversationLog(input, "red", TEST_PERSONAS);
 		expect(result).toEqual(['[Round 0] A voice says: "Hi"']);
@@ -112,7 +114,9 @@ describe("buildConversationLog — voice-chat", () => {
 	it("renders AI reply with round tag and quotes", () => {
 		const input: ConversationLogInput = {
 			...emptyInput(),
-			conversationLog: [{ kind: "chat", role: "ai", content: "Hello", round: 0 }],
+			conversationLog: [
+				{ kind: "chat", role: "ai", content: "Hello", round: 0 },
+			],
 		};
 		const result = buildConversationLog(input, "red", TEST_PERSONAS);
 		expect(result).toEqual(['[Round 0] You: "Hello"']);
@@ -124,7 +128,9 @@ describe("buildConversationLog — voice-chat", () => {
 		// messages appear — the per-AI filtering is the caller's responsibility.
 		const input: ConversationLogInput = {
 			...emptyInput(),
-			conversationLog: [{ kind: "chat", role: "player", content: "red-msg", round: 0 }],
+			conversationLog: [
+				{ kind: "chat", role: "player", content: "red-msg", round: 0 },
+			],
 		};
 		const result = buildConversationLog(input, "red", TEST_PERSONAS);
 		expect(result).toHaveLength(1);
@@ -510,7 +516,9 @@ describe("buildConversationLog — chronological ordering", () => {
 			},
 		};
 		const input: ConversationLogInput = {
-			conversationLog: [{ kind: "chat", role: "player", content: "early msg", round: 0 }],
+			conversationLog: [
+				{ kind: "chat", role: "player", content: "early msg", round: 0 },
+			],
 			whispers: [{ from: "green", to: "red", content: "late", round: 2 }],
 			physicalLog: [physRecord],
 			worldEntities: [],
@@ -538,7 +546,9 @@ describe("buildConversationLog — chronological ordering", () => {
 			},
 		};
 		const input: ConversationLogInput = {
-			conversationLog: [{ kind: "chat", role: "player", content: "chat", round: 0 }],
+			conversationLog: [
+				{ kind: "chat", role: "player", content: "chat", round: 0 },
+			],
 			whispers: [{ from: "green", to: "red", content: "whisper", round: 0 }],
 			physicalLog: [physRecord],
 			worldEntities: [],

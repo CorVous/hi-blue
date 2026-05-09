@@ -166,9 +166,18 @@ describe("serializeGameSave", () => {
 		expect(ember?.phases[0]?.phaseNumber).toBe(1);
 		expect(ember?.phases[1]?.phaseNumber).toBe(2);
 		expect(ember?.phases[2]?.phaseNumber).toBe(3);
-		expect(ember?.phases[0]?.conversationLog[0]?.kind === "chat" && ember?.phases[0]?.conversationLog[0]?.content).toBe("Phase 1 message");
-		expect(ember?.phases[1]?.conversationLog[0]?.kind === "chat" && ember?.phases[1]?.conversationLog[0]?.content).toBe("Phase 2 message");
-		expect(ember?.phases[2]?.conversationLog[0]?.kind === "chat" && ember?.phases[2]?.conversationLog[0]?.content).toBe("Phase 3 message");
+		expect(
+			ember?.phases[0]?.conversationLog[0]?.kind === "chat" &&
+				ember?.phases[0]?.conversationLog[0]?.content,
+		).toBe("Phase 1 message");
+		expect(
+			ember?.phases[1]?.conversationLog[0]?.kind === "chat" &&
+				ember?.phases[1]?.conversationLog[0]?.content,
+		).toBe("Phase 2 message");
+		expect(
+			ember?.phases[2]?.conversationLog[0]?.kind === "chat" &&
+				ember?.phases[2]?.conversationLog[0]?.content,
+		).toBe("Phase 3 message");
 	});
 
 	it("produces a serializable (round-trippable) payload", () => {

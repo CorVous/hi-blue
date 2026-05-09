@@ -107,13 +107,19 @@ describe("buildAiContext", () => {
 		game = appendChat(game, "green", { role: "player", content: "Hello Sage" });
 
 		const redCtx = buildAiContext(game, "red");
-		expect(redCtx.conversationLog.filter((e) => e.kind === "chat")).toHaveLength(2);
+		expect(
+			redCtx.conversationLog.filter((e) => e.kind === "chat"),
+		).toHaveLength(2);
 
 		const greenCtx = buildAiContext(game, "green");
-		expect(greenCtx.conversationLog.filter((e) => e.kind === "chat")).toHaveLength(1);
+		expect(
+			greenCtx.conversationLog.filter((e) => e.kind === "chat"),
+		).toHaveLength(1);
 
 		const blueCtx = buildAiContext(game, "blue");
-		expect(blueCtx.conversationLog.filter((e) => e.kind === "chat")).toHaveLength(0);
+		expect(
+			blueCtx.conversationLog.filter((e) => e.kind === "chat"),
+		).toHaveLength(0);
 	});
 
 	it("includes only whispers received by the AI", () => {

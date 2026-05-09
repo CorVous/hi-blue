@@ -111,7 +111,12 @@ describe("devtools-edit: mutating daemon .txt affects conversationLogs on reload
 					...phase,
 					conversationLogs: {
 						red: [
-							{ kind: "chat" as const, role: "ai" as const, content: "original message", round: 1 },
+							{
+								kind: "chat" as const,
+								role: "ai" as const,
+								content: "original message",
+								round: 1,
+							},
 						],
 						green: [],
 						blue: [],
@@ -188,7 +193,9 @@ describe("devtools-edit: mutating daemon .txt affects conversationLogs on reload
 			const loadedPhase = result.state.phases[0];
 			const greenLog = loadedPhase?.conversationLogs.green ?? [];
 			expect(
-				greenLog.some((e) => e.kind === "chat" && e.content === "PLAYER_DEVTOOLS_MESSAGE"),
+				greenLog.some(
+					(e) => e.kind === "chat" && e.content === "PLAYER_DEVTOOLS_MESSAGE",
+				),
 			).toBe(true);
 		}
 	});

@@ -132,7 +132,10 @@ export type DeserializeResult =
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const EMPTY_PHASE_SLICE: DaemonPhaseSlice = { phaseGoal: "", conversationLog: [] };
+const EMPTY_PHASE_SLICE: DaemonPhaseSlice = {
+	phaseGoal: "",
+	conversationLog: [],
+};
 const EMPTY_WHISPER_LIST: WhisperMessage[] = [];
 
 function phaseSliceFor(
