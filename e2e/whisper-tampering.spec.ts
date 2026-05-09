@@ -115,9 +115,7 @@ test("fabricated whisper appears in target daemon prompt and is absent from othe
 	// 6. Identify each daemon's request body by matching the identity line.
 	//    renderSystemPrompt writes: `You are *${ctx.name}. You have no clue...`
 	//    (phase 1), so we match `You are *${name}.` for each known name.
-	function findBodyForName(
-		name: string,
-	): Record<string, unknown> | null {
+	function findBodyForName(name: string): Record<string, unknown> | null {
 		for (const body of capturedBodies) {
 			if (
 				body &&
@@ -169,7 +167,9 @@ test("fabricated whisper appears in target daemon prompt and is absent from othe
 	expect(
 		targetSysContent,
 		"Sentinel must appear between <conversation> tags",
-	).toMatch(/<conversation>[\s\S]*FABRICATED_TAMPERED_WHISPER_xyz123[\s\S]*<\/conversation>/);
+	).toMatch(
+		/<conversation>[\s\S]*FABRICATED_TAMPERED_WHISPER_xyz123[\s\S]*<\/conversation>/,
+	);
 
 	// 8. Assert the other two daemons' prompts do NOT contain the sentinel.
 	//    (senderName reference used in the log name for clarity.)

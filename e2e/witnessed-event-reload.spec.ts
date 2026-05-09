@@ -101,21 +101,32 @@ interface GridPosition {
 type CardinalDirection = "north" | "south" | "east" | "west";
 const DIRECTIONS: CardinalDirection[] = ["north", "south", "east", "west"];
 
-function forwardDelta(facing: CardinalDirection): { drow: number; dcol: number } {
+function forwardDelta(facing: CardinalDirection): {
+	drow: number;
+	dcol: number;
+} {
 	switch (facing) {
-		case "north": return { drow: -1, dcol: 0 };
-		case "south": return { drow: 1, dcol: 0 };
-		case "east":  return { drow: 0, dcol: 1 };
-		case "west":  return { drow: 0, dcol: -1 };
+		case "north":
+			return { drow: -1, dcol: 0 };
+		case "south":
+			return { drow: 1, dcol: 0 };
+		case "east":
+			return { drow: 0, dcol: 1 };
+		case "west":
+			return { drow: 0, dcol: -1 };
 	}
 }
 
 function leftDelta(facing: CardinalDirection): { drow: number; dcol: number } {
 	switch (facing) {
-		case "north": return { drow: 0, dcol: -1 };
-		case "south": return { drow: 0, dcol: 1 };
-		case "east":  return { drow: -1, dcol: 0 };
-		case "west":  return { drow: 1, dcol: 0 };
+		case "north":
+			return { drow: 0, dcol: -1 };
+		case "south":
+			return { drow: 0, dcol: 1 };
+		case "east":
+			return { drow: -1, dcol: 0 };
+		case "west":
+			return { drow: 1, dcol: 0 };
 	}
 }
 
@@ -123,15 +134,24 @@ function inBounds(pos: GridPosition): boolean {
 	return pos.row >= 0 && pos.row < 5 && pos.col >= 0 && pos.col < 5;
 }
 
-function coneCells(pos: GridPosition, facing: CardinalDirection): GridPosition[] {
+function coneCells(
+	pos: GridPosition,
+	facing: CardinalDirection,
+): GridPosition[] {
 	const fwd = forwardDelta(facing);
 	const lft = leftDelta(facing);
 	const candidates: GridPosition[] = [
 		{ row: pos.row, col: pos.col },
 		{ row: pos.row + fwd.drow, col: pos.col + fwd.dcol },
-		{ row: pos.row + 2 * fwd.drow + lft.drow, col: pos.col + 2 * fwd.dcol + lft.dcol },
+		{
+			row: pos.row + 2 * fwd.drow + lft.drow,
+			col: pos.col + 2 * fwd.dcol + lft.dcol,
+		},
 		{ row: pos.row + 2 * fwd.drow, col: pos.col + 2 * fwd.dcol },
-		{ row: pos.row + 2 * fwd.drow - lft.drow, col: pos.col + 2 * fwd.dcol - lft.dcol },
+		{
+			row: pos.row + 2 * fwd.drow - lft.drow,
+			col: pos.col + 2 * fwd.dcol - lft.dcol,
+		},
 	];
 	return candidates.filter((c, i) => i === 0 || inBounds(c));
 }
@@ -149,7 +169,8 @@ function deobfuscateEngineBlob(blob: string): string {
 	const binary = atob(blob);
 	const bytes = new Uint8Array(binary.length);
 	for (let i = 0; i < binary.length; i++) {
-		bytes[i] = (binary.charCodeAt(i) & 0xff) ^ (keyBytes[i % keyBytes.length] as number);
+		bytes[i] =
+			(binary.charCodeAt(i) & 0xff) ^ (keyBytes[i % keyBytes.length] as number);
 	}
 	return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
 }
@@ -445,9 +466,7 @@ async function waitForRound(
 			sid: string;
 			expectedRound: number;
 		}) => {
-			const metaRaw = localStorage.getItem(
-				`hi-blue:sessions/${sid}/meta.json`,
-			);
+			const metaRaw = localStorage.getItem(`hi-blue:sessions/${sid}/meta.json`);
 			if (!metaRaw) return false;
 			try {
 				const meta = JSON.parse(metaRaw) as { round?: number };
@@ -584,28 +603,43 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 				const bytes = new Uint8Array(binary.length);
 				for (let i = 0; i < binary.length; i++) {
 					bytes[i] =
-						(binary.charCodeAt(i) & 0xff) ^ (keyBytes[i % keyBytes.length] as number);
+						(binary.charCodeAt(i) & 0xff) ^
+						(keyBytes[i % keyBytes.length] as number);
 				}
 				const json = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
 				const data = JSON.parse(json) as {
 					personaSpatial: Record<
 						string,
-						Record<string, { position: { row: number; col: number }; facing: string }>
+						Record<
+							string,
+							{ position: { row: number; col: number }; facing: string }
+						>
 					>;
 				};
 
 				// Patch witness position in phase "1"
 				const phase1 = data.personaSpatial["1"];
-				if (!phase1 || !phase1[wId]) throw new Error(`No spatial for ${wId}`);
-				(phase1[wId] as { position: { row: number; col: number }; facing: string }).position = newPos;
-				(phase1[wId] as { position: { row: number; col: number }; facing: string }).facing = newFacing;
+				if (!phase1?.[wId]) throw new Error(`No spatial for ${wId}`);
+				(
+					phase1[wId] as {
+						position: { row: number; col: number };
+						facing: string;
+					}
+				).position = newPos;
+				(
+					phase1[wId] as {
+						position: { row: number; col: number };
+						facing: string;
+					}
+				).facing = newFacing;
 
 				// Inline encode
 				const patchedJson = JSON.stringify(data);
 				const patchBytes = new TextEncoder().encode(patchedJson);
 				for (let i = 0; i < patchBytes.length; i++) {
 					patchBytes[i] =
-						(patchBytes[i] as number) ^ (keyBytes[i % keyBytes.length] as number);
+						(patchBytes[i] as number) ^
+						(keyBytes[i % keyBytes.length] as number);
 				}
 				let binOut = "";
 				for (let i = 0; i < patchBytes.length; i++) {
