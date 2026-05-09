@@ -60,17 +60,11 @@ function seedOkSessionScript(id: string, lastSavedAt: string): string {
 			});
 			localStorage.setItem(prefix + 'red.txt', daemonFile);
 
-			// Whispers file: must match WhispersFile shape
-			const whispersFile = JSON.stringify({
-				phases: { '1': [], '2': [], '3': [] },
-			});
-			localStorage.setItem(prefix + 'whispers.txt', whispersFile);
-
 			// Build engine.dat via inline obfuscation — payload must match SealedEngine
 			const OBFUSCATION_KEY = '${OBFUSCATION_KEY}';
 			const keyBytes = Array.from(new TextEncoder().encode(OBFUSCATION_KEY));
 			const payload = JSON.stringify({
-				schemaVersion: 2,
+				schemaVersion: 3,
 				currentPhase: 1,
 				isComplete: false,
 				world: {
@@ -114,7 +108,7 @@ function seedBrokenSessionScript(id: string): string {
 			});
 			localStorage.setItem(prefix + 'meta.json', meta);
 			localStorage.setItem(prefix + 'red.txt', '{}');
-			// Intentionally omit engine.dat and whispers.txt
+			// Intentionally omit engine.dat (whispers.txt retired in v3)
 		})();
 	`;
 }
@@ -134,7 +128,6 @@ function seedVersionMismatchScript(id: string): string {
 			});
 			localStorage.setItem(prefix + 'meta.json', meta);
 			localStorage.setItem(prefix + 'red.txt', '{}');
-			localStorage.setItem(prefix + 'whispers.txt', '{}');
 
 			// Build engine.dat with schemaVersion=999 (mismatch)
 			const OBFUSCATION_KEY = '${OBFUSCATION_KEY}';
