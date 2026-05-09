@@ -1102,7 +1102,7 @@ main {
 
 .session-row .ops button {
 	background: transparent;
-	border: 1px solid var(--amber-dim);
+	border: 0;
 	color: var(--amber-dim);
 	font-family: inherit;
 	font-size: 11px;
@@ -1114,7 +1114,6 @@ main {
 
 .session-row .ops button:hover {
 	color: var(--amber);
-	border-color: var(--amber);
 }
 
 .tag-active {
@@ -1141,7 +1140,7 @@ main {
 
 #sessions-new {
 	background: transparent;
-	border: 1px solid var(--amber-dim);
+	border: 0;
 	color: var(--amber-dim);
 	font-family: inherit;
 	font-size: 13px;
@@ -1149,15 +1148,12 @@ main {
 	padding: 5px 16px;
 	cursor: pointer;
 	text-shadow: inherit;
-	transition:
-		color 120ms,
-		border-color 120ms;
+	transition: color 120ms;
 	margin-top: 4px;
 }
 
 #sessions-new:hover {
 	color: var(--amber);
-	border-color: var(--amber);
 	text-shadow:
 		0 0 1px var(--amber),
 		0 0 8px rgba(255, 180, 84, 0.5);
