@@ -844,7 +844,6 @@ main {
 	color: var(--blue);
 	text-shadow: 0 0 6px rgba(127, 182, 255, 0.4);
 	overflow: hidden;
-	user-select: none;
 	width: 100%;
 	text-align: left;
 }
