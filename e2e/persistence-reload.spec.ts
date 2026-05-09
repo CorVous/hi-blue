@@ -30,16 +30,23 @@ test("game state and transcripts persist across mid-round reload", async ({
 	// rather than the transcript (which fills via live deltas earlier).
 	// (Post-#107 the send button does NOT re-enable after submit because the
 	// prompt is cleared and an empty prompt has no *mention → sendEnabled=false.)
-	// Post-#172: the commit signal is engine.dat (written last in the strict
-	// write order: meta.json → daemons → whispers.txt → engine.dat).
+	// Post-#173: BEGIN also saves engine.dat at round=0 on commit, so we can no
+	// longer use engine.dat !== null as the "round complete" signal.  Instead we
+	// wait for meta.round to advance to ≥ 1, which proves a full round was committed.
 	await page.waitForFunction(
 		() => {
 			const sessionId = localStorage.getItem("hi-blue:active-session");
 			if (!sessionId) return false;
-			return (
-				localStorage.getItem(`hi-blue:sessions/${sessionId}/engine.dat`) !==
-				null
+			const metaRaw = localStorage.getItem(
+				`hi-blue:sessions/${sessionId}/meta.json`,
 			);
+			if (!metaRaw) return false;
+			try {
+				const meta = JSON.parse(metaRaw) as { round?: number };
+				return typeof meta.round === "number" && meta.round >= 1;
+			} catch {
+				return false;
+			}
 		},
 		{ timeout: 15_000 },
 	);
