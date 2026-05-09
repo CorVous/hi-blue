@@ -18,13 +18,20 @@ test.use({ ignoreHTTPSErrors: true });
  *   3. AI's own system prompt (server-rendered text) is not asserted here —
  *      we only smoke the user-visible flow.
  *
- * Skipped unless OPENROUTER_API_KEY is set in the environment.
+ * Skipped unless OPENROUTER_API_KEY is set in the environment to a real
+ * credential (the playwright webServer injects the placeholder "test-key" by
+ * default, which cannot reach OpenRouter and would only cause this test to
+ * time out).
  */
 test("live: per-AI budget decrements in cents from real OpenRouter usage.cost", async ({
 	page,
 }) => {
 	const apiKey = process.env.OPENROUTER_API_KEY;
-	test.skip(!apiKey, "OPENROUTER_API_KEY not set — skipping live smoke");
+	const hasRealKey = !!apiKey && apiKey !== "test-key";
+	test.skip(
+		!hasRealKey,
+		"OPENROUTER_API_KEY not set (or is the placeholder 'test-key') — skipping live smoke; set a real OpenRouter key to run this test",
+	);
 
 	test.setTimeout(180_000);
 
