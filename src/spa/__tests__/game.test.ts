@@ -1012,6 +1012,76 @@ describe("renderGame — localStorage persistence", () => {
 				?.textContent ?? "";
 		expect(redTextRestored).toContain("RED_RESPONSE_UNIQUE_TAG");
 	});
+
+	it("transcripts swap to the new session when the active pointer moves mid-SPA (no page refresh)", async () => {
+		// Regression for the [ load ] click path: PR #203 swapped the in-memory
+		// session when the active-pointer drifted, but the restore branch only
+		// cleared `transcript.textContent` when the new session had chat — so a
+		// load into a fresh-or-quieter session left the previous session's
+		// `> *ember …` lines in the panels.
+		const stub = makeLocalStorageStub();
+		await seedSessionInStub(stub);
+		vi.stubGlobal(
+			"fetch",
+			makeThreeAiFetchMock(RED_ACTION, GREEN_ACTION, BLUE_ACTION),
+		);
+		vi.stubGlobal("localStorage", stub);
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		await renderGame(getEl<HTMLElement>("main"));
+
+		// Run a round so Session A's transcripts hold chat content.
+		const form = getEl<HTMLFormElement>("#composer");
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		promptInput.value = "*Sage hello";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		// Sanity: Session A chat is in the DOM.
+		expect(
+			document.querySelector<HTMLElement>('[data-transcript="red"]')
+				?.textContent ?? "",
+		).toContain("RED_RESPONSE_UNIQUE_TAG");
+
+		// Seed a brand-new Session B alongside Session A and point the active
+		// pointer at it. This mirrors the [ load ] click in #/sessions:
+		// `setActiveSessionId(B); location.hash = "#/game"`.
+		const { buildSessionFromAssets } = await import("../game/bootstrap.js");
+		const { setActiveSessionId, saveActiveSession } = await import(
+			"../persistence/session-storage.js"
+		);
+		setActiveSessionId("0xB000");
+		const sessionB = buildSessionFromAssets({
+			personas: STATIC_PERSONAS,
+			contentPacks: STATIC_CONTENT_PACKS,
+		});
+		saveActiveSession(sessionB.getState());
+
+		// Re-enter the route on the SAME module instance — the cached session
+		// id from Session A no longer matches the active pointer, so the route
+		// must drop its closure-held session and re-render against Session B.
+		await renderGame(getEl<HTMLElement>("main"));
+
+		// Session B has zero chat for any daemon, so all panel transcripts
+		// must be empty — Session A's chat lines must not linger.
+		expect(
+			document.querySelector<HTMLElement>('[data-transcript="red"]')
+				?.textContent ?? "",
+		).not.toContain("RED_RESPONSE_UNIQUE_TAG");
+		expect(
+			document.querySelector<HTMLElement>('[data-transcript="green"]')
+				?.textContent ?? "",
+		).not.toContain("GREEN_RESPONSE_UNIQUE_TAG");
+		expect(
+			document.querySelector<HTMLElement>('[data-transcript="blue"]')
+				?.textContent ?? "",
+		).not.toContain("BLUE_RESPONSE_UNIQUE_TAG");
+	});
 });
 
 describe("renderGame — chat_lockout event", () => {

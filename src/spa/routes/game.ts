@@ -731,12 +731,17 @@ export function renderGame(
 					if (!panel) return;
 					const transcript = panel.querySelector<HTMLElement>(".transcript");
 					if (!transcript) return;
+					// Always reset before re-populating: when the user clicks [load] on
+					// a different Session in the picker, the panels keep the previous
+					// session's transcript children. Clearing inside the entries-only
+					// branch left them stale whenever the new session had fewer (or
+					// zero) chat entries for this panel slot.
+					transcript.textContent = "";
 					const chatEntries = (
 						restoredPhase.conversationLogs[aiId] ?? []
 					).filter((e) => e.kind === "chat");
 					if (chatEntries.length > 0) {
 						// Synthesise from conversationLogs (stored in daemon .txt files).
-						transcript.textContent = "";
 						const persona = restoredPersonas[aiId];
 						const personaName = persona?.name ?? aiId;
 						for (const entry of chatEntries) {
