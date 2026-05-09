@@ -17,10 +17,10 @@ const BANNER_SEGMENTS: ReadonlyArray<readonly [string, string, string]> = [
 ] as const;
 
 /** Banner as HTML — the BLUE block letters are wrapped in `.banner-blue`.
- *  Each body-row `║` is wrapped in `.banner-side` so CSS can hide the
- *  beaded glyph and paint a continuous double-line via a per-cell
- *  `::before` that extends slightly past the line-box (overlapping the
- *  next row's overlay so the strip is seamless). */
+ *  Each body-row `║` is wrapped in `.banner-side` so CSS can stamp
+ *  vertically-offset clones of the glyph (sharp text-shadows) to fill
+ *  the 1-2 px inter-line gap that causes vertical beading. The shadow
+ *  is the glyph's own ink, so it auto-aligns with the corner glyphs. */
 export const BANNER: string = (() => {
 	const len = (s: string): number => [...s].length;
 	const lineLen = (seg: readonly [string, string, string]): number =>

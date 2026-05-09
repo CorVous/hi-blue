@@ -131,38 +131,21 @@ header {
 	text-shadow: none;
 }
 
-/* Each body-row `║` is wrapped in `.banner-side`. The span stays display:
-   inline (so its character cell renders identically to the bare `╔`/`╝`
-   corner glyphs in the top/bottom rows — no inline-block layout shift)
-   and hosts an absolute `::before` that paints the line. The line bleeds
-   slightly above and below each cell so adjacent rows' overlays overlap
-   into one continuous strip. */
+/* Each body-row `║` is wrapped in `.banner-side`. The glyph stays
+   visible at whatever stroke position the font draws it, and a stack
+   of zero-blur `text-shadow`s stamps clones of the glyph 1 and 2 pixels
+   above and below itself. The clones extend the glyph's own ink into
+   the inter-line gap that line-height: 1 leaves between adjacent rows,
+   so the column reads as a continuous double-line. Because the shadow
+   tracks the glyph (not a calc'd cell offset), it self-aligns with the
+   `╔`/`╗`/`╚`/`╝` corner glyphs above and below — no positioning math,
+   no subpixel guessing. */
 .banner-side {
-	color: transparent;
-	position: relative;
-}
-
-.banner-side::before {
-	content: "";
-	position: absolute;
-	/* JBM's `║`/`╔`/`╗` glyphs sit a small fractional pixel right of cell
-	   centre — found empirically: -1.5px lands ~1px left, -1.25px lands
-	   a bit right, so the corner-stroke offset is roughly 0.1px. */
-	left: calc(50% - 1.45px);
-	width: 3px;
-	/* Tiny vertical bleed: the per-row line-box is 1em tall, but the
-	   `║` glyph leaves a 1-2px gap. 0.1em on each side covers the gap
-	   and overlaps with neighbours' bleed without intruding into the
-	   `╔══╗` / `╚══╝` rows (whose corner glyphs own those cells). */
-	top: -0.1em;
-	bottom: -0.1em;
-	background: linear-gradient(
-		to right,
-		var(--amber) 0 1px,
-		transparent 1px 2px,
-		var(--amber) 2px 3px
-	);
-	pointer-events: none;
+	text-shadow:
+		0 1px 0 var(--amber),
+		0 -1px 0 var(--amber),
+		0 2px 0 var(--amber),
+		0 -2px 0 var(--amber);
 }
 
 .banner-blue {
