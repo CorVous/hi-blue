@@ -8,17 +8,14 @@
  *     bottom) and wrapped long messages onto multiple lines, hiding context.
  */
 import { expect, test } from "@playwright/test";
-import { getAiHandles, stubChatCompletions } from "./helpers";
+import { getAiHandles, goToGame, stubChatCompletions } from "./helpers";
 
 test.use({ viewport: { width: 375, height: 667 } });
 
 test("bento layout: panels have non-zero geometry inside their grid cells", async ({
 	page,
 }) => {
-	await stubChatCompletions(page, ["hi"]);
-	await page.goto("/");
-
-	const handles = await getAiHandles(page);
+	const handles = await goToGame(page, { sse: ["hi"] });
 
 	// No-address: first panel should be the main, others strip cards.
 	const noAddress = await page.evaluate(() => {
@@ -72,9 +69,7 @@ test("bento layout: panels have non-zero geometry inside their grid cells", asyn
 test("strip-card label: panel-name renders on the TOP edge, not the bottom", async ({
 	page,
 }) => {
-	await stubChatCompletions(page, ["hi"]);
-	await page.goto("/");
-	const handles = await getAiHandles(page);
+	const handles = await goToGame(page, { sse: ["hi"] });
 
 	// Address middle panel so panels[0] and panels[2] are strip cards.
 	await page.locator("#prompt").fill(`${handles.mention(1)} hello`);
@@ -121,10 +116,7 @@ test("strip-card label: panel-name renders on the TOP edge, not the bottom", asy
 test("strip-card preview: latest line visible + per-line ellipsis", async ({
 	page,
 }) => {
-	await stubChatCompletions(page, ["hi"]);
-	await page.goto("/");
-
-	const handles = await getAiHandles(page);
+	const handles = await goToGame(page, { sse: ["hi"] });
 
 	// Address middle panel so panels[0] and panels[2] become strip cards.
 	// Inject a transcript with many lines, including a wide one that would
@@ -244,11 +236,9 @@ test("strip-card preview: restored multi-line AI message stays in one msg-line",
 	// so a saved AI message containing internal newlines came back as
 	// multiple .msg-line divs after a reload — each appearing as its own
 	// ellipsis-truncated line in the strip-card preview.
-	await stubChatCompletions(page, [
-		"first line of saved msg\nsecond line\nthird",
-	]);
-	await page.goto("/");
-	const handles = await getAiHandles(page);
+	const handles = await goToGame(page, {
+		sse: ["first line of saved msg\nsecond line\nthird"],
+	});
 
 	// Send a message addressed to panel 0 so the AI responds there.
 	await page.locator("#prompt").fill(`${handles.mention(0)} hi`);
@@ -313,11 +303,9 @@ test("strip-card preview: streamed AI tokens with embedded \\n stay in one msg-l
 	// Stream a multi-line AI response. Even though the SSE body emits two
 	// hard \n characters mid-message, the entire AI message must collapse
 	// into a single .msg-line so the strip-card preview shows one line.
-	await stubChatCompletions(page, [
-		"first line of message\nsecond line\nthird",
-	]);
-	await page.goto("/");
-	const handles = await getAiHandles(page);
+	const handles = await goToGame(page, {
+		sse: ["first line of message\nsecond line\nthird"],
+	});
 
 	// Send a message addressed to panel 0 so it streams there.
 	await page.locator("#prompt").fill(`${handles.mention(0)} hi`);
@@ -356,9 +344,7 @@ test("strip-card preview: streamed AI tokens with embedded \\n stay in one msg-l
 test("mobile header: HI-BLUE title visible left, cog right; compact topinfo", async ({
 	page,
 }) => {
-	await stubChatCompletions(page, ["hi"]);
-	await page.goto("/");
-	await getAiHandles(page);
+	await goToGame(page, { sse: ["hi"] });
 
 	const probe = await page.evaluate(() => {
 		const title = document.querySelector<HTMLElement>(".mobile-title");

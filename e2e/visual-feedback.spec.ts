@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { getAiHandles, stubChatCompletions } from "./helpers";
+import { goToGame } from "./helpers";
 
 /**
  * E2E spec for #109: visual feedback for the active addressee.
@@ -18,11 +18,8 @@ import { getAiHandles, stubChatCompletions } from "./helpers";
 test("typing '*<ai1> hi' → second panel highlighted, overlay mention-highlight span", async ({
 	page,
 }) => {
-	await stubChatCompletions(page, ["hi"]);
-	await page.goto("/");
+	const { ids, names } = await goToGame(page, { sse: ["hi"] });
 	await expect(page.locator("#composer")).toBeVisible();
-
-	const { ids, names } = await getAiHandles(page);
 
 	await page.fill("#prompt", `*${names[1]} hi`);
 
@@ -48,11 +45,8 @@ test("typing '*<ai1> hi' → second panel highlighted, overlay mention-highlight
 test("after typing '*<ai1> hi', clicking third panel transfers highlight to third panel", async ({
 	page,
 }) => {
-	await stubChatCompletions(page, ["hi"]);
-	await page.goto("/");
+	const { ids, names } = await goToGame(page, { sse: ["hi"] });
 	await expect(page.locator("#composer")).toBeVisible();
-
-	const { ids, names } = await getAiHandles(page);
 
 	// Set up second AI mention first
 	await page.fill("#prompt", `*${names[1]} hi`);
@@ -84,11 +78,8 @@ test("after typing '*<ai1> hi', clicking third panel transfers highlight to thir
 });
 
 test("clearing input removes all visual feedback", async ({ page }) => {
-	await stubChatCompletions(page, ["hi"]);
-	await page.goto("/");
+	const { names } = await goToGame(page, { sse: ["hi"] });
 	await expect(page.locator("#composer")).toBeVisible();
-
-	const { names } = await getAiHandles(page);
 
 	// First set a mention to create visual state
 	await page.fill("#prompt", `*${names[1]} hi`);

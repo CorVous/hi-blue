@@ -36,7 +36,17 @@ test("live: per-AI budget decrements in cents from real OpenRouter usage.cost", 
 	const pageErrors: Error[] = [];
 	page.on("pageerror", (err) => pageErrors.push(err));
 
+	// Navigate to the root — the start screen will appear first since there
+	// is no active session. Real LLM calls (synthesis + content-pack) will run
+	// using the injected BYOK key.
 	await page.goto("/");
+
+	// Wait for the start screen's generation to complete (real synthesis call).
+	await expect(page.locator("#begin")).toBeEnabled({ timeout: 120_000 });
+
+	// Click BEGIN to proceed to the game.
+	await page.locator("#begin").click();
+	await page.waitForURL(/.*#\/game/, { timeout: 30_000 });
 
 	// Wait for the three AI panels to be ready (synthesis complete).
 	const { ids, names } = await getAiHandles(page);

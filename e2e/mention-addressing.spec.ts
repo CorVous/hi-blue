@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { getAiHandles, stubChatCompletions } from "./helpers";
+import { goToGame } from "./helpers";
 
 /**
  * E2E spec for #107: *mention-based addressing replaces the address dropdown.
@@ -13,20 +13,20 @@ import { getAiHandles, stubChatCompletions } from "./helpers";
  */
 
 test("address dropdown is gone (#address count === 0)", async ({ page }) => {
-	await page.goto("/");
+	await goToGame(page);
 	await expect(page.locator("#composer")).toBeVisible();
 	await expect(page.locator("#address")).toHaveCount(0);
 });
 
 test("on first load, prompt empty and Send disabled", async ({ page }) => {
-	await page.goto("/");
+	await goToGame(page);
 	await expect(page.locator("#composer")).toBeVisible();
 	await expect(page.locator("#prompt")).toHaveValue("");
 	await expect(page.locator("#send")).toBeDisabled();
 });
 
 test("typing 'hi' leaves Send disabled", async ({ page }) => {
-	await page.goto("/");
+	await goToGame(page);
 	await expect(page.locator("#composer")).toBeVisible();
 	await page.fill("#prompt", "hi");
 	await expect(page.locator("#send")).toBeDisabled();
@@ -38,11 +38,9 @@ test("typing '*<ai1> hi' enables Send and submits to that transcript only", asyn
 	const pageErrors: Error[] = [];
 	page.on("pageerror", (err) => pageErrors.push(err));
 
-	await stubChatCompletions(page, ["greetings"]);
-	await page.goto("/");
+	// goToGame stubs synthesis + content-pack + SSE with "greetings" reply
+	const { ids, names } = await goToGame(page, { sse: ["greetings"] });
 	await expect(page.locator("#composer")).toBeVisible();
-
-	const { ids, names } = await getAiHandles(page);
 
 	// Typing "*<name> hi" should enable Send.
 	await page.fill("#prompt", `*${names[1]} hi`);

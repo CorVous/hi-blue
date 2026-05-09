@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { getAiHandles, stubChatCompletions } from "./helpers";
+import { getAiHandles, goToGame, stubChatCompletions } from "./helpers";
 
 /**
  * AI completions returned by the stub, keyed by call index (0 = first, 1 = second, 2 = third
@@ -13,17 +13,12 @@ test("game state and transcripts persist across mid-round reload", async ({
 	const pageErrors: Error[] = [];
 	page.on("pageerror", (err) => pageErrors.push(err));
 
-	// Stub every call to /v1/chat/completions with a deterministic one-token response.
-	// The SPA fires one call per AI per round.
-	await stubChatCompletions(page, [STUB_COMPLETION]);
-
-	await page.goto("/");
+	// Navigate through the start screen into the game.
+	// goToGame stubs synthesis + content-pack + SSE and clicks BEGIN.
+	const { names, ids } = await goToGame(page, { sse: [STUB_COMPLETION] });
 
 	// Wait for the SPA game route to mount (the composer form is present)
 	await expect(page.locator("#composer")).toBeVisible();
-
-	// Read AI handles dynamically (set after synthesis completes).
-	const { ids, names } = await getAiHandles(page);
 
 	// Address first AI via *<name> mention and send a message
 	await page.fill("#prompt", `*${names[0]} hello`);

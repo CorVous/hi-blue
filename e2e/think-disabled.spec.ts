@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { getAiHandles, stubChatCompletions } from "./helpers";
+import { goToGame } from "./helpers";
 
 /**
  * Routine daemon turns disable reasoning by default — `BrowserLLMProvider`
@@ -27,18 +27,16 @@ test("default daemon turns add reasoning:{enabled:false} to chat-completions req
 
 	// Capture each request body as it arrives, then fulfil with a deterministic
 	// SSE response so the round actually completes.
-	await stubChatCompletions(page, (request) => {
-		try {
-			observedBodies.push(JSON.parse(request.postData() ?? "null"));
-		} catch {
-			observedBodies.push(null);
-		}
-		return ["greetings"];
+	const { names } = await goToGame(page, {
+		sse: (request) => {
+			try {
+				observedBodies.push(JSON.parse(request.postData() ?? "null"));
+			} catch {
+				observedBodies.push(null);
+			}
+			return ["greetings"];
+		},
 	});
-
-	await page.goto("/");
-
-	const { names } = await getAiHandles(page);
 
 	await page.fill("#prompt", `*${names[1]} hello`);
 	await expect(page.locator("#send")).toBeEnabled();
@@ -63,19 +61,18 @@ test("?think=1 opts back into thinking — requests do NOT include the reasoning
 
 	const observedBodies: Record<string, unknown>[] = [];
 
-	await stubChatCompletions(page, (request) => {
-		try {
-			const parsed = JSON.parse(request.postData() ?? "null");
-			if (parsed && typeof parsed === "object") observedBodies.push(parsed);
-		} catch {
-			// ignore
-		}
-		return ["greetings"];
+	const { names } = await goToGame(page, {
+		url: "/?think=1",
+		sse: (request) => {
+			try {
+				const parsed = JSON.parse(request.postData() ?? "null");
+				if (parsed && typeof parsed === "object") observedBodies.push(parsed);
+			} catch {
+				// ignore
+			}
+			return ["greetings"];
+		},
 	});
-
-	await page.goto("/?think=1");
-
-	const { names } = await getAiHandles(page);
 
 	await page.fill("#prompt", `*${names[1]} hello`);
 	await expect(page.locator("#send")).toBeEnabled();
