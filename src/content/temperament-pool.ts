@@ -3,7 +3,6 @@ export const TEMPERAMENT_POOL: string[] = [
 	"taciturn",
 	"meticulous",
 	"erratic",
-	"sycophantic",
 	"melancholic",
 	"glib",
 	"pedantic",
