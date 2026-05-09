@@ -173,23 +173,23 @@ describe("renderStart — BEGIN button state", () => {
 		document.body.innerHTML = "";
 	});
 
-	it("BEGIN is disabled at mount while generation is in flight", async () => {
+	it("BEGIN is enabled as soon as the login form reveals — generation runs in the background", async () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
 		const { renderStart } = await import("../routes/start.js");
 
-		// renderStart kicks off generation and returns a promise. Before the
-		// promise settles, BEGIN must be disabled. We check the synchronous
-		// post-mount state by starting the render but not awaiting it yet.
+		// renderStart kicks off generation and returns a promise. With skipDialup,
+		// the login form reveals synchronously; BEGIN should be available
+		// immediately so the player can click through to the progressive-loading
+		// game route while content packs are still resolving.
 		const renderPromise = renderStart(
 			getMain(),
 			new URLSearchParams("skipDialup=1"),
 		);
 
-		// Immediately after mount (generation promise is in flight), BEGIN is disabled
 		const beginBtn = document.querySelector<HTMLButtonElement>("#begin");
-		expect(beginBtn?.disabled).toBe(true);
+		expect(beginBtn?.disabled).toBe(false);
 
 		// Clean up — let generation finish
 		try {
@@ -199,7 +199,7 @@ describe("renderStart — BEGIN button state", () => {
 		}
 	});
 
-	it("BEGIN becomes enabled after generation resolves successfully", async () => {
+	it("BEGIN remains enabled after generation resolves successfully", async () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
@@ -306,24 +306,32 @@ describe("renderStart — CapHitError handling", () => {
 		document.body.innerHTML = "";
 	});
 
-	it("shows #cap-hit and hides #start-screen when generateNewGameAssets throws CapHitError", async () => {
+	it("shows #cap-hit and hides #start-screen when generation throws CapHitError", async () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
 
-		// Override the bootstrap module so generateNewGameAssets throws CapHitError
+		// Override the bootstrap module so the split generation rejects with
+		// CapHitError on both promises. Pending-bootstrap subscribes to each
+		// promise; surfacing CapHitError on either is enough to trigger the
+		// start route's #cap-hit fallback.
 		vi.doMock("../game/bootstrap.js", async (importOriginal) => {
 			const actual =
 				await importOriginal<typeof import("../game/bootstrap.js")>();
 			const { CapHitError } = await import("../llm-client.js");
+			const err = new CapHitError({
+				message: "rate limit",
+				reason: "per-ip-daily",
+				retryAfterSec: 86400,
+			});
 			return {
 				...actual,
+				generateNewGameAssetsSplit: () => ({
+					personasPromise: Promise.reject(err),
+					contentPacksPromise: Promise.reject(err),
+				}),
 				generateNewGameAssets: async () => {
-					throw new CapHitError({
-						message: "rate limit",
-						reason: "per-ip-daily",
-						retryAfterSec: 86400,
-					});
+					throw err;
 				},
 			};
 		});

@@ -112,6 +112,45 @@ export function formatTopInfoRight(i: TopInfoInputs): string {
 }
 
 export const TOPINFO_RIGHT_OK_TEXT = "● connection stable";
+export const TOPINFO_RIGHT_LOADING_TEXT = "● loading daemons";
+export const TOPINFO_RIGHT_GENERATING_TEXT = "● generating room";
+
+export const TOPINFO_MOBILE_OK_TEXT = "● stable";
+export const TOPINFO_MOBILE_LOADING_TEXT = "● loading";
+export const TOPINFO_MOBILE_GENERATING_TEXT = "● generating";
+
+/** Three-phase load state used by the start → game progressive loading flow. */
+export type LoadState = "loading-daemons" | "generating-room" | "stable";
+
+export interface LoadStateStatus {
+	desktop: string;
+	mobile: string;
+	cls: "err" | "warn" | "ok";
+}
+
+/** Map a `LoadState` to the right-cell text + the CSS class that colors it. */
+export function topInfoStatus(state: LoadState): LoadStateStatus {
+	switch (state) {
+		case "loading-daemons":
+			return {
+				desktop: TOPINFO_RIGHT_LOADING_TEXT,
+				mobile: TOPINFO_MOBILE_LOADING_TEXT,
+				cls: "err",
+			};
+		case "generating-room":
+			return {
+				desktop: TOPINFO_RIGHT_GENERATING_TEXT,
+				mobile: TOPINFO_MOBILE_GENERATING_TEXT,
+				cls: "warn",
+			};
+		case "stable":
+			return {
+				desktop: TOPINFO_RIGHT_OK_TEXT,
+				mobile: TOPINFO_MOBILE_OK_TEXT,
+				cls: "ok",
+			};
+	}
+}
 
 /** Idempotent: inject the ASCII banner into `#banner` if not already there. */
 export function paintBanner(doc: Document): void {
