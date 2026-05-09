@@ -13,4 +13,7 @@ export const SETTING_POOL: readonly string[] = [
 	"moonlit greenhouse ruin",
 	"stripped server vault",
 	"tide-flooded boardwalk",
+	"humid and dense bog",
+	"library overflowing with books",
+	"throne room of a pagoda",
 ] as const;
