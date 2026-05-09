@@ -134,6 +134,14 @@ header {
 		0 0 6px rgba(127, 182, 255, 0.5);
 }
 
+/* `.login-tag b` and `.login-sysinfo b` set color: var(--amber) at
+   specificity (0,1,1), which beats the single-class `.banner-blue` rule
+   above. Re-apply the blue color in those contexts. */
+.login-tag b.banner-blue,
+.login-sysinfo b.banner-blue {
+	color: var(--blue);
+}
+
 /* Top-info row */
 .topinfo {
 	display: flex;
