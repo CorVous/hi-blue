@@ -14,4 +14,5 @@ export const TEMPERAMENT_POOL: string[] = [
 	"laconic",
 	"verbose",
 	"capricious",
+	"sweet",
 ];
