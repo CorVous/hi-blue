@@ -115,22 +115,23 @@ export default {
 } satisfies ExportedHandler<Env>;
 
 /**
- * Rewrite Cache-Control on asset responses based on path:
- *   /assets/*  → public, max-age=31536000, immutable  (filenames are
- *                content-hashed by esbuild, so a new commit produces new URLs
- *                and old URLs remain valid for clients that already hold them)
- *   everything → no-cache, must-revalidate            (index.html and SPA
- *                fallback responses; they must always reflect the latest
- *                hashed bundle names)
+ * Rewrite responses for static-asset routes:
+ *   /assets/*  with non-HTML body → public, max-age=31536000, immutable
+ *                (filenames are content-hashed by esbuild, so a new commit
+ *                produces new URLs and old URLs remain valid for clients
+ *                that already hold them)
+ *   /assets/*  with HTML body     → 404 Not Found
+ *                (the asset binding's single-page-application not_found_handling
+ *                returns index.html with status 200 for unmatched paths;
+ *                serving HTML for an asset URL would cause <script>/<link>
+ *                loads to fail with a cryptic SyntaxError as the parser tries
+ *                to execute HTML — fail fast with a real 404 instead)
+ *   everything → no-cache, must-revalidate
+ *                (index.html and SPA fallback responses; they must always
+ *                reflect the latest hashed bundle names)
  *
- * Two guard cases:
- *   1. Non-2xx responses pass through untouched so error pages keep whatever
- *      caching the asset binding chose.
- *   2. /assets/* requests that miss and fall back to index.html (the asset
- *      binding's single-page-application not_found_handling serves text/html
- *      with status 200 for any unmatched path) must NOT get the immutable
- *      header — otherwise a typo'd asset URL would pin an HTML body into
- *      browser/CDN caches under that URL forever.
+ * Non-2xx responses pass through untouched so error pages from the asset
+ * binding keep whatever caching it chose.
  */
 function withAssetCacheHeaders(url: URL, response: Response): Response {
 	if (!response.ok) return response;
@@ -138,8 +139,14 @@ function withAssetCacheHeaders(url: URL, response: Response): Response {
 	const isHtml = (response.headers.get("Content-Type") ?? "").includes(
 		"text/html",
 	);
+	if (isAssetPath && isHtml) {
+		return new Response("Asset not found", {
+			status: 404,
+			headers: { "Cache-Control": "no-cache, must-revalidate" },
+		});
+	}
 	const headers = new Headers(response.headers);
-	if (isAssetPath && !isHtml) {
+	if (isAssetPath) {
 		headers.set("Cache-Control", "public, max-age=31536000, immutable");
 	} else {
 		headers.set("Cache-Control", "no-cache, must-revalidate");
