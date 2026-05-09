@@ -535,6 +535,13 @@ export function renderGame(
 	if (sessionsScreenEl) sessionsScreenEl.setAttribute("hidden", "");
 	if (panelsEl) panelsEl.removeAttribute("hidden");
 	if (composerEl) composerEl.removeAttribute("hidden");
+	// Restore the global chrome that the start route hides during the login takeover.
+	const headerEl = doc.querySelector<HTMLElement>("#stage > header");
+	const topinfoEl = doc.querySelector<HTMLElement>("#topinfo");
+	const bannerWrapEl = doc.querySelector<HTMLElement>("#banner");
+	if (headerEl) headerEl.removeAttribute("hidden");
+	if (topinfoEl) topinfoEl.removeAttribute("hidden");
+	if (bannerWrapEl) bannerWrapEl.removeAttribute("hidden");
 
 	// Set initial composer state (Send starts disabled until a valid *mention).
 	refreshComposerState();

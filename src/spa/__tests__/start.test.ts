@@ -37,8 +37,19 @@ vi.mock("../../content/content-pack-generator", () => ({
 const INDEX_BODY_HTML = `
 <main>
   <section id="start-screen" hidden>
-    <p class="start-placeholder">initialising daemon mesh&hellip;</p>
-    <button id="begin" type="button" disabled>[ BEGIN ]</button>
+    <pre id="dial" class="dial"></pre>
+    <div id="login-reveal" class="login-reveal" hidden>
+      <pre id="login-keyart" class="login-keyart"></pre>
+      <form id="login-form" autocomplete="off">
+        <div class="login-field">
+          <label for="password">password:</label>
+          <input id="password" type="text" autocomplete="off" data-real="" />
+          <button id="begin" class="login-connect" type="submit" disabled>[ CONNECT ]</button>
+        </div>
+        <output id="login-error" hidden></output>
+      </form>
+      <pre id="login-postlog" class="dial"></pre>
+    </div>
   </section>
   <div id="panels" class="row">
     <article class="ai-panel" data-ai="red">
@@ -133,7 +144,7 @@ describe("renderStart — screen visibility", () => {
 		const { renderStart } = await import("../routes/start.js");
 
 		try {
-			await renderStart(getMain(), new URLSearchParams());
+			await renderStart(getMain(), new URLSearchParams("skipDialup=1"));
 		} catch {
 			// generation may reject in test environment — ok
 		}
@@ -171,7 +182,10 @@ describe("renderStart — BEGIN button state", () => {
 		// renderStart kicks off generation and returns a promise. Before the
 		// promise settles, BEGIN must be disabled. We check the synchronous
 		// post-mount state by starting the render but not awaiting it yet.
-		const renderPromise = renderStart(getMain(), new URLSearchParams());
+		const renderPromise = renderStart(
+			getMain(),
+			new URLSearchParams("skipDialup=1"),
+		);
 
 		// Immediately after mount (generation promise is in flight), BEGIN is disabled
 		const beginBtn = document.querySelector<HTMLButtonElement>("#begin");
@@ -191,7 +205,7 @@ describe("renderStart — BEGIN button state", () => {
 		vi.resetModules();
 		const { renderStart } = await import("../routes/start.js");
 
-		await renderStart(getMain(), new URLSearchParams());
+		await renderStart(getMain(), new URLSearchParams("skipDialup=1"));
 
 		const beginBtn = document.querySelector<HTMLButtonElement>("#begin");
 		expect(beginBtn?.disabled).toBe(false);
@@ -218,10 +232,13 @@ describe("renderStart — BEGIN click saves session and navigates", () => {
 		vi.resetModules();
 		const { renderStart } = await import("../routes/start.js");
 
-		await renderStart(getMain(), new URLSearchParams());
+		await renderStart(getMain(), new URLSearchParams("skipDialup=1"));
 
 		const beginBtn = document.querySelector<HTMLButtonElement>("#begin");
 		expect(beginBtn?.disabled).toBe(false);
+
+		const pwEl = document.querySelector<HTMLInputElement>("#password");
+		if (pwEl) pwEl.dataset.real = "password";
 
 		// Click BEGIN — start.ts will call saveActiveSession then set location.hash
 		beginBtn?.click();
@@ -235,14 +252,43 @@ describe("renderStart — BEGIN click saves session and navigates", () => {
 		vi.resetModules();
 		const { renderStart } = await import("../routes/start.js");
 
-		await renderStart(getMain(), new URLSearchParams());
+		await renderStart(getMain(), new URLSearchParams("skipDialup=1"));
 
 		const beginBtn = document.querySelector<HTMLButtonElement>("#begin");
+		const pwEl = document.querySelector<HTMLInputElement>("#password");
+		if (pwEl) pwEl.dataset.real = "password";
 		beginBtn?.click();
 		beginBtn?.click();
 
 		// After first click, _beginClickPending=true and btn.disabled=true; second is no-op.
 		expect(beginBtn?.disabled).toBe(true);
+	});
+
+	it("CONNECT click with wrong password shows inline error and does not navigate", async () => {
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		vi.resetModules();
+		const { renderStart } = await import("../routes/start.js");
+
+		await renderStart(getMain(), new URLSearchParams("skipDialup=1"));
+
+		const beginBtn = document.querySelector<HTMLButtonElement>("#begin");
+		const pwEl = document.querySelector<HTMLInputElement>("#password");
+		const errorEl = document.querySelector<HTMLElement>("#login-error");
+
+		// Wrong password — directly setting dataset.real bypasses the masking listener,
+		// which is fine because the gate reads dataset.real.
+		if (pwEl) pwEl.dataset.real = "wrong";
+
+		const hashBefore = location.hash;
+		beginBtn?.click();
+
+		// Hash didn't change → did not navigate.
+		expect(location.hash).toBe(hashBefore);
+		// Error revealed and CONNECT remains enabled for retry.
+		expect(errorEl?.hasAttribute("hidden")).toBe(false);
+		expect(errorEl?.textContent).toContain("access denied");
+		expect(beginBtn?.disabled).toBe(false);
 	});
 });
 
@@ -286,7 +332,7 @@ describe("renderStart — CapHitError handling", () => {
 		const { renderStart } = await import("../routes/start.js");
 
 		try {
-			await renderStart(getMain(), new URLSearchParams());
+			await renderStart(getMain(), new URLSearchParams("skipDialup=1"));
 		} catch {
 			// renderStart re-throws generation errors — expected
 		}
@@ -319,7 +365,10 @@ describe("renderStart — persistence warning banners", () => {
 		const { renderStart } = await import("../routes/start.js");
 
 		try {
-			await renderStart(getMain(), new URLSearchParams("reason=broken"));
+			await renderStart(
+				getMain(),
+				new URLSearchParams("reason=broken&skipDialup=1"),
+			);
 		} catch {
 			// ok
 		}
@@ -341,7 +390,7 @@ describe("renderStart — persistence warning banners", () => {
 		try {
 			await renderStart(
 				getMain(),
-				new URLSearchParams("reason=version-mismatch"),
+				new URLSearchParams("reason=version-mismatch&skipDialup=1"),
 			);
 		} catch {
 			// ok
@@ -364,7 +413,7 @@ describe("renderStart — persistence warning banners", () => {
 		try {
 			await renderStart(
 				getMain(),
-				new URLSearchParams("reason=legacy-save-discarded"),
+				new URLSearchParams("reason=legacy-save-discarded&skipDialup=1"),
 			);
 		} catch {
 			// ok
@@ -385,7 +434,7 @@ describe("renderStart — persistence warning banners", () => {
 		const { renderStart } = await import("../routes/start.js");
 
 		try {
-			await renderStart(getMain(), new URLSearchParams());
+			await renderStart(getMain(), new URLSearchParams("skipDialup=1"));
 		} catch {
 			// ok
 		}
@@ -404,7 +453,7 @@ describe("renderStart — persistence warning banners", () => {
 		try {
 			await renderStart(
 				getMain(),
-				new URLSearchParams("reason=totally-unknown"),
+				new URLSearchParams("reason=totally-unknown&skipDialup=1"),
 			);
 		} catch {
 			// ok

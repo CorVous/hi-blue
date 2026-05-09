@@ -92,6 +92,13 @@ export function renderSessions(
 
 	// Route-entry visibility
 	showOnly(doc, "#sessions-screen");
+	// Restore the global chrome that the start route hides during the login takeover.
+	const headerEl = doc.querySelector<HTMLElement>("#stage > header");
+	const topinfoEl = doc.querySelector<HTMLElement>("#topinfo");
+	const bannerWrapEl = doc.querySelector<HTMLElement>("#banner");
+	if (headerEl) headerEl.removeAttribute("hidden");
+	if (topinfoEl) topinfoEl.removeAttribute("hidden");
+	if (bannerWrapEl) bannerWrapEl.removeAttribute("hidden");
 
 	// Persistent chrome (visible on every route): ASCII banner + topinfo.
 	// Direct-load on #/sessions otherwise leaves them empty.

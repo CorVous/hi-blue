@@ -46,12 +46,13 @@ test("live: per-AI budget decrements in cents from real OpenRouter usage.cost", 
 	// Navigate to the root — the start screen will appear first since there
 	// is no active session. Real LLM calls (synthesis + content-pack) will run
 	// using the injected BYOK key.
-	await page.goto("/");
+	await page.goto("/?skipDialup=1");
 
 	// Wait for the start screen's generation to complete (real synthesis call).
 	await expect(page.locator("#begin")).toBeEnabled({ timeout: 120_000 });
 
-	// Click BEGIN to proceed to the game.
+	// Enter the password and click CONNECT to proceed to the game.
+	await page.locator("#password").fill("password");
 	await page.locator("#begin").click();
 	await page.waitForURL(/.*#\/game/, { timeout: 30_000 });
 

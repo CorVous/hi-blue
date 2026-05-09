@@ -86,13 +86,14 @@ test("clicking [ BEGIN ] navigates to #/game and shows panels", async ({
 	// Stub both generation and subsequent gameplay LLM calls
 	await stubNewGameLLM(page, { sse: ["stub reply"] });
 
-	await page.goto("/");
+	await page.goto("/?skipDialup=1");
 
-	// Wait for [ BEGIN ] to be enabled
+	// Wait for [ CONNECT ] to be enabled
 	const beginBtn = page.locator("#begin");
 	await expect(beginBtn).toBeEnabled({ timeout: 30_000 });
 
-	// Click BEGIN
+	// Enter the password and click CONNECT
+	await page.locator("#password").fill("password");
 	await beginBtn.click();
 
 	// Should navigate to #/game
@@ -119,11 +120,12 @@ test("refreshing on #/game with an active session stays on #/game (no redirect t
 	// Stub all LLM calls
 	await stubNewGameLLM(page, { sse: ["stub reply"] });
 
-	await page.goto("/");
+	await page.goto("/?skipDialup=1");
 
-	// Complete the new-game flow: wait for BEGIN and click it
+	// Complete the new-game flow: wait for CONNECT, fill password, click
 	const beginBtn = page.locator("#begin");
 	await expect(beginBtn).toBeEnabled({ timeout: 30_000 });
+	await page.locator("#password").fill("password");
 	await beginBtn.click();
 	await page.waitForURL(/.*#\/game/, { timeout: 10_000 });
 

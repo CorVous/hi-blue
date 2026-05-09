@@ -277,12 +277,13 @@ test("DIAGNOSTIC: observe wire vs DOM timeline during streaming", async ({
 		{ chunkSets: CHUNKS_PER_AI, intervalMs: CHUNK_INTERVAL_MS },
 	);
 
-	await page.goto("/");
+	await page.goto("/?skipDialup=1");
 
-	// Wait for the start screen's generation to complete, then click BEGIN.
+	// Wait for the start screen's generation to complete, then click CONNECT.
 	// The addInitScript monkey-patch handles synthesis and content-pack JSON-mode
-	// calls, so generation should complete and enable the BEGIN button.
+	// calls, so generation should complete and enable the CONNECT button.
 	await expect(page.locator("#begin")).toBeEnabled({ timeout: 30_000 });
+	await page.locator("#password").fill("password");
 	await page.locator("#begin").click();
 	await page.waitForURL(/.*#\/game/, { timeout: 10_000 });
 

@@ -190,7 +190,9 @@ main {
 }
 
 @media (prefers-reduced-motion: reduce) {
-	#phase-banner {
+	#phase-banner,
+	.blinkonly,
+	.topinfo .blink {
 		animation: none;
 	}
 }
@@ -593,53 +595,291 @@ main {
 	margin-bottom: 2px;
 }
 
-/* Start screen */
+/* Start screen — CRT dial-up login */
+:root {
+	--amber-faint: #4a3618;
+}
+
 #start-screen:not([hidden]) {
 	display: flex;
 	flex-direction: column;
-	align-items: flex-start;
+	align-items: stretch;
 	gap: 10px;
 	padding: 8px 0;
+	width: 100%;
+	max-width: 720px;
+	margin: 0 auto;
+	overflow-y: auto;
+	scrollbar-width: thin;
+	scrollbar-color: rgba(255, 180, 84, 0.3) transparent;
 }
 
-.start-placeholder {
+#start-screen::-webkit-scrollbar {
+	width: 6px;
+}
+
+#start-screen::-webkit-scrollbar-thumb {
+	background: rgba(255, 180, 84, 0.3);
+}
+
+#start-screen .dial {
 	margin: 0;
+	white-space: pre-wrap;
+	font-size: clamp(11px, 1.6vmin, 13px);
+	line-height: 1.35;
 	color: var(--amber-dim);
-	font-size: 12px;
-	letter-spacing: 0.06em;
+	letter-spacing: 0.02em;
+	text-shadow: none;
 }
 
-#begin {
-	background: transparent;
-	border: 1px solid var(--amber-dim);
-	color: var(--amber-dim);
-	font-family: inherit;
-	font-size: 13px;
-	letter-spacing: 0.18em;
-	padding: 5px 16px;
-	cursor: pointer;
-	text-shadow: inherit;
-	transition:
-		color 120ms,
-		border-color 120ms;
+#start-screen .dial .ok {
+	color: #8df27f;
+	text-shadow: 0 0 6px rgba(141, 242, 127, 0.5);
 }
 
-#begin:hover:not(:disabled) {
+#start-screen .dial .hot {
 	color: var(--amber);
-	border-color: var(--amber);
 	text-shadow:
 		0 0 1px var(--amber),
-		0 0 8px rgba(255, 180, 84, 0.5);
+		0 0 6px rgba(255, 180, 84, 0.4);
 }
 
-#begin:disabled {
+.blinkonly {
+	animation: blink 1.05s steps(2, end) infinite;
+}
+
+#start-screen .dial-postlog {
+	margin-top: 4px;
+}
+
+.login-reveal {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.banner-login {
+	margin: 6px 0 0;
+	white-space: pre;
+	line-height: 1;
+	font-size: clamp(7px, 1.5vmin, 12px);
+	color: var(--amber);
+	overflow: hidden;
+	text-align: center;
+}
+
+.banner-login-mini {
+	display: none;
+}
+
+.login-tag {
+	text-align: center;
+	color: var(--amber-dim);
+	letter-spacing: 0.18em;
+	font-size: clamp(9px, 1.3vmin, 11px);
+	text-transform: uppercase;
+}
+
+.login-tag b {
+	color: var(--amber);
+	font-weight: 500;
+}
+
+.login-rule {
+	margin: 2px 0;
+	line-height: 1;
+	font-size: clamp(10px, 1.4vmin, 13px);
+	color: var(--amber-dim);
+	overflow: hidden;
+	white-space: nowrap;
+	user-select: none;
+}
+
+.login-sysinfo {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 4px 22px;
+	font-size: clamp(10px, 1.4vmin, 12px);
+	color: var(--amber-dim);
+	padding: 4px 4px;
+	letter-spacing: 0.04em;
+}
+
+.login-sysinfo .k {
+	color: var(--amber-faint);
+}
+
+.login-sysinfo b {
+	color: var(--amber);
+	font-weight: 500;
+}
+
+.login-sysinfo .row {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.login-frame {
+	color: var(--amber-dim);
+	font-size: clamp(10px, 1.4vmin, 12px);
+	display: flex;
+	flex-direction: column;
+}
+
+.login-frame-brow {
+	display: flex;
+	white-space: pre;
+	line-height: 1;
+	user-select: none;
+	overflow: hidden;
+	position: relative;
+	color: var(--amber);
+}
+
+.login-frame-brow .fill {
+	flex: 1 1 0;
+	width: 0;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	display: inline-block;
+}
+
+.login-frame-brow .corner-r {
+	position: absolute;
+	right: 0;
+	top: 0;
+	z-index: 1;
+	background: var(--bg);
+}
+
+.login-frame-body {
+	display: flex;
+	align-items: stretch;
+}
+
+.login-frame-body .side {
+	white-space: pre;
+	line-height: 1;
+	width: 1ch;
+	flex: 0 0 auto;
+	user-select: none;
+	color: var(--amber);
+	overflow: hidden;
+}
+
+.login-frame-body .inner {
+	flex: 1;
+	min-width: 0;
+	padding: 6px 10px;
+}
+
+.login-frame-body .who {
+	color: var(--amber);
+}
+
+.login-keyart {
+	margin: 8px 0 0;
+	white-space: pre;
+	line-height: 1.15;
+	font-size: clamp(8px, 1.2vmin, 11px);
+	color: var(--blue);
+	text-shadow: 0 0 6px rgba(127, 182, 255, 0.4);
+	overflow: hidden;
+	user-select: none;
+	width: 100%;
+	text-align: left;
+}
+
+.login-form {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-top: 6px;
+}
+
+.login-field {
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+	font-size: clamp(11px, 1.6vmin, 13px);
+}
+
+.login-field .lbl {
+	color: var(--amber-dim);
+	width: 11ch;
+	flex: 0 0 auto;
+	text-align: right;
+	letter-spacing: 0.04em;
+}
+
+.login-field input {
+	flex: 1;
+	min-width: 0;
+	background: transparent;
+	border: 0;
+	border-bottom: 1px solid rgba(255, 180, 84, 0.45);
+	outline: 0;
+	color: var(--amber);
+	font-family: inherit;
+	font-size: inherit;
+	text-shadow: inherit;
+	caret-color: var(--amber);
+	padding: 2px 0 3px;
+}
+
+.login-field input:focus {
+	border-bottom-color: var(--amber);
+}
+
+.login-connect {
+	background: transparent;
+	border: 0;
+	color: var(--amber);
+	font-family: inherit;
+	font-size: clamp(11px, 1.5vmin, 13px);
+	letter-spacing: 0.06em;
+	padding: 2px 0 3px;
+	cursor: pointer;
+	text-shadow: inherit;
+	white-space: nowrap;
+}
+
+.login-connect:hover:not(:disabled) {
+	color: #fff5e0;
+	text-shadow: 0 0 6px rgba(255, 245, 224, 0.5);
+}
+
+.login-connect:disabled {
 	opacity: 0.4;
 	cursor: not-allowed;
 }
 
-#begin:not(:disabled) {
-	color: var(--amber);
-	border-color: var(--amber);
+.login-error {
+	color: var(--err);
+	font-size: clamp(10px, 1.3vmin, 11px);
+	letter-spacing: 0.04em;
+	text-shadow: 0 0 6px rgba(255, 123, 107, 0.4);
+	padding-left: calc(11ch + 10px);
+}
+
+@media (max-width: 520px) {
+	.banner-login-full {
+		display: none;
+	}
+	.banner-login-mini {
+		display: block;
+	}
+	.login-field .lbl {
+		width: 9ch;
+	}
+	.login-sysinfo {
+		grid-template-columns: 1fr;
+	}
+	.login-error {
+		padding-left: 0;
+	}
 }
 
 /* Cap-hit (rate limit) */
