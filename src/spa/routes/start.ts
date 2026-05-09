@@ -66,13 +66,15 @@ export function renderStart(
 ): Promise<void> {
 	const doc = root.ownerDocument;
 
-	// Hide panels and composer; show start screen
+	// Hide panels, composer, and sessions screen; show start screen
 	const startScreenEl = doc.querySelector<HTMLElement>("#start-screen");
 	const panelsEl = doc.querySelector<HTMLElement>("#panels");
 	const composerEl = doc.querySelector<HTMLElement>("#composer");
+	const sessionsScreenEl = doc.querySelector<HTMLElement>("#sessions-screen");
 
 	if (panelsEl) panelsEl.hidden = true;
 	if (composerEl) composerEl.hidden = true;
+	if (sessionsScreenEl) sessionsScreenEl.hidden = true;
 	if (startScreenEl) startScreenEl.hidden = false;
 
 	// Show persistence warning if reason param is present

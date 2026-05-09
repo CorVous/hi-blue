@@ -53,24 +53,24 @@ describe("dispatchActiveSession — five-state truth table", () => {
 		expect(verdict.needsMint).toBe(false);
 	});
 
-	it("Row 4 — broken load result → #/start, broken, needsMint false", () => {
+	it("Row 4 — broken load result → #/sessions, broken, needsMint false", () => {
 		const snapshot: DispatcherSnapshot = {
 			activeSessionId: "0xABCD",
 			loadResult: { kind: "broken", sessionId: "0xABCD" },
 		};
 		const verdict = dispatchActiveSession(snapshot);
-		expect(verdict.route).toBe("#/start");
+		expect(verdict.route).toBe("#/sessions");
 		expect(verdict.reason).toBe("broken");
 		expect(verdict.needsMint).toBe(false);
 	});
 
-	it("Row 5 — version-mismatch load result → #/start, version-mismatch, needsMint false", () => {
+	it("Row 5 — version-mismatch load result → #/sessions, version-mismatch, needsMint false", () => {
 		const snapshot: DispatcherSnapshot = {
 			activeSessionId: "0xABCD",
 			loadResult: { kind: "version-mismatch", sessionId: "0xABCD" },
 		};
 		const verdict = dispatchActiveSession(snapshot);
-		expect(verdict.route).toBe("#/start");
+		expect(verdict.route).toBe("#/sessions");
 		expect(verdict.reason).toBe("version-mismatch");
 		expect(verdict.needsMint).toBe(false);
 	});

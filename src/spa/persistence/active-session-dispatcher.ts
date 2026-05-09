@@ -6,12 +6,12 @@
  *
  * Five-state truth table:
  *   1. activeSessionId === null → #/start, reason "no-active-pointer", needsMint true
- *   2. loadResult.kind === "ok"             → #/game,  reason "populated",        needsMint false
- *   3. loadResult.kind === "none"           → #/start, reason "empty",            needsMint false
- *   4. loadResult.kind === "broken"         → #/start, reason "broken",           needsMint false
- *   5. loadResult.kind === "version-mismatch" → #/start, reason "version-mismatch", needsMint false
+ *   2. loadResult.kind === "ok"             → #/game,     reason "populated",        needsMint false
+ *   3. loadResult.kind === "none"           → #/start,    reason "empty",            needsMint false
+ *   4. loadResult.kind === "broken"         → #/sessions, reason "broken",           needsMint false
+ *   5. loadResult.kind === "version-mismatch" → #/sessions, reason "version-mismatch", needsMint false
  *
- * Issue #173 (parent #155).
+ * Issue #174 (parent #155).
  */
 
 import type { LoadResult } from "./session-storage.js";
@@ -24,7 +24,7 @@ export type DispatcherReason =
 	| "no-active-pointer";
 
 export interface DispatcherVerdict {
-	route: "#/start" | "#/game";
+	route: "#/start" | "#/game" | "#/sessions";
 	reason: DispatcherReason;
 	needsMint: boolean;
 }
@@ -59,9 +59,14 @@ export function dispatchActiveSession(
 			return { route: "#/start", reason: "empty", needsMint: false };
 
 		case "broken":
-			return { route: "#/start", reason: "broken", needsMint: false };
+			return { route: "#/sessions", reason: "broken", needsMint: false };
 
 		case "version-mismatch":
-			return { route: "#/start", reason: "version-mismatch", needsMint: false };
+			// TODO(#146): version-mismatch handling
+			return {
+				route: "#/sessions",
+				reason: "version-mismatch",
+				needsMint: false,
+			};
 	}
 }

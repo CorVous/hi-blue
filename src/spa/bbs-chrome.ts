@@ -88,6 +88,27 @@ export function formatTopInfoLeft(i: TopInfoInputs): string {
 	return `SESSION ${i.sessionId} · PHASE ${phase} · TURN ${turn}`;
 }
 
+/**
+ * Render the left topinfo cell as DOM children:
+ *   <a class="session-link" href="#/sessions">SESSION 0xXXXX</a> · PHASE NN/NN · TURN N
+ *
+ * Clears `el` before populating.
+ */
+export function renderTopInfoLeft(el: HTMLElement, i: TopInfoInputs): void {
+	// Clear existing children
+	while (el.firstChild) el.removeChild(el.firstChild);
+	const doc = el.ownerDocument;
+	const phase = `${String(i.phaseNumber).padStart(2, "0")}/${String(i.totalPhases).padStart(2, "0")}`;
+	const turn = String(i.turn).padStart(1, "0");
+
+	const link = doc.createElement("a");
+	link.className = "session-link";
+	link.href = "#/sessions";
+	link.textContent = `SESSION ${i.sessionId}`;
+	el.appendChild(link);
+	el.appendChild(doc.createTextNode(` · PHASE ${phase} · TURN ${turn}`));
+}
+
 /** Compact form rendered into `#topinfo-mobile` for the <=720px bento
  * layout — drops the labels and the daemons-online/connection trailer. */
 export function formatTopInfoMobile(i: TopInfoInputs): string {
