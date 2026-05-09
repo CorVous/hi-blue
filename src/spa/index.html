@@ -25,8 +25,55 @@
 			</div>
 			<main>
 				<section id="start-screen" hidden>
-					<p class="start-placeholder">initialising daemon mesh&hellip;</p>
-					<button id="begin" type="button" disabled>[ BEGIN ]</button>
+					<pre id="dial" class="dial" aria-hidden="true"></pre>
+					<div id="login-reveal" class="login-reveal" hidden>
+						<pre class="banner-login banner-login-full" aria-hidden="true">   ██╗  ██╗██╗      <span class="banner-blue">██████╗ ██╗     ██╗   ██╗███████╗</span>
+   ██║  ██║██║      <span class="banner-blue">██╔══██╗██║     ██║   ██║██╔════╝</span>
+   ███████║██║█████╗<span class="banner-blue">██████╔╝██║     ██║   ██║█████╗  </span>
+   ██╔══██║██║╚════╝<span class="banner-blue">██╔══██╗██║     ██║   ██║██╔══╝  </span>
+   ██║  ██║██║      <span class="banner-blue">██████╔╝███████╗╚██████╔╝███████╗</span>
+   ╚═╝  ╚═╝╚═╝      <span class="banner-blue">╚═════╝ ╚══════╝ ╚═════╝ ╚══════╝</span></pre>
+						<pre class="banner-login banner-login-mini" aria-hidden="true"> ██╗  ██╗██╗ ▄▄ <span class="banner-blue">██████╗ ██╗    ██╗   ██╗███████╗</span>
+ ██║  ██║██║    <span class="banner-blue">██╔══██╗██║    ██║   ██║██╔════╝</span>
+ ███████║██║▄▄▄▄<span class="banner-blue">██████╔╝██║    ██║   ██║█████╗  </span>
+ ██╔══██║██║    <span class="banner-blue">██╔══██╗██║    ██║   ██║██╔══╝  </span>
+ ██║  ██║██║    <span class="banner-blue">██████╔╝███████╗╚█████╔╝███████╗</span>
+ ╚═╝  ╚═╝╚═╝    <span class="banner-blue">╚═════╝ ╚══════╝ ╚════╝ ╚══════╝</span></pre>
+						<div class="login-tag">// <b class="banner-blue">blue</b>'s personal bbs · est <b>1996</b> · running on a <b>486</b> in a closet</div>
+						<div class="login-rule" aria-hidden="true">─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</div>
+						<div class="login-sysinfo">
+							<div class="row"><span class="k">sysop</span> <b class="banner-blue">blue</b></div>
+							<div class="row"><span class="k">node</span> <span>01/01</span></div>
+							<div class="row"><span class="k">visits</span> <span>1,247</span></div>
+							<div class="row"><span class="k">in chat</span> <span>3 daemons</span></div>
+							<div class="row"><span class="k">location</span> <span>cold storage</span></div>
+							<div class="row"><span class="k">uptime</span> <span>11d 04h 22m</span></div>
+						</div>
+						<div class="login-rule" aria-hidden="true">─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</div>
+						<div class="login-frame">
+							<div class="login-frame-brow"><span>┌──[ </span><span>last visit</span><span> ]──</span><span class="fill">─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</span><span class="corner-r">┐</span></div>
+							<div class="login-frame-body">
+								<span class="side">│
+│
+│</span>
+								<div class="inner"><span class="who">02:14</span> prior · <span class="banner-blue">&gt; @blue</span> <span class="dim">well, what do we have here?</span></div>
+								<span class="side">│
+│
+│</span>
+							</div>
+							<div class="login-frame-brow"><span>└</span><span class="fill">──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</span><span class="corner-r">┘</span></div>
+						</div>
+						<pre id="login-keyart" class="login-keyart" aria-hidden="true"></pre>
+						<form id="login-form" class="login-form" autocomplete="off">
+							<div class="login-field">
+								<label class="lbl" for="password">password:</label>
+								<input id="password" type="text" maxlength="32" autocomplete="off" spellcheck="false" data-real="" />
+								<button id="begin" class="login-connect" type="submit" disabled>[ CONNECT ]</button>
+							</div>
+							<output id="login-error" class="login-error" role="status" aria-live="polite" hidden></output>
+						</form>
+						<pre id="login-postlog" class="dial dial-postlog" aria-hidden="true"></pre>
+					</div>
 				</section>
 				<section id="sessions-screen" hidden>
 					<aside id="sessions-banner" hidden role="status" aria-live="polite"></aside>

@@ -368,11 +368,13 @@ export type GoToGameOptions = {
  *
  * Steps:
  *  a. Stubs all new-game LLM calls (synthesis, content-pack, SSE) via `stubNewGameLLM`.
- *  b. `await page.goto(opts.url ?? "/")`
- *  c. Waits for `#begin` to be enabled (generation complete).
- *  d. Clicks `#begin`.
- *  e. Waits for `#/game` URL and `#composer` visibility.
- *  f. Returns AiHandles from `getAiHandles(page)`.
+ *  b. `await page.goto(opts.url ?? "/?skipDialup=1")` — the default skips the
+ *     dial-up animation so the login form appears immediately.
+ *  c. Waits for `#begin` (CONNECT) to be enabled (generation complete).
+ *  d. Fills `#password` with the accepted password.
+ *  e. Clicks `#begin`.
+ *  f. Waits for `#/game` URL and `#composer` visibility.
+ *  g. Returns AiHandles from `getAiHandles(page)`.
  *
  * Specs that test the start-screen path itself should NOT use this helper —
  * they should navigate to `"/"` directly and exercise start-screen behaviour.
@@ -383,10 +385,18 @@ export async function goToGame(
 ): Promise<AiHandles> {
 	const sse = opts?.sse ?? ["stub reply"];
 	await stubNewGameLLM(page, { sse, synthesis: opts?.synthesis });
-	await page.goto(opts?.url ?? "/");
+	await page.goto(withSkipDialup(opts?.url ?? "/"));
 	await expect(page.locator("#begin")).toBeEnabled({ timeout: 30_000 });
+	await page.locator("#password").fill("password");
 	await page.locator("#begin").click();
 	await page.waitForURL(/.*#\/game/, { timeout: 10_000 });
 	await expect(page.locator("#composer")).toBeVisible();
 	return getAiHandles(page);
+}
+
+/** Append `skipDialup=1` to the URL's query string if it's not already present. */
+function withSkipDialup(url: string): string {
+	if (/[?&]skipDialup=/.test(url)) return url;
+	const sep = url.includes("?") ? "&" : "?";
+	return `${url}${sep}skipDialup=1`;
 }
