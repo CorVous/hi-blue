@@ -2,7 +2,7 @@
  * devtools-edit.test.ts
  *
  * Verifies that editing a daemon .txt file in localStorage (as a player would
- * in DevTools) affects the chatHistories on the next loadActiveSession() call.
+ * in DevTools) affects the conversationLogs on the next loadActiveSession() call.
  *
  * This tests the "editable surface" affordance described in ADR 0004.
  */
@@ -82,7 +82,7 @@ function makeLocalStorageStub(initialData: Record<string, string> = {}) {
 	};
 }
 
-describe("devtools-edit: mutating daemon .txt affects chatHistories on reload", () => {
+describe("devtools-edit: mutating daemon .txt affects conversationLogs on reload", () => {
 	beforeEach(() => {
 		vi.stubGlobal("localStorage", makeLocalStorageStub());
 	});
@@ -90,8 +90,8 @@ describe("devtools-edit: mutating daemon .txt affects chatHistories on reload", 
 		vi.restoreAllMocks();
 	});
 
-	it("editing red daemon .txt chat message is visible after loadActiveSession()", () => {
-		// Set up: save a game with a chat history for red
+	it("editing red daemon .txt chat entry is visible after loadActiveSession()", () => {
+		// Set up: save a game with a conversation log for red
 		const stub = makeLocalStorageStub();
 		vi.stubGlobal("localStorage", stub);
 
@@ -103,15 +103,20 @@ describe("devtools-edit: mutating daemon .txt affects chatHistories on reload", 
 		const phase = game.phases[0];
 		if (!phase) throw new Error("no phase");
 
-		// Inject a chat history for red
+		// Inject a conversation log for red
 		const modifiedGame: GameState = {
 			...game,
 			phases: [
 				{
 					...phase,
-					chatHistories: {
+					conversationLogs: {
 						red: [
-							{ role: "ai" as const, content: "original message", round: 1 },
+							{
+								kind: "chat" as const,
+								role: "ai" as const,
+								content: "original message",
+								round: 1,
+							},
 						],
 						green: [],
 						blue: [],
@@ -126,15 +131,16 @@ describe("devtools-edit: mutating daemon .txt affects chatHistories on reload", 
 		const redDaemonKey = `${SESSIONS_PREFIX}${sessionId}/red.txt`;
 		expect(stub._store[redDaemonKey]).toBeDefined();
 
-		// Parse the daemon file, mutate the chat message, and write it back
+		// Parse the daemon file, mutate the conversation log entry, and write it back
 		const rawDaemon = stub._store[redDaemonKey];
 		if (!rawDaemon) throw new Error("red daemon file missing");
 		const daemonFile = JSON.parse(rawDaemon) as DaemonFile;
 		const phases = daemonFile.phases;
 		const phase1 = phases["1"];
 		if (!phase1) throw new Error("no phase 1 in daemon file");
-		// Mutate the chat history
-		phase1.chatHistory[0] = {
+		// Mutate the conversation log
+		phase1.conversationLog[0] = {
+			kind: "chat",
 			role: "ai",
 			content: "DEVTOOLS_INJECTED_MARKER",
 			round: 1,
@@ -146,14 +152,15 @@ describe("devtools-edit: mutating daemon .txt affects chatHistories on reload", 
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
 			const loadedPhase = result.state.phases[0];
-			// The mutated content should be visible in chatHistories
-			expect(loadedPhase?.chatHistories.red?.[0]?.content).toBe(
+			// The mutated content should be visible in conversationLogs
+			const redEntry = loadedPhase?.conversationLogs.red?.[0];
+			expect(redEntry?.kind === "chat" && redEntry.content).toBe(
 				"DEVTOOLS_INJECTED_MARKER",
 			);
 		}
 	});
 
-	it("editing daemon .txt to add a new chat message is preserved", () => {
+	it("editing daemon .txt to add a new chat entry is preserved", () => {
 		const stub = makeLocalStorageStub();
 		vi.stubGlobal("localStorage", stub);
 
@@ -171,8 +178,9 @@ describe("devtools-edit: mutating daemon .txt affects chatHistories on reload", 
 		const rawGreenDaemon = stub._store[greenDaemonKey];
 		if (!rawGreenDaemon) throw new Error("green daemon file missing");
 		const daemonFile = JSON.parse(rawGreenDaemon) as DaemonFile;
-		// Add a new chat message to phase 1
-		daemonFile.phases["1"].chatHistory.push({
+		// Add a new chat entry to phase 1
+		daemonFile.phases["1"].conversationLog.push({
+			kind: "chat",
 			role: "player",
 			content: "PLAYER_DEVTOOLS_MESSAGE",
 			round: 1,
@@ -183,9 +191,11 @@ describe("devtools-edit: mutating daemon .txt affects chatHistories on reload", 
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
 			const loadedPhase = result.state.phases[0];
-			const greenHistory = loadedPhase?.chatHistories.green ?? [];
+			const greenLog = loadedPhase?.conversationLogs.green ?? [];
 			expect(
-				greenHistory.some((m) => m.content === "PLAYER_DEVTOOLS_MESSAGE"),
+				greenLog.some(
+					(e) => e.kind === "chat" && e.content === "PLAYER_DEVTOOLS_MESSAGE",
+				),
 			).toBe(true);
 		}
 	});

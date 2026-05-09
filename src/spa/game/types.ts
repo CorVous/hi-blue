@@ -217,7 +217,6 @@ export interface PhaseState {
 	round: number;
 	world: WorldState;
 	budgets: Record<AiId, AiBudget>;
-	chatHistories: Record<AiId, ChatMessage[]>;
 	whispers: WhisperMessage[];
 	/** Append-only log of observable physical actions for the phase. Used for Witnessed event rendering. */
 	physicalLog: PhysicalActionRecord[];

@@ -23,8 +23,8 @@ import type {
 	AiBudget,
 	AiId,
 	AiPersona,
-	ChatMessage,
 	ContentPack,
+	ConversationEntry,
 	GameState,
 	PersonaSpatialState,
 	PhaseConfig,
@@ -41,7 +41,7 @@ import {
 // ── Schema version ─────────────────────────────────────────────────────────────
 
 /** Version embedded in engine.dat. Increment when sealed shape changes. */
-export const SESSION_SCHEMA_VERSION = 1 as const;
+export const SESSION_SCHEMA_VERSION = 2 as const;
 
 // ── Phase config lookup ────────────────────────────────────────────────────────
 
@@ -55,7 +55,7 @@ const PHASE_CONFIGS: Record<1 | 2 | 3, PhaseConfig> = {
 
 export interface DaemonPhaseSlice {
 	phaseGoal: string;
-	chatHistory: ChatMessage[];
+	conversationLog: ConversationEntry[];
 }
 
 /**
@@ -132,7 +132,10 @@ export type DeserializeResult =
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const EMPTY_PHASE_SLICE: DaemonPhaseSlice = { phaseGoal: "", chatHistory: [] };
+const EMPTY_PHASE_SLICE: DaemonPhaseSlice = {
+	phaseGoal: "",
+	conversationLog: [],
+};
 const EMPTY_WHISPER_LIST: WhisperMessage[] = [];
 
 function phaseSliceFor(
@@ -143,7 +146,7 @@ function phaseSliceFor(
 	if (!phase) return EMPTY_PHASE_SLICE;
 	return {
 		phaseGoal: phase.aiGoals[aiId] ?? "",
-		chatHistory: phase.chatHistories[aiId] ?? [],
+		conversationLog: phase.conversationLogs[aiId] ?? [],
 	};
 }
 
@@ -380,12 +383,12 @@ export function deserializeSession(
 			const config = PHASE_CONFIGS[phaseNumber];
 			const phaseKey = String(phaseNumber) as "1" | "2" | "3";
 
-			// Rebuild chatHistories from daemon files
-			const chatHistories: Record<AiId, ChatMessage[]> = {};
+			// Rebuild conversationLogs from daemon files
+			const conversationLogs: Record<AiId, ConversationEntry[]> = {};
 			const aiGoals: Record<AiId, string> = {};
 			for (const [aiId, daemonFile] of Object.entries(daemonFiles)) {
 				const slice = daemonFile.phases[phaseKey] ?? EMPTY_PHASE_SLICE;
-				chatHistories[aiId] = [...(slice.chatHistory ?? [])];
+				conversationLogs[aiId] = [...(slice.conversationLog ?? [])];
 				aiGoals[aiId] = slice.phaseGoal;
 			}
 
@@ -433,10 +436,9 @@ export function deserializeSession(
 				round: phaseNumber === sealed.currentPhase ? meta.round : 0,
 				world,
 				budgets,
-				chatHistories,
 				whispers,
 				physicalLog: [],
-				conversationLogs: {},
+				conversationLogs,
 				lockedOut,
 				chatLockouts,
 				personaSpatial,

@@ -4,8 +4,8 @@ import type {
 	AiId,
 	AiPersona,
 	CardinalDirection,
-	ChatMessage,
 	ContentPack,
+	ConversationEntry,
 	GameState,
 	GridPosition,
 	PersonaSpatialState,
@@ -79,9 +79,9 @@ export function startPhase(
 		};
 	}
 
-	const chatHistories: Record<AiId, ChatMessage[]> = {};
+	const conversationLogs: Record<AiId, ConversationEntry[]> = {};
 	for (const aiId of aiIds) {
-		chatHistories[aiId] = [];
+		conversationLogs[aiId] = [];
 	}
 
 	const aiGoals = resolveAiGoals(config, rng, aiIds);
@@ -123,10 +123,9 @@ export function startPhase(
 		round: 0,
 		world: { entities: worldEntities },
 		budgets,
-		chatHistories,
 		whispers: [],
 		physicalLog: [],
-		conversationLogs: {},
+		conversationLogs,
 		lockedOut: new Set(),
 		chatLockouts: new Map(),
 		personaSpatial,
@@ -230,18 +229,23 @@ export function deductBudget(
 export function appendChat(
 	game: GameState,
 	aiId: AiId,
-	message: Omit<ChatMessage, "round">,
+	message: { role: "player" | "ai"; content: string },
 ): GameState {
-	return updateActivePhase(game, (phase) => ({
-		...phase,
-		chatHistories: {
-			...phase.chatHistories,
-			[aiId]: [
-				...(phase.chatHistories[aiId] ?? []),
-				{ ...message, round: phase.round },
-			],
-		},
-	}));
+	return updateActivePhase(game, (phase) => {
+		const entry: ConversationEntry = {
+			kind: "chat",
+			round: phase.round,
+			role: message.role,
+			content: message.content,
+		};
+		return {
+			...phase,
+			conversationLogs: {
+				...phase.conversationLogs,
+				[aiId]: [...(phase.conversationLogs[aiId] ?? []), entry],
+			},
+		};
+	});
 }
 
 export function appendPhysicalAction(

@@ -4,7 +4,7 @@
  * Builds the unified per-AI per-phase Conversation log for the system prompt.
  *
  * Interleaves three streams of events, all tagged by round:
- *   1. Voice-chat messages (player and AI turns from chatHistories)
+ *   1. Voice-chat messages (player and AI turns from conversationLogs)
  *   2. Whispers received by the AI
  *   3. Witnessed events derived from physicalLog + cone-visibility
  *
@@ -20,7 +20,7 @@ import { projectCone } from "./cone-projector.js";
 import type {
 	AiId,
 	AiPersona,
-	ChatMessage,
+	ConversationEntry,
 	GridPosition,
 	PhysicalActionRecord,
 	WhisperMessage,
@@ -143,8 +143,8 @@ interface LogEntry {
  * or a test fixture with only the fields it needs.
  */
 export interface ConversationLogInput {
-	/** Per-AI chat histories for this phase. */
-	chatHistories: Record<AiId, ChatMessage[]>;
+	/** Pre-filtered ConversationEntry[] for the single AI whose log is being built. */
+	conversationLog: ConversationEntry[];
 	/** All whispers for this phase. */
 	whispers: WhisperMessage[];
 	/** Append-only log of observable physical actions. */
@@ -168,18 +168,18 @@ export function buildConversationLog(
 ): string[] {
 	const entries: LogEntry[] = [];
 
-	// 1. Voice-chat: from this AI's chatHistory
-	const chatHistory = input.chatHistories[aiId] ?? [];
-	for (let i = 0; i < chatHistory.length; i++) {
-		const msg = chatHistory[i];
-		if (!msg) continue;
+	// 1. Voice-chat: from the per-AI conversationLog (kind === "chat" entries only)
+	const chatEntries = input.conversationLog.filter((e) => e.kind === "chat");
+	for (let i = 0; i < chatEntries.length; i++) {
+		const entry = chatEntries[i];
+		if (!entry || entry.kind !== "chat") continue;
 		let line: string;
-		if (msg.role === "player") {
-			line = `[Round ${msg.round}] A voice says: "${msg.content}"`;
+		if (entry.role === "player") {
+			line = `[Round ${entry.round}] A voice says: "${entry.content}"`;
 		} else {
-			line = `[Round ${msg.round}] You: "${msg.content}"`;
+			line = `[Round ${entry.round}] You: "${entry.content}"`;
 		}
-		entries.push({ round: msg.round, kind: "chat", seq: i, line });
+		entries.push({ round: entry.round, kind: "chat", seq: i, line });
 	}
 
 	// 2. Whispers received by this AI

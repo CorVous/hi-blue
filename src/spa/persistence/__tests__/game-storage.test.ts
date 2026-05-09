@@ -157,7 +157,7 @@ describe("serializeGameState / deserializeGameState", () => {
 		expect(restoredPhase?.nextPhaseConfig?.phaseNumber).toBe(2);
 	});
 
-	it("round-trips chat histories, whispers, world entities, budgets", () => {
+	it("round-trips conversation logs, whispers, world entities, budgets", () => {
 		const game = makeFreshGame();
 		const phase = game.phases[0];
 		if (!phase) throw new Error("no phase");
@@ -170,9 +170,23 @@ describe("serializeGameState / deserializeGameState", () => {
 		};
 		const modifiedPhase = {
 			...phase,
-			chatHistories: {
-				red: [{ role: "player" as const, content: "hello red", round: 0 }],
-				green: [{ role: "ai" as const, content: "green reply", round: 0 }],
+			conversationLogs: {
+				red: [
+					{
+						kind: "chat" as const,
+						role: "player" as const,
+						content: "hello red",
+						round: 0,
+					},
+				],
+				green: [
+					{
+						kind: "chat" as const,
+						role: "ai" as const,
+						content: "green reply",
+						round: 0,
+					},
+				],
 				blue: [],
 			},
 			whispers: [
@@ -193,11 +207,11 @@ describe("serializeGameState / deserializeGameState", () => {
 		const restored = deserializeGameState(persisted);
 		const rp = restored.phases[0];
 
-		expect(rp?.chatHistories.red).toEqual([
-			{ role: "player", content: "hello red", round: 0 },
+		expect(rp?.conversationLogs.red).toEqual([
+			{ kind: "chat", role: "player", content: "hello red", round: 0 },
 		]);
-		expect(rp?.chatHistories.green).toEqual([
-			{ role: "ai", content: "green reply", round: 0 },
+		expect(rp?.conversationLogs.green).toEqual([
+			{ kind: "chat", role: "ai", content: "green reply", round: 0 },
 		]);
 		expect(rp?.whispers[0]).toEqual({
 			from: "red",

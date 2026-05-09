@@ -580,8 +580,10 @@ describe("dispatchAiTurn", () => {
 			chat: { target: "player", content: "Hello, I am Ember" },
 		};
 		const result = dispatchAiTurn(game, action);
-		expect(getActivePhase(result.game).chatHistories.red).toHaveLength(1);
-		expect(getActivePhase(result.game).chatHistories.red?.[0]?.content).toBe(
+		const redLog = getActivePhase(result.game).conversationLogs.red ?? [];
+		const chatEntries = redLog.filter((e) => e.kind === "chat");
+		expect(chatEntries).toHaveLength(1);
+		expect(chatEntries[0]?.kind === "chat" && chatEntries[0].content).toBe(
 			"Hello, I am Ember",
 		);
 	});

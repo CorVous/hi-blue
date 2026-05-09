@@ -8,7 +8,7 @@ import type {
 	AiId,
 	AiPersona,
 	CardinalDirection,
-	ChatMessage,
+	ConversationEntry,
 	GameState,
 	GridPosition,
 	PersonaSpatialState,
@@ -28,7 +28,8 @@ export interface AiContext {
 	personaGoal: string;
 	goal: string;
 	setting: string;
-	chatHistory: ChatMessage[];
+	/** Per-AI conversation log (ConversationEntry[]) for this phase. */
+	conversationLog: ConversationEntry[];
 	whispersReceived: WhisperMessage[];
 	worldSnapshot: WorldState;
 	budget: AiBudget;
@@ -49,7 +50,7 @@ export function buildAiContext(game: GameState, aiId: AiId): AiContext {
 	const phase = getActivePhase(game);
 	const persona = game.personas[aiId];
 
-	const chatHistory = phase.chatHistories[aiId] ?? [];
+	const conversationLog = phase.conversationLogs[aiId] ?? [];
 	const whispersReceived = phase.whispers.filter((w) => w.to === aiId);
 	const worldSnapshot = phase.world;
 	const budget = phase.budgets[aiId] ?? { remaining: 0, total: 0 };
@@ -72,7 +73,7 @@ export function buildAiContext(game: GameState, aiId: AiId): AiContext {
 		personaGoal: persona.personaGoal,
 		goal,
 		setting,
-		chatHistory,
+		conversationLog,
 		whispersReceived,
 		worldSnapshot,
 		budget,
@@ -327,7 +328,7 @@ function renderSystemPrompt(ctx: AiContext): string {
 	// Unified conversation log — interleaves voice-chat, whispers received, and
 	// cone-visible witnessed events in chronological round order.
 	const logInput: ConversationLogInput = {
-		chatHistories: { [ctx.aiId]: ctx.chatHistory },
+		conversationLog: ctx.conversationLog,
 		// ctx.whispersReceived is already filtered to w.to === aiId;
 		// buildConversationLog re-filters so it's safe to pass as-is.
 		whispers: ctx.whispersReceived,

@@ -246,9 +246,9 @@ test("strip-card preview: restored multi-line AI message stays in one msg-line",
 	const transcript0 = page.locator(`[data-transcript="${handles.ids[0]}"]`);
 	await expect(transcript0).toContainText("third");
 	// Wait for the round-end save to land in localStorage. engine.dat already
-	// exists from the initial start-save (round=0, empty chatHistories), so
+	// exists from the initial start-save (round=0, empty conversationLogs), so
 	// polling for its mere presence races the round-end save. Instead, poll
-	// the addressed AI's daemon file until phase-1 chatHistory has at least
+	// the addressed AI's daemon file until phase-1 conversationLog has at least
 	// one entry — that pins the AI response into the persisted shape.
 	await page.waitForFunction(
 		(addressedAiId) => {
@@ -260,9 +260,9 @@ test("strip-card preview: restored multi-line AI message stays in one msg-line",
 			if (!daemonRaw) return false;
 			try {
 				const daemon = JSON.parse(daemonRaw) as {
-					phases?: { "1"?: { chatHistory?: unknown[] } };
+					phases?: { "1"?: { conversationLog?: unknown[] } };
 				};
-				return (daemon.phases?.["1"]?.chatHistory?.length ?? 0) > 0;
+				return (daemon.phases?.["1"]?.conversationLog?.length ?? 0) > 0;
 			} catch {
 				return false;
 			}

@@ -53,9 +53,9 @@ function seedOkSessionScript(id: string, lastSavedAt: string): string {
 					voiceExamples: ['Hello.', 'Indeed.', 'Farewell.'],
 				},
 				phases: {
-					'1': { phaseGoal: '', chatHistory: [] },
-					'2': { phaseGoal: '', chatHistory: [] },
-					'3': { phaseGoal: '', chatHistory: [] },
+					'1': { phaseGoal: '', conversationLog: [] },
+					'2': { phaseGoal: '', conversationLog: [] },
+					'3': { phaseGoal: '', conversationLog: [] },
 				},
 			});
 			localStorage.setItem(prefix + 'red.txt', daemonFile);
@@ -70,7 +70,7 @@ function seedOkSessionScript(id: string, lastSavedAt: string): string {
 			const OBFUSCATION_KEY = '${OBFUSCATION_KEY}';
 			const keyBytes = Array.from(new TextEncoder().encode(OBFUSCATION_KEY));
 			const payload = JSON.stringify({
-				schemaVersion: 1,
+				schemaVersion: 2,
 				currentPhase: 1,
 				isComplete: false,
 				world: {
