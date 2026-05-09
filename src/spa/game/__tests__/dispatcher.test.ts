@@ -588,14 +588,23 @@ describe("dispatchAiTurn", () => {
 		);
 	});
 
-	it("appends whisper messages", () => {
+	it("appends whisper messages to both sender and recipient conversationLogs", () => {
 		const game = makeGame();
 		const action: AiTurnAction = {
 			aiId: "red",
 			whisper: { target: "blue", content: "Psst, ally with me" },
 		};
 		const result = dispatchAiTurn(game, action);
-		expect(getActivePhase(result.game).whispers).toHaveLength(1);
+		const phase = getActivePhase(result.game);
+		const redWhispers = (phase.conversationLogs.red ?? []).filter(
+			(e) => e.kind === "whisper",
+		);
+		const blueWhispers = (phase.conversationLogs.blue ?? []).filter(
+			(e) => e.kind === "whisper",
+		);
+		expect(redWhispers).toHaveLength(1);
+		expect(blueWhispers).toHaveLength(1);
+		expect("whispers" in phase).toBe(false);
 	});
 
 	it("put_down of objective_object on its matching space yields placementFlavor as description", () => {

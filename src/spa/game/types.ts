@@ -88,7 +88,8 @@ export interface ChatMessage {
 
 /**
  * A physical action that was observable by other AIs (via cone visibility).
- * Appended to PhaseState.physicalLog by the dispatcher after each successful tool call.
+ * Computed by the dispatcher at write time and consumed once to fan out witnessed-event
+ * entries into per-Daemon conversationLogs; no longer stored on PhaseState.
  * Does NOT include look (facing-change only, no observable physical event) or examine.
  */
 export interface PhysicalActionRecord {
@@ -217,10 +218,7 @@ export interface PhaseState {
 	round: number;
 	world: WorldState;
 	budgets: Record<AiId, AiBudget>;
-	whispers: WhisperMessage[];
-	/** Append-only log of observable physical actions for the phase. Used for Witnessed event rendering. */
-	physicalLog: PhysicalActionRecord[];
-	/** Per-Daemon conversation log (storage + prompt-rendered shape). Populated by #194; read by #195. */
+	/** Per-Daemon conversation log (storage + prompt-rendered shape). */
 	conversationLogs: Record<AiId, ConversationEntry[]>;
 	/** Budget-exhaustion lockout: prevents the AI from acting at all. */
 	lockedOut: Set<AiId>;

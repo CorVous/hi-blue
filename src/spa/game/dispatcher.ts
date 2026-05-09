@@ -8,8 +8,8 @@ import {
 } from "./direction.js";
 import {
 	appendChat,
-	appendPhysicalAction,
-	appendWhisper,
+	appendWhisperEntry,
+	appendWitnessedEvent,
 	deductBudget,
 	getActivePhase,
 	isAiLockedOut,
@@ -457,7 +457,40 @@ export function dispatchAiTurn(
 						...(placementFlavorRaw !== undefined ? { placementFlavorRaw } : {}),
 					};
 
-					state = appendPhysicalAction(state, physRecord);
+					// Write-time cone fan-out: append a witnessed-event entry to each
+					// qualifying witness's per-Daemon log. The actor gets nothing here —
+					// their tool-result string is their channel.
+					for (const [witnessId, witnessSp] of Object.entries(witnessSpatial)) {
+						const witnessCone = projectCone(
+							witnessSp.position,
+							witnessSp.facing,
+						);
+						const actorInCone = witnessCone.some((cell) =>
+							positionsEqual(cell.position, physRecord.actorCellAtAction),
+						);
+						if (!actorInCone) continue;
+
+						const witnessEntry = {
+							kind: "witnessed-event" as const,
+							round,
+							actor: aiId,
+							actionKind: physRecord.kind,
+							...(physRecord.item !== undefined
+								? { item: physRecord.item }
+								: {}),
+							...(physRecord.to !== undefined ? { to: physRecord.to } : {}),
+							...(physRecord.direction !== undefined
+								? { direction: physRecord.direction }
+								: {}),
+							...(physRecord.useOutcome !== undefined
+								? { useOutcome: physRecord.useOutcome }
+								: {}),
+							...(physRecord.placementFlavorRaw !== undefined
+								? { placementFlavorRaw: physRecord.placementFlavorRaw }
+								: {}),
+						};
+						state = appendWitnessedEvent(state, witnessId, witnessEntry);
+					}
 				}
 			}
 		} else {
@@ -484,12 +517,12 @@ export function dispatchAiTurn(
 	}
 
 	if (action.whisper) {
-		state = appendWhisper(state, {
-			from: aiId,
-			to: action.whisper.target,
-			content: action.whisper.content,
-			round,
-		});
+		state = appendWhisperEntry(
+			state,
+			aiId,
+			action.whisper.target,
+			action.whisper.content,
+		);
 		records.push({
 			round,
 			actor: aiId,

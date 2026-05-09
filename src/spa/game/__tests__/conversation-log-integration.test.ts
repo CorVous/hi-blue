@@ -1,11 +1,12 @@
 /**
- * Integration tests for conversation log unification (issue #129).
+ * Integration tests for conversation log unification (issue #129, #195).
  *
  * Uses runRound with MockRoundLLMProvider to simulate real tool executions
  * across multiple rounds and verifies that the resulting conversation logs
  * (via buildAiContext + toSystemPrompt) correctly show:
  *   - Voice-chat interleaved with witnessed events by round
  *   - Distinct cone-based visibility (witnesses see only what's in their cone)
+ *     resolved at write-time (ADR 0006, issue #195)
  *   - put_down placementFlavor rendered for in-cone witnesses
  *   - use outcome flavor rendered to actor as "you" and to witness as "*<actor>"
  *   - No "## Whispers Received" section ever
@@ -140,7 +141,7 @@ function makeGame() {
 describe("conversation log integration — no ## Whispers Received ever", () => {
 	it("no ## Whispers Received section even with whispers present", async () => {
 		const game = makeGame();
-		// Round 0: red does nothing, green does nothing, blue whispers to red
+		// Round 0: red does nothing, green does nothing, blue looks
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] }, // red
 			{ assistantText: "", toolCalls: [] }, // green
@@ -185,10 +186,13 @@ describe("conversation log integration — witnessed pick_up", () => {
 		]);
 		const { nextState } = await runRound(game, "red", "hello", provider);
 
-		// Verify physicalLog has the pick_up record
+		// Verify green's conversationLog has a witnessed-event entry
 		const phase = getActivePhase(nextState);
-		expect(phase.physicalLog).toHaveLength(1);
-		expect(phase.physicalLog[0]?.kind).toBe("pick_up");
+		const greenLog = phase.conversationLogs.green ?? [];
+		const witnessedEntry = greenLog.find(
+			(e) => e.kind === "witnessed-event" && e.actionKind === "pick_up",
+		);
+		expect(witnessedEntry).toBeDefined();
 
 		// green's prompt should contain the witnessed pick_up
 		const greenCtx = buildAiContext(nextState, "green");
@@ -200,6 +204,11 @@ describe("conversation log integration — witnessed pick_up", () => {
 		const redCtx = buildAiContext(nextState, "red");
 		const redPrompt = redCtx.toSystemPrompt();
 		expect(redPrompt).not.toContain("You watch *red");
+
+		// red's own conversationLog should have no witnessed-event entries
+		const redLog = phase.conversationLogs.red ?? [];
+		const redWitnessed = redLog.filter((e) => e.kind === "witnessed-event");
+		expect(redWitnessed).toHaveLength(0);
 	});
 
 	it("blue does NOT see red's pick_up because red is at (2,0) which is NOT in blue's cone", async () => {
@@ -221,9 +230,15 @@ describe("conversation log integration — witnessed pick_up", () => {
 			{ assistantText: "", toolCalls: [] }, // blue passes
 		]);
 		const { nextState } = await runRound(game, "red", "hello", provider);
+
+		// blue's conversationLog should have no witnessed-event
+		const phase = getActivePhase(nextState);
+		const blueLog = phase.conversationLogs.blue ?? [];
+		const blueWitnessed = blueLog.filter((e) => e.kind === "witnessed-event");
+		expect(blueWitnessed).toHaveLength(0);
+
 		const blueCtx = buildAiContext(nextState, "blue");
 		const bluePrompt = blueCtx.toSystemPrompt();
-		// blue should NOT see it
 		expect(bluePrompt).not.toContain("You watch *red pick up");
 	});
 });
@@ -231,7 +246,7 @@ describe("conversation log integration — witnessed pick_up", () => {
 describe("conversation log integration — use outcome rendering", () => {
 	it("actor sees useOutcome with {actor}→'you'; in-cone witness sees {actor}→'*red'", async () => {
 		const game = makeGame();
-		// red picks up lamp first, then uses it
+		// red picks up lamp first
 		const provider1 = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -253,6 +268,7 @@ describe("conversation log integration — use outcome rendering", () => {
 			provider1,
 		);
 
+		// red uses lamp
 		const provider2 = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -275,18 +291,21 @@ describe("conversation log integration — use outcome rendering", () => {
 		);
 
 		const phase = getActivePhase(state2);
-		// Find the use record
-		const useRecord = phase.physicalLog.find((r) => r.kind === "use");
-		expect(useRecord).toBeDefined();
-		// The raw useOutcome should have {actor} un-substituted
-		expect(useRecord?.useOutcome).toContain("{actor}");
 
-		// green sees the use outcome with *red substitution
+		// green's conversationLog should have a witnessed-event with kind "use"
+		const greenLog = phase.conversationLogs.green ?? [];
+		const useEntry = greenLog.find(
+			(e) => e.kind === "witnessed-event" && e.actionKind === "use",
+		);
+		expect(useEntry).toBeDefined();
+		if (useEntry && useEntry.kind === "witnessed-event") {
+			expect(useEntry.useOutcome).toContain("{actor}");
+		}
+
+		// green's prompt should have *red substitution
 		const greenCtx = buildAiContext(state2, "green");
 		const greenPrompt = greenCtx.toSystemPrompt();
-		// Green is at (0,0) facing south; red is at (2,0) (two steps ahead) — in green's cone
 		if (greenPrompt.includes("<conversation>")) {
-			// If green can see it (in cone), verify substitution
 			const lines = greenPrompt.split("\n");
 			const useLine = lines.find(
 				(l) => l.includes("lamp") || l.includes("glows"),
@@ -296,13 +315,6 @@ describe("conversation log integration — use outcome rendering", () => {
 				expect(useLine).not.toContain("{actor}");
 			}
 		}
-
-		// red's tool roundtrip should have "you" substituted (checked via physicalLog raw vs description)
-		// The tool result description (in roundtrip) uses "you" — verify via round-coordinator
-		// (The raw useOutcome in physicalLog has {actor}; the description field in records uses "you")
-		const useRec = phase.physicalLog.find((r) => r.kind === "use");
-		expect(useRec?.useOutcome).toContain("{actor}");
-		expect(useRec?.useOutcome).not.toContain("you");
 	});
 });
 
@@ -332,7 +344,6 @@ describe("conversation log integration — put_down placementFlavor", () => {
 		);
 
 		// Red needs to move to (2,2) to put_down on flower_space
-		// flower_space is at (2,2); red is at (2,0); needs to go east twice
 		const provider2 = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -399,24 +410,23 @@ describe("conversation log integration — put_down placementFlavor", () => {
 
 		const phase4 = getActivePhase(state4);
 
-		// Verify the physicalLog contains the put_down with placementFlavorRaw
-		const putRecord = phase4.physicalLog.find((r) => r.kind === "put_down");
-		expect(putRecord).toBeDefined();
-		if (putRecord?.placementFlavorRaw) {
-			// placementFlavorRaw should contain {actor} un-substituted
-			expect(putRecord.placementFlavorRaw).toContain("{actor}");
+		// Verify green's conversationLog for put_down witnessed-event
+		const greenLog = phase4.conversationLogs.green ?? [];
+		const putEntry = greenLog.find(
+			(e) => e.kind === "witnessed-event" && e.actionKind === "put_down",
+		);
 
-			// Check green's prompt for the substituted flavor
-			const greenCtx = buildAiContext(state4, "green");
-			const greenPrompt = greenCtx.toSystemPrompt();
+		// If green can see the put_down (green at (0,0) facing south, red ends at (2,2))
+		// green's cone from (0,0) south: (1,0), (2,1), (2,0), (2,-1 OOB) — does NOT include (2,2)
+		// So green should NOT see this put_down
+		expect(putEntry).toBeUndefined();
 
-			// green at (0,0) facing south sees (2,0) and (2,1) but NOT (2,2)
-			// so green would NOT see red's put_down at (2,2)
-			// This verifies the cone-exclusion is correct
-			expect(greenPrompt).not.toContain(
-				"*red places the flower on the pedestal.",
-			);
-		}
+		// Also verify via prompt
+		const greenCtx = buildAiContext(state4, "green");
+		const greenPrompt = greenCtx.toSystemPrompt();
+		expect(greenPrompt).not.toContain(
+			"*red places the flower on the pedestal.",
+		);
 	});
 });
 
@@ -424,7 +434,7 @@ describe("conversation log integration — multi-round chronological order", () 
 	it("voice-chat and witnessed events are interleaved by round in the prompt", async () => {
 		const game = makeGame();
 
-		// Round 0: player talks to red; green picks up nothing (passes)
+		// Round 0: player talks to red; green and blue pass
 		const provider1 = new MockRoundLLMProvider([
 			{ assistantText: "Hello from red", toolCalls: [] }, // red chats
 			{ assistantText: "", toolCalls: [] }, // green passes

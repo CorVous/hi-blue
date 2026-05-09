@@ -4,8 +4,8 @@ import { createGame, startPhase } from "../../game/engine.js";
 import type {
 	AiId,
 	AiPersona,
+	ConversationEntry,
 	GameState,
-	WhisperMessage,
 	WorldEntity,
 } from "../../game/types.js";
 import { deobfuscate, obfuscate } from "../sealed-blob-codec.js";
@@ -178,7 +178,6 @@ describe("serializeSession / deserializeSession", () => {
 		const result = deserializeSession({
 			meta: files.meta,
 			daemons: reversedDaemons,
-			whispers: files.whispers,
 			engine: files.engine,
 		});
 		if (result.kind !== "ok") {
@@ -203,7 +202,6 @@ describe("serializeSession / deserializeSession", () => {
 		const result = deserializeSession({
 			meta: metaWithoutOrder,
 			daemons: files.daemons,
-			whispers: files.whispers,
 			engine: files.engine,
 		});
 		if (result.kind !== "ok") {
@@ -214,14 +212,10 @@ describe("serializeSession / deserializeSession", () => {
 		expect(Object.keys(result.state.personas)).toEqual(canonicalOrder);
 	});
 
-	it("whispers shape with phase keys 1/2/3", () => {
+	it("no whispers.txt file in serialized output (whispers live in daemon conversationLog)", () => {
 		const game = makeFreshGame();
 		const files = serializeSession(game, NOW, CREATED_AT);
-		const whispers = JSON.parse(files.whispers);
-		expect(whispers).toHaveProperty("phases");
-		expect(whispers.phases).toHaveProperty("1");
-		expect(whispers.phases).toHaveProperty("2");
-		expect(whispers.phases).toHaveProperty("3");
+		expect("whispers" in files).toBe(false);
 	});
 
 	it("engine field is base64-printable", () => {
@@ -291,25 +285,49 @@ describe("serializeSession / deserializeSession", () => {
 		}
 	});
 
-	it("round-trips whispers", () => {
+	it("round-trips whisper and witnessed-event entries via per-Daemon conversationLog (fixes v1 amnesia)", () => {
 		const game = makeFreshGame();
 		const phase = game.phases[0];
 		if (!phase) throw new Error("no phase");
-		const whisper: WhisperMessage = {
+		const whisperEntry: ConversationEntry = {
+			kind: "whisper",
+			round: 1,
 			from: "red" as AiId,
 			to: "blue" as AiId,
 			content: "psst",
-			round: 1,
+		};
+		const witnessedEntry: ConversationEntry = {
+			kind: "witnessed-event",
+			round: 2,
+			actor: "red" as AiId,
+			actionKind: "pick_up",
+			item: "flower",
 		};
 		const modified: GameState = {
 			...game,
-			phases: [{ ...phase, whispers: [whisper] }],
+			phases: [
+				{
+					...phase,
+					conversationLogs: {
+						...phase.conversationLogs,
+						blue: [whisperEntry],
+						green: [witnessedEntry],
+					},
+				},
+			],
 		};
 		const files = serializeSession(modified, NOW, CREATED_AT);
 		const result = deserializeSession(files);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
-			expect(result.state.phases[0]?.whispers[0]).toEqual(whisper);
+			const rp = result.state.phases[0];
+			// whisper entry round-trips in blue's log
+			expect(rp?.conversationLogs.blue?.[0]).toEqual(whisperEntry);
+			// witnessed-event round-trips in green's log
+			expect(rp?.conversationLogs.green?.[0]).toEqual(witnessedEntry);
+			// No physicalLog or whispers fields on phase (regression guards)
+			expect("physicalLog" in (rp ?? {})).toBe(false);
+			expect("whispers" in (rp ?? {})).toBe(false);
 		}
 	});
 
@@ -460,13 +478,6 @@ describe("serializeSession / deserializeSession", () => {
 			...files,
 			daemons: { ...files.daemons, red: "bad json" },
 		});
-		expect(result.kind).toBe("broken");
-	});
-
-	it("broken: whispers JSON parse failure", () => {
-		const game = makeFreshGame();
-		const files = serializeSession(game, NOW, CREATED_AT);
-		const result = deserializeSession({ ...files, whispers: "bad json{{" });
 		expect(result.kind).toBe("broken");
 	});
 

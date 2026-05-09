@@ -141,7 +141,7 @@ describe("saveActiveSession", () => {
 		vi.restoreAllMocks();
 	});
 
-	it("writes six keys in strict order: meta → 3 daemons → whispers → engine", () => {
+	it("writes five keys in strict order: meta → 3 daemons → engine", () => {
 		const stub = makeLocalStorageStub();
 		vi.stubGlobal("localStorage", stub);
 		mintAndActivateNewSession();
@@ -158,15 +158,14 @@ describe("saveActiveSession", () => {
 		// Last key should be engine.dat
 		expect(dataCalls[dataCalls.length - 1]).toMatch(/engine\.dat$/);
 
-		// whispers.txt is second-to-last
-		expect(dataCalls[dataCalls.length - 2]).toMatch(/whispers\.txt$/);
+		// No whispers.txt key anywhere
+		expect(dataCalls.some((k) => k.includes("whispers"))).toBe(false);
 
 		// Middle 3 keys are daemon .txt files
-		const daemonCalls = dataCalls.slice(1, dataCalls.length - 2);
+		const daemonCalls = dataCalls.slice(1, dataCalls.length - 1);
 		expect(daemonCalls).toHaveLength(3);
 		for (const k of daemonCalls) {
 			expect(k).toMatch(/\.txt$/);
-			expect(k).not.toMatch(/whispers/);
 		}
 	});
 
@@ -307,7 +306,7 @@ describe("clearActiveSession", () => {
 		vi.restoreAllMocks();
 	});
 
-	it("removes pointer + all six session files", () => {
+	it("removes pointer + all session files", () => {
 		const stub = makeLocalStorageStub();
 		vi.stubGlobal("localStorage", stub);
 		mintAndActivateNewSession();

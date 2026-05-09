@@ -3,10 +3,9 @@
  *
  * Facade over localStorage for the multi-file session format.
  *
- * Each session is stored as six localStorage keys:
+ * Each session is stored as five localStorage keys:
  *   hi-blue:sessions/<id>/meta.json
  *   hi-blue:sessions/<id>/<aiId>.txt  × 3
- *   hi-blue:sessions/<id>/whispers.txt
  *   hi-blue:sessions/<id>/engine.dat   ← commit signal (written last)
  *
  * The active session pointer is stored at hi-blue:active-session.
@@ -30,7 +29,6 @@ export type SessionInfo =
 			phase: 1 | 2 | 3;
 			round: number;
 			daemonFiles: Array<{ name: string; size: number }>;
-			whispersSize: number;
 			engineSize: number;
 	  }
 	| { kind: "broken"; daemonFiles: Array<{ name: string; size: number }> }
@@ -115,10 +113,6 @@ function daemonKey(sessionId: string, aiId: AiId): string {
 	return `${SESSIONS_PREFIX}${sessionId}/${aiId}.txt`;
 }
 
-function whispersKey(sessionId: string): string {
-	return `${SESSIONS_PREFIX}${sessionId}/whispers.txt`;
-}
-
 function engineKey(sessionId: string): string {
 	return `${SESSIONS_PREFIX}${sessionId}/engine.dat`;
 }
@@ -131,8 +125,7 @@ function engineKey(sessionId: string): string {
  * Write order (strict):
  *   1. meta.json
  *   2..4. <aiId>.txt × 3
- *   5. whispers.txt
- *   6. engine.dat   ← commit signal
+ *   5. engine.dat   ← commit signal
  *
  * Returns SaveResult. On error, no partial rollback is performed (the missing
  * engine.dat is the break signal on load).
@@ -163,10 +156,7 @@ export function saveActiveSession(
 			localStorage.setItem(daemonKey(sessionId, aiId), daemonJson);
 		}
 
-		// 5. whispers.txt
-		localStorage.setItem(whispersKey(sessionId), files.whispers);
-
-		// 6. engine.dat (commit signal — written last)
+		// 5. engine.dat (commit signal — written last)
 		// serializeSession always returns a string (not null) for engine.
 		// biome-ignore lint/style/noNonNullAssertion: serializeSession always returns a non-null engine string
 		localStorage.setItem(engineKey(sessionId), files.engine!);
@@ -209,7 +199,7 @@ export function loadActiveSession(): LoadResult {
 // ── Clear ─────────────────────────────────────────────────────────────────────
 
 /**
- * Delete all six session files plus the active pointer.
+ * Delete all session files plus the active pointer.
  * Best-effort: errors are silently swallowed.
  */
 export function clearActiveSession(): void {
@@ -265,13 +255,12 @@ export function deleteLegacySaveKey(): void {
  */
 function _loadSessionById(sessionId: string): LoadResult {
 	try {
-		// Read all six files
+		// Read key files
 		const metaJson = localStorage.getItem(metaKey(sessionId));
-		const whispersJson = localStorage.getItem(whispersKey(sessionId));
 		const engineBlob = localStorage.getItem(engineKey(sessionId));
 
 		// No data at all: session was minted but never saved — treat as "none".
-		if (metaJson === null && whispersJson === null && engineBlob === null) {
+		if (metaJson === null && engineBlob === null) {
 			return { kind: "none" };
 		}
 
@@ -281,9 +270,6 @@ function _loadSessionById(sessionId: string): LoadResult {
 		// meta.json absent → broken
 		if (metaJson === null) return { kind: "broken", sessionId };
 
-		// whispers.txt absent → broken
-		if (whispersJson === null) return { kind: "broken", sessionId };
-
 		// Read daemon files
 		const daemonsRaw: Record<AiId, string> = {};
 		const prefix = `${SESSIONS_PREFIX}${sessionId}/`;
@@ -292,7 +278,7 @@ function _loadSessionById(sessionId: string): LoadResult {
 			if (!key) continue;
 			if (!key.startsWith(prefix)) continue;
 			const suffix = key.slice(prefix.length);
-			if (suffix.endsWith(".txt") && suffix !== "whispers.txt") {
+			if (suffix.endsWith(".txt")) {
 				const aiId = suffix.slice(0, -4);
 				const value = localStorage.getItem(key);
 				if (value !== null) daemonsRaw[aiId] = value;
@@ -302,7 +288,6 @@ function _loadSessionById(sessionId: string): LoadResult {
 		const result: DeserializeResult = deserializeSession({
 			meta: metaJson,
 			daemons: daemonsRaw,
-			whispers: whispersJson,
 			engine: engineBlob,
 		});
 
@@ -367,7 +352,7 @@ export function mintSession(): string {
 }
 
 /**
- * Duplicate a session, writing all six keys in canonical order.
+ * Duplicate a session, writing all keys in canonical order.
  * engine.dat is written LAST (commit signal).
  * Returns the new session id.
  * Throws if the source session is broken or version-mismatch (programmer-error guard).
@@ -383,9 +368,8 @@ export function dupSession(srcId: string): string {
 
 	const srcPrefix = `${SESSIONS_PREFIX}${srcId}/`;
 
-	// Read all six keys
+	// Read key files
 	const metaVal = localStorage.getItem(`${srcPrefix}meta.json`);
-	const whispersVal = localStorage.getItem(`${srcPrefix}whispers.txt`);
 	const engineVal = localStorage.getItem(`${srcPrefix}engine.dat`);
 
 	// Read daemon .txt files
@@ -395,7 +379,7 @@ export function dupSession(srcId: string): string {
 		if (!key) continue;
 		if (!key.startsWith(srcPrefix)) continue;
 		const suffix = key.slice(srcPrefix.length);
-		if (suffix.endsWith(".txt") && suffix !== "whispers.txt") {
+		if (suffix.endsWith(".txt")) {
 			const value = localStorage.getItem(key);
 			if (value !== null) daemonEntries.push({ key: suffix, value });
 		}
@@ -404,15 +388,12 @@ export function dupSession(srcId: string): string {
 	const newId = mintSessionId();
 	const dstPrefix = `${SESSIONS_PREFIX}${newId}/`;
 
-	// Write in canonical order: meta → daemons → whispers → engine.dat (LAST)
+	// Write in canonical order: meta → daemons → engine.dat (LAST)
 	if (metaVal !== null) {
 		localStorage.setItem(`${dstPrefix}meta.json`, metaVal);
 	}
 	for (const { key, value } of daemonEntries) {
 		localStorage.setItem(`${dstPrefix}${key}`, value);
-	}
-	if (whispersVal !== null) {
-		localStorage.setItem(`${dstPrefix}whispers.txt`, whispersVal);
 	}
 	if (engineVal !== null) {
 		localStorage.setItem(`${dstPrefix}engine.dat`, engineVal);
@@ -461,7 +442,7 @@ export function getSessionInfo(id: string): SessionInfo {
 				if (!key) continue;
 				if (!key.startsWith(prefix)) continue;
 				const suffix = key.slice(prefix.length);
-				if (suffix.endsWith(".txt") && suffix !== "whispers.txt") {
+				if (suffix.endsWith(".txt")) {
 					const value = localStorage.getItem(key);
 					files.push({ name: suffix, size: value?.length ?? 0 });
 				}
@@ -512,7 +493,6 @@ export function getSessionInfo(id: string): SessionInfo {
 	}
 
 	// ok
-	const whispersVal = localStorage.getItem(`${prefix}whispers.txt`) ?? "";
 	const engineVal = localStorage.getItem(`${prefix}engine.dat`) ?? "";
 	return {
 		kind: "ok",
@@ -520,7 +500,6 @@ export function getSessionInfo(id: string): SessionInfo {
 		phase: result.state.currentPhase,
 		round: result.state.phases[result.state.phases.length - 1]?.round ?? 0,
 		daemonFiles: getDaemonFiles(),
-		whispersSize: whispersVal.length,
 		engineSize: engineVal.length,
 	};
 }

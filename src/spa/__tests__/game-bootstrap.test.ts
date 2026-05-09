@@ -170,9 +170,9 @@ describe("renderGame — session restore (formerly async bootstrap)", () => {
 // ── Persistence round-trip regression ────────────────────────────────────────
 
 describe("persistence — LLM-shaped blurb round-trips verbatim", () => {
-	it("serializeGameState + deserializeGameState preserves an LLM-shaped blurb", async () => {
-		const { serializeGameState, deserializeGameState } = await import(
-			"../persistence/game-storage.js"
+	it("serializeSession + deserializeSession preserves an LLM-shaped blurb", async () => {
+		const { serializeSession, deserializeSession } = await import(
+			"../persistence/session-codec.js"
 		);
 		const { createGame, startPhase } = await import("../game/engine.js");
 		const { PHASE_1_CONFIG } = await import("../../content/index.js");
@@ -228,8 +228,13 @@ describe("persistence — LLM-shaped blurb round-trips verbatim", () => {
 			PHASE_1_CONFIG,
 			() => 0,
 		);
-		const persisted = serializeGameState(game);
-		const restored = deserializeGameState(persisted);
+		const now = new Date().toISOString();
+		const files = serializeSession(game, now, now);
+		const result = deserializeSession(files);
+
+		if (result.kind !== "ok")
+			throw new Error(`Expected ok, got ${result.kind}`);
+		const restored = result.state;
 
 		// The LLM blurb must survive the round-trip byte-for-byte
 		expect(restored.personas.red?.blurb).toBe(LLM_BLURB);

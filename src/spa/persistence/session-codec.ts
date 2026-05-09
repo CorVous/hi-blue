@@ -6,8 +6,8 @@
  *
  * Files:
  *   meta.json        — createdAt, lastSavedAt, phase, round
- *   <aiId>.txt × 3  — per-daemon chat history + phase goals (all three phases)
- *   whispers.txt     — whisper messages keyed by phase number
+ *   <aiId>.txt × 3  — per-daemon conversation log + phase goals (all three phases)
+ *                      (includes chat, whisper, and witnessed-event entries inline)
  *   engine.dat       — sealed (XOR-obfuscated) engine state
  *
  * See docs/adr/0004-editable-vs-sealed-save-surface.md
@@ -29,7 +29,6 @@ import type {
 	PersonaSpatialState,
 	PhaseConfig,
 	PhaseState,
-	WhisperMessage,
 	WorldState,
 } from "../game/types.js";
 import {
@@ -40,8 +39,12 @@ import {
 
 // ── Schema version ─────────────────────────────────────────────────────────────
 
-/** Version embedded in engine.dat. Increment when sealed shape changes. */
-export const SESSION_SCHEMA_VERSION = 2 as const;
+/**
+ * Version embedded in engine.dat. Bumped to 3 when whispers.txt was retired:
+ * whisper entries now live inside each Daemon's conversationLog inline.
+ * Old v2 saves cannot round-trip whispers and will trigger a version-mismatch banner.
+ */
+export const SESSION_SCHEMA_VERSION = 3 as const;
 
 // ── Phase config lookup ────────────────────────────────────────────────────────
 
@@ -88,15 +91,6 @@ export interface MetaFile {
 	personaOrder?: string[];
 }
 
-/** Shape of `whispers.txt`. */
-export interface WhispersFile {
-	phases: {
-		"1": WhisperMessage[];
-		"2": WhisperMessage[];
-		"3": WhisperMessage[];
-	};
-}
-
 /** Shape of the sealed payload inside `engine.dat`. */
 export interface SealedEngine {
 	schemaVersion: typeof SESSION_SCHEMA_VERSION;
@@ -120,7 +114,6 @@ export interface SealedEngine {
 export interface SerializedSessionFiles {
 	meta: string;
 	daemons: Record<AiId, string>;
-	whispers: string;
 	engine: string | null;
 }
 
@@ -136,7 +129,6 @@ const EMPTY_PHASE_SLICE: DaemonPhaseSlice = {
 	phaseGoal: "",
 	conversationLog: [],
 };
-const EMPTY_WHISPER_LIST: WhisperMessage[] = [];
 
 function phaseSliceFor(
 	_phaseNumber: 1 | 2 | 3,
@@ -148,14 +140,6 @@ function phaseSliceFor(
 		phaseGoal: phase.aiGoals[aiId] ?? "",
 		conversationLog: phase.conversationLogs[aiId] ?? [],
 	};
-}
-
-function phaseWhispers(
-	phaseNumber: 1 | 2 | 3,
-	phases: PhaseState[],
-): WhisperMessage[] {
-	const phase = phases.find((p) => p.phaseNumber === phaseNumber);
-	return phase ? [...phase.whispers] : [];
 }
 
 /** Get a PhaseState by phaseNumber from the phases array. */
@@ -217,15 +201,6 @@ export function serializeSession(
 		daemons[aiId] = JSON.stringify(daemonFile, null, 2);
 	}
 
-	// whispers.txt
-	const whispersFile: WhispersFile = {
-		phases: {
-			"1": phaseWhispers(1, state.phases),
-			"2": phaseWhispers(2, state.phases),
-			"3": phaseWhispers(3, state.phases),
-		},
-	};
-
 	// engine.dat (sealed)
 	const sealedPayload: SealedEngine = {
 		schemaVersion: SESSION_SCHEMA_VERSION,
@@ -259,7 +234,6 @@ export function serializeSession(
 	return {
 		meta: JSON.stringify(meta, null, 2),
 		daemons,
-		whispers: JSON.stringify(whispersFile, null, 2),
 		engine,
 	};
 }
@@ -328,17 +302,6 @@ export function deserializeSession(
 		return { kind: "broken" };
 	}
 
-	// Parse whispers.txt
-	let whispersFile: WhispersFile;
-	try {
-		const parsedWhispers = JSON.parse(files.whispers);
-		if (!parsedWhispers || typeof parsedWhispers !== "object")
-			return { kind: "broken" };
-		whispersFile = parsedWhispers as WhispersFile;
-	} catch {
-		return { kind: "broken" };
-	}
-
 	// Parse daemon files
 	const daemonFiles: Record<AiId, DaemonFile> = {};
 	for (const [aiId, daemonJson] of Object.entries(files.daemons)) {
@@ -369,7 +332,7 @@ export function deserializeSession(
 		if (!(aiId in personas)) personas[aiId] = daemonFile.persona;
 	}
 
-	// Reconstruct phases from sealed engine + editable daemon/whisper files
+	// Reconstruct phases from sealed engine + editable daemon files
 	try {
 		const phases: PhaseState[] = [];
 
@@ -384,6 +347,7 @@ export function deserializeSession(
 			const phaseKey = String(phaseNumber) as "1" | "2" | "3";
 
 			// Rebuild conversationLogs from daemon files
+			// Each entry (chat, whisper, witnessed-event) lives inline in the daemon's file.
 			const conversationLogs: Record<AiId, ConversationEntry[]> = {};
 			const aiGoals: Record<AiId, string> = {};
 			for (const [aiId, daemonFile] of Object.entries(daemonFiles)) {
@@ -391,11 +355,6 @@ export function deserializeSession(
 				conversationLogs[aiId] = [...(slice.conversationLog ?? [])];
 				aiGoals[aiId] = slice.phaseGoal;
 			}
-
-			// Rebuild whispers for this phase
-			const whispers: WhisperMessage[] = [
-				...(whispersFile.phases[phaseKey] ?? EMPTY_WHISPER_LIST),
-			];
 
 			// Get sealed data for this phase
 			const world = structuredClone(
@@ -436,8 +395,6 @@ export function deserializeSession(
 				round: phaseNumber === sealed.currentPhase ? meta.round : 0,
 				world,
 				budgets,
-				whispers,
-				physicalLog: [],
 				conversationLogs,
 				lockedOut,
 				chatLockouts,

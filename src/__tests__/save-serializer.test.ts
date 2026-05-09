@@ -1,10 +1,11 @@
 /**
- * Tests for the save-file serializer (issue #19).
+ * Tests for the save-file serializer (issue #19, updated for #195).
  *
  * The serializer takes a completed GameState and produces a deterministic
  * JSON-serializable payload containing:
  * - Each AI's persona
- * - Each AI's per-phase transcript (chat history + whispers, in round order)
+ * - Each AI's per-phase transcript (unified conversationLog including chat,
+ *   whispers, and witnessed events, in round order)
  *
  * The payload must be stable for round-tripping.
  */
@@ -13,7 +14,7 @@ import { serializeGameSave } from "../save-serializer";
 import {
 	advancePhase,
 	appendChat,
-	appendWhisper,
+	appendWhisperEntry,
 	createGame,
 	startPhase,
 } from "../spa/game/engine";
@@ -127,19 +128,21 @@ describe("serializeGameSave", () => {
 		});
 	});
 
-	it("includes whispers in the per-phase transcript", () => {
+	it("includes whispers in the per-phase conversationLog (via per-Daemon log)", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), PHASE1_CONFIG);
-		game = appendWhisper(game, {
-			from: "red",
-			to: "blue",
-			content: "Secret plan",
-			round: 1,
-		});
+		game = appendWhisperEntry(game, "red", "blue", "Secret plan");
 		const save = serializeGameSave(game);
-		// Whispers from/to an AI appear in their respective transcripts
+		// Whisper from red appears in red's conversationLog (sender's log also gets the entry)
 		const ember = save.ais.find((a) => a.persona.id === "red");
-		expect(ember?.phases[0]?.whispers).toHaveLength(1);
-		expect(ember?.phases[0]?.whispers[0]?.content).toBe("Secret plan");
+		const redWhispers = ember?.phases[0]?.conversationLog.filter(
+			(e) => e.kind === "whisper",
+		);
+		expect(redWhispers).toHaveLength(1);
+		expect(redWhispers?.[0]?.kind === "whisper" && redWhispers[0].content).toBe(
+			"Secret plan",
+		);
+		// No separate `whispers` field — it's all in conversationLog
+		expect("whispers" in (ember?.phases[0] ?? {})).toBe(false);
 	});
 
 	it("accumulates transcripts across multiple phases", () => {
@@ -188,23 +191,21 @@ describe("serializeGameSave", () => {
 		expect(parsed.ais).toHaveLength(3);
 	});
 
-	it("output has a version field for forward compatibility", () => {
+	it("output has a version field of 3 (v3 = whispers moved inline into conversationLog)", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), PHASE1_CONFIG);
 		const save = serializeGameSave(game);
-		expect(save.version).toBe(2);
+		expect(save.version).toBe(3);
 	});
 
-	it("whispers in one AI's phase include only whispers that involve that AI", () => {
+	it("whisper in green's log only if green is sender or recipient", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), PHASE1_CONFIG);
-		// Whisper between red and blue — should appear in both red and blue, not green
-		game = appendWhisper(game, {
-			from: "red",
-			to: "blue",
-			content: "Our secret",
-			round: 1,
-		});
+		// Whisper between red and blue — should appear in red and blue, not green
+		game = appendWhisperEntry(game, "red", "blue", "Our secret");
 		const save = serializeGameSave(game);
 		const sage = save.ais.find((a) => a.persona.id === "green");
-		expect(sage?.phases[0]?.whispers).toHaveLength(0);
+		const greenWhispers = sage?.phases[0]?.conversationLog.filter(
+			(e) => e.kind === "whisper",
+		);
+		expect(greenWhispers).toHaveLength(0);
 	});
 });
