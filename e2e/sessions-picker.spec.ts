@@ -35,22 +35,59 @@ function seedOkSessionScript(id: string, lastSavedAt: string): string {
 				lastSavedAt: '${lastSavedAt}',
 				phase: 1,
 				round: 0,
+				personaOrder: ['red'],
 			});
 			localStorage.setItem(prefix + 'meta.json', meta);
-			localStorage.setItem(prefix + 'red.txt', '{}');
-			localStorage.setItem(prefix + 'green.txt', '{}');
-			localStorage.setItem(prefix + 'blue.txt', '{}');
-			localStorage.setItem(prefix + 'whispers.txt', '{}');
 
-			// Build engine.dat via inline obfuscation
+			// Daemon file: must match DaemonFile shape (aiId, persona, phases)
+			const daemonFile = JSON.stringify({
+				aiId: 'red',
+				persona: {
+					id: 'red',
+					name: 'Red',
+					color: '#ff0000',
+					temperaments: ['bold', 'calm'],
+					personaGoal: 'stub',
+					blurb: 'stub',
+					typingQuirks: ['...', '!'],
+					voiceExamples: ['Hello.', 'Indeed.', 'Farewell.'],
+				},
+				phases: {
+					'1': { phaseGoal: '', chatHistory: [] },
+					'2': { phaseGoal: '', chatHistory: [] },
+					'3': { phaseGoal: '', chatHistory: [] },
+				},
+			});
+			localStorage.setItem(prefix + 'red.txt', daemonFile);
+
+			// Whispers file: must match WhispersFile shape
+			const whispersFile = JSON.stringify({
+				phases: { '1': [], '2': [], '3': [] },
+			});
+			localStorage.setItem(prefix + 'whispers.txt', whispersFile);
+
+			// Build engine.dat via inline obfuscation — payload must match SealedEngine
 			const OBFUSCATION_KEY = '${OBFUSCATION_KEY}';
 			const keyBytes = Array.from(new TextEncoder().encode(OBFUSCATION_KEY));
 			const payload = JSON.stringify({
 				schemaVersion: 1,
 				currentPhase: 1,
-				personas: { red: { id:'red', name:'Ember', color:'#e07a5f', temperaments:['hot','cool'], personaGoal:'', blurb:'', typingQuirks:['f','c'], voiceExamples:['a.','b.'] } },
-				phases: [{ phaseNumber:1, round:0, budgets:{}, chatHistories:{}, chatLockouts:[], worldState:{objects:[],spaces:[]}, actionLog:[], isComplete:false, contentPack:{phaseNumber:1,setting:'test',objectivePairs:[],interestingObjects:[],obstacles:[]}, config:null }],
-				whisperMessages: {},
+				isComplete: false,
+				world: {
+					1: { entities: [] },
+					2: { entities: [] },
+					3: { entities: [] },
+				},
+				contentPacks: [
+					{ phaseNumber: 1, setting: 'test', objectivePairs: [], interestingObjects: [], obstacles: [], aiStarts: {} },
+				],
+				budgets: { 1: {}, 2: {}, 3: {} },
+				lockouts: {
+					1: { lockedOut: [], chatLockouts: [] },
+					2: { lockedOut: [], chatLockouts: [] },
+					3: { lockedOut: [], chatLockouts: [] },
+				},
+				personaSpatial: { 1: {}, 2: {}, 3: {} },
 			});
 			const jsonBytes = Array.from(new TextEncoder().encode(payload));
 			const xored = jsonBytes.map((b,i) => b ^ (keyBytes[i % keyBytes.length] ?? 0));
