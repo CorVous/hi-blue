@@ -123,13 +123,23 @@ export default {
  *                fallback responses; they must always reflect the latest
  *                hashed bundle names)
  *
- * Only successful (2xx) responses are rewritten so error pages keep whatever
- * caching the asset binding chose.
+ * Two guard cases:
+ *   1. Non-2xx responses pass through untouched so error pages keep whatever
+ *      caching the asset binding chose.
+ *   2. /assets/* requests that miss and fall back to index.html (the asset
+ *      binding's single-page-application not_found_handling serves text/html
+ *      with status 200 for any unmatched path) must NOT get the immutable
+ *      header — otherwise a typo'd asset URL would pin an HTML body into
+ *      browser/CDN caches under that URL forever.
  */
 function withAssetCacheHeaders(url: URL, response: Response): Response {
 	if (!response.ok) return response;
+	const isAssetPath = url.pathname.startsWith("/assets/");
+	const isHtml = (response.headers.get("Content-Type") ?? "").includes(
+		"text/html",
+	);
 	const headers = new Headers(response.headers);
-	if (url.pathname.startsWith("/assets/")) {
+	if (isAssetPath && !isHtml) {
 		headers.set("Cache-Control", "public, max-age=31536000, immutable");
 	} else {
 		headers.set("Cache-Control", "no-cache, must-revalidate");
