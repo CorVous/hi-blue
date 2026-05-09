@@ -20,8 +20,22 @@ const COMMIT_SHA = (() => {
 	}
 })();
 
+const COMMIT_TIMESTAMP_MS = (() => {
+	try {
+		const seconds = Number.parseInt(
+			execSync("git log -1 --format=%ct HEAD", { cwd: root })
+				.toString()
+				.trim(),
+			10,
+		);
+		return Number.isFinite(seconds) ? seconds * 1000 : 0;
+	} catch {
+		return 0;
+	}
+})();
+
 console.log(
-	`Building SPA with WORKER_BASE_URL=${WORKER_BASE_URL} COMMIT_SHA=${COMMIT_SHA}`,
+	`Building SPA with WORKER_BASE_URL=${WORKER_BASE_URL} COMMIT_SHA=${COMMIT_SHA} COMMIT_TIMESTAMP_MS=${COMMIT_TIMESTAMP_MS}`,
 );
 
 // Ensure dist/ and dist/assets/ exist
@@ -56,6 +70,7 @@ const ctx = await esbuild.context({
 	define: {
 		__WORKER_BASE_URL__: JSON.stringify(WORKER_BASE_URL),
 		__COMMIT_SHA__: JSON.stringify(COMMIT_SHA),
+		__COMMIT_TIMESTAMP_MS__: JSON.stringify(COMMIT_TIMESTAMP_MS),
 	},
 	plugins: [copyHtmlPlugin],
 });
