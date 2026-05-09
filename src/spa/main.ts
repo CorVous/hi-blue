@@ -13,6 +13,7 @@
 
 import "./styles.css";
 import { initByokModal } from "./byok-modal.js";
+import { getPendingBootstrap } from "./game/pending-bootstrap.js";
 import { dispatchActiveSession } from "./persistence/active-session-dispatcher.js";
 import {
 	deleteLegacySaveKey,
@@ -105,8 +106,13 @@ function withDispatcher(
 		}
 
 		// targetHash === "#/game"
-		// Only render when the session is populated; otherwise redirect appropriately.
+		// Render when the session is populated, OR when a fresh bootstrap is
+		// in flight (the player just submitted CONNECT but content packs
+		// haven't landed yet — the game route owns the progressive-loading UI).
 		if (verdict.reason !== "populated") {
+			if (getPendingBootstrap() !== undefined) {
+				return renderer(root, params);
+			}
 			if (
 				verdict.reason === "broken" ||
 				verdict.reason === "version-mismatch"

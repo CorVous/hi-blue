@@ -10,26 +10,25 @@
  *     legacy-save-discarded is present.
  *   - Type out the dial-up handshake into #dial, then reveal the login form.
  *     Skip the animation under prefers-reduced-motion or ?skipDialup=1.
- *   - Kick off generateNewGameAssets() on mount; CONNECT starts disabled.
- *   - On generation success → enable CONNECT and hold assets in module scope.
- *   - On failure (CapHitError or any error) → show #cap-hit, hide #start-screen.
- *   - CONNECT click → password === "password" gate. On match: buildSessionFromAssets,
- *     applyTestAffordances, saveActiveSession, then location.hash = "#/game".
- *     On mismatch: show inline error, keep CONNECT enabled. Idempotent against
- *     double-click while a successful connect is mid-flight.
- *
- * Issue #173 (parent #155).
+ *   - Kick off persona + content-pack generation on mount via the shared
+ *     pending-bootstrap module. CONNECT becomes available as soon as the
+ *     login form is revealed — generation continues in the background and
+ *     the game route observes it for progressive loading.
+ *   - On generation failure (CapHitError or any error) → show #cap-hit and
+ *     hide #start-screen.
+ *   - CONNECT click → password === "password" gate. On match, navigate to
+ *     #/game; the game route handles the loading UI and only persists the
+ *     session once content packs resolve. On mismatch: show inline error.
  */
 
-import {
-	buildSessionFromAssets,
-	type ContentPackProvider,
-	generateNewGameAssets,
-	type NewGameAssets,
-	type SynthesisProvider,
+import type {
+	ContentPackProvider,
+	SynthesisProvider,
 } from "../game/bootstrap.js";
-import { saveActiveSession } from "../persistence/session-storage.js";
-import { applyTestAffordances } from "./game.js";
+import {
+	getPendingBootstrap,
+	startBootstrap,
+} from "../game/pending-bootstrap.js";
 
 /** Warning reason strings shown in the persistence warning banner. */
 export const PERSISTENCE_WARNING_MESSAGES: Record<string, string> = {
@@ -235,8 +234,7 @@ export function _setTestOverrides(
 	_testOverrides = overrides;
 }
 
-/** Module-level pending assets holder. Cleared on each render call. */
-let _pendingAssets: NewGameAssets | undefined;
+/** Set once a successful CONNECT submit is mid-flight, to debounce double-clicks. */
 let _beginClickPending = false;
 /** The resize listener installed on the most recent render — removed on next call. */
 let _activeResizeHandler: (() => void) | undefined;
@@ -291,8 +289,9 @@ export function renderStart(
 	const formEl = doc.querySelector<HTMLFormElement>("#login-form");
 	const keyartEl = doc.querySelector<HTMLElement>("#login-keyart");
 
-	// Reset module-level state on each render call
-	_pendingAssets = undefined;
+	// Reset module-level state on each render call. CONNECT is disabled only
+	// while the dial-up animation is still typing out — it's re-enabled in
+	// revealLogin() once the login form appears.
 	_beginClickPending = false;
 	beginBtn.disabled = true;
 
@@ -328,6 +327,10 @@ export function renderStart(
 	const revealLogin = () => {
 		if (!revealEl) return;
 		revealEl.hidden = false;
+		// CONNECT is gated only on the dial-up animation completing — not on
+		// asset readiness. Generation continues in the background while the
+		// player types, and the game route renders progressive loading.
+		beginBtn.disabled = false;
 		if (keyartEl) {
 			paintLandscape(keyartEl);
 			const handler = () => paintLandscape(keyartEl);
@@ -368,29 +371,14 @@ export function renderStart(
 
 	const proceedConnect = () => {
 		if (_beginClickPending) return;
-		if (!_pendingAssets) return;
 		_beginClickPending = true;
 		beginBtn.disabled = true;
 		if (pwEl) pwEl.disabled = true;
 		clearError();
 
-		const assets = _pendingAssets;
-		let session = buildSessionFromAssets(assets);
-		session = applyTestAffordances(session, effectiveParams);
-
-		const saveResult = saveActiveSession(session.getState());
-		if (!saveResult.ok) {
-			const persistenceWarningEl = doc.querySelector<HTMLElement>(
-				"#persistence-warning",
-			);
-			if (persistenceWarningEl) {
-				persistenceWarningEl.textContent =
-					"Game progress cannot be saved: storage is full or disabled.";
-				persistenceWarningEl.removeAttribute("hidden");
-			}
-		}
-
-		// Navigate to game regardless of save result (game.ts will handle missing session)
+		// The game route reads the in-flight bootstrap from pending-bootstrap.ts
+		// and progressively renders the loading UI as personas, then content
+		// packs, resolve. The session is built and persisted there, not here.
 		location.hash = "#/game";
 	};
 
@@ -418,22 +406,31 @@ export function renderStart(
 	if (formEl) formEl.addEventListener("submit", handleSubmit);
 	beginBtn.addEventListener("click", handleSubmit);
 
-	// Kick off generation
+	// Kick off (or reuse) the in-flight bootstrap. If the user backed out to
+	// the start screen after a previous render, startBootstrap returns the
+	// existing entry rather than starting a fresh generation.
+	const existing = getPendingBootstrap();
+	const bootstrap = existing ?? startBootstrap(_testOverrides);
+	_testOverrides = undefined;
+
+	// If generation fails while the player is still on this screen, surface
+	// the same CapHitError UX we used to show when CONNECT was gated. Once
+	// they've navigated to #/game, the start screen is hidden — the game
+	// route's loading flow handles the failure there instead.
 	const generationPromise = (async () => {
 		try {
-			const assets = await generateNewGameAssets(_testOverrides);
-			_pendingAssets = assets;
-			beginBtn.disabled = false;
+			await Promise.all([
+				bootstrap.personasPromise,
+				bootstrap.contentPacksPromise,
+			]);
 		} catch (err) {
-			// Funnel failure to #cap-hit (same UX as game-route CapHitError)
-			const capHitEl = doc.querySelector<HTMLElement>("#cap-hit");
-			if (capHitEl) capHitEl.removeAttribute("hidden");
-			if (startScreenEl) startScreenEl.setAttribute("hidden", "");
-			// Re-throw so callers can observe the failure
+			const startVisible = startScreenEl ? !startScreenEl.hidden : false;
+			if (startVisible) {
+				const capHitEl = doc.querySelector<HTMLElement>("#cap-hit");
+				if (capHitEl) capHitEl.removeAttribute("hidden");
+				if (startScreenEl) startScreenEl.setAttribute("hidden", "");
+			}
 			throw err;
-		} finally {
-			// Clear test overrides after each render cycle
-			_testOverrides = undefined;
 		}
 	})();
 

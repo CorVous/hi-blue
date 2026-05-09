@@ -239,6 +239,63 @@ main {
 	filter: grayscale(0.6);
 }
 
+/* ── Progressive-loading states (start → game transition) ─────────────────
+ * #stage carries a `data-load-state` attribute set by routes/game.ts:
+ *   loading-daemons   — empty panel frames; composer disabled; status red
+ *   generating-room   — names + braille spinners; bottom→top brightness
+ *                       wipe driven by --fill-pct; status yellow
+ *   stable (default)  — attribute removed; full-bright "live" appearance
+ * The wipe overlays a dull layer that retreats from the bottom; pixels
+ * BELOW --fill-pct (measured from the bottom edge) are fully bright.
+ */
+#stage[data-load-state="loading-daemons"] .ai-panel,
+#stage[data-load-state="generating-room"] .ai-panel {
+	pointer-events: none;
+	cursor: default;
+}
+
+#stage[data-load-state="loading-daemons"] .ai-panel {
+	opacity: 0.45;
+	filter: grayscale(0.55);
+}
+
+#stage[data-load-state="generating-room"] .ai-panel {
+	position: relative;
+}
+
+#stage[data-load-state="generating-room"] .ai-panel::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	background: linear-gradient(
+		to top,
+		transparent 0%,
+		transparent calc(var(--fill-pct, 0%) - 6%),
+		rgba(11, 7, 0, 0.55) var(--fill-pct, 0%),
+		rgba(11, 7, 0, 0.55) 100%
+	);
+	mix-blend-mode: multiply;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	#stage[data-load-state="generating-room"] .ai-panel::after {
+		background: rgba(11, 7, 0, 0.35);
+	}
+}
+
+/* Topinfo right-cell status colors — green is .ok (existing), red is .err
+ * (loading daemons), yellow is .warn (generating room). */
+.topinfo .err {
+	color: var(--err);
+	text-shadow: 0 0 6px rgba(255, 123, 107, 0.5);
+}
+
+.topinfo .warn {
+	color: #ffe07a;
+	text-shadow: 0 0 6px rgba(255, 224, 122, 0.5);
+}
+
 /* Stretchable border row: [corner][label][stretch dashes][corner-r absolute] */
 .brow {
 	display: flex;

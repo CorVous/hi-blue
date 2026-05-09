@@ -5,9 +5,11 @@ import {
 	formatTopInfoMobile,
 	formatTopInfoRight,
 	initPanelChrome,
+	type LoadState,
 	renderTopInfoLeft,
-	TOPINFO_RIGHT_OK_TEXT,
+	topInfoStatus,
 } from "../bbs-chrome.js";
+import { buildSessionFromAssets } from "../game/bootstrap.js";
 import { BrowserLLMProvider } from "../game/browser-llm-provider.js";
 import { deriveComposerState } from "../game/composer-reducer.js";
 import { getActivePhase, updateActivePhase } from "../game/engine.js";
@@ -19,8 +21,12 @@ import {
 	buildPersonaNameMap,
 	findFirstMention,
 } from "../game/mention-parser.js";
+import {
+	clearPendingBootstrap,
+	getPendingBootstrap,
+} from "../game/pending-bootstrap.js";
 import { encodeRoundResult } from "../game/round-result-encoder.js";
-import type { AiId, PhaseConfig } from "../game/types";
+import type { AiId, AiPersona, PhaseConfig } from "../game/types";
 import { AI_TYPING_SPEED, TOKEN_PACE_MS } from "../game/typing-rhythm.js";
 import { CapHitError } from "../llm-client.js";
 import {
@@ -397,9 +403,273 @@ export function renderGame(
 		persistenceWarningEl.removeAttribute("hidden");
 	}
 
+	/** Apply the three-phase load state on `#stage` so CSS can drive panel +
+	 * status visuals. Removing the attribute (state="stable") restores the
+	 * fully-bright "live" look. */
+	function setStageLoadState(state: LoadState): void {
+		const stageEl = doc.querySelector<HTMLElement>("#stage");
+		if (!stageEl) return;
+		if (state === "stable") {
+			stageEl.removeAttribute("data-load-state");
+			stageEl.style.removeProperty("--fill-pct");
+		} else {
+			stageEl.setAttribute("data-load-state", state);
+		}
+	}
+
+	/** Paint the right-hand topinfo cell for one of the three load states.
+	 * Used during progressive loading; the normal `refreshTopInfo` (session
+	 * required) takes over once we transition to stable. */
+	function renderLoadingTopInfo(state: LoadState, daemonsOnline: number): void {
+		const topinfoLeftEl = doc.querySelector<HTMLElement>("#topinfo-left");
+		const topinfoRightEl = doc.querySelector<HTMLElement>("#topinfo-right");
+		const topinfoMobileEl = doc.querySelector<HTMLElement>("#topinfo-mobile");
+		const topinfoMobileStatusEl = doc.querySelector<HTMLElement>(
+			"#topinfo-mobile-status",
+		);
+		const status = topInfoStatus(state);
+		const sessionIdLocal = getActiveSessionId() ?? "0x????";
+		// Walk the phase chain to count total phases (matches refreshTopInfo).
+		let total = 1;
+		let cursor: PhaseConfig | undefined = PHASE_1_CONFIG.nextPhaseConfig;
+		while (cursor) {
+			total += 1;
+			cursor = cursor.nextPhaseConfig;
+		}
+		const inputs = {
+			sessionId: sessionIdLocal,
+			phaseNumber: 1,
+			totalPhases: total,
+			turn: 0,
+			daemonsOnline,
+		};
+		if (topinfoLeftEl) renderTopInfoLeft(topinfoLeftEl, inputs);
+		if (topinfoRightEl) {
+			topinfoRightEl.textContent = formatTopInfoRight(inputs);
+			const span = doc.createElement("span");
+			span.className = status.cls;
+			span.textContent = status.desktop;
+			topinfoRightEl.appendChild(span);
+		}
+		if (topinfoMobileEl) {
+			topinfoMobileEl.textContent = formatTopInfoMobile(inputs);
+		}
+		if (topinfoMobileStatusEl) {
+			topinfoMobileStatusEl.textContent = "";
+			const span = doc.createElement("span");
+			span.className = status.cls;
+			span.textContent = ` ${status.mobile}`;
+			topinfoMobileStatusEl.appendChild(span);
+		}
+	}
+
+	/** Async loading flow: render an empty "loading daemons" screen
+	 * immediately, populate panels with names + braille spinners when
+	 * personas resolve, run a fake-progress brightness wipe while waiting
+	 * for content packs, then build + persist the session and recurse into
+	 * the normal restore path. */
+	function renderBootstrapLoadingFlow(
+		pending: ReturnType<typeof getPendingBootstrap> & object,
+	): Promise<void> {
+		// Show route chrome + global header now (start route hides them).
+		const startScreenEl = doc.querySelector<HTMLElement>("#start-screen");
+		const sessionsScreenEl = doc.querySelector<HTMLElement>("#sessions-screen");
+		const panelsEl = doc.querySelector<HTMLElement>("#panels");
+		const composerEl = doc.querySelector<HTMLElement>("#composer");
+		if (startScreenEl) startScreenEl.setAttribute("hidden", "");
+		if (sessionsScreenEl) sessionsScreenEl.setAttribute("hidden", "");
+		if (panelsEl) panelsEl.removeAttribute("hidden");
+		if (composerEl) composerEl.removeAttribute("hidden");
+		const headerEl = doc.querySelector<HTMLElement>("#stage > header");
+		const topinfoEl = doc.querySelector<HTMLElement>("#topinfo");
+		const bannerWrapEl = doc.querySelector<HTMLElement>("#banner");
+		if (headerEl) headerEl.removeAttribute("hidden");
+		if (topinfoEl) topinfoEl.removeAttribute("hidden");
+		if (bannerWrapEl) bannerWrapEl.removeAttribute("hidden");
+		const bannerEl = doc.querySelector<HTMLElement>("#banner");
+		if (bannerEl && !bannerEl.innerHTML) bannerEl.innerHTML = BANNER;
+
+		// Reset panels: clear any stale data-ai/persona-name from a previous
+		// session so the loading frames render as empty shells.
+		const panelEls = doc.querySelectorAll<HTMLElement>(".ai-panel");
+		for (const panel of panelEls) {
+			panel.removeAttribute("data-ai");
+			panel.style.removeProperty("--panel-color");
+			for (const lbl of panel.querySelectorAll<HTMLElement>(".panel-name")) {
+				lbl.textContent = "";
+			}
+			const transcript = panel.querySelector<HTMLElement>(".transcript");
+			if (transcript) {
+				transcript.dataset.transcript = "";
+				transcript.textContent = "";
+			}
+			const budgetEl = panel.querySelector<HTMLSpanElement>(".panel-budget");
+			if (budgetEl) {
+				budgetEl.dataset.budget = "";
+				budgetEl.textContent = "";
+			}
+		}
+
+		// Composer: visible but disabled with a "loading…" placeholder.
+		_promptInput.disabled = true;
+		_sendBtn.disabled = true;
+		_promptInput.placeholder = "loading…";
+
+		setStageLoadState("loading-daemons");
+		renderLoadingTopInfo("loading-daemons", 0);
+
+		// Braille spinner machinery — duplicated from the round-submit path so
+		// we can ride spinners on the panel-name labels while content packs
+		// load (no session yet, so we can't share that closure).
+		const BRAILLE_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+		const SPINNER_INTERVAL_MS = 80;
+		let spinnerInterval: ReturnType<typeof setInterval> | undefined;
+		let wipeRaf: ReturnType<typeof requestAnimationFrame> | undefined;
+
+		const cleanupLoadingTimers = (): void => {
+			if (spinnerInterval) {
+				clearInterval(spinnerInterval);
+				spinnerInterval = undefined;
+			}
+			if (wipeRaf !== undefined) {
+				cancelAnimationFrame(wipeRaf);
+				wipeRaf = undefined;
+			}
+		};
+
+		const startSpinners = (): void => {
+			let frame = 0;
+			spinnerInterval = setInterval(() => {
+				frame = (frame + 1) % BRAILLE_FRAMES.length;
+				const text = ` ${BRAILLE_FRAMES[frame] ?? ""}`;
+				for (const sp of doc.querySelectorAll<HTMLElement>(
+					".panel-name .panel-spinner",
+				)) {
+					sp.textContent = text;
+				}
+			}, SPINNER_INTERVAL_MS);
+		};
+
+		const startBrightnessWipe = (): void => {
+			const stageEl = doc.querySelector<HTMLElement>("#stage");
+			if (!stageEl) return;
+			const startTs =
+				typeof performance !== "undefined" ? performance.now() : Date.now();
+			// τ chosen so the bright band reaches ~95% at ~60s (target pack
+			// load time) and ~99% at ~90s, asymptotically capped at 99% so
+			// the panel never visually completes until packs actually resolve.
+			const TAU_MS = 20_000;
+			const tick = (): void => {
+				const now =
+					typeof performance !== "undefined" ? performance.now() : Date.now();
+				const elapsed = now - startTs;
+				const eased = 1 - Math.exp(-elapsed / TAU_MS);
+				const pct = Math.min(99, Math.max(0, eased * 100));
+				stageEl.style.setProperty("--fill-pct", `${pct.toFixed(2)}%`);
+				wipeRaf = requestAnimationFrame(tick);
+			};
+			wipeRaf = requestAnimationFrame(tick);
+		};
+
+		const buildLoadingPersonaShape = (
+			personas: Record<AiId, AiPersona>,
+		): void => {
+			const ids = Object.keys(personas);
+			panelEls.forEach((panel, idx) => {
+				const aiId = ids[idx];
+				if (!aiId) return;
+				const persona = personas[aiId];
+				if (!persona) return;
+				panel.dataset.ai = aiId;
+				panel.style.setProperty("--panel-color", persona.color);
+				initPanelChrome(panel, persona);
+				// Append a braille spinner span next to each persona name label.
+				for (const labelEl of panel.querySelectorAll<HTMLElement>(
+					".panel-name",
+				)) {
+					const sp = doc.createElement("span");
+					sp.className = "panel-spinner";
+					sp.textContent = ` ${BRAILLE_FRAMES[0] ?? ""}`;
+					labelEl.appendChild(sp);
+				}
+			});
+		};
+
+		return pending.personasPromise
+			.then((personas) => {
+				buildLoadingPersonaShape(personas);
+				setStageLoadState("generating-room");
+				renderLoadingTopInfo("generating-room", Object.keys(personas).length);
+				startSpinners();
+				startBrightnessWipe();
+				return pending.contentPacksPromise.then((packs) => ({
+					personas,
+					contentPacks: packs,
+				}));
+			})
+			.then((assets) => {
+				cleanupLoadingTimers();
+				let built = buildSessionFromAssets(assets);
+				built = applyTestAffordances(built, effectiveParams);
+
+				const saveResult = saveActiveSession(built.getState());
+				if (!saveResult.ok) {
+					showPersistenceWarning(saveResult.reason);
+				}
+				clearPendingBootstrap();
+
+				// Strip braille spinners — initPanelChrome below will overwrite
+				// .panel-name text content but spinners are appended children,
+				// so clear them explicitly first.
+				for (const sp of doc.querySelectorAll<HTMLElement>(
+					".panel-name .panel-spinner",
+				)) {
+					sp.remove();
+				}
+
+				setStageLoadState("stable");
+
+				// Re-enable composer; the recursive renderGame call below will
+				// run refreshComposerState which re-derives sendBtn.disabled from
+				// the current text + lockouts (start state: send disabled until
+				// a valid mention is typed).
+				_promptInput.disabled = false;
+				_promptInput.placeholder = "";
+
+				// Hand off to the normal populated path. Setting the module-scope
+				// session var lets the recursive call skip both the loading branch
+				// and the localStorage restore path.
+				session = built;
+				return renderGame(root, params);
+			})
+			.catch((err: unknown) => {
+				cleanupLoadingTimers();
+				clearPendingBootstrap();
+				if (err instanceof CapHitError && capHitEl) {
+					capHitEl.removeAttribute("hidden");
+					if (panelsEl) panelsEl.setAttribute("hidden", "");
+					if (composerEl) composerEl.setAttribute("hidden", "");
+					return;
+				}
+				// Anything else: bounce to start with a generic broken reason.
+				clearActiveSession();
+				if (typeof location !== "undefined") {
+					location.hash = "#/start?reason=broken";
+				}
+			});
+	}
+
 	// Session restore path: load from active session pointer.
 	// If no valid session → redirect to #/start.
 	if (!session) {
+		// Bootstrap-loading branch: the player just submitted CONNECT, the
+		// session can't be built until content packs land, but we want them on
+		// the main screen with progressive loading rather than stuck on dial-up.
+		const pendingBootstrap = getPendingBootstrap();
+		if (pendingBootstrap) {
+			return renderBootstrapLoadingFlow(pendingBootstrap);
+		}
+
 		// Feature-detect localStorage availability (SecurityError in privacy mode).
 		let storageAvailable = true;
 		try {
@@ -621,12 +891,26 @@ export function renderGame(
 		};
 		renderTopInfoLeft(topinfoLeftEl, inputs);
 		topinfoRightEl.textContent = formatTopInfoRight(inputs);
+		const stableStatus = topInfoStatus("stable");
 		const okSpan = doc.createElement("span");
-		okSpan.className = "ok";
-		okSpan.textContent = TOPINFO_RIGHT_OK_TEXT;
+		okSpan.className = stableStatus.cls;
+		okSpan.textContent = stableStatus.desktop;
 		topinfoRightEl.appendChild(okSpan);
 		if (topinfoMobileEl) {
 			topinfoMobileEl.textContent = formatTopInfoMobile(inputs);
+		}
+		// Reset the mobile status pill to "stable" — during progressive
+		// loading we put loading/generating in #topinfo-mobile-status; this
+		// brings it back to its normal green appearance once a session is live.
+		const topinfoMobileStatusEl = doc.querySelector<HTMLElement>(
+			"#topinfo-mobile-status",
+		);
+		if (topinfoMobileStatusEl) {
+			topinfoMobileStatusEl.textContent = "";
+			const sp = doc.createElement("span");
+			sp.className = stableStatus.cls;
+			sp.textContent = ` ${stableStatus.mobile}`;
+			topinfoMobileStatusEl.appendChild(sp);
 		}
 	}
 
