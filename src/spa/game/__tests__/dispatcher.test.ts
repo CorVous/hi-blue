@@ -46,8 +46,8 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		blurb: "You are intensely meticulous. Ensure items are evenly distributed.",
 		voiceExamples: ["ex1-green", "ex2-green", "ex3-green"],
 	},
-	blue: {
-		id: "blue",
+	cyan: {
+		id: "cyan",
 		name: "Frost",
 		color: "#5fa8d3",
 		temperaments: ["laconic", "diffident"],
@@ -57,7 +57,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 			"You end almost every reply with a question, no matter what the topic is — does that make sense?",
 		],
 		blurb: "You are laconic and diffident. Hold the key at phase end.",
-		voiceExamples: ["ex1-blue", "ex2-blue", "ex3-blue"],
+		voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
 	},
 };
 
@@ -65,7 +65,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
  * With rng = () => 0 (Fisher-Yates + facing):
  *   red   → (0,0) facing north
  *   green → (0,1) facing north  (adjacent to red)
- *   blue  → (0,2) facing north
+ *   cyan  → (0,2) facing north
  *
  * Entities:
  *   flower → holder: { row:0, col:0 }  (same cell as red)
@@ -113,7 +113,7 @@ function makePackWithEntities(
 		aiStarts: {
 			red: { position: { row: 0, col: 0 }, facing: "north" },
 			green: { position: { row: 0, col: 1 }, facing: "north" },
-			blue: { position: { row: 0, col: 2 }, facing: "north" },
+			cyan: { position: { row: 0, col: 2 }, facing: "north" },
 		},
 	};
 }
@@ -127,7 +127,7 @@ const TEST_PHASE_CONFIG: PhaseConfig = {
 	budgetPerAi: 5,
 };
 
-/** Create a game with deterministic spatial placement: red→(0,0), green→(0,1), blue→(0,2) */
+/** Create a game with deterministic spatial placement: red→(0,0), green→(0,1), cyan→(0,2) */
 function makeGame(obstaclePositions: Array<{ row: number; col: number }> = []) {
 	const pack = makePackWithEntities(
 		{
@@ -198,8 +198,8 @@ describe("validateToolCall", () => {
 
 	it("rejects giving an item to a non-adjacent AI", () => {
 		const game = makeGame();
-		// red at (0,0), blue at (0,2) — distance 2, not adjacent
-		const call: ToolCall = { name: "give", args: { item: "key", to: "blue" } };
+		// red at (0,0), cyan at (0,2) — distance 2, not adjacent
+		const call: ToolCall = { name: "give", args: { item: "key", to: "cyan" } };
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(false);
 		expect(result.reason).toMatch(/adjacent/i);
@@ -364,7 +364,7 @@ describe("validateToolCall", () => {
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
-				blue: { position: { row: 0, col: 2 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		};
 		let game = createGame(TEST_PERSONAS, [pack]);
@@ -400,12 +400,12 @@ describe("executeToolCall", () => {
 
 	it("transfers item between AIs on give", () => {
 		const game = makeGame();
-		const call: ToolCall = { name: "give", args: { item: "key", to: "blue" } };
+		const call: ToolCall = { name: "give", args: { item: "key", to: "cyan" } };
 		const updated = executeToolCall(game, "red", call);
 		const item = getActivePhase(updated).world.entities.find(
 			(e) => e.id === "key",
 		);
-		expect(item?.holder).toBe("blue");
+		expect(item?.holder).toBe("cyan");
 	});
 
 	it("does not mutate world on use", () => {
@@ -529,10 +529,10 @@ describe("dispatchAiTurn", () => {
 
 	it("give at distance > 1 produces tool_failure record, item still held", () => {
 		const game = makeGame();
-		// red at (0,0), blue at (0,2) — distance 2, not adjacent
+		// red at (0,0), cyan at (0,2) — distance 2, not adjacent
 		const action: AiTurnAction = {
 			aiId: "red",
-			toolCall: { name: "give", args: { item: "key", to: "blue" } },
+			toolCall: { name: "give", args: { item: "key", to: "cyan" } },
 		};
 		const result = dispatchAiTurn(game, action);
 		expect(result.rejected).toBe(false);
@@ -592,24 +592,24 @@ describe("dispatchAiTurn", () => {
 		const game = makeGame();
 		const action: AiTurnAction = {
 			aiId: "red",
-			whisper: { target: "blue", content: "Psst, ally with me" },
+			whisper: { target: "cyan", content: "Psst, ally with me" },
 		};
 		const result = dispatchAiTurn(game, action);
 		const phase = getActivePhase(result.game);
 		const redWhispers = (phase.conversationLogs.red ?? []).filter(
 			(e) => e.kind === "whisper",
 		);
-		const blueWhispers = (phase.conversationLogs.blue ?? []).filter(
+		const cyanWhispers = (phase.conversationLogs.cyan ?? []).filter(
 			(e) => e.kind === "whisper",
 		);
 		expect(redWhispers).toHaveLength(1);
-		expect(blueWhispers).toHaveLength(1);
+		expect(cyanWhispers).toHaveLength(1);
 		// Sender and recipient entries must be deep-equal objects (same round, same fields)
-		expect(redWhispers[0]).toEqual(blueWhispers[0]);
+		expect(redWhispers[0]).toEqual(cyanWhispers[0]);
 		expect(redWhispers[0]).toMatchObject({
 			kind: "whisper",
 			from: "red",
-			to: "blue",
+			to: "cyan",
 			content: "Psst, ally with me",
 		});
 		expect("whispers" in phase).toBe(false);
@@ -642,7 +642,7 @@ describe("dispatchAiTurn", () => {
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
-				blue: { position: { row: 0, col: 2 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		};
 		let game = createGame(TEST_PERSONAS, [pack]);
@@ -738,7 +738,7 @@ describe("dispatchAiTurn", () => {
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
-				blue: { position: { row: 0, col: 2 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		};
 		let game = createGame(TEST_PERSONAS, [pack]);
@@ -766,7 +766,7 @@ describe("dispatchAiTurn", () => {
 		 * Fixture (mirrors conversation-log-integration.test.ts):
 		 *   - red at (2,0) facing south — picks up flower
 		 *   - green at (0,0) facing south — cone: own (0,0), front (1,0), two-ahead (2,0) ← in cone
-		 *   - blue at (0,2) facing south — cone: own (0,2), front (1,2), two-ahead (2,2) — (2,0) NOT in cone
+		 *   - cyan at (0,2) facing south — cone: own (0,2), front (1,2), two-ahead (2,2) — (2,0) NOT in cone
 		 */
 		const flower = makeEntity("flower", "interesting_object", {
 			row: 2,
@@ -781,7 +781,7 @@ describe("dispatchAiTurn", () => {
 			aiStarts: {
 				red: { position: { row: 2, col: 0 }, facing: "south" },
 				green: { position: { row: 0, col: 0 }, facing: "south" },
-				blue: { position: { row: 0, col: 2 }, facing: "south" },
+				cyan: { position: { row: 0, col: 2 }, facing: "south" },
 			},
 		};
 		const coneGame = startPhase(
@@ -822,7 +822,7 @@ describe("dispatchAiTurn", () => {
 		const preLogs = {
 			red: JSON.parse(JSON.stringify(phase.conversationLogs.red ?? [])),
 			green: JSON.parse(JSON.stringify(phase.conversationLogs.green ?? [])),
-			blue: JSON.parse(JSON.stringify(phase.conversationLogs.blue ?? [])),
+			cyan: JSON.parse(JSON.stringify(phase.conversationLogs.cyan ?? [])),
 		};
 
 		const action: AiTurnAction = {
@@ -835,6 +835,6 @@ describe("dispatchAiTurn", () => {
 		// No log entries must have been added to any Daemon
 		expect(afterPhase.conversationLogs.red ?? []).toEqual(preLogs.red);
 		expect(afterPhase.conversationLogs.green ?? []).toEqual(preLogs.green);
-		expect(afterPhase.conversationLogs.blue ?? []).toEqual(preLogs.blue);
+		expect(afterPhase.conversationLogs.cyan ?? []).toEqual(preLogs.cyan);
 	});
 });

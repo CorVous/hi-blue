@@ -45,8 +45,8 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		blurb: "You are meticulous.",
 		voiceExamples: ["ex1-green", "ex2-green", "ex3-green"],
 	},
-	blue: {
-		id: "blue",
+	cyan: {
+		id: "cyan",
 		name: "Frost",
 		color: "#5fa8d3",
 		temperaments: ["laconic", "diffident"],
@@ -56,7 +56,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 			"You end almost every reply with a question, no matter what the topic is — does that make sense?",
 		],
 		blurb: "You are laconic.",
-		voiceExamples: ["ex1-blue", "ex2-blue", "ex3-blue"],
+		voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
 	},
 };
 
@@ -104,7 +104,7 @@ const TEST_CONTENT_PACK: ContentPack = {
 	aiStarts: {
 		red: { position: { row: 0, col: 0 }, facing: "north" },
 		green: { position: { row: 0, col: 1 }, facing: "north" },
-		blue: { position: { row: 0, col: 2 }, facing: "north" },
+		cyan: { position: { row: 0, col: 2 }, facing: "north" },
 	},
 };
 
@@ -116,8 +116,8 @@ function makeGame() {
 }
 
 describe("non-addressed daemon never sees a stale user message as its last turn", () => {
-	it("after addressing red then blue, red's round-2 messages end with the silent-voice anchor (not the prior user/assistant)", async () => {
-		const initiative: AiId[] = ["red", "green", "blue"];
+	it("after addressing red then cyan, red's round-2 messages end with the silent-voice anchor (not the prior user/assistant)", async () => {
+		const initiative: AiId[] = ["red", "green", "cyan"];
 		const game = makeGame();
 
 		const provider = new MockRoundLLMProvider([
@@ -126,7 +126,7 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "<red round 2>", toolCalls: [] },
 			{ assistantText: "<green round 2>", toolCalls: [] },
-			{ assistantText: "<blue round 2>", toolCalls: [] },
+			{ assistantText: "<cyan round 2>", toolCalls: [] },
 		]);
 
 		const r1 = await runRound(
@@ -140,8 +140,8 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 
 		await runRound(
 			r1.nextState,
-			"blue",
-			"different question for blue",
+			"cyan",
+			"different question for cyan",
 			provider,
 			undefined,
 			initiative,
@@ -170,16 +170,16 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 		);
 		expect(priorUser).toBeDefined();
 
-		// Blue (the addressee this round) must NOT receive the silent-voice
+		// Cyan (the addressee this round) must NOT receive the silent-voice
 		// anchor — its tail is the actual player message.
-		const blueRound2 = provider.calls[5];
-		const blueMsgs = blueRound2!.messages;
-		const blueLastUser = [...blueMsgs].reverse().find((m) => m.role === "user");
-		expect((blueLastUser as { content: string }).content).toBe(
-			"different question for blue",
+		const cyanRound2 = provider.calls[5];
+		const cyanMsgs = cyanRound2!.messages;
+		const cyanLastUser = [...cyanMsgs].reverse().find((m) => m.role === "user");
+		expect((cyanLastUser as { content: string }).content).toBe(
+			"different question for cyan",
 		);
 		expect(
-			blueMsgs.some(
+			cyanMsgs.some(
 				(m) =>
 					m.role === "user" &&
 					(m as { content: string }).content === SILENT_VOICE_TURN,
@@ -188,13 +188,13 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 	});
 
 	it("an AI that has never been addressed still gets the silent-voice anchor", async () => {
-		const initiative: AiId[] = ["red", "green", "blue"];
+		const initiative: AiId[] = ["red", "green", "cyan"];
 		const game = makeGame();
 
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "<red>", toolCalls: [] },
 			{ assistantText: "<green>", toolCalls: [] },
-			{ assistantText: "<blue>", toolCalls: [] },
+			{ assistantText: "<cyan>", toolCalls: [] },
 		]);
 
 		await runRound(game, "red", "hello red", provider, undefined, initiative);

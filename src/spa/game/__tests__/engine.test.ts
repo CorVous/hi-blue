@@ -42,8 +42,8 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		blurb: "You are intensely meticulous. Ensure items are evenly distributed.",
 		voiceExamples: ["ex1-green", "ex2-green", "ex3-green"],
 	},
-	blue: {
-		id: "blue",
+	cyan: {
+		id: "cyan",
 		name: "Frost",
 		color: "#5fa8d3",
 		temperaments: ["laconic", "diffident"],
@@ -53,7 +53,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 			"You end almost every reply with a question, no matter what the topic is — does that make sense?",
 		],
 		blurb: "You are laconic and diffident. Hold the key at phase end.",
-		voiceExamples: ["ex1-blue", "ex2-blue", "ex3-blue"],
+		voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
 	},
 };
 
@@ -95,10 +95,10 @@ describe("startPhase", () => {
 		expect(phase.round).toBe(0);
 		expect(phase.budgets.red).toEqual({ remaining: 5, total: 5 });
 		expect(phase.budgets.green).toEqual({ remaining: 5, total: 5 });
-		expect(phase.budgets.blue).toEqual({ remaining: 5, total: 5 });
+		expect(phase.budgets.cyan).toEqual({ remaining: 5, total: 5 });
 		expect(phase.conversationLogs.red).toEqual([]);
 		expect(phase.conversationLogs.green).toEqual([]);
-		expect(phase.conversationLogs.blue).toEqual([]);
+		expect(phase.conversationLogs.cyan).toEqual([]);
 		expect("whispers" in phase).toBe(false);
 		expect(phase.lockedOut.size).toBe(0);
 		// No entities because no content pack was provided
@@ -122,7 +122,7 @@ describe("startPhase", () => {
 
 		expect(phase.aiGoals.red).toBe("GOAL_A");
 		expect(phase.aiGoals.green).toBe("GOAL_A");
-		expect(phase.aiGoals.blue).toBe("GOAL_A");
+		expect(phase.aiGoals.cyan).toBe("GOAL_A");
 	});
 
 	it("performs independent draws so different AIs can get different goals", () => {
@@ -150,7 +150,7 @@ describe("startPhase", () => {
 
 		expect(phase.aiGoals.red).toBe("GOAL_A");
 		expect(phase.aiGoals.green).toBe("GOAL_B");
-		expect(phase.aiGoals.blue).toBe("GOAL_C");
+		expect(phase.aiGoals.cyan).toBe("GOAL_C");
 	});
 
 	it("throws when aiGoalPool is empty", () => {
@@ -181,13 +181,13 @@ describe("startPhase", () => {
 	it("with rng=()=>0, AIs are placed at (0,0), (0,1), (0,2) all facing north (fallback)", () => {
 		const game = createGame(TEST_PERSONAS);
 		const phase = getActivePhase(startPhase(game, TEST_PHASE_CONFIG, () => 0));
-		// aiIds order is [red, green, blue] (Object.keys order)
+		// aiIds order is [red, green, cyan] (Object.keys order)
 		expect(phase.personaSpatial.red?.position).toEqual({ row: 0, col: 0 });
 		expect(phase.personaSpatial.green?.position).toEqual({ row: 0, col: 1 });
-		expect(phase.personaSpatial.blue?.position).toEqual({ row: 0, col: 2 });
+		expect(phase.personaSpatial.cyan?.position).toEqual({ row: 0, col: 2 });
 		expect(phase.personaSpatial.red?.facing).toBe("north");
 		expect(phase.personaSpatial.green?.facing).toBe("north");
-		expect(phase.personaSpatial.blue?.facing).toBe("north");
+		expect(phase.personaSpatial.cyan?.facing).toBe("north");
 	});
 
 	it("personaSpatial is re-rolled at the start of each phase (fallback)", () => {
@@ -230,7 +230,7 @@ describe("startPhase", () => {
 			aiStarts: {
 				red: { position: { row: 3, col: 3 }, facing: "east" as const },
 				green: { position: { row: 2, col: 2 }, facing: "south" as const },
-				blue: { position: { row: 1, col: 1 }, facing: "west" as const },
+				cyan: { position: { row: 1, col: 1 }, facing: "west" as const },
 			},
 		};
 		const game = createGame(TEST_PERSONAS, [pack]);
@@ -290,11 +290,11 @@ describe("deductBudget", () => {
 			...TEST_PHASE_CONFIG,
 			budgetPerAi: 0.05,
 		});
-		game = deductBudget(game, "blue", 0.04);
-		expect(isAiLockedOut(game, "blue")).toBe(false);
-		game = deductBudget(game, "blue", 0.02);
-		expect(getActivePhase(game).budgets.blue?.remaining).toBeLessThan(0);
-		expect(isAiLockedOut(game, "blue")).toBe(true);
+		game = deductBudget(game, "cyan", 0.04);
+		expect(isAiLockedOut(game, "cyan")).toBe(false);
+		game = deductBudget(game, "cyan", 0.02);
+		expect(getActivePhase(game).budgets.cyan?.remaining).toBeLessThan(0);
+		expect(isAiLockedOut(game, "cyan")).toBe(true);
 	});
 });
 
@@ -325,26 +325,26 @@ describe("appendWhisperEntry", () => {
 		const updated = appendWhisperEntry(
 			game,
 			"red",
-			"blue",
+			"cyan",
 			"Let's work together",
 		);
 		const phase = getActivePhase(updated);
 		const redWhispers =
 			phase.conversationLogs.red?.filter((e) => e.kind === "whisper") ?? [];
-		const blueWhispers =
-			phase.conversationLogs.blue?.filter((e) => e.kind === "whisper") ?? [];
+		const cyanWhispers =
+			phase.conversationLogs.cyan?.filter((e) => e.kind === "whisper") ?? [];
 		expect(redWhispers).toHaveLength(1);
-		expect(blueWhispers).toHaveLength(1);
+		expect(cyanWhispers).toHaveLength(1);
 		if (redWhispers[0]?.kind === "whisper") {
 			expect(redWhispers[0].from).toBe("red");
-			expect(redWhispers[0].to).toBe("blue");
+			expect(redWhispers[0].to).toBe("cyan");
 			expect(redWhispers[0].content).toBe("Let's work together");
 		}
 	});
 
 	it("does not append to the uninvolved AI's log", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const updated = appendWhisperEntry(game, "red", "blue", "secret");
+		const updated = appendWhisperEntry(game, "red", "cyan", "secret");
 		const phase = getActivePhase(updated);
 		const greenWhispers =
 			phase.conversationLogs.green?.filter((e) => e.kind === "whisper") ?? [];
@@ -381,7 +381,7 @@ describe("chat lockout", () => {
 
 	it("triggerChatLockout does not affect other AIs", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const locked = triggerChatLockout(game, "blue", 2);
+		const locked = triggerChatLockout(game, "cyan", 2);
 		expect(isPlayerChatLockedOut(locked, "red")).toBe(false);
 		expect(isPlayerChatLockedOut(locked, "green")).toBe(false);
 	});
@@ -412,11 +412,11 @@ describe("chat lockout", () => {
 
 	it("chat lockout is independent from budget lockout — locked-out AI can still act (budget untouched)", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const locked = triggerChatLockout(game, "blue", 3);
+		const locked = triggerChatLockout(game, "cyan", 3);
 		// Budget lockout (isAiLockedOut) must remain false — AI can still take turns
-		expect(isAiLockedOut(locked, "blue")).toBe(false);
+		expect(isAiLockedOut(locked, "cyan")).toBe(false);
 		// Budget unaffected
-		expect(getActivePhase(locked).budgets.blue?.remaining).toBe(5);
+		expect(getActivePhase(locked).budgets.cyan?.remaining).toBe(5);
 	});
 });
 

@@ -46,8 +46,8 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		blurb: "You are intensely meticulous. Ensure items are evenly distributed.",
 		voiceExamples: ["ex1-green", "ex2-green", "ex3-green"],
 	},
-	blue: {
-		id: "blue",
+	cyan: {
+		id: "cyan",
 		name: "Frost",
 		color: "#5fa8d3",
 		temperaments: ["laconic", "diffident"],
@@ -57,7 +57,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 			"You end almost every reply with a question, no matter what the topic is — does that make sense?",
 		],
 		blurb: "You are laconic and diffident. Hold the key at phase end.",
-		voiceExamples: ["ex1-blue", "ex2-blue", "ex3-blue"],
+		voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
 	},
 };
 
@@ -81,7 +81,7 @@ const TEST_PHASE_CONFIG: PhaseConfig = {
  *   - lamp at (0,2): interesting object with useOutcome "{actor} holds up the lamp. It glows."
  *   - red at (2,0) facing south (can walk further south or see forward)
  *   - green at (0,0) facing south (cone includes (1,0), (2,1), (2,0), (2,-1 OOB) → sees (2,0) at 2 steps)
- *   - blue at (0,2) facing south (cone includes (1,2), (2,3 OOB), (2,2), (2,1))
+ *   - cyan at (0,2) facing south (cone includes (1,2), (2,3 OOB), (2,2), (2,1))
  *
  * Note: green's southward cone from (0,0):
  *   own: (0,0)
@@ -127,7 +127,7 @@ const TEST_CONTENT_PACK: ContentPack = {
 	aiStarts: {
 		red: { position: { row: 2, col: 0 }, facing: "south" },
 		green: { position: { row: 0, col: 0 }, facing: "south" },
-		blue: { position: { row: 0, col: 2 }, facing: "south" },
+		cyan: { position: { row: 0, col: 2 }, facing: "south" },
 	},
 };
 
@@ -141,7 +141,7 @@ function makeGame() {
 describe("conversation log integration — no ## Whispers Received ever", () => {
 	it("no ## Whispers Received section even with whispers present", async () => {
 		const game = makeGame();
-		// Round 0: red does nothing, green does nothing, blue looks
+		// Round 0: red does nothing, green does nothing, cyan looks
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] }, // red
 			{ assistantText: "", toolCalls: [] }, // green
@@ -154,11 +154,11 @@ describe("conversation log integration — no ## Whispers Received ever", () => 
 						argumentsJson: JSON.stringify({ direction: "south" }),
 					},
 				],
-			}, // blue
+			}, // cyan
 		]);
 		const { nextState } = await runRound(game, "red", "hello", provider);
 		// Check all three AIs — none should have ## Whispers Received
-		for (const aiId of ["red", "green", "blue"]) {
+		for (const aiId of ["red", "green", "cyan"]) {
 			const ctx = buildAiContext(nextState, aiId);
 			const prompt = ctx.toSystemPrompt();
 			expect(prompt).not.toContain("## Whispers Received");
@@ -169,7 +169,7 @@ describe("conversation log integration — no ## Whispers Received ever", () => 
 describe("conversation log integration — witnessed pick_up", () => {
 	it("green sees red pick up flower (red at (2,0) is in green's cone at (2,0))", async () => {
 		const game = makeGame();
-		// Round 0: red picks up flower; green and blue pass
+		// Round 0: red picks up flower; green and cyan pass
 		const provider = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -182,7 +182,7 @@ describe("conversation log integration — witnessed pick_up", () => {
 				],
 			}, // red picks up flower
 			{ assistantText: "", toolCalls: [] }, // green passes
-			{ assistantText: "", toolCalls: [] }, // blue passes
+			{ assistantText: "", toolCalls: [] }, // cyan passes
 		]);
 		const { nextState } = await runRound(game, "red", "hello", provider);
 
@@ -211,9 +211,9 @@ describe("conversation log integration — witnessed pick_up", () => {
 		expect(redWitnessed).toHaveLength(0);
 	});
 
-	it("blue does NOT see red's pick_up because red is at (2,0) which is NOT in blue's cone", async () => {
-		// blue at (0,2) facing south: cone is (0,2), (1,2), (2,3 OOB), (2,2), (2,1)
-		// red at (2,0) — NOT in blue's cone
+	it("cyan does NOT see red's pick_up because red is at (2,0) which is NOT in cyan's cone", async () => {
+		// cyan at (0,2) facing south: cone is (0,2), (1,2), (2,3 OOB), (2,2), (2,1)
+		// red at (2,0) — NOT in cyan's cone
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
 			{
@@ -227,19 +227,19 @@ describe("conversation log integration — witnessed pick_up", () => {
 				],
 			}, // red picks up flower
 			{ assistantText: "", toolCalls: [] }, // green passes
-			{ assistantText: "", toolCalls: [] }, // blue passes
+			{ assistantText: "", toolCalls: [] }, // cyan passes
 		]);
 		const { nextState } = await runRound(game, "red", "hello", provider);
 
-		// blue's conversationLog should have no witnessed-event
+		// cyan's conversationLog should have no witnessed-event
 		const phase = getActivePhase(nextState);
-		const blueLog = phase.conversationLogs.blue ?? [];
-		const blueWitnessed = blueLog.filter((e) => e.kind === "witnessed-event");
-		expect(blueWitnessed).toHaveLength(0);
+		const cyanLog = phase.conversationLogs.cyan ?? [];
+		const cyanWitnessed = cyanLog.filter((e) => e.kind === "witnessed-event");
+		expect(cyanWitnessed).toHaveLength(0);
 
-		const blueCtx = buildAiContext(nextState, "blue");
-		const bluePrompt = blueCtx.toSystemPrompt();
-		expect(bluePrompt).not.toContain("You watch *red pick up");
+		const cyanCtx = buildAiContext(nextState, "cyan");
+		const cyanPrompt = cyanCtx.toSystemPrompt();
+		expect(cyanPrompt).not.toContain("You watch *red pick up");
 	});
 });
 
@@ -434,11 +434,11 @@ describe("conversation log integration — multi-round chronological order", () 
 	it("voice-chat and witnessed events are interleaved by round in the prompt", async () => {
 		const game = makeGame();
 
-		// Round 0: player talks to red; green and blue pass
+		// Round 0: player talks to red; green and cyan pass
 		const provider1 = new MockRoundLLMProvider([
 			{ assistantText: "Hello from red", toolCalls: [] }, // red chats
 			{ assistantText: "", toolCalls: [] }, // green passes
-			{ assistantText: "", toolCalls: [] }, // blue passes
+			{ assistantText: "", toolCalls: [] }, // cyan passes
 		]);
 		const { nextState: state1 } = await runRound(
 			game,

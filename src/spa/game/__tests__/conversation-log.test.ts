@@ -42,8 +42,8 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		blurb: "You are intensely meticulous.",
 		voiceExamples: ["ex1-green", "ex2-green", "ex3-green"],
 	},
-	blue: {
-		id: "blue",
+	cyan: {
+		id: "cyan",
 		name: "Frost",
 		color: "#5fa8d3",
 		temperaments: ["laconic", "diffident"],
@@ -53,7 +53,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 			"You end almost every reply with a question, no matter what the topic is — does that make sense?",
 		],
 		blurb: "You are laconic and diffident.",
-		voiceExamples: ["ex1-blue", "ex2-blue", "ex3-blue"],
+		voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
 	},
 };
 
@@ -299,13 +299,13 @@ describe("buildConversationLog — witnessed give", () => {
 					actor: "red",
 					actionKind: "give",
 					item: "key-1",
-					to: "blue",
+					to: "cyan",
 				},
 			],
 			worldEntities: [makeItem("key-1", "Key")],
 		};
 		const result = buildConversationLog(input, "green", TEST_PERSONAS);
-		expect(result).toEqual(["[Round 0] You watch *red give the Key to *blue."]);
+		expect(result).toEqual(["[Round 0] You watch *red give the Key to *cyan."]);
 	});
 
 	it("renders give with 'you' when recipient is the witness (aiId)", () => {
@@ -318,13 +318,13 @@ describe("buildConversationLog — witnessed give", () => {
 					actor: "red",
 					actionKind: "give",
 					item: "key-1",
-					to: "blue",
+					to: "cyan",
 				},
 			],
 			worldEntities: [makeItem("key-1", "Key")],
 		};
-		// blue witnesses red giving to blue — should say "to you"
-		const result = buildConversationLog(input, "blue", TEST_PERSONAS);
+		// cyan witnesses red giving to cyan — should say "to you"
+		const result = buildConversationLog(input, "cyan", TEST_PERSONAS);
 		expect(result).toEqual(["[Round 0] You watch *red give the Key to you."]);
 	});
 });

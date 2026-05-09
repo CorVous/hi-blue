@@ -12,7 +12,7 @@ import type { AiId } from "../types.js";
 const nameMap = new Map<string, AiId>([
 	["ember", "red"],
 	["sage", "green"],
-	["frost", "blue"],
+	["frost", "cyan"],
 ]);
 
 describe("parseFirstMention", () => {
@@ -27,14 +27,14 @@ describe("parseFirstMention", () => {
 		["*Sage,", "green"],
 		["*Sage.", "green"],
 		["*Sage *Frost", "green"],
-		["*Frost *Sage", "blue"],
+		["*Frost *Sage", "cyan"],
 		["", null],
 		["hello world", null],
 		["email me at user@host", null],
 		["*Nonpersona hi", null],
 		["*", null],
 		["*Ember", "red"],
-		["*Frost", "blue"],
+		["*Frost", "cyan"],
 	])("parseFirstMention(%j) → %j", (text, expected) => {
 		expect(parseFirstMention(text, nameMap)).toBe(expected);
 	});
@@ -95,9 +95,9 @@ describe("findFirstMention", () => {
 		});
 	});
 
-	it('"*Frost *Sage" → first match is Frost (blue), nameEnd: 6, end: 6', () => {
+	it('"*Frost *Sage" → first match is Frost (cyan), nameEnd: 6, end: 6', () => {
 		expect(findFirstMention("*Frost *Sage", nameMap)).toEqual({
-			aiId: "blue",
+			aiId: "cyan",
 			start: 0,
 			nameEnd: 6,
 			end: 6,
@@ -118,12 +118,12 @@ describe("buildPersonaNameMap", () => {
 		const personas = {
 			red: { name: "Ember" },
 			green: { name: "Sage" },
-			blue: { name: "Frost" },
+			cyan: { name: "Frost" },
 		} as Record<AiId, { name: string }>;
 		const map = buildPersonaNameMap(personas);
 		expect(map.get("ember")).toBe("red");
 		expect(map.get("sage")).toBe("green");
-		expect(map.get("frost")).toBe("blue");
+		expect(map.get("frost")).toBe("cyan");
 		expect(map.size).toBe(3);
 	});
 });
@@ -135,12 +135,12 @@ describe("buildPersonaColorMap", () => {
 		const personas = {
 			red: { color: "crimson" },
 			green: { color: "lime" },
-			blue: { color: "cyan" },
+			cyan: { color: "cyan" },
 		} as Record<AiId, { color: string }>;
 		const map = buildPersonaColorMap(personas);
 		expect(map.get("red")).toBe("crimson");
 		expect(map.get("green")).toBe("lime");
-		expect(map.get("blue")).toBe("cyan");
+		expect(map.get("cyan")).toBe("cyan");
 		expect(map.size).toBe(3);
 	});
 
@@ -150,19 +150,19 @@ describe("buildPersonaColorMap", () => {
 		const personas = {
 			red: { color: "tomato" },
 			green: { color: "forest" },
-			blue: { color: "ocean" },
+			cyan: { color: "ocean" },
 		} as Record<AiId, { color: string }>;
 		const map = buildPersonaColorMap(personas);
 		expect(map.get("red")).not.toBe("red");
 		expect(map.get("green")).not.toBe("green");
-		expect(map.get("blue")).not.toBe("blue");
+		expect(map.get("cyan")).not.toBe("cyan");
 	});
 });
 
 const personasFixture = {
 	red: { name: "Ember" },
 	green: { name: "Sage" },
-	blue: { name: "Frost" },
+	cyan: { name: "Frost" },
 } as Record<AiId, { name: string }>;
 
 describe("applyAddresseeChange", () => {
@@ -175,7 +175,7 @@ describe("applyAddresseeChange", () => {
 		["*Sage hi", 3, "red", "*Ember hi", 6],
 		["*Sage tell *Frost ...", 21, "red", "*Ember tell *Frost ...", 22],
 		["*Sage,", 6, "red", "*Ember,", 7],
-		["hello *Sage how are you", 23, "blue", "hello *Frost how are you", 24],
+		["hello *Sage how are you", 23, "cyan", "hello *Frost how are you", 24],
 		["*nonpersona hi", 14, "red", "*Ember *nonpersona hi", 21],
 		["hi", null, "green", "*Sage hi", 6],
 		["hi", 0, "green", "*Sage hi", 6],

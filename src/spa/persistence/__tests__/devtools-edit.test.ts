@@ -44,8 +44,8 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 			"One more sweep through the list.",
 		],
 	},
-	blue: {
-		id: "blue",
+	cyan: {
+		id: "cyan",
 		name: "Frost",
 		color: "#5fa8d3",
 		temperaments: ["laconic", "diffident"],
@@ -119,7 +119,7 @@ describe("devtools-edit: mutating daemon .txt affects conversationLogs on reload
 							},
 						],
 						green: [],
-						blue: [],
+						cyan: [],
 					},
 				},
 			],

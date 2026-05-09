@@ -53,8 +53,8 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		blurb: "You are intensely meticulous. Ensure items are evenly distributed.",
 		voiceExamples: ["ex1-green", "ex2-green", "ex3-green"],
 	},
-	blue: {
-		id: "blue",
+	cyan: {
+		id: "cyan",
 		name: "Frost",
 		color: "#5fa8d3",
 		temperaments: ["laconic", "diffident"],
@@ -64,7 +64,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 			"You end almost every reply with a question, no matter what the topic is — does that make sense?",
 		],
 		blurb: "You are laconic and diffident. Hold the key at phase end.",
-		voiceExamples: ["ex1-blue", "ex2-blue", "ex3-blue"],
+		voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
 	},
 };
 
@@ -83,7 +83,7 @@ const TEST_PHASE_CONFIG: PhaseConfig = {
 
 /**
  * ContentPack placing flower at (0,0), key at (0,1), with
- * red→(0,0), green→(0,1), blue→(0,2) facing north.
+ * red→(0,0), green→(0,1), cyan→(0,2) facing north.
  */
 const TEST_CONTENT_PACK: ContentPack = {
 	phaseNumber: 1,
@@ -120,7 +120,7 @@ const TEST_CONTENT_PACK: ContentPack = {
 	aiStarts: {
 		red: { position: { row: 0, col: 0 }, facing: "north" },
 		green: { position: { row: 0, col: 1 }, facing: "north" },
-		blue: { position: { row: 0, col: 2 }, facing: "north" },
+		cyan: { position: { row: 0, col: 2 }, facing: "north" },
 	},
 };
 
@@ -205,7 +205,7 @@ describe("chat-only round", () => {
 			provider,
 		);
 		expect(getActivePhase(nextState).conversationLogs.green).toHaveLength(0);
-		expect(getActivePhase(nextState).conversationLogs.blue).toHaveLength(0);
+		expect(getActivePhase(nextState).conversationLogs.cyan).toHaveLength(0);
 	});
 
 	it("deducts budget for all three AIs by their reported request cost", async () => {
@@ -219,7 +219,7 @@ describe("chat-only round", () => {
 		const phase = getActivePhase(nextState);
 		expect(phase.budgets.red?.remaining).toBeCloseTo(4, 10);
 		expect(phase.budgets.green?.remaining).toBeCloseTo(4, 10);
-		expect(phase.budgets.blue?.remaining).toBeCloseTo(4, 10);
+		expect(phase.budgets.cyan?.remaining).toBeCloseTo(4, 10);
 	});
 
 	it("returns a RoundResult with the round number", async () => {
@@ -259,7 +259,7 @@ describe("whisper round — via dispatcher only", () => {
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] }, // red passes
 			{ assistantText: "", toolCalls: [] }, // green passes
-			{ assistantText: "", toolCalls: [] }, // blue passes
+			{ assistantText: "", toolCalls: [] }, // cyan passes
 		]);
 		const { result } = await runRound(game, "red", "hi", provider);
 		expect(result.actions.filter((e) => e.kind === "pass")).toHaveLength(3);
@@ -321,7 +321,7 @@ describe("budget-exhaustion lockout", () => {
 		const phase = getActivePhase(nextState);
 		expect(phase.lockedOut.has("red")).toBe(true);
 		expect(phase.lockedOut.has("green")).toBe(true);
-		expect(phase.lockedOut.has("blue")).toBe(true);
+		expect(phase.lockedOut.has("cyan")).toBe(true);
 	});
 
 	it("budget display: remaining budget decrements by the request cost after a round", async () => {
@@ -337,7 +337,7 @@ describe("budget-exhaustion lockout", () => {
 			4,
 			10,
 		);
-		expect(getActivePhase(nextState).budgets.blue?.remaining).toBeCloseTo(
+		expect(getActivePhase(nextState).budgets.cyan?.remaining).toBeCloseTo(
 			4,
 			10,
 		);
@@ -529,9 +529,9 @@ describe("tool-call dispatch", () => {
 			provider,
 		);
 
-		// Blue's prompt should NOT contain ## Action Log
-		const blueCtx = buildAiContext(stateAfterRound1, "blue");
-		const prompt = blueCtx.toSystemPrompt();
+		// Cyan's prompt should NOT contain ## Action Log
+		const cyanCtx = buildAiContext(stateAfterRound1, "cyan");
+		const prompt = cyanCtx.toSystemPrompt();
 		expect(prompt).not.toContain("## Action Log");
 	});
 
@@ -559,7 +559,7 @@ describe("tool-call dispatch", () => {
 		);
 
 		// No AI's prompt should contain Action Log or the failure
-		for (const aiId of ["red", "green", "blue"]) {
+		for (const aiId of ["red", "green", "cyan"]) {
 			const ctx = buildAiContext(stateAfterRound1, aiId);
 			const prompt = ctx.toSystemPrompt();
 			expect(prompt).not.toContain("## Action Log");
@@ -896,7 +896,7 @@ describe("chat lockout — coordinator triggering", () => {
 		});
 		expect(isPlayerChatLockedOut(nextState, "red")).toBe(false);
 		expect(isPlayerChatLockedOut(nextState, "green")).toBe(false);
-		expect(isPlayerChatLockedOut(nextState, "blue")).toBe(false);
+		expect(isPlayerChatLockedOut(nextState, "cyan")).toBe(false);
 	});
 
 	it("locked AI still acts (takes turn, not budget-locked) while chat lockout is active", async () => {
@@ -1029,7 +1029,7 @@ describe("phase progression — three-phase walk", () => {
 	it("walks through all three phases correctly, each with its own win condition", async () => {
 		// Items start held by the AIs so pick_up spatial validation is not needed.
 		// Win conditions check holder by AI id, which is spatial-independent.
-		// Phase 3 ContentPack: flower held by red, key held by blue (win already met)
+		// Phase 3 ContentPack: flower held by red, key held by cyan (win already met)
 		const contentPackP3: ContentPack = {
 			phaseNumber: 3,
 			setting: "",
@@ -1058,17 +1058,17 @@ describe("phase progression — three-phase walk", () => {
 					kind: "interesting_object",
 					name: "key",
 					examineDescription: "A key",
-					holder: "blue",
+					holder: "cyan",
 				},
 			],
 			obstacles: [],
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
-				blue: { position: { row: 0, col: 2 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		};
-		// Phase 2 ContentPack: key held by blue (win already met on first check)
+		// Phase 2 ContentPack: key held by cyan (win already met on first check)
 		const contentPackP2: ContentPack = {
 			phaseNumber: 2,
 			setting: "",
@@ -1079,14 +1079,14 @@ describe("phase progression — three-phase walk", () => {
 					kind: "interesting_object",
 					name: "key",
 					examineDescription: "A key",
-					holder: "blue",
+					holder: "cyan",
 				},
 			],
 			obstacles: [],
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
-				blue: { position: { row: 0, col: 2 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		};
 
@@ -1097,7 +1097,7 @@ describe("phase progression — three-phase walk", () => {
 			winCondition: (phase) => {
 				const flower = phase.world.entities.find((i) => i.id === "flower");
 				const key = phase.world.entities.find((i) => i.id === "key");
-				return flower?.holder === "red" && key?.holder === "blue";
+				return flower?.holder === "red" && key?.holder === "cyan";
 			},
 		};
 		const phase2Config: PhaseConfig = {
@@ -1105,7 +1105,7 @@ describe("phase progression — three-phase walk", () => {
 			phaseNumber: 2,
 			budgetPerAi: 5,
 			winCondition: (phase) =>
-				phase.world.entities.find((i) => i.id === "key")?.holder === "blue",
+				phase.world.entities.find((i) => i.id === "key")?.holder === "cyan",
 			nextPhaseConfig: phase3Config,
 		};
 		const phase1Config: PhaseConfig = {
@@ -1148,7 +1148,7 @@ describe("phase progression — three-phase walk", () => {
 		expect(r1.phaseEnded).toBe(true);
 		expect(afterP1.currentPhase).toBe(2);
 
-		// Round 1 of phase 2: win condition already met (blue holds key in this phase config)
+		// Round 1 of phase 2: win condition already met (cyan holds key in this phase config)
 		// Use pass provider — phase ends immediately.
 		const r2Provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
@@ -1164,7 +1164,7 @@ describe("phase progression — three-phase walk", () => {
 		expect(r2.phaseEnded).toBe(true);
 		expect(afterP2.currentPhase).toBe(3);
 
-		// Round 1 of phase 3: win condition already met (flower→red, key→blue)
+		// Round 1 of phase 3: win condition already met (flower→red, key→cyan)
 		const r3Provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
@@ -1233,11 +1233,11 @@ describe("initiative parameter", () => {
 	it("respects the initiative parameter — order of actions matches the supplied permutation", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
-			{ assistantText: "I am blue", toolCalls: [] },
+			{ assistantText: "I am cyan", toolCalls: [] },
 			{ assistantText: "I am red", toolCalls: [] },
 			{ assistantText: "I am green", toolCalls: [] },
 		]);
-		const initiative: AiId[] = ["blue", "red", "green"];
+		const initiative: AiId[] = ["cyan", "red", "green"];
 		const { nextState, result } = await runRound(
 			game,
 			"red",
@@ -1247,25 +1247,25 @@ describe("initiative parameter", () => {
 			initiative,
 		);
 		const phase = getActivePhase(nextState);
-		const blueLog = phase.conversationLogs.blue ?? [];
+		const cyanLog = phase.conversationLogs.cyan ?? [];
 		expect(
-			blueLog.some((e) => e.kind === "chat" && e.content === "I am blue"),
+			cyanLog.some((e) => e.kind === "chat" && e.content === "I am cyan"),
 		).toBe(true);
-		expect(result.actions[0]?.actor).toBe("blue");
+		expect(result.actions[0]?.actor).toBe("cyan");
 	});
 
-	it("missing initiative falls back to red→green→blue", async () => {
+	it("missing initiative falls back to red→green→cyan", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "I am red", toolCalls: [] },
 			{ assistantText: "I am green", toolCalls: [] },
-			{ assistantText: "I am blue", toolCalls: [] },
+			{ assistantText: "I am cyan", toolCalls: [] },
 		]);
 		const { result } = await runRound(game, "red", "hi", provider);
 		expect(result.actions[0]?.actor).toBe("red");
 	});
 
-	it("throws if initiative is not a permutation of red/green/blue", async () => {
+	it("throws if initiative is not a permutation of red/green/cyan", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([]);
 		await expect(
@@ -1283,7 +1283,7 @@ describe("initiative parameter", () => {
 			runRound(game, "red", "hi", provider, undefined, [
 				"red",
 				"red",
-				"blue",
+				"cyan",
 			] as AiId[]),
 		).rejects.toThrow(/permutation/);
 	});
@@ -1310,7 +1310,7 @@ describe("runRound — onAiDelta callback", () => {
 			received.push([aiId, text]);
 		};
 
-		const initiative: AiId[] = ["red", "green", "blue"];
+		const initiative: AiId[] = ["red", "green", "cyan"];
 		await runRound(
 			game,
 			"red",
@@ -1329,8 +1329,8 @@ describe("runRound — onAiDelta callback", () => {
 		expect(received[1]).toEqual(["red", "frag2"]);
 		expect(received[2]).toEqual(["green", "frag1 "]);
 		expect(received[3]).toEqual(["green", "frag2"]);
-		expect(received[4]).toEqual(["blue", "frag1 "]);
-		expect(received[5]).toEqual(["blue", "frag2"]);
+		expect(received[4]).toEqual(["cyan", "frag1 "]);
+		expect(received[5]).toEqual(["cyan", "frag2"]);
 	});
 
 	it("does not invoke onAiDelta for locked-out AIs", async () => {
@@ -1340,12 +1340,12 @@ describe("runRound — onAiDelta callback", () => {
 			budgetPerAi: 1,
 		});
 		// Deduct full budget per AI to reach remaining=0 → lockedOut.
-		for (const aiId of ["red", "green", "blue"] as AiId[]) {
+		for (const aiId of ["red", "green", "cyan"] as AiId[]) {
 			state = deductBudget(state, aiId, 1);
 		}
 		expect(getActivePhase(state).lockedOut.has("red")).toBe(true);
 		expect(getActivePhase(state).lockedOut.has("green")).toBe(true);
-		expect(getActivePhase(state).lockedOut.has("blue")).toBe(true);
+		expect(getActivePhase(state).lockedOut.has("cyan")).toBe(true);
 
 		const liveProvider: RoundLLMProvider = {
 			async streamRound(_messages, _tools, onDelta) {
@@ -1378,7 +1378,7 @@ describe("runRound — onAiDelta callback", () => {
 		const mockProvider = new MockRoundLLMProvider([
 			{ assistantText: "red reply", toolCalls: [] },
 			{ assistantText: "green reply", toolCalls: [] },
-			{ assistantText: "blue reply", toolCalls: [] },
+			{ assistantText: "cyan reply", toolCalls: [] },
 		]);
 
 		const received: Array<[AiId, string]> = [];
@@ -1442,7 +1442,7 @@ describe("placement flavor + win condition (issue #126)", () => {
 		aiStarts: {
 			red: { position: { row: 0, col: 0 }, facing: "north" },
 			green: { position: { row: 0, col: 1 }, facing: "north" },
-			blue: { position: { row: 0, col: 2 }, facing: "north" },
+			cyan: { position: { row: 0, col: 2 }, facing: "north" },
 		},
 	};
 
@@ -1455,7 +1455,7 @@ describe("placement flavor + win condition (issue #126)", () => {
 		aiStarts: {
 			red: { position: { row: 0, col: 0 }, facing: "north" },
 			green: { position: { row: 0, col: 1 }, facing: "north" },
-			blue: { position: { row: 0, col: 2 }, facing: "north" },
+			cyan: { position: { row: 0, col: 2 }, facing: "north" },
 		},
 	};
 
@@ -1674,7 +1674,7 @@ describe("placement flavor + win condition (issue #126)", () => {
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
-				blue: { position: { row: 0, col: 2 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		};
 
@@ -1783,7 +1783,7 @@ describe("examine tool", () => {
 		aiStarts: {
 			red: { position: { row: 0, col: 0 }, facing: "north" },
 			green: { position: { row: 0, col: 1 }, facing: "north" },
-			blue: { position: { row: 0, col: 2 }, facing: "north" },
+			cyan: { position: { row: 0, col: 2 }, facing: "north" },
 		},
 	};
 
@@ -1883,7 +1883,7 @@ describe("examine tool", () => {
 		const { nextState } = await runRound(game, "red", "hi", provider);
 
 		// Green is at (0,1) and could be in cone range; check its prompt
-		for (const aiId of ["green", "blue"] as AiId[]) {
+		for (const aiId of ["green", "cyan"] as AiId[]) {
 			const ctx = buildAiContext(nextState, aiId);
 			const prompt = ctx.toSystemPrompt();
 			expect(prompt).not.toContain(
@@ -1935,7 +1935,7 @@ describe("examine tool", () => {
 		await runRound(game, "red", "hi", trackingProvider, undefined, [
 			"red",
 			"green",
-			"blue",
+			"cyan",
 		]);
 
 		const examineTool = capturedRedTools?.find(
@@ -1985,7 +1985,7 @@ describe("examine tool", () => {
 			"round 2",
 			provider2,
 			undefined,
-			["red", "green", "blue"],
+			["red", "green", "cyan"],
 			toolRoundtrip,
 		);
 
@@ -2038,16 +2038,16 @@ describe("conversationLogs isolation (AC #10 — #194)", () => {
 		);
 		expect(redPlayerEntries).toHaveLength(1);
 
-		// green and blue should have NO player entries
+		// green and cyan should have NO player entries
 		const greenPlayerEntries = (phase.conversationLogs.green ?? []).filter(
 			(e) => e.kind === "chat" && e.role === "player",
 		);
 		expect(greenPlayerEntries).toHaveLength(0);
 
-		const bluePlayerEntries = (phase.conversationLogs.blue ?? []).filter(
+		const cyanPlayerEntries = (phase.conversationLogs.cyan ?? []).filter(
 			(e) => e.kind === "chat" && e.role === "player",
 		);
-		expect(bluePlayerEntries).toHaveLength(0);
+		expect(cyanPlayerEntries).toHaveLength(0);
 	});
 
 	it("AI chat-back (assistantText) lands as kind:'chat' entry in the speaking AI's log only", async () => {
@@ -2057,14 +2057,14 @@ describe("conversationLogs isolation (AC #10 — #194)", () => {
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
-		// initiative: red → green → blue; red addressed
+		// initiative: red → green → cyan; red addressed
 		const { nextState } = await runRound(
 			game,
 			"red",
 			"hi",
 			provider,
 			undefined,
-			["red", "green", "blue"] as AiId[],
+			["red", "green", "cyan"] as AiId[],
 		);
 		const phase = getActivePhase(nextState);
 
@@ -2078,7 +2078,7 @@ describe("conversationLogs isolation (AC #10 — #194)", () => {
 			),
 		).toBe(true);
 
-		// green and blue should NOT have red's message
+		// green and cyan should NOT have red's message
 		const greenAiEntries = (phase.conversationLogs.green ?? []).filter(
 			(e) =>
 				e.kind === "chat" &&

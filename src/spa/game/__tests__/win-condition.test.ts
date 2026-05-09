@@ -292,7 +292,7 @@ describe("checkPlacementFlavor", () => {
 		const world = makeWorld([]);
 		const action: AiTurnAction = {
 			aiId: "red",
-			toolCall: { name: "give", args: { item: "gem", to: "blue" } },
+			toolCall: { name: "give", args: { item: "gem", to: "cyan" } },
 		};
 		expect(checkPlacementFlavor(action, pack, world)).toBeNull();
 	});

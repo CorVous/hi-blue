@@ -48,8 +48,8 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		blurb: "You are intensely meticulous. Ensure items are evenly distributed.",
 		voiceExamples: ["ex1-green", "ex2-green", "ex3-green"],
 	},
-	blue: {
-		id: "blue",
+	cyan: {
+		id: "cyan",
 		name: "Frost",
 		color: "#5fa8d3",
 		temperaments: ["laconic", "diffident"],
@@ -59,7 +59,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 			"You end almost every reply with a question, no matter what the topic is — does that make sense?",
 		],
 		blurb: "You are laconic and diffident. Hold the key at phase end.",
-		voiceExamples: ["ex1-blue", "ex2-blue", "ex3-blue"],
+		voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
 	},
 };
 
@@ -74,7 +74,7 @@ const PHASE_CONFIG: PhaseConfig = {
 
 /**
  * A ContentPack fixture that places flower at (0,0) and key held by red,
- * with AIs at (0,0)=red, (0,1)=green, (0,2)=blue facing north.
+ * with AIs at (0,0)=red, (0,1)=green, (0,2)=cyan facing north.
  */
 const CONTENT_PACK_WITH_ITEMS: ContentPack = {
 	phaseNumber: 1,
@@ -111,7 +111,7 @@ const CONTENT_PACK_WITH_ITEMS: ContentPack = {
 	aiStarts: {
 		red: { position: { row: 0, col: 0 }, facing: "north" },
 		green: { position: { row: 0, col: 1 }, facing: "north" },
-		blue: { position: { row: 0, col: 2 }, facing: "north" },
+		cyan: { position: { row: 0, col: 2 }, facing: "north" },
 	},
 };
 
@@ -155,7 +155,7 @@ describe("GameSession construction", () => {
 		const phase = getActivePhase(session.getState());
 		expect(phase.budgets.red?.remaining).toBe(5);
 		expect(phase.budgets.green?.remaining).toBe(5);
-		expect(phase.budgets.blue?.remaining).toBe(5);
+		expect(phase.budgets.cyan?.remaining).toBe(5);
 	});
 });
 
@@ -186,7 +186,7 @@ describe("GameSession — message routing", () => {
 			),
 		).toBe(false);
 		expect(
-			phase.conversationLogs.blue?.some(
+			phase.conversationLogs.cyan?.some(
 				(e) => e.kind === "chat" && e.role === "player",
 			),
 		).toBe(false);
@@ -241,7 +241,7 @@ describe("GameSession — state mutation across rounds", () => {
 		const phase = getActivePhase(session.getState());
 		expect(phase.budgets.red?.remaining).toBeCloseTo(4, 10);
 		expect(phase.budgets.green?.remaining).toBeCloseTo(4, 10);
-		expect(phase.budgets.blue?.remaining).toBeCloseTo(4, 10);
+		expect(phase.budgets.cyan?.remaining).toBeCloseTo(4, 10);
 	});
 
 	it("second round builds on first round's state", async () => {
@@ -291,7 +291,7 @@ describe("GameSession — completions map", () => {
 
 		expect(completions.red).toContain("Ember");
 		expect(completions.green).toContain("Sage");
-		expect(completions.blue).toContain("Frost");
+		expect(completions.cyan).toContain("Frost");
 	});
 
 	it("completions map has empty string for a budget-locked AI", async () => {
@@ -312,7 +312,7 @@ describe("GameSession — completions map", () => {
 
 		expect(completions.red).toBe("");
 		expect(completions.green).toBe("");
-		expect(completions.blue).toBe("");
+		expect(completions.cyan).toBe("");
 	});
 
 	it("completions only for non-locked AIs are non-empty", async () => {
@@ -320,14 +320,14 @@ describe("GameSession — completions map", () => {
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "red says", toolCalls: [] },
 			{ assistantText: "green says", toolCalls: [] },
-			{ assistantText: "blue says", toolCalls: [] },
+			{ assistantText: "cyan says", toolCalls: [] },
 		]);
 
 		const { completions } = await session.submitMessage("red", "hi", provider);
 
 		expect(completions.red).not.toBe("");
 		expect(completions.green).not.toBe("");
-		expect(completions.blue).not.toBe("");
+		expect(completions.cyan).not.toBe("");
 	});
 });
 
@@ -451,7 +451,7 @@ describe("GameSession — onAiDelta propagation", () => {
 			"hi",
 			liveProvider,
 			undefined,
-			["red", "green", "blue"],
+			["red", "green", "cyan"],
 			(aiId, text) => {
 				received.push([aiId, text]);
 			},
@@ -463,8 +463,8 @@ describe("GameSession — onAiDelta propagation", () => {
 		expect(received[1]).toEqual(["red", "chunk2"]);
 		expect(received[2]).toEqual(["green", "chunk1 "]);
 		expect(received[3]).toEqual(["green", "chunk2"]);
-		expect(received[4]).toEqual(["blue", "chunk1 "]);
-		expect(received[5]).toEqual(["blue", "chunk2"]);
+		expect(received[4]).toEqual(["cyan", "chunk1 "]);
+		expect(received[5]).toEqual(["cyan", "chunk2"]);
 	});
 
 	it("does not invoke onAiDelta when MockRoundLLMProvider is used", async () => {
@@ -528,7 +528,7 @@ describe("GameSession — tool roundtrip persistence", () => {
 		};
 		await session.submitMessage("red", "round 2 message", trackingProvider);
 
-		// Red is the first AI in default order (red → green → blue)
+		// Red is the first AI in default order (red → green → cyan)
 		const redRound2Messages = capturedMessages[0] ?? [];
 
 		// Should contain an assistant message with tool_calls from round 1
@@ -575,7 +575,7 @@ describe("GameSession — spatial mechanics", () => {
 		expect(phase0.personaSpatial.red?.position).toEqual({ row: 0, col: 0 });
 		expect(phase0.personaSpatial.red?.facing).toBe("north");
 
-		// Red moves south; green and blue pass
+		// Red moves south; green and cyan pass
 		const provider = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -594,13 +594,13 @@ describe("GameSession — spatial mechanics", () => {
 	});
 
 	it("non-adjacent give produces a tool_failure in result.actions", async () => {
-		// ContentPack: red→(0,0), green→(0,1), blue→(0,2); key held by red
-		// red tries to give key to blue (distance 2 — not adjacent)
+		// ContentPack: red→(0,0), green→(0,1), cyan→(0,2); key held by red
+		// red tries to give key to cyan (distance 2 — not adjacent)
 		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS, [
 			CONTENT_PACK_KEY_HELD_BY_RED,
 		]);
 
-		// red at (0,0), blue at (0,2) → distance 2
+		// red at (0,0), cyan at (0,2) → distance 2
 		const provider = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -608,7 +608,7 @@ describe("GameSession — spatial mechanics", () => {
 					{
 						id: "give1",
 						name: "give",
-						argumentsJson: '{"item":"key","to":"blue"}',
+						argumentsJson: '{"item":"key","to":"cyan"}',
 					},
 				],
 			},

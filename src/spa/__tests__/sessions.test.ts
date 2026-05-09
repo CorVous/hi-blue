@@ -57,8 +57,8 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		typingQuirks: ["ellipses", "no contractions"],
 		voiceExamples: ["I will count again...", "That is not balanced."],
 	},
-	blue: {
-		id: "blue",
+	cyan: {
+		id: "cyan",
 		name: "Frost",
 		color: "#5fa8d3",
 		temperaments: ["laconic", "diffident"],
