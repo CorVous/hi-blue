@@ -238,6 +238,22 @@ export function _setTestOverrides(
 let _beginClickPending = false;
 /** The resize listener installed on the most recent render — removed on next call. */
 let _activeResizeHandler: (() => void) | undefined;
+/** The uptime ticker installed on the most recent render — cleared on next call. */
+let _activeUptimeInterval: ReturnType<typeof setInterval> | undefined;
+
+/**
+ * Format the elapsed time since the build's commit as `Dd HHh MMm`. Mirrors
+ * the look of the placeholder text the design system uses for the BBS uptime
+ * line (e.g. `11d 04h 22m`). Negative or zero spans render as `0d 00h 00m`.
+ */
+export function formatUptime(elapsedMs: number): string {
+	const safe = Math.max(0, Math.floor(elapsedMs / 1000));
+	const days = Math.floor(safe / 86400);
+	const hours = Math.floor((safe % 86400) / 3600);
+	const minutes = Math.floor((safe % 3600) / 60);
+	const pad = (n: number) => n.toString().padStart(2, "0");
+	return `${days}d ${pad(hours)}h ${pad(minutes)}m`;
+}
 
 export function renderStart(
 	root: HTMLElement,
@@ -314,6 +330,12 @@ export function renderStart(
 		_activeResizeHandler = undefined;
 	}
 
+	// Drop the previous render's uptime ticker if it's still running.
+	if (_activeUptimeInterval !== undefined) {
+		clearInterval(_activeUptimeInterval);
+		_activeUptimeInterval = undefined;
+	}
+
 	// Merge hash-query-string params with location.search so ?winImmediately=1 etc. work
 	const effectiveParams = new URLSearchParams(
 		typeof location !== "undefined" ? location.search : "",
@@ -331,6 +353,16 @@ export function renderStart(
 		// asset readiness. Generation continues in the background while the
 		// player types, and the game route renders progressive loading.
 		beginBtn.disabled = false;
+		const uptimeEl = doc.querySelector<HTMLElement>("#login-uptime");
+		if (uptimeEl && __COMMIT_TIMESTAMP_MS__ > 0) {
+			const tick = () => {
+				uptimeEl.textContent = formatUptime(
+					Date.now() - __COMMIT_TIMESTAMP_MS__,
+				);
+			};
+			tick();
+			_activeUptimeInterval = setInterval(tick, 60_000);
+		}
 		if (keyartEl) {
 			paintLandscape(keyartEl);
 			const handler = () => paintLandscape(keyartEl);
