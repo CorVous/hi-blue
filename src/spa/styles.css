@@ -125,13 +125,14 @@ header {
 	font-size: 13px;
 	letter-spacing: 0;
 	color: var(--amber);
+	/* Same per-glyph halo accumulation as the panel chrome — the banner
+	   frame's `║` columns sit in separate line-boxes and bead under the
+	   inherited body text-shadow. */
+	text-shadow: none;
 }
 
 .banner-blue {
 	color: var(--blue);
-	text-shadow:
-		0 0 1px var(--blue),
-		0 0 6px rgba(127, 182, 255, 0.5);
 }
 
 /* `.login-tag b` and `.login-sysinfo b` set color: var(--amber) at
@@ -316,6 +317,11 @@ main {
 	position: relative;
 	min-width: 0;
 	color: var(--panel-color);
+	/* Borders are runs of box-drawing glyphs; the body's inherited
+	   text-shadow halos overlap per-glyph and bead along vertical sides
+	   (where line-box gaps interrupt the ink column). Drop the halo on
+	   the chrome so the eye fuses the glyphs into a continuous line. */
+	text-shadow: none;
 }
 
 .corner,
@@ -439,6 +445,7 @@ main {
 	flex: 0 0 auto;
 	user-select: none;
 	color: var(--panel-color);
+	text-shadow: none;
 }
 
 .panel-content {
@@ -800,6 +807,7 @@ main {
 	overflow: hidden;
 	position: relative;
 	color: var(--amber);
+	text-shadow: none;
 }
 
 .login-frame-brow .fill {
