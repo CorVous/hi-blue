@@ -13,7 +13,6 @@
  */
 import { describe, expect, it } from "vitest";
 import { createGame, startPhase } from "../engine";
-import { SILENT_BLUE_TURN } from "../openai-message-builder";
 import { runRound } from "../round-coordinator";
 import { MockRoundLLMProvider } from "../round-llm-provider";
 import type { AiId, AiPersona, ContentPack, PhaseConfig } from "../types";
@@ -59,6 +58,17 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
 	},
 };
+
+/** Compute the expected silent-turn anchor for an AI given fixed personas. */
+function expectedSilentTurn(self: AiId): string {
+	const others = (["red", "green", "cyan"] as const)
+		.filter((id) => id !== self)
+		.map((id) => `*${id}`);
+	const senders = [...others, "blue"];
+	const last = senders[senders.length - 1];
+	const rest = senders.slice(0, -1).join(", ");
+	return `No messages from ${rest}, or ${last}.`;
+}
 
 const TEST_PHASE_CONFIG: PhaseConfig = {
 	phaseNumber: 1,
@@ -157,12 +167,16 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 		// Last message anchors the current round.
 		const last = msgs[msgs.length - 1];
 		expect(last?.role).toBe("user");
-		expect((last as { content: string }).content).toBe(SILENT_BLUE_TURN);
+		expect((last as { content: string }).content).toBe(
+			expectedSilentTurn("red"),
+		);
 
 		// And the prior round's user/assistant are still in history but no longer
 		// at the tail.
 		const lastUser = [...msgs].reverse().find((m) => m.role === "user");
-		expect((lastUser as { content: string }).content).toBe(SILENT_BLUE_TURN);
+		expect((lastUser as { content: string }).content).toBe(
+			expectedSilentTurn("red"),
+		);
 		const priorUser = msgs.find(
 			(m) =>
 				m.role === "user" &&
@@ -182,7 +196,7 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 			cyanMsgs.some(
 				(m) =>
 					m.role === "user" &&
-					(m as { content: string }).content === SILENT_BLUE_TURN,
+					(m as { content: string }).content === expectedSilentTurn("cyan"),
 			),
 		).toBe(false);
 	});
@@ -204,6 +218,8 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 		const greenMsgs = greenCall!.messages;
 		const last = greenMsgs[greenMsgs.length - 1];
 		expect(last?.role).toBe("user");
-		expect((last as { content: string }).content).toBe(SILENT_BLUE_TURN);
+		expect((last as { content: string }).content).toBe(
+			expectedSilentTurn("green"),
+		);
 	});
 });
