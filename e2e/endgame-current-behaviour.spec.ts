@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { getAiHandles, stubChatCompletions } from "./helpers";
+import { goToGame } from "./helpers";
 
 /**
  * E2E Slice 4 — game_ended current behaviour (issue #80, simplified by #101)
@@ -27,21 +27,18 @@ test("game_ended disables composer and clears storage", async ({ page }) => {
 	const pageErrors: Error[] = [];
 	page.on("pageerror", (err) => pageErrors.push(err));
 
-	// 1. Stub every /v1/chat/completions call — one per AI per turn.
-	await stubChatCompletions(page, ["hello"]);
-
-	// 2. Cold-start: navigate directly to /?winImmediately=1.
+	// 1. Navigate through the start screen with ?winImmediately=1.
 	//    applyTestAffordances recursively patches the real PHASE_1 → PHASE_2 →
 	//    PHASE_3 chain so every phase has winCondition: () => true.
-	await page.goto("/?winImmediately=1");
+	const { names } = await goToGame(page, {
+		url: "/?winImmediately=1",
+		sse: ["hello"],
+	});
 
 	// Wait for SPA mount.
 	await expect(page.locator("#composer")).toBeVisible();
 
-	// 3. Read AI handles dynamically (set after synthesis completes).
-	const { names } = await getAiHandles(page);
-
-	// 4. Capture URL before submitting (proves URL stability below).
+	// 2. Capture URL before submitting (proves URL stability below).
 	const urlBefore = page.url();
 
 	// Helper: fill prompt with a mention of ids[0], wait for Send to enable, click.
@@ -51,23 +48,23 @@ test("game_ended disables composer and clears storage", async ({ page }) => {
 		await page.click("#send");
 	}
 
-	// 5. Round 1 — phase 1 ends; wait for phase banner to advance to Phase 2.
+	// 3. Round 1 — phase 1 ends; wait for phase banner to advance to Phase 2.
 	await submitMessage(`*${names[0]} hello`);
 	await expect(page.locator("#phase-banner")).toContainText("Phase 2", {
 		timeout: 30_000,
 	});
 
-	// 6. Round 2 — phase 2 ends; wait for phase banner to advance to Phase 3.
+	// 4. Round 2 — phase 2 ends; wait for phase banner to advance to Phase 3.
 	await submitMessage(`*${names[0]} hello`);
 	await expect(page.locator("#phase-banner")).toContainText("Phase 3", {
 		timeout: 30_000,
 	});
 
-	// 7. Round 3 — phase 3 ends; game_ended fires → #send permanently disabled.
+	// 5. Round 3 — phase 3 ends; game_ended fires → #send permanently disabled.
 	await submitMessage(`*${names[0]} hello`);
 	await expect(page.locator("#send")).toBeDisabled({ timeout: 30_000 });
 
-	// 8. Assert all acceptance criteria.
+	// 6. Assert all acceptance criteria.
 
 	// #send disabled
 	await expect(page.locator("#send")).toBeDisabled();

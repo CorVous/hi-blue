@@ -15,6 +15,61 @@ vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 import { STATIC_CONTENT_PACKS } from "./fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "./fixtures/static-personas";
 
+function makeLocalStorageStub(initialData: Record<string, string> = {}) {
+	const store: Record<string, string> = { ...initialData };
+	return {
+		getItem: vi.fn((key: string) => store[key] ?? null),
+		setItem: vi.fn((key: string, value: string) => {
+			store[key] = value;
+		}),
+		removeItem: vi.fn((key: string) => {
+			delete store[key];
+		}),
+		clear: vi.fn(() => {
+			for (const k of Object.keys(store)) delete store[k];
+		}),
+		get length() {
+			return Object.keys(store).length;
+		},
+		key: vi.fn((i: number) => Object.keys(store)[i] ?? null),
+		_store: store,
+	};
+}
+
+async function seedSessionInStub(
+	stub: ReturnType<typeof makeLocalStorageStub>,
+): Promise<void> {
+	// Use engine functions directly (not buildSessionFromAssets) to avoid the
+	// module-level vi.mock("../game/game-session.js") interfering with session
+	// seeding — GameSession is mocked but createGame/startPhase are not.
+	const { createGame, startPhase } = await import("../game/engine.js");
+	const { PHASE_1_CONFIG } = await import("../../content/index.js");
+	const { mintAndActivateNewSession, saveActiveSession } = await import(
+		"../persistence/session-storage.js"
+	);
+	const prev = globalThis.localStorage;
+	Object.defineProperty(globalThis, "localStorage", {
+		value: stub,
+		writable: true,
+		configurable: true,
+	});
+	try {
+		mintAndActivateNewSession();
+		const gameState = startPhase(
+			createGame(STATIC_PERSONAS, STATIC_CONTENT_PACKS),
+			PHASE_1_CONFIG,
+			() => 0,
+		);
+		saveActiveSession(gameState);
+	} finally {
+		Object.defineProperty(globalThis, "localStorage", {
+			value: prev,
+			writable: true,
+			configurable: true,
+		});
+	}
+}
+
 // Pin generatePersonas to a static fixture so panel/transcript hookups
 // keyed by red/green/blue continue to work in this regression test.
 vi.mock("../../content", async (importOriginal) => {
@@ -126,22 +181,22 @@ function getEl<T extends HTMLElement>(selector: string): T {
 }
 
 describe("renderGame — game_ended disables #send permanently (regression #89)", () => {
-	beforeEach(() => {
+	beforeEach(async () => {
 		document.body.innerHTML = INDEX_BODY_HTML;
+		// Seed a valid active session so game.ts proceeds to restore path.
+		const stub = makeLocalStorageStub();
+		await seedSessionInStub(stub);
+		vi.stubGlobal("localStorage", stub);
 	});
 
 	afterEach(() => {
 		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
 		vi.resetModules();
 		document.body.innerHTML = "";
 	});
 
 	it("#send stays disabled after game_ended fires (finally block must not re-enable it)", async () => {
-		vi.stubGlobal("localStorage", {
-			getItem: () => null,
-			setItem: () => undefined,
-			removeItem: () => undefined,
-		});
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();

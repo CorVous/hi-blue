@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { getAiHandles, stubChatCompletions } from "./helpers";
+import { goToGame } from "./helpers";
 
 // Word chunks yielded for every AI call.  First AI gets these tokens and we
 // sample its transcript; second / third responses use the same stub so all
@@ -63,13 +63,8 @@ test("token streaming arrives word-by-word, not as a single dump", async ({
 	const pageErrors: Error[] = [];
 	page.on("pageerror", (err) => pageErrors.push(err));
 
-	// Stub every /v1/chat/completions call (one per AI per round).
-	await stubChatCompletions(page, WORDS);
-
-	await page.goto("/");
-
-	// Read AI handles dynamically (set after synthesis completes).
-	const { ids, names } = await getAiHandles(page);
+	// Navigate through the start screen into the game, stubbing SSE with WORDS.
+	const { ids, names } = await goToGame(page, { sse: WORDS });
 
 	// Ensure the game page is ready.
 	await expect(

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { getAiHandles, stubNewGameLLM } from "./helpers";
+import { goToGame } from "./helpers";
 
 /**
  * Acceptance spec: new-game synthesis blurbs land in turn-stream system prompts.
@@ -8,7 +8,7 @@ import { getAiHandles, stubNewGameLLM } from "./helpers";
  * LLM synthesis JSON call → persona record → prompt-builder → SSE request body.
  *
  * Strategy:
- * 1. Use `stubNewGameLLM` with a custom `synthesis.blurb` factory that embeds a
+ * 1. Use `goToGame` with a custom `synthesis.blurb` factory that embeds a
  *    sentinel string per persona id.
  * 2. Capture every SSE streaming request body.
  * 3. After sending a message, verify that each persona's sentinel appears in at
@@ -22,7 +22,7 @@ test("new-game synthesis blurbs land in turn-stream system prompts", async ({
 		stream?: boolean;
 	}> = [];
 
-	await stubNewGameLLM(page, {
+	const { ids, names } = await goToGame(page, {
 		synthesis: { blurb: (id) => `Synthesized blurb sentinel for ${id}.` },
 		sse: (request) => {
 			try {
@@ -37,11 +37,6 @@ test("new-game synthesis blurbs land in turn-stream system prompts", async ({
 			return ["ok"];
 		},
 	});
-
-	await page.goto("/");
-
-	// getAiHandles also reads persona display names from .panel-name
-	const { ids, names } = await getAiHandles(page);
 
 	// All ids must be 4-char procedural handles
 	for (const id of ids) {

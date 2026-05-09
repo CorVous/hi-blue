@@ -1,4 +1,6 @@
-import type { Page, Request } from "@playwright/test";
+import { expect, type Page, type Request } from "@playwright/test";
+import type { AiHandles } from "./handles.js";
+import { getAiHandles } from "./handles.js";
 
 /**
  * A factory function that produces word chunks for a `/v1/chat/completions`
@@ -344,4 +346,47 @@ export async function stubChatCompletions(
 			body: wordsToOpenAiSseBody(words),
 		});
 	});
+}
+
+export type GoToGameOptions = {
+	/** SSE reply words or factory. Defaults to `["stub reply"]`. */
+	sse?: string[] | WordsFactory;
+	/** Synthesis blurb options. */
+	synthesis?: SynthesisStubOptions;
+	/**
+	 * URL to navigate to instead of `"/"`. Useful for specs that need query-string
+	 * test affordances (e.g. `"/?winImmediately=1"`, `"/?think=1"`, `"/?lockout=1"`).
+	 * The start screen reads `location.search` at render time, so affordances set
+	 * in the query string flow through to `applyTestAffordances` when BEGIN is clicked.
+	 * Defaults to `"/"`.
+	 */
+	url?: string;
+};
+
+/**
+ * Navigate through the start screen into the game and return AI handles.
+ *
+ * Steps:
+ *  a. Stubs all new-game LLM calls (synthesis, content-pack, SSE) via `stubNewGameLLM`.
+ *  b. `await page.goto(opts.url ?? "/")`
+ *  c. Waits for `#begin` to be enabled (generation complete).
+ *  d. Clicks `#begin`.
+ *  e. Waits for `#/game` URL and `#composer` visibility.
+ *  f. Returns AiHandles from `getAiHandles(page)`.
+ *
+ * Specs that test the start-screen path itself should NOT use this helper —
+ * they should navigate to `"/"` directly and exercise start-screen behaviour.
+ */
+export async function goToGame(
+	page: Page,
+	opts?: GoToGameOptions,
+): Promise<AiHandles> {
+	const sse = opts?.sse ?? ["stub reply"];
+	await stubNewGameLLM(page, { sse, synthesis: opts?.synthesis });
+	await page.goto(opts?.url ?? "/");
+	await expect(page.locator("#begin")).toBeEnabled({ timeout: 30_000 });
+	await page.locator("#begin").click();
+	await page.waitForURL(/.*#\/game/, { timeout: 10_000 });
+	await expect(page.locator("#composer")).toBeVisible();
+	return getAiHandles(page);
 }

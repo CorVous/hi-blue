@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { getAiHandles, stubChatCompletions } from "./helpers/index";
+import { goToGame } from "./helpers/index";
 
 /**
  * The three distinct completions served to the three AIs.  Since the SPA
@@ -15,31 +15,29 @@ test("addressed message lands only on first panel; all three panels render progr
 	const pageErrors: Error[] = [];
 	page.on("pageerror", (err) => pageErrors.push(err));
 
-	// 1. Navigate with ?winImmediately=1 so the SPA injects a win condition
-	//    into the active phase on boot.
-	await page.goto("/?winImmediately=1");
-
-	// 2. Stub /v1/chat/completions — the SPA calls this once per AI per round.
-	//    Return a distinct completion on each successive call using a factory.
+	// Navigate through the start screen with ?winImmediately=1 so the SPA
+	// injects a win condition into the active phase on boot.
+	// The SSE factory returns distinct completions by call order.
 	let callIndex = 0;
-	await stubChatCompletions(page, () => {
-		const text = COMPLETIONS[callIndex % COMPLETIONS.length] ?? COMPLETIONS[0];
-		callIndex++;
-		return (text as string).split(" ").map((w) => `${w} `);
+	const { ids, names } = await goToGame(page, {
+		url: "/?winImmediately=1",
+		sse: () => {
+			const text =
+				COMPLETIONS[callIndex % COMPLETIONS.length] ?? COMPLETIONS[0];
+			callIndex++;
+			return (text as string).split(" ").map((w) => `${w} `);
+		},
 	});
 
-	// 3. Read AI handles dynamically (set after synthesis completes).
-	const { ids, names } = await getAiHandles(page);
-
-	// 4. Fill prompt with first AI's mention to address ids[0].
+	// Fill prompt with first AI's mention to address ids[0].
 	const message = `*${names[0]} hello first panel`;
 	await page.fill("#prompt", message);
 
-	// 5. Click send — triggers the SPA round flow.
+	// Click send — triggers the SPA round flow.
 	await page.click("#send");
 
-	// 6. Wait for all three panels to show their completion text.
-	//    Each AI gets a distinct completion; wait until the third one appears.
+	// Wait for all three panels to show their completion text.
+	// Each AI gets a distinct completion; wait until the third one appears.
 	await page.waitForFunction(
 		({
 			completions,
@@ -59,7 +57,7 @@ test("addressed message lands only on first panel; all three panels render progr
 		{ timeout: 30_000 },
 	);
 
-	// 7. Gather transcript content.
+	// Gather transcript content.
 	const firstTranscript = await page
 		.locator(`[data-transcript="${ids[0]}"]`)
 		.textContent();
@@ -70,16 +68,16 @@ test("addressed message lands only on first panel; all three panels render progr
 		.locator(`[data-transcript="${ids[2]}"]`)
 		.textContent();
 
-	// 8. player message appears in first transcript exactly once.
+	// player message appears in first transcript exactly once.
 	expect(firstTranscript ?? "").toContain(`> *${names[0]} hello first panel`);
 	// Exactly once: splitting on the player prefix gives exactly two parts.
 	expect((firstTranscript ?? "").split(`> *${names[0]} hello`).length).toBe(2);
 
-	// 9. second and third do NOT contain the player line.
+	// second and third do NOT contain the player line.
 	expect(secondTranscript ?? "").not.toContain(`> *${names[0]} hello`);
 	expect(thirdTranscript ?? "").not.toContain(`> *${names[0]} hello`);
 
-	// 10. Each distinct completion appears in exactly one transcript.
+	// Each distinct completion appears in exactly one transcript.
 	const transcripts = [
 		firstTranscript ?? "",
 		secondTranscript ?? "",
@@ -93,7 +91,7 @@ test("addressed message lands only on first panel; all three panels render progr
 		).toBe(1);
 	}
 
-	// 11. No page errors.
+	// No page errors.
 	// The previous `divergentSample` assertion (a 30 ms-poll setInterval that
 	// looked for a moment where two panels had non-zero but different lengths)
 	// was dropped: under stubbed SSE the round completes in well under 100 ms,

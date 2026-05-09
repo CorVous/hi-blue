@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { getAiHandles, stubChatCompletions } from "./helpers";
+import { getAiHandles, goToGame, stubChatCompletions } from "./helpers";
 
 /**
  * AI completions returned by the stub, keyed by call index (0 = first, 1 = second, 2 = third
@@ -13,17 +13,12 @@ test("game state and transcripts persist across mid-round reload", async ({
 	const pageErrors: Error[] = [];
 	page.on("pageerror", (err) => pageErrors.push(err));
 
-	// Stub every call to /v1/chat/completions with a deterministic one-token response.
-	// The SPA fires one call per AI per round.
-	await stubChatCompletions(page, [STUB_COMPLETION]);
-
-	await page.goto("/");
+	// Navigate through the start screen into the game.
+	// goToGame stubs synthesis + content-pack + SSE and clicks BEGIN.
+	const { names, ids } = await goToGame(page, { sse: [STUB_COMPLETION] });
 
 	// Wait for the SPA game route to mount (the composer form is present)
 	await expect(page.locator("#composer")).toBeVisible();
-
-	// Read AI handles dynamically (set after synthesis completes).
-	const { ids, names } = await getAiHandles(page);
 
 	// Address first AI via *<name> mention and send a message
 	await page.fill("#prompt", `*${names[0]} hello`);
@@ -35,16 +30,23 @@ test("game state and transcripts persist across mid-round reload", async ({
 	// rather than the transcript (which fills via live deltas earlier).
 	// (Post-#107 the send button does NOT re-enable after submit because the
 	// prompt is cleared and an empty prompt has no *mention → sendEnabled=false.)
-	// Post-#172: the commit signal is engine.dat (written last in the strict
-	// write order: meta.json → daemons → whispers.txt → engine.dat).
+	// Post-#173: BEGIN also saves engine.dat at round=0 on commit, so we can no
+	// longer use engine.dat !== null as the "round complete" signal.  Instead we
+	// wait for meta.round to advance to ≥ 1, which proves a full round was committed.
 	await page.waitForFunction(
 		() => {
 			const sessionId = localStorage.getItem("hi-blue:active-session");
 			if (!sessionId) return false;
-			return (
-				localStorage.getItem(`hi-blue:sessions/${sessionId}/engine.dat`) !==
-				null
+			const metaRaw = localStorage.getItem(
+				`hi-blue:sessions/${sessionId}/meta.json`,
 			);
+			if (!metaRaw) return false;
+			try {
+				const meta = JSON.parse(metaRaw) as { round?: number };
+				return typeof meta.round === "number" && meta.round >= 1;
+			} catch {
+				return false;
+			}
 		},
 		{ timeout: 15_000 },
 	);

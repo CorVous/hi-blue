@@ -279,6 +279,13 @@ test("DIAGNOSTIC: observe wire vs DOM timeline during streaming", async ({
 
 	await page.goto("/");
 
+	// Wait for the start screen's generation to complete, then click BEGIN.
+	// The addInitScript monkey-patch handles synthesis and content-pack JSON-mode
+	// calls, so generation should complete and enable the BEGIN button.
+	await expect(page.locator("#begin")).toBeEnabled({ timeout: 30_000 });
+	await page.locator("#begin").click();
+	await page.waitForURL(/.*#\/game/, { timeout: 10_000 });
+
 	// Wait for synthesis to complete and panels to get dynamic data-ai attributes.
 	const { ids, names } = await getAiHandles(page);
 
@@ -288,8 +295,8 @@ test("DIAGNOSTIC: observe wire vs DOM timeline during streaming", async ({
 	// Wait until all three SSE streams complete. (Post-#107 the send button no
 	// longer re-enables after submit because the prompt is cleared and an empty
 	// prompt has no *mention.)
-	// The synthesis call is call-1, so streaming starts at call-2. We need 3
-	// fetch_done events (calls 2, 3, 4).
+	// call-1 = synthesis, call-2 = content-pack (both JSON-mode, no fetch_done).
+	// Gameplay SSE starts at call-3. We need 3 fetch_done events (one per AI).
 	await expect
 		.poll(() => samples.filter((s) => s.kind === "fetch_done").length, {
 			timeout: 30_000,

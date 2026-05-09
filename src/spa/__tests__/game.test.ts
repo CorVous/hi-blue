@@ -17,6 +17,75 @@ vi.mock("../../content/content-pack-generator", () => ({
 	generateContentPacks: async () => STATIC_CONTENT_PACKS,
 }));
 
+// ── Shared localStorage stub helpers ──────────────────────────────────────────
+// game.ts (post-#173) requires a pre-populated active session to avoid
+// redirecting to #/start. These helpers set up a valid session in localStorage
+// so renderGame() proceeds to the restore path.
+
+function makeLocalStorageStub(initialData: Record<string, string> = {}) {
+	const store: Record<string, string> = { ...initialData };
+	return {
+		getItem: vi.fn((key: string) => store[key] ?? null),
+		setItem: vi.fn((key: string, value: string) => {
+			store[key] = value;
+		}),
+		removeItem: vi.fn((key: string) => {
+			delete store[key];
+		}),
+		clear: vi.fn(() => {
+			for (const k of Object.keys(store)) delete store[k];
+		}),
+		get length() {
+			return Object.keys(store).length;
+		},
+		key: vi.fn((i: number) => Object.keys(store)[i] ?? null),
+		_store: store,
+	};
+}
+
+/**
+ * Seed a localStorage stub with a valid active session derived from
+ * STATIC_PERSONAS and STATIC_CONTENT_PACKS.
+ *
+ * Called in beforeEach (or inline) so game.ts finds a restorable session
+ * instead of redirecting to #/start.
+ *
+ * Must be called BEFORE vi.resetModules() in each test (modules that import
+ * session-storage.ts must still be the same instance).
+ */
+async function seedSessionInStub(
+	stub: ReturnType<typeof makeLocalStorageStub>,
+): Promise<void> {
+	// Use the real buildSessionFromAssets + saveActiveSession
+	const { buildSessionFromAssets } = await import("../game/bootstrap.js");
+	const { mintAndActivateNewSession, saveActiveSession } = await import(
+		"../persistence/session-storage.js"
+	);
+
+	// Temporarily install the stub
+	const prev = globalThis.localStorage;
+	Object.defineProperty(globalThis, "localStorage", {
+		value: stub,
+		writable: true,
+		configurable: true,
+	});
+
+	try {
+		mintAndActivateNewSession();
+		const session = buildSessionFromAssets({
+			personas: STATIC_PERSONAS,
+			contentPacks: STATIC_CONTENT_PACKS,
+		});
+		saveActiveSession(session.getState());
+	} finally {
+		Object.defineProperty(globalThis, "localStorage", {
+			value: prev,
+			writable: true,
+			configurable: true,
+		});
+	}
+}
+
 // Matches the body content of src/spa/index.html (three-panel layout)
 const INDEX_BODY_HTML = `
 <main>
@@ -144,10 +213,16 @@ const GREEN_ACTION = '{"action":"chat","content":"GREEN_RESPONSE_UNIQUE_TAG"}';
 const BLUE_ACTION = '{"action":"chat","content":"BLUE_RESPONSE_UNIQUE_TAG"}';
 
 describe("renderGame (game route — three-AI)", () => {
-	beforeEach(() => {
+	let _stub: ReturnType<typeof makeLocalStorageStub>;
+
+	beforeEach(async () => {
 		// Must be set before each test since vi.unstubAllGlobals() in afterEach removes it
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		document.body.innerHTML = INDEX_BODY_HTML;
+		// Seed a valid session so game.ts finds an active session on render.
+		_stub = makeLocalStorageStub();
+		await seedSessionInStub(_stub);
+		vi.stubGlobal("localStorage", _stub);
 	});
 
 	afterEach(() => {
@@ -164,11 +239,6 @@ describe("renderGame (game route — three-AI)", () => {
 			BLUE_ACTION,
 		);
 		vi.stubGlobal("fetch", mockFetch);
-		vi.stubGlobal("localStorage", {
-			getItem: () => null,
-			setItem: () => undefined,
-			removeItem: () => undefined,
-		});
 		// Math.random=0.9 produces identity shuffle: ["red","green","blue"]
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
@@ -202,7 +272,6 @@ describe("renderGame (game route — three-AI)", () => {
 			BLUE_ACTION,
 		);
 		vi.stubGlobal("fetch", mockFetch);
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
@@ -241,7 +310,6 @@ describe("renderGame (game route — three-AI)", () => {
 			PASS_ACTION,
 		);
 		vi.stubGlobal("fetch", mockFetch);
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
@@ -265,7 +333,6 @@ describe("renderGame (game route — three-AI)", () => {
 			PASS_ACTION,
 		);
 		vi.stubGlobal("fetch", mockFetch);
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
@@ -295,7 +362,6 @@ describe("renderGame (game route — three-AI)", () => {
 			PASS_ACTION,
 		);
 		vi.stubGlobal("fetch", mockFetch);
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
@@ -336,7 +402,6 @@ describe("renderGame (game route — three-AI)", () => {
 			PASS_ACTION,
 		);
 		vi.stubGlobal("fetch", mockFetch);
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
@@ -362,7 +427,6 @@ describe("renderGame (game route — three-AI)", () => {
 			BLUE_ACTION,
 		);
 		vi.stubGlobal("fetch", mockFetch);
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
@@ -415,7 +479,6 @@ describe("renderGame (game route — three-AI)", () => {
 			PASS_ACTION,
 		);
 		vi.stubGlobal("fetch", mockFetch);
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
@@ -460,7 +523,6 @@ describe("renderGame (game route — three-AI)", () => {
 			body: makeAiSseStream(PASS_ACTION),
 		});
 		vi.stubGlobal("fetch", mockFetch);
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
@@ -525,7 +587,6 @@ describe("renderGame (game route — three-AI)", () => {
 			body: makeAiSseStream(PASS_ACTION),
 		});
 		vi.stubGlobal("fetch", mockFetch);
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		const createObjectURLSpy = vi
@@ -575,7 +636,6 @@ describe("renderGame (game route — three-AI)", () => {
 			body: makeAiSseStream(PASS_ACTION),
 		});
 		vi.stubGlobal("fetch", mockFetch);
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
@@ -622,7 +682,6 @@ describe("renderGame (game route — three-AI)", () => {
 			body: makeAiSseStream(PASS_ACTION),
 		});
 		vi.stubGlobal("fetch", mockFetch);
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
@@ -715,6 +774,7 @@ describe("renderGame — localStorage persistence", () => {
 
 	it("state is saved to localStorage after a successful round", async () => {
 		const stub = makeLocalStorageStub();
+		await seedSessionInStub(stub);
 		vi.stubGlobal(
 			"fetch",
 			makeThreeAiFetchMock(PASS_ACTION, PASS_ACTION, PASS_ACTION),
@@ -748,6 +808,7 @@ describe("renderGame — localStorage persistence", () => {
 	it("state is restored from localStorage on renderGame when saved state exists", async () => {
 		// First: run a round using chat actions so AI responses land in transcripts
 		const stub = makeLocalStorageStub();
+		await seedSessionInStub(stub);
 		vi.stubGlobal(
 			"fetch",
 			makeThreeAiFetchMock(RED_ACTION, GREEN_ACTION, BLUE_ACTION),
@@ -812,6 +873,7 @@ describe("renderGame — localStorage persistence", () => {
 
 	it("quota-exceeded localStorage write surfaces the warning banner without breaking the round", async () => {
 		const stub = makeLocalStorageStub();
+		await seedSessionInStub(stub);
 		// Intercept setItem for the engine.dat commit key (new format).
 		// The probe key and other session keys pass through normally.
 		stub.setItem.mockImplementation((key: string, value: string) => {
@@ -858,8 +920,10 @@ describe("renderGame — localStorage persistence", () => {
 		expect(warningEl?.textContent).toBeTruthy();
 	});
 
-	it("localStorage disabled shows warning banner and starts a fresh game", async () => {
-		// Stub localStorage as completely unavailable (both probe and all calls throw)
+	it("localStorage disabled shows warning banner (gameplay not possible without storage)", async () => {
+		// Stub localStorage as completely unavailable (both probe and all calls throw).
+		// Post-#173: game.ts requires a pre-existing session; when storage is unavailable
+		// the warning is shown but no session can be established, so gameplay is inert.
 		const unavailableStub = {
 			getItem: vi.fn(() => {
 				throw new DOMException("denied", "SecurityError");
@@ -896,24 +960,6 @@ describe("renderGame — localStorage persistence", () => {
 		);
 		expect(warningEl?.hasAttribute("hidden")).toBe(false);
 		expect(warningEl?.textContent).toBeTruthy();
-
-		// Game should still function (submit works)
-		const form = getEl<HTMLFormElement>("#composer");
-		const promptInput = getEl<HTMLInputElement>("#prompt");
-		promptInput.value = "*Sage test";
-		promptInput.dispatchEvent(new Event("input"));
-		form.dispatchEvent(
-			new Event("submit", { bubbles: true, cancelable: true }),
-		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
-
-		// All three panels should have content (game ran normally)
-		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
-		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
-		const blueTranscript = getEl<HTMLElement>('[data-transcript="blue"]');
-		expect(redTranscript.textContent?.trim()).toBeTruthy();
-		expect(greenTranscript.textContent?.trim()).toBeTruthy();
-		expect(blueTranscript.textContent?.trim()).toBeTruthy();
 	});
 
 	it("chat message content is preserved across a fresh renderGame via chatHistories", async () => {
@@ -921,6 +967,7 @@ describe("renderGame — localStorage persistence", () => {
 		// Note: the new format stores chat histories in daemon .txt files, so raw
 		// tool outputs (pass/pick_up/etc.) are NOT preserved — only chat messages are.
 		const stub = makeLocalStorageStub();
+		await seedSessionInStub(stub);
 		vi.stubGlobal(
 			"fetch",
 			makeThreeAiFetchMock(RED_ACTION, GREEN_ACTION, BLUE_ACTION),
@@ -968,10 +1015,13 @@ describe("renderGame — localStorage persistence", () => {
 });
 
 describe("renderGame — chat_lockout event", () => {
-	beforeEach(() => {
+	beforeEach(async () => {
 		// Must be set before each test since vi.unstubAllGlobals() in afterEach removes it
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		document.body.innerHTML = INDEX_BODY_HTML;
+		const _stub = makeLocalStorageStub();
+		await seedSessionInStub(_stub);
+		vi.stubGlobal("localStorage", _stub);
 	});
 
 	afterEach(() => {
@@ -986,7 +1036,6 @@ describe("renderGame — chat_lockout event", () => {
 			"fetch",
 			makeThreeAiFetchMock(PASS_ACTION, PASS_ACTION, PASS_ACTION),
 		);
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
@@ -1044,9 +1093,12 @@ describe("renderGame — chat_lockout event", () => {
 });
 
 describe("renderGame — mention-based addressing", () => {
-	beforeEach(() => {
+	beforeEach(async () => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		document.body.innerHTML = INDEX_BODY_HTML;
+		const _stub = makeLocalStorageStub();
+		await seedSessionInStub(_stub);
+		vi.stubGlobal("localStorage", _stub);
 	});
 
 	afterEach(() => {
@@ -1057,7 +1109,6 @@ describe("renderGame — mention-based addressing", () => {
 	});
 
 	it("empty input on initial load leaves Send disabled", async () => {
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
@@ -1067,7 +1118,6 @@ describe("renderGame — mention-based addressing", () => {
 	});
 
 	it("typing 'hi' (no mention) leaves Send disabled", async () => {
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
@@ -1080,7 +1130,6 @@ describe("renderGame — mention-based addressing", () => {
 	});
 
 	it("typing '*Sage hi' enables Send", async () => {
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
@@ -1099,7 +1148,6 @@ describe("renderGame — mention-based addressing", () => {
 			PASS_ACTION,
 		);
 		vi.stubGlobal("fetch", mockFetch);
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
@@ -1132,7 +1180,6 @@ describe("renderGame — mention-based addressing", () => {
 			PASS_ACTION,
 		);
 		vi.stubGlobal("fetch", mockFetch);
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
@@ -1187,9 +1234,12 @@ describe("renderGame — mention-based addressing", () => {
 });
 
 describe("renderGame — panel-click addressee", () => {
-	beforeEach(() => {
+	beforeEach(async () => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		document.body.innerHTML = INDEX_BODY_HTML;
+		const _stub = makeLocalStorageStub();
+		await seedSessionInStub(_stub);
+		vi.stubGlobal("localStorage", _stub);
 	});
 
 	afterEach(() => {
@@ -1200,7 +1250,6 @@ describe("renderGame — panel-click addressee", () => {
 	});
 
 	it("empty input + click red panel → '*Ember ', Send stays disabled (no body)", async () => {
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
@@ -1218,7 +1267,6 @@ describe("renderGame — panel-click addressee", () => {
 	});
 
 	it("'*Sage hi' in input + click red panel → '*Ember hi'", async () => {
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
@@ -1234,7 +1282,6 @@ describe("renderGame — panel-click addressee", () => {
 	});
 
 	it("multi-mention '*Sage tell *Frost go' + click red → only first mention replaced", async () => {
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
@@ -1250,7 +1297,6 @@ describe("renderGame — panel-click addressee", () => {
 	});
 
 	it("cursor is preserved after mention mutation (after the mention)", async () => {
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
@@ -1272,7 +1318,6 @@ describe("renderGame — panel-click addressee", () => {
 			"fetch",
 			makeThreeAiFetchMock(PASS_ACTION, PASS_ACTION, PASS_ACTION),
 		);
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
@@ -1324,7 +1369,6 @@ describe("renderGame — panel-click addressee", () => {
 	});
 
 	it("'*Nonpersona hi' + click blue → prepends '*Frost '", async () => {
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
@@ -1341,9 +1385,12 @@ describe("renderGame — panel-click addressee", () => {
 });
 
 describe("renderGame — URL param sourcing", () => {
-	beforeEach(() => {
+	beforeEach(async () => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		document.body.innerHTML = INDEX_BODY_HTML;
+		const _stub = makeLocalStorageStub();
+		await seedSessionInStub(_stub);
+		vi.stubGlobal("localStorage", _stub);
 	});
 
 	afterEach(() => {
@@ -1367,7 +1414,6 @@ describe("renderGame — URL param sourcing", () => {
 			PASS_ACTION,
 		);
 		vi.stubGlobal("fetch", mockFetch);
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
@@ -1405,7 +1451,6 @@ describe("renderGame — URL param sourcing", () => {
 			PASS_ACTION,
 		);
 		vi.stubGlobal("fetch", mockFetch);
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
@@ -1432,7 +1477,6 @@ describe("renderGame — URL param sourcing", () => {
 			PASS_ACTION,
 		);
 		vi.stubGlobal("fetch", mockFetch);
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
@@ -1450,9 +1494,12 @@ describe("renderGame — URL param sourcing", () => {
 });
 
 describe("renderGame — addressee persistence after send", () => {
-	beforeEach(() => {
+	beforeEach(async () => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		document.body.innerHTML = INDEX_BODY_HTML;
+		const _stub = makeLocalStorageStub();
+		await seedSessionInStub(_stub);
+		vi.stubGlobal("localStorage", _stub);
 	});
 
 	afterEach(() => {
@@ -1463,7 +1510,6 @@ describe("renderGame — addressee persistence after send", () => {
 	});
 
 	it("first-load: input empty and Send disabled (#107 preserved)", async () => {
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
@@ -1482,7 +1528,6 @@ describe("renderGame — addressee persistence after send", () => {
 			PASS_ACTION,
 		);
 		vi.stubGlobal("fetch", mockFetch);
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
@@ -1513,7 +1558,6 @@ describe("renderGame — addressee persistence after send", () => {
 			PASS_ACTION,
 		);
 		vi.stubGlobal("fetch", mockFetch);
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
@@ -1548,7 +1592,6 @@ describe("renderGame — addressee persistence after send", () => {
 			body: makeAiSseStream(PASS_ACTION),
 		});
 		vi.stubGlobal("fetch", mockFetch);
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
@@ -1593,7 +1636,6 @@ describe("renderGame — addressee persistence after send", () => {
 			PASS_ACTION,
 		);
 		vi.stubGlobal("fetch", mockFetch);
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
@@ -1621,7 +1663,6 @@ describe("renderGame — addressee persistence after send", () => {
 			PASS_ACTION,
 		);
 		vi.stubGlobal("fetch", mockFetch);
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
@@ -1670,9 +1711,12 @@ describe("renderGame — addressee persistence after send", () => {
 });
 
 describe("visual feedback for active addressee", () => {
-	beforeEach(() => {
+	beforeEach(async () => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		document.body.innerHTML = INDEX_BODY_HTML;
+		const _stub = makeLocalStorageStub();
+		await seedSessionInStub(_stub);
+		vi.stubGlobal("localStorage", _stub);
 	});
 
 	afterEach(() => {
@@ -1683,7 +1727,6 @@ describe("visual feedback for active addressee", () => {
 	});
 
 	it("empty input → neutral state: no composer-border-*, no panel--addressed, no mention-highlight", async () => {
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
@@ -1707,7 +1750,6 @@ describe("visual feedback for active addressee", () => {
 	});
 
 	it("typing '*Sage hi' → green border, green panel highlight, *Sage span in overlay", async () => {
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
@@ -1740,7 +1782,6 @@ describe("visual feedback for active addressee", () => {
 	});
 
 	it("multi-mention '*Sage tell *Frost ...' → exactly one mention-highlight for *Sage only", async () => {
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
@@ -1759,7 +1800,6 @@ describe("visual feedback for active addressee", () => {
 	});
 
 	it("trailing punctuation '*Sage,' → overlay mention-highlight has textContent '*Sage' (comma is plain text)", async () => {
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
@@ -1777,7 +1817,6 @@ describe("visual feedback for active addressee", () => {
 	});
 
 	it("clearing input → all visual feedback removed", async () => {
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
@@ -1806,7 +1845,6 @@ describe("visual feedback for active addressee", () => {
 	});
 
 	it("panel-click transfers highlight: type *Sage hi then click blue panel → blue border, blue panel, *Frost span", async () => {
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
@@ -1844,7 +1882,6 @@ describe("visual feedback for active addressee", () => {
 
 	it("locked addressee still gets visual feedback (typing path)", async () => {
 		vi.stubGlobal("fetch", {});
-		vi.stubGlobal("localStorage", { getItem: () => null });
 
 		vi.resetModules();
 
@@ -1924,9 +1961,12 @@ describe("visual feedback for active addressee", () => {
 });
 
 describe("renderGame — chat lockout visual affordances (panel muting + inline error)", () => {
-	beforeEach(() => {
+	beforeEach(async () => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		document.body.innerHTML = INDEX_BODY_HTML;
+		const _stub = makeLocalStorageStub();
+		await seedSessionInStub(_stub);
+		vi.stubGlobal("localStorage", _stub);
 	});
 
 	afterEach(() => {
@@ -1965,7 +2005,6 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 			"fetch",
 			makeThreeAiFetchMock(PASS_ACTION, PASS_ACTION, PASS_ACTION),
 		);
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		await setupLockoutMock("red", "Ember is unresponsive…");
@@ -1999,7 +2038,6 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 			"fetch",
 			makeThreeAiFetchMock(PASS_ACTION, PASS_ACTION, PASS_ACTION),
 		);
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		await setupLockoutMock("green", "Sage is unresponsive…");
@@ -2033,7 +2071,6 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 	it("chat_lockout_resolved mid-draft → muting clears, #lockout-error hidden, Send re-enables when *Sage re-typed", async () => {
 		// First round: inject lockout for green
 		// Second round: inject lockout_resolved for green via mock
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		const { GameSession } = await import("../game/game-session.js");
@@ -2123,7 +2160,6 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 			"fetch",
 			makeThreeAiFetchMock(PASS_ACTION, PASS_ACTION, PASS_ACTION),
 		);
-		vi.stubGlobal("localStorage", { getItem: () => null });
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		await setupLockoutMock("green", "Sage is unresponsive…");

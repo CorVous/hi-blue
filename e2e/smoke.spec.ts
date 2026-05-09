@@ -1,13 +1,11 @@
 import { expect, test } from "@playwright/test";
-import { stubChatCompletions } from "./helpers";
+import { goToGame } from "./helpers";
 
 test("SPA root renders three AI panels and composer", async ({ page }) => {
 	const pageErrors: Error[] = [];
 	page.on("pageerror", (err) => pageErrors.push(err));
 
-	await stubChatCompletions(page, ["hi"]);
-
-	await page.goto("/");
+	await goToGame(page, { sse: ["hi"] });
 
 	await expect(page.locator("article.ai-panel")).toHaveCount(3);
 

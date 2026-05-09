@@ -77,10 +77,63 @@ function getEl<T extends HTMLElement>(selector: string): T {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe("renderGame — async new-game bootstrap", () => {
-	beforeEach(() => {
+/**
+ * Post-#173: game.ts no longer runs async bootstrap — it restores from an
+ * active session. The async bootstrap tests (synthesis failure, content-pack
+ * failure, form submit before resolution) have moved to start.test.ts where
+ * they belong: those scenarios now apply to renderStart, not renderGame.
+ *
+ * This describe block verifies that game.ts correctly restores panels from
+ * a pre-existing session (the restore path that replaced the old async IIFE).
+ */
+describe("renderGame — session restore (formerly async bootstrap)", () => {
+	beforeEach(async () => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		document.body.innerHTML = INDEX_BODY_HTML;
+		// Pre-populate a valid session so game.ts takes the restore path.
+		const store: Record<string, string> = {};
+		const stub = {
+			getItem: vi.fn((key: string) => store[key] ?? null),
+			setItem: vi.fn((key: string, value: string) => {
+				store[key] = value;
+			}),
+			removeItem: vi.fn((key: string) => {
+				delete store[key];
+			}),
+			clear: vi.fn(() => {
+				for (const k of Object.keys(store)) delete store[k];
+			}),
+			get length() {
+				return Object.keys(store).length;
+			},
+			key: vi.fn((i: number) => Object.keys(store)[i] ?? null),
+			_store: store,
+		};
+		const { buildSessionFromAssets } = await import("../game/bootstrap.js");
+		const { mintAndActivateNewSession, saveActiveSession } = await import(
+			"../persistence/session-storage.js"
+		);
+		const prev = globalThis.localStorage;
+		Object.defineProperty(globalThis, "localStorage", {
+			value: stub,
+			writable: true,
+			configurable: true,
+		});
+		try {
+			mintAndActivateNewSession();
+			const session = buildSessionFromAssets({
+				personas: STATIC_PERSONAS,
+				contentPacks: STATIC_CONTENT_PACKS,
+			});
+			saveActiveSession(session.getState());
+		} finally {
+			Object.defineProperty(globalThis, "localStorage", {
+				value: prev,
+				writable: true,
+				configurable: true,
+			});
+		}
+		vi.stubGlobal("localStorage", stub);
 	});
 
 	afterEach(() => {
@@ -90,12 +143,7 @@ describe("renderGame — async new-game bootstrap", () => {
 		document.body.innerHTML = "";
 	});
 
-	it("after awaiting renderGame, panels are initialized with persona handles", async () => {
-		vi.stubGlobal("localStorage", {
-			getItem: () => null,
-			setItem: () => undefined,
-			removeItem: () => undefined,
-		});
+	it("after awaiting renderGame (restore path), panels are initialized with persona handles", async () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
@@ -116,173 +164,6 @@ describe("renderGame — async new-game bootstrap", () => {
 		expect(redPanel).toBeTruthy();
 		expect(greenPanel).toBeTruthy();
 		expect(bluePanel).toBeTruthy();
-	});
-
-	it("synthesis failure shows #cap-hit and hides #panels", async () => {
-		// generatePersonas is mocked to succeed, but BrowserSynthesisProvider's
-		// fetch can fail. We simulate this by making generatePersonas throw.
-		vi.resetModules();
-
-		// Override the generatePersonas mock to throw for this test
-		vi.doMock("../../content", async (importOriginal) => {
-			const actual = await importOriginal<typeof import("../../content")>();
-			return {
-				...actual,
-				generatePersonas: async () => {
-					throw new Error("synthesis failed");
-				},
-			};
-		});
-
-		vi.stubGlobal("localStorage", {
-			getItem: () => null,
-			setItem: () => undefined,
-			removeItem: () => undefined,
-		});
-
-		const { renderGame } = await import("../routes/game.js");
-		// renderGame starts the async IIFE but doesn't throw synchronously;
-		// the failure is surfaced inside the IIFE. We await to let it resolve/reject.
-		try {
-			await renderGame(getEl<HTMLElement>("main"));
-		} catch {
-			// Expected — synthesis failure re-throws inside IIFE
-		}
-
-		const capHit = document.querySelector<HTMLElement>("#cap-hit");
-		const panels = document.querySelector<HTMLElement>("#panels");
-		expect(capHit?.hasAttribute("hidden")).toBe(false);
-		expect(panels?.hidden).toBe(true);
-	});
-
-	it("content-pack failure (generic Error) shows #cap-hit and hides #panels", async () => {
-		// generatePersonas succeeds but generateContentPacks throws a generic error.
-		vi.resetModules();
-
-		// Re-establish the working generatePersonas mock (the synthesis-failure test
-		// above may have registered a throwing doMock; doMocks accumulate across
-		// vi.resetModules() calls, so we must explicitly restore it here).
-		vi.doMock("../../content", async (importOriginal) => {
-			const actual = await importOriginal<typeof import("../../content")>();
-			return { ...actual, generatePersonas: async () => STATIC_PERSONAS };
-		});
-
-		vi.doMock("../../content/content-pack-generator", () => ({
-			generateContentPacks: async () => {
-				throw new Error("content pack generation failed");
-			},
-		}));
-
-		vi.stubGlobal("localStorage", {
-			getItem: () => null,
-			setItem: () => undefined,
-			removeItem: () => undefined,
-		});
-
-		const { renderGame } = await import("../routes/game.js");
-		try {
-			await renderGame(getEl<HTMLElement>("main"));
-		} catch {
-			// Expected — failure re-throws inside IIFE
-		}
-
-		const capHit = document.querySelector<HTMLElement>("#cap-hit");
-		const panels = document.querySelector<HTMLElement>("#panels");
-		expect(capHit?.hasAttribute("hidden")).toBe(false);
-		expect(panels?.hidden).toBe(true);
-	});
-
-	it("content-pack failure (CapHitError) shows #cap-hit and hides #panels", async () => {
-		// generatePersonas succeeds but generateContentPacks throws a CapHitError.
-		vi.resetModules();
-
-		// Re-establish the working generatePersonas mock (doMocks accumulate across
-		// vi.resetModules() calls, so we must explicitly restore it here).
-		vi.doMock("../../content", async (importOriginal) => {
-			const actual = await importOriginal<typeof import("../../content")>();
-			return { ...actual, generatePersonas: async () => STATIC_PERSONAS };
-		});
-
-		vi.doMock("../../content/content-pack-generator", () => ({
-			generateContentPacks: async () => {
-				const { CapHitError } = await import("../llm-client.js");
-				throw new CapHitError({
-					message: "cap hit during content pack generation",
-					reason: "per-ip-daily",
-					retryAfterSec: null,
-				});
-			},
-		}));
-
-		vi.stubGlobal("localStorage", {
-			getItem: () => null,
-			setItem: () => undefined,
-			removeItem: () => undefined,
-		});
-
-		const { renderGame } = await import("../routes/game.js");
-		try {
-			await renderGame(getEl<HTMLElement>("main"));
-		} catch {
-			// Expected — CapHitError re-throws inside IIFE
-		}
-
-		const capHit = document.querySelector<HTMLElement>("#cap-hit");
-		const panels = document.querySelector<HTMLElement>("#panels");
-		expect(capHit?.hasAttribute("hidden")).toBe(false);
-		expect(panels?.hidden).toBe(true);
-	});
-
-	it("form submit is a no-op before session resolves (no crash)", async () => {
-		// This test verifies that submitting the form before async init completes
-		// doesn't crash the page — the handler returns early when !session.
-		vi.stubGlobal("localStorage", {
-			getItem: () => null,
-			setItem: () => undefined,
-			removeItem: () => undefined,
-		});
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
-
-		vi.resetModules();
-
-		// Re-establish the static content-packs mock (the CapHitError test above
-		// may have registered a throwing doMock for this module; doMocks accumulate
-		// across vi.resetModules() calls, so we must explicitly restore it here).
-		vi.doMock("../../content/content-pack-generator", () => ({
-			generateContentPacks: async () => STATIC_CONTENT_PACKS,
-		}));
-
-		// We need to make generatePersonas hang briefly so we can fire submit first
-		let resolvePersonas!: (v: typeof STATIC_PERSONAS) => void;
-		vi.doMock("../../content", async (importOriginal) => {
-			const actual = await importOriginal<typeof import("../../content")>();
-			return {
-				...actual,
-				generatePersonas: () =>
-					new Promise<typeof STATIC_PERSONAS>((resolve) => {
-						resolvePersonas = resolve;
-					}),
-			};
-		});
-
-		const { renderGame } = await import("../routes/game.js");
-		const initPromise = renderGame(getEl<HTMLElement>("main"));
-
-		// Fire submit before personas are ready
-		const form = getEl<HTMLFormElement>("#composer");
-		const promptInput = getEl<HTMLInputElement>("#prompt");
-		promptInput.value = "*Sage hello";
-		promptInput.dispatchEvent(new Event("input"));
-		expect(() => {
-			form.dispatchEvent(
-				new Event("submit", { bubbles: true, cancelable: true }),
-			);
-		}).not.toThrow();
-
-		// Now let personas resolve
-		resolvePersonas(STATIC_PERSONAS);
-		await initPromise;
-		// No crash — test passes
 	});
 });
 
