@@ -17,11 +17,16 @@
  * Issue #174 (parent #155).
  */
 
+import { PHASE_1_CONFIG } from "../../content";
+import { paintBanner, paintTopInfo } from "../bbs-chrome.js";
+import { getActivePhase } from "../game/engine.js";
+import type { PhaseConfig } from "../game/types";
 import {
 	dupSession,
 	getActiveSessionId,
 	getSessionInfo,
 	listSessions,
+	loadActiveSession,
 	mintSession,
 	rmSession,
 	setActiveSessionId,
@@ -87,6 +92,30 @@ export function renderSessions(
 
 	// Route-entry visibility
 	showOnly(doc, "#sessions-screen");
+
+	// Persistent chrome (visible on every route): ASCII banner + topinfo.
+	// Direct-load on #/sessions otherwise leaves them empty.
+	paintBanner(doc);
+	const loadResult = loadActiveSession();
+	if (loadResult.kind === "ok") {
+		const phase = getActivePhase(loadResult.state);
+		let total = 1;
+		let cursor: PhaseConfig | undefined = PHASE_1_CONFIG.nextPhaseConfig;
+		while (cursor) {
+			total += 1;
+			cursor = cursor.nextPhaseConfig;
+		}
+		const daemonsOnline = Object.keys(loadResult.state.personas).filter(
+			(id) => !phase.chatLockouts.has(id),
+		).length;
+		paintTopInfo(doc, {
+			sessionId: loadResult.sessionId,
+			phaseNumber: phase.phaseNumber,
+			totalPhases: total,
+			turn: phase.round,
+			daemonsOnline,
+		});
+	}
 
 	// Banner
 	const bannerEl = doc.querySelector<HTMLElement>("#sessions-banner");
