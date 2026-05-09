@@ -444,8 +444,32 @@ main {
 	width: 1ch;
 	flex: 0 0 auto;
 	user-select: none;
-	color: var(--panel-color);
+	/* The vertical border was rendered as a column of `│` glyphs, one per
+	   line-box. Fonts draw `│` slightly shorter than the em-square, so
+	   adjacent glyphs leave a 1-2px gap that reads as beading down the
+	   column. Hide the glyphs and paint a continuous 1px line via a
+	   background gradient at the cell's horizontal centre — same width
+	   and position as the corner glyphs' vertical strokes above/below. */
+	color: transparent;
 	text-shadow: none;
+	background: linear-gradient(
+		to right,
+		transparent calc(50% - 0.5px),
+		var(--panel-color, var(--amber)) calc(50% - 0.5px) calc(50% + 0.5px),
+		transparent calc(50% + 0.5px)
+	);
+}
+
+.ai-panel.panel--addressed .side-heavy {
+	/* `║` is a double line — two 1px strokes with a 1px gap. */
+	background: linear-gradient(
+		to right,
+		transparent calc(50% - 1.5px),
+		var(--panel-color, var(--amber)) calc(50% - 1.5px) calc(50% - 0.5px),
+		transparent calc(50% - 0.5px) calc(50% + 0.5px),
+		var(--panel-color, var(--amber)) calc(50% + 0.5px) calc(50% + 1.5px),
+		transparent calc(50% + 1.5px)
+	);
 }
 
 .panel-content {
