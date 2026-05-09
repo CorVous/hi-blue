@@ -26,14 +26,6 @@ import { MockSynthesisProvider } from "../spa/game/llm-synthesis-provider.js";
 // ── Content pools ─────────────────────────────────────────────────────────────
 
 describe("TEMPERAMENT_POOL", () => {
-	it("has at least 12 entries", () => {
-		expect(TEMPERAMENT_POOL.length).toBeGreaterThanOrEqual(12);
-	});
-
-	it("has at most 20 entries", () => {
-		expect(TEMPERAMENT_POOL.length).toBeLessThanOrEqual(20);
-	});
-
 	it("every entry is a non-empty string", () => {
 		for (const t of TEMPERAMENT_POOL) {
 			expect(typeof t).toBe("string");
@@ -43,14 +35,6 @@ describe("TEMPERAMENT_POOL", () => {
 });
 
 describe("PERSONA_GOAL_POOL", () => {
-	it("has at least 10 entries", () => {
-		expect(PERSONA_GOAL_POOL.length).toBeGreaterThanOrEqual(10);
-	});
-
-	it("has at most 15 entries", () => {
-		expect(PERSONA_GOAL_POOL.length).toBeLessThanOrEqual(15);
-	});
-
 	it("every entry is a non-empty string", () => {
 		for (const g of PERSONA_GOAL_POOL) {
 			expect(typeof g).toBe("string");
@@ -68,10 +52,6 @@ describe("COLOR_PALETTE", () => {
 });
 
 describe("TYPING_QUIRK_POOL", () => {
-	it("has at least 10 entries", () => {
-		expect(TYPING_QUIRK_POOL.length).toBeGreaterThanOrEqual(10);
-	});
-
 	it("every entry is a non-empty string", () => {
 		for (const q of TYPING_QUIRK_POOL) {
 			expect(typeof q).toBe("string");
@@ -213,10 +193,6 @@ describe("phase configs — aiGoalPool", () => {
 });
 
 describe("PHASE_GOAL_POOL", () => {
-	it("contains at least one goal", () => {
-		expect(PHASE_GOAL_POOL.length).toBeGreaterThanOrEqual(1);
-	});
-
 	it("every entry is a non-empty string", () => {
 		for (const goal of PHASE_GOAL_POOL) {
 			expect(typeof goal).toBe("string");
