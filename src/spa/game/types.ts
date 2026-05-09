@@ -130,6 +130,48 @@ export interface WhisperMessage {
 	round: number;
 }
 
+/**
+ * A single tagged item inside a Daemon's conversation log.
+ *
+ * Discriminated union of three kinds — `chat`, `whisper`, `witnessed-event` — each carrying a
+ * `round` and the smallest payload needed to render its line in the system prompt. This is the
+ * per-Daemon storage shape *and* the prompt-rendered shape (per CONTEXT.md's `Conversation log`
+ * glossary entry). The `kind` tag is chosen so a player editing a `*xxxx.txt` file in devtools
+ * can tell entry kinds apart at a glance.
+ *
+ * - `chat`: projects ChatMessage — a voice/AI line addressed to or from this Daemon.
+ * - `whisper`: projects WhisperMessage — a whisper this Daemon sent or received.
+ * - `witnessed-event`: projects the render-relevant subset of PhysicalActionRecord for an action
+ *   this Daemon observed inside its cone. The cone-snapshot fields (`actorCellAtAction`,
+ *   `actorFacingAtAction`, `witnessSpatial`) are omitted — cone visibility is resolved at
+ *   write-time (ADR 0006), not re-evaluated at read-time.
+ */
+export type ConversationEntry =
+	| {
+			kind: "chat";
+			round: number;
+			role: "player" | "ai";
+			content: string;
+	  }
+	| {
+			kind: "whisper";
+			round: number;
+			from: AiId;
+			to: AiId;
+			content: string;
+	  }
+	| {
+			kind: "witnessed-event";
+			round: number;
+			actor: AiId;
+			actionKind: "go" | "pick_up" | "put_down" | "give" | "use";
+			item?: string;
+			to?: AiId;
+			direction?: CardinalDirection;
+			useOutcome?: string;
+			placementFlavorRaw?: string;
+	  };
+
 export interface AiBudget {
 	remaining: number;
 	total: number;
@@ -179,6 +221,8 @@ export interface PhaseState {
 	whispers: WhisperMessage[];
 	/** Append-only log of observable physical actions for the phase. Used for Witnessed event rendering. */
 	physicalLog: PhysicalActionRecord[];
+	/** Per-Daemon conversation log (storage + prompt-rendered shape). Populated by #194; read by #195. */
+	conversationLogs: Record<AiId, ConversationEntry[]>;
 	/** Budget-exhaustion lockout: prevents the AI from acting at all. */
 	lockedOut: Set<AiId>;
 	/**
