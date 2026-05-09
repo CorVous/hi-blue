@@ -107,7 +107,53 @@ export default {
 		// Delegate to the assets binding for any unmatched path. This allows
 		// the assets binding's not_found_handling: single-page-application to
 		// serve dist/index.html for SPA client-side routes (e.g. /endgame)
-		// instead of the Worker returning a hard 404.
-		return env.ASSETS.fetch(request);
+		// instead of the Worker returning a hard 404. Cache-Control is
+		// rewritten so content-hashed bundles can live in CDN/browser caches
+		// indefinitely while index.html is always revalidated.
+		return withAssetCacheHeaders(url, await env.ASSETS.fetch(request));
 	},
 } satisfies ExportedHandler<Env>;
+
+/**
+ * Rewrite responses for static-asset routes:
+ *   /assets/*  with non-HTML body → public, max-age=31536000, immutable
+ *                (filenames are content-hashed by esbuild, so a new commit
+ *                produces new URLs and old URLs remain valid for clients
+ *                that already hold them)
+ *   /assets/*  with HTML body     → 404 Not Found
+ *                (the asset binding's single-page-application not_found_handling
+ *                returns index.html with status 200 for unmatched paths;
+ *                serving HTML for an asset URL would cause <script>/<link>
+ *                loads to fail with a cryptic SyntaxError as the parser tries
+ *                to execute HTML — fail fast with a real 404 instead)
+ *   everything → no-cache, must-revalidate
+ *                (index.html and SPA fallback responses; they must always
+ *                reflect the latest hashed bundle names)
+ *
+ * Non-2xx responses pass through untouched so error pages from the asset
+ * binding keep whatever caching it chose.
+ */
+function withAssetCacheHeaders(url: URL, response: Response): Response {
+	if (!response.ok) return response;
+	const isAssetPath = url.pathname.startsWith("/assets/");
+	const isHtml = (response.headers.get("Content-Type") ?? "").includes(
+		"text/html",
+	);
+	if (isAssetPath && isHtml) {
+		return new Response("Asset not found", {
+			status: 404,
+			headers: { "Cache-Control": "no-cache, must-revalidate" },
+		});
+	}
+	const headers = new Headers(response.headers);
+	if (isAssetPath) {
+		headers.set("Cache-Control", "public, max-age=31536000, immutable");
+	} else {
+		headers.set("Cache-Control", "no-cache, must-revalidate");
+	}
+	return new Response(response.body, {
+		status: response.status,
+		statusText: response.statusText,
+		headers,
+	});
+}

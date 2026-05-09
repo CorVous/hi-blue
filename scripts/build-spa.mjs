@@ -39,18 +39,59 @@ console.log(
 // Ensure dist/ and dist/assets/ exist
 await fs.mkdir(path.join(root, "dist", "assets"), { recursive: true });
 
-/** esbuild plugin: re-copy index.html after every (re)build. */
-const copyHtmlPlugin = {
-	name: "copy-html",
+// Drop any previously-built hashed assets so old hashes don't accumulate
+// across rebuilds (esbuild won't clean its outdir).
+async function cleanAssets() {
+	const assetsDir = path.join(root, "dist", "assets");
+	const entries = await fs.readdir(assetsDir).catch(() => []);
+	await Promise.all(
+		entries.map((name) =>
+			fs.rm(path.join(assetsDir, name), { force: true, recursive: true }),
+		),
+	);
+}
+await cleanAssets();
+
+/**
+ * esbuild plugin: after each (re)build, look up the content-hashed entry
+ * filenames from the metafile and rewrite dist/index.html to reference them.
+ * The source HTML keeps the un-hashed `./assets/index.{js,css}` paths so it
+ * stays valid as a template; the build is the only place hashes are wired in.
+ */
+const templateHtmlPlugin = {
+	name: "template-html",
 	setup(build) {
-		build.onEnd(async () => {
+		build.onEnd(async (result) => {
 			try {
-				await fs.copyFile(
+				if (!result.metafile) {
+					console.error("[template-html] missing metafile in build result");
+					return;
+				}
+				let jsName = null;
+				let cssName = null;
+				for (const outPath of Object.keys(result.metafile.outputs)) {
+					const base = path.basename(outPath);
+					if (base.endsWith(".map")) continue;
+					if (base.endsWith(".js")) jsName = base;
+					else if (base.endsWith(".css")) cssName = base;
+				}
+				if (!jsName || !cssName) {
+					console.error("[template-html] could not find hashed entry outputs", {
+						jsName,
+						cssName,
+					});
+					return;
+				}
+				const src = await fs.readFile(
 					path.join(root, "src/spa/index.html"),
-					path.join(root, "dist/index.html"),
+					"utf8",
 				);
+				const html = src
+					.replace("./assets/index.css", `./assets/${cssName}`)
+					.replace("./assets/index.js", `./assets/${jsName}`);
+				await fs.writeFile(path.join(root, "dist/index.html"), html);
 			} catch (err) {
-				console.error("[copy-html] failed to copy index.html:", err);
+				console.error("[template-html] failed:", err);
 			}
 		});
 	},
@@ -60,6 +101,11 @@ const ctx = await esbuild.context({
 	entryPoints: { index: path.join(root, "src/spa/main.ts") },
 	bundle: true,
 	outdir: path.join(root, "dist/assets"),
+	// Content-hashed entry filenames so new commits invalidate downstream
+	// caches automatically. Combined with long-lived Cache-Control headers on
+	// /assets/* in the Worker, this gives immutable-cacheable bundles.
+	entryNames: "[name]-[hash]",
+	metafile: true,
 	format: "esm",
 	target: ["es2022"],
 	sourcemap: true,
@@ -70,7 +116,7 @@ const ctx = await esbuild.context({
 		__COMMIT_SHA__: JSON.stringify(COMMIT_SHA),
 		__COMMIT_TIMESTAMP_MS__: JSON.stringify(COMMIT_TIMESTAMP_MS),
 	},
-	plugins: [copyHtmlPlugin],
+	plugins: [templateHtmlPlugin],
 });
 
 if (watchMode) {
