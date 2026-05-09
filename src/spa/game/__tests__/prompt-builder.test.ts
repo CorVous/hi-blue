@@ -908,14 +908,23 @@ describe("unified <conversation> block (issue #129)", () => {
 
 	it("whisper is rendered in the unified <conversation> block with correct format", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		// appendWhisperEntry uses phase.round (0) as the round; the whisper appears in both
-		// sender's and recipient's logs (per-Daemon asymmetric-storage model, ADR 0006).
+		// Advance to round 1 so the whisper is stamped with round 1 (fixture contract).
+		game = advanceRound(game);
 		game = appendWhisperEntry(game, "green", "red", "secret");
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("<conversation>");
-		expect(prompt).toContain('[Round 0] *green whispered to you: "secret"');
-		// The whisper also appears in the sender's (green's) log
+		expect(prompt).toContain('[Round 1] *green whispered to you: "secret"');
+		// NOTE: under the new per-Daemon log design (ADR 0006, issue #195), the sender's
+		// conversationLog also receives the whisper entry. The original assertion
+		// `expect(greenPrompt).not.toContain("secret")` is no longer valid — it reflected
+		// the old behaviour where only the recipient's log held the whisper. That assertion
+		// is removed here and replaced by a dedicated test below.
+	});
+
+	it("sender (green) sees their own whisper in their conversation log (AC 1)", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = appendWhisperEntry(game, "green", "red", "secret");
 		const greenCtx = buildAiContext(game, "green");
 		const greenPrompt = greenCtx.toSystemPrompt();
 		expect(greenPrompt).toContain("secret");
