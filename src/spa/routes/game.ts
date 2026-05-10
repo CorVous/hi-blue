@@ -1259,19 +1259,19 @@ export function renderGame(
 
 					case "message": {
 						// DM-thread panel painting (AC #1/2/3/4).
-						// Determine which daemon's panel this message belongs to.
-						const daemonId =
-							event.from === "blue" ? (event.to as AiId) : (event.from as AiId);
-						if (event.from === "blue") {
-							// Player's outgoing message — no self-attribution prefix (AC #3).
-							appendPlayerLine(daemonId, `> ${event.content}\n`);
-						} else {
+						// Only paint daemon→player messages here. The player's own line is
+						// written eagerly at submit time (line ~1149) and must NOT be written
+						// again from the encoder event — that would double-render it.
+						if (event.to === "blue") {
 							// Daemon's outgoing message to player (AC #4): existing treatment.
+							const daemonId = event.from as AiId;
 							const pName =
 								nextState.personas[daemonId]?.name ?? daemonId;
 							appendAiPrefix(daemonId, pName);
 							appendAiTokens(daemonId, `${event.content}\n`);
 						}
+						// event.from === "blue" case intentionally omitted: the submit handler
+						// already painted the player's line via appendPlayerLine at submit time.
 						// No per-message pace() — message events are complete utterances,
 						// not per-token chunks. Post-#213 AI speech is tool-call-based so
 						// the encoder emits one message event per turn; pacing here would
