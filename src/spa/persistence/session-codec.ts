@@ -377,6 +377,8 @@ export function deserializeSession(
 			) ?? {
 				phaseNumber,
 				setting: "",
+				weather: "",
+				timeOfDay: "",
 				objectivePairs: [],
 				interestingObjects: [],
 				obstacles: [],
@@ -385,10 +387,16 @@ export function deserializeSession(
 
 			// Derive setting from content pack
 			const setting = contentPack.setting;
+			const weather =
+				(contentPack as ContentPack & { weather?: string }).weather ?? "";
+			const timeOfDay =
+				(contentPack as ContentPack & { timeOfDay?: string }).timeOfDay ?? "";
 
 			const phase: PhaseState = {
 				phaseNumber,
 				setting,
+				weather,
+				timeOfDay,
 				contentPack,
 				aiGoals,
 				// Use round from meta only for the active phase; previous phases use 0

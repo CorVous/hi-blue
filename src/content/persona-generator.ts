@@ -99,7 +99,7 @@ export async function generatePersonas(
 		id: string;
 		temperaments: [string, string];
 		personaGoal: string;
-		typingQuirks: [string, string];
+		typingQuirks: [string, string, ...string[]];
 	}> = [];
 	for (let i = 0; i < PERSONA_COUNT; i++) {
 		const name = names[i] as string;
@@ -108,14 +108,14 @@ export async function generatePersonas(
 			drawWithReplacement(TEMPERAMENT_POOL, rng),
 		];
 		const personaGoal = drawWithReplacement(PERSONA_GOAL_POOL, rng);
-		const typingQuirk0 = drawWithReplacement(TYPING_QUIRK_POOL, rng);
-		const typingQuirk1 = drawWithReplacement(TYPING_QUIRK_POOL, rng);
-		tuples.push({
-			id: name,
-			temperaments,
-			personaGoal,
-			typingQuirks: [typingQuirk0, typingQuirk1] as [string, string],
-		});
+		const typingQuirks: [string, string, ...string[]] = [
+			drawWithReplacement(TYPING_QUIRK_POOL, rng),
+			drawWithReplacement(TYPING_QUIRK_POOL, rng),
+		];
+		while (Math.floor(rng() * 6) + 1 === 6) {
+			typingQuirks.push(drawWithReplacement(TYPING_QUIRK_POOL, rng));
+		}
+		tuples.push({ id: name, temperaments, personaGoal, typingQuirks });
 	}
 
 	// Synthesize blurbs and voice examples: LLM path when provider supplied, template fallback otherwise.

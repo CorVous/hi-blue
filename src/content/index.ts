@@ -5,4 +5,7 @@ export { PERSONA_GOAL_POOL } from "./persona-goal-pool";
 export { PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG } from "./phases";
 export { SETTING_POOL } from "./setting-pool";
 export { TEMPERAMENT_POOL } from "./temperament-pool";
+export { THEME_POOL } from "./theme-pool";
+export { TIME_OF_DAY_POOL } from "./time-of-day-pool";
 export { TYPING_QUIRK_POOL } from "./typing-quirk-pool";
+export { WEATHER_POOL } from "./weather-pool";

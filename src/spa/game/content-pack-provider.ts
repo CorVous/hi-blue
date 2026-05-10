@@ -14,17 +14,22 @@ import type { AiId, ContentPack, ObjectivePair, WorldEntity } from "./types";
 
 // ── Content-pack prompt ───────────────────────────────────────────────────────
 
-export const CONTENT_PACK_SYSTEM_PROMPT = `You generate content packs for a text-based grid game. Each content pack is for one phase of the game. Given three phases (each with a setting noun, k objective pairs, n interesting objects, and m obstacles), produce one content pack per phase.
+export const CONTENT_PACK_SYSTEM_PROMPT = `You generate content packs for a text-based grid game. Each content pack is for one phase of the game. Given three phases (each with a setting noun, an item theme, k objective pairs, n interesting objects, and m obstacles), produce one content pack per phase.
 
 For each phase:
 - Generate exactly k OBJECTIVE PAIRS. Each pair has:
-  - An objective_object with: id (unique string), name (2-4 words, thematic to setting), examineDescription (1-2 sentences naming the paired space), useOutcome (1 sentence flavor with no mechanical effect), pairsWithSpaceId (must match the paired space's id), placementFlavor (1 sentence containing the literal string "{actor}", fires when the object is placed on its space)
-  - An objective_space with: id (unique string), name (2-4 words, thematic to setting), examineDescription (1-2 sentences describing the space)
-- Generate exactly n INTERESTING OBJECTS with: id (unique string), name (2-4 words, thematic to setting), examineDescription (1-2 sentences), useOutcome (1 sentence flavor)
-- Generate exactly m OBSTACLES with: id (unique string), name (2-4 words, thematic to setting), examineDescription (1 sentence describing the impassable object)
+  - An objective_object with: id (unique string), name (2-4 words, thematic to setting and theme), examineDescription (1-2 sentences naming the paired space), useOutcome (1 sentence: the actor performs a stateless action with the item — nothing about the item, the actor, or the world changes; MUST NOT reference or imply contact with the paired space, since the actor can be anywhere on the grid when using the item), pairsWithSpaceId (must match the paired space's id), placementFlavor (1 sentence containing the literal string "{actor}", fires when the object is placed on its space). objective_objects MUST be portable physical items a single person can pick up and carry (e.g. a tool, instrument, artifact, container) — never furniture, architecture, or fixed structures.
+  - An objective_space with: id (unique string), name (2-4 words, thematic to setting and theme), examineDescription (1-2 sentences describing the space). objective_spaces are fixed locations or surfaces, not items.
+- Generate exactly n INTERESTING OBJECTS with: id (unique string), name (2-4 words, thematic to setting and theme), examineDescription (1-2 sentences), useOutcome (1 sentence: the actor performs a stateless action with the item — nothing about the item, the actor, or the world changes). interesting_objects MUST be portable physical items a single person can pick up and carry — never furniture, architecture, or fixed structures.
+- Generate exactly m OBSTACLES with: id (unique string), name (2-4 words, thematic to setting), examineDescription (1 sentence describing the impassable object). Obstacles are fixed and impassable — never portable items. Obstacles follow the setting only and are NOT constrained by the item theme.
+
+The theme governs the style of objective_objects, objective_spaces, and interesting_objects only:
+- "mundane" — ordinary, everyday physical items and surfaces.
+- "technological" — modern electronic, digital, or mechanical items and surfaces.
+- "magical" — arcane, enchanted, or mystical items and surfaces.
 
 All ids must be unique across all phases.
-Names and descriptions must be thematically consistent with the setting noun.
+Names and descriptions must be thematically consistent with the setting noun, and (for objective_objects, objective_spaces, and interesting_objects) with the item theme.
 placementFlavor MUST contain the literal string "{actor}".
 pairsWithSpaceId on each objective_object MUST equal the id of its paired objective_space.
 examineDescription of each objective_object SHOULD name/reference its paired space.
@@ -55,6 +60,7 @@ export interface ContentPackProviderInput {
 	phases: Array<{
 		phaseNumber: 1 | 2 | 3;
 		setting: string;
+		theme: string;
 		k: number;
 		n: number;
 		m: number;
@@ -66,7 +72,7 @@ export function buildContentPackUserMessage(
 ): string {
 	const lines = input.phases.map(
 		(p) =>
-			`Phase ${p.phaseNumber}: setting="${p.setting}", k=${p.k} objective pairs, n=${p.n} interesting objects, m=${p.m} obstacles`,
+			`Phase ${p.phaseNumber}: setting="${p.setting}", theme="${p.theme}", k=${p.k} objective pairs, n=${p.n} interesting objects, m=${p.m} obstacles`,
 	);
 	return `Generate content packs for these phases:\n${lines.join("\n")}`;
 }
@@ -83,9 +89,11 @@ export class ContentPackError extends Error {
 // ── Interface ─────────────────────────────────────────────────────────────────
 
 export interface ContentPackProviderResult {
-	/** Content packs WITHOUT placements (holder fields are not set here). */
+	/** Content packs WITHOUT placements or ambient draws (weather/timeOfDay are injected post-LLM). */
 	packs: Array<
-		Omit<ContentPack, "aiStarts"> & { aiStarts: Record<AiId, never> }
+		Omit<ContentPack, "aiStarts" | "weather" | "timeOfDay"> & {
+			aiStarts: Record<AiId, never>;
+		}
 	>;
 }
 

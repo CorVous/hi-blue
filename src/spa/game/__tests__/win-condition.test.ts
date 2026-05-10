@@ -51,6 +51,8 @@ function makeContentPack(pairs: ObjectivePair[]): ContentPack {
 	return {
 		phaseNumber: 1,
 		setting: "test",
+		weather: "",
+		timeOfDay: "",
 		objectivePairs: pairs,
 		interestingObjects: [],
 		obstacles: [],

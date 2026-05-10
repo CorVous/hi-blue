@@ -10,7 +10,7 @@ export interface AiPersona {
 	color: string;
 	temperaments: [string, string];
 	personaGoal: string;
-	typingQuirks: [string, string];
+	typingQuirks: [string, string, ...string[]];
 	blurb: string;
 	/**
 	 * Three short, single-sentence in-character utterances synthesized alongside
@@ -55,6 +55,8 @@ export interface ObjectivePair {
 export interface ContentPack {
 	phaseNumber: 1 | 2 | 3;
 	setting: string;
+	weather: string;
+	timeOfDay: string;
 	objectivePairs: ObjectivePair[];
 	interestingObjects: WorldEntity[];
 	obstacles: WorldEntity[];
@@ -212,6 +214,8 @@ export interface PhaseState {
 	phaseNumber: 1 | 2 | 3;
 	/** Setting noun for this phase (e.g. "abandoned subway station"). */
 	setting: string;
+	weather: string;
+	timeOfDay: string;
 	/** The full content pack for this phase. */
 	contentPack: ContentPack;
 	aiGoals: Record<AiId, string>;

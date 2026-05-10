@@ -20,12 +20,14 @@ export interface AiContext {
 	name: string;
 	aiId: AiId;
 	blurb: string;
-	typingQuirks: [string, string];
+	typingQuirks: [string, string, ...string[]];
 	/** Three short in-character utterances; rendered as `<voice_examples>` in the system prompt. */
 	voiceExamples: string[];
 	personaGoal: string;
 	goal: string;
 	setting: string;
+	weather: string;
+	timeOfDay: string;
 	/** Per-AI conversation log (ConversationEntry[]) for this phase. */
 	conversationLog: ConversationEntry[];
 	worldSnapshot: WorldState;
@@ -50,6 +52,8 @@ export function buildAiContext(game: GameState, aiId: AiId): AiContext {
 	const budget = phase.budgets[aiId] ?? { remaining: 0, total: 0 };
 	const goal = phase.aiGoals[aiId] ?? "";
 	const setting = phase.setting ?? "";
+	const weather = phase.weather ?? "";
+	const timeOfDay = phase.timeOfDay ?? "";
 	const personaSpatial = phase.personaSpatial;
 
 	if (!persona) throw new Error(`No persona for aiId: ${aiId}`);
@@ -67,6 +71,8 @@ export function buildAiContext(game: GameState, aiId: AiId): AiContext {
 		personaGoal: persona.personaGoal,
 		goal,
 		setting,
+		weather,
+		timeOfDay,
 		conversationLog,
 		worldSnapshot,
 		budget,
@@ -165,6 +171,8 @@ function renderSystemPrompt(ctx: AiContext): string {
 	if (ctx.setting) {
 		lines.push("<setting>");
 		lines.push(`You are in a ${ctx.setting}.`);
+		if (ctx.timeOfDay) lines.push(`It is ${ctx.timeOfDay}.`);
+		if (ctx.weather) lines.push(ctx.weather);
 		lines.push("</setting>");
 		lines.push("");
 	}
@@ -178,8 +186,9 @@ function renderSystemPrompt(ctx: AiContext): string {
 	// Typing quirks — byte-identical across all phases. Per-persona surface signals
 	// to prevent voice bleed across daemons (issue #167; GLM-4.7 guide §4.5).
 	lines.push("<typing_quirks>");
-	lines.push(ctx.typingQuirks[0]);
-	lines.push(ctx.typingQuirks[1]);
+	for (const quirk of ctx.typingQuirks) {
+		lines.push(quirk);
+	}
 	lines.push("</typing_quirks>");
 	lines.push("");
 

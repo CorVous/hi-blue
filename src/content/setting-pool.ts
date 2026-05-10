@@ -3,8 +3,6 @@
  *
  * Hand-authored noun phrases used as per-phase setting descriptors.
  * Three are drawn without replacement at game start (one per phase).
- *
- * Size: 6 (within the [5, 10] AC constraint).
  */
 export const SETTING_POOL: readonly string[] = [
 	"abandoned subway station",
@@ -13,4 +11,14 @@ export const SETTING_POOL: readonly string[] = [
 	"moonlit greenhouse ruin",
 	"stripped server vault",
 	"tide-flooded boardwalk",
+	"humid and dense bog",
+	"library overflowing with books",
+	"throne room of a pagoda",
+	"dust-filled opera hall",
+	"collapsed market arcade",
+	"hollowed glacier cave",
+	"flooded underground cistern",
+	"silent planetarium dome",
+	"rusted oil platform deck",
+	"ink-stained printing hall",
 ] as const;

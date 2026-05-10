@@ -30,6 +30,9 @@ import type {
 	PhaseConfig,
 	WorldEntity,
 } from "../spa/game/types.js";
+import { THEME_POOL } from "./theme-pool.js";
+import { TIME_OF_DAY_POOL } from "./time-of-day-pool.js";
+import { WEATHER_POOL } from "./weather-pool.js";
 
 const GRID_ROWS = 5;
 const GRID_COLS = 5;
@@ -287,11 +290,27 @@ export async function generateContentPacks(
 		drawnSettings.push(settingPool[i] as string);
 	}
 
+	// Draw weather, time-of-day, and theme independently per phase (with replacement)
+	const drawnWeather = Array.from(
+		{ length: 3 },
+		() => WEATHER_POOL[Math.floor(rng() * WEATHER_POOL.length)] as string,
+	);
+	const drawnTimeOfDay = Array.from(
+		{ length: 3 },
+		() =>
+			TIME_OF_DAY_POOL[Math.floor(rng() * TIME_OF_DAY_POOL.length)] as string,
+	);
+	const drawnThemes = Array.from(
+		{ length: 3 },
+		() => THEME_POOL[Math.floor(rng() * THEME_POOL.length)] as string,
+	);
+
 	// Roll k/n/m per phase
 	const phaseInputs: ContentPackProviderInput["phases"] = configs.map(
 		(cfg, i) => ({
 			phaseNumber: cfg.phaseNumber,
 			setting: drawnSettings[i] as string,
+			theme: drawnThemes[i] as string,
 			k: rollInt(rng, cfg.kRange[0], cfg.kRange[1]),
 			n: rollInt(rng, cfg.nRange[0], cfg.nRange[1]),
 			m: rollInt(rng, cfg.mRange[0], cfg.mRange[1]),
@@ -308,9 +327,11 @@ export async function generateContentPacks(
 	]);
 
 	// Build placeholder ContentPack structures from LLM result (no placements yet)
-	const unplacedPacks: ContentPack[] = llmResult.packs.map((pack) => ({
+	const unplacedPacks: ContentPack[] = llmResult.packs.map((pack, i) => ({
 		phaseNumber: pack.phaseNumber,
 		setting: pack.setting,
+		weather: drawnWeather[i] as string,
+		timeOfDay: drawnTimeOfDay[i] as string,
 		objectivePairs: pack.objectivePairs,
 		interestingObjects: pack.interestingObjects as WorldEntity[],
 		obstacles: pack.obstacles as WorldEntity[],

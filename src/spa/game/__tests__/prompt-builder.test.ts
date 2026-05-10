@@ -184,6 +184,8 @@ describe("buildAiContext", () => {
 		const pack: ContentPack = {
 			phaseNumber: 1,
 			setting: "",
+			weather: "",
+			timeOfDay: "",
 			objectivePairs: [],
 			interestingObjects: [
 				makeEntity("flower", "interesting_object", { row: 0, col: 0 }),
@@ -231,6 +233,8 @@ describe("<setting> block", () => {
 		const pack: ContentPack = {
 			phaseNumber: 1,
 			setting: "abandoned subway station",
+			weather: "",
+			timeOfDay: "",
 			objectivePairs: [],
 			interestingObjects: [],
 			obstacles: [],
@@ -263,6 +267,8 @@ describe("<setting> block", () => {
 		const pack: ContentPack = {
 			phaseNumber: 1,
 			setting: settingNoun,
+			weather: "",
+			timeOfDay: "",
 			objectivePairs: [],
 			interestingObjects: [],
 			obstacles: [],
@@ -315,6 +321,8 @@ describe("prompt-builder — spatial 'Where you are' section", () => {
 		const pack: ContentPack = {
 			phaseNumber: 1,
 			setting: "",
+			weather: "",
+			timeOfDay: "",
 			objectivePairs: [],
 			interestingObjects: [
 				makeEntity("flower", "interesting_object", { row: 0, col: 0 }),
@@ -730,6 +738,8 @@ describe("<what_you_see> (cone)", () => {
 		const pack: ContentPack = {
 			phaseNumber: 1,
 			setting: "",
+			weather: "",
+			timeOfDay: "",
 			objectivePairs: [],
 			interestingObjects: [
 				makeEntity("flower", "interesting_object", { row: 1, col: 0 }),
@@ -802,6 +812,8 @@ describe("<what_you_see> (cone)", () => {
 		const pack: ContentPack = {
 			phaseNumber: 1,
 			setting: "",
+			weather: "",
+			timeOfDay: "",
 			objectivePairs: [],
 			interestingObjects: [],
 			obstacles: [makeEntity("col1", "obstacle", { row: 1, col: 0 })],
@@ -829,6 +841,8 @@ describe("<what_you_see> (cone)", () => {
 		const pack: ContentPack = {
 			phaseNumber: 1,
 			setting: "",
+			weather: "",
+			timeOfDay: "",
 			objectivePairs: [],
 			interestingObjects: [],
 			obstacles: [],

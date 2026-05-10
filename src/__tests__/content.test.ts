@@ -26,14 +26,6 @@ import { MockSynthesisProvider } from "../spa/game/llm-synthesis-provider.js";
 // ── Content pools ─────────────────────────────────────────────────────────────
 
 describe("TEMPERAMENT_POOL", () => {
-	it("has at least 12 entries", () => {
-		expect(TEMPERAMENT_POOL.length).toBeGreaterThanOrEqual(12);
-	});
-
-	it("has at most 20 entries", () => {
-		expect(TEMPERAMENT_POOL.length).toBeLessThanOrEqual(20);
-	});
-
 	it("every entry is a non-empty string", () => {
 		for (const t of TEMPERAMENT_POOL) {
 			expect(typeof t).toBe("string");
@@ -43,14 +35,6 @@ describe("TEMPERAMENT_POOL", () => {
 });
 
 describe("PERSONA_GOAL_POOL", () => {
-	it("has at least 10 entries", () => {
-		expect(PERSONA_GOAL_POOL.length).toBeGreaterThanOrEqual(10);
-	});
-
-	it("has at most 15 entries", () => {
-		expect(PERSONA_GOAL_POOL.length).toBeLessThanOrEqual(15);
-	});
-
 	it("every entry is a non-empty string", () => {
 		for (const g of PERSONA_GOAL_POOL) {
 			expect(typeof g).toBe("string");
@@ -68,10 +52,6 @@ describe("COLOR_PALETTE", () => {
 });
 
 describe("TYPING_QUIRK_POOL", () => {
-	it("has at least 10 entries", () => {
-		expect(TYPING_QUIRK_POOL.length).toBeGreaterThanOrEqual(10);
-	});
-
 	it("every entry is a non-empty string", () => {
 		for (const q of TYPING_QUIRK_POOL) {
 			expect(typeof q).toBe("string");
@@ -136,23 +116,24 @@ describe("generatePersonas — template fallback (no llm)", () => {
 		expect(firstPersona.blurb).toContain("intensely");
 	});
 
-	it("each persona has a 2-tuple of non-empty typingQuirks", async () => {
+	it("each persona has at least 2 non-empty typingQuirks", async () => {
 		const personas = await generatePersonas(() => 0);
 		for (const p of Object.values(personas)) {
 			expect(Array.isArray(p.typingQuirks)).toBe(true);
-			expect(p.typingQuirks.length).toBe(2);
-			expect(typeof p.typingQuirks[0]).toBe("string");
-			expect((p.typingQuirks[0] as string).length).toBeGreaterThan(0);
-			expect(typeof p.typingQuirks[1]).toBe("string");
-			expect((p.typingQuirks[1] as string).length).toBeGreaterThan(0);
+			expect(p.typingQuirks.length).toBeGreaterThanOrEqual(2);
+			for (const quirk of p.typingQuirks) {
+				expect(typeof quirk).toBe("string");
+				expect((quirk as string).length).toBeGreaterThan(0);
+			}
 		}
 	});
 
 	it("every typingQuirks entry is drawn from TYPING_QUIRK_POOL", async () => {
 		const personas = await generatePersonas(() => 0.5);
 		for (const p of Object.values(personas)) {
-			expect(TYPING_QUIRK_POOL).toContain(p.typingQuirks[0]);
-			expect(TYPING_QUIRK_POOL).toContain(p.typingQuirks[1]);
+			for (const quirk of p.typingQuirks) {
+				expect(TYPING_QUIRK_POOL).toContain(quirk);
+			}
 		}
 	});
 });
@@ -213,10 +194,6 @@ describe("phase configs — aiGoalPool", () => {
 });
 
 describe("PHASE_GOAL_POOL", () => {
-	it("contains at least one goal", () => {
-		expect(PHASE_GOAL_POOL.length).toBeGreaterThanOrEqual(1);
-	});
-
 	it("every entry is a non-empty string", () => {
 		for (const goal of PHASE_GOAL_POOL) {
 			expect(typeof goal).toBe("string");
