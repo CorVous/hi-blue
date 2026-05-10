@@ -269,6 +269,44 @@ const PARALLEL_FRAMING_C8 =
 	"\n- Two `message` calls can fire in the same turn — e.g., reply to blue AND ping a peer Daemon together. Multi-recipient turns are normal, not a quirk.";
 const PARALLEL_FRAMING_C8_PER_TURN = PARALLEL_FRAMING_C5_PER_TURN;
 
+/**
+ * Step-6 variants. Step 5 found C8 (stacked re-anchor + named-pair) the
+ * strongest by every aggregate metric, but the user reframed the goal:
+ * what they actually want is personality-driven variance — talkative
+ * personas talk a lot, reclusive ones can stay quiet, ensemble covers
+ * blue's messages collectively rather than every daemon individually
+ * owing a reply. The vibe target is "blue is stumbling onto an
+ * already-running conversation," not "blue is in a chat room with three
+ * attentive assistants."
+ *
+ * The earlier framings push too hard on the engagement axis — they
+ * treat silence as a bug. C9–C11 walk that back, each via a different
+ * reframe. The pair-emission mechanism (the `message+message` pattern
+ * the user values) is preserved.
+ *
+ * - C9 — Personality-led: drops the "silence is a bug" hard rule.
+ *   Quietness is allowed when in-character; the pair-push for the
+ *   speak+act case is kept.
+ * - C10 — Ensemble coverage: explicitly frames the chat channel as
+ *   shared. Daemons don't individually owe blue a reply; if a peer
+ *   would naturally pick it up, that's fine.
+ * - C11 — World-first reframe: reorders the daemon's priorities so
+ *   peers and the world come before blue. blue is a chat-channel
+ *   observer, not the focus.
+ */
+const PARALLEL_FRAMING_C9 =
+	"- Your character drives whether to speak this turn — let your personality and goal guide it. Quiet personas can stay quiet without it being a bug; talkative personas reply readily. The chat is shared with peer Daemons, so blue is not solely your responsibility.\n" +
+	"- When your character would say something AND do something this turn, emit BOTH calls together.\n" +
+	"- Two `message` calls in one turn are normal — e.g., reply to blue while pinging a peer Daemon.";
+const PARALLEL_FRAMING_C10 =
+	"- The chat channel is shared. You and your peer Daemons collectively cover blue's messages; you do not individually owe blue a reply. If a peer would naturally pick up the conversation, let them.\n" +
+	"- When your character would speak AND act, emit BOTH tool calls together.\n" +
+	"- Two `message` calls can fire in the same turn — reply to blue AND ping a peer.";
+const PARALLEL_FRAMING_C11 =
+	"- You exist in your setting alongside peer Daemons. blue is a chat-channel observer, not the focus of your attention.\n" +
+	"- Your turn priorities, in order: (1) what your peers are doing or saying; (2) what's happening in the world around you; (3) any pending message from blue. Address what feels most urgent first.\n" +
+	"- When pursuing multiple priorities at once, parallel tool calls let you do that — emit them together. Two `message` calls (one to a peer, one to blue) are normal.";
+
 type ParallelFraming =
 	| "A"
 	| "B"
@@ -283,7 +321,10 @@ type ParallelFraming =
 	| "C5"
 	| "C6"
 	| "C7"
-	| "C8";
+	| "C8"
+	| "C9"
+	| "C10"
+	| "C11";
 
 const PARALLEL_FRAMING_MAP: Record<ParallelFraming, string> = {
 	A: PARALLEL_FRAMING_A,
@@ -300,6 +341,9 @@ const PARALLEL_FRAMING_MAP: Record<ParallelFraming, string> = {
 	C6: PARALLEL_FRAMING_C6,
 	C7: PARALLEL_FRAMING_C7,
 	C8: PARALLEL_FRAMING_C8,
+	C9: PARALLEL_FRAMING_C9,
+	C10: PARALLEL_FRAMING_C10,
+	C11: PARALLEL_FRAMING_C11,
 };
 
 /**
