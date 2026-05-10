@@ -326,7 +326,7 @@ export function buildConeSnapshot(ctx: AiContext): string {
  * changes surface as a single readable line rather than a paired
  * remove + add.
  */
-export function renderWhatsNew(prev: string, current: string): string | null {
+export function renderWhatsNew(prev = "", current = ""): string | null {
 	if (prev === current) return null;
 
 	const prevLines = prev.split("\n").filter((l) => l.length > 0);
@@ -392,12 +392,10 @@ function renderCurrentState(ctx: AiContext): string {
 	if (ctx.prevConeSnapshot !== undefined) {
 		const current = buildConeSnapshot(ctx);
 		const diff = renderWhatsNew(ctx.prevConeSnapshot, current);
-		if (diff !== null) {
-			lines.push("<whats_new>");
-			lines.push(diff);
-			lines.push("</whats_new>");
-			lines.push("");
-		}
+		lines.push("<whats_new>");
+		lines.push(diff ?? "(no change)");
+		lines.push("</whats_new>");
+		lines.push("");
 	}
 
 	const actorSpatial = ctx.personaSpatial[ctx.aiId];
