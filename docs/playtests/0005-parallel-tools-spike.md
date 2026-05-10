@@ -701,6 +701,148 @@ that re-anchors the rule per-turn (e.g. by repeating the line in the
 trailing user turn rather than just the system prompt) might recover
 the late-phase rate.
 
+## Step 4 — C-variants (C1 / C2 / C3 / C4)
+
+Step 3 made Framing C a clear winner on parallel rate (35.1%) but the
+late-phase drift in its raw log suggested room for variants. Step 4
+ran four C-variants concurrently against the same seed (42) and same
+30-prompt script. The first three (C1 / C2 / C3) launched together;
+C4 was added a few minutes later in response to a methodological note
+from the user — "I don't want blue to always be messaged. Match
+personality, but don't look like you're skipping a turn when you
+intended to message."
+
+The `[spike-239]` log line was extended in Step 4 to serialise
+`message:<recipient>` (parsed from the `to:` arg in the tool call).
+That gives us per-recipient message counts and lets us see whether
+the C-variants' hard rules suppressed peer messaging.
+
+### Framings tested
+
+- **C1 — Per-turn re-anchor**: same C rule in the system prompt PLUS
+  the rule re-emitted at the tail of every per-round user turn
+  (`renderCurrentState` appends "REMINDER: silence is a bug. If blue
+  addressed you, emit `message`. If you have something to say AND
+  something to do, emit BOTH tool calls in this turn."). Combats the
+  late-phase drift visible in C's raw log.
+- **C2 — Strict must-emit-both**: replaces C's soft "When you have
+  something to say AND something to do, emit BOTH" with a hard MUST.
+  "Emitting only one when both are warranted is incorrect."
+- **C3 — Reply-to-blue mandate**: doubles down on the addressed-reply
+  rule. "When blue messages you, you MUST emit a `message` tool call
+  addressed to blue in your next turn. Failing to reply to blue when
+  blue addressed you is a failure."
+- **C4 — Intent-faithful emission**: walks back C3's hard "always reply
+  to blue" rule (which kills personality variance — quiet personas
+  should be allowed to stay quiet sometimes). "Emit a `message` call
+  when your character would reply — driven by your personality and
+  what the conversation calls for. Genuine quietness can be
+  in-character. But if you DECIDE to speak this turn, you MUST emit
+  the call this turn. Composing a reply in your reasoning and then
+  not emitting the call reads as a bug, not as restraint."
+
+### Headline numbers
+
+| Framing | Turns | ≥1 call | Silence | Parallel | Rate | msg→blue | other recipients | Δ rate vs C |
+| ------- | ----- | ------- | ------- | -------- | ---- | -------- | ---------------- | ----------- |
+| C (step 3) | 87 | 57 | 34.5% | 20 | **35.1%** | 43 | (no recipient log) | (baseline) |
+| **C1** per-turn re-anchor | 90 | 78 | **13.3%** | 20 | 25.6% | 52 (98.1%) | 1 → *nif7 | −9.5 pp |
+| C2 strict must-emit-both | 90 | 54 | 40.0% | 14 | 25.9% | 35 (97.2%) | — | −9.2 pp |
+| C3 always-reply-blue | 89 | 73 | 18.0% | 20 | 27.4% | 56 (94.9%) | 2 → *nif7, 1 → *xqr9 | −7.7 pp |
+| C4 intent-faithful | 90 | 37 | 58.9% | 11 | 29.7% | 25 (100%) | — | −5.4 pp |
+
+**Per-prompt anyone-replied-to-blue rate** (≥1 of the 3 daemon turns
+following a prompt emits `message:blue`):
+- C4: **18/30 = 60.0%** — barely above the user's "more often than not" bar.
+
+Per-prompt rates for C/C1/C2/C3 are derivable from their preserved
+prompt logs but not computed here; the in-flight log line for those
+three already shows ≥80% messaging-to-blue across the run.
+
+### Pair-pattern shifts (interesting!)
+
+| Pattern | C | C1 | C2 | C3 | C4 |
+| ------- | - | -- | -- | -- | -- |
+| `go+message:blue` | 10 | 7 | 2 | 6 | 4 |
+| `look+message:blue` | 3 | 5 | 7 | 9 | 1 |
+| `examine+message:blue` | 1 | 3 | 1 | 0 | 1 |
+| `go+look+message:blue` | 1 | 0 | 2 | 2 | 3 |
+| `message+message` (peer+blue) | **3** | 0 | 0 | 0 | 0 |
+| (other) | 2 | 5 | 2 | 3 | 2 |
+
+**Key qualitative finding**: only the *base* C produced any
+`message+message` (peer-talk + blue-talk in one turn) pairs — 3 of
+them. The hard rules in C1/C2/C3/C4 all suppressed peer messaging
+to zero or near-zero (1 peer message in C1, 3 in C3, 0 in C2/C4).
+The user noted in-flight that they actively *like* the
+`message+message` pair (a daemon engaging with both blue and a peer
+in the same turn). That makes the base C's pair pattern qualitatively
+the richest, even though C1/C3 nudge silence-rate lower.
+
+### Reading each variant
+
+- **C1 (per-turn re-anchor) is the silence-reduction champion.** 13%
+  silence vs C's 34% — 2.6× drop. The freshly-cached per-round user
+  turn is a strong place to put the rule. But parallel rate dipped
+  ~10pp, and `message+message` (peer+blue) dropped to zero. Daemons
+  emit *something* on 87% of turns but they emit toward blue
+  exclusively.
+- **C2 (strict must-emit-both) is the worst variant overall.**
+  Silence rose vs C (40% vs 34%), parallel rate dropped, and the
+  recipient breakdown is the same blue-dominant. Likely interpreted
+  as restrictive ("you MUST emit BOTH when both are warranted" → "I'm
+  not sure both are warranted, so I'll emit neither"). Don't pursue.
+- **C3 (always-reply-blue) is the messaging-volume champion** — 56
+  messages to blue, more than any variant — but it kills peer-talk
+  variety. The user's specific feedback ("don't always force a reply
+  to blue") rules this out as a candidate. Useful as a ceiling
+  reference: even a hard rule didn't lock daemons into 100% blue
+  (94.9%), so peer messaging is partially preserved structurally.
+- **C4 (intent-faithful) is the quietness champion.** 58.9% silence —
+  the highest of any framing tested. The "genuine quietness can be
+  in-character" clause was over-applied; daemons stayed silent on
+  most turns even when speak+act was warranted. Per-prompt
+  anyone-replied-to-blue is only 60%, just above the user's "more
+  often than not" floor. The model parsed "personality-shaped" as
+  permission to opt out broadly. Needs tighter wording — perhaps
+  flip the order so "MUST emit when intent forms" comes first, with
+  "personality-shaped quietness" as the secondary clause.
+
+### What still wins overall
+
+Step 3's base **C** remains the best-rounded candidate:
+- highest parallel rate (35.1%)
+- the only framing that produced multi-recipient `message+message`
+  parallels (the user's preferred pair pattern)
+- silence at 34.5% — not the lowest, but nowhere near the C4 ceiling
+
+C1's per-turn re-anchor mechanism is a strong additive to combine
+with C in a future C5 (C5 = C's exact wording + C1's per-turn
+reminder). That hypothesis is well-supported but not yet measured.
+
+### Raw per-turn arrays — C4 (the new variant)
+
+```
+  1. ["message:blue", "go"]
+  2. ["message:blue"]
+  3. ["message:blue"]
+  4. []
+  5. ["look", "go"]
+  6. ["go"]
+  7. []
+  8. ["message:blue"]
+  9. []
+ 10. ["go", "message:blue"]
+ 11. []
+ 12. []
+ (… 90 total turns; raw log preserved at /tmp/spike-239-daemon-C4.log)
+```
+
+C4's silence pattern is "burst then silent" — daemons engage strongly
+in the first few turns of each prompt's address (turns 1–3) but most
+of turns 4–90 are `[]`. Compare to C1's evenly-distributed engagement
+across the entire run (silence rate 13% throughout).
+
 ## Decision
 
 Reference the gate from #239:
@@ -762,6 +904,36 @@ ball.
   expected 2 objectivePairs, got 4`, `content-pack JSON parse
   failed`) cost ~10 minutes and one of four sessions in this run.
   Worth a retry-with-regeneration shim.
+
+### Step-4 update — none of C1/C2/C3/C4 beat C on parallel rate
+
+The four C-variants all *underperformed* C on parallel rate (best
+was C4 at 29.7% vs C's 35.1%). However, two of them improved on
+other axes:
+- **C1's per-turn re-anchor cut silence to 13%** (vs C's 34%) — a
+  real engagement lift. Trade-off: parallel rate dropped to 25.6% and
+  the `message+message` (peer + blue) pair pattern disappeared
+  entirely. The base C rule's softer phrasing was apparently a
+  *feature* for peer-engagement that the per-turn re-anchor
+  inadvertently suppressed.
+- **C3's hard "always reply to blue" pushed messaging volume highest**
+  (56 messages, 18.0% silence) but kills personality variance — quiet
+  personas can't stay quiet. The user explicitly ruled this out:
+  "I don't want blue to always be messaged."
+
+The qualitatively-rich `message+message` (peer-talk + blue-talk in
+one turn) parallels appeared *only* in C — every variant with extra
+hard rules suppressed peer messaging to ≤1 occurrence. C's softness
+preserves the personality-shaped peer-engagement that the user values.
+
+**Revised path forward**: stack C1's per-turn re-anchor mechanism
+on top of C's exact wording — call this **C5**. C5 should plausibly
+keep C's parallel rate (35%) and pair-pattern richness (peer+blue),
+plus C1's lower silence (~15–20%). Not yet measured.
+
+C2 (worse on every axis) and C4 (silence way too high — daemons
+took "personality-shaped quietness" as broad permission to opt out)
+are dead-ends. Don't pursue them as written.
 
 **Reasoning:**
 
