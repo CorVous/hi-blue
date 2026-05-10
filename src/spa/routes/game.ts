@@ -800,32 +800,33 @@ export function renderGame(
 				return Promise.resolve();
 			}
 		}
+	}
 
-		// Synchronous post-init: runs for the restore path (session is set).
-		if (session !== null) {
-			// Apply SPA-side test affordances from location.search (e.g. ?winImmediately=1
-			// or ?lockout=1). These are gated inside applyTestAffordances to only fire
-			// when __WORKER_BASE_URL__ === "http://localhost:8787" (local dev).
-			// Note: we use location.search (not the hash params) because these flags are
-			// intended to be set on the page URL itself, matching the legacy worker pattern.
-			session = applyTestAffordances(session, effectiveParams);
+	// Synchronous post-init: runs for both the restore path AND the bootstrap-
+	// recursive path (which already set session = built before re-entering).
+	if (session !== null) {
+		// Apply SPA-side test affordances from location.search (e.g. ?winImmediately=1
+		// or ?lockout=1). These are gated inside applyTestAffordances to only fire
+		// when __WORKER_BASE_URL__ === "http://localhost:8787" (local dev).
+		// Note: we use location.search (not the hash params) because these flags are
+		// intended to be set on the page URL itself, matching the legacy worker pattern.
+		session = applyTestAffordances(session, effectiveParams);
 
-			// Build persona maps from runtime state (after affordances may have replaced session)
-			const runtimePersonas = session.getState().personas;
-			personaNamesToId = buildPersonaNameMap(runtimePersonas);
-			personaColors = buildPersonaColorMap(runtimePersonas);
-			personaDisplayNames = buildPersonaDisplayNameMap(runtimePersonas);
+		// Build persona maps from runtime state (after affordances may have replaced session)
+		const runtimePersonas = session.getState().personas;
+		personaNamesToId = buildPersonaNameMap(runtimePersonas);
+		personaColors = buildPersonaColorMap(runtimePersonas);
+		personaDisplayNames = buildPersonaDisplayNameMap(runtimePersonas);
 
-			// Hydrate lockouts from the active phase's chatLockouts map so that
-			// a reload preserves the Send-disabled state for locked-out AIs.
-			const activePhaseForLockouts = getActivePhase(session.getState());
-			for (const aiId of Object.keys(runtimePersonas)) {
-				lockouts.set(aiId, activePhaseForLockouts.chatLockouts.has(aiId));
-			}
-
-			// Reset module-level gameEnded flag on fresh session init
-			gameEnded = false;
+		// Hydrate lockouts from the active phase's chatLockouts map so that
+		// a reload preserves the Send-disabled state for locked-out AIs.
+		const activePhaseForLockouts = getActivePhase(session.getState());
+		for (const aiId of Object.keys(runtimePersonas)) {
+			lockouts.set(aiId, activePhaseForLockouts.chatLockouts.has(aiId));
 		}
+
+		// Reset module-level gameEnded flag on fresh session init
+		gameEnded = false;
 	}
 
 	// Route-entry visibility: game route shows panels/composer and hides start-screen
