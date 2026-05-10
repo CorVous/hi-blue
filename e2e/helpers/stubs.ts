@@ -15,6 +15,13 @@ export type WordsFactory = (request: Request) => string[] | Promise<string[]>;
  * Wire format mirrors what src/proxy/openai-proxy.ts forwards from OpenRouter:
  *   data: {"choices":[{"delta":{"content":"<text>"},"finish_reason":null}]}\n\n
  *   data: [DONE]\n\n
+ *
+ * Post-#214 free-form `delta.content` is no longer painted into player panels —
+ * panels paint exclusively from `message` tool-call entries in conversationLogs.
+ * The default SSE-body helper used by `stubChatCompletions` is now
+ * `messageToolCallToBlueSseBody`. This helper is retained for tests that
+ * specifically need to exercise the free-form-delta wire path (e.g. asserting
+ * that free-form text is silently dropped).
  */
 export function wordsToOpenAiSseBody(words: string[]): string {
 	const lines: string[] = words.map(
@@ -23,6 +30,44 @@ export function wordsToOpenAiSseBody(words: string[]): string {
 	);
 	lines.push("data: [DONE]\n\n");
 	return lines.join("");
+}
+
+/**
+ * Build a minimal OpenAI-compatible SSE body that emits a single `message`
+ * tool-call addressed to "blue", carrying the joined `words` as its content.
+ * This is the post-#214 wire shape that lands in panel transcripts: panels
+ * render only entries written into conversationLogs by the `message` tool.
+ *
+ * Includes a final usage chunk so the budget-deduction path sees a non-zero
+ * cost. Mirrors `makeMessageToolCallSseStream` from `src/spa/__tests__/game.test.ts`.
+ */
+export function messageToolCallToBlueSseBody(words: string[]): string {
+	const args = JSON.stringify({ to: "blue", content: words.join("") });
+	const headerChunk = `data: ${JSON.stringify({
+		choices: [
+			{
+				delta: {
+					tool_calls: [
+						{
+							index: 0,
+							id: "call_msg",
+							function: { name: "message", arguments: "" },
+						},
+					],
+				},
+			},
+		],
+	})}\n\n`;
+	const argsChunk = `data: ${JSON.stringify({
+		choices: [
+			{
+				delta: { tool_calls: [{ index: 0, function: { arguments: args } }] },
+				finish_reason: "tool_calls",
+			},
+		],
+	})}\n\n`;
+	const usageChunk = `data: ${JSON.stringify({ choices: [], usage: { cost: 0.01, total_tokens: 100 } })}\n\n`;
+	return `${headerChunk}${argsChunk}${usageChunk}data: [DONE]\n\n`;
 }
 
 // ── Pure helpers (request classification + canned responses) ─────────────────
@@ -287,7 +332,7 @@ export async function stubNewGameLLM(
 				"Cache-Control": "no-cache",
 				"X-Content-Type-Options": "nosniff",
 			},
-			body: wordsToOpenAiSseBody(words),
+			body: messageToolCallToBlueSseBody(words),
 		});
 	});
 }
@@ -343,7 +388,7 @@ export async function stubChatCompletions(
 				"Cache-Control": "no-cache",
 				"X-Content-Type-Options": "nosniff",
 			},
-			body: wordsToOpenAiSseBody(words),
+			body: messageToolCallToBlueSseBody(words),
 		});
 	});
 }

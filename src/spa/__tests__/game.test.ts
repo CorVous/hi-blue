@@ -248,6 +248,43 @@ function makeThreeAiFetchMock(
 }
 
 /**
+ * Creates an SSE stream for a `message` tool call with a custom `to` field.
+ * Used to simulate daemon→daemon peer-to-peer messages.
+ */
+function makeMessageToolCallSseStreamTo(
+	to: string,
+	content: string,
+): ReadableStream<Uint8Array> {
+	const args = JSON.stringify({ to, content });
+	const chunk1 = `data: ${JSON.stringify({
+		choices: [
+			{
+				delta: {
+					tool_calls: [
+						{
+							index: 0,
+							id: "call_peer",
+							function: { name: "message", arguments: "" },
+						},
+					],
+				},
+			},
+		],
+	})}\n\n`;
+	const chunk2 = `data: ${JSON.stringify({
+		choices: [
+			{
+				delta: { tool_calls: [{ index: 0, function: { arguments: args } }] },
+				finish_reason: "tool_calls",
+			},
+		],
+	})}\n\n`;
+	const usageChunk = `data: ${JSON.stringify({ choices: [], usage: { cost: 0.01, total_tokens: 100 } })}\n\n`;
+	const sseData = `${chunk1}${chunk2}${usageChunk}data: [DONE]\n\n`;
+	return makeSSEStream([sseData]);
+}
+
+/**
  * Returns a fresh fetch mock serving three `message` tool calls (AI→blue), one per daemon.
  * Using tool calls ensures the content lands in conversationLogs and is restored on reload.
  */
@@ -301,11 +338,9 @@ describe("renderGame (game route — three-AI)", () => {
 	});
 
 	it("after one submit, all three transcript panels have content", async () => {
-		const mockFetch = makeThreeAiFetchMock(
-			RED_ACTION,
-			GREEN_ACTION,
-			CYAN_ACTION,
-		);
+		// Use message tool calls so AI content lands in conversationLogs and
+		// surfaces through the encoder's "message" event (DM-thread filter, #214).
+		const mockFetch = makeMessageToolCallFetchMock();
 		vi.stubGlobal("fetch", mockFetch);
 		// Math.random=0.9 produces identity shuffle: ["red","green","cyan"]
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
@@ -334,11 +369,9 @@ describe("renderGame (game route — three-AI)", () => {
 	});
 
 	it("each panel only contains its own AI's completion text", async () => {
-		const mockFetch = makeThreeAiFetchMock(
-			RED_ACTION,
-			GREEN_ACTION,
-			CYAN_ACTION,
-		);
+		// Use message tool calls so AI content lands in conversationLogs and
+		// surfaces through the encoder's "message" event (DM-thread filter, #214).
+		const mockFetch = makeMessageToolCallFetchMock();
 		vi.stubGlobal("fetch", mockFetch);
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
@@ -489,11 +522,9 @@ describe("renderGame (game route — three-AI)", () => {
 	});
 
 	it("shows per-daemon braille spinners during the round, stripped after responses arrive", async () => {
-		const mockFetch = makeThreeAiFetchMock(
-			RED_ACTION,
-			GREEN_ACTION,
-			CYAN_ACTION,
-		);
+		// Use message tool calls so AI content lands in conversationLogs and
+		// surfaces through the encoder's "message" event (DM-thread filter, #214).
+		const mockFetch = makeMessageToolCallFetchMock();
 		vi.stubGlobal("fetch", mockFetch);
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
@@ -579,6 +610,92 @@ describe("renderGame (game route — three-AI)", () => {
 		expect(redTranscript.textContent).not.toContain("> *Sage");
 		expect(redTranscript.textContent).not.toContain("> *Ember");
 		expect(redTranscript.textContent).not.toContain("> *Frost");
+	});
+
+	it("daemon→daemon peer-to-peer message is silent in all panels (AC #2)", async () => {
+		// Red sends a peer-to-peer message to green; green and cyan target blue.
+		// The peer content should be invisible in every panel.
+		const mockFetch = vi
+			.fn()
+			.mockResolvedValueOnce({
+				ok: true,
+				status: 200,
+				statusText: "OK",
+				body: makeMessageToolCallSseStreamTo("green", "PEER_PEER_TAG"),
+			})
+			.mockResolvedValueOnce({
+				ok: true,
+				status: 200,
+				statusText: "OK",
+				body: makeMessageToolCallSseStream("GREEN_RESPONSE_UNIQUE_TAG"),
+			})
+			.mockResolvedValueOnce({
+				ok: true,
+				status: 200,
+				statusText: "OK",
+				body: makeMessageToolCallSseStream("CYAN_RESPONSE_UNIQUE_TAG"),
+			});
+		vi.stubGlobal("fetch", mockFetch);
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		await renderGame(getEl<HTMLElement>("main"));
+
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		const form = getEl<HTMLFormElement>("#composer");
+		promptInput.value = "*Sage hello";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
+		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
+		const cyanTranscript = getEl<HTMLElement>('[data-transcript="cyan"]');
+
+		// Peer-to-peer content must be invisible in ALL panels
+		expect(redTranscript.textContent).not.toContain("PEER_PEER_TAG");
+		expect(greenTranscript.textContent).not.toContain("PEER_PEER_TAG");
+		expect(cyanTranscript.textContent).not.toContain("PEER_PEER_TAG");
+
+		// Blue-targeted messages still appear in their panels
+		expect(greenTranscript.textContent).toContain("GREEN_RESPONSE_UNIQUE_TAG");
+		expect(cyanTranscript.textContent).toContain("CYAN_RESPONSE_UNIQUE_TAG");
+	});
+
+	it("player outgoing message renders without blue: prefix (AC #3)", async () => {
+		// All AIs pass so the only panel content is the player's own line.
+		const mockFetch = makeThreeAiFetchMock(
+			PASS_ACTION,
+			PASS_ACTION,
+			PASS_ACTION,
+		);
+		vi.stubGlobal("fetch", mockFetch);
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		await renderGame(getEl<HTMLElement>("main"));
+
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		const form = getEl<HTMLFormElement>("#composer");
+		promptInput.value = "*Sage hello";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
+
+		// Player line appears exactly once and without any "blue:" self-attribution prefix
+		const occurrences =
+			(greenTranscript.textContent ?? "").split("> hello").length - 1;
+		expect(occurrences).toBe(1);
+		expect(greenTranscript.textContent).not.toContain("blue:");
+		expect(greenTranscript.textContent).not.toContain("blue: hello");
 	});
 
 	it("after three-phase win condition, endgame screen shown and chat hidden; download button has parseable GameSave", async () => {
@@ -1089,10 +1206,8 @@ describe("renderGame — localStorage persistence", () => {
 		// `> *ember …` lines in the panels.
 		const stub = makeLocalStorageStub();
 		await seedSessionInStub(stub);
-		vi.stubGlobal(
-			"fetch",
-			makeThreeAiFetchMock(RED_ACTION, GREEN_ACTION, CYAN_ACTION),
-		);
+		// Use message tool calls so AI content lands in conversationLogs (#214).
+		vi.stubGlobal("fetch", makeMessageToolCallFetchMock());
 		vi.stubGlobal("localStorage", stub);
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 

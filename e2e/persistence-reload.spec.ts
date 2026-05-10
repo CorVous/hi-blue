@@ -78,8 +78,10 @@ test("game state and transcripts persist across mid-round reload", async ({
 		.locator(`[data-transcript="${ids[0]}"]`)
 		.textContent();
 	expect(preReloadTranscript).toBeTruthy();
-	// The player's message must appear in the transcript
-	expect(preReloadTranscript).toContain(`> *${names[0]}`);
+	// The player's message must appear in the transcript. Post-#214 the leading
+	// `*<handle>` mention is stripped before render, so the displayed line is
+	// `> hello`, not `> *<handle> hello`.
+	expect(preReloadTranscript).toContain("> hello");
 	// The stub completion must appear in the addressed panel
 	expect(preReloadTranscript).toContain(STUB_COMPLETION);
 
@@ -108,7 +110,7 @@ test("game state and transcripts persist across mid-round reload", async ({
 	const postReloadTranscript = await page
 		.locator(`[data-transcript="${reloadIds[0]}"]`)
 		.textContent();
-	expect(postReloadTranscript).toContain(`> *${names[0]}`);
+	expect(postReloadTranscript).toContain("> hello");
 	expect(postReloadTranscript).toContain(STUB_COMPLETION);
 	expect(postReloadTranscript).toBe(preReloadTranscript);
 
