@@ -386,9 +386,24 @@ export function getParallelPerTurnReminder(): string | null {
 }
 
 /**
+ * Production default framing, picked by spike #239 (steps 5 and 7 — see
+ * `docs/playtests/0005-parallel-tools-spike.md`). C12 reframes blue as
+ * an overhearer (vs an addressee), adds the per-turn re-anchor, and
+ * names multi-recipient `message+message` as the normal shape. On the
+ * spike's 30-prompt script it produced 41% parallel rate, 17 mm-pairs,
+ * and 39% peer-message share.
+ *
+ * Override at runtime with `?parallelFraming=<id>` for spike A/B; pass
+ * `?parallelFraming=off` (or any unknown id) to suppress the framing
+ * entirely (useful for tests that want a minimal rules block).
+ */
+const PRODUCTION_PARALLEL_FRAMING: ParallelFraming = "C12";
+
+/**
  * Read the spike #239 framing selector from URL / localStorage.
- * Browser-only side channels — returns null in node/test contexts and on
- * any storage error.
+ * Defaults to the production framing (C12). Override is honoured if
+ * present; `?parallelFraming=off` (or any string not in the framing
+ * map) suppresses the framing entirely.
  */
 export function getParallelFraming(): ParallelFraming | null {
 	if (typeof window !== "undefined" && window.location !== undefined) {
@@ -396,8 +411,10 @@ export function getParallelFraming(): ParallelFraming | null {
 			const fromUrl = new URLSearchParams(window.location.search).get(
 				"parallelFraming",
 			);
-			if (fromUrl && fromUrl in PARALLEL_FRAMING_MAP) {
-				return fromUrl as ParallelFraming;
+			if (fromUrl !== null) {
+				return fromUrl in PARALLEL_FRAMING_MAP
+					? (fromUrl as ParallelFraming)
+					: null;
 			}
 		} catch {
 			// fall through to localStorage
@@ -406,14 +423,16 @@ export function getParallelFraming(): ParallelFraming | null {
 	if (typeof localStorage !== "undefined") {
 		try {
 			const fromLs = localStorage.getItem("parallel_framing");
-			if (fromLs && fromLs in PARALLEL_FRAMING_MAP) {
-				return fromLs as ParallelFraming;
+			if (fromLs !== null) {
+				return fromLs in PARALLEL_FRAMING_MAP
+					? (fromLs as ParallelFraming)
+					: null;
 			}
 		} catch {
 			// privacy mode / storage unavailable
 		}
 	}
-	return null;
+	return PRODUCTION_PARALLEL_FRAMING;
 }
 
 /**
