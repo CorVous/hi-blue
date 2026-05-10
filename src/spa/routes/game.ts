@@ -1265,8 +1265,7 @@ export function renderGame(
 						if (event.to === "blue") {
 							// Daemon's outgoing message to player (AC #4): existing treatment.
 							const daemonId = event.from as AiId;
-							const pName =
-								nextState.personas[daemonId]?.name ?? daemonId;
+							const pName = nextState.personas[daemonId]?.name ?? daemonId;
 							appendAiPrefix(daemonId, pName);
 							appendAiTokens(daemonId, `${event.content}\n`);
 						}

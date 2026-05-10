@@ -691,7 +691,8 @@ describe("renderGame (game route — three-AI)", () => {
 		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
 
 		// Player line appears exactly once and without any "blue:" self-attribution prefix
-		const occurrences = (greenTranscript.textContent ?? "").split("> hello").length - 1;
+		const occurrences =
+			(greenTranscript.textContent ?? "").split("> hello").length - 1;
 		expect(occurrences).toBe(1);
 		expect(greenTranscript.textContent).not.toContain("blue:");
 		expect(greenTranscript.textContent).not.toContain("blue: hello");

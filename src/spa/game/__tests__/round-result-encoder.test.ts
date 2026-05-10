@@ -741,7 +741,8 @@ describe("encodeRoundResult — message events from conversationLogs", () => {
 		const anyPeerEvent = events.some(
 			(e) =>
 				e.type === "message" &&
-				(e as Extract<SseEvent, { type: "message" }>).content === "PEER_PEER_TAG",
+				(e as Extract<SseEvent, { type: "message" }>).content ===
+					"PEER_PEER_TAG",
 		);
 		expect(anyPeerEvent).toBe(false);
 	});
