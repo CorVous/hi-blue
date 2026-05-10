@@ -7,6 +7,15 @@ export interface ToolCallResult {
 export interface UsageInfo {
 	cost?: number;
 	total_tokens?: number;
+	prompt_tokens?: number;
+	completion_tokens?: number;
+	/**
+	 * Prompt tokens served from the provider's prefix cache.
+	 * Sourced from `usage.prompt_tokens_details.cached_tokens` (OpenAI-spec)
+	 * with a fallback to `usage.cache_read_input_tokens` (Anthropic-style).
+	 * Undefined when the provider doesn't surface caching info.
+	 */
+	cached_tokens?: number;
 }
 
 export async function parseSSEStream(
@@ -120,8 +129,37 @@ export async function parseSSEStream(
 								typeof usage.total_tokens === "number"
 									? usage.total_tokens
 									: undefined;
-							if (cost !== undefined || total_tokens !== undefined) {
-								onUsage({ cost, total_tokens });
+							const prompt_tokens =
+								typeof usage.prompt_tokens === "number"
+									? usage.prompt_tokens
+									: undefined;
+							const completion_tokens =
+								typeof usage.completion_tokens === "number"
+									? usage.completion_tokens
+									: undefined;
+							const cachedFromOpenAi =
+								typeof usage.prompt_tokens_details?.cached_tokens === "number"
+									? usage.prompt_tokens_details.cached_tokens
+									: undefined;
+							const cachedFromAnthropic =
+								typeof usage.cache_read_input_tokens === "number"
+									? usage.cache_read_input_tokens
+									: undefined;
+							const cached_tokens = cachedFromOpenAi ?? cachedFromAnthropic;
+							if (
+								cost !== undefined ||
+								total_tokens !== undefined ||
+								prompt_tokens !== undefined ||
+								completion_tokens !== undefined ||
+								cached_tokens !== undefined
+							) {
+								onUsage({
+									cost,
+									total_tokens,
+									prompt_tokens,
+									completion_tokens,
+									cached_tokens,
+								});
 							}
 						}
 					} catch {

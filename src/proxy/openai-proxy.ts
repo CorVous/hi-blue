@@ -158,12 +158,8 @@ export async function handleChatCompletions(
 		const usage = extractUsage(responseText);
 
 		if (usage !== null) {
-			const pricing = await pricingPromise;
-			const cost = computeCostMicroUsd(
-				usage.promptTokens,
-				usage.completionTokens,
-				pricing,
-			);
+			const cost = await resolveCostMicroUsd(usage, pricingPromise);
+			logCache(usage);
 			await reconcile(kv, ip, nowMs, guard.preCharged, cost);
 		} else {
 			await refundFull(kv, ip, nowMs, guard.preCharged);
@@ -182,7 +178,7 @@ export async function handleChatCompletions(
 		upstream.headers.get("Content-Type") ?? "application/octet-stream";
 
 	let sseBuffer = "";
-	let usage: { promptTokens: number; completionTokens: number } | null = null;
+	let usage: ParsedUsage | null = null;
 
 	const tryParseSseLine = (line: string): void => {
 		const trimmed = line.trim();
@@ -208,19 +204,10 @@ export async function handleChatCompletions(
 			const finalUsage = usage;
 			const kvWork =
 				finalUsage !== null
-					? pricingPromise.then((pricing) =>
-							reconcile(
-								kv,
-								ip,
-								nowMs,
-								guard.preCharged,
-								computeCostMicroUsd(
-									finalUsage.promptTokens,
-									finalUsage.completionTokens,
-									pricing,
-								),
-							),
-						)
+					? resolveCostMicroUsd(finalUsage, pricingPromise).then((cost) => {
+							logCache(finalUsage);
+							return reconcile(kv, ip, nowMs, guard.preCharged, cost);
+						})
 					: refundFull(kv, ip, nowMs, guard.preCharged);
 			ctx.waitUntil(kvWork);
 
@@ -246,13 +233,28 @@ export async function handleChatCompletions(
 }
 
 /**
- * Extract `{prompt_tokens, completion_tokens}` from a non-streaming JSON
- * response. Returns null if the body is unparseable or either field is
- * missing — callers should treat null as "issue a full refund".
+ * Token + cost accounting parsed from an upstream OpenRouter usage payload.
+ *
+ * `costUsd` mirrors `usage.cost` (USD) when OpenRouter sends it, which it
+ * does whenever the request opted into `usage: { include: true }`. That
+ * value already reflects any prompt-cache discount the provider applied,
+ * so we prefer it over locally re-computing from token counts.
+ *
+ * `cachedTokens` is purely for diagnostics — we don't price it directly.
  */
-function extractUsage(
-	responseText: string,
-): { promptTokens: number; completionTokens: number } | null {
+interface ParsedUsage {
+	promptTokens: number;
+	completionTokens: number;
+	cachedTokens?: number;
+	costUsd?: number;
+}
+
+/**
+ * Extract usage info from a non-streaming JSON response. Returns null if
+ * the body is unparseable or required token fields are missing — callers
+ * should treat null as "issue a full refund".
+ */
+function extractUsage(responseText: string): ParsedUsage | null {
 	try {
 		return parseUsageJson(responseText);
 	} catch {
@@ -260,11 +262,15 @@ function extractUsage(
 	}
 }
 
-function parseUsageJson(
-	text: string,
-): { promptTokens: number; completionTokens: number } | null {
+function parseUsageJson(text: string): ParsedUsage | null {
 	let parsed: {
-		usage?: { prompt_tokens?: number; completion_tokens?: number };
+		usage?: {
+			prompt_tokens?: number;
+			completion_tokens?: number;
+			cost?: number;
+			prompt_tokens_details?: { cached_tokens?: number };
+			cache_read_input_tokens?: number;
+		};
 	};
 	try {
 		parsed = JSON.parse(text) as typeof parsed;
@@ -279,5 +285,54 @@ function parseUsageJson(
 	) {
 		return null;
 	}
-	return { promptTokens, completionTokens };
+	const cachedFromOpenAi = parsed.usage?.prompt_tokens_details?.cached_tokens;
+	const cachedFromAnthropic = parsed.usage?.cache_read_input_tokens;
+	const cachedTokens =
+		typeof cachedFromOpenAi === "number"
+			? cachedFromOpenAi
+			: typeof cachedFromAnthropic === "number"
+				? cachedFromAnthropic
+				: undefined;
+	const costUsd =
+		typeof parsed.usage?.cost === "number" ? parsed.usage.cost : undefined;
+	return {
+		promptTokens,
+		completionTokens,
+		...(cachedTokens !== undefined ? { cachedTokens } : {}),
+		...(costUsd !== undefined ? { costUsd } : {}),
+	};
+}
+
+/**
+ * Resolve the cost to charge in micro-USD. Prefers OpenRouter's reported
+ * `usage.cost` (already discount-aware) over locally re-deriving from token
+ * counts × `/models` pricing.
+ */
+async function resolveCostMicroUsd(
+	usage: ParsedUsage,
+	pricingPromise: Promise<{
+		promptMicroUsdPerToken: number;
+		completionMicroUsdPerToken: number;
+	}>,
+): Promise<number> {
+	if (usage.costUsd !== undefined) {
+		return Math.ceil(usage.costUsd * 1e6);
+	}
+	const pricing = await pricingPromise;
+	return computeCostMicroUsd(
+		usage.promptTokens,
+		usage.completionTokens,
+		pricing,
+	);
+}
+
+function logCache(usage: ParsedUsage): void {
+	if (usage.cachedTokens === undefined) return;
+	const pct =
+		usage.promptTokens > 0
+			? Math.round((usage.cachedTokens / usage.promptTokens) * 100)
+			: 0;
+	console.log(
+		`[cache] prompt ${usage.cachedTokens}/${usage.promptTokens} cached (${pct}%)`,
+	);
 }
