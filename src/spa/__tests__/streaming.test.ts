@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ToolCallResult } from "../streaming.js";
+import type { ToolCallResult, UsageInfo } from "../streaming.js";
 import { parseSSEStream } from "../streaming.js";
 
 // __WORKER_BASE_URL__ is a build-time constant; provide a stub for tests
@@ -64,6 +64,76 @@ describe("parseSSEStream", () => {
 		);
 
 		expect(onDelta).not.toHaveBeenCalled();
+	});
+
+	it("surfaces cached_tokens from OpenAI-spec prompt_tokens_details", async () => {
+		const usageChunk = JSON.stringify({
+			choices: [],
+			usage: {
+				prompt_tokens: 1200,
+				completion_tokens: 80,
+				prompt_tokens_details: { cached_tokens: 900 },
+				cost: 0.000123,
+			},
+		});
+
+		const usages: UsageInfo[] = [];
+		await parseSSEStream(
+			makeSSEStream([`data: ${usageChunk}\n\ndata: [DONE]\n\n`]),
+			vi.fn(),
+			undefined,
+			undefined,
+			(u) => usages.push(u),
+		);
+
+		expect(usages).toHaveLength(1);
+		expect(usages[0]).toMatchObject({
+			cost: 0.000123,
+			prompt_tokens: 1200,
+			completion_tokens: 80,
+			cached_tokens: 900,
+		});
+	});
+
+	it("falls back to cache_read_input_tokens when prompt_tokens_details is absent", async () => {
+		const usageChunk = JSON.stringify({
+			choices: [],
+			usage: {
+				prompt_tokens: 500,
+				completion_tokens: 50,
+				cache_read_input_tokens: 400,
+			},
+		});
+
+		const usages: UsageInfo[] = [];
+		await parseSSEStream(
+			makeSSEStream([`data: ${usageChunk}\n\ndata: [DONE]\n\n`]),
+			vi.fn(),
+			undefined,
+			undefined,
+			(u) => usages.push(u),
+		);
+
+		expect(usages[0]?.cached_tokens).toBe(400);
+	});
+
+	it("omits cached_tokens when neither field is present", async () => {
+		const usageChunk = JSON.stringify({
+			choices: [],
+			usage: { prompt_tokens: 100, completion_tokens: 20 },
+		});
+
+		const usages: UsageInfo[] = [];
+		await parseSSEStream(
+			makeSSEStream([`data: ${usageChunk}\n\ndata: [DONE]\n\n`]),
+			vi.fn(),
+			undefined,
+			undefined,
+			(u) => usages.push(u),
+		);
+
+		expect(usages[0]?.cached_tokens).toBeUndefined();
+		expect(usages[0]?.prompt_tokens).toBe(100);
 	});
 
 	it("[DONE] terminates stream without emitting", async () => {

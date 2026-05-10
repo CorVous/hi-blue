@@ -121,8 +121,17 @@ function makeGame() {
 	);
 }
 
+// The trailing user message is always the current-state turn (carries
+// `<where_you_are>` + `<what_you_see>`). The silent-turn anchor, when it fires,
+// sits immediately before it — so "the last conversational message" is now
+// `messages[messages.length - 2]`, and finding the last *peer/player* user msg
+// requires skipping the current-state tail.
+function isCurrentStateTurn(content: string | null | undefined): boolean {
+	return typeof content === "string" && content.startsWith("<where_you_are>");
+}
+
 describe("non-addressed daemon never sees a stale user message as its last turn", () => {
-	it("after addressing red then cyan, red's round-2 messages end with the silent-voice anchor (not the prior user/assistant)", async () => {
+	it("after addressing red then cyan, red's round-2 messages have the silent-voice anchor immediately before the current-state turn", async () => {
 		const initiative: AiId[] = ["red", "green", "cyan"];
 		const game = makeGame();
 
@@ -160,35 +169,42 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 		expect(redRound2).toBeDefined();
 		const msgs = redRound2?.messages ?? [];
 
-		// Last message anchors the current round.
+		// The trailing message is the current-state turn (always).
 		const last = msgs[msgs.length - 1];
 		expect(last?.role).toBe("user");
-		expect((last as { content: string }).content).toBe(
+		expect(isCurrentStateTurn((last as { content: string }).content)).toBe(
+			true,
+		);
+
+		// The silent-turn anchor sits immediately before it.
+		const anchor = msgs[msgs.length - 2];
+		expect(anchor?.role).toBe("user");
+		expect((anchor as { content: string }).content).toBe(
 			expectedSilentTurn("red"),
 		);
 
-		// And the prior round's user/assistant are still in history but no longer
-		// at the tail.
-		const lastUser = [...msgs].reverse().find((m) => m.role === "user");
-		expect((lastUser as { content: string }).content).toBe(
-			expectedSilentTurn("red"),
-		);
-		// In v4 the player message is prefixed with "blue: " when built into OpenAI messages
+		// And the prior round's user/assistant are still in history.
 		const priorUser = msgs.find(
 			(m) =>
 				m.role === "user" &&
-				(m as { content: string }).content === "blue: are you alive?",
+				(m as { content: string }).content ===
+					"[Round 0] blue dms you: are you alive?",
 		);
 		expect(priorUser).toBeDefined();
 
 		// Cyan (the addressee this round) must NOT receive the silent-voice
-		// anchor — its tail is the actual player message.
+		// anchor — its last conversational user msg is the actual player message.
 		const cyanRound2 = provider.calls[5];
 		const cyanMsgs = cyanRound2?.messages ?? [];
-		const cyanLastUser = [...cyanMsgs].reverse().find((m) => m.role === "user");
-		// In v4 the player message is prefixed with "blue: " when built into OpenAI messages
-		expect((cyanLastUser as { content: string }).content).toBe(
-			"blue: different question for cyan",
+		const cyanLastConv = [...cyanMsgs]
+			.reverse()
+			.find(
+				(m) =>
+					m.role === "user" &&
+					!isCurrentStateTurn((m as { content: string }).content),
+			);
+		expect((cyanLastConv as { content: string }).content).toBe(
+			"[Round 1] blue dms you: different question for cyan",
 		);
 		expect(
 			cyanMsgs.some(
@@ -199,7 +215,7 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 		).toBe(false);
 	});
 
-	it("an AI that has never been addressed still gets the silent-voice anchor", async () => {
+	it("an AI that has never been addressed still gets the silent-voice anchor (before current-state)", async () => {
 		const initiative: AiId[] = ["red", "green", "cyan"];
 		const game = makeGame();
 
@@ -211,12 +227,17 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 
 		await runRound(game, "red", "hello red", provider, undefined, initiative);
 
-		// Green was never addressed; green's call (index 1) must end with the anchor.
+		// Green was never addressed; green's call (index 1) must have the anchor
+		// immediately before the trailing current-state turn.
 		const greenCall = provider.calls[1];
 		const greenMsgs = greenCall?.messages ?? [];
 		const last = greenMsgs[greenMsgs.length - 1];
-		expect(last?.role).toBe("user");
-		expect((last as { content: string }).content).toBe(
+		expect(isCurrentStateTurn((last as { content: string }).content)).toBe(
+			true,
+		);
+		const anchor = greenMsgs[greenMsgs.length - 2];
+		expect(anchor?.role).toBe("user");
+		expect((anchor as { content: string }).content).toBe(
 			expectedSilentTurn("green"),
 		);
 	});
@@ -225,7 +246,7 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 		// Initiative: red acts first, then green, then cyan.
 		// Blue addresses red. Red emits a message tool call to green.
 		// When green acts, it has an incoming message from red in the current round →
-		// anchor must NOT fire, and green's last user message is the peer message.
+		// anchor must NOT fire, and green's last conversational user msg is the peer message.
 		const initiative: AiId[] = ["red", "green", "cyan"];
 		const game = makeGame();
 
@@ -262,14 +283,20 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 			),
 		).toBe(false);
 
-		// Green's last user message is the peer message from red.
-		const lastUser = [...greenMsgs].reverse().find((m) => m.role === "user");
-		expect((lastUser as { content: string }).content).toBe("*red: psst green");
+		// Green's last conversational user message is the peer message from red.
+		const lastConv = [...greenMsgs]
+			.reverse()
+			.find(
+				(m) =>
+					m.role === "user" &&
+					!isCurrentStateTurn((m as { content: string }).content),
+			);
+		expect((lastConv as { content: string }).content).toBe(
+			"[Round 0] *red dms you: psst green",
+		);
 	});
 
-	it("blue addresses this daemon → no anchor; last user message is the player message", async () => {
-		// Blue addresses cyan directly. Cyan's messages must NOT end with the anchor;
-		// instead the last user message is the player message prefixed with "blue: ".
+	it("blue addresses this daemon → no anchor; last conversational user message is the player message", async () => {
 		const initiative: AiId[] = ["red", "green", "cyan"];
 		const game = makeGame();
 
@@ -296,8 +323,17 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 			),
 		).toBe(false);
 
-		// Last user message is the player's message.
-		const lastUser = [...cyanMsgs].reverse().find((m) => m.role === "user");
-		expect((lastUser as { content: string }).content).toBe("blue: hello cyan");
+		// Last conversational user message (skipping the trailing current-state turn)
+		// is the player's message.
+		const lastConv = [...cyanMsgs]
+			.reverse()
+			.find(
+				(m) =>
+					m.role === "user" &&
+					!isCurrentStateTurn((m as { content: string }).content),
+			);
+		expect((lastConv as { content: string }).content).toBe(
+			"[Round 0] blue dms you: hello cyan",
+		);
 	});
 });

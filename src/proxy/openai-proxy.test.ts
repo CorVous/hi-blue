@@ -768,6 +768,128 @@ describe("cost-guard integration — POST /v1/chat/completions", () => {
 		const ipVal = await kv().get(perIpKey(ip, Date.now()));
 		expect(Number(ipVal)).toBe(seeded);
 	});
+
+	// ── prompt-cache discount awareness ──
+	// When upstream emits `usage.cost` (USD), the proxy reconciles using
+	// that authoritative figure — which already reflects any cached-prompt
+	// discount the provider applied — instead of locally re-deriving cost
+	// from raw token counts × seeded pricing.
+
+	it("streaming: prefers upstream usage.cost over local recompute", async () => {
+		const ip = "11.0.0.1";
+		// Pricing seeded at 1 micro-USD/token would give 1500 micro-USD locally;
+		// upstream reports cost=0.000200 USD = 200 micro-USD, reflecting a
+		// cache discount. Reconciliation must use 200, not 1500.
+		const ssePayload =
+			'data: {"usage":{"prompt_tokens":500,"completion_tokens":1000,"cost":0.000200,"prompt_tokens_details":{"cached_tokens":480}}}\n\ndata: [DONE]\n\n';
+
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockImplementation(() =>
+				Promise.resolve(
+					new Response(ssePayload, {
+						status: 200,
+						headers: { "Content-Type": "text/event-stream" },
+					}),
+				),
+			),
+		);
+
+		const resp = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": ip,
+			},
+			body: JSON.stringify({
+				messages: [{ role: "user", content: "hi" }],
+				stream: true,
+			}),
+		});
+
+		expect(resp.status).toBe(200);
+		await resp.text();
+		await new Promise((r) => setTimeout(r, 50));
+
+		const ipVal = await kv().get(perIpKey(ip, Date.now()));
+		expect(Number(ipVal)).toBe(200);
+	});
+
+	it("non-streaming: prefers upstream usage.cost over local recompute", async () => {
+		const ip = "11.0.0.2";
+		const responseBody = JSON.stringify({
+			choices: [{ message: { content: "ok" } }],
+			usage: {
+				prompt_tokens: 300,
+				completion_tokens: 500,
+				cost: 0.00015,
+				prompt_tokens_details: { cached_tokens: 250 },
+			},
+		});
+
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockImplementation(() =>
+				Promise.resolve(
+					new Response(responseBody, {
+						status: 200,
+						headers: { "Content-Type": "application/json" },
+					}),
+				),
+			),
+		);
+
+		await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": ip,
+			},
+			body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+		});
+
+		await new Promise((r) => setTimeout(r, 50));
+
+		const ipVal = await kv().get(perIpKey(ip, Date.now()));
+		expect(Number(ipVal)).toBe(150);
+	});
+
+	it("falls back to local price recompute when upstream cost is absent", async () => {
+		const ip = "11.0.0.3";
+		// No `cost` field — proxy must use seeded 1 micro-USD/token pricing.
+		const ssePayload =
+			'data: {"usage":{"prompt_tokens":500,"completion_tokens":1000,"prompt_tokens_details":{"cached_tokens":400}}}\n\ndata: [DONE]\n\n';
+
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockImplementation(() =>
+				Promise.resolve(
+					new Response(ssePayload, {
+						status: 200,
+						headers: { "Content-Type": "text/event-stream" },
+					}),
+				),
+			),
+		);
+
+		const resp = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": ip,
+			},
+			body: JSON.stringify({
+				messages: [{ role: "user", content: "hi" }],
+				stream: true,
+			}),
+		});
+
+		await resp.text();
+		await new Promise((r) => setTimeout(r, 50));
+
+		const ipVal = await kv().get(perIpKey(ip, Date.now()));
+		expect(Number(ipVal)).toBe(1500);
+	});
 });
 
 // ── 10. CORS — OPTIONS preflight ──────────────────────────────────────────────

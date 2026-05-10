@@ -803,45 +803,43 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 			`Captured ${capturedBodies.length} bodies.`,
 	).not.toBeNull();
 
-	// ── 14. Assert witnessed-event line in witness prompt ─────────────────────
+	// ── 14. Assert witnessed-event line in witness role turns ────────────────
 	// conversation-log.ts:63-65:
 	//   case "go":
 	//     return `[Round ${round}] You watch *${actorSub} walk ${direction}.`;
 	// where round = phase.round at dispatch time.
+	//
+	// Witnessed events used to be folded into the system-prompt <conversation>
+	// block; after the prompt-cache restructure they're emitted as user role
+	// turns by openai-message-builder. Search the full message array.
 	const expectedLine = `[Round ${roundAtDispatch}] You watch *${actorId} walk ${direction}.`;
 
-	const witnessSysContent = (
-		witnessBody as { messages: Array<{ content: string }> }
-	).messages[0]?.content;
+	const witnessAllContent = (
+		witnessBody as { messages: Array<{ content: string | null }> }
+	).messages
+		.map((m) => (typeof m.content === "string" ? m.content : ""))
+		.join("\n");
 
-	expect(witnessSysContent).toContain("<conversation>");
-	expect(witnessSysContent).toContain("</conversation>");
 	expect(
-		witnessSysContent,
-		`Expected witnessed-event line not found in witness system prompt. ` +
+		witnessAllContent,
+		`Expected witnessed-event line not found in witness messages. ` +
 			`Expected: "${expectedLine}"\n` +
 			`plan: ${JSON.stringify(plan)}\n` +
 			`actorId=${actorId} direction=${direction} witnessId=${witnessId}`,
 	).toContain(expectedLine);
-	expect(
-		witnessSysContent,
-		"Witnessed-event line must appear between <conversation> tags",
-	).toMatch(
-		new RegExp(
-			`<conversation>[\\s\\S]*${expectedLine.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[\\s\\S]*</conversation>`,
-		),
-	);
 
-	// ── 15. Assert actor's system prompt does NOT contain the line ────────────
+	// ── 15. Assert actor's messages do NOT contain the line ──────────────────
 	// The write-time fan-out (dispatcher.ts:460-493) only appends to witnesses,
 	// never to the actor.
-	const actorSysContent = (
-		actorBody as { messages: Array<{ content: string }> }
-	).messages[0]?.content;
+	const actorAllContent = (
+		actorBody as { messages: Array<{ content: string | null }> }
+	).messages
+		.map((m) => (typeof m.content === "string" ? m.content : ""))
+		.join("\n");
 
 	expect(
-		actorSysContent,
-		"Actor must not have the witnessed-event line in their system prompt",
+		actorAllContent,
+		"Actor must not have the witnessed-event line in their messages",
 	).not.toContain(expectedLine);
 
 	// ── 16. No page errors ────────────────────────────────────────────────────

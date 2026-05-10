@@ -1,7 +1,7 @@
 import { PINNED_MODEL } from "../model.js";
 import type { OpenAiMessage } from "./game/round-llm-provider.js";
 import type { OpenAiTool } from "./game/tool-registry.js";
-import type { ToolCallResult } from "./streaming.js";
+import type { ToolCallResult, UsageInfo } from "./streaming.js";
 import { parseSSEStream } from "./streaming.js";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
@@ -114,10 +114,7 @@ export type {
 } from "./game/round-llm-provider.js";
 export type { OpenAiTool } from "./game/tool-registry.js";
 
-export interface UsageInfo {
-	cost?: number;
-	total_tokens?: number;
-}
+export type { UsageInfo } from "./streaming.js";
 
 export async function streamCompletion(opts: {
 	messages: OpenAiMessage[];
@@ -209,6 +206,11 @@ export async function chatCompletionJson(opts: {
 		messages,
 		stream: false,
 		response_format: { type: "json_object" },
+		// Ask OpenRouter to include the authoritative `usage.cost` (USD) in the
+		// response. The Worker proxy's reconciliation prefers that over locally
+		// re-deriving cost from token counts, so this keeps non-streaming JSON
+		// calls accounting-aligned with the streaming path.
+		usage: { include: true },
 	};
 
 	if (disableReasoning) {

@@ -37,6 +37,9 @@ export class BrowserLLMProvider implements RoundLLMProvider {
 		const reasoningParts: string[] = [];
 		const toolCalls: RoundTurnResult["toolCalls"] = [];
 		let costUsd: number | undefined;
+		let promptTokens: number | undefined;
+		let completionTokens: number | undefined;
+		let cachedPromptTokens: number | undefined;
 
 		await streamCompletion({
 			messages,
@@ -53,15 +56,37 @@ export class BrowserLLMProvider implements RoundLLMProvider {
 			},
 			onUsage: (usage) => {
 				if (typeof usage.cost === "number") costUsd = usage.cost;
+				if (typeof usage.prompt_tokens === "number") {
+					promptTokens = usage.prompt_tokens;
+				}
+				if (typeof usage.completion_tokens === "number") {
+					completionTokens = usage.completion_tokens;
+				}
+				if (typeof usage.cached_tokens === "number") {
+					cachedPromptTokens = usage.cached_tokens;
+				}
 			},
 			disableReasoning: this.disableReasoning,
 		});
+
+		if (promptTokens !== undefined && cachedPromptTokens !== undefined) {
+			const pct =
+				promptTokens > 0
+					? Math.round((cachedPromptTokens / promptTokens) * 100)
+					: 0;
+			console.log(
+				`[cache] prompt ${cachedPromptTokens}/${promptTokens} cached (${pct}%)`,
+			);
+		}
 
 		const assistantText = textParts.join("") || reasoningParts.join("");
 		return {
 			assistantText,
 			toolCalls,
 			...(costUsd !== undefined ? { costUsd } : {}),
+			...(promptTokens !== undefined ? { promptTokens } : {}),
+			...(completionTokens !== undefined ? { completionTokens } : {}),
+			...(cachedPromptTokens !== undefined ? { cachedPromptTokens } : {}),
 		};
 	}
 }

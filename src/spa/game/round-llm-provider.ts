@@ -37,6 +37,11 @@ export interface RoundTurnResult {
 	// USD cost of this LLM request, populated from OpenRouter's usage.cost
 	// when available. Absent in mocks/tests that don't model spend.
 	costUsd?: number;
+	// Token accounting from the provider's final usage chunk. Used for
+	// prompt-caching diagnostics; absent in mocks.
+	promptTokens?: number;
+	completionTokens?: number;
+	cachedPromptTokens?: number;
 }
 
 export interface RoundLLMProvider {
