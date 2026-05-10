@@ -443,7 +443,8 @@ export function renderStart(
 	// spatial layout via Mulberry32 sub-streams. Production paths leave
 	// _spikeSeed null and fall back to Math.random.
 	const seedRaw = params?.get("seed");
-	const seedNum = seedRaw !== null && seedRaw !== undefined ? Number(seedRaw) : Number.NaN;
+	const seedNum =
+		seedRaw !== null && seedRaw !== undefined ? Number(seedRaw) : Number.NaN;
 	if (Number.isFinite(seedNum)) {
 		setSpikeSeed(seedNum | 0);
 	}
@@ -455,9 +456,7 @@ export function renderStart(
 	const personasRng = getSpikeRng("personas");
 	const contentPackRng = getSpikeRng("contentPack");
 	const spikeOpts =
-		personasRng && contentPackRng
-			? { personasRng, contentPackRng }
-			: undefined;
+		personasRng && contentPackRng ? { personasRng, contentPackRng } : undefined;
 	const mergedOpts =
 		_testOverrides || spikeOpts
 			? { ..._testOverrides, ...spikeOpts }
