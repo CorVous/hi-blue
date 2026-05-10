@@ -1,24 +1,23 @@
 /**
  * RoundResultEncoder
  *
- * Pure function: translates a RoundResult plus per-AI buffered completion
- * strings into a flat sequence of SSE event payloads.
+ * Pure function: translates a RoundResult plus the post-round PhaseState into
+ * a flat sequence of SSE event payloads.
  *
  * The encoder is the single source of truth for the event wire format. Every
  * event type the SPA's game route handler understands is emitted here.
  *
- * Token streaming is paced word-by-word from the buffered completion string.
- * This is a deliberate v1 cheat — the round coordinator buffers the full
- * response before parsing, so the encoder re-emits it in word-chunks to give
- * the UI a progressive streaming feel. When a real streaming provider lands,
- * this function can accept token iterables directly.
+ * Panel content is driven by ConversationEntry records — specifically `message`
+ * entries from `phaseAfter.conversationLogs` — rather than free-form completion
+ * strings. Only entries where `from === "blue"` or `to === "blue"` are emitted;
+ * daemon-to-daemon entries are silently dropped (the DM-thread filter, AC #1/2).
  *
  * Event types emitted (consumed by src/spa/routes/game.ts):
  *   ai_start   — { type, aiId }
- *   token      — { type, text }
+ *   message    — { type, from, to, content }  (replaces token/lockout for panel painting)
  *   ai_end     — { type }
  *   budget     — { type, aiId, remaining }
- *   lockout    — { type, aiId, content }
+ *   lockout    — { type, aiId, content }  (budget-exhaustion only, kept for styling)
  *   chat_lockout         — { type, aiId, message }
  *   chat_lockout_resolved — { type, aiId }
  *   action_log — { type, entry }
@@ -35,6 +34,12 @@ import type { AiId, AiPersona, PhaseState, RoundResult } from "./types";
 export type SseEvent =
 	| { type: "ai_start"; aiId: AiId }
 	| { type: "token"; text: string }
+	| {
+			type: "message";
+			from: AiId | "blue";
+			to: AiId | "blue";
+			content: string;
+	  }
 	| { type: "ai_end" }
 	| { type: "budget"; aiId: AiId; remaining: number }
 	| { type: "lockout"; aiId: AiId; content: string }
@@ -71,12 +76,19 @@ export function splitIntoWordChunks(text: string): string[] {
 /**
  * Encode a completed round into a flat sequence of SSE events.
  *
+ * Panel content is driven by ConversationEntry records from
+ * `phaseAfter.conversationLogs`, scoped to `result.round`.  Only entries
+ * where `from === "blue"` or `to === "blue"` are emitted per daemon log;
+ * daemon-to-daemon entries are silently dropped (DM-thread filter).
+ *
+ * The `completions` param is retained for callers that pass it but is no
+ * longer used for panel painting — completions are dead post-#213 (free-form
+ * assistantText is dropped by the engine).
+ *
  * @param result         The RoundResult returned by runRound.
- * @param completions    Map from AiId to the buffered completion string for
- *                       that AI. Used only for token-pacing; the chat content
- *                       itself is authoritative in result.actions.
- * @param phaseAfter     The PhaseState after the round (for budget reads and
- *                       lockout state). Pass the active phase from nextState.
+ * @param completions    Unused post-#214; retained for call-site compatibility.
+ * @param phaseAfter     The PhaseState after the round (for budget reads,
+ *                       lockout state, and conversation logs).
  * @param personas       The personas record (for AI display names in
  *                       budget-exhaustion lockout messages).
  */
@@ -86,34 +98,45 @@ export function encodeRoundResult(
 	phaseAfter: PhaseState,
 	personas: Record<AiId, AiPersona>,
 ): SseEvent[] {
+	// Suppress unused-variable warning; completions is retained for
+	// call-site compatibility but panel painting is now conversationLog-driven.
+	void completions;
+
 	const events: SseEvent[] = [];
 
 	const lockoutContent = (aiId: AiId): string =>
 		`${personas[aiId]?.name ?? aiId} is unresponsive…`;
 
 	for (const aiId of Object.keys(personas)) {
-		const completion = completions[aiId] ?? "";
 		const isLockedOut = phaseAfter.lockedOut.has(aiId);
 
-		// ai_start
+		// ai_start — marks the beginning of this daemon's turn block
 		events.push({ type: "ai_start", aiId });
 
-		if (!completion) {
-			// AI was budget-locked out — emit lockout event and no tokens
-			events.push({
-				type: "lockout",
-				aiId,
-				content: lockoutContent(aiId),
-			});
-		} else {
-			// Emit paced token events from the buffered completion string
-			const chunks = splitIntoWordChunks(completion);
-			for (const chunk of chunks) {
-				events.push({ type: "token", text: chunk });
+		// Emit message events from this daemon's conversation log, scoped to
+		// this round, filtered to entries where blue is sender or recipient.
+		// Daemon→daemon entries are silently dropped (DM-thread filter, AC #1/2).
+		//
+		// NOTE: result.round is the round counter AFTER advanceRound(), so entries
+		// written during the round carry round: result.round - 1.
+		const playedRound = result.round - 1;
+		const log = phaseAfter.conversationLogs[aiId] ?? [];
+		for (const entry of log) {
+			if (
+				entry.kind === "message" &&
+				entry.round === playedRound &&
+				(entry.from === "blue" || entry.to === "blue")
+			) {
+				events.push({
+					type: "message",
+					from: entry.from,
+					to: entry.to,
+					content: entry.content,
+				});
 			}
 		}
 
-		// ai_end
+		// ai_end — marks the end of this daemon's turn block
 		events.push({ type: "ai_end" });
 
 		// budget — emit current remaining budget
@@ -122,9 +145,10 @@ export function encodeRoundResult(
 			events.push({ type: "budget", aiId, remaining: budget.remaining });
 		}
 
-		// If the AI exhausted its budget this round (had a turn but is now locked),
-		// emit a lockout event after the turn block.
-		if (isLockedOut && completion) {
+		// If the AI is budget-locked out, emit a lockout event (visual indicator).
+		// Budget-exhaustion lockouts are preserved as a separate event type so
+		// the renderer can display the `[<name> is unresponsive…]` system line.
+		if (isLockedOut) {
 			events.push({
 				type: "lockout",
 				aiId,

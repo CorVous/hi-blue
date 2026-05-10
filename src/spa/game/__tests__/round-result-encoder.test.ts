@@ -10,6 +10,7 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+	appendMessage,
 	createGame,
 	deductBudget,
 	getActivePhase,
@@ -80,6 +81,23 @@ function makePhase(
 ) {
 	let game = startPhase(createGame(TEST_PERSONAS), PHASE_CONFIG);
 	if (mutate) game = mutate(game);
+	return getActivePhase(game);
+}
+
+/**
+ * Seed a phase with `kind: "message"` conversation log entries for round 0
+ * (the played round when makePassResult's `round: 1` is used, since
+ * result.round - 1 = 0). Each entry is daemon→blue.
+ *
+ * Returns the PhaseState with the entries in each daemon's conversationLog.
+ */
+function makePhaseWithMessages(
+	entries: Array<{ from: AiId | "blue"; to: AiId | "blue"; content: string }>,
+): ReturnType<typeof makePhase> {
+	let game = startPhase(createGame(TEST_PERSONAS), PHASE_CONFIG);
+	for (const { from, to, content } of entries) {
+		game = appendMessage(game, from, to, content);
+	}
 	return getActivePhase(game);
 }
 
@@ -166,20 +184,25 @@ describe("encodeRoundResult — ai_start, token, ai_end sequence", () => {
 		expect(cyanStart).toBeGreaterThan(greenStart);
 	});
 
-	it("emits token events for each AI's completion string", () => {
-		const phase = makePhase();
+	it("emits message events for each AI's conversationLog entry (round-scoped, blue-involved)", () => {
+		// Seed round-0 entries in each daemon's log (result.round - 1 = 0).
+		const phase = makePhaseWithMessages([
+			{ from: "red", to: "blue", content: "hello world" },
+			{ from: "green", to: "blue", content: "one two" },
+			{ from: "cyan", to: "blue", content: "abc" },
+		]);
 		const result = makePassResult();
-		const completions = { red: "hello world", green: "one two", cyan: "abc" };
+		const completions = {};
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
-		const tokenEvents = events.filter(
-			(e): e is Extract<SseEvent, { type: "token" }> => e.type === "token",
+		const messageEvents = events.filter(
+			(e): e is Extract<SseEvent, { type: "message" }> => e.type === "message",
 		);
-		const text = tokenEvents.map((t) => t.text).join("");
-		expect(text).toContain("hello world");
-		expect(text).toContain("one two");
-		expect(text).toContain("abc");
+		const contents = messageEvents.map((e) => e.content);
+		expect(contents).toContain("hello world");
+		expect(contents).toContain("one two");
+		expect(contents).toContain("abc");
 	});
 
 	it("emits exactly three ai_start and three ai_end events", () => {
@@ -193,14 +216,17 @@ describe("encodeRoundResult — ai_start, token, ai_end sequence", () => {
 		expect(events.filter((e) => e.type === "ai_end")).toHaveLength(3);
 	});
 
-	it("ai_end follows all token events for the same AI", () => {
-		const phase = makePhase();
+	it("ai_end follows message events for the same AI", () => {
+		// Seed a round-0 message for red only.
+		const phase = makePhaseWithMessages([
+			{ from: "red", to: "blue", content: "hello world" },
+		]);
 		const result = makePassResult();
-		const completions = { red: "hello world", green: "", cyan: "" };
+		const completions = {};
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
-		// Find red's block
+		// Find red's block (from ai_start "red" to ai_start "green")
 		const redStartIdx = events.findIndex(
 			(e) =>
 				e.type === "ai_start" &&
@@ -212,17 +238,20 @@ describe("encodeRoundResult — ai_start, token, ai_end sequence", () => {
 				(e as { type: string; aiId: string }).aiId === "green",
 		);
 
-		// Token events for red should be between redStart and greenStart
+		// Message events for red should be between redStart and greenStart,
+		// and ai_end should come after the message event.
 		const redBlock = events.slice(redStartIdx, greenStartIdx);
 		const hasAiEnd = redBlock.some((e) => e.type === "ai_end");
-		const tokenTexts = redBlock
-			.filter(
-				(e): e is Extract<SseEvent, { type: "token" }> => e.type === "token",
-			)
-			.map((e) => e.text)
-			.join("");
+		const messageEvents = redBlock.filter(
+			(e): e is Extract<SseEvent, { type: "message" }> => e.type === "message",
+		);
 		expect(hasAiEnd).toBe(true);
-		expect(tokenTexts).toContain("hello world");
+		expect(messageEvents.map((e) => e.content)).toContain("hello world");
+
+		// Verify ai_end comes after the message event within the block
+		const msgIdx = redBlock.findIndex((e) => e.type === "message");
+		const endIdx = redBlock.findIndex((e) => e.type === "ai_end");
+		expect(endIdx).toBeGreaterThan(msgIdx);
 	});
 });
 
@@ -269,11 +298,19 @@ describe("encodeRoundResult — budget events", () => {
 // ── lockout ───────────────────────────────────────────────────────────────────
 
 describe("encodeRoundResult — lockout events (budget-exhaustion)", () => {
-	it("emits a lockout event for an AI with empty completion (locked out)", () => {
-		const phase = makePhase();
+	it("emits a lockout event when AI is budget-exhausted (lockedOut set)", () => {
+		// In the new encoder, lockout is driven by isLockedOut (budget exhaustion),
+		// not by empty completions. Deduct red to 0 so it's in the lockedOut set.
+		let game = startPhase(createGame(TEST_PERSONAS), {
+			...PHASE_CONFIG,
+			budgetPerAi: 1,
+		});
+		game = deductBudget(game, "red", 1);
+		const phase = getActivePhase(game);
+		expect(phase.lockedOut.has("red")).toBe(true);
+
 		const result = makePassResult();
-		// No completion for red (budget locked)
-		const completions = { red: "", green: "g", cyan: "b" };
+		const completions = {};
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
@@ -285,14 +322,15 @@ describe("encodeRoundResult — lockout events (budget-exhaustion)", () => {
 		expect(lockout?.content).toBeTruthy();
 	});
 
-	it("does NOT emit a lockout event when AI has a completion string", () => {
+	it("does NOT emit a lockout event when AI is not budget-locked-out", () => {
+		// A fresh phase has no locked-out AIs, regardless of completions.
 		const phase = makePhase();
 		const result = makePassResult();
-		const completions = { red: "I am speaking", green: "g", cyan: "b" };
+		const completions = {};
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
-		// Red should have no lockout event when it has a completion
+		// No lockout events when no AI is budget-exhausted
 		const redLockout = events.find(
 			(e): e is Extract<SseEvent, { type: "lockout" }> =>
 				e.type === "lockout" && e.aiId === "red",
@@ -639,39 +677,93 @@ describe("encodeRoundResult — game_ended event", () => {
 	});
 });
 
-// ── word pacing ───────────────────────────────────────────────────────────────
+// ── message events from conversationLogs ─────────────────────────────────────
 
-describe("encodeRoundResult — token pacing", () => {
-	it("splits a multi-word completion into multiple token events", () => {
-		const phase = makePhase();
+describe("encodeRoundResult — message events from conversationLogs", () => {
+	it("emits one message event per blue-involved conversationLog entry (round-scoped)", () => {
+		// Seed three daemon→blue entries for round 0 (= result.round - 1).
+		const phase = makePhaseWithMessages([
+			{ from: "red", to: "blue", content: "one two three" },
+			{ from: "green", to: "blue", content: "hello world" },
+			{ from: "cyan", to: "blue", content: "frost" },
+		]);
 		const result = makePassResult();
-		const completions = { red: "one two three", green: "g", cyan: "b" };
+		const completions = {};
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
-		const tokenEvents = events.filter(
-			(e): e is Extract<SseEvent, { type: "token" }> => e.type === "token",
+		const messageEvents = events.filter(
+			(e): e is Extract<SseEvent, { type: "message" }> => e.type === "message",
 		);
-		// Should have more than one token event for red's "one two three"
-		// (other AIs contribute their own tokens too)
-		expect(tokenEvents.length).toBeGreaterThan(1);
+		// One message event per AI
+		expect(messageEvents).toHaveLength(3);
 
-		// The content re-joins cleanly
-		const allText = tokenEvents.map((e) => e.text).join("");
-		expect(allText).toContain("one two three");
+		const contents = messageEvents.map((e) => e.content);
+		expect(contents).toContain("one two three");
+		expect(contents).toContain("hello world");
+		expect(contents).toContain("frost");
 	});
 
-	it("a single-word completion produces exactly one token event per AI", () => {
-		const phase = makePhase();
+	it("emits exactly one message event per daemon when each has one entry", () => {
+		const phase = makePhaseWithMessages([
+			{ from: "red", to: "blue", content: "hello" },
+			{ from: "green", to: "blue", content: "world" },
+			{ from: "cyan", to: "blue", content: "frost" },
+		]);
 		const result = makePassResult();
-		const completions = { red: "hello", green: "world", cyan: "frost" };
+		const completions = {};
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
-		const tokenEvents = events.filter(
-			(e): e is Extract<SseEvent, { type: "token" }> => e.type === "token",
+		const messageEvents = events.filter(
+			(e): e is Extract<SseEvent, { type: "message" }> => e.type === "message",
 		);
-		// 3 AIs × 1 word = 3 token events
-		expect(tokenEvents).toHaveLength(3);
+		// 3 AIs × 1 entry each = 3 message events
+		expect(messageEvents).toHaveLength(3);
+	});
+
+	it("emits NO message events for daemon→daemon entries (DM-thread filter, AC #2)", () => {
+		// Seed a peer-to-peer entry that should be silently dropped.
+		const phase = makePhaseWithMessages([
+			{ from: "red", to: "green", content: "PEER_PEER_TAG" },
+		]);
+		const result = makePassResult();
+		const completions = {};
+
+		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
+
+		const messageEvents = events.filter(
+			(e): e is Extract<SseEvent, { type: "message" }> => e.type === "message",
+		);
+		expect(messageEvents).toHaveLength(0);
+
+		// Confirm PEER_PEER_TAG never appears in any event
+		const anyPeerEvent = events.some(
+			(e) =>
+				e.type === "message" &&
+				(e as Extract<SseEvent, { type: "message" }>).content === "PEER_PEER_TAG",
+		);
+		expect(anyPeerEvent).toBe(false);
+	});
+
+	it("emits message event for blue→daemon entry with correct from/to (AC #1)", () => {
+		// Seed a blue→red entry (player message to daemon).
+		const phase = makePhaseWithMessages([
+			{ from: "blue", to: "red", content: "player message" },
+		]);
+		const result = makePassResult();
+		const completions = {};
+
+		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
+
+		const messageEvents = events.filter(
+			(e): e is Extract<SseEvent, { type: "message" }> => e.type === "message",
+		);
+		// The blue→red entry appears only in red's log (blue is not a daemon).
+		// It passes the filter (from === "blue") and appears in red's panel.
+		expect(messageEvents).toHaveLength(1);
+		expect(messageEvents[0]?.from).toBe("blue");
+		expect(messageEvents[0]?.to).toBe("red");
+		expect(messageEvents[0]?.content).toBe("player message");
 	});
 });

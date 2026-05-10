@@ -1202,24 +1202,22 @@ export function renderGame(
 		// Round-local ended flag (distinct from module-level gameEnded)
 		let roundGameEnded = false;
 
-		// Track AIs that have received at least one live delta from the wire.
-		// When an AI is in this set, the encoder skips re-appending token text
-		// (it's already painted live) but still awaits pace() for timing shape.
-		const liveAis = new Set<AiId>();
-		// Track first-delta-seen per AI to emit the persona prefix exactly once.
+		// Track first-delta-seen per AI to strip the spinner exactly once.
 		const firstDeltaSeen = new Set<AiId>();
 
-		const onAiDelta = (aiId: AiId, text: string): void => {
+		const onAiDelta = (aiId: AiId, _text: string): void => {
 			if (!firstDeltaSeen.has(aiId)) {
 				firstDeltaSeen.add(aiId);
-				// Strip this daemon's spinner on its first live delta — before painting.
+				// Strip this daemon's spinner on its first live delta.
+				// Post-#213, free-form assistantText is dropped by the engine; actual
+				// panel content comes from ConversationEntry message events emitted
+				// by the encoder after the round completes. We keep the spinner-strip
+				// side-effect here but no longer paint tokens or the AI prefix live.
 				stripSpinner(aiId);
-				// Emit persona prefix live (encoder will skip it for this AI).
-				const personaName = session?.getState().personas[aiId]?.name ?? aiId;
-				appendAiPrefix(aiId, personaName);
-				liveAis.add(aiId);
 			}
-			appendAiTokens(aiId, text);
+			// Free-form delta text is intentionally NOT painted. Panel content is
+			// driven by encoder "message" events (conversationLog-based) after the
+			// round, ensuring the DM-thread filter (AC #1/2) is always applied.
 		};
 
 		try {
@@ -1247,38 +1245,42 @@ export function renderGame(
 				nextState.personas,
 			);
 
-			let speakingAi: AiId | null = null;
-
 			for (const event of events) {
 				switch (event.type) {
 					case "ai_start":
-						speakingAi = event.aiId;
-						if (!liveAis.has(event.aiId)) {
-							// Not live — emit persona prefix now (synthetic path).
-							const sName = nextState.personas[event.aiId]?.name ?? event.aiId;
-							appendAiPrefix(event.aiId, sName);
-						}
-						// If live, prefix was already painted; just track speakingAi.
+						// Track the current daemon for budget/lockout events.
+						// Panel content is now driven by "message" events, not prefixes.
 						break;
 
 					case "token":
-						if (speakingAi) {
-							if (!liveAis.has(speakingAi)) {
-								// Synthetic path: append token and pace.
-								appendAiTokens(speakingAi, event.text);
-							}
-							// Live path: text already painted; still await pace() so the
-							// overall timing shape is preserved (important for token-pacing
-							// tests and consistent UI behaviour).
-							await pace();
-						}
+						// Token events are no longer emitted by the encoder post-#214.
+						// This case is retained for forward-compatibility / safety.
 						break;
 
-					case "ai_end":
-						if (speakingAi) {
-							appendAiTokens(speakingAi, "\n");
+					case "message": {
+						// DM-thread panel painting (AC #1/2/3/4).
+						// Determine which daemon's panel this message belongs to.
+						const daemonId =
+							event.from === "blue" ? (event.to as AiId) : (event.from as AiId);
+						if (event.from === "blue") {
+							// Player's outgoing message — no self-attribution prefix (AC #3).
+							appendPlayerLine(daemonId, `> ${event.content}\n`);
+						} else {
+							// Daemon's outgoing message to player (AC #4): existing treatment.
+							const pName =
+								nextState.personas[daemonId]?.name ?? daemonId;
+							appendAiPrefix(daemonId, pName);
+							appendAiTokens(daemonId, `${event.content}\n`);
 						}
-						speakingAi = null;
+						// No per-message pace() — message events are complete utterances,
+						// not per-token chunks. Post-#213 AI speech is tool-call-based so
+						// the encoder emits one message event per turn; pacing here would
+						// cause test timeouts without a streaming-feel benefit.
+						break;
+					}
+
+					case "ai_end":
+						// No trailing newline needed — message events include their own \n.
 						break;
 
 					case "budget":
