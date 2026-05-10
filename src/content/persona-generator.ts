@@ -42,12 +42,13 @@ export function generatePersonaName(
 }
 
 export function buildBlurb(
+	name: string,
 	temperaments: [string, string],
 	personaGoal: string,
 ): string {
 	const [t1, t2] = temperaments;
 	const temperamentSentence =
-		t1 === t2 ? `You are intensely ${t1}.` : `You are ${t1} and ${t2}.`;
+		t1 === t2 ? `${name} is intensely ${t1}.` : `${name} is ${t1} and ${t2}.`;
 	return `${temperamentSentence} ${personaGoal}`;
 }
 
@@ -133,7 +134,7 @@ export async function generatePersonas(
 			tuples.map((t) => [
 				t.id,
 				{
-					blurb: buildBlurb(t.temperaments, t.personaGoal),
+					blurb: buildBlurb(t.id, t.temperaments, t.personaGoal),
 					voiceExamples: buildFallbackVoiceExamples(t),
 				},
 			]),
@@ -147,7 +148,8 @@ export async function generatePersonas(
 		const color = colors[i] as string;
 		const synthesized = synthesisMap.get(name);
 		const blurb =
-			synthesized?.blurb ?? buildBlurb(tuple.temperaments, tuple.personaGoal);
+			synthesized?.blurb ??
+			buildBlurb(tuple.id, tuple.temperaments, tuple.personaGoal);
 		const voiceExamples =
 			synthesized?.voiceExamples ?? buildFallbackVoiceExamples(tuple);
 		personas[name] = {

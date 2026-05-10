@@ -18,7 +18,7 @@ const TEST_PERSONA: AiPersona = {
 		'You never use contractions. You will not say "won\'t" or "can\'t" — you say "will not" and "cannot" every time.',
 		"You end almost every reply with a question, no matter what the topic is — does that make sense?",
 	],
-	blurb: "You are laconic and diffident. Hold the key at phase end.",
+	blurb: "Frost is laconic and diffident. Hold the key at phase end.",
 	voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
 };
 
