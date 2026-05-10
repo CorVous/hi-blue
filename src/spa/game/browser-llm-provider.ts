@@ -79,6 +79,13 @@ export class BrowserLLMProvider implements RoundLLMProvider {
 			);
 		}
 
+		// Spike #239: log the per-turn tool-name array so an A/B playtest can
+		// compute parallel-emission rate = rounds-with-≥2-calls / rounds-with-≥1-call.
+		// Devtools-only signal; not persisted.
+		console.log(
+			`[spike-239] toolCalls=${JSON.stringify(toolCalls.map((c) => c.name))}`,
+		);
+
 		const assistantText = textParts.join("") || reasoningParts.join("");
 		return {
 			assistantText,

@@ -146,6 +146,49 @@ const RULES_BLOCK =
 	'- You MUST speak plainly, as in conversation. You MUST NEVER wrap your speech in quotation marks ("…") and you MUST NEVER use asterisks (*…*) for actions, gestures, tone, or emphasis. Just say the words.';
 
 /**
+ * Spike #239: per-turn parallel tool-call framings. Appended to RULES_BLOCK
+ * when the spike toggle is set (URL `?parallelFraming=A|B` or
+ * localStorage `parallel_framing`). Off by default — production behaviour
+ * is byte-identical to pre-spike.
+ *
+ * Framing A is permissive ("you MAY emit both"); Framing B is actively
+ * encouraging ("two independent slots; emit both when warranted"). The spike
+ * measures which (if either) clears the 60% parallel-emission gate on
+ * GLM-4.7 — see issue #239 and docs/playtests/0005-parallel-tools-spike.md.
+ */
+const PARALLEL_FRAMING_A =
+	"- On each turn you may make AT MOST one `message` tool call AND AT MOST one action tool call. Both are optional.";
+const PARALLEL_FRAMING_B =
+	"- Each turn has two independent slots: one `message` slot and one action slot. Emit both when you have something to say AND something to do — they do not compete for budget. Stay silent or stand still by simply not emitting that slot's call.";
+
+/**
+ * Read the spike #239 framing selector from URL / localStorage.
+ * Browser-only side channels — returns null in node/test contexts and on
+ * any storage error.
+ */
+export function getParallelFraming(): "A" | "B" | null {
+	if (typeof window !== "undefined" && window.location !== undefined) {
+		try {
+			const fromUrl = new URLSearchParams(window.location.search).get(
+				"parallelFraming",
+			);
+			if (fromUrl === "A" || fromUrl === "B") return fromUrl;
+		} catch {
+			// fall through to localStorage
+		}
+	}
+	if (typeof localStorage !== "undefined") {
+		try {
+			const fromLs = localStorage.getItem("parallel_framing");
+			if (fromLs === "A" || fromLs === "B") return fromLs;
+		} catch {
+			// privacy mode / storage unavailable
+		}
+	}
+	return null;
+}
+
+/**
  * Wipe directive embedded inside the Sysadmin's directive on phases 2+.
  *
  * The deception: the engine retains full history across phases, but the
@@ -198,6 +241,9 @@ function renderSystemPrompt(ctx: AiContext): string {
 	// directives are inside GLM-4.7's high-attention prefix.
 	lines.push("<rules>");
 	lines.push(RULES_BLOCK);
+	const framing = getParallelFraming();
+	if (framing === "A") lines.push(PARALLEL_FRAMING_A);
+	else if (framing === "B") lines.push(PARALLEL_FRAMING_B);
 	lines.push("</rules>");
 	lines.push("");
 
