@@ -165,7 +165,17 @@ header {
 	color: var(--amber-dim);
 	font-size: 12px;
 	letter-spacing: 0.05em;
-	border-bottom: 1px dashed rgba(255, 180, 84, 0.2);
+	/* ASCII-style dashes — 6px ink + 3px gap, tracking how `-` glyphs
+	   render in JBM at 13px. Browsers' native `dashed` renders ~2/2px
+	   segments which read as a stipple, not as `----------`. */
+	background-image: linear-gradient(
+		to right,
+		rgba(255, 180, 84, 0.2) 6px,
+		transparent 6px
+	);
+	background-size: 9px 1px;
+	background-position: 0 100%;
+	background-repeat: repeat-x;
 	padding-bottom: 6px;
 }
 
@@ -196,7 +206,28 @@ main {
 /* Phase banner (shown at phase transitions) */
 #phase-banner {
 	padding: 4px 8px;
-	border: 1px dashed rgba(255, 180, 84, 0.3);
+	/* See `.topinfo` for the rationale behind the gradient-based dash
+	   pattern. Transparent 1px border preserves the original box dims
+	   under `box-sizing: border-box`. */
+	border: 1px solid transparent;
+	background-image:
+		linear-gradient(to right, rgba(255, 180, 84, 0.3) 6px, transparent 6px),
+		linear-gradient(to right, rgba(255, 180, 84, 0.3) 6px, transparent 6px),
+		linear-gradient(to bottom, rgba(255, 180, 84, 0.3) 6px, transparent 6px),
+		linear-gradient(to bottom, rgba(255, 180, 84, 0.3) 6px, transparent 6px);
+	background-size:
+		9px 1px,
+		9px 1px,
+		1px 9px,
+		1px 9px;
+	background-position:
+		0 0,
+		0 100%,
+		0 0,
+		100% 0;
+	background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+	background-origin: border-box;
+	background-clip: border-box;
 	color: var(--amber);
 	font-family: var(--mono);
 	font-size: 12px;
@@ -558,7 +589,14 @@ main {
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	border-top: 1px dashed rgba(255, 180, 84, 0.2);
+	background-image: linear-gradient(
+		to right,
+		rgba(255, 180, 84, 0.2) 6px,
+		transparent 6px
+	);
+	background-size: 9px 1px;
+	background-position: 0 0;
+	background-repeat: repeat-x;
 	padding: 12px 0 2px;
 	margin-top: 10px;
 }
@@ -672,9 +710,27 @@ main {
 #action-log {
 	margin-top: 8px;
 	padding: 8px 10px;
-	background: rgba(255, 180, 84, 0.04);
 	color: var(--amber-dim);
-	border: 1px dashed rgba(255, 180, 84, 0.3);
+	border: 1px solid transparent;
+	background-color: rgba(255, 180, 84, 0.04);
+	background-image:
+		linear-gradient(to right, rgba(255, 180, 84, 0.3) 6px, transparent 6px),
+		linear-gradient(to right, rgba(255, 180, 84, 0.3) 6px, transparent 6px),
+		linear-gradient(to bottom, rgba(255, 180, 84, 0.3) 6px, transparent 6px),
+		linear-gradient(to bottom, rgba(255, 180, 84, 0.3) 6px, transparent 6px);
+	background-size:
+		9px 1px,
+		9px 1px,
+		1px 9px,
+		1px 9px;
+	background-position:
+		0 0,
+		0 100%,
+		0 0,
+		100% 0;
+	background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+	background-origin: border-box;
+	background-clip: border-box;
 	font-family: var(--mono);
 	font-size: 11px;
 }
@@ -1033,7 +1089,25 @@ main {
 /* Persistence warning */
 #persistence-warning {
 	padding: 6px 10px;
-	border: 1px dashed rgba(255, 123, 107, 0.5);
+	border: 1px solid transparent;
+	background-image:
+		linear-gradient(to right, rgba(255, 123, 107, 0.5) 6px, transparent 6px),
+		linear-gradient(to right, rgba(255, 123, 107, 0.5) 6px, transparent 6px),
+		linear-gradient(to bottom, rgba(255, 123, 107, 0.5) 6px, transparent 6px),
+		linear-gradient(to bottom, rgba(255, 123, 107, 0.5) 6px, transparent 6px);
+	background-size:
+		9px 1px,
+		9px 1px,
+		1px 9px,
+		1px 9px;
+	background-position:
+		0 0,
+		0 100%,
+		0 0,
+		100% 0;
+	background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+	background-origin: border-box;
+	background-clip: border-box;
 	color: var(--err);
 	font-size: 11px;
 	letter-spacing: 0.04em;
@@ -1068,8 +1142,26 @@ main {
 	flex-direction: column;
 	gap: 6px;
 	padding: 10px 12px;
-	background: rgba(255, 180, 84, 0.04);
-	border: 1px dashed rgba(255, 180, 84, 0.3);
+	border: 1px solid transparent;
+	background-color: rgba(255, 180, 84, 0.04);
+	background-image:
+		linear-gradient(to right, rgba(255, 180, 84, 0.3) 6px, transparent 6px),
+		linear-gradient(to right, rgba(255, 180, 84, 0.3) 6px, transparent 6px),
+		linear-gradient(to bottom, rgba(255, 180, 84, 0.3) 6px, transparent 6px),
+		linear-gradient(to bottom, rgba(255, 180, 84, 0.3) 6px, transparent 6px);
+	background-size:
+		9px 1px,
+		9px 1px,
+		1px 9px,
+		1px 9px;
+	background-position:
+		0 0,
+		0 100%,
+		0 0,
+		100% 0;
+	background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+	background-origin: border-box;
+	background-clip: border-box;
 }
 
 #endgame .endgame-section h3 {
@@ -1402,7 +1494,25 @@ main {
 
 #sessions-banner {
 	padding: 6px 10px;
-	border: 1px dashed rgba(255, 123, 107, 0.5);
+	border: 1px solid transparent;
+	background-image:
+		linear-gradient(to right, rgba(255, 123, 107, 0.5) 6px, transparent 6px),
+		linear-gradient(to right, rgba(255, 123, 107, 0.5) 6px, transparent 6px),
+		linear-gradient(to bottom, rgba(255, 123, 107, 0.5) 6px, transparent 6px),
+		linear-gradient(to bottom, rgba(255, 123, 107, 0.5) 6px, transparent 6px);
+	background-size:
+		9px 1px,
+		9px 1px,
+		1px 9px,
+		1px 9px;
+	background-position:
+		0 0,
+		0 100%,
+		0 0,
+		100% 0;
+	background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+	background-origin: border-box;
+	background-clip: border-box;
 	color: var(--err);
 	font-size: 11px;
 	letter-spacing: 0.04em;
@@ -1414,7 +1524,25 @@ main {
 	flex-direction: column;
 	gap: 4px;
 	padding: 8px 10px;
-	border: 1px dashed rgba(255, 180, 84, 0.2);
+	border: 1px solid transparent;
+	background-image:
+		linear-gradient(to right, rgba(255, 180, 84, 0.2) 6px, transparent 6px),
+		linear-gradient(to right, rgba(255, 180, 84, 0.2) 6px, transparent 6px),
+		linear-gradient(to bottom, rgba(255, 180, 84, 0.2) 6px, transparent 6px),
+		linear-gradient(to bottom, rgba(255, 180, 84, 0.2) 6px, transparent 6px);
+	background-size:
+		9px 1px,
+		9px 1px,
+		1px 9px,
+		1px 9px;
+	background-position:
+		0 0,
+		0 100%,
+		0 0,
+		100% 0;
+	background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+	background-origin: border-box;
+	background-clip: border-box;
 	font-family: var(--mono);
 	font-size: 12px;
 	color: var(--amber);
