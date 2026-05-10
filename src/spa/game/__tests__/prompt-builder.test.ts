@@ -936,7 +936,13 @@ describe("conversation rendering (role turns)", () => {
 		expect(userMsg).toBeDefined();
 	});
 
-	it("outgoing AI message becomes an assistant turn '[Round N] you dm <to>: <content>'", () => {
+	it("outgoing AI message becomes an assistant turn carrying the raw body the model emitted", () => {
+		// Outgoing turns deliberately render as `entry.content` only — no
+		// synthetic "[Round N] you dm <to>:" prefix. Showing the model that
+		// prefix as if it were its own output would (a) misrepresent its past
+		// emission, (b) risk inducing it to emit the prefix verbatim instead
+		// of using the `message` tool. Routing context for outgoing turns
+		// lives in the prior-round tool_call/tool_result pair when present.
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = appendMessage(game, "red", "blue", "Greetings");
 		const ctx = buildAiContext(game, "red");
@@ -944,8 +950,7 @@ describe("conversation rendering (role turns)", () => {
 		const asst = messages.find(
 			(m) =>
 				m.role === "assistant" &&
-				(m as { content: string | null }).content ===
-					"[Round 0] you dm blue: Greetings",
+				(m as { content: string | null }).content === "Greetings",
 		);
 		expect(asst).toBeDefined();
 	});
@@ -971,11 +976,12 @@ describe("conversation rendering (role turns)", () => {
 		game = appendMessage(game, "green", "red", "secret");
 		const greenCtx = buildAiContext(game, "green");
 		const messages = buildOpenAiMessages(greenCtx);
+		// Outgoing turn = raw content; see the "outgoing AI message" test above
+		// for why we don't add a synthetic round/routing prefix here.
 		const asst = messages.find(
 			(m) =>
 				m.role === "assistant" &&
-				(m as { content: string | null }).content ===
-					"[Round 0] you dm *red: secret",
+				(m as { content: string | null }).content === "secret",
 		);
 		expect(asst).toBeDefined();
 	});

@@ -8,8 +8,13 @@
  *   1. { role: "system", content: ctx.toSystemPrompt() }
  *      Stable per (persona × phase) — OpenRouter's prefix cache reuses it round-to-round.
  *   2. One turn per ConversationEntry, sorted by round ascending (stable):
- *      - kind=message, outgoing: { role: "assistant", content: renderEntry(...) }
- *        — "[Round N] you dm <to>: <content>" so the model retains routing context.
+ *      - kind=message, outgoing: { role: "assistant", content: entry.content }
+ *        — raw body the model emitted via the `message` tool. NO synthetic
+ *        prefix: showing the model `[Round N] you dm <to>:` as if it were
+ *        its own output would (a) misrepresent what it actually produced,
+ *        (b) risk inducing it to emit that prefix verbatim instead of using
+ *        the tool. Routing context for outgoing turns lives in the
+ *        prior-round tool_call/tool_result pair (block 3 below) when present.
  *      - kind=message, incoming: { role: "user",      content: renderEntry(...) }
  *        — "[Round N] <from> dms you: <content>".
  *      - kind=witnessed-event:   { role: "user",      content: renderEntry(...) }
@@ -57,13 +62,20 @@ export function buildOpenAiMessages(
 	const sortedLog = [...ctx.conversationLog].sort((a, b) => a.round - b.round);
 	for (const entry of sortedLog) {
 		if (entry.kind === "message") {
-			const content = renderEntry(entry, ctx.aiId, ctx.worldSnapshot.entities);
-			// Outgoing → assistant role; incoming → user role. The "[Round N]
-			// you dm <to>" / "[Round N] <from> dms you" prefix on both sides
-			// preserves routing context the model needs for multi-recipient
-			// reasoning (issue surfaced by code review of a704b81).
-			const role = entry.from === ctx.aiId ? "assistant" : "user";
-			messages.push({ role, content });
+			if (entry.from === ctx.aiId) {
+				// Outgoing: assistant turn shows the raw body the model emitted
+				// via the `message` tool. No synthetic round/routing prefix —
+				// it would misrepresent the model's own output. See header.
+				messages.push({ role: "assistant", content: entry.content });
+			} else {
+				// Incoming: user turn includes "[Round N] <from> dms you:" so
+				// the model can place the message in time and identify the
+				// sender. Routing-context need surfaced by review of a704b81.
+				messages.push({
+					role: "user",
+					content: renderEntry(entry, ctx.aiId, ctx.worldSnapshot.entities),
+				});
+			}
 		} else if (entry.kind === "witnessed-event") {
 			messages.push({
 				role: "user",
