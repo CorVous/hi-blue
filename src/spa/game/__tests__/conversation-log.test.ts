@@ -103,7 +103,7 @@ describe("buildConversationLog — voice-chat", () => {
 			],
 		};
 		const result = buildConversationLog(input, "red", TEST_PERSONAS);
-		expect(result).toEqual(['[Round 0] blue said: "Hi"']);
+		expect(result).toEqual(["[Round 0] blue dms you: Hi"]);
 	});
 
 	it("renders AI reply with round tag and quotes", () => {
@@ -139,7 +139,7 @@ describe("buildConversationLog — voice-chat", () => {
 		};
 		const result = buildConversationLog(input, "red", TEST_PERSONAS);
 		expect(result).toHaveLength(2);
-		expect(result[0]).toContain("blue said");
+		expect(result[0]).toContain("blue dms you");
 		expect(result[1]).toContain("You:");
 	});
 });
@@ -161,7 +161,7 @@ describe("buildConversationLog — whispers", () => {
 			],
 		};
 		const result = buildConversationLog(input, "red", TEST_PERSONAS);
-		expect(result).toEqual(['[Round 1] *green whispered to you: "psst"']);
+		expect(result).toEqual(["[Round 1] *green dms you: psst"]);
 	});
 
 	it("renders whisper that was sent (sender's log also gets the entry)", () => {
@@ -182,7 +182,7 @@ describe("buildConversationLog — whispers", () => {
 		// From green's perspective (who sent it), it still renders the same format
 		const result = buildConversationLog(input, "green", TEST_PERSONAS);
 		expect(result).toHaveLength(1);
-		expect(result[0]).toContain("whispered to you");
+		expect(result[0]).toContain("dms you");
 	});
 });
 
@@ -430,8 +430,8 @@ describe("buildConversationLog — chronological ordering", () => {
 		const result = buildConversationLog(input, "red", TEST_PERSONAS);
 		expect(result).toHaveLength(3);
 		// Insertion order preserved within same round
-		expect(result[0]).toContain("blue said");
-		expect(result[1]).toContain("whispered to you");
+		expect(result[0]).toContain("blue dms you");
+		expect(result[1]).toContain("*green dms you");
 		expect(result[2]).toContain("You watch");
 	});
 });

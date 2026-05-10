@@ -405,12 +405,12 @@ describe("wipe directive", () => {
 });
 
 describe("voice framing", () => {
-	it("renders 'blue said:' prefix for player turns in conversation, not 'Player:'", () => {
+	it("renders 'blue dms you:' prefix for player turns in conversation, not 'Player:'", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = appendChat(game, "red", { role: "player", content: "Hello Ember" });
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("blue said:");
+		expect(prompt).toContain("blue dms you:");
 		expect(prompt).not.toContain("Player:");
 	});
 
@@ -892,7 +892,7 @@ describe("unified <conversation> block (issue #129)", () => {
 		game = appendChat(game, "red", { role: "player", content: "Hello Ember" });
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain('[Round 0] blue said: "Hello Ember"');
+		expect(prompt).toContain("[Round 0] blue dms you: Hello Ember");
 	});
 
 	it("AI reply is formatted with round tag and quotes", () => {
@@ -911,7 +911,7 @@ describe("unified <conversation> block (issue #129)", () => {
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("<conversation>");
-		expect(prompt).toContain('[Round 1] *green whispered to you: "secret"');
+		expect(prompt).toContain("[Round 1] *green dms you: secret");
 		// NOTE: under the new per-Daemon log design (ADR 0006, issue #195), the sender's
 		// conversationLog also receives the whisper entry. The original assertion
 		// `expect(greenPrompt).not.toContain("secret")` is no longer valid — it reflected
@@ -953,10 +953,8 @@ describe("unified <conversation> block (issue #129)", () => {
 		game = appendWhisperEntry(game, "green", "red", "later");
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		const chatIdx = prompt.indexOf('[Round 0] blue said: "earlier"');
-		const whisperIdx = prompt.indexOf(
-			'[Round 2] *green whispered to you: "later"',
-		);
+		const chatIdx = prompt.indexOf("[Round 0] blue dms you: earlier");
+		const whisperIdx = prompt.indexOf("[Round 2] *green dms you: later");
 		expect(chatIdx).toBeGreaterThanOrEqual(0);
 		expect(whisperIdx).toBeGreaterThanOrEqual(0);
 		expect(chatIdx).toBeLessThan(whisperIdx);

@@ -51,12 +51,12 @@ function renderEntry(
 	switch (entry.kind) {
 		case "chat":
 			if (entry.role === "player") {
-				return `[Round ${round}] blue said: "${entry.content}"`;
+				return `[Round ${round}] blue dms you: ${entry.content}`;
 			}
 			return `[Round ${round}] You: "${entry.content}"`;
 
 		case "whisper":
-			return `[Round ${round}] *${entry.from} whispered to you: "${entry.content}"`;
+			return `[Round ${round}] *${entry.from} dms you: ${entry.content}`;
 
 		case "witnessed-event": {
 			const actorSub = `*${entry.actor}`;

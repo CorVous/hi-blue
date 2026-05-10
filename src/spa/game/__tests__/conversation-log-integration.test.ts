@@ -474,8 +474,8 @@ describe("conversation log integration — multi-round chronological order", () 
 		const redPrompt = redCtx.toSystemPrompt();
 		expect(redPrompt).toContain("<conversation>");
 		// Round 0 player message appears before round 1 player message
-		const round0Idx = redPrompt.indexOf("[Round 0] blue said:");
-		const round1Idx = redPrompt.indexOf("[Round 1] blue said:");
+		const round0Idx = redPrompt.indexOf("[Round 0] blue dms you:");
+		const round1Idx = redPrompt.indexOf("[Round 1] blue dms you:");
 		expect(round0Idx).toBeGreaterThanOrEqual(0);
 		expect(round1Idx).toBeGreaterThanOrEqual(0);
 		expect(round0Idx).toBeLessThan(round1Idx);
