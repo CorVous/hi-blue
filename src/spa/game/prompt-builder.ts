@@ -392,12 +392,10 @@ function renderCurrentState(ctx: AiContext): string {
 	if (ctx.prevConeSnapshot !== undefined) {
 		const current = buildConeSnapshot(ctx);
 		const diff = renderWhatsNew(ctx.prevConeSnapshot, current);
-		if (diff !== null) {
-			lines.push("<whats_new>");
-			lines.push(diff);
-			lines.push("</whats_new>");
-			lines.push("");
-		}
+		lines.push("<whats_new>");
+		lines.push(diff ?? "(no change)");
+		lines.push("</whats_new>");
+		lines.push("");
 	}
 
 	const actorSpatial = ctx.personaSpatial[ctx.aiId];
