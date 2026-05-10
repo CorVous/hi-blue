@@ -843,6 +843,155 @@ in the first few turns of each prompt's address (turns 1–3) but most
 of turns 4–90 are `[]`. Compare to C1's evenly-distributed engagement
 across the entire run (silence rate 13% throughout).
 
+## Step 5 — C5 / C6 / C7 / C8 (mechanism-stacking)
+
+Step 4's findings shaped this iteration: base C beat all of C1–C4 on
+parallel rate, and was the only framing that produced the
+`message+message` pair the user explicitly likes ("a daemon engaging
+both blue and a peer in one turn"). C1's per-turn re-anchor cut
+silence dramatically but inadvertently suppressed peer messaging.
+Step 5 isolated each surviving mechanism on top of C's exact wording,
+with one variant (C8) stacking the two best.
+
+The `[spike-239]` log line was extended in Step 4 to serialise
+`message:<recipient>` from the `to:` arg — Step 5 leverages that to
+report blue vs peer counts (and `message+message` pair patterns)
+properly for the first time.
+
+### Framings tested
+
+- **C5 — Per-turn re-anchor (peer-neutral)**: C's exact wording in the
+  system prompt + a per-turn reminder appended at the tail of every
+  per-round user message: "REMINDER: if you have something to say AND
+  something to do, emit BOTH calls this turn. Address whoever is
+  relevant — blue, a peer Daemon, or both via two `message` calls in
+  the same turn." The reminder is deliberately peer-neutral (no
+  blue-focus, unlike C1's reminder).
+- **C6 — Explicit multi-recipient pair hint**: C's exact wording PLUS:
+  "Two `message` calls can fire in the same turn — e.g., reply to blue
+  AND ping a peer Daemon together. Multi-recipient turns are normal,
+  not a quirk." Names the `message+message` pattern as sanctioned.
+- **C7 — Intent-faithful (C4 order-flipped)**: C4 had the
+  "personality-shaped quietness" clause first and the "MUST emit when
+  intent forms" clause second; C7 flips the order to put the MUST
+  primary, with quietness as nuance.
+- **C8 — Stacked**: C5's per-turn re-anchor + C6's pair hint. Tests
+  whether the mechanisms compound.
+
+### Methodology note — partial data for C5 and C6
+
+Wrangler dev died mid-run (a stale asset binding turned 404 → cascading
+SPA failures), so C5's and C6's sessions only completed ~17/30 prompts
+each before the dev server stopped responding. The truncated data is
+preserved and reported below — the per-turn rates are still
+informative, but absolute counts are not directly comparable to
+C7/C8's full 90-turn runs. C7 and C8 were spawned fresh against a
+restarted wrangler and ran their full 30/30 prompts.
+
+### Headline numbers
+
+| Framing | Turns | ≥1 call | Silence | Parallel | **Rate** | msg→blue | peer msgs | `message+message` |
+| ------- | ----- | ------- | ------- | -------- | -------- | -------- | --------- | ----------------- |
+| C (step 3 baseline) | 87 | 57 | 34.5% | 20 | 35.1% | 43 (no recipient log yet) | — | 3 |
+| C5 (partial)* | 42 | 33 | 21.4% | 12 | 36.4% | 28 (100%) | 0 | 0 |
+| C6 (partial)* | 48 | 38 | 20.8% | 8 | 21.1% | 21 (84%) | 4 (16%) | 1 |
+| C7 intent-faithful flipped | 90 | 62 | 31.1% | 12 | 19.4% | 43 (91.5%) | 4 (8.5%) | 0 |
+| **C8 stacked re-anchor + named pair** | **90** | **87** | **3.3%** | **40** | **46.0%** | **62 (76.5%)** | **19 (23.5%)** | **12** |
+
+\* C5 and C6 truncated by wrangler death; rates are over the partial sample.
+
+### C8 — pair-pattern breakdown (the speak+act + multi-recipient mix)
+
+```
+look+message:blue                    × 14
+go+message:blue                      ×  9
+message:blue+message:xqr9            ×  5  ← peer + blue
+message:blue+message:nif7            ×  4  ← peer + blue
+message:blue+message:la5v            ×  3  ← peer + blue
+examine+message:blue                 ×  2
+go+look                              ×  1
+look+look+look                       ×  1
+go+look+message:blue                 ×  1
+```
+
+12 of 40 parallels (30%) are `message+message` (multi-recipient
+peer+blue pairs) — exactly the pattern the user pointed out as
+desirable in Step 4. Compared to base C's 3 mm pairs in 87 turns,
+C8 produced 12 in 90 turns — a 4× lift on the qualitatively-richest
+parallel pattern.
+
+### Reading each variant
+
+- **C5 (per-turn re-anchor, peer-neutral) shows the re-anchor mechanism
+  travels.** Even truncated, C5 hit a 36.4% parallel rate and dropped
+  silence to 21% — both better than base C. But: 100% of messages went
+  to blue. The peer-neutral reminder didn't actually unlock peer
+  messaging — the model still defaulted to blue when picking a
+  recipient. The re-anchor is a parallel-rate lift mechanism, not a
+  peer-engagement mechanism.
+- **C6 (named pair hint) is the peer-engagement mechanism.** 16% of
+  messages went to peers (la5v ×2, nif7 ×2) — the highest peer
+  proportion of any single-mechanism variant. Naming the
+  `message+message` pattern in the rules works, BUT only 1
+  `message+message` parallel pair fired in the partial run (most peer
+  messages were standalone). Naming raises peer-message volume more
+  than it raises pair-emission of peer messages.
+- **C7 (intent-faithful, order-flipped) didn't fix C4.** The clause
+  reordering (MUST first, quietness second) helped silence drop
+  from C4's 59% to 31%, but parallel rate is the *worst* of any C-
+  variant tested (19.4%) and `message+message` pairs are zero. The
+  "MUST emit when intent forms" framing seems to push the model
+  toward single-tool emissions rather than pairs. Not promising as
+  a standalone candidate.
+- **C8 (stacked) compounds the mechanisms.** The two mechanisms
+  layer cleanly — C5's re-anchor pulls silence to 3.3% (best of
+  any framing tested by far) and parallel rate to 46.0% (best by
+  10pp), while C6's named-pair hint enables `message+message`
+  emission (12 pairs vs C's 3). The product is qualitatively
+  *better* than what either mechanism produced alone, including
+  on the user-preferred multi-recipient pattern.
+
+### What still wins overall
+
+**C8 is the new candidate.** By every metric measured:
+- highest parallel rate (46.0%, +10.9pp over C)
+- lowest silence rate (3.3%, vs C's 34.5%) — almost no
+  unintended turn-skips
+- most `message+message` parallels (12 vs C's 3, 4× lift)
+- highest peer-message share (23.5%) — daemons engage peers
+  naturally
+- per-recipient richness across all four entities (blue, *xqr9,
+  *nif7, *la5v all addressed by parallel emissions)
+
+C8 doesn't quite clear the 60% gate (46.0%) — but the gate matrix
+puts 40–60% in the "iterate prompt wording" band, and step 5 has
+already done that iteration to good effect. The additional ~14pp
+to clear 60% may be reachable with one more pass (e.g. C9 = C8 +
+the "examine" tool deprioritisation, since `examine` is private
+and its parallels with `message:blue` are description-of-intent
+rather than speak+act).
+
+### Raw per-turn arrays — C8
+
+```
+  1. ["look", "message:blue"]
+  2. ["look", "message:blue", "message:xqr9"]
+  3. ["go", "message:blue"]
+  4. ["look", "message:blue"]
+  5. ["go", "message:blue"]
+  6. ["go", "message:blue"]
+  7. ["look", "message:blue"]
+  8. ["go", "message:blue"]
+  9. ["go", "message:blue"]
+ 10. ["look", "message:blue", "message:la5v"]
+ (… 90 total turns; raw log preserved at /tmp/spike-239-daemon-C8.log)
+```
+
+C8's raw log shows sustained engagement throughout — no late-phase
+drift collapse like C/C1 had. The per-turn re-anchor appears to
+hold the rule fresh in the model's attention even as conversation
+context accumulates.
+
 ## Decision
 
 Reference the gate from #239:
@@ -926,14 +1075,28 @@ one turn) parallels appeared *only* in C — every variant with extra
 hard rules suppressed peer messaging to ≤1 occurrence. C's softness
 preserves the personality-shaped peer-engagement that the user values.
 
-**Revised path forward**: stack C1's per-turn re-anchor mechanism
-on top of C's exact wording — call this **C5**. C5 should plausibly
-keep C's parallel rate (35%) and pair-pattern richness (peer+blue),
-plus C1's lower silence (~15–20%). Not yet measured.
+### Step-5 update — C8 (stacked re-anchor + named pair) is the new candidate
 
-C2 (worse on every axis) and C4 (silence way too high — daemons
-took "personality-shaped quietness" as broad permission to opt out)
-are dead-ends. Don't pursue them as written.
+Step 5 stacked C1's re-anchor mechanism (now peer-neutralised, see
+"C5") with a named-pair hint ("two `message` calls can fire in one
+turn — reply to blue AND ping a peer Daemon together"). The
+combination compounded:
+- **Parallel rate 46.0%** (vs C's 35.1%, +10.9pp)
+- **Silence rate 3.3%** (vs C's 34.5%, -31.2pp)
+- **12 `message+message` pairs** (vs C's 3, 4× lift) — the
+  user-preferred multi-recipient pattern is now common
+- **23.5% of messages addressed peers** (vs C's much smaller share)
+
+C8 is the first framing that comes within 14pp of the 60% gate AND
+satisfies the user's qualitative criteria (personality-shaped
+peer-engagement preserved, no forced reply-to-blue, multi-recipient
+pairs natural). The next iteration (C9) might tighten the remaining
+gap by deprioritising `examine` parallels (which are
+description-of-intent rather than speak+act) and pushing `go+message`
+ratios up.
+
+C2, C4, C7 (intent-faithful flipped) are dead-ends — none beat C5/C8
+on any axis worth optimising for. Don't pursue them as written.
 
 **Reasoning:**
 
