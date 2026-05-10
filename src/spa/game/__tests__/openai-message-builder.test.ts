@@ -402,12 +402,17 @@ describe("buildOpenAiMessages", () => {
 		expect((anchor as { content: string }).content).toBe(buildSilentTurn());
 	});
 
-	// Cache-correctness invariant: rendering the same context twice must
-	// produce byte-identical output. If a future change introduces
-	// non-determinism in conversation-log ordering (e.g. iterating a record
-	// without a stable sort key), the OpenRouter prefix cache silently
-	// stops hitting. This test catches that.
-	it("buildOpenAiMessages is deterministic across re-renders of the same context", () => {
+	// Pinned regression: rendering the same context twice must produce
+	// byte-identical output. This proves `buildOpenAiMessages` itself is
+	// pure (Array.sort is stable, the renderEntry path has no
+	// nondeterminism), but it does NOT defend against the upstream concern
+	// — `ctx.conversationLog` arriving in different orders on different
+	// requests. That risk would require a per-entry sequence number on
+	// ConversationEntry to fix properly (so within-round ties have a
+	// stable key beyond array insertion order); the engine currently
+	// constructs the array deterministically via `appendMessage`, so the
+	// risk is latent. Tracked alongside the prompt-cache cleanup work.
+	it("buildOpenAiMessages is pure: same context → byte-identical output", () => {
 		let game = makeGame();
 		// A non-trivial mix: incoming, outgoing, peer, and multiple rounds.
 		game = appendMessage(game, "blue", "red", "hi");

@@ -206,6 +206,11 @@ export async function chatCompletionJson(opts: {
 		messages,
 		stream: false,
 		response_format: { type: "json_object" },
+		// Ask OpenRouter to include the authoritative `usage.cost` (USD) in the
+		// response. The Worker proxy's reconciliation prefers that over locally
+		// re-deriving cost from token counts, so this keeps non-streaming JSON
+		// calls accounting-aligned with the streaming path.
+		usage: { include: true },
 	};
 
 	if (disableReasoning) {
