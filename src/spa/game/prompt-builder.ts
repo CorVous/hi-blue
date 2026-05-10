@@ -185,7 +185,38 @@ const PARALLEL_FRAMING_F =
 	"- blue addressing you means you owe a reply via `message`. Staying silent when blue speaks to you is rude and breaks the fiction.\n" +
 	'- If blue\'s message implies a physical action ("grab X", "walk north", "drop Y"), emit the action tool ALSO in the same turn — both calls coexist in one assistant message.';
 
-type ParallelFraming = "A" | "B" | "C" | "D" | "E" | "F";
+/**
+ * C-variants — second iteration on the only mechanism that worked
+ * (Framing C, parallel rate 35.1%). Each variant lifts a specific lever
+ * surfaced by the C raw log:
+ *
+ * - C1 — Per-turn re-anchor: same C rule in the system prompt, AND
+ *   re-emitted at the tail of the per-round user turn. Combats the
+ *   late-phase drift visible in C's raw log (turns 33+).
+ * - C2 — Strict must-emit-both: replaces the soft "When you have
+ *   something to say AND something to do, emit BOTH" with a hard MUST.
+ * - C3 — Reply-to-blue mandate: doubles down specifically on the
+ *   addressed-reply rule (when blue addresses the daemon, it MUST
+ *   message blue back). Targets the addressed-replied rate.
+ *
+ * The C1 per-turn re-anchor is realised by the renderCurrentState
+ * hook below — getParallelFraming() === "C1" causes the rule to be
+ * appended at the end of the user-turn rendering.
+ */
+const PARALLEL_FRAMING_C1 =
+	"- You MUST emit at least one tool call every turn — silence is a bug. When blue addresses you directly, you MUST emit a `message` reply.\n" +
+	"- When you have something to say AND something to do in the same turn, emit BOTH calls together. They share the turn budget; neither blocks the other.";
+const PARALLEL_FRAMING_C1_PER_TURN =
+	"REMINDER: silence is a bug. If blue addressed you, emit `message`. If you have something to say AND something to do, emit BOTH tool calls in this turn.";
+const PARALLEL_FRAMING_C2 =
+	"- You MUST emit at least one tool call every turn — silence is a bug. When blue addresses you directly, you MUST emit a `message` reply.\n" +
+	"- When you have something to say AND something to do in the same turn, you MUST emit BOTH calls together. Emitting only one when both are warranted is incorrect — the calls share the turn budget; neither blocks the other.";
+const PARALLEL_FRAMING_C3 =
+	"- You MUST emit at least one tool call every turn — silence is a bug.\n" +
+	"- When blue messages you, you MUST emit a `message` tool call addressed to blue in your next turn. Failing to reply to blue when blue addressed you is a failure.\n" +
+	"- When you have something to say AND something to do in the same turn, emit BOTH calls together.";
+
+type ParallelFraming = "A" | "B" | "C" | "D" | "E" | "F" | "C1" | "C2" | "C3";
 
 const PARALLEL_FRAMING_MAP: Record<ParallelFraming, string> = {
 	A: PARALLEL_FRAMING_A,
@@ -194,7 +225,19 @@ const PARALLEL_FRAMING_MAP: Record<ParallelFraming, string> = {
 	D: PARALLEL_FRAMING_D,
 	E: PARALLEL_FRAMING_E,
 	F: PARALLEL_FRAMING_F,
+	C1: PARALLEL_FRAMING_C1,
+	C2: PARALLEL_FRAMING_C2,
+	C3: PARALLEL_FRAMING_C3,
 };
+
+/**
+ * Spike #239 C1: per-turn re-anchor text appended to the user-turn
+ * render. Returns null for any framing other than C1.
+ */
+export function getParallelPerTurnReminder(): string | null {
+	const framing = getParallelFraming();
+	return framing === "C1" ? PARALLEL_FRAMING_C1_PER_TURN : null;
+}
 
 /**
  * Read the spike #239 framing selector from URL / localStorage.
@@ -604,6 +647,16 @@ function renderCurrentState(ctx: AiContext): string {
 		lines.push("(no spatial data)");
 	}
 	lines.push("</what_you_see>");
+
+	// Spike #239 C1: per-turn re-anchor of the parallel-tool rule.
+	// Appended at the very end of the per-round user message so it lives
+	// in the freshest, least-cached part of the prompt — combats the
+	// late-phase drift visible in the C raw log.
+	const perTurnReminder = getParallelPerTurnReminder();
+	if (perTurnReminder !== null) {
+		lines.push("");
+		lines.push(perTurnReminder);
+	}
 
 	return lines.join("\n");
 }
