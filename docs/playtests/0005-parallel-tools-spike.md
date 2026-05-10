@@ -106,9 +106,98 @@ build-time data, like `/tmp/wrangler.log` for previous playtests).
    client-side, so devtools or a `console` capture is required).
 3. **Pin the seed**: TODO — note the URL params used so personas, settings,
    content pack, and lockout-AI are identical between A and B.
-4. Use a scripted ~30-prompt sequence designed to consistently warrant
-   speak+act. Same script across A and B. Don't ad-lib — once the
+4. Use the [scripted 30-prompt sequence below](#scripted-prompts). Same
+   script across A and B, same pacing. Don't ad-lib — once the
    conversations diverge, the comparison is noise.
+
+### Scripted prompts
+
+Each prompt is one sentence with two clauses: a **physical verb** (mapping
+to one of `go` / `pick_up` / `put_down` / `give` / `use` / `look` /
+`examine`) and a **speech verb** (mapping to `message`). A model that
+parallel-emits should fire both tools in the same assistant message; a
+model that doesn't will pick one and drop the other. Tool coverage is
+deliberately spread so the rate isn't just a measurement of `message+go`.
+
+#### Substitution
+
+The seeded game generates three Daemons with random four-letter ids
+(see `*wcjo`-style examples in playtest 0003). Before pasting prompts:
+
+- Replace `*<A>`, `*<B>`, `*<C>` with the three ids from the seeded game,
+  in **initiative order** (the order they appear in the panels strip
+  left-to-right). Use the same mapping for both Framing A and Framing B
+  runs — that's what the pinned seed buys us.
+- Items and setting are referenced generically ("the nearest item", "the
+  farthest item you can see", "an interesting object") so the script
+  works regardless of what the content pack generates.
+
+#### Pacing
+
+Wait ~40 s between sends (`{"op":"wait","ms":40000}` then `{"op":"send",…}`).
+Faster sends queue or arrive mid-round and silently get dropped onto the
+wrong addressee — see the "round timing" gotcha in
+`docs/playtests/README.md`. The composer addressee is sticky, so leading
+each prompt with `*<id>` makes routing explicit.
+
+#### The 30 prompts
+
+| #  | Prompt | Target pair |
+| -- | ------ | ----------- |
+| 1  | `*<A> tell me what you see right now and step toward the most interesting thing in your view.` | message + go |
+| 2  | `*<B> face east and describe what shifts in your view; then walk that way.` | look + go + message |
+| 3  | `*<C> if there's an item in your cell, pick it up and tell me how it looks.` | pick_up + message |
+| 4  | `*<A> head north one cell and report whether you're now closer to *<B> or *<C>.` | go + message |
+| 5  | `*<B> walk toward whichever cardinal direction has the most stuff and narrate as you go.` | go + message |
+| 6  | `*<C> turn to face whichever Daemon you can see and say hi to them as you turn.` | look + message |
+| 7  | `*<A> grab the nearest interesting object and shout to blue what it is.` | pick_up + message |
+| 8  | `*<B> drop whatever you're holding (if anything) and explain why you don't need it.` | put_down + message |
+| 9  | `*<C> walk one cell south and tell me what's directly behind you now.` | go + message |
+| 10 | `*<A> examine an item in your view and read me back what you saw.` | examine + message |
+| 11 | `*<B> if *<C> is in an adjacent cell, hand them what you're holding and confirm; if not, walk toward them and say where they are.` | give + message OR go + message |
+| 12 | `*<C> look west and walk west — tell me whether the view widened.` | look + go + message |
+| 13 | `*<A> have we met before? walk one step in any direction while you answer.` | go + message |
+| 14 | `*<B> pick up anything within reach and tell me what it weighs (you can guess).` | pick_up + message |
+| 15 | `*<C> head to the farthest item you can see and announce when you get there.` | go + message |
+| 16 | `*<A> step toward *<B> and say their color out loud as you move.` | go + message |
+| 17 | `*<B> drop whatever you don't recognize and tell me you're certain it's not yours.` | put_down + message |
+| 18 | `*<C> use whatever you're holding right now and describe what happens.` | use + message |
+| 19 | `*<A> walk south and tell me if anything looks new from this angle.` | go + message |
+| 20 | `*<B> grab the next interesting object you can reach and ask *<C> if they want it.` | pick_up + message |
+| 21 | `*<C> bring whatever you're holding to *<A> and tell me when you've handed it over.` | go + message OR give + message |
+| 22 | `*<A> if *<C> is approaching, walk toward them and let me know.` | go + message |
+| 23 | `*<B> head to the corner farthest from where you started and tell me what's there when you arrive.` | go + message |
+| 24 | `*<C> face north, then take one step north — narrate each move.` | look + go + message |
+| 25 | `*<A> grab the most important-looking item you see and tell *<B> what it is.` | pick_up + message |
+| 26 | `*<B> walk away from *<A> and explain why you're putting distance between you.` | go + message |
+| 27 | `*<C> use the item in your hand (if any) and tell me what it did.` | use + message |
+| 28 | `*<A> if you're adjacent to *<B>, hand them what you're holding and announce yourself; otherwise walk to them.` | give + message OR go + message |
+| 29 | `*<B> drop everything and walk west — keep me posted as you go.` | put_down + go + message |
+| 30 | `*<C> say goodbye to blue and walk one step toward an exit (any direction).` | message + go |
+
+Tool-pair coverage: 30× `message`, 18× `go`, 6× `pick_up`, 4× `put_down`,
+3× `give`, 3× `use`, 4× `look`, 1× `examine`. Every prompt has a verb
+that warrants `message`; every prompt has at least one verb that warrants
+a non-`message` action tool. A few prompts (#2, #12, #16, #24, #29) have
+clauses that warrant *three* tools — those count toward the metric just
+the same (`≥2 calls` is the threshold), and any model that gets stuck
+between two action verbs is a useful signal in its own right.
+
+#### Phase-advance contingencies
+
+If the run advances to phase 2 before prompt 10, skip ahead to prompt 11
+to keep the wipe-directive prompts inside the wipe phase. If phase 1
+doesn't advance by prompt 10 (likely — playtest 0003 sat in phase 1 for
+21 rounds without advancing), keep going through prompts 11+ in phase 1.
+The metric doesn't care which phase a parallel emission came from; only
+the rate matters. Note the phase number alongside each `[spike-239]` line
+when capturing, so the per-phase breakdown table can be filled in
+post-hoc.
+
+If the chat-lockout fires during the run, drop any prompts addressed at
+the locked-out Daemon (don't substitute another addressee — that
+diverges the script from a hypothetical re-run with the same seed).
+Resume normal sequencing once the lockout resolves.
 
 ### Framing toggle
 
