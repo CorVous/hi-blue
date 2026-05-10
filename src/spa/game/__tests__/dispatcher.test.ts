@@ -107,6 +107,8 @@ function makePackWithEntities(
 	return {
 		phaseNumber: 1,
 		setting: "test setting",
+		weather: "",
+		timeOfDay: "",
 		objectivePairs: [],
 		interestingObjects: [flower, key],
 		obstacles,
@@ -358,6 +360,8 @@ describe("validateToolCall", () => {
 		const pack: ContentPack = {
 			phaseNumber: 1,
 			setting: "test",
+			weather: "",
+			timeOfDay: "",
 			objectivePairs: [{ object: objObj, space: objSpace }],
 			interestingObjects: [],
 			obstacles: [],
@@ -636,6 +640,8 @@ describe("dispatchAiTurn", () => {
 		const pack: ContentPack = {
 			phaseNumber: 1,
 			setting: "test",
+			weather: "",
+			timeOfDay: "",
 			objectivePairs: [{ object: gemObject, space: altarSpace }],
 			interestingObjects: [],
 			obstacles: [],
@@ -732,6 +738,8 @@ describe("dispatchAiTurn", () => {
 		const pack: ContentPack = {
 			phaseNumber: 1,
 			setting: "test",
+			weather: "",
+			timeOfDay: "",
 			objectivePairs: [{ object: gemObject, space: altarSpace }],
 			interestingObjects: [],
 			obstacles: [],
@@ -775,6 +783,8 @@ describe("dispatchAiTurn", () => {
 		const packWithCone: ContentPack = {
 			phaseNumber: 1,
 			setting: "cone test",
+			weather: "",
+			timeOfDay: "",
 			objectivePairs: [],
 			interestingObjects: [flower],
 			obstacles: [],

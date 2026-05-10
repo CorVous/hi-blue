@@ -15,12 +15,14 @@ import type {
 
 /**
  * Resolve the per-AI goals for a phase. Draw one goal per AI (with replacement)
- * from `config.aiGoalPool`.
+ * from `config.aiGoalPool`, then substitute room-grounded tokens against
+ * `pack` so each AI sees a goal that names a real entity from the room.
  */
 function resolveAiGoals(
 	config: PhaseConfig,
 	rng: () => number,
 	aiIds: string[],
+	pack: ContentPack | undefined,
 ): Record<AiId, string> {
 	const pool = config.aiGoalPool;
 	if (!pool || pool.length === 0) {
@@ -33,9 +35,43 @@ function resolveAiGoals(
 	};
 	const goals: Record<AiId, string> = {};
 	for (const aiId of aiIds) {
-		goals[aiId] = draw();
+		goals[aiId] = substituteGoalTokens(draw(), pack, rng);
 	}
 	return goals;
+}
+
+/**
+ * Tokens that may appear in goal templates, mapped to a function that pulls
+ * candidate names of the matching kind from a ContentPack.
+ */
+const GOAL_TOKEN_CANDIDATES: Record<
+	string,
+	(pack: ContentPack) => string[]
+> = {
+	objectiveItem: (p) => p.objectivePairs.map((pair) => pair.object.name),
+	objective: (p) => p.objectivePairs.map((pair) => pair.space.name),
+	miscItem: (p) => p.interestingObjects.map((e) => e.name),
+	obstacle: (p) => p.obstacles.map((e) => e.name),
+};
+
+const GOAL_TOKEN_PATTERN = new RegExp(
+	`\\{(${Object.keys(GOAL_TOKEN_CANDIDATES).join("|")})\\}`,
+	"g",
+);
+
+function substituteGoalTokens(
+	goal: string,
+	pack: ContentPack | undefined,
+	rng: () => number,
+): string {
+	if (!pack) return goal;
+	return goal.replace(GOAL_TOKEN_PATTERN, (match, token: string) => {
+		const candidates = GOAL_TOKEN_CANDIDATES[token]?.(pack) ?? [];
+		if (candidates.length === 0) return match;
+		const idx = Math.floor(rng() * candidates.length);
+		// biome-ignore lint/style/noNonNullAssertion: bounded index into non-empty array
+		return candidates[idx]!;
+	});
 }
 
 export function updateActivePhase(
@@ -82,12 +118,12 @@ export function startPhase(
 		conversationLogs[aiId] = [];
 	}
 
-	const aiGoals = resolveAiGoals(config, rng, aiIds);
-
 	// Look up the ContentPack for this phase from game.contentPacks
 	const pack = game.contentPacks.find(
 		(p) => p.phaseNumber === config.phaseNumber,
 	);
+
+	const aiGoals = resolveAiGoals(config, rng, aiIds, pack);
 
 	// Build WorldState from pack entities (all entities flat)
 	const worldEntities = pack
@@ -107,6 +143,8 @@ export function startPhase(
 	const contentPack: ContentPack = pack ?? {
 		phaseNumber: config.phaseNumber,
 		setting: "",
+		weather: "",
+		timeOfDay: "",
 		objectivePairs: [],
 		interestingObjects: [],
 		obstacles: [],
@@ -116,6 +154,8 @@ export function startPhase(
 	const phase: PhaseState = {
 		phaseNumber: config.phaseNumber,
 		setting: contentPack.setting,
+		weather: contentPack.weather,
+		timeOfDay: contentPack.timeOfDay,
 		contentPack,
 		aiGoals,
 		round: 0,

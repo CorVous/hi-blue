@@ -41,13 +41,13 @@ export function buildSynthesisUserMessage(
 		id: string;
 		temperaments: [string, string];
 		personaGoal: string;
-		typingQuirks?: [string, string];
+		typingQuirks?: [string, string, ...string[]];
 	}>,
 ): string {
 	const items = input.map((p) => {
 		let line = `id: ${JSON.stringify(p.id)}, temperaments: [${JSON.stringify(p.temperaments[0])}, ${JSON.stringify(p.temperaments[1])}], personaGoal: ${JSON.stringify(p.personaGoal)}`;
 		if (p.typingQuirks) {
-			line += `, typingQuirks: [${JSON.stringify(p.typingQuirks[0])}, ${JSON.stringify(p.typingQuirks[1])}]`;
+			line += `, typingQuirks: [${p.typingQuirks.map((q) => JSON.stringify(q)).join(", ")}]`;
 		}
 		return line;
 	});
@@ -69,7 +69,7 @@ export interface SynthesisInput {
 	id: string;
 	temperaments: [string, string];
 	personaGoal: string;
-	typingQuirks?: [string, string];
+	typingQuirks?: [string, string, ...string[]];
 }
 
 export interface SynthesisResult {

@@ -79,6 +79,8 @@ const PHASE_CONFIG: PhaseConfig = {
 const CONTENT_PACK_WITH_ITEMS: ContentPack = {
 	phaseNumber: 1,
 	setting: "test setting",
+	weather: "",
+	timeOfDay: "",
 	objectivePairs: [
 		{
 			object: {

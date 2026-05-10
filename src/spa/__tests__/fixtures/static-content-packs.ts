@@ -14,6 +14,8 @@ export const STATIC_CONTENT_PACKS: ContentPack[] = [
 	{
 		phaseNumber: 1,
 		setting: "abandoned subway station",
+		weather: "",
+		timeOfDay: "",
 		objectivePairs: [
 			{
 				object: {
@@ -40,6 +42,8 @@ export const STATIC_CONTENT_PACKS: ContentPack[] = [
 	{
 		phaseNumber: 2,
 		setting: "sun-baked salt flat",
+		weather: "",
+		timeOfDay: "",
 		objectivePairs: [
 			{
 				object: {
@@ -66,6 +70,8 @@ export const STATIC_CONTENT_PACKS: ContentPack[] = [
 	{
 		phaseNumber: 3,
 		setting: "forgotten laboratory",
+		weather: "",
+		timeOfDay: "",
 		objectivePairs: [
 			{
 				object: {

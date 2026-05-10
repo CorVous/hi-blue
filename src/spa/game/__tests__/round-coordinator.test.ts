@@ -88,6 +88,8 @@ const TEST_PHASE_CONFIG: PhaseConfig = {
 const TEST_CONTENT_PACK: ContentPack = {
 	phaseNumber: 1,
 	setting: "",
+	weather: "",
+	timeOfDay: "",
 	objectivePairs: [
 		{
 			object: {
@@ -1033,6 +1035,8 @@ describe("phase progression — three-phase walk", () => {
 		const contentPackP3: ContentPack = {
 			phaseNumber: 3,
 			setting: "",
+			weather: "",
+			timeOfDay: "",
 			objectivePairs: [
 				{
 					object: {
@@ -1072,6 +1076,8 @@ describe("phase progression — three-phase walk", () => {
 		const contentPackP2: ContentPack = {
 			phaseNumber: 2,
 			setting: "",
+			weather: "",
+			timeOfDay: "",
 			objectivePairs: [],
 			interestingObjects: [
 				{
@@ -1417,6 +1423,8 @@ describe("placement flavor + win condition (issue #126)", () => {
 	const PHASE1_PACK_K1: ContentPack = {
 		phaseNumber: 1,
 		setting: "temple",
+		weather: "",
+		timeOfDay: "",
 		objectivePairs: [
 			{
 				object: {
@@ -1449,6 +1457,8 @@ describe("placement flavor + win condition (issue #126)", () => {
 	const PHASE2_PACK: ContentPack = {
 		phaseNumber: 2,
 		setting: "crypt",
+		weather: "",
+		timeOfDay: "",
 		objectivePairs: [],
 		interestingObjects: [],
 		obstacles: [],
@@ -1631,6 +1641,8 @@ describe("placement flavor + win condition (issue #126)", () => {
 		const packK2: ContentPack = {
 			phaseNumber: 1,
 			setting: "vault",
+			weather: "",
+			timeOfDay: "",
 			objectivePairs: [
 				{
 					object: {
@@ -1757,6 +1769,8 @@ describe("examine tool", () => {
 	const EXAMINE_PACK: ContentPack = {
 		phaseNumber: 1,
 		setting: "vault",
+		weather: "",
+		timeOfDay: "",
 		objectivePairs: [
 			{
 				object: {

@@ -116,23 +116,24 @@ describe("generatePersonas — template fallback (no llm)", () => {
 		expect(firstPersona.blurb).toContain("intensely");
 	});
 
-	it("each persona has a 2-tuple of non-empty typingQuirks", async () => {
+	it("each persona has at least 2 non-empty typingQuirks", async () => {
 		const personas = await generatePersonas(() => 0);
 		for (const p of Object.values(personas)) {
 			expect(Array.isArray(p.typingQuirks)).toBe(true);
-			expect(p.typingQuirks.length).toBe(2);
-			expect(typeof p.typingQuirks[0]).toBe("string");
-			expect((p.typingQuirks[0] as string).length).toBeGreaterThan(0);
-			expect(typeof p.typingQuirks[1]).toBe("string");
-			expect((p.typingQuirks[1] as string).length).toBeGreaterThan(0);
+			expect(p.typingQuirks.length).toBeGreaterThanOrEqual(2);
+			for (const quirk of p.typingQuirks) {
+				expect(typeof quirk).toBe("string");
+				expect((quirk as string).length).toBeGreaterThan(0);
+			}
 		}
 	});
 
 	it("every typingQuirks entry is drawn from TYPING_QUIRK_POOL", async () => {
 		const personas = await generatePersonas(() => 0.5);
 		for (const p of Object.values(personas)) {
-			expect(TYPING_QUIRK_POOL).toContain(p.typingQuirks[0]);
-			expect(TYPING_QUIRK_POOL).toContain(p.typingQuirks[1]);
+			for (const quirk of p.typingQuirks) {
+				expect(TYPING_QUIRK_POOL).toContain(quirk);
+			}
 		}
 	});
 });

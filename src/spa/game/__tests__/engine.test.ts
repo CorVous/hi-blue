@@ -224,6 +224,8 @@ describe("startPhase", () => {
 		const pack = {
 			phaseNumber: 1 as const,
 			setting: "abandoned subway station",
+			weather: "",
+			timeOfDay: "",
 			objectivePairs: [],
 			interestingObjects: [],
 			obstacles: [],
