@@ -10,7 +10,8 @@
  *   3. If priorToolRoundtrip is provided and non-empty:
  *      - { role: "assistant", content: null, tool_calls: [...] }
  *      - { role: "tool", tool_call_id, content } for each result
- *   4. If `addressed` is provided and is not this AI: a synthetic
+ *   4. If `currentRound` is provided and this AI received zero `message` ConversationEntries
+ *      with `to === ctx.aiId` in that round: a synthetic
  *      { role: "user", content: buildSilentTurn(ctx) } anchoring the current
  *      round so the model does not re-respond to its prior user turn.
  *
@@ -20,10 +21,12 @@
 
 import type { AiContext } from "./prompt-builder.js";
 import type { OpenAiMessage } from "./round-llm-provider.js";
-import type { AiId, ToolRoundtripMessage } from "./types.js";
+import type { ToolRoundtripMessage } from "./types.js";
 
 /**
- * Synthetic anchor for the current round when no message arrived for this AI.
+ * Synthetic anchor for the current round when no incoming messages arrived for this AI.
+ * Fires iff the Daemon received zero `message` ConversationEntries with
+ * `to === ctx.aiId` in the current round.
  * Lists every potential sender (peer daemons + blue) so the model reads
  * "nobody addressed me this round" rather than treating the prior round's
  * user turn as fresh stimulus.
@@ -45,7 +48,7 @@ export function buildSilentTurn(ctx: AiContext): string {
 export function buildOpenAiMessages(
 	ctx: AiContext,
 	priorToolRoundtrip?: ToolRoundtripMessage,
-	addressed?: AiId,
+	currentRound?: number,
 ): OpenAiMessage[] {
 	const messages: OpenAiMessage[] = [];
 
@@ -89,11 +92,16 @@ export function buildOpenAiMessages(
 		}
 	}
 
-	// Anchor the current round for non-addressed AIs. Without this, the model's
-	// last user turn is the prior round's player message, and it tends to
-	// re-respond to it as if it had just been sent again.
-	if (addressed !== undefined && addressed !== ctx.aiId) {
-		messages.push({ role: "user", content: buildSilentTurn(ctx) });
+	// Anchor the current round for AIs that received no incoming messages.
+	// Without this, the model's last user turn is the prior round's player
+	// message, and it tends to re-respond to it as if it had just been sent again.
+	if (currentRound !== undefined) {
+		const incomingThisRound = ctx.conversationLog.some(
+			(e) => e.kind === "message" && e.to === ctx.aiId && e.round === currentRound,
+		);
+		if (!incomingThisRound) {
+			messages.push({ role: "user", content: buildSilentTurn(ctx) });
+		}
 	}
 
 	return messages;

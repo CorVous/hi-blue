@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appendMessage, createGame, startPhase } from "../engine";
+import { advanceRound, appendMessage, createGame, startPhase } from "../engine";
 import {
 	buildOpenAiMessages,
 	buildSilentTurn,
@@ -244,36 +244,77 @@ describe("buildOpenAiMessages", () => {
 		expect(messages.every((m) => m.role !== "tool")).toBe(true);
 	});
 
-	it("non-addressed AI gets a trailing silent-turn user message", () => {
+	// Case (a): blue addresses a peer — this Daemon received no messages this round → anchor fires
+	it("(a) blue addresses peer, no incoming message for this daemon → silent-turn anchor fires", () => {
 		let game = makeGame();
+		// Prior round (round 0): red was addressed and replied
 		game = appendMessage(game, "blue", "red", "Hi Ember");
 		game = appendMessage(game, "red", "blue", "Hi player");
 
-		const ctx = buildAiContext(game, "red");
-		// addressed = green: red is NOT the addressee this round.
-		const messages = buildOpenAiMessages(ctx, undefined, "green");
+		// Advance to round 1 — now blue addresses green; red gets nothing this round
+		game = advanceRound(game);
+		const phase = game.phases[game.phases.length - 1]!;
+		const currentRound = phase.round; // = 1
 
+		const ctx = buildAiContext(game, "red");
+		const messages = buildOpenAiMessages(ctx, undefined, currentRound);
+
+		// Anchor must fire: no messages for red in round 1
 		const last = messages[messages.length - 1];
 		expect(last?.role).toBe("user");
 		expect((last as { content: string }).content).toBe(buildSilentTurn(ctx));
 	});
 
-	it("addressed AI does not get the silent-turn anchor", () => {
+	// Case (b): peer messages this Daemon, blue silent → no anchor; last user msg is `*<sender>: <content>`
+	it("(b) peer messages this daemon this round → no silent-turn anchor, last user msg is peer message", () => {
 		let game = makeGame();
-		game = appendMessage(game, "blue", "red", "Hi Ember");
+		// red receives a message from green this round
+		const phase = game.phases[game.phases.length - 1]!;
+		const currentRound = phase.round;
+		game = appendMessage(game, "green", "red", "psst red");
+
 		const ctx = buildAiContext(game, "red");
 		const silent = buildSilentTurn(ctx);
+		const messages = buildOpenAiMessages(ctx, undefined, currentRound);
 
-		const messages = buildOpenAiMessages(ctx, undefined, "red");
+		// Anchor must NOT fire
 		expect(
 			messages.some(
 				(m) =>
 					m.role === "user" && (m as { content: string }).content === silent,
 			),
 		).toBe(false);
+
+		// Last user message is the peer message
+		const lastUser = [...messages].reverse().find((m) => m.role === "user");
+		expect((lastUser as { content: string }).content).toBe("*green: psst red");
 	});
 
-	it("when `addressed` is omitted, no anchor is appended (back-compat)", () => {
+	// Case (c): blue addresses this Daemon → no anchor; last user msg is `blue: <content>`
+	it("(c) blue addresses this daemon → no silent-turn anchor, last user msg is player message", () => {
+		let game = makeGame();
+		const phase = game.phases[game.phases.length - 1]!;
+		const currentRound = phase.round;
+		game = appendMessage(game, "blue", "red", "Hi Ember");
+
+		const ctx = buildAiContext(game, "red");
+		const silent = buildSilentTurn(ctx);
+		const messages = buildOpenAiMessages(ctx, undefined, currentRound);
+
+		// Anchor must NOT fire
+		expect(
+			messages.some(
+				(m) =>
+					m.role === "user" && (m as { content: string }).content === silent,
+			),
+		).toBe(false);
+
+		// Last user message is the player message
+		const lastUser = [...messages].reverse().find((m) => m.role === "user");
+		expect((lastUser as { content: string }).content).toBe("blue: Hi Ember");
+	});
+
+	it("when `currentRound` is omitted, no anchor is appended (back-compat)", () => {
 		const game = makeGame();
 		const ctx = buildAiContext(game, "red");
 		const silent = buildSilentTurn(ctx);
@@ -284,5 +325,33 @@ describe("buildOpenAiMessages", () => {
 					m.role === "user" && (m as { content: string }).content === silent,
 			),
 		).toBe(false);
+	});
+
+	// Defensive: incoming message stamped with a prior round → anchor still fires for currentRound
+	it("incoming message from a prior round does not suppress the anchor for currentRound", () => {
+		let game = makeGame();
+		// Message appended in round 0
+		game = appendMessage(game, "blue", "red", "Prior round message");
+		game = appendMessage(game, "red", "blue", "My reply");
+		// Advance round so current round is 1 (or whatever advanceRound yields)
+		// We simulate this by reading the phase round before any messages in new round
+		const phase = game.phases[game.phases.length - 1]!;
+		const priorRound = phase.round - 1; // The round the messages above were stamped with
+
+		// Build with priorRound + 1 (current round) — no messages stamped for that round
+		const currentRound = phase.round;
+		// Sanity: priorRound and currentRound differ only if advanceRound was called.
+		// In this test we stay at the same phase without advancing; messages were stamped at phase.round.
+		// So currentRound === priorRound + 0 here — we need to use a round number for which no
+		// messages exist. We use currentRound + 1 to simulate "next round, no messages yet".
+		const futureRound = currentRound + 1;
+
+		const ctx = buildAiContext(game, "red");
+		const messages = buildOpenAiMessages(ctx, undefined, futureRound);
+
+		// Anchor must fire because no messages are stamped for futureRound
+		const last = messages[messages.length - 1];
+		expect(last?.role).toBe("user");
+		expect((last as { content: string }).content).toBe(buildSilentTurn(ctx));
 	});
 });

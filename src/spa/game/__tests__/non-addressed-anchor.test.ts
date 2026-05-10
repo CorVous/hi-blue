@@ -226,4 +226,84 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 			expectedSilentTurn("green"),
 		);
 	});
+
+	it("peer addresses this daemon mid-round → no anchor for that daemon", async () => {
+		// Initiative: red acts first, then green, then cyan.
+		// Blue addresses red. Red emits a message tool call to green.
+		// When green acts, it has an incoming message from red in the current round →
+		// anchor must NOT fire, and green's last user message is the peer message.
+		const initiative: AiId[] = ["red", "green", "cyan"];
+		const game = makeGame();
+
+		const provider = new MockRoundLLMProvider([
+			// red: sends a message to green
+			{
+				assistantText: "",
+				toolCall: {
+					id: "call_msg_1",
+					name: "message",
+					argumentsJson: JSON.stringify({ to: "green", content: "psst green" }),
+				},
+			},
+			// green: simple pass
+			{ assistantText: "", toolCalls: [] },
+			// cyan: simple pass
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		await runRound(game, "red", "hi red", provider, undefined, initiative);
+
+		expect(provider.calls).toHaveLength(3);
+
+		// Green's messages (provider.calls[1]) must NOT contain the silent-turn anchor.
+		const greenCall = provider.calls[1];
+		const greenMsgs = greenCall?.messages ?? [];
+		const silentAnchor = expectedSilentTurn("green");
+
+		expect(
+			greenMsgs.some(
+				(m) =>
+					m.role === "user" &&
+					(m as { content: string }).content === silentAnchor,
+			),
+		).toBe(false);
+
+		// Green's last user message is the peer message from red.
+		const lastUser = [...greenMsgs].reverse().find((m) => m.role === "user");
+		expect((lastUser as { content: string }).content).toBe("*red: psst green");
+	});
+
+	it("blue addresses this daemon → no anchor; last user message is the player message", async () => {
+		// Blue addresses cyan directly. Cyan's messages must NOT end with the anchor;
+		// instead the last user message is the player message prefixed with "blue: ".
+		const initiative: AiId[] = ["red", "green", "cyan"];
+		const game = makeGame();
+
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "<cyan>", toolCalls: [] },
+		]);
+
+		await runRound(game, "cyan", "hello cyan", provider, undefined, initiative);
+
+		expect(provider.calls).toHaveLength(3);
+
+		const cyanCall = provider.calls[2];
+		const cyanMsgs = cyanCall?.messages ?? [];
+		const silentAnchor = expectedSilentTurn("cyan");
+
+		// Anchor must NOT fire.
+		expect(
+			cyanMsgs.some(
+				(m) =>
+					m.role === "user" &&
+					(m as { content: string }).content === silentAnchor,
+			),
+		).toBe(false);
+
+		// Last user message is the player's message.
+		const lastUser = [...cyanMsgs].reverse().find((m) => m.role === "user");
+		expect((lastUser as { content: string }).content).toBe("blue: hello cyan");
+	});
 });
