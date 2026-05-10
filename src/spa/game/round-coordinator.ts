@@ -29,7 +29,7 @@ import {
 	triggerChatLockout,
 } from "./engine";
 import { buildOpenAiMessages } from "./openai-message-builder";
-import { buildAiContext } from "./prompt-builder";
+import { buildAiContext, buildConeSnapshot } from "./prompt-builder";
 import type { RoundLLMProvider } from "./round-llm-provider";
 import { parseToolCallArguments } from "./tool-registry";
 import type {
@@ -66,6 +66,13 @@ export interface RunRoundResult {
 	 * The caller should persist this and pass it back on the next runRound call.
 	 */
 	toolRoundtrip: Partial<Record<AiId, ToolRoundtripMessage>>;
+	/**
+	 * Per-AI canonical cone snapshot captured at the moment that AI's prompt
+	 * was built this round. The caller should persist this and pass it back as
+	 * `priorConeSnapshots` on the next runRound call so each AI's next prompt
+	 * can include a `<whats_new>` diff against its own last view.
+	 */
+	coneSnapshots: Partial<Record<AiId, string>>;
 }
 
 /**
@@ -81,6 +88,9 @@ export interface RunRoundResult {
  * @param priorToolRoundtrip  Per-AI tool roundtrip from the previous round.
  *   Passed into buildOpenAiMessages to re-inject the protocol messages required
  *   by OpenAI's tool-use spec.
+ * @param priorConeSnapshots  Per-AI canonical cone snapshots from the previous
+ *   round, used by `buildAiContext` to emit a `<whats_new>` diff in each AI's
+ *   per-round user message.
  * @param completionSink  Optional per-AI sink for the assistant text produced
  *   by each LLM call. Used by GameSession to capture completions for pacing.
  * @param onAiDelta  Optional per-AI live-delta callback. Fires synchronously
@@ -97,6 +107,7 @@ export async function runRound(
 	priorToolRoundtrip?: Partial<Record<AiId, ToolRoundtripMessage>>,
 	completionSink?: (aiId: AiId, text: string) => void,
 	onAiDelta?: (aiId: AiId, text: string) => void,
+	priorConeSnapshots?: Partial<Record<AiId, string>>,
 ): Promise<RunRoundResult> {
 	const aiOrder = Object.keys(game.personas);
 
@@ -124,6 +135,10 @@ export async function runRound(
 	// Track tool roundtrip produced this round (to be returned to caller)
 	const newToolRoundtrip: Partial<Record<AiId, ToolRoundtripMessage>> = {};
 
+	// Track cone snapshots captured at prompt-build time this round (returned
+	// to caller so the next round's prompt can render a `<whats_new>` diff).
+	const newConeSnapshots: Partial<Record<AiId, string>> = {};
+
 	// 2. Each AI acts in turn
 	for (const aiId of turnOrder) {
 		if (isAiLockedOut(state, aiId)) {
@@ -141,8 +156,17 @@ export async function runRound(
 			continue;
 		}
 
-		// Build OpenAI messages for this AI
-		const ctx = buildAiContext(state, aiId);
+		// Build OpenAI messages for this AI. Pass the prior-round cone snapshot
+		// so the per-round user turn can prepend a `<whats_new>` diff.
+		const priorSnapshot = priorConeSnapshots?.[aiId];
+		const ctx = buildAiContext(
+			state,
+			aiId,
+			priorSnapshot !== undefined ? { prevConeSnapshot: priorSnapshot } : {},
+		);
+		// Capture the snapshot we just built against — the caller stores this
+		// and passes it back as priorConeSnapshots next round.
+		newConeSnapshots[aiId] = buildConeSnapshot(ctx);
 		const priorRoundtrip = priorToolRoundtrip?.[aiId];
 		const messages = buildOpenAiMessages(
 			ctx,
@@ -345,5 +369,10 @@ export async function runRound(
 		...(chatLockoutsResolved !== undefined ? { chatLockoutsResolved } : {}),
 	};
 
-	return { nextState: state, result, toolRoundtrip: newToolRoundtrip };
+	return {
+		nextState: state,
+		result,
+		toolRoundtrip: newToolRoundtrip,
+		coneSnapshots: newConeSnapshots,
+	};
 }

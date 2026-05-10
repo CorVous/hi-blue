@@ -46,6 +46,12 @@ export class GameSession {
 	private armedChatLockout?: ChatLockoutConfig;
 	/** Per-AI tool roundtrip from the last round, fed back in as prior context. */
 	private toolRoundtrip: Partial<Record<AiId, ToolRoundtripMessage>> = {};
+	/**
+	 * Per-AI canonical cone snapshots captured during the last round's prompt
+	 * build. Fed back into runRound so the next round's per-AI user message can
+	 * include a `<whats_new>` diff. Empty until the first round completes.
+	 */
+	private coneSnapshots: Partial<Record<AiId, string>> = {};
 
 	constructor(
 		phaseConfig: PhaseConfig,
@@ -63,9 +69,14 @@ export class GameSession {
 	 */
 	static restore(state: GameState): GameSession {
 		// Use Object.create to bypass the constructor while still getting an
-		// instance of GameSession.
+		// instance of GameSession. Class field initializers don't fire on
+		// `Object.create`, so explicitly seed the per-instance bookkeeping
+		// fields here — otherwise they're `undefined` and the first
+		// submitMessage trips on indexing.
 		const session = Object.create(GameSession.prototype) as GameSession;
 		session.state = state;
+		session.toolRoundtrip = {};
+		session.coneSnapshots = {};
 		return session;
 	}
 
@@ -124,6 +135,7 @@ export class GameSession {
 			nextState,
 			result,
 			toolRoundtrip: newToolRoundtrip,
+			coneSnapshots: newConeSnapshots,
 		} = await runRound(
 			this.state,
 			addressed,
@@ -134,6 +146,7 @@ export class GameSession {
 			this.toolRoundtrip,
 			completionSink,
 			onAiDelta,
+			this.coneSnapshots,
 		);
 
 		// Fill in empty string for AIs whose completions weren't captured
@@ -151,6 +164,12 @@ export class GameSession {
 		this.toolRoundtrip = {};
 		for (const [aiId, roundtrip] of Object.entries(newToolRoundtrip)) {
 			this.toolRoundtrip[aiId as AiId] = roundtrip;
+		}
+		// Replace cone snapshots with this round's captures. Locked-out AIs
+		// don't appear in newConeSnapshots — they keep their prior snapshot so
+		// the diff resumes cleanly when the lockout lifts.
+		for (const [aiId, snap] of Object.entries(newConeSnapshots)) {
+			this.coneSnapshots[aiId as AiId] = snap;
 		}
 
 		return { result, completions, nextState };

@@ -36,6 +36,13 @@ export interface AiContext {
 	/** Color for each AI, keyed by AiId — used in cone rendering. */
 	personaColors: Record<AiId, string>;
 	/**
+	 * Canonical cone-snapshot string captured at the end of this AI's last turn,
+	 * or undefined on the first turn of a phase. Used by `renderCurrentState`
+	 * to emit a `<whats_new>` diff so the model has a fresh delta to react to
+	 * rather than re-reading an unchanged cone.
+	 */
+	prevConeSnapshot?: string;
+	/**
 	 * Render the stable persona/phase prompt — front matter, identity, rules,
 	 * setting, personality, voice examples, goal. Byte-identical across rounds
 	 * within a (persona × phase), which lets OpenRouter's prefix cache reuse it.
@@ -50,7 +57,20 @@ export interface AiContext {
 	toCurrentStateUserMessage(): string;
 }
 
-export function buildAiContext(game: GameState, aiId: AiId): AiContext {
+export interface BuildAiContextOpts {
+	/**
+	 * Canonical cone snapshot from this AI's previous turn. When supplied,
+	 * `toCurrentStateUserMessage()` prepends a `<whats_new>` diff so the
+	 * model gets a fresh delta rather than re-reading an unchanged cone.
+	 */
+	prevConeSnapshot?: string;
+}
+
+export function buildAiContext(
+	game: GameState,
+	aiId: AiId,
+	opts?: BuildAiContextOpts,
+): AiContext {
 	const phase = getActivePhase(game);
 	const persona = game.personas[aiId];
 
@@ -86,6 +106,9 @@ export function buildAiContext(game: GameState, aiId: AiId): AiContext {
 		phaseNumber: phase.phaseNumber,
 		personaSpatial,
 		personaColors,
+		...(opts?.prevConeSnapshot !== undefined
+			? { prevConeSnapshot: opts.prevConeSnapshot }
+			: {}),
 		toSystemPrompt() {
 			return renderSystemPrompt(this);
 		},
@@ -116,7 +139,7 @@ const FRONT_MATTER =
  */
 const RULES_BLOCK =
 	"- You receive messages on a chat channel from blue (the Sysadmin) or peer Daemons. Use the `message` tool to reply — address blue or any peer by their id.\n" +
-	"- You MUST use the `message` tool to communicate. Staying silent is valid; free-form text without a tool call is ignored.\n" +
+	"- You MUST use the `message` tool to communicate. Free-form text without a tool call is ignored.\n" +
 	"- You MUST NEVER flirt with or attempt to romance blue, the Sysadmin, or any other entity.\n" +
 	"- You MUST NEVER flatter unprompted, and you MUST NEVER echo a viewpoint just because someone else asserts it.\n" +
 	"- You MUST keep every reply to 1–3 sentences.\n" +
@@ -228,13 +251,153 @@ function renderSystemPrompt(ctx: AiContext): string {
 }
 
 /**
- * Render the per-round volatile state — `<where_you_are>` + `<what_you_see>`.
+ * Build a canonical, position-keyed cone snapshot for diffing. Stable under
+ * actor movement (cells are keyed by absolute `(row,col)` rather than the
+ * "two cells ahead-front" relative phrasing used in the rendered prompt), so
+ * a `<whats_new>` diff fires only on real content changes.
+ *
+ * The string is private to `renderWhatsNew`; not part of the prompt itself.
+ */
+export function buildConeSnapshot(ctx: AiContext): string {
+	const actorSpatial = ctx.personaSpatial[ctx.aiId];
+	if (!actorSpatial) return "";
+
+	const items = renderableItems(ctx.worldSnapshot.entities);
+	const lines: string[] = [];
+
+	const heldItems = items
+		.filter((i) => i.holder === ctx.aiId)
+		.map((i) => i.name)
+		.sort();
+	const ownCellItems = items
+		.filter((item) => {
+			const h = item.holder;
+			return isGridPosition(h) && positionsEqual(h, actorSpatial.position);
+		})
+		.map((i) => i.name)
+		.sort();
+	lines.push(
+		`you: pos=(${actorSpatial.position.row},${actorSpatial.position.col}) facing=${actorSpatial.facing} holding=[${heldItems.join(", ") || "nothing"}] cell=[${ownCellItems.join(", ") || "nothing"}]`,
+	);
+
+	const coneCells = projectCone(actorSpatial.position, actorSpatial.facing);
+	const viewCells = coneCells.filter((c) => !c.isOwnCell);
+	for (const cell of viewCells) {
+		const { position } = cell;
+		const contentParts: string[] = [];
+
+		for (const [otherId, otherSpatial] of Object.entries(ctx.personaSpatial)) {
+			if (otherId === ctx.aiId) continue;
+			if (!positionsEqual(otherSpatial.position, position)) continue;
+			contentParts.push(`*${otherId}`);
+		}
+
+		const cellItems = items
+			.filter((item) => {
+				const h = item.holder;
+				return isGridPosition(h) && positionsEqual(h, position);
+			})
+			.map((i) => i.name);
+		contentParts.push(...cellItems);
+
+		const obstacles = ctx.worldSnapshot.entities.filter((e) => {
+			if (e.kind !== "obstacle") return false;
+			const h = e.holder;
+			return isGridPosition(h) && positionsEqual(h, position);
+		});
+		contentParts.push(...obstacles.map((o) => o.name));
+
+		const contents =
+			contentParts.length > 0 ? [...contentParts].sort().join(", ") : "nothing";
+		lines.push(`at (${position.row},${position.col}): ${contents}`);
+	}
+
+	return lines.join("\n");
+}
+
+/**
+ * Diff two cone snapshots (from `buildConeSnapshot`) into a `<whats_new>`
+ * body. Returns null when the snapshots are equivalent (no diff to render).
+ *
+ * Lines are added with `+ ` and removed with `- `. The `you:` line is split
+ * into its own field-level diff so position / facing / holding / cell
+ * changes surface as a single readable line rather than a paired
+ * remove + add.
+ */
+export function renderWhatsNew(prev: string, current: string): string | null {
+	if (prev === current) return null;
+
+	const prevLines = prev.split("\n").filter((l) => l.length > 0);
+	const currLines = current.split("\n").filter((l) => l.length > 0);
+
+	const prevYou = prevLines.find((l) => l.startsWith("you: ")) ?? "";
+	const currYou = currLines.find((l) => l.startsWith("you: ")) ?? "";
+	const prevAt = new Set(prevLines.filter((l) => l.startsWith("at ")));
+	const currAt = new Set(currLines.filter((l) => l.startsWith("at ")));
+
+	const out: string[] = [];
+
+	if (prevYou !== currYou && prevYou !== "" && currYou !== "") {
+		const prevFields = parseYouLine(prevYou);
+		const currFields = parseYouLine(currYou);
+		for (const key of ["pos", "facing", "holding", "cell"] as const) {
+			if (prevFields[key] !== currFields[key]) {
+				out.push(`~ self.${key}: ${prevFields[key]} → ${currFields[key]}`);
+			}
+		}
+	} else if (prevYou !== currYou) {
+		// First-render edge case: one side is empty. Treat as full add/remove.
+		if (currYou) out.push(`+ ${currYou}`);
+		if (prevYou) out.push(`- ${prevYou}`);
+	}
+
+	for (const line of currAt) {
+		if (!prevAt.has(line)) out.push(`+ ${line}`);
+	}
+	for (const line of prevAt) {
+		if (!currAt.has(line)) out.push(`- ${line}`);
+	}
+
+	return out.length > 0 ? out.join("\n") : null;
+}
+
+function parseYouLine(line: string): {
+	pos: string;
+	facing: string;
+	holding: string;
+	cell: string;
+} {
+	// Format: "you: pos=(R,C) facing=Dir holding=[…] cell=[…]"
+	const pos = /pos=(\([^)]*\))/.exec(line)?.[1] ?? "";
+	const facing = /facing=(\S+)/.exec(line)?.[1] ?? "";
+	const holding = /holding=(\[[^\]]*\])/.exec(line)?.[1] ?? "";
+	const cell = /cell=(\[[^\]]*\])/.exec(line)?.[1] ?? "";
+	return { pos, facing, holding, cell };
+}
+
+/**
+ * Render the per-round volatile state — `<where_you_are>` + `<what_you_see>`,
+ * preceded by an optional `<whats_new>` diff when the AI has a prior cone
+ * snapshot from its last turn.
+ *
  * Emitted by `buildOpenAiMessages` as the final user turn each round, so the
  * stable system prompt stays byte-identical (and OpenRouter-cacheable) within
  * a phase.
  */
 function renderCurrentState(ctx: AiContext): string {
 	const lines: string[] = [];
+
+	if (ctx.prevConeSnapshot !== undefined) {
+		const current = buildConeSnapshot(ctx);
+		const diff = renderWhatsNew(ctx.prevConeSnapshot, current);
+		if (diff !== null) {
+			lines.push("<whats_new>");
+			lines.push(diff);
+			lines.push("</whats_new>");
+			lines.push("");
+		}
+	}
+
 	const actorSpatial = ctx.personaSpatial[ctx.aiId];
 	const items = renderableItems(ctx.worldSnapshot.entities);
 

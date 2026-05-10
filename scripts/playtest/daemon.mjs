@@ -57,8 +57,16 @@ const page = await context.newPage();
 
 page.on("pageerror", (err) => log(`pageerror: ${err.message}`));
 page.on("console", (msg) => {
-	if (msg.type() === "error") log(`console.error: ${msg.text()}`);
+	const t = msg.type();
+	if (t === "error" || t === "warn" || t === "log") {
+		log(`console.${t}: ${msg.text().slice(0, 500)}`);
+	}
 });
+page.on("requestfailed", (req) =>
+	log(
+		`requestfailed: ${req.method()} ${req.url()} - ${req.failure()?.errorText ?? "?"}`,
+	),
+);
 
 log("navigating to http://localhost:8787/?skipDialup=1");
 await page.goto("http://localhost:8787/?skipDialup=1", {
