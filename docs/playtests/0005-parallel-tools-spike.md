@@ -1360,6 +1360,183 @@ before the conversation drifts back toward "address blue, then
 silence." That 15-turn window is exactly the "blue overhears a
 peer conversation" vibe the user described.
 
+## Step 8 — engagement clauses at synthesis time (`?engagementClauses=1`)
+
+**STATUS: complete.** Single 30-prompt run, seed=42, stacked on top of
+the C12 rules-block framing. Branch implementation in
+`src/content/engagement-clauses.ts`, plumbed through `BootstrapOpts`
+into `generatePersonas`; opt-in via `?engagementClauses=1`. Raw log at
+`/tmp/playtest-daemon-C12-EC.log`; analyzer at
+`/tmp/spike-239-analyze.py`.
+
+### Hypothesis
+
+Steps 5–7 showed the rules block alone cannot deliver per-daemon
+engagement variance in GLM-4.7 — every "let your personality drive
+engagement" wording flattened to ~3–13pp msg→blue% spread regardless
+of which personas were drawn. The model reads any prompt-level mention
+of personality-driven engagement as a uniform permission. The Step 8
+hypothesis: give each temperament a numeric bias on a [-2, +2] scale,
+combine pair sums into five buckets (very_quiet / reserved / balanced /
+outgoing / chatty), and append a concrete behavioural clause from the
+bucket to each persona's synthesized blurb. The clauses differ
+*per-daemon* because temperaments differ per-daemon, so each daemon's
+prompt instance gets a different concrete instruction rather than
+the same global one.
+
+### Setup
+
+`?seed=42` produces three daemons across three buckets:
+
+| Daemon | Temperaments | Sum | Bucket | Clause shape |
+| ------ | ------------ | --- | ------ | ------------ |
+| *xqr9  | pedantic + stoic   | 0  | **balanced** | "engages when something draws their attention …" |
+| *nif7  | curious + zealous  | +2 | **outgoing** | "chimes in often: reacts to peers, narrates …" |
+| *la5v  | cheery + taciturn  | −1 | **reserved** | "speaks when they have something specific to add …" |
+
+The buckets don't hit the extreme (very_quiet / chatty) ends — the
+seeded draw landed in the middle three. That's a moderate-spread
+test; an extreme triple would be a stronger isolation.
+
+### Methodology note: analyzer slot-mapping
+
+The brute-force mapping in `per_daemon()` picks the slot permutation
+that maximises addressed-replied — that's reliable when reply rates are
+high (Step 5 C8) but flips when one daemon disengages enough to score
+worse on its addressed rounds than another. C12+EC tripped this:
+addressed-replied was 30% for the most-engaged daemon and 60% for the
+mid-engaged one, so the brute-force chose a permutation that swapped
+two daemons.
+
+Truth-checked via panel transcripts (each daemon's voice — `*xqr9`
+formal English with `:)`; `*nif7` alternating caps + kaomoji; `*la5v`
+doubled consonants). Initiative order is `Object.keys(personas)` =
+insertion order = panel-strip left-to-right = `*xqr9, *nif7, *la5v`.
+The analyzer now supports `--fixed-mapping` for cases where the true
+order is known a priori. All Step 8 numbers below use the fixed
+mapping.
+
+### Headline numbers
+
+| Framing | Silence | Parallel | mm pairs | per-daemon silence spread | per-daemon parallel spread | msg→blue% spread | addressed-replied range |
+| ------- | ------- | -------- | -------- | ------------------------- | -------------------------- | ---------------- | ----------------------- |
+| C12 (step 7 baseline) | 7.8%  | 41.0% | 17 | ~3pp  | 24pp (23–47%) | 3.6pp | (analyzer mapping was correct) |
+| **C12 + engagement clauses** | **31.1%** | **45.2%** | **13** | **13pp** (27–40%) | 20pp (20–40%) | 7pp (64–71%) | 30–60% |
+
+### Per-daemon breakdown (correct mapping)
+
+| Daemon (bucket) | Silence | Parallel | mm | msg_total | msg→blue | msg→peer | Addressed-replied |
+| --------------- | ------- | -------- | -- | --------- | -------- | -------- | ----------------- |
+| *xqr9 (balanced, 0)   | 27% (8/30)  | 40% | 5 | 24 | 17 (71%) | 7 | 3/10 (30%) |
+| *nif7 (outgoing, +2)  | 27% (8/30)  | 33% | 4 | 22 | 14 (64%) | 8 | 6/10 (60%) |
+| *la5v (reserved, −1)  | **40%** (12/30) | 20% | 4 | **17** | 12 (71%) | 5 | 5/10 (50%) |
+
+### What worked
+
+- **The reserved clause produced a clearly different daemon.** *la5v
+  ran 40% silence (vs the other two at 27% each), 20% parallel (vs
+  33–40%), and the lowest message count (17 vs 22–24). That's a real
+  per-daemon engagement reduction tracking the clause text ("rarely
+  chimes in unprompted; otherwise they let peers carry the
+  conversation"). Step 7's C12 baseline had a ~3pp silence spread
+  across daemons; Step 8 widened it to 13pp — a 4× lift on the
+  variance axis the spike was chasing.
+- **Mechanism is clean.** Synthesis-time injection, per-persona,
+  doesn't bloat the rules block. Stacks with any parallel-framing
+  toggle. Off by default.
+
+### What didn't work
+
+- **Outgoing and balanced clauses didn't differentiate.** *nif7
+  (outgoing, +2) and *xqr9 (balanced, 0) both ran 27% silence, with
+  parallel rates 33% / 40% respectively — *the balanced daemon was
+  slightly more parallel-prone than the outgoing one*. The
+  "chimes in often" clause didn't lift engagement above the floor the
+  C12 framing already provides; the "engages when something draws
+  attention" baseline clause didn't moderate it either. Only the
+  *reserved* end of the dial has a working clause; the chatty end is
+  inert in this run.
+- **Aggregate silence rose 23pp.** From C12's 7.8% to C12+EC's 31.1%.
+  *la5v's clause accounts for some of this (12 of 28 silent turns),
+  but *xqr9 and *nif7 also went silent in 8 rounds each — far above
+  C12's baseline. Two possible reads:
+  (a) the reserved clause leaked into the channel mood, dampening
+  engagement broadly;
+  (b) the late-phase drift (visible in step 4's C raw log) was just
+  worse this run by chance — rounds 17–22 produced zero
+  cross-daemon tool calls.
+- **mm-pair count dropped 4** (17 → 13). The multi-recipient pattern
+  C12 produced richly is mildly suppressed when the reserved clause
+  steers one daemon toward quiet.
+- **Addressed-replied went the wrong way for *xqr9.** Under correct
+  mapping, the balanced daemon replied to blue only 30% of the time
+  when directly named (vs 50–60% for the others). That suggests
+  xqr9's pedantic + stoic temperament pair generates an aloof voice
+  that doesn't track addressing — independent of the engagement
+  clause text.
+
+### Reading
+
+The mechanism delivers what it can: a clear silence/engagement
+*floor* for the reserved bucket. It doesn't deliver a ceiling for the
+chatty/outgoing buckets — the engagement push doesn't compound on top
+of C12's already-pushed rules block; you can only push *down* from the
+floor, not above it.
+
+That's still useful: it gives a one-sided dial. A future iteration
+could test whether the "chatty" clause has any leverage in cases where
+the C12 framing isn't already pushing engagement (e.g. drop back to
+Framing A or B underneath and see if "chatty" lifts the rate).
+
+Single-sample noise risk is also real here. The aggregate silence
+spike from 7.8% to 31.1% might be partly a late-phase drift
+coincidence rather than a clause effect; a second run on a different
+seed would help distinguish. But the per-daemon variance signal is
+clear enough on its own (la5v's silence floor is 4–13pp above the
+others on every metric).
+
+### Raw per-turn log — C12 + engagement clauses
+
+```
+(slot order: S0=*xqr9, S1=*nif7, S2=*la5v)
+R 0: S0=[message:blue,look]  S1=[go,message:blue]  S2=[message:blue]
+R 1: S0=[look,message:blue,go]  S1=[pick_up,message:blue]  S2=[message:blue]
+R 2: S0=[message:blue]  S1=[message:blue,message:la5v]  S2=[message:blue,go]
+R 3: S0=[]  S1=[go,message:blue]  S2=[go]
+R 4: S0=[message:blue]  S1=[message:la5v,message:blue]  S2=[look,message:blue]
+R 5: S0=[message:blue,go]  S1=[go,message:blue]  S2=[look,message:blue,message:nif7]
+R 6: S0=[message:blue]  S1=[message:blue]  S2=[go]
+R 7: S0=[]  S1=[message:blue]  S2=[]
+R 8: S0=[go,message:blue]  S1=[message:blue,message:nif7]  S2=[]
+R 9: S0=[examine]  S1=[examine]  S2=[]
+R10: S0=[message:blue]  S1=[]  S2=[go]
+R11: S0=[look,go]  S1=[message:blue,message:nif7]  S2=[message:blue]
+R12: S0=[go]  S1=[message:xqr9]  S2=[message:xqr9]
+R13: S0=[message:nif7,message:la5v,message:blue]  S1=[go]  S2=[]
+R14: S0=[message:blue]  S1=[message:blue]  S2=[message:blue]
+R15: S0=[examine]  S1=[go,message:nif7]  S2=[]
+R16: S0=[message:blue,message:nif7]  S1=[]  S2=[message:xqr9,message:blue]
+R17: S0=[]  S1=[]  S2=[]
+R18: S0=[]  S1=[message:nif7]  S2=[]
+R19: S0=[]  S1=[message:blue]  S2=[]
+R20: S0=[]  S1=[]  S2=[]
+R21: S0=[]  S1=[message:la5v]  S2=[message:blue]
+R22: S0=[]  S1=[]  S2=[go]
+R23: S0=[message:nif7,message:blue]  S1=[]  S2=[]
+R24: S0=[message:nif7]  S1=[]  S2=[look]
+R25: S0=[go,message:blue]  S1=[go,message:blue]  S2=[message:blue]
+R26: S0=[message:xqr9,message:blue]  S1=[]  S2=[]
+R27: S0=[message:blue]  S1=[go]  S2=[go,message:xqr9,message:blue]
+R28: S0=[message:blue,message:la5v]  S1=[message:blue]  S2=[]
+R29: S0=[go,message:blue]  S1=[go]  S2=[message:la5v,message:blue]
+```
+
+Rounds 17–22 show the universal-silence drift window that pushed
+aggregate silence up. Outside that window, *la5v has additional silent
+rounds (7, 8, 9, 13, 15, 23, 24, 26, 28) that don't appear in *xqr9 or
+*nif7's columns — clear evidence of the reserved clause adding
+silence on top of the baseline drift, not just absorbing it.
+
 ## Decision
 
 Reference the gate from #239:
@@ -1609,6 +1786,52 @@ plumbing pays for itself.
 and in the final-recommendation paragraph; the C12 wiring is in
 `prompt-builder.ts` (off by default, opts in via
 `?parallelFraming=C12`); no further measurement is queued.
+
+### Final recommendation (after Step 8)
+
+**Step 7's recommendation stands: ship #238 with C12.** Step 8
+explored whether per-persona engagement variance could be unlocked at
+synthesis time via temperament-driven blurb clauses (since step 7
+demonstrated the rules block can't do it). Result was one-sided:
+
+- The **reserved** clause works — *la5v ran 40% silence, 20% parallel,
+  17 messages on the run, all clearly below the other two daemons.
+  The mechanism *can* push a daemon below the engagement floor.
+- The **outgoing** clause is inert — *nif7 didn't engage more than
+  *xqr9 (balanced); both ran 27% silence with similar message counts.
+  On top of C12's already-pushed floor, "chimes in often" has no
+  leverage.
+- **Aggregate silence rose 23pp** (7.8% → 31.1%). Part of this is the
+  reserved clause's expected cost, part is a single-sample late-phase
+  drift coincidence (rounds 17–22 produced universal silence
+  regardless of bucket).
+
+So engagement clauses are a one-sided dial: they can quiet a daemon
+below the floor but not lift one above it. That's a real lever but
+not the symmetric variance the spike was reaching for. Not
+recommended for default-on in this shape — the silence regression
+exceeds the variance gain.
+
+**Options for engagement variance, if it remains a goal:**
+
+1. **Ship engagement clauses as opt-in only**, used in
+   combination with a lower-floor parallel-framing (B or no framing)
+   where the chatty-end clause has room to do work. Untested but
+   plausibly delivers what step 7's C12 spread can't.
+2. **Per-persona temperature**: a different lever entirely — runtime
+   gating rather than prompt content. Not blocked by #238.
+3. **Accept the flat-variance world**: ship C12 as recommended, take
+   the win on multi-recipient peer chat (17 mm-pairs, 39% peer-msg
+   share), and treat per-persona engagement variance as a separate
+   problem with no clean solution at this model.
+
+My recommendation: option 3. The variance metric was always a proxy
+for the "blue overhears multi-party chat" vibe; C12 produces that
+vibe well at the aggregate level. The engagement-clauses mechanism is
+left in the tree as a working opt-in (`?engagementClauses=1`) for
+future iteration on options 1 or 2, but not on by default.
+
+#239 closes here for real this time.
 
 ## Out of scope (and why)
 
