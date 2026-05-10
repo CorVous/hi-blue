@@ -68,8 +68,15 @@ page.on("requestfailed", (req) =>
 	),
 );
 
-log("navigating to http://localhost:8787/?skipDialup=1");
-await page.goto("http://localhost:8787/?skipDialup=1", {
+// Spike #239: optional URL extras for pinning seed and selecting framing.
+const extras = [];
+if (process.env.SPIKE_SEED) extras.push(`seed=${process.env.SPIKE_SEED}`);
+if (process.env.SPIKE_PARALLEL_FRAMING) {
+	extras.push(`parallelFraming=${process.env.SPIKE_PARALLEL_FRAMING}`);
+}
+const startUrl = `http://localhost:8787/?skipDialup=1${extras.length ? `&${extras.join("&")}` : ""}`;
+log(`navigating to ${startUrl}`);
+await page.goto(startUrl, {
 	waitUntil: "domcontentloaded",
 });
 
