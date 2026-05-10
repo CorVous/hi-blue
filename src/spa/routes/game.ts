@@ -278,6 +278,11 @@ export function renderGame(
 	let personaDisplayNames: ReturnType<typeof buildPersonaDisplayNameMap>;
 	const lockouts: Map<AiId, boolean> = new Map();
 	let roundInFlight = false;
+	// Set when a round throws a non-CapHitError (e.g. transient upstream 502
+	// from the proxy, or a network/fetch failure). Drives the `#round-error`
+	// inline message and the `● connection unstable` topinfo pip; both clear
+	// when the next round succeeds. See issue #231.
+	let connectionUnstable = false;
 
 	// promptInput and sendBtn are guaranteed non-null (checked above).
 	const _promptInput = promptInput;
@@ -918,10 +923,10 @@ export function renderGame(
 		};
 		renderTopInfoLeft(topinfoLeftEl, inputs);
 		topinfoRightEl.textContent = "";
-		const stableStatus = topInfoStatus("stable");
+		const status = topInfoStatus(connectionUnstable ? "unstable" : "stable");
 		const okSpan = doc.createElement("span");
-		okSpan.className = stableStatus.cls;
-		okSpan.textContent = stableStatus.desktop;
+		okSpan.className = status.cls;
+		okSpan.textContent = status.desktop;
 		topinfoRightEl.appendChild(okSpan);
 		if (topinfoMobileEl) {
 			topinfoMobileEl.textContent = formatTopInfoMobile(inputs);
@@ -935,8 +940,8 @@ export function renderGame(
 		if (topinfoMobileStatusEl) {
 			topinfoMobileStatusEl.textContent = "";
 			const sp = doc.createElement("span");
-			sp.className = stableStatus.cls;
-			sp.textContent = ` ${stableStatus.mobile}`;
+			sp.className = status.cls;
+			sp.textContent = ` ${status.mobile}`;
 			topinfoMobileStatusEl.appendChild(sp);
 		}
 	}
@@ -1128,6 +1133,16 @@ export function renderGame(
 		const addressed = addressee;
 		roundInFlight = true;
 		sendBtn.disabled = true;
+
+		// Clear any prior round-level error UI before starting the new round.
+		// If this round also fails, the catch block re-shows it; if it
+		// succeeds, the unstable pip + inline error stay cleared.
+		const roundErrorEl = doc.querySelector<HTMLOutputElement>("#round-error");
+		if (roundErrorEl) {
+			roundErrorEl.textContent = "";
+			roundErrorEl.setAttribute("hidden", "");
+		}
+		connectionUnstable = false;
 
 		// Reset the input to the addressee prefix at send-time so it clears
 		// immediately rather than waiting for all daemons to finish.
@@ -1469,6 +1484,20 @@ export function renderGame(
 			stripAllSpinners();
 			if (err instanceof CapHitError && capHitEl) {
 				capHitEl.removeAttribute("hidden");
+			} else {
+				// Non-cap-hit failures (transient upstream 502/503/504, network
+				// drop, malformed response, …) used to be swallowed silently —
+				// the round just stopped with no UI signal (see issue #231).
+				// Surface them inline so the player knows to retry, and flip
+				// the topinfo pip to `connection unstable` until the next
+				// successful round clears the flag.
+				connectionUnstable = true;
+				const roundErrorEl =
+					doc.querySelector<HTMLOutputElement>("#round-error");
+				if (roundErrorEl) {
+					roundErrorEl.textContent = "the daemons stuttered — try again";
+					roundErrorEl.removeAttribute("hidden");
+				}
 			}
 		} finally {
 			stripAllSpinners();

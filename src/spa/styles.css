@@ -678,6 +678,15 @@ main {
 	text-shadow: 0 0 6px rgba(255, 123, 107, 0.5);
 }
 
+.round-error {
+	color: var(--err);
+	font-size: 11px;
+	letter-spacing: 0.04em;
+	align-self: center;
+	padding: 0 4px;
+	text-shadow: 0 0 6px rgba(255, 123, 107, 0.5);
+}
+
 #send {
 	background: transparent;
 	border: 0;

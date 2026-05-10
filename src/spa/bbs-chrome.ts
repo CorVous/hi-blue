@@ -110,13 +110,22 @@ export function formatTopInfoMobile(i: TopInfoInputs): string {
 export const TOPINFO_RIGHT_OK_TEXT = "● connection stable";
 export const TOPINFO_RIGHT_LOADING_TEXT = "● loading daemons";
 export const TOPINFO_RIGHT_GENERATING_TEXT = "● generating room";
+export const TOPINFO_RIGHT_UNSTABLE_TEXT = "● connection unstable";
 
 export const TOPINFO_MOBILE_OK_TEXT = "● stable";
 export const TOPINFO_MOBILE_LOADING_TEXT = "● loading";
 export const TOPINFO_MOBILE_GENERATING_TEXT = "● generating";
+export const TOPINFO_MOBILE_UNSTABLE_TEXT = "● unstable";
 
-/** Three-phase load state used by the start → game progressive loading flow. */
-export type LoadState = "loading-daemons" | "generating-room" | "stable";
+/** Right-cell connection states. `loading-daemons`/`generating-room` are the
+ * progressive boot phases; `unstable` is set by the game route after a round
+ * fails on a non-cap-hit error (e.g. transient upstream 502/503/504) and
+ * cleared when the next round succeeds. */
+export type LoadState =
+	| "loading-daemons"
+	| "generating-room"
+	| "stable"
+	| "unstable";
 
 export interface LoadStateStatus {
 	desktop: string;
@@ -137,6 +146,12 @@ export function topInfoStatus(state: LoadState): LoadStateStatus {
 			return {
 				desktop: TOPINFO_RIGHT_GENERATING_TEXT,
 				mobile: TOPINFO_MOBILE_GENERATING_TEXT,
+				cls: "warn",
+			};
+		case "unstable":
+			return {
+				desktop: TOPINFO_RIGHT_UNSTABLE_TEXT,
+				mobile: TOPINFO_MOBILE_UNSTABLE_TEXT,
 				cls: "warn",
 			};
 		case "stable":
