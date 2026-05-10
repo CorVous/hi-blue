@@ -59,17 +59,17 @@ test("live: per-AI budget decrements in cents from real OpenRouter usage.cost", 
 	// Wait for the three AI panels to be ready (synthesis complete).
 	const { ids, names } = await getAiHandles(page);
 
-	// 1. Initial state: value "5.000¢".
+	// 1. Initial state: value "50.000¢".
 	const firstPanel = page.locator(`.ai-panel[data-ai="${ids[0]}"]`);
-	await expect(firstPanel.locator(".panel-budget")).toHaveText("5.000¢", {
+	await expect(firstPanel.locator(".panel-budget")).toHaveText("50.000¢", {
 		timeout: 30_000,
 	});
 
-	// All three panels start at 5.000¢.
+	// All three panels start at 50.000¢.
 	for (const id of ids) {
 		await expect(
 			page.locator(`.ai-panel[data-ai="${id}"] .panel-budget`),
-		).toHaveText("5.000¢");
+		).toHaveText("50.000¢");
 	}
 
 	// 2. Send a short message addressed to all three AIs. Keep it minimal to
@@ -78,7 +78,7 @@ test("live: per-AI budget decrements in cents from real OpenRouter usage.cost", 
 	await page.fill("#prompt", message);
 	await page.click("#send");
 
-	// 3. Wait for all three panels to drop below 5.000¢ (i.e. cost was
+	// 3. Wait for all three panels to drop below 50.000¢ (i.e. cost was
 	//    deducted). Real OpenRouter calls take a few seconds.
 	await page.waitForFunction(
 		(aiIds: string[]) => {
@@ -90,7 +90,7 @@ test("live: per-AI budget decrements in cents from real OpenRouter usage.cost", 
 				const match = /^(\d+\.\d{3})¢$/.exec(text);
 				if (!match) return false;
 				const cents = Number(match[1]);
-				return Number.isFinite(cents) && cents < 5;
+				return Number.isFinite(cents) && cents < 50;
 			});
 		},
 		ids,
@@ -104,7 +104,7 @@ test("live: per-AI budget decrements in cents from real OpenRouter usage.cost", 
 			.textContent();
 		expect(text).toMatch(/^\d+\.\d{3}¢$/);
 		const cents = Number((text ?? "").replace("¢", ""));
-		expect(cents).toBeLessThan(5);
+		expect(cents).toBeLessThan(50);
 		expect(cents).toBeGreaterThanOrEqual(0); // display clamps at zero
 	}
 
