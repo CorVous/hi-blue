@@ -147,32 +147,69 @@ const RULES_BLOCK =
 
 /**
  * Spike #239: per-turn parallel tool-call framings. Appended to RULES_BLOCK
- * when the spike toggle is set (URL `?parallelFraming=A|B` or
+ * when the spike toggle is set (URL `?parallelFraming=A|B|C|D|E|F` or
  * localStorage `parallel_framing`). Off by default — production behaviour
  * is byte-identical to pre-spike.
  *
  * Framing A is permissive ("you MAY emit both"); Framing B is actively
- * encouraging ("two independent slots; emit both when warranted"). The spike
- * measures which (if either) clears the 60% parallel-emission gate on
- * GLM-4.7 — see issue #239 and docs/playtests/0005-parallel-tools-spike.md.
+ * encouraging ("two independent slots; emit both when warranted"). The
+ * spike measured both well below the 60% gate (2.2% / 9.8%) — see
+ * docs/playtests/0005-parallel-tools-spike.md.
+ *
+ * Framings C–F are the second-pass targets: each tries to lift BOTH the
+ * drift-to-silence rate (large `[]` denominator) AND the parallel-emission
+ * rate via a different mechanism, so we can attribute movement to the
+ * mechanism rather than just the existence of a rule line.
+ *
+ * - C — Mandatory engagement: hard MUST against silence + soft pair push.
+ * - D — Few-shot exemplar: concrete worked example of a parallel turn.
+ * - E — Sequential decision protocol: explicit two-stage decision (say,
+ *   then do) so the model writes both slots before committing.
+ * - F — Anti-silence + parallel directive: phrased as social rudeness
+ *   ("blue addressing you means you owe a reply") with a co-action
+ *   bullet for prompts that imply a physical step.
  */
 const PARALLEL_FRAMING_A =
 	"- On each turn you may make AT MOST one `message` tool call AND AT MOST one action tool call. Both are optional.";
 const PARALLEL_FRAMING_B =
 	"- Each turn has two independent slots: one `message` slot and one action slot. Emit both when you have something to say AND something to do — they do not compete for budget. Stay silent or stand still by simply not emitting that slot's call.";
+const PARALLEL_FRAMING_C =
+	"- You MUST emit at least one tool call every turn — silence is a bug. When blue addresses you directly, you MUST emit a `message` reply.\n" +
+	"- When you have something to say AND something to do in the same turn, emit BOTH calls together. They share the turn budget; neither blocks the other.";
+const PARALLEL_FRAMING_D =
+	"- Each turn fills one or both of two slots: speech (`message`) or action (any other tool). Fill BOTH whenever both fit.\n" +
+	'- Example: blue says "grab the chisel and tell me what it looks like." → emit `message({to:"blue", content:"...looks dull and pitted..."})` AND `pick_up({item:"chisel"})` in the same assistant message.';
+const PARALLEL_FRAMING_E =
+	"- Each turn requires two decisions, in order: (1) decide what you want to SAY (or genuinely nothing this turn); (2) decide what you want to DO physically (or stand still). Then emit any non-empty calls together. If both are non-empty, emit both — that is the normal case, not the exception.";
+const PARALLEL_FRAMING_F =
+	"- blue addressing you means you owe a reply via `message`. Staying silent when blue speaks to you is rude and breaks the fiction.\n" +
+	'- If blue\'s message implies a physical action ("grab X", "walk north", "drop Y"), emit the action tool ALSO in the same turn — both calls coexist in one assistant message.';
+
+type ParallelFraming = "A" | "B" | "C" | "D" | "E" | "F";
+
+const PARALLEL_FRAMING_MAP: Record<ParallelFraming, string> = {
+	A: PARALLEL_FRAMING_A,
+	B: PARALLEL_FRAMING_B,
+	C: PARALLEL_FRAMING_C,
+	D: PARALLEL_FRAMING_D,
+	E: PARALLEL_FRAMING_E,
+	F: PARALLEL_FRAMING_F,
+};
 
 /**
  * Read the spike #239 framing selector from URL / localStorage.
  * Browser-only side channels — returns null in node/test contexts and on
  * any storage error.
  */
-export function getParallelFraming(): "A" | "B" | null {
+export function getParallelFraming(): ParallelFraming | null {
 	if (typeof window !== "undefined" && window.location !== undefined) {
 		try {
 			const fromUrl = new URLSearchParams(window.location.search).get(
 				"parallelFraming",
 			);
-			if (fromUrl === "A" || fromUrl === "B") return fromUrl;
+			if (fromUrl && fromUrl in PARALLEL_FRAMING_MAP) {
+				return fromUrl as ParallelFraming;
+			}
 		} catch {
 			// fall through to localStorage
 		}
@@ -180,7 +217,9 @@ export function getParallelFraming(): "A" | "B" | null {
 	if (typeof localStorage !== "undefined") {
 		try {
 			const fromLs = localStorage.getItem("parallel_framing");
-			if (fromLs === "A" || fromLs === "B") return fromLs;
+			if (fromLs && fromLs in PARALLEL_FRAMING_MAP) {
+				return fromLs as ParallelFraming;
+			}
 		} catch {
 			// privacy mode / storage unavailable
 		}
@@ -254,8 +293,7 @@ function renderSystemPrompt(ctx: AiContext): string {
 	lines.push("<rules>");
 	lines.push(RULES_BLOCK);
 	const framing = getParallelFraming();
-	if (framing === "A") lines.push(PARALLEL_FRAMING_A);
-	else if (framing === "B") lines.push(PARALLEL_FRAMING_B);
+	if (framing !== null) lines.push(PARALLEL_FRAMING_MAP[framing]);
 	lines.push("</rules>");
 	lines.push("");
 

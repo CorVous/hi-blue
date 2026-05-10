@@ -24,9 +24,12 @@ import {
 } from "node:fs";
 import { chromium } from "@playwright/test";
 
-const IN = "/tmp/playtest-in";
-const OUT = "/tmp/playtest-out";
-const LOG = "/tmp/playtest.log";
+// Spike #239: env-overridable FIFO + log paths so multiple daemon instances
+// can run concurrently (one per A/B/C/D/E/F session). Defaults preserve the
+// original single-daemon contract.
+const IN = process.env.PLAYTEST_IN || "/tmp/playtest-in";
+const OUT = process.env.PLAYTEST_OUT || "/tmp/playtest-out";
+const LOG = process.env.PLAYTEST_LOG || "/tmp/playtest.log";
 
 function ensureFifo(p) {
 	if (existsSync(p)) {
