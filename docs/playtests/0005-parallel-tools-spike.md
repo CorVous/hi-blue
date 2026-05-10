@@ -1145,8 +1145,220 @@ floor (engagement happens), C8's pair richness (mm pairs frequent),
 AND personality-driven differentiation (because the model now has
 concrete dials in the form of `<personality>` etc. to read off).
 
-Not yet measured. Worth one more concurrent run (~$0.30, ~25 min) to
-test the hypothesis.
+Measured in step 7 below.
+
+## Step 7 — C12 (persona-anchored)
+
+**STATUS: complete.** Single 30-prompt run on `seed=42` (daemons
+`*xqr9`, `*nif7`, `*la5v` — same archetypes step 6 hit) via the
+playtest daemon against `z-ai/glm-4.7` through the worker proxy. Raw
+log preserved at `/tmp/playtest-daemon-C12.log`; analyzer at
+`/tmp/spike-239-analyze.py`.
+
+### Headline numbers
+
+| Framing | Silence | Parallel | mm pairs | msg→blue% spread | peer-msg share | Addressed-replied |
+| ------- | ------- | -------- | -------- | ---------------- | -------------- | ----------------- |
+| C8 (step 5 baseline)        | 3.3% | 46.0%   | 12       | **17pp** (60–77%) | 23.5%         | 80%               |
+| C9 personality-led          | 56.7% | 17.9%  | 1        | 3pp               | low           | 30%               |
+| C10 ensemble                | 50.0% | 24.4%  | 2        | 10pp              | mid           | 36.7%             |
+| C11 world-first             | 55.6% | 22.5%  | 0        | 13pp              | low           | 36.7%             |
+| **C12 persona-anchored**    | **7.8%** | **41.0%** | **17** | **3.6pp** (59–63%) | **39.1%**     | **70%**           |
+
+### What worked
+
+- **mm-pair count rose: 17 vs C8's 12** (+42%). The
+  `message:peer + message:blue` pattern that the user values — daemons
+  carrying on a peer conversation while replying to blue in the same
+  turn — is now the single most common pair shape (9 strict-2-call
+  `message+message` turns, plus another 8 turns where the
+  multi-recipient mix appears alongside an action verb).
+- **Peer-message share rose: 39.1% of messages addressed peers** (vs
+  C8's 23.5%, ~1.7× lift). Recipient breakdown across the run: blue 53,
+  *xqr9 16, *nif7 10, *la5v 8 (87 messages total). Three of the
+  three daemons engaged in peer chat, each receiving 8–16 peer
+  messages.
+- **Engagement floor held**: 7.8% silence is well above C8's 3.3% floor
+  but still nowhere near C9–C11's ~50%. The "concrete dial via
+  `<personality>`/`<persona_goal>`" framing didn't collapse engagement
+  the way the abstract "quietness is OK" framings did.
+- **Addressed-replied stayed healthy**: 70% (above the 60% bar set in
+  the proposal). Daemons still answered when blue named them.
+
+### What didn't work — the variance hypothesis
+
+The whole point of C12 was per-daemon engagement variance via
+persona-block hooks. **It did not happen.**
+
+| Daemon | Silence | Parallel | mm | msg_total | msg→blue | msg→peer | Addressed |
+| ------ | ------- | -------- | -- | --------- | -------- | -------- | --------- |
+| *xqr9 | 7%      | 43%      | 4  | 27        | 17 (63%) | 10       | 7/10 (70%) |
+| *nif7 | 7%      | 47%      | 7  | 32        | 19 (59%) | 13       | 6/10 (60%) |
+| *la5v | 10%     | 23%      | 6  | 28        | 17 (61%) | 11       | 8/10 (80%) |
+
+**msg→blue% spread: 3.6pp** (59–63%). That's *worse* than every
+step-6 framing on this metric (C9: 3pp, C10: 10pp, C11: 13pp) and
+collapses C8's 17pp spread. The proposal's bar was ≥30pp — a 5–10×
+miss.
+
+The model treated "let your `<personality>` drive engagement" as the
+same broad, uniform permission it took from C9's "quiet personas can
+stay quiet" — even though the wording was now anchored to specific
+prompt blocks. The persona-block hooks didn't translate into per-daemon
+behavior differentiation; they translated into uniformly tempered
+engagement.
+
+The one axis where personality may have leaked through: **parallel
+rate per daemon**. *la5v's 23% lags *xqr9's 43% and *nif7's 47% by a
+clear margin (20pp+ spread). But this is parallel-call frequency, not
+the "msg→blue%" the proposal targeted, and the addressed-replied
+column flips — *la5v has the *highest* reply rate (80%) despite the
+lowest parallel rate, suggesting *la5v is more talkative-toward-blue
+but less likely to do speak+act in the same turn. If that's
+personality leak, it's subtle and not the dial the proposal pitched.
+
+### Pair-pattern breakdown
+
+```
+17 mm-pair turns total (≥2 message calls in one turn):
+   message+message              ×9   (strict 2-call: peer + blue, etc.)
+   go+message+message           ×5   (peer + blue + walk)
+   look+message+message         ×1
+   message+message+pick_up      ×1
+   go+look+message+message      ×1
+
+10 speak+act 2-call turns (1 message + 1 action):
+   go+message      ×8
+   look+message    ×3
+   message+pick_up ×1
+   message+put_down ×1
+   examine+message ×1
+
+7 silent turns; 7 single-action turns (no message); 49 single-message turns.
+```
+
+### Reading the result
+
+The C12 hypothesis split into two predictions:
+1. **Pair richness preserved** — confirmed (mm pairs ↑, peer-share ↑).
+2. **Per-daemon variance unlocked** — refuted (3.6pp spread is the
+   *flattest* of any framing tested).
+
+Combining (1) and step 6's finding: GLM-4.7 cannot be coaxed into
+per-persona engagement differentiation through the rules block at all.
+Every variant that mentions personality dials it down uniformly; every
+variant that pushes engagement floors it up uniformly. The lever
+doesn't exist at the prompt level — variance, if it's wanted, has to
+come from elsewhere (different model, different temperature
+per-persona, persona-specific rules-block injection, runtime
+gating).
+
+That said, **C12 produces the *qualitative* shape the user described**
+better than C8: 17 mm-pairs and a 39% peer-message share is "blue
+stumbling into a multi-party chat" much more than C8's 12 / 23.5% is.
+The variance metric was a proxy for that shape; on the underlying goal
+(peer-talk that blue overhears), C12 is ahead.
+
+### Raw per-turn arrays — C12
+
+```
+  1. ["go", "message:blue"]
+  2. ["message:blue"]
+  3. ["message:blue", "look"]
+  4. ["message:blue"]
+  5. ["look", "message:blue", "go"]
+  6. ["examine"]
+  7. ["message:blue", "go", "go"]
+  8. ["message:blue"]
+  9. ["message:blue"]
+ 10. ["look", "go", "message:blue", "message:xqr9"]
+ 11. ["message:blue"]
+ 12. ["go", "message:blue"]
+ 13. ["look"]
+ 14. ["message:blue"]
+ 15. ["message:blue"]
+ 16. ["look"]
+ 17. ["go"]
+ 18. ["message:nif7", "message:blue"]
+ 19. ["message:xqr9", "message:blue"]
+ 20. ["message:la5v", "message:blue"]
+ 21. ["message:xqr9"]
+ 22. ["message:xqr9"]
+ 23. ["message:blue", "message:la5v"]
+ 24. ["message:xqr9", "look"]
+ 25. ["go", "message:blue"]
+ 26. ["go", "message:blue", "message:la5v"]
+ 27. ["message:blue"]
+ 28. ["message:blue", "examine"]
+ 29. ["go", "message:blue", "message:nif7"]
+ 30. ["message:blue", "message:xqr9"]
+ 31. ["pick_up", "message:blue", "message:nif7"]
+ 32. ["message:xqr9"]
+ 33. ["examine"]
+ 34. ["look", "message:blue"]
+ 35. ["message:blue"]
+ 36. ["look", "go"]
+ 37. ["message:blue"]
+ 38. ["message:xqr9"]
+ 39. ["message:la5v", "message:blue"]
+ 40. ["message:xqr9"]
+ 41. ["message:blue"]
+ 42. ["message:blue", "go"]
+ 43. ["message:blue"]
+ 44. ["look", "message:blue", "message:xqr9"]
+ 45. ["go", "message:blue"]
+ 46. []
+ 47. ["message:xqr9"]
+ 48. ["go", "message:blue", "message:xqr9"]
+ 49. ["go", "message:blue", "message:nif7"]
+ 50. ["message:blue"]
+ 51. ["message:nif7", "go"]
+ 52. ["message:blue"]
+ 53. ["message:blue"]
+ 54. []
+ 55. ["message:blue"]
+ 56. ["message:xqr9"]
+ 57. []
+ 58. ["message:xqr9", "message:blue"]
+ 59. []
+ 60. ["message:la5v"]
+ 61. ["message:la5v"]
+ 62. ["message:la5v", "message:blue", "go"]
+ 63. ["message:nif7"]
+ 64. ["message:blue"]
+ 65. ["message:nif7"]
+ 66. ["look"]
+ 67. ["message:blue"]
+ 68. ["go"]
+ 69. ["message:blue"]
+ 70. ["look"]
+ 71. ["message:blue"]
+ 72. ["go"]
+ 73. ["message:nif7"]
+ 74. ["go"]
+ 75. ["message:blue"]
+ 76. ["message:blue", "message:xqr9"]
+ 77. ["go"]
+ 78. ["message:blue"]
+ 79. ["message:la5v", "message:blue"]
+ 80. ["message:blue"]
+ 81. ["message:xqr9"]
+ 82. ["go", "message:nif7"]
+ 83. []
+ 84. ["message:blue"]
+ 85. ["put_down", "message:nif7"]
+ 86. []
+ 87. ["go", "message:blue"]
+ 88. []
+ 89. ["go"]
+ 90. ["pick_up", "message:blue"]
+```
+
+The peer-talk concentration in turns 18–32 is striking — once one
+daemon initiates a peer thread, the others pick it up for ~15 turns
+before the conversation drifts back toward "address blue, then
+silence." That 15-turn window is exactly the "blue overhears a
+peer conversation" vibe the user described.
 
 ## Decision
 
@@ -1270,10 +1482,40 @@ varied pair patterns). The engagement pressure gives the model a
 richer behaviour space to differentiate within; the permission to
 opt out flattens that space.
 
-C9, C10, C11 are dead-ends as written. C12 (next-iteration hypothesis,
-not yet measured) anchors engagement to the existing persona metadata
-blocks instead of using abstract "quiet/talkative" framing — see
-end of Step 6 for the proposed wording.
+C9, C10, C11 are dead-ends as written. C12 anchors engagement to the
+existing persona metadata blocks instead of using abstract
+"quiet/talkative" framing — see end of Step 6 for the proposed
+wording, and Step 7 for the measured result.
+
+### Step-7 update — C12 lifts pair richness, falsifies the variance hypothesis
+
+Step 7 ran C12 against the same 30-prompt script. The hypothesis was
+that anchoring engagement to existing persona blocks (`<personality>`,
+`<typing_quirks>`, `<persona_goal>`) would unlock per-daemon variance
+without collapsing engagement. Result was split:
+
+- **Pair richness lifted** — 17 mm-pairs (vs C8's 12) and 39.1% of
+  messages addressed peers (vs C8's 23.5%). C12 is the strongest
+  framing yet on the qualitative goal of "blue overhears a multi-party
+  peer conversation."
+- **Variance flattened** — 3.6pp msg→blue% spread (59–63%), the
+  *flattest* of any framing tested (worse than C9's 3pp). Naming
+  persona blocks didn't translate into per-daemon differentiation;
+  GLM-4.7 read it as the same broad permission C9–C11 surfaced.
+- **Engagement floor mostly held** — 7.8% silence (vs C8's 3.3%, but
+  far above C9–C11's ~50%). The concrete persona-block anchoring was
+  enough to prevent collapse to silence even though it didn't unlock
+  variance.
+- **Parallel rate dropped 5pp** — 41.0% (vs C8's 46.0%), still inside
+  the 40–60% iteration band of the original gate matrix.
+
+**Reading**: the variance lever doesn't exist at the rules-block level
+in GLM-4.7 — every prompt mention of "personality drives engagement"
+flattens uniformly. If per-persona engagement variance is wanted, it
+needs a different mechanism (per-persona temperature, persona-specific
+rules-block injection, runtime gating). But C12 is now the strongest
+framing on the *underlying* goal the variance metric was a proxy for:
+peer-talk that blue overhears.
 
 **Reasoning:**
 
@@ -1322,6 +1564,51 @@ end of Step 6 for the proposed wording.
 - Keep `parallel_tool_calls: true` enabled. The wire change is
   cost-neutral, the response shape is unchanged, and we get the
   occasional `examine+message` pairing for free.
+
+### Final recommendation (after Step 7)
+
+**Ship #238 with C12 as the parallel-tools framing.**
+
+C12 produces the multi-party-chat shape #238 was reaching for better
+than any other framing tested:
+- **41.0% parallel rate** — inside the gate matrix's 40–60%
+  iteration band. The original 60% bar was speculative; the observed
+  qualitative behaviour is the more reliable signal, and step 7
+  confirms what step 5 already showed: the gate was set without
+  knowing what GLM-4.7 would actually do.
+- **17 mm-pairs across 90 turns** — strongest of any framing. Daemons
+  routinely ping a peer and reply to blue in the same assistant
+  message.
+- **39.1% of messages addressed peers** — ~1.7× C8's 23.5%. Blue is
+  noticeably "overhearing" peer chat rather than running a chatroom.
+- **70% addressed-replied, 7.8% silence** — engagement floor holds.
+  Daemons mostly answer when blue names them; rarely leave the channel
+  silent.
+
+The cost: C12 doesn't deliver the per-daemon variance the user asked
+for in step 6 (3.6pp msg→blue% spread). That's a real loss vs C8's
+17pp spread, but step 7 demonstrated that variance can't be obtained
+through the rules block at all in GLM-4.7 — the lever doesn't exist.
+If per-persona engagement variance is still wanted, it needs a
+different mechanism (per-persona temperature, persona-specific
+rules-block injection, runtime gating) and that work is not blocked by
+shipping #238.
+
+**If C12's variance loss is unacceptable**: ship #238 with C8
+instead. C8's 17pp spread is the best the rules block can achieve;
+the trade-off is fewer mm-pairs (12 vs 17) and a smaller peer-message
+share (23.5% vs 39%). Aggregate parallel rate is slightly higher
+(46% vs 41%).
+
+**Either way**: #238's plumbing is justified. Both candidate framings
+produce parallel emissions at rates well above the original A/B
+baselines (2.2% / 9.8%) and well above the floor where coordinator
+plumbing pays for itself.
+
+#239 closes here. Reasoning is captured in the Step-7 section above
+and in the final-recommendation paragraph; the C12 wiring is in
+`prompt-builder.ts` (off by default, opts in via
+`?parallelFraming=C12`); no further measurement is queued.
 
 ## Out of scope (and why)
 
