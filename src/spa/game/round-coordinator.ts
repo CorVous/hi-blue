@@ -42,6 +42,18 @@ import type {
 	ToolRoundtripMessage,
 } from "./types";
 
+// Match the SPA dev-host gate used in src/spa/routes/game.ts. The
+// `typeof` guard keeps this safe in test environments that don't stub
+// the build-time constant.
+function isDevHost(): boolean {
+	return (
+		typeof __WORKER_BASE_URL__ !== "undefined" &&
+		__WORKER_BASE_URL__ === "http://localhost:8787" &&
+		typeof location !== "undefined" &&
+		location.origin === __WORKER_BASE_URL__
+	);
+}
+
 /**
  * Configuration for the mid-phase chat-lockout event.
  *
@@ -244,6 +256,12 @@ export async function runRound(
 
 		// Free-form assistantText without a message tool call → treat as pass (drop the text)
 		if (!action.toolCall && !action.message) {
+			if (assistantText && isDevHost()) {
+				console.log(
+					`[dev] ${aiId} emitted free-form text without a tool call (dropped):`,
+					assistantText,
+				);
+			}
 			action.pass = true;
 		}
 
