@@ -84,7 +84,6 @@ export interface TopInfoInputs {
 	phaseNumber: number;
 	totalPhases: number;
 	turn: number;
-	daemonsOnline: number;
 }
 
 export function formatTopInfoLeft(i: TopInfoInputs): string {
@@ -102,18 +101,10 @@ export function renderTopInfoLeft(el: HTMLElement, i: TopInfoInputs): void {
 }
 
 /** Compact form rendered into `#topinfo-mobile` for the <=720px bento
- * layout — drops the labels and the daemons-online/connection trailer. */
+ * layout — drops the labels and the connection trailer. */
 export function formatTopInfoMobile(i: TopInfoInputs): string {
 	const phase = `${String(i.phaseNumber).padStart(2, "0")}/${String(i.totalPhases).padStart(2, "0")}`;
 	return `${i.sessionId} · ${phase} · TRN ${i.turn}`;
-}
-
-/** Prefix portion of the topinfo right cell — the "● connection stable"
- * trailer is appended at the call site as a span so it can carry its own
- * green color. Kept here so the daemons-online wording stays in one place. */
-export function formatTopInfoRight(i: TopInfoInputs): string {
-	const word = i.daemonsOnline === 1 ? "daemon" : "daemons";
-	return `[${i.daemonsOnline} ${word} online] · `;
 }
 
 export const TOPINFO_RIGHT_OK_TEXT = "● connection stable";
@@ -170,7 +161,7 @@ export function paintTopInfo(doc: Document, inputs: TopInfoInputs): void {
 	const mobile = doc.querySelector<HTMLElement>("#topinfo-mobile");
 	if (left) left.textContent = formatTopInfoLeft(inputs);
 	if (right) {
-		right.textContent = formatTopInfoRight(inputs);
+		right.textContent = "";
 		const okSpan = doc.createElement("span");
 		okSpan.className = "ok";
 		okSpan.textContent = TOPINFO_RIGHT_OK_TEXT;

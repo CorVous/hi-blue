@@ -112,15 +112,11 @@ export function renderSessions(
 			total += 1;
 			cursor = cursor.nextPhaseConfig;
 		}
-		const daemonsOnline = Object.keys(loadResult.state.personas).filter(
-			(id) => !phase.chatLockouts.has(id),
-		).length;
 		paintTopInfo(doc, {
 			sessionId: loadResult.sessionId,
 			phaseNumber: phase.phaseNumber,
 			totalPhases: total,
 			turn: phase.round,
-			daemonsOnline,
 		});
 	}
 
