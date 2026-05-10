@@ -197,7 +197,8 @@ describe("devtools-edit: mutating daemon .txt affects conversationLogs on reload
 			const greenLog = loadedPhase?.conversationLogs.green ?? [];
 			expect(
 				greenLog.some(
-					(e) => e.kind === "message" && e.content === "PLAYER_DEVTOOLS_MESSAGE",
+					(e) =>
+						e.kind === "message" && e.content === "PLAYER_DEVTOOLS_MESSAGE",
 				),
 			).toBe(true);
 		}

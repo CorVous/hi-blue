@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-	advanceRound,
-	appendMessage,
-	createGame,
-	startPhase,
-} from "../engine";
+import { advanceRound, appendMessage, createGame, startPhase } from "../engine";
 import { buildAiContext } from "../prompt-builder";
 import type {
 	AiPersona,

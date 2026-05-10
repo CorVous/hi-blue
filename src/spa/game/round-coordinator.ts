@@ -255,17 +255,18 @@ export async function runRound(
 						},
 					],
 				};
-			} else {
-				// Normal tool or message tool: find the record from dispatch
+			} else if (action.toolCall) {
+				// Normal (non-message) tool: record the roundtrip so the next round
+				// can replay tool_calls + tool results in the OpenAI message sequence.
+				// The `message` tool is intentionally excluded here: the sent message
+				// is already replayed via the conversationLog as an `assistant` content
+				// turn. Recording a roundtrip for `message` would produce two consecutive
+				// `assistant` turns in the next round (one from the log, one from the
+				// priorToolRoundtrip), violating the OpenAI/OpenRouter message protocol.
 				const toolRecord = dispatchResult.records.find(
-					(r) =>
-						r.kind === "tool_success" ||
-						r.kind === "tool_failure" ||
-						r.kind === "message",
+					(r) => r.kind === "tool_success" || r.kind === "tool_failure",
 				);
-				const success =
-					toolRecord?.kind === "tool_success" ||
-					toolRecord?.kind === "message";
+				const success = toolRecord?.kind === "tool_success";
 				const description = toolRecord?.description ?? "";
 
 				newToolRoundtrip[aiId] = {

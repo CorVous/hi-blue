@@ -261,10 +261,22 @@ describe("serializeSession / deserializeSession", () => {
 					...phase,
 					conversationLogs: {
 						red: [
-							{ kind: "message", from: "blue", to: "red", content: "hello red", round: 0 },
+							{
+								kind: "message",
+								from: "blue",
+								to: "red",
+								content: "hello red",
+								round: 0,
+							},
 						],
 						green: [
-							{ kind: "message", from: "green", to: "blue", content: "green reply", round: 0 },
+							{
+								kind: "message",
+								from: "green",
+								to: "blue",
+								content: "green reply",
+								round: 0,
+							},
 						],
 						cyan: [],
 					},
@@ -277,10 +289,22 @@ describe("serializeSession / deserializeSession", () => {
 		if (result.kind === "ok") {
 			const rp = result.state.phases[0];
 			expect(rp?.conversationLogs.red).toEqual([
-				{ kind: "message", from: "blue", to: "red", content: "hello red", round: 0 },
+				{
+					kind: "message",
+					from: "blue",
+					to: "red",
+					content: "hello red",
+					round: 0,
+				},
 			]);
 			expect(rp?.conversationLogs.green).toEqual([
-				{ kind: "message", from: "green", to: "blue", content: "green reply", round: 0 },
+				{
+					kind: "message",
+					from: "green",
+					to: "blue",
+					content: "green reply",
+					round: 0,
+				},
 			]);
 		}
 	});

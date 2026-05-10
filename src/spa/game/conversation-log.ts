@@ -52,13 +52,11 @@ function renderEntry(
 		case "message": {
 			if (entry.to === aiId) {
 				// Incoming: render as "<fromLabel> dms you: <content>"
-				const fromLabel =
-					entry.from === "blue" ? "blue" : `*${entry.from}`;
+				const fromLabel = entry.from === "blue" ? "blue" : `*${entry.from}`;
 				return `[Round ${round}] ${fromLabel} dms you: ${entry.content}`;
 			}
 			// Outgoing: render as "you dm <toLabel>: <content>"
-			const toLabel =
-				entry.to === "blue" ? "blue" : `*${entry.to}`;
+			const toLabel = entry.to === "blue" ? "blue" : `*${entry.to}`;
 			return `[Round ${round}] you dm ${toLabel}: ${entry.content}`;
 		}
 

@@ -630,7 +630,9 @@ describe("dispatchAiTurn", () => {
 		expect(result.records[0]?.kind).toBe("tool_failure");
 		// No logs should be mutated
 		for (const aiId of ["red", "green", "cyan"]) {
-			expect(getActivePhase(result.game).conversationLogs[aiId]).toHaveLength(0);
+			expect(getActivePhase(result.game).conversationLogs[aiId]).toHaveLength(
+				0,
+			);
 		}
 	});
 

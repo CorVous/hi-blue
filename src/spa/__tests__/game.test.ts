@@ -185,15 +185,34 @@ function makeAiSseStream(jsonAction: string): ReadableStream<Uint8Array> {
  *
  * Includes a final usage chunk so the budget-deduction path sees a non-zero cost.
  */
-function makeMessageToolCallSseStream(content: string): ReadableStream<Uint8Array> {
+function makeMessageToolCallSseStream(
+	content: string,
+): ReadableStream<Uint8Array> {
 	const args = JSON.stringify({ to: "blue", content });
 	// First chunk: tool call header
 	const chunk1 = `data: ${JSON.stringify({
-		choices: [{ delta: { tool_calls: [{ index: 0, id: "call_msg", function: { name: "message", arguments: "" } }] } }],
+		choices: [
+			{
+				delta: {
+					tool_calls: [
+						{
+							index: 0,
+							id: "call_msg",
+							function: { name: "message", arguments: "" },
+						},
+					],
+				},
+			},
+		],
 	})}\n\n`;
 	// Second chunk: arguments + finish_reason
 	const chunk2 = `data: ${JSON.stringify({
-		choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: args } }] }, finish_reason: "tool_calls" }],
+		choices: [
+			{
+				delta: { tool_calls: [{ index: 0, function: { arguments: args } }] },
+				finish_reason: "tool_calls",
+			},
+		],
 	})}\n\n`;
 	const usageChunk = `data: ${JSON.stringify({ choices: [], usage: { cost: 0.01, total_tokens: 100 } })}\n\n`;
 	const sseData = `${chunk1}${chunk2}${usageChunk}data: [DONE]\n\n`;
@@ -859,10 +878,7 @@ describe("renderGame — localStorage persistence", () => {
 		// (free-form assistantText is silently dropped in v4 — use the message tool instead)
 		const stub = makeLocalStorageStub();
 		await seedSessionInStub(stub);
-		vi.stubGlobal(
-			"fetch",
-			makeMessageToolCallFetchMock(),
-		);
+		vi.stubGlobal("fetch", makeMessageToolCallFetchMock());
 		vi.stubGlobal("localStorage", stub);
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
@@ -1018,10 +1034,7 @@ describe("renderGame — localStorage persistence", () => {
 		// only message tool calls are persisted to daemon .txt files and restored on reload.
 		const stub = makeLocalStorageStub();
 		await seedSessionInStub(stub);
-		vi.stubGlobal(
-			"fetch",
-			makeMessageToolCallFetchMock(),
-		);
+		vi.stubGlobal("fetch", makeMessageToolCallFetchMock());
 		vi.stubGlobal("localStorage", stub);
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 

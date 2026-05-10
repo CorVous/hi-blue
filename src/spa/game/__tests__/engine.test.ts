@@ -260,7 +260,9 @@ describe("budget and lockout", () => {
 	it("reports an AI as locked out when budget is zero", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		const phase = getActivePhase(game);
-		phase.budgets.red!.remaining = 0;
+		const redBudget = phase.budgets.red;
+		if (!redBudget) throw new Error("invariant: red budget must exist");
+		redBudget.remaining = 0;
 		phase.lockedOut.add("red");
 		expect(isAiLockedOut(game, "red")).toBe(true);
 	});

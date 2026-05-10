@@ -158,7 +158,9 @@ describe("chat-only round", () => {
 		const { nextState } = await runRound(game, "red", "Hello Ember!", provider);
 		const redLog = getActivePhase(nextState).conversationLogs.red ?? [];
 		// Free-form assistantText without a message tool call → treated as pass, not appended
-		const msgEntries = redLog.filter((e) => e.kind === "message" && e.from === "red");
+		const msgEntries = redLog.filter(
+			(e) => e.kind === "message" && e.from === "red",
+		);
 		expect(msgEntries).toHaveLength(0);
 	});
 
@@ -1237,7 +1239,7 @@ describe("initiative parameter", () => {
 			{ assistantText: "I am green", toolCalls: [] },
 		]);
 		const initiative: AiId[] = ["cyan", "red", "green"];
-		const { nextState, result } = await runRound(
+		const { result } = await runRound(
 			game,
 			"red",
 			"hi",
@@ -2064,7 +2066,10 @@ describe("conversationLogs isolation (AC #10 — #194)", () => {
 					{
 						id: "msg_red",
 						name: "message",
-						argumentsJson: JSON.stringify({ to: "blue", content: "I am red speaking" }),
+						argumentsJson: JSON.stringify({
+							to: "blue",
+							content: "I am red speaking",
+						}),
 					},
 				],
 			},
@@ -2110,5 +2115,103 @@ describe("conversationLogs isolation (AC #10 — #194)", () => {
 		const { nextState } = await runRound(game, "red", "hi", provider);
 		const phase = getActivePhase(nextState);
 		expect("chatHistories" in phase).toBe(false);
+	});
+});
+
+// ----------------------------------------------------------------------------
+// Regression: no double-assistant turn after message tool call in multi-round (#213)
+// ----------------------------------------------------------------------------
+describe("message tool multi-round regression (#213)", () => {
+	it("no consecutive assistant turns in round 2 when round 1 used the message tool", async () => {
+		const game = makeGame();
+		// Round 1: red uses the message tool to speak to blue
+		const r1Provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "msg_r1_red",
+						name: "message",
+						argumentsJson: JSON.stringify({
+							to: "blue",
+							content: "Hello blue",
+						}),
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const r1 = await runRound(
+			game,
+			"red",
+			"say something",
+			r1Provider,
+			undefined,
+			["red", "green", "cyan"] as AiId[],
+		);
+
+		// The message tool should NOT produce a roundtrip entry for red
+		// (avoids double-assistant turn in next round)
+		expect(r1.toolRoundtrip.red).toBeUndefined();
+
+		// Round 2: capture what messages red receives and assert no consecutive assistant turns
+		const capturedRedMessages: OpenAiMessage[] = [];
+		const r2Provider: RoundLLMProvider = {
+			async streamRound(messages, _tools) {
+				// red is first in initiative, so the first call is red's
+				if (capturedRedMessages.length === 0) {
+					capturedRedMessages.push(...messages);
+				}
+				return { assistantText: "", toolCalls: [] };
+			},
+		};
+
+		await runRound(
+			r1.nextState,
+			"red",
+			"round2",
+			r2Provider,
+			undefined,
+			["red", "green", "cyan"] as AiId[],
+			r1.toolRoundtrip,
+		);
+
+		// Assert no two consecutive assistant turns
+		for (let i = 0; i < capturedRedMessages.length - 1; i++) {
+			const curr = capturedRedMessages[i];
+			const next = capturedRedMessages[i + 1];
+			if (curr?.role === "assistant" && next?.role === "assistant") {
+				throw new Error(
+					`Consecutive assistant turns at positions ${i} and ${i + 1}: ` +
+						JSON.stringify([curr, next]),
+				);
+			}
+		}
+
+		// Assert every assistant message with tool_calls is followed by a tool message
+		for (let i = 0; i < capturedRedMessages.length - 1; i++) {
+			const msg = capturedRedMessages[i];
+			if (
+				msg?.role === "assistant" &&
+				"tool_calls" in msg &&
+				Array.isArray((msg as { tool_calls?: unknown }).tool_calls) &&
+				((msg as { tool_calls?: unknown[] }).tool_calls?.length ?? 0) > 0
+			) {
+				const next = capturedRedMessages[i + 1];
+				expect(next?.role).toBe("tool");
+			}
+		}
+
+		// The conversation log entry (assistant saying "Hello blue") must be present
+		const hasAssistantContent = capturedRedMessages.some(
+			(m) =>
+				m.role === "assistant" &&
+				"content" in m &&
+				typeof (m as { content?: unknown }).content === "string" &&
+				(m as { content: string }).content.includes("Hello blue"),
+		);
+		expect(hasAssistantContent).toBe(true);
 	});
 });

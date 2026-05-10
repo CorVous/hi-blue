@@ -58,8 +58,7 @@ export function buildOpenAiMessages(
 			messages.push({ role: "assistant", content: entry.content });
 		} else {
 			// Incoming: message was sent to this daemon → user turn with sender prefix
-			const senderPrefix =
-				entry.from === "blue" ? "blue" : `*${entry.from}`;
+			const senderPrefix = entry.from === "blue" ? "blue" : `*${entry.from}`;
 			messages.push({
 				role: "user",
 				content: `${senderPrefix}: ${entry.content}`,

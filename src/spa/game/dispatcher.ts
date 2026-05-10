@@ -346,12 +346,13 @@ export function dispatchAiTurn(
 		| undefined;
 
 	if (action.toolCall) {
-		const validation = validateToolCall(state, aiId, action.toolCall);
+		const toolCall = action.toolCall;
+		const validation = validateToolCall(state, aiId, toolCall);
 
-		if (action.toolCall.name === "examine") {
+		if (toolCall.name === "examine") {
 			if (validation.valid) {
 				const item = getActivePhase(state).world.entities.find(
-					(e) => e.id === action.toolCall!.args.item,
+					(e) => e.id === toolCall.args.item,
 				);
 				actorPrivateToolResult = {
 					description: item?.examineDescription ?? "",

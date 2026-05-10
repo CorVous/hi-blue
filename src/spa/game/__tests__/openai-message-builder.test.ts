@@ -83,7 +83,10 @@ describe("buildOpenAiMessages", () => {
 
 		expect(messages).toHaveLength(3);
 		expect(messages[0]?.role).toBe("system");
-		expect(messages[1]).toEqual({ role: "user", content: "blue: Hello Ember!" });
+		expect(messages[1]).toEqual({
+			role: "user",
+			content: "blue: Hello Ember!",
+		});
 		expect(messages[2]).toEqual({
 			role: "assistant",
 			content: "Hello, player!",

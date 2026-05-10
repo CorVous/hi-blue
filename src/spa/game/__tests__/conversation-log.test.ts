@@ -110,7 +110,13 @@ describe("buildConversationLog — message (incoming from blue)", () => {
 		const input: ConversationLogInput = {
 			...emptyInput(),
 			conversationLog: [
-				{ kind: "message", from: "red", to: "blue", content: "Hello", round: 0 },
+				{
+					kind: "message",
+					from: "red",
+					to: "blue",
+					content: "Hello",
+					round: 0,
+				},
 			],
 		};
 		const result = buildConversationLog(input, "red", TEST_PERSONAS);
@@ -121,7 +127,13 @@ describe("buildConversationLog — message (incoming from blue)", () => {
 		const input: ConversationLogInput = {
 			...emptyInput(),
 			conversationLog: [
-				{ kind: "message", from: "green", to: "red", content: "red-msg", round: 0 },
+				{
+					kind: "message",
+					from: "green",
+					to: "red",
+					content: "red-msg",
+					round: 0,
+				},
 			],
 		};
 		const result = buildConversationLog(input, "red", TEST_PERSONAS);
@@ -146,8 +158,20 @@ describe("buildConversationLog — message (incoming from blue)", () => {
 		const input: ConversationLogInput = {
 			...emptyInput(),
 			conversationLog: [
-				{ kind: "message", from: "blue", to: "red", content: "First", round: 0 },
-				{ kind: "message", from: "red", to: "blue", content: "Second", round: 0 },
+				{
+					kind: "message",
+					from: "blue",
+					to: "red",
+					content: "First",
+					round: 0,
+				},
+				{
+					kind: "message",
+					from: "red",
+					to: "blue",
+					content: "Second",
+					round: 0,
+				},
 			],
 		};
 		const result = buildConversationLog(input, "red", TEST_PERSONAS);
@@ -392,7 +416,13 @@ describe("buildConversationLog — chronological ordering", () => {
 		// Round 2 peer message, round 0 blue message, round 1 witnessed event
 		const input: ConversationLogInput = {
 			conversationLog: [
-				{ kind: "message", from: "blue", to: "red", content: "early msg", round: 0 },
+				{
+					kind: "message",
+					from: "blue",
+					to: "red",
+					content: "early msg",
+					round: 0,
+				},
 				{
 					kind: "witnessed-event",
 					round: 1,

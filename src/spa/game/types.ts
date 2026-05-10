@@ -72,12 +72,7 @@ export type RoundActionRecord = {
 	round: number;
 	actor: AiId;
 	description: string;
-	kind:
-		| "tool_success"
-		| "tool_failure"
-		| "message"
-		| "pass"
-		| "lockout";
+	kind: "tool_success" | "tool_failure" | "message" | "pass" | "lockout";
 };
 
 /**
