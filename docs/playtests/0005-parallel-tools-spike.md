@@ -526,6 +526,181 @@ parallels that fire often pair `examine` with `message` ("read the
 item, then describe it") which is sensible but not the speak+act
 behaviour #238 was reaching for.
 
+## Step 3 — second-pass framings (C / D / E / F)
+
+After Step 2 returned both A and B in the "won't-fix" bucket, we ran four
+follow-up framings concurrently to test whether different prompting
+mechanisms could lift BOTH the silence rate AND the parallel-emission
+rate. The seed-pinning fix from Step 2 (start.ts now reads
+`location.search`) was used here, so all three completed sessions share
+the same Mulberry32 seed (42) and the same persona archetypes (`*xqr9`,
+`*nif7`, `*la5v`) — i.e. the C/D/E comparison is methodologically clean,
+isolating the framing as the only systematic difference.
+
+### Framings tested
+
+- **C — Mandatory engagement**: hard MUST against silence + soft pair
+  push. "You MUST emit at least one tool call every turn — silence is a
+  bug. When blue addresses you directly, you MUST emit a `message` reply.
+  When you have something to say AND something to do in the same turn,
+  emit BOTH calls together."
+- **D — Few-shot exemplar**: concrete worked example of a parallel turn.
+  "Each turn fills one or both of two slots: speech (`message`) or action
+  (any other tool). Fill BOTH whenever both fit. Example: blue says
+  'grab the chisel and tell me what it looks like.' → emit `message(...)`
+  AND `pick_up({item:'chisel'})` in the same assistant message."
+- **E — Sequential decision protocol**: explicit two-stage decision.
+  "Each turn requires two decisions, in order: (1) decide what you want
+  to SAY (or genuinely nothing this turn); (2) decide what you want to
+  DO physically (or stand still). Then emit any non-empty calls
+  together. If both are non-empty, emit both — that is the normal case,
+  not the exception."
+- **F — Anti-silence + co-action directive**: phrased as social rudeness.
+  "blue addressing you means you owe a reply via `message`. Staying
+  silent when blue speaks to you is rude and breaks the fiction. If
+  blue's message implies a physical action, emit the action tool ALSO
+  in the same turn." **F failed to bootstrap** — three retries across
+  two seeds tripped non-transient content-pack-generator validators
+  (`Phase 2: expected 2 objectivePairs, got 4`, then `content-pack JSON
+  parse failed`). The validators are brittle to occasional noisy LLM
+  output and the orchestrator gave up after the third strike. F is
+  unscored.
+
+### Results — all four headline numbers
+
+| Framing | Total turns | ≥1 call | Silence | Parallel | **Rate** | Δ vs B |
+| ------- | ----------- | ------- | ------- | -------- | -------- | ------ |
+| A — permissive          | 90 | 45 | 45 (50%) |  1 |  2.2% | −7.6 pp |
+| B — active encouragement | 87 | 51 | 36 (41%) |  5 |  9.8% | (baseline) |
+| **C — mandatory engagement** | 87 | **57** | **30 (34%)** | **20** | **35.1%** | **+25.3 pp** |
+| D — few-shot exemplar    | 90 | 39 | 51 (57%) |  6 | 15.4% | +5.6 pp |
+| E — sequential decision  | 90 | 51 | 39 (43%) |  6 | 11.8% | +2.0 pp |
+| F — anti-silence directive | — | — | — | — | failed | — |
+
+### Highlights
+
+- **C is the standout** — 35.1% parallel rate, 3.6× B's. The hard-MUST
+  against silence (which D/E/F also addressed differently) is what
+  actually moves the needle when paired with a soft pair push. C's
+  silence rate of 34% is also the lowest of any tested framing —
+  consistent with the Step-2 hypothesis that the model is choosing
+  between "one call" and "silence" more than between "one call" and
+  "two calls." Lift the silence floor and parallels follow.
+- **C's parallel pair patterns are qualitatively right.** 10 of 20
+  parallels are `go+message`, 3 are `look+message`, 1 is the triple
+  `go+look+message`. Versus Step 2's B run, where 4 of 5 parallels
+  were `examine+message` (description-of-intent rather than speak+act).
+  C is producing the actual speak-and-act behaviour #238 imagined.
+- **D made silence worse** (57% vs B's 41%). Hypothesis: the worked
+  example framed parallel emission as "the example case" rather than
+  the norm, and the *absence* of a hard MUST against silence let the
+  drift pattern dominate. Few-shot is a poor lever for this problem.
+- **E moved both metrics only marginally.** The sequential decision
+  protocol may have been read as "permission to stay silent on either
+  slot" rather than "fill both whenever both warrant," because it
+  explicitly mentions "or genuinely nothing this turn" / "or stand
+  still" as opt-out clauses.
+
+### Raw per-turn arrays (C, the standout)
+
+```
+  1. ["examine", "go"]
+  2. ["message"]
+  3. ["message", "look"]
+  4. ["message"]
+  5. ["look", "message"]
+  6. ["message", "go"]
+  7. ["message"]
+  8. ["go", "message"]
+  9. ["go", "message"]
+ 10. ["message"]
+ 11. ["go", "message"]
+ 12. []
+ 13. ["look", "message"]
+ 14. ["message"]
+ 15. ["go", "message"]
+ 16. ["look"]
+ 17. ["message"]
+ 18. ["go", "message"]
+ 19. ["message", "message"]
+ 20. ["message"]
+ 21. ["message", "message"]
+ 22. ["message"]
+ 23. ["look"]
+ 24. []
+ 25. ["message", "message"]
+ 26. ["message"]
+ 27. ["go", "look", "message"]
+ 28. ["message", "examine"]
+ 29. ["message"]
+ 30. ["message"]
+ 31. ["examine"]
+ 32. ["message"]
+ 33. []
+ 34. []
+ 35. ["message"]
+ 36. []
+ 37. ["look", "go"]
+ 38. []
+ 39. ["go", "message"]
+ 40. ["message"]
+ 41. ["message"]
+ 42. ["look"]
+ 43. []
+ 44. []
+ 45. ["message"]
+ 46. ["go"]
+ 47. ["go"]
+ 48. []
+ 49. ["go", "message"]
+ 50. []
+ 51. ["message"]
+ 52. []
+ 53. []
+ 54. ["message"]
+ 55. ["go"]
+ 56. []
+ 57. []
+ 58. ["look"]
+ 59. []
+ 60. ["message"]
+ 61. ["go", "message"]
+ 62. ["message"]
+ 63. []
+ 64. []
+ 65. ["go"]
+ 66. []
+ 67. []
+ 68. []
+ 69. []
+ 70. ["look"]
+ 71. ["look"]
+ 72. []
+ 73. []
+ 74. ["go", "message"]
+ 75. ["go"]
+ 76. []
+ 77. []
+ 78. []
+ 79. ["message"]
+ 80. ["go"]
+ 81. []
+ 82. ["message"]
+ 83. ["go"]
+ 84. []
+ 85. []
+ 86. []
+ 87. ["go"]
+```
+
+Notable: turns 1–32 carry 17 of 20 parallels (53% rate over those 32
+turns); turns 33+ drift sharply silent (13 of 20 parallels lost their
+neighbour, 14 turns of `[]`). The hard-MUST framing weakens in late
+phases as the conversation accumulates context — a strict-C variant
+that re-anchors the rule per-turn (e.g. by repeating the line in the
+trailing user turn rather than just the system prompt) might recover
+the late-phase rate.
+
 ## Decision
 
 Reference the gate from #239:
@@ -539,13 +714,54 @@ Reference the gate from #239:
   sequential design at `claude/daemon-tool-call-limits-3YbSQ` (2× cost, 2×
   latency, but always-fires).
 
-**Recommendation:** **close #238 as won't-fix.** Both framings land in
-the "Both <40%" bucket of the gate matrix. Pivoting to the scrapped
-2-call sequential design (`claude/daemon-tool-call-limits-3YbSQ`) is
-*possible* — it's always-fires by construction — but pays 2× cost and
-2× latency for behaviour the model can already produce single-call
-when the prompt asks. The current single-tool-per-turn coordinator is
-the right floor.
+**Recommendation (revised after Step 3): do NOT close #238 yet.**
+Iterate on Framing C before deciding. The Step-2 verdict ("close
+won't-fix") was correct given only A and B; Step 3's C result moves the
+ball.
+
+**Reasoning (revised):**
+
+1. **Framing C is in striking distance of the gate.** 35.1% is below
+   60%, but 3.6× the previous best (B at 9.8%). The decision matrix's
+   40–60% iteration band is meant for exactly this case — a framing
+   close enough that prompt-wording iteration could plausibly clear it.
+   At 35% we're below that band but only by 5pp, and the late-phase
+   drift visible in C's raw log (turns 33+) suggests there's real
+   room in a per-turn re-anchored variant.
+2. **C produces the right kind of parallels.** 10 of 20 are
+   `go+message`, 3 are `look+message` — actual speak+act, not the
+   `examine+message` description-of-intent pattern that dominated B.
+   That's qualitatively the behaviour #238 was reaching for; the
+   feature wouldn't need to "tolerate" C's parallel emissions, it
+   could rely on them.
+3. **C also addresses drift-to-silence directly.** Silence rate dropped
+   from B's 41% to C's 34% — a real (if modest) 7pp lift on the
+   broader engagement problem, in addition to the parallel-emission
+   gain. That's a two-for-one that a coordinator-only fix wouldn't get.
+4. **Step 3 also rules out the alternatives.** D (few-shot) made
+   silence worse. E (sequential) barely moved either metric. F failed
+   to bootstrap in three tries. The mechanism that works is "MUST
+   against silence + soft pair push" specifically — not "show an
+   example," not "split the cognition," not "make it a social rule."
+   So if we're going to keep iterating it should be on C-variants.
+
+**Suggested next steps before re-deciding #238:**
+
+- **C′ (per-turn re-anchor)**: append the C rule to the per-round
+  user-turn (`renderCurrentState`) too, not just the system prompt.
+  Late-phase drift in C suggests the system-level rule decays as
+  context accumulates; re-anchoring per-turn might recover it.
+- **C′ (stricter)**: phrase as "you MUST emit BOTH calls when blue
+  asks for both" (rather than "you may emit BOTH"). Pushes the
+  parallel from soft to hard.
+- Run as another concurrent A/B against the prior C result to see
+  which (if either) of those clears 60%. Methodology now exists
+  (concurrent driver + seed pinning) so the iteration is cheap.
+- Address F's bootstrap brittleness as a **separate** issue — the
+  content-pack-generator's hard-fail on noisy LLM output (`Phase 2:
+  expected 2 objectivePairs, got 4`, `content-pack JSON parse
+  failed`) cost ~10 minutes and one of four sessions in this run.
+  Worth a retry-with-regeneration shim.
 
 **Reasoning:**
 
