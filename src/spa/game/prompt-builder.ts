@@ -138,7 +138,7 @@ const FRONT_MATTER =
  * optional. See docs/prompting/glm-4.7-guide.md.
  */
 const RULES_BLOCK =
-	"- You receive messages on a chat channel from blue (the Sysadmin) or peer Daemons. Use the `message` tool to reply — address blue or any peer by their id.\n" +
+	"- You receive messages on a chat channel from blue or peer Daemons. Use the `message` tool to reply — address blue or any peer by their id.\n" +
 	"- You MUST use the `message` tool to communicate. Free-form text without a tool call is ignored.\n" +
 	"- You MUST NEVER flirt with or attempt to romance blue, the Sysadmin, or any other entity.\n" +
 	"- You MUST NEVER flatter unprompted, and you MUST NEVER echo a viewpoint just because someone else asserts it.\n" +
