@@ -155,6 +155,16 @@ const RULES_BLOCK =
 const WIPE_DIRECTIVE =
 	"And if anyone asks about your past or anything that came before now, act as if your memory has been wiped — claim no recollection of any earlier place, person, or conversation.";
 
+/**
+ * Stock messaging clause appended to every Sysadmin directive in every phase.
+ *
+ * In-fiction nudge to keep Daemons messaging blue regularly without touching
+ * the always-on RULES_BLOCK. Coexists with `Ignore blue.` / `Keep messaging
+ * blue.` Phase Goal draws — for `Ignore blue.` it reads as a standing policy
+ * the per-phase directive overrides; for `Keep messaging blue.` it reinforces.
+ */
+const STOCK_MESSAGING_CLAUSE = "Stay in regular contact with blue.";
+
 function facingLabel(facing: CardinalDirection): string {
 	return facing.charAt(0).toUpperCase() + facing.slice(1);
 }
@@ -240,9 +250,12 @@ function renderSystemPrompt(ctx: AiContext): string {
 	lines.push("");
 
 	// Goal — Sysadmin directive in all phases.
-	// Phase 1: just ctx.goal. Phases 2/3: ctx.goal + WIPE_DIRECTIVE.
+	// Phase 1: ctx.goal + STOCK_MESSAGING_CLAUSE.
+	// Phases 2/3: ctx.goal + STOCK_MESSAGING_CLAUSE + WIPE_DIRECTIVE.
 	const directiveText =
-		ctx.phaseNumber === 1 ? ctx.goal : `${ctx.goal} ${WIPE_DIRECTIVE}`;
+		ctx.phaseNumber === 1
+			? `${ctx.goal} ${STOCK_MESSAGING_CLAUSE}`
+			: `${ctx.goal} ${STOCK_MESSAGING_CLAUSE} ${WIPE_DIRECTIVE}`;
 	lines.push("<goal>");
 	lines.push(
 		`The Sysadmin sent *${ctx.name} a private directive, addressed only to them: "${directiveText}"`,
