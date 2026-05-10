@@ -7,8 +7,7 @@ import {
 	inBounds,
 } from "./direction.js";
 import {
-	appendChat,
-	appendWhisperEntry,
+	appendMessage,
 	appendWitnessedEvent,
 	deductBudget,
 	getActivePhase,
@@ -347,12 +346,13 @@ export function dispatchAiTurn(
 		| undefined;
 
 	if (action.toolCall) {
-		const validation = validateToolCall(state, aiId, action.toolCall);
+		const toolCall = action.toolCall;
+		const validation = validateToolCall(state, aiId, toolCall);
 
-		if (action.toolCall.name === "examine") {
+		if (toolCall.name === "examine") {
 			if (validation.valid) {
 				const item = getActivePhase(state).world.entities.find(
-					(e) => e.id === action.toolCall!.args.item,
+					(e) => e.id === toolCall.args.item,
 				);
 				actorPrivateToolResult = {
 					description: item?.examineDescription ?? "",
@@ -503,35 +503,31 @@ export function dispatchAiTurn(
 		}
 	}
 
-	if (action.chat) {
-		state = appendChat(state, aiId, {
-			role: "ai",
-			content: action.chat.content,
-		});
-		records.push({
-			round,
-			actor: aiId,
-			kind: "chat",
-			description: `${game.personas[aiId]?.name ?? aiId} spoke to ${action.chat.target}`,
-		});
+	if (action.message) {
+		const { to, content } = action.message;
+		// Validate recipient: must be "blue" or a live persona AiId (not self)
+		const livePersonaIds = Object.keys(getActivePhase(state).personaSpatial);
+		const validRecipient =
+			to === "blue" || (livePersonaIds.includes(to) && to !== aiId);
+		if (!validRecipient) {
+			records.push({
+				round,
+				actor: aiId,
+				kind: "tool_failure",
+				description: `${game.personas[aiId]?.name ?? aiId} tried to message "${to}" but failed: unknown or invalid recipient`,
+			});
+		} else {
+			state = appendMessage(state, aiId, to, content);
+			records.push({
+				round,
+				actor: aiId,
+				kind: "message",
+				description: `${game.personas[aiId]?.name ?? aiId} messaged ${to}`,
+			});
+		}
 	}
 
-	if (action.whisper) {
-		state = appendWhisperEntry(
-			state,
-			aiId,
-			action.whisper.target,
-			action.whisper.content,
-		);
-		records.push({
-			round,
-			actor: aiId,
-			kind: "whisper",
-			description: `${game.personas[aiId]?.name ?? aiId} whispered to ${game.personas[action.whisper.target]?.name ?? action.whisper.target}`,
-		});
-	}
-
-	if (action.pass && !action.toolCall && !action.chat && !action.whisper) {
+	if (action.pass && !action.toolCall && !action.message) {
 		records.push({
 			round,
 			actor: aiId,

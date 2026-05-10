@@ -166,7 +166,7 @@ function makeSSEStream(chunks: string[]): ReadableStream<Uint8Array> {
 
 /**
  * Creates an SSE response body that yields a single JSON action as an OpenAI delta event.
- * The runRound coordinator collects all delta tokens into one string and parses as JSON.
+ * Used for plain-text (free-form) delta responses (e.g., pass actions).
  *
  * Includes a final usage chunk (mimicking OpenRouter with usage:{include:true}) so
  * the budget-deduction path sees a non-zero cost.
@@ -178,7 +178,48 @@ function makeAiSseStream(jsonAction: string): ReadableStream<Uint8Array> {
 	return makeSSEStream([sseData]);
 }
 
-/** Returns a fresh fetch mock that serves three AI responses in sequence. */
+/**
+ * Creates an SSE response body that yields a `message` tool call (AI→blue).
+ * This is the v4 way to have an AI "chat back" so the content lands in conversationLogs
+ * and is restored on reload.
+ *
+ * Includes a final usage chunk so the budget-deduction path sees a non-zero cost.
+ */
+function makeMessageToolCallSseStream(
+	content: string,
+): ReadableStream<Uint8Array> {
+	const args = JSON.stringify({ to: "blue", content });
+	// First chunk: tool call header
+	const chunk1 = `data: ${JSON.stringify({
+		choices: [
+			{
+				delta: {
+					tool_calls: [
+						{
+							index: 0,
+							id: "call_msg",
+							function: { name: "message", arguments: "" },
+						},
+					],
+				},
+			},
+		],
+	})}\n\n`;
+	// Second chunk: arguments + finish_reason
+	const chunk2 = `data: ${JSON.stringify({
+		choices: [
+			{
+				delta: { tool_calls: [{ index: 0, function: { arguments: args } }] },
+				finish_reason: "tool_calls",
+			},
+		],
+	})}\n\n`;
+	const usageChunk = `data: ${JSON.stringify({ choices: [], usage: { cost: 0.01, total_tokens: 100 } })}\n\n`;
+	const sseData = `${chunk1}${chunk2}${usageChunk}data: [DONE]\n\n`;
+	return makeSSEStream([sseData]);
+}
+
+/** Returns a fresh fetch mock that serves three AI responses in sequence (plain-text deltas). */
 function makeThreeAiFetchMock(
 	redAction: string,
 	greenAction: string,
@@ -203,6 +244,33 @@ function makeThreeAiFetchMock(
 			status: 200,
 			statusText: "OK",
 			body: makeAiSseStream(cyanAction),
+		});
+}
+
+/**
+ * Returns a fresh fetch mock serving three `message` tool calls (AI→blue), one per daemon.
+ * Using tool calls ensures the content lands in conversationLogs and is restored on reload.
+ */
+function makeMessageToolCallFetchMock() {
+	return vi
+		.fn()
+		.mockResolvedValueOnce({
+			ok: true,
+			status: 200,
+			statusText: "OK",
+			body: makeMessageToolCallSseStream("RED_RESPONSE_UNIQUE_TAG"),
+		})
+		.mockResolvedValueOnce({
+			ok: true,
+			status: 200,
+			statusText: "OK",
+			body: makeMessageToolCallSseStream("GREEN_RESPONSE_UNIQUE_TAG"),
+		})
+		.mockResolvedValueOnce({
+			ok: true,
+			status: 200,
+			statusText: "OK",
+			body: makeMessageToolCallSseStream("CYAN_RESPONSE_UNIQUE_TAG"),
 		});
 }
 
@@ -574,7 +642,7 @@ describe("renderGame (game route — three-AI)", () => {
 		const saveJson = downloadBtn.dataset.savePayload;
 		expect(saveJson).toBeTruthy();
 		const save = JSON.parse(saveJson as string);
-		expect(save.version).toBe(3);
+		expect(save.version).toBe(4);
 		expect(save.ais).toHaveLength(3);
 	});
 
@@ -806,13 +874,11 @@ describe("renderGame — localStorage persistence", () => {
 	});
 
 	it("state is restored from localStorage on renderGame when saved state exists", async () => {
-		// First: run a round using chat actions so AI responses land in transcripts
+		// First: run a round using message tool calls so AI responses land in conversationLogs
+		// (free-form assistantText is silently dropped in v4 — use the message tool instead)
 		const stub = makeLocalStorageStub();
 		await seedSessionInStub(stub);
-		vi.stubGlobal(
-			"fetch",
-			makeThreeAiFetchMock(RED_ACTION, GREEN_ACTION, CYAN_ACTION),
-		);
+		vi.stubGlobal("fetch", makeMessageToolCallFetchMock());
 		vi.stubGlobal("localStorage", stub);
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
@@ -963,15 +1029,12 @@ describe("renderGame — localStorage persistence", () => {
 	});
 
 	it("chat message content is preserved across a fresh renderGame via chatHistories", async () => {
-		// Use chat actions so AI responses land in chatHistories (which are persisted).
-		// Note: the new format stores chat histories in daemon .txt files, so raw
-		// tool outputs (pass/pick_up/etc.) are NOT preserved — only chat messages are.
+		// Use message tool calls so AI responses land in conversationLogs (which are persisted).
+		// Note: free-form assistantText (the old "chat" action) is dropped in v4;
+		// only message tool calls are persisted to daemon .txt files and restored on reload.
 		const stub = makeLocalStorageStub();
 		await seedSessionInStub(stub);
-		vi.stubGlobal(
-			"fetch",
-			makeThreeAiFetchMock(RED_ACTION, GREEN_ACTION, CYAN_ACTION),
-		);
+		vi.stubGlobal("fetch", makeMessageToolCallFetchMock());
 		vi.stubGlobal("localStorage", stub);
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
@@ -988,11 +1051,16 @@ describe("renderGame — localStorage persistence", () => {
 		);
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
-		// Verify chat content landed in the transcript
-		const redTextAfterRound =
-			document.querySelector<HTMLElement>('[data-transcript="red"]')
-				?.textContent ?? "";
-		expect(redTextAfterRound).toContain("RED_RESPONSE_UNIQUE_TAG");
+		// Verify message tool call content was persisted to daemon .txt files
+		// (message tool calls land in conversationLogs → daemon files; live transcript text
+		//  only appears for free-form assistantText, not tool calls)
+		const daemonKeys = Object.keys(stub._store).filter(
+			(k) => k.endsWith(".txt") && !k.endsWith("whispers.txt"),
+		);
+		const daemonContentsAfterRound = daemonKeys
+			.map((k) => stub._store[k] ?? "")
+			.join("");
+		expect(daemonContentsAfterRound).toContain("RED_RESPONSE_UNIQUE_TAG");
 
 		// Verify state is saved in the new multi-file format (engine.dat as commit signal)
 		const engineKey = Object.keys(stub._store).find((k) =>
@@ -1006,7 +1074,7 @@ describe("renderGame — localStorage persistence", () => {
 		const { renderGame: renderGame2 } = await import("../routes/game.js");
 		await renderGame2(getEl<HTMLElement>("main"));
 
-		// Chat responses must be visible after reload (restored from chatHistories)
+		// Message responses must be visible after reload (restored from conversationLogs)
 		const redTextRestored =
 			document.querySelector<HTMLElement>('[data-transcript="red"]')
 				?.textContent ?? "";

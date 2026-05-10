@@ -106,7 +106,7 @@ type PhaseSpec = {
  */
 function parseContentPackPhases(userMessage: string): PhaseSpec[] {
 	const re =
-		/Phase\s+(\d+):\s+setting="([^"]*)",\s+k=(\d+)\s+objective pairs,\s+n=(\d+)\s+interesting objects,\s+m=(\d+)\s+obstacles/g;
+		/Phase\s+(\d+):\s+setting="([^"]*)"(?:,\s+theme="[^"]*")?,\s+k=(\d+)\s+objective pairs,\s+n=(\d+)\s+interesting objects,\s+m=(\d+)\s+obstacles/g;
 	const phases: PhaseSpec[] = [];
 	for (const match of userMessage.matchAll(re)) {
 		const phaseNumber = Number(match[1]);

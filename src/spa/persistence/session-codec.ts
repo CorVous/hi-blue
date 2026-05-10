@@ -40,11 +40,11 @@ import {
 // ── Schema version ─────────────────────────────────────────────────────────────
 
 /**
- * Version embedded in engine.dat. Bumped to 3 when whispers.txt was retired:
- * whisper entries now live inside each Daemon's conversationLog inline.
- * Old v2 saves cannot round-trip whispers and will trigger a version-mismatch banner.
+ * Version embedded in engine.dat. Bumped to 4 when the `chat` and `whisper`
+ * ConversationEntry kinds were collapsed into a single directional `message` kind.
+ * Old v3 saves used `chat`/`whisper` shapes that no longer exist in the type union.
  */
-export const SESSION_SCHEMA_VERSION = 3 as const;
+export const SESSION_SCHEMA_VERSION = 4 as const;
 
 // ── Phase config lookup ────────────────────────────────────────────────────────
 

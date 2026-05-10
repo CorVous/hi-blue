@@ -1,10 +1,17 @@
 import { type OpenAiMessage, streamCompletion } from "../llm-client.js";
-import type { AiId, AiPersona, ChatMessage } from "./types";
+import type { AiId, AiPersona } from "./types";
+
+/** Legacy single-AI chat history entry used only by game-loop. */
+interface LegacyChatMessage {
+	role: "player" | "ai";
+	content: string;
+	round: number;
+}
 
 export interface SingleAiSession {
 	readonly aiId: AiId;
 	readonly persona: AiPersona;
-	history: ChatMessage[]; // accumulates across rounds
+	history: LegacyChatMessage[]; // accumulates across rounds
 }
 
 export function createSingleAiSession(persona: AiPersona): SingleAiSession {
@@ -40,7 +47,7 @@ export async function runSingleAiRound(opts: RunRoundOptions): Promise<string> {
 		content: `You are ${session.persona.name}. ${session.persona.blurb}`,
 	};
 
-	// Map history ChatMessage[] to OpenAI messages
+	// Map history LegacyChatMessage[] to OpenAI messages
 	const historyMessages: OpenAiMessage[] = session.history.map(
 		(msg): OpenAiMessage => ({
 			role: msg.role === "player" ? "user" : "assistant",
@@ -73,7 +80,7 @@ export async function runSingleAiRound(opts: RunRoundOptions): Promise<string> {
 
 	// Only mutate history after successful stream.
 	// game-loop is a legacy single-AI path that doesn't track rounds;
-	// use 0 as a sentinel so the ChatMessage type is satisfied.
+	// use history length as the round sentinel.
 	const nextRound = session.history.length;
 	session.history.push({ role: "player", content: message, round: nextRound });
 	session.history.push({ role: "ai", content: fullResponse, round: nextRound });

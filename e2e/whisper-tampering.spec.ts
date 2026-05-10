@@ -2,10 +2,10 @@ import { expect, test } from "@playwright/test";
 import { getAiHandles, goToGame, stubChatCompletions } from "./helpers";
 
 /**
- * E2E — Per-Daemon asymmetric whisper tampering (issue #196, PRD #157)
+ * E2E — Per-Daemon asymmetric message tampering (issue #213)
  *
  * Proves the editable surface (per-Daemon <aiId>.txt files) is:
- *   1. The sole source of whisper state fed into the system prompt.
+ *   1. The sole source of message state fed into the system prompt.
  *   2. Per-Daemon: an entry injected into one Daemon's file does NOT bleed
  *      into the other two Daemons' prompts.
  *
@@ -13,21 +13,20 @@ import { getAiHandles, goToGame, stubChatCompletions } from "./helpers";
  *   - Drive the start screen through goToGame → game is live, all three
  *     <aiId>.txt files exist in localStorage.
  *   - Directly mutate ids[0]'s DaemonFile in localStorage, appending a
- *     fabricated `kind: "whisper"` ConversationEntry with a unique sentinel.
+ *     fabricated `kind: "message"` ConversationEntry with a unique sentinel.
  *   - Reload → the SPA deserialises from storage → reconstructs state.
  *   - Capture the next round's /v1/chat/completions request bodies.
- *   - Assert: the targeted Daemon's system prompt contains the whisper line
+ *   - Assert: the targeted Daemon's system prompt contains the message line
  *     inside <conversation>...</conversation>; the other two do not contain
  *     the sentinel at all.
  *
- * This is a v2-only property: in v1 whispers lived in a shared whispers.txt
- * file and the "absent from other prompts" invariant could not be asserted at
- * the per-Daemon storage level.
+ * This is a per-Daemon property: entries injected into one Daemon's file
+ * do not appear in other Daemons' prompts.
  */
 
 const SENTINEL = "FABRICATED_TAMPERED_WHISPER_xyz123";
 
-test("fabricated whisper appears in target daemon prompt and is absent from others after reload", async ({
+test("fabricated message appears in target daemon prompt and is absent from others after reload", async ({
 	page,
 }) => {
 	const pageErrors: Error[] = [];
@@ -70,9 +69,9 @@ test("fabricated whisper appears in target daemon prompt and is absent from othe
 				};
 			};
 
-			// Append fabricated whisper to phase "1" log.
+			// Append fabricated message entry to phase "1" log.
 			daemonFile.phases["1"].conversationLog.push({
-				kind: "whisper",
+				kind: "message",
 				round: 0,
 				from: senderId,
 				to: targetId,
@@ -137,14 +136,14 @@ test("fabricated whisper appears in target daemon prompt and is absent from othe
 	const other1Body = findBodyForName(names[1]);
 	const other2Body = findBodyForName(names[2]);
 
-	// Derive expected whisper line from conversation-log.ts:58-59:
-	//   `[Round ${round}] *${entry.from} whispered to you: "${entry.content}"`
+	// Derive expected message line from conversation-log.ts:
+	//   `[Round R] *<from> dms you: <content>` (no surrounding quotes)
 	// entry.from is senderId (an aiId); conversation-log uses entry.from directly
 	// as the display value. In the spec we verify the sentinel via SENTINEL alone
 	// and also check the full line format including senderName for robustness.
 	// NOTE: conversation-log.ts renders entry.from (the AiId) directly, not the
 	// persona name. The sentinel is unique so checking via SENTINEL is sufficient.
-	const expectedLine = `[Round 0] *${senderId} whispered to you: "${SENTINEL}"`;
+	const expectedLine = `[Round 0] *${senderId} dms you: ${SENTINEL}`;
 
 	// 7. Assert targeted daemon's system prompt contains the whisper inside
 	//    <conversation>...</conversation>.
@@ -161,7 +160,7 @@ test("fabricated whisper appears in target daemon prompt and is absent from othe
 	expect(targetSysContent).toContain("</conversation>");
 	expect(
 		targetSysContent,
-		`Expected whisper line not found in target daemon's system prompt. ` +
+		`Expected message line not found in target daemon's system prompt. ` +
 			`Expected: ${expectedLine}`,
 	).toContain(expectedLine);
 	expect(

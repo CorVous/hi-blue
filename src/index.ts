@@ -7,8 +7,7 @@ export {
 export {
 	advancePhase,
 	advanceRound,
-	appendChat,
-	appendWhisperEntry,
+	appendMessage,
 	appendWitnessedEvent,
 	createGame,
 	deductBudget,
@@ -22,7 +21,6 @@ export type {
 	AiId,
 	AiPersona,
 	AiTurnAction,
-	ChatMessage,
 	GameState,
 	PhaseConfig,
 	PhaseState,
@@ -31,7 +29,6 @@ export type {
 	ToolCall,
 	ToolName,
 	ToolResult,
-	WhisperMessage,
 	WorldEntity,
 	WorldState,
 } from "./spa/game/types";

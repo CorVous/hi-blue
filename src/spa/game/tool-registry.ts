@@ -169,6 +169,30 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 			},
 		},
 	},
+	{
+		type: "function",
+		function: {
+			name: "message",
+			description:
+				"Send a direct message to a specific recipient — blue (the player) or a peer Daemon. The recipient receives the message in their conversation log. Only the sender and recipient see this message.",
+			parameters: {
+				type: "object",
+				properties: {
+					to: {
+						type: "string",
+						description:
+							'The recipient: "blue" for the player, or the AiId of a peer Daemon.',
+					},
+					content: {
+						type: "string",
+						description: "The message content to send.",
+					},
+				},
+				required: ["to", "content"],
+				additionalProperties: false,
+			},
+		},
+	},
 ];
 
 type ParseSuccess<T> = { ok: true; args: T };
@@ -183,6 +207,7 @@ type UseArgs = { item: string };
 type GoArgs = { direction: string };
 type LookArgs = { direction: string };
 type ExamineArgs = { item: string };
+type MessageArgs = { to: string; content: string };
 
 type ToolArgs = {
 	pick_up: PickUpArgs;
@@ -192,6 +217,7 @@ type ToolArgs = {
 	go: GoArgs;
 	look: LookArgs;
 	examine: ExamineArgs;
+	message: MessageArgs;
 };
 
 /**
@@ -248,6 +274,18 @@ export function parseToolCallArguments<N extends ToolName>(
 				};
 			}
 			return { ok: true, args: { direction: obj.direction } as ToolArgs[N] };
+		}
+		case "message": {
+			if (typeof obj.to !== "string" || obj.to.length === 0) {
+				return { ok: false, reason: "Required argument 'to' is missing" };
+			}
+			if (typeof obj.content !== "string" || obj.content.length === 0) {
+				return { ok: false, reason: "Required argument 'content' is missing" };
+			}
+			return {
+				ok: true,
+				args: { to: obj.to, content: obj.content } as ToolArgs[N],
+			};
 		}
 		default:
 			return { ok: false, reason: `Unknown tool "${name}"` };

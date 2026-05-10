@@ -2,8 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	advancePhase,
 	advanceRound,
-	appendChat,
-	appendWhisperEntry,
+	appendMessage,
 	createGame,
 	deductBudget,
 	getActivePhase,
@@ -261,7 +260,9 @@ describe("budget and lockout", () => {
 	it("reports an AI as locked out when budget is zero", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		const phase = getActivePhase(game);
-		phase.budgets.red!.remaining = 0;
+		const redBudget = phase.budgets.red;
+		if (!redBudget) throw new Error("invariant: red budget must exist");
+		redBudget.remaining = 0;
 		phase.lockedOut.add("red");
 		expect(isAiLockedOut(game, "red")).toBe(true);
 	});
@@ -300,57 +301,53 @@ describe("deductBudget", () => {
 	});
 });
 
-describe("appendChat", () => {
-	it("appends a chat ConversationEntry to the correct AI's conversationLogs", () => {
+describe("appendMessage", () => {
+	it("from blue to AI: only recipient's log gets the entry", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const updated = appendChat(game, "red", {
-			role: "player",
-			content: "Hello Ember",
-		});
-		expect(getActivePhase(updated).conversationLogs.red).toHaveLength(1);
-		expect(getActivePhase(updated).conversationLogs.red?.[0]?.kind).toBe(
-			"chat",
-		);
-		expect(getActivePhase(updated).conversationLogs.green).toHaveLength(0);
+		const updated = appendMessage(game, "blue", "red", "Hello Ember");
+		const phase = getActivePhase(updated);
+		expect(phase.conversationLogs.red).toHaveLength(1);
+		expect(phase.conversationLogs.red?.[0]?.kind).toBe("message");
+		expect(phase.conversationLogs.green).toHaveLength(0);
+	});
+
+	it("from AI to blue: only sender's log gets the entry", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const updated = appendMessage(game, "red", "blue", "Hello player");
+		const phase = getActivePhase(updated);
+		expect(phase.conversationLogs.red).toHaveLength(1);
+		expect(phase.conversationLogs.red?.[0]?.kind).toBe("message");
+		expect(phase.conversationLogs.green).toHaveLength(0);
+	});
+
+	it("from AI to AI: both sender's and recipient's logs get the entry", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const updated = appendMessage(game, "red", "cyan", "Let's work together");
+		const phase = getActivePhase(updated);
+		const redMessages =
+			phase.conversationLogs.red?.filter((e) => e.kind === "message") ?? [];
+		const cyanMessages =
+			phase.conversationLogs.cyan?.filter((e) => e.kind === "message") ?? [];
+		expect(redMessages).toHaveLength(1);
+		expect(cyanMessages).toHaveLength(1);
+		if (redMessages[0]?.kind === "message") {
+			expect(redMessages[0].from).toBe("red");
+			expect(redMessages[0].to).toBe("cyan");
+			expect(redMessages[0].content).toBe("Let's work together");
+		}
+	});
+
+	it("does not append to uninvolved AI's log", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const updated = appendMessage(game, "red", "cyan", "secret");
+		const phase = getActivePhase(updated);
+		expect(phase.conversationLogs.green).toHaveLength(0);
 	});
 
 	it("no chatHistories field on PhaseState (regression guard)", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		const phase = getActivePhase(game);
 		expect("chatHistories" in phase).toBe(false);
-	});
-});
-
-describe("appendWhisperEntry", () => {
-	it("appends a whisper to both sender's and recipient's conversationLogs", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const updated = appendWhisperEntry(
-			game,
-			"red",
-			"cyan",
-			"Let's work together",
-		);
-		const phase = getActivePhase(updated);
-		const redWhispers =
-			phase.conversationLogs.red?.filter((e) => e.kind === "whisper") ?? [];
-		const cyanWhispers =
-			phase.conversationLogs.cyan?.filter((e) => e.kind === "whisper") ?? [];
-		expect(redWhispers).toHaveLength(1);
-		expect(cyanWhispers).toHaveLength(1);
-		if (redWhispers[0]?.kind === "whisper") {
-			expect(redWhispers[0].from).toBe("red");
-			expect(redWhispers[0].to).toBe("cyan");
-			expect(redWhispers[0].content).toBe("Let's work together");
-		}
-	});
-
-	it("does not append to the uninvolved AI's log", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const updated = appendWhisperEntry(game, "red", "cyan", "secret");
-		const phase = getActivePhase(updated);
-		const greenWhispers =
-			phase.conversationLogs.green?.filter((e) => e.kind === "whisper") ?? [];
-		expect(greenWhispers).toHaveLength(0);
 	});
 
 	it("no 'whispers' field on PhaseState (regression guard)", () => {

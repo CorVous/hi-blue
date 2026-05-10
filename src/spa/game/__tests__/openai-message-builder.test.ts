@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appendChat, createGame, startPhase } from "../engine";
+import { appendMessage, createGame, startPhase } from "../engine";
 import {
 	buildOpenAiMessages,
 	buildSilentTurn,
@@ -73,37 +73,37 @@ describe("buildOpenAiMessages", () => {
 		expect(messages[0]?.role).toBe("system");
 	});
 
-	it("single player+AI chat turn → [system, user, assistant]", () => {
+	it("single player+AI message turn → [system, user, assistant]", () => {
 		let game = makeGame();
-		game = appendChat(game, "red", { role: "player", content: "Hello Ember!" });
-		game = appendChat(game, "red", { role: "ai", content: "Hello, player!" });
+		game = appendMessage(game, "blue", "red", "Hello Ember!");
+		game = appendMessage(game, "red", "blue", "Hello, player!");
 
 		const ctx = buildAiContext(game, "red");
 		const messages = buildOpenAiMessages(ctx, undefined);
 
 		expect(messages).toHaveLength(3);
 		expect(messages[0]?.role).toBe("system");
-		expect(messages[1]).toEqual({ role: "user", content: "Hello Ember!" });
+		expect(messages[1]).toEqual({
+			role: "user",
+			content: "blue: Hello Ember!",
+		});
 		expect(messages[2]).toEqual({
 			role: "assistant",
 			content: "Hello, player!",
 		});
 	});
 
-	it("chat history of length N → N pairs after system", () => {
+	it("message history of length N → N pairs after system", () => {
 		let game = makeGame();
 		for (let i = 0; i < 3; i++) {
-			game = appendChat(game, "red", {
-				role: "player",
-				content: `Player msg ${i}`,
-			});
-			game = appendChat(game, "red", { role: "ai", content: `AI msg ${i}` });
+			game = appendMessage(game, "blue", "red", `Player msg ${i}`);
+			game = appendMessage(game, "red", "blue", `AI msg ${i}`);
 		}
 
 		const ctx = buildAiContext(game, "red");
 		const messages = buildOpenAiMessages(ctx, undefined);
 
-		// 1 system + 6 chat messages (3 player + 3 AI)
+		// 1 system + 6 messages (3 player + 3 AI)
 		expect(messages).toHaveLength(7);
 		expect(messages[0]?.role).toBe("system");
 		// Pairs alternate user/assistant
@@ -115,7 +115,7 @@ describe("buildOpenAiMessages", () => {
 
 	it("prior-round tool roundtrip is appended with correct ordering", () => {
 		let game = makeGame();
-		game = appendChat(game, "red", { role: "player", content: "Pick it up!" });
+		game = appendMessage(game, "blue", "red", "Pick it up!");
 
 		const ctx = buildAiContext(game, "red");
 
@@ -246,8 +246,8 @@ describe("buildOpenAiMessages", () => {
 
 	it("non-addressed AI gets a trailing silent-turn user message", () => {
 		let game = makeGame();
-		game = appendChat(game, "red", { role: "player", content: "Hi Ember" });
-		game = appendChat(game, "red", { role: "ai", content: "Hi player" });
+		game = appendMessage(game, "blue", "red", "Hi Ember");
+		game = appendMessage(game, "red", "blue", "Hi player");
 
 		const ctx = buildAiContext(game, "red");
 		// addressed = green: red is NOT the addressee this round.
@@ -260,7 +260,7 @@ describe("buildOpenAiMessages", () => {
 
 	it("addressed AI does not get the silent-turn anchor", () => {
 		let game = makeGame();
-		game = appendChat(game, "red", { role: "player", content: "Hi Ember" });
+		game = appendMessage(game, "blue", "red", "Hi Ember");
 		const ctx = buildAiContext(game, "red");
 		const silent = buildSilentTurn(ctx);
 

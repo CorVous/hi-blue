@@ -259,56 +259,38 @@ export function deductBudget(
 	});
 }
 
-export function appendChat(
-	game: GameState,
-	aiId: AiId,
-	message: { role: "player" | "ai"; content: string },
-): GameState {
-	return updateActivePhase(game, (phase) => {
-		const entry: ConversationEntry = {
-			kind: "chat",
-			round: phase.round,
-			role: message.role,
-			content: message.content,
-		};
-		return {
-			...phase,
-			conversationLogs: {
-				...phase.conversationLogs,
-				[aiId]: [...(phase.conversationLogs[aiId] ?? []), entry],
-			},
-		};
-	});
-}
-
 /**
- * Append an identical `kind: "whisper"` ConversationEntry to both the sender's
- * and the recipient's per-Daemon conversationLogs in one atomic update.
+ * Append a `kind: "message"` ConversationEntry to the relevant per-Daemon logs.
+ *
+ * Both sender's and recipient's per-Daemon conversationLogs receive the same entry
+ * in one atomic update. "blue" is not a Daemon, so when `from === "blue"` only the
+ * recipient gets the entry, and when `to === "blue"` only the sender gets it.
  */
-export function appendWhisperEntry(
+export function appendMessage(
 	game: GameState,
-	sender: AiId,
-	recipient: AiId,
+	from: AiId | "blue",
+	to: AiId | "blue",
 	content: string,
 ): GameState {
 	return updateActivePhase(game, (phase) => {
 		const entry: ConversationEntry = {
-			kind: "whisper",
+			kind: "message",
 			round: phase.round,
-			from: sender,
-			to: recipient,
+			from,
+			to,
 			content,
 		};
-		const senderLog = [...(phase.conversationLogs[sender] ?? []), entry];
-		const recipientLog = [...(phase.conversationLogs[recipient] ?? []), entry];
-		return {
-			...phase,
-			conversationLogs: {
-				...phase.conversationLogs,
-				[sender]: senderLog,
-				[recipient]: recipientLog,
-			},
-		};
+		const logs = { ...phase.conversationLogs };
+		// Sender gets entry only when sender is a Daemon (not blue)
+		if (from !== "blue") {
+			logs[from] = [...(logs[from] ?? []), entry];
+		}
+		// Recipient gets entry only when recipient is a Daemon (not blue)
+		// and recipient is different from sender (avoid double-append if from===to, which shouldn't happen)
+		if (to !== "blue" && to !== from) {
+			logs[to] = [...(logs[to] ?? []), entry];
+		}
+		return { ...phase, conversationLogs: logs };
 	});
 }
 

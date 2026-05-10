@@ -164,7 +164,7 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 
 		const redRound2 = provider.calls[3];
 		expect(redRound2).toBeDefined();
-		const msgs = redRound2!.messages;
+		const msgs = redRound2?.messages ?? [];
 
 		// Last message anchors the current round.
 		const last = msgs[msgs.length - 1];
@@ -179,20 +179,22 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 		expect((lastUser as { content: string }).content).toBe(
 			expectedSilentTurn("red"),
 		);
+		// In v4 the player message is prefixed with "blue: " when built into OpenAI messages
 		const priorUser = msgs.find(
 			(m) =>
 				m.role === "user" &&
-				(m as { content: string }).content === "are you alive?",
+				(m as { content: string }).content === "blue: are you alive?",
 		);
 		expect(priorUser).toBeDefined();
 
 		// Cyan (the addressee this round) must NOT receive the silent-voice
 		// anchor — its tail is the actual player message.
 		const cyanRound2 = provider.calls[5];
-		const cyanMsgs = cyanRound2!.messages;
+		const cyanMsgs = cyanRound2?.messages ?? [];
 		const cyanLastUser = [...cyanMsgs].reverse().find((m) => m.role === "user");
+		// In v4 the player message is prefixed with "blue: " when built into OpenAI messages
 		expect((cyanLastUser as { content: string }).content).toBe(
-			"different question for cyan",
+			"blue: different question for cyan",
 		);
 		expect(
 			cyanMsgs.some(
@@ -217,7 +219,7 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 
 		// Green was never addressed; green's call (index 1) must end with the anchor.
 		const greenCall = provider.calls[1];
-		const greenMsgs = greenCall!.messages;
+		const greenMsgs = greenCall?.messages ?? [];
 		const last = greenMsgs[greenMsgs.length - 1];
 		expect(last?.role).toBe("user");
 		expect((last as { content: string }).content).toBe(

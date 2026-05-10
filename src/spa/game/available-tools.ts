@@ -113,6 +113,14 @@ export function availableTools(game: GameState, aiId: AiId): OpenAiTool[] {
 
 	const tools: OpenAiTool[] = [];
 
+	// 0. message — always present; restrict 'to' to blue + live other daemon ids
+	const liveOtherDaemonIds = Object.keys(phase.personaSpatial).filter(
+		(id) => id !== aiId,
+	);
+	tools.push(
+		cloneToolWithEnums("message", { to: ["blue", ...liveOtherDaemonIds] }),
+	);
+
 	// 1. look — always present
 	tools.push(
 		cloneToolWithEnums("look", { direction: [...CARDINAL_DIRECTIONS] }),

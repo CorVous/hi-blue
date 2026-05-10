@@ -30,8 +30,8 @@ export interface AiSaveEntry {
 }
 
 export interface GameSave {
-	/** Schema version. v3 = whispers moved inline into conversationLog. */
-	version: 3;
+	/** Schema version. v4 = chat/whisper collapsed into directional message primitive. */
+	version: 4;
 	ais: AiSaveEntry[];
 	/** All three content packs (generated at game start). */
 	contentPacks: ContentPack[];
@@ -59,5 +59,5 @@ export function serializeGameSave(game: GameState): GameSave {
 		return { persona: { ...persona }, phases };
 	});
 
-	return { version: 3, ais, contentPacks: game.contentPacks };
+	return { version: 4, ais, contentPacks: game.contentPacks };
 }

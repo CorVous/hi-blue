@@ -49,14 +49,16 @@ function renderEntry(
 ): string {
 	const round = entry.round;
 	switch (entry.kind) {
-		case "chat":
-			if (entry.role === "player") {
-				return `[Round ${round}] blue dms you: ${entry.content}`;
+		case "message": {
+			if (entry.to === aiId) {
+				// Incoming: render as "<fromLabel> dms you: <content>"
+				const fromLabel = entry.from === "blue" ? "blue" : `*${entry.from}`;
+				return `[Round ${round}] ${fromLabel} dms you: ${entry.content}`;
 			}
-			return `[Round ${round}] You: "${entry.content}"`;
-
-		case "whisper":
-			return `[Round ${round}] *${entry.from} dms you: ${entry.content}`;
+			// Outgoing: render as "you dm <toLabel>: <content>"
+			const toLabel = entry.to === "blue" ? "blue" : `*${entry.to}`;
+			return `[Round ${round}] you dm ${toLabel}: ${entry.content}`;
+		}
 
 		case "witnessed-event": {
 			const actorSub = `*${entry.actor}`;
