@@ -413,9 +413,9 @@ describe("wipe directive", () => {
 describe("voice framing", () => {
 	it("renders 'blue:' prefix for player turns in role messages, never 'Player:'", () => {
 		// Conversation rendering moved out of the system prompt into role
-		// turns; the compact "blue: <content>" form replaces the rich
-		// "[Round N] blue dms you: <content>" form previously emitted in the
-		// system prompt's <conversation> block.
+		// turns rendered via conversation-log.ts:renderEntry — the
+		// "[Round N] blue dms you: <content>" form (preserves the round
+		// number and recipient routing context the model relies on).
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = appendMessage(game, "blue", "red", "Hello Ember");
 		const ctx = buildAiContext(game, "red");
@@ -423,7 +423,8 @@ describe("voice framing", () => {
 		const userMsg = messages.find(
 			(m) =>
 				m.role === "user" &&
-				(m as { content: string }).content === "blue: Hello Ember",
+				(m as { content: string }).content ===
+					"[Round 0] blue dms you: Hello Ember",
 		);
 		expect(userMsg).toBeDefined();
 		// "Player:" framing must never appear anywhere
@@ -921,7 +922,7 @@ describe("conversation rendering (role turns)", () => {
 		}
 	});
 
-	it("incoming blue message becomes a user turn 'blue: <content>'", () => {
+	it("incoming blue message becomes a user turn '[Round N] blue dms you: <content>'", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = appendMessage(game, "blue", "red", "Hello Ember");
 		const ctx = buildAiContext(game, "red");
@@ -929,12 +930,13 @@ describe("conversation rendering (role turns)", () => {
 		const userMsg = messages.find(
 			(m) =>
 				m.role === "user" &&
-				(m as { content: string }).content === "blue: Hello Ember",
+				(m as { content: string }).content ===
+					"[Round 0] blue dms you: Hello Ember",
 		);
 		expect(userMsg).toBeDefined();
 	});
 
-	it("outgoing AI message becomes an assistant turn with bare content", () => {
+	it("outgoing AI message becomes an assistant turn '[Round N] you dm <to>: <content>'", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = appendMessage(game, "red", "blue", "Greetings");
 		const ctx = buildAiContext(game, "red");
@@ -942,12 +944,13 @@ describe("conversation rendering (role turns)", () => {
 		const asst = messages.find(
 			(m) =>
 				m.role === "assistant" &&
-				(m as { content: string | null }).content === "Greetings",
+				(m as { content: string | null }).content ===
+					"[Round 0] you dm blue: Greetings",
 		);
 		expect(asst).toBeDefined();
 	});
 
-	it("peer message becomes a user turn '*<sender>: <content>'", () => {
+	it("peer message becomes a user turn '[Round N] *<sender> dms you: <content>'", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		// Advance to round 1 so the message is stamped with round 1 (fixture contract).
 		game = advanceRound(game);
@@ -957,7 +960,8 @@ describe("conversation rendering (role turns)", () => {
 		const userMsg = messages.find(
 			(m) =>
 				m.role === "user" &&
-				(m as { content: string }).content === "*green: secret",
+				(m as { content: string }).content ===
+					"[Round 1] *green dms you: secret",
 		);
 		expect(userMsg).toBeDefined();
 	});
@@ -970,7 +974,8 @@ describe("conversation rendering (role turns)", () => {
 		const asst = messages.find(
 			(m) =>
 				m.role === "assistant" &&
-				(m as { content: string | null }).content === "secret",
+				(m as { content: string | null }).content ===
+					"[Round 0] you dm *red: secret",
 		);
 		expect(asst).toBeDefined();
 	});
@@ -1008,12 +1013,14 @@ describe("conversation rendering (role turns)", () => {
 		const earlierIdx = messages.findIndex(
 			(m) =>
 				m.role === "user" &&
-				(m as { content: string }).content === "blue: earlier",
+				(m as { content: string }).content ===
+					"[Round 0] blue dms you: earlier",
 		);
 		const laterIdx = messages.findIndex(
 			(m) =>
 				m.role === "user" &&
-				(m as { content: string }).content === "*green: later",
+				(m as { content: string }).content ===
+					"[Round 2] *green dms you: later",
 		);
 		expect(earlierIdx).toBeGreaterThanOrEqual(0);
 		expect(laterIdx).toBeGreaterThanOrEqual(0);

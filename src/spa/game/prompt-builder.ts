@@ -4,7 +4,6 @@ import { getActivePhase } from "./engine";
 import type {
 	AiBudget,
 	AiId,
-	AiPersona,
 	CardinalDirection,
 	ConversationEntry,
 	GameState,
@@ -36,8 +35,6 @@ export interface AiContext {
 	personaSpatial: Record<AiId, PersonaSpatialState>;
 	/** Color for each AI, keyed by AiId — used in cone rendering. */
 	personaColors: Record<AiId, string>;
-	/** All personas — used by buildConversationLog for name resolution. */
-	personas: Record<AiId, AiPersona>;
 	/**
 	 * Render the stable persona/phase prompt — front matter, identity, rules,
 	 * setting, personality, voice examples, goal. Byte-identical across rounds
@@ -89,7 +86,6 @@ export function buildAiContext(game: GameState, aiId: AiId): AiContext {
 		phaseNumber: phase.phaseNumber,
 		personaSpatial,
 		personaColors,
-		personas: game.personas,
 		toSystemPrompt() {
 			return renderSystemPrompt(this);
 		},

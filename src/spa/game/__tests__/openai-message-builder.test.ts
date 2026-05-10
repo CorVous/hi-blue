@@ -95,11 +95,11 @@ describe("buildOpenAiMessages", () => {
 		expect(messages[0]?.role).toBe("system");
 		expect(messages[1]).toEqual({
 			role: "user",
-			content: "blue: Hello Ember!",
+			content: "[Round 0] blue dms you: Hello Ember!",
 		});
 		expect(messages[2]).toEqual({
 			role: "assistant",
-			content: "Hello, player!",
+			content: "[Round 0] you dm blue: Hello, player!",
 		});
 		// Trailing current-state turn
 		expect(messages[3]?.role).toBe("user");
@@ -294,7 +294,7 @@ describe("buildOpenAiMessages", () => {
 		// Anchor sits immediately before the trailing current-state turn
 		const anchor = messages[messages.length - 2];
 		expect(anchor?.role).toBe("user");
-		expect((anchor as { content: string }).content).toBe(buildSilentTurn(ctx));
+		expect((anchor as { content: string }).content).toBe(buildSilentTurn());
 
 		// Last is the current-state turn
 		const last = messages[messages.length - 1];
@@ -312,7 +312,7 @@ describe("buildOpenAiMessages", () => {
 		game = appendMessage(game, "green", "red", "psst red");
 
 		const ctx = buildAiContext(game, "red");
-		const silent = buildSilentTurn(ctx);
+		const silent = buildSilentTurn();
 		const stateContent = ctx.toCurrentStateUserMessage();
 		const messages = buildOpenAiMessages(ctx, undefined, currentRound);
 
@@ -333,7 +333,7 @@ describe("buildOpenAiMessages", () => {
 		const lastConversational =
 			conversationalUserTurns[conversationalUserTurns.length - 1];
 		expect((lastConversational as { content: string }).content).toBe(
-			"*green: psst red",
+			"[Round 0] *green dms you: psst red",
 		);
 	});
 
@@ -345,7 +345,7 @@ describe("buildOpenAiMessages", () => {
 		game = appendMessage(game, "blue", "red", "Hi Ember");
 
 		const ctx = buildAiContext(game, "red");
-		const silent = buildSilentTurn(ctx);
+		const silent = buildSilentTurn();
 		const stateContent = ctx.toCurrentStateUserMessage();
 		const messages = buildOpenAiMessages(ctx, undefined, currentRound);
 
@@ -365,14 +365,14 @@ describe("buildOpenAiMessages", () => {
 		const lastConversational =
 			conversationalUserTurns[conversationalUserTurns.length - 1];
 		expect((lastConversational as { content: string }).content).toBe(
-			"blue: Hi Ember",
+			"[Round 0] blue dms you: Hi Ember",
 		);
 	});
 
 	it("when `currentRound` is omitted, no anchor is appended (back-compat)", () => {
 		const game = makeGame();
 		const ctx = buildAiContext(game, "red");
-		const silent = buildSilentTurn(ctx);
+		const silent = buildSilentTurn();
 		const messages = buildOpenAiMessages(ctx, undefined);
 		expect(
 			messages.some(
@@ -399,6 +399,47 @@ describe("buildOpenAiMessages", () => {
 		// Anchor sits immediately before the trailing current-state turn
 		const anchor = messages[messages.length - 2];
 		expect(anchor?.role).toBe("user");
-		expect((anchor as { content: string }).content).toBe(buildSilentTurn(ctx));
+		expect((anchor as { content: string }).content).toBe(buildSilentTurn());
+	});
+
+	// Cache-correctness invariant: rendering the same context twice must
+	// produce byte-identical output. If a future change introduces
+	// non-determinism in conversation-log ordering (e.g. iterating a record
+	// without a stable sort key), the OpenRouter prefix cache silently
+	// stops hitting. This test catches that.
+	it("buildOpenAiMessages is deterministic across re-renders of the same context", () => {
+		let game = makeGame();
+		// A non-trivial mix: incoming, outgoing, peer, and multiple rounds.
+		game = appendMessage(game, "blue", "red", "hi");
+		game = appendMessage(game, "red", "blue", "hi back");
+		game = appendMessage(game, "green", "red", "psst");
+		game = advanceRound(game);
+		game = appendMessage(game, "blue", "red", "round two");
+		game = appendMessage(game, "red", "cyan", "side channel");
+
+		const ctx = buildAiContext(game, "red");
+		const a = buildOpenAiMessages(ctx, undefined, 1);
+		const b = buildOpenAiMessages(ctx, undefined, 1);
+		expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+	});
+
+	// Cache-correctness invariant: the system prompt for a (persona × phase)
+	// must be byte-identical across rounds, since OpenRouter's prefix cache
+	// hashes the literal request bytes. Any drift here silently busts caching.
+	it("system prompt is byte-stable across rounds within a phase", () => {
+		let game = makeGame();
+		const round0Prompt = buildAiContext(game, "red").toSystemPrompt();
+
+		// Advance through a few rounds, with messages and no spatial moves.
+		// Spatial moves don't matter for the system prompt (where_you_are
+		// lives in the trailing user turn now), but they would have busted
+		// the prefix in the pre-restructure code path.
+		game = appendMessage(game, "blue", "red", "round 0 chatter");
+		game = advanceRound(game);
+		game = appendMessage(game, "blue", "red", "round 1 chatter");
+		game = advanceRound(game);
+		const round2Prompt = buildAiContext(game, "red").toSystemPrompt();
+
+		expect(round2Prompt).toBe(round0Prompt);
 	});
 });

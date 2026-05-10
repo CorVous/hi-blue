@@ -8,17 +8,19 @@
  *   1. { role: "system", content: ctx.toSystemPrompt() }
  *      Stable per (persona × phase) — OpenRouter's prefix cache reuses it round-to-round.
  *   2. One turn per ConversationEntry, sorted by round ascending (stable):
- *      - kind=message, outgoing: { role: "assistant", content: entry.content }
- *      - kind=message, incoming: { role: "user", content: "<sender>: <content>" }
- *      - kind=witnessed-event: { role: "user", content: renderEntry(...) } — the
- *        rich "[Round N] You watch *X do Y." narration.
+ *      - kind=message, outgoing: { role: "assistant", content: renderEntry(...) }
+ *        — "[Round N] you dm <to>: <content>" so the model retains routing context.
+ *      - kind=message, incoming: { role: "user",      content: renderEntry(...) }
+ *        — "[Round N] <from> dms you: <content>".
+ *      - kind=witnessed-event:   { role: "user",      content: renderEntry(...) }
+ *        — "[Round N] You watch *X do Y."
  *      Append-only across rounds, so the cached prefix grows with the game.
  *   3. If priorToolRoundtrip is provided and non-empty:
  *      - { role: "assistant", content: null, tool_calls: [...] }
  *      - { role: "tool", tool_call_id, content } for each result
  *   4. If `currentRound` is provided and this AI received zero `message` ConversationEntries
  *      with `to === ctx.aiId` in that round: a synthetic
- *      { role: "user", content: buildSilentTurn(ctx) } anchoring the current
+ *      { role: "user", content: buildSilentTurn() } anchoring the current
  *      round so the model does not re-respond to its prior user turn.
  *   5. A trailing { role: "user", content: ctx.toCurrentStateUserMessage() } turn
  *      carrying `<where_you_are>` + `<what_you_see>`. Always fresh, only the
@@ -38,7 +40,7 @@ import type { ToolRoundtripMessage } from "./types.js";
  * `to === ctx.aiId` in the current round, anchoring the round so the model
  * does not treat the prior round's user turn as fresh stimulus.
  */
-export function buildSilentTurn(_ctx: AiContext): string {
+export function buildSilentTurn(): string {
 	return "You have received no messages.";
 }
 
@@ -55,23 +57,14 @@ export function buildOpenAiMessages(
 	const sortedLog = [...ctx.conversationLog].sort((a, b) => a.round - b.round);
 	for (const entry of sortedLog) {
 		if (entry.kind === "message") {
-			if (entry.from === ctx.aiId) {
-				// Outgoing: this daemon sent the message → assistant turn.
-				// Compact form (no "you dm <to>:" prefix) — the assistant role
-				// already implies the daemon is the speaker.
-				messages.push({ role: "assistant", content: entry.content });
-			} else {
-				// Incoming: message was sent to this daemon → user turn with sender prefix
-				const senderPrefix = entry.from === "blue" ? "blue" : `*${entry.from}`;
-				messages.push({
-					role: "user",
-					content: `${senderPrefix}: ${entry.content}`,
-				});
-			}
+			const content = renderEntry(entry, ctx.aiId, ctx.worldSnapshot.entities);
+			// Outgoing → assistant role; incoming → user role. The "[Round N]
+			// you dm <to>" / "[Round N] <from> dms you" prefix on both sides
+			// preserves routing context the model needs for multi-recipient
+			// reasoning (issue surfaced by code review of a704b81).
+			const role = entry.from === ctx.aiId ? "assistant" : "user";
+			messages.push({ role, content });
 		} else if (entry.kind === "witnessed-event") {
-			// The daemon observed an action by another. Rendered via the same
-			// helper used by the (legacy) system-prompt conversation block so the
-			// "[Round N] You watch *X do Y." phrasing stays consistent.
 			messages.push({
 				role: "user",
 				content: renderEntry(entry, ctx.aiId, ctx.worldSnapshot.entities),
@@ -111,7 +104,7 @@ export function buildOpenAiMessages(
 				e.kind === "message" && e.to === ctx.aiId && e.round === currentRound,
 		);
 		if (!incomingThisRound) {
-			messages.push({ role: "user", content: buildSilentTurn(ctx) });
+			messages.push({ role: "user", content: buildSilentTurn() });
 		}
 	}
 

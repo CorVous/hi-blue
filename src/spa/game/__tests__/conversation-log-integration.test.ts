@@ -491,19 +491,21 @@ describe("conversation log integration — multi-round chronological order", () 
 		);
 
 		// Verify red's role turns have player messages in chronological order.
-		// Role turns use the compact "blue: <content>" form, not the rich
-		// "[Round N] blue dms you:" form.
+		// Role turns use the rich "[Round N] blue dms you: <content>" form
+		// rendered via conversation-log.ts:renderEntry.
 		const redCtx = buildAiContext(state2, "red");
 		const redMsgs = buildOpenAiMessages(redCtx);
 		const round0Idx = redMsgs.findIndex(
 			(m) =>
 				m.role === "user" &&
-				(m as { content: string }).content === "blue: Hi Ember",
+				(m as { content: string }).content ===
+					"[Round 0] blue dms you: Hi Ember",
 		);
 		const round1Idx = redMsgs.findIndex(
 			(m) =>
 				m.role === "user" &&
-				(m as { content: string }).content === "blue: What are you doing?",
+				(m as { content: string }).content ===
+					"[Round 1] blue dms you: What are you doing?",
 		);
 		expect(round0Idx).toBeGreaterThanOrEqual(0);
 		expect(round1Idx).toBeGreaterThanOrEqual(0);

@@ -187,7 +187,8 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 		const priorUser = msgs.find(
 			(m) =>
 				m.role === "user" &&
-				(m as { content: string }).content === "blue: are you alive?",
+				(m as { content: string }).content ===
+					"[Round 0] blue dms you: are you alive?",
 		);
 		expect(priorUser).toBeDefined();
 
@@ -203,7 +204,7 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 					!isCurrentStateTurn((m as { content: string }).content),
 			);
 		expect((cyanLastConv as { content: string }).content).toBe(
-			"blue: different question for cyan",
+			"[Round 1] blue dms you: different question for cyan",
 		);
 		expect(
 			cyanMsgs.some(
@@ -290,7 +291,9 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 					m.role === "user" &&
 					!isCurrentStateTurn((m as { content: string }).content),
 			);
-		expect((lastConv as { content: string }).content).toBe("*red: psst green");
+		expect((lastConv as { content: string }).content).toBe(
+			"[Round 0] *red dms you: psst green",
+		);
 	});
 
 	it("blue addresses this daemon → no anchor; last conversational user message is the player message", async () => {
@@ -329,6 +332,8 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 					m.role === "user" &&
 					!isCurrentStateTurn((m as { content: string }).content),
 			);
-		expect((lastConv as { content: string }).content).toBe("blue: hello cyan");
+		expect((lastConv as { content: string }).content).toBe(
+			"[Round 0] blue dms you: hello cyan",
+		);
 	});
 });
