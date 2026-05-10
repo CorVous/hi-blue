@@ -387,8 +387,10 @@ export function deserializeSession(
 
 			// Derive setting from content pack
 			const setting = contentPack.setting;
-			const weather = (contentPack as ContentPack & { weather?: string }).weather ?? "";
-			const timeOfDay = (contentPack as ContentPack & { timeOfDay?: string }).timeOfDay ?? "";
+			const weather =
+				(contentPack as ContentPack & { weather?: string }).weather ?? "";
+			const timeOfDay =
+				(contentPack as ContentPack & { timeOfDay?: string }).timeOfDay ?? "";
 
 			const phase: PhaseState = {
 				phaseNumber,

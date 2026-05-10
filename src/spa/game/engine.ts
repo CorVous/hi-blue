@@ -44,10 +44,7 @@ function resolveAiGoals(
  * Tokens that may appear in goal templates, mapped to a function that pulls
  * candidate names of the matching kind from a ContentPack.
  */
-const GOAL_TOKEN_CANDIDATES: Record<
-	string,
-	(pack: ContentPack) => string[]
-> = {
+const GOAL_TOKEN_CANDIDATES: Record<string, (pack: ContentPack) => string[]> = {
 	objectiveItem: (p) => p.objectivePairs.map((pair) => pair.object.name),
 	objective: (p) => p.objectivePairs.map((pair) => pair.space.name),
 	miscItem: (p) => p.interestingObjects.map((e) => e.name),

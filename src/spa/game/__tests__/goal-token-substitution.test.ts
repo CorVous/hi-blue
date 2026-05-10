@@ -173,7 +173,9 @@ describe("goal token substitution", () => {
 			interestingObjects: [misc("compass")],
 			obstacles: [obstacle("rusted gate")],
 		});
-		const goal = goalFor(PERSONAS, pack, ["Stand on the same tile as another Daemon."]);
+		const goal = goalFor(PERSONAS, pack, [
+			"Stand on the same tile as another Daemon.",
+		]);
 		expect(goal).toBe("Stand on the same tile as another Daemon.");
 	});
 
