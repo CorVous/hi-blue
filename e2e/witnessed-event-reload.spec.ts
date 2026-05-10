@@ -425,7 +425,7 @@ async function armRoute(
 		}
 
 		const sysContent = bodyParsed?.messages?.[0]?.content ?? "";
-		if (sysContent.includes(`You are *${actorName}.`)) {
+		if (sysContent.includes(`You are *${actorName}, a Daemon.`)) {
 			await route.fulfill({
 				status: 200,
 				headers: {
@@ -779,7 +779,7 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 			if (body && typeof body === "object") {
 				const b = body as { messages?: Array<{ content?: string }> };
 				const sysContent = b.messages?.[0]?.content ?? "";
-				if (sysContent.includes(`You are *${name}.`)) {
+				if (sysContent.includes(`You are *${name}, a Daemon.`)) {
 					return body as Record<string, unknown>;
 				}
 			}
