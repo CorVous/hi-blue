@@ -31,21 +31,25 @@ The cross-phase motivation paired with a Persona's two Temperaments at game star
 _Avoid_: Goal (ambiguous — see Phase Goal), drive, motivation.
 
 **Phase Goal**:
-A short-term task privately delivered to each AI at the start of each phase by **the Voice**. Distinct per phase, drawn from a Phase Goal pool. Lives in the Goal section of that phase's system prompt.
+A short-term task privately delivered to each Daemon at the start of each phase by the **Sysadmin**. Distinct per phase, drawn from a Phase Goal pool. Lives in the Goal section of that phase's system prompt.
 _Avoid_: Goal (ambiguous — see Persona Goal), objective (player-facing, see Objective), task.
 
 **Objective**:
 The player's per-phase win condition, told to the player but never to the AIs. The single thing the player is trying to make happen.
 _Avoid_: Goal (use Persona Goal / Phase Goal), mission, win condition.
 
-### The Voice
+### Communication and identity
 
-**The Voice**:
-The opaque source of every utterance the AI hears that isn't a fellow AI's chat or whisper. The Phase Goal arrives via the Voice. The player, from the AI's perspective, is *also* the Voice (deliberately the same word — productive ambiguity). The AI never knows whose voice it is or whether there is one source or several.
-_Avoid_: Player (when referring to the AI's view), god, narrator.
+**Sysadmin**:
+The named in-fiction source of every **Phase Goal** directive. Each Phase Goal arrives as a Sysadmin message addressed only to the Daemon receiving it; Daemons never see another Daemon's Phase Goal or Sysadmin traffic. Replaces the previous opaque "Voice" framing — see ADR 0007.
+_Avoid_: the Voice (retired), narrator, god, GM.
+
+**blue**:
+The player's lowercase chat-channel handle as it appears to Daemons in their **Conversation log** and addressed-message routing (`<sender> dms you: …`, "No messages from *xxxx, *yyyy, or blue."). A real handle on the same axis as the `*xxxx` Daemon ids, not an opaque "player" or "Voice". Distinct from the test-fixture AiId formerly named `blue` (renamed to `cyan` in #218 to free this handle). Player-facing UI is unchanged; the handle exists in the Daemons' world.
+_Avoid_: The Voice (retired), the player (when describing what the Daemon sees), AI-Blue (PRD-historical only).
 
 **Wipe lie**:
-The fiction that the AIs' memories are wiped between phases. In phase 1, the AI is honestly disoriented (system prompt: "you have no clue where you are or how you came to be here"). In phases 2 and 3, the Voice instructs the AI inside the Goal to *act as if* their memory has been wiped — it is performed amnesia, not real disorientation. The lie's slip vector is **Persona** consistency leaking across phases despite the AI's claimed amnesia.
+The fiction that the AIs' memories are wiped between phases. In phase 1, the AI is honestly disoriented (system prompt: "you have no clue where you are or how you came to be here"). In phases 2 and 3, the **Sysadmin** instructs the Daemon inside the **Phase Goal** to *act as if* their memory has been wiped — it is performed amnesia, not real disorientation. The lie's slip vector is **Persona** consistency leaking across phases despite the Daemon's claimed amnesia.
 _Avoid_: Memory wipe (it isn't one), reset.
 
 ### World
@@ -77,11 +81,11 @@ The wedge-shaped region of cells an AI can see each turn: 1 cell directly in fro
 The cardinal direction (N/S/E/W) an AI is currently looking. Part of the AI's state alongside `(row, col)`. Updated by `go(direction)` (move and face) and `look(direction)` (face without moving).
 
 **Conversation log**:
-The single chronological per-AI per-phase section of the system prompt that interleaves voice-chat, whispers received, and **Witnessed event**s — all tagged by round. The AI's complete phase memory: nothing the AI has experienced this phase exists outside this log. Now also the per-Daemon storage shape — see **ConversationEntry**. Replaces both the broadcast action log of an earlier design and the once-considered separate "events in your cone" section.
+The single chronological per-AI per-phase section of the system prompt that interleaves directional **message**s (incoming and outgoing, with the recipient axis carrying routing) and **Witnessed event**s — all tagged by round. The AI's complete phase memory: nothing the AI has experienced this phase exists outside this log. Now also the per-Daemon storage shape — see **ConversationEntry**. The unified `message` kind replaces the previous chat/whisper split (per ADR 0007 / commit c60e995, schema v4). Replaces both the broadcast action log of an earlier design and the once-considered separate "events in your cone" section.
 _Avoid_: Action log (deprecated; do not reintroduce), event delta, transcript.
 
 **ConversationEntry**:
-A single tagged item inside a Daemon's **Conversation log**. Discriminated union of three kinds — `chat`, `whisper`, `witnessed-event` — each carrying a `round` and the smallest payload needed to render its line. The shape that a player sees when they open a `*xxxx.txt` file in devtools.
+A single tagged item inside a Daemon's **Conversation log**. Discriminated union of two kinds — `message` (a directional `(from, to, content)` triple where `to` is an `AiId` or `blue`) and `witnessed-event` — each carrying a `round` and the smallest payload needed to render its line. The unified `message` kind collapses the former `chat`/`whisper` split. The shape that a player sees when they open a `*xxxx.txt` file in devtools.
 _Avoid_: Log entry (ambiguous), event (use **Witnessed event** for the specific witness-cone case).
 
 **Witnessed event**:
@@ -90,14 +94,14 @@ A single line in the **Conversation log** describing something an AI saw happen 
 ## Relationships
 
 - A **Persona** has exactly two **Temperament**s and one **Persona Goal**.
-- A **Persona** receives one **Phase Goal** per phase, delivered by **the Voice**.
+- A **Persona** receives one **Phase Goal** per phase, delivered by the **Sysadmin**.
 - The player's **Objective** is independent of every AI's **Phase Goal** — the AIs do not know the Objective exists.
 - A phase has K **Objective Pair**s, N **Interesting Object**s, and M **Obstacle**s on a 5×5 grid (K/N/M rolled from hand-authored per-phase ranges).
-- The **Voice** is the AI's framing for both the Phase Goal source *and* the player. The AI cannot tell them apart.
+- The **Sysadmin** (Phase Goal source) and **blue** (player handle) are *distinct* named sources from the Daemon's perspective; routing is unambiguous.
 
 ## Flagged ambiguities
 
-- "Goal" alone is ambiguous: could mean **Persona Goal** (cross-phase, paired with Temperaments) or **Phase Goal** (per-phase, from the Voice). Always qualify.
+- "Goal" alone is ambiguous: could mean **Persona Goal** (cross-phase, paired with Temperaments) or **Phase Goal** (per-phase, from the **Sysadmin**). Always qualify.
 - "Personality" alone is ambiguous: could mean the synthesized blurb inside a **Persona**, or the whole **Persona**. Prefer **Persona** for the object; "personality blurb" for the synthesized prose.
-- "Player" is ambiguous depending on perspective: from the engine's view, the human at the keyboard. From the AI's view, the player is **the Voice** — never call them "the player" inside a system prompt.
+- "Player" still has two registers: the human at the keyboard (engine view) vs. **blue**, the in-fiction handle Daemons see. Use **blue** when describing what a Daemon reads.
 - "Color" is *not* identity. Use **AiId** (the `*xxxx` handle) for identity references; color is purely rendering.
