@@ -326,7 +326,7 @@ export function buildConeSnapshot(ctx: AiContext): string {
  * changes surface as a single readable line rather than a paired
  * remove + add.
  */
-export function renderWhatsNew(prev: string, current: string): string | null {
+export function renderWhatsNew(prev = "", current = ""): string | null {
 	if (prev === current) return null;
 
 	const prevLines = prev.split("\n").filter((l) => l.length > 0);
