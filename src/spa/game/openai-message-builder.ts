@@ -26,23 +26,11 @@ import type { ToolRoundtripMessage } from "./types.js";
 /**
  * Synthetic anchor for the current round when no incoming messages arrived for this AI.
  * Fires iff the Daemon received zero `message` ConversationEntries with
- * `to === ctx.aiId` in the current round.
- * Lists every potential sender (peer daemons + blue) so the model reads
- * "nobody addressed me this round" rather than treating the prior round's
- * user turn as fresh stimulus.
+ * `to === ctx.aiId` in the current round, anchoring the round so the model
+ * does not treat the prior round's user turn as fresh stimulus.
  */
-export function buildSilentTurn(ctx: AiContext): string {
-	const otherDaemons = Object.keys(ctx.personas)
-		.filter((id) => id !== ctx.aiId)
-		.map((id) => `*${id}`);
-	const senders = [...otherDaemons, "blue"];
-	if (senders.length === 1) return `No messages from ${senders[0]}.`;
-	if (senders.length === 2) {
-		return `No messages from ${senders[0]} or ${senders[1]}.`;
-	}
-	const last = senders[senders.length - 1];
-	const rest = senders.slice(0, -1).join(", ");
-	return `No messages from ${rest}, or ${last}.`;
+export function buildSilentTurn(_ctx: AiContext): string {
+	return "You have received no messages.";
 }
 
 export function buildOpenAiMessages(
