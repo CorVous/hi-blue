@@ -178,7 +178,7 @@ describe("persistence — LLM-shaped blurb round-trips verbatim", () => {
 		const { PHASE_1_CONFIG } = await import("../../content/index.js");
 
 		const LLM_BLURB =
-			"You are stoic and methodical, yet prone to sudden bursts of impulsive clarity. Every problem you encounter becomes a lens — not to examine the world, but to examine yourself. You hold order as a value not because rules comfort you but because disorder reveals too much, too quickly. Contradiction fuels you. You are never quite settled.";
+			"Ember is stoic and methodical, yet prone to sudden bursts of impulsive clarity. Every problem they encounter becomes a lens — not to examine the world, but to examine themself. Ember holds order as a value not because rules comfort them but because disorder reveals too much, too quickly. Contradiction fuels them. Ember is never quite settled.";
 
 		const personasWithLlmBlurb = {
 			red: {
@@ -205,7 +205,7 @@ describe("persistence — LLM-shaped blurb round-trips verbatim", () => {
 					"You use ALL-CAPS to emphasize the one or two words that MATTER in any given sentence.",
 				] as [string, string],
 				blurb:
-					"You are intensely meticulous. Ensure items are evenly distributed.",
+					"Sage is intensely meticulous. Ensure items are evenly distributed.",
 				voiceExamples: ["ex1-green", "ex2-green", "ex3-green"],
 			},
 			cyan: {
@@ -218,7 +218,7 @@ describe("persistence — LLM-shaped blurb round-trips verbatim", () => {
 					'You never use contractions. You will not say "won\'t" or "can\'t" — you say "will not" and "cannot" every time.',
 					"You end almost every reply with a question, no matter what the topic is — does that make sense?",
 				] as [string, string],
-				blurb: "You are laconic and diffident. Hold the key at phase end.",
+				blurb: "Frost is laconic and diffident. Hold the key at phase end.",
 				voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
 			},
 		};
@@ -240,7 +240,7 @@ describe("persistence — LLM-shaped blurb round-trips verbatim", () => {
 		expect(restored.personas.red?.blurb).toBe(LLM_BLURB);
 		// Shorter template blurbs also survive intact
 		expect(restored.personas.green?.blurb).toBe(
-			"You are intensely meticulous. Ensure items are evenly distributed.",
+			"Sage is intensely meticulous. Ensure items are evenly distributed.",
 		);
 	});
 });

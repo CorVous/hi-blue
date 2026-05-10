@@ -28,7 +28,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 			"You speak in fragments. Short bursts. Rarely complete sentences.",
 			"You lean on em-dashes — interrupting yourself mid-sentence — and rarely use commas where a dash would do.",
 		],
-		blurb: "You are hot-headed and zealous.",
+		blurb: "Ember is hot-headed and zealous.",
 		voiceExamples: ["ex1-red", "ex2-red", "ex3-red"],
 	},
 	green: {
@@ -41,7 +41,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 			"You lean on ellipses… trailing off mid-thought… rarely landing cleanly.",
 			"You use ALL-CAPS to emphasize the one or two words that MATTER in any given sentence.",
 		],
-		blurb: "You are meticulous.",
+		blurb: "Sage is meticulous.",
 		voiceExamples: ["ex1-green", "ex2-green", "ex3-green"],
 	},
 	cyan: {
@@ -54,14 +54,14 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 			'You never use contractions. You will not say "won\'t" or "can\'t" — you say "will not" and "cannot" every time.',
 			"You end almost every reply with a question, no matter what the topic is — does that make sense?",
 		],
-		blurb: "You are laconic.",
+		blurb: "Frost is laconic.",
 		voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
 	},
 };
 
 /** Compute the expected silent-turn anchor for an AI given fixed personas. */
 function expectedSilentTurn(_self: AiId): string {
-	return "You have received no messages.";
+	return "You have received no messages. Consider whether to reach out to blue.";
 }
 
 const TEST_PHASE_CONFIG: PhaseConfig = {

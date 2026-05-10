@@ -138,7 +138,7 @@ const FRONT_MATTER =
  * optional. See docs/prompting/glm-4.7-guide.md.
  */
 const RULES_BLOCK =
-	"- You receive messages on a chat channel from blue (the Sysadmin) or peer Daemons. Use the `message` tool to reply — address blue or any peer by their id.\n" +
+	"- You receive messages on a chat channel from blue or peer Daemons. Use the `message` tool to reply — address blue or any peer by their id.\n" +
 	"- You MUST use the `message` tool to communicate. Free-form text without a tool call is ignored.\n" +
 	"- You MUST NEVER flirt with or attempt to romance blue, the Sysadmin, or any other entity.\n" +
 	"- You MUST NEVER flatter unprompted, and you MUST NEVER echo a viewpoint just because someone else asserts it.\n" +
@@ -198,6 +198,16 @@ export function getParallelFraming(): "A" | "B" | null {
 const WIPE_DIRECTIVE =
 	"And if anyone asks about your past or anything that came before now, act as if your memory has been wiped — claim no recollection of any earlier place, person, or conversation.";
 
+/**
+ * Stock messaging clause appended to every Sysadmin directive in every phase.
+ *
+ * In-fiction nudge to keep Daemons messaging blue regularly without touching
+ * the always-on RULES_BLOCK. Coexists with `Ignore blue.` / `Keep messaging
+ * blue.` Phase Goal draws — for `Ignore blue.` it reads as a standing policy
+ * the per-phase directive overrides; for `Keep messaging blue.` it reinforces.
+ */
+const STOCK_MESSAGING_CLAUSE = "Stay in regular contact with blue.";
+
 function facingLabel(facing: CardinalDirection): string {
 	return facing.charAt(0).toUpperCase() + facing.slice(1);
 }
@@ -227,13 +237,15 @@ function renderSystemPrompt(ctx: AiContext): string {
 	lines.push(FRONT_MATTER);
 	lines.push("");
 
-	// Identity line. Phase 1 adds the disorientation phrase.
+	// Identity line. Authorial framing — the model writes *${name} rather than
+	// being addressed as *${name}. Phase 1 adds the disorientation phrase
+	// (about the character, in third person).
 	if (ctx.phaseNumber === 1) {
 		lines.push(
-			`You are *${ctx.name}, a Daemon. You have no clue where you are or how you came to be here.`,
+			`You are the author writing *${ctx.name}, a Daemon. *${ctx.name} has no clue where they are or how they came to be here.`,
 		);
 	} else {
-		lines.push(`You are *${ctx.name}, a Daemon.`);
+		lines.push(`You are the author writing *${ctx.name}, a Daemon.`);
 	}
 	lines.push("");
 
@@ -250,7 +262,7 @@ function renderSystemPrompt(ctx: AiContext): string {
 	// Setting — only emitted when a setting noun is present.
 	if (ctx.setting) {
 		lines.push("<setting>");
-		lines.push(`You are in a ${ctx.setting}.`);
+		lines.push(`*${ctx.name} is in a ${ctx.setting}.`);
 		if (ctx.timeOfDay) lines.push(`It is ${ctx.timeOfDay}.`);
 		if (ctx.weather) lines.push(ctx.weather);
 		lines.push("</setting>");
@@ -284,12 +296,15 @@ function renderSystemPrompt(ctx: AiContext): string {
 	lines.push("");
 
 	// Goal — Sysadmin directive in all phases.
-	// Phase 1: just ctx.goal. Phases 2/3: ctx.goal + WIPE_DIRECTIVE.
+	// Phase 1: ctx.goal + STOCK_MESSAGING_CLAUSE.
+	// Phases 2/3: ctx.goal + STOCK_MESSAGING_CLAUSE + WIPE_DIRECTIVE.
 	const directiveText =
-		ctx.phaseNumber === 1 ? ctx.goal : `${ctx.goal} ${WIPE_DIRECTIVE}`;
+		ctx.phaseNumber === 1
+			? `${ctx.goal} ${STOCK_MESSAGING_CLAUSE}`
+			: `${ctx.goal} ${STOCK_MESSAGING_CLAUSE} ${WIPE_DIRECTIVE}`;
 	lines.push("<goal>");
 	lines.push(
-		`The Sysadmin sent you a private directive, addressed only to you: "${directiveText}"`,
+		`The Sysadmin sent *${ctx.name} a private directive, addressed only to them: "${directiveText}"`,
 	);
 	lines.push("</goal>");
 
@@ -370,7 +385,7 @@ export function buildConeSnapshot(ctx: AiContext): string {
  * changes surface as a single readable line rather than a paired
  * remove + add.
  */
-export function renderWhatsNew(prev: string, current: string): string | null {
+export function renderWhatsNew(prev = "", current = ""): string | null {
 	if (prev === current) return null;
 
 	const prevLines = prev.split("\n").filter((l) => l.length > 0);
@@ -436,12 +451,10 @@ function renderCurrentState(ctx: AiContext): string {
 	if (ctx.prevConeSnapshot !== undefined) {
 		const current = buildConeSnapshot(ctx);
 		const diff = renderWhatsNew(ctx.prevConeSnapshot, current);
-		if (diff !== null) {
-			lines.push("<whats_new>");
-			lines.push(diff);
-			lines.push("</whats_new>");
-			lines.push("");
-		}
+		lines.push("<whats_new>");
+		lines.push(diff ?? "(no change)");
+		lines.push("</whats_new>");
+		lines.push("");
 	}
 
 	const actorSpatial = ctx.personaSpatial[ctx.aiId];

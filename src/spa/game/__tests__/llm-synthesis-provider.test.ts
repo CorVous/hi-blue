@@ -38,17 +38,17 @@ const THREE_INPUTS = [INPUT_A, INPUT_B, INPUT_C];
 const CANNED_PERSONAS = [
 	{
 		id: "a1b2",
-		blurb: "You are stoic and precise.",
+		blurb: "a1b2 is stoic and precise.",
 		voiceExamples: ["voice1-a1b2", "voice2-a1b2", "voice3-a1b2"],
 	},
 	{
 		id: "c3d4",
-		blurb: "You are intensely impulsive.",
+		blurb: "c3d4 is intensely impulsive.",
 		voiceExamples: ["voice1-c3d4", "voice2-c3d4", "voice3-c3d4"],
 	},
 	{
 		id: "e5f6",
-		blurb: "You are gentle and wry.",
+		blurb: "e5f6 is gentle and wry.",
 		voiceExamples: ["voice1-e5f6", "voice2-e5f6", "voice3-e5f6"],
 	},
 ];
@@ -150,8 +150,9 @@ describe("SYNTHESIS_SYSTEM_PROMPT", () => {
 		expect(SYNTHESIS_SYSTEM_PROMPT).toContain("120");
 	});
 
-	it("encodes second-person ('You are') framing", () => {
-		expect(SYNTHESIS_SYSTEM_PROMPT).toMatch(/[Yy]ou are/);
+	it("encodes third-person framing using the persona's id as subject", () => {
+		expect(SYNTHESIS_SYSTEM_PROMPT.toLowerCase()).toContain("third person");
+		expect(SYNTHESIS_SYSTEM_PROMPT).toContain("id");
 	});
 
 	it("encodes contradictions-as-tension handling", () => {
