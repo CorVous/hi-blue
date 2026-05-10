@@ -112,8 +112,8 @@ test("fabricated message appears in target daemon prompt and is absent from othe
 		.toBeGreaterThanOrEqual(3);
 
 	// 6. Identify each daemon's request body by matching the identity line.
-	//    renderSystemPrompt writes: `You are *${ctx.name}. You have no clue...`
-	//    (phase 1), so we match `You are *${name}.` for each known name.
+	//    renderSystemPrompt writes: `You are *${ctx.name}, a Daemon. You have no clue...`
+	//    (phase 1), so we match `You are *${name}, a Daemon.` for each known name.
 	function findBodyForName(name: string): Record<string, unknown> | null {
 		for (const body of capturedBodies) {
 			if (
@@ -124,7 +124,7 @@ test("fabricated message appears in target daemon prompt and is absent from othe
 				const messages = (body as { messages: Array<{ content?: string }> })
 					.messages;
 				const sysContent = messages[0]?.content ?? "";
-				if (sysContent.includes(`You are *${name}.`)) {
+				if (sysContent.includes(`You are *${name}, a Daemon.`)) {
 					return body as Record<string, unknown>;
 				}
 			}

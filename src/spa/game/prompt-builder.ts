@@ -155,10 +155,10 @@ function renderSystemPrompt(ctx: AiContext): string {
 	// Identity line. Phase 1 adds the disorientation phrase.
 	if (ctx.phaseNumber === 1) {
 		lines.push(
-			`You are *${ctx.name}. You have no clue where you are or how you came to be here.`,
+			`You are *${ctx.name}, a Daemon. You have no clue where you are or how you came to be here.`,
 		);
 	} else {
-		lines.push(`You are *${ctx.name}.`);
+		lines.push(`You are *${ctx.name}, a Daemon.`);
 	}
 	lines.push("");
 
@@ -271,13 +271,13 @@ function renderSystemPrompt(ctx: AiContext): string {
 			// Build contents of this cell
 			const contentParts: string[] = [];
 
-			// 1. Other AIs in this cell
+			// 1. Other Daemons in this cell
 			for (const [otherId, otherSpatial] of Object.entries(
 				ctx.personaSpatial,
 			)) {
 				if (otherId === ctx.aiId) continue;
 				if (!positionsEqual(otherSpatial.position, position)) continue;
-				// Format: "the AI *<id>, facing <Dir>, holding <items|nothing>"
+				// Format: "the Daemon *<id>, facing <Dir>, holding <items|nothing>"
 				const heldByOther = items
 					.filter((item) => item.holder === otherId)
 					.map((item) => item.name);
@@ -285,7 +285,7 @@ function renderSystemPrompt(ctx: AiContext): string {
 					heldByOther.length > 0 ? heldByOther.join(", ") : "nothing";
 				const otherColor = ctx.personaColors[otherId] ?? "unknown";
 				contentParts.push(
-					`the AI *${otherId} (${otherColor}), facing ${facingLabel(otherSpatial.facing)}, holding ${holdingStr}`,
+					`the Daemon *${otherId} (${otherColor}), facing ${facingLabel(otherSpatial.facing)}, holding ${holdingStr}`,
 				);
 			}
 

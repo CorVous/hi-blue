@@ -418,25 +418,25 @@ describe("voice framing", () => {
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain(
-			"You are *Ember. You have no clue where you are or how you came to be here.",
+			"You are *Ember, a Daemon. You have no clue where you are or how you came to be here.",
 		);
 	});
 
-	it("phase-2 prompt's identity line is just 'You are *xxxx.' without disorientation", () => {
+	it("phase-2 prompt's identity line is just 'You are *xxxx, a Daemon.' without disorientation", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = startPhase(game, makeConfig(2));
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toMatch(/\nYou are \*Ember\.\n/);
+		expect(prompt).toMatch(/\nYou are \*Ember, a Daemon\.\n/);
 		expect(prompt).not.toContain("no clue where you are");
 	});
 
-	it("phase-3 prompt's identity line is just 'You are *xxxx.' without disorientation", () => {
+	it("phase-3 prompt's identity line is just 'You are *xxxx, a Daemon.' without disorientation", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = startPhase(game, makeConfig(3));
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toMatch(/\nYou are \*Ember\.\n/);
+		expect(prompt).toMatch(/\nYou are \*Ember, a Daemon\.\n/);
 		expect(prompt).not.toContain("no clue where you are");
 	});
 });
@@ -694,8 +694,8 @@ describe("byte-identical sections across phases", () => {
 
 	it("phase-1 identity line differs from phase-2 identity line (disorientation present in phase 1 only)", () => {
 		const { p1, p2 } = buildBothPrompts();
-		const idMatch1 = p1.match(/\nYou are \*Ember\.[^\n]*/);
-		const idMatch2 = p2.match(/\nYou are \*Ember\.[^\n]*/);
+		const idMatch1 = p1.match(/\nYou are \*Ember, a Daemon\.[^\n]*/);
+		const idMatch2 = p2.match(/\nYou are \*Ember, a Daemon\.[^\n]*/);
 		expect(idMatch1).not.toBeNull();
 		expect(idMatch2).not.toBeNull();
 		expect(idMatch1?.[0]).not.toBe(idMatch2?.[0]);
