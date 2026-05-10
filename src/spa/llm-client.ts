@@ -153,6 +153,10 @@ export async function streamCompletion(opts: {
 	if (tools && tools.length > 0) {
 		bodyObj.tools = tools;
 		bodyObj.tool_choice = "auto";
+		// Spike #239: probe whether GLM-4.7 actually emits parallel speak+act in
+		// one assistant message. Coordinator still drops the tail (#239 §"Out of
+		// scope"); this just unlocks the model's tendency so we can measure it.
+		bodyObj.parallel_tool_calls = true;
 	}
 
 	// OpenRouter Reasoning Tokens API: { enabled: false } skips the model's

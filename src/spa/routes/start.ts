@@ -29,6 +29,7 @@ import {
 	getPendingBootstrap,
 	startBootstrap,
 } from "../game/pending-bootstrap.js";
+import { getSpikeRng, setSpikeSeed } from "../game/spike-seed.js";
 
 /** Warning reason strings shown in the persistence warning banner. */
 export const PERSISTENCE_WARNING_MESSAGES: Record<string, string> = {
@@ -438,11 +439,38 @@ export function renderStart(
 	if (formEl) formEl.addEventListener("submit", handleSubmit);
 	beginBtn.addEventListener("click", handleSubmit);
 
+	// Spike #239: `?seed=N` pins persona archetype, setting noun, and
+	// spatial layout via Mulberry32 sub-streams. Production paths leave
+	// _spikeSeed null and fall back to Math.random.
+	//
+	// Read both hash-query params (passed in from the router) and
+	// location.search — the router only parses hash params, but daemon URLs
+	// like `http://localhost:8787/?seed=42` keep the seed in the search
+	// string. Mirror the merge in routes/game.ts:413.
+	const searchParams =
+		typeof window !== "undefined" && window.location !== undefined
+			? new URLSearchParams(window.location.search)
+			: new URLSearchParams();
+	const seedRaw = params?.get("seed") ?? searchParams.get("seed");
+	const seedNum =
+		seedRaw !== null && seedRaw !== undefined ? Number(seedRaw) : Number.NaN;
+	if (Number.isFinite(seedNum)) {
+		setSpikeSeed(seedNum | 0);
+	}
+
 	// Kick off (or reuse) the in-flight bootstrap. If the user backed out to
 	// the start screen after a previous render, startBootstrap returns the
 	// existing entry rather than starting a fresh generation.
 	const existing = getPendingBootstrap();
-	const bootstrap = existing ?? startBootstrap(_testOverrides);
+	const personasRng = getSpikeRng("personas");
+	const contentPackRng = getSpikeRng("contentPack");
+	const spikeOpts =
+		personasRng && contentPackRng ? { personasRng, contentPackRng } : undefined;
+	const mergedOpts =
+		_testOverrides || spikeOpts
+			? { ..._testOverrides, ...spikeOpts }
+			: undefined;
+	const bootstrap = existing ?? startBootstrap(mergedOpts);
 	_testOverrides = undefined;
 
 	// If generation fails while the player is still on this screen, surface

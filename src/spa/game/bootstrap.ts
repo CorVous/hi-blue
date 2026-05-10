@@ -39,6 +39,14 @@ export interface BootstrapOpts {
 	synthesis?: LlmSynthesisProvider;
 	packProvider?: ContentPackProvider;
 	rng?: () => number;
+	/**
+	 * Spike #239: separate Mulberry32 streams for persona vs. content-pack
+	 * generation. When set, takes precedence over `rng`. Independent streams
+	 * make rng consumption deterministic across runs even though the two
+	 * generators run as concurrent sibling promises.
+	 */
+	personasRng?: () => number;
+	contentPackRng?: () => number;
 }
 
 // Re-export provider types for use in start.ts without creating circular deps
@@ -52,11 +60,13 @@ export type { ContentPackProvider, LlmSynthesisProvider as SynthesisProvider };
 export function generateNewGameAssetsSplit(
 	opts?: BootstrapOpts,
 ): SplitNewGameAssets {
-	const rng = opts?.rng ?? Math.random;
+	const fallbackRng = opts?.rng ?? Math.random;
+	const personasRng = opts?.personasRng ?? fallbackRng;
+	const contentPackRng = opts?.contentPackRng ?? fallbackRng;
 	const synth = opts?.synthesis ?? new BrowserSynthesisProvider();
 	const packLLM = opts?.packProvider ?? new BrowserContentPackProvider();
 
-	const personasPromise = generatePersonas(rng, synth) as Promise<
+	const personasPromise = generatePersonas(personasRng, synth) as Promise<
 		Record<AiId, AiPersona>
 	>;
 	// Silence unhandled-rejection on derived promises if a downstream consumer
@@ -66,7 +76,7 @@ export function generateNewGameAssetsSplit(
 	aiIdsPromise.catch(() => {});
 
 	const contentPacksPromise = generateContentPacks(
-		rng,
+		contentPackRng,
 		SETTING_POOL,
 		[PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG],
 		packLLM,
@@ -100,12 +110,20 @@ export async function generateNewGameAssets(
 /**
  * Construct a GameSession from pre-generated assets.
  *
- * opts.rng is unused at construction time (GameSession uses Math.random
- * internally), but is provided for API symmetry and future use.
+ * `opts.rng`, when provided, is forwarded to the GameSession constructor
+ * and ultimately drives initial spatial placement via `startPhase`. When
+ * undefined the constructor falls back to `Math.random` as before.
+ * Spike #239 passes a Mulberry32 stream here so a `?seed=N` run pins
+ * spatial layout across A/B sessions.
  */
 export function buildSessionFromAssets(
 	assets: NewGameAssets,
-	_opts?: { rng?: () => number },
+	opts?: { rng?: () => number },
 ): GameSession {
-	return new GameSession(PHASE_1_CONFIG, assets.personas, assets.contentPacks);
+	return new GameSession(
+		PHASE_1_CONFIG,
+		assets.personas,
+		assets.contentPacks,
+		opts?.rng,
+	);
 }

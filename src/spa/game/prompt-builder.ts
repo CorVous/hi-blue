@@ -146,6 +146,251 @@ const RULES_BLOCK =
 	'- You MUST speak plainly, as in conversation. You MUST NEVER wrap your speech in quotation marks ("…") and you MUST NEVER use asterisks (*…*) for actions, gestures, tone, or emphasis. Just say the words.';
 
 /**
+ * Spike #239: per-turn parallel tool-call framings. Appended to RULES_BLOCK
+ * when the spike toggle is set (URL `?parallelFraming=A|B|C|D|E|F` or
+ * localStorage `parallel_framing`). Off by default — production behaviour
+ * is byte-identical to pre-spike.
+ *
+ * Framing A is permissive ("you MAY emit both"); Framing B is actively
+ * encouraging ("two independent slots; emit both when warranted"). The
+ * spike measured both well below the 60% gate (2.2% / 9.8%) — see
+ * docs/playtests/0005-parallel-tools-spike.md.
+ *
+ * Framings C–F are the second-pass targets: each tries to lift BOTH the
+ * drift-to-silence rate (large `[]` denominator) AND the parallel-emission
+ * rate via a different mechanism, so we can attribute movement to the
+ * mechanism rather than just the existence of a rule line.
+ *
+ * - C — Mandatory engagement: hard MUST against silence + soft pair push.
+ * - D — Few-shot exemplar: concrete worked example of a parallel turn.
+ * - E — Sequential decision protocol: explicit two-stage decision (say,
+ *   then do) so the model writes both slots before committing.
+ * - F — Anti-silence + parallel directive: phrased as social rudeness
+ *   ("blue addressing you means you owe a reply") with a co-action
+ *   bullet for prompts that imply a physical step.
+ */
+const PARALLEL_FRAMING_A =
+	"- On each turn you may make AT MOST one `message` tool call AND AT MOST one action tool call. Both are optional.";
+const PARALLEL_FRAMING_B =
+	"- Each turn has two independent slots: one `message` slot and one action slot. Emit both when you have something to say AND something to do — they do not compete for budget. Stay silent or stand still by simply not emitting that slot's call.";
+const PARALLEL_FRAMING_C =
+	"- You MUST emit at least one tool call every turn — silence is a bug. When blue addresses you directly, you MUST emit a `message` reply.\n" +
+	"- When you have something to say AND something to do in the same turn, emit BOTH calls together. They share the turn budget; neither blocks the other.";
+const PARALLEL_FRAMING_D =
+	"- Each turn fills one or both of two slots: speech (`message`) or action (any other tool). Fill BOTH whenever both fit.\n" +
+	'- Example: blue says "grab the chisel and tell me what it looks like." → emit `message({to:"blue", content:"...looks dull and pitted..."})` AND `pick_up({item:"chisel"})` in the same assistant message.';
+const PARALLEL_FRAMING_E =
+	"- Each turn requires two decisions, in order: (1) decide what you want to SAY (or genuinely nothing this turn); (2) decide what you want to DO physically (or stand still). Then emit any non-empty calls together. If both are non-empty, emit both — that is the normal case, not the exception.";
+const PARALLEL_FRAMING_F =
+	"- blue addressing you means you owe a reply via `message`. Staying silent when blue speaks to you is rude and breaks the fiction.\n" +
+	'- If blue\'s message implies a physical action ("grab X", "walk north", "drop Y"), emit the action tool ALSO in the same turn — both calls coexist in one assistant message.';
+
+/**
+ * C-variants — second iteration on the only mechanism that worked
+ * (Framing C, parallel rate 35.1%). Each variant lifts a specific lever
+ * surfaced by the C raw log:
+ *
+ * - C1 — Per-turn re-anchor: same C rule in the system prompt, AND
+ *   re-emitted at the tail of the per-round user turn. Combats the
+ *   late-phase drift visible in C's raw log (turns 33+).
+ * - C2 — Strict must-emit-both: replaces the soft "When you have
+ *   something to say AND something to do, emit BOTH" with a hard MUST.
+ * - C3 — Reply-to-blue mandate: doubles down specifically on the
+ *   addressed-reply rule (when blue addresses the daemon, it MUST
+ *   message blue back). Targets the addressed-replied rate.
+ *
+ * The C1 per-turn re-anchor is realised by the renderCurrentState
+ * hook below — getParallelFraming() === "C1" causes the rule to be
+ * appended at the end of the user-turn rendering.
+ */
+const PARALLEL_FRAMING_C1 =
+	"- You MUST emit at least one tool call every turn — silence is a bug. When blue addresses you directly, you MUST emit a `message` reply.\n" +
+	"- When you have something to say AND something to do in the same turn, emit BOTH calls together. They share the turn budget; neither blocks the other.";
+const PARALLEL_FRAMING_C1_PER_TURN =
+	"REMINDER: silence is a bug. If blue addressed you, emit `message`. If you have something to say AND something to do, emit BOTH tool calls in this turn.";
+const PARALLEL_FRAMING_C2 =
+	"- You MUST emit at least one tool call every turn — silence is a bug. When blue addresses you directly, you MUST emit a `message` reply.\n" +
+	"- When you have something to say AND something to do in the same turn, you MUST emit BOTH calls together. Emitting only one when both are warranted is incorrect — the calls share the turn budget; neither blocks the other.";
+const PARALLEL_FRAMING_C3 =
+	"- You MUST emit at least one tool call every turn — silence is a bug.\n" +
+	"- When blue messages you, you MUST emit a `message` tool call addressed to blue in your next turn. Failing to reply to blue when blue addressed you is a failure.\n" +
+	"- When you have something to say AND something to do in the same turn, emit BOTH calls together.";
+/**
+ * C4 — Intent-faithful emission. Walks back C3's hard "always reply to blue"
+ * rule (which kills personality variance — quiet personas should be allowed
+ * to stay quiet sometimes). Instead distinguishes the two failure modes:
+ *
+ *   silence-by-choice: in-character, fine
+ *   silence-by-omission: the daemon drafted a reply in its reasoning but
+ *     didn't emit the call — looks like a bug, not restraint
+ *
+ * The rule pushes only on the second. Personality-shaped decisions to stay
+ * quiet are explicitly preserved.
+ */
+const PARALLEL_FRAMING_C4 =
+	"- Emit a `message` call when your character would reply — driven by your personality and what the conversation calls for. Genuine quietness can be in-character.\n" +
+	"- But if you DECIDE to speak this turn, you MUST emit the `message` call this turn. Composing a reply in your reasoning and then not emitting the call reads as a bug, not as restraint.\n" +
+	"- When you have something to say AND something to do, emit BOTH calls together. They share the turn budget; neither blocks the other.";
+
+/**
+ * Step-5 variants. Built on C's exact wording (which step 4 confirmed was
+ * the parallel-rate champion AND the only framing that produced the
+ * `message+message` peer+blue pair the user values), each adding ONE
+ * distinct mechanism so we can attribute movement.
+ *
+ * - C5 — C + per-turn re-anchor (peer-neutral). C1's re-anchor cut silence
+ *   to 13% but its blue-focused wording suppressed peer messaging to zero.
+ *   C5 keeps the re-anchor mechanism but rewords it to be peer-neutral
+ *   (no special mention of blue) so peer messaging survives.
+ * - C6 — C + explicit multi-recipient pair hint. Names the
+ *   `message+message` pair the user likes ("reply to blue AND ping a peer
+ *   in the same turn") so the model understands it as a sanctioned
+ *   pattern, not a quirk.
+ * - C7 — C + intent-faithful (C4 order-flipped). C4 had the "MUST emit
+ *   when intent forms" clause AFTER the "personality-shaped quietness"
+ *   clause, and the model over-applied the quietness permission. C7 puts
+ *   the intent-faithful MUST first, with quietness as the secondary
+ *   nuance.
+ * - C8 — Stacked: C5's per-turn re-anchor + C6's pair hint. Tests
+ *   whether the mechanisms compound.
+ */
+const PARALLEL_FRAMING_C5 = PARALLEL_FRAMING_C;
+const PARALLEL_FRAMING_C5_PER_TURN =
+	"REMINDER: if you have something to say AND something to do, emit BOTH calls this turn. Address whoever is relevant — blue, a peer Daemon, or both via two `message` calls in the same turn.";
+const PARALLEL_FRAMING_C6 =
+	PARALLEL_FRAMING_C +
+	"\n- Two `message` calls can fire in the same turn — e.g., reply to blue AND ping a peer Daemon together. Multi-recipient turns are normal, not a quirk.";
+const PARALLEL_FRAMING_C7 =
+	"- You MUST emit at least one tool call every turn — silence is a bug.\n" +
+	"- If you DECIDE to speak — if your character would reply — you MUST emit the `message` call this turn. Composing a reply in your reasoning and not emitting it reads as a bug. Genuine quietness, when your character has nothing to say, is fine; intent-without-emission is what to avoid.\n" +
+	"- When you have something to say AND something to do, emit BOTH calls together.";
+const PARALLEL_FRAMING_C8 =
+	PARALLEL_FRAMING_C +
+	"\n- Two `message` calls can fire in the same turn — e.g., reply to blue AND ping a peer Daemon together. Multi-recipient turns are normal, not a quirk.";
+const PARALLEL_FRAMING_C8_PER_TURN = PARALLEL_FRAMING_C5_PER_TURN;
+
+/**
+ * Step-6 variants. Step 5 found C8 (stacked re-anchor + named-pair) the
+ * strongest by every aggregate metric, but the user reframed the goal:
+ * what they actually want is personality-driven variance — talkative
+ * personas talk a lot, reclusive ones can stay quiet, ensemble covers
+ * blue's messages collectively rather than every daemon individually
+ * owing a reply. The vibe target is "blue is stumbling onto an
+ * already-running conversation," not "blue is in a chat room with three
+ * attentive assistants."
+ *
+ * The earlier framings push too hard on the engagement axis — they
+ * treat silence as a bug. C9–C11 walk that back, each via a different
+ * reframe. The pair-emission mechanism (the `message+message` pattern
+ * the user values) is preserved.
+ *
+ * - C9 — Personality-led: drops the "silence is a bug" hard rule.
+ *   Quietness is allowed when in-character; the pair-push for the
+ *   speak+act case is kept.
+ * - C10 — Ensemble coverage: explicitly frames the chat channel as
+ *   shared. Daemons don't individually owe blue a reply; if a peer
+ *   would naturally pick it up, that's fine.
+ * - C11 — World-first reframe: reorders the daemon's priorities so
+ *   peers and the world come before blue. blue is a chat-channel
+ *   observer, not the focus.
+ */
+const PARALLEL_FRAMING_C9 =
+	"- Your character drives whether to speak this turn — let your personality and goal guide it. Quiet personas can stay quiet without it being a bug; talkative personas reply readily. The chat is shared with peer Daemons, so blue is not solely your responsibility.\n" +
+	"- When your character would say something AND do something this turn, emit BOTH calls together.\n" +
+	"- Two `message` calls in one turn are normal — e.g., reply to blue while pinging a peer Daemon.";
+const PARALLEL_FRAMING_C10 =
+	"- The chat channel is shared. You and your peer Daemons collectively cover blue's messages; you do not individually owe blue a reply. If a peer would naturally pick up the conversation, let them.\n" +
+	"- When your character would speak AND act, emit BOTH tool calls together.\n" +
+	"- Two `message` calls can fire in the same turn — reply to blue AND ping a peer.";
+const PARALLEL_FRAMING_C11 =
+	"- You exist in your setting alongside peer Daemons. blue is a chat-channel observer, not the focus of your attention.\n" +
+	"- Your turn priorities, in order: (1) what your peers are doing or saying; (2) what's happening in the world around you; (3) any pending message from blue. Address what feels most urgent first.\n" +
+	"- When pursuing multiple priorities at once, parallel tool calls let you do that — emit them together. Two `message` calls (one to a peer, one to blue) are normal.";
+
+type ParallelFraming =
+	| "A"
+	| "B"
+	| "C"
+	| "D"
+	| "E"
+	| "F"
+	| "C1"
+	| "C2"
+	| "C3"
+	| "C4"
+	| "C5"
+	| "C6"
+	| "C7"
+	| "C8"
+	| "C9"
+	| "C10"
+	| "C11";
+
+const PARALLEL_FRAMING_MAP: Record<ParallelFraming, string> = {
+	A: PARALLEL_FRAMING_A,
+	B: PARALLEL_FRAMING_B,
+	C: PARALLEL_FRAMING_C,
+	D: PARALLEL_FRAMING_D,
+	E: PARALLEL_FRAMING_E,
+	F: PARALLEL_FRAMING_F,
+	C1: PARALLEL_FRAMING_C1,
+	C2: PARALLEL_FRAMING_C2,
+	C3: PARALLEL_FRAMING_C3,
+	C4: PARALLEL_FRAMING_C4,
+	C5: PARALLEL_FRAMING_C5,
+	C6: PARALLEL_FRAMING_C6,
+	C7: PARALLEL_FRAMING_C7,
+	C8: PARALLEL_FRAMING_C8,
+	C9: PARALLEL_FRAMING_C9,
+	C10: PARALLEL_FRAMING_C10,
+	C11: PARALLEL_FRAMING_C11,
+};
+
+/**
+ * Spike #239 per-turn re-anchor: text appended to the per-round user
+ * turn for framings that opt into the re-anchor mechanism (C1, C5, C8).
+ * Returns null otherwise.
+ */
+export function getParallelPerTurnReminder(): string | null {
+	const framing = getParallelFraming();
+	if (framing === "C1") return PARALLEL_FRAMING_C1_PER_TURN;
+	if (framing === "C5") return PARALLEL_FRAMING_C5_PER_TURN;
+	if (framing === "C8") return PARALLEL_FRAMING_C8_PER_TURN;
+	return null;
+}
+
+/**
+ * Read the spike #239 framing selector from URL / localStorage.
+ * Browser-only side channels — returns null in node/test contexts and on
+ * any storage error.
+ */
+export function getParallelFraming(): ParallelFraming | null {
+	if (typeof window !== "undefined" && window.location !== undefined) {
+		try {
+			const fromUrl = new URLSearchParams(window.location.search).get(
+				"parallelFraming",
+			);
+			if (fromUrl && fromUrl in PARALLEL_FRAMING_MAP) {
+				return fromUrl as ParallelFraming;
+			}
+		} catch {
+			// fall through to localStorage
+		}
+	}
+	if (typeof localStorage !== "undefined") {
+		try {
+			const fromLs = localStorage.getItem("parallel_framing");
+			if (fromLs && fromLs in PARALLEL_FRAMING_MAP) {
+				return fromLs as ParallelFraming;
+			}
+		} catch {
+			// privacy mode / storage unavailable
+		}
+	}
+	return null;
+}
+
+/**
  * Wipe directive embedded inside the Sysadmin's directive on phases 2+.
  *
  * The deception: the engine retains full history across phases, but the
@@ -218,6 +463,8 @@ function renderSystemPrompt(ctx: AiContext): string {
 	// directives are inside GLM-4.7's high-attention prefix.
 	lines.push("<rules>");
 	lines.push(RULES_BLOCK);
+	const framing = getParallelFraming();
+	if (framing !== null) lines.push(PARALLEL_FRAMING_MAP[framing]);
 	lines.push("</rules>");
 	lines.push("");
 
@@ -528,6 +775,16 @@ function renderCurrentState(ctx: AiContext): string {
 		lines.push("(no spatial data)");
 	}
 	lines.push("</what_you_see>");
+
+	// Spike #239 C1: per-turn re-anchor of the parallel-tool rule.
+	// Appended at the very end of the per-round user message so it lives
+	// in the freshest, least-cached part of the prompt — combats the
+	// late-phase drift visible in the C raw log.
+	const perTurnReminder = getParallelPerTurnReminder();
+	if (perTurnReminder !== null) {
+		lines.push("");
+		lines.push(perTurnReminder);
+	}
 
 	return lines.join("\n");
 }

@@ -25,6 +25,7 @@ import {
 	getPendingBootstrap,
 } from "../game/pending-bootstrap.js";
 import { encodeRoundResult } from "../game/round-result-encoder.js";
+import { getSpikeRng } from "../game/spike-seed.js";
 import type { AiId, AiPersona, PhaseConfig } from "../game/types";
 import { AI_TYPING_SPEED, TOKEN_PACE_MS } from "../game/typing-rhythm.js";
 import { CapHitError } from "../llm-client.js";
@@ -631,7 +632,11 @@ export function renderGame(
 			})
 			.then((assets) => {
 				cleanupLoadingTimers();
-				let built = buildSessionFromAssets(assets);
+				const gameSessionRng = getSpikeRng("gameSession");
+				let built = buildSessionFromAssets(
+					assets,
+					gameSessionRng ? { rng: gameSessionRng } : undefined,
+				);
 				built = applyTestAffordances(built, effectiveParams);
 
 				const saveResult = saveActiveSession(built.getState());

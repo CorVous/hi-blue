@@ -24,9 +24,12 @@ import {
 } from "node:fs";
 import { chromium } from "@playwright/test";
 
-const IN = "/tmp/playtest-in";
-const OUT = "/tmp/playtest-out";
-const LOG = "/tmp/playtest.log";
+// Spike #239: env-overridable FIFO + log paths so multiple daemon instances
+// can run concurrently (one per A/B/C/D/E/F session). Defaults preserve the
+// original single-daemon contract.
+const IN = process.env.PLAYTEST_IN || "/tmp/playtest-in";
+const OUT = process.env.PLAYTEST_OUT || "/tmp/playtest-out";
+const LOG = process.env.PLAYTEST_LOG || "/tmp/playtest.log";
 
 function ensureFifo(p) {
 	if (existsSync(p)) {
@@ -68,8 +71,15 @@ page.on("requestfailed", (req) =>
 	),
 );
 
-log("navigating to http://localhost:8787/?skipDialup=1");
-await page.goto("http://localhost:8787/?skipDialup=1", {
+// Spike #239: optional URL extras for pinning seed and selecting framing.
+const extras = [];
+if (process.env.SPIKE_SEED) extras.push(`seed=${process.env.SPIKE_SEED}`);
+if (process.env.SPIKE_PARALLEL_FRAMING) {
+	extras.push(`parallelFraming=${process.env.SPIKE_PARALLEL_FRAMING}`);
+}
+const startUrl = `http://localhost:8787/?skipDialup=1${extras.length ? `&${extras.join("&")}` : ""}`;
+log(`navigating to ${startUrl}`);
+await page.goto(startUrl, {
 	waitUntil: "domcontentloaded",
 });
 
