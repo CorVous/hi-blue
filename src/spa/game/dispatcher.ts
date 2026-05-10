@@ -345,6 +345,34 @@ export function dispatchAiTurn(
 		| { description: string; success: boolean }
 		| undefined;
 
+	// Process message BEFORE toolCall so that result.records reflects
+	// speak-then-act order (P0-1 fix for issue #238).
+	// Validation uses live personaSpatial from pre-action state — persona
+	// membership cannot be changed by an action in scope here, so this is safe.
+	if (action.message) {
+		const { to, content } = action.message;
+		// Validate recipient: must be "blue" or a live persona AiId (not self)
+		const livePersonaIds = Object.keys(getActivePhase(state).personaSpatial);
+		const validRecipient =
+			to === "blue" || (livePersonaIds.includes(to) && to !== aiId);
+		if (!validRecipient) {
+			records.push({
+				round,
+				actor: aiId,
+				kind: "tool_failure",
+				description: `${game.personas[aiId]?.name ?? aiId} tried to message "${to}" but failed: unknown or invalid recipient`,
+			});
+		} else {
+			state = appendMessage(state, aiId, to, content);
+			records.push({
+				round,
+				actor: aiId,
+				kind: "message",
+				description: `${game.personas[aiId]?.name ?? aiId} messaged ${to}`,
+			});
+		}
+	}
+
 	if (action.toolCall) {
 		const toolCall = action.toolCall;
 		const validation = validateToolCall(state, aiId, toolCall);
@@ -499,30 +527,6 @@ export function dispatchAiTurn(
 				actor: aiId,
 				kind: "tool_failure",
 				description: `${game.personas[aiId]?.name ?? aiId} tried to ${action.toolCall.name} ${action.toolCall.args.item ?? action.toolCall.args.direction ?? ""} but failed: ${validation.reason}`,
-			});
-		}
-	}
-
-	if (action.message) {
-		const { to, content } = action.message;
-		// Validate recipient: must be "blue" or a live persona AiId (not self)
-		const livePersonaIds = Object.keys(getActivePhase(state).personaSpatial);
-		const validRecipient =
-			to === "blue" || (livePersonaIds.includes(to) && to !== aiId);
-		if (!validRecipient) {
-			records.push({
-				round,
-				actor: aiId,
-				kind: "tool_failure",
-				description: `${game.personas[aiId]?.name ?? aiId} tried to message "${to}" but failed: unknown or invalid recipient`,
-			});
-		} else {
-			state = appendMessage(state, aiId, to, content);
-			records.push({
-				round,
-				actor: aiId,
-				kind: "message",
-				description: `${game.personas[aiId]?.name ?? aiId} messaged ${to}`,
 			});
 		}
 	}

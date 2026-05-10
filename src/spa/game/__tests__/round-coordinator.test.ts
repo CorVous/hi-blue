@@ -2119,6 +2119,424 @@ describe("conversationLogs isolation (AC #10 — #194)", () => {
 });
 
 // ----------------------------------------------------------------------------
+// Parallel tool calls: message + action in one turn (issue #238)
+// ----------------------------------------------------------------------------
+describe("parallel tool calls (message + action in one turn) (#238)", () => {
+	// Table row 3: [msg-success, action] → roundtrip has action id only;
+	// conversation log gets the message body.
+	it("[msg, pick_up]: both dispatched; message record first; roundtrip has only pick_up id", async () => {
+		const game = makeGame();
+		// red at (0,0), flower at (0,0) — red can pick up flower
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "msg_id",
+						name: "message",
+						argumentsJson: JSON.stringify({
+							to: "blue",
+							content: "I'll grab the flower",
+						}),
+					},
+					{
+						id: "pickup_id",
+						name: "pick_up",
+						argumentsJson: JSON.stringify({ item: "flower" }),
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const { result, nextState, toolRoundtrip } = await runRound(
+			game,
+			"red",
+			"hi",
+			provider,
+			undefined,
+			["red", "green", "cyan"] as AiId[],
+		);
+
+		// Both dispatched
+		const redActions = result.actions.filter((a) => a.actor === "red");
+		expect(redActions.some((a) => a.kind === "message")).toBe(true);
+		expect(redActions.some((a) => a.kind === "tool_success")).toBe(true);
+
+		// message record BEFORE tool_success (P0-1 ordering)
+		const msgIdx = redActions.findIndex((a) => a.kind === "message");
+		const toolIdx = redActions.findIndex((a) => a.kind === "tool_success");
+		expect(msgIdx).toBeLessThan(toolIdx);
+
+		// Conversation log has the spoken message
+		const redLog = getActivePhase(nextState).conversationLogs.red ?? [];
+		expect(
+			redLog.some(
+				(e) =>
+					e.kind === "message" &&
+					e.from === "red" &&
+					e.content.includes("I'll grab the flower"),
+			),
+		).toBe(true);
+
+		// World state reflects pick_up
+		const flower = getActivePhase(nextState).world.entities.find(
+			(e) => e.id === "flower",
+		);
+		expect(flower?.holder).toBe("red");
+
+		// Roundtrip has ONLY pick_up id (msg-success excluded per ADR 0007 / table row 3)
+		const rt = toolRoundtrip.red;
+		expect(rt).toBeDefined();
+		expect(rt?.assistantToolCalls).toHaveLength(1);
+		expect(rt?.assistantToolCalls[0]?.id).toBe("pickup_id");
+		expect(rt?.toolResults).toHaveLength(1);
+		expect(rt?.toolResults[0]?.tool_call_id).toBe("pickup_id");
+		expect(rt?.toolResults[0]?.success).toBe(true);
+	});
+
+	// Table row 2: [action]-only → roundtrip has the action id; regression guard
+	it("[pick_up]-only: existing single-call behavior unchanged; roundtrip has action id", async () => {
+		const game = makeGame();
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "pickup_only_id",
+						name: "pick_up",
+						argumentsJson: JSON.stringify({ item: "flower" }),
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const { result, nextState, toolRoundtrip } = await runRound(
+			game,
+			"red",
+			"hi",
+			provider,
+			undefined,
+			["red", "green", "cyan"] as AiId[],
+		);
+
+		expect(
+			result.actions.some(
+				(a) => a.kind === "tool_success" && a.actor === "red",
+			),
+		).toBe(true);
+		expect(
+			getActivePhase(nextState).world.entities.find((e) => e.id === "flower")
+				?.holder,
+		).toBe("red");
+
+		const rt = toolRoundtrip.red;
+		expect(rt).toBeDefined();
+		expect(rt?.assistantToolCalls).toHaveLength(1);
+		expect(rt?.assistantToolCalls[0]?.id).toBe("pickup_only_id");
+		expect(rt?.toolResults[0]?.tool_call_id).toBe("pickup_only_id");
+	});
+
+	// Table row 1: [msg-success]-only → no roundtrip; conversation log has message
+	it("[msg-success]-only: no roundtrip recorded; conversation log has message", async () => {
+		const game = makeGame();
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "msg_only_id",
+						name: "message",
+						argumentsJson: JSON.stringify({
+							to: "blue",
+							content: "Just saying hi",
+						}),
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const { nextState, toolRoundtrip } = await runRound(
+			game,
+			"red",
+			"hi",
+			provider,
+			undefined,
+			["red", "green", "cyan"] as AiId[],
+		);
+
+		// No roundtrip for red (msg-success excluded per ADR 0007)
+		expect(toolRoundtrip.red).toBeUndefined();
+
+		// Conversation log has the message
+		const redLog = getActivePhase(nextState).conversationLogs.red ?? [];
+		expect(
+			redLog.some(
+				(e) =>
+					e.kind === "message" &&
+					e.from === "red" &&
+					e.content.includes("Just saying hi"),
+			),
+		).toBe(true);
+	});
+
+	// Table row 4: [msg-fail, pick_up] → roundtrip has BOTH ids; msgFailure + actionResult
+	it("[msg-fail-bad-recipient, pick_up]: roundtrip has both ids; msg failure + pick_up success", async () => {
+		const game = makeGame();
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "msg_fail_id",
+						name: "message",
+						argumentsJson: JSON.stringify({
+							to: "nobody_invalid",
+							content: "Hello?",
+						}),
+					},
+					{
+						id: "pickup_row4_id",
+						name: "pick_up",
+						argumentsJson: JSON.stringify({ item: "flower" }),
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const { result, nextState, toolRoundtrip } = await runRound(
+			game,
+			"red",
+			"hi",
+			provider,
+			undefined,
+			["red", "green", "cyan"] as AiId[],
+		);
+
+		// Message failure and tool_success both in result.actions for red
+		const redActions = result.actions.filter((a) => a.actor === "red");
+		expect(redActions.some((a) => a.kind === "tool_failure")).toBe(true);
+		expect(redActions.some((a) => a.kind === "tool_success")).toBe(true);
+
+		// Flower still picked up
+		expect(
+			getActivePhase(nextState).world.entities.find((e) => e.id === "flower")
+				?.holder,
+		).toBe("red");
+
+		// Roundtrip has BOTH ids: msg_fail_id and pickup_row4_id
+		const rt = toolRoundtrip.red;
+		expect(rt).toBeDefined();
+		expect(rt?.assistantToolCalls).toHaveLength(2);
+		const ids = rt?.assistantToolCalls.map((c) => c.id);
+		expect(ids).toContain("msg_fail_id");
+		expect(ids).toContain("pickup_row4_id");
+
+		// Message result is failure (FAILED: ...)
+		const msgResult = rt?.toolResults.find(
+			(r) => r.tool_call_id === "msg_fail_id",
+		);
+		expect(msgResult?.success).toBe(false);
+
+		// Pickup result is success
+		const pickupResult = rt?.toolResults.find(
+			(r) => r.tool_call_id === "pickup_row4_id",
+		);
+		expect(pickupResult?.success).toBe(true);
+	});
+
+	// Duplicate-within-slot: [msg, msg] → first dispatched, second is tool_failure in roundtrip
+	it("[msg, msg] duplicate: first message dispatched; second in roundtrip as failure", async () => {
+		const game = makeGame();
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "msg_first_id",
+						name: "message",
+						argumentsJson: JSON.stringify({ to: "blue", content: "First msg" }),
+					},
+					{
+						id: "msg_dup_id",
+						name: "message",
+						argumentsJson: JSON.stringify({
+							to: "blue",
+							content: "Duplicate msg",
+						}),
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const { result, nextState, toolRoundtrip } = await runRound(
+			game,
+			"red",
+			"hi",
+			provider,
+			undefined,
+			["red", "green", "cyan"] as AiId[],
+		);
+
+		// First message is dispatched (in conversation log)
+		const redLog = getActivePhase(nextState).conversationLogs.red ?? [];
+		expect(
+			redLog.some(
+				(e) =>
+					e.kind === "message" &&
+					e.from === "red" &&
+					e.content.includes("First msg"),
+			),
+		).toBe(true);
+
+		// Duplicate produces a tool_failure in result.actions
+		const redActions = result.actions.filter((a) => a.actor === "red");
+		const failureRecord = redActions.find(
+			(a) =>
+				a.kind === "tool_failure" && /only one message/i.test(a.description),
+		);
+		expect(failureRecord).toBeDefined();
+
+		// Roundtrip has the DUPLICATE id (not the success id), with failure result
+		const rt = toolRoundtrip.red;
+		expect(rt).toBeDefined();
+		expect(rt?.assistantToolCalls.map((c) => c.id)).toContain("msg_dup_id");
+		const dupResult = rt?.toolResults.find(
+			(r) => r.tool_call_id === "msg_dup_id",
+		);
+		expect(dupResult?.success).toBe(false);
+	});
+
+	// Duplicate-within-slot: [pick_up, go] → first action dispatched, second is tool_failure
+	it("[pick_up, go] duplicate action slot: first action dispatched; second in roundtrip as failure", async () => {
+		const game = makeGame();
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "pickup_first_id",
+						name: "pick_up",
+						argumentsJson: JSON.stringify({ item: "flower" }),
+					},
+					{
+						id: "go_dup_id",
+						name: "go",
+						argumentsJson: JSON.stringify({ direction: "south" }),
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const { result, nextState, toolRoundtrip } = await runRound(
+			game,
+			"red",
+			"hi",
+			provider,
+			undefined,
+			["red", "green", "cyan"] as AiId[],
+		);
+
+		// First action (pick_up) dispatched
+		expect(
+			getActivePhase(nextState).world.entities.find((e) => e.id === "flower")
+				?.holder,
+		).toBe("red");
+
+		// Second action (go) produces tool_failure in result.actions
+		const redActions = result.actions.filter((a) => a.actor === "red");
+		const failureRecord = redActions.find(
+			(a) =>
+				a.kind === "tool_failure" && /only one action/i.test(a.description),
+		);
+		expect(failureRecord).toBeDefined();
+
+		// Roundtrip has both pick_up (success) and go (failure)
+		const rt = toolRoundtrip.red;
+		expect(rt).toBeDefined();
+		const ids = rt?.assistantToolCalls.map((c) => c.id);
+		expect(ids).toContain("pickup_first_id");
+		expect(ids).toContain("go_dup_id");
+		const pickupResult = rt?.toolResults.find(
+			(r) => r.tool_call_id === "pickup_first_id",
+		);
+		expect(pickupResult?.success).toBe(true);
+		const goResult = rt?.toolResults.find(
+			(r) => r.tool_call_id === "go_dup_id",
+		);
+		expect(goResult?.success).toBe(false);
+	});
+
+	// Cost: single costUsd from the single provider call (not doubled)
+	it("cost deduction is the single call's costUsd, not doubled", async () => {
+		const game = makeGame();
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "msg_cost_id",
+						name: "message",
+						argumentsJson: JSON.stringify({ to: "blue", content: "hi" }),
+					},
+					{
+						id: "pickup_cost_id",
+						name: "pick_up",
+						argumentsJson: JSON.stringify({ item: "flower" }),
+					},
+				],
+				costUsd: 1,
+			},
+			{ assistantText: "", toolCalls: [], costUsd: 0 },
+			{ assistantText: "", toolCalls: [], costUsd: 0 },
+		]);
+
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			provider,
+			undefined,
+			["red", "green", "cyan"] as AiId[],
+		);
+
+		// Red budget: 5 - 1 = 4 (single call cost, not 2)
+		expect(getActivePhase(nextState).budgets.red?.remaining).toBeCloseTo(4, 10);
+	});
+
+	// Empty toolCalls → pass record (existing regression guard)
+	it("[] empty toolCalls → pass record produced", async () => {
+		const game = makeGame();
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const { result } = await runRound(game, "red", "hi", provider, undefined, [
+			"red",
+			"green",
+			"cyan",
+		] as AiId[]);
+
+		expect(
+			result.actions.filter((a) => a.actor === "red" && a.kind === "pass"),
+		).toHaveLength(1);
+	});
+});
+
+// ----------------------------------------------------------------------------
 // Regression: no double-assistant turn after message tool call in multi-round (#213)
 // ----------------------------------------------------------------------------
 describe("message tool multi-round regression (#213)", () => {
