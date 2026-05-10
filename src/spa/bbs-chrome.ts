@@ -16,7 +16,11 @@ const BANNER_SEGMENTS: ReadonlyArray<readonly [string, string, string]> = [
 	["   ╚═╝  ╚═╝╚═╝      ", "╚═════╝ ╚══════╝ ╚═════╝ ╚══════╝", ""],
 ] as const;
 
-/** Banner as HTML — the BLUE block letters are wrapped in `.banner-blue`. */
+/** Banner as HTML — the BLUE block letters are wrapped in `.banner-blue`.
+ *  Each body-row `║` is wrapped in `.banner-side` so CSS can stamp
+ *  vertically-offset clones of the glyph (sharp text-shadows) to fill
+ *  the 1-2 px inter-line gap that causes vertical beading. The shadow
+ *  is the glyph's own ink, so it auto-aligns with the corner glyphs. */
 export const BANNER: string = (() => {
 	const len = (s: string): number => [...s].length;
 	const lineLen = (seg: readonly [string, string, string]): number =>
@@ -24,9 +28,10 @@ export const BANNER: string = (() => {
 	const w = Math.max(...BANNER_SEGMENTS.map(lineLen));
 	const top = ` ╔${"═".repeat(w + 2)}╗`;
 	const bot = ` ╚${"═".repeat(w + 2)}╝`;
+	const side = `<span class="banner-side">║</span>`;
 	const body = BANNER_SEGMENTS.map(([a, b, c]) => {
 		const pad = " ".repeat(w - lineLen([a, b, c]));
-		return ` ║ ${a}<span class="banner-blue">${b}</span>${c}${pad} ║`;
+		return ` ${side} ${a}<span class="banner-blue">${b}</span>${c}${pad} ${side}`;
 	});
 	return [top, ...body, bot].join("\n");
 })();
