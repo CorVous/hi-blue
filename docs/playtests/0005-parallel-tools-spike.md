@@ -104,8 +104,15 @@ build-time data, like `/tmp/wrangler.log` for previous playtests).
    want the `[spike-239]` lines live; otherwise grep them out of
    `/tmp/wrangler.log` (no — those are server-side; the spike log is
    client-side, so devtools or a `console` capture is required).
-3. **Pin the seed**: TODO — note the URL params used so personas, settings,
-   content pack, and lockout-AI are identical between A and B.
+3. **Pin the seed**: append `?seed=42` (or any integer) to the start URL.
+   This drives a Mulberry32 PRNG with sub-streams for persona archetype
+   selection, setting noun, and initial spatial placement
+   (`src/spa/game/spike-seed.ts`). Re-using the same `seed=N` for the A
+   and B sessions pins those structural choices across runs. Note the
+   carve-out: persona blurbs / typing quirks / content-pack item names
+   come from non-deterministic LLM synthesis and will still vary
+   text-wise between runs — the rng-driven structural skeleton is what
+   pins.
 4. Use the [scripted 30-prompt sequence below](#scripted-prompts). Same
    script across A and B, same pacing. Don't ad-lib — once the
    conversations diverge, the comparison is noise.
