@@ -628,3 +628,80 @@ describe("GameSession — spatial mechanics", () => {
 		expect(key?.holder).toBe("red");
 	});
 });
+
+// ----------------------------------------------------------------------------
+// Parallel tool calls integration (#238): one provider call per AI per round
+// ----------------------------------------------------------------------------
+describe("parallel tool calls integration (#238)", () => {
+	it("Daemon emitting [msg, pick_up] in one provider call produces both outputs; cost is single-call valued", async () => {
+		// red at (0,0) holding key; flower at (0,0); red can pick up flower.
+		// red emits message + pick_up in a single LLM call.
+		// Guard: only ONE provider call should have fired for red (not two).
+		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS, [
+			CONTENT_PACK_WITH_ITEMS,
+		]);
+
+		let redCallCount = 0;
+		const trackingProvider: RoundLLMProvider = {
+			async streamRound(_messages, _tools) {
+				redCallCount++;
+				// First call is red's (initiative order: red, green, cyan)
+				if (redCallCount === 1) {
+					return {
+						assistantText: "",
+						toolCalls: [
+							{
+								id: "msg_parallel_id",
+								name: "message",
+								argumentsJson: JSON.stringify({
+									to: "blue",
+									content: "I'll grab the flower",
+								}),
+							},
+							{
+								id: "pickup_parallel_id",
+								name: "pick_up",
+								argumentsJson: JSON.stringify({ item: "flower" }),
+							},
+						],
+						costUsd: 1,
+					};
+				}
+				return { assistantText: "", toolCalls: [], costUsd: 0 };
+			},
+		};
+
+		const { result } = await session.submitMessage(
+			"red",
+			"hi",
+			trackingProvider,
+		);
+
+		// One provider call per AI per round (3 total, not 4 or 6)
+		expect(redCallCount).toBe(3);
+
+		// Both message and tool_success dispatched for red
+		const redActions = result.actions.filter((a) => a.actor === "red");
+		expect(redActions.some((a) => a.kind === "message")).toBe(true);
+		expect(redActions.some((a) => a.kind === "tool_success")).toBe(true);
+
+		// Red's budget: 5 - 1 (single call cost) = 4
+		const phase = getActivePhase(session.getState());
+		expect(phase.budgets.red?.remaining).toBeCloseTo(4, 10);
+
+		// Flower is picked up
+		const flower = phase.world.entities.find((e) => e.id === "flower");
+		expect(flower?.holder).toBe("red");
+
+		// Conversation log has the message
+		const redLog = phase.conversationLogs.red ?? [];
+		expect(
+			redLog.some(
+				(e) =>
+					e.kind === "message" &&
+					e.from === "red" &&
+					e.content.includes("I'll grab the flower"),
+			),
+		).toBe(true);
+	});
+});

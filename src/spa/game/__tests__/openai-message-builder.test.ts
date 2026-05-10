@@ -451,3 +451,199 @@ describe("buildOpenAiMessages", () => {
 		expect(round2Prompt).toBe(round0Prompt);
 	});
 });
+
+// ----------------------------------------------------------------------------
+// Multi-id roundtrip shapes (issue #238 parallel tool calls)
+// ----------------------------------------------------------------------------
+describe("multi-id roundtrip replay shapes (#238)", () => {
+	// Test: N=2 assistantToolCalls produces the correct message ordering:
+	// [..., assistant{tool_calls:[a,b]}, tool{a-result}, tool{b-result}, ...]
+	it("roundtrip with 2 assistantToolCalls produces assistant{tool_calls:[a,b]} + 2 tool messages", () => {
+		const game = makeGame();
+		const ctx = buildAiContext(game, "red");
+
+		const roundtrip: ToolRoundtripMessage = {
+			assistantToolCalls: [
+				{ id: "call_a", name: "pick_up", argumentsJson: '{"item":"flower"}' },
+				{ id: "call_b", name: "go", argumentsJson: '{"direction":"south"}' },
+			],
+			toolResults: [
+				{
+					tool_call_id: "call_a",
+					success: true,
+					description: "Ember picked up the flower",
+				},
+				{
+					tool_call_id: "call_b",
+					success: false,
+					description: "Ember tried to go but failed: blocked",
+					reason: "blocked",
+				},
+			],
+		};
+
+		const messages = buildOpenAiMessages(ctx, roundtrip);
+
+		// Find the assistant message with tool_calls
+		const assistantToolMsg = messages.find(
+			(m) => m.role === "assistant" && "tool_calls" in m,
+		);
+		expect(assistantToolMsg).toBeDefined();
+		if (assistantToolMsg?.role === "assistant") {
+			expect(assistantToolMsg.tool_calls).toHaveLength(2);
+			expect(assistantToolMsg.tool_calls?.[0]?.id).toBe("call_a");
+			expect(assistantToolMsg.tool_calls?.[1]?.id).toBe("call_b");
+		}
+
+		// Both tool results follow, in order
+		const toolMsgs = messages.filter((m) => m.role === "tool");
+		expect(toolMsgs).toHaveLength(2);
+		if (toolMsgs[0]?.role === "tool" && toolMsgs[1]?.role === "tool") {
+			expect(toolMsgs[0].tool_call_id).toBe("call_a");
+			expect(toolMsgs[0].content).toBe("Ember picked up the flower");
+			expect(toolMsgs[1].tool_call_id).toBe("call_b");
+			// Failed result is prefixed with FAILED:
+			expect(toolMsgs[1].content).toMatch(/^FAILED:/);
+			expect(toolMsgs[1].content).toContain("blocked");
+		}
+
+		// assistant{tool_calls} is immediately followed by the first tool message
+		const assistantIdx = assistantToolMsg
+			? messages.indexOf(assistantToolMsg)
+			: -1;
+		expect(assistantIdx).toBeGreaterThanOrEqual(0);
+		const firstToolMsg = messages[assistantIdx + 1];
+		expect(firstToolMsg?.role).toBe("tool");
+
+		// The two tool messages are consecutive (assistant{tool_calls}, tool{a}, tool{b})
+		expect(messages[assistantIdx + 2]?.role).toBe("tool");
+	});
+
+	// Row 4 shape: first fail + second success (msg-fail + action-success)
+	it("roundtrip with [msg-fail, action-success] produces both tool messages with correct success flags", () => {
+		const game = makeGame();
+		const ctx = buildAiContext(game, "red");
+
+		const roundtrip: ToolRoundtripMessage = {
+			assistantToolCalls: [
+				{
+					id: "msg_fail_id",
+					name: "message",
+					argumentsJson: '{"to":"nobody","content":"hi"}',
+				},
+				{
+					id: "pickup_id",
+					name: "pick_up",
+					argumentsJson: '{"item":"flower"}',
+				},
+			],
+			toolResults: [
+				{
+					tool_call_id: "msg_fail_id",
+					success: false,
+					description:
+						"Ember tried to message nobody but failed: unknown or invalid recipient",
+				},
+				{
+					tool_call_id: "pickup_id",
+					success: true,
+					description: "Ember picked up the flower",
+				},
+			],
+		};
+
+		const messages = buildOpenAiMessages(ctx, roundtrip);
+
+		const toolMsgs = messages.filter((m) => m.role === "tool");
+		expect(toolMsgs).toHaveLength(2);
+
+		if (toolMsgs[0]?.role === "tool" && toolMsgs[1]?.role === "tool") {
+			// Message failure comes first, prefixed with FAILED:
+			expect(toolMsgs[0].tool_call_id).toBe("msg_fail_id");
+			expect(toolMsgs[0].content).toMatch(/^FAILED:/);
+
+			// Action success comes second
+			expect(toolMsgs[1].tool_call_id).toBe("pickup_id");
+			expect(toolMsgs[1].content).toBe("Ember picked up the flower");
+		}
+	});
+
+	// Row 3 wire shape: [msg-success, action] produces two consecutive assistant turns.
+	//
+	// In the row-3 case, the round-coordinator EXCLUDES the successful message call
+	// from the roundtrip (per ADR 0007 — it replays via conversationLog as
+	// assistant{content}). The action call DOES go in the roundtrip. This means
+	// the next round's message array has:
+	//   assistant{content: "<msg>"} — from conversationLog
+	//   assistant{tool_calls:[actionId]} — from roundtrip
+	//   tool{actionId, result}
+	//
+	// Two consecutive assistant turns is intentional and OpenAI-spec-permitted
+	// (the strict pairing rule is only that tool_calls → matching tool results
+	// directly after). Do NOT generalize the #213 invariant ("no consecutive
+	// assistant turns for message-only turns") to this case.
+	it("row-3 wire shape: conversationLog msg + roundtrip action produces consecutive assistant turns (intentional)", () => {
+		let game = makeGame();
+		// Simulate a prior round where red sent a message to blue (goes in conversationLog)
+		game = appendMessage(game, "red", "blue", "I'll grab the flower");
+
+		const ctx = buildAiContext(game, "red");
+
+		// The roundtrip carries ONLY the action call (msg-success excluded per ADR 0007)
+		const roundtrip: ToolRoundtripMessage = {
+			assistantToolCalls: [
+				{
+					id: "pickup_r3_id",
+					name: "pick_up",
+					argumentsJson: '{"item":"flower"}',
+				},
+			],
+			toolResults: [
+				{
+					tool_call_id: "pickup_r3_id",
+					success: true,
+					description: "Ember picked up the flower",
+				},
+			],
+		};
+
+		const messages = buildOpenAiMessages(ctx, roundtrip);
+
+		// The conversation log assistant turn (message body) appears first
+		const assistantContentMsg = messages.find(
+			(m) =>
+				m.role === "assistant" &&
+				"content" in m &&
+				typeof (m as { content?: unknown }).content === "string" &&
+				(m as { content: string }).content.includes("I'll grab the flower"),
+		);
+		expect(assistantContentMsg).toBeDefined();
+
+		// The roundtrip assistant{tool_calls} turn appears after it
+		const assistantToolMsg = messages.find(
+			(m) => m.role === "assistant" && "tool_calls" in m,
+		);
+		expect(assistantToolMsg).toBeDefined();
+
+		const contentIdx = assistantContentMsg
+			? messages.indexOf(assistantContentMsg)
+			: -1;
+		const toolIdx = assistantToolMsg ? messages.indexOf(assistantToolMsg) : -1;
+		expect(contentIdx).toBeLessThan(toolIdx);
+
+		// INTENTIONAL: these two assistant turns are consecutive (no user turn between them).
+		// This is correct for row-3 because the conversation log entry and the roundtrip
+		// are from the same AI turn but are separate message-protocol constructs.
+		// Note: the #213 invariant ("no consecutive assistant turns") applies ONLY to
+		// message-only turns where no roundtrip is recorded. In the row-3 case, two
+		// consecutive assistant turns are correct and expected.
+		expect(messages[contentIdx + 1]).toBe(assistantToolMsg);
+
+		// The tool result follows immediately after the assistant{tool_calls}
+		const toolMsg = messages[toolIdx + 1];
+		expect(toolMsg?.role).toBe("tool");
+		if (toolMsg?.role === "tool") {
+			expect(toolMsg.tool_call_id).toBe("pickup_r3_id");
+		}
+	});
+});

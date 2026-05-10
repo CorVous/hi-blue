@@ -893,8 +893,7 @@ describe("dispatchAiTurn", () => {
 		expect(
 			redLog.some(
 				(e) =>
-					e.kind === "message" &&
-					e.content.includes("I'll grab the flower"),
+					e.kind === "message" && e.content.includes("I'll grab the flower"),
 			),
 		).toBe(true);
 
