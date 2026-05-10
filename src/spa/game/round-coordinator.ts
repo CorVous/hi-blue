@@ -144,7 +144,11 @@ export async function runRound(
 		// Build OpenAI messages for this AI
 		const ctx = buildAiContext(state, aiId);
 		const priorRoundtrip = priorToolRoundtrip?.[aiId];
-		const messages = buildOpenAiMessages(ctx, priorRoundtrip, getActivePhase(state).round);
+		const messages = buildOpenAiMessages(
+			ctx,
+			priorRoundtrip,
+			getActivePhase(state).round,
+		);
 
 		// Compute legal tools for this AI given current game state
 		const tools = availableTools(state, aiId);

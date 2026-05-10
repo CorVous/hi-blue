@@ -97,7 +97,8 @@ export function buildOpenAiMessages(
 	// message, and it tends to re-respond to it as if it had just been sent again.
 	if (currentRound !== undefined) {
 		const incomingThisRound = ctx.conversationLog.some(
-			(e) => e.kind === "message" && e.to === ctx.aiId && e.round === currentRound,
+			(e) =>
+				e.kind === "message" && e.to === ctx.aiId && e.round === currentRound,
 		);
 		if (!incomingThisRound) {
 			messages.push({ role: "user", content: buildSilentTurn(ctx) });

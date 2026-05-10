@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { advanceRound, appendMessage, createGame, startPhase } from "../engine";
+import {
+	advanceRound,
+	appendMessage,
+	createGame,
+	getActivePhase,
+	startPhase,
+} from "../engine";
 import {
 	buildOpenAiMessages,
 	buildSilentTurn,
@@ -253,7 +259,7 @@ describe("buildOpenAiMessages", () => {
 
 		// Advance to round 1 — now blue addresses green; red gets nothing this round
 		game = advanceRound(game);
-		const phase = game.phases[game.phases.length - 1]!;
+		const phase = getActivePhase(game);
 		const currentRound = phase.round; // = 1
 
 		const ctx = buildAiContext(game, "red");
@@ -269,7 +275,7 @@ describe("buildOpenAiMessages", () => {
 	it("(b) peer messages this daemon this round → no silent-turn anchor, last user msg is peer message", () => {
 		let game = makeGame();
 		// red receives a message from green this round
-		const phase = game.phases[game.phases.length - 1]!;
+		const phase = getActivePhase(game);
 		const currentRound = phase.round;
 		game = appendMessage(game, "green", "red", "psst red");
 
@@ -293,7 +299,7 @@ describe("buildOpenAiMessages", () => {
 	// Case (c): blue addresses this Daemon → no anchor; last user msg is `blue: <content>`
 	it("(c) blue addresses this daemon → no silent-turn anchor, last user msg is player message", () => {
 		let game = makeGame();
-		const phase = game.phases[game.phases.length - 1]!;
+		const phase = getActivePhase(game);
 		const currentRound = phase.round;
 		game = appendMessage(game, "blue", "red", "Hi Ember");
 
@@ -330,26 +336,18 @@ describe("buildOpenAiMessages", () => {
 	// Defensive: incoming message stamped with a prior round → anchor still fires for currentRound
 	it("incoming message from a prior round does not suppress the anchor for currentRound", () => {
 		let game = makeGame();
-		// Message appended in round 0
+		// Round 0: red receives a message from blue
 		game = appendMessage(game, "blue", "red", "Prior round message");
 		game = appendMessage(game, "red", "blue", "My reply");
-		// Advance round so current round is 1 (or whatever advanceRound yields)
-		// We simulate this by reading the phase round before any messages in new round
-		const phase = game.phases[game.phases.length - 1]!;
-		const priorRound = phase.round - 1; // The round the messages above were stamped with
 
-		// Build with priorRound + 1 (current round) — no messages stamped for that round
-		const currentRound = phase.round;
-		// Sanity: priorRound and currentRound differ only if advanceRound was called.
-		// In this test we stay at the same phase without advancing; messages were stamped at phase.round.
-		// So currentRound === priorRound + 0 here — we need to use a round number for which no
-		// messages exist. We use currentRound + 1 to simulate "next round, no messages yet".
-		const futureRound = currentRound + 1;
+		// Advance to round 1 — red gets nothing this round
+		game = advanceRound(game);
+		const currentRound = getActivePhase(game).round;
 
 		const ctx = buildAiContext(game, "red");
-		const messages = buildOpenAiMessages(ctx, undefined, futureRound);
+		const messages = buildOpenAiMessages(ctx, undefined, currentRound);
 
-		// Anchor must fire because no messages are stamped for futureRound
+		// Anchor must fire — round 1 has no incoming entries even though round 0 does
 		const last = messages[messages.length - 1];
 		expect(last?.role).toBe("user");
 		expect((last as { content: string }).content).toBe(buildSilentTurn(ctx));
