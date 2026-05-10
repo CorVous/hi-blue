@@ -456,16 +456,17 @@ main {
 	line-height: 1;
 	overflow: hidden;
 	word-break: break-all;
-	width: 1ch;
+	/* No explicit width — `1ch` is the advance of `0`, but JBM's box-
+	   drawing glyphs have a (very slightly) different advance, so
+	   pinning the column to 1ch shifts the `│` stroke half a pixel
+	   left of the corner glyphs' vertical arms. Let the box auto-size
+	   from the `│` glyph's own advance and the column lines up exactly. */
 	flex: 0 0 auto;
 	user-select: none;
 	color: var(--panel-color);
 	/* Same approach as the banner `║` — stamp clones of the glyph 1 px
-	   above and below itself with zero-blur text-shadows. The clones
-	   extend the glyph's own ink into the inter-line gap that causes
-	   vertical beading, and because the shadow is the glyph itself, it
-	   self-aligns with the corner glyphs above/below — no positioning
-	   math, no subpixel guessing. */
+	   above and below itself with zero-blur text-shadows so the `│`
+	   ink bleeds into the inter-line gap that causes vertical beading. */
 	text-shadow:
 		0 1px 0 var(--panel-color, var(--amber)),
 		0 -1px 0 var(--panel-color, var(--amber));
