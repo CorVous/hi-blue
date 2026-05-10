@@ -69,17 +69,21 @@ function makeGame() {
 }
 
 describe("buildOpenAiMessages", () => {
-	it("empty chat history + no roundtrip → [system, (no user/assistant pair)]", () => {
+	it("empty chat history + no roundtrip → [system, current-state user turn]", () => {
 		const game = makeGame();
 		const ctx = buildAiContext(game, "red");
 		const messages = buildOpenAiMessages(ctx, undefined);
 
-		// Just system message — no chat history
-		expect(messages).toHaveLength(1);
+		// system + trailing current-state user turn (always last)
+		expect(messages).toHaveLength(2);
 		expect(messages[0]?.role).toBe("system");
+		expect(messages[1]?.role).toBe("user");
+		expect((messages[1] as { content: string }).content).toBe(
+			ctx.toCurrentStateUserMessage(),
+		);
 	});
 
-	it("single player+AI message turn → [system, user, assistant]", () => {
+	it("single player+AI message turn → [system, user, assistant, current-state]", () => {
 		let game = makeGame();
 		game = appendMessage(game, "blue", "red", "Hello Ember!");
 		game = appendMessage(game, "red", "blue", "Hello, player!");
@@ -87,7 +91,7 @@ describe("buildOpenAiMessages", () => {
 		const ctx = buildAiContext(game, "red");
 		const messages = buildOpenAiMessages(ctx, undefined);
 
-		expect(messages).toHaveLength(3);
+		expect(messages).toHaveLength(4);
 		expect(messages[0]?.role).toBe("system");
 		expect(messages[1]).toEqual({
 			role: "user",
@@ -97,9 +101,14 @@ describe("buildOpenAiMessages", () => {
 			role: "assistant",
 			content: "Hello, player!",
 		});
+		// Trailing current-state turn
+		expect(messages[3]?.role).toBe("user");
+		expect((messages[3] as { content: string }).content).toBe(
+			ctx.toCurrentStateUserMessage(),
+		);
 	});
 
-	it("message history of length N → N pairs after system", () => {
+	it("message history of length N → N pairs after system, then current-state", () => {
 		let game = makeGame();
 		for (let i = 0; i < 3; i++) {
 			game = appendMessage(game, "blue", "red", `Player msg ${i}`);
@@ -109,14 +118,19 @@ describe("buildOpenAiMessages", () => {
 		const ctx = buildAiContext(game, "red");
 		const messages = buildOpenAiMessages(ctx, undefined);
 
-		// 1 system + 6 messages (3 player + 3 AI)
-		expect(messages).toHaveLength(7);
+		// 1 system + 6 messages (3 player + 3 AI) + 1 trailing current-state
+		expect(messages).toHaveLength(8);
 		expect(messages[0]?.role).toBe("system");
 		// Pairs alternate user/assistant
 		for (let i = 0; i < 3; i++) {
 			expect(messages[1 + i * 2]?.role).toBe("user");
 			expect(messages[2 + i * 2]?.role).toBe("assistant");
 		}
+		// Last message is the current-state user turn
+		expect(messages[7]?.role).toBe("user");
+		expect((messages[7] as { content: string }).content).toBe(
+			ctx.toCurrentStateUserMessage(),
+		);
 	});
 
 	it("prior-round tool roundtrip is appended with correct ordering", () => {
@@ -144,8 +158,8 @@ describe("buildOpenAiMessages", () => {
 
 		const messages = buildOpenAiMessages(ctx, roundtrip);
 
-		// system + user + assistant{tool_calls} + tool result
-		expect(messages).toHaveLength(4);
+		// system + user(blue msg) + assistant{tool_calls} + tool result + trailing current-state
+		expect(messages).toHaveLength(5);
 		expect(messages[0]?.role).toBe("system");
 		expect(messages[1]?.role).toBe("user");
 
@@ -167,6 +181,12 @@ describe("buildOpenAiMessages", () => {
 			expect(toolMsg.tool_call_id).toBe("call_abc");
 			expect(toolMsg.content).toBe("Ember picked up the flower");
 		}
+
+		// Trailing current-state turn
+		expect(messages[4]?.role).toBe("user");
+		expect((messages[4] as { content: string }).content).toBe(
+			ctx.toCurrentStateUserMessage(),
+		);
 	});
 
 	it("matching tool_call_id in assistant message and tool message", () => {
@@ -245,13 +265,19 @@ describe("buildOpenAiMessages", () => {
 		};
 
 		const messages = buildOpenAiMessages(ctx, emptyRoundtrip);
-		// No extra messages appended
-		expect(messages).toHaveLength(1); // only system
+		// system + trailing current-state user turn (always emitted)
+		expect(messages).toHaveLength(2);
+		expect(messages[0]?.role).toBe("system");
+		expect(messages[1]?.role).toBe("user");
 		expect(messages.every((m) => m.role !== "tool")).toBe(true);
 	});
 
+	// The current-state user turn is always last (carries <where_you_are> +
+	// <what_you_see>). The silent-turn anchor, when it fires, sits immediately
+	// before that — i.e. second-to-last.
+
 	// Case (a): blue addresses a peer — this Daemon received no messages this round → anchor fires
-	it("(a) blue addresses peer, no incoming message for this daemon → silent-turn anchor fires", () => {
+	it("(a) blue addresses peer, no incoming message for this daemon → silent-turn anchor fires (second-to-last)", () => {
 		let game = makeGame();
 		// Prior round (round 0): red was addressed and replied
 		game = appendMessage(game, "blue", "red", "Hi Ember");
@@ -265,14 +291,20 @@ describe("buildOpenAiMessages", () => {
 		const ctx = buildAiContext(game, "red");
 		const messages = buildOpenAiMessages(ctx, undefined, currentRound);
 
-		// Anchor must fire: no messages for red in round 1
+		// Anchor sits immediately before the trailing current-state turn
+		const anchor = messages[messages.length - 2];
+		expect(anchor?.role).toBe("user");
+		expect((anchor as { content: string }).content).toBe(buildSilentTurn(ctx));
+
+		// Last is the current-state turn
 		const last = messages[messages.length - 1];
-		expect(last?.role).toBe("user");
-		expect((last as { content: string }).content).toBe(buildSilentTurn(ctx));
+		expect((last as { content: string }).content).toBe(
+			ctx.toCurrentStateUserMessage(),
+		);
 	});
 
-	// Case (b): peer messages this Daemon, blue silent → no anchor; last user msg is `*<sender>: <content>`
-	it("(b) peer messages this daemon this round → no silent-turn anchor, last user msg is peer message", () => {
+	// Case (b): peer messages this Daemon, blue silent → no anchor; last *non-state* user msg is the peer message
+	it("(b) peer messages this daemon this round → no silent-turn anchor, last conversational user msg is peer message", () => {
 		let game = makeGame();
 		// red receives a message from green this round
 		const phase = getActivePhase(game);
@@ -281,6 +313,7 @@ describe("buildOpenAiMessages", () => {
 
 		const ctx = buildAiContext(game, "red");
 		const silent = buildSilentTurn(ctx);
+		const stateContent = ctx.toCurrentStateUserMessage();
 		const messages = buildOpenAiMessages(ctx, undefined, currentRound);
 
 		// Anchor must NOT fire
@@ -291,13 +324,21 @@ describe("buildOpenAiMessages", () => {
 			),
 		).toBe(false);
 
-		// Last user message is the peer message
-		const lastUser = [...messages].reverse().find((m) => m.role === "user");
-		expect((lastUser as { content: string }).content).toBe("*green: psst red");
+		// The last non-state user turn is the peer message (state turn is at the very end)
+		const conversationalUserTurns = messages.filter(
+			(m) =>
+				m.role === "user" &&
+				(m as { content: string }).content !== stateContent,
+		);
+		const lastConversational =
+			conversationalUserTurns[conversationalUserTurns.length - 1];
+		expect((lastConversational as { content: string }).content).toBe(
+			"*green: psst red",
+		);
 	});
 
-	// Case (c): blue addresses this Daemon → no anchor; last user msg is `blue: <content>`
-	it("(c) blue addresses this daemon → no silent-turn anchor, last user msg is player message", () => {
+	// Case (c): blue addresses this Daemon → no anchor; last *non-state* user msg is `blue: <content>`
+	it("(c) blue addresses this daemon → no silent-turn anchor, last conversational user msg is player message", () => {
 		let game = makeGame();
 		const phase = getActivePhase(game);
 		const currentRound = phase.round;
@@ -305,6 +346,7 @@ describe("buildOpenAiMessages", () => {
 
 		const ctx = buildAiContext(game, "red");
 		const silent = buildSilentTurn(ctx);
+		const stateContent = ctx.toCurrentStateUserMessage();
 		const messages = buildOpenAiMessages(ctx, undefined, currentRound);
 
 		// Anchor must NOT fire
@@ -315,9 +357,16 @@ describe("buildOpenAiMessages", () => {
 			),
 		).toBe(false);
 
-		// Last user message is the player message
-		const lastUser = [...messages].reverse().find((m) => m.role === "user");
-		expect((lastUser as { content: string }).content).toBe("blue: Hi Ember");
+		const conversationalUserTurns = messages.filter(
+			(m) =>
+				m.role === "user" &&
+				(m as { content: string }).content !== stateContent,
+		);
+		const lastConversational =
+			conversationalUserTurns[conversationalUserTurns.length - 1];
+		expect((lastConversational as { content: string }).content).toBe(
+			"blue: Hi Ember",
+		);
 	});
 
 	it("when `currentRound` is omitted, no anchor is appended (back-compat)", () => {
@@ -347,9 +396,9 @@ describe("buildOpenAiMessages", () => {
 		const ctx = buildAiContext(game, "red");
 		const messages = buildOpenAiMessages(ctx, undefined, currentRound);
 
-		// Anchor must fire — round 1 has no incoming entries even though round 0 does
-		const last = messages[messages.length - 1];
-		expect(last?.role).toBe("user");
-		expect((last as { content: string }).content).toBe(buildSilentTurn(ctx));
+		// Anchor sits immediately before the trailing current-state turn
+		const anchor = messages[messages.length - 2];
+		expect(anchor?.role).toBe("user");
+		expect((anchor as { content: string }).content).toBe(buildSilentTurn(ctx));
 	});
 });

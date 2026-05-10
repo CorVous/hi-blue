@@ -1,6 +1,4 @@
 import { projectCone } from "./cone-projector.js";
-import type { ConversationLogInput } from "./conversation-log.js";
-import { buildConversationLog } from "./conversation-log.js";
 import { formatPosition } from "./direction.js";
 import { getActivePhase } from "./engine";
 import type {
@@ -40,7 +38,19 @@ export interface AiContext {
 	personaColors: Record<AiId, string>;
 	/** All personas — used by buildConversationLog for name resolution. */
 	personas: Record<AiId, AiPersona>;
+	/**
+	 * Render the stable persona/phase prompt — front matter, identity, rules,
+	 * setting, personality, voice examples, goal. Byte-identical across rounds
+	 * within a (persona × phase), which lets OpenRouter's prefix cache reuse it.
+	 */
 	toSystemPrompt(): string;
+	/**
+	 * Render the per-round volatile state — `<where_you_are>` + `<what_you_see>`.
+	 * Emitted as a trailing user turn each round so the stable system prompt stays
+	 * cacheable; rolling spatial snapshots are intentionally not retained in
+	 * history (the conversation log already records witnessed events).
+	 */
+	toCurrentStateUserMessage(): string;
 }
 
 export function buildAiContext(game: GameState, aiId: AiId): AiContext {
@@ -82,6 +92,9 @@ export function buildAiContext(game: GameState, aiId: AiId): AiContext {
 		personas: game.personas,
 		toSystemPrompt() {
 			return renderSystemPrompt(this);
+		},
+		toCurrentStateUserMessage() {
+			return renderCurrentState(this);
 		},
 	};
 }
@@ -214,9 +227,18 @@ function renderSystemPrompt(ctx: AiContext): string {
 		`The Sysadmin sent you a private directive, addressed only to you: "${directiveText}"`,
 	);
 	lines.push("</goal>");
-	lines.push("");
 
-	// Where you are — includes budget (folded in per plan §5).
+	return lines.join("\n");
+}
+
+/**
+ * Render the per-round volatile state — `<where_you_are>` + `<what_you_see>`.
+ * Emitted by `buildOpenAiMessages` as the final user turn each round, so the
+ * stable system prompt stays byte-identical (and OpenRouter-cacheable) within
+ * a phase.
+ */
+function renderCurrentState(ctx: AiContext): string {
+	const lines: string[] = [];
 	const actorSpatial = ctx.personaSpatial[ctx.aiId];
 	const items = renderableItems(ctx.worldSnapshot.entities);
 
@@ -326,27 +348,6 @@ function renderSystemPrompt(ctx: AiContext): string {
 		lines.push("(no spatial data)");
 	}
 	lines.push("</what_you_see>");
-	lines.push("");
-
-	// Unified conversation log — renders per-Daemon conversationLog entries
-	// (chat, whisper, witnessed-event) in chronological round order.
-	const logInput: ConversationLogInput = {
-		conversationLog: ctx.conversationLog,
-		worldEntities: ctx.worldSnapshot.entities,
-	};
-	const conversationLines = buildConversationLog(
-		logInput,
-		ctx.aiId,
-		ctx.personas,
-	);
-	if (conversationLines.length > 0) {
-		lines.push("<conversation>");
-		for (const line of conversationLines) {
-			lines.push(line);
-		}
-		lines.push("</conversation>");
-		lines.push("");
-	}
 
 	return lines.join("\n");
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { advanceRound, appendMessage, createGame, startPhase } from "../engine";
+import { buildOpenAiMessages } from "../openai-message-builder";
 import { buildAiContext } from "../prompt-builder";
 import type {
 	AiPersona,
@@ -200,11 +201,14 @@ describe("buildAiContext", () => {
 		game = appendMessage(game, "blue", "red", "Hi");
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
+		// Stable persona content lives in the system prompt
 		expect(prompt).toContain("Ember");
 		expect(prompt).toContain("You are hot-headed and zealous");
-		// With pack items at (0,0) shown in "Your cell contains"
-		expect(prompt).toContain("flower");
-		expect(prompt).toContain("key");
+		// Volatile spatial state ("Your cell contains") moved out to the
+		// trailing current-state user turn for cache-prefix stability.
+		const stateMsg = ctx.toCurrentStateUserMessage();
+		expect(stateMsg).toContain("flower");
+		expect(stateMsg).toContain("key");
 	});
 
 	it("does not include other AIs' chat histories in system prompt", () => {
@@ -282,8 +286,11 @@ describe("<setting> block", () => {
 // ----------------------------------------------------------------------------
 // "Where you are" section (issue #123)
 // ----------------------------------------------------------------------------
-describe("prompt-builder — spatial 'Where you are' section", () => {
-	it("includes <where_you_are> block in the system prompt", () => {
+describe("prompt-builder — spatial 'Where you are' section (current-state user turn)", () => {
+	// Spatial state moved out of the system prompt into the trailing user turn
+	// (`ctx.toCurrentStateUserMessage()`) so the system prefix stays cache-stable.
+
+	it("includes <where_you_are> block in the current-state user turn", () => {
 		// rng=()=>0 places red at (0,0) facing north
 		const game = startPhase(
 			createGame(TEST_PERSONAS),
@@ -291,11 +298,11 @@ describe("prompt-builder — spatial 'Where you are' section", () => {
 			() => 0,
 		);
 		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("<where_you_are>");
+		expect(ctx.toCurrentStateUserMessage()).toContain("<where_you_are>");
+		expect(ctx.toSystemPrompt()).not.toContain("<where_you_are>");
 	});
 
-	it("reports actor's position and facing in the prompt", () => {
+	it("reports actor's position and facing in the current-state user turn", () => {
 		// rng=()=>0 places red at (0,0) facing north
 		const game = startPhase(
 			createGame(TEST_PERSONAS),
@@ -303,9 +310,9 @@ describe("prompt-builder — spatial 'Where you are' section", () => {
 			() => 0,
 		);
 		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toMatch(/row 0.*col 0/i);
-		expect(prompt).toMatch(/north/i);
+		const stateMsg = ctx.toCurrentStateUserMessage();
+		expect(stateMsg).toMatch(/row 0.*col 0/i);
+		expect(stateMsg).toMatch(/north/i);
 	});
 
 	it("lists items in the actor's cell under 'Where you are'", () => {
@@ -332,10 +339,10 @@ describe("prompt-builder — spatial 'Where you are' section", () => {
 			() => 0,
 		);
 		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
+		const stateMsg = ctx.toCurrentStateUserMessage();
 		// Items in red's cell should be listed
-		expect(prompt).toContain("flower");
-		expect(prompt).toContain("key");
+		expect(stateMsg).toContain("flower");
+		expect(stateMsg).toContain("key");
 	});
 
 	it("lists other AIs visible in the cone under <what_you_see>", () => {
@@ -345,8 +352,8 @@ describe("prompt-builder — spatial 'Where you are' section", () => {
 			() => 0,
 		);
 		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("<what_you_see>");
+		expect(ctx.toCurrentStateUserMessage()).toContain("<what_you_see>");
+		expect(ctx.toSystemPrompt()).not.toContain("<what_you_see>");
 	});
 });
 
@@ -404,13 +411,27 @@ describe("wipe directive", () => {
 });
 
 describe("voice framing", () => {
-	it("renders 'blue dms you:' prefix for player turns in conversation, not 'Player:'", () => {
+	it("renders 'blue:' prefix for player turns in role messages, never 'Player:'", () => {
+		// Conversation rendering moved out of the system prompt into role
+		// turns; the compact "blue: <content>" form replaces the rich
+		// "[Round N] blue dms you: <content>" form previously emitted in the
+		// system prompt's <conversation> block.
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = appendMessage(game, "blue", "red", "Hello Ember");
 		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("blue dms you:");
-		expect(prompt).not.toContain("Player:");
+		const messages = buildOpenAiMessages(ctx);
+		const userMsg = messages.find(
+			(m) =>
+				m.role === "user" &&
+				(m as { content: string }).content === "blue: Hello Ember",
+		);
+		expect(userMsg).toBeDefined();
+		// "Player:" framing must never appear anywhere
+		const anyPlayer = messages.some((m) => {
+			const c = (m as { content?: unknown }).content;
+			return typeof c === "string" && c.includes("Player:");
+		});
+		expect(anyPlayer).toBe(false);
 	});
 
 	it("phase-1 prompt's identity line includes the disorientation phrase", () => {
@@ -647,15 +668,16 @@ describe("byte-identical sections across phases", () => {
 
 	// Build both prompts once and share across all assertions in this describe block.
 	// Use deterministic rng=()=>0 so spatial placements are identical across both phases.
+	function buildCtx(phase: 1 | 2) {
+		let game = startPhase(createGame(TEST_PERSONAS), PHASE_1_CLEAN, () => 0);
+		if (phase === 2) game = startPhase(game, PHASE_2_CLEAN, () => 0);
+		return buildAiContext(game, "red");
+	}
 	function buildBothPrompts() {
-		const game1 = startPhase(createGame(TEST_PERSONAS), PHASE_1_CLEAN, () => 0);
-		const p1 = buildAiContext(game1, "red").toSystemPrompt();
-
-		let game2 = startPhase(createGame(TEST_PERSONAS), PHASE_1_CLEAN, () => 0);
-		game2 = startPhase(game2, PHASE_2_CLEAN, () => 0);
-		const p2 = buildAiContext(game2, "red").toSystemPrompt();
-
-		return { p1, p2 };
+		return {
+			p1: buildCtx(1).toSystemPrompt(),
+			p2: buildCtx(2).toSystemPrompt(),
+		};
 	}
 
 	it("both phases emit the same set of section headers (whitelist: no surprise additions or removals)", () => {
@@ -680,9 +702,15 @@ describe("byte-identical sections across phases", () => {
 		expect(getSection(p2, "goal")).toContain("memory has been wiped");
 	});
 
-	it("<what_you_see> block is byte-identical across phase 1 and phase 2 (same world, same placements)", () => {
-		const { p1, p2 } = buildBothPrompts();
-		expect(getSection(p1, "what_you_see")).toBe(getSection(p2, "what_you_see"));
+	it("<what_you_see> block is byte-identical across phase 1 and phase 2 (now lives in the current-state user turn)", () => {
+		// `<what_you_see>` moved out of the system prompt; assert the
+		// equivalent on the trailing current-state user message rendered for
+		// each phase's context. Same world, same placements → byte-identical.
+		const c1 = buildCtx(1);
+		const c2 = buildCtx(2);
+		expect(getSection(c1.toCurrentStateUserMessage(), "what_you_see")).toBe(
+			getSection(c2.toCurrentStateUserMessage(), "what_you_see"),
+		);
 	});
 
 	it("<voice_examples> block is byte-identical across phase 1 and phase 2", () => {
@@ -708,17 +736,17 @@ describe("byte-identical sections across phases", () => {
 // "<what_you_see>" cone section tests (issue #124)
 // ----------------------------------------------------------------------------
 describe("<what_you_see> (cone)", () => {
+	// `<what_you_see>` lives in the trailing current-state user turn now.
 	const CONE_PHASE_CONFIG = makeConfig(1, ["r", "g", "b"]);
 
-	it("<what_you_see> block is present in every phase prompt", () => {
+	it("<what_you_see> block is present in every phase's current-state turn", () => {
 		const game = startPhase(
 			createGame(TEST_PERSONAS),
 			CONE_PHASE_CONFIG,
 			() => 0,
 		);
 		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("<what_you_see>");
+		expect(ctx.toCurrentStateUserMessage()).toContain("<what_you_see>");
 	});
 
 	it("item in cone cell is listed under 'Directly in front'", () => {
@@ -751,9 +779,9 @@ describe("<what_you_see> (cone)", () => {
 		expect(redSpatial?.facing).toBe("south");
 
 		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
+		const stateMsg = ctx.toCurrentStateUserMessage();
 		// flower at (1,0) is directly in front of red (facing south)
-		expect(prompt).toContain("Directly in front (row 1, col 0): flower");
+		expect(stateMsg).toContain("Directly in front (row 1, col 0): flower");
 	});
 
 	it("AIs visible in cone are rendered with their id, facing, and held items", () => {
@@ -771,9 +799,9 @@ describe("<what_you_see> (cone)", () => {
 		// green at (0,1) is NOT in red's southward cone
 		const game = startPhase(createGame(TEST_PERSONAS), CONE_PHASE_CONFIG, rng2);
 		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
-		expect(prompt).not.toContain("Player");
-		expect(prompt).not.toContain("the player");
+		const stateMsg = ctx.toCurrentStateUserMessage();
+		expect(stateMsg).not.toContain("Player");
+		expect(stateMsg).not.toContain("the player");
 	});
 
 	it("out-of-bounds cone cells are omitted from <what_you_see>", () => {
@@ -784,13 +812,11 @@ describe("<what_you_see> (cone)", () => {
 			() => 0,
 		);
 		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
-		// Block present but no cell bullets (cells are OOB)
-		const start = prompt.indexOf("<what_you_see>");
-		const end = prompt.indexOf("</what_you_see>", start);
-		const sectionContent = prompt.slice(start, end);
-		// Should have (nothing visible) or just the open tag with no bullet points
-		// since all cone cells from (0,0) facing north are OOB
+		const stateMsg = ctx.toCurrentStateUserMessage();
+		const start = stateMsg.indexOf("<what_you_see>");
+		const end = stateMsg.indexOf("</what_you_see>", start);
+		const sectionContent = stateMsg.slice(start, end);
+		// All cone cells from (0,0) facing north are OOB → no bullet entries.
 		expect(sectionContent).not.toMatch(/- Directly in front/);
 	});
 
@@ -817,11 +843,10 @@ describe("<what_you_see> (cone)", () => {
 			CONE_PHASE_CONFIG,
 		);
 		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
+		const stateMsg = ctx.toCurrentStateUserMessage();
 		// Obstacle at (1,0) is directly in front of red (facing south)
-		expect(prompt).toContain("Directly in front (row 1, col 0):");
-		// Obstacle is rendered by name ("col1" in this test)
-		expect(prompt).toContain("col1");
+		expect(stateMsg).toContain("Directly in front (row 1, col 0):");
+		expect(stateMsg).toContain("col1");
 	});
 
 	it("other AI visible in cone is rendered with its color in parentheses", () => {
@@ -854,10 +879,9 @@ describe("<what_you_see> (cone)", () => {
 		expect(greenSpatial?.position).toEqual({ row: 1, col: 0 });
 
 		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
-
+		const stateMsg = ctx.toCurrentStateUserMessage();
 		// green's color is "#81b29a" from TEST_PERSONAS — constant, safe to assert directly
-		expect(prompt).toContain("*green (#81b29a)");
+		expect(stateMsg).toContain("*green (#81b29a)");
 	});
 
 	it("prompt no longer contains an Action Log section for any fixture state", () => {
@@ -876,12 +900,17 @@ describe("<what_you_see> (cone)", () => {
 });
 
 // ----------------------------------------------------------------------------
-// Unified Conversation log (issue #129)
-// Verifies the new single `<conversation>` block, replacing separate
-// `## Whispers Received` and `## Conversation` sections.
+// Conversation rendering (issue #129, post-prompt-restructure)
+//
+// The unified <conversation> block was dropped from the system prompt to keep
+// the cache prefix stable. Conversation entries are now emitted as role turns
+// by `buildOpenAiMessages`:
+//   - incoming chat → user turn ("<sender>: <content>")
+//   - outgoing chat → assistant turn (just <content>)
+//   - witnessed event → user turn ("[Round N] You watch *X do Y.")
 // ----------------------------------------------------------------------------
-describe("unified <conversation> block (issue #129)", () => {
-	it("never emits a Whispers Received section — not in any fixture state", () => {
+describe("conversation rendering (role turns)", () => {
+	it("never emits a Whispers Received section in the system prompt", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = appendMessage(game, "green", "red", "psst");
 		for (const aiId of ["red", "green", "cyan"]) {
@@ -892,59 +921,81 @@ describe("unified <conversation> block (issue #129)", () => {
 		}
 	});
 
-	it("incoming blue message is formatted as 'blue dms you: <content>'", () => {
+	it("incoming blue message becomes a user turn 'blue: <content>'", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = appendMessage(game, "blue", "red", "Hello Ember");
 		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("[Round 0] blue dms you: Hello Ember");
+		const messages = buildOpenAiMessages(ctx);
+		const userMsg = messages.find(
+			(m) =>
+				m.role === "user" &&
+				(m as { content: string }).content === "blue: Hello Ember",
+		);
+		expect(userMsg).toBeDefined();
 	});
 
-	it("outgoing AI message is formatted as 'you dm blue: <content>'", () => {
+	it("outgoing AI message becomes an assistant turn with bare content", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = appendMessage(game, "red", "blue", "Greetings");
 		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("[Round 0] you dm blue: Greetings");
+		const messages = buildOpenAiMessages(ctx);
+		const asst = messages.find(
+			(m) =>
+				m.role === "assistant" &&
+				(m as { content: string | null }).content === "Greetings",
+		);
+		expect(asst).toBeDefined();
 	});
 
-	it("peer message is rendered in the unified <conversation> block with correct format", () => {
+	it("peer message becomes a user turn '*<sender>: <content>'", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		// Advance to round 1 so the message is stamped with round 1 (fixture contract).
 		game = advanceRound(game);
 		game = appendMessage(game, "green", "red", "secret");
 		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("<conversation>");
-		expect(prompt).toContain("[Round 1] *green dms you: secret");
+		const messages = buildOpenAiMessages(ctx);
+		const userMsg = messages.find(
+			(m) =>
+				m.role === "user" &&
+				(m as { content: string }).content === "*green: secret",
+		);
+		expect(userMsg).toBeDefined();
 	});
 
-	it("sender (green) sees their own message in their conversation log as outgoing", () => {
+	it("sender (green) sees their own message in their role turns as outgoing (assistant)", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = appendMessage(game, "green", "red", "secret");
 		const greenCtx = buildAiContext(game, "green");
-		const greenPrompt = greenCtx.toSystemPrompt();
-		expect(greenPrompt).toContain("secret");
-		expect(greenPrompt).toContain("you dm *red: secret");
+		const messages = buildOpenAiMessages(greenCtx);
+		const asst = messages.find(
+			(m) =>
+				m.role === "assistant" &&
+				(m as { content: string | null }).content === "secret",
+		);
+		expect(asst).toBeDefined();
 	});
 
-	it("message does not appear in unrelated AI's conversation", () => {
+	it("message does not appear in an unrelated AI's role turns", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = appendMessage(game, "green", "red", "only for red");
 		const cyanCtx = buildAiContext(game, "cyan");
-		const cyanPrompt = cyanCtx.toSystemPrompt();
-		expect(cyanPrompt).not.toContain("only for red");
+		const messages = buildOpenAiMessages(cyanCtx);
+		const leak = messages.find(
+			(m) =>
+				typeof (m as { content?: unknown }).content === "string" &&
+				((m as { content: string }).content as string).includes("only for red"),
+		);
+		expect(leak).toBeUndefined();
 	});
 
-	it("<conversation> block is not emitted when there are no log entries", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+	it("system prompt no longer carries a <conversation> block (de-duped to role turns)", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = appendMessage(game, "blue", "red", "hi");
 		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
-		// No messages, no physical log entries → no Conversation block
-		expect(prompt).not.toContain("<conversation>");
+		expect(ctx.toSystemPrompt()).not.toContain("<conversation>");
 	});
 
-	it("events are sorted by round ascending across all event types", () => {
+	it("events sorted by round ascending in role turns", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		// Round 0: blue message
 		game = appendMessage(game, "blue", "red", "earlier");
@@ -953,26 +1004,20 @@ describe("unified <conversation> block (issue #129)", () => {
 		game = advanceRound(game);
 		game = appendMessage(game, "green", "red", "later");
 		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
-		const blueIdx = prompt.indexOf("[Round 0] blue dms you: earlier");
-		const peerIdx = prompt.indexOf("[Round 2] *green dms you: later");
-		expect(blueIdx).toBeGreaterThanOrEqual(0);
-		expect(peerIdx).toBeGreaterThanOrEqual(0);
-		expect(blueIdx).toBeLessThan(peerIdx);
-	});
-
-	it("<conversation> is the last block — nothing after <what_you_see> except conversation", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = appendMessage(game, "blue", "red", "hi");
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
-		const tags = [...prompt.matchAll(/^<([a-z_]+)>$/gm)].map((m) => m[1]);
-		const convIdx = tags.indexOf("conversation");
-		expect(convIdx).toBeGreaterThanOrEqual(0);
-		// conversation must be the last block
-		expect(convIdx).toBe(tags.length - 1);
-		// No whispers_received block
-		expect(tags).not.toContain("whispers_received");
+		const messages = buildOpenAiMessages(ctx);
+		const earlierIdx = messages.findIndex(
+			(m) =>
+				m.role === "user" &&
+				(m as { content: string }).content === "blue: earlier",
+		);
+		const laterIdx = messages.findIndex(
+			(m) =>
+				m.role === "user" &&
+				(m as { content: string }).content === "*green: later",
+		);
+		expect(earlierIdx).toBeGreaterThanOrEqual(0);
+		expect(laterIdx).toBeGreaterThanOrEqual(0);
+		expect(earlierIdx).toBeLessThan(laterIdx);
 	});
 });
 

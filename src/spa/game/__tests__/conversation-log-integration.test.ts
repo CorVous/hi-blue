@@ -3,21 +3,38 @@
  *
  * Uses runRound with MockRoundLLMProvider to simulate real tool executions
  * across multiple rounds and verifies that the resulting conversation logs
- * (via buildAiContext + toSystemPrompt) correctly show:
+ * correctly surface, via `buildOpenAiMessages` role turns:
  *   - Voice-chat interleaved with witnessed events by round
  *   - Distinct cone-based visibility (witnesses see only what's in their cone)
  *     resolved at write-time (ADR 0006, issue #195)
  *   - put_down placementFlavor rendered for in-cone witnesses
  *   - use outcome flavor rendered to actor as "you" and to witness as "*<actor>"
  *   - No "## Whispers Received" section ever
+ *
+ * The unified <conversation> system-prompt block was retired in favour of
+ * direct role-turn rendering (issue: prompt-cache restructure); witnessed
+ * events now show up as user turns interleaved with peer messages.
  */
 
 import { describe, expect, it } from "vitest";
 import { createGame, getActivePhase, startPhase } from "../engine";
+import { buildOpenAiMessages } from "../openai-message-builder";
 import { buildAiContext } from "../prompt-builder";
 import { runRound } from "../round-coordinator";
 import { MockRoundLLMProvider } from "../round-llm-provider";
 import type { AiPersona, ContentPack, PhaseConfig } from "../types";
+
+/** Concatenate all role-turn message contents into a single searchable string. */
+function flattenMessageContents(
+	messages: ReturnType<typeof buildOpenAiMessages>,
+): string {
+	return messages
+		.map((m) => {
+			const c = (m as { content?: unknown }).content;
+			return typeof c === "string" ? c : "";
+		})
+		.join("\n");
+}
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -196,16 +213,16 @@ describe("conversation log integration — witnessed pick_up", () => {
 		);
 		expect(witnessedEntry).toBeDefined();
 
-		// green's prompt should contain the witnessed pick_up
+		// green's role turns should contain the witnessed pick_up
 		const greenCtx = buildAiContext(nextState, "green");
-		const greenPrompt = greenCtx.toSystemPrompt();
-		expect(greenPrompt).toContain("<conversation>");
-		expect(greenPrompt).toContain("You watch *red pick up the Flower.");
+		const greenMsgs = buildOpenAiMessages(greenCtx);
+		const greenAll = flattenMessageContents(greenMsgs);
+		expect(greenAll).toContain("You watch *red pick up the Flower.");
 
-		// red's own prompt should NOT have a "You watch *red" line
+		// red's own role turns should NOT have a "You watch *red" line
 		const redCtx = buildAiContext(nextState, "red");
-		const redPrompt = redCtx.toSystemPrompt();
-		expect(redPrompt).not.toContain("You watch *red");
+		const redMsgs = buildOpenAiMessages(redCtx);
+		expect(flattenMessageContents(redMsgs)).not.toContain("You watch *red");
 
 		// red's own conversationLog should have no witnessed-event entries
 		const redLog = phase.conversationLogs.red ?? [];
@@ -240,8 +257,10 @@ describe("conversation log integration — witnessed pick_up", () => {
 		expect(cyanWitnessed).toHaveLength(0);
 
 		const cyanCtx = buildAiContext(nextState, "cyan");
-		const cyanPrompt = cyanCtx.toSystemPrompt();
-		expect(cyanPrompt).not.toContain("You watch *red pick up");
+		const cyanMsgs = buildOpenAiMessages(cyanCtx);
+		expect(flattenMessageContents(cyanMsgs)).not.toContain(
+			"You watch *red pick up",
+		);
 	});
 });
 
@@ -304,18 +323,18 @@ describe("conversation log integration — use outcome rendering", () => {
 			expect(useEntry.useOutcome).toContain("{actor}");
 		}
 
-		// green's prompt should have *red substitution
+		// green's role turns should have *red substitution
 		const greenCtx = buildAiContext(state2, "green");
-		const greenPrompt = greenCtx.toSystemPrompt();
-		if (greenPrompt.includes("<conversation>")) {
-			const lines = greenPrompt.split("\n");
-			const useLine = lines.find(
-				(l) => l.includes("lamp") || l.includes("glows"),
-			);
-			if (useLine) {
-				expect(useLine).toContain("*red");
-				expect(useLine).not.toContain("{actor}");
-			}
+		const greenMsgs = buildOpenAiMessages(greenCtx);
+		const useLine = greenMsgs
+			.map((m) => {
+				const c = (m as { content?: unknown }).content;
+				return typeof c === "string" ? c : "";
+			})
+			.find((c) => c.includes("lamp") || c.includes("glows"));
+		if (useLine) {
+			expect(useLine).toContain("*red");
+			expect(useLine).not.toContain("{actor}");
 		}
 	});
 });
@@ -423,10 +442,10 @@ describe("conversation log integration — put_down placementFlavor", () => {
 		// So green should NOT see this put_down
 		expect(putEntry).toBeUndefined();
 
-		// Also verify via prompt
+		// Also verify via role turns
 		const greenCtx = buildAiContext(state4, "green");
-		const greenPrompt = greenCtx.toSystemPrompt();
-		expect(greenPrompt).not.toContain(
+		const greenMsgs = buildOpenAiMessages(greenCtx);
+		expect(flattenMessageContents(greenMsgs)).not.toContain(
 			"*red places the flower on the pedestal.",
 		);
 	});
@@ -471,22 +490,33 @@ describe("conversation log integration — multi-round chronological order", () 
 			provider2,
 		);
 
-		// Verify red's prompt has events in order
+		// Verify red's role turns have player messages in chronological order.
+		// Role turns use the compact "blue: <content>" form, not the rich
+		// "[Round N] blue dms you:" form.
 		const redCtx = buildAiContext(state2, "red");
-		const redPrompt = redCtx.toSystemPrompt();
-		expect(redPrompt).toContain("<conversation>");
-		// Round 0 player message appears before round 1 player message
-		const round0Idx = redPrompt.indexOf("[Round 0] blue dms you:");
-		const round1Idx = redPrompt.indexOf("[Round 1] blue dms you:");
+		const redMsgs = buildOpenAiMessages(redCtx);
+		const round0Idx = redMsgs.findIndex(
+			(m) =>
+				m.role === "user" &&
+				(m as { content: string }).content === "blue: Hi Ember",
+		);
+		const round1Idx = redMsgs.findIndex(
+			(m) =>
+				m.role === "user" &&
+				(m as { content: string }).content === "blue: What are you doing?",
+		);
 		expect(round0Idx).toBeGreaterThanOrEqual(0);
 		expect(round1Idx).toBeGreaterThanOrEqual(0);
 		expect(round0Idx).toBeLessThan(round1Idx);
 
-		// Verify green's prompt has the witnessed pick_up in round 1
+		// Verify green's role turns include the witnessed pick_up in round 1.
+		// green at (0,0) facing south: two steps ahead is (2,0) — red's position.
+		// Witnessed events keep the rich "[Round N] You watch *X do Y." form
+		// since that's how renderEntry formats them.
 		const greenCtx = buildAiContext(state2, "green");
-		const greenPrompt = greenCtx.toSystemPrompt();
-		// green at (0,0) facing south: two steps ahead is (2,0) — red's position
-		// So green should see the pick_up
-		expect(greenPrompt).toContain("[Round 1] You watch *red pick up the Lamp.");
+		const greenMsgs = buildOpenAiMessages(greenCtx);
+		expect(flattenMessageContents(greenMsgs)).toContain(
+			"[Round 1] You watch *red pick up the Lamp.",
+		);
 	});
 });

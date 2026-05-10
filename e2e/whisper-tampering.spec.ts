@@ -136,55 +136,45 @@ test("fabricated message appears in target daemon prompt and is absent from othe
 	const other1Body = findBodyForName(names[1]);
 	const other2Body = findBodyForName(names[2]);
 
-	// Derive expected message line from conversation-log.ts:
-	//   `[Round R] *<from> dms you: <content>` (no surrounding quotes)
-	// entry.from is senderId (an aiId); conversation-log uses entry.from directly
-	// as the display value. In the spec we verify the sentinel via SENTINEL alone
-	// and also check the full line format including senderName for robustness.
-	// NOTE: conversation-log.ts renders entry.from (the AiId) directly, not the
-	// persona name. The sentinel is unique so checking via SENTINEL is sufficient.
-	const expectedLine = `[Round 0] *${senderId} dms you: ${SENTINEL}`;
+	// Conversation rendering moved out of the system prompt into role turns
+	// (prompt-cache restructure). Incoming peer messages are rendered as
+	// `*<from>: <content>` user turns by openai-message-builder. The sentinel
+	// uniquely identifies the fabricated whisper.
+	const expectedLine = `*${senderId}: ${SENTINEL}`;
+	const _senderName = senderName; // referenced for log clarity only
 
-	// 7. Assert targeted daemon's system prompt contains the whisper inside
-	//    <conversation>...</conversation>.
+	function flattenContents(body: Record<string, unknown> | null): string {
+		if (!body) return "";
+		const messages = (body as { messages: Array<{ content?: unknown }> })
+			.messages;
+		return messages
+			.map((m) => (typeof m.content === "string" ? m.content : ""))
+			.join("\n");
+	}
+
+	// 7. Assert targeted daemon's role turns contain the whisper.
 	expect(
 		targetBody,
 		`No request body found for target daemon (names[0]=${names[0]}). ` +
 			`Captured ${capturedBodies.length} bodies.`,
 	).not.toBeNull();
 
-	const targetSysContent = (
-		targetBody as { messages: Array<{ content: string }> }
-	).messages[0]?.content;
-	expect(targetSysContent).toContain("<conversation>");
-	expect(targetSysContent).toContain("</conversation>");
+	const targetAllContent = flattenContents(targetBody);
 	expect(
-		targetSysContent,
-		`Expected message line not found in target daemon's system prompt. ` +
+		targetAllContent,
+		`Expected message line not found in target daemon's role turns. ` +
 			`Expected: ${expectedLine}`,
 	).toContain(expectedLine);
-	expect(
-		targetSysContent,
-		"Sentinel must appear between <conversation> tags",
-	).toMatch(
-		/<conversation>[\s\S]*FABRICATED_TAMPERED_WHISPER_xyz123[\s\S]*<\/conversation>/,
-	);
 
-	// 8. Assert the other two daemons' prompts do NOT contain the sentinel.
-	//    (senderName reference used in the log name for clarity.)
-	const _senderName = senderName; // referenced for documentation only
-
+	// 8. Assert the other two daemons' messages do NOT contain the sentinel.
 	expect(
 		other1Body,
 		`No request body found for daemon[1] (names[1]=${names[1]}). ` +
 			`Captured ${capturedBodies.length} bodies.`,
 	).not.toBeNull();
-	const other1SysContent = (
-		other1Body as { messages: Array<{ content: string }> }
-	).messages[0]?.content;
 	expect(
-		other1SysContent,
-		`Sentinel must NOT appear in daemon[1]'s system prompt (asymmetric property)`,
+		flattenContents(other1Body),
+		`Sentinel must NOT appear in daemon[1]'s messages (asymmetric property)`,
 	).not.toContain(SENTINEL);
 
 	expect(
@@ -192,12 +182,9 @@ test("fabricated message appears in target daemon prompt and is absent from othe
 		`No request body found for daemon[2] (names[2]=${names[2]}). ` +
 			`Captured ${capturedBodies.length} bodies.`,
 	).not.toBeNull();
-	const other2SysContent = (
-		other2Body as { messages: Array<{ content: string }> }
-	).messages[0]?.content;
 	expect(
-		other2SysContent,
-		`Sentinel must NOT appear in daemon[2]'s system prompt (asymmetric property)`,
+		flattenContents(other2Body),
+		`Sentinel must NOT appear in daemon[2]'s messages (asymmetric property)`,
 	).not.toContain(SENTINEL);
 
 	// 9. No page errors.

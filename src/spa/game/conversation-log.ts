@@ -41,8 +41,12 @@ function itemName(entities: WorldEntity[], itemId: string): string {
 
 /**
  * Render a single ConversationEntry line for the owning AI.
+ *
+ * Exported for `openai-message-builder.ts`, which interleaves witnessed events
+ * with chat messages in role-turn form. Internal callers (the system-prompt
+ * conversation block, when present) reach this via `buildConversationLog`.
  */
-function renderEntry(
+export function renderEntry(
 	entry: ConversationEntry,
 	aiId: AiId,
 	entities: WorldEntity[],
