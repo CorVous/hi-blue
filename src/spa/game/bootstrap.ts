@@ -47,6 +47,13 @@ export interface BootstrapOpts {
 	 */
 	personasRng?: () => number;
 	contentPackRng?: () => number;
+	/**
+	 * Spike #239 step 8: opt-in per-persona engagement clauses appended to
+	 * each daemon's synthesized blurb based on its temperament pair. Set by
+	 * the start screen when `?engagementClauses=1` is in the URL. Default
+	 * (undefined / false) leaves persona blurbs unchanged.
+	 */
+	engagementClauses?: boolean;
 }
 
 // Re-export provider types for use in start.ts without creating circular deps
@@ -66,9 +73,9 @@ export function generateNewGameAssetsSplit(
 	const synth = opts?.synthesis ?? new BrowserSynthesisProvider();
 	const packLLM = opts?.packProvider ?? new BrowserContentPackProvider();
 
-	const personasPromise = generatePersonas(personasRng, synth) as Promise<
-		Record<AiId, AiPersona>
-	>;
+	const personasPromise = generatePersonas(personasRng, synth, {
+		engagementClauses: opts?.engagementClauses ?? false,
+	}) as Promise<Record<AiId, AiPersona>>;
 	// Silence unhandled-rejection on derived promises if a downstream consumer
 	// chooses not to await one of them.
 	personasPromise.catch(() => {});

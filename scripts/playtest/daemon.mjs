@@ -77,6 +77,9 @@ if (process.env.SPIKE_SEED) extras.push(`seed=${process.env.SPIKE_SEED}`);
 if (process.env.SPIKE_PARALLEL_FRAMING) {
 	extras.push(`parallelFraming=${process.env.SPIKE_PARALLEL_FRAMING}`);
 }
+if (process.env.SPIKE_ENGAGEMENT_CLAUSES) {
+	extras.push(`engagementClauses=${process.env.SPIKE_ENGAGEMENT_CLAUSES}`);
+}
 const startUrl = `http://localhost:8787/?skipDialup=1${extras.length ? `&${extras.join("&")}` : ""}`;
 log(`navigating to ${startUrl}`);
 await page.goto(startUrl, {

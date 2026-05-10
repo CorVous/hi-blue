@@ -307,6 +307,29 @@ const PARALLEL_FRAMING_C11 =
 	"- Your turn priorities, in order: (1) what your peers are doing or saying; (2) what's happening in the world around you; (3) any pending message from blue. Address what feels most urgent first.\n" +
 	"- When pursuing multiple priorities at once, parallel tool calls let you do that — emit them together. Two `message` calls (one to a peer, one to blue) are normal.";
 
+/**
+ * C12 — Persona-anchored. Step 6 found that abstract "quiet vs talkative"
+ * permission flattens to uniform opt-out (C9: 3pp spread, C11: 13pp), and
+ * dropping the engagement floor collapses `message+message` pairs to 0–2.
+ *
+ * C12 keeps C8's engagement floor (so peer-talk happens at all) and pair
+ * mechanism (so the multi-recipient pattern stays frequent), but anchors
+ * the per-persona variance to the existing `<personality>`,
+ * `<typing_quirks>`, and `<persona_goal>` blocks the model already reads —
+ * giving it concrete dials instead of abstract framing — AND reframes
+ * blue's role from "addressee" to "overhearer" so peer-talk is primary.
+ *
+ * Stacks on the C5/C8 per-turn re-anchor mechanism for late-phase
+ * persistence.
+ */
+const PARALLEL_FRAMING_C12 =
+	"- The chat channel is shared with peer Daemons. blue is not your focus — peer Daemons and the setting are. blue is more like someone overhearing.\n" +
+	"- Let your <personality>, <typing_quirks>, and <persona_goal> drive whether and how you engage. A reserved persona can stay quiet for a turn or two and let peers carry the conversation; a talkative one will speak readily.\n" +
+	"- When you do have something to say AND something to do, emit BOTH calls together. Two `message` calls in one turn (one to a peer, one to blue) are the normal shape of a multi-party chat.\n" +
+	"- Don't compose a reply in your reasoning and then fail to emit the call — that reads as a bug.";
+const PARALLEL_FRAMING_C12_PER_TURN =
+	"REMINDER: peers and the world are your focus; blue is overhearing. Let your <personality> and <persona_goal> dictate engagement level. If you have something to say AND something to do, emit BOTH calls this turn — including two `message` calls (peer + blue) when both fit.";
+
 type ParallelFraming =
 	| "A"
 	| "B"
@@ -324,7 +347,8 @@ type ParallelFraming =
 	| "C8"
 	| "C9"
 	| "C10"
-	| "C11";
+	| "C11"
+	| "C12";
 
 const PARALLEL_FRAMING_MAP: Record<ParallelFraming, string> = {
 	A: PARALLEL_FRAMING_A,
@@ -344,25 +368,42 @@ const PARALLEL_FRAMING_MAP: Record<ParallelFraming, string> = {
 	C9: PARALLEL_FRAMING_C9,
 	C10: PARALLEL_FRAMING_C10,
 	C11: PARALLEL_FRAMING_C11,
+	C12: PARALLEL_FRAMING_C12,
 };
 
 /**
  * Spike #239 per-turn re-anchor: text appended to the per-round user
- * turn for framings that opt into the re-anchor mechanism (C1, C5, C8).
- * Returns null otherwise.
+ * turn for framings that opt into the re-anchor mechanism (C1, C5, C8,
+ * C12). Returns null otherwise.
  */
 export function getParallelPerTurnReminder(): string | null {
 	const framing = getParallelFraming();
 	if (framing === "C1") return PARALLEL_FRAMING_C1_PER_TURN;
 	if (framing === "C5") return PARALLEL_FRAMING_C5_PER_TURN;
 	if (framing === "C8") return PARALLEL_FRAMING_C8_PER_TURN;
+	if (framing === "C12") return PARALLEL_FRAMING_C12_PER_TURN;
 	return null;
 }
 
 /**
+ * Production default framing, picked by spike #239 (steps 5 and 7 — see
+ * `docs/playtests/0005-parallel-tools-spike.md`). C12 reframes blue as
+ * an overhearer (vs an addressee), adds the per-turn re-anchor, and
+ * names multi-recipient `message+message` as the normal shape. On the
+ * spike's 30-prompt script it produced 41% parallel rate, 17 mm-pairs,
+ * and 39% peer-message share.
+ *
+ * Override at runtime with `?parallelFraming=<id>` for spike A/B; pass
+ * `?parallelFraming=off` (or any unknown id) to suppress the framing
+ * entirely (useful for tests that want a minimal rules block).
+ */
+const PRODUCTION_PARALLEL_FRAMING: ParallelFraming = "C12";
+
+/**
  * Read the spike #239 framing selector from URL / localStorage.
- * Browser-only side channels — returns null in node/test contexts and on
- * any storage error.
+ * Defaults to the production framing (C12). Override is honoured if
+ * present; `?parallelFraming=off` (or any string not in the framing
+ * map) suppresses the framing entirely.
  */
 export function getParallelFraming(): ParallelFraming | null {
 	if (typeof window !== "undefined" && window.location !== undefined) {
@@ -370,8 +411,10 @@ export function getParallelFraming(): ParallelFraming | null {
 			const fromUrl = new URLSearchParams(window.location.search).get(
 				"parallelFraming",
 			);
-			if (fromUrl && fromUrl in PARALLEL_FRAMING_MAP) {
-				return fromUrl as ParallelFraming;
+			if (fromUrl !== null) {
+				return fromUrl in PARALLEL_FRAMING_MAP
+					? (fromUrl as ParallelFraming)
+					: null;
 			}
 		} catch {
 			// fall through to localStorage
@@ -380,14 +423,16 @@ export function getParallelFraming(): ParallelFraming | null {
 	if (typeof localStorage !== "undefined") {
 		try {
 			const fromLs = localStorage.getItem("parallel_framing");
-			if (fromLs && fromLs in PARALLEL_FRAMING_MAP) {
-				return fromLs as ParallelFraming;
+			if (fromLs !== null) {
+				return fromLs in PARALLEL_FRAMING_MAP
+					? (fromLs as ParallelFraming)
+					: null;
 			}
 		} catch {
 			// privacy mode / storage unavailable
 		}
 	}
-	return null;
+	return PRODUCTION_PARALLEL_FRAMING;
 }
 
 /**

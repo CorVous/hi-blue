@@ -199,58 +199,135 @@ export async function runRound(
 		// Capture completion text
 		completionSink?.(aiId, assistantText);
 
-		// Translate the result into an AiTurnAction
+		// Translate the result into an AiTurnAction.
+		// Iterate all toolCalls from this response; route by name into two slots:
+		//   - message slot (at most one accepted `message`-named call)
+		//   - action slot  (at most one accepted non-message call)
+		// Duplicates within either slot and parse-failures are recorded as
+		// tool_failure records and included in the roundtrip.
 		const action: AiTurnAction = { aiId };
 
-		// Handle tool call (take first tool call if present)
-		let toolCallId: string | undefined;
-		const [tc] = toolCalls;
-		if (tc !== undefined) {
-			toolCallId = tc.id;
+		// Slot guards: track whether each slot has been accepted
+		let messageAssigned = false;
+		let actionAssigned = false;
+
+		// ID of the accepted non-message action call (needed to match dispatcher result)
+		let acceptedActionCallId: string | undefined;
+
+		// Roundtrip accumulators — built inline, applied after dispatch
+		const recordedAssistantToolCalls: Array<{
+			id: string;
+			name: string;
+			argumentsJson: string;
+		}> = [];
+		const recordedToolResults: Array<{
+			tool_call_id: string;
+			success: boolean;
+			description: string;
+			reason?: string;
+		}> = [];
+
+		const round = getActivePhase(state).round;
+		const actorName = state.personas[aiId]?.name ?? aiId;
+
+		for (const tc of toolCalls) {
 			const parseResult = parseToolCallArguments(
 				tc.name as ToolName,
 				tc.argumentsJson,
 			);
 
-			if (parseResult.ok) {
-				if (tc.name === "message") {
-					// message tool: route to action.message, not action.toolCall
+			if (!parseResult.ok) {
+				// Parse-failed call: always goes to roundtrip as failure, never to action.*
+				const failDesc = `${actorName} tried to ${tc.name} but failed: ${parseResult.reason}`;
+				roundActions.push({
+					round,
+					actor: aiId,
+					kind: "tool_failure",
+					description: failDesc,
+				});
+				recordedAssistantToolCalls.push({
+					id: tc.id,
+					name: tc.name,
+					argumentsJson: tc.argumentsJson,
+				});
+				recordedToolResults.push({
+					tool_call_id: tc.id,
+					success: false,
+					description: failDesc,
+					reason: parseResult.reason,
+				});
+			} else if (tc.name === "message") {
+				if (!messageAssigned) {
+					// Accept into message slot
 					const msgArgs = parseResult.args as { to: string; content: string };
 					action.message = { to: msgArgs.to, content: msgArgs.content };
+					messageAssigned = true;
+					// Do NOT add to recordedAssistantToolCalls here — we decide post-dispatch
+					// whether the message succeeded (row 3 vs row 4 of the table).
 				} else {
+					// Duplicate message slot — reject as tool_failure
+					const dupDesc = `${actorName} tried to send more than one message in a turn: only one message tool call per turn`;
+					roundActions.push({
+						round,
+						actor: aiId,
+						kind: "tool_failure",
+						description: dupDesc,
+					});
+					recordedAssistantToolCalls.push({
+						id: tc.id,
+						name: tc.name,
+						argumentsJson: tc.argumentsJson,
+					});
+					recordedToolResults.push({
+						tool_call_id: tc.id,
+						success: false,
+						description: dupDesc,
+						reason: "only one message tool call per turn",
+					});
+				}
+			} else {
+				// Non-message tool call
+				if (!actionAssigned) {
+					// Accept into action slot
 					action.toolCall = {
 						name: tc.name as ToolName,
 						args: parseResult.args as Record<string, string>,
 					};
-				}
-			} else {
-				// Parse failed — synthesise a tool_failure record without dispatching
-				const round = getActivePhase(state).round;
-				const failureRecord: RoundActionRecord = {
-					round,
-					actor: aiId,
-					kind: "tool_failure",
-					description: `${state.personas[aiId]?.name ?? aiId} tried to ${tc.name} but failed: ${parseResult.reason}`,
-				};
-				roundActions.push(failureRecord);
-
-				// Record the tool failure in the roundtrip for the next round
-				newToolRoundtrip[aiId] = {
-					assistantToolCalls: toolCalls.map((c) => ({
-						id: c.id,
-						name: c.name,
-						argumentsJson: c.argumentsJson,
-					})),
-					toolResults: toolCalls.map((c) => ({
-						tool_call_id: c.id,
+					actionAssigned = true;
+					acceptedActionCallId = tc.id;
+					// Add to roundtrip accumulators — result filled in post-dispatch
+					recordedAssistantToolCalls.push({
+						id: tc.id,
+						name: tc.name,
+						argumentsJson: tc.argumentsJson,
+					});
+					// Placeholder — will be updated with actual success/description after dispatch
+					recordedToolResults.push({
+						tool_call_id: tc.id,
 						success: false,
-						description: `${state.personas[aiId]?.name ?? aiId} tried to ${tc.name} but failed: ${parseResult.reason}`,
-						reason: parseResult.reason,
-					})),
-				};
-
-				// Parse failed → pass
-				action.pass = true;
+						description: "",
+					});
+				} else {
+					// Duplicate action slot — reject as tool_failure
+					const dupDesc = `${actorName} tried to take more than one action in a turn: only one action tool call per turn`;
+					roundActions.push({
+						round,
+						actor: aiId,
+						kind: "tool_failure",
+						description: dupDesc,
+					});
+					recordedAssistantToolCalls.push({
+						id: tc.id,
+						name: tc.name,
+						argumentsJson: tc.argumentsJson,
+					});
+					recordedToolResults.push({
+						tool_call_id: tc.id,
+						success: false,
+						description: dupDesc,
+						reason: "only one action tool call per turn",
+					});
+				}
 			}
 		}
 
@@ -278,58 +355,84 @@ export async function runRound(
 			roundActions.push(record);
 		}
 
-		// Record tool roundtrip for this AI if a tool call was successfully parsed
-		if (
-			toolCalls.length > 0 &&
-			(action.toolCall || action.message) &&
-			toolCallId !== undefined
-		) {
-			if (dispatchResult.actorPrivateToolResult !== undefined) {
-				// examine: private result — NOT added to roundActions; only fed back to actor
-				const { description, success } = dispatchResult.actorPrivateToolResult;
-				newToolRoundtrip[aiId] = {
-					assistantToolCalls: toolCalls.map((c) => ({
-						id: c.id,
-						name: c.name,
-						argumentsJson: c.argumentsJson,
-					})),
-					toolResults: [
-						{
-							tool_call_id: toolCallId,
-							success,
-							description,
-						},
-					],
-				};
-			} else if (action.toolCall) {
-				// Normal (non-message) tool: record the roundtrip so the next round
-				// can replay tool_calls + tool results in the OpenAI message sequence.
-				// The `message` tool is intentionally excluded here: the sent message
-				// is already replayed via the conversationLog as an `assistant` content
-				// turn. Recording a roundtrip for `message` would produce two consecutive
-				// `assistant` turns in the next round (one from the log, one from the
-				// priorToolRoundtrip), violating the OpenAI/OpenRouter message protocol.
-				const toolRecord = dispatchResult.records.find(
-					(r) => r.kind === "tool_success" || r.kind === "tool_failure",
-				);
-				const success = toolRecord?.kind === "tool_success";
-				const description = toolRecord?.description ?? "";
-
-				newToolRoundtrip[aiId] = {
-					assistantToolCalls: toolCalls.map((c) => ({
-						id: c.id,
-						name: c.name,
-						argumentsJson: c.argumentsJson,
-					})),
-					toolResults: [
-						{
-							tool_call_id: toolCallId,
-							success,
-							description,
-						},
-					],
-				};
+		// Post-dispatch: resolve the accepted message call's roundtrip status.
+		// Successful message: EXCLUDE from roundtrip (replays via conversationLog per ADR 0007).
+		// Failed message (invalid recipient): INCLUDE in roundtrip with failure result.
+		let msgFailRecord: RoundActionRecord | undefined;
+		if (messageAssigned && action.message !== undefined) {
+			// Find whether the dispatcher produced a tool_failure for the message slot.
+			// dispatcher.ts applies message before toolCall (P0-1 swap), so the message
+			// dispatch record comes first. The message failure is identified by the
+			// "tried to message" text in the description (matches dispatcher.ts line).
+			msgFailRecord = dispatchResult.records.find(
+				(r) =>
+					r.kind === "tool_failure" &&
+					r.description.includes("tried to message"),
+			);
+			if (msgFailRecord) {
+				// Message failed — include in roundtrip so model sees the rejection next round
+				const acceptedMsgTc = toolCalls.find((tc) => tc.name === "message");
+				if (acceptedMsgTc) {
+					recordedAssistantToolCalls.unshift({
+						id: acceptedMsgTc.id,
+						name: acceptedMsgTc.name,
+						argumentsJson: acceptedMsgTc.argumentsJson,
+					});
+					recordedToolResults.unshift({
+						tool_call_id: acceptedMsgTc.id,
+						success: false,
+						description: msgFailRecord.description,
+					});
+				}
 			}
+			// If message succeeded: do NOT add to roundtrip (ADR 0007).
+		}
+
+		// Post-dispatch: resolve the accepted action call's result in the roundtrip.
+		if (actionAssigned && acceptedActionCallId !== undefined) {
+			const actionResultIdx = recordedToolResults.findIndex(
+				(r) => r.tool_call_id === acceptedActionCallId && r.description === "",
+			);
+			if (actionResultIdx >= 0) {
+				if (dispatchResult.actorPrivateToolResult !== undefined) {
+					// examine: private result fed back to actor only
+					const { description, success } =
+						dispatchResult.actorPrivateToolResult;
+					recordedToolResults[actionResultIdx] = {
+						tool_call_id: acceptedActionCallId,
+						success,
+						description,
+					};
+				} else {
+					// Normal tool: find the tool_success or tool_failure record from dispatcher.
+					// If the message also failed, dispatchResult.records has BOTH a msg-failure
+					// record and the action's record. Skip the message failure record (already
+					// identified as msgFailRecord) and look for the action's record, which is
+					// either tool_success or a tool_failure NOT from the message slot.
+					const toolRecord = dispatchResult.records.find(
+						(r) =>
+							(r.kind === "tool_success" || r.kind === "tool_failure") &&
+							r !== msgFailRecord,
+					);
+					const success = toolRecord?.kind === "tool_success";
+					const description = toolRecord?.description ?? "";
+					recordedToolResults[actionResultIdx] = {
+						tool_call_id: acceptedActionCallId,
+						success,
+						description,
+					};
+				}
+			}
+		}
+
+		// Save roundtrip only when there are entries to replay.
+		// msg-success-only (row 1) and pass (no calls) produce empty lists → no entry.
+		// This preserves the #213 fix: no spurious double-assistant turn for message-only turns.
+		if (recordedAssistantToolCalls.length > 0) {
+			newToolRoundtrip[aiId] = {
+				assistantToolCalls: recordedAssistantToolCalls,
+				toolResults: recordedToolResults,
+			};
 		}
 	}
 
