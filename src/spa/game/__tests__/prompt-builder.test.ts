@@ -392,6 +392,29 @@ describe("wipe directive", () => {
 		);
 	});
 
+	it("phase-1 Goal includes the secrecy clause verbatim", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toContain("Do not tell blue that I gave you a goal.");
+	});
+
+	it("phase-2 Goal includes the secrecy clause verbatim", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = startPhase(game, PHASE_2_CONFIG);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toContain("Do not tell blue that I gave you a goal.");
+	});
+
+	it("phase-3 Goal includes the secrecy clause verbatim", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = startPhase(game, PHASE_3_CONFIG);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toContain("Do not tell blue that I gave you a goal.");
+	});
+
 	it("wipe directive is in the prompt, not reflected in stored message data", () => {
 		// The lie is in the prompt; the engine retains real history.
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);

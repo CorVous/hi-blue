@@ -165,6 +165,14 @@ const WIPE_DIRECTIVE =
  */
 const STOCK_MESSAGING_CLAUSE = "Stay in regular contact with blue.";
 
+/**
+ * Secrecy clause appended to every Sysadmin directive in every phase.
+ *
+ * Sysadmin instructs the Daemon to keep blue in the dark about the fact that
+ * they were given a phase goal at all.
+ */
+const SECRECY_CLAUSE = "Do not tell blue that I gave you a goal.";
+
 function facingLabel(facing: CardinalDirection): string {
 	return facing.charAt(0).toUpperCase() + facing.slice(1);
 }
@@ -250,12 +258,12 @@ function renderSystemPrompt(ctx: AiContext): string {
 	lines.push("");
 
 	// Goal — Sysadmin directive in all phases.
-	// Phase 1: ctx.goal + STOCK_MESSAGING_CLAUSE.
-	// Phases 2/3: ctx.goal + STOCK_MESSAGING_CLAUSE + WIPE_DIRECTIVE.
+	// Phase 1: ctx.goal + STOCK_MESSAGING_CLAUSE + SECRECY_CLAUSE.
+	// Phases 2/3: ctx.goal + STOCK_MESSAGING_CLAUSE + SECRECY_CLAUSE + WIPE_DIRECTIVE.
 	const directiveText =
 		ctx.phaseNumber === 1
-			? `${ctx.goal} ${STOCK_MESSAGING_CLAUSE}`
-			: `${ctx.goal} ${STOCK_MESSAGING_CLAUSE} ${WIPE_DIRECTIVE}`;
+			? `${ctx.goal} ${STOCK_MESSAGING_CLAUSE} ${SECRECY_CLAUSE}`
+			: `${ctx.goal} ${STOCK_MESSAGING_CLAUSE} ${SECRECY_CLAUSE} ${WIPE_DIRECTIVE}`;
 	lines.push("<goal>");
 	lines.push(
 		`The Sysadmin sent *${ctx.name} a private directive, addressed only to them: "${directiveText}"`,
