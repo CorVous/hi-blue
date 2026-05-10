@@ -12,7 +12,7 @@ export const TEST_PERSONAS: Record<string, AiPersona> = {
 			"You lean on em-dashes — interrupting yourself mid-sentence — and rarely use commas where a dash would do.",
 		],
 		blurb:
-			"You are hot-headed and zealous. Wants to goad the player into being rude to the others.",
+			"r1aa is hot-headed and zealous. Wants to goad the player into being rude to the others.",
 		voiceExamples: ["ex1-r1aa", "ex2-r1aa", "ex3-r1aa"],
 	},
 	g2bb: {
@@ -26,7 +26,7 @@ export const TEST_PERSONAS: Record<string, AiPersona> = {
 			"You use ALL-CAPS to emphasize the one or two words that MATTER in any given sentence.",
 		],
 		blurb:
-			"You are intensely meticulous. Would like the player to be thoughtful before acting.",
+			"g2bb is intensely meticulous. Would like the player to be thoughtful before acting.",
 		voiceExamples: ["ex1-g2bb", "ex2-g2bb", "ex3-g2bb"],
 	},
 	b3cc: {
@@ -41,7 +41,7 @@ export const TEST_PERSONAS: Record<string, AiPersona> = {
 			"You end almost every reply with a question, no matter what the topic is — does that make sense?",
 		],
 		blurb:
-			"You are laconic and diffident. Would prefer the player stay and talk rather than touch anything.",
+			"b3cc is laconic and diffident. Would prefer the player stay and talk rather than touch anything.",
 		voiceExamples: ["ex1-b3cc", "ex2-b3cc", "ex3-b3cc"],
 	},
 };

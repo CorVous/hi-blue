@@ -20,7 +20,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 			"You lean on ellipses… trailing off mid-thought… rarely landing cleanly.",
 			"You lean on em-dashes — interrupting yourself mid-sentence — and rarely use commas where a dash would do.",
 		],
-		blurb: "You are hot-headed and zealous. Hold the flower at phase end.",
+		blurb: "Ember is hot-headed and zealous. Hold the flower at phase end.",
 		voiceExamples: ["ex1-red", "ex2-red", "ex3-red"],
 	},
 	green: {
@@ -33,7 +33,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 			"You speak in fragments. Short bursts. Rarely complete sentences.",
 			"You use ALL-CAPS to emphasize the one or two words that MATTER in any given sentence.",
 		],
-		blurb: "You are intensely meticulous. Ensure items are evenly distributed.",
+		blurb: "Sage is intensely meticulous. Ensure items are evenly distributed.",
 		voiceExamples: ["ex1-green", "ex2-green", "ex3-green"],
 	},
 	cyan: {
@@ -46,7 +46,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 			'You never use contractions. You will not say "won\'t" or "can\'t" — you say "will not" and "cannot" every time.',
 			"You end almost every reply with a question, no matter what the topic is — does that make sense?",
 		],
-		blurb: "You are laconic and diffident. Hold the key at phase end.",
+		blurb: "Frost is laconic and diffident. Hold the key at phase end.",
 		voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
 	},
 };
@@ -86,7 +86,7 @@ describe("buildAiContext", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		const ctx = buildAiContext(game, "red");
 		expect(ctx.blurb).toBe(
-			"You are hot-headed and zealous. Hold the flower at phase end.",
+			"Ember is hot-headed and zealous. Hold the flower at phase end.",
 		);
 	});
 
@@ -203,7 +203,7 @@ describe("buildAiContext", () => {
 		const prompt = ctx.toSystemPrompt();
 		// Stable persona content lives in the system prompt
 		expect(prompt).toContain("Ember");
-		expect(prompt).toContain("You are hot-headed and zealous");
+		expect(prompt).toContain("Ember is hot-headed and zealous");
 		// Volatile spatial state ("Your cell contains") moved out to the
 		// trailing current-state user turn for cache-prefix stability.
 		const stateMsg = ctx.toCurrentStateUserMessage();
@@ -246,7 +246,7 @@ describe("<setting> block", () => {
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("<setting>");
-		expect(prompt).toContain("You are in a abandoned subway station.");
+		expect(prompt).toContain("*Ember is in a abandoned subway station.");
 	});
 
 	it("omits <setting> block when phase has no setting", () => {
@@ -440,26 +440,30 @@ describe("voice framing", () => {
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain(
-			"You are *Ember, a Daemon. You have no clue where you are or how you came to be here.",
+			"You are the author writing *Ember, a Daemon. *Ember has no clue where they are or how they came to be here.",
 		);
 	});
 
-	it("phase-2 prompt's identity line is just 'You are *xxxx, a Daemon.' without disorientation", () => {
+	it("phase-2 prompt's identity line is just 'You are the author writing *xxxx, a Daemon.' without disorientation", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = startPhase(game, makeConfig(2));
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toMatch(/\nYou are \*Ember, a Daemon\.\n/);
-		expect(prompt).not.toContain("no clue where you are");
+		expect(prompt).toMatch(
+			/\nYou are the author writing \*Ember, a Daemon\.\n/,
+		);
+		expect(prompt).not.toContain("has no clue where they are");
 	});
 
-	it("phase-3 prompt's identity line is just 'You are *xxxx, a Daemon.' without disorientation", () => {
+	it("phase-3 prompt's identity line is just 'You are the author writing *xxxx, a Daemon.' without disorientation", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = startPhase(game, makeConfig(3));
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toMatch(/\nYou are \*Ember, a Daemon\.\n/);
-		expect(prompt).not.toContain("no clue where you are");
+		expect(prompt).toMatch(
+			/\nYou are the author writing \*Ember, a Daemon\.\n/,
+		);
+		expect(prompt).not.toContain("has no clue where they are");
 	});
 });
 
@@ -598,7 +602,7 @@ describe("<goal> block voice framing", () => {
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("<goal>");
 		expect(prompt).toContain(
-			"The Sysadmin sent you a private directive, addressed only to you:",
+			"The Sysadmin sent *Ember a private directive, addressed only to them:",
 		);
 		expect(prompt).toContain(ctx.goal);
 	});
@@ -610,7 +614,7 @@ describe("<goal> block voice framing", () => {
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("<goal>");
 		expect(prompt).toContain(
-			"The Sysadmin sent you a private directive, addressed only to you:",
+			"The Sysadmin sent *Ember a private directive, addressed only to them:",
 		);
 		expect(prompt).toContain(ctx.goal);
 	});
@@ -622,7 +626,7 @@ describe("<goal> block voice framing", () => {
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("<goal>");
 		expect(prompt).toContain(
-			"The Sysadmin sent you a private directive, addressed only to you:",
+			"The Sysadmin sent *Ember a private directive, addressed only to them:",
 		);
 		expect(prompt).toContain(ctx.goal);
 	});
@@ -723,13 +727,17 @@ describe("byte-identical sections across phases", () => {
 
 	it("phase-1 identity line differs from phase-2 identity line (disorientation present in phase 1 only)", () => {
 		const { p1, p2 } = buildBothPrompts();
-		const idMatch1 = p1.match(/\nYou are \*Ember, a Daemon\.[^\n]*/);
-		const idMatch2 = p2.match(/\nYou are \*Ember, a Daemon\.[^\n]*/);
+		const idMatch1 = p1.match(
+			/\nYou are the author writing \*Ember, a Daemon\.[^\n]*/,
+		);
+		const idMatch2 = p2.match(
+			/\nYou are the author writing \*Ember, a Daemon\.[^\n]*/,
+		);
 		expect(idMatch1).not.toBeNull();
 		expect(idMatch2).not.toBeNull();
 		expect(idMatch1?.[0]).not.toBe(idMatch2?.[0]);
-		expect(idMatch1?.[0]).toContain("no clue where you are");
-		expect(idMatch2?.[0]).not.toContain("no clue where you are");
+		expect(idMatch1?.[0]).toContain("has no clue where they are");
+		expect(idMatch2?.[0]).not.toContain("has no clue where they are");
 	});
 });
 

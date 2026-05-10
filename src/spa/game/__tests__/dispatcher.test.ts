@@ -30,7 +30,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 			"You speak in fragments. Short bursts. Rarely complete sentences.",
 			"You lean on em-dashes — interrupting yourself mid-sentence — and rarely use commas where a dash would do.",
 		],
-		blurb: "You are hot-headed and zealous. Hold the flower at phase end.",
+		blurb: "Ember is hot-headed and zealous. Hold the flower at phase end.",
 		voiceExamples: ["ex1-red", "ex2-red", "ex3-red"],
 	},
 	green: {
@@ -43,7 +43,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 			"You lean on ellipses… trailing off mid-thought… rarely landing cleanly.",
 			"You use ALL-CAPS to emphasize the one or two words that MATTER in any given sentence.",
 		],
-		blurb: "You are intensely meticulous. Ensure items are evenly distributed.",
+		blurb: "Sage is intensely meticulous. Ensure items are evenly distributed.",
 		voiceExamples: ["ex1-green", "ex2-green", "ex3-green"],
 	},
 	cyan: {
@@ -56,7 +56,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 			'You never use contractions. You will not say "won\'t" or "can\'t" — you say "will not" and "cannot" every time.',
 			"You end almost every reply with a question, no matter what the topic is — does that make sense?",
 		],
-		blurb: "You are laconic and diffident. Hold the key at phase end.",
+		blurb: "Frost is laconic and diffident. Hold the key at phase end.",
 		voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
 	},
 };

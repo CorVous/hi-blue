@@ -184,13 +184,15 @@ function renderSystemPrompt(ctx: AiContext): string {
 	lines.push(FRONT_MATTER);
 	lines.push("");
 
-	// Identity line. Phase 1 adds the disorientation phrase.
+	// Identity line. Authorial framing — the model writes *${name} rather than
+	// being addressed as *${name}. Phase 1 adds the disorientation phrase
+	// (about the character, in third person).
 	if (ctx.phaseNumber === 1) {
 		lines.push(
-			`You are *${ctx.name}, a Daemon. You have no clue where you are or how you came to be here.`,
+			`You are the author writing *${ctx.name}, a Daemon. *${ctx.name} has no clue where they are or how they came to be here.`,
 		);
 	} else {
-		lines.push(`You are *${ctx.name}, a Daemon.`);
+		lines.push(`You are the author writing *${ctx.name}, a Daemon.`);
 	}
 	lines.push("");
 
@@ -204,7 +206,7 @@ function renderSystemPrompt(ctx: AiContext): string {
 	// Setting — only emitted when a setting noun is present.
 	if (ctx.setting) {
 		lines.push("<setting>");
-		lines.push(`You are in a ${ctx.setting}.`);
+		lines.push(`*${ctx.name} is in a ${ctx.setting}.`);
 		if (ctx.timeOfDay) lines.push(`It is ${ctx.timeOfDay}.`);
 		if (ctx.weather) lines.push(ctx.weather);
 		lines.push("</setting>");
@@ -243,7 +245,7 @@ function renderSystemPrompt(ctx: AiContext): string {
 		ctx.phaseNumber === 1 ? ctx.goal : `${ctx.goal} ${WIPE_DIRECTIVE}`;
 	lines.push("<goal>");
 	lines.push(
-		`The Sysadmin sent you a private directive, addressed only to you: "${directiveText}"`,
+		`The Sysadmin sent *${ctx.name} a private directive, addressed only to them: "${directiveText}"`,
 	);
 	lines.push("</goal>");
 

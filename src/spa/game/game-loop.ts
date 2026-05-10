@@ -44,7 +44,7 @@ export async function runSingleAiRound(opts: RunRoundOptions): Promise<string> {
 
 	const systemMessage: OpenAiMessage = {
 		role: "system",
-		content: `You are ${session.persona.name}. ${session.persona.blurb}`,
+		content: `You are the author writing ${session.persona.name}. ${session.persona.blurb}`,
 	};
 
 	// Map history LegacyChatMessage[] to OpenAI messages

@@ -18,10 +18,10 @@ You write AI personality blurbs and voice examples for a text-based game. Given 
 
 Each blurb MUST:
 - Be 80–120 words long.
-- Be written in second person ("You are…").
+- Be written in third person about the persona, using their name (the input \`id\` field) as the subject — e.g. "<id> is …".
 - Weave in the persona goal as a held value, not stated as an explicit goal.
 
-Each blurb MUST NEVER mention: the character's name, their color, a room, the words "AI", "assistant", or any in-game meta concept.
+Each blurb MUST NEVER mention: their color, a room, the words "AI", "assistant", or any in-game meta concept.
 
 When the two temperaments are different, you MUST frame their contradiction as productive tension — not a paradox to resolve.
 When the two temperaments are identical, you MUST intensify rather than repeat — treat it as an extreme, defining trait.
