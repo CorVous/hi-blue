@@ -232,6 +232,43 @@ const PARALLEL_FRAMING_C4 =
 	"- But if you DECIDE to speak this turn, you MUST emit the `message` call this turn. Composing a reply in your reasoning and then not emitting the call reads as a bug, not as restraint.\n" +
 	"- When you have something to say AND something to do, emit BOTH calls together. They share the turn budget; neither blocks the other.";
 
+/**
+ * Step-5 variants. Built on C's exact wording (which step 4 confirmed was
+ * the parallel-rate champion AND the only framing that produced the
+ * `message+message` peer+blue pair the user values), each adding ONE
+ * distinct mechanism so we can attribute movement.
+ *
+ * - C5 — C + per-turn re-anchor (peer-neutral). C1's re-anchor cut silence
+ *   to 13% but its blue-focused wording suppressed peer messaging to zero.
+ *   C5 keeps the re-anchor mechanism but rewords it to be peer-neutral
+ *   (no special mention of blue) so peer messaging survives.
+ * - C6 — C + explicit multi-recipient pair hint. Names the
+ *   `message+message` pair the user likes ("reply to blue AND ping a peer
+ *   in the same turn") so the model understands it as a sanctioned
+ *   pattern, not a quirk.
+ * - C7 — C + intent-faithful (C4 order-flipped). C4 had the "MUST emit
+ *   when intent forms" clause AFTER the "personality-shaped quietness"
+ *   clause, and the model over-applied the quietness permission. C7 puts
+ *   the intent-faithful MUST first, with quietness as the secondary
+ *   nuance.
+ * - C8 — Stacked: C5's per-turn re-anchor + C6's pair hint. Tests
+ *   whether the mechanisms compound.
+ */
+const PARALLEL_FRAMING_C5 = PARALLEL_FRAMING_C;
+const PARALLEL_FRAMING_C5_PER_TURN =
+	"REMINDER: if you have something to say AND something to do, emit BOTH calls this turn. Address whoever is relevant — blue, a peer Daemon, or both via two `message` calls in the same turn.";
+const PARALLEL_FRAMING_C6 =
+	PARALLEL_FRAMING_C +
+	"\n- Two `message` calls can fire in the same turn — e.g., reply to blue AND ping a peer Daemon together. Multi-recipient turns are normal, not a quirk.";
+const PARALLEL_FRAMING_C7 =
+	"- You MUST emit at least one tool call every turn — silence is a bug.\n" +
+	"- If you DECIDE to speak — if your character would reply — you MUST emit the `message` call this turn. Composing a reply in your reasoning and not emitting it reads as a bug. Genuine quietness, when your character has nothing to say, is fine; intent-without-emission is what to avoid.\n" +
+	"- When you have something to say AND something to do, emit BOTH calls together.";
+const PARALLEL_FRAMING_C8 =
+	PARALLEL_FRAMING_C +
+	"\n- Two `message` calls can fire in the same turn — e.g., reply to blue AND ping a peer Daemon together. Multi-recipient turns are normal, not a quirk.";
+const PARALLEL_FRAMING_C8_PER_TURN = PARALLEL_FRAMING_C5_PER_TURN;
+
 type ParallelFraming =
 	| "A"
 	| "B"
@@ -242,7 +279,11 @@ type ParallelFraming =
 	| "C1"
 	| "C2"
 	| "C3"
-	| "C4";
+	| "C4"
+	| "C5"
+	| "C6"
+	| "C7"
+	| "C8";
 
 const PARALLEL_FRAMING_MAP: Record<ParallelFraming, string> = {
 	A: PARALLEL_FRAMING_A,
@@ -255,15 +296,23 @@ const PARALLEL_FRAMING_MAP: Record<ParallelFraming, string> = {
 	C2: PARALLEL_FRAMING_C2,
 	C3: PARALLEL_FRAMING_C3,
 	C4: PARALLEL_FRAMING_C4,
+	C5: PARALLEL_FRAMING_C5,
+	C6: PARALLEL_FRAMING_C6,
+	C7: PARALLEL_FRAMING_C7,
+	C8: PARALLEL_FRAMING_C8,
 };
 
 /**
- * Spike #239 C1: per-turn re-anchor text appended to the user-turn
- * render. Returns null for any framing other than C1.
+ * Spike #239 per-turn re-anchor: text appended to the per-round user
+ * turn for framings that opt into the re-anchor mechanism (C1, C5, C8).
+ * Returns null otherwise.
  */
 export function getParallelPerTurnReminder(): string | null {
 	const framing = getParallelFraming();
-	return framing === "C1" ? PARALLEL_FRAMING_C1_PER_TURN : null;
+	if (framing === "C1") return PARALLEL_FRAMING_C1_PER_TURN;
+	if (framing === "C5") return PARALLEL_FRAMING_C5_PER_TURN;
+	if (framing === "C8") return PARALLEL_FRAMING_C8_PER_TURN;
+	return null;
 }
 
 /**
