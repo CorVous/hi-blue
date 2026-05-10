@@ -89,6 +89,11 @@ async function seedSessionInStub(
 // Matches the body content of src/spa/index.html (three-panel layout)
 const INDEX_BODY_HTML = `
 <main>
+  <div id="topinfo">
+    <span id="topinfo-left"></span>
+    <span id="topinfo-right"></span>
+  </div>
+  <div id="topinfo-mobile-status"></div>
   <div id="phase-banner" hidden></div>
   <div id="panels">
     <article class="ai-panel" data-ai="red">
@@ -119,6 +124,7 @@ const INDEX_BODY_HTML = `
       <input id="prompt" type="text" placeholder="Enter a message…" autocomplete="off" />
     </div>
     <output id="lockout-error" class="lockout-error" role="status" aria-live="polite" hidden></output>
+    <output id="round-error" class="round-error" role="status" aria-live="polite" hidden></output>
     <button id="send" type="submit">Send</button>
   </form>
   <section id="cap-hit" hidden></section>
@@ -2442,5 +2448,93 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 		// Error element is hidden (no addressee)
 		const lockoutError = getEl<HTMLOutputElement>("#lockout-error");
 		expect(lockoutError.hasAttribute("hidden")).toBe(true);
+	});
+});
+
+// Regression for #231: when a round throws a non-CapHitError (e.g. the worker
+// proxy returns 502 upstream_error after an OpenRouter blip) the round used
+// to fail silently — no inline message, no status pip change. Verify the
+// surfaced-error UX: `#round-error` becomes visible and `#topinfo-right`
+// flips to "● connection unstable" (warn class).
+describe("renderGame — round error surfacing (issue #231)", () => {
+	let _stub: ReturnType<typeof makeLocalStorageStub>;
+
+	beforeEach(async () => {
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		document.body.innerHTML = INDEX_BODY_HTML;
+		_stub = makeLocalStorageStub();
+		await seedSessionInStub(_stub);
+		vi.stubGlobal("localStorage", _stub);
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+		vi.resetModules();
+		document.body.innerHTML = "";
+	});
+
+	it("surfaces #round-error and flips topinfo to 'connection unstable' on a 502 round; clears both on the next successful round", async () => {
+		// First submit: every fetch returns 502 (mimics the worker proxy's
+		// `upstream_error` mapping after OpenRouter returns a transient 502).
+		const failingFetch = vi.fn().mockResolvedValue({
+			ok: false,
+			status: 502,
+			statusText: "Bad Gateway",
+			headers: { get: () => null },
+			json: async () => ({
+				error: {
+					message: "OpenRouter returned 502 Bad Gateway",
+					type: "upstream_error",
+				},
+			}),
+		});
+		vi.stubGlobal("fetch", failingFetch);
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		await renderGame(getEl<HTMLElement>("main"));
+
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		const form = getEl<HTMLFormElement>("#composer");
+		promptInput.value = "*Sage hello";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		// 1. Inline error visible with non-empty player-readable text.
+		const roundError = getEl<HTMLOutputElement>("#round-error");
+		expect(roundError.hasAttribute("hidden")).toBe(false);
+		expect(roundError.textContent?.trim()).toBeTruthy();
+
+		// 2. Topinfo right cell shows the unstable warn pip.
+		const topinfoRight = getEl<HTMLElement>("#topinfo-right");
+		expect(topinfoRight.textContent).toContain("connection unstable");
+		const pip = topinfoRight.querySelector("span");
+		expect(pip?.className).toBe("warn");
+
+		// 3. Cap-hit overlay stays hidden (this is not a 429).
+		const capHit = getEl<HTMLElement>("#cap-hit");
+		expect(capHit.hasAttribute("hidden")).toBe(true);
+
+		// Second submit: now fetch succeeds for all three daemons. The
+		// round-error should clear and topinfo should return to "stable".
+		const okFetch = makeMessageToolCallFetchMock();
+		vi.stubGlobal("fetch", okFetch);
+		promptInput.value = "*Sage retry";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		expect(roundError.hasAttribute("hidden")).toBe(true);
+		expect(roundError.textContent ?? "").toBe("");
+		expect(topinfoRight.textContent).toContain("connection stable");
+		const pipAfter = topinfoRight.querySelector("span");
+		expect(pipAfter?.className).toBe("ok");
 	});
 });
