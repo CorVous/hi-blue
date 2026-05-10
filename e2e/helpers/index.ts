@@ -3,6 +3,7 @@ export {
 	classifyJsonRequest,
 	type GoToGameOptions,
 	goToGame,
+	messageToolCallToBlueSseBody,
 	type NewGameLLMOptions,
 	type SynthesisStubOptions,
 	stubChatCompletions,

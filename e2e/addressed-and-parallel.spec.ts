@@ -15,12 +15,17 @@ test("addressed message lands only on first panel; all three panels render progr
 	const pageErrors: Error[] = [];
 	page.on("pageerror", (err) => pageErrors.push(err));
 
-	// Navigate through the start screen with ?winImmediately=1 so the SPA
-	// injects a win condition into the active phase on boot.
-	// The SSE factory returns distinct completions by call order.
+	// The SSE factory returns distinct completions by call order. Each call
+	// becomes a `message` tool-call addressed to "blue" carrying the joined
+	// words as content (see e2e/helpers/stubs.ts).
+	//
+	// Note: this spec previously navigated with `?winImmediately=1`. Post-#214
+	// the encoder paints panels and (when winning) clears them via
+	// phase_advanced inside one synchronous burst, so the populated state is
+	// unobservable from the page. Removing winImmediately lets the test sample
+	// the painted transcripts before any phase clear.
 	let callIndex = 0;
 	const { ids, names } = await goToGame(page, {
-		url: "/?winImmediately=1",
 		sse: () => {
 			const text =
 				COMPLETIONS[callIndex % COMPLETIONS.length] ?? COMPLETIONS[0];
