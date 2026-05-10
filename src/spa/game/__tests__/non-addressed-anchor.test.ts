@@ -60,14 +60,8 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 };
 
 /** Compute the expected silent-turn anchor for an AI given fixed personas. */
-function expectedSilentTurn(self: AiId): string {
-	const others = (["red", "green", "cyan"] as const)
-		.filter((id) => id !== self)
-		.map((id) => `*${id}`);
-	const senders = [...others, "blue"];
-	const last = senders[senders.length - 1];
-	const rest = senders.slice(0, -1).join(", ");
-	return `No messages from ${rest}, or ${last}.`;
+function expectedSilentTurn(_self: AiId): string {
+	return "You have received no messages.";
 }
 
 const TEST_PHASE_CONFIG: PhaseConfig = {
