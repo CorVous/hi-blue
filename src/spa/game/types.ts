@@ -75,18 +75,10 @@ export type RoundActionRecord = {
 	kind:
 		| "tool_success"
 		| "tool_failure"
-		| "chat"
-		| "whisper"
+		| "message"
 		| "pass"
 		| "lockout";
 };
-
-export interface ChatMessage {
-	role: "player" | "ai";
-	content: string;
-	/** Round number in which this message was uttered. */
-	round: number;
-}
 
 /**
  * A physical action that was observable by other AIs (via cone visibility).
@@ -126,24 +118,17 @@ export interface PhysicalActionRecord {
 	witnessSpatial: Record<AiId, PersonaSpatialState>;
 }
 
-export interface WhisperMessage {
-	from: AiId;
-	to: AiId;
-	content: string;
-	round: number;
-}
-
 /**
  * A single tagged item inside a Daemon's conversation log.
  *
- * Discriminated union of three kinds — `chat`, `whisper`, `witnessed-event` — each carrying a
+ * Discriminated union of two kinds — `message`, `witnessed-event` — each carrying a
  * `round` and the smallest payload needed to render its line in the system prompt. This is the
  * per-Daemon storage shape *and* the prompt-rendered shape (per CONTEXT.md's `Conversation log`
  * glossary entry). The `kind` tag is chosen so a player editing a `*xxxx.txt` file in devtools
  * can tell entry kinds apart at a glance.
  *
- * - `chat`: projects ChatMessage — a voice/AI line addressed to or from this Daemon.
- * - `whisper`: projects WhisperMessage — a whisper this Daemon sent or received.
+ * - `message`: a directional message from `from: AiId | "blue"` to `to: AiId | "blue"`.
+ *   Both sender's and recipient's per-Daemon logs receive the same entry.
  * - `witnessed-event`: projects the render-relevant subset of PhysicalActionRecord for an action
  *   this Daemon observed inside its cone. The cone-snapshot fields (`actorCellAtAction`,
  *   `actorFacingAtAction`, `witnessSpatial`) are omitted — cone visibility is resolved at
@@ -151,16 +136,10 @@ export interface WhisperMessage {
  */
 export type ConversationEntry =
 	| {
-			kind: "chat";
+			kind: "message";
 			round: number;
-			role: "player" | "ai";
-			content: string;
-	  }
-	| {
-			kind: "whisper";
-			round: number;
-			from: AiId;
-			to: AiId;
+			from: AiId | "blue";
+			to: AiId | "blue";
 			content: string;
 	  }
 	| {
@@ -258,7 +237,8 @@ export type ToolName =
 	| "use"
 	| "go"
 	| "look"
-	| "examine";
+	| "examine"
+	| "message";
 
 export interface ToolCall {
 	name: ToolName;
@@ -273,8 +253,7 @@ export interface ToolResult {
 
 export interface AiTurnAction {
 	aiId: AiId;
-	chat?: { target: AiId | "player"; content: string };
-	whisper?: { target: AiId; content: string };
+	message?: { to: AiId | "blue"; content: string };
 	toolCall?: ToolCall;
 	pass?: boolean;
 }

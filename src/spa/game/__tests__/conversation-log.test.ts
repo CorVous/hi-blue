@@ -92,67 +92,80 @@ describe("buildConversationLog — empty phase", () => {
 	});
 });
 
-// ── Voice-chat formatting ──────────────────────────────────────────────────────
+// ── Message formatting ─────────────────────────────────────────────────────────
 
-describe("buildConversationLog — voice-chat", () => {
-	it("renders player message with round tag and quotes", () => {
+describe("buildConversationLog — message (incoming from blue)", () => {
+	it("renders incoming message from blue as 'blue dms you: <content>'", () => {
 		const input: ConversationLogInput = {
 			...emptyInput(),
 			conversationLog: [
-				{ kind: "chat", role: "player", content: "Hi", round: 0 },
+				{ kind: "message", from: "blue", to: "red", content: "Hi", round: 0 },
 			],
 		};
 		const result = buildConversationLog(input, "red", TEST_PERSONAS);
 		expect(result).toEqual(["[Round 0] blue dms you: Hi"]);
 	});
 
-	it("renders AI reply with round tag and quotes", () => {
+	it("renders outgoing message to blue as 'you dm blue: <content>'", () => {
 		const input: ConversationLogInput = {
 			...emptyInput(),
 			conversationLog: [
-				{ kind: "chat", role: "ai", content: "Hello", round: 0 },
+				{ kind: "message", from: "red", to: "blue", content: "Hello", round: 0 },
 			],
 		};
 		const result = buildConversationLog(input, "red", TEST_PERSONAS);
-		expect(result).toEqual(['[Round 0] You: "Hello"']);
+		expect(result).toEqual(["[Round 0] you dm blue: Hello"]);
 	});
 
-	it("does not include other AIs' chat messages (caller pre-filters)", () => {
+	it("renders incoming message from peer as '*<from> dms you: <content>'", () => {
 		const input: ConversationLogInput = {
 			...emptyInput(),
 			conversationLog: [
-				{ kind: "chat", role: "player", content: "red-msg", round: 0 },
+				{ kind: "message", from: "green", to: "red", content: "red-msg", round: 0 },
 			],
 		};
 		const result = buildConversationLog(input, "red", TEST_PERSONAS);
 		expect(result).toHaveLength(1);
 		expect(result[0]).toContain("red-msg");
+		expect(result[0]).toEqual("[Round 0] *green dms you: red-msg");
+	});
+
+	it("renders outgoing message to peer as 'you dm *<to>: <content>'", () => {
+		const input: ConversationLogInput = {
+			...emptyInput(),
+			conversationLog: [
+				{ kind: "message", from: "red", to: "cyan", content: "hey", round: 0 },
+			],
+		};
+		// From red's perspective (outgoing)
+		const result = buildConversationLog(input, "red", TEST_PERSONAS);
+		expect(result).toEqual(["[Round 0] you dm *cyan: hey"]);
 	});
 
 	it("renders multiple messages in order", () => {
 		const input: ConversationLogInput = {
 			...emptyInput(),
 			conversationLog: [
-				{ kind: "chat", role: "player", content: "First", round: 0 },
-				{ kind: "chat", role: "ai", content: "Second", round: 0 },
+				{ kind: "message", from: "blue", to: "red", content: "First", round: 0 },
+				{ kind: "message", from: "red", to: "blue", content: "Second", round: 0 },
 			],
 		};
 		const result = buildConversationLog(input, "red", TEST_PERSONAS);
 		expect(result).toHaveLength(2);
 		expect(result[0]).toContain("blue dms you");
-		expect(result[1]).toContain("You:");
+		expect(result[1]).toContain("you dm blue");
 	});
 });
 
-// ── Whisper formatting ─────────────────────────────────────────────────────────
+// ── Peer-to-peer message formatting ───────────────────────────────────────────
 
-describe("buildConversationLog — whispers", () => {
-	it("renders whisper received with correct format", () => {
+describe("buildConversationLog — peer message", () => {
+	it("renders received peer message with correct format", () => {
 		const input: ConversationLogInput = {
 			...emptyInput(),
 			conversationLog: [
 				{
-					kind: "whisper",
+					kind: "message",
 					from: "green",
 					to: "red",
 					content: "psst",
@@ -164,14 +177,14 @@ describe("buildConversationLog — whispers", () => {
 		expect(result).toEqual(["[Round 1] *green dms you: psst"]);
 	});
 
-	it("renders whisper that was sent (sender's log also gets the entry)", () => {
+	it("renders sent peer message from sender's perspective as outgoing", () => {
 		// The dispatcher writes the same entry to both sender and recipient.
-		// So sender's log contains a "whisper" entry too.
+		// From green's perspective (who sent it), it renders as outgoing.
 		const input: ConversationLogInput = {
 			...emptyInput(),
 			conversationLog: [
 				{
-					kind: "whisper",
+					kind: "message",
 					from: "green",
 					to: "red",
 					content: "psst",
@@ -179,10 +192,10 @@ describe("buildConversationLog — whispers", () => {
 				},
 			],
 		};
-		// From green's perspective (who sent it), it still renders the same format
+		// From green's perspective (outgoing)
 		const result = buildConversationLog(input, "green", TEST_PERSONAS);
 		expect(result).toHaveLength(1);
-		expect(result[0]).toContain("dms you");
+		expect(result[0]).toContain("you dm *red");
 	});
 });
 
@@ -376,10 +389,10 @@ describe("buildConversationLog — witnessed use", () => {
 
 describe("buildConversationLog — chronological ordering", () => {
 	it("sorts events by round ascending across all types", () => {
-		// Round 2 whisper, round 0 chat, round 1 witnessed event
+		// Round 2 peer message, round 0 blue message, round 1 witnessed event
 		const input: ConversationLogInput = {
 			conversationLog: [
-				{ kind: "chat", role: "player", content: "early msg", round: 0 },
+				{ kind: "message", from: "blue", to: "red", content: "early msg", round: 0 },
 				{
 					kind: "witnessed-event",
 					round: 1,
@@ -388,7 +401,7 @@ describe("buildConversationLog — chronological ordering", () => {
 					direction: "south",
 				},
 				{
-					kind: "whisper",
+					kind: "message",
 					from: "green",
 					to: "red",
 					content: "late",
@@ -409,12 +422,12 @@ describe("buildConversationLog — chronological ordering", () => {
 		// The sort is stable, so same-round entries keep their insertion order.
 		const input: ConversationLogInput = {
 			conversationLog: [
-				{ kind: "chat", role: "player", content: "chat", round: 0 },
+				{ kind: "message", from: "blue", to: "red", content: "chat", round: 0 },
 				{
-					kind: "whisper",
+					kind: "message",
 					from: "green",
 					to: "red",
-					content: "whisper",
+					content: "peer msg",
 					round: 0,
 				},
 				{

@@ -22,7 +22,7 @@ import { dispatchAiTurn } from "./dispatcher";
 import {
 	advancePhase,
 	advanceRound,
-	appendChat,
+	appendMessage,
 	getActivePhase,
 	isAiLockedOut,
 	resolveChatLockouts,
@@ -117,10 +117,7 @@ export async function runRound(
 	const turnOrder = initiative ?? aiOrder;
 
 	// 1. Record player message in the addressed AI's history
-	let state = appendChat(game, addressed, {
-		role: "player",
-		content: playerMessage,
-	});
+	let state = appendMessage(game, "blue", addressed, playerMessage);
 
 	const roundActions: RoundActionRecord[] = [];
 
@@ -132,10 +129,7 @@ export async function runRound(
 		if (isAiLockedOut(state, aiId)) {
 			// Emit lockout line — no LLM call, no budget deduction.
 			const lockoutContent = `${state.personas[aiId]?.name ?? aiId} is unresponsive…`;
-			state = appendChat(state, aiId, {
-				role: "ai",
-				content: lockoutContent,
-			});
+			state = appendMessage(state, aiId, "blue", lockoutContent);
 			roundActions.push({
 				round: getActivePhase(state).round,
 				actor: aiId,
@@ -179,10 +173,16 @@ export async function runRound(
 			);
 
 			if (parseResult.ok) {
-				action.toolCall = {
-					name: tc.name as ToolName,
-					args: parseResult.args as Record<string, string>,
-				};
+				if (tc.name === "message") {
+					// message tool: route to action.message, not action.toolCall
+					const msgArgs = parseResult.args as { to: string; content: string };
+					action.message = { to: msgArgs.to, content: msgArgs.content };
+				} else {
+					action.toolCall = {
+						name: tc.name as ToolName,
+						args: parseResult.args as Record<string, string>,
+					};
+				}
 			} else {
 				// Parse failed — synthesise a tool_failure record without dispatching
 				const round = getActivePhase(state).round;
@@ -209,16 +209,13 @@ export async function runRound(
 					})),
 				};
 
-				// Fall through: still handle assistantText below as a pass/chat
+				// Parse failed → pass
 				action.pass = true;
 			}
 		}
 
-		// Handle assistant text (chat or pass)
-		if (assistantText?.trim()) {
-			action.chat = { target: "player", content: assistantText };
-		} else if (!action.toolCall) {
-			// No text and no valid tool call → pass
+		// Free-form assistantText without a message tool call → treat as pass (drop the text)
+		if (!action.toolCall && !action.message) {
 			action.pass = true;
 		}
 
@@ -236,7 +233,11 @@ export async function runRound(
 		}
 
 		// Record tool roundtrip for this AI if a tool call was successfully parsed
-		if (toolCalls.length > 0 && action.toolCall && toolCallId !== undefined) {
+		if (
+			toolCalls.length > 0 &&
+			(action.toolCall || action.message) &&
+			toolCallId !== undefined
+		) {
 			if (dispatchResult.actorPrivateToolResult !== undefined) {
 				// examine: private result — NOT added to roundActions; only fed back to actor
 				const { description, success } = dispatchResult.actorPrivateToolResult;
@@ -255,11 +256,16 @@ export async function runRound(
 					],
 				};
 			} else {
-				// Normal tool: find the record from dispatch
+				// Normal tool or message tool: find the record from dispatch
 				const toolRecord = dispatchResult.records.find(
-					(r) => r.kind === "tool_success" || r.kind === "tool_failure",
+					(r) =>
+						r.kind === "tool_success" ||
+						r.kind === "tool_failure" ||
+						r.kind === "message",
 				);
-				const success = toolRecord?.kind === "tool_success";
+				const success =
+					toolRecord?.kind === "tool_success" ||
+					toolRecord?.kind === "message";
 				const description = toolRecord?.description ?? "";
 
 				newToolRoundtrip[aiId] = {

@@ -737,18 +737,23 @@ export function renderGame(
 					// branch left them stale whenever the new session had fewer (or
 					// zero) chat entries for this panel slot.
 					transcript.textContent = "";
-					const chatEntries = (
+					// Filter to message entries where blue is involved (from blue or to blue)
+					// Skip daemon-to-daemon messages from the player-facing transcript.
+					const messageEntries = (
 						restoredPhase.conversationLogs[aiId] ?? []
-					).filter((e) => e.kind === "chat");
-					if (chatEntries.length > 0) {
+					).filter(
+						(e) => e.kind === "message" && (e.from === "blue" || e.to === "blue"),
+					);
+					if (messageEntries.length > 0) {
 						// Synthesise from conversationLogs (stored in daemon .txt files).
 						const persona = restoredPersonas[aiId];
 						const personaName = persona?.name ?? aiId;
-						for (const entry of chatEntries) {
-							if (entry.kind !== "chat") continue;
+						for (const entry of messageEntries) {
+							if (entry.kind !== "message") continue;
 							const lineEl = doc.createElement("div");
 							lineEl.className = "msg-line";
-							if (entry.role === "player") {
+							if (entry.from === "blue") {
+								// Incoming from player
 								appendMentionAwareText(
 									lineEl,
 									`> ${entry.content}\n`,
@@ -756,6 +761,7 @@ export function renderGame(
 									"msg-you",
 								);
 							} else {
+								// Outgoing from AI to blue
 								const prefixSpan = doc.createElement("span");
 								prefixSpan.className = "msg-prefix";
 								if (persona?.color) {

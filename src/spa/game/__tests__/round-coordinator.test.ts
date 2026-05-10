@@ -148,7 +148,7 @@ describe("chat-only round", () => {
 		expect(getActivePhase(nextState).round).toBe(1);
 	});
 
-	it("appends chat messages to the addressed AI's history", async () => {
+	it("free-form assistantText (no message tool call) does not appear in the AI's log", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "I am Ember", toolCalls: [] },
@@ -157,18 +157,12 @@ describe("chat-only round", () => {
 		]);
 		const { nextState } = await runRound(game, "red", "Hello Ember!", provider);
 		const redLog = getActivePhase(nextState).conversationLogs.red ?? [];
-		const chatEntries = redLog.filter((e) => e.kind === "chat");
-		expect(chatEntries.some((e) => e.kind === "chat" && e.role === "ai")).toBe(
-			true,
-		);
-		expect(
-			chatEntries.some(
-				(e) => e.kind === "chat" && e.content.includes("I am Ember"),
-			),
-		).toBe(true);
+		// Free-form assistantText without a message tool call → treated as pass, not appended
+		const msgEntries = redLog.filter((e) => e.kind === "message" && e.from === "red");
+		expect(msgEntries).toHaveLength(0);
 	});
 
-	it("appends the player's message to the addressed AI's history", async () => {
+	it("appends the player's message to the addressed AI's history as a 'message' entry", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
@@ -182,13 +176,13 @@ describe("chat-only round", () => {
 			provider,
 		);
 		const redLog = getActivePhase(nextState).conversationLogs.red ?? [];
-		const chatEntries = redLog.filter((e) => e.kind === "chat");
+		const blueMessages = redLog.filter(
+			(e) => e.kind === "message" && e.from === "blue",
+		);
+		expect(blueMessages).toHaveLength(1);
 		expect(
-			chatEntries.some((e) => e.kind === "chat" && e.role === "player"),
-		).toBe(true);
-		expect(
-			chatEntries.some(
-				(e) => e.kind === "chat" && e.content.includes("My secret message"),
+			blueMessages.some(
+				(e) => e.kind === "message" && e.content.includes("My secret message"),
 			),
 		).toBe(true);
 	});
@@ -284,12 +278,11 @@ describe("budget-exhaustion lockout", () => {
 		const { nextState } = await runRound(game, "green", "hi", provider);
 
 		const redLog = getActivePhase(nextState).conversationLogs.red ?? [];
-		const chatEntries = redLog.filter((e) => e.kind === "chat");
-		expect(chatEntries.length).toBeGreaterThan(0);
-		expect(
-			chatEntries[chatEntries.length - 1]?.kind === "chat" &&
-				chatEntries[chatEntries.length - 1]?.role,
-		).toBe("ai");
+		// Lockout emits a message from the locked AI to blue
+		const lockoutMessages = redLog.filter(
+			(e) => e.kind === "message" && e.from === "red" && e.to === "blue",
+		);
+		expect(lockoutMessages.length).toBeGreaterThan(0);
 	});
 
 	it("lockout line is added to the action log", async () => {
@@ -483,7 +476,7 @@ describe("tool-call dispatch", () => {
 		expect(failure?.description).toBeTruthy();
 	});
 
-	it("assistantText + toolCalls both fire (chat + tool_success in result.actions)", async () => {
+	it("assistantText + toolCalls both fire (tool_success in result.actions; free-form text is dropped)", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
 			{
@@ -500,7 +493,7 @@ describe("tool-call dispatch", () => {
 			{ assistantText: "", toolCalls: [] },
 		]);
 		const { nextState, result } = await runRound(game, "red", "hi", provider);
-		expect(result.actions.some((e) => e.kind === "chat")).toBe(true);
+		// Free-form assistantText without a message tool call is silently dropped (becomes pass).
 		expect(result.actions.some((e) => e.kind === "tool_success")).toBe(true);
 		expect(
 			getActivePhase(nextState).world.entities.find((i) => i.id === "flower")
@@ -1205,10 +1198,10 @@ describe("lockout messages", () => {
 		const { nextState } = await runRound(game, "green", "hi", provider);
 
 		const redLog = getActivePhase(nextState).conversationLogs.red ?? [];
-		const chatEntries = redLog.filter((e) => e.kind === "chat");
-		const lastEntry = chatEntries[chatEntries.length - 1];
-		expect(lastEntry?.kind === "chat" && lastEntry.role).toBe("ai");
-		expect(lastEntry?.kind === "chat" && lastEntry.content).toBe(
+		const messageEntries = redLog.filter((e) => e.kind === "message");
+		const lastEntry = messageEntries[messageEntries.length - 1];
+		expect(lastEntry?.kind === "message" && lastEntry.from).toBe("red");
+		expect(lastEntry?.kind === "message" && lastEntry.content).toBe(
 			"Ember is unresponsive…",
 		);
 	});
@@ -1252,11 +1245,8 @@ describe("initiative parameter", () => {
 			undefined,
 			initiative,
 		);
-		const phase = getActivePhase(nextState);
-		const cyanLog = phase.conversationLogs.cyan ?? [];
-		expect(
-			cyanLog.some((e) => e.kind === "chat" && e.content === "I am cyan"),
-		).toBe(true);
+		// Free-form assistantText without a message tool call is silently dropped.
+		// Verify initiative ordering via result.actions instead.
 		expect(result.actions[0]?.actor).toBe("cyan");
 	});
 
@@ -2031,7 +2021,7 @@ describe("examine tool", () => {
 // AC #10 regression tests: conversationLogs isolation (#194)
 // ----------------------------------------------------------------------------
 describe("conversationLogs isolation (AC #10 — #194)", () => {
-	it("player message to addressed AI lands ONLY in that AI's conversationLogs as kind:'chat'", async () => {
+	it("player message to addressed AI lands ONLY in that AI's conversationLogs as kind:'message'", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
@@ -2046,28 +2036,38 @@ describe("conversationLogs isolation (AC #10 — #194)", () => {
 		);
 		const phase = getActivePhase(nextState);
 
-		// Only red's log should have a player entry
+		// Only red's log should have the player (blue→red) entry
 		const redPlayerEntries = (phase.conversationLogs.red ?? []).filter(
-			(e) => e.kind === "chat" && e.role === "player",
+			(e) => e.kind === "message" && e.from === "blue",
 		);
 		expect(redPlayerEntries).toHaveLength(1);
 
 		// green and cyan should have NO player entries
 		const greenPlayerEntries = (phase.conversationLogs.green ?? []).filter(
-			(e) => e.kind === "chat" && e.role === "player",
+			(e) => e.kind === "message" && e.from === "blue",
 		);
 		expect(greenPlayerEntries).toHaveLength(0);
 
 		const cyanPlayerEntries = (phase.conversationLogs.cyan ?? []).filter(
-			(e) => e.kind === "chat" && e.role === "player",
+			(e) => e.kind === "message" && e.from === "blue",
 		);
 		expect(cyanPlayerEntries).toHaveLength(0);
 	});
 
-	it("AI chat-back (assistantText) lands as kind:'chat' entry in the speaking AI's log only", async () => {
+	it("AI message tool call lands as kind:'message' entry in the speaking AI's log only", async () => {
 		const game = makeGame();
+		// Use message tool call instead of free-form assistantText (which is dropped in v4)
 		const provider = new MockRoundLLMProvider([
-			{ assistantText: "I am red speaking", toolCalls: [] },
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "msg_red",
+						name: "message",
+						argumentsJson: JSON.stringify({ to: "blue", content: "I am red speaking" }),
+					},
+				],
+			},
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
@@ -2082,24 +2082,22 @@ describe("conversationLogs isolation (AC #10 — #194)", () => {
 		);
 		const phase = getActivePhase(nextState);
 
-		const redAiEntries = (phase.conversationLogs.red ?? []).filter(
-			(e) => e.kind === "chat" && e.role === "ai",
+		// red's log should contain the outgoing message entry (red→blue)
+		const redMessageEntries = (phase.conversationLogs.red ?? []).filter(
+			(e) => e.kind === "message" && e.from === "red",
 		);
-		expect(redAiEntries.length).toBeGreaterThanOrEqual(1);
+		expect(redMessageEntries.length).toBeGreaterThanOrEqual(1);
 		expect(
-			redAiEntries.some(
-				(e) => e.kind === "chat" && e.content.includes("I am red speaking"),
+			redMessageEntries.some(
+				(e) => e.kind === "message" && e.content.includes("I am red speaking"),
 			),
 		).toBe(true);
 
-		// green and cyan should NOT have red's message
-		const greenAiEntries = (phase.conversationLogs.green ?? []).filter(
-			(e) =>
-				e.kind === "chat" &&
-				e.role === "ai" &&
-				e.content === "I am red speaking",
+		// green and cyan should NOT have red's outgoing message (it goes to blue only)
+		const greenRedEntries = (phase.conversationLogs.green ?? []).filter(
+			(e) => e.kind === "message" && e.from === "red",
 		);
-		expect(greenAiEntries).toHaveLength(0);
+		expect(greenRedEntries).toHaveLength(0);
 	});
 
 	it("no chatHistories field on PhaseState after a round (regression guard)", async () => {

@@ -250,7 +250,7 @@ describe("serializeSession / deserializeSession", () => {
 		}
 	});
 
-	it("round-trips conversation logs", () => {
+	it("round-trips conversation logs with message entries", () => {
 		const game = makeFreshGame();
 		const phase = game.phases[0];
 		if (!phase) throw new Error("no phase");
@@ -261,10 +261,10 @@ describe("serializeSession / deserializeSession", () => {
 					...phase,
 					conversationLogs: {
 						red: [
-							{ kind: "chat", role: "player", content: "hello red", round: 0 },
+							{ kind: "message", from: "blue", to: "red", content: "hello red", round: 0 },
 						],
 						green: [
-							{ kind: "chat", role: "ai", content: "green reply", round: 0 },
+							{ kind: "message", from: "green", to: "blue", content: "green reply", round: 0 },
 						],
 						cyan: [],
 					},
@@ -277,20 +277,20 @@ describe("serializeSession / deserializeSession", () => {
 		if (result.kind === "ok") {
 			const rp = result.state.phases[0];
 			expect(rp?.conversationLogs.red).toEqual([
-				{ kind: "chat", role: "player", content: "hello red", round: 0 },
+				{ kind: "message", from: "blue", to: "red", content: "hello red", round: 0 },
 			]);
 			expect(rp?.conversationLogs.green).toEqual([
-				{ kind: "chat", role: "ai", content: "green reply", round: 0 },
+				{ kind: "message", from: "green", to: "blue", content: "green reply", round: 0 },
 			]);
 		}
 	});
 
-	it("round-trips whisper and witnessed-event entries via per-Daemon conversationLog (fixes v1 amnesia)", () => {
+	it("round-trips message and witnessed-event entries via per-Daemon conversationLog", () => {
 		const game = makeFreshGame();
 		const phase = game.phases[0];
 		if (!phase) throw new Error("no phase");
-		const whisperEntry: ConversationEntry = {
-			kind: "whisper",
+		const messageEntry: ConversationEntry = {
+			kind: "message",
 			round: 1,
 			from: "red" as AiId,
 			to: "cyan" as AiId,
@@ -310,7 +310,7 @@ describe("serializeSession / deserializeSession", () => {
 					...phase,
 					conversationLogs: {
 						...phase.conversationLogs,
-						cyan: [whisperEntry],
+						cyan: [messageEntry],
 						green: [witnessedEntry],
 					},
 				},
@@ -321,8 +321,8 @@ describe("serializeSession / deserializeSession", () => {
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
 			const rp = result.state.phases[0];
-			// whisper entry round-trips in cyan's log
-			expect(rp?.conversationLogs.cyan?.[0]).toEqual(whisperEntry);
+			// message entry round-trips in cyan's log
+			expect(rp?.conversationLogs.cyan?.[0]).toEqual(messageEntry);
 			// witnessed-event round-trips in green's log
 			expect(rp?.conversationLogs.green?.[0]).toEqual(witnessedEntry);
 			// No physicalLog or whispers fields on phase (regression guards)

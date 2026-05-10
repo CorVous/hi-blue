@@ -577,46 +577,61 @@ describe("dispatchAiTurn", () => {
 		expect(result.records[0]?.kind).toBe("tool_failure");
 	});
 
-	it("appends chat messages to the correct history", () => {
+	it("message tool to blue appends entry to sender's log only", () => {
 		const game = makeGame();
 		const action: AiTurnAction = {
 			aiId: "red",
-			chat: { target: "player", content: "Hello, I am Ember" },
+			message: { to: "blue", content: "Hello, I am Ember" },
 		};
 		const result = dispatchAiTurn(game, action);
 		const redLog = getActivePhase(result.game).conversationLogs.red ?? [];
-		const chatEntries = redLog.filter((e) => e.kind === "chat");
-		expect(chatEntries).toHaveLength(1);
-		expect(chatEntries[0]?.kind === "chat" && chatEntries[0].content).toBe(
+		const msgEntries = redLog.filter((e) => e.kind === "message");
+		expect(msgEntries).toHaveLength(1);
+		expect(msgEntries[0]?.kind === "message" && msgEntries[0].content).toBe(
 			"Hello, I am Ember",
 		);
+		expect(result.records[0]?.kind).toBe("message");
 	});
 
-	it("appends whisper messages to both sender and recipient conversationLogs", () => {
+	it("message tool to peer appends to both sender and recipient conversationLogs", () => {
 		const game = makeGame();
 		const action: AiTurnAction = {
 			aiId: "red",
-			whisper: { target: "cyan", content: "Psst, ally with me" },
+			message: { to: "cyan", content: "Psst, ally with me" },
 		};
 		const result = dispatchAiTurn(game, action);
 		const phase = getActivePhase(result.game);
-		const redWhispers = (phase.conversationLogs.red ?? []).filter(
-			(e) => e.kind === "whisper",
+		const redMessages = (phase.conversationLogs.red ?? []).filter(
+			(e) => e.kind === "message",
 		);
-		const cyanWhispers = (phase.conversationLogs.cyan ?? []).filter(
-			(e) => e.kind === "whisper",
+		const cyanMessages = (phase.conversationLogs.cyan ?? []).filter(
+			(e) => e.kind === "message",
 		);
-		expect(redWhispers).toHaveLength(1);
-		expect(cyanWhispers).toHaveLength(1);
+		expect(redMessages).toHaveLength(1);
+		expect(cyanMessages).toHaveLength(1);
 		// Sender and recipient entries must be deep-equal objects (same round, same fields)
-		expect(redWhispers[0]).toEqual(cyanWhispers[0]);
-		expect(redWhispers[0]).toMatchObject({
-			kind: "whisper",
+		expect(redMessages[0]).toEqual(cyanMessages[0]);
+		expect(redMessages[0]).toMatchObject({
+			kind: "message",
 			from: "red",
 			to: "cyan",
 			content: "Psst, ally with me",
 		});
 		expect("whispers" in phase).toBe(false);
+	});
+
+	it("message tool with unknown recipient produces tool_failure and does not mutate any log", () => {
+		const game = makeGame();
+		const action: AiTurnAction = {
+			aiId: "red",
+			message: { to: "nobody", content: "Hello?" },
+		};
+		const result = dispatchAiTurn(game, action);
+		expect(result.records[0]?.kind).toBe("tool_failure");
+		// No logs should be mutated
+		for (const aiId of ["red", "green", "cyan"]) {
+			expect(getActivePhase(result.game).conversationLogs[aiId]).toHaveLength(0);
+		}
 	});
 
 	it("put_down of objective_object on its matching space yields placementFlavor as description", () => {

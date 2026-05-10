@@ -179,10 +179,11 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 		expect((lastUser as { content: string }).content).toBe(
 			expectedSilentTurn("red"),
 		);
+		// In v4 the player message is prefixed with "blue: " when built into OpenAI messages
 		const priorUser = msgs.find(
 			(m) =>
 				m.role === "user" &&
-				(m as { content: string }).content === "are you alive?",
+				(m as { content: string }).content === "blue: are you alive?",
 		);
 		expect(priorUser).toBeDefined();
 
@@ -191,8 +192,9 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 		const cyanRound2 = provider.calls[5];
 		const cyanMsgs = cyanRound2!.messages;
 		const cyanLastUser = [...cyanMsgs].reverse().find((m) => m.role === "user");
+		// In v4 the player message is prefixed with "blue: " when built into OpenAI messages
 		expect((cyanLastUser as { content: string }).content).toBe(
-			"different question for cyan",
+			"blue: different question for cyan",
 		);
 		expect(
 			cyanMsgs.some(

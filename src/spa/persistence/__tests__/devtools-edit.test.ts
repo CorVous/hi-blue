@@ -90,7 +90,7 @@ describe("devtools-edit: mutating daemon .txt affects conversationLogs on reload
 		vi.restoreAllMocks();
 	});
 
-	it("editing red daemon .txt chat entry is visible after loadActiveSession()", () => {
+	it("editing red daemon .txt message entry is visible after loadActiveSession()", () => {
 		// Set up: save a game with a conversation log for red
 		const stub = makeLocalStorageStub();
 		vi.stubGlobal("localStorage", stub);
@@ -112,8 +112,9 @@ describe("devtools-edit: mutating daemon .txt affects conversationLogs on reload
 					conversationLogs: {
 						red: [
 							{
-								kind: "chat" as const,
-								role: "ai" as const,
+								kind: "message" as const,
+								from: "red" as const,
+								to: "blue" as const,
 								content: "original message",
 								round: 1,
 							},
@@ -140,8 +141,9 @@ describe("devtools-edit: mutating daemon .txt affects conversationLogs on reload
 		if (!phase1) throw new Error("no phase 1 in daemon file");
 		// Mutate the conversation log
 		phase1.conversationLog[0] = {
-			kind: "chat",
-			role: "ai",
+			kind: "message",
+			from: "blue",
+			to: "red",
 			content: "DEVTOOLS_INJECTED_MARKER",
 			round: 1,
 		};
@@ -154,13 +156,13 @@ describe("devtools-edit: mutating daemon .txt affects conversationLogs on reload
 			const loadedPhase = result.state.phases[0];
 			// The mutated content should be visible in conversationLogs
 			const redEntry = loadedPhase?.conversationLogs.red?.[0];
-			expect(redEntry?.kind === "chat" && redEntry.content).toBe(
+			expect(redEntry?.kind === "message" && redEntry.content).toBe(
 				"DEVTOOLS_INJECTED_MARKER",
 			);
 		}
 	});
 
-	it("editing daemon .txt to add a new chat entry is preserved", () => {
+	it("editing daemon .txt to add a new message entry is preserved", () => {
 		const stub = makeLocalStorageStub();
 		vi.stubGlobal("localStorage", stub);
 
@@ -178,10 +180,11 @@ describe("devtools-edit: mutating daemon .txt affects conversationLogs on reload
 		const rawGreenDaemon = stub._store[greenDaemonKey];
 		if (!rawGreenDaemon) throw new Error("green daemon file missing");
 		const daemonFile = JSON.parse(rawGreenDaemon) as DaemonFile;
-		// Add a new chat entry to phase 1
+		// Add a new message entry to phase 1
 		daemonFile.phases["1"].conversationLog.push({
-			kind: "chat",
-			role: "player",
+			kind: "message",
+			from: "blue",
+			to: "green",
 			content: "PLAYER_DEVTOOLS_MESSAGE",
 			round: 1,
 		});
@@ -194,7 +197,7 @@ describe("devtools-edit: mutating daemon .txt affects conversationLogs on reload
 			const greenLog = loadedPhase?.conversationLogs.green ?? [];
 			expect(
 				greenLog.some(
-					(e) => e.kind === "chat" && e.content === "PLAYER_DEVTOOLS_MESSAGE",
+					(e) => e.kind === "message" && e.content === "PLAYER_DEVTOOLS_MESSAGE",
 				),
 			).toBe(true);
 		}

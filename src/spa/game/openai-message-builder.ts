@@ -52,11 +52,18 @@ export function buildOpenAiMessages(
 	messages.push({ role: "system", content: ctx.toSystemPrompt() });
 
 	for (const entry of ctx.conversationLog) {
-		if (entry.kind !== "chat") continue;
-		if (entry.role === "player") {
-			messages.push({ role: "user", content: entry.content });
-		} else {
+		if (entry.kind !== "message") continue;
+		if (entry.from === ctx.aiId) {
+			// Outgoing: this daemon sent the message → assistant turn
 			messages.push({ role: "assistant", content: entry.content });
+		} else {
+			// Incoming: message was sent to this daemon → user turn with sender prefix
+			const senderPrefix =
+				entry.from === "blue" ? "blue" : `*${entry.from}`;
+			messages.push({
+				role: "user",
+				content: `${senderPrefix}: ${entry.content}`,
+			});
 		}
 	}
 

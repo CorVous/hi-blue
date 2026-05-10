@@ -164,7 +164,7 @@ describe("GameSession construction", () => {
 // ── Message routing ───────────────────────────────────────────────────────────
 
 describe("GameSession — message routing", () => {
-	it("player message appears in only the addressed AI's chat history", async () => {
+	it("player message appears in only the addressed AI's message log", async () => {
 		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
 
 		await session.submitMessage(
@@ -177,19 +177,19 @@ describe("GameSession — message routing", () => {
 		expect(
 			phase.conversationLogs.red?.some(
 				(e) =>
-					e.kind === "chat" &&
-					e.role === "player" &&
+					e.kind === "message" &&
+					e.from === "blue" &&
 					e.content.includes("Secret message for Ember"),
 			),
 		).toBe(true);
 		expect(
 			phase.conversationLogs.green?.some(
-				(e) => e.kind === "chat" && e.role === "player",
+				(e) => e.kind === "message" && e.from === "blue",
 			),
 		).toBe(false);
 		expect(
 			phase.conversationLogs.cyan?.some(
-				(e) => e.kind === "chat" && e.role === "player",
+				(e) => e.kind === "message" && e.from === "blue",
 			),
 		).toBe(false);
 	});
@@ -204,14 +204,14 @@ describe("GameSession — message routing", () => {
 		expect(
 			phase.conversationLogs.green?.some(
 				(e) =>
-					e.kind === "chat" &&
-					e.role === "player" &&
+					e.kind === "message" &&
+					e.from === "blue" &&
 					e.content.includes("for green"),
 			),
 		).toBe(true);
 		expect(
 			phase.conversationLogs.red?.filter(
-				(e) => e.kind === "chat" && e.role === "player",
+				(e) => e.kind === "message" && e.from === "blue",
 			),
 		).toHaveLength(1);
 	});
