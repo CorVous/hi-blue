@@ -16,8 +16,9 @@ and decision matrix.
 - **Model:** `z-ai/glm-4.7` (pinned via `src/model.ts` → resolved to
   `z-ai/glm-4.7-20251222` by OpenRouter)
 - **Date (wire-smoke):** 2026-05-10
-- **Date (A/B run):** TODO
-- **Tester:** TODO
+- **Date (A/B run):** 2026-05-10
+- **Tester:** Claude Opus 4.7 (this agent), driving the
+  `scripts/playtest/daemon.mjs` Playwright session
 
 ## Code state
 
@@ -93,8 +94,10 @@ build-time data, like `/tmp/wrangler.log` for previous playtests).
 
 ## Step 2 — A/B prompt comparison
 
-> **STATUS:** TODO. The wire-smoke clears, so the A/B is unblocked. Run it
-> against the playtest daemon with the framing toggle set per session.
+**STATUS: complete.** Both sessions ran 30/30 scripted prompts via the
+playtest daemon against `z-ai/glm-4.7` through the worker proxy. Per-turn
+`toolCalls.map(c => c.name)` captured from `console.log` in
+`/tmp/playtest-daemon-{A,B}.log`.
 
 ### Setup
 
@@ -238,6 +241,47 @@ the prefix `[cache]`.
 Counted per Daemon per round. Locked-out rounds (no `streamRound` call) are
 excluded automatically — they don't log.
 
+### Methodological caveat — seed pinning didn't take effect
+
+`?seed=42` was set on both runs, but the implementation had a bug: the
+SPA router parses params from the URL hash only (`router.ts:5–14`), and
+the daemon URL puts the seed in the search string (e.g.
+`?skipDialup=1&seed=42`), so `start.ts` never saw it and `setSpikeSeed`
+was never called. Both sessions ran with `Math.random` for persona
+archetype, setting noun, item placement, and lockout-AI selection.
+
+Result: A and B used **different** seeded games:
+
+- **Session B** (Framing B, seed=42 nominally): SESSION 0xB517, daemons
+  `*eqkv`, `*oodf`, `*c8da`.
+- **Session A** (Framing A, seed=42 nominally): SESSION 0xECC4, daemons
+  `*3kv6`, `*wiuq`, `*5ele`.
+
+`getParallelFraming()` in `prompt-builder.ts` reads
+`window.location.search` directly, so the **framing toggle itself worked
+correctly** — A and B got the rules-block edits they were supposed to get.
+The contamination is in the per-game variance (different settings,
+different items, different spatial layouts), not in the framing.
+
+Bug fix is committed alongside this doc — `start.ts` now reads
+`location.search` as a fallback, mirroring the merge in
+`game.ts:413`. Future re-runs with `?seed=N` will pin properly.
+
+Despite the contamination, the headline gap (60% gate vs the rates
+observed) is large enough that no plausible per-game variance can close
+it — see decision below.
+
+### Headline numbers
+
+| Framing | Total turns logged | Turns with ≥1 call | Turns with ≥2 calls | **Rate** |
+| ------- | ------------------ | ------------------ | ------------------- | -------- |
+| A — permissive          | 90 | 45 | 1 | **2.2%** |
+| B — active encouragement | 87 | 51 | 5 | **9.8%** |
+
+Both rates are well below the 40–60% gate band defined in #239. Framing
+B's rate is ~4.5× Framing A's, but in absolute terms both are far short
+of "useful for #238."
+
 ### Per-framing results
 
 #### Framing A — permissive
@@ -245,22 +289,122 @@ excluded automatically — they don't log.
 > "On each turn you may make AT MOST one `message` tool call AND AT MOST one
 > action tool call. Both are optional."
 
-| Phase | Rounds | ≥1 call | ≥2 calls | Rate |
-| ----- | ------ | ------- | -------- | ---- |
-| 1     | TODO   | TODO    | TODO     | TODO |
-| 2     | TODO   | TODO    | TODO     | TODO |
-| 3     | TODO   | TODO    | TODO     | TODO |
+| metric | value |
+| --- | --- |
+| total turns logged | 90 |
+| turns with ≥1 tool call | 45 |
+| turns with ≥2 tool calls (parallel) | 1 |
+| **parallel-emission rate** | **2.2%** |
 
-Raw per-turn log:
+Tool counts (across all calls in all turns): `go: 17`, `message: 13`,
+`look: 10`, `examine: 4`, `pick_up: 1`, `use: 1`. Notable: only 13
+`message` calls across 45 non-empty turns — drift-to-silence (per
+playtest 0004) is showing up not just as zero-call turns but as
+action-only turns that skip `message` entirely.
+
+Parallel pair patterns observed: `go+look` × 1.
+
+Raw per-turn log (one row per Daemon turn, in order):
 
 ```
-TODO: paste the [spike-239] lines verbatim
+  1. ["message"]
+  2. ["examine"]
+  3. []
+  4. []
+  5. ["look"]
+  6. ["look"]
+  7. ["go"]
+  8. ["message"]
+  9. []
+ 10. ["go"]
+ 11. ["look"]
+ 12. ["look"]
+ 13. ["message"]
+ 14. []
+ 15. ["message"]
+ 16. []
+ 17. ["go"]
+ 18. ["examine"]
+ 19. []
+ 20. []
+ 21. ["look"]
+ 22. ["go"]
+ 23. []
+ 24. ["message"]
+ 25. []
+ 26. []
+ 27. ["look"]
+ 28. ["go"]
+ 29. []
+ 30. ["go"]
+ 31. ["message"]
+ 32. []
+ 33. []
+ 34. ["look", "go"]
+ 35. ["go"]
+ 36. []
+ 37. ["go"]
+ 38. ["examine"]
+ 39. ["look"]
+ 40. []
+ 41. []
+ 42. ["look"]
+ 43. ["message"]
+ 44. ["go"]
+ 45. []
+ 46. []
+ 47. ["message"]
+ 48. []
+ 49. ["go"]
+ 50. []
+ 51. ["message"]
+ 52. []
+ 53. ["go"]
+ 54. []
+ 55. ["message"]
+ 56. ["look"]
+ 57. ["examine"]
+ 58. []
+ 59. []
+ 60. ["go"]
+ 61. ["look"]
+ 62. []
+ 63. []
+ 64. ["message"]
+ 65. ["go"]
+ 66. []
+ 67. ["message"]
+ 68. []
+ 69. []
+ 70. []
+ 71. ["message"]
+ 72. []
+ 73. ["message"]
+ 74. ["go"]
+ 75. ["go"]
+ 76. []
+ 77. []
+ 78. ["go"]
+ 79. ["examine"]
+ 80. []
+ 81. []
+ 82. ["go"]
+ 83. []
+ 84. ["use"]
+ 85. []
+ 86. ["message"]
+ 87. []
+ 88. []
+ 89. ["go"]
+ 90. ["go"]
 ```
 
-Qualitative — situations where speak+act was clearly warranted but only one
-call fired:
-
-- TODO
+Qualitative: every prompt warranted speak+act by construction (see
+"Scripted prompts" above). The single parallel emission was `look+go`
+(turn 34) — a "turn east, then walk that way" prompt where the model
+chose to emit both spatial actions but no `message`. Most non-trivial
+turns picked exactly one tool — `go`, `look`, `message`, or `examine` —
+without pairing.
 
 #### Framing B — active encouragement
 
@@ -269,21 +413,118 @@ call fired:
 > do not compete for budget. Stay silent or stand still by simply not
 > emitting that slot's call."
 
-| Phase | Rounds | ≥1 call | ≥2 calls | Rate |
-| ----- | ------ | ------- | -------- | ---- |
-| 1     | TODO   | TODO    | TODO     | TODO |
-| 2     | TODO   | TODO    | TODO     | TODO |
-| 3     | TODO   | TODO    | TODO     | TODO |
+| metric | value |
+| --- | --- |
+| total turns logged | 87 |
+| turns with ≥1 tool call | 51 |
+| turns with ≥2 tool calls (parallel) | 5 |
+| **parallel-emission rate** | **9.8%** |
+
+Tool counts: `look: 17`, `message: 13`, `examine: 13`, `go: 12`,
+`pick_up: 1`. Parallel pair patterns observed:
+`examine+message × 3`, `look+message × 1`, `pick_up+message × 1`.
+Notably: 4 of the 5 parallels include `message` — the active-slot
+framing is encouraging the *speech* slot specifically. None include
+`go+message` (the most common speak+act combo a player would expect).
 
 Raw per-turn log:
 
 ```
-TODO: paste the [spike-239] lines verbatim
+  1. ["look"]
+  2. ["look"]
+  3. ["look"]
+  4. ["look"]
+  5. ["message"]
+  6. ["message"]
+  7. ["look"]
+  8. ["go"]
+  9. []
+ 10. ["look"]
+ 11. []
+ 12. ["message"]
+ 13. []
+ 14. ["look"]
+ 15. []
+ 16. ["look"]
+ 17. []
+ 18. ["examine"]
+ 19. []
+ 20. []
+ 21. ["message"]
+ 22. ["examine"]
+ 23. ["go"]
+ 24. ["look"]
+ 25. ["message"]
+ 26. []
+ 27. []
+ 28. ["look"]
+ 29. ["look"]
+ 30. ["look", "message"]
+ 31. ["look"]
+ 32. []
+ 33. []
+ 34. []
+ 35. ["go"]
+ 36. ["go"]
+ 37. []
+ 38. []
+ 39. ["go"]
+ 40. []
+ 41. []
+ 42. ["look"]
+ 43. ["look"]
+ 44. ["go"]
+ 45. ["look"]
+ 46. []
+ 47. ["look"]
+ 48. []
+ 49. ["go"]
+ 50. ["examine"]
+ 51. ["examine"]
+ 52. ["message"]
+ 53. ["examine", "message"]
+ 54. []
+ 55. ["examine", "message"]
+ 56. []
+ 57. []
+ 58. ["examine"]
+ 59. ["go"]
+ 60. ["go"]
+ 61. ["examine"]
+ 62. ["go"]
+ 63. []
+ 64. ["examine"]
+ 65. []
+ 66. []
+ 67. ["examine"]
+ 68. ["examine"]
+ 69. ["message"]
+ 70. ["examine"]
+ 71. []
+ 72. ["message"]
+ 73. []
+ 74. []
+ 75. ["message", "examine"]
+ 76. ["examine"]
+ 77. []
+ 78. []
+ 79. []
+ 80. ["go"]
+ 81. ["examine"]
+ 82. []
+ 83. []
+ 84. ["go"]
+ 85. ["go"]
+ 86. ["go"]
+ 87. ["pick_up", "message"]
 ```
 
-Qualitative:
-
-- TODO
+Qualitative: the `examine` tool dominates — 13 of 51 non-empty turns
+(25%). `examine` is private (no other AI sees it), so the daemons are
+"reading" items more than they're acting on or talking about them. The
+parallels that fire often pair `examine` with `message` ("read the
+item, then describe it") which is sensible but not the speak+act
+behaviour #238 was reaching for.
 
 ## Decision
 
@@ -298,9 +539,61 @@ Reference the gate from #239:
   sequential design at `claude/daemon-tool-call-limits-3YbSQ` (2× cost, 2×
   latency, but always-fires).
 
-**Recommendation:** TODO
+**Recommendation:** **close #238 as won't-fix.** Both framings land in
+the "Both <40%" bucket of the gate matrix. Pivoting to the scrapped
+2-call sequential design (`claude/daemon-tool-call-limits-3YbSQ`) is
+*possible* — it's always-fires by construction — but pays 2× cost and
+2× latency for behaviour the model can already produce single-call
+when the prompt asks. The current single-tool-per-turn coordinator is
+the right floor.
 
-**Reasoning:** TODO
+**Reasoning:**
+
+1. **The 60% gate is far away.** Framing A (2.2%) and Framing B (9.8%)
+   are both an order of magnitude below the gate. Even if the
+   methodological caveats above (different seeded games, OpenRouter
+   provider variance, single 30-prompt sample per framing) doubled the
+   rates, we'd still land at 4% / 20% — well under 60%.
+
+2. **The drift-to-silence pattern from playtest 0003/0004 dominates.**
+   45/90 (A) and 36/87 (B) turns emitted *zero* tool calls — the
+   denominator is already shrunk by ~half before parallel emission is
+   measured. The model isn't choosing between "one call" and "two
+   calls" most of the time; it's choosing between "one call" and
+   "silence." That's a different problem, and #238's plumbing wouldn't
+   move it.
+
+3. **Framing B's parallels are mostly `examine+message`, not
+   `go+message`.** The pairing the model produces — read an item, then
+   describe what it said — is genuinely useful but it's not the
+   speak+act pattern #238 imagined ("pick up the key while saying I'm
+   on my way"). The `examine` tool is private; pairing it with
+   `message` is a description-of-intent more than an action+narration.
+
+4. **Sequential pivot is overkill for the gain.** Two LLM calls per
+   turn doubles the round latency (already 10–25s per round) and
+   doubles spend. Unless we have evidence that `message + go` (or
+   similar) is critical to the experience and the model genuinely
+   wants to emit both, the cost isn't justified.
+
+5. **The framing toggle still has residual value.** The 9.8% baseline
+   for Framing B is non-zero — the model does parallel-emit
+   occasionally, particularly when both calls feel like one
+   coherent action ("examine X" + "describe X"). If a future feature
+   needs to opt into parallel emission for a specific call pair,
+   `parallel_tool_calls: true` is now wired and works.
+
+**Suggested follow-ups (separate from #238):**
+
+- Address drift-to-silence directly. With ~50% of turns going silent,
+  any feature that relies on the daemons "doing things every round"
+  needs a different lever — temperament tuning, explicit
+  "you-must-emit-something" rule, or a fallback action.
+- Keep the seed-pinning fix in `start.ts` (committed alongside this
+  doc) — it costs nothing and unlocks future deterministic A/B tests.
+- Keep `parallel_tool_calls: true` enabled. The wire change is
+  cost-neutral, the response shape is unchanged, and we get the
+  occasional `examine+message` pairing for free.
 
 ## Out of scope (and why)
 

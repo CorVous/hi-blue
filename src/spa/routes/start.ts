@@ -442,7 +442,16 @@ export function renderStart(
 	// Spike #239: `?seed=N` pins persona archetype, setting noun, and
 	// spatial layout via Mulberry32 sub-streams. Production paths leave
 	// _spikeSeed null and fall back to Math.random.
-	const seedRaw = params?.get("seed");
+	//
+	// Read both hash-query params (passed in from the router) and
+	// location.search — the router only parses hash params, but daemon URLs
+	// like `http://localhost:8787/?seed=42` keep the seed in the search
+	// string. Mirror the merge in routes/game.ts:413.
+	const searchParams =
+		typeof window !== "undefined" && window.location !== undefined
+			? new URLSearchParams(window.location.search)
+			: new URLSearchParams();
+	const seedRaw = params?.get("seed") ?? searchParams.get("seed");
 	const seedNum =
 		seedRaw !== null && seedRaw !== undefined ? Number(seedRaw) : Number.NaN;
 	if (Number.isFinite(seedNum)) {
