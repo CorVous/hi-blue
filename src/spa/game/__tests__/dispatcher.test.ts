@@ -864,4 +864,44 @@ describe("dispatchAiTurn", () => {
 		expect(afterPhase.conversationLogs.green ?? []).toEqual(preLogs.green);
 		expect(afterPhase.conversationLogs.cyan ?? []).toEqual(preLogs.cyan);
 	});
+
+	// -------------------------------------------------------------------------
+	// P0-1 record-ordering: message before toolCall (issue #238)
+	// -------------------------------------------------------------------------
+
+	it("both message + toolCall populated: message record appears before tool_success record in result.records", () => {
+		// red at (0,0), flower at (0,0) — red can pick up flower.
+		// red also sends a message to blue.
+		// The dispatcher must process action.message BEFORE action.toolCall so that
+		// "I'll grab the key" + picks up flower reads as one narrative beat.
+		const game = makeGame();
+		const action: AiTurnAction = {
+			aiId: "red",
+			message: { to: "blue", content: "I'll grab the flower" },
+			toolCall: { name: "pick_up", args: { item: "flower" } },
+		};
+		const result = dispatchAiTurn(game, action);
+
+		expect(result.rejected).toBe(false);
+		expect(result.records).toHaveLength(2);
+		// Message record MUST come first (P0-1 ordering requirement)
+		expect(result.records[0]?.kind).toBe("message");
+		expect(result.records[1]?.kind).toBe("tool_success");
+
+		// Conversation log must have the spoken line
+		const redLog = getActivePhase(result.game).conversationLogs.red ?? [];
+		expect(
+			redLog.some(
+				(e) =>
+					e.kind === "message" &&
+					e.content.includes("I'll grab the flower"),
+			),
+		).toBe(true);
+
+		// World state must reflect the pick_up
+		const flower = getActivePhase(result.game).world.entities.find(
+			(e) => e.id === "flower",
+		);
+		expect(flower?.holder).toBe("red");
+	});
 });
