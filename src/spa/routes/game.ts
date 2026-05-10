@@ -3,7 +3,6 @@ import { serializeGameSave } from "../../save-serializer.js";
 import {
 	BANNER,
 	formatTopInfoMobile,
-	formatTopInfoRight,
 	initPanelChrome,
 	type LoadState,
 	renderTopInfoLeft,
@@ -439,7 +438,7 @@ export function renderGame(
 	/** Paint the right-hand topinfo cell for one of the three load states.
 	 * Used during progressive loading; the normal `refreshTopInfo` (session
 	 * required) takes over once we transition to stable. */
-	function renderLoadingTopInfo(state: LoadState, daemonsOnline: number): void {
+	function renderLoadingTopInfo(state: LoadState): void {
 		const topinfoLeftEl = doc.querySelector<HTMLElement>("#topinfo-left");
 		const topinfoRightEl = doc.querySelector<HTMLElement>("#topinfo-right");
 		const topinfoMobileEl = doc.querySelector<HTMLElement>("#topinfo-mobile");
@@ -460,11 +459,10 @@ export function renderGame(
 			phaseNumber: 1,
 			totalPhases: total,
 			turn: 0,
-			daemonsOnline,
 		};
 		if (topinfoLeftEl) renderTopInfoLeft(topinfoLeftEl, inputs);
 		if (topinfoRightEl) {
-			topinfoRightEl.textContent = formatTopInfoRight(inputs);
+			topinfoRightEl.textContent = "";
 			const span = doc.createElement("span");
 			span.className = status.cls;
 			span.textContent = status.desktop;
@@ -535,7 +533,7 @@ export function renderGame(
 		_promptInput.placeholder = "loading…";
 
 		setStageLoadState("loading-daemons");
-		renderLoadingTopInfo("loading-daemons", 0);
+		renderLoadingTopInfo("loading-daemons");
 
 		// Braille spinner machinery — duplicated from the round-submit path so
 		// we can ride spinners on the panel-name labels while content packs
@@ -618,7 +616,7 @@ export function renderGame(
 			.then((personas) => {
 				buildLoadingPersonaShape(personas);
 				setStageLoadState("generating-room");
-				renderLoadingTopInfo("generating-room", Object.keys(personas).length);
+				renderLoadingTopInfo("generating-room");
 				startSpinners();
 				startBrightnessWipe();
 				return pending.contentPacksPromise.then((packs) => ({
@@ -904,19 +902,14 @@ export function renderGame(
 			total += 1;
 			cursor = cursor.nextPhaseConfig;
 		}
-		const personas = state.personas;
-		const daemons = Object.keys(personas).filter(
-			(id) => !phase.chatLockouts.has(id),
-		).length;
 		const inputs = {
 			sessionId,
 			phaseNumber: phase.phaseNumber,
 			totalPhases: total,
 			turn: phase.round,
-			daemonsOnline: daemons,
 		};
 		renderTopInfoLeft(topinfoLeftEl, inputs);
-		topinfoRightEl.textContent = formatTopInfoRight(inputs);
+		topinfoRightEl.textContent = "";
 		const stableStatus = topInfoStatus("stable");
 		const okSpan = doc.createElement("span");
 		okSpan.className = stableStatus.cls;
