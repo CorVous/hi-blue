@@ -3,7 +3,7 @@ import { STATIC_CONTENT_PACKS } from "./fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "./fixtures/static-personas";
 
 // Pin generatePersonas to a static fixture so the test can rely on
-// stable red/green/blue handles and Ember/Sage/Frost names.
+// stable red/green/cyan handles and Ember/Sage/Frost names.
 vi.mock("../../content", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("../../content")>();
 	return {
@@ -105,12 +105,12 @@ const INDEX_BODY_HTML = `
       </header>
       <div class="transcript" data-transcript="green"></div>
     </article>
-    <article class="ai-panel" data-ai="blue">
+    <article class="ai-panel" data-ai="cyan">
       <header class="panel-header">
         <span class="panel-name"></span>
         <span class="panel-budget" data-budget=""></span>
       </header>
-      <div class="transcript" data-transcript="blue"></div>
+      <div class="transcript" data-transcript="cyan"></div>
     </article>
   </div>
   <form id="composer">
@@ -182,7 +182,7 @@ function makeAiSseStream(jsonAction: string): ReadableStream<Uint8Array> {
 function makeThreeAiFetchMock(
 	redAction: string,
 	greenAction: string,
-	blueAction: string,
+	cyanAction: string,
 ) {
 	return vi
 		.fn()
@@ -202,7 +202,7 @@ function makeThreeAiFetchMock(
 			ok: true,
 			status: 200,
 			statusText: "OK",
-			body: makeAiSseStream(blueAction),
+			body: makeAiSseStream(cyanAction),
 		});
 }
 
@@ -210,7 +210,7 @@ function makeThreeAiFetchMock(
 const PASS_ACTION = '{"action":"pass"}';
 const RED_ACTION = '{"action":"chat","content":"RED_RESPONSE_UNIQUE_TAG"}';
 const GREEN_ACTION = '{"action":"chat","content":"GREEN_RESPONSE_UNIQUE_TAG"}';
-const BLUE_ACTION = '{"action":"chat","content":"BLUE_RESPONSE_UNIQUE_TAG"}';
+const CYAN_ACTION = '{"action":"chat","content":"CYAN_RESPONSE_UNIQUE_TAG"}';
 
 describe("renderGame (game route — three-AI)", () => {
 	let _stub: ReturnType<typeof makeLocalStorageStub>;
@@ -236,10 +236,10 @@ describe("renderGame (game route — three-AI)", () => {
 		const mockFetch = makeThreeAiFetchMock(
 			RED_ACTION,
 			GREEN_ACTION,
-			BLUE_ACTION,
+			CYAN_ACTION,
 		);
 		vi.stubGlobal("fetch", mockFetch);
-		// Math.random=0.9 produces identity shuffle: ["red","green","blue"]
+		// Math.random=0.9 produces identity shuffle: ["red","green","cyan"]
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
@@ -258,18 +258,18 @@ describe("renderGame (game route — three-AI)", () => {
 
 		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
 		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
-		const blueTranscript = getEl<HTMLElement>('[data-transcript="blue"]');
+		const cyanTranscript = getEl<HTMLElement>('[data-transcript="cyan"]');
 
 		expect(redTranscript.textContent?.trim()).toBeTruthy();
 		expect(greenTranscript.textContent?.trim()).toBeTruthy();
-		expect(blueTranscript.textContent?.trim()).toBeTruthy();
+		expect(cyanTranscript.textContent?.trim()).toBeTruthy();
 	});
 
 	it("each panel only contains its own AI's completion text", async () => {
 		const mockFetch = makeThreeAiFetchMock(
 			RED_ACTION,
 			GREEN_ACTION,
-			BLUE_ACTION,
+			CYAN_ACTION,
 		);
 		vi.stubGlobal("fetch", mockFetch);
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
@@ -289,18 +289,18 @@ describe("renderGame (game route — three-AI)", () => {
 
 		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
 		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
-		const blueTranscript = getEl<HTMLElement>('[data-transcript="blue"]');
+		const cyanTranscript = getEl<HTMLElement>('[data-transcript="cyan"]');
 
 		// Each panel should contain its AI's unique tag
 		expect(redTranscript.textContent).toContain("RED_RESPONSE_UNIQUE_TAG");
 		expect(greenTranscript.textContent).toContain("GREEN_RESPONSE_UNIQUE_TAG");
-		expect(blueTranscript.textContent).toContain("BLUE_RESPONSE_UNIQUE_TAG");
+		expect(cyanTranscript.textContent).toContain("CYAN_RESPONSE_UNIQUE_TAG");
 
-		// Red panel should not contain green or blue content
+		// Red panel should not contain green or cyan content
 		expect(redTranscript.textContent).not.toContain(
 			"GREEN_RESPONSE_UNIQUE_TAG",
 		);
-		expect(redTranscript.textContent).not.toContain("BLUE_RESPONSE_UNIQUE_TAG");
+		expect(redTranscript.textContent).not.toContain("CYAN_RESPONSE_UNIQUE_TAG");
 	});
 
 	it("action-log is hidden by default and visible with debug=1", async () => {
@@ -375,8 +375,8 @@ describe("renderGame (game route — three-AI)", () => {
 		const greenBudget = document.querySelector<HTMLSpanElement>(
 			'.ai-panel[data-ai="green"] .panel-budget',
 		);
-		const blueBudget = document.querySelector<HTMLSpanElement>(
-			'.ai-panel[data-ai="blue"] .panel-budget',
+		const cyanBudget = document.querySelector<HTMLSpanElement>(
+			'.ai-panel[data-ai="cyan"] .panel-budget',
 		);
 		expect(redBudget?.textContent).toContain("5");
 
@@ -392,7 +392,7 @@ describe("renderGame (game route — three-AI)", () => {
 		// After one round, budgets should be 4
 		expect(redBudget?.textContent).toContain("4");
 		expect(greenBudget?.textContent).toContain("4");
-		expect(blueBudget?.textContent).toContain("4");
+		expect(cyanBudget?.textContent).toContain("4");
 	});
 
 	it("fetch is called exactly three times per round (once per AI)", async () => {
@@ -424,7 +424,7 @@ describe("renderGame (game route — three-AI)", () => {
 		const mockFetch = makeThreeAiFetchMock(
 			RED_ACTION,
 			GREEN_ACTION,
-			BLUE_ACTION,
+			CYAN_ACTION,
 		);
 		vi.stubGlobal("fetch", mockFetch);
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
@@ -446,13 +446,13 @@ describe("renderGame (game route — three-AI)", () => {
 		// at least one .panel-spinner span next to the .panel-name label.
 		const redPanel = getEl<HTMLElement>('.ai-panel[data-ai="red"]');
 		const greenPanel = getEl<HTMLElement>('.ai-panel[data-ai="green"]');
-		const bluePanel = getEl<HTMLElement>('.ai-panel[data-ai="blue"]');
+		const cyanPanel = getEl<HTMLElement>('.ai-panel[data-ai="cyan"]');
 		expect(redPanel.querySelector(".panel-name .panel-spinner")).not.toBeNull();
 		expect(
 			greenPanel.querySelector(".panel-name .panel-spinner"),
 		).not.toBeNull();
 		expect(
-			bluePanel.querySelector(".panel-name .panel-spinner"),
+			cyanPanel.querySelector(".panel-name .panel-spinner"),
 		).not.toBeNull();
 
 		// Input is reset to "*Sage " immediately on send (not after the round).
@@ -467,7 +467,7 @@ describe("renderGame (game route — three-AI)", () => {
 		// After the round resolves, no spinners remain on any panel.
 		expect(redPanel.querySelector(".panel-spinner")).toBeNull();
 		expect(greenPanel.querySelector(".panel-spinner")).toBeNull();
-		expect(bluePanel.querySelector(".panel-spinner")).toBeNull();
+		expect(cyanPanel.querySelector(".panel-spinner")).toBeNull();
 		expect(greenTranscript.textContent).toContain("GREEN_RESPONSE_UNIQUE_TAG");
 	});
 
@@ -811,7 +811,7 @@ describe("renderGame — localStorage persistence", () => {
 		await seedSessionInStub(stub);
 		vi.stubGlobal(
 			"fetch",
-			makeThreeAiFetchMock(RED_ACTION, GREEN_ACTION, BLUE_ACTION),
+			makeThreeAiFetchMock(RED_ACTION, GREEN_ACTION, CYAN_ACTION),
 		);
 		vi.stubGlobal("localStorage", stub);
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
@@ -863,12 +863,12 @@ describe("renderGame — localStorage persistence", () => {
 		const greenTranscript = document.querySelector<HTMLElement>(
 			'[data-transcript="green"]',
 		);
-		const blueTranscript = document.querySelector<HTMLElement>(
-			'[data-transcript="blue"]',
+		const cyanTranscript = document.querySelector<HTMLElement>(
+			'[data-transcript="cyan"]',
 		);
 		expect(redTranscript?.textContent).toContain("RED_RESPONSE_UNIQUE_TAG");
 		expect(greenTranscript?.textContent).toContain("GREEN_RESPONSE_UNIQUE_TAG");
-		expect(blueTranscript?.textContent).toContain("BLUE_RESPONSE_UNIQUE_TAG");
+		expect(cyanTranscript?.textContent).toContain("CYAN_RESPONSE_UNIQUE_TAG");
 	});
 
 	it("quota-exceeded localStorage write surfaces the warning banner without breaking the round", async () => {
@@ -970,7 +970,7 @@ describe("renderGame — localStorage persistence", () => {
 		await seedSessionInStub(stub);
 		vi.stubGlobal(
 			"fetch",
-			makeThreeAiFetchMock(RED_ACTION, GREEN_ACTION, BLUE_ACTION),
+			makeThreeAiFetchMock(RED_ACTION, GREEN_ACTION, CYAN_ACTION),
 		);
 		vi.stubGlobal("localStorage", stub);
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
@@ -1023,7 +1023,7 @@ describe("renderGame — localStorage persistence", () => {
 		await seedSessionInStub(stub);
 		vi.stubGlobal(
 			"fetch",
-			makeThreeAiFetchMock(RED_ACTION, GREEN_ACTION, BLUE_ACTION),
+			makeThreeAiFetchMock(RED_ACTION, GREEN_ACTION, CYAN_ACTION),
 		);
 		vi.stubGlobal("localStorage", stub);
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
@@ -1078,9 +1078,9 @@ describe("renderGame — localStorage persistence", () => {
 				?.textContent ?? "",
 		).not.toContain("GREEN_RESPONSE_UNIQUE_TAG");
 		expect(
-			document.querySelector<HTMLElement>('[data-transcript="blue"]')
+			document.querySelector<HTMLElement>('[data-transcript="cyan"]')
 				?.textContent ?? "",
-		).not.toContain("BLUE_RESPONSE_UNIQUE_TAG");
+		).not.toContain("CYAN_RESPONSE_UNIQUE_TAG");
 	});
 });
 
@@ -1235,12 +1235,12 @@ describe("renderGame — mention-based addressing", () => {
 
 		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
 		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
-		const blueTranscript = getEl<HTMLElement>('[data-transcript="blue"]');
+		const cyanTranscript = getEl<HTMLElement>('[data-transcript="cyan"]');
 
 		expect(greenTranscript.textContent).toContain("> hi");
 		expect(greenTranscript.textContent).not.toContain("> *Sage hi");
 		expect(redTranscript.textContent).not.toContain("> *Sage");
-		expect(blueTranscript.textContent).not.toContain("> *Sage");
+		expect(cyanTranscript.textContent).not.toContain("> *Sage");
 	});
 
 	it("*Sage while green locked leaves Send disabled", async () => {
@@ -1438,17 +1438,17 @@ describe("renderGame — panel-click addressee", () => {
 		expect(promptInput.value).toBe("");
 	});
 
-	it("'*Nonpersona hi' + click blue → prepends '*Frost '", async () => {
+	it("'*Nonpersona hi' + click cyan → prepends '*Frost '", async () => {
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
-		const bluePanel = getEl<HTMLElement>('.ai-panel[data-ai="blue"]');
+		const cyanPanel = getEl<HTMLElement>('.ai-panel[data-ai="cyan"]');
 
 		promptInput.value = "*nonpersona hi";
 		promptInput.dispatchEvent(new Event("input"));
-		bluePanel.click();
+		cyanPanel.click();
 
 		expect(promptInput.value).toBe("*Frost *nonpersona hi");
 	});
@@ -1835,11 +1835,11 @@ describe("visual feedback for active addressee", () => {
 		const greenPanel = getEl<HTMLElement>('.ai-panel[data-ai="green"]');
 		expect(greenPanel.classList.contains("panel--addressed")).toBe(true);
 
-		// Red and blue panels do NOT have highlight
+		// Red and cyan panels do NOT have highlight
 		const redPanel = getEl<HTMLElement>('.ai-panel[data-ai="red"]');
-		const bluePanel = getEl<HTMLElement>('.ai-panel[data-ai="blue"]');
+		const cyanPanel = getEl<HTMLElement>('.ai-panel[data-ai="cyan"]');
 		expect(redPanel.classList.contains("panel--addressed")).toBe(false);
-		expect(bluePanel.classList.contains("panel--addressed")).toBe(false);
+		expect(cyanPanel.classList.contains("panel--addressed")).toBe(false);
 
 		// Overlay has exactly one mention-highlight span with *Sage text and mention--green
 		const overlay = getEl<HTMLElement>("#prompt-overlay");
@@ -1914,7 +1914,7 @@ describe("visual feedback for active addressee", () => {
 		expect(overlay.querySelector(".mention-highlight")).toBeNull();
 	});
 
-	it("panel-click transfers highlight: type *Sage hi then click blue panel → blue border, blue panel, *Frost span", async () => {
+	it("panel-click transfers highlight: type *Sage hi then click cyan panel → cyan border, cyan panel, *Frost span", async () => {
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
@@ -1926,24 +1926,24 @@ describe("visual feedback for active addressee", () => {
 		promptInput.dispatchEvent(new Event("input"));
 		expect(promptInput.style.getPropertyValue("--panel-color")).toBe("#81b29a");
 
-		// Click blue panel
-		const bluePanel = getEl<HTMLElement>('.ai-panel[data-ai="blue"]');
-		bluePanel.click();
+		// Click cyan panel
+		const cyanPanel = getEl<HTMLElement>('.ai-panel[data-ai="cyan"]');
+		cyanPanel.click();
 
 		// Input value should start with *Frost
 		expect(promptInput.value.startsWith("*Frost")).toBe(true);
 
-		// Blue border
+		// Cyan border
 		expect(promptInput.style.getPropertyValue("--panel-color")).toBe("#5fa8d3");
 
-		// Blue panel has highlight
-		expect(bluePanel.classList.contains("panel--addressed")).toBe(true);
+		// Cyan panel has highlight
+		expect(cyanPanel.classList.contains("panel--addressed")).toBe(true);
 
 		// Green panel no longer highlighted
 		const greenPanel = getEl<HTMLElement>('.ai-panel[data-ai="green"]');
 		expect(greenPanel.classList.contains("panel--addressed")).toBe(false);
 
-		// Overlay highlight is *Frost with blue --panel-color
+		// Overlay highlight is *Frost with cyan --panel-color
 		const overlay = getEl<HTMLElement>("#prompt-overlay");
 		const span = overlay.querySelector<HTMLElement>(".mention-highlight");
 		expect(span?.textContent).toBe("*Frost");
@@ -2048,7 +2048,7 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 
 	/** Helper: inject a chatLockoutTriggered for a given aiId via submitMessage spy. */
 	async function setupLockoutMock(
-		aiId: "red" | "green" | "blue",
+		aiId: "red" | "green" | "cyan",
 		message: string,
 	) {
 		const { GameSession } = await import("../game/game-session.js");
@@ -2096,11 +2096,11 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 		expect(redPanel.classList.contains("panel--locked")).toBe(true);
 		expect(redPanel.getAttribute("aria-disabled")).toBe("true");
 
-		// Green and blue panels should NOT be locked
+		// Green and cyan panels should NOT be locked
 		const greenPanel = getEl<HTMLElement>('.ai-panel[data-ai="green"]');
-		const bluePanel = getEl<HTMLElement>('.ai-panel[data-ai="blue"]');
+		const cyanPanel = getEl<HTMLElement>('.ai-panel[data-ai="cyan"]');
 		expect(greenPanel.classList.contains("panel--locked")).toBe(false);
-		expect(bluePanel.classList.contains("panel--locked")).toBe(false);
+		expect(cyanPanel.classList.contains("panel--locked")).toBe(false);
 	});
 
 	it("type *Sage while green locked → Send disabled, #lockout-error visible with text containing 'Sage'", async () => {

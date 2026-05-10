@@ -34,8 +34,8 @@ const COMPOSER_PERSONAS: Record<string, AiPersona> = {
 		blurb: "You are intensely meticulous. Ensure items are evenly distributed.",
 		voiceExamples: ["ex1-green", "ex2-green", "ex3-green"],
 	},
-	blue: {
-		id: "blue",
+	cyan: {
+		id: "cyan",
 		name: "Frost",
 		color: "#5fa8d3",
 		temperaments: ["laconic", "diffident"],
@@ -45,7 +45,7 @@ const COMPOSER_PERSONAS: Record<string, AiPersona> = {
 			"You end almost every reply with a question, no matter what the topic is — does that make sense?",
 		],
 		blurb: "You are laconic and diffident. Hold the key at phase end.",
-		voiceExamples: ["ex1-blue", "ex2-blue", "ex3-blue"],
+		voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
 	},
 };
 
@@ -57,7 +57,7 @@ function noLockouts(): ReadonlyMap<AiId, boolean> {
 	return new Map<AiId, boolean>([
 		["red", false],
 		["green", false],
-		["blue", false],
+		["cyan", false],
 	]);
 }
 
@@ -65,7 +65,7 @@ function lockouts(locked: AiId): ReadonlyMap<AiId, boolean> {
 	const m = new Map<AiId, boolean>([
 		["red", false],
 		["green", false],
-		["blue", false],
+		["cyan", false],
 	]);
 	m.set(locked, true);
 	return m;
@@ -75,7 +75,7 @@ function multiLockouts(locked: AiId[]): ReadonlyMap<AiId, boolean> {
 	const m = new Map<AiId, boolean>([
 		["red", false],
 		["green", false],
-		["blue", false],
+		["cyan", false],
 	]);
 	for (const id of locked) m.set(id, true);
 	return m;
@@ -238,23 +238,23 @@ describe("deriveComposerState", () => {
 		});
 	});
 
-	it('"*Frost *Sage" blue-locked → addressee blue, sendEnabled false, lockoutError set for Frost', () => {
+	it('"*Frost *Sage" cyan-locked → addressee cyan, sendEnabled false, lockoutError set for Frost', () => {
 		expect(
 			deriveComposerState({
 				text: "*Frost *Sage",
-				lockouts: lockouts("blue"),
+				lockouts: lockouts("cyan"),
 				personaNamesToId,
 				personaColors,
 				personaDisplayNames,
 			}),
 		).toEqual({
-			addressee: "blue",
+			addressee: "cyan",
 			sendEnabled: false,
 			borderColor: "#5fa8d3",
-			panelHighlight: "blue",
+			panelHighlight: "cyan",
 			mentionHighlight: { start: 0, end: 6, color: "#5fa8d3" },
 			lockoutError: "Frost isn't reading right now",
-			lockedPanels: new Set(["blue"]),
+			lockedPanels: new Set(["cyan"]),
 		});
 	});
 
@@ -298,7 +298,7 @@ describe("deriveComposerState", () => {
 		});
 	});
 
-	it('"*Frost *Sage" no lockouts → addressee blue, sendEnabled true (body = *Sage)', () => {
+	it('"*Frost *Sage" no lockouts → addressee cyan, sendEnabled true (body = *Sage)', () => {
 		expect(
 			deriveComposerState({
 				text: "*Frost *Sage",
@@ -308,10 +308,10 @@ describe("deriveComposerState", () => {
 				personaDisplayNames,
 			}),
 		).toEqual({
-			addressee: "blue",
+			addressee: "cyan",
 			sendEnabled: true,
 			borderColor: "#5fa8d3",
-			panelHighlight: "blue",
+			panelHighlight: "cyan",
 			mentionHighlight: { start: 0, end: 6, color: "#5fa8d3" },
 			lockoutError: null,
 			lockedPanels: new Set(),
@@ -460,23 +460,23 @@ describe("deriveComposerState", () => {
 		});
 	});
 
-	it('"*Frost *Sage" + blue locked → lockoutError for Frost, lockedPanels has blue', () => {
+	it('"*Frost *Sage" + cyan locked → lockoutError for Frost, lockedPanels has cyan', () => {
 		expect(
 			deriveComposerState({
 				text: "*Frost *Sage",
-				lockouts: lockouts("blue"),
+				lockouts: lockouts("cyan"),
 				personaNamesToId,
 				personaColors,
 				personaDisplayNames,
 			}),
 		).toEqual({
-			addressee: "blue",
+			addressee: "cyan",
 			sendEnabled: false,
 			borderColor: "#5fa8d3",
-			panelHighlight: "blue",
+			panelHighlight: "cyan",
 			mentionHighlight: { start: 0, end: 6, color: "#5fa8d3" },
 			lockoutError: "Frost isn't reading right now",
-			lockedPanels: new Set(["blue"]),
+			lockedPanels: new Set(["cyan"]),
 		});
 	});
 });

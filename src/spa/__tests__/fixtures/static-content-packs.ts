@@ -3,7 +3,7 @@ import type { ContentPack } from "../../game/types";
 const AI_STARTS: ContentPack["aiStarts"] = {
 	red: { position: { row: 0, col: 0 }, facing: "north" },
 	green: { position: { row: 0, col: 1 }, facing: "north" },
-	blue: { position: { row: 0, col: 2 }, facing: "north" },
+	cyan: { position: { row: 0, col: 2 }, facing: "north" },
 };
 
 /**

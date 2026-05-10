@@ -71,7 +71,7 @@ async function seedSessionInStub(
 }
 
 // Pin generatePersonas to a static fixture so panel/transcript hookups
-// keyed by red/green/blue continue to work in this regression test.
+// keyed by red/green/cyan continue to work in this regression test.
 vi.mock("../../content", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("../../content")>();
 	return {
@@ -94,13 +94,13 @@ const FAKE_PHASE_STATE = {
 	phaseNumber: 1,
 	objective: "get the key in the keyhole",
 	round: 1,
-	budgets: { red: AI_BUDGET, green: AI_BUDGET, blue: AI_BUDGET },
-	conversationLogs: { red: [], green: [], blue: [] },
+	budgets: { red: AI_BUDGET, green: AI_BUDGET, cyan: AI_BUDGET },
+	conversationLogs: { red: [], green: [], cyan: [] },
 	whispers: [],
 	lockedOut: new Set<string>(),
 	chatLockouts: new Map<string, number>(),
 	world: { items: [] },
-	aiGoals: { red: "test goal", green: "test goal", blue: "test goal" },
+	aiGoals: { red: "test goal", green: "test goal", cyan: "test goal" },
 };
 
 const FAKE_GAME_STATE = {
@@ -118,7 +118,7 @@ const GAME_ENDED_RESULT = {
 		gameEnded: true,
 	},
 	// Non-empty completions prevent the lockout branch which needs personas.name
-	completions: { red: "done", green: "done", blue: "done" },
+	completions: { red: "done", green: "done", cyan: "done" },
 	nextState: FAKE_GAME_STATE,
 };
 
@@ -152,12 +152,12 @@ const INDEX_BODY_HTML = `
       </header>
       <div class="transcript" data-transcript="green"></div>
     </article>
-    <article class="ai-panel" data-ai="blue">
+    <article class="ai-panel" data-ai="cyan">
       <header class="panel-header">
         <span class="panel-name"></span>
         <span class="panel-budget" data-budget=""></span>
       </header>
-      <div class="transcript" data-transcript="blue"></div>
+      <div class="transcript" data-transcript="cyan"></div>
     </article>
   </div>
   <form id="composer">

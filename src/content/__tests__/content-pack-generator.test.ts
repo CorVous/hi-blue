@@ -73,7 +73,7 @@ const SETTING_POOL_6: readonly string[] = [
 	"tide-flooded boardwalk",
 ];
 
-const AI_IDS = ["red", "green", "blue"];
+const AI_IDS = ["red", "green", "cyan"];
 
 // ── MockContentPackProvider factory ──────────────────────────────────────────
 

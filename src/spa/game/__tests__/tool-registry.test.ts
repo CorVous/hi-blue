@@ -112,11 +112,11 @@ describe("parseToolCallArguments", () => {
 	it("parses valid give arguments", () => {
 		const result = parseToolCallArguments(
 			"give",
-			'{"item":"flower","to":"blue"}',
+			'{"item":"flower","to":"cyan"}',
 		);
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			expect(result.args).toEqual({ item: "flower", to: "blue" });
+			expect(result.args).toEqual({ item: "flower", to: "cyan" });
 		}
 	});
 
@@ -169,7 +169,7 @@ describe("parseToolCallArguments", () => {
 	});
 
 	it("returns ok:false with /required/i reason when 'item' is missing for give", () => {
-		const result = parseToolCallArguments("give", '{"to":"blue"}');
+		const result = parseToolCallArguments("give", '{"to":"cyan"}');
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
 			expect(result.reason).toMatch(/required/i);

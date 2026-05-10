@@ -38,8 +38,8 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 			"One more sweep through the list.",
 		],
 	},
-	blue: {
-		id: "blue",
+	cyan: {
+		id: "cyan",
 		name: "Frost",
 		color: "#5fa8d3",
 		temperaments: ["laconic", "diffident"],
@@ -266,7 +266,7 @@ describe("serializeSession / deserializeSession", () => {
 						green: [
 							{ kind: "chat", role: "ai", content: "green reply", round: 0 },
 						],
-						blue: [],
+						cyan: [],
 					},
 				},
 			],
@@ -293,7 +293,7 @@ describe("serializeSession / deserializeSession", () => {
 			kind: "whisper",
 			round: 1,
 			from: "red" as AiId,
-			to: "blue" as AiId,
+			to: "cyan" as AiId,
 			content: "psst",
 		};
 		const witnessedEntry: ConversationEntry = {
@@ -310,7 +310,7 @@ describe("serializeSession / deserializeSession", () => {
 					...phase,
 					conversationLogs: {
 						...phase.conversationLogs,
-						blue: [whisperEntry],
+						cyan: [whisperEntry],
 						green: [witnessedEntry],
 					},
 				},
@@ -321,8 +321,8 @@ describe("serializeSession / deserializeSession", () => {
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
 			const rp = result.state.phases[0];
-			// whisper entry round-trips in blue's log
-			expect(rp?.conversationLogs.blue?.[0]).toEqual(whisperEntry);
+			// whisper entry round-trips in cyan's log
+			expect(rp?.conversationLogs.cyan?.[0]).toEqual(whisperEntry);
 			// witnessed-event round-trips in green's log
 			expect(rp?.conversationLogs.green?.[0]).toEqual(witnessedEntry);
 			// No physicalLog or whispers fields on phase (regression guards)
@@ -370,7 +370,7 @@ describe("serializeSession / deserializeSession", () => {
 					budgets: {
 						red: { remaining: 0.03, total: 0.05 },
 						green: { remaining: 0.05, total: 0.05 },
-						blue: { remaining: 0.04, total: 0.05 },
+						cyan: { remaining: 0.04, total: 0.05 },
 					},
 				},
 			],
@@ -398,7 +398,7 @@ describe("serializeSession / deserializeSession", () => {
 					personaSpatial: {
 						red: { position: { row: 2, col: 3 }, facing: "east" as const },
 						green: { position: { row: 1, col: 1 }, facing: "south" as const },
-						blue: { position: { row: 4, col: 4 }, facing: "west" as const },
+						cyan: { position: { row: 4, col: 4 }, facing: "west" as const },
 					},
 				},
 			],

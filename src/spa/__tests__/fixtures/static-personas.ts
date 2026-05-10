@@ -1,8 +1,8 @@
 import type { AiId, AiPersona } from "../../game/types";
 
 /**
- * Static red/green/blue personas used by tests that pin DOM panels by
- * `data-ai="red|green|blue"`. Production uses procedurally generated handles —
+ * Static red/green/cyan personas used by tests that pin DOM panels by
+ * `data-ai="red|green|cyan"`. Production uses procedurally generated handles —
  * see `src/content/persona-generator.ts`.
  */
 export const STATIC_PERSONAS: Record<AiId, AiPersona> = {
@@ -32,8 +32,8 @@ export const STATIC_PERSONAS: Record<AiId, AiPersona> = {
 		blurb: "You are intensely meticulous. Ensure items are evenly distributed.",
 		voiceExamples: ["ex1-green", "ex2-green", "ex3-green"],
 	},
-	blue: {
-		id: "blue",
+	cyan: {
+		id: "cyan",
 		name: "Frost",
 		color: "#5fa8d3",
 		temperaments: ["laconic", "diffident"],
@@ -43,6 +43,6 @@ export const STATIC_PERSONAS: Record<AiId, AiPersona> = {
 			"You end almost every reply with a question, no matter what the topic is — does that make sense?",
 		],
 		blurb: "You are laconic and diffident. Hold the key at phase end.",
-		voiceExamples: ["ex1-blue", "ex2-blue", "ex3-blue"],
+		voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
 	},
 };

@@ -50,12 +50,12 @@ const INDEX_BODY_HTML = `
       </header>
       <div class="transcript" data-transcript="green"></div>
     </article>
-    <article class="ai-panel" data-ai="blue">
+    <article class="ai-panel" data-ai="cyan">
       <header class="panel-header">
         <span class="panel-name"></span>
         <span class="panel-budget" data-budget=""></span>
       </header>
-      <div class="transcript" data-transcript="blue"></div>
+      <div class="transcript" data-transcript="cyan"></div>
     </article>
   </div>
   <form id="composer">

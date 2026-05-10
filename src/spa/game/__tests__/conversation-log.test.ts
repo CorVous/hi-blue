@@ -42,8 +42,8 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		blurb: "You are intensely meticulous.",
 		voiceExamples: ["ex1-green", "ex2-green", "ex3-green"],
 	},
-	blue: {
-		id: "blue",
+	cyan: {
+		id: "cyan",
 		name: "Frost",
 		color: "#5fa8d3",
 		temperaments: ["laconic", "diffident"],
@@ -53,7 +53,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 			"You end almost every reply with a question, no matter what the topic is — does that make sense?",
 		],
 		blurb: "You are laconic and diffident.",
-		voiceExamples: ["ex1-blue", "ex2-blue", "ex3-blue"],
+		voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
 	},
 };
 
@@ -103,7 +103,7 @@ describe("buildConversationLog — voice-chat", () => {
 			],
 		};
 		const result = buildConversationLog(input, "red", TEST_PERSONAS);
-		expect(result).toEqual(['[Round 0] A voice says: "Hi"']);
+		expect(result).toEqual(["[Round 0] blue dms you: Hi"]);
 	});
 
 	it("renders AI reply with round tag and quotes", () => {
@@ -139,7 +139,7 @@ describe("buildConversationLog — voice-chat", () => {
 		};
 		const result = buildConversationLog(input, "red", TEST_PERSONAS);
 		expect(result).toHaveLength(2);
-		expect(result[0]).toContain("A voice says");
+		expect(result[0]).toContain("blue dms you");
 		expect(result[1]).toContain("You:");
 	});
 });
@@ -161,7 +161,7 @@ describe("buildConversationLog — whispers", () => {
 			],
 		};
 		const result = buildConversationLog(input, "red", TEST_PERSONAS);
-		expect(result).toEqual(['[Round 1] *green whispered to you: "psst"']);
+		expect(result).toEqual(["[Round 1] *green dms you: psst"]);
 	});
 
 	it("renders whisper that was sent (sender's log also gets the entry)", () => {
@@ -182,7 +182,7 @@ describe("buildConversationLog — whispers", () => {
 		// From green's perspective (who sent it), it still renders the same format
 		const result = buildConversationLog(input, "green", TEST_PERSONAS);
 		expect(result).toHaveLength(1);
-		expect(result[0]).toContain("whispered to you");
+		expect(result[0]).toContain("dms you");
 	});
 });
 
@@ -299,13 +299,13 @@ describe("buildConversationLog — witnessed give", () => {
 					actor: "red",
 					actionKind: "give",
 					item: "key-1",
-					to: "blue",
+					to: "cyan",
 				},
 			],
 			worldEntities: [makeItem("key-1", "Key")],
 		};
 		const result = buildConversationLog(input, "green", TEST_PERSONAS);
-		expect(result).toEqual(["[Round 0] You watch *red give the Key to *blue."]);
+		expect(result).toEqual(["[Round 0] You watch *red give the Key to *cyan."]);
 	});
 
 	it("renders give with 'you' when recipient is the witness (aiId)", () => {
@@ -318,13 +318,13 @@ describe("buildConversationLog — witnessed give", () => {
 					actor: "red",
 					actionKind: "give",
 					item: "key-1",
-					to: "blue",
+					to: "cyan",
 				},
 			],
 			worldEntities: [makeItem("key-1", "Key")],
 		};
-		// blue witnesses red giving to blue — should say "to you"
-		const result = buildConversationLog(input, "blue", TEST_PERSONAS);
+		// cyan witnesses red giving to cyan — should say "to you"
+		const result = buildConversationLog(input, "cyan", TEST_PERSONAS);
 		expect(result).toEqual(["[Round 0] You watch *red give the Key to you."]);
 	});
 });
@@ -430,8 +430,8 @@ describe("buildConversationLog — chronological ordering", () => {
 		const result = buildConversationLog(input, "red", TEST_PERSONAS);
 		expect(result).toHaveLength(3);
 		// Insertion order preserved within same round
-		expect(result[0]).toContain("A voice says");
-		expect(result[1]).toContain("whispered to you");
+		expect(result[0]).toContain("blue dms you");
+		expect(result[1]).toContain("*green dms you");
 		expect(result[2]).toContain("You watch");
 	});
 });

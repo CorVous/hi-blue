@@ -41,8 +41,8 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		blurb: "You are intensely meticulous. Ensure items are evenly distributed.",
 		voiceExamples: ["ex1-green", "ex2-green", "ex3-green"],
 	},
-	blue: {
-		id: "blue",
+	cyan: {
+		id: "cyan",
 		name: "Frost",
 		color: "#5fa8d3",
 		temperaments: ["laconic", "diffident"],
@@ -52,7 +52,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 			"You end almost every reply with a question, no matter what the topic is — does that make sense?",
 		],
 		blurb: "You are laconic and diffident. Hold the key at phase end.",
-		voiceExamples: ["ex1-blue", "ex2-blue", "ex3-blue"],
+		voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
 	},
 };
 
@@ -122,15 +122,15 @@ describe("buildAiContext", () => {
 			greenCtx.conversationLog.filter((e) => e.kind === "chat"),
 		).toHaveLength(1);
 
-		const blueCtx = buildAiContext(game, "blue");
+		const cyanCtx = buildAiContext(game, "cyan");
 		expect(
-			blueCtx.conversationLog.filter((e) => e.kind === "chat"),
+			cyanCtx.conversationLog.filter((e) => e.kind === "chat"),
 		).toHaveLength(0);
 	});
 
 	it("includes only whispers received by the AI (via per-Daemon conversationLog)", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = appendWhisperEntry(game, "red", "blue", "Secret to blue");
+		game = appendWhisperEntry(game, "red", "cyan", "Secret to cyan");
 		game = appendWhisperEntry(game, "green", "red", "Secret to red");
 
 		const redCtx = buildAiContext(game, "red");
@@ -142,13 +142,13 @@ describe("buildAiContext", () => {
 			"Secret to red",
 		);
 
-		const blueCtx = buildAiContext(game, "blue");
-		const blueWhispers = blueCtx.conversationLog.filter(
-			(e) => e.kind === "whisper" && e.to === "blue",
+		const cyanCtx = buildAiContext(game, "cyan");
+		const cyanWhispers = cyanCtx.conversationLog.filter(
+			(e) => e.kind === "whisper" && e.to === "cyan",
 		);
-		expect(blueWhispers).toHaveLength(1);
-		expect(blueWhispers[0]?.kind === "whisper" && blueWhispers[0].content).toBe(
-			"Secret to blue",
+		expect(cyanWhispers).toHaveLength(1);
+		expect(cyanWhispers[0]?.kind === "whisper" && cyanWhispers[0].content).toBe(
+			"Secret to cyan",
 		);
 
 		const greenCtx = buildAiContext(game, "green");
@@ -163,8 +163,8 @@ describe("buildAiContext", () => {
 	it("includes the same world snapshot for all AIs", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		const redCtx = buildAiContext(game, "red");
-		const blueCtx = buildAiContext(game, "blue");
-		expect(redCtx.worldSnapshot).toEqual(blueCtx.worldSnapshot);
+		const cyanCtx = buildAiContext(game, "cyan");
+		expect(redCtx.worldSnapshot).toEqual(cyanCtx.worldSnapshot);
 	});
 
 	it("includes budget info for the AI", () => {
@@ -195,7 +195,7 @@ describe("buildAiContext", () => {
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
-				blue: { position: { row: 0, col: 2 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		};
 		let game = startPhase(
@@ -241,7 +241,7 @@ describe("<setting> block", () => {
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
-				blue: { position: { row: 0, col: 2 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		};
 		const game = startPhase(
@@ -275,7 +275,7 @@ describe("<setting> block", () => {
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
-				blue: { position: { row: 0, col: 2 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		};
 		const game = startPhase(
@@ -332,7 +332,7 @@ describe("prompt-builder — spatial 'Where you are' section", () => {
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
-				blue: { position: { row: 0, col: 2 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		};
 		const game = startPhase(
@@ -413,12 +413,12 @@ describe("wipe directive", () => {
 });
 
 describe("voice framing", () => {
-	it("renders 'A voice says:' prefix for player turns in conversation, not 'Player:'", () => {
+	it("renders 'blue dms you:' prefix for player turns in conversation, not 'Player:'", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = appendChat(game, "red", { role: "player", content: "Hello Ember" });
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("A voice says:");
+		expect(prompt).toContain("blue dms you:");
 		expect(prompt).not.toContain("Player:");
 	});
 
@@ -570,12 +570,12 @@ describe("<voice_examples> block", () => {
 		expect(sectionInner).toBe("- ex1-red\n- ex2-red\n- ex3-red");
 		// also confirm the other AIs' examples are NOT in red's prompt
 		expect(prompt).not.toContain("ex1-green");
-		expect(prompt).not.toContain("ex1-blue");
+		expect(prompt).not.toContain("ex1-cyan");
 	});
 });
 
 describe("<goal> block voice framing", () => {
-	it("<goal> block uses voice framing in phase 1", () => {
+	it("<goal> block uses Sysadmin framing in phase 1", () => {
 		const game = startPhase(
 			createGame(TEST_PERSONAS),
 			TEST_PHASE_CONFIG,
@@ -585,35 +585,32 @@ describe("<goal> block voice framing", () => {
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("<goal>");
 		expect(prompt).toContain(
-			"A voice you cannot place spoke to you a moment ago, alone, and only you heard it:",
+			"The Sysadmin sent you a private directive, addressed only to you:",
 		);
-		expect(prompt).toContain("You do not know whose voice it was.");
 		expect(prompt).toContain(ctx.goal);
 	});
 
-	it("<goal> block uses voice framing in phase 2", () => {
+	it("<goal> block uses Sysadmin framing in phase 2", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = startPhase(game, makeConfig(2));
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("<goal>");
 		expect(prompt).toContain(
-			"A voice you cannot place spoke to you a moment ago, alone, and only you heard it:",
+			"The Sysadmin sent you a private directive, addressed only to you:",
 		);
-		expect(prompt).toContain("You do not know whose voice it was.");
 		expect(prompt).toContain(ctx.goal);
 	});
 
-	it("<goal> block uses voice framing in phase 3", () => {
+	it("<goal> block uses Sysadmin framing in phase 3", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = startPhase(game, makeConfig(3));
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("<goal>");
 		expect(prompt).toContain(
-			"A voice you cannot place spoke to you a moment ago, alone, and only you heard it:",
+			"The Sysadmin sent you a private directive, addressed only to you:",
 		);
-		expect(prompt).toContain("You do not know whose voice it was.");
 		expect(prompt).toContain(ctx.goal);
 	});
 });
@@ -748,7 +745,7 @@ describe("<what_you_see> (cone)", () => {
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "south" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
-				blue: { position: { row: 0, col: 2 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		};
 
@@ -778,7 +775,7 @@ describe("<what_you_see> (cone)", () => {
 			return v;
 		};
 
-		// green at (0,1) facing north, blue at (0,2) facing north
+		// green at (0,1) facing north, cyan at (0,2) facing north
 		// red at (0,0) facing south — cone: (1,0), (2,1), (2,0), (2,-1→OOB)
 		// green at (0,1) is NOT in red's southward cone
 		const game = startPhase(createGame(TEST_PERSONAS), CONE_PHASE_CONFIG, rng2);
@@ -820,7 +817,7 @@ describe("<what_you_see> (cone)", () => {
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "south" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
-				blue: { position: { row: 0, col: 2 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		};
 
@@ -849,7 +846,7 @@ describe("<what_you_see> (cone)", () => {
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "south" },
 				green: { position: { row: 1, col: 0 }, facing: "north" },
-				blue: { position: { row: 0, col: 2 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		};
 
@@ -878,7 +875,7 @@ describe("<what_you_see> (cone)", () => {
 			CONE_PHASE_CONFIG,
 			() => 0,
 		);
-		for (const aiId of ["red", "green", "blue"]) {
+		for (const aiId of ["red", "green", "cyan"]) {
 			const ctx = buildAiContext(game, aiId);
 			const prompt = ctx.toSystemPrompt();
 			expect(prompt).not.toContain("## Action Log");
@@ -896,7 +893,7 @@ describe("unified <conversation> block (issue #129)", () => {
 	it("never emits a Whispers Received section — not in any fixture state", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = appendWhisperEntry(game, "green", "red", "psst");
-		for (const aiId of ["red", "green", "blue"]) {
+		for (const aiId of ["red", "green", "cyan"]) {
 			const ctx = buildAiContext(game, aiId);
 			const prompt = ctx.toSystemPrompt();
 			expect(prompt).not.toContain("## Whispers Received");
@@ -909,7 +906,7 @@ describe("unified <conversation> block (issue #129)", () => {
 		game = appendChat(game, "red", { role: "player", content: "Hello Ember" });
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain('[Round 0] A voice says: "Hello Ember"');
+		expect(prompt).toContain("[Round 0] blue dms you: Hello Ember");
 	});
 
 	it("AI reply is formatted with round tag and quotes", () => {
@@ -928,7 +925,7 @@ describe("unified <conversation> block (issue #129)", () => {
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("<conversation>");
-		expect(prompt).toContain('[Round 1] *green whispered to you: "secret"');
+		expect(prompt).toContain("[Round 1] *green dms you: secret");
 		// NOTE: under the new per-Daemon log design (ADR 0006, issue #195), the sender's
 		// conversationLog also receives the whisper entry. The original assertion
 		// `expect(greenPrompt).not.toContain("secret")` is no longer valid — it reflected
@@ -947,9 +944,9 @@ describe("unified <conversation> block (issue #129)", () => {
 	it("whisper does not appear in unrelated AI's conversation", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = appendWhisperEntry(game, "green", "red", "only for red");
-		const blueCtx = buildAiContext(game, "blue");
-		const bluePrompt = blueCtx.toSystemPrompt();
-		expect(bluePrompt).not.toContain("only for red");
+		const cyanCtx = buildAiContext(game, "cyan");
+		const cyanPrompt = cyanCtx.toSystemPrompt();
+		expect(cyanPrompt).not.toContain("only for red");
 	});
 
 	it("<conversation> block is not emitted when there are no log entries", () => {
@@ -970,10 +967,8 @@ describe("unified <conversation> block (issue #129)", () => {
 		game = appendWhisperEntry(game, "green", "red", "later");
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		const chatIdx = prompt.indexOf('[Round 0] A voice says: "earlier"');
-		const whisperIdx = prompt.indexOf(
-			'[Round 2] *green whispered to you: "later"',
-		);
+		const chatIdx = prompt.indexOf("[Round 0] blue dms you: earlier");
+		const whisperIdx = prompt.indexOf("[Round 2] *green dms you: later");
 		expect(chatIdx).toBeGreaterThanOrEqual(0);
 		expect(whisperIdx).toBeGreaterThanOrEqual(0);
 		expect(chatIdx).toBeLessThan(whisperIdx);
@@ -1038,7 +1033,7 @@ describe("<typing_quirks> block", () => {
 			TEST_PERSONAS.green?.typingQuirks[0] as string,
 		);
 		expect(redPrompt).not.toContain(
-			TEST_PERSONAS.blue?.typingQuirks[0] as string,
+			TEST_PERSONAS.cyan?.typingQuirks[0] as string,
 		);
 
 		const greenPrompt = buildAiContext(game, "green").toSystemPrompt();
@@ -1052,16 +1047,16 @@ describe("<typing_quirks> block", () => {
 			TEST_PERSONAS.red?.typingQuirks[0] as string,
 		);
 		expect(greenPrompt).not.toContain(
-			TEST_PERSONAS.blue?.typingQuirks[0] as string,
+			TEST_PERSONAS.cyan?.typingQuirks[0] as string,
 		);
 
-		const bluePrompt = buildAiContext(game, "blue").toSystemPrompt();
-		expect(bluePrompt).toContain(TEST_PERSONAS.blue?.typingQuirks[0] as string);
-		expect(bluePrompt).toContain(TEST_PERSONAS.blue?.typingQuirks[1] as string);
-		expect(bluePrompt).not.toContain(
+		const cyanPrompt = buildAiContext(game, "cyan").toSystemPrompt();
+		expect(cyanPrompt).toContain(TEST_PERSONAS.cyan?.typingQuirks[0] as string);
+		expect(cyanPrompt).toContain(TEST_PERSONAS.cyan?.typingQuirks[1] as string);
+		expect(cyanPrompt).not.toContain(
 			TEST_PERSONAS.red?.typingQuirks[0] as string,
 		);
-		expect(bluePrompt).not.toContain(
+		expect(cyanPrompt).not.toContain(
 			TEST_PERSONAS.green?.typingQuirks[0] as string,
 		);
 	});

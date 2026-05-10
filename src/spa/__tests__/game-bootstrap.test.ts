@@ -43,12 +43,12 @@ const INDEX_BODY_HTML = `
       </header>
       <div class="transcript" data-transcript="green"></div>
     </article>
-    <article class="ai-panel" data-ai="blue">
+    <article class="ai-panel" data-ai="cyan">
       <header class="panel-header">
         <span class="panel-name"></span>
         <span class="panel-budget" data-budget=""></span>
       </header>
-      <div class="transcript" data-transcript="blue"></div>
+      <div class="transcript" data-transcript="cyan"></div>
     </article>
   </div>
   <form id="composer">
@@ -150,20 +150,20 @@ describe("renderGame — session restore (formerly async bootstrap)", () => {
 		const { renderGame } = await import("../routes/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
-		// STATIC_PERSONAS uses red/green/blue as ids, Ember/Sage/Frost as names
+		// STATIC_PERSONAS uses red/green/cyan as ids, Ember/Sage/Frost as names
 		const redPanel = document.querySelector<HTMLElement>(
 			'.ai-panel[data-ai="red"]',
 		);
 		const greenPanel = document.querySelector<HTMLElement>(
 			'.ai-panel[data-ai="green"]',
 		);
-		const bluePanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="blue"]',
+		const cyanPanel = document.querySelector<HTMLElement>(
+			'.ai-panel[data-ai="cyan"]',
 		);
 
 		expect(redPanel).toBeTruthy();
 		expect(greenPanel).toBeTruthy();
-		expect(bluePanel).toBeTruthy();
+		expect(cyanPanel).toBeTruthy();
 	});
 });
 
@@ -208,8 +208,8 @@ describe("persistence — LLM-shaped blurb round-trips verbatim", () => {
 					"You are intensely meticulous. Ensure items are evenly distributed.",
 				voiceExamples: ["ex1-green", "ex2-green", "ex3-green"],
 			},
-			blue: {
-				id: "blue",
+			cyan: {
+				id: "cyan",
 				name: "Frost",
 				color: "#5fa8d3",
 				temperaments: ["laconic", "diffident"] as [string, string],
@@ -219,7 +219,7 @@ describe("persistence — LLM-shaped blurb round-trips verbatim", () => {
 					"You end almost every reply with a question, no matter what the topic is — does that make sense?",
 				] as [string, string],
 				blurb: "You are laconic and diffident. Hold the key at phase end.",
-				voiceExamples: ["ex1-blue", "ex2-blue", "ex3-blue"],
+				voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
 			},
 		};
 

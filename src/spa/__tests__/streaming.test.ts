@@ -299,7 +299,7 @@ describe("parseSSEStream — tool_call delta assembly", () => {
 								type: "function",
 								function: {
 									name: "give",
-									arguments: '{"item":"key","to":"blue"}',
+									arguments: '{"item":"key","to":"cyan"}',
 								},
 							},
 						],

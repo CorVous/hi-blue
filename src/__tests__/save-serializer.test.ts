@@ -47,8 +47,8 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		blurb: "You are intensely meticulous. Ensure items are evenly distributed.",
 		voiceExamples: ["ex1-green", "ex2-green", "ex3-green"],
 	},
-	blue: {
-		id: "blue",
+	cyan: {
+		id: "cyan",
 		name: "Frost",
 		color: "#5fa8d3",
 		temperaments: ["laconic", "diffident"],
@@ -58,7 +58,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 			"You end almost every reply with a question, no matter what the topic is — does that make sense?",
 		],
 		blurb: "You are laconic and diffident. Hold the key at phase end.",
-		voiceExamples: ["ex1-blue", "ex2-blue", "ex3-blue"],
+		voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
 	},
 };
 
@@ -93,7 +93,7 @@ describe("serializeGameSave", () => {
 		const ids = save.ais.map((a) => a.persona.id);
 		expect(ids).toContain("red");
 		expect(ids).toContain("green");
-		expect(ids).toContain("blue");
+		expect(ids).toContain("cyan");
 	});
 
 	it("includes persona fields (name, color, blurb, personaGoal)", () => {
@@ -130,7 +130,7 @@ describe("serializeGameSave", () => {
 
 	it("includes whispers in the per-phase conversationLog (via per-Daemon log)", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), PHASE1_CONFIG);
-		game = appendWhisperEntry(game, "red", "blue", "Secret plan");
+		game = appendWhisperEntry(game, "red", "cyan", "Secret plan");
 		const save = serializeGameSave(game);
 		// Whisper from red appears in red's conversationLog (sender's log also gets the entry)
 		const ember = save.ais.find((a) => a.persona.id === "red");
@@ -199,8 +199,8 @@ describe("serializeGameSave", () => {
 
 	it("whisper in green's log only if green is sender or recipient", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), PHASE1_CONFIG);
-		// Whisper between red and blue — should appear in red and blue, not green
-		game = appendWhisperEntry(game, "red", "blue", "Our secret");
+		// Whisper between red and cyan — should appear in red and cyan, not green
+		game = appendWhisperEntry(game, "red", "cyan", "Our secret");
 		const save = serializeGameSave(game);
 		const sage = save.ais.find((a) => a.persona.id === "green");
 		const greenWhispers = sage?.phases[0]?.conversationLog.filter(

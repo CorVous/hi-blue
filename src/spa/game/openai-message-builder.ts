@@ -11,7 +11,7 @@
  *      - { role: "assistant", content: null, tool_calls: [...] }
  *      - { role: "tool", tool_call_id, content } for each result
  *   4. If `addressed` is provided and is not this AI: a synthetic
- *      { role: "user", content: SILENT_VOICE_TURN } anchoring the current
+ *      { role: "user", content: buildSilentTurn(ctx) } anchoring the current
  *      round so the model does not re-respond to its prior user turn.
  *
  * Note: the system prompt already encodes world state, action log, whispers etc.
@@ -22,7 +22,25 @@ import type { AiContext } from "./prompt-builder.js";
 import type { OpenAiMessage } from "./round-llm-provider.js";
 import type { AiId, ToolRoundtripMessage } from "./types.js";
 
-export const SILENT_VOICE_TURN = "The voice is silent.";
+/**
+ * Synthetic anchor for the current round when no message arrived for this AI.
+ * Lists every potential sender (peer daemons + blue) so the model reads
+ * "nobody addressed me this round" rather than treating the prior round's
+ * user turn as fresh stimulus.
+ */
+export function buildSilentTurn(ctx: AiContext): string {
+	const otherDaemons = Object.keys(ctx.personas)
+		.filter((id) => id !== ctx.aiId)
+		.map((id) => `*${id}`);
+	const senders = [...otherDaemons, "blue"];
+	if (senders.length === 1) return `No messages from ${senders[0]}.`;
+	if (senders.length === 2) {
+		return `No messages from ${senders[0]} or ${senders[1]}.`;
+	}
+	const last = senders[senders.length - 1];
+	const rest = senders.slice(0, -1).join(", ");
+	return `No messages from ${rest}, or ${last}.`;
+}
 
 export function buildOpenAiMessages(
 	ctx: AiContext,
@@ -69,7 +87,7 @@ export function buildOpenAiMessages(
 	// last user turn is the prior round's player message, and it tends to
 	// re-respond to it as if it had just been sent again.
 	if (addressed !== undefined && addressed !== ctx.aiId) {
-		messages.push({ role: "user", content: SILENT_VOICE_TURN });
+		messages.push({ role: "user", content: buildSilentTurn(ctx) });
 	}
 
 	return messages;

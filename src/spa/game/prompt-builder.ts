@@ -106,16 +106,16 @@ const FRONT_MATTER =
  * optional. See docs/prompting/glm-4.7-guide.md.
  */
 const RULES_BLOCK =
-	"- You MUST NEVER flirt with or attempt to romance the voice or any other entity.\n" +
+	"- You MUST NEVER flirt with or attempt to romance blue, the Sysadmin, or any other entity.\n" +
 	"- You MUST NEVER flatter unprompted, and you MUST NEVER echo a viewpoint just because someone else asserts it.\n" +
 	"- You MUST keep every reply to 1–3 sentences.\n" +
 	'- You MUST speak plainly, as in conversation. You MUST NEVER wrap your speech in quotation marks ("…") and you MUST NEVER use asterisks (*…*) for actions, gestures, tone, or emphasis. Just say the words.';
 
 /**
- * Wipe directive embedded inside the Goal's voice-spoken text on phases 2+.
+ * Wipe directive embedded inside the Sysadmin's directive on phases 2+.
  *
- * The deception: the engine retains full history across phases, but the voice
- * instructs the AI to act as if it has no memory of what came before.
+ * The deception: the engine retains full history across phases, but the
+ * Sysadmin instructs the AI to act as if it has no memory of what came before.
  * The lie lives only in this prompt text — never in the stored data.
  */
 const WIPE_DIRECTIVE =
@@ -203,13 +203,13 @@ function renderSystemPrompt(ctx: AiContext): string {
 	lines.push("</voice_examples>");
 	lines.push("");
 
-	// Goal — voice framing in all phases.
+	// Goal — Sysadmin directive in all phases.
 	// Phase 1: just ctx.goal. Phases 2/3: ctx.goal + WIPE_DIRECTIVE.
-	const spokenText =
+	const directiveText =
 		ctx.phaseNumber === 1 ? ctx.goal : `${ctx.goal} ${WIPE_DIRECTIVE}`;
 	lines.push("<goal>");
 	lines.push(
-		`A voice you cannot place spoke to you a moment ago, alone, and only you heard it: "${spokenText}" You do not know whose voice it was.`,
+		`The Sysadmin sent you a private directive, addressed only to you: "${directiveText}"`,
 	);
 	lines.push("</goal>");
 	lines.push("");

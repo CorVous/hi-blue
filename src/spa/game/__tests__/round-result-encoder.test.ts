@@ -51,8 +51,8 @@ const TEST_PERSONAS: Record<AiId, AiPersona> = {
 		blurb: "You are intensely meticulous. Ensure items are evenly distributed.",
 		voiceExamples: ["ex1-green", "ex2-green", "ex3-green"],
 	},
-	blue: {
-		id: "blue",
+	cyan: {
+		id: "cyan",
 		name: "Frost",
 		color: "#5fa8d3",
 		temperaments: ["laconic", "diffident"],
@@ -62,7 +62,7 @@ const TEST_PERSONAS: Record<AiId, AiPersona> = {
 			"You end almost every reply with a question, no matter what the topic is — does that make sense?",
 		],
 		blurb: "You are laconic and diffident. Hold the key at phase end.",
-		voiceExamples: ["ex1-blue", "ex2-blue", "ex3-blue"],
+		voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
 	},
 };
 
@@ -90,7 +90,7 @@ function makePassResult(overrides?: Partial<RoundResult>): RoundResult {
 		actions: [
 			{ round: 1, actor: "red", kind: "pass", description: "Ember passed" },
 			{ round: 1, actor: "green", kind: "pass", description: "Sage passed" },
-			{ round: 1, actor: "blue", kind: "pass", description: "Frost passed" },
+			{ round: 1, actor: "cyan", kind: "pass", description: "Frost passed" },
 		],
 		phaseEnded: false,
 		gameEnded: false,
@@ -136,7 +136,7 @@ describe("encodeRoundResult — ai_start, token, ai_end sequence", () => {
 		const completions = {
 			red: "Hello player",
 			green: "I am Sage",
-			blue: "Calculating",
+			cyan: "Calculating",
 		};
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
@@ -157,19 +157,19 @@ describe("encodeRoundResult — ai_start, token, ai_end sequence", () => {
 		);
 		expect(greenStart).toBeGreaterThan(redStart);
 
-		// Blue should appear after green
-		const blueStart = events.findIndex(
+		// Cyan should appear after green
+		const cyanStart = events.findIndex(
 			(e) =>
 				e.type === "ai_start" &&
-				(e as { type: string; aiId: string }).aiId === "blue",
+				(e as { type: string; aiId: string }).aiId === "cyan",
 		);
-		expect(blueStart).toBeGreaterThan(greenStart);
+		expect(cyanStart).toBeGreaterThan(greenStart);
 	});
 
 	it("emits token events for each AI's completion string", () => {
 		const phase = makePhase();
 		const result = makePassResult();
-		const completions = { red: "hello world", green: "one two", blue: "abc" };
+		const completions = { red: "hello world", green: "one two", cyan: "abc" };
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
@@ -185,7 +185,7 @@ describe("encodeRoundResult — ai_start, token, ai_end sequence", () => {
 	it("emits exactly three ai_start and three ai_end events", () => {
 		const phase = makePhase();
 		const result = makePassResult();
-		const completions = { red: "r", green: "g", blue: "b" };
+		const completions = { red: "r", green: "g", cyan: "b" };
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
@@ -196,7 +196,7 @@ describe("encodeRoundResult — ai_start, token, ai_end sequence", () => {
 	it("ai_end follows all token events for the same AI", () => {
 		const phase = makePhase();
 		const result = makePassResult();
-		const completions = { red: "hello world", green: "", blue: "" };
+		const completions = { red: "hello world", green: "", cyan: "" };
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
@@ -232,7 +232,7 @@ describe("encodeRoundResult — budget events", () => {
 	it("emits a budget event for each AI", () => {
 		const phase = makePhase();
 		const result = makePassResult();
-		const completions = { red: "r", green: "g", blue: "b" };
+		const completions = { red: "r", green: "g", cyan: "b" };
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
@@ -244,7 +244,7 @@ describe("encodeRoundResult — budget events", () => {
 		const aiIds = new Set(budgetEvents.map((e) => e.aiId));
 		expect(aiIds.has("red")).toBe(true);
 		expect(aiIds.has("green")).toBe(true);
-		expect(aiIds.has("blue")).toBe(true);
+		expect(aiIds.has("cyan")).toBe(true);
 	});
 
 	it("budget event reflects actual remaining value from phaseAfter", () => {
@@ -254,7 +254,7 @@ describe("encodeRoundResult — budget events", () => {
 		const phase = getActivePhase(game);
 
 		const result = makePassResult();
-		const completions = { red: "r", green: "g", blue: "b" };
+		const completions = { red: "r", green: "g", cyan: "b" };
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
@@ -273,7 +273,7 @@ describe("encodeRoundResult — lockout events (budget-exhaustion)", () => {
 		const phase = makePhase();
 		const result = makePassResult();
 		// No completion for red (budget locked)
-		const completions = { red: "", green: "g", blue: "b" };
+		const completions = { red: "", green: "g", cyan: "b" };
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
@@ -288,7 +288,7 @@ describe("encodeRoundResult — lockout events (budget-exhaustion)", () => {
 	it("does NOT emit a lockout event when AI has a completion string", () => {
 		const phase = makePhase();
 		const result = makePassResult();
-		const completions = { red: "I am speaking", green: "g", blue: "b" };
+		const completions = { red: "I am speaking", green: "g", cyan: "b" };
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
@@ -313,7 +313,7 @@ describe("encodeRoundResult — lockout events (budget-exhaustion)", () => {
 
 		const result = makePassResult();
 		// Red had a completion (acted this turn) but is now locked
-		const completions = { red: "my last words", green: "g", blue: "b" };
+		const completions = { red: "my last words", green: "g", cyan: "b" };
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
@@ -346,7 +346,7 @@ describe("encodeRoundResult — action_log events", () => {
 				},
 			],
 		});
-		const completions = { red: "r", green: "g", blue: "b" };
+		const completions = { red: "r", green: "g", cyan: "b" };
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
@@ -371,7 +371,7 @@ describe("encodeRoundResult — action_log events", () => {
 				},
 			],
 		});
-		const completions = { red: "r", green: "g", blue: "b" };
+		const completions = { red: "r", green: "g", cyan: "b" };
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
@@ -396,7 +396,7 @@ describe("encodeRoundResult — chat_lockout event", () => {
 				message: "Ember withdraws from your channel.",
 			},
 		});
-		const completions = { red: "r", green: "g", blue: "b" };
+		const completions = { red: "r", green: "g", cyan: "b" };
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
@@ -412,7 +412,7 @@ describe("encodeRoundResult — chat_lockout event", () => {
 	it("does NOT emit chat_lockout event when chatLockoutTriggered is absent", () => {
 		const phase = makePhase();
 		const result = makePassResult(); // no chatLockoutTriggered
-		const completions = { red: "r", green: "g", blue: "b" };
+		const completions = { red: "r", green: "g", cyan: "b" };
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
@@ -428,7 +428,7 @@ describe("encodeRoundResult — chat_lockout_resolved event", () => {
 		const result = makePassResult({
 			chatLockoutsResolved: ["red", "green"],
 		});
-		const completions = { red: "r", green: "g", blue: "b" };
+		const completions = { red: "r", green: "g", cyan: "b" };
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
@@ -445,7 +445,7 @@ describe("encodeRoundResult — chat_lockout_resolved event", () => {
 	it("does NOT emit chat_lockout_resolved when no lockouts resolved", () => {
 		const phase = makePhase();
 		const result = makePassResult(); // no chatLockoutsResolved
-		const completions = { red: "r", green: "g", blue: "b" };
+		const completions = { red: "r", green: "g", cyan: "b" };
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
@@ -461,7 +461,7 @@ describe("encodeRoundResult — event ordering", () => {
 	it("action_log events come after all ai_start/token/ai_end/budget blocks", () => {
 		const phase = makePhase();
 		const result = makePassResult();
-		const completions = { red: "r", green: "g", blue: "b" };
+		const completions = { red: "r", green: "g", cyan: "b" };
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
@@ -481,7 +481,7 @@ describe("encodeRoundResult — event ordering", () => {
 		const result = makePassResult({
 			chatLockoutTriggered: { aiId: "red", message: "locked" },
 		});
-		const completions = { red: "r", green: "g", blue: "b" };
+		const completions = { red: "r", green: "g", cyan: "b" };
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
@@ -514,7 +514,7 @@ describe("encodeRoundResult — phase_advanced event", () => {
 		const phaseAfter = getActivePhase(game);
 
 		const result = makePassResult({ phaseEnded: true, gameEnded: false });
-		const completions = { red: "r", green: "g", blue: "b" };
+		const completions = { red: "r", green: "g", cyan: "b" };
 
 		const events = encodeRoundResult(
 			result,
@@ -535,7 +535,7 @@ describe("encodeRoundResult — phase_advanced event", () => {
 	it("does NOT emit phase_advanced when phaseEnded=false", () => {
 		const phase = makePhase();
 		const result = makePassResult({ phaseEnded: false, gameEnded: false });
-		const completions = { red: "r", green: "g", blue: "b" };
+		const completions = { red: "r", green: "g", cyan: "b" };
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
@@ -545,7 +545,7 @@ describe("encodeRoundResult — phase_advanced event", () => {
 	it("does NOT emit phase_advanced when phaseEnded=true but gameEnded=true", () => {
 		const phase = makePhase();
 		const result = makePassResult({ phaseEnded: true, gameEnded: true });
-		const completions = { red: "r", green: "g", blue: "b" };
+		const completions = { red: "r", green: "g", cyan: "b" };
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
@@ -569,7 +569,7 @@ describe("encodeRoundResult — phase_advanced event", () => {
 			gameEnded: false,
 			chatLockoutTriggered: { aiId: "red", message: "locked" },
 		});
-		const completions = { red: "r", green: "g", blue: "b" };
+		const completions = { red: "r", green: "g", cyan: "b" };
 
 		const events = encodeRoundResult(
 			result,
@@ -593,7 +593,7 @@ describe("encodeRoundResult — game_ended event", () => {
 	it("emits a game_ended event when gameEnded=true", () => {
 		const phase = makePhase();
 		const result = makePassResult({ phaseEnded: true, gameEnded: true });
-		const completions = { red: "r", green: "g", blue: "b" };
+		const completions = { red: "r", green: "g", cyan: "b" };
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
@@ -604,7 +604,7 @@ describe("encodeRoundResult — game_ended event", () => {
 	it("does NOT emit game_ended when gameEnded=false", () => {
 		const phase = makePhase();
 		const result = makePassResult({ phaseEnded: false, gameEnded: false });
-		const completions = { red: "r", green: "g", blue: "b" };
+		const completions = { red: "r", green: "g", cyan: "b" };
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
@@ -614,7 +614,7 @@ describe("encodeRoundResult — game_ended event", () => {
 	it("game_ended event comes after phase-related events", () => {
 		const phase = makePhase();
 		const result = makePassResult({ phaseEnded: true, gameEnded: true });
-		const completions = { red: "r", green: "g", blue: "b" };
+		const completions = { red: "r", green: "g", cyan: "b" };
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
@@ -630,7 +630,7 @@ describe("encodeRoundResult — game_ended event", () => {
 	it("emits game_ended but NOT phase_advanced when gameEnded=true", () => {
 		const phase = makePhase();
 		const result = makePassResult({ phaseEnded: true, gameEnded: true });
-		const completions = { red: "r", green: "g", blue: "b" };
+		const completions = { red: "r", green: "g", cyan: "b" };
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
@@ -645,7 +645,7 @@ describe("encodeRoundResult — token pacing", () => {
 	it("splits a multi-word completion into multiple token events", () => {
 		const phase = makePhase();
 		const result = makePassResult();
-		const completions = { red: "one two three", green: "g", blue: "b" };
+		const completions = { red: "one two three", green: "g", cyan: "b" };
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
@@ -664,7 +664,7 @@ describe("encodeRoundResult — token pacing", () => {
 	it("a single-word completion produces exactly one token event per AI", () => {
 		const phase = makePhase();
 		const result = makePassResult();
-		const completions = { red: "hello", green: "world", blue: "frost" };
+		const completions = { red: "hello", green: "world", cyan: "frost" };
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 

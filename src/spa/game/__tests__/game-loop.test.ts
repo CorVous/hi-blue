@@ -9,7 +9,7 @@ vi.stubGlobal("localStorage", { getItem: () => null });
 const WORKER_COMPLETIONS_URL = "http://localhost:8787/v1/chat/completions";
 
 const TEST_PERSONA: AiPersona = {
-	id: "blue",
+	id: "cyan",
 	name: "Frost",
 	color: "#5fa8d3",
 	temperaments: ["laconic", "diffident"],
@@ -19,7 +19,7 @@ const TEST_PERSONA: AiPersona = {
 		"You end almost every reply with a question, no matter what the topic is — does that make sense?",
 	],
 	blurb: "You are laconic and diffident. Hold the key at phase end.",
-	voiceExamples: ["ex1-blue", "ex2-blue", "ex3-blue"],
+	voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
 };
 
 function makeSSEStream(chunks: string[]): ReadableStream<Uint8Array> {
@@ -53,7 +53,7 @@ function makeSseChunk(content: string): string {
 describe("createSingleAiSession", () => {
 	it("creates a session with empty history", () => {
 		const session = createSingleAiSession(TEST_PERSONA);
-		expect(session.aiId).toBe("blue");
+		expect(session.aiId).toBe("cyan");
 		expect(session.persona).toBe(TEST_PERSONA);
 		expect(session.history).toEqual([]);
 	});
