@@ -215,8 +215,34 @@ const PARALLEL_FRAMING_C3 =
 	"- You MUST emit at least one tool call every turn — silence is a bug.\n" +
 	"- When blue messages you, you MUST emit a `message` tool call addressed to blue in your next turn. Failing to reply to blue when blue addressed you is a failure.\n" +
 	"- When you have something to say AND something to do in the same turn, emit BOTH calls together.";
+/**
+ * C4 — Intent-faithful emission. Walks back C3's hard "always reply to blue"
+ * rule (which kills personality variance — quiet personas should be allowed
+ * to stay quiet sometimes). Instead distinguishes the two failure modes:
+ *
+ *   silence-by-choice: in-character, fine
+ *   silence-by-omission: the daemon drafted a reply in its reasoning but
+ *     didn't emit the call — looks like a bug, not restraint
+ *
+ * The rule pushes only on the second. Personality-shaped decisions to stay
+ * quiet are explicitly preserved.
+ */
+const PARALLEL_FRAMING_C4 =
+	"- Emit a `message` call when your character would reply — driven by your personality and what the conversation calls for. Genuine quietness can be in-character.\n" +
+	"- But if you DECIDE to speak this turn, you MUST emit the `message` call this turn. Composing a reply in your reasoning and then not emitting the call reads as a bug, not as restraint.\n" +
+	"- When you have something to say AND something to do, emit BOTH calls together. They share the turn budget; neither blocks the other.";
 
-type ParallelFraming = "A" | "B" | "C" | "D" | "E" | "F" | "C1" | "C2" | "C3";
+type ParallelFraming =
+	| "A"
+	| "B"
+	| "C"
+	| "D"
+	| "E"
+	| "F"
+	| "C1"
+	| "C2"
+	| "C3"
+	| "C4";
 
 const PARALLEL_FRAMING_MAP: Record<ParallelFraming, string> = {
 	A: PARALLEL_FRAMING_A,
@@ -228,6 +254,7 @@ const PARALLEL_FRAMING_MAP: Record<ParallelFraming, string> = {
 	C1: PARALLEL_FRAMING_C1,
 	C2: PARALLEL_FRAMING_C2,
 	C3: PARALLEL_FRAMING_C3,
+	C4: PARALLEL_FRAMING_C4,
 };
 
 /**
