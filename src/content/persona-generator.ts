@@ -1,5 +1,10 @@
 import type { LlmSynthesisProvider } from "../spa/game/llm-synthesis-provider.js";
 import { COLOR_PALETTE } from "./color-palette.js";
+import {
+	biasSum,
+	bucketFor,
+	engagementClauseFor,
+} from "./engagement-clauses.js";
 import { PERSONA_GOAL_POOL } from "./persona-goal-pool.js";
 import { TEMPERAMENT_POOL } from "./temperament-pool.js";
 import { TYPING_QUIRK_POOL } from "./typing-quirk-pool.js";
@@ -74,9 +79,16 @@ function drawWithReplacement<T>(pool: T[], rng: () => number): T {
 	return pool[Math.floor(rng() * pool.length)]!;
 }
 
+/**
+ * Spike #239 step 8: when `engagementClauses` is true, append a per-persona
+ * engagement clause derived from the persona's temperament pair to the
+ * synthesized blurb. Off by default; production behaviour byte-identical
+ * when the flag is unset. See `engagement-clauses.ts` for the rationale.
+ */
 export async function generatePersonas(
 	rng: () => number = Math.random,
 	llm?: LlmSynthesisProvider,
+	opts?: { engagementClauses?: boolean },
 ): Promise<Record<string, import("../spa/game/types.js").AiPersona>> {
 	const takenNames = new Set<string>();
 	const names: string[] = [];
@@ -147,9 +159,23 @@ export async function generatePersonas(
 		const name = tuple.id;
 		const color = colors[i] as string;
 		const synthesized = synthesisMap.get(name);
-		const blurb =
+		let blurb =
 			synthesized?.blurb ??
 			buildBlurb(tuple.id, tuple.temperaments, tuple.personaGoal);
+		if (opts?.engagementClauses) {
+			const [t1, t2] = tuple.temperaments;
+			const clause = engagementClauseFor(name, t1, t2);
+			blurb = `${blurb} ${clause}`;
+			// Spike #239 step 8: emit a per-persona breadcrumb so the playtest
+			// analyzer can correlate per-daemon transcripts to engagement bias.
+			// Goes through the same console.log channel as `[spike-239]`/`[cache]`
+			// so the daemon harness picks it up. Devtools-only signal.
+			if (typeof console !== "undefined" && console.log) {
+				console.log(
+					`[engagement] *${name} temperaments=[${t1},${t2}] sum=${biasSum(t1, t2)} bucket=${bucketFor(t1, t2)}`,
+				);
+			}
+		}
 		const voiceExamples =
 			synthesized?.voiceExamples ?? buildFallbackVoiceExamples(tuple);
 		personas[name] = {

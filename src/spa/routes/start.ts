@@ -458,6 +458,13 @@ export function renderStart(
 		setSpikeSeed(seedNum | 0);
 	}
 
+	// Spike #239 step 8: `?engagementClauses=1` opts into per-persona engagement
+	// clauses appended to each daemon's blurb at synthesis time. Off by default;
+	// any value other than the literal "1" is treated as off.
+	const engagementClausesRaw =
+		params?.get("engagementClauses") ?? searchParams.get("engagementClauses");
+	const engagementClauses = engagementClausesRaw === "1";
+
 	// Kick off (or reuse) the in-flight bootstrap. If the user backed out to
 	// the start screen after a previous render, startBootstrap returns the
 	// existing entry rather than starting a fresh generation.
@@ -466,9 +473,12 @@ export function renderStart(
 	const contentPackRng = getSpikeRng("contentPack");
 	const spikeOpts =
 		personasRng && contentPackRng ? { personasRng, contentPackRng } : undefined;
+	const engagementOpts = engagementClauses
+		? { engagementClauses: true }
+		: undefined;
 	const mergedOpts =
-		_testOverrides || spikeOpts
-			? { ..._testOverrides, ...spikeOpts }
+		_testOverrides || spikeOpts || engagementOpts
+			? { ..._testOverrides, ...spikeOpts, ...engagementOpts }
 			: undefined;
 	const bootstrap = existing ?? startBootstrap(mergedOpts);
 	_testOverrides = undefined;
