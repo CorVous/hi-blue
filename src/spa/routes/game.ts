@@ -290,7 +290,7 @@ export function renderGame(
 	// Prompt-target indicator inside the BBS-style command-line prefix.
 	const promptTargetEl = doc.querySelector<HTMLElement>(".prompt-target");
 
-	/** Update the `/*<handle>` indicator beside `guest@hi-blue.bbs:` from the
+	/** Update the `/*<handle>` indicator beside `root@hi-blue:` from the
 	 * current addressee. `null` resets to dim `/?????`. */
 	function refreshPromptTarget(addressee: AiId | null): void {
 		if (!promptTargetEl) return;
