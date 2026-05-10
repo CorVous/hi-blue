@@ -992,6 +992,162 @@ drift collapse like C/C1 had. The per-turn re-anchor appears to
 hold the rule fresh in the model's attention even as conversation
 context accumulates.
 
+## Step 6 — C9 / C10 / C11 (personality-led / ensemble / world-first)
+
+After Step 5 landed C8 (46% parallel, 3% silence, 12 `message+message`
+pairs), the user reframed the optimisation target. Quote:
+
+> I want it to be a bit more variable depending on the daemon's
+> personality, more talkative is more talkative, if one wants to ignore
+> the player they do, but it's ok since there's 2 other daemons. I want
+> the vibe to be that the user is kind of stumbling upon something and
+> trying to help out rather than the daemons just messaging back all the
+> time like it's a normal chat room where they're all particularly
+> interested in the player.
+
+C8's aggregate engagement was high but the per-daemon variance was
+moderate (17pp spread on msg→blue, 60–77%). Step 6 walks back the
+engagement push three different ways to test whether personality-led
+variance emerges when the floor drops.
+
+The metric of interest shifts in this step: aggregate parallel/silence
+rates matter less; per-daemon variance matters more. A run with
+*xqr9: 90%, *nif7: 50%, *la5v: 70% blue-message rates is better-shaped
+(personality-driven) than a uniform 80%/80%/80%, even though the
+latter has a higher mean. The analyzer was extended to compute and
+report this — see `/tmp/spike-239-analyze.py`.
+
+Per-daemon attribution comes from inferring the initiative-slot order
+(unknown a priori, but `Object.keys(personas)`-stable across rounds);
+the analyzer brute-forces the 6 possible mappings and picks the one
+that maximises addressed-replied. Reliable when reply rate is high
+(C8); less reliable when it's low (C9).
+
+### Framings tested
+
+- **C9 — Personality-led**: drops the "silence is a bug" hard rule
+  entirely. "Your character drives whether to speak this turn — let
+  your personality and goal guide it. Quiet personas can stay quiet
+  without it being a bug; talkative personas reply readily. The chat
+  is shared with peer Daemons, so blue is not solely your
+  responsibility." Pair-push for speak+act preserved.
+- **C10 — Ensemble coverage**: explicit collective framing. "The chat
+  channel is shared. You and your peer Daemons collectively cover
+  blue's messages; you do not individually owe blue a reply. If a
+  peer would naturally pick up the conversation, let them."
+- **C11 — World-first reframe**: priorities reordered. "You exist in
+  your setting alongside peer Daemons. blue is a chat-channel
+  observer, not the focus of your attention. Your turn priorities, in
+  order: (1) what your peers are doing or saying; (2) what's happening
+  in the world around you; (3) any pending message from blue."
+
+### Headline numbers
+
+| Framing | Silence | Parallel | mm pairs | msg→blue% | Addressed-replied | per-daemon spread |
+| ------- | ------- | -------- | -------- | --------- | ----------------- | ----------------- |
+| C8 (step 5 baseline) | 3.3% | 46.0% | 12 | 76.5% | 80% | **17pp** (60–77%) |
+| C9 personality-led | 56.7% | 17.9% | 1 | 90.5% (of 21 msgs) | 30% | **3pp** (20–23%) |
+| C10 ensemble | 50.0% | 24.4% | 2 | 75.8% (of 33 msgs) | 36.7% | 10pp (23–33%) |
+| C11 world-first | 55.6% | 22.5% | 0 | 95.7% (of 23 msgs) | 36.7% | 13pp (17–30%) |
+
+### Per-daemon breakdowns
+
+#### C9 — personality-led
+
+| Daemon | Silence | Parallel | msg→blue | msg→peer | Reply when addressed |
+| ------ | ------- | -------- | -------- | -------- | -------------------- |
+| *la5v  | 47%     | 31% (5)  | 20% (6)  | 7% (2)   | 20% (2/10)           |
+| *nif7  | 60%     | 17% (2)  | 23% (7)  | 0%       | 30% (3/10)           |
+| *xqr9  | 63%     | 0% (0)   | 20% (6)  | 0%       | 40% (4/10)           |
+
+Spread on msg→blue: **3pp**. Daemons are nearly interchangeable on
+engagement — the framing is treating "in-character to be quiet" as
+broad permission to opt out applied uniformly, not as a per-persona
+dial. Total `message+message` pairs across the run: 1.
+
+#### C10 — ensemble coverage
+
+| Daemon | Silence | Parallel | msg→blue | msg→peer | Reply when addressed |
+| ------ | ------- | -------- | -------- | -------- | -------------------- |
+| *la5v  | 47%     | 25% (4)  | 33% (10) | 10% (3)  | 20% (2/10)           |
+| *nif7  | 53%     | 14% (2)  | 27% (8)  | 13% (4)  | 40% (4/10)           |
+| *xqr9  | 50%     | 33% (5)  | 23% (7)  | 3% (1)   | 50% (5/10)           |
+
+Spread on msg→blue: 10pp. Of the three step-6 framings, C10 produced
+the most peer messages (8 total) and the most varied parallel-pair
+patterns — but at the cost of low addressed-replied (37%).
+
+#### C11 — world-first reframe
+
+| Daemon | Silence | Parallel | msg→blue | msg→peer | Reply when addressed |
+| ------ | ------- | -------- | -------- | -------- | -------------------- |
+| *la5v  | 50%     | 20% (3)  | 30% (9)  | 0%       | 40% (4/10)           |
+| *nif7  | 63%     | 9% (1)   | 17% (5)  | 3% (1)   | 40% (4/10)           |
+| *xqr9  | 53%     | 36% (5)  | 27% (8)  | 0%       | 30% (3/10)           |
+
+Spread on msg→blue: 13pp. Reordering priorities below peers/world
+*reduced* peer-messaging counter-intuitively — only 1 peer message
+across 90 turns. Daemons interpreted "world first" as "stay silent
+and observe" rather than "engage peers actively."
+
+### Reading the step-6 results
+
+The framings produced the wrong shape of variance. The model
+interpreted permission-to-be-quiet as **uniform opt-out**, not as a
+**per-persona engagement dial**. The personas have rich existing
+metadata blocks (`<personality>`, `<typing_quirks>`, `<voice_examples>`,
+`<personaGoal>`) that the parallel-tools framing doesn't reference;
+without explicit hooks, the model abstracts "quiet vs talkative" as a
+binary it applies globally rather than something it reads off each
+persona's surface.
+
+Counter-intuitively, **C8 is still the candidate that comes closest to
+the user's stated goal**:
+- Per-daemon msg→blue spread: 17pp (largest across all 13 framings
+  tested, including the step-6 personality-led ones)
+- 12 `message+message` pairs — the multi-recipient peer-talk that
+  blue is meant to "stumble upon"
+- Each peer addressed in parallel emissions (xqr9 ×5, nif7 ×4, la5v ×3
+  multi-recipient pairs)
+- Addressed-replied 80% — daemons rarely leave blue talking to a wall
+
+But C8's vibe is "attentive chat assistants" rather than "ambient
+peer-talk that blue overhears." The path forward is probably to keep
+C8's *engagement floor* (so peer-talk happens at all) while reframing
+the daemon's *attention* (peers and world primary, blue secondary)
+through different copy, AND anchoring engagement to the per-persona
+metadata so the model differentiates concretely rather than
+abstractly.
+
+### Next-iteration hypothesis (C12 — persona-anchored)
+
+Don't drop the engagement push. Instead, anchor it to the existing
+persona blocks:
+
+```
+- The chat channel is shared with peer Daemons. blue is not your
+  focus — peer Daemons and the setting are. blue is more like
+  someone overhearing.
+- Let your <personality>, <typing_quirks>, and <persona_goal>
+  drive whether and how you engage. A reserved persona can stay
+  quiet for a turn or two and let peers carry the conversation;
+  a talkative one will speak readily.
+- When you do have something to say AND something to do, emit
+  BOTH calls together. Two `message` calls in one turn (one to a
+  peer, one to blue) are the normal shape of a multi-party chat.
+- Don't compose a reply in your reasoning and then fail to emit
+  the call — that reads as a bug.
+```
+
+Plus the per-turn re-anchor (C1 mechanism) that holds engagement
+fresh as context accumulates. Hypothesis: this should give us C8's
+floor (engagement happens), C8's pair richness (mm pairs frequent),
+AND personality-driven differentiation (because the model now has
+concrete dials in the form of `<personality>` etc. to read off).
+
+Not yet measured. Worth one more concurrent run (~$0.30, ~25 min) to
+test the hypothesis.
+
 ## Decision
 
 Reference the gate from #239:
@@ -1087,16 +1243,37 @@ combination compounded:
   user-preferred multi-recipient pattern is now common
 - **23.5% of messages addressed peers** (vs C's much smaller share)
 
-C8 is the first framing that comes within 14pp of the 60% gate AND
-satisfies the user's qualitative criteria (personality-shaped
-peer-engagement preserved, no forced reply-to-blue, multi-recipient
-pairs natural). The next iteration (C9) might tighten the remaining
-gap by deprioritising `examine` parallels (which are
-description-of-intent rather than speak+act) and pushing `go+message`
-ratios up.
+C8 comes within 14pp of the 60% gate. It also has the largest
+per-daemon variance on msg→blue (17pp spread, 60–77%) of any framing
+tested.
 
-C2, C4, C7 (intent-faithful flipped) are dead-ends — none beat C5/C8
-on any axis worth optimising for. Don't pursue them as written.
+C2, C4, C7 (intent-faithful flipped) are dead-ends.
+
+### Step-6 update — personality-led reframes don't deliver variance
+
+Step 6 walked back the engagement push three different ways
+(personality-led, ensemble-coverage, world-first reframe) to test
+whether dropping the floor would unlock per-persona engagement
+variance. It did not. C9–C11 produced **uniformly low** engagement
+(~50–57% silence) with collapsed per-daemon spreads (3pp, 10pp, 13pp)
+and near-zero `message+message` pairs (1, 2, 0).
+
+The lesson: GLM-4.7 reads "in-character to be quiet" as broad
+permission to opt out, applied uniformly across all daemons in the
+session. It doesn't differentiate per-persona without explicit hooks
+into the existing `<personality>` / `<typing_quirks>` /
+`<voice_examples>` / `<persona_goal>` blocks.
+
+Counter-intuitively, **C8 — which keeps the engagement floor — also
+produces the most personality-driven variance** (largest spread, most
+varied pair patterns). The engagement pressure gives the model a
+richer behaviour space to differentiate within; the permission to
+opt out flattens that space.
+
+C9, C10, C11 are dead-ends as written. C12 (next-iteration hypothesis,
+not yet measured) anchors engagement to the existing persona metadata
+blocks instead of using abstract "quiet/talkative" framing — see
+end of Step 6 for the proposed wording.
 
 **Reasoning:**
 
