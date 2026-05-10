@@ -405,12 +405,12 @@ describe("wipe directive", () => {
 });
 
 describe("voice framing", () => {
-	it("renders 'A voice says:' prefix for player turns in conversation, not 'Player:'", () => {
+	it("renders 'blue said:' prefix for player turns in conversation, not 'Player:'", () => {
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = appendChat(game, "red", { role: "player", content: "Hello Ember" });
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("A voice says:");
+		expect(prompt).toContain("blue said:");
 		expect(prompt).not.toContain("Player:");
 	});
 
@@ -892,7 +892,7 @@ describe("unified <conversation> block (issue #129)", () => {
 		game = appendChat(game, "red", { role: "player", content: "Hello Ember" });
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain('[Round 0] A voice says: "Hello Ember"');
+		expect(prompt).toContain('[Round 0] blue said: "Hello Ember"');
 	});
 
 	it("AI reply is formatted with round tag and quotes", () => {
@@ -953,7 +953,7 @@ describe("unified <conversation> block (issue #129)", () => {
 		game = appendWhisperEntry(game, "green", "red", "later");
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		const chatIdx = prompt.indexOf('[Round 0] A voice says: "earlier"');
+		const chatIdx = prompt.indexOf('[Round 0] blue said: "earlier"');
 		const whisperIdx = prompt.indexOf(
 			'[Round 2] *green whispered to you: "later"',
 		);

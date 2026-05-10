@@ -51,7 +51,7 @@ function renderEntry(
 	switch (entry.kind) {
 		case "chat":
 			if (entry.role === "player") {
-				return `[Round ${round}] A voice says: "${entry.content}"`;
+				return `[Round ${round}] blue said: "${entry.content}"`;
 			}
 			return `[Round ${round}] You: "${entry.content}"`;
 

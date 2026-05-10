@@ -103,7 +103,7 @@ describe("buildConversationLog — voice-chat", () => {
 			],
 		};
 		const result = buildConversationLog(input, "red", TEST_PERSONAS);
-		expect(result).toEqual(['[Round 0] A voice says: "Hi"']);
+		expect(result).toEqual(['[Round 0] blue said: "Hi"']);
 	});
 
 	it("renders AI reply with round tag and quotes", () => {
@@ -139,7 +139,7 @@ describe("buildConversationLog — voice-chat", () => {
 		};
 		const result = buildConversationLog(input, "red", TEST_PERSONAS);
 		expect(result).toHaveLength(2);
-		expect(result[0]).toContain("A voice says");
+		expect(result[0]).toContain("blue said");
 		expect(result[1]).toContain("You:");
 	});
 });
@@ -430,7 +430,7 @@ describe("buildConversationLog — chronological ordering", () => {
 		const result = buildConversationLog(input, "red", TEST_PERSONAS);
 		expect(result).toHaveLength(3);
 		// Insertion order preserved within same round
-		expect(result[0]).toContain("A voice says");
+		expect(result[0]).toContain("blue said");
 		expect(result[1]).toContain("whispered to you");
 		expect(result[2]).toContain("You watch");
 	});
