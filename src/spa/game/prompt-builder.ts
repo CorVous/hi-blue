@@ -51,6 +51,12 @@ export interface AiContext {
 	 */
 	prevConeSnapshot?: string;
 	/**
+	 * Broadcast entry contents for the current round — world announcements
+	 * (e.g. weather change) that fired after the previous turn's LLM calls.
+	 * Rendered as `[announcement] …` lines inside `<whats_new>`.
+	 */
+	pendingBroadcasts: string[];
+	/**
 	 * Render the stable persona/phase prompt — front matter, identity, rules,
 	 * setting, personality, voice examples, goal. Byte-identical across rounds
 	 * within a (persona × phase), which lets OpenRouter's prefix cache reuse it.
@@ -83,6 +89,9 @@ export function buildAiContext(
 	const persona = game.personas[aiId];
 
 	const conversationLog = phase.conversationLogs[aiId] ?? [];
+	const pendingBroadcasts = conversationLog
+		.filter((e) => e.kind === "broadcast" && e.round === phase.round)
+		.map((e) => (e as Extract<typeof e, { kind: "broadcast" }>).content);
 	const worldSnapshot = phase.world;
 	const budget = phase.budgets[aiId] ?? { remaining: 0, total: 0 };
 	const goal = phase.aiGoals[aiId] ?? "";
@@ -116,6 +125,7 @@ export function buildAiContext(
 		personaSpatial,
 		personaColors,
 		landmarks,
+		pendingBroadcasts,
 		...(opts?.prevConeSnapshot !== undefined
 			? { prevConeSnapshot: opts.prevConeSnapshot }
 			: {}),
@@ -528,7 +538,6 @@ function renderSystemPrompt(ctx: AiContext): string {
 		lines.push("<setting>");
 		lines.push(`*${ctx.name} is in a ${ctx.setting}.`);
 		if (ctx.timeOfDay) lines.push(`It is ${ctx.timeOfDay}.`);
-		if (ctx.weather) lines.push(ctx.weather);
 		lines.push("</setting>");
 		lines.push("");
 	}
@@ -766,11 +775,16 @@ function parseYouLine(line: string): {
 function renderCurrentState(ctx: AiContext): string {
 	const lines: string[] = [];
 
-	if (ctx.prevConeSnapshot !== undefined) {
-		const current = buildConeSnapshot(ctx);
-		const diff = renderWhatsNew(ctx.prevConeSnapshot, current);
+	if (ctx.prevConeSnapshot !== undefined || ctx.pendingBroadcasts.length > 0) {
 		lines.push("<whats_new>");
-		lines.push(diff ?? "(no change)");
+		if (ctx.prevConeSnapshot !== undefined) {
+			const current = buildConeSnapshot(ctx);
+			const diff = renderWhatsNew(ctx.prevConeSnapshot, current);
+			lines.push(diff ?? "(no change)");
+		}
+		for (const content of ctx.pendingBroadcasts) {
+			lines.push(`[announcement] ${content}`);
+		}
 		lines.push("</whats_new>");
 		lines.push("");
 	}
@@ -787,6 +801,7 @@ function renderCurrentState(ctx: AiContext): string {
 		lines.push(
 			`On the horizon ahead: ${horizonLandmark.shortName} — ${horizonLandmark.horizonPhrase}.`,
 		);
+		if (ctx.weather) lines.push(`Weather: ${ctx.weather}`);
 
 		// Held items
 		const heldItems = items.filter((item) => item.holder === ctx.aiId);

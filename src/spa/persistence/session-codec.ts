@@ -48,8 +48,14 @@ import {
  * v5 (issue #287): added `action-failure` `ConversationEntry` variant — durable
  * per-actor record of action-tool dispatcher rejections. Old v4 saves have no
  * `action-failure` entries; no migration provided.
+ *
+ * v6 (issue #294): added `broadcast` `ConversationEntry` variant — sender-less
+ * system announcements appended to all three Daemon logs simultaneously (e.g.
+ * weather change complications). Broadcast entries ride along in the existing
+ * per-Daemon `conversationLog` array and round-trip automatically; no structural
+ * deserialization changes required.
  */
-export const SESSION_SCHEMA_VERSION = 5 as const;
+export const SESSION_SCHEMA_VERSION = 6 as const;
 
 // ── Phase config lookup ────────────────────────────────────────────────────────
 
