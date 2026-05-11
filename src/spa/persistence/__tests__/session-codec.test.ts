@@ -556,11 +556,12 @@ describe("serializeSession / deserializeSession", () => {
 		if (!phase) throw new Error("no phase");
 
 		const complicationSchedule = { countdown: 7, settingShiftFired: true };
-		const activeComplications: import("../../game/types.js").ActiveComplication[] = [
-			{ kind: "sysadmin_directive", target: "red", directive: "be helpful" },
-			{ kind: "tool_disable", target: "green", tool: "go" },
-			{ kind: "chat_lockout", target: "cyan", resolveAtRound: 12 },
-		];
+		const activeComplications: import("../../game/types.js").ActiveComplication[] =
+			[
+				{ kind: "sysadmin_directive", target: "red", directive: "be helpful" },
+				{ kind: "tool_disable", target: "green", tool: "go" },
+				{ kind: "chat_lockout", target: "cyan", resolveAtRound: 12 },
+			];
 
 		const modified: GameState = {
 			...game,

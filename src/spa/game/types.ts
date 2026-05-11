@@ -126,7 +126,12 @@ export type ComplicationVariant =
 	| { kind: "weather_change" }
 	| { kind: "sysadmin_directive"; target: AiId }
 	| { kind: "tool_disable"; target: AiId; tool: ToolName }
-	| { kind: "obstacle_shift"; obstacleId: string; fromCell: GridPosition; toCell: GridPosition }
+	| {
+			kind: "obstacle_shift";
+			obstacleId: string;
+			fromCell: GridPosition;
+			toCell: GridPosition;
+	  }
 	| { kind: "chat_lockout"; target: AiId; duration: number }
 	| { kind: "setting_shift" };
 

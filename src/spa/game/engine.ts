@@ -5,8 +5,8 @@ import {
 	GRID_ROWS,
 } from "./direction.js";
 import type {
-	AiBudget,
 	ActiveComplication,
+	AiBudget,
 	AiId,
 	AiPersona,
 	CardinalDirection,

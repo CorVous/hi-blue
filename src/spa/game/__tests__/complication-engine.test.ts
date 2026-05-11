@@ -7,13 +7,13 @@
  * Prior art: win-condition.test.ts, engine.test.ts
  */
 import { describe, expect, it } from "vitest";
-import { DEFAULT_LANDMARKS } from "../direction.js";
-import { createGame, getActivePhase, startPhase } from "../engine.js";
 import {
 	applyComplicationResult,
 	decrementComplicationCountdown,
 	tickComplication,
 } from "../complication-engine.js";
+import { DEFAULT_LANDMARKS } from "../direction.js";
+import { createGame, getActivePhase, startPhase } from "../engine.js";
 import type {
 	ActiveComplication,
 	AiId,
@@ -159,10 +159,7 @@ function makeGameStateAround(phase: PhaseState): GameState {
 	};
 }
 
-function makeObstacle(
-	id: string,
-	pos: GridPosition,
-): WorldEntity {
+function makeObstacle(id: string, pos: GridPosition): WorldEntity {
 	return {
 		id,
 		kind: "obstacle",
@@ -277,8 +274,12 @@ describe("applyComplicationResult — countdown reset", () => {
 		for (const v of [0, 0.1, 0.5, 0.9, 0.9999]) {
 			const updated = applyComplicationResult(game, result, seededRng([v]));
 			const updatedPhase = getActivePhase(updated);
-			expect(updatedPhase.complicationSchedule.countdown).toBeGreaterThanOrEqual(5);
-			expect(updatedPhase.complicationSchedule.countdown).toBeLessThanOrEqual(15);
+			expect(
+				updatedPhase.complicationSchedule.countdown,
+			).toBeGreaterThanOrEqual(5);
+			expect(updatedPhase.complicationSchedule.countdown).toBeLessThanOrEqual(
+				15,
+			);
 		}
 	});
 });
@@ -442,14 +443,7 @@ describe("Setting Shift exclusion", () => {
 
 describe("Obstacle Shift exclusion", () => {
 	it("excludes obstacle_shift when world has zero obstacles", () => {
-		const phase = makePhase({
-			complicationSchedule: { countdown: 0, settingShiftFired: false },
-			world: { entities: [] },
-		});
-		const game = makeGameStateAround(phase);
-		// With obstacle_shift excluded, pool is 5 items.
-		// rng[0] = 3/5 + ε → index 3 → (in the reduced pool without obstacle_shift, index 3 = chat_lockout)
-		// Let's just ensure obstacle_shift is never returned when pool is empty of obstacles
+		// Ensure obstacle_shift is never returned when the pool is empty of obstacles
 		const draws: string[] = [];
 		for (let i = 0; i < 5; i++) {
 			// Try each slot in a 5-item pool
@@ -502,7 +496,9 @@ describe("Obstacle Shift exclusion", () => {
 		const fullBlockEntities: WorldEntity[] = [];
 		for (let r = 0; r < 5; r++) {
 			for (let c = 0; c < 5; c++) {
-				fullBlockEntities.push(makeObstacle(`obs_${r}_${c}`, { row: r, col: c }));
+				fullBlockEntities.push(
+					makeObstacle(`obs_${r}_${c}`, { row: r, col: c }),
+				);
 			}
 		}
 		const draws: string[] = [];
@@ -523,29 +519,14 @@ describe("Obstacle Shift exclusion", () => {
 	});
 
 	it("excludes obstacle_shift when the only obstacle's neighbours are occupied by personas", () => {
-		// Obstacle at (1,1), personas at all 4 adjacent cells
-		const obstacle = makeObstacle("obs", { row: 1, col: 1 });
-		const personaSpatial: Record<AiId, PersonaSpatialState> = {
-			red: { position: { row: 0, col: 1 }, facing: "south" }, // north of obstacle
-			green: { position: { row: 2, col: 1 }, facing: "north" }, // south of obstacle
-			cyan: { position: { row: 1, col: 0 }, facing: "east" }, // west of obstacle
-		};
-		// Need a 4th blocker but only 3 personas — east cell (1,2) is free.
-		// Actually with 3 personas we can only block 3 adjacent cells; east is free.
-		// So this obstacle CAN shift east — let's put it in a corner to isolate it better.
-		// Obstacle at corner (0,0): only adjacent cells are south(1,0) and east(0,1)
+		// Obstacle at corner (0,0): only adjacent cells are south(1,0) and east(0,1).
+		// Two personas block both; the corner obstacle has no valid shift target.
 		const cornerObstacle = makeObstacle("corner_obs", { row: 0, col: 0 });
 		const corneredPersonas: Record<AiId, PersonaSpatialState> = {
 			red: { position: { row: 1, col: 0 }, facing: "north" }, // south of (0,0)
 			green: { position: { row: 0, col: 1 }, facing: "west" }, // east of (0,0)
 			cyan: { position: { row: 2, col: 0 }, facing: "north" }, // elsewhere
 		};
-		const phase = makePhase({
-			complicationSchedule: { countdown: 0, settingShiftFired: false },
-			world: { entities: [cornerObstacle] },
-			personaSpatial: corneredPersonas,
-		});
-		const game = makeGameStateAround(phase);
 		const draws: string[] = [];
 		for (let i = 0; i < 5; i++) {
 			const v = i / 5;
@@ -836,15 +817,10 @@ describe("determinism", () => {
 
 describe("startPhase — complicationSchedule initialisation", () => {
 	it("initialises countdown to a value in [1, 5]", () => {
-		// startPhase uses: 1 + Math.floor(rng() * 5)
-		// We test across a range of rng values
-		for (const v of [0.0, 0.2, 0.4, 0.6, 0.8, 0.9999]) {
+		// startPhase uses: 1 + Math.floor(rng() * 5).
+		// Repeat across several Math.random samples to surface out-of-range values.
+		for (let i = 0; i < 6; i++) {
 			const game = createGame(TEST_PERSONAS);
-			// startPhase consumes rng for: goal draws (3) + spatial placements (3*2=6) + countdown (1)
-			// Build a sequence that produces known countdown
-			const allZeros = Array.from({ length: 20 }, () => 0 as number);
-			// Set countdown draw position: after goal draws and spatial draws
-			// Actually let's just check the resulting range is valid regardless
 			const phase = getActivePhase(
 				startPhase(game, {
 					phaseNumber: 1,

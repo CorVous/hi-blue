@@ -12,11 +12,7 @@
  * No LLM calls, no browser APIs. All randomness is injected via `rng`.
  */
 
-import {
-	CARDINAL_DIRECTIONS,
-	applyDirection,
-	inBounds,
-} from "./direction.js";
+import { applyDirection, CARDINAL_DIRECTIONS, inBounds } from "./direction.js";
 import { getActivePhase, updateActivePhase } from "./engine.js";
 import type {
 	ActiveComplication,
@@ -176,10 +172,7 @@ function availableComplicationTypes(
 	excludeToolDisable = false,
 ): string[] {
 	const { complicationSchedule, world, personaSpatial } = phase;
-	const pool: string[] = [
-		"weather_change",
-		"sysadmin_directive",
-	];
+	const pool: string[] = ["weather_change", "sysadmin_directive"];
 
 	if (!excludeToolDisable) {
 		pool.push("tool_disable");
@@ -226,8 +219,9 @@ function drawComplication(
 			const aiIds = Object.keys(phase.personaSpatial);
 			const existingDisables = new Set<string>(
 				phase.activeComplications
-					.filter((c): c is Extract<ActiveComplication, { kind: "tool_disable" }> =>
-						c.kind === "tool_disable",
+					.filter(
+						(c): c is Extract<ActiveComplication, { kind: "tool_disable" }> =>
+							c.kind === "tool_disable",
 					)
 					.map((c) => `${c.target}:${c.tool}`),
 			);
@@ -258,7 +252,10 @@ function drawComplication(
 		}
 
 		case "obstacle_shift": {
-			const tuples = validObstacleShiftTuples(phase.world, phase.personaSpatial);
+			const tuples = validObstacleShiftTuples(
+				phase.world,
+				phase.personaSpatial,
+			);
 			const tupleIdx = Math.floor(rng() * tuples.length);
 			// biome-ignore lint/style/noNonNullAssertion: bounded index (obstacle_shift only in pool when tuples non-empty)
 			const tuple = tuples[tupleIdx]!;
@@ -306,7 +303,10 @@ function drawFallbackComplication(
 		}
 
 		case "obstacle_shift": {
-			const tuples = validObstacleShiftTuples(phase.world, phase.personaSpatial);
+			const tuples = validObstacleShiftTuples(
+				phase.world,
+				phase.personaSpatial,
+			);
 			const tupleIdx = Math.floor(rng() * tuples.length);
 			// biome-ignore lint/style/noNonNullAssertion: bounded
 			const tuple = tuples[tupleIdx]!;
