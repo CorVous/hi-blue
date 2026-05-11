@@ -177,6 +177,85 @@ describe("parseToolCallArguments", () => {
 		}
 	});
 
+	it("strips a leading '*' from give.to (conversation log renders ids as *foo)", () => {
+		const result = parseToolCallArguments(
+			"give",
+			'{"item":"flower","to":"*cyan"}',
+		);
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.args).toEqual({ item: "flower", to: "cyan" });
+		}
+	});
+
+	it("returns ok:false when give.to is just '*' (empty after strip)", () => {
+		const result = parseToolCallArguments("give", '{"item":"flower","to":"*"}');
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.reason).toMatch(/required/i);
+		}
+	});
+
+	it("parses valid message arguments", () => {
+		const result = parseToolCallArguments(
+			"message",
+			'{"to":"cyan","content":"hi"}',
+		);
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.args).toEqual({ to: "cyan", content: "hi" });
+		}
+	});
+
+	it("strips a leading '*' from message.to (conversation log renders ids as *foo)", () => {
+		const result = parseToolCallArguments(
+			"message",
+			'{"to":"*6nho","content":"hi"}',
+		);
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.args).toEqual({ to: "6nho", content: "hi" });
+		}
+	});
+
+	it("only strips a single leading '*' from message.to", () => {
+		const result = parseToolCallArguments(
+			"message",
+			'{"to":"**foo","content":"hi"}',
+		);
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.args).toEqual({ to: "*foo", content: "hi" });
+		}
+	});
+
+	it("returns ok:false when message.to is just '*' (empty after strip)", () => {
+		const result = parseToolCallArguments(
+			"message",
+			'{"to":"*","content":"hi"}',
+		);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.reason).toMatch(/required/i);
+		}
+	});
+
+	it("returns ok:false with /required/i reason when 'to' is missing for message", () => {
+		const result = parseToolCallArguments("message", '{"content":"hi"}');
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.reason).toMatch(/required/i);
+		}
+	});
+
+	it("returns ok:false with /required/i reason when 'content' is missing for message", () => {
+		const result = parseToolCallArguments("message", '{"to":"cyan"}');
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.reason).toMatch(/required/i);
+		}
+	});
+
 	it("parses valid go arguments", () => {
 		const result = parseToolCallArguments("go", '{"direction":"north"}');
 		expect(result.ok).toBe(true);
