@@ -411,22 +411,18 @@ describe("GameSession — result from submitMessage", () => {
 		expect(actors.size).toBe(3);
 	});
 
-	it("chat lockout is reflected in result.chatLockoutTriggered", async () => {
+	it("result object from submitMessage is always well-formed", async () => {
 		const session = new GameSession(MINIMAL_CONTENT_PACK, TEST_PERSONAS);
-
 		const { result } = await session.submitMessage(
 			"red",
 			"hi",
 			makePassProvider(),
-			{
-				rng: () => 0,
-				lockoutTriggerRound: 1,
-				lockoutDuration: 2,
-			},
 		);
-
-		expect(result.chatLockoutTriggered).toBeDefined();
-		expect(result.chatLockoutTriggered?.aiId).toBe("red");
+		// Verify the RoundResult surface is intact
+		expect(typeof result.round).toBe("number");
+		expect(Array.isArray(result.actions)).toBe(true);
+		expect(typeof result.phaseEnded).toBe("boolean");
+		expect(typeof result.gameEnded).toBe("boolean");
 	});
 });
 
@@ -514,7 +510,6 @@ describe("GameSession — onAiDelta propagation", () => {
 			"red",
 			"hi",
 			liveProvider,
-			undefined,
 			["red", "green", "cyan"],
 			(aiId, text) => {
 				received.push([aiId, text]);
@@ -544,7 +539,6 @@ describe("GameSession — onAiDelta propagation", () => {
 			"red",
 			"hi",
 			provider,
-			undefined,
 			undefined,
 			(aiId, text) => {
 				received.push([aiId, text]);

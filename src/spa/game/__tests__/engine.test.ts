@@ -10,10 +10,7 @@ import {
 	deductBudget,
 	getActivePhase,
 	isAiLockedOut,
-	isPlayerChatLockedOut,
-	resolveChatLockouts,
 	startPhase,
-	triggerChatLockout,
 } from "../engine";
 import type { AiPersona, PhaseConfig } from "../types";
 
@@ -357,67 +354,6 @@ describe("appendMessage", () => {
 		const phase = getActivePhase(game);
 		expect("whispers" in phase).toBe(false);
 		expect("physicalLog" in phase).toBe(false);
-	});
-});
-
-describe("chat lockout", () => {
-	it("startPhase initialises chatLockouts as empty", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const phase = getActivePhase(game);
-		expect(phase.chatLockouts.size).toBe(0);
-	});
-
-	it("isPlayerChatLockedOut returns false when no lockout active", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		expect(isPlayerChatLockedOut(game, "red")).toBe(false);
-	});
-
-	it("triggerChatLockout marks the AI as player-chat-locked", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const locked = triggerChatLockout(game, "green", 3); // resolves at round 3
-		expect(isPlayerChatLockedOut(locked, "green")).toBe(true);
-		// Budget-lockout should remain unaffected
-		expect(isAiLockedOut(locked, "green")).toBe(false);
-	});
-
-	it("triggerChatLockout does not affect other AIs", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const locked = triggerChatLockout(game, "cyan", 2);
-		expect(isPlayerChatLockedOut(locked, "red")).toBe(false);
-		expect(isPlayerChatLockedOut(locked, "green")).toBe(false);
-	});
-
-	it("resolveChatLockouts removes lockouts where resolveAtRound <= current round", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = triggerChatLockout(game, "red", 2); // resolves at round 2
-		// Advance round to 1 — not yet at resolveAtRound
-		game = advanceRound(game); // round = 1
-		game = resolveChatLockouts(game);
-		expect(isPlayerChatLockedOut(game, "red")).toBe(true); // still locked
-
-		// Advance to round 2 — now at resolveAtRound
-		game = advanceRound(game); // round = 2
-		game = resolveChatLockouts(game);
-		expect(isPlayerChatLockedOut(game, "red")).toBe(false); // resolved
-	});
-
-	it("resolveChatLockouts only removes expired lockouts, leaving others intact", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = triggerChatLockout(game, "red", 1); // expires at round 1
-		game = triggerChatLockout(game, "green", 5); // expires at round 5
-		game = advanceRound(game); // round = 1
-		game = resolveChatLockouts(game);
-		expect(isPlayerChatLockedOut(game, "red")).toBe(false); // expired
-		expect(isPlayerChatLockedOut(game, "green")).toBe(true); // still active
-	});
-
-	it("chat lockout is independent from budget lockout — locked-out AI can still act (budget untouched)", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const locked = triggerChatLockout(game, "cyan", 3);
-		// Budget lockout (isAiLockedOut) must remain false — AI can still take turns
-		expect(isAiLockedOut(locked, "cyan")).toBe(false);
-		// Budget unaffected
-		expect(getActivePhase(locked).budgets.cyan?.remaining).toBe(5);
 	});
 });
 

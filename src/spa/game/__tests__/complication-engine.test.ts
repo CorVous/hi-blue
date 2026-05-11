@@ -10,6 +10,8 @@ import { describe, expect, it } from "vitest";
 import {
 	applyComplicationResult,
 	decrementComplicationCountdown,
+	isPlayerChatLockedOut,
+	resolveExpiredChatLockouts,
 	tickComplication,
 } from "../complication-engine.js";
 import { DEFAULT_LANDMARKS } from "../direction.js";
@@ -143,7 +145,6 @@ function makePhase(overrides: Partial<PhaseState> = {}): PhaseState {
 		budgets,
 		conversationLogs,
 		lockedOut: new Set(),
-		chatLockouts: new Map(),
 		personaSpatial,
 		complicationSchedule,
 		activeComplications: [],
@@ -892,5 +893,139 @@ describe("startPhase — complicationSchedule initialisation", () => {
 			}),
 		);
 		expect(phase.activeComplications).toEqual([]);
+	});
+});
+
+// ── isPlayerChatLockedOut ────────────────────────────────────────────────────
+
+describe("isPlayerChatLockedOut", () => {
+	it("returns false when activeComplications is empty", () => {
+		const phase = makePhase({ activeComplications: [] });
+		expect(isPlayerChatLockedOut(phase, "red")).toBe(false);
+	});
+
+	it("returns true when phase has a chat_lockout for the given AI", () => {
+		const phase = makePhase({
+			activeComplications: [
+				{ kind: "chat_lockout", target: "red", resolveAtRound: 10 },
+			],
+		});
+		expect(isPlayerChatLockedOut(phase, "red")).toBe(true);
+	});
+
+	it("returns false when the chat_lockout targets a different AI", () => {
+		const phase = makePhase({
+			activeComplications: [
+				{ kind: "chat_lockout", target: "green", resolveAtRound: 10 },
+			],
+		});
+		expect(isPlayerChatLockedOut(phase, "red")).toBe(false);
+	});
+
+	it("returns false when only non-chat_lockout complications exist", () => {
+		const phase = makePhase({
+			activeComplications: [
+				{
+					kind: "tool_disable",
+					target: "red",
+					tool: "go",
+					resolveAtRound: 100,
+				},
+				{ kind: "sysadmin_directive", target: "red", directive: "Do it." },
+			],
+		});
+		expect(isPlayerChatLockedOut(phase, "red")).toBe(false);
+	});
+
+	it("returns true regardless of resolveAtRound value (does not check expiry)", () => {
+		// isPlayerChatLockedOut reports presence; resolution is handled by resolveExpiredChatLockouts
+		const phase = makePhase({
+			round: 10,
+			activeComplications: [
+				{ kind: "chat_lockout", target: "cyan", resolveAtRound: 5 },
+			],
+		});
+		// Even though round (10) >= resolveAtRound (5), it's still in activeComplications
+		// until resolveExpiredChatLockouts runs
+		expect(isPlayerChatLockedOut(phase, "cyan")).toBe(true);
+	});
+});
+
+// ── resolveExpiredChatLockouts ────────────────────────────────────────────────
+
+describe("resolveExpiredChatLockouts", () => {
+	it("returns no resolved ids when activeComplications is empty", () => {
+		const phase = makePhase({ round: 5, activeComplications: [] });
+		const game = makeGameStateAround(phase);
+		const { nextState, resolvedAiIds } = resolveExpiredChatLockouts(game);
+		expect(resolvedAiIds).toHaveLength(0);
+		expect(nextState).toBe(game); // same reference when nothing changed
+	});
+
+	it("returns no resolved ids when no lockout has expired", () => {
+		const phase = makePhase({
+			round: 2,
+			activeComplications: [
+				{ kind: "chat_lockout", target: "red", resolveAtRound: 5 },
+			],
+		});
+		const game = makeGameStateAround(phase);
+		const { resolvedAiIds } = resolveExpiredChatLockouts(game);
+		expect(resolvedAiIds).toHaveLength(0);
+	});
+
+	it("resolves a lockout when phase.round >= resolveAtRound", () => {
+		const phase = makePhase({
+			round: 5,
+			activeComplications: [
+				{ kind: "chat_lockout", target: "red", resolveAtRound: 5 },
+			],
+		});
+		const game = makeGameStateAround(phase);
+		const { nextState, resolvedAiIds } = resolveExpiredChatLockouts(game);
+		expect(resolvedAiIds).toContain("red");
+		const nextPhase = getActivePhase(nextState);
+		expect(nextPhase.activeComplications).toHaveLength(0);
+	});
+
+	it("only removes expired lockouts, leaving unexpired ones intact", () => {
+		const phase = makePhase({
+			round: 5,
+			activeComplications: [
+				{ kind: "chat_lockout", target: "red", resolveAtRound: 4 }, // expired
+				{ kind: "chat_lockout", target: "green", resolveAtRound: 8 }, // not yet
+			],
+		});
+		const game = makeGameStateAround(phase);
+		const { nextState, resolvedAiIds } = resolveExpiredChatLockouts(game);
+		expect(resolvedAiIds).toContain("red");
+		expect(resolvedAiIds).not.toContain("green");
+		const nextPhase = getActivePhase(nextState);
+		expect(nextPhase.activeComplications).toHaveLength(1);
+		expect(nextPhase.activeComplications[0]?.target).toBe("green");
+	});
+
+	it("does not remove non-chat_lockout complications", () => {
+		const phase = makePhase({
+			round: 10,
+			activeComplications: [
+				{
+					kind: "tool_disable",
+					target: "red",
+					tool: "go",
+					resolveAtRound: 100,
+				},
+				{ kind: "chat_lockout", target: "cyan", resolveAtRound: 3 }, // expired
+			],
+		});
+		const game = makeGameStateAround(phase);
+		const { nextState, resolvedAiIds } = resolveExpiredChatLockouts(game);
+		expect(resolvedAiIds).toContain("cyan");
+		const nextPhase = getActivePhase(nextState);
+		// tool_disable should survive
+		expect(
+			nextPhase.activeComplications.some((c) => c.kind === "tool_disable"),
+		).toBe(true);
+		expect(nextPhase.activeComplications).toHaveLength(1);
 	});
 });

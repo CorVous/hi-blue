@@ -282,14 +282,6 @@ export interface GameState {
 	conversationLogs: Record<AiId, ConversationEntry[]>;
 	/** Budget-exhaustion lockout: prevents the AI from acting at all. */
 	lockedOut: Set<AiId>;
-	/**
-	 * Player-chat lockout: maps an AI's id to the round number at which the
-	 * lockout resolves (resolves when game.round >= resolveAtRound).
-	 * While active the player cannot address messages to that AI; the AI
-	 * continues to receive whispers, take turns, and call tools normally.
-	 * Semantically distinct from `lockedOut` (budget-exhaustion).
-	 */
-	chatLockouts: Map<AiId, number>;
 	/** Per-AI spatial state (position + facing). */
 	personaSpatial: Record<AiId, PersonaSpatialState>;
 	/** Complication countdown + phase-level flags. */

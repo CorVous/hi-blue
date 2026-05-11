@@ -104,9 +104,10 @@ const FAKE_GAME_STATE = {
 	budgets: { red: AI_BUDGET, green: AI_BUDGET, cyan: AI_BUDGET },
 	conversationLogs: { red: [], green: [], cyan: [] },
 	lockedOut: new Set<string>(),
-	chatLockouts: new Map<string, number>(),
 	world: { entities: [] },
 	personaSpatial: {},
+	complicationSchedule: { countdown: 0, settingShiftFired: false },
+	activeComplications: [],
 };
 
 const GAME_ENDED_RESULT = {

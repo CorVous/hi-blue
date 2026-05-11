@@ -206,12 +206,11 @@ describe("serializeSession / deserializeSession", () => {
 		expect(files.engine).toMatch(/^[A-Za-z0-9+/=]*$/);
 	});
 
-	it("round-trips lockedOut Set (chatLockouts no longer persisted)", () => {
+	it("round-trips lockedOut Set", () => {
 		const game = makeFreshGame();
 		const modified: GameState = {
 			...game,
 			lockedOut: new Set<AiId>(["red"]),
-			chatLockouts: new Map<AiId, number>([["green", 5]]),
 		};
 		const files = serializeSession(modified, NOW, CREATED_AT);
 		const result = deserializeSession(files);
@@ -219,8 +218,6 @@ describe("serializeSession / deserializeSession", () => {
 		if (result.kind === "ok") {
 			expect(result.state.lockedOut).toBeInstanceOf(Set);
 			expect(result.state.lockedOut.has("red")).toBe(true);
-			expect(result.state.chatLockouts).toBeInstanceOf(Map);
-			expect(result.state.chatLockouts.size).toBe(0);
 		}
 	});
 

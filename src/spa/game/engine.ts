@@ -85,7 +85,6 @@ export function startGame(
 		budgets,
 		conversationLogs,
 		lockedOut: new Set(),
-		chatLockouts: new Map(),
 		personaSpatial,
 		complicationSchedule,
 		activeComplications,
@@ -295,37 +294,6 @@ export function appendActionFailure(
 }
 
 /**
- * Trigger a player-chat lockout for the given AI.
- *
- * @param resolveAtRound  The round number at which the lockout expires.
- *   The lockout is active while `game.round < resolveAtRound`.
- *   It resolves (is removed) when `game.round >= resolveAtRound`.
- */
-export function triggerChatLockout(
-	game: GameState,
-	aiId: AiId,
-	resolveAtRound: number,
-): GameState {
-	const chatLockouts = new Map(game.chatLockouts);
-	chatLockouts.set(aiId, resolveAtRound);
-	return { ...game, chatLockouts };
-}
-
-/**
- * Returns true when the player's chat channel to the given AI is currently
- * locked out (i.e. `game.chatLockouts` has an entry for `aiId` that has
- * not yet expired).
- *
- * Distinct from `isAiLockedOut` (budget-exhaustion): a chat-locked AI still
- * takes turns, whispers, and calls tools.
- */
-export function isPlayerChatLockedOut(game: GameState, aiId: AiId): boolean {
-	const resolveAtRound = game.chatLockouts.get(aiId);
-	if (resolveAtRound === undefined) return false;
-	return game.round < resolveAtRound;
-}
-
-/**
  * Append a `kind: "broadcast"` ConversationEntry to ONLY the specified
  * recipient daemon's log. Used for private Sysadmin notices (e.g. tool
  * disable / restore messages) that should reach exactly one daemon.
@@ -379,23 +347,6 @@ export function resolveToolDisables(game: GameState): {
 	return { game: { ...game, activeComplications: kept }, resolved };
 }
 
-/**
- * Remove all chat lockouts whose `resolveAtRound` has been reached
- * (i.e. `game.round >= resolveAtRound`).
- *
- * Call this after `advanceRound` so that a lockout set to resolve at round N
- * is cleared when `game.round === N`.
- */
-export function resolveChatLockouts(game: GameState): GameState {
-	const chatLockouts = new Map<AiId, number>();
-	for (const [aiId, resolveAtRound] of game.chatLockouts) {
-		if (game.round < resolveAtRound) {
-			chatLockouts.set(aiId, resolveAtRound);
-		}
-	}
-	return { ...game, chatLockouts };
-}
-
 // ── Legacy compatibility shims ──────────────────────────────────────────────
 // These aliases keep old callers compiling while the codebase migrates.
 
@@ -442,7 +393,6 @@ export function createGame(
 		budgets,
 		conversationLogs,
 		lockedOut: new Set(),
-		chatLockouts: new Map(),
 		personaSpatial: {},
 		complicationSchedule: { countdown: 0, settingShiftFired: false },
 		activeComplications: [],
@@ -578,7 +528,6 @@ export function startPhase(
 		budgets,
 		conversationLogs,
 		lockedOut: new Set(),
-		chatLockouts: new Map(),
 		personaSpatial,
 		complicationSchedule: {
 			countdown: initialCountdown,
