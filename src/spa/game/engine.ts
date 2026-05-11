@@ -319,6 +319,43 @@ export function appendWitnessedEvent(
 }
 
 /**
+ * Append a `kind: "broadcast"` ConversationEntry to EVERY persona's per-Daemon
+ * log in the active phase in one atomic update. Broadcasts are sender-less
+ * system announcements (e.g. weather change complications) that all three
+ * Daemons must see simultaneously.
+ */
+export function appendBroadcast(game: GameState, content: string): GameState {
+	return updateActivePhase(game, (phase) => {
+		const entry: ConversationEntry = {
+			kind: "broadcast",
+			round: phase.round,
+			content,
+		};
+		const logs = { ...phase.conversationLogs };
+		for (const aiId of Object.keys(logs)) {
+			logs[aiId] = [...(logs[aiId] ?? []), entry];
+		}
+		return { ...phase, conversationLogs: logs };
+	});
+}
+
+/**
+ * Update the `weather` field on both the active PhaseState and its embedded
+ * ContentPack so the two stay consistent. Used by complication handlers that
+ * change weather mid-phase.
+ */
+export function setActivePhaseWeather(
+	game: GameState,
+	weather: string,
+): GameState {
+	return updateActivePhase(game, (phase) => ({
+		...phase,
+		weather,
+		contentPack: { ...phase.contentPack, weather },
+	}));
+}
+
+/**
  * Append a `kind: "action-failure"` ConversationEntry to a single actor's
  * per-Daemon log. This entry is actor-only — peers do not see it.
  */

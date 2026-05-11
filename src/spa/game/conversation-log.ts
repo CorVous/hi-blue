@@ -16,6 +16,7 @@
  *   - `message`: incoming/outgoing DM lines.
  *   - `witnessed-event`: lines describing observed physical actions.
  *   - `action-failure`: actor-only lines recording dispatcher rejections.
+ *   - `broadcast`: sender-less system announcement rendered as `[Round N] <content>`.
  */
 
 import { cardinalToRelative } from "./direction.js";
@@ -132,6 +133,10 @@ export function renderEntry(
 			// Strip a trailing period from reason to keep the formatted line clean.
 			const reason = entry.reason.replace(/\.$/, "");
 			return `[Round ${round}] Your \`${entry.tool}\` action failed: ${reason}.`;
+		}
+
+		case "broadcast": {
+			return `[Round ${round}] ${entry.content}`;
 		}
 	}
 }
