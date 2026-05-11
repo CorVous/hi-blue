@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { advanceRound, appendMessage, createGame, startPhase } from "../engine";
 import { buildOpenAiMessages } from "../openai-message-builder";
-import { buildAiContext } from "../prompt-builder";
+import { buildAiContext, buildConeSnapshot } from "../prompt-builder";
 import type {
 	AiPersona,
 	ContentPack,
@@ -1182,6 +1182,180 @@ describe("<typing_quirks> block", () => {
 
 		expect(getSection(p1, "typing_quirks")).toBe(
 			getSection(p2, "typing_quirks"),
+		);
+	});
+});
+
+// ----------------------------------------------------------------------------
+// proximityFlavor sense line (plan: noble-swinging-oasis.md)
+//
+// When the actor holds an objective_object AND its paired space is in own cell
+// or front arc, a proximity flavor sentence is appended to both:
+//   - buildConeSnapshot (so <whats_new> diff shows +/- on entry/exit)
+//   - toCurrentStateUserMessage (inside <what_you_see> block)
+// ----------------------------------------------------------------------------
+describe("proximityFlavor sense line", () => {
+	const PROXIMITY_PHASE_CONFIG = makeConfig(1, ["r", "g", "b"]);
+
+	function makePackWithProximity(opts: {
+		actorPosition: { row: number; col: number };
+		actorFacing: "north" | "south" | "east" | "west";
+		spacePosition: { row: number; col: number };
+	}): ContentPack {
+		const gem: WorldEntity = {
+			id: "gem",
+			kind: "objective_object",
+			name: "Glowing Gem",
+			examineDescription: "A gem that glows near the pedestal.",
+			holder: "red", // held by red
+			pairsWithSpaceId: "pedestal",
+			placementFlavor: "{actor} places the gem on the pedestal.",
+			useOutcome: "You hold the gem up to the light.",
+			proximityFlavor: "The gem pulses warmly, drawn toward the pedestal.",
+		};
+		const pedestal: WorldEntity = {
+			id: "pedestal",
+			kind: "objective_space",
+			name: "Stone Pedestal",
+			examineDescription: "A stone pedestal.",
+			holder: opts.spacePosition,
+		};
+		return {
+			phaseNumber: 1,
+			setting: "",
+			weather: "",
+			timeOfDay: "",
+			objectivePairs: [{ object: gem, space: pedestal }],
+			interestingObjects: [],
+			obstacles: [],
+			aiStarts: {
+				red: { position: opts.actorPosition, facing: opts.actorFacing },
+				green: { position: { row: 0, col: 1 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
+			},
+		};
+	}
+
+	it("proximity flavor appears in <what_you_see> when paired space is in own cell", () => {
+		// red at (2,2) facing north; pedestal at (2,2) = own cell
+		const pack = makePackWithProximity({
+			actorPosition: { row: 2, col: 2 },
+			actorFacing: "north",
+			spacePosition: { row: 2, col: 2 },
+		});
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [pack]),
+			PROXIMITY_PHASE_CONFIG,
+		);
+		const ctx = buildAiContext(game, "red");
+		const stateMsg = ctx.toCurrentStateUserMessage();
+		expect(stateMsg).toContain(
+			"The gem pulses warmly, drawn toward the pedestal.",
+		);
+	});
+
+	it("proximity flavor appears in <what_you_see> when paired space is in front arc", () => {
+		// red at (0,0) facing south; pedestal at (1,0) = directly in front
+		const pack = makePackWithProximity({
+			actorPosition: { row: 0, col: 0 },
+			actorFacing: "south",
+			spacePosition: { row: 1, col: 0 },
+		});
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [pack]),
+			PROXIMITY_PHASE_CONFIG,
+		);
+		const ctx = buildAiContext(game, "red");
+		const stateMsg = ctx.toCurrentStateUserMessage();
+		expect(stateMsg).toContain(
+			"The gem pulses warmly, drawn toward the pedestal.",
+		);
+	});
+
+	it("proximity flavor does NOT appear when paired space is out of reach", () => {
+		// red at (0,0) facing north; pedestal at (1,0) — not in north front arc (all OOB)
+		const pack = makePackWithProximity({
+			actorPosition: { row: 0, col: 0 },
+			actorFacing: "north",
+			spacePosition: { row: 1, col: 0 },
+		});
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [pack]),
+			PROXIMITY_PHASE_CONFIG,
+		);
+		const ctx = buildAiContext(game, "red");
+		const stateMsg = ctx.toCurrentStateUserMessage();
+		expect(stateMsg).not.toContain(
+			"The gem pulses warmly, drawn toward the pedestal.",
+		);
+	});
+
+	it("proximity flavor appears in buildConeSnapshot when space is reachable", () => {
+		// red at (0,0) facing south; pedestal at (1,0) = front arc
+		const pack = makePackWithProximity({
+			actorPosition: { row: 0, col: 0 },
+			actorFacing: "south",
+			spacePosition: { row: 1, col: 0 },
+		});
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [pack]),
+			PROXIMITY_PHASE_CONFIG,
+		);
+		const ctx = buildAiContext(game, "red");
+		const snapshot = buildConeSnapshot(ctx);
+		expect(snapshot).toContain(
+			"proximity: The gem pulses warmly, drawn toward the pedestal.",
+		);
+	});
+
+	it("proximity flavor does NOT appear in buildConeSnapshot when space is out of reach", () => {
+		// red at (0,0) facing north; pedestal at (1,0) — not in north front arc
+		const pack = makePackWithProximity({
+			actorPosition: { row: 0, col: 0 },
+			actorFacing: "north",
+			spacePosition: { row: 1, col: 0 },
+		});
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [pack]),
+			PROXIMITY_PHASE_CONFIG,
+		);
+		const ctx = buildAiContext(game, "red");
+		const snapshot = buildConeSnapshot(ctx);
+		expect(snapshot).not.toContain("proximity:");
+	});
+
+	it("proximity line entry/exit shows as +/- in whats_new diff", () => {
+		// Build two contexts: one where space is reachable (prev: space not reachable; current: reachable)
+		// Previous snapshot: red at (0,0) facing north (space at (1,0) is OOB-reachable)
+		// Current snapshot: red at (0,0) facing south (space at (1,0) is in front arc)
+		const packOOB = makePackWithProximity({
+			actorPosition: { row: 0, col: 0 },
+			actorFacing: "north",
+			spacePosition: { row: 1, col: 0 },
+		});
+		const packFront = makePackWithProximity({
+			actorPosition: { row: 0, col: 0 },
+			actorFacing: "south",
+			spacePosition: { row: 1, col: 0 },
+		});
+		const gameOOB = startPhase(
+			createGame(TEST_PERSONAS, [packOOB]),
+			PROXIMITY_PHASE_CONFIG,
+		);
+		const gameFront = startPhase(
+			createGame(TEST_PERSONAS, [packFront]),
+			PROXIMITY_PHASE_CONFIG,
+		);
+		const ctxOOB = buildAiContext(gameOOB, "red");
+		const prevSnapshot = buildConeSnapshot(ctxOOB);
+		// Build current state with prevConeSnapshot set
+		const ctxWithPrev = buildAiContext(gameFront, "red", {
+			prevConeSnapshot: prevSnapshot,
+		});
+		const stateMsg = ctxWithPrev.toCurrentStateUserMessage();
+		// The proximity line should appear as a new addition in whats_new
+		expect(stateMsg).toContain(
+			"+ proximity: The gem pulses warmly, drawn toward the pedestal.",
 		);
 	});
 });

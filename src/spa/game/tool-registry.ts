@@ -2,7 +2,7 @@
  * Tool Registry
  *
  * Single source of truth for the OpenAI-spec `tools` array.
- * Declares one `function` per dispatcher tool: `pick_up`, `put_down`, `give`, `use`, `couple`, `go`, `look`.
+ * Declares one `function` per dispatcher tool: `pick_up`, `put_down`, `give`, `use`, `go`, `look`.
  * Names and argument keys mirror `validateToolCall` in `dispatcher.ts` 1:1.
  */
 
@@ -96,32 +96,13 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 		function: {
 			name: "use",
 			description:
-				"Use an item you are holding. Places it in your current cell (same effect as put_down) and surfaces an action-log entry.",
+				"Use an item you are holding. Fires a flavoured outcome string. If the item is an objective item AND its paired space is in the daemon's cell or front arc, also places it on that space (the primary way to satisfy an objective pair).",
 			parameters: {
 				type: "object",
 				properties: {
 					item: {
 						type: "string",
 						description: "The id of the item you are holding.",
-					},
-				},
-				required: ["item"],
-				additionalProperties: false,
-			},
-		},
-	},
-	{
-		type: "function",
-		function: {
-			name: "couple",
-			description:
-				"Place a held objective item onto its paired objective space. Works when the space is in your current cell or directly in front of you (the 3-cell front arc). The item leaves your hand and lands on the space.",
-			parameters: {
-				type: "object",
-				properties: {
-					item: {
-						type: "string",
-						description: "The id of the objective item you are holding.",
 					},
 				},
 				required: ["item"],
@@ -226,7 +207,6 @@ type UseArgs = { item: string };
 type GoArgs = { direction: string };
 type LookArgs = { direction: string };
 type ExamineArgs = { item: string };
-type CoupleArgs = { item: string };
 type MessageArgs = { to: string; content: string };
 
 type ToolArgs = {
@@ -234,7 +214,6 @@ type ToolArgs = {
 	put_down: PutDownArgs;
 	give: GiveArgs;
 	use: UseArgs;
-	couple: CoupleArgs;
 	go: GoArgs;
 	look: LookArgs;
 	examine: ExamineArgs;
@@ -268,7 +247,6 @@ export function parseToolCallArguments<N extends ToolName>(
 		case "pick_up":
 		case "put_down":
 		case "use":
-		case "couple":
 		case "examine": {
 			if (typeof obj.item !== "string" || obj.item.length === 0) {
 				return { ok: false, reason: "Required argument 'item' is missing" };

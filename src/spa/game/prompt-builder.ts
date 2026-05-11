@@ -1,4 +1,5 @@
 import { projectCone } from "./cone-projector.js";
+import { frontArc } from "./direction.js";
 import { getActivePhase } from "./engine";
 import type {
 	AiBudget,
@@ -565,6 +566,40 @@ function renderSystemPrompt(ctx: AiContext): string {
 }
 
 /**
+ * Returns the held objective_object's `proximityFlavor` sentence when the
+ * actor is holding such an object AND its paired space is in the actor's own
+ * cell or 3-cell front arc. Returns null otherwise.
+ *
+ * Used by both `buildConeSnapshot` (so the `<whats_new>` diff tracks entry/exit)
+ * and `renderCurrentState` (to append the sense line after the cone listing).
+ */
+function findProximityFlavor(ctx: AiContext): string | null {
+	const actorSpatial = ctx.personaSpatial[ctx.aiId];
+	if (!actorSpatial) return null;
+
+	const arc = frontArc(actorSpatial.position, actorSpatial.facing);
+
+	for (const entity of ctx.worldSnapshot.entities) {
+		if (entity.kind !== "objective_object") continue;
+		if (entity.holder !== ctx.aiId) continue;
+		if (!entity.pairsWithSpaceId || !entity.proximityFlavor) continue;
+
+		const space = ctx.worldSnapshot.entities.find(
+			(e) => e.id === entity.pairsWithSpaceId,
+		);
+		if (!space || !isGridPosition(space.holder)) continue;
+
+		const spacePos = space.holder as GridPosition;
+		const reachable =
+			positionsEqual(spacePos, actorSpatial.position) ||
+			arc.some((p) => positionsEqual(p, spacePos));
+
+		if (reachable) return entity.proximityFlavor;
+	}
+	return null;
+}
+
+/**
  * Build a canonical, position-keyed cone snapshot for diffing. Stable under
  * actor movement (cells are keyed by absolute `(row,col)` rather than the
  * "two cells ahead-front" relative phrasing used in the rendered prompt), so
@@ -626,6 +661,13 @@ export function buildConeSnapshot(ctx: AiContext): string {
 		lines.push(`at ${cell.phrasing}: ${contents}`);
 	}
 
+	// Append proximity flavor line when the actor holds an objective item whose
+	// paired space is reachable (own cell or front arc).
+	const proxFlavor = findProximityFlavor(ctx);
+	if (proxFlavor !== null) {
+		lines.push(`proximity: ${proxFlavor}`);
+	}
+
 	return lines.join("\n");
 }
 
@@ -648,6 +690,12 @@ export function renderWhatsNew(prev = "", current = ""): string | null {
 	const currYou = currLines.find((l) => l.startsWith("you: ")) ?? "";
 	const prevAt = new Set(prevLines.filter((l) => l.startsWith("at ")));
 	const currAt = new Set(currLines.filter((l) => l.startsWith("at ")));
+	const prevProximity = new Set(
+		prevLines.filter((l) => l.startsWith("proximity: ")),
+	);
+	const currProximity = new Set(
+		currLines.filter((l) => l.startsWith("proximity: ")),
+	);
 
 	const out: string[] = [];
 
@@ -670,6 +718,13 @@ export function renderWhatsNew(prev = "", current = ""): string | null {
 	}
 	for (const line of prevAt) {
 		if (!currAt.has(line)) out.push(`- ${line}`);
+	}
+
+	for (const line of currProximity) {
+		if (!prevProximity.has(line)) out.push(`+ ${line}`);
+	}
+	for (const line of prevProximity) {
+		if (!currProximity.has(line)) out.push(`- ${line}`);
 	}
 
 	return out.length > 0 ? out.join("\n") : null;
@@ -810,6 +865,12 @@ function renderCurrentState(ctx: AiContext): string {
 		}
 		if (viewCells.length === 0) {
 			lines.push("(nothing visible)");
+		}
+
+		// Proximity sense line — rendered after the cone listing when applicable.
+		const proxFlavor = findProximityFlavor(ctx);
+		if (proxFlavor !== null) {
+			lines.push(proxFlavor);
 		}
 	} else {
 		lines.push("(no spatial data)");

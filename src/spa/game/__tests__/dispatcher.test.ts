@@ -382,57 +382,20 @@ describe("validateToolCall", () => {
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(true);
 	});
+});
 
-	// couple tests
-	it("couple: allows coupling when the paired space is in the actor's own cell", () => {
-		// Build a pack with red holding gem, pedestal in red's own cell (0,0)
-		const gem: WorldEntity = {
-			id: "gem",
-			kind: "objective_object",
-			name: "Gem",
-			examineDescription: "A shiny gem.",
-			holder: "red",
-			pairsWithSpaceId: "pedestal",
-		};
-		const pedestal: WorldEntity = {
-			id: "pedestal",
-			kind: "objective_space",
-			name: "Pedestal",
-			examineDescription: "A stone pedestal.",
-			holder: { row: 0, col: 0 },
-		};
-		const pack: ContentPack = {
-			phaseNumber: 1,
-			setting: "test",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [{ object: gem, space: pedestal }],
-			interestingObjects: [],
-			obstacles: [],
-			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "north" },
-				green: { position: { row: 0, col: 1 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
-			},
-		};
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [pack]),
-			TEST_PHASE_CONFIG,
-			FIXED_RNG,
-		);
-		const call: ToolCall = { name: "couple", args: { item: "gem" } };
-		expect(validateToolCall(game, "red", call).valid).toBe(true);
-	});
-
-	it("couple: allows coupling when the paired space is in the front arc", () => {
+describe("executeToolCall — use placement via front arc", () => {
+	it("use: places the item on the paired space's cell when the space is in the actor's front arc", () => {
 		// red at (0,0) facing south; pedestal at (1,0) = directly in front
 		const gem: WorldEntity = {
 			id: "gem",
 			kind: "objective_object",
 			name: "Gem",
-			examineDescription: "A shiny gem.",
+			examineDescription: "A shiny gem. It belongs on the pedestal.",
 			holder: "red",
 			pairsWithSpaceId: "pedestal",
+			placementFlavor: "{actor} places the gem on the pedestal.",
+			useOutcome: "You hold the gem up.",
 		};
 		const pedestal: WorldEntity = {
 			id: "pedestal",
@@ -460,19 +423,26 @@ describe("validateToolCall", () => {
 			TEST_PHASE_CONFIG,
 			FIXED_RNG,
 		);
-		const call: ToolCall = { name: "couple", args: { item: "gem" } };
-		expect(validateToolCall(game, "red", call).valid).toBe(true);
+		const call: ToolCall = { name: "use", args: { item: "gem" } };
+		const updated = executeToolCall(game, "red", call);
+		const item = getActivePhase(updated).world.entities.find(
+			(e) => e.id === "gem",
+		);
+		// gem should now be at pedestal's cell (1,0)
+		expect(item?.holder).toEqual({ row: 1, col: 0 });
 	});
 
-	it("couple: rejects when the paired space is out of reach", () => {
+	it("use: leaves the item held when the paired space is out of reach", () => {
 		// red at (0,0) facing north; pedestal at (1,0) — not in north front arc (all OOB)
 		const gem: WorldEntity = {
 			id: "gem",
 			kind: "objective_object",
 			name: "Gem",
-			examineDescription: "A shiny gem.",
+			examineDescription: "A shiny gem. It belongs on the pedestal.",
 			holder: "red",
 			pairsWithSpaceId: "pedestal",
+			placementFlavor: "{actor} places the gem on the pedestal.",
+			useOutcome: "You hold the gem up.",
 		};
 		const pedestal: WorldEntity = {
 			id: "pedestal",
@@ -500,10 +470,13 @@ describe("validateToolCall", () => {
 			TEST_PHASE_CONFIG,
 			FIXED_RNG,
 		);
-		const call: ToolCall = { name: "couple", args: { item: "gem" } };
-		const result = validateToolCall(game, "red", call);
-		expect(result.valid).toBe(false);
-		expect(result.reason).toMatch(/in front/i);
+		const call: ToolCall = { name: "use", args: { item: "gem" } };
+		const updated = executeToolCall(game, "red", call);
+		const item = getActivePhase(updated).world.entities.find(
+			(e) => e.id === "gem",
+		);
+		// gem should still be held by red (no placement)
+		expect(item?.holder).toBe("red");
 	});
 });
 
