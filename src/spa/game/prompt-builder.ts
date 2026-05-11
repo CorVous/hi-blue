@@ -1,5 +1,4 @@
 import { projectCone } from "./cone-projector.js";
-import { formatPosition } from "./direction.js";
 import { getActivePhase } from "./engine";
 import type {
 	AiBudget,
@@ -592,7 +591,7 @@ export function buildConeSnapshot(ctx: AiContext): string {
 		.map((i) => i.name)
 		.sort();
 	lines.push(
-		`you: pos=(${actorSpatial.position.row},${actorSpatial.position.col}) facing=${actorSpatial.facing} holding=[${heldItems.join(", ") || "nothing"}] cell=[${ownCellItems.join(", ") || "nothing"}]`,
+		`you: facing=${actorSpatial.facing} holding=[${heldItems.join(", ") || "nothing"}] cell=[${ownCellItems.join(", ") || "nothing"}]`,
 	);
 
 	const coneCells = projectCone(actorSpatial.position, actorSpatial.facing);
@@ -624,7 +623,7 @@ export function buildConeSnapshot(ctx: AiContext): string {
 
 		const contents =
 			contentParts.length > 0 ? [...contentParts].sort().join(", ") : "nothing";
-		lines.push(`at (${position.row},${position.col}): ${contents}`);
+		lines.push(`at ${cell.phrasing}: ${contents}`);
 	}
 
 	return lines.join("\n");
@@ -716,9 +715,7 @@ function renderCurrentState(ctx: AiContext): string {
 
 	lines.push("<where_you_are>");
 	if (actorSpatial) {
-		lines.push(
-			`Position: ${formatPosition(actorSpatial.position)}, facing ${facingLabel(actorSpatial.facing)}`,
-		);
+		lines.push(`Facing: ${facingLabel(actorSpatial.facing)}`);
 
 		// Held items
 		const heldItems = items.filter((item) => item.holder === ctx.aiId);
@@ -809,9 +806,7 @@ function renderCurrentState(ctx: AiContext): string {
 
 			// Capitalise the phrasing for display
 			const label = phrasing.charAt(0).toUpperCase() + phrasing.slice(1);
-			lines.push(
-				`- ${label} (row ${position.row}, col ${position.col}): ${contents}`,
-			);
+			lines.push(`- ${label}: ${contents}`);
 		}
 		if (viewCells.length === 0) {
 			lines.push("(nothing visible)");
