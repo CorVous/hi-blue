@@ -231,42 +231,6 @@ export function validateToolCall(
 			};
 		}
 
-		case "couple": {
-			const item = pickable.find((i) => i.id === call.args.item);
-			if (!item)
-				return {
-					valid: false,
-					reason: `Item "${call.args.item}" does not exist`,
-				};
-			if (item.holder !== aiId)
-				return {
-					valid: false,
-					reason: `You are not holding "${call.args.item}"`,
-				};
-			if (item.kind !== "objective_object" || !item.pairsWithSpaceId)
-				return {
-					valid: false,
-					reason: `Item "${call.args.item}" is not an objective item with a paired space`,
-				};
-			if (!actorSpatial)
-				return { valid: false, reason: "Actor has no spatial state" };
-			const space = world.entities.find((e) => e.id === item.pairsWithSpaceId);
-			if (!space || !isGridPosition(space.holder))
-				return { valid: false, reason: "Paired space not found on the grid" };
-			const spacePos = space.holder as GridPosition;
-			const spaceReachable =
-				positionsEqual(spacePos, actorSpatial.position) ||
-				frontArc(actorSpatial.position, actorSpatial.facing).some((p) =>
-					positionsEqual(p, spacePos),
-				);
-			if (!spaceReachable)
-				return {
-					valid: false,
-					reason: `The paired space is not in your cell or directly in front of you`,
-				};
-			return { valid: true };
-		}
-
 		default:
 			return { valid: false, reason: `Unknown tool "${call.name}"` };
 	}
@@ -298,29 +262,23 @@ export function executeToolCall(
 			case "give":
 				if (target) target.holder = call.args.to as AiId;
 				break;
-			case "couple": {
-				// Place item directly on its paired space's cell (which may be in the front arc).
-				const pairedSpace = target?.pairsWithSpaceId
-					? entities.find((e) => e.id === target.pairsWithSpaceId)
-					: undefined;
-				if (target && pairedSpace && isGridPosition(pairedSpace.holder)) {
-					target.holder = { ...pairedSpace.holder };
-				}
-				break;
-			}
 			case "use": {
-				// Place item on current cell only when the actor is standing on the
-				// item's paired objective_space. Otherwise no world mutation.
+				// Place item on the paired space's cell when the paired space is in
+				// the actor's own cell OR front arc. Otherwise no world mutation.
 				if (target && actorSpatial && target.pairsWithSpaceId) {
 					const pairedSpace = entities.find(
 						(e) => e.id === target.pairsWithSpaceId,
 					);
-					if (
-						pairedSpace &&
-						isGridPosition(pairedSpace.holder) &&
-						positionsEqual(pairedSpace.holder, actorSpatial.position)
-					) {
-						target.holder = { ...actorSpatial.position };
+					if (pairedSpace && isGridPosition(pairedSpace.holder)) {
+						const spacePos = pairedSpace.holder as GridPosition;
+						const spaceReachable =
+							positionsEqual(spacePos, actorSpatial.position) ||
+							frontArc(actorSpatial.position, actorSpatial.facing).some((p) =>
+								positionsEqual(p, spacePos),
+							);
+						if (spaceReachable) {
+							target.holder = { ...spacePos };
+						}
 					}
 				}
 				break;
@@ -372,8 +330,6 @@ function describeToolCall(game: GameState, aiId: AiId, call: ToolCall): string {
 			return `${name} put down the ${call.args.item}`;
 		case "give":
 			return `${name} gave the ${call.args.item} to ${game.personas[call.args.to as AiId]?.name ?? call.args.to}`;
-		case "couple":
-			return `${name} placed the ${call.args.item} onto its paired space`;
 		case "use": {
 			// Return the entity's useOutcome as the description (flavor string),
 			// with {actor} substituted to "you" (actor's perspective).
@@ -476,9 +432,7 @@ export function dispatchAiTurn(
 			// If so, replace the default description with the per-pair placementFlavor.
 			const activePhase = getActivePhase(state);
 			const flavorDescription =
-				action.toolCall.name === "put_down" ||
-				action.toolCall.name === "use" ||
-				action.toolCall.name === "couple"
+				action.toolCall.name === "put_down" || action.toolCall.name === "use"
 					? checkPlacementFlavor(
 							action,
 							activePhase.contentPack,
@@ -517,8 +471,7 @@ export function dispatchAiTurn(
 				call.name === "pick_up" ||
 				call.name === "put_down" ||
 				call.name === "give" ||
-				call.name === "use" ||
-				call.name === "couple"
+				call.name === "use"
 			) {
 				// Post-execute spatial state — actor has moved for "go", others are unchanged
 				const postPhase = getActivePhase(state);
@@ -546,7 +499,7 @@ export function dispatchAiTurn(
 						useOutcomeRaw = item?.useOutcome;
 					}
 
-					if (call.name === "put_down" || call.name === "couple") {
+					if (call.name === "put_down" || call.name === "use") {
 						// Find the raw placementFlavor (before {actor} substitution)
 						// by looking at the content pack's object entity definition
 						const itemId = call.args.item;

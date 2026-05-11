@@ -112,6 +112,7 @@ function makeMockProvider(): MockContentPackProvider {
 								useOutcome: `You use object ${phaseNumber} ${i}.`,
 								pairsWithSpaceId: `${spaceId}_${i}`,
 								placementFlavor: `{actor} places the object on the space in phase ${phaseNumber}.`,
+								proximityFlavor: `The object hums near its space in phase ${phaseNumber}.`,
 								holder: { row: 0, col: 0 } as never,
 							},
 						})),

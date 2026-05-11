@@ -93,8 +93,7 @@ export function checkPlacementFlavor(
 	const toolCall = action.toolCall;
 	if (!toolCall) return null;
 	const toolName = toolCall.name;
-	if (toolName !== "put_down" && toolName !== "use" && toolName !== "couple")
-		return null;
+	if (toolName !== "put_down" && toolName !== "use") return null;
 
 	const itemId = toolCall.args.item;
 	if (!itemId) return null;

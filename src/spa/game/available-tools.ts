@@ -106,9 +106,6 @@ function cloneToolWithEnums(
  * 6. `examine` — included when any entity (any kind) is held by the actor OR rests
  *    anywhere in the full 9-cell cone (own + dist-1 arc + dist-2 fan).
  *    Enum restricted to those entity ids.
- * 7. `couple` — included only when actor holds an objective_object with a pairsWithSpaceId
- *    whose paired space is on the grid AND in the actor's own cell or front arc.
- *    Enum restricted to those item ids.
  *
  * Spaces and obstacles are never pickupable.
  */
@@ -212,29 +209,6 @@ export function availableTools(game: GameState, aiId: AiId): OpenAiTool[] {
 
 		if (examineableIds.length > 0) {
 			tools.push(cloneToolWithEnums("examine", { item: examineableIds }));
-		}
-	}
-
-	// 7. couple — held objective items whose paired space is in own cell or front arc
-	if (actorSpatial) {
-		const arc = frontArc(actorSpatial.position, actorSpatial.facing);
-		const couplableIds = pickable
-			.filter((item) => {
-				if (item.holder !== aiId) return false;
-				if (item.kind !== "objective_object") return false;
-				if (!item.pairsWithSpaceId) return false;
-				const space = world.entities.find(
-					(e) => e.id === item.pairsWithSpaceId,
-				);
-				if (!space || !isGridPosition(space.holder)) return false;
-				const spacePos = space.holder as GridPosition;
-				if (positionsEqual(spacePos, actorSpatial.position)) return true;
-				return arc.some((p) => positionsEqual(p, spacePos));
-			})
-			.map((i) => i.id);
-
-		if (couplableIds.length > 0) {
-			tools.push(cloneToolWithEnums("couple", { item: couplableIds }));
 		}
 	}
 

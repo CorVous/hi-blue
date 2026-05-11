@@ -107,6 +107,7 @@ describe("validateContentPacks — prose tell contract", () => {
 	function buildResponse(
 		objectExamine: string,
 		spaceName = "Brass Pedestal",
+		proximityFlavor = "The key hums faintly, resonating with the pedestal nearby.",
 	): unknown {
 		return {
 			packs: [
@@ -123,6 +124,7 @@ describe("validateContentPacks — prose tell contract", () => {
 								useOutcome: "You turn the key over in your hands.",
 								pairsWithSpaceId: "space1",
 								placementFlavor: "{actor} sets the key on its mount.",
+								proximityFlavor,
 							},
 							space: {
 								id: "space1",
@@ -166,5 +168,33 @@ describe("validateContentPacks — prose tell contract", () => {
 				input,
 			),
 		).toThrow(/examineDescription does not mention paired space/);
+	});
+
+	it("rejects a content pack whose objective_object is missing proximityFlavor", () => {
+		expect(() =>
+			validateContentPacks(
+				buildResponse(
+					"An iron key. It looks like it belongs on the brass pedestal.",
+					"Brass Pedestal",
+					"",
+				),
+				input,
+			),
+		).toThrow(/proximityFlavor/);
+	});
+
+	it("persists proximityFlavor onto the returned WorldEntity", () => {
+		const result = validateContentPacks(
+			buildResponse(
+				"An iron key. It looks like it belongs on the brass pedestal.",
+				"Brass Pedestal",
+				"The key hums faintly near the pedestal.",
+			),
+			input,
+		);
+		const pair = result.packs[0]?.objectivePairs[0];
+		expect(pair?.object.proximityFlavor).toBe(
+			"The key hums faintly near the pedestal.",
+		);
 	});
 });

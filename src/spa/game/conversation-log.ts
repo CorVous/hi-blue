@@ -90,19 +90,14 @@ export function renderEntry(
 				}
 
 				case "use": {
+					if (entry.placementFlavorRaw) {
+						return `[Round ${round}] ${substituteActor(entry.placementFlavorRaw, actorSub)}`;
+					}
 					if (entry.useOutcome) {
 						return `[Round ${round}] ${substituteActor(entry.useOutcome, actorSub)}`;
 					}
 					const name = entry.item ? itemName(entities, entry.item) : "item";
 					return `[Round ${round}] You watch ${actorSub} use the ${name}.`;
-				}
-
-				case "couple": {
-					if (entry.placementFlavorRaw) {
-						return `[Round ${round}] ${substituteActor(entry.placementFlavorRaw, actorSub)}`;
-					}
-					const name = entry.item ? itemName(entities, entry.item) : "item";
-					return `[Round ${round}] You watch ${actorSub} place the ${name} onto its space.`;
 				}
 			}
 		}

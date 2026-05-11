@@ -37,6 +37,8 @@ export interface WorldEntity {
 	pairsWithSpaceId?: string;
 	/** For objective_object: flavor string with {actor} substitution, fires on put_down match. */
 	placementFlavor?: string;
+	/** For objective_object: in-fiction sensory line rendered when held and paired space is near. */
+	proximityFlavor?: string;
 	/** AiId when held by an AI; GridPosition when resting on a cell. */
 	holder: AiId | GridPosition;
 }
@@ -89,7 +91,7 @@ export interface PhysicalActionRecord {
 	/** The actor's facing at the time the action resolved. */
 	actorFacingAtAction: CardinalDirection;
 	/** The observable action kind. */
-	kind: "go" | "pick_up" | "put_down" | "give" | "use" | "couple";
+	kind: "go" | "pick_up" | "put_down" | "give" | "use";
 	/** Item id (for pick_up, put_down, give, use). */
 	item?: string;
 	/** Recipient AI id (for give). */
@@ -141,7 +143,7 @@ export type ConversationEntry =
 			kind: "witnessed-event";
 			round: number;
 			actor: AiId;
-			actionKind: "go" | "pick_up" | "put_down" | "give" | "use" | "couple";
+			actionKind: "go" | "pick_up" | "put_down" | "give" | "use";
 			item?: string;
 			to?: AiId;
 			direction?: CardinalDirection;
@@ -230,7 +232,6 @@ export type ToolName =
 	| "put_down"
 	| "give"
 	| "use"
-	| "couple"
 	| "go"
 	| "look"
 	| "examine"

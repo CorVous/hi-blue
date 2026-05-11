@@ -59,10 +59,7 @@ effects in the snapshot):
   or can see anywhere in their 9-cell cone. Produces no witnessed event.
 - `give(item, recipient)` — hand an item to another daemon in the same cell or
   front arc.
-- `use(item)` — fire a flavoured outcome string. **No mechanical effect.**
-- `couple(item)` — place a held objective item onto its paired objective space,
-  when that space is in the daemon's current cell or front arc. This is the
-  primary way to satisfy an objective pair.
+- `use(item)` — fire a flavoured outcome string; if the item is an objective item AND its paired space is in the daemon's cell or front arc, also place it on that space (the primary way to satisfy an objective pair).
 - `message(recipient, text)` — speak to another daemon, or to `blue`.
 
 You can't fire any of these directly. You can only chat. Daemons decide for

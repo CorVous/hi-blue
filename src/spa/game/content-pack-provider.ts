@@ -18,7 +18,7 @@ export const CONTENT_PACK_SYSTEM_PROMPT = `You generate content packs for a text
 
 For each phase:
 - Generate exactly k OBJECTIVE PAIRS. Each pair has:
-  - An objective_object with: id (unique string), name (2-4 words, thematic to setting and theme), examineDescription (1-2 sentences naming the paired space), useOutcome (1 sentence: the actor performs a stateless action with the item — nothing about the item, the actor, or the world changes; MUST NOT reference or imply contact with the paired space, since the actor can be anywhere on the grid when using the item), pairsWithSpaceId (must match the paired space's id), placementFlavor (1 sentence containing the literal string "{actor}", fires when the object is placed on its space). objective_objects MUST be portable physical items a single person can pick up and carry (e.g. a tool, instrument, artifact, container) — never furniture, architecture, or fixed structures.
+  - An objective_object with: id (unique string), name (2-4 words, thematic to setting and theme), examineDescription (1-2 sentences naming the paired space), useOutcome (1 sentence: the actor performs a stateless action with the item — nothing about the item, the actor, or the world changes; MUST NOT reference or imply contact with the paired space, since the actor can be anywhere on the grid when using the item), pairsWithSpaceId (must match the paired space's id), placementFlavor (1 sentence containing the literal string "{actor}", fires when the object is placed on its space), proximityFlavor (1 sentence; in-fiction sensory description of what the daemon perceives when they are holding this item AND its paired space is in their own cell or directly in front of them. Written from the daemon's POV. Does NOT contain "{actor}" and MUST NOT reference placing or coupling the item.). objective_objects MUST be portable physical items a single person can pick up and carry (e.g. a tool, instrument, artifact, container) — never furniture, architecture, or fixed structures.
   - An objective_space with: id (unique string), name (2-4 words, thematic to setting and theme), examineDescription (1-2 sentences describing the space). objective_spaces are fixed locations or surfaces, not items.
 - Generate exactly n INTERESTING OBJECTS with: id (unique string), name (2-4 words, thematic to setting and theme), examineDescription (1-2 sentences), useOutcome (1 sentence: the actor performs a stateless action with the item — nothing about the item, the actor, or the world changes). interesting_objects MUST be portable physical items a single person can pick up and carry — never furniture, architecture, or fixed structures.
 - Generate exactly m OBSTACLES with: id (unique string), name (2-4 words, thematic to setting), examineDescription (1 sentence describing the impassable object). Obstacles are fixed and impassable — never portable items. Obstacles follow the setting only and are NOT constrained by the item theme.
@@ -42,7 +42,7 @@ Return ONLY valid JSON with this exact shape (no markdown, no preamble):
       "setting": "<setting noun>",
       "objectivePairs": [
         {
-          "object": { "id": "...", "kind": "objective_object", "name": "...", "examineDescription": "...", "useOutcome": "...", "pairsWithSpaceId": "...", "placementFlavor": "...{actor}..." },
+          "object": { "id": "...", "kind": "objective_object", "name": "...", "examineDescription": "...", "useOutcome": "...", "pairsWithSpaceId": "...", "placementFlavor": "...{actor}...", "proximityFlavor": "..." },
           "space": { "id": "...", "kind": "objective_space", "name": "...", "examineDescription": "..." }
         }
       ],
@@ -187,6 +187,14 @@ function validateEntity(
 				`Objective object ${e.id}: placementFlavor must contain "{actor}"`,
 			);
 		}
+		if (
+			typeof e.proximityFlavor !== "string" ||
+			e.proximityFlavor.length === 0
+		) {
+			throw new ContentPackError(
+				`Objective object ${e.id} missing proximityFlavor`,
+			);
+		}
 	}
 
 	// Build entity — holder is not set here (placement done later)
@@ -205,6 +213,9 @@ function validateEntity(
 	}
 	if (typeof e.placementFlavor === "string") {
 		entity.placementFlavor = e.placementFlavor;
+	}
+	if (typeof e.proximityFlavor === "string") {
+		entity.proximityFlavor = e.proximityFlavor;
 	}
 	return entity;
 }
