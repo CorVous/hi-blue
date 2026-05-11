@@ -197,9 +197,9 @@ describe("checkLoseCondition", () => {
 	});
 
 	it("returns false when 1 of 3 AIs is locked out", () => {
-		expect(
-			checkLoseCondition(new Set(["red"]), ["red", "green", "cyan"]),
-		).toBe(false);
+		expect(checkLoseCondition(new Set(["red"]), ["red", "green", "cyan"])).toBe(
+			false,
+		);
 	});
 
 	it("returns false when 2 of 3 AIs are locked out", () => {

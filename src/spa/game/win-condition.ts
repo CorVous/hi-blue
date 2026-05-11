@@ -82,10 +82,7 @@ export function checkLoseCondition(
 	lockedOut: ReadonlySet<AiId> | AiId[],
 	allAiIds: AiId[],
 ): boolean {
-	const lockedSet =
-		lockedOut instanceof Set
-			? lockedOut
-			: new Set(lockedOut);
+	const lockedSet = lockedOut instanceof Set ? lockedOut : new Set(lockedOut);
 	for (const aiId of allAiIds) {
 		if (!lockedSet.has(aiId)) return false;
 	}
