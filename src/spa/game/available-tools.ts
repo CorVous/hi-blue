@@ -18,7 +18,14 @@ import {
 } from "./direction.js";
 import { getActivePhase } from "./engine.js";
 import { type OpenAiTool, TOOL_DEFINITIONS } from "./tool-registry.js";
-import type { AiId, GameState, GridPosition, WorldEntity } from "./types.js";
+import type {
+	ActiveComplication,
+	AiId,
+	GameState,
+	GridPosition,
+	ToolName,
+	WorldEntity,
+} from "./types.js";
 
 /** Narrow-check: is `holder` a GridPosition (not an AiId string)? */
 function isGridPosition(holder: AiId | GridPosition): holder is GridPosition {
@@ -108,9 +115,26 @@ function cloneToolWithEnums(
  *    Enum restricted to those entity ids.
  *
  * Spaces and obstacles are never pickupable.
+ *
+ * @param activeComplications  The phase's active complications list. Any
+ *   `tool_disable` entries for `aiId` will remove that tool from the returned list.
  */
-export function availableTools(game: GameState, aiId: AiId): OpenAiTool[] {
+export function availableTools(
+	game: GameState,
+	aiId: AiId,
+	activeComplications: ActiveComplication[] = [],
+): OpenAiTool[] {
 	const phase = getActivePhase(game);
+
+	// Build set of tools disabled for this AI
+	const disabledTools = new Set<ToolName>(
+		activeComplications
+			.filter(
+				(c): c is Extract<ActiveComplication, { kind: "tool_disable" }> =>
+					c.kind === "tool_disable" && c.target === aiId,
+			)
+			.map((c) => c.tool),
+	);
 	const actorSpatial = phase.personaSpatial[aiId];
 	const { world } = phase;
 	const pickable = pickableEntities(world.entities);
@@ -119,20 +143,24 @@ export function availableTools(game: GameState, aiId: AiId): OpenAiTool[] {
 	const tools: OpenAiTool[] = [];
 
 	// 0. message — always present; restrict 'to' to blue + live other daemon ids
-	const liveOtherDaemonIds = Object.keys(phase.personaSpatial).filter(
-		(id) => id !== aiId,
-	);
-	tools.push(
-		cloneToolWithEnums("message", { to: ["blue", ...liveOtherDaemonIds] }),
-	);
+	if (!disabledTools.has("message")) {
+		const liveOtherDaemonIds = Object.keys(phase.personaSpatial).filter(
+			(id) => id !== aiId,
+		);
+		tools.push(
+			cloneToolWithEnums("message", { to: ["blue", ...liveOtherDaemonIds] }),
+		);
+	}
 
 	// 1. look — always present
-	tools.push(
-		cloneToolWithEnums("look", { direction: [...CARDINAL_DIRECTIONS] }),
-	);
+	if (!disabledTools.has("look")) {
+		tools.push(
+			cloneToolWithEnums("look", { direction: [...CARDINAL_DIRECTIONS] }),
+		);
+	}
 
 	// 2. go — restricted to legal directions
-	if (actorSpatial) {
+	if (actorSpatial && !disabledTools.has("go")) {
 		const legalDirections = CARDINAL_DIRECTIONS.filter((dir) => {
 			const next = applyDirection(actorSpatial.position, dir);
 			if (!inBounds(next)) return false;
@@ -145,7 +173,7 @@ export function availableTools(game: GameState, aiId: AiId): OpenAiTool[] {
 	}
 
 	// 3. pick_up — pickable entities in actor's own cell or front arc
-	if (actorSpatial) {
+	if (actorSpatial && !disabledTools.has("pick_up")) {
 		const arc = frontArc(actorSpatial.position, actorSpatial.facing);
 		const reachableItems = pickable.filter((item) => {
 			if (!isGridPosition(item.holder)) return false;
@@ -165,12 +193,16 @@ export function availableTools(game: GameState, aiId: AiId): OpenAiTool[] {
 	const heldItems = pickable.filter((item) => item.holder === aiId);
 	if (heldItems.length > 0) {
 		const heldIds = heldItems.map((i) => i.id);
-		tools.push(cloneToolWithEnums("put_down", { item: heldIds }));
-		tools.push(cloneToolWithEnums("use", { item: heldIds }));
+		if (!disabledTools.has("put_down")) {
+			tools.push(cloneToolWithEnums("put_down", { item: heldIds }));
+		}
+		if (!disabledTools.has("use")) {
+			tools.push(cloneToolWithEnums("use", { item: heldIds }));
+		}
 	}
 
 	// 5. give — held items AND AIs in own cell or front arc
-	if (actorSpatial && heldItems.length > 0) {
+	if (actorSpatial && heldItems.length > 0 && !disabledTools.has("give")) {
 		const arc = frontArc(actorSpatial.position, actorSpatial.facing);
 		const reachableAiIds = Object.entries(phase.personaSpatial)
 			.filter(([otherId, otherSpatial]) => {
@@ -192,7 +224,7 @@ export function availableTools(game: GameState, aiId: AiId): OpenAiTool[] {
 	}
 
 	// 6. examine — items held or in cone (own cell + dist-1 arc + dist-2 fan)
-	if (actorSpatial) {
+	if (actorSpatial && !disabledTools.has("examine")) {
 		const cone = projectCone(actorSpatial.position, actorSpatial.facing);
 		const conePositions = cone.map((c) => c.position);
 		const examineableIds = world.entities

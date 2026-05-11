@@ -24,9 +24,11 @@ import {
 	advancePhase,
 	advanceRound,
 	appendMessage,
+	appendPrivateSystemNotice,
 	getActivePhase,
 	isAiLockedOut,
 	resolveChatLockouts,
+	resolveToolDisables,
 	triggerChatLockout,
 } from "./engine";
 import { buildOpenAiMessages } from "./openai-message-builder";
@@ -211,7 +213,7 @@ export async function runRound(
 		);
 
 		// Compute legal tools for this AI given current game state
-		const tools = availableTools(state, aiId);
+		const tools = availableTools(state, aiId, getActivePhase(state).activeComplications);
 
 		// Call the provider
 		let { assistantText, toolCalls, costUsd } = await provider.streamRound(
@@ -502,6 +504,19 @@ export async function runRound(
 		if (expiredAis.length > 0) {
 			state = resolveChatLockouts(state);
 			chatLockoutsResolved = expiredAis;
+		}
+	}
+
+	// 4b. Resolve expired tool disables and notify the affected daemons
+	{
+		const { game: resolvedGame, resolved } = resolveToolDisables(state);
+		state = resolvedGame;
+		for (const { target, tool } of resolved) {
+			state = appendPrivateSystemNotice(
+				state,
+				target,
+				`Sysadmin: Your ${tool} tool has been restored.`,
+			);
 		}
 	}
 

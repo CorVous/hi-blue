@@ -18,6 +18,7 @@ import type {
 	PersonaSpatialState,
 	PhaseConfig,
 	PhaseState,
+	ToolName,
 } from "./types";
 
 /**
@@ -429,6 +430,68 @@ export function isPlayerChatLockedOut(game: GameState, aiId: AiId): boolean {
 	const resolveAtRound = phase.chatLockouts.get(aiId);
 	if (resolveAtRound === undefined) return false;
 	return phase.round < resolveAtRound;
+}
+
+/**
+ * Append a `kind: "broadcast"` ConversationEntry to ONLY the specified
+ * recipient daemon's log. Used for private Sysadmin notices (e.g. tool
+ * disable / restore messages) that should reach exactly one daemon.
+ */
+export function appendPrivateSystemNotice(
+	game: GameState,
+	recipientId: AiId,
+	content: string,
+): GameState {
+	return updateActivePhase(game, (phase) => {
+		const entry: ConversationEntry = {
+			kind: "broadcast",
+			round: phase.round,
+			content,
+		};
+		return {
+			...phase,
+			conversationLogs: {
+				...phase.conversationLogs,
+				[recipientId]: [...(phase.conversationLogs[recipientId] ?? []), entry],
+			},
+		};
+	});
+}
+
+/**
+ * Remove all `tool_disable` activeComplications whose `resolveAtRound` has
+ * been reached (i.e. `phase.round >= resolveAtRound`).
+ *
+ * Returns the updated game and the list of resolved (target, tool) pairs so
+ * the caller can send restore notifications.
+ *
+ * Call this after `advanceRound`.
+ */
+export function resolveToolDisables(game: GameState): {
+	game: GameState;
+	resolved: Array<{ target: AiId; tool: ToolName }>;
+} {
+	const phase = getActivePhase(game);
+	const resolved: Array<{ target: AiId; tool: ToolName }> = [];
+	const kept: ActiveComplication[] = [];
+
+	for (const complication of phase.activeComplications) {
+		if (
+			complication.kind === "tool_disable" &&
+			phase.round >= complication.resolveAtRound
+		) {
+			resolved.push({ target: complication.target, tool: complication.tool });
+		} else {
+			kept.push(complication);
+		}
+	}
+
+	const updatedGame = updateActivePhase(game, (p) => ({
+		...p,
+		activeComplications: kept,
+	}));
+
+	return { game: updatedGame, resolved };
 }
 
 /**

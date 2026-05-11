@@ -8,10 +8,10 @@
 
 import { describe, expect, it } from "vitest";
 import { WEATHER_POOL } from "../../../content/index.js";
-import { COMPLICATIONS, weatherChangeComplication } from "../complications.js";
+import { COMPLICATIONS, toolDisableComplication, weatherChangeComplication } from "../complications.js";
 import { DEFAULT_LANDMARKS } from "../direction.js";
-import { createGame, getActivePhase, startPhase } from "../engine.js";
-import type { AiPersona, ContentPack, PhaseConfig } from "../types.js";
+import { createGame, getActivePhase, startPhase, updateActivePhase } from "../engine.js";
+import type { ActiveComplication, AiPersona, ContentPack, PhaseConfig } from "../types.js";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -175,5 +175,101 @@ describe("COMPLICATIONS registry", () => {
 			expect(typeof comp.name).toBe("string");
 			expect(typeof comp.apply).toBe("function");
 		}
+	});
+
+	it("contains toolDisableComplication", () => {
+		expect(COMPLICATIONS.some((c) => c.name === "toolDisable")).toBe(true);
+	});
+});
+
+describe("toolDisableComplication", () => {
+	/** rng that returns values from the provided sequence */
+	function seqRng(values: number[]): () => number {
+		let idx = 0;
+		return () => {
+			if (idx >= values.length) throw new Error(`seqRng exhausted at call #${idx + 1}`);
+			// biome-ignore lint/style/noNonNullAssertion: bounded
+			return values[idx++]!;
+		};
+	}
+
+	it("apply appends one tool_disable to phase.activeComplications", () => {
+		const game = makeGameWithWeather("clear");
+		// rng[0]=0.0 → picks first valid pair; rng[1]=0.0 → duration=3
+		const result = toolDisableComplication.apply(game, seqRng([0.0, 0.0]));
+		const phase = getActivePhase(result);
+		const disables = phase.activeComplications.filter((c) => c.kind === "tool_disable");
+		expect(disables).toHaveLength(1);
+	});
+
+	it("apply sets resolveAtRound = phase.round + duration where duration ∈ [3, 5]", () => {
+		const game = makeGameWithWeather("clear");
+		// Test with several duration values
+		for (const durationSeed of [0.0, 0.34, 0.67, 0.99]) {
+			const result = toolDisableComplication.apply(game, seqRng([0.0, durationSeed]));
+			const phase = getActivePhase(result);
+			const disable = phase.activeComplications.find((c) => c.kind === "tool_disable");
+			expect(disable).toBeDefined();
+			if (disable?.kind === "tool_disable") {
+				const baseRound = getActivePhase(game).round;
+				expect(disable.resolveAtRound).toBeGreaterThanOrEqual(baseRound + 3);
+				expect(disable.resolveAtRound).toBeLessThanOrEqual(baseRound + 5);
+			}
+		}
+	});
+
+	it("apply appends a private broadcast notice to target daemon's log only", () => {
+		const game = makeGameWithWeather("clear");
+		// All AI ids are red, green, cyan; rng[0]=0.0 → first pair → first (daemon,tool)
+		const result = toolDisableComplication.apply(game, seqRng([0.0, 0.0]));
+		const phase = getActivePhase(result);
+
+		// Find the target daemon from the disable entry
+		const disable = phase.activeComplications.find((c) => c.kind === "tool_disable");
+		if (!disable || disable.kind !== "tool_disable") throw new Error("no disable");
+		const targetId = disable.target;
+
+		// Target daemon should have a broadcast entry
+		const targetLog = phase.conversationLogs[targetId] ?? [];
+		const broadcasts = targetLog.filter((e) => e.kind === "broadcast");
+		expect(broadcasts).toHaveLength(1);
+		if (broadcasts[0]?.kind === "broadcast") {
+			expect(broadcasts[0].content).toContain("Sysadmin");
+			expect(broadcasts[0].content).toContain(disable.tool);
+		}
+
+		// Other daemons should NOT have the broadcast
+		const aiIds = Object.keys(TEST_PERSONAS);
+		for (const aiId of aiIds) {
+			if (aiId === targetId) continue;
+			const otherLog = phase.conversationLogs[aiId] ?? [];
+			const otherBroadcasts = otherLog.filter((e) => e.kind === "broadcast");
+			expect(otherBroadcasts).toHaveLength(0);
+		}
+	});
+
+	it("apply is a no-op when all (daemon, tool) pairs already disabled", () => {
+		const game = makeGameWithWeather("clear");
+		const phase = getActivePhase(game);
+		const toolNames = ["pick_up", "put_down", "give", "use", "go", "look", "examine", "message"] as const;
+		const aiIds = Object.keys(TEST_PERSONAS);
+
+		// Build a game with all (daemon, tool) pairs already disabled
+		const allDisabled: ActiveComplication[] = [];
+		for (const aiId of aiIds) {
+			for (const tool of toolNames) {
+				allDisabled.push({ kind: "tool_disable", target: aiId, tool, resolveAtRound: phase.round + 99 });
+			}
+		}
+		const saturatedGame = updateActivePhase(game, (p) => ({
+			...p,
+			activeComplications: allDisabled,
+		}));
+
+		// Apply with an empty rng — if any rng call occurs, seqRng will throw.
+		// The no-op path must not consume any rng reads.
+		const result = toolDisableComplication.apply(saturatedGame, seqRng([]));
+		const after = getActivePhase(result);
+		expect(after.activeComplications.length).toBe(allDisabled.length);
 	});
 });

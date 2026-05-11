@@ -559,7 +559,7 @@ describe("serializeSession / deserializeSession", () => {
 		const activeComplications: import("../../game/types.js").ActiveComplication[] =
 			[
 				{ kind: "sysadmin_directive", target: "red", directive: "be helpful" },
-				{ kind: "tool_disable", target: "green", tool: "go" },
+				{ kind: "tool_disable", target: "green", tool: "go", resolveAtRound: 10 },
 				{ kind: "chat_lockout", target: "cyan", resolveAtRound: 12 },
 			];
 

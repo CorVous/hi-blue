@@ -248,7 +248,8 @@ function drawComplication(
 			const pairIdx = Math.floor(rng() * validPairs.length);
 			// biome-ignore lint/style/noNonNullAssertion: bounded index
 			const pair = validPairs[pairIdx]!;
-			return { kind: "tool_disable", target: pair.target, tool: pair.tool };
+			const duration = drawCountdown(rng, 3, 5);
+			return { kind: "tool_disable", target: pair.target, tool: pair.tool, duration };
 		}
 
 		case "obstacle_shift": {
@@ -417,6 +418,7 @@ export function applyComplicationResult(
 				kind: "tool_disable",
 				target: fired.target,
 				tool: fired.tool,
+				resolveAtRound: phase.round + fired.duration,
 			};
 			activeComplications = [...activeComplications, entry];
 		} else if (fired.kind === "chat_lockout") {
