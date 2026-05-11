@@ -18,7 +18,7 @@ import { getActivePhase } from "../engine";
 import { GameSession } from "../game-session";
 import type { RoundLLMProvider } from "../round-llm-provider";
 import { MockRoundLLMProvider } from "../round-llm-provider";
-import type { AiPersona, ContentPack, PhaseConfig } from "../types";
+import type { AiPersona, ContentPack } from "../types";
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -64,13 +64,23 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 	},
 };
 
-const PHASE_CONFIG: PhaseConfig = {
-	phaseNumber: 1,
-	kRange: [1, 1],
-	nRange: [1, 1],
-	mRange: [0, 0],
-	aiGoalPool: ["Hold the flower", "Distribute evenly", "Hold the key"],
-	budgetPerAi: 5,
+/**
+ * Minimal ContentPack with no objective pairs (vacuous win = always true).
+ * Used by tests that don't care about world content.
+ */
+const MINIMAL_CONTENT_PACK: ContentPack = {
+	setting: "test station",
+	weather: "",
+	timeOfDay: "",
+	objectivePairs: [],
+	interestingObjects: [],
+	obstacles: [],
+	landmarks: DEFAULT_LANDMARKS,
+	aiStarts: {
+		red: { position: { row: 0, col: 0 }, facing: "north" },
+		green: { position: { row: 0, col: 1 }, facing: "north" },
+		cyan: { position: { row: 0, col: 2 }, facing: "north" },
+	},
 };
 
 /**
@@ -146,20 +156,20 @@ function makePassProvider() {
 // ── Session construction ──────────────────────────────────────────────────────
 
 describe("GameSession construction", () => {
-	it("creates a session with an active phase", () => {
-		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
+	it("creates a session with flat game state", () => {
+		const session = new GameSession(MINIMAL_CONTENT_PACK, TEST_PERSONAS);
 		const state = session.getState();
-		expect(state.phases).toHaveLength(1);
-		expect(state.currentPhase).toBe(1);
 		expect(state.isComplete).toBe(false);
+		expect(state.round).toBe(0);
+		expect(state.personas).toEqual(TEST_PERSONAS);
 	});
 
-	it("initial budgets match the phase config", () => {
-		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
+	it("initial budgets are set from the default per-AI budget ($0.50)", () => {
+		const session = new GameSession(MINIMAL_CONTENT_PACK, TEST_PERSONAS);
 		const phase = getActivePhase(session.getState());
-		expect(phase.budgets.red?.remaining).toBe(5);
-		expect(phase.budgets.green?.remaining).toBe(5);
-		expect(phase.budgets.cyan?.remaining).toBe(5);
+		expect(phase.budgets.red?.remaining).toBeCloseTo(0.5, 10);
+		expect(phase.budgets.green?.remaining).toBeCloseTo(0.5, 10);
+		expect(phase.budgets.cyan?.remaining).toBeCloseTo(0.5, 10);
 	});
 });
 
@@ -167,7 +177,7 @@ describe("GameSession construction", () => {
 
 describe("GameSession — message routing", () => {
 	it("player message appears in only the addressed AI's message log", async () => {
-		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
+		const session = new GameSession(MINIMAL_CONTENT_PACK, TEST_PERSONAS);
 
 		await session.submitMessage(
 			"red",
@@ -197,7 +207,7 @@ describe("GameSession — message routing", () => {
 	});
 
 	it("routing changes per round — second message goes to different AI", async () => {
-		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
+		const session = new GameSession(MINIMAL_CONTENT_PACK, TEST_PERSONAS);
 
 		await session.submitMessage("red", "for red", makePassProvider());
 		await session.submitMessage("green", "for green", makePassProvider());
@@ -223,7 +233,7 @@ describe("GameSession — message routing", () => {
 
 describe("GameSession — state mutation across rounds", () => {
 	it("round counter advances after each submitMessage call", async () => {
-		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
+		const session = new GameSession(MINIMAL_CONTENT_PACK, TEST_PERSONAS);
 
 		await session.submitMessage("red", "hi", makePassProvider());
 		expect(getActivePhase(session.getState()).round).toBe(1);
@@ -233,26 +243,24 @@ describe("GameSession — state mutation across rounds", () => {
 	});
 
 	it("budget decrements for all AIs by the round's request cost", async () => {
-		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
+		const session = new GameSession(MINIMAL_CONTENT_PACK, TEST_PERSONAS);
 
 		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [], costUsd: 1 },
-			{ assistantText: "", toolCalls: [], costUsd: 1 },
-			{ assistantText: "", toolCalls: [], costUsd: 1 },
+			{ assistantText: "", toolCalls: [], costUsd: 0.1 },
+			{ assistantText: "", toolCalls: [], costUsd: 0.1 },
+			{ assistantText: "", toolCalls: [], costUsd: 0.1 },
 		]);
 		await session.submitMessage("red", "hi", provider);
 
 		const phase = getActivePhase(session.getState());
-		expect(phase.budgets.red?.remaining).toBeCloseTo(4, 10);
-		expect(phase.budgets.green?.remaining).toBeCloseTo(4, 10);
-		expect(phase.budgets.cyan?.remaining).toBeCloseTo(4, 10);
+		expect(phase.budgets.red?.remaining).toBeCloseTo(0.4, 10);
+		expect(phase.budgets.green?.remaining).toBeCloseTo(0.4, 10);
+		expect(phase.budgets.cyan?.remaining).toBeCloseTo(0.4, 10);
 	});
 
 	it("second round builds on first round's state", async () => {
 		// ContentPack places flower at (0,0) and red at (0,0)
-		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS, [
-			CONTENT_PACK_WITH_ITEMS,
-		]);
+		const session = new GameSession(CONTENT_PACK_WITH_ITEMS, TEST_PERSONAS);
 
 		// Red picks up flower in round 1
 		const provider1 = new MockRoundLLMProvider([
@@ -284,7 +292,7 @@ describe("GameSession — state mutation across rounds", () => {
 
 describe("GameSession — completions map", () => {
 	it("completions map contains the completion text for each AI", async () => {
-		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
+		const session = new GameSession(MINIMAL_CONTENT_PACK, TEST_PERSONAS);
 		// Each response includes a `message` tool call so #254's retry
 		// does not fire (this test asserts completion-text routing, not
 		// retry behaviour).
@@ -338,13 +346,15 @@ describe("GameSession — completions map", () => {
 	});
 
 	it("completions map has empty string for a budget-locked AI", async () => {
-		const session = new GameSession(
-			{ ...PHASE_CONFIG, budgetPerAi: 1 },
-			TEST_PERSONAS,
-		);
+		const session = new GameSession(MINIMAL_CONTENT_PACK, TEST_PERSONAS);
 
-		// Round 1 — all AIs act, budgets go to 0 → all locked out
-		await session.submitMessage("red", "round 1", makePassProvider());
+		// Round 1 — use a cost that exceeds the $0.50 budget to lock out all AIs
+		const exhaustProvider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [], costUsd: 1 },
+			{ assistantText: "", toolCalls: [], costUsd: 1 },
+			{ assistantText: "", toolCalls: [], costUsd: 1 },
+		]);
+		await session.submitMessage("red", "round 1", exhaustProvider);
 
 		// Round 2 — all AIs are locked, coordinator skips them
 		const { completions } = await session.submitMessage(
@@ -359,7 +369,7 @@ describe("GameSession — completions map", () => {
 	});
 
 	it("completions only for non-locked AIs are non-empty", async () => {
-		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
+		const session = new GameSession(MINIMAL_CONTENT_PACK, TEST_PERSONAS);
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "red says", toolCalls: [] },
 			{ assistantText: "green says", toolCalls: [] },
@@ -378,7 +388,7 @@ describe("GameSession — completions map", () => {
 
 describe("GameSession — result from submitMessage", () => {
 	it("result.round is 1 after the first call", async () => {
-		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
+		const session = new GameSession(MINIMAL_CONTENT_PACK, TEST_PERSONAS);
 
 		const { result } = await session.submitMessage(
 			"red",
@@ -389,7 +399,7 @@ describe("GameSession — result from submitMessage", () => {
 	});
 
 	it("result.actions contains entries from all three AIs", async () => {
-		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
+		const session = new GameSession(MINIMAL_CONTENT_PACK, TEST_PERSONAS);
 
 		const { result } = await session.submitMessage(
 			"red",
@@ -402,7 +412,7 @@ describe("GameSession — result from submitMessage", () => {
 	});
 
 	it("chat lockout is reflected in result.chatLockoutTriggered", async () => {
-		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
+		const session = new GameSession(MINIMAL_CONTENT_PACK, TEST_PERSONAS);
 
 		const { result } = await session.submitMessage(
 			"red",
@@ -420,56 +430,47 @@ describe("GameSession — result from submitMessage", () => {
 	});
 });
 
-// ── Phase advancement via GameSession ────────────────────────────────────────
+// ── Win / lose conditions via GameSession (issue #295) ───────────────────────
 
-describe("GameSession — phase advancement", () => {
-	it("phaseEnded is false when win condition not met", async () => {
-		const session = new GameSession(
-			{
-				...PHASE_CONFIG,
-				winCondition: (phase) =>
-					phase.world.entities.find((i) => i.id === "flower")?.holder === "red",
-			},
-			TEST_PERSONAS,
-			[CONTENT_PACK_WITH_ITEMS],
-		);
+describe("GameSession — win / lose via checkWinCondition / checkLoseCondition", () => {
+	it("gameEnded is false when objective pairs are not satisfied", async () => {
+		// CONTENT_PACK_WITH_ITEMS has one pair (flower at (0,0), space at (4,4))
+		// After a pass round, flower is still not on the space → no win.
+		const session = new GameSession(CONTENT_PACK_WITH_ITEMS, TEST_PERSONAS);
 
 		const { result } = await session.submitMessage(
 			"red",
 			"hi",
 			makePassProvider(),
 		);
+		expect(result.gameEnded).toBe(false);
 		expect(result.phaseEnded).toBe(false);
 	});
 
-	it("phaseEnded is true when win condition is met this round", async () => {
-		// ContentPack places flower at (0,0) and red at (0,0)
-		const session = new GameSession(
-			{
-				...PHASE_CONFIG,
-				winCondition: (phase) =>
-					phase.world.entities.find((i) => i.id === "flower")?.holder === "red",
-			},
-			TEST_PERSONAS,
-			[CONTENT_PACK_WITH_ITEMS],
+	it("gameEnded is true when all objective pairs are satisfied (vacuous K=0)", async () => {
+		// MINIMAL_CONTENT_PACK has no pairs → checkWinCondition vacuously true → game ends immediately
+		const session = new GameSession(MINIMAL_CONTENT_PACK, TEST_PERSONAS);
+
+		const { result } = await session.submitMessage(
+			"red",
+			"hi",
+			makePassProvider(),
 		);
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "call_win",
-						name: "pick_up",
-						argumentsJson: '{"item":"flower"}',
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
+		expect(result.gameEnded).toBe(true);
+	});
+
+	it("lose condition: gameEnded is true when all AIs are locked out", async () => {
+		// Use a very high cost to exhaust all budgets in one round.
+		const session = new GameSession(CONTENT_PACK_WITH_ITEMS, TEST_PERSONAS);
+		const exhaustProvider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [], costUsd: 1 },
+			{ assistantText: "", toolCalls: [], costUsd: 1 },
+			{ assistantText: "", toolCalls: [], costUsd: 1 },
 		]);
 
-		const { result } = await session.submitMessage("red", "hi", provider);
-		expect(result.phaseEnded).toBe(true);
+		const { result } = await session.submitMessage("red", "hi", exhaustProvider);
+		// With all AIs locked out, checkLoseCondition fires
+		expect(result.gameEnded).toBe(true);
 	});
 });
 
@@ -477,7 +478,7 @@ describe("GameSession — phase advancement", () => {
 
 describe("GameSession — onAiDelta propagation", () => {
 	it("fires onAiDelta for each delta emitted by a live provider", async () => {
-		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
+		const session = new GameSession(MINIMAL_CONTENT_PACK, TEST_PERSONAS);
 
 		// Hand-rolled provider that synchronously calls onDelta with two
 		// fragments and returns a `message` tool call so #254's retry does
@@ -527,7 +528,7 @@ describe("GameSession — onAiDelta propagation", () => {
 	});
 
 	it("does not invoke onAiDelta when MockRoundLLMProvider is used", async () => {
-		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
+		const session = new GameSession(MINIMAL_CONTENT_PACK, TEST_PERSONAS);
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "hello", toolCalls: [] },
 			{ assistantText: "world", toolCalls: [] },
@@ -556,9 +557,7 @@ describe("GameSession — onAiDelta propagation", () => {
 describe("GameSession — tool roundtrip persistence", () => {
 	it("two-round scenario: round-2 Red messages include round-1 assistant tool_call + tool result", async () => {
 		// ContentPack places flower at (0,0) and red at (0,0)
-		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS, [
-			CONTENT_PACK_WITH_ITEMS,
-		]);
+		const session = new GameSession(CONTENT_PACK_WITH_ITEMS, TEST_PERSONAS);
 
 		// Round 1: Red emits a tool_call (pick_up flower)
 		const round1Provider = new MockRoundLLMProvider([
@@ -627,9 +626,7 @@ describe("GameSession — tool roundtrip persistence", () => {
 describe("GameSession — spatial mechanics", () => {
 	it("go updates personaSpatial position and facing across rounds", async () => {
 		// ContentPack places red at (0,0) facing north
-		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS, [
-			CONTENT_PACK_WITH_ITEMS,
-		]);
+		const session = new GameSession(CONTENT_PACK_WITH_ITEMS, TEST_PERSONAS);
 		const phase0 = getActivePhase(session.getState());
 		expect(phase0.personaSpatial.red?.position).toEqual({ row: 0, col: 0 });
 		expect(phase0.personaSpatial.red?.facing).toBe("north");
@@ -655,9 +652,7 @@ describe("GameSession — spatial mechanics", () => {
 	it("non-adjacent give produces a tool_failure in result.actions", async () => {
 		// ContentPack: red→(0,0), green→(0,1), cyan→(0,2); key held by red
 		// red tries to give key to cyan (distance 2 — not adjacent)
-		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS, [
-			CONTENT_PACK_KEY_HELD_BY_RED,
-		]);
+		const session = new GameSession(CONTENT_PACK_KEY_HELD_BY_RED, TEST_PERSONAS);
 
 		// red at (0,0), cyan at (0,2) → distance 2
 		const provider = new MockRoundLLMProvider([
@@ -694,9 +689,7 @@ describe("parallel tool calls integration (#238)", () => {
 		// red at (0,0) holding key; flower at (0,0); red can pick up flower.
 		// red emits message + pick_up in a single LLM call.
 		// Guard: only ONE provider call should have fired for red (not two).
-		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS, [
-			CONTENT_PACK_WITH_ITEMS,
-		]);
+		const session = new GameSession(CONTENT_PACK_WITH_ITEMS, TEST_PERSONAS);
 
 		let redCallCount = 0;
 		const trackingProvider: RoundLLMProvider = {

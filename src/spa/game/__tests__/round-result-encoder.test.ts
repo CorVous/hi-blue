@@ -279,7 +279,7 @@ describe("encodeRoundResult — budget events", () => {
 	it("budget event reflects actual remaining value from phaseAfter", () => {
 		// Deduct red's budget twice with $1 cost each
 		let game = startPhase(createGame(TEST_PERSONAS), PHASE_CONFIG);
-		game = deductBudget(deductBudget(game, "red", 1), "red", 1);
+		game = deductBudget(deductBudget(game, "red", 1).game, "red", 1).game;
 		const phase = getActivePhase(game);
 
 		const result = makePassResult();
@@ -305,7 +305,7 @@ describe("encodeRoundResult — lockout events (budget-exhaustion)", () => {
 			...PHASE_CONFIG,
 			budgetPerAi: 1,
 		});
-		game = deductBudget(game, "red", 1);
+		game = deductBudget(game, "red", 1).game;
 		const phase = getActivePhase(game);
 		expect(phase.lockedOut.has("red")).toBe(true);
 
@@ -345,7 +345,7 @@ describe("encodeRoundResult — lockout events (budget-exhaustion)", () => {
 			budgetPerAi: 1,
 		});
 		// Deduct red down to 0
-		game = deductBudget(game, "red", 1);
+		game = deductBudget(game, "red", 1).game;
 		const phase = getActivePhase(game);
 		expect(phase.lockedOut.has("red")).toBe(true);
 

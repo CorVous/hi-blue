@@ -164,6 +164,7 @@ describe("phase configs — chaining", () => {
 	});
 
 	it("PHASE_3_CONFIG has no nextPhaseConfig", () => {
+		// @ts-expect-error nextPhaseConfig not in type (deprecated flat-model compat)
 		expect(PHASE_3_CONFIG.nextPhaseConfig).toBeUndefined();
 	});
 });

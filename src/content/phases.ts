@@ -1,50 +1,48 @@
-import type { PhaseConfig } from "../spa/game/types";
-import { checkWinCondition } from "../spa/game/win-condition";
+import type { SingleGameConfig } from "../content/content-pack-generator";
 import { PHASE_GOAL_POOL } from "./goal-pool";
 
 /**
- * Canonical phase configurations for the three-phase game.
- *
- * Per-phase goals are drawn at phase start from the shared `PHASE_GOAL_POOL`.
- * Personalities (and the persona-level cross-game goal) live in `personas.ts`
- * and are stable across all three phases.
- *
- * Chain: PHASE_1_CONFIG → PHASE_2_CONFIG → PHASE_3_CONFIG (no next).
+ * Single-game config for the new flat game loop (issue #295).
  *
  * k = objective pairs, n = interesting objects, m = obstacles.
- * The engine rolls k/n/m within the given ranges at game start via generateContentPacks.
- *
- * winCondition: phase advances when all K objective pairs are satisfied (issue #126).
+ * Budget is $0.50 per AI, no per-phase reset.
  */
-
-export const PHASE_3_CONFIG: PhaseConfig = {
-	phaseNumber: 3,
-	kRange: [2, 3],
-	nRange: [3, 4],
-	mRange: [2, 3],
+export const SINGLE_GAME_CONFIG: SingleGameConfig = {
+	kRange: [1, 2],
+	nRange: [2, 4],
+	mRange: [1, 3],
 	budgetPerAi: 0.5,
-	aiGoalPool: PHASE_GOAL_POOL,
-	winCondition: (phase) => checkWinCondition(phase.world, phase.contentPack),
 };
 
-export const PHASE_2_CONFIG: PhaseConfig = {
-	phaseNumber: 2,
-	kRange: [2, 2],
-	nRange: [2, 4],
-	mRange: [2, 3],
+/**
+ * @deprecated Legacy phase configs. Kept for test compatibility.
+ * Use SINGLE_GAME_CONFIG + generateContentPack instead.
+ */
+export const PHASE_3_CONFIG = {
+	phaseNumber: 3 as const,
+	kRange: [2, 3] as [number, number],
+	nRange: [3, 4] as [number, number],
+	mRange: [2, 3] as [number, number],
 	budgetPerAi: 0.5,
 	aiGoalPool: PHASE_GOAL_POOL,
-	winCondition: (phase) => checkWinCondition(phase.world, phase.contentPack),
+};
+
+export const PHASE_2_CONFIG = {
+	phaseNumber: 2 as const,
+	kRange: [2, 2] as [number, number],
+	nRange: [2, 4] as [number, number],
+	mRange: [2, 3] as [number, number],
+	budgetPerAi: 0.5,
+	aiGoalPool: PHASE_GOAL_POOL,
 	nextPhaseConfig: PHASE_3_CONFIG,
 };
 
-export const PHASE_1_CONFIG: PhaseConfig = {
-	phaseNumber: 1,
-	kRange: [1, 1],
-	nRange: [2, 3],
-	mRange: [1, 2],
+export const PHASE_1_CONFIG = {
+	phaseNumber: 1 as const,
+	kRange: [1, 1] as [number, number],
+	nRange: [2, 3] as [number, number],
+	mRange: [1, 2] as [number, number],
 	budgetPerAi: 0.5,
 	aiGoalPool: PHASE_GOAL_POOL,
-	winCondition: (phase) => checkWinCondition(phase.world, phase.contentPack),
 	nextPhaseConfig: PHASE_2_CONFIG,
 };

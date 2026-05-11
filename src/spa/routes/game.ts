@@ -1,4 +1,3 @@
-import { PHASE_1_CONFIG } from "../../content";
 import { serializeGameSave } from "../../save-serializer.js";
 import {
 	BANNER,
@@ -11,7 +10,6 @@ import {
 import { buildSessionFromAssets } from "../game/bootstrap.js";
 import { BrowserLLMProvider } from "../game/browser-llm-provider.js";
 import { deriveComposerState } from "../game/composer-reducer.js";
-import { getActivePhase, updateActivePhase } from "../game/engine.js";
 import { GameSession } from "../game/game-session.js";
 import {
 	applyAddresseeChange,
@@ -26,7 +24,7 @@ import {
 } from "../game/pending-bootstrap.js";
 import { encodeRoundResult } from "../game/round-result-encoder.js";
 import { getSpikeRng } from "../game/spike-seed.js";
-import type { AiId, AiPersona, PhaseConfig } from "../game/types";
+import type { AiId, AiPersona } from "../game/types";
 import { AI_TYPING_SPEED, TOKEN_PACE_MS } from "../game/typing-rhythm.js";
 import { CapHitError } from "../llm-client.js";
 import {
@@ -142,35 +140,16 @@ function isDevHost(): boolean {
 }
 
 /**
- * Recursively deep-clone a PhaseConfig chain, overriding `winCondition` to
- * `() => true` at every level.
- *
- * Only the config objects are cloned — the `initialWorld` and `aiGoals` values
- * are shallow-copied (they are plain data with no function members that need
- * patching). The original configs are never mutated.
+ * @deprecated Phase concept removed (issue #295). No longer used.
  */
-function patchPhaseChain(config: PhaseConfig): PhaseConfig {
-	return {
-		...config,
-		winCondition: () => true,
-		...(config.nextPhaseConfig !== undefined
-			? { nextPhaseConfig: patchPhaseChain(config.nextPhaseConfig) }
-			: {}),
-	};
-}
-
 /**
  * Apply SPA-side test affordances from URL search params.
  *
  * Only honoured when the SPA is served by `pnpm wrangler dev` (see
  * `isDevHost`). Silently inert in any other host.
  *
- * - `winImmediately=1`: recursively patch the real phase chain reachable from
- *   the active phase, injecting `winCondition: () => true` into the active
- *   phase AND every phase reachable via `nextPhaseConfig`. This uses the real
- *   PHASE_1 → PHASE_2 → PHASE_3 config chain (deep-cloned; originals are
- *   untouched). A cold-start `goto("/?winImmediately=1")` followed by three
- *   submitted messages will reliably reach `game_ended`.
+ * - `winImmediately=1`: not applicable in single-game loop (win is driven by
+ *   checkWinCondition after each round). This affordance is a no-op in #295.
  * - `lockout=1`: arm a chat-lockout for `red`, 2 rounds, effective next round.
  *   Matches the legacy worker semantics from `src/proxy/_smoke.ts`.
  *
@@ -183,30 +162,14 @@ export function applyTestAffordances(
 	// Gate: only apply when wrangler dev is the host
 	if (!isDevHost()) return s;
 
-	const wantsWinImmediately = searchParams.get("winImmediately") === "1";
 	const wantsLockout = searchParams.get("lockout") === "1";
 
-	if (!wantsWinImmediately && !wantsLockout) return s;
+	if (!wantsLockout) return s;
 
-	let active = s;
-
-	if (wantsWinImmediately) {
-		// Patch the real phase chain: inject winCondition: () => true into the
-		// active phase AND every phase reachable via nextPhaseConfig.
-		// patchPhaseChain deep-clones each config level so the global
-		// PHASE_1_CONFIG (and its linked configs) are never mutated.
-		const newState = updateActivePhase(active.getState(), (phase) => ({
-			...phase,
-			winCondition: () => true,
-			...(phase.nextPhaseConfig !== undefined
-				? { nextPhaseConfig: patchPhaseChain(phase.nextPhaseConfig) }
-				: {}),
-		}));
-		active = GameSession.restore(newState);
-	}
+	const active = s;
 
 	if (wantsLockout) {
-		const currentRound = getActivePhase(active.getState()).round;
+		const currentRound = active.getState().round;
 		active.armChatLockout({
 			rng: () => 0,
 			lockoutTriggerRound: currentRound + 1,
@@ -453,17 +416,10 @@ export function renderGame(
 		);
 		const status = topInfoStatus(state);
 		const sessionIdLocal = getActiveSessionId() ?? "0x????";
-		// Walk the phase chain to count total phases (matches refreshTopInfo).
-		let total = 1;
-		let cursor: PhaseConfig | undefined = PHASE_1_CONFIG.nextPhaseConfig;
-		while (cursor) {
-			total += 1;
-			cursor = cursor.nextPhaseConfig;
-		}
 		const inputs = {
 			sessionId: sessionIdLocal,
-			phaseNumber: 1,
-			totalPhases: total,
+			phaseNumber: 1 as const,
+			totalPhases: 1,
 			turn: 0,
 		};
 		if (topinfoLeftEl) renderTopInfoLeft(topinfoLeftEl, inputs);
@@ -627,6 +583,7 @@ export function renderGame(
 				startBrightnessWipe();
 				return pending.contentPacksPromise.then((packs) => ({
 					personas,
+					contentPack: packs[0]!,
 					contentPacks: packs,
 				}));
 			})
@@ -731,7 +688,7 @@ export function renderGame(
 				// Re-render transcripts from restored state using conversationLogs.
 				// (The new format stores conversation logs in daemon .txt files, not as
 				// serialized transcript HTML, so we always use the conversationLogs path.)
-				const restoredPhase = getActivePhase(restoredState);
+				const restoredPhase = restoredState;
 				const restoredPersonas = restoredState.personas;
 				const restorePanelEls = doc.querySelectorAll<HTMLElement>(".ai-panel");
 				Object.keys(restoredPersonas).forEach((aiId, idx) => {
@@ -835,7 +792,7 @@ export function renderGame(
 
 		// Hydrate lockouts from the active phase's chatLockouts map so that
 		// a reload preserves the Send-disabled state for locked-out AIs.
-		const activePhaseForLockouts = getActivePhase(session.getState());
+		const activePhaseForLockouts = session.getState();
 		for (const aiId of Object.keys(runtimePersonas)) {
 			lockouts.set(aiId, activePhaseForLockouts.chatLockouts.has(aiId));
 		}
@@ -884,9 +841,9 @@ export function renderGame(
 			panel.style.setProperty("--panel-color", persona.color);
 			initPanelChrome(panel, persona);
 			const budgetEl = panel.querySelector<HTMLSpanElement>(".panel-budget");
-			const phase = getActivePhase(sessionRef.getState());
+			const gameState = sessionRef.getState();
 			if (budgetEl) {
-				const budget = phase.budgets[aiId];
+				const budget = gameState.budgets[aiId];
 				if (budget) {
 					budgetEl.dataset.budget = String(budget.remaining);
 					budgetEl.textContent = formatBudget(budget.remaining);
@@ -917,19 +874,11 @@ export function renderGame(
 		if (!session) return;
 		if (!topinfoLeftEl || !topinfoRightEl) return;
 		const state = session.getState();
-		const phase = getActivePhase(state);
-		// Walk the nextPhaseConfig chain from PHASE_1_CONFIG to count total phases.
-		let total = 1;
-		let cursor: PhaseConfig | undefined = PHASE_1_CONFIG.nextPhaseConfig;
-		while (cursor) {
-			total += 1;
-			cursor = cursor.nextPhaseConfig;
-		}
 		const inputs = {
 			sessionId,
-			phaseNumber: phase.phaseNumber,
-			totalPhases: total,
-			turn: phase.round,
+			phaseNumber: 1 as const,
+			totalPhases: 1,
+			turn: state.round,
 		};
 		renderTopInfoLeft(topinfoLeftEl, inputs);
 		topinfoRightEl.textContent = "";
@@ -1246,11 +1195,10 @@ export function renderGame(
 				(aiId) => stripSpinner(aiId),
 			);
 
-			const phaseAfter = getActivePhase(nextState);
 			const events = encodeRoundResult(
 				result,
 				completions,
-				phaseAfter,
+				nextState,
 				nextState.personas,
 			);
 
@@ -1340,7 +1288,7 @@ export function renderGame(
 						// Refresh budget displays from new phase
 						const currentSession = session;
 						if (currentSession) {
-							const newPhase = getActivePhase(currentSession.getState());
+							const newState = currentSession.getState();
 							for (const aid of advAiIds) {
 								const panel = doc.querySelector<HTMLElement>(
 									`.ai-panel[data-ai="${aid}"]`,
@@ -1349,7 +1297,7 @@ export function renderGame(
 								const budgetEl =
 									panel.querySelector<HTMLSpanElement>(".panel-budget");
 								if (budgetEl) {
-									const b = newPhase.budgets[aid];
+									const b = newState.budgets[aid];
 									if (b) {
 										budgetEl.dataset.budget = String(b.remaining);
 										budgetEl.textContent = formatBudget(b.remaining);

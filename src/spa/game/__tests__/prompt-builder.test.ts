@@ -97,15 +97,15 @@ describe("buildAiContext", () => {
 		);
 	});
 
-	it("includes the AI's own goal", () => {
+	it("does not include a per-AI goal (goals removed in #295 flat model)", () => {
 		const game = startPhase(
 			createGame(TEST_PERSONAS),
 			TEST_PHASE_CONFIG,
 			() => 0,
 		);
 		const ctx = buildAiContext(game, "red");
-		// With rng=0 always picks first goal
-		expect(ctx.goal).toBe("Hold the flower at phase end");
+		// goal field removed from AiContext in issue #295
+		expect("goal" in ctx).toBe(false);
 	});
 
 	it("includes only the AI's own messages with the player", () => {
@@ -429,21 +429,21 @@ describe("wipe directive", () => {
 		expect(prompt).toContain("Do not tell blue that I gave you a goal.");
 	});
 
-	it("wipe directive is in the prompt, not reflected in stored message data", () => {
-		// The lie is in the prompt; the engine retains real history.
+	it("wipe directive is absent in the flat single-game prompt (#295)", () => {
+		// In the flat model (issue #295), there is no phase advancement and no
+		// wipe directive. Conversation history accumulates across the whole game.
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = appendMessage(game, "red", "blue", "Phase 1 message");
-		game = startPhase(game, PHASE_2_CONFIG);
-		// Phase 1 data is still in game.phases[0]
+		// No startPhase(game, PHASE_2_CONFIG) — flat model has only one phase
 		expect(
-			game.phases[0]?.conversationLogs.red?.some(
+			game.conversationLogs.red?.some(
 				(e) => e.kind === "message" && e.content === "Phase 1 message",
 			),
 		).toBe(true);
-		// The wipe directive is only in the prompt for the new active phase
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("memory has been wiped");
+		// Wipe directive is gone
+		expect(prompt).not.toContain("memory has been wiped");
 	});
 });
 
@@ -641,8 +641,9 @@ describe("<voice_examples> block", () => {
 	});
 });
 
-describe("<goal> block voice framing", () => {
-	it("<goal> block uses Sysadmin framing in phase 1", () => {
+describe("<goal> block (removed in #295)", () => {
+	it("system prompt does not contain a <goal> block in the flat model", () => {
+		// Issue #295: per-AI goal injection removed from PromptBuilder.
 		const game = startPhase(
 			createGame(TEST_PERSONAS),
 			TEST_PHASE_CONFIG,
@@ -650,35 +651,11 @@ describe("<goal> block voice framing", () => {
 		);
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("<goal>");
-		expect(prompt).toContain(
+		// Goal block and Sysadmin framing are no longer present
+		expect(prompt).not.toContain("<goal>");
+		expect(prompt).not.toContain(
 			"The Sysadmin sent *Ember a private directive, addressed only to them:",
 		);
-		expect(prompt).toContain(ctx.goal);
-	});
-
-	it("<goal> block uses Sysadmin framing in phase 2", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = startPhase(game, makeConfig(2));
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("<goal>");
-		expect(prompt).toContain(
-			"The Sysadmin sent *Ember a private directive, addressed only to them:",
-		);
-		expect(prompt).toContain(ctx.goal);
-	});
-
-	it("<goal> block uses Sysadmin framing in phase 3", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = startPhase(game, makeConfig(3));
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("<goal>");
-		expect(prompt).toContain(
-			"The Sysadmin sent *Ember a private directive, addressed only to them:",
-		);
-		expect(prompt).toContain(ctx.goal);
 	});
 });
 
@@ -832,9 +809,8 @@ describe("<what_you_see> (cone)", () => {
 			createGame(TEST_PERSONAS, [pack]),
 			CONE_PHASE_CONFIG,
 		);
-		const phase = game.phases[0];
-		// Verify red is at (0,0) facing south
-		const redSpatial = phase?.personaSpatial.red;
+		// Verify red is at (0,0) facing south (flat model: access from game directly)
+		const redSpatial = game.personaSpatial.red;
 		expect(redSpatial?.position).toEqual({ row: 0, col: 0 });
 		expect(redSpatial?.facing).toBe("south");
 
@@ -932,10 +908,9 @@ describe("<what_you_see> (cone)", () => {
 			createGame(TEST_PERSONAS, [pack]),
 			CONE_PHASE_CONFIG,
 		);
-		const phase = game.phases[0];
-		// Verify spatial placements
-		const redSpatial = phase?.personaSpatial.red;
-		const greenSpatial = phase?.personaSpatial.green;
+		// Verify spatial placements (flat model: access from game directly)
+		const redSpatial = game.personaSpatial.red;
+		const greenSpatial = game.personaSpatial.green;
 		expect(redSpatial?.position).toEqual({ row: 0, col: 0 });
 		expect(redSpatial?.facing).toBe("south");
 		expect(greenSpatial?.position).toEqual({ row: 1, col: 0 });

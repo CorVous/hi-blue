@@ -100,30 +100,22 @@ describe("devtools-edit: mutating daemon .txt affects conversationLogs on reload
 		expect(sessionId).toBeDefined();
 
 		const game = makeFreshGame();
-		const phase = game.phases[0];
-		if (!phase) throw new Error("no phase");
 
-		// Inject a conversation log for red
+		// Inject a conversation log for red (flat model: directly on game)
 		const modifiedGame: GameState = {
 			...game,
-			phases: [
-				{
-					...phase,
-					conversationLogs: {
-						red: [
-							{
-								kind: "message" as const,
-								from: "red" as const,
-								to: "blue" as const,
-								content: "original message",
-								round: 1,
-							},
-						],
-						green: [],
-						cyan: [],
+			conversationLogs: {
+				...game.conversationLogs,
+				red: [
+					{
+						kind: "message" as const,
+						from: "red" as const,
+						to: "blue" as const,
+						content: "original message",
+						round: 1,
 					},
-				},
-			],
+				],
+			},
 		};
 
 		saveActiveSession(modifiedGame);
@@ -150,9 +142,8 @@ describe("devtools-edit: mutating daemon .txt affects conversationLogs on reload
 		const result = loadActiveSession();
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
-			const loadedPhase = result.state.phases[0];
-			// The mutated content should be visible in conversationLogs
-			const redEntry = loadedPhase?.conversationLogs.red?.[0];
+			// In flat model: conversationLogs directly on state (not nested in phases)
+			const redEntry = result.state.conversationLogs.red?.[0];
 			expect(redEntry?.kind === "message" && redEntry.content).toBe(
 				"DEVTOOLS_INJECTED_MARKER",
 			);
@@ -190,8 +181,8 @@ describe("devtools-edit: mutating daemon .txt affects conversationLogs on reload
 		const result = loadActiveSession();
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
-			const loadedPhase = result.state.phases[0];
-			const greenLog = loadedPhase?.conversationLogs.green ?? [];
+			// In flat model: conversationLogs directly on state (not nested in phases)
+			const greenLog = result.state.conversationLogs.green ?? [];
 			expect(
 				greenLog.some(
 					(e) =>

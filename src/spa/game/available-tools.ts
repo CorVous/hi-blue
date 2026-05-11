@@ -16,7 +16,6 @@ import {
 	frontArc,
 	inBounds,
 } from "./direction.js";
-import { getActivePhase } from "./engine.js";
 import { type OpenAiTool, TOOL_DEFINITIONS } from "./tool-registry.js";
 import type {
 	ActiveComplication,
@@ -124,8 +123,6 @@ export function availableTools(
 	aiId: AiId,
 	activeComplications: ActiveComplication[] = [],
 ): OpenAiTool[] {
-	const phase = getActivePhase(game);
-
 	// Build set of tools disabled for this AI
 	const disabledTools = new Set<ToolName>(
 		activeComplications
@@ -135,8 +132,8 @@ export function availableTools(
 			)
 			.map((c) => c.tool),
 	);
-	const actorSpatial = phase.personaSpatial[aiId];
-	const { world } = phase;
+	const actorSpatial = game.personaSpatial[aiId];
+	const { world } = game;
 	const pickable = pickableEntities(world.entities);
 	const obstacles = obstaclePositions(world.entities);
 
@@ -144,7 +141,7 @@ export function availableTools(
 
 	// 0. message — always present; restrict 'to' to blue + live other daemon ids
 	if (!disabledTools.has("message")) {
-		const liveOtherDaemonIds = Object.keys(phase.personaSpatial).filter(
+		const liveOtherDaemonIds = Object.keys(game.personaSpatial).filter(
 			(id) => id !== aiId,
 		);
 		tools.push(
@@ -204,7 +201,7 @@ export function availableTools(
 	// 5. give — held items AND AIs in own cell or front arc
 	if (actorSpatial && heldItems.length > 0 && !disabledTools.has("give")) {
 		const arc = frontArc(actorSpatial.position, actorSpatial.facing);
-		const reachableAiIds = Object.entries(phase.personaSpatial)
+		const reachableAiIds = Object.entries(game.personaSpatial)
 			.filter(([otherId, otherSpatial]) => {
 				if (otherId === aiId) return false;
 				if (positionsEqual(actorSpatial.position, otherSpatial.position))

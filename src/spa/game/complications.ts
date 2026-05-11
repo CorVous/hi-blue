@@ -14,9 +14,7 @@ import { DISABLABLE_TOOLS } from "./complication-engine.js";
 import {
 	appendBroadcast,
 	appendPrivateSystemNotice,
-	getActivePhase,
-	setActivePhaseWeather,
-	updateActivePhase,
+	setWeather,
 } from "./engine.js";
 import type { ActiveComplication, AiId, GameState, ToolName } from "./types.js";
 
@@ -40,7 +38,7 @@ export interface Complication {
 export const weatherChangeComplication: Complication = {
 	name: "weatherChange",
 	apply(game: GameState, rng: () => number): GameState {
-		const currentWeather = getActivePhase(game).weather;
+		const currentWeather = game.weather;
 
 		// Filter out the current weather so the draw always produces a change.
 		const candidates = (WEATHER_POOL as readonly string[]).filter(
@@ -55,7 +53,7 @@ export const weatherChangeComplication: Complication = {
 		// biome-ignore lint/style/noNonNullAssertion: bounded index into non-empty array
 		const newWeather = pool[idx]!;
 
-		let state = setActivePhaseWeather(game, newWeather);
+		let state = setWeather(game, newWeather);
 		state = appendBroadcast(state, `The weather has changed to ${newWeather}`);
 		return state;
 	},
@@ -75,12 +73,11 @@ export const weatherChangeComplication: Complication = {
 export const toolDisableComplication: Complication = {
 	name: "toolDisable",
 	apply(game: GameState, rng: () => number): GameState {
-		const phase = getActivePhase(game);
-		const aiIds = Object.keys(phase.personaSpatial) as AiId[];
+		const aiIds = Object.keys(game.personaSpatial) as AiId[];
 
 		// Build set of already-disabled (daemon, tool) pairs
 		const existingDisables = new Set<string>(
-			phase.activeComplications
+			game.activeComplications
 				.filter(
 					(c): c is Extract<ActiveComplication, { kind: "tool_disable" }> =>
 						c.kind === "tool_disable",
@@ -110,7 +107,7 @@ export const toolDisableComplication: Complication = {
 
 		// Draw duration in [3, 5]
 		const duration = 3 + Math.floor(rng() * 3);
-		const resolveAtRound = phase.round + duration;
+		const resolveAtRound = game.round + duration;
 
 		// Append the active complication
 		const entry: ActiveComplication = {
@@ -120,10 +117,10 @@ export const toolDisableComplication: Complication = {
 			resolveAtRound,
 		};
 
-		let state = updateActivePhase(game, (p) => ({
-			...p,
-			activeComplications: [...p.activeComplications, entry],
-		}));
+		let state: GameState = {
+			...game,
+			activeComplications: [...game.activeComplications, entry],
+		};
 
 		// Notify the target daemon
 		state = appendPrivateSystemNotice(

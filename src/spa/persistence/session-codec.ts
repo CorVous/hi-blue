@@ -14,11 +14,6 @@
  * See docs/adr/0005-engine-dat-obfuscation-method.md
  */
 
-import {
-	PHASE_1_CONFIG,
-	PHASE_2_CONFIG,
-	PHASE_3_CONFIG,
-} from "../../content/phases.js";
 import { DEFAULT_LANDMARKS } from "../game/direction.js";
 import type {
 	ActiveComplication,
@@ -30,8 +25,6 @@ import type {
 	GameState,
 	Objective,
 	PersonaSpatialState,
-	PhaseConfig,
-	PhaseState,
 	WorldState,
 } from "../game/types.js";
 import {
@@ -62,14 +55,6 @@ import {
  *     no additional structural deserialization changes required.
  */
 export const SESSION_SCHEMA_VERSION = 6 as const;
-
-// ── Phase config lookup ────────────────────────────────────────────────────────
-
-const PHASE_CONFIGS: Record<1 | 2 | 3, PhaseConfig> = {
-	1: PHASE_1_CONFIG,
-	2: PHASE_2_CONFIG,
-	3: PHASE_3_CONFIG,
-};
 
 // ── File shapes ────────────────────────────────────────────────────────────────
 
@@ -148,14 +133,11 @@ export function serializeSession(
 	lastSavedAt: string,
 	createdAt: string,
 ): SerializedSessionFiles {
-	const activePhase = state.phases[state.phases.length - 1];
-	if (!activePhase) throw new Error("serializeSession: no active phase");
-
 	const meta: MetaFile = {
 		createdAt,
 		lastSavedAt,
-		epoch: state.currentPhase,
-		round: activePhase.round,
+		epoch: 1,
+		round: state.round,
 		personaOrder: Object.keys(state.personas),
 	};
 
@@ -173,14 +155,12 @@ export function serializeSession(
 				typingQuirks: persona.typingQuirks,
 				voiceExamples: persona.voiceExamples,
 			},
-			conversationLog: activePhase.conversationLogs[aiId] ?? [],
+			conversationLog: state.conversationLogs[aiId] ?? [],
 		};
 		daemons[aiId] = JSON.stringify(daemonFile, null, 2);
 	}
 
-	const contentPackB: ContentPack = state.contentPacks.find(
-		(p) => p.phaseNumber !== activePhase.phaseNumber,
-	) ?? {
+	const contentPackB: ContentPack = {
 		phaseNumber: 2,
 		setting: "",
 		weather: "",
@@ -194,17 +174,17 @@ export function serializeSession(
 
 	const sealedPayload: SealedEngine = {
 		schemaVersion: SESSION_SCHEMA_VERSION,
-		world: structuredClone(activePhase.world),
-		budgets: { ...activePhase.budgets },
-		lockedOut: Array.from(activePhase.lockedOut) as AiId[],
-		personaSpatial: structuredClone(activePhase.personaSpatial),
-		contentPackA: structuredClone(activePhase.contentPack),
-		contentPackB: structuredClone(contentPackB),
+		world: structuredClone(state.world),
+		budgets: { ...state.budgets },
+		lockedOut: Array.from(state.lockedOut) as AiId[],
+		personaSpatial: structuredClone(state.personaSpatial),
+		contentPackA: structuredClone(state.contentPack),
+		contentPackB,
 		activePackId: "A",
-		weather: activePhase.weather,
+		weather: state.weather,
 		objectives: [],
-		complicationSchedule: activePhase.complicationSchedule,
-		activeComplications: structuredClone(activePhase.activeComplications),
+		complicationSchedule: state.complicationSchedule,
+		activeComplications: structuredClone(state.activeComplications),
 		isComplete: state.isComplete,
 	};
 
@@ -298,18 +278,12 @@ export function deserializeSession(
 		if (!(aiId in personas)) personas[aiId] = daemonFile.persona;
 	}
 
-	// Reconstruct a single-phase GameState from the flat v6 engine
+	// Reconstruct a flat GameState from the v6 engine
 	try {
-		// Clamp epoch to valid phase number
-		const epochPhase = ([1, 2, 3] as const).find((n) => n === meta.epoch) ?? 1;
-		const config = PHASE_CONFIGS[epochPhase];
-
 		// Rebuild conversationLogs from daemon files
 		const conversationLogs: Record<AiId, ConversationEntry[]> = {};
-		const aiGoals: Record<AiId, string> = {};
 		for (const [aiId, daemonFile] of Object.entries(daemonFiles)) {
 			conversationLogs[aiId] = [...(daemonFile.conversationLog ?? [])];
-			aiGoals[aiId] = "";
 		}
 
 		const contentPack = sealed.contentPackA;
@@ -329,13 +303,13 @@ export function deserializeSession(
 		};
 		const activeComplications = sealed.activeComplications ?? [];
 
-		const phase: PhaseState = {
-			phaseNumber: epochPhase,
+		const state: GameState = {
+			isComplete: sealed.isComplete,
+			personas,
+			contentPack,
 			setting,
 			weather,
 			timeOfDay,
-			contentPack,
-			aiGoals,
 			round: meta.round,
 			world,
 			budgets,
@@ -345,21 +319,6 @@ export function deserializeSession(
 			personaSpatial,
 			complicationSchedule,
 			activeComplications,
-			// Re-attach function fields from canonical phase config
-			...(config?.winCondition !== undefined
-				? { winCondition: config.winCondition }
-				: {}),
-			...(config?.nextPhaseConfig !== undefined
-				? { nextPhaseConfig: config.nextPhaseConfig }
-				: {}),
-		};
-
-		const state: GameState = {
-			currentPhase: epochPhase,
-			isComplete: sealed.isComplete,
-			personas,
-			phases: [phase],
-			contentPacks: [sealed.contentPackA, sealed.contentPackB],
 		};
 
 		return {
