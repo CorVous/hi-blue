@@ -752,8 +752,7 @@ export function renderGame(
 						restoredPhase.conversationLogs[aiId] ?? []
 					).filter(
 						(e) =>
-							e.kind === "message" &&
-							(e.from === "blue" || e.to === "blue"),
+							e.kind === "message" && (e.from === "blue" || e.to === "blue"),
 					);
 					if (visibleEntries.length > 0) {
 						// Synthesise from conversationLogs (stored in daemon .txt files).
