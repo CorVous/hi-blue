@@ -8,13 +8,14 @@
  *   1. { role: "system", content: ctx.toSystemPrompt() }
  *      Stable per (persona × phase) — OpenRouter's prefix cache reuses it round-to-round.
  *   2. One turn per ConversationEntry, sorted by round ascending (stable):
- *      - kind=message, outgoing: { role: "assistant", content: entry.content }
- *        — raw body the model emitted via the `message` tool. NO synthetic
- *        prefix: showing the model `[Round N] you dm <to>:` as if it were
- *        its own output would (a) misrepresent what it actually produced,
- *        (b) risk inducing it to emit that prefix verbatim instead of using
- *        the tool. Routing context for outgoing turns lives in the
- *        prior-round tool_call/tool_result pair (block 3 below) when present.
+ *      - kind=message, outgoing: { role: "assistant", content: renderEntry(...) }
+ *        — "[Round N] you dm <to>: <content>". The routing prefix lets the
+ *        Daemon track who it addressed across the whole game (the prior-round
+ *        tool_call/tool_result pair in block 3 only covers the immediately-next
+ *        round). Tradeoff: the assistant turn no longer matches the raw body
+ *        the model emitted via the `message` tool, and the model may parrot
+ *        the prefix into future `content` — `message_tool_description` in
+ *        prompt-builder.ts is the place to defend against that if it shows up.
  *      - kind=message, incoming: { role: "user",      content: renderEntry(...) }
  *        — "[Round N] <from> dms you: <content>".
  *      - kind=witnessed-event:   { role: "user",      content: renderEntry(...) }
@@ -63,10 +64,14 @@ export function buildOpenAiMessages(
 	for (const entry of sortedLog) {
 		if (entry.kind === "message") {
 			if (entry.from === ctx.aiId) {
-				// Outgoing: assistant turn shows the raw body the model emitted
-				// via the `message` tool. No synthetic round/routing prefix —
-				// it would misrepresent the model's own output. See header.
-				messages.push({ role: "assistant", content: entry.content });
+				// Outgoing: prefix with "[Round N] you dm <toLabel>:" so the
+				// Daemon can track who it addressed across the whole game —
+				// not just on the round immediately after, which is the only
+				// scope the prior-round tool_call/tool_result pair covers.
+				messages.push({
+					role: "assistant",
+					content: renderEntry(entry, ctx.aiId, ctx.worldSnapshot.entities),
+				});
 			} else {
 				// Incoming: user turn includes "[Round N] <from> dms you:" so
 				// the model can place the message in time and identify the

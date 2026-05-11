@@ -980,13 +980,12 @@ describe("conversation rendering (role turns)", () => {
 		expect(userMsg).toBeDefined();
 	});
 
-	it("outgoing AI message becomes an assistant turn carrying the raw body the model emitted", () => {
-		// Outgoing turns deliberately render as `entry.content` only — no
-		// synthetic "[Round N] you dm <to>:" prefix. Showing the model that
-		// prefix as if it were its own output would (a) misrepresent its past
-		// emission, (b) risk inducing it to emit the prefix verbatim instead
-		// of using the `message` tool. Routing context for outgoing turns
-		// lives in the prior-round tool_call/tool_result pair when present.
+	it("outgoing AI message becomes an assistant turn prefixed with '[Round N] you dm <to>:'", () => {
+		// Outgoing turns carry the same "[Round N] you dm <toLabel>:" prefix
+		// renderEntry() produces, so the Daemon can track who it addressed
+		// across the whole game — not just on the round immediately after,
+		// which is the only scope the prior-round tool_call/tool_result pair
+		// covers.
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = appendMessage(game, "red", "blue", "Greetings");
 		const ctx = buildAiContext(game, "red");
@@ -994,7 +993,8 @@ describe("conversation rendering (role turns)", () => {
 		const asst = messages.find(
 			(m) =>
 				m.role === "assistant" &&
-				(m as { content: string | null }).content === "Greetings",
+				(m as { content: string | null }).content ===
+					"[Round 0] you dm blue: Greetings",
 		);
 		expect(asst).toBeDefined();
 	});
@@ -1020,12 +1020,13 @@ describe("conversation rendering (role turns)", () => {
 		game = appendMessage(game, "green", "red", "secret");
 		const greenCtx = buildAiContext(game, "green");
 		const messages = buildOpenAiMessages(greenCtx);
-		// Outgoing turn = raw content; see the "outgoing AI message" test above
-		// for why we don't add a synthetic round/routing prefix here.
+		// Outgoing turn carries the "[Round N] you dm <toLabel>:" prefix; see
+		// the "outgoing AI message" test above for the rationale.
 		const asst = messages.find(
 			(m) =>
 				m.role === "assistant" &&
-				(m as { content: string | null }).content === "secret",
+				(m as { content: string | null }).content ===
+					"[Round 0] you dm *red: secret",
 		);
 		expect(asst).toBeDefined();
 	});
