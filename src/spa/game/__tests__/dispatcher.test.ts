@@ -415,7 +415,11 @@ describe("validateToolCall", () => {
 				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		};
-		const game = startPhase(createGame(TEST_PERSONAS, [pack]), TEST_PHASE_CONFIG, FIXED_RNG);
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [pack]),
+			TEST_PHASE_CONFIG,
+			FIXED_RNG,
+		);
 		const call: ToolCall = { name: "couple", args: { item: "gem" } };
 		expect(validateToolCall(game, "red", call).valid).toBe(true);
 	});
@@ -451,7 +455,11 @@ describe("validateToolCall", () => {
 				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		};
-		const game = startPhase(createGame(TEST_PERSONAS, [pack]), TEST_PHASE_CONFIG, FIXED_RNG);
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [pack]),
+			TEST_PHASE_CONFIG,
+			FIXED_RNG,
+		);
 		const call: ToolCall = { name: "couple", args: { item: "gem" } };
 		expect(validateToolCall(game, "red", call).valid).toBe(true);
 	});
@@ -487,7 +495,11 @@ describe("validateToolCall", () => {
 				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		};
-		const game = startPhase(createGame(TEST_PERSONAS, [pack]), TEST_PHASE_CONFIG, FIXED_RNG);
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [pack]),
+			TEST_PHASE_CONFIG,
+			FIXED_RNG,
+		);
 		const call: ToolCall = { name: "couple", args: { item: "gem" } };
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(false);

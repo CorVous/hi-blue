@@ -218,7 +218,11 @@ export function validateToolCall(
 			if (item.holder === aiId) return { valid: true };
 			if (isGridPosition(item.holder)) {
 				const cone = projectCone(actorSpatial.position, actorSpatial.facing);
-				if (cone.some((c) => positionsEqual(c.position, item.holder as GridPosition)))
+				if (
+					cone.some((c) =>
+						positionsEqual(c.position, item.holder as GridPosition),
+					)
+				)
 					return { valid: true };
 			}
 			return {
@@ -296,17 +300,15 @@ export function executeToolCall(
 				break;
 			case "couple": {
 				// Place item directly on its paired space's cell (which may be in the front arc).
-				if (target && target.pairsWithSpaceId) {
-					const pairedSpace = entities.find(
-						(e) => e.id === target.pairsWithSpaceId,
-					);
-					if (pairedSpace && isGridPosition(pairedSpace.holder)) {
-						target.holder = { ...pairedSpace.holder };
-					}
+				const pairedSpace = target?.pairsWithSpaceId
+					? entities.find((e) => e.id === target.pairsWithSpaceId)
+					: undefined;
+				if (target && pairedSpace && isGridPosition(pairedSpace.holder)) {
+					target.holder = { ...pairedSpace.holder };
 				}
 				break;
 			}
-		case "use": {
+			case "use": {
 				// Place item on current cell only when the actor is standing on the
 				// item's paired objective_space. Otherwise no world mutation.
 				if (target && actorSpatial && target.pairsWithSpaceId) {
@@ -544,10 +546,7 @@ export function dispatchAiTurn(
 						useOutcomeRaw = item?.useOutcome;
 					}
 
-					if (
-						call.name === "put_down" ||
-						call.name === "couple"
-					) {
+					if (call.name === "put_down" || call.name === "couple") {
 						// Find the raw placementFlavor (before {actor} substitution)
 						// by looking at the content pack's object entity definition
 						const itemId = call.args.item;
