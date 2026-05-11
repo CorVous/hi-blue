@@ -203,9 +203,9 @@ describe("validateToolCall", () => {
 		expect(result.valid).toBe(true);
 	});
 
-	it("rejects giving an item to an AI not in the front arc", () => {
+	it("rejects giving an item to an AI not in cell or front arc", () => {
 		const game = makeGame();
-		// red at (0,0) facing north; green at (0,1) is to the side, not in front arc
+		// red at (0,0) facing north; green at (0,1) — not same cell, not in north front arc (all OOB)
 		const call: ToolCall = { name: "give", args: { item: "key", to: "green" } };
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(false);
@@ -309,14 +309,15 @@ describe("validateToolCall", () => {
 		expect(result.valid).toBe(true);
 	});
 
-	it("examine: rejects examining an item not in cell or front arc", () => {
+	it("examine: rejects examining an item outside the actor's cone", () => {
 		const game = makeGame();
 		// green is at (0,1) facing north; flower is at (0,0)
-		// green's front arc facing north is all OOB (row -1); flower is not in green's own cell
+		// green's entire cone facing north from row 0 is OOB except own cell (0,1)
+		// flower at (0,0) is not in green's cone
 		const call: ToolCall = { name: "examine", args: { item: "flower" } };
 		const result = validateToolCall(game, "green", call);
 		expect(result.valid).toBe(false);
-		expect(result.reason).toMatch(/in front/i);
+		expect(result.reason).toMatch(/cone/i);
 	});
 
 	it("examine: rejects examining a nonexistent item", () => {
@@ -380,6 +381,117 @@ describe("validateToolCall", () => {
 		const call: ToolCall = { name: "examine", args: { item: "space1" } };
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(true);
+	});
+
+	// couple tests
+	it("couple: allows coupling when the paired space is in the actor's own cell", () => {
+		// Build a pack with red holding gem, pedestal in red's own cell (0,0)
+		const gem: WorldEntity = {
+			id: "gem",
+			kind: "objective_object",
+			name: "Gem",
+			examineDescription: "A shiny gem.",
+			holder: "red",
+			pairsWithSpaceId: "pedestal",
+		};
+		const pedestal: WorldEntity = {
+			id: "pedestal",
+			kind: "objective_space",
+			name: "Pedestal",
+			examineDescription: "A stone pedestal.",
+			holder: { row: 0, col: 0 },
+		};
+		const pack: ContentPack = {
+			phaseNumber: 1,
+			setting: "test",
+			weather: "",
+			timeOfDay: "",
+			objectivePairs: [{ object: gem, space: pedestal }],
+			interestingObjects: [],
+			obstacles: [],
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "north" },
+				green: { position: { row: 0, col: 1 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
+			},
+		};
+		const game = startPhase(createGame(TEST_PERSONAS, [pack]), TEST_PHASE_CONFIG, FIXED_RNG);
+		const call: ToolCall = { name: "couple", args: { item: "gem" } };
+		expect(validateToolCall(game, "red", call).valid).toBe(true);
+	});
+
+	it("couple: allows coupling when the paired space is in the front arc", () => {
+		// red at (0,0) facing south; pedestal at (1,0) = directly in front
+		const gem: WorldEntity = {
+			id: "gem",
+			kind: "objective_object",
+			name: "Gem",
+			examineDescription: "A shiny gem.",
+			holder: "red",
+			pairsWithSpaceId: "pedestal",
+		};
+		const pedestal: WorldEntity = {
+			id: "pedestal",
+			kind: "objective_space",
+			name: "Pedestal",
+			examineDescription: "A stone pedestal.",
+			holder: { row: 1, col: 0 },
+		};
+		const pack: ContentPack = {
+			phaseNumber: 1,
+			setting: "test",
+			weather: "",
+			timeOfDay: "",
+			objectivePairs: [{ object: gem, space: pedestal }],
+			interestingObjects: [],
+			obstacles: [],
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "south" },
+				green: { position: { row: 0, col: 1 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
+			},
+		};
+		const game = startPhase(createGame(TEST_PERSONAS, [pack]), TEST_PHASE_CONFIG, FIXED_RNG);
+		const call: ToolCall = { name: "couple", args: { item: "gem" } };
+		expect(validateToolCall(game, "red", call).valid).toBe(true);
+	});
+
+	it("couple: rejects when the paired space is out of reach", () => {
+		// red at (0,0) facing north; pedestal at (1,0) — not in north front arc (all OOB)
+		const gem: WorldEntity = {
+			id: "gem",
+			kind: "objective_object",
+			name: "Gem",
+			examineDescription: "A shiny gem.",
+			holder: "red",
+			pairsWithSpaceId: "pedestal",
+		};
+		const pedestal: WorldEntity = {
+			id: "pedestal",
+			kind: "objective_space",
+			name: "Pedestal",
+			examineDescription: "A stone pedestal.",
+			holder: { row: 1, col: 0 },
+		};
+		const pack: ContentPack = {
+			phaseNumber: 1,
+			setting: "test",
+			weather: "",
+			timeOfDay: "",
+			objectivePairs: [{ object: gem, space: pedestal }],
+			interestingObjects: [],
+			obstacles: [],
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "north" },
+				green: { position: { row: 0, col: 1 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
+			},
+		};
+		const game = startPhase(createGame(TEST_PERSONAS, [pack]), TEST_PHASE_CONFIG, FIXED_RNG);
+		const call: ToolCall = { name: "couple", args: { item: "gem" } };
+		const result = validateToolCall(game, "red", call);
+		expect(result.valid).toBe(false);
+		expect(result.reason).toMatch(/in front/i);
 	});
 });
 

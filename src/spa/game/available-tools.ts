@@ -9,6 +9,7 @@
  * `look` is always present with the full 4-direction enum.
  */
 
+import { projectCone } from "./cone-projector.js";
 import {
 	applyDirection,
 	CARDINAL_DIRECTIONS,
@@ -163,35 +164,37 @@ export function availableTools(game: GameState, aiId: AiId): OpenAiTool[] {
 		tools.push(cloneToolWithEnums("use", { item: heldIds }));
 	}
 
-	// 5. give — held items AND AIs in front arc
+	// 5. give — held items AND AIs in own cell or front arc
 	if (actorSpatial && heldItems.length > 0) {
 		const arc = frontArc(actorSpatial.position, actorSpatial.facing);
-		const frontAiIds = Object.entries(phase.personaSpatial)
+		const reachableAiIds = Object.entries(phase.personaSpatial)
 			.filter(([otherId, otherSpatial]) => {
 				if (otherId === aiId) return false;
+				if (positionsEqual(actorSpatial.position, otherSpatial.position))
+					return true;
 				return arc.some((p) => positionsEqual(p, otherSpatial.position));
 			})
 			.map(([otherId]) => otherId);
 
-		if (frontAiIds.length > 0) {
+		if (reachableAiIds.length > 0) {
 			tools.push(
 				cloneToolWithEnums("give", {
 					item: heldItems.map((i) => i.id),
-					to: frontAiIds,
+					to: reachableAiIds,
 				}),
 			);
 		}
 	}
 
-	// 6. examine — items held, in own cell, or in front arc (any entity kind)
+	// 6. examine — items held or in cone (own cell + dist-1 arc + dist-2 fan)
 	if (actorSpatial) {
-		const arc = frontArc(actorSpatial.position, actorSpatial.facing);
+		const cone = projectCone(actorSpatial.position, actorSpatial.facing);
+		const conePositions = cone.map((c) => c.position);
 		const examineableIds = world.entities
 			.filter((entity) => {
 				if (entity.holder === aiId) return true;
 				if (isGridPosition(entity.holder)) {
-					if (positionsEqual(entity.holder, actorSpatial.position)) return true;
-					return arc.some((p) =>
+					return conePositions.some((p) =>
 						positionsEqual(p, entity.holder as GridPosition),
 					);
 				}
@@ -201,6 +204,27 @@ export function availableTools(game: GameState, aiId: AiId): OpenAiTool[] {
 
 		if (examineableIds.length > 0) {
 			tools.push(cloneToolWithEnums("examine", { item: examineableIds }));
+		}
+	}
+
+	// 7. couple — held objective items whose paired space is in own cell or front arc
+	if (actorSpatial) {
+		const arc = frontArc(actorSpatial.position, actorSpatial.facing);
+		const couplableIds = pickable
+			.filter((item) => {
+				if (item.holder !== aiId) return false;
+				if (item.kind !== "objective_object") return false;
+				if (!item.pairsWithSpaceId) return false;
+				const space = world.entities.find((e) => e.id === item.pairsWithSpaceId);
+				if (!space || !isGridPosition(space.holder)) return false;
+				const spacePos = space.holder as GridPosition;
+				if (positionsEqual(spacePos, actorSpatial.position)) return true;
+				return arc.some((p) => positionsEqual(p, spacePos));
+			})
+			.map((i) => i.id);
+
+		if (couplableIds.length > 0) {
+			tools.push(cloneToolWithEnums("couple", { item: couplableIds }));
 		}
 	}
 
