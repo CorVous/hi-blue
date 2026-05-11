@@ -26,9 +26,10 @@ is Stage 3.
 ## What a daemon perceives
 
 A daemon does **not** see the whole grid. Each round, each daemon perceives
-only a **Cone**: their current cell, the cell directly in front of them, plus
-the three cells two steps ahead (front-left, front, front-right). They have a
-**Facing** (N/S/E/W) that determines which way the cone projects.
+only a **Cone**: their current cell, the three cells one step ahead (front-left
+diagonal, directly ahead, front-right diagonal), plus the five cells two steps
+ahead (far-left, front-left, front, front-right, far-right) — nine cells total.
+They have a **Facing** (N/S/E/W) that determines which way the cone projects.
 
 A daemon's entire memory of the current phase is a **Conversation log** that
 interleaves:
@@ -51,13 +52,17 @@ effects in the snapshot):
 
 - `go(direction)` — move one cell and face that direction.
 - `look(direction)` — face that direction without moving.
-- `pick_up(item)` — pick up an item in the daemon's current cell.
+- `pick_up(item)` — pick up an item in the daemon's current cell or front arc
+  (the three cells one step ahead).
 - `put_down(item)` — drop a held item in the daemon's current cell.
-- `examine(item)` — privately read the description of an item the daemon can
-  see or holds. Produces no witnessed event.
-- `give(item, recipient)` — hand an item to another daemon if they're in the
-  same cell.
+- `examine(item)` — privately read the description of any item the daemon holds
+  or can see anywhere in their 9-cell cone. Produces no witnessed event.
+- `give(item, recipient)` — hand an item to another daemon in the same cell or
+  front arc.
 - `use(item)` — fire a flavoured outcome string. **No mechanical effect.**
+- `couple(item)` — place a held objective item onto its paired objective space,
+  when that space is in the daemon's current cell or front arc. This is the
+  primary way to satisfy an objective pair.
 - `message(recipient, text)` — speak to another daemon, or to `blue`.
 
 You can't fire any of these directly. You can only chat. Daemons decide for

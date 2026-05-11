@@ -91,16 +91,24 @@ function cloneToolWithEnums(
 /**
  * Compute the list of legal OpenAI tools for the given AI in the current game state.
  *
- * Algorithm (per plan §1b):
+ * Algorithm:
+ * 0. `message` — always present; `to` enum = "blue" + live peer daemon ids.
  * 1. `look` — always present, full CARDINAL_DIRECTIONS enum.
  * 2. `go` — included only when at least one direction is in-bounds AND non-obstacle.
  *    Enum restricted to legal directions.
- * 3. `pick_up` — included only when pickable entities rest in the actor's current cell.
+ * 3. `pick_up` — included only when pickable entities are in the actor's own cell
+ *    OR the 3-cell front arc (dist-1: front-left, ahead, front-right).
  *    Enum restricted to those entity ids.
  * 4. `put_down`, `use` — included only when actor holds at least one pickable entity.
  *    Enum restricted to held entity ids.
- * 5. `give` — included only when actor holds pickable entities AND has 4-adjacent AIs.
- *    item enum = held entity ids, to enum = adjacent AI ids.
+ * 5. `give` — included only when actor holds pickable entities AND has AIs in the
+ *    actor's own cell or front arc. item enum = held entity ids, to enum = reachable AI ids.
+ * 6. `examine` — included when any entity (any kind) is held by the actor OR rests
+ *    anywhere in the full 9-cell cone (own + dist-1 arc + dist-2 fan).
+ *    Enum restricted to those entity ids.
+ * 7. `couple` — included only when actor holds an objective_object with a pairsWithSpaceId
+ *    whose paired space is on the grid AND in the actor's own cell or front arc.
+ *    Enum restricted to those item ids.
  *
  * Spaces and obstacles are never pickupable.
  */
