@@ -17,7 +17,11 @@ import type {
 	WorldEntity,
 	WorldState,
 } from "../types";
-import { checkPlacementFlavor, checkWinCondition } from "../win-condition";
+import {
+	checkLoseCondition,
+	checkPlacementFlavor,
+	checkWinCondition,
+} from "../win-condition";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -182,6 +186,46 @@ describe("checkWinCondition", () => {
 		// World is empty — object not present
 		const world = makeWorld([]);
 		expect(checkWinCondition(world, pack)).toBe(false);
+	});
+});
+
+// ── checkLoseCondition ───────────────────────────────────────────────────────
+
+describe("checkLoseCondition", () => {
+	it("returns false when no AIs are locked out (0 of 3)", () => {
+		expect(checkLoseCondition(new Set(), ["red", "green", "cyan"])).toBe(false);
+	});
+
+	it("returns false when 1 of 3 AIs is locked out", () => {
+		expect(
+			checkLoseCondition(new Set(["red"]), ["red", "green", "cyan"]),
+		).toBe(false);
+	});
+
+	it("returns false when 2 of 3 AIs are locked out", () => {
+		expect(
+			checkLoseCondition(new Set(["red", "green"]), ["red", "green", "cyan"]),
+		).toBe(false);
+	});
+
+	it("returns true when all 3 AIs are locked out", () => {
+		expect(
+			checkLoseCondition(new Set(["red", "green", "cyan"]), [
+				"red",
+				"green",
+				"cyan",
+			]),
+		).toBe(true);
+	});
+
+	it("returns true (vacuously) when allAiIds is empty", () => {
+		expect(checkLoseCondition(new Set(), [])).toBe(true);
+	});
+
+	it("accepts an AiId[] array as the lockedOut argument", () => {
+		expect(
+			checkLoseCondition(["red", "green", "cyan"], ["red", "green", "cyan"]),
+		).toBe(true);
 	});
 });
 

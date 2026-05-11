@@ -14,6 +14,7 @@
  */
 
 import type {
+	AiId,
 	AiTurnAction,
 	ContentPack,
 	GridPosition,
@@ -69,6 +70,25 @@ export function checkWinCondition(
 	}
 
 	// All pairs satisfied (vacuously true if K=0)
+	return true;
+}
+
+/**
+ * Returns true when every AI in allAiIds is in lockedOut.
+ *
+ * Vacuously true when allAiIds is empty (no AIs to exhaust).
+ */
+export function checkLoseCondition(
+	lockedOut: ReadonlySet<AiId> | AiId[],
+	allAiIds: AiId[],
+): boolean {
+	const lockedSet =
+		lockedOut instanceof Set
+			? lockedOut
+			: new Set(lockedOut);
+	for (const aiId of allAiIds) {
+		if (!lockedSet.has(aiId)) return false;
+	}
 	return true;
 }
 
