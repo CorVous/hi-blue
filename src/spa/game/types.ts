@@ -92,9 +92,47 @@ export interface Objective {
 	description: string;
 }
 
-export interface ActiveComplication {
-	id: string;
-	description: string;
+// ── Complication types ────────────────────────────────────────────────────────
+
+export type ComplicationKind =
+	| "weather_change"
+	| "sysadmin_directive"
+	| "tool_disable"
+	| "obstacle_shift"
+	| "chat_lockout"
+	| "setting_shift";
+
+/**
+ * Persistent active complications stored on PhaseState.
+ * Transient complications (weather_change, obstacle_shift, setting_shift)
+ * mutate world/setting state and are not tracked here.
+ */
+export type ActiveComplication =
+	| { kind: "sysadmin_directive"; target: AiId; directive: string }
+	| { kind: "tool_disable"; target: AiId; tool: ToolName }
+	| { kind: "chat_lockout"; target: AiId; resolveAtRound: number };
+
+/** Countdown + phase-level flags for the complication schedule. */
+export interface ComplicationSchedule {
+	countdown: number;
+	settingShiftFired: boolean;
+}
+
+/**
+ * The draw payload returned from the complication engine — one variant per
+ * ComplicationKind. Carries only the data needed to dispatch the complication.
+ */
+export type ComplicationVariant =
+	| { kind: "weather_change" }
+	| { kind: "sysadmin_directive"; target: AiId }
+	| { kind: "tool_disable"; target: AiId; tool: ToolName }
+	| { kind: "obstacle_shift"; obstacleId: string; fromCell: GridPosition; toCell: GridPosition }
+	| { kind: "chat_lockout"; target: AiId; duration: number }
+	| { kind: "setting_shift" };
+
+/** Returned by tickComplication when a complication fires. */
+export interface ComplicationResult {
+	fired: ComplicationVariant;
 }
 
 export interface PersonaSpatialState {
@@ -258,6 +296,10 @@ export interface PhaseState {
 	nextPhaseConfig?: PhaseConfig;
 	/** Per-AI spatial state (position + facing) for this phase. */
 	personaSpatial: Record<AiId, PersonaSpatialState>;
+	/** Complication countdown + phase-level flags. */
+	complicationSchedule: ComplicationSchedule;
+	/** Currently active persistent complications (Sysadmin Directives, Tool Disables, Chat Lockouts). */
+	activeComplications: ActiveComplication[];
 }
 
 export interface GameState {
