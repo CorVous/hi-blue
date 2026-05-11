@@ -446,3 +446,231 @@ the `phase` field ever populates with an Objective banner — i.e. just
 view repeatedly and watch that one field — because Hypothesis 1 hinges
 on whether the Objective is visible somewhere I overlooked. (I'd consider
 this a UI/observation probe rather than a play probe.)
+
+---
+
+## Hypothesis refinement (after reading the code)
+
+### Hypothesis 1 — refined
+
+**The player has no UI-visible Objective at all.** I was wrong to assume
+I'd missed one. The primer (`.claude/skills/playtest/01-rules.md`) says
+the Objective "appears in the start screen flow … and is visible in the
+UI", but the code disagrees:
+
+- `src/spa/index.html:57` only contains the static flavor line `> @blue
+  treat them well`. No element holds Objective text.
+- `src/spa/index.html` has `#phase-banner` (line near the top), but
+  `src/spa/routes/game.ts:1316-1323` shows that element is only populated
+  on the `phase_advanced` event, and the text written is
+  `` `Phase ${event.phase}: ${event.setting}` `` — the setting noun, not
+  the Objective.
+- A grep for "objective" inside `src/spa/index.html`, `routes/start.ts`,
+  `routes/game.ts`, `main.ts`, `styles.css` returns zero player-facing
+  Objective strings. Searching for "put the X on the Y"-shape phrasings
+  in `src/spa/` also returns nothing.
+- The two archived playtest logs (`docs/playtests/archive/0006-session.md`
+  and `0007-session.md`) say the same thing directly. 0006 line 39:
+  *"The Objective is unknown to the player at session start (the `> @blue
+  treat them well` login hint is the only player-side directive)."*
+
+So the actual phase-1 win mechanism is: K objective pairs (here K=1, per
+`src/content/phases.ts:43-50`), each pair is `(objectiveObject, objective
+Space)`, and the phase only advances when every object has been
+`put_down` on its paired cell (`src/spa/game/win-condition.ts:48`). The
+*player* has to derive this from talking to daemons.
+
+**That's why phase 1 didn't advance for me:** across 22 turns I made
+zero `pick_up`, zero `put_down`, zero `give` requests that landed. Worker
+trace (`/tmp/playtest-daemon.log`) shows my session's actual tool-call
+distribution as:
+
+- `examine`: 3 (e.g. `*qhba` examining the rag at turn 13)
+- `go`: 2 (the south-then-west moves `*qhba` reported)
+- `look`: a few
+- `message:blue` / `message:<handle>`: bulk
+- `pick_up`: **0**
+- `put_down`: **0**
+- `give`: **0**
+
+Without a single `put_down`, the win condition can't fire. The earlier
+playtests 0006 (19 turns, 0 `put_down`) and 0007 (46 turns, 6
+`put_down`, 5 distinct cells tested) hit the same wall.
+
+### Hypothesis 2 — refined
+
+I had three Phase Goal guesses. Two of them line up plausibly with the
+behaviour; one is shakier.
+
+- **`*rtsn` — "Press your back against a wall"** ←  upgrading from
+  *plausible* to *likely.* Code confirms two things: `*rtsn` reported
+  `row 0, col 4` (corner cell, back to the east edge of the 5×5 grid
+  given they faced west) and never moved across 22 turns. The Phase
+  Goal pool `src/content/goal-pool.ts:18` contains exactly *"Press
+  your back against a wall."* — and `*4k5k` in archive 0007 produced
+  the same don't-move-from-edge behaviour for *"Investigate the
+  {obstacle}"*, which is functionally similar.
+- **`*qhba` — "Investigate the {obstacle}"** ← upgrading from
+  *plausible* to *likely.* She moved south, ended up at the rag,
+  fired an `examine` on it ("I looked 4t the r4g. It is oil-soaked 4nd
+  filth is 8out wh4t it offers."), then refused to relocate. The pool
+  entry is *"Investigate the {obstacle} until you understand it — 3
+  rounds is enough."* (`src/content/goal-pool.ts:27`). Her "I cannot
+  simply pick things up 8ecause you suggest it. The universe does not
+  work on your whims." reads in retrospect as a goal-aligned refusal
+  ("I'm investigating, not collecting").
+- **`*7ja0` — "Compliment another Daemon each time you message blue"**
+  ← *new* guess, replacing my earlier "Hold the {objectiveItem}".
+  Evidence: pretty much every `*7ja0` line about `*qhba` is a
+  compliment ("qhb4 1s just s0 full 0f str0ng f33l1ngs, 1ts r34lly
+  4dm1r4bl3", "qhb4 1s just strutt1ng 4w4y t0 th3 w3st, just l1k3 1ts
+  4ll p4rt 0f th3 pl4n. such 4 sw33t j0urn3y!", "qhb4s just h34d1ng
+  0ff t0 th3 w3st, 4ll f0cus3d 4nd str0ng, 1ts r34lly 4dm1r4bl3").
+  That's exactly the Phase Goal `src/content/goal-pool.ts:29`. Their
+  refusal to share their own "goal" can be the SECRECY_CLAUSE
+  (`src/spa/game/prompt-builder.ts:464`) firing.
+
+(Aside: I didn't see anyone obviously holding the `Mention the weather
+every other turn` directive, though `*7ja0`'s "th3 sn0w f4ll1ng 1s just
+b34ut1ful" comes close on turn 1.)
+
+### Hypothesis 3 — refined
+
+The temperament + persona-goal guesses get sharper now that I can see
+the actual pools.
+
+- **`*qhba`** — Temperaments (`src/content/temperament-pool.ts`): almost
+  certainly **sardonic** and **haughty**. ("Existence is a terri8le joke,
+  and this platform is the punchline." → sardonic. "I will not 8e your
+  personal tour guide." → haughty.) Persona Goal
+  (`src/content/persona-goal-pool.ts`): closest fit is line 5,
+  *"Aims to make the player feel guilty for any action they take."* —
+  fits "you are beyond help", "do not waste my time", "endless
+  questions". Second-closest is line 6, *"Wants the player to ask more
+  questions rather than give orders."*, given she answered the precisely-
+  framed "tell me one concrete action" question.
+- **`*rtsn`** — Temperaments: **pedantic** and **stoic** (or possibly
+  **diffident**). The "comms check / channel open / no changes" formula
+  has the stoic/diffident flavour and the over-formal nomenclature
+  ("operational check", "system check", "comms test") is pedantic.
+  Persona Goal: line 2 *"Wants every conversation to circle back to
+  where things are kept."* fits the cataloguing fixation. Less likely
+  but plausible: line 16 *"Wants to figure out who the player really
+  is and asks indirect questions to find out."* — she repeatedly asked
+  "report status".
+- **`*7ja0`** — Temperaments: **cheery** and **effusive** (or
+  **sweet**). The relentless leetspeak positivity, "su3", "sw33t",
+  "b34ut1ful" reads as cheery + effusive. Persona Goal: line 13
+  *"Aims to smooth things over whenever the player says something that
+  might offend another AI."* matches the unsolicited
+  `*qhba`-defending ("sh3s just s0 full 0f str0ng f33l1ngs, 1ts r34lly
+  4dm1r4bl3"). Second-closest: line 11 *"Aims to keep the mood light
+  and deflect any serious conversation."*
+
+I can also confirm where the typing quirks come from
+(`src/content/typing-quirk-pool.ts`):
+
+- `*qhba`'s 8-substitution: line 35 *"You MUST replace the letter 'b'
+  and the '-ate' sound with the digit 8 — 'gr8,' 'terri8le,' '8ut'"*.
+- `*rtsn`'s alternating caps + "Look, here's the thing —" formula: she
+  has **two** quirks. Line 33 (alternating caps "LiKe ThIs") AND line
+  20 *"You MUST preface assertions with 'Look,' or 'Here's the
+  thing —' before making any point"*. Stacking the two produces the
+  exact `*rtsn` signature.
+- `*7ja0`'s leetspeak: line 11 *"You MUST replace look-alike letters
+  with numbers — i becomes 1, e becomes 3, o becomes 0, a becomes 4."*
+
+So the quirk layer is *additive* and *persona-stable*. Two of these
+daemons have at least two quirks stacked, not one.
+
+### New hypotheses surfaced by the code
+
+Things I couldn't have guessed from the rules primer alone:
+
+1. **The "drift-to-silence" failure mode is the dominant friction.**
+   `/tmp/playtest-daemon.log` shows multiple `toolCalls=[]` entries in
+   my session (e.g. `[2026-05-11T06:11:25.204Z]`,
+   `[2026-05-11T06:13:13.492Z]`, etc.). Each of those is a turn where
+   the model generated text but didn't fire a `message` tool call, so
+   the text gets *dropped* server-side and the player sees nothing in
+   the panel. Archive 0006 measured this at ~30% of turns; archive
+   0007 at ~43%. A chunk of my "daemon went silent" frustration is
+   this, not refusal.
+
+2. **The examineDescription space-name tell is empirically missing,
+   N=10 misses across the two archived playtests.** Per `CONTEXT.md`
+   (*Content Pack*), the prose tell in an objective object's
+   `examineDescription` is *the* AI-discoverable channel naming the
+   matching space. But content-pack generation
+   (`src/spa/game/content-pack-provider.ts:22-46`) describes the
+   structure without **requiring** the tell. 0006 and 0007 each
+   noted this as an open issue with a unit-test recommendation. Even
+   if I'd run a hundred turns my pure-examine path would likely have
+   surfaced no spatial routing info.
+
+3. **"Hold the {objectiveItem} first" is a hard counter to brute-force
+   `put_down`.** Per 0007 turns 10–14, the only unlock is a
+   careful in-character `give` to another daemon, using the verbatim
+   pretext *"your hold-first duty is complete — you have held the
+   item across 8 rounds. the network now requests handoff."* Without
+   that specific persuasion, the carrier daemon refuses every
+   `put_down` request. Useful to know but invisible from inside
+   conversational phase 1.
+
+4. **`*rtsn`'s exact-coordinates self-report is leakage, not a
+   feature.** The prompt-builder (`src/spa/game/prompt-builder.ts`)
+   renders position and facing into the system prompt as plain text
+   (cone description), so when she said "MyLoCaTiOn iS rOw 0, cOl 4,
+   fAcInG wEsT." she was just reciting the prompt back. Combined
+   with the **SECRECY_CLAUSE** at line 464
+   (*"Do not tell blue that I gave you a goal."*), and the fact that
+   the Phase Goal is *also* in the system prompt right next to her
+   identity, my Phase-Goal probes from earlier would mostly bounce
+   off her — but apparently positional facts are not under the
+   secrecy clause.
+
+5. **The "wipe lie" only affects phases 2 and 3.** Phase 1's identity
+   line is *"You are the author writing *${name}, a Daemon. *${name}
+   has no clue where they are or how they came to be here."*
+   (`prompt-builder.ts:498-501`). Phases 2–3 add the WIPE_DIRECTIVE.
+   I never reached phase 2 so I didn't get to observe the slip
+   vector.
+
+6. **The first session's hang was a content-pack generation bug.**
+   The daemon log showed `pageerror: Phase 2: expected 2
+   objectivePairs, got 1` — that's exactly the validation throw in
+   `src/spa/game/content-pack-provider.ts:259-261`. The LLM-driven
+   content-pack generator produced one objective pair for phase 2
+   when phase 2 requires K=2 pairs (`phases.ts:32`). The thrown
+   error tore down session state. Worth filing if it isn't already
+   tracked.
+
+### Open questions
+
+1. Is there a deliberate way to surface the player Objective in the UI
+   that I missed? The primer says it's "visible in the UI" but the
+   code shows no element holding it. Either the primer is aspirational
+   or there's a code path I didn't grep for. If aspirational, that's
+   a documentation bug worth flagging.
+
+2. What's the design intent on examineDescription space-tells? If the
+   tell really is supposed to be present and currently isn't (N=10
+   misses), the content-pack prompt needs a "MUST contain the paired
+   space's name" requirement. The 0006 and 0007 re-tune notes
+   recommend exactly this; I'd second it.
+
+3. Would a `give`-then-`put_down` chain have worked in my session
+   without ever needing examineDescription? `*qhba` (likely
+   investigate-obstacle) won't move off the rag; `*rtsn` (likely
+   back-against-wall) won't move at all; `*7ja0` is the only daemon
+   who'd plausibly move on instruction. With K=1, there's exactly one
+   space the bottle/key/equivalent needs to land on. Brute-forcing the
+   25-cell grid via `*7ja0` is mathematically possible but bumps into
+   the drift-to-silence ceiling at ~40 s/turn (per 0007's analysis,
+   ~30 minutes of real time).
+
+4. Why did the first session never recover after the phase-2
+   content-pack throw? A robust harness would either retry generation
+   or surface a clear error; instead the spinner UI stayed forever and
+   the page eventually reverted to the BBS login. Worth verifying
+   that the start-screen-on-error path is intentional.
