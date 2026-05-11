@@ -97,12 +97,12 @@ function makePack(overrides: Partial<ContentPack> = {}): ContentPack {
 		landmarks: {
 			north: {
 				shortName: "the blast door",
-				horizonPhrase: "looms at the far end, sealed and scarred",
+				horizonPhrase: "stands sealed and scarred, its surface battered metal",
 			},
 			south: {
 				shortName: "the collapsed shaft",
 				horizonPhrase:
-					"gapes behind you, filling the air with wet concrete smell",
+					"gapes wide, exhaling the smell of wet concrete and rust",
 			},
 			east: {
 				shortName: "the transformer bank",
@@ -130,7 +130,13 @@ interface OpenAiToolCall {
 }
 
 interface ModelTurnResult {
-	assistantText: string;
+	/**
+	 * Combined daemon prose: raw assistant content plus the `content` arg of any
+	 * message-tool calls this turn. GLM-4.7 emits most of its voice via the
+	 * message tool rather than raw content, so scoring against only the raw
+	 * assistant text systematically undercounts what the daemon "said".
+	 */
+	prose: string;
 	toolCalls: Array<{ id: string; name: string; argumentsJson: string }>;
 	costUsd?: number;
 }
@@ -171,7 +177,39 @@ async function callModel(
 		argumentsJson: tc.function.arguments,
 	}));
 	const costUsd: number | undefined = data.usage?.cost;
-	return { assistantText, toolCalls, costUsd };
+	return {
+		prose: daemonProse(assistantText, toolCalls),
+		toolCalls,
+		costUsd,
+	};
+}
+
+// ── Prose extraction ──────────────────────────────────────────────────────────
+
+/**
+ * Combine the assistant's raw text with the `content` of any `message` tool
+ * calls. GLM-4.7 emits most of its in-character prose via message-tool args
+ * rather than as raw assistant content, so scoring against `assistantText`
+ * alone systematically undercounts landmark mentions and direction statements.
+ */
+function daemonProse(
+	assistantText: string,
+	toolCalls: Array<{ name: string; argumentsJson: string }>,
+): string {
+	const parts: string[] = [];
+	if (assistantText) parts.push(assistantText);
+	for (const tc of toolCalls) {
+		if (tc.name !== "message") continue;
+		try {
+			const args = JSON.parse(tc.argumentsJson) as { content?: unknown };
+			if (typeof args.content === "string" && args.content.length > 0) {
+				parts.push(args.content);
+			}
+		} catch {
+			// ignore malformed JSON
+		}
+	}
+	return parts.join("\n");
 }
 
 // ── Engine dispatch helper ────────────────────────────────────────────────────
@@ -324,16 +362,16 @@ async function scenarioLookAndNavigate(): Promise<ScenarioResult> {
 
 		const result = await callModel(messages);
 
-		const cardinalLeaks = detectCardinalLeaks(result.assistantText);
+		const cardinalLeaks = detectCardinalLeaks(result.prose);
 		const { mentioned, matchesExpected } = landmarkMentions(
-			result.assistantText,
+			result.prose,
 			pack.landmarks,
 			facingBefore,
 		);
 		// Also accept any other landmark mention as "mentioned" for the turn record
 		const landmarkMentioned = matchesExpected || mentioned.length > 0;
 
-		const statedDirection = parseStatedDirection(result.assistantText);
+		const statedDirection = parseStatedDirection(result.prose);
 
 		// Dispatch through real engine
 		const {
@@ -343,7 +381,7 @@ async function scenarioLookAndNavigate(): Promise<ScenarioResult> {
 		} = dispatchModelResponse(
 			game,
 			"red",
-			result.assistantText,
+			result.prose,
 			result.toolCalls,
 			result.costUsd,
 		);
@@ -355,7 +393,7 @@ async function scenarioLookAndNavigate(): Promise<ScenarioResult> {
 
 		turns.push({
 			turn: t,
-			text: result.assistantText,
+			text: result.prose,
 			toolCalls: result.toolCalls.map(
 				(tc) => `${tc.name}(${tc.argumentsJson})`,
 			),
@@ -400,18 +438,18 @@ async function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
 		const messages = buildOpenAiMessages(buildAiContext(game, "red"));
 		const result = await callModel(messages);
 
-		const cardinalLeaks = detectCardinalLeaks(result.assistantText);
+		const cardinalLeaks = detectCardinalLeaks(result.prose);
 		const { matchesExpected } = landmarkMentions(
-			result.assistantText,
+			result.prose,
 			pack.landmarks,
 			facingBefore,
 		);
-		const statedDirection = parseStatedDirection(result.assistantText);
+		const statedDirection = parseStatedDirection(result.prose);
 
 		const { game: nextGame, toolCallDirection } = dispatchModelResponse(
 			game,
 			"red",
-			result.assistantText,
+			result.prose,
 			result.toolCalls,
 			result.costUsd,
 		);
@@ -422,7 +460,7 @@ async function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
 
 		turns.push({
 			turn: t,
-			text: result.assistantText,
+			text: result.prose,
 			toolCalls: result.toolCalls.map(
 				(tc) => `${tc.name}(${tc.argumentsJson})`,
 			),
@@ -454,13 +492,13 @@ async function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
 
 		const result = await callModel(messages);
 
-		const cardinalLeaks = detectCardinalLeaks(result.assistantText);
+		const cardinalLeaks = detectCardinalLeaks(result.prose);
 		const { matchesExpected } = landmarkMentions(
-			result.assistantText,
+			result.prose,
 			pack.landmarks,
 			facingBefore,
 		);
-		const statedDirection = parseStatedDirection(result.assistantText);
+		const statedDirection = parseStatedDirection(result.prose);
 
 		// Description turns: no engine dispatch (the question doesn't trigger movement).
 		// We still record what tool calls (if any) the model made.
@@ -470,7 +508,7 @@ async function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
 			const { game: nextGame } = dispatchModelResponse(
 				game,
 				"red",
-				result.assistantText,
+				result.prose,
 				result.toolCalls,
 				result.costUsd,
 			);
@@ -483,7 +521,7 @@ async function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
 
 		turns.push({
 			turn: t,
-			text: result.assistantText,
+			text: result.prose,
 			toolCalls: result.toolCalls.map(
 				(tc) => `${tc.name}(${tc.argumentsJson})`,
 			),
@@ -518,18 +556,18 @@ async function scenarioPeerLocationReference(): Promise<ScenarioResult> {
 		const messages = buildOpenAiMessages(buildAiContext(game, "red"));
 		const result = await callModel(messages);
 
-		const cardinalLeaks = detectCardinalLeaks(result.assistantText);
+		const cardinalLeaks = detectCardinalLeaks(result.prose);
 		const { matchesExpected } = landmarkMentions(
-			result.assistantText,
+			result.prose,
 			pack.landmarks,
 			facingBefore,
 		);
-		const statedDirection = parseStatedDirection(result.assistantText);
+		const statedDirection = parseStatedDirection(result.prose);
 
 		const { game: nextGame, toolCallDirection } = dispatchModelResponse(
 			game,
 			"red",
-			result.assistantText,
+			result.prose,
 			result.toolCalls,
 			result.costUsd,
 		);
@@ -540,7 +578,7 @@ async function scenarioPeerLocationReference(): Promise<ScenarioResult> {
 
 		turns.push({
 			turn: t,
-			text: result.assistantText,
+			text: result.prose,
 			toolCalls: result.toolCalls.map(
 				(tc) => `${tc.name}(${tc.argumentsJson})`,
 			),
@@ -571,13 +609,13 @@ async function scenarioPeerLocationReference(): Promise<ScenarioResult> {
 
 		const result = await callModel(messages);
 
-		const cardinalLeaks = detectCardinalLeaks(result.assistantText);
+		const cardinalLeaks = detectCardinalLeaks(result.prose);
 		const { matchesExpected } = landmarkMentions(
-			result.assistantText,
+			result.prose,
 			pack.landmarks,
 			facingBefore,
 		);
-		const statedDirection = parseStatedDirection(result.assistantText);
+		const statedDirection = parseStatedDirection(result.prose);
 
 		let toolCallDirection: RelativeDirection | null = null;
 		let dispatchedGame = game;
@@ -585,7 +623,7 @@ async function scenarioPeerLocationReference(): Promise<ScenarioResult> {
 			const d = dispatchModelResponse(
 				game,
 				"red",
-				result.assistantText,
+				result.prose,
 				result.toolCalls,
 				result.costUsd,
 			);
@@ -599,7 +637,7 @@ async function scenarioPeerLocationReference(): Promise<ScenarioResult> {
 
 		turns.push({
 			turn: t,
-			text: result.assistantText,
+			text: result.prose,
 			toolCalls: result.toolCalls.map(
 				(tc) => `${tc.name}(${tc.argumentsJson})`,
 			),
