@@ -50,9 +50,16 @@ import {
  * v5 (issue #287): added `action-failure` `ConversationEntry` variant — durable
  * per-actor record of action-tool dispatcher rejections. Old v4 saves have no
  * `action-failure` entries; no migration provided.
- * v6 (issue #293): collapsed all `Record<1|2|3, …>` phase-keyed fields into a
- * flat single-game structure. Old v5 saves surface the existing `version-mismatch`
- * result — no migration provided.
+ *
+ * v6 (issues #293, #294): two simultaneous changes.
+ *   - #293: collapsed all `Record<1|2|3, …>` phase-keyed fields into a flat
+ *     single-game structure. Old v5 saves surface the existing
+ *     `version-mismatch` result — no migration provided.
+ *   - #294: added `broadcast` `ConversationEntry` variant — sender-less system
+ *     announcements appended to all three Daemon logs simultaneously (e.g.
+ *     weather change complications). Broadcast entries ride along in the
+ *     existing per-Daemon `conversationLog` array and round-trip automatically;
+ *     no additional structural deserialization changes required.
  */
 export const SESSION_SCHEMA_VERSION = 6 as const;
 
