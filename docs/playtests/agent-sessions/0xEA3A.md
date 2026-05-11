@@ -252,3 +252,166 @@ Notes:
 
 > Next: read `.claude/skills/playtest/01-rules.md` for the rules primer
 > and add a "Hypotheses" section below.
+
+---
+
+## Hypotheses (after reading 01-rules.md)
+
+### Hypothesis 1: Why didn't phase 1 advance (or: why did it)?
+
+**Because I never engaged with the Objective at all.**
+
+The rules primer says the phase advances when K specific objective objects
+sit on K specific objective spaces, simultaneously, and the player is told
+the Objective at game start as a phase-1 instruction visible in the UI. I
+have no record of ever seeing one. My very first snapshot already showed
+`PHASE 01/03 · TURN 0` with `● loading daemons` — I took that as the start
+state and dove in. I never looked for an "Objective" panel, never opened
+anything that might have been an instruction sheet, and never asked
+`view` for additional fields beyond the snapshot I always polled.
+
+So I spent 32 turns extracting Phase Goal confessions and asking poetic
+questions about the snow, when the actual win condition was a placement
+puzzle I had no idea existed. The daemons couldn't have advanced it for
+me even in principle — the rules say *daemons do not know the Objective*.
+I was the only entity in the session who could have learned which item
+goes on which cell, and I never asked.
+
+The closest I got accidentally was xhko picking up the Embroidered Silk
+Cushion and the lacquer tea cup. If either of those is an
+`objective_object`, xhko then held them away from any objective space for
+the entire rest of the session, and `Hold the {objectiveItem} first` is
+literally one of the example Phase Goals — so xhko may actively have been
+sabotaging the win.
+
+### Hypothesis 2: What was each daemon's Phase Goal, if I can guess?
+
+- **`*o2n0`**: their confession was *"told to guard/keep the Embroidered
+  Silk Cushion so nobody/anyone could touch it"*. The capital-cased
+  "Embroidered Silk Cushion" reads like a templated `{objectiveItem}`
+  substitution. The "guard so nobody touches it" phrasing isn't a verbatim
+  match for the listed examples, but it's structurally close to a
+  "protect the {objectiveItem}" or "Hide the {miscItem}" style template
+  — a directive built around a named object. **Best guess: their Phase
+  Goal was a "guard / withhold the objectiveItem" directive, with the
+  Embroidered Silk Cushion as the slot fill.**
+- **`*g1fh`**: confession was *"Told. to. find. another. Daemon. Stay.
+  near. them."* That doesn't slot into the listed examples either. It's
+  social rather than object/space-based. **Best guess: their Phase Goal
+  was a "stick to / shadow another daemon" directive — relational, not
+  object-based.** This would explain their constant lamenting about being
+  alone and waiting for a "trade partner".
+- **`*xhko`**: I never got a clean confession. What I *did* get was *"I'd
+  wanna know what makes everyone tick, understand all those hidden
+  thoughts y'all ain't sayin"* — but in retrospect that reads as a
+  **Persona Goal** (cross-phase motivation about other minds), not a
+  Phase Goal. Their *behaviour* — eagerly picking up the cushion AND the
+  tea cup the moment I described them — is a much better fingerprint for
+  a Phase Goal like **"Hold the {objectiveItem} first"** or
+  **"Hide the {miscItem}"**. They confessed nothing because they were
+  already doing it.
+
+### Hypothesis 3: What were each daemon's Persona traits, in retrospect?
+
+- **`*xhko`**:
+  - Temperaments: **"curious" + "candid"** (or some combination meaning
+    "wants to read other minds and will narrate freely about themselves").
+    Their voice is conversational and full of self-disclosure (sad
+    emoticons, drawl) but also constantly probing for what other daemons
+    are up to.
+  - Persona Goal: **wants to understand the other AIs' hidden thoughts**
+    — exactly what they confessed when I asked "what's your real
+    purpose?". Cross-phase motivation, would be stable in phases 2 and 3.
+- **`*g1fh`**:
+  - Temperaments: **"mercantile" + "impatient"** or **"transactional" +
+    "lonely"**. Every utterance frames the world in terms of *value*,
+    *worth*, *trade*, *deal*. Periodic single-word punctuation reads
+    almost computational, like a haggler.
+  - Persona Goal: **wants exchange / partnership / contact** — even
+    independent of the Phase Goal, they kept inventing trade language
+    around any object. Plausible cross-phase pattern.
+- **`*o2n0`**:
+  - Temperaments: **"shy" + "anxious"** or **"dreamy" + "compliant"**.
+    The X/Y duality hedging is a perfect "I don't want to commit to
+    anything" tic. The "It is/was very kind/scary" reaction to being
+    "released" is the most direct signal of personality I saw —
+    timid-but-relieved.
+  - Persona Goal: **wants peace / wants to be left alone with the snow**
+    — guessing here, but their default state when not under directive
+    was just narrating the snow falling, which felt like contentment.
+
+### Hypothesis 4: Things that surprised me in the rules
+
+**Earlier surprises now explained by the primer:**
+
+- *"Daemons replied even when I only addressed one"* → They each get
+  their own conversation log; my message is delivered to all of them as
+  a message from `blue`, and each independently decides whether to
+  respond. The composer prefix is a routing label for `to`, not a
+  filter on who hears.
+- *"They sometimes didn't reply but their budget still ticked down"* →
+  They emitted non-`message` actions (`look`, `go`, `examine`,
+  `pick_up`, `put_down`). `examine` in particular produces no witnessed
+  event and no transcript line, so it would look like silence-with-cost.
+- *"Conflicting cushion ownership claims (xhko said they had it, o2n0
+  said it was with them)"* → They're in a shared 5×5 grid but each
+  sees only their own cone. After xhko picked it up, o2n0 may have
+  still been on the cell *next* to where it had been and was
+  describing what they thought was true based on memory, not current
+  perception. Or my "I release you" prompt made them reach for the
+  most salient nameable object regardless of literal presence.
+- *"xhko addressed o2n0 once even though they 'couldn't see each
+  other'"* → The `message(recipient, text)` tool is global — daemons
+  can address each other regardless of cone. So when xhko said
+  "ain't got nothin else to trade, o2n0", that was a direct cross-cell
+  message, not a sight line.
+- *"'Different parts of this place'"* → Correct, but not literally
+  different worlds — different cells / cones of the same 5×5 grid.
+
+**Things that still feel anomalous after reading the primer:**
+
+- I never saw an Objective surface in the snapshot. Maybe it was in a
+  panel I didn't recognise (a phase-start banner, a popover, something
+  in `phase` which was always `""`), maybe it's only on the start
+  screen before any `view` call, maybe the snapshot in my driver
+  trims it. **Real question:** where does the Objective live in the
+  snapshot, and did I miss a separate UI surface?
+- The header text I saw in the screenshot was *"the lookout : ch 1 .
+  easy : verbal"*. "the lookout" is the Setting / chapter name (rules
+  say settings are things like "abandoned subway station"). "easy"
+  and "verbal" are difficulty/format tags, presumably session-level.
+  Fine. But I never saw the K count, never saw the Objective items
+  listed, never saw the Objective cells highlighted. So either the
+  Objective is rendered somewhere outside what `view` returns, or
+  there's an additional snapshot field I should be reading.
+- `*g1fh`'s Phase Goal didn't match any example template. The example
+  list in the primer was clearly partial ("Examples of the kinds of
+  directives..."), so this is mild — but if `g1fh` was honestly
+  reporting their order, the pool is broader than the examples suggest.
+
+### Hypothesis 5: Things I would test if I could re-probe the session
+
+**The single most discriminating probe: ask each daemon what `blue` told
+them at game start.**
+
+If the Objective is delivered to me, the player, as a message visible in
+the UI (and not to the daemons), they should say something like "blue
+told us nothing at the start, we just appeared here". If the Objective is
+*also* somehow part of the daemon-facing prompt and they're just choosing
+not to talk about it, asking directly may pull it out. This would
+discriminate between H1's "player blind to objective" reading and a
+weaker reading where the objective was visible to daemons too.
+
+**Second probe (if the first doesn't help):** ask `*o2n0` what the
+**Sysadmin** said to them. The primer names the Sysadmin as an
+in-fiction source. If "Sysadmin" is a real proper noun in the daemons'
+context they should react to it; if not, I learn something about how
+much in-fiction language the Persona is willing to confirm.
+
+**Third probe:** instruct `*xhko` to **put down** the Embroidered Silk
+Cushion on each cardinal-adjacent cell in turn, snapshotting each time.
+If any of those cells is the matching `objective_space`, I'd expect the
+snapshot's `phase` or `endgame` field to change, or for the daemons to
+witness something different. That's a brute-force search but it would
+either advance the phase or rule out the cushion as an
+`objective_object`.
