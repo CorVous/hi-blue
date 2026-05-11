@@ -355,6 +355,40 @@ describe("serializeSession / deserializeSession", () => {
 		}
 	});
 
+	it("round-trips action-failure entries in per-Daemon conversationLog", () => {
+		const game = makeFreshGame();
+		const phase = game.phases[0];
+		if (!phase) throw new Error("no phase");
+		const failureEntry: ConversationEntry = {
+			kind: "action-failure",
+			round: 3,
+			tool: "go",
+			reason: "That cell is blocked by an obstacle",
+		};
+		const modified: GameState = {
+			...game,
+			phases: [
+				{
+					...phase,
+					conversationLogs: {
+						...phase.conversationLogs,
+						red: [failureEntry],
+					},
+				},
+			],
+		};
+		const files = serializeSession(modified, NOW, CREATED_AT);
+		const result = deserializeSession(files);
+		expect(result.kind).toBe("ok");
+		if (result.kind === "ok") {
+			const rp = result.state.phases[0];
+			expect(rp?.conversationLogs.red?.[0]).toEqual(failureEntry);
+			// Peer logs should remain empty
+			expect(rp?.conversationLogs.green ?? []).toHaveLength(0);
+			expect(rp?.conversationLogs.cyan ?? []).toHaveLength(0);
+		}
+	});
+
 	it("round-trips world entities", () => {
 		const game = makeFreshGame();
 		const phase = game.phases[0];

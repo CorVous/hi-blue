@@ -11,6 +11,11 @@
  *
  * Returns a string[] of pre-formatted lines (no leading <conversation> tag —
  * caller adds that).
+ *
+ * Supported entry kinds:
+ *   - `message`: incoming/outgoing DM lines.
+ *   - `witnessed-event`: lines describing observed physical actions.
+ *   - `action-failure`: actor-only lines recording dispatcher rejections.
  */
 
 import { cardinalToRelative } from "./direction.js";
@@ -118,6 +123,15 @@ export function renderEntry(
 					return `[Round ${round}] You watch ${actorSub} use the ${name}.`;
 				}
 			}
+			// All inner cases return; this break is unreachable but satisfies the
+			// linter's no-fallthrough-switch-clause rule.
+			break;
+		}
+
+		case "action-failure": {
+			// Strip a trailing period from reason to keep the formatted line clean.
+			const reason = entry.reason.replace(/\.$/, "");
+			return `[Round ${round}] Your \`${entry.tool}\` action failed: ${reason}.`;
 		}
 	}
 }

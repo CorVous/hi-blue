@@ -140,11 +140,11 @@ export interface PhysicalActionRecord {
 /**
  * A single tagged item inside a Daemon's conversation log.
  *
- * Discriminated union of two kinds — `message`, `witnessed-event` — each carrying a
- * `round` and the smallest payload needed to render its line in the system prompt. This is the
- * per-Daemon storage shape *and* the prompt-rendered shape (per CONTEXT.md's `Conversation log`
- * glossary entry). The `kind` tag is chosen so a player editing a `*xxxx.txt` file in devtools
- * can tell entry kinds apart at a glance.
+ * Discriminated union of three kinds — `message`, `witnessed-event`, `action-failure` — each
+ * carrying a `round` and the smallest payload needed to render its line in the system prompt.
+ * This is the per-Daemon storage shape *and* the prompt-rendered shape (per CONTEXT.md's
+ * `Conversation log` glossary entry). The `kind` tag is chosen so a player editing a `*xxxx.txt`
+ * file in devtools can tell entry kinds apart at a glance.
  *
  * - `message`: a directional message from `from: AiId | "blue"` to `to: AiId | "blue"`.
  *   Both sender's and recipient's per-Daemon logs receive the same entry.
@@ -152,6 +152,9 @@ export interface PhysicalActionRecord {
  *   this Daemon observed inside its cone. The cone-snapshot fields (`actorCellAtAction`,
  *   `actorFacingAtAction`, `witnessSpatial`) are omitted — cone visibility is resolved at
  *   write-time (ADR 0006), not re-evaluated at read-time.
+ * - `action-failure`: actor-only; persists across rounds; written by the dispatcher when an
+ *   in-scope action tool is rejected. Surfaces the rejection reason directly to the actor so
+ *   Daemons do not repeat the same failed action (e.g. walking into a wall) indefinitely.
  */
 export type ConversationEntry =
 	| {
@@ -171,6 +174,13 @@ export type ConversationEntry =
 			direction?: CardinalDirection;
 			useOutcome?: string;
 			placementFlavorRaw?: string;
+	  }
+	| {
+			kind: "action-failure";
+			round: number;
+			tool: "go" | "look" | "pick_up" | "put_down" | "give" | "use" | "examine";
+			/** Verbatim dispatcher rejection reason (e.g. "That cell is blocked by an obstacle"). */
+			reason: string;
 	  };
 
 export interface AiBudget {

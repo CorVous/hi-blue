@@ -223,6 +223,83 @@ describe("buildConversationLog — peer message", () => {
 	});
 });
 
+// ── Action-failure rendering ───────────────────────────────────────────────────
+
+describe("buildConversationLog — action-failure", () => {
+	it("renders single action-failure entry as `[Round N] Your \\`go\\` action failed: <reason>.`", () => {
+		const input: ConversationLogInput = {
+			...emptyInput(),
+			conversationLog: [
+				{
+					kind: "action-failure",
+					round: 3,
+					tool: "go",
+					reason: "That cell is blocked by an obstacle",
+				},
+			],
+		};
+		const result = buildConversationLog(input, "red", TEST_PERSONAS);
+		expect(result).toHaveLength(1);
+		expect(result[0]).toBe(
+			"[Round 3] Your `go` action failed: That cell is blocked by an obstacle.",
+		);
+	});
+
+	it("strips a trailing period from reason to avoid double period", () => {
+		const input: ConversationLogInput = {
+			...emptyInput(),
+			conversationLog: [
+				{
+					kind: "action-failure",
+					round: 1,
+					tool: "pick_up",
+					reason: "Item not in your cell.",
+				},
+			],
+		};
+		const result = buildConversationLog(input, "red", TEST_PERSONAS);
+		expect(result[0]).toBe(
+			"[Round 1] Your `pick_up` action failed: Item not in your cell.",
+		);
+		// Must not end in double period
+		expect(result[0]).not.toMatch(/\.\.$/);
+	});
+
+	it("handles each in-scope tool name in the rendered line", () => {
+		const tools = [
+			"go",
+			"look",
+			"pick_up",
+			"put_down",
+			"give",
+			"use",
+			"examine",
+		] as const;
+		for (const tool of tools) {
+			const input: ConversationLogInput = {
+				...emptyInput(),
+				conversationLog: [
+					{ kind: "action-failure", round: 1, tool, reason: "test reason" },
+				],
+			};
+			const result = buildConversationLog(input, "red", TEST_PERSONAS);
+			expect(result[0]).toContain(`\`${tool}\``);
+			expect(result[0]).toContain("test reason");
+		}
+	});
+
+	it("renders with fallback when reason is 'rejected'", () => {
+		const input: ConversationLogInput = {
+			...emptyInput(),
+			conversationLog: [
+				{ kind: "action-failure", round: 2, tool: "use", reason: "rejected" },
+			],
+		};
+		const result = buildConversationLog(input, "red", TEST_PERSONAS);
+		expect(result[0]).toBe("[Round 2] Your `use` action failed: rejected.");
+	});
+});
+
 // ── Witnessed events — go ──────────────────────────────────────────────────────
 
 describe("buildConversationLog — witnessed go", () => {
@@ -476,5 +553,27 @@ describe("buildConversationLog — chronological ordering", () => {
 		expect(result[0]).toContain("blue dms you");
 		expect(result[1]).toContain("*green dms you");
 		expect(result[2]).toContain("You watch");
+	});
+
+	it("action-failure entries interleave with messages and witnessed-events by round (stable sort)", () => {
+		const input: ConversationLogInput = {
+			conversationLog: [
+				{ kind: "message", from: "blue", to: "red", content: "go!", round: 3 },
+				{ kind: "action-failure", round: 1, tool: "go", reason: "blocked" },
+				{
+					kind: "witnessed-event",
+					round: 2,
+					actor: "green",
+					actionKind: "go",
+					direction: "south",
+				},
+			],
+			worldEntities: [],
+		};
+		const result = buildConversationLog(input, "red", TEST_PERSONAS);
+		expect(result).toHaveLength(3);
+		expect(result[0]).toContain("[Round 1]");
+		expect(result[1]).toContain("[Round 2]");
+		expect(result[2]).toContain("[Round 3]");
 	});
 });

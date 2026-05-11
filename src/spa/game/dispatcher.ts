@@ -9,6 +9,7 @@ import {
 	relativeToCardinal,
 } from "./direction.js";
 import {
+	appendActionFailure,
 	appendMessage,
 	appendWitnessedEvent,
 	deductBudget,
@@ -453,6 +454,12 @@ export function dispatchAiTurn(
 					description: validation.reason ?? "Examine failed",
 					success: false,
 				};
+				state = appendActionFailure(state, aiId, {
+					kind: "action-failure",
+					round,
+					tool: "examine",
+					reason: validation.reason ?? "rejected",
+				});
 			}
 		} else if (validation.valid) {
 			// Snapshot all AIs' spatial state BEFORE execution (used for witness context).
@@ -608,6 +615,18 @@ export function dispatchAiTurn(
 				actor: aiId,
 				kind: "tool_failure",
 				description: `${game.personas[aiId]?.name ?? aiId} tried to ${action.toolCall.name} ${action.toolCall.args.item ?? action.toolCall.args.direction ?? ""} but failed: ${validation.reason}`,
+			});
+			state = appendActionFailure(state, aiId, {
+				kind: "action-failure",
+				round,
+				tool: action.toolCall.name as
+					| "go"
+					| "look"
+					| "pick_up"
+					| "put_down"
+					| "give"
+					| "use",
+				reason: validation.reason ?? "rejected",
 			});
 		}
 	}

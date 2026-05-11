@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	advanceRound,
+	appendActionFailure,
 	appendMessage,
 	createGame,
 	getActivePhase,
@@ -644,6 +645,98 @@ describe("multi-id roundtrip replay shapes (#238)", () => {
 		expect(toolMsg?.role).toBe("tool");
 		if (toolMsg?.role === "tool") {
 			expect(toolMsg.tool_call_id).toBe("pickup_r3_id");
+		}
+	});
+});
+
+// ── action-failure emission (issue #287) ──────────────────────────────────────
+
+describe("buildOpenAiMessages — action-failure entries", () => {
+	it("action-failure entry is emitted as role: 'user' with rendered content", () => {
+		let game = makeGame();
+		game = appendActionFailure(game, "red", {
+			kind: "action-failure",
+			round: 0,
+			tool: "go",
+			reason: "That cell is blocked by an obstacle",
+		});
+		const ctx = buildAiContext(game, "red");
+		const messages = buildOpenAiMessages(ctx, undefined);
+
+		const failureMsg = messages.find(
+			(m) =>
+				m.role === "user" &&
+				(m as { content: string }).content.includes("action failed"),
+		);
+		expect(failureMsg).toBeDefined();
+		expect((failureMsg as { content: string }).content).toContain(
+			"Your `go` action failed",
+		);
+		expect((failureMsg as { content: string }).content).toContain(
+			"That cell is blocked by an obstacle",
+		);
+	});
+
+	it("action-failure entries interleave with message and witnessed-event entries by round (stable sort)", () => {
+		let game = makeGame();
+		// Round 0: action-failure
+		game = appendActionFailure(game, "red", {
+			kind: "action-failure",
+			round: 0,
+			tool: "go",
+			reason: "blocked",
+		});
+		// Round 1: incoming message from blue
+		game = advanceRound(game);
+		game = appendMessage(game, "blue", "red", "round 1 msg");
+		// Back to check ordering
+		const ctx = buildAiContext(game, "red");
+		const messages = buildOpenAiMessages(ctx, undefined);
+
+		// The action-failure (round 0) user turn should appear before the message (round 1) user turn
+		const failureIdx = messages.findIndex(
+			(m) =>
+				m.role === "user" &&
+				(m as { content: string }).content.includes("action failed"),
+		);
+		const messageIdx = messages.findIndex(
+			(m) =>
+				m.role === "user" &&
+				(m as { content: string }).content.includes("round 1 msg"),
+		);
+		expect(failureIdx).toBeGreaterThanOrEqual(0);
+		expect(messageIdx).toBeGreaterThanOrEqual(0);
+		expect(failureIdx).toBeLessThan(messageIdx);
+	});
+
+	it("regression: existing prior-round FAILED: tool-result tests still pass — action-failure does not replace tool result channel", () => {
+		const game = makeGame();
+		const ctx = buildAiContext(game, "red");
+
+		const roundtrip: ToolRoundtripMessage = {
+			assistantToolCalls: [
+				{
+					id: "call_fail",
+					name: "pick_up",
+					argumentsJson: '{"item":"nonexistent"}',
+				},
+			],
+			toolResults: [
+				{
+					tool_call_id: "call_fail",
+					success: false,
+					description:
+						'Ember tried to pick_up nonexistent but failed: Item "nonexistent" does not exist',
+					reason: 'Item "nonexistent" does not exist',
+				},
+			],
+		};
+
+		const messages = buildOpenAiMessages(ctx, roundtrip);
+		const toolMsg = messages.find((m) => m.role === "tool");
+		expect(toolMsg).toBeDefined();
+		if (toolMsg?.role === "tool") {
+			expect(toolMsg.content).toContain("FAILED:");
 		}
 	});
 });
