@@ -215,7 +215,9 @@ export function availableTools(game: GameState, aiId: AiId): OpenAiTool[] {
 				if (item.holder !== aiId) return false;
 				if (item.kind !== "objective_object") return false;
 				if (!item.pairsWithSpaceId) return false;
-				const space = world.entities.find((e) => e.id === item.pairsWithSpaceId);
+				const space = world.entities.find(
+					(e) => e.id === item.pairsWithSpaceId,
+				);
 				if (!space || !isGridPosition(space.holder)) return false;
 				const spacePos = space.holder as GridPosition;
 				if (positionsEqual(spacePos, actorSpatial.position)) return true;
