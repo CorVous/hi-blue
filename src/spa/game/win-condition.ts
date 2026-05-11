@@ -90,7 +90,8 @@ export function checkPlacementFlavor(
 	_contentPack: ContentPack,
 	world: WorldState,
 ): string | null {
-	if (action.toolCall?.name !== "put_down") return null;
+	const toolName = action.toolCall?.name;
+	if (toolName !== "put_down" && toolName !== "use") return null;
 
 	const itemId = action.toolCall.args.item;
 	if (!itemId) return null;

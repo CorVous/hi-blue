@@ -252,9 +252,23 @@ export function executeToolCall(
 			case "give":
 				if (target) target.holder = call.args.to as AiId;
 				break;
-			case "use":
-				// No world mutation — useOutcome is returned as the tool result description.
+			case "use": {
+				// Place item on current cell only when the actor is standing on the
+				// item's paired objective_space. Otherwise no world mutation.
+				if (target && actorSpatial && target.pairsWithSpaceId) {
+					const pairedSpace = entities.find(
+						(e) => e.id === target.pairsWithSpaceId,
+					);
+					if (
+						pairedSpace &&
+						isGridPosition(pairedSpace.holder) &&
+						positionsEqual(pairedSpace.holder, actorSpatial.position)
+					) {
+						target.holder = { ...actorSpatial.position };
+					}
+				}
 				break;
+			}
 			case "examine":
 				// No world mutation — examineDescription is returned as the tool result description.
 				break;
@@ -404,7 +418,7 @@ export function dispatchAiTurn(
 			// If so, replace the default description with the per-pair placementFlavor.
 			const activePhase = getActivePhase(state);
 			const flavorDescription =
-				action.toolCall.name === "put_down"
+				action.toolCall.name === "put_down" || action.toolCall.name === "use"
 					? checkPlacementFlavor(
 							action,
 							activePhase.contentPack,
