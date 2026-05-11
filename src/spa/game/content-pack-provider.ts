@@ -32,7 +32,7 @@ All ids must be unique across all phases.
 Names and descriptions must be thematically consistent with the setting noun, and (for objective_objects, objective_spaces, and interesting_objects) with the item theme.
 placementFlavor MUST contain the literal string "{actor}".
 pairsWithSpaceId on each objective_object MUST equal the id of its paired objective_space.
-examineDescription of each objective_object SHOULD name/reference its paired space.
+Each objective_object's examineDescription MUST contain the literal name of its paired objective_space (or an unambiguous noun-phrase synonym a player could match). Example: if the objective_space is named "Brass Pedestal", the object's examineDescription must contain "brass pedestal" or a clear synonym ("the pedestal", "the brass mount", etc.). The prose tell is the only AI-discoverable channel for the pairing, so it cannot be omitted.
 
 Return ONLY valid JSON with this exact shape (no markdown, no preamble):
 {
@@ -101,6 +101,31 @@ export interface ContentPackProvider {
 	generateContentPacks(
 		input: ContentPackProviderInput,
 	): Promise<ContentPackProviderResult>;
+}
+
+// ── Prose-tell check ──────────────────────────────────────────────────────────
+
+/**
+ * Returns true when an objective_object's examineDescription mentions its paired
+ * objective_space's name — either the literal name (case-insensitive substring)
+ * or the head noun of the name (last whitespace-separated token, length >= 3).
+ *
+ * The head-noun fallback admits noun-phrase synonyms like "the pedestal" for a
+ * space named "Brass Pedestal". The system prompt MUSTs this property; this
+ * helper exists so tests and any future validator-side enforcement (see #248)
+ * share one definition.
+ */
+export function examineMentionsPairedSpace(
+	examineDescription: string,
+	spaceName: string,
+): boolean {
+	const examineLc = examineDescription.toLowerCase();
+	const spaceLc = spaceName.toLowerCase().trim();
+	if (spaceLc.length === 0) return false;
+	if (examineLc.includes(spaceLc)) return true;
+	const tokens = spaceLc.split(/\s+/).filter((t) => t.length >= 3);
+	const headNoun = tokens[tokens.length - 1];
+	return headNoun !== undefined && examineLc.includes(headNoun);
 }
 
 // ── Validation ────────────────────────────────────────────────────────────────
