@@ -3,16 +3,15 @@ import {
 	advanceRound,
 	appendActionFailure,
 	appendMessage,
-	createGame,
 	getActivePhase,
-	startPhase,
+	startGame,
 } from "../engine";
 import {
 	buildOpenAiMessages,
 	buildSilentTurn,
 } from "../openai-message-builder";
 import { buildAiContext } from "../prompt-builder";
-import type { AiPersona, PhaseConfig, ToolRoundtripMessage } from "../types";
+import type { AiPersona, ToolRoundtripMessage } from "../types";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -56,17 +55,8 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 	},
 };
 
-const PHASE_CONFIG: PhaseConfig = {
-	phaseNumber: 1,
-	kRange: [1, 1],
-	nRange: [0, 0],
-	mRange: [0, 0],
-	aiGoalPool: ["Hold the flower", "Balance items", "Hold the key"],
-	budgetPerAi: 5,
-};
-
 function makeGame() {
-	return startPhase(createGame(TEST_PERSONAS), PHASE_CONFIG);
+	return startGame(TEST_PERSONAS, []);
 }
 
 describe("buildOpenAiMessages", () => {

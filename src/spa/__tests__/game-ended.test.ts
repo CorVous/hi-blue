@@ -41,9 +41,8 @@ async function seedSessionInStub(
 ): Promise<void> {
 	// Use engine functions directly (not buildSessionFromAssets) to avoid the
 	// module-level vi.mock("../game/game-session.js") interfering with session
-	// seeding — GameSession is mocked but createGame/startPhase are not.
-	const { createGame, startPhase } = await import("../game/engine.js");
-	const { PHASE_1_CONFIG } = await import("../../content/index.js");
+	// seeding — GameSession is mocked but startGame is not.
+	const { startGame } = await import("../game/engine.js");
 	const { mintAndActivateNewSession, saveActiveSession } = await import(
 		"../persistence/session-storage.js"
 	);
@@ -55,11 +54,7 @@ async function seedSessionInStub(
 	});
 	try {
 		mintAndActivateNewSession();
-		const gameState = startPhase(
-			createGame(STATIC_PERSONAS, STATIC_CONTENT_PACKS),
-			PHASE_1_CONFIG,
-			() => 0,
-		);
+		const gameState = startGame(STATIC_PERSONAS, STATIC_CONTENT_PACKS, () => 0);
 		saveActiveSession(gameState);
 	} finally {
 		Object.defineProperty(globalThis, "localStorage", {

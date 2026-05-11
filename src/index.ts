@@ -5,14 +5,13 @@ export {
 	validateToolCall,
 } from "./spa/game/dispatcher";
 export {
-	advancePhase,
 	advanceRound,
 	appendMessage,
 	appendWitnessedEvent,
 	createGame,
 	deductBudget,
 	getActivePhase,
-	startPhase,
+	startGame,
 } from "./spa/game/engine";
 export type { AiContext } from "./spa/game/prompt-builder";
 export { buildAiContext } from "./spa/game/prompt-builder";
@@ -22,7 +21,7 @@ export type {
 	AiPersona,
 	AiTurnAction,
 	GameState,
-	PhaseConfig,
+	Objective,
 	PhaseState,
 	RoundActionRecord,
 	RoundResult,
@@ -32,3 +31,7 @@ export type {
 	WorldEntity,
 	WorldState,
 } from "./spa/game/types";
+export {
+	checkLoseCondition,
+	checkWinCondition,
+} from "./spa/game/win-condition";

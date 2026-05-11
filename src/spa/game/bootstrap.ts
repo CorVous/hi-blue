@@ -12,10 +12,8 @@
 
 import { generateContentPacks } from "../../content/content-pack-generator.js";
 import {
+	GAME_CONTENT_RANGES,
 	generatePersonas,
-	PHASE_1_CONFIG,
-	PHASE_2_CONFIG,
-	PHASE_3_CONFIG,
 	SETTING_POOL,
 } from "../../content/index.js";
 import type { ContentPackProvider } from "./content-pack-provider.js";
@@ -85,7 +83,11 @@ export function generateNewGameAssetsSplit(
 	const contentPacksPromise = generateContentPacks(
 		contentPackRng,
 		SETTING_POOL,
-		[PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG],
+		[
+			{ phaseNumber: 1, ...GAME_CONTENT_RANGES },
+			{ phaseNumber: 2, ...GAME_CONTENT_RANGES },
+			{ phaseNumber: 3, ...GAME_CONTENT_RANGES },
+		],
 		packLLM,
 		aiIdsPromise,
 	);
@@ -127,10 +129,5 @@ export function buildSessionFromAssets(
 	assets: NewGameAssets,
 	opts?: { rng?: () => number },
 ): GameSession {
-	return new GameSession(
-		PHASE_1_CONFIG,
-		assets.personas,
-		assets.contentPacks,
-		opts?.rng,
-	);
+	return new GameSession(assets.personas, assets.contentPacks, opts?.rng);
 }

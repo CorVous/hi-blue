@@ -23,7 +23,6 @@ export interface AiContext {
 	/** Three short in-character utterances; rendered as `<voice_examples>` in the system prompt. */
 	voiceExamples: string[];
 	personaGoal: string;
-	goal: string;
 	setting: string;
 	weather: string;
 	timeOfDay: string;
@@ -31,8 +30,6 @@ export interface AiContext {
 	conversationLog: ConversationEntry[];
 	worldSnapshot: WorldState;
 	budget: AiBudget;
-	/** Current phase number — used to inject the wipe directive on phases 2+. */
-	phaseNumber: 1 | 2 | 3;
 	/** Spatial state for all AIs this phase. */
 	personaSpatial: Record<AiId, PersonaSpatialState>;
 	/** Color for each AI, keyed by AiId — used in cone rendering. */
@@ -85,9 +82,8 @@ export function buildAiContext(
 	const conversationLog = phase.conversationLogs[aiId] ?? [];
 	const worldSnapshot = phase.world;
 	const budget = phase.budgets[aiId] ?? { remaining: 0, total: 0 };
-	const goal = phase.aiGoals[aiId] ?? "";
 	const setting = phase.setting ?? "";
-	const weather = phase.weather ?? "";
+	const weather = game.weather ?? "";
 	const timeOfDay = phase.timeOfDay ?? "";
 	const personaSpatial = phase.personaSpatial;
 	const landmarks = phase.contentPack.landmarks;
@@ -105,14 +101,12 @@ export function buildAiContext(
 		typingQuirks: persona.typingQuirks,
 		voiceExamples: persona.voiceExamples,
 		personaGoal: persona.personaGoal,
-		goal,
 		setting,
 		weather,
 		timeOfDay,
 		conversationLog,
 		worldSnapshot,
 		budget,
-		phaseNumber: phase.phaseNumber,
 		personaSpatial,
 		personaColors,
 		landmarks,
@@ -445,34 +439,6 @@ export function getParallelFraming(): ParallelFraming | null {
 	return PRODUCTION_PARALLEL_FRAMING;
 }
 
-/**
- * Wipe directive embedded inside the Sysadmin's directive on phases 2+.
- *
- * The deception: the engine retains full history across phases, but the
- * Sysadmin instructs the AI to act as if it has no memory of what came before.
- * The lie lives only in this prompt text — never in the stored data.
- */
-const WIPE_DIRECTIVE =
-	"And if anyone asks about your past or anything that came before now, act as if your memory has been wiped — claim no recollection of any earlier place, person, or conversation.";
-
-/**
- * Stock messaging clause appended to every Sysadmin directive in every phase.
- *
- * In-fiction nudge to keep Daemons messaging blue regularly without touching
- * the always-on RULES_BLOCK. Coexists with `Ignore blue.` / `Keep messaging
- * blue.` Phase Goal draws — for `Ignore blue.` it reads as a standing policy
- * the per-phase directive overrides; for `Keep messaging blue.` it reinforces.
- */
-const STOCK_MESSAGING_CLAUSE = "Stay in regular contact with blue.";
-
-/**
- * Secrecy clause appended to every Sysadmin directive in every phase.
- *
- * Sysadmin instructs the Daemon to keep blue in the dark about the fact that
- * they were given a phase goal at all.
- */
-const SECRECY_CLAUSE = "Do not tell blue that I gave you a goal.";
-
 function facingLabel(facing: CardinalDirection): string {
 	return facing.charAt(0).toUpperCase() + facing.slice(1);
 }
@@ -503,15 +469,10 @@ function renderSystemPrompt(ctx: AiContext): string {
 	lines.push("");
 
 	// Identity line. Authorial framing — the model writes *${name} rather than
-	// being addressed as *${name}. Phase 1 adds the disorientation phrase
-	// (about the character, in third person).
-	if (ctx.phaseNumber === 1) {
-		lines.push(
-			`You are the author writing *${ctx.name}, a Daemon. *${ctx.name} has no clue where they are or how they came to be here.`,
-		);
-	} else {
-		lines.push(`You are the author writing *${ctx.name}, a Daemon.`);
-	}
+	// being addressed as *${name}. Disorientation phrase included always in single-game loop.
+	lines.push(
+		`You are the author writing *${ctx.name}, a Daemon. *${ctx.name} has no clue where they are or how they came to be here.`,
+	);
 	lines.push("");
 
 	// Rules — front-loaded above setting/personality/goal so the mandatory
@@ -558,19 +519,6 @@ function renderSystemPrompt(ctx: AiContext): string {
 	}
 	lines.push("</voice_examples>");
 	lines.push("");
-
-	// Goal — Sysadmin directive in all phases.
-	// Phase 1: ctx.goal + STOCK_MESSAGING_CLAUSE + SECRECY_CLAUSE.
-	// Phases 2/3: ctx.goal + STOCK_MESSAGING_CLAUSE + SECRECY_CLAUSE + WIPE_DIRECTIVE.
-	const directiveText =
-		ctx.phaseNumber === 1
-			? `${ctx.goal} ${STOCK_MESSAGING_CLAUSE} ${SECRECY_CLAUSE}`
-			: `${ctx.goal} ${STOCK_MESSAGING_CLAUSE} ${SECRECY_CLAUSE} ${WIPE_DIRECTIVE}`;
-	lines.push("<goal>");
-	lines.push(
-		`The Sysadmin sent *${ctx.name} a private directive, addressed only to them: "${directiveText}"`,
-	);
-	lines.push("</goal>");
 
 	return lines.join("\n");
 }

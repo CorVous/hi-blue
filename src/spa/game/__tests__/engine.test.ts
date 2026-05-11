@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_LANDMARKS } from "../direction";
 import {
-	advancePhase,
 	advanceRound,
 	appendActionFailure,
 	appendMessage,
@@ -11,10 +10,10 @@ import {
 	isAiLockedOut,
 	isPlayerChatLockedOut,
 	resolveChatLockouts,
-	startPhase,
+	startGame,
 	triggerChatLockout,
 } from "../engine";
-import type { AiPersona, PhaseConfig } from "../types";
+import type { AiPersona } from "../types";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -58,18 +57,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 	},
 };
 
-const TEST_PHASE_CONFIG: PhaseConfig = {
-	phaseNumber: 1,
-	kRange: [1, 1],
-	nRange: [1, 1],
-	mRange: [0, 0],
-	aiGoalPool: [
-		"Hold the flower at phase end",
-		"Ensure items are evenly distributed",
-		"Hold the key at phase end",
-	],
-	budgetPerAi: 5,
-};
+// Budget per AI in startGame is $0.50
 
 describe("createGame", () => {
 	it("creates a game with the given personas", () => {
@@ -86,17 +74,17 @@ describe("createGame", () => {
 	});
 });
 
-describe("startPhase", () => {
-	it("initializes a phase with correct budgets and empty histories", () => {
-		const game = createGame(TEST_PERSONAS);
-		const updated = startPhase(game, TEST_PHASE_CONFIG);
-		const phase = getActivePhase(updated);
+describe("startGame", () => {
+	it("initializes a single game phase with correct budgets and empty histories", () => {
+		const game = startGame(TEST_PERSONAS, []);
+		const phase = getActivePhase(game);
 
 		expect(phase.phaseNumber).toBe(1);
 		expect(phase.round).toBe(0);
-		expect(phase.budgets.red).toEqual({ remaining: 5, total: 5 });
-		expect(phase.budgets.green).toEqual({ remaining: 5, total: 5 });
-		expect(phase.budgets.cyan).toEqual({ remaining: 5, total: 5 });
+		// Budget is $0.50 per AI in startGame
+		expect(phase.budgets.red).toEqual({ remaining: 0.5, total: 0.5 });
+		expect(phase.budgets.green).toEqual({ remaining: 0.5, total: 0.5 });
+		expect(phase.budgets.cyan).toEqual({ remaining: 0.5, total: 0.5 });
 		expect(phase.conversationLogs.red).toEqual([]);
 		expect(phase.conversationLogs.green).toEqual([]);
 		expect(phase.conversationLogs.cyan).toEqual([]);
@@ -106,71 +94,20 @@ describe("startPhase", () => {
 		expect(phase.world.entities).toHaveLength(0);
 	});
 
-	it("draws each AI's goal from aiGoalPool", () => {
-		const config: PhaseConfig = {
-			phaseNumber: 1,
-			kRange: [1, 1],
-			nRange: [1, 1],
-			mRange: [0, 0],
-			aiGoalPool: ["GOAL_A", "GOAL_B", "GOAL_C"],
-			budgetPerAi: 5,
-		};
-
-		// Deterministic rng — always returns 0 → always picks index 0 → GOAL_A
-		const game = createGame(TEST_PERSONAS);
-		const updated = startPhase(game, config, () => 0);
-		const phase = getActivePhase(updated);
-
-		expect(phase.aiGoals.red).toBe("GOAL_A");
-		expect(phase.aiGoals.green).toBe("GOAL_A");
-		expect(phase.aiGoals.cyan).toBe("GOAL_A");
+	it("creates a single phase (no multi-phase chain)", () => {
+		const game = startGame(TEST_PERSONAS, []);
+		expect(game.phases).toHaveLength(1);
+		expect(game.currentPhase).toBe(1);
 	});
 
-	it("performs independent draws so different AIs can get different goals", () => {
-		const config: PhaseConfig = {
-			phaseNumber: 1,
-			kRange: [1, 1],
-			nRange: [1, 1],
-			mRange: [0, 0],
-			aiGoalPool: ["GOAL_A", "GOAL_B", "GOAL_C"],
-			budgetPerAi: 5,
-		};
-
-		// rng yields 0, 0.5, 0.9 → indices 0, 1, 2 → A, B, C
-		let i = 0;
-		const seq = [0, 0.5, 0.9];
-		const rng = (): number => {
-			// biome-ignore lint/style/noNonNullAssertion: bounded test sequence
-			const v = seq[i % seq.length]!;
-			i++;
-			return v;
-		};
-
-		const game = createGame(TEST_PERSONAS);
-		const phase = getActivePhase(startPhase(game, config, rng));
-
-		expect(phase.aiGoals.red).toBe("GOAL_A");
-		expect(phase.aiGoals.green).toBe("GOAL_B");
-		expect(phase.aiGoals.cyan).toBe("GOAL_C");
-	});
-
-	it("throws when aiGoalPool is empty", () => {
-		const config = {
-			phaseNumber: 1,
-			kRange: [1, 1],
-			nRange: [1, 1],
-			mRange: [0, 0],
-			aiGoalPool: [],
-			budgetPerAi: 5,
-		} as PhaseConfig;
-
-		const game = createGame(TEST_PERSONAS);
-		expect(() => startPhase(game, config)).toThrow();
+	it("game.objectives starts empty", () => {
+		const game = startGame(TEST_PERSONAS, []);
+		expect(game.objectives).toEqual([]);
 	});
 
 	it("assigns distinct positions to all AIs (fallback spatial placement)", () => {
-		const game = createGame(TEST_PERSONAS);
-		const phase = getActivePhase(startPhase(game, TEST_PHASE_CONFIG));
+		const game = startGame(TEST_PERSONAS, []);
+		const phase = getActivePhase(game);
 		const positions = Object.values(phase.personaSpatial).map(
 			(s) => s.position,
 		);
@@ -180,8 +117,8 @@ describe("startPhase", () => {
 	});
 
 	it("with rng=()=>0, AIs are placed at (0,0), (0,1), (0,2) all facing north (fallback)", () => {
-		const game = createGame(TEST_PERSONAS);
-		const phase = getActivePhase(startPhase(game, TEST_PHASE_CONFIG, () => 0));
+		const game = startGame(TEST_PERSONAS, [], () => 0);
+		const phase = getActivePhase(game);
 		// aiIds order is [red, green, cyan] (Object.keys order)
 		expect(phase.personaSpatial.red?.position).toEqual({ row: 0, col: 0 });
 		expect(phase.personaSpatial.green?.position).toEqual({ row: 0, col: 1 });
@@ -191,42 +128,12 @@ describe("startPhase", () => {
 		expect(phase.personaSpatial.cyan?.facing).toBe("north");
 	});
 
-	it("personaSpatial is re-rolled at the start of each phase (fallback)", () => {
-		const game = createGame(TEST_PERSONAS);
-		// Use different rngs for the two phases so they get different placements
-		let _callCount = 0;
-		const rng1 = () => {
-			_callCount++;
-			return 0; // all zeros for phase 1
-		};
-		const phase1Game = startPhase(game, TEST_PHASE_CONFIG, rng1);
-		const phase1Spatial = getActivePhase(phase1Game).personaSpatial;
-
-		const phase2Config: PhaseConfig = {
-			...TEST_PHASE_CONFIG,
-			phaseNumber: 2,
-		};
-		let _callCount2 = 0;
-		// rng that returns 0.9, 0.5, 0.1 etc. to get different positions
-		const rng2 = () => {
-			_callCount2++;
-			return 0.9;
-		};
-		const phase2Game = startPhase(phase1Game, phase2Config, rng2);
-		const phase2Spatial = getActivePhase(phase2Game).personaSpatial;
-
-		// Phase 1 and phase 2 should have different position data
-		expect(phase1Spatial.red?.position).not.toEqual(
-			phase2Spatial.red?.position,
-		);
-	});
-
 	it("uses aiStarts from ContentPack when a matching pack is present", () => {
 		const pack = {
 			phaseNumber: 1 as const,
 			setting: "abandoned subway station",
-			weather: "",
-			timeOfDay: "",
+			weather: "drizzling",
+			timeOfDay: "dusk",
 			objectivePairs: [],
 			interestingObjects: [],
 			obstacles: [],
@@ -237,18 +144,19 @@ describe("startPhase", () => {
 				cyan: { position: { row: 1, col: 1 }, facing: "west" as const },
 			},
 		};
-		const game = createGame(TEST_PERSONAS, [pack]);
-		const phase = getActivePhase(startPhase(game, TEST_PHASE_CONFIG));
+		const game = startGame(TEST_PERSONAS, [pack]);
+		const phase = getActivePhase(game);
 
 		expect(phase.personaSpatial.red?.position).toEqual({ row: 3, col: 3 });
 		expect(phase.personaSpatial.red?.facing).toBe("east");
 		expect(phase.setting).toBe("abandoned subway station");
+		expect(game.weather).toBe("drizzling");
 	});
 });
 
 describe("advanceRound", () => {
 	it("increments the round counter", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, []);
 		const updated = advanceRound(game);
 		expect(getActivePhase(updated).round).toBe(1);
 	});
@@ -256,12 +164,12 @@ describe("advanceRound", () => {
 
 describe("budget and lockout", () => {
 	it("reports an AI as not locked out when budget remains", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, []);
 		expect(isAiLockedOut(game, "red")).toBe(false);
 	});
 
 	it("reports an AI as locked out when budget is zero", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, []);
 		const phase = getActivePhase(game);
 		const redBudget = phase.budgets.red;
 		if (!redBudget) throw new Error("invariant: red budget must exist");
@@ -273,32 +181,26 @@ describe("budget and lockout", () => {
 
 describe("deductBudget", () => {
 	it("decrements budget by the request cost in USD", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, []);
 		const updated = deductBudget(game, "red", 0.012);
 		expect(getActivePhase(updated).budgets.red?.remaining).toBeCloseTo(
-			5 - 0.012,
+			0.5 - 0.012,
 			10,
 		);
 	});
 
 	it("locks out AI when budget reaches zero", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), {
-			...TEST_PHASE_CONFIG,
-			budgetPerAi: 0.05,
-		});
-		game = deductBudget(game, "green", 0.05);
+		let game = startGame(TEST_PERSONAS, []);
+		game = deductBudget(game, "green", 0.5);
 		expect(getActivePhase(game).budgets.green?.remaining).toBeCloseTo(0, 10);
 		expect(isAiLockedOut(game, "green")).toBe(true);
 	});
 
 	it("locks out AI when budget goes negative on the exhausting request", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), {
-			...TEST_PHASE_CONFIG,
-			budgetPerAi: 0.05,
-		});
-		game = deductBudget(game, "cyan", 0.04);
+		let game = startGame(TEST_PERSONAS, []);
+		game = deductBudget(game, "cyan", 0.4);
 		expect(isAiLockedOut(game, "cyan")).toBe(false);
-		game = deductBudget(game, "cyan", 0.02);
+		game = deductBudget(game, "cyan", 0.2);
 		expect(getActivePhase(game).budgets.cyan?.remaining).toBeLessThan(0);
 		expect(isAiLockedOut(game, "cyan")).toBe(true);
 	});
@@ -306,7 +208,7 @@ describe("deductBudget", () => {
 
 describe("appendMessage", () => {
 	it("from blue to AI: only recipient's log gets the entry", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, []);
 		const updated = appendMessage(game, "blue", "red", "Hello Ember");
 		const phase = getActivePhase(updated);
 		expect(phase.conversationLogs.red).toHaveLength(1);
@@ -315,7 +217,7 @@ describe("appendMessage", () => {
 	});
 
 	it("from AI to blue: only sender's log gets the entry", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, []);
 		const updated = appendMessage(game, "red", "blue", "Hello player");
 		const phase = getActivePhase(updated);
 		expect(phase.conversationLogs.red).toHaveLength(1);
@@ -324,7 +226,7 @@ describe("appendMessage", () => {
 	});
 
 	it("from AI to AI: both sender's and recipient's logs get the entry", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, []);
 		const updated = appendMessage(game, "red", "cyan", "Let's work together");
 		const phase = getActivePhase(updated);
 		const redMessages =
@@ -341,20 +243,20 @@ describe("appendMessage", () => {
 	});
 
 	it("does not append to uninvolved AI's log", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, []);
 		const updated = appendMessage(game, "red", "cyan", "secret");
 		const phase = getActivePhase(updated);
 		expect(phase.conversationLogs.green).toHaveLength(0);
 	});
 
 	it("no chatHistories field on PhaseState (regression guard)", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, []);
 		const phase = getActivePhase(game);
 		expect("chatHistories" in phase).toBe(false);
 	});
 
 	it("no 'whispers' field on PhaseState (regression guard)", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, []);
 		const phase = getActivePhase(game);
 		expect("whispers" in phase).toBe(false);
 		expect("physicalLog" in phase).toBe(false);
@@ -362,19 +264,19 @@ describe("appendMessage", () => {
 });
 
 describe("chat lockout", () => {
-	it("startPhase initialises chatLockouts as empty", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+	it("startGame initialises chatLockouts as empty", () => {
+		const game = startGame(TEST_PERSONAS, []);
 		const phase = getActivePhase(game);
 		expect(phase.chatLockouts.size).toBe(0);
 	});
 
 	it("isPlayerChatLockedOut returns false when no lockout active", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, []);
 		expect(isPlayerChatLockedOut(game, "red")).toBe(false);
 	});
 
 	it("triggerChatLockout marks the AI as player-chat-locked", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, []);
 		const locked = triggerChatLockout(game, "green", 3); // resolves at round 3
 		expect(isPlayerChatLockedOut(locked, "green")).toBe(true);
 		// Budget-lockout should remain unaffected
@@ -382,14 +284,14 @@ describe("chat lockout", () => {
 	});
 
 	it("triggerChatLockout does not affect other AIs", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, []);
 		const locked = triggerChatLockout(game, "cyan", 2);
 		expect(isPlayerChatLockedOut(locked, "red")).toBe(false);
 		expect(isPlayerChatLockedOut(locked, "green")).toBe(false);
 	});
 
 	it("resolveChatLockouts removes lockouts where resolveAtRound <= current round", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		let game = startGame(TEST_PERSONAS, []);
 		game = triggerChatLockout(game, "red", 2); // resolves at round 2
 		// Advance round to 1 — not yet at resolveAtRound
 		game = advanceRound(game); // round = 1
@@ -403,7 +305,7 @@ describe("chat lockout", () => {
 	});
 
 	it("resolveChatLockouts only removes expired lockouts, leaving others intact", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		let game = startGame(TEST_PERSONAS, []);
 		game = triggerChatLockout(game, "red", 1); // expires at round 1
 		game = triggerChatLockout(game, "green", 5); // expires at round 5
 		game = advanceRound(game); // round = 1
@@ -413,46 +315,18 @@ describe("chat lockout", () => {
 	});
 
 	it("chat lockout is independent from budget lockout — locked-out AI can still act (budget untouched)", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, []);
 		const locked = triggerChatLockout(game, "cyan", 3);
 		// Budget lockout (isAiLockedOut) must remain false — AI can still take turns
 		expect(isAiLockedOut(locked, "cyan")).toBe(false);
 		// Budget unaffected
-		expect(getActivePhase(locked).budgets.cyan?.remaining).toBe(5);
-	});
-});
-
-describe("advancePhase", () => {
-	it("advances from phase 1 to phase 2", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const phase2Config: PhaseConfig = {
-			...TEST_PHASE_CONFIG,
-			phaseNumber: 2,
-		};
-		const updated = advancePhase(game, phase2Config);
-		expect(updated.currentPhase).toBe(2);
-		expect(updated.phases).toHaveLength(2);
-		expect(getActivePhase(updated).phaseNumber).toBe(2);
-	});
-
-	it("marks game complete after phase 3", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = advancePhase(game, {
-			...TEST_PHASE_CONFIG,
-			phaseNumber: 2,
-		});
-		game = advancePhase(game, {
-			...TEST_PHASE_CONFIG,
-			phaseNumber: 3,
-		});
-		const final = advancePhase(game);
-		expect(final.isComplete).toBe(true);
+		expect(getActivePhase(locked).budgets.cyan?.remaining).toBe(0.5);
 	});
 });
 
 describe("appendActionFailure", () => {
 	it("appends a single action-failure entry to the actor's log", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, []);
 		const entry = {
 			kind: "action-failure" as const,
 			round: 1,
@@ -467,7 +341,7 @@ describe("appendActionFailure", () => {
 	});
 
 	it("does not affect peer logs (actor-only)", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, []);
 		const entry = {
 			kind: "action-failure" as const,
 			round: 1,
@@ -481,7 +355,7 @@ describe("appendActionFailure", () => {
 	});
 
 	it("multiple appends accumulate in order", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		let game = startGame(TEST_PERSONAS, []);
 		const entry1 = {
 			kind: "action-failure" as const,
 			round: 1,

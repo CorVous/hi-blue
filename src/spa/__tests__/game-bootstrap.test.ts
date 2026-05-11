@@ -174,8 +174,7 @@ describe("persistence — LLM-shaped blurb round-trips verbatim", () => {
 		const { serializeSession, deserializeSession } = await import(
 			"../persistence/session-codec.js"
 		);
-		const { createGame, startPhase } = await import("../game/engine.js");
-		const { PHASE_1_CONFIG } = await import("../../content/index.js");
+		const { startGame } = await import("../game/engine.js");
 
 		const LLM_BLURB =
 			"Ember is stoic and methodical, yet prone to sudden bursts of impulsive clarity. Every problem they encounter becomes a lens — not to examine the world, but to examine themself. Ember holds order as a value not because rules comfort them but because disorder reveals too much, too quickly. Contradiction fuels them. Ember is never quite settled.";
@@ -223,11 +222,7 @@ describe("persistence — LLM-shaped blurb round-trips verbatim", () => {
 			},
 		};
 
-		const game = startPhase(
-			createGame(personasWithLlmBlurb),
-			PHASE_1_CONFIG,
-			() => 0,
-		);
+		const game = startGame(personasWithLlmBlurb, [], () => 0);
 		const now = new Date().toISOString();
 		const files = serializeSession(game, now, now);
 		const result = deserializeSession(files);
