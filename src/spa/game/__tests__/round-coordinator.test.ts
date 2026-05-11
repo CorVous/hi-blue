@@ -2824,7 +2824,8 @@ describe("complicationConfig", () => {
 			...TEST_CONTENT_PACK,
 			weather,
 		};
-		return startGame(TEST_PERSONAS, [pack]);
+		const game = createGame(TEST_PERSONAS, [pack]);
+		return startPhase(game, TEST_PHASE_CONFIG);
 	}
 
 	function makeProvider() {
