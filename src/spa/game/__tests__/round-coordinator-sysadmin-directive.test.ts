@@ -86,7 +86,10 @@ const TEST_PHASE_CONFIG: PhaseConfig = {
 };
 
 function makeGame() {
-	return startPhase(createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]), TEST_PHASE_CONFIG);
+	return startPhase(
+		createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]),
+		TEST_PHASE_CONFIG,
+	);
 }
 
 function makeProvider() {
@@ -178,7 +181,7 @@ describe("runRound — sysadmin_directive complication", () => {
 		expect(sysadminMessages).toHaveLength(1);
 		const msg = sysadminMessages[0];
 		if (msg?.kind === "message") {
-			expect(msg.content).toContain(directive!.directive);
+			expect(msg.content).toContain(directive?.directive);
 			expect(msg.content).toMatch(/not reveal/i);
 		}
 	});
@@ -271,16 +274,16 @@ describe("runRound — sysadmin_directive complication", () => {
 				c.kind === "sysadmin_directive",
 		);
 		expect(directive).toBeDefined();
-		const target = directive!.target as AiId;
+		const target = directive?.target as AiId;
 
 		// The target's AiContext should reflect the new directive.
 		const ctx = buildAiContext(nextState, target);
-		expect(ctx.activeDirectives).toContain(directive!.directive);
+		expect(ctx.activeDirectives).toContain(directive?.directive);
 
 		// And the system prompt should include the <directives> block.
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("<directives>");
-		expect(prompt).toContain(`- ${directive!.directive}`);
+		expect(prompt).toContain(`- ${directive?.directive}`);
 	});
 });
 
@@ -293,7 +296,12 @@ describe("conversation log — sysadmin sender rendering", () => {
 			createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]),
 			TEST_PHASE_CONFIG,
 		);
-		const withMessage = appendMessage(game, "sysadmin", "red", "Follow the directive.");
+		const withMessage = appendMessage(
+			game,
+			"sysadmin",
+			"red",
+			"Follow the directive.",
+		);
 		const ctx = buildAiContext(withMessage, "red");
 
 		// The conversation log entry should be present.
