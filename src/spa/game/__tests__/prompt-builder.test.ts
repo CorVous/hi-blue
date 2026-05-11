@@ -488,6 +488,19 @@ describe("voice framing", () => {
 		);
 		expect(prompt).not.toContain("has no clue where they are");
 	});
+
+	// Regression guard: e2e SSE-stub routing uses the substring
+	// `writing *{name}, a Daemon.` to identify the per-daemon actor request.
+	// If the identity line wording changes this test catches it at unit-test
+	// time instead of silently breaking smoke routing.
+	it("identity line contains the 'writing *{name}, a Daemon.' substring that e2e SSE routing depends on (all phases)", () => {
+		for (const phase of [1, 2, 3] as const) {
+			let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+			if (phase !== 1) game = startPhase(game, makeConfig(phase));
+			const prompt = buildAiContext(game, "red").toSystemPrompt();
+			expect(prompt).toContain("writing *Ember, a Daemon.");
+		}
+	});
 });
 
 describe("<rules> block", () => {
