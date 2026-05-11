@@ -26,7 +26,10 @@ export type PendingBootstrapStatus =
 
 export interface PendingBootstrap {
 	personasPromise: Promise<Record<AiId, AiPersona>>;
-	contentPacksPromise: Promise<{ packsA: ContentPack[]; packsB: ContentPack[] }>;
+	contentPacksPromise: Promise<{
+		packsA: ContentPack[];
+		packsB: ContentPack[];
+	}>;
 	status: PendingBootstrapStatus;
 	error?: unknown;
 }

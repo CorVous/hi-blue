@@ -13,7 +13,12 @@
  */
 
 import { applyDirection, CARDINAL_DIRECTIONS, inBounds } from "./direction.js";
-import { appendBroadcast, getActivePhase, swapActivePack, updateActivePhase } from "./engine.js";
+import {
+	appendBroadcast,
+	getActivePhase,
+	swapActivePack,
+	updateActivePhase,
+} from "./engine.js";
 import type {
 	ActiveComplication,
 	AiId,

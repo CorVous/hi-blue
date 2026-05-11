@@ -308,10 +308,9 @@ export function deserializeSession(
 
 		const contentPacksA = sealed.contentPacksA ?? [];
 		const contentPacksB = sealed.contentPacksB ?? [];
-		const contentPack =
-			(sealed.activePackId === "B"
-				? contentPacksB.find((p) => p.phaseNumber === epochPhase)
-				: contentPacksA.find((p) => p.phaseNumber === epochPhase)) ??
+		const contentPack = (sealed.activePackId === "B"
+			? contentPacksB.find((p) => p.phaseNumber === epochPhase)
+			: contentPacksA.find((p) => p.phaseNumber === epochPhase)) ??
 			contentPacksA[0] ?? {
 				phaseNumber: epochPhase,
 				setting: "",

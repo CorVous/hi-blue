@@ -33,7 +33,10 @@ export interface NewGameAssets {
 
 export interface SplitNewGameAssets {
 	personasPromise: Promise<Record<AiId, AiPersona>>;
-	contentPacksPromise: Promise<{ packsA: ContentPack[]; packsB: ContentPack[] }>;
+	contentPacksPromise: Promise<{
+		packsA: ContentPack[];
+		packsB: ContentPack[];
+	}>;
 }
 
 export interface BootstrapOpts {

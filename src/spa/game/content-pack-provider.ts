@@ -482,7 +482,9 @@ export function validateDualContentPacks(
 	}
 	const obj = raw as Record<string, unknown>;
 	if (!Array.isArray(obj.phases)) {
-		throw new ContentPackError("Dual content pack response missing phases array");
+		throw new ContentPackError(
+			"Dual content pack response missing phases array",
+		);
 	}
 	if (obj.phases.length !== input.phases.length) {
 		throw new ContentPackError(
@@ -499,7 +501,9 @@ export function validateDualContentPacks(
 		const phaseObj = phaseRaw as Record<string, unknown>;
 		const phaseNumber = phaseObj.phaseNumber as 1 | 2 | 3;
 		if (phaseNumber !== 1 && phaseNumber !== 2 && phaseNumber !== 3) {
-			throw new ContentPackError(`Invalid phaseNumber: ${String(phaseObj.phaseNumber)}`);
+			throw new ContentPackError(
+				`Invalid phaseNumber: ${String(phaseObj.phaseNumber)}`,
+			);
 		}
 		const inputPhase = input.phases.find((p) => p.phaseNumber === phaseNumber);
 		if (!inputPhase) {
@@ -509,8 +513,18 @@ export function validateDualContentPacks(
 		// Validate each pack independently, collecting IDs to verify parity
 		const allIdsA = new Set<string>();
 		const allIdsB = new Set<string>();
-		const packA = validateSinglePack(phaseObj.packA, inputPhase, allIdsA, "packA");
-		const packB = validateSinglePack(phaseObj.packB, inputPhase, allIdsB, "packB");
+		const packA = validateSinglePack(
+			phaseObj.packA,
+			inputPhase,
+			allIdsA,
+			"packA",
+		);
+		const packB = validateSinglePack(
+			phaseObj.packB,
+			inputPhase,
+			allIdsB,
+			"packB",
+		);
 
 		// Enforce entity ID parity between packA and packB
 		const idsA = [...allIdsA].sort();
@@ -587,11 +601,19 @@ function validateSinglePack(
 	const objectivePairs: ObjectivePair[] = [];
 	for (const pairRaw of pack.objectivePairs as unknown[]) {
 		if (pairRaw == null || typeof pairRaw !== "object") {
-			throw new ContentPackError(`${label}: objectivePair entry is not an object`);
+			throw new ContentPackError(
+				`${label}: objectivePair entry is not an object`,
+			);
 		}
 		const pair = pairRaw as Record<string, unknown>;
 		const space = validateEntity(pair.space, "objective_space", allIds, false);
-		const object = validateEntity(pair.object, "objective_object", allIds, true, {});
+		const object = validateEntity(
+			pair.object,
+			"objective_object",
+			allIds,
+			true,
+			{},
+		);
 		if (object.pairsWithSpaceId !== space.id) {
 			throw new ContentPackError(
 				`${label}: object ${object.id} pairsWithSpaceId "${object.pairsWithSpaceId}" does not match space id "${space.id}"`,
@@ -607,7 +629,9 @@ function validateSinglePack(
 
 	const interestingObjects: WorldEntity[] = [];
 	for (const itemRaw of pack.interestingObjects as unknown[]) {
-		interestingObjects.push(validateEntity(itemRaw, "interesting_object", allIds, true));
+		interestingObjects.push(
+			validateEntity(itemRaw, "interesting_object", allIds, true),
+		);
 	}
 
 	const obstacles: WorldEntity[] = [];

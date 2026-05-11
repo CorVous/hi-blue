@@ -448,12 +448,16 @@ export async function generateDualContentPacks(
 		const placedA = placedPacksA[i] as ContentPack;
 
 		// Build ID → holder map from placed Pack A
-		const holderById = new Map<string, AiId | import("../spa/game/types.js").GridPosition>();
+		const holderById = new Map<
+			string,
+			AiId | import("../spa/game/types.js").GridPosition
+		>();
 		for (const pair of placedA.objectivePairs) {
 			holderById.set(pair.object.id, pair.object.holder);
 			holderById.set(pair.space.id, pair.space.holder);
 		}
-		for (const obj of placedA.interestingObjects) holderById.set(obj.id, obj.holder);
+		for (const obj of placedA.interestingObjects)
+			holderById.set(obj.id, obj.holder);
 		for (const obs of placedA.obstacles) holderById.set(obs.id, obs.holder);
 
 		const applyHolder = (entity: WorldEntity): WorldEntity => ({
@@ -470,7 +474,9 @@ export async function generateDualContentPacks(
 				object: applyHolder(pair.object),
 				space: applyHolder(pair.space),
 			})),
-			interestingObjects: (ph.packB.interestingObjects as WorldEntity[]).map(applyHolder),
+			interestingObjects: (ph.packB.interestingObjects as WorldEntity[]).map(
+				applyHolder,
+			),
 			obstacles: (ph.packB.obstacles as WorldEntity[]).map(applyHolder),
 			landmarks: ph.packB.landmarks,
 			aiStarts: { ...placedA.aiStarts },

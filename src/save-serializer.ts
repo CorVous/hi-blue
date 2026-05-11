@@ -61,5 +61,10 @@ export function serializeGameSave(game: GameState): GameSave {
 		return { persona: { ...persona }, phases };
 	});
 
-	return { version: 4, ais, contentPacksA: game.contentPacksA, contentPacksB: game.contentPacksB };
+	return {
+		version: 4,
+		ais,
+		contentPacksA: game.contentPacksA,
+		contentPacksB: game.contentPacksB,
+	};
 }

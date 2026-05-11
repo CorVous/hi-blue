@@ -472,7 +472,9 @@ const SETTING_POOL_12: readonly string[] = [
 /** Build a dual-pack MockContentPackProvider for entity ID parity tests. */
 function makeDualMockProvider(): MockContentPackProvider {
 	return new MockContentPackProvider(
-		(_input: ContentPackProviderInput): ContentPackProviderResult => ({ packs: [] }),
+		(_input: ContentPackProviderInput): ContentPackProviderResult => ({
+			packs: [],
+		}),
 		(input: DualContentPackProviderInput): DualContentPackProviderResult => {
 			const phases = input.phases.map((phase) => {
 				const pn = phase.phaseNumber;
