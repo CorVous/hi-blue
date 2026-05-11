@@ -578,8 +578,9 @@ describe("renderGame (game route — three-AI)", () => {
 		expect(greenTranscript.textContent).toContain("GREEN_RESPONSE_UNIQUE_TAG");
 	});
 
-	it("phase_advanced shows banner with new objective and clears transcripts", async () => {
-		// winImmediately=1: first submit fires winCondition → phase_advanced event
+	it("winImmediately=1 ends the game on first submit (#295: single-game-loop)", async () => {
+		// winImmediately=1: in the single-game-loop, the game is already marked
+		// complete before the first submit, so game_ended fires on first round.
 		const mockFetch = makeThreeAiFetchMock(
 			PASS_ACTION,
 			PASS_ACTION,
@@ -604,20 +605,12 @@ describe("renderGame (game route — three-AI)", () => {
 		);
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
-		// Phase banner should be visible with the phase 2 setting
+		// game_ended fires on first round — endgame screen shown, phase banner stays hidden
+		const endgameEl = getEl<HTMLElement>("#endgame");
+		expect(endgameEl.hasAttribute("hidden")).toBe(false);
+		// phase banner stays hidden (no phase advancement in single-game-loop)
 		const phaseBanner = getEl<HTMLElement>("#phase-banner");
-		expect(phaseBanner.hasAttribute("hidden")).toBe(false);
-		expect(phaseBanner.textContent).toContain("Phase 2");
-		// Setting comes from STATIC_CONTENT_PACKS phase 2: "sun-baked salt flat"
-		expect(phaseBanner.textContent).toContain("sun-baked salt flat");
-
-		// All transcripts should have been cleared and repopulated with a separator
-		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
-		expect(redTranscript.textContent).toContain("--- Phase 2 begins:");
-		// No content from the previous phase should remain
-		expect(redTranscript.textContent).not.toContain("> *Sage");
-		expect(redTranscript.textContent).not.toContain("> *Ember");
-		expect(redTranscript.textContent).not.toContain("> *Frost");
+		expect(phaseBanner.hasAttribute("hidden")).toBe(true);
 	});
 
 	it("daemon→daemon peer-to-peer message is silent in all panels (AC #2)", async () => {
@@ -1661,9 +1654,10 @@ describe("renderGame — URL param sourcing", () => {
 		document.body.innerHTML = "";
 	});
 
-	it("search-only: ?winImmediately=1 in location.search (router passes empty params) triggers phase_advanced on first submit", async () => {
+	it("search-only: ?winImmediately=1 in location.search (router passes empty params) ends the game on first submit (#295)", async () => {
 		// Router always passes a non-null URLSearchParams, but it may be empty
 		// when the flag is in location.search rather than the hash query string.
+		// In the single-game-loop (#295), winImmediately=1 ends the game, not phase-advances.
 		vi.stubGlobal("location", {
 			search: "?winImmediately=1",
 			origin: "http://localhost:8787",
@@ -1694,10 +1688,11 @@ describe("renderGame — URL param sourcing", () => {
 		);
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
-		// Phase banner should be visible — winImmediately fired from location.search
+		// game_ended fires — endgame screen shown, phase banner stays hidden
+		const endgameEl = getEl<HTMLElement>("#endgame");
+		expect(endgameEl.hasAttribute("hidden")).toBe(false);
 		const phaseBanner = getEl<HTMLElement>("#phase-banner");
-		expect(phaseBanner.hasAttribute("hidden")).toBe(false);
-		expect(phaseBanner.textContent).toContain("Phase 2");
+		expect(phaseBanner.hasAttribute("hidden")).toBe(true);
 	});
 
 	it("hash-only: debug=1 in hash params (no location.search) shows action log", async () => {

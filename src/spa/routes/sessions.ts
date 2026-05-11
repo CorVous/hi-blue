@@ -17,10 +17,8 @@
  * Issue #174 (parent #155).
  */
 
-import { PHASE_1_CONFIG } from "../../content";
 import { paintBanner, paintTopInfo } from "../bbs-chrome.js";
 import { getActivePhase } from "../game/engine.js";
-import type { PhaseConfig } from "../game/types";
 import {
 	dupSession,
 	getActiveSessionId,
@@ -106,16 +104,10 @@ export function renderSessions(
 	const loadResult = loadActiveSession();
 	if (loadResult.kind === "ok") {
 		const phase = getActivePhase(loadResult.state);
-		let total = 1;
-		let cursor: PhaseConfig | undefined = PHASE_1_CONFIG.nextPhaseConfig;
-		while (cursor) {
-			total += 1;
-			cursor = cursor.nextPhaseConfig;
-		}
 		paintTopInfo(doc, {
 			sessionId: loadResult.sessionId,
 			phaseNumber: phase.phaseNumber,
-			totalPhases: total,
+			totalPhases: 1,
 			turn: phase.round,
 		});
 	}

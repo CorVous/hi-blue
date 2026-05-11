@@ -19,12 +19,12 @@
 import { describe, expect, it } from "vitest";
 import { buildConversationLog } from "../conversation-log.js";
 import { DEFAULT_LANDMARKS } from "../direction";
-import { createGame, getActivePhase, startPhase } from "../engine";
+import { getActivePhase, startGame } from "../engine";
 import { buildOpenAiMessages } from "../openai-message-builder";
 import { buildAiContext } from "../prompt-builder";
 import { runRound } from "../round-coordinator";
 import { MockRoundLLMProvider } from "../round-llm-provider";
-import type { AiPersona, ContentPack, PhaseConfig } from "../types";
+import type { AiPersona, ContentPack } from "../types";
 
 /** Concatenate all role-turn message contents into a single searchable string. */
 function flattenMessageContents(
@@ -78,19 +78,6 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		blurb: "Frost is laconic and diffident. Hold the key at phase end.",
 		voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
 	},
-};
-
-const TEST_PHASE_CONFIG: PhaseConfig = {
-	phaseNumber: 1,
-	kRange: [1, 1],
-	nRange: [1, 1],
-	mRange: [0, 0],
-	aiGoalPool: [
-		"Hold the flower at phase end",
-		"Ensure items are evenly distributed",
-		"Hold the key at phase end",
-	],
-	budgetPerAi: 10,
 };
 
 /**
@@ -152,10 +139,7 @@ const TEST_CONTENT_PACK: ContentPack = {
 };
 
 function makeGame() {
-	return startPhase(
-		createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]),
-		TEST_PHASE_CONFIG,
-	);
+	return startGame(TEST_PERSONAS, [TEST_CONTENT_PACK]);
 }
 
 describe("conversation log integration — no ## Whispers Received ever", () => {
@@ -512,10 +496,7 @@ describe("conversation log integration — action-failure (issue #287)", () => {
 				cyan: { position: { row: 0, col: 2 }, facing: "south" },
 			},
 		};
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [obstacleAtSouth]),
-			TEST_PHASE_CONFIG,
-		);
+		const game = startGame(TEST_PERSONAS, [obstacleAtSouth]);
 
 		// red tries to go south → blocked by wall at (3,0)
 		const provider = new MockRoundLLMProvider([

@@ -9,8 +9,7 @@
  * Issue #174 (parent #155).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PHASE_1_CONFIG } from "../../content/index.js";
-import { createGame, startPhase } from "../game/engine.js";
+import { startGame } from "../game/engine.js";
 import type { AiPersona, GameState } from "../game/types.js";
 import { deobfuscate, obfuscate } from "../persistence/sealed-blob-codec.js";
 import { ACTIVE_KEY, SESSIONS_PREFIX } from "../persistence/session-storage.js";
@@ -70,8 +69,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 };
 
 function makeFreshGame(): GameState {
-	const game = createGame(TEST_PERSONAS);
-	return startPhase(game, PHASE_1_CONFIG, () => 0);
+	return startGame(TEST_PERSONAS, [], () => 0);
 }
 
 // ── localStorage stub ─────────────────────────────────────────────────────────
