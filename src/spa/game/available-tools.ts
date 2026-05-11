@@ -9,11 +9,10 @@
  * `look` is always present with the full 4-direction enum.
  */
 
-import { projectCone } from "./cone-projector.js";
 import {
 	applyDirection,
-	areAdjacent4,
 	CARDINAL_DIRECTIONS,
+	frontArc,
 	inBounds,
 } from "./direction.js";
 import { getActivePhase } from "./engine.js";
@@ -139,16 +138,19 @@ export function availableTools(game: GameState, aiId: AiId): OpenAiTool[] {
 		}
 	}
 
-	// 3. pick_up — pickable entities resting in actor's cell
+	// 3. pick_up — pickable entities in actor's own cell or front arc
 	if (actorSpatial) {
-		const cellItems = pickable.filter(
-			(item) =>
-				isGridPosition(item.holder) &&
-				positionsEqual(item.holder, actorSpatial.position),
-		);
-		if (cellItems.length > 0) {
+		const arc = frontArc(actorSpatial.position, actorSpatial.facing);
+		const reachableItems = pickable.filter((item) => {
+			if (!isGridPosition(item.holder)) return false;
+			if (positionsEqual(item.holder, actorSpatial.position)) return true;
+			return arc.some((p) => positionsEqual(p, item.holder as GridPosition));
+		});
+		if (reachableItems.length > 0) {
 			tools.push(
-				cloneToolWithEnums("pick_up", { item: cellItems.map((i) => i.id) }),
+				cloneToolWithEnums("pick_up", {
+					item: reachableItems.map((i) => i.id),
+				}),
 			);
 		}
 	}
@@ -161,38 +163,36 @@ export function availableTools(game: GameState, aiId: AiId): OpenAiTool[] {
 		tools.push(cloneToolWithEnums("use", { item: heldIds }));
 	}
 
-	// 5. give — held items AND adjacent AIs
+	// 5. give — held items AND AIs in front arc
 	if (actorSpatial && heldItems.length > 0) {
-		const adjacentAiIds = Object.entries(phase.personaSpatial)
+		const arc = frontArc(actorSpatial.position, actorSpatial.facing);
+		const frontAiIds = Object.entries(phase.personaSpatial)
 			.filter(([otherId, otherSpatial]) => {
 				if (otherId === aiId) return false;
-				return areAdjacent4(actorSpatial.position, otherSpatial.position);
+				return arc.some((p) => positionsEqual(p, otherSpatial.position));
 			})
 			.map(([otherId]) => otherId);
 
-		if (adjacentAiIds.length > 0) {
+		if (frontAiIds.length > 0) {
 			tools.push(
 				cloneToolWithEnums("give", {
 					item: heldItems.map((i) => i.id),
-					to: adjacentAiIds,
+					to: frontAiIds,
 				}),
 			);
 		}
 	}
 
-	// 6. examine — items in cone (any kind) OR held by this actor
+	// 6. examine — items held, in own cell, or in front arc (any entity kind)
 	if (actorSpatial) {
-		const cone = projectCone(actorSpatial.position, actorSpatial.facing);
-		const conePositions = cone.map((c) => c.position);
-
+		const arc = frontArc(actorSpatial.position, actorSpatial.facing);
 		const examineableIds = world.entities
 			.filter((entity) => {
-				// Held by this actor
 				if (entity.holder === aiId) return true;
-				// Resting on a cell inside the cone
 				if (isGridPosition(entity.holder)) {
-					return conePositions.some((pos) =>
-						positionsEqual(pos, entity.holder as GridPosition),
+					if (positionsEqual(entity.holder, actorSpatial.position)) return true;
+					return arc.some((p) =>
+						positionsEqual(p, entity.holder as GridPosition),
 					);
 				}
 				return false;

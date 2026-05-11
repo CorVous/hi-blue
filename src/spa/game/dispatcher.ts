@@ -1,9 +1,9 @@
 import { projectCone } from "./cone-projector.js";
 import {
 	applyDirection,
-	areAdjacent4,
 	CARDINAL_DIRECTIONS,
 	formatPosition,
+	frontArc,
 	inBounds,
 } from "./direction.js";
 import {
@@ -98,13 +98,16 @@ export function validateToolCall(
 					valid: false,
 					reason: `Item "${call.args.item}" is not on the ground`,
 				};
-			// Spatial validity: item must be in the actor's current cell
 			if (!actorSpatial)
 				return { valid: false, reason: "Actor has no spatial state" };
-			if (!positionsEqual(item.holder, actorSpatial.position))
+			const inOwnCell = positionsEqual(item.holder, actorSpatial.position);
+			const inFront = frontArc(actorSpatial.position, actorSpatial.facing).some(
+				(p) => positionsEqual(p, item.holder as GridPosition),
+			);
+			if (!inOwnCell && !inFront)
 				return {
 					valid: false,
-					reason: `Item "${call.args.item}" is not in your current cell`,
+					reason: `Item "${call.args.item}" is not in your cell or directly in front of you`,
 				};
 			return { valid: true };
 		}
@@ -139,17 +142,21 @@ export function validateToolCall(
 			const target = call.args.to as AiId;
 			if (target === aiId)
 				return { valid: false, reason: "Cannot give an item to yourself" };
-			// Spatial validity: target AI must be 4-adjacent
+			// Spatial validity: target AI must be in the actor's front arc
 			const targetSpatial = phase.personaSpatial[target];
 			if (!actorSpatial || !targetSpatial)
 				return {
 					valid: false,
 					reason: "Spatial state missing for actor or target",
 				};
-			if (!areAdjacent4(actorSpatial.position, targetSpatial.position))
+			const targetInFront = frontArc(
+				actorSpatial.position,
+				actorSpatial.facing,
+			).some((p) => positionsEqual(p, targetSpatial.position));
+			if (!targetInFront)
 				return {
 					valid: false,
-					reason: `${target} is not adjacent to you`,
+					reason: `${target} is not directly in front of you`,
 				};
 			return { valid: true };
 		}
@@ -206,18 +213,21 @@ export function validateToolCall(
 				};
 			if (!actorSpatial)
 				return { valid: false, reason: "Actor has no spatial state" };
-			// Valid if held by aiId OR resting on a GridPosition inside actor's cone
+			// Valid if held, in own cell, or in front arc
 			if (item.holder === aiId) return { valid: true };
 			if (isGridPosition(item.holder)) {
-				const cone = projectCone(actorSpatial.position, actorSpatial.facing);
-				const inCone = cone.some((cell) =>
-					positionsEqual(cell.position, item.holder as GridPosition),
-				);
-				if (inCone) return { valid: true };
+				if (positionsEqual(item.holder, actorSpatial.position))
+					return { valid: true };
+				if (
+					frontArc(actorSpatial.position, actorSpatial.facing).some((p) =>
+						positionsEqual(p, item.holder as GridPosition),
+					)
+				)
+					return { valid: true };
 			}
 			return {
 				valid: false,
-				reason: `Item "${call.args.item}" is not in your cone or held by you`,
+				reason: `Item "${call.args.item}" is not in your cell, directly in front of you, or held by you`,
 			};
 		}
 

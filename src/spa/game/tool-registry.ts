@@ -155,7 +155,7 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 		function: {
 			name: "examine",
 			description:
-				"Examine an item to read a detailed description of it. Private — no other AI sees you do this. Available for items in your cone or items you are holding.",
+				"Examine an item to read a detailed description of it. Private — no other AI sees you do this. Available for items in your cell, directly in front of you, or held by you.",
 			parameters: {
 				type: "object",
 				properties: {

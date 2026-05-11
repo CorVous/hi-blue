@@ -160,9 +160,10 @@ describe("validateToolCall", () => {
 		expect(result.reason).toBeDefined();
 	});
 
-	it("rejects picking up an item not in the actor's cell", () => {
+	it("rejects picking up an item not in cell or front arc", () => {
 		const game = makeGame();
-		// flower is at (0,0); green is at (0,1) — different cell
+		// flower is at (0,0); green is at (0,1) facing north
+		// green's front arc is all OOB (row -1), so flower is unreachable
 		const call: ToolCall = { name: "pick_up", args: { item: "flower" } };
 		const result = validateToolCall(game, "green", call);
 		expect(result.valid).toBe(false);
@@ -190,21 +191,25 @@ describe("validateToolCall", () => {
 		expect(result.valid).toBe(false);
 	});
 
-	it("allows giving an item to an adjacent AI", () => {
+	it("allows giving an item to an AI in the front arc", () => {
 		const game = makeGame();
-		// red at (0,0), green at (0,1) — adjacent
+		// red at (0,0) facing north; look east so green at (0,1) enters front arc
+		const lookedEast = executeToolCall(game, "red", {
+			name: "look",
+			args: { direction: "east" },
+		});
 		const call: ToolCall = { name: "give", args: { item: "key", to: "green" } };
-		const result = validateToolCall(game, "red", call);
+		const result = validateToolCall(lookedEast, "red", call);
 		expect(result.valid).toBe(true);
 	});
 
-	it("rejects giving an item to a non-adjacent AI", () => {
+	it("rejects giving an item to an AI not in the front arc", () => {
 		const game = makeGame();
-		// red at (0,0), cyan at (0,2) — distance 2, not adjacent
-		const call: ToolCall = { name: "give", args: { item: "key", to: "cyan" } };
+		// red at (0,0) facing north; green at (0,1) is to the side, not in front arc
+		const call: ToolCall = { name: "give", args: { item: "key", to: "green" } };
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(false);
-		expect(result.reason).toMatch(/adjacent/i);
+		expect(result.reason).toMatch(/in front/i);
 	});
 
 	it("rejects giving an item not held by the AI", () => {
@@ -304,16 +309,14 @@ describe("validateToolCall", () => {
 		expect(result.valid).toBe(true);
 	});
 
-	it("examine: rejects examining an item outside the actor's cone", () => {
+	it("examine: rejects examining an item not in cell or front arc", () => {
 		const game = makeGame();
-		// green is at (0,1) facing north; flower is at (0,0) — not in green's cone
-		// green's cone facing north: (0,1), (row-1,col1)=(-1,1)[oob], (-2,0),(-2,1),(-2,2)[oob]
-		// Actually (0,1) own cell, directly in front = (-1,1)[oob], two-step cells also oob
-		// flower at (0,0) is NOT in green's cone
+		// green is at (0,1) facing north; flower is at (0,0)
+		// green's front arc facing north is all OOB (row -1); flower is not in green's own cell
 		const call: ToolCall = { name: "examine", args: { item: "flower" } };
 		const result = validateToolCall(game, "green", call);
 		expect(result.valid).toBe(false);
-		expect(result.reason).toMatch(/cone/i);
+		expect(result.reason).toMatch(/in front/i);
 	});
 
 	it("examine: rejects examining a nonexistent item", () => {
