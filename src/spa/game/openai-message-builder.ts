@@ -24,8 +24,6 @@
  *        — "[Round N] Your `<tool>` action failed: <reason>."
  *        Actor-only; surfaced as a user turn so the Daemon sees its own past
  *        rejections in context and avoids repeating the same failed action.
- *      - kind=broadcast:         { role: "user",      content: renderEntry(...) }
- *        — "[Round N] <content>". Sender-less system announcement visible to all Daemons.
  *      Append-only across rounds, so the cached prefix grows with the game.
  *   3. If priorToolRoundtrip is provided and non-empty:
  *      - { role: "assistant", content: null, tool_calls: [...] }
@@ -111,16 +109,6 @@ export function buildOpenAiMessages(
 				),
 			});
 		} else if (entry.kind === "action-failure") {
-			messages.push({
-				role: "user",
-				content: renderEntry(
-					entry,
-					ctx.aiId,
-					ctx.worldSnapshot.entities,
-					witnessState,
-				),
-			});
-		} else if (entry.kind === "broadcast") {
 			messages.push({
 				role: "user",
 				content: renderEntry(
