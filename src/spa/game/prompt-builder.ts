@@ -806,9 +806,7 @@ function renderCurrentState(ctx: AiContext): string {
 
 			// Capitalise the phrasing for display
 			const label = phrasing.charAt(0).toUpperCase() + phrasing.slice(1);
-			lines.push(
-				`- ${label}: ${contents}`,
-			);
+			lines.push(`- ${label}: ${contents}`);
 		}
 		if (viewCells.length === 0) {
 			lines.push("(nothing visible)");
