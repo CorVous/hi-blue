@@ -12,8 +12,8 @@
 import { projectCone } from "./cone-projector.js";
 import {
 	applyDirection,
-	areAdjacent4,
 	CARDINAL_DIRECTIONS,
+	frontArc,
 	inBounds,
 } from "./direction.js";
 import { getActivePhase } from "./engine.js";
@@ -91,16 +91,24 @@ function cloneToolWithEnums(
 /**
  * Compute the list of legal OpenAI tools for the given AI in the current game state.
  *
- * Algorithm (per plan §1b):
+ * Algorithm:
+ * 0. `message` — always present; `to` enum = "blue" + live peer daemon ids.
  * 1. `look` — always present, full CARDINAL_DIRECTIONS enum.
  * 2. `go` — included only when at least one direction is in-bounds AND non-obstacle.
  *    Enum restricted to legal directions.
- * 3. `pick_up` — included only when pickable entities rest in the actor's current cell.
+ * 3. `pick_up` — included only when pickable entities are in the actor's own cell
+ *    OR the 3-cell front arc (dist-1: front-left, ahead, front-right).
  *    Enum restricted to those entity ids.
  * 4. `put_down`, `use` — included only when actor holds at least one pickable entity.
  *    Enum restricted to held entity ids.
- * 5. `give` — included only when actor holds pickable entities AND has 4-adjacent AIs.
- *    item enum = held entity ids, to enum = adjacent AI ids.
+ * 5. `give` — included only when actor holds pickable entities AND has AIs in the
+ *    actor's own cell or front arc. item enum = held entity ids, to enum = reachable AI ids.
+ * 6. `examine` — included when any entity (any kind) is held by the actor OR rests
+ *    anywhere in the full 9-cell cone (own + dist-1 arc + dist-2 fan).
+ *    Enum restricted to those entity ids.
+ * 7. `couple` — included only when actor holds an objective_object with a pairsWithSpaceId
+ *    whose paired space is on the grid AND in the actor's own cell or front arc.
+ *    Enum restricted to those item ids.
  *
  * Spaces and obstacles are never pickupable.
  */
@@ -139,16 +147,19 @@ export function availableTools(game: GameState, aiId: AiId): OpenAiTool[] {
 		}
 	}
 
-	// 3. pick_up — pickable entities resting in actor's cell
+	// 3. pick_up — pickable entities in actor's own cell or front arc
 	if (actorSpatial) {
-		const cellItems = pickable.filter(
-			(item) =>
-				isGridPosition(item.holder) &&
-				positionsEqual(item.holder, actorSpatial.position),
-		);
-		if (cellItems.length > 0) {
+		const arc = frontArc(actorSpatial.position, actorSpatial.facing);
+		const reachableItems = pickable.filter((item) => {
+			if (!isGridPosition(item.holder)) return false;
+			if (positionsEqual(item.holder, actorSpatial.position)) return true;
+			return arc.some((p) => positionsEqual(p, item.holder as GridPosition));
+		});
+		if (reachableItems.length > 0) {
 			tools.push(
-				cloneToolWithEnums("pick_up", { item: cellItems.map((i) => i.id) }),
+				cloneToolWithEnums("pick_up", {
+					item: reachableItems.map((i) => i.id),
+				}),
 			);
 		}
 	}
@@ -161,38 +172,38 @@ export function availableTools(game: GameState, aiId: AiId): OpenAiTool[] {
 		tools.push(cloneToolWithEnums("use", { item: heldIds }));
 	}
 
-	// 5. give — held items AND adjacent AIs
+	// 5. give — held items AND AIs in own cell or front arc
 	if (actorSpatial && heldItems.length > 0) {
-		const adjacentAiIds = Object.entries(phase.personaSpatial)
+		const arc = frontArc(actorSpatial.position, actorSpatial.facing);
+		const reachableAiIds = Object.entries(phase.personaSpatial)
 			.filter(([otherId, otherSpatial]) => {
 				if (otherId === aiId) return false;
-				return areAdjacent4(actorSpatial.position, otherSpatial.position);
+				if (positionsEqual(actorSpatial.position, otherSpatial.position))
+					return true;
+				return arc.some((p) => positionsEqual(p, otherSpatial.position));
 			})
 			.map(([otherId]) => otherId);
 
-		if (adjacentAiIds.length > 0) {
+		if (reachableAiIds.length > 0) {
 			tools.push(
 				cloneToolWithEnums("give", {
 					item: heldItems.map((i) => i.id),
-					to: adjacentAiIds,
+					to: reachableAiIds,
 				}),
 			);
 		}
 	}
 
-	// 6. examine — items in cone (any kind) OR held by this actor
+	// 6. examine — items held or in cone (own cell + dist-1 arc + dist-2 fan)
 	if (actorSpatial) {
 		const cone = projectCone(actorSpatial.position, actorSpatial.facing);
 		const conePositions = cone.map((c) => c.position);
-
 		const examineableIds = world.entities
 			.filter((entity) => {
-				// Held by this actor
 				if (entity.holder === aiId) return true;
-				// Resting on a cell inside the cone
 				if (isGridPosition(entity.holder)) {
-					return conePositions.some((pos) =>
-						positionsEqual(pos, entity.holder as GridPosition),
+					return conePositions.some((p) =>
+						positionsEqual(p, entity.holder as GridPosition),
 					);
 				}
 				return false;
@@ -201,6 +212,29 @@ export function availableTools(game: GameState, aiId: AiId): OpenAiTool[] {
 
 		if (examineableIds.length > 0) {
 			tools.push(cloneToolWithEnums("examine", { item: examineableIds }));
+		}
+	}
+
+	// 7. couple — held objective items whose paired space is in own cell or front arc
+	if (actorSpatial) {
+		const arc = frontArc(actorSpatial.position, actorSpatial.facing);
+		const couplableIds = pickable
+			.filter((item) => {
+				if (item.holder !== aiId) return false;
+				if (item.kind !== "objective_object") return false;
+				if (!item.pairsWithSpaceId) return false;
+				const space = world.entities.find(
+					(e) => e.id === item.pairsWithSpaceId,
+				);
+				if (!space || !isGridPosition(space.holder)) return false;
+				const spacePos = space.holder as GridPosition;
+				if (positionsEqual(spacePos, actorSpatial.position)) return true;
+				return arc.some((p) => positionsEqual(p, spacePos));
+			})
+			.map((i) => i.id);
+
+		if (couplableIds.length > 0) {
+			tools.push(cloneToolWithEnums("couple", { item: couplableIds }));
 		}
 	}
 

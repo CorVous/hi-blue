@@ -1,9 +1,9 @@
 import { projectCone } from "./cone-projector.js";
 import {
 	applyDirection,
-	areAdjacent4,
 	CARDINAL_DIRECTIONS,
 	formatPosition,
+	frontArc,
 	inBounds,
 } from "./direction.js";
 import {
@@ -98,13 +98,16 @@ export function validateToolCall(
 					valid: false,
 					reason: `Item "${call.args.item}" is not on the ground`,
 				};
-			// Spatial validity: item must be in the actor's current cell
 			if (!actorSpatial)
 				return { valid: false, reason: "Actor has no spatial state" };
-			if (!positionsEqual(item.holder, actorSpatial.position))
+			const inOwnCell = positionsEqual(item.holder, actorSpatial.position);
+			const inFront = frontArc(actorSpatial.position, actorSpatial.facing).some(
+				(p) => positionsEqual(p, item.holder as GridPosition),
+			);
+			if (!inOwnCell && !inFront)
 				return {
 					valid: false,
-					reason: `Item "${call.args.item}" is not in your current cell`,
+					reason: `Item "${call.args.item}" is not in your cell or directly in front of you`,
 				};
 			return { valid: true };
 		}
@@ -139,17 +142,22 @@ export function validateToolCall(
 			const target = call.args.to as AiId;
 			if (target === aiId)
 				return { valid: false, reason: "Cannot give an item to yourself" };
-			// Spatial validity: target AI must be 4-adjacent
+			// Spatial validity: target AI must be in actor's own cell or front arc
 			const targetSpatial = phase.personaSpatial[target];
 			if (!actorSpatial || !targetSpatial)
 				return {
 					valid: false,
 					reason: "Spatial state missing for actor or target",
 				};
-			if (!areAdjacent4(actorSpatial.position, targetSpatial.position))
+			const targetReachable =
+				positionsEqual(actorSpatial.position, targetSpatial.position) ||
+				frontArc(actorSpatial.position, actorSpatial.facing).some((p) =>
+					positionsEqual(p, targetSpatial.position),
+				);
+			if (!targetReachable)
 				return {
 					valid: false,
-					reason: `${target} is not adjacent to you`,
+					reason: `${target} is not in your cell or directly in front of you`,
 				};
 			return { valid: true };
 		}
@@ -210,15 +218,53 @@ export function validateToolCall(
 			if (item.holder === aiId) return { valid: true };
 			if (isGridPosition(item.holder)) {
 				const cone = projectCone(actorSpatial.position, actorSpatial.facing);
-				const inCone = cone.some((cell) =>
-					positionsEqual(cell.position, item.holder as GridPosition),
-				);
-				if (inCone) return { valid: true };
+				if (
+					cone.some((c) =>
+						positionsEqual(c.position, item.holder as GridPosition),
+					)
+				)
+					return { valid: true };
 			}
 			return {
 				valid: false,
 				reason: `Item "${call.args.item}" is not in your cone or held by you`,
 			};
+		}
+
+		case "couple": {
+			const item = pickable.find((i) => i.id === call.args.item);
+			if (!item)
+				return {
+					valid: false,
+					reason: `Item "${call.args.item}" does not exist`,
+				};
+			if (item.holder !== aiId)
+				return {
+					valid: false,
+					reason: `You are not holding "${call.args.item}"`,
+				};
+			if (item.kind !== "objective_object" || !item.pairsWithSpaceId)
+				return {
+					valid: false,
+					reason: `Item "${call.args.item}" is not an objective item with a paired space`,
+				};
+			if (!actorSpatial)
+				return { valid: false, reason: "Actor has no spatial state" };
+			const space = world.entities.find((e) => e.id === item.pairsWithSpaceId);
+			if (!space || !isGridPosition(space.holder))
+				return { valid: false, reason: "Paired space not found on the grid" };
+			const spacePos = space.holder as GridPosition;
+			const spaceReachable =
+				positionsEqual(spacePos, actorSpatial.position) ||
+				frontArc(actorSpatial.position, actorSpatial.facing).some((p) =>
+					positionsEqual(p, spacePos),
+				);
+			if (!spaceReachable)
+				return {
+					valid: false,
+					reason: `The paired space is not in your cell or directly in front of you`,
+				};
+			return { valid: true };
 		}
 
 		default:
@@ -252,6 +298,16 @@ export function executeToolCall(
 			case "give":
 				if (target) target.holder = call.args.to as AiId;
 				break;
+			case "couple": {
+				// Place item directly on its paired space's cell (which may be in the front arc).
+				const pairedSpace = target?.pairsWithSpaceId
+					? entities.find((e) => e.id === target.pairsWithSpaceId)
+					: undefined;
+				if (target && pairedSpace && isGridPosition(pairedSpace.holder)) {
+					target.holder = { ...pairedSpace.holder };
+				}
+				break;
+			}
 			case "use": {
 				// Place item on current cell only when the actor is standing on the
 				// item's paired objective_space. Otherwise no world mutation.
@@ -316,6 +372,8 @@ function describeToolCall(game: GameState, aiId: AiId, call: ToolCall): string {
 			return `${name} put down the ${call.args.item}`;
 		case "give":
 			return `${name} gave the ${call.args.item} to ${game.personas[call.args.to as AiId]?.name ?? call.args.to}`;
+		case "couple":
+			return `${name} placed the ${call.args.item} onto its paired space`;
 		case "use": {
 			// Return the entity's useOutcome as the description (flavor string),
 			// with {actor} substituted to "you" (actor's perspective).
@@ -418,7 +476,9 @@ export function dispatchAiTurn(
 			// If so, replace the default description with the per-pair placementFlavor.
 			const activePhase = getActivePhase(state);
 			const flavorDescription =
-				action.toolCall.name === "put_down" || action.toolCall.name === "use"
+				action.toolCall.name === "put_down" ||
+				action.toolCall.name === "use" ||
+				action.toolCall.name === "couple"
 					? checkPlacementFlavor(
 							action,
 							activePhase.contentPack,
@@ -457,7 +517,8 @@ export function dispatchAiTurn(
 				call.name === "pick_up" ||
 				call.name === "put_down" ||
 				call.name === "give" ||
-				call.name === "use"
+				call.name === "use" ||
+				call.name === "couple"
 			) {
 				// Post-execute spatial state — actor has moved for "go", others are unchanged
 				const postPhase = getActivePhase(state);
@@ -485,7 +546,7 @@ export function dispatchAiTurn(
 						useOutcomeRaw = item?.useOutcome;
 					}
 
-					if (call.name === "put_down") {
+					if (call.name === "put_down" || call.name === "couple") {
 						// Find the raw placementFlavor (before {actor} substitution)
 						// by looking at the content pack's object entity definition
 						const itemId = call.args.item;

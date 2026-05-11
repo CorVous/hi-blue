@@ -89,7 +89,7 @@ export interface PhysicalActionRecord {
 	/** The actor's facing at the time the action resolved. */
 	actorFacingAtAction: CardinalDirection;
 	/** The observable action kind. */
-	kind: "go" | "pick_up" | "put_down" | "give" | "use";
+	kind: "go" | "pick_up" | "put_down" | "give" | "use" | "couple";
 	/** Item id (for pick_up, put_down, give, use). */
 	item?: string;
 	/** Recipient AI id (for give). */
@@ -141,7 +141,7 @@ export type ConversationEntry =
 			kind: "witnessed-event";
 			round: number;
 			actor: AiId;
-			actionKind: "go" | "pick_up" | "put_down" | "give" | "use";
+			actionKind: "go" | "pick_up" | "put_down" | "give" | "use" | "couple";
 			item?: string;
 			to?: AiId;
 			direction?: CardinalDirection;
@@ -230,6 +230,7 @@ export type ToolName =
 	| "put_down"
 	| "give"
 	| "use"
+	| "couple"
 	| "go"
 	| "look"
 	| "examine"

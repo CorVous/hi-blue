@@ -60,6 +60,23 @@ export function areAdjacent4(a: GridPosition, b: GridPosition): boolean {
 	return manhattan(a, b) === 1;
 }
 
+/**
+ * The 3 cells forming the immediate front arc: front-left diagonal, directly
+ * in front, and front-right diagonal. Out-of-bounds cells are omitted.
+ */
+export function frontArc(
+	pos: GridPosition,
+	facing: CardinalDirection,
+): GridPosition[] {
+	const fwd = directionDelta(facing);
+	const lft = { drow: -fwd.dcol, dcol: fwd.drow };
+	return [
+		{ row: pos.row + fwd.drow + lft.drow, col: pos.col + fwd.dcol + lft.dcol },
+		{ row: pos.row + fwd.drow, col: pos.col + fwd.dcol },
+		{ row: pos.row + fwd.drow - lft.drow, col: pos.col + fwd.dcol - lft.dcol },
+	].filter(inBounds);
+}
+
 /** Format a GridPosition as a labeled string for LLM-facing output. */
 export function formatPosition(pos: GridPosition): string {
 	return `(row ${pos.row}, col ${pos.col})`;

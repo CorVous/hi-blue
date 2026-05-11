@@ -97,15 +97,13 @@ const TEST_PHASE_CONFIG: PhaseConfig = {
  *     placementFlavor: "{actor} places the flower on the pedestal."
  *   - lamp at (0,2): interesting object with useOutcome "{actor} holds up the lamp. It glows."
  *   - red at (2,0) facing south (can walk further south or see forward)
- *   - green at (0,0) facing south (cone includes (1,0), (2,1), (2,0), (2,-1 OOB) → sees (2,0) at 2 steps)
- *   - cyan at (0,2) facing south (cone includes (1,2), (2,3 OOB), (2,2), (2,1))
+ *   - green at (0,0) facing south
+ *   - cyan at (0,2) facing south
  *
- * Note: green's southward cone from (0,0):
+ * Note: green's southward 9-cell cone from (0,0):
  *   own: (0,0)
- *   directly in front: (1,0)
- *   two steps ahead front-left: (2,-1) OOB
- *   two steps ahead: (2,0)       ← red is here
- *   two steps ahead front-right: (2,1)
+ *   dist-1: (1,1), (1,0), (1,-1 OOB)
+ *   dist-2: (2,2), (2,1), (2,0), (2,-1 OOB), (2,-2 OOB)
  */
 const TEST_CONTENT_PACK: ContentPack = {
 	phaseNumber: 1,
@@ -230,10 +228,34 @@ describe("conversation log integration — witnessed pick_up", () => {
 		expect(redWitnessed).toHaveLength(0);
 	});
 
-	it("cyan does NOT see red's pick_up because red is at (2,0) which is NOT in cyan's cone", async () => {
-		// cyan at (0,2) facing south: cone is (0,2), (1,2), (2,3 OOB), (2,2), (2,1)
-		// red at (2,0) — NOT in cyan's cone
+	it("cyan does NOT see red's pick_up when cyan faces north (all cone cells OOB from (0,2))", async () => {
+		// cyan at (0,2) facing south includes (2,0) in the new 9-cell cone.
+		// Turn cyan north first so its cone is just own cell — (2,0) falls outside.
 		const game = makeGame();
+
+		// Preliminary round: cyan looks north; others pass
+		const setupProvider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] }, // red
+			{ assistantText: "", toolCalls: [] }, // green
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "tc0",
+						name: "look",
+						argumentsJson: JSON.stringify({ direction: "north" }),
+					},
+				],
+			}, // cyan looks north
+		]);
+		const { nextState: setup } = await runRound(
+			game,
+			"red",
+			"setup",
+			setupProvider,
+		);
+
+		// Main round: red picks up flower; cyan now faces north → (2,0) not in cone
 		const provider = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -248,9 +270,9 @@ describe("conversation log integration — witnessed pick_up", () => {
 			{ assistantText: "", toolCalls: [] }, // green passes
 			{ assistantText: "", toolCalls: [] }, // cyan passes
 		]);
-		const { nextState } = await runRound(game, "red", "hello", provider);
+		const { nextState } = await runRound(setup, "red", "hello", provider);
 
-		// cyan's conversationLog should have no witnessed-event
+		// cyan's conversationLog should have no witnessed-event for pick_up
 		const phase = getActivePhase(nextState);
 		const cyanLog = phase.conversationLogs.cyan ?? [];
 		const cyanWitnessed = cyanLog.filter((e) => e.kind === "witnessed-event");
@@ -364,7 +386,9 @@ describe("conversation log integration — put_down placementFlavor", () => {
 			provider1,
 		);
 
-		// Red needs to move to (2,2) to put_down on flower_space
+		// Red needs to move to (2,2) to put_down on flower_space.
+		// Green looks west so its cone is only own cell by the put_down round —
+		// (2,2) enters the new 9-cell south cone but not the west cone from (0,0).
 		const provider2 = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -376,7 +400,16 @@ describe("conversation log integration — put_down placementFlavor", () => {
 					},
 				],
 			},
-			{ assistantText: "", toolCalls: [] },
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "tc2g",
+						name: "look",
+						argumentsJson: JSON.stringify({ direction: "west" }),
+					},
+				],
+			},
 			{ assistantText: "", toolCalls: [] },
 		]);
 		const { nextState: state2 } = await runRound(
@@ -437,9 +470,8 @@ describe("conversation log integration — put_down placementFlavor", () => {
 			(e) => e.kind === "witnessed-event" && e.actionKind === "put_down",
 		);
 
-		// If green can see the put_down (green at (0,0) facing south, red ends at (2,2))
-		// green's cone from (0,0) south: (1,0), (2,1), (2,0), (2,-1 OOB) — does NOT include (2,2)
-		// So green should NOT see this put_down
+		// Green looked west in round 2; facing west from (0,0) has only own cell in cone.
+		// (2,2) is not visible → green should NOT see this put_down.
 		expect(putEntry).toBeUndefined();
 
 		// Also verify via role turns

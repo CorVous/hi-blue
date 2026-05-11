@@ -2,13 +2,14 @@ import { describe, expect, it } from "vitest";
 import { parseToolCallArguments, TOOL_DEFINITIONS } from "../tool-registry";
 
 describe("TOOL_DEFINITIONS", () => {
-	it("lists exactly the eight tools: pick_up, put_down, give, use, go, look, examine, message", () => {
+	it("lists exactly the nine tools: pick_up, put_down, give, use, couple, go, look, examine, message", () => {
 		const names = TOOL_DEFINITIONS.map((t) => t.function.name);
 		expect(names).toEqual([
 			"pick_up",
 			"put_down",
 			"give",
 			"use",
+			"couple",
 			"go",
 			"look",
 			"examine",
