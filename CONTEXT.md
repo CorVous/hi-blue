@@ -105,3 +105,49 @@ A single line in the **Conversation log** describing something an AI saw happen 
 - "Personality" alone is ambiguous: could mean the synthesized blurb inside a **Persona**, or the whole **Persona**. Prefer **Persona** for the object; "personality blurb" for the synthesized prose.
 - "Player" still has two registers: the human at the keyboard (engine view) vs. **blue**, the in-fiction handle Daemons see. Use **blue** when describing what a Daemon reads.
 - "Color" is *not* identity. Use **AiId** (the `*xxxx` handle) for identity references; color is purely rendering.
+
+---
+
+## Pending restructure (in design — not yet implemented)
+
+The following terms are being introduced as part of a planned restructure from a three-phase model to a single-game model. These are under active design and will be promoted to the main glossary once stabilised.
+
+**Objective (revised)**:
+The player's win condition for the whole game — not per-phase. 2–3 Objectives are drawn from a pool at game start. Objectives are *not* revealed to the player upfront; they are discovered by having Daemons `examine` items and spaces. Each Objective has a satisfaction condition and cannot be deactivated once satisfied. Four Objective types exist in the pool:
+1. **Carry Objective** — Daemon brings a specific object to a specific space (existing mechanic).
+2. **Use-Item Objective** — A Daemon uses (`use` tool) a specific pickupable item. After satisfaction, the item becomes inert but stays on the grid, behaves like an **Interesting Object** (flavor on `use`, no mechanical effect). Examine/look flavor updates to reflect completion.
+3. **Use-Space Objective** — A Daemon uses the `use` tool while standing on a specific space (regardless of whether holding an item). After satisfaction, `use` is no longer available on that space; examine/look flavor updates to reflect completion. A generated flavor event fires on satisfaction.
+4. **Convergence Objective** — Any two Daemons occupy the same cell as a specific space simultaneously. The space emits tiered flavor: one Daemon present, then two (satisfaction). Satisfied the moment two Daemons share the cell.
+_Avoid_: Win condition (use Objective), mission.
+
+**Complication**:
+A mid-game disruption that fires on a schedule: first within 5 turns, then one every 5–15 turns (random countdown drawn after each fires). Only one Complication fires per turn. Replaces **Phase Goal** as the primary mid-game pressure mechanism. Five Complication types:
+1. **Weather Change** — Permanent. A new weather string replaces the current one. Broadcast to all Daemons as a neutral system message: *"The weather has changed to X."* No Sysadmin attribution.
+2. **Sysadmin Directive** — Temporary, open-ended. A behavioral instruction delivered by the Sysadmin to one Daemon privately. Revoked by a follow-up Sysadmin message.
+3. **Tool Disable** — Temporary, one Daemon. A specific tool is removed from that Daemon's available tools. Sysadmin notifies the Daemon on disable and on restore.
+4. **Obstacle Shift** — Permanent per-event. One Obstacle moves one adjacent cell to an empty space. Only Daemons with that cell in their **Cone** at the moment it fires see a generated flavor Witnessed event. The same Obstacle can shift again in a later draw.
+5. **Chat Lockout** — Temporary. The player cannot message one specific Daemon for a fixed number of turns. Existing `chatLockouts` mechanic.
+_Avoid_: Phase Goal (deprecated), event, trigger.
+
+**Complication schedule**:
+The live countdown state tracking when the next **Complication** fires. Initialized to a random value in [1, 5] at game start. After each Complication fires, a new countdown in [5, 15] is drawn.
+
+**End-game choice**:
+The three options presented to the player after a game ends (win or lose), before the current **Session** is archived:
+1. **New Daemons** — Fresh personas generated, new Session minted.
+2. **Same Daemons, New Room** — Same personas carried over, new Session minted, logs cleared, genuine disorientation (no wipe-lie fiction).
+3. **Continue (OpenRouter only)** — Same Session, logs appended, engine resets to a new room. Sysadmin delivers: *"The sysadmin has created a new room."* Requires an OpenRouter API key in localStorage. Does not archive the current Session.
+_Avoid_: Replay, restart, new game (too vague).
+
+**Session archive**:
+A read-only copy of a completed **Session**, stored under `hi-blue:archive/<id>/` (separate from `hi-blue:sessions/<id>/`). Visible in the session picker with a "last played" timestamp. Created when a game ends and the player chooses **New Daemons** or **Same Daemons, New Room**. Not created for the **Continue** path.
+_Avoid_: Save (use Session), history.
+
+**Wipe lie** *(deprecated)*:
+Retired. The fiction that AIs' memories are wiped between phases. Eliminated along with the three-phase structure. The **Same Daemons, New Room** end-game path produces genuine disorientation via empty logs — no instruction needed.
+
+**Phase Goal** *(deprecated)*:
+Retired in favour of **Complication** (specifically **Sysadmin Directive**). Per-phase short tasks no longer exist; mid-game pressure comes from the **Complication** schedule instead.
+
+**Broadcast message**:
+A system message delivered to all Daemons simultaneously, not attributed to any Daemon or the Sysadmin. Currently used only for **Weather Change** complications. Distinct from a **Sysadmin** directive (targeted, attributed) and a **Witnessed event** (cone-gated).
