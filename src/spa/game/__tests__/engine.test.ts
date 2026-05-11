@@ -454,7 +454,10 @@ describe("advancePhase", () => {
 describe("appendBroadcast", () => {
 	it("appends a broadcast entry to all three Daemons' logs in one call", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const updated = appendBroadcast(game, "The weather has changed to Heavy rain is falling.");
+		const updated = appendBroadcast(
+			game,
+			"The weather has changed to Heavy rain is falling.",
+		);
 		const phase = getActivePhase(updated);
 		expect(phase.conversationLogs.red).toHaveLength(1);
 		expect(phase.conversationLogs.green).toHaveLength(1);
@@ -466,7 +469,10 @@ describe("appendBroadcast", () => {
 
 	it("broadcast entry has no `from` / `to` fields (regression guard)", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const updated = appendBroadcast(game, "A biting wind cuts through the air.");
+		const updated = appendBroadcast(
+			game,
+			"A biting wind cuts through the air.",
+		);
 		const phase = getActivePhase(updated);
 		const entry = phase.conversationLogs.red?.[0];
 		expect(entry).toBeDefined();

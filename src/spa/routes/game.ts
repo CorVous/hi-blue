@@ -784,7 +784,10 @@ export function renderGame(
 									const prefixSpan = doc.createElement("span");
 									prefixSpan.className = "msg-prefix";
 									if (persona?.color) {
-										prefixSpan.style.setProperty("--prefix-color", persona.color);
+										prefixSpan.style.setProperty(
+											"--prefix-color",
+											persona.color,
+										);
 									}
 									prefixSpan.textContent = `> *${transcriptName(personaName)} `;
 									lineEl.appendChild(prefixSpan);
@@ -1317,9 +1320,7 @@ export function renderGame(
 
 					case "system_broadcast": {
 						// Append a system-generated broadcast line to every Daemon's panel.
-						const broadcastAiIds = Object.keys(
-							nextState.personas,
-						) as AiId[];
+						const broadcastAiIds = Object.keys(nextState.personas) as AiId[];
 						for (const bid of broadcastAiIds) {
 							appendStandaloneLine(bid, `[${event.content}]\n`);
 						}

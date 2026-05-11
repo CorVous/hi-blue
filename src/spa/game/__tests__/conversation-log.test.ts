@@ -644,9 +644,7 @@ describe("buildConversationLog — broadcast", () => {
 		expect(result).toHaveLength(3);
 		expect(result[0]).toContain("[Round 0]");
 		expect(result[1]).toContain("[Round 1]");
-		expect(result[2]).toBe(
-			"[Round 2] A biting wind cuts through the air.",
-		);
+		expect(result[2]).toBe("[Round 2] A biting wind cuts through the air.");
 	});
 
 	it("broadcast content is rendered verbatim — no actor substitution or item lookup", () => {

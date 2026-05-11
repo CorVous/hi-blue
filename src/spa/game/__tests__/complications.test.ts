@@ -8,10 +8,10 @@
 
 import { describe, expect, it } from "vitest";
 import { WEATHER_POOL } from "../../../content/index.js";
+import { COMPLICATIONS, weatherChangeComplication } from "../complications.js";
 import { DEFAULT_LANDMARKS } from "../direction.js";
-import { getActivePhase, startPhase, createGame } from "../engine.js";
-import { weatherChangeComplication, COMPLICATIONS } from "../complications.js";
-import type { AiPersona, PhaseConfig, ContentPack } from "../types.js";
+import { createGame, getActivePhase, startPhase } from "../engine.js";
+import type { AiPersona, ContentPack, PhaseConfig } from "../types.js";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -90,7 +90,7 @@ describe("weatherChangeComplication", () => {
 		// Current weather is "Heavy rain is falling." (index 0 in pool).
 		// With rng always returning 0 and the current weather filtered out,
 		// the draw should pick the first remaining entry.
-		const currentWeather = WEATHER_POOL[0]!;
+		const currentWeather = WEATHER_POOL[0] ?? "Heavy rain is falling.";
 		const game = makeGameWithWeather(currentWeather);
 
 		const result = weatherChangeComplication.apply(game, () => 0);

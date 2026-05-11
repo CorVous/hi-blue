@@ -46,16 +46,14 @@ export const weatherChangeComplication: Complication = {
 
 		// If somehow the pool is empty (shouldn't happen with ≥2 entries), fall
 		// back to the full pool so we never throw.
-		const pool = candidates.length > 0 ? candidates : (WEATHER_POOL as readonly string[]);
+		const pool =
+			candidates.length > 0 ? candidates : (WEATHER_POOL as readonly string[]);
 		const idx = Math.floor(rng() * pool.length);
 		// biome-ignore lint/style/noNonNullAssertion: bounded index into non-empty array
 		const newWeather = pool[idx]!;
 
 		let state = setActivePhaseWeather(game, newWeather);
-		state = appendBroadcast(
-			state,
-			`The weather has changed to ${newWeather}`,
-		);
+		state = appendBroadcast(state, `The weather has changed to ${newWeather}`);
 		return state;
 	},
 };
