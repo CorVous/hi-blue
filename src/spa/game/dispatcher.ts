@@ -3,7 +3,6 @@ import type { RelativeDirection } from "./direction.js";
 import {
 	applyDirection,
 	CARDINAL_DIRECTIONS,
-	formatPosition,
 	frontArc,
 	inBounds,
 	RELATIVE_DIRECTIONS,
@@ -356,7 +355,6 @@ export function executeToolCall(
 function describeToolCall(game: GameState, aiId: AiId, call: ToolCall): string {
 	const name = game.personas[aiId]?.name ?? aiId;
 	const phase = getActivePhase(game);
-	const spatial = phase.personaSpatial[aiId];
 	const pickable = pickableEntities(phase.world.entities);
 
 	switch (call.name) {
@@ -373,11 +371,8 @@ function describeToolCall(game: GameState, aiId: AiId, call: ToolCall): string {
 			if (item?.useOutcome) return item.useOutcome.replace(/\{actor\}/g, "you");
 			return `${name} used the ${call.args.item}`;
 		}
-		case "go": {
-			const pos = spatial?.position;
-			const posStr = pos ? formatPosition(pos) : "unknown";
-			return `${name} walks ${call.args.direction} to ${posStr}`;
-		}
+		case "go":
+			return `${name} walks ${call.args.direction}.`;
 		case "look":
 			return `${name} looks ${call.args.direction}`;
 		default:

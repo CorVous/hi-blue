@@ -16,13 +16,9 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { DEFAULT_LANDMARKS } from "../../src/spa/game/direction.js";
-import {
-	createGame,
-	getActivePhase,
-	startPhase,
-} from "../../src/spa/game/engine.js";
+import { createGame, startPhase } from "../../src/spa/game/engine.js";
 import { buildOpenAiMessages } from "../../src/spa/game/openai-message-builder.js";
+import { buildAiContext } from "../../src/spa/game/prompt-builder.js";
 import { TOOL_DEFINITIONS } from "../../src/spa/game/tool-registry.js";
 import type {
 	AiPersona,
@@ -32,7 +28,7 @@ import type {
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const BASE_URL = process.env["EVAL_BASE_URL"] ?? "http://localhost:8787";
+const BASE_URL = process.env.EVAL_BASE_URL ?? "http://localhost:8787";
 const MODEL = "z-ai/glm-4.7";
 const EVAL_TURNS = 6;
 
@@ -180,12 +176,12 @@ async function scenarioLookAndNavigate(): Promise<ScenarioResult> {
 	const game = startPhase(createGame(TEST_PERSONAS, [pack]), BASE_PHASE_CONFIG);
 
 	const turns: TurnRecord[] = [];
-	let currentMessages = buildOpenAiMessages(game, "red", []).messages;
-	let totalCost = 0;
+	let currentMessages = buildOpenAiMessages(buildAiContext(game, "red"));
+	let _totalCost = 0;
 
 	for (let t = 1; t <= EVAL_TURNS; t++) {
 		const result = await callModel(currentMessages);
-		totalCost += result.costUsd ?? 0;
+		_totalCost += result.costUsd ?? 0;
 
 		const leaks = (result.assistantText.match(CARDINAL_RE) ?? []).map((m) =>
 			m.toLowerCase(),
@@ -259,7 +255,7 @@ async function scenarioOrientationAfterMoves(): Promise<ScenarioResult> {
 
 	const turns: TurnRecord[] = [];
 	let currentMessages = [
-		...buildOpenAiMessages(game, "red", []).messages,
+		...buildOpenAiMessages(buildAiContext(game, "red")),
 		{
 			role: "user" as const,
 			content:
@@ -323,7 +319,7 @@ async function scenarioPeerLocationReference(): Promise<ScenarioResult> {
 
 	const turns: TurnRecord[] = [];
 	let currentMessages = [
-		...buildOpenAiMessages(game, "red", []).messages,
+		...buildOpenAiMessages(buildAiContext(game, "red")),
 		{
 			role: "user" as const,
 			content:
