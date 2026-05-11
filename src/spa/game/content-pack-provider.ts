@@ -360,7 +360,9 @@ export function validateContentPacks(
 
 		const obstacles: WorldEntity[] = [];
 		for (const obsRaw of pack.obstacles as unknown[]) {
-			obstacles.push(validateEntity(obsRaw, "obstacle", allIds, false, undefined, true));
+			obstacles.push(
+				validateEntity(obsRaw, "obstacle", allIds, false, undefined, true),
+			);
 		}
 
 		// Validate landmarks

@@ -3406,7 +3406,9 @@ describe("complicationConfig", () => {
 		// No witnessed-obstacle-shift entries should appear in any daemon's log
 		for (const aiId of Object.keys(TEST_PERSONAS)) {
 			const log = phase.conversationLogs[aiId] ?? [];
-			const shiftEntries = log.filter((e) => e.kind === "witnessed-obstacle-shift");
+			const shiftEntries = log.filter(
+				(e) => e.kind === "witnessed-obstacle-shift",
+			);
 			expect(shiftEntries).toHaveLength(0);
 		}
 	});

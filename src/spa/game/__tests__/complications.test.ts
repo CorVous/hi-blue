@@ -216,10 +216,7 @@ function makeObstacle(
  *   - cyan  at (0,2), facing north
  *   - obstacle at (2,2)   → toCell could be (3,2) or (2,3) or (2,1) or (1,2)
  */
-function makeGameWithObstacle(
-	obstaclePos: GridPosition,
-	shiftFlavor?: string,
-) {
+function makeGameWithObstacle(obstaclePos: GridPosition, shiftFlavor?: string) {
 	const obstacle = makeObstacle("obs1", obstaclePos, shiftFlavor);
 	const pack: ContentPack = {
 		phaseNumber: 1,
@@ -318,7 +315,9 @@ describe("obstacleShiftComplication", () => {
 		const greenLog = phase.conversationLogs.green ?? [];
 		const cyanLog = phase.conversationLogs.cyan ?? [];
 
-		const redShift = redLog.filter((e) => e.kind === "witnessed-obstacle-shift");
+		const redShift = redLog.filter(
+			(e) => e.kind === "witnessed-obstacle-shift",
+		);
 		const greenShift = greenLog.filter(
 			(e) => e.kind === "witnessed-obstacle-shift",
 		);

@@ -170,7 +170,9 @@ export const obstacleShiftComplication: Complication = {
 	name: "obstacleShift",
 	isAvailable(game: GameState): boolean {
 		const phase = getActivePhase(game);
-		return validObstacleShiftTuples(phase.world, phase.personaSpatial).length > 0;
+		return (
+			validObstacleShiftTuples(phase.world, phase.personaSpatial).length > 0
+		);
 	},
 	apply(game: GameState, rng: () => number): GameState {
 		const phase = getActivePhase(game);
@@ -196,17 +198,19 @@ export const obstacleShiftComplication: Complication = {
 		}));
 
 		// Compute which Daemons have fromCell in their cone at the moment of shift
-		const shiftEntry: Extract<ConversationEntry, { kind: "witnessed-obstacle-shift" }> =
-			{
-				kind: "witnessed-obstacle-shift",
-				round: phase.round,
-				obstacleId,
-				fromCell,
-				toCell,
-				flavor:
-					phase.world.entities.find((e) => e.id === obstacleId)?.shiftFlavor ??
-					"Something shifts.",
-			};
+		const entry: Extract<
+			ConversationEntry,
+			{ kind: "witnessed-obstacle-shift" }
+		> = {
+			kind: "witnessed-obstacle-shift",
+			round: phase.round,
+			obstacleId,
+			fromCell,
+			toCell,
+			flavor:
+				phase.world.entities.find((e) => e.id === obstacleId)?.shiftFlavor ??
+				"Something shifts.",
+		};
 
 		for (const [daemonId, spatial] of Object.entries(phase.personaSpatial)) {
 			const cone = projectCone(spatial.position, spatial.facing);
@@ -214,7 +218,7 @@ export const obstacleShiftComplication: Complication = {
 				positionsEqual(cell.position, fromCell),
 			);
 			if (witnessesShift) {
-				state = appendWitnessedObstacleShift(state, daemonId, shiftEntry);
+				state = appendWitnessedObstacleShift(state, daemonId, entry);
 			}
 		}
 
