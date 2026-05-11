@@ -58,7 +58,11 @@ export class GameSession {
 		_contentPacks?: ContentPack[],
 		rng?: () => number,
 	) {
-		this.state = startGame(personas, contentPack, rng !== undefined ? { rng } : {});
+		this.state = startGame(
+			personas,
+			contentPack,
+			rng !== undefined ? { rng } : {},
+		);
 	}
 
 	/**

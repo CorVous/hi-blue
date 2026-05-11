@@ -1150,7 +1150,10 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 
 	it("RoundResult.phaseEnded is always false (phase-based model removed)", async () => {
 		// phaseEnded is always false in the flat model.
-		const game = startPhase(createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]), TEST_PHASE_CONFIG);
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]),
+			TEST_PHASE_CONFIG,
+		);
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
@@ -1162,7 +1165,10 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 
 	it("gameEnded is false when objective pairs are not satisfied", async () => {
 		// TEST_CONTENT_PACK: flower at (0,0), flower_space at (4,4) — not same cell.
-		const game = startPhase(createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]), TEST_PHASE_CONFIG);
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]),
+			TEST_PHASE_CONFIG,
+		);
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
@@ -1175,7 +1181,10 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 
 	it("gameEnded is true and isComplete is true when all pairs satisfied (K=0 vacuous)", async () => {
 		// K=0 → checkWinCondition vacuously returns true after the first round.
-		const game = startPhase(createGame(TEST_PERSONAS, [NO_PAIRS_PACK]), TEST_PHASE_CONFIG);
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [NO_PAIRS_PACK]),
+			TEST_PHASE_CONFIG,
+		);
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
@@ -1190,7 +1199,10 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 	it("conversation history accumulates across rounds in flat model (no wipe)", async () => {
 		// In flat model there is no phase advance / history wipe.
 		// Player message and AI turn from round 1 should be in conversationLogs after round 2.
-		const game = startPhase(createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]), TEST_PHASE_CONFIG);
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]),
+			TEST_PHASE_CONFIG,
+		);
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },

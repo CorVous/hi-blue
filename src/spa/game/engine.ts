@@ -565,9 +565,7 @@ export function getActivePhase(game: GameState): GameState & {
 		...game,
 		phaseNumber: g._phaseNumber ?? 1,
 		aiGoals: g._aiGoals ?? {},
-		...(g._winCondition !== undefined
-			? { winCondition: g._winCondition }
-			: {}),
+		...(g._winCondition !== undefined ? { winCondition: g._winCondition } : {}),
 		...(g._nextPhaseConfig !== undefined
 			? { nextPhaseConfig: g._nextPhaseConfig }
 			: {}),

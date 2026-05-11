@@ -307,10 +307,7 @@ export function executeToolCall(
 			const direction: CardinalDirection = RELATIVE_DIRECTIONS.includes(
 				rawGoDir as RelativeDirection,
 			)
-				? relativeToCardinal(
-						actorSpatial.facing,
-						rawGoDir as RelativeDirection,
-					)
+				? relativeToCardinal(actorSpatial.facing, rawGoDir as RelativeDirection)
 				: (rawGoDir as CardinalDirection);
 			const nextPos = applyDirection(actorSpatial.position, direction);
 			return {
@@ -464,11 +461,7 @@ export function dispatchAiTurn(
 			// If so, replace the default description with the per-pair placementFlavor.
 			const flavorDescription =
 				action.toolCall.name === "put_down" || action.toolCall.name === "use"
-					? checkPlacementFlavor(
-							action,
-							state.contentPack,
-							state.world,
-						)
+					? checkPlacementFlavor(action, state.contentPack, state.world)
 					: null;
 			const successDescription =
 				flavorDescription ?? describeToolCall(state, aiId, action.toolCall);
@@ -509,9 +502,7 @@ export function dispatchAiTurn(
 
 				// Collect all other AIs' spatial states at this moment (snapshot)
 				const witnessSpatial: Record<AiId, PersonaSpatialState> = {};
-				for (const [otherId, spatial] of Object.entries(
-					state.personaSpatial,
-				)) {
+				for (const [otherId, spatial] of Object.entries(state.personaSpatial)) {
 					if (otherId !== aiId) {
 						witnessSpatial[otherId] = spatial;
 					}

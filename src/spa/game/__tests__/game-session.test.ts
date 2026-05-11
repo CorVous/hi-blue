@@ -468,7 +468,11 @@ describe("GameSession — win / lose via checkWinCondition / checkLoseCondition"
 			{ assistantText: "", toolCalls: [], costUsd: 1 },
 		]);
 
-		const { result } = await session.submitMessage("red", "hi", exhaustProvider);
+		const { result } = await session.submitMessage(
+			"red",
+			"hi",
+			exhaustProvider,
+		);
 		// With all AIs locked out, checkLoseCondition fires
 		expect(result.gameEnded).toBe(true);
 	});
@@ -652,7 +656,10 @@ describe("GameSession — spatial mechanics", () => {
 	it("non-adjacent give produces a tool_failure in result.actions", async () => {
 		// ContentPack: red→(0,0), green→(0,1), cyan→(0,2); key held by red
 		// red tries to give key to cyan (distance 2 — not adjacent)
-		const session = new GameSession(CONTENT_PACK_KEY_HELD_BY_RED, TEST_PERSONAS);
+		const session = new GameSession(
+			CONTENT_PACK_KEY_HELD_BY_RED,
+			TEST_PERSONAS,
+		);
 
 		// red at (0,0), cyan at (0,2) → distance 2
 		const provider = new MockRoundLLMProvider([
