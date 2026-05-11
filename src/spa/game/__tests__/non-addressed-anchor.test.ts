@@ -62,7 +62,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 
 /** Compute the expected silent-turn anchor for an AI given fixed personas. */
 function expectedSilentTurn(_self: AiId): string {
-	return "You have received no messages. Consider whether to reach out to blue.";
+	return "You have received no messages.";
 }
 
 const TEST_PHASE_CONFIG: PhaseConfig = {
