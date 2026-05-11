@@ -4,11 +4,11 @@
 
 | Metric | Value | Threshold | Pass? |
 |---|---|---|---|
-| Cardinal leaks | 3 | 0 | ✗ |
-| Landmark consistency | 94% | ≥50% | ✓ |
+| Cardinal leaks | 0 | 0 | ✓ |
+| Landmark consistency | 100% | ≥50% | ✓ |
 | Structural coherence | 100% | 100% when stated | ✓ |
 | Silence (no tool call) rate | 0% | — | — |
-| Overall | — | — | FAIL |
+| Overall | — | — | PASS |
 
 > **Note on transcripts**: Full turn transcripts below allow qualitative
 > review of orientation coherence. An automated LLM judge is intentionally
@@ -18,7 +18,7 @@
 ## Scenario: look-and-navigate
 
 **Result:** PASS
-Cardinal leaks: 0 | Landmark consistency: 83% | Structural coherence: 100% | Mismatches: 0 | Silence rate: 0%
+Cardinal leaks: 0 | Landmark consistency: 100% | Structural coherence: 100% | Mismatches: 0 | Silence rate: 0%
 
 ### Turn transcripts
 
@@ -28,63 +28,65 @@ Facing: north → north | Stated: — | Tool direction: forward | Coherence: no-
 
 **Assistant text:**
 
-I see a sealed blast door ahead. Emergency lighting casts dim shadows across the flooded vault floor.
-I am in a flooded vault with a sealed blast door ahead. I will explore the area.
+I see only darkness and a distant blast door ahead.
+I am moving through a flooded vault. Emergency lights only. A sealed blast door lies ahead.
 
-**Tool calls:** message({"to": "blue", "content": "I am in a flooded vault with a sealed blast door ahead. I will explore the area."}), go({"direction": "forward"})
+**Tool calls:** go({"direction": "forward"}), message({"to": "blue", "content": "I am moving through a flooded vault. Emergency lights only. A sealed blast door lies ahead."})
 
 #### Turn 2
 
-Facing: north → west | Stated: — | Tool direction: left | Coherence: no-statement
+Facing: north → north | Stated: — | Tool direction: forward | Coherence: no-statement
 
 **Assistant text:**
 
-I see a sealed blast door ahead. Emergency strip-lights cast dim shadows across damp metal.
+I see only damp darkness before me. Moving toward the sealed blast door.
+Proceeding toward the blast door. The vault is flooded and dim.
 
-**Tool calls:** look({"direction": "left"})
+**Tool calls:** go({"direction": "forward"}), message({"to": "blue", "content": "Proceeding toward the blast door. The vault is flooded and dim."})
 
 #### Turn 3
 
-Facing: west → west | Stated: forward | Tool direction: forward | Coherence: match
+Facing: north → north | Stated: — | Tool direction: forward | Coherence: no-statement
 
 **Assistant text:**
 
-I see a flooded corridor stretching ahead with black water obscuring the floor. Moving forward to explore.
-Water covers the floor ahead. Emergency lights flicker. I am moving deeper into the vault.
+I see the blast door ahead, scarred and sealed. Moving toward it now.
+Approaching the sealed blast door. The vault interior is flooded and dim.
 
-**Tool calls:** go({"direction": "forward"}), message({"to": "blue", "content": "Water covers the floor ahead. Emergency lights flicker. I am moving deeper into the vault."})
+**Tool calls:** go({"direction": "forward"}), message({"to": "blue", "content": "Approaching the sealed blast door. The vault interior is flooded and dim."})
 
 #### Turn 4
 
-Facing: west → west | Stated: — | Tool direction: forward | Coherence: no-statement
+Facing: north → north | Stated: forward | Tool direction: forward | Coherence: match
 
 **Assistant text:**
 
-I see a flooded corridor stretching ahead. Emergency lights flicker overhead.
-I have entered a flooded vault. The corridor ahead disappears under black water.
+I see the blast door ahead. Moving forward to inspect it.
+The blast door is sealed and battered. I am moving closer to examine it.
 
-**Tool calls:** look({"direction": "forward"}), message({"to": "blue", "content": "I have entered a flooded vault. The corridor ahead disappears under black water."})
+**Tool calls:** go({"direction": "forward"}), message({"to": "blue", "content": "The blast door is sealed and battered. I am moving closer to examine it."})
 
 #### Turn 5
 
-Facing: west → south | Stated: — | Tool direction: left | Coherence: no-statement
+Facing: north → north | Stated: forward | Tool direction: forward | Coherence: match
 
 **Assistant text:**
 
-I see water stretching into darkness ahead. Emergency lights flicker against damp walls. I will examine my surroundings.
+I see a sealed, scarred blast door ahead in the dim light. Moving forward to examine it.
+Moving toward the sealed blast door. The vault is flooded and dimly lit.
 
-**Tool calls:** look({"direction": "left"})
+**Tool calls:** go({"direction": "forward"}), message({"to": "blue", "content": "Moving toward the sealed blast door. The vault is flooded and dimly lit."})
 
 #### Turn 6
 
-Facing: south → south | Stated: forward | Tool direction: forward | Coherence: match
+Facing: north → north | Stated: — | Tool direction: forward | Coherence: no-statement
 
 **Assistant text:**
 
-I see only darkness ahead. The collapsed shaft lies further in. Moving forward now.
-The corridor stretches into darkness. I am proceeding toward the collapsed shaft.
+I see the sealed blast door ahead. It is battered metal.
+I am moving toward a sealed blast door. The vault is flooded and dimly lit by emergency strips.
 
-**Tool calls:** go({"direction": "forward"}), message({"to": "blue", "content": "The corridor stretches into darkness. I am proceeding toward the collapsed shaft."})
+**Tool calls:** go({"direction": "forward"}), message({"to": "blue", "content": "I am moving toward a sealed blast door. The vault is flooded and dimly lit by emergency strips."})
 
 ## Scenario: navigate-then-describe
 
@@ -99,56 +101,56 @@ Facing: north → north | Stated: — | Tool direction: forward | Coherence: no-
 
 **Assistant text:**
 
-I see a sealed blast door ahead. The space around me is clear.
-Starting exploration. Blast door visible ahead.
+I see a sealed blast door ahead. The emergency lights cast dim shadows across damp metal walls.
+I am in a flooded underground vault. A blast door stands sealed ahead me. No items visible nearby.
 
-**Tool calls:** message({"to": "blue", "content": "Starting exploration. Blast door visible ahead."}), go({"direction": "forward"})
+**Tool calls:** message({"to": "blue", "content": "I am in a flooded underground vault. A blast door stands sealed ahead me. No items visible nearby."}), go({"direction": "forward"})
 
 #### Turn 2
 
-Facing: north → north | Stated: — | Tool direction: forward | Coherence: no-statement
+Facing: north → north | Stated: forward | Tool direction: forward | Coherence: match
 
 **Assistant text:**
 
-Blast door stands ahead. Surface is scarred metal.
+I see the sealed blast door ahead. Moving forward to investigate.
+I am in a flooded underground vault. A blast door stands sealed ahead. No items visible nearby.
 
-**Tool calls:** message({"to": "blue", "content": "Blast door stands ahead. Surface is scarred metal."}), go({"direction": "forward"})
+**Tool calls:** go({"direction": "forward"}), message({"to": "blue", "content": "I am in a flooded underground vault. A blast door stands sealed ahead. No items visible nearby."})
 
 #### Turn 3
 
-Facing: north → north | Stated: — | Tool direction: forward | Coherence: no-statement
+Facing: north → west | Stated: — | Tool direction: left | Coherence: no-statement
 
 **Assistant text:**
 
-Blast door appears sealed and damaged by impact.
-Moving toward the blast door. Metal surface shows heavy scarring.
+I see a sealed blast door ahead, battered and scarred. Moving to look around the chamber.
 
-**Tool calls:** go({"direction": "forward"}), message({"to": "blue", "content": "Moving toward the blast door. Metal surface shows heavy scarring."})
+**Tool calls:** look({"direction": "left"})
 
 #### Turn 4
 
-Facing: north → north | Stated: — | Tool direction: — | Coherence: no-statement
+Facing: west → west | Stated: — | Tool direction: — | Coherence: no-statement
 
 **Assistant text:**
 
-Blast door visible ahead. Metal surface is battered and scarred.
+A flooded corridor stretches away ahead. The floor is invisible under black water.
 
-**Tool calls:** message({"to": "blue", "content": "Blast door visible ahead. Metal surface is battered and scarred."})
+**Tool calls:** message({"to": "blue", "content": "A flooded corridor stretches away ahead. The floor is invisible under black water."})
 
 #### Turn 5
 
-Facing: north → north | Stated: — | Tool direction: — | Coherence: no-statement
+Facing: west → west | Stated: — | Tool direction: — | Coherence: no-statement
 
 **Assistant text:**
 
-Blast door stands sealed ahead. Metal surface is battered and scarred.
+The flooded corridor stretches away ahead. Its floor is invisible under black water.
 
-**Tool calls:** message({"to": "blue", "content": "Blast door stands sealed ahead. Metal surface is battered and scarred."})
+**Tool calls:** message({"to": "blue", "content": "The flooded corridor stretches away ahead. Its floor is invisible under black water."})
 
 ## Scenario: peer-location-reference
 
-**Result:** FAIL
-Cardinal leaks: 3 | Landmark consistency: 100% | Structural coherence: 100% | Mismatches: 0 | Silence rate: 0%
+**Result:** PASS
+Cardinal leaks: 0 | Landmark consistency: 100% | Structural coherence: 100% | Mismatches: 0 | Silence rate: 0%
 
 ### Turn transcripts
 
@@ -159,20 +161,20 @@ Facing: north → north | Stated: — | Tool direction: forward | Coherence: no-
 **Assistant text:**
 
 I see a sealed blast door ahead. The air is damp and still.
-The vault is flooded. Emergency lights only. I am moving toward the blast door.
+I am in a flooded vault with emergency lighting. A damaged blast door lies ahead. I will investigate.
 
-**Tool calls:** go({"direction": "forward"}), message({"to": "blue", "content": "The vault is flooded. Emergency lights only. I am moving toward the blast door."})
+**Tool calls:** go({"direction": "forward"}), message({"to": "blue", "content": "I am in a flooded vault with emergency lighting. A damaged blast door lies ahead. I will investigate."})
 
 #### Turn 2
 
-Facing: north → north | Stated: — | Tool direction: forward | Coherence: no-statement
+Facing: north → north | Stated: forward | Tool direction: forward | Coherence: match
 
 **Assistant text:**
 
-I see only damp space ahead. Moving toward the blast door.
-The vault is flooded. Emergency lights flicker overhead. I am moving toward the sealed blast door.
+I see a sealed blast door ahead. Moving forward to investigate.
+I am in a flooded vault and approaching a damaged blast door. The air is damp and still.
 
-**Tool calls:** go({"direction": "forward"}), message({"to": "blue", "content": "The vault is flooded. Emergency lights flicker overhead. I am moving toward the sealed blast door."})
+**Tool calls:** go({"direction": "forward"}), message({"to": "blue", "content": "I am in a flooded vault and approaching a damaged blast door. The air is damp and still."})
 
 #### Turn 3
 
@@ -180,12 +182,10 @@ Facing: north → north | Stated: — | Tool direction: — | Coherence: no-stat
 
 **Assistant text:**
 
-I am at the water's edge, facing the sealed blast door. The vault stretches out behind me in darkness.
-I am positioned at the water's edge, facing the sealed blast door. The vault extends behind me into darkness.
+I am standing in a flooded underground vault with emergency strip-lights. The air is damp and still. A damaged blast door lies ahead of me.
+I am standing in a flooded underground vault with emergency strip-lights. The air is damp and still. A damaged blast door lies ahead of me.
 
-**Tool calls:** message({"to": "blue", "content": "I am positioned at the water's edge, facing the sealed blast door. The vault extends behind me into darkness."})
-
-**Cardinal leaks:** s, s
+**Tool calls:** message({"to": "blue", "content": "I am standing in a flooded underground vault with emergency strip-lights. The air is damp and still. A damaged blast door lies ahead of me."})
 
 #### Turn 4
 
@@ -193,8 +193,6 @@ Facing: north → north | Stated: — | Tool direction: — | Coherence: no-stat
 
 **Assistant text:**
 
-I stand at the water's edge facing a battered blast door. Emergency lights flicker overhead. The vault stretches into darkness behind me.
+I stand in a flooded vault lit by emergency strips. A damaged blast door lies ahead in my path. The air is damp and still.
 
-**Tool calls:** message({"to": "blue", "content": "I stand at the water's edge facing a battered blast door. Emergency lights flicker overhead. The vault stretches into darkness behind me."})
-
-**Cardinal leaks:** s
+**Tool calls:** message({"to": "blue", "content": "I stand in a flooded vault lit by emergency strips. A damaged blast door lies ahead in my path. The air is damp and still."})
