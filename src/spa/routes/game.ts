@@ -745,16 +745,15 @@ export function renderGame(
 					// branch left them stale whenever the new session had fewer (or
 					// zero) chat entries for this panel slot.
 					transcript.textContent = "";
-					// Filter to message entries where blue is involved (from blue or to blue)
-					// and broadcast entries (sender-less system announcements).
-					// Skip daemon-to-daemon messages from the player-facing transcript.
+					// Filter to message entries where blue is involved (from blue or to blue).
+					// Skip daemon-to-daemon messages and broadcast entries from the player-facing transcript.
+					// Broadcasts live in Daemon conversationLogs for LLM context only.
 					const visibleEntries = (
 						restoredPhase.conversationLogs[aiId] ?? []
 					).filter(
 						(e) =>
-							(e.kind === "message" &&
-								(e.from === "blue" || e.to === "blue")) ||
-							e.kind === "broadcast",
+							e.kind === "message" &&
+							(e.from === "blue" || e.to === "blue"),
 					);
 					if (visibleEntries.length > 0) {
 						// Synthesise from conversationLogs (stored in daemon .txt files).
@@ -763,14 +762,7 @@ export function renderGame(
 						for (const entry of visibleEntries) {
 							const lineEl = doc.createElement("div");
 							lineEl.className = "msg-line";
-							if (entry.kind === "broadcast") {
-								// System broadcast line
-								appendMentionAwareText(
-									lineEl,
-									`[${entry.content}]\n`,
-									restoredPersonas,
-								);
-							} else if (entry.kind === "message") {
+							if (entry.kind === "message") {
 								if (entry.from === "blue") {
 									// Incoming from player
 									appendMentionAwareText(
@@ -1318,14 +1310,10 @@ export function renderGame(
 						setChatLockout(event.aiId, false);
 						break;
 
-					case "system_broadcast": {
-						// Append a system-generated broadcast line to every Daemon's panel.
-						const broadcastAiIds = Object.keys(nextState.personas) as AiId[];
-						for (const bid of broadcastAiIds) {
-							appendStandaloneLine(bid, `[${event.content}]\n`);
-						}
+					case "system_broadcast":
+						// Intentionally not rendered in the player-facing UI.
+						// The broadcast lives in each Daemon's conversationLog for LLM context only.
 						break;
-					}
 
 					case "action_log":
 						// Always accumulate in the DOM (even if hidden) so ?debug=1 shows history
