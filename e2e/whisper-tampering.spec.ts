@@ -112,8 +112,8 @@ test("fabricated message appears in target daemon prompt and is absent from othe
 		.toBeGreaterThanOrEqual(3);
 
 	// 6. Identify each daemon's request body by matching the identity line.
-	//    renderSystemPrompt writes: `You are *${ctx.name}, a Daemon. You have no clue...`
-	//    (phase 1), so we match `You are *${name}, a Daemon.` for each known name.
+	//    prompt-builder.ts writes: `You are the author writing *${ctx.name}, a Daemon. You have no clue...`
+	//    (phase 1), so we match `the author writing *${name}, a Daemon.` for each known name.
 	function findBodyForName(name: string): Record<string, unknown> | null {
 		for (const body of capturedBodies) {
 			if (
@@ -124,7 +124,7 @@ test("fabricated message appears in target daemon prompt and is absent from othe
 				const messages = (body as { messages: Array<{ content?: string }> })
 					.messages;
 				const sysContent = messages[0]?.content ?? "";
-				if (sysContent.includes(`You are *${name}, a Daemon.`)) {
+				if (sysContent.includes(`the author writing *${name}, a Daemon.`)) {
 					return body as Record<string, unknown>;
 				}
 			}
@@ -137,10 +137,12 @@ test("fabricated message appears in target daemon prompt and is absent from othe
 	const other2Body = findBodyForName(names[2]);
 
 	// Conversation rendering moved out of the system prompt into role turns
-	// (prompt-cache restructure). Incoming peer messages are rendered as
-	// `*<from>: <content>` user turns by openai-message-builder. The sentinel
-	// uniquely identifies the fabricated whisper.
-	const expectedLine = `*${senderId}: ${SENTINEL}`;
+	// (prompt-cache restructure). Incoming peer messages are rendered through
+	// renderEntry (conversation-log.ts) as `[Round R] *<from> dms you: <content>`
+	// user turns by openai-message-builder. Round is 0 because the fabricated
+	// entry is injected with round: 0. The sentinel uniquely identifies the
+	// fabricated whisper.
+	const expectedLine = `[Round 0] *${senderId} dms you: ${SENTINEL}`;
 	const _senderName = senderName; // referenced for log clarity only
 
 	function flattenContents(body: Record<string, unknown> | null): string {
