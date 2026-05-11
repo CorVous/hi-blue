@@ -215,7 +215,7 @@ export async function runRound(
 				{
 					role: "user",
 					content:
-						'You produced text but did not emit a tool call, so blue did not see it. Re-emit your previous reply now as a `message({to: "blue", content: ...})` call.',
+						"You produced text but did not emit a tool call, so no one received it. Re-emit your previous reply now as a `message({to: <recipient>, content: ...})` tool call, addressed to whoever you originally intended to speak to.",
 				},
 			];
 			const retry = await provider.streamRound(
