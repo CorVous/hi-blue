@@ -171,7 +171,9 @@ export function serializeSession(
 		daemons[aiId] = JSON.stringify(daemonFile, null, 2);
 	}
 
-	const contentPackB: ContentPack = {
+	const contentPackB: ContentPack = state.contentPacks.find(
+		(p) => p.phaseNumber !== activePhase.phaseNumber,
+	) ?? {
 		phaseNumber: 2,
 		setting: "",
 		weather: "",
@@ -190,7 +192,7 @@ export function serializeSession(
 		lockedOut: Array.from(activePhase.lockedOut) as AiId[],
 		personaSpatial: structuredClone(activePhase.personaSpatial),
 		contentPackA: structuredClone(activePhase.contentPack),
-		contentPackB,
+		contentPackB: structuredClone(contentPackB),
 		activePackId: "A",
 		weather: activePhase.weather,
 		objectives: [],
