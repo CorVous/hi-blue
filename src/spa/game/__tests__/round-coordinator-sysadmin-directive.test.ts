@@ -118,6 +118,7 @@ function sysadminRng(callValues: number[]): () => number {
 			// Default: return 0 for remaining calls.
 			return 0;
 		}
+		// biome-ignore lint/style/noNonNullAssertion: bounded by check above
 		return callValues[idx++]!;
 	};
 }

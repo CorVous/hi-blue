@@ -33,14 +33,14 @@ import {
 	isAiLockedOut,
 	resolveToolDisables,
 } from "./engine";
+import { buildOpenAiMessages } from "./openai-message-builder";
+import { buildAiContext, buildConeSnapshot } from "./prompt-builder";
+import type { OpenAiMessage, RoundLLMProvider } from "./round-llm-provider";
 import {
 	drawDirectiveText,
 	formatDirectiveDelivery,
 	formatDirectiveRevocation,
 } from "./sysadmin-directive";
-import { buildOpenAiMessages } from "./openai-message-builder";
-import { buildAiContext, buildConeSnapshot } from "./prompt-builder";
-import type { OpenAiMessage, RoundLLMProvider } from "./round-llm-provider";
 import { parseToolCallArguments } from "./tool-registry";
 import type {
 	AiId,
