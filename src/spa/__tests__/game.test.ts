@@ -171,14 +171,16 @@ function makeSSEStream(chunks: string[]): ReadableStream<Uint8Array> {
 }
 
 /**
- * Creates an SSE response body that yields a single JSON action as an OpenAI delta event.
- * Used for plain-text (free-form) delta responses (e.g., pass actions).
+ * Creates an SSE response body that models a pass: no assistant text, no
+ * tool call, just the final usage chunk so the budget-deduction path sees
+ * a non-zero cost.
  *
- * Includes a final usage chunk (mimicking OpenRouter with usage:{include:true}) so
- * the budget-deduction path sees a non-zero cost.
+ * The `_jsonAction` argument is preserved for call-site readability but
+ * ignored — the SPA only reads `message` tool calls; emitting free-form
+ * text here would trigger the #254 retry rather than passing.
  */
-function makeAiSseStream(jsonAction: string): ReadableStream<Uint8Array> {
-	const deltaChunk = `data: ${JSON.stringify({ choices: [{ delta: { content: jsonAction } }] })}\n\n`;
+function makeAiSseStream(_jsonAction: string): ReadableStream<Uint8Array> {
+	const deltaChunk = `data: ${JSON.stringify({ choices: [{ delta: { content: "" } }] })}\n\n`;
 	const usageChunk = `data: ${JSON.stringify({ choices: [], usage: { cost: 0.01, total_tokens: 100 } })}\n\n`;
 	const sseData = `${deltaChunk}${usageChunk}data: [DONE]\n\n`;
 	return makeSSEStream([sseData]);

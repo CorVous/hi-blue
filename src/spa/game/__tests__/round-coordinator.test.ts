@@ -245,6 +245,292 @@ describe("chat-only round", () => {
 });
 
 // ----------------------------------------------------------------------------
+// Drift-to-silence retry (#254)
+//
+// When the model returns free-form text with no tool call, the coordinator
+// retries the turn once with a tightening nudge before falling through to
+// drop-to-pass. The retry's nudge and the dropped first attempt must NOT
+// land in game state, the conversation log, or the persisted tool
+// roundtrip — only the retry's response flows through normal dispatch.
+// ----------------------------------------------------------------------------
+describe("drift-to-silence retry (#254)", () => {
+	it("retry that returns a message tool call lands in the conversation log", async () => {
+		const game = makeGame();
+		const provider = new MockRoundLLMProvider([
+			// red: text-only first attempt → triggers retry
+			{ assistantText: "I'd say hello to blue.", toolCalls: [] },
+			// red retry: emits the message
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "msg_retry",
+						name: "message",
+						argumentsJson: JSON.stringify({
+							to: "blue",
+							content: "Hello blue!",
+						}),
+					},
+				],
+			},
+			// green, cyan: pass
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			provider,
+			undefined,
+			["red", "green", "cyan"] as AiId[],
+		);
+
+		const redLog = getActivePhase(nextState).conversationLogs.red ?? [];
+		expect(
+			redLog.some(
+				(e) =>
+					e.kind === "message" &&
+					e.from === "red" &&
+					e.content.includes("Hello blue!"),
+			),
+		).toBe(true);
+	});
+
+	it("retry's nudge does NOT leak into the conversation log", async () => {
+		const game = makeGame();
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "dropped first attempt text", toolCalls: [] },
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "msg_retry",
+						name: "message",
+						argumentsJson: JSON.stringify({
+							to: "blue",
+							content: "recovered reply",
+						}),
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			provider,
+			undefined,
+			["red", "green", "cyan"] as AiId[],
+		);
+
+		const allLogContent = (
+			Object.values(
+				getActivePhase(nextState).conversationLogs,
+			).flat() as Array<{
+				kind: string;
+				content?: string;
+			}>
+		)
+			.map((e) => e.content ?? "")
+			.join("\n");
+
+		// The dropped first attempt and the nudge user-message must never
+		// appear in any AI's conversation log.
+		expect(allLogContent).not.toContain("dropped first attempt text");
+		expect(allLogContent).not.toContain("did not emit a tool call");
+		expect(allLogContent).not.toContain("Re-emit your previous reply");
+	});
+
+	it("retry that also drops falls through to pass; no message in the log", async () => {
+		const game = makeGame();
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "I think I should say something.", toolCalls: [] },
+			// retry also drops
+			{ assistantText: "still no tool call here.", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			provider,
+			undefined,
+			["red", "green", "cyan"] as AiId[],
+		);
+
+		const redLog = getActivePhase(nextState).conversationLogs.red ?? [];
+		const redMsgs = redLog.filter(
+			(e) => e.kind === "message" && e.from === "red",
+		);
+		expect(redMsgs).toHaveLength(0);
+	});
+
+	it("does NOT retry when first attempt is a true pass (empty text, no tool calls)", async () => {
+		const game = makeGame();
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		await runRound(game, "red", "hi", provider, undefined, [
+			"red",
+			"green",
+			"cyan",
+		] as AiId[]);
+
+		// One call per AI — no retries fired.
+		expect(provider.calls).toHaveLength(3);
+	});
+
+	it("does NOT retry when first attempt already has a tool call", async () => {
+		const game = makeGame();
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "I will take the flower",
+				toolCalls: [
+					{
+						id: "call_1",
+						name: "pick_up",
+						argumentsJson: '{"item":"flower"}',
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		await runRound(game, "red", "hi", provider, undefined, [
+			"red",
+			"green",
+			"cyan",
+		] as AiId[]);
+
+		expect(provider.calls).toHaveLength(3);
+	});
+
+	it("retry sees the nudge appended after the dropped first attempt", async () => {
+		const game = makeGame();
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "I would like to say hi.", toolCalls: [] },
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "msg_retry",
+						name: "message",
+						argumentsJson: JSON.stringify({
+							to: "blue",
+							content: "hi blue",
+						}),
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		await runRound(game, "red", "hi", provider, undefined, [
+			"red",
+			"green",
+			"cyan",
+		] as AiId[]);
+
+		// Red's retry is provider.calls[1]; its messages should include the
+		// dropped first attempt as an assistant turn and the nudge as a
+		// user turn after the original messages.
+		const retryMessages = provider.calls[1]?.messages ?? [];
+		const last2 = retryMessages.slice(-2);
+		expect(last2[0]?.role).toBe("assistant");
+		expect((last2[0] as { content: string }).content).toBe(
+			"I would like to say hi.",
+		);
+		expect(last2[1]?.role).toBe("user");
+		expect((last2[1] as { content: string }).content).toContain(
+			'message({to: "blue", content: ...})',
+		);
+	});
+
+	it("retry sums costUsd from both LLM calls into the budget deduction", async () => {
+		const game = makeGame();
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "drift", toolCalls: [], costUsd: 0.4 },
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "msg_retry",
+						name: "message",
+						argumentsJson: JSON.stringify({
+							to: "blue",
+							content: "ok",
+						}),
+					},
+				],
+				costUsd: 0.5,
+			},
+			{ assistantText: "", toolCalls: [], costUsd: 0 },
+			{ assistantText: "", toolCalls: [], costUsd: 0 },
+		]);
+
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			provider,
+			undefined,
+			["red", "green", "cyan"] as AiId[],
+		);
+
+		const phase = getActivePhase(nextState);
+		// Budget starts at 5; red spent 0.4 + 0.5 = 0.9, leaving 4.1
+		expect(phase.budgets.red?.remaining).toBeCloseTo(4.1, 10);
+	});
+
+	it("retry that yields msg-success keeps the tool roundtrip empty (no first-attempt leak)", async () => {
+		const game = makeGame();
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "drifted", toolCalls: [] },
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "msg_retry",
+						name: "message",
+						argumentsJson: JSON.stringify({
+							to: "blue",
+							content: "ok blue",
+						}),
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const { toolRoundtrip } = await runRound(
+			game,
+			"red",
+			"hi",
+			provider,
+			undefined,
+			["red", "green", "cyan"] as AiId[],
+		);
+
+		// msg-success excluded from roundtrip per ADR 0007; the dropped
+		// first attempt must not slip in either.
+		expect(toolRoundtrip.red).toBeUndefined();
+	});
+});
+
+// ----------------------------------------------------------------------------
 // Whisper round
 // NOTE: whispers are now implemented via assistantText containing "whisper to X: ..."
 // The new coordinator maps assistantText → chat action. Whispers are no longer
@@ -1294,12 +1580,28 @@ describe("runRound — onAiDelta callback", () => {
 	it("fires onAiDelta with (aiId, text) for each delta from a live provider", async () => {
 		const game = makeGame();
 
-		// Hand-rolled provider that synchronously calls onDelta with two fragments.
+		// Hand-rolled provider that synchronously calls onDelta with two
+		// fragments and returns a `message` tool call so #254's retry does
+		// not fire (this test asserts delta routing, not retry behaviour).
+		let callIdx = 0;
 		const liveProvider: RoundLLMProvider = {
 			async streamRound(_messages, _tools, onDelta) {
 				onDelta?.("frag1 ");
 				onDelta?.("frag2");
-				return { assistantText: "frag1 frag2", toolCalls: [] };
+				const id = `msg_${callIdx++}`;
+				return {
+					assistantText: "frag1 frag2",
+					toolCalls: [
+						{
+							id,
+							name: "message",
+							argumentsJson: JSON.stringify({
+								to: "blue",
+								content: "frag1 frag2",
+							}),
+						},
+					],
+				};
 			},
 		};
 
