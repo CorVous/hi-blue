@@ -1222,24 +1222,6 @@ export function renderGame(
 		// Round-local ended flag (distinct from module-level gameEnded)
 		let roundGameEnded = false;
 
-		// Track first-delta-seen per AI to strip the spinner exactly once.
-		const firstDeltaSeen = new Set<AiId>();
-
-		const onAiDelta = (aiId: AiId, _text: string): void => {
-			if (!firstDeltaSeen.has(aiId)) {
-				firstDeltaSeen.add(aiId);
-				// Strip this daemon's spinner on its first live delta.
-				// Post-#213, free-form assistantText is dropped by the engine; actual
-				// panel content comes from ConversationEntry message events emitted
-				// by the encoder after the round completes. We keep the spinner-strip
-				// side-effect here but no longer paint tokens or the AI prefix live.
-				stripSpinner(aiId);
-			}
-			// Free-form delta text is intentionally NOT painted. Panel content is
-			// driven by encoder "message" events (conversationLog-based) after the
-			// round, ensuring the DM-thread filter (AC #1/2) is always applied.
-		};
-
 		try {
 			const provider = new BrowserLLMProvider({
 				disableReasoning: !enableReasoning,
@@ -1250,12 +1232,7 @@ export function renderGame(
 				provider,
 				undefined,
 				initiative,
-				onAiDelta,
 			);
-
-			// Safety-net strip: if no live deltas arrived (mock provider, all AIs
-			// locked out, or first delta hasn't fired yet), strip every spinner now.
-			stripAllSpinners();
 
 			const phaseAfter = getActivePhase(nextState);
 			const events = encodeRoundResult(
@@ -1268,8 +1245,13 @@ export function renderGame(
 			for (const event of events) {
 				switch (event.type) {
 					case "ai_start":
-						// Track the current daemon for budget/lockout events.
-						// Panel content is now driven by "message" events, not prefixes.
+						// Strip this daemon's spinner as the encoder reaches its
+						// turn block. Spinners persist through the entire round
+						// — including any drift-to-silence retry (#254) — and
+						// strip in initiative order here at round-resolve time.
+						// The finally block also calls stripAllSpinners() as a
+						// safety net on early exit / error.
+						stripSpinner(event.aiId);
 						break;
 
 					case "token":
