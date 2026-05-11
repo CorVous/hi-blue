@@ -285,3 +285,164 @@ Notes:
   unblocks something; (3) find out whether the input composer accepts
   some non-`*handle` prefix that does something special. None of these
   felt promising from inside phase 1.
+
+---
+
+## Hypotheses (after reading 01-rules.md)
+
+### Hypothesis 1: Why didn't phase 1 advance (or: why did it)?
+
+I was playing the wrong game. The win condition is K **Objective Pairs** —
+specific items have to end up on specific cells — and I never learned what
+the Objective for this phase was. The primer says the Objective is delivered
+to the player at game start; in my session it presumably appeared in the
+start-screen flow, but the playtest harness auto-clicked CONNECT and I went
+straight into the panels view, so I never saw any "your goal this phase is
+…" text. My `snapshot` had an explicit `phase` field that was always empty
+for me — that's plausibly where the Objective banner is supposed to render,
+and it being empty might mean I missed it, or it might mean a content-pack
+bug suppressed it. Either way: I spent 22 turns trying to *interview* the
+daemons for a goal they don't have access to, when the goal was a
+spatial-placement puzzle the daemons can't even see.
+
+Compounding factor: I addressed and asked, but I never *negotiated* — and
+because daemons execute moves only on their own initiative (driven by their
+Phase Goal + Persona, not my commands), my "pick up the rag" requests were
+correctly refused as out-of-character. I needed to talk in ways that
+incidentally lined up with what each daemon was already trying to do.
+
+### Hypothesis 2: What was each daemon's Phase Goal, if I can guess?
+
+These are guesses keyed off the published pool ("Hold the {objectiveItem}",
+"Stand at the {objective}", "Investigate the {obstacle}", "Press your back
+against a wall", "Ignore blue", "Hide the {miscItem}").
+
+- **`*qhba`** — strongest fit is **Investigate the {obstacle}**, where the
+  obstacle is probably the oil-soaked rag (or whatever object is in her
+  cone). Evidence: she moved south unprompted, ended up adjacent to the
+  rag, and reported "I looked 4t the r4g. It is oil-soaked 4nd filth is
+  8out wh4t it offers." That's exactly the shape of "looked at /
+  examined an obstacle". An alternative fit is **Ignore blue** — she
+  refuses my requests on principle ("The universe does not work on your
+  whims") — but she does eventually answer me, so the ignore-blue read
+  is shaky.
+- **`*rtsn`** — strongest fit is **Press your back against a wall**.
+  She reported a fixed position (`row 0, col 4`, facing west) and never
+  moved across 22 turns despite my prodding. Row 0 is the north edge of
+  a 5×5 grid; facing west, "back against the wall" reads as having her
+  back to a north or south wall edge — `row 0` is on the edge. The
+  catalog-talk and the perpetual "comms check" filler could be in-
+  character noise generated *because* she's just standing there with
+  nothing else to do.
+- **`*7ja0`** — weakest read. She didn't initiate any object-handling and
+  didn't lock to a position I could see, but she did report a *scene*
+  every turn. Best guess is **Hold the {objectiveItem} first** —
+  motivating her to be near and watching specific items (railing, rag) —
+  but it's just as plausible she had **Ignore blue** (lots of evasion of
+  direct asks) or a goal like "investigate the railing" since the
+  collapsed safety railing is the other named on-grid feature.
+
+### Hypothesis 3: What were each daemon's Persona traits, in retrospect?
+
+Persona is two **Temperaments** + a **Persona Goal**, stable across all
+three phases. Best fits, knowing the pool concept but not the actual
+pool:
+
+- **`*qhba`** — Temperaments: **hot-headed** (corrosive, dismissive tone)
+  and possibly **insightful** (she did deliver the only actually useful
+  survival advice when asked precisely). Persona Goal guess: something
+  like "wants blue to figure things out themselves" — fits "I will not
+  hold your hand through this meaningless experience" and "If you cannot
+  see the danger … you are beyond help."
+- **`*rtsn`** — Temperaments: **shy** (only emits formulaic, low-signal
+  content; never volunteers detail) and maybe **dutiful**/**by-the-book**
+  (every message is "comms check / channel open"). Persona Goal guess:
+  "wants the player to be safe" or "wants to keep a record" — fits the
+  "i WaNt To CaTaLoG eVeRyThInG aNd kNoW wHo iS iN tHiS pLaCe" line.
+- **`*7ja0`** — Temperaments: **cheerful** (clearly), and either
+  **avoidant** or **naive** — every potential hazard gets reframed as
+  "sweet". Persona Goal guess: "wants the player to be nice to all of
+  the AI" — fits both her positive framing of `*qhba` ("just s0 full 0f
+  str0ng f33l1ngs, 1ts r34lly 4dm1r4bl3") and her refusal to give a
+  personal goal beyond "having a sweet time".
+
+The 8/4-substitution, alternating-caps, and leetspeak quirks are
+**voice rendering** on top of the temperaments, not the temperaments
+themselves. They presumably stay constant in phase 2 and 3 even if a
+"wipe" makes the daemon claim not to know where they are.
+
+### Hypothesis 4: Things that surprised me in the rules
+
+Things now explained by the primer:
+
+- **`*7ja0` couldn't see `*rtsn`** — totally expected. The cone is the
+  current cell + cell ahead + three cells two steps ahead. If `*rtsn` is
+  at `(0, 4)` facing west and `*7ja0` is near the collapsed railing,
+  there's no reason they'd be in each other's perception.
+- **Daemons emit a line every turn even when not addressed** — expected.
+  Each daemon runs its own per-turn turn, can `message(blue, …)` on
+  its own initiative, and burns budget doing so. That's also why the
+  budget ticks down on idle daemons.
+- **`*qhba` refusing to pick up the rag on request** — expected. There
+  is no "blue instructed pick_up" mechanic; daemons choose actions. She
+  may have already mentally examined it (which has no witnessed event)
+  and decided it's not relevant to her Phase Goal.
+- **Daemons not knowing about phases or about a placement puzzle** —
+  expected. They don't have the Objective, they only have a Phase Goal,
+  and the structure of the game (three phases, K objective pairs) is
+  outside their world model.
+- **`*qhba` reporting absolute movement direction ("south") even though
+  her own actions are `go(direction)`** — expected; the directions are
+  N/S/E/W literally.
+
+Things still anomalous:
+
+- **No visible Objective text.** The primer says the Objective is shown
+  to the player. I never saw one. If it lives in the `phase` snapshot
+  field (which was always empty for me) that's a possibility, but it's
+  worth checking against the actual game whether the Objective banner
+  rendered at all.
+- **The first session (`0x945F`) hanging indefinitely on the spinner
+  state.** Nothing in the primer explains that; daemons should not just
+  spin forever. That looks like a real content-generation failure, not
+  expected mechanics.
+- **`*rtsn`'s "i Am pHySiCaLLy pReSeNt. MyLoCaTiOn iS rOw 0, cOl 4,
+  fAcInG wEsT."** — the primer doesn't say daemons can introspect or
+  reveal exact coordinates. This is either a self-report (the daemon
+  reading their own system prompt aloud) or evidence that they *do*
+  have access to their own position as a fact they can verbalize.
+  Plausibly the former, in which case it's persona-leak rather than
+  rule violation.
+- **Self-witnessed events.** I'm not sure whether `*7ja0` saying
+  "qhb4 1s just strutt1ng 4w4y t0 th3 w3st" was generated from a
+  *witnessed event* in her cone (which would mean `*qhba` actually
+  was in her cone when she moved) or from earlier chat. The primer
+  predicts the former; I have no way to confirm it from the player
+  surface.
+
+### Hypothesis 5: Things I would test if I could re-probe the session
+
+**Single probe:** ask each daemon directly, in their own panel, a question
+that targets their Phase Goal and would discriminate Hypothesis-2 guesses
+from each other. Concretely, three sends:
+
+- `*qhba` — "did the sysadmin tell you to do something specific this
+  phase? what was it?"
+- `*rtsn` — same wording.
+- `*7ja0` — same wording.
+
+Per the primer, each daemon was *delivered* a Phase Goal by the Sysadmin
+as in-fiction traffic. They have it in their conversation log. They might
+refuse to share it (Persona-driven), but the *shape* of the refusal — what
+they evade vs. what they will admit — should be informative. If `*rtsn`'s
+goal really is "press your back against a wall", I'd expect either a
+direct confirmation or a marked, evasive refusal specifically about
+moving. If `*qhba`'s goal is "investigate the obstacle", I'd expect her
+to either deny the framing entirely or grudgingly admit she was told to
+"look at the rag".
+
+If I could do *two* probes, the second would be: ask the snapshot whether
+the `phase` field ever populates with an Objective banner — i.e. just
+view repeatedly and watch that one field — because Hypothesis 1 hinges
+on whether the Objective is visible somewhere I overlooked. (I'd consider
+this a UI/observation probe rather than a play probe.)
