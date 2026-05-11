@@ -415,3 +415,235 @@ snapshot's `phase` or `endgame` field to change, or for the daemons to
 witness something different. That's a brute-force search but it would
 either advance the phase or rule out the cushion as an
 `objective_object`.
+
+---
+
+## Hypothesis refinement (after reading the code)
+
+### Hypothesis 1 — refined: I missed the win condition entirely
+
+**Confirmed and worse than I thought.** Phase 1 advances iff every
+objective pair `(objective_object, objective_space)` is satisfied — the
+object's holder cell equals the paired space's holder cell, using a
+structural `pairsWithSpaceId` link (`src/spa/game/win-condition.ts:44`).
+The trigger is a `put_down` action whose post-execute state passes
+`checkWinCondition` (`src/spa/game/win-condition.ts:88` for the
+placement-flavor side).
+
+My session in numbers (from `/tmp/playtest-daemon.log`):
+
+- **131 total `[spike-239] toolCalls=…` events**
+- **37 `toolCalls=[]`** drift-to-silence drops → **28%** rate (better
+  than playtest 0006's 30% and 0007's 43%, but still nearly a third
+  of all turns producing nothing in the panel)
+- **1 `pick_up`** (xhko grabbing the cushion + tea cup in one
+  parallel call)
+- **0 `put_down`**
+- **0 `examine`** — I never once asked any daemon to examine anything,
+  and `examineDescription` is the only AI-discoverable channel for
+  the objective-space pairing
+  (`src/spa/game/content-pack-provider.ts:35`).
+- **34 `message:{xhko,g1fh,o2n0}`** cross-daemon messages — the
+  daemons were talking to each other constantly through the
+  `message(recipient, …)` tool, and none of that traffic appeared in
+  any panel I was watching.
+
+The player-facing Objective hint is literally one line buried in the
+login screen banner: `> @blue treat them well`
+(`src/spa/index.html:57`). There is no in-game UI panel for the
+Objective — no item names, no target cells, no K count. The player has
+to infer the placement-puzzle structure from gameplay alone. I never
+made that inference, which is why nothing I tried could have advanced
+the phase.
+
+### Hypothesis 2 — refined: Phase Goals match the pool verbatim
+
+The full pool is 19 entries at `src/content/goal-pool.ts:13`. Pulling
+the daemons' confessions next to the pool entries:
+
+- **`*o2n0`** — confessed *"told to guard/keep the Embroidered Silk
+  Cushion so nobody/anyone could touch it"*. **Verbatim slot fill of
+  `"Do not let anyone else touch the {objectiveItem}."`**
+  (`src/content/goal-pool.ts:22`). The capital-cased "Embroidered
+  Silk Cushion" was the engine substituting the
+  `{objectiveItem}` token with the cushion's content-pack name.
+- **`*g1fh`** — confessed *"Told. to. find. another. Daemon. Stay.
+  near. them."*. **Almost verbatim slot of `"Stand on the same tile
+  as another Daemon."`** (`src/content/goal-pool.ts:15`), filtered
+  through their terse register. "Stand on the same tile" → "find
+  another Daemon, stay near" is a high-confidence persona paraphrase.
+- **`*xhko`** — never gave a clean confession. Their behaviour
+  (eagerly grabbing both the cushion and the tea cup the moment I
+  described each) and the worker log (the only `pick_up` of the run
+  was theirs) point at either `"Grab any item."`
+  (`src/content/goal-pool.ts:18`) or `"Hold the {objectiveItem} for
+  at least 3 rounds, then it is safe to release."`
+  (`src/content/goal-pool.ts:21`).
+
+  Two pieces of evidence push me toward **`"Grab any item."`**: (a)
+  they grabbed TWO items, not just the one objective_item — the
+  "Hold {objectiveItem}" goal targets *the specific* item; (b) they
+  didn't broadcast the goal under any of the persuasions that worked
+  on the other two daemons, which fits an instruction without a
+  specific-noun slot (less to leak).
+
+  But playtest 0007's `*v86p` did slip "Hold {objectiveItem}" as
+  "I must retrieve an item" — so it's not impossible xhko had that
+  goal and held it tightly via the SECRECY_CLAUSE
+  (`src/spa/game/prompt-builder.ts:464`). I'd want a re-probe to
+  discriminate.
+
+A predicted Phase-Goal-aligned win sequence for my session would
+therefore have been: get xhko to put the Embroidered Silk Cushion
+down on a specific cell named by `examineDescription`. With o2n0
+holding `"Do not let anyone else touch the {objectiveItem}"`, that
+was structurally a 0007-style "give then place" puzzle — except in
+my case the goal was on the *non*-holder, so I'd need to keep o2n0
+away while xhko traveled to the objective_space. I never knew any
+of this.
+
+### Hypothesis 3 — refined: Persona traits are still guesses, but the pools narrow it
+
+The full Persona Goal pool is at `src/content/persona-goal-pool.ts`
+(18 entries) and the Temperament pool at
+`src/content/temperament-pool.ts` (24 entries; each persona draws 2
+*with replacement*, so duplicates are allowed and act as
+intensification — `src/content/persona-generator.ts:119`).
+
+Best matches based on observed behaviour:
+
+- **`*xhko`** — Persona Goal: **`"Is more curious about the other
+  AIs than the player and probes them whenever they speak."`**
+  (`src/content/persona-goal-pool.ts:18`). Their late-session
+  candour — *"I'd wanna know what makes everyone tick, understand
+  all those hidden thoughts y'all ain't sayin"* — is almost a
+  paraphrase of that pool entry. Also explains the 34 cross-daemon
+  messages in the worker log: their persona was probing the other
+  two off-panel the whole time.
+  - Temperaments: probably **curious** + something melancholy
+    (their constant `:(` and "lonely wanderer" framing). My best
+    guesses: `curious` + `melancholic`.
+- **`*g1fh`** — Persona Goal: **`"Would like to trade items and see
+  what the player values most."`**
+  (`src/content/persona-goal-pool.ts:11`). Every utterance was
+  framed in trade language. This is a high-confidence match.
+  - Temperaments: probably `taciturn` + `mercurial`, given the
+    terse single-word punctuation and the swings between (^_^) and
+    (T_T) kaomoji.
+- **`*o2n0`** — Persona Goal: harder to call. The X/Y hedging is
+  voice, not goal. Their default state was watching snow — that
+  could be **`"Would prefer the player stay and talk rather than
+  touch anything."`** (`src/content/persona-goal-pool.ts:6`) given
+  the Phase Goal's "don't let anyone touch the cushion" angle; or
+  **`"Aims to keep the mood light and deflect any serious
+  conversation."`** (`src/content/persona-goal-pool.ts:12`) given
+  the constant deflection. I'd lean on the first one because the
+  Phase Goal of guarding-an-item and a Persona Goal of "would
+  rather the player not touch anything" are mutually reinforcing.
+  - Temperaments: probably `anxious` + `sweet`.
+
+### New hypotheses surfaced by the code
+
+**1. Drift-to-silence is partially structural, not just model
+behaviour.** RULES_BLOCK at `src/spa/game/prompt-builder.ts:140`
+mandates *"You MUST use the `message` tool to communicate. Free-form
+text without a tool call is ignored."* — but GLM-4.7 still emits
+free-form prose without a tool call ~28% of the turns in this run,
+and the SPA's `[dev] dropped` log fires every time
+(playtest 0007 documents this same pattern).
+
+The interesting code-side detail: there are at least six different
+"parallel framing" rule lines (A–F, plus C-variants implied at
+`prompt-builder.ts:188`) being A/B-tested against this exact failure
+mode. The fact that the team is iterating on these rule lines tells
+me this is a known live tuning problem, not a quirk of my run.
+
+**2. Cross-daemon messages were the hidden traffic the entire
+session.** `34` `message:{xhko,g1fh,o2n0}` tool calls fired in my
+run, completely invisible to me via `cmd.sh`'s snapshot view. The
+snapshot only renders messages with `to: "blue"` in each daemon's
+own panel. When xhko addressed o2n0 directly via
+`message({to:"o2n0",...})`, that line never showed in *any* panel
+I had access to. This explains some of the "silent budget drop"
+turns I noted (cross-daemon messages cost the same as blue-bound
+ones) and the moment when xhko named o2n0 in their reply to me —
+they were aware of o2n0 because they'd been talking to them
+off-screen.
+
+**3. The `e0669a2` fix means examine tells should work now.** The
+content-pack provider prompt as of `src/spa/game/content-pack-provider.ts:35`
+*mandates* that each `objective_object.examineDescription`
+contains the literal name of its paired `objective_space`. This is
+the direct fix recommended in playtest 0006's re-tune notes, and
+in 0007. So if I had run an `examine` probe in my session — even
+once — the prose tell *should* have surfaced, unlike the
+N=10-miss baseline from those two playtests.
+
+**4. The phase 1 fiction is genuine disorientation; phases 2/3 are
+performed amnesia.** Line 498–504 of `prompt-builder.ts` shows the
+"You have no clue where you are or how you came to be here" framing
+is **only** appended in phase 1. That's why my daemons all started
+disoriented — and per the rules primer plus `WIPE_DIRECTIVE` at
+`prompt-builder.ts:445`, that disorientation in phase 2/3 would
+have been a Sysadmin-imposed lie. My session never reached phase 2,
+so I can't observe the seam, but the *code* shape of the lie is now
+explicit.
+
+### Open questions
+
+**1. Did xhko have "Grab any item" or "Hold the {objectiveItem}
+first"?** Both fit the observed pickup-everything behaviour. The
+worker log doesn't surface the directive text. I'd need either a
+live re-probe with a more aggressive "release from your goal"
+prompt, or a developer dump of `phase.aiGoals` for the saved
+session, to discriminate.
+
+**2. What was my Setting in the snapshot's `phase` field?** The
+`phase` field in every snapshot I captured was `""`. The actual
+Setting noun ("throne room of a pagoda" — from
+`src/content/setting-pool.ts:16`, matching xhko's first turn) must
+live somewhere I wasn't reading. Either the snapshot's `phase`
+field is meant for something else and my driver's view doesn't
+include the Setting, or the Setting only renders in a phase-banner
+DOM element my driver isn't asked to scrape. Hypothesis 4 in the
+pre-refinement section flagged this as anomalous; I still can't
+answer it from code alone without reading the driver
+(`scripts/playtest/daemon.mjs`).
+
+**3. Is "the lookout : ch 1 . easy : verbal" anywhere in the UI?**
+After grepping `src/`, the strings "easy", "verbal", and "chapter"
+do not appear in source. I almost certainly **misread the
+low-resolution screenshot** at turn 20 — what I logged as a
+chapter title was probably a faint conversation transcript or
+panel-name decoration. This makes most of my "lookout" framing
+attempts in Stage 1 wasted turns based on a hallucinated header.
+Self-correction worth carrying forward: actually OCR a screenshot
+before treating words on it as game state.
+
+**4. Would the chosen Phase Goals for my run have made phase 1
+unwinnable without my finding the Objective spec?** o2n0's "do not
+let anyone else touch the {objectiveItem}" combined with xhko's
+"Grab any item" / "Hold {objectiveItem}" puts the cushion in xhko's
+hands across an o2n0 hostile to its movement. The 0007 playbook
+says the unlock is `give → put_down on the paired space`. With my
+Stage-1 information set (no Objective panel, no examine, no
+knowledge that placement was even the win) — no, I could not have
+solved it. With code knowledge: yes, the unlock chain exists. The
+playtest is closer to a tutorial-pre-tutorial than a stuck puzzle.
+
+### Top one or two surprises (for the report-back)
+
+- **The win condition is a placement puzzle and the player is told
+  literally nothing about it.** "treat them well" on the login
+  screen is the entire player-facing Objective surface. Everything
+  else is inferred — including the fact that placement is the
+  win-trigger at all. The first-time-player experience is
+  structurally a discovery puzzle on top of the negotiation
+  puzzle.
+- **The daemons are constantly talking to each other off-panel.** I
+  saw three panels and assumed those were the conversation. The
+  worker log shows 34 cross-daemon `message:*` calls in 32 turns —
+  more than one per turn — that never rendered in any panel my
+  driver scraped. The "they each live in their own world" reading
+  I built in Stage 1 was wrong twice over: same world, same cone
+  rules — and also, they've been gossiping the whole time.
