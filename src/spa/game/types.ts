@@ -141,7 +141,7 @@ export type ConversationEntry =
 			kind: "witnessed-event";
 			round: number;
 			actor: AiId;
-			actionKind: "go" | "pick_up" | "put_down" | "give" | "use";
+			actionKind: "go" | "pick_up" | "put_down" | "give" | "use" | "couple";
 			item?: string;
 			to?: AiId;
 			direction?: CardinalDirection;
