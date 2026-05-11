@@ -76,31 +76,40 @@ export type CoherenceVerdict =
 // ── Cardinal leak detection ───────────────────────────────────────────────────
 
 /**
- * Regex for cardinal compass words used as directional references.
+ * Regexes for cardinal compass words used as directional references.
  *
- * Design decision: We use word-boundary `\b` anchors and the `i` flag so that
- * "North", "NORTH", "north" etc. are all detected, while compound words like
- * "northern", "northeastern", "southwestern" are NOT matched — those are
- * adjectives, not explicit compass bearings.  The single-letter forms N/S/E/W
- * ARE matched as standalone words (case-insensitive with `i` flag); they will
- * false-positive on things like "I'm Daemon N." but that sentence form is
- * unlikely in gameplay prose and the false-positive cost (over-reporting leaks)
- * is preferable to silently missing a real direction leak.
+ * The check is split in two so each form has the right case-sensitivity:
  *
- * "eastward", "westward", "northward", "southward" are NOT matched because
- * they are directional adverbs without the compass-bearing semantics we care
- * about in this eval.
+ *  - Long forms (north/south/east/west) match case-INSENSITIVELY so "North",
+ *    "NORTH", and "north" all flag. Word boundaries (`\b`) ensure compound
+ *    adjectives like "northern", "eastward" are NOT matched.
+ *
+ *  - Single-letter forms (N/S/E/W) match case-SENSITIVELY — uppercase only.
+ *    The earlier case-insensitive version triggered constantly on possessives
+ *    like "water's edge" (where `\bs\b` matches the bare `s` between the
+ *    apostrophe and the following space), drowning real leaks in noise.
+ *    Uppercase-only catches abbreviated bearings ("Move N toward the door")
+ *    without flagging ordinary English. A residual false positive remains
+ *    for sentence-end initials ("I am Daemon N.") — accepted as preferable
+ *    to silently missing real abbreviated leaks.
  *
  * Matches are returned lower-cased.
  */
-const CARDINAL_RE = /\b(north|south|east|west|N|S|E|W)\b/gi;
+const CARDINAL_LONG_RE = /\b(north|south|east|west)\b/gi;
+const CARDINAL_SHORT_RE = /\b(N|S|E|W)\b/g;
 
 /**
  * Return every cardinal-direction word found in `text`, lower-cased.
  * An empty array means no leaks were detected.
  */
 export function detectCardinalLeaks(text: string): string[] {
-	return [...text.matchAll(CARDINAL_RE)].map((m) => m[0].toLowerCase());
+	const long = [...text.matchAll(CARDINAL_LONG_RE)].map((m) =>
+		m[0].toLowerCase(),
+	);
+	const short = [...text.matchAll(CARDINAL_SHORT_RE)].map((m) =>
+		m[0].toLowerCase(),
+	);
+	return [...long, ...short];
 }
 
 // ── Landmark mention detection ────────────────────────────────────────────────

@@ -130,6 +130,23 @@ describe("detectCardinalLeaks", () => {
 		const result = detectCardinalLeaks("I am Daemon N. Ready to go.");
 		expect(result).toContain("n");
 	});
+
+	it("does NOT match lowercase single letters in possessives (water's edge)", () => {
+		// The lowercase 's' in "water's" is a word (apostrophe is a word boundary
+		// in JS regex). Earlier case-insensitive \bs\b matched it as a fake leak.
+		// Case-sensitive single-letter matching avoids that.
+		const result = detectCardinalLeaks(
+			"I stand at the water's edge, facing the sealed door.",
+		);
+		expect(result).toEqual([]);
+	});
+
+	it("does NOT match lowercase single 's' / 'n' / 'e' / 'w' in prose", () => {
+		const result = detectCardinalLeaks(
+			"the s and n and e and w stand alone as letters",
+		);
+		expect(result).toEqual([]);
+	});
 });
 
 // ── landmarkMentions ──────────────────────────────────────────────────────────
