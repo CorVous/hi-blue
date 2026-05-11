@@ -1239,6 +1239,7 @@ describe("proximityFlavor sense line", () => {
 			objectivePairs: [{ object: gem, space: pedestal }],
 			interestingObjects: [],
 			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
 			aiStarts: {
 				red: { position: opts.actorPosition, facing: opts.actorFacing },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
