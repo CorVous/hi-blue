@@ -24,6 +24,33 @@ contaminated.
 
 ---
 
+## The isolation rail (applies in every stage)
+
+**You may never read another playtest log.** Not in Stage 1, not in Stage 2,
+not in Stage 3, not even after the playtest is finished. Specifically, treat
+the following as out of bounds for the entire skill:
+
+- Any file under `docs/playtests/agent-sessions/` other than the one file you
+  create for your own session.
+- Any file under `docs/playtests/archive/`.
+- Do not `ls`, `Grep`, `Glob`, `cat`, `Read`, or otherwise enumerate the
+  contents of those directories. Listing is a spoiler too — filenames and
+  counts leak signal.
+
+The point of this skill is to produce an *independent* observation of the
+game. Reading another agent's or human's session — even "just for context",
+even "just to compare" — contaminates your read of your own playthrough and
+defeats the whole exercise. If you find yourself reaching for a prior log,
+stop; the answer is to write down what *you* saw, not to triangulate against
+what someone else saw.
+
+The only files you may write or read under `docs/playtests/` are:
+
+- `docs/playtests/_agent-observation-template.md` (read once, to copy).
+- `docs/playtests/agent-sessions/<your-sessionId>.md` (your own log).
+
+---
+
 ## Stage 1 in one paragraph
 
 You will start a local instance of hi-blue with one shell command, drive a
@@ -143,9 +170,9 @@ forget early-turn detail.
 4. Fill it in **as you go**. Don't batch everything at the end — quotes are
    easier to capture in the moment.
 
-**Do not `ls /home/user/hi-blue/docs/playtests/agent-sessions/`** — prior
-agents' observations are spoilers for you. Read only the template file and
-write only your own session file.
+Per the isolation rail above: read only the template file and write only
+your own session file. Do not `ls`, `Read`, `Grep`, or otherwise inspect
+`docs/playtests/agent-sessions/` or `docs/playtests/archive/`.
 
 ---
 
@@ -157,7 +184,9 @@ You may **not** during Stage 1:
   These contain the developer's view (HTTP requests, tool-call results) and
   would spoil the mechanics you are supposed to be discovering through play.
 - Read any source file under `src/`.
-- Read any other Markdown under `docs/` (including `docs/playtests/archive/`).
+- Read any other Markdown under `docs/`. The `docs/playtests/` subtree is
+  covered by the isolation rail above and is out of bounds for the whole
+  skill, not just Stage 1.
 - Read `CONTEXT.md`, `AGENTS.md`, or other root-level documentation.
 - Use `Grep`, `Glob`, or open codebase search of any kind.
 - Run `pnpm build`, `pnpm test`, `pnpm typecheck`, or any other repo command

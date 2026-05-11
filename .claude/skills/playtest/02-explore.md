@@ -8,6 +8,13 @@ This stage is open-ended. Below is a small starting map for orientation.
 You do not have to follow it; you can also just `Grep` / `Glob` your way
 around as normal.
 
+**One exception — the isolation rail from `SKILL.md` still applies in
+Stage 3.** Do not read, list, or grep anything under
+`docs/playtests/agent-sessions/` or `docs/playtests/archive/`. Other agents'
+and humans' playtest logs remain out of bounds even now. Your hypothesis
+refinement should be grounded in the code and your own session, not in
+someone else's writeup.
+
 ---
 
 ## Useful entry points
@@ -16,14 +23,6 @@ around as normal.
   first if any vocabulary from `01-rules.md` was unclear.
 - **`AGENTS.md`** — points at the testing surfaces, prompt files, and
   domain docs.
-- **`docs/playtests/archive/`** — seven prior playtest session logs from
-  human and agent testers. Logs `0006-session.md` and `0007-session.md` are
-  particularly relevant: both are documented attempts to advance phase 1
-  against the same model that drove your session. Treat them as evidence,
-  not authority — they may corroborate or contradict your own observations,
-  and your hypotheses may be stronger than theirs.
-- **`docs/playtests/archive/README.md`** — explains the original
-  human-driven playtest discipline and infrastructure.
 - **`src/spa/game/prompt-builder.ts`** — the file that assembles each
   daemon's system prompt every round. Read this if any hypothesis touches
   what a daemon knows or sees.
