@@ -140,12 +140,11 @@ export interface PhysicalActionRecord {
 /**
  * A single tagged item inside a Daemon's conversation log.
  *
- * Discriminated union of four kinds — `message`, `witnessed-event`, `action-failure`,
- * `broadcast` — each carrying a `round` and the smallest payload needed to render its
- * line in the system prompt. This is the per-Daemon storage shape *and* the
- * prompt-rendered shape (per CONTEXT.md's `Conversation log` glossary entry). The `kind`
- * tag is chosen so a player editing a `*xxxx.txt` file in devtools can tell entry kinds
- * apart at a glance.
+ * Discriminated union of three kinds — `message`, `witnessed-event`, `action-failure` — each
+ * carrying a `round` and the smallest payload needed to render its line in the system prompt.
+ * This is the per-Daemon storage shape *and* the prompt-rendered shape (per CONTEXT.md's
+ * `Conversation log` glossary entry). The `kind` tag is chosen so a player editing a `*xxxx.txt`
+ * file in devtools can tell entry kinds apart at a glance.
  *
  * - `message`: a directional message from `from: AiId | "blue"` to `to: AiId | "blue"`.
  *   Both sender's and recipient's per-Daemon logs receive the same entry.
@@ -156,8 +155,6 @@ export interface PhysicalActionRecord {
  * - `action-failure`: actor-only; persists across rounds; written by the dispatcher when an
  *   in-scope action tool is rejected. Surfaces the rejection reason directly to the actor so
  *   Daemons do not repeat the same failed action (e.g. walking into a wall) indefinitely.
- * - `broadcast`: sender-less system announcement appended to ALL three Daemon logs at once
- *   (e.g. a weather change complication). Has no `from` / `to` fields.
  */
 export type ConversationEntry =
 	| {
@@ -184,11 +181,6 @@ export type ConversationEntry =
 			tool: "go" | "look" | "pick_up" | "put_down" | "give" | "use" | "examine";
 			/** Verbatim dispatcher rejection reason (e.g. "That cell is blocked by an obstacle"). */
 			reason: string;
-	  }
-	| {
-			kind: "broadcast";
-			round: number;
-			content: string;
 	  };
 
 export interface AiBudget {

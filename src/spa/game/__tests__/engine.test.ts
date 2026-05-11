@@ -3,7 +3,6 @@ import { DEFAULT_LANDMARKS } from "../direction";
 import {
 	advanceRound,
 	appendActionFailure,
-	appendBroadcast,
 	appendMessage,
 	createGame,
 	deductBudget,
@@ -322,58 +321,6 @@ describe("chat lockout", () => {
 		expect(isAiLockedOut(locked, "cyan")).toBe(false);
 		// Budget unaffected
 		expect(getActivePhase(locked).budgets.cyan?.remaining).toBe(0.5);
-	});
-});
-
-describe("appendBroadcast", () => {
-	it("appends a broadcast entry to all three Daemons' logs in one call", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const updated = appendBroadcast(
-			game,
-			"The weather has changed to Heavy rain is falling.",
-		);
-		const phase = getActivePhase(updated);
-		expect(phase.conversationLogs.red).toHaveLength(1);
-		expect(phase.conversationLogs.green).toHaveLength(1);
-		expect(phase.conversationLogs.cyan).toHaveLength(1);
-		expect(phase.conversationLogs.red?.[0]?.kind).toBe("broadcast");
-		expect(phase.conversationLogs.green?.[0]?.kind).toBe("broadcast");
-		expect(phase.conversationLogs.cyan?.[0]?.kind).toBe("broadcast");
-	});
-
-	it("broadcast entry has no `from` / `to` fields (regression guard)", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const updated = appendBroadcast(
-			game,
-			"A biting wind cuts through the air.",
-		);
-		const phase = getActivePhase(updated);
-		const entry = phase.conversationLogs.red?.[0];
-		expect(entry).toBeDefined();
-		expect("from" in (entry ?? {})).toBe(false);
-		expect("to" in (entry ?? {})).toBe(false);
-	});
-
-	it("carries the current phase round", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = advanceRound(game); // round = 1
-		game = advanceRound(game); // round = 2
-		const updated = appendBroadcast(game, "Dense fog has settled in.");
-		const phase = getActivePhase(updated);
-		const entry = phase.conversationLogs.red?.[0];
-		expect(entry?.round).toBe(2);
-	});
-
-	it("leaves uninvolved phase state intact", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const before = getActivePhase(game);
-		const updated = appendBroadcast(game, "Light snow drifts down.");
-		const after = getActivePhase(updated);
-		// Round and world should be unchanged
-		expect(after.round).toBe(before.round);
-		expect(after.world).toEqual(before.world);
-		// Budgets should be unchanged
-		expect(after.budgets).toEqual(before.budgets);
 	});
 });
 
