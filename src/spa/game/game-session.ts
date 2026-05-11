@@ -62,7 +62,7 @@ export class GameSession {
 
 	/**
 	 * Restore a GameSession from a pre-existing GameState (e.g. loaded from
-	 * localStorage). Bypasses initial `startPhase` — the state is used as-is.
+	 * localStorage). Bypasses initial `startGame` — the state is used as-is.
 	 */
 	static restore(state: GameState): GameSession {
 		// Use Object.create to bypass the constructor while still getting an
