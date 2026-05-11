@@ -700,6 +700,32 @@ describe("budget-exhaustion lockout", () => {
 		expect(phase.lockedOut.has("cyan")).toBe(true);
 	});
 
+	it("an AI exhausting budget mid-round emits a farewell line before lockout", async () => {
+		const game = startGame(TEST_PERSONAS, []);
+
+		// costUsd = 0.5 exhausts red's full budget on its turn
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [], costUsd: 0.5 },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+		const { nextState } = await runRound(game, "red", "hi", provider);
+
+		const phase = getActivePhase(nextState);
+		expect(phase.lockedOut.has("red")).toBe(true);
+
+		// Farewell message should appear in red's log, from red to blue
+		const redLog = phase.conversationLogs.red ?? [];
+		const farewellEntry = redLog.find(
+			(e) =>
+				e.kind === "message" &&
+				e.from === "red" &&
+				e.to === "blue" &&
+				e.content === "Ember goes silent.",
+		);
+		expect(farewellEntry).toBeDefined();
+	});
+
 	it("budget display: remaining budget decrements by the request cost after a round", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
