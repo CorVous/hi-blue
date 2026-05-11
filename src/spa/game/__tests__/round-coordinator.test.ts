@@ -531,6 +531,119 @@ describe("drift-to-silence retry (#254)", () => {
 });
 
 // ----------------------------------------------------------------------------
+// onAiTurnComplete callback
+//
+// Per-AI "turn finished" signal — fires once per AI in initiative order,
+// AFTER any drift-to-silence retry (#254). The SPA hooks this for staged
+// per-daemon spinner-strip; coordinator runs AIs serially so the fire
+// order matches the visible round progression.
+// ----------------------------------------------------------------------------
+describe("onAiTurnComplete callback", () => {
+	it("fires once per AI in initiative order", async () => {
+		const game = makeGame();
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const order: AiId[] = [];
+		await runRound(
+			game,
+			"red",
+			"hi",
+			provider,
+			undefined,
+			["green", "cyan", "red"] as AiId[],
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			(aiId) => order.push(aiId),
+		);
+
+		expect(order).toEqual(["green", "cyan", "red"]);
+	});
+
+	it("fires AFTER the retry resolves, not after the first dropped attempt", async () => {
+		const game = makeGame();
+		const provider = new MockRoundLLMProvider([
+			// red: text-only first attempt → triggers retry
+			{ assistantText: "I would like to say hi.", toolCalls: [] },
+			// red retry: message
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "msg_retry",
+						name: "message",
+						argumentsJson: JSON.stringify({ to: "blue", content: "hi" }),
+					},
+				],
+			},
+			// green, cyan pass
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		// Track when each callback fires relative to provider call count.
+		const fireOrder: Array<{ aiId: AiId; callsAtFire: number }> = [];
+		await runRound(
+			game,
+			"red",
+			"hi",
+			provider,
+			undefined,
+			["red", "green", "cyan"] as AiId[],
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			(aiId) => fireOrder.push({ aiId, callsAtFire: provider.calls.length }),
+		);
+
+		// Red's turn made 2 provider calls (initial + retry). The
+		// onAiTurnComplete for red must fire AFTER both — i.e., when the
+		// total call count has reached 2, not 1.
+		const redFire = fireOrder.find((f) => f.aiId === "red");
+		expect(redFire?.callsAtFire).toBe(2);
+	});
+
+	it("fires for locked-out AIs too (uniform per-AI signal)", async () => {
+		// Exhaust red's budget so it locks out next round.
+		let state = startPhase(createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]), {
+			...TEST_PHASE_CONFIG,
+			budgetPerAi: 1,
+		});
+		state = deductBudget(state, "red" as AiId, 1);
+		expect(isAiLockedOut(state, "red" as AiId)).toBe(true);
+
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const fired: AiId[] = [];
+		await runRound(
+			state,
+			"green",
+			"hi",
+			provider,
+			undefined,
+			["red", "green", "cyan"] as AiId[],
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			(aiId) => fired.push(aiId),
+		);
+
+		expect(fired).toContain("red");
+		expect(fired).toHaveLength(3);
+	});
+});
+
+// ----------------------------------------------------------------------------
 // Whisper round
 // NOTE: whispers are now implemented via assistantText containing "whisper to X: ..."
 // The new coordinator maps assistantText → chat action. Whispers are no longer

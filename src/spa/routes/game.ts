@@ -1226,12 +1226,19 @@ export function renderGame(
 			const provider = new BrowserLLMProvider({
 				disableReasoning: !enableReasoning,
 			});
+			// Strip each daemon's spinner as the coordinator finishes its
+			// turn (post-retry per #254). Coordinator awaits AIs serially in
+			// initiative order, so this fires staged in real time —
+			// preserving the "spinners stop one by one" feel from before
+			// #254 while correctly covering the retry window.
 			const { result, completions, nextState } = await session.submitMessage(
 				addressed,
 				message,
 				provider,
 				undefined,
 				initiative,
+				undefined,
+				(aiId) => stripSpinner(aiId),
 			);
 
 			const phaseAfter = getActivePhase(nextState);
@@ -1245,13 +1252,9 @@ export function renderGame(
 			for (const event of events) {
 				switch (event.type) {
 					case "ai_start":
-						// Strip this daemon's spinner as the encoder reaches its
-						// turn block. Spinners persist through the entire round
-						// — including any drift-to-silence retry (#254) — and
-						// strip in initiative order here at round-resolve time.
-						// The finally block also calls stripAllSpinners() as a
-						// safety net on early exit / error.
-						stripSpinner(event.aiId);
+						// Per-daemon spinner-strip happens live via the
+						// onAiTurnComplete callback (see above); panel content
+						// is driven by "message" events, not prefixes.
 						break;
 
 					case "token":

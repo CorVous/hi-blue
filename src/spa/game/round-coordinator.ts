@@ -108,6 +108,10 @@ export interface RunRoundResult {
  * @param onAiDelta  Optional per-AI live-delta callback. Fires synchronously
  *   inside the SSE parser loop for each text chunk arriving from the wire.
  *   Never called for locked-out AIs or mock providers that ignore onDelta.
+ * @param onAiTurnComplete  Optional per-AI "turn finished" callback. Fires
+ *   exactly once per AI in initiative order, AFTER any drift-to-silence
+ *   retry (#254) has resolved and after dispatch. Fires for locked-out
+ *   AIs too (so callers can clear per-AI UI state uniformly).
  */
 export async function runRound(
 	game: GameState,
@@ -120,6 +124,7 @@ export async function runRound(
 	completionSink?: (aiId: AiId, text: string) => void,
 	onAiDelta?: (aiId: AiId, text: string) => void,
 	priorConeSnapshots?: Partial<Record<AiId, string>>,
+	onAiTurnComplete?: (aiId: AiId) => void,
 ): Promise<RunRoundResult> {
 	const aiOrder = Object.keys(game.personas);
 
@@ -165,6 +170,7 @@ export async function runRound(
 			});
 			// Sink gets empty string for locked AI
 			completionSink?.(aiId, "");
+			onAiTurnComplete?.(aiId);
 			continue;
 		}
 
@@ -465,6 +471,12 @@ export async function runRound(
 				toolResults: recordedToolResults,
 			};
 		}
+
+		// Per-AI "turn finished" signal — fires after dispatch, after any
+		// drift-to-silence retry (#254). Callers use this for per-daemon UI
+		// state that should track the coordinator's serial progress through
+		// the initiative order (e.g., stripping panel spinners staged).
+		onAiTurnComplete?.(aiId);
 	}
 
 	// 3. Advance the round counter
