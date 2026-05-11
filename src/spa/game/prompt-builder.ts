@@ -538,7 +538,6 @@ function renderSystemPrompt(ctx: AiContext): string {
 		lines.push("<setting>");
 		lines.push(`*${ctx.name} is in a ${ctx.setting}.`);
 		if (ctx.timeOfDay) lines.push(`It is ${ctx.timeOfDay}.`);
-		if (ctx.weather) lines.push(ctx.weather);
 		lines.push("</setting>");
 		lines.push("");
 	}
@@ -802,6 +801,7 @@ function renderCurrentState(ctx: AiContext): string {
 		lines.push(
 			`On the horizon ahead: ${horizonLandmark.shortName} — ${horizonLandmark.horizonPhrase}.`,
 		);
+		if (ctx.weather) lines.push(`Weather: ${ctx.weather}`);
 
 		// Held items
 		const heldItems = items.filter((item) => item.holder === ctx.aiId);
