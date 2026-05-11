@@ -9,11 +9,16 @@ import { describe, expect, it } from "vitest";
 import type {
 	ContentPackProviderInput,
 	ContentPackProviderResult,
+	DualContentPackProviderInput,
+	DualContentPackProviderResult,
 } from "../../spa/game/content-pack-provider.js";
 import { MockContentPackProvider } from "../../spa/game/content-pack-provider.js";
 import { DEFAULT_LANDMARKS } from "../../spa/game/direction.js";
-import type { PhaseConfig } from "../../spa/game/types.js";
-import { generateContentPacks } from "../content-pack-generator.js";
+import type { ContentPack, PhaseConfig } from "../../spa/game/types.js";
+import {
+	generateContentPacks,
+	generateDualContentPacks,
+} from "../content-pack-generator.js";
 
 // ── Seeded RNG ────────────────────────────────────────────────────────────────
 
@@ -444,5 +449,214 @@ describe("generateContentPacks — degenerate config throws after MAX_ATTEMPTS",
 				AI_IDS,
 			),
 		).rejects.toThrow(/could not place phase/);
+	});
+});
+
+// ── generateDualContentPacks — entity ID parity (issue #302) ──────────────────
+
+const SETTING_POOL_12: readonly string[] = [
+	"abandoned subway station",
+	"sun-baked salt flat",
+	"forgotten laboratory",
+	"moonlit greenhouse ruin",
+	"stripped server vault",
+	"tide-flooded boardwalk",
+	"flooded power station",
+	"crumbling amphitheatre",
+	"rusted oil platform",
+	"derelict space station",
+	"frozen research camp",
+	"overgrown shopping mall",
+];
+
+/** Build a dual-pack MockContentPackProvider for entity ID parity tests. */
+function makeDualMockProvider(): MockContentPackProvider {
+	return new MockContentPackProvider(
+		(_input: ContentPackProviderInput): ContentPackProviderResult => ({ packs: [] }),
+		(input: DualContentPackProviderInput): DualContentPackProviderResult => {
+			const phases = input.phases.map((phase) => {
+				const pn = phase.phaseNumber;
+				const spaceId = `p${pn}_space`;
+				const objId = `p${pn}_obj`;
+				const intId = `p${pn}_interesting`;
+				const obsId = `p${pn}_obstacle`;
+
+				const makePackVariant = (
+					setting: string,
+					suffix: string,
+				): DualContentPackProviderResult["phases"][number]["packA"] => ({
+					phaseNumber: pn,
+					setting,
+					objectivePairs: Array.from({ length: phase.k }, (_, i) => ({
+						space: {
+							id: `${spaceId}_${i}`,
+							kind: "objective_space" as const,
+							name: `Space ${pn} ${i} ${suffix}`,
+							examineDescription: `A space in phase ${pn} (${suffix}).`,
+							holder: { row: 0, col: 0 } as never,
+						},
+						object: {
+							id: `${objId}_${i}`,
+							kind: "objective_object" as const,
+							name: `Object ${pn} ${i} ${suffix}`,
+							examineDescription: `An object for Space ${pn} ${i} ${suffix}.`,
+							useOutcome: `You use it (${suffix}).`,
+							pairsWithSpaceId: `${spaceId}_${i}`,
+							placementFlavor: `{actor} places the object (${suffix}).`,
+							proximityFlavor: `Near its space (${suffix}).`,
+							holder: { row: 0, col: 0 } as never,
+						},
+					})),
+					interestingObjects: Array.from({ length: phase.n }, (_, i) => ({
+						id: `${intId}_${i}`,
+						kind: "interesting_object" as const,
+						name: `Interesting ${pn} ${i} ${suffix}`,
+						examineDescription: `Interesting (${suffix}).`,
+						useOutcome: `You interact (${suffix}).`,
+						holder: { row: 0, col: 0 } as never,
+					})),
+					obstacles: Array.from({ length: phase.m }, (_, i) => ({
+						id: `${obsId}_${i}`,
+						kind: "obstacle" as const,
+						name: `Obstacle ${pn} ${i} ${suffix}`,
+						examineDescription: `An obstacle (${suffix}).`,
+						holder: { row: 0, col: 0 } as never,
+					})),
+					landmarks: DEFAULT_LANDMARKS,
+					aiStarts: {} as never,
+				});
+
+				return {
+					phaseNumber: pn,
+					packA: makePackVariant(phase.settingA, "A"),
+					packB: makePackVariant(phase.settingB, "B"),
+				};
+			});
+			return { phases };
+		},
+	);
+}
+
+/** Extract all entity IDs from a ContentPack. */
+function allEntityIds(pack: ContentPack): string[] {
+	return [
+		...pack.objectivePairs.flatMap((p) => [p.object.id, p.space.id]),
+		...pack.interestingObjects.map((e) => e.id),
+		...pack.obstacles.map((e) => e.id),
+	].sort();
+}
+
+describe("generateDualContentPacks — entity ID parity (issue #302)", () => {
+	it("produces packsA and packsB with identical entity IDs per phase", async () => {
+		const rng = seededRng(99);
+		const provider = makeDualMockProvider();
+
+		const { packsA, packsB } = await generateDualContentPacks(
+			rng,
+			SETTING_POOL_12,
+			FIXED_PHASE_CONFIGS,
+			provider,
+			AI_IDS,
+		);
+
+		expect(packsA).toHaveLength(3);
+		expect(packsB).toHaveLength(3);
+
+		for (let i = 0; i < 3; i++) {
+			const packA = packsA[i] as ContentPack;
+			const packB = packsB[i] as ContentPack;
+			expect(packA.phaseNumber).toBe(packB.phaseNumber);
+			expect(allEntityIds(packA)).toEqual(allEntityIds(packB));
+		}
+	});
+
+	it("Pack A and Pack B have different settings", async () => {
+		const rng = seededRng(99);
+		const provider = makeDualMockProvider();
+
+		const { packsA, packsB } = await generateDualContentPacks(
+			rng,
+			SETTING_POOL_12,
+			FIXED_PHASE_CONFIGS,
+			provider,
+			AI_IDS,
+		);
+
+		for (let i = 0; i < 3; i++) {
+			const packA = packsA[i] as ContentPack;
+			const packB = packsB[i] as ContentPack;
+			expect(packA.setting).not.toBe(packB.setting);
+		}
+	});
+
+	it("Pack B entities have the same holder positions as Pack A (placement parity)", async () => {
+		const rng = seededRng(99);
+		const provider = makeDualMockProvider();
+
+		const { packsA, packsB } = await generateDualContentPacks(
+			rng,
+			SETTING_POOL_12,
+			FIXED_PHASE_CONFIGS,
+			provider,
+			AI_IDS,
+		);
+
+		for (let i = 0; i < 3; i++) {
+			const packA = packsA[i] as ContentPack;
+			const packB = packsB[i] as ContentPack;
+
+			// Build ID→holder map for A
+			const holdersA = new Map<string, unknown>();
+			for (const pair of packA.objectivePairs) {
+				holdersA.set(pair.object.id, pair.object.holder);
+				holdersA.set(pair.space.id, pair.space.holder);
+			}
+			for (const e of packA.interestingObjects) holdersA.set(e.id, e.holder);
+			for (const e of packA.obstacles) holdersA.set(e.id, e.holder);
+
+			// Verify B holders match A holders by entity ID
+			for (const pair of packB.objectivePairs) {
+				expect(pair.object.holder).toEqual(holdersA.get(pair.object.id));
+				expect(pair.space.holder).toEqual(holdersA.get(pair.space.id));
+			}
+			for (const e of packB.interestingObjects) {
+				expect(e.holder).toEqual(holdersA.get(e.id));
+			}
+			for (const e of packB.obstacles) {
+				expect(e.holder).toEqual(holdersA.get(e.id));
+			}
+		}
+	});
+
+	it("makes exactly one LLM call for the dual packs", async () => {
+		const rng = seededRng(99);
+		const provider = makeDualMockProvider();
+
+		await generateDualContentPacks(
+			rng,
+			SETTING_POOL_12,
+			FIXED_PHASE_CONFIGS,
+			provider,
+			AI_IDS,
+		);
+
+		expect(provider.dualCalls).toHaveLength(1);
+		expect(provider.calls).toHaveLength(0);
+	});
+
+	it("throws when setting pool has fewer than 6 entries", async () => {
+		const rng = seededRng(99);
+		const provider = makeDualMockProvider();
+		const smallPool = ["a", "b", "c", "d", "e"];
+
+		await expect(
+			generateDualContentPacks(
+				rng,
+				smallPool,
+				FIXED_PHASE_CONFIGS,
+				provider,
+				AI_IDS,
+			),
+		).rejects.toThrow(/at least 6/);
 	});
 });

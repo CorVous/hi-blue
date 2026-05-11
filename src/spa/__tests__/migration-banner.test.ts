@@ -23,9 +23,12 @@ vi.mock("../../content", async (importOriginal) => {
 	};
 });
 
-// Pin generateContentPacks to static content packs (no LLM call in tests).
+// Pin generateDualContentPacks to static content packs (no LLM call in tests).
 vi.mock("../../content/content-pack-generator", () => ({
-	generateContentPacks: async () => STATIC_CONTENT_PACKS,
+	generateDualContentPacks: async () => ({
+		packsA: STATIC_CONTENT_PACKS,
+		packsB: STATIC_CONTENT_PACKS,
+	}),
 }));
 
 const INDEX_BODY_HTML = `

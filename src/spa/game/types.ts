@@ -320,8 +320,12 @@ export interface GameState {
 	phases: PhaseState[];
 	personas: Record<AiId, AiPersona>;
 	isComplete: boolean;
-	/** All three content packs generated at game start. */
-	contentPacks: ContentPack[];
+	/** Setting A content packs — one per phase, generated at game start. */
+	contentPacksA: ContentPack[];
+	/** Setting B content packs — same entity IDs as A, different names/descriptions. */
+	contentPacksB: ContentPack[];
+	/** Which setting is currently active. Starts as "A"; swapped to "B" by Setting Shift. */
+	activePackId: "A" | "B";
 }
 
 export type ToolName =

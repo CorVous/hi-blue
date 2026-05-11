@@ -91,14 +91,17 @@ export function updateActivePhase(
 
 export function createGame(
 	personas: Record<string, AiPersona>,
-	contentPacks: ContentPack[] = [],
+	contentPacksA: ContentPack[] = [],
+	contentPacksB: ContentPack[] = [],
 ): GameState {
 	return {
 		currentPhase: 1,
 		phases: [],
 		personas: personas as Record<AiId, AiPersona>,
 		isComplete: false,
-		contentPacks,
+		contentPacksA,
+		contentPacksB,
+		activePackId: "A",
 	};
 }
 
@@ -122,10 +125,10 @@ export function startPhase(
 		conversationLogs[aiId] = [];
 	}
 
-	// Look up the ContentPack for this phase from game.contentPacks
-	const pack = game.contentPacks.find(
-		(p) => p.phaseNumber === config.phaseNumber,
-	);
+	// Look up the ContentPack for this phase from the active pack set
+	const activePacks =
+		game.activePackId === "B" ? game.contentPacksB : game.contentPacksA;
+	const pack = activePacks.find((p) => p.phaseNumber === config.phaseNumber);
 
 	const aiGoals = resolveAiGoals(config, rng, aiIds, pack);
 
@@ -239,6 +242,39 @@ export function getActivePhase(game: GameState): PhaseState {
 	const phase = game.phases[game.phases.length - 1];
 	if (!phase) throw new Error("No active phase");
 	return phase;
+}
+
+/**
+ * Returns the active ContentPack for the current phase, honoring `activePackId`.
+ * Falls back to the phase's embedded `contentPack` if no matching pack is found
+ * in the A/B arrays (e.g. in tests that construct GameState directly).
+ */
+export function getActivePack(game: GameState): ContentPack {
+	const phase = getActivePhase(game);
+	const packs =
+		game.activePackId === "B" ? game.contentPacksB : game.contentPacksA;
+	return (
+		packs.find((p) => p.phaseNumber === phase.phaseNumber) ?? phase.contentPack
+	);
+}
+
+/**
+ * Swap `activePackId` from "A" to "B". Updates the active phase's `contentPack`
+ * reference to the B-side pack so prompt builders and dispatchers see the new
+ * names/descriptions immediately. Entity positions in `PhaseState.world` are
+ * unchanged — world state is keyed by entity ID, which is stable across packs.
+ */
+export function swapActivePack(game: GameState): GameState {
+	const phase = getActivePhase(game);
+	const bPack = game.contentPacksB.find(
+		(p) => p.phaseNumber === phase.phaseNumber,
+	);
+	if (!bPack) return game; // No B pack for this phase; no-op
+	return updateActivePhase({ ...game, activePackId: "B" }, (p) => ({
+		...p,
+		contentPack: bPack,
+		setting: bPack.setting,
+	}));
 }
 
 export function advanceRound(game: GameState): GameState {

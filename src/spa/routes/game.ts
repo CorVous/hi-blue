@@ -625,9 +625,10 @@ export function renderGame(
 				renderLoadingTopInfo("generating-room");
 				startSpinners();
 				startBrightnessWipe();
-				return pending.contentPacksPromise.then((packs) => ({
+				return pending.contentPacksPromise.then(({ packsA, packsB }) => ({
 					personas,
-					contentPacks: packs,
+					contentPacksA: packsA,
+					contentPacksB: packsB,
 				}));
 			})
 			.then((assets) => {

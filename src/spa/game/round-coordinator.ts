@@ -19,6 +19,11 @@
 
 import { availableTools } from "./available-tools";
 import { COMPLICATIONS } from "./complications";
+import {
+	applyComplicationResult,
+	decrementComplicationCountdown,
+	tickComplication,
+} from "./complication-engine";
 import { dispatchAiTurn } from "./dispatcher";
 import {
 	advancePhase,
@@ -506,6 +511,8 @@ export async function runRound(
 	}
 
 	// 5. Mid-phase complication
+	// complicationConfig is a legacy test-only injection path (triggers at a specific round).
+	// In production the complication engine drives the schedule automatically every round.
 	if (complicationConfig) {
 		const { rng, triggerRound } = complicationConfig;
 		const currentRound = getActivePhase(state).round;
@@ -514,6 +521,15 @@ export async function runRound(
 			// biome-ignore lint/style/noNonNullAssertion: bounded index into non-empty array
 			const complication = COMPLICATIONS[compIdx]!;
 			state = complication.apply(state, rng);
+		}
+	} else {
+		// Real complication engine path: tick the countdown every round and
+		// dispatch when it reaches zero.
+		const compResult = tickComplication(state, Math.random);
+		if (compResult !== null) {
+			state = applyComplicationResult(state, compResult, Math.random);
+		} else {
+			state = decrementComplicationCountdown(state);
 		}
 	}
 

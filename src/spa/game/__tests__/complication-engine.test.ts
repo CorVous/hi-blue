@@ -155,7 +155,9 @@ function makeGameStateAround(phase: PhaseState): GameState {
 		phases: [phase],
 		personas: TEST_PERSONAS,
 		isComplete: false,
-		contentPacks: [],
+		contentPacksA: [],
+		contentPacksB: [],
+		activePackId: "A",
 	};
 }
 
@@ -795,6 +797,119 @@ describe("applyComplicationResult — activeComplications appends", () => {
 		const updated = applyComplicationResult(game, result, seededRng([0.5]));
 		const updatedPhase = getActivePhase(updated);
 		expect(updatedPhase.complicationSchedule.settingShiftFired).toBe(true);
+	});
+});
+
+// ── Setting Shift A/B pack swap (issue #302) ──────────────────────────────────
+
+describe("applyComplicationResult — setting_shift swaps active pack", () => {
+	const PACK_A: ContentPack = {
+		phaseNumber: 1,
+		setting: "neon arcade",
+		weather: "clear",
+		timeOfDay: "night",
+		objectivePairs: [],
+		interestingObjects: [],
+		obstacles: [],
+		landmarks: DEFAULT_LANDMARKS,
+		aiStarts: makePersonaSpatial(),
+	};
+
+	const PACK_B: ContentPack = {
+		phaseNumber: 1,
+		setting: "sun-baked salt flat",
+		weather: "hot",
+		timeOfDay: "day",
+		objectivePairs: [],
+		interestingObjects: [],
+		obstacles: [],
+		landmarks: DEFAULT_LANDMARKS,
+		aiStarts: makePersonaSpatial(),
+	};
+
+	function makeGameWithDualPacks(): GameState {
+		const phase = makePhase({ contentPack: PACK_A, setting: PACK_A.setting });
+		return {
+			currentPhase: 1,
+			phases: [phase],
+			personas: TEST_PERSONAS,
+			isComplete: false,
+			contentPacksA: [PACK_A],
+			contentPacksB: [PACK_B],
+			activePackId: "A",
+		};
+	}
+
+	it("sets activePackId to 'B' when setting_shift fires", () => {
+		const game = makeGameWithDualPacks();
+		const result = { fired: { kind: "setting_shift" as const } };
+		const updated = applyComplicationResult(game, result, seededRng([0.5]));
+		expect(updated.activePackId).toBe("B");
+	});
+
+	it("updates phase.contentPack to the B-side pack after setting_shift", () => {
+		const game = makeGameWithDualPacks();
+		const result = { fired: { kind: "setting_shift" as const } };
+		const updated = applyComplicationResult(game, result, seededRng([0.5]));
+		const updatedPhase = getActivePhase(updated);
+		expect(updatedPhase.contentPack.setting).toBe("sun-baked salt flat");
+	});
+
+	it("updates phase.setting to the B-side pack's setting string", () => {
+		const game = makeGameWithDualPacks();
+		const result = { fired: { kind: "setting_shift" as const } };
+		const updated = applyComplicationResult(game, result, seededRng([0.5]));
+		const updatedPhase = getActivePhase(updated);
+		expect(updatedPhase.setting).toBe("sun-baked salt flat");
+	});
+
+	it("leaves world entity positions unchanged after setting_shift", () => {
+		const entities: WorldEntity[] = [
+			makeObstacle("box", { row: 2, col: 3 }),
+			makeObstacle("crate", { row: 1, col: 1 }),
+		];
+		const phase = makePhase({
+			contentPack: PACK_A,
+			setting: PACK_A.setting,
+			world: { entities },
+		});
+		const game: GameState = {
+			currentPhase: 1,
+			phases: [phase],
+			personas: TEST_PERSONAS,
+			isComplete: false,
+			contentPacksA: [PACK_A],
+			contentPacksB: [PACK_B],
+			activePackId: "A",
+		};
+		const result = { fired: { kind: "setting_shift" as const } };
+		const updated = applyComplicationResult(game, result, seededRng([0.5]));
+		const updatedPhase = getActivePhase(updated);
+		expect(updatedPhase.world.entities).toHaveLength(2);
+		expect(updatedPhase.world.entities[0]?.holder).toEqual({ row: 2, col: 3 });
+		expect(updatedPhase.world.entities[1]?.holder).toEqual({ row: 1, col: 1 });
+	});
+
+	it("appends a broadcast entry to every daemon's conversationLog", () => {
+		const game = makeGameWithDualPacks();
+		const result = { fired: { kind: "setting_shift" as const } };
+		const updated = applyComplicationResult(game, result, seededRng([0.5]));
+		const updatedPhase = getActivePhase(updated);
+		for (const aiId of AI_IDS) {
+			const log = updatedPhase.conversationLogs[aiId] ?? [];
+			const broadcast = log.find((e) => e.kind === "broadcast");
+			expect(broadcast).toBeDefined();
+			if (broadcast?.kind === "broadcast") {
+				expect(broadcast.content).toContain("sun-baked salt flat");
+			}
+		}
+	});
+
+	it("does NOT change activePackId when a non-shift complication fires", () => {
+		const game = makeGameWithDualPacks();
+		const result = { fired: { kind: "weather_change" as const } };
+		const updated = applyComplicationResult(game, result, seededRng([0.5]));
+		expect(updated.activePackId).toBe("A");
 	});
 });
 

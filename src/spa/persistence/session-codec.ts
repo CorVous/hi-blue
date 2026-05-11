@@ -60,8 +60,14 @@ import {
  *     weather change complications). Broadcast entries ride along in the
  *     existing per-Daemon `conversationLog` array and round-trip automatically;
  *     no additional structural deserialization changes required.
+ *
+ * v7 (issue #302): A/B dual content-pack generation.
+ *   - `contentPackA`/`contentPackB` (single-pack scalars) replaced by
+ *     `contentPacksA`/`contentPacksB` (full pack arrays, one entry per phase).
+ *   - `activePackId: "A" | "B"` now persisted correctly (was hardcoded "A").
+ *   - Old v6 saves surface `version-mismatch` — no migration provided.
  */
-export const SESSION_SCHEMA_VERSION = 6 as const;
+export const SESSION_SCHEMA_VERSION = 7 as const;
 
 // ── Phase config lookup ────────────────────────────────────────────────────────
 
@@ -106,8 +112,10 @@ export interface SealedEngine {
 	budgets: Record<AiId, AiBudget>;
 	lockedOut: AiId[];
 	personaSpatial: Record<AiId, PersonaSpatialState>;
-	contentPackA: ContentPack;
-	contentPackB: ContentPack;
+	/** All Setting A content packs (one per phase). */
+	contentPacksA: ContentPack[];
+	/** All Setting B content packs (one per phase, same entity IDs as A). */
+	contentPacksB: ContentPack[];
 	activePackId: "A" | "B";
 	weather: string;
 	objectives: Objective[];
@@ -178,29 +186,15 @@ export function serializeSession(
 		daemons[aiId] = JSON.stringify(daemonFile, null, 2);
 	}
 
-	const contentPackB: ContentPack = state.contentPacks.find(
-		(p) => p.phaseNumber !== activePhase.phaseNumber,
-	) ?? {
-		phaseNumber: 2,
-		setting: "",
-		weather: "",
-		timeOfDay: "",
-		objectivePairs: [],
-		interestingObjects: [],
-		obstacles: [],
-		landmarks: DEFAULT_LANDMARKS,
-		aiStarts: {},
-	};
-
 	const sealedPayload: SealedEngine = {
 		schemaVersion: SESSION_SCHEMA_VERSION,
 		world: structuredClone(activePhase.world),
 		budgets: { ...activePhase.budgets },
 		lockedOut: Array.from(activePhase.lockedOut) as AiId[],
 		personaSpatial: structuredClone(activePhase.personaSpatial),
-		contentPackA: structuredClone(activePhase.contentPack),
-		contentPackB: structuredClone(contentPackB),
-		activePackId: "A",
+		contentPacksA: structuredClone(state.contentPacksA),
+		contentPacksB: structuredClone(state.contentPacksB),
+		activePackId: state.activePackId,
 		weather: activePhase.weather,
 		objectives: [],
 		complicationSchedule: activePhase.complicationSchedule,
@@ -312,7 +306,23 @@ export function deserializeSession(
 			aiGoals[aiId] = "";
 		}
 
-		const contentPack = sealed.contentPackA;
+		const contentPacksA = sealed.contentPacksA ?? [];
+		const contentPacksB = sealed.contentPacksB ?? [];
+		const contentPack =
+			(sealed.activePackId === "B"
+				? contentPacksB.find((p) => p.phaseNumber === epochPhase)
+				: contentPacksA.find((p) => p.phaseNumber === epochPhase)) ??
+			contentPacksA[0] ?? {
+				phaseNumber: epochPhase,
+				setting: "",
+				weather: "",
+				timeOfDay: "",
+				objectivePairs: [],
+				interestingObjects: [],
+				obstacles: [],
+				landmarks: DEFAULT_LANDMARKS,
+				aiStarts: {},
+			};
 		const setting = contentPack.setting;
 		const weather = sealed.weather;
 		const timeOfDay = contentPack.timeOfDay ?? "";
@@ -359,7 +369,9 @@ export function deserializeSession(
 			isComplete: sealed.isComplete,
 			personas,
 			phases: [phase],
-			contentPacks: [sealed.contentPackA, sealed.contentPackB],
+			contentPacksA,
+			contentPacksB,
+			activePackId: sealed.activePackId,
 		};
 
 		return {

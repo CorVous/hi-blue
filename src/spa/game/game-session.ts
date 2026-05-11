@@ -56,10 +56,11 @@ export class GameSession {
 	constructor(
 		phaseConfig: PhaseConfig,
 		personas: Record<AiId, AiPersona>,
-		contentPacks?: ContentPack[],
+		contentPacksA?: ContentPack[],
+		contentPacksB?: ContentPack[],
 		rng?: () => number,
 	) {
-		const game = createGame(personas, contentPacks ?? []);
+		const game = createGame(personas, contentPacksA ?? [], contentPacksB ?? []);
 		this.state = startPhase(game, phaseConfig, rng);
 	}
 

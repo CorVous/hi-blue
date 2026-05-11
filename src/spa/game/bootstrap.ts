@@ -10,7 +10,7 @@
  * Issue #173 (parent #155).
  */
 
-import { generateContentPacks } from "../../content/content-pack-generator.js";
+import { generateDualContentPacks } from "../../content/content-pack-generator.js";
 import {
 	generatePersonas,
 	PHASE_1_CONFIG,
@@ -27,12 +27,13 @@ import type { AiId, AiPersona, ContentPack } from "./types.js";
 
 export interface NewGameAssets {
 	personas: Record<AiId, AiPersona>;
-	contentPacks: ContentPack[];
+	contentPacksA: ContentPack[];
+	contentPacksB: ContentPack[];
 }
 
 export interface SplitNewGameAssets {
 	personasPromise: Promise<Record<AiId, AiPersona>>;
-	contentPacksPromise: Promise<ContentPack[]>;
+	contentPacksPromise: Promise<{ packsA: ContentPack[]; packsB: ContentPack[] }>;
 }
 
 export interface BootstrapOpts {
@@ -82,7 +83,7 @@ export function generateNewGameAssetsSplit(
 	const aiIdsPromise = personasPromise.then((p) => Object.keys(p));
 	aiIdsPromise.catch(() => {});
 
-	const contentPacksPromise = generateContentPacks(
+	const contentPacksPromise = generateDualContentPacks(
 		contentPackRng,
 		SETTING_POOL,
 		[PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG],
@@ -107,11 +108,11 @@ export async function generateNewGameAssets(
 ): Promise<NewGameAssets> {
 	const { personasPromise, contentPacksPromise } =
 		generateNewGameAssetsSplit(opts);
-	const [personas, contentPacks] = await Promise.all([
+	const [personas, { packsA, packsB }] = await Promise.all([
 		personasPromise,
 		contentPacksPromise,
 	]);
-	return { personas, contentPacks };
+	return { personas, contentPacksA: packsA, contentPacksB: packsB };
 }
 
 /**
@@ -130,7 +131,8 @@ export function buildSessionFromAssets(
 	return new GameSession(
 		PHASE_1_CONFIG,
 		assets.personas,
-		assets.contentPacks,
+		assets.contentPacksA,
+		assets.contentPacksB,
 		opts?.rng,
 	);
 }
