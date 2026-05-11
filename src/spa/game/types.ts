@@ -248,7 +248,7 @@ export interface ToolResult {
 
 export interface AiTurnAction {
 	aiId: AiId;
-	message?: { to: AiId | "blue"; content: string };
+	messages?: Array<{ to: AiId | "blue"; content: string }>;
 	toolCall?: ToolCall;
 	pass?: boolean;
 }

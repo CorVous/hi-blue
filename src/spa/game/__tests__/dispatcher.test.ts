@@ -614,7 +614,7 @@ describe("dispatchAiTurn", () => {
 		const game = makeGame();
 		const action: AiTurnAction = {
 			aiId: "red",
-			message: { to: "blue", content: "Hello, I am Ember" },
+			messages: [{ to: "blue", content: "Hello, I am Ember" }],
 		};
 		const result = dispatchAiTurn(game, action);
 		const redLog = getActivePhase(result.game).conversationLogs.red ?? [];
@@ -630,7 +630,7 @@ describe("dispatchAiTurn", () => {
 		const game = makeGame();
 		const action: AiTurnAction = {
 			aiId: "red",
-			message: { to: "cyan", content: "Psst, ally with me" },
+			messages: [{ to: "cyan", content: "Psst, ally with me" }],
 		};
 		const result = dispatchAiTurn(game, action);
 		const phase = getActivePhase(result.game);
@@ -657,7 +657,7 @@ describe("dispatchAiTurn", () => {
 		const game = makeGame();
 		const action: AiTurnAction = {
 			aiId: "red",
-			message: { to: "nobody", content: "Hello?" },
+			messages: [{ to: "nobody", content: "Hello?" }],
 		};
 		const result = dispatchAiTurn(game, action);
 		expect(result.records[0]?.kind).toBe("tool_failure");
@@ -905,12 +905,12 @@ describe("dispatchAiTurn", () => {
 	it("both message + toolCall populated: message record appears before tool_success record in result.records", () => {
 		// red at (0,0), flower at (0,0) — red can pick up flower.
 		// red also sends a message to blue.
-		// The dispatcher must process action.message BEFORE action.toolCall so that
+		// The dispatcher must process action.messages BEFORE action.toolCall so that
 		// "I'll grab the key" + picks up flower reads as one narrative beat.
 		const game = makeGame();
 		const action: AiTurnAction = {
 			aiId: "red",
-			message: { to: "blue", content: "I'll grab the flower" },
+			messages: [{ to: "blue", content: "I'll grab the flower" }],
 			toolCall: { name: "pick_up", args: { item: "flower" } },
 		};
 		const result = dispatchAiTurn(game, action);
