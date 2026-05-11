@@ -1,3 +1,4 @@
+import { PHASE_1_CONFIG } from "../../content";
 import { serializeGameSave } from "../../save-serializer.js";
 import {
 	BANNER,
@@ -10,7 +11,7 @@ import {
 import { buildSessionFromAssets } from "../game/bootstrap.js";
 import { BrowserLLMProvider } from "../game/browser-llm-provider.js";
 import { deriveComposerState } from "../game/composer-reducer.js";
-import { getActivePhase } from "../game/engine.js";
+import { getActivePhase, updateActivePhase } from "../game/engine.js";
 import { GameSession } from "../game/game-session.js";
 import {
 	applyAddresseeChange,
@@ -25,7 +26,7 @@ import {
 } from "../game/pending-bootstrap.js";
 import { encodeRoundResult } from "../game/round-result-encoder.js";
 import { getSpikeRng } from "../game/spike-seed.js";
-import type { AiId, AiPersona } from "../game/types";
+import type { AiId, AiPersona, PhaseConfig } from "../game/types";
 import { AI_TYPING_SPEED, TOKEN_PACE_MS } from "../game/typing-rhythm.js";
 import { CapHitError } from "../llm-client.js";
 import {
@@ -141,14 +142,35 @@ function isDevHost(): boolean {
 }
 
 /**
+ * Recursively deep-clone a PhaseConfig chain, overriding `winCondition` to
+ * `() => true` at every level.
+ *
+ * Only the config objects are cloned — the `initialWorld` and `aiGoals` values
+ * are shallow-copied (they are plain data with no function members that need
+ * patching). The original configs are never mutated.
+ */
+function patchPhaseChain(config: PhaseConfig): PhaseConfig {
+	return {
+		...config,
+		winCondition: () => true,
+		...(config.nextPhaseConfig !== undefined
+			? { nextPhaseConfig: patchPhaseChain(config.nextPhaseConfig) }
+			: {}),
+	};
+}
+
+/**
  * Apply SPA-side test affordances from URL search params.
  *
  * Only honoured when the SPA is served by `pnpm wrangler dev` (see
  * `isDevHost`). Silently inert in any other host.
  *
- * - `winImmediately=1`: mark the game as complete with a "win" outcome.
- *   A cold-start `goto("/?winImmediately=1")` followed by one submitted
- *   message will reliably reach `game_ended`.
+ * - `winImmediately=1`: recursively patch the real phase chain reachable from
+ *   the active phase, injecting `winCondition: () => true` into the active
+ *   phase AND every phase reachable via `nextPhaseConfig`. This uses the real
+ *   PHASE_1 → PHASE_2 → PHASE_3 config chain (deep-cloned; originals are
+ *   untouched). A cold-start `goto("/?winImmediately=1")` followed by three
+ *   submitted messages will reliably reach `game_ended`.
  * - `lockout=1`: arm a chat-lockout for `red`, 2 rounds, effective next round.
  *   Matches the legacy worker semantics from `src/proxy/_smoke.ts`.
  *
@@ -169,13 +191,17 @@ export function applyTestAffordances(
 	let active = s;
 
 	if (wantsWinImmediately) {
-		// Mark game complete with a win outcome so the next round-end triggers
-		// the game_ended screen.
-		const newState = {
-			...active.getState(),
-			isComplete: true,
-			outcome: "win" as const,
-		};
+		// Patch the real phase chain: inject winCondition: () => true into the
+		// active phase AND every phase reachable via nextPhaseConfig.
+		// patchPhaseChain deep-clones each config level so the global
+		// PHASE_1_CONFIG (and its linked configs) are never mutated.
+		const newState = updateActivePhase(active.getState(), (phase) => ({
+			...phase,
+			winCondition: () => true,
+			...(phase.nextPhaseConfig !== undefined
+				? { nextPhaseConfig: patchPhaseChain(phase.nextPhaseConfig) }
+				: {}),
+		}));
 		active = GameSession.restore(newState);
 	}
 
@@ -427,10 +453,17 @@ export function renderGame(
 		);
 		const status = topInfoStatus(state);
 		const sessionIdLocal = getActiveSessionId() ?? "0x????";
+		// Walk the phase chain to count total phases (matches refreshTopInfo).
+		let total = 1;
+		let cursor: PhaseConfig | undefined = PHASE_1_CONFIG.nextPhaseConfig;
+		while (cursor) {
+			total += 1;
+			cursor = cursor.nextPhaseConfig;
+		}
 		const inputs = {
 			sessionId: sessionIdLocal,
 			phaseNumber: 1,
-			totalPhases: 1,
+			totalPhases: total,
 			turn: 0,
 		};
 		if (topinfoLeftEl) renderTopInfoLeft(topinfoLeftEl, inputs);
@@ -712,49 +745,44 @@ export function renderGame(
 					// branch left them stale whenever the new session had fewer (or
 					// zero) chat entries for this panel slot.
 					transcript.textContent = "";
-					// Filter to message entries where blue is involved (from blue or to blue).
-					// Skip daemon-to-daemon messages and broadcast entries from the player-facing transcript.
-					// Broadcasts live in Daemon conversationLogs for LLM context only.
-					const visibleEntries = (
+					// Filter to message entries where blue is involved (from blue or to blue)
+					// Skip daemon-to-daemon messages from the player-facing transcript.
+					const messageEntries = (
 						restoredPhase.conversationLogs[aiId] ?? []
 					).filter(
 						(e) =>
 							e.kind === "message" && (e.from === "blue" || e.to === "blue"),
 					);
-					if (visibleEntries.length > 0) {
+					if (messageEntries.length > 0) {
 						// Synthesise from conversationLogs (stored in daemon .txt files).
 						const persona = restoredPersonas[aiId];
 						const personaName = persona?.name ?? aiId;
-						for (const entry of visibleEntries) {
+						for (const entry of messageEntries) {
+							if (entry.kind !== "message") continue;
 							const lineEl = doc.createElement("div");
 							lineEl.className = "msg-line";
-							if (entry.kind === "message") {
-								if (entry.from === "blue") {
-									// Incoming from player
-									appendMentionAwareText(
-										lineEl,
-										`> ${entry.content}\n`,
-										restoredPersonas,
-										"msg-you",
-									);
-								} else {
-									// Outgoing from AI to blue
-									const prefixSpan = doc.createElement("span");
-									prefixSpan.className = "msg-prefix";
-									if (persona?.color) {
-										prefixSpan.style.setProperty(
-											"--prefix-color",
-											persona.color,
-										);
-									}
-									prefixSpan.textContent = `> *${transcriptName(personaName)} `;
-									lineEl.appendChild(prefixSpan);
-									appendMentionAwareText(
-										lineEl,
-										`${entry.content}\n`,
-										restoredPersonas,
-									);
+							if (entry.from === "blue") {
+								// Incoming from player
+								appendMentionAwareText(
+									lineEl,
+									`> ${entry.content}\n`,
+									restoredPersonas,
+									"msg-you",
+								);
+							} else {
+								// Outgoing from AI to blue
+								const prefixSpan = doc.createElement("span");
+								prefixSpan.className = "msg-prefix";
+								if (persona?.color) {
+									prefixSpan.style.setProperty("--prefix-color", persona.color);
 								}
+								prefixSpan.textContent = `> *${transcriptName(personaName)} `;
+								lineEl.appendChild(prefixSpan);
+								appendMentionAwareText(
+									lineEl,
+									`${entry.content}\n`,
+									restoredPersonas,
+								);
 							}
 							transcript.appendChild(lineEl);
 						}
@@ -885,10 +913,17 @@ export function renderGame(
 		if (!topinfoLeftEl || !topinfoRightEl) return;
 		const state = session.getState();
 		const phase = getActivePhase(state);
+		// Walk the nextPhaseConfig chain from PHASE_1_CONFIG to count total phases.
+		let total = 1;
+		let cursor: PhaseConfig | undefined = PHASE_1_CONFIG.nextPhaseConfig;
+		while (cursor) {
+			total += 1;
+			cursor = cursor.nextPhaseConfig;
+		}
 		const inputs = {
 			sessionId,
 			phaseNumber: phase.phaseNumber,
-			totalPhases: 1,
+			totalPhases: total,
 			turn: phase.round,
 		};
 		renderTopInfoLeft(topinfoLeftEl, inputs);
@@ -1267,11 +1302,6 @@ export function renderGame(
 
 					case "chat_lockout_resolved":
 						setChatLockout(event.aiId, false);
-						break;
-
-					case "system_broadcast":
-						// Intentionally not rendered in the player-facing UI.
-						// The broadcast lives in each Daemon's conversationLog for LLM context only.
 						break;
 
 					case "action_log":

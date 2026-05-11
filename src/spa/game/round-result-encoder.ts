@@ -20,7 +20,6 @@
  *   lockout    — { type, aiId, content }  (budget-exhaustion only, kept for styling)
  *   chat_lockout         — { type, aiId, message }
  *   chat_lockout_resolved — { type, aiId }
- *   system_broadcast — { type, content }  (sender-less announcement, e.g. weather change)
  *   action_log — { type, entry }
  *   phase_advanced — { type, phase, setting }
  *   game_ended     — { type }
@@ -46,7 +45,6 @@ export type SseEvent =
 	| { type: "lockout"; aiId: AiId; content: string }
 	| { type: "chat_lockout"; aiId: AiId; message: string }
 	| { type: "chat_lockout_resolved"; aiId: AiId }
-	| { type: "system_broadcast"; content: string }
 	| { type: "action_log"; entry: RoundResult["actions"][number] }
 	| { type: "phase_advanced"; phase: 1 | 2 | 3; setting: string }
 	| { type: "game_ended" };
@@ -156,24 +154,6 @@ export function encodeRoundResult(
 				aiId,
 				content: lockoutContent(aiId),
 			});
-		}
-	}
-
-	// system_broadcast — one event per broadcast entry written during this round.
-	// Walk one daemon's log (all daemons receive the same broadcast entries) and
-	// emit a system_broadcast event for each entry matching the played round.
-	// NOTE: result.round is the round counter AFTER advanceRound(), so entries
-	// written during the round carry round: result.round - 1.
-	{
-		const playedRound = result.round - 1;
-		const firstAiId = Object.keys(personas)[0];
-		if (firstAiId !== undefined) {
-			const firstLog = phaseAfter.conversationLogs[firstAiId] ?? [];
-			for (const entry of firstLog) {
-				if (entry.kind === "broadcast" && entry.round === playedRound) {
-					events.push({ type: "system_broadcast", content: entry.content });
-				}
-			}
 		}
 	}
 

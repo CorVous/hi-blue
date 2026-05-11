@@ -18,9 +18,9 @@
  */
 
 import { availableTools } from "./available-tools";
-import { COMPLICATIONS } from "./complications";
 import { dispatchAiTurn } from "./dispatcher";
 import {
+	advancePhase,
 	advanceRound,
 	appendMessage,
 	getActivePhase,
@@ -41,7 +41,6 @@ import type {
 	ToolName,
 	ToolRoundtripMessage,
 } from "./types";
-import { checkLoseCondition, checkWinCondition } from "./win-condition";
 
 // Match the SPA dev-host gate used in src/spa/routes/game.ts. The
 // `typeof` guard keeps this safe in test environments that don't stub
@@ -68,19 +67,6 @@ export interface ChatLockoutConfig {
 	rng: () => number;
 	lockoutTriggerRound: number;
 	lockoutDuration: number;
-}
-
-/**
- * Configuration for mid-phase complication events.
- *
- * Inject this into `runRound` to arm a complication at a specific round.
- *
- * @param rng          Returns a value in [0, 1). Used to pick the complication.
- * @param triggerRound The round number (post-advance) at which to fire the complication.
- */
-export interface ComplicationConfig {
-	rng: () => number;
-	triggerRound: number;
 }
 
 export interface RunRoundResult {
@@ -114,21 +100,18 @@ export interface RunRoundResult {
  * @param priorToolRoundtrip  Per-AI tool roundtrip from the previous round.
  *   Passed into buildOpenAiMessages to re-inject the protocol messages required
  *   by OpenAI's tool-use spec.
+ * @param priorConeSnapshots  Per-AI canonical cone snapshots from the previous
+ *   round, used by `buildAiContext` to emit a `<whats_new>` diff in each AI's
+ *   per-round user message.
  * @param completionSink  Optional per-AI sink for the assistant text produced
  *   by each LLM call. Used by GameSession to capture completions for pacing.
  * @param onAiDelta  Optional per-AI live-delta callback. Fires synchronously
  *   inside the SSE parser loop for each text chunk arriving from the wire.
  *   Never called for locked-out AIs or mock providers that ignore onDelta.
- * @param priorConeSnapshots  Per-AI canonical cone snapshots from the previous
- *   round, used by `buildAiContext` to emit a `<whats_new>` diff in each AI's
- *   per-round user message.
  * @param onAiTurnComplete  Optional per-AI "turn finished" callback. Fires
  *   exactly once per AI in initiative order, AFTER any drift-to-silence
  *   retry (#254) has resolved and after dispatch. Fires for locked-out
  *   AIs too (so callers can clear per-AI UI state uniformly).
- * @param complicationConfig  Optional config for mid-phase complication events.
- *   When present and `currentRound === triggerRound`, one complication is drawn
- *   from the COMPLICATIONS registry and applied after the round advances.
  */
 export async function runRound(
 	game: GameState,
@@ -142,7 +125,6 @@ export async function runRound(
 	onAiDelta?: (aiId: AiId, text: string) => void,
 	priorConeSnapshots?: Partial<Record<AiId, string>>,
 	onAiTurnComplete?: (aiId: AiId) => void,
-	complicationConfig?: ComplicationConfig,
 ): Promise<RunRoundResult> {
 	const aiOrder = Object.keys(game.personas);
 
@@ -191,9 +173,6 @@ export async function runRound(
 			onAiTurnComplete?.(aiId);
 			continue;
 		}
-
-		// Snapshot locked-out set before dispatch to detect newly locked AIs
-		const lockedOutBefore = new Set(getActivePhase(state).lockedOut);
 
 		// Build OpenAI messages for this AI. Pass the prior-round cone snapshot
 		// so the per-round user turn can prepend a `<whats_new>` diff.
@@ -376,15 +355,6 @@ export async function runRound(
 			roundActions.push(record);
 		}
 
-		// Detect newly locked-out AIs and emit farewell lines
-		const lockedOutAfter = getActivePhase(state).lockedOut;
-		for (const lockedAiId of lockedOutAfter) {
-			if (!lockedOutBefore.has(lockedAiId)) {
-				const farewell = `${state.personas[lockedAiId]?.name ?? lockedAiId} goes silent.`;
-				state = appendMessage(state, lockedAiId as AiId, "blue", farewell);
-			}
-		}
-
 		// Pair dispatcher records back to their originating tool calls.
 		// dispatcher.ts emits exactly one record per entry in action.messages,
 		// in order, followed by (if action accepted) one record for the
@@ -517,33 +487,19 @@ export async function runRound(
 		}
 	}
 
-	// 5. Mid-phase complication
-	if (complicationConfig) {
-		const { rng, triggerRound } = complicationConfig;
-		const currentRound = getActivePhase(state).round;
-		if (currentRound === triggerRound && COMPLICATIONS.length > 0) {
-			const compIdx = Math.floor(rng() * COMPLICATIONS.length);
-			// biome-ignore lint/style/noNonNullAssertion: bounded index into non-empty array
-			const complication = COMPLICATIONS[compIdx]!;
-			state = complication.apply(state, rng);
-		}
-	}
-
-	// 6. Check win/lose conditions
+	// 5. Check win condition
 	const activePhaseAfterRound = getActivePhase(state);
+	let phaseEnded = false;
 
-	const allAiIds = Object.keys(state.personas);
-	const lockedOutArr = Array.from(activePhaseAfterRound.lockedOut) as AiId[];
-	const lost = checkLoseCondition(lockedOutArr, allAiIds);
-	const won = checkWinCondition(state.objectives);
-	if (won || lost) {
-		state = { ...state, isComplete: true, outcome: won ? "win" : "lose" };
+	if (activePhaseAfterRound.winCondition?.(activePhaseAfterRound)) {
+		phaseEnded = true;
+		state = advancePhase(state, activePhaseAfterRound.nextPhaseConfig);
 	}
 
 	const result: RoundResult = {
 		round: activePhaseAfterRound.round,
 		actions: roundActions,
-		phaseEnded: false,
+		phaseEnded,
 		gameEnded: state.isComplete,
 		...(chatLockoutTriggered !== undefined ? { chatLockoutTriggered } : {}),
 		...(chatLockoutsResolved !== undefined ? { chatLockoutsResolved } : {}),

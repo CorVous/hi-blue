@@ -20,7 +20,7 @@
  * so the message builder can re-inject them for the next round.
  */
 
-import { startGame } from "./engine";
+import { createGame, startPhase } from "./engine";
 import type { ChatLockoutConfig } from "./round-coordinator";
 import { runRound } from "./round-coordinator";
 import type { RoundLLMProvider } from "./round-llm-provider";
@@ -29,6 +29,7 @@ import type {
 	AiPersona,
 	ContentPack,
 	GameState,
+	PhaseConfig,
 	RoundResult,
 	ToolRoundtripMessage,
 } from "./types";
@@ -53,16 +54,18 @@ export class GameSession {
 	private coneSnapshots: Partial<Record<AiId, string>> = {};
 
 	constructor(
+		phaseConfig: PhaseConfig,
 		personas: Record<AiId, AiPersona>,
 		contentPacks?: ContentPack[],
 		rng?: () => number,
 	) {
-		this.state = startGame(personas, contentPacks ?? [], rng);
+		const game = createGame(personas, contentPacks ?? []);
+		this.state = startPhase(game, phaseConfig, rng);
 	}
 
 	/**
 	 * Restore a GameSession from a pre-existing GameState (e.g. loaded from
-	 * localStorage). Bypasses initial `startGame` — the state is used as-is.
+	 * localStorage). Bypasses initial `startPhase` — the state is used as-is.
 	 */
 	static restore(state: GameState): GameSession {
 		// Use Object.create to bypass the constructor while still getting an

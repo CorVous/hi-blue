@@ -11,8 +11,13 @@
  */
 import { describe, expect, it } from "vitest";
 import { serializeGameSave } from "../save-serializer";
-import { appendMessage, startGame } from "../spa/game/engine";
-import type { AiPersona } from "../spa/game/types";
+import {
+	advancePhase,
+	appendMessage,
+	createGame,
+	startPhase,
+} from "../spa/game/engine";
+import type { AiPersona, PhaseConfig } from "../spa/game/types";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -56,9 +61,32 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 	},
 };
 
+const PHASE1_CONFIG: PhaseConfig = {
+	phaseNumber: 1,
+	kRange: [1, 1],
+	nRange: [1, 1],
+	mRange: [0, 0],
+	aiGoalPool: [
+		"Hold the flower at phase end",
+		"Ensure items are evenly distributed",
+		"Hold the key at phase end",
+	],
+	budgetPerAi: 5,
+};
+
+const PHASE2_CONFIG: PhaseConfig = {
+	...PHASE1_CONFIG,
+	phaseNumber: 2,
+};
+
+const PHASE3_CONFIG: PhaseConfig = {
+	...PHASE1_CONFIG,
+	phaseNumber: 3,
+};
+
 describe("serializeGameSave", () => {
 	it("includes each AI's persona in the output", () => {
-		const game = startGame(TEST_PERSONAS, []);
+		const game = startPhase(createGame(TEST_PERSONAS), PHASE1_CONFIG);
 		const save = serializeGameSave(game);
 		expect(save.ais).toHaveLength(3);
 		const ids = save.ais.map((a) => a.persona.id);
@@ -68,7 +96,7 @@ describe("serializeGameSave", () => {
 	});
 
 	it("includes persona fields (name, color, blurb, personaGoal)", () => {
-		const game = startGame(TEST_PERSONAS, []);
+		const game = startPhase(createGame(TEST_PERSONAS), PHASE1_CONFIG);
 		const save = serializeGameSave(game);
 		const ember = save.ais.find((a) => a.persona.id === "red");
 		expect(ember?.persona.name).toBe("Ember");
@@ -80,7 +108,7 @@ describe("serializeGameSave", () => {
 	});
 
 	it("includes the per-phase transcript for each AI", () => {
-		let game = startGame(TEST_PERSONAS, []);
+		let game = startPhase(createGame(TEST_PERSONAS), PHASE1_CONFIG);
 		game = appendMessage(game, "blue", "red", "Hello Ember");
 		game = appendMessage(game, "red", "blue", "Greetings, player");
 		const save = serializeGameSave(game);
@@ -98,7 +126,7 @@ describe("serializeGameSave", () => {
 	});
 
 	it("includes peer messages in the per-phase conversationLog (via per-Daemon log)", () => {
-		let game = startGame(TEST_PERSONAS, []);
+		let game = startPhase(createGame(TEST_PERSONAS), PHASE1_CONFIG);
 		game = appendMessage(game, "red", "cyan", "Secret plan");
 		const save = serializeGameSave(game);
 		// Message from red appears in red's conversationLog (sender's log gets the entry)
@@ -114,8 +142,37 @@ describe("serializeGameSave", () => {
 		expect("whispers" in (ember?.phases[0] ?? {})).toBe(false);
 	});
 
+	it("accumulates transcripts across multiple phases", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), PHASE1_CONFIG);
+		game = appendMessage(game, "blue", "red", "Phase 1 message");
+		game = advancePhase(game, PHASE2_CONFIG);
+		game = appendMessage(game, "blue", "red", "Phase 2 message");
+		game = advancePhase(game, PHASE3_CONFIG);
+		game = appendMessage(game, "blue", "red", "Phase 3 message");
+		game = advancePhase(game); // complete
+
+		const save = serializeGameSave(game);
+		const ember = save.ais.find((a) => a.persona.id === "red");
+		expect(ember?.phases).toHaveLength(3);
+		expect(ember?.phases[0]?.phaseNumber).toBe(1);
+		expect(ember?.phases[1]?.phaseNumber).toBe(2);
+		expect(ember?.phases[2]?.phaseNumber).toBe(3);
+		expect(
+			ember?.phases[0]?.conversationLog[0]?.kind === "message" &&
+				ember?.phases[0]?.conversationLog[0]?.content,
+		).toBe("Phase 1 message");
+		expect(
+			ember?.phases[1]?.conversationLog[0]?.kind === "message" &&
+				ember?.phases[1]?.conversationLog[0]?.content,
+		).toBe("Phase 2 message");
+		expect(
+			ember?.phases[2]?.conversationLog[0]?.kind === "message" &&
+				ember?.phases[2]?.conversationLog[0]?.content,
+		).toBe("Phase 3 message");
+	});
+
 	it("produces a serializable (round-trippable) payload", () => {
-		const game = startGame(TEST_PERSONAS, []);
+		const game = startPhase(createGame(TEST_PERSONAS), PHASE1_CONFIG);
 		const save = serializeGameSave(game);
 		const json = JSON.stringify(save);
 		const parsed = JSON.parse(json);
@@ -123,13 +180,13 @@ describe("serializeGameSave", () => {
 	});
 
 	it("output has a version field of 4 (v4 = chat/whisper collapsed into message primitive)", () => {
-		const game = startGame(TEST_PERSONAS, []);
+		const game = startPhase(createGame(TEST_PERSONAS), PHASE1_CONFIG);
 		const save = serializeGameSave(game);
 		expect(save.version).toBe(4);
 	});
 
 	it("peer message in green's log only if green is sender or recipient", () => {
-		let game = startGame(TEST_PERSONAS, []);
+		let game = startPhase(createGame(TEST_PERSONAS), PHASE1_CONFIG);
 		// Message between red and cyan — should appear in red and cyan, not green
 		game = appendMessage(game, "red", "cyan", "Our secret");
 		const save = serializeGameSave(game);

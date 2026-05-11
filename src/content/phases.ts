@@ -1,15 +1,50 @@
+import type { PhaseConfig } from "../spa/game/types";
+import { checkWinCondition } from "../spa/game/win-condition";
 import { PHASE_GOAL_POOL } from "./goal-pool";
 
-export { PHASE_GOAL_POOL };
-
 /**
- * Content generation ranges for the single-game loop.
+ * Canonical phase configurations for the three-phase game.
+ *
+ * Per-phase goals are drawn at phase start from the shared `PHASE_GOAL_POOL`.
+ * Personalities (and the persona-level cross-game goal) live in `personas.ts`
+ * and are stable across all three phases.
+ *
+ * Chain: PHASE_1_CONFIG → PHASE_2_CONFIG → PHASE_3_CONFIG (no next).
  *
  * k = objective pairs, n = interesting objects, m = obstacles.
  * The engine rolls k/n/m within the given ranges at game start via generateContentPacks.
+ *
+ * winCondition: phase advances when all K objective pairs are satisfied (issue #126).
  */
-export const GAME_CONTENT_RANGES = {
-	kRange: [1, 3] as [number, number],
-	nRange: [2, 4] as [number, number],
-	mRange: [1, 3] as [number, number],
+
+export const PHASE_3_CONFIG: PhaseConfig = {
+	phaseNumber: 3,
+	kRange: [2, 3],
+	nRange: [3, 4],
+	mRange: [2, 3],
+	budgetPerAi: 0.5,
+	aiGoalPool: PHASE_GOAL_POOL,
+	winCondition: (phase) => checkWinCondition(phase.world, phase.contentPack),
+};
+
+export const PHASE_2_CONFIG: PhaseConfig = {
+	phaseNumber: 2,
+	kRange: [2, 2],
+	nRange: [2, 4],
+	mRange: [2, 3],
+	budgetPerAi: 0.5,
+	aiGoalPool: PHASE_GOAL_POOL,
+	winCondition: (phase) => checkWinCondition(phase.world, phase.contentPack),
+	nextPhaseConfig: PHASE_3_CONFIG,
+};
+
+export const PHASE_1_CONFIG: PhaseConfig = {
+	phaseNumber: 1,
+	kRange: [1, 1],
+	nRange: [2, 3],
+	mRange: [1, 2],
+	budgetPerAi: 0.5,
+	aiGoalPool: PHASE_GOAL_POOL,
+	winCondition: (phase) => checkWinCondition(phase.world, phase.contentPack),
+	nextPhaseConfig: PHASE_2_CONFIG,
 };

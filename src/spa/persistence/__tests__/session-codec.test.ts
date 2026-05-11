@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { startGame } from "../../game/engine.js";
+import { PHASE_1_CONFIG } from "../../../content/index.js";
+import { createGame, startPhase } from "../../game/engine.js";
 import type {
 	AiId,
 	AiPersona,
@@ -50,7 +51,8 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 };
 
 function makeFreshGame(): GameState {
-	return startGame(TEST_PERSONAS, [], () => 0);
+	const game = createGame(TEST_PERSONAS);
+	return startPhase(game, PHASE_1_CONFIG, () => 0);
 }
 
 const NOW = new Date().toISOString();
@@ -550,63 +552,18 @@ describe("serializeSession / deserializeSession", () => {
 		expect(result.kind).toBe("version-mismatch");
 	});
 
-	it("round-trips with a single phase (single-game-loop, #295)", () => {
+	it("re-attaches nextPhaseConfig and winCondition from canonical phase chain", () => {
 		const game = makeFreshGame();
 		const files = serializeSession(game, NOW, CREATED_AT);
 		const result = deserializeSession(files);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
-			// In the single-game-loop, there is always exactly one phase
-			expect(result.state.phases).toHaveLength(1);
-			expect(result.state.phases[0]?.phaseNumber).toBe(1);
+			const phase = result.state.phases[0];
+			// PHASE_1_CONFIG has nextPhaseConfig (PHASE_2_CONFIG)
+			expect(phase?.nextPhaseConfig).toBeDefined();
+			expect(phase?.nextPhaseConfig?.phaseNumber).toBe(2);
+			// winCondition should be re-attached
+			expect(typeof phase?.winCondition).toBe("function");
 		}
-	});
-
-	it("round-trips broadcast entries in per-Daemon conversationLogs", () => {
-		const game = makeFreshGame();
-		const phase = game.phases[0];
-		if (!phase) throw new Error("no phase");
-		const broadcastEntry: ConversationEntry = {
-			kind: "broadcast",
-			round: 2,
-			content: "The weather has changed to Heavy rain is falling.",
-		};
-		const modified: GameState = {
-			...game,
-			phases: [
-				{
-					...phase,
-					conversationLogs: {
-						red: [broadcastEntry],
-						green: [broadcastEntry],
-						cyan: [broadcastEntry],
-					},
-				},
-			],
-		};
-		const files = serializeSession(modified, NOW, CREATED_AT);
-		const result = deserializeSession(files);
-		expect(result.kind).toBe("ok");
-		if (result.kind === "ok") {
-			const rp = result.state.phases[0];
-			// Broadcast entry round-trips in all three daemon logs
-			expect(rp?.conversationLogs.red?.[0]).toEqual(broadcastEntry);
-			expect(rp?.conversationLogs.green?.[0]).toEqual(broadcastEntry);
-			expect(rp?.conversationLogs.cyan?.[0]).toEqual(broadcastEntry);
-			// Ensure broadcast has no from/to fields
-			const entry = rp?.conversationLogs.red?.[0];
-			expect(entry).toBeDefined();
-			expect("from" in (entry ?? {})).toBe(false);
-			expect("to" in (entry ?? {})).toBe(false);
-		}
-	});
-
-	it("SESSION_SCHEMA_VERSION is 6", () => {
-		const game = makeFreshGame();
-		const files = serializeSession(game, NOW, CREATED_AT);
-		if (!files.engine) throw new Error("engine should not be null");
-		const rawJson = deobfuscate(files.engine);
-		const sealed = JSON.parse(rawJson);
-		expect(sealed.schemaVersion).toBe(6);
 	});
 });

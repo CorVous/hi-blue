@@ -13,10 +13,10 @@
  */
 import { describe, expect, it } from "vitest";
 import { DEFAULT_LANDMARKS } from "../direction";
-import { startGame } from "../engine";
+import { createGame, startPhase } from "../engine";
 import { runRound } from "../round-coordinator";
 import { MockRoundLLMProvider } from "../round-llm-provider";
-import type { AiId, AiPersona, ContentPack } from "../types";
+import type { AiId, AiPersona, ContentPack, PhaseConfig } from "../types";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -65,6 +65,15 @@ function expectedSilentTurn(_self: AiId): string {
 	return "You have received no messages.";
 }
 
+const TEST_PHASE_CONFIG: PhaseConfig = {
+	phaseNumber: 1,
+	kRange: [1, 1],
+	nRange: [1, 1],
+	mRange: [0, 0],
+	aiGoalPool: ["g1", "g2", "g3"],
+	budgetPerAi: 5,
+};
+
 const TEST_CONTENT_PACK: ContentPack = {
 	phaseNumber: 1,
 	setting: "",
@@ -108,7 +117,10 @@ const TEST_CONTENT_PACK: ContentPack = {
 };
 
 function makeGame() {
-	return startGame(TEST_PERSONAS, [TEST_CONTENT_PACK]);
+	return startPhase(
+		createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]),
+		TEST_PHASE_CONFIG,
+	);
 }
 
 // The trailing user message is always the current-state turn (carries

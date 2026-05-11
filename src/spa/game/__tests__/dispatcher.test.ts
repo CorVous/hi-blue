@@ -5,11 +5,17 @@ import {
 	executeToolCall,
 	validateToolCall,
 } from "../dispatcher";
-import { deductBudget, getActivePhase, startGame } from "../engine";
+import {
+	createGame,
+	deductBudget,
+	getActivePhase,
+	startPhase,
+} from "../engine";
 import type {
 	AiPersona,
 	AiTurnAction,
 	ContentPack,
+	PhaseConfig,
 	ToolCall,
 	WorldEntity,
 } from "../types";
@@ -116,6 +122,15 @@ function makePackWithEntities(
 	};
 }
 
+const TEST_PHASE_CONFIG: PhaseConfig = {
+	phaseNumber: 1,
+	kRange: [0, 0],
+	nRange: [2, 2],
+	mRange: [0, 0],
+	aiGoalPool: ["g1", "g2", "g3"],
+	budgetPerAi: 5,
+};
+
 /** Create a game with deterministic spatial placement: red→(0,0), green→(0,1), cyan→(0,2) */
 function makeGame(obstaclePositions: Array<{ row: number; col: number }> = []) {
 	const pack = makePackWithEntities(
@@ -125,7 +140,8 @@ function makeGame(obstaclePositions: Array<{ row: number; col: number }> = []) {
 		},
 		obstaclePositions,
 	);
-	return startGame(TEST_PERSONAS, [pack], FIXED_RNG);
+	const game = createGame(TEST_PERSONAS, [pack]);
+	return startPhase(game, TEST_PHASE_CONFIG, FIXED_RNG);
 }
 
 describe("validateToolCall", () => {
@@ -320,7 +336,11 @@ describe("validateToolCall", () => {
 			{ flower: { row: 3, col: 3 }, key: { row: 4, col: 4 } },
 			[{ row: 0, col: 0 }],
 		);
-		const game = startGame(TEST_PERSONAS, [pack], FIXED_RNG);
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [pack]),
+			TEST_PHASE_CONFIG,
+			FIXED_RNG,
+		);
 		const call: ToolCall = { name: "examine", args: { item: "obs0" } };
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(true);
@@ -358,7 +378,8 @@ describe("validateToolCall", () => {
 				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		};
-		const game = startGame(TEST_PERSONAS, [pack], FIXED_RNG);
+		let game = createGame(TEST_PERSONAS, [pack]);
+		game = startPhase(game, TEST_PHASE_CONFIG, FIXED_RNG);
 		// red at (0,0), space1 at (0,0) — own cell is in cone
 		const call: ToolCall = { name: "examine", args: { item: "space1" } };
 		const result = validateToolCall(game, "red", call);
@@ -401,7 +422,11 @@ describe("executeToolCall — use placement via front arc", () => {
 				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		};
-		const game = startGame(TEST_PERSONAS, [pack], FIXED_RNG);
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [pack]),
+			TEST_PHASE_CONFIG,
+			FIXED_RNG,
+		);
 		const call: ToolCall = { name: "use", args: { item: "gem" } };
 		const updated = executeToolCall(game, "red", call);
 		const item = getActivePhase(updated).world.entities.find(
@@ -445,7 +470,11 @@ describe("executeToolCall — use placement via front arc", () => {
 				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		};
-		const game = startGame(TEST_PERSONAS, [pack], FIXED_RNG);
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [pack]),
+			TEST_PHASE_CONFIG,
+			FIXED_RNG,
+		);
 		const call: ToolCall = { name: "use", args: { item: "gem" } };
 		const updated = executeToolCall(game, "red", call);
 		const item = getActivePhase(updated).world.entities.find(
@@ -625,12 +654,18 @@ describe("executeToolCall", () => {
 
 describe("dispatchAiTurn", () => {
 	it("rejects a turn from a locked-out AI", () => {
-		let game = startGame(
-			TEST_PERSONAS,
-			[makePackWithEntities({ flower: { row: 0, col: 0 }, key: "red" })],
+		let game = createGame(TEST_PERSONAS, [
+			makePackWithEntities({ flower: { row: 0, col: 0 }, key: "red" }),
+		]);
+		game = startPhase(
+			game,
+			{
+				...TEST_PHASE_CONFIG,
+				budgetPerAi: 0.01,
+			},
 			FIXED_RNG,
 		);
-		game = deductBudget(game, "red", 0.5);
+		game = deductBudget(game, "red", 0.01);
 		const action: AiTurnAction = { aiId: "red", pass: true };
 		const result = dispatchAiTurn(game, action);
 		expect(result.rejected).toBe(true);
@@ -640,10 +675,10 @@ describe("dispatchAiTurn", () => {
 	it("processes a pass action and deducts budget", () => {
 		const game = makeGame();
 		const action: AiTurnAction = { aiId: "red", pass: true };
-		const result = dispatchAiTurn(game, action, { costUsd: 0.1 });
+		const result = dispatchAiTurn(game, action, { costUsd: 1 });
 		expect(result.rejected).toBe(false);
 		expect(getActivePhase(result.game).budgets.red?.remaining).toBeCloseTo(
-			0.4,
+			4,
 			10,
 		);
 		expect(result.records[0]?.kind).toBe("pass");
@@ -881,7 +916,8 @@ describe("dispatchAiTurn", () => {
 				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		};
-		const game = startGame(TEST_PERSONAS, [pack], FIXED_RNG);
+		let game = createGame(TEST_PERSONAS, [pack]);
+		game = startPhase(game, TEST_PHASE_CONFIG, FIXED_RNG);
 
 		// red is at (0,0) and holds the gem; altar_space is also at (0,0)
 		const action: AiTurnAction = {
@@ -939,9 +975,9 @@ describe("dispatchAiTurn", () => {
 			aiId: "red",
 			toolCall: { name: "examine", args: { item: "key" } },
 		};
-		const result = dispatchAiTurn(game, action, { costUsd: 0.1 });
+		const result = dispatchAiTurn(game, action, { costUsd: 1 });
 		expect(getActivePhase(result.game).budgets.red?.remaining).toBeCloseTo(
-			0.4,
+			4,
 			10,
 		);
 	});
@@ -979,7 +1015,8 @@ describe("dispatchAiTurn", () => {
 				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		};
-		const game = startGame(TEST_PERSONAS, [pack], FIXED_RNG);
+		let game = createGame(TEST_PERSONAS, [pack]);
+		game = startPhase(game, TEST_PHASE_CONFIG, FIXED_RNG);
 
 		const action: AiTurnAction = {
 			aiId: "red",
@@ -1024,7 +1061,10 @@ describe("dispatchAiTurn", () => {
 				cyan: { position: { row: 0, col: 2 }, facing: "south" },
 			},
 		};
-		const coneGame = startGame(TEST_PERSONAS, [packWithCone]);
+		const coneGame = startPhase(
+			createGame(TEST_PERSONAS, [packWithCone]),
+			TEST_PHASE_CONFIG,
+		);
 
 		const action: AiTurnAction = {
 			aiId: "red",

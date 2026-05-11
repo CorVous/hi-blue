@@ -140,12 +140,11 @@ export interface PhysicalActionRecord {
 /**
  * A single tagged item inside a Daemon's conversation log.
  *
- * Discriminated union of four kinds — `message`, `witnessed-event`, `action-failure`,
- * `broadcast` — each carrying a `round` and the smallest payload needed to render its
- * line in the system prompt. This is the per-Daemon storage shape *and* the
- * prompt-rendered shape (per CONTEXT.md's `Conversation log` glossary entry). The `kind`
- * tag is chosen so a player editing a `*xxxx.txt` file in devtools can tell entry kinds
- * apart at a glance.
+ * Discriminated union of three kinds — `message`, `witnessed-event`, `action-failure` — each
+ * carrying a `round` and the smallest payload needed to render its line in the system prompt.
+ * This is the per-Daemon storage shape *and* the prompt-rendered shape (per CONTEXT.md's
+ * `Conversation log` glossary entry). The `kind` tag is chosen so a player editing a `*xxxx.txt`
+ * file in devtools can tell entry kinds apart at a glance.
  *
  * - `message`: a directional message from `from: AiId | "blue"` to `to: AiId | "blue"`.
  *   Both sender's and recipient's per-Daemon logs receive the same entry.
@@ -156,8 +155,6 @@ export interface PhysicalActionRecord {
  * - `action-failure`: actor-only; persists across rounds; written by the dispatcher when an
  *   in-scope action tool is rejected. Surfaces the rejection reason directly to the actor so
  *   Daemons do not repeat the same failed action (e.g. walking into a wall) indefinitely.
- * - `broadcast`: sender-less system announcement appended to ALL three Daemon logs at once
- *   (e.g. a weather change complication). Has no `from` / `to` fields.
  */
 export type ConversationEntry =
 	| {
@@ -184,11 +181,6 @@ export type ConversationEntry =
 			tool: "go" | "look" | "pick_up" | "put_down" | "give" | "use" | "examine";
 			/** Verbatim dispatcher rejection reason (e.g. "That cell is blocked by an obstacle"). */
 			reason: string;
-	  }
-	| {
-			kind: "broadcast";
-			round: number;
-			content: string;
 	  };
 
 export interface AiBudget {
@@ -197,13 +189,33 @@ export interface AiBudget {
 }
 
 /**
- * A single game objective that can be satisfied or not.
- * Satisfaction logic is implemented in issues #303-#305.
+ * A win condition for a phase.
+ * Receives the active PhaseState and returns true when the phase objective is met.
  */
-export interface Objective {
-	id: string;
-	description: string;
-	satisfactionState: "unsatisfied" | "satisfied";
+export type WinCondition = (phase: PhaseState) => boolean;
+
+export interface PhaseConfig {
+	phaseNumber: 1 | 2 | 3;
+	/** Roll k (objective pairs) per phase. */
+	kRange: [number, number];
+	/** Roll n (interesting objects) per phase. */
+	nRange: [number, number];
+	/** Roll m (obstacles) per phase. */
+	mRange: [number, number];
+	budgetPerAi: number;
+	/**
+	 * Pool of candidate goals drawn at phase start. Must contain at least one entry.
+	 * `startPhase` performs one uniform draw per AI (independent draws — same goal
+	 * can be assigned to multiple AIs in one phase).
+	 * AC #6 deviation: the AC said "remove aiGoalPool?" but the field is retained as required
+	 * because goal selection still needs a per-phase draw pool — the AC language conflated
+	 * removing the optional pool marker with removing goal selection itself.
+	 */
+	aiGoalPool: string[];
+	/** Optional win condition. If absent, the phase never auto-advances. */
+	winCondition?: WinCondition;
+	/** Config for the next phase. Required when winCondition may fire. */
+	nextPhaseConfig?: PhaseConfig;
 }
 
 export interface PhaseState {
@@ -230,6 +242,10 @@ export interface PhaseState {
 	 * Semantically distinct from `lockedOut` (budget-exhaustion).
 	 */
 	chatLockouts: Map<AiId, number>;
+	/** Win condition carried from PhaseConfig so the coordinator can check it. */
+	winCondition?: WinCondition;
+	/** Next phase config carried from PhaseConfig so the coordinator can advance. */
+	nextPhaseConfig?: PhaseConfig;
 	/** Per-AI spatial state (position + facing) for this phase. */
 	personaSpatial: Record<AiId, PersonaSpatialState>;
 }
@@ -239,14 +255,8 @@ export interface GameState {
 	phases: PhaseState[];
 	personas: Record<AiId, AiPersona>;
 	isComplete: boolean;
-	/** All content packs generated at game start. */
+	/** All three content packs generated at game start. */
 	contentPacks: ContentPack[];
-	/** Current weather string for the game (canonical source for prompt builder). */
-	weather: string;
-	/** Game objectives. Satisfaction logic implemented in #303-#305. */
-	objectives: Objective[];
-	/** Set when the game ends. "win" when all objectives satisfied, "lose" when all AIs locked out. */
-	outcome?: "win" | "lose";
 }
 
 export type ToolName =

@@ -27,17 +27,9 @@ import type {
 	ContentPack,
 	GridPosition,
 	PersonaSpatialState,
+	PhaseConfig,
 	WorldEntity,
 } from "../spa/game/types.js";
-
-/** Per-phase k/n/m ranges for content-pack generation. */
-export interface PhaseRanges {
-	phaseNumber: 1 | 2 | 3;
-	kRange: [number, number];
-	nRange: [number, number];
-	mRange: [number, number];
-}
-
 import { THEME_POOL } from "./theme-pool.js";
 import { TIME_OF_DAY_POOL } from "./time-of-day-pool.js";
 import { WEATHER_POOL } from "./weather-pool.js";
@@ -277,7 +269,7 @@ function placePhases(
 export async function generateContentPacks(
 	rng: () => number,
 	settings: readonly string[],
-	configs: [PhaseRanges, PhaseRanges, PhaseRanges],
+	configs: [PhaseConfig, PhaseConfig, PhaseConfig],
 	llm: ContentPackProvider,
 	aiIdsOrPromise: AiId[] | Promise<AiId[]>,
 ): Promise<ContentPack[]> {

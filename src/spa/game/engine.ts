@@ -14,8 +14,67 @@ import type {
 	GameState,
 	GridPosition,
 	PersonaSpatialState,
+	PhaseConfig,
 	PhaseState,
 } from "./types";
+
+/**
+ * Resolve the per-AI goals for a phase. Draw one goal per AI (with replacement)
+ * from `config.aiGoalPool`, then substitute room-grounded tokens against
+ * `pack` so each AI sees a goal that names a real entity from the room.
+ */
+function resolveAiGoals(
+	config: PhaseConfig,
+	rng: () => number,
+	aiIds: string[],
+	pack: ContentPack | undefined,
+): Record<AiId, string> {
+	const pool = config.aiGoalPool;
+	if (!pool || pool.length === 0) {
+		throw new Error("PhaseConfig must provide a non-empty aiGoalPool");
+	}
+	const draw = (): string => {
+		const idx = Math.floor(rng() * pool.length);
+		// biome-ignore lint/style/noNonNullAssertion: bounded index into non-empty array
+		return pool[idx]!;
+	};
+	const goals: Record<AiId, string> = {};
+	for (const aiId of aiIds) {
+		goals[aiId] = substituteGoalTokens(draw(), pack, rng);
+	}
+	return goals;
+}
+
+/**
+ * Tokens that may appear in goal templates, mapped to a function that pulls
+ * candidate names of the matching kind from a ContentPack.
+ */
+const GOAL_TOKEN_CANDIDATES: Record<string, (pack: ContentPack) => string[]> = {
+	objectiveItem: (p) => p.objectivePairs.map((pair) => pair.object.name),
+	objective: (p) => p.objectivePairs.map((pair) => pair.space.name),
+	miscItem: (p) => p.interestingObjects.map((e) => e.name),
+	obstacle: (p) => p.obstacles.map((e) => e.name),
+};
+
+const GOAL_TOKEN_PATTERN = new RegExp(
+	`\\{(${Object.keys(GOAL_TOKEN_CANDIDATES).join("|")})\\}`,
+	"g",
+);
+
+function substituteGoalTokens(
+	goal: string,
+	pack: ContentPack | undefined,
+	rng: () => number,
+): string {
+	if (!pack) return goal;
+	return goal.replace(GOAL_TOKEN_PATTERN, (match, token: string) => {
+		const candidates = GOAL_TOKEN_CANDIDATES[token]?.(pack) ?? [];
+		if (candidates.length === 0) return match;
+		const idx = Math.floor(rng() * candidates.length);
+		// biome-ignore lint/style/noNonNullAssertion: bounded index into non-empty array
+		return candidates[idx]!;
+	});
+}
 
 export function updateActivePhase(
 	game: GameState,
@@ -38,34 +97,21 @@ export function createGame(
 		personas: personas as Record<AiId, AiPersona>,
 		isComplete: false,
 		contentPacks,
-		weather: "",
-		objectives: [],
 	};
 }
 
-/**
- * Initialize a new single-game-loop game.
- *
- * Replaces startPhase+advancePhase. Picks the first content pack, sets
- * budgets at $0.50 per AI, initializes an empty objectives list and reads
- * weather from the content pack.
- */
-export function startGame(
-	personas: Record<AiId, AiPersona>,
-	contentPacks: ContentPack[],
+export function startPhase(
+	game: GameState,
+	config: PhaseConfig,
 	rng: () => number = Math.random,
 ): GameState {
-	const BUDGET_PER_AI = 0.5;
-	const aiIds = Object.keys(personas);
-
-	// Use the first content pack (phase-1 pack) if available
-	const pack = contentPacks.find((p) => p.phaseNumber === 1) ?? contentPacks[0];
+	const aiIds = Object.keys(game.personas);
 
 	const budgets: Record<AiId, AiBudget> = {};
 	for (const aiId of aiIds) {
 		budgets[aiId] = {
-			remaining: BUDGET_PER_AI,
-			total: BUDGET_PER_AI,
+			remaining: config.budgetPerAi,
+			total: config.budgetPerAi,
 		};
 	}
 
@@ -74,7 +120,14 @@ export function startGame(
 		conversationLogs[aiId] = [];
 	}
 
-	// Build WorldState from pack entities
+	// Look up the ContentPack for this phase from game.contentPacks
+	const pack = game.contentPacks.find(
+		(p) => p.phaseNumber === config.phaseNumber,
+	);
+
+	const aiGoals = resolveAiGoals(config, rng, aiIds, pack);
+
+	// Build WorldState from pack entities (all entities flat)
 	const worldEntities = pack
 		? [
 				...pack.objectivePairs.flatMap((pair) => [pair.object, pair.space]),
@@ -83,14 +136,14 @@ export function startGame(
 			]
 		: [];
 
-	// Use AI starts from pack if available; otherwise draw spatially
+	// Use AI starts from the pack if available; otherwise draw spatially
 	const personaSpatial: Record<AiId, PersonaSpatialState> = pack?.aiStarts
 		? { ...pack.aiStarts }
 		: drawSpatialPlacements(rng, aiIds);
 
-	// Create a minimal content pack if none exists
+	// Create a minimal content pack if none exists (for backward-compat with tests)
 	const contentPack: ContentPack = pack ?? {
-		phaseNumber: 1,
+		phaseNumber: config.phaseNumber,
 		setting: "",
 		weather: "",
 		timeOfDay: "",
@@ -101,13 +154,13 @@ export function startGame(
 		aiStarts: personaSpatial,
 	};
 
-	const phase: import("./types").PhaseState = {
-		phaseNumber: 1,
+	const phase: PhaseState = {
+		phaseNumber: config.phaseNumber,
 		setting: contentPack.setting,
 		weather: contentPack.weather,
 		timeOfDay: contentPack.timeOfDay,
 		contentPack,
-		aiGoals: {},
+		aiGoals,
 		round: 0,
 		world: { entities: worldEntities },
 		budgets,
@@ -115,16 +168,18 @@ export function startGame(
 		lockedOut: new Set(),
 		chatLockouts: new Map(),
 		personaSpatial,
+		...(config.winCondition !== undefined
+			? { winCondition: config.winCondition }
+			: {}),
+		...(config.nextPhaseConfig !== undefined
+			? { nextPhaseConfig: config.nextPhaseConfig }
+			: {}),
 	};
 
 	return {
-		currentPhase: 1,
-		phases: [phase],
-		personas,
-		isComplete: false,
-		contentPacks,
-		weather: contentPack.weather,
-		objectives: [],
+		...game,
+		currentPhase: config.phaseNumber,
+		phases: [...game.phases, phase],
 	};
 }
 
@@ -264,43 +319,6 @@ export function appendWitnessedEvent(
 }
 
 /**
- * Append a `kind: "broadcast"` ConversationEntry to EVERY persona's per-Daemon
- * log in the active phase in one atomic update. Broadcasts are sender-less
- * system announcements (e.g. weather change complications) that all three
- * Daemons must see simultaneously.
- */
-export function appendBroadcast(game: GameState, content: string): GameState {
-	return updateActivePhase(game, (phase) => {
-		const entry: ConversationEntry = {
-			kind: "broadcast",
-			round: phase.round,
-			content,
-		};
-		const logs = { ...phase.conversationLogs };
-		for (const aiId of Object.keys(logs)) {
-			logs[aiId] = [...(logs[aiId] ?? []), entry];
-		}
-		return { ...phase, conversationLogs: logs };
-	});
-}
-
-/**
- * Update the `weather` field on both the active PhaseState and its embedded
- * ContentPack so the two stay consistent. Used by complication handlers that
- * change weather mid-phase.
- */
-export function setActivePhaseWeather(
-	game: GameState,
-	weather: string,
-): GameState {
-	return updateActivePhase(game, (phase) => ({
-		...phase,
-		weather,
-		contentPack: { ...phase.contentPack, weather },
-	}));
-}
-
-/**
  * Append a `kind: "action-failure"` ConversationEntry to a single actor's
  * per-Daemon log. This entry is actor-only — peers do not see it.
  */
@@ -316,6 +334,18 @@ export function appendActionFailure(
 			[actorId]: [...(phase.conversationLogs[actorId] ?? []), entry],
 		},
 	}));
+}
+
+export function advancePhase(
+	game: GameState,
+	nextConfig?: PhaseConfig,
+	rng?: () => number,
+): GameState {
+	if (!nextConfig) {
+		return { ...game, isComplete: true };
+	}
+
+	return startPhase(game, nextConfig, rng);
 }
 
 /**
