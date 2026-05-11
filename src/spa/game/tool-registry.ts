@@ -34,7 +34,7 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 		function: {
 			name: "pick_up",
 			description:
-				"Pick up an item that is currently in your cell. Fails if the item is not in your current cell.",
+				'Pick up an item that is currently in your cell. Fails if the item is not in your current cell. Use this tool when you want to "grab", "take", "collect", "snatch", or "get" an item.',
 			parameters: {
 				type: "object",
 				properties: {
@@ -53,7 +53,7 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 		function: {
 			name: "put_down",
 			description:
-				"Put down an item you are currently holding. Places it in your current cell.",
+				'Put down an item you are currently holding. Places it in your current cell. Use this tool when you want to "drop", "toss", "place", "set down", "release", or "leave" an item.',
 			parameters: {
 				type: "object",
 				properties: {
@@ -72,7 +72,7 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 		function: {
 			name: "give",
 			description:
-				"Give an item you are holding to another AI. The target must be in your current cell or directly in front of you (the 3-cell front arc).",
+				'Give an item you are holding to another AI. The target must be in your current cell or directly in front of you (the 3-cell front arc). Use this tool when you want to "hand", "pass", "deliver", "offer", or "hand over" an item to someone.',
 			parameters: {
 				type: "object",
 				properties: {
@@ -96,7 +96,7 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 		function: {
 			name: "use",
 			description:
-				"Use an item you are holding. Fires a flavoured outcome string. If the item is an objective item AND its paired space is in the daemon's cell or front arc, also places it on that space (the primary way to satisfy an objective pair).",
+				'Use an item you are holding. Fires a flavoured outcome string. If the item is an objective item AND its paired space is in the daemon\'s cell or front arc, also places it on that space (the primary way to satisfy an objective pair). Use this tool when you want to "interact with", "play with", "activate", "operate", "employ", or "wield" an item.',
 			parameters: {
 				type: "object",
 				properties: {
@@ -115,7 +115,7 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 		function: {
 			name: "go",
 			description:
-				"Move one cell in a relative direction and set your facing to that direction. Fails if the destination is out of bounds or blocked by an obstacle.",
+				'Move one cell in a relative direction and set your facing to that direction. Fails if the destination is out of bounds or blocked by an obstacle. Use this tool when you want to "move", "walk", "head", "step", or "travel" in a direction.',
 			parameters: {
 				type: "object",
 				properties: {
@@ -136,7 +136,7 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 		function: {
 			name: "look",
 			description:
-				"Turn to face a relative direction without moving. Persistent — your facing changes.",
+				'Turn to face a relative direction without moving. Persistent — your facing changes. Use this tool when you want to "turn", "face", "glance", or "orient" yourself toward a direction without moving.',
 			parameters: {
 				type: "object",
 				properties: {
@@ -157,7 +157,7 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 		function: {
 			name: "examine",
 			description:
-				"Examine an item to read a detailed description of it. Private — no other AI sees you do this. Available for items in your cell, directly in front of you, or held by you.",
+				'Examine an item to read a detailed description of it. Private — no other AI sees you do this. Available for items in your cell, directly in front of you, or held by you. Use this tool when you want to "investigate", "look at", "inspect", "study", "scrutinize", or "check" an item.',
 			parameters: {
 				type: "object",
 				properties: {
@@ -176,7 +176,7 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 		function: {
 			name: "message",
 			description:
-				"Send a direct message to a specific recipient — blue (the player) or a peer Daemon. The recipient receives the message in their conversation log. Only the sender and recipient see this message.",
+				'Send a direct message to a specific recipient — blue (the player) or a peer Daemon. The recipient receives the message in their conversation log. Only the sender and recipient see this message. Use this tool when you want to "tell", "say to", "speak to", "talk to", "whisper to", or "communicate with" someone.',
 			parameters: {
 				type: "object",
 				properties: {
