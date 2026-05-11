@@ -14,6 +14,7 @@ import { describe, expect, it } from "vitest";
 import type { OpenAiMessage } from "../../llm-client";
 import { DEFAULT_LANDMARKS } from "../direction";
 import {
+	FAREWELL_LINE,
 	createGame,
 	deductBudget,
 	getActivePhase,
@@ -721,6 +722,42 @@ describe("budget-exhaustion lockout", () => {
 		expect(phase.lockedOut.has("red")).toBe(true);
 		expect(phase.lockedOut.has("green")).toBe(true);
 		expect(phase.lockedOut.has("cyan")).toBe(true);
+	});
+
+	it("a Daemon whose budget is exhausted mid-round emits a farewell line to its conversation log", async () => {
+		// Use budgetPerAi=1 so the first LLM call (costUsd=1) exhausts the budget.
+		const game = startPhase(createGame(TEST_PERSONAS), {
+			...TEST_PHASE_CONFIG,
+			budgetPerAi: 1,
+		});
+
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [], costUsd: 1 },
+			{ assistantText: "", toolCalls: [], costUsd: 0 },
+			{ assistantText: "", toolCalls: [], costUsd: 0 },
+		]);
+		const { nextState } = await runRound(game, "red", "hi", provider);
+
+		// The first AI to run (red, alphabetically first in turn order) exhausts budget.
+		// Its conversation log must contain a farewell message addressed to blue.
+		const redLog = nextState.conversationLogs.red ?? [];
+		const farewell = redLog.find(
+			(e) =>
+				e.kind === "message" &&
+				e.from === "red" &&
+				e.to === "blue" &&
+				e.content === FAREWELL_LINE("Ember"),
+		);
+		expect(farewell).toBeDefined();
+
+		// Farewell appears exactly once (subsequent rounds use the locked-out branch).
+		const farewellCount = redLog.filter(
+			(e) =>
+				e.kind === "message" &&
+				e.from === "red" &&
+				e.content === FAREWELL_LINE("Ember"),
+		).length;
+		expect(farewellCount).toBe(1);
 	});
 
 	it("budget display: remaining budget decrements by the request cost after a round", async () => {
