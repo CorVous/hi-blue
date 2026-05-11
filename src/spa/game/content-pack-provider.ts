@@ -302,6 +302,11 @@ export function validateContentPacks(
 					`Phase ${phaseNumber}: object ${object.id} pairsWithSpaceId "${object.pairsWithSpaceId}" does not match space id "${space.id}"`,
 				);
 			}
+			if (!examineMentionsPairedSpace(object.examineDescription, space.name)) {
+				throw new ContentPackError(
+					`Phase ${phaseNumber}: object ${object.id} examineDescription does not mention paired space "${space.name}"`,
+				);
+			}
 			objectivePairs.push({ object, space });
 		}
 
