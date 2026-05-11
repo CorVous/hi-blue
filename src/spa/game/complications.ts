@@ -10,6 +10,7 @@
  */
 
 import { WEATHER_POOL } from "../../content/index.js";
+import { DISABLABLE_TOOLS } from "./complication-engine.js";
 import {
 	appendBroadcast,
 	appendPrivateSystemNotice,
@@ -18,7 +19,6 @@ import {
 	updateActivePhase,
 } from "./engine.js";
 import type { ActiveComplication, AiId, GameState, ToolName } from "./types.js";
-import { DISABLABLE_TOOLS } from "./complication-engine.js";
 
 /**
  * A mid-phase complication: a named handler that receives the current game

@@ -249,7 +249,12 @@ function drawComplication(
 			// biome-ignore lint/style/noNonNullAssertion: bounded index
 			const pair = validPairs[pairIdx]!;
 			const duration = drawCountdown(rng, 3, 5);
-			return { kind: "tool_disable", target: pair.target, tool: pair.tool, duration };
+			return {
+				kind: "tool_disable",
+				target: pair.target,
+				tool: pair.tool,
+				duration,
+			};
 		}
 
 		case "obstacle_shift": {
