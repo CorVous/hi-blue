@@ -203,8 +203,8 @@ export function serializeSession(
 		activePackId: "A",
 		weather: activePhase.weather,
 		objectives: [],
-		complicationSchedule: { countdown: 0, settingShiftFired: false },
-		activeComplications: [],
+		complicationSchedule: activePhase.complicationSchedule,
+		activeComplications: structuredClone(activePhase.activeComplications),
 		isComplete: state.isComplete,
 	};
 
@@ -322,6 +322,13 @@ export function deserializeSession(
 		const chatLockouts = new Map<AiId, number>();
 		const personaSpatial = structuredClone(sealed.personaSpatial);
 
+		// Defensive defaults for legacy blobs that omit complication fields
+		const complicationSchedule = sealed.complicationSchedule ?? {
+			countdown: 0,
+			settingShiftFired: false,
+		};
+		const activeComplications = sealed.activeComplications ?? [];
+
 		const phase: PhaseState = {
 			phaseNumber: epochPhase,
 			setting,
@@ -336,6 +343,8 @@ export function deserializeSession(
 			lockedOut,
 			chatLockouts,
 			personaSpatial,
+			complicationSchedule,
+			activeComplications,
 			// Re-attach function fields from canonical phase config
 			...(config?.winCondition !== undefined
 				? { winCondition: config.winCondition }

@@ -550,6 +550,34 @@ describe("serializeSession / deserializeSession", () => {
 		}
 	});
 
+	it("round-trips complicationSchedule and activeComplications unchanged", () => {
+		const game = makeFreshGame();
+		const phase = game.phases[0];
+		if (!phase) throw new Error("no phase");
+
+		const complicationSchedule = { countdown: 7, settingShiftFired: true };
+		const activeComplications: import("../../game/types.js").ActiveComplication[] =
+			[
+				{ kind: "sysadmin_directive", target: "red", directive: "be helpful" },
+				{ kind: "tool_disable", target: "green", tool: "go" },
+				{ kind: "chat_lockout", target: "cyan", resolveAtRound: 12 },
+			];
+
+		const modified: GameState = {
+			...game,
+			phases: [{ ...phase, complicationSchedule, activeComplications }],
+		};
+
+		const files = serializeSession(modified, NOW, CREATED_AT);
+		const result = deserializeSession(files);
+		expect(result.kind).toBe("ok");
+		if (result.kind === "ok") {
+			const rp = result.state.phases[0];
+			expect(rp?.complicationSchedule).toEqual(complicationSchedule);
+			expect(rp?.activeComplications).toEqual(activeComplications);
+		}
+	});
+
 	it("round-trips broadcast entries in per-Daemon conversationLogs", () => {
 		const game = makeFreshGame();
 		const phase = game.phases[0];

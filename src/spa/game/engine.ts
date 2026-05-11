@@ -5,10 +5,12 @@ import {
 	GRID_ROWS,
 } from "./direction.js";
 import type {
+	ActiveComplication,
 	AiBudget,
 	AiId,
 	AiPersona,
 	CardinalDirection,
+	ComplicationSchedule,
 	ContentPack,
 	ConversationEntry,
 	GameState,
@@ -154,6 +156,14 @@ export function startPhase(
 		aiStarts: personaSpatial,
 	};
 
+	// Initial countdown: random in [1, 5]
+	const initialCountdown = 1 + Math.floor(rng() * 5);
+	const complicationSchedule: ComplicationSchedule = {
+		countdown: initialCountdown,
+		settingShiftFired: false,
+	};
+	const activeComplications: ActiveComplication[] = [];
+
 	const phase: PhaseState = {
 		phaseNumber: config.phaseNumber,
 		setting: contentPack.setting,
@@ -168,6 +178,8 @@ export function startPhase(
 		lockedOut: new Set(),
 		chatLockouts: new Map(),
 		personaSpatial,
+		complicationSchedule,
+		activeComplications,
 		...(config.winCondition !== undefined
 			? { winCondition: config.winCondition }
 			: {}),
