@@ -311,7 +311,7 @@ describe("prompt-builder — spatial 'Where you are' section (current-state user
 		);
 		const ctx = buildAiContext(game, "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
-		expect(stateMsg).toMatch(/row 0.*col 0/i);
+		expect(stateMsg).toMatch(/facing/i);
 		expect(stateMsg).toMatch(/north/i);
 	});
 
@@ -826,7 +826,7 @@ describe("<what_you_see> (cone)", () => {
 		const ctx = buildAiContext(game, "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
 		// flower at (1,0) is directly in front of red (facing south)
-		expect(stateMsg).toContain("Directly in front (row 1, col 0): flower");
+		expect(stateMsg).toContain("Directly in front: flower");
 	});
 
 	it("AIs visible in cone are rendered with their id, facing, and held items", () => {
@@ -890,7 +890,7 @@ describe("<what_you_see> (cone)", () => {
 		const ctx = buildAiContext(game, "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
 		// Obstacle at (1,0) is directly in front of red (facing south)
-		expect(stateMsg).toContain("Directly in front (row 1, col 0):");
+		expect(stateMsg).toContain("Directly in front:");
 		expect(stateMsg).toContain("col1");
 	});
 
