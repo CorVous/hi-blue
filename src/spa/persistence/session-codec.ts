@@ -21,10 +21,10 @@ import {
 } from "../../content/phases.js";
 import { DEFAULT_LANDMARKS } from "../game/direction.js";
 import type {
+	ActiveComplication,
 	AiBudget,
 	AiId,
 	AiPersona,
-	ActiveComplication,
 	ContentPack,
 	ConversationEntry,
 	GameState,
@@ -294,8 +294,7 @@ export function deserializeSession(
 	// Reconstruct a single-phase GameState from the flat v6 engine
 	try {
 		// Clamp epoch to valid phase number
-		const epochPhase =
-			([1, 2, 3] as const).find((n) => n === meta.epoch) ?? 1;
+		const epochPhase = ([1, 2, 3] as const).find((n) => n === meta.epoch) ?? 1;
 		const config = PHASE_CONFIGS[epochPhase];
 
 		// Rebuild conversationLogs from daemon files

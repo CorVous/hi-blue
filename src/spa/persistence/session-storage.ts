@@ -473,7 +473,8 @@ export function getSessionInfo(id: string): SessionInfo {
 				};
 				if (typeof meta.lastSavedAt === "string")
 					lastSavedAt = meta.lastSavedAt;
-				const rawEpoch = typeof meta.epoch === "number" ? meta.epoch : meta.phase;
+				const rawEpoch =
+					typeof meta.epoch === "number" ? meta.epoch : meta.phase;
 				if (typeof rawEpoch === "number") epoch = rawEpoch;
 			}
 		} catch {
