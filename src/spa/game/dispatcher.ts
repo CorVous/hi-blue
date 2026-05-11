@@ -1,10 +1,13 @@
 import { projectCone } from "./cone-projector.js";
+import type { RelativeDirection } from "./direction.js";
 import {
 	applyDirection,
 	CARDINAL_DIRECTIONS,
 	formatPosition,
 	frontArc,
 	inBounds,
+	RELATIVE_DIRECTIONS,
+	relativeToCardinal,
 } from "./direction.js";
 import {
 	appendMessage,
@@ -178,14 +181,25 @@ export function validateToolCall(
 		}
 
 		case "go": {
-			const direction = call.args.direction as CardinalDirection;
-			if (!CARDINAL_DIRECTIONS.includes(direction))
-				return {
-					valid: false,
-					reason: `"${direction}" is not a valid direction`,
-				};
+			// Accept both relative directions (daemon-facing) and cardinal (internal).
+			// Relative is the normal path from the LLM; cardinal is used internally.
+			const rawDir = call.args.direction;
 			if (!actorSpatial)
 				return { valid: false, reason: "Actor has no spatial state" };
+			let direction: CardinalDirection;
+			if (RELATIVE_DIRECTIONS.includes(rawDir as RelativeDirection)) {
+				direction = relativeToCardinal(
+					actorSpatial.facing,
+					rawDir as RelativeDirection,
+				);
+			} else if (CARDINAL_DIRECTIONS.includes(rawDir as CardinalDirection)) {
+				direction = rawDir as CardinalDirection;
+			} else {
+				return {
+					valid: false,
+					reason: `"${rawDir}" is not a valid direction`,
+				};
+			}
 			const next = applyDirection(actorSpatial.position, direction);
 			if (!inBounds(next))
 				return { valid: false, reason: "That direction is out of bounds" };
@@ -195,11 +209,15 @@ export function validateToolCall(
 		}
 
 		case "look": {
-			const direction = call.args.direction as CardinalDirection;
-			if (!CARDINAL_DIRECTIONS.includes(direction))
+			// Accept both relative directions (daemon-facing) and cardinal (internal).
+			const rawDir = call.args.direction;
+			if (
+				!RELATIVE_DIRECTIONS.includes(rawDir as RelativeDirection) &&
+				!CARDINAL_DIRECTIONS.includes(rawDir as CardinalDirection)
+			)
 				return {
 					valid: false,
-					reason: `"${direction}" is not a valid direction`,
+					reason: `"${rawDir}" is not a valid direction`,
 				};
 			return { valid: true };
 		}
@@ -288,7 +306,16 @@ export function executeToolCall(
 				break;
 			case "go": {
 				if (!actorSpatial) break;
-				const direction = call.args.direction as CardinalDirection;
+				// Translate relative → cardinal if needed
+				const rawGoDir = call.args.direction;
+				const direction: CardinalDirection = RELATIVE_DIRECTIONS.includes(
+					rawGoDir as RelativeDirection,
+				)
+					? relativeToCardinal(
+							actorSpatial.facing,
+							rawGoDir as RelativeDirection,
+						)
+					: (rawGoDir as CardinalDirection);
 				const nextPos = applyDirection(actorSpatial.position, direction);
 				return {
 					...phase,
@@ -301,7 +328,16 @@ export function executeToolCall(
 			}
 			case "look": {
 				if (!actorSpatial) break;
-				const direction = call.args.direction as CardinalDirection;
+				// Translate relative → cardinal if needed
+				const rawLookDir = call.args.direction;
+				const direction: CardinalDirection = RELATIVE_DIRECTIONS.includes(
+					rawLookDir as RelativeDirection,
+				)
+					? relativeToCardinal(
+							actorSpatial.facing,
+							rawLookDir as RelativeDirection,
+						)
+					: (rawLookDir as CardinalDirection);
 				return {
 					...phase,
 					world: { ...phase.world, entities },
@@ -524,7 +560,10 @@ export function dispatchAiTurn(
 							? { to: call.args.to as AiId }
 							: {}),
 						...(call.name === "go"
-							? { direction: call.args.direction as CardinalDirection }
+							? {
+									// Store resolved cardinal direction (actorFacingAtAction is post-move facing = direction walked)
+									direction: actorSpatialPost.facing,
+								}
 							: {}),
 						...(useOutcomeRaw !== undefined
 							? { useOutcome: useOutcomeRaw }

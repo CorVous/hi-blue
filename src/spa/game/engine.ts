@@ -1,4 +1,9 @@
-import { CARDINAL_DIRECTIONS, GRID_COLS, GRID_ROWS } from "./direction.js";
+import {
+	CARDINAL_DIRECTIONS,
+	DEFAULT_LANDMARKS,
+	GRID_COLS,
+	GRID_ROWS,
+} from "./direction.js";
 import type {
 	AiBudget,
 	AiId,
@@ -145,6 +150,7 @@ export function startPhase(
 		objectivePairs: [],
 		interestingObjects: [],
 		obstacles: [],
+		landmarks: DEFAULT_LANDMARKS,
 		aiStarts: personaSpatial,
 	};
 

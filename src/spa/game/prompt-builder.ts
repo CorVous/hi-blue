@@ -1,13 +1,15 @@
 import { projectCone } from "./cone-projector.js";
-import { frontArc } from "./direction.js";
+import { cardinalToRelative, frontArc } from "./direction.js";
 import { getActivePhase } from "./engine";
 import type {
 	AiBudget,
 	AiId,
 	CardinalDirection,
+	ContentPack,
 	ConversationEntry,
 	GameState,
 	GridPosition,
+	LandmarkDescription,
 	PersonaSpatialState,
 	WorldEntity,
 	WorldState,
@@ -35,6 +37,12 @@ export interface AiContext {
 	personaSpatial: Record<AiId, PersonaSpatialState>;
 	/** Color for each AI, keyed by AiId — used in cone rendering. */
 	personaColors: Record<AiId, string>;
+	/**
+	 * Four distant horizon landmarks, one per cardinal anchor.
+	 * Used to render the "On the horizon ahead:" line in `<where_you_are>`.
+	 * Keyed by cardinal direction.
+	 */
+	landmarks: ContentPack["landmarks"];
 	/**
 	 * Canonical cone-snapshot string captured at the end of this AI's last turn,
 	 * or undefined on the first turn of a phase. Used by `renderCurrentState`
@@ -82,6 +90,7 @@ export function buildAiContext(
 	const weather = phase.weather ?? "";
 	const timeOfDay = phase.timeOfDay ?? "";
 	const personaSpatial = phase.personaSpatial;
+	const landmarks = phase.contentPack.landmarks;
 
 	if (!persona) throw new Error(`No persona for aiId: ${aiId}`);
 
@@ -106,6 +115,7 @@ export function buildAiContext(
 		phaseNumber: phase.phaseNumber,
 		personaSpatial,
 		personaColors,
+		landmarks,
 		...(opts?.prevConeSnapshot !== undefined
 			? { prevConeSnapshot: opts.prevConeSnapshot }
 			: {}),
@@ -770,7 +780,13 @@ function renderCurrentState(ctx: AiContext): string {
 
 	lines.push("<where_you_are>");
 	if (actorSpatial) {
-		lines.push(`Facing: ${facingLabel(actorSpatial.facing)}`);
+		// Horizon landmark: the one landmark currently in front of the daemon.
+		// Cardinal facing is used to look up the landmark; the line is always-on.
+		const horizonLandmark: LandmarkDescription =
+			ctx.landmarks[actorSpatial.facing];
+		lines.push(
+			`On the horizon ahead: ${horizonLandmark.shortName} — ${horizonLandmark.horizonPhrase}.`,
+		);
 
 		// Held items
 		const heldItems = items.filter((item) => item.holder === ctx.aiId);
@@ -823,15 +839,19 @@ function renderCurrentState(ctx: AiContext): string {
 			)) {
 				if (otherId === ctx.aiId) continue;
 				if (!positionsEqual(otherSpatial.position, position)) continue;
-				// Format: "the Daemon *<id>, facing <Dir>, holding <items|nothing>"
+				// Format: "the Daemon *<id>, facing <relative>, holding <items|nothing>"
+				// Other daemon's facing is rendered relative to the observer's facing.
 				const heldByOther = items
 					.filter((item) => item.holder === otherId)
 					.map((item) => item.name);
 				const holdingStr =
 					heldByOther.length > 0 ? heldByOther.join(", ") : "nothing";
 				const otherColor = ctx.personaColors[otherId] ?? "unknown";
+				const otherFacingRelative = actorSpatial
+					? cardinalToRelative(actorSpatial.facing, otherSpatial.facing)
+					: facingLabel(otherSpatial.facing);
 				contentParts.push(
-					`the Daemon *${otherId} (${otherColor}), facing ${facingLabel(otherSpatial.facing)}, holding ${holdingStr}`,
+					`the Daemon *${otherId} (${otherColor}), facing ${otherFacingRelative}, holding ${holdingStr}`,
 				);
 			}
 

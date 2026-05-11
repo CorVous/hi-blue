@@ -19,6 +19,7 @@ import {
 	PHASE_2_CONFIG,
 	PHASE_3_CONFIG,
 } from "../../content/phases.js";
+import { DEFAULT_LANDMARKS } from "../game/direction.js";
 import type {
 	AiBudget,
 	AiId,
@@ -382,6 +383,7 @@ export function deserializeSession(
 				objectivePairs: [],
 				interestingObjects: [],
 				obstacles: [],
+				landmarks: DEFAULT_LANDMARKS,
 				aiStarts: {},
 			};
 

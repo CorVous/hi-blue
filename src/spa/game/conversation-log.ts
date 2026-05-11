@@ -13,10 +13,13 @@
  * caller adds that).
  */
 
+import { cardinalToRelative } from "./direction.js";
 import type {
 	AiId,
 	AiPersona,
+	CardinalDirection,
 	ConversationEntry,
+	PersonaSpatialState,
 	WorldEntity,
 } from "./types.js";
 
@@ -45,11 +48,16 @@ function itemName(entities: WorldEntity[], itemId: string): string {
  * Exported for `openai-message-builder.ts`, which interleaves witnessed events
  * with chat messages in role-turn form. Internal callers (the system-prompt
  * conversation block, when present) reach this via `buildConversationLog`.
+ *
+ * @param witnessState  Optional spatial state of the witnessing AI. When
+ *   provided, movement directions in witnessed-event lines are rendered
+ *   relative to the witness's facing rather than as raw cardinals.
  */
 export function renderEntry(
 	entry: ConversationEntry,
 	aiId: AiId,
 	entities: WorldEntity[],
+	witnessState?: PersonaSpatialState,
 ): string {
 	const round = entry.round;
 	switch (entry.kind) {
@@ -67,8 +75,18 @@ export function renderEntry(
 		case "witnessed-event": {
 			const actorSub = `*${entry.actor}`;
 			switch (entry.actionKind) {
-				case "go":
-					return `[Round ${round}] You watch ${actorSub} walk ${entry.direction}.`;
+				case "go": {
+					// Render direction relative to the witness's facing if available,
+					// falling back to the raw cardinal for logs and dev tools.
+					let dirLabel: string = entry.direction ?? "forward";
+					if (entry.direction && witnessState) {
+						dirLabel = cardinalToRelative(
+							witnessState.facing,
+							entry.direction as CardinalDirection,
+						);
+					}
+					return `[Round ${round}] You watch ${actorSub} walk ${dirLabel}.`;
+				}
 
 				case "pick_up": {
 					const name = entry.item ? itemName(entities, entry.item) : "item";
@@ -114,6 +132,12 @@ export interface ConversationLogInput {
 	conversationLog: ConversationEntry[];
 	/** World entities (for item name resolution). */
 	worldEntities: WorldEntity[];
+	/**
+	 * Optional spatial state of the AI whose log is being built.
+	 * When provided, movement directions in witnessed-event "go" lines are
+	 * rendered relative to this AI's facing rather than as raw cardinals.
+	 */
+	witnessState?: PersonaSpatialState;
 }
 
 /**
@@ -134,7 +158,9 @@ export function buildConversationLog(
 
 	const lines: string[] = [];
 	for (const entry of sorted) {
-		lines.push(renderEntry(entry, aiId, input.worldEntities));
+		lines.push(
+			renderEntry(entry, aiId, input.worldEntities, input.witnessState),
+		);
 	}
 	return lines;
 }

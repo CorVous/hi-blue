@@ -335,6 +335,7 @@ export async function generateContentPacks(
 		objectivePairs: pack.objectivePairs,
 		interestingObjects: pack.interestingObjects as WorldEntity[],
 		obstacles: pack.obstacles as WorldEntity[],
+		landmarks: pack.landmarks,
 		aiStarts: {},
 	}));
 
