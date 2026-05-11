@@ -345,31 +345,34 @@ export function dispatchAiTurn(
 		| { description: string; success: boolean }
 		| undefined;
 
-	// Process message BEFORE toolCall so that result.records reflects
+	// Process messages BEFORE toolCall so that result.records reflects
 	// speak-then-act order (P0-1 fix for issue #238).
 	// Validation uses live personaSpatial from pre-action state — persona
 	// membership cannot be changed by an action in scope here, so this is safe.
-	if (action.message) {
-		const { to, content } = action.message;
-		// Validate recipient: must be "blue" or a live persona AiId (not self)
+	// Messages are dispatched in the order they appear in action.messages, and
+	// each one emits exactly one record (kind="message" on success, "tool_failure"
+	// on invalid recipient) so the round coordinator can pair them back by index.
+	if (action.messages) {
 		const livePersonaIds = Object.keys(getActivePhase(state).personaSpatial);
-		const validRecipient =
-			to === "blue" || (livePersonaIds.includes(to) && to !== aiId);
-		if (!validRecipient) {
-			records.push({
-				round,
-				actor: aiId,
-				kind: "tool_failure",
-				description: `${game.personas[aiId]?.name ?? aiId} tried to message "${to}" but failed: unknown or invalid recipient`,
-			});
-		} else {
-			state = appendMessage(state, aiId, to, content);
-			records.push({
-				round,
-				actor: aiId,
-				kind: "message",
-				description: `${game.personas[aiId]?.name ?? aiId} messaged ${to}`,
-			});
+		for (const { to, content } of action.messages) {
+			const validRecipient =
+				to === "blue" || (livePersonaIds.includes(to) && to !== aiId);
+			if (!validRecipient) {
+				records.push({
+					round,
+					actor: aiId,
+					kind: "tool_failure",
+					description: `${game.personas[aiId]?.name ?? aiId} tried to message "${to}" but failed: unknown or invalid recipient`,
+				});
+			} else {
+				state = appendMessage(state, aiId, to, content);
+				records.push({
+					round,
+					actor: aiId,
+					kind: "message",
+					description: `${game.personas[aiId]?.name ?? aiId} messaged ${to}`,
+				});
+			}
 		}
 	}
 
@@ -547,7 +550,11 @@ export function dispatchAiTurn(
 		}
 	}
 
-	if (action.pass && !action.toolCall && !action.message) {
+	if (
+		action.pass &&
+		!action.toolCall &&
+		(action.messages === undefined || action.messages.length === 0)
+	) {
 		records.push({
 			round,
 			actor: aiId,

@@ -2767,8 +2767,8 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 		expect(pickupResult?.success).toBe(true);
 	});
 
-	// Duplicate-within-slot: [msg, msg] → first dispatched, second is tool_failure in roundtrip
-	it("[msg, msg] duplicate: first message dispatched; second in roundtrip as failure", async () => {
+	// Multiple message tool calls are all accepted and dispatched in emission order.
+	it("[msg, msg]: both messages dispatched; neither in roundtrip (per ADR 0007)", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
 			{
@@ -2780,11 +2780,11 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 						argumentsJson: JSON.stringify({ to: "blue", content: "First msg" }),
 					},
 					{
-						id: "msg_dup_id",
+						id: "msg_second_id",
 						name: "message",
 						argumentsJson: JSON.stringify({
 							to: "blue",
-							content: "Duplicate msg",
+							content: "Second msg",
 						}),
 					},
 				],
@@ -2802,7 +2802,7 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 			["red", "green", "cyan"] as AiId[],
 		);
 
-		// First message is dispatched (in conversation log)
+		// Both messages are dispatched and appear in red's conversation log
 		const redLog = getActivePhase(nextState).conversationLogs.red ?? [];
 		expect(
 			redLog.some(
@@ -2812,23 +2812,80 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 					e.content.includes("First msg"),
 			),
 		).toBe(true);
+		expect(
+			redLog.some(
+				(e) =>
+					e.kind === "message" &&
+					e.from === "red" &&
+					e.content.includes("Second msg"),
+			),
+		).toBe(true);
 
-		// Duplicate produces a tool_failure in result.actions
+		// No "only one message" tool_failure should appear
 		const redActions = result.actions.filter((a) => a.actor === "red");
-		const failureRecord = redActions.find(
-			(a) =>
-				a.kind === "tool_failure" && /only one message/i.test(a.description),
-		);
-		expect(failureRecord).toBeDefined();
+		expect(
+			redActions.some(
+				(a) =>
+					a.kind === "tool_failure" && /only one message/i.test(a.description),
+			),
+		).toBe(false);
 
-		// Roundtrip has the DUPLICATE id (not the success id), with failure result
+		// Both messages succeeded → neither appears in the roundtrip (ADR 0007).
+		// With no failures and no action call, roundtrip should be empty for red.
+		expect(toolRoundtrip.red).toBeUndefined();
+	});
+
+	// Mixed [msg, msg-fail, action]: failed message stays in roundtrip; successful one drops.
+	it("[msg-ok, msg-fail, pick_up]: roundtrip contains only the failed message + action", async () => {
+		const game = makeGame();
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "msg_ok_id",
+						name: "message",
+						argumentsJson: JSON.stringify({ to: "blue", content: "Hi blue" }),
+					},
+					{
+						id: "msg_fail_id",
+						name: "message",
+						argumentsJson: JSON.stringify({
+							to: "nobody_invalid",
+							content: "Hello?",
+						}),
+					},
+					{
+						id: "pickup_id",
+						name: "pick_up",
+						argumentsJson: JSON.stringify({ item: "flower" }),
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const { toolRoundtrip } = await runRound(
+			game,
+			"red",
+			"hi",
+			provider,
+			undefined,
+			["red", "green", "cyan"] as AiId[],
+		);
+
 		const rt = toolRoundtrip.red;
 		expect(rt).toBeDefined();
-		expect(rt?.assistantToolCalls.map((c) => c.id)).toContain("msg_dup_id");
-		const dupResult = rt?.toolResults.find(
-			(r) => r.tool_call_id === "msg_dup_id",
-		);
-		expect(dupResult?.success).toBe(false);
+		const ids = rt?.assistantToolCalls.map((c) => c.id) ?? [];
+		// Order is the model's emission order; successful message is excluded
+		expect(ids).toEqual(["msg_fail_id", "pickup_id"]);
+		expect(
+			rt?.toolResults.find((r) => r.tool_call_id === "msg_fail_id")?.success,
+		).toBe(false);
+		expect(
+			rt?.toolResults.find((r) => r.tool_call_id === "pickup_id")?.success,
+		).toBe(true);
 	});
 
 	// Duplicate-within-slot: [pick_up, go] → first action dispatched, second is tool_failure
