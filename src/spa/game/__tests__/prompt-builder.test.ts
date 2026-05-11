@@ -1206,8 +1206,7 @@ describe("proximityFlavor sense line", () => {
 			id: "gem",
 			kind: "objective_object",
 			name: "Glowing Gem",
-			examineDescription:
-				"A gem that glows near the pedestal.",
+			examineDescription: "A gem that glows near the pedestal.",
 			holder: "red", // held by red
 			pairsWithSpaceId: "pedestal",
 			placementFlavor: "{actor} places the gem on the pedestal.",
@@ -1348,7 +1347,6 @@ describe("proximityFlavor sense line", () => {
 			PROXIMITY_PHASE_CONFIG,
 		);
 		const ctxOOB = buildAiContext(gameOOB, "red");
-		const ctxFront = buildAiContext(gameFront, "red");
 		const prevSnapshot = buildConeSnapshot(ctxOOB);
 		// Build current state with prevConeSnapshot set
 		const ctxWithPrev = buildAiContext(gameFront, "red", {

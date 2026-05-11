@@ -382,7 +382,6 @@ describe("validateToolCall", () => {
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(true);
 	});
-
 });
 
 describe("executeToolCall — use placement via front arc", () => {
