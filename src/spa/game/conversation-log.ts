@@ -135,6 +135,10 @@ export function renderEntry(
 			return `[Round ${round}] Your \`${entry.tool}\` action failed: ${reason}.`;
 		}
 
+		case "witnessed-obstacle-shift": {
+			return `[Round ${round}] ${entry.flavor}`;
+		}
+
 		case "broadcast": {
 			return `[Round ${round}] ${entry.content}`;
 		}

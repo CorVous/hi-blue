@@ -1,5 +1,5 @@
 /**
- * Tests for complications.ts — Weather Change complication handler.
+ * Tests for complications.ts — Weather Change and Obstacle Shift complication handlers.
  *
  * Uses a stub rng for determinism. The weather pool has 12 entries;
  * drawing index 0 always gives "Heavy rain is falling." when the
@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import { WEATHER_POOL } from "../../../content/index.js";
 import {
 	COMPLICATIONS,
+	obstacleShiftComplication,
 	toolDisableComplication,
 	weatherChangeComplication,
 } from "../complications.js";
@@ -24,7 +25,9 @@ import type {
 	ActiveComplication,
 	AiPersona,
 	ContentPack,
+	GridPosition,
 	PhaseConfig,
+	WorldEntity,
 } from "../types.js";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
@@ -179,9 +182,230 @@ describe("weatherChangeComplication", () => {
 	});
 });
 
+// ── Obstacle Shift tests ──────────────────────────────────────────────────────
+
+/**
+ * Make a WorldEntity obstacle at a fixed grid position.
+ */
+function makeObstacle(
+	id: string,
+	pos: GridPosition,
+	shiftFlavor?: string,
+): WorldEntity {
+	const entity: WorldEntity = {
+		id,
+		kind: "obstacle",
+		name: id,
+		examineDescription: `A ${id}.`,
+		holder: pos,
+	};
+	if (shiftFlavor !== undefined) {
+		entity.shiftFlavor = shiftFlavor;
+	}
+	return entity;
+}
+
+/**
+ * Build a game with one obstacle at a known position and three Daemons at
+ * known positions. The obstacle's neighbor (row+1, col) is empty so there is
+ * always one valid shift tuple.
+ *
+ * Grid layout (5×5, top-left is row=0, col=0):
+ *   - red   at (0,0), facing north
+ *   - green at (0,1), facing north
+ *   - cyan  at (0,2), facing north
+ *   - obstacle at (2,2)   → toCell could be (3,2) or (2,3) or (2,1) or (1,2)
+ */
+function makeGameWithObstacle(
+	obstaclePos: GridPosition,
+	shiftFlavor?: string,
+) {
+	const obstacle = makeObstacle("obs1", obstaclePos, shiftFlavor);
+	const pack: ContentPack = {
+		phaseNumber: 1,
+		setting: "test setting",
+		weather: "clear",
+		timeOfDay: "day",
+		objectivePairs: [],
+		interestingObjects: [],
+		obstacles: [obstacle],
+		landmarks: DEFAULT_LANDMARKS,
+		aiStarts: {
+			red: { position: { row: 0, col: 0 }, facing: "north" },
+			green: { position: { row: 0, col: 1 }, facing: "north" },
+			cyan: { position: { row: 0, col: 2 }, facing: "north" },
+		},
+	};
+	const game = createGame(TEST_PERSONAS, [pack]);
+	return startPhase(game, TEST_PHASE_CONFIG, () => 0);
+}
+
+describe("obstacleShiftComplication", () => {
+	it("is a no-op when no obstacle has a valid adjacent empty cell", () => {
+		// Pack with no obstacles → no valid tuples
+		const game = makeGameWithWeather("clear");
+		const result = obstacleShiftComplication.apply(game, () => 0);
+		expect(result).toBe(game);
+	});
+
+	it("moves the obstacle's position to the toCell", () => {
+		// Obstacle at (2,2); all Daemons at row 0 far from obstacle.
+		// rng always returns 0 → first valid tuple is drawn.
+		const game = makeGameWithObstacle({ row: 2, col: 2 });
+		const result = obstacleShiftComplication.apply(game, () => 0);
+		const phase = getActivePhase(result);
+
+		const obstacle = phase.world.entities.find((e) => e.id === "obs1");
+		expect(obstacle).toBeDefined();
+		if (!obstacle) return;
+
+		// Obstacle must have moved — holder should differ from (2,2)
+		const holder = obstacle.holder as GridPosition;
+		expect(
+			holder.row === 2 && holder.col === 2,
+			"obstacle must have moved away from (2,2)",
+		).toBe(false);
+	});
+
+	it("does not append any witnessed-obstacle-shift when no Daemon has the fromCell in cone", () => {
+		// Obstacle at (4,4); Daemons at row 0, facing north — cone covers (5,0)–(5,2) which is OOB.
+		// A north-facing daemon at row 0 looks away from row 4: no overlap with (4,4).
+		const game = makeGameWithObstacle({ row: 4, col: 4 });
+		const result = obstacleShiftComplication.apply(game, () => 0);
+		const phase = getActivePhase(result);
+
+		for (const aiId of Object.keys(TEST_PERSONAS)) {
+			const log = phase.conversationLogs[aiId] ?? [];
+			const shiftEntries = log.filter(
+				(e) => e.kind === "witnessed-obstacle-shift",
+			);
+			expect(shiftEntries).toHaveLength(0);
+		}
+	});
+
+	it("appends witnessed-obstacle-shift only to Daemons whose cone contains fromCell", () => {
+		// Place the obstacle just in front of a south-facing daemon so its cone definitely covers the obstacle.
+		// We set red at (2,2) facing south, obstacle at (3,2) — directly south of red.
+		// green and cyan are placed far away and face north.
+		const obstacle = makeObstacle(
+			"obs1",
+			{ row: 3, col: 2 },
+			"A heavy crate scrapes across the floor.",
+		);
+		const pack: ContentPack = {
+			phaseNumber: 1,
+			setting: "test setting",
+			weather: "clear",
+			timeOfDay: "day",
+			objectivePairs: [],
+			interestingObjects: [],
+			obstacles: [obstacle],
+			landmarks: DEFAULT_LANDMARKS,
+			aiStarts: {
+				red: { position: { row: 2, col: 2 }, facing: "south" }, // cone covers (3,2)
+				green: { position: { row: 0, col: 0 }, facing: "north" }, // cone does not cover (3,2)
+				cyan: { position: { row: 0, col: 1 }, facing: "north" }, // cone does not cover (3,2)
+			},
+		};
+		const game = createGame(TEST_PERSONAS, [pack]);
+		const started = startPhase(game, TEST_PHASE_CONFIG, () => 0);
+
+		// rng → 0: pick first valid tuple
+		const result = obstacleShiftComplication.apply(started, () => 0);
+		const phase = getActivePhase(result);
+
+		const redLog = phase.conversationLogs.red ?? [];
+		const greenLog = phase.conversationLogs.green ?? [];
+		const cyanLog = phase.conversationLogs.cyan ?? [];
+
+		const redShift = redLog.filter((e) => e.kind === "witnessed-obstacle-shift");
+		const greenShift = greenLog.filter(
+			(e) => e.kind === "witnessed-obstacle-shift",
+		);
+		const cyanShift = cyanLog.filter(
+			(e) => e.kind === "witnessed-obstacle-shift",
+		);
+
+		expect(redShift).toHaveLength(1);
+		expect(greenShift).toHaveLength(0);
+		expect(cyanShift).toHaveLength(0);
+	});
+
+	it("witnessed-obstacle-shift entry has correct obstacleId, fromCell, toCell, and flavor", () => {
+		const flavor = "A heavy crate scrapes across the floor.";
+		const obstacle = makeObstacle("obs1", { row: 3, col: 2 }, flavor);
+		const pack: ContentPack = {
+			phaseNumber: 1,
+			setting: "test setting",
+			weather: "clear",
+			timeOfDay: "day",
+			objectivePairs: [],
+			interestingObjects: [],
+			obstacles: [obstacle],
+			landmarks: DEFAULT_LANDMARKS,
+			aiStarts: {
+				red: { position: { row: 2, col: 2 }, facing: "south" }, // cone covers (3,2)
+				green: { position: { row: 0, col: 0 }, facing: "north" },
+				cyan: { position: { row: 0, col: 1 }, facing: "north" },
+			},
+		};
+		const game = createGame(TEST_PERSONAS, [pack]);
+		const started = startPhase(game, TEST_PHASE_CONFIG, () => 0);
+		const result = obstacleShiftComplication.apply(started, () => 0);
+		const phase = getActivePhase(result);
+
+		const redLog = phase.conversationLogs.red ?? [];
+		const entry = redLog.find((e) => e.kind === "witnessed-obstacle-shift");
+
+		expect(entry?.kind).toBe("witnessed-obstacle-shift");
+		if (entry?.kind !== "witnessed-obstacle-shift") return;
+
+		expect(entry.obstacleId).toBe("obs1");
+		expect(entry.fromCell).toEqual({ row: 3, col: 2 });
+		expect(entry.flavor).toBe(flavor);
+		// toCell should differ from fromCell
+		expect(
+			entry.toCell.row === entry.fromCell.row &&
+				entry.toCell.col === entry.fromCell.col,
+		).toBe(false);
+	});
+
+	it("falls back to 'Something shifts.' when obstacle has no shiftFlavor", () => {
+		// Obstacle without shiftFlavor field
+		const obstacle = makeObstacle("obs1", { row: 3, col: 2 });
+		const pack: ContentPack = {
+			phaseNumber: 1,
+			setting: "test setting",
+			weather: "clear",
+			timeOfDay: "day",
+			objectivePairs: [],
+			interestingObjects: [],
+			obstacles: [obstacle],
+			landmarks: DEFAULT_LANDMARKS,
+			aiStarts: {
+				red: { position: { row: 2, col: 2 }, facing: "south" },
+				green: { position: { row: 0, col: 0 }, facing: "north" },
+				cyan: { position: { row: 0, col: 1 }, facing: "north" },
+			},
+		};
+		const game = createGame(TEST_PERSONAS, [pack]);
+		const started = startPhase(game, TEST_PHASE_CONFIG, () => 0);
+		const result = obstacleShiftComplication.apply(started, () => 0);
+		const phase = getActivePhase(result);
+
+		const redLog = phase.conversationLogs.red ?? [];
+		const entry = redLog.find((e) => e.kind === "witnessed-obstacle-shift");
+
+		if (entry?.kind !== "witnessed-obstacle-shift") return;
+		expect(entry.flavor).toBe("Something shifts.");
+	});
+});
+
 describe("COMPLICATIONS registry", () => {
-	it("contains at least one entry", () => {
-		expect(COMPLICATIONS.length).toBeGreaterThan(0);
+	it("contains both weatherChangeComplication and obstacleShiftComplication", () => {
+		const names = COMPLICATIONS.map((c) => c.name);
+		expect(names).toContain("weatherChange");
+		expect(names).toContain("obstacleShift");
 	});
 
 	it("every complication has a name and apply function", () => {

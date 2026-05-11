@@ -39,6 +39,8 @@ export interface WorldEntity {
 	placementFlavor?: string;
 	/** For objective_object: in-fiction sensory line rendered when held and paired space is near. */
 	proximityFlavor?: string;
+	/** For obstacle: 1-sentence sensory line a witness Daemon perceives when the obstacle moves one cell. Third person from witness POV. Does NOT contain {actor}. */
+	shiftFlavor?: string;
 	/** AiId when held by an AI; GridPosition when resting on a cell. */
 	holder: AiId | GridPosition;
 }
@@ -248,6 +250,14 @@ export type ConversationEntry =
 			kind: "broadcast";
 			round: number;
 			content: string;
+	  }
+	| {
+			kind: "witnessed-obstacle-shift";
+			round: number;
+			obstacleId: string;
+			fromCell: GridPosition;
+			toCell: GridPosition;
+			flavor: string;
 	  };
 
 export interface AiBudget {
