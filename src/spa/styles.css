@@ -259,6 +259,53 @@ main {
 	min-height: 0;
 }
 
+/* Stretchable border row: [corner][label][stretch dashes][corner-r absolute] */
+.brow {
+	display: flex;
+	align-items: stretch;
+	white-space: pre;
+	line-height: 1;
+	font-size: 13px;
+	user-select: none;
+	overflow: hidden;
+	position: relative;
+	min-width: 0;
+	color: var(--panel-color);
+	/* Borders are runs of box-drawing glyphs; the body's inherited
+	   text-shadow halos overlap per-glyph and bead along vertical sides
+	   (where line-box gaps interrupt the ink column). Drop the halo on
+	   the chrome so the eye fuses the glyphs into a continuous line. */
+	text-shadow: none;
+}
+
+/* Body row: vertical sides hugging the scrollable transcript */
+.side {
+	white-space: pre;
+	line-height: 1;
+	overflow: hidden;
+	word-break: break-all;
+	/* Match `.brow`'s explicit 13px so the `│` glyph cell width tracks
+	   the corner glyph cell width — at responsive (mobile) breakpoints
+	   the body drops to 12px and an inherited side would shrink the
+	   column ~0.6px narrower than the corner, shifting the `│` stroke
+	   visibly left of the `┌`/`└` vertical arms. */
+	font-size: 13px;
+	/* No explicit width — `1ch` is the advance of `0`, but JBM's box-
+	   drawing glyphs have a (very slightly) different advance, so
+	   pinning the column to 1ch shifts the `│` stroke half a pixel
+	   left of the corner glyphs' vertical arms. Let the box auto-size
+	   from the `│` glyph's own advance and the column lines up exactly. */
+	flex: 0 0 auto;
+	user-select: none;
+	color: var(--panel-color);
+	/* Same approach as the banner `║` — stamp clones of the glyph 1 px
+	   above and below itself with zero-blur text-shadows so the `│`
+	   ink bleeds into the inter-line gap that causes vertical beading. */
+	text-shadow:
+		0 1px 0 var(--panel-color, var(--amber)),
+		0 -1px 0 var(--panel-color, var(--amber));
+}
+
 .ai-panel {
 	--panel-color: var(--amber);
 	flex: 1 1 0;
@@ -270,11 +317,6 @@ main {
 	cursor: pointer;
 	overflow: hidden;
 	color: var(--amber);
-}
-
-.ai-panel:hover .brow,
-.ai-panel:hover .side {
-	opacity: 1;
 }
 
 .ai-panel .brow,
@@ -349,25 +391,6 @@ main {
 .topinfo .warn {
 	color: #ffe07a;
 	text-shadow: 0 0 6px rgba(255, 224, 122, 0.5);
-}
-
-/* Stretchable border row: [corner][label][stretch dashes][corner-r absolute] */
-.brow {
-	display: flex;
-	align-items: stretch;
-	white-space: pre;
-	line-height: 1;
-	font-size: 13px;
-	user-select: none;
-	overflow: hidden;
-	position: relative;
-	min-width: 0;
-	color: var(--panel-color);
-	/* Borders are runs of box-drawing glyphs; the body's inherited
-	   text-shadow halos overlap per-glyph and bead along vertical sides
-	   (where line-box gaps interrupt the ink column). Drop the halo on
-	   the chrome so the eye fuses the glyphs into a continuous line. */
-	text-shadow: none;
 }
 
 .corner,
@@ -480,33 +503,6 @@ main {
 	min-height: 0;
 	display: flex;
 	align-items: stretch;
-}
-
-.side {
-	white-space: pre;
-	line-height: 1;
-	overflow: hidden;
-	word-break: break-all;
-	/* Match `.brow`'s explicit 13px so the `│` glyph cell width tracks
-	   the corner glyph cell width — at responsive (mobile) breakpoints
-	   the body drops to 12px and an inherited side would shrink the
-	   column ~0.6px narrower than the corner, shifting the `│` stroke
-	   visibly left of the `┌`/`└` vertical arms. */
-	font-size: 13px;
-	/* No explicit width — `1ch` is the advance of `0`, but JBM's box-
-	   drawing glyphs have a (very slightly) different advance, so
-	   pinning the column to 1ch shifts the `│` stroke half a pixel
-	   left of the corner glyphs' vertical arms. Let the box auto-size
-	   from the `│` glyph's own advance and the column lines up exactly. */
-	flex: 0 0 auto;
-	user-select: none;
-	color: var(--panel-color);
-	/* Same approach as the banner `║` — stamp clones of the glyph 1 px
-	   above and below itself with zero-blur text-shadows so the `│`
-	   ink bleeds into the inter-line gap that causes vertical beading. */
-	text-shadow:
-		0 1px 0 var(--panel-color, var(--amber)),
-		0 -1px 0 var(--panel-color, var(--amber));
 }
 
 .panel-content {
@@ -934,6 +930,11 @@ main {
 	user-select: none;
 	color: var(--amber);
 	overflow: hidden;
+}
+
+.ai-panel:hover .brow,
+.ai-panel:hover .side {
+	opacity: 1;
 }
 
 .login-frame-body .inner {
