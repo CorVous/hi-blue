@@ -2814,3 +2814,106 @@ describe("action-failure entries — round-coordinator integration", () => {
 		expect(greenFailureMsgs).toHaveLength(0);
 	});
 });
+
+// ----------------------------------------------------------------------------
+// complicationConfig — mid-phase complication trigger
+// ----------------------------------------------------------------------------
+describe("complicationConfig", () => {
+	function makeGameWithWeather(weather: string) {
+		const pack: ContentPack = {
+			...TEST_CONTENT_PACK,
+			weather,
+		};
+		const game = createGame(TEST_PERSONAS, [pack]);
+		return startPhase(game, TEST_PHASE_CONFIG);
+	}
+
+	function makeProvider() {
+		return new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+	}
+
+	it("fires the Weather Change complication on triggerRound", async () => {
+		const game = makeGameWithWeather("A biting wind cuts through the air.");
+
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeProvider(),
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{ rng: () => 0, triggerRound: 1 },
+		);
+
+		// After round 1 (triggerRound), weather should have changed
+		const phase = getActivePhase(nextState);
+		expect(phase.weather).not.toBe("A biting wind cuts through the air.");
+		// Each daemon should have a broadcast entry
+		for (const aiId of Object.keys(TEST_PERSONAS)) {
+			const log = phase.conversationLogs[aiId] ?? [];
+			const broadcasts = log.filter((e) => e.kind === "broadcast");
+			expect(broadcasts).toHaveLength(1);
+		}
+	});
+
+	it("does not fire when currentRound !== triggerRound", async () => {
+		const initialWeather = "Dense fog has settled in.";
+		const game = makeGameWithWeather(initialWeather);
+
+		// Trigger is set for round 5, but we only run round 1
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeProvider(),
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{ rng: () => 0, triggerRound: 5 },
+		);
+
+		const phase = getActivePhase(nextState);
+		// Weather should be unchanged
+		expect(phase.weather).toBe(initialWeather);
+		// No broadcast entries in any daemon's log
+		for (const aiId of Object.keys(TEST_PERSONAS)) {
+			const log = phase.conversationLogs[aiId] ?? [];
+			const broadcasts = log.filter((e) => e.kind === "broadcast");
+			expect(broadcasts).toHaveLength(0);
+		}
+	});
+
+	it("does not fire when complicationConfig is undefined", async () => {
+		const initialWeather = "Light snow drifts down.";
+		const game = makeGameWithWeather(initialWeather);
+
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeProvider(),
+			// No complicationConfig passed
+		);
+
+		const phase = getActivePhase(nextState);
+		expect(phase.weather).toBe(initialWeather);
+		for (const aiId of Object.keys(TEST_PERSONAS)) {
+			const log = phase.conversationLogs[aiId] ?? [];
+			const broadcasts = log.filter((e) => e.kind === "broadcast");
+			expect(broadcasts).toHaveLength(0);
+		}
+	});
+});

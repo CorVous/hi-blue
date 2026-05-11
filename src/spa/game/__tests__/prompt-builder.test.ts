@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_LANDMARKS } from "../direction";
-import { advanceRound, appendMessage, startGame } from "../engine";
+import {
+	advanceRound,
+	appendBroadcast,
+	appendMessage,
+	startGame,
+} from "../engine";
 import { buildOpenAiMessages } from "../openai-message-builder";
 import { buildAiContext, buildConeSnapshot } from "../prompt-builder";
 import type { AiPersona, ContentPack, WorldEntity } from "../types";
@@ -1036,5 +1041,48 @@ describe("proximityFlavor sense line", () => {
 		expect(stateMsg).toContain(
 			"+ proximity: The gem pulses warmly, drawn toward the pedestal.",
 		);
+	});
+});
+
+describe("<whats_new> broadcast announcements", () => {
+	it("includes [announcement] line when a broadcast fires at the current round", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = advanceRound(game); // round advances to 1
+		game = appendBroadcast(game, "The weather has changed to heavy fog.");
+		const prevSnapshot = buildConeSnapshot(buildAiContext(game, "red"));
+		const ctx = buildAiContext(game, "red", { prevConeSnapshot: prevSnapshot });
+		const stateMsg = ctx.toCurrentStateUserMessage();
+		expect(stateMsg).toContain("<whats_new>");
+		expect(stateMsg).toContain(
+			"[announcement] The weather has changed to heavy fog.",
+		);
+	});
+
+	it("emits <whats_new> with the announcement even without a prevConeSnapshot", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = advanceRound(game);
+		game = appendBroadcast(game, "The weather has changed to heavy fog.");
+		const ctx = buildAiContext(game, "red");
+		const stateMsg = ctx.toCurrentStateUserMessage();
+		expect(stateMsg).toContain("<whats_new>");
+		expect(stateMsg).toContain(
+			"[announcement] The weather has changed to heavy fog.",
+		);
+	});
+
+	it("does not emit <whats_new> when there are no broadcasts and no prevConeSnapshot", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const ctx = buildAiContext(game, "red");
+		const stateMsg = ctx.toCurrentStateUserMessage();
+		expect(stateMsg).not.toContain("<whats_new>");
+	});
+
+	it("broadcast from a prior round does not appear as pending", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = advanceRound(game); // round 1
+		game = appendBroadcast(game, "Old broadcast.");
+		game = advanceRound(game); // round 2 — broadcast is now stale
+		const ctx = buildAiContext(game, "red");
+		expect(ctx.pendingBroadcasts).toHaveLength(0);
 	});
 });

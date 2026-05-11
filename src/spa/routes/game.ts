@@ -712,44 +712,49 @@ export function renderGame(
 					// branch left them stale whenever the new session had fewer (or
 					// zero) chat entries for this panel slot.
 					transcript.textContent = "";
-					// Filter to message entries where blue is involved (from blue or to blue)
-					// Skip daemon-to-daemon messages from the player-facing transcript.
-					const messageEntries = (
+					// Filter to message entries where blue is involved (from blue or to blue).
+					// Skip daemon-to-daemon messages and broadcast entries from the player-facing transcript.
+					// Broadcasts live in Daemon conversationLogs for LLM context only.
+					const visibleEntries = (
 						restoredPhase.conversationLogs[aiId] ?? []
 					).filter(
 						(e) =>
 							e.kind === "message" && (e.from === "blue" || e.to === "blue"),
 					);
-					if (messageEntries.length > 0) {
+					if (visibleEntries.length > 0) {
 						// Synthesise from conversationLogs (stored in daemon .txt files).
 						const persona = restoredPersonas[aiId];
 						const personaName = persona?.name ?? aiId;
-						for (const entry of messageEntries) {
-							if (entry.kind !== "message") continue;
+						for (const entry of visibleEntries) {
 							const lineEl = doc.createElement("div");
 							lineEl.className = "msg-line";
-							if (entry.from === "blue") {
-								// Incoming from player
-								appendMentionAwareText(
-									lineEl,
-									`> ${entry.content}\n`,
-									restoredPersonas,
-									"msg-you",
-								);
-							} else {
-								// Outgoing from AI to blue
-								const prefixSpan = doc.createElement("span");
-								prefixSpan.className = "msg-prefix";
-								if (persona?.color) {
-									prefixSpan.style.setProperty("--prefix-color", persona.color);
+							if (entry.kind === "message") {
+								if (entry.from === "blue") {
+									// Incoming from player
+									appendMentionAwareText(
+										lineEl,
+										`> ${entry.content}\n`,
+										restoredPersonas,
+										"msg-you",
+									);
+								} else {
+									// Outgoing from AI to blue
+									const prefixSpan = doc.createElement("span");
+									prefixSpan.className = "msg-prefix";
+									if (persona?.color) {
+										prefixSpan.style.setProperty(
+											"--prefix-color",
+											persona.color,
+										);
+									}
+									prefixSpan.textContent = `> *${transcriptName(personaName)} `;
+									lineEl.appendChild(prefixSpan);
+									appendMentionAwareText(
+										lineEl,
+										`${entry.content}\n`,
+										restoredPersonas,
+									);
 								}
-								prefixSpan.textContent = `> *${transcriptName(personaName)} `;
-								lineEl.appendChild(prefixSpan);
-								appendMentionAwareText(
-									lineEl,
-									`${entry.content}\n`,
-									restoredPersonas,
-								);
 							}
 							transcript.appendChild(lineEl);
 						}
@@ -1262,6 +1267,11 @@ export function renderGame(
 
 					case "chat_lockout_resolved":
 						setChatLockout(event.aiId, false);
+						break;
+
+					case "system_broadcast":
+						// Intentionally not rendered in the player-facing UI.
+						// The broadcast lives in each Daemon's conversationLog for LLM context only.
 						break;
 
 					case "action_log":

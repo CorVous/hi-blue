@@ -18,6 +18,7 @@
  */
 
 import { availableTools } from "./available-tools";
+import { COMPLICATIONS } from "./complications";
 import { dispatchAiTurn } from "./dispatcher";
 import {
 	advanceRound,
@@ -69,6 +70,19 @@ export interface ChatLockoutConfig {
 	lockoutDuration: number;
 }
 
+/**
+ * Configuration for mid-phase complication events.
+ *
+ * Inject this into `runRound` to arm a complication at a specific round.
+ *
+ * @param rng          Returns a value in [0, 1). Used to pick the complication.
+ * @param triggerRound The round number (post-advance) at which to fire the complication.
+ */
+export interface ComplicationConfig {
+	rng: () => number;
+	triggerRound: number;
+}
+
 export interface RunRoundResult {
 	nextState: GameState;
 	result: RoundResult;
@@ -100,18 +114,21 @@ export interface RunRoundResult {
  * @param priorToolRoundtrip  Per-AI tool roundtrip from the previous round.
  *   Passed into buildOpenAiMessages to re-inject the protocol messages required
  *   by OpenAI's tool-use spec.
- * @param priorConeSnapshots  Per-AI canonical cone snapshots from the previous
- *   round, used by `buildAiContext` to emit a `<whats_new>` diff in each AI's
- *   per-round user message.
  * @param completionSink  Optional per-AI sink for the assistant text produced
  *   by each LLM call. Used by GameSession to capture completions for pacing.
  * @param onAiDelta  Optional per-AI live-delta callback. Fires synchronously
  *   inside the SSE parser loop for each text chunk arriving from the wire.
  *   Never called for locked-out AIs or mock providers that ignore onDelta.
+ * @param priorConeSnapshots  Per-AI canonical cone snapshots from the previous
+ *   round, used by `buildAiContext` to emit a `<whats_new>` diff in each AI's
+ *   per-round user message.
  * @param onAiTurnComplete  Optional per-AI "turn finished" callback. Fires
  *   exactly once per AI in initiative order, AFTER any drift-to-silence
  *   retry (#254) has resolved and after dispatch. Fires for locked-out
  *   AIs too (so callers can clear per-AI UI state uniformly).
+ * @param complicationConfig  Optional config for mid-phase complication events.
+ *   When present and `currentRound === triggerRound`, one complication is drawn
+ *   from the COMPLICATIONS registry and applied after the round advances.
  */
 export async function runRound(
 	game: GameState,
@@ -125,6 +142,7 @@ export async function runRound(
 	onAiDelta?: (aiId: AiId, text: string) => void,
 	priorConeSnapshots?: Partial<Record<AiId, string>>,
 	onAiTurnComplete?: (aiId: AiId) => void,
+	complicationConfig?: ComplicationConfig,
 ): Promise<RunRoundResult> {
 	const aiOrder = Object.keys(game.personas);
 
@@ -499,7 +517,19 @@ export async function runRound(
 		}
 	}
 
-	// 5. Check win/lose conditions
+	// 5. Mid-phase complication
+	if (complicationConfig) {
+		const { rng, triggerRound } = complicationConfig;
+		const currentRound = getActivePhase(state).round;
+		if (currentRound === triggerRound && COMPLICATIONS.length > 0) {
+			const compIdx = Math.floor(rng() * COMPLICATIONS.length);
+			// biome-ignore lint/style/noNonNullAssertion: bounded index into non-empty array
+			const complication = COMPLICATIONS[compIdx]!;
+			state = complication.apply(state, rng);
+		}
+	}
+
+	// 6. Check win/lose conditions
 	const activePhaseAfterRound = getActivePhase(state);
 
 	const allAiIds = Object.keys(state.personas);
