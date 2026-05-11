@@ -583,7 +583,7 @@ export function renderGame(
 				startBrightnessWipe();
 				return pending.contentPacksPromise.then((packs) => ({
 					personas,
-					contentPack: packs[0]!,
+					contentPack: packs[0] as NonNullable<(typeof packs)[0]>,
 					contentPacks: packs,
 				}));
 			})

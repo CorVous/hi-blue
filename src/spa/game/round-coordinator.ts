@@ -206,11 +206,7 @@ export async function runRound(
 		// and passes it back as priorConeSnapshots next round.
 		newConeSnapshots[aiId] = buildConeSnapshot(ctx);
 		const priorRoundtrip = priorToolRoundtrip?.[aiId];
-		const messages = buildOpenAiMessages(
-			ctx,
-			priorRoundtrip,
-			state.round,
-		);
+		const messages = buildOpenAiMessages(ctx, priorRoundtrip, state.round);
 
 		// Compute legal tools for this AI given current game state
 		const tools = availableTools(state, aiId, state.activeComplications);
@@ -374,7 +370,8 @@ export async function runRound(
 		state = dispatchResult.game;
 
 		// Farewell line: emitted exactly once when a Daemon's budget is just exhausted.
-		const justExhausted = !lockedOutBefore.has(aiId) && state.lockedOut.has(aiId);
+		const justExhausted =
+			!lockedOutBefore.has(aiId) && state.lockedOut.has(aiId);
 		if (justExhausted) {
 			const personaName = state.personas[aiId]?.name ?? aiId;
 			const farewellContent = FAREWELL_LINE(personaName);
@@ -553,9 +550,7 @@ export async function runRound(
 	if (checkWinCondition(state.world, state.contentPack)) {
 		state = { ...state, isComplete: true, outcome: "win" };
 		gameEnded = true;
-	} else if (
-		checkLoseCondition(state.lockedOut, Object.keys(state.personas))
-	) {
+	} else if (checkLoseCondition(state.lockedOut, Object.keys(state.personas))) {
 		state = { ...state, isComplete: true, outcome: "lose" };
 		gameEnded = true;
 	}

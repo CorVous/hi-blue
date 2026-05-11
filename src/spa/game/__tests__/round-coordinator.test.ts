@@ -1966,7 +1966,7 @@ describe("placement flavor + win condition (issue #126)", () => {
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
-		const { result, nextState } = await runRound(game, "red", "hi", provider);
+		const { result } = await runRound(game, "red", "hi", provider);
 		const toolRecord = result.actions.find((a) => a.kind === "tool_success");
 		// Should NOT contain the flavor text
 		expect(toolRecord?.description).not.toContain(

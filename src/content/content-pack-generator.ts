@@ -55,6 +55,7 @@ export interface PhaseConfig {
 	budgetPerAi: number;
 	aiGoalPool: string[];
 }
+
 import { THEME_POOL } from "./theme-pool.js";
 import { TIME_OF_DAY_POOL } from "./time-of-day-pool.js";
 import { WEATHER_POOL } from "./weather-pool.js";
@@ -353,7 +354,9 @@ export async function generateContentPacks(
 
 	// Build placeholder ContentPack structures from LLM result (no placements yet)
 	const unplacedPacks: ContentPack[] = llmResult.packs.map((pack, i) => ({
-		...(pack.phaseNumber !== undefined ? { phaseNumber: pack.phaseNumber as 1 | 2 | 3 } : {}),
+		...(pack.phaseNumber !== undefined
+			? { phaseNumber: pack.phaseNumber as 1 | 2 | 3 }
+			: {}),
 		setting: pack.setting,
 		weather: drawnWeather[i] as string,
 		timeOfDay: drawnTimeOfDay[i] as string,
@@ -395,8 +398,12 @@ export async function generateContentPack(
 	const setting = settings[settingIdx] as string;
 
 	// Draw weather, time-of-day, and theme
-	const weather = WEATHER_POOL[Math.floor(rng() * WEATHER_POOL.length)] as string;
-	const timeOfDay = TIME_OF_DAY_POOL[Math.floor(rng() * TIME_OF_DAY_POOL.length)] as string;
+	const weather = WEATHER_POOL[
+		Math.floor(rng() * WEATHER_POOL.length)
+	] as string;
+	const timeOfDay = TIME_OF_DAY_POOL[
+		Math.floor(rng() * TIME_OF_DAY_POOL.length)
+	] as string;
 	const theme = THEME_POOL[Math.floor(rng() * THEME_POOL.length)] as string;
 
 	// Roll k/n/m
