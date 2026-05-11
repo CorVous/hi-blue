@@ -109,7 +109,12 @@ export type ComplicationKind =
  */
 export type ActiveComplication =
 	| { kind: "sysadmin_directive"; target: AiId; directive: string }
-	| { kind: "tool_disable"; target: AiId; tool: ToolName }
+	| {
+			kind: "tool_disable";
+			target: AiId;
+			tool: ToolName;
+			resolveAtRound: number;
+	  }
 	| { kind: "chat_lockout"; target: AiId; resolveAtRound: number };
 
 /** Countdown + phase-level flags for the complication schedule. */
@@ -125,7 +130,7 @@ export interface ComplicationSchedule {
 export type ComplicationVariant =
 	| { kind: "weather_change" }
 	| { kind: "sysadmin_directive"; target: AiId }
-	| { kind: "tool_disable"; target: AiId; tool: ToolName }
+	| { kind: "tool_disable"; target: AiId; tool: ToolName; duration: number }
 	| {
 			kind: "obstacle_shift";
 			obstacleId: string;

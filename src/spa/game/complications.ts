@@ -10,12 +10,15 @@
  */
 
 import { WEATHER_POOL } from "../../content/index.js";
+import { DISABLABLE_TOOLS } from "./complication-engine.js";
 import {
 	appendBroadcast,
+	appendPrivateSystemNotice,
 	getActivePhase,
 	setActivePhaseWeather,
+	updateActivePhase,
 } from "./engine.js";
-import type { GameState } from "./types.js";
+import type { ActiveComplication, AiId, GameState, ToolName } from "./types.js";
 
 /**
  * A mid-phase complication: a named handler that receives the current game
@@ -59,7 +62,85 @@ export const weatherChangeComplication: Complication = {
 };
 
 /**
+ * Tool Disable complication.
+ *
+ * Picks a random (daemon, tool) pair from the cross-product of daemon IDs ×
+ * DISABLABLE_TOOLS, excluding pairs that are already actively disabled.
+ * Appends a `tool_disable` ActiveComplication for a duration in [3, 5] rounds
+ * and sends a private Sysadmin notice to the target daemon.
+ *
+ * If no valid (daemon, tool) pairs remain (all are already disabled), the
+ * complication is a no-op.
+ */
+export const toolDisableComplication: Complication = {
+	name: "toolDisable",
+	apply(game: GameState, rng: () => number): GameState {
+		const phase = getActivePhase(game);
+		const aiIds = Object.keys(phase.personaSpatial) as AiId[];
+
+		// Build set of already-disabled (daemon, tool) pairs
+		const existingDisables = new Set<string>(
+			phase.activeComplications
+				.filter(
+					(c): c is Extract<ActiveComplication, { kind: "tool_disable" }> =>
+						c.kind === "tool_disable",
+				)
+				.map((c) => `${c.target}:${c.tool}`),
+		);
+
+		// Build valid cross-product pairs
+		const validPairs: Array<{ target: AiId; tool: ToolName }> = [];
+		for (const aiId of aiIds) {
+			for (const tool of DISABLABLE_TOOLS) {
+				if (!existingDisables.has(`${aiId}:${tool}`)) {
+					validPairs.push({ target: aiId, tool });
+				}
+			}
+		}
+
+		// Safety net: no valid pairs → no-op
+		if (validPairs.length === 0) {
+			return game;
+		}
+
+		// Pick a random pair
+		const pairIdx = Math.floor(rng() * validPairs.length);
+		// biome-ignore lint/style/noNonNullAssertion: bounded index into non-empty array
+		const pair = validPairs[pairIdx]!;
+
+		// Draw duration in [3, 5]
+		const duration = 3 + Math.floor(rng() * 3);
+		const resolveAtRound = phase.round + duration;
+
+		// Append the active complication
+		const entry: ActiveComplication = {
+			kind: "tool_disable",
+			target: pair.target,
+			tool: pair.tool,
+			resolveAtRound,
+		};
+
+		let state = updateActivePhase(game, (p) => ({
+			...p,
+			activeComplications: [...p.activeComplications, entry],
+		}));
+
+		// Notify the target daemon
+		state = appendPrivateSystemNotice(
+			state,
+			pair.target,
+			`Sysadmin: Your ${pair.tool} tool has been disabled for ${duration} rounds.`,
+		);
+
+		return state;
+	},
+};
+
+/**
  * Registry of all available complications. The round coordinator draws one
  * entry from this list when a `complicationConfig.triggerRound` fires.
  */
-export const COMPLICATIONS: Complication[] = [weatherChangeComplication];
+export const COMPLICATIONS: Complication[] = [
+	weatherChangeComplication,
+	toolDisableComplication,
+];

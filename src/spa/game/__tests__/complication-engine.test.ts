@@ -614,7 +614,12 @@ describe("Tool Disable exclusion", () => {
 		const activeComplications: ActiveComplication[] = [];
 		for (const aiId of AI_IDS) {
 			for (const tool of toolNames) {
-				activeComplications.push({ kind: "tool_disable", target: aiId, tool });
+				activeComplications.push({
+					kind: "tool_disable",
+					target: aiId,
+					tool,
+					resolveAtRound: 99,
+				});
 			}
 		}
 		const phase = makePhase({
@@ -634,7 +639,12 @@ describe("Tool Disable exclusion", () => {
 		// Only red+pick_up is already disabled. With 3 daemons × 8 tools = 24 pairs,
 		// 1 excluded, 23 valid pairs remain.
 		const activeComplications: ActiveComplication[] = [
-			{ kind: "tool_disable", target: "red", tool: "pick_up" },
+			{
+				kind: "tool_disable",
+				target: "red",
+				tool: "pick_up",
+				resolveAtRound: 99,
+			},
 		];
 		const phase = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
@@ -653,7 +663,12 @@ describe("Tool Disable exclusion", () => {
 
 	it("permits a (daemon, tool) pair when the same daemon has a different tool disabled", () => {
 		const activeComplications: ActiveComplication[] = [
-			{ kind: "tool_disable", target: "red", tool: "pick_up" },
+			{
+				kind: "tool_disable",
+				target: "red",
+				tool: "pick_up",
+				resolveAtRound: 99,
+			},
 		];
 		const phase = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
@@ -668,7 +683,12 @@ describe("Tool Disable exclusion", () => {
 
 	it("permits a (daemon, tool) pair when a different daemon has the same tool disabled", () => {
 		const activeComplications: ActiveComplication[] = [
-			{ kind: "tool_disable", target: "green", tool: "pick_up" },
+			{
+				kind: "tool_disable",
+				target: "green",
+				tool: "pick_up",
+				resolveAtRound: 99,
+			},
 		];
 		const phase = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
@@ -716,6 +736,7 @@ describe("applyComplicationResult — activeComplications appends", () => {
 				kind: "tool_disable" as const,
 				target: "cyan" as AiId,
 				tool: "go" as ToolName,
+				duration: 3,
 			},
 		};
 		const updated = applyComplicationResult(game, result, seededRng([0.5]));
@@ -727,6 +748,28 @@ describe("applyComplicationResult — activeComplications appends", () => {
 		if (added?.kind === "tool_disable") {
 			expect(added.target).toBe("cyan");
 			expect(added.tool).toBe("go");
+		}
+	});
+
+	it("appends ActiveComplication for tool_disable with resolveAtRound = phase.round + duration", () => {
+		const phase = makePhase({ round: 7 });
+		const game = makeGameStateAround(phase);
+		const result = {
+			fired: {
+				kind: "tool_disable" as const,
+				target: "red" as AiId,
+				tool: "message" as ToolName,
+				duration: 4,
+			},
+		};
+		const updated = applyComplicationResult(game, result, seededRng([0.5]));
+		const updatedPhase = getActivePhase(updated);
+		const added = updatedPhase.activeComplications.find(
+			(c) => c.kind === "tool_disable",
+		);
+		expect(added).toBeDefined();
+		if (added?.kind === "tool_disable") {
+			expect(added.resolveAtRound).toBe(11); // round 7 + duration 4
 		}
 	});
 
@@ -806,9 +849,10 @@ describe("determinism", () => {
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
 		});
 		const game = makeGameStateAround(phase);
-		// 5-item pool: 0.5*5=2 → tool_disable; then 0.0 for pair draw; no countdown draw needed (tickComplication doesn't reset)
-		const r1 = tickComplication(game, seededRng([0.5, 0.0]));
-		const r2 = tickComplication(game, seededRng([0.5, 0.0]));
+		// 5-item pool: 0.5*5=2 → tool_disable; rng[1]=0.0 for pair draw; rng[2]=0.0 for duration draw
+		// no countdown draw needed (tickComplication doesn't reset)
+		const r1 = tickComplication(game, seededRng([0.5, 0.0, 0.0]));
+		const r2 = tickComplication(game, seededRng([0.5, 0.0, 0.0]));
 		expect(r1).toEqual(r2);
 	});
 });
