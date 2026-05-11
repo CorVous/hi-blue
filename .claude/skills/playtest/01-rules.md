@@ -7,6 +7,10 @@ section at the bottom.
 **Do not look at any source file or other documentation yet.** Code exploration
 is Stage 3.
 
+The isolation rail from `SKILL.md` still applies: do not read, list, or grep
+anything under `docs/playtests/agent-sessions/` or `docs/playtests/archive/`.
+Other playtest logs are off-limits in this stage too.
+
 ---
 
 ## The world model
