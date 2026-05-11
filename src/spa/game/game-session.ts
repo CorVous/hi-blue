@@ -115,6 +115,7 @@ export class GameSession {
 		chatLockoutConfig?: ChatLockoutConfig,
 		initiative?: AiId[],
 		onAiDelta?: (aiId: AiId, text: string) => void,
+		onAiTurnComplete?: (aiId: AiId) => void,
 	): Promise<SubmitMessageResult> {
 		let effectiveConfig = chatLockoutConfig;
 		if (!effectiveConfig && this.armedChatLockout) {
@@ -147,6 +148,7 @@ export class GameSession {
 			completionSink,
 			onAiDelta,
 			this.coneSnapshots,
+			onAiTurnComplete,
 		);
 
 		// Fill in empty string for AIs whose completions weren't captured

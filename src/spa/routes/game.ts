@@ -1222,40 +1222,24 @@ export function renderGame(
 		// Round-local ended flag (distinct from module-level gameEnded)
 		let roundGameEnded = false;
 
-		// Track first-delta-seen per AI to strip the spinner exactly once.
-		const firstDeltaSeen = new Set<AiId>();
-
-		const onAiDelta = (aiId: AiId, _text: string): void => {
-			if (!firstDeltaSeen.has(aiId)) {
-				firstDeltaSeen.add(aiId);
-				// Strip this daemon's spinner on its first live delta.
-				// Post-#213, free-form assistantText is dropped by the engine; actual
-				// panel content comes from ConversationEntry message events emitted
-				// by the encoder after the round completes. We keep the spinner-strip
-				// side-effect here but no longer paint tokens or the AI prefix live.
-				stripSpinner(aiId);
-			}
-			// Free-form delta text is intentionally NOT painted. Panel content is
-			// driven by encoder "message" events (conversationLog-based) after the
-			// round, ensuring the DM-thread filter (AC #1/2) is always applied.
-		};
-
 		try {
 			const provider = new BrowserLLMProvider({
 				disableReasoning: !enableReasoning,
 			});
+			// Strip each daemon's spinner as the coordinator finishes its
+			// turn (post-retry per #254). Coordinator awaits AIs serially in
+			// initiative order, so this fires staged in real time —
+			// preserving the "spinners stop one by one" feel from before
+			// #254 while correctly covering the retry window.
 			const { result, completions, nextState } = await session.submitMessage(
 				addressed,
 				message,
 				provider,
 				undefined,
 				initiative,
-				onAiDelta,
+				undefined,
+				(aiId) => stripSpinner(aiId),
 			);
-
-			// Safety-net strip: if no live deltas arrived (mock provider, all AIs
-			// locked out, or first delta hasn't fired yet), strip every spinner now.
-			stripAllSpinners();
 
 			const phaseAfter = getActivePhase(nextState);
 			const events = encodeRoundResult(
@@ -1268,8 +1252,9 @@ export function renderGame(
 			for (const event of events) {
 				switch (event.type) {
 					case "ai_start":
-						// Track the current daemon for budget/lockout events.
-						// Panel content is now driven by "message" events, not prefixes.
+						// Per-daemon spinner-strip happens live via the
+						// onAiTurnComplete callback (see above); panel content
+						// is driven by "message" events, not prefixes.
 						break;
 
 					case "token":

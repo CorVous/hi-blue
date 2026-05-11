@@ -30,7 +30,7 @@ import {
 } from "./engine";
 import { buildOpenAiMessages } from "./openai-message-builder";
 import { buildAiContext, buildConeSnapshot } from "./prompt-builder";
-import type { RoundLLMProvider } from "./round-llm-provider";
+import type { OpenAiMessage, RoundLLMProvider } from "./round-llm-provider";
 import { parseToolCallArguments } from "./tool-registry";
 import type {
 	AiId,
@@ -108,6 +108,10 @@ export interface RunRoundResult {
  * @param onAiDelta  Optional per-AI live-delta callback. Fires synchronously
  *   inside the SSE parser loop for each text chunk arriving from the wire.
  *   Never called for locked-out AIs or mock providers that ignore onDelta.
+ * @param onAiTurnComplete  Optional per-AI "turn finished" callback. Fires
+ *   exactly once per AI in initiative order, AFTER any drift-to-silence
+ *   retry (#254) has resolved and after dispatch. Fires for locked-out
+ *   AIs too (so callers can clear per-AI UI state uniformly).
  */
 export async function runRound(
 	game: GameState,
@@ -120,6 +124,7 @@ export async function runRound(
 	completionSink?: (aiId: AiId, text: string) => void,
 	onAiDelta?: (aiId: AiId, text: string) => void,
 	priorConeSnapshots?: Partial<Record<AiId, string>>,
+	onAiTurnComplete?: (aiId: AiId) => void,
 ): Promise<RunRoundResult> {
 	const aiOrder = Object.keys(game.personas);
 
@@ -165,6 +170,7 @@ export async function runRound(
 			});
 			// Sink gets empty string for locked AI
 			completionSink?.(aiId, "");
+			onAiTurnComplete?.(aiId);
 			continue;
 		}
 
@@ -190,11 +196,39 @@ export async function runRound(
 		const tools = availableTools(state, aiId);
 
 		// Call the provider
-		const { assistantText, toolCalls, costUsd } = await provider.streamRound(
+		let { assistantText, toolCalls, costUsd } = await provider.streamRound(
 			messages,
 			tools,
 			onAiDelta ? (text) => onAiDelta(aiId, text) : undefined,
 		);
+
+		// Drift-to-silence recovery (#254): if the model returned free-form
+		// text with no tool call, retry once with a tightening nudge before
+		// falling through to the drop-to-pass branch below. The retry's
+		// input — the dropped first attempt and the nudge — stays in
+		// `retryMessages` only; it never enters game state, the
+		// conversation log, or the persisted tool roundtrip.
+		if (assistantText && toolCalls.length === 0) {
+			const retryMessages: OpenAiMessage[] = [
+				...messages,
+				{ role: "assistant", content: assistantText },
+				{
+					role: "user",
+					content:
+						'You produced text but did not emit a tool call, so blue did not see it. Re-emit your previous reply now as a `message({to: "blue", content: ...})` call.',
+				},
+			];
+			const retry = await provider.streamRound(
+				retryMessages,
+				tools,
+				onAiDelta ? (text) => onAiDelta(aiId, text) : undefined,
+			);
+			assistantText = retry.assistantText;
+			toolCalls = retry.toolCalls;
+			if (retry.costUsd !== undefined) {
+				costUsd = (costUsd ?? 0) + retry.costUsd;
+			}
+		}
 
 		// Capture completion text
 		completionSink?.(aiId, assistantText);
@@ -331,11 +365,14 @@ export async function runRound(
 			}
 		}
 
-		// Free-form assistantText without a message tool call → treat as pass (drop the text)
+		// Free-form assistantText without a message tool call → treat as
+		// pass. The one-shot retry above already fired; reaching this branch
+		// with non-empty text means the retry also failed to emit a tool
+		// call (#254).
 		if (!action.toolCall && !action.message) {
 			if (assistantText && isDevHost()) {
 				console.log(
-					`[dev] ${aiId} emitted free-form text without a tool call (dropped):`,
+					`[dev] ${aiId} emitted free-form text without a tool call (dropped after retry):`,
 					assistantText,
 				);
 			}
@@ -434,6 +471,12 @@ export async function runRound(
 				toolResults: recordedToolResults,
 			};
 		}
+
+		// Per-AI "turn finished" signal — fires after dispatch, after any
+		// drift-to-silence retry (#254). Callers use this for per-daemon UI
+		// state that should track the coordinator's serial progress through
+		// the initiative order (e.g., stripping panel spinners staged).
+		onAiTurnComplete?.(aiId);
 	}
 
 	// 3. Advance the round counter

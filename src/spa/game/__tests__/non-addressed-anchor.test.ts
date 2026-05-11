@@ -136,12 +136,16 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 		const game = makeGame();
 
 		const provider = new MockRoundLLMProvider([
-			{ assistantText: "Hi, I am Ember.", toolCalls: [] },
+			// All-pass responses across both rounds. Text-only responses are
+			// avoided here because #254's retry would consume an extra
+			// mock slot per text-only attempt; this test cares about
+			// message construction, not retry behaviour.
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "<red round 2>", toolCalls: [] },
-			{ assistantText: "<green round 2>", toolCalls: [] },
-			{ assistantText: "<cyan round 2>", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
 		]);
 
 		const r1 = await runRound(
@@ -220,9 +224,9 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 		const game = makeGame();
 
 		const provider = new MockRoundLLMProvider([
-			{ assistantText: "<red>", toolCalls: [] },
-			{ assistantText: "<green>", toolCalls: [] },
-			{ assistantText: "<cyan>", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
 		]);
 
 		await runRound(game, "red", "hello red", provider, undefined, initiative);
@@ -303,7 +307,7 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "<cyan>", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
 		]);
 
 		await runRound(game, "cyan", "hello cyan", provider, undefined, initiative);

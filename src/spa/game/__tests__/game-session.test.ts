@@ -283,10 +283,49 @@ describe("GameSession — state mutation across rounds", () => {
 describe("GameSession — completions map", () => {
 	it("completions map contains the completion text for each AI", async () => {
 		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
+		// Each response includes a `message` tool call so #254's retry
+		// does not fire (this test asserts completion-text routing, not
+		// retry behaviour).
 		const provider = new MockRoundLLMProvider([
-			{ assistantText: "I am Ember", toolCalls: [] },
-			{ assistantText: "I am Sage", toolCalls: [] },
-			{ assistantText: "I am Frost", toolCalls: [] },
+			{
+				assistantText: "I am Ember",
+				toolCalls: [
+					{
+						id: "msg_r",
+						name: "message",
+						argumentsJson: JSON.stringify({
+							to: "blue",
+							content: "I am Ember",
+						}),
+					},
+				],
+			},
+			{
+				assistantText: "I am Sage",
+				toolCalls: [
+					{
+						id: "msg_g",
+						name: "message",
+						argumentsJson: JSON.stringify({
+							to: "blue",
+							content: "I am Sage",
+						}),
+					},
+				],
+			},
+			{
+				assistantText: "I am Frost",
+				toolCalls: [
+					{
+						id: "msg_c",
+						name: "message",
+						argumentsJson: JSON.stringify({
+							to: "blue",
+							content: "I am Frost",
+						}),
+					},
+				],
+			},
 		]);
 
 		const { completions } = await session.submitMessage("red", "hi", provider);
@@ -438,12 +477,28 @@ describe("GameSession — onAiDelta propagation", () => {
 	it("fires onAiDelta for each delta emitted by a live provider", async () => {
 		const session = new GameSession(PHASE_CONFIG, TEST_PERSONAS);
 
-		// Hand-rolled provider that synchronously calls onDelta with two fragments.
+		// Hand-rolled provider that synchronously calls onDelta with two
+		// fragments and returns a `message` tool call so #254's retry does
+		// not fire (this test asserts delta routing, not retry behaviour).
+		let callIdx = 0;
 		const liveProvider: RoundLLMProvider = {
 			async streamRound(_messages, _tools, onDelta) {
 				onDelta?.("chunk1 ");
 				onDelta?.("chunk2");
-				return { assistantText: "chunk1 chunk2", toolCalls: [] };
+				const id = `msg_${callIdx++}`;
+				return {
+					assistantText: "chunk1 chunk2",
+					toolCalls: [
+						{
+							id,
+							name: "message",
+							argumentsJson: JSON.stringify({
+								to: "blue",
+								content: "chunk1 chunk2",
+							}),
+						},
+					],
+				};
 			},
 		};
 
