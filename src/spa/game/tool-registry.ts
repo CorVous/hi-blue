@@ -257,12 +257,18 @@ export function parseToolCallArguments<N extends ToolName>(
 			if (typeof obj.item !== "string" || obj.item.length === 0) {
 				return { ok: false, reason: "Required argument 'item' is missing" };
 			}
-			if (typeof obj.to !== "string" || obj.to.length === 0) {
+			if (typeof obj.to !== "string") {
+				return { ok: false, reason: "Required argument 'to' is missing" };
+			}
+			// Strip a leading `*` — the conversation log renders AI ids as `*foo`,
+			// and the model occasionally parrots that prefix into the structured arg.
+			const to = obj.to.startsWith("*") ? obj.to.slice(1) : obj.to;
+			if (to.length === 0) {
 				return { ok: false, reason: "Required argument 'to' is missing" };
 			}
 			return {
 				ok: true,
-				args: { item: obj.item, to: obj.to } as ToolArgs[N],
+				args: { item: obj.item, to } as ToolArgs[N],
 			};
 		}
 		case "go":
@@ -276,7 +282,13 @@ export function parseToolCallArguments<N extends ToolName>(
 			return { ok: true, args: { direction: obj.direction } as ToolArgs[N] };
 		}
 		case "message": {
-			if (typeof obj.to !== "string" || obj.to.length === 0) {
+			if (typeof obj.to !== "string") {
+				return { ok: false, reason: "Required argument 'to' is missing" };
+			}
+			// Strip a leading `*` — the conversation log renders AI ids as `*foo`,
+			// and the model occasionally parrots that prefix into the structured arg.
+			const to = obj.to.startsWith("*") ? obj.to.slice(1) : obj.to;
+			if (to.length === 0) {
 				return { ok: false, reason: "Required argument 'to' is missing" };
 			}
 			if (typeof obj.content !== "string" || obj.content.length === 0) {
@@ -284,7 +296,7 @@ export function parseToolCallArguments<N extends ToolName>(
 			}
 			return {
 				ok: true,
-				args: { to: obj.to, content: obj.content } as ToolArgs[N],
+				args: { to, content: obj.content } as ToolArgs[N],
 			};
 		}
 		default:
