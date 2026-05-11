@@ -13,9 +13,7 @@ import {
 	appendMessage,
 	appendWitnessedEvent,
 	deductBudget,
-	getActivePhase,
 	isAiLockedOut,
-	updateActivePhase,
 } from "./engine";
 import type {
 	AiId,
@@ -82,9 +80,8 @@ export function validateToolCall(
 	aiId: AiId,
 	call: ToolCall,
 ): ValidationResult {
-	const phase = getActivePhase(game);
-	const { world } = phase;
-	const actorSpatial = phase.personaSpatial[aiId];
+	const { world } = game;
+	const actorSpatial = game.personaSpatial[aiId];
 	const pickable = pickableEntities(world.entities);
 	const obstacles = obstaclePositions(world.entities);
 
@@ -146,7 +143,7 @@ export function validateToolCall(
 			if (target === aiId)
 				return { valid: false, reason: "Cannot give an item to yourself" };
 			// Spatial validity: target AI must be in actor's own cell or front arc
-			const targetSpatial = phase.personaSpatial[target];
+			const targetSpatial = game.personaSpatial[target];
 			if (!actorSpatial || !targetSpatial)
 				return {
 					valid: false,
@@ -259,104 +256,98 @@ export function executeToolCall(
 	aiId: AiId,
 	call: ToolCall,
 ): GameState {
-	return updateActivePhase(game, (phase) => {
-		const entities = phase.world.entities.map((e) => ({ ...e }));
-		const actorSpatial = phase.personaSpatial[aiId];
-		const pickable = pickableEntities(entities);
+	const entities = game.world.entities.map((e) => ({ ...e }));
+	const actorSpatial = game.personaSpatial[aiId];
+	const pickable = pickableEntities(entities);
 
-		const target = pickable.find((i) => i.id === call.args.item);
-		switch (call.name) {
-			case "pick_up":
-				if (target) target.holder = aiId;
-				break;
-			case "put_down":
-				if (target && actorSpatial) {
-					target.holder = { ...actorSpatial.position };
-				} else if (target) {
-					// Fallback: no spatial state — drop at (0,0)
-					target.holder = { row: 0, col: 0 };
-				}
-				break;
-			case "give":
-				if (target) target.holder = call.args.to as AiId;
-				break;
-			case "use": {
-				// Place item on the paired space's cell when the paired space is in
-				// the actor's own cell OR front arc. Otherwise no world mutation.
-				if (target && actorSpatial && target.pairsWithSpaceId) {
-					const pairedSpace = entities.find(
-						(e) => e.id === target.pairsWithSpaceId,
-					);
-					if (pairedSpace && isGridPosition(pairedSpace.holder)) {
-						const spacePos = pairedSpace.holder as GridPosition;
-						const spaceReachable =
-							positionsEqual(spacePos, actorSpatial.position) ||
-							frontArc(actorSpatial.position, actorSpatial.facing).some((p) =>
-								positionsEqual(p, spacePos),
-							);
-						if (spaceReachable) {
-							target.holder = { ...spacePos };
-						}
+	const target = pickable.find((i) => i.id === call.args.item);
+	switch (call.name) {
+		case "pick_up":
+			if (target) target.holder = aiId;
+			break;
+		case "put_down":
+			if (target && actorSpatial) {
+				target.holder = { ...actorSpatial.position };
+			} else if (target) {
+				// Fallback: no spatial state — drop at (0,0)
+				target.holder = { row: 0, col: 0 };
+			}
+			break;
+		case "give":
+			if (target) target.holder = call.args.to as AiId;
+			break;
+		case "use": {
+			// Place item on the paired space's cell when the paired space is in
+			// the actor's own cell OR front arc. Otherwise no world mutation.
+			if (target && actorSpatial && target.pairsWithSpaceId) {
+				const pairedSpace = entities.find(
+					(e) => e.id === target.pairsWithSpaceId,
+				);
+				if (pairedSpace && isGridPosition(pairedSpace.holder)) {
+					const spacePos = pairedSpace.holder as GridPosition;
+					const spaceReachable =
+						positionsEqual(spacePos, actorSpatial.position) ||
+						frontArc(actorSpatial.position, actorSpatial.facing).some((p) =>
+							positionsEqual(p, spacePos),
+						);
+					if (spaceReachable) {
+						target.holder = { ...spacePos };
 					}
 				}
-				break;
 			}
-			case "examine":
-				// No world mutation — examineDescription is returned as the tool result description.
-				break;
-			case "go": {
-				if (!actorSpatial) break;
-				// Translate relative → cardinal if needed
-				const rawGoDir = call.args.direction;
-				const direction: CardinalDirection = RELATIVE_DIRECTIONS.includes(
-					rawGoDir as RelativeDirection,
-				)
-					? relativeToCardinal(
-							actorSpatial.facing,
-							rawGoDir as RelativeDirection,
-						)
-					: (rawGoDir as CardinalDirection);
-				const nextPos = applyDirection(actorSpatial.position, direction);
-				return {
-					...phase,
-					world: { ...phase.world, entities },
-					personaSpatial: {
-						...phase.personaSpatial,
-						[aiId]: { position: nextPos, facing: direction },
-					},
-				};
-			}
-			case "look": {
-				if (!actorSpatial) break;
-				// Translate relative → cardinal if needed
-				const rawLookDir = call.args.direction;
-				const direction: CardinalDirection = RELATIVE_DIRECTIONS.includes(
-					rawLookDir as RelativeDirection,
-				)
-					? relativeToCardinal(
-							actorSpatial.facing,
-							rawLookDir as RelativeDirection,
-						)
-					: (rawLookDir as CardinalDirection);
-				return {
-					...phase,
-					world: { ...phase.world, entities },
-					personaSpatial: {
-						...phase.personaSpatial,
-						[aiId]: { ...actorSpatial, facing: direction },
-					},
-				};
-			}
+			break;
 		}
+		case "examine":
+			// No world mutation — examineDescription is returned as the tool result description.
+			break;
+		case "go": {
+			if (!actorSpatial) break;
+			// Translate relative → cardinal if needed
+			const rawGoDir = call.args.direction;
+			const direction: CardinalDirection = RELATIVE_DIRECTIONS.includes(
+				rawGoDir as RelativeDirection,
+			)
+				? relativeToCardinal(actorSpatial.facing, rawGoDir as RelativeDirection)
+				: (rawGoDir as CardinalDirection);
+			const nextPos = applyDirection(actorSpatial.position, direction);
+			return {
+				...game,
+				world: { ...game.world, entities },
+				personaSpatial: {
+					...game.personaSpatial,
+					[aiId]: { position: nextPos, facing: direction },
+				},
+			};
+		}
+		case "look": {
+			if (!actorSpatial) break;
+			// Translate relative → cardinal if needed
+			const rawLookDir = call.args.direction;
+			const direction: CardinalDirection = RELATIVE_DIRECTIONS.includes(
+				rawLookDir as RelativeDirection,
+			)
+				? relativeToCardinal(
+						actorSpatial.facing,
+						rawLookDir as RelativeDirection,
+					)
+				: (rawLookDir as CardinalDirection);
+			return {
+				...game,
+				world: { ...game.world, entities },
+				personaSpatial: {
+					...game.personaSpatial,
+					[aiId]: { ...actorSpatial, facing: direction },
+				},
+			};
+		}
+	}
 
-		return { ...phase, world: { ...phase.world, entities } };
-	});
+	return { ...game, world: { ...game.world, entities } };
 }
 
 function describeToolCall(game: GameState, aiId: AiId, call: ToolCall): string {
 	const name = game.personas[aiId]?.name ?? aiId;
-	const phase = getActivePhase(game);
-	const pickable = pickableEntities(phase.world.entities);
+	const pickable = pickableEntities(game.world.entities);
 
 	switch (call.name) {
 		case "pick_up":
@@ -398,7 +389,7 @@ export function dispatchAiTurn(
 	}
 
 	let state = game;
-	const round = getActivePhase(state).round;
+	const round = state.round;
 	const records: RoundActionRecord[] = [];
 
 	let actorPrivateToolResult:
@@ -413,7 +404,7 @@ export function dispatchAiTurn(
 	// each one emits exactly one record (kind="message" on success, "tool_failure"
 	// on invalid recipient) so the round coordinator can pair them back by index.
 	if (action.messages) {
-		const livePersonaIds = Object.keys(getActivePhase(state).personaSpatial);
+		const livePersonaIds = Object.keys(state.personaSpatial);
 		for (const { to, content } of action.messages) {
 			const validRecipient =
 				to === "blue" || (livePersonaIds.includes(to) && to !== aiId);
@@ -442,7 +433,7 @@ export function dispatchAiTurn(
 
 		if (toolCall.name === "examine") {
 			if (validation.valid) {
-				const item = getActivePhase(state).world.entities.find(
+				const item = state.world.entities.find(
 					(e) => e.id === toolCall.args.item,
 				);
 				actorPrivateToolResult = {
@@ -468,14 +459,9 @@ export function dispatchAiTurn(
 			state = executeToolCall(state, aiId, action.toolCall);
 			// For put_down, check if the object landed on its paired space.
 			// If so, replace the default description with the per-pair placementFlavor.
-			const activePhase = getActivePhase(state);
 			const flavorDescription =
 				action.toolCall.name === "put_down" || action.toolCall.name === "use"
-					? checkPlacementFlavor(
-							action,
-							activePhase.contentPack,
-							activePhase.world,
-						)
+					? checkPlacementFlavor(action, state.contentPack, state.world)
 					: null;
 			const successDescription =
 				flavorDescription ?? describeToolCall(state, aiId, action.toolCall);
@@ -490,7 +476,7 @@ export function dispatchAiTurn(
 			// to the actor so objective-item details land in the actor's context
 			// without requiring a separate examine call.
 			if (action.toolCall.name === "pick_up") {
-				const picked = activePhase.world.entities.find(
+				const picked = state.world.entities.find(
 					(e) => e.id === action.toolCall?.args.item,
 				);
 				if (picked?.examineDescription) {
@@ -512,14 +498,11 @@ export function dispatchAiTurn(
 				call.name === "use"
 			) {
 				// Post-execute spatial state — actor has moved for "go", others are unchanged
-				const postPhase = getActivePhase(state);
-				const actorSpatialPost = postPhase.personaSpatial[aiId];
+				const actorSpatialPost = state.personaSpatial[aiId];
 
 				// Collect all other AIs' spatial states at this moment (snapshot)
 				const witnessSpatial: Record<AiId, PersonaSpatialState> = {};
-				for (const [otherId, spatial] of Object.entries(
-					postPhase.personaSpatial,
-				)) {
+				for (const [otherId, spatial] of Object.entries(state.personaSpatial)) {
 					if (otherId !== aiId) {
 						witnessSpatial[otherId] = spatial;
 					}
@@ -527,7 +510,7 @@ export function dispatchAiTurn(
 
 				if (actorSpatialPost) {
 					// Gather optional fields
-					const pickable = pickableEntities(postPhase.world.entities);
+					const pickable = pickableEntities(state.world.entities);
 					let useOutcomeRaw: string | undefined;
 					let placementFlavorRaw: string | undefined;
 
@@ -541,7 +524,7 @@ export function dispatchAiTurn(
 						// Find the raw placementFlavor (before {actor} substitution)
 						// by looking at the content pack's object entity definition
 						const itemId = call.args.item;
-						const packObject = activePhase.contentPack.objectivePairs
+						const packObject = state.contentPack.objectivePairs
 							.map((p) => p.object)
 							.find((o) => o.id === itemId);
 						if (packObject?.placementFlavor && flavorDescription) {
@@ -644,7 +627,8 @@ export function dispatchAiTurn(
 		});
 	}
 
-	state = deductBudget(state, aiId, options?.costUsd ?? 0);
+	const deductResult = deductBudget(state, aiId, options?.costUsd ?? 0);
+	state = deductResult.game;
 
 	return {
 		rejected: false,

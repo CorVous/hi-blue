@@ -292,8 +292,9 @@ describe("loadActiveSession", () => {
 		const result = loadActiveSession();
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
-			expect(result.state.currentPhase).toBe(1);
-			expect(result.state.phases).toHaveLength(1);
+			// Flat model: no currentPhase / phases — verify state is valid
+			expect(result.state.isComplete).toBe(false);
+			expect(result.state.round).toBe(0);
 		}
 	});
 });
@@ -386,7 +387,8 @@ describe("consecutive saves", () => {
 		const secondLoad = loadActiveSession();
 		expect(secondLoad.kind).toBe("ok");
 		if (secondLoad.kind === "ok") {
-			expect(secondLoad.state.currentPhase).toBe(1);
+			// Flat model: no currentPhase — verify state loaded successfully
+			expect(secondLoad.state.isComplete).toBe(false);
 		}
 	});
 });

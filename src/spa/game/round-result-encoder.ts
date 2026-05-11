@@ -26,7 +26,7 @@
  *   game_ended     — { type }
  */
 
-import type { AiId, AiPersona, PhaseState, RoundResult } from "./types";
+import type { AiId, AiPersona, GameState, RoundResult } from "./types";
 
 /**
  * A single structured SSE event ready to be serialised as
@@ -97,7 +97,7 @@ export function splitIntoWordChunks(text: string): string[] {
 export function encodeRoundResult(
 	result: RoundResult,
 	completions: Partial<Record<AiId, string>>,
-	phaseAfter: PhaseState,
+	phaseAfter: GameState,
 	personas: Record<AiId, AiPersona>,
 ): SseEvent[] {
 	// Suppress unused-variable warning; completions is retained for
@@ -199,11 +199,12 @@ export function encodeRoundResult(
 	}
 
 	// phase_advanced — emitted when the phase advanced but the game is not over.
-	// phaseAfter is the new phase state when phaseEnded is true, so read from it.
+	// In the single-game loop (issue #295), phases are retired so phaseEnded is
+	// always false. This block is kept for wire-format backward-compat.
 	if (result.phaseEnded && !result.gameEnded) {
 		events.push({
 			type: "phase_advanced",
-			phase: phaseAfter.phaseNumber,
+			phase: 1,
 			setting: phaseAfter.setting,
 		});
 	}

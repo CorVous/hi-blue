@@ -66,7 +66,8 @@ export interface LandmarkDescription {
 
 /** Per-phase content pack: setting-flavored names, descriptions, outcomes, and placed entities. */
 export interface ContentPack {
-	phaseNumber: 1 | 2 | 3;
+	/** @deprecated Phase number is no longer meaningful in the flat single-game model (#295). */
+	phaseNumber?: 1 | 2 | 3;
 	setting: string;
 	weather: string;
 	timeOfDay: string;
@@ -254,45 +255,16 @@ export interface AiBudget {
 	total: number;
 }
 
-/**
- * A win condition for a phase.
- * Receives the active PhaseState and returns true when the phase objective is met.
- */
-export type WinCondition = (phase: PhaseState) => boolean;
-
-export interface PhaseConfig {
-	phaseNumber: 1 | 2 | 3;
-	/** Roll k (objective pairs) per phase. */
-	kRange: [number, number];
-	/** Roll n (interesting objects) per phase. */
-	nRange: [number, number];
-	/** Roll m (obstacles) per phase. */
-	mRange: [number, number];
-	budgetPerAi: number;
-	/**
-	 * Pool of candidate goals drawn at phase start. Must contain at least one entry.
-	 * `startPhase` performs one uniform draw per AI (independent draws — same goal
-	 * can be assigned to multiple AIs in one phase).
-	 * AC #6 deviation: the AC said "remove aiGoalPool?" but the field is retained as required
-	 * because goal selection still needs a per-phase draw pool — the AC language conflated
-	 * removing the optional pool marker with removing goal selection itself.
-	 */
-	aiGoalPool: string[];
-	/** Optional win condition. If absent, the phase never auto-advances. */
-	winCondition?: WinCondition;
-	/** Config for the next phase. Required when winCondition may fire. */
-	nextPhaseConfig?: PhaseConfig;
-}
-
-export interface PhaseState {
-	phaseNumber: 1 | 2 | 3;
-	/** Setting noun for this phase (e.g. "abandoned subway station"). */
+export interface GameState {
+	personas: Record<AiId, AiPersona>;
+	/** Single content pack for the game. */
+	contentPack: ContentPack;
+	isComplete: boolean;
+	outcome?: "win" | "lose";
+	/** Setting noun for this game (e.g. "abandoned subway station"). */
 	setting: string;
 	weather: string;
 	timeOfDay: string;
-	/** The full content pack for this phase. */
-	contentPack: ContentPack;
-	aiGoals: Record<AiId, string>;
 	round: number;
 	world: WorldState;
 	budgets: Record<AiId, AiBudget>;
@@ -302,31 +274,18 @@ export interface PhaseState {
 	lockedOut: Set<AiId>;
 	/**
 	 * Player-chat lockout: maps an AI's id to the round number at which the
-	 * lockout resolves (resolves when phase.round >= resolveAtRound).
+	 * lockout resolves (resolves when game.round >= resolveAtRound).
 	 * While active the player cannot address messages to that AI; the AI
 	 * continues to receive whispers, take turns, and call tools normally.
 	 * Semantically distinct from `lockedOut` (budget-exhaustion).
 	 */
 	chatLockouts: Map<AiId, number>;
-	/** Win condition carried from PhaseConfig so the coordinator can check it. */
-	winCondition?: WinCondition;
-	/** Next phase config carried from PhaseConfig so the coordinator can advance. */
-	nextPhaseConfig?: PhaseConfig;
-	/** Per-AI spatial state (position + facing) for this phase. */
+	/** Per-AI spatial state (position + facing). */
 	personaSpatial: Record<AiId, PersonaSpatialState>;
 	/** Complication countdown + phase-level flags. */
 	complicationSchedule: ComplicationSchedule;
 	/** Currently active persistent complications (Sysadmin Directives, Tool Disables, Chat Lockouts). */
 	activeComplications: ActiveComplication[];
-}
-
-export interface GameState {
-	currentPhase: 1 | 2 | 3;
-	phases: PhaseState[];
-	personas: Record<AiId, AiPersona>;
-	isComplete: boolean;
-	/** All three content packs generated at game start. */
-	contentPacks: ContentPack[];
 }
 
 export type ToolName =
@@ -375,6 +334,36 @@ export interface ToolRoundtripMessage {
 		reason?: string;
 	}>;
 }
+
+/**
+ * @deprecated Phase concept removed (issue #295). Use GameState directly.
+ * Kept as a type alias for test backward-compat.
+ */
+export type PhaseState = GameState & {
+	phaseNumber: 1 | 2 | 3;
+	aiGoals: Record<AiId, string>;
+	contentPack: ContentPack;
+};
+
+/**
+ * @deprecated Phase concept removed (issue #295). Use SingleGameConfig.
+ * Kept as a type alias for test backward-compat.
+ */
+export interface PhaseConfig {
+	phaseNumber: 1 | 2 | 3;
+	kRange: [number, number];
+	nRange: [number, number];
+	mRange: [number, number];
+	budgetPerAi: number;
+	aiGoalPool: string[];
+	winCondition?: (phase: GameState) => boolean;
+	nextPhaseConfig?: PhaseConfig;
+}
+
+/**
+ * @deprecated Phase concept removed (issue #295).
+ */
+export type WinCondition = (phase: GameState) => boolean;
 
 export interface RoundResult {
 	round: number;

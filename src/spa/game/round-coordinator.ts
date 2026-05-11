@@ -21,11 +21,10 @@ import { availableTools } from "./available-tools";
 import { COMPLICATIONS } from "./complications";
 import { dispatchAiTurn } from "./dispatcher";
 import {
-	advancePhase,
 	advanceRound,
 	appendMessage,
 	appendPrivateSystemNotice,
-	getActivePhase,
+	FAREWELL_LINE,
 	isAiLockedOut,
 	resolveChatLockouts,
 	resolveToolDisables,
@@ -44,6 +43,7 @@ import type {
 	ToolName,
 	ToolRoundtripMessage,
 } from "./types";
+import { checkLoseCondition, checkWinCondition } from "./win-condition";
 
 // Match the SPA dev-host gate used in src/spa/routes/game.ts. The
 // `typeof` guard keeps this safe in test environments that don't stub
@@ -183,7 +183,7 @@ export async function runRound(
 			const lockoutContent = `${state.personas[aiId]?.name ?? aiId} is unresponsive…`;
 			state = appendMessage(state, aiId, "blue", lockoutContent);
 			roundActions.push({
-				round: getActivePhase(state).round,
+				round: state.round,
 				actor: aiId,
 				kind: "lockout",
 				description: `${state.personas[aiId]?.name ?? aiId} is locked out`,
@@ -206,18 +206,10 @@ export async function runRound(
 		// and passes it back as priorConeSnapshots next round.
 		newConeSnapshots[aiId] = buildConeSnapshot(ctx);
 		const priorRoundtrip = priorToolRoundtrip?.[aiId];
-		const messages = buildOpenAiMessages(
-			ctx,
-			priorRoundtrip,
-			getActivePhase(state).round,
-		);
+		const messages = buildOpenAiMessages(ctx, priorRoundtrip, state.round);
 
 		// Compute legal tools for this AI given current game state
-		const tools = availableTools(
-			state,
-			aiId,
-			getActivePhase(state).activeComplications,
-		);
+		const tools = availableTools(state, aiId, state.activeComplications);
 
 		// Call the provider
 		let { assistantText, toolCalls, costUsd } = await provider.streamRound(
@@ -292,7 +284,7 @@ export async function runRound(
 
 		let actionAssigned = false;
 
-		const round = getActivePhase(state).round;
+		const round = state.round;
 		const actorName = state.personas[aiId]?.name ?? aiId;
 
 		for (const tc of toolCalls) {
@@ -366,6 +358,9 @@ export async function runRound(
 			action.pass = true;
 		}
 
+		// Snapshot locked-out set before dispatch to detect budget exhaustion.
+		const lockedOutBefore = new Set(state.lockedOut);
+
 		// Dispatch through the existing dispatcher
 		const dispatchResult = dispatchAiTurn(
 			state,
@@ -373,6 +368,21 @@ export async function runRound(
 			costUsd !== undefined ? { costUsd } : {},
 		);
 		state = dispatchResult.game;
+
+		// Farewell line: emitted exactly once when a Daemon's budget is just exhausted.
+		const justExhausted =
+			!lockedOutBefore.has(aiId) && state.lockedOut.has(aiId);
+		if (justExhausted) {
+			const personaName = state.personas[aiId]?.name ?? aiId;
+			const farewellContent = FAREWELL_LINE(personaName);
+			state = appendMessage(state, aiId, "blue", farewellContent);
+			roundActions.push({
+				round: state.round,
+				actor: aiId,
+				kind: "message",
+				description: farewellContent,
+			});
+		}
 
 		// Collect records produced by this dispatch (examine produces none)
 		for (const record of dispatchResult.records) {
@@ -478,15 +488,15 @@ export async function runRound(
 	// 3. Advance the round counter
 	state = advanceRound(state);
 
-	// 4. Mid-phase chat-lockout
+	// 4. Mid-game chat-lockout
 	let chatLockoutTriggered: RoundResult["chatLockoutTriggered"] | undefined;
 	let chatLockoutsResolved: AiId[] | undefined;
 
 	if (chatLockoutConfig) {
 		const { rng, lockoutTriggerRound, lockoutDuration } = chatLockoutConfig;
-		const currentRound = getActivePhase(state).round;
+		const currentRound = state.round;
 
-		const alreadyHasLockout = getActivePhase(state).chatLockouts.size > 0;
+		const alreadyHasLockout = state.chatLockouts.size > 0;
 		if (currentRound === lockoutTriggerRound && !alreadyHasLockout) {
 			const aiIndex = Math.floor(rng() * aiOrder.length);
 			const targetAi = aiOrder[aiIndex] as AiId;
@@ -498,10 +508,9 @@ export async function runRound(
 			};
 		}
 
-		const phaseBefore = getActivePhase(state);
 		const expiredAis: AiId[] = [];
-		for (const [aiId, resolveAtRound] of phaseBefore.chatLockouts) {
-			if (phaseBefore.round >= resolveAtRound) {
+		for (const [aiId, resolveAtRound] of state.chatLockouts) {
+			if (state.round >= resolveAtRound) {
 				expiredAis.push(aiId);
 			}
 		}
@@ -524,10 +533,10 @@ export async function runRound(
 		}
 	}
 
-	// 5. Mid-phase complication
+	// 5. Mid-game complication
 	if (complicationConfig) {
 		const { rng, triggerRound } = complicationConfig;
-		const currentRound = getActivePhase(state).round;
+		const currentRound = state.round;
 		if (currentRound === triggerRound && COMPLICATIONS.length > 0) {
 			const compIdx = Math.floor(rng() * COMPLICATIONS.length);
 			// biome-ignore lint/style/noNonNullAssertion: bounded index into non-empty array
@@ -536,20 +545,21 @@ export async function runRound(
 		}
 	}
 
-	// 6. Check win condition
-	const activePhaseAfterRound = getActivePhase(state);
-	let phaseEnded = false;
-
-	if (activePhaseAfterRound.winCondition?.(activePhaseAfterRound)) {
-		phaseEnded = true;
-		state = advancePhase(state, activePhaseAfterRound.nextPhaseConfig);
+	// 6. Check win/lose conditions — win takes priority.
+	let gameEnded = false;
+	if (checkWinCondition(state.world, state.contentPack)) {
+		state = { ...state, isComplete: true, outcome: "win" };
+		gameEnded = true;
+	} else if (checkLoseCondition(state.lockedOut, Object.keys(state.personas))) {
+		state = { ...state, isComplete: true, outcome: "lose" };
+		gameEnded = true;
 	}
 
 	const result: RoundResult = {
-		round: activePhaseAfterRound.round,
+		round: state.round,
 		actions: roundActions,
-		phaseEnded,
-		gameEnded: state.isComplete,
+		phaseEnded: false,
+		gameEnded,
 		...(chatLockoutTriggered !== undefined ? { chatLockoutTriggered } : {}),
 		...(chatLockoutsResolved !== undefined ? { chatLockoutsResolved } : {}),
 	};

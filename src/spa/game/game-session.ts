@@ -20,7 +20,7 @@
  * so the message builder can re-inject them for the next round.
  */
 
-import { createGame, startPhase } from "./engine";
+import { startGame } from "./engine";
 import type { ChatLockoutConfig } from "./round-coordinator";
 import { runRound } from "./round-coordinator";
 import type { RoundLLMProvider } from "./round-llm-provider";
@@ -29,7 +29,6 @@ import type {
 	AiPersona,
 	ContentPack,
 	GameState,
-	PhaseConfig,
 	RoundResult,
 	ToolRoundtripMessage,
 } from "./types";
@@ -54,13 +53,16 @@ export class GameSession {
 	private coneSnapshots: Partial<Record<AiId, string>> = {};
 
 	constructor(
-		phaseConfig: PhaseConfig,
+		contentPack: ContentPack,
 		personas: Record<AiId, AiPersona>,
-		contentPacks?: ContentPack[],
+		_contentPacks?: ContentPack[],
 		rng?: () => number,
 	) {
-		const game = createGame(personas, contentPacks ?? []);
-		this.state = startPhase(game, phaseConfig, rng);
+		this.state = startGame(
+			personas,
+			contentPack,
+			rng !== undefined ? { rng } : {},
+		);
 	}
 
 	/**

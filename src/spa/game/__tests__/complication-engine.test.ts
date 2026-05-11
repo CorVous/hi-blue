@@ -130,7 +130,9 @@ function makePhase(overrides: Partial<PhaseState> = {}): PhaseState {
 	};
 
 	return {
+		personas: TEST_PERSONAS,
 		phaseNumber: 1,
+		isComplete: false,
 		setting: "test",
 		weather: "clear",
 		timeOfDay: "day",
@@ -150,13 +152,9 @@ function makePhase(overrides: Partial<PhaseState> = {}): PhaseState {
 }
 
 function makeGameStateAround(phase: PhaseState): GameState {
-	return {
-		currentPhase: 1,
-		phases: [phase],
-		personas: TEST_PERSONAS,
-		isComplete: false,
-		contentPacks: [],
-	};
+	// Flat GameState model: PhaseState already includes all GameState fields.
+	const { phaseNumber: _pn, aiGoals: _ag, ...gameState } = phase;
+	return gameState;
 }
 
 function makeObstacle(id: string, pos: GridPosition): WorldEntity {

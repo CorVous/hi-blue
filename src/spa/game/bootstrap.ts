@@ -10,13 +10,11 @@
  * Issue #173 (parent #155).
  */
 
-import { generateContentPacks } from "../../content/content-pack-generator.js";
+import { generateContentPack } from "../../content/content-pack-generator.js";
 import {
 	generatePersonas,
-	PHASE_1_CONFIG,
-	PHASE_2_CONFIG,
-	PHASE_3_CONFIG,
 	SETTING_POOL,
+	SINGLE_GAME_CONFIG,
 } from "../../content/index.js";
 import type { ContentPackProvider } from "./content-pack-provider.js";
 import { BrowserContentPackProvider } from "./content-pack-provider.js";
@@ -27,11 +25,15 @@ import type { AiId, AiPersona, ContentPack } from "./types.js";
 
 export interface NewGameAssets {
 	personas: Record<AiId, AiPersona>;
+	contentPack: ContentPack;
+	/** @deprecated use contentPack */
 	contentPacks: ContentPack[];
 }
 
 export interface SplitNewGameAssets {
 	personasPromise: Promise<Record<AiId, AiPersona>>;
+	contentPackPromise: Promise<ContentPack>;
+	/** @deprecated use contentPackPromise */
 	contentPacksPromise: Promise<ContentPack[]>;
 }
 
@@ -82,16 +84,20 @@ export function generateNewGameAssetsSplit(
 	const aiIdsPromise = personasPromise.then((p) => Object.keys(p));
 	aiIdsPromise.catch(() => {});
 
-	const contentPacksPromise = generateContentPacks(
+	const contentPackPromise = generateContentPack(
 		contentPackRng,
 		SETTING_POOL,
-		[PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG],
+		SINGLE_GAME_CONFIG,
 		packLLM,
 		aiIdsPromise,
 	);
+	contentPackPromise.catch(() => {});
+
+	// Backward-compat shim: wrap single pack in an array
+	const contentPacksPromise = contentPackPromise.then((p) => [p]);
 	contentPacksPromise.catch(() => {});
 
-	return { personasPromise, contentPacksPromise };
+	return { personasPromise, contentPackPromise, contentPacksPromise };
 }
 
 /**
@@ -105,13 +111,13 @@ export function generateNewGameAssetsSplit(
 export async function generateNewGameAssets(
 	opts?: BootstrapOpts,
 ): Promise<NewGameAssets> {
-	const { personasPromise, contentPacksPromise } =
+	const { personasPromise, contentPackPromise } =
 		generateNewGameAssetsSplit(opts);
-	const [personas, contentPacks] = await Promise.all([
+	const [personas, contentPack] = await Promise.all([
 		personasPromise,
-		contentPacksPromise,
+		contentPackPromise,
 	]);
-	return { personas, contentPacks };
+	return { personas, contentPack, contentPacks: [contentPack] };
 }
 
 /**
@@ -128,9 +134,9 @@ export function buildSessionFromAssets(
 	opts?: { rng?: () => number },
 ): GameSession {
 	return new GameSession(
-		PHASE_1_CONFIG,
+		assets.contentPack,
 		assets.personas,
-		assets.contentPacks,
+		undefined,
 		opts?.rng,
 	);
 }

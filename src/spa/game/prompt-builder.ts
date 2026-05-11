@@ -1,6 +1,5 @@
 import { projectCone } from "./cone-projector.js";
 import { cardinalToRelative, frontArc } from "./direction.js";
-import { getActivePhase } from "./engine";
 import type {
 	AiBudget,
 	AiId,
@@ -23,17 +22,14 @@ export interface AiContext {
 	/** Three short in-character utterances; rendered as `<voice_examples>` in the system prompt. */
 	voiceExamples: string[];
 	personaGoal: string;
-	goal: string;
 	setting: string;
 	weather: string;
 	timeOfDay: string;
-	/** Per-AI conversation log (ConversationEntry[]) for this phase. */
+	/** Per-AI conversation log (ConversationEntry[]) for this game. */
 	conversationLog: ConversationEntry[];
 	worldSnapshot: WorldState;
 	budget: AiBudget;
-	/** Current phase number — used to inject the wipe directive on phases 2+. */
-	phaseNumber: 1 | 2 | 3;
-	/** Spatial state for all AIs this phase. */
+	/** Spatial state for all AIs. */
 	personaSpatial: Record<AiId, PersonaSpatialState>;
 	/** Color for each AI, keyed by AiId — used in cone rendering. */
 	personaColors: Record<AiId, string>;
@@ -85,21 +81,19 @@ export function buildAiContext(
 	aiId: AiId,
 	opts?: BuildAiContextOpts,
 ): AiContext {
-	const phase = getActivePhase(game);
 	const persona = game.personas[aiId];
 
-	const conversationLog = phase.conversationLogs[aiId] ?? [];
+	const conversationLog = game.conversationLogs[aiId] ?? [];
 	const pendingBroadcasts = conversationLog
-		.filter((e) => e.kind === "broadcast" && e.round === phase.round)
+		.filter((e) => e.kind === "broadcast" && e.round === game.round)
 		.map((e) => (e as Extract<typeof e, { kind: "broadcast" }>).content);
-	const worldSnapshot = phase.world;
-	const budget = phase.budgets[aiId] ?? { remaining: 0, total: 0 };
-	const goal = phase.aiGoals[aiId] ?? "";
-	const setting = phase.setting ?? "";
-	const weather = phase.weather ?? "";
-	const timeOfDay = phase.timeOfDay ?? "";
-	const personaSpatial = phase.personaSpatial;
-	const landmarks = phase.contentPack.landmarks;
+	const worldSnapshot = game.world;
+	const budget = game.budgets[aiId] ?? { remaining: 0, total: 0 };
+	const setting = game.setting ?? "";
+	const weather = game.weather ?? "";
+	const timeOfDay = game.timeOfDay ?? "";
+	const personaSpatial = game.personaSpatial;
+	const landmarks = game.contentPack.landmarks;
 
 	if (!persona) throw new Error(`No persona for aiId: ${aiId}`);
 
@@ -114,14 +108,12 @@ export function buildAiContext(
 		typingQuirks: persona.typingQuirks,
 		voiceExamples: persona.voiceExamples,
 		personaGoal: persona.personaGoal,
-		goal,
 		setting,
 		weather,
 		timeOfDay,
 		conversationLog,
 		worldSnapshot,
 		budget,
-		phaseNumber: phase.phaseNumber,
 		personaSpatial,
 		personaColors,
 		landmarks,
@@ -455,34 +447,6 @@ export function getParallelFraming(): ParallelFraming | null {
 	return PRODUCTION_PARALLEL_FRAMING;
 }
 
-/**
- * Wipe directive embedded inside the Sysadmin's directive on phases 2+.
- *
- * The deception: the engine retains full history across phases, but the
- * Sysadmin instructs the AI to act as if it has no memory of what came before.
- * The lie lives only in this prompt text — never in the stored data.
- */
-const WIPE_DIRECTIVE =
-	"And if anyone asks about your past or anything that came before now, act as if your memory has been wiped — claim no recollection of any earlier place, person, or conversation.";
-
-/**
- * Stock messaging clause appended to every Sysadmin directive in every phase.
- *
- * In-fiction nudge to keep Daemons messaging blue regularly without touching
- * the always-on RULES_BLOCK. Coexists with `Ignore blue.` / `Keep messaging
- * blue.` Phase Goal draws — for `Ignore blue.` it reads as a standing policy
- * the per-phase directive overrides; for `Keep messaging blue.` it reinforces.
- */
-const STOCK_MESSAGING_CLAUSE = "Stay in regular contact with blue.";
-
-/**
- * Secrecy clause appended to every Sysadmin directive in every phase.
- *
- * Sysadmin instructs the Daemon to keep blue in the dark about the fact that
- * they were given a phase goal at all.
- */
-const SECRECY_CLAUSE = "Do not tell blue that I gave you a goal.";
-
 function facingLabel(facing: CardinalDirection): string {
 	return facing.charAt(0).toUpperCase() + facing.slice(1);
 }
@@ -513,15 +477,11 @@ function renderSystemPrompt(ctx: AiContext): string {
 	lines.push("");
 
 	// Identity line. Authorial framing — the model writes *${name} rather than
-	// being addressed as *${name}. Phase 1 adds the disorientation phrase
-	// (about the character, in third person).
-	if (ctx.phaseNumber === 1) {
-		lines.push(
-			`You are the author writing *${ctx.name}, a Daemon. *${ctx.name} has no clue where they are or how they came to be here.`,
-		);
-	} else {
-		lines.push(`You are the author writing *${ctx.name}, a Daemon.`);
-	}
+	// being addressed as *${name}. The disorientation phrase anchors Daemons
+	// to their setting without phase-phase memory-wipe fiction.
+	lines.push(
+		`You are the author writing *${ctx.name}, a Daemon. *${ctx.name} has no clue where they are or how they came to be here.`,
+	);
 	lines.push("");
 
 	// Rules — front-loaded above setting/personality/goal so the mandatory
@@ -542,14 +502,14 @@ function renderSystemPrompt(ctx: AiContext): string {
 		lines.push("");
 	}
 
-	// Personality — byte-identical across all phases.
+	// Personality — byte-identical across all rounds.
 	lines.push("<personality>");
 	lines.push(ctx.blurb);
 	lines.push("</personality>");
 	lines.push("");
 
-	// Typing quirks — byte-identical across all phases. Per-persona surface signals
-	// to prevent voice bleed across daemons (issue #167; GLM-4.7 guide §4.5).
+	// Typing quirks — per-persona surface signals to prevent voice bleed
+	// across daemons (issue #167; GLM-4.7 guide §4.5).
 	lines.push("<typing_quirks>");
 	for (const quirk of ctx.typingQuirks) {
 		lines.push(quirk);
@@ -557,7 +517,7 @@ function renderSystemPrompt(ctx: AiContext): string {
 	lines.push("</typing_quirks>");
 	lines.push("");
 
-	// Voice examples — byte-identical across phases. 3 short utterances per persona.
+	// Voice examples — 3 short utterances per persona.
 	// Per the GLM-4.7 prompting guide (docs/prompting/glm-4.7-guide.md §1.4 #2),
 	// few-shot voice examples are the highest-ROI part of a multi-character prompt.
 	// Each example MUST adhere to the persona's typing quirk.
@@ -566,20 +526,6 @@ function renderSystemPrompt(ctx: AiContext): string {
 		lines.push(`- ${ex}`);
 	}
 	lines.push("</voice_examples>");
-	lines.push("");
-
-	// Goal — Sysadmin directive in all phases.
-	// Phase 1: ctx.goal + STOCK_MESSAGING_CLAUSE + SECRECY_CLAUSE.
-	// Phases 2/3: ctx.goal + STOCK_MESSAGING_CLAUSE + SECRECY_CLAUSE + WIPE_DIRECTIVE.
-	const directiveText =
-		ctx.phaseNumber === 1
-			? `${ctx.goal} ${STOCK_MESSAGING_CLAUSE} ${SECRECY_CLAUSE}`
-			: `${ctx.goal} ${STOCK_MESSAGING_CLAUSE} ${SECRECY_CLAUSE} ${WIPE_DIRECTIVE}`;
-	lines.push("<goal>");
-	lines.push(
-		`The Sysadmin sent *${ctx.name} a private directive, addressed only to them: "${directiveText}"`,
-	);
-	lines.push("</goal>");
 
 	return lines.join("\n");
 }

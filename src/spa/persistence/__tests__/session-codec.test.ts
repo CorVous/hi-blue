@@ -61,15 +61,14 @@ const CREATED_AT = "2024-01-01T00:00:00.000Z";
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe("serializeSession / deserializeSession", () => {
-	it("round-trips a fresh phase-1 game (ok)", () => {
+	it("round-trips a fresh game (ok)", () => {
 		const game = makeFreshGame();
 		const files = serializeSession(game, NOW, CREATED_AT);
 		const result = deserializeSession(files);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
-			expect(result.state.currentPhase).toBe(1);
-			expect(result.state.phases).toHaveLength(1);
 			expect(result.state.isComplete).toBe(false);
+			expect(result.state.round).toBe(0);
 			expect(result.createdAt).toBe(CREATED_AT);
 			expect(result.lastSavedAt).toBe(NOW);
 		}
@@ -209,69 +208,53 @@ describe("serializeSession / deserializeSession", () => {
 
 	it("round-trips lockedOut Set (chatLockouts no longer persisted)", () => {
 		const game = makeFreshGame();
-		const phase = game.phases[0];
-		if (!phase) throw new Error("no phase");
 		const modified: GameState = {
 			...game,
-			phases: [
-				{
-					...phase,
-					lockedOut: new Set<AiId>(["red"]),
-					chatLockouts: new Map<AiId, number>([["green", 5]]),
-				},
-			],
+			lockedOut: new Set<AiId>(["red"]),
+			chatLockouts: new Map<AiId, number>([["green", 5]]),
 		};
 		const files = serializeSession(modified, NOW, CREATED_AT);
 		const result = deserializeSession(files);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
-			const rp = result.state.phases[0];
-			expect(rp?.lockedOut).toBeInstanceOf(Set);
-			expect(rp?.lockedOut.has("red")).toBe(true);
-			expect(rp?.chatLockouts).toBeInstanceOf(Map);
-			expect(rp?.chatLockouts.size).toBe(0);
+			expect(result.state.lockedOut).toBeInstanceOf(Set);
+			expect(result.state.lockedOut.has("red")).toBe(true);
+			expect(result.state.chatLockouts).toBeInstanceOf(Map);
+			expect(result.state.chatLockouts.size).toBe(0);
 		}
 	});
 
 	it("round-trips conversation logs with message entries", () => {
 		const game = makeFreshGame();
-		const phase = game.phases[0];
-		if (!phase) throw new Error("no phase");
 		const modified: GameState = {
 			...game,
-			phases: [
-				{
-					...phase,
-					conversationLogs: {
-						red: [
-							{
-								kind: "message",
-								from: "blue",
-								to: "red",
-								content: "hello red",
-								round: 0,
-							},
-						],
-						green: [
-							{
-								kind: "message",
-								from: "green",
-								to: "blue",
-								content: "green reply",
-								round: 0,
-							},
-						],
-						cyan: [],
+			conversationLogs: {
+				red: [
+					{
+						kind: "message",
+						from: "blue",
+						to: "red",
+						content: "hello red",
+						round: 0,
 					},
-				},
-			],
+				],
+				green: [
+					{
+						kind: "message",
+						from: "green",
+						to: "blue",
+						content: "green reply",
+						round: 0,
+					},
+				],
+				cyan: [],
+			},
 		};
 		const files = serializeSession(modified, NOW, CREATED_AT);
 		const result = deserializeSession(files);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
-			const rp = result.state.phases[0];
-			expect(rp?.conversationLogs.red).toEqual([
+			expect(result.state.conversationLogs.red).toEqual([
 				{
 					kind: "message",
 					from: "blue",
@@ -280,7 +263,7 @@ describe("serializeSession / deserializeSession", () => {
 					round: 0,
 				},
 			]);
-			expect(rp?.conversationLogs.green).toEqual([
+			expect(result.state.conversationLogs.green).toEqual([
 				{
 					kind: "message",
 					from: "green",
@@ -294,8 +277,6 @@ describe("serializeSession / deserializeSession", () => {
 
 	it("round-trips message and witnessed-event entries via per-Daemon conversationLog", () => {
 		const game = makeFreshGame();
-		const phase = game.phases[0];
-		if (!phase) throw new Error("no phase");
 		const messageEntry: ConversationEntry = {
 			kind: "message",
 			round: 1,
@@ -312,36 +293,28 @@ describe("serializeSession / deserializeSession", () => {
 		};
 		const modified: GameState = {
 			...game,
-			phases: [
-				{
-					...phase,
-					conversationLogs: {
-						...phase.conversationLogs,
-						cyan: [messageEntry],
-						green: [witnessedEntry],
-					},
-				},
-			],
+			conversationLogs: {
+				...game.conversationLogs,
+				cyan: [messageEntry],
+				green: [witnessedEntry],
+			},
 		};
 		const files = serializeSession(modified, NOW, CREATED_AT);
 		const result = deserializeSession(files);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
-			const rp = result.state.phases[0];
 			// message entry round-trips in cyan's log
-			expect(rp?.conversationLogs.cyan?.[0]).toEqual(messageEntry);
+			expect(result.state.conversationLogs.cyan?.[0]).toEqual(messageEntry);
 			// witnessed-event round-trips in green's log
-			expect(rp?.conversationLogs.green?.[0]).toEqual(witnessedEntry);
-			// No physicalLog or whispers fields on phase (regression guards)
-			expect("physicalLog" in (rp ?? {})).toBe(false);
-			expect("whispers" in (rp ?? {})).toBe(false);
+			expect(result.state.conversationLogs.green?.[0]).toEqual(witnessedEntry);
+			// No physicalLog or whispers fields on state (regression guards)
+			expect("physicalLog" in result.state).toBe(false);
+			expect("whispers" in result.state).toBe(false);
 		}
 	});
 
 	it("round-trips action-failure entries in per-Daemon conversationLog", () => {
 		const game = makeFreshGame();
-		const phase = game.phases[0];
-		if (!phase) throw new Error("no phase");
 		const failureEntry: ConversationEntry = {
 			kind: "action-failure",
 			round: 3,
@@ -350,32 +323,24 @@ describe("serializeSession / deserializeSession", () => {
 		};
 		const modified: GameState = {
 			...game,
-			phases: [
-				{
-					...phase,
-					conversationLogs: {
-						...phase.conversationLogs,
-						red: [failureEntry],
-					},
-				},
-			],
+			conversationLogs: {
+				...game.conversationLogs,
+				red: [failureEntry],
+			},
 		};
 		const files = serializeSession(modified, NOW, CREATED_AT);
 		const result = deserializeSession(files);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
-			const rp = result.state.phases[0];
-			expect(rp?.conversationLogs.red?.[0]).toEqual(failureEntry);
+			expect(result.state.conversationLogs.red?.[0]).toEqual(failureEntry);
 			// Peer logs should remain empty
-			expect(rp?.conversationLogs.green ?? []).toHaveLength(0);
-			expect(rp?.conversationLogs.cyan ?? []).toHaveLength(0);
+			expect(result.state.conversationLogs.green ?? []).toHaveLength(0);
+			expect(result.state.conversationLogs.cyan ?? []).toHaveLength(0);
 		}
 	});
 
 	it("round-trips world entities", () => {
 		const game = makeFreshGame();
-		const phase = game.phases[0];
-		if (!phase) throw new Error("no phase");
 		const entity: WorldEntity = {
 			id: "key",
 			kind: "interesting_object",
@@ -385,13 +350,13 @@ describe("serializeSession / deserializeSession", () => {
 		};
 		const modified: GameState = {
 			...game,
-			phases: [{ ...phase, world: { entities: [entity] } }],
+			world: { entities: [entity] },
 		};
 		const files = serializeSession(modified, NOW, CREATED_AT);
 		const result = deserializeSession(files);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
-			expect(result.state.phases[0]?.world.entities[0]).toMatchObject({
+			expect(result.state.world.entities[0]).toMatchObject({
 				id: "key",
 				name: "The Key",
 				holder: { row: 2, col: 3 },
@@ -401,26 +366,19 @@ describe("serializeSession / deserializeSession", () => {
 
 	it("round-trips budgets", () => {
 		const game = makeFreshGame();
-		const phase = game.phases[0];
-		if (!phase) throw new Error("no phase");
 		const modified: GameState = {
 			...game,
-			phases: [
-				{
-					...phase,
-					budgets: {
-						red: { remaining: 0.03, total: 0.05 },
-						green: { remaining: 0.05, total: 0.05 },
-						cyan: { remaining: 0.04, total: 0.05 },
-					},
-				},
-			],
+			budgets: {
+				red: { remaining: 0.03, total: 0.05 },
+				green: { remaining: 0.05, total: 0.05 },
+				cyan: { remaining: 0.04, total: 0.05 },
+			},
 		};
 		const files = serializeSession(modified, NOW, CREATED_AT);
 		const result = deserializeSession(files);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
-			expect(result.state.phases[0]?.budgets.red).toEqual({
+			expect(result.state.budgets.red).toEqual({
 				remaining: 0.03,
 				total: 0.05,
 			});
@@ -429,26 +387,19 @@ describe("serializeSession / deserializeSession", () => {
 
 	it("round-trips personaSpatial", () => {
 		const game = makeFreshGame();
-		const phase = game.phases[0];
-		if (!phase) throw new Error("no phase");
 		const modified: GameState = {
 			...game,
-			phases: [
-				{
-					...phase,
-					personaSpatial: {
-						red: { position: { row: 2, col: 3 }, facing: "east" as const },
-						green: { position: { row: 1, col: 1 }, facing: "south" as const },
-						cyan: { position: { row: 4, col: 4 }, facing: "west" as const },
-					},
-				},
-			],
+			personaSpatial: {
+				red: { position: { row: 2, col: 3 }, facing: "east" as const },
+				green: { position: { row: 1, col: 1 }, facing: "south" as const },
+				cyan: { position: { row: 4, col: 4 }, facing: "west" as const },
+			},
 		};
 		const files = serializeSession(modified, NOW, CREATED_AT);
 		const result = deserializeSession(files);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
-			expect(result.state.phases[0]?.personaSpatial.red).toEqual({
+			expect(result.state.personaSpatial.red).toEqual({
 				position: { row: 2, col: 3 },
 				facing: "east",
 			});
@@ -457,8 +408,6 @@ describe("serializeSession / deserializeSession", () => {
 
 	it("round-trips obstacle entities", () => {
 		const game = makeFreshGame();
-		const phase = game.phases[0];
-		if (!phase) throw new Error("no phase");
 		const obstacles: WorldEntity[] = [
 			{
 				id: "wall_a",
@@ -470,21 +419,16 @@ describe("serializeSession / deserializeSession", () => {
 		];
 		const modified: GameState = {
 			...game,
-			phases: [
-				{
-					...phase,
-					world: { entities: [...phase.world.entities, ...obstacles] },
-				},
-			],
+			world: { entities: [...game.world.entities, ...obstacles] },
 		};
 		const files = serializeSession(modified, NOW, CREATED_AT);
 		const result = deserializeSession(files);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
-			const obstacleEntities = result.state.phases[0]?.world.entities.filter(
+			const obstacleEntities = result.state.world.entities.filter(
 				(e) => e.kind === "obstacle",
 			);
-			expect(obstacleEntities?.some((e) => e.id === "wall_a")).toBe(true);
+			expect(obstacleEntities.some((e) => e.id === "wall_a")).toBe(true);
 		}
 	});
 
@@ -535,25 +479,22 @@ describe("serializeSession / deserializeSession", () => {
 		expect(result.kind).toBe("version-mismatch");
 	});
 
-	it("re-attaches nextPhaseConfig and winCondition from canonical phase chain", () => {
+	it("round-trips correctly with flat state (no phase config re-attachment needed)", () => {
+		// In the flat model (#295), there are no nextPhaseConfig / winCondition
+		// fields to re-attach. The round-trip should still succeed.
 		const game = makeFreshGame();
 		const files = serializeSession(game, NOW, CREATED_AT);
 		const result = deserializeSession(files);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
-			const phase = result.state.phases[0];
-			// PHASE_1_CONFIG has nextPhaseConfig (PHASE_2_CONFIG)
-			expect(phase?.nextPhaseConfig).toBeDefined();
-			expect(phase?.nextPhaseConfig?.phaseNumber).toBe(2);
-			// winCondition should be re-attached
-			expect(typeof phase?.winCondition).toBe("function");
+			// Flat state: no phase chain — just verify basic fields survived round-trip
+			expect(result.state.isComplete).toBe(game.isComplete);
+			expect(result.state.round).toBe(game.round);
 		}
 	});
 
 	it("round-trips complicationSchedule and activeComplications unchanged", () => {
 		const game = makeFreshGame();
-		const phase = game.phases[0];
-		if (!phase) throw new Error("no phase");
 
 		const complicationSchedule = { countdown: 7, settingShiftFired: true };
 		const activeComplications: import("../../game/types.js").ActiveComplication[] =
@@ -570,23 +511,21 @@ describe("serializeSession / deserializeSession", () => {
 
 		const modified: GameState = {
 			...game,
-			phases: [{ ...phase, complicationSchedule, activeComplications }],
+			complicationSchedule,
+			activeComplications,
 		};
 
 		const files = serializeSession(modified, NOW, CREATED_AT);
 		const result = deserializeSession(files);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
-			const rp = result.state.phases[0];
-			expect(rp?.complicationSchedule).toEqual(complicationSchedule);
-			expect(rp?.activeComplications).toEqual(activeComplications);
+			expect(result.state.complicationSchedule).toEqual(complicationSchedule);
+			expect(result.state.activeComplications).toEqual(activeComplications);
 		}
 	});
 
 	it("round-trips broadcast entries in per-Daemon conversationLogs", () => {
 		const game = makeFreshGame();
-		const phase = game.phases[0];
-		if (!phase) throw new Error("no phase");
 		const broadcastEntry: ConversationEntry = {
 			kind: "broadcast",
 			round: 2,
@@ -594,28 +533,22 @@ describe("serializeSession / deserializeSession", () => {
 		};
 		const modified: GameState = {
 			...game,
-			phases: [
-				{
-					...phase,
-					conversationLogs: {
-						red: [broadcastEntry],
-						green: [broadcastEntry],
-						cyan: [broadcastEntry],
-					},
-				},
-			],
+			conversationLogs: {
+				red: [broadcastEntry],
+				green: [broadcastEntry],
+				cyan: [broadcastEntry],
+			},
 		};
 		const files = serializeSession(modified, NOW, CREATED_AT);
 		const result = deserializeSession(files);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
-			const rp = result.state.phases[0];
 			// Broadcast entry round-trips in all three daemon logs
-			expect(rp?.conversationLogs.red?.[0]).toEqual(broadcastEntry);
-			expect(rp?.conversationLogs.green?.[0]).toEqual(broadcastEntry);
-			expect(rp?.conversationLogs.cyan?.[0]).toEqual(broadcastEntry);
+			expect(result.state.conversationLogs.red?.[0]).toEqual(broadcastEntry);
+			expect(result.state.conversationLogs.green?.[0]).toEqual(broadcastEntry);
+			expect(result.state.conversationLogs.cyan?.[0]).toEqual(broadcastEntry);
 			// Ensure broadcast has no from/to fields
-			const entry = rp?.conversationLogs.red?.[0];
+			const entry = result.state.conversationLogs.red?.[0];
 			expect(entry).toBeDefined();
 			expect("from" in (entry ?? {})).toBe(false);
 			expect("to" in (entry ?? {})).toBe(false);

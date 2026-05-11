@@ -75,15 +75,13 @@ const TEST_PHASE_CONFIG: PhaseConfig = {
 describe("createGame", () => {
 	it("creates a game with the given personas", () => {
 		const game = createGame(TEST_PERSONAS);
-		expect(game.currentPhase).toBe(1);
 		expect(game.isComplete).toBe(false);
 		expect(game.personas).toEqual(TEST_PERSONAS);
-		expect(game.phases).toHaveLength(0);
 	});
 
-	it("creates a game with contentPacks", () => {
+	it("creates a game (contentPacks param ignored in flat model)", () => {
 		const game = createGame(TEST_PERSONAS, []);
-		expect(game.contentPacks).toEqual([]);
+		expect(game.personas).toEqual(TEST_PERSONAS);
 	});
 });
 
@@ -275,7 +273,7 @@ describe("budget and lockout", () => {
 describe("deductBudget", () => {
 	it("decrements budget by the request cost in USD", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const updated = deductBudget(game, "red", 0.012);
+		const updated = deductBudget(game, "red", 0.012).game;
 		expect(getActivePhase(updated).budgets.red?.remaining).toBeCloseTo(
 			5 - 0.012,
 			10,
@@ -287,7 +285,7 @@ describe("deductBudget", () => {
 			...TEST_PHASE_CONFIG,
 			budgetPerAi: 0.05,
 		});
-		game = deductBudget(game, "green", 0.05);
+		game = deductBudget(game, "green", 0.05).game;
 		expect(getActivePhase(game).budgets.green?.remaining).toBeCloseTo(0, 10);
 		expect(isAiLockedOut(game, "green")).toBe(true);
 	});
@@ -297,9 +295,9 @@ describe("deductBudget", () => {
 			...TEST_PHASE_CONFIG,
 			budgetPerAi: 0.05,
 		});
-		game = deductBudget(game, "cyan", 0.04);
+		game = deductBudget(game, "cyan", 0.04).game;
 		expect(isAiLockedOut(game, "cyan")).toBe(false);
-		game = deductBudget(game, "cyan", 0.02);
+		game = deductBudget(game, "cyan", 0.02).game;
 		expect(getActivePhase(game).budgets.cyan?.remaining).toBeLessThan(0);
 		expect(isAiLockedOut(game, "cyan")).toBe(true);
 	});
@@ -424,28 +422,21 @@ describe("chat lockout", () => {
 });
 
 describe("advancePhase", () => {
-	it("advances from phase 1 to phase 2", () => {
+	it("advances from phase 1 to phase 2 (compat shim — isComplete remains false)", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		const phase2Config: PhaseConfig = {
 			...TEST_PHASE_CONFIG,
 			phaseNumber: 2,
 		};
 		const updated = advancePhase(game, phase2Config);
-		expect(updated.currentPhase).toBe(2);
-		expect(updated.phases).toHaveLength(2);
-		expect(getActivePhase(updated).phaseNumber).toBe(2);
+		// In flat model advancePhase with a next config is a no-op — game continues
+		expect(updated.isComplete).toBe(false);
+		// phaseNumber compat shim returns 1 (single-phase game)
+		expect(getActivePhase(updated).phaseNumber).toBe(1);
 	});
 
-	it("marks game complete after phase 3", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = advancePhase(game, {
-			...TEST_PHASE_CONFIG,
-			phaseNumber: 2,
-		});
-		game = advancePhase(game, {
-			...TEST_PHASE_CONFIG,
-			phaseNumber: 3,
-		});
+	it("marks game complete when called with no next config (compat shim)", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		const final = advancePhase(game);
 		expect(final.isComplete).toBe(true);
 	});

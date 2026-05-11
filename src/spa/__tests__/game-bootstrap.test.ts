@@ -123,6 +123,9 @@ describe("renderGame — session restore (formerly async bootstrap)", () => {
 			mintAndActivateNewSession();
 			const session = buildSessionFromAssets({
 				personas: STATIC_PERSONAS,
+				contentPack: STATIC_CONTENT_PACKS[0] as NonNullable<
+					(typeof STATIC_CONTENT_PACKS)[0]
+				>,
 				contentPacks: STATIC_CONTENT_PACKS,
 			});
 			saveActiveSession(session.getState());
