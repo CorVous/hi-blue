@@ -157,24 +157,14 @@ describe("validateContentPacks — prose tell contract", () => {
 		).toBe(true);
 	});
 
-	it("exposes the prose-tell omission via examineMentionsPairedSpace on a validated pack", () => {
-		// Today the validator accepts this — it is the very gap issue #253 documents.
-		// The helper, however, must flag it, so a future #248-style validator-side
-		// retry has a single source of truth to call.
-		const result = validateContentPacks(
-			buildResponse(
-				"rusted iron key, heavily corroded but still intact. The teeth are worn smooth from use",
+	it("rejects a content pack whose objective_object examine does not mention the paired space", () => {
+		expect(() =>
+			validateContentPacks(
+				buildResponse(
+					"rusted iron key, heavily corroded but still intact. The teeth are worn smooth from use",
+				),
+				input,
 			),
-			input,
-		);
-		const pair = result.packs[0]?.objectivePairs[0];
-		expect(pair).toBeDefined();
-		if (!pair) return;
-		expect(
-			examineMentionsPairedSpace(
-				pair.object.examineDescription,
-				pair.space.name,
-			),
-		).toBe(false);
+		).toThrow(/examineDescription does not mention paired space/);
 	});
 });
