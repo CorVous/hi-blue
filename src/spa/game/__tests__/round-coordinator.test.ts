@@ -454,7 +454,7 @@ describe("drift-to-silence retry (#254)", () => {
 		);
 		expect(last2[1]?.role).toBe("user");
 		expect((last2[1] as { content: string }).content).toContain(
-			'message({to: "blue", content: ...})',
+			"message({to: <recipient>, content: ...})",
 		);
 	});
 
