@@ -21,10 +21,10 @@ import { availableTools } from "./available-tools";
 import { COMPLICATIONS } from "./complications";
 import { dispatchAiTurn } from "./dispatcher";
 import {
-	FAREWELL_LINE,
 	advanceRound,
 	appendMessage,
 	appendPrivateSystemNotice,
+	FAREWELL_LINE,
 	isAiLockedOut,
 	resolveChatLockouts,
 	resolveToolDisables,

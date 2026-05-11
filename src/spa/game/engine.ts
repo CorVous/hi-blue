@@ -544,6 +544,9 @@ export function startPhase(
 		aiStarts: personaSpatial,
 	};
 
+	// Initial countdown: random in [1, 5]
+	const initialCountdown = 1 + Math.floor(rng() * 5);
+
 	return {
 		personas: game.personas,
 		contentPack,
@@ -558,7 +561,10 @@ export function startPhase(
 		lockedOut: new Set(),
 		chatLockouts: new Map(),
 		personaSpatial,
-		complicationSchedule: { countdown: 0, settingShiftFired: false },
+		complicationSchedule: {
+			countdown: initialCountdown,
+			settingShiftFired: false,
+		},
 		activeComplications: [],
 		// Carry forward for chaining / restore paths
 		_contentPacks: contentPacks,

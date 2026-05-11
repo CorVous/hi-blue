@@ -495,8 +495,6 @@ describe("serializeSession / deserializeSession", () => {
 
 	it("round-trips complicationSchedule and activeComplications unchanged", () => {
 		const game = makeFreshGame();
-		const phase = game.phases[0];
-		if (!phase) throw new Error("no phase");
 
 		const complicationSchedule = { countdown: 7, settingShiftFired: true };
 		const activeComplications: import("../../game/types.js").ActiveComplication[] =
@@ -513,16 +511,16 @@ describe("serializeSession / deserializeSession", () => {
 
 		const modified: GameState = {
 			...game,
-			phases: [{ ...phase, complicationSchedule, activeComplications }],
+			complicationSchedule,
+			activeComplications,
 		};
 
 		const files = serializeSession(modified, NOW, CREATED_AT);
 		const result = deserializeSession(files);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
-			const rp = result.state.phases[0];
-			expect(rp?.complicationSchedule).toEqual(complicationSchedule);
-			expect(rp?.activeComplications).toEqual(activeComplications);
+			expect(result.state.complicationSchedule).toEqual(complicationSchedule);
+			expect(result.state.activeComplications).toEqual(activeComplications);
 		}
 	});
 
