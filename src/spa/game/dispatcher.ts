@@ -408,13 +408,29 @@ export function dispatchAiTurn(
 							activePhase.world,
 						)
 					: null;
+			const successDescription =
+				flavorDescription ?? describeToolCall(state, aiId, action.toolCall);
 			records.push({
 				round,
 				actor: aiId,
 				kind: "tool_success",
-				description:
-					flavorDescription ?? describeToolCall(state, aiId, action.toolCall),
+				description: successDescription,
 			});
+
+			// Auto-examine on pick_up: surface the item's examineDescription privately
+			// to the actor so objective-item details land in the actor's context
+			// without requiring a separate examine call.
+			if (action.toolCall.name === "pick_up") {
+				const picked = activePhase.world.entities.find(
+					(e) => e.id === action.toolCall?.args.item,
+				);
+				if (picked?.examineDescription) {
+					actorPrivateToolResult = {
+						description: `${successDescription} ${picked.examineDescription}`,
+						success: true,
+					};
+				}
+			}
 
 			// Build and append a PhysicalActionRecord for observable physical actions.
 			// look is excluded (facing-change only, not observable); examine doesn't exist yet.
