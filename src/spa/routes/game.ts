@@ -746,43 +746,54 @@ export function renderGame(
 					// zero) chat entries for this panel slot.
 					transcript.textContent = "";
 					// Filter to message entries where blue is involved (from blue or to blue)
+					// and broadcast entries (sender-less system announcements).
 					// Skip daemon-to-daemon messages from the player-facing transcript.
-					const messageEntries = (
+					const visibleEntries = (
 						restoredPhase.conversationLogs[aiId] ?? []
 					).filter(
 						(e) =>
-							e.kind === "message" && (e.from === "blue" || e.to === "blue"),
+							(e.kind === "message" &&
+								(e.from === "blue" || e.to === "blue")) ||
+							e.kind === "broadcast",
 					);
-					if (messageEntries.length > 0) {
+					if (visibleEntries.length > 0) {
 						// Synthesise from conversationLogs (stored in daemon .txt files).
 						const persona = restoredPersonas[aiId];
 						const personaName = persona?.name ?? aiId;
-						for (const entry of messageEntries) {
-							if (entry.kind !== "message") continue;
+						for (const entry of visibleEntries) {
 							const lineEl = doc.createElement("div");
 							lineEl.className = "msg-line";
-							if (entry.from === "blue") {
-								// Incoming from player
+							if (entry.kind === "broadcast") {
+								// System broadcast line
 								appendMentionAwareText(
 									lineEl,
-									`> ${entry.content}\n`,
+									`[${entry.content}]\n`,
 									restoredPersonas,
-									"msg-you",
 								);
-							} else {
-								// Outgoing from AI to blue
-								const prefixSpan = doc.createElement("span");
-								prefixSpan.className = "msg-prefix";
-								if (persona?.color) {
-									prefixSpan.style.setProperty("--prefix-color", persona.color);
+							} else if (entry.kind === "message") {
+								if (entry.from === "blue") {
+									// Incoming from player
+									appendMentionAwareText(
+										lineEl,
+										`> ${entry.content}\n`,
+										restoredPersonas,
+										"msg-you",
+									);
+								} else {
+									// Outgoing from AI to blue
+									const prefixSpan = doc.createElement("span");
+									prefixSpan.className = "msg-prefix";
+									if (persona?.color) {
+										prefixSpan.style.setProperty("--prefix-color", persona.color);
+									}
+									prefixSpan.textContent = `> *${transcriptName(personaName)} `;
+									lineEl.appendChild(prefixSpan);
+									appendMentionAwareText(
+										lineEl,
+										`${entry.content}\n`,
+										restoredPersonas,
+									);
 								}
-								prefixSpan.textContent = `> *${transcriptName(personaName)} `;
-								lineEl.appendChild(prefixSpan);
-								appendMentionAwareText(
-									lineEl,
-									`${entry.content}\n`,
-									restoredPersonas,
-								);
 							}
 							transcript.appendChild(lineEl);
 						}
@@ -1303,6 +1314,17 @@ export function renderGame(
 					case "chat_lockout_resolved":
 						setChatLockout(event.aiId, false);
 						break;
+
+					case "system_broadcast": {
+						// Append a system-generated broadcast line to every Daemon's panel.
+						const broadcastAiIds = Object.keys(
+							nextState.personas,
+						) as AiId[];
+						for (const bid of broadcastAiIds) {
+							appendStandaloneLine(bid, `[${event.content}]\n`);
+						}
+						break;
+					}
 
 					case "action_log":
 						// Always accumulate in the DOM (even if hidden) so ?debug=1 shows history
