@@ -449,6 +449,37 @@ export interface PhaseConfig {
 }
 
 /**
+ * Tokens that may appear in goal templates, mapped to a function that pulls
+ * candidate names of the matching kind from a ContentPack.
+ */
+const GOAL_TOKEN_CANDIDATES: Record<string, (pack: ContentPack) => string[]> = {
+	objectiveItem: (p) => p.objectivePairs.map((pair) => pair.object.name),
+	objective: (p) => p.objectivePairs.map((pair) => pair.space.name),
+	miscItem: (p) => p.interestingObjects.map((e) => e.name),
+	obstacle: (p) => p.obstacles.map((e) => e.name),
+};
+
+const GOAL_TOKEN_PATTERN = new RegExp(
+	`\\{(${Object.keys(GOAL_TOKEN_CANDIDATES).join("|")})\\}`,
+	"g",
+);
+
+function substituteGoalTokens(
+	goal: string,
+	pack: ContentPack | undefined,
+	rng: () => number,
+): string {
+	if (!pack) return goal;
+	return goal.replace(GOAL_TOKEN_PATTERN, (match, token: string) => {
+		const candidates = GOAL_TOKEN_CANDIDATES[token]?.(pack) ?? [];
+		if (candidates.length === 0) return match;
+		const idx = Math.floor(rng() * candidates.length);
+		// biome-ignore lint/style/noNonNullAssertion: bounded index into non-empty array
+		return candidates[idx]!;
+	});
+}
+
+/**
  * @deprecated Use `startGame` instead. Kept for test compatibility.
  */
 export function startPhase(
@@ -484,7 +515,7 @@ export function startPhase(
 	for (const aiId of aiIds) {
 		const idx = Math.floor(rng() * pool.length);
 		// biome-ignore lint/style/noNonNullAssertion: bounded index into non-empty array
-		aiGoals[aiId] = pool[idx]!;
+		aiGoals[aiId] = substituteGoalTokens(pool[idx]!, pack, rng);
 	}
 
 	// Build WorldState from pack entities (all entities flat)
@@ -587,9 +618,12 @@ export function updateActivePhase(
  */
 export function advancePhase(
 	game: GameState,
-	_nextConfig?: PhaseConfig,
+	nextConfig?: PhaseConfig,
 	_rng?: () => number,
 ): GameState {
+	// In the flat model, advancing with a next config is a no-op (game continues).
+	// Advancing without a next config marks the game complete.
+	if (nextConfig !== undefined) return game;
 	return { ...game, isComplete: true };
 }
 

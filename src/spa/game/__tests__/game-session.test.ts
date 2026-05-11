@@ -742,9 +742,10 @@ describe("parallel tool calls integration (#238)", () => {
 		expect(redActions.some((a) => a.kind === "message")).toBe(true);
 		expect(redActions.some((a) => a.kind === "tool_success")).toBe(true);
 
-		// Red's budget: 5 - 1 (single call cost) = 4
+		// Red's budget: 0.5 - 1 (single call cost) = -0.5
+		// (one provider call, even though two tools were dispatched)
 		const phase = getActivePhase(session.getState());
-		expect(phase.budgets.red?.remaining).toBeCloseTo(4, 10);
+		expect(phase.budgets.red?.remaining).toBeCloseTo(-0.5, 10);
 
 		// Flower is picked up
 		const flower = phase.world.entities.find((e) => e.id === "flower");

@@ -27,9 +27,10 @@ vi.mock("../../content", async (importOriginal) => {
 	};
 });
 
-// Pin generateContentPacks to static content packs (no LLM call in tests).
+// Pin generateContentPacks / generateContentPack to static content packs (no LLM call in tests).
 vi.mock("../../content/content-pack-generator", () => ({
 	generateContentPacks: async () => STATIC_CONTENT_PACKS,
+	generateContentPack: async () => STATIC_CONTENT_PACKS[0],
 }));
 
 // ── HTML fixture ──────────────────────────────────────────────────────────────

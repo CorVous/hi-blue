@@ -142,33 +142,35 @@ describe("serializeGameSave", () => {
 		expect("whispers" in (ember?.phases[0] ?? {})).toBe(false);
 	});
 
-	it("accumulates transcripts across multiple phases", () => {
+	it("accumulates transcripts in a single phase (flat model, #295)", () => {
+		// In the flat single-game model (issue #295), all conversation accumulates
+		// in one phase. advancePhase() with a next config is a no-op.
 		let game = startPhase(createGame(TEST_PERSONAS), PHASE1_CONFIG);
-		game = appendMessage(game, "blue", "red", "Phase 1 message");
-		game = advancePhase(game, PHASE2_CONFIG);
-		game = appendMessage(game, "blue", "red", "Phase 2 message");
-		game = advancePhase(game, PHASE3_CONFIG);
-		game = appendMessage(game, "blue", "red", "Phase 3 message");
-		game = advancePhase(game); // complete
+		game = appendMessage(game, "blue", "red", "Message 1");
+		game = advancePhase(game, PHASE2_CONFIG); // no-op in flat model
+		game = appendMessage(game, "blue", "red", "Message 2");
+		game = advancePhase(game, PHASE3_CONFIG); // no-op in flat model
+		game = appendMessage(game, "blue", "red", "Message 3");
+		game = advancePhase(game); // marks complete
 
 		const save = serializeGameSave(game);
 		const ember = save.ais.find((a) => a.persona.id === "red");
-		expect(ember?.phases).toHaveLength(3);
+		// Flat model: single phase with all messages accumulated
+		expect(ember?.phases).toHaveLength(1);
 		expect(ember?.phases[0]?.phaseNumber).toBe(1);
-		expect(ember?.phases[1]?.phaseNumber).toBe(2);
-		expect(ember?.phases[2]?.phaseNumber).toBe(3);
+		expect(ember?.phases[0]?.conversationLog).toHaveLength(3);
 		expect(
 			ember?.phases[0]?.conversationLog[0]?.kind === "message" &&
 				ember?.phases[0]?.conversationLog[0]?.content,
-		).toBe("Phase 1 message");
+		).toBe("Message 1");
 		expect(
-			ember?.phases[1]?.conversationLog[0]?.kind === "message" &&
-				ember?.phases[1]?.conversationLog[0]?.content,
-		).toBe("Phase 2 message");
+			ember?.phases[0]?.conversationLog[1]?.kind === "message" &&
+				ember?.phases[0]?.conversationLog[1]?.content,
+		).toBe("Message 2");
 		expect(
-			ember?.phases[2]?.conversationLog[0]?.kind === "message" &&
-				ember?.phases[2]?.conversationLog[0]?.content,
-		).toBe("Phase 3 message");
+			ember?.phases[0]?.conversationLog[2]?.kind === "message" &&
+				ember?.phases[0]?.conversationLog[2]?.content,
+		).toBe("Message 3");
 	});
 
 	it("produces a serializable (round-trippable) payload", () => {

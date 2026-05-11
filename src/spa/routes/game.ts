@@ -162,9 +162,10 @@ export function applyTestAffordances(
 	// Gate: only apply when wrangler dev is the host
 	if (!isDevHost()) return s;
 
+	const wantsWin = searchParams.get("winImmediately") === "1";
 	const wantsLockout = searchParams.get("lockout") === "1";
 
-	if (!wantsLockout) return s;
+	if (!wantsWin && !wantsLockout) return s;
 
 	const active = s;
 
@@ -175,6 +176,21 @@ export function applyTestAffordances(
 			lockoutTriggerRound: currentRound + 1,
 			lockoutDuration: 2,
 		});
+	}
+
+	if (wantsWin) {
+		// In the flat single-game model, wrap submitMessage so the next call ends
+		// the game (outcome: "win"). Used by integration tests that need to drive
+		// the UI to game_ended without satisfying objectives via tool calls.
+		const originalSubmit = active.submitMessage.bind(active);
+		active.submitMessage = async (...args) => {
+			const result = await originalSubmit(...args);
+			return {
+				...result,
+				result: { ...result.result, gameEnded: true, phaseEnded: false },
+				nextState: { ...result.nextState, isComplete: true, outcome: "win" as const },
+			};
+		};
 	}
 
 	return active;

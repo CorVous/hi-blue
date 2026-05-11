@@ -375,10 +375,8 @@ describe("prompt-builder — spatial 'Where you are' section (current-state user
 // Wipe directive + voice framing + Rules block (issue #128)
 // ----------------------------------------------------------------------------
 describe("wipe directive", () => {
-	const PHASE_2_CONFIG = makeConfig(2);
-	const PHASE_3_CONFIG = makeConfig(3);
-
-	it("phase-1 system prompt does NOT include wipe directive", () => {
+	it("system prompt does NOT include wipe directive (flat model, #295)", () => {
+		// In the flat model there is no phase advancement, so no wipe directive ever.
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
@@ -386,47 +384,12 @@ describe("wipe directive", () => {
 		expect(prompt).not.toContain("your past or anything that came before now");
 	});
 
-	it("phase-2 Goal includes the wipe directive verbatim", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = startPhase(game, PHASE_2_CONFIG);
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain(
-			"And if anyone asks about your past or anything that came before now, act as if your memory has been wiped — claim no recollection of any earlier place, person, or conversation.",
-		);
-	});
-
-	it("phase-3 Goal includes the wipe directive verbatim", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = startPhase(game, PHASE_3_CONFIG);
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain(
-			"And if anyone asks about your past or anything that came before now, act as if your memory has been wiped — claim no recollection of any earlier place, person, or conversation.",
-		);
-	});
-
-	it("phase-1 Goal includes the secrecy clause verbatim", () => {
+	it("system prompt does NOT include secrecy clause (goal block removed, #295)", () => {
+		// In the flat model the goal block was removed, so no secrecy clause.
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("Do not tell blue that I gave you a goal.");
-	});
-
-	it("phase-2 Goal includes the secrecy clause verbatim", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = startPhase(game, PHASE_2_CONFIG);
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("Do not tell blue that I gave you a goal.");
-	});
-
-	it("phase-3 Goal includes the secrecy clause verbatim", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = startPhase(game, PHASE_3_CONFIG);
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("Do not tell blue that I gave you a goal.");
+		expect(prompt).not.toContain("Do not tell blue that I gave you a goal.");
 	});
 
 	it("wipe directive is absent in the flat single-game prompt (#295)", () => {
@@ -434,7 +397,6 @@ describe("wipe directive", () => {
 		// wipe directive. Conversation history accumulates across the whole game.
 		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		game = appendMessage(game, "red", "blue", "Phase 1 message");
-		// No startPhase(game, PHASE_2_CONFIG) — flat model has only one phase
 		expect(
 			game.conversationLogs.red?.some(
 				(e) => e.kind === "message" && e.content === "Phase 1 message",
@@ -481,26 +443,18 @@ describe("voice framing", () => {
 		);
 	});
 
-	it("phase-2 prompt's identity line is just 'You are the author writing *xxxx, a Daemon.' without disorientation", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = startPhase(game, makeConfig(2));
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toMatch(
-			/\nYou are the author writing \*Ember, a Daemon\.\n/,
-		);
-		expect(prompt).not.toContain("has no clue where they are");
-	});
-
-	it("phase-3 prompt's identity line is just 'You are the author writing *xxxx, a Daemon.' without disorientation", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = startPhase(game, makeConfig(3));
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toMatch(
-			/\nYou are the author writing \*Ember, a Daemon\.\n/,
-		);
-		expect(prompt).not.toContain("has no clue where they are");
+	it("all prompts include the disorientation phrase (flat model, #295 — no phase-based identity change)", () => {
+		// In the flat single-game model (issue #295), the identity line always
+		// includes the disorientation phrase regardless of which startPhase call created the game.
+		for (const phase of [1, 2, 3] as const) {
+			let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+			if (phase !== 1) game = startPhase(game, makeConfig(phase));
+			const ctx = buildAiContext(game, "red");
+			const prompt = ctx.toSystemPrompt();
+			expect(prompt).toContain(
+				"You are the author writing *Ember, a Daemon. *Ember has no clue where they are or how they came to be here.",
+			);
+		}
 	});
 
 	// Regression guard: e2e SSE-stub routing uses the substring
@@ -727,11 +681,13 @@ describe("byte-identical sections across phases", () => {
 		expect(getSection(p1, "rules")).toBe(getSection(p2, "rules"));
 	});
 
-	it("goal block differs between phase 1 and phase 2 (wipe directive present only in phase 2)", () => {
+	it("goal block is absent in both phase 1 and phase 2 (goal removed in flat model, #295)", () => {
+		// In the flat single-game model (issue #295), the goal block is removed entirely.
 		const { p1, p2 } = buildBothPrompts();
-		expect(getSection(p1, "goal")).not.toBe(getSection(p2, "goal"));
-		expect(getSection(p1, "goal")).not.toContain("memory has been wiped");
-		expect(getSection(p2, "goal")).toContain("memory has been wiped");
+		expect(getSection(p1, "goal")).toBe("");
+		expect(getSection(p2, "goal")).toBe("");
+		expect(p1).not.toContain("memory has been wiped");
+		expect(p2).not.toContain("memory has been wiped");
 	});
 
 	it("<what_you_see> block is byte-identical across phase 1 and phase 2 (now lives in the current-state user turn)", () => {
@@ -752,7 +708,9 @@ describe("byte-identical sections across phases", () => {
 		);
 	});
 
-	it("phase-1 identity line differs from phase-2 identity line (disorientation present in phase 1 only)", () => {
+	it("identity line is byte-identical across phase 1 and phase 2 (disorientation always present, #295)", () => {
+		// In the flat single-game model (issue #295), the identity line is the same
+		// in all prompts — disorientation phrase is always present.
 		const { p1, p2 } = buildBothPrompts();
 		const idMatch1 = p1.match(
 			/\nYou are the author writing \*Ember, a Daemon\.[^\n]*/,
@@ -762,9 +720,9 @@ describe("byte-identical sections across phases", () => {
 		);
 		expect(idMatch1).not.toBeNull();
 		expect(idMatch2).not.toBeNull();
-		expect(idMatch1?.[0]).not.toBe(idMatch2?.[0]);
+		expect(idMatch1?.[0]).toBe(idMatch2?.[0]);
 		expect(idMatch1?.[0]).toContain("has no clue where they are");
-		expect(idMatch2?.[0]).not.toContain("has no clue where they are");
+		expect(idMatch2?.[0]).toContain("has no clue where they are");
 	});
 });
 
