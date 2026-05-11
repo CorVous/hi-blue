@@ -1046,7 +1046,7 @@ describe("proximityFlavor sense line", () => {
 
 describe("<whats_new> broadcast announcements", () => {
 	it("includes [announcement] line when a broadcast fires at the current round", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		let game = startGame(TEST_PERSONAS, []);
 		game = advanceRound(game); // round advances to 1
 		game = appendBroadcast(game, "The weather has changed to heavy fog.");
 		const prevSnapshot = buildConeSnapshot(buildAiContext(game, "red"));
@@ -1059,7 +1059,7 @@ describe("<whats_new> broadcast announcements", () => {
 	});
 
 	it("emits <whats_new> with the announcement even without a prevConeSnapshot", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		let game = startGame(TEST_PERSONAS, []);
 		game = advanceRound(game);
 		game = appendBroadcast(game, "The weather has changed to heavy fog.");
 		const ctx = buildAiContext(game, "red");
@@ -1071,14 +1071,14 @@ describe("<whats_new> broadcast announcements", () => {
 	});
 
 	it("does not emit <whats_new> when there are no broadcasts and no prevConeSnapshot", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, []);
 		const ctx = buildAiContext(game, "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
 		expect(stateMsg).not.toContain("<whats_new>");
 	});
 
 	it("broadcast from a prior round does not appear as pending", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		let game = startGame(TEST_PERSONAS, []);
 		game = advanceRound(game); // round 1
 		game = appendBroadcast(game, "Old broadcast.");
 		game = advanceRound(game); // round 2 — broadcast is now stale

@@ -5,7 +5,6 @@ import {
 	appendActionFailure,
 	appendBroadcast,
 	appendMessage,
-	createGame,
 	deductBudget,
 	getActivePhase,
 	isAiLockedOut,
@@ -57,23 +56,6 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
 	},
 };
-
-// Budget per AI in startGame is $0.50
-
-describe("createGame", () => {
-	it("creates a game with the given personas", () => {
-		const game = createGame(TEST_PERSONAS);
-		expect(game.currentPhase).toBe(1);
-		expect(game.isComplete).toBe(false);
-		expect(game.personas).toEqual(TEST_PERSONAS);
-		expect(game.phases).toHaveLength(0);
-	});
-
-	it("creates a game with contentPacks", () => {
-		const game = createGame(TEST_PERSONAS, []);
-		expect(game.contentPacks).toEqual([]);
-	});
-});
 
 describe("startGame", () => {
 	it("initializes a single game phase with correct budgets and empty histories", () => {
@@ -327,7 +309,7 @@ describe("chat lockout", () => {
 
 describe("appendBroadcast", () => {
 	it("appends a broadcast entry to all three Daemons' logs in one call", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, []);
 		const updated = appendBroadcast(
 			game,
 			"The weather has changed to Heavy rain is falling.",
@@ -342,7 +324,7 @@ describe("appendBroadcast", () => {
 	});
 
 	it("broadcast entry has no `from` / `to` fields (regression guard)", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, []);
 		const updated = appendBroadcast(
 			game,
 			"A biting wind cuts through the air.",
@@ -355,7 +337,7 @@ describe("appendBroadcast", () => {
 	});
 
 	it("carries the current phase round", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		let game = startGame(TEST_PERSONAS, []);
 		game = advanceRound(game); // round = 1
 		game = advanceRound(game); // round = 2
 		const updated = appendBroadcast(game, "Dense fog has settled in.");
@@ -365,7 +347,7 @@ describe("appendBroadcast", () => {
 	});
 
 	it("leaves uninvolved phase state intact", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, []);
 		const before = getActivePhase(game);
 		const updated = appendBroadcast(game, "Light snow drifts down.");
 		const after = getActivePhase(updated);
