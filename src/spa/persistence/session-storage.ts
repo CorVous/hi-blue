@@ -26,7 +26,7 @@ export type SessionInfo =
 	| {
 			kind: "ok";
 			lastSavedAt: string;
-			phase: 1 | 2 | 3;
+			epoch: number;
 			round: number;
 			daemonFiles: Array<{ name: string; size: number }>;
 			engineSize: number;
@@ -35,7 +35,7 @@ export type SessionInfo =
 	| {
 			kind: "version-mismatch";
 			lastSavedAt?: string;
-			phase?: 1 | 2 | 3;
+			epoch?: number;
 			daemonFiles: Array<{ name: string; size: number }>;
 	  };
 
@@ -460,20 +460,22 @@ export function getSessionInfo(id: string): SessionInfo {
 	}
 
 	if (result.kind === "version-mismatch") {
-		// Try to read meta for phase/lastSavedAt
+		// Try to read meta for epoch/lastSavedAt
 		let lastSavedAt: string | undefined;
-		let phase: (1 | 2 | 3) | undefined;
+		let epoch: number | undefined;
 		try {
 			const metaRaw = localStorage.getItem(`${prefix}meta.json`);
 			if (metaRaw) {
 				const meta = JSON.parse(metaRaw) as {
 					lastSavedAt?: string;
-					phase?: number;
+					epoch?: number;
+					phase?: number; // legacy v5
 				};
 				if (typeof meta.lastSavedAt === "string")
 					lastSavedAt = meta.lastSavedAt;
-				if (meta.phase === 1 || meta.phase === 2 || meta.phase === 3)
-					phase = meta.phase;
+				const rawEpoch =
+					typeof meta.epoch === "number" ? meta.epoch : meta.phase;
+				if (typeof rawEpoch === "number") epoch = rawEpoch;
 			}
 		} catch {
 			// swallow
@@ -482,7 +484,7 @@ export function getSessionInfo(id: string): SessionInfo {
 			kind: "version-mismatch",
 			daemonFiles: getDaemonFiles(),
 			...(lastSavedAt !== undefined ? { lastSavedAt } : {}),
-			...(phase !== undefined ? { phase } : {}),
+			...(epoch !== undefined ? { epoch } : {}),
 		};
 		return vmResult;
 	}
@@ -497,7 +499,7 @@ export function getSessionInfo(id: string): SessionInfo {
 	return {
 		kind: "ok",
 		lastSavedAt: result.lastSavedAt,
-		phase: result.state.currentPhase,
+		epoch: result.state.currentPhase,
 		round: result.state.phases[result.state.phases.length - 1]?.round ?? 0,
 		daemonFiles: getDaemonFiles(),
 		engineSize: engineVal.length,

@@ -64,7 +64,7 @@ function seedOkSessionScript(id: string, lastSavedAt: string): string {
 			const OBFUSCATION_KEY = '${OBFUSCATION_KEY}';
 			const keyBytes = Array.from(new TextEncoder().encode(OBFUSCATION_KEY));
 			const payload = JSON.stringify({
-				schemaVersion: 4,
+				schemaVersion: 5,
 				currentPhase: 1,
 				isComplete: false,
 				world: {

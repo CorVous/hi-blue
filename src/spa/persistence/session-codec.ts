@@ -5,8 +5,8 @@
  * multi-file session format described in ADR 0004.
  *
  * Files:
- *   meta.json        — createdAt, lastSavedAt, phase, round
- *   <aiId>.txt × 3  — per-daemon conversation log + phase goals (all three phases)
+ *   meta.json        — createdAt, lastSavedAt, epoch, round
+ *   <aiId>.txt × 3  — per-daemon conversation log (all three phases collapsed into one)
  *                      (includes chat, whisper, and witnessed-event entries inline)
  *   engine.dat       — sealed (XOR-obfuscated) engine state
  *
@@ -21,12 +21,14 @@ import {
 } from "../../content/phases.js";
 import { DEFAULT_LANDMARKS } from "../game/direction.js";
 import type {
+	ActiveComplication,
 	AiBudget,
 	AiId,
 	AiPersona,
 	ContentPack,
 	ConversationEntry,
 	GameState,
+	Objective,
 	PersonaSpatialState,
 	PhaseConfig,
 	PhaseState,
@@ -44,8 +46,15 @@ import {
  * Version embedded in engine.dat. Bumped to 4 when the `chat` and `whisper`
  * ConversationEntry kinds were collapsed into a single directional `message` kind.
  * Old v3 saves used `chat`/`whisper` shapes that no longer exist in the type union.
+ *
+ * v5 (issue #287): added `action-failure` `ConversationEntry` variant — durable
+ * per-actor record of action-tool dispatcher rejections. Old v4 saves have no
+ * `action-failure` entries; no migration provided.
+ * v6 (issue #293): collapsed all `Record<1|2|3, …>` phase-keyed fields into a
+ * flat single-game structure. Old v5 saves surface the existing `version-mismatch`
+ * result — no migration provided.
  */
-export const SESSION_SCHEMA_VERSION = 4 as const;
+export const SESSION_SCHEMA_VERSION = 6 as const;
 
 // ── Phase config lookup ────────────────────────────────────────────────────────
 
@@ -57,30 +66,21 @@ const PHASE_CONFIGS: Record<1 | 2 | 3, PhaseConfig> = {
 
 // ── File shapes ────────────────────────────────────────────────────────────────
 
-export interface DaemonPhaseSlice {
-	phaseGoal: string;
-	conversationLog: ConversationEntry[];
-}
-
 /**
  * Shape of a single daemon's `.txt` file.
- * Contains the AI persona definition and per-phase narrative state.
+ * Contains the AI persona definition and the active-phase conversation log.
  */
 export interface DaemonFile {
 	aiId: AiId;
 	persona: AiPersona;
-	phases: {
-		"1": DaemonPhaseSlice;
-		"2": DaemonPhaseSlice;
-		"3": DaemonPhaseSlice;
-	};
+	conversationLog: ConversationEntry[];
 }
 
 /** Shape of `meta.json`. */
 export interface MetaFile {
 	createdAt: string;
 	lastSavedAt: string;
-	phase: 1 | 2 | 3;
+	epoch: number;
 	round: number;
 	/**
 	 * Canonical panel order: the aiIds in the order they were assigned to
@@ -95,16 +95,18 @@ export interface MetaFile {
 /** Shape of the sealed payload inside `engine.dat`. */
 export interface SealedEngine {
 	schemaVersion: typeof SESSION_SCHEMA_VERSION;
-	world: Record<1 | 2 | 3, WorldState>;
-	contentPacks: ContentPack[];
-	budgets: Record<1 | 2 | 3, Record<AiId, AiBudget>>;
-	lockouts: Record<
-		1 | 2 | 3,
-		{ lockedOut: AiId[]; chatLockouts: Array<[AiId, number]> }
-	>;
-	currentPhase: 1 | 2 | 3;
+	world: WorldState;
+	budgets: Record<AiId, AiBudget>;
+	lockedOut: AiId[];
+	personaSpatial: Record<AiId, PersonaSpatialState>;
+	contentPackA: ContentPack;
+	contentPackB: ContentPack;
+	activePackId: "A" | "B";
+	weather: string;
+	objectives: Objective[];
+	complicationSchedule: { countdown: number; settingShiftFired: boolean };
+	activeComplications: ActiveComplication[];
 	isComplete: boolean;
-	personaSpatial: Record<1 | 2 | 3, Record<AiId, PersonaSpatialState>>;
 }
 
 /**
@@ -124,33 +126,6 @@ export type DeserializeResult =
 	| { kind: "broken" }
 	| { kind: "version-mismatch" };
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-const EMPTY_PHASE_SLICE: DaemonPhaseSlice = {
-	phaseGoal: "",
-	conversationLog: [],
-};
-
-function phaseSliceFor(
-	_phaseNumber: 1 | 2 | 3,
-	phase: PhaseState | undefined,
-	aiId: AiId,
-): DaemonPhaseSlice {
-	if (!phase) return EMPTY_PHASE_SLICE;
-	return {
-		phaseGoal: phase.aiGoals[aiId] ?? "",
-		conversationLog: phase.conversationLogs[aiId] ?? [],
-	};
-}
-
-/** Get a PhaseState by phaseNumber from the phases array. */
-function findPhase(
-	phases: PhaseState[],
-	phaseNumber: 1 | 2 | 3,
-): PhaseState | undefined {
-	return phases.find((p) => p.phaseNumber === phaseNumber);
-}
-
 // ── serializeSession ──────────────────────────────────────────────────────────
 
 /**
@@ -169,16 +144,14 @@ export function serializeSession(
 	const activePhase = state.phases[state.phases.length - 1];
 	if (!activePhase) throw new Error("serializeSession: no active phase");
 
-	// meta.json
 	const meta: MetaFile = {
 		createdAt,
 		lastSavedAt,
-		phase: state.currentPhase,
+		epoch: state.currentPhase,
 		round: activePhase.round,
 		personaOrder: Object.keys(state.personas),
 	};
 
-	// daemons: one file per aiId
 	const daemons: Record<AiId, string> = {};
 	for (const [aiId, persona] of Object.entries(state.personas)) {
 		const daemonFile: DaemonFile = {
@@ -193,41 +166,39 @@ export function serializeSession(
 				typingQuirks: persona.typingQuirks,
 				voiceExamples: persona.voiceExamples,
 			},
-			phases: {
-				"1": phaseSliceFor(1, findPhase(state.phases, 1), aiId),
-				"2": phaseSliceFor(2, findPhase(state.phases, 2), aiId),
-				"3": phaseSliceFor(3, findPhase(state.phases, 3), aiId),
-			},
+			conversationLog: activePhase.conversationLogs[aiId] ?? [],
 		};
 		daemons[aiId] = JSON.stringify(daemonFile, null, 2);
 	}
 
-	// engine.dat (sealed)
+	const contentPackB: ContentPack = state.contentPacks.find(
+		(p) => p.phaseNumber !== activePhase.phaseNumber,
+	) ?? {
+		phaseNumber: 2,
+		setting: "",
+		weather: "",
+		timeOfDay: "",
+		objectivePairs: [],
+		interestingObjects: [],
+		obstacles: [],
+		landmarks: DEFAULT_LANDMARKS,
+		aiStarts: {},
+	};
+
 	const sealedPayload: SealedEngine = {
 		schemaVersion: SESSION_SCHEMA_VERSION,
-		world: {
-			1: findPhase(state.phases, 1)?.world ?? { entities: [] },
-			2: findPhase(state.phases, 2)?.world ?? { entities: [] },
-			3: findPhase(state.phases, 3)?.world ?? { entities: [] },
-		},
-		contentPacks: structuredClone(state.contentPacks),
-		budgets: {
-			1: { ...(findPhase(state.phases, 1)?.budgets ?? {}) },
-			2: { ...(findPhase(state.phases, 2)?.budgets ?? {}) },
-			3: { ...(findPhase(state.phases, 3)?.budgets ?? {}) },
-		},
-		lockouts: {
-			1: serializeLockouts(findPhase(state.phases, 1)),
-			2: serializeLockouts(findPhase(state.phases, 2)),
-			3: serializeLockouts(findPhase(state.phases, 3)),
-		},
-		currentPhase: state.currentPhase,
+		world: structuredClone(activePhase.world),
+		budgets: { ...activePhase.budgets },
+		lockedOut: Array.from(activePhase.lockedOut) as AiId[],
+		personaSpatial: structuredClone(activePhase.personaSpatial),
+		contentPackA: structuredClone(activePhase.contentPack),
+		contentPackB: structuredClone(contentPackB),
+		activePackId: "A",
+		weather: activePhase.weather,
+		objectives: [],
+		complicationSchedule: { countdown: 0, settingShiftFired: false },
+		activeComplications: [],
 		isComplete: state.isComplete,
-		personaSpatial: {
-			1: structuredClone(findPhase(state.phases, 1)?.personaSpatial ?? {}),
-			2: structuredClone(findPhase(state.phases, 2)?.personaSpatial ?? {}),
-			3: structuredClone(findPhase(state.phases, 3)?.personaSpatial ?? {}),
-		},
 	};
 
 	const engine = obfuscate(JSON.stringify(sealedPayload, null, 2));
@@ -236,19 +207,6 @@ export function serializeSession(
 		meta: JSON.stringify(meta, null, 2),
 		daemons,
 		engine,
-	};
-}
-
-function serializeLockouts(phase: PhaseState | undefined): {
-	lockedOut: AiId[];
-	chatLockouts: Array<[AiId, number]>;
-} {
-	if (!phase) return { lockedOut: [], chatLockouts: [] };
-	return {
-		lockedOut: Array.from(phase.lockedOut) as AiId[],
-		chatLockouts: Array.from(phase.chatLockouts.entries()) as Array<
-			[AiId, number]
-		>,
 	};
 }
 
@@ -333,100 +291,59 @@ export function deserializeSession(
 		if (!(aiId in personas)) personas[aiId] = daemonFile.persona;
 	}
 
-	// Reconstruct phases from sealed engine + editable daemon files
+	// Reconstruct a single-phase GameState from the flat v6 engine
 	try {
-		const phases: PhaseState[] = [];
+		// Clamp epoch to valid phase number
+		const epochPhase = ([1, 2, 3] as const).find((n) => n === meta.epoch) ?? 1;
+		const config = PHASE_CONFIGS[epochPhase];
 
-		// Determine which phases exist: any phase up to and including currentPhase
-		const phaseNumbers: Array<1 | 2 | 3> = [];
-		for (const pn of [1, 2, 3] as const) {
-			if (pn <= sealed.currentPhase) phaseNumbers.push(pn);
+		// Rebuild conversationLogs from daemon files
+		const conversationLogs: Record<AiId, ConversationEntry[]> = {};
+		const aiGoals: Record<AiId, string> = {};
+		for (const [aiId, daemonFile] of Object.entries(daemonFiles)) {
+			conversationLogs[aiId] = [...(daemonFile.conversationLog ?? [])];
+			aiGoals[aiId] = "";
 		}
 
-		for (const phaseNumber of phaseNumbers) {
-			const config = PHASE_CONFIGS[phaseNumber];
-			const phaseKey = String(phaseNumber) as "1" | "2" | "3";
+		const contentPack = sealed.contentPackA;
+		const setting = contentPack.setting;
+		const weather = sealed.weather;
+		const timeOfDay = contentPack.timeOfDay ?? "";
+		const world = structuredClone(sealed.world);
+		const budgets = { ...sealed.budgets };
+		const lockedOut = new Set<AiId>(sealed.lockedOut);
+		const chatLockouts = new Map<AiId, number>();
+		const personaSpatial = structuredClone(sealed.personaSpatial);
 
-			// Rebuild conversationLogs from daemon files
-			// Each entry (chat, whisper, witnessed-event) lives inline in the daemon's file.
-			const conversationLogs: Record<AiId, ConversationEntry[]> = {};
-			const aiGoals: Record<AiId, string> = {};
-			for (const [aiId, daemonFile] of Object.entries(daemonFiles)) {
-				const slice = daemonFile.phases[phaseKey] ?? EMPTY_PHASE_SLICE;
-				conversationLogs[aiId] = [...(slice.conversationLog ?? [])];
-				aiGoals[aiId] = slice.phaseGoal;
-			}
-
-			// Get sealed data for this phase
-			const world = structuredClone(
-				sealed.world[phaseNumber] ?? { entities: [] },
-			);
-			const budgets = { ...(sealed.budgets[phaseNumber] ?? {}) };
-			const lockoutData = sealed.lockouts[phaseNumber] ?? {
-				lockedOut: [],
-				chatLockouts: [],
-			};
-			const lockedOut = new Set<AiId>(lockoutData.lockedOut);
-			const chatLockouts = new Map<AiId, number>(lockoutData.chatLockouts);
-			const personaSpatial = structuredClone(
-				sealed.personaSpatial[phaseNumber] ?? {},
-			);
-
-			// Find the content pack for this phase
-			const contentPack = sealed.contentPacks.find(
-				(p) => p.phaseNumber === phaseNumber,
-			) ?? {
-				phaseNumber,
-				setting: "",
-				weather: "",
-				timeOfDay: "",
-				objectivePairs: [],
-				interestingObjects: [],
-				obstacles: [],
-				landmarks: DEFAULT_LANDMARKS,
-				aiStarts: {},
-			};
-
-			// Derive setting from content pack
-			const setting = contentPack.setting;
-			const weather =
-				(contentPack as ContentPack & { weather?: string }).weather ?? "";
-			const timeOfDay =
-				(contentPack as ContentPack & { timeOfDay?: string }).timeOfDay ?? "";
-
-			const phase: PhaseState = {
-				phaseNumber,
-				setting,
-				weather,
-				timeOfDay,
-				contentPack,
-				aiGoals,
-				// Use round from meta only for the active phase; previous phases use 0
-				round: phaseNumber === sealed.currentPhase ? meta.round : 0,
-				world,
-				budgets,
-				conversationLogs,
-				lockedOut,
-				chatLockouts,
-				personaSpatial,
-				// Re-attach function fields from canonical phase config
-				...(config?.winCondition !== undefined
-					? { winCondition: config.winCondition }
-					: {}),
-				...(config?.nextPhaseConfig !== undefined
-					? { nextPhaseConfig: config.nextPhaseConfig }
-					: {}),
-			};
-
-			phases.push(phase);
-		}
+		const phase: PhaseState = {
+			phaseNumber: epochPhase,
+			setting,
+			weather,
+			timeOfDay,
+			contentPack,
+			aiGoals,
+			round: meta.round,
+			world,
+			budgets,
+			conversationLogs,
+			lockedOut,
+			chatLockouts,
+			personaSpatial,
+			// Re-attach function fields from canonical phase config
+			...(config?.winCondition !== undefined
+				? { winCondition: config.winCondition }
+				: {}),
+			...(config?.nextPhaseConfig !== undefined
+				? { nextPhaseConfig: config.nextPhaseConfig }
+				: {}),
+		};
 
 		const state: GameState = {
-			currentPhase: sealed.currentPhase,
+			currentPhase: epochPhase,
 			isComplete: sealed.isComplete,
 			personas,
-			phases,
-			contentPacks: structuredClone(sealed.contentPacks),
+			phases: [phase],
+			contentPacks: [sealed.contentPackA, sealed.contentPackB],
 		};
 
 		return {

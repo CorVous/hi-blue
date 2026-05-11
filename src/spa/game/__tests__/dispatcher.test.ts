@@ -699,6 +699,14 @@ describe("dispatchAiTurn", () => {
 			(e) => e.id === "key",
 		);
 		expect(key?.holder).toBe("red");
+		// action-failure entry added to actor's log
+		const greenLog = getActivePhase(result.game).conversationLogs.green ?? [];
+		const failures = greenLog.filter((e) => e.kind === "action-failure");
+		expect(failures).toHaveLength(1);
+		expect(failures[0]).toMatchObject({
+			kind: "action-failure",
+			tool: "pick_up",
+		});
 	});
 
 	it("valid pick_up produces tool_success record and mutates world", () => {
@@ -780,6 +788,11 @@ describe("dispatchAiTurn", () => {
 			(e) => e.id === "key",
 		);
 		expect(key?.holder).toBe("red");
+		// action-failure entry added to actor's log with tool: "give"
+		const redLog = getActivePhase(result.game).conversationLogs.red ?? [];
+		const failures = redLog.filter((e) => e.kind === "action-failure");
+		expect(failures).toHaveLength(1);
+		expect(failures[0]).toMatchObject({ kind: "action-failure", tool: "give" });
 	});
 
 	it("use returns tool_success with entity's useOutcome as description when not on paired space", () => {
@@ -1139,5 +1152,99 @@ describe("dispatchAiTurn", () => {
 			(e) => e.id === "flower",
 		);
 		expect(flower?.holder).toBe("red");
+	});
+
+	// ── action-failure log entries (issue #287) ───────────────────────────────
+
+	it("go against a wall produces one action-failure entry in actor's log; peers untouched", () => {
+		const game = makeGame([{ row: 1, col: 0 }]);
+		// red at (0,0) facing north; obstacle at (1,0); go south → blocked
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "go", args: { direction: "south" } },
+		};
+		const result = dispatchAiTurn(game, action);
+		expect(result.rejected).toBe(false);
+		expect(result.records[0]?.kind).toBe("tool_failure");
+
+		const phase = getActivePhase(result.game);
+		const redLog = phase.conversationLogs.red ?? [];
+		const failures = redLog.filter((e) => e.kind === "action-failure");
+		expect(failures).toHaveLength(1);
+		expect(failures[0]).toMatchObject({
+			kind: "action-failure",
+			tool: "go",
+			reason: "That cell is blocked by an obstacle",
+		});
+
+		// Peer logs must have zero action-failure entries
+		const greenFailures = (phase.conversationLogs.green ?? []).filter(
+			(e) => e.kind === "action-failure",
+		);
+		const cyanFailures = (phase.conversationLogs.cyan ?? []).filter(
+			(e) => e.kind === "action-failure",
+		);
+		expect(greenFailures).toHaveLength(0);
+		expect(cyanFailures).toHaveLength(0);
+	});
+
+	it("failed examine produces action-failure with tool: 'examine' AND actorPrivateToolResult", () => {
+		const game = makeGame();
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "examine", args: { item: "nonexistent" } },
+		};
+		const result = dispatchAiTurn(game, action);
+		expect(result.rejected).toBe(false);
+
+		// actorPrivateToolResult is still set (failure path)
+		expect(result.actorPrivateToolResult).toBeDefined();
+		expect(result.actorPrivateToolResult?.success).toBe(false);
+
+		// action-failure entry in actor's log
+		const redLog = getActivePhase(result.game).conversationLogs.red ?? [];
+		const failures = redLog.filter((e) => e.kind === "action-failure");
+		expect(failures).toHaveLength(1);
+		expect(failures[0]).toMatchObject({
+			kind: "action-failure",
+			tool: "examine",
+		});
+	});
+
+	it("failed message (invalid recipient) produces NO action-failure entry", () => {
+		const game = makeGame();
+		const action: AiTurnAction = {
+			aiId: "red",
+			messages: [{ to: "nobody", content: "Hello?" }],
+		};
+		const result = dispatchAiTurn(game, action);
+		expect(result.records[0]?.kind).toBe("tool_failure");
+
+		// No action-failure entries in any log
+		const phase = getActivePhase(result.game);
+		for (const aiId of ["red", "green", "cyan"]) {
+			const failures = (phase.conversationLogs[aiId] ?? []).filter(
+				(e) => e.kind === "action-failure",
+			);
+			expect(failures).toHaveLength(0);
+		}
+	});
+
+	it("failed put_down produces action-failure with tool: 'put_down'", () => {
+		const game = makeGame();
+		// red doesn't hold flower (flower is on ground)
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "put_down", args: { item: "flower" } },
+		};
+		const result = dispatchAiTurn(game, action);
+		expect(result.records[0]?.kind).toBe("tool_failure");
+		const redLog = getActivePhase(result.game).conversationLogs.red ?? [];
+		const failures = redLog.filter((e) => e.kind === "action-failure");
+		expect(failures).toHaveLength(1);
+		expect(failures[0]).toMatchObject({
+			kind: "action-failure",
+			tool: "put_down",
+		});
 	});
 });

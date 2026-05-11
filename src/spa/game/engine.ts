@@ -318,6 +318,24 @@ export function appendWitnessedEvent(
 	}));
 }
 
+/**
+ * Append a `kind: "action-failure"` ConversationEntry to a single actor's
+ * per-Daemon log. This entry is actor-only — peers do not see it.
+ */
+export function appendActionFailure(
+	game: GameState,
+	actorId: AiId,
+	entry: Extract<ConversationEntry, { kind: "action-failure" }>,
+): GameState {
+	return updateActivePhase(game, (phase) => ({
+		...phase,
+		conversationLogs: {
+			...phase.conversationLogs,
+			[actorId]: [...(phase.conversationLogs[actorId] ?? []), entry],
+		},
+	}));
+}
+
 export function advancePhase(
 	game: GameState,
 	nextConfig?: PhaseConfig,

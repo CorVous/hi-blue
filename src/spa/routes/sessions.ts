@@ -230,7 +230,7 @@ function buildSessionRow(
 		metaLine.className = "session-meta";
 		const round = info.round;
 		const savedShort = info.lastSavedAt.replace("T", " ").slice(0, 19);
-		metaLine.textContent = `phase ${info.phase} · turn ${round} · saved ${savedShort}`;
+		metaLine.textContent = `epoch ${info.epoch} · turn ${round} · saved ${savedShort}`;
 		rowEl.appendChild(metaLine);
 
 		// Tree lines: 3 daemon .txt files + engine.dat (last)

@@ -3,6 +3,7 @@ import { DEFAULT_LANDMARKS } from "../direction";
 import {
 	advancePhase,
 	advanceRound,
+	appendActionFailure,
 	appendMessage,
 	createGame,
 	deductBudget,
@@ -446,5 +447,58 @@ describe("advancePhase", () => {
 		});
 		const final = advancePhase(game);
 		expect(final.isComplete).toBe(true);
+	});
+});
+
+describe("appendActionFailure", () => {
+	it("appends a single action-failure entry to the actor's log", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const entry = {
+			kind: "action-failure" as const,
+			round: 1,
+			tool: "go" as const,
+			reason: "That cell is blocked by an obstacle",
+		};
+		const updated = appendActionFailure(game, "red", entry);
+		const phase = getActivePhase(updated);
+		const redLog = phase.conversationLogs.red ?? [];
+		expect(redLog).toHaveLength(1);
+		expect(redLog[0]).toEqual(entry);
+	});
+
+	it("does not affect peer logs (actor-only)", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const entry = {
+			kind: "action-failure" as const,
+			round: 1,
+			tool: "go" as const,
+			reason: "blocked",
+		};
+		const updated = appendActionFailure(game, "red", entry);
+		const phase = getActivePhase(updated);
+		expect(phase.conversationLogs.green ?? []).toHaveLength(0);
+		expect(phase.conversationLogs.cyan ?? []).toHaveLength(0);
+	});
+
+	it("multiple appends accumulate in order", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const entry1 = {
+			kind: "action-failure" as const,
+			round: 1,
+			tool: "go" as const,
+			reason: "first",
+		};
+		const entry2 = {
+			kind: "action-failure" as const,
+			round: 2,
+			tool: "look" as const,
+			reason: "second",
+		};
+		game = appendActionFailure(game, "red", entry1);
+		game = appendActionFailure(game, "red", entry2);
+		const redLog = getActivePhase(game).conversationLogs.red ?? [];
+		expect(redLog).toHaveLength(2);
+		expect(redLog[0]).toEqual(entry1);
+		expect(redLog[1]).toEqual(entry2);
 	});
 });

@@ -17,6 +17,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { buildConversationLog } from "../conversation-log.js";
 import { DEFAULT_LANDMARKS } from "../direction";
 import { createGame, getActivePhase, startPhase } from "../engine";
 import { buildOpenAiMessages } from "../openai-message-builder";
@@ -482,6 +483,71 @@ describe("conversation log integration — put_down placementFlavor", () => {
 		expect(flattenMessageContents(greenMsgs)).not.toContain(
 			"*red places the flower on the pedestal.",
 		);
+	});
+});
+
+describe("conversation log integration — action-failure (issue #287)", () => {
+	it("dispatch invalid go then buildConversationLog contains one line matching 'Your `go` action failed:'", async () => {
+		// Use a ContentPack where red faces south and there's an obstacle directly south.
+		const obstacleAtSouth: ContentPack = {
+			phaseNumber: 1,
+			setting: "blocked test",
+			weather: "",
+			timeOfDay: "",
+			objectivePairs: [],
+			interestingObjects: [],
+			obstacles: [
+				{
+					id: "wall_s",
+					kind: "obstacle",
+					name: "wall",
+					examineDescription: "A wall.",
+					holder: { row: 3, col: 0 },
+				},
+			],
+			landmarks: DEFAULT_LANDMARKS,
+			aiStarts: {
+				red: { position: { row: 2, col: 0 }, facing: "south" },
+				green: { position: { row: 0, col: 0 }, facing: "south" },
+				cyan: { position: { row: 0, col: 2 }, facing: "south" },
+			},
+		};
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [obstacleAtSouth]),
+			TEST_PHASE_CONFIG,
+		);
+
+		// red tries to go south → blocked by wall at (3,0)
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "go_fail",
+						name: "go",
+						argumentsJson: JSON.stringify({ direction: "south" }),
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+		const { nextState } = await runRound(game, "red", "hi", provider);
+
+		// Build the actor's conversation log and check for the failure line
+		const phase = getActivePhase(nextState);
+		const redLog = phase.conversationLogs.red ?? [];
+
+		const lines = buildConversationLog(
+			{ conversationLog: redLog, worldEntities: phase.world.entities },
+			"red",
+			{} as Record<string, never>,
+		);
+
+		const failureLine = lines.find((l) =>
+			l.includes("Your `go` action failed:"),
+		);
+		expect(failureLine).toBeDefined();
 	});
 });
 
