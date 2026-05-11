@@ -321,9 +321,9 @@ function makeMessageToolCallFetchMock() {
 
 /** passAiResponse: used when we just want all AIs to pass (budget deduction still fires). */
 const PASS_ACTION = '{"action":"pass"}';
-const RED_ACTION = '{"action":"chat","content":"RED_RESPONSE_UNIQUE_TAG"}';
-const GREEN_ACTION = '{"action":"chat","content":"GREEN_RESPONSE_UNIQUE_TAG"}';
-const CYAN_ACTION = '{"action":"chat","content":"CYAN_RESPONSE_UNIQUE_TAG"}';
+const _RED_ACTION = '{"action":"chat","content":"RED_RESPONSE_UNIQUE_TAG"}';
+const _GREEN_ACTION = '{"action":"chat","content":"GREEN_RESPONSE_UNIQUE_TAG"}';
+const _CYAN_ACTION = '{"action":"chat","content":"CYAN_RESPONSE_UNIQUE_TAG"}';
 
 describe("renderGame (game route — three-AI)", () => {
 	let _stub: ReturnType<typeof makeLocalStorageStub>;
