@@ -11,6 +11,7 @@ import type {
 	ContentPackProviderResult,
 } from "../../spa/game/content-pack-provider.js";
 import { MockContentPackProvider } from "../../spa/game/content-pack-provider.js";
+import { DEFAULT_LANDMARKS } from "../../spa/game/direction.js";
 import type { PhaseConfig } from "../../spa/game/types.js";
 import { generateContentPacks } from "../content-pack-generator.js";
 
@@ -131,6 +132,7 @@ function makeMockProvider(): MockContentPackProvider {
 							examineDescription: `An impassable obstacle in phase ${phaseNumber}.`,
 							holder: { row: 0, col: 0 } as never,
 						})),
+						landmarks: DEFAULT_LANDMARKS,
 						aiStarts: {} as Record<string, never>,
 					};
 				},
@@ -310,6 +312,24 @@ describe("generateContentPacks — placement constraints", () => {
 				expect(obj.useOutcome).toBeTruthy();
 				expect(obj.examineDescription).toBeTruthy();
 			}
+
+			// 9. All four horizon landmarks are present, non-empty, and distinct
+			const dirs = ["north", "south", "east", "west"] as const;
+			for (const dir of dirs) {
+				const lm = pack.landmarks[dir];
+				expect(
+					lm.shortName,
+					`Phase ${pack.phaseNumber}: landmarks.${dir}.shortName missing`,
+				).toBeTruthy();
+				expect(
+					lm.horizonPhrase,
+					`Phase ${pack.phaseNumber}: landmarks.${dir}.horizonPhrase missing`,
+				).toBeTruthy();
+			}
+			// All four shortNames should be distinct (the mock returns DEFAULT_LANDMARKS
+			// which has four different shortNames)
+			const shortNames = dirs.map((d) => pack.landmarks[d].shortName);
+			expect(new Set(shortNames).size).toBe(4);
 		}
 	});
 
@@ -409,6 +429,7 @@ describe("generateContentPacks — degenerate config throws after MAX_ATTEMPTS",
 						examineDescription: "An impassable obstacle.",
 						holder: { row: 0, col: 0 } as never,
 					})),
+					landmarks: DEFAULT_LANDMARKS,
 					aiStarts: {} as Record<string, never>,
 				})),
 			}),

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_LANDMARKS } from "../direction";
 import {
 	advancePhase,
 	advanceRound,
@@ -228,6 +229,7 @@ describe("startPhase", () => {
 			objectivePairs: [],
 			interestingObjects: [],
 			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
 			aiStarts: {
 				red: { position: { row: 3, col: 3 }, facing: "east" as const },
 				green: { position: { row: 2, col: 2 }, facing: "south" as const },

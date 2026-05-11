@@ -15,6 +15,7 @@
 		"test": "vitest run",
 		"smoke": "playwright test",
 		"smoke:ui": "playwright test --ui",
+		"eval:directions": "npx tsx evals/relative-directions/runner.mts",
 		"prepare": "husky"
 	},
 	"pnpm": {

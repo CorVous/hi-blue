@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_LANDMARKS } from "../direction";
 import { createGame, getActivePhase, startPhase } from "../engine";
 import type {
 	AiPersona,
@@ -74,6 +75,7 @@ function makePack(overrides: Partial<ContentPack>): ContentPack {
 		objectivePairs: [],
 		interestingObjects: [],
 		obstacles: [],
+		landmarks: DEFAULT_LANDMARKS,
 		aiStarts: {
 			red: { position: { row: 0, col: 0 }, facing: "north" },
 		},

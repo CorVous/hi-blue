@@ -61,6 +61,9 @@ export function buildOpenAiMessages(
 
 	// Sort by round ascending — stable, so ties preserve append order.
 	const sortedLog = [...ctx.conversationLog].sort((a, b) => a.round - b.round);
+	// Current spatial state of this AI — used to render movement directions
+	// relative to the witness's facing in witnessed-event lines.
+	const witnessState = ctx.personaSpatial[ctx.aiId];
 	for (const entry of sortedLog) {
 		if (entry.kind === "message") {
 			if (entry.from === ctx.aiId) {
@@ -70,7 +73,12 @@ export function buildOpenAiMessages(
 				// scope the prior-round tool_call/tool_result pair covers.
 				messages.push({
 					role: "assistant",
-					content: renderEntry(entry, ctx.aiId, ctx.worldSnapshot.entities),
+					content: renderEntry(
+						entry,
+						ctx.aiId,
+						ctx.worldSnapshot.entities,
+						witnessState,
+					),
 				});
 			} else {
 				// Incoming: user turn includes "[Round N] <from> dms you:" so
@@ -78,13 +86,23 @@ export function buildOpenAiMessages(
 				// sender. Routing-context need surfaced by review of a704b81.
 				messages.push({
 					role: "user",
-					content: renderEntry(entry, ctx.aiId, ctx.worldSnapshot.entities),
+					content: renderEntry(
+						entry,
+						ctx.aiId,
+						ctx.worldSnapshot.entities,
+						witnessState,
+					),
 				});
 			}
 		} else if (entry.kind === "witnessed-event") {
 			messages.push({
 				role: "user",
-				content: renderEntry(entry, ctx.aiId, ctx.worldSnapshot.entities),
+				content: renderEntry(
+					entry,
+					ctx.aiId,
+					ctx.worldSnapshot.entities,
+					witnessState,
+				),
 			});
 		}
 	}

@@ -10,7 +10,13 @@
  */
 
 import { CapHitError, chatCompletionJson } from "../llm-client.js";
-import type { AiId, ContentPack, ObjectivePair, WorldEntity } from "./types";
+import type {
+	AiId,
+	ContentPack,
+	LandmarkDescription,
+	ObjectivePair,
+	WorldEntity,
+} from "./types";
 
 // ── Content-pack prompt ───────────────────────────────────────────────────────
 
@@ -22,6 +28,7 @@ For each phase:
   - An objective_space with: id (unique string), name (2-4 words, thematic to setting and theme), examineDescription (1-2 sentences describing the space). objective_spaces are fixed locations or surfaces, not items.
 - Generate exactly n INTERESTING OBJECTS with: id (unique string), name (2-4 words, thematic to setting and theme), examineDescription (1-2 sentences), useOutcome (1 sentence: the actor performs a stateless action with the item — nothing about the item, the actor, or the world changes). interesting_objects MUST be portable physical items a single person can pick up and carry — never furniture, architecture, or fixed structures.
 - Generate exactly m OBSTACLES with: id (unique string), name (2-4 words, thematic to setting), examineDescription (1 sentence describing the impassable object). Obstacles are fixed and impassable — never portable items. Obstacles follow the setting only and are NOT constrained by the item theme.
+- Generate exactly 4 HORIZON LANDMARKS — one anchoring each cardinal direction (north, south, east, west). Each landmark is distant, unreachable, distinctive, mutually visually distinguishable, and consistent with the setting, atmosphere, and weather. Each landmark has: shortName (2-5 words, e.g. "the rusted radio tower"), horizonPhrase (a short evocative clause describing what the landmark itself looks like — its form, condition, materials — NOT where it sits relative to any viewer. The phrase is slotted into "On the horizon ahead: <shortName> — <horizonPhrase>." so it must read coherently as a continuation. Good: "rises above the platform, antenna bent toward the dark". Bad: "looms behind you in the dark" (implies position) or "stands to your left" (implies relative direction).
 
 The theme governs the style of objective_objects, objective_spaces, and interesting_objects only:
 - "mundane" — ordinary, everyday physical items and surfaces.
@@ -33,6 +40,7 @@ Names and descriptions must be thematically consistent with the setting noun, an
 placementFlavor MUST contain the literal string "{actor}".
 pairsWithSpaceId on each objective_object MUST equal the id of its paired objective_space.
 Each objective_object's examineDescription MUST contain the literal name of its paired objective_space (or an unambiguous noun-phrase synonym a player could match). Example: if the objective_space is named "Brass Pedestal", the object's examineDescription must contain "brass pedestal" or a clear synonym ("the pedestal", "the brass mount", etc.). The prose tell is the only AI-discoverable channel for the pairing, so it cannot be omitted.
+Horizon landmark horizonPhrase MUST NOT contain any cardinal direction words (north, south, east, west) or positional phrases that imply where the landmark sits relative to the viewer (ahead, behind, in front, to your/the left, to your/the right, on the horizon, beneath you, above you).
 
 Return ONLY valid JSON with this exact shape (no markdown, no preamble):
 {
@@ -51,7 +59,13 @@ Return ONLY valid JSON with this exact shape (no markdown, no preamble):
       ],
       "obstacles": [
         { "id": "...", "kind": "obstacle", "name": "...", "examineDescription": "..." }
-      ]
+      ],
+      "landmarks": {
+        "north": { "shortName": "...", "horizonPhrase": "..." },
+        "south": { "shortName": "...", "horizonPhrase": "..." },
+        "east":  { "shortName": "...", "horizonPhrase": "..." },
+        "west":  { "shortName": "...", "horizonPhrase": "..." }
+      }
     }
   ]
 }`;
@@ -333,17 +347,58 @@ export function validateContentPacks(
 			obstacles.push(validateEntity(obsRaw, "obstacle", allIds, false));
 		}
 
+		// Validate landmarks
+		const landmarksRaw = pack.landmarks;
+		if (landmarksRaw == null || typeof landmarksRaw !== "object") {
+			throw new ContentPackError(
+				`Phase ${phaseNumber}: missing or invalid landmarks object`,
+			);
+		}
+		const lm = landmarksRaw as Record<string, unknown>;
+		const landmarks: ContentPack["landmarks"] = {
+			north: validateLandmark(lm.north, phaseNumber, "north"),
+			south: validateLandmark(lm.south, phaseNumber, "south"),
+			east: validateLandmark(lm.east, phaseNumber, "east"),
+			west: validateLandmark(lm.west, phaseNumber, "west"),
+		};
+
 		packs.push({
 			phaseNumber,
 			setting: pack.setting,
 			objectivePairs,
 			interestingObjects,
 			obstacles,
+			landmarks,
 			aiStarts: {} as Record<AiId, never>,
 		});
 	}
 
 	return { packs };
+}
+
+/** Validate a single landmark entry from the LLM response. */
+function validateLandmark(
+	raw: unknown,
+	phaseNumber: number,
+	direction: string,
+): LandmarkDescription {
+	if (raw == null || typeof raw !== "object") {
+		throw new ContentPackError(
+			`Phase ${phaseNumber}: landmark "${direction}" is not an object`,
+		);
+	}
+	const lm = raw as Record<string, unknown>;
+	if (typeof lm.shortName !== "string" || lm.shortName.length === 0) {
+		throw new ContentPackError(
+			`Phase ${phaseNumber}: landmark "${direction}" missing shortName`,
+		);
+	}
+	if (typeof lm.horizonPhrase !== "string" || lm.horizonPhrase.length === 0) {
+		throw new ContentPackError(
+			`Phase ${phaseNumber}: landmark "${direction}" missing horizonPhrase`,
+		);
+	}
+	return { shortName: lm.shortName, horizonPhrase: lm.horizonPhrase };
 }
 
 // ── BrowserContentPackProvider ────────────────────────────────────────────────

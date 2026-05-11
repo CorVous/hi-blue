@@ -60,14 +60,14 @@ describe("TOOL_DEFINITIONS", () => {
 		expect(go?.function.parameters.required).toContain("direction");
 	});
 
-	it("go.direction has a 4-value enum of cardinal directions", () => {
+	it("go.direction has a 4-value enum of relative directions", () => {
 		const go = TOOL_DEFINITIONS.find((t) => t.function.name === "go");
 		const dirEnum = go?.function.parameters.properties.direction?.enum;
 		expect(dirEnum).toHaveLength(4);
-		expect(dirEnum).toContain("north");
-		expect(dirEnum).toContain("south");
-		expect(dirEnum).toContain("east");
-		expect(dirEnum).toContain("west");
+		expect(dirEnum).toContain("forward");
+		expect(dirEnum).toContain("back");
+		expect(dirEnum).toContain("left");
+		expect(dirEnum).toContain("right");
 	});
 
 	it("look requires 'direction'", () => {
@@ -75,14 +75,14 @@ describe("TOOL_DEFINITIONS", () => {
 		expect(look?.function.parameters.required).toContain("direction");
 	});
 
-	it("look.direction has a 4-value enum of cardinal directions", () => {
+	it("look.direction has a 4-value enum of relative directions", () => {
 		const look = TOOL_DEFINITIONS.find((t) => t.function.name === "look");
 		const dirEnum = look?.function.parameters.properties.direction?.enum;
 		expect(dirEnum).toHaveLength(4);
-		expect(dirEnum).toContain("north");
-		expect(dirEnum).toContain("south");
-		expect(dirEnum).toContain("east");
-		expect(dirEnum).toContain("west");
+		expect(dirEnum).toContain("forward");
+		expect(dirEnum).toContain("back");
+		expect(dirEnum).toContain("left");
+		expect(dirEnum).toContain("right");
 	});
 
 	it("examine requires 'item'", () => {

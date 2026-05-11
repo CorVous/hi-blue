@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_LANDMARKS } from "../direction";
 import { advanceRound, appendMessage, createGame, startPhase } from "../engine";
 import { buildOpenAiMessages } from "../openai-message-builder";
 import { buildAiContext, buildConeSnapshot } from "../prompt-builder";
@@ -187,6 +188,7 @@ describe("buildAiContext", () => {
 				makeEntity("key", "interesting_object", { row: 0, col: 0 }),
 			],
 			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -233,6 +235,7 @@ describe("<setting> block", () => {
 			objectivePairs: [],
 			interestingObjects: [],
 			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -267,6 +270,7 @@ describe("<setting> block", () => {
 			objectivePairs: [],
 			interestingObjects: [],
 			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -302,8 +306,9 @@ describe("prompt-builder — spatial 'Where you are' section (current-state user
 		expect(ctx.toSystemPrompt()).not.toContain("<where_you_are>");
 	});
 
-	it("reports actor's position and facing in the current-state user turn", () => {
+	it("reports horizon landmark in the current-state user turn (replaces old Facing: line)", () => {
 		// rng=()=>0 places red at (0,0) facing north
+		// With DEFAULT_LANDMARKS, facing north → "the distant ridge"
 		const game = startPhase(
 			createGame(TEST_PERSONAS),
 			TEST_PHASE_CONFIG,
@@ -311,8 +316,10 @@ describe("prompt-builder — spatial 'Where you are' section (current-state user
 		);
 		const ctx = buildAiContext(game, "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
-		expect(stateMsg).toMatch(/facing/i);
-		expect(stateMsg).toMatch(/north/i);
+		expect(stateMsg).toMatch(/on the horizon ahead/i);
+		expect(stateMsg).toContain("the distant ridge");
+		// No cardinal direction should appear in the where_you_are section
+		expect(stateMsg).not.toMatch(/<where_you_are>[\s\S]*Facing:/i);
 	});
 
 	it("lists items in the actor's cell under 'Where you are'", () => {
@@ -327,6 +334,7 @@ describe("prompt-builder — spatial 'Where you are' section (current-state user
 				makeEntity("key", "interesting_object", { row: 0, col: 0 }),
 			],
 			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -806,6 +814,7 @@ describe("<what_you_see> (cone)", () => {
 				makeEntity("flower", "interesting_object", { row: 1, col: 0 }),
 			],
 			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "south" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -876,6 +885,7 @@ describe("<what_you_see> (cone)", () => {
 			objectivePairs: [],
 			interestingObjects: [],
 			obstacles: [makeEntity("col1", "obstacle", { row: 1, col: 0 })],
+			landmarks: DEFAULT_LANDMARKS,
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "south" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -904,6 +914,7 @@ describe("<what_you_see> (cone)", () => {
 			objectivePairs: [],
 			interestingObjects: [],
 			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "south" },
 				green: { position: { row: 1, col: 0 }, facing: "north" },
@@ -1228,6 +1239,7 @@ describe("proximityFlavor sense line", () => {
 			objectivePairs: [{ object: gem, space: pedestal }],
 			interestingObjects: [],
 			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
 			aiStarts: {
 				red: { position: opts.actorPosition, facing: opts.actorFacing },
 				green: { position: { row: 0, col: 1 }, facing: "north" },

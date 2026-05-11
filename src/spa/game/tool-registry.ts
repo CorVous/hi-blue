@@ -6,7 +6,7 @@
  * Names and argument keys mirror `validateToolCall` in `dispatcher.ts` 1:1.
  */
 
-import { CARDINAL_DIRECTIONS } from "./direction.js";
+import { RELATIVE_DIRECTIONS } from "./direction.js";
 import type { ToolName } from "./types";
 
 export interface OpenAiToolFunction {
@@ -115,14 +115,15 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 		function: {
 			name: "go",
 			description:
-				"Move one cell in a cardinal direction and set your facing to that direction. Fails if the destination is out of bounds or blocked by an obstacle.",
+				"Move one cell in a relative direction and set your facing to that direction. Fails if the destination is out of bounds or blocked by an obstacle.",
 			parameters: {
 				type: "object",
 				properties: {
 					direction: {
 						type: "string",
-						description: "The cardinal direction to move.",
-						enum: [...CARDINAL_DIRECTIONS],
+						description:
+							"The relative direction to move (relative to your current facing).",
+						enum: [...RELATIVE_DIRECTIONS],
 					},
 				},
 				required: ["direction"],
@@ -135,14 +136,15 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 		function: {
 			name: "look",
 			description:
-				"Turn to face a cardinal direction without moving. Persistent — your facing changes.",
+				"Turn to face a relative direction without moving. Persistent — your facing changes.",
 			parameters: {
 				type: "object",
 				properties: {
 					direction: {
 						type: "string",
-						description: "The cardinal direction to face.",
-						enum: [...CARDINAL_DIRECTIONS],
+						description:
+							"The relative direction to face (relative to your current facing).",
+						enum: [...RELATIVE_DIRECTIONS],
 					},
 				},
 				required: ["direction"],

@@ -12,6 +12,7 @@
  * non-addressed daemon, anchoring the current round.
  */
 import { describe, expect, it } from "vitest";
+import { DEFAULT_LANDMARKS } from "../direction";
 import { createGame, startPhase } from "../engine";
 import { runRound } from "../round-coordinator";
 import { MockRoundLLMProvider } from "../round-llm-provider";
@@ -107,6 +108,7 @@ const TEST_CONTENT_PACK: ContentPack = {
 		},
 	],
 	obstacles: [],
+	landmarks: DEFAULT_LANDMARKS,
 	aiStarts: {
 		red: { position: { row: 0, col: 0 }, facing: "north" },
 		green: { position: { row: 0, col: 1 }, facing: "north" },
