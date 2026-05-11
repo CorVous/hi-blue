@@ -97,12 +97,12 @@ describe("buildOpenAiMessages", () => {
 			role: "user",
 			content: "[Round 0] blue dms you: Hello Ember!",
 		});
-		// Outgoing assistant turn renders raw entry.content — what the model
-		// actually emitted via the `message` tool. No synthetic round/routing
-		// prefix; that would misrepresent its own output back to it.
+		// Outgoing assistant turn is prefixed with "[Round N] you dm <toLabel>:"
+		// so the Daemon can track who it addressed across the whole game (not
+		// just on the round immediately after).
 		expect(messages[2]).toEqual({
 			role: "assistant",
-			content: "Hello, player!",
+			content: "[Round 0] you dm blue: Hello, player!",
 		});
 		// Trailing current-state turn
 		expect(messages[3]?.role).toBe("user");
