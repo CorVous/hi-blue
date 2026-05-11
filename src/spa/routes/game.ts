@@ -188,7 +188,11 @@ export function applyTestAffordances(
 			return {
 				...result,
 				result: { ...result.result, gameEnded: true, phaseEnded: false },
-				nextState: { ...result.nextState, isComplete: true, outcome: "win" as const },
+				nextState: {
+					...result.nextState,
+					isComplete: true,
+					outcome: "win" as const,
+				},
 			};
 		};
 	}

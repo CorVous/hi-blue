@@ -123,14 +123,14 @@ const GAME_ENDED_RESULT = {
 
 vi.mock("../game/game-session.js", () => {
 	class MockGameSession {
-		submitMessage = vi.fn().mockImplementation(() =>
-			Promise.resolve(GAME_ENDED_RESULT),
-		);
+		submitMessage = vi
+			.fn()
+			.mockImplementation(() => Promise.resolve(GAME_ENDED_RESULT));
 		getState = vi.fn().mockImplementation(() => FAKE_GAME_STATE);
 		static restore = vi.fn().mockImplementation(() => ({
-			submitMessage: vi.fn().mockImplementation(() =>
-				Promise.resolve(GAME_ENDED_RESULT),
-			),
+			submitMessage: vi
+				.fn()
+				.mockImplementation(() => Promise.resolve(GAME_ENDED_RESULT)),
 			getState: vi.fn().mockImplementation(() => FAKE_GAME_STATE),
 		}));
 	}
