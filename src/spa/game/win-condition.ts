@@ -90,9 +90,12 @@ export function checkPlacementFlavor(
 	_contentPack: ContentPack,
 	world: WorldState,
 ): string | null {
-	if (action.toolCall?.name !== "put_down") return null;
+	const toolCall = action.toolCall;
+	if (!toolCall) return null;
+	const toolName = toolCall.name;
+	if (toolName !== "put_down" && toolName !== "use") return null;
 
-	const itemId = action.toolCall.args.item;
+	const itemId = toolCall.args.item;
 	if (!itemId) return null;
 
 	// Find the live object entity in world (post-execute, so holder is now a GridPosition)

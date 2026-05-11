@@ -1085,7 +1085,7 @@ export function renderGame(
 	}
 
 	// Helper: pace token emission
-	function pace(): Promise<void> {
+	function _pace(): Promise<void> {
 		const ms = TOKEN_PACE_MS * AI_TYPING_SPEED * (0.5 + Math.random());
 		return new Promise((r) => setTimeout(r, ms));
 	}

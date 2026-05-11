@@ -412,7 +412,7 @@ describe("executeToolCall", () => {
 		expect(item?.holder).toBe("cyan");
 	});
 
-	it("does not mutate world on use", () => {
+	it("does not mutate world on use when not on paired objective space", () => {
 		const game = makeGame();
 		const before = JSON.stringify(getActivePhase(game).world);
 		const call: ToolCall = { name: "use", args: { item: "key" } };
@@ -581,9 +581,9 @@ describe("dispatchAiTurn", () => {
 		expect(key?.holder).toBe("red");
 	});
 
-	it("use returns tool_success with entity's useOutcome as description", () => {
+	it("use returns tool_success with entity's useOutcome as description when not on paired space", () => {
 		const game = makeGame();
-		// key has useOutcome: "You used the key."
+		// key has useOutcome: "You used the key." and red is not on key's paired space
 		const action: AiTurnAction = {
 			aiId: "red",
 			toolCall: { name: "use", args: { item: "key" } },
@@ -592,7 +592,7 @@ describe("dispatchAiTurn", () => {
 		expect(result.rejected).toBe(false);
 		expect(result.records[0]?.kind).toBe("tool_success");
 		expect(result.records[0]?.description).toBe("You used the key.");
-		// World is byte-identical before and after use
+		// World is byte-identical before and after use (no paired space match)
 		const beforeEntities = JSON.stringify(getActivePhase(game).world.entities);
 		const afterEntities = JSON.stringify(
 			getActivePhase(result.game).world.entities,

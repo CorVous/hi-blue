@@ -96,7 +96,7 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 		function: {
 			name: "use",
 			description:
-				"Use an item you are holding. Has no world effect in v1 — surfaces an action-log entry.",
+				"Use an item you are holding. Places it in your current cell (same effect as put_down) and surfaces an action-log entry.",
 			parameters: {
 				type: "object",
 				properties: {

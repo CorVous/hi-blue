@@ -253,7 +253,7 @@ describe("checkPlacementFlavor", () => {
 		expect(checkPlacementFlavor(action, pack, world)).toBeNull();
 	});
 
-	it("returns null for a use action", () => {
+	it("returns placement flavor for a use action when object is on its paired space", () => {
 		const pair = makeObjectivePair(
 			"gem",
 			"altar",
@@ -266,7 +266,9 @@ describe("checkPlacementFlavor", () => {
 			aiId: "red",
 			toolCall: { name: "use", args: { item: "gem" } },
 		};
-		expect(checkPlacementFlavor(action, pack, world)).toBeNull();
+		expect(checkPlacementFlavor(action, pack, world)).toBe(
+			"you placed the item.",
+		);
 	});
 
 	it("returns null for a go action (no item)", () => {
