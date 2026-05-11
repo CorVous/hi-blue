@@ -14,9 +14,9 @@ import { describe, expect, it } from "vitest";
 import type { OpenAiMessage } from "../../llm-client";
 import { DEFAULT_LANDMARKS } from "../direction";
 import {
-	FAREWELL_LINE,
 	createGame,
 	deductBudget,
+	FAREWELL_LINE,
 	getActivePhase,
 	isAiLockedOut,
 	isPlayerChatLockedOut,
