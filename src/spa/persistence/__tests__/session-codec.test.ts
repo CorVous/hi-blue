@@ -75,7 +75,7 @@ describe("serializeSession / deserializeSession", () => {
 		}
 	});
 
-	it("daemon shape: top-level aiId/persona/phases, all three phases present", () => {
+	it("daemon shape: top-level aiId/persona/conversationLog", () => {
 		const game = makeFreshGame();
 		const files = serializeSession(game, NOW, CREATED_AT);
 		const daemonJson = files.daemons.red;
@@ -84,26 +84,9 @@ describe("serializeSession / deserializeSession", () => {
 		const daemon = JSON.parse(daemonJson!);
 		expect(daemon).toHaveProperty("aiId", "red");
 		expect(daemon).toHaveProperty("persona");
-		expect(daemon).toHaveProperty("phases");
-		expect(daemon.phases).toHaveProperty("1");
-		expect(daemon.phases).toHaveProperty("2");
-		expect(daemon.phases).toHaveProperty("3");
-	});
-
-	it("unstarted phases have empty conversationLog and phaseGoal", () => {
-		const game = makeFreshGame();
-		const files = serializeSession(game, NOW, CREATED_AT);
-		// biome-ignore lint/style/noNonNullAssertion: daemons.red always exists for this fixture
-		const daemon = JSON.parse(files.daemons.red!);
-		// Phase 2 and 3 have not started
-		// biome-ignore lint/suspicious/noExplicitAny: daemon is dynamically parsed JSON
-		expect((daemon as any).phases["2"].conversationLog).toEqual([]);
-		// biome-ignore lint/suspicious/noExplicitAny: daemon is dynamically parsed JSON
-		expect((daemon as any).phases["2"].phaseGoal).toBe("");
-		// biome-ignore lint/suspicious/noExplicitAny: daemon is dynamically parsed JSON
-		expect((daemon as any).phases["3"].conversationLog).toEqual([]);
-		// biome-ignore lint/suspicious/noExplicitAny: daemon is dynamically parsed JSON
-		expect((daemon as any).phases["3"].phaseGoal).toBe("");
+		expect(daemon).toHaveProperty("conversationLog");
+		expect(Array.isArray(daemon.conversationLog)).toBe(true);
+		expect(daemon).not.toHaveProperty("phases");
 	});
 
 	it("persona block keys are exactly the editable AiPersona surface (no budgetPerPhase)", () => {
@@ -134,13 +117,13 @@ describe("serializeSession / deserializeSession", () => {
 		expect(metaLines[1]).toMatch(/^ {2}/);
 	});
 
-	it("meta has createdAt/lastSavedAt/phase/round/personaOrder", () => {
+	it("meta has createdAt/lastSavedAt/epoch/round/personaOrder", () => {
 		const game = makeFreshGame();
 		const files = serializeSession(game, NOW, CREATED_AT);
 		const meta = JSON.parse(files.meta);
 		expect(meta).toHaveProperty("createdAt", CREATED_AT);
 		expect(meta).toHaveProperty("lastSavedAt", NOW);
-		expect(meta).toHaveProperty("phase", 1);
+		expect(meta).toHaveProperty("epoch", 1);
 		expect(meta).toHaveProperty("round", 0);
 		expect(meta).toHaveProperty("personaOrder");
 		expect(Array.isArray(meta.personaOrder)).toBe(true);
@@ -224,7 +207,7 @@ describe("serializeSession / deserializeSession", () => {
 		expect(files.engine).toMatch(/^[A-Za-z0-9+/=]*$/);
 	});
 
-	it("round-trips lockedOut Set and chatLockouts Map", () => {
+	it("round-trips lockedOut Set (chatLockouts no longer persisted)", () => {
 		const game = makeFreshGame();
 		const phase = game.phases[0];
 		if (!phase) throw new Error("no phase");
@@ -246,7 +229,7 @@ describe("serializeSession / deserializeSession", () => {
 			expect(rp?.lockedOut).toBeInstanceOf(Set);
 			expect(rp?.lockedOut.has("red")).toBe(true);
 			expect(rp?.chatLockouts).toBeInstanceOf(Map);
-			expect(rp?.chatLockouts.get("green")).toBe(5);
+			expect(rp?.chatLockouts.size).toBe(0);
 		}
 	});
 
@@ -546,7 +529,7 @@ describe("serializeSession / deserializeSession", () => {
 		if (!files.engine) throw new Error("engine should not be null");
 		const rawJson = deobfuscate(files.engine);
 		const sealed = JSON.parse(rawJson);
-		sealed.schemaVersion = 999;
+		sealed.schemaVersion = 5;
 		const tampered = obfuscate(JSON.stringify(sealed));
 		const result = deserializeSession({ ...files, engine: tampered });
 		expect(result.kind).toBe("version-mismatch");

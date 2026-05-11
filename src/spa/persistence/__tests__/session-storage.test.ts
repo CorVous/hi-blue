@@ -698,7 +698,7 @@ describe("getSessionInfo", () => {
 		const info = getSessionInfo(id);
 		expect(info.kind).toBe("ok");
 		if (info.kind === "ok") {
-			expect(info.phase).toBe(1);
+			expect(info.epoch).toBe(1);
 			expect(typeof info.lastSavedAt).toBe("string");
 			expect(Array.isArray(info.daemonFiles)).toBe(true);
 			expect(info.daemonFiles.length).toBeGreaterThan(0);

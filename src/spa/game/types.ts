@@ -87,6 +87,16 @@ export interface ContentPack {
 	};
 }
 
+export interface Objective {
+  id: string;
+  description: string;
+}
+
+export interface ActiveComplication {
+  id: string;
+  description: string;
+}
+
 export interface PersonaSpatialState {
 	position: GridPosition;
 	facing: CardinalDirection;

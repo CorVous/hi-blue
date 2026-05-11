@@ -136,11 +136,8 @@ describe("devtools-edit: mutating daemon .txt affects conversationLogs on reload
 		const rawDaemon = stub._store[redDaemonKey];
 		if (!rawDaemon) throw new Error("red daemon file missing");
 		const daemonFile = JSON.parse(rawDaemon) as DaemonFile;
-		const phases = daemonFile.phases;
-		const phase1 = phases["1"];
-		if (!phase1) throw new Error("no phase 1 in daemon file");
 		// Mutate the conversation log
-		phase1.conversationLog[0] = {
+		daemonFile.conversationLog[0] = {
 			kind: "message",
 			from: "blue",
 			to: "red",
@@ -180,8 +177,8 @@ describe("devtools-edit: mutating daemon .txt affects conversationLogs on reload
 		const rawGreenDaemon = stub._store[greenDaemonKey];
 		if (!rawGreenDaemon) throw new Error("green daemon file missing");
 		const daemonFile = JSON.parse(rawGreenDaemon) as DaemonFile;
-		// Add a new message entry to phase 1
-		daemonFile.phases["1"].conversationLog.push({
+		// Add a new message entry to the conversation log
+		daemonFile.conversationLog.push({
 			kind: "message",
 			from: "blue",
 			to: "green",
