@@ -516,6 +516,39 @@ describe("dispatchAiTurn", () => {
 		expect(flower?.holder).toBe("red");
 	});
 
+	it("pick_up auto-fires examine: actorPrivateToolResult includes examineDescription", () => {
+		const game = makeGame();
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "pick_up", args: { item: "flower" } },
+		};
+		const result = dispatchAiTurn(game, action);
+		expect(result.rejected).toBe(false);
+		// Public tool_success record still describes the pickup
+		expect(result.records[0]?.kind).toBe("tool_success");
+		expect(result.records[0]?.description).toMatch(/picked up the flower/);
+		// Private result feeds the examineDescription back to the actor's context
+		expect(result.actorPrivateToolResult).toBeDefined();
+		expect(result.actorPrivateToolResult?.success).toBe(true);
+		expect(result.actorPrivateToolResult?.description).toMatch(
+			/picked up the flower/,
+		);
+		expect(result.actorPrivateToolResult?.description).toMatch(/A flower\./);
+	});
+
+	it("failed pick_up does not produce an auto-examine private result", () => {
+		const game = makeGame();
+		// green is at (0,1); flower is at (0,0) — not in green's cell
+		const action: AiTurnAction = {
+			aiId: "green",
+			toolCall: { name: "pick_up", args: { item: "flower" } },
+		};
+		const result = dispatchAiTurn(game, action);
+		expect(result.rejected).toBe(false);
+		expect(result.records[0]?.kind).toBe("tool_failure");
+		expect(result.actorPrivateToolResult).toBeUndefined();
+	});
+
 	it("go produces tool_success record and updates position", () => {
 		const game = makeGame();
 		// red at (0,0), going south
