@@ -41,10 +41,15 @@ function positionsEqual(a: GridPosition, b: GridPosition): boolean {
 /**
  * A mid-phase complication: a named handler that receives the current game
  * state plus a seeded rng and returns an updated game state.
+ *
+ * Optional `isAvailable` guard: when present, the round coordinator calls it
+ * before drawing. Complications that return `false` are excluded from the pool
+ * for that draw. When absent, the complication is always eligible.
  */
 export interface Complication {
 	name: string;
 	apply(game: GameState, rng: () => number): GameState;
+	isAvailable?(game: GameState): boolean;
 }
 
 /**
@@ -163,6 +168,10 @@ export const toolDisableComplication: Complication = {
  */
 export const obstacleShiftComplication: Complication = {
 	name: "obstacleShift",
+	isAvailable(game: GameState): boolean {
+		const phase = getActivePhase(game);
+		return validObstacleShiftTuples(phase.world, phase.personaSpatial).length > 0;
+	},
 	apply(game: GameState, rng: () => number): GameState {
 		const phase = getActivePhase(game);
 		const tuples = validObstacleShiftTuples(phase.world, phase.personaSpatial);
