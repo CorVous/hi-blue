@@ -13,6 +13,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { OpenAiMessage } from "../../llm-client";
+import { DEFAULT_LANDMARKS } from "../direction";
 import { getActivePhase } from "../engine";
 import { GameSession } from "../game-session";
 import type { RoundLLMProvider } from "../round-llm-provider";
@@ -110,6 +111,7 @@ const CONTENT_PACK_WITH_ITEMS: ContentPack = {
 		},
 	],
 	obstacles: [],
+	landmarks: DEFAULT_LANDMARKS,
 	aiStarts: {
 		red: { position: { row: 0, col: 0 }, facing: "north" },
 		green: { position: { row: 0, col: 1 }, facing: "north" },

@@ -9,6 +9,7 @@
  * null otherwise.
  */
 import { describe, expect, it } from "vitest";
+import { DEFAULT_LANDMARKS } from "../direction";
 import type {
 	AiTurnAction,
 	ContentPack,
@@ -56,6 +57,7 @@ function makeContentPack(pairs: ObjectivePair[]): ContentPack {
 		objectivePairs: pairs,
 		interestingObjects: [],
 		obstacles: [],
+		landmarks: DEFAULT_LANDMARKS,
 		aiStarts: {},
 	};
 }

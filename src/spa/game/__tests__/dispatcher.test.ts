@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_LANDMARKS } from "../direction";
 import {
 	dispatchAiTurn,
 	executeToolCall,
@@ -112,6 +113,7 @@ function makePackWithEntities(
 		objectivePairs: [],
 		interestingObjects: [flower, key],
 		obstacles,
+		landmarks: DEFAULT_LANDMARKS,
 		aiStarts: {
 			red: { position: { row: 0, col: 0 }, facing: "north" },
 			green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -369,6 +371,7 @@ describe("validateToolCall", () => {
 			objectivePairs: [{ object: objObj, space: objSpace }],
 			interestingObjects: [],
 			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -412,6 +415,7 @@ describe("executeToolCall — use placement via front arc", () => {
 			objectivePairs: [{ object: gem, space: pedestal }],
 			interestingObjects: [],
 			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "south" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -459,6 +463,7 @@ describe("executeToolCall — use placement via front arc", () => {
 			objectivePairs: [{ object: gem, space: pedestal }],
 			interestingObjects: [],
 			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -548,6 +553,102 @@ describe("executeToolCall", () => {
 		const updated = executeToolCall(game, "red", call);
 		const after = JSON.stringify(getActivePhase(updated).world);
 		expect(after).toBe(before);
+	});
+
+	// ── Relative direction dispatch (issue: relative-directions) ─────────────
+	// red starts at (0,0) facing north (via FIXED_RNG).
+
+	it("look forward (facing north) → remains at (0,0) facing north", () => {
+		const game = makeGame();
+		const call: ToolCall = { name: "look", args: { direction: "forward" } };
+		const updated = executeToolCall(game, "red", call);
+		const spatial = getActivePhase(updated).personaSpatial.red;
+		expect(spatial?.position).toEqual({ row: 0, col: 0 });
+		expect(spatial?.facing).toBe("north");
+	});
+
+	it("look right (facing north) → remains at (0,0) facing east", () => {
+		const game = makeGame();
+		const call: ToolCall = { name: "look", args: { direction: "right" } };
+		const updated = executeToolCall(game, "red", call);
+		const spatial = getActivePhase(updated).personaSpatial.red;
+		expect(spatial?.position).toEqual({ row: 0, col: 0 });
+		expect(spatial?.facing).toBe("east");
+	});
+
+	it("look left (facing north) → remains at (0,0) facing west", () => {
+		const game = makeGame();
+		const call: ToolCall = { name: "look", args: { direction: "left" } };
+		const updated = executeToolCall(game, "red", call);
+		const spatial = getActivePhase(updated).personaSpatial.red;
+		expect(spatial?.position).toEqual({ row: 0, col: 0 });
+		expect(spatial?.facing).toBe("west");
+	});
+
+	it("look back (facing north) → remains at (0,0) facing south", () => {
+		const game = makeGame();
+		const call: ToolCall = { name: "look", args: { direction: "back" } };
+		const updated = executeToolCall(game, "red", call);
+		const spatial = getActivePhase(updated).personaSpatial.red;
+		expect(spatial?.position).toEqual({ row: 0, col: 0 });
+		expect(spatial?.facing).toBe("south");
+	});
+
+	it("go forward (facing north) is rejected (out of bounds at row -1)", () => {
+		// red at (0,0) facing north; forward = north → row -1, which is OOB
+		const game = makeGame();
+		const result = validateToolCall(game, "red", {
+			name: "go",
+			args: { direction: "forward" },
+		});
+		expect(result.valid).toBe(false);
+		expect(result.reason).toMatch(/out of bounds/i);
+	});
+
+	it("go back (facing north) → moves to (1,0) facing south", () => {
+		// back = south from north-facing → row+1
+		const game = makeGame();
+		const call: ToolCall = { name: "go", args: { direction: "back" } };
+		const updated = executeToolCall(game, "red", call);
+		const spatial = getActivePhase(updated).personaSpatial.red;
+		expect(spatial?.position).toEqual({ row: 1, col: 0 });
+		expect(spatial?.facing).toBe("south");
+	});
+
+	it("go right (facing north) → moves to (0,1) facing east", () => {
+		// right = east from north-facing
+		const game = makeGame();
+		const call: ToolCall = { name: "go", args: { direction: "right" } };
+		const updated = executeToolCall(game, "red", call);
+		const spatial = getActivePhase(updated).personaSpatial.red;
+		expect(spatial?.position).toEqual({ row: 0, col: 1 });
+		expect(spatial?.facing).toBe("east");
+	});
+
+	it("go left (facing north) is rejected (out of bounds at col -1)", () => {
+		// red at (0,0) facing north; left = west → col -1, which is OOB
+		const game = makeGame();
+		const result = validateToolCall(game, "red", {
+			name: "go",
+			args: { direction: "left" },
+		});
+		expect(result.valid).toBe(false);
+		expect(result.reason).toMatch(/out of bounds/i);
+	});
+
+	it("go back (relative) resolves correctly: actor ends up facing south and at (1,0)", () => {
+		// Verifies the resolved cardinal is applied to spatial state (not the raw "back" arg).
+		// red at (0,0) facing north; back = south = row+1.
+		const game = makeGame();
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "go", args: { direction: "back" } },
+		};
+		const result = dispatchAiTurn(game, action);
+		expect(result.rejected).toBe(false);
+		const spatial = getActivePhase(result.game).personaSpatial.red;
+		expect(spatial?.position).toEqual({ row: 1, col: 0 });
+		expect(spatial?.facing).toBe("south");
 	});
 });
 
@@ -795,6 +896,7 @@ describe("dispatchAiTurn", () => {
 			objectivePairs: [{ object: gemObject, space: altarSpace }],
 			interestingObjects: [],
 			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -893,6 +995,7 @@ describe("dispatchAiTurn", () => {
 			objectivePairs: [{ object: gemObject, space: altarSpace }],
 			interestingObjects: [],
 			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -938,6 +1041,7 @@ describe("dispatchAiTurn", () => {
 			objectivePairs: [],
 			interestingObjects: [flower],
 			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
 			aiStarts: {
 				red: { position: { row: 2, col: 0 }, facing: "south" },
 				green: { position: { row: 0, col: 0 }, facing: "south" },

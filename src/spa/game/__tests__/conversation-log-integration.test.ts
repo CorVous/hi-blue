@@ -17,6 +17,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { DEFAULT_LANDMARKS } from "../direction";
 import { createGame, getActivePhase, startPhase } from "../engine";
 import { buildOpenAiMessages } from "../openai-message-builder";
 import { buildAiContext } from "../prompt-builder";
@@ -141,6 +142,7 @@ const TEST_CONTENT_PACK: ContentPack = {
 		},
 	],
 	obstacles: [],
+	landmarks: DEFAULT_LANDMARKS,
 	aiStarts: {
 		red: { position: { row: 2, col: 0 }, facing: "south" },
 		green: { position: { row: 0, col: 0 }, facing: "south" },

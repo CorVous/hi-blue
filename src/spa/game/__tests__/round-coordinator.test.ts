@@ -12,6 +12,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { OpenAiMessage } from "../../llm-client";
+import { DEFAULT_LANDMARKS } from "../direction";
 import {
 	createGame,
 	deductBudget,
@@ -119,6 +120,7 @@ const TEST_CONTENT_PACK: ContentPack = {
 		},
 	],
 	obstacles: [],
+	landmarks: DEFAULT_LANDMARKS,
 	aiStarts: {
 		red: { position: { row: 0, col: 0 }, facing: "north" },
 		green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -1460,6 +1462,7 @@ describe("phase progression — three-phase walk", () => {
 				},
 			],
 			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -1483,6 +1486,7 @@ describe("phase progression — three-phase walk", () => {
 				},
 			],
 			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -1854,6 +1858,7 @@ describe("placement flavor + win condition (issue #126)", () => {
 		],
 		interestingObjects: [],
 		obstacles: [],
+		landmarks: DEFAULT_LANDMARKS,
 		aiStarts: {
 			red: { position: { row: 0, col: 0 }, facing: "north" },
 			green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -1869,6 +1874,7 @@ describe("placement flavor + win condition (issue #126)", () => {
 		objectivePairs: [],
 		interestingObjects: [],
 		obstacles: [],
+		landmarks: DEFAULT_LANDMARKS,
 		aiStarts: {
 			red: { position: { row: 0, col: 0 }, facing: "north" },
 			green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -2090,6 +2096,7 @@ describe("placement flavor + win condition (issue #126)", () => {
 			],
 			interestingObjects: [],
 			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -2201,6 +2208,7 @@ describe("examine tool", () => {
 		],
 		interestingObjects: [],
 		obstacles: [],
+		landmarks: DEFAULT_LANDMARKS,
 		aiStarts: {
 			red: { position: { row: 0, col: 0 }, facing: "north" },
 			green: { position: { row: 0, col: 1 }, facing: "north" },

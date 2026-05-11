@@ -1,3 +1,4 @@
+import { DEFAULT_LANDMARKS } from "../../game/direction";
 import type { ContentPack } from "../../game/types";
 
 const AI_STARTS: ContentPack["aiStarts"] = {
@@ -37,6 +38,7 @@ export const STATIC_CONTENT_PACKS: ContentPack[] = [
 		],
 		interestingObjects: [],
 		obstacles: [],
+		landmarks: DEFAULT_LANDMARKS,
 		aiStarts: AI_STARTS,
 	},
 	{
@@ -65,6 +67,7 @@ export const STATIC_CONTENT_PACKS: ContentPack[] = [
 		],
 		interestingObjects: [],
 		obstacles: [],
+		landmarks: DEFAULT_LANDMARKS,
 		aiStarts: AI_STARTS,
 	},
 	{
@@ -93,6 +96,7 @@ export const STATIC_CONTENT_PACKS: ContentPack[] = [
 		],
 		interestingObjects: [],
 		obstacles: [],
+		landmarks: DEFAULT_LANDMARKS,
 		aiStarts: AI_STARTS,
 	},
 ];
