@@ -18,12 +18,12 @@
  */
 
 import { availableTools } from "./available-tools";
-import { COMPLICATIONS } from "./complications";
 import {
 	applyComplicationResult,
 	decrementComplicationCountdown,
 	tickComplication,
 } from "./complication-engine";
+import { COMPLICATIONS } from "./complications";
 import { dispatchAiTurn } from "./dispatcher";
 import {
 	advancePhase,
