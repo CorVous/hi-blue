@@ -213,7 +213,11 @@ export async function runRound(
 		);
 
 		// Compute legal tools for this AI given current game state
-		const tools = availableTools(state, aiId, getActivePhase(state).activeComplications);
+		const tools = availableTools(
+			state,
+			aiId,
+			getActivePhase(state).activeComplications,
+		);
 
 		// Call the provider
 		let { assistantText, toolCalls, costUsd } = await provider.streamRound(

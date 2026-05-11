@@ -614,7 +614,12 @@ describe("Tool Disable exclusion", () => {
 		const activeComplications: ActiveComplication[] = [];
 		for (const aiId of AI_IDS) {
 			for (const tool of toolNames) {
-				activeComplications.push({ kind: "tool_disable", target: aiId, tool, resolveAtRound: 99 });
+				activeComplications.push({
+					kind: "tool_disable",
+					target: aiId,
+					tool,
+					resolveAtRound: 99,
+				});
 			}
 		}
 		const phase = makePhase({
@@ -634,7 +639,12 @@ describe("Tool Disable exclusion", () => {
 		// Only red+pick_up is already disabled. With 3 daemons × 8 tools = 24 pairs,
 		// 1 excluded, 23 valid pairs remain.
 		const activeComplications: ActiveComplication[] = [
-			{ kind: "tool_disable", target: "red", tool: "pick_up", resolveAtRound: 99 },
+			{
+				kind: "tool_disable",
+				target: "red",
+				tool: "pick_up",
+				resolveAtRound: 99,
+			},
 		];
 		const phase = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
@@ -653,7 +663,12 @@ describe("Tool Disable exclusion", () => {
 
 	it("permits a (daemon, tool) pair when the same daemon has a different tool disabled", () => {
 		const activeComplications: ActiveComplication[] = [
-			{ kind: "tool_disable", target: "red", tool: "pick_up", resolveAtRound: 99 },
+			{
+				kind: "tool_disable",
+				target: "red",
+				tool: "pick_up",
+				resolveAtRound: 99,
+			},
 		];
 		const phase = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
@@ -668,7 +683,12 @@ describe("Tool Disable exclusion", () => {
 
 	it("permits a (daemon, tool) pair when a different daemon has the same tool disabled", () => {
 		const activeComplications: ActiveComplication[] = [
-			{ kind: "tool_disable", target: "green", tool: "pick_up", resolveAtRound: 99 },
+			{
+				kind: "tool_disable",
+				target: "green",
+				tool: "pick_up",
+				resolveAtRound: 99,
+			},
 		];
 		const phase = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },

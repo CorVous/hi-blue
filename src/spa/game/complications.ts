@@ -140,4 +140,7 @@ export const toolDisableComplication: Complication = {
  * Registry of all available complications. The round coordinator draws one
  * entry from this list when a `complicationConfig.triggerRound` fires.
  */
-export const COMPLICATIONS: Complication[] = [weatherChangeComplication, toolDisableComplication];
+export const COMPLICATIONS: Complication[] = [
+	weatherChangeComplication,
+	toolDisableComplication,
+];
