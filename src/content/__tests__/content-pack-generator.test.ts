@@ -12,7 +12,7 @@ import type {
 } from "../../spa/game/content-pack-provider.js";
 import { MockContentPackProvider } from "../../spa/game/content-pack-provider.js";
 import { DEFAULT_LANDMARKS } from "../../spa/game/direction.js";
-import type { PhaseRanges } from "../content-pack-generator.js";
+import type { PhaseConfig } from "../../spa/game/types.js";
 import { generateContentPacks } from "../content-pack-generator.js";
 
 // ── Seeded RNG ────────────────────────────────────────────────────────────────
@@ -38,24 +38,30 @@ const CARDINAL = new Set(["north", "south", "east", "west"]);
 // ── Fixed phase configs for tests ─────────────────────────────────────────────
 
 /** Minimal k=1, n=1, m=1 — stays well within the 5x5 grid. */
-const FIXED_PHASE_CONFIGS: [PhaseRanges, PhaseRanges, PhaseRanges] = [
+const FIXED_PHASE_CONFIGS: [PhaseConfig, PhaseConfig, PhaseConfig] = [
 	{
 		phaseNumber: 1,
 		kRange: [1, 1],
 		nRange: [1, 1],
 		mRange: [1, 1],
+		budgetPerAi: 5,
+		aiGoalPool: ["find the key"],
 	},
 	{
 		phaseNumber: 2,
 		kRange: [1, 1],
 		nRange: [1, 1],
 		mRange: [1, 1],
+		budgetPerAi: 5,
+		aiGoalPool: ["guard the door"],
 	},
 	{
 		phaseNumber: 3,
 		kRange: [1, 1],
 		nRange: [1, 1],
 		mRange: [1, 1],
+		budgetPerAi: 5,
+		aiGoalPool: ["solve the puzzle"],
 	},
 ];
 
@@ -379,25 +385,31 @@ describe("generateContentPacks — degenerate config throws after MAX_ATTEMPTS",
 		// A 5x5 grid has 25 cells. With 3 AI starts, we need at least 3 non-obstacle cells.
 		// Setting m=23 leaves only 2 non-obstacle cells, which is fewer than the 3 AI starts.
 		// This makes placement impossible.
-		const impossibleConfigs: [PhaseRanges, PhaseRanges, PhaseRanges] = [
+		const impossibleConfigs: [PhaseConfig, PhaseConfig, PhaseConfig] = [
 			{
 				phaseNumber: 1,
 				// k=0, n=0, m=23 → only 2 non-obstacle cells for 3 AI starts → impossible
 				kRange: [0, 0],
 				nRange: [0, 0],
 				mRange: [23, 23],
+				budgetPerAi: 5,
+				aiGoalPool: ["survive"],
 			},
 			{
 				phaseNumber: 2,
 				kRange: [0, 0],
 				nRange: [0, 0],
 				mRange: [23, 23],
+				budgetPerAi: 5,
+				aiGoalPool: ["survive"],
 			},
 			{
 				phaseNumber: 3,
 				kRange: [0, 0],
 				nRange: [0, 0],
 				mRange: [23, 23],
+				budgetPerAi: 5,
+				aiGoalPool: ["survive"],
 			},
 		];
 

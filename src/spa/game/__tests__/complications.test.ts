@@ -10,8 +10,8 @@ import { describe, expect, it } from "vitest";
 import { WEATHER_POOL } from "../../../content/index.js";
 import { COMPLICATIONS, weatherChangeComplication } from "../complications.js";
 import { DEFAULT_LANDMARKS } from "../direction.js";
-import { getActivePhase, startGame } from "../engine.js";
-import type { AiPersona, ContentPack } from "../types.js";
+import { createGame, getActivePhase, startPhase } from "../engine.js";
+import type { AiPersona, ContentPack, PhaseConfig } from "../types.js";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -55,6 +55,15 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 	},
 };
 
+const TEST_PHASE_CONFIG: PhaseConfig = {
+	phaseNumber: 1,
+	kRange: [1, 1],
+	nRange: [0, 0],
+	mRange: [0, 0],
+	aiGoalPool: ["Hold the flower at phase end"],
+	budgetPerAi: 5,
+};
+
 /** Build a game with a specific weather value in the active phase. */
 function makeGameWithWeather(weather: string) {
 	const pack: ContentPack = {
@@ -72,7 +81,8 @@ function makeGameWithWeather(weather: string) {
 			cyan: { position: { row: 0, col: 2 }, facing: "north" },
 		},
 	};
-	return startGame(TEST_PERSONAS, [pack], () => 0);
+	const game = createGame(TEST_PERSONAS, [pack]);
+	return startPhase(game, TEST_PHASE_CONFIG, () => 0);
 }
 
 describe("weatherChangeComplication", () => {

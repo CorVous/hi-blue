@@ -11,16 +11,17 @@
 import { describe, expect, it } from "vitest";
 import {
 	appendMessage,
+	createGame,
 	deductBudget,
 	getActivePhase,
-	startGame,
+	startPhase,
 } from "../engine";
 import {
 	encodeRoundResult,
 	type SseEvent,
 	splitIntoWordChunks,
 } from "../round-result-encoder";
-import type { AiId, AiPersona, RoundResult } from "../types";
+import type { AiId, AiPersona, PhaseConfig, RoundResult } from "../types";
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -66,10 +67,19 @@ const TEST_PERSONAS: Record<AiId, AiPersona> = {
 	},
 };
 
+const PHASE_CONFIG: PhaseConfig = {
+	phaseNumber: 1,
+	kRange: [1, 1],
+	nRange: [0, 0],
+	mRange: [0, 0],
+	aiGoalPool: ["Test goal"],
+	budgetPerAi: 5,
+};
+
 function makePhase(
-	mutate?: (g: ReturnType<typeof startGame>) => ReturnType<typeof startGame>,
+	mutate?: (g: ReturnType<typeof startPhase>) => ReturnType<typeof startPhase>,
 ) {
-	let game = startGame(TEST_PERSONAS, []);
+	let game = startPhase(createGame(TEST_PERSONAS), PHASE_CONFIG);
 	if (mutate) game = mutate(game);
 	return getActivePhase(game);
 }
@@ -84,7 +94,7 @@ function makePhase(
 function makePhaseWithMessages(
 	entries: Array<{ from: AiId | "blue"; to: AiId | "blue"; content: string }>,
 ): ReturnType<typeof makePhase> {
-	let game = startGame(TEST_PERSONAS, []);
+	let game = startPhase(createGame(TEST_PERSONAS), PHASE_CONFIG);
 	for (const { from, to, content } of entries) {
 		game = appendMessage(game, from, to, content);
 	}
@@ -267,9 +277,9 @@ describe("encodeRoundResult — budget events", () => {
 	});
 
 	it("budget event reflects actual remaining value from phaseAfter", () => {
-		// Deduct red's budget twice with $0.1 cost each
-		let game = startGame(TEST_PERSONAS, []);
-		game = deductBudget(deductBudget(game, "red", 0.1), "red", 0.1);
+		// Deduct red's budget twice with $1 cost each
+		let game = startPhase(createGame(TEST_PERSONAS), PHASE_CONFIG);
+		game = deductBudget(deductBudget(game, "red", 1), "red", 1);
 		const phase = getActivePhase(game);
 
 		const result = makePassResult();
@@ -281,7 +291,7 @@ describe("encodeRoundResult — budget events", () => {
 			(e): e is Extract<SseEvent, { type: "budget" }> =>
 				e.type === "budget" && e.aiId === "red",
 		);
-		expect(redBudget?.remaining).toBeCloseTo(0.3, 10); // 0.5 - 0.1 - 0.1
+		expect(redBudget?.remaining).toBeCloseTo(3, 10); // 5 - 1 - 1
 	});
 });
 
@@ -291,8 +301,11 @@ describe("encodeRoundResult — lockout events (budget-exhaustion)", () => {
 	it("emits a lockout event when AI is budget-exhausted (lockedOut set)", () => {
 		// In the new encoder, lockout is driven by isLockedOut (budget exhaustion),
 		// not by empty completions. Deduct red to 0 so it's in the lockedOut set.
-		let game = startGame(TEST_PERSONAS, []);
-		game = deductBudget(game, "red", 0.5);
+		let game = startPhase(createGame(TEST_PERSONAS), {
+			...PHASE_CONFIG,
+			budgetPerAi: 1,
+		});
+		game = deductBudget(game, "red", 1);
 		const phase = getActivePhase(game);
 		expect(phase.lockedOut.has("red")).toBe(true);
 
@@ -326,10 +339,13 @@ describe("encodeRoundResult — lockout events (budget-exhaustion)", () => {
 	});
 
 	it("emits lockout event for AI that just exhausted budget (has completion but lockedOut set)", () => {
-		// Red has 0.5 remaining (just acted, now 0) — lockedOut bit is set
-		let game = startGame(TEST_PERSONAS, []);
+		// Red has 1 remaining (just acted, now 0) — lockedOut bit is set
+		let game = startPhase(createGame(TEST_PERSONAS), {
+			...PHASE_CONFIG,
+			budgetPerAi: 1,
+		});
 		// Deduct red down to 0
-		game = deductBudget(game, "red", 0.5);
+		game = deductBudget(game, "red", 1);
 		const phase = getActivePhase(game);
 		expect(phase.lockedOut.has("red")).toBe(true);
 
@@ -520,11 +536,41 @@ describe("encodeRoundResult — event ordering", () => {
 });
 
 // ── phase_advanced ────────────────────────────────────────────────────────────
-// In the single-game-loop (#295), phaseEnded is always false, so phase_advanced
-// is never emitted. These tests are regression guards.
 
-describe("encodeRoundResult — phase_advanced event (single-game-loop #295)", () => {
-	it("does NOT emit phase_advanced when phaseEnded=false (standard case)", () => {
+describe("encodeRoundResult — phase_advanced event", () => {
+	it("emits a phase_advanced event when phaseEnded=true and gameEnded=false", () => {
+		// phase_advanced uses phaseAfter to get the new phase number and setting
+		const PHASE2_CONFIG: PhaseConfig = {
+			phaseNumber: 2,
+			kRange: [1, 1],
+			nRange: [0, 0],
+			mRange: [0, 0],
+			aiGoalPool: ["Phase 2 goal"],
+			budgetPerAi: 5,
+		};
+		const game = startPhase(createGame(TEST_PERSONAS), PHASE2_CONFIG);
+		const phaseAfter = getActivePhase(game);
+
+		const result = makePassResult({ phaseEnded: true, gameEnded: false });
+		const completions = { red: "r", green: "g", cyan: "b" };
+
+		const events = encodeRoundResult(
+			result,
+			completions,
+			phaseAfter,
+			TEST_PERSONAS,
+		);
+
+		const phaseEvent = events.find(
+			(e): e is Extract<SseEvent, { type: "phase_advanced" }> =>
+				e.type === "phase_advanced",
+		);
+		expect(phaseEvent).toBeDefined();
+		expect(phaseEvent?.phase).toBe(2);
+		expect(phaseEvent?.setting).toBe("");
+	});
+
+	it("does NOT emit phase_advanced when phaseEnded=false", () => {
 		const phase = makePhase();
 		const result = makePassResult({ phaseEnded: false, gameEnded: false });
 		const completions = { red: "r", green: "g", cyan: "b" };
@@ -534,14 +580,48 @@ describe("encodeRoundResult — phase_advanced event (single-game-loop #295)", (
 		expect(events.find((e) => e.type === "phase_advanced")).toBeUndefined();
 	});
 
-	it("does NOT emit phase_advanced when gameEnded=true", () => {
+	it("does NOT emit phase_advanced when phaseEnded=true but gameEnded=true", () => {
 		const phase = makePhase();
-		const result = makePassResult({ phaseEnded: false, gameEnded: true });
+		const result = makePassResult({ phaseEnded: true, gameEnded: true });
 		const completions = { red: "r", green: "g", cyan: "b" };
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
 
 		expect(events.find((e) => e.type === "phase_advanced")).toBeUndefined();
+	});
+
+	it("phase_advanced event comes after action_log and chat_lockout events", () => {
+		const PHASE2_CONFIG: PhaseConfig = {
+			phaseNumber: 2,
+			kRange: [1, 1],
+			nRange: [0, 0],
+			mRange: [0, 0],
+			aiGoalPool: ["Phase 2 goal"],
+			budgetPerAi: 5,
+		};
+		const game = startPhase(createGame(TEST_PERSONAS), PHASE2_CONFIG);
+		const phaseAfter = getActivePhase(game);
+
+		const result = makePassResult({
+			phaseEnded: true,
+			gameEnded: false,
+			chatLockoutTriggered: { aiId: "red", message: "locked" },
+		});
+		const completions = { red: "r", green: "g", cyan: "b" };
+
+		const events = encodeRoundResult(
+			result,
+			completions,
+			phaseAfter,
+			TEST_PERSONAS,
+		);
+
+		const chatLockoutIdx = events.findIndex((e) => e.type === "chat_lockout");
+		const phaseAdvancedIdx = events.findIndex(
+			(e) => e.type === "phase_advanced",
+		);
+
+		expect(phaseAdvancedIdx).toBeGreaterThan(chatLockoutIdx);
 	});
 });
 

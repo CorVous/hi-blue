@@ -14,6 +14,11 @@
  * See docs/adr/0005-engine-dat-obfuscation-method.md
  */
 
+import {
+	PHASE_1_CONFIG,
+	PHASE_2_CONFIG,
+	PHASE_3_CONFIG,
+} from "../../content/phases.js";
 import { DEFAULT_LANDMARKS } from "../game/direction.js";
 import type {
 	AiBudget,
@@ -22,8 +27,8 @@ import type {
 	ContentPack,
 	ConversationEntry,
 	GameState,
-	Objective,
 	PersonaSpatialState,
+	PhaseConfig,
 	PhaseState,
 	WorldState,
 } from "../game/types.js";
@@ -51,6 +56,14 @@ import {
  * deserialization changes required.
  */
 export const SESSION_SCHEMA_VERSION = 6 as const;
+
+// ── Phase config lookup ────────────────────────────────────────────────────────
+
+const PHASE_CONFIGS: Record<1 | 2 | 3, PhaseConfig> = {
+	1: PHASE_1_CONFIG,
+	2: PHASE_2_CONFIG,
+	3: PHASE_3_CONFIG,
+};
 
 // ── File shapes ────────────────────────────────────────────────────────────────
 
@@ -102,10 +115,6 @@ export interface SealedEngine {
 	currentPhase: 1 | 2 | 3;
 	isComplete: boolean;
 	personaSpatial: Record<1 | 2 | 3, Record<AiId, PersonaSpatialState>>;
-	/** Added in single-game-loop refactor (#295). Optional for decode-tolerant backward compat. */
-	weather?: string;
-	objectives?: Objective[];
-	outcome?: "win" | "lose";
 }
 
 /**
@@ -229,9 +238,6 @@ export function serializeSession(
 			2: structuredClone(findPhase(state.phases, 2)?.personaSpatial ?? {}),
 			3: structuredClone(findPhase(state.phases, 3)?.personaSpatial ?? {}),
 		},
-		weather: state.weather,
-		objectives: structuredClone(state.objectives),
-		...(state.outcome !== undefined ? { outcome: state.outcome } : {}),
 	};
 
 	const engine = obfuscate(JSON.stringify(sealedPayload, null, 2));
@@ -348,6 +354,7 @@ export function deserializeSession(
 		}
 
 		for (const phaseNumber of phaseNumbers) {
+			const config = PHASE_CONFIGS[phaseNumber];
 			const phaseKey = String(phaseNumber) as "1" | "2" | "3";
 
 			// Rebuild conversationLogs from daemon files
@@ -412,6 +419,13 @@ export function deserializeSession(
 				lockedOut,
 				chatLockouts,
 				personaSpatial,
+				// Re-attach function fields from canonical phase config
+				...(config?.winCondition !== undefined
+					? { winCondition: config.winCondition }
+					: {}),
+				...(config?.nextPhaseConfig !== undefined
+					? { nextPhaseConfig: config.nextPhaseConfig }
+					: {}),
 			};
 
 			phases.push(phase);
@@ -423,9 +437,6 @@ export function deserializeSession(
 			personas,
 			phases,
 			contentPacks: structuredClone(sealed.contentPacks),
-			weather: sealed.weather ?? "",
-			objectives: structuredClone(sealed.objectives ?? []),
-			...(sealed.outcome !== undefined ? { outcome: sealed.outcome } : {}),
 		};
 
 		return {
