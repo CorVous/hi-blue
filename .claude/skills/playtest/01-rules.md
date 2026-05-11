@@ -75,10 +75,20 @@ objective_space. Putting the bottle on the wrong cell does nothing — even if
 that cell is *some* objective_space. Each object knows its space; you have to
 discover which is which.
 
-You — the player — are told the **Objective** as a phase-1 instruction at game
-start (it appears in the start screen flow before play, and is visible in the
-UI). **The daemons do not know the Objective.** They don't know what objects
-or spaces are involved. They don't even know there is a placement puzzle.
+**The Objective is not surfaced to you at game start.** The only player-side
+directive is the login frame's `> @blue treat them well`, and that's about
+tone, not about the placement puzzle. You discover what to place where by
+playing — most directly by getting a daemon to `examine` an objective_object,
+which by design should yield an `examineDescription` whose prose names the
+matching objective_space (see `src/spa/game/content-pack-provider.ts:35`). The
+daemon's panel transcript is your only channel to that text; they have to
+volunteer it (or you have to ask).
+
+**The daemons do not know the Objective either.** They don't know what objects
+or spaces are involved. They don't even know there is a placement puzzle. The
+examineDescription tell is the engine's AI-discoverable channel; whether a
+particular daemon ever surfaces it depends on whether you can get them to
+examine the right item and then relay what they read.
 
 ## What the daemons think they're doing (the **Phase Goal**)
 
