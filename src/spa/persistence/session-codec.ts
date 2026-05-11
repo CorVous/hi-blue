@@ -44,8 +44,12 @@ import {
  * Version embedded in engine.dat. Bumped to 4 when the `chat` and `whisper`
  * ConversationEntry kinds were collapsed into a single directional `message` kind.
  * Old v3 saves used `chat`/`whisper` shapes that no longer exist in the type union.
+ *
+ * v5 (issue #287): added `action-failure` `ConversationEntry` variant — durable
+ * per-actor record of action-tool dispatcher rejections. Old v4 saves have no
+ * `action-failure` entries; no migration provided.
  */
-export const SESSION_SCHEMA_VERSION = 4 as const;
+export const SESSION_SCHEMA_VERSION = 5 as const;
 
 // ── Phase config lookup ────────────────────────────────────────────────────────
 

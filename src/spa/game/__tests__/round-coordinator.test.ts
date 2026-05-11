@@ -21,6 +21,7 @@ import {
 	isPlayerChatLockedOut,
 	startPhase,
 } from "../engine";
+import { buildOpenAiMessages } from "../openai-message-builder";
 import { buildAiContext } from "../prompt-builder";
 import { runRound } from "../round-coordinator";
 import type { RoundLLMProvider } from "../round-llm-provider";
@@ -3111,5 +3112,169 @@ describe("message tool multi-round regression (#213)", () => {
 				(m as { content: string }).content.includes("Hello blue"),
 		);
 		expect(hasAssistantContent).toBe(true);
+	});
+});
+
+// ----------------------------------------------------------------------------
+// action-failure log entries (issue #287) — round-coordinator integration
+// ----------------------------------------------------------------------------
+describe("action-failure entries — round-coordinator integration", () => {
+	/**
+	 * ContentPack: red at (0,0) facing north; obstacle at (0,1) east of red.
+	 * go east → blocked by obstacle → action-failure entry.
+	 */
+	const OBSTACLE_PACK: ContentPack = {
+		phaseNumber: 1,
+		setting: "blocked corridor",
+		weather: "",
+		timeOfDay: "",
+		objectivePairs: [],
+		interestingObjects: [],
+		obstacles: [
+			{
+				id: "wall",
+				kind: "obstacle",
+				name: "wall",
+				examineDescription: "A solid wall.",
+				holder: { row: 0, col: 1 },
+			},
+		],
+		landmarks: DEFAULT_LANDMARKS,
+		aiStarts: {
+			red: { position: { row: 0, col: 0 }, facing: "north" },
+			green: { position: { row: 2, col: 2 }, facing: "north" },
+			cyan: { position: { row: 4, col: 4 }, facing: "north" },
+		},
+	};
+
+	const OBSTACLE_PHASE_CONFIG: PhaseConfig = {
+		phaseNumber: 1,
+		kRange: [0, 0],
+		nRange: [0, 0],
+		mRange: [0, 0],
+		aiGoalPool: ["g1", "g2", "g3"],
+		budgetPerAi: 10,
+	};
+
+	it("parse-fail (unknown tool) → tool_failure in result, no action-failure entry in any log", async () => {
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [OBSTACLE_PACK]),
+			OBSTACLE_PHASE_CONFIG,
+		);
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [{ id: "c1", name: "fly_away", argumentsJson: "{}" }],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+		const { nextState, result } = await runRound(game, "red", "hi", provider);
+		expect(result.actions.some((a) => a.kind === "tool_failure")).toBe(true);
+
+		const phase = getActivePhase(nextState);
+		for (const aiId of ["red", "green", "cyan"]) {
+			const failures = (phase.conversationLogs[aiId] ?? []).filter(
+				(e) => e.kind === "action-failure",
+			);
+			expect(failures).toHaveLength(0);
+		}
+	});
+
+	it("malformed JSON tool call → tool_failure in result, no action-failure entry in any log", async () => {
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [OBSTACLE_PACK]),
+			OBSTACLE_PHASE_CONFIG,
+		);
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [{ id: "c1", name: "pick_up", argumentsJson: "not json" }],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+		const { nextState, result } = await runRound(game, "red", "hi", provider);
+		expect(result.actions.some((a) => a.kind === "tool_failure")).toBe(true);
+
+		const phase = getActivePhase(nextState);
+		for (const aiId of ["red", "green", "cyan"]) {
+			const failures = (phase.conversationLogs[aiId] ?? []).filter(
+				(e) => e.kind === "action-failure",
+			);
+			expect(failures).toHaveLength(0);
+		}
+	});
+
+	it("wall-collision repro: daemon facing a wall issues go east on rounds 1, 2, 3 → 3 action-failure user turns; peers 0", async () => {
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [OBSTACLE_PACK]),
+			OBSTACLE_PHASE_CONFIG,
+		);
+
+		// red at (0,0) facing north; obstacle at (0,1) east; go east → blocked
+		const goEastToolCall = {
+			id: "go_e",
+			name: "go",
+			argumentsJson: JSON.stringify({ direction: "east" }),
+		};
+
+		let state = game;
+		for (let round = 0; round < 3; round++) {
+			const provider = new MockRoundLLMProvider([
+				{
+					assistantText: "",
+					toolCalls: [{ ...goEastToolCall, id: `go_e_${round}` }],
+				},
+				{ assistantText: "", toolCalls: [] },
+				{ assistantText: "", toolCalls: [] },
+			]);
+			const { nextState } = await runRound(state, "red", "hi", provider);
+			state = nextState;
+		}
+
+		// After 3 rounds: red's action-failure count should be exactly 3
+		const phase = getActivePhase(state);
+		const redFailures = (phase.conversationLogs.red ?? []).filter(
+			(e) => e.kind === "action-failure",
+		);
+		expect(redFailures).toHaveLength(3);
+
+		// All failures should be for tool "go"
+		for (const f of redFailures) {
+			if (f.kind === "action-failure") {
+				expect(f.tool).toBe("go");
+			}
+		}
+
+		// Verify via buildOpenAiMessages: 3 user turns matching the failure pattern
+		const redCtx = buildAiContext(state, "red");
+		const redMsgs = buildOpenAiMessages(redCtx);
+		const failureMsgs = redMsgs.filter(
+			(m) =>
+				m.role === "user" &&
+				(m as { content: string }).content.match(/Your `go` action failed:/),
+		);
+		expect(failureMsgs).toHaveLength(3);
+
+		// Peer logs must have 0 action-failure entries
+		const greenFailures = (phase.conversationLogs.green ?? []).filter(
+			(e) => e.kind === "action-failure",
+		);
+		const cyanFailures = (phase.conversationLogs.cyan ?? []).filter(
+			(e) => e.kind === "action-failure",
+		);
+		expect(greenFailures).toHaveLength(0);
+		expect(cyanFailures).toHaveLength(0);
+
+		// Check peers via message builder too
+		const greenCtx = buildAiContext(state, "green");
+		const greenMsgs = buildOpenAiMessages(greenCtx);
+		const greenFailureMsgs = greenMsgs.filter(
+			(m) =>
+				m.role === "user" &&
+				(m as { content: string }).content.match(/action failed:/),
+		);
+		expect(greenFailureMsgs).toHaveLength(0);
 	});
 });
