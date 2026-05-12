@@ -602,31 +602,45 @@ export async function runRound(
 
 		if (!spaceCell) continue;
 
-		const flavor =
+		// Split fan-out (#336): Daemons standing on the space cell receive the
+		// first-person actor flavor on a dedicated channel; cone-witnesses NOT
+		// on the cell receive the third-person witness flavor. No Daemon
+		// receives both.
+		const witnessFlavor =
 			tier === 1
 				? (spaceEntity?.convergenceTier1Flavor ?? "Something stirs here.")
 				: (spaceEntity?.convergenceTier2Flavor ?? "Two presences converge.");
+		const actorFlavor =
+			tier === 1
+				? (spaceEntity?.convergenceTier1ActorFlavor ??
+					"You linger here; the place feels poised for company.")
+				: (spaceEntity?.convergenceTier2ActorFlavor ??
+					"You stand here; another presence shares the place with you.");
 
-		const entry: Extract<ConversationEntry, { kind: "witnessed-convergence" }> =
-			{
-				kind: "witnessed-convergence",
-				round: state.round,
-				spaceId,
-				tier,
-				flavor,
-			};
-
-		// Fan out to every Daemon whose cone contains the space cell.
 		for (const [daemonId, spatial] of Object.entries(state.personaSpatial)) {
+			const isOccupant =
+				spatial.position.row === spaceCell.row &&
+				spatial.position.col === spaceCell.col;
 			const cone = projectCone(spatial.position, spatial.facing);
 			const witnessesCell = cone.some(
 				(cell) =>
 					cell.position.row === spaceCell.row &&
 					cell.position.col === spaceCell.col,
 			);
-			if (witnessesCell) {
-				state = appendWitnessedConvergence(state, daemonId, entry);
-			}
+			if (!isOccupant && !witnessesCell) continue;
+
+			const entry: Extract<
+				ConversationEntry,
+				{ kind: "witnessed-convergence" }
+			> = {
+				kind: "witnessed-convergence",
+				round: state.round,
+				spaceId,
+				tier,
+				flavor: isOccupant ? actorFlavor : witnessFlavor,
+				audience: isOccupant ? "actor" : "witness",
+			};
+			state = appendWitnessedConvergence(state, daemonId, entry);
 		}
 
 		// Tier 2: satisfy the objective immediately.

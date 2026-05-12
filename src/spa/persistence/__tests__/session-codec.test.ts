@@ -659,6 +659,77 @@ describe("serializeSession / deserializeSession", () => {
 		}
 	});
 
+	it("round-trips witnessed-convergence ConversationEntries with audience tag (#336)", () => {
+		const game = makeFreshGame();
+		const actorEntry: ConversationEntry = {
+			kind: "witnessed-convergence",
+			round: 3,
+			spaceId: "ent-shrine",
+			tier: 1,
+			flavor: "You linger at the shrine; the place feels poised for company.",
+			audience: "actor",
+		};
+		const witnessEntry: ConversationEntry = {
+			kind: "witnessed-convergence",
+			round: 3,
+			spaceId: "ent-shrine",
+			tier: 2,
+			flavor: "Two figures converge at the shrine.",
+			audience: "witness",
+		};
+		const modified: GameState = {
+			...game,
+			conversationLogs: {
+				...game.conversationLogs,
+				red: [actorEntry],
+				green: [witnessEntry],
+			},
+		};
+		const files = serializeSession(modified, NOW, CREATED_AT);
+		const result = deserializeSession(files);
+		expect(result.kind).toBe("ok");
+		if (result.kind === "ok") {
+			expect(result.state.conversationLogs.red?.[0]).toEqual(actorEntry);
+			expect(result.state.conversationLogs.green?.[0]).toEqual(witnessEntry);
+		}
+	});
+
+	it("round-trips convergenceTier1ActorFlavor and convergenceTier2ActorFlavor on objective_space entities (#336)", () => {
+		const game = makeFreshGame();
+		const space: import("../../game/types.js").WorldEntity = {
+			id: "ent-shrine",
+			kind: "objective_space",
+			name: "Mossy Shrine",
+			examineDescription:
+				"A round altar; the air seems to wait for another presence. Pull the lever to use it.",
+			holder: { row: 2, col: 2 },
+			convergenceTier1Flavor: "A lone figure lingers at the mossy shrine.",
+			convergenceTier2Flavor: "Two figures converge at the mossy shrine.",
+			convergenceTier1ActorFlavor:
+				"You linger at the mossy shrine; the place feels poised.",
+			convergenceTier2ActorFlavor:
+				"You share the mossy shrine with another presence.",
+		};
+		const modified: GameState = {
+			...game,
+			world: { entities: [space] },
+		};
+		const files = serializeSession(modified, NOW, CREATED_AT);
+		const result = deserializeSession(files);
+		expect(result.kind).toBe("ok");
+		if (result.kind === "ok") {
+			const restored = result.state.world.entities.find(
+				(e) => e.id === "ent-shrine",
+			);
+			expect(restored?.convergenceTier1ActorFlavor).toBe(
+				"You linger at the mossy shrine; the place feels poised.",
+			);
+			expect(restored?.convergenceTier2ActorFlavor).toBe(
+				"You share the mossy shrine with another presence.",
+			);
+		}
+	});
+
 	it("SESSION_SCHEMA_VERSION is 7", () => {
 		const game = makeFreshGame();
 		const files = serializeSession(game, NOW, CREATED_AT);
