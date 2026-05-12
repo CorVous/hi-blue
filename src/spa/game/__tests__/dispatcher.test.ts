@@ -1475,7 +1475,10 @@ describe("executeToolCall — use on objective_space", () => {
 
 	it("flips pending UseSpaceObjective to satisfied when space is in actor's own cell", () => {
 		// red at (2,2), space at (2,2) (own cell)
-		const game = makeGameWithSpaceObjective({ row: 2, col: 2 }, "south", { row: 2, col: 2 });
+		const game = makeGameWithSpaceObjective({ row: 2, col: 2 }, "south", {
+			row: 2,
+			col: 2,
+		});
 		const call: ToolCall = { name: "use", args: { item: "shrine" } };
 		const updated = executeToolCall(game, "red", call);
 		const objective = updated.objectives.find((o) => o.id === "obj-0");
@@ -1509,7 +1512,10 @@ describe("validateToolCall — use on objective_space", () => {
 	});
 
 	it("accepts use on a space in the actor's own cell", () => {
-		const game = makeGameWithSpaceObjective({ row: 2, col: 2 }, "south", { row: 2, col: 2 });
+		const game = makeGameWithSpaceObjective({ row: 2, col: 2 }, "south", {
+			row: 2,
+			col: 2,
+		});
 		const call: ToolCall = { name: "use", args: { item: "shrine" } };
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(true);
@@ -1517,7 +1523,10 @@ describe("validateToolCall — use on objective_space", () => {
 
 	it("rejects use on space at distance 2 (not in front arc)", () => {
 		// red at (2,2) facing south; shrine at (4,2) = 2 cells south
-		const game = makeGameWithSpaceObjective({ row: 2, col: 2 }, "south", { row: 4, col: 2 });
+		const game = makeGameWithSpaceObjective({ row: 2, col: 2 }, "south", {
+			row: 4,
+			col: 2,
+		});
 		const call: ToolCall = { name: "use", args: { item: "shrine" } };
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(false);
@@ -1526,7 +1535,10 @@ describe("validateToolCall — use on objective_space", () => {
 
 	it("rejects use on space directly behind actor", () => {
 		// red at (2,2) facing south; shrine at (1,2) = directly north (behind)
-		const game = makeGameWithSpaceObjective({ row: 2, col: 2 }, "south", { row: 1, col: 2 });
+		const game = makeGameWithSpaceObjective({ row: 2, col: 2 }, "south", {
+			row: 1,
+			col: 2,
+		});
 		const call: ToolCall = { name: "use", args: { item: "shrine" } };
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(false);
@@ -1535,7 +1547,10 @@ describe("validateToolCall — use on objective_space", () => {
 	it("rejects second use when useAvailable is false", () => {
 		const game = makeGameWithSpaceObjective();
 		// First use
-		const afterUse = executeToolCall(game, "red", { name: "use", args: { item: "shrine" } });
+		const afterUse = executeToolCall(game, "red", {
+			name: "use",
+			args: { item: "shrine" },
+		});
 		// Second use attempt
 		const call: ToolCall = { name: "use", args: { item: "shrine" } };
 		const result = validateToolCall(afterUse, "red", call);

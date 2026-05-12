@@ -4,7 +4,12 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_LANDMARKS } from "../direction";
 import { drawObjectives } from "../objective-pool";
-import type { ContentPack, ObjectivePair, UseSpaceObjective, WorldEntity } from "../types";
+import type {
+	ContentPack,
+	ObjectivePair,
+	UseSpaceObjective,
+	WorldEntity,
+} from "../types";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 

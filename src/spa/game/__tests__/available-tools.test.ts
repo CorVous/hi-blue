@@ -339,7 +339,11 @@ describe("availableTools — use includes objective_space ids", () => {
 
 	it("use does NOT include space id when useAvailable is false", () => {
 		// red at (2,2) facing north; space at (1,2) with useAvailable=false
-		const game = makeGameWithSpace("north", { row: 1, col: 2 }, { useAvailable: false });
+		const game = makeGameWithSpace(
+			"north",
+			{ row: 1, col: 2 },
+			{ useAvailable: false },
+		);
 		const tools = availableTools(game, "red", []);
 		const useTool = tools.find((t) => t.function.name === "use");
 		const itemEnum = useTool?.function.parameters.properties.item?.enum ?? [];

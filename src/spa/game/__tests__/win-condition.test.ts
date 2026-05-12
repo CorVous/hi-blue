@@ -648,4 +648,3 @@ describe("checkWinCondition with UseSpaceObjective", () => {
 		expect(checkWinCondition(world, objectives)).toBe(false);
 	});
 });
-
