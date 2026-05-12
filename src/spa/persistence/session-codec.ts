@@ -48,8 +48,11 @@ import {
  * v5 (issue #287): added `action-failure` `ConversationEntry` variant — durable
  * per-actor record of action-tool dispatcher rejections. Old v4 saves have no
  * `action-failure` entries; no migration provided.
+ *
+ * v6 (issue #306): added `epoch` to MetaFile, optional `readonly` and
+ * `lastPlayedAt` for archived sessions.
  */
-export const SESSION_SCHEMA_VERSION = 5 as const;
+export const SESSION_SCHEMA_VERSION = 6 as const;
 
 // ── Phase config lookup ────────────────────────────────────────────────────────
 
@@ -94,6 +97,12 @@ export interface MetaFile {
 	 * Optional for backward-compat with saves written before this field.
 	 */
 	personaOrder?: string[];
+	/** Epoch counter. New sessions start at 1; only seedFromArchive (issue #308) increments. */
+	epoch: number;
+	/** True on archived meta only. */
+	readonly?: boolean;
+	/** ISO timestamp; present on archived meta only (equals lastSavedAt at archival time). */
+	lastPlayedAt?: string;
 }
 
 /** Shape of the sealed payload inside `engine.dat`. */
@@ -124,7 +133,7 @@ export interface SerializedSessionFiles {
 
 /** Result of deserializing a session. */
 export type DeserializeResult =
-	| { kind: "ok"; state: GameState; createdAt: string; lastSavedAt: string }
+	| { kind: "ok"; state: GameState; createdAt: string; lastSavedAt: string; epoch: number }
 	| { kind: "broken" }
 	| { kind: "version-mismatch" };
 
@@ -164,11 +173,13 @@ function findPhase(
  * @param state       The current GameState.
  * @param lastSavedAt ISO timestamp of the save moment.
  * @param createdAt   ISO timestamp of session creation.
+ * @param epoch       Epoch counter (default 1). Only incremented by seedFromArchive (issue #308).
  */
 export function serializeSession(
 	state: GameState,
 	lastSavedAt: string,
 	createdAt: string,
+	epoch = 1,
 ): SerializedSessionFiles {
 	const activePhase = state.phases[state.phases.length - 1];
 	if (!activePhase) throw new Error("serializeSession: no active phase");
@@ -180,6 +191,7 @@ export function serializeSession(
 		phase: state.currentPhase,
 		round: activePhase.round,
 		personaOrder: Object.keys(state.personas),
+		epoch,
 	};
 
 	// daemons: one file per aiId
@@ -438,6 +450,7 @@ export function deserializeSession(
 			state,
 			createdAt: meta.createdAt,
 			lastSavedAt: meta.lastSavedAt,
+			epoch: typeof meta.epoch === "number" ? meta.epoch : 1,
 		};
 	} catch {
 		return { kind: "broken" };
