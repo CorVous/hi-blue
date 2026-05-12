@@ -62,7 +62,6 @@ export function dispatchActiveSession(
 			return { route: "#/sessions", reason: "broken", needsMint: false };
 
 		case "version-mismatch":
-			// TODO(#146): version-mismatch handling
 			return {
 				route: "#/sessions",
 				reason: "version-mismatch",
