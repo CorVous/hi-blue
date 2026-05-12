@@ -703,9 +703,7 @@ export function renderGame(
 			// handle the stale session correctly.
 			const staleCheckId = getActiveSessionId();
 			const staleCheckResult =
-				staleCheckId !== null
-					? loadActiveSession()
-					: { kind: "none" as const };
+				staleCheckId !== null ? loadActiveSession() : { kind: "none" as const };
 			if (staleCheckResult.kind === "none") {
 				return renderBootstrapLoadingFlow(pendingBootstrap);
 			}

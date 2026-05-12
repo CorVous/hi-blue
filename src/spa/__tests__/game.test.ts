@@ -2630,7 +2630,7 @@ describe("renderGame — version-mismatch session with pending bootstrap (regres
 		const saveSpy = vi.spyOn(sessionStorage, "saveActiveSession");
 
 		const { renderGame } = await import("../routes/game.js");
-		await renderGame(document.querySelector<HTMLElement>("main")!);
+		await renderGame(getEl<HTMLElement>("main"));
 
 		// The stale session must be cleared and the route redirected away.
 		expect(location.hash).toBe("#/start?reason=version-mismatch");
