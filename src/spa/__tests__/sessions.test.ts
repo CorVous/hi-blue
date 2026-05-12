@@ -13,7 +13,11 @@ import { PHASE_1_CONFIG } from "../../content/index.js";
 import { createGame, startPhase } from "../game/engine.js";
 import type { AiPersona, GameState } from "../game/types.js";
 import { deobfuscate, obfuscate } from "../persistence/sealed-blob-codec.js";
-import { ACTIVE_KEY, ARCHIVE_PREFIX, SESSIONS_PREFIX } from "../persistence/session-storage.js";
+import {
+	ACTIVE_KEY,
+	ARCHIVE_PREFIX,
+	SESSIONS_PREFIX,
+} from "../persistence/session-storage.js";
 
 // ── HTML fixture ──────────────────────────────────────────────────────────────
 
@@ -545,7 +549,12 @@ async function seedArchivedSession(
 ): Promise<void> {
 	const { serializeSession } = await import("../persistence/session-codec.js");
 	const game = makeFreshGame();
-	const files = serializeSession(game, lastSavedAt, "2025-01-01T00:00:00.000Z", 1);
+	const files = serializeSession(
+		game,
+		lastSavedAt,
+		"2025-01-01T00:00:00.000Z",
+		1,
+	);
 	const meta = JSON.parse(files.meta) as Record<string, unknown>;
 	meta.readonly = true;
 	meta.lastPlayedAt = lastSavedAt;
@@ -653,7 +662,9 @@ describe("renderSessions — archived sessions section", () => {
 		const activeRow = document.querySelector<HTMLElement>(
 			'.session-row[data-session-id="0xAAAA"]',
 		);
-		expect(activeRow?.querySelector(".session-meta")?.textContent).toContain("epoch 1");
+		expect(activeRow?.querySelector(".session-meta")?.textContent).toContain(
+			"epoch 1",
+		);
 	});
 
 	it("with zero active sessions + one archived session: active sessions heading renders with empty placeholder; archived sessions heading renders the archived row", async () => {

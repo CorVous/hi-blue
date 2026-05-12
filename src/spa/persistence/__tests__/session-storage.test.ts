@@ -816,7 +816,11 @@ describe("archiveSession", () => {
 		if (!srcMetaJson) throw new Error("source meta.json missing");
 		const srcMeta = JSON.parse(srcMetaJson) as { epoch?: number };
 		srcMeta.epoch = 7;
-		stub._store[`${SESSIONS_PREFIX}${id}/meta.json`] = JSON.stringify(srcMeta, null, 2);
+		stub._store[`${SESSIONS_PREFIX}${id}/meta.json`] = JSON.stringify(
+			srcMeta,
+			null,
+			2,
+		);
 
 		await archiveSession(id);
 
@@ -962,7 +966,9 @@ describe("loadArchivedSession", () => {
 		if (!engineBlob) throw new Error("archive engine.dat missing");
 		const sealed = JSON.parse(deobfuscate(engineBlob));
 		sealed.schemaVersion = 999;
-		stub._store[`${ARCHIVE_PREFIX}${id}/engine.dat`] = obfuscate(JSON.stringify(sealed));
+		stub._store[`${ARCHIVE_PREFIX}${id}/engine.dat`] = obfuscate(
+			JSON.stringify(sealed),
+		);
 
 		const result = loadArchivedSession(id);
 		expect(result.kind).toBe("version-mismatch");
@@ -1019,7 +1025,9 @@ describe("getArchivedSessionInfo", () => {
 		if (!engineBlob) throw new Error("archive engine.dat missing");
 		const sealed = JSON.parse(deobfuscate(engineBlob));
 		sealed.schemaVersion = 999;
-		stub._store[`${ARCHIVE_PREFIX}${id}/engine.dat`] = obfuscate(JSON.stringify(sealed));
+		stub._store[`${ARCHIVE_PREFIX}${id}/engine.dat`] = obfuscate(
+			JSON.stringify(sealed),
+		);
 
 		const info = getArchivedSessionInfo(id);
 		expect(info.kind).toBe("version-mismatch");
@@ -1106,7 +1114,11 @@ describe("epoch in active sessions", () => {
 		if (!metaJson) throw new Error("meta.json missing");
 		const meta = JSON.parse(metaJson) as { epoch?: number };
 		meta.epoch = 7;
-		stub._store[`${SESSIONS_PREFIX}${id}/meta.json`] = JSON.stringify(meta, null, 2);
+		stub._store[`${SESSIONS_PREFIX}${id}/meta.json`] = JSON.stringify(
+			meta,
+			null,
+			2,
+		);
 
 		saveActiveSession(makeFreshGame());
 

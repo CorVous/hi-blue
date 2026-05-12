@@ -16,8 +16,8 @@
 import type { AiId, GameState } from "../game/types.js";
 import {
 	type DeserializeResult,
-	type MetaFile,
 	deserializeSession,
+	type MetaFile,
 	serializeSession,
 } from "./session-codec.js";
 
@@ -157,7 +157,9 @@ export function saveActiveSession(
 	// Read existing epoch from meta.json (preserve it across saves)
 	let epoch = 1;
 	try {
-		const existingMeta = localStorage.getItem(metaKey(SESSIONS_PREFIX, sessionId));
+		const existingMeta = localStorage.getItem(
+			metaKey(SESSIONS_PREFIX, sessionId),
+		);
 		if (existingMeta !== null) {
 			const parsed = JSON.parse(existingMeta) as MetaFile;
 			if (typeof parsed.epoch === "number") {
@@ -181,7 +183,10 @@ export function saveActiveSession(
 
 		// 2..4. daemon files in persona insertion order
 		for (const [aiId, daemonJson] of Object.entries(files.daemons)) {
-			localStorage.setItem(daemonKey(SESSIONS_PREFIX, sessionId, aiId), daemonJson);
+			localStorage.setItem(
+				daemonKey(SESSIONS_PREFIX, sessionId, aiId),
+				daemonJson,
+			);
 		}
 
 		// 5. engine.dat (commit signal — written last)
@@ -283,11 +288,16 @@ export function deleteLegacySaveKey(): void {
  * @param sessionId  The session id to load.
  * @param storagePrefix  The localStorage prefix to read from (default: SESSIONS_PREFIX).
  */
-function _loadSessionById(sessionId: string, storagePrefix = SESSIONS_PREFIX): LoadResult {
+function _loadSessionById(
+	sessionId: string,
+	storagePrefix = SESSIONS_PREFIX,
+): LoadResult {
 	try {
 		// Read key files
 		const metaJson = localStorage.getItem(metaKey(storagePrefix, sessionId));
-		const engineBlob = localStorage.getItem(engineKey(storagePrefix, sessionId));
+		const engineBlob = localStorage.getItem(
+			engineKey(storagePrefix, sessionId),
+		);
 
 		// No data at all: session was minted but never saved — treat as "none".
 		if (metaJson === null && engineBlob === null) {
@@ -531,7 +541,8 @@ export function getArchivedSessionInfo(id: string): SessionInfo {
 					lastSavedAt?: string;
 					phase?: number;
 				};
-				if (typeof meta.lastSavedAt === "string") lastSavedAt = meta.lastSavedAt;
+				if (typeof meta.lastSavedAt === "string")
+					lastSavedAt = meta.lastSavedAt;
 				if (meta.phase === 1 || meta.phase === 2 || meta.phase === 3)
 					phase = meta.phase;
 			}
@@ -609,16 +620,20 @@ export async function archiveSession(sessionId: string): Promise<void> {
 	const metaJson = localStorage.getItem(`${srcPrefix}meta.json`);
 	const engineVal = localStorage.getItem(`${srcPrefix}engine.dat`);
 	if (metaJson === null) {
-		throw new Error(`archiveSession: session "${sessionId}" is incomplete or missing`);
+		throw new Error(
+			`archiveSession: session "${sessionId}" is incomplete or missing`,
+		);
 	}
 	if (engineVal === null) {
-		throw new Error(`archiveSession: session "${sessionId}" is incomplete or missing`);
+		throw new Error(
+			`archiveSession: session "${sessionId}" is incomplete or missing`,
+		);
 	}
 	// 2. Read daemon .txt files
 	const daemonEntries: Array<{ suffix: string; value: string }> = [];
 	for (let i = 0; i < localStorage.length; i++) {
 		const key = localStorage.key(i);
-		if (!key || !key.startsWith(srcPrefix)) continue;
+		if (!key?.startsWith(srcPrefix)) continue;
 		const suffix = key.slice(srcPrefix.length);
 		if (suffix.endsWith(".txt")) {
 			const value = localStorage.getItem(key);
@@ -630,7 +645,9 @@ export async function archiveSession(sessionId: string): Promise<void> {
 	try {
 		meta = JSON.parse(metaJson) as MetaFile;
 	} catch {
-		throw new Error(`archiveSession: meta.json for "${sessionId}" is not valid JSON`);
+		throw new Error(
+			`archiveSession: meta.json for "${sessionId}" is not valid JSON`,
+		);
 	}
 	meta.readonly = true;
 	meta.lastPlayedAt = meta.lastSavedAt;

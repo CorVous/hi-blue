@@ -133,7 +133,13 @@ export interface SerializedSessionFiles {
 
 /** Result of deserializing a session. */
 export type DeserializeResult =
-	| { kind: "ok"; state: GameState; createdAt: string; lastSavedAt: string; epoch: number }
+	| {
+			kind: "ok";
+			state: GameState;
+			createdAt: string;
+			lastSavedAt: string;
+			epoch: number;
+	  }
 	| { kind: "broken" }
 	| { kind: "version-mismatch" };
 
