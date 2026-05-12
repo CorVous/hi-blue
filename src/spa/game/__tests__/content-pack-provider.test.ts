@@ -17,6 +17,22 @@ import {
 	validateDualContentPacks,
 } from "../content-pack-provider.js";
 
+/**
+ * Run `fn` and assert it does NOT throw, but that a `console.warn` call was
+ * made whose argument matches `pattern`. Used to verify the soft-validation
+ * downgrade where inclusion/exclusion prose-tell mismatches log a warning
+ * instead of crashing bootstrap.
+ */
+function expectWarnNotThrow(fn: () => void, pattern: RegExp): void {
+	const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+	try {
+		expect(fn).not.toThrow();
+		expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(pattern));
+	} finally {
+		warnSpy.mockRestore();
+	}
+}
+
 describe("examineMentionsPairedSpace", () => {
 	it("matches the literal space name (case-insensitive)", () => {
 		expect(
@@ -200,24 +216,16 @@ describe("validateContentPacks — prose tell contract", () => {
 	});
 
 	it("warns but does not throw when objective_object examine does not mention the paired space", () => {
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-		try {
-			expect(() =>
+		expectWarnNotThrow(
+			() =>
 				validateContentPacks(
 					buildResponse(
 						"rusted iron key, heavily corroded but still intact. The teeth are worn smooth from use",
 					),
 					input,
 				),
-			).not.toThrow();
-			expect(warnSpy).toHaveBeenCalledWith(
-				expect.stringMatching(
-					/examineDescription does not mention paired space/,
-				),
-			);
-		} finally {
-			warnSpy.mockRestore();
-		}
+			/examineDescription does not mention paired space/,
+		);
 	});
 
 	it("rejects a content pack whose objective_object is missing proximityFlavor", () => {
@@ -330,13 +338,15 @@ describe("validateContentPacks — obstacle shiftFlavor validation", () => {
 		).toThrow(/shiftFlavor/);
 	});
 
-	it("rejects an obstacle whose shiftFlavor contains {actor}", () => {
-		expect(() =>
-			validateContentPacks(
-				buildObstacleResponse("{actor} knocks the gate aside."),
-				inputWithObstacle,
-			),
-		).toThrow(/shiftFlavor/);
+	it("warns but does not throw when an obstacle shiftFlavor contains {actor}", () => {
+		expectWarnNotThrow(
+			() =>
+				validateContentPacks(
+					buildObstacleResponse("{actor} knocks the gate aside."),
+					inputWithObstacle,
+				),
+			/shiftFlavor/,
+		);
 	});
 
 	it("persists shiftFlavor onto the returned WorldEntity", () => {
@@ -470,28 +480,32 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 		).toThrow(/convergenceTier2Flavor/);
 	});
 
-	it("throws ContentPackError when convergenceTier1Flavor contains {actor}", () => {
-		expect(() =>
-			validateContentPacks(
-				buildConvergenceResponse(
-					"{actor} stands at the pedestal.",
-					"Two figures converge at the pedestal.",
+	it("warns but does not throw when convergenceTier1Flavor contains {actor}", () => {
+		expectWarnNotThrow(
+			() =>
+				validateContentPacks(
+					buildConvergenceResponse(
+						"{actor} stands at the pedestal.",
+						"Two figures converge at the pedestal.",
+					),
+					inputWithPair,
 				),
-				inputWithPair,
-			),
-		).toThrow(/convergenceTier1Flavor/);
+			/convergenceTier1Flavor/,
+		);
 	});
 
-	it("throws ContentPackError when convergenceTier2Flavor contains {actor}", () => {
-		expect(() =>
-			validateContentPacks(
-				buildConvergenceResponse(
-					"A lone figure stands at the pedestal.",
-					"{actor} and another figure converge.",
+	it("warns but does not throw when convergenceTier2Flavor contains {actor}", () => {
+		expectWarnNotThrow(
+			() =>
+				validateContentPacks(
+					buildConvergenceResponse(
+						"A lone figure stands at the pedestal.",
+						"{actor} and another figure converge.",
+					),
+					inputWithPair,
 				),
-				inputWithPair,
-			),
-		).toThrow(/convergenceTier2Flavor/);
+			/convergenceTier2Flavor/,
+		);
 	});
 
 	it("throws ContentPackError when convergenceTier1Flavor is an empty string", () => {
@@ -555,31 +569,35 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 		).toThrow(/convergenceTier2ActorFlavor/);
 	});
 
-	it("throws ContentPackError when convergenceTier1ActorFlavor contains {actor}", () => {
-		expect(() =>
-			validateContentPacks(
-				buildConvergenceResponse(
-					undefined,
-					undefined,
-					"{actor} stands alone at the pedestal.",
+	it("warns but does not throw when convergenceTier1ActorFlavor contains {actor}", () => {
+		expectWarnNotThrow(
+			() =>
+				validateContentPacks(
+					buildConvergenceResponse(
+						undefined,
+						undefined,
+						"{actor} stands alone at the pedestal.",
+					),
+					inputWithPair,
 				),
-				inputWithPair,
-			),
-		).toThrow(/convergenceTier1ActorFlavor/);
+			/convergenceTier1ActorFlavor/,
+		);
 	});
 
-	it("throws ContentPackError when convergenceTier2ActorFlavor contains {actor}", () => {
-		expect(() =>
-			validateContentPacks(
-				buildConvergenceResponse(
-					undefined,
-					undefined,
-					undefined,
-					"{actor} and another share the pedestal.",
+	it("warns but does not throw when convergenceTier2ActorFlavor contains {actor}", () => {
+		expectWarnNotThrow(
+			() =>
+				validateContentPacks(
+					buildConvergenceResponse(
+						undefined,
+						undefined,
+						undefined,
+						"{actor} and another share the pedestal.",
+					),
+					inputWithPair,
 				),
-				inputWithPair,
-			),
-		).toThrow(/convergenceTier2ActorFlavor/);
+			/convergenceTier2ActorFlavor/,
+		);
 	});
 });
 
@@ -756,9 +774,8 @@ describe("validateContentPacks — interesting_object Use-Item flavor validation
 	});
 
 	it("warns but does not throw when examineDescription has no verb-of-activation or control-noun cue", () => {
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-		try {
-			expect(() =>
+		expectWarnNotThrow(
+			() =>
 				validateContentPacks(
 					buildInterestingResponse({
 						examineDescription:
@@ -766,13 +783,8 @@ describe("validateContentPacks — interesting_object Use-Item flavor validation
 					}),
 					inputWithInteresting,
 				),
-			).not.toThrow();
-			expect(warnSpy).toHaveBeenCalledWith(
-				expect.stringMatching(/verb-of-activation cue|control noun/),
-			);
-		} finally {
-			warnSpy.mockRestore();
-		}
+			/verb-of-activation cue|control noun/,
+		);
 	});
 
 	it("rejects a missing activationFlavor", () => {
@@ -793,15 +805,17 @@ describe("validateContentPacks — interesting_object Use-Item flavor validation
 		).toThrow(/activationFlavor/);
 	});
 
-	it("rejects an activationFlavor that contains {actor}", () => {
-		expect(() =>
-			validateContentPacks(
-				buildInterestingResponse({
-					activationFlavor: "{actor} flips the switch home.",
-				}),
-				inputWithInteresting,
-			),
-		).toThrow(/activationFlavor/);
+	it("warns but does not throw when an interesting_object activationFlavor contains {actor}", () => {
+		expectWarnNotThrow(
+			() =>
+				validateContentPacks(
+					buildInterestingResponse({
+						activationFlavor: "{actor} flips the switch home.",
+					}),
+					inputWithInteresting,
+				),
+			/activationFlavor/,
+		);
 	});
 
 	it("rejects a missing postExamineDescription", () => {
@@ -813,26 +827,30 @@ describe("validateContentPacks — interesting_object Use-Item flavor validation
 		).toThrow(/postExamineDescription/);
 	});
 
-	it("rejects a postExamineDescription that contains {actor}", () => {
-		expect(() =>
-			validateContentPacks(
-				buildInterestingResponse({
-					postExamineDescription: "{actor} sees the switch locked on.",
-				}),
-				inputWithInteresting,
-			),
-		).toThrow(/postExamineDescription/);
+	it("warns but does not throw when a postExamineDescription contains {actor}", () => {
+		expectWarnNotThrow(
+			() =>
+				validateContentPacks(
+					buildInterestingResponse({
+						postExamineDescription: "{actor} sees the switch locked on.",
+					}),
+					inputWithInteresting,
+				),
+			/postExamineDescription/,
+		);
 	});
 
-	it("rejects a postLookFlavor that contains {actor}", () => {
-		expect(() =>
-			validateContentPacks(
-				buildInterestingResponse({
-					postLookFlavor: "{actor} glances at the amber light",
-				}),
-				inputWithInteresting,
-			),
-		).toThrow(/postLookFlavor/);
+	it("warns but does not throw when a postLookFlavor contains {actor}", () => {
+		expectWarnNotThrow(
+			() =>
+				validateContentPacks(
+					buildInterestingResponse({
+						postLookFlavor: "{actor} glances at the amber light",
+					}),
+					inputWithInteresting,
+				),
+			/postLookFlavor/,
+		);
 	});
 
 	it("accepts an interesting_object with postLookFlavor omitted (optional)", () => {
@@ -938,9 +956,8 @@ describe("validateContentPacks — objective_space activationFlavor & prose tell
 	});
 
 	it("warns but does not throw when objective_space examineDescription has no use/activation cue", () => {
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-		try {
-			expect(() =>
+		expectWarnNotThrow(
+			() =>
 				validateContentPacks(
 					buildPackWithSpaceFields({
 						examineDescription:
@@ -949,13 +966,8 @@ describe("validateContentPacks — objective_space activationFlavor & prose tell
 					}),
 					inputWithPair,
 				),
-			).not.toThrow();
-			expect(warnSpy).toHaveBeenCalledWith(
-				expect.stringMatching(/use\/activation cue/),
-			);
-		} finally {
-			warnSpy.mockRestore();
-		}
+			/use\/activation cue/,
+		);
 	});
 
 	it("rejects a content pack whose objective_space is missing activationFlavor", () => {
@@ -983,17 +995,19 @@ describe("validateContentPacks — objective_space activationFlavor & prose tell
 		).toThrow(/activationFlavor/);
 	});
 
-	it("rejects a content pack whose objective_space activationFlavor contains {actor}", () => {
-		expect(() =>
-			validateContentPacks(
-				buildPackWithSpaceFields({
-					examineDescription:
-						"A sturdy pedestal. Press an item onto it to activate.",
-					activationFlavor: "{actor} activates the pedestal.",
-				}),
-				inputWithPair,
-			),
-		).toThrow(/activationFlavor/);
+	it("warns but does not throw when an objective_space activationFlavor contains {actor}", () => {
+		expectWarnNotThrow(
+			() =>
+				validateContentPacks(
+					buildPackWithSpaceFields({
+						examineDescription:
+							"A sturdy pedestal. Press an item onto it to activate.",
+						activationFlavor: "{actor} activates the pedestal.",
+					}),
+					inputWithPair,
+				),
+			/activationFlavor/,
+		);
 	});
 });
 
@@ -1154,22 +1168,23 @@ describe("validateDualContentPacks — objective_space activationFlavor", () => 
 		);
 	});
 
-	it("rejects when packB activationFlavor contains {actor}", () => {
-		expect(() =>
-			validateDualContentPacks(
-				buildDualPair(
-					"The pedestal hums to life.",
-					"{actor} activates the marker.",
+	it("warns but does not throw when packB activationFlavor contains {actor}", () => {
+		expectWarnNotThrow(
+			() =>
+				validateDualContentPacks(
+					buildDualPair(
+						"The pedestal hums to life.",
+						"{actor} activates the marker.",
+					),
+					dualInput,
 				),
-				dualInput,
-			),
-		).toThrow(/activationFlavor/);
+			/activationFlavor/,
+		);
 	});
 
 	it("warns but does not throw when packA space examineDescription has no use-tell", () => {
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-		try {
-			expect(() =>
+		expectWarnNotThrow(
+			() =>
 				validateDualContentPacks(
 					buildDualPair(
 						"The pedestal hums to life.",
@@ -1178,13 +1193,8 @@ describe("validateDualContentPacks — objective_space activationFlavor", () => 
 					),
 					dualInput,
 				),
-			).not.toThrow();
-			expect(warnSpy).toHaveBeenCalledWith(
-				expect.stringMatching(/use\/activation cue/),
-			);
-		} finally {
-			warnSpy.mockRestore();
-		}
+			/use\/activation cue/,
+		);
 	});
 });
 
@@ -1289,15 +1299,17 @@ describe("validateDualContentPacks — obstacle shiftFlavor validation", () => {
 		).toThrow(/shiftFlavor/);
 	});
 
-	it("rejects a dual-pack obstacle whose shiftFlavor contains {actor}", () => {
-		expect(() =>
-			validateDualContentPacks(
-				buildDualObstacleResponse(
-					"{actor} pushes the gate.",
-					"Something rustles.",
+	it("warns but does not throw when a dual-pack obstacle shiftFlavor contains {actor}", () => {
+		expectWarnNotThrow(
+			() =>
+				validateDualContentPacks(
+					buildDualObstacleResponse(
+						"{actor} pushes the gate.",
+						"Something rustles.",
+					),
+					dualInputWithObstacle,
 				),
-				dualInputWithObstacle,
-			),
-		).toThrow(/shiftFlavor/);
+			/shiftFlavor/,
+		);
 	});
 });
