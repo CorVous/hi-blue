@@ -1368,7 +1368,12 @@ describe("activeDirectives — buildAiContext and system prompt injection", () =
 			...phase,
 			activeComplications: [
 				...phase.activeComplications,
-				{ kind: "sysadmin_directive" as const, target, directive },
+				{
+					kind: "sysadmin_directive" as const,
+					target,
+					directive,
+					resolveAtRound: 999,
+				},
 			],
 		}));
 	}

@@ -188,6 +188,7 @@ describe("availableTools — tool_disable filtering", () => {
 				kind: "sysadmin_directive",
 				target: "red",
 				directive: "Do not move.",
+				resolveAtRound: 999,
 			},
 			{
 				kind: "chat_lockout",

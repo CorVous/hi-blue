@@ -240,6 +240,7 @@ describe("runRound — sysadmin_directive complication", () => {
 					kind: "sysadmin_directive" as const,
 					target: "red",
 					directive: existingDirective,
+					resolveAtRound: 999,
 				},
 			],
 		}));

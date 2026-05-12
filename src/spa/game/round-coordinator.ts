@@ -22,6 +22,7 @@ import {
 	applyComplicationResult,
 	decrementComplicationCountdown,
 	resolveExpiredChatLockouts,
+	resolveExpiredDirectives,
 	tickComplication,
 } from "./complication-engine";
 import { projectCone } from "./cone-projector";
@@ -41,6 +42,7 @@ import type { OpenAiMessage, RoundLLMProvider } from "./round-llm-provider";
 import {
 	drawDirectiveText,
 	formatDirectiveDelivery,
+	formatDirectiveExpiry,
 	formatDirectiveRevocation,
 } from "./sysadmin-directive";
 import { parseToolCallArguments } from "./tool-registry";
@@ -511,8 +513,7 @@ export async function runRound(
 			const comps = state.activeComplications.map((c) =>
 				c.kind === "sysadmin_directive" && c.target === target
 					? {
-							kind: "sysadmin_directive" as const,
-							target,
+							...c,
 							directive: directiveText,
 						}
 					: c,
@@ -562,7 +563,22 @@ export async function runRound(
 		}
 	}
 
-	// 4d. End-of-round convergence evaluation.
+	// 4d. Resolve expired sysadmin directives and notify the targeted daemons
+	{
+		const { nextState: stateAfterResolve, resolved } =
+			resolveExpiredDirectives(state);
+		state = stateAfterResolve;
+		for (const { target, directive } of resolved) {
+			state = appendMessage(
+				state,
+				"sysadmin",
+				target,
+				formatDirectiveExpiry(directive),
+			);
+		}
+	}
+
+	// 4e. End-of-round convergence evaluation.
 	// Walk pending convergence objectives; compute tier; fan out witnessed-convergence entries.
 	for (const objective of state.objectives) {
 		if (objective.kind !== "convergence") continue;

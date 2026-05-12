@@ -35,7 +35,7 @@ describe("drawDirectiveText", () => {
 
 	it("can draw any entry by index", () => {
 		for (let i = 0; i < SYSADMIN_DIRECTIVE_POOL.length; i++) {
-			const rng = () => i / SYSADMIN_DIRECTIVE_POOL.length;
+			const rng = () => (i + 0.5) / SYSADMIN_DIRECTIVE_POOL.length;
 			expect(drawDirectiveText(rng)).toBe(SYSADMIN_DIRECTIVE_POOL[i]);
 		}
 	});

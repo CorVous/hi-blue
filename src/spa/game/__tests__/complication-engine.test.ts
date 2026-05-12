@@ -723,7 +723,11 @@ describe("applyComplicationResult — activeComplications appends", () => {
 		const phase = makePhase();
 		const game = makeGameStateAround(phase);
 		const result = {
-			fired: { kind: "sysadmin_directive" as const, target: "red" as AiId },
+			fired: {
+				kind: "sysadmin_directive" as const,
+				target: "red" as AiId,
+				duration: 3,
+			},
 		};
 		const updated = applyComplicationResult(game, result, seededRng([0.5]));
 		const updatedPhase = getActivePhase(updated);
@@ -1047,7 +1051,12 @@ describe("isPlayerChatLockedOut", () => {
 					tool: "go",
 					resolveAtRound: 100,
 				},
-				{ kind: "sysadmin_directive", target: "red", directive: "Do it." },
+				{
+					kind: "sysadmin_directive",
+					target: "red",
+					directive: "Do it.",
+					resolveAtRound: 100,
+				},
 			],
 		});
 		expect(isPlayerChatLockedOut(phase, "red")).toBe(false);
