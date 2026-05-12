@@ -843,3 +843,117 @@ describe("validateDualContentPacks — objective_space activationFlavor", () => 
 		).toThrow(/use\/activation cue/);
 	});
 });
+
+// ── shiftFlavor validation for dual-pack obstacles (issue #337) ──────────────
+
+describe("validateDualContentPacks — obstacle shiftFlavor validation", () => {
+	const dualInputWithObstacle = {
+		phases: [
+			{
+				phaseNumber: 1 as const,
+				settingA: "abandoned subway station",
+				settingB: "overgrown ruin",
+				theme: "mundane",
+				k: 0,
+				n: 0,
+				m: 1,
+			},
+		],
+	};
+
+	const STUB_LANDMARKS = {
+		north: { shortName: "the signal tower", horizonPhrase: "rises high" },
+		south: { shortName: "the collapsed entrance", horizonPhrase: "gapes wide" },
+		east: { shortName: "the rusted shaft", horizonPhrase: "spins slowly" },
+		west: { shortName: "the flooded tunnel", horizonPhrase: "fades to black" },
+	};
+
+	function buildDualObstacleResponse(
+		packAShift: unknown,
+		packBShift: unknown,
+	): unknown {
+		const buildObstacle = (shiftFlavor: unknown, ab: "a" | "b") => ({
+			id: "obs1",
+			kind: "obstacle",
+			name: `Rusted Gate ${ab}`,
+			examineDescription: `An old rusted gate ${ab}.`,
+			...(shiftFlavor !== undefined ? { shiftFlavor } : {}),
+		});
+		return {
+			phases: [
+				{
+					phaseNumber: 1,
+					packA: {
+						setting: "abandoned subway station",
+						objectivePairs: [],
+						interestingObjects: [],
+						obstacles: [buildObstacle(packAShift, "a")],
+						landmarks: STUB_LANDMARKS,
+					},
+					packB: {
+						setting: "overgrown ruin",
+						objectivePairs: [],
+						interestingObjects: [],
+						obstacles: [buildObstacle(packBShift, "b")],
+						landmarks: STUB_LANDMARKS,
+					},
+				},
+			],
+		};
+	}
+
+	it("accepts dual-pack obstacles with valid shiftFlavor on both packs", () => {
+		const result = validateDualContentPacks(
+			buildDualObstacleResponse(
+				"The rusted gate scrapes along the floor.",
+				"The mossy gate slides through wet leaves.",
+			),
+			dualInputWithObstacle,
+		);
+		expect(result.phases[0]?.packA.obstacles[0]?.shiftFlavor).toBe(
+			"The rusted gate scrapes along the floor.",
+		);
+		expect(result.phases[0]?.packB.obstacles[0]?.shiftFlavor).toBe(
+			"The mossy gate slides through wet leaves.",
+		);
+	});
+
+	it("rejects a dual-pack obstacle missing shiftFlavor on packA", () => {
+		expect(() =>
+			validateDualContentPacks(
+				buildDualObstacleResponse(undefined, "Something rustles."),
+				dualInputWithObstacle,
+			),
+		).toThrow(/shiftFlavor/);
+	});
+
+	it("rejects a dual-pack obstacle missing shiftFlavor on packB", () => {
+		expect(() =>
+			validateDualContentPacks(
+				buildDualObstacleResponse("The gate scrapes.", undefined),
+				dualInputWithObstacle,
+			),
+		).toThrow(/shiftFlavor/);
+	});
+
+	it("rejects a dual-pack obstacle with an empty shiftFlavor", () => {
+		expect(() =>
+			validateDualContentPacks(
+				buildDualObstacleResponse("", "Something rustles."),
+				dualInputWithObstacle,
+			),
+		).toThrow(/shiftFlavor/);
+	});
+
+	it("rejects a dual-pack obstacle whose shiftFlavor contains {actor}", () => {
+		expect(() =>
+			validateDualContentPacks(
+				buildDualObstacleResponse(
+					"{actor} pushes the gate.",
+					"Something rustles.",
+				),
+				dualInputWithObstacle,
+			),
+		).toThrow(/shiftFlavor/);
+	});
+});
