@@ -27,7 +27,10 @@ import type {
 	ToolCall,
 	WorldEntity,
 } from "./types";
-import { checkPlacementFlavor } from "./win-condition.js";
+import {
+	checkPlacementFlavor,
+	checkUseItemActivation,
+} from "./win-condition.js";
 
 export interface ValidationResult {
 	valid: boolean;
@@ -563,6 +566,9 @@ export function dispatchAiTurn(
 			// Snapshot all AIs' spatial state BEFORE execution (used for witness context).
 			// For go: the actor's pre-move state is captured here; post-move state is
 			// captured from the post-execute phase below.
+			// Snapshot pre-execute world so the post-execute branch can compare
+			// satisfactionState transitions for activation-flavor detection.
+			const preExecuteWorld = state.world;
 			state = executeToolCall(state, aiId, action.toolCall);
 			// For put_down, check if the object landed on its paired space.
 			// If so, replace the default description with the per-pair placementFlavor.
@@ -570,8 +576,16 @@ export function dispatchAiTurn(
 				action.toolCall.name === "put_down" || action.toolCall.name === "use"
 					? checkPlacementFlavor(action, state.contentPack, state.world)
 					: null;
+			// For `use` on an interesting_object Use-Item target, surface
+			// activationFlavor on the call that just satisfied the objective.
+			const activationFlavor =
+				action.toolCall.name === "use"
+					? checkUseItemActivation(action, preExecuteWorld, state.world)
+					: null;
 			const successDescription =
-				flavorDescription ?? describeToolCall(state, aiId, action.toolCall);
+				activationFlavor ??
+				flavorDescription ??
+				describeToolCall(state, aiId, action.toolCall);
 			records.push({
 				round,
 				actor: aiId,
@@ -628,6 +642,10 @@ export function dispatchAiTurn(
 						);
 						if (spaceTarget) {
 							useOutcomeRaw = spaceTarget.satisfactionFlavor;
+						} else if (activationFlavor !== null) {
+							// Use-Item activation: witnesses get the activationFlavor verbatim
+							// (validator-enforced no-{actor} so no substitution needed).
+							useOutcomeRaw = activationFlavor;
 						} else {
 							const item = pickable.find((i) => i.id === call.args.item);
 							// Store raw (un-substituted) useOutcome for witness rendering

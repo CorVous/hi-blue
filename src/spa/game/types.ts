@@ -53,6 +53,14 @@ export interface WorldEntity {
 	postExamineDescription?: string;
 	/** Alternate look flavor shown after satisfactionState flips to "satisfied". */
 	postLookFlavor?: string;
+	/**
+	 * For interesting_object used as a Use-Item target: 1-sentence flavor returned
+	 * (to actor AND witnesses) on the `use` call that satisfies the UseItemObjective.
+	 * Does NOT contain "{actor}" — third-person, world-meaningful description of the
+	 * activation event. Pre-satisfaction use that triggers the objective fires this
+	 * flavor; subsequent (post-satisfaction) `use` calls return `useOutcome` instead.
+	 */
+	activationFlavor?: string;
 	/** For objective_space: whether the `use` action is available on this space. Defaults to true when omitted. Set to false after a UseSpaceObjective is satisfied. */
 	useAvailable?: boolean;
 	/** For objective_space: flavor string emitted as a Witnessed event when a UseSpaceObjective is satisfied. */

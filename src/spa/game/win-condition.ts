@@ -214,3 +214,42 @@ export function checkPlacementFlavor(
 	// Pair matched — return flavor with {actor} substituted to "you"
 	return placementFlavor.replace(/\{actor\}/g, "you");
 }
+
+/**
+ * Returns the activationFlavor string for the `use` call that satisfies a
+ * UseItemObjective on an interesting_object, or null otherwise.
+ *
+ * Detection compares pre-execute and post-execute world snapshots:
+ *  - The action must be a `use` on an interesting_object that has an
+ *    `activationFlavor` field.
+ *  - The entity's `satisfactionState` must have flipped from
+ *    pending / undefined (pre) to `"satisfied"` (post). Only the call that
+ *    just satisfied the objective returns activationFlavor; subsequent calls
+ *    on an already-satisfied item fall through to `useOutcome`.
+ *
+ * activationFlavor has no `{actor}` token (validator-enforced), so the same
+ * string is returned to the actor and used verbatim for the witness fan-out.
+ */
+export function checkUseItemActivation(
+	action: AiTurnAction,
+	preWorld: WorldState,
+	postWorld: WorldState,
+): string | null {
+	const toolCall = action.toolCall;
+	if (!toolCall || toolCall.name !== "use") return null;
+
+	const itemId = toolCall.args.item;
+	if (!itemId) return null;
+
+	const postEntity = postWorld.entities.find((e) => e.id === itemId);
+	if (!postEntity) return null;
+	if (postEntity.kind !== "interesting_object") return null;
+	if (!postEntity.activationFlavor) return null;
+	if (postEntity.satisfactionState !== "satisfied") return null;
+
+	const preEntity = preWorld.entities.find((e) => e.id === itemId);
+	// "just satisfied" means the pre-state was not yet satisfied
+	if (preEntity?.satisfactionState === "satisfied") return null;
+
+	return postEntity.activationFlavor;
+}

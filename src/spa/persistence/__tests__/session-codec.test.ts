@@ -361,6 +361,40 @@ describe("serializeSession / deserializeSession", () => {
 		}
 	});
 
+	it("round-trips interesting_object Use-Item flavor fields (issue #334)", () => {
+		const game = makeFreshGame();
+		const entity: WorldEntity = {
+			id: "switch",
+			kind: "interesting_object",
+			name: "Brass Switch",
+			examineDescription: "A brass switch waiting to be pressed.",
+			useOutcome: "The switch clicks under your finger.",
+			activationFlavor:
+				"The switch flips home with a hard thunk and an amber light pulses on.",
+			postExamineDescription:
+				"The switch sits locked in its on position, amber light steady.",
+			postLookFlavor: "an amber pinpoint of light glows beside the switch",
+			satisfactionState: "satisfied",
+			holder: { row: 1, col: 1 },
+		};
+		const modified: GameState = {
+			...game,
+			world: { entities: [entity] },
+		};
+		const files = serializeSession(modified, NOW, CREATED_AT);
+		const result = deserializeSession(files);
+		expect(result.kind).toBe("ok");
+		if (result.kind === "ok") {
+			const restored = result.state.world.entities[0];
+			expect(restored?.activationFlavor).toBe(entity.activationFlavor);
+			expect(restored?.postExamineDescription).toBe(
+				entity.postExamineDescription,
+			);
+			expect(restored?.postLookFlavor).toBe(entity.postLookFlavor);
+			expect(restored?.satisfactionState).toBe("satisfied");
+		}
+	});
+
 	it("round-trips budgets", () => {
 		const game = makeFreshGame();
 		const modified: GameState = {

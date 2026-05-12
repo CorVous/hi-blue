@@ -654,10 +654,12 @@ export function buildConeSnapshot(ctx: AiContext): string {
 		const contents =
 			contentParts.length > 0 ? [...contentParts].sort().join(", ") : "nothing";
 
-		// Append postLookFlavor for satisfied objective_space entities in this cell
-		const satisfiedSpaceFlavors = ctx.worldSnapshot.entities
+		// Append postLookFlavor for satisfied objective_space OR interesting_object
+		// entities resting in this cell. Same swap rule applies to both kinds.
+		const satisfiedFlavors = ctx.worldSnapshot.entities
 			.filter((e) => {
-				if (e.kind !== "objective_space") return false;
+				if (e.kind !== "objective_space" && e.kind !== "interesting_object")
+					return false;
 				if (e.satisfactionState !== "satisfied") return false;
 				if (!e.postLookFlavor) return false;
 				const h = e.holder;
@@ -666,7 +668,7 @@ export function buildConeSnapshot(ctx: AiContext): string {
 			.map((e) => e.postLookFlavor as string);
 
 		let cellLine = `at ${cell.phrasing}: ${contents}`;
-		for (const flavor of satisfiedSpaceFlavors) {
+		for (const flavor of satisfiedFlavors) {
 			cellLine += ` ${flavor}`;
 		}
 		lines.push(cellLine);
@@ -886,10 +888,12 @@ function renderCurrentState(ctx: AiContext): string {
 			const contents =
 				contentParts.length > 0 ? contentParts.join("; ") : "nothing";
 
-			// Append postLookFlavor for satisfied objective_space entities in this cell
-			const satisfiedSpaceFlavors = ctx.worldSnapshot.entities
+			// Append postLookFlavor for satisfied objective_space OR interesting_object
+			// entities in this cell.
+			const satisfiedFlavors = ctx.worldSnapshot.entities
 				.filter((e) => {
-					if (e.kind !== "objective_space") return false;
+					if (e.kind !== "objective_space" && e.kind !== "interesting_object")
+						return false;
 					if (e.satisfactionState !== "satisfied") return false;
 					if (!e.postLookFlavor) return false;
 					const h = e.holder;
@@ -900,7 +904,7 @@ function renderCurrentState(ctx: AiContext): string {
 			// Capitalise the phrasing for display
 			const label = phrasing.charAt(0).toUpperCase() + phrasing.slice(1);
 			let cellLine = `- ${label}: ${contents}`;
-			for (const flavor of satisfiedSpaceFlavors) {
+			for (const flavor of satisfiedFlavors) {
 				cellLine += ` ${flavor}`;
 			}
 			lines.push(cellLine);

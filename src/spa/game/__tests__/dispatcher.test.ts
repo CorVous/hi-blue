@@ -1640,3 +1640,161 @@ describe("dispatchAiTurn — use on objective_space witnesses satisfactionFlavor
 		}
 	});
 });
+
+// ── UseItem activationFlavor on interesting_object (issue #334) ────────────────
+
+describe("dispatchAiTurn — UseItemObjective activationFlavor on interesting_object", () => {
+	/** Build a game where red holds 'key' (interesting_object) with activation
+	 * flavor configured, plus a pending UseItemObjective targeting 'key'. */
+	function makeGameWithUseItemActivation() {
+		const game = makeGame();
+		const withItemFlavors = updateActivePhase(game, (phase) => ({
+			...phase,
+			world: {
+				...phase.world,
+				entities: phase.world.entities.map((e) =>
+					e.id === "key"
+						? {
+								...e,
+								useOutcome: "The key sits inert in your palm.",
+								activationFlavor:
+									"The key flares briefly with a steady amber light as something in the wall clicks.",
+								postExamineDescription:
+									"The key has dimmed; whatever it was for is finished.",
+								postLookFlavor: "the spent key gives off a faint warmth",
+							}
+						: e,
+				),
+			},
+		}));
+		const useItemObj: UseItemObjective = {
+			id: "obj-0",
+			kind: "use_item",
+			description: "Use the key",
+			satisfactionState: "pending",
+			itemId: "key",
+		};
+		return updateActivePhase(withItemFlavors, (phase) => ({
+			...phase,
+			objectives: [useItemObj],
+		}));
+	}
+
+	it("returns activationFlavor as the actor's tool-success description on the satisfying use", () => {
+		const game = makeGameWithUseItemActivation();
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "use", args: { item: "key" } },
+		};
+		const result = dispatchAiTurn(game, action);
+		expect(result.rejected).toBe(false);
+		const success = result.records.find((r) => r.kind === "tool_success");
+		expect(success?.description).toBe(
+			"The key flares briefly with a steady amber light as something in the wall clicks.",
+		);
+	});
+
+	it("falls back to useOutcome on a subsequent use after the objective is already satisfied", () => {
+		const game = makeGameWithUseItemActivation();
+		// First use — satisfies and emits activationFlavor.
+		const after = dispatchAiTurn(game, {
+			aiId: "red",
+			toolCall: { name: "use", args: { item: "key" } },
+		});
+		expect(after.rejected).toBe(false);
+		// Second use — should fall back to useOutcome.
+		const second = dispatchAiTurn(after.game, {
+			aiId: "red",
+			toolCall: { name: "use", args: { item: "key" } },
+		});
+		const success = second.records.find((r) => r.kind === "tool_success");
+		expect(success?.description).toBe("The key sits inert in your palm.");
+	});
+
+	it("does not emit activationFlavor when there is no pending UseItemObjective", () => {
+		// No use_item objective wired up.
+		const game = updateActivePhase(makeGame(), (phase) => ({
+			...phase,
+			world: {
+				...phase.world,
+				entities: phase.world.entities.map((e) =>
+					e.id === "key"
+						? {
+								...e,
+								useOutcome: "You weigh the key in your hand.",
+								activationFlavor:
+									"The key flares briefly with a steady amber light.",
+							}
+						: e,
+				),
+			},
+		}));
+		const result = dispatchAiTurn(game, {
+			aiId: "red",
+			toolCall: { name: "use", args: { item: "key" } },
+		});
+		const success = result.records.find((r) => r.kind === "tool_success");
+		// Should fall back to useOutcome — activation only fires when a
+		// UseItemObjective transitions from pending → satisfied.
+		expect(success?.description).toBe("You weigh the key in your hand.");
+	});
+
+	it("fans out activationFlavor as the witnessed-event useOutcome on the satisfying call", () => {
+		// Reposition: put red and green in the same cell so green's cone covers red.
+		const game = makeGameWithUseItemActivation();
+		const lookedEast = executeToolCall(game, "red", {
+			name: "look",
+			args: { direction: "east" },
+		});
+		// red at (0,0) facing east; green at (0,1) facing north.
+		// green's cone (facing north from (0,1)) does NOT include (0,0),
+		// so green won't witness. Instead, move green so its cone covers red.
+		// Simplest: have green face west from (0,1) — front arc covers (0,0).
+		const greenWest = executeToolCall(lookedEast, "green", {
+			name: "look",
+			args: { direction: "west" },
+		});
+		const result = dispatchAiTurn(greenWest, {
+			aiId: "red",
+			toolCall: { name: "use", args: { item: "key" } },
+		});
+		expect(result.rejected).toBe(false);
+		const greenLog = result.game.conversationLogs.green ?? [];
+		const useEvent = greenLog.find(
+			(e) => e.kind === "witnessed-event" && e.actionKind === "use",
+		);
+		expect(useEvent).toBeDefined();
+		if (useEvent?.kind === "witnessed-event") {
+			expect(useEvent.useOutcome).toBe(
+				"The key flares briefly with a steady amber light as something in the wall clicks.",
+			);
+		}
+	});
+
+	it("fans out useOutcome to witnesses on a post-satisfaction subsequent use", () => {
+		const game = makeGameWithUseItemActivation();
+		const greenWest = executeToolCall(game, "green", {
+			name: "look",
+			args: { direction: "west" },
+		});
+		// First use satisfies + emits activationFlavor.
+		const after = dispatchAiTurn(greenWest, {
+			aiId: "red",
+			toolCall: { name: "use", args: { item: "key" } },
+		});
+		// Second use — witness should see useOutcome.
+		const second = dispatchAiTurn(after.game, {
+			aiId: "red",
+			toolCall: { name: "use", args: { item: "key" } },
+		});
+		const greenLog = second.game.conversationLogs.green ?? [];
+		const useEvents = greenLog.filter(
+			(e) => e.kind === "witnessed-event" && e.actionKind === "use",
+		);
+		// Last event should carry useOutcome, not activationFlavor.
+		const last = useEvents[useEvents.length - 1];
+		if (last?.kind === "witnessed-event") {
+			expect(last.useOutcome).toBe("The key sits inert in your palm.");
+		}
+	});
+});

@@ -1444,3 +1444,80 @@ describe("activeDirectives — buildAiContext and system prompt injection", () =
 		expect(prompt).toMatch(/do not reveal|private/i);
 	});
 });
+
+// ── postLookFlavor on satisfied interesting_object (issue #334) ───────────────
+
+describe("postLookFlavor swap covers satisfied interesting_object", () => {
+	const POST_LOOK_CONFIG = makeConfig(1);
+
+	function buildPackWithSatisfiedItem(
+		opts: { withPostLook: boolean } = { withPostLook: true },
+	): ContentPack {
+		const item: WorldEntity = {
+			id: "switch",
+			kind: "interesting_object",
+			name: "brass switch",
+			examineDescription: "A small brass switch ready to be pressed.",
+			useOutcome: "You toggle the switch.",
+			satisfactionState: "satisfied",
+			holder: { row: 1, col: 0 },
+			...(opts.withPostLook
+				? { postLookFlavor: "a steady amber glow lingers near the switch" }
+				: {}),
+		};
+		return {
+			phaseNumber: 1,
+			setting: "",
+			weather: "",
+			timeOfDay: "",
+			objectivePairs: [],
+			interestingObjects: [item],
+			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "south" },
+				green: { position: { row: 0, col: 1 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
+			},
+		};
+	}
+
+	it("appends postLookFlavor to the cell line in <what_you_see> for a satisfied interesting_object", () => {
+		const pack = buildPackWithSatisfiedItem({ withPostLook: true });
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [pack]),
+			POST_LOOK_CONFIG,
+		);
+		const ctx = buildAiContext(game, "red");
+		const stateMsg = ctx.toCurrentStateUserMessage();
+		expect(stateMsg).toContain("Directly in front:");
+		expect(stateMsg).toContain("a steady amber glow lingers near the switch");
+	});
+
+	it("does NOT append postLookFlavor when entity is not satisfied", () => {
+		const pack = buildPackWithSatisfiedItem({ withPostLook: true });
+		// Flip satisfactionState back to pending.
+		const item = pack.interestingObjects[0];
+		if (item) item.satisfactionState = "pending";
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [pack]),
+			POST_LOOK_CONFIG,
+		);
+		const ctx = buildAiContext(game, "red");
+		const stateMsg = ctx.toCurrentStateUserMessage();
+		expect(stateMsg).not.toContain(
+			"a steady amber glow lingers near the switch",
+		);
+	});
+
+	it("postLookFlavor also appears in buildConeSnapshot for satisfied interesting_object", () => {
+		const pack = buildPackWithSatisfiedItem({ withPostLook: true });
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [pack]),
+			POST_LOOK_CONFIG,
+		);
+		const ctx = buildAiContext(game, "red");
+		const snapshot = buildConeSnapshot(ctx);
+		expect(snapshot).toContain("a steady amber glow lingers near the switch");
+	});
+});
