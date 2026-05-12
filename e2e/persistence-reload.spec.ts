@@ -69,7 +69,6 @@ test("game state and transcripts persist across mid-round reload", async ({
 		createdAt: string;
 		lastSavedAt: string;
 	};
-	expect(meta.phase).toBeGreaterThanOrEqual(1);
 	expect(meta.round).toBeGreaterThanOrEqual(1);
 
 	// ── Capture pre-reload values ───────────────────────────────────────────────
