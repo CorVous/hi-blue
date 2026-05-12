@@ -2557,7 +2557,7 @@ describe("renderGame — version-mismatch session with pending bootstrap (regres
 		document.body.innerHTML = "";
 	});
 
-	it("redirects to #/start and does not overwrite the old session when a bootstrap is pending", async () => {
+	it("redirects to #/sessions and does not overwrite the old session when a bootstrap is pending", async () => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		document.body.innerHTML = INDEX_BODY_HTML;
 
@@ -2632,12 +2632,72 @@ describe("renderGame — version-mismatch session with pending bootstrap (regres
 		const { renderGame } = await import("../routes/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
-		// The stale session must be cleared and the route redirected away.
-		expect(location.hash).toBe("#/start?reason=version-mismatch");
-		expect(stub.getItem("hi-blue:active-session")).toBeNull();
-
+		// The route must redirect to the sessions picker with the reason.
+		expect(location.hash).toBe("#/sessions?reason=version-mismatch");
+		// The active-session pointer must NOT be cleared — only the sessions
+		// picker (or an explicit user action) should touch it.
+		expect(stub.getItem("hi-blue:active-session")).toBe(SESSION_ID);
+		// The pending bootstrap must be cleared so a subsequent navigation
+		// doesn't re-enter the bootstrap loading flow.
+		const { getPendingBootstrap } = await import(
+			"../game/pending-bootstrap.js"
+		);
+		expect(getPendingBootstrap()).toBeUndefined();
 		// The bootstrap must NOT have saved new content packs/daemons under the
 		// old session id.
+		expect(saveSpy).not.toHaveBeenCalled();
+	});
+
+	it("redirects to #/sessions and clears pending bootstrap when session is broken", async () => {
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		document.body.innerHTML = INDEX_BODY_HTML;
+
+		vi.resetModules();
+		const stub = makeLocalStorageStub();
+
+		const SESSION_ID = "0xBEEF";
+		const prefix = `hi-blue:sessions/${SESSION_ID}/`;
+		stub._store["hi-blue:active-session"] = SESSION_ID;
+
+		stub._store[`${prefix}meta.json`] = JSON.stringify({
+			createdAt: "2024-01-01T00:00:00.000Z",
+			lastSavedAt: "2024-01-01T00:00:00.000Z",
+			phase: 1,
+			round: 0,
+			personaOrder: ["red", "green", "cyan"],
+		});
+
+		const daemonPhases = {
+			"1": { phaseGoal: "", conversationLog: [] },
+			"2": { phaseGoal: "", conversationLog: [] },
+			"3": { phaseGoal: "", conversationLog: [] },
+		};
+		for (const aiId of ["red", "green", "cyan"] as const) {
+			stub._store[`${prefix}${aiId}.txt`] = JSON.stringify({
+				aiId,
+				persona: STATIC_PERSONAS[aiId],
+				phases: daemonPhases,
+			});
+		}
+		// engine.dat is intentionally absent → loadActiveSession returns { kind: "broken" }.
+
+		vi.stubGlobal("localStorage", stub);
+
+		const { startBootstrap } = await import("../game/pending-bootstrap.js");
+		startBootstrap();
+
+		const sessionStorage = await import("../persistence/session-storage.js");
+		const saveSpy = vi.spyOn(sessionStorage, "saveActiveSession");
+
+		const { renderGame } = await import("../routes/game.js");
+		await renderGame(getEl<HTMLElement>("main"));
+
+		expect(location.hash).toBe("#/sessions?reason=broken");
+		expect(stub.getItem("hi-blue:active-session")).toBe(SESSION_ID);
+		const { getPendingBootstrap } = await import(
+			"../game/pending-bootstrap.js"
+		);
+		expect(getPendingBootstrap()).toBeUndefined();
 		expect(saveSpy).not.toHaveBeenCalled();
 	});
 });

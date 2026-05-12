@@ -639,6 +639,15 @@ export function renderGame(
 				);
 				built = applyTestAffordances(built, effectiveParams);
 
+				// Defensive: if the active session is no longer empty, another
+				// navigation invalidated the bootstrap mid-flight. Abort rather
+				// than overwriting state under the wrong session id.
+				if (loadActiveSession().kind !== "none") {
+					clearPendingBootstrap();
+					location.hash = "#/sessions";
+					return;
+				}
+
 				const saveResult = saveActiveSession(built.getState());
 				if (!saveResult.ok) {
 					showPersistenceWarning(saveResult.reason);
@@ -696,18 +705,21 @@ export function renderGame(
 		const pendingBootstrap = getPendingBootstrap();
 		if (pendingBootstrap) {
 			// Only use the bootstrap when the active session is genuinely empty
-			// (just minted, no data yet). If there is a stale session under the
-			// active pointer (version-mismatch / broken), running the bootstrap
-			// would overwrite the old save with new content under the same
-			// session id. Clear the bootstrap and let the redirect path below
-			// handle the stale session correctly.
-			const staleCheckId = getActiveSessionId();
-			const staleCheckResult =
-				staleCheckId !== null ? loadActiveSession() : { kind: "none" as const };
-			if (staleCheckResult.kind === "none") {
+			// (just minted, no data yet). loadActiveSession() returns { kind: "none" }
+			// for both a null pointer and a minted-but-unsaved session, which are
+			// the only states where it's safe to build and save a new game.
+			// A stale session (version-mismatch / broken) must redirect to the
+			// sessions picker instead — not start generating content that would
+			// be saved under the old session id.
+			const loadCheck = loadActiveSession();
+			if (loadCheck.kind === "none") {
 				return renderBootstrapLoadingFlow(pendingBootstrap);
 			}
 			clearPendingBootstrap();
+			const reason =
+				loadCheck.kind === "version-mismatch" ? "version-mismatch" : "broken";
+			location.hash = `#/sessions?reason=${reason}`;
+			return Promise.resolve();
 		}
 
 		// Feature-detect localStorage availability (SecurityError in privacy mode).

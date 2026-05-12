@@ -125,8 +125,7 @@ function withDispatcher(
 		if (verdict.reason !== "populated") {
 			if (
 				getPendingBootstrap() !== undefined &&
-				verdict.reason !== "version-mismatch" &&
-				verdict.reason !== "broken"
+				(verdict.reason === "empty" || verdict.reason === "no-active-pointer")
 			) {
 				return renderer(root, params);
 			}
