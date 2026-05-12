@@ -95,13 +95,20 @@ the visible game state.
 ### Commands
 
 ```sh
-# Read the visible game state (always your first call).
+# Read the visible game state (delta transcripts — only new lines since last call).
 scripts/playtest/cmd.sh '{"op":"view"}'
 
+# Read the full game state (complete transcripts for every panel).
+# Use sparingly — much larger response.
+scripts/playtest/cmd.sh '{"op":"view","full":true}'
+
 # Type a message into the composer and press send. The daemon waits for the
-# round to go quiet (up to 90 s) before returning a snapshot, so you do NOT
-# need a separate "wait" after most sends.
+# round to go quiet (up to 90 s) before returning a delta snapshot, so you
+# do NOT need a separate "wait" after most sends.
 scripts/playtest/cmd.sh '{"op":"send","text":"*v86p hi! im blue. what do you see?"}'
+
+# Send with full transcript in the response (for context refresh):
+scripts/playtest/cmd.sh '{"op":"send","text":"*v86p hi!","full":true}'
 
 # Pause for N ms, then snapshot. Useful when you want to observe a slow round
 # without sending anything.
@@ -132,9 +139,31 @@ A `snapshot` is an object with these fields:
 - `panels` — array of three objects, each `{ name, budget, transcript }`. The
   `name` is the `*xxxx` handle of that daemon. The `budget` is that daemon's
   remaining dollars for the *whole game* (no per-phase reset). The
-  `transcript` is the full visible chat scroll for that daemon's panel —
-  diffing it between snapshots is how you see "what just happened" in that
-  daemon.
+  `transcript` field is **delta by default** — it contains only the new lines
+  that appeared since your last command. On the very first call, or when you
+  pass `"full":true`, it contains the entire visible chat scroll instead.
+
+### Delta vs full transcripts
+
+By default, each snapshot's `transcript` contains only **new lines** since
+your last command. This keeps your context window lean across a long session
+— you won't re-read the same early messages dozens of times as the transcript
+grows.
+
+**Your session log file is your canonical conversation memory.** After each
+snapshot, append the new transcript lines to the relevant section of your
+`docs/playtests/agent-sessions/<sessionId>.md` log. When you need to recall
+what a daemon said earlier, read your session log — do not rely on your
+context window retaining older snapshots.
+
+If you lose track of the conversation state and need a full refresh:
+
+```sh
+scripts/playtest/cmd.sh '{"op":"view","full":true}'
+```
+
+This returns the complete transcript for every panel. Use it sparingly — a
+full snapshot is much larger than a delta and fills your context fast.
 
 ### How to address daemons
 
@@ -172,7 +201,10 @@ turns to ~50. Use your judgement.
 ## Writing the observations log
 
 **Before the playtest is over**, start your observations log so you don't
-forget early-turn detail.
+forget early-turn detail. Because snapshots return delta transcripts by
+default, your session log is also your conversation archive — append new
+lines from each snapshot so you can read them back later if your context
+window loses earlier turns.
 
 1. After your first `view`, extract the 4-hex session id from `topinfoLeft`
    or `topinfoRight` (e.g. `0x478F`).
@@ -180,8 +212,10 @@ forget early-turn detail.
 3. Create a new file at
    `/home/user/hi-blue/docs/playtests/agent-sessions/<sessionId>.md` based on
    that template. For example, `agent-sessions/0x478F.md`.
-4. Fill it in **as you go**. Don't batch everything at the end — quotes are
-   easier to capture in the moment.
+4. Fill it in **as you go**. After each `send` or `view`, append the new
+   transcript lines to the relevant sections. Don't batch everything at the
+   end — quotes are easier to capture in the moment, and your context window
+   won't retain old snapshots indefinitely.
 
 Per the isolation rail above: read only the template file and write only
 your own session file. Do not `ls`, `Read`, `Grep`, or otherwise inspect

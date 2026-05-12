@@ -6,7 +6,8 @@
 // visible text from panels. We never call page.evaluate to peek at hidden state.
 //
 // Commands (one JSON object per line, via /tmp/playtest-in):
-//   {"op":"view"}                       → snapshot the visible game state
+//   {"op":"view"}                       → snapshot (delta transcripts by default)
+//   {"op":"view","full":true}             → snapshot with full transcripts
 //   {"op":"send","text":"<message>"}    → type into composer and click [tx]
 //   {"op":"wait","ms":3000}             → sleep, then snapshot
 //   {"op":"snap","path":"/tmp/x.png"}   → screenshot for human reference
@@ -130,6 +131,26 @@ if (finalPromptDisabled !== null) {
 }
 log("game route loaded — daemon ready");
 
+// ---- Per-panel transcript tracking for delta snapshots --------------------
+// Keyed by daemon name (e.g. "*v86p"). Stores the full transcript string
+// seen on the previous snapshot so we can diff and return only new lines.
+const lastSeenTranscript = {};
+
+function computeDelta(name, current) {
+	const prev = lastSeenTranscript[name] ?? "";
+	lastSeenTranscript[name] = current;
+	if (!prev) return current; // first snapshot for this panel — return everything
+	if (current === prev) return ""; // nothing new
+	// The transcript is append-only; new content appears at the end.
+	// If the current transcript starts with the previous one, the delta is
+	// the trailing portion. Otherwise (edge case: re-render, page refresh)
+	// fall back to returning the full transcript so nothing is lost.
+	if (current.startsWith(prev)) {
+		return current.slice(prev.length);
+	}
+	return current;
+}
+
 // ---- Helpers that read ONLY visible text from the GUI -----------------------
 
 async function readVisibleText(loc) {
@@ -224,21 +245,40 @@ async function waitForRoundQuiet(maxMs = 60_000) {
 	}
 }
 
+// Apply delta logic to a snapshot in place. When full=true (or on the first
+// snapshot for a panel), the panel's `transcript` field contains the full text.
+// Otherwise `transcript` is replaced with only the new lines since the last
+// agent-facing snapshot, keeping the agent's context window lean.
+function applyDelta(snap, full) {
+	for (const p of snap.panels) {
+		const delta = computeDelta(p.name, p.transcript);
+		if (!full) {
+			p.transcript = delta || "(no new messages)";
+		}
+	}
+}
+
 // ---- Command loop ----------------------------------------------------------
 
 async function handle(cmd) {
 	switch (cmd.op) {
 		case "view": {
-			return { ok: true, snapshot: await snapshot() };
+			const snap = await snapshot();
+			applyDelta(snap, cmd.full);
+			return { ok: true, snapshot: snap };
 		}
 		case "send": {
 			await send(cmd.text);
 			await waitForRoundQuiet(cmd.maxMs ?? 90_000);
-			return { ok: true, snapshot: await snapshot() };
+			const snap = await snapshot();
+			applyDelta(snap, cmd.full);
+			return { ok: true, snapshot: snap };
 		}
 		case "wait": {
 			await page.waitForTimeout(cmd.ms ?? 1000);
-			return { ok: true, snapshot: await snapshot() };
+			const snap = await snapshot();
+			applyDelta(snap, cmd.full);
+			return { ok: true, snapshot: snap };
 		}
 		case "snap": {
 			const path = cmd.path ?? "/tmp/playtest.png";
