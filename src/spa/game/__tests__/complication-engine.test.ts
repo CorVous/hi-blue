@@ -151,6 +151,7 @@ function makePhase(overrides: Partial<PhaseState> = {}): PhaseState {
 		contentPacksA: [],
 		contentPacksB: [],
 		activePackId: "A" as const,
+		objectives: [],
 		...overrides,
 	};
 }

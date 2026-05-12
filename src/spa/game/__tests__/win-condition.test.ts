@@ -12,8 +12,11 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_LANDMARKS } from "../direction";
 import type {
 	AiTurnAction,
+	CarryObjective,
 	ContentPack,
+	Objective,
 	ObjectivePair,
+	UseItemObjective,
 	WorldEntity,
 	WorldState,
 } from "../types";
@@ -21,6 +24,8 @@ import {
 	checkLoseCondition,
 	checkPlacementFlavor,
 	checkWinCondition,
+	isCarryObjectiveSatisfied,
+	isUseItemObjectiveSatisfied,
 } from "../win-condition";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -76,13 +81,32 @@ function worldFromPairs(pairs: ObjectivePair[]): WorldState {
 	return makeWorld(entities);
 }
 
+/** Build a CarryObjective from an ObjectivePair. */
+function carryObjectiveFromPair(
+	pair: ObjectivePair,
+	id = "obj-0",
+): CarryObjective {
+	return {
+		id,
+		kind: "carry",
+		description: `Bring the ${pair.object.name} to the ${pair.space.name}`,
+		satisfactionState: "pending",
+		objectId: pair.object.id,
+		spaceId: pair.space.id,
+	};
+}
+
+/** Build an array of CarryObjectives from an array of ObjectivePairs. */
+function carryObjectivesFromPairs(pairs: ObjectivePair[]): CarryObjective[] {
+	return pairs.map((p, i) => carryObjectiveFromPair(p, `obj-${i}`));
+}
+
 // ── checkWinCondition ────────────────────────────────────────────────────────
 
 describe("checkWinCondition", () => {
 	it("K=0: vacuously returns true when there are no objective pairs", () => {
-		const pack = makeContentPack([]);
 		const world = makeWorld([]);
-		expect(checkWinCondition(world, pack)).toBe(true);
+		expect(checkWinCondition(world, [])).toBe(true);
 	});
 
 	it("K=1: returns true when object and space share the same cell", () => {
@@ -92,9 +116,9 @@ describe("checkWinCondition", () => {
 			{ row: 2, col: 3 },
 			{ row: 2, col: 3 },
 		);
-		const pack = makeContentPack([pair]);
 		const world = worldFromPairs([pair]);
-		expect(checkWinCondition(world, pack)).toBe(true);
+		const objectives = carryObjectivesFromPairs([pair]);
+		expect(checkWinCondition(world, objectives)).toBe(true);
 	});
 
 	it("K=1: returns false when object is on a different cell than its space", () => {
@@ -104,17 +128,17 @@ describe("checkWinCondition", () => {
 			{ row: 0, col: 0 },
 			{ row: 2, col: 3 },
 		);
-		const pack = makeContentPack([pair]);
 		const world = worldFromPairs([pair]);
-		expect(checkWinCondition(world, pack)).toBe(false);
+		const objectives = carryObjectivesFromPairs([pair]);
+		expect(checkWinCondition(world, objectives)).toBe(false);
 	});
 
 	it("K=1: returns false when object is held by an AI (not on the ground)", () => {
 		// Object holder is an AiId string, not a GridPosition
 		const pair = makeObjectivePair("obj", "spc", "red", { row: 2, col: 3 });
-		const pack = makeContentPack([pair]);
 		const world = worldFromPairs([pair]);
-		expect(checkWinCondition(world, pack)).toBe(false);
+		const objectives = carryObjectivesFromPairs([pair]);
+		expect(checkWinCondition(world, objectives)).toBe(false);
 	});
 
 	it("K=2: returns true when both pairs are satisfied", () => {
@@ -130,9 +154,9 @@ describe("checkWinCondition", () => {
 			{ row: 3, col: 4 },
 			{ row: 3, col: 4 },
 		);
-		const pack = makeContentPack([pairA, pairB]);
 		const world = worldFromPairs([pairA, pairB]);
-		expect(checkWinCondition(world, pack)).toBe(true);
+		const objectives = carryObjectivesFromPairs([pairA, pairB]);
+		expect(checkWinCondition(world, objectives)).toBe(true);
 	});
 
 	it("K=2: returns false when only one pair is satisfied", () => {
@@ -148,9 +172,9 @@ describe("checkWinCondition", () => {
 			{ row: 0, col: 0 },
 			{ row: 3, col: 4 },
 		);
-		const pack = makeContentPack([pairA, pairB]);
 		const world = worldFromPairs([pairA, pairB]);
-		expect(checkWinCondition(world, pack)).toBe(false);
+		const objectives = carryObjectivesFromPairs([pairA, pairB]);
+		expect(checkWinCondition(world, objectives)).toBe(false);
 	});
 
 	it("AC #6: wrong pair coincidence does NOT count — object on same coords as different pair's space", () => {
@@ -169,10 +193,10 @@ describe("checkWinCondition", () => {
 			{ row: 3, col: 3 },
 			{ row: 3, col: 3 },
 		);
-		const pack = makeContentPack([pairA, pairB]);
 		const world = worldFromPairs([pairA, pairB]);
+		const objectives = carryObjectivesFromPairs([pairA, pairB]);
 		// pair-A: objA at (3,3) ≠ spcA at (2,2) → false
-		expect(checkWinCondition(world, pack)).toBe(false);
+		expect(checkWinCondition(world, objectives)).toBe(false);
 	});
 
 	it("returns false when the object entity is not found in world", () => {
@@ -182,10 +206,147 @@ describe("checkWinCondition", () => {
 			{ row: 0, col: 0 },
 			{ row: 0, col: 0 },
 		);
-		const pack = makeContentPack([pair]);
+		const objectives = carryObjectivesFromPairs([pair]);
 		// World is empty — object not present
 		const world = makeWorld([]);
-		expect(checkWinCondition(world, pack)).toBe(false);
+		expect(checkWinCondition(world, objectives)).toBe(false);
+	});
+});
+
+// ── isCarryObjectiveSatisfied ─────────────────────────────────────────────────
+
+describe("isCarryObjectiveSatisfied", () => {
+	it("returns true when object and space are on the same cell", () => {
+		const pair = makeObjectivePair(
+			"obj",
+			"spc",
+			{ row: 2, col: 3 },
+			{ row: 2, col: 3 },
+		);
+		const world = worldFromPairs([pair]);
+		const objective = carryObjectiveFromPair(pair);
+		expect(isCarryObjectiveSatisfied(objective, world)).toBe(true);
+	});
+
+	it("returns false when object and space are on different cells", () => {
+		const pair = makeObjectivePair(
+			"obj",
+			"spc",
+			{ row: 0, col: 0 },
+			{ row: 2, col: 3 },
+		);
+		const world = worldFromPairs([pair]);
+		const objective = carryObjectiveFromPair(pair);
+		expect(isCarryObjectiveSatisfied(objective, world)).toBe(false);
+	});
+
+	it("returns false when object is held by an AI", () => {
+		const pair = makeObjectivePair("obj", "spc", "red", { row: 2, col: 3 });
+		const world = worldFromPairs([pair]);
+		const objective = carryObjectiveFromPair(pair);
+		expect(isCarryObjectiveSatisfied(objective, world)).toBe(false);
+	});
+
+	it("returns false when object entity is not found in world", () => {
+		const pair = makeObjectivePair(
+			"obj",
+			"spc",
+			{ row: 1, col: 1 },
+			{ row: 1, col: 1 },
+		);
+		const world = makeWorld([]); // empty world
+		const objective = carryObjectiveFromPair(pair);
+		expect(isCarryObjectiveSatisfied(objective, world)).toBe(false);
+	});
+});
+
+// ── isUseItemObjectiveSatisfied ───────────────────────────────────────────────
+
+describe("isUseItemObjectiveSatisfied", () => {
+	it("returns false when satisfactionState is pending", () => {
+		const objective: UseItemObjective = {
+			id: "obj-0",
+			kind: "use_item",
+			description: "Use the torch",
+			satisfactionState: "pending",
+			itemId: "torch",
+		};
+		expect(isUseItemObjectiveSatisfied(objective)).toBe(false);
+	});
+
+	it("returns true when satisfactionState is satisfied", () => {
+		const objective: UseItemObjective = {
+			id: "obj-0",
+			kind: "use_item",
+			description: "Use the torch",
+			satisfactionState: "satisfied",
+			itemId: "torch",
+		};
+		expect(isUseItemObjectiveSatisfied(objective)).toBe(true);
+	});
+});
+
+// ── checkWinCondition with mixed objectives ───────────────────────────────────
+
+describe("checkWinCondition with mixed Carry + UseItem objectives", () => {
+	it("returns true when all objectives are satisfied (carry + use_item)", () => {
+		const pair = makeObjectivePair(
+			"obj",
+			"spc",
+			{ row: 1, col: 1 },
+			{ row: 1, col: 1 },
+		);
+		const world = worldFromPairs([pair]);
+		const carryObj = carryObjectiveFromPair(pair, "obj-0");
+		const useItemObj: UseItemObjective = {
+			id: "obj-1",
+			kind: "use_item",
+			description: "Use the torch",
+			satisfactionState: "satisfied",
+			itemId: "torch",
+		};
+		const objectives: Objective[] = [carryObj, useItemObj];
+		expect(checkWinCondition(world, objectives)).toBe(true);
+	});
+
+	it("returns false when carry is satisfied but use_item is pending", () => {
+		const pair = makeObjectivePair(
+			"obj",
+			"spc",
+			{ row: 1, col: 1 },
+			{ row: 1, col: 1 },
+		);
+		const world = worldFromPairs([pair]);
+		const carryObj = carryObjectiveFromPair(pair, "obj-0");
+		const useItemObj: UseItemObjective = {
+			id: "obj-1",
+			kind: "use_item",
+			description: "Use the torch",
+			satisfactionState: "pending",
+			itemId: "torch",
+		};
+		const objectives: Objective[] = [carryObj, useItemObj];
+		expect(checkWinCondition(world, objectives)).toBe(false);
+	});
+
+	it("returns false when use_item is satisfied but carry is not", () => {
+		const pair = makeObjectivePair(
+			"obj",
+			"spc",
+			{ row: 0, col: 0 }, // object not on space's cell
+			{ row: 2, col: 2 },
+		);
+		const world = worldFromPairs([pair]);
+		const carryObj = carryObjectiveFromPair(pair, "obj-0");
+		const useItemObj: UseItemObjective = {
+			id: "obj-1",
+			kind: "use_item",
+			description: "Use the torch",
+			satisfactionState: "satisfied",
+			itemId: "torch",
+		};
+		const objectives: Objective[] = [carryObj, useItemObj];
+		expect(checkWinCondition(world, objectives)).toBe(false);
 	});
 });
 

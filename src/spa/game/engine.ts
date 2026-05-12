@@ -65,6 +65,19 @@ export function startGame(
 			? { ...contentPack.aiStarts }
 			: drawSpatialPlacements(rng, aiIds);
 
+	// Build one CarryObjective per objective pair. This is the default objective
+	// set for a new game: every pair must be carried to win. Higher-level callers
+	// (e.g. content-pack generation, future issue logic) may replace this with a
+	// drawn subset using drawObjectives from objective-pool.ts.
+	const objectives = contentPack.objectivePairs.map((pair, i) => ({
+		id: `obj-${i}`,
+		kind: "carry" as const,
+		description: `Bring the ${pair.object.name} to the ${pair.space.name}`,
+		satisfactionState: "pending" as const,
+		objectId: pair.object.id,
+		spaceId: pair.space.id,
+	}));
+
 	// Initial countdown: random in [1, 5]
 	const initialCountdown = 1 + Math.floor(rng() * 5);
 	const complicationSchedule: ComplicationSchedule = {
@@ -91,6 +104,7 @@ export function startGame(
 		contentPacksA: [],
 		contentPacksB: [],
 		activePackId: "A",
+		objectives,
 	};
 }
 
@@ -433,6 +447,7 @@ export function createGame(
 		contentPacksA: contentPacks,
 		contentPacksB: contentPacksB,
 		activePackId: "A",
+		objectives: [],
 		// Stash contentPacks for startPhase lookup
 		_contentPacks: contentPacks,
 	} as GameState & { _contentPacks: ContentPack[] };
@@ -550,6 +565,16 @@ export function startPhase(
 		aiStarts: personaSpatial,
 	};
 
+	// Build one CarryObjective per objective pair (matches old content-pack win behavior).
+	const objectives = contentPack.objectivePairs.map((pair, i) => ({
+		id: `obj-${i}`,
+		kind: "carry" as const,
+		description: `Bring the ${pair.object.name} to the ${pair.space.name}`,
+		satisfactionState: "pending" as const,
+		objectId: pair.object.id,
+		spaceId: pair.space.id,
+	}));
+
 	// Initial countdown: random in [1, 5]
 	const initialCountdown = 1 + Math.floor(rng() * 5);
 
@@ -574,6 +599,7 @@ export function startPhase(
 		contentPacksA: contentPacks,
 		contentPacksB: [],
 		activePackId: "A",
+		objectives,
 		// Carry forward for chaining / restore paths
 		_contentPacks: contentPacks,
 		// Carry goals for prompt-builder compat

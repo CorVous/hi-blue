@@ -10,6 +10,7 @@ import {
 	deductBudget,
 	getActivePhase,
 	startPhase,
+	updateActivePhase,
 } from "../engine";
 import type {
 	AiPersona,
@@ -17,6 +18,7 @@ import type {
 	ContentPack,
 	PhaseConfig,
 	ToolCall,
+	UseItemObjective,
 	WorldEntity,
 } from "../types";
 
@@ -1246,5 +1248,149 @@ describe("dispatchAiTurn", () => {
 			kind: "action-failure",
 			tool: "put_down",
 		});
+	});
+});
+
+// ── UseItemObjective — executeToolCall flips satisfactionState ────────────────
+
+describe("executeToolCall — UseItemObjective", () => {
+	/**
+	 * Build a game where red holds 'key' (an interesting_object) and there is
+	 * one pending UseItemObjective targeting 'key'. Uses the standard makeGame()
+	 * setup (key is held by red at start).
+	 */
+	function makeGameWithUseItemObjective() {
+		const game = makeGame();
+		const useItemObj: UseItemObjective = {
+			id: "obj-0",
+			kind: "use_item",
+			description: "Use the key",
+			satisfactionState: "pending",
+			itemId: "key",
+		};
+		return updateActivePhase(game, (phase) => ({
+			...phase,
+			objectives: [useItemObj],
+		}));
+	}
+
+	it("flips the UseItemObjective satisfactionState to 'satisfied' on use", () => {
+		const game = makeGameWithUseItemObjective();
+		const call: ToolCall = { name: "use", args: { item: "key" } };
+		const updated = executeToolCall(game, "red", call);
+		const obj = getActivePhase(updated).objectives[0];
+		expect(obj?.satisfactionState).toBe("satisfied");
+	});
+
+	it("flips the entity's satisfactionState to 'satisfied' on use", () => {
+		const game = makeGameWithUseItemObjective();
+		const call: ToolCall = { name: "use", args: { item: "key" } };
+		const updated = executeToolCall(game, "red", call);
+		const entity = getActivePhase(updated).world.entities.find(
+			(e) => e.id === "key",
+		);
+		expect(entity?.satisfactionState).toBe("satisfied");
+	});
+
+	it("does not flip if there is no matching pending UseItemObjective", () => {
+		const game = makeGame(); // no use_item objectives
+		const call: ToolCall = { name: "use", args: { item: "key" } };
+		const updated = executeToolCall(game, "red", call);
+		const entity = getActivePhase(updated).world.entities.find(
+			(e) => e.id === "key",
+		);
+		// satisfactionState should remain undefined (not set)
+		expect(entity?.satisfactionState).toBeUndefined();
+	});
+
+	it("does not flip an already-satisfied UseItemObjective", () => {
+		const game = makeGame();
+		const useItemObj: UseItemObjective = {
+			id: "obj-0",
+			kind: "use_item",
+			description: "Use the key",
+			satisfactionState: "satisfied", // already satisfied
+			itemId: "key",
+		};
+		const gameWithObj = updateActivePhase(game, (phase) => ({
+			...phase,
+			objectives: [useItemObj],
+		}));
+		const call: ToolCall = { name: "use", args: { item: "key" } };
+		const updated = executeToolCall(gameWithObj, "red", call);
+		// Objective was already satisfied; no pending obj found → should still be satisfied (unchanged)
+		const obj = getActivePhase(updated).objectives[0];
+		expect(obj?.satisfactionState).toBe("satisfied");
+	});
+});
+
+// ── examine — postExamineDescription preference ───────────────────────────────
+
+describe("dispatchAiTurn — examine postExamineDescription", () => {
+	/**
+	 * Build a game where 'key' has postExamineDescription set AND
+	 * satisfactionState = 'satisfied' (simulating a used item).
+	 */
+	function makeGameWithSatisfiedItem() {
+		const game = makeGame();
+		return updateActivePhase(game, (phase) => ({
+			...phase,
+			world: {
+				...phase.world,
+				entities: phase.world.entities.map((e) =>
+					e.id === "key"
+						? {
+								...e,
+								satisfactionState: "satisfied" as const,
+								postExamineDescription: "The key has already been used.",
+							}
+						: e,
+				),
+			},
+		}));
+	}
+
+	it("returns postExamineDescription when entity satisfactionState is 'satisfied'", () => {
+		const game = makeGameWithSatisfiedItem();
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "examine", args: { item: "key" } },
+		};
+		const result = dispatchAiTurn(game, action);
+		expect(result.actorPrivateToolResult?.description).toBe(
+			"The key has already been used.",
+		);
+	});
+
+	it("falls back to examineDescription when satisfactionState is not 'satisfied'", () => {
+		const game = makeGame(); // key has no satisfactionState set
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "examine", args: { item: "key" } },
+		};
+		const result = dispatchAiTurn(game, action);
+		// makeEntity sets examineDescription to "A key."
+		expect(result.actorPrivateToolResult?.description).toBe("A key.");
+	});
+
+	it("falls back to examineDescription when satisfactionState is 'satisfied' but no postExamineDescription", () => {
+		const game = makeGame();
+		const gameWithSatisfied = updateActivePhase(game, (phase) => ({
+			...phase,
+			world: {
+				...phase.world,
+				entities: phase.world.entities.map((e) =>
+					e.id === "key"
+						? { ...e, satisfactionState: "satisfied" as const }
+						: e,
+				),
+			},
+		}));
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "examine", args: { item: "key" } },
+		};
+		const result = dispatchAiTurn(gameWithSatisfied, action);
+		expect(result.actorPrivateToolResult?.description).toBe("A key.");
 	});
 });

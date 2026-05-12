@@ -28,7 +28,13 @@ import { buildAiContext } from "../prompt-builder";
 import { runRound } from "../round-coordinator";
 import type { RoundLLMProvider } from "../round-llm-provider";
 import { MockRoundLLMProvider } from "../round-llm-provider";
-import type { AiId, AiPersona, ContentPack, PhaseConfig } from "../types";
+import type {
+	AiId,
+	AiPersona,
+	ContentPack,
+	PhaseConfig,
+	UseItemObjective,
+} from "../types";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -1249,6 +1255,81 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 		const { nextState } = await runRound(game, "red", "hi", provider);
 		// Red's log should contain at least the player message from round 1
 		expect(nextState.conversationLogs.red?.length ?? 0).toBeGreaterThan(0);
+	});
+
+	it("gameEnded is true when a UseItemObjective is satisfied mid-round", async () => {
+		/**
+		 * Setup:
+		 *   - Pack has no objectivePairs (no carry objectives).
+		 *   - We inject a single pending UseItemObjective targeting 'key'.
+		 *   - key is held by red at start (via NO_PAIRS_PACK with red at (0,0)).
+		 *   - red's turn: use(key) → dispatcher flips objective satisfactionState.
+		 *   - After the round, checkWinCondition sees all objectives satisfied → gameEnded.
+		 *
+		 * We override the objectives on the started game to inject the UseItemObjective.
+		 * The key entity must be an interesting_object held by red (so use is valid).
+		 */
+		const packWithKey: ContentPack = {
+			phaseNumber: 1,
+			setting: "",
+			weather: "",
+			timeOfDay: "",
+			objectivePairs: [],
+			interestingObjects: [
+				{
+					id: "key",
+					kind: "interesting_object",
+					name: "key",
+					examineDescription: "A small brass key.",
+					holder: "red", // held by red from the start
+					useOutcome: "You turn the key. Click.",
+				},
+			],
+			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "north" },
+				green: { position: { row: 0, col: 1 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
+			},
+		};
+		const baseGame = startPhase(
+			createGame(TEST_PERSONAS, [packWithKey]),
+			TEST_PHASE_CONFIG,
+		);
+
+		// Inject the UseItemObjective (engine.ts doesn't generate these from
+		// interestingObjects, so we override objectives directly).
+		const useItemObj: UseItemObjective = {
+			id: "obj-0",
+			kind: "use_item",
+			description: "Use the key",
+			satisfactionState: "pending",
+			itemId: "key",
+		};
+		const game = updateActivePhase(baseGame, (phase) => ({
+			...phase,
+			objectives: [useItemObj],
+		}));
+
+		// red uses key; green and cyan pass.
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{ id: "tc1", name: "use", argumentsJson: '{"item":"key"}' },
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const { nextState, result } = await runRound(game, "red", "hi", provider);
+		expect(result.gameEnded).toBe(true);
+		expect(nextState.isComplete).toBe(true);
+		// The objective should be marked satisfied in the final state
+		const obj = nextState.objectives[0];
+		expect(obj?.satisfactionState).toBe("satisfied");
 	});
 });
 
