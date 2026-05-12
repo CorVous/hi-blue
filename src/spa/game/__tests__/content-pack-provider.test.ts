@@ -484,13 +484,39 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 	});
 });
 
-// ── examineMentionsUseTell (issue #335) ───────────────────────────────────────
+// ── examineMentionsUseTell helper (issues #334, #335) ─────────────────────────
 
 describe("examineMentionsUseTell", () => {
-	it("matches when the description contains an activation verb", () => {
+	// — verb-of-activation matches (#334, #335 share the same cue set) —
+	it("matches a verb-of-activation like 'press'", () => {
+		expect(
+			examineMentionsUseTell(
+				"A small brass dial mounted on a panel. It looks like it should be pressed to open the chamber.",
+			),
+		).toBe(true);
+	});
+
+	it("matches the bare verb 'use'", () => {
+		expect(
+			examineMentionsUseTell(
+				"A peculiar device. You wonder if it could be used.",
+			),
+		).toBe(true);
+	});
+
+	it("matches an activation verb in context", () => {
 		expect(
 			examineMentionsUseTell(
 				"A heavy stone slab carved with runes. Press the slab to activate the chamber.",
+			),
+		).toBe(true);
+	});
+
+	// — control / activator nouns —
+	it("matches a control noun like 'lever' even without an activation verb", () => {
+		expect(
+			examineMentionsUseTell(
+				"A heavy iron lever bolted to the wall, weathered by years of damp.",
 			),
 		).toBe(true);
 	});
@@ -501,14 +527,13 @@ describe("examineMentionsUseTell", () => {
 		);
 	});
 
-	it("is case-insensitive", () => {
-		expect(examineMentionsUseTell("PULL THE LEVER.")).toBe(true);
-	});
-
-	it("rejects a description with no use cue (whole-word match — 'fuse' must not match 'use')", () => {
-		expect(examineMentionsUseTell("A blown fuse hangs from the ceiling.")).toBe(
-			false,
-		);
+	// — negative cases —
+	it("rejects an examine with no verb or control-noun cue", () => {
+		expect(
+			examineMentionsUseTell(
+				"A small porcelain figurine, chipped along one edge but otherwise intact.",
+			),
+		).toBe(false);
 	});
 
 	it("rejects a generic descriptive examine with no activation cue", () => {
@@ -519,8 +544,183 @@ describe("examineMentionsUseTell", () => {
 		).toBe(false);
 	});
 
+	it("does not match 'use' inside a longer word like 'fuse'", () => {
+		expect(
+			examineMentionsUseTell(
+				"A scorched copper fuse, brittle and discoloured.",
+			),
+		).toBe(false);
+	});
+
+	it("rejects 'fuse' (whole-word match — 'fuse' must not match 'use')", () => {
+		expect(examineMentionsUseTell("A blown fuse hangs from the ceiling.")).toBe(
+			false,
+		);
+	});
+
 	it("returns false for the empty string", () => {
 		expect(examineMentionsUseTell("")).toBe(false);
+	});
+
+	it("is case-insensitive", () => {
+		expect(examineMentionsUseTell("PRESS the BUTTON to begin.")).toBe(true);
+		expect(examineMentionsUseTell("PULL THE LEVER.")).toBe(true);
+	});
+});
+
+// ── interesting_object Use-Item flavor field validation (issue #334) ──────────
+
+describe("validateContentPacks — interesting_object Use-Item flavor validation", () => {
+	const inputWithInteresting = {
+		phases: [
+			{
+				phaseNumber: 1 as const,
+				setting: "abandoned subway station",
+				theme: "mundane",
+				k: 0,
+				n: 1,
+				m: 0,
+			},
+		],
+	};
+
+	function buildInterestingResponse(overrides: Record<string, unknown>) {
+		const item: Record<string, unknown> = {
+			id: "item1",
+			kind: "interesting_object",
+			name: "Brass Switch",
+			examineDescription:
+				"A small brass switch mounted on a panel. It looks like it should be pressed.",
+			useOutcome: "The switch clicks under your finger but nothing changes.",
+			activationFlavor:
+				"The switch flips home with a hard mechanical thunk and a single amber light pulses on.",
+			postExamineDescription:
+				"The switch sits locked in its on position, the amber light steady behind it.",
+			postLookFlavor: "an amber pinpoint of light glows beside the panel",
+			...overrides,
+		};
+		return {
+			packs: [
+				{
+					phaseNumber: 1,
+					setting: "abandoned subway station",
+					objectivePairs: [],
+					interestingObjects: [item],
+					obstacles: [],
+					landmarks: {
+						north: {
+							shortName: "the signal tower",
+							horizonPhrase: "rises above the platform",
+						},
+						south: {
+							shortName: "the collapsed entrance",
+							horizonPhrase: "gapes like a wound in the dark",
+						},
+						east: {
+							shortName: "the rusted fan shaft",
+							horizonPhrase: "spins slowly in the stale air",
+						},
+						west: {
+							shortName: "the flooded tunnel",
+							horizonPhrase: "disappears into still black water",
+						},
+					},
+				},
+			],
+		};
+	}
+
+	it("accepts an interesting_object with all Use-Item flavor fields", () => {
+		const result = validateContentPacks(
+			buildInterestingResponse({}),
+			inputWithInteresting,
+		);
+		const item = result.packs[0]?.interestingObjects[0];
+		expect(item?.activationFlavor).toContain("mechanical thunk");
+		expect(item?.postExamineDescription).toContain("locked in its on position");
+		expect(item?.postLookFlavor).toContain("amber pinpoint");
+	});
+
+	it("rejects an examineDescription with no verb-of-activation or control-noun cue", () => {
+		expect(() =>
+			validateContentPacks(
+				buildInterestingResponse({
+					examineDescription:
+						"A small porcelain figurine, chipped along one edge but otherwise intact.",
+				}),
+				inputWithInteresting,
+			),
+		).toThrow(/verb-of-activation cue|control noun/);
+	});
+
+	it("rejects a missing activationFlavor", () => {
+		expect(() =>
+			validateContentPacks(
+				buildInterestingResponse({ activationFlavor: undefined }),
+				inputWithInteresting,
+			),
+		).toThrow(/activationFlavor/);
+	});
+
+	it("rejects an empty activationFlavor", () => {
+		expect(() =>
+			validateContentPacks(
+				buildInterestingResponse({ activationFlavor: "" }),
+				inputWithInteresting,
+			),
+		).toThrow(/activationFlavor/);
+	});
+
+	it("rejects an activationFlavor that contains {actor}", () => {
+		expect(() =>
+			validateContentPacks(
+				buildInterestingResponse({
+					activationFlavor: "{actor} flips the switch home.",
+				}),
+				inputWithInteresting,
+			),
+		).toThrow(/activationFlavor/);
+	});
+
+	it("rejects a missing postExamineDescription", () => {
+		expect(() =>
+			validateContentPacks(
+				buildInterestingResponse({ postExamineDescription: undefined }),
+				inputWithInteresting,
+			),
+		).toThrow(/postExamineDescription/);
+	});
+
+	it("rejects a postExamineDescription that contains {actor}", () => {
+		expect(() =>
+			validateContentPacks(
+				buildInterestingResponse({
+					postExamineDescription: "{actor} sees the switch locked on.",
+				}),
+				inputWithInteresting,
+			),
+		).toThrow(/postExamineDescription/);
+	});
+
+	it("rejects a postLookFlavor that contains {actor}", () => {
+		expect(() =>
+			validateContentPacks(
+				buildInterestingResponse({
+					postLookFlavor: "{actor} glances at the amber light",
+				}),
+				inputWithInteresting,
+			),
+		).toThrow(/postLookFlavor/);
+	});
+
+	it("accepts an interesting_object with postLookFlavor omitted (optional)", () => {
+		const result = validateContentPacks(
+			buildInterestingResponse({ postLookFlavor: undefined }),
+			inputWithInteresting,
+		);
+		const item = result.packs[0]?.interestingObjects[0];
+		expect(item?.activationFlavor).toBeDefined();
+		expect(item?.postLookFlavor).toBeUndefined();
 	});
 });
 

@@ -53,18 +53,26 @@ export interface WorldEntity {
 	postExamineDescription?: string;
 	/** Alternate look flavor shown after satisfactionState flips to "satisfied". */
 	postLookFlavor?: string;
+	/**
+	 * 1-sentence world-meaningful flavor returned to the actor (and to witnesses)
+	 * as their `use` tool result on the call that satisfies a `UseSpaceObjective`
+	 * (when entity.kind === "objective_space") or a `UseItemObjective` (when
+	 * entity.kind === "interesting_object"). Does NOT contain "{actor}" —
+	 * third-person, world-meaningful description of the activation event.
+	 *
+	 * For objective_space (#335): use on a space only ever fires on the satisfying
+	 * call (post-satisfaction `useAvailable` is false), so this is the actor's
+	 * moment-of-satisfaction line.
+	 *
+	 * For interesting_object (#334): pre-satisfaction use that flips the objective
+	 * pending → satisfied fires this flavor; subsequent (post-satisfaction) `use`
+	 * calls return `useOutcome` instead.
+	 */
+	activationFlavor?: string;
 	/** For objective_space: whether the `use` action is available on this space. Defaults to true when omitted. Set to false after a UseSpaceObjective is satisfied. */
 	useAvailable?: boolean;
 	/** For objective_space: flavor string emitted as a Witnessed event when a UseSpaceObjective is satisfied. */
 	satisfactionFlavor?: string;
-	/**
-	 * For objective_space: 1-sentence world-meaningful flavor returned to the actor
-	 * as their `use` tool result on the satisfying call. Does NOT contain {actor}.
-	 * Because `use` on an objective_space only ever fires on the satisfying call
-	 * (post-satisfaction `useAvailable` is false), this is the actor's
-	 * moment-of-satisfaction line.
-	 */
-	activationFlavor?: string;
 }
 
 export interface WorldState {
