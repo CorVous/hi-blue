@@ -3380,9 +3380,10 @@ describe("complicationConfig", () => {
 		const game = createGame(TEST_PERSONAS, [pack]);
 		const started = startPhase(game, TEST_PHASE_CONFIG);
 
-		// rng returns 0.99 — if obstacleShift were in the pool (length 2), this
-		// would map to index 1 (obstacleShift). With it excluded, only
-		// weatherChange (length 1) is available and index 0 is drawn.
+		// rng returns 0 — always draws the first available complication (weatherChange,
+		// index 0). If obstacleShift were not excluded it would still be in the pool
+		// but rng=0 draws index 0 regardless; the important assertion is the
+		// absence of witnessed-obstacle-shift entries below.
 		const { nextState } = await runRound(
 			started,
 			"red",
@@ -3395,7 +3396,7 @@ describe("complicationConfig", () => {
 			undefined,
 			undefined,
 			undefined,
-			{ rng: () => 0.99, triggerRound: 1 },
+			{ rng: () => 0, triggerRound: 1 },
 		);
 
 		const phase = getActivePhase(nextState);

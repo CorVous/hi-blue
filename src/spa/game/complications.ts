@@ -14,7 +14,10 @@
  */
 
 import { WEATHER_POOL } from "../../content/index.js";
-import { DISABLABLE_TOOLS, validObstacleShiftTuples } from "./complication-engine.js";
+import {
+	DISABLABLE_TOOLS,
+	validObstacleShiftTuples,
+} from "./complication-engine.js";
 import { projectCone } from "./cone-projector.js";
 import {
 	appendBroadcast,
