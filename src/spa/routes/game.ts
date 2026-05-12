@@ -642,9 +642,13 @@ export function renderGame(
 				// Defensive: if the active session is no longer empty, another
 				// navigation invalidated the bootstrap mid-flight. Abort rather
 				// than overwriting state under the wrong session id.
-				if (loadActiveSession().kind !== "none") {
+				const midFlightCheck = loadActiveSession();
+				if (midFlightCheck.kind !== "none") {
 					clearPendingBootstrap();
-					location.hash = "#/sessions";
+					// If a concurrent save landed a valid session, send the player to
+					// the game rather than the sessions picker.
+					location.hash =
+						midFlightCheck.kind === "ok" ? "#/game" : "#/sessions";
 					return;
 				}
 
@@ -706,19 +710,22 @@ export function renderGame(
 		if (pendingBootstrap) {
 			// Only use the bootstrap when the active session is genuinely empty
 			// (just minted, no data yet). loadActiveSession() returns { kind: "none" }
-			// for both a null pointer and a minted-but-unsaved session, which are
-			// the only states where it's safe to build and save a new game.
-			// A stale session (version-mismatch / broken) must redirect to the
-			// sessions picker instead — not start generating content that would
-			// be saved under the old session id.
+			// for a minted-but-unsaved session, which is the only state where it's
+			// safe to build and save a new game. A stale or already-populated session
+			// must be handled without writing new content under the existing id.
 			const loadCheck = loadActiveSession();
 			if (loadCheck.kind === "none") {
 				return renderBootstrapLoadingFlow(pendingBootstrap);
 			}
 			clearPendingBootstrap();
-			const reason =
-				loadCheck.kind === "version-mismatch" ? "version-mismatch" : "broken";
-			location.hash = `#/sessions?reason=${reason}`;
+			if (loadCheck.kind === "ok") {
+				// Session is already populated (e.g. restored concurrently); play it.
+				location.hash = "#/game";
+			} else {
+				const reason =
+					loadCheck.kind === "version-mismatch" ? "version-mismatch" : "broken";
+				location.hash = `#/sessions?reason=${reason}`;
+			}
 			return Promise.resolve();
 		}
 
