@@ -403,6 +403,43 @@ describe("serializeSession / deserializeSession", () => {
 		}
 	});
 
+	it("round-trips objective_space activationFlavor (issue #335)", () => {
+		const game = makeFreshGame();
+		const space: WorldEntity = {
+			id: "shrine",
+			kind: "objective_space",
+			name: "Shrine",
+			examineDescription: "A small shrine. Press the basin to activate it.",
+			holder: { row: 4, col: 4 },
+			useAvailable: true,
+			activationFlavor: "The basin floods with light beneath your palm.",
+			satisfactionFlavor: "The shrine pulses with light.",
+			postExamineDescription: "The shrine has been activated.",
+			postLookFlavor: "The shrine glows steadily.",
+		};
+		const modified: GameState = {
+			...game,
+			world: { entities: [...game.world.entities, space] },
+		};
+		const files = serializeSession(modified, NOW, CREATED_AT);
+		const result = deserializeSession(files);
+		expect(result.kind).toBe("ok");
+		if (result.kind === "ok") {
+			const restored = result.state.world.entities.find(
+				(e) => e.id === "shrine",
+			);
+			expect(restored?.activationFlavor).toBe(
+				"The basin floods with light beneath your palm.",
+			);
+			expect(restored?.satisfactionFlavor).toBe(
+				"The shrine pulses with light.",
+			);
+			expect(restored?.postExamineDescription).toBe(
+				"The shrine has been activated.",
+			);
+		}
+	});
+
 	it("round-trips obstacle entities", () => {
 		const game = makeFreshGame();
 		const obstacles: WorldEntity[] = [

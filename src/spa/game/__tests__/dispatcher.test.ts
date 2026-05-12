@@ -1640,3 +1640,127 @@ describe("dispatchAiTurn — use on objective_space witnesses satisfactionFlavor
 		}
 	});
 });
+
+// ── UseSpace: actor receives activationFlavor on satisfying call (issue #335) ─
+
+describe("dispatchAiTurn — use on objective_space surfaces activationFlavor to actor", () => {
+	it("uses activationFlavor as the tool_success description for the actor on the satisfying call", () => {
+		const game = makeGameWithSpaceObjective(
+			{ row: 2, col: 2 },
+			"south",
+			{ row: 3, col: 2 },
+			{
+				activationFlavor:
+					"The pedestal's runes ignite and a slow warmth fills the alcove.",
+			},
+		);
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "use", args: { item: "shrine" } },
+		};
+		const result = dispatchAiTurn(game, action);
+		expect(result.rejected).toBe(false);
+		const successRecord = result.records.find((r) => r.kind === "tool_success");
+		expect(successRecord?.description).toBe(
+			"The pedestal's runes ignite and a slow warmth fills the alcove.",
+		);
+	});
+
+	it("falls back to useOutcome when activationFlavor is absent (backward compat with pre-#335 saves)", () => {
+		// Default fixture has useOutcome but no activationFlavor — exercises the
+		// fallback branch.
+		const game = makeGameWithSpaceObjective({ row: 2, col: 2 }, "south", {
+			row: 3,
+			col: 2,
+		});
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "use", args: { item: "shrine" } },
+		};
+		const result = dispatchAiTurn(game, action);
+		expect(result.rejected).toBe(false);
+		const successRecord = result.records.find((r) => r.kind === "tool_success");
+		expect(successRecord?.description).toBe(
+			"A warm glow emanates from the shrine.",
+		);
+	});
+
+	it("still emits satisfactionFlavor to witnesses when activationFlavor is set (no regression)", () => {
+		// Witness setup mirrors the existing satisfactionFlavor test.
+		const space: WorldEntity = {
+			id: "shrine",
+			kind: "objective_space",
+			name: "Shrine",
+			examineDescription:
+				"A shrine. Press your hand to the basin to activate it.",
+			holder: { row: 3, col: 2 },
+			useAvailable: true,
+			activationFlavor: "The basin floods with light beneath your palm.",
+			satisfactionFlavor: "The shrine pulses with light.",
+		};
+		const obj: WorldEntity = {
+			id: "relic",
+			kind: "objective_object",
+			name: "Relic",
+			examineDescription: "A relic.",
+			holder: { row: 0, col: 0 },
+			pairsWithSpaceId: "shrine",
+		};
+		const spaceObjective: UseSpaceObjective = {
+			id: "obj-0",
+			kind: "use_space",
+			description: "Use the Shrine",
+			satisfactionState: "pending",
+			spaceId: "shrine",
+		};
+		const pack: ContentPack = {
+			phaseNumber: 1,
+			setting: "test",
+			weather: "",
+			timeOfDay: "",
+			objectivePairs: [{ object: obj, space }],
+			interestingObjects: [],
+			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
+			aiStarts: {
+				red: { position: { row: 2, col: 2 }, facing: "south" },
+				green: { position: { row: 2, col: 0 }, facing: "east" },
+				cyan: { position: { row: 4, col: 4 }, facing: "north" },
+			},
+		};
+		const config: PhaseConfig = {
+			phaseNumber: 1,
+			kRange: [1, 1],
+			nRange: [0, 0],
+			mRange: [0, 0],
+			aiGoalPool: ["g1"],
+			budgetPerAi: 5,
+		};
+		const game = createGame(TEST_PERSONAS, [pack]);
+		const started = startPhase(game, config, () => 0);
+		const withObjective = { ...started, objectives: [spaceObjective] };
+
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "use", args: { item: "shrine" } },
+		};
+		const result = dispatchAiTurn(withObjective, action);
+		expect(result.rejected).toBe(false);
+
+		// Actor's tool_success carries activationFlavor.
+		const successRecord = result.records.find((r) => r.kind === "tool_success");
+		expect(successRecord?.description).toBe(
+			"The basin floods with light beneath your palm.",
+		);
+
+		// Witness still receives satisfactionFlavor on the use witnessed-event.
+		const greenLog = result.game.conversationLogs.green ?? [];
+		const useEvent = greenLog.find(
+			(e) => e.kind === "witnessed-event" && e.actionKind === "use",
+		);
+		expect(useEvent).toBeDefined();
+		if (useEvent?.kind === "witnessed-event") {
+			expect(useEvent.useOutcome).toBe("The shrine pulses with light.");
+		}
+	});
+});
