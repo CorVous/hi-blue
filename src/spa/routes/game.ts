@@ -7,10 +7,14 @@ import {
 	renderTopInfoLeft,
 	topInfoStatus,
 } from "../bbs-chrome.js";
-import { buildSessionFromAssets } from "../game/bootstrap.js";
+import {
+	buildSameDaemonsSession,
+	buildSessionFromAssets,
+} from "../game/bootstrap.js";
 import { BrowserLLMProvider } from "../game/browser-llm-provider.js";
 import { isPlayerChatLockedOut } from "../game/complication-engine.js";
 import { deriveComposerState } from "../game/composer-reducer.js";
+import { appendBroadcast } from "../game/engine.js";
 import { GameSession } from "../game/game-session.js";
 import {
 	applyAddresseeChange,
@@ -29,9 +33,11 @@ import type { AiId, AiPersona } from "../game/types";
 import { AI_TYPING_SPEED, TOKEN_PACE_MS } from "../game/typing-rhythm.js";
 import { CapHitError } from "../llm-client.js";
 import {
+	archiveSession,
 	clearActiveSession,
 	getActiveSessionId,
 	loadActiveSession,
+	mintAndActivateNewSession,
 	saveActiveSession,
 } from "../persistence/session-storage.js";
 
@@ -1332,8 +1338,12 @@ export function renderGame(
 						sendBtn.disabled = true;
 						promptInput.disabled = true;
 
-						// Clear persisted game state on game-end
-						clearActiveSession();
+						// Capture state for choice handlers, then null out session so
+						// any subsequent form submits are no-ops (form checks `if (!session) return`).
+						const endedSessionId = getActiveSessionId();
+						const endedState = session?.getState();
+						session = null;
+						cachedSessionId = null;
 
 						// Hide game UI
 						const panelsEl = doc.querySelector<HTMLElement>("#panels");
@@ -1350,15 +1360,129 @@ export function renderGame(
 						// Show endgame screen
 						if (endgameEl) endgameEl.removeAttribute("hidden");
 
+						// Wire end-game choice buttons
+						const newDaemonsBtn = doc.querySelector<HTMLButtonElement>(
+							"#endgame-new-daemons-btn",
+						);
+						const sameDaemonsBtn = doc.querySelector<HTMLButtonElement>(
+							"#endgame-same-daemons-btn",
+						);
+						const continueBtn = doc.querySelector<HTMLButtonElement>(
+							"#endgame-continue-btn",
+						);
+						const choiceStatus = doc.querySelector<HTMLElement>(
+							"#endgame-choice-status",
+						);
+
+						// Show Continue only when an OpenRouter key is present
+						if (
+							continueBtn &&
+							localStorage.getItem("openrouter_key") !== null
+						) {
+							continueBtn.removeAttribute("hidden");
+						}
+
+						const disableChoiceButtons = () => {
+							if (newDaemonsBtn) newDaemonsBtn.disabled = true;
+							if (sameDaemonsBtn) sameDaemonsBtn.disabled = true;
+							if (continueBtn) continueBtn.disabled = true;
+						};
+
+						if (newDaemonsBtn) {
+							newDaemonsBtn.addEventListener("click", () => {
+								disableChoiceButtons();
+								if (choiceStatus) choiceStatus.textContent = "archiving…";
+								(endedSessionId
+									? archiveSession(endedSessionId)
+									: Promise.resolve()
+								)
+									.then(() => {
+										clearActiveSession();
+										session = null;
+										cachedSessionId = null;
+										location.hash = "#/start";
+									})
+									.catch(() => {
+										clearActiveSession();
+										session = null;
+										cachedSessionId = null;
+										location.hash = "#/start";
+									});
+							});
+						}
+
+						if (sameDaemonsBtn) {
+							sameDaemonsBtn.addEventListener("click", () => {
+								disableChoiceButtons();
+								if (!endedState) {
+									location.hash = "#/start";
+									return;
+								}
+								if (choiceStatus) choiceStatus.textContent = "archiving…";
+								(endedSessionId
+									? archiveSession(endedSessionId)
+									: Promise.resolve()
+								)
+									.then(() => {
+										if (choiceStatus)
+											choiceStatus.textContent = "spinning up a new room…";
+										return buildSameDaemonsSession(endedState.personas);
+									})
+									.then((newSess) => {
+										clearActiveSession();
+										mintAndActivateNewSession();
+										saveActiveSession(newSess.getState());
+										session = null;
+										cachedSessionId = null;
+										gameEnded = false;
+										location.hash = `#/game?${Date.now()}`;
+									})
+									.catch(() => {
+										clearActiveSession();
+										session = null;
+										cachedSessionId = null;
+										location.hash = "#/start";
+									});
+							});
+						}
+
+						if (continueBtn) {
+							continueBtn.addEventListener("click", () => {
+								disableChoiceButtons();
+								if (!endedState) {
+									location.hash = "#/start";
+									return;
+								}
+								if (choiceStatus)
+									choiceStatus.textContent = "spinning up a new room…";
+								buildSameDaemonsSession(endedState.personas)
+									.then((newSess) => {
+										let newState = newSess.getState();
+										newState = appendBroadcast(
+											newState,
+											"The sysadmin has created a new room.",
+										);
+										saveActiveSession(newState); // same session ID (active pointer unchanged)
+										session = null;
+										cachedSessionId = null;
+										gameEnded = false;
+										location.hash = `#/game?${Date.now()}`;
+									})
+									.catch(() => {
+										session = null;
+										cachedSessionId = null;
+										location.hash = "#/start";
+									});
+							});
+						}
+
 						// Serialize and stash save payload
 						const downloadBtn =
 							doc.querySelector<HTMLButtonElement>("#download-ais-btn");
 						const downloadStatusEl =
 							doc.querySelector<HTMLElement>("#download-status");
-						if (downloadBtn && session) {
-							const savePayload = JSON.stringify(
-								serializeGameSave(session.getState()),
-							);
+						if (downloadBtn && endedState) {
+							const savePayload = JSON.stringify(serializeGameSave(endedState));
 							downloadBtn.dataset.savePayload = savePayload;
 
 							downloadBtn.addEventListener("click", () => {

@@ -6,7 +6,8 @@ import { goToGame } from "./helpers";
  *
  * Proves that when game_ended fires the SPA:
  *   - disables #send and #prompt
- *   - clears localStorage (clearGame() ran)
+ *   - shows #endgame screen with choice buttons
+ *   - keeps active-session pointer in localStorage (cleared only on user choice)
  *   - keeps the URL stable (no navigation)
  *   - emits no pageerror events
  *
@@ -21,9 +22,16 @@ import { goToGame } from "./helpers";
  * Note (post-#107): Send no longer re-enables after a round because the prompt
  * is cleared on submit and the *mention parser sees an empty string. We wait
  * on `#phase-banner` (set by the encoder's `phase_advanced` event) instead.
+ *
+ * Note (post-#307): clearActiveSession() is no longer called immediately on
+ * game_ended — the session pointer stays until the user selects a choice
+ * (New Daemons / Same Daemons / Continue). The active-session key is therefore
+ * non-null immediately after game_ended fires.
  */
 
-test("game_ended disables composer and clears storage", async ({ page }) => {
+test("game_ended disables composer and shows endgame choices", async ({
+	page,
+}) => {
 	const pageErrors: Error[] = [];
 	page.on("pageerror", (err) => pageErrors.push(err));
 
@@ -51,7 +59,7 @@ test("game_ended disables composer and clears storage", async ({ page }) => {
 	// game_ended fires → #send permanently disabled.
 	await expect(page.locator("#send")).toBeDisabled({ timeout: 30_000 });
 
-	// 6. Assert all acceptance criteria.
+	// Assert all acceptance criteria.
 
 	// #send disabled
 	await expect(page.locator("#send")).toBeDisabled();
@@ -59,13 +67,20 @@ test("game_ended disables composer and clears storage", async ({ page }) => {
 	// #prompt disabled
 	await expect(page.locator("#prompt")).toBeDisabled();
 
-	// localStorage cleared (clearGame() ran inside game_ended handler).
-	// Post-#172: the active-session pointer key is the canonical "something saved"
-	// indicator — it is removed by clearActiveSession() on game_ended.
+	// #endgame screen visible with choice buttons
+	await expect(page.locator("#endgame")).toBeVisible();
+	await expect(page.locator("#endgame-new-daemons-btn")).toBeVisible();
+	await expect(page.locator("#endgame-same-daemons-btn")).toBeVisible();
+
+	// Post-#307: active-session pointer is retained (not cleared immediately).
+	// clearActiveSession() runs only when the user picks a choice.
 	const stored = await page.evaluate(() =>
 		localStorage.getItem("hi-blue:active-session"),
 	);
-	expect(stored, "localStorage must be null after game_ended").toBeNull();
+	expect(
+		stored,
+		"active-session pointer must be kept after game_ended",
+	).not.toBeNull();
 
 	// URL stable — no navigation or hash change occurred
 	expect(page.url(), "URL must not change after game_ended").toBe(urlBefore);

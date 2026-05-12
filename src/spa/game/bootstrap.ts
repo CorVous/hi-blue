@@ -119,6 +119,30 @@ export async function generateNewGameAssets(
 }
 
 /**
+ * Build a new GameSession reusing existing personas but generating fresh
+ * content packs. Used by the end-game "Same Daemons, New Room" and
+ * "Continue" choices (issue #307).
+ */
+export async function buildSameDaemonsSession(
+	personas: Record<AiId, AiPersona>,
+	opts?: { rng?: () => number },
+): Promise<GameSession> {
+	const rng = opts?.rng ?? Math.random;
+	const packLLM = new BrowserContentPackProvider();
+	const { packsA, packsB } = await generateDualContentPacks(
+		rng,
+		SETTING_POOL,
+		[PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG],
+		packLLM,
+		Object.keys(personas),
+	);
+	return buildSessionFromAssets(
+		{ personas, contentPacksA: packsA, contentPacksB: packsB },
+		opts,
+	);
+}
+
+/**
  * Construct a GameSession from pre-generated assets.
  *
  * `opts.rng`, when provided, is forwarded to the GameSession constructor
