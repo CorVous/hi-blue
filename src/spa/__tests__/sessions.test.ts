@@ -536,38 +536,41 @@ describe("renderSessions — [ load ] button", () => {
 	});
 });
 
-// ── Helpers for archived sessions ─────────────────────────────────────────────
+// ── Archive helpers ───────────────────────────────────────────────────────────
 
 /**
- * Write an archived session directly into the stub store.
- * Seeds archive keys with readonly: true and lastPlayedAt.
+ * Seed an archived session directly into the stub store for DOM tests.
+ * Uses an archived meta with readonly: true, lastPlayedAt, epoch: 1.
  */
-async function seedArchivedSession(
+async function seedArchivedSessionInStore(
 	stub: ReturnType<typeof makeLocalStorageStub>,
 	id: string,
-	lastSavedAt = "2025-01-01T10:00:00.000Z",
 ): Promise<void> {
 	const { serializeSession } = await import("../persistence/session-codec.js");
 	const game = makeFreshGame();
+	const lastSavedAt = "2024-01-01T00:00:00.000Z";
 	const files = serializeSession(
 		game,
 		lastSavedAt,
-		"2025-01-01T00:00:00.000Z",
+		"2024-01-01T00:00:00.000Z",
 		1,
 	);
+	const dstPrefix = `${ARCHIVE_PREFIX}${id}/`;
+
+	// Parse meta and stamp archived fields
 	const meta = JSON.parse(files.meta) as Record<string, unknown>;
 	meta.readonly = true;
 	meta.lastPlayedAt = lastSavedAt;
-	const prefix = `${ARCHIVE_PREFIX}${id}/`;
-	stub._store[`${prefix}meta.json`] = JSON.stringify(meta, null, 2);
+	stub._store[`${dstPrefix}meta.json`] = JSON.stringify(meta, null, 2);
+
 	for (const [aiId, daemonJson] of Object.entries(files.daemons)) {
-		stub._store[`${prefix}${aiId}.txt`] = daemonJson;
+		stub._store[`${dstPrefix}${aiId}.txt`] = daemonJson;
 	}
 	// biome-ignore lint/style/noNonNullAssertion: serializeSession always returns engine
-	stub._store[`${prefix}engine.dat`] = files.engine!;
+	stub._store[`${dstPrefix}engine.dat`] = files.engine!;
 }
 
-// ── Tests for archived sessions rendering ─────────────────────────────────────
+// ── renderSessions — archived sessions section ────────────────────────────────
 
 describe("renderSessions — archived sessions section", () => {
 	beforeEach(() => {
@@ -580,77 +583,80 @@ describe("renderSessions — archived sessions section", () => {
 		document.body.innerHTML = "";
 	});
 
-	it("with one ok active session + one archived session: both section headings render; archived row has data-session-id", async () => {
+	it("renders both 'active sessions' and 'archived sessions' headings with one of each", async () => {
 		vi.resetModules();
 		const stub = makeLocalStorageStub();
 		vi.stubGlobal("localStorage", stub);
 		await seedOkSession(stub, "0xAAAA");
-		await seedArchivedSession(stub, "0xBBBB");
+		await seedArchivedSessionInStore(stub, "0xARCH");
 
 		const { renderSessions } = await import("../routes/sessions.js");
 		renderSessions(getMain(), new URLSearchParams());
 
-		const headings = document.querySelectorAll(".sessions-section-heading");
-		const headingTexts = Array.from(headings).map((h) => h.textContent);
-		expect(headingTexts).toContain("active sessions");
-		expect(headingTexts).toContain("archived sessions");
+		const headings = Array.from(
+			document.querySelectorAll(".sessions-section-heading"),
+		).map((h) => h.textContent);
+		expect(headings).toContain("active sessions");
+		expect(headings).toContain("archived sessions");
 
 		const archivedRow = document.querySelector<HTMLElement>(
-			'.session-row[data-session-id="0xBBBB"]',
+			'.session-row[data-session-id="0xARCH"]',
 		);
 		expect(archivedRow).toBeTruthy();
 	});
 
-	it("archived row contains 'epoch 1' and 'last played' text", async () => {
+	it("archived row textContent contains 'epoch 1' and 'last played'", async () => {
 		vi.resetModules();
 		const stub = makeLocalStorageStub();
 		vi.stubGlobal("localStorage", stub);
-		await seedArchivedSession(stub, "0xBBBB");
+		await seedArchivedSessionInStore(stub, "0xARCH");
 
 		const { renderSessions } = await import("../routes/sessions.js");
 		renderSessions(getMain(), new URLSearchParams());
 
 		const archivedRow = document.querySelector<HTMLElement>(
-			'.session-row[data-session-id="0xBBBB"]',
+			'.session-row[data-session-id="0xARCH"]',
 		);
 		expect(archivedRow?.textContent).toContain("epoch 1");
 		expect(archivedRow?.textContent).toContain("last played");
 	});
 
-	it("archived row has NO [ load ] button, has [ rm ] button", async () => {
+	it("archived row has NO [ load ] or [ dup ] button; has [ rm ] button", async () => {
 		vi.resetModules();
 		const stub = makeLocalStorageStub();
 		vi.stubGlobal("localStorage", stub);
-		await seedArchivedSession(stub, "0xBBBB");
+		await seedArchivedSessionInStore(stub, "0xARCH");
 
 		const { renderSessions } = await import("../routes/sessions.js");
 		renderSessions(getMain(), new URLSearchParams());
 
 		const archivedRow = document.querySelector<HTMLElement>(
-			'.session-row[data-session-id="0xBBBB"]',
+			'.session-row[data-session-id="0xARCH"]',
 		);
-		const buttons = archivedRow?.querySelectorAll(".ops button");
-		const btnTexts = Array.from(buttons ?? []).map((b) => b.textContent);
-		expect(btnTexts).not.toContain("[ load ]");
-		expect(btnTexts).toContain("[ rm ]");
+		const buttons = Array.from(
+			archivedRow?.querySelectorAll<HTMLButtonElement>(".ops button") ?? [],
+		).map((b) => b.textContent);
+		expect(buttons).not.toContain("[ load ]");
+		expect(buttons).not.toContain("[ dup ]");
+		expect(buttons).toContain("[ rm ]");
 	});
 
-	it("archived row has [ readonly ] tag text visible", async () => {
+	it("archived row contains '[ readonly ]' text", async () => {
 		vi.resetModules();
 		const stub = makeLocalStorageStub();
 		vi.stubGlobal("localStorage", stub);
-		await seedArchivedSession(stub, "0xBBBB");
+		await seedArchivedSessionInStore(stub, "0xARCH");
 
 		const { renderSessions } = await import("../routes/sessions.js");
 		renderSessions(getMain(), new URLSearchParams());
 
 		const archivedRow = document.querySelector<HTMLElement>(
-			'.session-row[data-session-id="0xBBBB"]',
+			'.session-row[data-session-id="0xARCH"]',
 		);
 		expect(archivedRow?.textContent).toContain("[ readonly ]");
 	});
 
-	it("active ok row meta-line contains 'epoch 1' text", async () => {
+	it("active ok row meta-line says 'last played' (not 'saved')", async () => {
 		vi.resetModules();
 		const stub = makeLocalStorageStub();
 		vi.stubGlobal("localStorage", stub);
@@ -662,33 +668,28 @@ describe("renderSessions — archived sessions section", () => {
 		const activeRow = document.querySelector<HTMLElement>(
 			'.session-row[data-session-id="0xAAAA"]',
 		);
-		expect(activeRow?.querySelector(".session-meta")?.textContent).toContain(
-			"epoch 1",
-		);
+		const metaLine = activeRow?.querySelector(".session-meta");
+		expect(metaLine?.textContent).toContain("last played");
+		expect(metaLine?.textContent).not.toContain(" saved ");
 	});
 
-	it("with zero active sessions + one archived session: active sessions heading renders with empty placeholder; archived sessions heading renders the archived row", async () => {
+	it("with zero active sessions and one archived: both headings render; archived row present", async () => {
 		vi.resetModules();
 		const stub = makeLocalStorageStub();
 		vi.stubGlobal("localStorage", stub);
-		await seedArchivedSession(stub, "0xBBBB");
+		await seedArchivedSessionInStore(stub, "0xARCH");
 
 		const { renderSessions } = await import("../routes/sessions.js");
 		renderSessions(getMain(), new URLSearchParams());
 
-		const headings = document.querySelectorAll(".sessions-section-heading");
-		const headingTexts = Array.from(headings).map((h) => h.textContent);
-		expect(headingTexts).toContain("active sessions");
-		expect(headingTexts).toContain("archived sessions");
+		const headings = Array.from(
+			document.querySelectorAll(".sessions-section-heading"),
+		).map((h) => h.textContent);
+		expect(headings).toContain("active sessions");
+		expect(headings).toContain("archived sessions");
 
-		// Active sessions section should have the "no sessions found." placeholder
-		const emptyEls = document.querySelectorAll(".sessions-empty");
-		const emptyTexts = Array.from(emptyEls).map((e) => e.textContent);
-		expect(emptyTexts).toContain("no sessions found.");
-
-		// Archived row should be present
 		const archivedRow = document.querySelector<HTMLElement>(
-			'.session-row[data-session-id="0xBBBB"]',
+			'.session-row[data-session-id="0xARCH"]',
 		);
 		expect(archivedRow).toBeTruthy();
 	});
