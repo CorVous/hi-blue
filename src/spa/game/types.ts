@@ -57,6 +57,14 @@ export interface WorldEntity {
 	useAvailable?: boolean;
 	/** For objective_space: flavor string emitted as a Witnessed event when a UseSpaceObjective is satisfied. */
 	satisfactionFlavor?: string;
+	/**
+	 * For objective_space: 1-sentence world-meaningful flavor returned to the actor
+	 * as their `use` tool result on the satisfying call. Does NOT contain {actor}.
+	 * Because `use` on an objective_space only ever fires on the satisfying call
+	 * (post-satisfaction `useAvailable` is false), this is the actor's
+	 * moment-of-satisfaction line.
+	 */
+	activationFlavor?: string;
 }
 
 export interface WorldState {

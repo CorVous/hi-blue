@@ -451,11 +451,14 @@ function describeToolCall(game: GameState, aiId: AiId, call: ToolCall): string {
 		case "give":
 			return `${name} gave the ${call.args.item} to ${game.personas[call.args.to as AiId]?.name ?? call.args.to}`;
 		case "use": {
-			// Check if the target is an objective_space — surface its useOutcome or satisfactionFlavor
+			// Check if the target is an objective_space — surface its activationFlavor
+			// (the actor's moment-of-satisfaction line) and fall back to useOutcome
+			// for backward compat with saves authored before #335.
 			const spaceTarget = game.world.entities.find(
 				(e) => e.id === call.args.item && e.kind === "objective_space",
 			);
 			if (spaceTarget) {
+				if (spaceTarget.activationFlavor) return spaceTarget.activationFlavor;
 				if (spaceTarget.useOutcome)
 					return spaceTarget.useOutcome.replace(/\{actor\}/g, "you");
 				return `${name} used the ${call.args.item}`;
