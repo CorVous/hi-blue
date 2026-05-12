@@ -9,6 +9,7 @@ import {
 } from "../bbs-chrome.js";
 import { buildSessionFromAssets } from "../game/bootstrap.js";
 import { BrowserLLMProvider } from "../game/browser-llm-provider.js";
+import { isPlayerChatLockedOut } from "../game/complication-engine.js";
 import { deriveComposerState } from "../game/composer-reducer.js";
 import { GameSession } from "../game/game-session.js";
 import {
@@ -148,10 +149,9 @@ function isDevHost(): boolean {
  * Only honoured when the SPA is served by `pnpm wrangler dev` (see
  * `isDevHost`). Silently inert in any other host.
  *
- * - `winImmediately=1`: not applicable in single-game loop (win is driven by
- *   checkWinCondition after each round). This affordance is a no-op in #295.
- * - `lockout=1`: arm a chat-lockout for `red`, 2 rounds, effective next round.
- *   Matches the legacy worker semantics from `src/proxy/_smoke.ts`.
+ * - `winImmediately=1`: wrap submitMessage so the next call ends the game with
+ *   outcome "win". Used by integration tests that need to drive the UI to
+ *   `game_ended` without satisfying objectives via tool calls.
  *
  * Returns the (possibly replaced) GameSession to use going forward.
  */
@@ -163,39 +163,27 @@ export function applyTestAffordances(
 	if (!isDevHost()) return s;
 
 	const wantsWin = searchParams.get("winImmediately") === "1";
-	const wantsLockout = searchParams.get("lockout") === "1";
 
-	if (!wantsWin && !wantsLockout) return s;
+	if (!wantsWin) return s;
 
 	const active = s;
 
-	if (wantsLockout) {
-		const currentRound = active.getState().round;
-		active.armChatLockout({
-			rng: () => 0,
-			lockoutTriggerRound: currentRound + 1,
-			lockoutDuration: 2,
-		});
-	}
-
-	if (wantsWin) {
-		// In the flat single-game model, wrap submitMessage so the next call ends
-		// the game (outcome: "win"). Used by integration tests that need to drive
-		// the UI to game_ended without satisfying objectives via tool calls.
-		const originalSubmit = active.submitMessage.bind(active);
-		active.submitMessage = async (...args) => {
-			const result = await originalSubmit(...args);
-			return {
-				...result,
-				result: { ...result.result, gameEnded: true, phaseEnded: false },
-				nextState: {
-					...result.nextState,
-					isComplete: true,
-					outcome: "win" as const,
-				},
-			};
+	// In the flat single-game model, wrap submitMessage so the next call ends
+	// the game (outcome: "win"). Used by integration tests that need to drive
+	// the UI to game_ended without satisfying objectives via tool calls.
+	const originalSubmit = active.submitMessage.bind(active);
+	active.submitMessage = async (...args) => {
+		const result = await originalSubmit(...args);
+		return {
+			...result,
+			result: { ...result.result, gameEnded: true, phaseEnded: false },
+			nextState: {
+				...result.nextState,
+				isComplete: true,
+				outcome: "win" as const,
+			},
 		};
-	}
+	};
 
 	return active;
 }
@@ -390,9 +378,9 @@ export function renderGame(
 	// step back on for prompt-tuning. Gated to wrangler-dev (see isDevHost).
 	//
 	// Merge hash-query-string params (from the router) with location.search
-	// params so flags like ?think=1, ?lockout=1, ?winImmediately=1 work whether
-	// they appear in the search string (e.g. "/?lockout=1") or after the hash
-	// (e.g. "/#/?lockout=1"). Hash params win on conflict.
+	// params so flags like ?think=1, ?winImmediately=1 work whether
+	// they appear in the search string (e.g. "/?winImmediately=1") or after the hash
+	// (e.g. "/#/?winImmediately=1"). Hash params win on conflict.
 	const effectiveParams = new URLSearchParams(location.search);
 	if (params) {
 		for (const [k, v] of params) effectiveParams.set(k, v);
@@ -797,9 +785,9 @@ export function renderGame(
 	// Synchronous post-init: runs for both the restore path AND the bootstrap-
 	// recursive path (which already set session = built before re-entering).
 	if (session !== null) {
-		// Apply SPA-side test affordances from location.search (e.g. ?winImmediately=1
-		// or ?lockout=1). These are gated inside applyTestAffordances to only fire
-		// when __WORKER_BASE_URL__ === "http://localhost:8787" (local dev).
+		// Apply SPA-side test affordances from location.search (e.g. ?winImmediately=1).
+		// These are gated inside applyTestAffordances to only fire when
+		// __WORKER_BASE_URL__ === "http://localhost:8787" (local dev).
 		// Note: we use location.search (not the hash params) because these flags are
 		// intended to be set on the page URL itself, matching the legacy worker pattern.
 		session = applyTestAffordances(session, effectiveParams);
@@ -810,11 +798,11 @@ export function renderGame(
 		personaColors = buildPersonaColorMap(runtimePersonas);
 		personaDisplayNames = buildPersonaDisplayNameMap(runtimePersonas);
 
-		// Hydrate lockouts from the active phase's chatLockouts map so that
-		// a reload preserves the Send-disabled state for locked-out AIs.
+		// Hydrate lockouts from activeComplications so that a reload preserves
+		// the Send-disabled state for chat-locked-out AIs.
 		const activePhaseForLockouts = session.getState();
 		for (const aiId of Object.keys(runtimePersonas)) {
-			lockouts.set(aiId, activePhaseForLockouts.chatLockouts.has(aiId));
+			lockouts.set(aiId, isPlayerChatLockedOut(activePhaseForLockouts, aiId));
 		}
 
 		// Reset module-level gameEnded flag on fresh session init
@@ -1209,7 +1197,6 @@ export function renderGame(
 				addressed,
 				message,
 				provider,
-				undefined,
 				initiative,
 				undefined,
 				(aiId) => stripSpinner(aiId),

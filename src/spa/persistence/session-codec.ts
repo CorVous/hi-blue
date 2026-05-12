@@ -293,7 +293,6 @@ export function deserializeSession(
 		const world = structuredClone(sealed.world);
 		const budgets = { ...sealed.budgets };
 		const lockedOut = new Set<AiId>(sealed.lockedOut);
-		const chatLockouts = new Map<AiId, number>();
 		const personaSpatial = structuredClone(sealed.personaSpatial);
 
 		// Defensive defaults for legacy blobs that omit complication fields
@@ -315,7 +314,6 @@ export function deserializeSession(
 			budgets,
 			conversationLogs,
 			lockedOut,
-			chatLockouts,
 			personaSpatial,
 			complicationSchedule,
 			activeComplications,

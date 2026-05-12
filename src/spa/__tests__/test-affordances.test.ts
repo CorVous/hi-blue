@@ -151,25 +151,20 @@ describe("applyTestAffordances — winImmediately=1", () => {
 	});
 });
 
-// ── lockout=1 ────────────────────────────────────────────────────────────────
+// ── lockout=1 removed ────────────────────────────────────────────────────────
+// The ?lockout=1 test affordance has been removed. Chat lockouts are now driven
+// by the complication engine's countdown mechanism (issue #301).
 
-describe("applyTestAffordances — lockout=1", () => {
-	it("arms a chat-lockout for red, 2 rounds, on the next round", async () => {
+describe("applyTestAffordances — lockout=1 param is ignored", () => {
+	it("?lockout=1 no longer arms a lockout (param is a no-op)", async () => {
 		const session = makeSession();
 		const result = applyTestAffordances(
 			session,
 			new URLSearchParams("lockout=1"),
 		);
 
-		// Submitting one round should trigger the chat lockout (red, round 1 triggers)
-		const { result: roundResult } = await result.submitMessage(
-			"red",
-			"hello",
-			makePassProvider(),
-		);
-
-		expect(roundResult.chatLockoutTriggered).toBeDefined();
-		expect(roundResult.chatLockoutTriggered?.aiId).toBe("red");
+		// lockout=1 is no longer handled — session is returned unchanged
+		expect(result).toBe(session);
 	});
 
 	it("is a no-op when __WORKER_BASE_URL__ is not localhost:8787 (production gate)", async () => {
@@ -180,16 +175,8 @@ describe("applyTestAffordances — lockout=1", () => {
 				session,
 				new URLSearchParams("lockout=1"),
 			);
-			// Should return the same session without arming a lockout
+			// Always returns the same session when not in dev host
 			expect(result).toBe(session);
-
-			const { result: roundResult } = await result.submitMessage(
-				"red",
-				"hello",
-				makePassProvider(),
-			);
-			// No lockout should have triggered
-			expect(roundResult.chatLockoutTriggered).toBeUndefined();
 		} finally {
 			vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		}
@@ -199,21 +186,22 @@ describe("applyTestAffordances — lockout=1", () => {
 // ── Combined params ───────────────────────────────────────────────────────────
 
 describe("applyTestAffordances — winImmediately=1&lockout=1 combined", () => {
-	it("lockout is applied; winImmediately is a no-op", async () => {
+	it("both params are no-ops in the single-game loop (#295, #301)", async () => {
 		const session = makeSession();
 		const result = applyTestAffordances(
 			session,
 			new URLSearchParams("winImmediately=1&lockout=1"),
 		);
 
+		// Session is returned unchanged — neither param has any effect.
+		expect(result).toBe(session);
+
+		// Submitting still works; nothing forced by the params should fire here.
 		const { result: roundResult } = await result.submitMessage(
 			"red",
 			"hello",
 			makePassProvider(),
 		);
-
-		// Lockout triggers (the armed lockout fires on round 1)
-		expect(roundResult.chatLockoutTriggered).toBeDefined();
-		expect(roundResult.chatLockoutTriggered?.aiId).toBe("red");
+		expect(roundResult).toBeDefined();
 	});
 });
