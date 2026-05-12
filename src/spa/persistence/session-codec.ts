@@ -189,7 +189,7 @@ export function serializeSession(
 		contentPacksB: structuredClone(state.contentPacksB),
 		activePackId: state.activePackId,
 		weather: state.weather,
-		objectives: structuredClone(state.objectives),
+		objectives: structuredClone(state.objectives ?? []),
 		complicationSchedule: state.complicationSchedule,
 		activeComplications: structuredClone(state.activeComplications),
 		isComplete: state.isComplete,
@@ -322,6 +322,10 @@ export function deserializeSession(
 		};
 		const activeComplications = sealed.activeComplications ?? [];
 
+		const objectives: Objective[] = Array.isArray(sealed.objectives)
+			? (sealed.objectives as Objective[])
+			: [];
+
 		const state: GameState = {
 			isComplete: sealed.isComplete,
 			personas,
@@ -340,7 +344,7 @@ export function deserializeSession(
 			contentPacksA,
 			contentPacksB,
 			activePackId: sealed.activePackId ?? "A",
-			objectives: structuredClone(sealed.objectives ?? []),
+			objectives: structuredClone(objectives),
 		};
 
 		return {

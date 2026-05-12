@@ -19,6 +19,7 @@ import type {
 	GridPosition,
 	Objective,
 	UseItemObjective,
+	UseSpaceObjective,
 	WorldState,
 } from "./types";
 
@@ -66,6 +67,16 @@ export function isUseItemObjectiveSatisfied(
 }
 
 /**
+ * Returns true when a UseSpaceObjective is satisfied:
+ * The objective's satisfactionState is "satisfied".
+ */
+export function isUseSpaceObjectiveSatisfied(
+	objective: UseSpaceObjective,
+): boolean {
+	return objective.satisfactionState === "satisfied";
+}
+
+/**
  * Returns true iff every objective in the objectives array is satisfied.
  *
  * - CarryObjective: checks world state (object and space share same cell)
@@ -88,8 +99,9 @@ export function checkWinCondition(
 				if (!isUseItemObjectiveSatisfied(objective)) return false;
 				break;
 			case "use_space":
+				if (!isUseSpaceObjectiveSatisfied(objective)) return false;
+				break;
 			case "convergence":
-				// These can only be satisfied when something external sets satisfactionState
 				if (objective.satisfactionState !== "satisfied") return false;
 				break;
 		}

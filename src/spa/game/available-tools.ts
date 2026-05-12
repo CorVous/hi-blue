@@ -186,15 +186,36 @@ export function availableTools(
 		}
 	}
 
-	// 4. put_down and use — pickable entities held by this actor
+	// 4. put_down and use — pickable entities held by this actor; also spaces in reach
 	const heldItems = pickable.filter((item) => item.holder === aiId);
-	if (heldItems.length > 0) {
+	if (!disabledTools.has("put_down") && heldItems.length > 0) {
 		const heldIds = heldItems.map((i) => i.id);
-		if (!disabledTools.has("put_down")) {
-			tools.push(cloneToolWithEnums("put_down", { item: heldIds }));
+		tools.push(cloneToolWithEnums("put_down", { item: heldIds }));
+	}
+	if (!disabledTools.has("use")) {
+		// Held item ids
+		const heldIds = heldItems.map((i) => i.id);
+
+		// Reachable objective_space ids: space must be in actor's own cell or front arc,
+		// and must have useAvailable !== false.
+		let reachableSpaceIds: string[] = [];
+		if (actorSpatial) {
+			const arc = frontArc(actorSpatial.position, actorSpatial.facing);
+			reachableSpaceIds = world.entities
+				.filter((e) => {
+					if (e.kind !== "objective_space") return false;
+					if (e.useAvailable === false) return false;
+					if (!isGridPosition(e.holder)) return false;
+					const spacePos = e.holder as GridPosition;
+					if (positionsEqual(spacePos, actorSpatial.position)) return true;
+					return arc.some((p) => positionsEqual(p, spacePos));
+				})
+				.map((e) => e.id);
 		}
-		if (!disabledTools.has("use")) {
-			tools.push(cloneToolWithEnums("use", { item: heldIds }));
+
+		const useIds = [...heldIds, ...reachableSpaceIds];
+		if (useIds.length > 0) {
+			tools.push(cloneToolWithEnums("use", { item: useIds }));
 		}
 	}
 

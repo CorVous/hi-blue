@@ -17,6 +17,7 @@ import type {
 	Objective,
 	ObjectivePair,
 	UseItemObjective,
+	UseSpaceObjective,
 	WorldEntity,
 	WorldState,
 } from "../types";
@@ -26,6 +27,7 @@ import {
 	checkWinCondition,
 	isCarryObjectiveSatisfied,
 	isUseItemObjectiveSatisfied,
+	isUseSpaceObjectiveSatisfied,
 } from "../win-condition";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -570,3 +572,80 @@ describe("checkPlacementFlavor", () => {
 		expect(checkPlacementFlavor(action, pack, world)).toBeNull();
 	});
 });
+
+// ── isUseSpaceObjectiveSatisfied ─────────────────────────────────────────────
+
+describe("isUseSpaceObjectiveSatisfied", () => {
+	it("returns false when satisfactionState is pending", () => {
+		const objective: UseSpaceObjective = {
+			id: "obj-0",
+			kind: "use_space",
+			description: "Use the Shrine",
+			satisfactionState: "pending",
+			spaceId: "shrine1",
+		};
+		expect(isUseSpaceObjectiveSatisfied(objective)).toBe(false);
+	});
+
+	it("returns true when satisfactionState is satisfied", () => {
+		const objective: UseSpaceObjective = {
+			id: "obj-0",
+			kind: "use_space",
+			description: "Use the Shrine",
+			satisfactionState: "satisfied",
+			spaceId: "shrine1",
+		};
+		expect(isUseSpaceObjectiveSatisfied(objective)).toBe(true);
+	});
+});
+
+// ── checkWinCondition with UseSpaceObjective ──────────────────────────────────
+
+describe("checkWinCondition with UseSpaceObjective", () => {
+	it("returns false when use_space objective is pending", () => {
+		const world = makeWorld([]);
+		const objective: UseSpaceObjective = {
+			id: "obj-0",
+			kind: "use_space",
+			description: "Use the Shrine",
+			satisfactionState: "pending",
+			spaceId: "shrine1",
+		};
+		const objectives: Objective[] = [objective];
+		expect(checkWinCondition(world, objectives)).toBe(false);
+	});
+
+	it("returns true when use_space objective is satisfied", () => {
+		const world = makeWorld([]);
+		const objective: UseSpaceObjective = {
+			id: "obj-0",
+			kind: "use_space",
+			description: "Use the Shrine",
+			satisfactionState: "satisfied",
+			spaceId: "shrine1",
+		};
+		const objectives: Objective[] = [objective];
+		expect(checkWinCondition(world, objectives)).toBe(true);
+	});
+
+	it("returns false when use_space is pending alongside a satisfied carry", () => {
+		const pair = makeObjectivePair(
+			"obj",
+			"spc",
+			{ row: 1, col: 1 },
+			{ row: 1, col: 1 },
+		);
+		const world = worldFromPairs([pair]);
+		const carryObj = carryObjectiveFromPair(pair, "obj-0");
+		const useSpaceObj: UseSpaceObjective = {
+			id: "obj-1",
+			kind: "use_space",
+			description: "Use the shrine",
+			satisfactionState: "pending",
+			spaceId: "shrine1",
+		};
+		const objectives: Objective[] = [carryObj, useSpaceObj];
+		expect(checkWinCondition(world, objectives)).toBe(false);
+	});
+});
+

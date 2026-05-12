@@ -653,7 +653,23 @@ export function buildConeSnapshot(ctx: AiContext): string {
 
 		const contents =
 			contentParts.length > 0 ? [...contentParts].sort().join(", ") : "nothing";
-		lines.push(`at ${cell.phrasing}: ${contents}`);
+
+		// Append postLookFlavor for satisfied objective_space entities in this cell
+		const satisfiedSpaceFlavors = ctx.worldSnapshot.entities
+			.filter((e) => {
+				if (e.kind !== "objective_space") return false;
+				if (e.satisfactionState !== "satisfied") return false;
+				if (!e.postLookFlavor) return false;
+				const h = e.holder;
+				return isGridPosition(h) && positionsEqual(h, position);
+			})
+			.map((e) => e.postLookFlavor as string);
+
+		let cellLine = `at ${cell.phrasing}: ${contents}`;
+		for (const flavor of satisfiedSpaceFlavors) {
+			cellLine += ` ${flavor}`;
+		}
+		lines.push(cellLine);
 	}
 
 	// Append proximity flavor line when the actor holds an objective item whose
@@ -870,9 +886,24 @@ function renderCurrentState(ctx: AiContext): string {
 			const contents =
 				contentParts.length > 0 ? contentParts.join("; ") : "nothing";
 
+			// Append postLookFlavor for satisfied objective_space entities in this cell
+			const satisfiedSpaceFlavors = ctx.worldSnapshot.entities
+				.filter((e) => {
+					if (e.kind !== "objective_space") return false;
+					if (e.satisfactionState !== "satisfied") return false;
+					if (!e.postLookFlavor) return false;
+					const h = e.holder;
+					return isGridPosition(h) && positionsEqual(h, position);
+				})
+				.map((e) => e.postLookFlavor as string);
+
 			// Capitalise the phrasing for display
 			const label = phrasing.charAt(0).toUpperCase() + phrasing.slice(1);
-			lines.push(`- ${label}: ${contents}`);
+			let cellLine = `- ${label}: ${contents}`;
+			for (const flavor of satisfiedSpaceFlavors) {
+				cellLine += ` ${flavor}`;
+			}
+			lines.push(cellLine);
 		}
 		if (viewCells.length === 0) {
 			lines.push("(nothing visible)");

@@ -163,6 +163,39 @@ export function validateToolCall(
 		}
 
 		case "use": {
+			// Check if the target is an objective_space (use-space flow)
+			const spaceTarget = world.entities.find(
+				(e) => e.id === call.args.item && e.kind === "objective_space",
+			);
+			if (spaceTarget) {
+				// Validate reachability and useAvailable
+				if (spaceTarget.useAvailable === false)
+					return {
+						valid: false,
+						reason: `"${call.args.item}" has already been used`,
+					};
+				if (!isGridPosition(spaceTarget.holder))
+					return {
+						valid: false,
+						reason: `Space "${call.args.item}" is not on the grid`,
+					};
+				if (!actorSpatial)
+					return { valid: false, reason: "Actor has no spatial state" };
+				const spacePos = spaceTarget.holder as GridPosition;
+				const inOwnCell = positionsEqual(spacePos, actorSpatial.position);
+				const inFront = frontArc(
+					actorSpatial.position,
+					actorSpatial.facing,
+				).some((p) => positionsEqual(p, spacePos));
+				if (!inOwnCell && !inFront)
+					return {
+						valid: false,
+						reason: `Space "${call.args.item}" is not in your cell or directly in front of you`,
+					};
+				return { valid: true };
+			}
+
+			// Standard item use
 			const item = pickable.find((i) => i.id === call.args.item);
 			if (!item)
 				return {
@@ -277,6 +310,39 @@ export function executeToolCall(
 			if (target) target.holder = call.args.to as AiId;
 			break;
 		case "use": {
+			// Check if the target is an objective_space (use-space flow)
+			const spaceTarget = entities.find(
+				(e) => e.id === call.args.item && e.kind === "objective_space",
+			);
+			if (spaceTarget) {
+				const spaceId = call.args.item;
+				// Find pending UseSpaceObjective for this space
+				const pendingSpaceObjIdx = game.objectives.findIndex(
+					(obj) =>
+						obj.kind === "use_space" &&
+						obj.spaceId === spaceId &&
+						obj.satisfactionState === "pending",
+				);
+				if (pendingSpaceObjIdx !== -1) {
+					const updatedObjectives = game.objectives.map((obj, idx) =>
+						idx === pendingSpaceObjIdx
+							? { ...obj, satisfactionState: "satisfied" as const }
+							: obj,
+					);
+					// Flip entity satisfactionState and mark useAvailable = false
+					spaceTarget.satisfactionState = "satisfied";
+					spaceTarget.useAvailable = false;
+					return {
+						...game,
+						world: { ...game.world, entities },
+						objectives: updatedObjectives,
+					};
+				}
+				// No pending objective — still mark space as used
+				spaceTarget.useAvailable = false;
+				break;
+			}
+
 			// Place item on the paired space's cell when the paired space is in
 			// the actor's own cell OR front arc. Otherwise no world mutation.
 			if (target && actorSpatial && target.pairsWithSpaceId) {
@@ -385,6 +451,15 @@ function describeToolCall(game: GameState, aiId: AiId, call: ToolCall): string {
 		case "give":
 			return `${name} gave the ${call.args.item} to ${game.personas[call.args.to as AiId]?.name ?? call.args.to}`;
 		case "use": {
+			// Check if the target is an objective_space — surface its useOutcome or satisfactionFlavor
+			const spaceTarget = game.world.entities.find(
+				(e) => e.id === call.args.item && e.kind === "objective_space",
+			);
+			if (spaceTarget) {
+				if (spaceTarget.useOutcome)
+					return spaceTarget.useOutcome.replace(/\{actor\}/g, "you");
+				return `${name} used the ${call.args.item}`;
+			}
 			// Return the entity's useOutcome as the description (flavor string),
 			// with {actor} substituted to "you" (actor's perspective).
 			const item = pickable.find((i) => i.id === call.args.item);
@@ -547,9 +622,17 @@ export function dispatchAiTurn(
 					let placementFlavorRaw: string | undefined;
 
 					if (call.name === "use") {
-						const item = pickable.find((i) => i.id === call.args.item);
-						// Store raw (un-substituted) useOutcome for witness rendering
-						useOutcomeRaw = item?.useOutcome;
+						// Check if the target is an objective_space — use its satisfactionFlavor for witnesses
+						const spaceTarget = state.world.entities.find(
+							(e) => e.id === call.args.item && e.kind === "objective_space",
+						);
+						if (spaceTarget) {
+							useOutcomeRaw = spaceTarget.satisfactionFlavor;
+						} else {
+							const item = pickable.find((i) => i.id === call.args.item);
+							// Store raw (un-substituted) useOutcome for witness rendering
+							useOutcomeRaw = item?.useOutcome;
+						}
 					}
 
 					if (call.name === "put_down" || call.name === "use") {

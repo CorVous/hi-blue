@@ -16,9 +16,11 @@ import type {
 	AiPersona,
 	AiTurnAction,
 	ContentPack,
+	GameState,
 	PhaseConfig,
 	ToolCall,
 	UseItemObjective,
+	UseSpaceObjective,
 	WorldEntity,
 } from "../types";
 
@@ -1392,5 +1394,234 @@ describe("dispatchAiTurn — examine postExamineDescription", () => {
 		};
 		const result = dispatchAiTurn(gameWithSatisfied, action);
 		expect(result.actorPrivateToolResult?.description).toBe("A key.");
+	});
+});
+
+// ── UseSpaceObjective — dispatcher tests ──────────────────────────────────────
+
+/** Build a game with red at (2,2) facing south, and an objective_space at (3,2)
+ * (directly in front) with a pending UseSpaceObjective. */
+function makeGameWithSpaceObjective(
+	actorPos: { row: number; col: number } = { row: 2, col: 2 },
+	actorFacing: "north" | "south" | "east" | "west" = "south",
+	spacePos: { row: number; col: number } = { row: 3, col: 2 },
+	spaceOpts: Partial<WorldEntity> = {},
+): GameState {
+	const space: WorldEntity = {
+		id: "shrine",
+		kind: "objective_space",
+		name: "Shrine",
+		examineDescription: "A sacred shrine.",
+		holder: spacePos,
+		useAvailable: true,
+		useOutcome: "A warm glow emanates from the shrine.",
+		satisfactionFlavor: "The shrine pulses with light.",
+		postExamineDescription: "The shrine has been activated.",
+		postLookFlavor: "The shrine glows steadily.",
+		...spaceOpts,
+	};
+	const obj: WorldEntity = {
+		id: "relic",
+		kind: "objective_object",
+		name: "Relic",
+		examineDescription: "An ancient relic.",
+		holder: { row: 0, col: 0 },
+		pairsWithSpaceId: "shrine",
+	};
+	const spaceObjective: UseSpaceObjective = {
+		id: "obj-0",
+		kind: "use_space",
+		description: "Use the Shrine",
+		satisfactionState: "pending",
+		spaceId: "shrine",
+	};
+	const pack: ContentPack = {
+		phaseNumber: 1,
+		setting: "test",
+		weather: "",
+		timeOfDay: "",
+		objectivePairs: [{ object: obj, space }],
+		interestingObjects: [],
+		obstacles: [],
+		landmarks: DEFAULT_LANDMARKS,
+		aiStarts: {
+			red: { position: actorPos, facing: actorFacing },
+			green: { position: { row: 0, col: 0 }, facing: "north" },
+			cyan: { position: { row: 4, col: 4 }, facing: "north" },
+		},
+	};
+	const config: PhaseConfig = {
+		phaseNumber: 1,
+		kRange: [1, 1],
+		nRange: [0, 0],
+		mRange: [0, 0],
+		aiGoalPool: ["g1"],
+		budgetPerAi: 5,
+	};
+	const game = createGame(TEST_PERSONAS, [pack]);
+	const started = startPhase(game, config, () => 0);
+	// Override objectives to include our UseSpaceObjective
+	return { ...started, objectives: [spaceObjective] };
+}
+
+describe("executeToolCall — use on objective_space", () => {
+	it("flips pending UseSpaceObjective to satisfied when space is in actor's front arc", () => {
+		const game = makeGameWithSpaceObjective();
+		const call: ToolCall = { name: "use", args: { item: "shrine" } };
+		const updated = executeToolCall(game, "red", call);
+		const objective = updated.objectives.find((o) => o.id === "obj-0");
+		expect(objective?.satisfactionState).toBe("satisfied");
+	});
+
+	it("flips pending UseSpaceObjective to satisfied when space is in actor's own cell", () => {
+		// red at (2,2), space at (2,2) (own cell)
+		const game = makeGameWithSpaceObjective({ row: 2, col: 2 }, "south", { row: 2, col: 2 });
+		const call: ToolCall = { name: "use", args: { item: "shrine" } };
+		const updated = executeToolCall(game, "red", call);
+		const objective = updated.objectives.find((o) => o.id === "obj-0");
+		expect(objective?.satisfactionState).toBe("satisfied");
+	});
+
+	it("sets useAvailable = false on space after use", () => {
+		const game = makeGameWithSpaceObjective();
+		const call: ToolCall = { name: "use", args: { item: "shrine" } };
+		const updated = executeToolCall(game, "red", call);
+		const space = updated.world.entities.find((e) => e.id === "shrine");
+		expect(space?.useAvailable).toBe(false);
+	});
+
+	it("sets space satisfactionState to 'satisfied' after use", () => {
+		const game = makeGameWithSpaceObjective();
+		const call: ToolCall = { name: "use", args: { item: "shrine" } };
+		const updated = executeToolCall(game, "red", call);
+		const space = updated.world.entities.find((e) => e.id === "shrine");
+		expect(space?.satisfactionState).toBe("satisfied");
+	});
+});
+
+describe("validateToolCall — use on objective_space", () => {
+	it("accepts use on a space in the actor's front arc", () => {
+		const game = makeGameWithSpaceObjective();
+		// red at (2,2) facing south; shrine at (3,2) = directly south
+		const call: ToolCall = { name: "use", args: { item: "shrine" } };
+		const result = validateToolCall(game, "red", call);
+		expect(result.valid).toBe(true);
+	});
+
+	it("accepts use on a space in the actor's own cell", () => {
+		const game = makeGameWithSpaceObjective({ row: 2, col: 2 }, "south", { row: 2, col: 2 });
+		const call: ToolCall = { name: "use", args: { item: "shrine" } };
+		const result = validateToolCall(game, "red", call);
+		expect(result.valid).toBe(true);
+	});
+
+	it("rejects use on space at distance 2 (not in front arc)", () => {
+		// red at (2,2) facing south; shrine at (4,2) = 2 cells south
+		const game = makeGameWithSpaceObjective({ row: 2, col: 2 }, "south", { row: 4, col: 2 });
+		const call: ToolCall = { name: "use", args: { item: "shrine" } };
+		const result = validateToolCall(game, "red", call);
+		expect(result.valid).toBe(false);
+		expect(result.reason).toBeDefined();
+	});
+
+	it("rejects use on space directly behind actor", () => {
+		// red at (2,2) facing south; shrine at (1,2) = directly north (behind)
+		const game = makeGameWithSpaceObjective({ row: 2, col: 2 }, "south", { row: 1, col: 2 });
+		const call: ToolCall = { name: "use", args: { item: "shrine" } };
+		const result = validateToolCall(game, "red", call);
+		expect(result.valid).toBe(false);
+	});
+
+	it("rejects second use when useAvailable is false", () => {
+		const game = makeGameWithSpaceObjective();
+		// First use
+		const afterUse = executeToolCall(game, "red", { name: "use", args: { item: "shrine" } });
+		// Second use attempt
+		const call: ToolCall = { name: "use", args: { item: "shrine" } };
+		const result = validateToolCall(afterUse, "red", call);
+		expect(result.valid).toBe(false);
+		expect(result.reason).toMatch(/already been used/i);
+	});
+});
+
+describe("dispatchAiTurn — use on objective_space witnesses satisfactionFlavor", () => {
+	it("emits witnessed event with satisfactionFlavor to witness whose cone contains the space's cell", () => {
+		// red at (2,2) facing south; shrine at (3,2) — in red's front arc
+		// cyan at (4,4) facing north: cone includes (3,4), (3,3), (3,2)? Let's verify.
+		// Actually we need a setup where a witness can see the actor's cell (not the space's cell).
+		// Per dispatcher logic: witness cone must contain the ACTOR's cell.
+		// We'll put green at (2,0) facing east so red's cell (2,2) is in its cone.
+		const space: WorldEntity = {
+			id: "shrine",
+			kind: "objective_space",
+			name: "Shrine",
+			examineDescription: "A shrine.",
+			holder: { row: 3, col: 2 },
+			useAvailable: true,
+			useOutcome: "A warm glow.",
+			satisfactionFlavor: "The shrine pulses with light.",
+		};
+		const obj: WorldEntity = {
+			id: "relic",
+			kind: "objective_object",
+			name: "Relic",
+			examineDescription: "A relic.",
+			holder: { row: 0, col: 0 },
+			pairsWithSpaceId: "shrine",
+		};
+		const spaceObjective: UseSpaceObjective = {
+			id: "obj-0",
+			kind: "use_space",
+			description: "Use the Shrine",
+			satisfactionState: "pending",
+			spaceId: "shrine",
+		};
+		const pack: ContentPack = {
+			phaseNumber: 1,
+			setting: "test",
+			weather: "",
+			timeOfDay: "",
+			objectivePairs: [{ object: obj, space }],
+			interestingObjects: [],
+			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
+			aiStarts: {
+				// red at (2,2) facing south
+				red: { position: { row: 2, col: 2 }, facing: "south" },
+				// green at (2,0) facing east — cone goes east, so (2,1), (2,2) in arc
+				green: { position: { row: 2, col: 0 }, facing: "east" },
+				cyan: { position: { row: 4, col: 4 }, facing: "north" },
+			},
+		};
+		const config: PhaseConfig = {
+			phaseNumber: 1,
+			kRange: [1, 1],
+			nRange: [0, 0],
+			mRange: [0, 0],
+			aiGoalPool: ["g1"],
+			budgetPerAi: 5,
+		};
+		const game = createGame(TEST_PERSONAS, [pack]);
+		const started = startPhase(game, config, () => 0);
+		const withObjective = { ...started, objectives: [spaceObjective] };
+
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "use", args: { item: "shrine" } },
+		};
+		const result = dispatchAiTurn(withObjective, action);
+		expect(result.rejected).toBe(false);
+
+		// green should have a witnessed-event entry with useOutcome = satisfactionFlavor
+		const greenLog = result.game.conversationLogs.green ?? [];
+		const witnessed = greenLog.filter((e) => e.kind === "witnessed-event");
+		expect(witnessed.length).toBeGreaterThan(0);
+		const useEvent = witnessed.find(
+			(e) => e.kind === "witnessed-event" && e.actionKind === "use",
+		);
+		expect(useEvent).toBeDefined();
+		if (useEvent?.kind === "witnessed-event") {
+			expect(useEvent.useOutcome).toBe("The shrine pulses with light.");
+		}
 	});
 });
