@@ -260,9 +260,9 @@ test("strip-card preview: restored multi-line AI message stays in one msg-line",
 			if (!daemonRaw) return false;
 			try {
 				const daemon = JSON.parse(daemonRaw) as {
-					phases?: { "1"?: { conversationLog?: unknown[] } };
+					conversationLog?: unknown[];
 				};
-				return (daemon.phases?.["1"]?.conversationLog?.length ?? 0) > 0;
+				return (daemon.conversationLog?.length ?? 0) > 0;
 			} catch {
 				return false;
 			}

@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { STATIC_CONTENT_PACKS } from "./fixtures/static-content-packs";
+import {
+	STATIC_CONTENT_PACK_NO_PAIRS,
+	STATIC_CONTENT_PACKS,
+} from "./fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "./fixtures/static-personas";
 
 // Pin generatePersonas to a static fixture so the test can rely on
@@ -12,9 +15,13 @@ vi.mock("../../content", async (importOriginal) => {
 	};
 });
 
-// Pin generateContentPacks to static content packs (no LLM call in tests).
+// Pin generateDualContentPacks to static content packs (no LLM call in tests).
 vi.mock("../../content/content-pack-generator", () => ({
-	generateContentPacks: async () => STATIC_CONTENT_PACKS,
+	generateDualContentPacks: async () => ({
+		packsA: STATIC_CONTENT_PACKS,
+		packsB: STATIC_CONTENT_PACKS,
+	}),
+	generateContentPack: async () => STATIC_CONTENT_PACKS[0],
 }));
 
 // ── Shared localStorage stub helpers ──────────────────────────────────────────
@@ -55,6 +62,7 @@ function makeLocalStorageStub(initialData: Record<string, string> = {}) {
  */
 async function seedSessionInStub(
 	stub: ReturnType<typeof makeLocalStorageStub>,
+	opts?: { noPairs?: boolean },
 ): Promise<void> {
 	// Use the real buildSessionFromAssets + saveActiveSession
 	const { buildSessionFromAssets } = await import("../game/bootstrap.js");
@@ -70,11 +78,18 @@ async function seedSessionInStub(
 		configurable: true,
 	});
 
+	const _contentPack = opts?.noPairs
+		? STATIC_CONTENT_PACK_NO_PAIRS
+		: (STATIC_CONTENT_PACKS[0] as NonNullable<
+				(typeof STATIC_CONTENT_PACKS)[0]
+			>);
+
 	try {
 		mintAndActivateNewSession();
 		const session = buildSessionFromAssets({
 			personas: STATIC_PERSONAS,
-			contentPacks: STATIC_CONTENT_PACKS,
+			contentPacksA: STATIC_CONTENT_PACKS,
+			contentPacksB: STATIC_CONTENT_PACKS,
 		});
 		saveActiveSession(session.getState());
 	} finally {
@@ -576,48 +591,6 @@ describe("renderGame (game route — three-AI)", () => {
 		expect(greenPanel.querySelector(".panel-spinner")).toBeNull();
 		expect(cyanPanel.querySelector(".panel-spinner")).toBeNull();
 		expect(greenTranscript.textContent).toContain("GREEN_RESPONSE_UNIQUE_TAG");
-	});
-
-	it("phase_advanced shows banner with new objective and clears transcripts", async () => {
-		// winImmediately=1: first submit fires winCondition → phase_advanced event
-		const mockFetch = makeThreeAiFetchMock(
-			PASS_ACTION,
-			PASS_ACTION,
-			PASS_ACTION,
-		);
-		vi.stubGlobal("fetch", mockFetch);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
-
-		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
-		await renderGame(
-			getEl<HTMLElement>("main"),
-			new URLSearchParams("winImmediately=1"),
-		);
-
-		const form = getEl<HTMLFormElement>("#composer");
-		const promptInput = getEl<HTMLInputElement>("#prompt");
-		promptInput.value = "*Sage go";
-		promptInput.dispatchEvent(new Event("input"));
-		form.dispatchEvent(
-			new Event("submit", { bubbles: true, cancelable: true }),
-		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
-
-		// Phase banner should be visible with the phase 2 setting
-		const phaseBanner = getEl<HTMLElement>("#phase-banner");
-		expect(phaseBanner.hasAttribute("hidden")).toBe(false);
-		expect(phaseBanner.textContent).toContain("Phase 2");
-		// Setting comes from STATIC_CONTENT_PACKS phase 2: "sun-baked salt flat"
-		expect(phaseBanner.textContent).toContain("sun-baked salt flat");
-
-		// All transcripts should have been cleared and repopulated with a separator
-		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
-		expect(redTranscript.textContent).toContain("--- Phase 2 begins:");
-		// No content from the previous phase should remain
-		expect(redTranscript.textContent).not.toContain("> *Sage");
-		expect(redTranscript.textContent).not.toContain("> *Ember");
-		expect(redTranscript.textContent).not.toContain("> *Frost");
 	});
 
 	it("daemon→daemon peer-to-peer message is silent in all panels (AC #2)", async () => {
@@ -1249,7 +1222,8 @@ describe("renderGame — localStorage persistence", () => {
 		setActiveSessionId("0xB000");
 		const sessionB = buildSessionFromAssets({
 			personas: STATIC_PERSONAS,
-			contentPacks: STATIC_CONTENT_PACKS,
+			contentPacksA: STATIC_CONTENT_PACKS,
+			contentPacksB: STATIC_CONTENT_PACKS,
 		});
 		saveActiveSession(sessionB.getState());
 
@@ -1292,7 +1266,7 @@ describe("renderGame — chat_lockout event", () => {
 		document.body.innerHTML = "";
 	});
 
-	it("chat_lockout appends the lockout message to the locked AI's transcript", async () => {
+	it("chat_lockout silently locks the panel without appending a transcript message", async () => {
 		vi.stubGlobal(
 			"fetch",
 			makeThreeAiFetchMock(PASS_ACTION, PASS_ACTION, PASS_ACTION),
@@ -1341,9 +1315,10 @@ describe("renderGame — chat_lockout event", () => {
 
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
-		// The chat_lockout event should have appended the message to red's transcript.
+		// The chat_lockout event should NOT append any message to the transcript —
+		// complications are silent to the player.
 		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
-		expect(redTranscript.textContent).toContain("[Ember is unresponsive…]");
+		expect(redTranscript.textContent).not.toContain("[Ember is unresponsive…]");
 
 		// After the chat_lockout fires for red, typing *Ember should leave Send disabled.
 		const sendBtn = getEl<HTMLButtonElement>("#send");
@@ -1659,45 +1634,6 @@ describe("renderGame — URL param sourcing", () => {
 		vi.unstubAllGlobals();
 		vi.resetModules();
 		document.body.innerHTML = "";
-	});
-
-	it("search-only: ?winImmediately=1 in location.search (router passes empty params) triggers phase_advanced on first submit", async () => {
-		// Router always passes a non-null URLSearchParams, but it may be empty
-		// when the flag is in location.search rather than the hash query string.
-		vi.stubGlobal("location", {
-			search: "?winImmediately=1",
-			origin: "http://localhost:8787",
-			hash: "",
-		});
-		const mockFetch = makeThreeAiFetchMock(
-			PASS_ACTION,
-			PASS_ACTION,
-			PASS_ACTION,
-		);
-		vi.stubGlobal("fetch", mockFetch);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
-
-		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
-		// Router passes empty URLSearchParams (hash had no query string)
-		await renderGame(getEl<HTMLElement>("main"), new URLSearchParams());
-
-		const form = getEl<HTMLFormElement>("#composer");
-		const promptInput = getEl<HTMLInputElement>("#prompt");
-		// Post-#107: submit handler requires a valid @mention; without one,
-		// deriveComposerState returns sendEnabled=false and the submit no-ops.
-		promptInput.value = "*Ember go";
-		// Dispatch input so the SPA's listener updates the composer state.
-		promptInput.dispatchEvent(new Event("input", { bubbles: true }));
-		form.dispatchEvent(
-			new Event("submit", { bubbles: true, cancelable: true }),
-		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
-
-		// Phase banner should be visible — winImmediately fired from location.search
-		const phaseBanner = getEl<HTMLElement>("#phase-banner");
-		expect(phaseBanner.hasAttribute("hidden")).toBe(false);
-		expect(phaseBanner.textContent).toContain("Phase 2");
 	});
 
 	it("hash-only: debug=1 in hash params (no location.search) shows action log", async () => {

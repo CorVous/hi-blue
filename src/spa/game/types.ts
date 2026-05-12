@@ -39,8 +39,44 @@ export interface WorldEntity {
 	placementFlavor?: string;
 	/** For objective_object: in-fiction sensory line rendered when held and paired space is near. */
 	proximityFlavor?: string;
+	/** For obstacle: 1-sentence sensory line a witness Daemon perceives when the obstacle moves one cell. Third person from witness POV. Does NOT contain {actor}. */
+	shiftFlavor?: string;
+	/** For objective_space used as a Convergence target: tier-1 witness flavor (exactly one Daemon on space). Third-person witness POV. Does NOT contain {actor}. */
+	convergenceTier1Flavor?: string;
+	/** For objective_space used as a Convergence target: tier-2 witness flavor (two or more Daemons share space). Third-person witness POV. Does NOT contain {actor}. */
+	convergenceTier2Flavor?: string;
+	/** For objective_space: first-person actor flavor delivered to the Daemon standing alone on the space at Tier 1. Does NOT contain {actor}. */
+	convergenceTier1ActorFlavor?: string;
+	/** For objective_space: first-person actor flavor delivered to every Daemon standing on the space when Tier 2 fires. Does NOT contain {actor}. */
+	convergenceTier2ActorFlavor?: string;
 	/** AiId when held by an AI; GridPosition when resting on a cell. */
 	holder: AiId | GridPosition;
+	/** Tracks whether this entity has been "used" for a UseItem objective. Defaults to "pending" when omitted. */
+	satisfactionState?: "pending" | "satisfied";
+	/** Alternate examineDescription shown after satisfactionState flips to "satisfied". */
+	postExamineDescription?: string;
+	/** Alternate look flavor shown after satisfactionState flips to "satisfied". */
+	postLookFlavor?: string;
+	/**
+	 * 1-sentence world-meaningful flavor returned to the actor (and to witnesses)
+	 * as their `use` tool result on the call that satisfies a `UseSpaceObjective`
+	 * (when entity.kind === "objective_space") or a `UseItemObjective` (when
+	 * entity.kind === "interesting_object"). Does NOT contain "{actor}" —
+	 * third-person, world-meaningful description of the activation event.
+	 *
+	 * For objective_space (#335): use on a space only ever fires on the satisfying
+	 * call (post-satisfaction `useAvailable` is false), so this is the actor's
+	 * moment-of-satisfaction line.
+	 *
+	 * For interesting_object (#334): pre-satisfaction use that flips the objective
+	 * pending → satisfied fires this flavor; subsequent (post-satisfaction) `use`
+	 * calls return `useOutcome` instead.
+	 */
+	activationFlavor?: string;
+	/** For objective_space: whether the `use` action is available on this space. Defaults to true when omitted. Set to false after a UseSpaceObjective is satisfied. */
+	useAvailable?: boolean;
+	/** For objective_space: flavor string emitted as a Witnessed event when a UseSpaceObjective is satisfied. */
+	satisfactionFlavor?: string;
 }
 
 export interface WorldState {
@@ -66,7 +102,8 @@ export interface LandmarkDescription {
 
 /** Per-phase content pack: setting-flavored names, descriptions, outcomes, and placed entities. */
 export interface ContentPack {
-	phaseNumber: 1 | 2 | 3;
+	/** @deprecated Phase number is no longer meaningful in the flat single-game model (#295). */
+	phaseNumber?: 1 | 2 | 3;
 	setting: string;
 	weather: string;
 	timeOfDay: string;
@@ -85,6 +122,106 @@ export interface ContentPack {
 		east: LandmarkDescription;
 		west: LandmarkDescription;
 	};
+}
+
+export type ObjectiveKind = "carry" | "use_item" | "use_space" | "convergence";
+
+export interface CarryObjective {
+	id: string;
+	kind: "carry";
+	description: string;
+	satisfactionState: "pending" | "satisfied";
+	objectId: string;
+	spaceId: string;
+}
+
+export interface UseItemObjective {
+	id: string;
+	kind: "use_item";
+	description: string;
+	satisfactionState: "pending" | "satisfied";
+	itemId: string;
+}
+
+export interface UseSpaceObjective {
+	id: string;
+	kind: "use_space";
+	description: string;
+	satisfactionState: "pending" | "satisfied";
+	spaceId: string;
+}
+
+export interface ConvergenceObjective {
+	id: string;
+	kind: "convergence";
+	description: string;
+	satisfactionState: "pending" | "satisfied";
+	/** The id of the objective_space that acts as the convergence point. */
+	spaceId: string;
+}
+
+export type Objective =
+	| CarryObjective
+	| UseItemObjective
+	| UseSpaceObjective
+	| ConvergenceObjective;
+
+// ── Complication types ────────────────────────────────────────────────────────
+
+export type ComplicationKind =
+	| "weather_change"
+	| "sysadmin_directive"
+	| "tool_disable"
+	| "obstacle_shift"
+	| "chat_lockout"
+	| "setting_shift";
+
+/**
+ * Persistent active complications stored on PhaseState.
+ * Transient complications (weather_change, obstacle_shift, setting_shift)
+ * mutate world/setting state and are not tracked here.
+ */
+export type ActiveComplication =
+	| {
+			kind: "sysadmin_directive";
+			target: AiId;
+			directive: string;
+			resolveAtRound: number;
+	  }
+	| {
+			kind: "tool_disable";
+			target: AiId;
+			tool: ToolName;
+			resolveAtRound: number;
+	  }
+	| { kind: "chat_lockout"; target: AiId; resolveAtRound: number };
+
+/** Countdown + phase-level flags for the complication schedule. */
+export interface ComplicationSchedule {
+	countdown: number;
+	settingShiftFired: boolean;
+}
+
+/**
+ * The draw payload returned from the complication engine — one variant per
+ * ComplicationKind. Carries only the data needed to dispatch the complication.
+ */
+export type ComplicationVariant =
+	| { kind: "weather_change" }
+	| { kind: "sysadmin_directive"; target: AiId; duration: number }
+	| { kind: "tool_disable"; target: AiId; tool: ToolName; duration: number }
+	| {
+			kind: "obstacle_shift";
+			obstacleId: string;
+			fromCell: GridPosition;
+			toCell: GridPosition;
+	  }
+	| { kind: "chat_lockout"; target: AiId; duration: number }
+	| { kind: "setting_shift" };
+
+/** Returned by tickComplication when a complication fires. */
+export interface ComplicationResult {
+	fired: ComplicationVariant;
 }
 
 export interface PersonaSpatialState {
@@ -140,14 +277,16 @@ export interface PhysicalActionRecord {
 /**
  * A single tagged item inside a Daemon's conversation log.
  *
- * Discriminated union of three kinds — `message`, `witnessed-event`, `action-failure` — each
- * carrying a `round` and the smallest payload needed to render its line in the system prompt.
- * This is the per-Daemon storage shape *and* the prompt-rendered shape (per CONTEXT.md's
- * `Conversation log` glossary entry). The `kind` tag is chosen so a player editing a `*xxxx.txt`
- * file in devtools can tell entry kinds apart at a glance.
+ * Discriminated union of four kinds — `message`, `witnessed-event`, `action-failure`,
+ * `broadcast` — each carrying a `round` and the smallest payload needed to render its
+ * line in the system prompt. This is the per-Daemon storage shape *and* the
+ * prompt-rendered shape (per CONTEXT.md's `Conversation log` glossary entry). The `kind`
+ * tag is chosen so a player editing a `*xxxx.txt` file in devtools can tell entry kinds
+ * apart at a glance.
  *
- * - `message`: a directional message from `from: AiId | "blue"` to `to: AiId | "blue"`.
- *   Both sender's and recipient's per-Daemon logs receive the same entry.
+ * - `message`: a directional message from `from: AiId | "blue" | "sysadmin"` to `to: AiId | "blue"`.
+ *   Both sender's and recipient's per-Daemon logs receive the same entry. `"sysadmin"` is a
+ *   special sender for privately-delivered system directives (not a real Daemon — has no log slot).
  * - `witnessed-event`: projects the render-relevant subset of PhysicalActionRecord for an action
  *   this Daemon observed inside its cone. The cone-snapshot fields (`actorCellAtAction`,
  *   `actorFacingAtAction`, `witnessSpatial`) are omitted — cone visibility is resolved at
@@ -155,12 +294,14 @@ export interface PhysicalActionRecord {
  * - `action-failure`: actor-only; persists across rounds; written by the dispatcher when an
  *   in-scope action tool is rejected. Surfaces the rejection reason directly to the actor so
  *   Daemons do not repeat the same failed action (e.g. walking into a wall) indefinitely.
+ * - `broadcast`: sender-less system announcement appended to ALL three Daemon logs at once
+ *   (e.g. a weather change complication). Has no `from` / `to` fields.
  */
 export type ConversationEntry =
 	| {
 			kind: "message";
 			round: number;
-			from: AiId | "blue";
+			from: AiId | "blue" | "sysadmin";
 			to: AiId | "blue";
 			content: string;
 	  }
@@ -181,6 +322,32 @@ export type ConversationEntry =
 			tool: "go" | "look" | "pick_up" | "put_down" | "give" | "use" | "examine";
 			/** Verbatim dispatcher rejection reason (e.g. "That cell is blocked by an obstacle"). */
 			reason: string;
+	  }
+	| {
+			kind: "broadcast";
+			round: number;
+			content: string;
+	  }
+	| {
+			kind: "witnessed-obstacle-shift";
+			round: number;
+			obstacleId: string;
+			fromCell: GridPosition;
+			toCell: GridPosition;
+			flavor: string;
+	  }
+	| {
+			kind: "witnessed-convergence";
+			round: number;
+			spaceId: string;
+			tier: 1 | 2;
+			flavor: string;
+			/**
+			 * "actor" — receiver was standing on the space; flavor is the first-person actor line.
+			 * "witness" — receiver's cone covered the space but they were NOT on it; flavor is the third-person witness line.
+			 * Optional for backward-compat with saves written before #336 (treat as "witness").
+			 */
+			audience?: "actor" | "witness";
 	  };
 
 export interface AiBudget {
@@ -188,45 +355,16 @@ export interface AiBudget {
 	total: number;
 }
 
-/**
- * A win condition for a phase.
- * Receives the active PhaseState and returns true when the phase objective is met.
- */
-export type WinCondition = (phase: PhaseState) => boolean;
-
-export interface PhaseConfig {
-	phaseNumber: 1 | 2 | 3;
-	/** Roll k (objective pairs) per phase. */
-	kRange: [number, number];
-	/** Roll n (interesting objects) per phase. */
-	nRange: [number, number];
-	/** Roll m (obstacles) per phase. */
-	mRange: [number, number];
-	budgetPerAi: number;
-	/**
-	 * Pool of candidate goals drawn at phase start. Must contain at least one entry.
-	 * `startPhase` performs one uniform draw per AI (independent draws — same goal
-	 * can be assigned to multiple AIs in one phase).
-	 * AC #6 deviation: the AC said "remove aiGoalPool?" but the field is retained as required
-	 * because goal selection still needs a per-phase draw pool — the AC language conflated
-	 * removing the optional pool marker with removing goal selection itself.
-	 */
-	aiGoalPool: string[];
-	/** Optional win condition. If absent, the phase never auto-advances. */
-	winCondition?: WinCondition;
-	/** Config for the next phase. Required when winCondition may fire. */
-	nextPhaseConfig?: PhaseConfig;
-}
-
-export interface PhaseState {
-	phaseNumber: 1 | 2 | 3;
-	/** Setting noun for this phase (e.g. "abandoned subway station"). */
+export interface GameState {
+	personas: Record<AiId, AiPersona>;
+	/** Single content pack for the game (active pack — switches on Setting Shift). */
+	contentPack: ContentPack;
+	isComplete: boolean;
+	outcome?: "win" | "lose";
+	/** Setting noun for this game (e.g. "abandoned subway station"). */
 	setting: string;
 	weather: string;
 	timeOfDay: string;
-	/** The full content pack for this phase. */
-	contentPack: ContentPack;
-	aiGoals: Record<AiId, string>;
 	round: number;
 	world: WorldState;
 	budgets: Record<AiId, AiBudget>;
@@ -234,29 +372,20 @@ export interface PhaseState {
 	conversationLogs: Record<AiId, ConversationEntry[]>;
 	/** Budget-exhaustion lockout: prevents the AI from acting at all. */
 	lockedOut: Set<AiId>;
-	/**
-	 * Player-chat lockout: maps an AI's id to the round number at which the
-	 * lockout resolves (resolves when phase.round >= resolveAtRound).
-	 * While active the player cannot address messages to that AI; the AI
-	 * continues to receive whispers, take turns, and call tools normally.
-	 * Semantically distinct from `lockedOut` (budget-exhaustion).
-	 */
-	chatLockouts: Map<AiId, number>;
-	/** Win condition carried from PhaseConfig so the coordinator can check it. */
-	winCondition?: WinCondition;
-	/** Next phase config carried from PhaseConfig so the coordinator can advance. */
-	nextPhaseConfig?: PhaseConfig;
-	/** Per-AI spatial state (position + facing) for this phase. */
+	/** Per-AI spatial state (position + facing). */
 	personaSpatial: Record<AiId, PersonaSpatialState>;
-}
-
-export interface GameState {
-	currentPhase: 1 | 2 | 3;
-	phases: PhaseState[];
-	personas: Record<AiId, AiPersona>;
-	isComplete: boolean;
-	/** All three content packs generated at game start. */
-	contentPacks: ContentPack[];
+	/** Complication countdown + phase-level flags. */
+	complicationSchedule: ComplicationSchedule;
+	/** Currently active persistent complications (Sysadmin Directives, Tool Disables, Chat Lockouts). */
+	activeComplications: ActiveComplication[];
+	/** Setting A content packs — one per phase, generated at game start. */
+	contentPacksA: ContentPack[];
+	/** Setting B content packs — same entity IDs as A, different names/descriptions. */
+	contentPacksB: ContentPack[];
+	/** Which setting is currently active. Starts as "A"; swapped to "B" by Setting Shift. */
+	activePackId: "A" | "B";
+	/** Active objectives for this game session. Drawn at game start from the content pack pool. */
+	objectives: Objective[];
 }
 
 export type ToolName =
@@ -305,6 +434,36 @@ export interface ToolRoundtripMessage {
 		reason?: string;
 	}>;
 }
+
+/**
+ * @deprecated Phase concept removed (issue #295). Use GameState directly.
+ * Kept as a type alias for test backward-compat.
+ */
+export type PhaseState = GameState & {
+	phaseNumber: 1 | 2 | 3;
+	aiGoals: Record<AiId, string>;
+	contentPack: ContentPack;
+};
+
+/**
+ * @deprecated Phase concept removed (issue #295). Use SingleGameConfig.
+ * Kept as a type alias for test backward-compat.
+ */
+export interface PhaseConfig {
+	phaseNumber: 1 | 2 | 3;
+	kRange: [number, number];
+	nRange: [number, number];
+	mRange: [number, number];
+	budgetPerAi: number;
+	aiGoalPool: string[];
+	winCondition?: (phase: GameState) => boolean;
+	nextPhaseConfig?: PhaseConfig;
+}
+
+/**
+ * @deprecated Phase concept removed (issue #295).
+ */
+export type WinCondition = (phase: GameState) => boolean;
 
 export interface RoundResult {
 	round: number;

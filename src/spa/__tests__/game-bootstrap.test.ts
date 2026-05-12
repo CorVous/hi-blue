@@ -17,9 +17,12 @@ vi.mock("../../content", async (importOriginal) => {
 	};
 });
 
-// Pin generateContentPacks to static content packs (no LLM call in tests).
+// Pin generateDualContentPacks to static content packs (no LLM call in tests).
 vi.mock("../../content/content-pack-generator", () => ({
-	generateContentPacks: async () => STATIC_CONTENT_PACKS,
+	generateDualContentPacks: async () => ({
+		packsA: STATIC_CONTENT_PACKS,
+		packsB: STATIC_CONTENT_PACKS,
+	}),
 }));
 
 vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
@@ -123,7 +126,8 @@ describe("renderGame — session restore (formerly async bootstrap)", () => {
 			mintAndActivateNewSession();
 			const session = buildSessionFromAssets({
 				personas: STATIC_PERSONAS,
-				contentPacks: STATIC_CONTENT_PACKS,
+				contentPacksA: STATIC_CONTENT_PACKS,
+				contentPacksB: STATIC_CONTENT_PACKS,
 			});
 			saveActiveSession(session.getState());
 		} finally {

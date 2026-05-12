@@ -1,4 +1,3 @@
-import { PHASE_1_CONFIG } from "../../content";
 import { serializeGameSave } from "../../save-serializer.js";
 import {
 	BANNER,
@@ -8,10 +7,14 @@ import {
 	renderTopInfoLeft,
 	topInfoStatus,
 } from "../bbs-chrome.js";
-import { buildSessionFromAssets } from "../game/bootstrap.js";
+import {
+	buildSameDaemonsSession,
+	buildSessionFromAssets,
+} from "../game/bootstrap.js";
 import { BrowserLLMProvider } from "../game/browser-llm-provider.js";
+import { isPlayerChatLockedOut } from "../game/complication-engine.js";
 import { deriveComposerState } from "../game/composer-reducer.js";
-import { getActivePhase, updateActivePhase } from "../game/engine.js";
+import { appendBroadcast } from "../game/engine.js";
 import { GameSession } from "../game/game-session.js";
 import {
 	applyAddresseeChange,
@@ -26,13 +29,15 @@ import {
 } from "../game/pending-bootstrap.js";
 import { encodeRoundResult } from "../game/round-result-encoder.js";
 import { getSpikeRng } from "../game/spike-seed.js";
-import type { AiId, AiPersona, PhaseConfig } from "../game/types";
+import type { AiId, AiPersona } from "../game/types";
 import { AI_TYPING_SPEED, TOKEN_PACE_MS } from "../game/typing-rhythm.js";
 import { CapHitError } from "../llm-client.js";
 import {
+	archiveSession,
 	clearActiveSession,
 	getActiveSessionId,
 	loadActiveSession,
+	mintAndActivateNewSession,
 	saveActiveSession,
 } from "../persistence/session-storage.js";
 
@@ -142,37 +147,17 @@ function isDevHost(): boolean {
 }
 
 /**
- * Recursively deep-clone a PhaseConfig chain, overriding `winCondition` to
- * `() => true` at every level.
- *
- * Only the config objects are cloned — the `initialWorld` and `aiGoals` values
- * are shallow-copied (they are plain data with no function members that need
- * patching). The original configs are never mutated.
+ * @deprecated Phase concept removed (issue #295). No longer used.
  */
-function patchPhaseChain(config: PhaseConfig): PhaseConfig {
-	return {
-		...config,
-		winCondition: () => true,
-		...(config.nextPhaseConfig !== undefined
-			? { nextPhaseConfig: patchPhaseChain(config.nextPhaseConfig) }
-			: {}),
-	};
-}
-
 /**
  * Apply SPA-side test affordances from URL search params.
  *
  * Only honoured when the SPA is served by `pnpm wrangler dev` (see
  * `isDevHost`). Silently inert in any other host.
  *
- * - `winImmediately=1`: recursively patch the real phase chain reachable from
- *   the active phase, injecting `winCondition: () => true` into the active
- *   phase AND every phase reachable via `nextPhaseConfig`. This uses the real
- *   PHASE_1 → PHASE_2 → PHASE_3 config chain (deep-cloned; originals are
- *   untouched). A cold-start `goto("/?winImmediately=1")` followed by three
- *   submitted messages will reliably reach `game_ended`.
- * - `lockout=1`: arm a chat-lockout for `red`, 2 rounds, effective next round.
- *   Matches the legacy worker semantics from `src/proxy/_smoke.ts`.
+ * - `winImmediately=1`: wrap submitMessage so the next call ends the game with
+ *   outcome "win". Used by integration tests that need to drive the UI to
+ *   `game_ended` without satisfying objectives via tool calls.
  *
  * Returns the (possibly replaced) GameSession to use going forward.
  */
@@ -183,36 +168,28 @@ export function applyTestAffordances(
 	// Gate: only apply when wrangler dev is the host
 	if (!isDevHost()) return s;
 
-	const wantsWinImmediately = searchParams.get("winImmediately") === "1";
-	const wantsLockout = searchParams.get("lockout") === "1";
+	const wantsWin = searchParams.get("winImmediately") === "1";
 
-	if (!wantsWinImmediately && !wantsLockout) return s;
+	if (!wantsWin) return s;
 
-	let active = s;
+	const active = s;
 
-	if (wantsWinImmediately) {
-		// Patch the real phase chain: inject winCondition: () => true into the
-		// active phase AND every phase reachable via nextPhaseConfig.
-		// patchPhaseChain deep-clones each config level so the global
-		// PHASE_1_CONFIG (and its linked configs) are never mutated.
-		const newState = updateActivePhase(active.getState(), (phase) => ({
-			...phase,
-			winCondition: () => true,
-			...(phase.nextPhaseConfig !== undefined
-				? { nextPhaseConfig: patchPhaseChain(phase.nextPhaseConfig) }
-				: {}),
-		}));
-		active = GameSession.restore(newState);
-	}
-
-	if (wantsLockout) {
-		const currentRound = getActivePhase(active.getState()).round;
-		active.armChatLockout({
-			rng: () => 0,
-			lockoutTriggerRound: currentRound + 1,
-			lockoutDuration: 2,
-		});
-	}
+	// In the flat single-game model, wrap submitMessage so the next call ends
+	// the game (outcome: "win"). Used by integration tests that need to drive
+	// the UI to game_ended without satisfying objectives via tool calls.
+	const originalSubmit = active.submitMessage.bind(active);
+	active.submitMessage = async (...args) => {
+		const result = await originalSubmit(...args);
+		return {
+			...result,
+			result: { ...result.result, gameEnded: true, phaseEnded: false },
+			nextState: {
+				...result.nextState,
+				isComplete: true,
+				outcome: "win" as const,
+			},
+		};
+	};
 
 	return active;
 }
@@ -407,9 +384,9 @@ export function renderGame(
 	// step back on for prompt-tuning. Gated to wrangler-dev (see isDevHost).
 	//
 	// Merge hash-query-string params (from the router) with location.search
-	// params so flags like ?think=1, ?lockout=1, ?winImmediately=1 work whether
-	// they appear in the search string (e.g. "/?lockout=1") or after the hash
-	// (e.g. "/#/?lockout=1"). Hash params win on conflict.
+	// params so flags like ?think=1, ?winImmediately=1 work whether
+	// they appear in the search string (e.g. "/?winImmediately=1") or after the hash
+	// (e.g. "/#/?winImmediately=1"). Hash params win on conflict.
 	const effectiveParams = new URLSearchParams(location.search);
 	if (params) {
 		for (const [k, v] of params) effectiveParams.set(k, v);
@@ -453,17 +430,10 @@ export function renderGame(
 		);
 		const status = topInfoStatus(state);
 		const sessionIdLocal = getActiveSessionId() ?? "0x????";
-		// Walk the phase chain to count total phases (matches refreshTopInfo).
-		let total = 1;
-		let cursor: PhaseConfig | undefined = PHASE_1_CONFIG.nextPhaseConfig;
-		while (cursor) {
-			total += 1;
-			cursor = cursor.nextPhaseConfig;
-		}
 		const inputs = {
 			sessionId: sessionIdLocal,
-			phaseNumber: 1,
-			totalPhases: total,
+			phaseNumber: 1 as const,
+			totalPhases: 1,
 			turn: 0,
 		};
 		if (topinfoLeftEl) renderTopInfoLeft(topinfoLeftEl, inputs);
@@ -625,9 +595,10 @@ export function renderGame(
 				renderLoadingTopInfo("generating-room");
 				startSpinners();
 				startBrightnessWipe();
-				return pending.contentPacksPromise.then((packs) => ({
+				return pending.contentPacksPromise.then(({ packsA, packsB }) => ({
 					personas,
-					contentPacks: packs,
+					contentPacksA: packsA,
+					contentPacksB: packsB,
 				}));
 			})
 			.then((assets) => {
@@ -762,7 +733,7 @@ export function renderGame(
 				// Re-render transcripts from restored state using conversationLogs.
 				// (The new format stores conversation logs in daemon .txt files, not as
 				// serialized transcript HTML, so we always use the conversationLogs path.)
-				const restoredPhase = getActivePhase(restoredState);
+				const restoredPhase = restoredState;
 				const restoredPersonas = restoredState.personas;
 				const restorePanelEls = doc.querySelectorAll<HTMLElement>(".ai-panel");
 				Object.keys(restoredPersonas).forEach((aiId, idx) => {
@@ -776,44 +747,49 @@ export function renderGame(
 					// branch left them stale whenever the new session had fewer (or
 					// zero) chat entries for this panel slot.
 					transcript.textContent = "";
-					// Filter to message entries where blue is involved (from blue or to blue)
-					// Skip daemon-to-daemon messages from the player-facing transcript.
-					const messageEntries = (
+					// Filter to message entries where blue is involved (from blue or to blue).
+					// Skip daemon-to-daemon messages and broadcast entries from the player-facing transcript.
+					// Broadcasts live in Daemon conversationLogs for LLM context only.
+					const visibleEntries = (
 						restoredPhase.conversationLogs[aiId] ?? []
 					).filter(
 						(e) =>
 							e.kind === "message" && (e.from === "blue" || e.to === "blue"),
 					);
-					if (messageEntries.length > 0) {
+					if (visibleEntries.length > 0) {
 						// Synthesise from conversationLogs (stored in daemon .txt files).
 						const persona = restoredPersonas[aiId];
 						const personaName = persona?.name ?? aiId;
-						for (const entry of messageEntries) {
-							if (entry.kind !== "message") continue;
+						for (const entry of visibleEntries) {
 							const lineEl = doc.createElement("div");
 							lineEl.className = "msg-line";
-							if (entry.from === "blue") {
-								// Incoming from player
-								appendMentionAwareText(
-									lineEl,
-									`> ${entry.content}\n`,
-									restoredPersonas,
-									"msg-you",
-								);
-							} else {
-								// Outgoing from AI to blue
-								const prefixSpan = doc.createElement("span");
-								prefixSpan.className = "msg-prefix";
-								if (persona?.color) {
-									prefixSpan.style.setProperty("--prefix-color", persona.color);
+							if (entry.kind === "message") {
+								if (entry.from === "blue") {
+									// Incoming from player
+									appendMentionAwareText(
+										lineEl,
+										`> ${entry.content}\n`,
+										restoredPersonas,
+										"msg-you",
+									);
+								} else {
+									// Outgoing from AI to blue
+									const prefixSpan = doc.createElement("span");
+									prefixSpan.className = "msg-prefix";
+									if (persona?.color) {
+										prefixSpan.style.setProperty(
+											"--prefix-color",
+											persona.color,
+										);
+									}
+									prefixSpan.textContent = `> *${transcriptName(personaName)} `;
+									lineEl.appendChild(prefixSpan);
+									appendMentionAwareText(
+										lineEl,
+										`${entry.content}\n`,
+										restoredPersonas,
+									);
 								}
-								prefixSpan.textContent = `> *${transcriptName(personaName)} `;
-								lineEl.appendChild(prefixSpan);
-								appendMentionAwareText(
-									lineEl,
-									`${entry.content}\n`,
-									restoredPersonas,
-								);
 							}
 							transcript.appendChild(lineEl);
 						}
@@ -846,9 +822,9 @@ export function renderGame(
 	// Synchronous post-init: runs for both the restore path AND the bootstrap-
 	// recursive path (which already set session = built before re-entering).
 	if (session !== null) {
-		// Apply SPA-side test affordances from location.search (e.g. ?winImmediately=1
-		// or ?lockout=1). These are gated inside applyTestAffordances to only fire
-		// when __WORKER_BASE_URL__ === "http://localhost:8787" (local dev).
+		// Apply SPA-side test affordances from location.search (e.g. ?winImmediately=1).
+		// These are gated inside applyTestAffordances to only fire when
+		// __WORKER_BASE_URL__ === "http://localhost:8787" (local dev).
 		// Note: we use location.search (not the hash params) because these flags are
 		// intended to be set on the page URL itself, matching the legacy worker pattern.
 		session = applyTestAffordances(session, effectiveParams);
@@ -859,11 +835,11 @@ export function renderGame(
 		personaColors = buildPersonaColorMap(runtimePersonas);
 		personaDisplayNames = buildPersonaDisplayNameMap(runtimePersonas);
 
-		// Hydrate lockouts from the active phase's chatLockouts map so that
-		// a reload preserves the Send-disabled state for locked-out AIs.
-		const activePhaseForLockouts = getActivePhase(session.getState());
+		// Hydrate lockouts from activeComplications so that a reload preserves
+		// the Send-disabled state for chat-locked-out AIs.
+		const activePhaseForLockouts = session.getState();
 		for (const aiId of Object.keys(runtimePersonas)) {
-			lockouts.set(aiId, activePhaseForLockouts.chatLockouts.has(aiId));
+			lockouts.set(aiId, isPlayerChatLockedOut(activePhaseForLockouts, aiId));
 		}
 
 		// Reset module-level gameEnded flag on fresh session init
@@ -910,9 +886,9 @@ export function renderGame(
 			panel.style.setProperty("--panel-color", persona.color);
 			initPanelChrome(panel, persona);
 			const budgetEl = panel.querySelector<HTMLSpanElement>(".panel-budget");
-			const phase = getActivePhase(sessionRef.getState());
+			const gameState = sessionRef.getState();
 			if (budgetEl) {
-				const budget = phase.budgets[aiId];
+				const budget = gameState.budgets[aiId];
 				if (budget) {
 					budgetEl.dataset.budget = String(budget.remaining);
 					budgetEl.textContent = formatBudget(budget.remaining);
@@ -943,19 +919,11 @@ export function renderGame(
 		if (!session) return;
 		if (!topinfoLeftEl || !topinfoRightEl) return;
 		const state = session.getState();
-		const phase = getActivePhase(state);
-		// Walk the nextPhaseConfig chain from PHASE_1_CONFIG to count total phases.
-		let total = 1;
-		let cursor: PhaseConfig | undefined = PHASE_1_CONFIG.nextPhaseConfig;
-		while (cursor) {
-			total += 1;
-			cursor = cursor.nextPhaseConfig;
-		}
 		const inputs = {
 			sessionId,
-			phaseNumber: phase.phaseNumber,
-			totalPhases: total,
-			turn: phase.round,
+			phaseNumber: 1 as const,
+			totalPhases: 1,
+			turn: state.round,
 		};
 		renderTopInfoLeft(topinfoLeftEl, inputs);
 		topinfoRightEl.textContent = "";
@@ -1266,17 +1234,15 @@ export function renderGame(
 				addressed,
 				message,
 				provider,
-				undefined,
 				initiative,
 				undefined,
 				(aiId) => stripSpinner(aiId),
 			);
 
-			const phaseAfter = getActivePhase(nextState);
 			const events = encodeRoundResult(
 				result,
 				completions,
-				phaseAfter,
+				nextState,
 				nextState.personas,
 			);
 
@@ -1328,11 +1294,15 @@ export function renderGame(
 
 					case "chat_lockout":
 						setChatLockout(event.aiId, true);
-						appendStandaloneLine(event.aiId, `[${event.message}]\n`);
 						break;
 
 					case "chat_lockout_resolved":
 						setChatLockout(event.aiId, false);
+						break;
+
+					case "system_broadcast":
+						// Intentionally not rendered in the player-facing UI.
+						// The broadcast lives in each Daemon's conversationLog for LLM context only.
 						break;
 
 					case "action_log":
@@ -1361,7 +1331,7 @@ export function renderGame(
 						// Refresh budget displays from new phase
 						const currentSession = session;
 						if (currentSession) {
-							const newPhase = getActivePhase(currentSession.getState());
+							const newState = currentSession.getState();
 							for (const aid of advAiIds) {
 								const panel = doc.querySelector<HTMLElement>(
 									`.ai-panel[data-ai="${aid}"]`,
@@ -1370,7 +1340,7 @@ export function renderGame(
 								const budgetEl =
 									panel.querySelector<HTMLSpanElement>(".panel-budget");
 								if (budgetEl) {
-									const b = newPhase.budgets[aid];
+									const b = newState.budgets[aid];
 									if (b) {
 										budgetEl.dataset.budget = String(b.remaining);
 										budgetEl.textContent = formatBudget(b.remaining);
@@ -1399,8 +1369,12 @@ export function renderGame(
 						sendBtn.disabled = true;
 						promptInput.disabled = true;
 
-						// Clear persisted game state on game-end
-						clearActiveSession();
+						// Capture state for choice handlers, then null out session so
+						// any subsequent form submits are no-ops (form checks `if (!session) return`).
+						const endedSessionId = getActiveSessionId();
+						const endedState = session?.getState();
+						session = null;
+						cachedSessionId = null;
 
 						// Hide game UI
 						const panelsEl = doc.querySelector<HTMLElement>("#panels");
@@ -1417,15 +1391,129 @@ export function renderGame(
 						// Show endgame screen
 						if (endgameEl) endgameEl.removeAttribute("hidden");
 
+						// Wire end-game choice buttons
+						const newDaemonsBtn = doc.querySelector<HTMLButtonElement>(
+							"#endgame-new-daemons-btn",
+						);
+						const sameDaemonsBtn = doc.querySelector<HTMLButtonElement>(
+							"#endgame-same-daemons-btn",
+						);
+						const continueBtn = doc.querySelector<HTMLButtonElement>(
+							"#endgame-continue-btn",
+						);
+						const choiceStatus = doc.querySelector<HTMLElement>(
+							"#endgame-choice-status",
+						);
+
+						// Show Continue only when an OpenRouter key is present
+						if (
+							continueBtn &&
+							localStorage.getItem("openrouter_key") !== null
+						) {
+							continueBtn.removeAttribute("hidden");
+						}
+
+						const disableChoiceButtons = () => {
+							if (newDaemonsBtn) newDaemonsBtn.disabled = true;
+							if (sameDaemonsBtn) sameDaemonsBtn.disabled = true;
+							if (continueBtn) continueBtn.disabled = true;
+						};
+
+						if (newDaemonsBtn) {
+							newDaemonsBtn.addEventListener("click", () => {
+								disableChoiceButtons();
+								if (choiceStatus) choiceStatus.textContent = "archiving…";
+								(endedSessionId
+									? archiveSession(endedSessionId)
+									: Promise.resolve()
+								)
+									.then(() => {
+										clearActiveSession();
+										session = null;
+										cachedSessionId = null;
+										location.hash = "#/start";
+									})
+									.catch(() => {
+										clearActiveSession();
+										session = null;
+										cachedSessionId = null;
+										location.hash = "#/start";
+									});
+							});
+						}
+
+						if (sameDaemonsBtn) {
+							sameDaemonsBtn.addEventListener("click", () => {
+								disableChoiceButtons();
+								if (!endedState) {
+									location.hash = "#/start";
+									return;
+								}
+								if (choiceStatus) choiceStatus.textContent = "archiving…";
+								(endedSessionId
+									? archiveSession(endedSessionId)
+									: Promise.resolve()
+								)
+									.then(() => {
+										if (choiceStatus)
+											choiceStatus.textContent = "spinning up a new room…";
+										return buildSameDaemonsSession(endedState.personas);
+									})
+									.then((newSess) => {
+										clearActiveSession();
+										mintAndActivateNewSession();
+										saveActiveSession(newSess.getState());
+										session = null;
+										cachedSessionId = null;
+										gameEnded = false;
+										location.hash = `#/game?${Date.now()}`;
+									})
+									.catch(() => {
+										clearActiveSession();
+										session = null;
+										cachedSessionId = null;
+										location.hash = "#/start";
+									});
+							});
+						}
+
+						if (continueBtn) {
+							continueBtn.addEventListener("click", () => {
+								disableChoiceButtons();
+								if (!endedState) {
+									location.hash = "#/start";
+									return;
+								}
+								if (choiceStatus)
+									choiceStatus.textContent = "spinning up a new room…";
+								buildSameDaemonsSession(endedState.personas)
+									.then((newSess) => {
+										let newState = newSess.getState();
+										newState = appendBroadcast(
+											newState,
+											"The sysadmin has created a new room.",
+										);
+										saveActiveSession(newState); // same session ID (active pointer unchanged)
+										session = null;
+										cachedSessionId = null;
+										gameEnded = false;
+										location.hash = `#/game?${Date.now()}`;
+									})
+									.catch(() => {
+										session = null;
+										cachedSessionId = null;
+										location.hash = "#/start";
+									});
+							});
+						}
+
 						// Serialize and stash save payload
 						const downloadBtn =
 							doc.querySelector<HTMLButtonElement>("#download-ais-btn");
 						const downloadStatusEl =
 							doc.querySelector<HTMLElement>("#download-status");
-						if (downloadBtn && session) {
-							const savePayload = JSON.stringify(
-								serializeGameSave(session.getState()),
-							);
+						if (downloadBtn && endedState) {
+							const savePayload = JSON.stringify(serializeGameSave(endedState));
 							downloadBtn.dataset.savePayload = savePayload;
 
 							downloadBtn.addEventListener("click", () => {

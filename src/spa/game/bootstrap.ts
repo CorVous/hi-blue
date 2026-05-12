@@ -10,7 +10,7 @@
  * Issue #173 (parent #155).
  */
 
-import { generateContentPacks } from "../../content/content-pack-generator.js";
+import { generateDualContentPacks } from "../../content/content-pack-generator.js";
 import {
 	generatePersonas,
 	PHASE_1_CONFIG,
@@ -27,12 +27,16 @@ import type { AiId, AiPersona, ContentPack } from "./types.js";
 
 export interface NewGameAssets {
 	personas: Record<AiId, AiPersona>;
-	contentPacks: ContentPack[];
+	contentPacksA: ContentPack[];
+	contentPacksB: ContentPack[];
 }
 
 export interface SplitNewGameAssets {
 	personasPromise: Promise<Record<AiId, AiPersona>>;
-	contentPacksPromise: Promise<ContentPack[]>;
+	contentPacksPromise: Promise<{
+		packsA: ContentPack[];
+		packsB: ContentPack[];
+	}>;
 }
 
 export interface BootstrapOpts {
@@ -82,7 +86,7 @@ export function generateNewGameAssetsSplit(
 	const aiIdsPromise = personasPromise.then((p) => Object.keys(p));
 	aiIdsPromise.catch(() => {});
 
-	const contentPacksPromise = generateContentPacks(
+	const contentPacksPromise = generateDualContentPacks(
 		contentPackRng,
 		SETTING_POOL,
 		[PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG],
@@ -107,11 +111,35 @@ export async function generateNewGameAssets(
 ): Promise<NewGameAssets> {
 	const { personasPromise, contentPacksPromise } =
 		generateNewGameAssetsSplit(opts);
-	const [personas, contentPacks] = await Promise.all([
+	const [personas, { packsA, packsB }] = await Promise.all([
 		personasPromise,
 		contentPacksPromise,
 	]);
-	return { personas, contentPacks };
+	return { personas, contentPacksA: packsA, contentPacksB: packsB };
+}
+
+/**
+ * Build a new GameSession reusing existing personas but generating fresh
+ * content packs. Used by the end-game "Same Daemons, New Room" and
+ * "Continue" choices (issue #307).
+ */
+export async function buildSameDaemonsSession(
+	personas: Record<AiId, AiPersona>,
+	opts?: { rng?: () => number },
+): Promise<GameSession> {
+	const rng = opts?.rng ?? Math.random;
+	const packLLM = new BrowserContentPackProvider();
+	const { packsA, packsB } = await generateDualContentPacks(
+		rng,
+		SETTING_POOL,
+		[PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG],
+		packLLM,
+		Object.keys(personas),
+	);
+	return buildSessionFromAssets(
+		{ personas, contentPacksA: packsA, contentPacksB: packsB },
+		opts,
+	);
 }
 
 /**
@@ -128,9 +156,25 @@ export function buildSessionFromAssets(
 	opts?: { rng?: () => number },
 ): GameSession {
 	return new GameSession(
-		PHASE_1_CONFIG,
+		assets.contentPacksA[0] ??
+			assets.contentPacksB[0] ?? {
+				setting: "",
+				weather: "",
+				timeOfDay: "",
+				objectivePairs: [],
+				interestingObjects: [],
+				obstacles: [],
+				landmarks: {
+					north: { shortName: "", horizonPhrase: "" },
+					south: { shortName: "", horizonPhrase: "" },
+					east: { shortName: "", horizonPhrase: "" },
+					west: { shortName: "", horizonPhrase: "" },
+				},
+				aiStarts: {},
+			},
 		assets.personas,
-		assets.contentPacks,
+		assets.contentPacksA,
+		assets.contentPacksB,
 		opts?.rng,
 	);
 }

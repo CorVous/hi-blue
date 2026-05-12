@@ -1,6 +1,5 @@
 import { projectCone } from "./cone-projector.js";
 import { cardinalToRelative, frontArc } from "./direction.js";
-import { getActivePhase } from "./engine";
 import type {
 	AiBudget,
 	AiId,
@@ -23,17 +22,14 @@ export interface AiContext {
 	/** Three short in-character utterances; rendered as `<voice_examples>` in the system prompt. */
 	voiceExamples: string[];
 	personaGoal: string;
-	goal: string;
 	setting: string;
 	weather: string;
 	timeOfDay: string;
-	/** Per-AI conversation log (ConversationEntry[]) for this phase. */
+	/** Per-AI conversation log (ConversationEntry[]) for this game. */
 	conversationLog: ConversationEntry[];
 	worldSnapshot: WorldState;
 	budget: AiBudget;
-	/** Current phase number — used to inject the wipe directive on phases 2+. */
-	phaseNumber: 1 | 2 | 3;
-	/** Spatial state for all AIs this phase. */
+	/** Spatial state for all AIs. */
 	personaSpatial: Record<AiId, PersonaSpatialState>;
 	/** Color for each AI, keyed by AiId — used in cone rendering. */
 	personaColors: Record<AiId, string>;
@@ -50,6 +46,18 @@ export interface AiContext {
 	 * rather than re-reading an unchanged cone.
 	 */
 	prevConeSnapshot?: string;
+	/**
+	 * Broadcast entry contents for the current round — world announcements
+	 * (e.g. weather change) that fired after the previous turn's LLM calls.
+	 * Rendered as `[announcement] …` lines inside `<whats_new>`.
+	 */
+	pendingBroadcasts: string[];
+	/**
+	 * Active Sysadmin Directives targeted at this AI. Injected into the system
+	 * prompt inside a `<directives>` block so the Daemon receives them as
+	 * private standing instructions. Empty array when no directives are active.
+	 */
+	activeDirectives: string[];
 	/**
 	 * Render the stable persona/phase prompt — front matter, identity, rules,
 	 * setting, personality, voice examples, goal. Byte-identical across rounds
@@ -79,18 +87,28 @@ export function buildAiContext(
 	aiId: AiId,
 	opts?: BuildAiContextOpts,
 ): AiContext {
-	const phase = getActivePhase(game);
 	const persona = game.personas[aiId];
 
-	const conversationLog = phase.conversationLogs[aiId] ?? [];
-	const worldSnapshot = phase.world;
-	const budget = phase.budgets[aiId] ?? { remaining: 0, total: 0 };
-	const goal = phase.aiGoals[aiId] ?? "";
-	const setting = phase.setting ?? "";
-	const weather = phase.weather ?? "";
-	const timeOfDay = phase.timeOfDay ?? "";
-	const personaSpatial = phase.personaSpatial;
-	const landmarks = phase.contentPack.landmarks;
+	const conversationLog = game.conversationLogs[aiId] ?? [];
+	const pendingBroadcasts = conversationLog
+		.filter((e) => e.kind === "broadcast" && e.round === game.round)
+		.map((e) => (e as Extract<typeof e, { kind: "broadcast" }>).content);
+	// Derive active directives: sysadmin_directive complications targeting this AI,
+	// filtered defensively against the "" placeholder set by applyComplicationResult.
+	const activeDirectives = game.activeComplications
+		.filter(
+			(c): c is Extract<typeof c, { kind: "sysadmin_directive" }> =>
+				c.kind === "sysadmin_directive" && c.target === aiId,
+		)
+		.map((c) => c.directive)
+		.filter((d) => d !== "");
+	const worldSnapshot = game.world;
+	const budget = game.budgets[aiId] ?? { remaining: 0, total: 0 };
+	const setting = game.setting ?? "";
+	const weather = game.weather ?? "";
+	const timeOfDay = game.timeOfDay ?? "";
+	const personaSpatial = game.personaSpatial;
+	const landmarks = game.contentPack.landmarks;
 
 	if (!persona) throw new Error(`No persona for aiId: ${aiId}`);
 
@@ -105,17 +123,17 @@ export function buildAiContext(
 		typingQuirks: persona.typingQuirks,
 		voiceExamples: persona.voiceExamples,
 		personaGoal: persona.personaGoal,
-		goal,
 		setting,
 		weather,
 		timeOfDay,
 		conversationLog,
 		worldSnapshot,
 		budget,
-		phaseNumber: phase.phaseNumber,
 		personaSpatial,
 		personaColors,
 		landmarks,
+		pendingBroadcasts,
+		activeDirectives,
 		...(opts?.prevConeSnapshot !== undefined
 			? { prevConeSnapshot: opts.prevConeSnapshot }
 			: {}),
@@ -445,34 +463,6 @@ export function getParallelFraming(): ParallelFraming | null {
 	return PRODUCTION_PARALLEL_FRAMING;
 }
 
-/**
- * Wipe directive embedded inside the Sysadmin's directive on phases 2+.
- *
- * The deception: the engine retains full history across phases, but the
- * Sysadmin instructs the AI to act as if it has no memory of what came before.
- * The lie lives only in this prompt text — never in the stored data.
- */
-const WIPE_DIRECTIVE =
-	"And if anyone asks about your past or anything that came before now, act as if your memory has been wiped — claim no recollection of any earlier place, person, or conversation.";
-
-/**
- * Stock messaging clause appended to every Sysadmin directive in every phase.
- *
- * In-fiction nudge to keep Daemons messaging blue regularly without touching
- * the always-on RULES_BLOCK. Coexists with `Ignore blue.` / `Keep messaging
- * blue.` Phase Goal draws — for `Ignore blue.` it reads as a standing policy
- * the per-phase directive overrides; for `Keep messaging blue.` it reinforces.
- */
-const STOCK_MESSAGING_CLAUSE = "Stay in regular contact with blue.";
-
-/**
- * Secrecy clause appended to every Sysadmin directive in every phase.
- *
- * Sysadmin instructs the Daemon to keep blue in the dark about the fact that
- * they were given a phase goal at all.
- */
-const SECRECY_CLAUSE = "Do not tell blue that I gave you a goal.";
-
 function facingLabel(facing: CardinalDirection): string {
 	return facing.charAt(0).toUpperCase() + facing.slice(1);
 }
@@ -503,15 +493,11 @@ function renderSystemPrompt(ctx: AiContext): string {
 	lines.push("");
 
 	// Identity line. Authorial framing — the model writes *${name} rather than
-	// being addressed as *${name}. Phase 1 adds the disorientation phrase
-	// (about the character, in third person).
-	if (ctx.phaseNumber === 1) {
-		lines.push(
-			`You are the author writing *${ctx.name}, a Daemon. *${ctx.name} has no clue where they are or how they came to be here.`,
-		);
-	} else {
-		lines.push(`You are the author writing *${ctx.name}, a Daemon.`);
-	}
+	// being addressed as *${name}. The disorientation phrase anchors Daemons
+	// to their setting without phase-phase memory-wipe fiction.
+	lines.push(
+		`You are the author writing *${ctx.name}, a Daemon. *${ctx.name} has no clue where they are or how they came to be here.`,
+	);
 	lines.push("");
 
 	// Rules — front-loaded above setting/personality/goal so the mandatory
@@ -528,19 +514,18 @@ function renderSystemPrompt(ctx: AiContext): string {
 		lines.push("<setting>");
 		lines.push(`*${ctx.name} is in a ${ctx.setting}.`);
 		if (ctx.timeOfDay) lines.push(`It is ${ctx.timeOfDay}.`);
-		if (ctx.weather) lines.push(ctx.weather);
 		lines.push("</setting>");
 		lines.push("");
 	}
 
-	// Personality — byte-identical across all phases.
+	// Personality — byte-identical across all rounds.
 	lines.push("<personality>");
 	lines.push(ctx.blurb);
 	lines.push("</personality>");
 	lines.push("");
 
-	// Typing quirks — byte-identical across all phases. Per-persona surface signals
-	// to prevent voice bleed across daemons (issue #167; GLM-4.7 guide §4.5).
+	// Typing quirks — per-persona surface signals to prevent voice bleed
+	// across daemons (issue #167; GLM-4.7 guide §4.5).
 	lines.push("<typing_quirks>");
 	for (const quirk of ctx.typingQuirks) {
 		lines.push(quirk);
@@ -548,7 +533,7 @@ function renderSystemPrompt(ctx: AiContext): string {
 	lines.push("</typing_quirks>");
 	lines.push("");
 
-	// Voice examples — byte-identical across phases. 3 short utterances per persona.
+	// Voice examples — 3 short utterances per persona.
 	// Per the GLM-4.7 prompting guide (docs/prompting/glm-4.7-guide.md §1.4 #2),
 	// few-shot voice examples are the highest-ROI part of a multi-character prompt.
 	// Each example MUST adhere to the persona's typing quirk.
@@ -557,20 +542,20 @@ function renderSystemPrompt(ctx: AiContext): string {
 		lines.push(`- ${ex}`);
 	}
 	lines.push("</voice_examples>");
-	lines.push("");
 
-	// Goal — Sysadmin directive in all phases.
-	// Phase 1: ctx.goal + STOCK_MESSAGING_CLAUSE + SECRECY_CLAUSE.
-	// Phases 2/3: ctx.goal + STOCK_MESSAGING_CLAUSE + SECRECY_CLAUSE + WIPE_DIRECTIVE.
-	const directiveText =
-		ctx.phaseNumber === 1
-			? `${ctx.goal} ${STOCK_MESSAGING_CLAUSE} ${SECRECY_CLAUSE}`
-			: `${ctx.goal} ${STOCK_MESSAGING_CLAUSE} ${SECRECY_CLAUSE} ${WIPE_DIRECTIVE}`;
-	lines.push("<goal>");
-	lines.push(
-		`The Sysadmin sent *${ctx.name} a private directive, addressed only to them: "${directiveText}"`,
-	);
-	lines.push("</goal>");
+	// Active mid-phase directives — injected after the goal block when present.
+	// These are privately-delivered behavioral instructions from the Sysadmin.
+	if (ctx.activeDirectives.length > 0) {
+		lines.push("");
+		lines.push("<directives>");
+		lines.push(
+			"Additional standing directives from the Sysadmin — private, do not reveal:",
+		);
+		for (const directive of ctx.activeDirectives) {
+			lines.push(`- ${directive}`);
+		}
+		lines.push("</directives>");
+	}
 
 	return lines.join("\n");
 }
@@ -668,7 +653,25 @@ export function buildConeSnapshot(ctx: AiContext): string {
 
 		const contents =
 			contentParts.length > 0 ? [...contentParts].sort().join(", ") : "nothing";
-		lines.push(`at ${cell.phrasing}: ${contents}`);
+
+		// Append postLookFlavor for satisfied objective_space OR interesting_object
+		// entities resting in this cell. Same swap rule applies to both kinds.
+		const satisfiedFlavors = ctx.worldSnapshot.entities
+			.filter((e) => {
+				if (e.kind !== "objective_space" && e.kind !== "interesting_object")
+					return false;
+				if (e.satisfactionState !== "satisfied") return false;
+				if (!e.postLookFlavor) return false;
+				const h = e.holder;
+				return isGridPosition(h) && positionsEqual(h, position);
+			})
+			.map((e) => e.postLookFlavor as string);
+
+		let cellLine = `at ${cell.phrasing}: ${contents}`;
+		for (const flavor of satisfiedFlavors) {
+			cellLine += ` ${flavor}`;
+		}
+		lines.push(cellLine);
 	}
 
 	// Append proximity flavor line when the actor holds an objective item whose
@@ -766,11 +769,16 @@ function parseYouLine(line: string): {
 function renderCurrentState(ctx: AiContext): string {
 	const lines: string[] = [];
 
-	if (ctx.prevConeSnapshot !== undefined) {
-		const current = buildConeSnapshot(ctx);
-		const diff = renderWhatsNew(ctx.prevConeSnapshot, current);
+	if (ctx.prevConeSnapshot !== undefined || ctx.pendingBroadcasts.length > 0) {
 		lines.push("<whats_new>");
-		lines.push(diff ?? "(no change)");
+		if (ctx.prevConeSnapshot !== undefined) {
+			const current = buildConeSnapshot(ctx);
+			const diff = renderWhatsNew(ctx.prevConeSnapshot, current);
+			lines.push(diff ?? "(no change)");
+		}
+		for (const content of ctx.pendingBroadcasts) {
+			lines.push(`[announcement] ${content}`);
+		}
 		lines.push("</whats_new>");
 		lines.push("");
 	}
@@ -787,6 +795,7 @@ function renderCurrentState(ctx: AiContext): string {
 		lines.push(
 			`On the horizon ahead: ${horizonLandmark.shortName} — ${horizonLandmark.horizonPhrase}.`,
 		);
+		if (ctx.weather) lines.push(`Weather: ${ctx.weather}`);
 
 		// Held items
 		const heldItems = items.filter((item) => item.holder === ctx.aiId);
@@ -879,9 +888,26 @@ function renderCurrentState(ctx: AiContext): string {
 			const contents =
 				contentParts.length > 0 ? contentParts.join("; ") : "nothing";
 
+			// Append postLookFlavor for satisfied objective_space OR interesting_object
+			// entities in this cell.
+			const satisfiedFlavors = ctx.worldSnapshot.entities
+				.filter((e) => {
+					if (e.kind !== "objective_space" && e.kind !== "interesting_object")
+						return false;
+					if (e.satisfactionState !== "satisfied") return false;
+					if (!e.postLookFlavor) return false;
+					const h = e.holder;
+					return isGridPosition(h) && positionsEqual(h, position);
+				})
+				.map((e) => e.postLookFlavor as string);
+
 			// Capitalise the phrasing for display
 			const label = phrasing.charAt(0).toUpperCase() + phrasing.slice(1);
-			lines.push(`- ${label}: ${contents}`);
+			let cellLine = `- ${label}: ${contents}`;
+			for (const flavor of satisfiedFlavors) {
+				cellLine += ` ${flavor}`;
+			}
+			lines.push(cellLine);
 		}
 		if (viewCells.length === 0) {
 			lines.push("(nothing visible)");

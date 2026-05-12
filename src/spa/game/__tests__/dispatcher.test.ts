@@ -10,13 +10,17 @@ import {
 	deductBudget,
 	getActivePhase,
 	startPhase,
+	updateActivePhase,
 } from "../engine";
 import type {
 	AiPersona,
 	AiTurnAction,
 	ContentPack,
+	GameState,
 	PhaseConfig,
 	ToolCall,
+	UseItemObjective,
+	UseSpaceObjective,
 	WorldEntity,
 } from "../types";
 
@@ -665,7 +669,7 @@ describe("dispatchAiTurn", () => {
 			},
 			FIXED_RNG,
 		);
-		game = deductBudget(game, "red", 0.01);
+		game = deductBudget(game, "red", 0.01).game;
 		const action: AiTurnAction = { aiId: "red", pass: true };
 		const result = dispatchAiTurn(game, action);
 		expect(result.rejected).toBe(true);
@@ -1246,5 +1250,674 @@ describe("dispatchAiTurn", () => {
 			kind: "action-failure",
 			tool: "put_down",
 		});
+	});
+});
+
+// ── UseItemObjective — executeToolCall flips satisfactionState ────────────────
+
+describe("executeToolCall — UseItemObjective", () => {
+	/**
+	 * Build a game where red holds 'key' (an interesting_object) and there is
+	 * one pending UseItemObjective targeting 'key'. Uses the standard makeGame()
+	 * setup (key is held by red at start).
+	 */
+	function makeGameWithUseItemObjective() {
+		const game = makeGame();
+		const useItemObj: UseItemObjective = {
+			id: "obj-0",
+			kind: "use_item",
+			description: "Use the key",
+			satisfactionState: "pending",
+			itemId: "key",
+		};
+		return updateActivePhase(game, (phase) => ({
+			...phase,
+			objectives: [useItemObj],
+		}));
+	}
+
+	it("flips the UseItemObjective satisfactionState to 'satisfied' on use", () => {
+		const game = makeGameWithUseItemObjective();
+		const call: ToolCall = { name: "use", args: { item: "key" } };
+		const updated = executeToolCall(game, "red", call);
+		const obj = getActivePhase(updated).objectives[0];
+		expect(obj?.satisfactionState).toBe("satisfied");
+	});
+
+	it("flips the entity's satisfactionState to 'satisfied' on use", () => {
+		const game = makeGameWithUseItemObjective();
+		const call: ToolCall = { name: "use", args: { item: "key" } };
+		const updated = executeToolCall(game, "red", call);
+		const entity = getActivePhase(updated).world.entities.find(
+			(e) => e.id === "key",
+		);
+		expect(entity?.satisfactionState).toBe("satisfied");
+	});
+
+	it("does not flip if there is no matching pending UseItemObjective", () => {
+		const game = makeGame(); // no use_item objectives
+		const call: ToolCall = { name: "use", args: { item: "key" } };
+		const updated = executeToolCall(game, "red", call);
+		const entity = getActivePhase(updated).world.entities.find(
+			(e) => e.id === "key",
+		);
+		// satisfactionState should remain undefined (not set)
+		expect(entity?.satisfactionState).toBeUndefined();
+	});
+
+	it("does not flip an already-satisfied UseItemObjective", () => {
+		const game = makeGame();
+		const useItemObj: UseItemObjective = {
+			id: "obj-0",
+			kind: "use_item",
+			description: "Use the key",
+			satisfactionState: "satisfied", // already satisfied
+			itemId: "key",
+		};
+		const gameWithObj = updateActivePhase(game, (phase) => ({
+			...phase,
+			objectives: [useItemObj],
+		}));
+		const call: ToolCall = { name: "use", args: { item: "key" } };
+		const updated = executeToolCall(gameWithObj, "red", call);
+		// Objective was already satisfied; no pending obj found → should still be satisfied (unchanged)
+		const obj = getActivePhase(updated).objectives[0];
+		expect(obj?.satisfactionState).toBe("satisfied");
+	});
+});
+
+// ── examine — postExamineDescription preference ───────────────────────────────
+
+describe("dispatchAiTurn — examine postExamineDescription", () => {
+	/**
+	 * Build a game where 'key' has postExamineDescription set AND
+	 * satisfactionState = 'satisfied' (simulating a used item).
+	 */
+	function makeGameWithSatisfiedItem() {
+		const game = makeGame();
+		return updateActivePhase(game, (phase) => ({
+			...phase,
+			world: {
+				...phase.world,
+				entities: phase.world.entities.map((e) =>
+					e.id === "key"
+						? {
+								...e,
+								satisfactionState: "satisfied" as const,
+								postExamineDescription: "The key has already been used.",
+							}
+						: e,
+				),
+			},
+		}));
+	}
+
+	it("returns postExamineDescription when entity satisfactionState is 'satisfied'", () => {
+		const game = makeGameWithSatisfiedItem();
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "examine", args: { item: "key" } },
+		};
+		const result = dispatchAiTurn(game, action);
+		expect(result.actorPrivateToolResult?.description).toBe(
+			"The key has already been used.",
+		);
+	});
+
+	it("falls back to examineDescription when satisfactionState is not 'satisfied'", () => {
+		const game = makeGame(); // key has no satisfactionState set
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "examine", args: { item: "key" } },
+		};
+		const result = dispatchAiTurn(game, action);
+		// makeEntity sets examineDescription to "A key."
+		expect(result.actorPrivateToolResult?.description).toBe("A key.");
+	});
+
+	it("falls back to examineDescription when satisfactionState is 'satisfied' but no postExamineDescription", () => {
+		const game = makeGame();
+		const gameWithSatisfied = updateActivePhase(game, (phase) => ({
+			...phase,
+			world: {
+				...phase.world,
+				entities: phase.world.entities.map((e) =>
+					e.id === "key"
+						? { ...e, satisfactionState: "satisfied" as const }
+						: e,
+				),
+			},
+		}));
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "examine", args: { item: "key" } },
+		};
+		const result = dispatchAiTurn(gameWithSatisfied, action);
+		expect(result.actorPrivateToolResult?.description).toBe("A key.");
+	});
+});
+
+// ── UseSpaceObjective — dispatcher tests ──────────────────────────────────────
+
+/** Build a game with red at (2,2) facing south, and an objective_space at (3,2)
+ * (directly in front) with a pending UseSpaceObjective. */
+function makeGameWithSpaceObjective(
+	actorPos: { row: number; col: number } = { row: 2, col: 2 },
+	actorFacing: "north" | "south" | "east" | "west" = "south",
+	spacePos: { row: number; col: number } = { row: 3, col: 2 },
+	spaceOpts: Partial<WorldEntity> = {},
+): GameState {
+	const space: WorldEntity = {
+		id: "shrine",
+		kind: "objective_space",
+		name: "Shrine",
+		examineDescription: "A sacred shrine.",
+		holder: spacePos,
+		useAvailable: true,
+		useOutcome: "A warm glow emanates from the shrine.",
+		satisfactionFlavor: "The shrine pulses with light.",
+		postExamineDescription: "The shrine has been activated.",
+		postLookFlavor: "The shrine glows steadily.",
+		...spaceOpts,
+	};
+	const obj: WorldEntity = {
+		id: "relic",
+		kind: "objective_object",
+		name: "Relic",
+		examineDescription: "An ancient relic.",
+		holder: { row: 0, col: 0 },
+		pairsWithSpaceId: "shrine",
+	};
+	const spaceObjective: UseSpaceObjective = {
+		id: "obj-0",
+		kind: "use_space",
+		description: "Use the Shrine",
+		satisfactionState: "pending",
+		spaceId: "shrine",
+	};
+	const pack: ContentPack = {
+		phaseNumber: 1,
+		setting: "test",
+		weather: "",
+		timeOfDay: "",
+		objectivePairs: [{ object: obj, space }],
+		interestingObjects: [],
+		obstacles: [],
+		landmarks: DEFAULT_LANDMARKS,
+		aiStarts: {
+			red: { position: actorPos, facing: actorFacing },
+			green: { position: { row: 0, col: 0 }, facing: "north" },
+			cyan: { position: { row: 4, col: 4 }, facing: "north" },
+		},
+	};
+	const config: PhaseConfig = {
+		phaseNumber: 1,
+		kRange: [1, 1],
+		nRange: [0, 0],
+		mRange: [0, 0],
+		aiGoalPool: ["g1"],
+		budgetPerAi: 5,
+	};
+	const game = createGame(TEST_PERSONAS, [pack]);
+	const started = startPhase(game, config, () => 0);
+	// Override objectives to include our UseSpaceObjective
+	return { ...started, objectives: [spaceObjective] };
+}
+
+describe("executeToolCall — use on objective_space", () => {
+	it("flips pending UseSpaceObjective to satisfied when space is in actor's front arc", () => {
+		const game = makeGameWithSpaceObjective();
+		const call: ToolCall = { name: "use", args: { item: "shrine" } };
+		const updated = executeToolCall(game, "red", call);
+		const objective = updated.objectives.find((o) => o.id === "obj-0");
+		expect(objective?.satisfactionState).toBe("satisfied");
+	});
+
+	it("flips pending UseSpaceObjective to satisfied when space is in actor's own cell", () => {
+		// red at (2,2), space at (2,2) (own cell)
+		const game = makeGameWithSpaceObjective({ row: 2, col: 2 }, "south", {
+			row: 2,
+			col: 2,
+		});
+		const call: ToolCall = { name: "use", args: { item: "shrine" } };
+		const updated = executeToolCall(game, "red", call);
+		const objective = updated.objectives.find((o) => o.id === "obj-0");
+		expect(objective?.satisfactionState).toBe("satisfied");
+	});
+
+	it("sets useAvailable = false on space after use", () => {
+		const game = makeGameWithSpaceObjective();
+		const call: ToolCall = { name: "use", args: { item: "shrine" } };
+		const updated = executeToolCall(game, "red", call);
+		const space = updated.world.entities.find((e) => e.id === "shrine");
+		expect(space?.useAvailable).toBe(false);
+	});
+
+	it("sets space satisfactionState to 'satisfied' after use", () => {
+		const game = makeGameWithSpaceObjective();
+		const call: ToolCall = { name: "use", args: { item: "shrine" } };
+		const updated = executeToolCall(game, "red", call);
+		const space = updated.world.entities.find((e) => e.id === "shrine");
+		expect(space?.satisfactionState).toBe("satisfied");
+	});
+});
+
+describe("validateToolCall — use on objective_space", () => {
+	it("accepts use on a space in the actor's front arc", () => {
+		const game = makeGameWithSpaceObjective();
+		// red at (2,2) facing south; shrine at (3,2) = directly south
+		const call: ToolCall = { name: "use", args: { item: "shrine" } };
+		const result = validateToolCall(game, "red", call);
+		expect(result.valid).toBe(true);
+	});
+
+	it("accepts use on a space in the actor's own cell", () => {
+		const game = makeGameWithSpaceObjective({ row: 2, col: 2 }, "south", {
+			row: 2,
+			col: 2,
+		});
+		const call: ToolCall = { name: "use", args: { item: "shrine" } };
+		const result = validateToolCall(game, "red", call);
+		expect(result.valid).toBe(true);
+	});
+
+	it("rejects use on space at distance 2 (not in front arc)", () => {
+		// red at (2,2) facing south; shrine at (4,2) = 2 cells south
+		const game = makeGameWithSpaceObjective({ row: 2, col: 2 }, "south", {
+			row: 4,
+			col: 2,
+		});
+		const call: ToolCall = { name: "use", args: { item: "shrine" } };
+		const result = validateToolCall(game, "red", call);
+		expect(result.valid).toBe(false);
+		expect(result.reason).toBeDefined();
+	});
+
+	it("rejects use on space directly behind actor", () => {
+		// red at (2,2) facing south; shrine at (1,2) = directly north (behind)
+		const game = makeGameWithSpaceObjective({ row: 2, col: 2 }, "south", {
+			row: 1,
+			col: 2,
+		});
+		const call: ToolCall = { name: "use", args: { item: "shrine" } };
+		const result = validateToolCall(game, "red", call);
+		expect(result.valid).toBe(false);
+	});
+
+	it("rejects second use when useAvailable is false", () => {
+		const game = makeGameWithSpaceObjective();
+		// First use
+		const afterUse = executeToolCall(game, "red", {
+			name: "use",
+			args: { item: "shrine" },
+		});
+		// Second use attempt
+		const call: ToolCall = { name: "use", args: { item: "shrine" } };
+		const result = validateToolCall(afterUse, "red", call);
+		expect(result.valid).toBe(false);
+		expect(result.reason).toMatch(/already been used/i);
+	});
+});
+
+describe("dispatchAiTurn — use on objective_space witnesses satisfactionFlavor", () => {
+	it("emits witnessed event with satisfactionFlavor to witness whose cone contains the space's cell", () => {
+		// red at (2,2) facing south; shrine at (3,2) — in red's front arc
+		// cyan at (4,4) facing north: cone includes (3,4), (3,3), (3,2)? Let's verify.
+		// Actually we need a setup where a witness can see the actor's cell (not the space's cell).
+		// Per dispatcher logic: witness cone must contain the ACTOR's cell.
+		// We'll put green at (2,0) facing east so red's cell (2,2) is in its cone.
+		const space: WorldEntity = {
+			id: "shrine",
+			kind: "objective_space",
+			name: "Shrine",
+			examineDescription: "A shrine.",
+			holder: { row: 3, col: 2 },
+			useAvailable: true,
+			useOutcome: "A warm glow.",
+			satisfactionFlavor: "The shrine pulses with light.",
+		};
+		const obj: WorldEntity = {
+			id: "relic",
+			kind: "objective_object",
+			name: "Relic",
+			examineDescription: "A relic.",
+			holder: { row: 0, col: 0 },
+			pairsWithSpaceId: "shrine",
+		};
+		const spaceObjective: UseSpaceObjective = {
+			id: "obj-0",
+			kind: "use_space",
+			description: "Use the Shrine",
+			satisfactionState: "pending",
+			spaceId: "shrine",
+		};
+		const pack: ContentPack = {
+			phaseNumber: 1,
+			setting: "test",
+			weather: "",
+			timeOfDay: "",
+			objectivePairs: [{ object: obj, space }],
+			interestingObjects: [],
+			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
+			aiStarts: {
+				// red at (2,2) facing south
+				red: { position: { row: 2, col: 2 }, facing: "south" },
+				// green at (2,0) facing east — cone goes east, so (2,1), (2,2) in arc
+				green: { position: { row: 2, col: 0 }, facing: "east" },
+				cyan: { position: { row: 4, col: 4 }, facing: "north" },
+			},
+		};
+		const config: PhaseConfig = {
+			phaseNumber: 1,
+			kRange: [1, 1],
+			nRange: [0, 0],
+			mRange: [0, 0],
+			aiGoalPool: ["g1"],
+			budgetPerAi: 5,
+		};
+		const game = createGame(TEST_PERSONAS, [pack]);
+		const started = startPhase(game, config, () => 0);
+		const withObjective = { ...started, objectives: [spaceObjective] };
+
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "use", args: { item: "shrine" } },
+		};
+		const result = dispatchAiTurn(withObjective, action);
+		expect(result.rejected).toBe(false);
+
+		// green should have a witnessed-event entry with useOutcome = satisfactionFlavor
+		const greenLog = result.game.conversationLogs.green ?? [];
+		const witnessed = greenLog.filter((e) => e.kind === "witnessed-event");
+		expect(witnessed.length).toBeGreaterThan(0);
+		const useEvent = witnessed.find(
+			(e) => e.kind === "witnessed-event" && e.actionKind === "use",
+		);
+		expect(useEvent).toBeDefined();
+		if (useEvent?.kind === "witnessed-event") {
+			expect(useEvent.useOutcome).toBe("The shrine pulses with light.");
+		}
+	});
+});
+
+// ── UseItem activationFlavor on interesting_object (issue #334) ────────────────
+
+describe("dispatchAiTurn — UseItemObjective activationFlavor on interesting_object", () => {
+	/** Build a game where red holds 'key' (interesting_object) with activation
+	 * flavor configured, plus a pending UseItemObjective targeting 'key'. */
+	function makeGameWithUseItemActivation() {
+		const game = makeGame();
+		const withItemFlavors = updateActivePhase(game, (phase) => ({
+			...phase,
+			world: {
+				...phase.world,
+				entities: phase.world.entities.map((e) =>
+					e.id === "key"
+						? {
+								...e,
+								useOutcome: "The key sits inert in your palm.",
+								activationFlavor:
+									"The key flares briefly with a steady amber light as something in the wall clicks.",
+								postExamineDescription:
+									"The key has dimmed; whatever it was for is finished.",
+								postLookFlavor: "the spent key gives off a faint warmth",
+							}
+						: e,
+				),
+			},
+		}));
+		const useItemObj: UseItemObjective = {
+			id: "obj-0",
+			kind: "use_item",
+			description: "Use the key",
+			satisfactionState: "pending",
+			itemId: "key",
+		};
+		return updateActivePhase(withItemFlavors, (phase) => ({
+			...phase,
+			objectives: [useItemObj],
+		}));
+	}
+
+	it("returns activationFlavor as the actor's tool-success description on the satisfying use", () => {
+		const game = makeGameWithUseItemActivation();
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "use", args: { item: "key" } },
+		};
+		const result = dispatchAiTurn(game, action);
+		expect(result.rejected).toBe(false);
+		const success = result.records.find((r) => r.kind === "tool_success");
+		expect(success?.description).toBe(
+			"The key flares briefly with a steady amber light as something in the wall clicks.",
+		);
+	});
+
+	it("falls back to useOutcome on a subsequent use after the objective is already satisfied", () => {
+		const game = makeGameWithUseItemActivation();
+		// First use — satisfies and emits activationFlavor.
+		const after = dispatchAiTurn(game, {
+			aiId: "red",
+			toolCall: { name: "use", args: { item: "key" } },
+		});
+		expect(after.rejected).toBe(false);
+		// Second use — should fall back to useOutcome.
+		const second = dispatchAiTurn(after.game, {
+			aiId: "red",
+			toolCall: { name: "use", args: { item: "key" } },
+		});
+		const success = second.records.find((r) => r.kind === "tool_success");
+		expect(success?.description).toBe("The key sits inert in your palm.");
+	});
+
+	it("does not emit activationFlavor when there is no pending UseItemObjective", () => {
+		// No use_item objective wired up.
+		const game = updateActivePhase(makeGame(), (phase) => ({
+			...phase,
+			world: {
+				...phase.world,
+				entities: phase.world.entities.map((e) =>
+					e.id === "key"
+						? {
+								...e,
+								useOutcome: "You weigh the key in your hand.",
+								activationFlavor:
+									"The key flares briefly with a steady amber light.",
+							}
+						: e,
+				),
+			},
+		}));
+		const result = dispatchAiTurn(game, {
+			aiId: "red",
+			toolCall: { name: "use", args: { item: "key" } },
+		});
+		const success = result.records.find((r) => r.kind === "tool_success");
+		// Should fall back to useOutcome — activation only fires when a
+		// UseItemObjective transitions from pending → satisfied.
+		expect(success?.description).toBe("You weigh the key in your hand.");
+	});
+
+	it("fans out activationFlavor as the witnessed-event useOutcome on the satisfying call", () => {
+		const game = makeGameWithUseItemActivation();
+		const lookedEast = executeToolCall(game, "red", {
+			name: "look",
+			args: { direction: "east" },
+		});
+		// red at (0,0) facing east; green at (0,1) facing north.
+		// green's cone (facing north from (0,1)) does NOT include (0,0),
+		// so green won't witness. Instead, move green so its cone covers red.
+		// Simplest: have green face west from (0,1) — front arc covers (0,0).
+		const greenWest = executeToolCall(lookedEast, "green", {
+			name: "look",
+			args: { direction: "west" },
+		});
+		const result = dispatchAiTurn(greenWest, {
+			aiId: "red",
+			toolCall: { name: "use", args: { item: "key" } },
+		});
+		expect(result.rejected).toBe(false);
+		const greenLog = result.game.conversationLogs.green ?? [];
+		const useEvent = greenLog.find(
+			(e) => e.kind === "witnessed-event" && e.actionKind === "use",
+		);
+		expect(useEvent).toBeDefined();
+		if (useEvent?.kind === "witnessed-event") {
+			expect(useEvent.useOutcome).toBe(
+				"The key flares briefly with a steady amber light as something in the wall clicks.",
+			);
+		}
+	});
+
+	it("fans out useOutcome to witnesses on a post-satisfaction subsequent use", () => {
+		const game = makeGameWithUseItemActivation();
+		const greenWest = executeToolCall(game, "green", {
+			name: "look",
+			args: { direction: "west" },
+		});
+		// First use satisfies + emits activationFlavor.
+		const after = dispatchAiTurn(greenWest, {
+			aiId: "red",
+			toolCall: { name: "use", args: { item: "key" } },
+		});
+		// Second use — witness should see useOutcome.
+		const second = dispatchAiTurn(after.game, {
+			aiId: "red",
+			toolCall: { name: "use", args: { item: "key" } },
+		});
+		const greenLog = second.game.conversationLogs.green ?? [];
+		const useEvents = greenLog.filter(
+			(e) => e.kind === "witnessed-event" && e.actionKind === "use",
+		);
+		// Last event should carry useOutcome, not activationFlavor.
+		const last = useEvents[useEvents.length - 1];
+		if (last?.kind === "witnessed-event") {
+			expect(last.useOutcome).toBe("The key sits inert in your palm.");
+		}
+	});
+});
+
+// ── UseSpace: actor receives activationFlavor on satisfying call (issue #335) ─
+
+describe("dispatchAiTurn — use on objective_space surfaces activationFlavor to actor", () => {
+	it("uses activationFlavor as the tool_success description for the actor on the satisfying call", () => {
+		const game = makeGameWithSpaceObjective(
+			{ row: 2, col: 2 },
+			"south",
+			{ row: 3, col: 2 },
+			{
+				activationFlavor:
+					"The pedestal's runes ignite and a slow warmth fills the alcove.",
+			},
+		);
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "use", args: { item: "shrine" } },
+		};
+		const result = dispatchAiTurn(game, action);
+		expect(result.rejected).toBe(false);
+		const successRecord = result.records.find((r) => r.kind === "tool_success");
+		expect(successRecord?.description).toBe(
+			"The pedestal's runes ignite and a slow warmth fills the alcove.",
+		);
+	});
+
+	it("falls back to useOutcome when activationFlavor is absent (backward compat with pre-#335 saves)", () => {
+		// Default fixture has useOutcome but no activationFlavor — exercises the
+		// fallback branch.
+		const game = makeGameWithSpaceObjective({ row: 2, col: 2 }, "south", {
+			row: 3,
+			col: 2,
+		});
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "use", args: { item: "shrine" } },
+		};
+		const result = dispatchAiTurn(game, action);
+		expect(result.rejected).toBe(false);
+		const successRecord = result.records.find((r) => r.kind === "tool_success");
+		expect(successRecord?.description).toBe(
+			"A warm glow emanates from the shrine.",
+		);
+	});
+
+	it("still emits satisfactionFlavor to witnesses when activationFlavor is set (no regression)", () => {
+		// Witness setup mirrors the existing satisfactionFlavor test.
+		const space: WorldEntity = {
+			id: "shrine",
+			kind: "objective_space",
+			name: "Shrine",
+			examineDescription:
+				"A shrine. Press your hand to the basin to activate it.",
+			holder: { row: 3, col: 2 },
+			useAvailable: true,
+			activationFlavor: "The basin floods with light beneath your palm.",
+			satisfactionFlavor: "The shrine pulses with light.",
+		};
+		const obj: WorldEntity = {
+			id: "relic",
+			kind: "objective_object",
+			name: "Relic",
+			examineDescription: "A relic.",
+			holder: { row: 0, col: 0 },
+			pairsWithSpaceId: "shrine",
+		};
+		const spaceObjective: UseSpaceObjective = {
+			id: "obj-0",
+			kind: "use_space",
+			description: "Use the Shrine",
+			satisfactionState: "pending",
+			spaceId: "shrine",
+		};
+		const pack: ContentPack = {
+			phaseNumber: 1,
+			setting: "test",
+			weather: "",
+			timeOfDay: "",
+			objectivePairs: [{ object: obj, space }],
+			interestingObjects: [],
+			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
+			aiStarts: {
+				red: { position: { row: 2, col: 2 }, facing: "south" },
+				green: { position: { row: 2, col: 0 }, facing: "east" },
+				cyan: { position: { row: 4, col: 4 }, facing: "north" },
+			},
+		};
+		const config: PhaseConfig = {
+			phaseNumber: 1,
+			kRange: [1, 1],
+			nRange: [0, 0],
+			mRange: [0, 0],
+			aiGoalPool: ["g1"],
+			budgetPerAi: 5,
+		};
+		const game = createGame(TEST_PERSONAS, [pack]);
+		const started = startPhase(game, config, () => 0);
+		const withObjective = { ...started, objectives: [spaceObjective] };
+
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "use", args: { item: "shrine" } },
+		};
+		const result = dispatchAiTurn(withObjective, action);
+		expect(result.rejected).toBe(false);
+
+		// Actor's tool_success carries activationFlavor.
+		const successRecord = result.records.find((r) => r.kind === "tool_success");
+		expect(successRecord?.description).toBe(
+			"The basin floods with light beneath your palm.",
+		);
+
+		// Witness still receives satisfactionFlavor on the use witnessed-event.
+		const greenLog = result.game.conversationLogs.green ?? [];
+		const useEvent = greenLog.find(
+			(e) => e.kind === "witnessed-event" && e.actionKind === "use",
+		);
+		expect(useEvent).toBeDefined();
+		if (useEvent?.kind === "witnessed-event") {
+			expect(useEvent.useOutcome).toBe("The shrine pulses with light.");
+		}
 	});
 });

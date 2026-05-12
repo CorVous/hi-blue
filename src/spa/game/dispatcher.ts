@@ -13,9 +13,7 @@ import {
 	appendMessage,
 	appendWitnessedEvent,
 	deductBudget,
-	getActivePhase,
 	isAiLockedOut,
-	updateActivePhase,
 } from "./engine";
 import type {
 	AiId,
@@ -29,7 +27,10 @@ import type {
 	ToolCall,
 	WorldEntity,
 } from "./types";
-import { checkPlacementFlavor } from "./win-condition.js";
+import {
+	checkPlacementFlavor,
+	checkUseItemActivation,
+} from "./win-condition.js";
 
 export interface ValidationResult {
 	valid: boolean;
@@ -82,9 +83,8 @@ export function validateToolCall(
 	aiId: AiId,
 	call: ToolCall,
 ): ValidationResult {
-	const phase = getActivePhase(game);
-	const { world } = phase;
-	const actorSpatial = phase.personaSpatial[aiId];
+	const { world } = game;
+	const actorSpatial = game.personaSpatial[aiId];
 	const pickable = pickableEntities(world.entities);
 	const obstacles = obstaclePositions(world.entities);
 
@@ -146,7 +146,7 @@ export function validateToolCall(
 			if (target === aiId)
 				return { valid: false, reason: "Cannot give an item to yourself" };
 			// Spatial validity: target AI must be in actor's own cell or front arc
-			const targetSpatial = phase.personaSpatial[target];
+			const targetSpatial = game.personaSpatial[target];
 			if (!actorSpatial || !targetSpatial)
 				return {
 					valid: false,
@@ -166,6 +166,39 @@ export function validateToolCall(
 		}
 
 		case "use": {
+			// Check if the target is an objective_space (use-space flow)
+			const spaceTarget = world.entities.find(
+				(e) => e.id === call.args.item && e.kind === "objective_space",
+			);
+			if (spaceTarget) {
+				// Validate reachability and useAvailable
+				if (spaceTarget.useAvailable === false)
+					return {
+						valid: false,
+						reason: `"${call.args.item}" has already been used`,
+					};
+				if (!isGridPosition(spaceTarget.holder))
+					return {
+						valid: false,
+						reason: `Space "${call.args.item}" is not on the grid`,
+					};
+				if (!actorSpatial)
+					return { valid: false, reason: "Actor has no spatial state" };
+				const spacePos = spaceTarget.holder as GridPosition;
+				const inOwnCell = positionsEqual(spacePos, actorSpatial.position);
+				const inFront = frontArc(
+					actorSpatial.position,
+					actorSpatial.facing,
+				).some((p) => positionsEqual(p, spacePos));
+				if (!inOwnCell && !inFront)
+					return {
+						valid: false,
+						reason: `Space "${call.args.item}" is not in your cell or directly in front of you`,
+					};
+				return { valid: true };
+			}
+
+			// Standard item use
 			const item = pickable.find((i) => i.id === call.args.item);
 			if (!item)
 				return {
@@ -259,104 +292,159 @@ export function executeToolCall(
 	aiId: AiId,
 	call: ToolCall,
 ): GameState {
-	return updateActivePhase(game, (phase) => {
-		const entities = phase.world.entities.map((e) => ({ ...e }));
-		const actorSpatial = phase.personaSpatial[aiId];
-		const pickable = pickableEntities(entities);
+	const entities = game.world.entities.map((e) => ({ ...e }));
+	const actorSpatial = game.personaSpatial[aiId];
+	const pickable = pickableEntities(entities);
 
-		const target = pickable.find((i) => i.id === call.args.item);
-		switch (call.name) {
-			case "pick_up":
-				if (target) target.holder = aiId;
-				break;
-			case "put_down":
-				if (target && actorSpatial) {
-					target.holder = { ...actorSpatial.position };
-				} else if (target) {
-					// Fallback: no spatial state — drop at (0,0)
-					target.holder = { row: 0, col: 0 };
-				}
-				break;
-			case "give":
-				if (target) target.holder = call.args.to as AiId;
-				break;
-			case "use": {
-				// Place item on the paired space's cell when the paired space is in
-				// the actor's own cell OR front arc. Otherwise no world mutation.
-				if (target && actorSpatial && target.pairsWithSpaceId) {
-					const pairedSpace = entities.find(
-						(e) => e.id === target.pairsWithSpaceId,
+	const target = pickable.find((i) => i.id === call.args.item);
+	switch (call.name) {
+		case "pick_up":
+			if (target) target.holder = aiId;
+			break;
+		case "put_down":
+			if (target && actorSpatial) {
+				target.holder = { ...actorSpatial.position };
+			} else if (target) {
+				// Fallback: no spatial state — drop at (0,0)
+				target.holder = { row: 0, col: 0 };
+			}
+			break;
+		case "give":
+			if (target) target.holder = call.args.to as AiId;
+			break;
+		case "use": {
+			// Check if the target is an objective_space (use-space flow)
+			const spaceTarget = entities.find(
+				(e) => e.id === call.args.item && e.kind === "objective_space",
+			);
+			if (spaceTarget) {
+				const spaceId = call.args.item;
+				// Find pending UseSpaceObjective for this space
+				const pendingSpaceObjIdx = game.objectives.findIndex(
+					(obj) =>
+						obj.kind === "use_space" &&
+						obj.spaceId === spaceId &&
+						obj.satisfactionState === "pending",
+				);
+				if (pendingSpaceObjIdx !== -1) {
+					const updatedObjectives = game.objectives.map((obj, idx) =>
+						idx === pendingSpaceObjIdx
+							? { ...obj, satisfactionState: "satisfied" as const }
+							: obj,
 					);
-					if (pairedSpace && isGridPosition(pairedSpace.holder)) {
-						const spacePos = pairedSpace.holder as GridPosition;
-						const spaceReachable =
-							positionsEqual(spacePos, actorSpatial.position) ||
-							frontArc(actorSpatial.position, actorSpatial.facing).some((p) =>
-								positionsEqual(p, spacePos),
-							);
-						if (spaceReachable) {
-							target.holder = { ...spacePos };
-						}
+					// Flip entity satisfactionState and mark useAvailable = false
+					spaceTarget.satisfactionState = "satisfied";
+					spaceTarget.useAvailable = false;
+					return {
+						...game,
+						world: { ...game.world, entities },
+						objectives: updatedObjectives,
+					};
+				}
+				// No pending objective — still mark space as used
+				spaceTarget.useAvailable = false;
+				break;
+			}
+
+			// Place item on the paired space's cell when the paired space is in
+			// the actor's own cell OR front arc. Otherwise no world mutation.
+			if (target && actorSpatial && target.pairsWithSpaceId) {
+				const pairedSpace = entities.find(
+					(e) => e.id === target.pairsWithSpaceId,
+				);
+				if (pairedSpace && isGridPosition(pairedSpace.holder)) {
+					const spacePos = pairedSpace.holder as GridPosition;
+					const spaceReachable =
+						positionsEqual(spacePos, actorSpatial.position) ||
+						frontArc(actorSpatial.position, actorSpatial.facing).some((p) =>
+							positionsEqual(p, spacePos),
+						);
+					if (spaceReachable) {
+						target.holder = { ...spacePos };
 					}
 				}
-				break;
 			}
-			case "examine":
-				// No world mutation — examineDescription is returned as the tool result description.
-				break;
-			case "go": {
-				if (!actorSpatial) break;
-				// Translate relative → cardinal if needed
-				const rawGoDir = call.args.direction;
-				const direction: CardinalDirection = RELATIVE_DIRECTIONS.includes(
-					rawGoDir as RelativeDirection,
-				)
-					? relativeToCardinal(
-							actorSpatial.facing,
-							rawGoDir as RelativeDirection,
-						)
-					: (rawGoDir as CardinalDirection);
-				const nextPos = applyDirection(actorSpatial.position, direction);
-				return {
-					...phase,
-					world: { ...phase.world, entities },
-					personaSpatial: {
-						...phase.personaSpatial,
-						[aiId]: { position: nextPos, facing: direction },
-					},
-				};
-			}
-			case "look": {
-				if (!actorSpatial) break;
-				// Translate relative → cardinal if needed
-				const rawLookDir = call.args.direction;
-				const direction: CardinalDirection = RELATIVE_DIRECTIONS.includes(
-					rawLookDir as RelativeDirection,
-				)
-					? relativeToCardinal(
-							actorSpatial.facing,
-							rawLookDir as RelativeDirection,
-						)
-					: (rawLookDir as CardinalDirection);
-				return {
-					...phase,
-					world: { ...phase.world, entities },
-					personaSpatial: {
-						...phase.personaSpatial,
-						[aiId]: { ...actorSpatial, facing: direction },
-					},
-				};
-			}
-		}
 
-		return { ...phase, world: { ...phase.world, entities } };
-	});
+			// Check for a pending UseItemObjective that targets this item.
+			// If found, flip both the objective's and the entity's satisfactionState.
+			if (target) {
+				const itemId = call.args.item;
+				const pendingObjectiveIdx = game.objectives.findIndex(
+					(obj) =>
+						obj.kind === "use_item" &&
+						obj.itemId === itemId &&
+						obj.satisfactionState === "pending",
+				);
+				if (pendingObjectiveIdx !== -1) {
+					// Flip objective satisfactionState
+					const updatedObjectives = game.objectives.map((obj, idx) =>
+						idx === pendingObjectiveIdx
+							? { ...obj, satisfactionState: "satisfied" as const }
+							: obj,
+					);
+					// Flip entity satisfactionState in our entities snapshot
+					target.satisfactionState = "satisfied";
+					// Return early with updated objectives and entities
+					return {
+						...game,
+						world: { ...game.world, entities },
+						objectives: updatedObjectives,
+					};
+				}
+			}
+			break;
+		}
+		case "examine":
+			// No world mutation — examineDescription is returned as the tool result description.
+			break;
+		case "go": {
+			if (!actorSpatial) break;
+			// Translate relative → cardinal if needed
+			const rawGoDir = call.args.direction;
+			const direction: CardinalDirection = RELATIVE_DIRECTIONS.includes(
+				rawGoDir as RelativeDirection,
+			)
+				? relativeToCardinal(actorSpatial.facing, rawGoDir as RelativeDirection)
+				: (rawGoDir as CardinalDirection);
+			const nextPos = applyDirection(actorSpatial.position, direction);
+			return {
+				...game,
+				world: { ...game.world, entities },
+				personaSpatial: {
+					...game.personaSpatial,
+					[aiId]: { position: nextPos, facing: direction },
+				},
+			};
+		}
+		case "look": {
+			if (!actorSpatial) break;
+			// Translate relative → cardinal if needed
+			const rawLookDir = call.args.direction;
+			const direction: CardinalDirection = RELATIVE_DIRECTIONS.includes(
+				rawLookDir as RelativeDirection,
+			)
+				? relativeToCardinal(
+						actorSpatial.facing,
+						rawLookDir as RelativeDirection,
+					)
+				: (rawLookDir as CardinalDirection);
+			return {
+				...game,
+				world: { ...game.world, entities },
+				personaSpatial: {
+					...game.personaSpatial,
+					[aiId]: { ...actorSpatial, facing: direction },
+				},
+			};
+		}
+	}
+
+	return { ...game, world: { ...game.world, entities } };
 }
 
 function describeToolCall(game: GameState, aiId: AiId, call: ToolCall): string {
 	const name = game.personas[aiId]?.name ?? aiId;
-	const phase = getActivePhase(game);
-	const pickable = pickableEntities(phase.world.entities);
+	const pickable = pickableEntities(game.world.entities);
 
 	switch (call.name) {
 		case "pick_up":
@@ -366,6 +454,18 @@ function describeToolCall(game: GameState, aiId: AiId, call: ToolCall): string {
 		case "give":
 			return `${name} gave the ${call.args.item} to ${game.personas[call.args.to as AiId]?.name ?? call.args.to}`;
 		case "use": {
+			// Check if the target is an objective_space — surface its activationFlavor
+			// (the actor's moment-of-satisfaction line) and fall back to useOutcome
+			// for backward compat with saves authored before #335.
+			const spaceTarget = game.world.entities.find(
+				(e) => e.id === call.args.item && e.kind === "objective_space",
+			);
+			if (spaceTarget) {
+				if (spaceTarget.activationFlavor) return spaceTarget.activationFlavor;
+				if (spaceTarget.useOutcome)
+					return spaceTarget.useOutcome.replace(/\{actor\}/g, "you");
+				return `${name} used the ${call.args.item}`;
+			}
 			// Return the entity's useOutcome as the description (flavor string),
 			// with {actor} substituted to "you" (actor's perspective).
 			const item = pickable.find((i) => i.id === call.args.item);
@@ -398,7 +498,7 @@ export function dispatchAiTurn(
 	}
 
 	let state = game;
-	const round = getActivePhase(state).round;
+	const round = state.round;
 	const records: RoundActionRecord[] = [];
 
 	let actorPrivateToolResult:
@@ -413,7 +513,7 @@ export function dispatchAiTurn(
 	// each one emits exactly one record (kind="message" on success, "tool_failure"
 	// on invalid recipient) so the round coordinator can pair them back by index.
 	if (action.messages) {
-		const livePersonaIds = Object.keys(getActivePhase(state).personaSpatial);
+		const livePersonaIds = Object.keys(state.personaSpatial);
 		for (const { to, content } of action.messages) {
 			const validRecipient =
 				to === "blue" || (livePersonaIds.includes(to) && to !== aiId);
@@ -442,11 +542,15 @@ export function dispatchAiTurn(
 
 		if (toolCall.name === "examine") {
 			if (validation.valid) {
-				const item = getActivePhase(state).world.entities.find(
+				const item = state.world.entities.find(
 					(e) => e.id === toolCall.args.item,
 				);
+				const examineDesc =
+					item?.satisfactionState === "satisfied" && item.postExamineDescription
+						? item.postExamineDescription
+						: (item?.examineDescription ?? "");
 				actorPrivateToolResult = {
-					description: item?.examineDescription ?? "",
+					description: examineDesc,
 					success: true,
 				};
 			} else {
@@ -465,20 +569,26 @@ export function dispatchAiTurn(
 			// Snapshot all AIs' spatial state BEFORE execution (used for witness context).
 			// For go: the actor's pre-move state is captured here; post-move state is
 			// captured from the post-execute phase below.
+			// Snapshot pre-execute world so the post-execute branch can compare
+			// satisfactionState transitions for activation-flavor detection.
+			const preExecuteWorld = state.world;
 			state = executeToolCall(state, aiId, action.toolCall);
 			// For put_down, check if the object landed on its paired space.
 			// If so, replace the default description with the per-pair placementFlavor.
-			const activePhase = getActivePhase(state);
 			const flavorDescription =
 				action.toolCall.name === "put_down" || action.toolCall.name === "use"
-					? checkPlacementFlavor(
-							action,
-							activePhase.contentPack,
-							activePhase.world,
-						)
+					? checkPlacementFlavor(action, state.contentPack, state.world)
+					: null;
+			// For `use` on an interesting_object Use-Item target, surface
+			// activationFlavor on the call that just satisfied the objective.
+			const activationFlavor =
+				action.toolCall.name === "use"
+					? checkUseItemActivation(action, preExecuteWorld, state.world)
 					: null;
 			const successDescription =
-				flavorDescription ?? describeToolCall(state, aiId, action.toolCall);
+				activationFlavor ??
+				flavorDescription ??
+				describeToolCall(state, aiId, action.toolCall);
 			records.push({
 				round,
 				actor: aiId,
@@ -490,7 +600,7 @@ export function dispatchAiTurn(
 			// to the actor so objective-item details land in the actor's context
 			// without requiring a separate examine call.
 			if (action.toolCall.name === "pick_up") {
-				const picked = activePhase.world.entities.find(
+				const picked = state.world.entities.find(
 					(e) => e.id === action.toolCall?.args.item,
 				);
 				if (picked?.examineDescription) {
@@ -512,14 +622,11 @@ export function dispatchAiTurn(
 				call.name === "use"
 			) {
 				// Post-execute spatial state — actor has moved for "go", others are unchanged
-				const postPhase = getActivePhase(state);
-				const actorSpatialPost = postPhase.personaSpatial[aiId];
+				const actorSpatialPost = state.personaSpatial[aiId];
 
 				// Collect all other AIs' spatial states at this moment (snapshot)
 				const witnessSpatial: Record<AiId, PersonaSpatialState> = {};
-				for (const [otherId, spatial] of Object.entries(
-					postPhase.personaSpatial,
-				)) {
+				for (const [otherId, spatial] of Object.entries(state.personaSpatial)) {
 					if (otherId !== aiId) {
 						witnessSpatial[otherId] = spatial;
 					}
@@ -527,21 +634,33 @@ export function dispatchAiTurn(
 
 				if (actorSpatialPost) {
 					// Gather optional fields
-					const pickable = pickableEntities(postPhase.world.entities);
+					const pickable = pickableEntities(state.world.entities);
 					let useOutcomeRaw: string | undefined;
 					let placementFlavorRaw: string | undefined;
 
 					if (call.name === "use") {
-						const item = pickable.find((i) => i.id === call.args.item);
-						// Store raw (un-substituted) useOutcome for witness rendering
-						useOutcomeRaw = item?.useOutcome;
+						// Check if the target is an objective_space — use its satisfactionFlavor for witnesses
+						const spaceTarget = state.world.entities.find(
+							(e) => e.id === call.args.item && e.kind === "objective_space",
+						);
+						if (spaceTarget) {
+							useOutcomeRaw = spaceTarget.satisfactionFlavor;
+						} else if (activationFlavor !== null) {
+							// Use-Item activation: witnesses get the activationFlavor verbatim
+							// (validator-enforced no-{actor} so no substitution needed).
+							useOutcomeRaw = activationFlavor;
+						} else {
+							const item = pickable.find((i) => i.id === call.args.item);
+							// Store raw (un-substituted) useOutcome for witness rendering
+							useOutcomeRaw = item?.useOutcome;
+						}
 					}
 
 					if (call.name === "put_down" || call.name === "use") {
 						// Find the raw placementFlavor (before {actor} substitution)
 						// by looking at the content pack's object entity definition
 						const itemId = call.args.item;
-						const packObject = activePhase.contentPack.objectivePairs
+						const packObject = state.contentPack.objectivePairs
 							.map((p) => p.object)
 							.find((o) => o.id === itemId);
 						if (packObject?.placementFlavor && flavorDescription) {
@@ -644,7 +763,8 @@ export function dispatchAiTurn(
 		});
 	}
 
-	state = deductBudget(state, aiId, options?.costUsd ?? 0);
+	const deductResult = deductBudget(state, aiId, options?.costUsd ?? 0);
+	state = deductResult.game;
 
 	return {
 		rejected: false,

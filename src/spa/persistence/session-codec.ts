@@ -5,8 +5,8 @@
  * multi-file session format described in ADR 0004.
  *
  * Files:
- *   meta.json        — createdAt, lastSavedAt, phase, round
- *   <aiId>.txt × 3  — per-daemon conversation log + phase goals (all three phases)
+ *   meta.json        — createdAt, lastSavedAt, epoch, round
+ *   <aiId>.txt × 3  — per-daemon conversation log (all three phases collapsed into one)
  *                      (includes chat, whisper, and witnessed-event entries inline)
  *   engine.dat       — sealed (XOR-obfuscated) engine state
  *
@@ -14,22 +14,17 @@
  * See docs/adr/0005-engine-dat-obfuscation-method.md
  */
 
-import {
-	PHASE_1_CONFIG,
-	PHASE_2_CONFIG,
-	PHASE_3_CONFIG,
-} from "../../content/phases.js";
 import { DEFAULT_LANDMARKS } from "../game/direction.js";
 import type {
+	ActiveComplication,
 	AiBudget,
 	AiId,
 	AiPersona,
 	ContentPack,
 	ConversationEntry,
 	GameState,
+	Objective,
 	PersonaSpatialState,
-	PhaseConfig,
-	PhaseState,
 	WorldState,
 } from "../game/types.js";
 import {
@@ -48,43 +43,42 @@ import {
  * v5 (issue #287): added `action-failure` `ConversationEntry` variant — durable
  * per-actor record of action-tool dispatcher rejections. Old v4 saves have no
  * `action-failure` entries; no migration provided.
+ *
+ * v6 (issues #293, #294): two simultaneous changes.
+ *   - #293: collapsed all `Record<1|2|3, …>` phase-keyed fields into a flat
+ *     single-game structure. Old v5 saves surface the existing
+ *     `version-mismatch` result — no migration provided.
+ *   - #294: added `broadcast` `ConversationEntry` variant — sender-less system
+ *     announcements appended to all three Daemon logs simultaneously (e.g.
+ *     weather change complications). Broadcast entries ride along in the
+ *     existing per-Daemon `conversationLog` array and round-trip automatically;
+ *     no additional structural deserialization changes required.
+ *
+ * v7 (issue #302): A/B dual content-pack generation.
+ *   - `contentPackA`/`contentPackB` (single-pack scalars) replaced by
+ *     `contentPacksA`/`contentPacksB` (full pack arrays, one entry per phase).
+ *   - `activePackId: "A" | "B"` now persisted correctly (was hardcoded "A").
+ *   - Old v6 saves surface `version-mismatch` — no migration provided.
  */
-export const SESSION_SCHEMA_VERSION = 5 as const;
-
-// ── Phase config lookup ────────────────────────────────────────────────────────
-
-const PHASE_CONFIGS: Record<1 | 2 | 3, PhaseConfig> = {
-	1: PHASE_1_CONFIG,
-	2: PHASE_2_CONFIG,
-	3: PHASE_3_CONFIG,
-};
+export const SESSION_SCHEMA_VERSION = 7 as const;
 
 // ── File shapes ────────────────────────────────────────────────────────────────
 
-export interface DaemonPhaseSlice {
-	phaseGoal: string;
-	conversationLog: ConversationEntry[];
-}
-
 /**
  * Shape of a single daemon's `.txt` file.
- * Contains the AI persona definition and per-phase narrative state.
+ * Contains the AI persona definition and the active-phase conversation log.
  */
 export interface DaemonFile {
 	aiId: AiId;
 	persona: AiPersona;
-	phases: {
-		"1": DaemonPhaseSlice;
-		"2": DaemonPhaseSlice;
-		"3": DaemonPhaseSlice;
-	};
+	conversationLog: ConversationEntry[];
 }
 
 /** Shape of `meta.json`. */
 export interface MetaFile {
 	createdAt: string;
 	lastSavedAt: string;
-	phase: 1 | 2 | 3;
+	epoch: number;
 	round: number;
 	/**
 	 * Canonical panel order: the aiIds in the order they were assigned to
@@ -94,21 +88,29 @@ export interface MetaFile {
 	 * Optional for backward-compat with saves written before this field.
 	 */
 	personaOrder?: string[];
+	/** Present and true on archived sessions; absent on active sessions. */
+	readonly?: boolean;
+	/** ISO timestamp of when the session was archived. */
+	lastPlayedAt?: string;
 }
 
 /** Shape of the sealed payload inside `engine.dat`. */
 export interface SealedEngine {
 	schemaVersion: typeof SESSION_SCHEMA_VERSION;
-	world: Record<1 | 2 | 3, WorldState>;
-	contentPacks: ContentPack[];
-	budgets: Record<1 | 2 | 3, Record<AiId, AiBudget>>;
-	lockouts: Record<
-		1 | 2 | 3,
-		{ lockedOut: AiId[]; chatLockouts: Array<[AiId, number]> }
-	>;
-	currentPhase: 1 | 2 | 3;
+	world: WorldState;
+	budgets: Record<AiId, AiBudget>;
+	lockedOut: AiId[];
+	personaSpatial: Record<AiId, PersonaSpatialState>;
+	/** All Setting A content packs (one per phase). */
+	contentPacksA: ContentPack[];
+	/** All Setting B content packs (one per phase, same entity IDs as A). */
+	contentPacksB: ContentPack[];
+	activePackId: "A" | "B";
+	weather: string;
+	objectives: Objective[];
+	complicationSchedule: { countdown: number; settingShiftFired: boolean };
+	activeComplications: ActiveComplication[];
 	isComplete: boolean;
-	personaSpatial: Record<1 | 2 | 3, Record<AiId, PersonaSpatialState>>;
 }
 
 /**
@@ -124,36 +126,15 @@ export interface SerializedSessionFiles {
 
 /** Result of deserializing a session. */
 export type DeserializeResult =
-	| { kind: "ok"; state: GameState; createdAt: string; lastSavedAt: string }
+	| {
+			kind: "ok";
+			state: GameState;
+			createdAt: string;
+			lastSavedAt: string;
+			epoch: number;
+	  }
 	| { kind: "broken" }
 	| { kind: "version-mismatch" };
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-const EMPTY_PHASE_SLICE: DaemonPhaseSlice = {
-	phaseGoal: "",
-	conversationLog: [],
-};
-
-function phaseSliceFor(
-	_phaseNumber: 1 | 2 | 3,
-	phase: PhaseState | undefined,
-	aiId: AiId,
-): DaemonPhaseSlice {
-	if (!phase) return EMPTY_PHASE_SLICE;
-	return {
-		phaseGoal: phase.aiGoals[aiId] ?? "",
-		conversationLog: phase.conversationLogs[aiId] ?? [],
-	};
-}
-
-/** Get a PhaseState by phaseNumber from the phases array. */
-function findPhase(
-	phases: PhaseState[],
-	phaseNumber: 1 | 2 | 3,
-): PhaseState | undefined {
-	return phases.find((p) => p.phaseNumber === phaseNumber);
-}
 
 // ── serializeSession ──────────────────────────────────────────────────────────
 
@@ -169,20 +150,16 @@ export function serializeSession(
 	state: GameState,
 	lastSavedAt: string,
 	createdAt: string,
+	epoch = 1,
 ): SerializedSessionFiles {
-	const activePhase = state.phases[state.phases.length - 1];
-	if (!activePhase) throw new Error("serializeSession: no active phase");
-
-	// meta.json
 	const meta: MetaFile = {
 		createdAt,
 		lastSavedAt,
-		phase: state.currentPhase,
-		round: activePhase.round,
+		epoch,
+		round: state.round,
 		personaOrder: Object.keys(state.personas),
 	};
 
-	// daemons: one file per aiId
 	const daemons: Record<AiId, string> = {};
 	for (const [aiId, persona] of Object.entries(state.personas)) {
 		const daemonFile: DaemonFile = {
@@ -197,41 +174,25 @@ export function serializeSession(
 				typingQuirks: persona.typingQuirks,
 				voiceExamples: persona.voiceExamples,
 			},
-			phases: {
-				"1": phaseSliceFor(1, findPhase(state.phases, 1), aiId),
-				"2": phaseSliceFor(2, findPhase(state.phases, 2), aiId),
-				"3": phaseSliceFor(3, findPhase(state.phases, 3), aiId),
-			},
+			conversationLog: state.conversationLogs[aiId] ?? [],
 		};
 		daemons[aiId] = JSON.stringify(daemonFile, null, 2);
 	}
 
-	// engine.dat (sealed)
 	const sealedPayload: SealedEngine = {
 		schemaVersion: SESSION_SCHEMA_VERSION,
-		world: {
-			1: findPhase(state.phases, 1)?.world ?? { entities: [] },
-			2: findPhase(state.phases, 2)?.world ?? { entities: [] },
-			3: findPhase(state.phases, 3)?.world ?? { entities: [] },
-		},
-		contentPacks: structuredClone(state.contentPacks),
-		budgets: {
-			1: { ...(findPhase(state.phases, 1)?.budgets ?? {}) },
-			2: { ...(findPhase(state.phases, 2)?.budgets ?? {}) },
-			3: { ...(findPhase(state.phases, 3)?.budgets ?? {}) },
-		},
-		lockouts: {
-			1: serializeLockouts(findPhase(state.phases, 1)),
-			2: serializeLockouts(findPhase(state.phases, 2)),
-			3: serializeLockouts(findPhase(state.phases, 3)),
-		},
-		currentPhase: state.currentPhase,
+		world: structuredClone(state.world),
+		budgets: { ...state.budgets },
+		lockedOut: Array.from(state.lockedOut) as AiId[],
+		personaSpatial: structuredClone(state.personaSpatial),
+		contentPacksA: structuredClone(state.contentPacksA),
+		contentPacksB: structuredClone(state.contentPacksB),
+		activePackId: state.activePackId,
+		weather: state.weather,
+		objectives: structuredClone(state.objectives),
+		complicationSchedule: state.complicationSchedule,
+		activeComplications: structuredClone(state.activeComplications),
 		isComplete: state.isComplete,
-		personaSpatial: {
-			1: structuredClone(findPhase(state.phases, 1)?.personaSpatial ?? {}),
-			2: structuredClone(findPhase(state.phases, 2)?.personaSpatial ?? {}),
-			3: structuredClone(findPhase(state.phases, 3)?.personaSpatial ?? {}),
-		},
 	};
 
 	const engine = obfuscate(JSON.stringify(sealedPayload, null, 2));
@@ -240,19 +201,6 @@ export function serializeSession(
 		meta: JSON.stringify(meta, null, 2),
 		daemons,
 		engine,
-	};
-}
-
-function serializeLockouts(phase: PhaseState | undefined): {
-	lockedOut: AiId[];
-	chatLockouts: Array<[AiId, number]>;
-} {
-	if (!phase) return { lockedOut: [], chatLockouts: [] };
-	return {
-		lockedOut: Array.from(phase.lockedOut) as AiId[],
-		chatLockouts: Array.from(phase.chatLockouts.entries()) as Array<
-			[AiId, number]
-		>,
 	};
 }
 
@@ -337,100 +285,66 @@ export function deserializeSession(
 		if (!(aiId in personas)) personas[aiId] = daemonFile.persona;
 	}
 
-	// Reconstruct phases from sealed engine + editable daemon files
+	// Reconstruct a flat GameState from the v6 engine
 	try {
-		const phases: PhaseState[] = [];
-
-		// Determine which phases exist: any phase up to and including currentPhase
-		const phaseNumbers: Array<1 | 2 | 3> = [];
-		for (const pn of [1, 2, 3] as const) {
-			if (pn <= sealed.currentPhase) phaseNumbers.push(pn);
+		// Rebuild conversationLogs from daemon files
+		const conversationLogs: Record<AiId, ConversationEntry[]> = {};
+		for (const [aiId, daemonFile] of Object.entries(daemonFiles)) {
+			conversationLogs[aiId] = [...(daemonFile.conversationLog ?? [])];
 		}
 
-		for (const phaseNumber of phaseNumbers) {
-			const config = PHASE_CONFIGS[phaseNumber];
-			const phaseKey = String(phaseNumber) as "1" | "2" | "3";
+		const contentPacksA = sealed.contentPacksA ?? [];
+		const contentPacksB = sealed.contentPacksB ?? [];
+		const contentPack = (sealed.activePackId === "B"
+			? contentPacksB[0]
+			: contentPacksA[0]) ?? {
+			setting: "",
+			weather: "",
+			timeOfDay: "",
+			objectivePairs: [],
+			interestingObjects: [],
+			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
+			aiStarts: {},
+		};
+		const setting = contentPack.setting;
+		const weather = sealed.weather;
+		const timeOfDay = contentPack.timeOfDay ?? "";
+		const world = structuredClone(sealed.world);
+		const budgets = { ...sealed.budgets };
+		const lockedOut = new Set<AiId>(sealed.lockedOut);
+		const personaSpatial = structuredClone(sealed.personaSpatial);
 
-			// Rebuild conversationLogs from daemon files
-			// Each entry (chat, whisper, witnessed-event) lives inline in the daemon's file.
-			const conversationLogs: Record<AiId, ConversationEntry[]> = {};
-			const aiGoals: Record<AiId, string> = {};
-			for (const [aiId, daemonFile] of Object.entries(daemonFiles)) {
-				const slice = daemonFile.phases[phaseKey] ?? EMPTY_PHASE_SLICE;
-				conversationLogs[aiId] = [...(slice.conversationLog ?? [])];
-				aiGoals[aiId] = slice.phaseGoal;
-			}
+		// Defensive defaults for legacy blobs that omit complication fields
+		const complicationSchedule = sealed.complicationSchedule ?? {
+			countdown: 0,
+			settingShiftFired: false,
+		};
+		const activeComplications = sealed.activeComplications ?? [];
 
-			// Get sealed data for this phase
-			const world = structuredClone(
-				sealed.world[phaseNumber] ?? { entities: [] },
-			);
-			const budgets = { ...(sealed.budgets[phaseNumber] ?? {}) };
-			const lockoutData = sealed.lockouts[phaseNumber] ?? {
-				lockedOut: [],
-				chatLockouts: [],
-			};
-			const lockedOut = new Set<AiId>(lockoutData.lockedOut);
-			const chatLockouts = new Map<AiId, number>(lockoutData.chatLockouts);
-			const personaSpatial = structuredClone(
-				sealed.personaSpatial[phaseNumber] ?? {},
-			);
-
-			// Find the content pack for this phase
-			const contentPack = sealed.contentPacks.find(
-				(p) => p.phaseNumber === phaseNumber,
-			) ?? {
-				phaseNumber,
-				setting: "",
-				weather: "",
-				timeOfDay: "",
-				objectivePairs: [],
-				interestingObjects: [],
-				obstacles: [],
-				landmarks: DEFAULT_LANDMARKS,
-				aiStarts: {},
-			};
-
-			// Derive setting from content pack
-			const setting = contentPack.setting;
-			const weather =
-				(contentPack as ContentPack & { weather?: string }).weather ?? "";
-			const timeOfDay =
-				(contentPack as ContentPack & { timeOfDay?: string }).timeOfDay ?? "";
-
-			const phase: PhaseState = {
-				phaseNumber,
-				setting,
-				weather,
-				timeOfDay,
-				contentPack,
-				aiGoals,
-				// Use round from meta only for the active phase; previous phases use 0
-				round: phaseNumber === sealed.currentPhase ? meta.round : 0,
-				world,
-				budgets,
-				conversationLogs,
-				lockedOut,
-				chatLockouts,
-				personaSpatial,
-				// Re-attach function fields from canonical phase config
-				...(config?.winCondition !== undefined
-					? { winCondition: config.winCondition }
-					: {}),
-				...(config?.nextPhaseConfig !== undefined
-					? { nextPhaseConfig: config.nextPhaseConfig }
-					: {}),
-			};
-
-			phases.push(phase);
-		}
+		const objectives: Objective[] = Array.isArray(sealed.objectives)
+			? (sealed.objectives as Objective[])
+			: [];
 
 		const state: GameState = {
-			currentPhase: sealed.currentPhase,
 			isComplete: sealed.isComplete,
 			personas,
-			phases,
-			contentPacks: structuredClone(sealed.contentPacks),
+			contentPack,
+			setting,
+			weather,
+			timeOfDay,
+			round: meta.round,
+			world,
+			budgets,
+			conversationLogs,
+			lockedOut,
+			personaSpatial,
+			complicationSchedule,
+			activeComplications,
+			contentPacksA,
+			contentPacksB,
+			activePackId: sealed.activePackId ?? "A",
+			objectives: structuredClone(objectives),
 		};
 
 		return {
@@ -438,6 +352,7 @@ export function deserializeSession(
 			state,
 			createdAt: meta.createdAt,
 			lastSavedAt: meta.lastSavedAt,
+			epoch: typeof meta.epoch === "number" ? meta.epoch : 1,
 		};
 	} catch {
 		return { kind: "broken" };

@@ -20,12 +20,13 @@
  *   lockout    — { type, aiId, content }  (budget-exhaustion only, kept for styling)
  *   chat_lockout         — { type, aiId, message }
  *   chat_lockout_resolved — { type, aiId }
+ *   system_broadcast — { type, content }  (sender-less announcement, e.g. weather change)
  *   action_log — { type, entry }
  *   phase_advanced — { type, phase, setting }
  *   game_ended     — { type }
  */
 
-import type { AiId, AiPersona, PhaseState, RoundResult } from "./types";
+import type { AiId, AiPersona, GameState, RoundResult } from "./types";
 
 /**
  * A single structured SSE event ready to be serialised as
@@ -45,6 +46,7 @@ export type SseEvent =
 	| { type: "lockout"; aiId: AiId; content: string }
 	| { type: "chat_lockout"; aiId: AiId; message: string }
 	| { type: "chat_lockout_resolved"; aiId: AiId }
+	| { type: "system_broadcast"; content: string }
 	| { type: "action_log"; entry: RoundResult["actions"][number] }
 	| { type: "phase_advanced"; phase: 1 | 2 | 3; setting: string }
 	| { type: "game_ended" };
@@ -95,7 +97,7 @@ export function splitIntoWordChunks(text: string): string[] {
 export function encodeRoundResult(
 	result: RoundResult,
 	completions: Partial<Record<AiId, string>>,
-	phaseAfter: PhaseState,
+	phaseAfter: GameState,
 	personas: Record<AiId, AiPersona>,
 ): SseEvent[] {
 	// Suppress unused-variable warning; completions is retained for
@@ -157,6 +159,24 @@ export function encodeRoundResult(
 		}
 	}
 
+	// system_broadcast — one event per broadcast entry written during this round.
+	// Walk one daemon's log (all daemons receive the same broadcast entries) and
+	// emit a system_broadcast event for each entry matching the played round.
+	// NOTE: result.round is the round counter AFTER advanceRound(), so entries
+	// written during the round carry round: result.round - 1.
+	{
+		const playedRound = result.round - 1;
+		const firstAiId = Object.keys(personas)[0];
+		if (firstAiId !== undefined) {
+			const firstLog = phaseAfter.conversationLogs[firstAiId] ?? [];
+			for (const entry of firstLog) {
+				if (entry.kind === "broadcast" && entry.round === playedRound) {
+					events.push({ type: "system_broadcast", content: entry.content });
+				}
+			}
+		}
+	}
+
 	// action_log entries for all actions this round
 	for (const action of result.actions) {
 		events.push({ type: "action_log", entry: action });
@@ -179,11 +199,12 @@ export function encodeRoundResult(
 	}
 
 	// phase_advanced — emitted when the phase advanced but the game is not over.
-	// phaseAfter is the new phase state when phaseEnded is true, so read from it.
+	// In the single-game loop (issue #295), phases are retired so phaseEnded is
+	// always false. This block is kept for wire-format backward-compat.
 	if (result.phaseEnded && !result.gameEnded) {
 		events.push({
 			type: "phase_advanced",
-			phase: phaseAfter.phaseNumber,
+			phase: 1,
 			setting: phaseAfter.setting,
 		});
 	}

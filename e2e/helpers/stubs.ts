@@ -86,20 +86,23 @@ function isJsonModeRequest(body: ParsedBody): boolean {
 }
 
 /**
- * Classify a JSON-mode request by its user-message preamble. Two callers fire
+ * Classify a JSON-mode request by its user-message preamble. Callers fire
  * JSON-mode `/v1/chat/completions` at game start:
  *   - persona synthesis (`Synthesize blurbs for these personas:` …)
- *   - content-pack generation (`Generate content packs for these phases:` …)
+ *   - dual content-pack generation (`Generate dual A/B content packs for these phases:` …)
+ *   - single content-pack generation (`Generate content packs for these phases:` …)
  *
  * Returns "unknown" for callers we don't recognise so future additions surface
  * loudly instead of silently receiving a persona-shaped reply.
  */
 export function classifyJsonRequest(
 	body: ParsedBody,
-): "synthesis" | "content-pack" | "unknown" {
+): "synthesis" | "dual-content-pack" | "content-pack" | "unknown" {
 	const userMsg = body?.messages?.[1]?.content ?? "";
 	if (userMsg.startsWith("Synthesize blurbs for these personas:"))
 		return "synthesis";
+	if (userMsg.startsWith("Generate dual A/B content packs for these phases:"))
+		return "dual-content-pack";
 	if (userMsg.startsWith("Generate content packs for these phases:"))
 		return "content-pack";
 	return "unknown";
@@ -167,6 +170,127 @@ function parseContentPackPhases(userMessage: string): PhaseSpec[] {
 	return phases;
 }
 
+type DualPhaseSpec = {
+	phaseNumber: 1 | 2 | 3;
+	settingA: string;
+	settingB: string;
+	k: number;
+	n: number;
+	m: number;
+};
+
+/**
+ * Parse the per-phase `Phase N: settingA="…", settingB="…", theme="…", k=K …`
+ * lines from a dual content-pack user message.
+ */
+function parseDualContentPackPhases(userMessage: string): DualPhaseSpec[] {
+	const re =
+		/Phase\s+(\d+):\s+settingA="([^"]*)",\s+settingB="([^"]*)",\s+theme="[^"]*",\s+k=(\d+)\s+objective pairs,\s+n=(\d+)\s+interesting objects,\s+m=(\d+)\s+obstacles/g;
+	const phases: DualPhaseSpec[] = [];
+	for (const match of userMessage.matchAll(re)) {
+		const phaseNumber = Number(match[1]);
+		if (phaseNumber !== 1 && phaseNumber !== 2 && phaseNumber !== 3) continue;
+		phases.push({
+			phaseNumber: phaseNumber as 1 | 2 | 3,
+			settingA: match[2] ?? "",
+			settingB: match[3] ?? "",
+			k: Number(match[4]),
+			n: Number(match[5]),
+			m: Number(match[6]),
+		});
+	}
+	return phases;
+}
+
+const STUB_LANDMARKS = {
+	north: {
+		shortName: "Distant ridge",
+		horizonPhrase: "A jagged ridge cuts the skyline.",
+	},
+	south: {
+		shortName: "Rolling hills",
+		horizonPhrase: "Gentle slopes melt into haze.",
+	},
+	east: {
+		shortName: "Stone tower",
+		horizonPhrase: "A weathered tower breaks the treeline.",
+	},
+	west: {
+		shortName: "Misty forest",
+		horizonPhrase: "A dark canopy blurs into fog.",
+	},
+};
+
+/**
+ * Build a dual content-pack JSON-mode response body that satisfies
+ * `validateDualContentPacks`. Each phase has identical entity IDs in packA
+ * and packB; only names, descriptions, and settings differ.
+ */
+function buildDualContentPackResponseBody(body: ParsedBody): string {
+	const userMsg = body?.messages?.[1]?.content ?? "";
+	const phases = parseDualContentPackPhases(userMsg);
+	const resultPhases = phases.map((phase) => {
+		const tag = `p${phase.phaseNumber}`;
+
+		const buildPack = (setting: string, ab: "a" | "b") => {
+			const objectivePairs = Array.from({ length: phase.k }, (_, i) => {
+				const spaceId = `${tag}-spc-${i}`;
+				const objectId = `${tag}-obj-${i}`;
+				const spaceName = `Stub space ${tag} ${i}`;
+				return {
+					object: {
+						id: objectId,
+						kind: "objective_object",
+						name: `Stub object ${tag} ${i} ${ab}`,
+						examineDescription: `Stub object near ${spaceName}.`,
+						useOutcome: "Nothing happens.",
+						pairsWithSpaceId: spaceId,
+						placementFlavor: "{actor} sets it down.",
+						proximityFlavor: "Something catches your attention nearby.",
+					},
+					space: {
+						id: spaceId,
+						kind: "objective_space",
+						name: spaceName,
+						examineDescription: `Stub space ${spaceId} ${ab}.`,
+						convergenceTier1Flavor: `A presence lingers at the ${spaceName}.`,
+						convergenceTier2Flavor: `Two presences converge at the ${spaceName}.`,
+					},
+				};
+			});
+			const interestingObjects = Array.from({ length: phase.n }, (_, i) => ({
+				id: `${tag}-int-${i}`,
+				kind: "interesting_object",
+				name: `Stub item ${tag} ${i} ${ab}`,
+				examineDescription: `Stub interesting object ${tag}-int-${i} ${ab}.`,
+				useOutcome: "Nothing happens.",
+			}));
+			const obstacles = Array.from({ length: phase.m }, (_, i) => ({
+				id: `${tag}-obs-${i}`,
+				kind: "obstacle",
+				name: `Stub obstacle ${tag} ${i} ${ab}`,
+				examineDescription: `Stub obstacle ${tag}-obs-${i} ${ab}.`,
+				shiftFlavor: `Stub obstacle ${tag}-obs-${i} ${ab} grinds across the floor.`,
+			}));
+			return {
+				setting,
+				objectivePairs,
+				interestingObjects,
+				obstacles,
+				landmarks: STUB_LANDMARKS,
+			};
+		};
+
+		return {
+			phaseNumber: phase.phaseNumber,
+			packA: buildPack(phase.settingA, "a"),
+			packB: buildPack(phase.settingB, "b"),
+		};
+	});
+	const content = JSON.stringify({ phases: resultPhases });
+	return JSON.stringify({ choices: [{ message: { content } }] });
+}
+
 /**
  * Build a content-pack JSON-mode response body that satisfies
  * `validateContentPacks` (see src/spa/game/content-pack-provider.ts) for the
@@ -200,6 +324,8 @@ function buildContentPackResponseBody(body: ParsedBody): string {
 					kind: "objective_space",
 					name: `Stub space ${tag}-${i}`,
 					examineDescription: `Stub objective space ${spaceId}.`,
+					convergenceTier1Flavor: `A presence lingers at stub space ${tag}-${i}.`,
+					convergenceTier2Flavor: `Two presences converge at stub space ${tag}-${i}.`,
 				},
 			};
 		});
@@ -254,9 +380,11 @@ async function tryFulfillJsonMode(
 	const responseBody =
 		kind === "synthesis"
 			? buildSynthesisResponseBody(body, blurbFn)
-			: kind === "content-pack"
-				? buildContentPackResponseBody(body)
-				: null;
+			: kind === "dual-content-pack"
+				? buildDualContentPackResponseBody(body)
+				: kind === "content-pack"
+					? buildContentPackResponseBody(body)
+					: null;
 	if (responseBody === null) {
 		throw new Error(
 			`stubs.ts: unrecognised JSON-mode /v1/chat/completions caller. ` +

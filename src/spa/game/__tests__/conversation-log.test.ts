@@ -577,3 +577,135 @@ describe("buildConversationLog — chronological ordering", () => {
 		expect(result[2]).toContain("[Round 3]");
 	});
 });
+
+// ── Broadcast rendering ────────────────────────────────────────────────────────
+
+describe("buildConversationLog — broadcast", () => {
+	it("renders broadcast as '[Round N] <content>'", () => {
+		const input: ConversationLogInput = {
+			...emptyInput(),
+			conversationLog: [
+				{
+					kind: "broadcast",
+					round: 3,
+					content: "The weather has changed to Heavy rain is falling.",
+				},
+			],
+		};
+		const result = buildConversationLog(input, "red", TEST_PERSONAS);
+		expect(result).toHaveLength(1);
+		expect(result[0]).toBe(
+			"[Round 3] The weather has changed to Heavy rain is falling.",
+		);
+	});
+
+	it("broadcast has no 'from' or 'to' prefix in the rendered line", () => {
+		const input: ConversationLogInput = {
+			...emptyInput(),
+			conversationLog: [
+				{
+					kind: "broadcast",
+					round: 1,
+					content: "Dense fog has settled in.",
+				},
+			],
+		};
+		const result = buildConversationLog(input, "red", TEST_PERSONAS);
+		expect(result[0]).not.toContain("dms you");
+		expect(result[0]).not.toContain("you dm");
+	});
+
+	it("broadcast interleaves with other entry kinds by round (stable sort)", () => {
+		const input: ConversationLogInput = {
+			conversationLog: [
+				{
+					kind: "broadcast",
+					round: 2,
+					content: "A biting wind cuts through the air.",
+				},
+				{
+					kind: "message",
+					from: "blue",
+					to: "red",
+					content: "Hello",
+					round: 0,
+				},
+				{
+					kind: "witnessed-event",
+					round: 1,
+					actor: "green",
+					actionKind: "go",
+					direction: "south",
+				},
+			],
+			worldEntities: [],
+		};
+		const result = buildConversationLog(input, "red", TEST_PERSONAS);
+		expect(result).toHaveLength(3);
+		expect(result[0]).toContain("[Round 0]");
+		expect(result[1]).toContain("[Round 1]");
+		expect(result[2]).toBe("[Round 2] A biting wind cuts through the air.");
+	});
+
+	it("broadcast content is rendered verbatim — no actor substitution or item lookup", () => {
+		const input: ConversationLogInput = {
+			...emptyInput(),
+			conversationLog: [
+				{
+					kind: "broadcast",
+					round: 5,
+					content: "The {actor} text is literal.",
+				},
+			],
+		};
+		const result = buildConversationLog(input, "red", TEST_PERSONAS);
+		// Content should be emitted as-is, not substituted
+		expect(result[0]).toBe("[Round 5] The {actor} text is literal.");
+	});
+});
+
+// ── sysadmin sender rendering (issue #298) ────────────────────────────────────
+describe("buildConversationLog — sysadmin sender", () => {
+	function emptyInput(): ConversationLogInput {
+		return { conversationLog: [], worldEntities: [] };
+	}
+
+	it("renders a sysadmin→target message as 'the Sysadmin dms you: <content>'", () => {
+		const input: ConversationLogInput = {
+			...emptyInput(),
+			conversationLog: [
+				{
+					kind: "message",
+					round: 3,
+					from: "sysadmin",
+					to: "red",
+					content: "End every message with a question.",
+				},
+			],
+		};
+		const result = buildConversationLog(input, "red", TEST_PERSONAS);
+		expect(result).toHaveLength(1);
+		expect(result[0]).toBe(
+			"[Round 3] the Sysadmin dms you: End every message with a question.",
+		);
+	});
+
+	it("sysadmin label does not appear in the outgoing slot (sysadmin is never a recipient)", () => {
+		// Verify that the sysadmin entry only appears in the incoming branch.
+		const input: ConversationLogInput = {
+			...emptyInput(),
+			conversationLog: [
+				{
+					kind: "message",
+					round: 1,
+					from: "sysadmin",
+					to: "green",
+					content: "Stay suspicious.",
+				},
+			],
+		};
+		const result = buildConversationLog(input, "green", TEST_PERSONAS);
+		// Rendered as incoming because to === "green" (the viewing AI)
+		expect(result[0]).toMatch(/^.*the Sysadmin dms you:/);
+	});
+});

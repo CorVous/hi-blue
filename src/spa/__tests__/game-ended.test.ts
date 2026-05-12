@@ -80,9 +80,13 @@ vi.mock("../../content", async (importOriginal) => {
 	};
 });
 
-// Pin generateContentPacks to static content packs (no LLM call in tests).
+// Pin generateDualContentPacks to static content packs (no LLM call in tests).
 vi.mock("../../content/content-pack-generator", () => ({
-	generateContentPacks: async () => STATIC_CONTENT_PACKS,
+	generateDualContentPacks: async () => ({
+		packsA: STATIC_CONTENT_PACKS,
+		packsB: STATIC_CONTENT_PACKS,
+	}),
+	generateContentPack: async () => STATIC_CONTENT_PACKS[0],
 }));
 
 // ---------------------------------------------------------------------------
@@ -90,24 +94,23 @@ vi.mock("../../content/content-pack-generator", () => ({
 // need a real win-condition in the phase config.
 // ---------------------------------------------------------------------------
 const AI_BUDGET = { remaining: 4, total: 5 };
-const FAKE_PHASE_STATE = {
-	phaseNumber: 1,
-	objective: "get the key in the keyhole",
-	round: 1,
-	budgets: { red: AI_BUDGET, green: AI_BUDGET, cyan: AI_BUDGET },
-	conversationLogs: { red: [], green: [], cyan: [] },
-	whispers: [],
-	lockedOut: new Set<string>(),
-	chatLockouts: new Map<string, number>(),
-	world: { items: [] },
-	aiGoals: { red: "test goal", green: "test goal", cyan: "test goal" },
-};
 
 const FAKE_GAME_STATE = {
 	isComplete: true,
-	currentPhase: 1,
-	phases: [FAKE_PHASE_STATE],
+	outcome: "win" as const,
 	personas: STATIC_PERSONAS,
+	contentPack: STATIC_CONTENT_PACKS[0],
+	setting: "",
+	weather: "",
+	timeOfDay: "",
+	round: 1,
+	budgets: { red: AI_BUDGET, green: AI_BUDGET, cyan: AI_BUDGET },
+	conversationLogs: { red: [], green: [], cyan: [] },
+	lockedOut: new Set<string>(),
+	world: { entities: [] },
+	personaSpatial: {},
+	complicationSchedule: { countdown: 0, settingShiftFired: false },
+	activeComplications: [],
 };
 
 const GAME_ENDED_RESULT = {
@@ -124,12 +127,16 @@ const GAME_ENDED_RESULT = {
 
 vi.mock("../game/game-session.js", () => {
 	class MockGameSession {
-		submitMessage = vi.fn().mockResolvedValue(GAME_ENDED_RESULT);
-		getState = vi.fn().mockReturnValue(FAKE_GAME_STATE);
-		static restore = vi.fn().mockReturnValue({
-			submitMessage: vi.fn().mockResolvedValue(GAME_ENDED_RESULT),
-			getState: vi.fn().mockReturnValue(FAKE_GAME_STATE),
-		});
+		submitMessage = vi
+			.fn()
+			.mockImplementation(() => Promise.resolve(GAME_ENDED_RESULT));
+		getState = vi.fn().mockImplementation(() => FAKE_GAME_STATE);
+		static restore = vi.fn().mockImplementation(() => ({
+			submitMessage: vi
+				.fn()
+				.mockImplementation(() => Promise.resolve(GAME_ENDED_RESULT)),
+			getState: vi.fn().mockImplementation(() => FAKE_GAME_STATE),
+		}));
 	}
 	return { GameSession: MockGameSession };
 });

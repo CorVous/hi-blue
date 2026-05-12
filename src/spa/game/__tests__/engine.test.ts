@@ -4,15 +4,13 @@ import {
 	advancePhase,
 	advanceRound,
 	appendActionFailure,
+	appendBroadcast,
 	appendMessage,
 	createGame,
 	deductBudget,
 	getActivePhase,
 	isAiLockedOut,
-	isPlayerChatLockedOut,
-	resolveChatLockouts,
 	startPhase,
-	triggerChatLockout,
 } from "../engine";
 import type { AiPersona, PhaseConfig } from "../types";
 
@@ -74,15 +72,15 @@ const TEST_PHASE_CONFIG: PhaseConfig = {
 describe("createGame", () => {
 	it("creates a game with the given personas", () => {
 		const game = createGame(TEST_PERSONAS);
-		expect(game.currentPhase).toBe(1);
 		expect(game.isComplete).toBe(false);
 		expect(game.personas).toEqual(TEST_PERSONAS);
-		expect(game.phases).toHaveLength(0);
 	});
 
-	it("creates a game with contentPacks", () => {
-		const game = createGame(TEST_PERSONAS, []);
-		expect(game.contentPacks).toEqual([]);
+	it("creates a game with contentPacksA and contentPacksB", () => {
+		const game = createGame(TEST_PERSONAS, [], []);
+		expect(game.contentPacksA).toEqual([]);
+		expect(game.contentPacksB).toEqual([]);
+		expect(game.activePackId).toBe("A");
 	});
 });
 
@@ -237,7 +235,7 @@ describe("startPhase", () => {
 				cyan: { position: { row: 1, col: 1 }, facing: "west" as const },
 			},
 		};
-		const game = createGame(TEST_PERSONAS, [pack]);
+		const game = createGame(TEST_PERSONAS, [pack], []);
 		const phase = getActivePhase(startPhase(game, TEST_PHASE_CONFIG));
 
 		expect(phase.personaSpatial.red?.position).toEqual({ row: 3, col: 3 });
@@ -274,7 +272,7 @@ describe("budget and lockout", () => {
 describe("deductBudget", () => {
 	it("decrements budget by the request cost in USD", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const updated = deductBudget(game, "red", 0.012);
+		const updated = deductBudget(game, "red", 0.012).game;
 		expect(getActivePhase(updated).budgets.red?.remaining).toBeCloseTo(
 			5 - 0.012,
 			10,
@@ -286,7 +284,7 @@ describe("deductBudget", () => {
 			...TEST_PHASE_CONFIG,
 			budgetPerAi: 0.05,
 		});
-		game = deductBudget(game, "green", 0.05);
+		game = deductBudget(game, "green", 0.05).game;
 		expect(getActivePhase(game).budgets.green?.remaining).toBeCloseTo(0, 10);
 		expect(isAiLockedOut(game, "green")).toBe(true);
 	});
@@ -296,9 +294,9 @@ describe("deductBudget", () => {
 			...TEST_PHASE_CONFIG,
 			budgetPerAi: 0.05,
 		});
-		game = deductBudget(game, "cyan", 0.04);
+		game = deductBudget(game, "cyan", 0.04).game;
 		expect(isAiLockedOut(game, "cyan")).toBe(false);
-		game = deductBudget(game, "cyan", 0.02);
+		game = deductBudget(game, "cyan", 0.02).game;
 		expect(getActivePhase(game).budgets.cyan?.remaining).toBeLessThan(0);
 		expect(isAiLockedOut(game, "cyan")).toBe(true);
 	});
@@ -361,92 +359,76 @@ describe("appendMessage", () => {
 	});
 });
 
-describe("chat lockout", () => {
-	it("startPhase initialises chatLockouts as empty", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const phase = getActivePhase(game);
-		expect(phase.chatLockouts.size).toBe(0);
-	});
-
-	it("isPlayerChatLockedOut returns false when no lockout active", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		expect(isPlayerChatLockedOut(game, "red")).toBe(false);
-	});
-
-	it("triggerChatLockout marks the AI as player-chat-locked", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const locked = triggerChatLockout(game, "green", 3); // resolves at round 3
-		expect(isPlayerChatLockedOut(locked, "green")).toBe(true);
-		// Budget-lockout should remain unaffected
-		expect(isAiLockedOut(locked, "green")).toBe(false);
-	});
-
-	it("triggerChatLockout does not affect other AIs", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const locked = triggerChatLockout(game, "cyan", 2);
-		expect(isPlayerChatLockedOut(locked, "red")).toBe(false);
-		expect(isPlayerChatLockedOut(locked, "green")).toBe(false);
-	});
-
-	it("resolveChatLockouts removes lockouts where resolveAtRound <= current round", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = triggerChatLockout(game, "red", 2); // resolves at round 2
-		// Advance round to 1 — not yet at resolveAtRound
-		game = advanceRound(game); // round = 1
-		game = resolveChatLockouts(game);
-		expect(isPlayerChatLockedOut(game, "red")).toBe(true); // still locked
-
-		// Advance to round 2 — now at resolveAtRound
-		game = advanceRound(game); // round = 2
-		game = resolveChatLockouts(game);
-		expect(isPlayerChatLockedOut(game, "red")).toBe(false); // resolved
-	});
-
-	it("resolveChatLockouts only removes expired lockouts, leaving others intact", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = triggerChatLockout(game, "red", 1); // expires at round 1
-		game = triggerChatLockout(game, "green", 5); // expires at round 5
-		game = advanceRound(game); // round = 1
-		game = resolveChatLockouts(game);
-		expect(isPlayerChatLockedOut(game, "red")).toBe(false); // expired
-		expect(isPlayerChatLockedOut(game, "green")).toBe(true); // still active
-	});
-
-	it("chat lockout is independent from budget lockout — locked-out AI can still act (budget untouched)", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const locked = triggerChatLockout(game, "cyan", 3);
-		// Budget lockout (isAiLockedOut) must remain false — AI can still take turns
-		expect(isAiLockedOut(locked, "cyan")).toBe(false);
-		// Budget unaffected
-		expect(getActivePhase(locked).budgets.cyan?.remaining).toBe(5);
-	});
-});
-
 describe("advancePhase", () => {
-	it("advances from phase 1 to phase 2", () => {
+	it("advances from phase 1 to phase 2 (compat shim — isComplete remains false)", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		const phase2Config: PhaseConfig = {
 			...TEST_PHASE_CONFIG,
 			phaseNumber: 2,
 		};
 		const updated = advancePhase(game, phase2Config);
-		expect(updated.currentPhase).toBe(2);
-		expect(updated.phases).toHaveLength(2);
-		expect(getActivePhase(updated).phaseNumber).toBe(2);
+		// In flat model advancePhase with a next config is a no-op — game continues
+		expect(updated.isComplete).toBe(false);
+		// phaseNumber compat shim returns 1 (single-phase game)
+		expect(getActivePhase(updated).phaseNumber).toBe(1);
 	});
 
-	it("marks game complete after phase 3", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = advancePhase(game, {
-			...TEST_PHASE_CONFIG,
-			phaseNumber: 2,
-		});
-		game = advancePhase(game, {
-			...TEST_PHASE_CONFIG,
-			phaseNumber: 3,
-		});
+	it("marks game complete when called with no next config (compat shim)", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		const final = advancePhase(game);
 		expect(final.isComplete).toBe(true);
+	});
+});
+
+describe("appendBroadcast", () => {
+	it("appends a broadcast entry to all three Daemons' logs in one call", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const updated = appendBroadcast(
+			game,
+			"The weather has changed to Heavy rain is falling.",
+		);
+		const phase = getActivePhase(updated);
+		expect(phase.conversationLogs.red).toHaveLength(1);
+		expect(phase.conversationLogs.green).toHaveLength(1);
+		expect(phase.conversationLogs.cyan).toHaveLength(1);
+		expect(phase.conversationLogs.red?.[0]?.kind).toBe("broadcast");
+		expect(phase.conversationLogs.green?.[0]?.kind).toBe("broadcast");
+		expect(phase.conversationLogs.cyan?.[0]?.kind).toBe("broadcast");
+	});
+
+	it("broadcast entry has no `from` / `to` fields (regression guard)", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const updated = appendBroadcast(
+			game,
+			"A biting wind cuts through the air.",
+		);
+		const phase = getActivePhase(updated);
+		const entry = phase.conversationLogs.red?.[0];
+		expect(entry).toBeDefined();
+		expect("from" in (entry ?? {})).toBe(false);
+		expect("to" in (entry ?? {})).toBe(false);
+	});
+
+	it("carries the current phase round", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = advanceRound(game); // round = 1
+		game = advanceRound(game); // round = 2
+		const updated = appendBroadcast(game, "Dense fog has settled in.");
+		const phase = getActivePhase(updated);
+		const entry = phase.conversationLogs.red?.[0];
+		expect(entry?.round).toBe(2);
+	});
+
+	it("leaves uninvolved phase state intact", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const before = getActivePhase(game);
+		const updated = appendBroadcast(game, "Light snow drifts down.");
+		const after = getActivePhase(updated);
+		// Round and world should be unchanged
+		expect(after.round).toBe(before.round);
+		expect(after.world).toEqual(before.world);
+		// Budgets should be unchanged
+		expect(after.budgets).toEqual(before.budgets);
 	});
 });
 

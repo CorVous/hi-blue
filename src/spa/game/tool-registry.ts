@@ -96,7 +96,7 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 		function: {
 			name: "use",
 			description:
-				'Use an item you are holding. Fires a flavoured outcome string. If the item is an objective item AND its paired space is in the daemon\'s cell or front arc, also places it on that space (the primary way to satisfy an objective pair). Use this tool when you want to "interact with", "play with", "activate", "operate", "employ", or "wield" an item.',
+				'Use an item you are holding, OR activate an objective space in your cell or front arc. Fires a flavoured outcome string. For held items: if the item is an objective item AND its paired space is in the daemon\'s cell or front arc, also places it on that space. For spaces: activates the space to satisfy a UseSpace objective. Use this tool when you want to "interact with", "play with", "activate", "operate", "employ", or "wield" an item or space.',
 			parameters: {
 				type: "object",
 				properties: {

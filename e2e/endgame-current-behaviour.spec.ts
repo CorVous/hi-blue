@@ -6,7 +6,8 @@ import { goToGame } from "./helpers";
  *
  * Proves that when game_ended fires the SPA:
  *   - disables #send and #prompt
- *   - clears localStorage (clearGame() ran)
+ *   - shows #endgame screen with choice buttons
+ *   - keeps active-session pointer in localStorage (cleared only on user choice)
  *   - keeps the URL stable (no navigation)
  *   - emits no pageerror events
  *
@@ -21,9 +22,16 @@ import { goToGame } from "./helpers";
  * Note (post-#107): Send no longer re-enables after a round because the prompt
  * is cleared on submit and the *mention parser sees an empty string. We wait
  * on `#phase-banner` (set by the encoder's `phase_advanced` event) instead.
+ *
+ * Note (post-#307): clearActiveSession() is no longer called immediately on
+ * game_ended — the session pointer stays until the user selects a choice
+ * (New Daemons / Same Daemons / Continue). The active-session key is therefore
+ * non-null immediately after game_ended fires.
  */
 
-test("game_ended disables composer and clears storage", async ({ page }) => {
+test("game_ended disables composer and shows endgame choices", async ({
+	page,
+}) => {
 	const pageErrors: Error[] = [];
 	page.on("pageerror", (err) => pageErrors.push(err));
 
@@ -41,30 +49,17 @@ test("game_ended disables composer and clears storage", async ({ page }) => {
 	// 2. Capture URL before submitting (proves URL stability below).
 	const urlBefore = page.url();
 
-	// Helper: fill prompt with a mention of ids[0], wait for Send to enable, click.
-	async function submitMessage(text: string): Promise<void> {
-		await page.fill("#prompt", text);
-		await expect(page.locator("#send")).toBeEnabled();
-		await page.click("#send");
-	}
+	// 3. Submit one message — ?winImmediately=1 wraps submitMessage so the next
+	//    call ends the game immediately (gameEnded: true, isComplete: true).
+	//    There are no phase transitions in the flat single-game loop.
+	await page.fill("#prompt", `*${names[0]} hello`);
+	await expect(page.locator("#send")).toBeEnabled();
+	await page.click("#send");
 
-	// 3. Round 1 — phase 1 ends; wait for phase banner to advance to Phase 2.
-	await submitMessage(`*${names[0]} hello`);
-	await expect(page.locator("#phase-banner")).toContainText("Phase 2", {
-		timeout: 30_000,
-	});
-
-	// 4. Round 2 — phase 2 ends; wait for phase banner to advance to Phase 3.
-	await submitMessage(`*${names[0]} hello`);
-	await expect(page.locator("#phase-banner")).toContainText("Phase 3", {
-		timeout: 30_000,
-	});
-
-	// 5. Round 3 — phase 3 ends; game_ended fires → #send permanently disabled.
-	await submitMessage(`*${names[0]} hello`);
+	// game_ended fires → #send permanently disabled.
 	await expect(page.locator("#send")).toBeDisabled({ timeout: 30_000 });
 
-	// 6. Assert all acceptance criteria.
+	// Assert all acceptance criteria.
 
 	// #send disabled
 	await expect(page.locator("#send")).toBeDisabled();
@@ -72,13 +67,20 @@ test("game_ended disables composer and clears storage", async ({ page }) => {
 	// #prompt disabled
 	await expect(page.locator("#prompt")).toBeDisabled();
 
-	// localStorage cleared (clearGame() ran inside game_ended handler).
-	// Post-#172: the active-session pointer key is the canonical "something saved"
-	// indicator — it is removed by clearActiveSession() on game_ended.
+	// #endgame screen visible with choice buttons
+	await expect(page.locator("#endgame")).toBeVisible();
+	await expect(page.locator("#endgame-new-daemons-btn")).toBeVisible();
+	await expect(page.locator("#endgame-same-daemons-btn")).toBeVisible();
+
+	// Post-#307: active-session pointer is retained (not cleared immediately).
+	// clearActiveSession() runs only when the user picks a choice.
 	const stored = await page.evaluate(() =>
 		localStorage.getItem("hi-blue:active-session"),
 	);
-	expect(stored, "localStorage must be null after game_ended").toBeNull();
+	expect(
+		stored,
+		"active-session pointer must be kept after game_ended",
+	).not.toBeNull();
 
 	// URL stable — no navigation or hash change occurred
 	expect(page.url(), "URL must not change after game_ended").toBe(urlBefore);

@@ -16,6 +16,7 @@
  *   - `message`: incoming/outgoing DM lines.
  *   - `witnessed-event`: lines describing observed physical actions.
  *   - `action-failure`: actor-only lines recording dispatcher rejections.
+ *   - `broadcast`: sender-less system announcement rendered as `[Round N] <content>`.
  */
 
 import { cardinalToRelative } from "./direction.js";
@@ -69,7 +70,14 @@ export function renderEntry(
 		case "message": {
 			if (entry.to === aiId) {
 				// Incoming: render as "<fromLabel> dms you: <content>"
-				const fromLabel = entry.from === "blue" ? "blue" : `*${entry.from}`;
+				let fromLabel: string;
+				if (entry.from === "blue") {
+					fromLabel = "blue";
+				} else if (entry.from === "sysadmin") {
+					fromLabel = "the Sysadmin";
+				} else {
+					fromLabel = `*${entry.from}`;
+				}
 				return `[Round ${round}] ${fromLabel} dms you: ${entry.content}`;
 			}
 			// Outgoing: render as "you dm <toLabel>: <content>"
@@ -132,6 +140,18 @@ export function renderEntry(
 			// Strip a trailing period from reason to keep the formatted line clean.
 			const reason = entry.reason.replace(/\.$/, "");
 			return `[Round ${round}] Your \`${entry.tool}\` action failed: ${reason}.`;
+		}
+
+		case "witnessed-obstacle-shift": {
+			return `[Round ${round}] ${entry.flavor}`;
+		}
+
+		case "witnessed-convergence": {
+			return `[Round ${round}] ${entry.flavor}`;
+		}
+
+		case "broadcast": {
+			return `[Round ${round}] ${entry.content}`;
 		}
 	}
 }
