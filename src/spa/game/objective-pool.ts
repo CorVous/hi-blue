@@ -17,6 +17,7 @@ import type {
 	ContentPack,
 	Objective,
 	UseItemObjective,
+	UseSpaceObjective,
 } from "./types.js";
 
 /**
@@ -43,6 +44,15 @@ export function drawObjectives(
 			spaceId: pair.space.id,
 		};
 		pool.push(carry);
+
+		const useSpace: UseSpaceObjective = {
+			id: "", // placeholder; will be replaced with assigned id
+			kind: "use_space",
+			description: `Use the ${pair.space.name}`,
+			satisfactionState: "pending",
+			spaceId: pair.space.id,
+		};
+		pool.push(useSpace);
 	}
 
 	for (const obj of contentPack.interestingObjects) {

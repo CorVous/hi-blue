@@ -49,6 +49,10 @@ export interface WorldEntity {
 	postExamineDescription?: string;
 	/** Alternate look flavor shown after satisfactionState flips to "satisfied". */
 	postLookFlavor?: string;
+	/** For objective_space: whether the `use` action is available on this space. Defaults to true when omitted. Set to false after a UseSpaceObjective is satisfied. */
+	useAvailable?: boolean;
+	/** For objective_space: flavor string emitted as a Witnessed event when a UseSpaceObjective is satisfied. */
+	satisfactionFlavor?: string;
 }
 
 export interface WorldState {
@@ -120,6 +124,7 @@ export interface UseSpaceObjective {
 	kind: "use_space";
 	description: string;
 	satisfactionState: "pending" | "satisfied";
+	spaceId: string;
 }
 
 export interface ConvergenceObjective {

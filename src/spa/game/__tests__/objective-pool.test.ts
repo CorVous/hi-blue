@@ -4,7 +4,12 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_LANDMARKS } from "../direction";
 import { drawObjectives } from "../objective-pool";
-import type { ContentPack, ObjectivePair, WorldEntity } from "../types";
+import type {
+	ContentPack,
+	ObjectivePair,
+	UseSpaceObjective,
+	WorldEntity,
+} from "../types";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -179,14 +184,65 @@ describe("drawObjectives — id assignment", () => {
 // ── multiple pairs in pool ────────────────────────────────────────────────────
 
 describe("drawObjectives — multiple pairs in pool", () => {
-	it("selects the correct pair when rng picks index 1 from a 2-pair pool", () => {
+	it("selects the correct objective when rng picks index 1 from a 2-pair pool", () => {
 		const pack = makePack(["gem", "orb"], []);
-		// pool: [carry(gem), carry(orb)] — rng=0.999 → Math.floor(0.999*2)=1 → orb
-		const [obj] = drawObjectives(pack, rngLast, 1);
+		// pool: [carry(gem), use_space(gem_space), carry(orb), use_space(orb_space)]
+		// rng=0 → index 0 → carry(gem)
+		const rngZero = () => 0;
+		const [obj] = drawObjectives(pack, rngZero, 1);
 		expect(obj?.kind).toBe("carry");
 		if (obj?.kind === "carry") {
-			expect(obj.objectId).toBe("orb_obj");
-			expect(obj.spaceId).toBe("orb_space");
+			expect(obj.objectId).toBe("gem_obj");
+			expect(obj.spaceId).toBe("gem_space");
 		}
+	});
+
+	it("draws a use_space objective from a 2-pair pool", () => {
+		const pack = makePack(["gem", "orb"], []);
+		// pool: [carry(gem), use_space(gem_space), carry(orb), use_space(orb_space)]
+		// rng picks index 1 (second entry) → use_space for gem_space
+		const rngIdx1 = () => 1 / 4 + 0.001; // Math.floor(0.251 * 4) = 1
+		const [obj] = drawObjectives(pack, rngIdx1, 1);
+		expect(obj?.kind).toBe("use_space");
+		if (obj?.kind === "use_space") {
+			expect(obj.spaceId).toBe("gem_space");
+		}
+	});
+
+	it("pool size is 2*(objectivePairs.length) for a pack with no interesting objects", () => {
+		const pack = makePack(["gem", "orb"], []);
+		// 2 pairs → pool has 4 entries (2 carry + 2 use_space)
+		// Draw 4 times with rng cycling through all indices
+		let call = 0;
+		const cyclingRng = () => (call++ % 4) / 4;
+		const drawn = drawObjectives(pack, cyclingRng, 4);
+		const kinds = drawn.map((o) => o.kind);
+		expect(kinds).toContain("carry");
+		expect(kinds).toContain("use_space");
+	});
+});
+
+// ── use_space objectives ──────────────────────────────────────────────────────
+
+describe("drawObjectives — use_space objectives", () => {
+	it("produces a UseSpaceObjective candidate for each objectivePair", () => {
+		const pack = makePack(["gem"], []);
+		// pool: [carry(gem), use_space(gem_space)]
+		// rng picks index 1 → use_space for gem_space
+		const rngIdx1 = () => 0.5; // Math.floor(0.5 * 2) = 1
+		const [obj] = drawObjectives(pack, rngIdx1, 1);
+		expect(obj).toBeDefined();
+		expect(obj?.kind).toBe("use_space");
+		if (obj?.kind === "use_space") {
+			expect((obj as UseSpaceObjective).spaceId).toBe("gem_space");
+			expect(obj.satisfactionState).toBe("pending");
+		}
+	});
+
+	it("use_space objective description includes the space name", () => {
+		const pack = makePack(["gem"], []);
+		const rngIdx1 = () => 0.5; // picks use_space
+		const [obj] = drawObjectives(pack, rngIdx1, 1);
+		expect(obj?.description).toContain("gem space");
 	});
 });
