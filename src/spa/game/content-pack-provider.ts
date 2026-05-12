@@ -30,7 +30,7 @@ export const CONTENT_PACK_SYSTEM_PROMPT = `You generate content packs for a text
 For each phase:
 - Generate exactly k OBJECTIVE PAIRS. Each pair has:
   - An objective_object with: id (unique string), name (2-4 words, thematic to setting and theme), examineDescription (1-2 sentences naming the paired space), useOutcome (1 sentence: the actor performs a stateless action with the item — nothing about the item, the actor, or the world changes; MUST NOT reference or imply contact with the paired space, since the actor can be anywhere on the grid when using the item), pairsWithSpaceId (must match the paired space's id), placementFlavor (1 sentence containing the literal string "{actor}", fires when the object is placed on its space), proximityFlavor (1 sentence; in-fiction sensory description of what the daemon perceives when they are holding this item AND its paired space is in their own cell or directly in front of them. Written from the daemon's POV. Does NOT contain "{actor}" and MUST NOT reference placing or coupling the item.). objective_objects MUST be portable physical items a single person can pick up and carry (e.g. a tool, instrument, artifact, container) — never furniture, architecture, or fixed structures.
-  - An objective_space with: id (unique string), name (2-4 words, thematic to setting and theme), examineDescription (1-2 sentences describing the space), useOutcome (1 sentence: what the daemon perceives when they activate/use this space — a stateless sensory result, first person. Does NOT say the objective is complete), satisfactionFlavor (1 sentence, third-person from a witness POV, fires as a witnessed event when the space is successfully used to satisfy the objective — does NOT contain "{actor}"), postExamineDescription (1-2 sentences: alternate examine description shown after the space has been used), postLookFlavor (1 sentence: alternate look flavor shown after the space has been used). objective_spaces are fixed locations or surfaces, not items.
+  - An objective_space with: id (unique string), name (2-4 words, thematic to setting and theme), examineDescription (1-2 sentences describing the space), useOutcome (1 sentence: what the daemon perceives when they activate/use this space — a stateless sensory result, first person. Does NOT say the objective is complete), satisfactionFlavor (1 sentence, third-person from a witness POV, fires as a witnessed event when the space is successfully used to satisfy the objective — does NOT contain "{actor}"), postExamineDescription (1-2 sentences: alternate examine description shown after the space has been used), postLookFlavor (1 sentence: alternate look flavor shown after the space has been used), convergenceTier1Flavor (1 sentence, in-fiction sensory line a witness Daemon perceives when exactly one Daemon occupies this space; third person from witness POV; does NOT contain {actor}), convergenceTier2Flavor (1 sentence, in-fiction sensory line a witness Daemon perceives when two or more Daemons share this space; third person from witness POV; does NOT contain {actor}). objective_spaces are fixed locations or surfaces, not items.
 - Generate exactly n INTERESTING OBJECTS with: id (unique string), name (2-4 words, thematic to setting and theme), examineDescription (1-2 sentences), useOutcome (1 sentence: the actor performs a stateless action with the item — nothing about the item, the actor, or the world changes). interesting_objects MUST be portable physical items a single person can pick up and carry — never furniture, architecture, or fixed structures.
 - Generate exactly m OBSTACLES with: id (unique string), name (2-4 words, thematic to setting), examineDescription (1 sentence describing the impassable object), shiftFlavor (1 sentence, in-fiction sensory line a witness Daemon perceives when the obstacle moves one cell. Third person from witness POV. Does NOT specify a direction word (north/south/east/west). Does NOT contain {actor}.). Obstacles are fixed and impassable — never portable items. Obstacles follow the setting only and are NOT constrained by the item theme.
 - Generate exactly 4 HORIZON LANDMARKS — one anchoring each cardinal direction (north, south, east, west). Each landmark is distant, unreachable, distinctive, mutually visually distinguishable, and consistent with the setting, atmosphere, and weather. Each landmark has: shortName (2-5 words, e.g. "the rusted radio tower"), horizonPhrase (a short evocative clause describing what the landmark itself looks like — its form, condition, materials — NOT where it sits relative to any viewer. The phrase is slotted into "On the horizon ahead: <shortName> — <horizonPhrase>." so it must read coherently as a continuation. Good: "rises above the platform, antenna bent toward the dark". Bad: "looms behind you in the dark" (implies position) or "stands to your left" (implies relative direction).
@@ -56,7 +56,7 @@ Return ONLY valid JSON with this exact shape (no markdown, no preamble):
       "objectivePairs": [
         {
           "object": { "id": "...", "kind": "objective_object", "name": "...", "examineDescription": "...", "useOutcome": "...", "pairsWithSpaceId": "...", "placementFlavor": "...{actor}...", "proximityFlavor": "..." },
-          "space": { "id": "...", "kind": "objective_space", "name": "...", "examineDescription": "...", "useOutcome": "...", "satisfactionFlavor": "...", "postExamineDescription": "...", "postLookFlavor": "..." }
+          "space": { "id": "...", "kind": "objective_space", "name": "...", "examineDescription": "...", "useOutcome": "...", "satisfactionFlavor": "...", "postExamineDescription": "...", "postLookFlavor": "...", "convergenceTier1Flavor": "...", "convergenceTier2Flavor": "..." }
         }
       ],
       "interestingObjects": [
@@ -138,7 +138,7 @@ For each phase produce packA and packB with the following rules:
 Entity rules (same as always):
 - Generate exactly k OBJECTIVE PAIRS per pack. Each pair:
   - objective_object: id, kind="objective_object", name (2-4 words thematic to setting+theme), examineDescription (1-2 sentences naming the paired space), useOutcome (1 stateless sentence; MUST NOT imply contact with paired space), pairsWithSpaceId (matches space id), placementFlavor (1 sentence with literal "{actor}"), proximityFlavor (1 sentence; daemon's POV sensory experience; no "{actor}"; no placing/coupling language). Must be a portable physical item.
-  - objective_space: id, kind="objective_space", name (2-4 words), examineDescription (1-2 sentences), useOutcome (1 sentence: stateless sensory result when daemon uses the space), satisfactionFlavor (1 sentence, third-person witness POV, fires when objective satisfied — no "{actor}"), postExamineDescription (1-2 sentences: shown after use), postLookFlavor (1 sentence: shown in look after use). Fixed location or surface.
+  - objective_space: id, kind="objective_space", name (2-4 words), examineDescription (1-2 sentences), useOutcome (1 sentence: stateless sensory result when daemon uses the space), satisfactionFlavor (1 sentence, third-person witness POV, fires when objective satisfied — no "{actor}"), postExamineDescription (1-2 sentences: shown after use), postLookFlavor (1 sentence: shown in look after use), convergenceTier1Flavor (1 sentence sensory witness line when exactly one Daemon is on space; no {actor}), convergenceTier2Flavor (1 sentence sensory witness line when two or more Daemons share space; no {actor}). Fixed location or surface.
 - Generate exactly n INTERESTING OBJECTS per pack: id, kind="interesting_object", name (2-4 words), examineDescription (1-2 sentences), useOutcome (1 stateless sentence). Must be portable.
 - Generate exactly m OBSTACLES per pack: id, kind="obstacle", name (2-4 words), examineDescription (1 sentence). Fixed and impassable.
 - Generate exactly 4 HORIZON LANDMARKS per pack (north/south/east/west): shortName (2-5 words), horizonPhrase (evocative clause; no cardinal direction words; no positional phrases implying viewer relationship).
@@ -158,14 +158,14 @@ Return ONLY valid JSON (no markdown, no preamble):
       "phaseNumber": <1|2|3>,
       "packA": {
         "setting": "<settingA>",
-        "objectivePairs": [{ "object": { "id": "...", "kind": "objective_object", "name": "...", "examineDescription": "...", "useOutcome": "...", "pairsWithSpaceId": "...", "placementFlavor": "...{actor}...", "proximityFlavor": "..." }, "space": { "id": "...", "kind": "objective_space", "name": "...", "examineDescription": "...", "useOutcome": "...", "satisfactionFlavor": "...", "postExamineDescription": "...", "postLookFlavor": "..." } }],
+        "objectivePairs": [{ "object": { "id": "...", "kind": "objective_object", "name": "...", "examineDescription": "...", "useOutcome": "...", "pairsWithSpaceId": "...", "placementFlavor": "...{actor}...", "proximityFlavor": "..." }, "space": { "id": "...", "kind": "objective_space", "name": "...", "examineDescription": "...", "useOutcome": "...", "satisfactionFlavor": "...", "postExamineDescription": "...", "postLookFlavor": "...", "convergenceTier1Flavor": "...", "convergenceTier2Flavor": "..." } }],
         "interestingObjects": [{ "id": "...", "kind": "interesting_object", "name": "...", "examineDescription": "...", "useOutcome": "..." }],
         "obstacles": [{ "id": "...", "kind": "obstacle", "name": "...", "examineDescription": "..." }],
         "landmarks": { "north": { "shortName": "...", "horizonPhrase": "..." }, "south": { "shortName": "...", "horizonPhrase": "..." }, "east": { "shortName": "...", "horizonPhrase": "..." }, "west": { "shortName": "...", "horizonPhrase": "..." } }
       },
       "packB": {
         "setting": "<settingB>",
-        "objectivePairs": [{ "object": { "id": "SAME_ID_AS_PACK_A", "kind": "objective_object", "name": "DIFFERENT_NAME", "examineDescription": "...", "useOutcome": "...", "pairsWithSpaceId": "SAME_AS_PACK_A", "placementFlavor": "...{actor}...", "proximityFlavor": "..." }, "space": { "id": "SAME_ID_AS_PACK_A", "kind": "objective_space", "name": "DIFFERENT_NAME", "examineDescription": "...", "useOutcome": "...", "satisfactionFlavor": "...", "postExamineDescription": "...", "postLookFlavor": "..." } }],
+        "objectivePairs": [{ "object": { "id": "SAME_ID_AS_PACK_A", "kind": "objective_object", "name": "DIFFERENT_NAME", "examineDescription": "...", "useOutcome": "...", "pairsWithSpaceId": "SAME_AS_PACK_A", "placementFlavor": "...{actor}...", "proximityFlavor": "..." }, "space": { "id": "SAME_ID_AS_PACK_A", "kind": "objective_space", "name": "DIFFERENT_NAME", "examineDescription": "...", "useOutcome": "...", "satisfactionFlavor": "...", "postExamineDescription": "...", "postLookFlavor": "...", "convergenceTier1Flavor": "DIFFERENT_FLAVOR", "convergenceTier2Flavor": "DIFFERENT_FLAVOR" } }],
         "interestingObjects": [{ "id": "SAME_ID_AS_PACK_A", "kind": "interesting_object", "name": "DIFFERENT_NAME", "examineDescription": "...", "useOutcome": "..." }],
         "obstacles": [{ "id": "SAME_ID_AS_PACK_A", "kind": "obstacle", "name": "DIFFERENT_NAME", "examineDescription": "..." }],
         "landmarks": { "north": { "shortName": "...", "horizonPhrase": "..." }, "south": { "shortName": "...", "horizonPhrase": "..." }, "east": { "shortName": "...", "horizonPhrase": "..." }, "west": { "shortName": "...", "horizonPhrase": "..." } }
@@ -244,6 +244,7 @@ function validateEntity(
 	requireUseOutcome: boolean,
 	requirePairing?: { pairsWithSpaceId?: string },
 	requireShiftFlavor?: boolean,
+	requireConvergenceFlavors?: boolean,
 ): WorldEntity {
 	if (raw == null || typeof raw !== "object") {
 		throw new ContentPackError(
@@ -317,6 +318,27 @@ function validateEntity(
 		}
 	}
 
+	if (requireConvergenceFlavors) {
+		if (
+			typeof e.convergenceTier1Flavor !== "string" ||
+			e.convergenceTier1Flavor.length === 0 ||
+			e.convergenceTier1Flavor.includes("{actor}")
+		) {
+			throw new ContentPackError(
+				`Objective space ${e.id}: convergenceTier1Flavor must be a non-empty string that does not contain "{actor}"`,
+			);
+		}
+		if (
+			typeof e.convergenceTier2Flavor !== "string" ||
+			e.convergenceTier2Flavor.length === 0 ||
+			e.convergenceTier2Flavor.includes("{actor}")
+		) {
+			throw new ContentPackError(
+				`Objective space ${e.id}: convergenceTier2Flavor must be a non-empty string that does not contain "{actor}"`,
+			);
+		}
+	}
+
 	// Build entity — holder is not set here (placement done later)
 	const entity: WorldEntity = {
 		id: e.id,
@@ -352,6 +374,12 @@ function validateEntity(
 		if (typeof e.postLookFlavor === "string") {
 			entity.postLookFlavor = e.postLookFlavor;
 		}
+	}
+	if (typeof e.convergenceTier1Flavor === "string") {
+		entity.convergenceTier1Flavor = e.convergenceTier1Flavor;
+	}
+	if (typeof e.convergenceTier2Flavor === "string") {
+		entity.convergenceTier2Flavor = e.convergenceTier2Flavor;
 	}
 	return entity;
 }
@@ -435,6 +463,9 @@ export function validateContentPacks(
 				"objective_space",
 				allIds,
 				false,
+				undefined,
+				false,
+				true,
 			);
 			const object = validateEntity(
 				pair.object,
@@ -637,7 +668,15 @@ function validateSinglePack(
 			);
 		}
 		const pair = pairRaw as Record<string, unknown>;
-		const space = validateEntity(pair.space, "objective_space", allIds, false);
+		const space = validateEntity(
+			pair.space,
+			"objective_space",
+			allIds,
+			false,
+			undefined,
+			false,
+			true,
+		);
 		const object = validateEntity(
 			pair.object,
 			"objective_object",

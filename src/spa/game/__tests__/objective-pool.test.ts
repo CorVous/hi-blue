@@ -11,6 +11,29 @@ import type {
 	WorldEntity,
 } from "../types";
 
+// ── helpers for convergence tests ─────────────────────────────────────────────
+
+function makeObjectivePairWithConvergenceFlavors(id: string): ObjectivePair {
+	const obj: WorldEntity = {
+		id: `${id}_obj`,
+		kind: "objective_object",
+		name: `${id} object`,
+		examineDescription: `The ${id} object belongs on the ${id} space.`,
+		holder: { row: 0, col: 0 },
+		pairsWithSpaceId: `${id}_space`,
+	};
+	const space: WorldEntity = {
+		id: `${id}_space`,
+		kind: "objective_space",
+		name: `${id} space`,
+		examineDescription: `The ${id} space.`,
+		holder: { row: 4, col: 4 },
+		convergenceTier1Flavor: `A single presence lingers at the ${id} space.`,
+		convergenceTier2Flavor: `Two presences converge at the ${id} space.`,
+	};
+	return { object: obj, space };
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function makeObjectivePair(id: string): ObjectivePair {
@@ -244,5 +267,73 @@ describe("drawObjectives — use_space objectives", () => {
 		const rngIdx1 = () => 0.5; // picks use_space
 		const [obj] = drawObjectives(pack, rngIdx1, 1);
 		expect(obj?.description).toContain("gem space");
+	});
+});
+
+// ── convergence objectives ────────────────────────────────────────────────────
+
+describe("drawObjectives — convergence objectives", () => {
+	it("includes a ConvergenceObjective when the pack has a space with both tier flavors", () => {
+		const packWithConvergence: ContentPack = {
+			setting: "test",
+			weather: "",
+			timeOfDay: "",
+			objectivePairs: [makeObjectivePairWithConvergenceFlavors("relic")],
+			interestingObjects: [],
+			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
+			aiStarts: {},
+		};
+		// pool: [carry(relic), convergence(relic)] — rng=last → index 1 → convergence
+		const [obj] = drawObjectives(packWithConvergence, rngLast, 1);
+		expect(obj?.kind).toBe("convergence");
+		if (obj?.kind === "convergence") {
+			expect(obj.spaceId).toBe("relic_space");
+			expect(obj.satisfactionState).toBe("pending");
+			expect(obj.id).toBe("obj-0");
+		}
+	});
+
+	it("does NOT include a ConvergenceObjective when space lacks tier flavor fields", () => {
+		const packWithoutFlavors: ContentPack = {
+			setting: "test",
+			weather: "",
+			timeOfDay: "",
+			objectivePairs: [makeObjectivePair("gem")], // no convergence flavors
+			interestingObjects: [],
+			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
+			aiStarts: {},
+		};
+		// Pool is [carry(gem)] only — no convergence
+		const drawn = drawObjectives(packWithoutFlavors, rngZero, 10);
+		expect(drawn.every((o) => o.kind !== "convergence")).toBe(true);
+	});
+
+	it("builds a mixed pool with carry + use_item + convergence from a well-flavored pack", () => {
+		const packMixed: ContentPack = {
+			setting: "test",
+			weather: "",
+			timeOfDay: "",
+			objectivePairs: [makeObjectivePairWithConvergenceFlavors("altar")],
+			interestingObjects: [makeInterestingObject("torch")],
+			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
+			aiStarts: {},
+		};
+		// Pool: [carry(altar), use_item(torch), convergence(altar)] — 3 candidates
+		// rngZero → always index 0 → carry
+		const allDrawn = drawObjectives(packMixed, rngZero, 3);
+		// All three should be carry since rngZero always picks index 0
+		expect(allDrawn[0]?.kind).toBe("carry");
+
+		// With rngLast, index = Math.floor(0.999 * 3) = 2 → convergence
+		const [lastObj] = drawObjectives(packMixed, rngLast, 1);
+		expect(lastObj?.kind).toBe("convergence");
+
+		// Confirm description mentions the space name
+		if (lastObj?.kind === "convergence") {
+			expect(lastObj.description).toContain("altar space");
+		}
 	});
 });
