@@ -33,13 +33,13 @@ function seedOkSessionScript(id: string, lastSavedAt: string): string {
 			const meta = JSON.stringify({
 				createdAt: '2025-01-01T00:00:00.000Z',
 				lastSavedAt: '${lastSavedAt}',
-				phase: 1,
+				epoch: 1,
 				round: 0,
 				personaOrder: ['red'],
 			});
 			localStorage.setItem(prefix + 'meta.json', meta);
 
-			// Daemon file: must match DaemonFile shape (aiId, persona, phases)
+			// Daemon file: flat DaemonFile shape (v6+)
 			const daemonFile = JSON.stringify({
 				aiId: 'red',
 				persona: {
@@ -52,36 +52,44 @@ function seedOkSessionScript(id: string, lastSavedAt: string): string {
 					typingQuirks: ['...', '!'],
 					voiceExamples: ['Hello.', 'Indeed.', 'Farewell.'],
 				},
-				phases: {
-					'1': { phaseGoal: '', conversationLog: [] },
-					'2': { phaseGoal: '', conversationLog: [] },
-					'3': { phaseGoal: '', conversationLog: [] },
-				},
+				conversationLog: [],
 			});
 			localStorage.setItem(prefix + 'red.txt', daemonFile);
 
-			// Build engine.dat via inline obfuscation — payload must match SealedEngine
+			// Build engine.dat via inline obfuscation — payload must match SealedEngine v7
 			const OBFUSCATION_KEY = '${OBFUSCATION_KEY}';
 			const keyBytes = Array.from(new TextEncoder().encode(OBFUSCATION_KEY));
+			const stubLandmarks = {
+				north: { shortName: 'Ridge', horizonPhrase: 'A distant ridge.' },
+				south: { shortName: 'Hills', horizonPhrase: 'Rolling hills.' },
+				east: { shortName: 'Tower', horizonPhrase: 'A stone tower.' },
+				west: { shortName: 'Forest', horizonPhrase: 'A dark forest.' },
+			};
+			const stubPack = {
+				phaseNumber: 1,
+				setting: 'test setting',
+				weather: 'clear',
+				timeOfDay: 'morning',
+				objectivePairs: [],
+				interestingObjects: [],
+				obstacles: [],
+				aiStarts: {},
+				landmarks: stubLandmarks,
+			};
 			const payload = JSON.stringify({
-				schemaVersion: 5,
-				currentPhase: 1,
+				schemaVersion: 7,
 				isComplete: false,
-				world: {
-					1: { entities: [] },
-					2: { entities: [] },
-					3: { entities: [] },
-				},
-				contentPacks: [
-					{ phaseNumber: 1, setting: 'test', objectivePairs: [], interestingObjects: [], obstacles: [], aiStarts: {} },
-				],
-				budgets: { 1: {}, 2: {}, 3: {} },
-				lockouts: {
-					1: { lockedOut: [], chatLockouts: [] },
-					2: { lockedOut: [], chatLockouts: [] },
-					3: { lockedOut: [], chatLockouts: [] },
-				},
-				personaSpatial: { 1: {}, 2: {}, 3: {} },
+				world: { entities: [] },
+				budgets: { red: { remaining: 50, total: 50 } },
+				lockedOut: [],
+				personaSpatial: { red: { position: { row: 2, col: 2 }, facing: 'north' } },
+				contentPacksA: [stubPack],
+				contentPacksB: [{ ...stubPack, setting: 'test setting B' }],
+				activePackId: 'A',
+				weather: 'clear',
+				objectives: [],
+				complicationSchedule: { countdown: 5, settingShiftFired: false },
+				activeComplications: [],
 			});
 			const jsonBytes = Array.from(new TextEncoder().encode(payload));
 			const xored = jsonBytes.map((b,i) => b ^ (keyBytes[i % keyBytes.length] ?? 0));
@@ -103,12 +111,12 @@ function seedBrokenSessionScript(id: string): string {
 			const meta = JSON.stringify({
 				createdAt: '2025-01-01T00:00:00.000Z',
 				lastSavedAt: '2025-01-01T08:00:00.000Z',
-				phase: 1,
+				epoch: 1,
 				round: 0,
 			});
 			localStorage.setItem(prefix + 'meta.json', meta);
 			localStorage.setItem(prefix + 'red.txt', '{}');
-			// Intentionally omit engine.dat (whispers.txt retired in v3)
+			// Intentionally omit engine.dat
 		})();
 	`;
 }
@@ -123,7 +131,7 @@ function seedVersionMismatchScript(id: string): string {
 			const meta = JSON.stringify({
 				createdAt: '2025-01-01T00:00:00.000Z',
 				lastSavedAt: '2025-01-01T06:00:00.000Z',
-				phase: 1,
+				epoch: 1,
 				round: 0,
 			});
 			localStorage.setItem(prefix + 'meta.json', meta);

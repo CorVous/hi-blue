@@ -59,18 +59,11 @@ test("fabricated message appears in target daemon prompt and is absent from othe
 			const daemonFile = JSON.parse(raw) as {
 				aiId: string;
 				persona: unknown;
-				phases: {
-					"1": {
-						phaseGoal: string;
-						conversationLog: Array<Record<string, unknown>>;
-					};
-					"2": { phaseGoal: string; conversationLog: Array<unknown> };
-					"3": { phaseGoal: string; conversationLog: Array<unknown> };
-				};
+				conversationLog: Array<Record<string, unknown>>;
 			};
 
-			// Append fabricated message entry to phase "1" log.
-			daemonFile.phases["1"].conversationLog.push({
+			// Append fabricated message entry to the flat conversation log.
+			daemonFile.conversationLog.push({
 				kind: "message",
 				round: 0,
 				from: senderId,

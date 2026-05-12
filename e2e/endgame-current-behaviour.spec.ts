@@ -41,27 +41,14 @@ test("game_ended disables composer and clears storage", async ({ page }) => {
 	// 2. Capture URL before submitting (proves URL stability below).
 	const urlBefore = page.url();
 
-	// Helper: fill prompt with a mention of ids[0], wait for Send to enable, click.
-	async function submitMessage(text: string): Promise<void> {
-		await page.fill("#prompt", text);
-		await expect(page.locator("#send")).toBeEnabled();
-		await page.click("#send");
-	}
+	// 3. Submit one message — ?winImmediately=1 wraps submitMessage so the next
+	//    call ends the game immediately (gameEnded: true, isComplete: true).
+	//    There are no phase transitions in the flat single-game loop.
+	await page.fill("#prompt", `*${names[0]} hello`);
+	await expect(page.locator("#send")).toBeEnabled();
+	await page.click("#send");
 
-	// 3. Round 1 — phase 1 ends; wait for phase banner to advance to Phase 2.
-	await submitMessage(`*${names[0]} hello`);
-	await expect(page.locator("#phase-banner")).toContainText("Phase 2", {
-		timeout: 30_000,
-	});
-
-	// 4. Round 2 — phase 2 ends; wait for phase banner to advance to Phase 3.
-	await submitMessage(`*${names[0]} hello`);
-	await expect(page.locator("#phase-banner")).toContainText("Phase 3", {
-		timeout: 30_000,
-	});
-
-	// 5. Round 3 — phase 3 ends; game_ended fires → #send permanently disabled.
-	await submitMessage(`*${names[0]} hello`);
+	// game_ended fires → #send permanently disabled.
 	await expect(page.locator("#send")).toBeDisabled({ timeout: 30_000 });
 
 	// 6. Assert all acceptance criteria.

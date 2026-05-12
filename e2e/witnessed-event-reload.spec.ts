@@ -508,20 +508,29 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 
 	const engineJson = deobfuscateEngineBlob(storageInfo.engineBlob);
 	const engineData = JSON.parse(engineJson) as {
-		personaSpatial: Record<string, Record<string, PersonaSpatial>>;
-		contentPacks: Array<{
+		personaSpatial: Record<string, PersonaSpatial>;
+		contentPacksA: Array<{
 			phaseNumber: number;
 			obstacles: Array<{ holder: GridPosition | null }>;
 		}>;
-		currentPhase: 1 | 2 | 3;
+		contentPacksB: Array<{
+			phaseNumber: number;
+			obstacles: Array<{ holder: GridPosition | null }>;
+		}>;
+		activePackId: "A" | "B";
 	};
 
-	const phase1Spatial = engineData.personaSpatial["1"] as
+	const phase1Spatial = engineData.personaSpatial as
 		| Record<string, PersonaSpatial>
 		| undefined;
-	if (!phase1Spatial) throw new Error("No phase 1 spatial data in engine.dat");
+	if (!phase1Spatial || Object.keys(phase1Spatial).length === 0)
+		throw new Error("No phase 1 spatial data in engine.dat");
 
-	const phase1Pack = engineData.contentPacks.find((p) => p.phaseNumber === 1);
+	const activePacks =
+		engineData.activePackId === "B"
+			? engineData.contentPacksB
+			: engineData.contentPacksA;
+	const phase1Pack = activePacks.find((p) => p.phaseNumber === 1);
 	const obstaclePositions: GridPosition[] = (phase1Pack?.obstacles ?? [])
 		.map((o) => o.holder)
 		.filter((h): h is GridPosition => h !== null);
@@ -725,11 +734,9 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 			const raw = localStorage.getItem(key);
 			if (!raw) return { found: false, log: [] as unknown[] };
 			const df = JSON.parse(raw) as {
-				phases: {
-					"1": { conversationLog: Array<{ kind: string; actor?: string }> };
-				};
+				conversationLog: Array<{ kind: string; actor?: string }>;
 			};
-			const log = df.phases["1"].conversationLog;
+			const log = df.conversationLog;
 			const found = log.some(
 				(e) => e.kind === "witnessed-event" && e.actor === aId,
 			);
@@ -804,15 +811,15 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 	).not.toBeNull();
 
 	// ── 14. Assert witnessed-event line in witness role turns ────────────────
-	// conversation-log.ts:63-65:
-	//   case "go":
-	//     return `[Round ${round}] You watch *${actorSub} walk ${direction}.`;
-	// where round = phase.round at dispatch time.
-	//
-	// Witnessed events used to be folded into the system-prompt <conversation>
-	// block; after the prompt-cache restructure they're emitted as user role
-	// turns by openai-message-builder. Search the full message array.
-	const expectedLine = `[Round ${roundAtDispatch}] You watch *${actorId} walk ${direction}.`;
+	// conversation-log.ts renders direction relative to witness's facing.
+	// Compute the relative direction from the plan's absolute cardinal.
+	const CARDINALS = ["north", "east", "south", "west"];
+	const RELATIVES = ["forward", "right", "back", "left"];
+	const witnessFacing = (phase1Spatial?.[witnessId] as PersonaSpatial | undefined)?.facing ?? "north";
+	const facingIdx = CARDINALS.indexOf(witnessFacing);
+	const dirIdx = CARDINALS.indexOf(direction);
+	const relativeDirection = RELATIVES[(dirIdx - facingIdx + 4) % 4] ?? direction;
+	const expectedLine = `[Round ${roundAtDispatch}] You watch *${actorId} walk ${relativeDirection}.`;
 
 	const witnessAllContent = (
 		witnessBody as { messages: Array<{ content: string | null }> }
