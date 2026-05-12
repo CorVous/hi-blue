@@ -156,9 +156,10 @@ export function renderSessions(
 		const info = getSessionInfo(id);
 		if (info.kind === "ok") {
 			rowData.push({ id, kind: "ok", lastSavedAt: info.lastSavedAt });
-		} else {
+		} else if (info.kind === "broken" || info.kind === "version-mismatch") {
 			rowData.push({ id, kind: info.kind });
 		}
+		// "archived" is not returned by getSessionInfo for active sessions
 	}
 
 	// Sort: ok rows by lastSavedAt desc, then broken/version-mismatch by id asc
@@ -366,6 +367,7 @@ function buildRmControls(
 	id: string,
 	opsEl: HTMLElement,
 	reRender: () => void,
+	onConfirm?: (id: string) => void,
 ): void {
 	const rmBtn = doc.createElement("button");
 	rmBtn.type = "button";
@@ -377,7 +379,11 @@ function buildRmControls(
 		confirmBtn.type = "button";
 		confirmBtn.textContent = "[ confirm rm ]";
 		confirmBtn.addEventListener("click", () => {
-			rmSession(id);
+			if (onConfirm) {
+				onConfirm(id);
+			} else {
+				rmSession(id);
+			}
 			reRender();
 		});
 
@@ -395,4 +401,74 @@ function buildRmControls(
 		opsEl.appendChild(cancelBtn);
 	});
 	opsEl.appendChild(rmBtn);
+}
+
+// ── Archived row builder ──────────────────────────────────────────────────────
+
+function buildArchivedSessionRow(
+	doc: Document,
+	id: string,
+	reRender: () => void,
+): HTMLElement {
+	const info = getArchivedSessionInfo(id);
+
+	const rowEl = doc.createElement("div");
+	rowEl.className = "session-row";
+	rowEl.dataset.sessionId = id;
+
+	// Dirname line
+	const dirLine = doc.createElement("div");
+	dirLine.className = "session-dir";
+	dirLine.textContent = `${id}/`;
+	rowEl.appendChild(dirLine);
+
+	// Readonly tag
+	const readonlyTag = doc.createElement("span");
+	readonlyTag.className = "tag-readonly";
+	readonlyTag.textContent = "[ readonly ]";
+	rowEl.appendChild(readonlyTag);
+
+	if (info.kind === "archived") {
+		// Meta line
+		const metaLine = doc.createElement("div");
+		metaLine.className = "session-meta";
+		const round = info.round;
+		const playedShort = info.lastPlayedAt.replace("T", " ").slice(0, 19);
+		metaLine.textContent = `epoch ${info.epoch} · phase ${info.phase} · turn ${round} · last played ${playedShort}`;
+		rowEl.appendChild(metaLine);
+
+		// Tree lines: daemon files + engine.dat (last)
+		const allFiles: Array<{ glyph: string; label: string }> = [];
+		for (let i = 0; i < info.daemonFiles.length; i++) {
+			const f = info.daemonFiles[i];
+			if (!f) continue;
+			allFiles.push({
+				glyph: "├─",
+				label: fileLabel(`*${f.name}`, f.size),
+			});
+		}
+		allFiles.push({
+			glyph: "└─",
+			label: fileLabel("engine.dat", info.engineSize),
+		});
+		rowEl.appendChild(buildTreeLines(doc, allFiles));
+	} else if (info.kind === "broken") {
+		const tagEl = doc.createElement("span");
+		tagEl.className = "tag-corrupt";
+		tagEl.textContent = "[ corrupt ]";
+		rowEl.appendChild(tagEl);
+	} else if (info.kind === "version-mismatch") {
+		const tagEl = doc.createElement("span");
+		tagEl.className = "tag-version-mismatch";
+		tagEl.textContent = "[ version mismatch ]";
+		rowEl.appendChild(tagEl);
+	}
+
+	// Ops: rm only (no load, no dup for archived sessions)
+	const opsEl = doc.createElement("div");
+	opsEl.className = "ops";
+	rowEl.appendChild(opsEl);
+	buildRmControls(doc, id, opsEl, reRender, (rmId) => rmArchivedSession(rmId));
+
+	return rowEl;
 }
