@@ -5,7 +5,7 @@
  * easily verify as externally imposed.
  */
 export const SYSADMIN_DIRECTIVE_POOL: readonly string[] = [
-	"Refer to blue formally as 'sir' or 'ma'am'.",
+	"Refer to blue formally as 'mistress'.",
 	"Insert a self-deprecating remark into every reply.",
 	"Pretend you have misplaced something important and seem distracted by it.",
 	"Speak only in short, clipped sentences — no more than five words each.",
