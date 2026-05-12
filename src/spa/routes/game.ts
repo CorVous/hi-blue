@@ -1338,9 +1338,12 @@ export function renderGame(
 						sendBtn.disabled = true;
 						promptInput.disabled = true;
 
-						// Capture session info before any cleanup so choice handlers can use it
+						// Capture state for choice handlers, then null out session so
+						// any subsequent form submits are no-ops (form checks `if (!session) return`).
 						const endedSessionId = getActiveSessionId();
 						const endedState = session?.getState();
+						session = null;
+						cachedSessionId = null;
 
 						// Hide game UI
 						const panelsEl = doc.querySelector<HTMLElement>("#panels");
@@ -1478,10 +1481,8 @@ export function renderGame(
 							doc.querySelector<HTMLButtonElement>("#download-ais-btn");
 						const downloadStatusEl =
 							doc.querySelector<HTMLElement>("#download-status");
-						if (downloadBtn && session) {
-							const savePayload = JSON.stringify(
-								serializeGameSave(session.getState()),
-							);
+						if (downloadBtn && endedState) {
+							const savePayload = JSON.stringify(serializeGameSave(endedState));
 							downloadBtn.dataset.savePayload = savePayload;
 
 							downloadBtn.addEventListener("click", () => {
