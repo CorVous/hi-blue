@@ -26,9 +26,11 @@ import {
 	listArchivedSessions,
 	listSessions,
 	loadActiveSession,
+	loadArchivedSession,
 	mintSession,
 	rmArchivedSession,
 	rmSession,
+	seedFromArchive,
 	setActiveSessionId,
 } from "../persistence/session-storage.js";
 
@@ -386,6 +388,16 @@ function buildRmControls(
 	opsEl.appendChild(rmBtn);
 }
 
+// ── OpenRouter key detection ──────────────────────────────────────────────────
+
+function hasOpenRouterKey(): boolean {
+	try {
+		return localStorage.getItem("openrouter_key") !== null;
+	} catch {
+		return false;
+	}
+}
+
 // ── Archived row builder ─────────────────────────────────────────────────────
 
 function buildArchivedSessionRow(
@@ -434,10 +446,40 @@ function buildArchivedSessionRow(
 		});
 		rowEl.appendChild(buildTreeLines(doc, allFiles));
 
-		// Ops: rm only
+		// Ops
 		const opsEl = doc.createElement("div");
 		opsEl.className = "ops";
 		rowEl.appendChild(opsEl);
+
+		if (hasOpenRouterKey()) {
+			const continueBtn = doc.createElement("button");
+			continueBtn.type = "button";
+			continueBtn.textContent = "[ continue with new room ]";
+			continueBtn.addEventListener("click", async () => {
+				continueBtn.disabled = true;
+				try {
+					const archiveResult = loadArchivedSession(id);
+					if (archiveResult.kind !== "ok") {
+						continueBtn.disabled = false;
+						return;
+					}
+					const { buildSameDaemonsSession } = await import(
+						"../game/bootstrap.js"
+					);
+					const newSession = await buildSameDaemonsSession(
+						archiveResult.state.personas,
+					);
+					const freshState = newSession.getState();
+					const newId = seedFromArchive(id, freshState);
+					setActiveSessionId(newId);
+					location.hash = `#/game?${Date.now()}`;
+				} catch {
+					continueBtn.disabled = false;
+				}
+			});
+			opsEl.appendChild(continueBtn);
+		}
+
 		buildArchivedRmControls(doc, id, opsEl, reRender);
 	} else if (info.kind === "broken") {
 		const tagEl = doc.createElement("span");

@@ -13,6 +13,7 @@
  * See docs/adr/0004-editable-vs-sealed-save-surface.md.
  */
 
+import { appendBroadcast } from "../game/engine.js";
 import type { AiId, GameState } from "../game/types.js";
 import {
 	type DeserializeResult,
@@ -613,6 +614,59 @@ export function rmSession(id: string): void {
 	} catch {
 		// swallow
 	}
+}
+
+/**
+ * Seed a new session by merging archived conversation logs into a fresh GameState.
+ *
+ * 1. Loads the archived session (throws if not ok — programmer-error guard).
+ * 2. Deep-copies the archived conversationLogs into freshState.
+ * 3. Appends a broadcast: "The sysadmin has created a new room."
+ * 4. Writes in canonical order: meta → daemons → engine.dat LAST (commit signal).
+ * 5. Returns the new session id (does NOT set the active pointer).
+ */
+export function seedFromArchive(
+	archiveId: string,
+	freshState: GameState,
+): string {
+	const archiveResult = loadArchivedSession(archiveId);
+	if (archiveResult.kind !== "ok") {
+		throw new Error(
+			`seedFromArchive: archive "${archiveId}" is not loadable (kind: ${archiveResult.kind})`,
+		);
+	}
+
+	// Deep-copy archived conversation logs into freshState
+	const archivedLogs = JSON.parse(
+		JSON.stringify(archiveResult.state.conversationLogs),
+	) as GameState["conversationLogs"];
+	const mergedState: GameState = {
+		...freshState,
+		conversationLogs: archivedLogs,
+	};
+
+	// Append broadcast
+	const broadcastedState = appendBroadcast(
+		mergedState,
+		"The sysadmin has created a new room.",
+	);
+
+	const newEpoch = archiveResult.epoch + 1;
+	const now = new Date().toISOString();
+	const files = serializeSession(broadcastedState, now, now, newEpoch);
+
+	const newId = mintSessionId();
+	const dstPrefix = `${SESSIONS_PREFIX}${newId}/`;
+
+	// Write in canonical order: meta → daemons → engine.dat LAST (commit signal)
+	localStorage.setItem(`${dstPrefix}meta.json`, files.meta);
+	for (const [aiId, daemonJson] of Object.entries(files.daemons)) {
+		localStorage.setItem(`${dstPrefix}${aiId}.txt`, daemonJson);
+	}
+	// biome-ignore lint/style/noNonNullAssertion: serializeSession always returns a non-null engine string
+	localStorage.setItem(`${dstPrefix}engine.dat`, files.engine!);
+
+	return newId;
 }
 
 /**

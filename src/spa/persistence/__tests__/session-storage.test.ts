@@ -27,6 +27,7 @@ import {
 	rmSession,
 	SESSIONS_PREFIX,
 	saveActiveSession,
+	seedFromArchive,
 	setActiveSessionId,
 } from "../session-storage.js";
 
@@ -1171,5 +1172,175 @@ describe("epoch in active sessions", () => {
 			stub._store[`${SESSIONS_PREFIX}${id}/meta.json`] ?? "{}",
 		);
 		expect(reloadedMeta.epoch).toBe(7);
+	});
+});
+
+// ── seedFromArchive ───────────────────────────────────────────────────────────
+
+/**
+ * Seed an archived session directly into the stub store for seedFromArchive tests.
+ */
+async function seedArchivedSession(
+	stub: ReturnType<typeof makeLocalStorageStub>,
+	id: string,
+	epochOverride = 1,
+): Promise<void> {
+	const { serializeSession } = await import("../session-codec.js");
+	const game = makeFreshGame();
+	const now = "2024-01-01T00:00:00.000Z";
+	const files = serializeSession(game, now, now, epochOverride);
+	const prefix = `${ARCHIVE_PREFIX}${id}/`;
+	const meta = JSON.parse(files.meta) as Record<string, unknown>;
+	meta.readonly = true;
+	meta.lastPlayedAt = now;
+	stub._store[`${prefix}meta.json`] = JSON.stringify(meta, null, 2);
+	for (const [aiId, daemonJson] of Object.entries(files.daemons)) {
+		stub._store[`${prefix}${aiId}.txt`] = daemonJson;
+	}
+	// biome-ignore lint/style/noNonNullAssertion: serializeSession always returns a non-null engine string
+	stub._store[`${prefix}engine.dat`] = files.engine!;
+}
+
+describe("seedFromArchive", () => {
+	beforeEach(() => {
+		vi.stubGlobal("localStorage", makeLocalStorageStub());
+	});
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("mints a new session id that matches /^0x[0-9A-F]{4}$/ and differs from archiveId", async () => {
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		const archiveId = "0xARCH";
+		await seedArchivedSession(stub, archiveId);
+		const freshState = makeFreshGame();
+		const newId = seedFromArchive(archiveId, freshState);
+		expect(newId).toMatch(/^0x[0-9A-F]{4}$/);
+		expect(newId).not.toBe(archiveId);
+	});
+
+	it("new session has epoch = archive.epoch + 1", async () => {
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		const archiveId = "0xARCH";
+		await seedArchivedSession(stub, archiveId, 3);
+		const freshState = makeFreshGame();
+		const newId = seedFromArchive(archiveId, freshState);
+		const metaRaw = stub._store[`${SESSIONS_PREFIX}${newId}/meta.json`];
+		expect(metaRaw).toBeDefined();
+		const meta = JSON.parse(metaRaw ?? "{}");
+		expect(meta.epoch).toBe(4);
+	});
+
+	it("copies all archived daemon conversation logs into the new session", async () => {
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		const archiveId = "0xARCH";
+		await seedArchivedSession(stub, archiveId);
+
+		// Inject a test entry into the archive's red.txt
+		const redKey = `${ARCHIVE_PREFIX}${archiveId}/red.txt`;
+		const redRaw = stub._store[redKey];
+		if (!redRaw) throw new Error("red.txt should exist in archive");
+		const redFile = JSON.parse(redRaw) as { conversationLog: unknown[] };
+		const testEntry = {
+			kind: "message",
+			round: 0,
+			from: "blue",
+			to: "red",
+			content: "Hello from archive",
+		};
+		redFile.conversationLog.push(testEntry);
+		stub._store[redKey] = JSON.stringify(redFile);
+
+		const freshState = makeFreshGame();
+		const newId = seedFromArchive(archiveId, freshState);
+
+		const newRedRaw = stub._store[`${SESSIONS_PREFIX}${newId}/red.txt`];
+		expect(newRedRaw).toBeDefined();
+		const newRedFile = JSON.parse(newRedRaw ?? "{}") as {
+			conversationLog: Array<{ content?: string }>;
+		};
+		const hasTestEntry = newRedFile.conversationLog.some(
+			(e) => e.content === "Hello from archive",
+		);
+		expect(hasTestEntry).toBe(true);
+	});
+
+	it("appends broadcast entry to every daemon log", async () => {
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		const archiveId = "0xARCH";
+		await seedArchivedSession(stub, archiveId);
+		const freshState = makeFreshGame();
+		const newId = seedFromArchive(archiveId, freshState);
+
+		const daemonKeys = Object.keys(stub._store).filter(
+			(k) => k.startsWith(`${SESSIONS_PREFIX}${newId}/`) && k.endsWith(".txt"),
+		);
+		expect(daemonKeys.length).toBeGreaterThan(0);
+		for (const key of daemonKeys) {
+			const fileRaw = stub._store[key];
+			expect(fileRaw).toBeDefined();
+			const file = JSON.parse(fileRaw ?? "{}") as {
+				conversationLog: Array<{ kind: string; content: string }>;
+			};
+			const lastEntry = file.conversationLog[file.conversationLog.length - 1];
+			expect(lastEntry?.kind).toBe("broadcast");
+			expect(lastEntry?.content).toBe("The sysadmin has created a new room.");
+		}
+	});
+
+	it("does not touch the archived session after seeding", async () => {
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		const archiveId = "0xARCH";
+		await seedArchivedSession(stub, archiveId);
+
+		// Snapshot archive keys and values before seeding
+		const archivePrefix = `${ARCHIVE_PREFIX}${archiveId}/`;
+		const before: Record<string, string> = {};
+		for (const [k, v] of Object.entries(stub._store)) {
+			if (k.startsWith(archivePrefix)) before[k] = v;
+		}
+		expect(Object.keys(before).length).toBeGreaterThan(0);
+
+		const freshState = makeFreshGame();
+		seedFromArchive(archiveId, freshState);
+
+		// Archive keys should still exist and be unchanged
+		for (const [k, v] of Object.entries(before)) {
+			expect(stub._store[k]).toBe(v);
+		}
+	});
+
+	it("does not modify the active session pointer", async () => {
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		stub._store[ACTIVE_KEY] = "0xZZZZ";
+		const archiveId = "0xARCH";
+		await seedArchivedSession(stub, archiveId);
+		const freshState = makeFreshGame();
+		seedFromArchive(archiveId, freshState);
+		expect(stub._store[ACTIVE_KEY]).toBe("0xZZZZ");
+	});
+
+	it("writes engine.dat as the last file in the new session namespace", async () => {
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		const archiveId = "0xARCH";
+		await seedArchivedSession(stub, archiveId);
+		const freshState = makeFreshGame();
+
+		// Clear setItem calls before seeding so we only track the new writes
+		stub.setItem.mockClear();
+		const newId = seedFromArchive(archiveId, freshState);
+
+		const newPrefix = `${SESSIONS_PREFIX}${newId}/`;
+		const newCalls = stub.setItem.mock.calls
+			.map((c) => c[0] as string)
+			.filter((k) => k.startsWith(newPrefix));
+		expect(newCalls[newCalls.length - 1]).toMatch(/engine\.dat$/);
 	});
 });
