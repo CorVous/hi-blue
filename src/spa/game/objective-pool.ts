@@ -69,11 +69,19 @@ export function drawObjectives(
 
 	for (const pair of contentPack.objectivePairs) {
 		const { space } = pair;
+		// Convergence inclusion guard (#336): the space must have ALL four
+		// tier-flavor fields (witness + actor for each of Tier 1 and Tier 2)
+		// authored. Spaces missing any field are excluded from the convergence
+		// pool — they remain eligible for Carry / Use-Space draws.
 		if (
 			typeof space.convergenceTier1Flavor === "string" &&
 			space.convergenceTier1Flavor.length > 0 &&
 			typeof space.convergenceTier2Flavor === "string" &&
-			space.convergenceTier2Flavor.length > 0
+			space.convergenceTier2Flavor.length > 0 &&
+			typeof space.convergenceTier1ActorFlavor === "string" &&
+			space.convergenceTier1ActorFlavor.length > 0 &&
+			typeof space.convergenceTier2ActorFlavor === "string" &&
+			space.convergenceTier2ActorFlavor.length > 0
 		) {
 			const convergence: ConvergenceObjective = {
 				id: "", // placeholder; will be replaced with assigned id

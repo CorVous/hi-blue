@@ -64,6 +64,10 @@ const CONVERGENCE_SPACE: WorldEntity = {
 	holder: { row: 4, col: 4 },
 	convergenceTier1Flavor: "A single presence lingers at the Stone Altar.",
 	convergenceTier2Flavor: "Two presences converge at the Stone Altar.",
+	convergenceTier1ActorFlavor:
+		"You linger at the Stone Altar; the air seems to wait.",
+	convergenceTier2ActorFlavor:
+		"You stand at the Stone Altar; another presence shares the place.",
 };
 
 // Paired object (required by ContentPack.objectivePairs).
@@ -167,7 +171,9 @@ describe("runRound — convergence evaluation (step 4d)", () => {
 		if (entry?.kind === "witnessed-convergence") {
 			expect(entry.tier).toBe(1);
 			expect(entry.spaceId).toBe("altar_space");
-			expect(entry.flavor).toBe(CONVERGENCE_SPACE.convergenceTier1Flavor);
+			// red is the sole occupant → first-person actor flavor (#336).
+			expect(entry.audience).toBe("actor");
+			expect(entry.flavor).toBe(CONVERGENCE_SPACE.convergenceTier1ActorFlavor);
 		}
 	});
 
@@ -236,14 +242,20 @@ describe("runRound — convergence evaluation (step 4d)", () => {
 		expect(redConvergence).toHaveLength(1);
 		if (redConvergence[0]?.kind === "witnessed-convergence") {
 			expect(redConvergence[0].tier).toBe(2);
+			// red is an occupant → first-person actor flavor (#336).
+			expect(redConvergence[0].audience).toBe("actor");
 			expect(redConvergence[0].flavor).toBe(
-				CONVERGENCE_SPACE.convergenceTier2Flavor,
+				CONVERGENCE_SPACE.convergenceTier2ActorFlavor,
 			);
 		}
 
 		expect(greenConvergence).toHaveLength(1);
 		if (greenConvergence[0]?.kind === "witnessed-convergence") {
 			expect(greenConvergence[0].tier).toBe(2);
+			expect(greenConvergence[0].audience).toBe("actor");
+			expect(greenConvergence[0].flavor).toBe(
+				CONVERGENCE_SPACE.convergenceTier2ActorFlavor,
+			);
 		}
 
 		// cyan's cone at (0,2) facing south does not include (4,4).
@@ -301,5 +313,97 @@ describe("runRound — convergence evaluation (step 4d)", () => {
 			(e) => e.kind === "witnessed-convergence",
 		).length;
 		expect(redCountAfterRound2).toBe(redCountAfterRound1);
+	});
+});
+
+describe("runRound — convergence split fan-out (actor vs witness) — #336", () => {
+	it("tier-1: the sole occupant gets the actor flavor; a non-occupant cone-witness gets the witness flavor", async () => {
+		// red on the space at (4,4). Move cyan to (3,4) facing south so cyan's
+		// cone covers (4,4) but cyan is NOT on the cell. green stays at (0,0)
+		// facing south — out of cone.
+		const baseGame = makeBaseGame();
+		const game = {
+			...baseGame,
+			personaSpatial: {
+				...baseGame.personaSpatial,
+				cyan: { position: { row: 3, col: 4 }, facing: "south" as const },
+			},
+		};
+
+		const { nextState } = await runRound(game, "red", "hi", makeProvider());
+
+		const redEntry = (nextState.conversationLogs.red ?? []).find(
+			(e) => e.kind === "witnessed-convergence",
+		);
+		expect(redEntry).toBeDefined();
+		if (redEntry?.kind === "witnessed-convergence") {
+			expect(redEntry.audience).toBe("actor");
+			expect(redEntry.flavor).toBe(
+				CONVERGENCE_SPACE.convergenceTier1ActorFlavor,
+			);
+		}
+
+		const cyanEntry = (nextState.conversationLogs.cyan ?? []).find(
+			(e) => e.kind === "witnessed-convergence",
+		);
+		expect(cyanEntry).toBeDefined();
+		if (cyanEntry?.kind === "witnessed-convergence") {
+			expect(cyanEntry.audience).toBe("witness");
+			expect(cyanEntry.flavor).toBe(CONVERGENCE_SPACE.convergenceTier1Flavor);
+		}
+	});
+
+	it("tier-2: every occupant gets the actor flavor; a non-occupant cone-witness gets the witness flavor", async () => {
+		// red and green both at (4,4). cyan at (3,4) facing south — cone covers (4,4)
+		// but cyan is not on the cell.
+		const baseGame = makeBaseGame();
+		const game = {
+			...baseGame,
+			personaSpatial: {
+				red: { position: { row: 4, col: 4 }, facing: "north" as const },
+				green: { position: { row: 4, col: 4 }, facing: "north" as const },
+				cyan: { position: { row: 3, col: 4 }, facing: "south" as const },
+			},
+		};
+
+		const { nextState } = await runRound(game, "red", "hi", makeProvider());
+
+		for (const aiId of ["red", "green"] as const) {
+			const entry = (nextState.conversationLogs[aiId] ?? []).find(
+				(e) => e.kind === "witnessed-convergence",
+			);
+			expect(entry).toBeDefined();
+			if (entry?.kind === "witnessed-convergence") {
+				expect(entry.audience).toBe("actor");
+				expect(entry.flavor).toBe(
+					CONVERGENCE_SPACE.convergenceTier2ActorFlavor,
+				);
+			}
+		}
+
+		const cyanEntry = (nextState.conversationLogs.cyan ?? []).find(
+			(e) => e.kind === "witnessed-convergence",
+		);
+		expect(cyanEntry).toBeDefined();
+		if (cyanEntry?.kind === "witnessed-convergence") {
+			expect(cyanEntry.audience).toBe("witness");
+			expect(cyanEntry.flavor).toBe(CONVERGENCE_SPACE.convergenceTier2Flavor);
+		}
+	});
+
+	it("no double-emission: a Daemon standing on the space receives exactly one entry (the actor variant)", async () => {
+		// red is on the space and faces north so red's own cone trivially covers
+		// (4,4) too — verify red does NOT receive both actor and witness entries.
+		const game = makeBaseGame();
+
+		const { nextState } = await runRound(game, "red", "hi", makeProvider());
+
+		const redConvergence = (nextState.conversationLogs.red ?? []).filter(
+			(e) => e.kind === "witnessed-convergence",
+		);
+		expect(redConvergence).toHaveLength(1);
+		if (redConvergence[0]?.kind === "witnessed-convergence") {
+			expect(redConvergence[0].audience).toBe("actor");
+		}
 	});
 });

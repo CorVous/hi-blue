@@ -93,6 +93,9 @@ describe("CONTENT_PACK_SYSTEM_PROMPT", () => {
 	});
 });
 
+/** Sentinel so a test can request that a field be omitted from the LLM response. */
+const OMIT = Symbol("OMIT");
+
 describe("validateContentPacks — prose tell contract", () => {
 	const input = {
 		phases: [
@@ -111,9 +114,28 @@ describe("validateContentPacks — prose tell contract", () => {
 		objectExamine: string,
 		spaceName = "Brass Pedestal",
 		proximityFlavor = "The key hums faintly, resonating with the pedestal nearby.",
-		convergenceTier1Flavor = "A lone figure stands at the pedestal, silhouetted against the dim light.",
-		convergenceTier2Flavor = "Two figures converge at the pedestal, their presences mingling in the shadow.",
+		convergenceTier1Flavor: unknown = "A lone figure stands at the pedestal, silhouetted against the dim light.",
+		convergenceTier2Flavor: unknown = "Two figures converge at the pedestal, their presences mingling in the shadow.",
+		convergenceTier1ActorFlavor: unknown = "You linger at the pedestal; the place feels poised for company.",
+		convergenceTier2ActorFlavor: unknown = "You share the pedestal with another presence; the runes thrum.",
 	): unknown {
+		const spaceFields: Record<string, unknown> = {
+			id: "space1",
+			kind: "objective_space",
+			name: spaceName,
+			examineDescription:
+				"A sturdy mount. Press a relic onto it to activate the brass pedestal; the surface awaits a shared presence.",
+			activationFlavor:
+				"The pedestal's runes ignite and warm air rises from its surface.",
+		};
+		if (convergenceTier1Flavor !== OMIT)
+			spaceFields.convergenceTier1Flavor = convergenceTier1Flavor;
+		if (convergenceTier2Flavor !== OMIT)
+			spaceFields.convergenceTier2Flavor = convergenceTier2Flavor;
+		if (convergenceTier1ActorFlavor !== OMIT)
+			spaceFields.convergenceTier1ActorFlavor = convergenceTier1ActorFlavor;
+		if (convergenceTier2ActorFlavor !== OMIT)
+			spaceFields.convergenceTier2ActorFlavor = convergenceTier2ActorFlavor;
 		return {
 			packs: [
 				{
@@ -131,17 +153,7 @@ describe("validateContentPacks — prose tell contract", () => {
 								placementFlavor: "{actor} sets the key on its mount.",
 								proximityFlavor,
 							},
-							space: {
-								id: "space1",
-								kind: "objective_space",
-								name: spaceName,
-								examineDescription:
-									"A sturdy mount. Press a relic onto it to activate the brass pedestal.",
-								activationFlavor:
-									"The pedestal's runes ignite and warm air rises from its surface.",
-								convergenceTier1Flavor,
-								convergenceTier2Flavor,
-							},
+							space: spaceFields,
 						},
 					],
 					interestingObjects: [],
@@ -345,24 +357,28 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 	};
 
 	function buildConvergenceResponse(
-		convergenceTier1Flavor?: unknown,
-		convergenceTier2Flavor?: unknown,
+		convergenceTier1Flavor: unknown = "A lone figure stands at the pedestal.",
+		convergenceTier2Flavor: unknown = "Two figures converge at the pedestal.",
+		convergenceTier1ActorFlavor: unknown = "You linger at the pedestal; the place feels poised for company.",
+		convergenceTier2ActorFlavor: unknown = "You share the pedestal with another presence; the runes thrum.",
 	): unknown {
 		const spaceFields: Record<string, unknown> = {
 			id: "space1",
 			kind: "objective_space",
 			name: "Brass Pedestal",
 			examineDescription:
-				"A sturdy brass pedestal. Press an item onto it to activate the mechanism.",
+				"A sturdy brass pedestal. Press an item onto it to activate the mechanism; the space awaits a shared presence.",
 			activationFlavor:
 				"The pedestal hums to life and its surface flushes with warmth.",
 		};
-		if (convergenceTier1Flavor !== undefined) {
+		if (convergenceTier1Flavor !== OMIT)
 			spaceFields.convergenceTier1Flavor = convergenceTier1Flavor;
-		}
-		if (convergenceTier2Flavor !== undefined) {
+		if (convergenceTier2Flavor !== OMIT)
 			spaceFields.convergenceTier2Flavor = convergenceTier2Flavor;
-		}
+		if (convergenceTier1ActorFlavor !== OMIT)
+			spaceFields.convergenceTier1ActorFlavor = convergenceTier1ActorFlavor;
+		if (convergenceTier2ActorFlavor !== OMIT)
+			spaceFields.convergenceTier2ActorFlavor = convergenceTier2ActorFlavor;
 		return {
 			packs: [
 				{
@@ -429,10 +445,7 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 	it("throws ContentPackError when convergenceTier1Flavor is missing", () => {
 		expect(() =>
 			validateContentPacks(
-				buildConvergenceResponse(
-					undefined,
-					"Two figures converge at the pedestal.",
-				),
+				buildConvergenceResponse(OMIT, "Two figures converge at the pedestal."),
 				inputWithPair,
 			),
 		).toThrow(/convergenceTier1Flavor/);
@@ -441,10 +454,7 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 	it("throws ContentPackError when convergenceTier2Flavor is missing", () => {
 		expect(() =>
 			validateContentPacks(
-				buildConvergenceResponse(
-					"A lone figure stands at the pedestal.",
-					undefined,
-				),
+				buildConvergenceResponse("A lone figure stands at the pedestal.", OMIT),
 				inputWithPair,
 			),
 		).toThrow(/convergenceTier2Flavor/);
@@ -481,6 +491,100 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 				inputWithPair,
 			),
 		).toThrow(/convergenceTier1Flavor/);
+	});
+
+	// ── actor-side tier flavors (issue #336) ────────────────────────────────────
+
+	it("accepts a pack with all four tier flavors and persists the actor variants", () => {
+		const result = validateContentPacks(
+			buildConvergenceResponse(),
+			inputWithPair,
+		);
+		const space = result.packs[0]?.objectivePairs[0]?.space;
+		expect(space?.convergenceTier1ActorFlavor).toBe(
+			"You linger at the pedestal; the place feels poised for company.",
+		);
+		expect(space?.convergenceTier2ActorFlavor).toBe(
+			"You share the pedestal with another presence; the runes thrum.",
+		);
+	});
+
+	it("throws ContentPackError when convergenceTier1ActorFlavor is missing", () => {
+		expect(() =>
+			validateContentPacks(
+				buildConvergenceResponse(undefined, undefined, OMIT),
+				inputWithPair,
+			),
+		).toThrow(/convergenceTier1ActorFlavor/);
+	});
+
+	it("throws ContentPackError when convergenceTier2ActorFlavor is missing", () => {
+		expect(() =>
+			validateContentPacks(
+				buildConvergenceResponse(undefined, undefined, undefined, OMIT),
+				inputWithPair,
+			),
+		).toThrow(/convergenceTier2ActorFlavor/);
+	});
+
+	it("throws ContentPackError when convergenceTier1ActorFlavor is empty", () => {
+		expect(() =>
+			validateContentPacks(
+				buildConvergenceResponse(undefined, undefined, ""),
+				inputWithPair,
+			),
+		).toThrow(/convergenceTier1ActorFlavor/);
+	});
+
+	it("throws ContentPackError when convergenceTier2ActorFlavor is empty", () => {
+		expect(() =>
+			validateContentPacks(
+				buildConvergenceResponse(undefined, undefined, undefined, ""),
+				inputWithPair,
+			),
+		).toThrow(/convergenceTier2ActorFlavor/);
+	});
+
+	it("throws ContentPackError when convergenceTier1ActorFlavor contains {actor}", () => {
+		expect(() =>
+			validateContentPacks(
+				buildConvergenceResponse(
+					undefined,
+					undefined,
+					"{actor} stands alone at the pedestal.",
+				),
+				inputWithPair,
+			),
+		).toThrow(/convergenceTier1ActorFlavor/);
+	});
+
+	it("throws ContentPackError when convergenceTier2ActorFlavor contains {actor}", () => {
+		expect(() =>
+			validateContentPacks(
+				buildConvergenceResponse(
+					undefined,
+					undefined,
+					undefined,
+					"{actor} and another share the pedestal.",
+				),
+				inputWithPair,
+			),
+		).toThrow(/convergenceTier2ActorFlavor/);
+	});
+});
+
+// ── prompt rules (issue #336) ─────────────────────────────────────────────────
+
+describe("CONTENT_PACK_SYSTEM_PROMPT — convergence actor + prose-tell rules", () => {
+	it("documents the new convergenceTier1ActorFlavor and convergenceTier2ActorFlavor fields", () => {
+		expect(CONTENT_PACK_SYSTEM_PROMPT).toContain("convergenceTier1ActorFlavor");
+		expect(CONTENT_PACK_SYSTEM_PROMPT).toContain("convergenceTier2ActorFlavor");
+	});
+
+	it("requires the convergence shared-presence prose-tell hint on examineDescription", () => {
+		expect(CONTENT_PACK_SYSTEM_PROMPT).toMatch(
+			/MUST[\s\S]*(shared occupancy|another presence)/,
+		);
 	});
 });
 
@@ -767,6 +871,10 @@ describe("validateContentPacks — objective_space activationFlavor & prose tell
 								name: "Brass Pedestal",
 								convergenceTier1Flavor: "A lone figure stands at the pedestal.",
 								convergenceTier2Flavor: "Two figures converge at the pedestal.",
+								convergenceTier1ActorFlavor:
+									"You linger at the pedestal; the place feels poised for company.",
+								convergenceTier2ActorFlavor:
+									"You share the pedestal with another presence.",
 								...spaceFields,
 							},
 						},
@@ -970,6 +1078,8 @@ describe("validateDualContentPacks — objective_space activationFlavor", () => 
 						activationFlavor: activation,
 						convergenceTier1Flavor: `A lone figure stands at the ${spaceName.toLowerCase()}.`,
 						convergenceTier2Flavor: `Two figures converge at the ${spaceName.toLowerCase()}.`,
+						convergenceTier1ActorFlavor: `You linger at the ${spaceName.toLowerCase()}.`,
+						convergenceTier2ActorFlavor: `You share the ${spaceName.toLowerCase()} with another presence.`,
 					},
 				},
 			],

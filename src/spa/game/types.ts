@@ -41,10 +41,14 @@ export interface WorldEntity {
 	proximityFlavor?: string;
 	/** For obstacle: 1-sentence sensory line a witness Daemon perceives when the obstacle moves one cell. Third person from witness POV. Does NOT contain {actor}. */
 	shiftFlavor?: string;
-	/** For objective_space used as a Convergence target: tier-1 flavor (exactly one Daemon on space). Does NOT contain {actor}. */
+	/** For objective_space used as a Convergence target: tier-1 witness flavor (exactly one Daemon on space). Third-person witness POV. Does NOT contain {actor}. */
 	convergenceTier1Flavor?: string;
-	/** For objective_space used as a Convergence target: tier-2 flavor (two or more Daemons share space). Does NOT contain {actor}. */
+	/** For objective_space used as a Convergence target: tier-2 witness flavor (two or more Daemons share space). Third-person witness POV. Does NOT contain {actor}. */
 	convergenceTier2Flavor?: string;
+	/** For objective_space: first-person actor flavor delivered to the Daemon standing alone on the space at Tier 1. Does NOT contain {actor}. */
+	convergenceTier1ActorFlavor?: string;
+	/** For objective_space: first-person actor flavor delivered to every Daemon standing on the space when Tier 2 fires. Does NOT contain {actor}. */
+	convergenceTier2ActorFlavor?: string;
 	/** AiId when held by an AI; GridPosition when resting on a cell. */
 	holder: AiId | GridPosition;
 	/** Tracks whether this entity has been "used" for a UseItem objective. Defaults to "pending" when omitted. */
@@ -338,6 +342,12 @@ export type ConversationEntry =
 			spaceId: string;
 			tier: 1 | 2;
 			flavor: string;
+			/**
+			 * "actor" — receiver was standing on the space; flavor is the first-person actor line.
+			 * "witness" — receiver's cone covered the space but they were NOT on it; flavor is the third-person witness line.
+			 * Optional for backward-compat with saves written before #336 (treat as "witness").
+			 */
+			audience?: "actor" | "witness";
 	  };
 
 export interface AiBudget {
