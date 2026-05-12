@@ -66,10 +66,13 @@ echo "[start.sh] launching playtest daemon..." >&2
 nohup node scripts/playtest/daemon.mjs >>"$DAEMON_LOG" 2>&1 &
 echo $! > "$DAEMON_PID_FILE"
 
-# Wait up to ~120s for the game route to be ready. Persona synthesis +
-# content-pack generation can take 30–60s on first load.
-echo "[start.sh] waiting for game route (this can take up to 2 minutes)..." >&2
-for _ in $(seq 1 240); do
+# Wait up to ~6 min for the game route to reach its "stable" state. In the
+# single-game restructure two content packs (A + B) are generated up front
+# in one batched LLM call, which can take 2–4 min on first load. The daemon
+# only logs "game route loaded — daemon ready" once #prompt is enabled and
+# #stage has dropped its data-load-state attribute.
+echo "[start.sh] waiting for game route to reach stable state (this can take up to 6 minutes)..." >&2
+for _ in $(seq 1 720); do
   if grep -q "game route loaded — daemon ready" "$DAEMON_LOG" 2>/dev/null; then
     echo "READY"
     exit 0
@@ -82,4 +85,4 @@ for _ in $(seq 1 240); do
 done
 
 cat "$DAEMON_LOG" >&2 || true
-fail "playtest daemon did not become ready within 2 minutes"
+fail "playtest daemon did not become ready within 6 minutes"

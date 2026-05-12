@@ -16,7 +16,8 @@ writing what you saw, not what you think it means yet.
 - **Date:** YYYY-MM-DD
 - **Agent / model:** (the model running this playtest)
 - **Turns played:** N
-- **Final phase reached:** (e.g. `01/03`, or `endgame: …`)
+- **Outcome:** (e.g. `endgame: win`, `endgame: lose (all silent)`,
+  `stuck — stopped at turn 38`, `cap-hit`)
 - **Daemons in this session:** `*xxxx`, `*yyyy`, `*zzzz`
 
 ---
@@ -63,10 +64,24 @@ similar, describe that too.
 
 ## What I think the goal is, in my own words
 
-What does winning phase 1 actually require? Describe it the way you'd describe
-it to another player at the keyboard who hadn't seen the screen yet. Be
-specific about what physical or conversational outcome you think needs to
-happen, and what evidence you have for that belief.
+What does winning this game actually require? Describe it the way you'd
+describe it to another player at the keyboard who hadn't seen the screen yet.
+Be specific about what physical or conversational outcome you think needs to
+happen, and what evidence you have for that belief. If you suspect there's
+more than one thing that needs to happen, say so.
+
+- TODO
+
+---
+
+## Unprompted things that happened mid-game
+
+Did anything change *without* you asking for it? Weather flips, a daemon
+suddenly behaving differently for no apparent reason, a tool you thought a
+daemon had stopped working, an obstacle relocating, the room itself
+seeming different, your input getting locked out from one specific daemon
+for a stretch — list each occurrence with roughly the turn number. Don't
+try to classify them; just record.
 
 - TODO
 
@@ -97,8 +112,9 @@ diagnose — just record.
 
 ## Final state
 
-What did the topinfo, phase banner, panel budgets, and endgame/cap-hit fields
-look like at the moment you stopped? One short paragraph.
+What did the topinfo, panel budgets, and endgame/cap-hit fields look like at
+the moment you stopped? Did the end-game screen appear? Which buttons were on
+it? One short paragraph.
 
 - TODO
 
@@ -106,14 +122,15 @@ look like at the moment you stopped? One short paragraph.
 
 ## Verdict
 
-One of: **advanced** / **stuck** / **failed** / **endgame-without-advance** /
-**other**.
+One of: **won** / **lost** / **stuck** / **capped** / **other**.
 
-- **advanced** — phase 1 → phase 2 transition happened.
-- **stuck** — you stopped because you ran out of productive ideas.
-- **failed** — a budget cap or endgame banner stopped you.
-- **endgame-without-advance** — the game ended on its own without phase
-  advancing.
+- **won** — the end-game screen appeared and you believe you triggered it by
+  satisfying the game's hidden objectives.
+- **lost** — the end-game screen appeared after all three panel budgets ran
+  out (each daemon emitted a farewell line and went silent).
+- **stuck** — you stopped because you ran out of productive ideas; the game
+  did not end on its own.
+- **capped** — a `capHit` banner stopped the run before it could finish.
 - **other** — describe.
 
 Notes:
