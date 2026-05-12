@@ -500,14 +500,15 @@ export async function runRound(
 			state = applyComplicationResult(state, complicationResult, rng);
 
 			// Patch the just-appended entry with the real directive text.
-			const comps = [...state.activeComplications];
-			for (let i = comps.length - 1; i >= 0; i--) {
-				const c = comps[i]!;
-				if (c.kind === "sysadmin_directive" && c.target === target) {
-					comps[i] = { kind: "sysadmin_directive", target, directive: directiveText };
-					break;
-				}
-			}
+			const comps = state.activeComplications.map((c) =>
+				c.kind === "sysadmin_directive" && c.target === target
+					? {
+							kind: "sysadmin_directive" as const,
+							target,
+							directive: directiveText,
+						}
+					: c,
+			);
 			state = { ...state, activeComplications: comps };
 
 			// Deliver directive message to the target Daemon only.

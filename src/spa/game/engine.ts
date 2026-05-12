@@ -162,7 +162,6 @@ export function swapActivePack(game: GameState): GameState {
 	};
 }
 
-
 export function advanceRound(game: GameState): GameState {
 	return { ...game, round: game.round + 1 };
 }

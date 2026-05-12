@@ -297,7 +297,6 @@ export interface GameState {
 	activePackId: "A" | "B";
 }
 
-
 export type ToolName =
 	| "pick_up"
 	| "put_down"

@@ -3449,5 +3449,4 @@ describe("complication countdown — coordinator integration", () => {
 	});
 
 	// ── sysadmin_directive dispatch ─────────────────────────────────────────────
-
 });
