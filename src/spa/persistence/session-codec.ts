@@ -189,7 +189,7 @@ export function serializeSession(
 		contentPacksB: structuredClone(state.contentPacksB),
 		activePackId: state.activePackId,
 		weather: state.weather,
-		objectives: [],
+		objectives: structuredClone(state.objectives),
 		complicationSchedule: state.complicationSchedule,
 		activeComplications: structuredClone(state.activeComplications),
 		isComplete: state.isComplete,
@@ -340,6 +340,7 @@ export function deserializeSession(
 			contentPacksA,
 			contentPacksB,
 			activePackId: sealed.activePackId ?? "A",
+			objectives: structuredClone(sealed.objectives ?? []),
 		};
 
 		return {

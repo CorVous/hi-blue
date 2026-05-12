@@ -490,6 +490,37 @@ describe("serializeSession / deserializeSession", () => {
 		}
 	});
 
+	it("round-trips objectives unchanged", () => {
+		const game = makeFreshGame();
+
+		const objectives: import("../../game/types.js").Objective[] = [
+			{
+				id: "obj-0",
+				kind: "carry",
+				description: "Bring the flower to the altar.",
+				satisfactionState: "pending",
+				objectId: "ent-flower",
+				spaceId: "ent-altar",
+			},
+			{
+				id: "obj-1",
+				kind: "use_item",
+				description: "Use the key.",
+				satisfactionState: "satisfied",
+				itemId: "ent-key",
+			},
+		];
+
+		const modified: GameState = { ...game, objectives };
+
+		const files = serializeSession(modified, NOW, CREATED_AT);
+		const result = deserializeSession(files);
+		expect(result.kind).toBe("ok");
+		if (result.kind === "ok") {
+			expect(result.state.objectives).toEqual(objectives);
+		}
+	});
+
 	it("round-trips complicationSchedule and activeComplications unchanged", () => {
 		const game = makeFreshGame();
 
