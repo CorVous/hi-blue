@@ -25,9 +25,9 @@ import {
 	mintSessionId,
 	rmArchivedSession,
 	rmSession,
-	seedFromArchive,
 	SESSIONS_PREFIX,
 	saveActiveSession,
+	seedFromArchive,
 	setActiveSessionId,
 } from "../session-storage.js";
 
@@ -1197,6 +1197,7 @@ async function seedArchivedSession(
 	for (const [aiId, daemonJson] of Object.entries(files.daemons)) {
 		stub._store[`${prefix}${aiId}.txt`] = daemonJson;
 	}
+	// biome-ignore lint/style/noNonNullAssertion: serializeSession always returns a non-null engine string
 	stub._store[`${prefix}engine.dat`] = files.engine!;
 }
 
@@ -1276,8 +1277,7 @@ describe("seedFromArchive", () => {
 		const newId = seedFromArchive(archiveId, freshState);
 
 		const daemonKeys = Object.keys(stub._store).filter(
-			(k) =>
-				k.startsWith(`${SESSIONS_PREFIX}${newId}/`) && k.endsWith(".txt"),
+			(k) => k.startsWith(`${SESSIONS_PREFIX}${newId}/`) && k.endsWith(".txt"),
 		);
 		expect(daemonKeys.length).toBeGreaterThan(0);
 		for (const key of daemonKeys) {

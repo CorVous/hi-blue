@@ -709,7 +709,7 @@ describe("renderSessions — archived Continue button", () => {
 	it("button visible when openrouter_key present", async () => {
 		vi.resetModules();
 		const stub = makeLocalStorageStub();
-		stub._store["openrouter_key"] = "sk-or-test";
+		stub._store.openrouter_key = "sk-or-test";
 		vi.stubGlobal("localStorage", stub);
 		await seedArchivedSessionInStore(stub, "0xARCH");
 

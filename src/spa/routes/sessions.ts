@@ -472,7 +472,7 @@ function buildArchivedSessionRow(
 					const freshState = newSession.getState();
 					const newId = seedFromArchive(id, freshState);
 					setActiveSessionId(newId);
-					location.hash = "#/game?" + Date.now();
+					location.hash = `#/game?${Date.now()}`;
 				} catch {
 					continueBtn.disabled = false;
 				}

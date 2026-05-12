@@ -625,7 +625,10 @@ export function rmSession(id: string): void {
  * 4. Writes in canonical order: meta → daemons → engine.dat LAST (commit signal).
  * 5. Returns the new session id (does NOT set the active pointer).
  */
-export function seedFromArchive(archiveId: string, freshState: GameState): string {
+export function seedFromArchive(
+	archiveId: string,
+	freshState: GameState,
+): string {
 	const archiveResult = loadArchivedSession(archiveId);
 	if (archiveResult.kind !== "ok") {
 		throw new Error(
@@ -637,7 +640,10 @@ export function seedFromArchive(archiveId: string, freshState: GameState): strin
 	const archivedLogs = JSON.parse(
 		JSON.stringify(archiveResult.state.conversationLogs),
 	) as GameState["conversationLogs"];
-	const mergedState: GameState = { ...freshState, conversationLogs: archivedLogs };
+	const mergedState: GameState = {
+		...freshState,
+		conversationLogs: archivedLogs,
+	};
 
 	// Append broadcast
 	const broadcastedState = appendBroadcast(
