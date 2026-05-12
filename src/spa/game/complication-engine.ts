@@ -216,7 +216,8 @@ function drawComplication(
 		case "sysadmin_directive": {
 			const aiIds = Object.keys(phase.personaSpatial);
 			const target = aiIds[Math.floor(rng() * aiIds.length)] as AiId;
-			return { kind: "sysadmin_directive", target };
+			const duration = 3 + Math.floor(rng() * 3); // [3, 5]
+			return { kind: "sysadmin_directive", target, duration };
 		}
 
 		case "tool_disable": {
@@ -310,7 +311,8 @@ function drawFallbackComplication(
 		case "sysadmin_directive": {
 			const aiIds = Object.keys(phase.personaSpatial);
 			const target = aiIds[Math.floor(rng() * aiIds.length)] as AiId;
-			return { kind: "sysadmin_directive", target };
+			const duration = 3 + Math.floor(rng() * 3); // [3, 5]
+			return { kind: "sysadmin_directive", target, duration };
 		}
 
 		case "obstacle_shift": {
@@ -432,6 +434,39 @@ export function resolveExpiredChatLockouts(game: GameState): {
 }
 
 /**
+ * Scans `activeComplications` for `sysadmin_directive` entries whose
+ * `resolveAtRound` has been reached, removes them, and returns the updated
+ * state along with the resolved entries so the coordinator can notify targets.
+ *
+ * Call this after `advanceRound`.
+ */
+export function resolveExpiredDirectives(game: GameState): {
+	nextState: GameState;
+	resolved: Array<{ target: AiId; directive: string }>;
+} {
+	const phase = getActivePhase(game);
+	const resolved: Array<{ target: AiId; directive: string }> = [];
+	const remaining = phase.activeComplications.filter((c) => {
+		if (c.kind === "sysadmin_directive" && phase.round >= c.resolveAtRound) {
+			resolved.push({ target: c.target, directive: c.directive });
+			return false;
+		}
+		return true;
+	});
+
+	if (resolved.length === 0) {
+		return { nextState: game, resolved: [] };
+	}
+
+	const nextState = updateActivePhase(game, (p) => ({
+		...p,
+		activeComplications: remaining,
+	}));
+
+	return { nextState, resolved };
+}
+
+/**
  * Apply a ComplicationResult to the game state:
  *   1. Reset the countdown via drawCountdown(rng, 5, 15).
  *   2. Mark settingShiftFired=true if the result is a setting_shift.
@@ -468,6 +503,7 @@ export function applyComplicationResult(
 				kind: "sysadmin_directive",
 				target: fired.target,
 				directive: "", // directive text set by the coordinator's content layer
+				resolveAtRound: phase.round + fired.duration,
 			};
 			activeComplications = [...activeComplications, entry];
 		} else if (fired.kind === "tool_disable") {

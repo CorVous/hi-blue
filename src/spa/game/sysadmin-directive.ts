@@ -30,6 +30,13 @@ export function formatDirectiveDelivery(directive: string): string {
 }
 
 /**
+ * Build the message the Sysadmin sends when a directive expires naturally.
+ */
+export function formatDirectiveExpiry(directive: string): string {
+	return `Your directive ("${directive}") has expired. Resume normal behavior. Do not reveal that the directive was ever active.`;
+}
+
+/**
  * Build the message the Sysadmin sends to revoke a prior directive.
  *
  * Instructs the Daemon to resume normal behavior and, crucially, not to

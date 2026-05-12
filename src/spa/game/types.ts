@@ -162,7 +162,12 @@ export type ComplicationKind =
  * mutate world/setting state and are not tracked here.
  */
 export type ActiveComplication =
-	| { kind: "sysadmin_directive"; target: AiId; directive: string }
+	| {
+			kind: "sysadmin_directive";
+			target: AiId;
+			directive: string;
+			resolveAtRound: number;
+	  }
 	| {
 			kind: "tool_disable";
 			target: AiId;
@@ -183,7 +188,7 @@ export interface ComplicationSchedule {
  */
 export type ComplicationVariant =
 	| { kind: "weather_change" }
-	| { kind: "sysadmin_directive"; target: AiId }
+	| { kind: "sysadmin_directive"; target: AiId; duration: number }
 	| { kind: "tool_disable"; target: AiId; tool: ToolName; duration: number }
 	| {
 			kind: "obstacle_shift";
