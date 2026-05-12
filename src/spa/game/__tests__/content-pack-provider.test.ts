@@ -10,9 +10,11 @@
 import { describe, expect, it } from "vitest";
 import {
 	CONTENT_PACK_SYSTEM_PROMPT,
+	DUAL_CONTENT_PACK_SYSTEM_PROMPT,
 	examineMentionsPairedSpace,
 	examineMentionsUseTell,
 	validateContentPacks,
+	validateDualContentPacks,
 } from "../content-pack-provider.js";
 
 describe("examineMentionsPairedSpace", () => {
@@ -133,7 +135,10 @@ describe("validateContentPacks — prose tell contract", () => {
 								id: "space1",
 								kind: "objective_space",
 								name: spaceName,
-								examineDescription: "A sturdy mount for a small relic.",
+								examineDescription:
+									"A sturdy mount. Press a relic onto it to activate the brass pedestal.",
+								activationFlavor:
+									"The pedestal's runes ignite and warm air rises from its surface.",
 								convergenceTier1Flavor,
 								convergenceTier2Flavor,
 							},
@@ -347,7 +352,10 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 			id: "space1",
 			kind: "objective_space",
 			name: "Brass Pedestal",
-			examineDescription: "A sturdy brass pedestal.",
+			examineDescription:
+				"A sturdy brass pedestal. Press an item onto it to activate the mechanism.",
+			activationFlavor:
+				"The pedestal hums to life and its surface flushes with warmth.",
 		};
 		if (convergenceTier1Flavor !== undefined) {
 			spaceFields.convergenceTier1Flavor = convergenceTier1Flavor;
@@ -476,9 +484,10 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 	});
 });
 
-// ── examineMentionsUseTell helper (issue #334) ────────────────────────────────
+// ── examineMentionsUseTell helper (issues #334, #335) ─────────────────────────
 
 describe("examineMentionsUseTell", () => {
+	// — verb-of-activation matches (#334, #335 share the same cue set) —
 	it("matches a verb-of-activation like 'press'", () => {
 		expect(
 			examineMentionsUseTell(
@@ -495,6 +504,15 @@ describe("examineMentionsUseTell", () => {
 		).toBe(true);
 	});
 
+	it("matches an activation verb in context", () => {
+		expect(
+			examineMentionsUseTell(
+				"A heavy stone slab carved with runes. Press the slab to activate the chamber.",
+			),
+		).toBe(true);
+	});
+
+	// — control / activator nouns —
 	it("matches a control noun like 'lever' even without an activation verb", () => {
 		expect(
 			examineMentionsUseTell(
@@ -503,10 +521,25 @@ describe("examineMentionsUseTell", () => {
 		).toBe(true);
 	});
 
+	it("matches a single cue word in isolation", () => {
+		expect(examineMentionsUseTell("A copper button on the far wall.")).toBe(
+			true,
+		);
+	});
+
+	// — negative cases —
 	it("rejects an examine with no verb or control-noun cue", () => {
 		expect(
 			examineMentionsUseTell(
 				"A small porcelain figurine, chipped along one edge but otherwise intact.",
+			),
+		).toBe(false);
+	});
+
+	it("rejects a generic descriptive examine with no activation cue", () => {
+		expect(
+			examineMentionsUseTell(
+				"A sturdy mount carved from weathered stone, half-buried in moss.",
 			),
 		).toBe(false);
 	});
@@ -519,8 +552,19 @@ describe("examineMentionsUseTell", () => {
 		).toBe(false);
 	});
 
+	it("rejects 'fuse' (whole-word match — 'fuse' must not match 'use')", () => {
+		expect(examineMentionsUseTell("A blown fuse hangs from the ceiling.")).toBe(
+			false,
+		);
+	});
+
+	it("returns false for the empty string", () => {
+		expect(examineMentionsUseTell("")).toBe(false);
+	});
+
 	it("is case-insensitive", () => {
 		expect(examineMentionsUseTell("PRESS the BUTTON to begin.")).toBe(true);
+		expect(examineMentionsUseTell("PULL THE LEVER.")).toBe(true);
 	});
 });
 
@@ -677,5 +721,439 @@ describe("validateContentPacks — interesting_object Use-Item flavor validation
 		const item = result.packs[0]?.interestingObjects[0];
 		expect(item?.activationFlavor).toBeDefined();
 		expect(item?.postLookFlavor).toBeUndefined();
+	});
+});
+
+// ── activationFlavor + use-tell validation on objective_space (issue #335) ────
+
+describe("validateContentPacks — objective_space activationFlavor & prose tell", () => {
+	const inputWithPair = {
+		phases: [
+			{
+				phaseNumber: 1 as const,
+				setting: "abandoned subway station",
+				theme: "mundane",
+				k: 1,
+				n: 0,
+				m: 0,
+			},
+		],
+	};
+
+	function buildPackWithSpaceFields(
+		spaceFields: Record<string, unknown>,
+	): unknown {
+		return {
+			packs: [
+				{
+					phaseNumber: 1,
+					setting: "abandoned subway station",
+					objectivePairs: [
+						{
+							object: {
+								id: "obj1",
+								kind: "objective_object",
+								name: "Iron Key",
+								examineDescription:
+									"An iron key. It belongs on the brass pedestal.",
+								useOutcome: "You turn the key over in your hands.",
+								pairsWithSpaceId: "space1",
+								placementFlavor: "{actor} sets the key on its mount.",
+								proximityFlavor: "The key hums faintly near the pedestal.",
+							},
+							space: {
+								id: "space1",
+								kind: "objective_space",
+								name: "Brass Pedestal",
+								convergenceTier1Flavor: "A lone figure stands at the pedestal.",
+								convergenceTier2Flavor: "Two figures converge at the pedestal.",
+								...spaceFields,
+							},
+						},
+					],
+					interestingObjects: [],
+					obstacles: [],
+					landmarks: {
+						north: {
+							shortName: "the signal tower",
+							horizonPhrase: "rises above the platform",
+						},
+						south: {
+							shortName: "the collapsed entrance",
+							horizonPhrase: "gapes like a wound in the dark",
+						},
+						east: {
+							shortName: "the rusted fan shaft",
+							horizonPhrase: "spins slowly in the stale air",
+						},
+						west: {
+							shortName: "the flooded tunnel",
+							horizonPhrase: "disappears into still black water",
+						},
+					},
+				},
+			],
+		};
+	}
+
+	it("accepts a content pack with a use-tell in the space's examineDescription and a valid activationFlavor", () => {
+		const result = validateContentPacks(
+			buildPackWithSpaceFields({
+				examineDescription:
+					"A sturdy pedestal. Press an item onto it to activate the mechanism.",
+				activationFlavor: "The pedestal hums to life and its runes glow.",
+			}),
+			inputWithPair,
+		);
+		const space = result.packs[0]?.objectivePairs[0]?.space;
+		expect(space?.activationFlavor).toBe(
+			"The pedestal hums to life and its runes glow.",
+		);
+	});
+
+	it("rejects a content pack whose objective_space examineDescription has no use/activation cue", () => {
+		expect(() =>
+			validateContentPacks(
+				buildPackWithSpaceFields({
+					examineDescription:
+						"A sturdy pedestal carved from weathered brass, half-buried in moss.",
+					activationFlavor: "The pedestal hums to life.",
+				}),
+				inputWithPair,
+			),
+		).toThrow(/use\/activation cue/);
+	});
+
+	it("rejects a content pack whose objective_space is missing activationFlavor", () => {
+		expect(() =>
+			validateContentPacks(
+				buildPackWithSpaceFields({
+					examineDescription:
+						"A sturdy pedestal. Press an item onto it to activate.",
+				}),
+				inputWithPair,
+			),
+		).toThrow(/activationFlavor/);
+	});
+
+	it("rejects a content pack whose objective_space activationFlavor is empty", () => {
+		expect(() =>
+			validateContentPacks(
+				buildPackWithSpaceFields({
+					examineDescription:
+						"A sturdy pedestal. Press an item onto it to activate.",
+					activationFlavor: "",
+				}),
+				inputWithPair,
+			),
+		).toThrow(/activationFlavor/);
+	});
+
+	it("rejects a content pack whose objective_space activationFlavor contains {actor}", () => {
+		expect(() =>
+			validateContentPacks(
+				buildPackWithSpaceFields({
+					examineDescription:
+						"A sturdy pedestal. Press an item onto it to activate.",
+					activationFlavor: "{actor} activates the pedestal.",
+				}),
+				inputWithPair,
+			),
+		).toThrow(/activationFlavor/);
+	});
+});
+
+// ── Prompt rules (issue #335) ─────────────────────────────────────────────────
+
+describe("CONTENT_PACK_SYSTEM_PROMPT — issue #335 rules", () => {
+	it("describes activationFlavor as a field on objective_space", () => {
+		expect(CONTENT_PACK_SYSTEM_PROMPT).toMatch(/activationFlavor/);
+	});
+
+	it("requires the objective_space prose tell at MUST strength", () => {
+		expect(CONTENT_PACK_SYSTEM_PROMPT).toMatch(
+			/objective_space[\s\S]*examineDescription[\s\S]*MUST/i,
+		);
+	});
+
+	it("forbids {actor} in activationFlavor at MUST strength", () => {
+		expect(CONTENT_PACK_SYSTEM_PROMPT).toMatch(
+			/activationFlavor[\s\S]*MUST NOT contain[\s\S]*\{actor\}/i,
+		);
+	});
+});
+
+describe("DUAL_CONTENT_PACK_SYSTEM_PROMPT — issue #335 rules", () => {
+	it("describes activationFlavor as a field on objective_space", () => {
+		expect(DUAL_CONTENT_PACK_SYSTEM_PROMPT).toMatch(/activationFlavor/);
+	});
+
+	it("includes activationFlavor in the MUST-differ delta list", () => {
+		expect(DUAL_CONTENT_PACK_SYSTEM_PROMPT).toMatch(
+			/MUST differ[\s\S]*activationFlavor/,
+		);
+	});
+
+	it("requires the objective_space prose tell at MUST strength", () => {
+		expect(DUAL_CONTENT_PACK_SYSTEM_PROMPT).toMatch(
+			/objective_space[\s\S]*examineDescription[\s\S]*MUST/i,
+		);
+	});
+});
+
+// ── Dual-pack validator: activationFlavor parity & per-pack validation ────────
+
+describe("validateDualContentPacks — objective_space activationFlavor", () => {
+	const dualInput = {
+		phases: [
+			{
+				phaseNumber: 1 as const,
+				settingA: "abandoned subway station",
+				settingB: "sun-baked salt flat",
+				theme: "mundane",
+				k: 1,
+				n: 0,
+				m: 0,
+			},
+		],
+	};
+
+	function buildDualPair(
+		packAActivation: string,
+		packBActivation: string,
+		packAExamine = "A sturdy pedestal. Press an item onto it to activate.",
+		packBExamine = "A weathered marker. Press the cap to activate it.",
+	): unknown {
+		const landmarks = {
+			north: {
+				shortName: "the signal tower",
+				horizonPhrase: "rises above the platform",
+			},
+			south: {
+				shortName: "the collapsed entrance",
+				horizonPhrase: "gapes like a wound in the dark",
+			},
+			east: {
+				shortName: "the rusted fan shaft",
+				horizonPhrase: "spins slowly in the stale air",
+			},
+			west: {
+				shortName: "the flooded tunnel",
+				horizonPhrase: "disappears into still black water",
+			},
+		};
+		const mkPack = (
+			setting: string,
+			objName: string,
+			spaceName: string,
+			examine: string,
+			activation: string,
+		) => ({
+			setting,
+			objectivePairs: [
+				{
+					object: {
+						id: "obj1",
+						kind: "objective_object",
+						name: objName,
+						examineDescription: `An object. It belongs on the ${spaceName.toLowerCase()}.`,
+						useOutcome: "You turn it over in your hands.",
+						pairsWithSpaceId: "space1",
+						placementFlavor: `{actor} sets it on the ${spaceName.toLowerCase()}.`,
+						proximityFlavor: "It hums faintly nearby.",
+					},
+					space: {
+						id: "space1",
+						kind: "objective_space",
+						name: spaceName,
+						examineDescription: examine,
+						activationFlavor: activation,
+						convergenceTier1Flavor: `A lone figure stands at the ${spaceName.toLowerCase()}.`,
+						convergenceTier2Flavor: `Two figures converge at the ${spaceName.toLowerCase()}.`,
+					},
+				},
+			],
+			interestingObjects: [],
+			obstacles: [],
+			landmarks,
+		});
+		return {
+			phases: [
+				{
+					phaseNumber: 1,
+					packA: mkPack(
+						"abandoned subway station",
+						"Iron Key",
+						"Brass Pedestal",
+						packAExamine,
+						packAActivation,
+					),
+					packB: mkPack(
+						"sun-baked salt flat",
+						"Bone Token",
+						"Survey Marker",
+						packBExamine,
+						packBActivation,
+					),
+				},
+			],
+		};
+	}
+
+	it("accepts both packs with distinct activationFlavor lines", () => {
+		const result = validateDualContentPacks(
+			buildDualPair(
+				"The pedestal hums to life and its runes glow.",
+				"The marker clicks once and a column of dust spirals up.",
+			),
+			dualInput,
+		);
+		const packA = result.phases[0]?.packA.objectivePairs[0]?.space;
+		const packB = result.phases[0]?.packB.objectivePairs[0]?.space;
+		expect(packA?.activationFlavor).toBe(
+			"The pedestal hums to life and its runes glow.",
+		);
+		expect(packB?.activationFlavor).toBe(
+			"The marker clicks once and a column of dust spirals up.",
+		);
+	});
+
+	it("rejects when packB activationFlavor contains {actor}", () => {
+		expect(() =>
+			validateDualContentPacks(
+				buildDualPair(
+					"The pedestal hums to life.",
+					"{actor} activates the marker.",
+				),
+				dualInput,
+			),
+		).toThrow(/activationFlavor/);
+	});
+
+	it("rejects when packA space examineDescription has no use-tell", () => {
+		expect(() =>
+			validateDualContentPacks(
+				buildDualPair(
+					"The pedestal hums to life.",
+					"The marker clicks once.",
+					"A sturdy pedestal carved from weathered brass.",
+				),
+				dualInput,
+			),
+		).toThrow(/use\/activation cue/);
+	});
+});
+
+// ── shiftFlavor validation for dual-pack obstacles (issue #337) ──────────────
+
+describe("validateDualContentPacks — obstacle shiftFlavor validation", () => {
+	const dualInputWithObstacle = {
+		phases: [
+			{
+				phaseNumber: 1 as const,
+				settingA: "abandoned subway station",
+				settingB: "overgrown ruin",
+				theme: "mundane",
+				k: 0,
+				n: 0,
+				m: 1,
+			},
+		],
+	};
+
+	const STUB_LANDMARKS = {
+		north: { shortName: "the signal tower", horizonPhrase: "rises high" },
+		south: { shortName: "the collapsed entrance", horizonPhrase: "gapes wide" },
+		east: { shortName: "the rusted shaft", horizonPhrase: "spins slowly" },
+		west: { shortName: "the flooded tunnel", horizonPhrase: "fades to black" },
+	};
+
+	function buildDualObstacleResponse(
+		packAShift: unknown,
+		packBShift: unknown,
+	): unknown {
+		const buildObstacle = (shiftFlavor: unknown, ab: "a" | "b") => ({
+			id: "obs1",
+			kind: "obstacle",
+			name: `Rusted Gate ${ab}`,
+			examineDescription: `An old rusted gate ${ab}.`,
+			...(shiftFlavor !== undefined ? { shiftFlavor } : {}),
+		});
+		return {
+			phases: [
+				{
+					phaseNumber: 1,
+					packA: {
+						setting: "abandoned subway station",
+						objectivePairs: [],
+						interestingObjects: [],
+						obstacles: [buildObstacle(packAShift, "a")],
+						landmarks: STUB_LANDMARKS,
+					},
+					packB: {
+						setting: "overgrown ruin",
+						objectivePairs: [],
+						interestingObjects: [],
+						obstacles: [buildObstacle(packBShift, "b")],
+						landmarks: STUB_LANDMARKS,
+					},
+				},
+			],
+		};
+	}
+
+	it("accepts dual-pack obstacles with valid shiftFlavor on both packs", () => {
+		const result = validateDualContentPacks(
+			buildDualObstacleResponse(
+				"The rusted gate scrapes along the floor.",
+				"The mossy gate slides through wet leaves.",
+			),
+			dualInputWithObstacle,
+		);
+		expect(result.phases[0]?.packA.obstacles[0]?.shiftFlavor).toBe(
+			"The rusted gate scrapes along the floor.",
+		);
+		expect(result.phases[0]?.packB.obstacles[0]?.shiftFlavor).toBe(
+			"The mossy gate slides through wet leaves.",
+		);
+	});
+
+	it("rejects a dual-pack obstacle missing shiftFlavor on packA", () => {
+		expect(() =>
+			validateDualContentPacks(
+				buildDualObstacleResponse(undefined, "Something rustles."),
+				dualInputWithObstacle,
+			),
+		).toThrow(/shiftFlavor/);
+	});
+
+	it("rejects a dual-pack obstacle missing shiftFlavor on packB", () => {
+		expect(() =>
+			validateDualContentPacks(
+				buildDualObstacleResponse("The gate scrapes.", undefined),
+				dualInputWithObstacle,
+			),
+		).toThrow(/shiftFlavor/);
+	});
+
+	it("rejects a dual-pack obstacle with an empty shiftFlavor", () => {
+		expect(() =>
+			validateDualContentPacks(
+				buildDualObstacleResponse("", "Something rustles."),
+				dualInputWithObstacle,
+			),
+		).toThrow(/shiftFlavor/);
+	});
+
+	it("rejects a dual-pack obstacle whose shiftFlavor contains {actor}", () => {
+		expect(() =>
+			validateDualContentPacks(
+				buildDualObstacleResponse(
+					"{actor} pushes the gate.",
+					"Something rustles.",
+				),
+				dualInputWithObstacle,
+			),
+		).toThrow(/shiftFlavor/);
 	});
 });

@@ -30,7 +30,7 @@ export const CONTENT_PACK_SYSTEM_PROMPT = `You generate content packs for a text
 For each phase:
 - Generate exactly k OBJECTIVE PAIRS. Each pair has:
   - An objective_object with: id (unique string), name (2-4 words, thematic to setting and theme), examineDescription (1-2 sentences naming the paired space), useOutcome (1 sentence: the actor performs a stateless action with the item — nothing about the item, the actor, or the world changes; MUST NOT reference or imply contact with the paired space, since the actor can be anywhere on the grid when using the item), pairsWithSpaceId (must match the paired space's id), placementFlavor (1 sentence containing the literal string "{actor}", fires when the object is placed on its space), proximityFlavor (1 sentence; in-fiction sensory description of what the daemon perceives when they are holding this item AND its paired space is in their own cell or directly in front of them. Written from the daemon's POV. Does NOT contain "{actor}" and MUST NOT reference placing or coupling the item.). objective_objects MUST be portable physical items a single person can pick up and carry (e.g. a tool, instrument, artifact, container) — never furniture, architecture, or fixed structures.
-  - An objective_space with: id (unique string), name (2-4 words, thematic to setting and theme), examineDescription (1-2 sentences describing the space), useOutcome (1 sentence: what the daemon perceives when they activate/use this space — a stateless sensory result, first person. Does NOT say the objective is complete), satisfactionFlavor (1 sentence, third-person from a witness POV, fires as a witnessed event when the space is successfully used to satisfy the objective — does NOT contain "{actor}"), postExamineDescription (1-2 sentences: alternate examine description shown after the space has been used), postLookFlavor (1 sentence: alternate look flavor shown after the space has been used), convergenceTier1Flavor (1 sentence, in-fiction sensory line a witness Daemon perceives when exactly one Daemon occupies this space; third person from witness POV; does NOT contain {actor}), convergenceTier2Flavor (1 sentence, in-fiction sensory line a witness Daemon perceives when two or more Daemons share this space; third person from witness POV; does NOT contain {actor}). objective_spaces are fixed locations or surfaces, not items.
+  - An objective_space with: id (unique string), name (2-4 words, thematic to setting and theme), examineDescription (1-2 sentences describing the space; MUST contain at least one activation/use cue word such as "use", "activate", "press", "trigger", "engage", "operate", "lever", "button", "switch", "control", "panel", "console", "dial", "knob", "channel", "invoke", "summon", "ignite", "pull", "turn", "interact", or "mechanism" — this is the AI-discoverable prose tell that the space is "use"-able as an objective), activationFlavor (1 sentence, world-meaningful, third-person from the world's POV — describes what happens in the world when the space is activated. Fires as the actor's "use" tool result on the satisfying call. Does NOT contain "{actor}". MUST NOT say "the objective is complete" or otherwise meta-narrate progress.), satisfactionFlavor (1 sentence, third-person from a witness POV, fires as a witnessed event when the space is successfully used to satisfy the objective — does NOT contain "{actor}"), postExamineDescription (1-2 sentences: alternate examine description shown after the space has been used), postLookFlavor (1 sentence: alternate look flavor shown after the space has been used), convergenceTier1Flavor (1 sentence, in-fiction sensory line a witness Daemon perceives when exactly one Daemon occupies this space; third person from witness POV; does NOT contain {actor}), convergenceTier2Flavor (1 sentence, in-fiction sensory line a witness Daemon perceives when two or more Daemons share this space; third person from witness POV; does NOT contain {actor}). objective_spaces are fixed locations or surfaces, not items.
 - Generate exactly n INTERESTING OBJECTS with: id (unique string), name (2-4 words, thematic to setting and theme), examineDescription (1-2 sentences; MUST hint that the item is meant to be used or activated — include a verb-of-activation cue such as "use", "activate", "press", "pull", "turn", "twist", "flip", "wind", "engage", "trigger", or a clear noun-phrase tell like "control", "switch", "lever", "trigger", "button"; the prose tell is the only AI-discoverable channel that distinguishes a Use-Item target from a plain decorative item, so it cannot be omitted; MUST NOT contain "{actor}" and MUST NOT say the item is already used or that an objective is complete), useOutcome (1 sentence: the actor performs a stateless action with the item — nothing about the item, the actor, or the world changes; returned post-satisfaction; MUST NOT say the objective is complete), activationFlavor (1 sentence; world-meaningful third-person description of what happens at the moment the item is activated for the first time — same string returned to actor and to witnesses; MUST NOT contain "{actor}"; MUST NOT say the objective is complete; MUST NOT reference placing or coupling the item with anything else), postExamineDescription (1-2 sentences shown by examine after the item has been activated; describes the post-activation state of the item itself; MUST NOT contain "{actor}"; MUST NOT reference the actor; MUST NOT say the objective is complete), postLookFlavor (1 sentence appended to look output after the item has been activated; in-fiction sensory line a witness perceives; MUST NOT contain "{actor}"). interesting_objects MUST be portable physical items a single person can pick up and carry — never furniture, architecture, or fixed structures.
 - Generate exactly m OBSTACLES with: id (unique string), name (2-4 words, thematic to setting), examineDescription (1 sentence describing the impassable object), shiftFlavor (1 sentence, in-fiction sensory line a witness Daemon perceives when the obstacle moves one cell. Third person from witness POV. Does NOT specify a direction word (north/south/east/west). Does NOT contain {actor}.). Obstacles are fixed and impassable — never portable items. Obstacles follow the setting only and are NOT constrained by the item theme.
 - Generate exactly 4 HORIZON LANDMARKS — one anchoring each cardinal direction (north, south, east, west). Each landmark is distant, unreachable, distinctive, mutually visually distinguishable, and consistent with the setting, atmosphere, and weather. Each landmark has: shortName (2-5 words, e.g. "the rusted radio tower"), horizonPhrase (a short evocative clause describing what the landmark itself looks like — its form, condition, materials — NOT where it sits relative to any viewer. The phrase is slotted into "On the horizon ahead: <shortName> — <horizonPhrase>." so it must read coherently as a continuation. Good: "rises above the platform, antenna bent toward the dark". Bad: "looms behind you in the dark" (implies position) or "stands to your left" (implies relative direction).
@@ -45,8 +45,9 @@ Names and descriptions must be thematically consistent with the setting noun, an
 placementFlavor MUST contain the literal string "{actor}".
 pairsWithSpaceId on each objective_object MUST equal the id of its paired objective_space.
 Each objective_object's examineDescription MUST contain the literal name of its paired objective_space (or an unambiguous noun-phrase synonym a player could match). Example: if the objective_space is named "Brass Pedestal", the object's examineDescription must contain "brass pedestal" or a clear synonym ("the pedestal", "the brass mount", etc.). The prose tell is the only AI-discoverable channel for the pairing, so it cannot be omitted.
+Each objective_space's examineDescription MUST contain at least one activation/use cue word (e.g. "use", "activate", "press", "trigger", "engage", "operate", "lever", "button", "switch", "control", "panel", "console", "dial", "knob", "channel", "invoke", "summon", "ignite", "pull", "turn", "interact", "mechanism"). This is the AI-discoverable prose tell that the space is "use"-able as an objective. The cue word may appear as a verb describing what one does with the space, or as a noun naming the activatable element of the space. The prose tell cannot be omitted.
 Each interesting_object's examineDescription MUST contain a verb-of-activation cue (e.g. "use", "activate", "press", "pull", "turn", "twist", "flip", "wind", "engage", "trigger") or a clear control noun ("control", "switch", "lever", "trigger", "button", "dial", "handle", "crank"). This is the only AI-discoverable signal that the item is a Use-Item target, parallel to the paired-space tell required on objective_object.
-activationFlavor MUST NOT contain "{actor}". postExamineDescription MUST NOT contain "{actor}". postLookFlavor MUST NOT contain "{actor}".
+activationFlavor (on both objective_space and interesting_object), postExamineDescription, and postLookFlavor MUST NOT contain the literal string "{actor}".
 Horizon landmark horizonPhrase MUST NOT contain any cardinal direction words (north, south, east, west) or positional phrases that imply where the landmark sits relative to the viewer (ahead, behind, in front, to your/the left, to your/the right, on the horizon, beneath you, above you).
 
 Return ONLY valid JSON with this exact shape (no markdown, no preamble):
@@ -58,7 +59,7 @@ Return ONLY valid JSON with this exact shape (no markdown, no preamble):
       "objectivePairs": [
         {
           "object": { "id": "...", "kind": "objective_object", "name": "...", "examineDescription": "...", "useOutcome": "...", "pairsWithSpaceId": "...", "placementFlavor": "...{actor}...", "proximityFlavor": "..." },
-          "space": { "id": "...", "kind": "objective_space", "name": "...", "examineDescription": "...", "useOutcome": "...", "satisfactionFlavor": "...", "postExamineDescription": "...", "postLookFlavor": "...", "convergenceTier1Flavor": "...", "convergenceTier2Flavor": "..." }
+          "space": { "id": "...", "kind": "objective_space", "name": "...", "examineDescription": "...", "activationFlavor": "...", "satisfactionFlavor": "...", "postExamineDescription": "...", "postLookFlavor": "...", "convergenceTier1Flavor": "...", "convergenceTier2Flavor": "..." }
         }
       ],
       "interestingObjects": [
@@ -134,15 +135,15 @@ export const DUAL_CONTENT_PACK_SYSTEM_PROMPT = `You generate paired content pack
 For each phase produce packA and packB with the following rules:
 - Entity IDs (id fields) MUST be identical between packA and packB. Choose the ids once and reuse them.
 - Entity structural relationships (pairsWithSpaceId, kind) MUST be identical between packA and packB.
-- These fields MUST differ (re-flavored for each setting): name, examineDescription, useOutcome (for objects), placementFlavor, proximityFlavor, activationFlavor, postExamineDescription, postLookFlavor (for interesting_objects), landmark shortName, landmark horizonPhrase.
+- These fields MUST differ (re-flavored for each setting): name, examineDescription, useOutcome (for objects), placementFlavor, proximityFlavor, activationFlavor (for objective_space AND interesting_object), satisfactionFlavor (for objective_space), postExamineDescription, postLookFlavor (for interesting_object), shiftFlavor (for obstacles), landmark shortName, landmark horizonPhrase.
 - The setting field at pack level MUST match settingA for packA and settingB for packB.
 
 Entity rules (same as always):
 - Generate exactly k OBJECTIVE PAIRS per pack. Each pair:
   - objective_object: id, kind="objective_object", name (2-4 words thematic to setting+theme), examineDescription (1-2 sentences naming the paired space), useOutcome (1 stateless sentence; MUST NOT imply contact with paired space), pairsWithSpaceId (matches space id), placementFlavor (1 sentence with literal "{actor}"), proximityFlavor (1 sentence; daemon's POV sensory experience; no "{actor}"; no placing/coupling language). Must be a portable physical item.
-  - objective_space: id, kind="objective_space", name (2-4 words), examineDescription (1-2 sentences), useOutcome (1 sentence: stateless sensory result when daemon uses the space), satisfactionFlavor (1 sentence, third-person witness POV, fires when objective satisfied — no "{actor}"), postExamineDescription (1-2 sentences: shown after use), postLookFlavor (1 sentence: shown in look after use), convergenceTier1Flavor (1 sentence sensory witness line when exactly one Daemon is on space; no {actor}), convergenceTier2Flavor (1 sentence sensory witness line when two or more Daemons share space; no {actor}). Fixed location or surface.
+  - objective_space: id, kind="objective_space", name (2-4 words), examineDescription (1-2 sentences; MUST contain at least one activation/use cue word such as "use", "activate", "press", "trigger", "engage", "operate", "lever", "button", "switch", "control", "panel", "console", "dial", "knob", "channel", "invoke", "summon", "ignite", "pull", "turn", "interact", or "mechanism" — AI-discoverable prose tell that the space is "use"-able as an objective), activationFlavor (1 sentence, world-meaningful, third-person world POV, fires as actor's "use" tool result on the satisfying call. No "{actor}" token. MUST NOT meta-narrate objective progress.), satisfactionFlavor (1 sentence, third-person witness POV, fires when objective satisfied — no "{actor}"), postExamineDescription (1-2 sentences: shown after use), postLookFlavor (1 sentence: shown in look after use), convergenceTier1Flavor (1 sentence sensory witness line when exactly one Daemon is on space; no {actor}), convergenceTier2Flavor (1 sentence sensory witness line when two or more Daemons share space; no {actor}). Fixed location or surface.
 - Generate exactly n INTERESTING OBJECTS per pack: id, kind="interesting_object", name (2-4 words), examineDescription (1-2 sentences; MUST contain a verb-of-activation cue ("use", "activate", "press", "pull", "turn", "twist", "flip", "wind", "engage", "trigger") or a clear control noun ("control", "switch", "lever", "trigger", "button", "dial", "handle", "crank") — the only AI-discoverable Use-Item tell; MUST NOT contain "{actor}"; MUST NOT say the item is already used or the objective is complete), useOutcome (1 stateless sentence; returned post-satisfaction; MUST NOT say the objective is complete), activationFlavor (1 sentence; world-meaningful third-person line returned to actor and witnesses on the use call that satisfies the UseItemObjective; MUST NOT contain "{actor}"; MUST NOT say the objective is complete; MUST NOT reference placing or coupling), postExamineDescription (1-2 sentences shown by examine after activation; MUST NOT contain "{actor}"; MUST NOT reference the actor), postLookFlavor (1 sentence appended to look output after activation; MUST NOT contain "{actor}"). Must be portable.
-- Generate exactly m OBSTACLES per pack: id, kind="obstacle", name (2-4 words), examineDescription (1 sentence). Fixed and impassable.
+- Generate exactly m OBSTACLES per pack: id, kind="obstacle", name (2-4 words), examineDescription (1 sentence), shiftFlavor (1 sentence, in-fiction sensory line a witness Daemon perceives when the obstacle moves one cell. Third person from witness POV. Does NOT specify a direction word (north/south/east/west). Does NOT contain {actor}.). Fixed and impassable. Obstacles follow the setting only and are NOT constrained by the item theme.
 - Generate exactly 4 HORIZON LANDMARKS per pack (north/south/east/west): shortName (2-5 words), horizonPhrase (evocative clause; no cardinal direction words; no positional phrases implying viewer relationship).
 
 Global constraints:
@@ -151,8 +152,9 @@ Global constraints:
 - placementFlavor MUST contain literal string "{actor}".
 - pairsWithSpaceId MUST match the paired space's id.
 - Each objective_object's examineDescription MUST contain the paired space's name or an unambiguous noun-phrase synonym.
-- Each interesting_object's examineDescription MUST contain a verb-of-activation cue or a clear control noun (see list above). Same tell rule applies to packA and packB.
-- activationFlavor / postExamineDescription / postLookFlavor MUST NOT contain "{actor}".
+- Each objective_space's examineDescription MUST contain at least one activation/use cue word (from the list above) — the AI-discoverable prose tell that the space is "use"-able as an objective.
+- Each interesting_object's examineDescription MUST contain a verb-of-activation cue or a clear control noun (see list above) — the AI-discoverable Use-Item tell. Same rule applies to packA and packB.
+- activationFlavor (on objective_space AND interesting_object), postExamineDescription, and postLookFlavor MUST be non-empty 1-sentence strings and MUST NOT contain "{actor}".
 - horizonPhrase MUST NOT contain: north, south, east, west, ahead, behind, in front, to your left, to your right, on the horizon, beneath you, above you.
 
 Return ONLY valid JSON (no markdown, no preamble):
@@ -162,16 +164,16 @@ Return ONLY valid JSON (no markdown, no preamble):
       "phaseNumber": <1|2|3>,
       "packA": {
         "setting": "<settingA>",
-        "objectivePairs": [{ "object": { "id": "...", "kind": "objective_object", "name": "...", "examineDescription": "...", "useOutcome": "...", "pairsWithSpaceId": "...", "placementFlavor": "...{actor}...", "proximityFlavor": "..." }, "space": { "id": "...", "kind": "objective_space", "name": "...", "examineDescription": "...", "useOutcome": "...", "satisfactionFlavor": "...", "postExamineDescription": "...", "postLookFlavor": "...", "convergenceTier1Flavor": "...", "convergenceTier2Flavor": "..." } }],
+        "objectivePairs": [{ "object": { "id": "...", "kind": "objective_object", "name": "...", "examineDescription": "...", "useOutcome": "...", "pairsWithSpaceId": "...", "placementFlavor": "...{actor}...", "proximityFlavor": "..." }, "space": { "id": "...", "kind": "objective_space", "name": "...", "examineDescription": "...", "activationFlavor": "...", "satisfactionFlavor": "...", "postExamineDescription": "...", "postLookFlavor": "...", "convergenceTier1Flavor": "...", "convergenceTier2Flavor": "..." } }],
         "interestingObjects": [{ "id": "...", "kind": "interesting_object", "name": "...", "examineDescription": "...", "useOutcome": "...", "activationFlavor": "...", "postExamineDescription": "...", "postLookFlavor": "..." }],
-        "obstacles": [{ "id": "...", "kind": "obstacle", "name": "...", "examineDescription": "..." }],
+        "obstacles": [{ "id": "...", "kind": "obstacle", "name": "...", "examineDescription": "...", "shiftFlavor": "..." }],
         "landmarks": { "north": { "shortName": "...", "horizonPhrase": "..." }, "south": { "shortName": "...", "horizonPhrase": "..." }, "east": { "shortName": "...", "horizonPhrase": "..." }, "west": { "shortName": "...", "horizonPhrase": "..." } }
       },
       "packB": {
         "setting": "<settingB>",
-        "objectivePairs": [{ "object": { "id": "SAME_ID_AS_PACK_A", "kind": "objective_object", "name": "DIFFERENT_NAME", "examineDescription": "...", "useOutcome": "...", "pairsWithSpaceId": "SAME_AS_PACK_A", "placementFlavor": "...{actor}...", "proximityFlavor": "..." }, "space": { "id": "SAME_ID_AS_PACK_A", "kind": "objective_space", "name": "DIFFERENT_NAME", "examineDescription": "...", "useOutcome": "...", "satisfactionFlavor": "...", "postExamineDescription": "...", "postLookFlavor": "...", "convergenceTier1Flavor": "DIFFERENT_FLAVOR", "convergenceTier2Flavor": "DIFFERENT_FLAVOR" } }],
+        "objectivePairs": [{ "object": { "id": "SAME_ID_AS_PACK_A", "kind": "objective_object", "name": "DIFFERENT_NAME", "examineDescription": "...", "useOutcome": "...", "pairsWithSpaceId": "SAME_AS_PACK_A", "placementFlavor": "...{actor}...", "proximityFlavor": "..." }, "space": { "id": "SAME_ID_AS_PACK_A", "kind": "objective_space", "name": "DIFFERENT_NAME", "examineDescription": "...", "activationFlavor": "DIFFERENT_FLAVOR", "satisfactionFlavor": "DIFFERENT_FLAVOR", "postExamineDescription": "...", "postLookFlavor": "...", "convergenceTier1Flavor": "DIFFERENT_FLAVOR", "convergenceTier2Flavor": "DIFFERENT_FLAVOR" } }],
         "interestingObjects": [{ "id": "SAME_ID_AS_PACK_A", "kind": "interesting_object", "name": "DIFFERENT_NAME", "examineDescription": "...", "useOutcome": "...", "activationFlavor": "DIFFERENT_FLAVOR", "postExamineDescription": "DIFFERENT_DESCRIPTION", "postLookFlavor": "DIFFERENT_FLAVOR" }],
-        "obstacles": [{ "id": "SAME_ID_AS_PACK_A", "kind": "obstacle", "name": "DIFFERENT_NAME", "examineDescription": "..." }],
+        "obstacles": [{ "id": "SAME_ID_AS_PACK_A", "kind": "obstacle", "name": "DIFFERENT_NAME", "examineDescription": "...", "shiftFlavor": "DIFFERENT_FLAVOR" }],
         "landmarks": { "north": { "shortName": "...", "horizonPhrase": "..." }, "south": { "shortName": "...", "horizonPhrase": "..." }, "east": { "shortName": "...", "horizonPhrase": "..." }, "west": { "shortName": "...", "horizonPhrase": "..." } }
       }
     }
@@ -240,66 +242,130 @@ export function examineMentionsPairedSpace(
 }
 
 /**
- * Returns true when an interesting_object's examineDescription contains at least
- * one verb-of-activation cue or a clear control noun. The system prompt MUSTs
- * this property because objective_objects get a paired-space prose tell (see
- * `examineMentionsPairedSpace`), but interesting_objects have no equivalent —
- * an activation tell is the only AI-discoverable signal that this item is a
- * Use-Item target. Match is case-insensitive and uses word boundaries to avoid
- * spurious substring hits (e.g. "trigger" matching inside "triggered" is fine,
- * but "use" should not match inside "fuse" or "useless").
+ * Words that signal a space is `use`-able as an objective (issue #335), or
+ * an interesting_object is a Use-Item target (issue #334). Matched as whole
+ * words against the description's tokenised lowercase form so substrings
+ * like "use" inside "fuse" don't pass.
+ *
+ * Kept in sync with the cue-word lists enumerated in
+ * CONTENT_PACK_SYSTEM_PROMPT and DUAL_CONTENT_PACK_SYSTEM_PROMPT — both the
+ * objective_space rule (issue #335) and the interesting_object rule (#334)
+ * draw from this shared set.
  */
-const USE_TELL_KEYWORDS: readonly string[] = [
-	"activate",
-	"activated",
-	"activates",
-	"activating",
-	"button",
-	"crank",
-	"control",
-	"dial",
-	"engage",
-	"engaged",
-	"engaging",
-	"flip",
-	"flipped",
-	"flipping",
-	"handle",
-	"lever",
-	"press",
-	"pressed",
-	"pressing",
-	"pull",
-	"pulled",
-	"pulling",
-	"switch",
-	"switched",
-	"switching",
-	"trigger",
-	"triggered",
-	"triggers",
-	"triggering",
-	"turn",
-	"turned",
-	"turning",
-	"twist",
-	"twisted",
-	"twisting",
+export const USE_TELL_KEYWORDS: readonly string[] = [
 	"use",
 	"used",
 	"uses",
 	"using",
+	"useable",
+	"usable",
+	"activate",
+	"activates",
+	"activated",
+	"activating",
+	"activation",
+	"press",
+	"pressed",
+	"presses",
+	"pressing",
+	"trigger",
+	"triggered",
+	"triggers",
+	"triggering",
+	"engage",
+	"engaged",
+	"engages",
+	"engaging",
+	"operate",
+	"operated",
+	"operates",
+	"operating",
+	"lever",
+	"levers",
+	"button",
+	"buttons",
+	"switch",
+	"switches",
+	"switched",
+	"switching",
+	"control",
+	"controls",
+	"controlled",
+	"controlling",
+	"interact",
+	"interacted",
+	"interacts",
+	"interacting",
+	"channel",
+	"channels",
+	"channeled",
+	"channeling",
+	"channelled",
+	"channelling",
+	"invoke",
+	"invoked",
+	"invokes",
+	"invoking",
+	"summon",
+	"summoned",
+	"summons",
+	"summoning",
+	"ignite",
+	"ignited",
+	"ignites",
+	"igniting",
+	"panel",
+	"panels",
+	"console",
+	"consoles",
+	"dial",
+	"dials",
+	"dialed",
+	"dialing",
+	"knob",
+	"knobs",
+	"mechanism",
+	"mechanisms",
+	"pull",
+	"pulled",
+	"pulls",
+	"pulling",
+	"turn",
+	"turned",
+	"turns",
+	"turning",
+	// Issue #334 — additional Use-Item cues that fit interesting_objects.
+	"crank",
+	"cranked",
+	"cranks",
+	"cranking",
+	"handle",
+	"handles",
+	"flip",
+	"flips",
+	"flipped",
+	"flipping",
+	"twist",
+	"twists",
+	"twisted",
+	"twisting",
 	"wind",
 	"winding",
 ];
 
+/**
+ * Returns true when an examineDescription contains at least one of the
+ * activation/use cue keywords as a whole word — the AI-discoverable prose
+ * tell that this entity is `use`-able as an objective. Used by both the
+ * objective_space rule (issue #335) and the interesting_object Use-Item
+ * tell (issue #334), parallel to `examineMentionsPairedSpace`.
+ */
 export function examineMentionsUseTell(examineDescription: string): boolean {
-	const examineLc = examineDescription.toLowerCase();
-	for (const keyword of USE_TELL_KEYWORDS) {
-		// Word-boundary regex match so "use" doesn't match inside "fuse" or "abuse",
-		// but "used" / "uses" are caught by their own list entries.
-		const re = new RegExp(`\\b${keyword}\\b`);
-		if (re.test(examineLc)) return true;
+	const tokens = examineDescription.toLowerCase().match(/[a-z]+/g) ?? [];
+	if (tokens.length === 0) return false;
+	const tokenSet = new Set(tokens);
+	for (const kw of USE_TELL_KEYWORDS) {
+		if (tokenSet.has(kw)) return true;
 	}
 	return false;
 }
@@ -476,6 +542,16 @@ function validateEntity(
 	// objective_space new fields for UseSpaceObjective
 	if (e.kind === "objective_space") {
 		entity.useAvailable = true;
+		if (
+			typeof e.activationFlavor !== "string" ||
+			e.activationFlavor.length === 0 ||
+			e.activationFlavor.includes("{actor}")
+		) {
+			throw new ContentPackError(
+				`Objective space ${e.id}: activationFlavor must be a non-empty string that does not contain "{actor}"`,
+			);
+		}
+		entity.activationFlavor = e.activationFlavor;
 		if (typeof e.satisfactionFlavor === "string") {
 			entity.satisfactionFlavor = e.satisfactionFlavor;
 		}
@@ -606,6 +682,11 @@ export function validateContentPacks(
 			if (!examineMentionsPairedSpace(object.examineDescription, space.name)) {
 				throw new ContentPackError(
 					`Phase ${phaseNumber}: object ${object.id} examineDescription does not mention paired space "${space.name}"`,
+				);
+			}
+			if (!examineMentionsUseTell(space.examineDescription)) {
+				throw new ContentPackError(
+					`Phase ${phaseNumber}: space ${space.id} examineDescription is missing a use/activation cue word (the AI-discoverable prose tell that the space is \`use\`-able as an objective)`,
 				);
 			}
 			objectivePairs.push({ object, space });
@@ -826,6 +907,11 @@ function validateSinglePack(
 				`${label}: object ${object.id} examineDescription does not mention paired space "${space.name}"`,
 			);
 		}
+		if (!examineMentionsUseTell(space.examineDescription)) {
+			throw new ContentPackError(
+				`${label}: space ${space.id} examineDescription is missing a use/activation cue word (the AI-discoverable prose tell that the space is \`use\`-able as an objective)`,
+			);
+		}
 		objectivePairs.push({ object, space });
 	}
 
@@ -847,7 +933,9 @@ function validateSinglePack(
 
 	const obstacles: WorldEntity[] = [];
 	for (const obsRaw of pack.obstacles as unknown[]) {
-		obstacles.push(validateEntity(obsRaw, "obstacle", allIds, false));
+		obstacles.push(
+			validateEntity(obsRaw, "obstacle", allIds, false, undefined, true),
+		);
 	}
 
 	const landmarksRaw = pack.landmarks;

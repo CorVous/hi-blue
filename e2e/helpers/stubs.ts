@@ -270,6 +270,7 @@ function buildDualContentPackResponseBody(body: ParsedBody): string {
 				kind: "obstacle",
 				name: `Stub obstacle ${tag} ${i} ${ab}`,
 				examineDescription: `Stub obstacle ${tag}-obs-${i} ${ab}.`,
+				shiftFlavor: `Stub obstacle ${tag}-obs-${i} ${ab} grinds across the floor.`,
 			}));
 			return {
 				setting,
