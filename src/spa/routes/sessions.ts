@@ -24,10 +24,13 @@ import type { PhaseConfig } from "../game/types";
 import {
 	dupSession,
 	getActiveSessionId,
+	getArchivedSessionInfo,
 	getSessionInfo,
+	listArchivedSessions,
 	listSessions,
 	loadActiveSession,
 	mintSession,
+	rmArchivedSession,
 	rmSession,
 	setActiveSessionId,
 } from "../persistence/session-storage.js";
@@ -171,12 +174,37 @@ export function renderSessions(
 	// Clear and rebuild list
 	listEl.textContent = "";
 
+	// Active sessions section heading
+	const activeHeading = doc.createElement("h2");
+	activeHeading.className = "sessions-section-heading";
+	activeHeading.textContent = "active sessions";
+	listEl.appendChild(activeHeading);
+
 	for (const row of rowData) {
 		const rowEl = buildSessionRow(doc, row.id, activeId, reRender);
 		listEl.appendChild(rowEl);
 	}
 
 	if (rowData.length === 0) {
+		const empty = doc.createElement("p");
+		empty.className = "sessions-empty";
+		empty.textContent = "no sessions found.";
+		listEl.appendChild(empty);
+	}
+
+	// Archived sessions section heading
+	const archivedHeading = doc.createElement("h2");
+	archivedHeading.className = "sessions-section-heading";
+	archivedHeading.textContent = "archived sessions";
+	listEl.appendChild(archivedHeading);
+
+	const archivedIds = listArchivedSessions();
+	for (const archivedId of archivedIds) {
+		const rowEl = buildArchivedSessionRow(doc, archivedId, reRender);
+		listEl.appendChild(rowEl);
+	}
+
+	if (archivedIds.length === 0) {
 		const empty = doc.createElement("p");
 		empty.className = "sessions-empty";
 		empty.textContent = "no sessions found.";
@@ -230,7 +258,7 @@ function buildSessionRow(
 		metaLine.className = "session-meta";
 		const round = info.round;
 		const savedShort = info.lastSavedAt.replace("T", " ").slice(0, 19);
-		metaLine.textContent = `phase ${info.phase} · turn ${round} · saved ${savedShort}`;
+		metaLine.textContent = `epoch ${info.epoch} · phase ${info.phase} · turn ${round} · last played ${savedShort}`;
 		rowEl.appendChild(metaLine);
 
 		// Tree lines: 3 daemon .txt files + engine.dat (last)
