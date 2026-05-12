@@ -203,10 +203,22 @@ function parseDualContentPackPhases(userMessage: string): DualPhaseSpec[] {
 }
 
 const STUB_LANDMARKS = {
-	north: { shortName: "Distant ridge", horizonPhrase: "A jagged ridge cuts the skyline." },
-	south: { shortName: "Rolling hills", horizonPhrase: "Gentle slopes melt into haze." },
-	east: { shortName: "Stone tower", horizonPhrase: "A weathered tower breaks the treeline." },
-	west: { shortName: "Misty forest", horizonPhrase: "A dark canopy blurs into fog." },
+	north: {
+		shortName: "Distant ridge",
+		horizonPhrase: "A jagged ridge cuts the skyline.",
+	},
+	south: {
+		shortName: "Rolling hills",
+		horizonPhrase: "Gentle slopes melt into haze.",
+	},
+	east: {
+		shortName: "Stone tower",
+		horizonPhrase: "A weathered tower breaks the treeline.",
+	},
+	west: {
+		shortName: "Misty forest",
+		horizonPhrase: "A dark canopy blurs into fog.",
+	},
 };
 
 /**
@@ -257,7 +269,13 @@ function buildDualContentPackResponseBody(body: ParsedBody): string {
 				name: `Stub obstacle ${tag} ${i} ${ab}`,
 				examineDescription: `Stub obstacle ${tag}-obs-${i} ${ab}.`,
 			}));
-			return { setting, objectivePairs, interestingObjects, obstacles, landmarks: STUB_LANDMARKS };
+			return {
+				setting,
+				objectivePairs,
+				interestingObjects,
+				obstacles,
+				landmarks: STUB_LANDMARKS,
+			};
 		};
 
 		return {

@@ -815,10 +815,13 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 	// Compute the relative direction from the plan's absolute cardinal.
 	const CARDINALS = ["north", "east", "south", "west"];
 	const RELATIVES = ["forward", "right", "back", "left"];
-	const witnessFacing = (phase1Spatial?.[witnessId] as PersonaSpatial | undefined)?.facing ?? "north";
+	const witnessFacing =
+		(phase1Spatial?.[witnessId] as PersonaSpatial | undefined)?.facing ??
+		"north";
 	const facingIdx = CARDINALS.indexOf(witnessFacing);
 	const dirIdx = CARDINALS.indexOf(direction);
-	const relativeDirection = RELATIVES[(dirIdx - facingIdx + 4) % 4] ?? direction;
+	const relativeDirection =
+		RELATIVES[(dirIdx - facingIdx + 4) % 4] ?? direction;
 	const expectedLine = `[Round ${roundAtDispatch}] You watch *${actorId} walk ${relativeDirection}.`;
 
 	const witnessAllContent = (

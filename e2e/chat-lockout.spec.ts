@@ -27,7 +27,9 @@ test("chat lockout disables send for locked-out AI and is silent to player", asy
 			const keyBytes = Array.from(new TextEncoder().encode(key));
 			const iso = atob(raw);
 			const decoded = new Uint8Array(
-				Array.from(iso).map((c, i) => c.charCodeAt(0) ^ (keyBytes[i % keyBytes.length] ?? 0)),
+				Array.from(iso).map(
+					(c, i) => c.charCodeAt(0) ^ (keyBytes[i % keyBytes.length] ?? 0),
+				),
 			);
 			const json = new TextDecoder("utf-8").decode(decoded);
 			const sealed = JSON.parse(json) as {
