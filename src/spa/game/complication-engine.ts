@@ -109,7 +109,7 @@ function isObstacleShiftAvailable(
  * Build valid (obstacle, direction) tuples for the obstacle_shift draw.
  * Returns an array of { obstacleId, fromCell, toCell } for each valid shift.
  */
-function validObstacleShiftTuples(
+export function validObstacleShiftTuples(
 	world: WorldState,
 	personaSpatial: PhaseState["personaSpatial"],
 ): Array<{ obstacleId: string; fromCell: GridPosition; toCell: GridPosition }> {

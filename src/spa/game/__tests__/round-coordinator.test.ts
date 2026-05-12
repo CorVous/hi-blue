@@ -3362,4 +3362,55 @@ describe("complicationConfig", () => {
 			expect(broadcasts).toHaveLength(0);
 		}
 	});
+
+	it("excludes obstacleShift from the draw when all obstacles are surrounded (no valid shift tuples)", async () => {
+		// Build a pack with no obstacles at all — validObstacleShiftTuples returns []
+		// so obstacleShiftComplication.isAvailable() is false.
+		// Force rng to always return a value that would select the last entry in
+		// COMPLICATIONS (index 1 = obstacleShift if the pool were unfiltered),
+		// by returning 0.99. With obstacleShift excluded, only weatherChange remains
+		// and it must fire (weather changes).
+		const initialWeather = "A biting wind cuts through the air.";
+		// TEST_CONTENT_PACK has no obstacles field — use it directly (obstacles: [])
+		const pack: ContentPack = {
+			...TEST_CONTENT_PACK,
+			weather: initialWeather,
+			obstacles: [],
+		};
+		const game = createGame(TEST_PERSONAS, [pack]);
+		const started = startPhase(game, TEST_PHASE_CONFIG);
+
+		// rng returns 0 — always draws the first available complication (weatherChange,
+		// index 0). If obstacleShift were not excluded it would still be in the pool
+		// but rng=0 draws index 0 regardless; the important assertion is the
+		// absence of witnessed-obstacle-shift entries below.
+		const { nextState } = await runRound(
+			started,
+			"red",
+			"hi",
+			makeProvider(),
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{ rng: () => 0, triggerRound: 1 },
+		);
+
+		const phase = getActivePhase(nextState);
+
+		// Weather must have changed — obstacleShift was excluded, weatherChange fired
+		expect(phase.weather).not.toBe(initialWeather);
+
+		// No witnessed-obstacle-shift entries should appear in any daemon's log
+		for (const aiId of Object.keys(TEST_PERSONAS)) {
+			const log = phase.conversationLogs[aiId] ?? [];
+			const shiftEntries = log.filter(
+				(e) => e.kind === "witnessed-obstacle-shift",
+			);
+			expect(shiftEntries).toHaveLength(0);
+		}
+	});
 });

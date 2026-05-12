@@ -227,6 +227,25 @@ export function appendWitnessedEvent(
 }
 
 /**
+ * Append a `kind: "witnessed-obstacle-shift"` ConversationEntry to a single
+ * witness's per-Daemon log. Called by the Obstacle Shift complication handler
+ * for each Daemon whose cone contained the obstacle's origin cell.
+ */
+export function appendWitnessedObstacleShift(
+	game: GameState,
+	witnessId: AiId,
+	entry: Extract<ConversationEntry, { kind: "witnessed-obstacle-shift" }>,
+): GameState {
+	return updateActivePhase(game, (phase) => ({
+		...phase,
+		conversationLogs: {
+			...phase.conversationLogs,
+			[witnessId]: [...(phase.conversationLogs[witnessId] ?? []), entry],
+		},
+	}));
+}
+
+/**
  * Append a `kind: "broadcast"` ConversationEntry to EVERY persona's per-Daemon
  * log in one atomic update. Broadcasts are sender-less system announcements
  * (e.g. weather change complications) that all three Daemons must see simultaneously.

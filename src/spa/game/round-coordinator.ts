@@ -537,11 +537,18 @@ export async function runRound(
 	if (complicationConfig) {
 		const { rng, triggerRound } = complicationConfig;
 		const currentRound = state.round;
-		if (currentRound === triggerRound && COMPLICATIONS.length > 0) {
-			const compIdx = Math.floor(rng() * COMPLICATIONS.length);
-			// biome-ignore lint/style/noNonNullAssertion: bounded index into non-empty array
-			const complication = COMPLICATIONS[compIdx]!;
-			state = complication.apply(state, rng);
+		if (currentRound === triggerRound) {
+			// Filter to complications that are applicable given the current game state.
+			// Complications with no `isAvailable` guard are always eligible.
+			const availableComplications = COMPLICATIONS.filter(
+				(c) => !c.isAvailable || c.isAvailable(state),
+			);
+			if (availableComplications.length > 0) {
+				const compIdx = Math.floor(rng() * availableComplications.length);
+				// biome-ignore lint/style/noNonNullAssertion: bounded index into non-empty array
+				const complication = availableComplications[compIdx]!;
+				state = complication.apply(state, rng);
+			}
 		}
 	}
 
