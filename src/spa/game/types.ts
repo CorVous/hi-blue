@@ -267,7 +267,7 @@ export interface AiBudget {
 
 export interface GameState {
 	personas: Record<AiId, AiPersona>;
-	/** Single content pack for the game. */
+	/** Single content pack for the game (active pack — switches on Setting Shift). */
 	contentPack: ContentPack;
 	isComplete: boolean;
 	outcome?: "win" | "lose";
@@ -288,7 +288,14 @@ export interface GameState {
 	complicationSchedule: ComplicationSchedule;
 	/** Currently active persistent complications (Sysadmin Directives, Tool Disables, Chat Lockouts). */
 	activeComplications: ActiveComplication[];
+	/** Setting A content packs — one per phase, generated at game start. */
+	contentPacksA: ContentPack[];
+	/** Setting B content packs — same entity IDs as A, different names/descriptions. */
+	contentPacksB: ContentPack[];
+	/** Which setting is currently active. Starts as "A"; swapped to "B" by Setting Shift. */
+	activePackId: "A" | "B";
 }
+
 
 export type ToolName =
 	| "pick_up"

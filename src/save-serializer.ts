@@ -33,8 +33,10 @@ export interface GameSave {
 	/** Schema version. v4 = chat/whisper collapsed into directional message primitive. */
 	version: 4;
 	ais: AiSaveEntry[];
-	/** All three content packs (generated at game start). */
-	contentPacks: ContentPack[];
+	/** Setting A content packs (generated at game start). */
+	contentPacksA: ContentPack[];
+	/** Setting B content packs (generated at game start). */
+	contentPacksB: ContentPack[];
 }
 
 /**
@@ -59,5 +61,10 @@ export function serializeGameSave(game: GameState): GameSave {
 		return { persona: { ...persona }, phases };
 	});
 
-	return { version: 4, ais, contentPacks: [game.contentPack] };
+	return {
+		version: 4,
+		ais,
+		contentPacksA: game.contentPacksA,
+		contentPacksB: game.contentPacksB,
+	};
 }

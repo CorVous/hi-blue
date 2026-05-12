@@ -53,14 +53,20 @@ export class GameSession {
 	constructor(
 		contentPack: ContentPack,
 		personas: Record<AiId, AiPersona>,
-		_contentPacks?: ContentPack[],
+		contentPacksA?: ContentPack[],
+		contentPacksB?: ContentPack[],
 		rng?: () => number,
 	) {
-		this.state = startGame(
+		const game = startGame(
 			personas,
 			contentPack,
 			rng !== undefined ? { rng } : {},
 		);
+		this.state = {
+			...game,
+			contentPacksA: contentPacksA ?? [],
+			contentPacksB: contentPacksB ?? [],
+		};
 	}
 
 	/**

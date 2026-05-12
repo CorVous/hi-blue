@@ -552,12 +552,12 @@ describe("serializeSession / deserializeSession", () => {
 		}
 	});
 
-	it("SESSION_SCHEMA_VERSION is 6", () => {
+	it("SESSION_SCHEMA_VERSION is 7", () => {
 		const game = makeFreshGame();
 		const files = serializeSession(game, NOW, CREATED_AT);
 		if (!files.engine) throw new Error("engine should not be null");
 		const rawJson = deobfuscate(files.engine);
 		const sealed = JSON.parse(rawJson);
-		expect(sealed.schemaVersion).toBe(6);
+		expect(sealed.schemaVersion).toBe(7);
 	});
 });

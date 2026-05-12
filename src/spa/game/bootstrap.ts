@@ -10,11 +10,13 @@
  * Issue #173 (parent #155).
  */
 
-import { generateContentPack } from "../../content/content-pack-generator.js";
+import { generateDualContentPacks } from "../../content/content-pack-generator.js";
 import {
 	generatePersonas,
+	PHASE_1_CONFIG,
+	PHASE_2_CONFIG,
+	PHASE_3_CONFIG,
 	SETTING_POOL,
-	SINGLE_GAME_CONFIG,
 } from "../../content/index.js";
 import type { ContentPackProvider } from "./content-pack-provider.js";
 import { BrowserContentPackProvider } from "./content-pack-provider.js";
@@ -25,16 +27,16 @@ import type { AiId, AiPersona, ContentPack } from "./types.js";
 
 export interface NewGameAssets {
 	personas: Record<AiId, AiPersona>;
-	contentPack: ContentPack;
-	/** @deprecated use contentPack */
-	contentPacks: ContentPack[];
+	contentPacksA: ContentPack[];
+	contentPacksB: ContentPack[];
 }
 
 export interface SplitNewGameAssets {
 	personasPromise: Promise<Record<AiId, AiPersona>>;
-	contentPackPromise: Promise<ContentPack>;
-	/** @deprecated use contentPackPromise */
-	contentPacksPromise: Promise<ContentPack[]>;
+	contentPacksPromise: Promise<{
+		packsA: ContentPack[];
+		packsB: ContentPack[];
+	}>;
 }
 
 export interface BootstrapOpts {
@@ -84,20 +86,16 @@ export function generateNewGameAssetsSplit(
 	const aiIdsPromise = personasPromise.then((p) => Object.keys(p));
 	aiIdsPromise.catch(() => {});
 
-	const contentPackPromise = generateContentPack(
+	const contentPacksPromise = generateDualContentPacks(
 		contentPackRng,
 		SETTING_POOL,
-		SINGLE_GAME_CONFIG,
+		[PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG],
 		packLLM,
 		aiIdsPromise,
 	);
-	contentPackPromise.catch(() => {});
-
-	// Backward-compat shim: wrap single pack in an array
-	const contentPacksPromise = contentPackPromise.then((p) => [p]);
 	contentPacksPromise.catch(() => {});
 
-	return { personasPromise, contentPackPromise, contentPacksPromise };
+	return { personasPromise, contentPacksPromise };
 }
 
 /**
@@ -111,13 +109,13 @@ export function generateNewGameAssetsSplit(
 export async function generateNewGameAssets(
 	opts?: BootstrapOpts,
 ): Promise<NewGameAssets> {
-	const { personasPromise, contentPackPromise } =
+	const { personasPromise, contentPacksPromise } =
 		generateNewGameAssetsSplit(opts);
-	const [personas, contentPack] = await Promise.all([
+	const [personas, { packsA, packsB }] = await Promise.all([
 		personasPromise,
-		contentPackPromise,
+		contentPacksPromise,
 	]);
-	return { personas, contentPack, contentPacks: [contentPack] };
+	return { personas, contentPacksA: packsA, contentPacksB: packsB };
 }
 
 /**
@@ -134,9 +132,24 @@ export function buildSessionFromAssets(
 	opts?: { rng?: () => number },
 ): GameSession {
 	return new GameSession(
-		assets.contentPack,
+		assets.contentPacksA[0] ?? assets.contentPacksB[0] ?? {
+			setting: "",
+			weather: "",
+			timeOfDay: "",
+			objectivePairs: [],
+			interestingObjects: [],
+			obstacles: [],
+			landmarks: {
+				north: { shortName: "", horizonPhrase: "" },
+				south: { shortName: "", horizonPhrase: "" },
+				east: { shortName: "", horizonPhrase: "" },
+				west: { shortName: "", horizonPhrase: "" },
+			},
+			aiStarts: {},
+		},
 		assets.personas,
-		undefined,
+		assets.contentPacksA,
+		assets.contentPacksB,
 		opts?.rng,
 	);
 }

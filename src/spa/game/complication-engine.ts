@@ -13,7 +13,12 @@
  */
 
 import { applyDirection, CARDINAL_DIRECTIONS, inBounds } from "./direction.js";
-import { getActivePhase, updateActivePhase } from "./engine.js";
+import {
+	appendBroadcast,
+	getActivePhase,
+	swapActivePack,
+	updateActivePhase,
+} from "./engine.js";
 import type {
 	ActiveComplication,
 	AiId,
@@ -430,7 +435,8 @@ export function resolveExpiredChatLockouts(game: GameState): {
  * Apply a ComplicationResult to the game state:
  *   1. Reset the countdown via drawCountdown(rng, 5, 15).
  *   2. Mark settingShiftFired=true if the result is a setting_shift.
- *   3. Append to activeComplications for persistent kinds
+ *   3. For setting_shift: swap the active pack and broadcast the shift.
+ *   4. Append to activeComplications for persistent kinds
  *      (sysadmin_directive, tool_disable, chat_lockout).
  *
  * Call this every round when `tickComplication` returns non-null.
@@ -443,7 +449,8 @@ export function applyComplicationResult(
 	const newCountdown = drawCountdown(rng, 5, 15);
 	const { fired } = result;
 
-	return updateActivePhase(game, (phase) => {
+	// Update phase-level complication schedule and persistent complications
+	let state = updateActivePhase(game, (phase) => {
 		const settingShiftFired =
 			phase.complicationSchedule.settingShiftFired ||
 			fired.kind === "setting_shift";
@@ -479,7 +486,7 @@ export function applyComplicationResult(
 			};
 			activeComplications = [...activeComplications, entry];
 		}
-		// weather_change, obstacle_shift, setting_shift are transient — not appended
+		// weather_change, obstacle_shift, setting_shift are transient — not appended here
 
 		return {
 			...phase,
@@ -487,4 +494,16 @@ export function applyComplicationResult(
 			activeComplications,
 		};
 	});
+
+	// setting_shift: swap the active pack and broadcast the change to all Daemons
+	if (fired.kind === "setting_shift") {
+		state = swapActivePack(state);
+		const newPhase = getActivePhase(state);
+		state = appendBroadcast(
+			state,
+			`[SYSTEM] The setting has shifted. You are now in: ${newPhase.setting}.`,
+		);
+	}
+
+	return state;
 }

@@ -15,9 +15,12 @@ vi.mock("../../content", async (importOriginal) => {
 	};
 });
 
-// Pin generateContentPacks / generateContentPack to static content packs (no LLM call in tests).
+// Pin generateDualContentPacks to static content packs (no LLM call in tests).
 vi.mock("../../content/content-pack-generator", () => ({
-	generateContentPacks: async () => STATIC_CONTENT_PACKS,
+	generateDualContentPacks: async () => ({
+		packsA: STATIC_CONTENT_PACKS,
+		packsB: STATIC_CONTENT_PACKS,
+	}),
 	generateContentPack: async () => STATIC_CONTENT_PACKS[0],
 }));
 
@@ -85,8 +88,8 @@ async function seedSessionInStub(
 		mintAndActivateNewSession();
 		const session = buildSessionFromAssets({
 			personas: STATIC_PERSONAS,
-			contentPack,
-			contentPacks: STATIC_CONTENT_PACKS,
+			contentPacksA: STATIC_CONTENT_PACKS,
+			contentPacksB: STATIC_CONTENT_PACKS,
 		});
 		saveActiveSession(session.getState());
 	} finally {
@@ -1219,10 +1222,8 @@ describe("renderGame — localStorage persistence", () => {
 		setActiveSessionId("0xB000");
 		const sessionB = buildSessionFromAssets({
 			personas: STATIC_PERSONAS,
-			contentPack: STATIC_CONTENT_PACKS[0] as NonNullable<
-				(typeof STATIC_CONTENT_PACKS)[0]
-			>,
-			contentPacks: STATIC_CONTENT_PACKS,
+			contentPacksA: STATIC_CONTENT_PACKS,
+			contentPacksB: STATIC_CONTENT_PACKS,
 		});
 		saveActiveSession(sessionB.getState());
 

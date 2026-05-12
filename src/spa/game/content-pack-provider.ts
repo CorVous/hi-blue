@@ -5,8 +5,13 @@
  * MockContentPackProvider (tests).
  *
  * The browser provider makes one non-streaming JSON-mode chat-completions call
- * to generate three per-phase content packs (setting-flavored entities without
- * placements). On transient failure it retries once. CapHitError surfaces immediately.
+ * to generate content packs (setting-flavored entities without placements). On
+ * transient failure it retries once. CapHitError surfaces immediately.
+ *
+ * Issue #302: added `generateDualContentPacks` for A/B pack generation — one
+ * call that produces two setting-variants of the same entity structure. Entity
+ * IDs are identical across packs A and B; only names, descriptions, and flavor
+ * strings differ.
  */
 
 import { CapHitError, chatCompletionJson } from "../llm-client.js";
@@ -115,6 +120,94 @@ export interface ContentPackProvider {
 	generateContentPacks(
 		input: ContentPackProviderInput,
 	): Promise<ContentPackProviderResult>;
+	generateDualContentPacks(
+		input: DualContentPackProviderInput,
+	): Promise<DualContentPackProviderResult>;
+}
+
+// ── Dual-pack types (issue #302) ──────────────────────────────────────────────
+
+export const DUAL_CONTENT_PACK_SYSTEM_PROMPT = `You generate paired content packs for a text-based grid game. You are given phases, each with two settings (settingA and settingB), a shared item theme, and entity counts (k objective pairs, n interesting objects, m obstacles). For each phase produce TWO packs — Pack A (settingA) and Pack B (settingB) — where entity IDs are IDENTICAL across both packs but names and descriptions are re-flavored for the alternate setting.
+
+For each phase produce packA and packB with the following rules:
+- Entity IDs (id fields) MUST be identical between packA and packB. Choose the ids once and reuse them.
+- Entity structural relationships (pairsWithSpaceId, kind) MUST be identical between packA and packB.
+- These fields MUST differ (re-flavored for each setting): name, examineDescription, useOutcome (for objects), placementFlavor, proximityFlavor, landmark shortName, landmark horizonPhrase.
+- The setting field at pack level MUST match settingA for packA and settingB for packB.
+
+Entity rules (same as always):
+- Generate exactly k OBJECTIVE PAIRS per pack. Each pair:
+  - objective_object: id, kind="objective_object", name (2-4 words thematic to setting+theme), examineDescription (1-2 sentences naming the paired space), useOutcome (1 stateless sentence; MUST NOT imply contact with paired space), pairsWithSpaceId (matches space id), placementFlavor (1 sentence with literal "{actor}"), proximityFlavor (1 sentence; daemon's POV sensory experience; no "{actor}"; no placing/coupling language). Must be a portable physical item.
+  - objective_space: id, kind="objective_space", name (2-4 words), examineDescription (1-2 sentences). Fixed location or surface.
+- Generate exactly n INTERESTING OBJECTS per pack: id, kind="interesting_object", name (2-4 words), examineDescription (1-2 sentences), useOutcome (1 stateless sentence). Must be portable.
+- Generate exactly m OBSTACLES per pack: id, kind="obstacle", name (2-4 words), examineDescription (1 sentence). Fixed and impassable.
+- Generate exactly 4 HORIZON LANDMARKS per pack (north/south/east/west): shortName (2-5 words), horizonPhrase (evocative clause; no cardinal direction words; no positional phrases implying viewer relationship).
+
+Global constraints:
+- All ids must be unique within a pack (across phases within the same call).
+- Theme ("mundane"/"technological"/"magical") governs objective_objects, objective_spaces, and interesting_objects only.
+- placementFlavor MUST contain literal string "{actor}".
+- pairsWithSpaceId MUST match the paired space's id.
+- Each objective_object's examineDescription MUST contain the paired space's name or an unambiguous noun-phrase synonym.
+- horizonPhrase MUST NOT contain: north, south, east, west, ahead, behind, in front, to your left, to your right, on the horizon, beneath you, above you.
+
+Return ONLY valid JSON (no markdown, no preamble):
+{
+  "phases": [
+    {
+      "phaseNumber": <1|2|3>,
+      "packA": {
+        "setting": "<settingA>",
+        "objectivePairs": [{ "object": { "id": "...", "kind": "objective_object", "name": "...", "examineDescription": "...", "useOutcome": "...", "pairsWithSpaceId": "...", "placementFlavor": "...{actor}...", "proximityFlavor": "..." }, "space": { "id": "...", "kind": "objective_space", "name": "...", "examineDescription": "..." } }],
+        "interestingObjects": [{ "id": "...", "kind": "interesting_object", "name": "...", "examineDescription": "...", "useOutcome": "..." }],
+        "obstacles": [{ "id": "...", "kind": "obstacle", "name": "...", "examineDescription": "..." }],
+        "landmarks": { "north": { "shortName": "...", "horizonPhrase": "..." }, "south": { "shortName": "...", "horizonPhrase": "..." }, "east": { "shortName": "...", "horizonPhrase": "..." }, "west": { "shortName": "...", "horizonPhrase": "..." } }
+      },
+      "packB": {
+        "setting": "<settingB>",
+        "objectivePairs": [{ "object": { "id": "SAME_ID_AS_PACK_A", "kind": "objective_object", "name": "DIFFERENT_NAME", "examineDescription": "...", "useOutcome": "...", "pairsWithSpaceId": "SAME_AS_PACK_A", "placementFlavor": "...{actor}...", "proximityFlavor": "..." }, "space": { "id": "SAME_ID_AS_PACK_A", "kind": "objective_space", "name": "DIFFERENT_NAME", "examineDescription": "..." } }],
+        "interestingObjects": [{ "id": "SAME_ID_AS_PACK_A", "kind": "interesting_object", "name": "DIFFERENT_NAME", "examineDescription": "...", "useOutcome": "..." }],
+        "obstacles": [{ "id": "SAME_ID_AS_PACK_A", "kind": "obstacle", "name": "DIFFERENT_NAME", "examineDescription": "..." }],
+        "landmarks": { "north": { "shortName": "...", "horizonPhrase": "..." }, "south": { "shortName": "...", "horizonPhrase": "..." }, "east": { "shortName": "...", "horizonPhrase": "..." }, "west": { "shortName": "...", "horizonPhrase": "..." } }
+      }
+    }
+  ]
+}`;
+
+/** Input for dual-pack (A/B) generation. */
+export interface DualContentPackProviderInput {
+	phases: Array<{
+		phaseNumber: 1 | 2 | 3;
+		settingA: string;
+		settingB: string;
+		theme: string;
+		k: number;
+		n: number;
+		m: number;
+	}>;
+}
+
+/** One phase's A+B pack pair (no placements, no weather/timeOfDay). */
+type UnplacedPack = Omit<ContentPack, "aiStarts" | "weather" | "timeOfDay"> & {
+	aiStarts: Record<AiId, never>;
+};
+
+export interface DualContentPackProviderResult {
+	phases: Array<{
+		phaseNumber: 1 | 2 | 3;
+		packA: UnplacedPack;
+		packB: UnplacedPack;
+	}>;
+}
+
+export function buildDualContentPackUserMessage(
+	input: DualContentPackProviderInput,
+): string {
+	const lines = input.phases.map(
+		(p) =>
+			`Phase ${p.phaseNumber}: settingA="${p.settingA}", settingB="${p.settingB}", theme="${p.theme}", k=${p.k} objective pairs, n=${p.n} interesting objects, m=${p.m} obstacles`,
+	);
+	return `Generate dual A/B content packs for these phases:\n${lines.join("\n")}`;
 }
 
 // ── Prose-tell check ──────────────────────────────────────────────────────────
@@ -394,6 +487,199 @@ export function validateContentPacks(
 	return { packs };
 }
 
+/**
+ * Validate a dual-pack LLM response. Ensures each phase has packA and packB
+ * with identical entity IDs and matching structural relationships.
+ */
+export function validateDualContentPacks(
+	raw: unknown,
+	input: DualContentPackProviderInput,
+): DualContentPackProviderResult {
+	if (raw == null || typeof raw !== "object") {
+		throw new ContentPackError("Dual content pack response is not an object");
+	}
+	const obj = raw as Record<string, unknown>;
+	if (!Array.isArray(obj.phases)) {
+		throw new ContentPackError(
+			"Dual content pack response missing phases array",
+		);
+	}
+	if (obj.phases.length !== input.phases.length) {
+		throw new ContentPackError(
+			`Expected ${input.phases.length} phases, got ${obj.phases.length}`,
+		);
+	}
+
+	const resultPhases: DualContentPackProviderResult["phases"] = [];
+
+	for (const phaseRaw of obj.phases) {
+		if (phaseRaw == null || typeof phaseRaw !== "object") {
+			throw new ContentPackError("Phase entry is not an object");
+		}
+		const phaseObj = phaseRaw as Record<string, unknown>;
+		const phaseNumber = phaseObj.phaseNumber as 1 | 2 | 3;
+		if (phaseNumber !== 1 && phaseNumber !== 2 && phaseNumber !== 3) {
+			throw new ContentPackError(
+				`Invalid phaseNumber: ${String(phaseObj.phaseNumber)}`,
+			);
+		}
+		const inputPhase = input.phases.find((p) => p.phaseNumber === phaseNumber);
+		if (!inputPhase) {
+			throw new ContentPackError(`Unexpected phaseNumber: ${phaseNumber}`);
+		}
+
+		// Validate each pack independently, collecting IDs to verify parity
+		const allIdsA = new Set<string>();
+		const allIdsB = new Set<string>();
+		const packA = validateSinglePack(
+			phaseObj.packA,
+			inputPhase,
+			allIdsA,
+			"packA",
+		);
+		const packB = validateSinglePack(
+			phaseObj.packB,
+			inputPhase,
+			allIdsB,
+			"packB",
+		);
+
+		// Enforce entity ID parity between packA and packB
+		const idsA = [...allIdsA].sort();
+		const idsB = [...allIdsB].sort();
+		if (JSON.stringify(idsA) !== JSON.stringify(idsB)) {
+			const onlyA = idsA.filter((id) => !allIdsB.has(id));
+			const onlyB = idsB.filter((id) => !allIdsA.has(id));
+			throw new ContentPackError(
+				`Phase ${phaseNumber}: entity IDs mismatch between packA and packB. ` +
+					`Only in A: [${onlyA.join(", ")}]. Only in B: [${onlyB.join(", ")}].`,
+			);
+		}
+
+		// Enforce pairsWithSpaceId parity
+		const pairingsA = new Map(
+			packA.objectivePairs.map((p) => [p.object.id, p.object.pairsWithSpaceId]),
+		);
+		const pairingsB = new Map(
+			packB.objectivePairs.map((p) => [p.object.id, p.object.pairsWithSpaceId]),
+		);
+		for (const [objId, spaceId] of pairingsA) {
+			if (pairingsB.get(objId) !== spaceId) {
+				throw new ContentPackError(
+					`Phase ${phaseNumber}: pairsWithSpaceId mismatch for object "${objId}" between packA and packB`,
+				);
+			}
+		}
+
+		resultPhases.push({ phaseNumber, packA, packB });
+	}
+
+	return { phases: resultPhases };
+}
+
+/** Validate a single pack within a dual-pack response. */
+function validateSinglePack(
+	raw: unknown,
+	inputPhase: DualContentPackProviderInput["phases"][number],
+	allIds: Set<string>,
+	label: string,
+): UnplacedPack {
+	if (raw == null || typeof raw !== "object") {
+		throw new ContentPackError(`${label} is not an object`);
+	}
+	const pack = raw as Record<string, unknown>;
+	if (typeof pack.setting !== "string" || pack.setting.length === 0) {
+		throw new ContentPackError(`${label}: missing setting`);
+	}
+	if (
+		!Array.isArray(pack.objectivePairs) ||
+		pack.objectivePairs.length !== inputPhase.k
+	) {
+		throw new ContentPackError(
+			`${label}: expected ${inputPhase.k} objectivePairs, got ${Array.isArray(pack.objectivePairs) ? pack.objectivePairs.length : "non-array"}`,
+		);
+	}
+	if (
+		!Array.isArray(pack.interestingObjects) ||
+		pack.interestingObjects.length !== inputPhase.n
+	) {
+		throw new ContentPackError(
+			`${label}: expected ${inputPhase.n} interestingObjects, got ${Array.isArray(pack.interestingObjects) ? pack.interestingObjects.length : "non-array"}`,
+		);
+	}
+	if (
+		!Array.isArray(pack.obstacles) ||
+		pack.obstacles.length !== inputPhase.m
+	) {
+		throw new ContentPackError(
+			`${label}: expected ${inputPhase.m} obstacles, got ${Array.isArray(pack.obstacles) ? pack.obstacles.length : "non-array"}`,
+		);
+	}
+
+	const objectivePairs: ObjectivePair[] = [];
+	for (const pairRaw of pack.objectivePairs as unknown[]) {
+		if (pairRaw == null || typeof pairRaw !== "object") {
+			throw new ContentPackError(
+				`${label}: objectivePair entry is not an object`,
+			);
+		}
+		const pair = pairRaw as Record<string, unknown>;
+		const space = validateEntity(pair.space, "objective_space", allIds, false);
+		const object = validateEntity(
+			pair.object,
+			"objective_object",
+			allIds,
+			true,
+			{},
+		);
+		if (object.pairsWithSpaceId !== space.id) {
+			throw new ContentPackError(
+				`${label}: object ${object.id} pairsWithSpaceId "${object.pairsWithSpaceId}" does not match space id "${space.id}"`,
+			);
+		}
+		if (!examineMentionsPairedSpace(object.examineDescription, space.name)) {
+			throw new ContentPackError(
+				`${label}: object ${object.id} examineDescription does not mention paired space "${space.name}"`,
+			);
+		}
+		objectivePairs.push({ object, space });
+	}
+
+	const interestingObjects: WorldEntity[] = [];
+	for (const itemRaw of pack.interestingObjects as unknown[]) {
+		interestingObjects.push(
+			validateEntity(itemRaw, "interesting_object", allIds, true),
+		);
+	}
+
+	const obstacles: WorldEntity[] = [];
+	for (const obsRaw of pack.obstacles as unknown[]) {
+		obstacles.push(validateEntity(obsRaw, "obstacle", allIds, false));
+	}
+
+	const landmarksRaw = pack.landmarks;
+	if (landmarksRaw == null || typeof landmarksRaw !== "object") {
+		throw new ContentPackError(`${label}: missing or invalid landmarks`);
+	}
+	const lm = landmarksRaw as Record<string, unknown>;
+	const landmarks: ContentPack["landmarks"] = {
+		north: validateLandmark(lm.north, inputPhase.phaseNumber, "north"),
+		south: validateLandmark(lm.south, inputPhase.phaseNumber, "south"),
+		east: validateLandmark(lm.east, inputPhase.phaseNumber, "east"),
+		west: validateLandmark(lm.west, inputPhase.phaseNumber, "west"),
+	};
+
+	return {
+		phaseNumber: inputPhase.phaseNumber,
+		setting: pack.setting,
+		objectivePairs,
+		interestingObjects,
+		obstacles,
+		landmarks,
+		aiStarts: {} as Record<AiId, never>,
+	};
+}
+
 /** Validate a single landmark entry from the LLM response. */
 function validateLandmark(
 	raw: unknown,
@@ -468,20 +754,72 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 			return await attempt();
 		}
 	}
+
+	async generateDualContentPacks(
+		input: DualContentPackProviderInput,
+	): Promise<DualContentPackProviderResult> {
+		const messages = [
+			{ role: "system" as const, content: DUAL_CONTENT_PACK_SYSTEM_PROMPT },
+			{
+				role: "user" as const,
+				content: buildDualContentPackUserMessage(input),
+			},
+		];
+
+		const attempt = async (): Promise<DualContentPackProviderResult> => {
+			const { content, reasoning } = await chatCompletionJson({
+				messages,
+				disableReasoning: this.disableReasoning,
+			});
+
+			const raw = content !== null && content !== "" ? content : reasoning;
+			if (raw === null || raw === "") {
+				throw new ContentPackError(
+					"dual content-pack response has neither content nor reasoning",
+				);
+			}
+
+			let parsed: unknown;
+			try {
+				parsed = JSON.parse(raw);
+			} catch {
+				throw new ContentPackError(
+					`dual content-pack JSON parse failed: ${raw}`,
+				);
+			}
+
+			return validateDualContentPacks(parsed, input);
+		};
+
+		try {
+			return await attempt();
+		} catch (err) {
+			if (err instanceof CapHitError) throw err;
+			return await attempt();
+		}
+	}
 }
 
 // ── MockContentPackProvider ───────────────────────────────────────────────────
 
 export class MockContentPackProvider implements ContentPackProvider {
 	readonly calls: ContentPackProviderInput[] = [];
+	readonly dualCalls: DualContentPackProviderInput[] = [];
 	private readonly fn: (
 		input: ContentPackProviderInput,
 	) => ContentPackProviderResult;
+	private readonly dualFn: (
+		input: DualContentPackProviderInput,
+	) => DualContentPackProviderResult;
 
 	constructor(
 		fn: (input: ContentPackProviderInput) => ContentPackProviderResult,
+		dualFn?: (
+			input: DualContentPackProviderInput,
+		) => DualContentPackProviderResult,
 	) {
 		this.fn = fn;
+		this.dualFn = dualFn ?? (() => ({ phases: [] }));
 	}
 
 	async generateContentPacks(
@@ -489,5 +827,12 @@ export class MockContentPackProvider implements ContentPackProvider {
 	): Promise<ContentPackProviderResult> {
 		this.calls.push(input);
 		return this.fn(input);
+	}
+
+	async generateDualContentPacks(
+		input: DualContentPackProviderInput,
+	): Promise<DualContentPackProviderResult> {
+		this.dualCalls.push(input);
+		return this.dualFn(input);
 	}
 }

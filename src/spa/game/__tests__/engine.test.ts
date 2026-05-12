@@ -76,9 +76,11 @@ describe("createGame", () => {
 		expect(game.personas).toEqual(TEST_PERSONAS);
 	});
 
-	it("creates a game (contentPacks param ignored in flat model)", () => {
-		const game = createGame(TEST_PERSONAS, []);
-		expect(game.personas).toEqual(TEST_PERSONAS);
+	it("creates a game with contentPacksA and contentPacksB", () => {
+		const game = createGame(TEST_PERSONAS, [], []);
+		expect(game.contentPacksA).toEqual([]);
+		expect(game.contentPacksB).toEqual([]);
+		expect(game.activePackId).toBe("A");
 	});
 });
 
@@ -233,7 +235,7 @@ describe("startPhase", () => {
 				cyan: { position: { row: 1, col: 1 }, facing: "west" as const },
 			},
 		};
-		const game = createGame(TEST_PERSONAS, [pack]);
+		const game = createGame(TEST_PERSONAS, [pack], []);
 		const phase = getActivePhase(startPhase(game, TEST_PHASE_CONFIG));
 
 		expect(phase.personaSpatial.red?.position).toEqual({ row: 3, col: 3 });

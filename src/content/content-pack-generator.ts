@@ -20,6 +20,7 @@
 import type {
 	ContentPackProvider,
 	ContentPackProviderInput,
+	DualContentPackProviderInput,
 } from "../spa/game/content-pack-provider.js";
 import type {
 	AiId,
@@ -369,6 +370,148 @@ export async function generateContentPacks(
 
 	// Run placement engine
 	return placePhases(rng, unplacedPacks, aiIds);
+}
+
+/**
+ * Generate paired A/B ContentPacks for all three phases in one LLM call.
+ *
+ * Pack A and Pack B share identical entity IDs and grid placements; only
+ * names, descriptions, and flavor strings differ (re-flavored per setting).
+ *
+ * @param rng        Seeded random number generator.
+ * @param settings   The pool of setting nouns (must have >= 4 entries: 3 for Pack A + 1 more for Pack B pairs).
+ * @param configs    The three phase configs (in order).
+ * @param llm        ContentPackProvider for the LLM call.
+ * @param aiIdsOrPromise  AiId list or a Promise resolving to one.
+ * @returns          `{ packsA, packsB }` — placed ContentPack arrays, one per phase.
+ */
+export async function generateDualContentPacks(
+	rng: () => number,
+	settings: readonly string[],
+	configs: [PhaseConfig, PhaseConfig, PhaseConfig],
+	llm: ContentPackProvider,
+	aiIdsOrPromise: AiId[] | Promise<AiId[]>,
+): Promise<{ packsA: ContentPack[]; packsB: ContentPack[] }> {
+	if (settings.length < 6) {
+		throw new Error(
+			`generateDualContentPacks: setting pool must have at least 6 entries (has ${settings.length})`,
+		);
+	}
+
+	// Draw 6 distinct settings (3 for A, 3 for B) via partial Fisher-Yates
+	const settingPool = [...settings];
+	const drawnSettings: string[] = [];
+	for (let i = 0; i < 6; i++) {
+		const j = i + Math.floor(rng() * (settingPool.length - i));
+		const tmp = settingPool[i] as string;
+		settingPool[i] = settingPool[j] as string;
+		settingPool[j] = tmp;
+		drawnSettings.push(settingPool[i] as string);
+	}
+	const settingsA = drawnSettings.slice(0, 3) as [string, string, string];
+	const settingsB = drawnSettings.slice(3, 6) as [string, string, string];
+
+	// Draw weather, time-of-day, and theme independently per phase (one set each; B reuses same ambient)
+	const drawnWeatherA = Array.from(
+		{ length: 3 },
+		() => WEATHER_POOL[Math.floor(rng() * WEATHER_POOL.length)] as string,
+	);
+	const drawnWeatherB = Array.from(
+		{ length: 3 },
+		() => WEATHER_POOL[Math.floor(rng() * WEATHER_POOL.length)] as string,
+	);
+	const drawnTimeOfDayA = Array.from(
+		{ length: 3 },
+		() =>
+			TIME_OF_DAY_POOL[Math.floor(rng() * TIME_OF_DAY_POOL.length)] as string,
+	);
+	const drawnTimeOfDayB = Array.from(
+		{ length: 3 },
+		() =>
+			TIME_OF_DAY_POOL[Math.floor(rng() * TIME_OF_DAY_POOL.length)] as string,
+	);
+	const drawnThemes = Array.from(
+		{ length: 3 },
+		() => THEME_POOL[Math.floor(rng() * THEME_POOL.length)] as string,
+	);
+
+	// Roll k/n/m per phase (shared between A and B — same entity counts)
+	const phaseInputs: DualContentPackProviderInput["phases"] = configs.map(
+		(cfg, i) => ({
+			phaseNumber: cfg.phaseNumber,
+			settingA: settingsA[i] as string,
+			settingB: settingsB[i] as string,
+			theme: drawnThemes[i] as string,
+			k: rollInt(rng, cfg.kRange[0], cfg.kRange[1]),
+			n: rollInt(rng, cfg.nRange[0], cfg.nRange[1]),
+			m: rollInt(rng, cfg.mRange[0], cfg.mRange[1]),
+		}),
+	);
+
+	// Kick off dual LLM call and aiIds resolution in parallel
+	const llmCallPromise = llm.generateDualContentPacks({ phases: phaseInputs });
+	const [llmResult, aiIds] = await Promise.all([
+		llmCallPromise,
+		Promise.resolve(aiIdsOrPromise),
+	]);
+
+	// Build unplaced Pack A and Pack B from LLM result
+	const unplacedPacksA: ContentPack[] = llmResult.phases.map((ph, i) => ({
+		phaseNumber: ph.phaseNumber,
+		setting: ph.packA.setting,
+		weather: drawnWeatherA[i] as string,
+		timeOfDay: drawnTimeOfDayA[i] as string,
+		objectivePairs: ph.packA.objectivePairs,
+		interestingObjects: ph.packA.interestingObjects as WorldEntity[],
+		obstacles: ph.packA.obstacles as WorldEntity[],
+		landmarks: ph.packA.landmarks,
+		aiStarts: {},
+	}));
+
+	// Run placement engine on Pack A
+	const placedPacksA = placePhases(rng, unplacedPacksA, aiIds);
+
+	// Apply the same placements to Pack B by matching entity IDs
+	const packsB: ContentPack[] = llmResult.phases.map((ph, i) => {
+		const placedA = placedPacksA[i] as ContentPack;
+
+		// Build ID → holder map from placed Pack A
+		const holderById = new Map<
+			string,
+			AiId | import("../spa/game/types.js").GridPosition
+		>();
+		for (const pair of placedA.objectivePairs) {
+			holderById.set(pair.object.id, pair.object.holder);
+			holderById.set(pair.space.id, pair.space.holder);
+		}
+		for (const obj of placedA.interestingObjects)
+			holderById.set(obj.id, obj.holder);
+		for (const obs of placedA.obstacles) holderById.set(obs.id, obs.holder);
+
+		const applyHolder = (entity: WorldEntity): WorldEntity => ({
+			...entity,
+			holder: holderById.get(entity.id) ?? { row: 0, col: 0 },
+		});
+
+		return {
+			phaseNumber: ph.phaseNumber,
+			setting: ph.packB.setting,
+			weather: drawnWeatherB[i] as string,
+			timeOfDay: drawnTimeOfDayB[i] as string,
+			objectivePairs: ph.packB.objectivePairs.map((pair) => ({
+				object: applyHolder(pair.object),
+				space: applyHolder(pair.space),
+			})),
+			interestingObjects: (ph.packB.interestingObjects as WorldEntity[]).map(
+				applyHolder,
+			),
+			obstacles: (ph.packB.obstacles as WorldEntity[]).map(applyHolder),
+			landmarks: ph.packB.landmarks,
+			aiStarts: { ...placedA.aiStarts },
+		};
+	});
+
+	return { packsA: placedPacksA, packsB };
 }
 
 /**

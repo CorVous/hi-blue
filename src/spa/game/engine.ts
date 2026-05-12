@@ -88,6 +88,9 @@ export function startGame(
 		personaSpatial,
 		complicationSchedule,
 		activeComplications,
+		contentPacksA: [],
+		contentPacksB: [],
+		activePackId: "A",
 	};
 }
 
@@ -130,6 +133,35 @@ function drawSpatialPlacements(
 	}
 	return result;
 }
+
+/**
+ * Returns the active ContentPack for the game, honoring `activePackId`.
+ * Falls back to the game's embedded `contentPack` if no matching pack is found
+ * in the A/B arrays (e.g. in tests that construct GameState directly).
+ */
+export function getActivePack(game: GameState): ContentPack {
+	const packs =
+		game.activePackId === "B" ? game.contentPacksB : game.contentPacksA;
+	return packs[0] ?? game.contentPack;
+}
+
+/**
+ * Swap `activePackId` from "A" to "B". Updates the game's `contentPack`
+ * reference to the B-side pack so prompt builders and dispatchers see the new
+ * names/descriptions immediately. Entity positions in `world` are
+ * unchanged — world state is keyed by entity ID, which is stable across packs.
+ */
+export function swapActivePack(game: GameState): GameState {
+	const bPack = game.contentPacksB[0];
+	if (!bPack) return game; // No B pack; no-op
+	return {
+		...game,
+		activePackId: "B",
+		contentPack: bPack,
+		setting: bPack.setting,
+	};
+}
+
 
 export function advanceRound(game: GameState): GameState {
 	return { ...game, round: game.round + 1 };
@@ -235,13 +267,13 @@ export function appendWitnessedObstacleShift(
 	witnessId: AiId,
 	entry: Extract<ConversationEntry, { kind: "witnessed-obstacle-shift" }>,
 ): GameState {
-	return updateActivePhase(game, (phase) => ({
-		...phase,
+	return {
+		...game,
 		conversationLogs: {
-			...phase.conversationLogs,
-			[witnessId]: [...(phase.conversationLogs[witnessId] ?? []), entry],
+			...game.conversationLogs,
+			[witnessId]: [...(game.conversationLogs[witnessId] ?? []), entry],
 		},
-	}));
+	};
 }
 
 /**
@@ -356,6 +388,7 @@ export function resolveToolDisables(game: GameState): {
 export function createGame(
 	personas: Record<string, AiPersona>,
 	contentPacks: ContentPack[] = [],
+	contentPacksB: ContentPack[] = [],
 ): GameState {
 	// Create a minimal content pack from the first pack if available,
 	// or a blank one for backward-compat with tests that don't pass packs.
@@ -396,6 +429,9 @@ export function createGame(
 		personaSpatial: {},
 		complicationSchedule: { countdown: 0, settingShiftFired: false },
 		activeComplications: [],
+		contentPacksA: contentPacks,
+		contentPacksB: contentPacksB,
+		activePackId: "A",
 		// Stash contentPacks for startPhase lookup
 		_contentPacks: contentPacks,
 	} as GameState & { _contentPacks: ContentPack[] };
@@ -534,6 +570,9 @@ export function startPhase(
 			settingShiftFired: false,
 		},
 		activeComplications: [],
+		contentPacksA: contentPacks,
+		contentPacksB: [],
+		activePackId: "A",
 		// Carry forward for chaining / restore paths
 		_contentPacks: contentPacks,
 		// Carry goals for prompt-builder compat
