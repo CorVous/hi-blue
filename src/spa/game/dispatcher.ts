@@ -465,8 +465,7 @@ export function dispatchAiTurn(
 					(e) => e.id === toolCall.args.item,
 				);
 				const examineDesc =
-					item?.satisfactionState === "satisfied" &&
-					item.postExamineDescription
+					item?.satisfactionState === "satisfied" && item.postExamineDescription
 						? item.postExamineDescription
 						: (item?.examineDescription ?? "");
 				actorPrivateToolResult = {
