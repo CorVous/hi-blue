@@ -88,6 +88,10 @@ export interface MetaFile {
 	 * Optional for backward-compat with saves written before this field.
 	 */
 	personaOrder?: string[];
+	/** Present and true on archived sessions; absent on active sessions. */
+	readonly?: boolean;
+	/** ISO timestamp of when the session was archived. */
+	lastPlayedAt?: string;
 }
 
 /** Shape of the sealed payload inside `engine.dat`. */
@@ -122,7 +126,13 @@ export interface SerializedSessionFiles {
 
 /** Result of deserializing a session. */
 export type DeserializeResult =
-	| { kind: "ok"; state: GameState; createdAt: string; lastSavedAt: string }
+	| {
+			kind: "ok";
+			state: GameState;
+			createdAt: string;
+			lastSavedAt: string;
+			epoch: number;
+	  }
 	| { kind: "broken" }
 	| { kind: "version-mismatch" };
 
@@ -140,11 +150,12 @@ export function serializeSession(
 	state: GameState,
 	lastSavedAt: string,
 	createdAt: string,
+	epoch = 1,
 ): SerializedSessionFiles {
 	const meta: MetaFile = {
 		createdAt,
 		lastSavedAt,
-		epoch: 1,
+		epoch,
 		round: state.round,
 		personaOrder: Object.keys(state.personas),
 	};
@@ -178,7 +189,7 @@ export function serializeSession(
 		contentPacksB: structuredClone(state.contentPacksB),
 		activePackId: state.activePackId,
 		weather: state.weather,
-		objectives: structuredClone(state.objectives),
+		objectives: [],
 		complicationSchedule: state.complicationSchedule,
 		activeComplications: structuredClone(state.activeComplications),
 		isComplete: state.isComplete,
@@ -329,7 +340,6 @@ export function deserializeSession(
 			contentPacksA,
 			contentPacksB,
 			activePackId: sealed.activePackId ?? "A",
-			objectives: sealed.objectives ?? [],
 		};
 
 		return {
@@ -337,6 +347,7 @@ export function deserializeSession(
 			state,
 			createdAt: meta.createdAt,
 			lastSavedAt: meta.lastSavedAt,
+			epoch: typeof meta.epoch === "number" ? meta.epoch : 1,
 		};
 	} catch {
 		return { kind: "broken" };
