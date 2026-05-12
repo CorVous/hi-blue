@@ -21,15 +21,18 @@ import { paintBanner, paintTopInfo } from "../bbs-chrome.js";
 import {
 	dupSession,
 	getActiveSessionId,
+	getArchivedSessionInfo,
 	getSessionInfo,
+	listArchivedSessions,
 	listSessions,
 	loadActiveSession,
 	mintSession,
+	rmArchivedSession,
 	rmSession,
 	setActiveSessionId,
 } from "../persistence/session-storage.js";
 
-// ── Banner copy ───────────────────────────────────────────────────────────────
+// ── Banner copy ───────────────────────────────────────────────────────────────────
 
 export const SESSIONS_BANNER_MESSAGES: Record<string, string> = {
 	broken: "The active Session was unreadable and could not be loaded.",
@@ -37,7 +40,7 @@ export const SESSIONS_BANNER_MESSAGES: Record<string, string> = {
 		"The active Session is from an older version of hi-blue and could not be loaded.",
 };
 
-// ── Visibility helpers ────────────────────────────────────────────────────────
+// ── Visibility helpers ──────────────────────────────────────────────────────────
 
 function showOnly(doc: Document, visibleId: string): void {
 	const hide = [
@@ -55,7 +58,7 @@ function showOnly(doc: Document, visibleId: string): void {
 	if (target) target.hidden = false;
 }
 
-// ── Row rendering helpers ─────────────────────────────────────────────────────
+// ── Row rendering helpers ───────────────────────────────────────────────────────
 
 /**
  * Build a tree-glyph file listing line using `white-space: pre`.
@@ -79,7 +82,7 @@ function fileLabel(name: string, size: number): string {
 	return `${padded}${sizeStr}`;
 }
 
-// ── Main renderer ─────────────────────────────────────────────────────────────
+// ── Main renderer ────────────────────────────────────────────────────────────────────
 
 export function renderSessions(
 	root: HTMLElement,
@@ -143,7 +146,7 @@ export function renderSessions(
 		const info = getSessionInfo(id);
 		if (info.kind === "ok") {
 			rowData.push({ id, kind: "ok", lastSavedAt: info.lastSavedAt });
-		} else {
+		} else if (info.kind === "broken" || info.kind === "version-mismatch") {
 			rowData.push({ id, kind: info.kind });
 		}
 	}
@@ -161,6 +164,12 @@ export function renderSessions(
 	// Clear and rebuild list
 	listEl.textContent = "";
 
+	// "active sessions" heading
+	const activeHeading = doc.createElement("h2");
+	activeHeading.className = "sessions-section-heading";
+	activeHeading.textContent = "active sessions";
+	listEl.appendChild(activeHeading);
+
 	for (const row of rowData) {
 		const rowEl = buildSessionRow(doc, row.id, activeId, reRender);
 		listEl.appendChild(rowEl);
@@ -170,6 +179,24 @@ export function renderSessions(
 		const empty = doc.createElement("p");
 		empty.className = "sessions-empty";
 		empty.textContent = "no sessions found.";
+		listEl.appendChild(empty);
+	}
+
+	// "archived sessions" heading
+	const archivedHeading = doc.createElement("h2");
+	archivedHeading.className = "sessions-section-heading";
+	archivedHeading.textContent = "archived sessions";
+	listEl.appendChild(archivedHeading);
+
+	// Archived rows
+	const archivedIds = listArchivedSessions();
+	for (const id of archivedIds) {
+		listEl.appendChild(buildArchivedSessionRow(doc, id, reRender));
+	}
+	if (archivedIds.length === 0) {
+		const empty = doc.createElement("p");
+		empty.className = "sessions-empty";
+		empty.textContent = "no archived sessions.";
 		listEl.appendChild(empty);
 	}
 
@@ -187,7 +214,7 @@ export function renderSessions(
 	}
 }
 
-// ── Row builder ───────────────────────────────────────────────────────────────
+// ── Row builder ──────────────────────────────────────────────────────────────────────
 
 function buildSessionRow(
 	doc: Document,
@@ -220,7 +247,7 @@ function buildSessionRow(
 		metaLine.className = "session-meta";
 		const round = info.round;
 		const savedShort = info.lastSavedAt.replace("T", " ").slice(0, 19);
-		metaLine.textContent = `epoch ${info.epoch} · turn ${round} · saved ${savedShort}`;
+		metaLine.textContent = `epoch ${info.epoch} · turn ${round} · last played ${savedShort}`;
 		rowEl.appendChild(metaLine);
 
 		// Tree lines: 3 daemon .txt files + engine.dat (last)
@@ -348,6 +375,139 @@ function buildRmControls(
 		cancelBtn.textContent = "[ cancel ]";
 		cancelBtn.addEventListener("click", () => {
 			// Swap back to rm mode
+			confirmBtn.remove();
+			cancelBtn.remove();
+			opsEl.appendChild(rmBtn);
+		});
+
+		opsEl.appendChild(confirmBtn);
+		opsEl.appendChild(cancelBtn);
+	});
+	opsEl.appendChild(rmBtn);
+}
+
+// ── Archived row builder ─────────────────────────────────────────────────────
+
+function buildArchivedSessionRow(
+	doc: Document,
+	id: string,
+	reRender: () => void,
+): HTMLElement {
+	const info = getArchivedSessionInfo(id);
+
+	const rowEl = doc.createElement("div");
+	rowEl.className = "session-row";
+	rowEl.dataset.sessionId = id;
+
+	// Dirname line
+	const dirLine = doc.createElement("div");
+	dirLine.className = "session-dir";
+	dirLine.textContent = `${id}/`;
+	const readonlyTag = doc.createElement("span");
+	readonlyTag.className = "tag-readonly";
+	readonlyTag.textContent = " [ readonly ]";
+	dirLine.appendChild(readonlyTag);
+	rowEl.appendChild(dirLine);
+
+	if (info.kind === "archived") {
+		// Meta line using lastPlayedAt
+		const metaLine = doc.createElement("div");
+		metaLine.className = "session-meta";
+		const round = info.round;
+		const playedShort = info.lastPlayedAt.replace("T", " ").slice(0, 19);
+		metaLine.textContent = `epoch ${info.epoch} · turn ${round} · last played ${playedShort}`;
+		rowEl.appendChild(metaLine);
+
+		// Tree lines
+		const allFiles: Array<{ glyph: string; label: string }> = [];
+		for (let i = 0; i < info.daemonFiles.length; i++) {
+			const f = info.daemonFiles[i];
+			if (!f) continue;
+			allFiles.push({
+				glyph: "├─",
+				label: fileLabel(`*${f.name}`, f.size),
+			});
+		}
+		allFiles.push({
+			glyph: "└─",
+			label: fileLabel("engine.dat", info.engineSize),
+		});
+		rowEl.appendChild(buildTreeLines(doc, allFiles));
+
+		// Ops: rm only
+		const opsEl = doc.createElement("div");
+		opsEl.className = "ops";
+		rowEl.appendChild(opsEl);
+		buildArchivedRmControls(doc, id, opsEl, reRender);
+	} else if (info.kind === "broken") {
+		const tagEl = doc.createElement("span");
+		tagEl.className = "tag-corrupt";
+		tagEl.textContent = "[ corrupt ]";
+		rowEl.appendChild(tagEl);
+
+		const placeholderFiles = [
+			{ glyph: "├─", label: "<corrupted>" },
+			{ glyph: "├─", label: "<corrupted>" },
+			{ glyph: "└─", label: "<corrupted>" },
+		];
+		rowEl.appendChild(buildTreeLines(doc, placeholderFiles));
+
+		const opsEl = doc.createElement("div");
+		opsEl.className = "ops";
+		rowEl.appendChild(opsEl);
+		buildArchivedRmControls(doc, id, opsEl, reRender);
+	} else {
+		// version-mismatch
+		const tagEl = doc.createElement("span");
+		tagEl.className = "tag-version-mismatch";
+		tagEl.textContent = "[ version mismatch ]";
+		rowEl.appendChild(tagEl);
+
+		const treeFiles: Array<{ glyph: string; label: string }> = [];
+		for (let i = 0; i < info.daemonFiles.length; i++) {
+			const f = info.daemonFiles[i];
+			if (!f) continue;
+			treeFiles.push({
+				glyph: i < info.daemonFiles.length - 1 ? "├─" : "└─",
+				label: fileLabel(`*${f.name}`, f.size),
+			});
+		}
+		if (treeFiles.length > 0) {
+			rowEl.appendChild(buildTreeLines(doc, treeFiles));
+		}
+
+		const opsEl = doc.createElement("div");
+		opsEl.className = "ops";
+		rowEl.appendChild(opsEl);
+		buildArchivedRmControls(doc, id, opsEl, reRender);
+	}
+
+	return rowEl;
+}
+
+function buildArchivedRmControls(
+	doc: Document,
+	id: string,
+	opsEl: HTMLElement,
+	reRender: () => void,
+): void {
+	const rmBtn = doc.createElement("button");
+	rmBtn.type = "button";
+	rmBtn.textContent = "[ rm ]";
+	rmBtn.addEventListener("click", () => {
+		rmBtn.remove();
+		const confirmBtn = doc.createElement("button");
+		confirmBtn.type = "button";
+		confirmBtn.textContent = "[ confirm rm ]";
+		confirmBtn.addEventListener("click", () => {
+			rmArchivedSession(id);
+			reRender();
+		});
+
+		const cancelBtn = doc.createElement("button");
+		cancelBtn.type = "button";
+		cancelBtn.textContent = "[ cancel ]";
+		cancelBtn.addEventListener("click", () => {
 			confirmBtn.remove();
 			cancelBtn.remove();
 			opsEl.appendChild(rmBtn);
