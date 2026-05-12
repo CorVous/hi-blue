@@ -695,7 +695,21 @@ export function renderGame(
 		// the main screen with progressive loading rather than stuck on dial-up.
 		const pendingBootstrap = getPendingBootstrap();
 		if (pendingBootstrap) {
-			return renderBootstrapLoadingFlow(pendingBootstrap);
+			// Only use the bootstrap when the active session is genuinely empty
+			// (just minted, no data yet). If there is a stale session under the
+			// active pointer (version-mismatch / broken), running the bootstrap
+			// would overwrite the old save with new content under the same
+			// session id. Clear the bootstrap and let the redirect path below
+			// handle the stale session correctly.
+			const staleCheckId = getActiveSessionId();
+			const staleCheckResult =
+				staleCheckId !== null
+					? loadActiveSession()
+					: { kind: "none" as const };
+			if (staleCheckResult.kind === "none") {
+				return renderBootstrapLoadingFlow(pendingBootstrap);
+			}
+			clearPendingBootstrap();
 		}
 
 		// Feature-detect localStorage availability (SecurityError in privacy mode).

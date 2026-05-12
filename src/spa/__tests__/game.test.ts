@@ -2540,3 +2540,104 @@ describe("renderGame — round error surfacing (issue #231)", () => {
 		expect(pipAfter?.className).toBe("ok");
 	});
 });
+
+// ── Regression: old-save session ID clobber ───────────────────────────────────
+//
+// When a version-mismatch session is active AND a pending bootstrap exists
+// (because the start screen ran first), renderGame must NOT call
+// renderBootstrapLoadingFlow — that would save new content packs and daemons
+// under the stale session ID.
+//
+// Issue: fix-old-save-diagnosis
+describe("renderGame — version-mismatch session with pending bootstrap (regression)", () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+		vi.resetModules();
+		document.body.innerHTML = "";
+	});
+
+	it("redirects to #/start and does not overwrite the old session when a bootstrap is pending", async () => {
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		document.body.innerHTML = INDEX_BODY_HTML;
+
+		// Build a localStorage stub seeded with a version-mismatch session.
+		// The session files are present but the engine.dat carries a stale
+		// schemaVersion so loadActiveSession() returns { kind: "version-mismatch" }.
+		// Use stub._store to populate data — makeLocalStorageStub spreads a copy
+		// of initialData, so direct mutations to an outer reference don't take.
+		vi.resetModules();
+		const { obfuscate } = await import("../persistence/sealed-blob-codec.js");
+
+		const stub = makeLocalStorageStub();
+
+		const SESSION_ID = "0xDEAD";
+		const prefix = `hi-blue:sessions/${SESSION_ID}/`;
+		stub._store["hi-blue:active-session"] = SESSION_ID;
+
+		stub._store[`${prefix}meta.json`] = JSON.stringify({
+			createdAt: "2024-01-01T00:00:00.000Z",
+			lastSavedAt: "2024-01-01T00:00:00.000Z",
+			phase: 1,
+			round: 0,
+			personaOrder: ["red", "green", "cyan"],
+		});
+
+		const daemonPhases = {
+			"1": { phaseGoal: "", conversationLog: [] },
+			"2": { phaseGoal: "", conversationLog: [] },
+			"3": { phaseGoal: "", conversationLog: [] },
+		};
+		for (const aiId of ["red", "green", "cyan"] as const) {
+			stub._store[`${prefix}${aiId}.txt`] = JSON.stringify({
+				aiId,
+				persona: STATIC_PERSONAS[aiId],
+				phases: daemonPhases,
+			});
+		}
+
+		// Engine.dat with a stale schemaVersion (4 instead of current 5).
+		const staleEnginePayload = {
+			schemaVersion: 4,
+			world: {
+				1: { entities: [] },
+				2: { entities: [] },
+				3: { entities: [] },
+			},
+			contentPacks: [],
+			budgets: { 1: {}, 2: {}, 3: {} },
+			lockouts: {
+				1: { lockedOut: [], chatLockouts: [] },
+				2: { lockedOut: [], chatLockouts: [] },
+				3: { lockedOut: [], chatLockouts: [] },
+			},
+			currentPhase: 1,
+			isComplete: false,
+			personaSpatial: { 1: {}, 2: {}, 3: {} },
+		};
+		stub._store[`${prefix}engine.dat`] = obfuscate(
+			JSON.stringify(staleEnginePayload),
+		);
+
+		vi.stubGlobal("localStorage", stub);
+
+		// Simulate the start screen having run: kick off a pending bootstrap.
+		const { startBootstrap } = await import("../game/pending-bootstrap.js");
+		startBootstrap();
+
+		// Spy on saveActiveSession — it must NOT be called during this render.
+		const sessionStorage = await import("../persistence/session-storage.js");
+		const saveSpy = vi.spyOn(sessionStorage, "saveActiveSession");
+
+		const { renderGame } = await import("../routes/game.js");
+		await renderGame(document.querySelector<HTMLElement>("main")!);
+
+		// The stale session must be cleared and the route redirected away.
+		expect(location.hash).toBe("#/start?reason=version-mismatch");
+		expect(stub.getItem("hi-blue:active-session")).toBeNull();
+
+		// The bootstrap must NOT have saved new content packs/daemons under the
+		// old session id.
+		expect(saveSpy).not.toHaveBeenCalled();
+	});
+});

@@ -90,9 +90,20 @@ function withDispatcher(
 				location.hash = "#/game";
 				return;
 			}
+			// Stale sessions belong on the picker — never render the start screen
+			// (which kicks off a bootstrap) while a broken or version-mismatch
+			// session owns the active pointer.  Rendering start would let the user
+			// click CONNECT and then have the bootstrap save new content under the
+			// old session id.
+			if (
+				verdict.reason === "broken" ||
+				verdict.reason === "version-mismatch"
+			) {
+				location.hash = `#/sessions?reason=${verdict.reason}`;
+				return;
+			}
 			// Otherwise, fall through to renderer — pass reason (legacy-save-discarded)
-			// as query param if not already present. broken/version-mismatch now route
-			// to #/sessions instead of #/start.
+			// as query param if not already present.
 			let effectiveParams = params;
 			if (!effectiveParams.get("reason")) {
 				if (legacySaveDiscarded) {
@@ -109,8 +120,14 @@ function withDispatcher(
 		// Render when the session is populated, OR when a fresh bootstrap is
 		// in flight (the player just submitted CONNECT but content packs
 		// haven't landed yet — the game route owns the progressive-loading UI).
+		// Never allow a pending bootstrap to bypass a stale session redirect:
+		// that would let the bootstrap overwrite the old save under the same id.
 		if (verdict.reason !== "populated") {
-			if (getPendingBootstrap() !== undefined) {
+			if (
+				getPendingBootstrap() !== undefined &&
+				verdict.reason !== "version-mismatch" &&
+				verdict.reason !== "broken"
+			) {
 				return renderer(root, params);
 			}
 			if (
