@@ -253,6 +253,8 @@ function buildDualContentPackResponseBody(body: ParsedBody): string {
 						kind: "objective_space",
 						name: spaceName,
 						examineDescription: `Stub space ${spaceId} ${ab}.`,
+						convergenceTier1Flavor: `A presence lingers at the ${spaceName}.`,
+						convergenceTier2Flavor: `Two presences converge at the ${spaceName}.`,
 					},
 				};
 			});
@@ -321,6 +323,8 @@ function buildContentPackResponseBody(body: ParsedBody): string {
 					kind: "objective_space",
 					name: `Stub space ${tag}-${i}`,
 					examineDescription: `Stub objective space ${spaceId}.`,
+					convergenceTier1Flavor: `A presence lingers at stub space ${tag}-${i}.`,
+					convergenceTier2Flavor: `Two presences converge at stub space ${tag}-${i}.`,
 				},
 			};
 		});
