@@ -80,20 +80,20 @@ describe("drawObjectives — carry objectives", () => {
 		const pack = makePack(["gem"], []);
 		const [obj] = drawObjectives(pack, rngZero, 1);
 		expect(obj).toBeDefined();
-		expect(obj!.kind).toBe("carry");
-		if (obj!.kind === "carry") {
-			expect(obj!.objectId).toBe("gem_obj");
-			expect(obj!.spaceId).toBe("gem_space");
-			expect(obj!.satisfactionState).toBe("pending");
-			expect(obj!.id).toBe("obj-0");
+		expect(obj?.kind).toBe("carry");
+		if (obj?.kind === "carry") {
+			expect(obj.objectId).toBe("gem_obj");
+			expect(obj.spaceId).toBe("gem_space");
+			expect(obj.satisfactionState).toBe("pending");
+			expect(obj.id).toBe("obj-0");
 		}
 	});
 
 	it("description includes object and space names", () => {
 		const pack = makePack(["gem"], []);
 		const [obj] = drawObjectives(pack, rngZero, 1);
-		expect(obj!.description).toContain("gem object");
-		expect(obj!.description).toContain("gem space");
+		expect(obj?.description).toContain("gem object");
+		expect(obj?.description).toContain("gem space");
 	});
 
 	it("can draw count > 1 carry objectives from a single-pair pool (with replacement)", () => {
@@ -113,18 +113,18 @@ describe("drawObjectives — use_item objectives", () => {
 		const pack = makePack([], ["key"]);
 		const [obj] = drawObjectives(pack, rngZero, 1);
 		expect(obj).toBeDefined();
-		expect(obj!.kind).toBe("use_item");
-		if (obj!.kind === "use_item") {
-			expect(obj!.itemId).toBe("key");
-			expect(obj!.satisfactionState).toBe("pending");
-			expect(obj!.id).toBe("obj-0");
+		expect(obj?.kind).toBe("use_item");
+		if (obj?.kind === "use_item") {
+			expect(obj.itemId).toBe("key");
+			expect(obj.satisfactionState).toBe("pending");
+			expect(obj.id).toBe("obj-0");
 		}
 	});
 
 	it("description includes item name", () => {
 		const pack = makePack([], ["key"]);
 		const [obj] = drawObjectives(pack, rngZero, 1);
-		expect(obj!.description).toContain("key");
+		expect(obj?.description).toContain("key");
 	});
 });
 
@@ -135,22 +135,22 @@ describe("drawObjectives — mixed pool (carry + use_item)", () => {
 		const pack = makePack(["gem"], ["key"]);
 		// pool: [carry(gem), use_item(key)] — rng=0 → index 0 → carry
 		const [obj] = drawObjectives(pack, rngZero, 1);
-		expect(obj!.kind).toBe("carry");
+		expect(obj?.kind).toBe("carry");
 	});
 
 	it("rng=last draws use_item (index 1) from a [carry, use_item] pool", () => {
 		const pack = makePack(["gem"], ["key"]);
 		// pool: [carry(gem), use_item(key)] — rng=0.999 → Math.floor(0.999*2)=1 → use_item
 		const [obj] = drawObjectives(pack, rngLast, 1);
-		expect(obj!.kind).toBe("use_item");
+		expect(obj?.kind).toBe("use_item");
 	});
 
 	it("draws count=2 with sequential ids obj-0 and obj-1", () => {
 		const pack = makePack(["gem"], ["key"]);
 		const drawn = drawObjectives(pack, rngZero, 2);
 		expect(drawn).toHaveLength(2);
-		expect(drawn[0]!.id).toBe("obj-0");
-		expect(drawn[1]!.id).toBe("obj-1");
+		expect(drawn[0]?.id).toBe("obj-0");
+		expect(drawn[1]?.id).toBe("obj-1");
 	});
 
 	it("all drawn objectives start with satisfactionState 'pending'", () => {
@@ -183,10 +183,10 @@ describe("drawObjectives — multiple pairs in pool", () => {
 		const pack = makePack(["gem", "orb"], []);
 		// pool: [carry(gem), carry(orb)] — rng=0.999 → Math.floor(0.999*2)=1 → orb
 		const [obj] = drawObjectives(pack, rngLast, 1);
-		expect(obj!.kind).toBe("carry");
-		if (obj!.kind === "carry") {
-			expect(obj!.objectId).toBe("orb_obj");
-			expect(obj!.spaceId).toBe("orb_space");
+		expect(obj?.kind).toBe("carry");
+		if (obj?.kind === "carry") {
+			expect(obj.objectId).toBe("orb_obj");
+			expect(obj.spaceId).toBe("orb_space");
 		}
 	});
 });
