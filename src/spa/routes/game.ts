@@ -7,10 +7,14 @@ import {
 	renderTopInfoLeft,
 	topInfoStatus,
 } from "../bbs-chrome.js";
-import { buildSameDaemonsSession, buildSessionFromAssets } from "../game/bootstrap.js";
+import {
+	buildSameDaemonsSession,
+	buildSessionFromAssets,
+} from "../game/bootstrap.js";
 import { BrowserLLMProvider } from "../game/browser-llm-provider.js";
 import { isPlayerChatLockedOut } from "../game/complication-engine.js";
 import { deriveComposerState } from "../game/composer-reducer.js";
+import { appendBroadcast } from "../game/engine.js";
 import { GameSession } from "../game/game-session.js";
 import {
 	applyAddresseeChange,
@@ -28,7 +32,6 @@ import { getSpikeRng } from "../game/spike-seed.js";
 import type { AiId, AiPersona } from "../game/types";
 import { AI_TYPING_SPEED, TOKEN_PACE_MS } from "../game/typing-rhythm.js";
 import { CapHitError } from "../llm-client.js";
-import { appendBroadcast } from "../game/engine.js";
 import {
 	archiveSession,
 	clearActiveSession,
@@ -1386,10 +1389,9 @@ export function renderGame(
 							newDaemonsBtn.addEventListener("click", () => {
 								disableChoiceButtons();
 								if (choiceStatus) choiceStatus.textContent = "archiving…";
-								(
-									endedSessionId
-										? archiveSession(endedSessionId)
-										: Promise.resolve()
+								(endedSessionId
+									? archiveSession(endedSessionId)
+									: Promise.resolve()
 								)
 									.then(() => {
 										clearActiveSession();
@@ -1414,10 +1416,9 @@ export function renderGame(
 									return;
 								}
 								if (choiceStatus) choiceStatus.textContent = "archiving…";
-								(
-									endedSessionId
-										? archiveSession(endedSessionId)
-										: Promise.resolve()
+								(endedSessionId
+									? archiveSession(endedSessionId)
+									: Promise.resolve()
 								)
 									.then(() => {
 										if (choiceStatus)
@@ -1431,7 +1432,7 @@ export function renderGame(
 										session = null;
 										cachedSessionId = null;
 										gameEnded = false;
-										location.hash = "#/game?" + Date.now();
+										location.hash = `#/game?${Date.now()}`;
 									})
 									.catch(() => {
 										clearActiveSession();
@@ -1462,7 +1463,7 @@ export function renderGame(
 										session = null;
 										cachedSessionId = null;
 										gameEnded = false;
-										location.hash = "#/game?" + Date.now();
+										location.hash = `#/game?${Date.now()}`;
 									})
 									.catch(() => {
 										session = null;
