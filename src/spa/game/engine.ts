@@ -4,6 +4,7 @@ import {
 	GRID_COLS,
 	GRID_ROWS,
 } from "./direction.js";
+import { drawObjectives } from "./objective-pool.js";
 import type {
 	ActiveComplication,
 	AiBudget,
@@ -31,15 +32,22 @@ export const FAREWELL_LINE = (name: string): string =>
  *
  * Replaces the old createGame + startPhase pair. Budget is $0.50 per AI
  * (no per-phase reset). The content pack drives all spatial placement and
- * world entities.
+ * world entities. Objectives are drawn from the pack's candidate pool
+ * (carry / use_space / use_item / convergence) via drawObjectives;
+ * `opts.objectiveCount` controls how many are drawn (default 3).
  */
 export function startGame(
 	personas: Record<AiId, AiPersona>,
 	contentPack: ContentPack,
-	opts: { budgetPerAi?: number; rng?: () => number } = {},
+	opts: {
+		budgetPerAi?: number;
+		rng?: () => number;
+		objectiveCount?: number;
+	} = {},
 ): GameState {
 	const rng = opts.rng ?? Math.random;
 	const budgetPerAi = opts.budgetPerAi ?? 0.5;
+	const objectiveCount = opts.objectiveCount ?? 3;
 	const aiIds = Object.keys(personas);
 
 	const budgets: Record<AiId, AiBudget> = {};
@@ -65,18 +73,11 @@ export function startGame(
 			? { ...contentPack.aiStarts }
 			: drawSpatialPlacements(rng, aiIds);
 
-	// Build one CarryObjective per objective pair. This is the default objective
-	// set for a new game: every pair must be carried to win. Higher-level callers
-	// (e.g. content-pack generation, future issue logic) may replace this with a
-	// drawn subset using drawObjectives from objective-pool.ts.
-	const objectives = contentPack.objectivePairs.map((pair, i) => ({
-		id: `obj-${i}`,
-		kind: "carry" as const,
-		description: `Bring the ${pair.object.name} to the ${pair.space.name}`,
-		satisfactionState: "pending" as const,
-		objectId: pair.object.id,
-		spaceId: pair.space.id,
-	}));
+	// Draw a mixed objective set (carry / use_space / use_item / convergence)
+	// from the pack using the seeded rng. Count is opts.objectiveCount (default 3).
+	// Packs with no objectivePairs and no interestingObjects produce an empty pool,
+	// in which case drawObjectives returns [] — yielding a vacuous win.
+	const objectives = drawObjectives(contentPack, rng, objectiveCount);
 
 	// Initial countdown: random in [1, 5]
 	const initialCountdown = 1 + Math.floor(rng() * 5);
