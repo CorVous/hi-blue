@@ -527,7 +527,12 @@ describe("serializeSession / deserializeSession", () => {
 		const complicationSchedule = { countdown: 7, settingShiftFired: true };
 		const activeComplications: import("../../game/types.js").ActiveComplication[] =
 			[
-				{ kind: "sysadmin_directive", target: "red", directive: "be helpful", resolveAtRound: 10 },
+				{
+					kind: "sysadmin_directive",
+					target: "red",
+					directive: "be helpful",
+					resolveAtRound: 10,
+				},
 				{
 					kind: "tool_disable",
 					target: "green",
