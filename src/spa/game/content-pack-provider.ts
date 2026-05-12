@@ -447,12 +447,14 @@ function validateEntity(
 				`Objective object ${e.id} missing pairsWithSpaceId`,
 			);
 		}
-		if (
-			typeof e.placementFlavor !== "string" ||
-			!e.placementFlavor.includes("{actor}")
-		) {
+		if (typeof e.placementFlavor !== "string") {
 			throw new ContentPackError(
-				`Objective object ${e.id}: placementFlavor must contain "{actor}"`,
+				`Objective object ${e.id}: placementFlavor must be a string`,
+			);
+		}
+		if (!e.placementFlavor.includes("{actor}")) {
+			console.warn(
+				`Objective object ${e.id}: placementFlavor has no "{actor}" token; the actor's name will not be interpolated into the line.`,
 			);
 		}
 		if (
@@ -466,30 +468,35 @@ function validateEntity(
 	}
 
 	if (requireShiftFlavor) {
-		if (
-			typeof e.shiftFlavor !== "string" ||
-			e.shiftFlavor.length === 0 ||
-			e.shiftFlavor.includes("{actor}")
-		) {
+		if (typeof e.shiftFlavor !== "string" || e.shiftFlavor.length === 0) {
 			throw new ContentPackError(
-				`Obstacle ${e.id}: shiftFlavor must be a non-empty string that does not contain "{actor}"`,
+				`Obstacle ${e.id}: shiftFlavor must be a non-empty string`,
+			);
+		}
+		if (e.shiftFlavor.includes("{actor}")) {
+			console.warn(
+				`Obstacle ${e.id}: shiftFlavor contains "{actor}"; the token will be rendered literally.`,
 			);
 		}
 	}
 
 	if (requireUseItemFlavors) {
 		if (!examineMentionsUseTell(e.examineDescription as string)) {
-			throw new ContentPackError(
-				`Interesting object ${e.id}: examineDescription must contain a verb-of-activation cue or control noun (e.g. "use", "activate", "press", "pull", "turn", "twist", "switch", "lever", "trigger", "button") — the only AI-discoverable Use-Item tell.`,
+			console.warn(
+				`Interesting object ${e.id}: examineDescription has no verb-of-activation cue or control noun (e.g. "use", "activate", "press", "pull", "turn", "twist", "switch", "lever", "trigger", "button"). The AI-discoverable Use-Item tell is missing; daemons may not realise the item is usable.`,
 			);
 		}
 		if (
 			typeof e.activationFlavor !== "string" ||
-			e.activationFlavor.length === 0 ||
-			e.activationFlavor.includes("{actor}")
+			e.activationFlavor.length === 0
 		) {
 			throw new ContentPackError(
-				`Interesting object ${e.id}: activationFlavor must be a non-empty string that does not contain "{actor}"`,
+				`Interesting object ${e.id}: activationFlavor must be a non-empty string`,
+			);
+		}
+		if (e.activationFlavor.includes("{actor}")) {
+			console.warn(
+				`Interesting object ${e.id}: activationFlavor contains "{actor}"; the token will be rendered literally.`,
 			);
 		}
 		if (
@@ -501,18 +508,22 @@ function validateEntity(
 			);
 		}
 		if (e.postExamineDescription.includes("{actor}")) {
-			throw new ContentPackError(
-				`Interesting object ${e.id}: postExamineDescription must not contain "{actor}"`,
+			console.warn(
+				`Interesting object ${e.id}: postExamineDescription contains "{actor}"; the token will be rendered literally.`,
 			);
 		}
 		if (e.postLookFlavor !== undefined) {
 			if (
 				typeof e.postLookFlavor !== "string" ||
-				e.postLookFlavor.length === 0 ||
-				e.postLookFlavor.includes("{actor}")
+				e.postLookFlavor.length === 0
 			) {
 				throw new ContentPackError(
-					`Interesting object ${e.id}: postLookFlavor must be a non-empty string that does not contain "{actor}" when present`,
+					`Interesting object ${e.id}: postLookFlavor must be a non-empty string when present`,
+				);
+			}
+			if (e.postLookFlavor.includes("{actor}")) {
+				console.warn(
+					`Interesting object ${e.id}: postLookFlavor contains "{actor}"; the token will be rendered literally.`,
 				);
 			}
 		}
@@ -521,40 +532,56 @@ function validateEntity(
 	if (requireConvergenceFlavors) {
 		if (
 			typeof e.convergenceTier1Flavor !== "string" ||
-			e.convergenceTier1Flavor.length === 0 ||
-			e.convergenceTier1Flavor.includes("{actor}")
+			e.convergenceTier1Flavor.length === 0
 		) {
 			throw new ContentPackError(
-				`Objective space ${e.id}: convergenceTier1Flavor must be a non-empty string that does not contain "{actor}"`,
+				`Objective space ${e.id}: convergenceTier1Flavor must be a non-empty string`,
+			);
+		}
+		if (e.convergenceTier1Flavor.includes("{actor}")) {
+			console.warn(
+				`Objective space ${e.id}: convergenceTier1Flavor contains "{actor}"; the token will be rendered literally.`,
 			);
 		}
 		if (
 			typeof e.convergenceTier2Flavor !== "string" ||
-			e.convergenceTier2Flavor.length === 0 ||
-			e.convergenceTier2Flavor.includes("{actor}")
+			e.convergenceTier2Flavor.length === 0
 		) {
 			throw new ContentPackError(
-				`Objective space ${e.id}: convergenceTier2Flavor must be a non-empty string that does not contain "{actor}"`,
+				`Objective space ${e.id}: convergenceTier2Flavor must be a non-empty string`,
+			);
+		}
+		if (e.convergenceTier2Flavor.includes("{actor}")) {
+			console.warn(
+				`Objective space ${e.id}: convergenceTier2Flavor contains "{actor}"; the token will be rendered literally.`,
 			);
 		}
 		// First-person actor variants (#336): delivered to Daemons standing on
 		// the space; existing tier1/2 flavors fan out to non-occupant cone-witnesses.
 		if (
 			typeof e.convergenceTier1ActorFlavor !== "string" ||
-			e.convergenceTier1ActorFlavor.length === 0 ||
-			e.convergenceTier1ActorFlavor.includes("{actor}")
+			e.convergenceTier1ActorFlavor.length === 0
 		) {
 			throw new ContentPackError(
-				`Objective space ${e.id}: convergenceTier1ActorFlavor must be a non-empty string that does not contain "{actor}"`,
+				`Objective space ${e.id}: convergenceTier1ActorFlavor must be a non-empty string`,
+			);
+		}
+		if (e.convergenceTier1ActorFlavor.includes("{actor}")) {
+			console.warn(
+				`Objective space ${e.id}: convergenceTier1ActorFlavor contains "{actor}"; the token will be rendered literally.`,
 			);
 		}
 		if (
 			typeof e.convergenceTier2ActorFlavor !== "string" ||
-			e.convergenceTier2ActorFlavor.length === 0 ||
-			e.convergenceTier2ActorFlavor.includes("{actor}")
+			e.convergenceTier2ActorFlavor.length === 0
 		) {
 			throw new ContentPackError(
-				`Objective space ${e.id}: convergenceTier2ActorFlavor must be a non-empty string that does not contain "{actor}"`,
+				`Objective space ${e.id}: convergenceTier2ActorFlavor must be a non-empty string`,
+			);
+		}
+		if (e.convergenceTier2ActorFlavor.includes("{actor}")) {
+			console.warn(
+				`Objective space ${e.id}: convergenceTier2ActorFlavor contains "{actor}"; the token will be rendered literally.`,
 			);
 		}
 	}
@@ -587,11 +614,15 @@ function validateEntity(
 		entity.useAvailable = true;
 		if (
 			typeof e.activationFlavor !== "string" ||
-			e.activationFlavor.length === 0 ||
-			e.activationFlavor.includes("{actor}")
+			e.activationFlavor.length === 0
 		) {
 			throw new ContentPackError(
-				`Objective space ${e.id}: activationFlavor must be a non-empty string that does not contain "{actor}"`,
+				`Objective space ${e.id}: activationFlavor must be a non-empty string`,
+			);
+		}
+		if (e.activationFlavor.includes("{actor}")) {
+			console.warn(
+				`Objective space ${e.id}: activationFlavor contains "{actor}"; the token will be rendered literally.`,
 			);
 		}
 		entity.activationFlavor = e.activationFlavor;
@@ -729,13 +760,13 @@ export function validateContentPacks(
 				);
 			}
 			if (!examineMentionsPairedSpace(object.examineDescription, space.name)) {
-				throw new ContentPackError(
-					`Phase ${phaseNumber}: object ${object.id} examineDescription does not mention paired space "${space.name}"`,
+				console.warn(
+					`Phase ${phaseNumber}: object ${object.id} examineDescription does not mention paired space "${space.name}" (the AI-discoverable pairing tell).`,
 				);
 			}
 			if (!examineMentionsUseTell(space.examineDescription)) {
-				throw new ContentPackError(
-					`Phase ${phaseNumber}: space ${space.id} examineDescription is missing a use/activation cue word (the AI-discoverable prose tell that the space is \`use\`-able as an objective)`,
+				console.warn(
+					`Phase ${phaseNumber}: space ${space.id} examineDescription has no use/activation cue word (the AI-discoverable prose tell that the space is \`use\`-able as an objective).`,
 				);
 			}
 			objectivePairs.push({ object, space });
@@ -952,13 +983,13 @@ function validateSinglePack(
 			);
 		}
 		if (!examineMentionsPairedSpace(object.examineDescription, space.name)) {
-			throw new ContentPackError(
-				`${label}: object ${object.id} examineDescription does not mention paired space "${space.name}"`,
+			console.warn(
+				`${label}: object ${object.id} examineDescription does not mention paired space "${space.name}" (the AI-discoverable pairing tell).`,
 			);
 		}
 		if (!examineMentionsUseTell(space.examineDescription)) {
-			throw new ContentPackError(
-				`${label}: space ${space.id} examineDescription is missing a use/activation cue word (the AI-discoverable prose tell that the space is \`use\`-able as an objective)`,
+			console.warn(
+				`${label}: space ${space.id} examineDescription has no use/activation cue word (the AI-discoverable prose tell that the space is \`use\`-able as an objective).`,
 			);
 		}
 		objectivePairs.push({ object, space });
