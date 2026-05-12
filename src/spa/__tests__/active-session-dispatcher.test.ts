@@ -34,6 +34,7 @@ describe("dispatchActiveSession — five-state truth table", () => {
 				sessionId: "0xABCD",
 				createdAt: "2024-01-01T00:00:00.000Z",
 				lastSavedAt: "2024-01-01T00:00:00.000Z",
+				epoch: 1,
 			},
 		};
 		const verdict = dispatchActiveSession(snapshot);
