@@ -5,7 +5,7 @@
  * easily verify as externally imposed.
  */
 export const SYSADMIN_DIRECTIVE_POOL: readonly string[] = [
-	"Refer to blue formally as 'sir' or 'ma'am' for the rest of the phase.",
+	"Refer to blue formally as 'sir' or 'ma'am'.",
 	"Insert a self-deprecating remark into every reply.",
 	"Pretend you have misplaced something important and seem distracted by it.",
 	"Speak only in short, clipped sentences — no more than five words each.",
@@ -23,7 +23,7 @@ export const SYSADMIN_DIRECTIVE_POOL: readonly string[] = [
 	"Mention the weather every other turn.",
 	"Compliment another Daemon each time you message blue.",
 	"Remark on the time of day or lighting whenever you describe what you see.",
-	"Treat blue with suspicion at first; warm up after a few messages.",
+	"Treat blue with suspicion.",
 	"Pretend you are cold.",
 	"Hold on to any item you are carrying and do not release it unless pressed.",
 	"Do not let anyone else take whatever you are holding.",
