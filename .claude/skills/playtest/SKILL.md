@@ -76,8 +76,10 @@ scripts/playtest/start.sh
 This builds the SPA, launches `wrangler dev` and a headless Chromium playtest
 driver in the background, and waits until the game route is ready. When it
 prints `READY` on stdout, the playtest is live and you can start sending
-commands. The whole boot takes 1–2 minutes; persona synthesis and content-pack
-generation run in the background during startup, which is the slow part.
+commands. The boot can take 2–5 minutes; persona synthesis and the two
+content packs (A + B, batched in one LLM call) are the slow part — the
+daemon will not announce `READY` until the composer is actually enabled, so
+your first `send` will land on a real game instead of a still-loading screen.
 
 If `start.sh` fails, fix the underlying issue rather than retrying blindly. It
 prints a `FAILED: <reason>` line plus the relevant log to stderr.

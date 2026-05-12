@@ -87,8 +87,11 @@ await page.goto(startUrl, {
 	waitUntil: "domcontentloaded",
 });
 
-// Wait for the CONNECT button to be enabled (persona + content-pack generation
-// completes asynchronously; CONNECT lights up when the dial-up animation ends).
+// Wait for the CONNECT button to be enabled. In the single-game restructure
+// CONNECT lights up as soon as the dial-up animation ends; persona +
+// content-pack generation continues in the background and the game route
+// renders a progressive-loading UI (loading-daemons → generating-room →
+// stable).
 await page.locator("#begin").waitFor({ state: "visible", timeout: 60_000 });
 log("waiting for #begin to be enabled (this can take up to 60s)");
 const start = Date.now();
@@ -102,6 +105,29 @@ await page.locator("#password").fill("password");
 await page.locator("#begin").click();
 await page.waitForURL(/#\/game/, { timeout: 30_000 });
 await page.locator("#composer").waitFor({ state: "visible", timeout: 30_000 });
+
+// The composer is visible during the "loading-daemons" and "generating-room"
+// states but the prompt input is `disabled` and shows a "loading…"
+// placeholder. Wait for the route to reach the "stable" state (composer
+// enabled, no `data-load-state` on #stage) before announcing READY —
+// otherwise the first `send` would type into a disabled input and the
+// playtest would hang silently.
+log("waiting for game route to reach stable state (content packs loading)...");
+const stableDeadline = Date.now() + 300_000; // up to 5 min for slow packs
+while (Date.now() < stableDeadline) {
+	const promptDisabled = await page.locator("#prompt").getAttribute("disabled");
+	const loadState = await page
+		.locator("#stage")
+		.getAttribute("data-load-state");
+	if (promptDisabled === null && loadState === null) break;
+	await page.waitForTimeout(500);
+}
+const finalPromptDisabled = await page
+	.locator("#prompt")
+	.getAttribute("disabled");
+if (finalPromptDisabled !== null) {
+	log("WARN: prompt still disabled after 5 min — proceeding anyway");
+}
 log("game route loaded — daemon ready");
 
 // ---- Helpers that read ONLY visible text from the GUI -----------------------
