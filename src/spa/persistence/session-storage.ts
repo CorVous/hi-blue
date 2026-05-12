@@ -16,6 +16,7 @@
 import type { AiId, GameState } from "../game/types.js";
 import {
 	type DeserializeResult,
+	type MetaFile,
 	deserializeSession,
 	serializeSession,
 } from "./session-codec.js";
@@ -28,6 +29,7 @@ export type SessionInfo =
 			lastSavedAt: string;
 			phase: 1 | 2 | 3;
 			round: number;
+			epoch: number;
 			daemonFiles: Array<{ name: string; size: number }>;
 			engineSize: number;
 	  }
@@ -37,12 +39,23 @@ export type SessionInfo =
 			lastSavedAt?: string;
 			phase?: 1 | 2 | 3;
 			daemonFiles: Array<{ name: string; size: number }>;
+	  }
+	| {
+			kind: "archived";
+			lastSavedAt: string;
+			lastPlayedAt: string;
+			phase: 1 | 2 | 3;
+			round: number;
+			epoch: number;
+			daemonFiles: Array<{ name: string; size: number }>;
+			engineSize: number;
 	  };
 
 // ── Keys ──────────────────────────────────────────────────────────────────────
 
 export const ACTIVE_KEY = "hi-blue:active-session";
 export const SESSIONS_PREFIX = "hi-blue:sessions/";
+export const ARCHIVE_PREFIX = "hi-blue:archive/";
 export const LEGACY_KEY = "hi-blue-game-state";
 
 // ── SaveResult (mirrors game-storage.ts for API compatibility) ────────────────
@@ -61,6 +74,7 @@ export type LoadResult =
 			sessionId: string;
 			createdAt: string;
 			lastSavedAt: string;
+			epoch: number;
 	  }
 	| { kind: "broken"; sessionId: string }
 	| { kind: "version-mismatch"; sessionId: string };
@@ -105,16 +119,16 @@ export function mintAndActivateNewSession(): string {
 
 // ── Key helpers ───────────────────────────────────────────────────────────────
 
-function metaKey(sessionId: string): string {
-	return `${SESSIONS_PREFIX}${sessionId}/meta.json`;
+function metaKey(prefix: string, sessionId: string): string {
+	return `${prefix}${sessionId}/meta.json`;
 }
 
-function daemonKey(sessionId: string, aiId: AiId): string {
-	return `${SESSIONS_PREFIX}${sessionId}/${aiId}.txt`;
+function daemonKey(prefix: string, sessionId: string, aiId: AiId): string {
+	return `${prefix}${sessionId}/${aiId}.txt`;
 }
 
-function engineKey(sessionId: string): string {
-	return `${SESSIONS_PREFIX}${sessionId}/engine.dat`;
+function engineKey(prefix: string, sessionId: string): string {
+	return `${prefix}${sessionId}/engine.dat`;
 }
 
 // ── Save ──────────────────────────────────────────────────────────────────────
@@ -140,26 +154,40 @@ export function saveActiveSession(
 	const now = new Date().toISOString();
 	const createdAt = opts?.createdAt ?? now;
 
+	// Read existing epoch from meta.json (preserve it across saves)
+	let epoch = 1;
+	try {
+		const existingMeta = localStorage.getItem(metaKey(SESSIONS_PREFIX, sessionId));
+		if (existingMeta !== null) {
+			const parsed = JSON.parse(existingMeta) as MetaFile;
+			if (typeof parsed.epoch === "number") {
+				epoch = parsed.epoch;
+			}
+		}
+	} catch {
+		// swallow — default to 1
+	}
+
 	let files: ReturnType<typeof serializeSession>;
 	try {
-		files = serializeSession(state, now, createdAt);
+		files = serializeSession(state, now, createdAt, epoch);
 	} catch {
 		return { ok: false, reason: "unknown" };
 	}
 
 	try {
 		// 1. meta.json
-		localStorage.setItem(metaKey(sessionId), files.meta);
+		localStorage.setItem(metaKey(SESSIONS_PREFIX, sessionId), files.meta);
 
 		// 2..4. daemon files in persona insertion order
 		for (const [aiId, daemonJson] of Object.entries(files.daemons)) {
-			localStorage.setItem(daemonKey(sessionId, aiId), daemonJson);
+			localStorage.setItem(daemonKey(SESSIONS_PREFIX, sessionId, aiId), daemonJson);
 		}
 
 		// 5. engine.dat (commit signal — written last)
 		// serializeSession always returns a string (not null) for engine.
 		// biome-ignore lint/style/noNonNullAssertion: serializeSession always returns a non-null engine string
-		localStorage.setItem(engineKey(sessionId), files.engine!);
+		localStorage.setItem(engineKey(SESSIONS_PREFIX, sessionId), files.engine!);
 
 		return { ok: true };
 	} catch (err) {
@@ -252,12 +280,14 @@ export function deleteLegacySaveKey(): void {
 /**
  * Core per-id session load logic. Does NOT touch the active pointer.
  * Used by both `loadActiveSession` and `loadSession`.
+ * @param sessionId  The session id to load.
+ * @param storagePrefix  The localStorage prefix to read from (default: SESSIONS_PREFIX).
  */
-function _loadSessionById(sessionId: string): LoadResult {
+function _loadSessionById(sessionId: string, storagePrefix = SESSIONS_PREFIX): LoadResult {
 	try {
 		// Read key files
-		const metaJson = localStorage.getItem(metaKey(sessionId));
-		const engineBlob = localStorage.getItem(engineKey(sessionId));
+		const metaJson = localStorage.getItem(metaKey(storagePrefix, sessionId));
+		const engineBlob = localStorage.getItem(engineKey(storagePrefix, sessionId));
 
 		// No data at all: session was minted but never saved — treat as "none".
 		if (metaJson === null && engineBlob === null) {
@@ -272,12 +302,12 @@ function _loadSessionById(sessionId: string): LoadResult {
 
 		// Read daemon files
 		const daemonsRaw: Record<AiId, string> = {};
-		const prefix = `${SESSIONS_PREFIX}${sessionId}/`;
+		const filePrefix = `${storagePrefix}${sessionId}/`;
 		for (let i = 0; i < localStorage.length; i++) {
 			const key = localStorage.key(i);
 			if (!key) continue;
-			if (!key.startsWith(prefix)) continue;
-			const suffix = key.slice(prefix.length);
+			if (!key.startsWith(filePrefix)) continue;
+			const suffix = key.slice(filePrefix.length);
 			if (suffix.endsWith(".txt")) {
 				const aiId = suffix.slice(0, -4);
 				const value = localStorage.getItem(key);
@@ -298,6 +328,7 @@ function _loadSessionById(sessionId: string): LoadResult {
 				sessionId,
 				createdAt: result.createdAt,
 				lastSavedAt: result.lastSavedAt,
+				epoch: result.epoch,
 			};
 		}
 		if (result.kind === "version-mismatch") {
@@ -427,6 +458,192 @@ export function rmSession(id: string): void {
 }
 
 /**
+ * Load an archived session by id from ARCHIVE_PREFIX namespace.
+ * Does NOT touch the active pointer.
+ */
+export function loadArchivedSession(sessionId: string): LoadResult {
+	return _loadSessionById(sessionId, ARCHIVE_PREFIX);
+}
+
+/**
+ * List all session ids found in the archive namespace.
+ * Enumerates keys with prefix `hi-blue:archive/`, extracts the segment
+ * between the prefix and the next `/`.
+ */
+export function listArchivedSessions(): string[] {
+	try {
+		const ids = new Set<string>();
+		for (let i = 0; i < localStorage.length; i++) {
+			const key = localStorage.key(i);
+			if (!key) continue;
+			if (!key.startsWith(ARCHIVE_PREFIX)) continue;
+			const rest = key.slice(ARCHIVE_PREFIX.length);
+			const slashIdx = rest.indexOf("/");
+			if (slashIdx === -1) continue;
+			const id = rest.slice(0, slashIdx);
+			if (id) ids.add(id);
+		}
+		return Array.from(ids);
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * Get info for an archived session. Returns kind: "archived" for ok sessions,
+ * kind: "broken" / kind: "version-mismatch" for failure modes.
+ */
+export function getArchivedSessionInfo(id: string): SessionInfo {
+	const prefix = `${ARCHIVE_PREFIX}${id}/`;
+
+	function getDaemonFiles(): Array<{ name: string; size: number }> {
+		const files: Array<{ name: string; size: number }> = [];
+		try {
+			for (let i = 0; i < localStorage.length; i++) {
+				const key = localStorage.key(i);
+				if (!key) continue;
+				if (!key.startsWith(prefix)) continue;
+				const suffix = key.slice(prefix.length);
+				if (suffix.endsWith(".txt")) {
+					const value = localStorage.getItem(key);
+					files.push({ name: suffix, size: value?.length ?? 0 });
+				}
+			}
+		} catch {
+			// swallow
+		}
+		return files.sort((a, b) => a.name.localeCompare(b.name));
+	}
+
+	const result = loadArchivedSession(id);
+
+	if (result.kind === "broken") {
+		return { kind: "broken", daemonFiles: getDaemonFiles() };
+	}
+
+	if (result.kind === "version-mismatch") {
+		let lastSavedAt: string | undefined;
+		let phase: (1 | 2 | 3) | undefined;
+		try {
+			const metaRaw = localStorage.getItem(`${prefix}meta.json`);
+			if (metaRaw) {
+				const meta = JSON.parse(metaRaw) as {
+					lastSavedAt?: string;
+					phase?: number;
+				};
+				if (typeof meta.lastSavedAt === "string") lastSavedAt = meta.lastSavedAt;
+				if (meta.phase === 1 || meta.phase === 2 || meta.phase === 3)
+					phase = meta.phase;
+			}
+		} catch {
+			// swallow
+		}
+		const vmResult: SessionInfo = {
+			kind: "version-mismatch",
+			daemonFiles: getDaemonFiles(),
+			...(lastSavedAt !== undefined ? { lastSavedAt } : {}),
+			...(phase !== undefined ? { phase } : {}),
+		};
+		return vmResult;
+	}
+
+	if (result.kind === "none") {
+		return { kind: "broken", daemonFiles: [] };
+	}
+
+	// ok — extract lastPlayedAt from meta.json
+	let lastPlayedAt = result.lastSavedAt;
+	try {
+		const metaRaw = localStorage.getItem(`${prefix}meta.json`);
+		if (metaRaw) {
+			const meta = JSON.parse(metaRaw) as MetaFile;
+			if (typeof meta.lastPlayedAt === "string") {
+				lastPlayedAt = meta.lastPlayedAt;
+			}
+		}
+	} catch {
+		// swallow — fall back to lastSavedAt
+	}
+
+	const engineVal = localStorage.getItem(`${prefix}engine.dat`) ?? "";
+	return {
+		kind: "archived",
+		lastSavedAt: result.lastSavedAt,
+		lastPlayedAt,
+		phase: result.state.currentPhase,
+		round: result.state.phases[result.state.phases.length - 1]?.round ?? 0,
+		epoch: result.epoch,
+		daemonFiles: getDaemonFiles(),
+		engineSize: engineVal.length,
+	};
+}
+
+/**
+ * Remove every key with prefix `hi-blue:archive/<id>/`.
+ * Does NOT touch the active pointer (archived sessions are never active).
+ */
+export function rmArchivedSession(id: string): void {
+	try {
+		const prefix = `${ARCHIVE_PREFIX}${id}/`;
+		const keysToRemove: string[] = [];
+		for (let i = 0; i < localStorage.length; i++) {
+			const key = localStorage.key(i);
+			if (key?.startsWith(prefix)) keysToRemove.push(key);
+		}
+		for (const key of keysToRemove) {
+			localStorage.removeItem(key);
+		}
+	} catch {
+		// swallow
+	}
+}
+
+/**
+ * Archive a session: copy all files from hi-blue:sessions/<id>/ to
+ * hi-blue:archive/<id>/, with readonly: true and lastPlayedAt set in meta.
+ * engine.dat is written LAST (commit signal).
+ */
+export async function archiveSession(sessionId: string): Promise<void> {
+	const srcPrefix = `${SESSIONS_PREFIX}${sessionId}/`;
+	// 1. Read meta.json and engine.dat from sessions namespace
+	const metaJson = localStorage.getItem(`${srcPrefix}meta.json`);
+	const engineVal = localStorage.getItem(`${srcPrefix}engine.dat`);
+	if (metaJson === null) {
+		throw new Error(`archiveSession: session "${sessionId}" is incomplete or missing`);
+	}
+	if (engineVal === null) {
+		throw new Error(`archiveSession: session "${sessionId}" is incomplete or missing`);
+	}
+	// 2. Read daemon .txt files
+	const daemonEntries: Array<{ suffix: string; value: string }> = [];
+	for (let i = 0; i < localStorage.length; i++) {
+		const key = localStorage.key(i);
+		if (!key || !key.startsWith(srcPrefix)) continue;
+		const suffix = key.slice(srcPrefix.length);
+		if (suffix.endsWith(".txt")) {
+			const value = localStorage.getItem(key);
+			if (value !== null) daemonEntries.push({ suffix, value });
+		}
+	}
+	// 3. Modify meta: add readonly: true and lastPlayedAt
+	let meta: MetaFile;
+	try {
+		meta = JSON.parse(metaJson) as MetaFile;
+	} catch {
+		throw new Error(`archiveSession: meta.json for "${sessionId}" is not valid JSON`);
+	}
+	meta.readonly = true;
+	meta.lastPlayedAt = meta.lastSavedAt;
+	// 4. Write to archive namespace in commit order: meta → daemons → engine.dat (LAST)
+	const dstPrefix = `${ARCHIVE_PREFIX}${sessionId}/`;
+	localStorage.setItem(`${dstPrefix}meta.json`, JSON.stringify(meta, null, 2));
+	for (const { suffix, value } of daemonEntries) {
+		localStorage.setItem(`${dstPrefix}${suffix}`, value);
+	}
+	localStorage.setItem(`${dstPrefix}engine.dat`, engineVal); // LAST (commit signal)
+}
+
+/**
  * Convenience info for the sessions picker.
  * Reads metadata from localStorage; calls loadSession to determine kind.
  */
@@ -499,6 +716,7 @@ export function getSessionInfo(id: string): SessionInfo {
 		lastSavedAt: result.lastSavedAt,
 		phase: result.state.currentPhase,
 		round: result.state.phases[result.state.phases.length - 1]?.round ?? 0,
+		epoch: result.epoch,
 		daemonFiles: getDaemonFiles(),
 		engineSize: engineVal.length,
 	};
