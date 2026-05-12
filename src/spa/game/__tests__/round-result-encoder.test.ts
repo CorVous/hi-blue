@@ -279,7 +279,7 @@ describe("encodeRoundResult — budget events", () => {
 	it("budget event reflects actual remaining value from phaseAfter", () => {
 		// Deduct red's budget twice with $1 cost each
 		let game = startPhase(createGame(TEST_PERSONAS), PHASE_CONFIG);
-		game = deductBudget(deductBudget(game, "red", 1), "red", 1);
+		game = deductBudget(deductBudget(game, "red", 1).game, "red", 1).game;
 		const phase = getActivePhase(game);
 
 		const result = makePassResult();
@@ -305,7 +305,7 @@ describe("encodeRoundResult — lockout events (budget-exhaustion)", () => {
 			...PHASE_CONFIG,
 			budgetPerAi: 1,
 		});
-		game = deductBudget(game, "red", 1);
+		game = deductBudget(game, "red", 1).game;
 		const phase = getActivePhase(game);
 		expect(phase.lockedOut.has("red")).toBe(true);
 
@@ -345,7 +345,7 @@ describe("encodeRoundResult — lockout events (budget-exhaustion)", () => {
 			budgetPerAi: 1,
 		});
 		// Deduct red down to 0
-		game = deductBudget(game, "red", 1);
+		game = deductBudget(game, "red", 1).game;
 		const phase = getActivePhase(game);
 		expect(phase.lockedOut.has("red")).toBe(true);
 
@@ -539,16 +539,10 @@ describe("encodeRoundResult — event ordering", () => {
 
 describe("encodeRoundResult — phase_advanced event", () => {
 	it("emits a phase_advanced event when phaseEnded=true and gameEnded=false", () => {
-		// phase_advanced uses phaseAfter to get the new phase number and setting
-		const PHASE2_CONFIG: PhaseConfig = {
-			phaseNumber: 2,
-			kRange: [1, 1],
-			nRange: [0, 0],
-			mRange: [0, 0],
-			aiGoalPool: ["Phase 2 goal"],
-			budgetPerAi: 5,
-		};
-		const game = startPhase(createGame(TEST_PERSONAS), PHASE2_CONFIG);
+		// In the flat single-game model (issue #295), phase is always 1.
+		// The phase_advanced event signals a between-phase transition for UI display,
+		// but the flat model does not track a real phase number — phase is always 1.
+		const game = startPhase(createGame(TEST_PERSONAS), PHASE_CONFIG);
 		const phaseAfter = getActivePhase(game);
 
 		const result = makePassResult({ phaseEnded: true, gameEnded: false });
@@ -566,7 +560,7 @@ describe("encodeRoundResult — phase_advanced event", () => {
 				e.type === "phase_advanced",
 		);
 		expect(phaseEvent).toBeDefined();
-		expect(phaseEvent?.phase).toBe(2);
+		expect(phaseEvent?.phase).toBe(1);
 		expect(phaseEvent?.setting).toBe("");
 	});
 

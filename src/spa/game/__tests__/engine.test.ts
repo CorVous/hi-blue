@@ -10,10 +10,7 @@ import {
 	deductBudget,
 	getActivePhase,
 	isAiLockedOut,
-	isPlayerChatLockedOut,
-	resolveChatLockouts,
 	startPhase,
-	triggerChatLockout,
 } from "../engine";
 import type { AiPersona, PhaseConfig } from "../types";
 
@@ -75,10 +72,8 @@ const TEST_PHASE_CONFIG: PhaseConfig = {
 describe("createGame", () => {
 	it("creates a game with the given personas", () => {
 		const game = createGame(TEST_PERSONAS);
-		expect(game.currentPhase).toBe(1);
 		expect(game.isComplete).toBe(false);
 		expect(game.personas).toEqual(TEST_PERSONAS);
-		expect(game.phases).toHaveLength(0);
 	});
 
 	it("creates a game with contentPacksA and contentPacksB", () => {
@@ -277,7 +272,7 @@ describe("budget and lockout", () => {
 describe("deductBudget", () => {
 	it("decrements budget by the request cost in USD", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const updated = deductBudget(game, "red", 0.012);
+		const updated = deductBudget(game, "red", 0.012).game;
 		expect(getActivePhase(updated).budgets.red?.remaining).toBeCloseTo(
 			5 - 0.012,
 			10,
@@ -289,7 +284,7 @@ describe("deductBudget", () => {
 			...TEST_PHASE_CONFIG,
 			budgetPerAi: 0.05,
 		});
-		game = deductBudget(game, "green", 0.05);
+		game = deductBudget(game, "green", 0.05).game;
 		expect(getActivePhase(game).budgets.green?.remaining).toBeCloseTo(0, 10);
 		expect(isAiLockedOut(game, "green")).toBe(true);
 	});
@@ -299,9 +294,9 @@ describe("deductBudget", () => {
 			...TEST_PHASE_CONFIG,
 			budgetPerAi: 0.05,
 		});
-		game = deductBudget(game, "cyan", 0.04);
+		game = deductBudget(game, "cyan", 0.04).game;
 		expect(isAiLockedOut(game, "cyan")).toBe(false);
-		game = deductBudget(game, "cyan", 0.02);
+		game = deductBudget(game, "cyan", 0.02).game;
 		expect(getActivePhase(game).budgets.cyan?.remaining).toBeLessThan(0);
 		expect(isAiLockedOut(game, "cyan")).toBe(true);
 	});
@@ -364,90 +359,22 @@ describe("appendMessage", () => {
 	});
 });
 
-describe("chat lockout", () => {
-	it("startPhase initialises chatLockouts as empty", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const phase = getActivePhase(game);
-		expect(phase.chatLockouts.size).toBe(0);
-	});
-
-	it("isPlayerChatLockedOut returns false when no lockout active", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		expect(isPlayerChatLockedOut(game, "red")).toBe(false);
-	});
-
-	it("triggerChatLockout marks the AI as player-chat-locked", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const locked = triggerChatLockout(game, "green", 3); // resolves at round 3
-		expect(isPlayerChatLockedOut(locked, "green")).toBe(true);
-		// Budget-lockout should remain unaffected
-		expect(isAiLockedOut(locked, "green")).toBe(false);
-	});
-
-	it("triggerChatLockout does not affect other AIs", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const locked = triggerChatLockout(game, "cyan", 2);
-		expect(isPlayerChatLockedOut(locked, "red")).toBe(false);
-		expect(isPlayerChatLockedOut(locked, "green")).toBe(false);
-	});
-
-	it("resolveChatLockouts removes lockouts where resolveAtRound <= current round", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = triggerChatLockout(game, "red", 2); // resolves at round 2
-		// Advance round to 1 — not yet at resolveAtRound
-		game = advanceRound(game); // round = 1
-		game = resolveChatLockouts(game);
-		expect(isPlayerChatLockedOut(game, "red")).toBe(true); // still locked
-
-		// Advance to round 2 — now at resolveAtRound
-		game = advanceRound(game); // round = 2
-		game = resolveChatLockouts(game);
-		expect(isPlayerChatLockedOut(game, "red")).toBe(false); // resolved
-	});
-
-	it("resolveChatLockouts only removes expired lockouts, leaving others intact", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = triggerChatLockout(game, "red", 1); // expires at round 1
-		game = triggerChatLockout(game, "green", 5); // expires at round 5
-		game = advanceRound(game); // round = 1
-		game = resolveChatLockouts(game);
-		expect(isPlayerChatLockedOut(game, "red")).toBe(false); // expired
-		expect(isPlayerChatLockedOut(game, "green")).toBe(true); // still active
-	});
-
-	it("chat lockout is independent from budget lockout — locked-out AI can still act (budget untouched)", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		const locked = triggerChatLockout(game, "cyan", 3);
-		// Budget lockout (isAiLockedOut) must remain false — AI can still take turns
-		expect(isAiLockedOut(locked, "cyan")).toBe(false);
-		// Budget unaffected
-		expect(getActivePhase(locked).budgets.cyan?.remaining).toBe(5);
-	});
-});
-
 describe("advancePhase", () => {
-	it("advances from phase 1 to phase 2", () => {
+	it("advances from phase 1 to phase 2 (compat shim — isComplete remains false)", () => {
 		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		const phase2Config: PhaseConfig = {
 			...TEST_PHASE_CONFIG,
 			phaseNumber: 2,
 		};
 		const updated = advancePhase(game, phase2Config);
-		expect(updated.currentPhase).toBe(2);
-		expect(updated.phases).toHaveLength(2);
-		expect(getActivePhase(updated).phaseNumber).toBe(2);
+		// In flat model advancePhase with a next config is a no-op — game continues
+		expect(updated.isComplete).toBe(false);
+		// phaseNumber compat shim returns 1 (single-phase game)
+		expect(getActivePhase(updated).phaseNumber).toBe(1);
 	});
 
-	it("marks game complete after phase 3", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = advancePhase(game, {
-			...TEST_PHASE_CONFIG,
-			phaseNumber: 2,
-		});
-		game = advancePhase(game, {
-			...TEST_PHASE_CONFIG,
-			phaseNumber: 3,
-		});
+	it("marks game complete when called with no next config (compat shim)", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
 		const final = advancePhase(game);
 		expect(final.isComplete).toBe(true);
 	});

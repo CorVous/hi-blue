@@ -8,6 +8,22 @@ const AI_STARTS: ContentPack["aiStarts"] = {
 };
 
 /**
+ * A single K=0 content pack (no objective pairs) for tests that need the game
+ * to end via the vacuous win condition on the first round (#295 flat model).
+ */
+export const STATIC_CONTENT_PACK_NO_PAIRS: ContentPack = {
+	phaseNumber: 1,
+	setting: "abandoned subway station",
+	weather: "",
+	timeOfDay: "",
+	objectivePairs: [],
+	interestingObjects: [],
+	obstacles: [],
+	landmarks: DEFAULT_LANDMARKS,
+	aiStarts: AI_STARTS,
+};
+
+/**
  * Minimal content packs for all three phases used by tests that need a
  * fully-bootstrapped game session without a real LLM call.
  */

@@ -5,7 +5,7 @@
  * Constructed from a phase-config triple (or just the first phase for v1).
  *
  * Exposes:
- *   submitMessage(addressedAi, message, provider, chatLockoutConfig?) → {
+ *   submitMessage(addressedAi, message, provider) → {
  *     result: RoundResult,
  *     completions: Record<AiId, string>,  // buffered per-AI completions
  *     nextState: GameState,
@@ -20,8 +20,7 @@
  * so the message builder can re-inject them for the next round.
  */
 
-import { createGame, startPhase } from "./engine";
-import type { ChatLockoutConfig } from "./round-coordinator";
+import { startGame } from "./engine";
 import { runRound } from "./round-coordinator";
 import type { RoundLLMProvider } from "./round-llm-provider";
 import type {
@@ -29,7 +28,6 @@ import type {
 	AiPersona,
 	ContentPack,
 	GameState,
-	PhaseConfig,
 	RoundResult,
 	ToolRoundtripMessage,
 } from "./types";
@@ -43,7 +41,6 @@ export interface SubmitMessageResult {
 
 export class GameSession {
 	private state: GameState;
-	private armedChatLockout?: ChatLockoutConfig;
 	/** Per-AI tool roundtrip from the last round, fed back in as prior context. */
 	private toolRoundtrip: Partial<Record<AiId, ToolRoundtripMessage>> = {};
 	/**
@@ -54,14 +51,22 @@ export class GameSession {
 	private coneSnapshots: Partial<Record<AiId, string>> = {};
 
 	constructor(
-		phaseConfig: PhaseConfig,
+		contentPack: ContentPack,
 		personas: Record<AiId, AiPersona>,
 		contentPacksA?: ContentPack[],
 		contentPacksB?: ContentPack[],
 		rng?: () => number,
 	) {
-		const game = createGame(personas, contentPacksA ?? [], contentPacksB ?? []);
-		this.state = startPhase(game, phaseConfig, rng);
+		const game = startGame(
+			personas,
+			contentPack,
+			rng !== undefined ? { rng } : {},
+		);
+		this.state = {
+			...game,
+			contentPacksA: contentPacksA ?? [],
+			contentPacksB: contentPacksB ?? [],
+		};
 	}
 
 	/**
@@ -86,23 +91,11 @@ export class GameSession {
 	}
 
 	/**
-	 * Prime a chat-lockout config to be consumed by the next submitMessage call
-	 * that does not pass an explicit chatLockoutConfig. Used by the SPA's
-	 * applyTestAffordances (?lockout=1) to arm a lockout without modifying the
-	 * submitMessage call signature.
-	 */
-	armChatLockout(config: ChatLockoutConfig): void {
-		this.armedChatLockout = config;
-	}
-
-	/**
 	 * Run one full round through runRound.
 	 *
 	 * @param addressed  The AI the player is directing their message at.
 	 * @param message    The player's raw message text.
 	 * @param provider   RoundLLMProvider (mock or real BrowserLLMProvider).
-	 * @param chatLockoutConfig  Optional chat-lockout configuration for deterministic testing.
-	 *   When omitted, any config previously set via armChatLockout is consumed once.
 	 * @param initiative  Optional turn-order permutation for this round.
 	 *   Must be a permutation of all three AI ids. When absent, coordinator uses default order.
 	 * @param onAiDelta  Optional per-AI live-delta callback. Fires synchronously inside
@@ -113,17 +106,10 @@ export class GameSession {
 		addressed: AiId,
 		message: string,
 		provider: RoundLLMProvider,
-		chatLockoutConfig?: ChatLockoutConfig,
 		initiative?: AiId[],
 		onAiDelta?: (aiId: AiId, text: string) => void,
 		onAiTurnComplete?: (aiId: AiId) => void,
 	): Promise<SubmitMessageResult> {
-		let effectiveConfig = chatLockoutConfig;
-		if (!effectiveConfig && this.armedChatLockout) {
-			effectiveConfig = this.armedChatLockout;
-			delete this.armedChatLockout;
-		}
-
 		const turnOrder = initiative ?? Object.keys(this.state.personas);
 
 		// Capture completions per AI via the completionSink parameter.
@@ -143,7 +129,7 @@ export class GameSession {
 			addressed,
 			message,
 			provider,
-			effectiveConfig,
+			Math.random,
 			initiative,
 			this.toolRoundtrip,
 			completionSink,

@@ -20,6 +20,8 @@
  *        — "[Round N] <from> dms you: <content>".
  *      - kind=witnessed-event:   { role: "user",      content: renderEntry(...) }
  *        — "[Round N] You watch *X do Y."
+ *      - kind=witnessed-obstacle-shift: { role: "user", content: renderEntry(...) }
+ *        — "[Round N] <shiftFlavor>."
  *      - kind=action-failure:    { role: "user",      content: renderEntry(...) }
  *        — "[Round N] Your `<tool>` action failed: <reason>."
  *        Actor-only; surfaced as a user turn so the Daemon sees its own past
@@ -111,6 +113,16 @@ export function buildOpenAiMessages(
 				),
 			});
 		} else if (entry.kind === "action-failure") {
+			messages.push({
+				role: "user",
+				content: renderEntry(
+					entry,
+					ctx.aiId,
+					ctx.worldSnapshot.entities,
+					witnessState,
+				),
+			});
+		} else if (entry.kind === "witnessed-obstacle-shift") {
 			messages.push({
 				role: "user",
 				content: renderEntry(

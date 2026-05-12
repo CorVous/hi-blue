@@ -28,9 +28,35 @@ import type {
 	ContentPack,
 	GridPosition,
 	PersonaSpatialState,
-	PhaseConfig,
 	WorldEntity,
 } from "../spa/game/types.js";
+
+/**
+ * Configuration for a single game's content pack generation.
+ */
+export interface SingleGameConfig {
+	/** Roll k (objective pairs). */
+	kRange: [number, number];
+	/** Roll n (interesting objects). */
+	nRange: [number, number];
+	/** Roll m (obstacles). */
+	mRange: [number, number];
+	budgetPerAi: number;
+}
+
+/**
+ * Legacy per-phase config shape. Kept for backward-compat with generateContentPacks.
+ * @deprecated use SingleGameConfig + generateContentPack
+ */
+export interface PhaseConfig {
+	phaseNumber: 1 | 2 | 3;
+	kRange: [number, number];
+	nRange: [number, number];
+	mRange: [number, number];
+	budgetPerAi: number;
+	aiGoalPool: string[];
+}
+
 import { THEME_POOL } from "./theme-pool.js";
 import { TIME_OF_DAY_POOL } from "./time-of-day-pool.js";
 import { WEATHER_POOL } from "./weather-pool.js";
@@ -329,7 +355,9 @@ export async function generateContentPacks(
 
 	// Build placeholder ContentPack structures from LLM result (no placements yet)
 	const unplacedPacks: ContentPack[] = llmResult.packs.map((pack, i) => ({
-		phaseNumber: pack.phaseNumber,
+		...(pack.phaseNumber !== undefined
+			? { phaseNumber: pack.phaseNumber as 1 | 2 | 3 }
+			: {}),
 		setting: pack.setting,
 		weather: drawnWeather[i] as string,
 		timeOfDay: drawnTimeOfDay[i] as string,
@@ -484,4 +512,81 @@ export async function generateDualContentPacks(
 	});
 
 	return { packsA: placedPacksA, packsB };
+}
+
+/**
+ * Generate a single ContentPack for a single-game session.
+ *
+ * @param rng        Seeded random number generator.
+ * @param settings   The pool of setting nouns to draw from (must have >= 1 entry).
+ * @param config     Single-game config (kRange, nRange, mRange).
+ * @param llm        ContentPackProvider for the LLM call.
+ * @param aiIdsOrPromise  AiId list or a Promise resolving to one.
+ */
+export async function generateContentPack(
+	rng: () => number,
+	settings: readonly string[],
+	config: SingleGameConfig,
+	llm: ContentPackProvider,
+	aiIdsOrPromise: AiId[] | Promise<AiId[]>,
+): Promise<ContentPack> {
+	if (settings.length < 1) {
+		throw new Error(
+			`generateContentPack: setting pool must have at least 1 entry (has ${settings.length})`,
+		);
+	}
+
+	// Draw 1 setting
+	const settingIdx = Math.floor(rng() * settings.length);
+	const setting = settings[settingIdx] as string;
+
+	// Draw weather, time-of-day, and theme
+	const weather = WEATHER_POOL[
+		Math.floor(rng() * WEATHER_POOL.length)
+	] as string;
+	const timeOfDay = TIME_OF_DAY_POOL[
+		Math.floor(rng() * TIME_OF_DAY_POOL.length)
+	] as string;
+	const theme = THEME_POOL[Math.floor(rng() * THEME_POOL.length)] as string;
+
+	// Roll k/n/m
+	const phaseInput: ContentPackProviderInput["phases"][number] = {
+		phaseNumber: 1,
+		setting,
+		theme,
+		k: rollInt(rng, config.kRange[0], config.kRange[1]),
+		n: rollInt(rng, config.nRange[0], config.nRange[1]),
+		m: rollInt(rng, config.mRange[0], config.mRange[1]),
+	};
+
+	// Kick off LLM call immediately (parallel with aiIds resolution)
+	const llmCallPromise = llm.generateContentPacks({ phases: [phaseInput] });
+
+	// Await both in parallel
+	const [llmResult, aiIds] = await Promise.all([
+		llmCallPromise,
+		Promise.resolve(aiIdsOrPromise),
+	]);
+
+	// Build placeholder ContentPack from LLM result
+	const pack = llmResult.packs[0];
+	if (!pack) throw new Error("generateContentPack: LLM returned no packs");
+
+	const unplacedPack: ContentPack = {
+		phaseNumber: 1,
+		setting: pack.setting,
+		weather,
+		timeOfDay,
+		objectivePairs: pack.objectivePairs,
+		interestingObjects: pack.interestingObjects as WorldEntity[],
+		obstacles: pack.obstacles as WorldEntity[],
+		landmarks: pack.landmarks,
+		aiStarts: {},
+	};
+
+	// Run placement engine
+	const placed = placePhases(rng, [unplacedPack], aiIds);
+	const result = placed[0];
+	if (!result) throw new Error("generateContentPack: placement failed");
+	return result;
 }

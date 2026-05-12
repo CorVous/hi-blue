@@ -499,8 +499,8 @@ export function getSessionInfo(id: string): SessionInfo {
 	return {
 		kind: "ok",
 		lastSavedAt: result.lastSavedAt,
-		epoch: result.state.currentPhase,
-		round: result.state.phases[result.state.phases.length - 1]?.round ?? 0,
+		epoch: 1,
+		round: result.state.round,
 		daemonFiles: getDaemonFiles(),
 		engineSize: engineVal.length,
 	};

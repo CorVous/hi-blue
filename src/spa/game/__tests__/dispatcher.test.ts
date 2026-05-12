@@ -665,7 +665,7 @@ describe("dispatchAiTurn", () => {
 			},
 			FIXED_RNG,
 		);
-		game = deductBudget(game, "red", 0.01);
+		game = deductBudget(game, "red", 0.01).game;
 		const action: AiTurnAction = { aiId: "red", pass: true };
 		const result = dispatchAiTurn(game, action);
 		expect(result.rejected).toBe(true);

@@ -33,6 +33,7 @@ vi.mock("../../content/content-pack-generator", () => ({
 		packsA: STATIC_CONTENT_PACKS,
 		packsB: STATIC_CONTENT_PACKS,
 	}),
+	generateContentPack: async () => STATIC_CONTENT_PACKS[0],
 }));
 
 // ── HTML fixture ──────────────────────────────────────────────────────────────

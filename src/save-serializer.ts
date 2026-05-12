@@ -50,13 +50,13 @@ export function serializeGameSave(game: GameState): GameSave {
 		// biome-ignore lint/style/noNonNullAssertion: key comes from Object.keys so always defined
 		const persona = game.personas[aiId]!;
 
-		const phases: PhaseTranscript[] = game.phases.map((phase) => {
-			const conversationLog = phase.conversationLogs[aiId] ?? [];
-			return {
-				phaseNumber: phase.phaseNumber,
+		const conversationLog = game.conversationLogs[aiId] ?? [];
+		const phases: PhaseTranscript[] = [
+			{
+				phaseNumber: 1,
 				conversationLog: conversationLog.map((e) => ({ ...e })),
-			};
-		});
+			},
+		];
 
 		return { persona: { ...persona }, phases };
 	});

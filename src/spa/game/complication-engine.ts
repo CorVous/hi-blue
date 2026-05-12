@@ -114,7 +114,7 @@ function isObstacleShiftAvailable(
  * Build valid (obstacle, direction) tuples for the obstacle_shift draw.
  * Returns an array of { obstacleId, fromCell, toCell } for each valid shift.
  */
-function validObstacleShiftTuples(
+export function validObstacleShiftTuples(
 	world: WorldState,
 	personaSpatial: PhaseState["personaSpatial"],
 ): Array<{ obstacleId: string; fromCell: GridPosition; toCell: GridPosition }> {
@@ -253,7 +253,13 @@ function drawComplication(
 			const pairIdx = Math.floor(rng() * validPairs.length);
 			// biome-ignore lint/style/noNonNullAssertion: bounded index
 			const pair = validPairs[pairIdx]!;
-			return { kind: "tool_disable", target: pair.target, tool: pair.tool };
+			const duration = drawCountdown(rng, 3, 5);
+			return {
+				kind: "tool_disable",
+				target: pair.target,
+				tool: pair.tool,
+				duration,
+			};
 		}
 
 		case "obstacle_shift": {
@@ -381,6 +387,51 @@ export function decrementComplicationCountdown(game: GameState): GameState {
 }
 
 /**
+ * Returns true if the active phase has a `chat_lockout` active complication
+ * targeting the given AI. Used by the route layer to mute player chat to that AI.
+ *
+ * Replaces `isChatLockedOut` from engine.ts which read the old `chatLockouts` map.
+ */
+export function isPlayerChatLockedOut(phase: GameState, aiId: AiId): boolean {
+	return phase.activeComplications.some(
+		(c) => c.kind === "chat_lockout" && c.target === aiId,
+	);
+}
+
+/**
+ * Scans `activeComplications` for `chat_lockout` entries whose `resolveAtRound`
+ * has been reached (`phase.round >= resolveAtRound`), removes them, and returns
+ * the updated state along with the list of resolved AI ids.
+ *
+ * Call this after `advanceRound`.
+ */
+export function resolveExpiredChatLockouts(game: GameState): {
+	nextState: GameState;
+	resolvedAiIds: AiId[];
+} {
+	const phase = getActivePhase(game);
+	const resolvedAiIds: AiId[] = [];
+	const remaining = phase.activeComplications.filter((c) => {
+		if (c.kind === "chat_lockout" && phase.round >= c.resolveAtRound) {
+			resolvedAiIds.push(c.target);
+			return false;
+		}
+		return true;
+	});
+
+	if (resolvedAiIds.length === 0) {
+		return { nextState: game, resolvedAiIds: [] };
+	}
+
+	const nextState = updateActivePhase(game, (p) => ({
+		...p,
+		activeComplications: remaining,
+	}));
+
+	return { nextState, resolvedAiIds };
+}
+
+/**
  * Apply a ComplicationResult to the game state:
  *   1. Reset the countdown via drawCountdown(rng, 5, 15).
  *   2. Mark settingShiftFired=true if the result is a setting_shift.
@@ -424,6 +475,7 @@ export function applyComplicationResult(
 				kind: "tool_disable",
 				target: fired.target,
 				tool: fired.tool,
+				resolveAtRound: phase.round + fired.duration,
 			};
 			activeComplications = [...activeComplications, entry];
 		} else if (fired.kind === "chat_lockout") {

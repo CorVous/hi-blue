@@ -10,6 +10,8 @@ import { describe, expect, it } from "vitest";
 import {
 	applyComplicationResult,
 	decrementComplicationCountdown,
+	isPlayerChatLockedOut,
+	resolveExpiredChatLockouts,
 	tickComplication,
 } from "../complication-engine.js";
 import { DEFAULT_LANDMARKS } from "../direction.js";
@@ -130,7 +132,9 @@ function makePhase(overrides: Partial<PhaseState> = {}): PhaseState {
 	};
 
 	return {
+		personas: TEST_PERSONAS,
 		phaseNumber: 1,
+		isComplete: false,
 		setting: "test",
 		weather: "clear",
 		timeOfDay: "day",
@@ -141,23 +145,24 @@ function makePhase(overrides: Partial<PhaseState> = {}): PhaseState {
 		budgets,
 		conversationLogs,
 		lockedOut: new Set(),
-		chatLockouts: new Map(),
 		personaSpatial,
 		complicationSchedule,
 		activeComplications: [],
+		contentPacksA: [],
+		contentPacksB: [],
+		activePackId: "A" as const,
 		...overrides,
 	};
 }
 
 function makeGameStateAround(phase: PhaseState): GameState {
+	// Flat GameState model: PhaseState already includes all GameState fields.
+	const { phaseNumber: _pn, aiGoals: _ag, ...gameState } = phase;
 	return {
-		currentPhase: 1,
-		phases: [phase],
-		personas: TEST_PERSONAS,
-		isComplete: false,
-		contentPacksA: [],
-		contentPacksB: [],
-		activePackId: "A",
+		...gameState,
+		contentPacksA: gameState.contentPacksA ?? [],
+		contentPacksB: gameState.contentPacksB ?? [],
+		activePackId: gameState.activePackId ?? "A",
 	};
 }
 
@@ -616,7 +621,12 @@ describe("Tool Disable exclusion", () => {
 		const activeComplications: ActiveComplication[] = [];
 		for (const aiId of AI_IDS) {
 			for (const tool of toolNames) {
-				activeComplications.push({ kind: "tool_disable", target: aiId, tool });
+				activeComplications.push({
+					kind: "tool_disable",
+					target: aiId,
+					tool,
+					resolveAtRound: 99,
+				});
 			}
 		}
 		const phase = makePhase({
@@ -636,7 +646,12 @@ describe("Tool Disable exclusion", () => {
 		// Only red+pick_up is already disabled. With 3 daemons × 8 tools = 24 pairs,
 		// 1 excluded, 23 valid pairs remain.
 		const activeComplications: ActiveComplication[] = [
-			{ kind: "tool_disable", target: "red", tool: "pick_up" },
+			{
+				kind: "tool_disable",
+				target: "red",
+				tool: "pick_up",
+				resolveAtRound: 99,
+			},
 		];
 		const phase = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
@@ -655,7 +670,12 @@ describe("Tool Disable exclusion", () => {
 
 	it("permits a (daemon, tool) pair when the same daemon has a different tool disabled", () => {
 		const activeComplications: ActiveComplication[] = [
-			{ kind: "tool_disable", target: "red", tool: "pick_up" },
+			{
+				kind: "tool_disable",
+				target: "red",
+				tool: "pick_up",
+				resolveAtRound: 99,
+			},
 		];
 		const phase = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
@@ -670,7 +690,12 @@ describe("Tool Disable exclusion", () => {
 
 	it("permits a (daemon, tool) pair when a different daemon has the same tool disabled", () => {
 		const activeComplications: ActiveComplication[] = [
-			{ kind: "tool_disable", target: "green", tool: "pick_up" },
+			{
+				kind: "tool_disable",
+				target: "green",
+				tool: "pick_up",
+				resolveAtRound: 99,
+			},
 		];
 		const phase = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
@@ -718,6 +743,7 @@ describe("applyComplicationResult — activeComplications appends", () => {
 				kind: "tool_disable" as const,
 				target: "cyan" as AiId,
 				tool: "go" as ToolName,
+				duration: 3,
 			},
 		};
 		const updated = applyComplicationResult(game, result, seededRng([0.5]));
@@ -729,6 +755,28 @@ describe("applyComplicationResult — activeComplications appends", () => {
 		if (added?.kind === "tool_disable") {
 			expect(added.target).toBe("cyan");
 			expect(added.tool).toBe("go");
+		}
+	});
+
+	it("appends ActiveComplication for tool_disable with resolveAtRound = phase.round + duration", () => {
+		const phase = makePhase({ round: 7 });
+		const game = makeGameStateAround(phase);
+		const result = {
+			fired: {
+				kind: "tool_disable" as const,
+				target: "red" as AiId,
+				tool: "message" as ToolName,
+				duration: 4,
+			},
+		};
+		const updated = applyComplicationResult(game, result, seededRng([0.5]));
+		const updatedPhase = getActivePhase(updated);
+		const added = updatedPhase.activeComplications.find(
+			(c) => c.kind === "tool_disable",
+		);
+		expect(added).toBeDefined();
+		if (added?.kind === "tool_disable") {
+			expect(added.resolveAtRound).toBe(11); // round 7 + duration 4
 		}
 	});
 
@@ -829,15 +877,12 @@ describe("applyComplicationResult — setting_shift swaps active pack", () => {
 
 	function makeGameWithDualPacks(): GameState {
 		const phase = makePhase({ contentPack: PACK_A, setting: PACK_A.setting });
-		return {
-			currentPhase: 1,
-			phases: [phase],
-			personas: TEST_PERSONAS,
-			isComplete: false,
+		return makeGameStateAround({
+			...phase,
 			contentPacksA: [PACK_A],
 			contentPacksB: [PACK_B],
 			activePackId: "A",
-		};
+		});
 	}
 
 	it("sets activePackId to 'B' when setting_shift fires", () => {
@@ -873,15 +918,12 @@ describe("applyComplicationResult — setting_shift swaps active pack", () => {
 			setting: PACK_A.setting,
 			world: { entities },
 		});
-		const game: GameState = {
-			currentPhase: 1,
-			phases: [phase],
-			personas: TEST_PERSONAS,
-			isComplete: false,
+		const game: GameState = makeGameStateAround({
+			...phase,
 			contentPacksA: [PACK_A],
 			contentPacksB: [PACK_B],
 			activePackId: "A",
-		};
+		});
 		const result = { fired: { kind: "setting_shift" as const } };
 		const updated = applyComplicationResult(game, result, seededRng([0.5]));
 		const updatedPhase = getActivePhase(updated);
@@ -921,9 +963,10 @@ describe("determinism", () => {
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
 		});
 		const game = makeGameStateAround(phase);
-		// 5-item pool: 0.5*5=2 → tool_disable; then 0.0 for pair draw; no countdown draw needed (tickComplication doesn't reset)
-		const r1 = tickComplication(game, seededRng([0.5, 0.0]));
-		const r2 = tickComplication(game, seededRng([0.5, 0.0]));
+		// 5-item pool: 0.5*5=2 → tool_disable; rng[1]=0.0 for pair draw; rng[2]=0.0 for duration draw
+		// no countdown draw needed (tickComplication doesn't reset)
+		const r1 = tickComplication(game, seededRng([0.5, 0.0, 0.0]));
+		const r2 = tickComplication(game, seededRng([0.5, 0.0, 0.0]));
 		expect(r1).toEqual(r2);
 	});
 });
@@ -965,5 +1008,139 @@ describe("startPhase — complicationSchedule initialisation", () => {
 			}),
 		);
 		expect(phase.activeComplications).toEqual([]);
+	});
+});
+
+// ── isPlayerChatLockedOut ────────────────────────────────────────────────────
+
+describe("isPlayerChatLockedOut", () => {
+	it("returns false when activeComplications is empty", () => {
+		const phase = makePhase({ activeComplications: [] });
+		expect(isPlayerChatLockedOut(phase, "red")).toBe(false);
+	});
+
+	it("returns true when phase has a chat_lockout for the given AI", () => {
+		const phase = makePhase({
+			activeComplications: [
+				{ kind: "chat_lockout", target: "red", resolveAtRound: 10 },
+			],
+		});
+		expect(isPlayerChatLockedOut(phase, "red")).toBe(true);
+	});
+
+	it("returns false when the chat_lockout targets a different AI", () => {
+		const phase = makePhase({
+			activeComplications: [
+				{ kind: "chat_lockout", target: "green", resolveAtRound: 10 },
+			],
+		});
+		expect(isPlayerChatLockedOut(phase, "red")).toBe(false);
+	});
+
+	it("returns false when only non-chat_lockout complications exist", () => {
+		const phase = makePhase({
+			activeComplications: [
+				{
+					kind: "tool_disable",
+					target: "red",
+					tool: "go",
+					resolveAtRound: 100,
+				},
+				{ kind: "sysadmin_directive", target: "red", directive: "Do it." },
+			],
+		});
+		expect(isPlayerChatLockedOut(phase, "red")).toBe(false);
+	});
+
+	it("returns true regardless of resolveAtRound value (does not check expiry)", () => {
+		// isPlayerChatLockedOut reports presence; resolution is handled by resolveExpiredChatLockouts
+		const phase = makePhase({
+			round: 10,
+			activeComplications: [
+				{ kind: "chat_lockout", target: "cyan", resolveAtRound: 5 },
+			],
+		});
+		// Even though round (10) >= resolveAtRound (5), it's still in activeComplications
+		// until resolveExpiredChatLockouts runs
+		expect(isPlayerChatLockedOut(phase, "cyan")).toBe(true);
+	});
+});
+
+// ── resolveExpiredChatLockouts ────────────────────────────────────────────────
+
+describe("resolveExpiredChatLockouts", () => {
+	it("returns no resolved ids when activeComplications is empty", () => {
+		const phase = makePhase({ round: 5, activeComplications: [] });
+		const game = makeGameStateAround(phase);
+		const { nextState, resolvedAiIds } = resolveExpiredChatLockouts(game);
+		expect(resolvedAiIds).toHaveLength(0);
+		expect(nextState).toBe(game); // same reference when nothing changed
+	});
+
+	it("returns no resolved ids when no lockout has expired", () => {
+		const phase = makePhase({
+			round: 2,
+			activeComplications: [
+				{ kind: "chat_lockout", target: "red", resolveAtRound: 5 },
+			],
+		});
+		const game = makeGameStateAround(phase);
+		const { resolvedAiIds } = resolveExpiredChatLockouts(game);
+		expect(resolvedAiIds).toHaveLength(0);
+	});
+
+	it("resolves a lockout when phase.round >= resolveAtRound", () => {
+		const phase = makePhase({
+			round: 5,
+			activeComplications: [
+				{ kind: "chat_lockout", target: "red", resolveAtRound: 5 },
+			],
+		});
+		const game = makeGameStateAround(phase);
+		const { nextState, resolvedAiIds } = resolveExpiredChatLockouts(game);
+		expect(resolvedAiIds).toContain("red");
+		const nextPhase = getActivePhase(nextState);
+		expect(nextPhase.activeComplications).toHaveLength(0);
+	});
+
+	it("only removes expired lockouts, leaving unexpired ones intact", () => {
+		const phase = makePhase({
+			round: 5,
+			activeComplications: [
+				{ kind: "chat_lockout", target: "red", resolveAtRound: 4 }, // expired
+				{ kind: "chat_lockout", target: "green", resolveAtRound: 8 }, // not yet
+			],
+		});
+		const game = makeGameStateAround(phase);
+		const { nextState, resolvedAiIds } = resolveExpiredChatLockouts(game);
+		expect(resolvedAiIds).toContain("red");
+		expect(resolvedAiIds).not.toContain("green");
+		const nextPhase = getActivePhase(nextState);
+		expect(nextPhase.activeComplications).toHaveLength(1);
+		expect(nextPhase.activeComplications[0]?.target).toBe("green");
+	});
+
+	it("does not remove non-chat_lockout complications", () => {
+		const phase = makePhase({
+			round: 10,
+			activeComplications: [
+				{
+					kind: "tool_disable",
+					target: "red",
+					tool: "go",
+					resolveAtRound: 100,
+				},
+				{ kind: "chat_lockout", target: "cyan", resolveAtRound: 3 }, // expired
+			],
+		});
+		const game = makeGameStateAround(phase);
+		const { nextState, resolvedAiIds } = resolveExpiredChatLockouts(game);
+		expect(resolvedAiIds).toContain("cyan");
+		const nextPhase = getActivePhase(nextState);
+		// tool_disable should survive
+		expect(
+			nextPhase.activeComplications.some((c) => c.kind === "tool_disable"),
+		).toBe(true);
+		expect(nextPhase.activeComplications).toHaveLength(1);
 	});
 });

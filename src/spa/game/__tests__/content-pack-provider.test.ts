@@ -216,3 +216,104 @@ describe("validateContentPacks — prose tell contract", () => {
 		);
 	});
 });
+
+// ── shiftFlavor validation for obstacles ─────────────────────────────────────
+
+describe("validateContentPacks — obstacle shiftFlavor validation", () => {
+	const inputWithObstacle = {
+		phases: [
+			{
+				phaseNumber: 1 as const,
+				setting: "abandoned subway station",
+				theme: "mundane",
+				k: 0,
+				n: 0,
+				m: 1,
+			},
+		],
+	};
+
+	function buildObstacleResponse(shiftFlavor: unknown): unknown {
+		return {
+			packs: [
+				{
+					phaseNumber: 1,
+					setting: "abandoned subway station",
+					objectivePairs: [],
+					interestingObjects: [],
+					obstacles: [
+						{
+							id: "obs1",
+							kind: "obstacle",
+							name: "Rusted Gate",
+							examineDescription: "An old rusted gate blocking the path.",
+							...(shiftFlavor !== undefined ? { shiftFlavor } : {}),
+						},
+					],
+					landmarks: {
+						north: {
+							shortName: "the signal tower",
+							horizonPhrase: "rises above the platform",
+						},
+						south: {
+							shortName: "the collapsed entrance",
+							horizonPhrase: "gapes like a wound in the dark",
+						},
+						east: {
+							shortName: "the rusted fan shaft",
+							horizonPhrase: "spins slowly in the stale air",
+						},
+						west: {
+							shortName: "the flooded tunnel",
+							horizonPhrase: "disappears into still black water",
+						},
+					},
+				},
+			],
+		};
+	}
+
+	it("accepts an obstacle with a valid shiftFlavor", () => {
+		const result = validateContentPacks(
+			buildObstacleResponse(
+				"The rusted gate scrapes along the floor with a grinding shriek.",
+			),
+			inputWithObstacle,
+		);
+		const obstacle = result.packs[0]?.obstacles[0];
+		expect(obstacle?.shiftFlavor).toBe(
+			"The rusted gate scrapes along the floor with a grinding shriek.",
+		);
+	});
+
+	it("rejects an obstacle missing shiftFlavor", () => {
+		expect(() =>
+			validateContentPacks(buildObstacleResponse(undefined), inputWithObstacle),
+		).toThrow(/shiftFlavor/);
+	});
+
+	it("rejects an obstacle with an empty shiftFlavor", () => {
+		expect(() =>
+			validateContentPacks(buildObstacleResponse(""), inputWithObstacle),
+		).toThrow(/shiftFlavor/);
+	});
+
+	it("rejects an obstacle whose shiftFlavor contains {actor}", () => {
+		expect(() =>
+			validateContentPacks(
+				buildObstacleResponse("{actor} knocks the gate aside."),
+				inputWithObstacle,
+			),
+		).toThrow(/shiftFlavor/);
+	});
+
+	it("persists shiftFlavor onto the returned WorldEntity", () => {
+		const flavor = "The rusted gate groans as it slides aside.";
+		const result = validateContentPacks(
+			buildObstacleResponse(flavor),
+			inputWithObstacle,
+		);
+		const obstacle = result.packs[0]?.obstacles[0];
+		expect(obstacle?.shiftFlavor).toBe(flavor);
+	});
+});

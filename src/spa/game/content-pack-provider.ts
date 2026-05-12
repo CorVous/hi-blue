@@ -32,7 +32,7 @@ For each phase:
   - An objective_object with: id (unique string), name (2-4 words, thematic to setting and theme), examineDescription (1-2 sentences naming the paired space), useOutcome (1 sentence: the actor performs a stateless action with the item — nothing about the item, the actor, or the world changes; MUST NOT reference or imply contact with the paired space, since the actor can be anywhere on the grid when using the item), pairsWithSpaceId (must match the paired space's id), placementFlavor (1 sentence containing the literal string "{actor}", fires when the object is placed on its space), proximityFlavor (1 sentence; in-fiction sensory description of what the daemon perceives when they are holding this item AND its paired space is in their own cell or directly in front of them. Written from the daemon's POV. Does NOT contain "{actor}" and MUST NOT reference placing or coupling the item.). objective_objects MUST be portable physical items a single person can pick up and carry (e.g. a tool, instrument, artifact, container) — never furniture, architecture, or fixed structures.
   - An objective_space with: id (unique string), name (2-4 words, thematic to setting and theme), examineDescription (1-2 sentences describing the space). objective_spaces are fixed locations or surfaces, not items.
 - Generate exactly n INTERESTING OBJECTS with: id (unique string), name (2-4 words, thematic to setting and theme), examineDescription (1-2 sentences), useOutcome (1 sentence: the actor performs a stateless action with the item — nothing about the item, the actor, or the world changes). interesting_objects MUST be portable physical items a single person can pick up and carry — never furniture, architecture, or fixed structures.
-- Generate exactly m OBSTACLES with: id (unique string), name (2-4 words, thematic to setting), examineDescription (1 sentence describing the impassable object). Obstacles are fixed and impassable — never portable items. Obstacles follow the setting only and are NOT constrained by the item theme.
+- Generate exactly m OBSTACLES with: id (unique string), name (2-4 words, thematic to setting), examineDescription (1 sentence describing the impassable object), shiftFlavor (1 sentence, in-fiction sensory line a witness Daemon perceives when the obstacle moves one cell. Third person from witness POV. Does NOT specify a direction word (north/south/east/west). Does NOT contain {actor}.). Obstacles are fixed and impassable — never portable items. Obstacles follow the setting only and are NOT constrained by the item theme.
 - Generate exactly 4 HORIZON LANDMARKS — one anchoring each cardinal direction (north, south, east, west). Each landmark is distant, unreachable, distinctive, mutually visually distinguishable, and consistent with the setting, atmosphere, and weather. Each landmark has: shortName (2-5 words, e.g. "the rusted radio tower"), horizonPhrase (a short evocative clause describing what the landmark itself looks like — its form, condition, materials — NOT where it sits relative to any viewer. The phrase is slotted into "On the horizon ahead: <shortName> — <horizonPhrase>." so it must read coherently as a continuation. Good: "rises above the platform, antenna bent toward the dark". Bad: "looms behind you in the dark" (implies position) or "stands to your left" (implies relative direction).
 
 The theme governs the style of objective_objects, objective_spaces, and interesting_objects only:
@@ -63,7 +63,7 @@ Return ONLY valid JSON with this exact shape (no markdown, no preamble):
         { "id": "...", "kind": "interesting_object", "name": "...", "examineDescription": "...", "useOutcome": "..." }
       ],
       "obstacles": [
-        { "id": "...", "kind": "obstacle", "name": "...", "examineDescription": "..." }
+        { "id": "...", "kind": "obstacle", "name": "...", "examineDescription": "...", "shiftFlavor": "..." }
       ],
       "landmarks": {
         "north": { "shortName": "...", "horizonPhrase": "..." },
@@ -243,6 +243,7 @@ function validateEntity(
 	allIds: Set<string>,
 	requireUseOutcome: boolean,
 	requirePairing?: { pairsWithSpaceId?: string },
+	requireShiftFlavor?: boolean,
 ): WorldEntity {
 	if (raw == null || typeof raw !== "object") {
 		throw new ContentPackError(
@@ -304,6 +305,18 @@ function validateEntity(
 		}
 	}
 
+	if (requireShiftFlavor) {
+		if (
+			typeof e.shiftFlavor !== "string" ||
+			e.shiftFlavor.length === 0 ||
+			e.shiftFlavor.includes("{actor}")
+		) {
+			throw new ContentPackError(
+				`Obstacle ${e.id}: shiftFlavor must be a non-empty string that does not contain "{actor}"`,
+			);
+		}
+	}
+
 	// Build entity — holder is not set here (placement done later)
 	const entity: WorldEntity = {
 		id: e.id,
@@ -323,6 +336,9 @@ function validateEntity(
 	}
 	if (typeof e.proximityFlavor === "string") {
 		entity.proximityFlavor = e.proximityFlavor;
+	}
+	if (typeof e.shiftFlavor === "string") {
+		entity.shiftFlavor = e.shiftFlavor;
 	}
 	return entity;
 }
@@ -437,7 +453,9 @@ export function validateContentPacks(
 
 		const obstacles: WorldEntity[] = [];
 		for (const obsRaw of pack.obstacles as unknown[]) {
-			obstacles.push(validateEntity(obsRaw, "obstacle", allIds, false));
+			obstacles.push(
+				validateEntity(obsRaw, "obstacle", allIds, false, undefined, true),
+			);
 		}
 
 		// Validate landmarks

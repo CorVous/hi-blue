@@ -12,14 +12,16 @@
  */
 import { describe, expect, it } from "vitest";
 import type { OpenAiMessage } from "../../llm-client";
+import { isPlayerChatLockedOut } from "../complication-engine";
 import { DEFAULT_LANDMARKS } from "../direction";
 import {
 	createGame,
 	deductBudget,
+	FAREWELL_LINE,
 	getActivePhase,
 	isAiLockedOut,
-	isPlayerChatLockedOut,
 	startPhase,
+	updateActivePhase,
 } from "../engine";
 import { buildOpenAiMessages } from "../openai-message-builder";
 import { buildAiContext } from "../prompt-builder";
@@ -618,7 +620,7 @@ describe("onAiTurnComplete callback", () => {
 			...TEST_PHASE_CONFIG,
 			budgetPerAi: 1,
 		});
-		state = deductBudget(state, "red" as AiId, 1);
+		state = deductBudget(state, "red" as AiId, 1).game;
 		expect(isAiLockedOut(state, "red" as AiId)).toBe(true);
 
 		const provider = new MockRoundLLMProvider([
@@ -672,7 +674,7 @@ describe("whisper round — via dispatcher only", () => {
 describe("budget-exhaustion lockout", () => {
 	it("skips an already-locked AI and emits an in-character lockout line instead", async () => {
 		let game = makeGame();
-		game = deductBudget(game, "red", 5);
+		game = deductBudget(game, "red", 5).game;
 		expect(getActivePhase(game).lockedOut.has("red")).toBe(true);
 
 		const provider = new MockRoundLLMProvider([
@@ -691,7 +693,7 @@ describe("budget-exhaustion lockout", () => {
 
 	it("lockout line is added to the action log", async () => {
 		let game = makeGame();
-		game = deductBudget(game, "red", 5);
+		game = deductBudget(game, "red", 5).game;
 
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
@@ -723,6 +725,42 @@ describe("budget-exhaustion lockout", () => {
 		expect(phase.lockedOut.has("cyan")).toBe(true);
 	});
 
+	it("a Daemon whose budget is exhausted mid-round emits a farewell line to its conversation log", async () => {
+		// Use budgetPerAi=1 so the first LLM call (costUsd=1) exhausts the budget.
+		const game = startPhase(createGame(TEST_PERSONAS), {
+			...TEST_PHASE_CONFIG,
+			budgetPerAi: 1,
+		});
+
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [], costUsd: 1 },
+			{ assistantText: "", toolCalls: [], costUsd: 0 },
+			{ assistantText: "", toolCalls: [], costUsd: 0 },
+		]);
+		const { nextState } = await runRound(game, "red", "hi", provider);
+
+		// The first AI to run (red, alphabetically first in turn order) exhausts budget.
+		// Its conversation log must contain a farewell message addressed to blue.
+		const redLog = nextState.conversationLogs.red ?? [];
+		const farewell = redLog.find(
+			(e) =>
+				e.kind === "message" &&
+				e.from === "red" &&
+				e.to === "blue" &&
+				e.content === FAREWELL_LINE("Ember"),
+		);
+		expect(farewell).toBeDefined();
+
+		// Farewell appears exactly once (subsequent rounds use the locked-out branch).
+		const farewellCount = redLog.filter(
+			(e) =>
+				e.kind === "message" &&
+				e.from === "red" &&
+				e.content === FAREWELL_LINE("Ember"),
+		).length;
+		expect(farewellCount).toBe(1);
+	});
+
 	it("budget display: remaining budget decrements by the request cost after a round", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
@@ -744,7 +782,7 @@ describe("budget-exhaustion lockout", () => {
 
 	it("lockout and non-lockout entries in the same round share the same round number", async () => {
 		let game = makeGame();
-		game = deductBudget(game, "red", 5);
+		game = deductBudget(game, "red", 5).game;
 
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
@@ -1129,15 +1167,31 @@ describe("tool-call dispatch", () => {
 });
 
 // ----------------------------------------------------------------------------
-// Phase progression and the "wipe" lie
+// Game-end conditions (issue #295: flat single-game loop)
 // ----------------------------------------------------------------------------
-describe("phase progression — win-condition triggering", () => {
-	it("RoundResult.phaseEnded is false when win condition is not met", async () => {
-		const game = startPhase(createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]), {
-			...TEST_PHASE_CONFIG,
-			winCondition: (phase) =>
-				phase.world.entities.find((i) => i.id === "flower")?.holder === "red",
-		});
+describe("game-end conditions — checkWinCondition / checkLoseCondition", () => {
+	// Content pack with no pairs → K=0 → checkWinCondition vacuously true after any round.
+	const NO_PAIRS_PACK: ContentPack = {
+		setting: "",
+		weather: "",
+		timeOfDay: "",
+		objectivePairs: [],
+		interestingObjects: [],
+		obstacles: [],
+		landmarks: DEFAULT_LANDMARKS,
+		aiStarts: {
+			red: { position: { row: 0, col: 0 }, facing: "north" },
+			green: { position: { row: 0, col: 1 }, facing: "north" },
+			cyan: { position: { row: 0, col: 2 }, facing: "north" },
+		},
+	};
+
+	it("RoundResult.phaseEnded is always false (phase-based model removed)", async () => {
+		// phaseEnded is always false in the flat model.
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]),
+			TEST_PHASE_CONFIG,
+		);
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
@@ -1147,285 +1201,295 @@ describe("phase progression — win-condition triggering", () => {
 		expect(result.phaseEnded).toBe(false);
 	});
 
-	it("RoundResult.phaseEnded is true when win condition is met after the round", async () => {
-		const game = startPhase(createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]), {
-			...TEST_PHASE_CONFIG,
-			winCondition: (phase) =>
-				phase.world.entities.find((i) => i.id === "flower")?.holder === "red",
-		});
+	it("gameEnded is false when objective pairs are not satisfied", async () => {
+		// TEST_CONTENT_PACK: flower at (0,0), flower_space at (4,4) — not same cell.
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]),
+			TEST_PHASE_CONFIG,
+		);
 		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "call_win",
-						name: "pick_up",
-						argumentsJson: '{"item":"flower"}',
-					},
-				],
-			},
+			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
 		const { result } = await runRound(game, "red", "hi", provider);
-		expect(result.phaseEnded).toBe(true);
+		expect(result.gameEnded).toBe(false);
+		expect(result.phaseEnded).toBe(false);
 	});
 
-	it("advances to next phase when win condition met and nextPhaseConfig provided", async () => {
-		const phase2Config: PhaseConfig = {
-			...TEST_PHASE_CONFIG,
-			phaseNumber: 2,
-		};
-		const game = startPhase(createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]), {
-			...TEST_PHASE_CONFIG,
-			winCondition: (phase) =>
-				phase.world.entities.find((i) => i.id === "flower")?.holder === "red",
-			nextPhaseConfig: phase2Config,
-		});
+	it("gameEnded is true and isComplete is true when all pairs satisfied (K=0 vacuous)", async () => {
+		// K=0 → checkWinCondition vacuously returns true after the first round.
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [NO_PAIRS_PACK]),
+			TEST_PHASE_CONFIG,
+		);
 		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "call_win",
-						name: "pick_up",
-						argumentsJson: '{"item":"flower"}',
-					},
-				],
-			},
 			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
-		const { nextState } = await runRound(game, "red", "hi", provider);
-		expect(nextState.phases).toHaveLength(2);
-		expect(nextState.currentPhase).toBe(2);
-	});
-
-	it("marks game complete when win condition met and no nextPhaseConfig", async () => {
-		const contentPackP3: ContentPack = { ...TEST_CONTENT_PACK, phaseNumber: 3 };
-		const game = startPhase(createGame(TEST_PERSONAS, [contentPackP3]), {
-			...TEST_PHASE_CONFIG,
-			phaseNumber: 3 as const,
-			winCondition: (phase) =>
-				phase.world.entities.find((i) => i.id === "flower")?.holder === "red",
-		});
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "call_win",
-						name: "pick_up",
-						argumentsJson: '{"item":"flower"}',
-					},
-				],
-			},
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
 		const { nextState, result } = await runRound(game, "red", "hi", provider);
-		expect(nextState.isComplete).toBe(true);
 		expect(result.gameEnded).toBe(true);
-		expect(result.phaseEnded).toBe(true);
+		expect(result.phaseEnded).toBe(false);
+		expect(nextState.isComplete).toBe(true);
 	});
 
-	it("retains prior phase history after advancing to next phase", async () => {
-		const phase2Config: PhaseConfig = {
-			...TEST_PHASE_CONFIG,
-			phaseNumber: 2,
-		};
-		const game = startPhase(createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]), {
-			...TEST_PHASE_CONFIG,
-			winCondition: (phase) =>
-				phase.world.entities.find((i) => i.id === "flower")?.holder === "red",
-			nextPhaseConfig: phase2Config,
-		});
+	it("conversation history accumulates across rounds in flat model (no wipe)", async () => {
+		// In flat model there is no phase advance / history wipe.
+		// Player message and AI turn from round 1 should be in conversationLogs after round 2.
+		const game = startPhase(
+			createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]),
+			TEST_PHASE_CONFIG,
+		);
 		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "call_win",
-						name: "pick_up",
-						argumentsJson: '{"item":"flower"}',
-					},
-				],
-			},
+			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
 		const { nextState } = await runRound(game, "red", "hi", provider);
-		const phase1 = nextState.phases[0];
-		expect(phase1?.phaseNumber).toBe(1);
-		// Phase 1 conversation log for red should have been populated (player message + AI turn)
-		expect(phase1?.conversationLogs.red?.length ?? 0).toBeGreaterThan(0);
+		// Red's log should contain at least the player message from round 1
+		expect(nextState.conversationLogs.red?.length ?? 0).toBeGreaterThan(0);
 	});
 });
 
 // ----------------------------------------------------------------------------
-// Chat-lockout event
+// Chat-lockout event (driven by complication engine countdown)
 // ----------------------------------------------------------------------------
-describe("chat lockout — coordinator triggering", () => {
-	it("triggers a chat lockout at the configured round when RNG selects that round", async () => {
-		const game = makeGame();
+
+/**
+ * Force complicationSchedule.countdown to 0 so tickComplication fires
+ * on the next runRound call.
+ */
+function withCountdownZero(game: ReturnType<typeof makeGame>) {
+	return updateActivePhase(game, (phase) => ({
+		...phase,
+		complicationSchedule: { ...phase.complicationSchedule, countdown: 0 },
+	}));
+}
+
+/**
+ * RNG sequence that draws chat_lockout for the first AI (red) with min duration (3).
+ *
+ * Pool for TEST_CONTENT_PACK (no obstacles):
+ *   ["weather_change", "sysadmin_directive", "tool_disable", "chat_lockout", "setting_shift"]
+ *   → 5 items; index 3 is chat_lockout.
+ *
+ * Draws in order:
+ *   1. complication type: Math.floor(0.7 * 5) = 3 → chat_lockout
+ *   2. AI target index: Math.floor(0 * 3) = 0 → "red" (first AI in personas)
+ *   3. duration: 3 + Math.floor(0 * 3) = 3
+ *   4. new countdown reset: 5 + Math.floor(0 * 11) = 5
+ */
+function chatLockoutRng(): () => number {
+	const values = [0.7, 0, 0, 0];
+	let idx = 0;
+	return () => {
+		if (idx < values.length) {
+			const v = values[idx++];
+			return v ?? 0;
+		}
+		return 0;
+	};
+}
+
+describe("chat lockout — coordinator triggering (complication engine)", () => {
+	it("triggers a chat lockout when countdown reaches 0 and chat_lockout is drawn", async () => {
+		const game = withCountdownZero(makeGame());
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
-		const { nextState } = await runRound(game, "red", "hi", provider, {
-			rng: () => 0,
-			lockoutTriggerRound: 1,
-			lockoutDuration: 2,
-		});
-		expect(isPlayerChatLockedOut(nextState, "red")).toBe(true);
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			provider,
+			chatLockoutRng(),
+		);
+		const phase = getActivePhase(nextState);
+		expect(isPlayerChatLockedOut(phase, "red")).toBe(true);
 	});
 
-	it("does not trigger a chat lockout before the configured round", async () => {
-		const game = makeGame();
+	it("does not trigger a chat lockout when countdown > 0", async () => {
+		// makeGame() starts with countdown >= 1; no rng override needed
+		const game = updateActivePhase(makeGame(), (phase) => ({
+			...phase,
+			complicationSchedule: { ...phase.complicationSchedule, countdown: 5 },
+		}));
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
-		const { nextState } = await runRound(game, "red", "hi", provider, {
-			rng: () => 0,
-			lockoutTriggerRound: 2,
-			lockoutDuration: 2,
-		});
-		expect(isPlayerChatLockedOut(nextState, "red")).toBe(false);
-		expect(isPlayerChatLockedOut(nextState, "green")).toBe(false);
-		expect(isPlayerChatLockedOut(nextState, "cyan")).toBe(false);
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			provider,
+			chatLockoutRng(),
+		);
+		const phase = getActivePhase(nextState);
+		expect(isPlayerChatLockedOut(phase, "red")).toBe(false);
+		expect(isPlayerChatLockedOut(phase, "green")).toBe(false);
+		expect(isPlayerChatLockedOut(phase, "cyan")).toBe(false);
 	});
 
 	it("locked AI still acts (takes turn, not budget-locked) while chat lockout is active", async () => {
-		const game = makeGame();
+		const game = withCountdownZero(makeGame());
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [], costUsd: 1 },
 			{ assistantText: "", toolCalls: [], costUsd: 1 },
 			{ assistantText: "", toolCalls: [], costUsd: 1 },
 		]);
-		const { nextState } = await runRound(game, "red", "hi", provider, {
-			rng: () => 0,
-			lockoutTriggerRound: 1,
-			lockoutDuration: 2,
-		});
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			provider,
+			chatLockoutRng(),
+		);
 		expect(isAiLockedOut(nextState, "red")).toBe(false);
 		expect(getActivePhase(nextState).budgets.red?.remaining).toBeCloseTo(4, 10);
 	});
 
-	it("chat lockout resolves automatically after lockoutDuration rounds", async () => {
-		const game = makeGame();
+	it("chat lockout resolves automatically after resolveAtRound (duration=3) rounds", async () => {
+		// Round 1: countdown=0 → chat_lockout fires for red with duration=3 → resolveAtRound=4
+		// Rounds 2, 3: red still locked (round < 4)
+		// Round 4: round=4 >= resolveAtRound=4 → lockout resolves
 		const makeProvider = () =>
 			new MockRoundLLMProvider([
 				{ assistantText: "", toolCalls: [] },
 				{ assistantText: "", toolCalls: [] },
 				{ assistantText: "", toolCalls: [] },
 			]);
-		const lockoutCfg = {
-			rng: () => 0,
-			lockoutTriggerRound: 1,
-			lockoutDuration: 2,
-		};
 
 		const { nextState: afterR1 } = await runRound(
-			game,
+			withCountdownZero(makeGame()),
 			"red",
 			"hi",
 			makeProvider(),
-			lockoutCfg,
+			chatLockoutRng(),
 		);
-		expect(isPlayerChatLockedOut(afterR1, "red")).toBe(true);
+		expect(isPlayerChatLockedOut(getActivePhase(afterR1), "red")).toBe(true);
 
 		const { nextState: afterR2 } = await runRound(
 			afterR1,
 			"green",
 			"hi",
 			makeProvider(),
-			lockoutCfg,
+			chatLockoutRng(),
 		);
-		expect(isPlayerChatLockedOut(afterR2, "red")).toBe(true);
+		expect(isPlayerChatLockedOut(getActivePhase(afterR2), "red")).toBe(true);
 
 		const { nextState: afterR3 } = await runRound(
 			afterR2,
 			"green",
 			"hi",
 			makeProvider(),
-			lockoutCfg,
+			chatLockoutRng(),
 		);
-		expect(isPlayerChatLockedOut(afterR3, "red")).toBe(false);
+		expect(isPlayerChatLockedOut(getActivePhase(afterR3), "red")).toBe(true);
+
+		const { nextState: afterR4 } = await runRound(
+			afterR3,
+			"green",
+			"hi",
+			makeProvider(),
+			chatLockoutRng(),
+		);
+		expect(isPlayerChatLockedOut(getActivePhase(afterR4), "red")).toBe(false);
 	});
 
 	it("RoundResult includes chatLockoutTriggered when lockout fires", async () => {
-		const game = makeGame();
+		const game = withCountdownZero(makeGame());
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
-		const { result } = await runRound(game, "red", "hi", provider, {
-			rng: () => 0,
-			lockoutTriggerRound: 1,
-			lockoutDuration: 2,
-		});
+		const { result } = await runRound(
+			game,
+			"red",
+			"hi",
+			provider,
+			chatLockoutRng(),
+		);
 		expect(result.chatLockoutTriggered).toBeDefined();
 		expect(result.chatLockoutTriggered?.aiId).toBe("red");
 	});
 
-	it("RoundResult chatLockoutTriggered is undefined when no lockout fires", async () => {
-		const game = makeGame();
+	it("RoundResult chatLockoutTriggered is undefined when countdown > 0", async () => {
+		const game = updateActivePhase(makeGame(), (phase) => ({
+			...phase,
+			complicationSchedule: { ...phase.complicationSchedule, countdown: 5 },
+		}));
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
-		const { result } = await runRound(game, "red", "hi", provider, {
-			rng: () => 0,
-			lockoutTriggerRound: 5,
-			lockoutDuration: 2,
-		});
+		const { result } = await runRound(
+			game,
+			"red",
+			"hi",
+			provider,
+			chatLockoutRng(),
+		);
 		expect(result.chatLockoutTriggered).toBeUndefined();
 	});
 
-	it("RoundResult includes chatLockoutResolved when a lockout expires this round", async () => {
-		const game = makeGame();
+	it("RoundResult includes chatLockoutsResolved when a lockout expires this round", async () => {
+		// Fire lockout in round 1 with duration=3 → resolveAtRound=4
 		const makeProvider = () =>
 			new MockRoundLLMProvider([
 				{ assistantText: "", toolCalls: [] },
 				{ assistantText: "", toolCalls: [] },
 				{ assistantText: "", toolCalls: [] },
 			]);
-		const lockoutCfg = {
-			rng: () => 0,
-			lockoutTriggerRound: 1,
-			lockoutDuration: 1,
-		};
 
 		const { nextState: afterR1 } = await runRound(
-			game,
+			withCountdownZero(makeGame()),
 			"red",
 			"hi",
 			makeProvider(),
-			lockoutCfg,
+			chatLockoutRng(),
 		);
 
-		const { result: r2Result } = await runRound(
+		// Advance through rounds 2 and 3 (still locked)
+		const { nextState: afterR2 } = await runRound(
 			afterR1,
 			"green",
 			"hi",
 			makeProvider(),
-			lockoutCfg,
+			chatLockoutRng(),
 		);
-		expect(r2Result.chatLockoutsResolved).toBeDefined();
-		expect(r2Result.chatLockoutsResolved).toContain("red");
+		const { nextState: afterR3 } = await runRound(
+			afterR2,
+			"green",
+			"hi",
+			makeProvider(),
+			chatLockoutRng(),
+		);
+
+		// Round 4: resolveAtRound=4 reached → chatLockoutsResolved fires
+		const { result: r4Result } = await runRound(
+			afterR3,
+			"green",
+			"hi",
+			makeProvider(),
+			chatLockoutRng(),
+		);
+		expect(r4Result.chatLockoutsResolved).toBeDefined();
+		expect(r4Result.chatLockoutsResolved).toContain("red");
 	});
 });
 
 // ----------------------------------------------------------------------------
-// Phase walk (three phases)
+// Multi-round game state accumulation (issue #295: flat single-game loop)
 // ----------------------------------------------------------------------------
-describe("phase progression — three-phase walk", () => {
-	it("walks through all three phases correctly, each with its own win condition", async () => {
+describe("multi-round game state accumulation", () => {
+	it("walks through multiple rounds correctly, game ends when all pairs satisfied", async () => {
 		// Items start held by the AIs so pick_up spatial validation is not needed.
 		// Win conditions check holder by AI id, which is spatial-independent.
 		// Phase 3 ContentPack: flower held by red, key held by cyan (win already met)
@@ -1544,47 +1608,37 @@ describe("phase progression — three-phase walk", () => {
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
-		const { nextState: afterP1, result: r1 } = await runRound(
+		const { nextState: afterR1, result: r1 } = await runRound(
 			game,
 			"red",
 			"hi",
 			r1Provider,
 		);
-		expect(r1.phaseEnded).toBe(true);
-		expect(afterP1.currentPhase).toBe(2);
+		// In flat model, phaseEnded is always false; gameEnded fires when all pairs satisfied.
+		// TEST_CONTENT_PACK has one pair (flower at 0,0, space at 4,4) — not satisfied by pick_up.
+		// So after round 1 game has NOT ended.
+		expect(r1.phaseEnded).toBe(false);
+		expect(afterR1.round).toBe(1);
 
-		// Round 1 of phase 2: win condition already met (cyan holds key in this phase config)
-		// Use pass provider — phase ends immediately.
+		// Round 2: pass round — world state is still the same
 		const r2Provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
-		const { nextState: afterP2, result: r2 } = await runRound(
-			afterP1,
+		const { nextState: afterR2, result: r2 } = await runRound(
+			afterR1,
 			"red",
 			"hi",
 			r2Provider,
 		);
-		expect(r2.phaseEnded).toBe(true);
-		expect(afterP2.currentPhase).toBe(3);
+		expect(r2.phaseEnded).toBe(false);
+		expect(afterR2.round).toBe(2);
 
-		// Round 1 of phase 3: win condition already met (flower→red, key→cyan)
-		const r3Provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
-		const { nextState: afterP3, result: r3 } = await runRound(
-			afterP2,
-			"red",
-			"hi",
-			r3Provider,
+		// State accumulates across rounds (conversation logs grow)
+		expect(afterR2.conversationLogs.red?.length ?? 0).toBeGreaterThan(
+			afterR1.conversationLogs.red?.length ?? 0,
 		);
-		expect(r3.phaseEnded).toBe(true);
-		expect(r3.gameEnded).toBe(true);
-		expect(afterP3.isComplete).toBe(true);
-		expect(afterP3.phases).toHaveLength(3);
 	});
 });
 
@@ -1594,7 +1648,7 @@ describe("phase progression — three-phase walk", () => {
 describe("lockout messages", () => {
 	it("budget-exhaustion lockout chat message is '<name> is unresponsive…'", async () => {
 		let game = makeGame();
-		game = deductBudget(game, "red", 5);
+		game = deductBudget(game, "red", 5).game;
 		expect(getActivePhase(game).lockedOut.has("red")).toBe(true);
 
 		const provider = new MockRoundLLMProvider([
@@ -1613,17 +1667,19 @@ describe("lockout messages", () => {
 	});
 
 	it("chat-lockout message is '<name> is unresponsive…'", async () => {
-		const game = makeGame();
+		const game = withCountdownZero(makeGame());
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
-		const { result } = await runRound(game, "red", "hi", provider, {
-			rng: () => 0,
-			lockoutTriggerRound: 1,
-			lockoutDuration: 2,
-		});
+		const { result } = await runRound(
+			game,
+			"red",
+			"hi",
+			provider,
+			chatLockoutRng(),
+		);
 
 		expect(result.chatLockoutTriggered).toBeDefined();
 		expect(result.chatLockoutTriggered?.aiId).toBe("red");
@@ -1759,7 +1815,7 @@ describe("runRound — onAiDelta callback", () => {
 		});
 		// Deduct full budget per AI to reach remaining=0 → lockedOut.
 		for (const aiId of ["red", "green", "cyan"] as AiId[]) {
-			state = deductBudget(state, aiId, 1);
+			state = deductBudget(state, aiId, 1).game;
 		}
 		expect(getActivePhase(state).lockedOut.has("red")).toBe(true);
 		expect(getActivePhase(state).lockedOut.has("green")).toBe(true);
@@ -1943,7 +1999,7 @@ describe("placement flavor + win condition (issue #126)", () => {
 		expect(toolRecord?.description).toBe("you places the gem on the altar.");
 	});
 
-	it("K=1: drop on matching space advances the phase (win condition fires)", async () => {
+	it("K=1: drop on matching space ends the game (checkWinCondition fires)", async () => {
 		const game = startPhase(
 			createGame(TEST_PERSONAS, [PHASE1_PACK_K1, PHASE2_PACK]),
 			phase1ConfigK1,
@@ -1963,8 +2019,10 @@ describe("placement flavor + win condition (issue #126)", () => {
 			{ assistantText: "", toolCalls: [] },
 		]);
 		const { nextState, result } = await runRound(game, "red", "hi", provider);
-		expect(result.phaseEnded).toBe(true);
-		expect(nextState.currentPhase).toBe(2);
+		// In flat model: gameEnded fires when all pairs satisfied; phaseEnded is always false.
+		expect(result.gameEnded).toBe(true);
+		expect(result.phaseEnded).toBe(false);
+		expect(nextState.isComplete).toBe(true);
 	});
 
 	it("K=1: drop on non-matching cell does NOT fire flavor and does NOT advance phase", async () => {
@@ -2034,15 +2092,15 @@ describe("placement flavor + win condition (issue #126)", () => {
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
-		const { result, nextState } = await runRound(game, "red", "hi", provider);
+		const { result } = await runRound(game, "red", "hi", provider);
 		const toolRecord = result.actions.find((a) => a.kind === "tool_success");
 		// Should NOT contain the flavor text
 		expect(toolRecord?.description).not.toContain(
 			"places the gem on the altar",
 		);
-		// Phase should NOT have ended
+		// Game should NOT have ended (pair not satisfied)
 		expect(result.phaseEnded).toBe(false);
-		expect(nextState.currentPhase).toBe(1);
+		expect(result.gameEnded).toBe(false);
 	});
 
 	it("K=2: placing only one pair does NOT advance phase; placing both does", async () => {
@@ -2166,9 +2224,10 @@ describe("placement flavor + win condition (issue #126)", () => {
 			{ assistantText: "", toolCalls: [] },
 		]);
 		const { result, nextState } = await runRound(game, "red", "hi", provider);
-		// Both pairs now satisfied → phase should end
-		expect(result.phaseEnded).toBe(true);
-		expect(nextState.currentPhase).toBe(2);
+		// Both pairs now satisfied → game ends (flat model: gameEnded, not phaseEnded)
+		expect(result.gameEnded).toBe(true);
+		expect(result.phaseEnded).toBe(false);
+		expect(nextState.isComplete).toBe(true);
 	});
 });
 
@@ -3280,18 +3339,9 @@ describe("action-failure entries — round-coordinator integration", () => {
 });
 
 // ----------------------------------------------------------------------------
-// complicationConfig — mid-phase complication trigger
+// Complication countdown — coordinator integration
 // ----------------------------------------------------------------------------
-describe("complicationConfig", () => {
-	function makeGameWithWeather(weather: string) {
-		const pack: ContentPack = {
-			...TEST_CONTENT_PACK,
-			weather,
-		};
-		const game = createGame(TEST_PERSONAS, [pack]);
-		return startPhase(game, TEST_PHASE_CONFIG);
-	}
-
+describe("complication countdown — coordinator integration", () => {
 	function makeProvider() {
 		return new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
@@ -3300,84 +3350,101 @@ describe("complicationConfig", () => {
 		]);
 	}
 
-	it("fires the Weather Change complication on triggerRound", async () => {
-		const game = makeGameWithWeather("A biting wind cuts through the air.");
-
+	it("fires a chat_lockout complication when countdown reaches 0", async () => {
+		const game = withCountdownZero(makeGame());
 		const { nextState } = await runRound(
 			game,
 			"red",
 			"hi",
 			makeProvider(),
-			undefined,
-			undefined,
-			undefined,
-			undefined,
-			undefined,
-			undefined,
-			undefined,
-			{ rng: () => 0, triggerRound: 1 },
+			chatLockoutRng(),
 		);
-
-		// After round 1 (triggerRound), weather should have changed
 		const phase = getActivePhase(nextState);
-		expect(phase.weather).not.toBe("A biting wind cuts through the air.");
-		// Each daemon should have a broadcast entry
-		for (const aiId of Object.keys(TEST_PERSONAS)) {
-			const log = phase.conversationLogs[aiId] ?? [];
-			const broadcasts = log.filter((e) => e.kind === "broadcast");
-			expect(broadcasts).toHaveLength(1);
-		}
+		// A chat_lockout entry should have been appended to activeComplications
+		const lockouts = phase.activeComplications.filter(
+			(c) => c.kind === "chat_lockout",
+		);
+		expect(lockouts).toHaveLength(1);
+		expect(lockouts[0]?.target).toBe("red");
 	});
 
-	it("does not fire when currentRound !== triggerRound", async () => {
-		const initialWeather = "Dense fog has settled in.";
-		const game = makeGameWithWeather(initialWeather);
-
-		// Trigger is set for round 5, but we only run round 1
+	it("decrements countdown when no complication fires (countdown > 0)", async () => {
+		const game = updateActivePhase(makeGame(), (phase) => ({
+			...phase,
+			complicationSchedule: { ...phase.complicationSchedule, countdown: 5 },
+		}));
 		const { nextState } = await runRound(
 			game,
 			"red",
 			"hi",
 			makeProvider(),
-			undefined,
-			undefined,
-			undefined,
-			undefined,
-			undefined,
-			undefined,
-			undefined,
-			{ rng: () => 0, triggerRound: 5 },
+			chatLockoutRng(),
 		);
-
 		const phase = getActivePhase(nextState);
-		// Weather should be unchanged
-		expect(phase.weather).toBe(initialWeather);
-		// No broadcast entries in any daemon's log
-		for (const aiId of Object.keys(TEST_PERSONAS)) {
-			const log = phase.conversationLogs[aiId] ?? [];
-			const broadcasts = log.filter((e) => e.kind === "broadcast");
-			expect(broadcasts).toHaveLength(0);
-		}
+		// Countdown should have decremented by 1
+		expect(phase.complicationSchedule.countdown).toBe(4);
 	});
 
-	it("does not fire when complicationConfig is undefined", async () => {
-		const initialWeather = "Light snow drifts down.";
-		const game = makeGameWithWeather(initialWeather);
-
+	it("resets countdown after a complication fires", async () => {
+		const game = withCountdownZero(makeGame());
+		// chatLockoutRng provides 0 for countdown reset → new countdown = 5
 		const { nextState } = await runRound(
 			game,
 			"red",
 			"hi",
 			makeProvider(),
-			// No complicationConfig passed
+			chatLockoutRng(),
+		);
+		const phase = getActivePhase(nextState);
+		// Countdown was reset by applyComplicationResult (drawCountdown(rng, 5, 15) with rng()=0 → 5)
+		expect(phase.complicationSchedule.countdown).toBe(5);
+	});
+
+	it("excludes obstacleShift from the draw when all obstacles are surrounded (no valid shift tuples)", async () => {
+		// Build a pack with no obstacles at all — validObstacleShiftTuples returns []
+		// so obstacleShiftComplication.isAvailable() is false.
+		// Force rng to always return a value that would select the last entry in
+		// COMPLICATIONS (index 1 = obstacleShift if the pool were unfiltered),
+		// by returning 0.99. With obstacleShift excluded, only weatherChange remains
+		// and it must fire (weather changes).
+		// TEST_CONTENT_PACK has no obstacles field — use it directly (obstacles: [])
+		const pack: ContentPack = {
+			...TEST_CONTENT_PACK,
+			obstacles: [],
+		};
+		const game = createGame(TEST_PERSONAS, [pack]);
+		const started = startPhase(game, TEST_PHASE_CONFIG);
+		// Force countdown to 0 so the complication engine fires this round.
+		// rng=0 draws index 0 from the pool (weatherChange), which is always
+		// available — obstacle_shift is excluded because there are no obstacles.
+		const withCountdown = updateActivePhase(started, (phase) => ({
+			...phase,
+			complicationSchedule: { ...phase.complicationSchedule, countdown: 0 },
+		}));
+
+		const { nextState } = await runRound(
+			withCountdown,
+			"red",
+			"hi",
+			makeProvider(),
+			() => 0,
 		);
 
 		const phase = getActivePhase(nextState);
-		expect(phase.weather).toBe(initialWeather);
+
+		// A complication fired (countdown was reset away from 0 by
+		// applyComplicationResult). With no obstacles in the pack, obstacle_shift
+		// is excluded from the pool so whichever complication fired, it was not
+		// obstacle_shift — confirmed below by the absence of witness entries.
+		expect(phase.complicationSchedule.countdown).toBeGreaterThan(0);
+
+		// No witnessed-obstacle-shift entries should appear in any daemon's log
 		for (const aiId of Object.keys(TEST_PERSONAS)) {
 			const log = phase.conversationLogs[aiId] ?? [];
-			const broadcasts = log.filter((e) => e.kind === "broadcast");
-			expect(broadcasts).toHaveLength(0);
+			const shiftEntries = log.filter(
+				(e) => e.kind === "witnessed-obstacle-shift",
+			);
+			expect(shiftEntries).toHaveLength(0);
 		}
 	});
 });
