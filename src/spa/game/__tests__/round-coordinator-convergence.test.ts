@@ -82,9 +82,7 @@ const TEST_CONTENT_PACK: ContentPack = {
 	setting: "",
 	weather: "",
 	timeOfDay: "",
-	objectivePairs: [
-		{ object: CONVERGENCE_OBJECT, space: CONVERGENCE_SPACE },
-	],
+	objectivePairs: [{ object: CONVERGENCE_OBJECT, space: CONVERGENCE_SPACE }],
 	interestingObjects: [],
 	obstacles: [],
 	landmarks: DEFAULT_LANDMARKS,

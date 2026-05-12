@@ -378,10 +378,22 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 					interestingObjects: [],
 					obstacles: [],
 					landmarks: {
-						north: { shortName: "the signal tower", horizonPhrase: "rises above the platform" },
-						south: { shortName: "the collapsed entrance", horizonPhrase: "gapes like a wound in the dark" },
-						east: { shortName: "the rusted fan shaft", horizonPhrase: "spins slowly in the stale air" },
-						west: { shortName: "the flooded tunnel", horizonPhrase: "disappears into still black water" },
+						north: {
+							shortName: "the signal tower",
+							horizonPhrase: "rises above the platform",
+						},
+						south: {
+							shortName: "the collapsed entrance",
+							horizonPhrase: "gapes like a wound in the dark",
+						},
+						east: {
+							shortName: "the rusted fan shaft",
+							horizonPhrase: "spins slowly in the stale air",
+						},
+						west: {
+							shortName: "the flooded tunnel",
+							horizonPhrase: "disappears into still black water",
+						},
 					},
 				},
 			],

@@ -24,6 +24,7 @@ import {
 	resolveExpiredChatLockouts,
 	tickComplication,
 } from "./complication-engine";
+import { projectCone } from "./cone-projector";
 import { dispatchAiTurn } from "./dispatcher";
 import {
 	advanceRound,
@@ -35,7 +36,6 @@ import {
 	resolveToolDisables,
 } from "./engine";
 import { buildOpenAiMessages } from "./openai-message-builder";
-import { projectCone } from "./cone-projector";
 import { buildAiContext, buildConeSnapshot } from "./prompt-builder";
 import type { OpenAiMessage, RoundLLMProvider } from "./round-llm-provider";
 import {
@@ -55,7 +55,11 @@ import type {
 	ToolName,
 	ToolRoundtripMessage,
 } from "./types";
-import { checkConvergenceTier, checkLoseCondition, checkWinCondition } from "./win-condition";
+import {
+	checkConvergenceTier,
+	checkLoseCondition,
+	checkWinCondition,
+} from "./win-condition";
 
 // Match the SPA dev-host gate used in src/spa/routes/game.ts. The
 // `typeof` guard keeps this safe in test environments that don't stub
@@ -587,13 +591,14 @@ export async function runRound(
 				? (spaceEntity?.convergenceTier1Flavor ?? "Something stirs here.")
 				: (spaceEntity?.convergenceTier2Flavor ?? "Two presences converge.");
 
-		const entry: Extract<ConversationEntry, { kind: "witnessed-convergence" }> = {
-			kind: "witnessed-convergence",
-			round: state.round,
-			spaceId,
-			tier,
-			flavor,
-		};
+		const entry: Extract<ConversationEntry, { kind: "witnessed-convergence" }> =
+			{
+				kind: "witnessed-convergence",
+				round: state.round,
+				spaceId,
+				tier,
+				flavor,
+			};
 
 		// Fan out to every Daemon whose cone contains the space cell.
 		for (const [daemonId, spatial] of Object.entries(state.personaSpatial)) {
