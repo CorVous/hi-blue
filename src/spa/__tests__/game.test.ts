@@ -1266,7 +1266,7 @@ describe("renderGame — chat_lockout event", () => {
 		document.body.innerHTML = "";
 	});
 
-	it("chat_lockout appends the lockout message to the locked AI's transcript", async () => {
+	it("chat_lockout silently locks the panel without appending a transcript message", async () => {
 		vi.stubGlobal(
 			"fetch",
 			makeThreeAiFetchMock(PASS_ACTION, PASS_ACTION, PASS_ACTION),
@@ -1315,9 +1315,10 @@ describe("renderGame — chat_lockout event", () => {
 
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
-		// The chat_lockout event should have appended the message to red's transcript.
+		// The chat_lockout event should NOT append any message to the transcript —
+		// complications are silent to the player.
 		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
-		expect(redTranscript.textContent).toContain("[Ember is unresponsive…]");
+		expect(redTranscript.textContent).not.toContain("[Ember is unresponsive…]");
 
 		// After the chat_lockout fires for red, typing *Ember should leave Send disabled.
 		const sendBtn = getEl<HTMLButtonElement>("#send");

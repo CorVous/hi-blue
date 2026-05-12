@@ -1257,7 +1257,6 @@ export function renderGame(
 
 					case "chat_lockout":
 						setChatLockout(event.aiId, true);
-						appendStandaloneLine(event.aiId, `[${event.message}]\n`);
 						break;
 
 					case "chat_lockout_resolved":
