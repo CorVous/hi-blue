@@ -9,6 +9,7 @@ export {
 	SINGLE_GAME_CONFIG,
 } from "./phases";
 export { SETTING_POOL } from "./setting-pool";
+export { SYSADMIN_DIRECTIVE_POOL } from "./sysadmin-directive-pool";
 export { TEMPERAMENT_POOL } from "./temperament-pool";
 export { THEME_POOL } from "./theme-pool";
 export { TIME_OF_DAY_POOL } from "./time-of-day-pool";

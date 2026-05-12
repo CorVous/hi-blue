@@ -70,7 +70,14 @@ export function renderEntry(
 		case "message": {
 			if (entry.to === aiId) {
 				// Incoming: render as "<fromLabel> dms you: <content>"
-				const fromLabel = entry.from === "blue" ? "blue" : `*${entry.from}`;
+				let fromLabel: string;
+				if (entry.from === "blue") {
+					fromLabel = "blue";
+				} else if (entry.from === "sysadmin") {
+					fromLabel = "the Sysadmin";
+				} else {
+					fromLabel = `*${entry.from}`;
+				}
 				return `[Round ${round}] ${fromLabel} dms you: ${entry.content}`;
 			}
 			// Outgoing: render as "you dm <toLabel>: <content>"

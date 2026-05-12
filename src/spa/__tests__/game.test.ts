@@ -78,7 +78,7 @@ async function seedSessionInStub(
 		configurable: true,
 	});
 
-	const contentPack = opts?.noPairs
+	const _contentPack = opts?.noPairs
 		? STATIC_CONTENT_PACK_NO_PAIRS
 		: (STATIC_CONTENT_PACKS[0] as NonNullable<
 				(typeof STATIC_CONTENT_PACKS)[0]

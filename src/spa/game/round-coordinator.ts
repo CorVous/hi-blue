@@ -36,6 +36,11 @@ import {
 import { buildOpenAiMessages } from "./openai-message-builder";
 import { buildAiContext, buildConeSnapshot } from "./prompt-builder";
 import type { OpenAiMessage, RoundLLMProvider } from "./round-llm-provider";
+import {
+	drawDirectiveText,
+	formatDirectiveDelivery,
+	formatDirectiveRevocation,
+} from "./sysadmin-directive";
 import { parseToolCallArguments } from "./tool-registry";
 import type {
 	AiId,
@@ -466,13 +471,61 @@ export async function runRound(
 
 	const complicationResult = tickComplication(state, rng);
 	if (complicationResult !== null) {
-		state = applyComplicationResult(state, complicationResult, rng);
 		const { fired } = complicationResult;
-		if (fired.kind === "chat_lockout") {
-			chatLockoutTriggered = {
-				aiId: fired.target,
-				message: `${state.personas[fired.target]?.name ?? fired.target} is unresponsive…`,
-			};
+		if (fired.kind === "sysadmin_directive") {
+			const target = fired.target;
+			const directiveText = drawDirectiveText(rng);
+
+			// Revoke any pre-existing directive for this target before issuing the new one.
+			const existing = state.activeComplications.find(
+				(c): c is Extract<typeof c, { kind: "sysadmin_directive" }> =>
+					c.kind === "sysadmin_directive" && c.target === target,
+			);
+			if (existing) {
+				state = appendMessage(
+					state,
+					"sysadmin",
+					target,
+					formatDirectiveRevocation(existing.directive),
+				);
+				state = {
+					...state,
+					activeComplications: state.activeComplications.filter(
+						(c) => !(c.kind === "sysadmin_directive" && c.target === target),
+					),
+				};
+			}
+
+			// Apply engine result (resets countdown, appends new entry with directive: "").
+			state = applyComplicationResult(state, complicationResult, rng);
+
+			// Patch the just-appended entry with the real directive text.
+			const comps = state.activeComplications.map((c) =>
+				c.kind === "sysadmin_directive" && c.target === target
+					? {
+							kind: "sysadmin_directive" as const,
+							target,
+							directive: directiveText,
+						}
+					: c,
+			);
+			state = { ...state, activeComplications: comps };
+
+			// Deliver directive message to the target Daemon only.
+			state = appendMessage(
+				state,
+				"sysadmin",
+				target,
+				formatDirectiveDelivery(directiveText),
+			);
+		} else {
+			state = applyComplicationResult(state, complicationResult, rng);
+			if (fired.kind === "chat_lockout") {
+				chatLockoutTriggered = {
+					aiId: fired.target,
+					message: `${state.personas[fired.target]?.name ?? fired.target} is unresponsive…`,
+				};
+			}
 		}
 	} else {
 		state = decrementComplicationCountdown(state);

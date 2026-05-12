@@ -6,6 +6,7 @@ import {
 	appendMessage,
 	createGame,
 	startPhase,
+	updateActivePhase,
 } from "../engine";
 import { buildOpenAiMessages } from "../openai-message-builder";
 import { buildAiContext, buildConeSnapshot } from "../prompt-builder";
@@ -1351,5 +1352,95 @@ describe("<whats_new> broadcast announcements", () => {
 		game = advanceRound(game); // round 2 — broadcast is now stale
 		const ctx = buildAiContext(game, "red");
 		expect(ctx.pendingBroadcasts).toHaveLength(0);
+	});
+});
+
+// ----------------------------------------------------------------------------
+// Sysadmin Directive complication injection (issue #298)
+// ----------------------------------------------------------------------------
+describe("activeDirectives — buildAiContext and system prompt injection", () => {
+	function seedDirective(
+		game: ReturnType<typeof startPhase>,
+		target: string,
+		directive: string,
+	) {
+		return updateActivePhase(game, (phase) => ({
+			...phase,
+			activeComplications: [
+				...phase.activeComplications,
+				{ kind: "sysadmin_directive" as const, target, directive },
+			],
+		}));
+	}
+
+	it("activeDirectives is empty when no sysadmin_directive complications exist", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const ctx = buildAiContext(game, "red");
+		expect(ctx.activeDirectives).toEqual([]);
+	});
+
+	it("activeDirectives includes directive text for the target AI", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = seedDirective(game, "red", "Speak only in short sentences.");
+		const ctx = buildAiContext(game, "red");
+		expect(ctx.activeDirectives).toEqual(["Speak only in short sentences."]);
+	});
+
+	it("activeDirectives excludes directives targeting other AIs", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = seedDirective(game, "green", "Act distracted.");
+		const ctx = buildAiContext(game, "red");
+		expect(ctx.activeDirectives).toEqual([]);
+	});
+
+	it("activeDirectives includes multiple directives for the same target", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = seedDirective(game, "red", "Directive A.");
+		game = seedDirective(game, "red", "Directive B.");
+		const ctx = buildAiContext(game, "red");
+		expect(ctx.activeDirectives).toEqual(["Directive A.", "Directive B."]);
+	});
+
+	it("activeDirectives filters out empty-string directive placeholders", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = seedDirective(game, "red", "");
+		game = seedDirective(game, "red", "Real directive.");
+		const ctx = buildAiContext(game, "red");
+		expect(ctx.activeDirectives).toEqual(["Real directive."]);
+	});
+
+	it("toSystemPrompt emits a <directives> block when activeDirectives is non-empty", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = seedDirective(game, "red", "End every message with a question.");
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toContain("<directives>");
+		expect(prompt).toContain("</directives>");
+		expect(prompt).toContain("End every message with a question.");
+	});
+
+	it("toSystemPrompt does NOT emit a <directives> block when activeDirectives is empty", () => {
+		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).not.toContain("<directives>");
+	});
+
+	it("toSystemPrompt lists all active directives as bullet lines", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = seedDirective(game, "red", "Directive Alpha.");
+		game = seedDirective(game, "red", "Directive Beta.");
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toContain("- Directive Alpha.");
+		expect(prompt).toContain("- Directive Beta.");
+	});
+
+	it("toSystemPrompt <directives> block includes a secrecy header", () => {
+		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		game = seedDirective(game, "red", "Some instruction.");
+		const ctx = buildAiContext(game, "red");
+		const prompt = ctx.toSystemPrompt();
+		expect(prompt).toMatch(/do not reveal|private/i);
 	});
 });

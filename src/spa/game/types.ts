@@ -208,8 +208,9 @@ export interface PhysicalActionRecord {
  * tag is chosen so a player editing a `*xxxx.txt` file in devtools can tell entry kinds
  * apart at a glance.
  *
- * - `message`: a directional message from `from: AiId | "blue"` to `to: AiId | "blue"`.
- *   Both sender's and recipient's per-Daemon logs receive the same entry.
+ * - `message`: a directional message from `from: AiId | "blue" | "sysadmin"` to `to: AiId | "blue"`.
+ *   Both sender's and recipient's per-Daemon logs receive the same entry. `"sysadmin"` is a
+ *   special sender for privately-delivered system directives (not a real Daemon — has no log slot).
  * - `witnessed-event`: projects the render-relevant subset of PhysicalActionRecord for an action
  *   this Daemon observed inside its cone. The cone-snapshot fields (`actorCellAtAction`,
  *   `actorFacingAtAction`, `witnessSpatial`) are omitted — cone visibility is resolved at
@@ -224,7 +225,7 @@ export type ConversationEntry =
 	| {
 			kind: "message";
 			round: number;
-			from: AiId | "blue";
+			from: AiId | "blue" | "sysadmin";
 			to: AiId | "blue";
 			content: string;
 	  }
@@ -295,7 +296,6 @@ export interface GameState {
 	/** Which setting is currently active. Starts as "A"; swapped to "B" by Setting Shift. */
 	activePackId: "A" | "B";
 }
-
 
 export type ToolName =
 	| "pick_up"

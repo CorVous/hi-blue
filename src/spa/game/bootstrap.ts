@@ -132,21 +132,22 @@ export function buildSessionFromAssets(
 	opts?: { rng?: () => number },
 ): GameSession {
 	return new GameSession(
-		assets.contentPacksA[0] ?? assets.contentPacksB[0] ?? {
-			setting: "",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [],
-			interestingObjects: [],
-			obstacles: [],
-			landmarks: {
-				north: { shortName: "", horizonPhrase: "" },
-				south: { shortName: "", horizonPhrase: "" },
-				east: { shortName: "", horizonPhrase: "" },
-				west: { shortName: "", horizonPhrase: "" },
+		assets.contentPacksA[0] ??
+			assets.contentPacksB[0] ?? {
+				setting: "",
+				weather: "",
+				timeOfDay: "",
+				objectivePairs: [],
+				interestingObjects: [],
+				obstacles: [],
+				landmarks: {
+					north: { shortName: "", horizonPhrase: "" },
+					south: { shortName: "", horizonPhrase: "" },
+					east: { shortName: "", horizonPhrase: "" },
+					west: { shortName: "", horizonPhrase: "" },
+				},
+				aiStarts: {},
 			},
-			aiStarts: {},
-		},
 		assets.personas,
 		assets.contentPacksA,
 		assets.contentPacksB,
