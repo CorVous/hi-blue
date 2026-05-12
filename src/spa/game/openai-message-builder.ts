@@ -57,7 +57,7 @@ import type { ToolRoundtripMessage } from "./types.js";
  * does not treat the prior round's user turn as fresh stimulus.
  */
 export function buildSilentTurn(): string {
-	return "You have received no messages. Consider whether to reach out to blue.";
+	return "You have received no messages.";
 }
 
 export function buildOpenAiMessages(
