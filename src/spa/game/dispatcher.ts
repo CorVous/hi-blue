@@ -295,6 +295,34 @@ export function executeToolCall(
 					}
 				}
 			}
+
+			// Check for a pending UseItemObjective that targets this item.
+			// If found, flip both the objective's and the entity's satisfactionState.
+			if (target) {
+				const itemId = call.args.item;
+				const pendingObjectiveIdx = game.objectives.findIndex(
+					(obj) =>
+						obj.kind === "use_item" &&
+						obj.itemId === itemId &&
+						obj.satisfactionState === "pending",
+				);
+				if (pendingObjectiveIdx !== -1) {
+					// Flip objective satisfactionState
+					const updatedObjectives = game.objectives.map((obj, idx) =>
+						idx === pendingObjectiveIdx
+							? { ...obj, satisfactionState: "satisfied" as const }
+							: obj,
+					);
+					// Flip entity satisfactionState in our entities snapshot
+					target.satisfactionState = "satisfied";
+					// Return early with updated objectives and entities
+					return {
+						...game,
+						world: { ...game.world, entities },
+						objectives: updatedObjectives,
+					};
+				}
+			}
 			break;
 		}
 		case "examine":
@@ -436,8 +464,13 @@ export function dispatchAiTurn(
 				const item = state.world.entities.find(
 					(e) => e.id === toolCall.args.item,
 				);
+				const examineDesc =
+					item?.satisfactionState === "satisfied" &&
+					item.postExamineDescription
+						? item.postExamineDescription
+						: (item?.examineDescription ?? "");
 				actorPrivateToolResult = {
-					description: item?.examineDescription ?? "",
+					description: examineDesc,
 					success: true,
 				};
 			} else {

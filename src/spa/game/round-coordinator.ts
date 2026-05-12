@@ -556,7 +556,7 @@ export async function runRound(
 
 	// 5. Check win/lose conditions — win takes priority.
 	let gameEnded = false;
-	if (checkWinCondition(state.world, state.contentPack)) {
+	if (checkWinCondition(state.world, state.objectives)) {
 		state = { ...state, isComplete: true, outcome: "win" };
 		gameEnded = true;
 	} else if (checkLoseCondition(state.lockedOut, Object.keys(state.personas))) {

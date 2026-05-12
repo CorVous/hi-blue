@@ -43,6 +43,12 @@ export interface WorldEntity {
 	shiftFlavor?: string;
 	/** AiId when held by an AI; GridPosition when resting on a cell. */
 	holder: AiId | GridPosition;
+	/** Tracks whether this entity has been "used" for a UseItem objective. Defaults to "pending" when omitted. */
+	satisfactionState?: "pending" | "satisfied";
+	/** Alternate examineDescription shown after satisfactionState flips to "satisfied". */
+	postExamineDescription?: string;
+	/** Alternate look flavor shown after satisfactionState flips to "satisfied". */
+	postLookFlavor?: string;
 }
 
 export interface WorldState {
@@ -90,10 +96,44 @@ export interface ContentPack {
 	};
 }
 
-export interface Objective {
+export type ObjectiveKind = "carry" | "use_item" | "use_space" | "convergence";
+
+export interface CarryObjective {
 	id: string;
+	kind: "carry";
 	description: string;
+	satisfactionState: "pending" | "satisfied";
+	objectId: string;
+	spaceId: string;
 }
+
+export interface UseItemObjective {
+	id: string;
+	kind: "use_item";
+	description: string;
+	satisfactionState: "pending" | "satisfied";
+	itemId: string;
+}
+
+export interface UseSpaceObjective {
+	id: string;
+	kind: "use_space";
+	description: string;
+	satisfactionState: "pending" | "satisfied";
+}
+
+export interface ConvergenceObjective {
+	id: string;
+	kind: "convergence";
+	description: string;
+	satisfactionState: "pending" | "satisfied";
+}
+
+export type Objective =
+	| CarryObjective
+	| UseItemObjective
+	| UseSpaceObjective
+	| ConvergenceObjective;
 
 // ── Complication types ────────────────────────────────────────────────────────
 
@@ -295,6 +335,8 @@ export interface GameState {
 	contentPacksB: ContentPack[];
 	/** Which setting is currently active. Starts as "A"; swapped to "B" by Setting Shift. */
 	activePackId: "A" | "B";
+	/** Active objectives for this game session. Drawn at game start from the content pack pool. */
+	objectives: Objective[];
 }
 
 export type ToolName =
