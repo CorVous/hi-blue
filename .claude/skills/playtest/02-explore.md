@@ -1,6 +1,6 @@
 # Explore the code (Stage 3 of 3)
 
-You've played a phase, written observations, read the rules primer, and
+You've played the game, written observations, read the rules primer, and
 drafted hypotheses. The gate is now lifted: **you may read any source file,
 documentation, log, or test in the repository to refine your hypotheses.**
 
@@ -23,11 +23,28 @@ someone else's writeup.
   first if any vocabulary from `01-rules.md` was unclear.
 - **`AGENTS.md`** — points at the testing surfaces, prompt files, and
   domain docs.
+- **`docs/prd/0005-restructure-game-mechanics.md`** — the PRD that
+  introduced single-game mode, the four Objective types, and the six
+  Complication types. Worth a read if any structural hypothesis is fuzzy.
 - **`src/spa/game/prompt-builder.ts`** — the file that assembles each
   daemon's system prompt every round. Read this if any hypothesis touches
   what a daemon knows or sees.
-- **`src/content/{personas.ts, phases.ts, goal-pool.ts}`** — the content
-  pools (Temperaments, Phase Goals, etc.) that synthesis draws from.
+- **`src/spa/game/objective-pool.ts`** — the four-type Objective pool and
+  the per-type satisfaction predicates. Pair with
+  `src/spa/game/win-condition.ts` for the all-objectives-satisfied check.
+- **`src/spa/game/complications.ts`** and
+  **`src/spa/game/complication-engine.ts`** — the six Complication types
+  and the schedule that draws them.
+- **`src/spa/game/sysadmin-directive.ts`** — the Sysadmin Directive
+  Complication's secrecy + revocation machinery.
+- **`src/spa/game/content-pack-provider.ts`** — where the AI-discoverable
+  `examineDescription` tells live, including the per-Objective-type prose
+  rules.
+- **`src/content/{persona-generator.ts, temperament-pool.ts,
+  persona-goal-pool.ts, sysadmin-directive-pool.ts, setting-pool.ts,
+  weather-pool.ts}`** — the content pools synthesis draws from.
+  `src/content/phases.ts` is still present but its `PHASE_*_CONFIG`
+  exports are deprecated; the live config is `SINGLE_GAME_CONFIG`.
 - **`/tmp/wrangler.log`** — the worker proxy log for this run. Now in
   bounds. Useful for confirming which tool calls a daemon actually fired
   in a given round (look for `["pick_up","examine","message:0jmn"]`-style

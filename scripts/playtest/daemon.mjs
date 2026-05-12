@@ -12,8 +12,9 @@
 //   {"op":"snap","path":"/tmp/x.png"}   → screenshot for human reference
 //   {"op":"shutdown"}                   → close the browser and exit
 //
-// Each response is one JSON object on /tmp/playtest-out, e.g.:
-//   {"ok":true,"phase":"...","panels":[...],"composer":"...","banner":"..."}
+// Each response is one JSON object on /tmp/playtest-out. The snapshot shape
+// is documented in .claude/skills/playtest/SKILL.md (single-game model — no
+// phase advancement; `endgame` is the terminal signal).
 
 import { execSync } from "node:child_process";
 import {
@@ -114,6 +115,9 @@ async function readVisibleText(loc) {
 }
 
 async function snapshot() {
+	// #phase-banner is legacy UI from the retired three-phase model. In the
+	// current single-game build it stays hidden, so `phase` is normally "".
+	// Kept in the snapshot shape for backward compat with older playtest logs.
 	const phase = await readVisibleText(page.locator("#phase-banner"));
 	const topinfoLeft = await readVisibleText(page.locator("#topinfo-left"));
 	const topinfoRight = await readVisibleText(page.locator("#topinfo-right"));

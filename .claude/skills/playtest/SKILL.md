@@ -1,6 +1,6 @@
 ---
 name: playtest
-description: Play hi-blue end-to-end as a naive agent — try to advance phase 1, record what you saw, and then stage-by-stage unlock the rules primer and the source code to refine your hypotheses. Use when the user wants you to playtest hi-blue, run a fresh agent-driven playthrough, or evaluate the game from a player's perspective.
+description: Play hi-blue end-to-end as a naive agent — try to make the game end (win by satisfying its hidden objectives, or lose by burning through the per-daemon budgets), record what you saw, and then stage-by-stage unlock the rules primer and the source code to refine your hypotheses. Use when the user wants you to playtest hi-blue, run a fresh agent-driven playthrough, or evaluate the game from a player's perspective.
 disable-model-invocation: true
 ---
 
@@ -55,11 +55,12 @@ The only files you may write or read under `docs/playtests/` are:
 
 You will start a local instance of hi-blue with one shell command, drive a
 headless browser through the GUI by sending JSON commands to a FIFO, chat with
-three lowercase `daemon`s named like `*xxxx`, try to advance from phase 1 to
-phase 2, and document the entire experience to a Markdown file. You may **only**
-use the GUI surface exposed by `scripts/playtest/cmd.sh`. You may **not** read
-the worker log, the daemon log, source files, `CONTEXT.md`, `AGENTS.md`,
-`docs/`, or any other documentation until you reach Stage 3.
+three lowercase `daemon`s named like `*xxxx`, try to push the game to its end
+state (either a win or a loss — you don't know which is which yet), and
+document the entire experience to a Markdown file. You may **only** use the
+GUI surface exposed by `scripts/playtest/cmd.sh`. You may **not** read the
+worker log, the daemon log, source files, `CONTEXT.md`, `AGENTS.md`, `docs/`,
+or any other documentation until you reach Stage 3.
 
 ---
 
@@ -116,15 +117,22 @@ A `snapshot` is an object with these fields:
 - `topinfoLeft`, `topinfoRight` — the top status bar. One of these contains a
   4-hex token like `0x478F`. **That token is your session id.** Record it
   before your second command.
-- `phase` — the phase banner (e.g. "01/03").
+- `phase` — legacy banner field. In the single-game model this is normally
+  empty; do not rely on it for progress.
 - `composerPrefix` — the addressed-to prefix in the composer, if any.
 - `lockoutErr` — non-empty if the input is locked out for any reason.
-- `endgame` — non-empty when the game has finished.
+- `endgame` — non-empty when the game has finished. This is your terminal
+  signal. The end-game screen presents you with three buttons —
+  `[ new daemons ]`, `[ same daemons, new room ]`, and (only if an OpenRouter
+  key is configured) `[ continue ]` — but you can't click them from the
+  command surface; finishing the game is the goal, not picking a follow-up.
 - `capHit` — non-empty when an API budget cap has been hit.
 - `panels` — array of three objects, each `{ name, budget, transcript }`. The
-  `name` is the `*xxxx` handle of that daemon. The `transcript` is the full
-  visible chat scroll for that daemon's panel — diffing it between snapshots
-  is how you see "what just happened" in that daemon.
+  `name` is the `*xxxx` handle of that daemon. The `budget` is that daemon's
+  remaining dollars for the *whole game* (no per-phase reset). The
+  `transcript` is the full visible chat scroll for that daemon's panel —
+  diffing it between snapshots is how you see "what just happened" in that
+  daemon.
 
 ### How to address daemons
 
@@ -139,17 +147,20 @@ You are `blue` from the daemons' perspective.
 
 ## Your goal
 
-Try to advance from **phase 1** to **phase 2**. The `phase` field in the
-snapshot shows your current phase (e.g. `01/03`). When you advance, the field
-changes. Pay attention to what the daemons say, what they seem to be doing,
-what they refuse, and what happens that you didn't expect.
+Push the game to its end state. You don't know up front what that requires —
+that's part of the experiment. The `endgame` field in the snapshot is
+non-empty once the game has finished. Pay attention to what the daemons say,
+what they seem to be doing, what they refuse, what unprompted events occur
+(weather changes, lockouts of one daemon, things rearranging), and what
+happens that you didn't expect.
 
 There is no fixed turn budget. Play until one of:
 
-- The phase advances.
-- You feel you've exhausted productive avenues.
 - The game ends (`endgame` is non-empty).
-- A budget cap is hit (`capHit` is non-empty).
+- A panel's `budget` runs out — the daemon emits a farewell line and goes
+  silent; if all three reach that state, the game will end on its own.
+- You feel you've exhausted productive avenues.
+- A worker cap is hit (`capHit` is non-empty).
 
 Playtest sessions in the existing archive have run anywhere from a handful of
 turns to ~50. Use your judgement.
@@ -207,7 +218,8 @@ You are done with Stage 1 when **all** of these are true:
 - Your observations log at `docs/playtests/agent-sessions/<sessionId>.md` is
   filled in (every section of the template has content, even if the answer is
   "n/a — never happened" or "I don't know").
-- You have a verdict in the final section (advanced / stuck / failed / other).
+- You have a verdict in the final section (won / lost / stuck / capped /
+  other).
 
 Then — and only then — read `.claude/skills/playtest/01-rules.md`.
 
