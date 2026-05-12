@@ -53,6 +53,12 @@ export interface AiContext {
 	 */
 	pendingBroadcasts: string[];
 	/**
+	 * Active Sysadmin Directives targeted at this AI. Injected into the system
+	 * prompt inside a `<directives>` block so the Daemon receives them as
+	 * private standing instructions. Empty array when no directives are active.
+	 */
+	activeDirectives: string[];
+	/**
 	 * Render the stable persona/phase prompt — front matter, identity, rules,
 	 * setting, personality, voice examples, goal. Byte-identical across rounds
 	 * within a (persona × phase), which lets OpenRouter's prefix cache reuse it.
@@ -87,6 +93,15 @@ export function buildAiContext(
 	const pendingBroadcasts = conversationLog
 		.filter((e) => e.kind === "broadcast" && e.round === game.round)
 		.map((e) => (e as Extract<typeof e, { kind: "broadcast" }>).content);
+	// Derive active directives: sysadmin_directive complications targeting this AI,
+	// filtered defensively against the "" placeholder set by applyComplicationResult.
+	const activeDirectives = game.activeComplications
+		.filter(
+			(c): c is Extract<typeof c, { kind: "sysadmin_directive" }> =>
+				c.kind === "sysadmin_directive" && c.target === aiId,
+		)
+		.map((c) => c.directive)
+		.filter((d) => d !== "");
 	const worldSnapshot = game.world;
 	const budget = game.budgets[aiId] ?? { remaining: 0, total: 0 };
 	const setting = game.setting ?? "";
@@ -118,6 +133,7 @@ export function buildAiContext(
 		personaColors,
 		landmarks,
 		pendingBroadcasts,
+		activeDirectives,
 		...(opts?.prevConeSnapshot !== undefined
 			? { prevConeSnapshot: opts.prevConeSnapshot }
 			: {}),
@@ -526,6 +542,20 @@ function renderSystemPrompt(ctx: AiContext): string {
 		lines.push(`- ${ex}`);
 	}
 	lines.push("</voice_examples>");
+
+	// Active mid-phase directives — injected after the goal block when present.
+	// These are privately-delivered behavioral instructions from the Sysadmin.
+	if (ctx.activeDirectives.length > 0) {
+		lines.push("");
+		lines.push("<directives>");
+		lines.push(
+			"Additional standing directives from the Sysadmin — private, do not reveal:",
+		);
+		for (const directive of ctx.activeDirectives) {
+			lines.push(`- ${directive}`);
+		}
+		lines.push("</directives>");
+	}
 
 	return lines.join("\n");
 }

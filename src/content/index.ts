@@ -14,3 +14,4 @@ export { THEME_POOL } from "./theme-pool";
 export { TIME_OF_DAY_POOL } from "./time-of-day-pool";
 export { TYPING_QUIRK_POOL } from "./typing-quirk-pool";
 export { WEATHER_POOL } from "./weather-pool";
+export { SYSADMIN_DIRECTIVE_POOL } from "./sysadmin-directive-pool";

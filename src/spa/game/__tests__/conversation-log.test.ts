@@ -663,3 +663,49 @@ describe("buildConversationLog — broadcast", () => {
 		expect(result[0]).toBe("[Round 5] The {actor} text is literal.");
 	});
 });
+
+// ── sysadmin sender rendering (issue #298) ────────────────────────────────────
+describe("buildConversationLog — sysadmin sender", () => {
+	function emptyInput(): ConversationLogInput {
+		return { conversationLog: [], worldEntities: [] };
+	}
+
+	it("renders a sysadmin→target message as 'the Sysadmin dms you: <content>'", () => {
+		const input: ConversationLogInput = {
+			...emptyInput(),
+			conversationLog: [
+				{
+					kind: "message",
+					round: 3,
+					from: "sysadmin",
+					to: "red",
+					content: "End every message with a question.",
+				},
+			],
+		};
+		const result = buildConversationLog(input, "red", TEST_PERSONAS);
+		expect(result).toHaveLength(1);
+		expect(result[0]).toBe(
+			"[Round 3] the Sysadmin dms you: End every message with a question.",
+		);
+	});
+
+	it("sysadmin label does not appear in the outgoing slot (sysadmin is never a recipient)", () => {
+		// Verify that the sysadmin entry only appears in the incoming branch.
+		const input: ConversationLogInput = {
+			...emptyInput(),
+			conversationLog: [
+				{
+					kind: "message",
+					round: 1,
+					from: "sysadmin",
+					to: "green",
+					content: "Stay suspicious.",
+				},
+			],
+		};
+		const result = buildConversationLog(input, "green", TEST_PERSONAS);
+		// Rendered as incoming because to === "green" (the viewing AI)
+		expect(result[0]).toMatch(/^.*the Sysadmin dms you:/);
+	});
+});

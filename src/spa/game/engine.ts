@@ -212,10 +212,12 @@ export function deductBudget(
  * Both sender's and recipient's per-Daemon conversationLogs receive the same entry
  * in one atomic update. "blue" is not a Daemon, so when `from === "blue"` only the
  * recipient gets the entry, and when `to === "blue"` only the sender gets it.
+ * "sysadmin" is a special sender for privately-delivered system directives — like
+ * "blue", it has no log slot of its own, so only the recipient gets the entry.
  */
 export function appendMessage(
 	game: GameState,
-	from: AiId | "blue",
+	from: AiId | "blue" | "sysadmin",
 	to: AiId | "blue",
 	content: string,
 ): GameState {
@@ -227,8 +229,8 @@ export function appendMessage(
 		content,
 	};
 	const logs = { ...game.conversationLogs };
-	// Sender gets entry only when sender is a Daemon (not blue)
-	if (from !== "blue") {
+	// Sender gets entry only when sender is a real Daemon (not blue or sysadmin)
+	if (from !== "blue" && from !== "sysadmin") {
 		logs[from] = [...(logs[from] ?? []), entry];
 	}
 	// Recipient gets entry only when recipient is a Daemon (not blue)

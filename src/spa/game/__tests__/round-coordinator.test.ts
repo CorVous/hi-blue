@@ -3447,4 +3447,7 @@ describe("complication countdown — coordinator integration", () => {
 			expect(shiftEntries).toHaveLength(0);
 		}
 	});
+
+	// ── sysadmin_directive dispatch ─────────────────────────────────────────────
+
 });
