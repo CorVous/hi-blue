@@ -694,3 +694,55 @@ describe("renderSessions — archived sessions section", () => {
 		expect(archivedRow).toBeTruthy();
 	});
 });
+
+describe("renderSessions — archived Continue button", () => {
+	beforeEach(() => {
+		document.body.innerHTML = INDEX_BODY_HTML;
+	});
+	afterEach(() => {
+		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+		vi.resetModules();
+		document.body.innerHTML = "";
+	});
+
+	it("button visible when openrouter_key present", async () => {
+		vi.resetModules();
+		const stub = makeLocalStorageStub();
+		stub._store["openrouter_key"] = "sk-or-test";
+		vi.stubGlobal("localStorage", stub);
+		await seedArchivedSessionInStore(stub, "0xARCH");
+
+		const { renderSessions } = await import("../routes/sessions.js");
+		renderSessions(getMain(), new URLSearchParams());
+
+		const archivedRow = document.querySelector<HTMLElement>(
+			'.session-row[data-session-id="0xARCH"]',
+		);
+		expect(archivedRow).toBeTruthy();
+		const buttons = Array.from(
+			archivedRow?.querySelectorAll<HTMLButtonElement>(".ops button") ?? [],
+		).map((b) => b.textContent);
+		expect(buttons).toContain("[ continue with new room ]");
+	});
+
+	it("button absent when openrouter_key absent", async () => {
+		vi.resetModules();
+		const stub = makeLocalStorageStub();
+		// No openrouter_key in stub
+		vi.stubGlobal("localStorage", stub);
+		await seedArchivedSessionInStore(stub, "0xARCH");
+
+		const { renderSessions } = await import("../routes/sessions.js");
+		renderSessions(getMain(), new URLSearchParams());
+
+		const archivedRow = document.querySelector<HTMLElement>(
+			'.session-row[data-session-id="0xARCH"]',
+		);
+		expect(archivedRow).toBeTruthy();
+		const buttons = Array.from(
+			archivedRow?.querySelectorAll<HTMLButtonElement>(".ops button") ?? [],
+		).map((b) => b.textContent);
+		expect(buttons).not.toContain("[ continue with new room ]");
+	});
+});
