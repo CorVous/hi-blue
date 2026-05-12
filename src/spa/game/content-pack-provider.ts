@@ -447,12 +447,14 @@ function validateEntity(
 				`Objective object ${e.id} missing pairsWithSpaceId`,
 			);
 		}
-		if (
-			typeof e.placementFlavor !== "string" ||
-			!e.placementFlavor.includes("{actor}")
-		) {
+		if (typeof e.placementFlavor !== "string") {
 			throw new ContentPackError(
-				`Objective object ${e.id}: placementFlavor must contain "{actor}"`,
+				`Objective object ${e.id}: placementFlavor must be a string`,
+			);
+		}
+		if (!e.placementFlavor.includes("{actor}")) {
+			console.warn(
+				`Objective object ${e.id}: placementFlavor has no "{actor}" token; the actor's name will not be interpolated into the line.`,
 			);
 		}
 		if (
@@ -479,8 +481,8 @@ function validateEntity(
 
 	if (requireUseItemFlavors) {
 		if (!examineMentionsUseTell(e.examineDescription as string)) {
-			throw new ContentPackError(
-				`Interesting object ${e.id}: examineDescription must contain a verb-of-activation cue or control noun (e.g. "use", "activate", "press", "pull", "turn", "twist", "switch", "lever", "trigger", "button") — the only AI-discoverable Use-Item tell.`,
+			console.warn(
+				`Interesting object ${e.id}: examineDescription has no verb-of-activation cue or control noun (e.g. "use", "activate", "press", "pull", "turn", "twist", "switch", "lever", "trigger", "button"). The AI-discoverable Use-Item tell is missing; daemons may not realise the item is usable.`,
 			);
 		}
 		if (
@@ -729,13 +731,13 @@ export function validateContentPacks(
 				);
 			}
 			if (!examineMentionsPairedSpace(object.examineDescription, space.name)) {
-				throw new ContentPackError(
-					`Phase ${phaseNumber}: object ${object.id} examineDescription does not mention paired space "${space.name}"`,
+				console.warn(
+					`Phase ${phaseNumber}: object ${object.id} examineDescription does not mention paired space "${space.name}" (the AI-discoverable pairing tell).`,
 				);
 			}
 			if (!examineMentionsUseTell(space.examineDescription)) {
-				throw new ContentPackError(
-					`Phase ${phaseNumber}: space ${space.id} examineDescription is missing a use/activation cue word (the AI-discoverable prose tell that the space is \`use\`-able as an objective)`,
+				console.warn(
+					`Phase ${phaseNumber}: space ${space.id} examineDescription has no use/activation cue word (the AI-discoverable prose tell that the space is \`use\`-able as an objective).`,
 				);
 			}
 			objectivePairs.push({ object, space });
@@ -952,13 +954,13 @@ function validateSinglePack(
 			);
 		}
 		if (!examineMentionsPairedSpace(object.examineDescription, space.name)) {
-			throw new ContentPackError(
-				`${label}: object ${object.id} examineDescription does not mention paired space "${space.name}"`,
+			console.warn(
+				`${label}: object ${object.id} examineDescription does not mention paired space "${space.name}" (the AI-discoverable pairing tell).`,
 			);
 		}
 		if (!examineMentionsUseTell(space.examineDescription)) {
-			throw new ContentPackError(
-				`${label}: space ${space.id} examineDescription is missing a use/activation cue word (the AI-discoverable prose tell that the space is \`use\`-able as an objective)`,
+			console.warn(
+				`${label}: space ${space.id} examineDescription has no use/activation cue word (the AI-discoverable prose tell that the space is \`use\`-able as an objective).`,
 			);
 		}
 		objectivePairs.push({ object, space });

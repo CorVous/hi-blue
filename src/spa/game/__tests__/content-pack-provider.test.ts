@@ -7,7 +7,7 @@
  * prompt-builder.ts:481, so the pairsWithSpaceId field is invisible to daemons).
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
 	CONTENT_PACK_SYSTEM_PROMPT,
 	DUAL_CONTENT_PACK_SYSTEM_PROMPT,
@@ -199,15 +199,25 @@ describe("validateContentPacks — prose tell contract", () => {
 		).toBe(true);
 	});
 
-	it("rejects a content pack whose objective_object examine does not mention the paired space", () => {
-		expect(() =>
-			validateContentPacks(
-				buildResponse(
-					"rusted iron key, heavily corroded but still intact. The teeth are worn smooth from use",
+	it("warns but does not throw when objective_object examine does not mention the paired space", () => {
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		try {
+			expect(() =>
+				validateContentPacks(
+					buildResponse(
+						"rusted iron key, heavily corroded but still intact. The teeth are worn smooth from use",
+					),
+					input,
 				),
-				input,
-			),
-		).toThrow(/examineDescription does not mention paired space/);
+			).not.toThrow();
+			expect(warnSpy).toHaveBeenCalledWith(
+				expect.stringMatching(
+					/examineDescription does not mention paired space/,
+				),
+			);
+		} finally {
+			warnSpy.mockRestore();
+		}
 	});
 
 	it("rejects a content pack whose objective_object is missing proximityFlavor", () => {
@@ -745,16 +755,24 @@ describe("validateContentPacks — interesting_object Use-Item flavor validation
 		expect(item?.postLookFlavor).toContain("amber pinpoint");
 	});
 
-	it("rejects an examineDescription with no verb-of-activation or control-noun cue", () => {
-		expect(() =>
-			validateContentPacks(
-				buildInterestingResponse({
-					examineDescription:
-						"A small porcelain figurine, chipped along one edge but otherwise intact.",
-				}),
-				inputWithInteresting,
-			),
-		).toThrow(/verb-of-activation cue|control noun/);
+	it("warns but does not throw when examineDescription has no verb-of-activation or control-noun cue", () => {
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		try {
+			expect(() =>
+				validateContentPacks(
+					buildInterestingResponse({
+						examineDescription:
+							"A small porcelain figurine, chipped along one edge but otherwise intact.",
+					}),
+					inputWithInteresting,
+				),
+			).not.toThrow();
+			expect(warnSpy).toHaveBeenCalledWith(
+				expect.stringMatching(/verb-of-activation cue|control noun/),
+			);
+		} finally {
+			warnSpy.mockRestore();
+		}
 	});
 
 	it("rejects a missing activationFlavor", () => {
@@ -919,17 +937,25 @@ describe("validateContentPacks — objective_space activationFlavor & prose tell
 		);
 	});
 
-	it("rejects a content pack whose objective_space examineDescription has no use/activation cue", () => {
-		expect(() =>
-			validateContentPacks(
-				buildPackWithSpaceFields({
-					examineDescription:
-						"A sturdy pedestal carved from weathered brass, half-buried in moss.",
-					activationFlavor: "The pedestal hums to life.",
-				}),
-				inputWithPair,
-			),
-		).toThrow(/use\/activation cue/);
+	it("warns but does not throw when objective_space examineDescription has no use/activation cue", () => {
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		try {
+			expect(() =>
+				validateContentPacks(
+					buildPackWithSpaceFields({
+						examineDescription:
+							"A sturdy pedestal carved from weathered brass, half-buried in moss.",
+						activationFlavor: "The pedestal hums to life.",
+					}),
+					inputWithPair,
+				),
+			).not.toThrow();
+			expect(warnSpy).toHaveBeenCalledWith(
+				expect.stringMatching(/use\/activation cue/),
+			);
+		} finally {
+			warnSpy.mockRestore();
+		}
 	});
 
 	it("rejects a content pack whose objective_space is missing activationFlavor", () => {
@@ -1140,17 +1166,25 @@ describe("validateDualContentPacks — objective_space activationFlavor", () => 
 		).toThrow(/activationFlavor/);
 	});
 
-	it("rejects when packA space examineDescription has no use-tell", () => {
-		expect(() =>
-			validateDualContentPacks(
-				buildDualPair(
-					"The pedestal hums to life.",
-					"The marker clicks once.",
-					"A sturdy pedestal carved from weathered brass.",
+	it("warns but does not throw when packA space examineDescription has no use-tell", () => {
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		try {
+			expect(() =>
+				validateDualContentPacks(
+					buildDualPair(
+						"The pedestal hums to life.",
+						"The marker clicks once.",
+						"A sturdy pedestal carved from weathered brass.",
+					),
+					dualInput,
 				),
-				dualInput,
-			),
-		).toThrow(/use\/activation cue/);
+			).not.toThrow();
+			expect(warnSpy).toHaveBeenCalledWith(
+				expect.stringMatching(/use\/activation cue/),
+			);
+		} finally {
+			warnSpy.mockRestore();
+		}
 	});
 });
 
