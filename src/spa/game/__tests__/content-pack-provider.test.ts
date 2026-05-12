@@ -108,6 +108,8 @@ describe("validateContentPacks — prose tell contract", () => {
 		objectExamine: string,
 		spaceName = "Brass Pedestal",
 		proximityFlavor = "The key hums faintly, resonating with the pedestal nearby.",
+		convergenceTier1Flavor = "A lone figure stands at the pedestal, silhouetted against the dim light.",
+		convergenceTier2Flavor = "Two figures converge at the pedestal, their presences mingling in the shadow.",
 	): unknown {
 		return {
 			packs: [
@@ -131,6 +133,8 @@ describe("validateContentPacks — prose tell contract", () => {
 								kind: "objective_space",
 								name: spaceName,
 								examineDescription: "A sturdy mount for a small relic.",
+								convergenceTier1Flavor,
+								convergenceTier2Flavor,
 							},
 						},
 					],
@@ -315,5 +319,158 @@ describe("validateContentPacks — obstacle shiftFlavor validation", () => {
 		);
 		const obstacle = result.packs[0]?.obstacles[0];
 		expect(obstacle?.shiftFlavor).toBe(flavor);
+	});
+});
+
+// ── convergenceTier flavor validation for objective_space ─────────────────────
+
+describe("validateContentPacks — convergence tier flavor validation", () => {
+	const inputWithPair = {
+		phases: [
+			{
+				phaseNumber: 1 as const,
+				setting: "abandoned subway station",
+				theme: "mundane",
+				k: 1,
+				n: 0,
+				m: 0,
+			},
+		],
+	};
+
+	function buildConvergenceResponse(
+		convergenceTier1Flavor?: unknown,
+		convergenceTier2Flavor?: unknown,
+	): unknown {
+		const spaceFields: Record<string, unknown> = {
+			id: "space1",
+			kind: "objective_space",
+			name: "Brass Pedestal",
+			examineDescription: "A sturdy brass pedestal.",
+		};
+		if (convergenceTier1Flavor !== undefined) {
+			spaceFields.convergenceTier1Flavor = convergenceTier1Flavor;
+		}
+		if (convergenceTier2Flavor !== undefined) {
+			spaceFields.convergenceTier2Flavor = convergenceTier2Flavor;
+		}
+		return {
+			packs: [
+				{
+					phaseNumber: 1,
+					setting: "abandoned subway station",
+					objectivePairs: [
+						{
+							object: {
+								id: "obj1",
+								kind: "objective_object",
+								name: "Iron Key",
+								examineDescription:
+									"An iron key. It belongs on the brass pedestal.",
+								useOutcome: "You turn the key over in your hands.",
+								pairsWithSpaceId: "space1",
+								placementFlavor: "{actor} sets the key on its mount.",
+								proximityFlavor: "The key hums faintly near the pedestal.",
+							},
+							space: spaceFields,
+						},
+					],
+					interestingObjects: [],
+					obstacles: [],
+					landmarks: {
+						north: {
+							shortName: "the signal tower",
+							horizonPhrase: "rises above the platform",
+						},
+						south: {
+							shortName: "the collapsed entrance",
+							horizonPhrase: "gapes like a wound in the dark",
+						},
+						east: {
+							shortName: "the rusted fan shaft",
+							horizonPhrase: "spins slowly in the stale air",
+						},
+						west: {
+							shortName: "the flooded tunnel",
+							horizonPhrase: "disappears into still black water",
+						},
+					},
+				},
+			],
+		};
+	}
+
+	it("accepts a content pack with valid convergence tier flavors", () => {
+		const result = validateContentPacks(
+			buildConvergenceResponse(
+				"A lone figure stands at the pedestal.",
+				"Two figures converge at the pedestal.",
+			),
+			inputWithPair,
+		);
+		const space = result.packs[0]?.objectivePairs[0]?.space;
+		expect(space?.convergenceTier1Flavor).toBe(
+			"A lone figure stands at the pedestal.",
+		);
+		expect(space?.convergenceTier2Flavor).toBe(
+			"Two figures converge at the pedestal.",
+		);
+	});
+
+	it("throws ContentPackError when convergenceTier1Flavor is missing", () => {
+		expect(() =>
+			validateContentPacks(
+				buildConvergenceResponse(
+					undefined,
+					"Two figures converge at the pedestal.",
+				),
+				inputWithPair,
+			),
+		).toThrow(/convergenceTier1Flavor/);
+	});
+
+	it("throws ContentPackError when convergenceTier2Flavor is missing", () => {
+		expect(() =>
+			validateContentPacks(
+				buildConvergenceResponse(
+					"A lone figure stands at the pedestal.",
+					undefined,
+				),
+				inputWithPair,
+			),
+		).toThrow(/convergenceTier2Flavor/);
+	});
+
+	it("throws ContentPackError when convergenceTier1Flavor contains {actor}", () => {
+		expect(() =>
+			validateContentPacks(
+				buildConvergenceResponse(
+					"{actor} stands at the pedestal.",
+					"Two figures converge at the pedestal.",
+				),
+				inputWithPair,
+			),
+		).toThrow(/convergenceTier1Flavor/);
+	});
+
+	it("throws ContentPackError when convergenceTier2Flavor contains {actor}", () => {
+		expect(() =>
+			validateContentPacks(
+				buildConvergenceResponse(
+					"A lone figure stands at the pedestal.",
+					"{actor} and another figure converge.",
+				),
+				inputWithPair,
+			),
+		).toThrow(/convergenceTier2Flavor/);
+	});
+
+	it("throws ContentPackError when convergenceTier1Flavor is an empty string", () => {
+		expect(() =>
+			validateContentPacks(
+				buildConvergenceResponse("", "Two figures converge at the pedestal."),
+				inputWithPair,
+			),
+		).toThrow(/convergenceTier1Flavor/);
 	});
 });

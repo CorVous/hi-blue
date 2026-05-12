@@ -24,11 +24,13 @@ import {
 	resolveExpiredChatLockouts,
 	tickComplication,
 } from "./complication-engine";
+import { projectCone } from "./cone-projector";
 import { dispatchAiTurn } from "./dispatcher";
 import {
 	advanceRound,
 	appendMessage,
 	appendPrivateSystemNotice,
+	appendWitnessedConvergence,
 	FAREWELL_LINE,
 	isAiLockedOut,
 	resolveToolDisables,
@@ -45,13 +47,19 @@ import { parseToolCallArguments } from "./tool-registry";
 import type {
 	AiId,
 	AiTurnAction,
+	ConversationEntry,
 	GameState,
+	GridPosition,
 	RoundActionRecord,
 	RoundResult,
 	ToolName,
 	ToolRoundtripMessage,
 } from "./types";
-import { checkLoseCondition, checkWinCondition } from "./win-condition";
+import {
+	checkConvergenceTier,
+	checkLoseCondition,
+	checkWinCondition,
+} from "./win-condition";
 
 // Match the SPA dev-host gate used in src/spa/routes/game.ts. The
 // `typeof` guard keeps this safe in test environments that don't stub
@@ -551,6 +559,70 @@ export async function runRound(
 		state = stateAfterResolve;
 		if (resolvedAiIds.length > 0) {
 			chatLockoutsResolved = resolvedAiIds;
+		}
+	}
+
+	// 4d. End-of-round convergence evaluation.
+	// Walk pending convergence objectives; compute tier; fan out witnessed-convergence entries.
+	for (const objective of state.objectives) {
+		if (objective.kind !== "convergence") continue;
+		if (objective.satisfactionState !== "pending") continue;
+
+		const { tier, spaceId } = checkConvergenceTier(
+			objective,
+			state.world,
+			state.personaSpatial,
+		);
+
+		if (tier === 0) continue;
+
+		const spaceEntity = state.world.entities.find((e) => e.id === spaceId);
+		const spaceCell =
+			spaceEntity &&
+			typeof spaceEntity.holder === "object" &&
+			spaceEntity.holder !== null
+				? (spaceEntity.holder as GridPosition)
+				: null;
+
+		if (!spaceCell) continue;
+
+		const flavor =
+			tier === 1
+				? (spaceEntity?.convergenceTier1Flavor ?? "Something stirs here.")
+				: (spaceEntity?.convergenceTier2Flavor ?? "Two presences converge.");
+
+		const entry: Extract<ConversationEntry, { kind: "witnessed-convergence" }> =
+			{
+				kind: "witnessed-convergence",
+				round: state.round,
+				spaceId,
+				tier,
+				flavor,
+			};
+
+		// Fan out to every Daemon whose cone contains the space cell.
+		for (const [daemonId, spatial] of Object.entries(state.personaSpatial)) {
+			const cone = projectCone(spatial.position, spatial.facing);
+			const witnessesCell = cone.some(
+				(cell) =>
+					cell.position.row === spaceCell.row &&
+					cell.position.col === spaceCell.col,
+			);
+			if (witnessesCell) {
+				state = appendWitnessedConvergence(state, daemonId, entry);
+			}
+		}
+
+		// Tier 2: satisfy the objective immediately.
+		if (tier === 2) {
+			state = {
+				...state,
+				objectives: state.objectives.map((o) =>
+					o.id === objective.id
+						? { ...o, satisfactionState: "satisfied" as const }
+						: o,
+				),
+			};
 		}
 	}
 

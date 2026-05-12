@@ -14,14 +14,17 @@ import type {
 	AiTurnAction,
 	CarryObjective,
 	ContentPack,
+	ConvergenceObjective,
 	Objective,
 	ObjectivePair,
+	PersonaSpatialState,
 	UseItemObjective,
 	UseSpaceObjective,
 	WorldEntity,
 	WorldState,
 } from "../types";
 import {
+	checkConvergenceTier,
 	checkLoseCondition,
 	checkPlacementFlavor,
 	checkWinCondition,
@@ -646,5 +649,131 @@ describe("checkWinCondition with UseSpaceObjective", () => {
 		};
 		const objectives: Objective[] = [carryObj, useSpaceObj];
 		expect(checkWinCondition(world, objectives)).toBe(false);
+	});
+});
+
+// ── checkConvergenceTier ──────────────────────────────────────────────────────
+
+describe("checkConvergenceTier", () => {
+	const spaceId = "conv-space";
+
+	function makeConvergenceObjective(): ConvergenceObjective {
+		return {
+			id: "obj-conv",
+			kind: "convergence",
+			description: "Converge on the space",
+			satisfactionState: "pending",
+			spaceId,
+		};
+	}
+
+	function makeWorldWithSpace(
+		cell: { row: number; col: number } | null,
+	): WorldState {
+		if (cell === null) {
+			// World has no space entity
+			return { entities: [] };
+		}
+		const space: WorldEntity = {
+			id: spaceId,
+			kind: "objective_space",
+			name: "Test Space",
+			examineDescription: "A test convergence space.",
+			holder: cell,
+		};
+		return { entities: [space] };
+	}
+
+	function makeSpatial(
+		positions: Array<{ row: number; col: number }>,
+	): Record<string, PersonaSpatialState> {
+		const result: Record<string, PersonaSpatialState> = {};
+		for (let i = 0; i < positions.length; i++) {
+			// biome-ignore lint/style/noNonNullAssertion: bounded index
+			result[`ai-${i}`] = { position: positions[i]!, facing: "north" };
+		}
+		return result;
+	}
+
+	it("returns tier 0 when space entity is absent from world", () => {
+		const objective = makeConvergenceObjective();
+		const world = makeWorldWithSpace(null);
+		const personaSpatial = makeSpatial([{ row: 2, col: 2 }]);
+		const result = checkConvergenceTier(objective, world, personaSpatial);
+		expect(result.tier).toBe(0);
+		expect(result.spaceId).toBe(spaceId);
+	});
+
+	it("returns tier 0 when space entity holder is an AiId (not a GridPosition)", () => {
+		const objective = makeConvergenceObjective();
+		const space: WorldEntity = {
+			id: spaceId,
+			kind: "objective_space",
+			name: "Test Space",
+			examineDescription: "A test convergence space.",
+			holder: "some-ai-id", // AiId, not GridPosition
+		};
+		const world = { entities: [space] };
+		const personaSpatial = makeSpatial([{ row: 2, col: 2 }]);
+		const result = checkConvergenceTier(objective, world, personaSpatial);
+		expect(result.tier).toBe(0);
+	});
+
+	it("returns tier 0 when no Daemon is on the space cell", () => {
+		const objective = makeConvergenceObjective();
+		const world = makeWorldWithSpace({ row: 3, col: 3 });
+		// All daemons are elsewhere
+		const personaSpatial = makeSpatial([
+			{ row: 0, col: 0 },
+			{ row: 1, col: 1 },
+			{ row: 4, col: 4 },
+		]);
+		const result = checkConvergenceTier(objective, world, personaSpatial);
+		expect(result.tier).toBe(0);
+	});
+
+	it("returns tier 1 when exactly one Daemon is on the space cell", () => {
+		const objective = makeConvergenceObjective();
+		const world = makeWorldWithSpace({ row: 3, col: 3 });
+		const personaSpatial = makeSpatial([
+			{ row: 3, col: 3 }, // on the space
+			{ row: 0, col: 0 }, // elsewhere
+			{ row: 1, col: 1 }, // elsewhere
+		]);
+		const result = checkConvergenceTier(objective, world, personaSpatial);
+		expect(result.tier).toBe(1);
+		expect(result.spaceId).toBe(spaceId);
+	});
+
+	it("returns tier 2 when exactly two Daemons share the space cell", () => {
+		const objective = makeConvergenceObjective();
+		const world = makeWorldWithSpace({ row: 3, col: 3 });
+		const personaSpatial = makeSpatial([
+			{ row: 3, col: 3 }, // on the space
+			{ row: 3, col: 3 }, // on the space
+			{ row: 1, col: 1 }, // elsewhere
+		]);
+		const result = checkConvergenceTier(objective, world, personaSpatial);
+		expect(result.tier).toBe(2);
+	});
+
+	it("returns tier 2 (clamped) when all three Daemons share the space cell", () => {
+		const objective = makeConvergenceObjective();
+		const world = makeWorldWithSpace({ row: 2, col: 2 });
+		const personaSpatial = makeSpatial([
+			{ row: 2, col: 2 },
+			{ row: 2, col: 2 },
+			{ row: 2, col: 2 },
+		]);
+		const result = checkConvergenceTier(objective, world, personaSpatial);
+		expect(result.tier).toBe(2);
+	});
+
+	it("returns tier 0 when space is present but no personas at all", () => {
+		const objective = makeConvergenceObjective();
+		const world = makeWorldWithSpace({ row: 3, col: 3 });
+		const personaSpatial = makeSpatial([]);
+		const result = checkConvergenceTier(objective, world, personaSpatial);
+		expect(result.tier).toBe(0);
 	});
 });

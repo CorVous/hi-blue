@@ -273,6 +273,25 @@ export function appendWitnessedEvent(
 }
 
 /**
+ * Append a `kind: "witnessed-convergence"` ConversationEntry to a single
+ * witness's per-Daemon log. Called by the Round Coordinator's end-of-round
+ * convergence evaluation for each Daemon whose cone contains the space cell.
+ */
+export function appendWitnessedConvergence(
+	game: GameState,
+	witnessId: AiId,
+	entry: Extract<ConversationEntry, { kind: "witnessed-convergence" }>,
+): GameState {
+	return {
+		...game,
+		conversationLogs: {
+			...game.conversationLogs,
+			[witnessId]: [...(game.conversationLogs[witnessId] ?? []), entry],
+		},
+	};
+}
+
+/**
  * Append a `kind: "witnessed-obstacle-shift"` ConversationEntry to a single
  * witness's per-Daemon log. Called by the Obstacle Shift complication handler
  * for each Daemon whose cone contained the obstacle's origin cell.

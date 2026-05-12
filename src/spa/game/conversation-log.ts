@@ -146,6 +146,10 @@ export function renderEntry(
 			return `[Round ${round}] ${entry.flavor}`;
 		}
 
+		case "witnessed-convergence": {
+			return `[Round ${round}] ${entry.flavor}`;
+		}
+
 		case "broadcast": {
 			return `[Round ${round}] ${entry.content}`;
 		}

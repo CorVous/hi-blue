@@ -15,6 +15,7 @@
 import type {
 	CarryObjective,
 	ContentPack,
+	ConvergenceObjective,
 	Objective,
 	UseItemObjective,
 	UseSpaceObjective,
@@ -64,6 +65,25 @@ export function drawObjectives(
 			itemId: obj.id,
 		};
 		pool.push(useItem);
+	}
+
+	for (const pair of contentPack.objectivePairs) {
+		const { space } = pair;
+		if (
+			typeof space.convergenceTier1Flavor === "string" &&
+			space.convergenceTier1Flavor.length > 0 &&
+			typeof space.convergenceTier2Flavor === "string" &&
+			space.convergenceTier2Flavor.length > 0
+		) {
+			const convergence: ConvergenceObjective = {
+				id: "", // placeholder; will be replaced with assigned id
+				kind: "convergence",
+				description: `Converge on the ${space.name}`,
+				satisfactionState: "pending",
+				spaceId: space.id,
+			};
+			pool.push(convergence);
+		}
 	}
 
 	if (pool.length === 0) {

@@ -41,6 +41,10 @@ export interface WorldEntity {
 	proximityFlavor?: string;
 	/** For obstacle: 1-sentence sensory line a witness Daemon perceives when the obstacle moves one cell. Third person from witness POV. Does NOT contain {actor}. */
 	shiftFlavor?: string;
+	/** For objective_space used as a Convergence target: tier-1 flavor (exactly one Daemon on space). Does NOT contain {actor}. */
+	convergenceTier1Flavor?: string;
+	/** For objective_space used as a Convergence target: tier-2 flavor (two or more Daemons share space). Does NOT contain {actor}. */
+	convergenceTier2Flavor?: string;
 	/** AiId when held by an AI; GridPosition when resting on a cell. */
 	holder: AiId | GridPosition;
 	/** Tracks whether this entity has been "used" for a UseItem objective. Defaults to "pending" when omitted. */
@@ -132,6 +136,8 @@ export interface ConvergenceObjective {
 	kind: "convergence";
 	description: string;
 	satisfactionState: "pending" | "satisfied";
+	/** The id of the objective_space that acts as the convergence point. */
+	spaceId: string;
 }
 
 export type Objective =
@@ -303,6 +309,13 @@ export type ConversationEntry =
 			obstacleId: string;
 			fromCell: GridPosition;
 			toCell: GridPosition;
+			flavor: string;
+	  }
+	| {
+			kind: "witnessed-convergence";
+			round: number;
+			spaceId: string;
+			tier: 1 | 2;
 			flavor: string;
 	  };
 

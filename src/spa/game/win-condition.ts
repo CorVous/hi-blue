@@ -16,8 +16,10 @@ import type {
 	AiTurnAction,
 	CarryObjective,
 	ContentPack,
+	ConvergenceObjective,
 	GridPosition,
 	Objective,
+	PersonaSpatialState,
 	UseItemObjective,
 	UseSpaceObjective,
 	WorldState,
@@ -74,6 +76,39 @@ export function isUseSpaceObjectiveSatisfied(
 	objective: UseSpaceObjective,
 ): boolean {
 	return objective.satisfactionState === "satisfied";
+}
+
+/**
+ * Returns the convergence tier for the given ConvergenceObjective:
+ *  - tier 0: space entity missing, or its holder is not a GridPosition, or zero Daemons on the space cell
+ *  - tier 1: exactly one Daemon on the space cell
+ *  - tier 2: two or more Daemons share the space cell (clamped to 2)
+ *
+ * Also returns the spaceId for the caller's convenience.
+ */
+export function checkConvergenceTier(
+	objective: ConvergenceObjective,
+	world: WorldState,
+	personaSpatial: Record<AiId, PersonaSpatialState>,
+): { tier: 0 | 1 | 2; spaceId: string } {
+	const spaceId = objective.spaceId;
+	const spaceEntity = world.entities.find((e) => e.id === spaceId);
+	if (!spaceEntity) return { tier: 0, spaceId };
+
+	if (!isGridPosition(spaceEntity.holder)) return { tier: 0, spaceId };
+
+	const spaceCell = spaceEntity.holder;
+
+	let count = 0;
+	for (const spatial of Object.values(personaSpatial)) {
+		if (positionsEqual(spatial.position, spaceCell)) {
+			count++;
+		}
+	}
+
+	if (count === 0) return { tier: 0, spaceId };
+	if (count === 1) return { tier: 1, spaceId };
+	return { tier: 2, spaceId };
 }
 
 /**
