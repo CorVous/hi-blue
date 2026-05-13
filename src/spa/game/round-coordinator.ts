@@ -305,6 +305,8 @@ export async function runRound(
 				action.messages.push({
 					to: msgArgs.to as AiId | "blue",
 					content: msgArgs.content,
+					toolCallId: tcTriple.id, // Preserve tool call ID for history rendering
+					toolArgumentsJson: tcTriple.argumentsJson, // Preserve arguments for history rendering
 				});
 				pending.push({ kind: "message", tc: tcTriple });
 			} else if (!actionAssigned) {
@@ -401,6 +403,31 @@ export async function runRound(
 			reason?: string;
 		}> = [];
 
+		/** Helper to append a tool-call entry to the actor's conversation log. */
+		function appendToolCallEntry(
+			entry: (typeof pending)[number],
+			success: boolean,
+			description: string,
+		) {
+			const toolCallEntry: ConversationEntry = {
+				kind: "tool-call",
+				round: state.round,
+				aiId: aiId,
+				toolCallId: entry.tc.id,
+				toolArgumentsJson: entry.tc.argumentsJson,
+				toolName: entry.tc.name,
+				result: description,
+				success,
+			};
+			state = {
+				...state,
+				conversationLogs: {
+					...state.conversationLogs,
+					[aiId]: [...(state.conversationLogs[aiId] ?? []), toolCallEntry],
+				},
+			};
+		}
+
 		let nextMessageIdx = 0;
 		for (const entry of pending) {
 			if (entry.kind === "parseFail") {
@@ -411,6 +438,7 @@ export async function runRound(
 					description: entry.description,
 					reason: entry.reason,
 				});
+				appendToolCallEntry(entry, false, entry.description);
 			} else if (entry.kind === "actionRejected") {
 				recordedAssistantToolCalls.push(entry.tc);
 				recordedToolResults.push({
@@ -419,6 +447,7 @@ export async function runRound(
 					description: entry.description,
 					reason: entry.reason,
 				});
+				appendToolCallEntry(entry, false, entry.description);
 			} else if (entry.kind === "message") {
 				const rec = messageRecords[nextMessageIdx++];
 				if (rec?.kind === "tool_failure") {
@@ -443,6 +472,7 @@ export async function runRound(
 						success,
 						description,
 					});
+					appendToolCallEntry(entry, success, description);
 				} else {
 					const success = actionRecord?.kind === "tool_success";
 					const description = actionRecord?.description ?? "";
@@ -451,6 +481,7 @@ export async function runRound(
 						success,
 						description,
 					});
+					appendToolCallEntry(entry, success, description);
 				}
 			}
 		}

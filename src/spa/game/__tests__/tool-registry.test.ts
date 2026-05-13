@@ -257,18 +257,18 @@ describe("parseToolCallArguments", () => {
 	});
 
 	it("parses valid go arguments", () => {
-		const result = parseToolCallArguments("go", '{"direction":"north"}');
+		const result = parseToolCallArguments("go", '{"direction":"forward"}');
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			expect(result.args).toEqual({ direction: "north" });
+			expect(result.args).toEqual({ direction: "forward" });
 		}
 	});
 
 	it("parses valid look arguments", () => {
-		const result = parseToolCallArguments("look", '{"direction":"west"}');
+		const result = parseToolCallArguments("look", '{"direction":"left"}');
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			expect(result.args).toEqual({ direction: "west" });
+			expect(result.args).toEqual({ direction: "left" });
 		}
 	});
 

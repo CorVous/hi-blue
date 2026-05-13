@@ -621,7 +621,7 @@ export function buildConeSnapshot(ctx: AiContext): string {
 		.map((i) => i.name)
 		.sort();
 	lines.push(
-		`you: facing=${actorSpatial.facing} holding=[${heldItems.join(", ") || "nothing"}] cell=[${ownCellItems.join(", ") || "nothing"}]`,
+		`you: holding=[${heldItems.join(", ") || "nothing"}] cell=[${ownCellItems.join(", ") || "nothing"}]`,
 	);
 
 	const coneCells = projectCone(actorSpatial.position, actorSpatial.facing);
@@ -715,7 +715,7 @@ export function renderWhatsNew(prev = "", current = ""): string | null {
 	if (prevYou !== currYou && prevYou !== "" && currYou !== "") {
 		const prevFields = parseYouLine(prevYou);
 		const currFields = parseYouLine(currYou);
-		for (const key of ["pos", "facing", "holding", "cell"] as const) {
+		for (const key of ["pos", "holding", "cell"] as const) {
 			if (prevFields[key] !== currFields[key]) {
 				out.push(`~ self.${key}: ${prevFields[key]} → ${currFields[key]}`);
 			}
