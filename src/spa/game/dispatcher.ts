@@ -2,7 +2,6 @@ import { projectCone } from "./cone-projector.js";
 import type { RelativeDirection } from "./direction.js";
 import {
 	applyDirection,
-	CARDINAL_DIRECTIONS,
 	frontArc,
 	inBounds,
 	RELATIVE_DIRECTIONS,
@@ -214,25 +213,20 @@ export function validateToolCall(
 		}
 
 		case "go": {
-			// Accept both relative directions (daemon-facing) and cardinal (internal).
-			// Relative is the normal path from the LLM; cardinal is used internally.
+			// Only accept relative directions (relative to daemon's facing).
 			const rawDir = call.args.direction;
 			if (!actorSpatial)
 				return { valid: false, reason: "Actor has no spatial state" };
-			let direction: CardinalDirection;
-			if (RELATIVE_DIRECTIONS.includes(rawDir as RelativeDirection)) {
-				direction = relativeToCardinal(
-					actorSpatial.facing,
-					rawDir as RelativeDirection,
-				);
-			} else if (CARDINAL_DIRECTIONS.includes(rawDir as CardinalDirection)) {
-				direction = rawDir as CardinalDirection;
-			} else {
+			if (!RELATIVE_DIRECTIONS.includes(rawDir as RelativeDirection)) {
 				return {
 					valid: false,
-					reason: `"${rawDir}" is not a valid direction`,
+					reason: `"${rawDir}" is not a valid direction. Use relative directions: forward, back, left, right.`,
 				};
 			}
+			const direction = relativeToCardinal(
+				actorSpatial.facing,
+				rawDir as RelativeDirection,
+			);
 			const next = applyDirection(actorSpatial.position, direction);
 			if (!inBounds(next))
 				return { valid: false, reason: "That direction is out of bounds" };
@@ -242,16 +236,14 @@ export function validateToolCall(
 		}
 
 		case "look": {
-			// Accept both relative directions (daemon-facing) and cardinal (internal).
+			// Only accept relative directions (relative to daemon's facing).
 			const rawDir = call.args.direction;
-			if (
-				!RELATIVE_DIRECTIONS.includes(rawDir as RelativeDirection) &&
-				!CARDINAL_DIRECTIONS.includes(rawDir as CardinalDirection)
-			)
+			if (!RELATIVE_DIRECTIONS.includes(rawDir as RelativeDirection)) {
 				return {
 					valid: false,
-					reason: `"${rawDir}" is not a valid direction`,
+					reason: `"${rawDir}" is not a valid direction. Use relative directions: forward, back, left, right.`,
 				};
+			}
 			return { valid: true };
 		}
 
@@ -418,16 +410,12 @@ export function executeToolCall(
 		}
 		case "look": {
 			if (!actorSpatial) break;
-			// Translate relative → cardinal if needed
+			// Convert relative direction to cardinal
 			const rawLookDir = call.args.direction;
-			const direction: CardinalDirection = RELATIVE_DIRECTIONS.includes(
+			const direction = relativeToCardinal(
+				actorSpatial.facing,
 				rawLookDir as RelativeDirection,
-			)
-				? relativeToCardinal(
-						actorSpatial.facing,
-						rawLookDir as RelativeDirection,
-					)
-				: (rawLookDir as CardinalDirection);
+			);
 			return {
 				...game,
 				world: { ...game.world, entities },
@@ -514,23 +502,29 @@ export function dispatchAiTurn(
 	// on invalid recipient) so the round coordinator can pair them back by index.
 	if (action.messages) {
 		const livePersonaIds = Object.keys(state.personaSpatial);
-		for (const { to, content } of action.messages) {
+		for (const msg of action.messages) {
 			const validRecipient =
-				to === "blue" || (livePersonaIds.includes(to) && to !== aiId);
+				msg.to === "blue" ||
+				(livePersonaIds.includes(msg.to) && msg.to !== aiId);
 			if (!validRecipient) {
 				records.push({
 					round,
 					actor: aiId,
 					kind: "tool_failure",
-					description: `${game.personas[aiId]?.name ?? aiId} tried to message "${to}" but failed: unknown or invalid recipient`,
+					description: `${game.personas[aiId]?.name ?? aiId} tried to message "${msg.to}" but failed: unknown or invalid recipient`,
 				});
 			} else {
-				state = appendMessage(state, aiId, to, content);
+				state = appendMessage(state, aiId, msg.to, msg.content, {
+					...(msg.toolCallId !== undefined && { toolCallId: msg.toolCallId }),
+					...(msg.toolArgumentsJson !== undefined && {
+						toolArgumentsJson: msg.toolArgumentsJson,
+					}),
+				});
 				records.push({
 					round,
 					actor: aiId,
 					kind: "message",
-					description: `${game.personas[aiId]?.name ?? aiId} messaged ${to}`,
+					description: `${game.personas[aiId]?.name ?? aiId} messaged ${msg.to}`,
 				});
 			}
 		}

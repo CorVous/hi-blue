@@ -466,7 +466,7 @@ describe("multi-id roundtrip replay shapes (#238)", () => {
 		const roundtrip: ToolRoundtripMessage = {
 			assistantToolCalls: [
 				{ id: "call_a", name: "pick_up", argumentsJson: '{"item":"flower"}' },
-				{ id: "call_b", name: "go", argumentsJson: '{"direction":"south"}' },
+				{ id: "call_b", name: "go", argumentsJson: '{"direction":"back"}' },
 			],
 			toolResults: [
 				{

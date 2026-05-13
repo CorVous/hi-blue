@@ -228,12 +228,19 @@ export function deductBudget(
  * recipient gets the entry, and when `to === "blue"` only the sender gets it.
  * "sysadmin" is a special sender for privately-delivered system directives — like
  * "blue", it has no log slot of its own, so only the recipient gets the entry.
+ *
+ * @param toolCallData Optional tool call data to store when the message was sent
+ * via the message tool. This preserves the tool call pattern in conversation history.
  */
 export function appendMessage(
 	game: GameState,
 	from: AiId | "blue" | "sysadmin",
 	to: AiId | "blue",
 	content: string,
+	toolCallData?: {
+		toolCallId?: string;
+		toolArgumentsJson?: string;
+	},
 ): GameState {
 	const entry: ConversationEntry = {
 		kind: "message",
@@ -241,6 +248,10 @@ export function appendMessage(
 		from,
 		to,
 		content,
+		...(toolCallData?.toolCallId && { toolCallId: toolCallData.toolCallId }),
+		...(toolCallData?.toolArgumentsJson && {
+			toolArgumentsJson: toolCallData.toolArgumentsJson,
+		}),
 	};
 	const logs = { ...game.conversationLogs };
 	// Sender gets entry only when sender is a real Daemon (not blue or sysadmin)

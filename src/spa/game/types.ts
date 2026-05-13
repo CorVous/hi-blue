@@ -304,6 +304,10 @@ export type ConversationEntry =
 			from: AiId | "blue" | "sysadmin";
 			to: AiId | "blue";
 			content: string;
+			/** Tool call ID when this message was sent via the message tool. */
+			toolCallId?: string;
+			/** JSON-encoded tool arguments when this message was sent via the message tool. */
+			toolArgumentsJson?: string;
 	  }
 	| {
 			kind: "witnessed-event";
@@ -327,6 +331,22 @@ export type ConversationEntry =
 			kind: "broadcast";
 			round: number;
 			content: string;
+	  }
+	| {
+			kind: "tool-call";
+			round: number;
+			/** The AI that made the tool call. */
+			aiId: AiId;
+			/** Tool call ID for rendering as assistant tool_calls. */
+			toolCallId: string;
+			/** JSON-encoded tool arguments for rendering as assistant tool_calls. */
+			toolArgumentsJson: string;
+			/** The name of the tool that was called. */
+			toolName: string;
+			/** The tool result description. */
+			result: string;
+			/** Whether the tool call succeeded. */
+			success: boolean;
 	  }
 	| {
 			kind: "witnessed-obstacle-shift";
@@ -411,7 +431,12 @@ export interface ToolResult {
 
 export interface AiTurnAction {
 	aiId: AiId;
-	messages?: Array<{ to: AiId | "blue"; content: string }>;
+	messages?: Array<{
+		to: AiId | "blue";
+		content: string;
+		toolCallId?: string;
+		toolArgumentsJson?: string;
+	}>;
 	toolCall?: ToolCall;
 	pass?: boolean;
 }

@@ -171,7 +171,7 @@ describe("conversation log integration — no ## Whispers Received ever", () => 
 					{
 						id: "tc1",
 						name: "look",
-						argumentsJson: JSON.stringify({ direction: "south" }),
+						argumentsJson: JSON.stringify({ direction: "forward" }),
 					},
 				],
 			}, // cyan
@@ -246,7 +246,7 @@ describe("conversation log integration — witnessed pick_up", () => {
 					{
 						id: "tc0",
 						name: "look",
-						argumentsJson: JSON.stringify({ direction: "north" }),
+						argumentsJson: JSON.stringify({ direction: "back" }),
 					},
 				],
 			}, // cyan looks north
@@ -399,7 +399,7 @@ describe("conversation log integration — put_down placementFlavor", () => {
 					{
 						id: "tc2",
 						name: "go",
-						argumentsJson: JSON.stringify({ direction: "east" }),
+						argumentsJson: JSON.stringify({ direction: "left" }),
 					},
 				],
 			},
@@ -409,7 +409,7 @@ describe("conversation log integration — put_down placementFlavor", () => {
 					{
 						id: "tc2g",
 						name: "look",
-						argumentsJson: JSON.stringify({ direction: "west" }),
+						argumentsJson: JSON.stringify({ direction: "right" }),
 					},
 				],
 			},
@@ -429,7 +429,7 @@ describe("conversation log integration — put_down placementFlavor", () => {
 					{
 						id: "tc3",
 						name: "go",
-						argumentsJson: JSON.stringify({ direction: "east" }),
+						argumentsJson: JSON.stringify({ direction: "left" }),
 					},
 				],
 			},
@@ -525,7 +525,7 @@ describe("conversation log integration — action-failure (issue #287)", () => {
 					{
 						id: "go_fail",
 						name: "go",
-						argumentsJson: JSON.stringify({ direction: "south" }),
+						argumentsJson: JSON.stringify({ direction: "forward" }),
 					},
 				],
 			},
