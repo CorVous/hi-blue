@@ -3243,15 +3243,19 @@ describe("message tool multi-round regression (#213)", () => {
 			}
 		}
 
-		// The conversation log entry (assistant saying "Hello blue") must be present
-		const hasAssistantContent = capturedRedMessages.some(
+		// The conversation log entry must be present as a tool call pair
+		// (assistant with tool_calls + tool result) since we now preserve tool call pattern
+		const hasAssistantToolCall = capturedRedMessages.some(
 			(m) =>
 				m.role === "assistant" &&
-				"content" in m &&
-				typeof (m as { content?: unknown }).content === "string" &&
-				(m as { content: string }).content.includes("Hello blue"),
+				"tool_calls" in m &&
+				Array.isArray((m as { tool_calls?: unknown }).tool_calls) &&
+				((m as { tool_calls?: unknown[] }).tool_calls?.length ?? 0) > 0 &&
+				(
+					m as { tool_calls: Array<{ function: { arguments: string } }> }
+				).tool_calls[0]?.function.arguments.includes("Hello blue"),
 		);
-		expect(hasAssistantContent).toBe(true);
+		expect(hasAssistantToolCall).toBe(true);
 	});
 });
 

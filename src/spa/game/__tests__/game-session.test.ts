@@ -634,7 +634,7 @@ describe("GameSession — spatial mechanics", () => {
 			{
 				assistantText: "",
 				toolCalls: [
-					{ id: "go1", name: "go", argumentsJson: '{"direction":"south"}' },
+					{ id: "go1", name: "go", argumentsJson: '{"direction":"back"}' },
 				],
 			},
 			{ assistantText: "", toolCalls: [] },

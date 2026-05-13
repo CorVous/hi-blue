@@ -77,19 +77,51 @@ export function buildOpenAiMessages(
 	for (const entry of sortedLog) {
 		if (entry.kind === "message") {
 			if (entry.from === ctx.aiId) {
-				// Outgoing: prefix with "[Round N] you dm <toLabel>:" so the
-				// Daemon can track who it addressed across the whole game —
-				// not just on the round immediately after, which is the only
-				// scope the prior-round tool_call/tool_result pair covers.
-				messages.push({
-					role: "assistant",
-					content: renderEntry(
-						entry,
-						ctx.aiId,
-						ctx.worldSnapshot.entities,
-						witnessState,
-					),
-				});
+				// Outgoing message from this AI
+				const outgoingEntry = entry as {
+					toolCallId?: string;
+					toolArgumentsJson?: string;
+				};
+				if (outgoingEntry.toolCallId && outgoingEntry.toolArgumentsJson) {
+					// Render as tool call pair (assistant with tool_calls + tool result)
+					// This preserves the tool call pattern in conversation history
+					messages.push({
+						role: "assistant",
+						content: null,
+						tool_calls: [
+							{
+								type: "function" as const,
+								id: outgoingEntry.toolCallId,
+								function: {
+									name: "message",
+									arguments: outgoingEntry.toolArgumentsJson,
+								},
+							},
+						],
+					});
+					// Tool result message
+					messages.push({
+						role: "tool",
+						tool_call_id: outgoingEntry.toolCallId,
+						content: renderEntry(
+							entry,
+							ctx.aiId,
+							ctx.worldSnapshot.entities,
+							witnessState,
+						),
+					});
+				} else {
+					// Legacy: render as free-text assistant message (backward compatibility)
+					messages.push({
+						role: "assistant",
+						content: renderEntry(
+							entry,
+							ctx.aiId,
+							ctx.worldSnapshot.entities,
+							witnessState,
+						),
+					});
+				}
 			} else {
 				// Incoming: user turn includes "[Round N] <from> dms you:" so
 				// the model can place the message in time and identify the
@@ -143,6 +175,28 @@ export function buildOpenAiMessages(
 					ctx.worldSnapshot.entities,
 					witnessState,
 				),
+			});
+		} else if (entry.kind === "tool-call") {
+			// Render as tool call pair (assistant with tool_calls + tool result)
+			messages.push({
+				role: "assistant",
+				content: null,
+				tool_calls: [
+					{
+						type: "function" as const,
+						id: entry.toolCallId,
+						function: {
+							name: entry.toolName,
+							arguments: entry.toolArgumentsJson,
+						},
+					},
+				],
+			});
+			// Tool result message
+			messages.push({
+				role: "tool",
+				tool_call_id: entry.toolCallId,
+				content: entry.result,
 			});
 		} else if (entry.kind === "broadcast") {
 			messages.push({

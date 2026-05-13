@@ -202,7 +202,7 @@ describe("validateToolCall", () => {
 		// red at (0,0) facing north; look east so green at (0,1) enters front arc
 		const lookedEast = executeToolCall(game, "red", {
 			name: "look",
-			args: { direction: "east" },
+			args: { direction: "right" },
 		});
 		const call: ToolCall = { name: "give", args: { item: "key", to: "green" } };
 		const result = validateToolCall(lookedEast, "red", call);
@@ -238,7 +238,7 @@ describe("validateToolCall", () => {
 	it("allows go in a valid direction", () => {
 		const game = makeGame();
 		// red at (0,0), going south → (1,0), which is in bounds
-		const call: ToolCall = { name: "go", args: { direction: "south" } };
+		const call: ToolCall = { name: "go", args: { direction: "back" } };
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(true);
 	});
@@ -246,7 +246,7 @@ describe("validateToolCall", () => {
 	it("rejects go out of bounds", () => {
 		const game = makeGame();
 		// red at (0,0), going north → (-1,0), out of bounds
-		const call: ToolCall = { name: "go", args: { direction: "north" } };
+		const call: ToolCall = { name: "go", args: { direction: "forward" } };
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(false);
 		expect(result.reason).toMatch(/out of bounds/i);
@@ -255,7 +255,7 @@ describe("validateToolCall", () => {
 	it("rejects go into an obstacle cell", () => {
 		const game = makeGame([{ row: 1, col: 0 }]);
 		// red at (0,0), going south → (1,0), which has an obstacle
-		const call: ToolCall = { name: "go", args: { direction: "south" } };
+		const call: ToolCall = { name: "go", args: { direction: "back" } };
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(false);
 		expect(result.reason).toMatch(/obstacle/i);
@@ -270,7 +270,7 @@ describe("validateToolCall", () => {
 
 	it("allows look in any valid direction", () => {
 		const game = makeGame();
-		const call: ToolCall = { name: "look", args: { direction: "east" } };
+		const call: ToolCall = { name: "look", args: { direction: "right" } };
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(true);
 	});
@@ -533,7 +533,7 @@ describe("executeToolCall", () => {
 	it("updates position and facing on go", () => {
 		const game = makeGame();
 		// red at (0,0) facing north; go south → (1,0) facing south
-		const call: ToolCall = { name: "go", args: { direction: "south" } };
+		const call: ToolCall = { name: "go", args: { direction: "back" } };
 		const updated = executeToolCall(game, "red", call);
 		const spatial = getActivePhase(updated).personaSpatial.red;
 		expect(spatial?.position).toEqual({ row: 1, col: 0 });
@@ -543,7 +543,7 @@ describe("executeToolCall", () => {
 	it("updates only facing on look (no position change)", () => {
 		const game = makeGame();
 		// red at (0,0) facing north; look east → (0,0) facing east
-		const call: ToolCall = { name: "look", args: { direction: "east" } };
+		const call: ToolCall = { name: "look", args: { direction: "right" } };
 		const updated = executeToolCall(game, "red", call);
 		const spatial = getActivePhase(updated).personaSpatial.red;
 		expect(spatial?.position).toEqual({ row: 0, col: 0 });
@@ -767,7 +767,7 @@ describe("dispatchAiTurn", () => {
 		// red at (0,0), going south
 		const action: AiTurnAction = {
 			aiId: "red",
-			toolCall: { name: "go", args: { direction: "south" } },
+			toolCall: { name: "go", args: { direction: "back" } },
 		};
 		const result = dispatchAiTurn(game, action);
 		expect(result.rejected).toBe(false);
@@ -1165,7 +1165,7 @@ describe("dispatchAiTurn", () => {
 		// red at (0,0) facing north; obstacle at (1,0); go south → blocked
 		const action: AiTurnAction = {
 			aiId: "red",
-			toolCall: { name: "go", args: { direction: "south" } },
+			toolCall: { name: "go", args: { direction: "back" } },
 		};
 		const result = dispatchAiTurn(game, action);
 		expect(result.rejected).toBe(false);
@@ -1743,7 +1743,7 @@ describe("dispatchAiTurn — UseItemObjective activationFlavor on interesting_ob
 		const game = makeGameWithUseItemActivation();
 		const lookedEast = executeToolCall(game, "red", {
 			name: "look",
-			args: { direction: "east" },
+			args: { direction: "right" },
 		});
 		// red at (0,0) facing east; green at (0,1) facing north.
 		// green's cone (facing north from (0,1)) does NOT include (0,0),
@@ -1751,7 +1751,7 @@ describe("dispatchAiTurn — UseItemObjective activationFlavor on interesting_ob
 		// Simplest: have green face west from (0,1) — front arc covers (0,0).
 		const greenWest = executeToolCall(lookedEast, "green", {
 			name: "look",
-			args: { direction: "west" },
+			args: { direction: "left" },
 		});
 		const result = dispatchAiTurn(greenWest, {
 			aiId: "red",
@@ -1774,7 +1774,7 @@ describe("dispatchAiTurn — UseItemObjective activationFlavor on interesting_ob
 		const game = makeGameWithUseItemActivation();
 		const greenWest = executeToolCall(game, "green", {
 			name: "look",
-			args: { direction: "west" },
+			args: { direction: "left" },
 		});
 		// First use satisfies + emits activationFlavor.
 		const after = dispatchAiTurn(greenWest, {

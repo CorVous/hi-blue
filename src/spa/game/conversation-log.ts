@@ -153,6 +153,11 @@ export function renderEntry(
 		case "broadcast": {
 			return `[Round ${round}] ${entry.content}`;
 		}
+
+		case "tool-call": {
+			const successStr = entry.success ? "succeeded" : "failed";
+			return `[Round ${round}] Your \`${entry.toolName}\` action ${successStr}: ${entry.result}`;
+		}
 	}
 }
 
