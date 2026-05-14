@@ -127,6 +127,7 @@ function getMain(): HTMLElement {
 describe("renderStart — legacy-save-discarded banner (via reason param)", () => {
 	beforeEach(() => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 	});
 

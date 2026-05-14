@@ -2,9 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ToolCallResult, UsageInfo } from "../streaming.js";
 import { parseSSEStream } from "../streaming.js";
 
-// __WORKER_BASE_URL__ is a build-time constant; provide a stub for tests
+// Build-time constants; provide stubs for tests
 // biome-ignore lint/suspicious/noExplicitAny: stubbing a build-time constant
 (globalThis as any).__WORKER_BASE_URL__ = "http://localhost:8787";
+// biome-ignore lint/suspicious/noExplicitAny: stubbing a build-time constant
+(globalThis as any).__DEV__ = true;
 
 function makeSSEStream(chunks: string[]): ReadableStream<Uint8Array> {
 	const encoder = new TextEncoder();
