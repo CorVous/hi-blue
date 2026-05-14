@@ -8,9 +8,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { BrowserLLMProvider } from "../browser-llm-provider";
 
-// Provide __WORKER_BASE_URL__ global before importing the module
-// biome-ignore lint/suspicious/noExplicitAny: stubbing a build-time constant
-(globalThis as any).__WORKER_BASE_URL__ = "http://localhost:8787";
+// Build-time globals are provided by src/spa/test-setup.ts
 
 function makeSseBody(words: string[]): ReadableStream<Uint8Array> {
 	const encoder = new TextEncoder();

@@ -4,6 +4,7 @@ import type { AiPersona } from "../types";
 
 // Provide globals before importing the module
 vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+vi.stubGlobal("__DEV__", true);
 vi.stubGlobal("localStorage", { getItem: () => null });
 
 const WORKER_COMPLETIONS_URL = "http://localhost:8787/v1/chat/completions";

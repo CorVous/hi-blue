@@ -16,6 +16,7 @@ export default defineConfig({
 					environmentOptions: {
 						jsdom: { url: "http://localhost:8787/" },
 					},
+					setupFiles: ["src/spa/test-setup.ts"],
 				},
 			},
 			{

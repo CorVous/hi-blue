@@ -130,6 +130,7 @@ function getMain(): HTMLElement {
 describe("renderStart — screen visibility", () => {
 	beforeEach(() => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 		vi.stubGlobal("localStorage", makeLocalStorageStub());
 	});
@@ -166,6 +167,7 @@ describe("renderStart — screen visibility", () => {
 describe("renderStart — BEGIN button state", () => {
 	beforeEach(() => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 		vi.stubGlobal("localStorage", makeLocalStorageStub());
 	});
@@ -219,6 +221,7 @@ describe("renderStart — BEGIN button state", () => {
 describe("renderStart — BEGIN click saves session and navigates", () => {
 	beforeEach(() => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 		vi.stubGlobal("localStorage", makeLocalStorageStub());
 	});
@@ -299,6 +302,7 @@ describe("renderStart — BEGIN click saves session and navigates", () => {
 describe("renderStart — CapHitError handling", () => {
 	beforeEach(() => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 		vi.stubGlobal("localStorage", makeLocalStorageStub());
 	});
@@ -360,6 +364,7 @@ describe("renderStart — CapHitError handling", () => {
 describe("renderStart — persistence warning banners", () => {
 	beforeEach(() => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 		vi.stubGlobal("localStorage", makeLocalStorageStub());
 	});

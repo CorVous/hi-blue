@@ -74,7 +74,7 @@ export class BrowserLLMProvider implements RoundLLMProvider {
 				promptTokens > 0
 					? Math.round((cachedPromptTokens / promptTokens) * 100)
 					: 0;
-			if (import.meta.env.DEV) {
+			if (__DEV__) {
 				console.log(
 					`[cache] prompt ${cachedPromptTokens}/${promptTokens} cached (${pct}%)`,
 				);
@@ -86,7 +86,7 @@ export class BrowserLLMProvider implements RoundLLMProvider {
 		// For `message` calls, append the recipient so per-recipient counts can
 		// be derived (e.g. "message:blue" vs "message:*xqr9"). Devtools-only
 		// signal; not persisted.
-		if (import.meta.env.DEV) {
+		if (__DEV__) {
 			const calls = toolCalls.map((c) => {
 				try {
 					const args = JSON.parse(c.argumentsJson);

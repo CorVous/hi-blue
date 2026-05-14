@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Provide globals before importing the module
 vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+vi.stubGlobal("__DEV__", true);
 
 import { STATIC_CONTENT_PACKS } from "./fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "./fixtures/static-personas";

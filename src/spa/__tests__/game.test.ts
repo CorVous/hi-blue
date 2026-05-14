@@ -346,6 +346,7 @@ describe("renderGame (game route — three-AI)", () => {
 	beforeEach(async () => {
 		// Must be set before each test since vi.unstubAllGlobals() in afterEach removes it
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 		// Seed a valid session so game.ts finds an active session on render.
 		_stub = makeLocalStorageStub();
@@ -928,6 +929,7 @@ describe("renderGame — localStorage persistence", () => {
 	beforeEach(() => {
 		// Must be set before each test since vi.unstubAllGlobals() in afterEach removes it
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 	});
 
@@ -1253,6 +1255,7 @@ describe("renderGame — chat_lockout event", () => {
 	beforeEach(async () => {
 		// Must be set before each test since vi.unstubAllGlobals() in afterEach removes it
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 		const _stub = makeLocalStorageStub();
 		await seedSessionInStub(_stub);
@@ -1331,6 +1334,7 @@ describe("renderGame — chat_lockout event", () => {
 describe("renderGame — mention-based addressing", () => {
 	beforeEach(async () => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 		const _stub = makeLocalStorageStub();
 		await seedSessionInStub(_stub);
@@ -1472,6 +1476,7 @@ describe("renderGame — mention-based addressing", () => {
 describe("renderGame — panel-click addressee", () => {
 	beforeEach(async () => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 		const _stub = makeLocalStorageStub();
 		await seedSessionInStub(_stub);
@@ -1623,6 +1628,7 @@ describe("renderGame — panel-click addressee", () => {
 describe("renderGame — URL param sourcing", () => {
 	beforeEach(async () => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 		const _stub = makeLocalStorageStub();
 		await seedSessionInStub(_stub);
@@ -1693,6 +1699,7 @@ describe("renderGame — URL param sourcing", () => {
 describe("renderGame — addressee persistence after send", () => {
 	beforeEach(async () => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 		const _stub = makeLocalStorageStub();
 		await seedSessionInStub(_stub);
@@ -1910,6 +1917,7 @@ describe("renderGame — addressee persistence after send", () => {
 describe("visual feedback for active addressee", () => {
 	beforeEach(async () => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 		const _stub = makeLocalStorageStub();
 		await seedSessionInStub(_stub);
@@ -2160,6 +2168,7 @@ describe("visual feedback for active addressee", () => {
 describe("renderGame — chat lockout visual affordances (panel muting + inline error)", () => {
 	beforeEach(async () => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 		const _stub = makeLocalStorageStub();
 		await seedSessionInStub(_stub);
@@ -2399,6 +2408,7 @@ describe("renderGame — round error surfacing (issue #231)", () => {
 
 	beforeEach(async () => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 		_stub = makeLocalStorageStub();
 		await seedSessionInStub(_stub);
@@ -2495,6 +2505,7 @@ describe("renderGame — version-mismatch session with pending bootstrap (regres
 
 	it("redirects to #/sessions and does not overwrite the old session when a bootstrap is pending", async () => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 
 		// Build a localStorage stub seeded with a version-mismatch session.
@@ -2586,6 +2597,7 @@ describe("renderGame — version-mismatch session with pending bootstrap (regres
 
 	it("redirects to #/sessions and clears pending bootstrap when session is broken", async () => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 
 		vi.resetModules();

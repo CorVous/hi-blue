@@ -206,6 +206,7 @@ describe("buildSynthesisUserMessage", () => {
 describe("BrowserSynthesisProvider", () => {
 	beforeEach(() => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
 		// Stub localStorage so resolveLLMTarget can read it
 		vi.stubGlobal("localStorage", { getItem: () => null });
 	});

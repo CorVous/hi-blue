@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// Provide __WORKER_BASE_URL__ global before importing home module
+// Provide build-time globals before importing home module
 vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+vi.stubGlobal("__DEV__", true);
 
 // Matches the body content of src/spa/index.html
 const INDEX_BODY_HTML = `
