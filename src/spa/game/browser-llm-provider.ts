@@ -74,9 +74,11 @@ export class BrowserLLMProvider implements RoundLLMProvider {
 				promptTokens > 0
 					? Math.round((cachedPromptTokens / promptTokens) * 100)
 					: 0;
-			console.log(
-				`[cache] prompt ${cachedPromptTokens}/${promptTokens} cached (${pct}%)`,
-			);
+			if (import.meta.env.DEV) {
+				console.log(
+					`[cache] prompt ${cachedPromptTokens}/${promptTokens} cached (${pct}%)`,
+				);
+			}
 		}
 
 		// Spike #239: log the per-turn tool-name array so an A/B playtest can
@@ -84,20 +86,17 @@ export class BrowserLLMProvider implements RoundLLMProvider {
 		// For `message` calls, append the recipient so per-recipient counts can
 		// be derived (e.g. "message:blue" vs "message:*xqr9"). Devtools-only
 		// signal; not persisted.
-		const labels = toolCalls.map((c) => {
-			if (c.name === "message") {
+		if (import.meta.env.DEV) {
+			const calls = toolCalls.map((c) => {
 				try {
-					const args = JSON.parse(c.argumentsJson) as { to?: unknown };
-					if (typeof args.to === "string" && args.to.length > 0) {
-						return `message:${args.to}`;
-					}
+					const args = JSON.parse(c.argumentsJson);
+					return { name: c.name, args };
 				} catch {
-					// fall through
+					return { name: c.name, args: c.argumentsJson };
 				}
-			}
-			return c.name;
-		});
-		console.log(`[spike-239] toolCalls=${JSON.stringify(labels)}`);
+			});
+			console.log(`[tools] toolCalls=${JSON.stringify(calls)}`);
+		}
 
 		const assistantText = textParts.join("") || reasoningParts.join("");
 		return {
