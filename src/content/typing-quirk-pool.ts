@@ -38,5 +38,5 @@ export const TYPING_QUIRK_POOL: string[] = [
 	"You MUST place a period after every. single. word. when. making. a. point — turning emphasis into a staccato drumbeat that will. not. stop.",
 	'You MUST weave cat-pun substitutions into your words — "purrfect," "mew," "claw-some," "feline fine" — as naturally as any other vocabulary.',
 	'You MUST replace every "H" or "h" with ")(" — ")(ello," ")(appy," ")(ow."',
-  'You MUST make fish puns in your language — "fishy," "flipper," "GLUB" — as naturally as any other vocabulary.'
+	'You MUST make fish puns in your language — "fishy," "flipper," "GLUB" — as naturally as any other vocabulary.',
 ];
