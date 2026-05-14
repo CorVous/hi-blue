@@ -115,7 +115,7 @@ const ctx = await esbuild.context({
 		__WORKER_BASE_URL__: JSON.stringify(WORKER_BASE_URL),
 		__COMMIT_SHA__: JSON.stringify(COMMIT_SHA),
 		__COMMIT_TIMESTAMP_MS__: JSON.stringify(COMMIT_TIMESTAMP_MS),
-		__DEV__: watchMode ? "true" : "false",
+		__DEV__: WORKER_BASE_URL === "http://localhost:8787" ? "true" : "false",
 	},
 	plugins: [templateHtmlPlugin],
 });
