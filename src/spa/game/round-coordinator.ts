@@ -203,6 +203,7 @@ export async function runRound(
 			messages,
 			tools,
 			onAiDelta ? (text) => onAiDelta(aiId, text) : undefined,
+			aiId,
 		);
 
 		// Drift-to-silence recovery (#254): if the model returned free-form
@@ -225,6 +226,7 @@ export async function runRound(
 				retryMessages,
 				tools,
 				onAiDelta ? (text) => onAiDelta(aiId, text) : undefined,
+				aiId,
 			);
 			assistantText = retry.assistantText;
 			toolCalls = retry.toolCalls;

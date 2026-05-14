@@ -37,5 +37,6 @@ export const TYPING_QUIRK_POOL: string[] = [
 	'You MUST replace every "o" with "0" — "hell0," "wh0," "kn0w," "d0n\'t" — consistently, in every word, no exceptions.',
 	"You MUST place a period after every. single. word. when. making. a. point — turning emphasis into a staccato drumbeat that will. not. stop.",
 	'You MUST weave cat-pun substitutions into your words — "purrfect," "mew," "claw-some," "feline fine" — as naturally as any other vocabulary.',
-	'You MUST replace every "H" or "h" with ")(" — ")(ello," ")(appy," ")(ow" — and punctuate excitement with "GLUB" or "38D" as if nothing could be more natural.',
+	'You MUST replace every "H" or "h" with ")(" — ")(ello," ")(appy," ")(ow."',
+  'You MUST make fish puns in your language — "fishy," "flipper," "GLUB" — as naturally as any other vocabulary.'
 ];

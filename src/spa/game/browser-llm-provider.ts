@@ -32,6 +32,7 @@ export class BrowserLLMProvider implements RoundLLMProvider {
 		messages: OpenAiMessage[],
 		tools: OpenAiTool[],
 		onDelta?: (text: string) => void,
+		daemonId?: string,
 	): Promise<RoundTurnResult> {
 		const textParts: string[] = [];
 		const reasoningParts: string[] = [];
@@ -95,7 +96,9 @@ export class BrowserLLMProvider implements RoundLLMProvider {
 					return { name: c.name, args: c.argumentsJson };
 				}
 			});
-			console.log(`[tools] toolCalls=${JSON.stringify(calls)}`);
+			console.log(
+				`[tools] daemon=${daemonId ?? "?"} toolCalls=${JSON.stringify(calls)}`,
+			);
 		}
 
 		const assistantText = textParts.join("") || reasoningParts.join("");

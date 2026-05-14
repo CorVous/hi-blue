@@ -49,6 +49,7 @@ export interface RoundLLMProvider {
 		messages: OpenAiMessage[],
 		tools: OpenAiTool[],
 		onDelta?: (text: string) => void,
+		daemonId?: string,
 	): Promise<RoundTurnResult>;
 }
 
@@ -85,6 +86,7 @@ export class MockRoundLLMProvider implements RoundLLMProvider {
 		messages: OpenAiMessage[],
 		tools: OpenAiTool[],
 		_onDelta?: (text: string) => void,
+		_daemonId?: string,
 	): Promise<RoundTurnResult> {
 		this.calls.push({ messages, tools });
 		const raw =
