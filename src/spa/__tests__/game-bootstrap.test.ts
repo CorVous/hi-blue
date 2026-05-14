@@ -26,6 +26,7 @@ vi.mock("../../content/content-pack-generator", () => ({
 }));
 
 vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+vi.stubGlobal("__DEV__", true);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -92,6 +93,7 @@ function getEl<T extends HTMLElement>(selector: string): T {
 describe("renderGame — session restore (formerly async bootstrap)", () => {
 	beforeEach(async () => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 		// Pre-populate a valid session so game.ts takes the restore path.
 		const store: Record<string, string> = {};

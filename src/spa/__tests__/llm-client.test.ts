@@ -10,9 +10,11 @@ import {
 	streamCompletion,
 } from "../llm-client.js";
 
-// Provide __WORKER_BASE_URL__ global before importing the module
+// Provide build-time globals before importing the module
 // biome-ignore lint/suspicious/noExplicitAny: stubbing a build-time constant
 (globalThis as any).__WORKER_BASE_URL__ = "http://localhost:8787";
+// biome-ignore lint/suspicious/noExplicitAny: stubbing a build-time constant
+(globalThis as any).__DEV__ = true;
 
 const WORKER_COMPLETIONS_URL = "http://localhost:8787/v1/chat/completions";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";

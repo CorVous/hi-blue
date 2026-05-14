@@ -12,9 +12,10 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-// Provide __WORKER_BASE_URL__ global before importing the module under test.
-// Tests that exercise the production gate will override this stub locally.
+// Provide build-time globals before importing the module under test.
+// Tests that exercise the production gate will override these stubs locally.
 vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+vi.stubGlobal("__DEV__", true);
 
 import { DEFAULT_LANDMARKS } from "../game/direction";
 import { GameSession } from "../game/game-session";
