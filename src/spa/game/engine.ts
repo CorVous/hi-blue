@@ -157,8 +157,9 @@ export function getActivePack(game: GameState): ContentPack {
 
 /**
  * One-way activation of the B-side content pack. Sets `activePackId` to "B"
- * and points `contentPack` / `setting` at `contentPacksB[0]` so prompt
- * builders and dispatchers see the new names/descriptions immediately.
+ * and points `contentPack` at `contentPacksB[0]`, and propagates `setting`,
+ * `weather`, and `timeOfDay` from the B pack so prompt builders and
+ * dispatchers see the new names/descriptions and ambient values immediately.
  *
  * Semantics:
  *   - A → B only. There is no reverse path; the `settingShiftFired` flag on
@@ -179,6 +180,8 @@ export function shiftToBPack(game: GameState): GameState {
 		activePackId: "B",
 		contentPack: bPack,
 		setting: bPack.setting,
+		weather: bPack.weather,
+		timeOfDay: bPack.timeOfDay,
 	};
 }
 
