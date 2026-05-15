@@ -1,16 +1,9 @@
 /**
  * conversation-log.ts
  *
- * Builds the unified per-AI per-phase Conversation log for the system prompt.
- *
- * Accepts a pre-filtered ConversationEntry[] (one AI's log) and world entities
- * for item-name resolution. Sorts ascending by round (stable — ties preserve
- * append order) and emits one formatted line per entry.
- *
- * Cone visibility is resolved at write-time (ADR 0006), not here.
- *
- * Returns a string[] of pre-formatted lines (no leading <conversation> tag —
- * caller adds that).
+ * Renders a single ConversationEntry (one AI's view of one log line) to its
+ * formatted string. Cone visibility is resolved at write-time (ADR 0006), not
+ * here. Sorting + interleaving with role turns happens in openai-message-builder.
  *
  * Supported entry kinds:
  *   - `message`: incoming/outgoing DM lines.
@@ -22,7 +15,6 @@
 import { cardinalToRelative } from "./direction.js";
 import type {
 	AiId,
-	AiPersona,
 	CardinalDirection,
 	ConversationEntry,
 	PersonaSpatialState,
@@ -50,10 +42,6 @@ function itemName(entities: WorldEntity[], itemId: string): string {
 
 /**
  * Render a single ConversationEntry line for the owning AI.
- *
- * Exported for `openai-message-builder.ts`, which interleaves witnessed events
- * with chat messages in role-turn form. Internal callers (the system-prompt
- * conversation block, when present) reach this via `buildConversationLog`.
  *
  * @param witnessState  Optional spatial state of the witnessing AI. When
  *   provided, movement directions in witnessed-event lines are rendered
@@ -159,47 +147,4 @@ export function renderEntry(
 			return `[Round ${round}] Your \`${entry.toolName}\` action ${successStr}: ${entry.result}`;
 		}
 	}
-}
-
-/**
- * The minimal data slice required to build a conversation log.
- * Extracted from PhaseState so the function can accept either a real PhaseState
- * or a test fixture with only the fields it needs.
- */
-export interface ConversationLogInput {
-	/** Pre-filtered ConversationEntry[] for the single AI whose log is being built. */
-	conversationLog: ConversationEntry[];
-	/** World entities (for item name resolution). */
-	worldEntities: WorldEntity[];
-	/**
-	 * Optional spatial state of the AI whose log is being built.
-	 * When provided, movement directions in witnessed-event "go" lines are
-	 * rendered relative to this AI's facing rather than as raw cardinals.
-	 */
-	witnessState?: PersonaSpatialState;
-}
-
-/**
- * Build the unified conversation log for a single AI in the current phase.
- *
- * @param input     The minimal data slice from the phase state.
- * @param aiId      The AI whose log to build (used for give-recipient personalisation).
- * @param _personas All persona objects (reserved for future name-resolution use).
- * @returns Array of formatted log lines. Empty when nothing has happened yet.
- */
-export function buildConversationLog(
-	input: ConversationLogInput,
-	aiId: AiId,
-	_personas: Record<AiId, AiPersona>,
-): string[] {
-	// Sort by round ascending; ties preserve insertion order (Array.sort is stable).
-	const sorted = [...input.conversationLog].sort((a, b) => a.round - b.round);
-
-	const lines: string[] = [];
-	for (const entry of sorted) {
-		lines.push(
-			renderEntry(entry, aiId, input.worldEntities, input.witnessState),
-		);
-	}
-	return lines;
 }
