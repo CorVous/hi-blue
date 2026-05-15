@@ -252,9 +252,15 @@ function buildDualContentPackResponseBody(body: ParsedBody): string {
 						id: spaceId,
 						kind: "objective_space",
 						name: spaceName,
-						examineDescription: `Stub space ${spaceId} ${ab}.`,
+						examineDescription: `Stub space ${spaceId} ${ab} — use the lever to activate; a meeting place where two are needed.`,
+						activationFlavor: `The ${spaceName} hums to life.`,
+						satisfactionFlavor: `The ${spaceName} settles into completion.`,
+						postExamineDescription: `The ${spaceName} now sits dormant after activation.`,
+						postLookFlavor: `The ${spaceName} rests, its purpose fulfilled.`,
 						convergenceTier1Flavor: `A presence lingers at the ${spaceName}.`,
 						convergenceTier2Flavor: `Two presences converge at the ${spaceName}.`,
+						convergenceTier1ActorFlavor: `You stand alone on the ${spaceName}; the air anticipates company.`,
+						convergenceTier2ActorFlavor: `You share the ${spaceName} with another presence.`,
 					},
 				};
 			});
@@ -262,8 +268,11 @@ function buildDualContentPackResponseBody(body: ParsedBody): string {
 				id: `${tag}-int-${i}`,
 				kind: "interesting_object",
 				name: `Stub item ${tag} ${i} ${ab}`,
-				examineDescription: `Stub interesting object ${tag}-int-${i} ${ab}.`,
+				examineDescription: `Stub interesting object ${tag}-int-${i} ${ab} — press the switch to activate.`,
 				useOutcome: "Nothing happens.",
+				activationFlavor: `The stub item ${tag}-int-${i} ${ab} clicks into action.`,
+				postExamineDescription: `The stub item ${tag}-int-${i} ${ab} sits used and inert.`,
+				postLookFlavor: `The stub item ${tag}-int-${i} ${ab} rests, spent.`,
 			}));
 			const obstacles = Array.from({ length: phase.m }, (_, i) => ({
 				id: `${tag}-obs-${i}`,
@@ -323,9 +332,15 @@ function buildContentPackResponseBody(body: ParsedBody): string {
 					id: spaceId,
 					kind: "objective_space",
 					name: `Stub space ${tag}-${i}`,
-					examineDescription: `Stub objective space ${spaceId}.`,
+					examineDescription: `Stub objective space ${spaceId} — use the lever to activate; a meeting place where two are needed.`,
+					activationFlavor: `Stub space ${tag}-${i} hums to life.`,
+					satisfactionFlavor: `Stub space ${tag}-${i} settles into completion.`,
+					postExamineDescription: `Stub space ${tag}-${i} now sits dormant after activation.`,
+					postLookFlavor: `Stub space ${tag}-${i} rests, its purpose fulfilled.`,
 					convergenceTier1Flavor: `A presence lingers at stub space ${tag}-${i}.`,
 					convergenceTier2Flavor: `Two presences converge at stub space ${tag}-${i}.`,
+					convergenceTier1ActorFlavor: `You stand alone on stub space ${tag}-${i}; the air anticipates company.`,
+					convergenceTier2ActorFlavor: `You share stub space ${tag}-${i} with another presence.`,
 				},
 			};
 		});
@@ -333,8 +348,11 @@ function buildContentPackResponseBody(body: ParsedBody): string {
 			id: `${tag}-int-${i}`,
 			kind: "interesting_object",
 			name: `Stub interesting ${tag}-${i}`,
-			examineDescription: `Stub interesting object ${tag}-int-${i}.`,
+			examineDescription: `Stub interesting object ${tag}-int-${i} — press the switch to activate.`,
 			useOutcome: "Nothing happens.",
+			activationFlavor: `Stub interesting ${tag}-${i} clicks into action.`,
+			postExamineDescription: `Stub interesting ${tag}-${i} sits used and inert.`,
+			postLookFlavor: `Stub interesting ${tag}-${i} rests, spent.`,
 		}));
 		const obstacles = Array.from({ length: phase.m }, (_, i) => ({
 			id: `${tag}-obs-${i}`,

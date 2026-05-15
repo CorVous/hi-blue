@@ -134,6 +134,17 @@ function inBounds(pos: GridPosition): boolean {
 	return pos.row >= 0 && pos.row < 5 && pos.col >= 0 && pos.col < 5;
 }
 
+type RelativeDirection = "forward" | "back" | "left" | "right";
+
+function cardinalToRelative(
+	facing: CardinalDirection,
+	absolute: CardinalDirection,
+): RelativeDirection {
+	const CW: CardinalDirection[] = ["north", "east", "south", "west"];
+	const delta = (CW.indexOf(absolute) - CW.indexOf(facing) + 4) % 4;
+	return (["forward", "right", "back", "left"] as const)[delta] ?? "forward";
+}
+
 function coneCells(
 	pos: GridPosition,
 	facing: CardinalDirection,
@@ -695,12 +706,20 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 	// at round=1, so roundAtDispatch=1 (set in findSetupPlan).
 	if (setupPlanUsed && plan.kind === "setup") {
 		const { witnessLookDir } = plan;
+		const witnessFacing = phase1Spatial[witnessId]?.facing;
+		if (!witnessFacing) {
+			throw new Error(`No facing for witness ${witnessId}`);
+		}
+		const witnessLookRelative = cardinalToRelative(
+			witnessFacing,
+			witnessLookDir,
+		);
 
-		// Register route: witness does `look witnessLookDir`, others stub reply
+		// Register route: witness does `look witnessLookRelative`, others stub reply
 		await armRoute(
 			page,
 			witnessName,
-			toolCallSseBody("look", { direction: witnessLookDir }),
+			toolCallSseBody("look", { direction: witnessLookRelative }),
 		);
 
 		// Address the witness to trigger the setup round
@@ -717,7 +736,16 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 	// This prepends a new route on top of any existing ones (Playwright prepends
 	// new routes for priority), so it overrides the setup round's route if one
 	// was registered above.
-	await armRoute(page, actorName, toolCallSseBody("go", { direction }));
+	const actorFacing = phase1Spatial[actorId]?.facing;
+	if (!actorFacing) {
+		throw new Error(`No facing for actor ${actorId}`);
+	}
+	const goRelative = cardinalToRelative(actorFacing, direction);
+	await armRoute(
+		page,
+		actorName,
+		toolCallSseBody("go", { direction: goRelative }),
+	);
 
 	// Address the actor.
 	await page.locator("#prompt").fill(`*${actorName} go!`);
