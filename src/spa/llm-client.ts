@@ -75,9 +75,6 @@ export async function parseCapHitFromResponse(
 	return new CapHitError({ message, reason, retryAfterSec });
 }
 
-export const PERSONA_PLACEHOLDER =
-	"[placeholder persona — replaced by real persona content in #43]";
-
 export function resolveLLMTarget(): {
 	url: string;
 	headers: Record<string, string>;
@@ -266,21 +263,4 @@ export async function chatCompletionJson(opts: {
 			: null;
 
 	return { content, reasoning };
-}
-
-export async function streamChat(opts: {
-	message: string;
-	signal?: AbortSignal;
-	onDelta: (text: string) => void;
-	onReasoning?: (text: string) => void;
-}): Promise<void> {
-	return streamCompletion({
-		messages: [
-			{ role: "system", content: PERSONA_PLACEHOLDER },
-			{ role: "user", content: opts.message },
-		],
-		...(opts.signal != null ? { signal: opts.signal } : {}),
-		onDelta: opts.onDelta,
-		...(opts.onReasoning != null ? { onReasoning: opts.onReasoning } : {}),
-	});
 }

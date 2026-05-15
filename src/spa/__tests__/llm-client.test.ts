@@ -1,12 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PINNED_MODEL } from "../../model.js";
 import { TOOL_DEFINITIONS } from "../game/tool-registry.js";
 import {
 	CapHitError,
-	PERSONA_PLACEHOLDER,
 	parseCapHitFromResponse,
 	resolveLLMTarget,
-	streamChat,
 	streamCompletion,
 } from "../llm-client.js";
 
@@ -196,207 +193,6 @@ describe("parseCapHitFromResponse", () => {
 		const err = await parseCapHitFromResponse(response);
 		expect(err).toBeInstanceOf(CapHitError);
 		expect(err?.reason).toBe("unknown");
-	});
-});
-
-describe("streamChat", () => {
-	beforeEach(() => {
-		vi.stubGlobal("fetch", vi.fn());
-	});
-
-	afterEach(() => {
-		vi.restoreAllMocks();
-	});
-
-	it("prepends persona placeholder as messages[0]", async () => {
-		const mockFetch = vi
-			.fn()
-			.mockResolvedValue(
-				makeFetchResponse(makeSSEStream([`data: [DONE]\n\n`])),
-			);
-		vi.stubGlobal("fetch", mockFetch);
-		vi.stubGlobal("localStorage", {
-			getItem: vi.fn().mockReturnValue(null),
-		});
-
-		await streamChat({ message: "hello", onDelta: vi.fn() });
-
-		const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
-		const body = JSON.parse(init.body as string);
-		expect(body.messages[0]).toEqual({
-			role: "system",
-			content: PERSONA_PLACEHOLDER,
-		});
-		expect(body.messages[1]).toEqual({ role: "user", content: "hello" });
-	});
-
-	it("POSTs to OpenRouter with Authorization when BYOK key is set (kill-line: not the Worker)", async () => {
-		const mockFetch = vi
-			.fn()
-			.mockResolvedValue(
-				makeFetchResponse(makeSSEStream([`data: [DONE]\n\n`])),
-			);
-		vi.stubGlobal("fetch", mockFetch);
-		vi.stubGlobal("localStorage", {
-			getItem: vi.fn().mockReturnValue("sk-byok-key"),
-		});
-
-		await streamChat({ message: "hello", onDelta: vi.fn() });
-
-		const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
-		expect(url).toBe(OPENROUTER_URL);
-		expect(url).not.toContain("localhost:8787");
-		expect((init.headers as Record<string, string>).Authorization).toBe(
-			"Bearer sk-byok-key",
-		);
-	});
-
-	it("POSTs to Worker URL with no Authorization header when no key", async () => {
-		const mockFetch = vi
-			.fn()
-			.mockResolvedValue(
-				makeFetchResponse(makeSSEStream([`data: [DONE]\n\n`])),
-			);
-		vi.stubGlobal("fetch", mockFetch);
-		vi.stubGlobal("localStorage", {
-			getItem: vi.fn().mockReturnValue(null),
-		});
-
-		await streamChat({ message: "hello", onDelta: vi.fn() });
-
-		const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
-		expect(url).toBe(WORKER_COMPLETIONS_URL);
-		expect(init.headers as Record<string, string>).not.toHaveProperty(
-			"Authorization",
-		);
-	});
-
-	it("emits a delta via parseSSEStream (happy-path wiring check)", async () => {
-		const sseData = `data: ${JSON.stringify({ choices: [{ delta: { content: "hi!" } }] })}\n\ndata: [DONE]\n\n`;
-		vi.stubGlobal(
-			"fetch",
-			vi.fn().mockResolvedValue(makeFetchResponse(makeSSEStream([sseData]))),
-		);
-		vi.stubGlobal("localStorage", {
-			getItem: vi.fn().mockReturnValue(null),
-		});
-
-		const deltas: string[] = [];
-		await streamChat({ message: "test", onDelta: (t) => deltas.push(t) });
-
-		expect(deltas).toEqual(["hi!"]);
-	});
-
-	it("throws on non-ok response with HTTP status", async () => {
-		vi.stubGlobal(
-			"fetch",
-			vi.fn().mockResolvedValue(makeFetchResponse(makeSSEStream([]), false)),
-		);
-		vi.stubGlobal("localStorage", {
-			getItem: vi.fn().mockReturnValue(null),
-		});
-
-		await expect(
-			streamChat({ message: "test", onDelta: vi.fn() }),
-		).rejects.toThrow(/HTTP 500/);
-	});
-
-	it("throws CapHitError when fetch returns 429 with rate_limit_exceeded body", async () => {
-		vi.stubGlobal(
-			"fetch",
-			vi.fn().mockResolvedValue(
-				make429Response(
-					{
-						error: {
-							message: "per-ip cap hit",
-							type: "rate_limit_exceeded",
-							code: "per-ip-daily",
-						},
-					},
-					"86400",
-				),
-			),
-		);
-		vi.stubGlobal("localStorage", {
-			getItem: vi.fn().mockReturnValue(null),
-		});
-
-		const err = await streamChat({ message: "test", onDelta: vi.fn() }).catch(
-			(e: unknown) => e,
-		);
-		expect(err).toBeInstanceOf(CapHitError);
-		const capErr = err as CapHitError;
-		expect(capErr.reason).toBe("per-ip-daily");
-		expect(capErr.retryAfterSec).toBe(86400);
-		expect(capErr.status).toBe(429);
-	});
-
-	it("throws CapHitError with reason:unknown when 429 body is malformed", async () => {
-		const response: Response = {
-			ok: false,
-			status: 429,
-			statusText: "Too Many Requests",
-			headers: { get: () => null },
-			json: () => Promise.reject(new SyntaxError("bad json")),
-		} as unknown as Response;
-		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
-		vi.stubGlobal("localStorage", {
-			getItem: vi.fn().mockReturnValue(null),
-		});
-
-		const err = await streamChat({ message: "test", onDelta: vi.fn() }).catch(
-			(e: unknown) => e,
-		);
-		expect(err).toBeInstanceOf(CapHitError);
-		expect((err as CapHitError).reason).toBe("unknown");
-	});
-
-	it("still throws generic HTTP error for non-429 failures", async () => {
-		vi.stubGlobal(
-			"fetch",
-			vi.fn().mockResolvedValue(makeFetchResponse(makeSSEStream([]), false)),
-		);
-		vi.stubGlobal("localStorage", {
-			getItem: vi.fn().mockReturnValue(null),
-		});
-
-		await expect(
-			streamChat({ message: "test", onDelta: vi.fn() }),
-		).rejects.toThrow(/HTTP 500/);
-	});
-
-	it("sends model: PINNED_MODEL on the free-tier path", async () => {
-		const mockFetch = vi
-			.fn()
-			.mockResolvedValue(
-				makeFetchResponse(makeSSEStream([`data: [DONE]\n\n`])),
-			);
-		vi.stubGlobal("fetch", mockFetch);
-		vi.stubGlobal("localStorage", {
-			getItem: vi.fn().mockReturnValue(null),
-		});
-
-		await streamChat({ message: "hello", onDelta: vi.fn() });
-
-		const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
-		expect(JSON.parse(init.body as string).model).toBe(PINNED_MODEL);
-	});
-
-	it("sends model: PINNED_MODEL on the BYOK path", async () => {
-		const mockFetch = vi
-			.fn()
-			.mockResolvedValue(
-				makeFetchResponse(makeSSEStream([`data: [DONE]\n\n`])),
-			);
-		vi.stubGlobal("fetch", mockFetch);
-		vi.stubGlobal("localStorage", {
-			getItem: vi.fn().mockReturnValue("sk-byok-key"),
-		});
-
-		await streamChat({ message: "hello", onDelta: vi.fn() });
-
-		const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
-		expect(JSON.parse(init.body as string).model).toBe(PINNED_MODEL);
 	});
 });
 
@@ -602,8 +398,6 @@ describe("streamCompletion", () => {
 		const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
 		const body = JSON.parse(init.body as string);
 		expect(body.messages).toEqual(customMessages);
-		// Ensure the PERSONA_PLACEHOLDER is NOT injected
-		expect(JSON.stringify(body.messages)).not.toContain(PERSONA_PLACEHOLDER);
 	});
 
 	it("POSTs to OpenRouter with Authorization when BYOK key is set", async () => {
