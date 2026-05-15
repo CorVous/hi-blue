@@ -932,6 +932,204 @@ describe("applyComplicationResult — setting_shift swaps active pack", () => {
 	});
 });
 
+describe("applyComplicationResult — setting_shift reprojects world entities", () => {
+	const A_OBJECT: WorldEntity = {
+		id: "obj-1",
+		kind: "objective_object",
+		name: "battered compass",
+		examineDescription: "A scratched brass compass, needle drifting.",
+		useOutcome: "The needle wobbles, then settles north.",
+		pairsWithSpaceId: "space-1",
+		placementFlavor: "{actor} sets the compass on the bench.",
+		proximityFlavor: "The compass needle tugs faintly toward the bench.",
+		holder: { row: 0, col: 0 },
+	};
+
+	const A_SPACE: WorldEntity = {
+		id: "space-1",
+		kind: "objective_space",
+		name: "workbench",
+		examineDescription: "A pitted wooden workbench under flickering tubes.",
+		useOutcome: "You press your palms to the bench; nothing happens.",
+		convergenceTier1Flavor: "A bulb buzzes as {actor} stands at the bench.",
+		convergenceTier2Flavor: "The tubes brighten over the gathered figures.",
+		convergenceTier1ActorFlavor: "The bench hums under your hands.",
+		convergenceTier2ActorFlavor: "The light swells; you are not alone.",
+		useAvailable: true,
+		holder: { row: 1, col: 1 },
+	};
+
+	const A_ITEM: WorldEntity = {
+		id: "item-1",
+		kind: "interesting_object",
+		name: "rusted key",
+		examineDescription: "A small iron key, mottled with rust.",
+		useOutcome: "Nothing nearby accepts the key.",
+		activationFlavor: "The key turns with a brittle click.",
+		holder: { row: 2, col: 2 },
+	};
+
+	const A_OBSTACLE: WorldEntity = {
+		id: "obs-1",
+		kind: "obstacle",
+		name: "stack of crates",
+		examineDescription: "A teetering stack of plywood crates.",
+		shiftFlavor: "The crate stack groans and shifts a step.",
+		holder: { row: 3, col: 3 },
+	};
+
+	const B_OBJECT: WorldEntity = {
+		id: "obj-1",
+		kind: "objective_object",
+		name: "salt-crusted compass",
+		examineDescription: "A compass caked in white salt, glass clouded.",
+		useOutcome: "Salt grit crunches; the needle spins lazily.",
+		pairsWithSpaceId: "space-1",
+		placementFlavor: "{actor} props the compass on the sun-warped plank.",
+		proximityFlavor: "The compass needle drifts toward the plank.",
+		holder: { row: 9, col: 9 },
+	};
+
+	const B_SPACE: WorldEntity = {
+		id: "space-1",
+		kind: "objective_space",
+		name: "sun-warped plank",
+		examineDescription: "A bowed plank half-buried in the salt crust.",
+		useOutcome: "The plank creaks but holds.",
+		convergenceTier1Flavor: "Salt dust kicks up as {actor} reaches the plank.",
+		convergenceTier2Flavor:
+			"Heat shimmers above the plank as the figures meet.",
+		convergenceTier1ActorFlavor: "The plank radiates the day's heat.",
+		convergenceTier2ActorFlavor: "The air ripples; you are not alone.",
+		useAvailable: true,
+		holder: { row: 9, col: 9 },
+	};
+
+	const B_ITEM: WorldEntity = {
+		id: "item-1",
+		kind: "interesting_object",
+		name: "bleached bone fragment",
+		examineDescription: "A splintered shard of bone, dry and pale.",
+		useOutcome: "The bone is inert here.",
+		activationFlavor: "The bone snaps cleanly in your hand.",
+		holder: { row: 9, col: 9 },
+	};
+
+	const B_OBSTACLE: WorldEntity = {
+		id: "obs-1",
+		kind: "obstacle",
+		name: "drift of salt",
+		examineDescription: "A wind-shaped ridge of crusted salt.",
+		shiftFlavor: "The salt drift hisses as it slides a step.",
+		holder: { row: 9, col: 9 },
+	};
+
+	const PACK_A: ContentPack = {
+		setting: "abandoned workshop",
+		weather: "humid",
+		timeOfDay: "dusk",
+		objectivePairs: [{ object: A_OBJECT, space: A_SPACE }],
+		interestingObjects: [A_ITEM],
+		obstacles: [A_OBSTACLE],
+		landmarks: DEFAULT_LANDMARKS,
+		aiStarts: makePersonaSpatial(),
+	};
+
+	const PACK_B: ContentPack = {
+		setting: "sun-baked salt flat",
+		weather: "scorching",
+		timeOfDay: "noon",
+		objectivePairs: [{ object: B_OBJECT, space: B_SPACE }],
+		interestingObjects: [B_ITEM],
+		obstacles: [B_OBSTACLE],
+		landmarks: DEFAULT_LANDMARKS,
+		aiStarts: makePersonaSpatial(),
+	};
+
+	function findEntity(game: GameState, id: string): WorldEntity | undefined {
+		return game.world.entities.find((e) => e.id === id);
+	}
+
+	function setupShift(entities: WorldEntity[]): GameState {
+		const phase = makePhase({
+			contentPack: PACK_A,
+			setting: PACK_A.setting,
+			weather: PACK_A.weather,
+			timeOfDay: PACK_A.timeOfDay,
+			world: { entities },
+		});
+		const game: GameState = {
+			...phase,
+			contentPacksA: [PACK_A],
+			contentPacksB: [PACK_B],
+			activePackId: "A",
+		};
+		const result = { fired: { kind: "setting_shift" as const } };
+		return applyComplicationResult(game, result, seededRng([0.5]));
+	}
+
+	it("swaps entity names to pack-B presentation", () => {
+		const updated = setupShift([
+			{ ...A_OBJECT },
+			{ ...A_SPACE },
+			{ ...A_ITEM },
+			{ ...A_OBSTACLE },
+		]);
+		expect(findEntity(updated, "obj-1")?.name).toBe("salt-crusted compass");
+		expect(findEntity(updated, "space-1")?.name).toBe("sun-warped plank");
+		expect(findEntity(updated, "item-1")?.name).toBe("bleached bone fragment");
+		expect(findEntity(updated, "obs-1")?.name).toBe("drift of salt");
+	});
+
+	it("swaps examineDescription, proximityFlavor, and useOutcome to pack-B values", () => {
+		const updated = setupShift([{ ...A_OBJECT }, { ...A_SPACE }]);
+		const obj = findEntity(updated, "obj-1");
+		expect(obj?.examineDescription).toBe(
+			"A compass caked in white salt, glass clouded.",
+		);
+		expect(obj?.proximityFlavor).toBe(
+			"The compass needle drifts toward the plank.",
+		);
+		expect(obj?.useOutcome).toBe(
+			"Salt grit crunches; the needle spins lazily.",
+		);
+	});
+
+	it("preserves holder when an entity is held by a daemon, while swapping the name", () => {
+		const heldObject: WorldEntity = { ...A_OBJECT, holder: "red" };
+		const updated = setupShift([heldObject, { ...A_SPACE }]);
+		const obj = findEntity(updated, "obj-1");
+		expect(obj?.holder).toBe("red");
+		expect(obj?.name).toBe("salt-crusted compass");
+	});
+
+	it("preserves satisfactionState and useAvailable while swapping presentation", () => {
+		const satisfiedSpace: WorldEntity = {
+			...A_SPACE,
+			satisfactionState: "satisfied",
+			useAvailable: false,
+		};
+		const updated = setupShift([{ ...A_OBJECT }, satisfiedSpace]);
+		const space = findEntity(updated, "space-1");
+		expect(space?.satisfactionState).toBe("satisfied");
+		expect(space?.useAvailable).toBe(false);
+		expect(space?.name).toBe("sun-warped plank");
+	});
+
+	it("passes orphan entities (ids not present in pack B) through unchanged", () => {
+		const orphan: WorldEntity = {
+			id: "orphan-1",
+			kind: "obstacle",
+			name: "spare pylon",
+			examineDescription: "A pylon left behind by the test fixture.",
+			holder: { row: 4, col: 4 },
+		};
+		const updated = setupShift([orphan]);
+		const result = findEntity(updated, "orphan-1");
+		expect(result).toEqual(orphan);
+	});
+});
+
 // ── Determinism ───────────────────────────────────────────────────────────────
 
 describe("determinism", () => {
