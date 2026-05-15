@@ -25,7 +25,6 @@ import type {
 	GameState,
 	GridPosition,
 	PersonaSpatialState,
-	PhaseState,
 	ToolName,
 	WorldEntity,
 	WorldState,
@@ -103,7 +102,7 @@ function makePersonaSpatial(
 	return result;
 }
 
-function makePhase(overrides: Partial<PhaseState> = {}): PhaseState {
+function makePhase(overrides: Partial<GameState> = {}): GameState {
 	const personaSpatial = overrides.personaSpatial ?? makePersonaSpatial();
 	const world: WorldState = overrides.world ?? { entities: [] };
 
@@ -133,13 +132,11 @@ function makePhase(overrides: Partial<PhaseState> = {}): PhaseState {
 
 	return {
 		personas: TEST_PERSONAS,
-		phaseNumber: 1,
 		isComplete: false,
 		setting: "test",
 		weather: "clear",
 		timeOfDay: "day",
 		contentPack,
-		aiGoals: { red: "goal", green: "goal", cyan: "goal" },
 		round: 5,
 		world,
 		budgets,
@@ -156,15 +153,8 @@ function makePhase(overrides: Partial<PhaseState> = {}): PhaseState {
 	};
 }
 
-function makeGameStateAround(phase: PhaseState): GameState {
-	// Flat GameState model: PhaseState already includes all GameState fields.
-	const { phaseNumber: _pn, aiGoals: _ag, ...gameState } = phase;
-	return {
-		...gameState,
-		contentPacksA: gameState.contentPacksA ?? [],
-		contentPacksB: gameState.contentPacksB ?? [],
-		activePackId: gameState.activePackId ?? "A",
-	};
+function makeGameStateAround(phase: GameState): GameState {
+	return phase;
 }
 
 function makeObstacle(id: string, pos: GridPosition): WorldEntity {

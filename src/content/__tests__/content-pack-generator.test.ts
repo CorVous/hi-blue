@@ -14,10 +14,11 @@ import type {
 } from "../../spa/game/content-pack-provider.js";
 import { MockContentPackProvider } from "../../spa/game/content-pack-provider.js";
 import { DEFAULT_LANDMARKS } from "../../spa/game/direction.js";
-import type { ContentPack, PhaseConfig } from "../../spa/game/types.js";
+import type { ContentPack } from "../../spa/game/types.js";
 import {
 	generateContentPacks,
 	generateDualContentPacks,
+	type PhaseConfig,
 } from "../content-pack-generator.js";
 
 // ── Seeded RNG ────────────────────────────────────────────────────────────────
