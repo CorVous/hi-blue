@@ -116,7 +116,6 @@ describe("validateContentPacks — prose tell contract", () => {
 	const input = {
 		phases: [
 			{
-				phaseNumber: 1 as const,
 				setting: "abandoned subway station",
 				theme: "mundane",
 				k: 1,
@@ -155,7 +154,6 @@ describe("validateContentPacks — prose tell contract", () => {
 		return {
 			packs: [
 				{
-					phaseNumber: 1,
 					setting: "abandoned subway station",
 					objectivePairs: [
 						{
@@ -263,7 +261,6 @@ describe("validateContentPacks — obstacle shiftFlavor validation", () => {
 	const inputWithObstacle = {
 		phases: [
 			{
-				phaseNumber: 1 as const,
 				setting: "abandoned subway station",
 				theme: "mundane",
 				k: 0,
@@ -277,7 +274,6 @@ describe("validateContentPacks — obstacle shiftFlavor validation", () => {
 		return {
 			packs: [
 				{
-					phaseNumber: 1,
 					setting: "abandoned subway station",
 					objectivePairs: [],
 					interestingObjects: [],
@@ -366,7 +362,6 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 	const inputWithPair = {
 		phases: [
 			{
-				phaseNumber: 1 as const,
 				setting: "abandoned subway station",
 				theme: "mundane",
 				k: 1,
@@ -402,7 +397,6 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 		return {
 			packs: [
 				{
-					phaseNumber: 1,
 					setting: "abandoned subway station",
 					objectivePairs: [
 						{
@@ -706,7 +700,6 @@ describe("validateContentPacks — interesting_object Use-Item flavor validation
 	const inputWithInteresting = {
 		phases: [
 			{
-				phaseNumber: 1 as const,
 				setting: "abandoned subway station",
 				theme: "mundane",
 				k: 0,
@@ -734,7 +727,6 @@ describe("validateContentPacks — interesting_object Use-Item flavor validation
 		return {
 			packs: [
 				{
-					phaseNumber: 1,
 					setting: "abandoned subway station",
 					objectivePairs: [],
 					interestingObjects: [item],
@@ -870,7 +862,6 @@ describe("validateContentPacks — objective_space activationFlavor & prose tell
 	const inputWithPair = {
 		phases: [
 			{
-				phaseNumber: 1 as const,
 				setting: "abandoned subway station",
 				theme: "mundane",
 				k: 1,
@@ -886,7 +877,6 @@ describe("validateContentPacks — objective_space activationFlavor & prose tell
 		return {
 			packs: [
 				{
-					phaseNumber: 1,
 					setting: "abandoned subway station",
 					objectivePairs: [
 						{
@@ -1055,7 +1045,6 @@ describe("validateDualContentPacks — objective_space activationFlavor", () => 
 	const dualInput = {
 		phases: [
 			{
-				phaseNumber: 1 as const,
 				settingA: "abandoned subway station",
 				settingB: "sun-baked salt flat",
 				theme: "mundane",
@@ -1130,7 +1119,6 @@ describe("validateDualContentPacks — objective_space activationFlavor", () => 
 		return {
 			phases: [
 				{
-					phaseNumber: 1,
 					packA: mkPack(
 						"abandoned subway station",
 						"Iron Key",
@@ -1204,7 +1192,6 @@ describe("validateDualContentPacks — obstacle shiftFlavor validation", () => {
 	const dualInputWithObstacle = {
 		phases: [
 			{
-				phaseNumber: 1 as const,
 				settingA: "abandoned subway station",
 				settingB: "overgrown ruin",
 				theme: "mundane",
@@ -1236,7 +1223,6 @@ describe("validateDualContentPacks — obstacle shiftFlavor validation", () => {
 		return {
 			phases: [
 				{
-					phaseNumber: 1,
 					packA: {
 						setting: "abandoned subway station",
 						objectivePairs: [],

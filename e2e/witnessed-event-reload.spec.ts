@@ -521,11 +521,9 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 	const engineData = JSON.parse(engineJson) as {
 		personaSpatial: Record<string, PersonaSpatial>;
 		contentPacksA: Array<{
-			phaseNumber: number;
 			obstacles: Array<{ holder: GridPosition | null }>;
 		}>;
 		contentPacksB: Array<{
-			phaseNumber: number;
 			obstacles: Array<{ holder: GridPosition | null }>;
 		}>;
 		activePackId: "A" | "B";
@@ -541,7 +539,7 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 		engineData.activePackId === "B"
 			? engineData.contentPacksB
 			: engineData.contentPacksA;
-	const phase1Pack = activePacks.find((p) => p.phaseNumber === 1);
+	const phase1Pack = activePacks[0];
 	const obstaclePositions: GridPosition[] = (phase1Pack?.obstacles ?? [])
 		.map((o) => o.holder)
 		.filter((h): h is GridPosition => h !== null);

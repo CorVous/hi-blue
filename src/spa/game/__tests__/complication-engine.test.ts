@@ -114,7 +114,6 @@ function makePhase(overrides: Partial<GameState> = {}): GameState {
 	}
 
 	const contentPack: ContentPack = {
-		phaseNumber: 1,
 		setting: "test",
 		weather: "clear",
 		timeOfDay: "day",
@@ -809,7 +808,6 @@ describe("applyComplicationResult — activeComplications appends", () => {
 
 describe("applyComplicationResult — setting_shift swaps active pack", () => {
 	const PACK_A: ContentPack = {
-		phaseNumber: 1,
 		setting: "neon arcade",
 		weather: "clear",
 		timeOfDay: "night",
@@ -821,7 +819,6 @@ describe("applyComplicationResult — setting_shift swaps active pack", () => {
 	};
 
 	const PACK_B: ContentPack = {
-		phaseNumber: 1,
 		setting: "sun-baked salt flat",
 		weather: "hot",
 		timeOfDay: "day",
@@ -935,7 +932,6 @@ describe("startGame — complicationSchedule initialisation", () => {
 		const phase = startGame(
 			TEST_PERSONAS,
 			{
-				phaseNumber: 1,
 				setting: "",
 				weather: "",
 				timeOfDay: "",

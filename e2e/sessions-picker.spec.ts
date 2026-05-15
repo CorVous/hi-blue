@@ -66,7 +66,6 @@ function seedOkSessionScript(id: string, lastSavedAt: string): string {
 				west: { shortName: 'Forest', horizonPhrase: 'A dark forest.' },
 			};
 			const stubPack = {
-				phaseNumber: 1,
 				setting: 'test setting',
 				weather: 'clear',
 				timeOfDay: 'morning',
@@ -77,7 +76,7 @@ function seedOkSessionScript(id: string, lastSavedAt: string): string {
 				landmarks: stubLandmarks,
 			};
 			const payload = JSON.stringify({
-				schemaVersion: 7,
+				schemaVersion: 8,
 				isComplete: false,
 				world: { entities: [] },
 				budgets: { red: { remaining: 50, total: 50 } },
@@ -386,7 +385,7 @@ test("refresh on #/sessions paints banner and topinfo", async ({ page }) => {
 	await expect(page.locator("#sessions-screen")).toBeVisible();
 	await expect(page.locator("#banner")).not.toBeEmpty();
 	await expect(page.locator("#topinfo-left")).toContainText("SESSION 0x");
-	await expect(page.locator("#topinfo-left")).toContainText("PHASE");
+	await expect(page.locator("#topinfo-left")).toContainText("EPOCH");
 	await expect(page.locator("#topinfo-right")).toContainText(
 		"connection stable",
 	);

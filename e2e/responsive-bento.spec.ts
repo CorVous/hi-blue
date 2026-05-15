@@ -411,8 +411,8 @@ test("mobile header: HI-BLUE title visible left, cog right; compact topinfo", as
 	expect(probe.mobileVisible).toBe(true);
 	expect(probe.leftHidden).toBe(true);
 	expect(probe.rightHidden).toBe(true);
-	// Format: "0xXXXX · 01/03 · TRN N" — assert structure with regex.
-	expect(probe.mobileText).toMatch(/^0x[0-9A-F]{4} · \d{2}\/\d{2} · TRN \d+$/);
+	// Format: "0xXXXX · EPC NN · TRN N" — assert structure with regex.
+	expect(probe.mobileText).toMatch(/^0x[0-9A-F]{4} · EPC \d{2} · TRN \d+$/);
 	// And it shouldn't include the desktop labels.
 	expect(probe.mobileText).not.toContain("SESSION");
 	expect(probe.mobileText).not.toContain("PHASE");

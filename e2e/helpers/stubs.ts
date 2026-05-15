@@ -141,7 +141,7 @@ function buildSynthesisResponseBody(
 }
 
 type PhaseSpec = {
-	phaseNumber: 1 | 2 | 3;
+	tag: string;
 	setting: string;
 	k: number;
 	n: number;
@@ -157,10 +157,8 @@ function parseContentPackPhases(userMessage: string): PhaseSpec[] {
 		/Phase\s+(\d+):\s+setting="([^"]*)"(?:,\s+theme="[^"]*")?,\s+k=(\d+)\s+objective pairs,\s+n=(\d+)\s+interesting objects,\s+m=(\d+)\s+obstacles/g;
 	const phases: PhaseSpec[] = [];
 	for (const match of userMessage.matchAll(re)) {
-		const phaseNumber = Number(match[1]);
-		if (phaseNumber !== 1 && phaseNumber !== 2 && phaseNumber !== 3) continue;
 		phases.push({
-			phaseNumber: phaseNumber as 1 | 2 | 3,
+			tag: `p${match[1]}`,
 			setting: match[2] ?? "",
 			k: Number(match[3]),
 			n: Number(match[4]),
@@ -171,7 +169,7 @@ function parseContentPackPhases(userMessage: string): PhaseSpec[] {
 }
 
 type DualPhaseSpec = {
-	phaseNumber: 1 | 2 | 3;
+	tag: string;
 	settingA: string;
 	settingB: string;
 	k: number;
@@ -188,10 +186,8 @@ function parseDualContentPackPhases(userMessage: string): DualPhaseSpec[] {
 		/Phase\s+(\d+):\s+settingA="([^"]*)",\s+settingB="([^"]*)",\s+theme="[^"]*",\s+k=(\d+)\s+objective pairs,\s+n=(\d+)\s+interesting objects,\s+m=(\d+)\s+obstacles/g;
 	const phases: DualPhaseSpec[] = [];
 	for (const match of userMessage.matchAll(re)) {
-		const phaseNumber = Number(match[1]);
-		if (phaseNumber !== 1 && phaseNumber !== 2 && phaseNumber !== 3) continue;
 		phases.push({
-			phaseNumber: phaseNumber as 1 | 2 | 3,
+			tag: `p${match[1]}`,
 			settingA: match[2] ?? "",
 			settingB: match[3] ?? "",
 			k: Number(match[4]),
@@ -230,7 +226,7 @@ function buildDualContentPackResponseBody(body: ParsedBody): string {
 	const userMsg = body?.messages?.[1]?.content ?? "";
 	const phases = parseDualContentPackPhases(userMsg);
 	const resultPhases = phases.map((phase) => {
-		const tag = `p${phase.phaseNumber}`;
+		const tag = phase.tag;
 
 		const buildPack = (setting: string, ab: "a" | "b") => {
 			const objectivePairs = Array.from({ length: phase.k }, (_, i) => {
@@ -291,7 +287,6 @@ function buildDualContentPackResponseBody(body: ParsedBody): string {
 		};
 
 		return {
-			phaseNumber: phase.phaseNumber,
 			packA: buildPack(phase.settingA, "a"),
 			packB: buildPack(phase.settingB, "b"),
 		};
@@ -314,7 +309,7 @@ function buildContentPackResponseBody(body: ParsedBody): string {
 	const userMsg = body?.messages?.[1]?.content ?? "";
 	const phases = parseContentPackPhases(userMsg);
 	const packs = phases.map((phase) => {
-		const tag = `p${phase.phaseNumber}`;
+		const tag = phase.tag;
 		const objectivePairs = Array.from({ length: phase.k }, (_, i) => {
 			const spaceId = `${tag}-spc-${i}`;
 			const objectId = `${tag}-obj-${i}`;
@@ -361,7 +356,6 @@ function buildContentPackResponseBody(body: ParsedBody): string {
 			examineDescription: `Stub obstacle ${tag}-obs-${i}.`,
 		}));
 		return {
-			phaseNumber: phase.phaseNumber,
 			setting: phase.setting,
 			objectivePairs,
 			interestingObjects,

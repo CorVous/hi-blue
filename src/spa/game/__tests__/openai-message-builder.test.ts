@@ -56,7 +56,6 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 };
 
 const TEST_CONTENT_PACK: ContentPack = {
-	phaseNumber: 1,
 	setting: "",
 	weather: "",
 	timeOfDay: "",

@@ -20,7 +20,6 @@ import {
 } from "../session-storage.js";
 
 const TEST_CONTENT_PACK: ContentPack = {
-	phaseNumber: 1,
 	setting: "",
 	weather: "",
 	timeOfDay: "",

@@ -15,7 +15,6 @@ import { deserializeSession, serializeSession } from "../session-codec.js";
 // ── Test fixtures ─────────────────────────────────────────────────────────────
 
 const TEST_CONTENT_PACK: ContentPack = {
-	phaseNumber: 1,
 	setting: "",
 	weather: "",
 	timeOfDay: "",

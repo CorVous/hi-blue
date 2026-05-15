@@ -44,7 +44,6 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 import type { ContentPack } from "../types";
 
 const TEST_CONTENT_PACK: ContentPack = {
-	phaseNumber: 1,
 	setting: "",
 	weather: "",
 	timeOfDay: "",

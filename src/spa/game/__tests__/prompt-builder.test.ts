@@ -62,7 +62,6 @@ function makeEntity(
 }
 
 const TEST_CONTENT_PACK: ContentPack = {
-	phaseNumber: 1,
 	setting: "",
 	weather: "",
 	timeOfDay: "",
@@ -176,7 +175,6 @@ describe("buildAiContext", () => {
 	it("renders to a system prompt string", () => {
 		// Use a ContentPack with items at (0,0) so red sees them in its cell
 		const pack: ContentPack = {
-			phaseNumber: 1,
 			setting: "",
 			weather: "",
 			timeOfDay: "",
@@ -222,7 +220,6 @@ describe("buildAiContext", () => {
 describe("<setting> block", () => {
 	it("emits <setting> block when phase has a setting noun", () => {
 		const pack: ContentPack = {
-			phaseNumber: 1,
 			setting: "abandoned subway station",
 			weather: "",
 			timeOfDay: "",
@@ -256,7 +253,6 @@ describe("<setting> block", () => {
 	it("setting noun appears verbatim in the Setting section", () => {
 		const settingNoun = "sun-baked salt flat";
 		const pack: ContentPack = {
-			phaseNumber: 1,
 			setting: settingNoun,
 			weather: "",
 			timeOfDay: "",
@@ -312,7 +308,6 @@ describe("prompt-builder — spatial 'Where you are' section (current-state user
 
 	it("lists items in the actor's cell under 'Where you are'", () => {
 		const pack: ContentPack = {
-			phaseNumber: 1,
 			setting: "",
 			weather: "",
 			timeOfDay: "",
@@ -745,7 +740,6 @@ describe("<what_you_see> (cone)", () => {
 	it("item in cone cell is listed under 'Directly in front'", () => {
 		// Place flower at (1,0) and use ContentPack with aiStarts so red is at (0,0) facing south.
 		const pack: ContentPack = {
-			phaseNumber: 1,
 			setting: "",
 			weather: "",
 			timeOfDay: "",
@@ -816,7 +810,6 @@ describe("<what_you_see> (cone)", () => {
 		// Place an obstacle named "concrete column" at (1,0) via ContentPack.
 		// Red faces south from (0,0).
 		const pack: ContentPack = {
-			phaseNumber: 1,
 			setting: "",
 			weather: "",
 			timeOfDay: "",
@@ -842,7 +835,6 @@ describe("<what_you_see> (cone)", () => {
 	it("other AI visible in cone is rendered with its color in parentheses", () => {
 		// Use ContentPack to place red at (0,0) facing south, green at (1,0).
 		const pack: ContentPack = {
-			phaseNumber: 1,
 			setting: "",
 			weather: "",
 			timeOfDay: "",
@@ -1162,7 +1154,6 @@ describe("proximityFlavor sense line", () => {
 			holder: opts.spacePosition,
 		};
 		return {
-			phaseNumber: 1,
 			setting: "",
 			weather: "",
 			timeOfDay: "",
@@ -1444,7 +1435,6 @@ describe("postLookFlavor swap covers satisfied interesting_object", () => {
 				: {}),
 		};
 		return {
-			phaseNumber: 1,
 			setting: "",
 			weather: "",
 			timeOfDay: "",

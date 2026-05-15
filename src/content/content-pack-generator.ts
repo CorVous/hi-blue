@@ -49,7 +49,6 @@ export interface SingleGameConfig {
  * @deprecated use SingleGameConfig + generateContentPack
  */
 export interface PhaseConfig {
-	phaseNumber: 1 | 2 | 3;
 	kRange: [number, number];
 	nRange: [number, number];
 	mRange: [number, number];
@@ -272,13 +271,13 @@ function placePhases(
 	packs: ContentPack[],
 	aiIds: AiId[],
 ): ContentPack[] {
-	return packs.map((pack) => {
+	return packs.map((pack, i) => {
 		for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
 			const result = tryPlacePhase(rng, pack, aiIds);
 			if (result !== null) return result;
 		}
 		throw new Error(
-			`generateContentPacks: could not place phase ${pack.phaseNumber} after ${MAX_ATTEMPTS} attempts. ` +
+			`generateContentPacks: could not place phase ${i + 1} after ${MAX_ATTEMPTS} attempts. ` +
 				`Check that m (${pack.obstacles.length}) obstacles leave enough room for AI starts and entities.`,
 		);
 	});
@@ -335,7 +334,6 @@ export async function generateContentPacks(
 	// Roll k/n/m per phase
 	const phaseInputs: ContentPackProviderInput["phases"] = configs.map(
 		(cfg, i) => ({
-			phaseNumber: cfg.phaseNumber,
 			setting: drawnSettings[i] as string,
 			theme: drawnThemes[i] as string,
 			k: rollInt(rng, cfg.kRange[0], cfg.kRange[1]),
@@ -355,9 +353,6 @@ export async function generateContentPacks(
 
 	// Build placeholder ContentPack structures from LLM result (no placements yet)
 	const unplacedPacks: ContentPack[] = llmResult.packs.map((pack, i) => ({
-		...(pack.phaseNumber !== undefined
-			? { phaseNumber: pack.phaseNumber as 1 | 2 | 3 }
-			: {}),
 		setting: pack.setting,
 		weather: drawnWeather[i] as string,
 		timeOfDay: drawnTimeOfDay[i] as string,
@@ -438,7 +433,6 @@ export async function generateDualContentPacks(
 	// Roll k/n/m per phase (shared between A and B — same entity counts)
 	const phaseInputs: DualContentPackProviderInput["phases"] = configs.map(
 		(cfg, i) => ({
-			phaseNumber: cfg.phaseNumber,
 			settingA: settingsA[i] as string,
 			settingB: settingsB[i] as string,
 			theme: drawnThemes[i] as string,
@@ -457,7 +451,6 @@ export async function generateDualContentPacks(
 
 	// Build unplaced Pack A and Pack B from LLM result
 	const unplacedPacksA: ContentPack[] = llmResult.phases.map((ph, i) => ({
-		phaseNumber: ph.phaseNumber,
 		setting: ph.packA.setting,
 		weather: drawnWeatherA[i] as string,
 		timeOfDay: drawnTimeOfDayA[i] as string,
@@ -494,7 +487,6 @@ export async function generateDualContentPacks(
 		});
 
 		return {
-			phaseNumber: ph.phaseNumber,
 			setting: ph.packB.setting,
 			weather: drawnWeatherB[i] as string,
 			timeOfDay: drawnTimeOfDayB[i] as string,
@@ -551,7 +543,6 @@ export async function generateContentPack(
 
 	// Roll k/n/m
 	const phaseInput: ContentPackProviderInput["phases"][number] = {
-		phaseNumber: 1,
 		setting,
 		theme,
 		k: rollInt(rng, config.kRange[0], config.kRange[1]),
@@ -573,7 +564,6 @@ export async function generateContentPack(
 	if (!pack) throw new Error("generateContentPack: LLM returned no packs");
 
 	const unplacedPack: ContentPack = {
-		phaseNumber: 1,
 		setting: pack.setting,
 		weather,
 		timeOfDay,

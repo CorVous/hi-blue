@@ -59,8 +59,13 @@ import {
  *     `contentPacksA`/`contentPacksB` (full pack arrays, one entry per phase).
  *   - `activePackId: "A" | "B"` now persisted correctly (was hardcoded "A").
  *   - Old v6 saves surface `version-mismatch` — no migration provided.
+ *
+ * v8 (issue #358): retire ContentPack.phaseNumber.
+ *   - `phaseNumber` removed from the `ContentPack` type; packs are identified
+ *     by array index rather than an embedded slot number.
+ *   - Old v7 saves surface `version-mismatch` — no migration provided.
  */
-export const SESSION_SCHEMA_VERSION = 7 as const;
+export const SESSION_SCHEMA_VERSION = 8 as const;
 
 // ── File shapes ────────────────────────────────────────────────────────────────
 

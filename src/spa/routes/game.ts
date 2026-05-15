@@ -214,6 +214,7 @@ let session: GameSession | null = null;
  * picker), this drifts from `getActiveSessionId()` and the next renderGame
  * drops the cache so the restore path runs against the new pointer. */
 let cachedSessionId: string | null = null;
+let cachedEpoch: number = 1;
 
 export function renderGame(
 	root: HTMLElement,
@@ -429,8 +430,7 @@ export function renderGame(
 		const sessionIdLocal = getActiveSessionId() ?? "0x????";
 		const inputs = {
 			sessionId: sessionIdLocal,
-			phaseNumber: 1 as const,
-			totalPhases: 1,
+			epoch: cachedEpoch,
 			turn: 0,
 		};
 		if (topinfoLeftEl) renderTopInfoLeft(topinfoLeftEl, inputs);
@@ -726,6 +726,7 @@ export function renderGame(
 				const restoredState = loadResult.state;
 				session = GameSession.restore(restoredState);
 				cachedSessionId = loadResult.sessionId;
+				cachedEpoch = loadResult.epoch;
 
 				// Re-render transcripts from restored state using conversationLogs.
 				// (The new format stores conversation logs in daemon .txt files, not as
@@ -918,8 +919,7 @@ export function renderGame(
 		const state = session.getState();
 		const inputs = {
 			sessionId,
-			phaseNumber: 1 as const,
-			totalPhases: 1,
+			epoch: cachedEpoch,
 			turn: state.round,
 		};
 		renderTopInfoLeft(topinfoLeftEl, inputs);

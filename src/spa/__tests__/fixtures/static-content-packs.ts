@@ -12,7 +12,6 @@ const AI_STARTS: ContentPack["aiStarts"] = {
  * to end via the vacuous win condition on the first round (#295 flat model).
  */
 export const STATIC_CONTENT_PACK_NO_PAIRS: ContentPack = {
-	phaseNumber: 1,
 	setting: "abandoned subway station",
 	weather: "",
 	timeOfDay: "",
@@ -29,7 +28,6 @@ export const STATIC_CONTENT_PACK_NO_PAIRS: ContentPack = {
  */
 export const STATIC_CONTENT_PACKS: ContentPack[] = [
 	{
-		phaseNumber: 1,
 		setting: "abandoned subway station",
 		weather: "",
 		timeOfDay: "",
@@ -58,7 +56,6 @@ export const STATIC_CONTENT_PACKS: ContentPack[] = [
 		aiStarts: AI_STARTS,
 	},
 	{
-		phaseNumber: 2,
 		setting: "sun-baked salt flat",
 		weather: "",
 		timeOfDay: "",
@@ -87,7 +84,6 @@ export const STATIC_CONTENT_PACKS: ContentPack[] = [
 		aiStarts: AI_STARTS,
 	},
 	{
-		phaseNumber: 3,
 		setting: "forgotten laboratory",
 		weather: "",
 		timeOfDay: "",
