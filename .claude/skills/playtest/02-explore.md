@@ -43,8 +43,9 @@ someone else's writeup.
 - **`src/content/{persona-generator.ts, temperament-pool.ts,
   persona-goal-pool.ts, sysadmin-directive-pool.ts, setting-pool.ts,
   weather-pool.ts}`** — the content pools synthesis draws from.
-  `src/content/phases.ts` is still present but its `PHASE_*_CONFIG`
-  exports are deprecated; the live config is `SINGLE_GAME_CONFIG`.
+  `src/content/phases.ts` now exports only `SINGLE_GAME_CONFIG`
+  (`kRange`, `nRange`, `mRange`, `budgetPerAi`); the legacy
+  `PHASE_*_CONFIG` constants have been removed.
 - **`/tmp/wrangler.log`** — the worker proxy log for this run. Now in
   bounds. Useful for confirming which tool calls a daemon actually fired
   in a given round (look for `["pick_up","examine","message:0jmn"]`-style
