@@ -13,7 +13,7 @@
  */
 
 import { applyDirection, CARDINAL_DIRECTIONS, inBounds } from "./direction.js";
-import { appendBroadcast, swapActivePack } from "./engine.js";
+import { appendBroadcast, shiftToBPack } from "./engine.js";
 import type {
 	ActiveComplication,
 	AiId,
@@ -516,9 +516,9 @@ export function applyComplicationResult(
 		activeComplications,
 	};
 
-	// setting_shift: swap the active pack and broadcast the change to all Daemons
+	// setting_shift: shift to the B pack and broadcast the change to all Daemons
 	if (fired.kind === "setting_shift") {
-		state = swapActivePack(state);
+		state = shiftToBPack(state);
 		state = appendBroadcast(
 			state,
 			`[SYSTEM] The setting has shifted. You are now in: ${state.setting}.`,

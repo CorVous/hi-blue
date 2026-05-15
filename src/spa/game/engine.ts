@@ -156,12 +156,22 @@ export function getActivePack(game: GameState): ContentPack {
 }
 
 /**
- * Swap `activePackId` from "A" to "B". Updates the game's `contentPack`
- * reference to the B-side pack so prompt builders and dispatchers see the new
- * names/descriptions immediately. Entity positions in `world` are
- * unchanged — world state is keyed by entity ID, which is stable across packs.
+ * One-way activation of the B-side content pack. Sets `activePackId` to "B"
+ * and points `contentPack` / `setting` at `contentPacksB[0]` so prompt
+ * builders and dispatchers see the new names/descriptions immediately.
+ *
+ * Semantics:
+ *   - A → B only. There is no reverse path; the `settingShiftFired` flag on
+ *     `complicationSchedule` ensures this fires at most once per game.
+ *   - No-op when no B pack exists (`contentPacksB[0]` undefined): returns the
+ *     input `game` unchanged.
+ *   - Idempotent from B-state: re-applies the same B-pack values; safe but
+ *     should not happen in practice given the fired-once guard.
+ *
+ * Entity positions in `world` are unchanged — world state is keyed by entity
+ * ID, which is stable across packs.
  */
-export function swapActivePack(game: GameState): GameState {
+export function shiftToBPack(game: GameState): GameState {
 	const bPack = game.contentPacksB[0];
 	if (!bPack) return game; // No B pack; no-op
 	return {
