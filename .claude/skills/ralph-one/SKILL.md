@@ -20,8 +20,14 @@ Read `AGENTS.md` (fallback `CLAUDE.md`) for:
   - Issue-tracker commands (list / view / comment / close)
   - Typecheck, unit-test, integration/smoke commands
   - Branch naming and source-branch conventions
+  - **PR base branch** — the long-lived branch PRs merge into (often
+    `main`, but some projects use `develop`, `dev`, a release branch,
+    etc.). Capture this as `{{BASE_BRANCH}}` and treat it as authoritative
+    for the rest of the run. Never let the PR tool fall back to the repo
+    default.
 
-If missing, ask the user once.
+If any of these are missing, ask the user once. Do not guess
+`{{BASE_BRANCH}}` — if it isn't in `AGENTS.md`/`CLAUDE.md`, ask.
 
 Set `MAX_ATTEMPTS = 5` (cap on implement↔review cycles).
 
@@ -53,8 +59,11 @@ stop. Otherwise capture the plan as `{{PLAN}}` for downstream phases.
 
 ## Phase 3 — Create the working branch
 
+Branch off `{{BASE_BRANCH}}` (the same branch the PR will target):
+
 ```
-git switch -c {branch} {source_branch}
+git fetch origin {{BASE_BRANCH}}
+git switch -c {branch} origin/{{BASE_BRANCH}}
 ```
 
 (Or `git switch {branch}` if it already exists from an earlier run.)
@@ -154,13 +163,26 @@ One line listing the typecheck / unit / smoke commands that passed.
 
 Then:
 
-  1. `git push -u origin {branch}`
-  2. Open a PR using the project's PR command. Title: the issue title.
-     Body: the hand-off note above, with a `Closes #{{ISSUE_ID}}` trailer
-     so the issue auto-references the PR.
-  3. Comment on the issue: "PR #<pr-number> opened against `{branch}` —
-     awaiting human review."
-  4. Report the PR URL to the user and wait.
+  1. **Base-branch sanity check.** Run
+     `git fetch origin {{BASE_BRANCH}}` and then
+     `git merge-base --is-ancestor origin/{{BASE_BRANCH}} HEAD`.
+     If the check fails, `{branch}` does not descend from `{{BASE_BRANCH}}`
+     — almost always the wrong base. Stop, surface to the user with the
+     output of `git log --oneline origin/{{BASE_BRANCH}}..HEAD` and
+     `git log --oneline HEAD..origin/{{BASE_BRANCH}}`, and let them confirm
+     the intended base before continuing. Do not open the PR.
+  2. `git push -u origin {branch}`
+  3. Open a PR using the project's PR command. **Pass the base branch
+     explicitly** (e.g. `--base {{BASE_BRANCH}}` for `gh`, or the equivalent
+     `base` field for the GitHub MCP tools) — never rely on the default.
+     Title: the issue title. Body: the hand-off note above, with a
+     `Closes #{{ISSUE_ID}}` trailer so the issue auto-references the PR.
+  4. **Verify the PR's base.** After creation, read the PR back and confirm
+     its base branch is exactly `{{BASE_BRANCH}}`. If it isn't, update it
+     (or close + recreate) before notifying anyone.
+  5. Comment on the issue: "PR #<pr-number> opened: `{branch}` →
+     `{{BASE_BRANCH}}` — awaiting human review."
+  6. Report the PR URL **and confirmed base branch** to the user and wait.
 
 ## Phase 6 — Close-out (after the human merges the PR)
 
@@ -178,5 +200,6 @@ Stop when any of:
 
   - planner surfaces a blocking question
   - `MAX_ATTEMPTS` reached without approval (escalate to human, no PR)
+  - base-branch sanity check fails in Phase 5 (escalate to human, no PR)
   - PR opened and human takes over (resume at Phase 6 on merge)
   - the user interrupts
