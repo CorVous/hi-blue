@@ -46,7 +46,6 @@ const CARDINAL = new Set(["north", "south", "east", "west"]);
 /** Minimal k=1, n=1, m=1 — stays well within the 5x5 grid. */
 const FIXED_PHASE_CONFIGS: [PhaseConfig, PhaseConfig, PhaseConfig] = [
 	{
-		phaseNumber: 1,
 		kRange: [1, 1],
 		nRange: [1, 1],
 		mRange: [1, 1],
@@ -54,7 +53,6 @@ const FIXED_PHASE_CONFIGS: [PhaseConfig, PhaseConfig, PhaseConfig] = [
 		aiGoalPool: ["find the key"],
 	},
 	{
-		phaseNumber: 2,
 		kRange: [1, 1],
 		nRange: [1, 1],
 		mRange: [1, 1],
@@ -62,7 +60,6 @@ const FIXED_PHASE_CONFIGS: [PhaseConfig, PhaseConfig, PhaseConfig] = [
 		aiGoalPool: ["guard the door"],
 	},
 	{
-		phaseNumber: 3,
 		kRange: [1, 1],
 		nRange: [1, 1],
 		mRange: [1, 1],
@@ -93,49 +90,48 @@ function makeMockProvider(): MockContentPackProvider {
 	return new MockContentPackProvider(
 		(input: ContentPackProviderInput): ContentPackProviderResult => {
 			const packs: ContentPackProviderResult["packs"] = input.phases.map(
-				(phase) => {
-					const phaseNumber = phase.phaseNumber;
-					const spaceId = `p${phaseNumber}_space`;
-					const objId = `p${phaseNumber}_obj`;
-					const interestingId = `p${phaseNumber}_interesting`;
-					const obstacleId = `p${phaseNumber}_obstacle`;
+				(phase, phaseIdx) => {
+					const pn = phaseIdx + 1;
+					const spaceId = `p${pn}_space`;
+					const objId = `p${pn}_obj`;
+					const interestingId = `p${pn}_interesting`;
+					const obstacleId = `p${pn}_obstacle`;
 
 					return {
-						phaseNumber,
 						setting: phase.setting,
 						objectivePairs: Array.from({ length: phase.k }, (_, i) => ({
 							space: {
 								id: `${spaceId}_${i}`,
 								kind: "objective_space" as const,
-								name: `Space ${phaseNumber} ${i}`,
-								examineDescription: `A space in phase ${phaseNumber}.`,
+								name: `Space ${pn} ${i}`,
+								examineDescription: `A space in phase ${pn}.`,
 								holder: { row: 0, col: 0 } as never,
 							},
 							object: {
 								id: `${objId}_${i}`,
 								kind: "objective_object" as const,
-								name: `Object ${phaseNumber} ${i}`,
-								examineDescription: `An object in phase ${phaseNumber} that belongs on Space ${phaseNumber} ${i}.`,
-								useOutcome: `You use object ${phaseNumber} ${i}.`,
+								name: `Object ${pn} ${i}`,
+								examineDescription: `An object in phase ${pn} that belongs on Space ${pn} ${i}.`,
+								useOutcome: `You use object ${pn} ${i}.`,
 								pairsWithSpaceId: `${spaceId}_${i}`,
-								placementFlavor: `{actor} places the object on the space in phase ${phaseNumber}.`,
-								proximityFlavor: `The object hums near its space in phase ${phaseNumber}.`,
+								placementFlavor: `{actor} places the object on the space in phase ${pn}.`,
+								proximityFlavor: `The object hums near its space in phase ${pn}.`,
 								holder: { row: 0, col: 0 } as never,
 							},
 						})),
 						interestingObjects: Array.from({ length: phase.n }, (_, i) => ({
 							id: `${interestingId}_${i}`,
 							kind: "interesting_object" as const,
-							name: `Interesting ${phaseNumber} ${i}`,
-							examineDescription: `Something interesting in phase ${phaseNumber}.`,
-							useOutcome: `You interact with interesting ${phaseNumber} ${i}.`,
+							name: `Interesting ${pn} ${i}`,
+							examineDescription: `Something interesting in phase ${pn}.`,
+							useOutcome: `You interact with interesting ${pn} ${i}.`,
 							holder: { row: 0, col: 0 } as never,
 						})),
 						obstacles: Array.from({ length: phase.m }, (_, i) => ({
 							id: `${obstacleId}_${i}`,
 							kind: "obstacle" as const,
-							name: `Obstacle ${phaseNumber} ${i}`,
-							examineDescription: `An impassable obstacle in phase ${phaseNumber}.`,
+							name: `Obstacle ${pn} ${i}`,
+							examineDescription: `An impassable obstacle in phase ${pn}.`,
 							holder: { row: 0, col: 0 } as never,
 						})),
 						landmarks: DEFAULT_LANDMARKS,
@@ -222,7 +218,8 @@ describe("generateContentPacks — placement constraints", () => {
 			AI_IDS,
 		);
 
-		for (const pack of packs) {
+		for (let packIdx = 0; packIdx < packs.length; packIdx++) {
+			const pack = packs[packIdx] as ContentPack;
 			// Build obstacle set
 			const obstacleKeys = new Set(
 				pack.obstacles.map((obs) => {
@@ -236,7 +233,7 @@ describe("generateContentPacks — placement constraints", () => {
 				const key = gridPosKey(spatial.position);
 				expect(
 					obstacleKeys.has(key),
-					`Phase ${pack.phaseNumber}: AI ${aiId} start is on an obstacle`,
+					`Pack ${packIdx}: AI ${aiId} start is on an obstacle`,
 				).toBe(false);
 			}
 
@@ -246,7 +243,7 @@ describe("generateContentPacks — placement constraints", () => {
 				const spacePos = pair.space.holder as { row: number; col: number };
 				expect(
 					gridPosKey(objPos) === gridPosKey(spacePos),
-					`Phase ${pack.phaseNumber}: objective object ${pair.object.id} is on its paired space`,
+					`Pack ${packIdx}: objective object ${pair.object.id} is on its paired space`,
 				).toBe(false);
 			}
 
@@ -260,7 +257,7 @@ describe("generateContentPacks — placement constraints", () => {
 				const key = gridPosKey(pos);
 				expect(
 					obstacleKeys.has(key),
-					`Phase ${pack.phaseNumber}: entity ${entity.id} (${entity.kind}) is on an obstacle`,
+					`Pack ${packIdx}: entity ${entity.id} (${entity.kind}) is on an obstacle`,
 				).toBe(false);
 			}
 
@@ -281,7 +278,7 @@ describe("generateContentPacks — placement constraints", () => {
 				for (const cell of nonObstacleCells) {
 					expect(
 						reachable.has(cell),
-						`Phase ${pack.phaseNumber}: cell ${cell} not reachable from AI ${aiId} start`,
+						`Pack ${packIdx}: cell ${cell} not reachable from AI ${aiId} start`,
 					).toBe(true);
 				}
 			}
@@ -290,7 +287,7 @@ describe("generateContentPacks — placement constraints", () => {
 			for (const [aiId, spatial] of Object.entries(pack.aiStarts)) {
 				expect(
 					CARDINAL.has(spatial.facing),
-					`Phase ${pack.phaseNumber}: AI ${aiId} has non-cardinal facing "${spatial.facing}"`,
+					`Pack ${packIdx}: AI ${aiId} has non-cardinal facing "${spatial.facing}"`,
 				).toBe(true);
 			}
 
@@ -303,7 +300,7 @@ describe("generateContentPacks — placement constraints", () => {
 			for (const pair of pack.objectivePairs) {
 				expect(
 					pair.object.placementFlavor,
-					`Phase ${pack.phaseNumber}: object ${pair.object.id} missing placementFlavor`,
+					`Pack ${packIdx}: object ${pair.object.id} missing placementFlavor`,
 				).toBeTruthy();
 				expect(pair.object.placementFlavor).toContain("{actor}");
 			}
@@ -325,11 +322,11 @@ describe("generateContentPacks — placement constraints", () => {
 				const lm = pack.landmarks[dir];
 				expect(
 					lm.shortName,
-					`Phase ${pack.phaseNumber}: landmarks.${dir}.shortName missing`,
+					`Pack ${packIdx}: landmarks.${dir}.shortName missing`,
 				).toBeTruthy();
 				expect(
 					lm.horizonPhrase,
-					`Phase ${pack.phaseNumber}: landmarks.${dir}.horizonPhrase missing`,
+					`Pack ${packIdx}: landmarks.${dir}.horizonPhrase missing`,
 				).toBeTruthy();
 			}
 			// All four shortNames should be distinct (the mock returns DEFAULT_LANDMARKS
@@ -393,7 +390,6 @@ describe("generateContentPacks — degenerate config throws after MAX_ATTEMPTS",
 		// This makes placement impossible.
 		const impossibleConfigs: [PhaseConfig, PhaseConfig, PhaseConfig] = [
 			{
-				phaseNumber: 1,
 				// k=0, n=0, m=23 → only 2 non-obstacle cells for 3 AI starts → impossible
 				kRange: [0, 0],
 				nRange: [0, 0],
@@ -402,7 +398,6 @@ describe("generateContentPacks — degenerate config throws after MAX_ATTEMPTS",
 				aiGoalPool: ["survive"],
 			},
 			{
-				phaseNumber: 2,
 				kRange: [0, 0],
 				nRange: [0, 0],
 				mRange: [23, 23],
@@ -410,7 +405,6 @@ describe("generateContentPacks — degenerate config throws after MAX_ATTEMPTS",
 				aiGoalPool: ["survive"],
 			},
 			{
-				phaseNumber: 3,
 				kRange: [0, 0],
 				nRange: [0, 0],
 				mRange: [23, 23],
@@ -423,13 +417,12 @@ describe("generateContentPacks — degenerate config throws after MAX_ATTEMPTS",
 
 		const impossibleProvider = new MockContentPackProvider(
 			(input: ContentPackProviderInput): ContentPackProviderResult => ({
-				packs: input.phases.map((phase) => ({
-					phaseNumber: phase.phaseNumber,
+				packs: input.phases.map((phase, phaseIdx) => ({
 					setting: phase.setting,
 					objectivePairs: [],
 					interestingObjects: [],
 					obstacles: Array.from({ length: phase.m }, (_, i) => ({
-						id: `obstacle_p${phase.phaseNumber}_${i}`,
+						id: `obstacle_p${phaseIdx + 1}_${i}`,
 						kind: "obstacle" as const,
 						name: `Obstacle ${i}`,
 						examineDescription: "An impassable obstacle.",
@@ -477,8 +470,8 @@ function makeDualMockProvider(): MockContentPackProvider {
 			packs: [],
 		}),
 		(input: DualContentPackProviderInput): DualContentPackProviderResult => {
-			const phases = input.phases.map((phase) => {
-				const pn = phase.phaseNumber;
+			const phases = input.phases.map((phase, phaseIdx) => {
+				const pn = phaseIdx + 1;
 				const spaceId = `p${pn}_space`;
 				const objId = `p${pn}_obj`;
 				const intId = `p${pn}_interesting`;
@@ -488,7 +481,6 @@ function makeDualMockProvider(): MockContentPackProvider {
 					setting: string,
 					suffix: string,
 				): DualContentPackProviderResult["phases"][number]["packA"] => ({
-					phaseNumber: pn,
 					setting,
 					objectivePairs: Array.from({ length: phase.k }, (_, i) => ({
 						space: {
@@ -530,7 +522,6 @@ function makeDualMockProvider(): MockContentPackProvider {
 				});
 
 				return {
-					phaseNumber: pn,
 					packA: makePackVariant(phase.settingA, "A"),
 					packB: makePackVariant(phase.settingB, "B"),
 				};
@@ -568,7 +559,6 @@ describe("generateDualContentPacks — entity ID parity (issue #302)", () => {
 		for (let i = 0; i < 3; i++) {
 			const packA = packsA[i] as ContentPack;
 			const packB = packsB[i] as ContentPack;
-			expect(packA.phaseNumber).toBe(packB.phaseNumber);
 			expect(allEntityIds(packA)).toEqual(allEntityIds(packB));
 		}
 	});

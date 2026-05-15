@@ -66,7 +66,6 @@ function seedOkSessionScript(id: string, lastSavedAt: string): string {
 				west: { shortName: 'Forest', horizonPhrase: 'A dark forest.' },
 			};
 			const stubPack = {
-				phaseNumber: 1,
 				setting: 'test setting',
 				weather: 'clear',
 				timeOfDay: 'morning',
@@ -77,7 +76,7 @@ function seedOkSessionScript(id: string, lastSavedAt: string): string {
 				landmarks: stubLandmarks,
 			};
 			const payload = JSON.stringify({
-				schemaVersion: 7,
+				schemaVersion: 8,
 				isComplete: false,
 				world: { entities: [] },
 				budgets: { red: { remaining: 50, total: 50 } },

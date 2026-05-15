@@ -103,7 +103,6 @@ function makePackWithEntities(
 		makeEntity(`obs${i}`, "obstacle", pos),
 	);
 	return {
-		phaseNumber: 1,
 		setting: "test setting",
 		weather: "",
 		timeOfDay: "",
@@ -350,7 +349,6 @@ describe("validateToolCall", () => {
 			pairsWithSpaceId: "space1",
 		};
 		const pack: ContentPack = {
-			phaseNumber: 1,
 			setting: "test",
 			weather: "",
 			timeOfDay: "",
@@ -396,7 +394,6 @@ describe("executeToolCall — use placement via front arc", () => {
 			holder: { row: 1, col: 0 },
 		};
 		const pack: ContentPack = {
-			phaseNumber: 1,
 			setting: "test",
 			weather: "",
 			timeOfDay: "",
@@ -441,7 +438,6 @@ describe("executeToolCall — use placement via front arc", () => {
 			holder: { row: 1, col: 0 },
 		};
 		const pack: ContentPack = {
-			phaseNumber: 1,
 			setting: "test",
 			weather: "",
 			timeOfDay: "",
@@ -859,7 +855,6 @@ describe("dispatchAiTurn", () => {
 			holder: { row: 0, col: 0 }, // red's cell
 		};
 		const pack: ContentPack = {
-			phaseNumber: 1,
 			setting: "test",
 			weather: "",
 			timeOfDay: "",
@@ -957,7 +952,6 @@ describe("dispatchAiTurn", () => {
 			holder: { row: 3, col: 3 }, // different from red's cell (0,0)
 		};
 		const pack: ContentPack = {
-			phaseNumber: 1,
 			setting: "test",
 			weather: "",
 			timeOfDay: "",
@@ -1005,7 +999,6 @@ describe("dispatchAiTurn", () => {
 			col: 0,
 		});
 		const packWithCone: ContentPack = {
-			phaseNumber: 1,
 			setting: "cone test",
 			weather: "",
 			timeOfDay: "",
@@ -1378,7 +1371,6 @@ function makeGameWithSpaceObjective(
 		spaceId: "shrine",
 	};
 	const pack: ContentPack = {
-		phaseNumber: 1,
 		setting: "test",
 		weather: "",
 		timeOfDay: "",
@@ -1528,7 +1520,6 @@ describe("dispatchAiTurn — use on objective_space witnesses satisfactionFlavor
 			spaceId: "shrine",
 		};
 		const pack: ContentPack = {
-			phaseNumber: 1,
 			setting: "test",
 			weather: "",
 			timeOfDay: "",
@@ -1799,7 +1790,6 @@ describe("dispatchAiTurn — use on objective_space surfaces activationFlavor to
 			spaceId: "shrine",
 		};
 		const pack: ContentPack = {
-			phaseNumber: 1,
 			setting: "test",
 			weather: "",
 			timeOfDay: "",

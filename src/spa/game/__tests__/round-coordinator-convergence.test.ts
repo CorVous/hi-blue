@@ -81,7 +81,6 @@ const CONVERGENCE_OBJECT: WorldEntity = {
 };
 
 const TEST_CONTENT_PACK: ContentPack = {
-	phaseNumber: 1,
 	setting: "",
 	weather: "",
 	timeOfDay: "",

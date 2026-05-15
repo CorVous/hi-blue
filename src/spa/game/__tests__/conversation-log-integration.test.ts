@@ -95,7 +95,6 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
  *   dist-2: (2,2), (2,1), (2,0), (2,-1 OOB), (2,-2 OOB)
  */
 const TEST_CONTENT_PACK: ContentPack = {
-	phaseNumber: 1,
 	setting: "test chamber",
 	weather: "",
 	timeOfDay: "",
@@ -474,7 +473,6 @@ describe("conversation log integration — action-failure (issue #287)", () => {
 	it("dispatch invalid go then buildConversationLog contains one line matching 'Your `go` action failed:'", async () => {
 		// Use a ContentPack where red faces south and there's an obstacle directly south.
 		const obstacleAtSouth: ContentPack = {
-			phaseNumber: 1,
 			setting: "blocked test",
 			weather: "",
 			timeOfDay: "",

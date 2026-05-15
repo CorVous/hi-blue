@@ -179,7 +179,6 @@ describe("renderGame — session restore (formerly async bootstrap)", () => {
 
 describe("persistence — LLM-shaped blurb round-trips verbatim", () => {
 	const TEST_CONTENT_PACK: ContentPack = {
-		phaseNumber: 1,
 		setting: "",
 		weather: "",
 		timeOfDay: "",

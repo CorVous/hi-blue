@@ -87,7 +87,6 @@ const MINIMAL_CONTENT_PACK: ContentPack = {
  * with AIs at (0,0)=red, (0,1)=green, (0,2)=cyan facing north.
  */
 const CONTENT_PACK_WITH_ITEMS: ContentPack = {
-	phaseNumber: 1,
 	setting: "test setting",
 	weather: "",
 	timeOfDay: "",

@@ -102,13 +102,6 @@ export interface LandmarkDescription {
 
 /** Setting-flavored content pack: names, descriptions, outcomes, and placed entities for one game. */
 export interface ContentPack {
-	/**
-	 * Slot index used by the dual-pack generator (1..3) and persisted in save
-	 * data. Retained from the pre-#295 phase-loop generator because the LLM
-	 * pipeline still emits the field and pack validation requires it; the value
-	 * has no runtime meaning in the flat single-game loop.
-	 */
-	phaseNumber?: 1 | 2 | 3;
 	setting: string;
 	weather: string;
 	timeOfDay: string;

@@ -56,7 +56,6 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 /** Build a minimal game with three daemons and no interesting entities in the world. */
 function makeGame() {
 	const pack: ContentPack = {
-		phaseNumber: 1,
 		setting: "abandoned subway station",
 		weather: "clear",
 		timeOfDay: "night",
@@ -238,7 +237,6 @@ function makeGameWithSpace(
 		pairsWithSpaceId: "space1",
 	};
 	const pack: ContentPack = {
-		phaseNumber: 1,
 		setting: "test",
 		weather: "",
 		timeOfDay: "",

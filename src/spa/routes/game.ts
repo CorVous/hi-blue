@@ -430,8 +430,7 @@ export function renderGame(
 		const sessionIdLocal = getActiveSessionId() ?? "0x????";
 		const inputs = {
 			sessionId: sessionIdLocal,
-			phaseNumber: cachedEpoch,
-			totalPhases: 1,
+			epoch: cachedEpoch,
 			turn: 0,
 		};
 		if (topinfoLeftEl) renderTopInfoLeft(topinfoLeftEl, inputs);
@@ -920,8 +919,7 @@ export function renderGame(
 		const state = session.getState();
 		const inputs = {
 			sessionId,
-			phaseNumber: cachedEpoch,
-			totalPhases: 1,
+			epoch: cachedEpoch,
 			turn: state.round,
 		};
 		renderTopInfoLeft(topinfoLeftEl, inputs);

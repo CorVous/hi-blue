@@ -81,13 +81,12 @@ export function initPanelChrome(panel: HTMLElement, persona: AiPersona): void {
 
 export interface TopInfoInputs {
 	sessionId: string;
-	phaseNumber: number;
-	totalPhases: number;
+	epoch: number;
 	turn: number;
 }
 
 export function formatTopInfoLeft(i: TopInfoInputs): string {
-	const epoch = `${String(i.phaseNumber).padStart(2, "0")}`;
+	const epoch = `${String(i.epoch).padStart(2, "0")}`;
 	const turn = String(i.turn).padStart(1, "0");
 	return `SESSION ${i.sessionId} · EPOCH ${epoch} · TURN ${turn}`;
 }
@@ -103,7 +102,7 @@ export function renderTopInfoLeft(el: HTMLElement, i: TopInfoInputs): void {
 /** Compact form rendered into `#topinfo-mobile` for the <=720px bento
  * layout — drops the labels and the connection trailer. */
 export function formatTopInfoMobile(i: TopInfoInputs): string {
-	const epoch = `${String(i.phaseNumber).padStart(2, "0")}`;
+	const epoch = `${String(i.epoch).padStart(2, "0")}`;
 	return `${i.sessionId} · EPC ${epoch} · TRN ${i.turn}`;
 }
 

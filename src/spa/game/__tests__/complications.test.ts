@@ -69,7 +69,6 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 /** Build a game with a specific weather value in the active phase. */
 function makeGameWithWeather(weather: string) {
 	const pack: ContentPack = {
-		phaseNumber: 1,
 		setting: "abandoned subway station",
 		weather,
 		timeOfDay: "night",
@@ -203,7 +202,6 @@ function makeObstacle(
 function makeGameWithObstacle(obstaclePos: GridPosition, shiftFlavor?: string) {
 	const obstacle = makeObstacle("obs1", obstaclePos, shiftFlavor);
 	const pack: ContentPack = {
-		phaseNumber: 1,
 		setting: "test setting",
 		weather: "clear",
 		timeOfDay: "day",
@@ -273,7 +271,6 @@ describe("obstacleShiftComplication", () => {
 			"A heavy crate scrapes across the floor.",
 		);
 		const pack: ContentPack = {
-			phaseNumber: 1,
 			setting: "test setting",
 			weather: "clear",
 			timeOfDay: "day",
@@ -319,7 +316,6 @@ describe("obstacleShiftComplication", () => {
 		const flavor = "A heavy crate scrapes across the floor.";
 		const obstacle = makeObstacle("obs1", { row: 3, col: 2 }, flavor);
 		const pack: ContentPack = {
-			phaseNumber: 1,
 			setting: "test setting",
 			weather: "clear",
 			timeOfDay: "day",
@@ -360,7 +356,6 @@ describe("obstacleShiftComplication", () => {
 		// Obstacle without shiftFlavor field
 		const obstacle = makeObstacle("obs1", { row: 3, col: 2 });
 		const pack: ContentPack = {
-			phaseNumber: 1,
 			setting: "test setting",
 			weather: "clear",
 			timeOfDay: "day",

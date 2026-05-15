@@ -66,7 +66,6 @@ function expectedSilentTurn(_self: AiId): string {
 }
 
 const TEST_CONTENT_PACK: ContentPack = {
-	phaseNumber: 1,
 	setting: "",
 	weather: "",
 	timeOfDay: "",

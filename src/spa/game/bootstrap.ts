@@ -72,11 +72,7 @@ function buildLegacyPhaseConfigs(): [PhaseConfig, PhaseConfig, PhaseConfig] {
 		budgetPerAi: SINGLE_GAME_CONFIG.budgetPerAi,
 		aiGoalPool: [] as string[],
 	};
-	return [
-		{ phaseNumber: 1 as const, ...base },
-		{ phaseNumber: 2 as const, ...base },
-		{ phaseNumber: 3 as const, ...base },
-	];
+	return [{ ...base }, { ...base }, { ...base }];
 }
 
 /**

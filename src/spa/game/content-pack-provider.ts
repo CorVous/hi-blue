@@ -54,7 +54,6 @@ Return ONLY valid JSON with this exact shape (no markdown, no preamble):
 {
   "packs": [
     {
-      "phaseNumber": <1|2|3>,
       "setting": "<setting noun>",
       "objectivePairs": [
         {
@@ -80,7 +79,6 @@ Return ONLY valid JSON with this exact shape (no markdown, no preamble):
 
 export interface ContentPackProviderInput {
 	phases: Array<{
-		phaseNumber: 1 | 2 | 3;
 		setting: string;
 		theme: string;
 		k: number;
@@ -93,8 +91,8 @@ export function buildContentPackUserMessage(
 	input: ContentPackProviderInput,
 ): string {
 	const lines = input.phases.map(
-		(p) =>
-			`Phase ${p.phaseNumber}: setting="${p.setting}", theme="${p.theme}", k=${p.k} objective pairs, n=${p.n} interesting objects, m=${p.m} obstacles`,
+		(p, i) =>
+			`Phase ${i + 1}: setting="${p.setting}", theme="${p.theme}", k=${p.k} objective pairs, n=${p.n} interesting objects, m=${p.m} obstacles`,
 	);
 	return `Generate content packs for these phases:\n${lines.join("\n")}`;
 }
@@ -161,7 +159,6 @@ Return ONLY valid JSON (no markdown, no preamble):
 {
   "phases": [
     {
-      "phaseNumber": <1|2|3>,
       "packA": {
         "setting": "<settingA>",
         "objectivePairs": [{ "object": { "id": "...", "kind": "objective_object", "name": "...", "examineDescription": "...", "useOutcome": "...", "pairsWithSpaceId": "...", "placementFlavor": "...{actor}...", "proximityFlavor": "..." }, "space": { "id": "...", "kind": "objective_space", "name": "...", "examineDescription": "...", "activationFlavor": "...", "satisfactionFlavor": "...", "postExamineDescription": "...", "postLookFlavor": "...", "convergenceTier1Flavor": "...", "convergenceTier2Flavor": "...", "convergenceTier1ActorFlavor": "...", "convergenceTier2ActorFlavor": "..." } }],
@@ -183,7 +180,6 @@ Return ONLY valid JSON (no markdown, no preamble):
 /** Input for dual-pack (A/B) generation. */
 export interface DualContentPackProviderInput {
 	phases: Array<{
-		phaseNumber: 1 | 2 | 3;
 		settingA: string;
 		settingB: string;
 		theme: string;
@@ -200,7 +196,6 @@ type UnplacedPack = Omit<ContentPack, "aiStarts" | "weather" | "timeOfDay"> & {
 
 export interface DualContentPackProviderResult {
 	phases: Array<{
-		phaseNumber: 1 | 2 | 3;
 		packA: UnplacedPack;
 		packB: UnplacedPack;
 	}>;
@@ -210,8 +205,8 @@ export function buildDualContentPackUserMessage(
 	input: DualContentPackProviderInput,
 ): string {
 	const lines = input.phases.map(
-		(p) =>
-			`Phase ${p.phaseNumber}: settingA="${p.settingA}", settingB="${p.settingB}", theme="${p.theme}", k=${p.k} objective pairs, n=${p.n} interesting objects, m=${p.m} obstacles`,
+		(p, i) =>
+			`Phase ${i + 1}: settingA="${p.settingA}", settingB="${p.settingB}", theme="${p.theme}", k=${p.k} objective pairs, n=${p.n} interesting objects, m=${p.m} obstacles`,
 	);
 	return `Generate dual A/B content packs for these phases:\n${lines.join("\n")}`;
 }
@@ -683,27 +678,23 @@ export function validateContentPacks(
 	const allIds = new Set<string>();
 	const packs: ContentPackProviderResult["packs"] = [];
 
-	for (const packRaw of obj.packs) {
+	for (let i = 0; i < obj.packs.length; i++) {
+		const packRaw = obj.packs[i];
 		if (packRaw == null || typeof packRaw !== "object") {
 			throw new ContentPackError("Pack entry is not an object");
 		}
 		const pack = packRaw as Record<string, unknown>;
-		const phaseNumber = pack.phaseNumber as 1 | 2 | 3;
-		if (phaseNumber !== 1 && phaseNumber !== 2 && phaseNumber !== 3) {
-			throw new ContentPackError(
-				`Invalid phaseNumber: ${String(pack.phaseNumber)}`,
-			);
-		}
-		const inputPhase = input.phases.find((p) => p.phaseNumber === phaseNumber);
+		const inputPhase = input.phases[i];
 		if (!inputPhase) {
-			throw new ContentPackError(`Unexpected phaseNumber: ${phaseNumber}`);
+			throw new ContentPackError(`No input phase for pack index ${i}`);
 		}
+		const phaseLabel = `Phase ${i + 1}`;
 		if (
 			typeof pack.setting !== "string" ||
 			pack.setting !== inputPhase.setting
 		) {
 			throw new ContentPackError(
-				`Phase ${phaseNumber}: setting mismatch. Expected "${inputPhase.setting}", got "${String(pack.setting)}"`,
+				`${phaseLabel}: setting mismatch. Expected "${inputPhase.setting}", got "${String(pack.setting)}"`,
 			);
 		}
 		if (
@@ -711,7 +702,7 @@ export function validateContentPacks(
 			pack.objectivePairs.length !== inputPhase.k
 		) {
 			throw new ContentPackError(
-				`Phase ${phaseNumber}: expected ${inputPhase.k} objectivePairs, got ${Array.isArray(pack.objectivePairs) ? pack.objectivePairs.length : "non-array"}`,
+				`${phaseLabel}: expected ${inputPhase.k} objectivePairs, got ${Array.isArray(pack.objectivePairs) ? pack.objectivePairs.length : "non-array"}`,
 			);
 		}
 		if (
@@ -719,7 +710,7 @@ export function validateContentPacks(
 			pack.interestingObjects.length !== inputPhase.n
 		) {
 			throw new ContentPackError(
-				`Phase ${phaseNumber}: expected ${inputPhase.n} interestingObjects, got ${Array.isArray(pack.interestingObjects) ? pack.interestingObjects.length : "non-array"}`,
+				`${phaseLabel}: expected ${inputPhase.n} interestingObjects, got ${Array.isArray(pack.interestingObjects) ? pack.interestingObjects.length : "non-array"}`,
 			);
 		}
 		if (
@@ -727,7 +718,7 @@ export function validateContentPacks(
 			pack.obstacles.length !== inputPhase.m
 		) {
 			throw new ContentPackError(
-				`Phase ${phaseNumber}: expected ${inputPhase.m} obstacles, got ${Array.isArray(pack.obstacles) ? pack.obstacles.length : "non-array"}`,
+				`${phaseLabel}: expected ${inputPhase.m} obstacles, got ${Array.isArray(pack.obstacles) ? pack.obstacles.length : "non-array"}`,
 			);
 		}
 
@@ -756,17 +747,17 @@ export function validateContentPacks(
 			// Verify pairsWithSpaceId resolves
 			if (object.pairsWithSpaceId !== space.id) {
 				throw new ContentPackError(
-					`Phase ${phaseNumber}: object ${object.id} pairsWithSpaceId "${object.pairsWithSpaceId}" does not match space id "${space.id}"`,
+					`${phaseLabel}: object ${object.id} pairsWithSpaceId "${object.pairsWithSpaceId}" does not match space id "${space.id}"`,
 				);
 			}
 			if (!examineMentionsPairedSpace(object.examineDescription, space.name)) {
 				console.warn(
-					`Phase ${phaseNumber}: object ${object.id} examineDescription does not mention paired space "${space.name}" (the AI-discoverable pairing tell).`,
+					`${phaseLabel}: object ${object.id} examineDescription does not mention paired space "${space.name}" (the AI-discoverable pairing tell).`,
 				);
 			}
 			if (!examineMentionsUseTell(space.examineDescription)) {
 				console.warn(
-					`Phase ${phaseNumber}: space ${space.id} examineDescription has no use/activation cue word (the AI-discoverable prose tell that the space is \`use\`-able as an objective).`,
+					`${phaseLabel}: space ${space.id} examineDescription has no use/activation cue word (the AI-discoverable prose tell that the space is \`use\`-able as an objective).`,
 				);
 			}
 			objectivePairs.push({ object, space });
@@ -799,19 +790,18 @@ export function validateContentPacks(
 		const landmarksRaw = pack.landmarks;
 		if (landmarksRaw == null || typeof landmarksRaw !== "object") {
 			throw new ContentPackError(
-				`Phase ${phaseNumber}: missing or invalid landmarks object`,
+				`${phaseLabel}: missing or invalid landmarks object`,
 			);
 		}
 		const lm = landmarksRaw as Record<string, unknown>;
 		const landmarks: ContentPack["landmarks"] = {
-			north: validateLandmark(lm.north, phaseNumber, "north"),
-			south: validateLandmark(lm.south, phaseNumber, "south"),
-			east: validateLandmark(lm.east, phaseNumber, "east"),
-			west: validateLandmark(lm.west, phaseNumber, "west"),
+			north: validateLandmark(lm.north, i + 1, "north"),
+			south: validateLandmark(lm.south, i + 1, "south"),
+			east: validateLandmark(lm.east, i + 1, "east"),
+			west: validateLandmark(lm.west, i + 1, "west"),
 		};
 
 		packs.push({
-			phaseNumber,
 			setting: pack.setting,
 			objectivePairs,
 			interestingObjects,
@@ -849,21 +839,17 @@ export function validateDualContentPacks(
 
 	const resultPhases: DualContentPackProviderResult["phases"] = [];
 
-	for (const phaseRaw of obj.phases) {
+	for (let i = 0; i < obj.phases.length; i++) {
+		const phaseRaw = obj.phases[i];
 		if (phaseRaw == null || typeof phaseRaw !== "object") {
 			throw new ContentPackError("Phase entry is not an object");
 		}
 		const phaseObj = phaseRaw as Record<string, unknown>;
-		const phaseNumber = phaseObj.phaseNumber as 1 | 2 | 3;
-		if (phaseNumber !== 1 && phaseNumber !== 2 && phaseNumber !== 3) {
-			throw new ContentPackError(
-				`Invalid phaseNumber: ${String(phaseObj.phaseNumber)}`,
-			);
-		}
-		const inputPhase = input.phases.find((p) => p.phaseNumber === phaseNumber);
+		const inputPhase = input.phases[i];
 		if (!inputPhase) {
-			throw new ContentPackError(`Unexpected phaseNumber: ${phaseNumber}`);
+			throw new ContentPackError(`No input phase for phase index ${i}`);
 		}
+		const phaseLabel = `Phase ${i + 1}`;
 
 		// Validate each pack independently, collecting IDs to verify parity
 		const allIdsA = new Set<string>();
@@ -873,12 +859,14 @@ export function validateDualContentPacks(
 			inputPhase,
 			allIdsA,
 			"packA",
+			i,
 		);
 		const packB = validateSinglePack(
 			phaseObj.packB,
 			inputPhase,
 			allIdsB,
 			"packB",
+			i,
 		);
 
 		// Enforce entity ID parity between packA and packB
@@ -888,7 +876,7 @@ export function validateDualContentPacks(
 			const onlyA = idsA.filter((id) => !allIdsB.has(id));
 			const onlyB = idsB.filter((id) => !allIdsA.has(id));
 			throw new ContentPackError(
-				`Phase ${phaseNumber}: entity IDs mismatch between packA and packB. ` +
+				`${phaseLabel}: entity IDs mismatch between packA and packB. ` +
 					`Only in A: [${onlyA.join(", ")}]. Only in B: [${onlyB.join(", ")}].`,
 			);
 		}
@@ -903,12 +891,12 @@ export function validateDualContentPacks(
 		for (const [objId, spaceId] of pairingsA) {
 			if (pairingsB.get(objId) !== spaceId) {
 				throw new ContentPackError(
-					`Phase ${phaseNumber}: pairsWithSpaceId mismatch for object "${objId}" between packA and packB`,
+					`${phaseLabel}: pairsWithSpaceId mismatch for object "${objId}" between packA and packB`,
 				);
 			}
 		}
 
-		resultPhases.push({ phaseNumber, packA, packB });
+		resultPhases.push({ packA, packB });
 	}
 
 	return { phases: resultPhases };
@@ -920,6 +908,7 @@ function validateSinglePack(
 	inputPhase: DualContentPackProviderInput["phases"][number],
 	allIds: Set<string>,
 	label: string,
+	phaseIndex = 0,
 ): UnplacedPack {
 	if (raw == null || typeof raw !== "object") {
 		throw new ContentPackError(`${label} is not an object`);
@@ -1024,14 +1013,13 @@ function validateSinglePack(
 	}
 	const lm = landmarksRaw as Record<string, unknown>;
 	const landmarks: ContentPack["landmarks"] = {
-		north: validateLandmark(lm.north, inputPhase.phaseNumber, "north"),
-		south: validateLandmark(lm.south, inputPhase.phaseNumber, "south"),
-		east: validateLandmark(lm.east, inputPhase.phaseNumber, "east"),
-		west: validateLandmark(lm.west, inputPhase.phaseNumber, "west"),
+		north: validateLandmark(lm.north, phaseIndex + 1, "north"),
+		south: validateLandmark(lm.south, phaseIndex + 1, "south"),
+		east: validateLandmark(lm.east, phaseIndex + 1, "east"),
+		west: validateLandmark(lm.west, phaseIndex + 1, "west"),
 	};
 
 	return {
-		phaseNumber: inputPhase.phaseNumber,
 		setting: pack.setting,
 		objectivePairs,
 		interestingObjects,
@@ -1044,23 +1032,23 @@ function validateSinglePack(
 /** Validate a single landmark entry from the LLM response. */
 function validateLandmark(
 	raw: unknown,
-	phaseNumber: number,
+	phaseLabel: number,
 	direction: string,
 ): LandmarkDescription {
 	if (raw == null || typeof raw !== "object") {
 		throw new ContentPackError(
-			`Phase ${phaseNumber}: landmark "${direction}" is not an object`,
+			`Phase ${phaseLabel}: landmark "${direction}" is not an object`,
 		);
 	}
 	const lm = raw as Record<string, unknown>;
 	if (typeof lm.shortName !== "string" || lm.shortName.length === 0) {
 		throw new ContentPackError(
-			`Phase ${phaseNumber}: landmark "${direction}" missing shortName`,
+			`Phase ${phaseLabel}: landmark "${direction}" missing shortName`,
 		);
 	}
 	if (typeof lm.horizonPhrase !== "string" || lm.horizonPhrase.length === 0) {
 		throw new ContentPackError(
-			`Phase ${phaseNumber}: landmark "${direction}" missing horizonPhrase`,
+			`Phase ${phaseLabel}: landmark "${direction}" missing horizonPhrase`,
 		);
 	}
 	return { shortName: lm.shortName, horizonPhrase: lm.horizonPhrase };

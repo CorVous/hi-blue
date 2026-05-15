@@ -74,7 +74,6 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
  * red→(0,0), green→(0,1), cyan→(0,2) facing north.
  */
 const TEST_CONTENT_PACK: ContentPack = {
-	phaseNumber: 1,
 	setting: "",
 	weather: "",
 	timeOfDay: "",
@@ -1223,7 +1222,6 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 		 * The key entity must be an interesting_object held by red (so use is valid).
 		 */
 		const packWithKey: ContentPack = {
-			phaseNumber: 1,
 			setting: "",
 			weather: "",
 			timeOfDay: "",
@@ -1820,7 +1818,6 @@ describe("placement flavor + win condition (issue #126)", () => {
 	const FLAVOR = "{actor} places the gem on the altar.";
 
 	const PHASE1_PACK_K1: ContentPack = {
-		phaseNumber: 1,
 		setting: "temple",
 		weather: "",
 		timeOfDay: "",
@@ -1965,7 +1962,6 @@ describe("placement flavor + win condition (issue #126)", () => {
 		const ORB_SPACE_ID = "orb_space";
 
 		const packK2: ContentPack = {
-			phaseNumber: 1,
 			setting: "vault",
 			weather: "",
 			timeOfDay: "",
@@ -2059,7 +2055,6 @@ describe("examine tool", () => {
 	 * Green starts at (0,1) facing north — so (0,0) is NOT in green's cone.
 	 */
 	const EXAMINE_PACK: ContentPack = {
-		phaseNumber: 1,
 		setting: "vault",
 		weather: "",
 		timeOfDay: "",
@@ -2997,7 +2992,6 @@ describe("action-failure entries — round-coordinator integration", () => {
 	 * go east → blocked by obstacle → action-failure entry.
 	 */
 	const OBSTACLE_PACK: ContentPack = {
-		phaseNumber: 1,
 		setting: "blocked corridor",
 		weather: "",
 		timeOfDay: "",
