@@ -7,9 +7,10 @@ import {
 	appendMessage,
 	deductBudget,
 	isAiLockedOut,
+	shiftToBPack,
 	startGame,
 } from "../engine";
-import type { AiPersona, ContentPack } from "../types";
+import type { AiPersona, ContentPack, GameState } from "../types";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -292,5 +293,88 @@ describe("appendActionFailure", () => {
 		expect(redLog).toHaveLength(2);
 		expect(redLog[0]).toEqual(entry1);
 		expect(redLog[1]).toEqual(entry2);
+	});
+});
+
+describe("shiftToBPack", () => {
+	const PACK_A: ContentPack = {
+		setting: "neon arcade",
+		weather: "clear",
+		timeOfDay: "night",
+		objectivePairs: [],
+		interestingObjects: [],
+		obstacles: [],
+		landmarks: DEFAULT_LANDMARKS,
+		aiStarts: {},
+	};
+
+	const PACK_B: ContentPack = {
+		setting: "sun-baked salt flat",
+		weather: "hot",
+		timeOfDay: "day",
+		objectivePairs: [],
+		interestingObjects: [],
+		obstacles: [],
+		landmarks: DEFAULT_LANDMARKS,
+		aiStarts: {},
+	};
+
+	function makeDualPackGame(): GameState {
+		const game = startGame(TEST_PERSONAS, PACK_A, { budgetPerAi: 5 });
+		return {
+			...game,
+			contentPacksA: [PACK_A],
+			contentPacksB: [PACK_B],
+		};
+	}
+
+	it("propagates weather from the B pack into game.weather", () => {
+		const game = makeDualPackGame();
+		const updated = shiftToBPack(game);
+		expect(updated.weather).toBe("hot");
+		expect(game.weather).toBe("clear");
+	});
+
+	it("propagates timeOfDay from the B pack into game.timeOfDay", () => {
+		const game = makeDualPackGame();
+		const updated = shiftToBPack(game);
+		expect(updated.timeOfDay).toBe("day");
+		expect(game.timeOfDay).toBe("night");
+	});
+
+	it("is idempotent when called a second time from B-state", () => {
+		const game = makeDualPackGame();
+		const once = shiftToBPack(game);
+		const twice = shiftToBPack(once);
+		expect(twice.activePackId).toBe("B");
+		expect(twice.setting).toBe("sun-baked salt flat");
+		expect(twice.weather).toBe("hot");
+		expect(twice.timeOfDay).toBe("day");
+		expect(twice.contentPack).toBe(PACK_B);
+		expect({
+			activePackId: twice.activePackId,
+			setting: twice.setting,
+			weather: twice.weather,
+			timeOfDay: twice.timeOfDay,
+		}).toEqual({
+			activePackId: once.activePackId,
+			setting: once.setting,
+			weather: once.weather,
+			timeOfDay: once.timeOfDay,
+		});
+	});
+
+	it("returns the input game unchanged when contentPacksB is empty", () => {
+		const game = {
+			...startGame(TEST_PERSONAS, PACK_A, { budgetPerAi: 5 }),
+			contentPacksA: [PACK_A],
+			contentPacksB: [] as ContentPack[],
+		};
+		const result = shiftToBPack(game);
+		expect(result).toBe(game);
+		expect(result.activePackId).toBe("A");
+		expect(result.setting).toBe("neon arcade");
+		expect(result.weather).toBe("clear");
+		expect(result.timeOfDay).toBe("night");
 	});
 });
