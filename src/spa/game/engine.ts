@@ -18,6 +18,7 @@ import type {
 	GridPosition,
 	PersonaSpatialState,
 	ToolName,
+	WorldEntity,
 } from "./types";
 
 /**
@@ -161,10 +162,55 @@ export function getActivePack(game: GameState): ContentPack {
 }
 
 /**
- * Swap `activePackId` from "A" to "B". Updates the game's `contentPack`
- * reference to the B-side pack so prompt builders and dispatchers see the new
- * names/descriptions immediately. Entity positions in `world` are
- * unchanged — world state is keyed by entity ID, which is stable across packs.
+ * Reproject `world.entities` onto pack B by entity id.
+ *
+ * Pack B is generated mirror-keyed to pack A (`generateDualContentPacks`):
+ * every id in pack A has a counterpart in pack B carrying the new setting's
+ * name, descriptions, and flavor fields. This walks the live world and swaps
+ * each entity's presentation for its pack-B counterpart while preserving the
+ * runtime state that has accumulated through play (`holder`,
+ * `satisfactionState`, `useAvailable`).
+ *
+ * Entities without a pack-B match are left unchanged — defensive for tests
+ * that construct world entities directly without populating pack B.
+ */
+function reprojectEntitiesOnto(
+	entities: WorldEntity[],
+	bPack: ContentPack,
+): WorldEntity[] {
+	const byId = new Map<string, WorldEntity>();
+	for (const pair of bPack.objectivePairs) {
+		byId.set(pair.object.id, pair.object);
+		byId.set(pair.space.id, pair.space);
+	}
+	for (const obj of bPack.interestingObjects) byId.set(obj.id, obj);
+	for (const obs of bPack.obstacles) byId.set(obs.id, obs);
+
+	return entities.map((entity) => {
+		const bEntity = byId.get(entity.id);
+		if (!bEntity) return entity;
+		const reprojected: WorldEntity = {
+			...bEntity,
+			holder: entity.holder,
+		};
+		if (entity.satisfactionState !== undefined) {
+			reprojected.satisfactionState = entity.satisfactionState;
+		}
+		if (entity.useAvailable !== undefined) {
+			reprojected.useAvailable = entity.useAvailable;
+		}
+		return reprojected;
+	});
+}
+
+/**
+ * Swap `activePackId` from "A" to "B" and reproject the live world onto
+ * pack B's presentation. After the swap a Daemon's `<where_you_are>` and
+ * `<what_you_see>` blocks reflect the new setting — held items and visible
+ * cells are described with pack B's names and flavor — while entity
+ * positions, satisfaction state, and `useAvailable` carry over from
+ * pre-swap play. `weather` and `timeOfDay` are also reprojected from pack
+ * B since the dual generator draws them independently per side.
  */
 export function swapActivePack(game: GameState): GameState {
 	const bPack = game.contentPacksB[0];
@@ -174,6 +220,9 @@ export function swapActivePack(game: GameState): GameState {
 		activePackId: "B",
 		contentPack: bPack,
 		setting: bPack.setting,
+		weather: bPack.weather,
+		timeOfDay: bPack.timeOfDay,
+		world: { entities: reprojectEntitiesOnto(game.world.entities, bPack) },
 	};
 }
 

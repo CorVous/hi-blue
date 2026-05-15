@@ -960,6 +960,205 @@ describe("applyComplicationResult — setting_shift swaps active pack", () => {
 	});
 });
 
+// ── setting_shift reprojects world entities onto pack B ───────────────────────
+
+describe("applyComplicationResult — setting_shift reprojects world onto pack B", () => {
+	/**
+	 * Pack A / pack B share entity ids (mirroring how
+	 * `generateDualContentPacks` produces them). Pack A is a "neon arcade",
+	 * pack B a "sun-baked salt flat" — entity names and flavor differ.
+	 */
+	const A_OBJECT: WorldEntity = {
+		id: "obj-1",
+		kind: "objective_object",
+		name: "joystick",
+		examineDescription: "A worn arcade joystick.",
+		useOutcome: "It clicks.",
+		pairsWithSpaceId: "space-1",
+		proximityFlavor: "neon hums nearby.",
+		holder: { row: 0, col: 0 },
+	};
+	const A_SPACE: WorldEntity = {
+		id: "space-1",
+		kind: "objective_space",
+		name: "control panel",
+		examineDescription: "A scuffed arcade control panel.",
+		holder: { row: 1, col: 1 },
+	};
+	const A_ITEM: WorldEntity = {
+		id: "item-1",
+		kind: "interesting_object",
+		name: "token",
+		examineDescription: "A brass arcade token.",
+		useOutcome: "It rattles into a slot.",
+		holder: { row: 2, col: 2 },
+	};
+	const A_OBSTACLE: WorldEntity = {
+		id: "obs-1",
+		kind: "obstacle",
+		name: "cabinet",
+		examineDescription: "A hulking cabinet.",
+		holder: { row: 3, col: 3 },
+	};
+
+	const B_OBJECT: WorldEntity = {
+		id: "obj-1",
+		kind: "objective_object",
+		name: "salt-crusted compass",
+		examineDescription: "A compass rimed with salt.",
+		useOutcome: "Its needle drifts lazily.",
+		pairsWithSpaceId: "space-1",
+		proximityFlavor: "the air shimmers.",
+		holder: { row: 0, col: 0 },
+	};
+	const B_SPACE: WorldEntity = {
+		id: "space-1",
+		kind: "objective_space",
+		name: "salt cairn",
+		examineDescription: "A waist-high cairn of crystallised salt.",
+		holder: { row: 1, col: 1 },
+	};
+	const B_ITEM: WorldEntity = {
+		id: "item-1",
+		kind: "interesting_object",
+		name: "sun-bleached shell",
+		examineDescription: "A papery shell, baked white.",
+		useOutcome: "It crumbles to dust.",
+		holder: { row: 2, col: 2 },
+	};
+	const B_OBSTACLE: WorldEntity = {
+		id: "obs-1",
+		kind: "obstacle",
+		name: "wind-scoured boulder",
+		examineDescription: "A boulder grooved by wind.",
+		holder: { row: 3, col: 3 },
+	};
+
+	const PACK_A: ContentPack = {
+		phaseNumber: 1,
+		setting: "neon arcade",
+		weather: "humid",
+		timeOfDay: "night",
+		objectivePairs: [{ object: A_OBJECT, space: A_SPACE }],
+		interestingObjects: [A_ITEM],
+		obstacles: [A_OBSTACLE],
+		landmarks: DEFAULT_LANDMARKS,
+		aiStarts: makePersonaSpatial(),
+	};
+
+	const PACK_B: ContentPack = {
+		phaseNumber: 1,
+		setting: "sun-baked salt flat",
+		weather: "scorching",
+		timeOfDay: "day",
+		objectivePairs: [{ object: B_OBJECT, space: B_SPACE }],
+		interestingObjects: [B_ITEM],
+		obstacles: [B_OBSTACLE],
+		landmarks: DEFAULT_LANDMARKS,
+		aiStarts: makePersonaSpatial(),
+	};
+
+	function makeGameWithLiveWorld(entities: WorldEntity[]): GameState {
+		const phase = makePhase({
+			contentPack: PACK_A,
+			setting: PACK_A.setting,
+			weather: PACK_A.weather,
+			timeOfDay: PACK_A.timeOfDay,
+			world: { entities },
+		});
+		return makeGameStateAround({
+			...phase,
+			contentPacksA: [PACK_A],
+			contentPacksB: [PACK_B],
+			activePackId: "A",
+		});
+	}
+
+	const SHIFT = { fired: { kind: "setting_shift" as const } };
+
+	it("reprojects entity names from pack B by id", () => {
+		const game = makeGameWithLiveWorld([A_OBJECT, A_SPACE, A_ITEM, A_OBSTACLE]);
+		const updated = applyComplicationResult(game, SHIFT, seededRng([0.5]));
+		const updatedPhase = getActivePhase(updated);
+		const byId = new Map(
+			updatedPhase.world.entities.map((e) => [e.id, e.name]),
+		);
+		expect(byId.get("obj-1")).toBe("salt-crusted compass");
+		expect(byId.get("space-1")).toBe("salt cairn");
+		expect(byId.get("item-1")).toBe("sun-bleached shell");
+		expect(byId.get("obs-1")).toBe("wind-scoured boulder");
+	});
+
+	it("reprojects examineDescription and flavor fields from pack B", () => {
+		const game = makeGameWithLiveWorld([A_OBJECT, A_SPACE, A_ITEM, A_OBSTACLE]);
+		const updated = applyComplicationResult(game, SHIFT, seededRng([0.5]));
+		const updatedPhase = getActivePhase(updated);
+		const obj = updatedPhase.world.entities.find((e) => e.id === "obj-1");
+		expect(obj?.examineDescription).toBe("A compass rimed with salt.");
+		expect(obj?.proximityFlavor).toBe("the air shimmers.");
+		expect(obj?.useOutcome).toBe("Its needle drifts lazily.");
+	});
+
+	it("preserves holder when a daemon is carrying an entity across the swap", () => {
+		// Move obj-1 into a daemon's hand before the shift.
+		const held: WorldEntity = { ...A_OBJECT, holder: "red" };
+		const game = makeGameWithLiveWorld([held, A_SPACE, A_ITEM, A_OBSTACLE]);
+		const updated = applyComplicationResult(game, SHIFT, seededRng([0.5]));
+		const updatedPhase = getActivePhase(updated);
+		const obj = updatedPhase.world.entities.find((e) => e.id === "obj-1");
+		expect(obj?.holder).toBe("red");
+		// And the new name comes through even though the daemon is holding it.
+		expect(obj?.name).toBe("salt-crusted compass");
+	});
+
+	it("preserves satisfactionState and useAvailable from the pre-swap world", () => {
+		const satisfiedSpace: WorldEntity = {
+			...A_SPACE,
+			satisfactionState: "satisfied",
+			useAvailable: false,
+		};
+		const game = makeGameWithLiveWorld([
+			A_OBJECT,
+			satisfiedSpace,
+			A_ITEM,
+			A_OBSTACLE,
+		]);
+		const updated = applyComplicationResult(game, SHIFT, seededRng([0.5]));
+		const updatedPhase = getActivePhase(updated);
+		const space = updatedPhase.world.entities.find((e) => e.id === "space-1");
+		expect(space?.satisfactionState).toBe("satisfied");
+		expect(space?.useAvailable).toBe(false);
+		expect(space?.name).toBe("salt cairn");
+	});
+
+	it("reprojects weather and timeOfDay onto pack B values", () => {
+		const game = makeGameWithLiveWorld([A_OBJECT, A_SPACE, A_ITEM, A_OBSTACLE]);
+		const updated = applyComplicationResult(game, SHIFT, seededRng([0.5]));
+		const updatedPhase = getActivePhase(updated);
+		expect(updatedPhase.weather).toBe("scorching");
+		expect(updatedPhase.timeOfDay).toBe("day");
+	});
+
+	it("leaves entities without a pack-B match unchanged", () => {
+		// An entity in the live world but absent from pack B — a test
+		// fixture or a future kind packs don't yet author.
+		const orphan: WorldEntity = {
+			id: "orphan-1",
+			kind: "obstacle",
+			name: "unpacked boulder",
+			examineDescription: "Not in any pack.",
+			holder: { row: 4, col: 4 },
+		};
+		const game = makeGameWithLiveWorld([A_OBJECT, orphan]);
+		const updated = applyComplicationResult(game, SHIFT, seededRng([0.5]));
+		const updatedPhase = getActivePhase(updated);
+		const orphanAfter = updatedPhase.world.entities.find(
+			(e) => e.id === "orphan-1",
+		);
+		expect(orphanAfter).toEqual(orphan);
+	});
+});
+
 // ── Determinism ───────────────────────────────────────────────────────────────
 
 describe("determinism", () => {
