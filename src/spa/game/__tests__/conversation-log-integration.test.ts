@@ -17,7 +17,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { buildConversationLog } from "../conversation-log.js";
+import { renderEntry } from "../conversation-log.js";
 import { DEFAULT_LANDMARKS } from "../direction";
 import { createGame, getActivePhase, startPhase } from "../engine";
 import { buildOpenAiMessages } from "../openai-message-builder";
@@ -538,15 +538,9 @@ describe("conversation log integration — action-failure (issue #287)", () => {
 		const phase = getActivePhase(nextState);
 		const redLog = phase.conversationLogs.red ?? [];
 
-		const lines = buildConversationLog(
-			{ conversationLog: redLog, worldEntities: phase.world.entities },
-			"red",
-			{} as Record<string, never>,
-		);
-
-		const failureLine = lines.find((l) =>
-			l.includes("Your `go` action failed:"),
-		);
+		const failureLine = redLog
+			.map((entry) => renderEntry(entry, "red", phase.world.entities))
+			.find((l) => l.includes("Your `go` action failed:"));
 		expect(failureLine).toBeDefined();
 	});
 });
