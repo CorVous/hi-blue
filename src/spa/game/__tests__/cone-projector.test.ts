@@ -141,24 +141,65 @@ describe("projectCone — facing west from (2,2)", () => {
 	});
 });
 
-describe("projectCone — edge cases: out-of-bounds filtering", () => {
-	it("facing north from (0,0) returns only own cell (all cone cells OOB)", () => {
+describe("projectCone — edge cases: wall sentinels for OOB cells", () => {
+	it("facing north from (0,0) returns exactly 9 cells — 8 non-own cells are walls", () => {
 		const cells = projectCone({ row: 0, col: 0 }, "north");
-		// Own cell is always included; all distance-1 and distance-2 cells are OOB
-		expect(cells).toHaveLength(1);
+		// Always 9 cells now — OOB cells are wall sentinels
+		expect(cells).toHaveLength(9);
 		expect(cells[0]?.phrasing).toBe("your cell");
 		expect(cells[0]?.position).toEqual({ row: 0, col: 0 });
+		// All 8 non-own cells must be walls (all cone cells are OOB from (0,0) facing north)
+		const nonOwn = cells.filter((c) => !c.isOwnCell);
+		expect(nonOwn).toHaveLength(8);
+		for (const c of nonOwn) {
+			expect(c.isWall).toBe(true);
+		}
 	});
 
-	it("facing north from (1,0) returns own cell plus the two in-bounds front-arc cells", () => {
-		// front-left (0,-1) OOB; front (0,0) in; front-right (0,1) in; all dist-2 OOB
+	it("facing north from (1,0) — only OOB cells have isWall: true", () => {
+		// front-left (0,-1) OOB → wall; front (0,0) in; front-right (0,1) in; all dist-2 OOB
 		const cells = projectCone({ row: 1, col: 0 }, "north");
-		expect(cells).toHaveLength(3);
-		expect(cells[0]?.phrasing).toBe("your cell");
-		expect(cells[1]?.phrasing).toBe("directly in front");
-		expect(cells[1]?.position).toEqual({ row: 0, col: 0 });
-		expect(cells[2]?.phrasing).toBe("directly in front, right");
-		expect(cells[2]?.position).toEqual({ row: 0, col: 1 });
+		expect(cells).toHaveLength(9);
+		// Own cell: not a wall
+		expect(cells[0]?.isWall).toBe(false);
+		// directly in front, left (0,-1): OOB → wall
+		expect(cells[1]?.phrasing).toBe("directly in front, left");
+		expect(cells[1]?.isWall).toBe(true);
+		// directly in front (0,0): in-bounds → not wall
+		expect(cells[2]?.phrasing).toBe("directly in front");
+		expect(cells[2]?.position).toEqual({ row: 0, col: 0 });
+		expect(cells[2]?.isWall).toBe(false);
+		// directly in front, right (0,1): in-bounds → not wall
+		expect(cells[3]?.phrasing).toBe("directly in front, right");
+		expect(cells[3]?.position).toEqual({ row: 0, col: 1 });
+		expect(cells[3]?.isWall).toBe(false);
+		// All dist-2 cells from (1,0) facing north are OOB → walls
+		for (const c of cells.slice(4)) {
+			expect(c.isWall).toBe(true);
+		}
+	});
+
+	it("center cone (2,2) facing north has all 9 cells with isWall: false", () => {
+		const cells = projectCone({ row: 2, col: 2 }, "north");
+		expect(cells).toHaveLength(9);
+		for (const c of cells) {
+			expect(c.isWall).toBe(false);
+		}
+	});
+
+	it("own cell is never a wall", () => {
+		// Test several positions including corners
+		for (const pos of [
+			{ row: 0, col: 0 },
+			{ row: 4, col: 4 },
+			{ row: 2, col: 2 },
+		]) {
+			for (const facing of ["north", "south", "east", "west"] as const) {
+				const cells = projectCone(pos, facing);
+				expect(cells[0]?.isOwnCell).toBe(true);
+				expect(cells[0]?.isWall).toBe(false);
+			}
+		}
 	});
 
 	it("own cell is always first in the returned array", () => {

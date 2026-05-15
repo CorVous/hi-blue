@@ -88,6 +88,7 @@ const TEST_CONTENT_PACK: ContentPack = {
 	interestingObjects: [],
 	obstacles: [],
 	landmarks: DEFAULT_LANDMARKS,
+	wallName: "wall",
 	// red at (4,4), green at (0,0), cyan at (0,2)
 	// cyan faces south so (4,4) is not in its cone.
 	aiStarts: {

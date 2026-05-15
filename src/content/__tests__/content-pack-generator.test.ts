@@ -131,6 +131,7 @@ function makeMockProvider(): MockContentPackProvider {
 							holder: { row: 0, col: 0 } as never,
 						})),
 						landmarks: DEFAULT_LANDMARKS,
+						wallName: "wall",
 						aiStarts: {} as Record<string, never>,
 					};
 				},
@@ -425,6 +426,7 @@ describe("generateContentPacks — degenerate config throws after MAX_ATTEMPTS",
 						holder: { row: 0, col: 0 } as never,
 					})),
 					landmarks: DEFAULT_LANDMARKS,
+					wallName: "wall",
 					aiStarts: {} as Record<string, never>,
 				})),
 			}),
@@ -499,6 +501,7 @@ function makeDualMockProvider(): MockContentPackProvider {
 						holder: { row: 0, col: 0 } as never,
 					})),
 					landmarks: DEFAULT_LANDMARKS,
+					wallName: `wall ${suffix}`,
 					aiStarts: {} as never,
 				});
 

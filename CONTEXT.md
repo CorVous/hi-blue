@@ -74,6 +74,10 @@ A non-win item present on the grid for flavor and negotiation currency. Has a `u
 **Obstacle**:
 A static, impassable cell occupant, named to match the Setting (e.g. "moss-covered concrete column"). Cannot share a cell with anything else.
 
+**Wall**:
+The impassable boundary surrounding the 5×5 grid, perceived by a Daemon as a setting-flavored noun phrase (e.g. "crumbling tile wall") when an out-of-bounds cell falls inside the Daemon's **Cone**. Authored on the **Content Pack** (paired across Pack A / Pack B for Setting Shift) as `wallName`. Rendered alongside obstacles in `<what_you_see>` and `<whats_new>`. Not a `WorldEntity`, not a separate cell occupant — purely a perception sentinel for OOB cone cells.
+_Avoid_: Edge (positional, not lexical), barrier (less setting-natural).
+
 **Cone**:
 The wedge-shaped region of cells an AI can see each turn: 1 cell directly in front + 3 cells two steps ahead (front-left, front, front-right), plus the AI's own cell. Projects from the AI's **Facing**. Obstacles do not occlude — the cone is a fixed-shape mask, not a raycast.
 

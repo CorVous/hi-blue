@@ -7,7 +7,11 @@ import {
 	startGame,
 } from "../engine";
 import { buildOpenAiMessages } from "../openai-message-builder";
-import { buildAiContext, buildConeSnapshot } from "../prompt-builder";
+import {
+	buildAiContext,
+	buildConeSnapshot,
+	renderWhatsNew,
+} from "../prompt-builder";
 import type { AiPersona, ContentPack, WorldEntity } from "../types";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
@@ -69,6 +73,7 @@ const TEST_CONTENT_PACK: ContentPack = {
 	interestingObjects: [],
 	obstacles: [],
 	landmarks: DEFAULT_LANDMARKS,
+	wallName: "wall",
 	aiStarts: {},
 };
 
@@ -185,6 +190,7 @@ describe("buildAiContext", () => {
 			],
 			obstacles: [],
 			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -227,6 +233,7 @@ describe("<setting> block", () => {
 			interestingObjects: [],
 			obstacles: [],
 			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -260,6 +267,7 @@ describe("<setting> block", () => {
 			interestingObjects: [],
 			obstacles: [],
 			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -318,6 +326,7 @@ describe("prompt-builder — spatial 'Where you are' section (current-state user
 			],
 			obstacles: [],
 			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -749,6 +758,7 @@ describe("<what_you_see> (cone)", () => {
 			],
 			obstacles: [],
 			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "south" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -791,19 +801,64 @@ describe("<what_you_see> (cone)", () => {
 		expect(stateMsg).not.toContain("the player");
 	});
 
-	it("out-of-bounds cone cells are omitted from <what_you_see>", () => {
-		// rng=()=>0: red→(0,0) facing north → all cone cells OOB
-		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+	it("out-of-bounds cone cells render as wall markers in <what_you_see>", () => {
+		// rng=()=>0: red→(0,0) facing north → all 8 non-own cone cells are OOB
+		const wallPack: ContentPack = {
+			...TEST_CONTENT_PACK,
+			wallName: "concrete platform wall",
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "north" },
+				green: { position: { row: 0, col: 1 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
+			},
+		};
+		const game = startGame(TEST_PERSONAS, wallPack, {
 			budgetPerAi: 5,
-			rng: () => 0,
 		});
 		const ctx = buildAiContext(game, "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
 		const start = stateMsg.indexOf("<what_you_see>");
 		const end = stateMsg.indexOf("</what_you_see>", start);
 		const sectionContent = stateMsg.slice(start, end);
-		// All cone cells from (0,0) facing north are OOB → no bullet entries.
-		expect(sectionContent).not.toMatch(/- Directly in front/);
+		// All 8 OOB cells render as wall markers — wallName from ContentPack
+		expect(sectionContent).toContain(
+			"- Directly in front, left: concrete platform wall",
+		);
+		expect(sectionContent).toContain(
+			"- Directly in front: concrete platform wall",
+		);
+		expect(sectionContent).toContain(
+			"- Directly in front, right: concrete platform wall",
+		);
+		// wallName comes from ContentPack, not hardcoded
+		expect(sectionContent).toContain("concrete platform wall");
+	});
+
+	it("partial edge: only OOB cells render as walls — in-bounds cells render normally", () => {
+		// red at (1,0) facing north: directly-in-front-left (0,-1) is OOB; front (0,0) and front-right (0,1) are in-bounds
+		const wallPack: ContentPack = {
+			...TEST_CONTENT_PACK,
+			wallName: "concrete platform wall",
+			aiStarts: {
+				red: { position: { row: 1, col: 0 }, facing: "north" },
+				green: { position: { row: 4, col: 4 }, facing: "north" },
+				cyan: { position: { row: 4, col: 3 }, facing: "north" },
+			},
+		};
+		const game = startGame(TEST_PERSONAS, wallPack, { budgetPerAi: 5 });
+		const ctx = buildAiContext(game, "red");
+		const stateMsg = ctx.toCurrentStateUserMessage();
+		const start = stateMsg.indexOf("<what_you_see>");
+		const end = stateMsg.indexOf("</what_you_see>", start);
+		const sectionContent = stateMsg.slice(start, end);
+		// OOB cell: directly in front, left → wall
+		expect(sectionContent).toContain(
+			"- Directly in front, left: concrete platform wall",
+		);
+		// In-bounds cell: directly in front (0,0) → "nothing" (no entities there)
+		expect(sectionContent).toContain("- Directly in front: nothing");
+		// In-bounds cell: directly in front, right (0,1) → "nothing"
+		expect(sectionContent).toContain("- Directly in front, right: nothing");
 	});
 
 	it("obstacles in the cone are listed by their name", () => {
@@ -817,6 +872,7 @@ describe("<what_you_see> (cone)", () => {
 			interestingObjects: [],
 			obstacles: [makeEntity("col1", "obstacle", { row: 1, col: 0 })],
 			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "south" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -842,6 +898,7 @@ describe("<what_you_see> (cone)", () => {
 			interestingObjects: [],
 			obstacles: [],
 			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "south" },
 				green: { position: { row: 1, col: 0 }, facing: "north" },
@@ -1161,6 +1218,7 @@ describe("proximityFlavor sense line", () => {
 			interestingObjects: [],
 			obstacles: [],
 			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
 			aiStarts: {
 				red: { position: opts.actorPosition, facing: opts.actorFacing },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -1442,6 +1500,7 @@ describe("postLookFlavor swap covers satisfied interesting_object", () => {
 			interestingObjects: [item],
 			obstacles: [],
 			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "south" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -1478,5 +1537,111 @@ describe("postLookFlavor swap covers satisfied interesting_object", () => {
 		const ctx = buildAiContext(game, "red");
 		const snapshot = buildConeSnapshot(ctx);
 		expect(snapshot).toContain("a steady amber glow lingers near the switch");
+	});
+});
+
+// ----------------------------------------------------------------------------
+// <whats_new> wall diff (issue #374)
+// When a daemon turns toward or away from a wall, the wall entry appears as
+// a + / - diff line in <whats_new>. Uses buildConeSnapshot + renderWhatsNew.
+// ----------------------------------------------------------------------------
+describe("<whats_new> wall diff (issue #374)", () => {
+	/** Build a game with red at the given position and facing. */
+	function makeWallGame(opts: {
+		position: { row: number; col: number };
+		facing: "north" | "south" | "east" | "west";
+		wallName?: string;
+	}) {
+		const wallName = opts.wallName ?? "concrete platform wall";
+		const pack: ContentPack = {
+			setting: "",
+			weather: "",
+			timeOfDay: "",
+			objectivePairs: [],
+			interestingObjects: [],
+			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
+			wallName,
+			aiStarts: {
+				red: { position: opts.position, facing: opts.facing },
+				green: { position: { row: 4, col: 4 }, facing: "north" },
+				cyan: { position: { row: 4, col: 3 }, facing: "north" },
+			},
+		};
+		return startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+	}
+
+	it("turning toward a wall produces + lines in <whats_new>", () => {
+		// prev: red at (0,0) facing east (cone goes right — hits east wall, no north wall)
+		// curr: red at (0,0) facing north (cone goes up — all OOB)
+		const prevGame = makeWallGame({
+			position: { row: 0, col: 0 },
+			facing: "east",
+		});
+		const currGame = makeWallGame({
+			position: { row: 0, col: 0 },
+			facing: "north",
+		});
+
+		const prevCtx = buildAiContext(prevGame, "red");
+		const currCtx = buildAiContext(currGame, "red");
+
+		const prev = buildConeSnapshot(prevCtx);
+		const curr = buildConeSnapshot(currCtx);
+
+		// The snapshots must differ (east vs north cone)
+		expect(prev).not.toBe(curr);
+
+		const diff = renderWhatsNew(prev, curr);
+		expect(diff).not.toBeNull();
+		// North cone from (0,0) has all walls — "directly in front" line should appear as added
+		expect(diff).toContain("+ at directly in front: concrete platform wall");
+	});
+
+	it("turning away from a wall produces - lines in <whats_new>", () => {
+		// prev: red at (0,0) facing north (all walls)
+		// curr: red at (0,0) facing south (cone goes down — in-bounds)
+		const prevGame = makeWallGame({
+			position: { row: 0, col: 0 },
+			facing: "north",
+		});
+		const currGame = makeWallGame({
+			position: { row: 0, col: 0 },
+			facing: "south",
+		});
+
+		const prevCtx = buildAiContext(prevGame, "red");
+		const currCtx = buildAiContext(currGame, "red");
+
+		const prev = buildConeSnapshot(prevCtx);
+		const curr = buildConeSnapshot(currCtx);
+
+		const diff = renderWhatsNew(prev, curr);
+		expect(diff).not.toBeNull();
+		// "directly in front" was a wall in north cone, now it's in-bounds in south cone → removed
+		expect(diff).toContain("- at directly in front: concrete platform wall");
+	});
+
+	it("identical snapshots at the wall → renderWhatsNew returns null", () => {
+		// Same position and facing → cone snapshot is byte-identical
+		const game = makeWallGame({
+			position: { row: 0, col: 0 },
+			facing: "north",
+		});
+		const ctx = buildAiContext(game, "red");
+		const snap = buildConeSnapshot(ctx);
+		expect(renderWhatsNew(snap, snap)).toBeNull();
+	});
+
+	it("wallName comes from ContentPack.wallName, not hardcoded", () => {
+		const game = makeWallGame({
+			position: { row: 0, col: 0 },
+			facing: "north",
+			wallName: "laboratory bulkhead",
+		});
+		const ctx = buildAiContext(game, "red");
+		const snap = buildConeSnapshot(ctx);
+		expect(snap).toContain("laboratory bulkhead");
+		expect(snap).not.toContain("concrete platform wall");
 	});
 });

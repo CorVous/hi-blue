@@ -360,6 +360,7 @@ export async function generateContentPacks(
 		interestingObjects: pack.interestingObjects as WorldEntity[],
 		obstacles: pack.obstacles as WorldEntity[],
 		landmarks: pack.landmarks,
+		wallName: pack.wallName,
 		aiStarts: {},
 	}));
 
@@ -454,6 +455,7 @@ export async function generateDualContentPacks(
 		interestingObjects: phaseResult.packA.interestingObjects as WorldEntity[],
 		obstacles: phaseResult.packA.obstacles as WorldEntity[],
 		landmarks: phaseResult.packA.landmarks,
+		wallName: phaseResult.packA.wallName,
 		aiStarts: {},
 	};
 
@@ -495,6 +497,7 @@ export async function generateDualContentPacks(
 		).map(applyHolder),
 		obstacles: (phaseResult.packB.obstacles as WorldEntity[]).map(applyHolder),
 		landmarks: phaseResult.packB.landmarks,
+		wallName: phaseResult.packB.wallName,
 		aiStarts: { ...placedPackA.aiStarts },
 	};
 
@@ -566,6 +569,7 @@ export async function generateContentPack(
 		interestingObjects: pack.interestingObjects as WorldEntity[],
 		obstacles: pack.obstacles as WorldEntity[],
 		landmarks: pack.landmarks,
+		wallName: pack.wallName,
 		aiStarts: {},
 	};
 

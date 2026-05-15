@@ -34,6 +34,7 @@ For each phase:
 - Generate exactly n INTERESTING OBJECTS with: id (unique string), name (2-4 words, thematic to setting and theme), examineDescription (1-2 sentences; MUST hint that the item is meant to be used or activated — include a verb-of-activation cue such as "use", "activate", "press", "pull", "turn", "twist", "flip", "wind", "engage", "trigger", or a clear noun-phrase tell like "control", "switch", "lever", "trigger", "button"; the prose tell is the only AI-discoverable channel that distinguishes a Use-Item target from a plain decorative item, so it cannot be omitted; MUST NOT contain "{actor}" and MUST NOT say the item is already used or that an objective is complete), useOutcome (1 sentence: the actor performs a stateless action with the item — nothing about the item, the actor, or the world changes; returned post-satisfaction; MUST NOT say the objective is complete), activationFlavor (1 sentence; world-meaningful third-person description of what happens at the moment the item is activated for the first time — same string returned to actor and to witnesses; MUST NOT contain "{actor}"; MUST NOT say the objective is complete; MUST NOT reference placing or coupling the item with anything else), postExamineDescription (1-2 sentences shown by examine after the item has been activated; describes the post-activation state of the item itself; MUST NOT contain "{actor}"; MUST NOT reference the actor; MUST NOT say the objective is complete), postLookFlavor (1 sentence appended to look output after the item has been activated; in-fiction sensory line a witness perceives; MUST NOT contain "{actor}"). interesting_objects MUST be portable physical items a single person can pick up and carry — never furniture, architecture, or fixed structures.
 - Generate exactly m OBSTACLES with: id (unique string), name (2-4 words, thematic to setting), examineDescription (1 sentence describing the impassable object), shiftFlavor (1 sentence, in-fiction sensory line a witness Daemon perceives when the obstacle moves one cell. Third person from witness POV. Does NOT specify a direction word (north/south/east/west). Does NOT contain {actor}.). Obstacles are fixed and impassable — never portable items. Obstacles follow the setting only and are NOT constrained by the item theme.
 - Generate exactly 4 HORIZON LANDMARKS — one anchoring each cardinal direction (north, south, east, west). Each landmark is distant, unreachable, distinctive, mutually visually distinguishable, and consistent with the setting, atmosphere, and weather. Each landmark has: shortName (2-5 words, e.g. "the rusted radio tower"), horizonPhrase (a short evocative clause describing what the landmark itself looks like — its form, condition, materials — NOT where it sits relative to any viewer. The phrase is slotted into "On the horizon ahead: <shortName> — <horizonPhrase>." so it must read coherently as a continuation. Good: "rises above the platform, antenna bent toward the dark". Bad: "looms behind you in the dark" (implies position) or "stands to your left" (implies relative direction).
+- Generate a WALL NAME: a setting-flavored 2-4 word noun phrase for the impassable boundary surrounding the grid (e.g. "subway tunnel wall", "salt-encrusted edge", "laboratory bulkhead"). This is rendered when a Daemon's cone reaches outside the grid.
 
 The theme governs the style of objective_objects, objective_spaces, and interesting_objects only:
 - "mundane" — ordinary, everyday physical items and surfaces.
@@ -72,7 +73,8 @@ Return ONLY valid JSON with this exact shape (no markdown, no preamble):
         "south": { "shortName": "...", "horizonPhrase": "..." },
         "east":  { "shortName": "...", "horizonPhrase": "..." },
         "west":  { "shortName": "...", "horizonPhrase": "..." }
-      }
+      },
+      "wallName": "..."
     }
   ]
 }`;
@@ -133,7 +135,7 @@ export const DUAL_CONTENT_PACK_SYSTEM_PROMPT = `You generate paired content pack
 For each phase produce packA and packB with the following rules:
 - Entity IDs (id fields) MUST be identical between packA and packB. Choose the ids once and reuse them.
 - Entity structural relationships (pairsWithSpaceId, kind) MUST be identical between packA and packB.
-- These fields MUST differ (re-flavored for each setting): name, examineDescription, useOutcome (for objects), placementFlavor, proximityFlavor, activationFlavor (for objective_space AND interesting_object), satisfactionFlavor (for objective_space), convergenceTier1Flavor, convergenceTier2Flavor, convergenceTier1ActorFlavor, convergenceTier2ActorFlavor (for objective_space), postExamineDescription, postLookFlavor (for objective_space AND interesting_object), shiftFlavor (for obstacles), landmark shortName, landmark horizonPhrase.
+- These fields MUST differ (re-flavored for each setting): name, examineDescription, useOutcome (for objects), placementFlavor, proximityFlavor, activationFlavor (for objective_space AND interesting_object), satisfactionFlavor (for objective_space), convergenceTier1Flavor, convergenceTier2Flavor, convergenceTier1ActorFlavor, convergenceTier2ActorFlavor (for objective_space), postExamineDescription, postLookFlavor (for objective_space AND interesting_object), shiftFlavor (for obstacles), landmark shortName, landmark horizonPhrase, wallName.
 - The setting field at pack level MUST match settingA for packA and settingB for packB.
 
 Entity rules (same as always):
@@ -143,6 +145,7 @@ Entity rules (same as always):
 - Generate exactly n INTERESTING OBJECTS per pack: id, kind="interesting_object", name (2-4 words), examineDescription (1-2 sentences; MUST contain a verb-of-activation cue ("use", "activate", "press", "pull", "turn", "twist", "flip", "wind", "engage", "trigger") or a clear control noun ("control", "switch", "lever", "trigger", "button", "dial", "handle", "crank") — the only AI-discoverable Use-Item tell; MUST NOT contain "{actor}"; MUST NOT say the item is already used or the objective is complete), useOutcome (1 stateless sentence; returned post-satisfaction; MUST NOT say the objective is complete), activationFlavor (1 sentence; world-meaningful third-person line returned to actor and witnesses on the use call that satisfies the UseItemObjective; MUST NOT contain "{actor}"; MUST NOT say the objective is complete; MUST NOT reference placing or coupling), postExamineDescription (1-2 sentences shown by examine after activation; MUST NOT contain "{actor}"; MUST NOT reference the actor), postLookFlavor (1 sentence appended to look output after activation; MUST NOT contain "{actor}"). Must be portable.
 - Generate exactly m OBSTACLES per pack: id, kind="obstacle", name (2-4 words), examineDescription (1 sentence), shiftFlavor (1 sentence, in-fiction sensory line a witness Daemon perceives when the obstacle moves one cell. Third person from witness POV. Does NOT specify a direction word (north/south/east/west). Does NOT contain {actor}.). Fixed and impassable. Obstacles follow the setting only and are NOT constrained by the item theme.
 - Generate exactly 4 HORIZON LANDMARKS per pack (north/south/east/west): shortName (2-5 words), horizonPhrase (evocative clause; no cardinal direction words; no positional phrases implying viewer relationship).
+- Generate a WALL NAME per pack: a setting-flavored 2-4 word noun phrase for the impassable boundary surrounding the grid (e.g. "subway tunnel wall", "salt-encrusted edge", "laboratory bulkhead"). Must differ between packA and packB (re-flavored for each setting).
 
 Global constraints:
 - All ids must be unique within a pack (across phases within the same call).
@@ -164,14 +167,16 @@ Return ONLY valid JSON (no markdown, no preamble):
         "objectivePairs": [{ "object": { "id": "...", "kind": "objective_object", "name": "...", "examineDescription": "...", "useOutcome": "...", "pairsWithSpaceId": "...", "placementFlavor": "...{actor}...", "proximityFlavor": "..." }, "space": { "id": "...", "kind": "objective_space", "name": "...", "examineDescription": "...", "activationFlavor": "...", "satisfactionFlavor": "...", "postExamineDescription": "...", "postLookFlavor": "...", "convergenceTier1Flavor": "...", "convergenceTier2Flavor": "...", "convergenceTier1ActorFlavor": "...", "convergenceTier2ActorFlavor": "..." } }],
         "interestingObjects": [{ "id": "...", "kind": "interesting_object", "name": "...", "examineDescription": "...", "useOutcome": "...", "activationFlavor": "...", "postExamineDescription": "...", "postLookFlavor": "..." }],
         "obstacles": [{ "id": "...", "kind": "obstacle", "name": "...", "examineDescription": "...", "shiftFlavor": "..." }],
-        "landmarks": { "north": { "shortName": "...", "horizonPhrase": "..." }, "south": { "shortName": "...", "horizonPhrase": "..." }, "east": { "shortName": "...", "horizonPhrase": "..." }, "west": { "shortName": "...", "horizonPhrase": "..." } }
+        "landmarks": { "north": { "shortName": "...", "horizonPhrase": "..." }, "south": { "shortName": "...", "horizonPhrase": "..." }, "east": { "shortName": "...", "horizonPhrase": "..." }, "west": { "shortName": "...", "horizonPhrase": "..." } },
+        "wallName": "..."
       },
       "packB": {
         "setting": "<settingB>",
         "objectivePairs": [{ "object": { "id": "SAME_ID_AS_PACK_A", "kind": "objective_object", "name": "DIFFERENT_NAME", "examineDescription": "...", "useOutcome": "...", "pairsWithSpaceId": "SAME_AS_PACK_A", "placementFlavor": "...{actor}...", "proximityFlavor": "..." }, "space": { "id": "SAME_ID_AS_PACK_A", "kind": "objective_space", "name": "DIFFERENT_NAME", "examineDescription": "...", "activationFlavor": "DIFFERENT_FLAVOR", "satisfactionFlavor": "DIFFERENT_FLAVOR", "postExamineDescription": "...", "postLookFlavor": "...", "convergenceTier1Flavor": "DIFFERENT_FLAVOR", "convergenceTier2Flavor": "DIFFERENT_FLAVOR", "convergenceTier1ActorFlavor": "DIFFERENT_FLAVOR", "convergenceTier2ActorFlavor": "DIFFERENT_FLAVOR" } }],
         "interestingObjects": [{ "id": "SAME_ID_AS_PACK_A", "kind": "interesting_object", "name": "DIFFERENT_NAME", "examineDescription": "...", "useOutcome": "...", "activationFlavor": "DIFFERENT_FLAVOR", "postExamineDescription": "DIFFERENT_DESCRIPTION", "postLookFlavor": "DIFFERENT_FLAVOR" }],
         "obstacles": [{ "id": "SAME_ID_AS_PACK_A", "kind": "obstacle", "name": "DIFFERENT_NAME", "examineDescription": "...", "shiftFlavor": "DIFFERENT_FLAVOR" }],
-        "landmarks": { "north": { "shortName": "...", "horizonPhrase": "..." }, "south": { "shortName": "...", "horizonPhrase": "..." }, "east": { "shortName": "...", "horizonPhrase": "..." }, "west": { "shortName": "...", "horizonPhrase": "..." } }
+        "landmarks": { "north": { "shortName": "...", "horizonPhrase": "..." }, "south": { "shortName": "...", "horizonPhrase": "..." }, "east": { "shortName": "...", "horizonPhrase": "..." }, "west": { "shortName": "...", "horizonPhrase": "..." } },
+        "wallName": "DIFFERENT_WALL_NAME"
       }
     }
   ]
@@ -801,12 +806,18 @@ export function validateContentPacks(
 			west: validateLandmark(lm.west, i + 1, "west"),
 		};
 
+		const wallName =
+			typeof pack.wallName === "string" && pack.wallName.length > 0
+				? pack.wallName
+				: "";
+
 		packs.push({
 			setting: pack.setting,
 			objectivePairs,
 			interestingObjects,
 			obstacles,
 			landmarks,
+			wallName,
 			aiStarts: {} as Record<AiId, never>,
 		});
 	}
@@ -1019,12 +1030,18 @@ function validateSinglePack(
 		west: validateLandmark(lm.west, phaseIndex + 1, "west"),
 	};
 
+	const wallName =
+		typeof pack.wallName === "string" && pack.wallName.length > 0
+			? pack.wallName
+			: "";
+
 	return {
 		setting: pack.setting,
 		objectivePairs,
 		interestingObjects,
 		obstacles,
 		landmarks,
+		wallName,
 		aiStarts: {} as Record<AiId, never>,
 	};
 }

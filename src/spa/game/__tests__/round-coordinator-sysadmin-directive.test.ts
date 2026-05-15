@@ -62,6 +62,7 @@ const TEST_CONTENT_PACK: ContentPack = {
 	interestingObjects: [],
 	obstacles: [],
 	landmarks: DEFAULT_LANDMARKS,
+	wallName: "wall",
 	aiStarts: {
 		red: { position: { row: 0, col: 0 }, facing: "north" },
 		green: { position: { row: 0, col: 1 }, facing: "north" },

@@ -62,6 +62,7 @@ const TEST_CONTENT_PACK: ContentPack = {
 	interestingObjects: [],
 	obstacles: [],
 	landmarks: DEFAULT_LANDMARKS,
+	wallName: "wall",
 	aiStarts: {},
 };
 
@@ -305,6 +306,7 @@ describe("shiftToBPack", () => {
 		interestingObjects: [],
 		obstacles: [],
 		landmarks: DEFAULT_LANDMARKS,
+		wallName: "wall",
 		aiStarts: {},
 	};
 
@@ -316,6 +318,7 @@ describe("shiftToBPack", () => {
 		interestingObjects: [],
 		obstacles: [],
 		landmarks: DEFAULT_LANDMARKS,
+		wallName: "wall",
 		aiStarts: {},
 	};
 

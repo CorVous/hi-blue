@@ -87,6 +87,7 @@ function makePack(
 		interestingObjects: interestingObjectIds.map(makeInterestingObject),
 		obstacles: [],
 		landmarks: DEFAULT_LANDMARKS,
+		wallName: "wall",
 		aiStarts: {},
 	};
 }
@@ -291,6 +292,7 @@ describe("drawObjectives — convergence objectives", () => {
 			interestingObjects: [],
 			obstacles: [],
 			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
 			aiStarts: {},
 		};
 		// pool: [carry(relic), convergence(relic)] — rng=last → index 1 → convergence
@@ -312,6 +314,7 @@ describe("drawObjectives — convergence objectives", () => {
 			interestingObjects: [],
 			obstacles: [],
 			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
 			aiStarts: {},
 		};
 		// Pool is [carry(gem)] only — no convergence
@@ -328,6 +331,7 @@ describe("drawObjectives — convergence objectives", () => {
 			interestingObjects: [makeInterestingObject("torch")],
 			obstacles: [],
 			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
 			aiStarts: {},
 		};
 		// Pool: [carry(altar), use_space(altar), use_item(torch), convergence(altar)] — 4 candidates
@@ -370,6 +374,7 @@ describe("drawObjectives — convergence inclusion guard requires all four flavo
 				interestingObjects: [],
 				obstacles: [],
 				landmarks: DEFAULT_LANDMARKS,
+				wallName: "wall",
 				aiStarts: {},
 			};
 			// Pool should be [carry(gem), use_space(gem)] — size 2, no convergence.
@@ -393,6 +398,7 @@ describe("drawObjectives — convergence inclusion guard requires all four flavo
 				interestingObjects: [],
 				obstacles: [],
 				landmarks: DEFAULT_LANDMARKS,
+				wallName: "wall",
 				aiStarts: {},
 			};
 			const drawn = drawObjectives(pack, rngZero, 10);
@@ -409,6 +415,7 @@ describe("drawObjectives — convergence inclusion guard requires all four flavo
 			interestingObjects: [],
 			obstacles: [],
 			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
 			aiStarts: {},
 		};
 		// Draw enough to cycle through all pool indices.

@@ -120,6 +120,14 @@ export interface ContentPack {
 		east: LandmarkDescription;
 		west: LandmarkDescription;
 	};
+	/**
+	 * Setting-flavored 2-4 word name for the impassable grid edge
+	 * (e.g. "subway tunnel wall", "salt-encrusted edge", "laboratory bulkhead").
+	 * Rendered in `<what_you_see>` and `<whats_new>` when an out-of-bounds cone
+	 * cell falls inside the Daemon's cone. Paired across Pack A / Pack B for
+	 * Setting Shift.
+	 */
+	wallName: string;
 }
 
 export type ObjectiveKind = "carry" | "use_item" | "use_space" | "convergence";

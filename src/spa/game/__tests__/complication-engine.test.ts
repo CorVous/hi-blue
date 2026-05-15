@@ -121,6 +121,7 @@ function makePhase(overrides: Partial<GameState> = {}): GameState {
 		interestingObjects: [],
 		obstacles: [],
 		landmarks: DEFAULT_LANDMARKS,
+		wallName: "wall",
 		aiStarts: personaSpatial,
 	};
 
@@ -815,6 +816,7 @@ describe("applyComplicationResult — setting_shift swaps active pack", () => {
 		interestingObjects: [],
 		obstacles: [],
 		landmarks: DEFAULT_LANDMARKS,
+		wallName: "wall",
 		aiStarts: makePersonaSpatial(),
 	};
 
@@ -826,6 +828,7 @@ describe("applyComplicationResult — setting_shift swaps active pack", () => {
 		interestingObjects: [],
 		obstacles: [],
 		landmarks: DEFAULT_LANDMARKS,
+		wallName: "wall",
 		aiStarts: makePersonaSpatial(),
 	};
 
@@ -1032,6 +1035,7 @@ describe("applyComplicationResult — setting_shift reprojects world entities", 
 		interestingObjects: [A_ITEM],
 		obstacles: [A_OBSTACLE],
 		landmarks: DEFAULT_LANDMARKS,
+		wallName: "wall",
 		aiStarts: makePersonaSpatial(),
 	};
 
@@ -1043,6 +1047,7 @@ describe("applyComplicationResult — setting_shift reprojects world entities", 
 		interestingObjects: [B_ITEM],
 		obstacles: [B_OBSTACLE],
 		landmarks: DEFAULT_LANDMARKS,
+		wallName: "wall",
 		aiStarts: makePersonaSpatial(),
 	};
 
@@ -1160,6 +1165,7 @@ describe("startGame — complicationSchedule initialisation", () => {
 				interestingObjects: [],
 				obstacles: [],
 				landmarks: DEFAULT_LANDMARKS,
+				wallName: "wall",
 				aiStarts: {},
 			},
 			{ budgetPerAi: 0.5 },
