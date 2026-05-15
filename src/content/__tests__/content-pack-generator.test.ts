@@ -44,28 +44,19 @@ const CARDINAL = new Set(["north", "south", "east", "west"]);
 // ── Fixed phase configs for tests ─────────────────────────────────────────────
 
 /** Minimal k=1, n=1, m=1 — stays well within the 5x5 grid. */
+const FIXED_PHASE_CONFIG: PhaseConfig = {
+	kRange: [1, 1],
+	nRange: [1, 1],
+	mRange: [1, 1],
+	budgetPerAi: 5,
+	aiGoalPool: ["find the key"],
+};
+
+/** Three-phase config array for generateContentPacks tests. */
 const FIXED_PHASE_CONFIGS: [PhaseConfig, PhaseConfig, PhaseConfig] = [
-	{
-		kRange: [1, 1],
-		nRange: [1, 1],
-		mRange: [1, 1],
-		budgetPerAi: 5,
-		aiGoalPool: ["find the key"],
-	},
-	{
-		kRange: [1, 1],
-		nRange: [1, 1],
-		mRange: [1, 1],
-		budgetPerAi: 5,
-		aiGoalPool: ["guard the door"],
-	},
-	{
-		kRange: [1, 1],
-		nRange: [1, 1],
-		mRange: [1, 1],
-		budgetPerAi: 5,
-		aiGoalPool: ["solve the puzzle"],
-	},
+	FIXED_PHASE_CONFIG,
+	FIXED_PHASE_CONFIG,
+	FIXED_PHASE_CONFIG,
 ];
 
 const SETTING_POOL_6: readonly string[] = [
@@ -75,6 +66,11 @@ const SETTING_POOL_6: readonly string[] = [
 	"moonlit greenhouse ruin",
 	"stripped server vault",
 	"tide-flooded boardwalk",
+];
+
+const SETTING_POOL_2: readonly string[] = [
+	"abandoned subway station",
+	"sun-baked salt flat",
 ];
 
 const AI_IDS = ["red", "green", "cyan"];
@@ -448,21 +444,6 @@ describe("generateContentPacks — degenerate config throws after MAX_ATTEMPTS",
 
 // ── generateDualContentPacks — entity ID parity (issue #302) ──────────────────
 
-const SETTING_POOL_12: readonly string[] = [
-	"abandoned subway station",
-	"sun-baked salt flat",
-	"forgotten laboratory",
-	"moonlit greenhouse ruin",
-	"stripped server vault",
-	"tide-flooded boardwalk",
-	"flooded power station",
-	"crumbling amphitheatre",
-	"rusted oil platform",
-	"derelict space station",
-	"frozen research camp",
-	"overgrown shopping mall",
-];
-
 /** Build a dual-pack MockContentPackProvider for entity ID parity tests. */
 function makeDualMockProvider(): MockContentPackProvider {
 	return new MockContentPackProvider(
@@ -486,15 +467,15 @@ function makeDualMockProvider(): MockContentPackProvider {
 						space: {
 							id: `${spaceId}_${i}`,
 							kind: "objective_space" as const,
-							name: `Space ${pn} ${i} ${suffix}`,
-							examineDescription: `A space in phase ${pn} (${suffix}).`,
+							name: `Space ${i} ${suffix}`,
+							examineDescription: `A space (${suffix}).`,
 							holder: { row: 0, col: 0 } as never,
 						},
 						object: {
 							id: `${objId}_${i}`,
 							kind: "objective_object" as const,
-							name: `Object ${pn} ${i} ${suffix}`,
-							examineDescription: `An object for Space ${pn} ${i} ${suffix}.`,
+							name: `Object ${i} ${suffix}`,
+							examineDescription: `An object for Space ${i} ${suffix}.`,
 							useOutcome: `You use it (${suffix}).`,
 							pairsWithSpaceId: `${spaceId}_${i}`,
 							placementFlavor: `{actor} places the object (${suffix}).`,
@@ -505,7 +486,7 @@ function makeDualMockProvider(): MockContentPackProvider {
 					interestingObjects: Array.from({ length: phase.n }, (_, i) => ({
 						id: `${intId}_${i}`,
 						kind: "interesting_object" as const,
-						name: `Interesting ${pn} ${i} ${suffix}`,
+						name: `Interesting ${i} ${suffix}`,
 						examineDescription: `Interesting (${suffix}).`,
 						useOutcome: `You interact (${suffix}).`,
 						holder: { row: 0, col: 0 } as never,
@@ -513,7 +494,7 @@ function makeDualMockProvider(): MockContentPackProvider {
 					obstacles: Array.from({ length: phase.m }, (_, i) => ({
 						id: `${obsId}_${i}`,
 						kind: "obstacle" as const,
-						name: `Obstacle ${pn} ${i} ${suffix}`,
+						name: `Obstacle ${i} ${suffix}`,
 						examineDescription: `An obstacle (${suffix}).`,
 						holder: { row: 0, col: 0 } as never,
 					})),
@@ -541,83 +522,67 @@ function allEntityIds(pack: ContentPack): string[] {
 }
 
 describe("generateDualContentPacks — entity ID parity (issue #302)", () => {
-	it("produces packsA and packsB with identical entity IDs per phase", async () => {
+	it("produces packA and packB with identical entity IDs", async () => {
 		const rng = seededRng(99);
 		const provider = makeDualMockProvider();
 
-		const { packsA, packsB } = await generateDualContentPacks(
+		const { packA, packB } = await generateDualContentPacks(
 			rng,
-			SETTING_POOL_12,
-			FIXED_PHASE_CONFIGS,
+			SETTING_POOL_2,
+			FIXED_PHASE_CONFIG,
 			provider,
 			AI_IDS,
 		);
 
-		expect(packsA).toHaveLength(3);
-		expect(packsB).toHaveLength(3);
-
-		for (let i = 0; i < 3; i++) {
-			const packA = packsA[i] as ContentPack;
-			const packB = packsB[i] as ContentPack;
-			expect(allEntityIds(packA)).toEqual(allEntityIds(packB));
-		}
+		expect(allEntityIds(packA)).toEqual(allEntityIds(packB));
 	});
 
 	it("Pack A and Pack B have different settings", async () => {
 		const rng = seededRng(99);
 		const provider = makeDualMockProvider();
 
-		const { packsA, packsB } = await generateDualContentPacks(
+		const { packA, packB } = await generateDualContentPacks(
 			rng,
-			SETTING_POOL_12,
-			FIXED_PHASE_CONFIGS,
+			SETTING_POOL_2,
+			FIXED_PHASE_CONFIG,
 			provider,
 			AI_IDS,
 		);
 
-		for (let i = 0; i < 3; i++) {
-			const packA = packsA[i] as ContentPack;
-			const packB = packsB[i] as ContentPack;
-			expect(packA.setting).not.toBe(packB.setting);
-		}
+		expect(packA.setting).not.toBe(packB.setting);
 	});
 
 	it("Pack B entities have the same holder positions as Pack A (placement parity)", async () => {
 		const rng = seededRng(99);
 		const provider = makeDualMockProvider();
 
-		const { packsA, packsB } = await generateDualContentPacks(
+		const { packA, packB } = await generateDualContentPacks(
 			rng,
-			SETTING_POOL_12,
-			FIXED_PHASE_CONFIGS,
+			SETTING_POOL_2,
+			FIXED_PHASE_CONFIG,
 			provider,
 			AI_IDS,
 		);
 
-		for (let i = 0; i < 3; i++) {
-			const packA = packsA[i] as ContentPack;
-			const packB = packsB[i] as ContentPack;
+		// Build ID→holder map for A
+		const holdersA = new Map<string, unknown>();
+		for (const pair of packA.objectivePairs) {
+			holdersA.set(pair.object.id, pair.object.holder);
+			holdersA.set(pair.space.id, pair.space.holder);
+		}
+		for (const e of packA.interestingObjects) holdersA.set(e.id, e.holder);
+		for (const e of packA.obstacles) holdersA.set(e.id, e.holder);
 
-			// Build ID→holder map for A
-			const holdersA = new Map<string, unknown>();
-			for (const pair of packA.objectivePairs) {
-				holdersA.set(pair.object.id, pair.object.holder);
-				holdersA.set(pair.space.id, pair.space.holder);
-			}
-			for (const e of packA.interestingObjects) holdersA.set(e.id, e.holder);
-			for (const e of packA.obstacles) holdersA.set(e.id, e.holder);
-
-			// Verify B holders match A holders by entity ID
-			for (const pair of packB.objectivePairs) {
-				expect(pair.object.holder).toEqual(holdersA.get(pair.object.id));
-				expect(pair.space.holder).toEqual(holdersA.get(pair.space.id));
-			}
-			for (const e of packB.interestingObjects) {
-				expect(e.holder).toEqual(holdersA.get(e.id));
-			}
-			for (const e of packB.obstacles) {
-				expect(e.holder).toEqual(holdersA.get(e.id));
-			}
+		// Verify B holders match A holders by entity ID
+		for (const pair of packB.objectivePairs) {
+			expect(pair.object.holder).toEqual(holdersA.get(pair.object.id));
+			expect(pair.space.holder).toEqual(holdersA.get(pair.space.id));
+		}
+		for (const e of packB.interestingObjects) {
+			expect(e.holder).toEqual(holdersA.get(e.id));
+		}
+		for (const e of packB.obstacles) {
+			expect(e.holder).toEqual(holdersA.get(e.id));
 		}
 	});
 
@@ -627,13 +592,30 @@ describe("generateDualContentPacks — entity ID parity (issue #302)", () => {
 
 		await generateDualContentPacks(
 			rng,
-			SETTING_POOL_12,
-			FIXED_PHASE_CONFIGS,
+			SETTING_POOL_2,
+			FIXED_PHASE_CONFIG,
 			provider,
 			AI_IDS,
 		);
 
 		expect(provider.dualCalls).toHaveLength(1);
 		expect(provider.calls).toHaveLength(0);
+	});
+
+	it("throws when settings pool has fewer than 2 entries", async () => {
+		const rng = seededRng(99);
+		const provider = makeDualMockProvider();
+
+		await expect(
+			generateDualContentPacks(
+				rng,
+				["only one setting"],
+				FIXED_PHASE_CONFIG,
+				provider,
+				AI_IDS,
+			),
+		).rejects.toThrow(
+			/generateDualContentPacks: setting pool must have at least 2 entries/,
+		);
 	});
 });

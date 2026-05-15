@@ -10,7 +10,11 @@ import type {
 	WorldEntity,
 } from "../../game/types.js";
 import { deobfuscate, obfuscate } from "../sealed-blob-codec.js";
-import { deserializeSession, serializeSession } from "../session-codec.js";
+import {
+	type DaemonFile,
+	deserializeSession,
+	serializeSession,
+} from "../session-codec.js";
 
 // ── Test fixtures ─────────────────────────────────────────────────────────────
 
@@ -559,6 +563,86 @@ describe("serializeSession / deserializeSession", () => {
 		const tampered = obfuscate(JSON.stringify(sealed));
 		const result = deserializeSession({ ...files, engine: tampered });
 		expect(result.kind).toBe("version-mismatch");
+	});
+
+	it("v8 save with multi-entry contentPacksA/B is migrated to v9 by truncating to first entry", () => {
+		// Create a v8-style sealed engine with 3 content packs each
+		const testPack: ContentPack = {
+			setting: "test setting",
+			weather: "sunny",
+			timeOfDay: "morning",
+			objectivePairs: [],
+			interestingObjects: [],
+			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
+			aiStarts: {},
+		};
+		const testPackVariant2: ContentPack = {
+			...testPack,
+			setting: "test setting 2",
+		};
+		const testPackVariant3: ContentPack = {
+			...testPack,
+			setting: "test setting 3",
+		};
+
+		const game = makeFreshGame();
+		const v8SealedPayload = {
+			schemaVersion: 8,
+			world: game.world,
+			budgets: game.budgets,
+			lockedOut: Array.from(game.lockedOut),
+			personaSpatial: game.personaSpatial,
+			// v8 had 3 packs per side
+			contentPacksA: [testPack, testPackVariant2, testPackVariant3],
+			contentPacksB: [testPack, testPackVariant2, testPackVariant3],
+			activePackId: "A" as const,
+			weather: game.weather,
+			objectives: game.objectives,
+			complicationSchedule: game.complicationSchedule,
+			activeComplications: game.activeComplications,
+			isComplete: game.isComplete,
+		};
+
+		const engine = obfuscate(JSON.stringify(v8SealedPayload, null, 2));
+		const meta = JSON.stringify({
+			createdAt: CREATED_AT,
+			lastSavedAt: NOW,
+			epoch: 1,
+			round: 0,
+			personaOrder: Object.keys(game.personas),
+		});
+
+		// Reconstruct daemon files from game
+		const daemons: Record<AiId, string> = {};
+		for (const [aiId, persona] of Object.entries(game.personas)) {
+			const daemonFile: DaemonFile = {
+				aiId,
+				persona: {
+					id: persona.id,
+					name: persona.name,
+					color: persona.color,
+					temperaments: persona.temperaments,
+					personaGoal: persona.personaGoal,
+					blurb: persona.blurb,
+					typingQuirks: persona.typingQuirks,
+					voiceExamples: persona.voiceExamples,
+				},
+				conversationLog: [],
+			};
+			daemons[aiId] = JSON.stringify(daemonFile, null, 2);
+		}
+
+		const result = deserializeSession({ meta, daemons, engine });
+		expect(result.kind).toBe("ok");
+		if (result.kind === "ok") {
+			// v8 packs (3 entries each) should be migrated to v9 by truncating to 1 entry
+			expect(result.state.contentPacksA).toHaveLength(1);
+			expect(result.state.contentPacksB).toHaveLength(1);
+			// The remaining entries should be the original first pack
+			expect(result.state.contentPacksA[0]?.setting).toBe(testPack.setting);
+			expect(result.state.contentPacksB[0]?.setting).toBe(testPack.setting);
+		}
 	});
 
 	it("round-trips correctly with flat state (no phase config re-attachment needed)", () => {

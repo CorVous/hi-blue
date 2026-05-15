@@ -10,10 +10,7 @@
  * Issue #173 (parent #155).
  */
 
-import {
-	generateDualContentPacks,
-	type PhaseConfig,
-} from "../../content/content-pack-generator.js";
+import { generateDualContentPacks } from "../../content/content-pack-generator.js";
 import {
 	generatePersonas,
 	SETTING_POOL,
@@ -64,17 +61,6 @@ export interface BootstrapOpts {
 // Re-export provider types for use in start.ts without creating circular deps
 export type { ContentPackProvider, LlmSynthesisProvider as SynthesisProvider };
 
-function buildLegacyPhaseConfigs(): [PhaseConfig, PhaseConfig, PhaseConfig] {
-	const base = {
-		kRange: SINGLE_GAME_CONFIG.kRange,
-		nRange: SINGLE_GAME_CONFIG.nRange,
-		mRange: SINGLE_GAME_CONFIG.mRange,
-		budgetPerAi: SINGLE_GAME_CONFIG.budgetPerAi,
-		aiGoalPool: [] as string[],
-	};
-	return [{ ...base }, { ...base }, { ...base }];
-}
-
 /**
  * Kick off persona + content-pack generation and expose them as separate
  * promises. Personas resolve seconds before content packs, which lets the
@@ -98,13 +84,22 @@ export function generateNewGameAssetsSplit(
 	const aiIdsPromise = personasPromise.then((p) => Object.keys(p));
 	aiIdsPromise.catch(() => {});
 
-	const contentPacksPromise = generateDualContentPacks(
-		contentPackRng,
-		SETTING_POOL,
-		buildLegacyPhaseConfigs(),
-		packLLM,
-		aiIdsPromise,
-	);
+	const contentPacksPromise = (async () => {
+		const { packA, packB } = await generateDualContentPacks(
+			contentPackRng,
+			SETTING_POOL,
+			{
+				kRange: SINGLE_GAME_CONFIG.kRange,
+				nRange: SINGLE_GAME_CONFIG.nRange,
+				mRange: SINGLE_GAME_CONFIG.mRange,
+				budgetPerAi: SINGLE_GAME_CONFIG.budgetPerAi,
+				aiGoalPool: [] as string[],
+			},
+			packLLM,
+			aiIdsPromise,
+		);
+		return { packsA: [packA], packsB: [packB] };
+	})();
 	contentPacksPromise.catch(() => {});
 
 	return { personasPromise, contentPacksPromise };
@@ -141,15 +136,21 @@ export async function buildSameDaemonsSession(
 ): Promise<GameSession> {
 	const rng = opts?.rng ?? Math.random;
 	const packLLM = new BrowserContentPackProvider();
-	const { packsA, packsB } = await generateDualContentPacks(
+	const { packA, packB } = await generateDualContentPacks(
 		rng,
 		SETTING_POOL,
-		buildLegacyPhaseConfigs(),
+		{
+			kRange: SINGLE_GAME_CONFIG.kRange,
+			nRange: SINGLE_GAME_CONFIG.nRange,
+			mRange: SINGLE_GAME_CONFIG.mRange,
+			budgetPerAi: SINGLE_GAME_CONFIG.budgetPerAi,
+			aiGoalPool: [] as string[],
+		},
 		packLLM,
 		Object.keys(personas),
 	);
 	return buildSessionFromAssets(
-		{ personas, contentPacksA: packsA, contentPacksB: packsB },
+		{ personas, contentPacksA: [packA], contentPacksB: [packB] },
 		opts,
 	);
 }

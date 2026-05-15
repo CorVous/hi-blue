@@ -30,8 +30,8 @@ vi.mock("../../content", async (importOriginal) => {
 // Pin generateDualContentPacks to static content packs (no LLM call in tests).
 vi.mock("../../content/content-pack-generator", () => ({
 	generateDualContentPacks: async () => ({
-		packsA: STATIC_CONTENT_PACKS,
-		packsB: STATIC_CONTENT_PACKS,
+		packA: STATIC_CONTENT_PACKS[0],
+		packB: STATIC_CONTENT_PACKS[0],
 	}),
 	generateContentPack: async () => STATIC_CONTENT_PACKS[0],
 }));
