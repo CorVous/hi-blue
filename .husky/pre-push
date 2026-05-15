@@ -1,1 +1,1 @@
-ANTHROPIC_API_KEY=ci-invalid-key pnpm run lint && pnpm run typecheck && pnpm run test
+ANTHROPIC_API_KEY=ci-invalid-key pnpm run lint && pnpm run typecheck && pnpm run test && pnpm exec playwright test e2e/smoke.spec.ts
