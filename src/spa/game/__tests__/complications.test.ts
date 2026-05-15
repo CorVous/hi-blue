@@ -15,18 +15,12 @@ import {
 	weatherChangeComplication,
 } from "../complications.js";
 import { DEFAULT_LANDMARKS } from "../direction.js";
-import {
-	createGame,
-	getActivePhase,
-	startPhase,
-	updateActivePhase,
-} from "../engine.js";
+import { startGame } from "../engine.js";
 import type {
 	ActiveComplication,
 	AiPersona,
 	ContentPack,
 	GridPosition,
-	PhaseConfig,
 	WorldEntity,
 } from "../types.js";
 
@@ -72,15 +66,6 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 	},
 };
 
-const TEST_PHASE_CONFIG: PhaseConfig = {
-	phaseNumber: 1,
-	kRange: [1, 1],
-	nRange: [0, 0],
-	mRange: [0, 0],
-	aiGoalPool: ["Hold the flower at phase end"],
-	budgetPerAi: 5,
-};
-
 /** Build a game with a specific weather value in the active phase. */
 function makeGameWithWeather(weather: string) {
 	const pack: ContentPack = {
@@ -98,8 +83,7 @@ function makeGameWithWeather(weather: string) {
 			cyan: { position: { row: 0, col: 2 }, facing: "north" },
 		},
 	};
-	const game = createGame(TEST_PERSONAS, [pack]);
-	return startPhase(game, TEST_PHASE_CONFIG, () => 0);
+	return startGame(TEST_PERSONAS, pack, { budgetPerAi: 5, rng: () => 0 });
 }
 
 describe("weatherChangeComplication", () => {
@@ -111,7 +95,7 @@ describe("weatherChangeComplication", () => {
 		const game = makeGameWithWeather(currentWeather);
 
 		const result = weatherChangeComplication.apply(game, () => 0);
-		const newWeather = getActivePhase(result).weather;
+		const newWeather = result.weather;
 
 		expect(newWeather).not.toBe(currentWeather);
 	});
@@ -122,7 +106,7 @@ describe("weatherChangeComplication", () => {
 
 		// rng always returns 0 → picks index 0 of the filtered pool
 		const result = weatherChangeComplication.apply(game, () => 0);
-		const phase = getActivePhase(result);
+		const phase = result;
 
 		expect(phase.weather).toBeDefined();
 		expect(phase.weather).not.toBe(currentWeather);
@@ -133,7 +117,7 @@ describe("weatherChangeComplication", () => {
 	it("also updates phase.contentPack.weather to stay consistent with phase.weather", () => {
 		const game = makeGameWithWeather("Sweltering heat clings to everything.");
 		const result = weatherChangeComplication.apply(game, () => 0);
-		const phase = getActivePhase(result);
+		const phase = result;
 
 		expect(phase.weather).toBe(phase.contentPack.weather);
 	});
@@ -141,7 +125,7 @@ describe("weatherChangeComplication", () => {
 	it("appends one broadcast entry to every Daemon's conversationLog", () => {
 		const game = makeGameWithWeather("A biting wind cuts through the air.");
 		const result = weatherChangeComplication.apply(game, () => 0);
-		const phase = getActivePhase(result);
+		const phase = result;
 
 		const aiIds = Object.keys(TEST_PERSONAS);
 		for (const aiId of aiIds) {
@@ -153,11 +137,11 @@ describe("weatherChangeComplication", () => {
 
 	it("broadcast.round equals the current phase round", () => {
 		const game = makeGameWithWeather("Light snow drifts down.");
-		const phase = getActivePhase(game);
+		const phase = game;
 		const currentRound = phase.round;
 
 		const result = weatherChangeComplication.apply(game, () => 0);
-		const afterPhase = getActivePhase(result);
+		const afterPhase = result;
 
 		for (const aiId of Object.keys(TEST_PERSONAS)) {
 			const log = afterPhase.conversationLogs[aiId] ?? [];
@@ -170,7 +154,7 @@ describe("weatherChangeComplication", () => {
 		const currentWeather = "Heavy snow is falling.";
 		const game = makeGameWithWeather(currentWeather);
 		const result = weatherChangeComplication.apply(game, () => 0);
-		const phase = getActivePhase(result);
+		const phase = result;
 		const newWeather = phase.weather;
 
 		const log = phase.conversationLogs.red ?? [];
@@ -233,8 +217,7 @@ function makeGameWithObstacle(obstaclePos: GridPosition, shiftFlavor?: string) {
 			cyan: { position: { row: 0, col: 2 }, facing: "north" },
 		},
 	};
-	const game = createGame(TEST_PERSONAS, [pack]);
-	return startPhase(game, TEST_PHASE_CONFIG, () => 0);
+	return startGame(TEST_PERSONAS, pack, { budgetPerAi: 5, rng: () => 0 });
 }
 
 describe("obstacleShiftComplication", () => {
@@ -250,7 +233,7 @@ describe("obstacleShiftComplication", () => {
 		// rng always returns 0 → first valid tuple is drawn.
 		const game = makeGameWithObstacle({ row: 2, col: 2 });
 		const result = obstacleShiftComplication.apply(game, () => 0);
-		const phase = getActivePhase(result);
+		const phase = result;
 
 		const obstacle = phase.world.entities.find((e) => e.id === "obs1");
 		expect(obstacle).toBeDefined();
@@ -269,7 +252,7 @@ describe("obstacleShiftComplication", () => {
 		// A north-facing daemon at row 0 looks away from row 4: no overlap with (4,4).
 		const game = makeGameWithObstacle({ row: 4, col: 4 });
 		const result = obstacleShiftComplication.apply(game, () => 0);
-		const phase = getActivePhase(result);
+		const phase = result;
 
 		for (const aiId of Object.keys(TEST_PERSONAS)) {
 			const log = phase.conversationLogs[aiId] ?? [];
@@ -304,12 +287,14 @@ describe("obstacleShiftComplication", () => {
 				cyan: { position: { row: 0, col: 1 }, facing: "north" }, // cone does not cover (3,2)
 			},
 		};
-		const game = createGame(TEST_PERSONAS, [pack]);
-		const started = startPhase(game, TEST_PHASE_CONFIG, () => 0);
+		const started = startGame(TEST_PERSONAS, pack, {
+			budgetPerAi: 5,
+			rng: () => 0,
+		});
 
 		// rng → 0: pick first valid tuple
 		const result = obstacleShiftComplication.apply(started, () => 0);
-		const phase = getActivePhase(result);
+		const phase = result;
 
 		const redLog = phase.conversationLogs.red ?? [];
 		const greenLog = phase.conversationLogs.green ?? [];
@@ -348,10 +333,12 @@ describe("obstacleShiftComplication", () => {
 				cyan: { position: { row: 0, col: 1 }, facing: "north" },
 			},
 		};
-		const game = createGame(TEST_PERSONAS, [pack]);
-		const started = startPhase(game, TEST_PHASE_CONFIG, () => 0);
+		const started = startGame(TEST_PERSONAS, pack, {
+			budgetPerAi: 5,
+			rng: () => 0,
+		});
 		const result = obstacleShiftComplication.apply(started, () => 0);
-		const phase = getActivePhase(result);
+		const phase = result;
 
 		const redLog = phase.conversationLogs.red ?? [];
 		const entry = redLog.find((e) => e.kind === "witnessed-obstacle-shift");
@@ -387,10 +374,12 @@ describe("obstacleShiftComplication", () => {
 				cyan: { position: { row: 0, col: 1 }, facing: "north" },
 			},
 		};
-		const game = createGame(TEST_PERSONAS, [pack]);
-		const started = startPhase(game, TEST_PHASE_CONFIG, () => 0);
+		const started = startGame(TEST_PERSONAS, pack, {
+			budgetPerAi: 5,
+			rng: () => 0,
+		});
 		const result = obstacleShiftComplication.apply(started, () => 0);
-		const phase = getActivePhase(result);
+		const phase = result;
 
 		const redLog = phase.conversationLogs.red ?? [];
 		const entry = redLog.find((e) => e.kind === "witnessed-obstacle-shift");
@@ -435,7 +424,7 @@ describe("toolDisableComplication", () => {
 		const game = makeGameWithWeather("clear");
 		// rng[0]=0.0 → picks first valid pair; rng[1]=0.0 → duration=3
 		const result = toolDisableComplication.apply(game, seqRng([0.0, 0.0]));
-		const phase = getActivePhase(result);
+		const phase = result;
 		const disables = phase.activeComplications.filter(
 			(c) => c.kind === "tool_disable",
 		);
@@ -450,13 +439,13 @@ describe("toolDisableComplication", () => {
 				game,
 				seqRng([0.0, durationSeed]),
 			);
-			const phase = getActivePhase(result);
+			const phase = result;
 			const disable = phase.activeComplications.find(
 				(c) => c.kind === "tool_disable",
 			);
 			expect(disable).toBeDefined();
 			if (disable?.kind === "tool_disable") {
-				const baseRound = getActivePhase(game).round;
+				const baseRound = game.round;
 				expect(disable.resolveAtRound).toBeGreaterThanOrEqual(baseRound + 3);
 				expect(disable.resolveAtRound).toBeLessThanOrEqual(baseRound + 5);
 			}
@@ -467,7 +456,7 @@ describe("toolDisableComplication", () => {
 		const game = makeGameWithWeather("clear");
 		// All AI ids are red, green, cyan; rng[0]=0.0 → first pair → first (daemon,tool)
 		const result = toolDisableComplication.apply(game, seqRng([0.0, 0.0]));
-		const phase = getActivePhase(result);
+		const phase = result;
 
 		// Find the target daemon from the disable entry
 		const disable = phase.activeComplications.find(
@@ -498,7 +487,7 @@ describe("toolDisableComplication", () => {
 
 	it("apply is a no-op when all (daemon, tool) pairs already disabled", () => {
 		const game = makeGameWithWeather("clear");
-		const phase = getActivePhase(game);
+		const phase = game;
 		const toolNames = [
 			"pick_up",
 			"put_down",
@@ -523,15 +512,12 @@ describe("toolDisableComplication", () => {
 				});
 			}
 		}
-		const saturatedGame = updateActivePhase(game, (p) => ({
-			...p,
-			activeComplications: allDisabled,
-		}));
+		const saturatedGame = { ...game, activeComplications: allDisabled };
 
 		// Apply with an empty rng — if any rng call occurs, seqRng will throw.
 		// The no-op path must not consume any rng reads.
 		const result = toolDisableComplication.apply(saturatedGame, seqRng([]));
-		const after = getActivePhase(result);
+		const after = result;
 		expect(after.activeComplications.length).toBe(allDisabled.length);
 	});
 });

@@ -15,26 +15,17 @@ import type { OpenAiMessage } from "../../llm-client";
 import { isPlayerChatLockedOut } from "../complication-engine";
 import { DEFAULT_LANDMARKS } from "../direction";
 import {
-	createGame,
 	deductBudget,
 	FAREWELL_LINE,
-	getActivePhase,
 	isAiLockedOut,
-	startPhase,
-	updateActivePhase,
+	startGame,
 } from "../engine";
 import { buildOpenAiMessages } from "../openai-message-builder";
 import { buildAiContext } from "../prompt-builder";
 import { runRound } from "../round-coordinator";
 import type { RoundLLMProvider } from "../round-llm-provider";
 import { MockRoundLLMProvider } from "../round-llm-provider";
-import type {
-	AiId,
-	AiPersona,
-	ContentPack,
-	PhaseConfig,
-	UseItemObjective,
-} from "../types";
+import type { AiId, AiPersona, ContentPack, UseItemObjective } from "../types";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -76,19 +67,6 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		blurb: "Frost is laconic and diffident. Hold the key at phase end.",
 		voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
 	},
-};
-
-const TEST_PHASE_CONFIG: PhaseConfig = {
-	phaseNumber: 1,
-	kRange: [1, 1],
-	nRange: [1, 1],
-	mRange: [0, 0],
-	aiGoalPool: [
-		"Hold the flower at phase end",
-		"Ensure items are evenly distributed",
-		"Hold the key at phase end",
-	],
-	budgetPerAi: 5,
 };
 
 /**
@@ -138,10 +116,7 @@ const TEST_CONTENT_PACK: ContentPack = {
 };
 
 function makeGame() {
-	return startPhase(
-		createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]),
-		TEST_PHASE_CONFIG,
-	);
+	return startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 }
 
 // ----------------------------------------------------------------------------
@@ -156,7 +131,7 @@ describe("chat-only round", () => {
 			{ assistantText: "", toolCalls: [] },
 		]);
 		const { nextState } = await runRound(game, "red", "Hello!", provider);
-		expect(getActivePhase(nextState).round).toBe(1);
+		expect(nextState.round).toBe(1);
 	});
 
 	it("free-form assistantText (no message tool call) does not appear in the AI's log", async () => {
@@ -167,7 +142,7 @@ describe("chat-only round", () => {
 			{ assistantText: "", toolCalls: [] },
 		]);
 		const { nextState } = await runRound(game, "red", "Hello Ember!", provider);
-		const redLog = getActivePhase(nextState).conversationLogs.red ?? [];
+		const redLog = nextState.conversationLogs.red ?? [];
 		// Free-form assistantText without a message tool call → treated as pass, not appended
 		const msgEntries = redLog.filter(
 			(e) => e.kind === "message" && e.from === "red",
@@ -188,7 +163,7 @@ describe("chat-only round", () => {
 			"My secret message",
 			provider,
 		);
-		const redLog = getActivePhase(nextState).conversationLogs.red ?? [];
+		const redLog = nextState.conversationLogs.red ?? [];
 		const blueMessages = redLog.filter(
 			(e) => e.kind === "message" && e.from === "blue",
 		);
@@ -213,8 +188,8 @@ describe("chat-only round", () => {
 			"Private to red",
 			provider,
 		);
-		expect(getActivePhase(nextState).conversationLogs.green).toHaveLength(0);
-		expect(getActivePhase(nextState).conversationLogs.cyan).toHaveLength(0);
+		expect(nextState.conversationLogs.green).toHaveLength(0);
+		expect(nextState.conversationLogs.cyan).toHaveLength(0);
 	});
 
 	it("deducts budget for all three AIs by their reported request cost", async () => {
@@ -225,7 +200,7 @@ describe("chat-only round", () => {
 			{ assistantText: "", toolCalls: [], costUsd: 1 },
 		]);
 		const { nextState } = await runRound(game, "red", "hi", provider);
-		const phase = getActivePhase(nextState);
+		const phase = nextState;
 		expect(phase.budgets.red?.remaining).toBeCloseTo(4, 10);
 		expect(phase.budgets.green?.remaining).toBeCloseTo(4, 10);
 		expect(phase.budgets.cyan?.remaining).toBeCloseTo(4, 10);
@@ -298,7 +273,7 @@ describe("drift-to-silence retry (#254)", () => {
 			["red", "green", "cyan"] as AiId[],
 		);
 
-		const redLog = getActivePhase(nextState).conversationLogs.red ?? [];
+		const redLog = nextState.conversationLogs.red ?? [];
 		expect(
 			redLog.some(
 				(e) =>
@@ -340,9 +315,7 @@ describe("drift-to-silence retry (#254)", () => {
 		);
 
 		const allLogContent = (
-			Object.values(
-				getActivePhase(nextState).conversationLogs,
-			).flat() as Array<{
+			Object.values(nextState.conversationLogs).flat() as Array<{
 				kind: string;
 				content?: string;
 			}>
@@ -376,7 +349,7 @@ describe("drift-to-silence retry (#254)", () => {
 			["red", "green", "cyan"] as AiId[],
 		);
 
-		const redLog = getActivePhase(nextState).conversationLogs.red ?? [];
+		const redLog = nextState.conversationLogs.red ?? [];
 		const redMsgs = redLog.filter(
 			(e) => e.kind === "message" && e.from === "red",
 		);
@@ -500,7 +473,7 @@ describe("drift-to-silence retry (#254)", () => {
 			["red", "green", "cyan"] as AiId[],
 		);
 
-		const phase = getActivePhase(nextState);
+		const phase = nextState;
 		// Budget starts at 5; red spent 0.4 + 0.5 = 0.9, leaving 4.1
 		expect(phase.budgets.red?.remaining).toBeCloseTo(4.1, 10);
 	});
@@ -622,10 +595,7 @@ describe("onAiTurnComplete callback", () => {
 
 	it("fires for locked-out AIs too (uniform per-AI signal)", async () => {
 		// Exhaust red's budget so it locks out next round.
-		let state = startPhase(createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]), {
-			...TEST_PHASE_CONFIG,
-			budgetPerAi: 1,
-		});
+		let state = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 1 });
 		state = deductBudget(state, "red" as AiId, 1).game;
 		expect(isAiLockedOut(state, "red" as AiId)).toBe(true);
 
@@ -681,7 +651,7 @@ describe("budget-exhaustion lockout", () => {
 	it("skips an already-locked AI and emits an in-character lockout line instead", async () => {
 		let game = makeGame();
 		game = deductBudget(game, "red", 5).game;
-		expect(getActivePhase(game).lockedOut.has("red")).toBe(true);
+		expect(game.lockedOut.has("red")).toBe(true);
 
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
@@ -689,7 +659,7 @@ describe("budget-exhaustion lockout", () => {
 		]);
 		const { nextState } = await runRound(game, "green", "hi", provider);
 
-		const redLog = getActivePhase(nextState).conversationLogs.red ?? [];
+		const redLog = nextState.conversationLogs.red ?? [];
 		// Lockout emits a message from the locked AI to blue
 		const lockoutMessages = redLog.filter(
 			(e) => e.kind === "message" && e.from === "red" && e.to === "blue",
@@ -713,8 +683,7 @@ describe("budget-exhaustion lockout", () => {
 	});
 
 	it("an AI exhausting budget mid-round locks out for subsequent rounds", async () => {
-		const game = startPhase(createGame(TEST_PERSONAS), {
-			...TEST_PHASE_CONFIG,
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
 			budgetPerAi: 1,
 		});
 
@@ -725,7 +694,7 @@ describe("budget-exhaustion lockout", () => {
 		]);
 		const { nextState } = await runRound(game, "red", "hi", provider);
 
-		const phase = getActivePhase(nextState);
+		const phase = nextState;
 		expect(phase.lockedOut.has("red")).toBe(true);
 		expect(phase.lockedOut.has("green")).toBe(true);
 		expect(phase.lockedOut.has("cyan")).toBe(true);
@@ -733,8 +702,7 @@ describe("budget-exhaustion lockout", () => {
 
 	it("a Daemon whose budget is exhausted mid-round emits a farewell line to its conversation log", async () => {
 		// Use budgetPerAi=1 so the first LLM call (costUsd=1) exhausts the budget.
-		const game = startPhase(createGame(TEST_PERSONAS), {
-			...TEST_PHASE_CONFIG,
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
 			budgetPerAi: 1,
 		});
 
@@ -775,15 +743,9 @@ describe("budget-exhaustion lockout", () => {
 			{ assistantText: "", toolCalls: [], costUsd: 1 },
 		]);
 		const { nextState } = await runRound(game, "red", "hi", provider);
-		expect(getActivePhase(nextState).budgets.red?.remaining).toBeCloseTo(4, 10);
-		expect(getActivePhase(nextState).budgets.green?.remaining).toBeCloseTo(
-			4,
-			10,
-		);
-		expect(getActivePhase(nextState).budgets.cyan?.remaining).toBeCloseTo(
-			4,
-			10,
-		);
+		expect(nextState.budgets.red?.remaining).toBeCloseTo(4, 10);
+		expect(nextState.budgets.green?.remaining).toBeCloseTo(4, 10);
+		expect(nextState.budgets.cyan?.remaining).toBeCloseTo(4, 10);
 	});
 
 	it("lockout and non-lockout entries in the same round share the same round number", async () => {
@@ -858,7 +820,7 @@ describe("tool-call dispatch", () => {
 			{ assistantText: "", toolCalls: [] },
 		]);
 		const { nextState } = await runRound(game, "red", "hi", provider);
-		const phase = getActivePhase(nextState);
+		const phase = nextState;
 		const flower = phase.world.entities.find((i) => i.id === "flower");
 		expect(flower?.holder).toBe("red");
 	});
@@ -944,8 +906,7 @@ describe("tool-call dispatch", () => {
 		// Free-form assistantText without a message tool call is silently dropped (becomes pass).
 		expect(result.actions.some((e) => e.kind === "tool_success")).toBe(true);
 		expect(
-			getActivePhase(nextState).world.entities.find((i) => i.id === "flower")
-				?.holder,
+			nextState.world.entities.find((i) => i.id === "flower")?.holder,
 		).toBe("red");
 	});
 
@@ -1028,9 +989,7 @@ describe("tool-call dispatch", () => {
 		const { nextState, result } = await runRound(game, "red", "hi", provider);
 		// Unknown tool: parseToolCallArguments returns "Unknown tool" failure
 		expect(result.actions.some((e) => e.kind === "tool_failure")).toBe(true);
-		const flower = getActivePhase(nextState).world.entities.find(
-			(i) => i.id === "flower",
-		);
+		const flower = nextState.world.entities.find((i) => i.id === "flower");
 		// flower still on the ground (a GridPosition), not held by an AI
 		expect(typeof flower?.holder).toBe("object");
 	});
@@ -1194,10 +1153,9 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 
 	it("RoundResult.phaseEnded is always false (phase-based model removed)", async () => {
 		// phaseEnded is always false in the flat model.
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]),
-			TEST_PHASE_CONFIG,
-		);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
@@ -1209,10 +1167,9 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 
 	it("gameEnded is false when objective pairs are not satisfied", async () => {
 		// TEST_CONTENT_PACK: flower at (0,0), flower_space at (4,4) — not same cell.
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]),
-			TEST_PHASE_CONFIG,
-		);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
@@ -1225,10 +1182,7 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 
 	it("gameEnded is true and isComplete is true when all pairs satisfied (K=0 vacuous)", async () => {
 		// K=0 → checkWinCondition vacuously returns true after the first round.
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [NO_PAIRS_PACK]),
-			TEST_PHASE_CONFIG,
-		);
+		const game = startGame(TEST_PERSONAS, NO_PAIRS_PACK, { budgetPerAi: 5 });
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
@@ -1243,10 +1197,9 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 	it("conversation history accumulates across rounds in flat model (no wipe)", async () => {
 		// In flat model there is no phase advance / history wipe.
 		// Player message and AI turn from round 1 should be in conversationLogs after round 2.
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]),
-			TEST_PHASE_CONFIG,
-		);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
@@ -1293,10 +1246,7 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		};
-		const baseGame = startPhase(
-			createGame(TEST_PERSONAS, [packWithKey]),
-			TEST_PHASE_CONFIG,
-		);
+		const baseGame = startGame(TEST_PERSONAS, packWithKey, { budgetPerAi: 5 });
 
 		// Inject the UseItemObjective (engine.ts doesn't generate these from
 		// interestingObjects, so we override objectives directly).
@@ -1307,10 +1257,7 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 			satisfactionState: "pending",
 			itemId: "key",
 		};
-		const game = updateActivePhase(baseGame, (phase) => ({
-			...phase,
-			objectives: [useItemObj],
-		}));
+		const game = { ...baseGame, objectives: [useItemObj] };
 
 		// red uses key; green and cyan pass.
 		const provider = new MockRoundLLMProvider([
@@ -1342,10 +1289,10 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
  * on the next runRound call.
  */
 function withCountdownZero(game: ReturnType<typeof makeGame>) {
-	return updateActivePhase(game, (phase) => ({
-		...phase,
-		complicationSchedule: { ...phase.complicationSchedule, countdown: 0 },
-	}));
+	return {
+		...game,
+		complicationSchedule: { ...game.complicationSchedule, countdown: 0 },
+	};
 }
 
 /**
@@ -1388,16 +1335,17 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 			provider,
 			chatLockoutRng(),
 		);
-		const phase = getActivePhase(nextState);
+		const phase = nextState;
 		expect(isPlayerChatLockedOut(phase, "red")).toBe(true);
 	});
 
 	it("does not trigger a chat lockout when countdown > 0", async () => {
 		// makeGame() starts with countdown >= 1; no rng override needed
-		const game = updateActivePhase(makeGame(), (phase) => ({
-			...phase,
-			complicationSchedule: { ...phase.complicationSchedule, countdown: 5 },
-		}));
+		const base = makeGame();
+		const game = {
+			...base,
+			complicationSchedule: { ...base.complicationSchedule, countdown: 5 },
+		};
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
@@ -1410,7 +1358,7 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 			provider,
 			chatLockoutRng(),
 		);
-		const phase = getActivePhase(nextState);
+		const phase = nextState;
 		expect(isPlayerChatLockedOut(phase, "red")).toBe(false);
 		expect(isPlayerChatLockedOut(phase, "green")).toBe(false);
 		expect(isPlayerChatLockedOut(phase, "cyan")).toBe(false);
@@ -1431,7 +1379,7 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 			chatLockoutRng(),
 		);
 		expect(isAiLockedOut(nextState, "red")).toBe(false);
-		expect(getActivePhase(nextState).budgets.red?.remaining).toBeCloseTo(4, 10);
+		expect(nextState.budgets.red?.remaining).toBeCloseTo(4, 10);
 	});
 
 	it("chat lockout resolves automatically after resolveAtRound (duration=3) rounds", async () => {
@@ -1452,7 +1400,7 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 			makeProvider(),
 			chatLockoutRng(),
 		);
-		expect(isPlayerChatLockedOut(getActivePhase(afterR1), "red")).toBe(true);
+		expect(isPlayerChatLockedOut(afterR1, "red")).toBe(true);
 
 		const { nextState: afterR2 } = await runRound(
 			afterR1,
@@ -1461,7 +1409,7 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 			makeProvider(),
 			chatLockoutRng(),
 		);
-		expect(isPlayerChatLockedOut(getActivePhase(afterR2), "red")).toBe(true);
+		expect(isPlayerChatLockedOut(afterR2, "red")).toBe(true);
 
 		const { nextState: afterR3 } = await runRound(
 			afterR2,
@@ -1470,7 +1418,7 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 			makeProvider(),
 			chatLockoutRng(),
 		);
-		expect(isPlayerChatLockedOut(getActivePhase(afterR3), "red")).toBe(true);
+		expect(isPlayerChatLockedOut(afterR3, "red")).toBe(true);
 
 		const { nextState: afterR4 } = await runRound(
 			afterR3,
@@ -1479,7 +1427,7 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 			makeProvider(),
 			chatLockoutRng(),
 		);
-		expect(isPlayerChatLockedOut(getActivePhase(afterR4), "red")).toBe(false);
+		expect(isPlayerChatLockedOut(afterR4, "red")).toBe(false);
 	});
 
 	it("RoundResult includes chatLockoutTriggered when lockout fires", async () => {
@@ -1501,10 +1449,11 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 	});
 
 	it("RoundResult chatLockoutTriggered is undefined when countdown > 0", async () => {
-		const game = updateActivePhase(makeGame(), (phase) => ({
-			...phase,
-			complicationSchedule: { ...phase.complicationSchedule, countdown: 5 },
-		}));
+		const base2 = makeGame();
+		const game = {
+			...base2,
+			complicationSchedule: { ...base2.complicationSchedule, countdown: 5 },
+		};
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
@@ -1571,108 +1520,12 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 // ----------------------------------------------------------------------------
 describe("multi-round game state accumulation", () => {
 	it("walks through multiple rounds correctly, game ends when all pairs satisfied", async () => {
-		// Items start held by the AIs so pick_up spatial validation is not needed.
-		// Win conditions check holder by AI id, which is spatial-independent.
-		// Phase 3 ContentPack: flower held by red, key held by cyan (win already met)
-		const contentPackP3: ContentPack = {
-			phaseNumber: 3,
-			setting: "",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [
-				{
-					object: {
-						id: "flower",
-						kind: "objective_object",
-						name: "flower",
-						examineDescription: "A flower",
-						holder: "red",
-						pairsWithSpaceId: "flower_space",
-					},
-					space: {
-						id: "flower_space",
-						kind: "objective_space",
-						name: "flower space",
-						examineDescription: "A space",
-						holder: { row: 4, col: 4 },
-					},
-				},
-			],
-			interestingObjects: [
-				{
-					id: "key",
-					kind: "interesting_object",
-					name: "key",
-					examineDescription: "A key",
-					holder: "cyan",
-				},
-			],
-			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
-			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "north" },
-				green: { position: { row: 0, col: 1 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
-			},
-		};
-		// Phase 2 ContentPack: key held by cyan (win already met on first check)
-		const contentPackP2: ContentPack = {
-			phaseNumber: 2,
-			setting: "",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [],
-			interestingObjects: [
-				{
-					id: "key",
-					kind: "interesting_object",
-					name: "key",
-					examineDescription: "A key",
-					holder: "cyan",
-				},
-			],
-			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
-			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "north" },
-				green: { position: { row: 0, col: 1 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
-			},
-		};
-
-		const phase3Config: PhaseConfig = {
-			...TEST_PHASE_CONFIG,
-			phaseNumber: 3,
+		// In the flat model there are no multi-phase transitions.
+		// This test verifies: phaseEnded is always false, round counter advances,
+		// and state accumulates across rounds.
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
 			budgetPerAi: 5,
-			winCondition: (phase) => {
-				const flower = phase.world.entities.find((i) => i.id === "flower");
-				const key = phase.world.entities.find((i) => i.id === "key");
-				return flower?.holder === "red" && key?.holder === "cyan";
-			},
-		};
-		const phase2Config: PhaseConfig = {
-			...TEST_PHASE_CONFIG,
-			phaseNumber: 2,
-			budgetPerAi: 5,
-			winCondition: (phase) =>
-				phase.world.entities.find((i) => i.id === "key")?.holder === "cyan",
-			nextPhaseConfig: phase3Config,
-		};
-		const phase1Config: PhaseConfig = {
-			...TEST_PHASE_CONFIG,
-			winCondition: (phase) =>
-				phase.world.entities.find((i) => i.id === "flower")?.holder === "red",
-			nextPhaseConfig: phase2Config,
-		};
-
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [
-				TEST_CONTENT_PACK,
-				contentPackP2,
-				contentPackP3,
-			]),
-			phase1Config,
-		);
+		});
 
 		// Round 1: red picks up flower (red is at (0,0); flower starts at (0,0)) → phase 1 ends
 		const r1Provider = new MockRoundLLMProvider([
@@ -1730,7 +1583,7 @@ describe("lockout messages", () => {
 	it("budget-exhaustion lockout chat message is '<name> is unresponsive…'", async () => {
 		let game = makeGame();
 		game = deductBudget(game, "red", 5).game;
-		expect(getActivePhase(game).lockedOut.has("red")).toBe(true);
+		expect(game.lockedOut.has("red")).toBe(true);
 
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
@@ -1738,7 +1591,7 @@ describe("lockout messages", () => {
 		]);
 		const { nextState } = await runRound(game, "green", "hi", provider);
 
-		const redLog = getActivePhase(nextState).conversationLogs.red ?? [];
+		const redLog = nextState.conversationLogs.red ?? [];
 		const messageEntries = redLog.filter((e) => e.kind === "message");
 		const lastEntry = messageEntries[messageEntries.length - 1];
 		expect(lastEntry?.kind === "message" && lastEntry.from).toBe("red");
@@ -1890,17 +1743,14 @@ describe("runRound — onAiDelta callback", () => {
 
 	it("does not invoke onAiDelta for locked-out AIs", async () => {
 		// Exhaust budget (budgetPerAi=1) so all AIs lock out after round 1.
-		let state = startPhase(createGame(TEST_PERSONAS), {
-			...TEST_PHASE_CONFIG,
-			budgetPerAi: 1,
-		});
+		let state = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 1 });
 		// Deduct full budget per AI to reach remaining=0 → lockedOut.
 		for (const aiId of ["red", "green", "cyan"] as AiId[]) {
 			state = deductBudget(state, aiId, 1).game;
 		}
-		expect(getActivePhase(state).lockedOut.has("red")).toBe(true);
-		expect(getActivePhase(state).lockedOut.has("green")).toBe(true);
-		expect(getActivePhase(state).lockedOut.has("cyan")).toBe(true);
+		expect(state.lockedOut.has("red")).toBe(true);
+		expect(state.lockedOut.has("green")).toBe(true);
+		expect(state.lockedOut.has("cyan")).toBe(true);
 
 		const liveProvider: RoundLLMProvider = {
 			async streamRound(_messages, _tools, onDelta) {
@@ -2004,60 +1854,8 @@ describe("placement flavor + win condition (issue #126)", () => {
 		},
 	};
 
-	const PHASE2_PACK: ContentPack = {
-		phaseNumber: 2,
-		setting: "crypt",
-		weather: "",
-		timeOfDay: "",
-		objectivePairs: [],
-		interestingObjects: [],
-		obstacles: [],
-		landmarks: DEFAULT_LANDMARKS,
-		aiStarts: {
-			red: { position: { row: 0, col: 0 }, facing: "north" },
-			green: { position: { row: 0, col: 1 }, facing: "north" },
-			cyan: { position: { row: 0, col: 2 }, facing: "north" },
-		},
-	};
-
-	const phase2Config: PhaseConfig = {
-		...TEST_PHASE_CONFIG,
-		phaseNumber: 2,
-		winCondition: () => false, // never auto-wins phase 2 in these tests
-	};
-	const phase1ConfigK1: PhaseConfig = {
-		...TEST_PHASE_CONFIG,
-		phaseNumber: 1,
-		kRange: [1, 1],
-		winCondition: (phase) => {
-			// Phase wins when gem_obj is on gem_space's cell (structural check)
-			const obj = phase.world.entities.find((e) => e.id === GEM_OBJ_ID);
-			const spc = phase.world.entities.find((e) => e.id === GEM_SPACE_ID);
-			if (!obj || !spc) return false;
-			const objH = obj.holder;
-			const spcH = spc.holder;
-			if (
-				typeof objH !== "object" ||
-				objH === null ||
-				typeof spcH !== "object" ||
-				spcH === null
-			)
-				return false;
-			return (
-				(objH as { row: number; col: number }).row ===
-					(spcH as { row: number; col: number }).row &&
-				(objH as { row: number; col: number }).col ===
-					(spcH as { row: number; col: number }).col
-			);
-		},
-		nextPhaseConfig: phase2Config,
-	};
-
 	it("K=1: drop on matching space fires placementFlavor in tool_success description", async () => {
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [PHASE1_PACK_K1, PHASE2_PACK]),
-			phase1ConfigK1,
-		);
+		const game = startGame(TEST_PERSONAS, PHASE1_PACK_K1, { budgetPerAi: 5 });
 		// red is at (0,0) and holds gem_obj; gem_space is also at (0,0)
 		const provider = new MockRoundLLMProvider([
 			{
@@ -2081,10 +1879,11 @@ describe("placement flavor + win condition (issue #126)", () => {
 	});
 
 	it("K=1: drop on matching space ends the game (checkWinCondition fires)", async () => {
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [PHASE1_PACK_K1, PHASE2_PACK]),
-			phase1ConfigK1,
-		);
+		// rng: () => 0 ensures drawObjectives always picks carry objectives (index 0 in pool)
+		const game = startGame(TEST_PERSONAS, PHASE1_PACK_K1, {
+			budgetPerAi: 5,
+			rng: () => 0,
+		});
 		const provider = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -2131,34 +1930,8 @@ describe("placement flavor + win condition (issue #126)", () => {
 				},
 			],
 		};
-		const phase1Mismatch: PhaseConfig = {
-			...phase1ConfigK1,
-			// Win condition checks gem_obj vs gem_space positions
-			winCondition: (phase) => {
-				const obj = phase.world.entities.find((e) => e.id === GEM_OBJ_ID);
-				const spc = phase.world.entities.find((e) => e.id === GEM_SPACE_ID);
-				if (!obj || !spc) return false;
-				const objH = obj.holder;
-				const spcH = spc.holder;
-				if (
-					typeof objH !== "object" ||
-					objH === null ||
-					typeof spcH !== "object" ||
-					spcH === null
-				)
-					return false;
-				return (
-					(objH as { row: number; col: number }).row ===
-						(spcH as { row: number; col: number }).row &&
-					(objH as { row: number; col: number }).col ===
-						(spcH as { row: number; col: number }).col
-				);
-			},
-		};
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [packMismatch, PHASE2_PACK]),
-			phase1Mismatch,
-		);
+		// In flat model, checkWinCondition compares obj/space positions automatically.
+		const game = startGame(TEST_PERSONAS, packMismatch, { budgetPerAi: 5 });
 		const provider = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -2244,49 +2017,13 @@ describe("placement flavor + win condition (issue #126)", () => {
 			},
 		};
 
-		const checkBothPairs = (phase: {
-			world: { entities: Array<{ id: string; holder: unknown }> };
-		}): boolean => {
-			const gemObj = phase.world.entities.find((e) => e.id === GEM_OBJ_ID);
-			const gemSpc = phase.world.entities.find((e) => e.id === GEM_SPACE_ID);
-			const orbObj = phase.world.entities.find((e) => e.id === ORB_OBJ_ID);
-			const orbSpc = phase.world.entities.find((e) => e.id === ORB_SPACE_ID);
-			const onCell = (
-				obj: { id: string; holder: unknown } | undefined,
-				spc: { id: string; holder: unknown } | undefined,
-			): boolean => {
-				if (!obj || !spc) return false;
-				const oh = obj.holder;
-				const sh = spc.holder;
-				if (
-					typeof oh !== "object" ||
-					oh === null ||
-					typeof sh !== "object" ||
-					sh === null
-				)
-					return false;
-				return (
-					(oh as { row: number; col: number }).row ===
-						(sh as { row: number; col: number }).row &&
-					(oh as { row: number; col: number }).col ===
-						(sh as { row: number; col: number }).col
-				);
-			};
-			return onCell(gemObj, gemSpc) && onCell(orbObj, orbSpc);
-		};
-
-		const phase1K2Config: PhaseConfig = {
-			...TEST_PHASE_CONFIG,
-			phaseNumber: 1,
-			kRange: [2, 2],
-			winCondition: checkBothPairs,
-			nextPhaseConfig: phase2Config,
-		};
-
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [packK2, PHASE2_PACK]),
-			phase1K2Config,
-		);
+		// In flat model, checkWinCondition compares all obj/space positions automatically.
+		// rng: () => 0 ensures drawObjectives always picks carry-gem objectives (index 0 in pool).
+		// After put_down, all carry-gem objectives are satisfied → game ends.
+		const game = startGame(TEST_PERSONAS, packK2, {
+			budgetPerAi: 5,
+			rng: () => 0,
+		});
 
 		// At game start: orb pair already satisfied; gem pair not (gem_obj held by red).
 		// Win check should fire only AFTER red puts down gem_obj at (0,0).
@@ -2358,10 +2095,7 @@ describe("examine tool", () => {
 	};
 
 	function makeExamineGame() {
-		return startPhase(
-			createGame(TEST_PERSONAS, [EXAMINE_PACK]),
-			TEST_PHASE_CONFIG,
-		);
+		return startGame(TEST_PERSONAS, EXAMINE_PACK, { budgetPerAi: 5 });
 	}
 
 	it("AC #5: examine on objective_object surfaces examineDescription with pair-tell prose to actor's tool result", async () => {
@@ -2600,7 +2334,7 @@ describe("conversationLogs isolation (AC #10 — #194)", () => {
 			"private message",
 			provider,
 		);
-		const phase = getActivePhase(nextState);
+		const phase = nextState;
 
 		// Only red's log should have the player (blue→red) entry
 		const redPlayerEntries = (phase.conversationLogs.red ?? []).filter(
@@ -2649,7 +2383,7 @@ describe("conversationLogs isolation (AC #10 — #194)", () => {
 			undefined,
 			["red", "green", "cyan"] as AiId[],
 		);
-		const phase = getActivePhase(nextState);
+		const phase = nextState;
 
 		// red's log should contain the outgoing message entry (red→blue)
 		const redMessageEntries = (phase.conversationLogs.red ?? []).filter(
@@ -2677,7 +2411,7 @@ describe("conversationLogs isolation (AC #10 — #194)", () => {
 			{ assistantText: "", toolCalls: [] },
 		]);
 		const { nextState } = await runRound(game, "red", "hi", provider);
-		const phase = getActivePhase(nextState);
+		const phase = nextState;
 		expect("chatHistories" in phase).toBe(false);
 	});
 });
@@ -2734,7 +2468,7 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 		expect(msgIdx).toBeLessThan(toolIdx);
 
 		// Conversation log has the spoken message
-		const redLog = getActivePhase(nextState).conversationLogs.red ?? [];
+		const redLog = nextState.conversationLogs.red ?? [];
 		expect(
 			redLog.some(
 				(e) =>
@@ -2745,9 +2479,7 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 		).toBe(true);
 
 		// World state reflects pick_up
-		const flower = getActivePhase(nextState).world.entities.find(
-			(e) => e.id === "flower",
-		);
+		const flower = nextState.world.entities.find((e) => e.id === "flower");
 		expect(flower?.holder).toBe("red");
 
 		// Roundtrip has ONLY pick_up id (msg-success excluded per ADR 0007 / table row 3)
@@ -2793,8 +2525,7 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 			),
 		).toBe(true);
 		expect(
-			getActivePhase(nextState).world.entities.find((e) => e.id === "flower")
-				?.holder,
+			nextState.world.entities.find((e) => e.id === "flower")?.holder,
 		).toBe("red");
 
 		const rt = toolRoundtrip.red;
@@ -2838,7 +2569,7 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 		expect(toolRoundtrip.red).toBeUndefined();
 
 		// Conversation log has the message
-		const redLog = getActivePhase(nextState).conversationLogs.red ?? [];
+		const redLog = nextState.conversationLogs.red ?? [];
 		expect(
 			redLog.some(
 				(e) =>
@@ -2891,8 +2622,7 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 
 		// Flower still picked up
 		expect(
-			getActivePhase(nextState).world.entities.find((e) => e.id === "flower")
-				?.holder,
+			nextState.world.entities.find((e) => e.id === "flower")?.holder,
 		).toBe("red");
 
 		// Roundtrip has BOTH ids: msg_fail_id and pickup_row4_id
@@ -2952,7 +2682,7 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 		);
 
 		// Both messages are dispatched and appear in red's conversation log
-		const redLog = getActivePhase(nextState).conversationLogs.red ?? [];
+		const redLog = nextState.conversationLogs.red ?? [];
 		expect(
 			redLog.some(
 				(e) =>
@@ -3071,8 +2801,7 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 
 		// First action (pick_up) dispatched
 		expect(
-			getActivePhase(nextState).world.entities.find((e) => e.id === "flower")
-				?.holder,
+			nextState.world.entities.find((e) => e.id === "flower")?.holder,
 		).toBe("red");
 
 		// Second action (go) produces tool_failure in result.actions
@@ -3133,7 +2862,7 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 		);
 
 		// Red budget: 5 - 1 = 4 (single call cost, not 2)
-		expect(getActivePhase(nextState).budgets.red?.remaining).toBeCloseTo(4, 10);
+		expect(nextState.budgets.red?.remaining).toBeCloseTo(4, 10);
 	});
 
 	// Empty toolCalls → pass record (existing regression guard)
@@ -3291,20 +3020,8 @@ describe("action-failure entries — round-coordinator integration", () => {
 		},
 	};
 
-	const OBSTACLE_PHASE_CONFIG: PhaseConfig = {
-		phaseNumber: 1,
-		kRange: [0, 0],
-		nRange: [0, 0],
-		mRange: [0, 0],
-		aiGoalPool: ["g1", "g2", "g3"],
-		budgetPerAi: 10,
-	};
-
 	it("parse-fail (unknown tool) → tool_failure in result, no action-failure entry in any log", async () => {
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [OBSTACLE_PACK]),
-			OBSTACLE_PHASE_CONFIG,
-		);
+		const game = startGame(TEST_PERSONAS, OBSTACLE_PACK, { budgetPerAi: 10 });
 		const provider = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -3316,7 +3033,7 @@ describe("action-failure entries — round-coordinator integration", () => {
 		const { nextState, result } = await runRound(game, "red", "hi", provider);
 		expect(result.actions.some((a) => a.kind === "tool_failure")).toBe(true);
 
-		const phase = getActivePhase(nextState);
+		const phase = nextState;
 		for (const aiId of ["red", "green", "cyan"]) {
 			const failures = (phase.conversationLogs[aiId] ?? []).filter(
 				(e) => e.kind === "action-failure",
@@ -3326,10 +3043,7 @@ describe("action-failure entries — round-coordinator integration", () => {
 	});
 
 	it("malformed JSON tool call → tool_failure in result, no action-failure entry in any log", async () => {
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [OBSTACLE_PACK]),
-			OBSTACLE_PHASE_CONFIG,
-		);
+		const game = startGame(TEST_PERSONAS, OBSTACLE_PACK, { budgetPerAi: 10 });
 		const provider = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -3341,7 +3055,7 @@ describe("action-failure entries — round-coordinator integration", () => {
 		const { nextState, result } = await runRound(game, "red", "hi", provider);
 		expect(result.actions.some((a) => a.kind === "tool_failure")).toBe(true);
 
-		const phase = getActivePhase(nextState);
+		const phase = nextState;
 		for (const aiId of ["red", "green", "cyan"]) {
 			const failures = (phase.conversationLogs[aiId] ?? []).filter(
 				(e) => e.kind === "action-failure",
@@ -3351,10 +3065,7 @@ describe("action-failure entries — round-coordinator integration", () => {
 	});
 
 	it("wall-collision repro: daemon facing a wall issues go east on rounds 1, 2, 3 → 3 action-failure user turns; peers 0", async () => {
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [OBSTACLE_PACK]),
-			OBSTACLE_PHASE_CONFIG,
-		);
+		const game = startGame(TEST_PERSONAS, OBSTACLE_PACK, { budgetPerAi: 10 });
 
 		// red at (0,0) facing north; obstacle at (0,1) east; go east → blocked
 		const goEastToolCall = {
@@ -3378,7 +3089,7 @@ describe("action-failure entries — round-coordinator integration", () => {
 		}
 
 		// After 3 rounds: red's action-failure count should be exactly 3
-		const phase = getActivePhase(state);
+		const phase = state;
 		const redFailures = (phase.conversationLogs.red ?? []).filter(
 			(e) => e.kind === "action-failure",
 		);
@@ -3444,7 +3155,7 @@ describe("complication countdown — coordinator integration", () => {
 			makeProvider(),
 			chatLockoutRng(),
 		);
-		const phase = getActivePhase(nextState);
+		const phase = nextState;
 		// A chat_lockout entry should have been appended to activeComplications
 		const lockouts = phase.activeComplications.filter(
 			(c) => c.kind === "chat_lockout",
@@ -3454,10 +3165,11 @@ describe("complication countdown — coordinator integration", () => {
 	});
 
 	it("decrements countdown when no complication fires (countdown > 0)", async () => {
-		const game = updateActivePhase(makeGame(), (phase) => ({
-			...phase,
-			complicationSchedule: { ...phase.complicationSchedule, countdown: 5 },
-		}));
+		const base3 = makeGame();
+		const game = {
+			...base3,
+			complicationSchedule: { ...base3.complicationSchedule, countdown: 5 },
+		};
 		const { nextState } = await runRound(
 			game,
 			"red",
@@ -3465,7 +3177,7 @@ describe("complication countdown — coordinator integration", () => {
 			makeProvider(),
 			chatLockoutRng(),
 		);
-		const phase = getActivePhase(nextState);
+		const phase = nextState;
 		// Countdown should have decremented by 1
 		expect(phase.complicationSchedule.countdown).toBe(4);
 	});
@@ -3480,7 +3192,7 @@ describe("complication countdown — coordinator integration", () => {
 			makeProvider(),
 			chatLockoutRng(),
 		);
-		const phase = getActivePhase(nextState);
+		const phase = nextState;
 		// Countdown was reset by applyComplicationResult (drawCountdown(rng, 5, 15) with rng()=0 → 5)
 		expect(phase.complicationSchedule.countdown).toBe(5);
 	});
@@ -3497,15 +3209,14 @@ describe("complication countdown — coordinator integration", () => {
 			...TEST_CONTENT_PACK,
 			obstacles: [],
 		};
-		const game = createGame(TEST_PERSONAS, [pack]);
-		const started = startPhase(game, TEST_PHASE_CONFIG);
+		const started = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		// Force countdown to 0 so the complication engine fires this round.
 		// rng=0 draws index 0 from the pool (weatherChange), which is always
 		// available — obstacle_shift is excluded because there are no obstacles.
-		const withCountdown = updateActivePhase(started, (phase) => ({
-			...phase,
-			complicationSchedule: { ...phase.complicationSchedule, countdown: 0 },
-		}));
+		const withCountdown = {
+			...started,
+			complicationSchedule: { ...started.complicationSchedule, countdown: 0 },
+		};
 
 		const { nextState } = await runRound(
 			withCountdown,
@@ -3515,7 +3226,7 @@ describe("complication countdown — coordinator integration", () => {
 			() => 0,
 		);
 
-		const phase = getActivePhase(nextState);
+		const phase = nextState;
 
 		// A complication fired (countdown was reset away from 0 by
 		// applyComplicationResult). With no obstacles in the pack, obstacle_shift

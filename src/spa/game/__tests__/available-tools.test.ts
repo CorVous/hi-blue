@@ -9,13 +9,12 @@
 import { describe, expect, it } from "vitest";
 import { availableTools } from "../available-tools.js";
 import { DEFAULT_LANDMARKS } from "../direction.js";
-import { createGame, getActivePhase, startPhase } from "../engine.js";
+import { startGame } from "../engine.js";
 import type {
 	ActiveComplication,
 	AiPersona,
 	ContentPack,
 	GameState,
-	PhaseConfig,
 	WorldEntity,
 } from "../types.js";
 
@@ -54,15 +53,6 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 	},
 };
 
-const TEST_PHASE_CONFIG: PhaseConfig = {
-	phaseNumber: 1,
-	kRange: [1, 1],
-	nRange: [0, 0],
-	mRange: [0, 0],
-	aiGoalPool: ["Hold the flower at phase end"],
-	budgetPerAi: 5,
-};
-
 /** Build a minimal game with three daemons and no interesting entities in the world. */
 function makeGame() {
 	const pack: ContentPack = {
@@ -80,8 +70,7 @@ function makeGame() {
 			cyan: { position: { row: 4, col: 4 }, facing: "south" },
 		},
 	};
-	const game = createGame(TEST_PERSONAS, [pack]);
-	return startPhase(game, TEST_PHASE_CONFIG, () => 0);
+	return startGame(TEST_PERSONAS, pack, { budgetPerAi: 5, rng: () => 0 });
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -100,13 +89,12 @@ describe("availableTools — tool_disable filtering", () => {
 
 	it("removes 'go' when tool_disable targets aiId with tool='go'", () => {
 		const game = makeGame();
-		const phase = getActivePhase(game);
 		const complications: ActiveComplication[] = [
 			{
 				kind: "tool_disable",
 				target: "red",
 				tool: "go",
-				resolveAtRound: phase.round + 3,
+				resolveAtRound: game.round + 3,
 			},
 		];
 		const tools = availableTools(game, "red", complications);
@@ -120,13 +108,12 @@ describe("availableTools — tool_disable filtering", () => {
 
 	it("a tool_disable for a different daemon does not affect the acting daemon's tools", () => {
 		const game = makeGame();
-		const phase = getActivePhase(game);
 		const complications: ActiveComplication[] = [
 			{
 				kind: "tool_disable",
 				target: "green",
 				tool: "go",
-				resolveAtRound: phase.round + 3,
+				resolveAtRound: game.round + 3,
 			},
 		];
 		const tools = availableTools(game, "red", complications);
@@ -138,13 +125,12 @@ describe("availableTools — tool_disable filtering", () => {
 
 	it("disabling 'message' removes message tool from the acting daemon", () => {
 		const game = makeGame();
-		const phase = getActivePhase(game);
 		const complications: ActiveComplication[] = [
 			{
 				kind: "tool_disable",
 				target: "red",
 				tool: "message",
-				resolveAtRound: phase.round + 3,
+				resolveAtRound: game.round + 3,
 			},
 		];
 		const tools = availableTools(game, "red", complications);
@@ -157,19 +143,18 @@ describe("availableTools — tool_disable filtering", () => {
 
 	it("two tool_disable entries on same daemon (different tools) removes both", () => {
 		const game = makeGame();
-		const phase = getActivePhase(game);
 		const complications: ActiveComplication[] = [
 			{
 				kind: "tool_disable",
 				target: "red",
 				tool: "go",
-				resolveAtRound: phase.round + 3,
+				resolveAtRound: game.round + 3,
 			},
 			{
 				kind: "tool_disable",
 				target: "red",
 				tool: "look",
-				resolveAtRound: phase.round + 4,
+				resolveAtRound: game.round + 4,
 			},
 		];
 		const tools = availableTools(game, "red", complications);
@@ -207,13 +192,12 @@ describe("availableTools — tool_disable filtering", () => {
 
 	it("disabling 'look' removes look tool", () => {
 		const game = makeGame();
-		const phase = getActivePhase(game);
 		const complications: ActiveComplication[] = [
 			{
 				kind: "tool_disable",
 				target: "cyan",
 				tool: "look",
-				resolveAtRound: phase.round + 3,
+				resolveAtRound: game.round + 3,
 			},
 		];
 		const tools = availableTools(game, "cyan", complications);
@@ -268,16 +252,7 @@ function makeGameWithSpace(
 			cyan: { position: { row: 4, col: 4 }, facing: "south" },
 		},
 	};
-	const config: PhaseConfig = {
-		phaseNumber: 1,
-		kRange: [1, 1],
-		nRange: [0, 0],
-		mRange: [0, 0],
-		aiGoalPool: ["g1"],
-		budgetPerAi: 5,
-	};
-	const game = createGame(TEST_PERSONAS, [pack]);
-	return startPhase(game, config, () => 0);
+	return startGame(TEST_PERSONAS, pack, { budgetPerAi: 5, rng: () => 0 });
 }
 
 describe("availableTools — use includes objective_space ids", () => {

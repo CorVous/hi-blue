@@ -15,7 +15,7 @@ import {
 	tickComplication,
 } from "../complication-engine.js";
 import { DEFAULT_LANDMARKS } from "../direction.js";
-import { createGame, getActivePhase, startPhase } from "../engine.js";
+import { startGame } from "../engine.js";
 import type {
 	ActiveComplication,
 	AiId,
@@ -25,7 +25,6 @@ import type {
 	GameState,
 	GridPosition,
 	PersonaSpatialState,
-	PhaseState,
 	ToolName,
 	WorldEntity,
 	WorldState,
@@ -103,7 +102,7 @@ function makePersonaSpatial(
 	return result;
 }
 
-function makePhase(overrides: Partial<PhaseState> = {}): PhaseState {
+function makePhase(overrides: Partial<GameState> = {}): GameState {
 	const personaSpatial = overrides.personaSpatial ?? makePersonaSpatial();
 	const world: WorldState = overrides.world ?? { entities: [] };
 
@@ -133,13 +132,11 @@ function makePhase(overrides: Partial<PhaseState> = {}): PhaseState {
 
 	return {
 		personas: TEST_PERSONAS,
-		phaseNumber: 1,
 		isComplete: false,
 		setting: "test",
 		weather: "clear",
 		timeOfDay: "day",
 		contentPack,
-		aiGoals: { red: "goal", green: "goal", cyan: "goal" },
 		round: 5,
 		world,
 		budgets,
@@ -156,15 +153,8 @@ function makePhase(overrides: Partial<PhaseState> = {}): PhaseState {
 	};
 }
 
-function makeGameStateAround(phase: PhaseState): GameState {
-	// Flat GameState model: PhaseState already includes all GameState fields.
-	const { phaseNumber: _pn, aiGoals: _ag, ...gameState } = phase;
-	return {
-		...gameState,
-		contentPacksA: gameState.contentPacksA ?? [],
-		contentPacksB: gameState.contentPacksB ?? [],
-		activePackId: gameState.activePackId ?? "A",
-	};
+function makeGameStateAround(phase: GameState): GameState {
+	return phase;
 }
 
 function makeObstacle(id: string, pos: GridPosition): WorldEntity {
@@ -225,7 +215,7 @@ describe("decrementComplicationCountdown", () => {
 		});
 		const game = makeGameStateAround(phase);
 		const updated = decrementComplicationCountdown(game);
-		const updatedPhase = getActivePhase(updated);
+		const updatedPhase = updated;
 		expect(updatedPhase.complicationSchedule.countdown).toBe(2);
 	});
 
@@ -235,7 +225,7 @@ describe("decrementComplicationCountdown", () => {
 		});
 		const game = makeGameStateAround(phase);
 		const updated = decrementComplicationCountdown(game);
-		const updatedPhase = getActivePhase(updated);
+		const updatedPhase = updated;
 		expect(updatedPhase.complicationSchedule.settingShiftFired).toBe(true);
 	});
 
@@ -249,7 +239,7 @@ describe("decrementComplicationCountdown", () => {
 		});
 		const game = makeGameStateAround(phase);
 		const updated = decrementComplicationCountdown(game);
-		const updatedPhase = getActivePhase(updated);
+		const updatedPhase = updated;
 		expect(updatedPhase.activeComplications).toEqual(active);
 	});
 });
@@ -403,7 +393,7 @@ describe("Setting Shift exclusion", () => {
 		// Apply result
 		if (result) {
 			const updated = applyComplicationResult(game, result, seededRng([0.5]));
-			const updatedPhase = getActivePhase(updated);
+			const updatedPhase = updated;
 			expect(updatedPhase.complicationSchedule.settingShiftFired).toBe(true);
 		}
 	});
@@ -692,7 +682,7 @@ describe("applyComplicationResult — activeComplications appends", () => {
 			},
 		};
 		const updated = applyComplicationResult(game, result, seededRng([0.5]));
-		const updatedPhase = getActivePhase(updated);
+		const updatedPhase = updated;
 		const added = updatedPhase.activeComplications.find(
 			(c) => c.kind === "sysadmin_directive",
 		);
@@ -714,7 +704,7 @@ describe("applyComplicationResult — activeComplications appends", () => {
 			},
 		};
 		const updated = applyComplicationResult(game, result, seededRng([0.5]));
-		const updatedPhase = getActivePhase(updated);
+		const updatedPhase = updated;
 		const added = updatedPhase.activeComplications.find(
 			(c) => c.kind === "tool_disable",
 		);
@@ -737,7 +727,7 @@ describe("applyComplicationResult — activeComplications appends", () => {
 			},
 		};
 		const updated = applyComplicationResult(game, result, seededRng([0.5]));
-		const updatedPhase = getActivePhase(updated);
+		const updatedPhase = updated;
 		const added = updatedPhase.activeComplications.find(
 			(c) => c.kind === "tool_disable",
 		);
@@ -758,7 +748,7 @@ describe("applyComplicationResult — activeComplications appends", () => {
 			},
 		};
 		const updated = applyComplicationResult(game, result, seededRng([0.5]));
-		const updatedPhase = getActivePhase(updated);
+		const updatedPhase = updated;
 		const added = updatedPhase.activeComplications.find(
 			(c) => c.kind === "chat_lockout",
 		);
@@ -774,7 +764,7 @@ describe("applyComplicationResult — activeComplications appends", () => {
 		const game = makeGameStateAround(phase);
 		const result = { fired: { kind: "weather_change" as const } };
 		const updated = applyComplicationResult(game, result, seededRng([0.5]));
-		const updatedPhase = getActivePhase(updated);
+		const updatedPhase = updated;
 		expect(updatedPhase.activeComplications).toHaveLength(0);
 	});
 
@@ -790,7 +780,7 @@ describe("applyComplicationResult — activeComplications appends", () => {
 			},
 		};
 		const updated = applyComplicationResult(game, result, seededRng([0.5]));
-		const updatedPhase = getActivePhase(updated);
+		const updatedPhase = updated;
 		expect(updatedPhase.activeComplications).toHaveLength(0);
 	});
 
@@ -799,7 +789,7 @@ describe("applyComplicationResult — activeComplications appends", () => {
 		const game = makeGameStateAround(phase);
 		const result = { fired: { kind: "setting_shift" as const } };
 		const updated = applyComplicationResult(game, result, seededRng([0.5]));
-		const updatedPhase = getActivePhase(updated);
+		const updatedPhase = updated;
 		expect(updatedPhase.activeComplications).toHaveLength(0);
 	});
 
@@ -810,7 +800,7 @@ describe("applyComplicationResult — activeComplications appends", () => {
 		const game = makeGameStateAround(phase);
 		const result = { fired: { kind: "setting_shift" as const } };
 		const updated = applyComplicationResult(game, result, seededRng([0.5]));
-		const updatedPhase = getActivePhase(updated);
+		const updatedPhase = updated;
 		expect(updatedPhase.complicationSchedule.settingShiftFired).toBe(true);
 	});
 });
@@ -863,7 +853,7 @@ describe("applyComplicationResult — setting_shift swaps active pack", () => {
 		const game = makeGameWithDualPacks();
 		const result = { fired: { kind: "setting_shift" as const } };
 		const updated = applyComplicationResult(game, result, seededRng([0.5]));
-		const updatedPhase = getActivePhase(updated);
+		const updatedPhase = updated;
 		expect(updatedPhase.contentPack.setting).toBe("sun-baked salt flat");
 	});
 
@@ -871,7 +861,7 @@ describe("applyComplicationResult — setting_shift swaps active pack", () => {
 		const game = makeGameWithDualPacks();
 		const result = { fired: { kind: "setting_shift" as const } };
 		const updated = applyComplicationResult(game, result, seededRng([0.5]));
-		const updatedPhase = getActivePhase(updated);
+		const updatedPhase = updated;
 		expect(updatedPhase.setting).toBe("sun-baked salt flat");
 	});
 
@@ -893,7 +883,7 @@ describe("applyComplicationResult — setting_shift swaps active pack", () => {
 		});
 		const result = { fired: { kind: "setting_shift" as const } };
 		const updated = applyComplicationResult(game, result, seededRng([0.5]));
-		const updatedPhase = getActivePhase(updated);
+		const updatedPhase = updated;
 		expect(updatedPhase.world.entities).toHaveLength(2);
 		expect(updatedPhase.world.entities[0]?.holder).toEqual({ row: 2, col: 3 });
 		expect(updatedPhase.world.entities[1]?.holder).toEqual({ row: 1, col: 1 });
@@ -903,7 +893,7 @@ describe("applyComplicationResult — setting_shift swaps active pack", () => {
 		const game = makeGameWithDualPacks();
 		const result = { fired: { kind: "setting_shift" as const } };
 		const updated = applyComplicationResult(game, result, seededRng([0.5]));
-		const updatedPhase = getActivePhase(updated);
+		const updatedPhase = updated;
 		for (const aiId of AI_IDS) {
 			const log = updatedPhase.conversationLogs[aiId] ?? [];
 			const broadcast = log.find((e) => e.kind === "broadcast");
@@ -938,20 +928,24 @@ describe("determinism", () => {
 	});
 });
 
-// ── startPhase initialisation (engine.ts addendum) ───────────────────────────
+// ── startGame initialisation (engine.ts addendum) ────────────────────────────
 
-describe("startPhase — complicationSchedule initialisation", () => {
+describe("startGame — complicationSchedule initialisation", () => {
 	it("initialises activeComplications to an empty array", () => {
-		const game = createGame(TEST_PERSONAS);
-		const phase = getActivePhase(
-			startPhase(game, {
+		const phase = startGame(
+			TEST_PERSONAS,
+			{
 				phaseNumber: 1,
-				kRange: [1, 1],
-				nRange: [1, 1],
-				mRange: [0, 0],
-				aiGoalPool: ["goal"],
-				budgetPerAi: 0.5,
-			}),
+				setting: "",
+				weather: "",
+				timeOfDay: "",
+				objectivePairs: [],
+				interestingObjects: [],
+				obstacles: [],
+				landmarks: DEFAULT_LANDMARKS,
+				aiStarts: {},
+			},
+			{ budgetPerAi: 0.5 },
 		);
 		expect(phase.activeComplications).toEqual([]);
 	});
@@ -1050,7 +1044,7 @@ describe("resolveExpiredChatLockouts", () => {
 		const game = makeGameStateAround(phase);
 		const { nextState, resolvedAiIds } = resolveExpiredChatLockouts(game);
 		expect(resolvedAiIds).toContain("red");
-		const nextPhase = getActivePhase(nextState);
+		const nextPhase = nextState;
 		expect(nextPhase.activeComplications).toHaveLength(0);
 	});
 
@@ -1066,7 +1060,7 @@ describe("resolveExpiredChatLockouts", () => {
 		const { nextState, resolvedAiIds } = resolveExpiredChatLockouts(game);
 		expect(resolvedAiIds).toContain("red");
 		expect(resolvedAiIds).not.toContain("green");
-		const nextPhase = getActivePhase(nextState);
+		const nextPhase = nextState;
 		expect(nextPhase.activeComplications).toHaveLength(1);
 		expect(nextPhase.activeComplications[0]?.target).toBe("green");
 	});
@@ -1087,7 +1081,7 @@ describe("resolveExpiredChatLockouts", () => {
 		const game = makeGameStateAround(phase);
 		const { nextState, resolvedAiIds } = resolveExpiredChatLockouts(game);
 		expect(resolvedAiIds).toContain("cyan");
-		const nextPhase = getActivePhase(nextState);
+		const nextPhase = nextState;
 		// tool_disable should survive
 		expect(
 			nextPhase.activeComplications.some((c) => c.kind === "tool_disable"),

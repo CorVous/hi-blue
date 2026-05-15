@@ -9,19 +9,14 @@
  *   chat_lockout, chat_lockout_resolved, action_log
  */
 import { describe, expect, it } from "vitest";
-import {
-	appendMessage,
-	createGame,
-	deductBudget,
-	getActivePhase,
-	startPhase,
-} from "../engine";
+import { DEFAULT_LANDMARKS } from "../direction";
+import { appendMessage, deductBudget, startGame } from "../engine";
 import {
 	encodeRoundResult,
 	type SseEvent,
 	splitIntoWordChunks,
 } from "../round-result-encoder";
-import type { AiId, AiPersona, PhaseConfig, RoundResult } from "../types";
+import type { AiId, AiPersona, ContentPack, RoundResult } from "../types";
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -67,21 +62,24 @@ const TEST_PERSONAS: Record<AiId, AiPersona> = {
 	},
 };
 
-const PHASE_CONFIG: PhaseConfig = {
+const TEST_CONTENT_PACK: ContentPack = {
 	phaseNumber: 1,
-	kRange: [1, 1],
-	nRange: [0, 0],
-	mRange: [0, 0],
-	aiGoalPool: ["Test goal"],
-	budgetPerAi: 5,
+	setting: "",
+	weather: "",
+	timeOfDay: "",
+	objectivePairs: [],
+	interestingObjects: [],
+	obstacles: [],
+	landmarks: DEFAULT_LANDMARKS,
+	aiStarts: {},
 };
 
 function makePhase(
-	mutate?: (g: ReturnType<typeof startPhase>) => ReturnType<typeof startPhase>,
+	mutate?: (g: ReturnType<typeof startGame>) => ReturnType<typeof startGame>,
 ) {
-	let game = startPhase(createGame(TEST_PERSONAS), PHASE_CONFIG);
+	let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 	if (mutate) game = mutate(game);
-	return getActivePhase(game);
+	return game;
 }
 
 /**
@@ -94,11 +92,11 @@ function makePhase(
 function makePhaseWithMessages(
 	entries: Array<{ from: AiId | "blue"; to: AiId | "blue"; content: string }>,
 ): ReturnType<typeof makePhase> {
-	let game = startPhase(createGame(TEST_PERSONAS), PHASE_CONFIG);
+	let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 	for (const { from, to, content } of entries) {
 		game = appendMessage(game, from, to, content);
 	}
-	return getActivePhase(game);
+	return game;
 }
 
 /** Minimal pass-round result fixture */
@@ -278,9 +276,9 @@ describe("encodeRoundResult — budget events", () => {
 
 	it("budget event reflects actual remaining value from phaseAfter", () => {
 		// Deduct red's budget twice with $1 cost each
-		let game = startPhase(createGame(TEST_PERSONAS), PHASE_CONFIG);
+		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		game = deductBudget(deductBudget(game, "red", 1).game, "red", 1).game;
-		const phase = getActivePhase(game);
+		const phase = game;
 
 		const result = makePassResult();
 		const completions = { red: "r", green: "g", cyan: "b" };
@@ -301,12 +299,9 @@ describe("encodeRoundResult — lockout events (budget-exhaustion)", () => {
 	it("emits a lockout event when AI is budget-exhausted (lockedOut set)", () => {
 		// In the new encoder, lockout is driven by isLockedOut (budget exhaustion),
 		// not by empty completions. Deduct red to 0 so it's in the lockedOut set.
-		let game = startPhase(createGame(TEST_PERSONAS), {
-			...PHASE_CONFIG,
-			budgetPerAi: 1,
-		});
+		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 1 });
 		game = deductBudget(game, "red", 1).game;
-		const phase = getActivePhase(game);
+		const phase = game;
 		expect(phase.lockedOut.has("red")).toBe(true);
 
 		const result = makePassResult();
@@ -340,13 +335,10 @@ describe("encodeRoundResult — lockout events (budget-exhaustion)", () => {
 
 	it("emits lockout event for AI that just exhausted budget (has completion but lockedOut set)", () => {
 		// Red has 1 remaining (just acted, now 0) — lockedOut bit is set
-		let game = startPhase(createGame(TEST_PERSONAS), {
-			...PHASE_CONFIG,
-			budgetPerAi: 1,
-		});
+		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 1 });
 		// Deduct red down to 0
 		game = deductBudget(game, "red", 1).game;
-		const phase = getActivePhase(game);
+		const phase = game;
 		expect(phase.lockedOut.has("red")).toBe(true);
 
 		const result = makePassResult();
@@ -542,8 +534,9 @@ describe("encodeRoundResult — phase_advanced event", () => {
 		// In the flat single-game model (issue #295), phase is always 1.
 		// The phase_advanced event signals a between-phase transition for UI display,
 		// but the flat model does not track a real phase number — phase is always 1.
-		const game = startPhase(createGame(TEST_PERSONAS), PHASE_CONFIG);
-		const phaseAfter = getActivePhase(game);
+		const phaseAfter = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
 
 		const result = makePassResult({ phaseEnded: true, gameEnded: false });
 		const completions = { red: "r", green: "g", cyan: "b" };
@@ -585,16 +578,10 @@ describe("encodeRoundResult — phase_advanced event", () => {
 	});
 
 	it("phase_advanced event comes after action_log and chat_lockout events", () => {
-		const PHASE2_CONFIG: PhaseConfig = {
-			phaseNumber: 2,
-			kRange: [1, 1],
-			nRange: [0, 0],
-			mRange: [0, 0],
-			aiGoalPool: ["Phase 2 goal"],
+		// Flat model: phase is always 1; use same content pack
+		const phaseAfter = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
 			budgetPerAi: 5,
-		};
-		const game = startPhase(createGame(TEST_PERSONAS), PHASE2_CONFIG);
-		const phaseAfter = getActivePhase(game);
+		});
 
 		const result = makePassResult({
 			phaseEnded: true,

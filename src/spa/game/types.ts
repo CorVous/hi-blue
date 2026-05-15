@@ -100,9 +100,14 @@ export interface LandmarkDescription {
 	horizonPhrase: string;
 }
 
-/** Per-phase content pack: setting-flavored names, descriptions, outcomes, and placed entities. */
+/** Setting-flavored content pack: names, descriptions, outcomes, and placed entities for one game. */
 export interface ContentPack {
-	/** @deprecated Phase number is no longer meaningful in the flat single-game model (#295). */
+	/**
+	 * Slot index used by the dual-pack generator (1..3) and persisted in save
+	 * data. Retained from the pre-#295 phase-loop generator because the LLM
+	 * pipeline still emits the field and pack validation requires it; the value
+	 * has no runtime meaning in the flat single-game loop.
+	 */
 	phaseNumber?: 1 | 2 | 3;
 	setting: string;
 	weather: string;
@@ -459,36 +464,6 @@ export interface ToolRoundtripMessage {
 		reason?: string;
 	}>;
 }
-
-/**
- * @deprecated Phase concept removed (issue #295). Use GameState directly.
- * Kept as a type alias for test backward-compat.
- */
-export type PhaseState = GameState & {
-	phaseNumber: 1 | 2 | 3;
-	aiGoals: Record<AiId, string>;
-	contentPack: ContentPack;
-};
-
-/**
- * @deprecated Phase concept removed (issue #295). Use SingleGameConfig.
- * Kept as a type alias for test backward-compat.
- */
-export interface PhaseConfig {
-	phaseNumber: 1 | 2 | 3;
-	kRange: [number, number];
-	nRange: [number, number];
-	mRange: [number, number];
-	budgetPerAi: number;
-	aiGoalPool: string[];
-	winCondition?: (phase: GameState) => boolean;
-	nextPhaseConfig?: PhaseConfig;
-}
-
-/**
- * @deprecated Phase concept removed (issue #295).
- */
-export type WinCondition = (phase: GameState) => boolean;
 
 export interface RoundResult {
 	round: number;

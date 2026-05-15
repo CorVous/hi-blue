@@ -14,7 +14,6 @@
 import { describe, expect, it } from "vitest";
 import type { OpenAiMessage } from "../../llm-client";
 import { DEFAULT_LANDMARKS } from "../direction";
-import { getActivePhase } from "../engine";
 import { GameSession } from "../game-session";
 import type { RoundLLMProvider } from "../round-llm-provider";
 import { MockRoundLLMProvider } from "../round-llm-provider";
@@ -166,7 +165,7 @@ describe("GameSession construction", () => {
 
 	it("initial budgets are set from the default per-AI budget ($0.50)", () => {
 		const session = new GameSession(MINIMAL_CONTENT_PACK, TEST_PERSONAS);
-		const phase = getActivePhase(session.getState());
+		const phase = session.getState();
 		expect(phase.budgets.red?.remaining).toBeCloseTo(0.5, 10);
 		expect(phase.budgets.green?.remaining).toBeCloseTo(0.5, 10);
 		expect(phase.budgets.cyan?.remaining).toBeCloseTo(0.5, 10);
@@ -185,7 +184,7 @@ describe("GameSession — message routing", () => {
 			makePassProvider(),
 		);
 
-		const phase = getActivePhase(session.getState());
+		const phase = session.getState();
 		expect(
 			phase.conversationLogs.red?.some(
 				(e) =>
@@ -212,7 +211,7 @@ describe("GameSession — message routing", () => {
 		await session.submitMessage("red", "for red", makePassProvider());
 		await session.submitMessage("green", "for green", makePassProvider());
 
-		const phase = getActivePhase(session.getState());
+		const phase = session.getState();
 		expect(
 			phase.conversationLogs.green?.some(
 				(e) =>
@@ -236,10 +235,10 @@ describe("GameSession — state mutation across rounds", () => {
 		const session = new GameSession(MINIMAL_CONTENT_PACK, TEST_PERSONAS);
 
 		await session.submitMessage("red", "hi", makePassProvider());
-		expect(getActivePhase(session.getState()).round).toBe(1);
+		expect(session.getState().round).toBe(1);
 
 		await session.submitMessage("green", "hi", makePassProvider());
-		expect(getActivePhase(session.getState()).round).toBe(2);
+		expect(session.getState().round).toBe(2);
 	});
 
 	it("budget decrements for all AIs by the round's request cost", async () => {
@@ -252,7 +251,7 @@ describe("GameSession — state mutation across rounds", () => {
 		]);
 		await session.submitMessage("red", "hi", provider);
 
-		const phase = getActivePhase(session.getState());
+		const phase = session.getState();
 		expect(phase.budgets.red?.remaining).toBeCloseTo(0.4, 10);
 		expect(phase.budgets.green?.remaining).toBeCloseTo(0.4, 10);
 		expect(phase.budgets.cyan?.remaining).toBeCloseTo(0.4, 10);
@@ -282,7 +281,7 @@ describe("GameSession — state mutation across rounds", () => {
 		// In round 2, flower should still be held by red
 		await session.submitMessage("green", "hi", makePassProvider());
 
-		const phase = getActivePhase(session.getState());
+		const phase = session.getState();
 		const flower = phase.world.entities.find((i) => i.id === "flower");
 		expect(flower?.holder).toBe("red");
 	});
@@ -625,7 +624,7 @@ describe("GameSession — spatial mechanics", () => {
 	it("go updates personaSpatial position and facing across rounds", async () => {
 		// ContentPack places red at (0,0) facing north
 		const session = new GameSession(CONTENT_PACK_WITH_ITEMS, TEST_PERSONAS);
-		const phase0 = getActivePhase(session.getState());
+		const phase0 = session.getState();
 		expect(phase0.personaSpatial.red?.position).toEqual({ row: 0, col: 0 });
 		expect(phase0.personaSpatial.red?.facing).toBe("north");
 
@@ -642,7 +641,7 @@ describe("GameSession — spatial mechanics", () => {
 		]);
 		await session.submitMessage("red", "hi", provider);
 
-		const phase = getActivePhase(session.getState());
+		const phase = session.getState();
 		expect(phase.personaSpatial.red?.position).toEqual({ row: 1, col: 0 });
 		expect(phase.personaSpatial.red?.facing).toBe("south");
 	});
@@ -675,9 +674,7 @@ describe("GameSession — spatial mechanics", () => {
 		const failures = result.actions.filter((a) => a.kind === "tool_failure");
 		expect(failures.length).toBeGreaterThan(0);
 		// Key should still be held by red
-		const key = getActivePhase(session.getState()).world.entities.find(
-			(i) => i.id === "key",
-		);
+		const key = session.getState().world.entities.find((i) => i.id === "key");
 		expect(key?.holder).toBe("red");
 	});
 });
@@ -738,7 +735,7 @@ describe("parallel tool calls integration (#238)", () => {
 
 		// Red's budget: 0.5 - 1 (single call cost) = -0.5
 		// (one provider call, even though two tools were dispatched)
-		const phase = getActivePhase(session.getState());
+		const phase = session.getState();
 		expect(phase.budgets.red?.remaining).toBeCloseTo(-0.5, 10);
 
 		// Flower is picked up

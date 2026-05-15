@@ -9,7 +9,8 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { appendMessage, createGame, startPhase } from "../engine";
+import { DEFAULT_LANDMARKS } from "../direction";
+import { appendMessage, startGame } from "../engine";
 import { buildOpenAiMessages } from "../openai-message-builder";
 import { buildAiContext } from "../prompt-builder";
 import type { AiPersona, ConversationEntry } from "../types";
@@ -40,17 +41,22 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 	},
 };
 
-const PHASE_CONFIG = {
-	phaseNumber: 1 as 1,
-	kRange: [1, 1] as [number, number],
-	nRange: [0, 0] as [number, number],
-	mRange: [0, 0] as [number, number],
-	aiGoalPool: ["Hold the flower"],
-	budgetPerAi: 5,
+import type { ContentPack } from "../types";
+
+const TEST_CONTENT_PACK: ContentPack = {
+	phaseNumber: 1,
+	setting: "",
+	weather: "",
+	timeOfDay: "",
+	objectivePairs: [],
+	interestingObjects: [],
+	obstacles: [],
+	landmarks: DEFAULT_LANDMARKS,
+	aiStarts: {},
 };
 
 function makeGame() {
-	return startPhase(createGame(TEST_PERSONAS), PHASE_CONFIG);
+	return startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 }
 
 // ── Step 1: ConversationEntry message kind accepts tool call fields ───────────

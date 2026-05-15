@@ -147,9 +147,6 @@ function isDevHost(): boolean {
 }
 
 /**
- * @deprecated Phase concept removed (issue #295). No longer used.
- */
-/**
  * Apply SPA-side test affordances from URL search params.
  *
  * Only honoured when the SPA is served by `pnpm wrangler dev` (see
