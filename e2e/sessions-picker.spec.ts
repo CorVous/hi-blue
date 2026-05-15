@@ -385,7 +385,7 @@ test("refresh on #/sessions paints banner and topinfo", async ({ page }) => {
 	await expect(page.locator("#sessions-screen")).toBeVisible();
 	await expect(page.locator("#banner")).not.toBeEmpty();
 	await expect(page.locator("#topinfo-left")).toContainText("SESSION 0x");
-	await expect(page.locator("#topinfo-left")).toContainText("PHASE");
+	await expect(page.locator("#topinfo-left")).toContainText("EPOCH");
 	await expect(page.locator("#topinfo-right")).toContainText(
 		"connection stable",
 	);
