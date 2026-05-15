@@ -1,18 +1,17 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_LANDMARKS } from "../direction";
 import {
 	advanceRound,
 	appendActionFailure,
 	appendMessage,
-	createGame,
-	getActivePhase,
-	startPhase,
+	startGame,
 } from "../engine";
 import {
 	buildOpenAiMessages,
 	buildSilentTurn,
 } from "../openai-message-builder";
 import { buildAiContext } from "../prompt-builder";
-import type { AiPersona, PhaseConfig, ToolRoundtripMessage } from "../types";
+import type { AiPersona, ContentPack, ToolRoundtripMessage } from "../types";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -56,17 +55,20 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 	},
 };
 
-const PHASE_CONFIG: PhaseConfig = {
+const TEST_CONTENT_PACK: ContentPack = {
 	phaseNumber: 1,
-	kRange: [1, 1],
-	nRange: [0, 0],
-	mRange: [0, 0],
-	aiGoalPool: ["Hold the flower", "Balance items", "Hold the key"],
-	budgetPerAi: 5,
+	setting: "",
+	weather: "",
+	timeOfDay: "",
+	objectivePairs: [],
+	interestingObjects: [],
+	obstacles: [],
+	landmarks: DEFAULT_LANDMARKS,
+	aiStarts: {},
 };
 
 function makeGame() {
-	return startPhase(createGame(TEST_PERSONAS), PHASE_CONFIG);
+	return startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 }
 
 describe("buildOpenAiMessages", () => {
@@ -289,8 +291,7 @@ describe("buildOpenAiMessages", () => {
 
 		// Advance to round 1 — now blue addresses green; red gets nothing this round
 		game = advanceRound(game);
-		const phase = getActivePhase(game);
-		const currentRound = phase.round; // = 1
+		const currentRound = game.round; // = 1
 
 		const ctx = buildAiContext(game, "red");
 		const messages = buildOpenAiMessages(ctx, undefined, currentRound);
@@ -311,8 +312,7 @@ describe("buildOpenAiMessages", () => {
 	it("(b) peer messages this daemon this round → no silent-turn anchor, last conversational user msg is peer message", () => {
 		let game = makeGame();
 		// red receives a message from green this round
-		const phase = getActivePhase(game);
-		const currentRound = phase.round;
+		const currentRound = game.round;
 		game = appendMessage(game, "green", "red", "psst red");
 
 		const ctx = buildAiContext(game, "red");
@@ -344,8 +344,7 @@ describe("buildOpenAiMessages", () => {
 	// Case (c): blue addresses this Daemon → no anchor; last *non-state* user msg is `blue: <content>`
 	it("(c) blue addresses this daemon → no silent-turn anchor, last conversational user msg is player message", () => {
 		let game = makeGame();
-		const phase = getActivePhase(game);
-		const currentRound = phase.round;
+		const currentRound = game.round;
 		game = appendMessage(game, "blue", "red", "Hi Ember");
 
 		const ctx = buildAiContext(game, "red");
@@ -395,7 +394,7 @@ describe("buildOpenAiMessages", () => {
 
 		// Advance to round 1 — red gets nothing this round
 		game = advanceRound(game);
-		const currentRound = getActivePhase(game).round;
+		const currentRound = game.round;
 
 		const ctx = buildAiContext(game, "red");
 		const messages = buildOpenAiMessages(ctx, undefined, currentRound);

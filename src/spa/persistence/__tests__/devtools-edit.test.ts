@@ -7,8 +7,9 @@
  * This tests the "editable surface" affordance described in ADR 0004.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createGame, startPhase } from "../../game/engine.js";
-import type { AiPersona, GameState, PhaseConfig } from "../../game/types.js";
+import { DEFAULT_LANDMARKS } from "../../game/direction.js";
+import { startGame } from "../../game/engine.js";
+import type { AiPersona, ContentPack, GameState } from "../../game/types.js";
 import type { DaemonFile } from "../session-codec.js";
 import {
 	ACTIVE_KEY,
@@ -18,17 +19,16 @@ import {
 	saveActiveSession,
 } from "../session-storage.js";
 
-const TEST_PHASE_CONFIG: PhaseConfig = {
+const TEST_CONTENT_PACK: ContentPack = {
 	phaseNumber: 1,
-	kRange: [1, 1],
-	nRange: [1, 1],
-	mRange: [0, 0],
-	aiGoalPool: [
-		"Hold the flower at phase end",
-		"Ensure items are evenly distributed",
-		"Hold the key at phase end",
-	],
-	budgetPerAi: 5,
+	setting: "",
+	weather: "",
+	timeOfDay: "",
+	objectivePairs: [],
+	interestingObjects: [],
+	obstacles: [],
+	landmarks: DEFAULT_LANDMARKS,
+	aiStarts: {},
 };
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
@@ -69,8 +69,10 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 };
 
 function makeFreshGame(): GameState {
-	const game = createGame(TEST_PERSONAS);
-	return startPhase(game, TEST_PHASE_CONFIG, () => 0);
+	return startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+		budgetPerAi: 5,
+		rng: () => 0,
+	});
 }
 
 function makeLocalStorageStub(initialData: Record<string, string> = {}) {

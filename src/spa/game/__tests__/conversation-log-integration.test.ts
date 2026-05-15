@@ -19,12 +19,12 @@
 import { describe, expect, it } from "vitest";
 import { renderEntry } from "../conversation-log.js";
 import { DEFAULT_LANDMARKS } from "../direction";
-import { createGame, getActivePhase, startPhase } from "../engine";
+import { startGame } from "../engine";
 import { buildOpenAiMessages } from "../openai-message-builder";
 import { buildAiContext } from "../prompt-builder";
 import { runRound } from "../round-coordinator";
 import { MockRoundLLMProvider } from "../round-llm-provider";
-import type { AiPersona, ContentPack, PhaseConfig } from "../types";
+import type { AiPersona, ContentPack } from "../types";
 
 /** Concatenate all role-turn message contents into a single searchable string. */
 function flattenMessageContents(
@@ -78,19 +78,6 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 		blurb: "Frost is laconic and diffident. Hold the key at phase end.",
 		voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
 	},
-};
-
-const TEST_PHASE_CONFIG: PhaseConfig = {
-	phaseNumber: 1,
-	kRange: [1, 1],
-	nRange: [1, 1],
-	mRange: [0, 0],
-	aiGoalPool: [
-		"Hold the flower at phase end",
-		"Ensure items are evenly distributed",
-		"Hold the key at phase end",
-	],
-	budgetPerAi: 10,
 };
 
 /**
@@ -152,10 +139,7 @@ const TEST_CONTENT_PACK: ContentPack = {
 };
 
 function makeGame() {
-	return startPhase(
-		createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]),
-		TEST_PHASE_CONFIG,
-	);
+	return startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 10 });
 }
 
 describe("conversation log integration — no ## Whispers Received ever", () => {
@@ -207,7 +191,7 @@ describe("conversation log integration — witnessed pick_up", () => {
 		const { nextState } = await runRound(game, "red", "hello", provider);
 
 		// Verify green's conversationLog has a witnessed-event entry
-		const phase = getActivePhase(nextState);
+		const phase = nextState;
 		const greenLog = phase.conversationLogs.green ?? [];
 		const witnessedEntry = greenLog.find(
 			(e) => e.kind === "witnessed-event" && e.actionKind === "pick_up",
@@ -276,7 +260,7 @@ describe("conversation log integration — witnessed pick_up", () => {
 		const { nextState } = await runRound(setup, "red", "hello", provider);
 
 		// cyan's conversationLog should have no witnessed-event for pick_up
-		const phase = getActivePhase(nextState);
+		const phase = nextState;
 		const cyanLog = phase.conversationLogs.cyan ?? [];
 		const cyanWitnessed = cyanLog.filter((e) => e.kind === "witnessed-event");
 		expect(cyanWitnessed).toHaveLength(0);
@@ -336,7 +320,7 @@ describe("conversation log integration — use outcome rendering", () => {
 			provider2,
 		);
 
-		const phase = getActivePhase(state2);
+		const phase = state2;
 
 		// green's conversationLog should have a witnessed-event with kind "use"
 		const greenLog = phase.conversationLogs.green ?? [];
@@ -465,7 +449,7 @@ describe("conversation log integration — put_down placementFlavor", () => {
 			provider4,
 		);
 
-		const phase4 = getActivePhase(state4);
+		const phase4 = state4;
 
 		// Verify green's conversationLog for put_down witnessed-event
 		const greenLog = phase4.conversationLogs.green ?? [];
@@ -512,10 +496,7 @@ describe("conversation log integration — action-failure (issue #287)", () => {
 				cyan: { position: { row: 0, col: 2 }, facing: "south" },
 			},
 		};
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [obstacleAtSouth]),
-			TEST_PHASE_CONFIG,
-		);
+		const game = startGame(TEST_PERSONAS, obstacleAtSouth, { budgetPerAi: 10 });
 
 		// red tries to go south → blocked by wall at (3,0)
 		const provider = new MockRoundLLMProvider([
@@ -535,7 +516,7 @@ describe("conversation log integration — action-failure (issue #287)", () => {
 		const { nextState } = await runRound(game, "red", "hi", provider);
 
 		// Build the actor's conversation log and check for the failure line
-		const phase = getActivePhase(nextState);
+		const phase = nextState;
 		const redLog = phase.conversationLogs.red ?? [];
 
 		const failureLine = redLog

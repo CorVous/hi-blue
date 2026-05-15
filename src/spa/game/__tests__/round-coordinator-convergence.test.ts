@@ -9,14 +9,13 @@
  */
 import { describe, expect, it } from "vitest";
 import { DEFAULT_LANDMARKS } from "../direction";
-import { createGame, startPhase } from "../engine";
+import { startGame } from "../engine";
 import { runRound } from "../round-coordinator";
 import { MockRoundLLMProvider } from "../round-llm-provider";
 import type {
 	AiPersona,
 	ContentPack,
 	ConvergenceObjective,
-	PhaseConfig,
 	WorldEntity,
 } from "../types";
 
@@ -99,15 +98,6 @@ const TEST_CONTENT_PACK: ContentPack = {
 	},
 };
 
-const TEST_PHASE_CONFIG: PhaseConfig = {
-	phaseNumber: 1,
-	kRange: [0, 0],
-	nRange: [0, 0],
-	mRange: [0, 0],
-	aiGoalPool: ["test goal"],
-	budgetPerAi: 99,
-};
-
 /** A ConvergenceObjective pointing at altar_space. */
 const CONVERGENCE_OBJECTIVE: ConvergenceObjective = {
 	id: "obj-conv",
@@ -126,18 +116,14 @@ function makeProvider() {
 }
 
 /**
- * Build a base game state via the standard createGame + startPhase path, then
- * overlay the objectives and spatial positions we need.
+ * Build a base game state, then overlay the objectives and spatial positions we need.
  *
  * - red at (4,4) facing north  → red's own cell = space cell; red witnesses
  * - green at (0,0) facing south → cone is (0,0)…(2,2); does NOT contain (4,4)
  * - cyan at (0,2) facing south  → cone is (0,2)…(2,4); does NOT contain (4,4)
  */
 function makeBaseGame() {
-	const base = startPhase(
-		createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]),
-		TEST_PHASE_CONFIG,
-	);
+	const base = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 99 });
 	// Override objectives with the convergence one.
 	return {
 		...base,
@@ -146,7 +132,7 @@ function makeBaseGame() {
 		world: {
 			entities: [CONVERGENCE_OBJECT, CONVERGENCE_SPACE],
 		},
-		// Use the aiStarts layout from TEST_CONTENT_PACK (startPhase already applied
+		// Use the aiStarts layout from TEST_CONTENT_PACK (startGame already applied
 		// these from aiStarts, but we re-assert them here for clarity / safety).
 		personaSpatial: TEST_CONTENT_PACK.aiStarts as typeof base.personaSpatial,
 	};

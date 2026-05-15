@@ -11,13 +11,9 @@
  */
 import { describe, expect, it } from "vitest";
 import { serializeGameSave } from "../save-serializer";
-import {
-	advancePhase,
-	appendMessage,
-	createGame,
-	startPhase,
-} from "../spa/game/engine";
-import type { AiPersona, PhaseConfig } from "../spa/game/types";
+import { DEFAULT_LANDMARKS } from "../spa/game/direction";
+import { appendMessage, startGame } from "../spa/game/engine";
+import type { AiPersona, ContentPack } from "../spa/game/types";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -61,32 +57,23 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 	},
 };
 
-const PHASE1_CONFIG: PhaseConfig = {
+const TEST_CONTENT_PACK: ContentPack = {
 	phaseNumber: 1,
-	kRange: [1, 1],
-	nRange: [1, 1],
-	mRange: [0, 0],
-	aiGoalPool: [
-		"Hold the flower at phase end",
-		"Ensure items are evenly distributed",
-		"Hold the key at phase end",
-	],
-	budgetPerAi: 5,
-};
-
-const PHASE2_CONFIG: PhaseConfig = {
-	...PHASE1_CONFIG,
-	phaseNumber: 2,
-};
-
-const PHASE3_CONFIG: PhaseConfig = {
-	...PHASE1_CONFIG,
-	phaseNumber: 3,
+	setting: "",
+	weather: "",
+	timeOfDay: "",
+	objectivePairs: [],
+	interestingObjects: [],
+	obstacles: [],
+	landmarks: DEFAULT_LANDMARKS,
+	aiStarts: {},
 };
 
 describe("serializeGameSave", () => {
 	it("includes each AI's persona in the output", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), PHASE1_CONFIG);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
 		const save = serializeGameSave(game);
 		expect(save.ais).toHaveLength(3);
 		const ids = save.ais.map((a) => a.persona.id);
@@ -96,7 +83,9 @@ describe("serializeGameSave", () => {
 	});
 
 	it("includes persona fields (name, color, blurb, personaGoal)", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), PHASE1_CONFIG);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
 		const save = serializeGameSave(game);
 		const ember = save.ais.find((a) => a.persona.id === "red");
 		expect(ember?.persona.name).toBe("Ember");
@@ -108,7 +97,7 @@ describe("serializeGameSave", () => {
 	});
 
 	it("includes the per-phase transcript for each AI", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), PHASE1_CONFIG);
+		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		game = appendMessage(game, "blue", "red", "Hello Ember");
 		game = appendMessage(game, "red", "blue", "Greetings, player");
 		const save = serializeGameSave(game);
@@ -126,7 +115,7 @@ describe("serializeGameSave", () => {
 	});
 
 	it("includes peer messages in the per-phase conversationLog (via per-Daemon log)", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), PHASE1_CONFIG);
+		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		game = appendMessage(game, "red", "cyan", "Secret plan");
 		const save = serializeGameSave(game);
 		// Message from red appears in red's conversationLog (sender's log gets the entry)
@@ -144,14 +133,12 @@ describe("serializeGameSave", () => {
 
 	it("accumulates transcripts in a single phase (flat model, #295)", () => {
 		// In the flat single-game model (issue #295), all conversation accumulates
-		// in one phase. advancePhase() with a next config is a no-op.
-		let game = startPhase(createGame(TEST_PERSONAS), PHASE1_CONFIG);
+		// in one phase.
+		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		game = appendMessage(game, "blue", "red", "Message 1");
-		game = advancePhase(game, PHASE2_CONFIG); // no-op in flat model
 		game = appendMessage(game, "blue", "red", "Message 2");
-		game = advancePhase(game, PHASE3_CONFIG); // no-op in flat model
 		game = appendMessage(game, "blue", "red", "Message 3");
-		game = advancePhase(game); // marks complete
+		game = { ...game, isComplete: true };
 
 		const save = serializeGameSave(game);
 		const ember = save.ais.find((a) => a.persona.id === "red");
@@ -174,7 +161,9 @@ describe("serializeGameSave", () => {
 	});
 
 	it("produces a serializable (round-trippable) payload", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), PHASE1_CONFIG);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
 		const save = serializeGameSave(game);
 		const json = JSON.stringify(save);
 		const parsed = JSON.parse(json);
@@ -182,13 +171,15 @@ describe("serializeGameSave", () => {
 	});
 
 	it("output has a version field of 4 (v4 = chat/whisper collapsed into message primitive)", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), PHASE1_CONFIG);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
 		const save = serializeGameSave(game);
 		expect(save.version).toBe(4);
 	});
 
 	it("peer message in green's log only if green is sender or recipient", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), PHASE1_CONFIG);
+		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		// Message between red and cyan — should appear in red and cyan, not green
 		game = appendMessage(game, "red", "cyan", "Our secret");
 		const save = serializeGameSave(game);

@@ -5,7 +5,8 @@
  * Also covers the persistence round-trip for LLM-shaped blurbs.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { PhaseConfig } from "../game/types.js";
+import { DEFAULT_LANDMARKS } from "../game/direction.js";
+import type { ContentPack } from "../game/types.js";
 import { STATIC_CONTENT_PACKS } from "./fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "./fixtures/static-personas";
 
@@ -177,24 +178,23 @@ describe("renderGame — session restore (formerly async bootstrap)", () => {
 // ── Persistence round-trip regression ────────────────────────────────────────
 
 describe("persistence — LLM-shaped blurb round-trips verbatim", () => {
-	const TEST_PHASE_CONFIG: PhaseConfig = {
+	const TEST_CONTENT_PACK: ContentPack = {
 		phaseNumber: 1,
-		kRange: [1, 1],
-		nRange: [1, 1],
-		mRange: [0, 0],
-		aiGoalPool: [
-			"Hold the flower at phase end",
-			"Ensure items are evenly distributed",
-			"Hold the key at phase end",
-		],
-		budgetPerAi: 5,
+		setting: "",
+		weather: "",
+		timeOfDay: "",
+		objectivePairs: [],
+		interestingObjects: [],
+		obstacles: [],
+		landmarks: DEFAULT_LANDMARKS,
+		aiStarts: {},
 	};
 
 	it("serializeSession + deserializeSession preserves an LLM-shaped blurb", async () => {
 		const { serializeSession, deserializeSession } = await import(
 			"../persistence/session-codec.js"
 		);
-		const { createGame, startPhase } = await import("../game/engine.js");
+		const { startGame } = await import("../game/engine.js");
 
 		const LLM_BLURB =
 			"Ember is stoic and methodical, yet prone to sudden bursts of impulsive clarity. Every problem they encounter becomes a lens — not to examine the world, but to examine themself. Ember holds order as a value not because rules comfort them but because disorder reveals too much, too quickly. Contradiction fuels them. Ember is never quite settled.";
@@ -242,11 +242,10 @@ describe("persistence — LLM-shaped blurb round-trips verbatim", () => {
 			},
 		};
 
-		const game = startPhase(
-			createGame(personasWithLlmBlurb),
-			TEST_PHASE_CONFIG,
-			() => 0,
-		);
+		const game = startGame(personasWithLlmBlurb, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+			rng: () => 0,
+		});
 		const now = new Date().toISOString();
 		const files = serializeSession(game, now, now);
 		const result = deserializeSession(files);

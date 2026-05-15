@@ -162,7 +162,7 @@ export async function buildSameDaemonsSession(
  * Construct a GameSession from pre-generated assets.
  *
  * `opts.rng`, when provided, is forwarded to the GameSession constructor
- * and ultimately drives initial spatial placement via `startPhase`. When
+ * and ultimately drives initial spatial placement via `startGame`. When
  * undefined the constructor falls back to `Math.random` as before.
  * Spike #239 passes a Mulberry32 stream here so a `?seed=N` run pins
  * spatial layout across A/B sessions.

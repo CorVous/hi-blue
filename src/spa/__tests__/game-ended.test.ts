@@ -8,7 +8,8 @@
  * re-enable on `if (!gameEnded)`.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { PhaseConfig } from "../game/types.js";
+import { DEFAULT_LANDMARKS } from "../game/direction.js";
+import type { ContentPack } from "../game/types.js";
 
 // Provide globals before importing the module
 vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
@@ -17,17 +18,16 @@ vi.stubGlobal("__DEV__", true);
 import { STATIC_CONTENT_PACKS } from "./fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "./fixtures/static-personas";
 
-const TEST_PHASE_CONFIG: PhaseConfig = {
+const TEST_CONTENT_PACK: ContentPack = {
 	phaseNumber: 1,
-	kRange: [1, 1],
-	nRange: [1, 1],
-	mRange: [0, 0],
-	aiGoalPool: [
-		"Hold the flower at phase end",
-		"Ensure items are evenly distributed",
-		"Hold the key at phase end",
-	],
-	budgetPerAi: 5,
+	setting: "",
+	weather: "",
+	timeOfDay: "",
+	objectivePairs: [],
+	interestingObjects: [],
+	obstacles: [],
+	landmarks: DEFAULT_LANDMARKS,
+	aiStarts: {},
 };
 
 function makeLocalStorageStub(initialData: Record<string, string> = {}) {
@@ -56,8 +56,8 @@ async function seedSessionInStub(
 ): Promise<void> {
 	// Use engine functions directly (not buildSessionFromAssets) to avoid the
 	// module-level vi.mock("../game/game-session.js") interfering with session
-	// seeding — GameSession is mocked but createGame/startPhase are not.
-	const { createGame, startPhase } = await import("../game/engine.js");
+	// seeding — GameSession is mocked but startGame is not.
+	const { startGame } = await import("../game/engine.js");
 	const { mintAndActivateNewSession, saveActiveSession } = await import(
 		"../persistence/session-storage.js"
 	);
@@ -69,10 +69,10 @@ async function seedSessionInStub(
 	});
 	try {
 		mintAndActivateNewSession();
-		const gameState = startPhase(
-			createGame(STATIC_PERSONAS, STATIC_CONTENT_PACKS),
-			TEST_PHASE_CONFIG,
-			() => 0,
+		const gameState = startGame(
+			STATIC_PERSONAS,
+			STATIC_CONTENT_PACKS[0] ?? TEST_CONTENT_PACK,
+			{ budgetPerAi: 5, rng: () => 0 },
 		);
 		saveActiveSession(gameState);
 	} finally {

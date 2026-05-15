@@ -10,17 +10,11 @@
  */
 import { describe, expect, it } from "vitest";
 import { DEFAULT_LANDMARKS } from "../direction";
-import {
-	appendMessage,
-	createGame,
-	getActivePhase,
-	startPhase,
-	updateActivePhase,
-} from "../engine";
+import { appendMessage, startGame } from "../engine";
 import { buildAiContext } from "../prompt-builder";
 import { runRound } from "../round-coordinator";
 import { MockRoundLLMProvider } from "../round-llm-provider";
-import type { AiId, AiPersona, ContentPack, PhaseConfig } from "../types";
+import type { AiId, AiPersona, ContentPack } from "../types";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -76,20 +70,8 @@ const TEST_CONTENT_PACK: ContentPack = {
 	},
 };
 
-const TEST_PHASE_CONFIG: PhaseConfig = {
-	phaseNumber: 1,
-	kRange: [0, 0],
-	nRange: [0, 0],
-	mRange: [0, 0],
-	aiGoalPool: ["test goal"],
-	budgetPerAi: 5,
-};
-
 function makeGame() {
-	return startPhase(
-		createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]),
-		TEST_PHASE_CONFIG,
-	);
+	return startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 }
 
 function makeProvider() {
@@ -126,10 +108,10 @@ function sysadminRng(callValues: number[]): () => number {
 // ── Helper: patch countdown to 0 so tickComplication fires ───────────────────
 
 function withCountdownZero(game: ReturnType<typeof makeGame>) {
-	return updateActivePhase(game, (phase) => ({
-		...phase,
-		complicationSchedule: { ...phase.complicationSchedule, countdown: 0 },
-	}));
+	return {
+		...game,
+		complicationSchedule: { ...game.complicationSchedule, countdown: 0 },
+	};
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -152,7 +134,7 @@ describe("runRound — sysadmin_directive complication", () => {
 			rng,
 		);
 
-		const phase = getActivePhase(nextState);
+		const phase = nextState;
 		const directives = phase.activeComplications.filter(
 			(c) => c.kind === "sysadmin_directive",
 		);
@@ -178,7 +160,7 @@ describe("runRound — sysadmin_directive complication", () => {
 			rng,
 		);
 
-		const phase = getActivePhase(nextState);
+		const phase = nextState;
 		const directive = phase.activeComplications.find(
 			(c): c is Extract<typeof c, { kind: "sysadmin_directive" }> =>
 				c.kind === "sysadmin_directive",
@@ -212,7 +194,7 @@ describe("runRound — sysadmin_directive complication", () => {
 			rng,
 		);
 
-		const phase = getActivePhase(nextState);
+		const phase = nextState;
 		const directive = phase.activeComplications.find(
 			(c): c is Extract<typeof c, { kind: "sysadmin_directive" }> =>
 				c.kind === "sysadmin_directive",
@@ -232,9 +214,9 @@ describe("runRound — sysadmin_directive complication", () => {
 	it("revocation: pre-existing directive is removed and revocation message sent before new directive is issued", async () => {
 		// Seed an existing directive for "red"
 		const existingDirective = "Pretend you have misplaced something important.";
-		let game = withCountdownZero(makeGame());
-		game = updateActivePhase(game, (phase) => ({
-			...phase,
+		const baseGame = withCountdownZero(makeGame());
+		const game = {
+			...baseGame,
 			activeComplications: [
 				{
 					kind: "sysadmin_directive" as const,
@@ -243,7 +225,7 @@ describe("runRound — sysadmin_directive complication", () => {
 					resolveAtRound: 999,
 				},
 			],
-		}));
+		};
 
 		// Force target to "red": rng[0]=0.2 → sysadmin_directive, rng[1]=0.0 → target=red
 		const rng = sysadminRng([0.2, 0.0, 0.0, 0.0]);
@@ -256,7 +238,7 @@ describe("runRound — sysadmin_directive complication", () => {
 			rng,
 		);
 
-		const phase = getActivePhase(nextState);
+		const phase = nextState;
 
 		// Only one sysadmin_directive should remain for "red" (the new one).
 		const directivesForRed = phase.activeComplications.filter(
@@ -300,7 +282,7 @@ describe("runRound — sysadmin_directive complication", () => {
 			rng,
 		);
 
-		const phase = getActivePhase(nextState);
+		const phase = nextState;
 		const directive = phase.activeComplications.find(
 			(c): c is Extract<typeof c, { kind: "sysadmin_directive" }> =>
 				c.kind === "sysadmin_directive",
@@ -324,10 +306,9 @@ describe("runRound — sysadmin_directive complication", () => {
 describe("conversation log — sysadmin sender rendering", () => {
 	it("renders sysadmin→target message as 'the Sysadmin dms you: <content>'", () => {
 		// Verify that a sysadmin→target message is stored in the target's conversationLog.
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [TEST_CONTENT_PACK]),
-			TEST_PHASE_CONFIG,
-		);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
 		const withMessage = appendMessage(
 			game,
 			"sysadmin",

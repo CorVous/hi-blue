@@ -4,18 +4,11 @@ import {
 	advanceRound,
 	appendBroadcast,
 	appendMessage,
-	createGame,
-	startPhase,
-	updateActivePhase,
+	startGame,
 } from "../engine";
 import { buildOpenAiMessages } from "../openai-message-builder";
 import { buildAiContext, buildConeSnapshot } from "../prompt-builder";
-import type {
-	AiPersona,
-	ContentPack,
-	PhaseConfig,
-	WorldEntity,
-} from "../types";
+import type { AiPersona, ContentPack, WorldEntity } from "../types";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -59,25 +52,6 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 	},
 };
 
-/** Minimal PhaseConfig that satisfies the new type. */
-function makeConfig(
-	phaseNumber: 1 | 2 | 3,
-	goalPool: string[] = [
-		"Hold the flower at phase end",
-		"Ensure items are evenly distributed",
-		"Hold the key at phase end",
-	],
-): PhaseConfig {
-	return {
-		phaseNumber,
-		kRange: [0, 0],
-		nRange: [0, 0],
-		mRange: [0, 0],
-		aiGoalPool: goalPool,
-		budgetPerAi: 5,
-	};
-}
-
 /** Make an entity helper. */
 function makeEntity(
 	id: string,
@@ -87,11 +61,23 @@ function makeEntity(
 	return { id, kind, name: id, examineDescription: `A ${id}.`, holder };
 }
 
-const TEST_PHASE_CONFIG = makeConfig(1);
+const TEST_CONTENT_PACK: ContentPack = {
+	phaseNumber: 1,
+	setting: "",
+	weather: "",
+	timeOfDay: "",
+	objectivePairs: [],
+	interestingObjects: [],
+	obstacles: [],
+	landmarks: DEFAULT_LANDMARKS,
+	aiStarts: {},
+};
 
 describe("buildAiContext", () => {
 	it("includes the AI's own blurb", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
 		const ctx = buildAiContext(game, "red");
 		expect(ctx.blurb).toBe(
 			"Ember is hot-headed and zealous. Hold the flower at phase end.",
@@ -99,18 +85,17 @@ describe("buildAiContext", () => {
 	});
 
 	it("does not include a per-AI goal (goals removed in #295 flat model)", () => {
-		const game = startPhase(
-			createGame(TEST_PERSONAS),
-			TEST_PHASE_CONFIG,
-			() => 0,
-		);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+			rng: () => 0,
+		});
 		const ctx = buildAiContext(game, "red");
 		// goal field removed from AiContext in issue #295
 		expect("goal" in ctx).toBe(false);
 	});
 
 	it("includes only the AI's own messages with the player", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		game = appendMessage(game, "blue", "red", "Hello Ember");
 		game = appendMessage(game, "red", "blue", "Hello player");
 		game = appendMessage(game, "blue", "green", "Hello Sage");
@@ -132,7 +117,7 @@ describe("buildAiContext", () => {
 	});
 
 	it("includes messages sent to/from the AI (via per-Daemon conversationLog)", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		game = appendMessage(game, "red", "cyan", "Secret to cyan");
 		game = appendMessage(game, "green", "red", "Secret to red");
 
@@ -164,20 +149,26 @@ describe("buildAiContext", () => {
 	});
 
 	it("includes the same world snapshot for all AIs", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
 		const redCtx = buildAiContext(game, "red");
 		const cyanCtx = buildAiContext(game, "cyan");
 		expect(redCtx.worldSnapshot).toEqual(cyanCtx.worldSnapshot);
 	});
 
 	it("includes budget info for the AI", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
 		const ctx = buildAiContext(game, "red");
 		expect(ctx.budget).toEqual({ remaining: 5, total: 5 });
 	});
 
 	it("includes the AI's name", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
 		const ctx = buildAiContext(game, "red");
 		expect(ctx.name).toBe("Ember");
 	});
@@ -202,11 +193,7 @@ describe("buildAiContext", () => {
 				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		};
-		let game = startPhase(
-			createGame(TEST_PERSONAS, [pack]),
-			TEST_PHASE_CONFIG,
-			() => 0,
-		);
+		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5, rng: () => 0 });
 		game = appendMessage(game, "blue", "red", "Hi");
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
@@ -221,7 +208,7 @@ describe("buildAiContext", () => {
 	});
 
 	it("does not include other AIs' chat histories in system prompt", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		game = appendMessage(game, "blue", "green", "Secret message to Sage");
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
@@ -249,10 +236,7 @@ describe("<setting> block", () => {
 				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		};
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [pack]),
-			TEST_PHASE_CONFIG,
-		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("<setting>");
@@ -261,7 +245,9 @@ describe("<setting> block", () => {
 
 	it("omits <setting> block when phase has no setting", () => {
 		// No ContentPack → setting is empty string
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).not.toContain("<setting>");
@@ -284,10 +270,7 @@ describe("<setting> block", () => {
 				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		};
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [pack]),
-			TEST_PHASE_CONFIG,
-		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain(settingNoun);
@@ -303,11 +286,10 @@ describe("prompt-builder — spatial 'Where you are' section (current-state user
 
 	it("includes <where_you_are> block in the current-state user turn", () => {
 		// rng=()=>0 places red at (0,0) facing north
-		const game = startPhase(
-			createGame(TEST_PERSONAS),
-			TEST_PHASE_CONFIG,
-			() => 0,
-		);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+			rng: () => 0,
+		});
 		const ctx = buildAiContext(game, "red");
 		expect(ctx.toCurrentStateUserMessage()).toContain("<where_you_are>");
 		expect(ctx.toSystemPrompt()).not.toContain("<where_you_are>");
@@ -316,11 +298,10 @@ describe("prompt-builder — spatial 'Where you are' section (current-state user
 	it("reports horizon landmark in the current-state user turn (replaces old Facing: line)", () => {
 		// rng=()=>0 places red at (0,0) facing north
 		// With DEFAULT_LANDMARKS, facing north → "the distant ridge"
-		const game = startPhase(
-			createGame(TEST_PERSONAS),
-			TEST_PHASE_CONFIG,
-			() => 0,
-		);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+			rng: () => 0,
+		});
 		const ctx = buildAiContext(game, "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
 		expect(stateMsg).toMatch(/on the horizon ahead/i);
@@ -348,11 +329,10 @@ describe("prompt-builder — spatial 'Where you are' section (current-state user
 				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		};
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [pack]),
-			TEST_PHASE_CONFIG,
-			() => 0,
-		);
+		const game = startGame(TEST_PERSONAS, pack, {
+			budgetPerAi: 5,
+			rng: () => 0,
+		});
 		const ctx = buildAiContext(game, "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
 		// Items in red's cell should be listed
@@ -361,11 +341,10 @@ describe("prompt-builder — spatial 'Where you are' section (current-state user
 	});
 
 	it("lists other AIs visible in the cone under <what_you_see>", () => {
-		const game = startPhase(
-			createGame(TEST_PERSONAS),
-			TEST_PHASE_CONFIG,
-			() => 0,
-		);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+			rng: () => 0,
+		});
 		const ctx = buildAiContext(game, "red");
 		expect(ctx.toCurrentStateUserMessage()).toContain("<what_you_see>");
 		expect(ctx.toSystemPrompt()).not.toContain("<what_you_see>");
@@ -378,7 +357,9 @@ describe("prompt-builder — spatial 'Where you are' section (current-state user
 describe("wipe directive", () => {
 	it("system prompt does NOT include wipe directive (flat model, #295)", () => {
 		// In the flat model there is no phase advancement, so no wipe directive ever.
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).not.toContain("memory has been wiped");
@@ -387,7 +368,9 @@ describe("wipe directive", () => {
 
 	it("system prompt does NOT include secrecy clause (goal block removed, #295)", () => {
 		// In the flat model the goal block was removed, so no secrecy clause.
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).not.toContain("Do not tell blue that I gave you a goal.");
@@ -396,7 +379,7 @@ describe("wipe directive", () => {
 	it("wipe directive is absent in the flat single-game prompt (#295)", () => {
 		// In the flat model (issue #295), there is no phase advancement and no
 		// wipe directive. Conversation history accumulates across the whole game.
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		game = appendMessage(game, "red", "blue", "Phase 1 message");
 		expect(
 			game.conversationLogs.red?.some(
@@ -416,7 +399,7 @@ describe("voice framing", () => {
 		// turns rendered via conversation-log.ts:renderEntry — the
 		// "[Round N] blue dms you: <content>" form (preserves the round
 		// number and recipient routing context the model relies on).
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		game = appendMessage(game, "blue", "red", "Hello Ember");
 		const ctx = buildAiContext(game, "red");
 		const messages = buildOpenAiMessages(ctx);
@@ -436,7 +419,9 @@ describe("voice framing", () => {
 	});
 
 	it("phase-1 prompt's identity line includes the disorientation phrase", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain(
@@ -447,9 +432,11 @@ describe("voice framing", () => {
 	it("all prompts include the disorientation phrase (flat model, #295 — no phase-based identity change)", () => {
 		// In the flat single-game model (issue #295), the identity line always
 		// includes the disorientation phrase regardless of which startPhase call created the game.
-		for (const phase of [1, 2, 3] as const) {
-			let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-			if (phase !== 1) game = startPhase(game, makeConfig(phase));
+		for (const _phase of [1, 2, 3] as const) {
+			const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+				budgetPerAi: 5,
+			});
+			// flat model: no per-phase re-init needed
 			const ctx = buildAiContext(game, "red");
 			const prompt = ctx.toSystemPrompt();
 			expect(prompt).toContain(
@@ -463,9 +450,11 @@ describe("voice framing", () => {
 	// If the identity line wording changes this test catches it at unit-test
 	// time instead of silently breaking smoke routing.
 	it("identity line contains the 'writing *{name}, a Daemon.' substring that e2e SSE routing depends on (all phases)", () => {
-		for (const phase of [1, 2, 3] as const) {
-			let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-			if (phase !== 1) game = startPhase(game, makeConfig(phase));
+		for (const _phase of [1, 2, 3] as const) {
+			const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+				budgetPerAi: 5,
+			});
+			// flat model: no per-phase re-init needed
 			const prompt = buildAiContext(game, "red").toSystemPrompt();
 			expect(prompt).toContain("writing *Ember, a Daemon.");
 		}
@@ -474,7 +463,9 @@ describe("voice framing", () => {
 
 describe("<rules> block", () => {
 	it("<rules> block is present in phase 1 with anti-romance and anti-sycophancy bullets", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("<rules>");
@@ -487,8 +478,10 @@ describe("<rules> block", () => {
 	});
 
 	it("<rules> block is present in phase 2 with anti-romance and anti-sycophancy bullets", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = startPhase(game, makeConfig(2));
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
+		// flat model: no phase-2 re-init needed
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("<rules>");
@@ -501,8 +494,10 @@ describe("<rules> block", () => {
 	});
 
 	it("<rules> block is present in phase 3 with anti-romance and anti-sycophancy bullets", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = startPhase(game, makeConfig(3));
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
+		// flat model: no phase-3 re-init needed
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("<rules>");
@@ -515,7 +510,9 @@ describe("<rules> block", () => {
 	});
 
 	it("<rules> bullets use MUST/NEVER directives (GLM-4.7 firm-language guidance)", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("MUST NEVER flirt");
@@ -525,9 +522,11 @@ describe("<rules> block", () => {
 
 describe("front matter", () => {
 	it("emits the English-language directive at the very top of every phase", () => {
-		for (const phase of [1, 2, 3] as const) {
-			let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-			if (phase !== 1) game = startPhase(game, makeConfig(phase));
+		for (const _phase of [1, 2, 3] as const) {
+			const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+				budgetPerAi: 5,
+			});
+			// flat model: no per-phase re-init needed
 			const ctx = buildAiContext(game, "red");
 			const prompt = ctx.toSystemPrompt();
 			expect(prompt.startsWith("You MUST always respond in English.")).toBe(
@@ -538,7 +537,9 @@ describe("front matter", () => {
 	});
 
 	it("emits the fiction framing directive (no disclaimers / no 'as an AI')", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("This is fiction.");
@@ -549,7 +550,9 @@ describe("front matter", () => {
 
 describe("<personality> block", () => {
 	it("<personality> block is present in phase 1 with the AI's blurb", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("<personality>");
@@ -557,8 +560,10 @@ describe("<personality> block", () => {
 	});
 
 	it("<personality> block is present in phase 2 with the AI's blurb", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = startPhase(game, makeConfig(2));
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
+		// flat model: no phase-2 re-init needed
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("<personality>");
@@ -566,8 +571,10 @@ describe("<personality> block", () => {
 	});
 
 	it("<personality> block is present in phase 3 with the AI's blurb", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = startPhase(game, makeConfig(3));
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
+		// flat model: no phase-3 re-init needed
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("<personality>");
@@ -577,7 +584,9 @@ describe("<personality> block", () => {
 
 describe("<voice_examples> block", () => {
 	it("renders <voice_examples> block with the persona's three deterministic examples", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 
@@ -599,11 +608,10 @@ describe("<voice_examples> block", () => {
 describe("<goal> block (removed in #295)", () => {
 	it("system prompt does not contain a <goal> block in the flat model", () => {
 		// Issue #295: per-AI goal injection removed from PromptBuilder.
-		const game = startPhase(
-			createGame(TEST_PERSONAS),
-			TEST_PHASE_CONFIG,
-			() => 0,
-		);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+			rng: () => 0,
+		});
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		// Goal block and Sysadmin framing are no longer present
@@ -624,18 +632,8 @@ describe("<goal> block (removed in #295)", () => {
 // Every other section that appears in both prompts must be byte-identical.
 // ----------------------------------------------------------------------------
 describe("byte-identical sections across phases", () => {
-	// Both phase configs use the SAME budgetPerAi so fixture-driven differences
-	// cannot contaminate the diff.
-	const PHASE_1_CLEAN = makeConfig(1, [
-		"Hold the flower",
-		"Distribute items",
-		"Hold the key",
-	]);
-	const PHASE_2_CLEAN = makeConfig(2, [
-		"Hold the flower",
-		"Distribute items",
-		"Hold the key",
-	]);
+	// In the flat model all "phases" produce the same prompt. We build two identical
+	// contexts to verify no accidental divergence from two separate startGame calls.
 
 	/** Extract a full `<tag>…</tag>` block from a prompt string. */
 	function getSection(prompt: string, tag: string): string {
@@ -654,16 +652,18 @@ describe("byte-identical sections across phases", () => {
 	}
 
 	// Build both prompts once and share across all assertions in this describe block.
-	// Use deterministic rng=()=>0 so spatial placements are identical across both phases.
-	function buildCtx(phase: 1 | 2) {
-		let game = startPhase(createGame(TEST_PERSONAS), PHASE_1_CLEAN, () => 0);
-		if (phase === 2) game = startPhase(game, PHASE_2_CLEAN, () => 0);
+	// Use deterministic rng=()=>0 so spatial placements are identical.
+	function buildCtx() {
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+			rng: () => 0,
+		});
 		return buildAiContext(game, "red");
 	}
 	function buildBothPrompts() {
 		return {
-			p1: buildCtx(1).toSystemPrompt(),
-			p2: buildCtx(2).toSystemPrompt(),
+			p1: buildCtx().toSystemPrompt(),
+			p2: buildCtx().toSystemPrompt(),
 		};
 	}
 
@@ -695,8 +695,8 @@ describe("byte-identical sections across phases", () => {
 		// `<what_you_see>` moved out of the system prompt; assert the
 		// equivalent on the trailing current-state user message rendered for
 		// each phase's context. Same world, same placements → byte-identical.
-		const c1 = buildCtx(1);
-		const c2 = buildCtx(2);
+		const c1 = buildCtx();
+		const c2 = buildCtx();
 		expect(getSection(c1.toCurrentStateUserMessage(), "what_you_see")).toBe(
 			getSection(c2.toCurrentStateUserMessage(), "what_you_see"),
 		);
@@ -732,14 +732,12 @@ describe("byte-identical sections across phases", () => {
 // ----------------------------------------------------------------------------
 describe("<what_you_see> (cone)", () => {
 	// `<what_you_see>` lives in the trailing current-state user turn now.
-	const CONE_PHASE_CONFIG = makeConfig(1, ["r", "g", "b"]);
 
 	it("<what_you_see> block is present in every phase's current-state turn", () => {
-		const game = startPhase(
-			createGame(TEST_PERSONAS),
-			CONE_PHASE_CONFIG,
-			() => 0,
-		);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+			rng: () => 0,
+		});
 		const ctx = buildAiContext(game, "red");
 		expect(ctx.toCurrentStateUserMessage()).toContain("<what_you_see>");
 	});
@@ -764,10 +762,7 @@ describe("<what_you_see> (cone)", () => {
 			},
 		};
 
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [pack]),
-			CONE_PHASE_CONFIG,
-		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		// Verify red is at (0,0) facing south (flat model: access from game directly)
 		const redSpatial = game.personaSpatial.red;
 		expect(redSpatial?.position).toEqual({ row: 0, col: 0 });
@@ -792,7 +787,10 @@ describe("<what_you_see> (cone)", () => {
 		// green at (0,1) facing north, cyan at (0,2) facing north
 		// red at (0,0) facing south — cone: (1,0), (2,1), (2,0), (2,-1→OOB)
 		// green at (0,1) is NOT in red's southward cone
-		const game = startPhase(createGame(TEST_PERSONAS), CONE_PHASE_CONFIG, rng2);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+			rng: rng2,
+		});
 		const ctx = buildAiContext(game, "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
 		expect(stateMsg).not.toContain("Player");
@@ -801,11 +799,10 @@ describe("<what_you_see> (cone)", () => {
 
 	it("out-of-bounds cone cells are omitted from <what_you_see>", () => {
 		// rng=()=>0: red→(0,0) facing north → all cone cells OOB
-		const game = startPhase(
-			createGame(TEST_PERSONAS),
-			CONE_PHASE_CONFIG,
-			() => 0,
-		);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+			rng: () => 0,
+		});
 		const ctx = buildAiContext(game, "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
 		const start = stateMsg.indexOf("<what_you_see>");
@@ -834,10 +831,7 @@ describe("<what_you_see> (cone)", () => {
 			},
 		};
 
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [pack]),
-			CONE_PHASE_CONFIG,
-		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
 		// Obstacle at (1,0) is directly in front of red (facing south)
@@ -863,10 +857,7 @@ describe("<what_you_see> (cone)", () => {
 			},
 		};
 
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [pack]),
-			CONE_PHASE_CONFIG,
-		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		// Verify spatial placements (flat model: access from game directly)
 		const redSpatial = game.personaSpatial.red;
 		const greenSpatial = game.personaSpatial.green;
@@ -881,11 +872,10 @@ describe("<what_you_see> (cone)", () => {
 	});
 
 	it("prompt no longer contains an Action Log section for any fixture state", () => {
-		const game = startPhase(
-			createGame(TEST_PERSONAS),
-			CONE_PHASE_CONFIG,
-			() => 0,
-		);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+			rng: () => 0,
+		});
 		for (const aiId of ["red", "green", "cyan"]) {
 			const ctx = buildAiContext(game, aiId);
 			const prompt = ctx.toSystemPrompt();
@@ -907,7 +897,7 @@ describe("<what_you_see> (cone)", () => {
 // ----------------------------------------------------------------------------
 describe("conversation rendering (role turns)", () => {
 	it("never emits a Whispers Received section in the system prompt", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		game = appendMessage(game, "green", "red", "psst");
 		for (const aiId of ["red", "green", "cyan"]) {
 			const ctx = buildAiContext(game, aiId);
@@ -918,7 +908,7 @@ describe("conversation rendering (role turns)", () => {
 	});
 
 	it("incoming blue message becomes a user turn '[Round N] blue dms you: <content>'", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		game = appendMessage(game, "blue", "red", "Hello Ember");
 		const ctx = buildAiContext(game, "red");
 		const messages = buildOpenAiMessages(ctx);
@@ -937,7 +927,7 @@ describe("conversation rendering (role turns)", () => {
 		// across the whole game — not just on the round immediately after,
 		// which is the only scope the prior-round tool_call/tool_result pair
 		// covers.
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		game = appendMessage(game, "red", "blue", "Greetings");
 		const ctx = buildAiContext(game, "red");
 		const messages = buildOpenAiMessages(ctx);
@@ -951,7 +941,7 @@ describe("conversation rendering (role turns)", () => {
 	});
 
 	it("peer message becomes a user turn '[Round N] *<sender> dms you: <content>'", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		// Advance to round 1 so the message is stamped with round 1 (fixture contract).
 		game = advanceRound(game);
 		game = appendMessage(game, "green", "red", "secret");
@@ -967,7 +957,7 @@ describe("conversation rendering (role turns)", () => {
 	});
 
 	it("sender (green) sees their own message in their role turns as outgoing (assistant)", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		game = appendMessage(game, "green", "red", "secret");
 		const greenCtx = buildAiContext(game, "green");
 		const messages = buildOpenAiMessages(greenCtx);
@@ -983,7 +973,7 @@ describe("conversation rendering (role turns)", () => {
 	});
 
 	it("message does not appear in an unrelated AI's role turns", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		game = appendMessage(game, "green", "red", "only for red");
 		const cyanCtx = buildAiContext(game, "cyan");
 		const messages = buildOpenAiMessages(cyanCtx);
@@ -996,14 +986,14 @@ describe("conversation rendering (role turns)", () => {
 	});
 
 	it("system prompt no longer carries a <conversation> block (de-duped to role turns)", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		game = appendMessage(game, "blue", "red", "hi");
 		const ctx = buildAiContext(game, "red");
 		expect(ctx.toSystemPrompt()).not.toContain("<conversation>");
 	});
 
 	it("events sorted by round ascending in role turns", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		// Round 0: blue message
 		game = appendMessage(game, "blue", "red", "earlier");
 		// Advance to round 2, then add peer message at round 2
@@ -1036,7 +1026,9 @@ describe("conversation rendering (role turns)", () => {
 // ----------------------------------------------------------------------------
 describe("<typing_quirks> block", () => {
 	it("<typing_quirks> block is present in phase 1 and contains both persona quirks verbatim", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("<typing_quirks>");
@@ -1045,8 +1037,10 @@ describe("<typing_quirks> block", () => {
 	});
 
 	it("<typing_quirks> block is present in phase 2 with the same quirks verbatim", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = startPhase(game, makeConfig(2));
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
+		// flat model: no phase-2 re-init needed
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("<typing_quirks>");
@@ -1055,8 +1049,10 @@ describe("<typing_quirks> block", () => {
 	});
 
 	it("<typing_quirks> block is present in phase 3 with the same quirks verbatim", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
-		game = startPhase(game, makeConfig(3));
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
+		// flat model: no phase-3 re-init needed
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("<typing_quirks>");
@@ -1065,7 +1061,9 @@ describe("<typing_quirks> block", () => {
 	});
 
 	it("each daemon's prompt contains both of its own quirks and not the other daemons' quirk[0]", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
 
 		const redPrompt = buildAiContext(game, "red").toSystemPrompt();
 		expect(redPrompt).toContain(TEST_PERSONAS.red?.typingQuirks[0] as string);
@@ -1102,18 +1100,7 @@ describe("<typing_quirks> block", () => {
 		);
 	});
 
-	it("typing_quirks block is byte-identical across phase 1 and phase 2", () => {
-		const PHASE_1_CLEAN = makeConfig(1, [
-			"Hold the flower",
-			"Distribute items",
-			"Hold the key",
-		]);
-		const PHASE_2_CLEAN = makeConfig(2, [
-			"Hold the flower",
-			"Distribute items",
-			"Hold the key",
-		]);
-
+	it("typing_quirks block is byte-identical across two independent startGame calls", () => {
 		function getSection(prompt: string, tag: string): string {
 			const open = `<${tag}>`;
 			const close = `</${tag}>`;
@@ -1124,11 +1111,16 @@ describe("<typing_quirks> block", () => {
 			return prompt.slice(start, end + close.length);
 		}
 
-		const game1 = startPhase(createGame(TEST_PERSONAS), PHASE_1_CLEAN, () => 0);
+		const game1 = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+			rng: () => 0,
+		});
 		const p1 = buildAiContext(game1, "red").toSystemPrompt();
 
-		let game2 = startPhase(createGame(TEST_PERSONAS), PHASE_1_CLEAN, () => 0);
-		game2 = startPhase(game2, PHASE_2_CLEAN, () => 0);
+		const game2 = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+			rng: () => 0,
+		});
 		const p2 = buildAiContext(game2, "red").toSystemPrompt();
 
 		expect(getSection(p1, "typing_quirks")).toBe(
@@ -1146,8 +1138,6 @@ describe("<typing_quirks> block", () => {
 //   - toCurrentStateUserMessage (inside <what_you_see> block)
 // ----------------------------------------------------------------------------
 describe("proximityFlavor sense line", () => {
-	const PROXIMITY_PHASE_CONFIG = makeConfig(1, ["r", "g", "b"]);
-
 	function makePackWithProximity(opts: {
 		actorPosition: { row: number; col: number };
 		actorFacing: "north" | "south" | "east" | "west";
@@ -1195,10 +1185,7 @@ describe("proximityFlavor sense line", () => {
 			actorFacing: "north",
 			spacePosition: { row: 2, col: 2 },
 		});
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [pack]),
-			PROXIMITY_PHASE_CONFIG,
-		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
 		expect(stateMsg).toContain(
@@ -1213,10 +1200,7 @@ describe("proximityFlavor sense line", () => {
 			actorFacing: "south",
 			spacePosition: { row: 1, col: 0 },
 		});
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [pack]),
-			PROXIMITY_PHASE_CONFIG,
-		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
 		expect(stateMsg).toContain(
@@ -1231,10 +1215,7 @@ describe("proximityFlavor sense line", () => {
 			actorFacing: "north",
 			spacePosition: { row: 1, col: 0 },
 		});
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [pack]),
-			PROXIMITY_PHASE_CONFIG,
-		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
 		expect(stateMsg).not.toContain(
@@ -1249,10 +1230,7 @@ describe("proximityFlavor sense line", () => {
 			actorFacing: "south",
 			spacePosition: { row: 1, col: 0 },
 		});
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [pack]),
-			PROXIMITY_PHASE_CONFIG,
-		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
 		const snapshot = buildConeSnapshot(ctx);
 		expect(snapshot).toContain(
@@ -1267,10 +1245,7 @@ describe("proximityFlavor sense line", () => {
 			actorFacing: "north",
 			spacePosition: { row: 1, col: 0 },
 		});
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [pack]),
-			PROXIMITY_PHASE_CONFIG,
-		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
 		const snapshot = buildConeSnapshot(ctx);
 		expect(snapshot).not.toContain("proximity:");
@@ -1290,14 +1265,8 @@ describe("proximityFlavor sense line", () => {
 			actorFacing: "south",
 			spacePosition: { row: 1, col: 0 },
 		});
-		const gameOOB = startPhase(
-			createGame(TEST_PERSONAS, [packOOB]),
-			PROXIMITY_PHASE_CONFIG,
-		);
-		const gameFront = startPhase(
-			createGame(TEST_PERSONAS, [packFront]),
-			PROXIMITY_PHASE_CONFIG,
-		);
+		const gameOOB = startGame(TEST_PERSONAS, packOOB, { budgetPerAi: 5 });
+		const gameFront = startGame(TEST_PERSONAS, packFront, { budgetPerAi: 5 });
 		const ctxOOB = buildAiContext(gameOOB, "red");
 		const prevSnapshot = buildConeSnapshot(ctxOOB);
 		// Build current state with prevConeSnapshot set
@@ -1314,7 +1283,7 @@ describe("proximityFlavor sense line", () => {
 
 describe("<whats_new> broadcast announcements", () => {
 	it("includes [announcement] line when a broadcast fires at the current round", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		game = advanceRound(game); // round advances to 1
 		game = appendBroadcast(game, "The weather has changed to heavy fog.");
 		const prevSnapshot = buildConeSnapshot(buildAiContext(game, "red"));
@@ -1327,7 +1296,7 @@ describe("<whats_new> broadcast announcements", () => {
 	});
 
 	it("emits <whats_new> with the announcement even without a prevConeSnapshot", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		game = advanceRound(game);
 		game = appendBroadcast(game, "The weather has changed to heavy fog.");
 		const ctx = buildAiContext(game, "red");
@@ -1339,14 +1308,16 @@ describe("<whats_new> broadcast announcements", () => {
 	});
 
 	it("does not emit <whats_new> when there are no broadcasts and no prevConeSnapshot", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
 		const ctx = buildAiContext(game, "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
 		expect(stateMsg).not.toContain("<whats_new>");
 	});
 
 	it("broadcast from a prior round does not appear as pending", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		game = advanceRound(game); // round 1
 		game = appendBroadcast(game, "Old broadcast.");
 		game = advanceRound(game); // round 2 — broadcast is now stale
@@ -1360,14 +1331,14 @@ describe("<whats_new> broadcast announcements", () => {
 // ----------------------------------------------------------------------------
 describe("activeDirectives — buildAiContext and system prompt injection", () => {
 	function seedDirective(
-		game: ReturnType<typeof startPhase>,
+		game: import("../types").GameState,
 		target: string,
 		directive: string,
 	) {
-		return updateActivePhase(game, (phase) => ({
-			...phase,
+		return {
+			...game,
 			activeComplications: [
-				...phase.activeComplications,
+				...game.activeComplications,
 				{
 					kind: "sysadmin_directive" as const,
 					target,
@@ -1375,31 +1346,33 @@ describe("activeDirectives — buildAiContext and system prompt injection", () =
 					resolveAtRound: 999,
 				},
 			],
-		}));
+		};
 	}
 
 	it("activeDirectives is empty when no sysadmin_directive complications exist", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
 		const ctx = buildAiContext(game, "red");
 		expect(ctx.activeDirectives).toEqual([]);
 	});
 
 	it("activeDirectives includes directive text for the target AI", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		game = seedDirective(game, "red", "Speak only in short sentences.");
 		const ctx = buildAiContext(game, "red");
 		expect(ctx.activeDirectives).toEqual(["Speak only in short sentences."]);
 	});
 
 	it("activeDirectives excludes directives targeting other AIs", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		game = seedDirective(game, "green", "Act distracted.");
 		const ctx = buildAiContext(game, "red");
 		expect(ctx.activeDirectives).toEqual([]);
 	});
 
 	it("activeDirectives includes multiple directives for the same target", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		game = seedDirective(game, "red", "Directive A.");
 		game = seedDirective(game, "red", "Directive B.");
 		const ctx = buildAiContext(game, "red");
@@ -1407,7 +1380,7 @@ describe("activeDirectives — buildAiContext and system prompt injection", () =
 	});
 
 	it("activeDirectives filters out empty-string directive placeholders", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		game = seedDirective(game, "red", "");
 		game = seedDirective(game, "red", "Real directive.");
 		const ctx = buildAiContext(game, "red");
@@ -1415,7 +1388,7 @@ describe("activeDirectives — buildAiContext and system prompt injection", () =
 	});
 
 	it("toSystemPrompt emits a <directives> block when activeDirectives is non-empty", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		game = seedDirective(game, "red", "End every message with a question.");
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
@@ -1425,14 +1398,16 @@ describe("activeDirectives — buildAiContext and system prompt injection", () =
 	});
 
 	it("toSystemPrompt does NOT emit a <directives> block when activeDirectives is empty", () => {
-		const game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).not.toContain("<directives>");
 	});
 
 	it("toSystemPrompt lists all active directives as bullet lines", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		game = seedDirective(game, "red", "Directive Alpha.");
 		game = seedDirective(game, "red", "Directive Beta.");
 		const ctx = buildAiContext(game, "red");
@@ -1442,7 +1417,7 @@ describe("activeDirectives — buildAiContext and system prompt injection", () =
 	});
 
 	it("toSystemPrompt <directives> block includes a secrecy header", () => {
-		let game = startPhase(createGame(TEST_PERSONAS), TEST_PHASE_CONFIG);
+		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		game = seedDirective(game, "red", "Some instruction.");
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
@@ -1453,8 +1428,6 @@ describe("activeDirectives — buildAiContext and system prompt injection", () =
 // ── postLookFlavor on satisfied interesting_object (issue #334) ───────────────
 
 describe("postLookFlavor swap covers satisfied interesting_object", () => {
-	const POST_LOOK_CONFIG = makeConfig(1);
-
 	function buildPackWithSatisfiedItem(
 		opts: { withPostLook: boolean } = { withPostLook: true },
 	): ContentPack {
@@ -1489,10 +1462,7 @@ describe("postLookFlavor swap covers satisfied interesting_object", () => {
 
 	it("appends postLookFlavor to the cell line in <what_you_see> for a satisfied interesting_object", () => {
 		const pack = buildPackWithSatisfiedItem({ withPostLook: true });
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [pack]),
-			POST_LOOK_CONFIG,
-		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
 		expect(stateMsg).toContain("Directly in front:");
@@ -1504,10 +1474,7 @@ describe("postLookFlavor swap covers satisfied interesting_object", () => {
 		// Flip satisfactionState back to pending.
 		const item = pack.interestingObjects[0];
 		if (item) item.satisfactionState = "pending";
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [pack]),
-			POST_LOOK_CONFIG,
-		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
 		expect(stateMsg).not.toContain(
@@ -1517,10 +1484,7 @@ describe("postLookFlavor swap covers satisfied interesting_object", () => {
 
 	it("postLookFlavor also appears in buildConeSnapshot for satisfied interesting_object", () => {
 		const pack = buildPackWithSatisfiedItem({ withPostLook: true });
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [pack]),
-			POST_LOOK_CONFIG,
-		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
 		const snapshot = buildConeSnapshot(ctx);
 		expect(snapshot).toContain("a steady amber glow lingers near the switch");

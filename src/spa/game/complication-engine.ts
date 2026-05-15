@@ -486,7 +486,7 @@ export function applyComplicationResult(
 	};
 
 	// Append persistent complications
-	let activeComplications = [...game.activeComplications];
+	const activeComplications = [...game.activeComplications];
 	if (fired.kind === "sysadmin_directive") {
 		activeComplications.push({
 			kind: "sysadmin_directive",

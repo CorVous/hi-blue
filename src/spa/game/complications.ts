@@ -169,9 +169,7 @@ export const toolDisableComplication: Complication = {
 export const obstacleShiftComplication: Complication = {
 	name: "obstacleShift",
 	isAvailable(game: GameState): boolean {
-		return (
-			validObstacleShiftTuples(game.world, game.personaSpatial).length > 0
-		);
+		return validObstacleShiftTuples(game.world, game.personaSpatial).length > 0;
 	},
 	apply(game: GameState, rng: () => number): GameState {
 		const tuples = validObstacleShiftTuples(game.world, game.personaSpatial);

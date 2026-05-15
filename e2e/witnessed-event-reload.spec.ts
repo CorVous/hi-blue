@@ -45,7 +45,7 @@ import { getAiHandles, goToGame, stubChatCompletions } from "./helpers";
  * Key source references:
  *   src/spa/game/conversation-log.ts:63-65 — witnessed-event "go" line format
  *   src/spa/game/dispatcher.ts:460-493     — write-time cone fan-out
- *   src/spa/game/dispatcher.ts:342         — round = getActivePhase(state).round
+ *   src/spa/game/dispatcher.ts:342         — round = state.round
  *   src/spa/persistence/session-codec.ts   — DaemonFile round-trip
  *   src/spa/persistence/sealed-blob-codec.ts:18 — OBFUSCATION_KEY
  */

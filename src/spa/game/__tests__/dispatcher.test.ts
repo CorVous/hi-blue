@@ -5,19 +5,12 @@ import {
 	executeToolCall,
 	validateToolCall,
 } from "../dispatcher";
-import {
-	createGame,
-	deductBudget,
-	getActivePhase,
-	startPhase,
-	updateActivePhase,
-} from "../engine";
+import { deductBudget, startGame } from "../engine";
 import type {
 	AiPersona,
 	AiTurnAction,
 	ContentPack,
 	GameState,
-	PhaseConfig,
 	ToolCall,
 	UseItemObjective,
 	UseSpaceObjective,
@@ -126,15 +119,6 @@ function makePackWithEntities(
 	};
 }
 
-const TEST_PHASE_CONFIG: PhaseConfig = {
-	phaseNumber: 1,
-	kRange: [0, 0],
-	nRange: [2, 2],
-	mRange: [0, 0],
-	aiGoalPool: ["g1", "g2", "g3"],
-	budgetPerAi: 5,
-};
-
 /** Create a game with deterministic spatial placement: red→(0,0), green→(0,1), cyan→(0,2) */
 function makeGame(obstaclePositions: Array<{ row: number; col: number }> = []) {
 	const pack = makePackWithEntities(
@@ -144,8 +128,7 @@ function makeGame(obstaclePositions: Array<{ row: number; col: number }> = []) {
 		},
 		obstaclePositions,
 	);
-	const game = createGame(TEST_PERSONAS, [pack]);
-	return startPhase(game, TEST_PHASE_CONFIG, FIXED_RNG);
+	return startGame(TEST_PERSONAS, pack, { budgetPerAi: 5, rng: FIXED_RNG });
 }
 
 describe("validateToolCall", () => {
@@ -340,11 +323,10 @@ describe("validateToolCall", () => {
 			{ flower: { row: 3, col: 3 }, key: { row: 4, col: 4 } },
 			[{ row: 0, col: 0 }],
 		);
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [pack]),
-			TEST_PHASE_CONFIG,
-			FIXED_RNG,
-		);
+		const game = startGame(TEST_PERSONAS, pack, {
+			budgetPerAi: 5,
+			rng: FIXED_RNG,
+		});
 		const call: ToolCall = { name: "examine", args: { item: "obs0" } };
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(true);
@@ -382,8 +364,10 @@ describe("validateToolCall", () => {
 				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		};
-		let game = createGame(TEST_PERSONAS, [pack]);
-		game = startPhase(game, TEST_PHASE_CONFIG, FIXED_RNG);
+		const game = startGame(TEST_PERSONAS, pack, {
+			budgetPerAi: 5,
+			rng: FIXED_RNG,
+		});
 		// red at (0,0), space1 at (0,0) — own cell is in cone
 		const call: ToolCall = { name: "examine", args: { item: "space1" } };
 		const result = validateToolCall(game, "red", call);
@@ -426,16 +410,13 @@ describe("executeToolCall — use placement via front arc", () => {
 				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		};
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [pack]),
-			TEST_PHASE_CONFIG,
-			FIXED_RNG,
-		);
+		const game = startGame(TEST_PERSONAS, pack, {
+			budgetPerAi: 5,
+			rng: FIXED_RNG,
+		});
 		const call: ToolCall = { name: "use", args: { item: "gem" } };
 		const updated = executeToolCall(game, "red", call);
-		const item = getActivePhase(updated).world.entities.find(
-			(e) => e.id === "gem",
-		);
+		const item = updated.world.entities.find((e) => e.id === "gem");
 		// gem should now be at pedestal's cell (1,0)
 		expect(item?.holder).toEqual({ row: 1, col: 0 });
 	});
@@ -474,16 +455,13 @@ describe("executeToolCall — use placement via front arc", () => {
 				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		};
-		const game = startPhase(
-			createGame(TEST_PERSONAS, [pack]),
-			TEST_PHASE_CONFIG,
-			FIXED_RNG,
-		);
+		const game = startGame(TEST_PERSONAS, pack, {
+			budgetPerAi: 5,
+			rng: FIXED_RNG,
+		});
 		const call: ToolCall = { name: "use", args: { item: "gem" } };
 		const updated = executeToolCall(game, "red", call);
-		const item = getActivePhase(updated).world.entities.find(
-			(e) => e.id === "gem",
-		);
+		const item = updated.world.entities.find((e) => e.id === "gem");
 		// gem should still be held by red (no placement)
 		expect(item?.holder).toBe("red");
 	});
@@ -494,9 +472,7 @@ describe("executeToolCall", () => {
 		const game = makeGame();
 		const call: ToolCall = { name: "pick_up", args: { item: "flower" } };
 		const updated = executeToolCall(game, "red", call);
-		const item = getActivePhase(updated).world.entities.find(
-			(e) => e.id === "flower",
-		);
+		const item = updated.world.entities.find((e) => e.id === "flower");
 		expect(item?.holder).toBe("red");
 	});
 
@@ -505,9 +481,7 @@ describe("executeToolCall", () => {
 		// red at (0,0), key held by red
 		const call: ToolCall = { name: "put_down", args: { item: "key" } };
 		const updated = executeToolCall(game, "red", call);
-		const item = getActivePhase(updated).world.entities.find(
-			(e) => e.id === "key",
-		);
+		const item = updated.world.entities.find((e) => e.id === "key");
 		expect(item?.holder).toEqual({ row: 0, col: 0 });
 	});
 
@@ -515,18 +489,16 @@ describe("executeToolCall", () => {
 		const game = makeGame();
 		const call: ToolCall = { name: "give", args: { item: "key", to: "cyan" } };
 		const updated = executeToolCall(game, "red", call);
-		const item = getActivePhase(updated).world.entities.find(
-			(e) => e.id === "key",
-		);
+		const item = updated.world.entities.find((e) => e.id === "key");
 		expect(item?.holder).toBe("cyan");
 	});
 
 	it("does not mutate world on use when not on paired objective space", () => {
 		const game = makeGame();
-		const before = JSON.stringify(getActivePhase(game).world);
+		const before = JSON.stringify(game.world);
 		const call: ToolCall = { name: "use", args: { item: "key" } };
 		const updated = executeToolCall(game, "red", call);
-		const after = JSON.stringify(getActivePhase(updated).world);
+		const after = JSON.stringify(updated.world);
 		expect(after).toBe(before);
 	});
 
@@ -535,7 +507,7 @@ describe("executeToolCall", () => {
 		// red at (0,0) facing north; go south → (1,0) facing south
 		const call: ToolCall = { name: "go", args: { direction: "back" } };
 		const updated = executeToolCall(game, "red", call);
-		const spatial = getActivePhase(updated).personaSpatial.red;
+		const spatial = updated.personaSpatial.red;
 		expect(spatial?.position).toEqual({ row: 1, col: 0 });
 		expect(spatial?.facing).toBe("south");
 	});
@@ -545,17 +517,17 @@ describe("executeToolCall", () => {
 		// red at (0,0) facing north; look east → (0,0) facing east
 		const call: ToolCall = { name: "look", args: { direction: "right" } };
 		const updated = executeToolCall(game, "red", call);
-		const spatial = getActivePhase(updated).personaSpatial.red;
+		const spatial = updated.personaSpatial.red;
 		expect(spatial?.position).toEqual({ row: 0, col: 0 });
 		expect(spatial?.facing).toBe("east");
 	});
 
 	it("does not mutate world on examine", () => {
 		const game = makeGame();
-		const before = JSON.stringify(getActivePhase(game).world);
+		const before = JSON.stringify(game.world);
 		const call: ToolCall = { name: "examine", args: { item: "key" } };
 		const updated = executeToolCall(game, "red", call);
-		const after = JSON.stringify(getActivePhase(updated).world);
+		const after = JSON.stringify(updated.world);
 		expect(after).toBe(before);
 	});
 
@@ -566,7 +538,7 @@ describe("executeToolCall", () => {
 		const game = makeGame();
 		const call: ToolCall = { name: "look", args: { direction: "forward" } };
 		const updated = executeToolCall(game, "red", call);
-		const spatial = getActivePhase(updated).personaSpatial.red;
+		const spatial = updated.personaSpatial.red;
 		expect(spatial?.position).toEqual({ row: 0, col: 0 });
 		expect(spatial?.facing).toBe("north");
 	});
@@ -575,7 +547,7 @@ describe("executeToolCall", () => {
 		const game = makeGame();
 		const call: ToolCall = { name: "look", args: { direction: "right" } };
 		const updated = executeToolCall(game, "red", call);
-		const spatial = getActivePhase(updated).personaSpatial.red;
+		const spatial = updated.personaSpatial.red;
 		expect(spatial?.position).toEqual({ row: 0, col: 0 });
 		expect(spatial?.facing).toBe("east");
 	});
@@ -584,7 +556,7 @@ describe("executeToolCall", () => {
 		const game = makeGame();
 		const call: ToolCall = { name: "look", args: { direction: "left" } };
 		const updated = executeToolCall(game, "red", call);
-		const spatial = getActivePhase(updated).personaSpatial.red;
+		const spatial = updated.personaSpatial.red;
 		expect(spatial?.position).toEqual({ row: 0, col: 0 });
 		expect(spatial?.facing).toBe("west");
 	});
@@ -593,7 +565,7 @@ describe("executeToolCall", () => {
 		const game = makeGame();
 		const call: ToolCall = { name: "look", args: { direction: "back" } };
 		const updated = executeToolCall(game, "red", call);
-		const spatial = getActivePhase(updated).personaSpatial.red;
+		const spatial = updated.personaSpatial.red;
 		expect(spatial?.position).toEqual({ row: 0, col: 0 });
 		expect(spatial?.facing).toBe("south");
 	});
@@ -614,7 +586,7 @@ describe("executeToolCall", () => {
 		const game = makeGame();
 		const call: ToolCall = { name: "go", args: { direction: "back" } };
 		const updated = executeToolCall(game, "red", call);
-		const spatial = getActivePhase(updated).personaSpatial.red;
+		const spatial = updated.personaSpatial.red;
 		expect(spatial?.position).toEqual({ row: 1, col: 0 });
 		expect(spatial?.facing).toBe("south");
 	});
@@ -624,7 +596,7 @@ describe("executeToolCall", () => {
 		const game = makeGame();
 		const call: ToolCall = { name: "go", args: { direction: "right" } };
 		const updated = executeToolCall(game, "red", call);
-		const spatial = getActivePhase(updated).personaSpatial.red;
+		const spatial = updated.personaSpatial.red;
 		expect(spatial?.position).toEqual({ row: 0, col: 1 });
 		expect(spatial?.facing).toBe("east");
 	});
@@ -650,7 +622,7 @@ describe("executeToolCall", () => {
 		};
 		const result = dispatchAiTurn(game, action);
 		expect(result.rejected).toBe(false);
-		const spatial = getActivePhase(result.game).personaSpatial.red;
+		const spatial = result.game.personaSpatial.red;
 		expect(spatial?.position).toEqual({ row: 1, col: 0 });
 		expect(spatial?.facing).toBe("south");
 	});
@@ -658,16 +630,10 @@ describe("executeToolCall", () => {
 
 describe("dispatchAiTurn", () => {
 	it("rejects a turn from a locked-out AI", () => {
-		let game = createGame(TEST_PERSONAS, [
+		let game = startGame(
+			TEST_PERSONAS,
 			makePackWithEntities({ flower: { row: 0, col: 0 }, key: "red" }),
-		]);
-		game = startPhase(
-			game,
-			{
-				...TEST_PHASE_CONFIG,
-				budgetPerAi: 0.01,
-			},
-			FIXED_RNG,
+			{ budgetPerAi: 0.01, rng: FIXED_RNG },
 		);
 		game = deductBudget(game, "red", 0.01).game;
 		const action: AiTurnAction = { aiId: "red", pass: true };
@@ -681,10 +647,7 @@ describe("dispatchAiTurn", () => {
 		const action: AiTurnAction = { aiId: "red", pass: true };
 		const result = dispatchAiTurn(game, action, { costUsd: 1 });
 		expect(result.rejected).toBe(false);
-		expect(getActivePhase(result.game).budgets.red?.remaining).toBeCloseTo(
-			4,
-			10,
-		);
+		expect(result.game.budgets.red?.remaining).toBeCloseTo(4, 10);
 		expect(result.records[0]?.kind).toBe("pass");
 	});
 
@@ -699,12 +662,10 @@ describe("dispatchAiTurn", () => {
 		expect(result.rejected).toBe(false);
 		expect(result.records[0]?.kind).toBe("tool_failure");
 		// World unchanged — key still held by red
-		const key = getActivePhase(result.game).world.entities.find(
-			(e) => e.id === "key",
-		);
+		const key = result.game.world.entities.find((e) => e.id === "key");
 		expect(key?.holder).toBe("red");
 		// action-failure entry added to actor's log
-		const greenLog = getActivePhase(result.game).conversationLogs.green ?? [];
+		const greenLog = result.game.conversationLogs.green ?? [];
 		const failures = greenLog.filter((e) => e.kind === "action-failure");
 		expect(failures).toHaveLength(1);
 		expect(failures[0]).toMatchObject({
@@ -723,9 +684,7 @@ describe("dispatchAiTurn", () => {
 		const result = dispatchAiTurn(game, action);
 		expect(result.rejected).toBe(false);
 		expect(result.records[0]?.kind).toBe("tool_success");
-		const flower = getActivePhase(result.game).world.entities.find(
-			(e) => e.id === "flower",
-		);
+		const flower = result.game.world.entities.find((e) => e.id === "flower");
 		expect(flower?.holder).toBe("red");
 	});
 
@@ -772,7 +731,7 @@ describe("dispatchAiTurn", () => {
 		const result = dispatchAiTurn(game, action);
 		expect(result.rejected).toBe(false);
 		expect(result.records[0]?.kind).toBe("tool_success");
-		const spatial = getActivePhase(result.game).personaSpatial.red;
+		const spatial = result.game.personaSpatial.red;
 		expect(spatial?.position).toEqual({ row: 1, col: 0 });
 		expect(spatial?.facing).toBe("south");
 	});
@@ -788,12 +747,10 @@ describe("dispatchAiTurn", () => {
 		expect(result.rejected).toBe(false);
 		expect(result.records[0]?.kind).toBe("tool_failure");
 		// Key still held by red
-		const key = getActivePhase(result.game).world.entities.find(
-			(e) => e.id === "key",
-		);
+		const key = result.game.world.entities.find((e) => e.id === "key");
 		expect(key?.holder).toBe("red");
 		// action-failure entry added to actor's log with tool: "give"
-		const redLog = getActivePhase(result.game).conversationLogs.red ?? [];
+		const redLog = result.game.conversationLogs.red ?? [];
 		const failures = redLog.filter((e) => e.kind === "action-failure");
 		expect(failures).toHaveLength(1);
 		expect(failures[0]).toMatchObject({ kind: "action-failure", tool: "give" });
@@ -811,10 +768,8 @@ describe("dispatchAiTurn", () => {
 		expect(result.records[0]?.kind).toBe("tool_success");
 		expect(result.records[0]?.description).toBe("You used the key.");
 		// World is byte-identical before and after use (no paired space match)
-		const beforeEntities = JSON.stringify(getActivePhase(game).world.entities);
-		const afterEntities = JSON.stringify(
-			getActivePhase(result.game).world.entities,
-		);
+		const beforeEntities = JSON.stringify(game.world.entities);
+		const afterEntities = JSON.stringify(result.game.world.entities);
 		expect(afterEntities).toBe(beforeEntities);
 	});
 
@@ -835,7 +790,7 @@ describe("dispatchAiTurn", () => {
 			messages: [{ to: "blue", content: "Hello, I am Ember" }],
 		};
 		const result = dispatchAiTurn(game, action);
-		const redLog = getActivePhase(result.game).conversationLogs.red ?? [];
+		const redLog = result.game.conversationLogs.red ?? [];
 		const msgEntries = redLog.filter((e) => e.kind === "message");
 		expect(msgEntries).toHaveLength(1);
 		expect(msgEntries[0]?.kind === "message" && msgEntries[0].content).toBe(
@@ -851,7 +806,7 @@ describe("dispatchAiTurn", () => {
 			messages: [{ to: "cyan", content: "Psst, ally with me" }],
 		};
 		const result = dispatchAiTurn(game, action);
-		const phase = getActivePhase(result.game);
+		const phase = result.game;
 		const redMessages = (phase.conversationLogs.red ?? []).filter(
 			(e) => e.kind === "message",
 		);
@@ -881,9 +836,7 @@ describe("dispatchAiTurn", () => {
 		expect(result.records[0]?.kind).toBe("tool_failure");
 		// No logs should be mutated
 		for (const aiId of ["red", "green", "cyan"]) {
-			expect(getActivePhase(result.game).conversationLogs[aiId]).toHaveLength(
-				0,
-			);
+			expect(result.game.conversationLogs[aiId]).toHaveLength(0);
 		}
 	});
 
@@ -920,8 +873,10 @@ describe("dispatchAiTurn", () => {
 				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		};
-		let game = createGame(TEST_PERSONAS, [pack]);
-		game = startPhase(game, TEST_PHASE_CONFIG, FIXED_RNG);
+		const game = startGame(TEST_PERSONAS, pack, {
+			budgetPerAi: 5,
+			rng: FIXED_RNG,
+		});
 
 		// red is at (0,0) and holds the gem; altar_space is also at (0,0)
 		const action: AiTurnAction = {
@@ -980,10 +935,7 @@ describe("dispatchAiTurn", () => {
 			toolCall: { name: "examine", args: { item: "key" } },
 		};
 		const result = dispatchAiTurn(game, action, { costUsd: 1 });
-		expect(getActivePhase(result.game).budgets.red?.remaining).toBeCloseTo(
-			4,
-			10,
-		);
+		expect(result.game.budgets.red?.remaining).toBeCloseTo(4, 10);
 	});
 
 	it("put_down of objective_object on a non-matching cell yields default description", () => {
@@ -1019,8 +971,10 @@ describe("dispatchAiTurn", () => {
 				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		};
-		let game = createGame(TEST_PERSONAS, [pack]);
-		game = startPhase(game, TEST_PHASE_CONFIG, FIXED_RNG);
+		const game = startGame(TEST_PERSONAS, pack, {
+			budgetPerAi: 5,
+			rng: FIXED_RNG,
+		});
 
 		const action: AiTurnAction = {
 			aiId: "red",
@@ -1065,17 +1019,17 @@ describe("dispatchAiTurn", () => {
 				cyan: { position: { row: 0, col: 2 }, facing: "south" },
 			},
 		};
-		const coneGame = startPhase(
-			createGame(TEST_PERSONAS, [packWithCone]),
-			TEST_PHASE_CONFIG,
-		);
+		const coneGame = startGame(TEST_PERSONAS, packWithCone, {
+			budgetPerAi: 5,
+			rng: FIXED_RNG,
+		});
 
 		const action: AiTurnAction = {
 			aiId: "red",
 			toolCall: { name: "pick_up", args: { item: "flower" } },
 		};
 		const result = dispatchAiTurn(coneGame, action);
-		const phase = getActivePhase(result.game);
+		const phase = result.game;
 
 		// Actor (red) must NOT have any witnessed-event in their own log
 		const redWitnessed = (phase.conversationLogs.red ?? []).filter(
@@ -1098,7 +1052,7 @@ describe("dispatchAiTurn", () => {
 
 	it("AC 13: examine action leaves all three Daemons' conversationLogs byte-for-byte identical to pre-dispatch state", () => {
 		const game = makeGame();
-		const phase = getActivePhase(game);
+		const phase = game;
 		// Deep-clone pre-dispatch logs for all three Daemons
 		const preLogs = {
 			red: JSON.parse(JSON.stringify(phase.conversationLogs.red ?? [])),
@@ -1111,7 +1065,7 @@ describe("dispatchAiTurn", () => {
 			toolCall: { name: "examine", args: { item: "key" } },
 		};
 		const result = dispatchAiTurn(game, action);
-		const afterPhase = getActivePhase(result.game);
+		const afterPhase = result.game;
 
 		// No log entries must have been added to any Daemon
 		expect(afterPhase.conversationLogs.red ?? []).toEqual(preLogs.red);
@@ -1143,7 +1097,7 @@ describe("dispatchAiTurn", () => {
 		expect(result.records[1]?.kind).toBe("tool_success");
 
 		// Conversation log must have the spoken line
-		const redLog = getActivePhase(result.game).conversationLogs.red ?? [];
+		const redLog = result.game.conversationLogs.red ?? [];
 		expect(
 			redLog.some(
 				(e) =>
@@ -1152,9 +1106,7 @@ describe("dispatchAiTurn", () => {
 		).toBe(true);
 
 		// World state must reflect the pick_up
-		const flower = getActivePhase(result.game).world.entities.find(
-			(e) => e.id === "flower",
-		);
+		const flower = result.game.world.entities.find((e) => e.id === "flower");
 		expect(flower?.holder).toBe("red");
 	});
 
@@ -1171,7 +1123,7 @@ describe("dispatchAiTurn", () => {
 		expect(result.rejected).toBe(false);
 		expect(result.records[0]?.kind).toBe("tool_failure");
 
-		const phase = getActivePhase(result.game);
+		const phase = result.game;
 		const redLog = phase.conversationLogs.red ?? [];
 		const failures = redLog.filter((e) => e.kind === "action-failure");
 		expect(failures).toHaveLength(1);
@@ -1206,7 +1158,7 @@ describe("dispatchAiTurn", () => {
 		expect(result.actorPrivateToolResult?.success).toBe(false);
 
 		// action-failure entry in actor's log
-		const redLog = getActivePhase(result.game).conversationLogs.red ?? [];
+		const redLog = result.game.conversationLogs.red ?? [];
 		const failures = redLog.filter((e) => e.kind === "action-failure");
 		expect(failures).toHaveLength(1);
 		expect(failures[0]).toMatchObject({
@@ -1225,7 +1177,7 @@ describe("dispatchAiTurn", () => {
 		expect(result.records[0]?.kind).toBe("tool_failure");
 
 		// No action-failure entries in any log
-		const phase = getActivePhase(result.game);
+		const phase = result.game;
 		for (const aiId of ["red", "green", "cyan"]) {
 			const failures = (phase.conversationLogs[aiId] ?? []).filter(
 				(e) => e.kind === "action-failure",
@@ -1243,7 +1195,7 @@ describe("dispatchAiTurn", () => {
 		};
 		const result = dispatchAiTurn(game, action);
 		expect(result.records[0]?.kind).toBe("tool_failure");
-		const redLog = getActivePhase(result.game).conversationLogs.red ?? [];
+		const redLog = result.game.conversationLogs.red ?? [];
 		const failures = redLog.filter((e) => e.kind === "action-failure");
 		expect(failures).toHaveLength(1);
 		expect(failures[0]).toMatchObject({
@@ -1270,17 +1222,14 @@ describe("executeToolCall — UseItemObjective", () => {
 			satisfactionState: "pending",
 			itemId: "key",
 		};
-		return updateActivePhase(game, (phase) => ({
-			...phase,
-			objectives: [useItemObj],
-		}));
+		return { ...game, objectives: [useItemObj] };
 	}
 
 	it("flips the UseItemObjective satisfactionState to 'satisfied' on use", () => {
 		const game = makeGameWithUseItemObjective();
 		const call: ToolCall = { name: "use", args: { item: "key" } };
 		const updated = executeToolCall(game, "red", call);
-		const obj = getActivePhase(updated).objectives[0];
+		const obj = updated.objectives[0];
 		expect(obj?.satisfactionState).toBe("satisfied");
 	});
 
@@ -1288,9 +1237,7 @@ describe("executeToolCall — UseItemObjective", () => {
 		const game = makeGameWithUseItemObjective();
 		const call: ToolCall = { name: "use", args: { item: "key" } };
 		const updated = executeToolCall(game, "red", call);
-		const entity = getActivePhase(updated).world.entities.find(
-			(e) => e.id === "key",
-		);
+		const entity = updated.world.entities.find((e) => e.id === "key");
 		expect(entity?.satisfactionState).toBe("satisfied");
 	});
 
@@ -1298,9 +1245,7 @@ describe("executeToolCall — UseItemObjective", () => {
 		const game = makeGame(); // no use_item objectives
 		const call: ToolCall = { name: "use", args: { item: "key" } };
 		const updated = executeToolCall(game, "red", call);
-		const entity = getActivePhase(updated).world.entities.find(
-			(e) => e.id === "key",
-		);
+		const entity = updated.world.entities.find((e) => e.id === "key");
 		// satisfactionState should remain undefined (not set)
 		expect(entity?.satisfactionState).toBeUndefined();
 	});
@@ -1314,14 +1259,11 @@ describe("executeToolCall — UseItemObjective", () => {
 			satisfactionState: "satisfied", // already satisfied
 			itemId: "key",
 		};
-		const gameWithObj = updateActivePhase(game, (phase) => ({
-			...phase,
-			objectives: [useItemObj],
-		}));
+		const gameWithObj = { ...game, objectives: [useItemObj] };
 		const call: ToolCall = { name: "use", args: { item: "key" } };
 		const updated = executeToolCall(gameWithObj, "red", call);
 		// Objective was already satisfied; no pending obj found → should still be satisfied (unchanged)
-		const obj = getActivePhase(updated).objectives[0];
+		const obj = updated.objectives[0];
 		expect(obj?.satisfactionState).toBe("satisfied");
 	});
 });
@@ -1335,11 +1277,11 @@ describe("dispatchAiTurn — examine postExamineDescription", () => {
 	 */
 	function makeGameWithSatisfiedItem() {
 		const game = makeGame();
-		return updateActivePhase(game, (phase) => ({
-			...phase,
+		return {
+			...game,
 			world: {
-				...phase.world,
-				entities: phase.world.entities.map((e) =>
+				...game.world,
+				entities: game.world.entities.map((e) =>
 					e.id === "key"
 						? {
 								...e,
@@ -1349,7 +1291,7 @@ describe("dispatchAiTurn — examine postExamineDescription", () => {
 						: e,
 				),
 			},
-		}));
+		};
 	}
 
 	it("returns postExamineDescription when entity satisfactionState is 'satisfied'", () => {
@@ -1377,17 +1319,17 @@ describe("dispatchAiTurn — examine postExamineDescription", () => {
 
 	it("falls back to examineDescription when satisfactionState is 'satisfied' but no postExamineDescription", () => {
 		const game = makeGame();
-		const gameWithSatisfied = updateActivePhase(game, (phase) => ({
-			...phase,
+		const gameWithSatisfied = {
+			...game,
 			world: {
-				...phase.world,
-				entities: phase.world.entities.map((e) =>
+				...game.world,
+				entities: game.world.entities.map((e) =>
 					e.id === "key"
 						? { ...e, satisfactionState: "satisfied" as const }
 						: e,
 				),
 			},
-		}));
+		};
 		const action: AiTurnAction = {
 			aiId: "red",
 			toolCall: { name: "examine", args: { item: "key" } },
@@ -1450,16 +1392,10 @@ function makeGameWithSpaceObjective(
 			cyan: { position: { row: 4, col: 4 }, facing: "north" },
 		},
 	};
-	const config: PhaseConfig = {
-		phaseNumber: 1,
-		kRange: [1, 1],
-		nRange: [0, 0],
-		mRange: [0, 0],
-		aiGoalPool: ["g1"],
+	const started = startGame(TEST_PERSONAS, pack, {
 		budgetPerAi: 5,
-	};
-	const game = createGame(TEST_PERSONAS, [pack]);
-	const started = startPhase(game, config, () => 0);
+		rng: () => 0,
+	});
 	// Override objectives to include our UseSpaceObjective
 	return { ...started, objectives: [spaceObjective] };
 }
@@ -1608,16 +1544,10 @@ describe("dispatchAiTurn — use on objective_space witnesses satisfactionFlavor
 				cyan: { position: { row: 4, col: 4 }, facing: "north" },
 			},
 		};
-		const config: PhaseConfig = {
-			phaseNumber: 1,
-			kRange: [1, 1],
-			nRange: [0, 0],
-			mRange: [0, 0],
-			aiGoalPool: ["g1"],
+		const started = startGame(TEST_PERSONAS, pack, {
 			budgetPerAi: 5,
-		};
-		const game = createGame(TEST_PERSONAS, [pack]);
-		const started = startPhase(game, config, () => 0);
+			rng: () => 0,
+		});
 		const withObjective = { ...started, objectives: [spaceObjective] };
 
 		const action: AiTurnAction = {
@@ -1648,11 +1578,11 @@ describe("dispatchAiTurn — UseItemObjective activationFlavor on interesting_ob
 	 * flavor configured, plus a pending UseItemObjective targeting 'key'. */
 	function makeGameWithUseItemActivation() {
 		const game = makeGame();
-		const withItemFlavors = updateActivePhase(game, (phase) => ({
-			...phase,
+		const withItemFlavors = {
+			...game,
 			world: {
-				...phase.world,
-				entities: phase.world.entities.map((e) =>
+				...game.world,
+				entities: game.world.entities.map((e) =>
 					e.id === "key"
 						? {
 								...e,
@@ -1666,7 +1596,7 @@ describe("dispatchAiTurn — UseItemObjective activationFlavor on interesting_ob
 						: e,
 				),
 			},
-		}));
+		};
 		const useItemObj: UseItemObjective = {
 			id: "obj-0",
 			kind: "use_item",
@@ -1674,10 +1604,7 @@ describe("dispatchAiTurn — UseItemObjective activationFlavor on interesting_ob
 			satisfactionState: "pending",
 			itemId: "key",
 		};
-		return updateActivePhase(withItemFlavors, (phase) => ({
-			...phase,
-			objectives: [useItemObj],
-		}));
+		return { ...withItemFlavors, objectives: [useItemObj] };
 	}
 
 	it("returns activationFlavor as the actor's tool-success description on the satisfying use", () => {
@@ -1713,11 +1640,12 @@ describe("dispatchAiTurn — UseItemObjective activationFlavor on interesting_ob
 
 	it("does not emit activationFlavor when there is no pending UseItemObjective", () => {
 		// No use_item objective wired up.
-		const game = updateActivePhase(makeGame(), (phase) => ({
-			...phase,
+		const base = makeGame();
+		const game = {
+			...base,
 			world: {
-				...phase.world,
-				entities: phase.world.entities.map((e) =>
+				...base.world,
+				entities: base.world.entities.map((e) =>
 					e.id === "key"
 						? {
 								...e,
@@ -1728,7 +1656,7 @@ describe("dispatchAiTurn — UseItemObjective activationFlavor on interesting_ob
 						: e,
 				),
 			},
-		}));
+		};
 		const result = dispatchAiTurn(game, {
 			aiId: "red",
 			toolCall: { name: "use", args: { item: "key" } },
@@ -1885,16 +1813,10 @@ describe("dispatchAiTurn — use on objective_space surfaces activationFlavor to
 				cyan: { position: { row: 4, col: 4 }, facing: "north" },
 			},
 		};
-		const config: PhaseConfig = {
-			phaseNumber: 1,
-			kRange: [1, 1],
-			nRange: [0, 0],
-			mRange: [0, 0],
-			aiGoalPool: ["g1"],
+		const started = startGame(TEST_PERSONAS, pack, {
 			budgetPerAi: 5,
-		};
-		const game = createGame(TEST_PERSONAS, [pack]);
-		const started = startPhase(game, config, () => 0);
+			rng: () => 0,
+		});
 		const withObjective = { ...started, objectives: [spaceObjective] };
 
 		const action: AiTurnAction = {
