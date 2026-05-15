@@ -39,7 +39,7 @@ remains in cardinal form. No internal API changes beyond the dispatcher translat
 
 Each `ContentPack` carries a `landmarks` object with exactly four `LandmarkDescription`
 entries keyed by cardinal (`north`, `south`, `east`, `west`). Each landmark has a `shortName`
-(2–5 words) and a `horizonPhrase` (an evocative clause without cardinal language).
+and a `horizonPhrase` (an evocative clause without cardinal language).
 The content-pack LLM is asked to generate distinctive, mutually distinguishable landmarks
 consistent with the phase setting.
 

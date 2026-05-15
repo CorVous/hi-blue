@@ -73,8 +73,7 @@ export const weatherChangeComplication: Complication = {
 			(w) => w !== currentWeather,
 		);
 
-		// If somehow the pool is empty (shouldn't happen with ≥2 entries), fall
-		// back to the full pool so we never throw.
+		// If somehow the pool is empty, fall back to the full pool so we never throw.
 		const pool =
 			candidates.length > 0 ? candidates : (WEATHER_POOL as readonly string[]);
 		const idx = Math.floor(rng() * pool.length);

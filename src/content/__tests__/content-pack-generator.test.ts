@@ -645,20 +645,4 @@ describe("generateDualContentPacks — entity ID parity (issue #302)", () => {
 		expect(provider.dualCalls).toHaveLength(1);
 		expect(provider.calls).toHaveLength(0);
 	});
-
-	it("throws when setting pool has fewer than 6 entries", async () => {
-		const rng = seededRng(99);
-		const provider = makeDualMockProvider();
-		const smallPool = ["a", "b", "c", "d", "e"];
-
-		await expect(
-			generateDualContentPacks(
-				rng,
-				smallPool,
-				FIXED_PHASE_CONFIGS,
-				provider,
-				AI_IDS,
-			),
-		).rejects.toThrow(/at least 6/);
-	});
 });

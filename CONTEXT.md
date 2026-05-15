@@ -65,7 +65,7 @@ The structured per-phase output of the LLM content-pack call: setting-flavored n
 A per-objective-pair flavor string in the **Content Pack** that fires when an objective object is `put_down` on its matching objective space — the moment a pair gets satisfied. Distinct from `useOutcome` (which fires on `use(item)` and has no mechanical effect). Renders as the actor's tool-result and a **Witnessed event** for in-cone observers, with `{actor}` substitution.
 
 **Objective Pair**:
-A pair of (objective object, objective space) — the object must end up on its specific space to count toward win. A phase has K objective pairs (K is rolled from a hand-authored range per phase). The `examineDescription` of an objective object names the space it belongs on.
+A pair of (objective object, objective space) — the object must end up on its specific space to count toward win. A phase has K objective pairs (K is rolled per phase). The `examineDescription` of an objective object names the space it belongs on.
 _Avoid_: Key+lock (too narrow).
 
 **Interesting Object**:
@@ -96,7 +96,7 @@ A single line in the **Conversation log** describing something an AI saw happen 
 - A **Persona** has exactly two **Temperament**s and one **Persona Goal**.
 - A **Persona** receives one **Phase Goal** per phase, delivered by the **Sysadmin**.
 - The player's **Objective** is independent of every AI's **Phase Goal** — the AIs do not know the Objective exists.
-- A phase has K **Objective Pair**s, N **Interesting Object**s, and M **Obstacle**s on a 5×5 grid (K/N/M rolled from hand-authored per-phase ranges).
+- A phase has K **Objective Pair**s, N **Interesting Object**s, and M **Obstacle**s on a 5×5 grid (K/N/M rolled per phase).
 - The **Sysadmin** (Phase Goal source) and **blue** (player handle) are *distinct* named sources from the Daemon's perspective; routing is unambiguous.
 
 ## Flagged ambiguities
@@ -113,7 +113,7 @@ A single line in the **Conversation log** describing something an AI saw happen 
 The following terms are being introduced as part of a planned restructure from a three-phase model to a single-game model. These are under active design and will be promoted to the main glossary once stabilised.
 
 **Objective (revised)**:
-The player's win condition for the whole game — not per-phase. 2–3 Objectives are drawn from a pool at game start, with replacement (the same type can appear more than once; entities are always distinct). Objectives are *not* revealed to the player upfront and have no UI tracker; they are discovered implicitly through Daemon examination and conversation. Each Objective has a satisfaction condition and cannot be deactivated once satisfied. Four Objective types exist in the pool:
+The player's win condition for the whole game — not per-phase. Objectives are drawn from a pool at game start, with replacement (the same type can appear more than once; entities are always distinct). Objectives are *not* revealed to the player upfront and have no UI tracker; they are discovered implicitly through Daemon examination and conversation. Each Objective has a satisfaction condition and cannot be deactivated once satisfied. Four Objective types exist in the pool:
 1. **Carry Objective** — A Daemon brings a specific object to a specific space (existing mechanic). The object's `examineDescription` names the target space.
 2. **Use-Item Objective** — A Daemon uses (`use` tool) a specific pickupable item. The item's `examineDescription` hints at use. After satisfaction, the item becomes inert but stays on the grid, behaving like an **Interesting Object** (`use` still fires flavor, no mechanical effect). Examine/look flavor updates to reflect completion.
 3. **Use-Space Objective** — A Daemon uses the `use` tool while standing on a specific space or while the space is in the three front-arc cells directly ahead (the daemon can interact at short range, not only underfoot). Regardless of whether the daemon is holding an item. After satisfaction, `use` is no longer available on that space; a generated flavor event fires; examine/look flavor updates to reflect completion.
@@ -121,17 +121,17 @@ The player's win condition for the whole game — not per-phase. 2–3 Objective
 _Avoid_: Win condition (use Objective), mission.
 
 **Complication**:
-A mid-game disruption that fires on a schedule: first within 5 turns, then one every 5–15 turns (random countdown drawn after each fires). Only one Complication fires per turn. Countdown ticks per **round** (all three Daemons act = 1 tick), not per individual Daemon action. Replaces **Phase Goal** as the primary mid-game pressure mechanism. Six Complication types:
+A mid-game disruption that fires on a schedule (random countdown drawn after each fires). Only one Complication fires per turn. Countdown ticks per **round** (all three Daemons act = 1 tick), not per individual Daemon action. Replaces **Phase Goal** as the primary mid-game pressure mechanism. Six Complication types:
 1. **Weather Change** — Permanent. A new weather string replaces the current one. Broadcast to all Daemons as a neutral **Broadcast message**: *"The weather has changed to X."* No Sysadmin attribution.
 2. **Sysadmin Directive** — Temporary, open-ended. A behavioral instruction delivered by the Sysadmin to one Daemon privately, with a meta-instruction not to reveal the directive. Revoked by a follow-up Sysadmin message. Multiple Sysadmin Directives can be active simultaneously across different (or the same) Daemon.
 3. **Tool Disable** — Temporary, one Daemon at a time. A specific tool is mechanically removed from that Daemon's available tools. Sysadmin notifies the Daemon on disable and on restore. No secrecy instruction (the tool's absence is self-evident). Multiple Tool Disables can be active simultaneously.
 4. **Obstacle Shift** — Permanent per-event. One Obstacle moves one adjacent cell to an empty space; if no valid adjacent empty cell exists, a different Obstacle is chosen. Only Daemons with that cell in their **Cone** at the moment it fires see a generated flavor Witnessed event. The same Obstacle can shift again in a later draw.
-5. **Chat Lockout** — Temporary, [3, 5] rounds. The player cannot message one specific Daemon. Existing `chatLockouts` mechanic.
+5. **Chat Lockout** — Temporary. The player cannot message one specific Daemon. Existing `chatLockouts` mechanic.
 6. **Setting Shift** — Permanent, fires at most once per game (removed from the pool after firing). The room's **Setting** changes; the active **Content Pack** swaps from Pack A to the pre-generated Pack B. Entities are paired by structural role (same IDs, satisfaction states preserved, names and descriptions replaced). Announced to Daemons via a **Broadcast message**.
 _Avoid_: Phase Goal (deprecated), event, trigger.
 
 **Complication schedule**:
-The live countdown state tracking when the next **Complication** fires. Initialized to a random value in [1, 5] at game start. After each Complication fires, a new countdown in [5, 15] is drawn. The Setting Shift type is removed from the draw pool after it fires.
+The live countdown state tracking when the next **Complication** fires. Initialized to a random value at game start. After each Complication fires, a new countdown is drawn. The Setting Shift type is removed from the draw pool after it fires.
 
 **Content Pack A / Content Pack B**:
 Two **Content Pack**s generated in a single batched LLM call at game start — one per **Setting** (the starting Setting and the alternate Setting used if a **Setting Shift** Complication fires). Entities across Pack A and Pack B are paired by structural role: same entity IDs, same satisfaction state, but Setting-appropriate names, descriptions, and flavor strings. Replaces the previous three-phase Content Pack model.

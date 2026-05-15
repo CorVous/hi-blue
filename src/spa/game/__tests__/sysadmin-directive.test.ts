@@ -26,7 +26,6 @@ describe("drawDirectiveText", () => {
 	it("selects different entries for different rng values", () => {
 		const first = drawDirectiveText(() => 0);
 		const last = drawDirectiveText(() => 0.9999);
-		// Pool has at least 2 entries, so index 0 and last must differ
 		expect(first).toBe(SYSADMIN_DIRECTIVE_POOL[0]);
 		expect(last).toBe(
 			SYSADMIN_DIRECTIVE_POOL[SYSADMIN_DIRECTIVE_POOL.length - 1],

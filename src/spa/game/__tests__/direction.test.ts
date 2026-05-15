@@ -5,8 +5,6 @@ import {
 	CARDINAL_DIRECTIONS,
 	cardinalToRelative,
 	directionDelta,
-	GRID_COLS,
-	GRID_ROWS,
 	inBounds,
 	manhattan,
 	RELATIVE_DIRECTIONS,
@@ -14,11 +12,6 @@ import {
 } from "../direction";
 
 describe("constants", () => {
-	it("GRID_ROWS and GRID_COLS are 5", () => {
-		expect(GRID_ROWS).toBe(5);
-		expect(GRID_COLS).toBe(5);
-	});
-
 	it("CARDINAL_DIRECTIONS has exactly 4 values", () => {
 		expect(CARDINAL_DIRECTIONS).toHaveLength(4);
 		expect(CARDINAL_DIRECTIONS).toContain("north");

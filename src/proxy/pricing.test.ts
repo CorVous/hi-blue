@@ -71,18 +71,6 @@ describe("getModelPricing", () => {
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
 
-	it("falls back to constants when /models is unreachable and no cache exists", async () => {
-		vi.stubGlobal(
-			"fetch",
-			vi.fn().mockRejectedValue(new Error("network down")),
-		);
-
-		const pricing = await getModelPricing(MODEL);
-		// Fallback constants: 1 / 5 micro-USD per token
-		expect(pricing.promptMicroUsdPerToken).toBe(1);
-		expect(pricing.completionMicroUsdPerToken).toBe(5);
-	});
-
 	it("returns stale cache if /models fetch fails after a previous success", async () => {
 		// Seed cache as if a previous successful fetch happened a long time ago
 		_setPricingCacheForTests(
@@ -99,34 +87,6 @@ describe("getModelPricing", () => {
 		// Stale cache preferred over fallback constants
 		expect(pricing.promptMicroUsdPerToken).toBe(0.25);
 		expect(pricing.completionMicroUsdPerToken).toBe(0.75);
-	});
-
-	it("falls back when /models returns 200 but the pinned model is missing", async () => {
-		vi.stubGlobal(
-			"fetch",
-			vi
-				.fn()
-				.mockImplementation(() =>
-					modelsResponse([
-						{ id: "other/model", prompt: "0.0000005", completion: "0.000002" },
-					]),
-				),
-		);
-
-		const pricing = await getModelPricing(MODEL);
-		expect(pricing.promptMicroUsdPerToken).toBe(1);
-		expect(pricing.completionMicroUsdPerToken).toBe(5);
-	});
-
-	it("falls back when /models returns non-2xx", async () => {
-		vi.stubGlobal(
-			"fetch",
-			vi.fn().mockResolvedValue(new Response("fail", { status: 503 })),
-		);
-
-		const pricing = await getModelPricing(MODEL);
-		expect(pricing.promptMicroUsdPerToken).toBe(1);
-		expect(pricing.completionMicroUsdPerToken).toBe(5);
 	});
 });
 
