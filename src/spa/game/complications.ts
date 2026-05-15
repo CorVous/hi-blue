@@ -23,9 +23,7 @@ import {
 	appendBroadcast,
 	appendPrivateSystemNotice,
 	appendWitnessedObstacleShift,
-	getActivePhase,
 	setWeather,
-	updateActivePhase,
 } from "./engine.js";
 import type {
 	ActiveComplication,
@@ -171,14 +169,12 @@ export const toolDisableComplication: Complication = {
 export const obstacleShiftComplication: Complication = {
 	name: "obstacleShift",
 	isAvailable(game: GameState): boolean {
-		const phase = getActivePhase(game);
 		return (
-			validObstacleShiftTuples(phase.world, phase.personaSpatial).length > 0
+			validObstacleShiftTuples(game.world, game.personaSpatial).length > 0
 		);
 	},
 	apply(game: GameState, rng: () => number): GameState {
-		const phase = getActivePhase(game);
-		const tuples = validObstacleShiftTuples(phase.world, phase.personaSpatial);
+		const tuples = validObstacleShiftTuples(game.world, game.personaSpatial);
 
 		if (tuples.length === 0) {
 			return game;
@@ -189,15 +185,15 @@ export const obstacleShiftComplication: Complication = {
 		const { obstacleId, fromCell, toCell } = tuples[idx]!;
 
 		// Move the obstacle: update its holder from fromCell to toCell (immutable)
-		const updatedEntities = phase.world.entities.map((entity) => {
+		const updatedEntities = game.world.entities.map((entity) => {
 			if (entity.id !== obstacleId) return entity;
 			return { ...entity, holder: toCell };
 		});
 
-		let state = updateActivePhase(game, (p) => ({
-			...p,
-			world: { ...p.world, entities: updatedEntities },
-		}));
+		let state: GameState = {
+			...game,
+			world: { ...game.world, entities: updatedEntities },
+		};
 
 		// Compute which Daemons have fromCell in their cone at the moment of shift
 		const entry: Extract<
@@ -205,16 +201,16 @@ export const obstacleShiftComplication: Complication = {
 			{ kind: "witnessed-obstacle-shift" }
 		> = {
 			kind: "witnessed-obstacle-shift",
-			round: phase.round,
+			round: game.round,
 			obstacleId,
 			fromCell,
 			toCell,
 			flavor:
-				phase.world.entities.find((e) => e.id === obstacleId)?.shiftFlavor ??
+				game.world.entities.find((e) => e.id === obstacleId)?.shiftFlavor ??
 				"Something shifts.",
 		};
 
-		for (const [daemonId, spatial] of Object.entries(phase.personaSpatial)) {
+		for (const [daemonId, spatial] of Object.entries(game.personaSpatial)) {
 			const cone = projectCone(spatial.position, spatial.facing);
 			const witnessesShift = cone.some((cell) =>
 				positionsEqual(cell.position, fromCell),

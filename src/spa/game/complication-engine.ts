@@ -13,12 +13,7 @@
  */
 
 import { applyDirection, CARDINAL_DIRECTIONS, inBounds } from "./direction.js";
-import {
-	appendBroadcast,
-	getActivePhase,
-	swapActivePack,
-	updateActivePhase,
-} from "./engine.js";
+import { appendBroadcast, swapActivePack } from "./engine.js";
 import type {
 	ActiveComplication,
 	AiId,
@@ -26,7 +21,6 @@ import type {
 	ComplicationVariant,
 	GameState,
 	GridPosition,
-	PhaseState,
 	ToolName,
 	WorldState,
 } from "./types.js";
@@ -69,7 +63,7 @@ function drawCountdown(rng: () => number, min: number, max: number): number {
  */
 function isObstacleShiftAvailable(
 	world: WorldState,
-	personaSpatial: PhaseState["personaSpatial"],
+	personaSpatial: GameState["personaSpatial"],
 ): boolean {
 	// Collect all occupied cells (grid-resting entities that are NOT the obstacle being examined)
 	const entityOccupied = new Set<string>();
@@ -116,7 +110,7 @@ function isObstacleShiftAvailable(
  */
 export function validObstacleShiftTuples(
 	world: WorldState,
-	personaSpatial: PhaseState["personaSpatial"],
+	personaSpatial: GameState["personaSpatial"],
 ): Array<{ obstacleId: string; fromCell: GridPosition; toCell: GridPosition }> {
 	// Same occupied set logic as isObstacleShiftAvailable
 	const entityOccupied = new Set<string>();
@@ -173,7 +167,7 @@ export function validObstacleShiftTuples(
  *     exhaustion by requesting a re-draw (see drawComplication)
  */
 function availableComplicationTypes(
-	phase: PhaseState,
+	phase: GameState,
 	excludeToolDisable = false,
 ): string[] {
 	const { complicationSchedule, world, personaSpatial } = phase;
@@ -201,7 +195,7 @@ function availableComplicationTypes(
  * Handles the tool_disable exhaustion re-draw.
  */
 function drawComplication(
-	phase: PhaseState,
+	phase: GameState,
 	rng: () => number,
 ): ComplicationVariant {
 	const pool = availableComplicationTypes(phase);
@@ -301,7 +295,7 @@ function drawComplication(
  */
 function drawFallbackComplication(
 	kind: string,
-	phase: PhaseState,
+	phase: GameState,
 	rng: () => number,
 ): ComplicationVariant {
 	switch (kind) {
@@ -362,15 +356,14 @@ export function tickComplication(
 	game: GameState,
 	rng: () => number,
 ): ComplicationResult | null {
-	const phase = getActivePhase(game);
-	const { countdown } = phase.complicationSchedule;
+	const { countdown } = game.complicationSchedule;
 
 	if (countdown > 0) {
 		return null;
 	}
 
 	// countdown === 0: draw a complication
-	const fired = drawComplication(phase, rng);
+	const fired = drawComplication(game, rng);
 	return { fired };
 }
 
@@ -379,13 +372,13 @@ export function tickComplication(
  * Call this every round when `tickComplication` returns null.
  */
 export function decrementComplicationCountdown(game: GameState): GameState {
-	return updateActivePhase(game, (phase) => ({
-		...phase,
+	return {
+		...game,
 		complicationSchedule: {
-			...phase.complicationSchedule,
-			countdown: phase.complicationSchedule.countdown - 1,
+			...game.complicationSchedule,
+			countdown: game.complicationSchedule.countdown - 1,
 		},
-	}));
+	};
 }
 
 /**
@@ -411,10 +404,9 @@ export function resolveExpiredChatLockouts(game: GameState): {
 	nextState: GameState;
 	resolvedAiIds: AiId[];
 } {
-	const phase = getActivePhase(game);
 	const resolvedAiIds: AiId[] = [];
-	const remaining = phase.activeComplications.filter((c) => {
-		if (c.kind === "chat_lockout" && phase.round >= c.resolveAtRound) {
+	const remaining = game.activeComplications.filter((c) => {
+		if (c.kind === "chat_lockout" && game.round >= c.resolveAtRound) {
 			resolvedAiIds.push(c.target);
 			return false;
 		}
@@ -425,10 +417,10 @@ export function resolveExpiredChatLockouts(game: GameState): {
 		return { nextState: game, resolvedAiIds: [] };
 	}
 
-	const nextState = updateActivePhase(game, (p) => ({
-		...p,
+	const nextState: GameState = {
+		...game,
 		activeComplications: remaining,
-	}));
+	};
 
 	return { nextState, resolvedAiIds };
 }
@@ -444,10 +436,9 @@ export function resolveExpiredDirectives(game: GameState): {
 	nextState: GameState;
 	resolved: Array<{ target: AiId; directive: string }>;
 } {
-	const phase = getActivePhase(game);
 	const resolved: Array<{ target: AiId; directive: string }> = [];
-	const remaining = phase.activeComplications.filter((c) => {
-		if (c.kind === "sysadmin_directive" && phase.round >= c.resolveAtRound) {
+	const remaining = game.activeComplications.filter((c) => {
+		if (c.kind === "sysadmin_directive" && game.round >= c.resolveAtRound) {
 			resolved.push({ target: c.target, directive: c.directive });
 			return false;
 		}
@@ -458,10 +449,10 @@ export function resolveExpiredDirectives(game: GameState): {
 		return { nextState: game, resolved: [] };
 	}
 
-	const nextState = updateActivePhase(game, (p) => ({
-		...p,
+	const nextState: GameState = {
+		...game,
 		activeComplications: remaining,
-	}));
+	};
 
 	return { nextState, resolved };
 }
@@ -484,60 +475,53 @@ export function applyComplicationResult(
 	const newCountdown = drawCountdown(rng, 5, 15);
 	const { fired } = result;
 
-	// Update phase-level complication schedule and persistent complications
-	let state = updateActivePhase(game, (phase) => {
-		const settingShiftFired =
-			phase.complicationSchedule.settingShiftFired ||
-			fired.kind === "setting_shift";
+	const settingShiftFired =
+		game.complicationSchedule.settingShiftFired ||
+		fired.kind === "setting_shift";
 
-		const complicationSchedule = {
-			...phase.complicationSchedule,
-			countdown: newCountdown,
-			settingShiftFired,
-		};
+	const complicationSchedule = {
+		...game.complicationSchedule,
+		countdown: newCountdown,
+		settingShiftFired,
+	};
 
-		// Append persistent complications
-		let activeComplications = [...phase.activeComplications];
-		if (fired.kind === "sysadmin_directive") {
-			const entry: ActiveComplication = {
-				kind: "sysadmin_directive",
-				target: fired.target,
-				directive: "", // directive text set by the coordinator's content layer
-				resolveAtRound: phase.round + fired.duration,
-			};
-			activeComplications = [...activeComplications, entry];
-		} else if (fired.kind === "tool_disable") {
-			const entry: ActiveComplication = {
-				kind: "tool_disable",
-				target: fired.target,
-				tool: fired.tool,
-				resolveAtRound: phase.round + fired.duration,
-			};
-			activeComplications = [...activeComplications, entry];
-		} else if (fired.kind === "chat_lockout") {
-			const entry: ActiveComplication = {
-				kind: "chat_lockout",
-				target: fired.target,
-				resolveAtRound: phase.round + fired.duration,
-			};
-			activeComplications = [...activeComplications, entry];
-		}
-		// weather_change, obstacle_shift, setting_shift are transient — not appended here
+	// Append persistent complications
+	let activeComplications = [...game.activeComplications];
+	if (fired.kind === "sysadmin_directive") {
+		activeComplications.push({
+			kind: "sysadmin_directive",
+			target: fired.target,
+			directive: "", // directive text set by the coordinator's content layer
+			resolveAtRound: game.round + fired.duration,
+		});
+	} else if (fired.kind === "tool_disable") {
+		activeComplications.push({
+			kind: "tool_disable",
+			target: fired.target,
+			tool: fired.tool,
+			resolveAtRound: game.round + fired.duration,
+		});
+	} else if (fired.kind === "chat_lockout") {
+		activeComplications.push({
+			kind: "chat_lockout",
+			target: fired.target,
+			resolveAtRound: game.round + fired.duration,
+		});
+	}
+	// weather_change, obstacle_shift, setting_shift are transient — not appended here
 
-		return {
-			...phase,
-			complicationSchedule,
-			activeComplications,
-		};
-	});
+	let state: GameState = {
+		...game,
+		complicationSchedule,
+		activeComplications,
+	};
 
 	// setting_shift: swap the active pack and broadcast the change to all Daemons
 	if (fired.kind === "setting_shift") {
 		state = swapActivePack(state);
-		const newPhase = getActivePhase(state);
 		state = appendBroadcast(
 			state,
-			`[SYSTEM] The setting has shifted. You are now in: ${newPhase.setting}.`,
+			`[SYSTEM] The setting has shifted. You are now in: ${state.setting}.`,
 		);
 	}
 
