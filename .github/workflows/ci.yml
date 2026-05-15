@@ -37,3 +37,36 @@ jobs:
       - name: Test
         if: ${{ !cancelled() }}
         run: pnpm run test
+
+  smoke:
+    runs-on: ubuntu-latest
+
+    env:
+      ANTHROPIC_API_KEY: ci-invalid-key
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run e2e suite
+        run: pnpm run smoke
+
+      - name: Upload Playwright report
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
