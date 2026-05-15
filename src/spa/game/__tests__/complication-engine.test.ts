@@ -830,7 +830,12 @@ describe("applyComplicationResult — setting_shift swaps active pack", () => {
 	};
 
 	function makeGameWithDualPacks(): GameState {
-		const phase = makePhase({ contentPack: PACK_A, setting: PACK_A.setting });
+		const phase = makePhase({
+			contentPack: PACK_A,
+			setting: PACK_A.setting,
+			weather: PACK_A.weather,
+			timeOfDay: PACK_A.timeOfDay,
+		});
 		return makeGameStateAround({
 			...phase,
 			contentPacksA: [PACK_A],
@@ -860,6 +865,22 @@ describe("applyComplicationResult — setting_shift swaps active pack", () => {
 		const updated = applyComplicationResult(game, result, seededRng([0.5]));
 		const updatedPhase = updated;
 		expect(updatedPhase.setting).toBe("sun-baked salt flat");
+	});
+
+	it("updates phase.weather to the B-side pack's weather string", () => {
+		const game = makeGameWithDualPacks();
+		const result = { fired: { kind: "setting_shift" as const } };
+		const updated = applyComplicationResult(game, result, seededRng([0.5]));
+		const updatedPhase = updated;
+		expect(updatedPhase.weather).toBe("hot");
+	});
+
+	it("updates phase.timeOfDay to the B-side pack's timeOfDay string", () => {
+		const game = makeGameWithDualPacks();
+		const result = { fired: { kind: "setting_shift" as const } };
+		const updated = applyComplicationResult(game, result, seededRng([0.5]));
+		const updatedPhase = updated;
+		expect(updatedPhase.timeOfDay).toBe("day");
 	});
 
 	it("leaves world entity positions unchanged after setting_shift", () => {
@@ -906,6 +927,8 @@ describe("applyComplicationResult — setting_shift swaps active pack", () => {
 		const result = { fired: { kind: "weather_change" as const } };
 		const updated = applyComplicationResult(game, result, seededRng([0.5]));
 		expect(updated.activePackId).toBe("A");
+		expect(updated.weather).toBe("clear");
+		expect(updated.timeOfDay).toBe("night");
 	});
 });
 
