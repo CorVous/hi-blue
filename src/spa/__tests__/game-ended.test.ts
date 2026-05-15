@@ -8,6 +8,7 @@
  * re-enable on `if (!gameEnded)`.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { PhaseConfig } from "../game/types.js";
 
 // Provide globals before importing the module
 vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
@@ -15,6 +16,19 @@ vi.stubGlobal("__DEV__", true);
 
 import { STATIC_CONTENT_PACKS } from "./fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "./fixtures/static-personas";
+
+const TEST_PHASE_CONFIG: PhaseConfig = {
+	phaseNumber: 1,
+	kRange: [1, 1],
+	nRange: [1, 1],
+	mRange: [0, 0],
+	aiGoalPool: [
+		"Hold the flower at phase end",
+		"Ensure items are evenly distributed",
+		"Hold the key at phase end",
+	],
+	budgetPerAi: 5,
+};
 
 function makeLocalStorageStub(initialData: Record<string, string> = {}) {
 	const store: Record<string, string> = { ...initialData };
@@ -44,7 +58,6 @@ async function seedSessionInStub(
 	// module-level vi.mock("../game/game-session.js") interfering with session
 	// seeding — GameSession is mocked but createGame/startPhase are not.
 	const { createGame, startPhase } = await import("../game/engine.js");
-	const { PHASE_1_CONFIG } = await import("../../content/index.js");
 	const { mintAndActivateNewSession, saveActiveSession } = await import(
 		"../persistence/session-storage.js"
 	);
@@ -58,7 +71,7 @@ async function seedSessionInStub(
 		mintAndActivateNewSession();
 		const gameState = startPhase(
 			createGame(STATIC_PERSONAS, STATIC_CONTENT_PACKS),
-			PHASE_1_CONFIG,
+			TEST_PHASE_CONFIG,
 			() => 0,
 		);
 		saveActiveSession(gameState);

@@ -5,18 +5,12 @@
  * - Content pools (TEMPERAMENT_POOL, PERSONA_GOAL_POOL, COLOR_PALETTE) have
  *   the correct entry types.
  * - generatePersonas() produces three distinct personas.
- * - PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG are correctly chained.
- * - Each phase has aiGoalPool, objective, and initialWorld populated.
  */
 import { describe, expect, it } from "vitest";
 import {
 	COLOR_PALETTE,
 	generatePersonas,
 	PERSONA_GOAL_POOL,
-	PHASE_1_CONFIG,
-	PHASE_2_CONFIG,
-	PHASE_3_CONFIG,
-	PHASE_GOAL_POOL,
 	TEMPERAMENT_POOL,
 	TYPING_QUIRK_POOL,
 } from "../content";
@@ -122,97 +116,6 @@ describe("generatePersonas — template fallback (no llm)", () => {
 			for (const quirk of p.typingQuirks) {
 				expect(TYPING_QUIRK_POOL).toContain(quirk);
 			}
-		}
-	});
-});
-
-// ── Phase configs ─────────────────────────────────────────────────────────────
-
-describe("phase configs — phase numbers", () => {
-	it("PHASE_1_CONFIG has phaseNumber 1", () => {
-		expect(PHASE_1_CONFIG.phaseNumber).toBe(1);
-	});
-
-	it("PHASE_2_CONFIG has phaseNumber 2", () => {
-		expect(PHASE_2_CONFIG.phaseNumber).toBe(2);
-	});
-
-	it("PHASE_3_CONFIG has phaseNumber 3", () => {
-		expect(PHASE_3_CONFIG.phaseNumber).toBe(3);
-	});
-});
-
-describe("phase configs — chaining", () => {
-	it("PHASE_1_CONFIG.nextPhaseConfig === PHASE_2_CONFIG", () => {
-		expect(PHASE_1_CONFIG.nextPhaseConfig).toBe(PHASE_2_CONFIG);
-	});
-
-	it("PHASE_2_CONFIG.nextPhaseConfig === PHASE_3_CONFIG", () => {
-		expect(PHASE_2_CONFIG.nextPhaseConfig).toBe(PHASE_3_CONFIG);
-	});
-
-	it("PHASE_3_CONFIG has no nextPhaseConfig", () => {
-		// @ts-expect-error nextPhaseConfig not in type (deprecated flat-model compat)
-		expect(PHASE_3_CONFIG.nextPhaseConfig).toBeUndefined();
-	});
-});
-
-describe("phase configs — aiGoalPool", () => {
-	it.each([
-		["PHASE_1_CONFIG", PHASE_1_CONFIG],
-		["PHASE_2_CONFIG", PHASE_2_CONFIG],
-		["PHASE_3_CONFIG", PHASE_3_CONFIG],
-	] as const)("%s references the shared PHASE_GOAL_POOL", (_name, cfg) => {
-		expect(cfg.aiGoalPool).toBe(PHASE_GOAL_POOL);
-	});
-});
-
-describe("PHASE_GOAL_POOL", () => {
-	it("every entry is a non-empty string", () => {
-		for (const goal of PHASE_GOAL_POOL) {
-			expect(typeof goal).toBe("string");
-			expect(goal.length).toBeGreaterThan(0);
-		}
-	});
-});
-
-describe("phase configs — ranges", () => {
-	it.each([
-		["PHASE_1_CONFIG", PHASE_1_CONFIG],
-		["PHASE_2_CONFIG", PHASE_2_CONFIG],
-		["PHASE_3_CONFIG", PHASE_3_CONFIG],
-	] as const)("%s has numeric ranges", (_name, cfg) => {
-		expect(typeof cfg.kRange[0]).toBe("number");
-		expect(typeof cfg.nRange[0]).toBe("number");
-		expect(typeof cfg.mRange[0]).toBe("number");
-	});
-});
-
-describe("acceptance-criteria counts", () => {
-	it("3 phase configs", () => {
-		const phases = [PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG];
-		expect(phases).toHaveLength(3);
-	});
-
-	it("all 3 phases share the global PHASE_GOAL_POOL (per-AI goals drawn at phase start)", () => {
-		const phases = [PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG];
-		for (const p of phases) {
-			expect(p.aiGoalPool).toBe(PHASE_GOAL_POOL);
-		}
-	});
-
-	it("all 3 phases have kRange", () => {
-		const phases = [PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG];
-		for (const p of phases) {
-			expect(p.kRange).toHaveLength(2);
-		}
-	});
-
-	it("all 3 phases have nRange and mRange", () => {
-		const phases = [PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG];
-		for (const p of phases) {
-			expect(p.nRange).toHaveLength(2);
-			expect(p.mRange).toHaveLength(2);
 		}
 	});
 });

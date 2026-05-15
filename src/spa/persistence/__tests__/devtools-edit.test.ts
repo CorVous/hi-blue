@@ -7,9 +7,8 @@
  * This tests the "editable surface" affordance described in ADR 0004.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PHASE_1_CONFIG } from "../../../content/index.js";
 import { createGame, startPhase } from "../../game/engine.js";
-import type { AiPersona, GameState } from "../../game/types.js";
+import type { AiPersona, GameState, PhaseConfig } from "../../game/types.js";
 import type { DaemonFile } from "../session-codec.js";
 import {
 	ACTIVE_KEY,
@@ -18,6 +17,19 @@ import {
 	SESSIONS_PREFIX,
 	saveActiveSession,
 } from "../session-storage.js";
+
+const TEST_PHASE_CONFIG: PhaseConfig = {
+	phaseNumber: 1,
+	kRange: [1, 1],
+	nRange: [1, 1],
+	mRange: [0, 0],
+	aiGoalPool: [
+		"Hold the flower at phase end",
+		"Ensure items are evenly distributed",
+		"Hold the key at phase end",
+	],
+	budgetPerAi: 5,
+};
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -58,7 +70,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 
 function makeFreshGame(): GameState {
 	const game = createGame(TEST_PERSONAS);
-	return startPhase(game, PHASE_1_CONFIG, () => 0);
+	return startPhase(game, TEST_PHASE_CONFIG, () => 0);
 }
 
 function makeLocalStorageStub(initialData: Record<string, string> = {}) {

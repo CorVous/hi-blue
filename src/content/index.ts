@@ -1,13 +1,7 @@
 export { COLOR_PALETTE } from "./color-palette";
-export { PHASE_GOAL_POOL } from "./goal-pool";
 export { generatePersonas } from "./persona-generator";
 export { PERSONA_GOAL_POOL } from "./persona-goal-pool";
-export {
-	PHASE_1_CONFIG,
-	PHASE_2_CONFIG,
-	PHASE_3_CONFIG,
-	SINGLE_GAME_CONFIG,
-} from "./phases";
+export { SINGLE_GAME_CONFIG } from "./phases";
 export { SETTING_POOL } from "./setting-pool";
 export { SYSADMIN_DIRECTIVE_POOL } from "./sysadmin-directive-pool";
 export { TEMPERAMENT_POOL } from "./temperament-pool";

@@ -10,13 +10,14 @@
  * Issue #173 (parent #155).
  */
 
-import { generateDualContentPacks } from "../../content/content-pack-generator.js";
+import {
+	generateDualContentPacks,
+	type PhaseConfig,
+} from "../../content/content-pack-generator.js";
 import {
 	generatePersonas,
-	PHASE_1_CONFIG,
-	PHASE_2_CONFIG,
-	PHASE_3_CONFIG,
 	SETTING_POOL,
+	SINGLE_GAME_CONFIG,
 } from "../../content/index.js";
 import type { ContentPackProvider } from "./content-pack-provider.js";
 import { BrowserContentPackProvider } from "./content-pack-provider.js";
@@ -63,6 +64,21 @@ export interface BootstrapOpts {
 // Re-export provider types for use in start.ts without creating circular deps
 export type { ContentPackProvider, LlmSynthesisProvider as SynthesisProvider };
 
+function buildLegacyPhaseConfigs(): [PhaseConfig, PhaseConfig, PhaseConfig] {
+	const base = {
+		kRange: SINGLE_GAME_CONFIG.kRange,
+		nRange: SINGLE_GAME_CONFIG.nRange,
+		mRange: SINGLE_GAME_CONFIG.mRange,
+		budgetPerAi: SINGLE_GAME_CONFIG.budgetPerAi,
+		aiGoalPool: [] as string[],
+	};
+	return [
+		{ phaseNumber: 1 as const, ...base },
+		{ phaseNumber: 2 as const, ...base },
+		{ phaseNumber: 3 as const, ...base },
+	];
+}
+
 /**
  * Kick off persona + content-pack generation and expose them as separate
  * promises. Personas resolve seconds before content packs, which lets the
@@ -89,7 +105,7 @@ export function generateNewGameAssetsSplit(
 	const contentPacksPromise = generateDualContentPacks(
 		contentPackRng,
 		SETTING_POOL,
-		[PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG],
+		buildLegacyPhaseConfigs(),
 		packLLM,
 		aiIdsPromise,
 	);
@@ -132,7 +148,7 @@ export async function buildSameDaemonsSession(
 	const { packsA, packsB } = await generateDualContentPacks(
 		rng,
 		SETTING_POOL,
-		[PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG],
+		buildLegacyPhaseConfigs(),
 		packLLM,
 		Object.keys(personas),
 	);
