@@ -104,7 +104,7 @@ export function renderTopInfoLeft(el: HTMLElement, i: TopInfoInputs): void {
  * layout — drops the labels and the connection trailer. */
 export function formatTopInfoMobile(i: TopInfoInputs): string {
 	const epoch = `${String(i.phaseNumber).padStart(2, "0")}`;
-	return `${i.sessionId} · EPOCH ${epoch} · TRN ${i.turn}`;
+	return `${i.sessionId} · EPC ${epoch} · TRN ${i.turn}`;
 }
 
 export const TOPINFO_RIGHT_OK_TEXT = "● connection stable";

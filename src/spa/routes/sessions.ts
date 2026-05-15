@@ -109,7 +109,7 @@ export function renderSessions(
 	if (loadResult.kind === "ok") {
 		paintTopInfo(doc, {
 			sessionId: loadResult.sessionId,
-			phaseNumber: 1,
+			phaseNumber: loadResult.epoch,
 			totalPhases: 1,
 			turn: loadResult.state.round,
 		});
