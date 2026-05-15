@@ -63,6 +63,7 @@ const TEST_CONTENT_PACK: ContentPack = {
 	interestingObjects: [],
 	obstacles: [],
 	landmarks: DEFAULT_LANDMARKS,
+	wallName: "wall",
 	aiStarts: {},
 };
 

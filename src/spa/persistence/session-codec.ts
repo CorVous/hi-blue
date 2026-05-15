@@ -69,8 +69,12 @@ import {
  *   - `contentPacksA` and `contentPacksB` now contain exactly 1 entry each
  *     (previously held 3 entries, one per phase). Migration truncates v8 saves
  *     by keeping only the first entry of each array.
+ *
+ * v10 (issue #374): add `wallName` to `ContentPack`.
+ *   - Old v9 saves have no `wallName`; version-mismatch result (consistent
+ *     with v7/v8 policy — no migration provided).
  */
-export const SESSION_SCHEMA_VERSION = 9 as const;
+export const SESSION_SCHEMA_VERSION = 10 as const;
 
 // ── File shapes ────────────────────────────────────────────────────────────────
 
@@ -332,6 +336,7 @@ export function deserializeSession(
 			interestingObjects: [],
 			obstacles: [],
 			landmarks: DEFAULT_LANDMARKS,
+			wallName: "",
 			aiStarts: {},
 		};
 		const setting = contentPack.setting;

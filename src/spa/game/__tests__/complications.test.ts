@@ -76,6 +76,7 @@ function makeGameWithWeather(weather: string) {
 		interestingObjects: [],
 		obstacles: [],
 		landmarks: DEFAULT_LANDMARKS,
+		wallName: "wall",
 		aiStarts: {
 			red: { position: { row: 0, col: 0 }, facing: "north" },
 			green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -209,6 +210,7 @@ function makeGameWithObstacle(obstaclePos: GridPosition, shiftFlavor?: string) {
 		interestingObjects: [],
 		obstacles: [obstacle],
 		landmarks: DEFAULT_LANDMARKS,
+		wallName: "wall",
 		aiStarts: {
 			red: { position: { row: 0, col: 0 }, facing: "north" },
 			green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -278,6 +280,7 @@ describe("obstacleShiftComplication", () => {
 			interestingObjects: [],
 			obstacles: [obstacle],
 			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
 			aiStarts: {
 				red: { position: { row: 2, col: 2 }, facing: "south" }, // cone covers (3,2)
 				green: { position: { row: 0, col: 0 }, facing: "north" }, // cone does not cover (3,2)
@@ -323,6 +326,7 @@ describe("obstacleShiftComplication", () => {
 			interestingObjects: [],
 			obstacles: [obstacle],
 			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
 			aiStarts: {
 				red: { position: { row: 2, col: 2 }, facing: "south" }, // cone covers (3,2)
 				green: { position: { row: 0, col: 0 }, facing: "north" },
@@ -363,6 +367,7 @@ describe("obstacleShiftComplication", () => {
 			interestingObjects: [],
 			obstacles: [obstacle],
 			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
 			aiStarts: {
 				red: { position: { row: 2, col: 2 }, facing: "south" },
 				green: { position: { row: 0, col: 0 }, facing: "north" },

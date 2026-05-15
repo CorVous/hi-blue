@@ -186,6 +186,7 @@ describe("persistence — LLM-shaped blurb round-trips verbatim", () => {
 		interestingObjects: [],
 		obstacles: [],
 		landmarks: DEFAULT_LANDMARKS,
+		wallName: "wall",
 		aiStarts: {},
 	};
 

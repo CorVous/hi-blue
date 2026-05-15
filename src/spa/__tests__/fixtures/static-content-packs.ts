@@ -19,6 +19,7 @@ export const STATIC_CONTENT_PACK_NO_PAIRS: ContentPack = {
 	interestingObjects: [],
 	obstacles: [],
 	landmarks: DEFAULT_LANDMARKS,
+	wallName: "tunnel wall",
 	aiStarts: AI_STARTS,
 };
 
@@ -53,6 +54,7 @@ export const STATIC_CONTENT_PACKS: ContentPack[] = [
 		interestingObjects: [],
 		obstacles: [],
 		landmarks: DEFAULT_LANDMARKS,
+		wallName: "tunnel wall",
 		aiStarts: AI_STARTS,
 	},
 	{
@@ -81,6 +83,7 @@ export const STATIC_CONTENT_PACKS: ContentPack[] = [
 		interestingObjects: [],
 		obstacles: [],
 		landmarks: DEFAULT_LANDMARKS,
+		wallName: "salt flat boundary",
 		aiStarts: AI_STARTS,
 	},
 	{
@@ -109,6 +112,7 @@ export const STATIC_CONTENT_PACKS: ContentPack[] = [
 		interestingObjects: [],
 		obstacles: [],
 		landmarks: DEFAULT_LANDMARKS,
+		wallName: "laboratory bulkhead",
 		aiStarts: AI_STARTS,
 	},
 ];

@@ -107,6 +107,7 @@ const TEST_CONTENT_PACK: ContentPack = {
 	],
 	obstacles: [],
 	landmarks: DEFAULT_LANDMARKS,
+	wallName: "wall",
 	aiStarts: {
 		red: { position: { row: 0, col: 0 }, facing: "north" },
 		green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -1143,6 +1144,7 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 		interestingObjects: [],
 		obstacles: [],
 		landmarks: DEFAULT_LANDMARKS,
+		wallName: "wall",
 		aiStarts: {
 			red: { position: { row: 0, col: 0 }, facing: "north" },
 			green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -1238,6 +1240,7 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 			],
 			obstacles: [],
 			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -1844,6 +1847,7 @@ describe("placement flavor + win condition (issue #126)", () => {
 		interestingObjects: [],
 		obstacles: [],
 		landmarks: DEFAULT_LANDMARKS,
+		wallName: "wall",
 		aiStarts: {
 			red: { position: { row: 0, col: 0 }, facing: "north" },
 			green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -2006,6 +2010,7 @@ describe("placement flavor + win condition (issue #126)", () => {
 			interestingObjects: [],
 			obstacles: [],
 			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -2082,6 +2087,7 @@ describe("examine tool", () => {
 		interestingObjects: [],
 		obstacles: [],
 		landmarks: DEFAULT_LANDMARKS,
+		wallName: "wall",
 		aiStarts: {
 			red: { position: { row: 0, col: 0 }, facing: "north" },
 			green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -3007,6 +3013,7 @@ describe("action-failure entries — round-coordinator integration", () => {
 			},
 		],
 		landmarks: DEFAULT_LANDMARKS,
+		wallName: "wall",
 		aiStarts: {
 			red: { position: { row: 0, col: 0 }, facing: "north" },
 			green: { position: { row: 2, col: 2 }, facing: "north" },

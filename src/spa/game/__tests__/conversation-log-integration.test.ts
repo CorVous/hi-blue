@@ -130,6 +130,7 @@ const TEST_CONTENT_PACK: ContentPack = {
 	],
 	obstacles: [],
 	landmarks: DEFAULT_LANDMARKS,
+	wallName: "wall",
 	aiStarts: {
 		red: { position: { row: 2, col: 0 }, facing: "south" },
 		green: { position: { row: 0, col: 0 }, facing: "south" },
@@ -488,6 +489,7 @@ describe("conversation log integration — action-failure (issue #287)", () => {
 				},
 			],
 			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
 			aiStarts: {
 				red: { position: { row: 2, col: 0 }, facing: "south" },
 				green: { position: { row: 0, col: 0 }, facing: "south" },

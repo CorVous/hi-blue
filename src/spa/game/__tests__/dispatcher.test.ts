@@ -110,6 +110,7 @@ function makePackWithEntities(
 		interestingObjects: [flower, key],
 		obstacles,
 		landmarks: DEFAULT_LANDMARKS,
+		wallName: "wall",
 		aiStarts: {
 			red: { position: { row: 0, col: 0 }, facing: "north" },
 			green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -356,6 +357,7 @@ describe("validateToolCall", () => {
 			interestingObjects: [],
 			obstacles: [],
 			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -401,6 +403,7 @@ describe("executeToolCall — use placement via front arc", () => {
 			interestingObjects: [],
 			obstacles: [],
 			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "south" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -445,6 +448,7 @@ describe("executeToolCall — use placement via front arc", () => {
 			interestingObjects: [],
 			obstacles: [],
 			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -862,6 +866,7 @@ describe("dispatchAiTurn", () => {
 			interestingObjects: [],
 			obstacles: [],
 			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -959,6 +964,7 @@ describe("dispatchAiTurn", () => {
 			interestingObjects: [],
 			obstacles: [],
 			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -1006,6 +1012,7 @@ describe("dispatchAiTurn", () => {
 			interestingObjects: [flower],
 			obstacles: [],
 			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
 			aiStarts: {
 				red: { position: { row: 2, col: 0 }, facing: "south" },
 				green: { position: { row: 0, col: 0 }, facing: "south" },
@@ -1378,6 +1385,7 @@ function makeGameWithSpaceObjective(
 		interestingObjects: [],
 		obstacles: [],
 		landmarks: DEFAULT_LANDMARKS,
+		wallName: "wall",
 		aiStarts: {
 			red: { position: actorPos, facing: actorFacing },
 			green: { position: { row: 0, col: 0 }, facing: "north" },
@@ -1527,6 +1535,7 @@ describe("dispatchAiTurn — use on objective_space witnesses satisfactionFlavor
 			interestingObjects: [],
 			obstacles: [],
 			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
 			aiStarts: {
 				// red at (2,2) facing south
 				red: { position: { row: 2, col: 2 }, facing: "south" },
@@ -1797,6 +1806,7 @@ describe("dispatchAiTurn — use on objective_space surfaces activationFlavor to
 			interestingObjects: [],
 			obstacles: [],
 			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
 			aiStarts: {
 				red: { position: { row: 2, col: 2 }, facing: "south" },
 				green: { position: { row: 2, col: 0 }, facing: "east" },

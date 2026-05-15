@@ -71,6 +71,7 @@ function makeContentPack(pairs: ObjectivePair[]): ContentPack {
 		interestingObjects: [],
 		obstacles: [],
 		landmarks: DEFAULT_LANDMARKS,
+		wallName: "wall",
 		aiStarts: {},
 	};
 }

@@ -183,6 +183,7 @@ export function buildSessionFromAssets(
 					east: { shortName: "", horizonPhrase: "" },
 					west: { shortName: "", horizonPhrase: "" },
 				},
+				wallName: "",
 				aiStarts: {},
 			},
 		assets.personas,

@@ -40,6 +40,11 @@ export interface AiContext {
 	 */
 	landmarks: ContentPack["landmarks"];
 	/**
+	 * Setting-flavored name for the impassable grid edge (e.g. "subway tunnel wall").
+	 * Rendered in `<what_you_see>` and `<whats_new>` for OOB cone cells.
+	 */
+	wallName: string;
+	/**
 	 * Canonical cone-snapshot string captured at the end of this AI's last turn,
 	 * or undefined on the first turn of a phase. Used by `renderCurrentState`
 	 * to emit a `<whats_new>` diff so the model has a fresh delta to react to
@@ -109,6 +114,7 @@ export function buildAiContext(
 	const timeOfDay = game.timeOfDay ?? "";
 	const personaSpatial = game.personaSpatial;
 	const landmarks = game.contentPack.landmarks;
+	const wallName = game.contentPack.wallName;
 
 	if (!persona) throw new Error(`No persona for aiId: ${aiId}`);
 
@@ -132,6 +138,7 @@ export function buildAiContext(
 		personaSpatial,
 		personaColors,
 		landmarks,
+		wallName,
 		pendingBroadcasts,
 		activeDirectives,
 		...(opts?.prevConeSnapshot !== undefined
@@ -627,6 +634,12 @@ export function buildConeSnapshot(ctx: AiContext): string {
 	const coneCells = projectCone(actorSpatial.position, actorSpatial.facing);
 	const viewCells = coneCells.filter((c) => !c.isOwnCell);
 	for (const cell of viewCells) {
+		// Wall sentinel — OOB cell
+		if (cell.isWall) {
+			lines.push(`at ${cell.phrasing}: ${ctx.wallName}`);
+			continue;
+		}
+
 		const { position } = cell;
 		const contentParts: string[] = [];
 
@@ -838,6 +851,13 @@ function renderCurrentState(ctx: AiContext): string {
 		const viewCells = coneCells.filter((c) => !c.isOwnCell);
 		for (const cell of viewCells) {
 			const { position, phrasing } = cell;
+
+			// Wall sentinel — OOB cell
+			if (cell.isWall) {
+				const label = phrasing.charAt(0).toUpperCase() + phrasing.slice(1);
+				lines.push(`- ${label}: ${ctx.wallName}`);
+				continue;
+			}
 
 			// Build contents of this cell
 			const contentParts: string[] = [];

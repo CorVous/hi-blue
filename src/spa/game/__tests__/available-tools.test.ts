@@ -63,6 +63,7 @@ function makeGame() {
 		interestingObjects: [],
 		obstacles: [],
 		landmarks: DEFAULT_LANDMARKS,
+		wallName: "wall",
 		aiStarts: {
 			red: { position: { row: 2, col: 2 }, facing: "north" },
 			green: { position: { row: 0, col: 0 }, facing: "north" },
@@ -244,6 +245,7 @@ function makeGameWithSpace(
 		interestingObjects: [],
 		obstacles: [],
 		landmarks: DEFAULT_LANDMARKS,
+		wallName: "wall",
 		aiStarts: {
 			red: { position: { row: 2, col: 2 }, facing: actorFacing },
 			green: { position: { row: 0, col: 0 }, facing: "north" },

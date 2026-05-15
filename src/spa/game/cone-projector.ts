@@ -13,7 +13,9 @@
  *   - Two steps ahead, front-right
  *   - Two steps ahead, far-right
  *
- * Out-of-bounds cells are omitted from the result.
+ * Out-of-bounds cells are returned as wall sentinels (isWall: true) rather than
+ * being omitted, so callers can render setting-flavored wall markers. The result
+ * is always a deterministic 9-cell array for every (position, facing).
  */
 
 import {
@@ -38,6 +40,8 @@ export interface ConeCell {
 	position: GridPosition;
 	phrasing: ConePhrasing;
 	isOwnCell: boolean;
+	/** True when this cell is out-of-bounds — represents the impassable grid-edge wall. */
+	isWall: boolean;
 }
 
 /**
@@ -54,7 +58,8 @@ export interface ConeCell {
  *   8. two steps ahead, front-right
  *   9. two steps ahead, far-right
  *
- * Out-of-bounds cells are omitted. Own cell is always included.
+ * Out-of-bounds cells are included as wall sentinels (isWall: true). Own cell is
+ * always isWall: false. The result is always exactly 9 cells in canonical order.
  */
 export function projectCone(
 	position: GridPosition,
@@ -130,13 +135,13 @@ export function projectCone(
 	const result: ConeCell[] = [];
 	for (const c of candidates) {
 		const pos: GridPosition = { row: c.row, col: c.col };
-		if (c.isOwnCell || inBounds(pos)) {
-			result.push({
-				position: pos,
-				phrasing: c.phrasing,
-				isOwnCell: c.isOwnCell,
-			});
-		}
+		const isWall = !c.isOwnCell && !inBounds(pos);
+		result.push({
+			position: pos,
+			phrasing: c.phrasing,
+			isOwnCell: c.isOwnCell,
+			isWall,
+		});
 	}
 	return result;
 }
