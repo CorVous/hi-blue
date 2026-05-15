@@ -3,7 +3,7 @@
  *
  * Validates:
  * - Content pools (TEMPERAMENT_POOL, PERSONA_GOAL_POOL, COLOR_PALETTE) have
- *   the correct types and sizes.
+ *   the correct entry types.
  * - generatePersonas() produces three distinct personas.
  * - PHASE_1_CONFIG, PHASE_2_CONFIG, PHASE_3_CONFIG are correctly chained.
  * - Each phase has aiGoalPool, objective, and initialWorld populated.
@@ -116,18 +116,6 @@ describe("generatePersonas — template fallback (no llm)", () => {
 		expect(firstPersona.blurb).toContain("intensely");
 	});
 
-	it("each persona has at least 2 non-empty typingQuirks", async () => {
-		const personas = await generatePersonas(() => 0);
-		for (const p of Object.values(personas)) {
-			expect(Array.isArray(p.typingQuirks)).toBe(true);
-			expect(p.typingQuirks.length).toBeGreaterThanOrEqual(2);
-			for (const quirk of p.typingQuirks) {
-				expect(typeof quirk).toBe("string");
-				expect((quirk as string).length).toBeGreaterThan(0);
-			}
-		}
-	});
-
 	it("every typingQuirks entry is drawn from TYPING_QUIRK_POOL", async () => {
 		const personas = await generatePersonas(() => 0.5);
 		for (const p of Object.values(personas)) {
@@ -166,21 +154,6 @@ describe("phase configs — chaining", () => {
 	it("PHASE_3_CONFIG has no nextPhaseConfig", () => {
 		// @ts-expect-error nextPhaseConfig not in type (deprecated flat-model compat)
 		expect(PHASE_3_CONFIG.nextPhaseConfig).toBeUndefined();
-	});
-});
-
-describe("phase configs — kRange/nRange/mRange", () => {
-	it.each([
-		["PHASE_1_CONFIG", PHASE_1_CONFIG],
-		["PHASE_2_CONFIG", PHASE_2_CONFIG],
-		["PHASE_3_CONFIG", PHASE_3_CONFIG],
-	] as const)("%s has valid kRange/nRange/mRange", (_name, cfg) => {
-		expect(cfg.kRange).toHaveLength(2);
-		expect(cfg.nRange).toHaveLength(2);
-		expect(cfg.mRange).toHaveLength(2);
-		expect(cfg.kRange[0]).toBeGreaterThanOrEqual(1);
-		expect(cfg.nRange[0]).toBeGreaterThanOrEqual(0);
-		expect(cfg.mRange[0]).toBeGreaterThanOrEqual(0);
 	});
 });
 

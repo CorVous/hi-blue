@@ -16,4 +16,4 @@ Accepted. Supersedes the "stable hand-authored personalities across all three ph
 
 - Stability of the wipe lie now leans entirely on **persona consistency within a single playthrough** (still stable across all three phases of one game) rather than across all playthroughs forever.
 - `AiId = "red" | "green" | "blue"` discriminated union becomes `AiId = string` (the `*xxxx` handle); `Persona.color` is added as a separate field. Touches `src/content/personas.ts`, `src/spa/game/types.ts`, the dispatcher's `give` enum, save serialization, and most fixtures.
-- Hand-authored content shifts from three personas to two pools (~12–20 Temperaments, ~10–15 Persona Goals) plus the synthesis prompt — smaller writing surface, more replayable output.
+- Hand-authored content shifts from three personas to a Temperament pool, a Persona Goal pool, and the synthesis prompt — smaller writing surface, more replayable output.

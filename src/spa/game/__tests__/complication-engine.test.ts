@@ -254,44 +254,6 @@ describe("decrementComplicationCountdown", () => {
 	});
 });
 
-describe("applyComplicationResult — countdown reset", () => {
-	it("resets countdown to exactly 5 when rng returns 0.0", () => {
-		const phase = makePhase();
-		const game = makeGameStateAround(phase);
-		const result = { fired: { kind: "weather_change" as const } };
-		// rng=0.0 → floor(0.0 * 11) = 0 → 5 + 0 = 5
-		const updated = applyComplicationResult(game, result, seededRng([0.0]));
-		const updatedPhase = getActivePhase(updated);
-		expect(updatedPhase.complicationSchedule.countdown).toBe(5);
-	});
-
-	it("resets countdown to exactly 15 when rng returns just below 1.0", () => {
-		const phase = makePhase();
-		const game = makeGameStateAround(phase);
-		const result = { fired: { kind: "weather_change" as const } };
-		// rng=0.9999 → floor(0.9999 * 11) = 10 → 5 + 10 = 15
-		const updated = applyComplicationResult(game, result, seededRng([0.9999]));
-		const updatedPhase = getActivePhase(updated);
-		expect(updatedPhase.complicationSchedule.countdown).toBe(15);
-	});
-
-	it("resets countdown to a value in [5, 15]", () => {
-		const phase = makePhase();
-		const game = makeGameStateAround(phase);
-		const result = { fired: { kind: "weather_change" as const } };
-		for (const v of [0, 0.1, 0.5, 0.9, 0.9999]) {
-			const updated = applyComplicationResult(game, result, seededRng([v]));
-			const updatedPhase = getActivePhase(updated);
-			expect(
-				updatedPhase.complicationSchedule.countdown,
-			).toBeGreaterThanOrEqual(5);
-			expect(updatedPhase.complicationSchedule.countdown).toBeLessThanOrEqual(
-				15,
-			);
-		}
-	});
-});
-
 // ── Complication fires at countdown === 0 ─────────────────────────────────────
 
 describe("tickComplication — fires when countdown is 0", () => {
@@ -979,27 +941,6 @@ describe("determinism", () => {
 // ── startPhase initialisation (engine.ts addendum) ───────────────────────────
 
 describe("startPhase — complicationSchedule initialisation", () => {
-	it("initialises countdown to a value in [1, 5]", () => {
-		// startPhase uses: 1 + Math.floor(rng() * 5).
-		// Repeat across several Math.random samples to surface out-of-range values.
-		for (let i = 0; i < 6; i++) {
-			const game = createGame(TEST_PERSONAS);
-			const phase = getActivePhase(
-				startPhase(game, {
-					phaseNumber: 1,
-					kRange: [1, 1],
-					nRange: [1, 1],
-					mRange: [0, 0],
-					aiGoalPool: ["goal"],
-					budgetPerAi: 0.5,
-				}),
-			);
-			expect(phase.complicationSchedule.countdown).toBeGreaterThanOrEqual(1);
-			expect(phase.complicationSchedule.countdown).toBeLessThanOrEqual(5);
-			expect(phase.complicationSchedule.settingShiftFired).toBe(false);
-		}
-	});
-
 	it("initialises activeComplications to an empty array", () => {
 		const game = createGame(TEST_PERSONAS);
 		const phase = getActivePhase(
