@@ -64,8 +64,13 @@ import {
  *   - `phaseNumber` removed from the `ContentPack` type; packs are identified
  *     by array index rather than an embedded slot number.
  *   - Old v7 saves surface `version-mismatch` — no migration provided.
+ *
+ * v9 (issue #361): collapse generateDualContentPacks to single A/B pair.
+ *   - `contentPacksA` and `contentPacksB` now contain exactly 1 entry each
+ *     (previously held 3 entries, one per phase). Migration truncates v8 saves
+ *     by keeping only the first entry of each array.
  */
-export const SESSION_SCHEMA_VERSION = 8 as const;
+export const SESSION_SCHEMA_VERSION = 9 as const;
 
 // ── File shapes ────────────────────────────────────────────────────────────────
 
@@ -209,6 +214,21 @@ export function serializeSession(
 	};
 }
 
+// ── Migration helpers ─────────────────────────────────────────────────────────
+
+/**
+ * Migrate a v8 SealedEngine to v9 by truncating contentPacksA and contentPacksB
+ * to their first entry.
+ */
+function migrateV8ToV9(sealed: SealedEngine): SealedEngine {
+	return {
+		...sealed,
+		schemaVersion: SESSION_SCHEMA_VERSION,
+		contentPacksA: (sealed.contentPacksA ?? []).slice(0, 1),
+		contentPacksB: (sealed.contentPacksB ?? []).slice(0, 1),
+	};
+}
+
 // ── deserializeSession ─────────────────────────────────────────────────────────
 
 /**
@@ -239,13 +259,15 @@ export function deserializeSession(
 	try {
 		const parsed = JSON.parse(sealedJson);
 		if (!parsed || typeof parsed !== "object") return { kind: "broken" };
-		sealed = parsed as SealedEngine;
+		sealed = parsed as unknown as SealedEngine;
 	} catch {
 		return { kind: "broken" };
 	}
 
-	// Schema version check
-	if (sealed.schemaVersion !== SESSION_SCHEMA_VERSION) {
+	// Schema version check and migration
+	if ((sealed as { schemaVersion: number }).schemaVersion === 8) {
+		sealed = migrateV8ToV9(sealed);
+	} else if (sealed.schemaVersion !== SESSION_SCHEMA_VERSION) {
 		return { kind: "version-mismatch" };
 	}
 
