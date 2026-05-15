@@ -13,6 +13,7 @@ import type {
 	GridPosition,
 	PersonaSpatialState,
 	ToolName,
+	WorldEntity,
 } from "./types";
 
 /**
@@ -156,10 +157,52 @@ export function getActivePack(game: GameState): ContentPack {
 }
 
 /**
+ * Reproject the current `world.entities` onto their pack-B counterparts.
+ *
+ * Pack B is id-mirrored to pack A by construction (see
+ * `generateDualContentPacks` in content-pack-generator.ts): every id in the
+ * world has a matching entity in pack B with the same `id`/`kind` but
+ * different name, descriptions, and flavor fields. This helper takes pack B's
+ * presentation for each entity while preserving runtime state
+ * (`holder`, `satisfactionState`, `useAvailable`).
+ *
+ * Entities whose id is not present in pack B pass through unchanged.
+ */
+function reprojectEntitiesOnto(
+	entities: WorldEntity[],
+	bPack: ContentPack,
+): WorldEntity[] {
+	const byId = new Map<string, WorldEntity>();
+	for (const pair of bPack.objectivePairs) {
+		byId.set(pair.object.id, pair.object);
+		byId.set(pair.space.id, pair.space);
+	}
+	for (const obj of bPack.interestingObjects) byId.set(obj.id, obj);
+	for (const obs of bPack.obstacles) byId.set(obs.id, obs);
+
+	return entities.map((entity) => {
+		const bEntity = byId.get(entity.id);
+		if (!bEntity) return entity;
+		const reprojected: WorldEntity = {
+			...bEntity,
+			holder: entity.holder,
+		};
+		if (entity.satisfactionState !== undefined) {
+			reprojected.satisfactionState = entity.satisfactionState;
+		}
+		if (entity.useAvailable !== undefined) {
+			reprojected.useAvailable = entity.useAvailable;
+		}
+		return reprojected;
+	});
+}
+
+/**
  * One-way activation of the B-side content pack. Sets `activePackId` to "B"
- * and points `contentPack` at `contentPacksB[0]`, and propagates `setting`,
- * `weather`, and `timeOfDay` from the B pack so prompt builders and
- * dispatchers see the new names/descriptions and ambient values immediately.
+ * and points `contentPack` at `contentPacksB[0]`, propagates `setting`,
+ * `weather`, and `timeOfDay` from the B pack, and reprojects `world.entities`
+ * onto their pack-B counterparts so prompt builders and dispatchers see the
+ * new names/descriptions and flavor fields immediately.
  *
  * Semantics:
  *   - A → B only. There is no reverse path; the `settingShiftFired` flag on
@@ -169,8 +212,11 @@ export function getActivePack(game: GameState): ContentPack {
  *   - Idempotent from B-state: re-applies the same B-pack values; safe but
  *     should not happen in practice given the fired-once guard.
  *
- * Entity positions in `world` are unchanged — world state is keyed by entity
- * ID, which is stable across packs.
+ * World reprojection preserves runtime state — entity positions/holders,
+ * `satisfactionState`, and `useAvailable` carry over — while presentation
+ * (name, examineDescription, useOutcome, all flavor fields) is swapped to
+ * pack B by entity id. Entities whose id is not present in pack B pass
+ * through unchanged.
  */
 export function shiftToBPack(game: GameState): GameState {
 	const bPack = game.contentPacksB[0];
@@ -182,6 +228,7 @@ export function shiftToBPack(game: GameState): GameState {
 		setting: bPack.setting,
 		weather: bPack.weather,
 		timeOfDay: bPack.timeOfDay,
+		world: { entities: reprojectEntitiesOnto(game.world.entities, bPack) },
 	};
 }
 
