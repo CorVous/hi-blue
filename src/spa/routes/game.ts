@@ -1134,6 +1134,13 @@ export function renderGame(
 		const addressed = addressee;
 		roundInFlight = true;
 		sendBtn.disabled = true;
+		// Expose round-in-flight as a DOM attribute on #stage so external
+		// drivers (the playtest daemon, e2e tests) can wait on a deterministic
+		// signal instead of polling transcript text. Cleared in the finally
+		// block below — after the events loop has painted the round's output.
+		doc
+			.querySelector<HTMLElement>("#stage")
+			?.setAttribute("data-round-in-flight", "true");
 
 		// Clear any prior round-level error UI before starting the new round.
 		// If this round also fails, the catch block re-shows it; if it
@@ -1608,6 +1615,9 @@ export function renderGame(
 		} finally {
 			stripAllSpinners();
 			roundInFlight = false;
+			doc
+				.querySelector<HTMLElement>("#stage")
+				?.removeAttribute("data-round-in-flight");
 			if (!roundGameEnded) {
 				refreshComposerState();
 				refreshTopInfo();
