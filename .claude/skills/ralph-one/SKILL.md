@@ -1,16 +1,17 @@
 ---
 name: ralph-one
-description: Run the Ralph loop for a single user-supplied issue. Plan once with Opus, then loop implement → review with Sonnet until approved, smoke-test, open a PR, and close the issue once the human merges. Use when the user wants to drive a specific issue end-to-end via the Ralph workflow without fanning out across the backlog.
+description: Run the Ralph loop for a single user-supplied issue. Plan once with Opus, then loop implement (Haiku) → review (Sonnet, including smoke testing) until approved, then open a PR and close the issue once the human merges. Use when the user wants to drive a specific issue end-to-end via the Ralph workflow without fanning out across the backlog.
 ---
 
 # Ralph (single issue, user-supplied)
 
 Inputs: `{{ISSUE_ID}}` (the user gives you this).
 
-Plan once with Opus, then loop implement → review with Sonnet until the
-reviewer approves. Work on the issue's branch in the main checkout — no
-worktree. On approval, Opus runs an integration smoke, writes the hand-off
-note, opens a PR, and closes the issue once the human merges.
+Plan once with Opus, then loop implement with Haiku → review with Sonnet
+until the reviewer approves. The Sonnet reviewer also runs the integration
+smoke as part of its checks. Work on the issue's branch in the main
+checkout — no worktree. On approval, Opus writes the hand-off note, opens
+a PR, and closes the issue once the human merges.
 
 ## Setup
 
@@ -19,8 +20,14 @@ Read `AGENTS.md` (fallback `CLAUDE.md`) for:
   - Issue-tracker commands (list / view / comment / close)
   - Typecheck, unit-test, integration/smoke commands
   - Branch naming and source-branch conventions
+  - **PR base branch** — the long-lived branch PRs merge into (often
+    `main`, but some projects use `develop`, `dev`, a release branch,
+    etc.). Capture this as `{{BASE_BRANCH}}` and treat it as authoritative
+    for the rest of the run. Never let the PR tool fall back to the repo
+    default.
 
-If missing, ask the user once.
+If any of these are missing, ask the user once. Do not guess
+`{{BASE_BRANCH}}` — if it isn't in `AGENTS.md`/`CLAUDE.md`, ask.
 
 Set `MAX_ATTEMPTS = 5` (cap on implement↔review cycles).
 
@@ -52,8 +59,11 @@ stop. Otherwise capture the plan as `{{PLAN}}` for downstream phases.
 
 ## Phase 3 — Create the working branch
 
+Branch off `{{BASE_BRANCH}}` (the same branch the PR will target):
+
 ```
-git switch -c {branch} {source_branch}
+git fetch origin {{BASE_BRANCH}}
+git switch -c {branch} origin/{{BASE_BRANCH}}
 ```
 
 (Or `git switch {branch}` if it already exists from an earlier run.)
@@ -67,12 +77,13 @@ review_feedback = null
 while attempt <= MAX_ATTEMPTS:
 ```
 
-### Implement (one Sonnet subagent)
+### Implement (one Haiku subagent)
 
-Spawn the implementer with `.claude/skills/ralph-loop/implement.md`,
-substituting `{{TASK_ID}}={{ISSUE_ID}}`, `{{ISSUE_TITLE}}`, `{{BRANCH}}`,
-`{{SOURCE_BRANCH}}`, `{{ISSUE_TRACKER_COMMANDS}}`, `{{TEST_COMMANDS}}`. Drop
-the `{{WORKTREE}}` placeholder — it works in the main checkout on `{branch}`.
+Spawn the implementer with `.claude/skills/ralph-loop/implement.md` on
+Haiku, substituting `{{TASK_ID}}={{ISSUE_ID}}`, `{{ISSUE_TITLE}}`,
+`{{BRANCH}}`, `{{SOURCE_BRANCH}}`, `{{ISSUE_TRACKER_COMMANDS}}`,
+`{{TEST_COMMANDS}}`. Drop the `{{WORKTREE}}` placeholder — it works in the
+main checkout on `{branch}`.
 
 Append to its task:
 
@@ -93,24 +104,31 @@ Spawn the reviewer with `.claude/skills/ralph-loop/review.md`, substituting
 `{{BRANCH}}`, `{{SOURCE_BRANCH}}`, `{{TEST_COMMANDS}}`. Drop `{{WORKTREE}}`.
 Pass the planner's `{{PLAN}}` as context so it can check fidelity.
 
-**Override: the reviewer is read-only and test-only.** Append these
-instructions to its task, which take precedence over anything in
-`review.md`:
+**Override: the reviewer is read-only, test-only, and runs the smoke.**
+Append these instructions to its task, which take precedence over anything
+in `review.md`:
 
   - You may read files, inspect the diff, and run the typecheck / unit-test
-    commands in `{{TEST_COMMANDS}}`. That's it.
+    commands in `{{TEST_COMMANDS}}`. That's it for mutations — no edits.
   - Do NOT edit, create, or delete any files. Do NOT run `git add`,
     `git commit`, `git restore`, or any other mutating git command. Skip
     the clarity-pass edits and the commit step entirely.
-  - If you find issues — missing deliverables, failing tests, clarity
-    problems, correctness or security concerns — describe them in the
-    `REJECTED:` feedback so the implementer can fix them on the next
-    attempt. Do not fix them yourself.
+  - In addition to the typecheck / unit tests, run the project's full
+    integration / smoke command end-to-end and exercise the actual code
+    path the issue describes (don't just trust the unit tests — drive the
+    feature/bug-fix path live: hit the endpoint, run the CLI, open the
+    page, etc.). Probe the obvious adjacent regressions. Treat smoke
+    failures the same as any other rejection reason.
+  - If you find issues — missing deliverables, failing tests, smoke
+    failures, clarity problems, correctness or security concerns —
+    describe them in the `REJECTED:` feedback (include reproduction steps
+    + observed vs. expected for smoke failures) so the implementer can fix
+    them on the next attempt. Do not fix them yourself.
 
 Ask it to end its response with exactly one of:
 
   ```
-  APPROVED
+  APPROVED: <one-line summary of what you exercised in the smoke>
   REJECTED: <specific, actionable feedback>
   ```
 
@@ -120,36 +138,12 @@ If `REJECTED` → `review_feedback = the feedback; attempt += 1; continue`.
 If the loop exits because `attempt > MAX_ATTEMPTS`:
 
   Comment on the issue with the last review feedback, leave the branch as-is,
-  and tell the user the cap was hit so they can intervene.
+  and tell the user the cap was hit so they can intervene. Do not open a PR.
 
-## Phase 5 — Integration smoke (one Opus subagent)
+## Phase 5 — Hand-off note + PR (Opus)
 
-Spawn an Opus subagent on `{branch}` with this brief:
-
-  You are doing a live integration smoke for issue `{{ISSUE_ID}}`
-  (`{{ISSUE_TITLE}}`). Branch under test: `{branch}`.
-
-    1. Run the project's full integration / smoke command end-to-end.
-    2. Exercise the actual code path the issue describes (don't just trust
-       the unit tests — drive the feature/bug-fix path live: hit the
-       endpoint, run the CLI, open the page, etc.).
-    3. Probe the obvious adjacent regressions.
-
-  Output one of:
-
-    ```
-    SMOKE PASSED: <one-line summary of what you exercised>
-    SMOKE FAILED: <reproduction steps + observed vs. expected>
-    ```
-
-If `SMOKE FAILED` → re-enter Phase 4 with the smoke failure as
-  `review_feedback` (counts toward `MAX_ATTEMPTS`). If still failing after the
-  cap, comment the failure on the issue and stop without opening a PR.
-
-## Phase 6 — Hand-off note + PR (Opus)
-
-On smoke pass, Opus produces the hand-off artifact. The note has three
-sections:
+On reviewer approval (which includes a passing smoke), Opus produces the
+hand-off artifact. The note has three sections:
 
 ### What this fixes
 
@@ -169,15 +163,28 @@ One line listing the typecheck / unit / smoke commands that passed.
 
 Then:
 
-  1. `git push -u origin {branch}`
-  2. Open a PR using the project's PR command. Title: the issue title.
-     Body: the hand-off note above, with a `Closes #{{ISSUE_ID}}` trailer
-     so the issue auto-references the PR.
-  3. Comment on the issue: "PR #<pr-number> opened against `{branch}` —
-     awaiting human review."
-  4. Report the PR URL to the user and wait.
+  1. **Base-branch sanity check.** Run
+     `git fetch origin {{BASE_BRANCH}}` and then
+     `git merge-base --is-ancestor origin/{{BASE_BRANCH}} HEAD`.
+     If the check fails, `{branch}` does not descend from `{{BASE_BRANCH}}`
+     — almost always the wrong base. Stop, surface to the user with the
+     output of `git log --oneline origin/{{BASE_BRANCH}}..HEAD` and
+     `git log --oneline HEAD..origin/{{BASE_BRANCH}}`, and let them confirm
+     the intended base before continuing. Do not open the PR.
+  2. `git push -u origin {branch}`
+  3. Open a PR using the project's PR command. **Pass the base branch
+     explicitly** (e.g. `--base {{BASE_BRANCH}}` for `gh`, or the equivalent
+     `base` field for the GitHub MCP tools) — never rely on the default.
+     Title: the issue title. Body: the hand-off note above, with a
+     `Closes #{{ISSUE_ID}}` trailer so the issue auto-references the PR.
+  4. **Verify the PR's base.** After creation, read the PR back and confirm
+     its base branch is exactly `{{BASE_BRANCH}}`. If it isn't, update it
+     (or close + recreate) before notifying anyone.
+  5. Comment on the issue: "PR #<pr-number> opened: `{branch}` →
+     `{{BASE_BRANCH}}` — awaiting human review."
+  6. Report the PR URL **and confirmed base branch** to the user and wait.
 
-## Phase 7 — Close-out (after the human merges the PR)
+## Phase 6 — Close-out (after the human merges the PR)
 
 Triggered when the user signals the PR has merged (or you observe the
 merge via the issue tracker / PR API).
@@ -192,7 +199,7 @@ merge via the issue tracker / PR API).
 Stop when any of:
 
   - planner surfaces a blocking question
-  - `MAX_ATTEMPTS` reached without approval (escalate to human)
-  - smoke fails `MAX_ATTEMPTS` times (escalate to human, no PR)
-  - PR opened and human takes over (resume at Phase 7 on merge)
+  - `MAX_ATTEMPTS` reached without approval (escalate to human, no PR)
+  - base-branch sanity check fails in Phase 5 (escalate to human, no PR)
+  - PR opened and human takes over (resume at Phase 6 on merge)
   - the user interrupts
