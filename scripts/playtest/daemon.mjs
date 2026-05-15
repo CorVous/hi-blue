@@ -226,23 +226,25 @@ async function send(text) {
 	await page.locator("#send").click();
 }
 
-async function waitForRoundQuiet(maxMs = 60_000) {
-	// A round is "quiet" when no panel transcript has changed in ~3s.
-	const deadline = Date.now() + maxMs;
-	let last = JSON.stringify((await snapshot()).panels.map((p) => p.transcript));
-	let lastChangeAt = Date.now();
-	while (Date.now() < deadline) {
-		await page.waitForTimeout(500);
-		const cur = JSON.stringify(
-			(await snapshot()).panels.map((p) => p.transcript),
-		);
-		if (cur !== last) {
-			last = cur;
-			lastChangeAt = Date.now();
-		} else if (Date.now() - lastChangeAt > 3000) {
-			return;
-		}
+async function waitForRoundEnd(maxMs = 90_000) {
+	// The round handler in routes/game.ts flips `data-round-in-flight` on
+	// `#stage` to "true" synchronously at submit-time, then removes it in the
+	// finally block after the events loop has painted every transcript update.
+	// Waiting on that attribute is deterministic: it fires whether daemons
+	// respond or not (locked-out and silent turns still complete the round)
+	// and only clears once the round's UI updates are fully applied.
+	const inFlight = page.locator("#stage[data-round-in-flight]");
+	try {
+		// Confirm the round actually started. The attribute is set in the
+		// synchronous portion of the click handler, so this should resolve
+		// immediately; a longer wait covers slow-to-handler edge cases.
+		await inFlight.waitFor({ state: "attached", timeout: 5_000 });
+	} catch {
+		// No round started — most likely the message was rejected client-side
+		// (empty / invalid mention). Nothing to wait for.
+		return;
 	}
+	await inFlight.waitFor({ state: "detached", timeout: maxMs });
 }
 
 // Apply delta logic to a snapshot in place. When full=true (or on the first
@@ -269,7 +271,7 @@ async function handle(cmd) {
 		}
 		case "send": {
 			await send(cmd.text);
-			await waitForRoundQuiet(cmd.maxMs ?? 90_000);
+			await waitForRoundEnd(cmd.maxMs ?? 90_000);
 			const snap = await snapshot();
 			applyDelta(snap, cmd.full);
 			return { ok: true, snapshot: snap };
