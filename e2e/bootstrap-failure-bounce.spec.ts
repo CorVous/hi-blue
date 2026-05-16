@@ -12,7 +12,7 @@ test("content-pack request returns HTTP 500 → bounces to broken", async ({
 }) => {
 	// Stub new-game synthesis and persona requests normally
 	await page.route("**/v1/chat/completions", async (route, request) => {
-		const body = JSON.parse(request.postDataJSON()?.toString() ?? "null") as {
+		const body = JSON.parse(request.postData() ?? "null") as {
 			stream?: boolean;
 			response_format?: unknown;
 			messages?: Array<{ role?: string; content?: string }>;
@@ -74,7 +74,7 @@ test("content-pack request returns HTTP 200 with error body → bounces to broke
 }) => {
 	// Stub new-game synthesis and persona requests normally
 	await page.route("**/v1/chat/completions", async (route, request) => {
-		const body = JSON.parse(request.postDataJSON()?.toString() ?? "null") as {
+		const body = JSON.parse(request.postData() ?? "null") as {
 			stream?: boolean;
 			response_format?: unknown;
 			messages?: Array<{ role?: string; content?: string }>;
