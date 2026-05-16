@@ -10,6 +10,12 @@ import { expect, test } from "@playwright/test";
 test("content-pack request returns HTTP 500 → bounces to broken", async ({
 	page,
 }) => {
+	// Release-signal promise: hold content-pack rejection until after CONNECT
+	let releaseContentPack!: () => void;
+	const contentPackHeld = new Promise<void>((resolve) => {
+		releaseContentPack = resolve;
+	});
+
 	// Stub new-game synthesis and persona requests normally
 	await page.route("**/v1/chat/completions", async (route, request) => {
 		const body = JSON.parse(request.postData() ?? "null") as {
@@ -47,8 +53,9 @@ test("content-pack request returns HTTP 500 → bounces to broken", async ({
 			return;
 		}
 
-		// Content-pack request: return HTTP 500
+		// Content-pack request: HOLD until released, then fail
 		if (userMsg.startsWith("Generate")) {
+			await contentPackHeld;
 			await route.abort("failed");
 			return;
 		}
@@ -65,13 +72,26 @@ test("content-pack request returns HTTP 500 → bounces to broken", async ({
 	await page.locator("#password").fill("password");
 	await page.locator("#begin").click();
 
+	// Wait until the SPA has navigated to #/game so the start-screen catch is bypassed
+	await page.waitForURL(/#\/game/, { timeout: 10_000 });
+
+	// NOW release the content-pack rejection. game.ts's loading-flow catch
+	// (the broken-bounce path) handles it.
+	releaseContentPack();
+
 	// Expect bounce to #/start?reason=broken
-	await expect(page).toHaveURL(/#\/start\?reason=broken/);
+	await expect(page).toHaveURL(/#\/start\?reason=broken/, { timeout: 30_000 });
 });
 
 test("content-pack request returns HTTP 200 with error body → bounces to broken", async ({
 	page,
 }) => {
+	// Release-signal promise: hold content-pack rejection until after CONNECT
+	let releaseContentPack!: () => void;
+	const contentPackHeld = new Promise<void>((resolve) => {
+		releaseContentPack = resolve;
+	});
+
 	// Stub new-game synthesis and persona requests normally
 	await page.route("**/v1/chat/completions", async (route, request) => {
 		const body = JSON.parse(request.postData() ?? "null") as {
@@ -109,8 +129,9 @@ test("content-pack request returns HTTP 200 with error body → bounces to broke
 			return;
 		}
 
-		// Content-pack request: return 200 with error body
+		// Content-pack request: HOLD until released, then fail
 		if (userMsg.startsWith("Generate")) {
+			await contentPackHeld;
 			await route.fulfill({
 				status: 200,
 				contentType: "application/json",
@@ -136,6 +157,13 @@ test("content-pack request returns HTTP 200 with error body → bounces to broke
 	await page.locator("#password").fill("password");
 	await page.locator("#begin").click();
 
+	// Wait until the SPA has navigated to #/game so the start-screen catch is bypassed
+	await page.waitForURL(/#\/game/, { timeout: 10_000 });
+
+	// NOW release the content-pack rejection. game.ts's loading-flow catch
+	// (the broken-bounce path) handles it.
+	releaseContentPack();
+
 	// Expect bounce to #/start?reason=broken
-	await expect(page).toHaveURL(/#\/start\?reason=broken/);
+	await expect(page).toHaveURL(/#\/start\?reason=broken/, { timeout: 30_000 });
 });
