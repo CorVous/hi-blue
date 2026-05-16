@@ -915,13 +915,17 @@ function validateEntity(
 			});
 		}
 		if (
-			!e.placementFlavor ||
-			(typeof e.placementFlavor === "string" &&
-				!e.placementFlavor.includes("{actor}"))
+			typeof e.placementFlavor === "string" &&
+			e.placementFlavor.length > 0 &&
+			!e.placementFlavor.includes("{actor}")
 		) {
-			console.warn(
-				`Objective object ${e.id}: placementFlavor has no "{actor}" token; the actor's name will not be interpolated into the line.`,
-			);
+			errors.push({
+				entityId: e.id,
+				field: "placementFlavor",
+				rule: "actor-presence",
+				message: `Objective object ${e.id}: placementFlavor must contain the literal string "{actor}" so the actor's name is interpolated. Remove any "{actor}" tokens that are absent.`,
+				retryUnit,
+			});
 		}
 		if (
 			typeof e.proximityFlavor !== "string" ||
@@ -951,9 +955,13 @@ function validateEntity(
 			typeof e.shiftFlavor === "string" &&
 			e.shiftFlavor.includes("{actor}")
 		) {
-			console.warn(
-				`Obstacle ${e.id}: shiftFlavor contains "{actor}"; the token will be rendered literally.`,
-			);
+			errors.push({
+				entityId: e.id,
+				field: "shiftFlavor",
+				rule: "actor-exclusion",
+				message: `Obstacle ${e.id}: shiftFlavor contains "{actor}"; the token will render literally. Remove the "{actor}" substring.`,
+				retryUnit,
+			});
 		}
 	}
 
@@ -979,9 +987,13 @@ function validateEntity(
 			typeof e.activationFlavor === "string" &&
 			e.activationFlavor.includes("{actor}")
 		) {
-			console.warn(
-				`Interesting object ${e.id}: activationFlavor contains "{actor}"; the token will be rendered literally.`,
-			);
+			errors.push({
+				entityId: e.id,
+				field: "activationFlavor",
+				rule: "actor-exclusion",
+				message: `Interesting object ${e.id}: activationFlavor contains "{actor}"; the token will render literally. Remove the "{actor}" substring.`,
+				retryUnit,
+			});
 		}
 		if (
 			typeof e.postExamineDescription !== "string" ||
@@ -999,9 +1011,13 @@ function validateEntity(
 			typeof e.postExamineDescription === "string" &&
 			e.postExamineDescription.includes("{actor}")
 		) {
-			console.warn(
-				`Interesting object ${e.id}: postExamineDescription contains "{actor}"; the token will be rendered literally.`,
-			);
+			errors.push({
+				entityId: e.id,
+				field: "postExamineDescription",
+				rule: "actor-exclusion",
+				message: `Interesting object ${e.id}: postExamineDescription contains "{actor}"; the token will render literally. Remove the "{actor}" substring.`,
+				retryUnit,
+			});
 		}
 		if (e.postLookFlavor !== undefined) {
 			if (
@@ -1020,9 +1036,13 @@ function validateEntity(
 				typeof e.postLookFlavor === "string" &&
 				e.postLookFlavor.includes("{actor}")
 			) {
-				console.warn(
-					`Interesting object ${e.id}: postLookFlavor contains "{actor}"; the token will be rendered literally.`,
-				);
+				errors.push({
+					entityId: e.id,
+					field: "postLookFlavor",
+					rule: "actor-exclusion",
+					message: `Interesting object ${e.id}: postLookFlavor contains "{actor}"; the token will render literally. Remove the "{actor}" substring.`,
+					retryUnit,
+				});
 			}
 		}
 	}
@@ -1044,9 +1064,13 @@ function validateEntity(
 			typeof e.convergenceTier1Flavor === "string" &&
 			e.convergenceTier1Flavor.includes("{actor}")
 		) {
-			console.warn(
-				`Objective space ${e.id}: convergenceTier1Flavor contains "{actor}"; the token will be rendered literally.`,
-			);
+			errors.push({
+				entityId: e.id,
+				field: "convergenceTier1Flavor",
+				rule: "actor-exclusion",
+				message: `Objective space ${e.id}: convergenceTier1Flavor contains "{actor}"; the token will render literally. Remove the "{actor}" substring.`,
+				retryUnit,
+			});
 		}
 		if (
 			typeof e.convergenceTier2Flavor !== "string" ||
@@ -1064,9 +1088,13 @@ function validateEntity(
 			typeof e.convergenceTier2Flavor === "string" &&
 			e.convergenceTier2Flavor.includes("{actor}")
 		) {
-			console.warn(
-				`Objective space ${e.id}: convergenceTier2Flavor contains "{actor}"; the token will be rendered literally.`,
-			);
+			errors.push({
+				entityId: e.id,
+				field: "convergenceTier2Flavor",
+				rule: "actor-exclusion",
+				message: `Objective space ${e.id}: convergenceTier2Flavor contains "{actor}"; the token will render literally. Remove the "{actor}" substring.`,
+				retryUnit,
+			});
 		}
 		// First-person actor variants (#336): delivered to Daemons standing on
 		// the space; existing tier1/2 flavors fan out to non-occupant cone-witnesses.
@@ -1086,9 +1114,13 @@ function validateEntity(
 			typeof e.convergenceTier1ActorFlavor === "string" &&
 			e.convergenceTier1ActorFlavor.includes("{actor}")
 		) {
-			console.warn(
-				`Objective space ${e.id}: convergenceTier1ActorFlavor contains "{actor}"; the token will be rendered literally.`,
-			);
+			errors.push({
+				entityId: e.id,
+				field: "convergenceTier1ActorFlavor",
+				rule: "actor-exclusion",
+				message: `Objective space ${e.id}: convergenceTier1ActorFlavor contains "{actor}"; the token will render literally. Remove the "{actor}" substring.`,
+				retryUnit,
+			});
 		}
 		if (
 			typeof e.convergenceTier2ActorFlavor !== "string" ||
@@ -1106,9 +1138,13 @@ function validateEntity(
 			typeof e.convergenceTier2ActorFlavor === "string" &&
 			e.convergenceTier2ActorFlavor.includes("{actor}")
 		) {
-			console.warn(
-				`Objective space ${e.id}: convergenceTier2ActorFlavor contains "{actor}"; the token will be rendered literally.`,
-			);
+			errors.push({
+				entityId: e.id,
+				field: "convergenceTier2ActorFlavor",
+				rule: "actor-exclusion",
+				message: `Objective space ${e.id}: convergenceTier2ActorFlavor contains "{actor}"; the token will render literally. Remove the "{actor}" substring.`,
+				retryUnit,
+			});
 		}
 	}
 
@@ -1156,9 +1192,13 @@ function validateEntity(
 				typeof e.activationFlavor === "string" &&
 				e.activationFlavor.includes("{actor}")
 			) {
-				console.warn(
-					`Objective space ${e.id}: activationFlavor contains "{actor}"; the token will be rendered literally.`,
-				);
+				errors.push({
+					entityId: e.id,
+					field: "activationFlavor",
+					rule: "actor-exclusion",
+					message: `Objective space ${e.id}: activationFlavor contains "{actor}"; the token will render literally. Remove the "{actor}" substring.`,
+					retryUnit,
+				});
 			}
 			entity.activationFlavor = e.activationFlavor;
 		}
