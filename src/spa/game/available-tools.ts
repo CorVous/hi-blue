@@ -12,9 +12,10 @@
 import { projectCone } from "./cone-projector.js";
 import {
 	applyDirection,
-	CARDINAL_DIRECTIONS,
 	frontArc,
 	inBounds,
+	RELATIVE_DIRECTIONS,
+	relativeToCardinal,
 } from "./direction.js";
 import { type OpenAiTool, TOOL_DEFINITIONS } from "./tool-registry.js";
 import type {
@@ -152,14 +153,15 @@ export function availableTools(
 	// 1. look — always present
 	if (!disabledTools.has("look")) {
 		tools.push(
-			cloneToolWithEnums("look", { direction: [...CARDINAL_DIRECTIONS] }),
+			cloneToolWithEnums("look", { direction: [...RELATIVE_DIRECTIONS] }),
 		);
 	}
 
 	// 2. go — restricted to legal directions
 	if (actorSpatial && !disabledTools.has("go")) {
-		const legalDirections = CARDINAL_DIRECTIONS.filter((dir) => {
-			const next = applyDirection(actorSpatial.position, dir);
+		const legalDirections = RELATIVE_DIRECTIONS.filter((relDir) => {
+			const cardinal = relativeToCardinal(actorSpatial.facing, relDir);
+			const next = applyDirection(actorSpatial.position, cardinal);
 			if (!inBounds(next)) return false;
 			if (obstacles.some((o) => positionsEqual(o, next))) return false;
 			return true;
