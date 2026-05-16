@@ -97,6 +97,45 @@ describe("examineMentionsPairedSpace", () => {
 	it("returns false for an empty space name", () => {
 		expect(examineMentionsPairedSpace("anything goes here", "")).toBe(false);
 	});
+
+	it("matches via token-overlap when multiple content tokens appear (issue #382 motivating case)", () => {
+		expect(
+			examineMentionsPairedSpace(
+				"A heavy brass ring that once slid along the ropes near the stage pulley.",
+				"Stage Pulley System",
+			),
+		).toBe(true);
+	});
+
+	it("matches when the examine contains the full space name (regression guard for 'Main Console Slot')", () => {
+		expect(
+			examineMentionsPairedSpace(
+				"fits into the main console slot",
+				"Main Console Slot",
+			),
+		).toBe(true);
+	});
+
+	it("matches via token-overlap on a non-head-noun token (telescope vs Telescope Mounting Arm)", () => {
+		expect(
+			examineMentionsPairedSpace(
+				"intended for the telescope mount",
+				"Telescope Mounting Arm",
+			),
+		).toBe(true);
+	});
+
+	it("rejects an examine that shares only the stopword 'for' with the space name", () => {
+		expect(
+			examineMentionsPairedSpace("the cake is for you", "For The Win"),
+		).toBe(false);
+	});
+
+	it("rejects an examine that shares only a 3-letter token with the space name", () => {
+		expect(
+			examineMentionsPairedSpace("the top of the stack", "Top Shelf"),
+		).toBe(false);
+	});
 });
 
 describe("CONTENT_PACK_SYSTEM_PROMPT", () => {
