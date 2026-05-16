@@ -19,6 +19,7 @@ import {
 	PARTIAL_RETRY_SYSTEM_PROMPT,
 	validateContentPacks,
 	validateContentPacksOrThrow,
+	validateDualContentPacks,
 	validateDualContentPacksOrThrow,
 } from "../content-pack-provider.js";
 
@@ -342,15 +343,25 @@ describe("validateContentPacks — obstacle shiftFlavor validation", () => {
 		).toThrow(/shiftFlavor/);
 	});
 
-	it("warns but does not throw when an obstacle shiftFlavor contains {actor}", () => {
-		expectWarnNotThrow(
-			() =>
-				validateContentPacksOrThrow(
-					buildObstacleResponse("{actor} knocks the gate aside."),
-					inputWithObstacle,
-				),
-			/shiftFlavor/,
+	it("throws ContentPackError when an obstacle shiftFlavor contains {actor}", () => {
+		const result = validateContentPacks(
+			buildObstacleResponse("{actor} knocks the gate aside."),
+			inputWithObstacle,
 		);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			const error = result.errors.find((e) => e.field === "shiftFlavor");
+			expect(error).toBeDefined();
+			expect(error?.rule).toBe("actor-exclusion");
+			expect(error?.entityId).toBe("obs1");
+			expect(error?.retryUnit.kind).toBe("obstacle");
+		}
+		expect(() =>
+			validateContentPacksOrThrow(
+				buildObstacleResponse("{actor} knocks the gate aside."),
+				inputWithObstacle,
+			),
+		).toThrow(/shiftFlavor/);
 	});
 
 	it("persists shiftFlavor onto the returned WorldEntity", () => {
@@ -361,6 +372,99 @@ describe("validateContentPacks — obstacle shiftFlavor validation", () => {
 		);
 		const obstacle = result.packs[0]?.obstacles[0];
 		expect(obstacle?.shiftFlavor).toBe(flavor);
+	});
+
+	// ── Test A: placementFlavor missing {actor} ───────────────────────────────
+
+	it("throws ContentPackError when placementFlavor is missing {actor}", () => {
+		const inputWithPair = {
+			phases: [
+				{
+					setting: "abandoned subway station",
+					theme: "mundane",
+					k: 1,
+					n: 0,
+					m: 0,
+				},
+			],
+		};
+		const badPack = {
+			packs: [
+				{
+					setting: "abandoned subway station",
+					objectivePairs: [
+						{
+							object: {
+								id: "obj1",
+								kind: "objective_object",
+								name: "Iron Key",
+								examineDescription:
+									"An iron key. It belongs on the brass pedestal.",
+								useOutcome: "You turn the key over in your hands.",
+								pairsWithSpaceId: "space1",
+								placementFlavor: "The actor sets the key on its mount.",
+								proximityFlavor: "The key hums faintly near the pedestal.",
+							},
+							space: {
+								id: "space1",
+								kind: "objective_space",
+								name: "Brass Pedestal",
+								examineDescription:
+									"A sturdy brass pedestal. Press an item onto it to activate.",
+								activationFlavor: "The pedestal hums to life.",
+								satisfactionFlavor: "The pedestal glows brightly.",
+								postExamineDescription: "The pedestal glows softly.",
+								postLookFlavor: "the pedestal hums.",
+								convergenceTier1Flavor: "A lone figure stands.",
+								convergenceTier2Flavor: "Two figures converge.",
+								convergenceTier1ActorFlavor: "You linger alone.",
+								convergenceTier2ActorFlavor: "You share the space.",
+							},
+						},
+					],
+					interestingObjects: [],
+					obstacles: [],
+					landmarks: {
+						north: {
+							shortName: "the tower",
+							horizonPhrase: "rises high",
+						},
+						south: {
+							shortName: "the entrance",
+							horizonPhrase: "gapes wide",
+						},
+						east: { shortName: "the shaft", horizonPhrase: "spins slowly" },
+						west: { shortName: "the tunnel", horizonPhrase: "fades black" },
+					},
+				},
+			],
+		};
+		const result = validateContentPacks(badPack, inputWithPair);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			const error = result.errors.find((e) => e.field === "placementFlavor");
+			expect(error).toBeDefined();
+			expect(error?.rule).toBe("actor-presence");
+			expect(error?.entityId).toBe("obj1");
+			expect(error?.retryUnit.kind).toBe("objective-pair");
+		}
+		expect(() => validateContentPacksOrThrow(badPack, inputWithPair)).toThrow(
+			/placementFlavor/,
+		);
+	});
+
+	// ── Test B: obstacle shiftFlavor containing {actor} (already flipped above) ─
+
+	it("throws ContentPackError when obstacle shiftFlavor contains {actor} via new error API", () => {
+		const result = validateContentPacks(
+			buildObstacleResponse("{actor} shoves the gate."),
+			inputWithObstacle,
+		);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			const error = result.errors.find((e) => e.field === "shiftFlavor");
+			expect(error?.rule).toBe("actor-exclusion");
+		}
 	});
 });
 
@@ -482,32 +586,62 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 		).toThrow(/convergenceTier2Flavor/);
 	});
 
-	it("warns but does not throw when convergenceTier1Flavor contains {actor}", () => {
-		expectWarnNotThrow(
-			() =>
-				validateContentPacksOrThrow(
-					buildConvergenceResponse(
-						"{actor} stands at the pedestal.",
-						"Two figures converge at the pedestal.",
-					),
-					inputWithPair,
-				),
-			/convergenceTier1Flavor/,
+	it("throws ContentPackError when convergenceTier1Flavor contains {actor}", () => {
+		const result = validateContentPacks(
+			buildConvergenceResponse(
+				"{actor} stands at the pedestal.",
+				"Two figures converge at the pedestal.",
+			),
+			inputWithPair,
 		);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			const error = result.errors.find(
+				(e) => e.field === "convergenceTier1Flavor",
+			);
+			expect(error).toBeDefined();
+			expect(error?.rule).toBe("actor-exclusion");
+			expect(error?.entityId).toBe("space1");
+			expect(error?.retryUnit.kind).toBe("objective-pair");
+		}
+		expect(() =>
+			validateContentPacksOrThrow(
+				buildConvergenceResponse(
+					"{actor} stands at the pedestal.",
+					"Two figures converge at the pedestal.",
+				),
+				inputWithPair,
+			),
+		).toThrow(/convergenceTier1Flavor/);
 	});
 
-	it("warns but does not throw when convergenceTier2Flavor contains {actor}", () => {
-		expectWarnNotThrow(
-			() =>
-				validateContentPacksOrThrow(
-					buildConvergenceResponse(
-						"A lone figure stands at the pedestal.",
-						"{actor} and another figure converge.",
-					),
-					inputWithPair,
-				),
-			/convergenceTier2Flavor/,
+	it("throws ContentPackError when convergenceTier2Flavor contains {actor}", () => {
+		const result = validateContentPacks(
+			buildConvergenceResponse(
+				"A lone figure stands at the pedestal.",
+				"{actor} and another figure converge.",
+			),
+			inputWithPair,
 		);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			const error = result.errors.find(
+				(e) => e.field === "convergenceTier2Flavor",
+			);
+			expect(error).toBeDefined();
+			expect(error?.rule).toBe("actor-exclusion");
+			expect(error?.entityId).toBe("space1");
+			expect(error?.retryUnit.kind).toBe("objective-pair");
+		}
+		expect(() =>
+			validateContentPacksOrThrow(
+				buildConvergenceResponse(
+					"A lone figure stands at the pedestal.",
+					"{actor} and another figure converge.",
+				),
+				inputWithPair,
+			),
+		).toThrow(/convergenceTier2Flavor/);
 	});
 
 	it("throws ContentPackError when convergenceTier1Flavor is an empty string", () => {
@@ -571,35 +705,68 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 		).toThrow(/convergenceTier2ActorFlavor/);
 	});
 
-	it("warns but does not throw when convergenceTier1ActorFlavor contains {actor}", () => {
-		expectWarnNotThrow(
-			() =>
-				validateContentPacksOrThrow(
-					buildConvergenceResponse(
-						undefined,
-						undefined,
-						"{actor} stands alone at the pedestal.",
-					),
-					inputWithPair,
-				),
-			/convergenceTier1ActorFlavor/,
+	it("throws ContentPackError when convergenceTier1ActorFlavor contains {actor}", () => {
+		const result = validateContentPacks(
+			buildConvergenceResponse(
+				undefined,
+				undefined,
+				"{actor} stands alone at the pedestal.",
+			),
+			inputWithPair,
 		);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			const error = result.errors.find(
+				(e) => e.field === "convergenceTier1ActorFlavor",
+			);
+			expect(error).toBeDefined();
+			expect(error?.rule).toBe("actor-exclusion");
+			expect(error?.entityId).toBe("space1");
+			expect(error?.retryUnit.kind).toBe("objective-pair");
+		}
+		expect(() =>
+			validateContentPacksOrThrow(
+				buildConvergenceResponse(
+					undefined,
+					undefined,
+					"{actor} stands alone at the pedestal.",
+				),
+				inputWithPair,
+			),
+		).toThrow(/convergenceTier1ActorFlavor/);
 	});
 
-	it("warns but does not throw when convergenceTier2ActorFlavor contains {actor}", () => {
-		expectWarnNotThrow(
-			() =>
-				validateContentPacksOrThrow(
-					buildConvergenceResponse(
-						undefined,
-						undefined,
-						undefined,
-						"{actor} and another share the pedestal.",
-					),
-					inputWithPair,
-				),
-			/convergenceTier2ActorFlavor/,
+	it("throws ContentPackError when convergenceTier2ActorFlavor contains {actor}", () => {
+		const result = validateContentPacks(
+			buildConvergenceResponse(
+				undefined,
+				undefined,
+				undefined,
+				"{actor} and another share the pedestal.",
+			),
+			inputWithPair,
 		);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			const error = result.errors.find(
+				(e) => e.field === "convergenceTier2ActorFlavor",
+			);
+			expect(error).toBeDefined();
+			expect(error?.rule).toBe("actor-exclusion");
+			expect(error?.entityId).toBe("space1");
+			expect(error?.retryUnit.kind).toBe("objective-pair");
+		}
+		expect(() =>
+			validateContentPacksOrThrow(
+				buildConvergenceResponse(
+					undefined,
+					undefined,
+					undefined,
+					"{actor} and another share the pedestal.",
+				),
+				inputWithPair,
+			),
+		).toThrow(/convergenceTier2ActorFlavor/);
 	});
 });
 
@@ -805,17 +972,29 @@ describe("validateContentPacks — interesting_object Use-Item flavor validation
 		).toThrow(/activationFlavor/);
 	});
 
-	it("warns but does not throw when an interesting_object activationFlavor contains {actor}", () => {
-		expectWarnNotThrow(
-			() =>
-				validateContentPacksOrThrow(
-					buildInterestingResponse({
-						activationFlavor: "{actor} flips the switch home.",
-					}),
-					inputWithInteresting,
-				),
-			/activationFlavor/,
+	it("throws ContentPackError when an interesting_object activationFlavor contains {actor}", () => {
+		const result = validateContentPacks(
+			buildInterestingResponse({
+				activationFlavor: "{actor} flips the switch home.",
+			}),
+			inputWithInteresting,
 		);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			const error = result.errors.find((e) => e.field === "activationFlavor");
+			expect(error).toBeDefined();
+			expect(error?.rule).toBe("actor-exclusion");
+			expect(error?.entityId).toBe("item1");
+			expect(error?.retryUnit.kind).toBe("interesting-object");
+		}
+		expect(() =>
+			validateContentPacksOrThrow(
+				buildInterestingResponse({
+					activationFlavor: "{actor} flips the switch home.",
+				}),
+				inputWithInteresting,
+			),
+		).toThrow(/activationFlavor/);
 	});
 
 	it("rejects a missing postExamineDescription", () => {
@@ -827,30 +1006,56 @@ describe("validateContentPacks — interesting_object Use-Item flavor validation
 		).toThrow(/postExamineDescription/);
 	});
 
-	it("warns but does not throw when a postExamineDescription contains {actor}", () => {
-		expectWarnNotThrow(
-			() =>
-				validateContentPacksOrThrow(
-					buildInterestingResponse({
-						postExamineDescription: "{actor} sees the switch locked on.",
-					}),
-					inputWithInteresting,
-				),
-			/postExamineDescription/,
+	it("throws ContentPackError when a postExamineDescription contains {actor}", () => {
+		const result = validateContentPacks(
+			buildInterestingResponse({
+				postExamineDescription: "{actor} sees the switch locked on.",
+			}),
+			inputWithInteresting,
 		);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			const error = result.errors.find(
+				(e) => e.field === "postExamineDescription",
+			);
+			expect(error).toBeDefined();
+			expect(error?.rule).toBe("actor-exclusion");
+			expect(error?.entityId).toBe("item1");
+			expect(error?.retryUnit.kind).toBe("interesting-object");
+		}
+		expect(() =>
+			validateContentPacksOrThrow(
+				buildInterestingResponse({
+					postExamineDescription: "{actor} sees the switch locked on.",
+				}),
+				inputWithInteresting,
+			),
+		).toThrow(/postExamineDescription/);
 	});
 
-	it("warns but does not throw when a postLookFlavor contains {actor}", () => {
-		expectWarnNotThrow(
-			() =>
-				validateContentPacksOrThrow(
-					buildInterestingResponse({
-						postLookFlavor: "{actor} glances at the amber light",
-					}),
-					inputWithInteresting,
-				),
-			/postLookFlavor/,
+	it("throws ContentPackError when a postLookFlavor contains {actor}", () => {
+		const result = validateContentPacks(
+			buildInterestingResponse({
+				postLookFlavor: "{actor} glances at the amber light",
+			}),
+			inputWithInteresting,
 		);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			const error = result.errors.find((e) => e.field === "postLookFlavor");
+			expect(error).toBeDefined();
+			expect(error?.rule).toBe("actor-exclusion");
+			expect(error?.entityId).toBe("item1");
+			expect(error?.retryUnit.kind).toBe("interesting-object");
+		}
+		expect(() =>
+			validateContentPacksOrThrow(
+				buildInterestingResponse({
+					postLookFlavor: "{actor} glances at the amber light",
+				}),
+				inputWithInteresting,
+			),
+		).toThrow(/postLookFlavor/);
 	});
 
 	it("accepts an interesting_object with postLookFlavor omitted (optional)", () => {
@@ -993,19 +1198,33 @@ describe("validateContentPacks — objective_space activationFlavor & prose tell
 		).toThrow(/activationFlavor/);
 	});
 
-	it("warns but does not throw when an objective_space activationFlavor contains {actor}", () => {
-		expectWarnNotThrow(
-			() =>
-				validateContentPacksOrThrow(
-					buildPackWithSpaceFields({
-						examineDescription:
-							"A sturdy pedestal. Press an item onto it to activate.",
-						activationFlavor: "{actor} activates the pedestal.",
-					}),
-					inputWithPair,
-				),
-			/activationFlavor/,
+	it("throws ContentPackError when an objective_space activationFlavor contains {actor}", () => {
+		const result = validateContentPacks(
+			buildPackWithSpaceFields({
+				examineDescription:
+					"A sturdy pedestal. Press an item onto it to activate.",
+				activationFlavor: "{actor} activates the pedestal.",
+			}),
+			inputWithPair,
 		);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			const error = result.errors.find((e) => e.field === "activationFlavor");
+			expect(error).toBeDefined();
+			expect(error?.rule).toBe("actor-exclusion");
+			expect(error?.entityId).toBe("space1");
+			expect(error?.retryUnit.kind).toBe("objective-pair");
+		}
+		expect(() =>
+			validateContentPacksOrThrow(
+				buildPackWithSpaceFields({
+					examineDescription:
+						"A sturdy pedestal. Press an item onto it to activate.",
+					activationFlavor: "{actor} activates the pedestal.",
+				}),
+				inputWithPair,
+			),
+		).toThrow(/activationFlavor/);
 	});
 });
 
@@ -1164,18 +1383,30 @@ describe("validateDualContentPacks — objective_space activationFlavor", () => 
 		);
 	});
 
-	it("warns but does not throw when packB activationFlavor contains {actor}", () => {
-		expectWarnNotThrow(
-			() =>
-				validateDualContentPacksOrThrow(
-					buildDualPair(
-						"The pedestal hums to life.",
-						"{actor} activates the marker.",
-					),
-					dualInput,
-				),
-			/activationFlavor/,
+	it("throws ContentPackError when packB activationFlavor contains {actor}", () => {
+		const result = validateDualContentPacks(
+			buildDualPair(
+				"The pedestal hums to life.",
+				"{actor} activates the marker.",
+			),
+			dualInput,
 		);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			const error = result.errors.find((e) => e.field === "activationFlavor");
+			expect(error).toBeDefined();
+			expect(error?.rule).toBe("actor-exclusion");
+			expect(error?.retryUnit.kind).toBe("objective-pair");
+		}
+		expect(() =>
+			validateDualContentPacksOrThrow(
+				buildDualPair(
+					"The pedestal hums to life.",
+					"{actor} activates the marker.",
+				),
+				dualInput,
+			),
+		).toThrow(/activationFlavor/);
 	});
 
 	it("warns but does not throw when packA space examineDescription has no use-tell", () => {
@@ -1293,18 +1524,30 @@ describe("validateDualContentPacks — obstacle shiftFlavor validation", () => {
 		).toThrow(/shiftFlavor/);
 	});
 
-	it("warns but does not throw when a dual-pack obstacle shiftFlavor contains {actor}", () => {
-		expectWarnNotThrow(
-			() =>
-				validateDualContentPacksOrThrow(
-					buildDualObstacleResponse(
-						"{actor} pushes the gate.",
-						"Something rustles.",
-					),
-					dualInputWithObstacle,
-				),
-			/shiftFlavor/,
+	it("throws ContentPackError when a dual-pack obstacle shiftFlavor contains {actor}", () => {
+		const result = validateDualContentPacks(
+			buildDualObstacleResponse(
+				"{actor} pushes the gate.",
+				"Something rustles.",
+			),
+			dualInputWithObstacle,
 		);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			const error = result.errors.find((e) => e.field === "shiftFlavor");
+			expect(error).toBeDefined();
+			expect(error?.rule).toBe("actor-exclusion");
+			expect(error?.retryUnit.kind).toBe("obstacle");
+		}
+		expect(() =>
+			validateDualContentPacksOrThrow(
+				buildDualObstacleResponse(
+					"{actor} pushes the gate.",
+					"Something rustles.",
+				),
+				dualInputWithObstacle,
+			),
+		).toThrow(/shiftFlavor/);
 	});
 });
 
