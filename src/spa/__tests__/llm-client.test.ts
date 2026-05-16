@@ -2,9 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TOOL_DEFINITIONS } from "../game/tool-registry.js";
 import {
 	CapHitError,
+	chatCompletionJson,
 	parseCapHitFromResponse,
 	resolveLLMTarget,
 	streamCompletion,
+	UpstreamErrorBodyError,
 } from "../llm-client.js";
 
 // Provide build-time globals before importing the module
@@ -485,5 +487,97 @@ describe("streamCompletion", () => {
 		const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
 		const body = JSON.parse(init.body as string);
 		expect(body).not.toHaveProperty("reasoning");
+	});
+});
+
+describe("chatCompletionJson", () => {
+	beforeEach(() => {
+		vi.stubGlobal("fetch", vi.fn());
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("throws UpstreamErrorBodyError when 200 OK body contains { error: { message, code } }", async () => {
+		const mockFetch = vi.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
+			statusText: "OK",
+			json: () =>
+				Promise.resolve({
+					error: { message: "upstream stalled", code: "service_error" },
+				}),
+		} as unknown as Response);
+		vi.stubGlobal("fetch", mockFetch);
+		vi.stubGlobal("localStorage", { getItem: vi.fn().mockReturnValue(null) });
+
+		await expect(
+			chatCompletionJson({ messages: [{ role: "user", content: "test" }] }),
+		).rejects.toThrow(UpstreamErrorBodyError);
+
+		const err = await chatCompletionJson({
+			messages: [{ role: "user", content: "test" }],
+		}).catch((e: unknown) => e);
+		expect(err).toBeInstanceOf(UpstreamErrorBodyError);
+		expect((err as UpstreamErrorBodyError).upstreamMessage).toBe(
+			"upstream stalled",
+		);
+		expect((err as UpstreamErrorBodyError).upstreamCode).toBe("service_error");
+	});
+
+	it("throws UpstreamErrorBodyError when 200 OK body has error alongside choices", async () => {
+		const mockFetch = vi.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
+			statusText: "OK",
+			json: () =>
+				Promise.resolve({
+					error: { message: "partial failure", code: "partial" },
+					choices: [{ message: { content: "response" } }],
+				}),
+		} as unknown as Response);
+		vi.stubGlobal("fetch", mockFetch);
+		vi.stubGlobal("localStorage", { getItem: vi.fn().mockReturnValue(null) });
+
+		const err = await chatCompletionJson({
+			messages: [{ role: "user", content: "test" }],
+		}).catch((e: unknown) => e);
+		expect(err).toBeInstanceOf(UpstreamErrorBodyError);
+	});
+
+	it("returns content normally when 200 OK with valid choices and no error", async () => {
+		const mockFetch = vi.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
+			statusText: "OK",
+			json: () =>
+				Promise.resolve({
+					choices: [{ message: { content: "valid response" } }],
+				}),
+		} as unknown as Response);
+		vi.stubGlobal("fetch", mockFetch);
+		vi.stubGlobal("localStorage", { getItem: vi.fn().mockReturnValue(null) });
+
+		const result = await chatCompletionJson({
+			messages: [{ role: "user", content: "test" }],
+		});
+		expect(result.content).toBe("valid response");
+	});
+
+	it("preserves empty-body behavior when no error field present", async () => {
+		const mockFetch = vi.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
+			statusText: "OK",
+			json: () => Promise.resolve({}),
+		} as unknown as Response);
+		vi.stubGlobal("fetch", mockFetch);
+		vi.stubGlobal("localStorage", { getItem: vi.fn().mockReturnValue(null) });
+
+		const result = await chatCompletionJson({
+			messages: [{ role: "user", content: "test" }],
+		});
+		expect(result.content).toBeNull();
 	});
 });
