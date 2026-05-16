@@ -940,18 +940,31 @@ describe("validateContentPacks — interesting_object Use-Item flavor validation
 		expect(item?.postLookFlavor).toContain("amber pinpoint");
 	});
 
-	it("warns but does not throw when examineDescription has no verb-of-activation or control-noun cue", () => {
-		expectWarnNotThrow(
-			() =>
-				validateContentPacksOrThrow(
-					buildInterestingResponse({
-						examineDescription:
-							"A small porcelain figurine, chipped along one edge but otherwise intact.",
-					}),
-					inputWithInteresting,
-				),
-			/verb-of-activation cue|control noun/,
+	it("throws ContentPackError when examineDescription has no verb-of-activation or control-noun cue", () => {
+		const result = validateContentPacks(
+			buildInterestingResponse({
+				examineDescription:
+					"A small porcelain figurine, chipped along one edge but otherwise intact.",
+			}),
+			inputWithInteresting,
 		);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			const error = result.errors.find((e) => e.field === "examineDescription");
+			expect(error).toBeDefined();
+			expect(error?.rule).toBe("verb-of-activation");
+			expect(error?.entityId).toBe("item1");
+			expect(error?.retryUnit.kind).toBe("interesting-object");
+		}
+		expect(() =>
+			validateContentPacksOrThrow(
+				buildInterestingResponse({
+					examineDescription:
+						"A small porcelain figurine, chipped along one edge but otherwise intact.",
+				}),
+				inputWithInteresting,
+			),
+		).toThrow(/verb-of-activation cue|control noun/);
 	});
 
 	it("rejects a missing activationFlavor", () => {
@@ -2277,5 +2290,61 @@ describe("BrowserContentPackProvider — partial-retry layer", () => {
 		expect(
 			result.packs[0]?.objectivePairs[0]?.space.convergenceTier1Flavor,
 		).not.toMatch(/{actor}/);
+	});
+
+	it("Test 7 — verb-of-activation cue missing in interesting_object examineDescription → repaired in round 1 (2 chatFn calls)", async () => {
+		const mockChatFn = vi.fn();
+
+		// Call 1: broken pack (no verb-of-activation cue in examineDescription)
+		const brokenPack = buildValidPack();
+		const brokenPackPacks = (brokenPack as Record<string, unknown>).packs as
+			| Record<string, unknown>[]
+			| undefined;
+		if (brokenPackPacks?.[0]) {
+			const pack = brokenPackPacks[0] as Record<string, unknown>;
+			const items = pack.interestingObjects as
+				| Record<string, unknown>[]
+				| undefined;
+			if (items?.[0]) {
+				(items[0] as Record<string, unknown>).examineDescription =
+					"A small porcelain figurine, chipped along one edge but otherwise intact.";
+			}
+		}
+		mockChatFn.mockResolvedValueOnce({
+			content: JSON.stringify(brokenPack),
+			reasoning: null,
+		});
+
+		// Call 2: repair response with valid examineDescription (has verb-of-activation cue)
+		const repair: ContentPackRepair = {
+			unitKind: "interesting-object",
+			phaseIndex: 0,
+			entity: {
+				id: "item1",
+				kind: "interesting_object",
+				name: "Brass Switch",
+				examineDescription:
+					"A small brass switch mounted on a panel. It looks like it should be pressed.",
+				useOutcome: "The switch clicks under your finger.",
+				activationFlavor: "The switch snaps loudly into place.",
+				postExamineDescription: "The switch sits locked in its on position.",
+				postLookFlavor: "an amber pinpoint of light glows beside the panel.",
+			},
+		};
+		mockChatFn.mockResolvedValueOnce({
+			content: buildBatchedRepair([repair]),
+			reasoning: null,
+		});
+
+		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
+		const result = await provider.generateContentPacks(baseInput);
+
+		expect(mockChatFn).toHaveBeenCalledTimes(2);
+		expect(result.packs[0]?.interestingObjects[0]?.examineDescription).toBe(
+			"A small brass switch mounted on a panel. It looks like it should be pressed.",
+		);
+		expect(
+			result.packs[0]?.interestingObjects[0]?.examineDescription,
+		).not.toMatch(/porcelain figurine/);
 	});
 });

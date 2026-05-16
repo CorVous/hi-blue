@@ -967,9 +967,13 @@ function validateEntity(
 
 	if (requireUseItemFlavors) {
 		if (!examineMentionsUseTell(e.examineDescription as string)) {
-			console.warn(
-				`Interesting object ${e.id}: examineDescription has no verb-of-activation cue or control noun (e.g. "use", "activate", "press", "pull", "turn", "twist", "switch", "lever", "trigger", "button"). The AI-discoverable Use-Item tell is missing; daemons may not realise the item is usable.`,
-			);
+			errors.push({
+				entityId: e.id,
+				field: "examineDescription",
+				rule: "verb-of-activation",
+				message: `Interesting object ${e.id}: examineDescription has no verb-of-activation cue or control noun (e.g. "use", "activate", "press", "pull", "turn", "twist", "switch", "lever", "trigger", "button"). The AI-discoverable Use-Item tell is missing; daemons may not realise the item is usable.`,
+				retryUnit,
+			});
 		}
 		if (
 			typeof e.activationFlavor !== "string" ||
