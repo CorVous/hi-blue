@@ -216,6 +216,153 @@ export function buildDualContentPackUserMessage(
 	return `Generate dual A/B content packs for these phases:\n${lines.join("\n")}`;
 }
 
+// ── Partial-retry system prompt and builders ──────────────────────────────
+
+export const PARTIAL_RETRY_SYSTEM_PROMPT = `You repair specific content-pack entities that failed validation. You are given a JSON fragment of failed entities from a prior content-pack generation attempt and the specific validation errors they violated.
+
+Your task: produce corrected JSON fragments that fix the violations while preserving entity IDs and structural relationships.
+
+Repair output shape:
+{
+  "repairs": [
+    {
+      "unitKind": "objective-pair",
+      "phaseIndex": <n>,
+      "object": { "id": "...", "kind": "objective_object", "name": "...", "examineDescription": "...", "useOutcome": "...", "pairsWithSpaceId": "...", "placementFlavor": "...{actor}...", "proximityFlavor": "..." },
+      "space": { "id": "...", "kind": "objective_space", "name": "...", "examineDescription": "...", "activationFlavor": "...", "satisfactionFlavor": "...", "postExamineDescription": "...", "postLookFlavor": "...", "convergenceTier1Flavor": "...", "convergenceTier2Flavor": "...", "convergenceTier1ActorFlavor": "...", "convergenceTier2ActorFlavor": "..." }
+    },
+    {
+      "unitKind": "interesting-object",
+      "phaseIndex": <n>,
+      "entity": { "id": "...", "kind": "interesting_object", "name": "...", "examineDescription": "...", "useOutcome": "...", "activationFlavor": "...", "postExamineDescription": "...", "postLookFlavor": "..." }
+    },
+    {
+      "unitKind": "obstacle",
+      "phaseIndex": <n>,
+      "entity": { "id": "...", "kind": "obstacle", "name": "...", "examineDescription": "...", "shiftFlavor": "..." }
+    }
+  ]
+}
+
+Rules for repairs:
+
+OBJECTIVE-PAIR repairs (object + space):
+- placementFlavor MUST contain the literal string "{actor}".
+- activationFlavor (on space) MUST NOT contain "{actor}".
+- postExamineDescription (on space) MUST NOT contain "{actor}".
+- postLookFlavor (on space) MUST NOT contain "{actor}".
+
+INTERESTING-OBJECT repairs:
+- examineDescription MUST contain a verb-of-activation cue (e.g. "use", "activate", "press", "pull", "turn", "twist", "flip", "wind", "engage", "trigger") or a clear control noun ("control", "switch", "lever", "trigger", "button", "dial", "handle", "crank"). This is the only AI-discoverable signal that the item is a Use-Item target.
+- activationFlavor MUST NOT contain "{actor}".
+- postExamineDescription MUST NOT contain "{actor}".
+- postLookFlavor MUST NOT contain "{actor}".
+
+OBSTACLE repairs:
+- shiftFlavor MUST NOT contain "{actor}".
+
+Do NOT wrap output in markdown or preamble. Return ONLY valid JSON.`;
+
+export function buildPartialRetryUserMessage(
+	input: ContentPackProviderInput,
+	failingUnits: RetryUnit[],
+	previousPackRaw: unknown,
+): string {
+	const lines: string[] = [];
+	let firstPhaseIndex: number | undefined;
+
+	for (const unit of failingUnits) {
+		if (firstPhaseIndex === undefined) {
+			firstPhaseIndex = unit.phaseIndex;
+		}
+		const phaseLabel = `Phase ${unit.phaseIndex + 1}`;
+
+		if (unit.kind === "objective-pair") {
+			const packEntry = (
+				(previousPackRaw as Record<string, unknown>)?.packs as
+					| unknown[]
+					| undefined
+			)?.[unit.phaseIndex];
+			const pairs = (packEntry as Record<string, unknown>)?.objectivePairs as
+				| unknown[]
+				| undefined;
+			const pair = pairs?.find((p: unknown) => {
+				if (p == null || typeof p !== "object") return false;
+				const pp = p as Record<string, unknown>;
+				const pobj = pp.object as Record<string, unknown> | undefined;
+				const pspace = pp.space as Record<string, unknown> | undefined;
+				return pobj?.id === unit.pairId || pspace?.id === unit.pairId;
+			}) as Record<string, unknown> | undefined;
+
+			if (pair) {
+				const obj = pair.object as Record<string, unknown> | undefined;
+				const space = pair.space as Record<string, unknown> | undefined;
+				lines.push(`${phaseLabel} objective pair (ID ${unit.pairId}):`);
+				lines.push(`  object: ${JSON.stringify(obj)}`);
+				lines.push(`  space (name="${space?.name}"): ${JSON.stringify(space)}`);
+				lines.push(`  Note: The paired space is named "${space?.name}".`);
+				lines.push(
+					`  Ensure the object's examineDescription mentions this space's name or a clear synonym.`,
+				);
+				lines.push("");
+			}
+		} else if (unit.kind === "interesting-object") {
+			const packEntry = (
+				(previousPackRaw as Record<string, unknown>)?.packs as
+					| unknown[]
+					| undefined
+			)?.[unit.phaseIndex];
+			const items = (packEntry as Record<string, unknown>)
+				?.interestingObjects as unknown[] | undefined;
+			const item = items?.find((it: unknown) => {
+				if (it == null || typeof it !== "object") return false;
+				return (it as Record<string, unknown>).id === unit.entityId;
+			}) as Record<string, unknown> | undefined;
+
+			if (item) {
+				lines.push(`${phaseLabel} interesting-object (ID ${unit.entityId}):`);
+				lines.push(`  ${JSON.stringify(item)}`);
+				lines.push("");
+			}
+		} else if (unit.kind === "obstacle") {
+			const packEntry = (
+				(previousPackRaw as Record<string, unknown>)?.packs as
+					| unknown[]
+					| undefined
+			)?.[unit.phaseIndex];
+			const obstacles = (packEntry as Record<string, unknown>)?.obstacles as
+				| unknown[]
+				| undefined;
+			const obs = obstacles?.find((o: unknown) => {
+				if (o == null || typeof o !== "object") return false;
+				return (o as Record<string, unknown>).id === unit.entityId;
+			}) as Record<string, unknown> | undefined;
+
+			if (obs) {
+				lines.push(`${phaseLabel} obstacle (ID ${unit.entityId}):`);
+				lines.push(`  ${JSON.stringify(obs)}`);
+				lines.push("");
+			}
+		}
+	}
+
+	if (firstPhaseIndex !== undefined) {
+		const phaseInput = input.phases[firstPhaseIndex];
+		if (phaseInput) {
+			lines.push(
+				`Phase context: setting="${phaseInput.setting}", theme="${phaseInput.theme}"`,
+			);
+		}
+	}
+
+	lines.push("");
+	lines.push(
+		"Produce corrected JSON repairs for the above entities that satisfies all rules.",
+	);
+
+	return lines.join("\n");
+}
+
 // ── Prose-tell check ──────────────────────────────────────────────────────────
 
 /**
@@ -422,6 +569,241 @@ export type ValidationError = {
 export type ValidationResult<T> =
 	| { ok: true; value: T }
 	| { ok: false; errors: ValidationError[] };
+
+export type ContentPackRepair =
+	| {
+			unitKind: "objective-pair";
+			phaseIndex: number;
+			object: Record<string, unknown>;
+			space: Record<string, unknown>;
+	  }
+	| {
+			unitKind: "interesting-object";
+			phaseIndex: number;
+			entity: Record<string, unknown>;
+	  }
+	| {
+			unitKind: "obstacle";
+			phaseIndex: number;
+			entity: Record<string, unknown>;
+	  };
+
+export interface PartialRetryResponse {
+	repairs: ContentPackRepair[];
+}
+
+/**
+ * Group validation errors by their retry unit, deduplicating errors that target
+ * the same entity. Skip units whose pairId/entityId is empty string — those are
+ * structural root-level failures that partial-retry can't repair.
+ */
+export function groupErrorsByRetryUnit(errors: ValidationError[]): RetryUnit[] {
+	const seen = new Set<string>();
+	const result: RetryUnit[] = [];
+
+	for (const err of errors) {
+		const unit = err.retryUnit;
+		// Skip structural errors without an entity ID
+		if (unit.kind === "objective-pair" && unit.pairId === "") continue;
+		if (unit.kind === "interesting-object" && unit.entityId === "") continue;
+		if (unit.kind === "obstacle" && unit.entityId === "") continue;
+
+		const key =
+			unit.kind === "objective-pair"
+				? `${unit.kind}:${unit.phaseIndex}:${unit.pairId}`
+				: `${unit.kind}:${unit.phaseIndex}:${unit.entityId}`;
+
+		if (!seen.has(key)) {
+			seen.add(key);
+			result.push(unit);
+		}
+	}
+
+	return result;
+}
+
+/**
+ * Defensively parse the partial-retry response shape `{ repairs: [...] }`.
+ */
+export function parsePartialRetryResponse(raw: unknown): ContentPackRepair[] {
+	if (raw == null || typeof raw !== "object") {
+		throw new ContentPackError(
+			`partial-retry response is not an object: ${JSON.stringify(raw)}`,
+		);
+	}
+
+	const obj = raw as Record<string, unknown>;
+	if (!Array.isArray(obj.repairs)) {
+		throw new ContentPackError(
+			`partial-retry response.repairs is not an array: ${JSON.stringify(raw)}`,
+		);
+	}
+
+	const repairs: ContentPackRepair[] = [];
+
+	for (const entry of obj.repairs as unknown[]) {
+		if (entry == null || typeof entry !== "object") {
+			throw new ContentPackError(
+				`partial-retry repair entry is not an object: ${JSON.stringify(entry)}`,
+			);
+		}
+
+		const e = entry as Record<string, unknown>;
+		const unitKind = e.unitKind as string | undefined;
+
+		if (unitKind === "objective-pair") {
+			if (
+				typeof e.phaseIndex !== "number" ||
+				e.object == null ||
+				typeof e.object !== "object" ||
+				e.space == null ||
+				typeof e.space !== "object"
+			) {
+				throw new ContentPackError(
+					`partial-retry objective-pair entry missing phaseIndex, object, or space: ${JSON.stringify(entry)}`,
+				);
+			}
+			repairs.push({
+				unitKind: "objective-pair",
+				phaseIndex: e.phaseIndex as number,
+				object: e.object as Record<string, unknown>,
+				space: e.space as Record<string, unknown>,
+			});
+		} else if (unitKind === "interesting-object") {
+			if (
+				typeof e.phaseIndex !== "number" ||
+				e.entity == null ||
+				typeof e.entity !== "object"
+			) {
+				throw new ContentPackError(
+					`partial-retry interesting-object entry missing phaseIndex or entity: ${JSON.stringify(entry)}`,
+				);
+			}
+			repairs.push({
+				unitKind: "interesting-object",
+				phaseIndex: e.phaseIndex as number,
+				entity: e.entity as Record<string, unknown>,
+			});
+		} else if (unitKind === "obstacle") {
+			if (
+				typeof e.phaseIndex !== "number" ||
+				e.entity == null ||
+				typeof e.entity !== "object"
+			) {
+				throw new ContentPackError(
+					`partial-retry obstacle entry missing phaseIndex or entity: ${JSON.stringify(entry)}`,
+				);
+			}
+			repairs.push({
+				unitKind: "obstacle",
+				phaseIndex: e.phaseIndex as number,
+				entity: e.entity as Record<string, unknown>,
+			});
+		} else {
+			throw new ContentPackError(
+				`partial-retry entry has invalid unitKind: "${unitKind}"`,
+			);
+		}
+	}
+
+	return repairs;
+}
+
+/**
+ * Deep-clone rawPack and splice in partial-retry repairs by entity ID.
+ */
+export function splicePartialRepairsIntoRawPack(
+	rawPack: unknown,
+	repairs: ContentPackRepair[],
+): unknown {
+	const cloned = structuredClone(rawPack);
+
+	if (cloned == null || typeof cloned !== "object") {
+		return cloned;
+	}
+
+	const packed = cloned as Record<string, unknown>;
+	if (!Array.isArray(packed.packs)) {
+		return cloned;
+	}
+
+	for (const repair of repairs) {
+		const phasePack = (packed.packs as unknown[])[repair.phaseIndex];
+		if (phasePack == null || typeof phasePack !== "object") {
+			continue;
+		}
+
+		const pack = phasePack as Record<string, unknown>;
+
+		if (repair.unitKind === "objective-pair") {
+			if (!Array.isArray(pack.objectivePairs)) continue;
+			const pairs = pack.objectivePairs as unknown[];
+
+			// Find the pair that has an object or space with matching ID
+			const objectId = (repair.object as Record<string, unknown>)?.id as
+				| string
+				| undefined;
+			const spaceId = (repair.space as Record<string, unknown>)?.id as
+				| string
+				| undefined;
+
+			for (let i = 0; i < pairs.length; i++) {
+				const pair = pairs[i];
+				if (pair == null || typeof pair !== "object") continue;
+
+				const p = pair as Record<string, unknown>;
+				const pObj = p.object as Record<string, unknown> | undefined;
+				const pSpace = p.space as Record<string, unknown> | undefined;
+
+				if (
+					(objectId && (pObj?.id === objectId || pSpace?.id === objectId)) ||
+					(spaceId && (pObj?.id === spaceId || pSpace?.id === spaceId))
+				) {
+					pairs[i] = { object: repair.object, space: repair.space };
+					break;
+				}
+			}
+		} else if (repair.unitKind === "interesting-object") {
+			if (!Array.isArray(pack.interestingObjects)) continue;
+			const items = pack.interestingObjects as unknown[];
+			const entityId = (repair.entity as Record<string, unknown>)?.id as
+				| string
+				| undefined;
+
+			if (entityId) {
+				for (let i = 0; i < items.length; i++) {
+					const item = items[i];
+					if (item == null || typeof item !== "object") continue;
+					const it = item as Record<string, unknown>;
+					if (it.id === entityId) {
+						items[i] = repair.entity;
+						break;
+					}
+				}
+			}
+		} else if (repair.unitKind === "obstacle") {
+			if (!Array.isArray(pack.obstacles)) continue;
+			const obstacles = pack.obstacles as unknown[];
+			const entityId = (repair.entity as Record<string, unknown>)?.id as
+				| string
+				| undefined;
+
+			if (entityId) {
+				for (let i = 0; i < obstacles.length; i++) {
+					const obs = obstacles[i];
+					if (obs == null || typeof obs !== "object") continue;
+					const o = obs as Record<string, unknown>;
+					if (o.id === entityId) {
+						obstacles[i] = repair.entity;
+						break;
+					}
+				}
+			}
+		}
+	}
+
+	return cloned;
+}
 
 function validateEntity(
 	raw: unknown,
@@ -1577,54 +1959,169 @@ export function validateDualContentPacksOrThrow(
 	return r.value;
 }
 
+// ── Helpers for layered retry ────────────────────────────────────────────────
+
+function sleep(ms: number): Promise<void> {
+	return new Promise((r) => setTimeout(r, ms));
+}
+
+function buildOuterMessages(
+	systemPrompt: string,
+	userPrompt: string,
+	corrective: string | null,
+): Array<{ role: "system" | "user"; content: string }> {
+	const messages: Array<{ role: "system" | "user"; content: string }> = [
+		{ role: "system", content: systemPrompt },
+		{ role: "user", content: userPrompt },
+	];
+
+	if (corrective !== null) {
+		messages.push({
+			role: "user",
+			content: `Your previous attempt failed validation. Specific issues:\n${corrective}\n\nProduce a fully valid response.`,
+		});
+	}
+
+	return messages;
+}
+
+function buildCorrectiveFeedback(errors: ValidationError[]): string {
+	const seen = new Set<string>();
+	const lines: string[] = [];
+
+	for (const err of errors) {
+		if (!seen.has(err.message)) {
+			seen.add(err.message);
+			lines.push(err.message);
+		}
+	}
+
+	return lines.join("\n");
+}
+
 // ── BrowserContentPackProvider ────────────────────────────────────────────────
 
 export class BrowserContentPackProvider implements ContentPackProvider {
 	private readonly disableReasoning: boolean;
+	private readonly chatFn: typeof chatCompletionJson;
 
-	constructor(opts: { disableReasoning?: boolean } = {}) {
+	constructor(
+		opts: {
+			disableReasoning?: boolean;
+			chatFn?: typeof chatCompletionJson;
+		} = {},
+	) {
 		this.disableReasoning = opts.disableReasoning ?? false;
+		this.chatFn = opts.chatFn ?? chatCompletionJson;
+	}
+
+	private async callAndParse(
+		messages: Array<{ role: "system" | "user"; content: string }>,
+		label: string,
+	): Promise<unknown> {
+		const { content, reasoning } = await this.chatFn({
+			messages,
+			disableReasoning: this.disableReasoning,
+		});
+
+		const raw = content !== null && content !== "" ? content : reasoning;
+		if (raw === null || raw === "") {
+			throw new ContentPackError(
+				`${label} response has neither content nor reasoning`,
+			);
+		}
+
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(raw);
+		} catch {
+			throw new ContentPackError(`${label} JSON parse failed: ${raw}`);
+		}
+
+		return parsed;
 	}
 
 	async generateContentPacks(
 		input: ContentPackProviderInput,
 	): Promise<ContentPackProviderResult> {
-		const messages = [
-			{ role: "system" as const, content: CONTENT_PACK_SYSTEM_PROMPT },
-			{ role: "user" as const, content: buildContentPackUserMessage(input) },
-		];
+		const OUTER_BUDGET = 3;
+		const BACKOFF_MS = [1_000, 2_000, 4_000];
+		const PARTIAL_ROUNDS = 2;
 
-		const attempt = async (): Promise<ContentPackProviderResult> => {
-			const { content, reasoning } = await chatCompletionJson({
-				messages,
-				disableReasoning: this.disableReasoning,
-			});
+		const systemPrompt = CONTENT_PACK_SYSTEM_PROMPT;
+		const baseUserPrompt = buildContentPackUserMessage(input);
+		let correctiveFeedback: string | null = null;
 
-			const raw = content !== null && content !== "" ? content : reasoning;
-			if (raw === null || raw === "") {
-				throw new ContentPackError(
-					"content-pack response has neither content nor reasoning",
-				);
-			}
+		for (let outer = 0; outer < OUTER_BUDGET; outer++) {
+			let rawPackJson: unknown;
+			let validationResult: ValidationResult<ContentPackProviderResult>;
 
-			let parsed: unknown;
+			// (a) full pack call with backoff on non-validation errors
 			try {
-				parsed = JSON.parse(raw);
-			} catch {
-				throw new ContentPackError(`content-pack JSON parse failed: ${raw}`);
+				const messages = buildOuterMessages(
+					systemPrompt,
+					baseUserPrompt,
+					correctiveFeedback,
+				);
+				rawPackJson = await this.callAndParse(messages, "content-pack");
+				validationResult = validateContentPacks(rawPackJson, input);
+			} catch (err) {
+				if (err instanceof CapHitError) throw err;
+				if (outer === OUTER_BUDGET - 1) throw err;
+				const backoffMs = BACKOFF_MS[outer];
+				if (backoffMs !== undefined) {
+					await sleep(backoffMs);
+				}
+				correctiveFeedback = null;
+				continue;
 			}
 
-			return validateContentPacksOrThrow(parsed, input);
-		};
+			if (validationResult.ok) return validationResult.value;
 
-		try {
-			return await attempt();
-		} catch (err) {
-			// CapHitError is not retried — surface immediately
-			if (err instanceof CapHitError) throw err;
-			// Retry once on any other failure
-			return await attempt();
+			// (b) partial-retry layer
+			let currentRaw = rawPackJson;
+			let currentErrors = validationResult.errors;
+
+			for (let round = 0; round < PARTIAL_ROUNDS; round++) {
+				const failingUnits = groupErrorsByRetryUnit(currentErrors);
+				if (failingUnits.length === 0) break;
+
+				let repairs: ContentPackRepair[];
+				try {
+					const repairMessages = [
+						{ role: "system" as const, content: PARTIAL_RETRY_SYSTEM_PROMPT },
+						{
+							role: "user" as const,
+							content: buildPartialRetryUserMessage(
+								input,
+								failingUnits,
+								currentRaw,
+							),
+						},
+					];
+					const parsedRepair = await this.callAndParse(
+						repairMessages,
+						"partial-retry",
+					);
+					repairs = parsePartialRetryResponse(parsedRepair);
+				} catch (err) {
+					if (err instanceof CapHitError) throw err;
+					break;
+				}
+
+				currentRaw = splicePartialRepairsIntoRawPack(currentRaw, repairs);
+				const reval = validateContentPacks(currentRaw, input);
+				if (reval.ok) return reval.value;
+				currentErrors = reval.errors;
+			}
+
+			// (c) partial-retry exhausted: prepare corrective feedback for outer retry
+			correctiveFeedback = buildCorrectiveFeedback(currentErrors);
 		}
+
+		throw new ContentPackError(
+			"content-pack generation exhausted retry budget",
+		);
 	}
 
 	async generateDualContentPacks(
@@ -1639,7 +2136,7 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 		];
 
 		const attempt = async (): Promise<DualContentPackProviderResult> => {
-			const { content, reasoning } = await chatCompletionJson({
+			const { content, reasoning } = await this.chatFn({
 				messages,
 				disableReasoning: this.disableReasoning,
 			});
