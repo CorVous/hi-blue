@@ -82,7 +82,7 @@ _Avoid_: Edge (positional, not lexical), barrier (less setting-natural).
 The wedge-shaped region of cells an AI can see each turn: 1 cell directly in front + 3 cells two steps ahead (front-left, front, front-right), plus the AI's own cell. Projects from the AI's **Facing**. Obstacles do not occlude — the cone is a fixed-shape mask, not a raycast.
 
 **Facing**:
-The cardinal direction (N/S/E/W) an AI is currently looking. Part of the AI's state alongside `(row, col)`. Updated by `go(direction)` (move and face) and `look(direction)` (face without moving).
+The cardinal direction (N/S/E/W) an AI is currently looking. Stored internally as a cardinal alongside `(row, col)` in the AI's spatial state. Updated by `go(direction)` (move and face) and `look(direction)` (face without moving); both tools take a relative direction argument (`forward | back | left | right`) which the dispatcher translates against the current Facing — daemons never see cardinals (ADR 0008).
 
 **Conversation log**:
 The single chronological per-AI per-phase section of the system prompt that interleaves directional **message**s (incoming and outgoing, with the recipient axis carrying routing) and **Witnessed event**s — all tagged by round. The AI's complete phase memory: nothing the AI has experienced this phase exists outside this log. Now also the per-Daemon storage shape — see **ConversationEntry**. The unified `message` kind replaces the previous chat/whisper split (per ADR 0007 / commit c60e995, schema v4). Replaces both the broadcast action log of an earlier design and the once-considered separate "events in your cone" section.

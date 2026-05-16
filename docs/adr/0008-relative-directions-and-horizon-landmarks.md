@@ -76,11 +76,12 @@ provided, the cardinal direction in the entry is converted with `cardinalToRelat
 
 **Negative / watch-out:**
 
-- The dispatcher now silently accepts both cardinal and relative tokens for `go`/`look`. This
-  backward-compatibility path exists so that internal engine helpers and existing test fixtures
-  using cardinal strings continue to work without modification. If this creates confusion in
-  the future, the cardinal path should be deprecated and removed once all test fixtures are
-  migrated.
+- ~~The dispatcher now silently accepts both cardinal and relative tokens for `go`/`look`.~~
+  Superseded: the dispatcher's `validate` function now rejects cardinal tokens with an explicit
+  "use relative directions" reason; the execution path only handles `RelativeDirection`. The
+  backward-compat shim turned out to be unnecessary and the dual-acceptance behavior was a
+  liability — `available-tools.ts` was inadvertently still advertising a cardinal enum, which
+  this branch fixed alongside the dead-code removal.
 - Content-pack generation now requires the LLM to produce four horizon landmarks per phase.
   The system prompt includes explicit shape constraints and a "no cardinal language in
   horizonPhrase" rule to prevent leakage. Playtests should monitor whether the LLM reliably

@@ -100,7 +100,7 @@ function cloneToolWithEnums(
  *
  * Algorithm:
  * 0. `message` — always present; `to` enum = "blue" + live peer daemon ids.
- * 1. `look` — always present, full CARDINAL_DIRECTIONS enum.
+ * 1. `look` — always present, full RELATIVE_DIRECTIONS enum.
  * 2. `go` — included only when at least one direction is in-bounds AND non-obstacle.
  *    Enum restricted to legal directions.
  * 3. `pick_up` — included only when pickable entities are in the actor's own cell
