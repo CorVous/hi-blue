@@ -13,6 +13,7 @@ import {
 	DUAL_CONTENT_PACK_SYSTEM_PROMPT,
 	examineMentionsPairedSpace,
 	examineMentionsUseTell,
+	validateContentPacks,
 	validateContentPacksOrThrow,
 	validateDualContentPacksOrThrow,
 } from "../content-pack-provider.js";
@@ -1300,5 +1301,108 @@ describe("validateDualContentPacks — obstacle shiftFlavor validation", () => {
 				),
 			/shiftFlavor/,
 		);
+	});
+});
+
+// ── Pure-result API: validateContentPacks with multiple failures ────────────────
+
+describe("validateContentPacks — pure-result API with multiple failures", () => {
+	const input = {
+		phases: [
+			{
+				setting: "abandoned subway station",
+				theme: "mundane",
+				k: 0,
+				n: 1,
+				m: 1,
+			},
+		],
+	};
+
+	function buildFixtureWithMultipleErrors(): unknown {
+		return {
+			packs: [
+				{
+					setting: "abandoned subway station",
+					objectivePairs: [],
+					interestingObjects: [
+						{
+							id: "item1",
+							kind: "interesting_object",
+							name: "Brass Switch",
+							examineDescription:
+								"A small brass switch mounted on a panel. It looks like it should be pressed.",
+							useOutcome: "The switch clicks under your finger.",
+							// Missing activationFlavor — this is the first error
+							postExamineDescription:
+								"The switch sits locked in its on position.",
+							postLookFlavor:
+								"an amber pinpoint of light glows beside the panel",
+						},
+					],
+					obstacles: [
+						{
+							id: "obs1",
+							kind: "obstacle",
+							name: "Rusted Gate",
+							examineDescription: "An old rusted gate blocking the path.",
+							// Missing shiftFlavor — this is the second error
+						},
+					],
+					landmarks: {
+						north: {
+							shortName: "the signal tower",
+							horizonPhrase: "rises above the platform",
+						},
+						south: {
+							shortName: "the collapsed entrance",
+							horizonPhrase: "gapes like a wound in the dark",
+						},
+						east: {
+							shortName: "the rusted fan shaft",
+							horizonPhrase: "spins slowly in the stale air",
+						},
+						west: {
+							shortName: "the flooded tunnel",
+							horizonPhrase: "disappears into still black water",
+						},
+					},
+				},
+			],
+		};
+	}
+
+	it("surfaces multiple validation errors in one pass (pure-result API)", () => {
+		const result = validateContentPacks(
+			buildFixtureWithMultipleErrors(),
+			input,
+		);
+
+		// Assert that the result is a failure (ok === false)
+		expect(result.ok).toBe(false);
+
+		if (!result.ok) {
+			// Assert that we got at least two errors
+			expect(result.errors.length).toBeGreaterThanOrEqual(2);
+
+			// Extract the two errors and verify they are for different entities
+			const activationFlavorError = result.errors.find(
+				(err) => err.field === "activationFlavor",
+			);
+			const shiftFlavorError = result.errors.find(
+				(err) => err.field === "shiftFlavor",
+			);
+
+			expect(activationFlavorError).toBeDefined();
+			expect(shiftFlavorError).toBeDefined();
+
+			// Verify that they target different retry units (kinds)
+			expect(activationFlavorError?.retryUnit.kind).toBe("interesting-object");
+			expect(shiftFlavorError?.retryUnit.kind).toBe("obstacle");
+
+			// Verify that the entity IDs are different (item1 vs obs1)
+			expect(activationFlavorError?.entityId).toBe("item1");
+			expect(shiftFlavorError?.entityId).toBe("obs1");
+		}
 	});
 });
