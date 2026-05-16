@@ -14,6 +14,11 @@ import {
 	deductBudget,
 	isAiLockedOut,
 } from "./engine";
+import {
+	buildAiContext,
+	buildConeSnapshot,
+	renderWhatsNew,
+} from "./prompt-builder.js";
 import type {
 	AiId,
 	AiTurnAction,
@@ -46,6 +51,13 @@ export interface DispatchResult {
 	 * Only set when the tool call is "examine".
 	 */
 	actorPrivateToolResult?: { description: string; success: boolean };
+	/**
+	 * For go/look actions where the actor's cone shift reveals new content,
+	 * this field carries the renderWhatsNew output. Only set for successful
+	 * go/look tool calls where the pre/post cone snapshots differ.
+	 * (Issue #376: persist cone-delta on go/look tool-call log entries)
+	 */
+	actorConeDelta?: string;
 }
 
 /** Narrow-check: is `holder` a GridPosition (not an AiId string)? */
@@ -490,6 +502,8 @@ export function dispatchAiTurn(
 		| { description: string; success: boolean }
 		| undefined;
 
+	let actorConeDelta: string | undefined;
+
 	// Process messages BEFORE toolCall so that result.records reflects
 	// speak-then-act order (P0-1 fix for issue #238).
 	// Validation uses live personaSpatial from pre-action state — persona
@@ -563,7 +577,22 @@ export function dispatchAiTurn(
 			// Snapshot pre-execute world so the post-execute branch can compare
 			// satisfactionState transitions for activation-flavor detection.
 			const preExecuteWorld = state.world;
-			state = executeToolCall(state, aiId, action.toolCall);
+
+			// For go/look, compute cone delta pre-execution to capture the state before the action
+			if (action.toolCall.name === "go" || action.toolCall.name === "look") {
+				const prevCtx = buildAiContext(state, aiId);
+				const prevSnap = buildConeSnapshot(prevCtx);
+				state = executeToolCall(state, aiId, action.toolCall);
+				const currCtx = buildAiContext(state, aiId);
+				const currSnap = buildConeSnapshot(currCtx);
+				const delta = renderWhatsNew(prevSnap, currSnap);
+				if (delta !== null) {
+					actorConeDelta = delta;
+				}
+			} else {
+				state = executeToolCall(state, aiId, action.toolCall);
+			}
+
 			// For put_down, check if the object landed on its paired space.
 			// If so, replace the default description with the per-pair placementFlavor.
 			const flavorDescription =
@@ -762,5 +791,6 @@ export function dispatchAiTurn(
 		game: state,
 		records,
 		...(actorPrivateToolResult !== undefined ? { actorPrivateToolResult } : {}),
+		...(actorConeDelta !== undefined ? { actorConeDelta } : {}),
 	};
 }

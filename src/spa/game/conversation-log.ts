@@ -143,6 +143,9 @@ export function renderEntry(
 		}
 
 		case "tool-call": {
+			// Note: renderEntry is not used for tool-call in openai-message-builder.ts;
+			// that path renders directly with entry.result and optional coneDelta enrichment.
+			// This function is kept for completeness but not on the render path.
 			const successStr = entry.success ? "succeeded" : "failed";
 			return `[Round ${round}] Your \`${entry.toolName}\` action ${successStr}: ${entry.result}`;
 		}

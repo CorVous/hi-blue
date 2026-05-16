@@ -355,6 +355,59 @@ describe("serializeSession / deserializeSession", () => {
 		}
 	});
 
+	it("round-trips tool-call entries with coneDelta (#376)", () => {
+		const game = makeFreshGame();
+		const toolCallWithDelta: ConversationEntry = {
+			kind: "tool-call",
+			round: 4,
+			aiId: "red" as AiId,
+			toolCallId: "go_call_1",
+			toolArgumentsJson: '{"direction":"forward"}',
+			toolName: "go",
+			result: "Ember moved forward.",
+			success: true,
+			coneDelta: "+ at directly in front, right: *green",
+		};
+		const modified: GameState = {
+			...game,
+			conversationLogs: { ...game.conversationLogs, red: [toolCallWithDelta] },
+		};
+		const files = serializeSession(modified, NOW, CREATED_AT);
+		const result = deserializeSession(files);
+		expect(result.kind).toBe("ok");
+		if (result.kind === "ok") {
+			expect(result.state.conversationLogs.red?.[0]).toEqual(toolCallWithDelta);
+		}
+	});
+
+	it("loads pre-#376 tool-call entries (no coneDelta field) cleanly", () => {
+		const game = makeFreshGame();
+		const legacyToolCall: ConversationEntry = {
+			kind: "tool-call",
+			round: 2,
+			aiId: "red" as AiId,
+			toolCallId: "old_call_1",
+			toolArgumentsJson: '{"item":"flower"}',
+			toolName: "pick_up",
+			result: "Ember picked up the flower.",
+			success: true,
+		};
+		const modified: GameState = {
+			...game,
+			conversationLogs: { ...game.conversationLogs, red: [legacyToolCall] },
+		};
+		const files = serializeSession(modified, NOW, CREATED_AT);
+		const result = deserializeSession(files);
+		expect(result.kind).toBe("ok");
+		if (result.kind === "ok") {
+			const loaded = result.state.conversationLogs.red?.[0];
+			expect(loaded).toEqual(legacyToolCall);
+			if (loaded?.kind === "tool-call") {
+				expect(loaded.coneDelta).toBeUndefined();
+			}
+		}
+	});
+
 	it("round-trips world entities", () => {
 		const game = makeFreshGame();
 		const entity: WorldEntity = {

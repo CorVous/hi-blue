@@ -353,6 +353,14 @@ export type ConversationEntry =
 			result: string;
 			/** Whether the tool call succeeded. */
 			success: boolean;
+			/**
+			 * For go/look actions that reveal new content in the actor's cone,
+			 * this field carries the renderWhatsNew output captured at write-time.
+			 * Used to enrich future-round prompts with the persisted perception.
+			 * Undefined for non-go/look tools, failed actions, or when the delta is empty.
+			 * (Issue #376: persist cone-delta on go/look tool-call log entries)
+			 */
+			coneDelta?: string;
 	  }
 	| {
 			kind: "witnessed-obstacle-shift";

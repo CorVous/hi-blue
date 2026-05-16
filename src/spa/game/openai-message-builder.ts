@@ -192,11 +192,15 @@ export function buildOpenAiMessages(
 					},
 				],
 			});
-			// Tool result message
+			// Tool result message with optional cone-delta enrichment
+			// Issue #376: append the persisted cone-delta so prior-round perceptions persist
+			const toolContent = entry.coneDelta
+				? `${entry.result}\n\n<noticed>\n${entry.coneDelta}\n</noticed>`
+				: entry.result;
 			messages.push({
 				role: "tool",
 				tool_call_id: entry.toolCallId,
-				content: entry.result,
+				content: toolContent,
 			});
 		} else if (entry.kind === "broadcast") {
 			messages.push({
