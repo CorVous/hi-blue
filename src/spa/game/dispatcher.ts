@@ -17,7 +17,6 @@ import {
 import type {
 	AiId,
 	AiTurnAction,
-	CardinalDirection,
 	GameState,
 	GridPosition,
 	PersonaSpatialState,
@@ -391,13 +390,11 @@ export function executeToolCall(
 			break;
 		case "go": {
 			if (!actorSpatial) break;
-			// Translate relative → cardinal if needed
-			const rawGoDir = call.args.direction;
-			const direction: CardinalDirection = RELATIVE_DIRECTIONS.includes(
-				rawGoDir as RelativeDirection,
-			)
-				? relativeToCardinal(actorSpatial.facing, rawGoDir as RelativeDirection)
-				: (rawGoDir as CardinalDirection);
+			// Validation upstream guarantees direction is a RelativeDirection.
+			const direction = relativeToCardinal(
+				actorSpatial.facing,
+				call.args.direction as RelativeDirection,
+			);
 			const nextPos = applyDirection(actorSpatial.position, direction);
 			return {
 				...game,
