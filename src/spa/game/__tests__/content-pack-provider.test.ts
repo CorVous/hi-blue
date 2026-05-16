@@ -14,7 +14,8 @@ import {
 	examineMentionsPairedSpace,
 	examineMentionsUseTell,
 	validateContentPacks,
-	validateDualContentPacks,
+	validateContentPacksOrThrow,
+	validateDualContentPacksOrThrow,
 } from "../content-pack-provider.js";
 
 /**
@@ -196,7 +197,7 @@ describe("validateContentPacks — prose tell contract", () => {
 	}
 
 	it("accepts a content pack whose objective_object examine names the paired space", () => {
-		const result = validateContentPacks(
+		const result = validateContentPacksOrThrow(
 			buildResponse(
 				"An iron key. It looks like it belongs on the brass pedestal across the room.",
 			),
@@ -216,7 +217,7 @@ describe("validateContentPacks — prose tell contract", () => {
 	it("warns but does not throw when objective_object examine does not mention the paired space", () => {
 		expectWarnNotThrow(
 			() =>
-				validateContentPacks(
+				validateContentPacksOrThrow(
 					buildResponse(
 						"rusted iron key, heavily corroded but still intact. The teeth are worn smooth from use",
 					),
@@ -228,7 +229,7 @@ describe("validateContentPacks — prose tell contract", () => {
 
 	it("rejects a content pack whose objective_object is missing proximityFlavor", () => {
 		expect(() =>
-			validateContentPacks(
+			validateContentPacksOrThrow(
 				buildResponse(
 					"An iron key. It looks like it belongs on the brass pedestal.",
 					"Brass Pedestal",
@@ -240,7 +241,7 @@ describe("validateContentPacks — prose tell contract", () => {
 	});
 
 	it("persists proximityFlavor onto the returned WorldEntity", () => {
-		const result = validateContentPacks(
+		const result = validateContentPacksOrThrow(
 			buildResponse(
 				"An iron key. It looks like it belongs on the brass pedestal.",
 				"Brass Pedestal",
@@ -310,7 +311,7 @@ describe("validateContentPacks — obstacle shiftFlavor validation", () => {
 	}
 
 	it("accepts an obstacle with a valid shiftFlavor", () => {
-		const result = validateContentPacks(
+		const result = validateContentPacksOrThrow(
 			buildObstacleResponse(
 				"The rusted gate scrapes along the floor with a grinding shriek.",
 			),
@@ -324,20 +325,23 @@ describe("validateContentPacks — obstacle shiftFlavor validation", () => {
 
 	it("rejects an obstacle missing shiftFlavor", () => {
 		expect(() =>
-			validateContentPacks(buildObstacleResponse(undefined), inputWithObstacle),
+			validateContentPacksOrThrow(
+				buildObstacleResponse(undefined),
+				inputWithObstacle,
+			),
 		).toThrow(/shiftFlavor/);
 	});
 
 	it("rejects an obstacle with an empty shiftFlavor", () => {
 		expect(() =>
-			validateContentPacks(buildObstacleResponse(""), inputWithObstacle),
+			validateContentPacksOrThrow(buildObstacleResponse(""), inputWithObstacle),
 		).toThrow(/shiftFlavor/);
 	});
 
 	it("warns but does not throw when an obstacle shiftFlavor contains {actor}", () => {
 		expectWarnNotThrow(
 			() =>
-				validateContentPacks(
+				validateContentPacksOrThrow(
 					buildObstacleResponse("{actor} knocks the gate aside."),
 					inputWithObstacle,
 				),
@@ -347,7 +351,7 @@ describe("validateContentPacks — obstacle shiftFlavor validation", () => {
 
 	it("persists shiftFlavor onto the returned WorldEntity", () => {
 		const flavor = "The rusted gate groans as it slides aside.";
-		const result = validateContentPacks(
+		const result = validateContentPacksOrThrow(
 			buildObstacleResponse(flavor),
 			inputWithObstacle,
 		);
@@ -440,7 +444,7 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 	}
 
 	it("accepts a content pack with valid convergence tier flavors", () => {
-		const result = validateContentPacks(
+		const result = validateContentPacksOrThrow(
 			buildConvergenceResponse(
 				"A lone figure stands at the pedestal.",
 				"Two figures converge at the pedestal.",
@@ -458,7 +462,7 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 
 	it("throws ContentPackError when convergenceTier1Flavor is missing", () => {
 		expect(() =>
-			validateContentPacks(
+			validateContentPacksOrThrow(
 				buildConvergenceResponse(OMIT, "Two figures converge at the pedestal."),
 				inputWithPair,
 			),
@@ -467,7 +471,7 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 
 	it("throws ContentPackError when convergenceTier2Flavor is missing", () => {
 		expect(() =>
-			validateContentPacks(
+			validateContentPacksOrThrow(
 				buildConvergenceResponse("A lone figure stands at the pedestal.", OMIT),
 				inputWithPair,
 			),
@@ -477,7 +481,7 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 	it("warns but does not throw when convergenceTier1Flavor contains {actor}", () => {
 		expectWarnNotThrow(
 			() =>
-				validateContentPacks(
+				validateContentPacksOrThrow(
 					buildConvergenceResponse(
 						"{actor} stands at the pedestal.",
 						"Two figures converge at the pedestal.",
@@ -491,7 +495,7 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 	it("warns but does not throw when convergenceTier2Flavor contains {actor}", () => {
 		expectWarnNotThrow(
 			() =>
-				validateContentPacks(
+				validateContentPacksOrThrow(
 					buildConvergenceResponse(
 						"A lone figure stands at the pedestal.",
 						"{actor} and another figure converge.",
@@ -504,7 +508,7 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 
 	it("throws ContentPackError when convergenceTier1Flavor is an empty string", () => {
 		expect(() =>
-			validateContentPacks(
+			validateContentPacksOrThrow(
 				buildConvergenceResponse("", "Two figures converge at the pedestal."),
 				inputWithPair,
 			),
@@ -514,7 +518,7 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 	// ── actor-side tier flavors (issue #336) ────────────────────────────────────
 
 	it("accepts a pack with all four tier flavors and persists the actor variants", () => {
-		const result = validateContentPacks(
+		const result = validateContentPacksOrThrow(
 			buildConvergenceResponse(),
 			inputWithPair,
 		);
@@ -529,7 +533,7 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 
 	it("throws ContentPackError when convergenceTier1ActorFlavor is missing", () => {
 		expect(() =>
-			validateContentPacks(
+			validateContentPacksOrThrow(
 				buildConvergenceResponse(undefined, undefined, OMIT),
 				inputWithPair,
 			),
@@ -538,7 +542,7 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 
 	it("throws ContentPackError when convergenceTier2ActorFlavor is missing", () => {
 		expect(() =>
-			validateContentPacks(
+			validateContentPacksOrThrow(
 				buildConvergenceResponse(undefined, undefined, undefined, OMIT),
 				inputWithPair,
 			),
@@ -547,7 +551,7 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 
 	it("throws ContentPackError when convergenceTier1ActorFlavor is empty", () => {
 		expect(() =>
-			validateContentPacks(
+			validateContentPacksOrThrow(
 				buildConvergenceResponse(undefined, undefined, ""),
 				inputWithPair,
 			),
@@ -556,7 +560,7 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 
 	it("throws ContentPackError when convergenceTier2ActorFlavor is empty", () => {
 		expect(() =>
-			validateContentPacks(
+			validateContentPacksOrThrow(
 				buildConvergenceResponse(undefined, undefined, undefined, ""),
 				inputWithPair,
 			),
@@ -566,7 +570,7 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 	it("warns but does not throw when convergenceTier1ActorFlavor contains {actor}", () => {
 		expectWarnNotThrow(
 			() =>
-				validateContentPacks(
+				validateContentPacksOrThrow(
 					buildConvergenceResponse(
 						undefined,
 						undefined,
@@ -581,7 +585,7 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 	it("warns but does not throw when convergenceTier2ActorFlavor contains {actor}", () => {
 		expectWarnNotThrow(
 			() =>
-				validateContentPacks(
+				validateContentPacksOrThrow(
 					buildConvergenceResponse(
 						undefined,
 						undefined,
@@ -755,7 +759,7 @@ describe("validateContentPacks — interesting_object Use-Item flavor validation
 	}
 
 	it("accepts an interesting_object with all Use-Item flavor fields", () => {
-		const result = validateContentPacks(
+		const result = validateContentPacksOrThrow(
 			buildInterestingResponse({}),
 			inputWithInteresting,
 		);
@@ -768,7 +772,7 @@ describe("validateContentPacks — interesting_object Use-Item flavor validation
 	it("warns but does not throw when examineDescription has no verb-of-activation or control-noun cue", () => {
 		expectWarnNotThrow(
 			() =>
-				validateContentPacks(
+				validateContentPacksOrThrow(
 					buildInterestingResponse({
 						examineDescription:
 							"A small porcelain figurine, chipped along one edge but otherwise intact.",
@@ -781,7 +785,7 @@ describe("validateContentPacks — interesting_object Use-Item flavor validation
 
 	it("rejects a missing activationFlavor", () => {
 		expect(() =>
-			validateContentPacks(
+			validateContentPacksOrThrow(
 				buildInterestingResponse({ activationFlavor: undefined }),
 				inputWithInteresting,
 			),
@@ -790,7 +794,7 @@ describe("validateContentPacks — interesting_object Use-Item flavor validation
 
 	it("rejects an empty activationFlavor", () => {
 		expect(() =>
-			validateContentPacks(
+			validateContentPacksOrThrow(
 				buildInterestingResponse({ activationFlavor: "" }),
 				inputWithInteresting,
 			),
@@ -800,7 +804,7 @@ describe("validateContentPacks — interesting_object Use-Item flavor validation
 	it("warns but does not throw when an interesting_object activationFlavor contains {actor}", () => {
 		expectWarnNotThrow(
 			() =>
-				validateContentPacks(
+				validateContentPacksOrThrow(
 					buildInterestingResponse({
 						activationFlavor: "{actor} flips the switch home.",
 					}),
@@ -812,7 +816,7 @@ describe("validateContentPacks — interesting_object Use-Item flavor validation
 
 	it("rejects a missing postExamineDescription", () => {
 		expect(() =>
-			validateContentPacks(
+			validateContentPacksOrThrow(
 				buildInterestingResponse({ postExamineDescription: undefined }),
 				inputWithInteresting,
 			),
@@ -822,7 +826,7 @@ describe("validateContentPacks — interesting_object Use-Item flavor validation
 	it("warns but does not throw when a postExamineDescription contains {actor}", () => {
 		expectWarnNotThrow(
 			() =>
-				validateContentPacks(
+				validateContentPacksOrThrow(
 					buildInterestingResponse({
 						postExamineDescription: "{actor} sees the switch locked on.",
 					}),
@@ -835,7 +839,7 @@ describe("validateContentPacks — interesting_object Use-Item flavor validation
 	it("warns but does not throw when a postLookFlavor contains {actor}", () => {
 		expectWarnNotThrow(
 			() =>
-				validateContentPacks(
+				validateContentPacksOrThrow(
 					buildInterestingResponse({
 						postLookFlavor: "{actor} glances at the amber light",
 					}),
@@ -846,7 +850,7 @@ describe("validateContentPacks — interesting_object Use-Item flavor validation
 	});
 
 	it("accepts an interesting_object with postLookFlavor omitted (optional)", () => {
-		const result = validateContentPacks(
+		const result = validateContentPacksOrThrow(
 			buildInterestingResponse({ postLookFlavor: undefined }),
 			inputWithInteresting,
 		);
@@ -931,7 +935,7 @@ describe("validateContentPacks — objective_space activationFlavor & prose tell
 	}
 
 	it("accepts a content pack with a use-tell in the space's examineDescription and a valid activationFlavor", () => {
-		const result = validateContentPacks(
+		const result = validateContentPacksOrThrow(
 			buildPackWithSpaceFields({
 				examineDescription:
 					"A sturdy pedestal. Press an item onto it to activate the mechanism.",
@@ -948,7 +952,7 @@ describe("validateContentPacks — objective_space activationFlavor & prose tell
 	it("warns but does not throw when objective_space examineDescription has no use/activation cue", () => {
 		expectWarnNotThrow(
 			() =>
-				validateContentPacks(
+				validateContentPacksOrThrow(
 					buildPackWithSpaceFields({
 						examineDescription:
 							"A sturdy pedestal carved from weathered brass, half-buried in moss.",
@@ -962,7 +966,7 @@ describe("validateContentPacks — objective_space activationFlavor & prose tell
 
 	it("rejects a content pack whose objective_space is missing activationFlavor", () => {
 		expect(() =>
-			validateContentPacks(
+			validateContentPacksOrThrow(
 				buildPackWithSpaceFields({
 					examineDescription:
 						"A sturdy pedestal. Press an item onto it to activate.",
@@ -974,7 +978,7 @@ describe("validateContentPacks — objective_space activationFlavor & prose tell
 
 	it("rejects a content pack whose objective_space activationFlavor is empty", () => {
 		expect(() =>
-			validateContentPacks(
+			validateContentPacksOrThrow(
 				buildPackWithSpaceFields({
 					examineDescription:
 						"A sturdy pedestal. Press an item onto it to activate.",
@@ -988,7 +992,7 @@ describe("validateContentPacks — objective_space activationFlavor & prose tell
 	it("warns but does not throw when an objective_space activationFlavor contains {actor}", () => {
 		expectWarnNotThrow(
 			() =>
-				validateContentPacks(
+				validateContentPacksOrThrow(
 					buildPackWithSpaceFields({
 						examineDescription:
 							"A sturdy pedestal. Press an item onto it to activate.",
@@ -1139,7 +1143,7 @@ describe("validateDualContentPacks — objective_space activationFlavor", () => 
 	}
 
 	it("accepts both packs with distinct activationFlavor lines", () => {
-		const result = validateDualContentPacks(
+		const result = validateDualContentPacksOrThrow(
 			buildDualPair(
 				"The pedestal hums to life and its runes glow.",
 				"The marker clicks once and a column of dust spirals up.",
@@ -1159,7 +1163,7 @@ describe("validateDualContentPacks — objective_space activationFlavor", () => 
 	it("warns but does not throw when packB activationFlavor contains {actor}", () => {
 		expectWarnNotThrow(
 			() =>
-				validateDualContentPacks(
+				validateDualContentPacksOrThrow(
 					buildDualPair(
 						"The pedestal hums to life.",
 						"{actor} activates the marker.",
@@ -1173,7 +1177,7 @@ describe("validateDualContentPacks — objective_space activationFlavor", () => 
 	it("warns but does not throw when packA space examineDescription has no use-tell", () => {
 		expectWarnNotThrow(
 			() =>
-				validateDualContentPacks(
+				validateDualContentPacksOrThrow(
 					buildDualPair(
 						"The pedestal hums to life.",
 						"The marker clicks once.",
@@ -1243,7 +1247,7 @@ describe("validateDualContentPacks — obstacle shiftFlavor validation", () => {
 	}
 
 	it("accepts dual-pack obstacles with valid shiftFlavor on both packs", () => {
-		const result = validateDualContentPacks(
+		const result = validateDualContentPacksOrThrow(
 			buildDualObstacleResponse(
 				"The rusted gate scrapes along the floor.",
 				"The mossy gate slides through wet leaves.",
@@ -1260,7 +1264,7 @@ describe("validateDualContentPacks — obstacle shiftFlavor validation", () => {
 
 	it("rejects a dual-pack obstacle missing shiftFlavor on packA", () => {
 		expect(() =>
-			validateDualContentPacks(
+			validateDualContentPacksOrThrow(
 				buildDualObstacleResponse(undefined, "Something rustles."),
 				dualInputWithObstacle,
 			),
@@ -1269,7 +1273,7 @@ describe("validateDualContentPacks — obstacle shiftFlavor validation", () => {
 
 	it("rejects a dual-pack obstacle missing shiftFlavor on packB", () => {
 		expect(() =>
-			validateDualContentPacks(
+			validateDualContentPacksOrThrow(
 				buildDualObstacleResponse("The gate scrapes.", undefined),
 				dualInputWithObstacle,
 			),
@@ -1278,7 +1282,7 @@ describe("validateDualContentPacks — obstacle shiftFlavor validation", () => {
 
 	it("rejects a dual-pack obstacle with an empty shiftFlavor", () => {
 		expect(() =>
-			validateDualContentPacks(
+			validateDualContentPacksOrThrow(
 				buildDualObstacleResponse("", "Something rustles."),
 				dualInputWithObstacle,
 			),
@@ -1288,7 +1292,7 @@ describe("validateDualContentPacks — obstacle shiftFlavor validation", () => {
 	it("warns but does not throw when a dual-pack obstacle shiftFlavor contains {actor}", () => {
 		expectWarnNotThrow(
 			() =>
-				validateDualContentPacks(
+				validateDualContentPacksOrThrow(
 					buildDualObstacleResponse(
 						"{actor} pushes the gate.",
 						"Something rustles.",
@@ -1297,5 +1301,108 @@ describe("validateDualContentPacks — obstacle shiftFlavor validation", () => {
 				),
 			/shiftFlavor/,
 		);
+	});
+});
+
+// ── Pure-result API: validateContentPacks with multiple failures ────────────────
+
+describe("validateContentPacks — pure-result API with multiple failures", () => {
+	const input = {
+		phases: [
+			{
+				setting: "abandoned subway station",
+				theme: "mundane",
+				k: 0,
+				n: 1,
+				m: 1,
+			},
+		],
+	};
+
+	function buildFixtureWithMultipleErrors(): unknown {
+		return {
+			packs: [
+				{
+					setting: "abandoned subway station",
+					objectivePairs: [],
+					interestingObjects: [
+						{
+							id: "item1",
+							kind: "interesting_object",
+							name: "Brass Switch",
+							examineDescription:
+								"A small brass switch mounted on a panel. It looks like it should be pressed.",
+							useOutcome: "The switch clicks under your finger.",
+							// Missing activationFlavor — this is the first error
+							postExamineDescription:
+								"The switch sits locked in its on position.",
+							postLookFlavor:
+								"an amber pinpoint of light glows beside the panel",
+						},
+					],
+					obstacles: [
+						{
+							id: "obs1",
+							kind: "obstacle",
+							name: "Rusted Gate",
+							examineDescription: "An old rusted gate blocking the path.",
+							// Missing shiftFlavor — this is the second error
+						},
+					],
+					landmarks: {
+						north: {
+							shortName: "the signal tower",
+							horizonPhrase: "rises above the platform",
+						},
+						south: {
+							shortName: "the collapsed entrance",
+							horizonPhrase: "gapes like a wound in the dark",
+						},
+						east: {
+							shortName: "the rusted fan shaft",
+							horizonPhrase: "spins slowly in the stale air",
+						},
+						west: {
+							shortName: "the flooded tunnel",
+							horizonPhrase: "disappears into still black water",
+						},
+					},
+				},
+			],
+		};
+	}
+
+	it("surfaces multiple validation errors in one pass (pure-result API)", () => {
+		const result = validateContentPacks(
+			buildFixtureWithMultipleErrors(),
+			input,
+		);
+
+		// Assert that the result is a failure (ok === false)
+		expect(result.ok).toBe(false);
+
+		if (!result.ok) {
+			// Assert that we got at least two errors
+			expect(result.errors.length).toBeGreaterThanOrEqual(2);
+
+			// Extract the two errors and verify they are for different entities
+			const activationFlavorError = result.errors.find(
+				(err) => err.field === "activationFlavor",
+			);
+			const shiftFlavorError = result.errors.find(
+				(err) => err.field === "shiftFlavor",
+			);
+
+			expect(activationFlavorError).toBeDefined();
+			expect(shiftFlavorError).toBeDefined();
+
+			// Verify that they target different retry units (kinds)
+			expect(activationFlavorError?.retryUnit.kind).toBe("interesting-object");
+			expect(shiftFlavorError?.retryUnit.kind).toBe("obstacle");
+
+			// Verify that the entity IDs are different (item1 vs obs1)
+			expect(activationFlavorError?.entityId).toBe("item1");
+			expect(shiftFlavorError?.entityId).toBe("obs1");
+		}
 	});
 });
