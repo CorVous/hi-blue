@@ -2203,4 +2203,79 @@ describe("BrowserContentPackProvider — partial-retry layer", () => {
 		);
 		expect(mockChatFn).toHaveBeenCalledTimes(1);
 	});
+
+	it("Test 7 — {actor} drift in convergenceTier1Flavor → repaired in round 1 (2 chatFn calls)", async () => {
+		const mockChatFn = vi.fn();
+
+		// Call 1: broken pack ({actor} in convergenceTier1Flavor)
+		const brokenPack = buildValidPack();
+		const brokenPackPacks = (brokenPack as Record<string, unknown>).packs as
+			| Record<string, unknown>[]
+			| undefined;
+		if (brokenPackPacks?.[0]) {
+			const pair = (
+				(brokenPackPacks[0] as Record<string, unknown>)
+					.objectivePairs as Record<string, unknown>[]
+			)[0];
+			if (pair) {
+				const space = pair.space as Record<string, unknown>;
+				space.convergenceTier1Flavor = "{actor} stands at the pedestal.";
+			}
+		}
+		mockChatFn.mockResolvedValueOnce({
+			content: JSON.stringify(brokenPack),
+			reasoning: null,
+		});
+
+		// Call 2: repair response with valid convergenceTier1Flavor (no {actor})
+		const repair: ContentPackRepair = {
+			unitKind: "objective-pair",
+			phaseIndex: 0,
+			object: {
+				id: "obj1",
+				kind: "objective_object",
+				name: "Iron Key",
+				examineDescription:
+					"An iron key. It looks like it belongs on the brass pedestal.",
+				useOutcome: "You turn the key over in your hands.",
+				pairsWithSpaceId: "space1",
+				placementFlavor: "{actor} sets the key on its mount.",
+				proximityFlavor: "The key hums faintly near the pedestal.",
+			},
+			space: {
+				id: "space1",
+				kind: "objective_space",
+				name: "Brass Pedestal",
+				examineDescription:
+					"A sturdy brass mount. Press an item onto it to activate the mechanism; the space awaits a shared presence.",
+				activationFlavor:
+					"The pedestal hums to life and its surface flushes with warmth.",
+				satisfactionFlavor:
+					"The pedestal glows brightly as the objective completes.",
+				postExamineDescription: "The pedestal glows softly after activation.",
+				postLookFlavor: "the pedestal hums with residual warmth.",
+				convergenceTier1Flavor: "A lone figure stands at the pedestal.",
+				convergenceTier2Flavor: "Two figures converge at the pedestal.",
+				convergenceTier1ActorFlavor:
+					"You linger at the pedestal; the place feels poised for company.",
+				convergenceTier2ActorFlavor:
+					"You share the pedestal with another presence; the runes thrum.",
+			},
+		};
+		mockChatFn.mockResolvedValueOnce({
+			content: buildBatchedRepair([repair]),
+			reasoning: null,
+		});
+
+		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
+		const result = await provider.generateContentPacks(baseInput);
+
+		expect(mockChatFn).toHaveBeenCalledTimes(2);
+		expect(
+			result.packs[0]?.objectivePairs[0]?.space.convergenceTier1Flavor,
+		).toBe("A lone figure stands at the pedestal.");
+		expect(
+			result.packs[0]?.objectivePairs[0]?.space.convergenceTier1Flavor,
+		).not.toMatch(/{actor}/);
+	});
 });
