@@ -841,9 +841,20 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 	// Compute the relative direction from the plan's absolute cardinal.
 	const CARDINALS = ["north", "east", "south", "west"];
 	const RELATIVES = ["forward", "right", "back", "left"];
-	const witnessFacing =
-		(phase1Spatial?.[witnessId] as PersonaSpatial | undefined)?.facing ??
-		"north";
+
+	// Determine the witness's effective facing after any plan-driven mutations.
+	let witnessFacing: CardinalDirection;
+	if (plan.kind === "setup") {
+		witnessFacing = plan.witnessLookDir;
+	} else if (plan.kind === "patch") {
+		witnessFacing = plan.witnessNewFacing;
+	} else {
+		// "direct": no mutation, use phase1 snapshot
+		witnessFacing =
+			(phase1Spatial?.[witnessId] as PersonaSpatial | undefined)?.facing ??
+			"north";
+	}
+
 	const facingIdx = CARDINALS.indexOf(witnessFacing);
 	const dirIdx = CARDINALS.indexOf(direction);
 	const relativeDirection =
