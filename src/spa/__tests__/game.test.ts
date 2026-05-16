@@ -2531,9 +2531,9 @@ describe("renderGame — version-mismatch session with pending bootstrap (regres
 		});
 
 		const daemonPhases = {
-			"1": { phaseGoal: "", conversationLog: [] },
-			"2": { phaseGoal: "", conversationLog: [] },
-			"3": { phaseGoal: "", conversationLog: [] },
+			"1": { conversationLog: [] },
+			"2": { conversationLog: [] },
+			"3": { conversationLog: [] },
 		};
 		for (const aiId of ["red", "green", "cyan"] as const) {
 			stub._store[`${prefix}${aiId}.txt`] = JSON.stringify({
@@ -2616,9 +2616,9 @@ describe("renderGame — version-mismatch session with pending bootstrap (regres
 		});
 
 		const daemonPhases = {
-			"1": { phaseGoal: "", conversationLog: [] },
-			"2": { phaseGoal: "", conversationLog: [] },
-			"3": { phaseGoal: "", conversationLog: [] },
+			"1": { conversationLog: [] },
+			"2": { conversationLog: [] },
+			"3": { conversationLog: [] },
 		};
 		for (const aiId of ["red", "green", "cyan"] as const) {
 			stub._store[`${prefix}${aiId}.txt`] = JSON.stringify({

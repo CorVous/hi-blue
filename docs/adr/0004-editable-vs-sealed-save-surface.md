@@ -6,10 +6,10 @@
 
 The game state contains two categories of data:
 
-1. **Human-editable narrative state** — chat histories, whispered messages, phase goals, persona
-   definitions. Allowing a player to edit these with a text editor and reload is a desirable
-   affordance: it lets them correct bad AI outputs, adjust persona flavour, or replay a phase from
-   an edited starting point without corrupting the engine.
+1. **Human-editable narrative state** — chat histories, whispered messages, persona definitions.
+   Allowing a player to edit these with a text editor and reload is a desirable affordance: it lets
+   them correct bad AI outputs, adjust persona flavour, or replay a phase from an edited starting
+   point without corrupting the engine.
 
 2. **Engine-committed state** — the world (`WorldState.entities`), content packs, AI budgets, lockout
    sets, phase number, completion flag, per-daemon spatial positions. Allowing ad-hoc edits to these
@@ -32,7 +32,7 @@ Per-Session save data is split across **six localStorage files**:
 | `engine.dat` | `hi-blue:sessions/<id>/engine.dat` | Sealed |
 
 **Editable files contain:**
-- Daemon `.txt` files: per-daemon chat history and phase goals for all three phases.
+- Daemon `.txt` files: per-daemon chat history for all three phases.
 - `whispers.txt`: all whisper messages, keyed by phase.
 - `meta.json`: session timestamps, current phase number, current round (devtools-editable).
 

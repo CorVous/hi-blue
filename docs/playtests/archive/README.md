@@ -16,9 +16,8 @@ record them.
   `z-ai/glm-4.7` — see `src/model.ts`). Prove personas hold and at least
   one phase advances at the new model's price point.
 - Persona / phase / content-pack prompts in `src/spa/game/prompt-builder.ts`,
-  `src/content/personas.ts`, `src/content/phases.ts`, or
-  `src/content/goal-pool.ts` change in a way that could affect daemon
-  voice or behaviour.
+  `src/content/personas.ts`, or `src/content/phases.ts` change in a way
+  that could affect daemon voice or behaviour.
 - A change to the round loop, mention parser, or cone projector that you
   want to exercise end-to-end with a real LLM rather than stubs.
 
