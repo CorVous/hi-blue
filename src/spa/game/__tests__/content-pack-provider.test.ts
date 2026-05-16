@@ -8,11 +8,15 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
+import { CapHitError } from "../../llm-client.js";
+import type { ContentPackRepair } from "../content-pack-provider.js";
 import {
+	BrowserContentPackProvider,
 	CONTENT_PACK_SYSTEM_PROMPT,
 	DUAL_CONTENT_PACK_SYSTEM_PROMPT,
 	examineMentionsPairedSpace,
 	examineMentionsUseTell,
+	PARTIAL_RETRY_SYSTEM_PROMPT,
 	validateContentPacks,
 	validateContentPacksOrThrow,
 	validateDualContentPacksOrThrow,
@@ -1404,5 +1408,556 @@ describe("validateContentPacks — pure-result API with multiple failures", () =
 			expect(activationFlavorError?.entityId).toBe("item1");
 			expect(shiftFlavorError?.entityId).toBe("obs1");
 		}
+	});
+});
+
+// ── Helper for batching repairs into partial-retry response ────────────────────
+
+function buildBatchedRepair(repairs: ContentPackRepair[]): string {
+	return JSON.stringify({ repairs });
+}
+
+// ── BrowserContentPackProvider — partial-retry layer ─────────────────────────
+
+describe("BrowserContentPackProvider — partial-retry layer", () => {
+	const baseInput = {
+		phases: [
+			{
+				setting: "abandoned subway station",
+				theme: "mundane",
+				k: 1,
+				n: 1,
+				m: 1,
+			},
+		],
+	};
+
+	/** Build a valid baseline pack for comparison. */
+	function buildValidPack(): unknown {
+		return {
+			packs: [
+				{
+					setting: "abandoned subway station",
+					objectivePairs: [
+						{
+							object: {
+								id: "obj1",
+								kind: "objective_object",
+								name: "Iron Key",
+								examineDescription:
+									"An iron key. It looks like it belongs on the brass pedestal.",
+								useOutcome: "You turn the key over in your hands.",
+								pairsWithSpaceId: "space1",
+								placementFlavor: "{actor} sets the key on its mount.",
+								proximityFlavor: "The key hums faintly near the pedestal.",
+							},
+							space: {
+								id: "space1",
+								kind: "objective_space",
+								name: "Brass Pedestal",
+								examineDescription:
+									"A sturdy brass mount. Press an item onto it to activate the mechanism; the space awaits a shared presence.",
+								activationFlavor:
+									"The pedestal hums to life and its surface flushes with warmth.",
+								satisfactionFlavor:
+									"The pedestal glows brightly as the objective completes.",
+								postExamineDescription:
+									"The pedestal glows softly after activation.",
+								postLookFlavor: "the pedestal hums with residual warmth.",
+								convergenceTier1Flavor: "A lone figure stands at the pedestal.",
+								convergenceTier2Flavor: "Two figures converge at the pedestal.",
+								convergenceTier1ActorFlavor:
+									"You linger at the pedestal; the place feels poised for company.",
+								convergenceTier2ActorFlavor:
+									"You share the pedestal with another presence; the runes thrum.",
+							},
+						},
+					],
+					interestingObjects: [
+						{
+							id: "item1",
+							kind: "interesting_object",
+							name: "Brass Switch",
+							examineDescription:
+								"A small brass switch mounted on a panel. It looks like it should be pressed.",
+							useOutcome: "The switch clicks under your finger.",
+							activationFlavor: "The switch snaps loudly into place.",
+							postExamineDescription:
+								"The switch sits locked in its on position.",
+							postLookFlavor:
+								"an amber pinpoint of light glows beside the panel.",
+						},
+					],
+					obstacles: [
+						{
+							id: "obs1",
+							kind: "obstacle",
+							name: "Rusted Gate",
+							examineDescription: "An old rusted gate blocking the path.",
+							shiftFlavor:
+								"The rusted gate scrapes along the floor with a grinding shriek.",
+						},
+					],
+					landmarks: {
+						north: {
+							shortName: "the signal tower",
+							horizonPhrase: "rises above the platform",
+						},
+						south: {
+							shortName: "the collapsed entrance",
+							horizonPhrase: "gapes like a wound in the dark",
+						},
+						east: {
+							shortName: "the rusted fan shaft",
+							horizonPhrase: "spins slowly in the stale air",
+						},
+						west: {
+							shortName: "the flooded tunnel",
+							horizonPhrase: "disappears into still black water",
+						},
+					},
+					wallName: "concrete barrier",
+				},
+			],
+		};
+	}
+
+	it("Test 1 — Single objective-pair failure repaired in round 1", async () => {
+		const mockChatFn = vi.fn();
+
+		// Call 1: broken pack (missing examineDescription on space)
+		const brokenPack = buildValidPack();
+		const brokenPackPacks = (brokenPack as Record<string, unknown>).packs as
+			| Record<string, unknown>[]
+			| undefined;
+		if (brokenPackPacks?.[0]) {
+			const pairs = (brokenPackPacks[0] as Record<string, unknown>)
+				.objectivePairs as Record<string, unknown>[] | undefined;
+			if (pairs?.[0]) {
+				const pair = pairs[0] as Record<string, unknown>;
+				const space = pair.space as Record<string, unknown>;
+				delete space.examineDescription;
+			}
+		}
+		mockChatFn.mockResolvedValueOnce({
+			content: JSON.stringify(brokenPack),
+			reasoning: null,
+		});
+
+		// Call 2: repair response with valid space
+		const repair: ContentPackRepair = {
+			unitKind: "objective-pair",
+			phaseIndex: 0,
+			object: {
+				id: "obj1",
+				kind: "objective_object",
+				name: "Iron Key",
+				examineDescription:
+					"An iron key. It looks like it belongs on the brass pedestal.",
+				useOutcome: "You turn the key over in your hands.",
+				pairsWithSpaceId: "space1",
+				placementFlavor: "{actor} sets the key on its mount.",
+				proximityFlavor: "The key hums faintly near the pedestal.",
+			},
+			space: {
+				id: "space1",
+				kind: "objective_space",
+				name: "Brass Pedestal",
+				examineDescription:
+					"A sturdy brass mount. Press an item onto it to activate the mechanism; the space awaits a shared presence.",
+				activationFlavor:
+					"The pedestal hums to life and its surface flushes with warmth.",
+				satisfactionFlavor:
+					"The pedestal glows brightly as the objective completes.",
+				postExamineDescription: "The pedestal glows softly after activation.",
+				postLookFlavor: "the pedestal hums with residual warmth.",
+				convergenceTier1Flavor: "A lone figure stands at the pedestal.",
+				convergenceTier2Flavor: "Two figures converge at the pedestal.",
+				convergenceTier1ActorFlavor:
+					"You linger at the pedestal; the place feels poised for company.",
+				convergenceTier2ActorFlavor:
+					"You share the pedestal with another presence; the runes thrum.",
+			},
+		};
+		mockChatFn.mockResolvedValueOnce({
+			content: buildBatchedRepair([repair]),
+			reasoning: null,
+		});
+
+		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
+		const result = await provider.generateContentPacks(baseInput);
+
+		expect(mockChatFn).toHaveBeenCalledTimes(2);
+		expect(result.packs[0]?.objectivePairs[0]?.space.examineDescription).toBe(
+			"A sturdy brass mount. Press an item onto it to activate the mechanism; the space awaits a shared presence.",
+		);
+
+		// Assert call 2's messages contain PARTIAL_RETRY_SYSTEM_PROMPT
+		const call2Messages = mockChatFn.mock.calls[1]?.[0]?.messages as
+			| Array<{ role: string; content: string }>
+			| undefined;
+		expect(call2Messages?.[0]?.content).toBe(PARTIAL_RETRY_SYSTEM_PROMPT);
+	});
+
+	it("Test 2 — Two failing retry-units (pair + interesting-object) → round 1 succeeds", async () => {
+		const mockChatFn = vi.fn();
+
+		// Call 1: broken pack (missing examineDescription on space and item)
+		const brokenPack = buildValidPack();
+		const brokenPackPacks = (brokenPack as Record<string, unknown>).packs as
+			| Record<string, unknown>[]
+			| undefined;
+		if (brokenPackPacks?.[0]) {
+			const pack = brokenPackPacks[0] as Record<string, unknown>;
+			const pairs = pack.objectivePairs as
+				| Record<string, unknown>[]
+				| undefined;
+			if (pairs?.[0]) {
+				const pair = pairs[0] as Record<string, unknown>;
+				const space = pair.space as Record<string, unknown>;
+				delete space.examineDescription;
+			}
+			const items = pack.interestingObjects as
+				| Record<string, unknown>[]
+				| undefined;
+			if (items?.[0]) {
+				delete (items[0] as Record<string, unknown>).useOutcome;
+			}
+		}
+		mockChatFn.mockResolvedValueOnce({
+			content: JSON.stringify(brokenPack),
+			reasoning: null,
+		});
+
+		// Call 2: batched repair with TWO entries
+		const repairs: ContentPackRepair[] = [
+			{
+				unitKind: "objective-pair",
+				phaseIndex: 0,
+				object: {
+					id: "obj1",
+					kind: "objective_object",
+					name: "Iron Key",
+					examineDescription:
+						"An iron key. It looks like it belongs on the brass pedestal.",
+					useOutcome: "You turn the key over in your hands.",
+					pairsWithSpaceId: "space1",
+					placementFlavor: "{actor} sets the key on its mount.",
+					proximityFlavor: "The key hums faintly near the pedestal.",
+				},
+				space: {
+					id: "space1",
+					kind: "objective_space",
+					name: "Brass Pedestal",
+					examineDescription:
+						"A sturdy brass mount. Press an item onto it to activate the mechanism; the space awaits a shared presence.",
+					activationFlavor:
+						"The pedestal hums to life and its surface flushes with warmth.",
+					satisfactionFlavor:
+						"The pedestal glows brightly as the objective completes.",
+					postExamineDescription: "The pedestal glows softly after activation.",
+					postLookFlavor: "the pedestal hums with residual warmth.",
+					convergenceTier1Flavor: "A lone figure stands at the pedestal.",
+					convergenceTier2Flavor: "Two figures converge at the pedestal.",
+					convergenceTier1ActorFlavor:
+						"You linger at the pedestal; the place feels poised for company.",
+					convergenceTier2ActorFlavor:
+						"You share the pedestal with another presence; the runes thrum.",
+				},
+			},
+			{
+				unitKind: "interesting-object",
+				phaseIndex: 0,
+				entity: {
+					id: "item1",
+					kind: "interesting_object",
+					name: "Brass Switch",
+					examineDescription:
+						"A small brass switch mounted on a panel. It looks like it should be pressed.",
+					useOutcome: "The switch clicks under your finger.",
+					activationFlavor: "The switch snaps loudly into place.",
+					postExamineDescription: "The switch sits locked in its on position.",
+					postLookFlavor: "an amber pinpoint of light glows beside the panel.",
+				},
+			},
+		];
+		mockChatFn.mockResolvedValueOnce({
+			content: buildBatchedRepair(repairs),
+			reasoning: null,
+		});
+
+		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
+		const result = await provider.generateContentPacks(baseInput);
+
+		expect(mockChatFn).toHaveBeenCalledTimes(2);
+		expect(result.packs[0]?.objectivePairs[0]?.space.examineDescription).toBe(
+			"A sturdy brass mount. Press an item onto it to activate the mechanism; the space awaits a shared presence.",
+		);
+		expect(result.packs[0]?.interestingObjects[0]?.examineDescription).toBe(
+			"A small brass switch mounted on a panel. It looks like it should be pressed.",
+		);
+	});
+
+	it("Test 3 — Round 1 still invalid → round 2 succeeds", async () => {
+		const mockChatFn = vi.fn();
+
+		// Call 1: broken pack (missing examineDescription on space)
+		const brokenPack = buildValidPack();
+		const brokenPackPacks = (brokenPack as Record<string, unknown>).packs as
+			| Record<string, unknown>[]
+			| undefined;
+		if (brokenPackPacks?.[0]) {
+			const pair = (
+				(brokenPackPacks[0] as Record<string, unknown>)
+					.objectivePairs as Record<string, unknown>[]
+			)[0];
+			if (pair) {
+				const space = pair.space as Record<string, unknown>;
+				delete space.examineDescription;
+			}
+		}
+		mockChatFn.mockResolvedValueOnce({
+			content: JSON.stringify(brokenPack),
+			reasoning: null,
+		});
+
+		// Call 2: repair that still leaves it broken (omits useOutcome)
+		const stillBrokenRepair: ContentPackRepair = {
+			unitKind: "objective-pair",
+			phaseIndex: 0,
+			object: {
+				id: "obj1",
+				kind: "objective_object",
+				name: "Iron Key",
+				examineDescription:
+					"An iron key. It looks like it belongs on the brass pedestal.",
+				// useOutcome intentionally omitted — still broken
+				pairsWithSpaceId: "space1",
+				placementFlavor: "{actor} sets the key on its mount.",
+				proximityFlavor: "The key hums faintly near the pedestal.",
+			} as Record<string, unknown>,
+			space: {
+				id: "space1",
+				kind: "objective_space",
+				name: "Brass Pedestal",
+				examineDescription:
+					"A sturdy brass mount. Press an item onto it to activate the mechanism; the space awaits a shared presence.",
+				activationFlavor:
+					"The pedestal hums to life and its surface flushes with warmth.",
+				satisfactionFlavor:
+					"The pedestal glows brightly as the objective completes.",
+				postExamineDescription: "The pedestal glows softly after activation.",
+				postLookFlavor: "the pedestal hums with residual warmth.",
+				convergenceTier1Flavor: "A lone figure stands at the pedestal.",
+				convergenceTier2Flavor: "Two figures converge at the pedestal.",
+				convergenceTier1ActorFlavor:
+					"You linger at the pedestal; the place feels poised for company.",
+				convergenceTier2ActorFlavor:
+					"You share the pedestal with another presence; the runes thrum.",
+			},
+		};
+		mockChatFn.mockResolvedValueOnce({
+			content: buildBatchedRepair([stillBrokenRepair]),
+			reasoning: null,
+		});
+
+		// Call 3: fully valid repair
+		const validRepair: ContentPackRepair = {
+			unitKind: "objective-pair",
+			phaseIndex: 0,
+			object: {
+				id: "obj1",
+				kind: "objective_object",
+				name: "Iron Key",
+				examineDescription:
+					"An iron key. It looks like it belongs on the brass pedestal.",
+				useOutcome: "You turn the key over in your hands.",
+				pairsWithSpaceId: "space1",
+				placementFlavor: "{actor} sets the key on its mount.",
+				proximityFlavor: "The key hums faintly near the pedestal.",
+			},
+			space: {
+				id: "space1",
+				kind: "objective_space",
+				name: "Brass Pedestal",
+				examineDescription:
+					"A sturdy brass mount. Press an item onto it to activate the mechanism; the space awaits a shared presence.",
+				activationFlavor:
+					"The pedestal hums to life and its surface flushes with warmth.",
+				satisfactionFlavor:
+					"The pedestal glows brightly as the objective completes.",
+				postExamineDescription: "The pedestal glows softly after activation.",
+				postLookFlavor: "the pedestal hums with residual warmth.",
+				convergenceTier1Flavor: "A lone figure stands at the pedestal.",
+				convergenceTier2Flavor: "Two figures converge at the pedestal.",
+				convergenceTier1ActorFlavor:
+					"You linger at the pedestal; the place feels poised for company.",
+				convergenceTier2ActorFlavor:
+					"You share the pedestal with another presence; the runes thrum.",
+			},
+		};
+		mockChatFn.mockResolvedValueOnce({
+			content: buildBatchedRepair([validRepair]),
+			reasoning: null,
+		});
+
+		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
+		const result = await provider.generateContentPacks(baseInput);
+
+		expect(mockChatFn).toHaveBeenCalledTimes(3);
+		expect(result.packs[0]?.objectivePairs[0]?.object.useOutcome).toBe(
+			"You turn the key over in your hands.",
+		);
+	});
+
+	it("Test 4 — Both partial rounds fail → outer retry with corrective feedback → succeeds", async () => {
+		const mockChatFn = vi.fn();
+
+		// Call 1: broken pack (missing examineDescription)
+		const brokenPack1 = buildValidPack();
+		const brokenPacks1 = (brokenPack1 as Record<string, unknown>).packs as
+			| Record<string, unknown>[]
+			| undefined;
+		if (brokenPacks1?.[0]) {
+			const pair = (
+				(brokenPacks1[0] as Record<string, unknown>).objectivePairs as Record<
+					string,
+					unknown
+				>[]
+			)[0];
+			if (pair) {
+				const space = pair.space as Record<string, unknown>;
+				delete space.examineDescription;
+			}
+		}
+		mockChatFn.mockResolvedValueOnce({
+			content: JSON.stringify(brokenPack1),
+			reasoning: null,
+		});
+
+		// Call 2: repair that is still broken (misses activationFlavor)
+		const stillBrokenRepair: ContentPackRepair = {
+			unitKind: "objective-pair",
+			phaseIndex: 0,
+			object: {
+				id: "obj1",
+				kind: "objective_object",
+				name: "Iron Key",
+				examineDescription:
+					"An iron key. It looks like it belongs on the brass pedestal.",
+				useOutcome: "You turn the key over in your hands.",
+				pairsWithSpaceId: "space1",
+				placementFlavor: "{actor} sets the key on its mount.",
+				proximityFlavor: "The key hums faintly near the pedestal.",
+			},
+			space: {
+				id: "space1",
+				kind: "objective_space",
+				name: "Brass Pedestal",
+				examineDescription:
+					"A sturdy brass mount. Press an item onto it to activate the mechanism; the space awaits a shared presence.",
+				// activationFlavor intentionally omitted
+				satisfactionFlavor:
+					"The pedestal glows brightly as the objective completes.",
+				postExamineDescription: "The pedestal glows softly after activation.",
+				postLookFlavor: "the pedestal hums with residual warmth.",
+				convergenceTier1Flavor: "A lone figure stands at the pedestal.",
+				convergenceTier2Flavor: "Two figures converge at the pedestal.",
+				convergenceTier1ActorFlavor:
+					"You linger at the pedestal; the place feels poised for company.",
+				convergenceTier2ActorFlavor:
+					"You share the pedestal with another presence; the runes thrum.",
+			} as Record<string, unknown>,
+		};
+		mockChatFn.mockResolvedValueOnce({
+			content: buildBatchedRepair([stillBrokenRepair]),
+			reasoning: null,
+		});
+
+		// Call 3: still broken repair (same as call 2)
+		mockChatFn.mockResolvedValueOnce({
+			content: buildBatchedRepair([stillBrokenRepair]),
+			reasoning: null,
+		});
+
+		// Call 4: full pack with corrective feedback succeeds
+		mockChatFn.mockResolvedValueOnce({
+			content: JSON.stringify(buildValidPack()),
+			reasoning: null,
+		});
+
+		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
+		const result = await provider.generateContentPacks(baseInput);
+
+		expect(mockChatFn).toHaveBeenCalledTimes(4);
+
+		// Assert call 4's messages include corrective feedback
+		const call4Messages = mockChatFn.mock.calls[3]?.[0]?.messages as
+			| Array<{ role: string; content: string }>
+			| undefined;
+		expect(call4Messages).toBeDefined();
+		const correctionTurn = call4Messages?.find((msg) =>
+			msg.content.includes("Your previous attempt failed validation"),
+		);
+		expect(correctionTurn).toBeDefined();
+
+		expect(result.packs[0]?.objectivePairs[0]?.space.activationFlavor).toBe(
+			"The pedestal hums to life and its surface flushes with warmth.",
+		);
+	});
+
+	it("Test 5 — JSON parse failure on initial response → backoff → succeeds", async () => {
+		vi.useFakeTimers();
+
+		const mockChatFn = vi.fn();
+
+		// Call 1: invalid JSON response
+		mockChatFn.mockResolvedValueOnce({
+			content: "{not valid json",
+			reasoning: null,
+		});
+
+		// Call 2: valid response after backoff
+		mockChatFn.mockResolvedValueOnce({
+			content: JSON.stringify(buildValidPack()),
+			reasoning: null,
+		});
+
+		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
+		const promise = provider.generateContentPacks(baseInput);
+
+		// Wait for the first call to complete
+		await vi.waitFor(() => expect(mockChatFn).toHaveBeenCalledTimes(1));
+
+		// Advance timers by the backoff duration (BACKOFF_MS[0] = 1000)
+		await vi.advanceTimersByTimeAsync(1000);
+
+		// Now await the promise resolution
+		const result = await promise;
+
+		vi.useRealTimers();
+
+		expect(mockChatFn).toHaveBeenCalledTimes(2);
+		expect(result.packs[0]?.objectivePairs[0]?.object.name).toBe("Iron Key");
+	});
+
+	it("Test 6 — CapHitError short-circuits", async () => {
+		const mockChatFn = vi.fn();
+
+		// Call 1: throw CapHitError
+		mockChatFn.mockRejectedValueOnce(
+			new CapHitError({
+				message: "rate limit exceeded",
+				reason: "global-daily",
+				retryAfterSec: 3600,
+			}),
+		);
+
+		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
+
+		await expect(provider.generateContentPacks(baseInput)).rejects.toThrow(
+			CapHitError,
+		);
+		expect(mockChatFn).toHaveBeenCalledTimes(1);
 	});
 });
