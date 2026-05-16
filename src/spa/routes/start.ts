@@ -39,6 +39,8 @@ export const PERSISTENCE_WARNING_MESSAGES: Record<string, string> = {
 		"Saved game data is from an older version and has been discarded. Starting a new game.",
 	"legacy-save-discarded":
 		"Saved game data from an older format has been discarded. Starting a new game.",
+	stuck:
+		"Game initialization took too long and was cancelled. Starting a new game.",
 };
 
 /** The password that gates entry. */

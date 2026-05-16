@@ -2649,3 +2649,81 @@ describe("renderGame — version-mismatch session with pending bootstrap (regres
 		expect(saveSpy).not.toHaveBeenCalled();
 	});
 });
+
+// ── Bootstrap timeout tests ──────────────────────────────────────────────────
+describe("renderBootstrapLoadingFlow — timeout", () => {
+	beforeEach(() => {
+		// Reset timers before each test to avoid state leakage
+		vi.restoreAllMocks();
+		vi.resetModules();
+		vi.useRealTimers();
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+		vi.resetModules();
+		document.body.innerHTML = "";
+	});
+
+	it("bounces to #/start?reason=stuck when contentPacksPromise never settles", async () => {
+		vi.useFakeTimers();
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
+		document.body.innerHTML = INDEX_BODY_HTML;
+
+		// Override generateNewGameAssetsSplit so we control promise settlement.
+		vi.doMock("../game/bootstrap.js", async (importOriginal) => {
+			const actual =
+				await importOriginal<typeof import("../game/bootstrap.js")>();
+			return {
+				...actual,
+				generateNewGameAssetsSplit: () => ({
+					personasPromise: Promise.resolve(STATIC_PERSONAS),
+					contentPacksPromise: new Promise(() => {
+						// Never settles
+					}),
+				}),
+			};
+		});
+
+		vi.resetModules();
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+
+		// Mint an active session with no data.
+		const { mintAndActivateNewSession } = await import(
+			"../persistence/session-storage.js"
+		);
+		mintAndActivateNewSession();
+
+		// Start the bootstrap (like clicking CONNECT).
+		const { startBootstrap } = await import("../game/pending-bootstrap.js");
+		startBootstrap();
+
+		const { renderGame } = await import("../routes/game.js");
+		const renderPromise = renderGame(getEl<HTMLElement>("main"));
+
+		// Advance time past the timeout (90s + 1ms to be safe).
+		const { BOOTSTRAP_LOADING_TIMEOUT_MS } = await import("../routes/game.js");
+		await vi.advanceTimersByTimeAsync(BOOTSTRAP_LOADING_TIMEOUT_MS + 1);
+		// Flush microtasks so the timeout settler races ahead.
+		await vi.runAllTimersAsync();
+
+		// Wait for the render to complete (should have bounced).
+		await renderPromise;
+
+		// Assert the bounce to #/start?reason=stuck.
+		expect(location.hash).toBe("#/start?reason=stuck");
+		// Assert pending bootstrap was cleared.
+		const { getPendingBootstrap } = await import(
+			"../game/pending-bootstrap.js"
+		);
+		expect(getPendingBootstrap()).toBeUndefined();
+		// Assert active session was cleared.
+		const { getActiveSessionId } = await import(
+			"../persistence/session-storage.js"
+		);
+		expect(getActiveSessionId()).toBeNull();
+	});
+});
