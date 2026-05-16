@@ -2649,3 +2649,347 @@ describe("renderGame — version-mismatch session with pending bootstrap (regres
 		expect(saveSpy).not.toHaveBeenCalled();
 	});
 });
+
+// ── Bootstrap happy-path tests ──────────────────────────────────────────────
+describe("renderBootstrapLoadingFlow — happy path", () => {
+	beforeEach(() => {
+		// Reset timers before each test to avoid state leakage
+		vi.restoreAllMocks();
+		vi.resetModules();
+		vi.useRealTimers();
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+		vi.resetModules();
+		document.body.innerHTML = "";
+	});
+
+	it("settles content packs before timeout results in no stuck bounce", async () => {
+		vi.useFakeTimers();
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
+		document.body.innerHTML = INDEX_BODY_HTML;
+
+		// Override generateNewGameAssetsSplit so contentPacksPromise resolves but is slow
+		vi.doMock("../game/bootstrap.js", async (importOriginal) => {
+			const actual =
+				await importOriginal<typeof import("../game/bootstrap.js")>();
+			return {
+				...actual,
+				generateNewGameAssetsSplit: () => ({
+					personasPromise: Promise.resolve(STATIC_PERSONAS),
+					contentPacksPromise: new Promise((resolve) => {
+						// Resolve after 30 seconds (well before 90s timeout)
+						setTimeout(
+							() =>
+								resolve({
+									packsA: [STATIC_CONTENT_PACKS[0]],
+									packsB: [STATIC_CONTENT_PACKS[0]],
+								}),
+							30_000,
+						);
+					}),
+				}),
+			};
+		});
+
+		vi.resetModules();
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+
+		const { mintAndActivateNewSession } = await import(
+			"../persistence/session-storage.js"
+		);
+		mintAndActivateNewSession();
+
+		const { startBootstrap } = await import("../game/pending-bootstrap.js");
+		startBootstrap();
+
+		const { renderGame } = await import("../routes/game.js");
+		const renderPromise = renderGame(getEl<HTMLElement>("main"));
+
+		// Advance time to 60 seconds (below 90s timeout)
+		await vi.advanceTimersByTimeAsync(60_000);
+		await vi.runAllTimersAsync();
+
+		// Wait for render to complete
+		await renderPromise;
+
+		// Assert NO bounce to #/start?reason=stuck (which would indicate timeout)
+		expect(location.hash).not.toMatch(/reason=stuck/);
+	});
+});
+
+// ── Bootstrap timeout tests ──────────────────────────────────────────────────
+describe("renderBootstrapLoadingFlow — timeout", () => {
+	beforeEach(() => {
+		// Reset timers before each test to avoid state leakage
+		vi.restoreAllMocks();
+		vi.resetModules();
+		vi.useRealTimers();
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+		vi.resetModules();
+		document.body.innerHTML = "";
+	});
+
+	it("bounces to #/start?reason=stuck when contentPacksPromise never settles", async () => {
+		vi.useFakeTimers();
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
+		document.body.innerHTML = INDEX_BODY_HTML;
+
+		// Override generateNewGameAssetsSplit so we control promise settlement.
+		vi.doMock("../game/bootstrap.js", async (importOriginal) => {
+			const actual =
+				await importOriginal<typeof import("../game/bootstrap.js")>();
+			return {
+				...actual,
+				generateNewGameAssetsSplit: () => ({
+					personasPromise: Promise.resolve(STATIC_PERSONAS),
+					contentPacksPromise: new Promise(() => {
+						// Never settles
+					}),
+				}),
+			};
+		});
+
+		vi.resetModules();
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+
+		// Mint an active session with no data.
+		const { mintAndActivateNewSession } = await import(
+			"../persistence/session-storage.js"
+		);
+		mintAndActivateNewSession();
+
+		// Start the bootstrap (like clicking CONNECT).
+		const { startBootstrap } = await import("../game/pending-bootstrap.js");
+		startBootstrap();
+
+		const { renderGame } = await import("../routes/game.js");
+		const renderPromise = renderGame(getEl<HTMLElement>("main"));
+
+		// Advance time past the timeout (90s + 1ms to be safe).
+		const { BOOTSTRAP_LOADING_TIMEOUT_MS } = await import("../routes/game.js");
+		await vi.advanceTimersByTimeAsync(BOOTSTRAP_LOADING_TIMEOUT_MS + 1);
+		// Flush microtasks so the timeout settler races ahead.
+		await vi.runAllTimersAsync();
+
+		// Wait for the render to complete (should have bounced).
+		await renderPromise;
+
+		// Assert the bounce to #/start?reason=stuck.
+		expect(location.hash).toBe("#/start?reason=stuck");
+		// Assert pending bootstrap was cleared.
+		const { getPendingBootstrap } = await import(
+			"../game/pending-bootstrap.js"
+		);
+		expect(getPendingBootstrap()).toBeUndefined();
+		// Assert active session was cleared.
+		const { getActiveSessionId } = await import(
+			"../persistence/session-storage.js"
+		);
+		expect(getActiveSessionId()).toBeNull();
+	});
+});
+
+// ── Bootstrap promise propagation tests (Lever 2) ───────────────────────────────
+describe("renderBootstrapLoadingFlow — promise propagation", () => {
+	beforeEach(() => {
+		vi.restoreAllMocks();
+		vi.resetModules();
+		vi.useRealTimers();
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+		vi.resetModules();
+		document.body.innerHTML = "";
+	});
+
+	it("bounces to #/start?reason=broken when contentPacksPromise rejects with generic error after personasPromise resolves", async () => {
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
+		document.body.innerHTML = INDEX_BODY_HTML;
+
+		vi.doMock("../game/bootstrap.js", async (importOriginal) => {
+			const actual =
+				await importOriginal<typeof import("../game/bootstrap.js")>();
+			return {
+				...actual,
+				generateNewGameAssetsSplit: () => ({
+					personasPromise: Promise.resolve(STATIC_PERSONAS),
+					contentPacksPromise: Promise.reject(
+						new Error("content pack generation failed"),
+					),
+				}),
+			};
+		});
+
+		vi.resetModules();
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+
+		const { mintAndActivateNewSession } = await import(
+			"../persistence/session-storage.js"
+		);
+		mintAndActivateNewSession();
+
+		const { startBootstrap } = await import("../game/pending-bootstrap.js");
+		startBootstrap();
+
+		const { renderGame } = await import("../routes/game.js");
+		await renderGame(getEl<HTMLElement>("main"));
+
+		expect(location.hash).toBe("#/start?reason=broken");
+		const { getActiveSessionId } = await import(
+			"../persistence/session-storage.js"
+		);
+		expect(getActiveSessionId()).toBeNull();
+	});
+
+	it("bounces to #/start?reason=broken when personasPromise rejects immediately", async () => {
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
+		document.body.innerHTML = INDEX_BODY_HTML;
+
+		vi.doMock("../game/bootstrap.js", async (importOriginal) => {
+			const actual =
+				await importOriginal<typeof import("../game/bootstrap.js")>();
+			return {
+				...actual,
+				generateNewGameAssetsSplit: () => ({
+					personasPromise: Promise.reject(
+						new Error("persona synthesis failed"),
+					),
+					contentPacksPromise: Promise.resolve({
+						packsA: [STATIC_CONTENT_PACKS[0]],
+						packsB: [STATIC_CONTENT_PACKS[0]],
+					}),
+				}),
+			};
+		});
+
+		vi.resetModules();
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+
+		const { mintAndActivateNewSession } = await import(
+			"../persistence/session-storage.js"
+		);
+		mintAndActivateNewSession();
+
+		const { startBootstrap } = await import("../game/pending-bootstrap.js");
+		startBootstrap();
+
+		const { renderGame } = await import("../routes/game.js");
+		await renderGame(getEl<HTMLElement>("main"));
+
+		expect(location.hash).toBe("#/start?reason=broken");
+		const { getActiveSessionId } = await import(
+			"../persistence/session-storage.js"
+		);
+		expect(getActiveSessionId()).toBeNull();
+	});
+
+	it("shows #cap-hit panel when personasPromise rejects with CapHitError (stays at #/game)", async () => {
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
+		document.body.innerHTML = INDEX_BODY_HTML;
+
+		vi.doMock("../game/bootstrap.js", async (importOriginal) => {
+			const actual =
+				await importOriginal<typeof import("../game/bootstrap.js")>();
+			const { CapHitError } = await import("../llm-client.js");
+			return {
+				...actual,
+				generateNewGameAssetsSplit: () => ({
+					personasPromise: Promise.reject(
+						new CapHitError({
+							message: "rate limit exceeded",
+							reason: "per-ip-daily",
+							retryAfterSec: 3600,
+						}),
+					),
+					contentPacksPromise: Promise.resolve({
+						packsA: [STATIC_CONTENT_PACKS[0]],
+						packsB: [STATIC_CONTENT_PACKS[0]],
+					}),
+				}),
+			};
+		});
+
+		vi.resetModules();
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+
+		const { mintAndActivateNewSession } = await import(
+			"../persistence/session-storage.js"
+		);
+		mintAndActivateNewSession();
+
+		const { startBootstrap } = await import("../game/pending-bootstrap.js");
+		startBootstrap();
+
+		const { renderGame } = await import("../routes/game.js");
+		await renderGame(getEl<HTMLElement>("main"));
+
+		// Should stay at #/game (location not changed by cap-hit handler)
+		// and cap-hit panel should be visible
+		const capHitPanel = document.querySelector<HTMLElement>("#cap-hit");
+		expect(capHitPanel?.hasAttribute("hidden")).toBe(false);
+	});
+
+	it("bounces to #/start?reason=broken when contentPacksPromise rejects with UpstreamErrorBodyError", async () => {
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
+		document.body.innerHTML = INDEX_BODY_HTML;
+
+		vi.doMock("../game/bootstrap.js", async (importOriginal) => {
+			const actual =
+				await importOriginal<typeof import("../game/bootstrap.js")>();
+			const { UpstreamErrorBodyError } = await import("../llm-client.js");
+			return {
+				...actual,
+				generateNewGameAssetsSplit: () => ({
+					personasPromise: Promise.resolve(STATIC_PERSONAS),
+					contentPacksPromise: Promise.reject(
+						new UpstreamErrorBodyError({
+							upstreamMessage: "service stalled",
+							upstreamCode: "service_error",
+						}),
+					),
+				}),
+			};
+		});
+
+		vi.resetModules();
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+
+		const { mintAndActivateNewSession } = await import(
+			"../persistence/session-storage.js"
+		);
+		mintAndActivateNewSession();
+
+		const { startBootstrap } = await import("../game/pending-bootstrap.js");
+		startBootstrap();
+
+		const { renderGame } = await import("../routes/game.js");
+		await renderGame(getEl<HTMLElement>("main"));
+
+		expect(location.hash).toBe("#/start?reason=broken");
+		const { getActiveSessionId } = await import(
+			"../persistence/session-storage.js"
+		);
+		expect(getActiveSessionId()).toBeNull();
+	});
+});

@@ -24,6 +24,21 @@ export class CapHitError extends Error {
 	}
 }
 
+export class UpstreamErrorBodyError extends Error {
+	readonly upstreamMessage: string;
+	readonly upstreamCode: string | null;
+
+	constructor(opts: {
+		upstreamMessage: string;
+		upstreamCode?: string;
+	}) {
+		super(`upstream returned 200 with error body: ${opts.upstreamMessage}`);
+		this.name = "UpstreamErrorBodyError";
+		this.upstreamMessage = opts.upstreamMessage;
+		this.upstreamCode = opts.upstreamCode ?? null;
+	}
+}
+
 export async function parseCapHitFromResponse(
 	response: Response,
 ): Promise<CapHitError | null> {
@@ -235,6 +250,27 @@ export async function chatCompletionJson(opts: {
 		body = await response.json();
 	} catch {
 		throw new Error("chatCompletionJson: failed to parse response JSON");
+	}
+
+	// Check for error in 200-OK response body before proceeding to extract choices
+	if (body != null && typeof body === "object") {
+		const bodyObj = body as Record<string, unknown>;
+		if (bodyObj.error != null && typeof bodyObj.error === "object") {
+			const errorObj = bodyObj.error as Record<string, unknown>;
+			const message =
+				typeof errorObj.message === "string"
+					? errorObj.message
+					: "unknown error";
+			const code =
+				typeof errorObj.code === "string" ? errorObj.code : undefined;
+			const opts: { upstreamMessage: string; upstreamCode?: string } = {
+				upstreamMessage: message,
+			};
+			if (code !== undefined) {
+				opts.upstreamCode = code;
+			}
+			throw new UpstreamErrorBodyError(opts);
+		}
 	}
 
 	const msg =

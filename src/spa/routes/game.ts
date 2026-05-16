@@ -41,6 +41,10 @@ import {
 	saveActiveSession,
 } from "../persistence/session-storage.js";
 
+/** Maximum time allowed for bootstrap loading (personas + content packs) before
+ * timing out and bouncing to #/start?reason=stuck. */
+export const BOOTSTRAP_LOADING_TIMEOUT_MS = 90_000;
+
 /** Lowercased persona name for transcript prefixes (`> *ember <msg>`). */
 function transcriptName(name: string): string {
 	return name.toLowerCase();
@@ -453,6 +457,14 @@ export function renderGame(
 		}
 	}
 
+	/** Error thrown when bootstrap loading exceeds BOOTSTRAP_LOADING_TIMEOUT_MS. */
+	class BootstrapTimeoutError extends Error {
+		constructor() {
+			super("bootstrap loading timed out");
+			this.name = "BootstrapTimeoutError";
+		}
+	}
+
 	/** Async loading flow: render an empty "loading daemons" screen
 	 * immediately, populate panels with names + braille spinners when
 	 * personas resolve, run a fake-progress brightness wipe while waiting
@@ -585,7 +597,8 @@ export function renderGame(
 			});
 		};
 
-		return pending.personasPromise
+		// Create the bootstrap promise chain
+		const bootstrapPromise = pending.personasPromise
 			.then((personas) => {
 				buildLoadingPersonaShape(personas);
 				setStageLoadState("generating-room");
@@ -650,7 +663,18 @@ export function renderGame(
 				session = built;
 				cachedSessionId = getActiveSessionId();
 				return renderGame(root, params);
-			})
+			});
+
+		// Create a timeout promise that rejects after BOOTSTRAP_LOADING_TIMEOUT_MS
+		let timeoutId: ReturnType<typeof setTimeout> | undefined;
+		const timeoutPromise = new Promise<never>((_resolve, reject) => {
+			timeoutId = setTimeout(() => {
+				reject(new BootstrapTimeoutError());
+			}, BOOTSTRAP_LOADING_TIMEOUT_MS);
+		});
+
+		// Race the bootstrap against the timeout
+		return Promise.race([bootstrapPromise, timeoutPromise])
 			.catch((err: unknown) => {
 				cleanupLoadingTimers();
 				clearPendingBootstrap();
@@ -660,10 +684,24 @@ export function renderGame(
 					if (composerEl) composerEl.setAttribute("hidden", "");
 					return;
 				}
+				// Handle timeout separately from other errors
+				if (err instanceof BootstrapTimeoutError) {
+					clearActiveSession();
+					if (typeof location !== "undefined") {
+						location.hash = "#/start?reason=stuck";
+					}
+					return;
+				}
 				// Anything else: bounce to start with a generic broken reason.
 				clearActiveSession();
 				if (typeof location !== "undefined") {
 					location.hash = "#/start?reason=broken";
+				}
+			})
+			.finally(() => {
+				// Always clear the timeout timer, whether the race succeeded or failed
+				if (timeoutId !== undefined) {
+					clearTimeout(timeoutId);
 				}
 			});
 	}

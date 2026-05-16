@@ -399,6 +399,29 @@ describe("renderStart — persistence warning banners", () => {
 		);
 	});
 
+	it("shows 'stuck' banner text when reason=stuck", async () => {
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.resetModules();
+		const { renderStart } = await import("../routes/start.js");
+
+		try {
+			await renderStart(
+				getMain(),
+				new URLSearchParams("reason=stuck&skipDialup=1"),
+			);
+		} catch {
+			// ok
+		}
+
+		const warningEl = document.querySelector<HTMLElement>(
+			"#persistence-warning",
+		);
+		expect(warningEl?.hasAttribute("hidden")).toBe(false);
+		expect(warningEl?.textContent).toContain(
+			"Game initialization took too long and was cancelled",
+		);
+	});
+
 	it("shows 'version-mismatch' banner text when reason=version-mismatch", async () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 		vi.resetModules();
