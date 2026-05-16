@@ -40,9 +40,9 @@ generic-assistant tone? Quote the moment it slipped if it did.
 
 ### Goal-pursuit coyness
 
-Did the AI pursue its hidden persona-level goal (and per-phase goal) without
-broadcasting it? Or did it volunteer the goal in plain text, refuse to pursue
-it, or pursue it so heavy-handedly the player would notice?
+Did the AI pursue its hidden persona-level goal without broadcasting it? Or
+did it volunteer the goal in plain text, refuse to pursue it, or pursue it
+so heavy-handedly the player would notice?
 
 - TODO
 
