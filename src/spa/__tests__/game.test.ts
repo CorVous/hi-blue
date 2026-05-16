@@ -202,6 +202,18 @@ function makeAiSseStream(_jsonAction: string): ReadableStream<Uint8Array> {
 }
 
 /**
+ * Creates an SSE response body that yields text-only content (no tool call).
+ * Used for testing drift-to-silence recovery (#254): when a daemon returns
+ * text without a tool call, it triggers a retry.
+ */
+function makeTextOnlySseStream(text: string): ReadableStream<Uint8Array> {
+	const deltaChunk = `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`;
+	const usageChunk = `data: ${JSON.stringify({ choices: [], usage: { cost: 0.01, total_tokens: 100 } })}\n\n`;
+	const sseData = `${deltaChunk}${usageChunk}data: [DONE]\n\n`;
+	return makeSSEStream([sseData]);
+}
+
+/**
  * Creates an SSE response body that yields a `message` tool call (AI→blue).
  * This is the v4 way to have an AI "chat back" so the content lands in conversationLogs
  * and is restored on reload.
@@ -2484,6 +2496,133 @@ describe("renderGame — round error surfacing (issue #231)", () => {
 		expect(topinfoRight.textContent).toContain("connection stable");
 		const pipAfter = topinfoRight.querySelector("span");
 		expect(pipAfter?.className).toBe("ok");
+	});
+});
+
+// Regression for #254: when a daemon drifts (produces text without a tool call)
+// and the retry path fires, surface a transient "<daemon> hesitated" indicator
+// in #round-error (reusing #231's element) to signal the player that a drift
+// occurred (whether recovered or not). The indicator clears on the next round.
+describe("renderGame — drift-to-silence indicator (issue #254)", () => {
+	let _stub: ReturnType<typeof makeLocalStorageStub>;
+
+	beforeEach(async () => {
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
+		document.body.innerHTML = INDEX_BODY_HTML;
+		_stub = makeLocalStorageStub();
+		await seedSessionInStub(_stub);
+		vi.stubGlobal("localStorage", _stub);
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+		vi.resetModules();
+		document.body.innerHTML = "";
+	});
+
+	it("surfaces #round-error 'hesitated' after a daemon drifts and recovers; clears on next round", async () => {
+		// Set up a four-call fetch mock:
+		// 1. Red: text-only (drifts), triggers retry
+		// 2. Red: retry with message tool call (recovered)
+		// 3. Green: pass
+		// 4. Cyan: pass
+		// Then for the second round, all daemons return clean (no drift):
+		// 5. Red: message tool call
+		// 6. Green: message tool call
+		// 7. Cyan: message tool call
+		const driftAndRecoverFetch = vi
+			.fn()
+			.mockResolvedValueOnce({
+				ok: true,
+				status: 200,
+				statusText: "OK",
+				// Red first attempt: text only (no tool call) — triggers retry
+				body: makeTextOnlySseStream("I'd like to say something"),
+			})
+			.mockResolvedValueOnce({
+				ok: true,
+				status: 200,
+				statusText: "OK",
+				// Red retry: message tool call (recovers)
+				body: makeMessageToolCallSseStream("RED_RECOVERED"),
+			})
+			.mockResolvedValueOnce({
+				ok: true,
+				status: 200,
+				statusText: "OK",
+				// Green: pass
+				body: makeAiSseStream(PASS_ACTION),
+			})
+			.mockResolvedValueOnce({
+				ok: true,
+				status: 200,
+				statusText: "OK",
+				// Cyan: pass
+				body: makeAiSseStream(PASS_ACTION),
+			})
+			// Second round: all clean
+			.mockResolvedValueOnce({
+				ok: true,
+				status: 200,
+				statusText: "OK",
+				body: makeMessageToolCallSseStream("RED_SECOND"),
+			})
+			.mockResolvedValueOnce({
+				ok: true,
+				status: 200,
+				statusText: "OK",
+				body: makeMessageToolCallSseStream("GREEN_SECOND"),
+			})
+			.mockResolvedValueOnce({
+				ok: true,
+				status: 200,
+				statusText: "OK",
+				body: makeMessageToolCallSseStream("CYAN_SECOND"),
+			});
+		vi.stubGlobal("fetch", driftAndRecoverFetch);
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+
+		vi.resetModules();
+		const { renderGame } = await import("../routes/game.js");
+		await renderGame(getEl<HTMLElement>("main"));
+
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		const form = getEl<HTMLFormElement>("#composer");
+		const roundError = getEl<HTMLOutputElement>("#round-error");
+		const topinfoRight = getEl<HTMLElement>("#topinfo-right");
+
+		// First submit: red drifts and recovers
+		promptInput.value = "*Ember hello";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		// 1. Inline error visible with hesitated text (from Red's persona name)
+		expect(roundError.hasAttribute("hidden")).toBe(false);
+		expect(roundError.textContent?.trim()).toContain("hesitated");
+		// The persona name "Ember" should be in the message
+		expect(roundError.textContent).toMatch(/ember|Ember/i);
+
+		// 2. Topinfo right cell shows "connection stable" (drift is a successful round, not a wire error)
+		expect(topinfoRight.textContent).toContain("connection stable");
+		const pip = topinfoRight.querySelector("span");
+		expect(pip?.className).toBe("ok");
+
+		// Second submit: all daemons return clean; the indicator should clear
+		promptInput.value = "*Ember retry";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		// The pre-submit clear (around lines 1186-1190 in game.ts) should have hidden it
+		expect(roundError.hasAttribute("hidden")).toBe(true);
+		expect(roundError.textContent ?? "").toBe("");
 	});
 });
 

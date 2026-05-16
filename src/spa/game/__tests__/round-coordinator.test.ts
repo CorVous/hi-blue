@@ -518,6 +518,165 @@ describe("drift-to-silence retry (#254)", () => {
 		// first attempt must not slip in either.
 		expect(toolRoundtrip.red).toBeUndefined();
 	});
+
+	it("fires onAiDrift(aiId, recovered=true) when the retry rescues the turn", async () => {
+		const game = makeGame();
+		const provider = new MockRoundLLMProvider([
+			// red: text-only first attempt → triggers retry
+			{ assistantText: "I'd say hello to blue.", toolCalls: [] },
+			// red retry: emits the message
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "msg_retry",
+						name: "message",
+						argumentsJson: JSON.stringify({
+							to: "blue",
+							content: "Hello blue!",
+						}),
+					},
+				],
+			},
+			// green, cyan: pass
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const driftCalls: Array<{ aiId: AiId; recovered: boolean }> = [];
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			provider,
+			undefined,
+			["red", "green", "cyan"] as AiId[],
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			(aiId, recovered) => driftCalls.push({ aiId, recovered }),
+		);
+
+		// Callback fires exactly once for red with recovered=true
+		expect(driftCalls).toHaveLength(1);
+		expect(driftCalls[0]).toEqual({ aiId: "red", recovered: true });
+
+		// Message still lands in conversation log
+		const redLog = nextState.conversationLogs.red ?? [];
+		expect(
+			redLog.some(
+				(e) =>
+					e.kind === "message" &&
+					e.from === "red" &&
+					e.content.includes("Hello blue!"),
+			),
+		).toBe(true);
+	});
+
+	it("fires onAiDrift(aiId, recovered=false) when the retry also drops", async () => {
+		const game = makeGame();
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "I think I should say something.", toolCalls: [] },
+			// retry also drops
+			{ assistantText: "still no tool call here.", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const driftCalls: Array<{ aiId: AiId; recovered: boolean }> = [];
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			provider,
+			undefined,
+			["red", "green", "cyan"] as AiId[],
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			(aiId, recovered) => driftCalls.push({ aiId, recovered }),
+		);
+
+		// Callback fires exactly once for red with recovered=false
+		expect(driftCalls).toHaveLength(1);
+		expect(driftCalls[0]).toEqual({ aiId: "red", recovered: false });
+
+		// Action becomes pass
+		const redLog = nextState.conversationLogs.red ?? [];
+		const redMsgs = redLog.filter(
+			(e) => e.kind === "message" && e.from === "red",
+		);
+		expect(redMsgs).toHaveLength(0);
+	});
+
+	it("does not fire onAiDrift when the first attempt has a tool call", async () => {
+		const game = makeGame();
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "I will take the flower",
+				toolCalls: [
+					{
+						id: "call_1",
+						name: "pick_up",
+						argumentsJson: '{"item":"flower"}',
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const driftCalls: Array<{ aiId: AiId; recovered: boolean }> = [];
+		await runRound(
+			game,
+			"red",
+			"hi",
+			provider,
+			undefined,
+			["red", "green", "cyan"] as AiId[],
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			(aiId, recovered) => driftCalls.push({ aiId, recovered }),
+		);
+
+		// Callback never fires — no retry happened
+		expect(driftCalls).toHaveLength(0);
+	});
+
+	it("does not fire onAiDrift when the first attempt is a true pass (empty text)", async () => {
+		const game = makeGame();
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const driftCalls: Array<{ aiId: AiId; recovered: boolean }> = [];
+		await runRound(
+			game,
+			"red",
+			"hi",
+			provider,
+			undefined,
+			["red", "green", "cyan"] as AiId[],
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			(aiId, recovered) => driftCalls.push({ aiId, recovered }),
+		);
+
+		// Callback never fires — no retry happened
+		expect(driftCalls).toHaveLength(0);
+	});
 });
 
 // ----------------------------------------------------------------------------

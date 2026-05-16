@@ -1267,6 +1267,9 @@ export function renderGame(
 			const provider = new BrowserLLMProvider({
 				disableReasoning: !enableReasoning,
 			});
+			// Capture current state for use in callbacks (TypeScript doesn't guarantee
+			// module-level `session` won't be reassigned during async operations)
+			const sessionState = session.getState();
 			// Strip each daemon's spinner as the coordinator finishes its
 			// turn (post-retry per #254). Coordinator awaits AIs serially in
 			// initiative order, so this fires staged in real time —
@@ -1279,6 +1282,15 @@ export function renderGame(
 				initiative,
 				undefined,
 				(aiId) => stripSpinner(aiId),
+				(aiId, _recovered) => {
+					const personaName = sessionState.personas[aiId]?.name ?? aiId;
+					const roundErrorEl =
+						doc.querySelector<HTMLOutputElement>("#round-error");
+					if (roundErrorEl) {
+						roundErrorEl.textContent = `${personaName} hesitated`;
+						roundErrorEl.removeAttribute("hidden");
+					}
+				},
 			);
 
 			const events = encodeRoundResult(

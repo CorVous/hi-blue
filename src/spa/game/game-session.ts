@@ -101,6 +101,8 @@ export class GameSession {
 	 * @param onAiDelta  Optional per-AI live-delta callback. Fires synchronously inside
 	 *   the SSE parser loop for each text chunk arriving from the wire.
 	 *   Never called for locked-out AIs or mock providers that ignore onDelta.
+	 * @param onAiTurnComplete  Optional per-AI "turn finished" callback.
+	 * @param onAiDrift  Optional per-AI drift-to-silence callback.
 	 */
 	async submitMessage(
 		addressed: AiId,
@@ -109,6 +111,7 @@ export class GameSession {
 		initiative?: AiId[],
 		onAiDelta?: (aiId: AiId, text: string) => void,
 		onAiTurnComplete?: (aiId: AiId) => void,
+		onAiDrift?: (aiId: AiId, recovered: boolean) => void,
 	): Promise<SubmitMessageResult> {
 		const turnOrder = initiative ?? Object.keys(this.state.personas);
 
@@ -136,6 +139,7 @@ export class GameSession {
 			onAiDelta,
 			this.coneSnapshots,
 			onAiTurnComplete,
+			onAiDrift,
 		);
 
 		// Fill in empty string for AIs whose completions weren't captured

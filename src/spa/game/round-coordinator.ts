@@ -119,6 +119,12 @@ export interface RunRoundResult {
  *   exactly once per AI in initiative order, AFTER any drift-to-silence
  *   retry (#254) has resolved and after dispatch. Fires for locked-out
  *   AIs too (so callers can clear per-AI UI state uniformly).
+ * @param onAiDrift  Optional per-AI drift-to-silence callback. Fires when a
+ *   daemon's turn drifts (produces text without a tool call) and the retry
+ *   resolves. Fires exactly once per drifted AI, after retry completes,
+ *   with a recovered flag indicating whether the retry rescued the turn
+ *   (recovered=true means a tool call landed; recovered=false means it also
+ *   dropped to pass).
  */
 export async function runRound(
 	game: GameState,
@@ -132,6 +138,7 @@ export async function runRound(
 	onAiDelta?: (aiId: AiId, text: string) => void,
 	priorConeSnapshots?: Partial<Record<AiId, string>>,
 	onAiTurnComplete?: (aiId: AiId) => void,
+	onAiDrift?: (aiId: AiId, recovered: boolean) => void,
 ): Promise<RunRoundResult> {
 	const aiOrder = Object.keys(game.personas);
 
@@ -233,6 +240,10 @@ export async function runRound(
 			if (retry.costUsd !== undefined) {
 				costUsd = (costUsd ?? 0) + retry.costUsd;
 			}
+			// Fire drift callback after retry resolves, indicating whether
+			// the retry rescued the turn (tool call landed).
+			const recovered = retry.toolCalls.length > 0;
+			onAiDrift?.(aiId, recovered);
 		}
 
 		// Capture completion text
