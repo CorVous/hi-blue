@@ -11,7 +11,12 @@ import {
 	buildSilentTurn,
 } from "../openai-message-builder";
 import { buildAiContext } from "../prompt-builder";
-import type { AiPersona, ContentPack, ToolRoundtripMessage } from "../types";
+import type {
+	AiPersona,
+	ContentPack,
+	ConversationEntry,
+	ToolRoundtripMessage,
+} from "../types";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -736,6 +741,77 @@ describe("buildOpenAiMessages — action-failure entries", () => {
 		expect(toolMsg).toBeDefined();
 		if (toolMsg?.role === "tool") {
 			expect(toolMsg.content).toContain("FAILED:");
+		}
+	});
+});
+
+describe("buildOpenAiMessages — tool-call coneDelta (#376)", () => {
+	it("tool-call entry with coneDelta renders tool message with <noticed> block", () => {
+		const game = makeGame();
+		const toolCallWithDelta: ConversationEntry = {
+			kind: "tool-call",
+			round: 1,
+			aiId: "red",
+			toolCallId: "go_call_1",
+			toolArgumentsJson: '{"direction":"forward"}',
+			toolName: "go",
+			result: "Ember moved forward.",
+			success: true,
+			coneDelta: "+ at directly in front, right: *green",
+		};
+		const modified = {
+			...game,
+			conversationLogs: {
+				...game.conversationLogs,
+				red: [toolCallWithDelta],
+			},
+		};
+		const ctx = buildAiContext(modified, "red");
+		const messages = buildOpenAiMessages(ctx);
+
+		const toolMsg = messages.find(
+			(m) => m.role === "tool" && m.tool_call_id === "go_call_1",
+		);
+		expect(toolMsg).toBeDefined();
+		if (toolMsg?.role === "tool") {
+			expect(toolMsg.content).toContain("Ember moved forward.");
+			expect(toolMsg.content).toContain("<noticed>");
+			expect(toolMsg.content).toContain(
+				"+ at directly in front, right: *green",
+			);
+			expect(toolMsg.content).toContain("</noticed>");
+		}
+	});
+
+	it("tool-call entry without coneDelta renders tool message as plain result (back-compat)", () => {
+		const game = makeGame();
+		const legacyToolCall: ConversationEntry = {
+			kind: "tool-call",
+			round: 1,
+			aiId: "red",
+			toolCallId: "pick_call_1",
+			toolArgumentsJson: '{"item":"flower"}',
+			toolName: "pick_up",
+			result: "Ember picked up the flower.",
+			success: true,
+		};
+		const modified = {
+			...game,
+			conversationLogs: {
+				...game.conversationLogs,
+				red: [legacyToolCall],
+			},
+		};
+		const ctx = buildAiContext(modified, "red");
+		const messages = buildOpenAiMessages(ctx);
+
+		const toolMsg = messages.find(
+			(m) => m.role === "tool" && m.tool_call_id === "pick_call_1",
+		);
+		expect(toolMsg).toBeDefined();
+		if (toolMsg?.role === "tool") {
+			expect(toolMsg.content).toBe("Ember picked up the flower.");
+			expect(toolMsg.content).not.toContain("<noticed>");
 		}
 	});
 });

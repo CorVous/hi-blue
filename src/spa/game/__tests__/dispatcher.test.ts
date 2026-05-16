@@ -1843,3 +1843,66 @@ describe("dispatchAiTurn — use on objective_space surfaces activationFlavor to
 		}
 	});
 });
+
+// ── cone-delta on dispatcher result (issue #376) ──────────────────────────────
+describe("dispatchAiTurn — cone-delta computation (issue #376)", () => {
+	it("go action that reveals a stationary actor sets actorConeDelta on DispatchResult", () => {
+		// Setup: red at (2,0) facing north, green at (0,1) facing south.
+		// Red goes north to (1,0) — now green at (0,1) is visible (distance 1, front-right).
+		const pack = makePackWithEntities(
+			{
+				flower: { row: 3, col: 3 },
+				key: "red",
+			},
+			[],
+		);
+
+		const packWithCustomStarts: ContentPack = {
+			...pack,
+			aiStarts: {
+				red: { position: { row: 2, col: 0 }, facing: "north" },
+				green: { position: { row: 0, col: 1 }, facing: "south" },
+				cyan: { position: { row: 5, col: 0 }, facing: "north" },
+			},
+		};
+
+		const game = startGame(TEST_PERSONAS, packWithCustomStarts, {
+			budgetPerAi: 5,
+			rng: FIXED_RNG,
+		});
+
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "go", args: { direction: "forward" } },
+		};
+		const result = dispatchAiTurn(game, action);
+		expect(result.rejected).toBe(false);
+		expect(result.actorConeDelta).toBeDefined();
+		expect(result.actorConeDelta).toContain("*green");
+	});
+
+	it("look action that doesn't change cone delta returns actorConeDelta as undefined", () => {
+		// Red faces north and looks forward → still faces north, snapshots identical.
+		const game = makeGame();
+
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "look", args: { direction: "forward" } },
+		};
+		const result = dispatchAiTurn(game, action);
+		expect(result.rejected).toBe(false);
+		expect(result.actorConeDelta).toBeUndefined();
+	});
+
+	it("non-go/look tools never set actorConeDelta", () => {
+		const game = makeGame();
+
+		const action: AiTurnAction = {
+			aiId: "red",
+			toolCall: { name: "pick_up", args: { item: "flower" } },
+		};
+		const result = dispatchAiTurn(game, action);
+		expect(result.rejected).toBe(false);
+		expect(result.actorConeDelta).toBeUndefined();
+	});
+});

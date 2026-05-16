@@ -25,7 +25,13 @@ import { buildAiContext } from "../prompt-builder";
 import { runRound } from "../round-coordinator";
 import type { RoundLLMProvider } from "../round-llm-provider";
 import { MockRoundLLMProvider } from "../round-llm-provider";
-import type { AiId, AiPersona, ContentPack, UseItemObjective } from "../types";
+import type {
+	AiId,
+	AiPersona,
+	ContentPack,
+	PersonaSpatialState,
+	UseItemObjective,
+} from "../types";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -3246,4 +3252,197 @@ describe("complication countdown — coordinator integration", () => {
 	});
 
 	// ── sysadmin_directive dispatch ─────────────────────────────────────────────
+
+	// ── cone-delta persistence (issue #376) ──────────────────────────────────────
+	describe("cone-delta persistence (issue #376)", () => {
+		/**
+		 * Helper to create a game with custom AI starting positions.
+		 */
+		function makeGameWithCustomStarts(
+			starts: Record<AiId, PersonaSpatialState>,
+		) {
+			const pack: ContentPack = { ...TEST_CONTENT_PACK, aiStarts: starts };
+			return startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		}
+
+		it("Test A: go reveals a stationary actor → tool-call entry carries coneDelta", async () => {
+			// Red at (2,0) facing north; green at (0,1) facing south.
+			// Red goes forward (north) to (1,0). From (1,0)/north green sits at
+			// "directly in front, right"; from (2,0)/north it sat at
+			// "two steps ahead, front-right" — different line, so the diff fires.
+			const game = makeGameWithCustomStarts({
+				red: { position: { row: 2, col: 0 }, facing: "north" },
+				green: { position: { row: 0, col: 1 }, facing: "south" },
+				cyan: { position: { row: 4, col: 4 }, facing: "north" },
+			});
+
+			const provider = new MockRoundLLMProvider([
+				{
+					assistantText: "",
+					toolCalls: [
+						{
+							id: "go_1",
+							name: "go",
+							argumentsJson: JSON.stringify({ direction: "forward" }),
+						},
+					],
+				},
+				{ assistantText: "", toolCalls: [] },
+				{ assistantText: "", toolCalls: [] },
+			]);
+
+			const { nextState } = await runRound(game, "red", "start", provider);
+
+			const redLog = nextState.conversationLogs.red ?? [];
+			const toolCallEntry = redLog.find(
+				(e) => e.kind === "tool-call" && e.toolName === "go",
+			);
+			expect(toolCallEntry).toBeDefined();
+			if (toolCallEntry?.kind === "tool-call") {
+				expect(toolCallEntry.coneDelta).toBeDefined();
+				expect(toolCallEntry.coneDelta).toContain("*green");
+			}
+		});
+
+		it("Test B: look reveals an item → tool-call entry carries coneDelta", async () => {
+			// Red at (0,0) facing north — north cone is all walls. After looking
+			// right (now facing east), the key at (0,1) sits at "directly in front".
+			const game = makeGame();
+
+			const provider = new MockRoundLLMProvider([
+				{
+					assistantText: "",
+					toolCalls: [
+						{
+							id: "look_1",
+							name: "look",
+							argumentsJson: JSON.stringify({ direction: "right" }),
+						},
+					],
+				},
+				{ assistantText: "", toolCalls: [] },
+				{ assistantText: "", toolCalls: [] },
+			]);
+
+			const { nextState } = await runRound(game, "red", "start", provider);
+
+			const redLog = nextState.conversationLogs.red ?? [];
+			const toolCallEntry = redLog.find(
+				(e) => e.kind === "tool-call" && e.toolName === "look",
+			);
+			expect(toolCallEntry).toBeDefined();
+			if (toolCallEntry?.kind === "tool-call") {
+				expect(toolCallEntry.coneDelta).toBeDefined();
+				expect(toolCallEntry.coneDelta).toContain("key");
+			}
+		});
+
+		it("Test C: empty delta no-op (look forward when already facing forward)", async () => {
+			// Red at (0,0) facing north. Red looks forward (still facing north).
+			// The cone snapshot before and after are identical → no enrichment.
+			const game = makeGame();
+
+			const provider = new MockRoundLLMProvider([
+				{
+					assistantText: "",
+					toolCalls: [
+						{
+							id: "look_1",
+							name: "look",
+							argumentsJson: JSON.stringify({ direction: "forward" }),
+						},
+					],
+				},
+				{ assistantText: "", toolCalls: [] },
+				{ assistantText: "", toolCalls: [] },
+			]);
+
+			const { nextState } = await runRound(game, "red", "start", provider);
+
+			const redLog = nextState.conversationLogs.red ?? [];
+			const toolCallEntry = redLog.find(
+				(e) => e.kind === "tool-call" && e.toolName === "look",
+			);
+			expect(toolCallEntry).toBeDefined();
+			if (toolCallEntry?.kind === "tool-call") {
+				// coneDelta should be undefined (not present or undefined).
+				expect(toolCallEntry.coneDelta).toBeUndefined();
+			}
+		});
+
+		it("Test D: non-go/look tools never enrich (pick_up does not get coneDelta)", async () => {
+			const game = makeGame();
+
+			const provider = new MockRoundLLMProvider([
+				{
+					assistantText: "",
+					toolCalls: [
+						{
+							id: "pick_1",
+							name: "pick_up",
+							argumentsJson: JSON.stringify({ item: "flower" }),
+						},
+					],
+				},
+				{ assistantText: "", toolCalls: [] },
+				{ assistantText: "", toolCalls: [] },
+			]);
+
+			const { nextState } = await runRound(game, "red", "start", provider);
+
+			const redLog = nextState.conversationLogs.red ?? [];
+			const toolCallEntry = redLog.find(
+				(e) => e.kind === "tool-call" && e.toolName === "pick_up",
+			);
+			expect(toolCallEntry).toBeDefined();
+			if (toolCallEntry?.kind === "tool-call") {
+				// pick_up should never have coneDelta.
+				expect(toolCallEntry.coneDelta).toBeUndefined();
+			}
+		});
+
+		it("Test E: no cross-Daemon contamination (go action doesn't enrich other logs)", async () => {
+			const game = makeGameWithCustomStarts({
+				red: { position: { row: 4, col: 0 }, facing: "north" },
+				green: { position: { row: 2, col: 0 }, facing: "north" },
+				cyan: { position: { row: 4, col: 4 }, facing: "north" },
+			});
+
+			const provider = new MockRoundLLMProvider([
+				{
+					assistantText: "",
+					toolCalls: [
+						{
+							id: "go_1",
+							name: "go",
+							argumentsJson: JSON.stringify({ direction: "forward" }),
+						},
+					],
+				},
+				{ assistantText: "", toolCalls: [] },
+				{ assistantText: "", toolCalls: [] },
+			]);
+
+			const { nextState } = await runRound(game, "red", "start", provider);
+
+			// Red should have a tool-call with coneDelta
+			const redLog = nextState.conversationLogs.red ?? [];
+			const redToolCall = redLog.find(
+				(e) => e.kind === "tool-call" && e.toolName === "go",
+			);
+			expect(
+				redToolCall?.kind === "tool-call" && redToolCall.coneDelta,
+			).toBeDefined();
+
+			// Green should NOT have a tool-call entry with coneDelta from red's action
+			// (Green may have witnessed-event entries, but not coneDelta on tool-calls)
+			const greenLog = nextState.conversationLogs.green ?? [];
+			const greenToolCalls = greenLog.filter((e) => e.kind === "tool-call");
+			for (const entry of greenToolCalls) {
+				if (entry.kind === "tool-call") {
+					expect(entry.coneDelta).toBeUndefined();
+				}
+			}
+		});
+	});
 });

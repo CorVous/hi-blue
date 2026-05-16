@@ -410,6 +410,7 @@ export async function runRound(
 			entry: (typeof pending)[number],
 			success: boolean,
 			description: string,
+			coneDelta?: string,
 		) {
 			const toolCallEntry: ConversationEntry = {
 				kind: "tool-call",
@@ -420,6 +421,7 @@ export async function runRound(
 				toolName: entry.tc.name,
 				result: description,
 				success,
+				...(coneDelta !== undefined ? { coneDelta } : {}),
 			};
 			state = {
 				...state,
@@ -483,7 +485,12 @@ export async function runRound(
 						success,
 						description,
 					});
-					appendToolCallEntry(entry, success, description);
+					appendToolCallEntry(
+						entry,
+						success,
+						description,
+						dispatchResult.actorConeDelta,
+					);
 				}
 			}
 		}
