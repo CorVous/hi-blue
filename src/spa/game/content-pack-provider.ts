@@ -395,46 +395,118 @@ export function examineMentionsUseTell(examineDescription: string): boolean {
 
 // ── Validation ────────────────────────────────────────────────────────────────
 
+export type RetryUnit =
+	| { kind: "objective-pair"; phaseIndex: number; pairId: string }
+	| { kind: "interesting-object"; phaseIndex: number; entityId: string }
+	| { kind: "obstacle"; phaseIndex: number; entityId: string };
+
+export type ValidationRule =
+	| "paired-space-tell"
+	| "verb-of-activation"
+	| "actor-presence"
+	| "actor-exclusion"
+	| "structural"
+	| "missing-field"
+	| "duplicate-id"
+	| "wrong-count"
+	| "wrong-kind";
+
+export type ValidationError = {
+	entityId: string;
+	field: string;
+	rule: ValidationRule;
+	message: string;
+	retryUnit: RetryUnit;
+};
+
+export type ValidationResult<T> =
+	| { ok: true; value: T }
+	| { ok: false; errors: ValidationError[] };
+
 function validateEntity(
 	raw: unknown,
 	expectedKind: string,
 	allIds: Set<string>,
 	requireUseOutcome: boolean,
+	retryUnit: RetryUnit,
+	errors: ValidationError[],
 	requirePairing?: { pairsWithSpaceId?: string },
 	requireShiftFlavor?: boolean,
 	requireConvergenceFlavors?: boolean,
 	requireUseItemFlavors?: boolean,
-): WorldEntity {
+): WorldEntity | null {
 	if (raw == null || typeof raw !== "object") {
-		throw new ContentPackError(
-			`Entity is not an object: ${JSON.stringify(raw)}`,
-		);
+		errors.push({
+			entityId: "",
+			field: "<entity>",
+			rule: "structural",
+			message: `Entity is not an object: ${JSON.stringify(raw)}`,
+			retryUnit,
+		});
+		return null;
 	}
 	const e = raw as Record<string, unknown>;
 	if (typeof e.id !== "string" || e.id.length === 0) {
-		throw new ContentPackError("Entity missing string id");
+		errors.push({
+			entityId: "",
+			field: "id",
+			rule: "missing-field",
+			message: "Entity missing string id",
+			retryUnit,
+		});
+		return null;
 	}
 	if (allIds.has(e.id)) {
-		throw new ContentPackError(`Duplicate entity id: ${e.id}`);
+		errors.push({
+			entityId: e.id,
+			field: "id",
+			rule: "duplicate-id",
+			message: `Duplicate entity id: ${e.id}`,
+			retryUnit,
+		});
+		return null;
 	}
 	allIds.add(e.id);
 	if (e.kind !== expectedKind) {
-		throw new ContentPackError(
-			`Entity ${e.id}: expected kind "${expectedKind}", got "${String(e.kind)}"`,
-		);
+		errors.push({
+			entityId: e.id,
+			field: "kind",
+			rule: "wrong-kind",
+			message: `Entity ${e.id}: expected kind "${expectedKind}", got "${String(e.kind)}"`,
+			retryUnit,
+		});
+		return null;
 	}
 	if (typeof e.name !== "string" || e.name.length === 0) {
-		throw new ContentPackError(`Entity ${e.id} missing name`);
+		errors.push({
+			entityId: e.id,
+			field: "name",
+			rule: "missing-field",
+			message: `Entity ${e.id} missing name`,
+			retryUnit,
+		});
 	}
 	if (
 		typeof e.examineDescription !== "string" ||
 		e.examineDescription.length === 0
 	) {
-		throw new ContentPackError(`Entity ${e.id} missing examineDescription`);
+		errors.push({
+			entityId: e.id,
+			field: "examineDescription",
+			rule: "missing-field",
+			message: `Entity ${e.id} missing examineDescription`,
+			retryUnit,
+		});
 	}
 	if (requireUseOutcome) {
 		if (typeof e.useOutcome !== "string" || e.useOutcome.length === 0) {
-			throw new ContentPackError(`Entity ${e.id} missing useOutcome`);
+			errors.push({
+				entityId: e.id,
+				field: "useOutcome",
+				rule: "missing-field",
+				message: `Entity ${e.id} missing useOutcome`,
+				retryUnit,
+			});
 		}
 	}
 	if (requirePairing !== undefined) {
@@ -443,16 +515,28 @@ function validateEntity(
 			typeof e.pairsWithSpaceId !== "string" ||
 			e.pairsWithSpaceId.length === 0
 		) {
-			throw new ContentPackError(
-				`Objective object ${e.id} missing pairsWithSpaceId`,
-			);
+			errors.push({
+				entityId: e.id,
+				field: "pairsWithSpaceId",
+				rule: "missing-field",
+				message: `Objective object ${e.id} missing pairsWithSpaceId`,
+				retryUnit,
+			});
 		}
 		if (typeof e.placementFlavor !== "string") {
-			throw new ContentPackError(
-				`Objective object ${e.id}: placementFlavor must be a string`,
-			);
+			errors.push({
+				entityId: e.id,
+				field: "placementFlavor",
+				rule: "structural",
+				message: `Objective object ${e.id}: placementFlavor must be a string`,
+				retryUnit,
+			});
 		}
-		if (!e.placementFlavor.includes("{actor}")) {
+		if (
+			!e.placementFlavor ||
+			(typeof e.placementFlavor === "string" &&
+				!e.placementFlavor.includes("{actor}"))
+		) {
 			console.warn(
 				`Objective object ${e.id}: placementFlavor has no "{actor}" token; the actor's name will not be interpolated into the line.`,
 			);
@@ -461,19 +545,30 @@ function validateEntity(
 			typeof e.proximityFlavor !== "string" ||
 			e.proximityFlavor.length === 0
 		) {
-			throw new ContentPackError(
-				`Objective object ${e.id} missing proximityFlavor`,
-			);
+			errors.push({
+				entityId: e.id,
+				field: "proximityFlavor",
+				rule: "missing-field",
+				message: `Objective object ${e.id} missing proximityFlavor`,
+				retryUnit,
+			});
 		}
 	}
 
 	if (requireShiftFlavor) {
 		if (typeof e.shiftFlavor !== "string" || e.shiftFlavor.length === 0) {
-			throw new ContentPackError(
-				`Obstacle ${e.id}: shiftFlavor must be a non-empty string`,
-			);
+			errors.push({
+				entityId: e.id,
+				field: "shiftFlavor",
+				rule: "missing-field",
+				message: `Obstacle ${e.id}: shiftFlavor must be a non-empty string`,
+				retryUnit,
+			});
 		}
-		if (e.shiftFlavor.includes("{actor}")) {
+		if (
+			typeof e.shiftFlavor === "string" &&
+			e.shiftFlavor.includes("{actor}")
+		) {
 			console.warn(
 				`Obstacle ${e.id}: shiftFlavor contains "{actor}"; the token will be rendered literally.`,
 			);
@@ -490,11 +585,18 @@ function validateEntity(
 			typeof e.activationFlavor !== "string" ||
 			e.activationFlavor.length === 0
 		) {
-			throw new ContentPackError(
-				`Interesting object ${e.id}: activationFlavor must be a non-empty string`,
-			);
+			errors.push({
+				entityId: e.id,
+				field: "activationFlavor",
+				rule: "missing-field",
+				message: `Interesting object ${e.id}: activationFlavor must be a non-empty string`,
+				retryUnit,
+			});
 		}
-		if (e.activationFlavor.includes("{actor}")) {
+		if (
+			typeof e.activationFlavor === "string" &&
+			e.activationFlavor.includes("{actor}")
+		) {
 			console.warn(
 				`Interesting object ${e.id}: activationFlavor contains "{actor}"; the token will be rendered literally.`,
 			);
@@ -503,11 +605,18 @@ function validateEntity(
 			typeof e.postExamineDescription !== "string" ||
 			e.postExamineDescription.length === 0
 		) {
-			throw new ContentPackError(
-				`Interesting object ${e.id} missing postExamineDescription`,
-			);
+			errors.push({
+				entityId: e.id,
+				field: "postExamineDescription",
+				rule: "missing-field",
+				message: `Interesting object ${e.id} missing postExamineDescription`,
+				retryUnit,
+			});
 		}
-		if (e.postExamineDescription.includes("{actor}")) {
+		if (
+			typeof e.postExamineDescription === "string" &&
+			e.postExamineDescription.includes("{actor}")
+		) {
 			console.warn(
 				`Interesting object ${e.id}: postExamineDescription contains "{actor}"; the token will be rendered literally.`,
 			);
@@ -517,11 +626,18 @@ function validateEntity(
 				typeof e.postLookFlavor !== "string" ||
 				e.postLookFlavor.length === 0
 			) {
-				throw new ContentPackError(
-					`Interesting object ${e.id}: postLookFlavor must be a non-empty string when present`,
-				);
+				errors.push({
+					entityId: e.id,
+					field: "postLookFlavor",
+					rule: "missing-field",
+					message: `Interesting object ${e.id}: postLookFlavor must be a non-empty string when present`,
+					retryUnit,
+				});
 			}
-			if (e.postLookFlavor.includes("{actor}")) {
+			if (
+				typeof e.postLookFlavor === "string" &&
+				e.postLookFlavor.includes("{actor}")
+			) {
 				console.warn(
 					`Interesting object ${e.id}: postLookFlavor contains "{actor}"; the token will be rendered literally.`,
 				);
@@ -534,11 +650,18 @@ function validateEntity(
 			typeof e.convergenceTier1Flavor !== "string" ||
 			e.convergenceTier1Flavor.length === 0
 		) {
-			throw new ContentPackError(
-				`Objective space ${e.id}: convergenceTier1Flavor must be a non-empty string`,
-			);
+			errors.push({
+				entityId: e.id,
+				field: "convergenceTier1Flavor",
+				rule: "missing-field",
+				message: `Objective space ${e.id}: convergenceTier1Flavor must be a non-empty string`,
+				retryUnit,
+			});
 		}
-		if (e.convergenceTier1Flavor.includes("{actor}")) {
+		if (
+			typeof e.convergenceTier1Flavor === "string" &&
+			e.convergenceTier1Flavor.includes("{actor}")
+		) {
 			console.warn(
 				`Objective space ${e.id}: convergenceTier1Flavor contains "{actor}"; the token will be rendered literally.`,
 			);
@@ -547,11 +670,18 @@ function validateEntity(
 			typeof e.convergenceTier2Flavor !== "string" ||
 			e.convergenceTier2Flavor.length === 0
 		) {
-			throw new ContentPackError(
-				`Objective space ${e.id}: convergenceTier2Flavor must be a non-empty string`,
-			);
+			errors.push({
+				entityId: e.id,
+				field: "convergenceTier2Flavor",
+				rule: "missing-field",
+				message: `Objective space ${e.id}: convergenceTier2Flavor must be a non-empty string`,
+				retryUnit,
+			});
 		}
-		if (e.convergenceTier2Flavor.includes("{actor}")) {
+		if (
+			typeof e.convergenceTier2Flavor === "string" &&
+			e.convergenceTier2Flavor.includes("{actor}")
+		) {
 			console.warn(
 				`Objective space ${e.id}: convergenceTier2Flavor contains "{actor}"; the token will be rendered literally.`,
 			);
@@ -562,11 +692,18 @@ function validateEntity(
 			typeof e.convergenceTier1ActorFlavor !== "string" ||
 			e.convergenceTier1ActorFlavor.length === 0
 		) {
-			throw new ContentPackError(
-				`Objective space ${e.id}: convergenceTier1ActorFlavor must be a non-empty string`,
-			);
+			errors.push({
+				entityId: e.id,
+				field: "convergenceTier1ActorFlavor",
+				rule: "missing-field",
+				message: `Objective space ${e.id}: convergenceTier1ActorFlavor must be a non-empty string`,
+				retryUnit,
+			});
 		}
-		if (e.convergenceTier1ActorFlavor.includes("{actor}")) {
+		if (
+			typeof e.convergenceTier1ActorFlavor === "string" &&
+			e.convergenceTier1ActorFlavor.includes("{actor}")
+		) {
 			console.warn(
 				`Objective space ${e.id}: convergenceTier1ActorFlavor contains "{actor}"; the token will be rendered literally.`,
 			);
@@ -575,11 +712,18 @@ function validateEntity(
 			typeof e.convergenceTier2ActorFlavor !== "string" ||
 			e.convergenceTier2ActorFlavor.length === 0
 		) {
-			throw new ContentPackError(
-				`Objective space ${e.id}: convergenceTier2ActorFlavor must be a non-empty string`,
-			);
+			errors.push({
+				entityId: e.id,
+				field: "convergenceTier2ActorFlavor",
+				rule: "missing-field",
+				message: `Objective space ${e.id}: convergenceTier2ActorFlavor must be a non-empty string`,
+				retryUnit,
+			});
 		}
-		if (e.convergenceTier2ActorFlavor.includes("{actor}")) {
+		if (
+			typeof e.convergenceTier2ActorFlavor === "string" &&
+			e.convergenceTier2ActorFlavor.includes("{actor}")
+		) {
 			console.warn(
 				`Objective space ${e.id}: convergenceTier2ActorFlavor contains "{actor}"; the token will be rendered literally.`,
 			);
@@ -590,8 +734,10 @@ function validateEntity(
 	const entity: WorldEntity = {
 		id: e.id,
 		kind: e.kind as WorldEntity["kind"],
-		name: e.name as string,
-		examineDescription: e.examineDescription as string,
+		name: (typeof e.name === "string" ? e.name : "") as string,
+		examineDescription: (typeof e.examineDescription === "string"
+			? e.examineDescription
+			: "") as string,
 		holder: { row: 0, col: 0 }, // placeholder; placement will overwrite
 	};
 	if (typeof e.useOutcome === "string") {
@@ -616,16 +762,24 @@ function validateEntity(
 			typeof e.activationFlavor !== "string" ||
 			e.activationFlavor.length === 0
 		) {
-			throw new ContentPackError(
-				`Objective space ${e.id}: activationFlavor must be a non-empty string`,
-			);
+			errors.push({
+				entityId: e.id,
+				field: "activationFlavor",
+				rule: "missing-field",
+				message: `Objective space ${e.id}: activationFlavor must be a non-empty string`,
+				retryUnit,
+			});
+		} else {
+			if (
+				typeof e.activationFlavor === "string" &&
+				e.activationFlavor.includes("{actor}")
+			) {
+				console.warn(
+					`Objective space ${e.id}: activationFlavor contains "{actor}"; the token will be rendered literally.`,
+				);
+			}
+			entity.activationFlavor = e.activationFlavor;
 		}
-		if (e.activationFlavor.includes("{actor}")) {
-			console.warn(
-				`Objective space ${e.id}: activationFlavor contains "{actor}"; the token will be rendered literally.`,
-			);
-		}
-		entity.activationFlavor = e.activationFlavor;
 		if (typeof e.satisfactionFlavor === "string") {
 			entity.satisfactionFlavor = e.satisfactionFlavor;
 		}
@@ -666,18 +820,39 @@ function validateEntity(
 export function validateContentPacks(
 	raw: unknown,
 	input: ContentPackProviderInput,
-): ContentPackProviderResult {
+): ValidationResult<ContentPackProviderResult> {
+	const errors: ValidationError[] = [];
+
 	if (raw == null || typeof raw !== "object") {
-		throw new ContentPackError("Content pack response is not an object");
+		errors.push({
+			entityId: "",
+			field: "<root>",
+			rule: "structural",
+			message: "Content pack response is not an object",
+			retryUnit: { kind: "objective-pair", phaseIndex: 0, pairId: "" },
+		});
+		return { ok: false, errors };
 	}
 	const obj = raw as Record<string, unknown>;
 	if (!Array.isArray(obj.packs)) {
-		throw new ContentPackError("Content pack response missing packs array");
+		errors.push({
+			entityId: "",
+			field: "packs",
+			rule: "missing-field",
+			message: "Content pack response missing packs array",
+			retryUnit: { kind: "objective-pair", phaseIndex: 0, pairId: "" },
+		});
+		return { ok: false, errors };
 	}
 	if (obj.packs.length !== input.phases.length) {
-		throw new ContentPackError(
-			`Expected ${input.phases.length} packs, got ${obj.packs.length}`,
-		);
+		errors.push({
+			entityId: "",
+			field: "packs",
+			rule: "wrong-count",
+			message: `Expected ${input.phases.length} packs, got ${obj.packs.length}`,
+			retryUnit: { kind: "objective-pair", phaseIndex: 0, pairId: "" },
+		});
+		return { ok: false, errors };
 	}
 
 	const allIds = new Set<string>();
@@ -686,124 +861,249 @@ export function validateContentPacks(
 	for (let i = 0; i < obj.packs.length; i++) {
 		const packRaw = obj.packs[i];
 		if (packRaw == null || typeof packRaw !== "object") {
-			throw new ContentPackError("Pack entry is not an object");
+			errors.push({
+				entityId: "",
+				field: "pack",
+				rule: "structural",
+				message: `Phase ${i + 1}: pack entry is not an object`,
+				retryUnit: { kind: "objective-pair", phaseIndex: i, pairId: "" },
+			});
+			continue;
 		}
 		const pack = packRaw as Record<string, unknown>;
 		const inputPhase = input.phases[i];
 		if (!inputPhase) {
-			throw new ContentPackError(`No input phase for pack index ${i}`);
+			errors.push({
+				entityId: "",
+				field: "phase",
+				rule: "structural",
+				message: `No input phase for pack index ${i}`,
+				retryUnit: { kind: "objective-pair", phaseIndex: i, pairId: "" },
+			});
+			continue;
 		}
 		const phaseLabel = `Phase ${i + 1}`;
 		if (
 			typeof pack.setting !== "string" ||
 			pack.setting !== inputPhase.setting
 		) {
-			throw new ContentPackError(
-				`${phaseLabel}: setting mismatch. Expected "${inputPhase.setting}", got "${String(pack.setting)}"`,
-			);
+			errors.push({
+				entityId: "",
+				field: "setting",
+				rule: "structural",
+				message: `${phaseLabel}: setting mismatch. Expected "${inputPhase.setting}", got "${String(pack.setting)}"`,
+				retryUnit: { kind: "objective-pair", phaseIndex: i, pairId: "" },
+			});
+			continue;
 		}
 		if (
 			!Array.isArray(pack.objectivePairs) ||
 			pack.objectivePairs.length !== inputPhase.k
 		) {
-			throw new ContentPackError(
-				`${phaseLabel}: expected ${inputPhase.k} objectivePairs, got ${Array.isArray(pack.objectivePairs) ? pack.objectivePairs.length : "non-array"}`,
-			);
+			errors.push({
+				entityId: "",
+				field: "objectivePairs",
+				rule: "wrong-count",
+				message: `${phaseLabel}: expected ${inputPhase.k} objectivePairs, got ${Array.isArray(pack.objectivePairs) ? pack.objectivePairs.length : "non-array"}`,
+				retryUnit: { kind: "objective-pair", phaseIndex: i, pairId: "" },
+			});
 		}
 		if (
 			!Array.isArray(pack.interestingObjects) ||
 			pack.interestingObjects.length !== inputPhase.n
 		) {
-			throw new ContentPackError(
-				`${phaseLabel}: expected ${inputPhase.n} interestingObjects, got ${Array.isArray(pack.interestingObjects) ? pack.interestingObjects.length : "non-array"}`,
-			);
+			errors.push({
+				entityId: "",
+				field: "interestingObjects",
+				rule: "wrong-count",
+				message: `${phaseLabel}: expected ${inputPhase.n} interestingObjects, got ${Array.isArray(pack.interestingObjects) ? pack.interestingObjects.length : "non-array"}`,
+				retryUnit: { kind: "objective-pair", phaseIndex: i, pairId: "" },
+			});
 		}
 		if (
 			!Array.isArray(pack.obstacles) ||
 			pack.obstacles.length !== inputPhase.m
 		) {
-			throw new ContentPackError(
-				`${phaseLabel}: expected ${inputPhase.m} obstacles, got ${Array.isArray(pack.obstacles) ? pack.obstacles.length : "non-array"}`,
-			);
+			errors.push({
+				entityId: "",
+				field: "obstacles",
+				rule: "wrong-count",
+				message: `${phaseLabel}: expected ${inputPhase.m} obstacles, got ${Array.isArray(pack.obstacles) ? pack.obstacles.length : "non-array"}`,
+				retryUnit: { kind: "objective-pair", phaseIndex: i, pairId: "" },
+			});
 		}
 
 		const objectivePairs: ObjectivePair[] = [];
-		for (const pairRaw of pack.objectivePairs as unknown[]) {
-			if (pairRaw == null || typeof pairRaw !== "object") {
-				throw new ContentPackError("objectivePair entry is not an object");
-			}
-			const pair = pairRaw as Record<string, unknown>;
-			const space = validateEntity(
-				pair.space,
-				"objective_space",
-				allIds,
-				false,
-				undefined,
-				false,
-				true,
-			);
-			const object = validateEntity(
-				pair.object,
-				"objective_object",
-				allIds,
-				true,
-				{},
-			);
-			// Verify pairsWithSpaceId resolves
-			if (object.pairsWithSpaceId !== space.id) {
-				throw new ContentPackError(
-					`${phaseLabel}: object ${object.id} pairsWithSpaceId "${object.pairsWithSpaceId}" does not match space id "${space.id}"`,
+		if (Array.isArray(pack.objectivePairs)) {
+			for (const pairRaw of pack.objectivePairs as unknown[]) {
+				if (pairRaw == null || typeof pairRaw !== "object") {
+					errors.push({
+						entityId: "",
+						field: "pair",
+						rule: "structural",
+						message: `${phaseLabel}: objectivePair entry is not an object`,
+						retryUnit: { kind: "objective-pair", phaseIndex: i, pairId: "" },
+					});
+					continue;
+				}
+				const pair = pairRaw as Record<string, unknown>;
+				const pairId =
+					((pair.object as Record<string, unknown>)?.id as
+						| string
+						| undefined) ??
+					((pair.space as Record<string, unknown>)?.id as string | undefined) ??
+					"";
+				const retryUnit = {
+					kind: "objective-pair" as const,
+					phaseIndex: i,
+					pairId,
+				};
+				const space = validateEntity(
+					pair.space,
+					"objective_space",
+					allIds,
+					false,
+					retryUnit,
+					errors,
+					undefined,
+					false,
+					true,
 				);
-			}
-			if (!examineMentionsPairedSpace(object.examineDescription, space.name)) {
-				console.warn(
-					`${phaseLabel}: object ${object.id} examineDescription does not mention paired space "${space.name}" (the AI-discoverable pairing tell).`,
+				const object = validateEntity(
+					pair.object,
+					"objective_object",
+					allIds,
+					true,
+					retryUnit,
+					errors,
+					{},
 				);
+				if (space === null || object === null) {
+					continue;
+				}
+				// Verify pairsWithSpaceId resolves
+				if (object.pairsWithSpaceId !== space.id) {
+					errors.push({
+						entityId: object.id,
+						field: "pairsWithSpaceId",
+						rule: "structural",
+						message: `${phaseLabel}: object ${object.id} pairsWithSpaceId "${object.pairsWithSpaceId}" does not match space id "${space.id}"`,
+						retryUnit,
+					});
+					continue;
+				}
+				if (
+					!examineMentionsPairedSpace(object.examineDescription, space.name)
+				) {
+					console.warn(
+						`${phaseLabel}: object ${object.id} examineDescription does not mention paired space "${space.name}" (the AI-discoverable pairing tell).`,
+					);
+				}
+				if (!examineMentionsUseTell(space.examineDescription)) {
+					console.warn(
+						`${phaseLabel}: space ${space.id} examineDescription has no use/activation cue word (the AI-discoverable prose tell that the space is \`use\`-able as an objective).`,
+					);
+				}
+				objectivePairs.push({ object, space });
 			}
-			if (!examineMentionsUseTell(space.examineDescription)) {
-				console.warn(
-					`${phaseLabel}: space ${space.id} examineDescription has no use/activation cue word (the AI-discoverable prose tell that the space is \`use\`-able as an objective).`,
-				);
-			}
-			objectivePairs.push({ object, space });
 		}
 
 		const interestingObjects: WorldEntity[] = [];
-		for (const itemRaw of pack.interestingObjects as unknown[]) {
-			interestingObjects.push(
-				validateEntity(
+		if (Array.isArray(pack.interestingObjects)) {
+			for (const itemRaw of pack.interestingObjects as unknown[]) {
+				const retryUnit = {
+					kind: "interesting-object" as const,
+					phaseIndex: i,
+					entityId:
+						((itemRaw as Record<string, unknown>)?.id as string | undefined) ??
+						"",
+				};
+				const entity = validateEntity(
 					itemRaw,
 					"interesting_object",
 					allIds,
 					true,
+					retryUnit,
+					errors,
 					undefined,
 					false,
 					false,
 					true,
-				),
-			);
+				);
+				if (entity !== null) {
+					interestingObjects.push(entity);
+				}
+			}
 		}
 
 		const obstacles: WorldEntity[] = [];
-		for (const obsRaw of pack.obstacles as unknown[]) {
-			obstacles.push(
-				validateEntity(obsRaw, "obstacle", allIds, false, undefined, true),
-			);
+		if (Array.isArray(pack.obstacles)) {
+			for (const obsRaw of pack.obstacles as unknown[]) {
+				const retryUnit = {
+					kind: "obstacle" as const,
+					phaseIndex: i,
+					entityId:
+						((obsRaw as Record<string, unknown>)?.id as string | undefined) ??
+						"",
+				};
+				const entity = validateEntity(
+					obsRaw,
+					"obstacle",
+					allIds,
+					false,
+					retryUnit,
+					errors,
+					undefined,
+					true,
+				);
+				if (entity !== null) {
+					obstacles.push(entity);
+				}
+			}
 		}
 
 		// Validate landmarks
 		const landmarksRaw = pack.landmarks;
 		if (landmarksRaw == null || typeof landmarksRaw !== "object") {
-			throw new ContentPackError(
-				`${phaseLabel}: missing or invalid landmarks object`,
-			);
+			errors.push({
+				entityId: "",
+				field: "landmarks",
+				rule: "missing-field",
+				message: `${phaseLabel}: missing or invalid landmarks object`,
+				retryUnit: { kind: "objective-pair", phaseIndex: i, pairId: "" },
+			});
+			continue;
 		}
 		const lm = landmarksRaw as Record<string, unknown>;
 		const landmarks: ContentPack["landmarks"] = {
-			north: validateLandmark(lm.north, i + 1, "north"),
-			south: validateLandmark(lm.south, i + 1, "south"),
-			east: validateLandmark(lm.east, i + 1, "east"),
-			west: validateLandmark(lm.west, i + 1, "west"),
+			north: validateLandmark(
+				lm.north,
+				i + 1,
+				"north",
+				{ kind: "objective-pair", phaseIndex: i, pairId: "" },
+				errors,
+			) ?? { shortName: "", horizonPhrase: "" },
+			south: validateLandmark(
+				lm.south,
+				i + 1,
+				"south",
+				{ kind: "objective-pair", phaseIndex: i, pairId: "" },
+				errors,
+			) ?? { shortName: "", horizonPhrase: "" },
+			east: validateLandmark(
+				lm.east,
+				i + 1,
+				"east",
+				{ kind: "objective-pair", phaseIndex: i, pairId: "" },
+				errors,
+			) ?? { shortName: "", horizonPhrase: "" },
+			west: validateLandmark(
+				lm.west,
+				i + 1,
+				"west",
+				{ kind: "objective-pair", phaseIndex: i, pairId: "" },
+				errors,
+			) ?? { shortName: "", horizonPhrase: "" },
 		};
 
 		const wallName =
@@ -812,7 +1112,7 @@ export function validateContentPacks(
 				: "";
 
 		packs.push({
-			setting: pack.setting,
+			setting: pack.setting as string,
 			objectivePairs,
 			interestingObjects,
 			obstacles,
@@ -822,7 +1122,9 @@ export function validateContentPacks(
 		});
 	}
 
-	return { packs };
+	return errors.length === 0
+		? { ok: true, value: { packs } }
+		: { ok: false, errors };
 }
 
 /**
@@ -832,20 +1134,39 @@ export function validateContentPacks(
 export function validateDualContentPacks(
 	raw: unknown,
 	input: DualContentPackProviderInput,
-): DualContentPackProviderResult {
+): ValidationResult<DualContentPackProviderResult> {
+	const errors: ValidationError[] = [];
+
 	if (raw == null || typeof raw !== "object") {
-		throw new ContentPackError("Dual content pack response is not an object");
+		errors.push({
+			entityId: "",
+			field: "<root>",
+			rule: "structural",
+			message: "Dual content pack response is not an object",
+			retryUnit: { kind: "objective-pair", phaseIndex: 0, pairId: "" },
+		});
+		return { ok: false, errors };
 	}
 	const obj = raw as Record<string, unknown>;
 	if (!Array.isArray(obj.phases)) {
-		throw new ContentPackError(
-			"Dual content pack response missing phases array",
-		);
+		errors.push({
+			entityId: "",
+			field: "phases",
+			rule: "missing-field",
+			message: "Dual content pack response missing phases array",
+			retryUnit: { kind: "objective-pair", phaseIndex: 0, pairId: "" },
+		});
+		return { ok: false, errors };
 	}
 	if (obj.phases.length !== input.phases.length) {
-		throw new ContentPackError(
-			`Expected ${input.phases.length} phases, got ${obj.phases.length}`,
-		);
+		errors.push({
+			entityId: "",
+			field: "phases",
+			rule: "wrong-count",
+			message: `Expected ${input.phases.length} phases, got ${obj.phases.length}`,
+			retryUnit: { kind: "objective-pair", phaseIndex: 0, pairId: "" },
+		});
+		return { ok: false, errors };
 	}
 
 	const resultPhases: DualContentPackProviderResult["phases"] = [];
@@ -853,12 +1174,26 @@ export function validateDualContentPacks(
 	for (let i = 0; i < obj.phases.length; i++) {
 		const phaseRaw = obj.phases[i];
 		if (phaseRaw == null || typeof phaseRaw !== "object") {
-			throw new ContentPackError("Phase entry is not an object");
+			errors.push({
+				entityId: "",
+				field: "phase",
+				rule: "structural",
+				message: `Phase ${i + 1}: phase entry is not an object`,
+				retryUnit: { kind: "objective-pair", phaseIndex: i, pairId: "" },
+			});
+			continue;
 		}
 		const phaseObj = phaseRaw as Record<string, unknown>;
 		const inputPhase = input.phases[i];
 		if (!inputPhase) {
-			throw new ContentPackError(`No input phase for phase index ${i}`);
+			errors.push({
+				entityId: "",
+				field: "phase",
+				rule: "structural",
+				message: `No input phase for phase index ${i}`,
+				retryUnit: { kind: "objective-pair", phaseIndex: i, pairId: "" },
+			});
+			continue;
 		}
 		const phaseLabel = `Phase ${i + 1}`;
 
@@ -871,6 +1206,7 @@ export function validateDualContentPacks(
 			allIdsA,
 			"packA",
 			i,
+			errors,
 		);
 		const packB = validateSinglePack(
 			phaseObj.packB,
@@ -878,7 +1214,12 @@ export function validateDualContentPacks(
 			allIdsB,
 			"packB",
 			i,
+			errors,
 		);
+
+		if (packA === null || packB === null) {
+			continue;
+		}
 
 		// Enforce entity ID parity between packA and packB
 		const idsA = [...allIdsA].sort();
@@ -886,10 +1227,16 @@ export function validateDualContentPacks(
 		if (JSON.stringify(idsA) !== JSON.stringify(idsB)) {
 			const onlyA = idsA.filter((id) => !allIdsB.has(id));
 			const onlyB = idsB.filter((id) => !allIdsA.has(id));
-			throw new ContentPackError(
-				`${phaseLabel}: entity IDs mismatch between packA and packB. ` +
+			errors.push({
+				entityId: "",
+				field: "id-parity",
+				rule: "structural",
+				message:
+					`${phaseLabel}: entity IDs mismatch between packA and packB. ` +
 					`Only in A: [${onlyA.join(", ")}]. Only in B: [${onlyB.join(", ")}].`,
-			);
+				retryUnit: { kind: "objective-pair", phaseIndex: i, pairId: "" },
+			});
+			continue;
 		}
 
 		// Enforce pairsWithSpaceId parity
@@ -901,16 +1248,22 @@ export function validateDualContentPacks(
 		);
 		for (const [objId, spaceId] of pairingsA) {
 			if (pairingsB.get(objId) !== spaceId) {
-				throw new ContentPackError(
-					`${phaseLabel}: pairsWithSpaceId mismatch for object "${objId}" between packA and packB`,
-				);
+				errors.push({
+					entityId: objId,
+					field: "pairsWithSpaceId-parity",
+					rule: "structural",
+					message: `${phaseLabel}: pairsWithSpaceId mismatch for object "${objId}" between packA and packB`,
+					retryUnit: { kind: "objective-pair", phaseIndex: i, pairId: objId },
+				});
 			}
 		}
 
 		resultPhases.push({ packA, packB });
 	}
 
-	return { phases: resultPhases };
+	return errors.length === 0
+		? { ok: true, value: { phases: resultPhases } }
+		: { ok: false, errors };
 }
 
 /** Validate a single pack within a dual-pack response. */
@@ -919,115 +1272,227 @@ function validateSinglePack(
 	inputPhase: DualContentPackProviderInput["phases"][number],
 	allIds: Set<string>,
 	label: string,
-	phaseIndex = 0,
-): UnplacedPack {
+	phaseIndex: number,
+	errors: ValidationError[],
+): UnplacedPack | null {
 	if (raw == null || typeof raw !== "object") {
-		throw new ContentPackError(`${label} is not an object`);
+		errors.push({
+			entityId: "",
+			field: "pack",
+			rule: "structural",
+			message: `${label} is not an object`,
+			retryUnit: { kind: "objective-pair", phaseIndex, pairId: "" },
+		});
+		return null;
 	}
 	const pack = raw as Record<string, unknown>;
 	if (typeof pack.setting !== "string" || pack.setting.length === 0) {
-		throw new ContentPackError(`${label}: missing setting`);
+		errors.push({
+			entityId: "",
+			field: "setting",
+			rule: "missing-field",
+			message: `${label}: missing setting`,
+			retryUnit: { kind: "objective-pair", phaseIndex, pairId: "" },
+		});
+		return null;
 	}
 	if (
 		!Array.isArray(pack.objectivePairs) ||
 		pack.objectivePairs.length !== inputPhase.k
 	) {
-		throw new ContentPackError(
-			`${label}: expected ${inputPhase.k} objectivePairs, got ${Array.isArray(pack.objectivePairs) ? pack.objectivePairs.length : "non-array"}`,
-		);
+		errors.push({
+			entityId: "",
+			field: "objectivePairs",
+			rule: "wrong-count",
+			message: `${label}: expected ${inputPhase.k} objectivePairs, got ${Array.isArray(pack.objectivePairs) ? pack.objectivePairs.length : "non-array"}`,
+			retryUnit: { kind: "objective-pair", phaseIndex, pairId: "" },
+		});
 	}
 	if (
 		!Array.isArray(pack.interestingObjects) ||
 		pack.interestingObjects.length !== inputPhase.n
 	) {
-		throw new ContentPackError(
-			`${label}: expected ${inputPhase.n} interestingObjects, got ${Array.isArray(pack.interestingObjects) ? pack.interestingObjects.length : "non-array"}`,
-		);
+		errors.push({
+			entityId: "",
+			field: "interestingObjects",
+			rule: "wrong-count",
+			message: `${label}: expected ${inputPhase.n} interestingObjects, got ${Array.isArray(pack.interestingObjects) ? pack.interestingObjects.length : "non-array"}`,
+			retryUnit: { kind: "objective-pair", phaseIndex, pairId: "" },
+		});
 	}
 	if (
 		!Array.isArray(pack.obstacles) ||
 		pack.obstacles.length !== inputPhase.m
 	) {
-		throw new ContentPackError(
-			`${label}: expected ${inputPhase.m} obstacles, got ${Array.isArray(pack.obstacles) ? pack.obstacles.length : "non-array"}`,
-		);
+		errors.push({
+			entityId: "",
+			field: "obstacles",
+			rule: "wrong-count",
+			message: `${label}: expected ${inputPhase.m} obstacles, got ${Array.isArray(pack.obstacles) ? pack.obstacles.length : "non-array"}`,
+			retryUnit: { kind: "objective-pair", phaseIndex, pairId: "" },
+		});
 	}
 
 	const objectivePairs: ObjectivePair[] = [];
-	for (const pairRaw of pack.objectivePairs as unknown[]) {
-		if (pairRaw == null || typeof pairRaw !== "object") {
-			throw new ContentPackError(
-				`${label}: objectivePair entry is not an object`,
+	if (Array.isArray(pack.objectivePairs)) {
+		for (const pairRaw of pack.objectivePairs as unknown[]) {
+			if (pairRaw == null || typeof pairRaw !== "object") {
+				errors.push({
+					entityId: "",
+					field: "pair",
+					rule: "structural",
+					message: `${label}: objectivePair entry is not an object`,
+					retryUnit: { kind: "objective-pair", phaseIndex, pairId: "" },
+				});
+				continue;
+			}
+			const pair = pairRaw as Record<string, unknown>;
+			const pairId =
+				((pair.object as Record<string, unknown>)?.id as string | undefined) ??
+				((pair.space as Record<string, unknown>)?.id as string | undefined) ??
+				"";
+			const retryUnit = { kind: "objective-pair" as const, phaseIndex, pairId };
+			const space = validateEntity(
+				pair.space,
+				"objective_space",
+				allIds,
+				false,
+				retryUnit,
+				errors,
+				undefined,
+				false,
+				true,
 			);
-		}
-		const pair = pairRaw as Record<string, unknown>;
-		const space = validateEntity(
-			pair.space,
-			"objective_space",
-			allIds,
-			false,
-			undefined,
-			false,
-			true,
-		);
-		const object = validateEntity(
-			pair.object,
-			"objective_object",
-			allIds,
-			true,
-			{},
-		);
-		if (object.pairsWithSpaceId !== space.id) {
-			throw new ContentPackError(
-				`${label}: object ${object.id} pairsWithSpaceId "${object.pairsWithSpaceId}" does not match space id "${space.id}"`,
+			const object = validateEntity(
+				pair.object,
+				"objective_object",
+				allIds,
+				true,
+				retryUnit,
+				errors,
+				{},
 			);
+			if (space === null || object === null) {
+				continue;
+			}
+			if (object.pairsWithSpaceId !== space.id) {
+				errors.push({
+					entityId: object.id,
+					field: "pairsWithSpaceId",
+					rule: "structural",
+					message: `${label}: object ${object.id} pairsWithSpaceId "${object.pairsWithSpaceId}" does not match space id "${space.id}"`,
+					retryUnit,
+				});
+				continue;
+			}
+			if (!examineMentionsPairedSpace(object.examineDescription, space.name)) {
+				console.warn(
+					`${label}: object ${object.id} examineDescription does not mention paired space "${space.name}" (the AI-discoverable pairing tell).`,
+				);
+			}
+			if (!examineMentionsUseTell(space.examineDescription)) {
+				console.warn(
+					`${label}: space ${space.id} examineDescription has no use/activation cue word (the AI-discoverable prose tell that the space is \`use\`-able as an objective).`,
+				);
+			}
+			objectivePairs.push({ object, space });
 		}
-		if (!examineMentionsPairedSpace(object.examineDescription, space.name)) {
-			console.warn(
-				`${label}: object ${object.id} examineDescription does not mention paired space "${space.name}" (the AI-discoverable pairing tell).`,
-			);
-		}
-		if (!examineMentionsUseTell(space.examineDescription)) {
-			console.warn(
-				`${label}: space ${space.id} examineDescription has no use/activation cue word (the AI-discoverable prose tell that the space is \`use\`-able as an objective).`,
-			);
-		}
-		objectivePairs.push({ object, space });
 	}
 
 	const interestingObjects: WorldEntity[] = [];
-	for (const itemRaw of pack.interestingObjects as unknown[]) {
-		interestingObjects.push(
-			validateEntity(
+	if (Array.isArray(pack.interestingObjects)) {
+		for (const itemRaw of pack.interestingObjects as unknown[]) {
+			const retryUnit = {
+				kind: "interesting-object" as const,
+				phaseIndex,
+				entityId:
+					((itemRaw as Record<string, unknown>)?.id as string | undefined) ??
+					"",
+			};
+			const entity = validateEntity(
 				itemRaw,
 				"interesting_object",
 				allIds,
 				true,
+				retryUnit,
+				errors,
 				undefined,
 				false,
 				false,
 				true,
-			),
-		);
+			);
+			if (entity !== null) {
+				interestingObjects.push(entity);
+			}
+		}
 	}
 
 	const obstacles: WorldEntity[] = [];
-	for (const obsRaw of pack.obstacles as unknown[]) {
-		obstacles.push(
-			validateEntity(obsRaw, "obstacle", allIds, false, undefined, true),
-		);
+	if (Array.isArray(pack.obstacles)) {
+		for (const obsRaw of pack.obstacles as unknown[]) {
+			const retryUnit = {
+				kind: "obstacle" as const,
+				phaseIndex,
+				entityId:
+					((obsRaw as Record<string, unknown>)?.id as string | undefined) ?? "",
+			};
+			const entity = validateEntity(
+				obsRaw,
+				"obstacle",
+				allIds,
+				false,
+				retryUnit,
+				errors,
+				undefined,
+				true,
+			);
+			if (entity !== null) {
+				obstacles.push(entity);
+			}
+		}
 	}
 
 	const landmarksRaw = pack.landmarks;
 	if (landmarksRaw == null || typeof landmarksRaw !== "object") {
-		throw new ContentPackError(`${label}: missing or invalid landmarks`);
+		errors.push({
+			entityId: "",
+			field: "landmarks",
+			rule: "missing-field",
+			message: `${label}: missing or invalid landmarks`,
+			retryUnit: { kind: "objective-pair", phaseIndex, pairId: "" },
+		});
+		return null;
 	}
 	const lm = landmarksRaw as Record<string, unknown>;
 	const landmarks: ContentPack["landmarks"] = {
-		north: validateLandmark(lm.north, phaseIndex + 1, "north"),
-		south: validateLandmark(lm.south, phaseIndex + 1, "south"),
-		east: validateLandmark(lm.east, phaseIndex + 1, "east"),
-		west: validateLandmark(lm.west, phaseIndex + 1, "west"),
+		north: validateLandmark(
+			lm.north,
+			phaseIndex + 1,
+			"north",
+			{ kind: "objective-pair", phaseIndex, pairId: "" },
+			errors,
+		) ?? { shortName: "", horizonPhrase: "" },
+		south: validateLandmark(
+			lm.south,
+			phaseIndex + 1,
+			"south",
+			{ kind: "objective-pair", phaseIndex, pairId: "" },
+			errors,
+		) ?? { shortName: "", horizonPhrase: "" },
+		east: validateLandmark(
+			lm.east,
+			phaseIndex + 1,
+			"east",
+			{ kind: "objective-pair", phaseIndex, pairId: "" },
+			errors,
+		) ?? { shortName: "", horizonPhrase: "" },
+		west: validateLandmark(
+			lm.west,
+			phaseIndex + 1,
+			"west",
+			{ kind: "objective-pair", phaseIndex, pairId: "" },
+			errors,
+		) ?? { shortName: "", horizonPhrase: "" },
 	};
 
 	const wallName =
@@ -1051,24 +1516,65 @@ function validateLandmark(
 	raw: unknown,
 	phaseLabel: number,
 	direction: string,
-): LandmarkDescription {
+	retryUnit: RetryUnit,
+	errors: ValidationError[],
+): LandmarkDescription | null {
 	if (raw == null || typeof raw !== "object") {
-		throw new ContentPackError(
-			`Phase ${phaseLabel}: landmark "${direction}" is not an object`,
-		);
+		errors.push({
+			entityId: "",
+			field: `landmark-${direction}`,
+			rule: "structural",
+			message: `Phase ${phaseLabel}: landmark "${direction}" is not an object`,
+			retryUnit,
+		});
+		return null;
 	}
 	const lm = raw as Record<string, unknown>;
 	if (typeof lm.shortName !== "string" || lm.shortName.length === 0) {
-		throw new ContentPackError(
-			`Phase ${phaseLabel}: landmark "${direction}" missing shortName`,
-		);
+		errors.push({
+			entityId: "",
+			field: `landmark-${direction}-shortName`,
+			rule: "missing-field",
+			message: `Phase ${phaseLabel}: landmark "${direction}" missing shortName`,
+			retryUnit,
+		});
 	}
 	if (typeof lm.horizonPhrase !== "string" || lm.horizonPhrase.length === 0) {
-		throw new ContentPackError(
-			`Phase ${phaseLabel}: landmark "${direction}" missing horizonPhrase`,
-		);
+		errors.push({
+			entityId: "",
+			field: `landmark-${direction}-horizonPhrase`,
+			rule: "missing-field",
+			message: `Phase ${phaseLabel}: landmark "${direction}" missing horizonPhrase`,
+			retryUnit,
+		});
 	}
-	return { shortName: lm.shortName, horizonPhrase: lm.horizonPhrase };
+	if (
+		typeof lm.shortName === "string" &&
+		typeof lm.horizonPhrase === "string"
+	) {
+		return { shortName: lm.shortName, horizonPhrase: lm.horizonPhrase };
+	}
+	return null;
+}
+
+export function validateContentPacksOrThrow(
+	raw: unknown,
+	input: ContentPackProviderInput,
+): ContentPackProviderResult {
+	const r = validateContentPacks(raw, input);
+	if (!r.ok)
+		throw new ContentPackError(r.errors[0]?.message ?? "validation failed");
+	return r.value;
+}
+
+export function validateDualContentPacksOrThrow(
+	raw: unknown,
+	input: DualContentPackProviderInput,
+): DualContentPackProviderResult {
+	const r = validateDualContentPacks(raw, input);
+	if (!r.ok)
+		throw new ContentPackError(r.errors[0]?.message ?? "validation failed");
+	return r.value;
 }
 
 // ── BrowserContentPackProvider ────────────────────────────────────────────────
@@ -1108,7 +1614,7 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 				throw new ContentPackError(`content-pack JSON parse failed: ${raw}`);
 			}
 
-			return validateContentPacks(parsed, input);
+			return validateContentPacksOrThrow(parsed, input);
 		};
 
 		try {
@@ -1154,7 +1660,7 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 				);
 			}
 
-			return validateDualContentPacks(parsed, input);
+			return validateDualContentPacksOrThrow(parsed, input);
 		};
 
 		try {
