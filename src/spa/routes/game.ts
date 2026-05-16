@@ -43,7 +43,7 @@ import {
 
 /** Maximum time allowed for bootstrap loading (personas + content packs) before
  * timing out and bouncing to #/start?reason=stuck. */
-export const BOOTSTRAP_LOADING_TIMEOUT_MS = 90_000;
+export const BOOTSTRAP_LOADING_TIMEOUT_MS = 120_000;
 
 /** Lowercased persona name for transcript prefixes (`> *ember <msg>`). */
 function transcriptName(name: string): string {
