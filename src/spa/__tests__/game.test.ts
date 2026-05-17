@@ -2799,9 +2799,7 @@ describe("renderBootstrapLoadingFlow — timeout", () => {
 		const titleEl = document.querySelector("#bootstrap-recovery-title");
 		expect(titleEl?.textContent).toBe("the room is taking too long");
 		const bodyEl = document.querySelector("#bootstrap-recovery-body");
-		expect(bodyEl?.textContent).toContain(
-			"the world generation timed out"
-		);
+		expect(bodyEl?.textContent).toContain("the world generation timed out");
 
 		// The main point: recovery UI is shown instead of an immediate full-page bounce
 		// (We might bounce to #/sessions, but only AFTER recovery UI has been rendered)
@@ -2867,7 +2865,7 @@ describe("renderBootstrapLoadingFlow — promise propagation", () => {
 		expect(bodyEl?.textContent).toContain("malformed");
 	});
 
-	it("bounces to #/start?reason=broken when personasPromise rejects immediately (no recovery without personas)", async () => {
+	it("shows #bootstrap-recovery when personasPromise rejects immediately (no personas cached for regen)", async () => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
@@ -2901,12 +2899,20 @@ describe("renderBootstrapLoadingFlow — promise propagation", () => {
 		const { startBootstrap } = await import("../game/pending-bootstrap.js");
 		startBootstrap();
 
+		// Simulate start-screen navigation to #/game when player clicks CONNECT.
+		// This is where the start route would navigate before renderGame is called.
+		location.hash = "#/game";
+
 		const { renderGame } = await import("../routes/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
-		// When personas fail, we can't recover (no cached personas), so it bounces.
-		// (Currently bounces to #/sessions but that's OK — the key is recovery UI is not shown)
-		expect(location.hash).toContain("reason=broken");
+		// When personas fail, recovery UI is still shown (generic bootstrap failure).
+		// Location hash should remain at #/game (not bounced to #/start?reason=broken).
+		expect(location.hash).toBe("#/game");
+		const recoveryEl = document.querySelector("#bootstrap-recovery");
+		expect(recoveryEl?.hasAttribute("hidden")).toBe(false);
+		const titleEl = document.querySelector("#bootstrap-recovery-title");
+		expect(titleEl?.textContent).toBe("the room collapsed");
 	});
 
 	it("shows #cap-hit panel when personasPromise rejects with CapHitError (stays at #/game)", async () => {

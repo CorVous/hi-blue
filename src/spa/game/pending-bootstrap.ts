@@ -102,9 +102,7 @@ export function getCachedPersonas(): Record<AiId, AiPersona> | undefined {
  *
  * If no cached personas exist, falls back to startBootstrap (full restart).
  */
-export function restartContentPacks(
-	opts?: BootstrapOpts,
-): PendingBootstrap {
+export function restartContentPacks(opts?: BootstrapOpts): PendingBootstrap {
 	const cached = getCachedPersonas();
 	if (!cached) {
 		return startBootstrap(opts);

@@ -117,7 +117,7 @@ export function generateContentPacksOnlySplit(
 	personas: Record<AiId, AiPersona>,
 	opts?: BootstrapOpts,
 ): SplitNewGameAssets {
-	const contentPackRng = opts?.contentPackRng ?? (opts?.rng ?? Math.random);
+	const contentPackRng = opts?.contentPackRng ?? opts?.rng ?? Math.random;
 	const packLLM = opts?.packProvider ?? new BrowserContentPackProvider();
 	const aiIds = Object.keys(personas);
 

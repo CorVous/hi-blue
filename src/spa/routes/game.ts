@@ -609,11 +609,13 @@ export function renderGame(
 					renderLoadingTopInfo("generating-room");
 					startSpinners();
 					startBrightnessWipe();
-					return pendingBootstrap.contentPacksPromise.then(({ packsA, packsB }) => ({
-						personas,
-						contentPacksA: packsA,
-						contentPacksB: packsB,
-					}));
+					return pendingBootstrap.contentPacksPromise.then(
+						({ packsA, packsB }) => ({
+							personas,
+							contentPacksA: packsA,
+							contentPacksB: packsB,
+						}),
+					);
 				})
 				.then((assets) => {
 					cleanupLoadingTimers();
@@ -686,137 +688,138 @@ export function renderGame(
 		};
 
 		// Run the initial bootstrap chain with error handling
-		return runBootstrapChain(pending)
-			.catch(async (err: unknown) => {
-				cleanupLoadingTimers();
+		return runBootstrapChain(pending).catch(async (err: unknown) => {
+			cleanupLoadingTimers();
 
-				if (err instanceof CapHitError && capHitEl) {
-					capHitEl.removeAttribute("hidden");
-					if (panelsEl) panelsEl.setAttribute("hidden", "");
-					if (composerEl) composerEl.setAttribute("hidden", "");
-					return;
-				}
-
-				const recoveryEl = doc.querySelector<HTMLElement>("#bootstrap-recovery");
-				const recoveryTitleEl = doc.querySelector<HTMLElement>(
-					"#bootstrap-recovery-title",
-				);
-				const recoveryBodyEl = doc.querySelector<HTMLElement>(
-					"#bootstrap-recovery-body",
-				);
-				const regenBtn = doc.querySelector<HTMLButtonElement>(
-					"#bootstrap-recovery-regen",
-				);
-				const abandonLink = doc.querySelector<HTMLAnchorElement>(
-					"#bootstrap-recovery-abandon",
-				);
-
-				// If recovery UI can't be shown (missing DOM),
-				// fall back to bouncing to #/start?reason=broken.
-				if (!recoveryEl || !recoveryTitleEl || !recoveryBodyEl) {
-					clearActiveSession();
-					clearPendingBootstrap();
-					location.hash = "#/start?reason=broken";
-					return;
-				}
-
-				// Determine reason and set UI text
-				let reason = "broken";
-				if (err instanceof BootstrapTimeoutError) {
-					reason = "stuck";
-				}
-
-				if (reason === "stuck") {
-					recoveryTitleEl.textContent = "the room is taking too long";
-					recoveryBodyEl.textContent =
-						"the world generation timed out. try regenerating with the same daemons, or abandon and reconnect.";
-				} else {
-					recoveryTitleEl.textContent = "the room collapsed";
-					recoveryBodyEl.textContent =
-						"the world we tried to build was malformed. try regenerating with the same daemons, or abandon and reconnect.";
-				}
-
-				// Show recovery UI
-				recoveryEl.removeAttribute("hidden");
+			if (err instanceof CapHitError && capHitEl) {
+				capHitEl.removeAttribute("hidden");
 				if (panelsEl) panelsEl.setAttribute("hidden", "");
 				if (composerEl) composerEl.setAttribute("hidden", "");
-				setStageLoadState("unstable");
+				return;
+			}
 
-				// Wire up regenerate button
-				if (regenBtn) {
-					regenBtn.disabled = false;
-					const runRegenerate = async (): Promise<void> => {
-						// Hide recovery UI and clear persistence warning
-						recoveryEl.setAttribute("hidden", "");
-						const persistenceWarningEl =
-							doc.querySelector<HTMLElement>("#persistence-warning");
-						if (persistenceWarningEl)
-							persistenceWarningEl.setAttribute("hidden", "");
+			const recoveryEl = doc.querySelector<HTMLElement>("#bootstrap-recovery");
+			const recoveryTitleEl = doc.querySelector<HTMLElement>(
+				"#bootstrap-recovery-title",
+			);
+			const recoveryBodyEl = doc.querySelector<HTMLElement>(
+				"#bootstrap-recovery-body",
+			);
+			const regenBtn = doc.querySelector<HTMLButtonElement>(
+				"#bootstrap-recovery-regen",
+			);
+			const abandonLink = doc.querySelector<HTMLAnchorElement>(
+				"#bootstrap-recovery-abandon",
+			);
 
-						// Show panels and composer as empty loading shells
-						if (panelsEl) panelsEl.removeAttribute("hidden");
-						if (composerEl) composerEl.removeAttribute("hidden");
-						_promptInput.disabled = true;
-						_promptInput.placeholder = "loading…";
+			// If recovery UI can't be shown (missing DOM),
+			// fall back to bouncing to #/start?reason=broken.
+			if (!recoveryEl || !recoveryTitleEl || !recoveryBodyEl) {
+				clearActiveSession();
+				clearPendingBootstrap();
+				location.hash = "#/start?reason=broken";
+				return;
+			}
 
-						// Disable the regen button during regeneration
-						regenBtn.disabled = true;
+			// Determine reason and set UI text
+			let reason = "broken";
+			if (err instanceof BootstrapTimeoutError) {
+				reason = "stuck";
+			}
 
-						// Restart content packs with cached personas
-						const regenPending = restartContentPacks();
+			if (reason === "stuck") {
+				recoveryTitleEl.textContent = "the room is taking too long";
+				recoveryBodyEl.textContent =
+					"the world generation timed out. try regenerating with the same daemons, or abandon and reconnect.";
+			} else {
+				recoveryTitleEl.textContent = "the room collapsed";
+				recoveryBodyEl.textContent =
+					"the world we tried to build was malformed. try regenerating with the same daemons, or abandon and reconnect.";
+			}
 
-						try {
-							await runBootstrapChain(regenPending);
-						} catch (regenErr: unknown) {
-							cleanupLoadingTimers();
+			// Show recovery UI
+			recoveryEl.removeAttribute("hidden");
+			if (panelsEl) panelsEl.setAttribute("hidden", "");
+			if (composerEl) composerEl.setAttribute("hidden", "");
+			setStageLoadState("unstable");
 
-							// If it's a cap-hit error, show cap-hit and hide recovery
-							if (regenErr instanceof CapHitError && capHitEl) {
-								capHitEl.removeAttribute("hidden");
-								recoveryEl.setAttribute("hidden", "");
-								if (panelsEl) panelsEl.setAttribute("hidden", "");
-								if (composerEl) composerEl.setAttribute("hidden", "");
-								return;
-							}
+			// Wire up regenerate button
+			if (regenBtn) {
+				regenBtn.disabled = false;
+				const runRegenerate = async (): Promise<void> => {
+					// Hide recovery UI and clear persistence warning
+					recoveryEl.setAttribute("hidden", "");
+					const persistenceWarningEl = doc.querySelector<HTMLElement>(
+						"#persistence-warning",
+					);
+					if (persistenceWarningEl)
+						persistenceWarningEl.setAttribute("hidden", "");
 
-							// Otherwise, re-show recovery UI for another attempt
-							recoveryEl.removeAttribute("hidden");
+					// Show panels and composer as empty loading shells
+					if (panelsEl) panelsEl.removeAttribute("hidden");
+					if (composerEl) composerEl.removeAttribute("hidden");
+					_promptInput.disabled = true;
+					_promptInput.placeholder = "loading…";
+
+					// Disable the regen button during regeneration
+					regenBtn.disabled = true;
+
+					// Restart content packs with cached personas
+					const regenPending = restartContentPacks();
+
+					try {
+						await runBootstrapChain(regenPending);
+					} catch (regenErr: unknown) {
+						cleanupLoadingTimers();
+
+						// If it's a cap-hit error, show cap-hit and hide recovery
+						if (regenErr instanceof CapHitError && capHitEl) {
+							capHitEl.removeAttribute("hidden");
+							recoveryEl.setAttribute("hidden", "");
 							if (panelsEl) panelsEl.setAttribute("hidden", "");
 							if (composerEl) composerEl.setAttribute("hidden", "");
-							regenBtn.disabled = false;
+							return;
 						}
-					};
 
-					regenBtn.replaceWith(regenBtn.cloneNode(true));
-					const newRegenBtn = doc.querySelector<HTMLButtonElement>(
-						"#bootstrap-recovery-regen",
-					);
-					if (newRegenBtn) {
-						newRegenBtn.addEventListener("click", (e) => {
-							e.preventDefault();
-							void runRegenerate();
-						});
+						// Otherwise, re-show recovery UI for another attempt
+						recoveryEl.removeAttribute("hidden");
+						if (panelsEl) panelsEl.setAttribute("hidden", "");
+						if (composerEl) composerEl.setAttribute("hidden", "");
+						setStageLoadState("unstable");
+						regenBtn.disabled = false;
 					}
-				}
+				};
 
-				// Wire up abandon link
-				if (abandonLink) {
-					abandonLink.replaceWith(abandonLink.cloneNode(true));
-					const newAbandonLink = doc.querySelector<HTMLAnchorElement>(
-						"#bootstrap-recovery-abandon",
-					);
-					if (newAbandonLink) {
-						newAbandonLink.addEventListener("click", (e) => {
-							e.preventDefault();
-							clearActiveSession();
-							clearPendingBootstrap();
-							if (typeof location !== "undefined") {
-								location.hash = "#/start?reason=broken";
-							}
-						});
-					}
+				regenBtn.replaceWith(regenBtn.cloneNode(true));
+				const newRegenBtn = doc.querySelector<HTMLButtonElement>(
+					"#bootstrap-recovery-regen",
+				);
+				if (newRegenBtn) {
+					newRegenBtn.addEventListener("click", (e) => {
+						e.preventDefault();
+						void runRegenerate();
+					});
 				}
-			});
+			}
+
+			// Wire up abandon link
+			if (abandonLink) {
+				abandonLink.replaceWith(abandonLink.cloneNode(true));
+				const newAbandonLink = doc.querySelector<HTMLAnchorElement>(
+					"#bootstrap-recovery-abandon",
+				);
+				if (newAbandonLink) {
+					newAbandonLink.addEventListener("click", (e) => {
+						e.preventDefault();
+						clearActiveSession();
+						clearPendingBootstrap();
+						if (typeof location !== "undefined") {
+							location.hash = "#/start?reason=broken";
+						}
+					});
+				}
+			}
+		});
 	}
 
 	// Session restore path: load from active session pointer.
