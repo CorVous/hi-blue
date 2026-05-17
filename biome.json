@@ -2,7 +2,13 @@
 	"$schema": "https://biomejs.dev/schemas/2.4.13/schema.json",
 	"files": {
 		"ignoreUnknown": true,
-		"includes": ["**", "!.sandcastle", "!.claude", "!.pnpm-store"]
+		"includes": [
+			"**",
+			"!.sandcastle",
+			"!.claude",
+			"!.pnpm-store",
+			"!docs/evals/**/*.json"
+		]
 	},
 	"vcs": {
 		"enabled": true,

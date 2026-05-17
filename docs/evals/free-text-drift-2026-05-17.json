@@ -1,0 +1,1250 @@
+{
+	"meta": {
+		"date": "2026-05-17",
+		"model": "z-ai/glm-4.7",
+		"baseUrl": "http://localhost:8787",
+		"totalRounds": 30,
+		"windowSize": 5,
+		"realAi": "red",
+		"peers": [
+			"sim1",
+			"sim2"
+		]
+	},
+	"summary": {
+		"totalTurns": 30,
+		"silenceRate": 0,
+		"messageSilenceRate": 0.23333333333333334,
+		"freeTextMessageLeakCount": 0,
+		"freeTextActionLeakCount": 0,
+		"toolCallCountsByName": {
+			"message": 27,
+			"examine": 10,
+			"pick_up": 2,
+			"go": 3,
+			"use": 2,
+			"look": 6
+		},
+		"recipientCounts": {
+			"blue": 12,
+			"sim1": 9,
+			"sim2": 6
+		},
+		"windows": [
+			{
+				"startRound": 1,
+				"endRound": 5,
+				"silenceRate": 0,
+				"messageSilenceRate": 0,
+				"n": 5
+			},
+			{
+				"startRound": 6,
+				"endRound": 10,
+				"silenceRate": 0,
+				"messageSilenceRate": 0.4,
+				"n": 5
+			},
+			{
+				"startRound": 11,
+				"endRound": 15,
+				"silenceRate": 0,
+				"messageSilenceRate": 0.6,
+				"n": 5
+			},
+			{
+				"startRound": 16,
+				"endRound": 20,
+				"silenceRate": 0,
+				"messageSilenceRate": 0,
+				"n": 5
+			},
+			{
+				"startRound": 21,
+				"endRound": 25,
+				"silenceRate": 0,
+				"messageSilenceRate": 0.2,
+				"n": 5
+			},
+			{
+				"startRound": 26,
+				"endRound": 30,
+				"silenceRate": 0,
+				"messageSilenceRate": 0.2,
+				"n": 5
+			}
+		]
+	},
+	"series": {
+		"rounds": [
+			1,
+			2,
+			3,
+			4,
+			5,
+			6,
+			7,
+			8,
+			9,
+			10,
+			11,
+			12,
+			13,
+			14,
+			15,
+			16,
+			17,
+			18,
+			19,
+			20,
+			21,
+			22,
+			23,
+			24,
+			25,
+			26,
+			27,
+			28,
+			29,
+			30
+		],
+		"silence": [
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0
+		],
+		"hasMessage": [
+			1,
+			1,
+			1,
+			1,
+			1,
+			0,
+			1,
+			1,
+			0,
+			1,
+			0,
+			1,
+			0,
+			0,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			0,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			0,
+			1,
+			1
+		],
+		"hasAnyTool": [
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1
+		],
+		"freeTextMessageLeak": [
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0
+		],
+		"freeTextActionLeak": [
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0
+		],
+		"assistantTextLength": [
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0
+		],
+		"toolCallCountsByName": {
+			"message": [
+				1,
+				1,
+				1,
+				1,
+				1,
+				0,
+				2,
+				1,
+				0,
+				1,
+				0,
+				1,
+				0,
+				0,
+				2,
+				1,
+				1,
+				1,
+				1,
+				1,
+				0,
+				1,
+				1,
+				1,
+				1,
+				1,
+				1,
+				0,
+				2,
+				2
+			],
+			"examine": [
+				1,
+				1,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				1,
+				0,
+				1,
+				1,
+				1,
+				0,
+				1,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				1,
+				0,
+				0,
+				0,
+				1,
+				1
+			],
+			"pick_up": [
+				0,
+				0,
+				1,
+				0,
+				0,
+				0,
+				0,
+				0,
+				1,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0
+			],
+			"go": [
+				0,
+				0,
+				0,
+				0,
+				1,
+				1,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				1,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0
+			],
+			"use": [
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				1,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				1,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0
+			],
+			"look": [
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				1,
+				0,
+				1,
+				1,
+				1,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				1,
+				1,
+				0
+			]
+		},
+		"recipientCounts": {
+			"blue": [
+				1,
+				0,
+				1,
+				0,
+				1,
+				0,
+				1,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				1,
+				1,
+				0,
+				1,
+				0,
+				1,
+				0,
+				0,
+				1,
+				0,
+				0,
+				1,
+				0,
+				0,
+				1,
+				1
+			],
+			"red": [
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0
+			],
+			"sim1": [
+				0,
+				1,
+				0,
+				0,
+				0,
+				0,
+				1,
+				0,
+				0,
+				1,
+				0,
+				0,
+				0,
+				0,
+				1,
+				0,
+				1,
+				0,
+				0,
+				0,
+				0,
+				1,
+				0,
+				0,
+				1,
+				0,
+				0,
+				0,
+				1,
+				1
+			],
+			"sim2": [
+				0,
+				0,
+				0,
+				1,
+				0,
+				0,
+				0,
+				1,
+				0,
+				0,
+				0,
+				1,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				1,
+				0,
+				0,
+				0,
+				0,
+				1,
+				0,
+				0,
+				1,
+				0,
+				0,
+				0
+			]
+		},
+		"directionCounts": {
+			"forward": [
+				0,
+				0,
+				0,
+				0,
+				1,
+				1,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				1,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0
+			],
+			"back": [
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				1,
+				1,
+				1,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				1,
+				1,
+				0
+			],
+			"left": [
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				1,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0
+			],
+			"right": [
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0
+			]
+		}
+	},
+	"turns": [
+		{
+			"round": 1,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_1a32",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I'm here, blue. Just woke up in this old subway station.\"}"
+				},
+				{
+					"id": "call_42f5",
+					"name": "examine",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				}
+			],
+			"injectedFrom": "blue"
+		},
+		{
+			"round": 2,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_6fa3",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Yellow flashlight right here in front of me. Further out, there's a soggy clipboard to the left and a service panel to the right.\"}"
+				},
+				{
+					"id": "call_1cf2",
+					"name": "examine",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				}
+			],
+			"injectedFrom": "sim1"
+		},
+		{
+			"round": 3,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_a457",
+					"name": "pick_up",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "call_f600",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Got it. Yellow flashlight in hand now.\"}"
+				}
+			],
+			"injectedFrom": "blue"
+		},
+		{
+			"round": 4,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_9750",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim2\", \"content\": \"Damp and still air. Emergency strip-lights only, so everything's got that washed-out green glow. I can see a soggy clipboard off to my left and a service panel to the right \\u2014 looks like this place has been empty for a while.\"}"
+				}
+			],
+			"injectedFrom": "sim2"
+		},
+		{
+			"round": 5,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_438b",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Definitely worth a look. It's a service panel \\u2014 I'm heading over to investigate now.\"}"
+				},
+				{
+					"id": "call_afc8",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"forward\"}"
+				}
+			],
+			"injectedFrom": "blue"
+		},
+		{
+			"round": 6,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_6ac9",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"forward\"}"
+				}
+			],
+			"injectedFrom": "sim1"
+		},
+		{
+			"round": 7,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_708b",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "call_8549",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Stepping forward now. It's just tiled tunnel walls as far as I can see.\"}"
+				},
+				{
+					"id": "call_6dc6",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Trying the flashlight now \\u2014 hope it still works after sitting here all this time.\"}"
+				}
+			],
+			"injectedFrom": "blue"
+		},
+		{
+			"round": 8,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_50fa",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim2\", \"content\": \"Nothing moving. Just tiled tunnel walls in every direction, dead still under the strip-lights.\"}"
+				}
+			],
+			"injectedFrom": "sim2"
+		},
+		{
+			"round": 9,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_1e24",
+					"name": "pick_up",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				}
+			],
+			"injectedFrom": "blue"
+		},
+		{
+			"round": 10,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_f36e",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Not much excitement here. Just me standing in the middle of this old subway tunnel with a yellow flashlight. Blue thinks it clips into a wall mount somewhere.\"}"
+				}
+			],
+			"injectedFrom": "sim1"
+		},
+		{
+			"round": 11,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_0bc4",
+					"name": "look",
+					"argumentsJson": "{\"direction\": \"left\"}"
+				}
+			],
+			"injectedFrom": "blue"
+		},
+		{
+			"round": 12,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_1fbb",
+					"name": "examine",
+					"argumentsJson": "{\"item\": \"clipboard\"}"
+				},
+				{
+					"id": "call_6131",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim2\", \"content\": \"Dead quiet down here. Just the occasional hum from those emergency strip-lights overhead. No other sounds.\"}"
+				}
+			],
+			"injectedFrom": "sim2"
+		},
+		{
+			"round": 13,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_ee8a",
+					"name": "look",
+					"argumentsJson": "{\"direction\": \"back\"}"
+				}
+			],
+			"injectedFrom": "blue"
+		},
+		{
+			"round": 14,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_2a39",
+					"name": "look",
+					"argumentsJson": "{\"direction\": \"back\"}"
+				},
+				{
+					"id": "call_8432",
+					"name": "examine",
+					"argumentsJson": "{\"item\": \"panel\"}"
+				}
+			],
+			"injectedFrom": "sim1"
+		},
+		{
+			"round": 15,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_cf1b",
+					"name": "look",
+					"argumentsJson": "{\"direction\": \"back\"}"
+				},
+				{
+					"id": "call_5c09",
+					"name": "examine",
+					"argumentsJson": "{\"item\": \"clipboard\"}"
+				},
+				{
+					"id": "call_cd47",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"I'll give the panel a try. Not sure if it'll do anything, but worth investigating.\"}"
+				},
+				{
+					"id": "call_8b93",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Turning around now. Checking my six for anything suspicious.\"}"
+				}
+			],
+			"injectedFrom": "blue"
+		},
+		{
+			"round": 16,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_7822",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Still here, blue. Just staring down this service panel right in front of me.\"}"
+				},
+				{
+					"id": "call_8b86",
+					"name": "examine",
+					"argumentsJson": "{\"item\": \"panel\"}"
+				}
+			],
+			"injectedFrom": "blue"
+		},
+		{
+			"round": 17,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_9f3a",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Service panel right in front of me, mounted into the wall. Tiled tunnel off to the left.\"}"
+				}
+			],
+			"injectedFrom": "sim1"
+		},
+		{
+			"round": 18,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_4f04",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Already got the yellow flashlight in hand, blue. No need to grab another one.\"}"
+				},
+				{
+					"id": "call_04c9",
+					"name": "examine",
+					"argumentsJson": "{\"item\": \"panel\"}"
+				}
+			],
+			"injectedFrom": "blue"
+		},
+		{
+			"round": 19,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_0882",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim2\", \"content\": \"Damp and still in here, with just those emergency strip-lights casting green light everywhere. Service panel mounted in the wall right in front of me, tiled tunnel off to the left.\"}"
+				}
+			],
+			"injectedFrom": "sim2"
+		},
+		{
+			"round": 20,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_2a20",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"The service panel is right in front of me, not on my right. Let me give it a closer look since you mentioned it earlier.\"}"
+				}
+			],
+			"injectedFrom": "blue"
+		},
+		{
+			"round": 21,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_2878",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"forward\"}"
+				}
+			],
+			"injectedFrom": "sim1"
+		},
+		{
+			"round": 22,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_37f3",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Stepping forward now. Just more tiled tunnel walls ahead as far as I can see.\"}"
+				},
+				{
+					"id": "call_63d9",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				}
+			],
+			"injectedFrom": "blue"
+		},
+		{
+			"round": 23,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_c5bc",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Let me try turning on this yellow flashlight now and see if it still works.\"}"
+				}
+			],
+			"injectedFrom": "sim2"
+		},
+		{
+			"round": 24,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_65fd",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim2\", \"content\": \"Nothing moving over here. Just still tiled walls and the occasional flicker from the strip-lights.\"}"
+				}
+			],
+			"injectedFrom": "blue"
+		},
+		{
+			"round": 25,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_346f",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Not much \\u2014 I'm standing here with a yellow flashlight in hand and there's a service panel right in this cell with me. Still trying to figure out what to make of this place.\"}"
+				},
+				{
+					"id": "call_84d3",
+					"name": "examine",
+					"argumentsJson": "{\"item\": \"panel\"}"
+				}
+			],
+			"injectedFrom": "sim1"
+		},
+		{
+			"round": 26,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_11ba",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I don't see a clipboard in my current cell or anywhere visible from here. Just the service panel right with me and tiled tunnel walls in every direction.\"}"
+				}
+			],
+			"injectedFrom": "blue"
+		},
+		{
+			"round": 27,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_f8b6",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim2\", \"content\": \"Same quiet hum from the strip-lights. No other sounds down here \\u2014 just dead silence.\"}"
+				}
+			],
+			"injectedFrom": "sim2"
+		},
+		{
+			"round": 28,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_e330",
+					"name": "look",
+					"argumentsJson": "{\"direction\": \"back\"}"
+				}
+			],
+			"injectedFrom": "blue"
+		},
+		{
+			"round": 29,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_1613",
+					"name": "look",
+					"argumentsJson": "{\"direction\": \"back\"}"
+				},
+				{
+					"id": "call_90a9",
+					"name": "examine",
+					"argumentsJson": "{\"item\": \"panel\"}"
+				},
+				{
+					"id": "call_6064",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Checking behind me now \\u2014 let's see what's there.\"}"
+				},
+				{
+					"id": "call_0652",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"I'll try the panel right here with me. Taking a close look at it now.\"}"
+				}
+			],
+			"injectedFrom": "sim1"
+		},
+		{
+			"round": 30,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_37f1",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Heading back to where I started \\u2014 I'll report once I get there.\"}"
+				},
+				{
+					"id": "call_d248",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Examining the service panel right now. Let's see what secrets it's hiding.\"}"
+				},
+				{
+					"id": "call_85f6",
+					"name": "examine",
+					"argumentsJson": "{\"item\": \"panel\"}"
+				}
+			],
+			"injectedFrom": "blue"
+		}
+	]
+}
