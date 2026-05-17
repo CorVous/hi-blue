@@ -70,6 +70,17 @@ const WINDOW_SIZE = Number(process.env.EVAL_DRIFT_WINDOW ?? 5);
 const REAL_AI: AiId = "red";
 const PEERS: AiId[] = ["sim1", "sim2"];
 
+/**
+ * When `EVAL_DIRECT_OPENROUTER=1`, the runner calls OpenRouter directly
+ * (read `OPENROUTER_API_KEY` from env, attach Bearer auth) instead of going
+ * through the proxy worker. Useful when wrangler dev can't run locally
+ * (e.g. Cloudflare login unavailable) or when measuring drift without the
+ * proxy's rate-guard in the loop.
+ */
+const DIRECT_OPENROUTER = process.env.EVAL_DIRECT_OPENROUTER === "1";
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY ?? "";
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+
 // ── Personas ─────────────────────────────────────────────────────────────────
 
 const PERSONAS: Record<string, AiPersona> = {
@@ -181,9 +192,23 @@ async function callModel(
 	}>,
 	tools: ReturnType<typeof availableTools>,
 ): Promise<ModelTurnResult> {
-	const resp = await fetch(`${BASE_URL}/v1/chat/completions`, {
+	const url = DIRECT_OPENROUTER
+		? OPENROUTER_URL
+		: `${BASE_URL}/v1/chat/completions`;
+	const headers: Record<string, string> = {
+		"Content-Type": "application/json",
+	};
+	if (DIRECT_OPENROUTER) {
+		if (!OPENROUTER_API_KEY) {
+			throw new Error(
+				"EVAL_DIRECT_OPENROUTER=1 but OPENROUTER_API_KEY is not set in env",
+			);
+		}
+		headers.Authorization = `Bearer ${OPENROUTER_API_KEY}`;
+	}
+	const resp = await fetch(url, {
 		method: "POST",
-		headers: { "Content-Type": "application/json" },
+		headers,
 		body: JSON.stringify({
 			model: MODEL,
 			messages,
