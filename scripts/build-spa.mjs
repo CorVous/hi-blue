@@ -32,8 +32,50 @@ const COMMIT_TIMESTAMP_MS = (() => {
 	}
 })();
 
+const PKG_VERSION = (() => {
+	try {
+		const raw = JSON.parse(
+			execSync("cat package.json", { cwd: root }).toString(),
+		);
+		return typeof raw.version === "string" ? raw.version : "0.0.0";
+	} catch {
+		return "0.0.0";
+	}
+})();
+
+// The version of the release tag at HEAD, or null if HEAD isn't tagged.
+// Drives the "are we exactly on a release?" branch of the banner suffix.
+const RELEASE_VERSION = (() => {
+	try {
+		const tag = execSync(
+			"git describe --tags --exact-match --match 'v*' HEAD",
+			{ cwd: root, stdio: ["ignore", "pipe", "ignore"] },
+		)
+			.toString()
+			.trim();
+		return tag.replace(/^v/, "");
+	} catch {
+		return null;
+	}
+})();
+
+// Latest v* tag that is an ancestor of HEAD, or null if no v* tag exists.
+const LATEST_RELEASE_VERSION = (() => {
+	try {
+		const tag = execSync("git describe --tags --abbrev=0 --match 'v*' HEAD", {
+			cwd: root,
+			stdio: ["ignore", "pipe", "ignore"],
+		})
+			.toString()
+			.trim();
+		return tag.replace(/^v/, "");
+	} catch {
+		return null;
+	}
+})();
+
 console.log(
-	`Building SPA with WORKER_BASE_URL=${WORKER_BASE_URL} COMMIT_SHA=${COMMIT_SHA} COMMIT_TIMESTAMP_MS=${COMMIT_TIMESTAMP_MS}`,
+	`Building SPA with WORKER_BASE_URL=${WORKER_BASE_URL} COMMIT_SHA=${COMMIT_SHA} COMMIT_TIMESTAMP_MS=${COMMIT_TIMESTAMP_MS} VERSION=${PKG_VERSION} RELEASE_VERSION=${RELEASE_VERSION} LATEST_RELEASE_VERSION=${LATEST_RELEASE_VERSION}`,
 );
 
 // Ensure dist/ and dist/assets/ exist
@@ -115,6 +157,9 @@ const ctx = await esbuild.context({
 		__WORKER_BASE_URL__: JSON.stringify(WORKER_BASE_URL),
 		__COMMIT_SHA__: JSON.stringify(COMMIT_SHA),
 		__COMMIT_TIMESTAMP_MS__: JSON.stringify(COMMIT_TIMESTAMP_MS),
+		__VERSION__: JSON.stringify(PKG_VERSION),
+		__RELEASE_VERSION__: JSON.stringify(RELEASE_VERSION),
+		__LATEST_RELEASE_VERSION__: JSON.stringify(LATEST_RELEASE_VERSION),
 		__DEV__: WORKER_BASE_URL === "http://localhost:8787" ? "true" : "false",
 	},
 	plugins: [templateHtmlPlugin],

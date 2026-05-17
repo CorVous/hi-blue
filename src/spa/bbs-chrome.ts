@@ -1,5 +1,26 @@
 import type { AiPersona } from "./game/types";
 
+// Build-time version data. `typeof` guards keep these safe in tests, where
+// the esbuild defines aren't injected — the IIFE that assembles BANNER runs
+// at module load, before any beforeEach stub can fire.
+const RELEASE_VERSION: string | null =
+	typeof __RELEASE_VERSION__ !== "undefined" ? __RELEASE_VERSION__ : null;
+const LATEST_RELEASE_VERSION: string | null =
+	typeof __LATEST_RELEASE_VERSION__ !== "undefined"
+		? __LATEST_RELEASE_VERSION__
+		: null;
+const PKG_VERSION: string =
+	typeof __VERSION__ !== "undefined" ? __VERSION__ : "0.0.0";
+const COMMIT_SHA: string =
+	typeof __COMMIT_SHA__ !== "undefined" ? __COMMIT_SHA__ : "unknown";
+
+// On a release tag → `bbs terminal · v<version>`.
+// Otherwise → `bbs terminal · v<latest-ancestor-tag> · 0x<short-sha>`,
+// falling back to the package.json version when no v* tag exists yet.
+const VERSION_SUFFIX: string = RELEASE_VERSION
+	? `   bbs terminal · v${RELEASE_VERSION} `
+	: `   bbs terminal · v${LATEST_RELEASE_VERSION ?? PKG_VERSION} · 0x${COMMIT_SHA} `;
+
 // Each line is split into amber prefix (HI-), blue middle (BLUE block
 // letters), and optional amber suffix (the meta line on row 5). The blue
 // segment is 33 chars wide on every row, so column alignment is preserved.
@@ -8,11 +29,7 @@ const BANNER_SEGMENTS: ReadonlyArray<readonly [string, string, string]> = [
 	["   ██║  ██║██║      ", "██╔══██╗██║     ██║   ██║██╔════╝", ""],
 	["   ███████║██║█████╗", "██████╔╝██║     ██║   ██║█████╗  ", ""],
 	["   ██╔══██║██║╚════╝", "██╔══██╗██║     ██║   ██║██╔══╝  ", ""],
-	[
-		"   ██║  ██║██║      ",
-		"██████╔╝███████╗╚██████╔╝███████╗",
-		"   bbs terminal · v0.3 · amber ",
-	],
+	["   ██║  ██║██║      ", "██████╔╝███████╗╚██████╔╝███████╗", VERSION_SUFFIX],
 	["   ╚═╝  ╚═╝╚═╝      ", "╚═════╝ ╚══════╝ ╚═════╝ ╚══════╝", ""],
 ] as const;
 
