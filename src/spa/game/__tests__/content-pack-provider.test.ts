@@ -1292,6 +1292,144 @@ describe("validateContentPacks — objective_space activationFlavor & prose tell
 	});
 });
 
+// ── proximityFlavor validation for interesting_object and objective_space ────
+
+describe("validateContentPacks — proximityFlavor rejection tests", () => {
+	const inputForInterestingObject = {
+		phases: [
+			{
+				setting: "abandoned subway station",
+				theme: "mundane",
+				k: 0,
+				n: 1,
+				m: 0,
+			},
+		],
+	};
+
+	const inputForObjectiveSpace = {
+		phases: [
+			{
+				setting: "abandoned subway station",
+				theme: "mundane",
+				k: 1,
+				n: 0,
+				m: 0,
+			},
+		],
+	};
+
+	it("rejects an interesting_object missing proximityFlavor", () => {
+		const pack = {
+			packs: [
+				{
+					setting: "abandoned subway station",
+					objectivePairs: [],
+					interestingObjects: [
+						{
+							id: "item1",
+							kind: "interesting_object",
+							name: "brass switch",
+							examineDescription: "A small brass switch ready to be pressed.",
+							useOutcome: "You toggle the switch.",
+							activationFlavor: "The switch clicks with a satisfying snap.",
+							postExamineDescription: "The switch is now activated.",
+							postLookFlavor: "a steady amber glow lingers near the switch",
+							// Missing proximityFlavor
+						},
+					],
+					obstacles: [],
+					landmarks: {
+						north: {
+							shortName: "the signal tower",
+							horizonPhrase: "rises above the platform",
+						},
+						south: {
+							shortName: "the collapsed entrance",
+							horizonPhrase: "gapes like a wound in the dark",
+						},
+						east: {
+							shortName: "the rusted fan shaft",
+							horizonPhrase: "spins slowly in the stale air",
+						},
+						west: {
+							shortName: "the flooded tunnel",
+							horizonPhrase: "disappears into still black water",
+						},
+					},
+				},
+			],
+		};
+		expect(() =>
+			validateContentPacksOrThrow(pack, inputForInterestingObject),
+		).toThrow(/proximityFlavor/);
+	});
+
+	it("rejects an objective_space missing proximityFlavor", () => {
+		const pack = {
+			packs: [
+				{
+					setting: "abandoned subway station",
+					objectivePairs: [
+						{
+							object: {
+								id: "obj1",
+								kind: "objective_object",
+								name: "Iron Key",
+								examineDescription:
+									"An iron key. It looks like it belongs on the brass pedestal.",
+								useOutcome: "You turn the key over in your hands.",
+								pairsWithSpaceId: "space1",
+								placementFlavor: "{actor} sets the key on its mount.",
+								proximityFlavor: "The key hums faintly near the pedestal.",
+							},
+							space: {
+								id: "space1",
+								kind: "objective_space",
+								name: "Brass Pedestal",
+								examineDescription:
+									"A sturdy brass pedestal. Press an item onto it to activate.",
+								activationFlavor: "The pedestal hums to life.",
+								satisfactionFlavor: "The pedestal glows brightly.",
+								postExamineDescription: "The pedestal glows softly.",
+								postLookFlavor: "the pedestal hums.",
+								convergenceTier1Flavor: "A lone figure stands.",
+								convergenceTier2Flavor: "Two figures converge.",
+								convergenceTier1ActorFlavor: "You linger alone.",
+								convergenceTier2ActorFlavor: "You share the space.",
+								// Missing proximityFlavor
+							},
+						},
+					],
+					interestingObjects: [],
+					obstacles: [],
+					landmarks: {
+						north: {
+							shortName: "the signal tower",
+							horizonPhrase: "rises above the platform",
+						},
+						south: {
+							shortName: "the collapsed entrance",
+							horizonPhrase: "gapes like a wound in the dark",
+						},
+						east: {
+							shortName: "the rusted fan shaft",
+							horizonPhrase: "spins slowly in the stale air",
+						},
+						west: {
+							shortName: "the flooded tunnel",
+							horizonPhrase: "disappears into still black water",
+						},
+					},
+				},
+			],
+		};
+		expect(() =>
+			validateContentPacksOrThrow(pack, inputForObjectiveSpace),
+		).toThrow(/proximityFlavor/);
+	});
+});
+
 // ── Prompt rules (issue #335) ─────────────────────────────────────────────────
 
 describe("CONTENT_PACK_SYSTEM_PROMPT — issue #335 rules", () => {

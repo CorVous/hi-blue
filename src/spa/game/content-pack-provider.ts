@@ -994,6 +994,18 @@ function validateEntity(
 			});
 		}
 		if (
+			typeof e.proximityFlavor !== "string" ||
+			e.proximityFlavor.length === 0
+		) {
+			errors.push({
+				entityId: e.id,
+				field: "proximityFlavor",
+				rule: "missing-field",
+				message: `Interesting object ${e.id} missing proximityFlavor`,
+				retryUnit,
+			});
+		}
+		if (
 			typeof e.activationFlavor !== "string" ||
 			e.activationFlavor.length === 0
 		) {
@@ -1165,6 +1177,22 @@ function validateEntity(
 				field: "convergenceTier2ActorFlavor",
 				rule: "actor-exclusion",
 				message: `Objective space ${e.id}: convergenceTier2ActorFlavor contains "{actor}"; the token will render literally. Remove the "{actor}" substring.`,
+				retryUnit,
+			});
+		}
+	}
+
+	// Validate proximityFlavor for objective_space (runs for all objective_space entities)
+	if (e.kind === "objective_space") {
+		if (
+			typeof e.proximityFlavor !== "string" ||
+			e.proximityFlavor.length === 0
+		) {
+			errors.push({
+				entityId: e.id,
+				field: "proximityFlavor",
+				rule: "missing-field",
+				message: `Objective space ${e.id} missing proximityFlavor`,
 				retryUnit,
 			});
 		}
