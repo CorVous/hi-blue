@@ -16,7 +16,7 @@
  * navigating to a URL. Sticky for broken / version-mismatch active sessions.
  */
 import { expect, test } from "@playwright/test";
-import { goToGame, stubNewGameLLM } from "./helpers";
+import { expectNoPageErrors, goToGame, stubNewGameLLM } from "./helpers";
 
 // ── Obfuscation key (embedded in seed scripts) ────────────────────────────────
 
@@ -216,7 +216,7 @@ test("picker renders ok/broken/version-mismatch rows with correct tags and butto
 		vmRow.locator(".ops button", { hasText: "[ load ]" }),
 	).not.toBeVisible();
 
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	await expectNoPageErrors(page, pageErrors);
 });
 
 test("[ load ] flow: click load on non-active row → game view", async ({
@@ -259,7 +259,7 @@ test("[ load ] flow: click load on non-active row → game view", async ({
 	);
 	expect(activeId).toBe("0xBBBB");
 
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	await expectNoPageErrors(page, pageErrors);
 });
 
 test("[ dup ] flow: click dup → two rows, active pointer unchanged", async ({
@@ -297,7 +297,7 @@ test("[ dup ] flow: click dup → two rows, active pointer unchanged", async ({
 	);
 	expect(activeId).toBe("0xAAAA");
 
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	await expectNoPageErrors(page, pageErrors);
 });
 
 test("[ rm ] confirm/cancel flow", async ({ page }) => {
@@ -342,7 +342,7 @@ test("[ rm ] confirm/cancel flow", async ({ page }) => {
 	// Row should be gone
 	await expect(page.locator(".session-row")).toHaveCount(0);
 
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	await expectNoPageErrors(page, pageErrors);
 });
 
 test("sessions-icon click → sessions view", async ({ page }) => {
@@ -360,7 +360,7 @@ test("sessions-icon click → sessions view", async ({ page }) => {
 	await expect(page.locator('main[data-view="sessions"]')).toBeAttached();
 	await expect(page.locator("#sessions-screen")).toBeVisible();
 
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	await expectNoPageErrors(page, pageErrors);
 });
 
 test("sessions-icon toggles back to game on second click", async ({ page }) => {
@@ -377,7 +377,7 @@ test("sessions-icon toggles back to game on second click", async ({ page }) => {
 	await expect(page.locator('main[data-view="game"]')).toBeAttached();
 	await expect(page.locator("#composer")).toBeVisible();
 
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	await expectNoPageErrors(page, pageErrors);
 });
 
 test("refresh while picker is open lands on the game view (picker state is in-memory)", async ({
@@ -404,7 +404,7 @@ test("refresh while picker is open lands on the game view (picker state is in-me
 		"connection stable",
 	);
 
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	await expectNoPageErrors(page, pageErrors);
 });
 
 test("Escape on the picker returns to the game view", async ({ page }) => {
@@ -419,7 +419,7 @@ test("Escape on the picker returns to the game view", async ({ page }) => {
 	await expect(page.locator('main[data-view="game"]')).toBeAttached();
 	await expect(page.locator("#composer")).toBeVisible();
 
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	await expectNoPageErrors(page, pageErrors);
 });
 
 test("broken-session banner: active session with missing engine.dat → sessions view with reason", async ({
@@ -447,7 +447,7 @@ test("broken-session banner: active session with missing engine.dat → sessions
 	await expect(banner).toBeVisible();
 	await expect(banner).toContainText("unreadable");
 
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	await expectNoPageErrors(page, pageErrors);
 });
 
 test("[ + new session ] flow: click → start view, new active pointer", async ({
@@ -486,5 +486,5 @@ test("[ + new session ] flow: click → start view, new active pointer", async (
 	expect(activeId).not.toBe("0xAAAA");
 	expect(activeId).toMatch(/^0x[0-9A-Fa-f]{4}$/i);
 
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	await expectNoPageErrors(page, pageErrors);
 });

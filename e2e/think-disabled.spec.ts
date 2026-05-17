@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { goToGame } from "./helpers";
+import { expectNoPageErrors, goToGame } from "./helpers";
 
 /**
  * Routine daemon turns disable reasoning by default — `BrowserLLMProvider`
@@ -50,7 +50,7 @@ test("default daemon turns add reasoning:{enabled:false} to chat-completions req
 		expect(body).toMatchObject({ reasoning: { enabled: false } });
 	}
 
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	await expectNoPageErrors(page, pageErrors);
 });
 
 test("?think=1 opts back into thinking — requests do NOT include the reasoning field", async ({
@@ -84,5 +84,5 @@ test("?think=1 opts back into thinking — requests do NOT include the reasoning
 		expect(body).not.toHaveProperty("reasoning");
 	}
 
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	await expectNoPageErrors(page, pageErrors);
 });

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { goToGame } from "./helpers";
+import { expectNoPageErrors, goToGame } from "./helpers";
 
 /**
  * E2E — end-game choice screen (issue #307)
@@ -48,7 +48,7 @@ test("endgame shows choice buttons; Continue hidden without openrouter_key", asy
 	await expect(continueBtn).toBeHidden();
 
 	// No page errors
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	await expectNoPageErrors(page, pageErrors);
 });
 
 test("Continue button visible when openrouter_key is set in localStorage", async ({
@@ -68,7 +68,7 @@ test("Continue button visible when openrouter_key is set in localStorage", async
 	await expect(page.locator("#endgame-continue-btn")).toBeVisible();
 
 	// No page errors
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	await expectNoPageErrors(page, pageErrors);
 });
 
 test("New Daemons click archives session and transitions to start view", async ({
@@ -102,5 +102,5 @@ test("New Daemons click archives session and transitions to start view", async (
 	expect(sessionAfter).not.toBe(sessionBefore);
 
 	// No page errors
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	await expectNoPageErrors(page, pageErrors);
 });

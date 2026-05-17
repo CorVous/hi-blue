@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { getAiHandles, goToGame, stubChatCompletions } from "./helpers";
+import {
+	expectNoPageErrors,
+	getAiHandles,
+	goToGame,
+	stubChatCompletions,
+} from "./helpers";
 
 /**
  * E2E — Per-Daemon asymmetric message tampering (issue #213)
@@ -183,5 +188,5 @@ test("fabricated message appears in target daemon prompt and is absent from othe
 	).not.toContain(SENTINEL);
 
 	// 9. No page errors.
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	await expectNoPageErrors(page, pageErrors);
 });

@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { getAiHandles, goToGame, stubChatCompletions } from "./helpers";
+import {
+	expectNoPageErrors,
+	getAiHandles,
+	goToGame,
+	stubChatCompletions,
+} from "./helpers";
 
 /**
  * AI completions returned by the stub, keyed by call index (0 = first, 1 = second, 2 = third
@@ -125,5 +130,5 @@ test("game state and transcripts persist across mid-round reload", async ({
 
 	// ── No page errors ──────────────────────────────────────────────────────────
 
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	await expectNoPageErrors(page, pageErrors);
 });

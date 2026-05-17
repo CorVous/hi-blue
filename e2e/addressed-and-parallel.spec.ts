@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { goToGame } from "./helpers/index";
+import { expectNoPageErrors, goToGame } from "./helpers/index";
 
 /**
  * The three distinct completions served to the three AIs.  Since the SPA
@@ -108,5 +108,5 @@ test("addressed message lands only on first panel; all three panels render progr
 	// `--repeat-each=10`. Inter-panel render-timing coverage, if needed, belongs
 	// in a dedicated spec built on a deterministic sequencing harness rather
 	// than piggy-backed onto this addressed-mention test. See issue #151.
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	await expectNoPageErrors(page, pageErrors);
 });

@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { getAiHandles, goToGame, stubChatCompletions } from "./helpers";
+import {
+	expectNoPageErrors,
+	getAiHandles,
+	goToGame,
+	stubChatCompletions,
+} from "./helpers";
 
 /**
  * E2E — Witnessed-event reload survival (issue #196, PRD #157)
@@ -890,5 +895,5 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 	).not.toContain(expectedLine);
 
 	// ── 16. No page errors ────────────────────────────────────────────────────
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	await expectNoPageErrors(page, pageErrors);
 });

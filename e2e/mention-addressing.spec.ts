@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { goToGame } from "./helpers";
+import { expectNoPageErrors, goToGame } from "./helpers";
 
 /**
  * E2E spec for #107: *mention-based addressing replaces the address dropdown.
@@ -76,5 +76,5 @@ test("typing '*<ai1> hi' enables Send and submits to that transcript only", asyn
 	expect(otherTranscript0 ?? "").not.toContain("> hi");
 	expect(otherTranscript2 ?? "").not.toContain("> hi");
 
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	await expectNoPageErrors(page, pageErrors);
 });
