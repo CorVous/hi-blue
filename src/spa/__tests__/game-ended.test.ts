@@ -232,8 +232,10 @@ describe("renderGame — game_ended disables #send permanently (regression #89)"
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 
-		// Wait for the async submit handler to complete
-		await new Promise((resolve) => setTimeout(resolve, 300));
+		// Wait for the async submit handler to complete (assertion-driven, no fixed delay)
+		await vi.waitFor(() => {
+			expect(getEl<HTMLButtonElement>("#send").disabled).toBe(true);
+		});
 
 		// Bug: the finally block was unconditionally setting sendBtn.disabled = false,
 		// undoing the game_ended handler's sendBtn.disabled = true.
