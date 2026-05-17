@@ -1095,6 +1095,66 @@ main {
 	text-decoration: underline;
 }
 
+#bootstrap-recovery {
+	font-family: var(--mono);
+	padding: 12px 14px;
+	background: var(--bg);
+	color: var(--amber);
+	border: 1px solid var(--amber-dim);
+	line-height: 1.6;
+}
+
+#bootstrap-recovery h2 {
+	margin: 0 0 8px;
+	font-size: 14px;
+	font-weight: 500;
+	color: var(--amber);
+	letter-spacing: 0.05em;
+}
+
+.bootstrap-recovery-actions {
+	margin-top: 12px;
+	display: flex;
+	gap: 16px;
+	align-items: center;
+}
+
+#bootstrap-recovery-regen {
+	background: transparent;
+	border: 1px solid var(--amber-dim);
+	color: var(--amber);
+	font-family: inherit;
+	font-size: 12px;
+	padding: 4px 8px;
+	cursor: pointer;
+	text-shadow: inherit;
+	transition: all 0.2s ease;
+}
+
+#bootstrap-recovery-regen:hover:not(:disabled) {
+	border-color: var(--amber);
+	box-shadow: 0 0 4px rgba(255, 180, 84, 0.3);
+}
+
+#bootstrap-recovery-regen:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+#bootstrap-recovery-abandon {
+	color: var(--amber-dim);
+	text-decoration: none;
+	font-family: inherit;
+	font-size: 12px;
+	cursor: pointer;
+	transition: color 0.2s ease;
+}
+
+#bootstrap-recovery-abandon:hover {
+	color: var(--amber);
+	text-decoration: underline;
+}
+
 /* Persistence warning */
 #persistence-warning {
 	padding: 6px 10px;

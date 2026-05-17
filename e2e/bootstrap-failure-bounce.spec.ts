@@ -1,13 +1,15 @@
 import { expect, test } from "@playwright/test";
 
 /**
- * Acceptance spec: Bootstrap-time HTTP errors bounce to broken state.
+ * Acceptance spec: Bootstrap-time HTTP errors show recovery UI (not bounce).
  *
  * Covers:
- * 1. Content-pack request returns HTTP 500 → click CONNECT → bounce to #/start?reason=broken
- * 2. Content-pack request returns HTTP 200 with error body → click CONNECT → bounce to #/start?reason=broken
+ * 1. Content-pack request returns HTTP 500 → click CONNECT → shows #bootstrap-recovery
+ * 2. Content-pack request returns HTTP 200 with error body → click CONNECT → shows #bootstrap-recovery
+ *
+ * Both scenarios verify that location.hash stays at #/game (not #/start?reason=broken).
  */
-test("content-pack request returns HTTP 500 → bounces to broken", async ({
+test("content-pack request returns HTTP 500 → shows recovery UI", async ({
 	page,
 }) => {
 	// Release-signal promise: hold content-pack rejection until after CONNECT
@@ -76,14 +78,23 @@ test("content-pack request returns HTTP 500 → bounces to broken", async ({
 	await page.waitForURL(/#\/game/, { timeout: 10_000 });
 
 	// NOW release the content-pack rejection. game.ts's loading-flow catch
-	// (the broken-bounce path) handles it.
+	// (the recovery UI path) handles it.
 	releaseContentPack();
 
-	// Expect bounce to #/start?reason=broken
-	await expect(page).toHaveURL(/#\/start\?reason=broken/, { timeout: 30_000 });
+	// Expect recovery UI to become visible and location.hash to stay at #/game
+	await expect(page.locator("#bootstrap-recovery")).toBeVisible({
+		timeout: 30_000,
+	});
+	await expect(page).toHaveURL(/#\/game\/?$/, { timeout: 5_000 });
+
+	// Verify recovery UI title and buttons are present
+	const titleEl = page.locator("#bootstrap-recovery-title");
+	await expect(titleEl).toContainText("the room collapsed");
+	await expect(page.locator("#bootstrap-recovery-regen")).toBeVisible();
+	await expect(page.locator("#bootstrap-recovery-abandon")).toBeVisible();
 });
 
-test("content-pack request returns HTTP 200 with error body → bounces to broken", async ({
+test("content-pack request returns HTTP 200 with error body → shows recovery UI", async ({
 	page,
 }) => {
 	// Release-signal promise: hold content-pack rejection until after CONNECT
@@ -161,9 +172,18 @@ test("content-pack request returns HTTP 200 with error body → bounces to broke
 	await page.waitForURL(/#\/game/, { timeout: 10_000 });
 
 	// NOW release the content-pack rejection. game.ts's loading-flow catch
-	// (the broken-bounce path) handles it.
+	// (the recovery UI path) handles it.
 	releaseContentPack();
 
-	// Expect bounce to #/start?reason=broken
-	await expect(page).toHaveURL(/#\/start\?reason=broken/, { timeout: 30_000 });
+	// Expect recovery UI to become visible and location.hash to stay at #/game
+	await expect(page.locator("#bootstrap-recovery")).toBeVisible({
+		timeout: 30_000,
+	});
+	await expect(page).toHaveURL(/#\/game\/?$/, { timeout: 5_000 });
+
+	// Verify recovery UI title and buttons are present
+	const titleEl = page.locator("#bootstrap-recovery-title");
+	await expect(titleEl).toContainText("the room collapsed");
+	await expect(page.locator("#bootstrap-recovery-regen")).toBeVisible();
+	await expect(page.locator("#bootstrap-recovery-abandon")).toBeVisible();
 });
