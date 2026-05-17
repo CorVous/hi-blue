@@ -29,6 +29,7 @@ corepack enable && pnpm install
 | `pnpm build` | Build the static SPA into `dist/` |
 | `pnpm dev` | Run the SPA + Worker dev loop via `wrangler dev` (press **b** to open the SPA). SPA edits under `src/spa` re-trigger the build; Worker edits live-reload through Wrangler. |
 | `pnpm smoke` | Run the Playwright integration / smoke suite (see below). |
+| `pnpm release` | Cut a release: bump version, update `CHANGELOG.md`, commit, tag. Push with `git push --follow-tags`. Driven by [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/#specification) — see `docs/agents/commits.md`. |
 
 ## Smoke suite (Playwright)
 
