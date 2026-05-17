@@ -614,9 +614,11 @@ function collectObjectiveHints(ctx: AiContext): string[] {
 		if (entity.holder === ctx.aiId) continue;
 
 		// Check if in actor's own cell or front arc
-		const inOwnCell = isGridPosition(entity.holder) &&
+		const inOwnCell =
+			isGridPosition(entity.holder) &&
 			positionsEqual(entity.holder, actorSpatial.position);
-		const inFrontArc = isGridPosition(entity.holder) &&
+		const inFrontArc =
+			isGridPosition(entity.holder) &&
 			arc.some((p) => positionsEqual(p, entity.holder as GridPosition));
 
 		if (!inOwnCell && !inFrontArc) continue;

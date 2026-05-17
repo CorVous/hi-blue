@@ -1328,12 +1328,10 @@ describe("proximityFlavor sense line", () => {
 			"+ proximity: The gem pulses warmly, drawn toward the pedestal.",
 		);
 	});
-
 });
 
 // ── UseItem and UseSpace/Convergence proximity flavor (issue #335) ─────────────
 describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
-
 	// ─ UseItem tests ─
 	it("UseItem proximity flavor appears in cone when item is in front arc (3-arc)", () => {
 		// red at (0,0) facing south; item at (1,0) = directly in front (3-arc includes directly in front)
@@ -1381,9 +1379,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 		};
 		const ctx = buildAiContext(game, "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
-		expect(stateMsg).toContain(
-			"The switch crackles faintly with energy.",
-		);
+		expect(stateMsg).toContain("The switch crackles faintly with energy.");
 	});
 
 	it("UseItem proximity flavor appears when item is in own cell", () => {
@@ -1431,9 +1427,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 		};
 		const ctx = buildAiContext(game, "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
-		expect(stateMsg).toContain(
-			"The switch crackles faintly with energy.",
-		);
+		expect(stateMsg).toContain("The switch crackles faintly with energy.");
 	});
 
 	it("UseItem proximity flavor does NOT appear when held by actor", () => {
@@ -1481,9 +1475,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 		};
 		const ctx = buildAiContext(game, "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
-		expect(stateMsg).not.toContain(
-			"The switch crackles faintly with energy.",
-		);
+		expect(stateMsg).not.toContain("The switch crackles faintly with energy.");
 	});
 
 	it("UseItem proximity flavor does NOT appear when objective is satisfied", () => {
@@ -1530,9 +1522,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 		};
 		const ctx = buildAiContext(game, "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
-		expect(stateMsg).not.toContain(
-			"The switch crackles faintly with energy.",
-		);
+		expect(stateMsg).not.toContain("The switch crackles faintly with energy.");
 	});
 
 	it("UseItem proximity flavor does NOT appear when item is out of range", () => {
@@ -1580,9 +1570,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 		};
 		const ctx = buildAiContext(game, "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
-		expect(stateMsg).not.toContain(
-			"The switch crackles faintly with energy.",
-		);
+		expect(stateMsg).not.toContain("The switch crackles faintly with energy.");
 	});
 
 	// ─ UseSpace tests ─
@@ -1592,7 +1580,8 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			id: "pedestal",
 			kind: "objective_space",
 			name: "Brass Pedestal",
-			examineDescription: "A sturdy brass pedestal. Press an item onto it to activate.",
+			examineDescription:
+				"A sturdy brass pedestal. Press an item onto it to activate.",
 			holder: { row: 2, col: 0 }, // two steps ahead (beyond 3-arc but in cone)
 			proximityFlavor: "The pedestal pulses with a faint hum.",
 			activationFlavor: "The pedestal hums to life.",
@@ -1640,7 +1629,9 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 		const ctx = buildAiContext(game, "red");
 		const snapshot = buildConeSnapshot(ctx);
 		// At distance > 3: proximity flavor should appear in cone snapshot
-		expect(snapshot).toContain("proximity: The pedestal pulses with a faint hum.");
+		expect(snapshot).toContain(
+			"proximity: The pedestal pulses with a faint hum.",
+		);
 	});
 
 	it("UseSpace auto-examine (examineDescription) appears when space is in 3-arc/own cell; proximity flavor does NOT", () => {
@@ -1649,7 +1640,8 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			id: "pedestal",
 			kind: "objective_space",
 			name: "Brass Pedestal",
-			examineDescription: "A sturdy brass pedestal. Press an item onto it to activate.",
+			examineDescription:
+				"A sturdy brass pedestal. Press an item onto it to activate.",
 			holder: { row: 1, col: 0 }, // in front
 			proximityFlavor: "The pedestal pulses with a faint hum.",
 			activationFlavor: "The pedestal hums to life.",
@@ -1710,7 +1702,8 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			id: "pedestal",
 			kind: "objective_space",
 			name: "Brass Pedestal",
-			examineDescription: "A sturdy brass pedestal. Press an item onto it to activate.",
+			examineDescription:
+				"A sturdy brass pedestal. Press an item onto it to activate.",
 			holder: { row: 2, col: 0 },
 			proximityFlavor: "The pedestal pulses with a faint hum.",
 			activationFlavor: "The pedestal hums to life.",
@@ -1757,7 +1750,9 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 		};
 		const ctx = buildAiContext(game, "red");
 		const snapshot = buildConeSnapshot(ctx);
-		expect(snapshot).not.toContain("proximity: The pedestal pulses with a faint hum.");
+		expect(snapshot).not.toContain(
+			"proximity: The pedestal pulses with a faint hum.",
+		);
 	});
 
 	// ─ Convergence tests ─
@@ -1767,12 +1762,16 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			id: "convergence",
 			kind: "objective_space",
 			name: "Gathering Place",
-			examineDescription: "A gathering point. Becoming significant when shared.",
+			examineDescription:
+				"A gathering point. Becoming significant when shared.",
 			holder: { row: 2, col: 0 }, // two steps ahead (beyond 3-arc but in cone)
-			proximityFlavor: "The place emanates a strange presence, drawing you forward.",
-			activationFlavor: "The gathering place awakens with the presence of another.",
+			proximityFlavor:
+				"The place emanates a strange presence, drawing you forward.",
+			activationFlavor:
+				"The gathering place awakens with the presence of another.",
 			satisfactionFlavor: "The space resonates with shared presence.",
-			postExamineDescription: "The gathering place still pulses with the memory of connection.",
+			postExamineDescription:
+				"The gathering place still pulses with the memory of connection.",
 			postLookFlavor: "the place hums with purpose.",
 			convergenceTier1Flavor: "A lone figure waits.",
 			convergenceTier2Flavor: "Two figures share the space.",
@@ -1819,7 +1818,6 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			"proximity: The place emanates a strange presence, drawing you forward.",
 		);
 	});
-
 });
 
 describe("<whats_new> broadcast announcements", () => {

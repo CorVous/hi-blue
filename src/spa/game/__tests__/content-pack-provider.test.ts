@@ -455,7 +455,7 @@ describe("validateContentPacks — obstacle shiftFlavor validation", () => {
 								useOutcome: "You turn the key over in your hands.",
 								pairsWithSpaceId: "space1",
 								placementFlavor: "The actor sets the key on its mount.",
-				proximityFlavor: "The key hums faintly near the pedestal.",
+								proximityFlavor: "The key hums faintly near the pedestal.",
 							},
 							space: {
 								id: "space1",
@@ -464,7 +464,7 @@ describe("validateContentPacks — obstacle shiftFlavor validation", () => {
 								examineDescription:
 									"A sturdy brass pedestal. Press an item onto it to activate.",
 								activationFlavor: "The pedestal hums to life.",
-				proximityFlavor: "The pedestal thrums softly nearby.",
+								proximityFlavor: "The pedestal thrums softly nearby.",
 								satisfactionFlavor: "The pedestal glows brightly.",
 								postExamineDescription: "The pedestal glows softly.",
 								postLookFlavor: "the pedestal hums.",
@@ -550,7 +550,7 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 				"A sturdy brass pedestal. Press an item onto it to activate the mechanism; the space awaits a shared presence.",
 			activationFlavor:
 				"The pedestal hums to life and its surface flushes with warmth.",
-				proximityFlavor: "The pedestal thrums softly nearby.",
+			proximityFlavor: "The pedestal thrums softly nearby.",
 		};
 		if (convergenceTier1Flavor !== OMIT)
 			spaceFields.convergenceTier1Flavor = convergenceTier1Flavor;
@@ -575,7 +575,7 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 								useOutcome: "You turn the key over in your hands.",
 								pairsWithSpaceId: "space1",
 								placementFlavor: "{actor} sets the key on its mount.",
-				proximityFlavor: "The key hums faintly near the pedestal.",
+								proximityFlavor: "The key hums faintly near the pedestal.",
 							},
 							space: spaceFields,
 						},
@@ -1170,7 +1170,7 @@ describe("validateContentPacks — objective_space activationFlavor & prose tell
 								useOutcome: "You turn the key over in your hands.",
 								pairsWithSpaceId: "space1",
 								placementFlavor: "{actor} sets the key on its mount.",
-				proximityFlavor: "The key hums faintly near the pedestal.",
+								proximityFlavor: "The key hums faintly near the pedestal.",
 							},
 							space: {
 								id: "space1",
@@ -1182,7 +1182,7 @@ describe("validateContentPacks — objective_space activationFlavor & prose tell
 									"You linger at the pedestal; the place feels poised for company.",
 								convergenceTier2ActorFlavor:
 									"You share the pedestal with another presence.",
-				proximityFlavor: "The pedestal hums softly in waiting.",
+								proximityFlavor: "The pedestal hums softly in waiting.",
 								...spaceFields,
 							},
 						},
@@ -1386,7 +1386,7 @@ describe("validateContentPacks — proximityFlavor rejection tests", () => {
 								useOutcome: "You turn the key over in your hands.",
 								pairsWithSpaceId: "space1",
 								placementFlavor: "{actor} sets the key on its mount.",
-				proximityFlavor: "The key hums faintly near the pedestal.",
+								proximityFlavor: "The key hums faintly near the pedestal.",
 							},
 							space: {
 								id: "space1",
@@ -1901,7 +1901,7 @@ describe("BrowserContentPackProvider — partial-retry layer", () => {
 								useOutcome: "You turn the key over in your hands.",
 								pairsWithSpaceId: "space1",
 								placementFlavor: "{actor} sets the key on its mount.",
-				proximityFlavor: "The key hums faintly near the pedestal.",
+								proximityFlavor: "The key hums faintly near the pedestal.",
 							},
 							space: {
 								id: "space1",
@@ -1911,7 +1911,7 @@ describe("BrowserContentPackProvider — partial-retry layer", () => {
 									"A sturdy brass mount. Press an item onto it to activate the mechanism; the space awaits a shared presence.",
 								activationFlavor:
 									"The pedestal hums to life and its surface flushes with warmth.",
-				proximityFlavor: "The pedestal thrums softly nearby.",
+								proximityFlavor: "The pedestal thrums softly nearby.",
 								satisfactionFlavor:
 									"The pedestal glows brightly as the objective completes.",
 								postExamineDescription:
@@ -1935,7 +1935,7 @@ describe("BrowserContentPackProvider — partial-retry layer", () => {
 								"A small brass switch mounted on a panel. It looks like it should be pressed.",
 							useOutcome: "The switch clicks under your finger.",
 							activationFlavor: "The switch snaps loudly into place.",
-						proximityFlavor: "The brass switch gleams softly.",
+							proximityFlavor: "The brass switch gleams softly.",
 							postExamineDescription:
 								"The switch sits locked in its on position.",
 							postLookFlavor:
@@ -2108,7 +2108,7 @@ describe("BrowserContentPackProvider — partial-retry layer", () => {
 						"A sturdy brass mount. Press an item onto it to activate the mechanism; the space awaits a shared presence.",
 					activationFlavor:
 						"The pedestal hums to life and its surface flushes with warmth.",
-				proximityFlavor: "The pedestal thrums softly nearby.",
+					proximityFlavor: "The pedestal thrums softly nearby.",
 					satisfactionFlavor:
 						"The pedestal glows brightly as the objective completes.",
 					postExamineDescription: "The pedestal glows softly after activation.",
@@ -2132,7 +2132,7 @@ describe("BrowserContentPackProvider — partial-retry layer", () => {
 						"A small brass switch mounted on a panel. It looks like it should be pressed.",
 					useOutcome: "The switch clicks under your finger.",
 					activationFlavor: "The switch snaps loudly into place.",
-						proximityFlavor: "The brass switch gleams softly.",
+					proximityFlavor: "The brass switch gleams softly.",
 					postExamineDescription: "The switch sits locked in its on position.",
 					postLookFlavor: "an amber pinpoint of light glows beside the panel.",
 				},
@@ -2532,7 +2532,7 @@ describe("BrowserContentPackProvider — partial-retry layer", () => {
 					"A small brass switch mounted on a panel. It looks like it should be pressed.",
 				useOutcome: "The switch clicks under your finger.",
 				activationFlavor: "The switch snaps loudly into place.",
-						proximityFlavor: "The brass switch gleams softly.",
+				proximityFlavor: "The brass switch gleams softly.",
 				postExamineDescription: "The switch sits locked in its on position.",
 				postLookFlavor: "an amber pinpoint of light glows beside the panel.",
 			},
@@ -2759,7 +2759,7 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 										useOutcome: "You turn it over in your hands.",
 										pairsWithSpaceId: "space1",
 										placementFlavor: "{actor} sets it on the brass pedestal.",
-						proximityFlavor: "It hums faintly nearby.",
+										proximityFlavor: "It hums faintly nearby.",
 									},
 									// space intentionally missing — validation failure
 								},
@@ -2798,7 +2798,7 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 										useOutcome: "You turn it over in your hands.",
 										pairsWithSpaceId: "space1",
 										placementFlavor: "{actor} sets it on the survey marker.",
-						proximityFlavor: "It hums faintly nearby.",
+										proximityFlavor: "It hums faintly nearby.",
 									},
 									space: {
 										id: "space1",
@@ -2808,7 +2808,7 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 											"A weathered marker. Press the cap to activate it.",
 										activationFlavor:
 											"The marker clicks once and a column of dust spirals up.",
-						proximityFlavor: "The space vibrates softly.",
+										proximityFlavor: "The space vibrates softly.",
 										satisfactionFlavor: "The space is satisfied.",
 										postExamineDescription: "The space is now used.",
 										postLookFlavor: "The space hums.",
@@ -2901,7 +2901,7 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 										useOutcome: "You turn it over in your hands.",
 										pairsWithSpaceId: "space1",
 										placementFlavor: "{actor} sets it on the brass pedestal.",
-						proximityFlavor: "It hums faintly nearby.",
+										proximityFlavor: "It hums faintly nearby.",
 									},
 									// space intentionally missing — validation failure
 								},
@@ -2940,7 +2940,7 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 										useOutcome: "You turn it over in your hands.",
 										pairsWithSpaceId: "space1",
 										placementFlavor: "{actor} sets it on the survey marker.",
-						proximityFlavor: "It hums faintly nearby.",
+										proximityFlavor: "It hums faintly nearby.",
 									},
 									space: {
 										id: "space1",
@@ -2950,7 +2950,7 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 											"A weathered marker. Press the cap to activate it.",
 										activationFlavor:
 											"The marker clicks once and a column of dust spirals up.",
-						proximityFlavor: "The space vibrates softly.",
+										proximityFlavor: "The space vibrates softly.",
 										satisfactionFlavor: "The space is satisfied.",
 										postExamineDescription: "The space is now used.",
 										postLookFlavor: "The space hums.",
@@ -3010,7 +3010,7 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 										useOutcome: "You turn it over in your hands.",
 										pairsWithSpaceId: "space1",
 										placementFlavor: "{actor} sets it on the brass pedestal.",
-						proximityFlavor: "It hums faintly nearby.",
+										proximityFlavor: "It hums faintly nearby.",
 									},
 									space: {
 										id: "space1",
@@ -3020,7 +3020,7 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 											"A sturdy pedestal. Press an item onto it to activate.",
 										activationFlavor:
 											"The pedestal hums to life and its runes glow.",
-						proximityFlavor: "The space vibrates softly.",
+										proximityFlavor: "The space vibrates softly.",
 										satisfactionFlavor: "The space is satisfied.",
 										postExamineDescription: "The space is now used.",
 										postLookFlavor: "The space hums.",
@@ -3132,7 +3132,7 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 									useOutcome: "You turn it over in your hands.",
 									pairsWithSpaceId: "space1",
 									placementFlavor: "{actor} sets it on the brass pedestal.",
-					proximityFlavor: "It hums faintly nearby.",
+									proximityFlavor: "It hums faintly nearby.",
 								},
 								// space intentionally missing — validation failure
 							},
@@ -3171,7 +3171,7 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 									useOutcome: "You turn it over in your hands.",
 									pairsWithSpaceId: "space1",
 									placementFlavor: "{actor} sets it on the survey marker.",
-					proximityFlavor: "It hums faintly nearby.",
+									proximityFlavor: "It hums faintly nearby.",
 								},
 								space: {
 									id: "space1",
@@ -3181,7 +3181,7 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 										"A weathered marker. Press the cap to activate it.",
 									activationFlavor:
 										"The marker clicks once and a column of dust spirals up.",
-					proximityFlavor: "The space vibrates softly.",
+									proximityFlavor: "The space vibrates softly.",
 									satisfactionFlavor: "The space is satisfied.",
 									postExamineDescription: "The space is now used.",
 									postLookFlavor: "The space hums.",
