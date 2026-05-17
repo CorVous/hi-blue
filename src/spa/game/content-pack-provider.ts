@@ -363,17 +363,34 @@ export function buildPartialRetryUserMessage(
 	return lines.join("\n");
 }
 
+const STOPWORDS = new Set([
+	"the",
+	"and",
+	"or",
+	"of",
+	"with",
+	"for",
+	"at",
+	"in",
+	"on",
+	"a",
+	"an",
+]);
+
 // ── Prose-tell check ──────────────────────────────────────────────────────────
 
 /**
  * Returns true when an objective_object's examineDescription mentions its paired
  * objective_space's name — either the literal name (case-insensitive substring)
- * or the head noun of the name (last whitespace-separated token, length >= 3).
+ * or any non-stopword token of length >= 4 from the space name.
  *
- * The head-noun fallback admits noun-phrase synonyms like "the pedestal" for a
- * space named "Brass Pedestal". The system prompt MUSTs this property; this
- * helper exists so tests and any future validator-side enforcement (see #248)
- * share one definition.
+ * The token-overlap fallback admits valid tells like "stage pulley" for a
+ * space named "Stage Pulley System" where neither token appears in the literal
+ * name but both are substantial content words. This widens the matcher beyond
+ * the head-noun fallback (see issue #382) to capture more valid adjacencies
+ * while still rejecting the playtest-0007 misses. The system prompt MUSTs
+ * this property; this helper exists so tests and any future validator-side
+ * enforcement (see #346) share one definition.
  */
 export function examineMentionsPairedSpace(
 	examineDescription: string,
@@ -383,9 +400,10 @@ export function examineMentionsPairedSpace(
 	const spaceLc = spaceName.toLowerCase().trim();
 	if (spaceLc.length === 0) return false;
 	if (examineLc.includes(spaceLc)) return true;
-	const tokens = spaceLc.split(/\s+/).filter((t) => t.length >= 3);
-	const headNoun = tokens[tokens.length - 1];
-	return headNoun !== undefined && examineLc.includes(headNoun);
+	const tokens = spaceLc
+		.split(/\s+/)
+		.filter((t) => t.length >= 4 && !STOPWORDS.has(t));
+	return tokens.some((t) => examineLc.includes(t));
 }
 
 /**
