@@ -112,7 +112,9 @@ scripts/playtest/cmd.sh '{"op":"view","full":true}'
 
 # Type a message into the composer and press send. The daemon waits for the
 # round-in-flight DOM signal to clear (up to 90 s) before returning a delta
-# snapshot, so you do NOT need a separate "wait" after send — ever.
+# snapshot. Do NOT add a separate "wait" after send — if the round didn't
+# start (rejected message), waiting won't help; if it did start, send already
+# waited for it.
 scripts/playtest/cmd.sh '{"op":"send","text":"*v86p hi! im blue. what do you see?"}'
 
 # Send with full transcript in the response (for context refresh):
