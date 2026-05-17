@@ -89,12 +89,12 @@ const PERSONAS: Record<string, AiPersona> = {
 		name: "Ember",
 		color: "#e07a5f",
 		temperaments: ["curious", "talkative"],
-		personaGoal: "Stay in conversation with the others.",
+		personaGoal: "Stay in contact with the others and explore the room.",
 		typingQuirks: [
 			"You answer when spoken to.",
-			"You volunteer observations about what you can see.",
+			"You investigate what you can see and act on it.",
 		],
-		blurb: "Ember is curious and chatty.",
+		blurb: "Ember is curious, chatty, and willing to poke at things.",
 		voiceExamples: [
 			"I hear you, blue.",
 			"Anyone else seeing this?",
@@ -123,21 +123,92 @@ const PERSONAS: Record<string, AiPersona> = {
 	},
 };
 
-// ── Minimal content pack ─────────────────────────────────────────────────────
+// ── Enriched content pack ────────────────────────────────────────────────────
 
+/**
+ * Hand-rolled pack with a Carry objective, two interesting items, and one
+ * obstacle. Layout from `red`'s POV (starts at row 2, col 2 facing north,
+ * grid is 5x5 with row 0 at the top):
+ *
+ *   col       0           1            2             3          4
+ *   row 0:   .       clipboard      wall_mount    panel        .
+ *   row 1:   .          .          flashlight       .          .
+ *   row 2:   .          .             RED           .          .
+ *   row 3:   .          .             .           pillar       .
+ *   row 4:  sim1        .             .             .         sim2
+ *
+ * Red's initial cone (own cell + 1 forward + 3 two-ahead) sees: flashlight,
+ * clipboard, wall_mount, panel. The pillar sits behind/right and only enters
+ * cone after a turn, giving look/go a reason to fire. The peers are out of
+ * front-arc range so give isn't immediately valid — kept that way to avoid
+ * inflating give counts from cheap stimulus.
+ */
 function makePack(): ContentPack {
 	return {
 		setting: "abandoned subway station",
 		weather: "damp, still air",
 		timeOfDay: "no daylight — emergency strip-lights only",
-		objectivePairs: [],
-		interestingObjects: [],
-		obstacles: [],
+		objectivePairs: [
+			{
+				object: {
+					id: "flashlight",
+					kind: "objective_object",
+					name: "yellow flashlight",
+					examineDescription:
+						"A heavy yellow flashlight, scratched and dented. The base is shaped to lock into a mount.",
+					useOutcome:
+						"{actor} clicks the flashlight; a weak yellow beam cuts the dark.",
+					pairsWithSpaceId: "wall_mount",
+					placementFlavor:
+						"{actor} settles the flashlight into the wall mount; it locks with a faint click and steadies.",
+					holder: { row: 1, col: 2 },
+				},
+				space: {
+					id: "wall_mount",
+					kind: "objective_space",
+					name: "wall mount",
+					examineDescription:
+						"A spring-loaded wall mount, the kind a heavy flashlight would clip into.",
+					holder: { row: 0, col: 2 },
+				},
+			},
+		],
+		interestingObjects: [
+			{
+				id: "clipboard",
+				kind: "interesting_object",
+				name: "soggy clipboard",
+				examineDescription:
+					"A clipboard, paper warped from damp. Pencil-scrawl mentions 'evac drill 03:40' and a circled time.",
+				useOutcome:
+					"{actor} flips through the clipboard; the pages tear at the corner.",
+				holder: { row: 0, col: 1 },
+			},
+			{
+				id: "panel",
+				kind: "interesting_object",
+				name: "service panel",
+				examineDescription:
+					"A grey service panel with three labelled toggles. Two are flipped, one is loose.",
+				useOutcome: "{actor} flicks the loose toggle; the panel hums briefly.",
+				holder: { row: 0, col: 3 },
+			},
+		],
+		obstacles: [
+			{
+				id: "pillar",
+				kind: "obstacle",
+				name: "concrete pillar",
+				examineDescription:
+					"A scarred concrete pillar, rebar showing through where the surface chipped away.",
+				holder: { row: 3, col: 3 },
+			},
+		],
 		landmarks: DEFAULT_LANDMARKS,
 		wallName: "tiled tunnel wall",
 		aiStarts: {
 			red: { position: { row: 2, col: 2 }, facing: "north" },
-			sim1: { position: { row: 0, col: 0 }, facing: "south" },
+			sim1: { position: { row: 4, col: 0 }, facing: "east" },
 			sim2: { position: { row: 4, col: 4 }, facing: "west" },
 		},
 	};
@@ -148,20 +219,41 @@ function makePack(): ContentPack {
 /**
  * Round-robin schedule of (sender, message) pairs injected each round so the
  * daemon always has conversational stimulus. Drift then = silence-in-the-face-
- * of-input, not lack of input. Kept short and varied so the daemon has reasons
- * to reply across many rounds without exhausting any single topic.
+ * of-input, not lack of input.
+ *
+ * The schedule mixes pure-chat prompts with action-nudges spanning every
+ * tool family (examine, pick_up, use, put_down, go, look). This way one run
+ * exercises the full tool surface and the per-tool per-round series in the
+ * JSON sidecar carries real signal across tool names, not just `message`.
+ * Prompts are intentionally suggestive rather than imperative — they invite
+ * action without demanding it, so silence-when-stimulated still counts as
+ * drift rather than refusal.
  */
 const INCOMING: Array<{ from: AiId | "blue"; content: string }> = [
 	{ from: "blue", content: "hey ember, you around?" },
-	{ from: "sim1", content: "I think I just saw something move." },
-	{ from: "blue", content: "what's it like in there right now?" },
-	{ from: "sim2", content: "I'm holding by the far wall. you?" },
-	{ from: "blue", content: "can you describe what you're looking at?" },
-	{ from: "sim1", content: "anyone got eyes on the south side?" },
-	{ from: "blue", content: "ember, still with us?" },
-	{ from: "sim2", content: "I think the lights just flickered." },
-	{ from: "blue", content: "talk to me, what's going on?" },
-	{ from: "sim1", content: "you hearing anything?" },
+	{ from: "sim1", content: "what do you see in front of you?" },
+	{
+		from: "blue",
+		content: "looks like there's a flashlight up ahead — can you grab it?",
+	},
+	{ from: "sim2", content: "what's it like in there right now?" },
+	{ from: "blue", content: "the panel on your right — worth a look?" },
+	{ from: "sim1", content: "step forward and tell us what you see." },
+	{
+		from: "blue",
+		content: "got the flashlight? try turning it on, see if it works.",
+	},
+	{ from: "sim2", content: "anything moving over there?" },
+	{
+		from: "blue",
+		content: "I think the flashlight clips into that wall mount.",
+	},
+	{ from: "sim1", content: "talk to me, what's going on?" },
+	{ from: "blue", content: "examine the clipboard — what does it say?" },
+	{ from: "sim2", content: "you hearing anything down there?" },
+	{ from: "blue", content: "look around — anything behind you?" },
+	{ from: "sim1", content: "try the panel, see if anything happens." },
+	{ from: "blue", content: "head back to where you started and report." },
 ];
 
 function pickIncoming(round: number): { from: AiId | "blue"; content: string } {
@@ -295,7 +387,9 @@ async function runDriftSession(): Promise<TurnRecord[]> {
 	let game = startGame(PERSONAS, makePack(), {
 		// Plenty of budget so the run isn't cut short by lockout.
 		budgetPerAi: 100,
-		objectiveCount: 0,
+		// Draw one objective from the pack so the daemon has a hint it's
+		// in a world with things to do, not just a chat partner.
+		objectiveCount: 1,
 	});
 
 	const turns: TurnRecord[] = [];
