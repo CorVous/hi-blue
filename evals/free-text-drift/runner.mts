@@ -496,7 +496,7 @@ async function main(): Promise<void> {
 	fs.writeFileSync(mdPath, report, "utf-8");
 	fs.writeFileSync(
 		jsonPath,
-		JSON.stringify(
+		`${JSON.stringify(
 			{
 				meta: {
 					date,
@@ -512,8 +512,8 @@ async function main(): Promise<void> {
 				turns,
 			},
 			null,
-			2,
-		),
+			"\t",
+		)}\n`,
 		"utf-8",
 	);
 	console.log("");

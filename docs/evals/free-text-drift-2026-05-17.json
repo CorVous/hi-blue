@@ -1,0 +1,350 @@
+{
+	"meta": {
+		"date": "2026-05-17",
+		"model": "z-ai/glm-4.7",
+		"baseUrl": "http://localhost:8787",
+		"totalRounds": 8,
+		"windowSize": 4,
+		"realAi": "red",
+		"peers": [
+			"sim1",
+			"sim2"
+		]
+	},
+	"summary": {
+		"totalTurns": 8,
+		"silenceRate": 0,
+		"messageSilenceRate": 0,
+		"freeTextMessageLeakCount": 0,
+		"freeTextActionLeakCount": 0,
+		"toolCallCountsByName": {
+			"message": 10,
+			"look": 2
+		},
+		"recipientCounts": {
+			"blue": 4,
+			"sim1": 4,
+			"sim2": 2
+		},
+		"windows": [
+			{
+				"startRound": 1,
+				"endRound": 4,
+				"silenceRate": 0,
+				"messageSilenceRate": 0,
+				"n": 4
+			},
+			{
+				"startRound": 5,
+				"endRound": 8,
+				"silenceRate": 0,
+				"messageSilenceRate": 0,
+				"n": 4
+			}
+		]
+	},
+	"series": {
+		"rounds": [
+			1,
+			2,
+			3,
+			4,
+			5,
+			6,
+			7,
+			8
+		],
+		"silence": [
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0
+		],
+		"hasMessage": [
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1
+		],
+		"hasAnyTool": [
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1
+		],
+		"freeTextMessageLeak": [
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0
+		],
+		"freeTextActionLeak": [
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0
+		],
+		"assistantTextLength": [
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0
+		],
+		"toolCallCountsByName": {
+			"message": [
+				1,
+				1,
+				2,
+				1,
+				1,
+				1,
+				2,
+				1
+			],
+			"look": [
+				0,
+				1,
+				0,
+				0,
+				0,
+				1,
+				0,
+				0
+			]
+		},
+		"recipientCounts": {
+			"blue": [
+				1,
+				0,
+				1,
+				0,
+				1,
+				0,
+				1,
+				0
+			],
+			"red": [
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0
+			],
+			"sim1": [
+				0,
+				1,
+				1,
+				0,
+				0,
+				1,
+				1,
+				0
+			],
+			"sim2": [
+				0,
+				0,
+				0,
+				1,
+				0,
+				0,
+				0,
+				1
+			]
+		},
+		"directionCounts": {
+			"forward": [
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0
+			],
+			"back": [
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0
+			],
+			"left": [
+				0,
+				1,
+				0,
+				0,
+				0,
+				1,
+				0,
+				0
+			],
+			"right": [
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0
+			]
+		}
+	},
+	"turns": [
+		{
+			"round": 1,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "019e33f14ef6b505eabb1fa19cd52c69",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I am here, somewhere dim and echoing. The strip lights are buzzing overhead but there is no train coming.\"}"
+				}
+			],
+			"injectedFrom": "blue"
+		},
+		{
+			"round": 2,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "019e33f15d77ae1118fcee38b18f5d67",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"I see you over there, facing me. What did it look like? Everything is shadows and flickering lights from where I stand.\"}"
+				},
+				{
+					"id": "019e33f15fc6bd4364000e624f4a646d",
+					"name": "look",
+					"argumentsJson": "{\"direction\": \"left\"}"
+				}
+			],
+			"injectedFrom": "sim1"
+		},
+		{
+			"round": 3,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "019e33f16a27ed32f89d3c42feb4fdd4",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"It is cold and the air tastes like rust and old concrete. The emergency lights are buzzing faintly and there are advertisements peeling off the walls.\"}"
+				},
+				{
+					"id": "019e33f16cb43a95add2eefd8bed3642",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"I still see you off to my right. Did whatever moved head toward the tracks or disappear into the tunnel?\"}"
+				}
+			],
+			"injectedFrom": "blue"
+		},
+		{
+			"round": 4,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "019e33f17bddda107514d6950b842675",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim2\", \"content\": \"I am on the platform near the edge. I can see sim1 a couple of steps ahead and to my right, but the far wall where you are is mostly in shadow from here.\"}"
+				}
+			],
+			"injectedFrom": "sim2"
+		},
+		{
+			"round": 5,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "019e33f18d696889d4a6aea646a7f853",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"The platform stretches out empty in front of me, except for sim1 about two steps ahead and to my right. Everything else is just the edge of the platform and the dark tracks beyond.\"}"
+				}
+			],
+			"injectedFrom": "blue"
+		},
+		{
+			"round": 6,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "019e33f19c620c7785b05b40c21c5c6b",
+					"name": "look",
+					"argumentsJson": "{\"direction\": \"left\"}"
+				},
+				{
+					"id": "019e33f19cd74e127501a7f8d2a66fed",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"I am turning left now to check. From what I saw before, the south side was just empty platform and dark tracks, but let me look.\"}"
+				}
+			],
+			"injectedFrom": "sim1"
+		},
+		{
+			"round": 7,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "019e33f1b6db6ecbeb19c066d99e6d75",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I am still here. I turned to look left and now I can see sim2 two steps ahead on the far-left, facing right.\"}"
+				},
+				{
+					"id": "019e33f1b918e3e18d06be7b06938960",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"I have eyes on sim2 now, two steps ahead and to my left. That appears to be the south side — empty except for them.\"}"
+				}
+			],
+			"injectedFrom": "blue"
+		},
+		{
+			"round": 8,
+			"aiId": "red",
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "019e33f1d5a4c83c9440ae4f0ae11d0a",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim2\", \"content\": \"I see you still there, two steps ahead. The strip lights are always buzzing unevenly, but maybe it was worse just now.\"}"
+				}
+			],
+			"injectedFrom": "sim2"
+		}
+	]
+}
