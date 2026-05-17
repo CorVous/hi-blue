@@ -74,7 +74,7 @@ scripts/playtest/start.sh
 ```
 
 This builds the SPA, launches `wrangler dev` and a headless Chromium playtest
-driver in the background, and waits until the game route is ready. When it
+driver in the background, and waits until the game view is ready. When it
 prints `READY` on stdout, the playtest is live and you can start sending
 commands. The boot can take 2–5 minutes; persona synthesis and the two
 content packs (A + B, batched in one LLM call) are the slow part — the
@@ -82,7 +82,15 @@ daemon will not announce `READY` until the composer is actually enabled, so
 your first `send` will land on a real game instead of a still-loading screen.
 
 If `start.sh` fails, fix the underlying issue rather than retrying blindly. It
-prints a `FAILED: <reason>` line plus the relevant log to stderr.
+prints a `FAILED: <reason>` line plus the relevant log to stderr. Two common
+failure modes worth knowing:
+
+- **Bootstrap recovery UI** — world generation timed out (the SPA's 120 s
+  bootstrap limit) or produced a malformed pack. The daemon detects the
+  `#bootstrap-recovery` section and exits non-zero rather than waiting out
+  its 5-minute stable-state poll; re-run `start.sh` to try again.
+- **Cap hit at startup** — an API budget cap fired before generation
+  finished. Same fail-fast behaviour.
 
 ---
 
@@ -123,6 +131,11 @@ scripts/playtest/cmd.sh '{"op":"snap","path":"/tmp/playtest-turn-7.png"}'
 
 A `snapshot` is an object with these fields:
 
+- `view` — which top-level view the SPA is rendering: `"game"` in the normal
+  case, `"start"` or `"sessions"` if something kicked you out of the game
+  (e.g. the active session was discarded as broken or version-mismatched).
+  The SPA is state-driven, not URL-routed (ADR 0011) — `data-view="game"` on
+  `<main>` is the load-bearing signal that you're in the game.
 - `topinfoLeft`, `topinfoRight` — the top status bar. One of these contains a
   4-hex token like `0x478F`. **That token is your session id.** Record it
   before your second command.
@@ -136,6 +149,11 @@ A `snapshot` is an object with these fields:
   key is configured) `[ continue ]` — but you can't click them from the
   command surface; finishing the game is the goal, not picking a follow-up.
 - `capHit` — non-empty when an API budget cap has been hit.
+- `recovery` — non-empty when the bootstrap-recovery UI has surfaced (world
+  generation failed or timed out). The regenerate / abandon buttons are not
+  reachable from `cmd.sh`, so if this appears mid-playtest the run is stuck
+  — record the text and shut down. (At startup this is caught earlier:
+  `start.sh` exits with `FAILED:` rather than printing `READY`.)
 - `panels` — array of three objects, each `{ name, budget, transcript }`. The
   `name` is the `*xxxx` handle of that daemon. The `budget` is that daemon's
   remaining dollars for the *whole game* (no per-phase reset). The
