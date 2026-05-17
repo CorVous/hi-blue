@@ -20,6 +20,30 @@ import { globalKey, perIpKey } from "./rate-guard";
 
 const ENDPOINT = "https://example.com/v1/chat/completions";
 
+/**
+ * Poll a KV key until its string value equals `expected`, or throw after
+ * `timeoutMs` ms. Replaces fixed-duration sleeps that were racing KV write
+ * visibility in Miniflare — the 5 ms poll interval is bounded and
+ * assertion-gated (not a time guess).
+ */
+async function waitForCounter(
+	kvNs: KVNamespace,
+	key: string,
+	expected: string,
+	{ timeoutMs = 1000 } = {},
+): Promise<void> {
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
+		const v = await kvNs.get(key);
+		if (v === expected) return;
+		await new Promise((r) => setTimeout(r, 5));
+	}
+	const final = await kvNs.get(key);
+	throw new Error(
+		`counter ${key} did not reach expected ${expected}, got ${final} within ${timeoutMs}ms`,
+	);
+}
+
 const VALID_BODY = JSON.stringify({
 	model: "gpt-4o",
 	messages: [{ role: "user", content: "Hello" }],
@@ -408,9 +432,13 @@ describe("cost-guard integration — POST /v1/chat/completions", () => {
 
 		expect(resp.status).toBe(200);
 		await resp.text();
-		await new Promise((r) => setTimeout(r, 50));
 
 		const now = Date.now();
+		await Promise.all([
+			waitForCounter(kv(), perIpKey(ip, now), "1500"),
+			waitForCounter(kv(), globalKey(now), "1500"),
+		]);
+
 		const [ipVal, gVal] = await Promise.all([
 			kv().get(perIpKey(ip, now)),
 			kv().get(globalKey(now)),
@@ -451,9 +479,11 @@ describe("cost-guard integration — POST /v1/chat/completions", () => {
 		});
 
 		await resp.text();
-		await new Promise((r) => setTimeout(r, 50));
 
-		const ipVal = await kv().get(perIpKey(ip, Date.now()));
+		const ipKey454 = perIpKey(ip, Date.now());
+		await waitForCounter(kv(), ipKey454, String(PRE_CHARGE));
+
+		const ipVal = await kv().get(ipKey454);
 		expect(Number(ipVal)).toBe(PRE_CHARGE);
 	});
 
@@ -634,9 +664,13 @@ describe("cost-guard integration — POST /v1/chat/completions", () => {
 		});
 
 		await resp.text();
-		await new Promise((r) => setTimeout(r, 50));
 
 		const now = Date.now();
+		await Promise.all([
+			waitForCounter(kv(), perIpKey(ip, now), "0"),
+			waitForCounter(kv(), globalKey(now), "0"),
+		]);
+
 		const [ipVal, gVal] = await Promise.all([
 			kv().get(perIpKey(ip, now)),
 			kv().get(globalKey(now)),
@@ -763,9 +797,10 @@ describe("cost-guard integration — POST /v1/chat/completions", () => {
 			// expected: the upstream stream error propagates to the client reader
 		}
 
-		await new Promise((r) => setTimeout(r, 100));
+		const ipKey766 = perIpKey(ip, Date.now());
+		await waitForCounter(kv(), ipKey766, String(seeded));
 
-		const ipVal = await kv().get(perIpKey(ip, Date.now()));
+		const ipVal = await kv().get(ipKey766);
 		expect(Number(ipVal)).toBe(seeded);
 	});
 
@@ -809,9 +844,11 @@ describe("cost-guard integration — POST /v1/chat/completions", () => {
 
 		expect(resp.status).toBe(200);
 		await resp.text();
-		await new Promise((r) => setTimeout(r, 50));
 
-		const ipVal = await kv().get(perIpKey(ip, Date.now()));
+		const ipKey812 = perIpKey(ip, Date.now());
+		await waitForCounter(kv(), ipKey812, "200");
+
+		const ipVal = await kv().get(ipKey812);
 		expect(Number(ipVal)).toBe(200);
 	});
 
@@ -848,9 +885,10 @@ describe("cost-guard integration — POST /v1/chat/completions", () => {
 			body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
 		});
 
-		await new Promise((r) => setTimeout(r, 50));
+		const ipKey851 = perIpKey(ip, Date.now());
+		await waitForCounter(kv(), ipKey851, "150");
 
-		const ipVal = await kv().get(perIpKey(ip, Date.now()));
+		const ipVal = await kv().get(ipKey851);
 		expect(Number(ipVal)).toBe(150);
 	});
 
@@ -885,9 +923,11 @@ describe("cost-guard integration — POST /v1/chat/completions", () => {
 		});
 
 		await resp.text();
-		await new Promise((r) => setTimeout(r, 50));
 
-		const ipVal = await kv().get(perIpKey(ip, Date.now()));
+		const ipKey888 = perIpKey(ip, Date.now());
+		await waitForCounter(kv(), ipKey888, "1500");
+
+		const ipVal = await kv().get(ipKey888);
 		expect(Number(ipVal)).toBe(1500);
 	});
 });
