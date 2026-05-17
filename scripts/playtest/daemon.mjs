@@ -104,7 +104,12 @@ while (Date.now() - start < 90_000) {
 log("filling password and clicking CONNECT");
 await page.locator("#password").fill("password");
 await page.locator("#begin").click();
-await page.waitForURL(/#\/game/, { timeout: 30_000 });
+// The SPA no longer uses hash-based routing (ADR 0011). Clicking CONNECT
+// calls renderApp(), which sets `data-view="game"` on the <main> root —
+// that is the load-bearing signal that we've left the start screen.
+await page
+	.locator('main[data-view="game"]')
+	.waitFor({ state: "attached", timeout: 30_000 });
 await page.locator("#composer").waitFor({ state: "visible", timeout: 30_000 });
 
 // The composer is visible during the "loading-daemons" and "generating-room"
@@ -113,6 +118,10 @@ await page.locator("#composer").waitFor({ state: "visible", timeout: 30_000 });
 // enabled, no `data-load-state` on #stage) before announcing READY —
 // otherwise the first `send` would type into a disabled input and the
 // playtest would hang silently.
+//
+// Also watch for #bootstrap-recovery and #cap-hit: if either becomes visible,
+// the run is unrecoverable from this command surface (we can't click the
+// regen / retry buttons through cmd.sh) so we fail fast for start.sh.
 log("waiting for game route to reach stable state (content packs loading)...");
 const stableDeadline = Date.now() + 300_000; // up to 5 min for slow packs
 while (Date.now() < stableDeadline) {
@@ -121,6 +130,31 @@ while (Date.now() < stableDeadline) {
 		.locator("#stage")
 		.getAttribute("data-load-state");
 	if (promptDisabled === null && loadState === null) break;
+
+	const recoveryVisible = await page
+		.locator("#bootstrap-recovery")
+		.isVisible()
+		.catch(() => false);
+	if (recoveryVisible) {
+		const body = await page
+			.locator("#bootstrap-recovery-title, #bootstrap-recovery-body")
+			.allInnerTexts()
+			.catch(() => []);
+		log(`bootstrap recovery UI surfaced: ${body.join(" — ")}`);
+		log("FATAL: bootstrap failed; restart the daemon to try again");
+		await browser.close();
+		process.exit(1);
+	}
+	const capHitVisible = await page
+		.locator("#cap-hit")
+		.isVisible()
+		.catch(() => false);
+	if (capHitVisible) {
+		log("FATAL: API budget cap was hit before the room finished generating");
+		await browser.close();
+		process.exit(1);
+	}
+
 	await page.waitForTimeout(500);
 }
 const finalPromptDisabled = await page
@@ -162,6 +196,15 @@ async function readVisibleText(loc) {
 }
 
 async function snapshot() {
+	// Which top-level view the state-driven renderer (ADR 0011) is showing:
+	// "start" | "game" | "sessions". During a normal playtest this is always
+	// "game"; "start" or "sessions" here means something kicked us out (e.g.
+	// the active session was discarded as broken or version-mismatched).
+	const view =
+		(await page
+			.locator("main")
+			.getAttribute("data-view")
+			.catch(() => null)) ?? "";
 	// #phase-banner is legacy UI from the retired three-phase model. In the
 	// current single-game build it stays hidden, so `phase` is normally "".
 	// Kept in the snapshot shape for backward compat with older playtest logs.
@@ -186,6 +229,16 @@ async function snapshot() {
 	const capHit = capHitVisible
 		? await readVisibleText(page.locator("#cap-hit"))
 		: "";
+	// #bootstrap-recovery surfaces when world generation fails or times out.
+	// Non-empty here means the cmd surface cannot proceed — the regen /
+	// abandon buttons aren't reachable, so the playtest is effectively stuck.
+	const recoveryVisible = await page
+		.locator("#bootstrap-recovery")
+		.isVisible()
+		.catch(() => false);
+	const recovery = recoveryVisible
+		? await readVisibleText(page.locator("#bootstrap-recovery"))
+		: "";
 
 	const panels = await page.locator("article.ai-panel").all();
 	const panelData = [];
@@ -207,6 +260,7 @@ async function snapshot() {
 		panelData.push({ name, budget, transcript });
 	}
 	return {
+		view,
 		topinfoLeft,
 		topinfoRight,
 		phase,
@@ -214,6 +268,7 @@ async function snapshot() {
 		lockoutErr,
 		endgame,
 		capHit,
+		recovery,
 		panels: panelData,
 	};
 }
