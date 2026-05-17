@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { goToGame } from "./helpers";
+import { expectNoPageErrors, goToGame } from "./helpers";
 
 /**
  * E2E Slice 4 — game_ended current behaviour (issue #80, simplified by #101)
@@ -86,5 +86,5 @@ test("game_ended disables composer and shows endgame choices", async ({
 	expect(page.url(), "URL must not change after game_ended").toBe(urlBefore);
 
 	// No page errors
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	await expectNoPageErrors(page, pageErrors);
 });

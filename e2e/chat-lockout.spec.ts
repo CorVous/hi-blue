@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { getAiHandles, goToGame, stubChatCompletions } from "./helpers";
+import {
+	expectNoPageErrors,
+	getAiHandles,
+	goToGame,
+	stubChatCompletions,
+} from "./helpers";
 
 // XOR obfuscation key for engine.dat (matches sealed-blob-codec.ts)
 const OBFUSCATION_KEY = "hi-blue:engine/v1@kJvN3pX8wQmR2sZt";
@@ -76,5 +81,5 @@ test("chat lockout disables send for locked-out AI and is silent to player", asy
 	await expect(page.locator("#send")).toBeEnabled();
 
 	// No page errors.
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	await expectNoPageErrors(page, pageErrors);
 });

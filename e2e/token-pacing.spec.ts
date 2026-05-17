@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { goToGame } from "./helpers";
+import { expectNoPageErrors, goToGame } from "./helpers";
 
 // 20 words of stub content. The default `goToGame` SSE stub now emits a single
 // `message` tool call addressed to "blue" carrying these joined words as its
@@ -70,5 +70,5 @@ test("AI message content lands in the addressed panel after the round", async ({
 		timeout: 20_000,
 	});
 
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	await expectNoPageErrors(page, pageErrors);
 });

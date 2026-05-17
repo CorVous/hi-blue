@@ -19,6 +19,7 @@
 import { expect, type Request, type Route, test } from "@playwright/test";
 import {
 	classifyJsonRequest,
+	expectNoPageErrors,
 	stubChatCompletions,
 	stubNewGameLLM,
 } from "./helpers";
@@ -57,7 +58,7 @@ test("new visitor sees start screen with disabled [ BEGIN ] button initially", a
 	await expect(page.locator("#panels")).toBeHidden();
 	await expect(page.locator("#composer")).toBeHidden();
 
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	await expectNoPageErrors(page, pageErrors);
 });
 
 test.describe("mobile viewport", () => {
@@ -80,7 +81,7 @@ test.describe("mobile viewport", () => {
 		await expect(page.locator("#panels")).toBeHidden();
 		await expect(page.locator("#composer")).toBeHidden();
 
-		expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+		await expectNoPageErrors(page, pageErrors);
 	});
 });
 
@@ -103,7 +104,7 @@ test("password input disables ligatures so masked `***` doesn't shift mid-char",
 		.evaluate((el) => getComputedStyle(el).fontVariantLigatures);
 	expect(liga).toBe("none");
 
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	await expectNoPageErrors(page, pageErrors);
 });
 
 test("[ BEGIN ] is enabled after persona synthesis and content-pack generation complete", async ({
@@ -121,7 +122,7 @@ test("[ BEGIN ] is enabled after persona synthesis and content-pack generation c
 	const beginBtn = page.locator("#begin");
 	await expect(beginBtn).toBeEnabled({ timeout: 30_000 });
 
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	await expectNoPageErrors(page, pageErrors);
 });
 
 test("clicking [ BEGIN ] transitions to the game view and shows panels", async ({
@@ -157,7 +158,7 @@ test("clicking [ BEGIN ] transitions to the game view and shows panels", async (
 	// Active session should be set in localStorage
 	await waitForActiveSession(page);
 
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	await expectNoPageErrors(page, pageErrors);
 });
 
 test("refreshing on the game view with an active session stays on the game view", async ({
@@ -193,7 +194,7 @@ test("refreshing on the game view with an active session stays on the game view"
 	await expect(page.locator("#composer")).toBeVisible();
 	await expect(page.locator("#start-screen")).toBeHidden();
 
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	await expectNoPageErrors(page, pageErrors);
 });
 
 test("CapHit during generation surfaces #cap-hit", async ({ page }) => {
@@ -310,7 +311,7 @@ test("refresh during generation re-enters start screen and restarts generation",
 	// Generation restarts on the second load: BEGIN re-enables once synthesis completes
 	await expect(beginBtn).toBeEnabled({ timeout: 30_000 });
 
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	await expectNoPageErrors(page, pageErrors);
 });
 
 test("empty active-session pointer surfaces the start screen on load", async ({
@@ -338,5 +339,5 @@ test("empty active-session pointer surfaces the start screen on load", async ({
 	});
 	await expect(page.locator("#start-screen")).toBeVisible();
 
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	await expectNoPageErrors(page, pageErrors);
 });

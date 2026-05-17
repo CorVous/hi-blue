@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { goToGame } from "./helpers";
+import { expectNoPageErrors, goToGame } from "./helpers";
 
 test("SPA root renders three AI panels and composer", async ({ page }) => {
 	const pageErrors: Error[] = [];
@@ -22,5 +22,28 @@ test("SPA root renders three AI panels and composer", async ({ page }) => {
 
 	await expect(page.locator("#composer")).toBeVisible();
 
-	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
+	await expectNoPageErrors(page, pageErrors);
+});
+
+test("expectNoPageErrors catches late-fired microtask errors (regression)", async ({
+	page,
+}) => {
+	const pageErrors: Error[] = [];
+	page.on("pageerror", (err) => pageErrors.push(err));
+
+	await goToGame(page, { sse: ["hi"] });
+
+	// Fire a late error via queueMicrotask — this runs after the current
+	// task unwinds but before the next macrotask, simulating errors that
+	// arrive asynchronously after the last `await` in a test body.
+	await page.evaluate(() => {
+		queueMicrotask(() => {
+			throw new Error("late pageerror from microtask");
+		});
+	});
+
+	// expectNoPageErrors must catch this; the test asserts the helper works.
+	await expect(expectNoPageErrors(page, pageErrors)).rejects.toThrow(
+		"late pageerror from microtask",
+	);
 });
