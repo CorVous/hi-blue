@@ -1330,6 +1330,496 @@ describe("proximityFlavor sense line", () => {
 	});
 });
 
+// ── UseItem and UseSpace/Convergence proximity flavor (issue #335) ─────────────
+describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
+	// ─ UseItem tests ─
+	it("UseItem proximity flavor appears in cone when item is in front arc (3-arc)", () => {
+		// red at (0,0) facing south; item at (1,0) = directly in front (3-arc includes directly in front)
+		const item: WorldEntity = {
+			id: "switch",
+			kind: "interesting_object",
+			name: "brass switch",
+			examineDescription: "A small brass switch ready to be pressed.",
+			holder: { row: 1, col: 0 }, // in front
+			proximityFlavor: "The switch crackles faintly with energy.",
+			activationFlavor: "The switch clicks with a satisfying snap.",
+			postExamineDescription: "The switch is now activated.",
+			postLookFlavor: "a steady amber glow lingers near the switch",
+			useOutcome: "You toggle the switch.",
+		};
+		const pack: ContentPack = {
+			setting: "",
+			weather: "",
+			timeOfDay: "",
+			objectivePairs: [],
+			interestingObjects: [item],
+			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "south" },
+				green: { position: { row: 0, col: 1 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
+			},
+		};
+		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		// Add a pending UseItemObjective for the switch
+		game = {
+			...game,
+			objectives: [
+				...game.objectives,
+				{
+					id: "use_item_X",
+					kind: "use_item" as const,
+					description: "Use the switch",
+					itemId: "switch",
+					satisfactionState: "pending" as const,
+				},
+			],
+		};
+		const ctx = buildAiContext(game, "red");
+		const stateMsg = ctx.toCurrentStateUserMessage();
+		expect(stateMsg).toContain("The switch crackles faintly with energy.");
+	});
+
+	it("UseItem proximity flavor appears when item is in own cell", () => {
+		// red at (0,0); item at (0,0) = own cell
+		const item: WorldEntity = {
+			id: "switch",
+			kind: "interesting_object",
+			name: "brass switch",
+			examineDescription: "A small brass switch ready to be pressed.",
+			holder: { row: 0, col: 0 }, // same cell
+			proximityFlavor: "The switch crackles faintly with energy.",
+			activationFlavor: "The switch clicks with a satisfying snap.",
+			postExamineDescription: "The switch is now activated.",
+			postLookFlavor: "a steady amber glow lingers near the switch",
+			useOutcome: "You toggle the switch.",
+		};
+		const pack: ContentPack = {
+			setting: "",
+			weather: "",
+			timeOfDay: "",
+			objectivePairs: [],
+			interestingObjects: [item],
+			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "south" },
+				green: { position: { row: 0, col: 1 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
+			},
+		};
+		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		game = {
+			...game,
+			objectives: [
+				...game.objectives,
+				{
+					id: "use_item_X",
+					kind: "use_item" as const,
+					description: "Use the switch",
+					itemId: "switch",
+					satisfactionState: "pending" as const,
+				},
+			],
+		};
+		const ctx = buildAiContext(game, "red");
+		const stateMsg = ctx.toCurrentStateUserMessage();
+		expect(stateMsg).toContain("The switch crackles faintly with energy.");
+	});
+
+	it("UseItem proximity flavor does NOT appear when held by actor", () => {
+		// red holds the switch
+		const item: WorldEntity = {
+			id: "switch",
+			kind: "interesting_object",
+			name: "brass switch",
+			examineDescription: "A small brass switch ready to be pressed.",
+			holder: "red", // held by actor
+			proximityFlavor: "The switch crackles faintly with energy.",
+			activationFlavor: "The switch clicks with a satisfying snap.",
+			postExamineDescription: "The switch is now activated.",
+			postLookFlavor: "a steady amber glow lingers near the switch",
+			useOutcome: "You toggle the switch.",
+		};
+		const pack: ContentPack = {
+			setting: "",
+			weather: "",
+			timeOfDay: "",
+			objectivePairs: [],
+			interestingObjects: [item],
+			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "south" },
+				green: { position: { row: 0, col: 1 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
+			},
+		};
+		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		game = {
+			...game,
+			objectives: [
+				...game.objectives,
+				{
+					id: "use_item_X",
+					kind: "use_item" as const,
+					description: "Use the switch",
+					itemId: "switch",
+					satisfactionState: "pending" as const,
+				},
+			],
+		};
+		const ctx = buildAiContext(game, "red");
+		const stateMsg = ctx.toCurrentStateUserMessage();
+		expect(stateMsg).not.toContain("The switch crackles faintly with energy.");
+	});
+
+	it("UseItem proximity flavor does NOT appear when objective is satisfied", () => {
+		// red at (0,0) facing south; item at (1,0) = in front
+		const item: WorldEntity = {
+			id: "switch",
+			kind: "interesting_object",
+			name: "brass switch",
+			examineDescription: "A small brass switch ready to be pressed.",
+			holder: { row: 1, col: 0 },
+			proximityFlavor: "The switch crackles faintly with energy.",
+			activationFlavor: "The switch clicks with a satisfying snap.",
+			postExamineDescription: "The switch is now activated.",
+			postLookFlavor: "a steady amber glow lingers near the switch",
+			useOutcome: "You toggle the switch.",
+		};
+		const pack: ContentPack = {
+			setting: "",
+			weather: "",
+			timeOfDay: "",
+			objectivePairs: [],
+			interestingObjects: [item],
+			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "south" },
+				green: { position: { row: 0, col: 1 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
+			},
+		};
+		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		// Replace the auto-generated pending objective with a satisfied one
+		game = {
+			...game,
+			objectives: game.objectives.map((obj) =>
+				obj.kind === "use_item" && obj.itemId === "switch"
+					? {
+							...obj,
+							satisfactionState: "satisfied" as const,
+						}
+					: obj,
+			),
+		};
+		const ctx = buildAiContext(game, "red");
+		const stateMsg = ctx.toCurrentStateUserMessage();
+		expect(stateMsg).not.toContain("The switch crackles faintly with energy.");
+	});
+
+	it("UseItem proximity flavor does NOT appear when item is out of range", () => {
+		// red at (0,0) facing north (cone goes up-north, OOB); item at (1,0) (south) = out of range
+		const item: WorldEntity = {
+			id: "switch",
+			kind: "interesting_object",
+			name: "brass switch",
+			examineDescription: "A small brass switch ready to be pressed.",
+			holder: { row: 1, col: 0 }, // south of actor facing north
+			proximityFlavor: "The switch crackles faintly with energy.",
+			activationFlavor: "The switch clicks with a satisfying snap.",
+			postExamineDescription: "The switch is now activated.",
+			postLookFlavor: "a steady amber glow lingers near the switch",
+			useOutcome: "You toggle the switch.",
+		};
+		const pack: ContentPack = {
+			setting: "",
+			weather: "",
+			timeOfDay: "",
+			objectivePairs: [],
+			interestingObjects: [item],
+			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "north" },
+				green: { position: { row: 0, col: 1 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
+			},
+		};
+		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		game = {
+			...game,
+			objectives: [
+				...game.objectives,
+				{
+					id: "use_item_X",
+					kind: "use_item" as const,
+					description: "Use the switch",
+					itemId: "switch",
+					satisfactionState: "pending" as const,
+				},
+			],
+		};
+		const ctx = buildAiContext(game, "red");
+		const stateMsg = ctx.toCurrentStateUserMessage();
+		expect(stateMsg).not.toContain("The switch crackles faintly with energy.");
+	});
+
+	// ─ UseSpace tests ─
+	it("UseSpace proximity flavor appears in cone when space is visible but outside 3-arc", () => {
+		// red at (0,0) facing south; space at (2,0) = "two steps ahead" (in cone but beyond front arc)
+		const space: WorldEntity = {
+			id: "pedestal",
+			kind: "objective_space",
+			name: "Brass Pedestal",
+			examineDescription:
+				"A sturdy brass pedestal. Press an item onto it to activate.",
+			holder: { row: 2, col: 0 }, // two steps ahead (beyond 3-arc but in cone)
+			proximityFlavor: "The pedestal pulses with a faint hum.",
+			activationFlavor: "The pedestal hums to life.",
+			satisfactionFlavor: "The pedestal glows brightly.",
+			postExamineDescription: "The pedestal glows softly.",
+			postLookFlavor: "the pedestal hums.",
+			convergenceTier1Flavor: "A lone figure stands.",
+			convergenceTier2Flavor: "Two figures converge.",
+			convergenceTier1ActorFlavor: "You linger alone.",
+			convergenceTier2ActorFlavor: "You share the space.",
+		};
+		const pack: ContentPack = {
+			setting: "",
+			weather: "",
+			timeOfDay: "",
+			objectivePairs: [],
+			interestingObjects: [],
+			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "south" },
+				green: { position: { row: 0, col: 1 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
+			},
+		};
+		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		game = {
+			...game,
+			world: {
+				...game.world,
+				entities: [space],
+			},
+			objectives: [
+				...game.objectives,
+				{
+					id: "use_space_1",
+					kind: "use_space" as const,
+					description: "Use the pedestal",
+					spaceId: "pedestal",
+					satisfactionState: "pending" as const,
+				},
+			],
+		};
+		const ctx = buildAiContext(game, "red");
+		const snapshot = buildConeSnapshot(ctx);
+		// At distance > 3: proximity flavor should appear in cone snapshot
+		expect(snapshot).toContain(
+			"proximity: The pedestal pulses with a faint hum.",
+		);
+	});
+
+	it("UseSpace auto-examine (examineDescription) appears when space is in 3-arc/own cell; proximity flavor does NOT", () => {
+		// red at (0,0) facing south; space at (1,0) = directly in front (3-arc)
+		const space: WorldEntity = {
+			id: "pedestal",
+			kind: "objective_space",
+			name: "Brass Pedestal",
+			examineDescription:
+				"A sturdy brass pedestal. Press an item onto it to activate.",
+			holder: { row: 1, col: 0 }, // in front
+			proximityFlavor: "The pedestal pulses with a faint hum.",
+			activationFlavor: "The pedestal hums to life.",
+			satisfactionFlavor: "The pedestal glows brightly.",
+			postExamineDescription: "The pedestal glows softly.",
+			postLookFlavor: "the pedestal hums.",
+			convergenceTier1Flavor: "A lone figure stands.",
+			convergenceTier2Flavor: "Two figures converge.",
+			convergenceTier1ActorFlavor: "You linger alone.",
+			convergenceTier2ActorFlavor: "You share the space.",
+		};
+		const pack: ContentPack = {
+			setting: "",
+			weather: "",
+			timeOfDay: "",
+			objectivePairs: [],
+			interestingObjects: [],
+			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "south" },
+				green: { position: { row: 0, col: 1 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
+			},
+		};
+		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		game = {
+			...game,
+			world: {
+				...game.world,
+				entities: [space],
+			},
+			objectives: [
+				...game.objectives,
+				{
+					id: "use_space_2",
+					kind: "use_space" as const,
+					description: "Use the pedestal",
+					spaceId: "pedestal",
+					satisfactionState: "pending" as const,
+				},
+			],
+		};
+		const ctx = buildAiContext(game, "red");
+		const stateMsg = ctx.toCurrentStateUserMessage();
+		// At 3-arc/own cell: auto-examine (examineDescription) appears
+		expect(stateMsg).toContain(
+			"A sturdy brass pedestal. Press an item onto it to activate.",
+		);
+		// Proximity flavor should NOT appear when close
+		expect(stateMsg).not.toContain("The pedestal pulses with a faint hum.");
+	});
+
+	it("UseSpace proximity flavor does NOT appear when objective is satisfied", () => {
+		// red at (0,0) facing south; space at (2,0) = in full cone but beyond 3-arc
+		const space: WorldEntity = {
+			id: "pedestal",
+			kind: "objective_space",
+			name: "Brass Pedestal",
+			examineDescription:
+				"A sturdy brass pedestal. Press an item onto it to activate.",
+			holder: { row: 2, col: 0 },
+			proximityFlavor: "The pedestal pulses with a faint hum.",
+			activationFlavor: "The pedestal hums to life.",
+			satisfactionFlavor: "The pedestal glows brightly.",
+			postExamineDescription: "The pedestal glows softly.",
+			postLookFlavor: "the pedestal hums.",
+			convergenceTier1Flavor: "A lone figure stands.",
+			convergenceTier2Flavor: "Two figures converge.",
+			convergenceTier1ActorFlavor: "You linger alone.",
+			convergenceTier2ActorFlavor: "You share the space.",
+		};
+		const pack: ContentPack = {
+			setting: "",
+			weather: "",
+			timeOfDay: "",
+			objectivePairs: [],
+			interestingObjects: [],
+			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "south" },
+				green: { position: { row: 0, col: 1 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
+			},
+		};
+		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		game = {
+			...game,
+			world: {
+				...game.world,
+				entities: [space],
+			},
+			objectives: [
+				...game.objectives,
+				{
+					id: "use_space_3",
+					kind: "use_space" as const,
+					description: "Use the pedestal",
+					spaceId: "pedestal",
+					satisfactionState: "satisfied" as const, // SATISFIED
+				},
+			],
+		};
+		const ctx = buildAiContext(game, "red");
+		const snapshot = buildConeSnapshot(ctx);
+		expect(snapshot).not.toContain(
+			"proximity: The pedestal pulses with a faint hum.",
+		);
+	});
+
+	// ─ Convergence tests ─
+	it("Convergence proximity flavor appears in cone when space is visible but outside 3-arc", () => {
+		// red at (0,0) facing south; space at (2,0) = "two steps ahead" (in cone but beyond front arc)
+		const space: WorldEntity = {
+			id: "convergence",
+			kind: "objective_space",
+			name: "Gathering Place",
+			examineDescription:
+				"A gathering point. Becoming significant when shared.",
+			holder: { row: 2, col: 0 }, // two steps ahead (beyond 3-arc but in cone)
+			proximityFlavor:
+				"The place emanates a strange presence, drawing you forward.",
+			activationFlavor:
+				"The gathering place awakens with the presence of another.",
+			satisfactionFlavor: "The space resonates with shared presence.",
+			postExamineDescription:
+				"The gathering place still pulses with the memory of connection.",
+			postLookFlavor: "the place hums with purpose.",
+			convergenceTier1Flavor: "A lone figure waits.",
+			convergenceTier2Flavor: "Two figures share the space.",
+			convergenceTier1ActorFlavor: "You stand alone, waiting.",
+			convergenceTier2ActorFlavor: "You share this moment.",
+		};
+		const pack: ContentPack = {
+			setting: "",
+			weather: "",
+			timeOfDay: "",
+			objectivePairs: [],
+			interestingObjects: [],
+			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "south" },
+				green: { position: { row: 0, col: 1 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
+			},
+		};
+		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		game = {
+			...game,
+			world: {
+				...game.world,
+				entities: [space],
+			},
+			objectives: [
+				...game.objectives,
+				{
+					id: "convergence_1",
+					kind: "convergence" as const,
+					description: "Converge at the gathering place",
+					spaceId: "convergence",
+					satisfactionState: "pending" as const,
+				},
+			],
+		};
+		const ctx = buildAiContext(game, "red");
+		const snapshot = buildConeSnapshot(ctx);
+		// At distance > 3: proximity flavor appears in cone snapshot
+		expect(snapshot).toContain(
+			"proximity: The place emanates a strange presence, drawing you forward.",
+		);
+	});
+});
+
 describe("<whats_new> broadcast announcements", () => {
 	it("includes [announcement] line when a broadcast fires at the current round", () => {
 		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
