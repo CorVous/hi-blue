@@ -255,9 +255,9 @@ test("refresh during generation re-enters start screen and restarts generation",
 	const pageErrors: Error[] = [];
 	page.on("pageerror", (err) => pageErrors.push(err));
 
-	// First load: install a stub that delays synthesis so BEGIN stays disabled.
-	// Playwright aborts in-flight requests on navigation, so the 10 s delay
-	// is never reached after the reload — the test does not actually wait 10 s.
+	// First load: install a stub that holds synthesis so BEGIN stays disabled.
+	// The handler blocks on a never-resolving promise; Playwright aborts the
+	// in-flight request when the page reloads, so the test does not stall.
 	const slowSynthesisHandler = async (route: Route, request: Request) => {
 		let body: {
 			stream?: boolean;
@@ -271,9 +271,10 @@ test("refresh during generation re-enters start screen and restarts generation",
 		const isJsonMode =
 			body !== null && (body.stream === false || body.response_format != null);
 		if (isJsonMode) {
-			// Hold synthesis indefinitely — reload will abort this in-flight request
-			await new Promise((r) => setTimeout(r, 60_000));
-			await route.abort();
+			// Hold synthesis indefinitely — Playwright aborts this in-flight request
+			// when the page navigates (reload). Using a never-resolving promise makes
+			// the intent explicit and removes any worst-case wall-clock ceiling.
+			await new Promise<never>(() => {});
 			return;
 		}
 		await route.fallback();
