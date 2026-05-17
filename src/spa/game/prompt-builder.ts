@@ -9,6 +9,7 @@ import type {
 	GameState,
 	GridPosition,
 	LandmarkDescription,
+	Objective,
 	PersonaSpatialState,
 	WorldEntity,
 	WorldState,
@@ -63,6 +64,8 @@ export interface AiContext {
 	 * private standing instructions. Empty array when no directives are active.
 	 */
 	activeDirectives: string[];
+	/** All objectives for this game session. Used to determine hint visibility. */
+	objectives: Objective[];
 	/**
 	 * Render the stable persona/phase prompt — front matter, identity, rules,
 	 * setting, personality, voice examples, goal. Byte-identical across rounds
@@ -141,6 +144,7 @@ export function buildAiContext(
 		wallName,
 		pendingBroadcasts,
 		activeDirectives,
+		objectives: game.objectives,
 		...(opts?.prevConeSnapshot !== undefined
 			? { prevConeSnapshot: opts.prevConeSnapshot }
 			: {}),
@@ -568,19 +572,22 @@ function renderSystemPrompt(ctx: AiContext): string {
 }
 
 /**
- * Returns the held objective_object's `proximityFlavor` sentence when the
- * actor is holding such an object AND its paired space is in the actor's own
- * cell or 3-cell front arc. Returns null otherwise.
+ * Returns zero or more hint lines to append after the cone listing.
+ * Covers carry proximity (existing), UseItem proximity (new),
+ * and UseSpace/Convergence proximity-or-auto-examine (new).
  *
  * Used by both `buildConeSnapshot` (so the `<whats_new>` diff tracks entry/exit)
- * and `renderCurrentState` (to append the sense line after the cone listing).
+ * and `renderCurrentState` (to append sense lines after the cone listing).
  */
-function findProximityFlavor(ctx: AiContext): string | null {
+function collectObjectiveHints(ctx: AiContext): string[] {
 	const actorSpatial = ctx.personaSpatial[ctx.aiId];
-	if (!actorSpatial) return null;
+	if (!actorSpatial) return [];
 
 	const arc = frontArc(actorSpatial.position, actorSpatial.facing);
+	const coneCells = projectCone(actorSpatial.position, actorSpatial.facing);
+	const hints: string[] = [];
 
+	// ── Carry (existing, moved into new function) ──────────────────────────────
 	for (const entity of ctx.worldSnapshot.entities) {
 		if (entity.kind !== "objective_object") continue;
 		if (entity.holder !== ctx.aiId) continue;
@@ -596,9 +603,112 @@ function findProximityFlavor(ctx: AiContext): string | null {
 			positionsEqual(spacePos, actorSpatial.position) ||
 			arc.some((p) => positionsEqual(p, spacePos));
 
-		if (reachable) return entity.proximityFlavor;
+		if (reachable) hints.push(entity.proximityFlavor);
 	}
-	return null;
+
+	// ── UseItem (new) ──────────────────────────────────────────────────────────
+	for (const entity of ctx.worldSnapshot.entities) {
+		if (entity.kind !== "interesting_object") continue;
+		if (!entity.proximityFlavor) continue;
+		// Skip if held by actor
+		if (entity.holder === ctx.aiId) continue;
+
+		// Check if in actor's own cell or front arc
+		const inOwnCell = isGridPosition(entity.holder) &&
+			positionsEqual(entity.holder, actorSpatial.position);
+		const inFrontArc = isGridPosition(entity.holder) &&
+			arc.some((p) => positionsEqual(p, entity.holder as GridPosition));
+
+		if (!inOwnCell && !inFrontArc) continue;
+
+		// Check if there's a pending UseItemObjective referencing this entity
+		const hasPendingObjective = ctx.objectives.some(
+			(obj) =>
+				obj.kind === "use_item" &&
+				obj.satisfactionState === "pending" &&
+				obj.itemId === entity.id,
+		);
+
+		if (hasPendingObjective) {
+			hints.push(entity.proximityFlavor);
+		}
+	}
+
+	// ── UseSpace / Convergence proximity flavor (new) ──────────────────────────
+	// (Auto-examine is handled separately in collectAutoExamines)
+	for (const entity of ctx.worldSnapshot.entities) {
+		if (entity.kind !== "objective_space") continue;
+		if (!isGridPosition(entity.holder)) continue;
+
+		// Check if there's a pending UseSpaceObjective or ConvergenceObjective referencing this space
+		const pendingObjective = ctx.objectives.find(
+			(obj) =>
+				(obj.kind === "use_space" || obj.kind === "convergence") &&
+				obj.satisfactionState === "pending" &&
+				obj.spaceId === entity.id,
+		);
+
+		if (!pendingObjective) continue;
+
+		const spacePos = entity.holder;
+
+		// Only fire proximity flavor when in full cone but NOT in own cell or front arc
+		const inOwnCell = positionsEqual(spacePos, actorSpatial.position);
+		const inFrontArc = arc.some((p) => positionsEqual(p, spacePos));
+
+		if (!inOwnCell && !inFrontArc) {
+			// Check if in full cone but outside front arc/own cell
+			const inCone = coneCells.some(
+				(cell) => !cell.isWall && positionsEqual(cell.position, spacePos),
+			);
+
+			if (inCone && entity.proximityFlavor) {
+				hints.push(entity.proximityFlavor);
+			}
+		}
+	}
+
+	return hints;
+}
+
+/**
+ * Returns zero or more auto-examine lines for UseSpace/Convergence objectives
+ * when the actor is in the own cell or front arc (close proximity).
+ * These are rendered separately from proximity hints in renderCurrentState.
+ */
+function collectAutoExamines(ctx: AiContext): string[] {
+	const actorSpatial = ctx.personaSpatial[ctx.aiId];
+	if (!actorSpatial) return [];
+
+	const arc = frontArc(actorSpatial.position, actorSpatial.facing);
+	const exams: string[] = [];
+
+	for (const entity of ctx.worldSnapshot.entities) {
+		if (entity.kind !== "objective_space") continue;
+		if (!isGridPosition(entity.holder)) continue;
+
+		// Check if there's a pending UseSpaceObjective or ConvergenceObjective referencing this space
+		const pendingObjective = ctx.objectives.find(
+			(obj) =>
+				(obj.kind === "use_space" || obj.kind === "convergence") &&
+				obj.satisfactionState === "pending" &&
+				obj.spaceId === entity.id,
+		);
+
+		if (!pendingObjective) continue;
+
+		const spacePos = entity.holder;
+
+		// Fire auto-examine only when in own cell or front arc
+		const inOwnCell = positionsEqual(spacePos, actorSpatial.position);
+		const inFrontArc = arc.some((p) => positionsEqual(p, spacePos));
+
+		if ((inOwnCell || inFrontArc) && entity.examineDescription) {
+			exams.push(entity.examineDescription);
+		}
+	}
+
+	return exams;
 }
 
 /**
@@ -687,11 +797,9 @@ export function buildConeSnapshot(ctx: AiContext): string {
 		lines.push(cellLine);
 	}
 
-	// Append proximity flavor line when the actor holds an objective item whose
-	// paired space is reachable (own cell or front arc).
-	const proxFlavor = findProximityFlavor(ctx);
-	if (proxFlavor !== null) {
-		lines.push(`proximity: ${proxFlavor}`);
+	// Append objective hint lines: carry proximity, UseItem proximity, UseSpace/Convergence.
+	for (const hint of collectObjectiveHints(ctx)) {
+		lines.push(`proximity: ${hint}`);
 	}
 
 	return lines.join("\n");
@@ -933,10 +1041,14 @@ function renderCurrentState(ctx: AiContext): string {
 			lines.push("(nothing visible)");
 		}
 
-		// Proximity sense line — rendered after the cone listing when applicable.
-		const proxFlavor = findProximityFlavor(ctx);
-		if (proxFlavor !== null) {
-			lines.push(proxFlavor);
+		// Objective hint lines — rendered after the cone listing when applicable.
+		for (const hint of collectObjectiveHints(ctx)) {
+			lines.push(hint);
+		}
+
+		// Auto-examine lines for UseSpace/Convergence when close to the space.
+		for (const exam of collectAutoExamines(ctx)) {
+			lines.push(exam);
 		}
 	} else {
 		lines.push("(no spatial data)");

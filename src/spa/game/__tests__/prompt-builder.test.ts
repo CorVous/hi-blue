@@ -1328,6 +1328,7 @@ describe("proximityFlavor sense line", () => {
 			"+ proximity: The gem pulses warmly, drawn toward the pedestal.",
 		);
 	});
+
 });
 
 describe("<whats_new> broadcast announcements", () => {
