@@ -26,6 +26,7 @@ import {
 import {
 	clearPendingBootstrap,
 	getPendingBootstrap,
+	restartContentPacks,
 } from "../game/pending-bootstrap.js";
 import { encodeRoundResult } from "../game/round-result-encoder.js";
 import { getSpikeRng } from "../game/spike-seed.js";
@@ -597,111 +598,223 @@ export function renderGame(
 			});
 		};
 
-		// Create the bootstrap promise chain
-		const bootstrapPromise = pending.personasPromise
-			.then((personas) => {
-				buildLoadingPersonaShape(personas);
-				setStageLoadState("generating-room");
-				renderLoadingTopInfo("generating-room");
-				startSpinners();
-				startBrightnessWipe();
-				return pending.contentPacksPromise.then(({ packsA, packsB }) => ({
-					personas,
-					contentPacksA: packsA,
-					contentPacksB: packsB,
-				}));
-			})
-			.then((assets) => {
-				cleanupLoadingTimers();
-				const gameSessionRng = getSpikeRng("gameSession");
-				let built = buildSessionFromAssets(
-					assets,
-					gameSessionRng ? { rng: gameSessionRng } : undefined,
-				);
-				built = applyTestAffordances(built, effectiveParams);
+		// Extract bootstrap chain logic into a helper so it can be reused by recovery
+		const runBootstrapChain = (
+			pendingBootstrap: ReturnType<typeof getPendingBootstrap> & object,
+		): Promise<void> => {
+			const bootstrapPromise = pendingBootstrap.personasPromise
+				.then((personas) => {
+					buildLoadingPersonaShape(personas);
+					setStageLoadState("generating-room");
+					renderLoadingTopInfo("generating-room");
+					startSpinners();
+					startBrightnessWipe();
+					return pendingBootstrap.contentPacksPromise.then(({ packsA, packsB }) => ({
+						personas,
+						contentPacksA: packsA,
+						contentPacksB: packsB,
+					}));
+				})
+				.then((assets) => {
+					cleanupLoadingTimers();
+					const gameSessionRng = getSpikeRng("gameSession");
+					let built = buildSessionFromAssets(
+						assets,
+						gameSessionRng ? { rng: gameSessionRng } : undefined,
+					);
+					built = applyTestAffordances(built, effectiveParams);
 
-				// Defensive: if the active session is no longer empty, another
-				// navigation invalidated the bootstrap mid-flight. Abort rather
-				// than overwriting state under the wrong session id.
-				const midFlightCheck = loadActiveSession();
-				if (midFlightCheck.kind !== "none") {
+					// Defensive: if the active session is no longer empty, another
+					// navigation invalidated the bootstrap mid-flight. Abort rather
+					// than overwriting state under the wrong session id.
+					const midFlightCheck = loadActiveSession();
+					if (midFlightCheck.kind !== "none") {
+						clearPendingBootstrap();
+						// If a concurrent save landed a valid session, send the player to
+						// the game rather than the sessions picker.
+						location.hash =
+							midFlightCheck.kind === "ok" ? "#/game" : "#/sessions";
+						return;
+					}
+
+					const saveResult = saveActiveSession(built.getState());
+					if (!saveResult.ok) {
+						showPersistenceWarning(saveResult.reason);
+					}
 					clearPendingBootstrap();
-					// If a concurrent save landed a valid session, send the player to
-					// the game rather than the sessions picker.
-					location.hash =
-						midFlightCheck.kind === "ok" ? "#/game" : "#/sessions";
-					return;
-				}
 
-				const saveResult = saveActiveSession(built.getState());
-				if (!saveResult.ok) {
-					showPersistenceWarning(saveResult.reason);
-				}
-				clearPendingBootstrap();
+					// Strip braille spinners — initPanelChrome below will overwrite
+					// .panel-name text content but spinners are appended children,
+					// so clear them explicitly first.
+					for (const sp of doc.querySelectorAll<HTMLElement>(
+						".panel-name .panel-spinner",
+					)) {
+						sp.remove();
+					}
 
-				// Strip braille spinners — initPanelChrome below will overwrite
-				// .panel-name text content but spinners are appended children,
-				// so clear them explicitly first.
-				for (const sp of doc.querySelectorAll<HTMLElement>(
-					".panel-name .panel-spinner",
-				)) {
-					sp.remove();
-				}
+					setStageLoadState("stable");
 
-				setStageLoadState("stable");
+					// Re-enable composer; the recursive renderGame call below will
+					// run refreshComposerState which re-derives sendBtn.disabled from
+					// the current text + lockouts (start state: send disabled until
+					// a valid mention is typed).
+					_promptInput.disabled = false;
+					_promptInput.placeholder = "";
 
-				// Re-enable composer; the recursive renderGame call below will
-				// run refreshComposerState which re-derives sendBtn.disabled from
-				// the current text + lockouts (start state: send disabled until
-				// a valid mention is typed).
-				_promptInput.disabled = false;
-				_promptInput.placeholder = "";
+					// Hand off to the normal populated path. Setting the module-scope
+					// session var lets the recursive call skip both the loading branch
+					// and the localStorage restore path.
+					session = built;
+					cachedSessionId = getActiveSessionId();
+					return renderGame(root, params);
+				});
 
-				// Hand off to the normal populated path. Setting the module-scope
-				// session var lets the recursive call skip both the loading branch
-				// and the localStorage restore path.
-				session = built;
-				cachedSessionId = getActiveSessionId();
-				return renderGame(root, params);
+			// Create a timeout promise that rejects after BOOTSTRAP_LOADING_TIMEOUT_MS
+			let timeoutId: ReturnType<typeof setTimeout> | undefined;
+			const timeoutPromise = new Promise<never>((_resolve, reject) => {
+				timeoutId = setTimeout(() => {
+					reject(new BootstrapTimeoutError());
+				}, BOOTSTRAP_LOADING_TIMEOUT_MS);
 			});
 
-		// Create a timeout promise that rejects after BOOTSTRAP_LOADING_TIMEOUT_MS
-		let timeoutId: ReturnType<typeof setTimeout> | undefined;
-		const timeoutPromise = new Promise<never>((_resolve, reject) => {
-			timeoutId = setTimeout(() => {
-				reject(new BootstrapTimeoutError());
-			}, BOOTSTRAP_LOADING_TIMEOUT_MS);
-		});
+			return Promise.race([bootstrapPromise, timeoutPromise]).finally(() => {
+				// Always clear the timeout timer, whether the race succeeded or failed
+				if (timeoutId !== undefined) {
+					clearTimeout(timeoutId);
+				}
+			});
+		};
 
-		// Race the bootstrap against the timeout
-		return Promise.race([bootstrapPromise, timeoutPromise])
-			.catch((err: unknown) => {
+		// Run the initial bootstrap chain with error handling
+		return runBootstrapChain(pending)
+			.catch(async (err: unknown) => {
 				cleanupLoadingTimers();
-				clearPendingBootstrap();
+
 				if (err instanceof CapHitError && capHitEl) {
 					capHitEl.removeAttribute("hidden");
 					if (panelsEl) panelsEl.setAttribute("hidden", "");
 					if (composerEl) composerEl.setAttribute("hidden", "");
 					return;
 				}
-				// Handle timeout separately from other errors
-				if (err instanceof BootstrapTimeoutError) {
+
+				const recoveryEl = doc.querySelector<HTMLElement>("#bootstrap-recovery");
+				const recoveryTitleEl = doc.querySelector<HTMLElement>(
+					"#bootstrap-recovery-title",
+				);
+				const recoveryBodyEl = doc.querySelector<HTMLElement>(
+					"#bootstrap-recovery-body",
+				);
+				const regenBtn = doc.querySelector<HTMLButtonElement>(
+					"#bootstrap-recovery-regen",
+				);
+				const abandonLink = doc.querySelector<HTMLAnchorElement>(
+					"#bootstrap-recovery-abandon",
+				);
+
+				// If recovery UI can't be shown (missing DOM),
+				// fall back to bouncing to #/start?reason=broken.
+				if (!recoveryEl || !recoveryTitleEl || !recoveryBodyEl) {
 					clearActiveSession();
-					if (typeof location !== "undefined") {
-						location.hash = "#/start?reason=stuck";
-					}
+					clearPendingBootstrap();
+					location.hash = "#/start?reason=broken";
 					return;
 				}
-				// Anything else: bounce to start with a generic broken reason.
-				clearActiveSession();
-				if (typeof location !== "undefined") {
-					location.hash = "#/start?reason=broken";
+
+				// Determine reason and set UI text
+				let reason = "broken";
+				if (err instanceof BootstrapTimeoutError) {
+					reason = "stuck";
 				}
-			})
-			.finally(() => {
-				// Always clear the timeout timer, whether the race succeeded or failed
-				if (timeoutId !== undefined) {
-					clearTimeout(timeoutId);
+
+				if (reason === "stuck") {
+					recoveryTitleEl.textContent = "the room is taking too long";
+					recoveryBodyEl.textContent =
+						"the world generation timed out. try regenerating with the same daemons, or abandon and reconnect.";
+				} else {
+					recoveryTitleEl.textContent = "the room collapsed";
+					recoveryBodyEl.textContent =
+						"the world we tried to build was malformed. try regenerating with the same daemons, or abandon and reconnect.";
+				}
+
+				// Show recovery UI
+				recoveryEl.removeAttribute("hidden");
+				if (panelsEl) panelsEl.setAttribute("hidden", "");
+				if (composerEl) composerEl.setAttribute("hidden", "");
+				setStageLoadState("unstable");
+
+				// Wire up regenerate button
+				if (regenBtn) {
+					regenBtn.disabled = false;
+					const runRegenerate = async (): Promise<void> => {
+						// Hide recovery UI and clear persistence warning
+						recoveryEl.setAttribute("hidden", "");
+						const persistenceWarningEl =
+							doc.querySelector<HTMLElement>("#persistence-warning");
+						if (persistenceWarningEl)
+							persistenceWarningEl.setAttribute("hidden", "");
+
+						// Show panels and composer as empty loading shells
+						if (panelsEl) panelsEl.removeAttribute("hidden");
+						if (composerEl) composerEl.removeAttribute("hidden");
+						_promptInput.disabled = true;
+						_promptInput.placeholder = "loading…";
+
+						// Disable the regen button during regeneration
+						regenBtn.disabled = true;
+
+						// Restart content packs with cached personas
+						const regenPending = restartContentPacks();
+
+						try {
+							await runBootstrapChain(regenPending);
+						} catch (regenErr: unknown) {
+							cleanupLoadingTimers();
+
+							// If it's a cap-hit error, show cap-hit and hide recovery
+							if (regenErr instanceof CapHitError && capHitEl) {
+								capHitEl.removeAttribute("hidden");
+								recoveryEl.setAttribute("hidden", "");
+								if (panelsEl) panelsEl.setAttribute("hidden", "");
+								if (composerEl) composerEl.setAttribute("hidden", "");
+								return;
+							}
+
+							// Otherwise, re-show recovery UI for another attempt
+							recoveryEl.removeAttribute("hidden");
+							if (panelsEl) panelsEl.setAttribute("hidden", "");
+							if (composerEl) composerEl.setAttribute("hidden", "");
+							regenBtn.disabled = false;
+						}
+					};
+
+					regenBtn.replaceWith(regenBtn.cloneNode(true));
+					const newRegenBtn = doc.querySelector<HTMLButtonElement>(
+						"#bootstrap-recovery-regen",
+					);
+					if (newRegenBtn) {
+						newRegenBtn.addEventListener("click", (e) => {
+							e.preventDefault();
+							void runRegenerate();
+						});
+					}
+				}
+
+				// Wire up abandon link
+				if (abandonLink) {
+					abandonLink.replaceWith(abandonLink.cloneNode(true));
+					const newAbandonLink = doc.querySelector<HTMLAnchorElement>(
+						"#bootstrap-recovery-abandon",
+					);
+					if (newAbandonLink) {
+						newAbandonLink.addEventListener("click", (e) => {
+							e.preventDefault();
+							clearActiveSession();
+							clearPendingBootstrap();
+							if (typeof location !== "undefined") {
+								location.hash = "#/start?reason=broken";
+							}
+						});
+					}
 				}
 			});
 	}

@@ -13,6 +13,7 @@
 
 import {
 	type BootstrapOpts,
+	generateContentPacksOnlySplit,
 	generateNewGameAssetsSplit,
 	type SplitNewGameAssets,
 } from "./bootstrap.js";
@@ -32,6 +33,7 @@ export interface PendingBootstrap {
 	}>;
 	status: PendingBootstrapStatus;
 	error?: unknown;
+	personas?: Record<AiId, AiPersona>;
 }
 
 let _current: PendingBootstrap | undefined;
@@ -52,7 +54,8 @@ export function startBootstrap(opts?: BootstrapOpts): PendingBootstrap {
 	};
 
 	split.personasPromise.then(
-		() => {
+		(personas) => {
+			entry.personas = personas;
 			if (entry.status === "pending") entry.status = "personas-ready";
 		},
 		(err: unknown) => {
@@ -82,6 +85,51 @@ export function startBootstrap(opts?: BootstrapOpts): PendingBootstrap {
  */
 export function getPendingBootstrap(): PendingBootstrap | undefined {
 	return _current;
+}
+
+/**
+ * Return the cached personas from the current pending bootstrap, if available.
+ * Personas may exist even when status is "failed" (after personas resolved but
+ * content packs failed), allowing recovery without re-generating personas.
+ */
+export function getCachedPersonas(): Record<AiId, AiPersona> | undefined {
+	return _current?.personas;
+}
+
+/**
+ * Restart content-pack generation with cached personas (if available), reusing
+ * the resolved persona pool without re-generating personas.
+ *
+ * If no cached personas exist, falls back to startBootstrap (full restart).
+ */
+export function restartContentPacks(
+	opts?: BootstrapOpts,
+): PendingBootstrap {
+	const cached = getCachedPersonas();
+	if (!cached) {
+		return startBootstrap(opts);
+	}
+
+	const split = generateContentPacksOnlySplit(cached, opts);
+	const entry: PendingBootstrap = {
+		personasPromise: split.personasPromise,
+		contentPacksPromise: split.contentPacksPromise,
+		status: "pending",
+		personas: cached,
+	};
+
+	split.contentPacksPromise.then(
+		() => {
+			entry.status = "ready";
+		},
+		(err: unknown) => {
+			entry.status = "failed";
+			entry.error = err;
+		},
+	);
+
+	_current = entry;
+	return entry;
 }
 
 /**

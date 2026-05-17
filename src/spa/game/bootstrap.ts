@@ -106,6 +106,46 @@ export function generateNewGameAssetsSplit(
 }
 
 /**
+ * Generate content packs only, reusing an existing set of resolved personas.
+ * Used by bootstrap recovery to regenerate content packs without re-generating
+ * personas (issue #380).
+ *
+ * The returned personasPromise resolves immediately with the supplied personas,
+ * so downstream code that chains on personasPromise still works unchanged.
+ */
+export function generateContentPacksOnlySplit(
+	personas: Record<AiId, AiPersona>,
+	opts?: BootstrapOpts,
+): SplitNewGameAssets {
+	const contentPackRng = opts?.contentPackRng ?? (opts?.rng ?? Math.random);
+	const packLLM = opts?.packProvider ?? new BrowserContentPackProvider();
+	const aiIds = Object.keys(personas);
+
+	const personasPromise = Promise.resolve(personas);
+	personasPromise.catch(() => {});
+
+	const contentPacksPromise = (async () => {
+		const { packA, packB } = await generateDualContentPacks(
+			contentPackRng,
+			SETTING_POOL,
+			{
+				kRange: SINGLE_GAME_CONFIG.kRange,
+				nRange: SINGLE_GAME_CONFIG.nRange,
+				mRange: SINGLE_GAME_CONFIG.mRange,
+				budgetPerAi: SINGLE_GAME_CONFIG.budgetPerAi,
+				aiGoalPool: [] as string[],
+			},
+			packLLM,
+			Promise.resolve(aiIds),
+		);
+		return { packsA: [packA], packsB: [packB] };
+	})();
+	contentPacksPromise.catch(() => {});
+
+	return { personasPromise, contentPacksPromise };
+}
+
+/**
  * Run the full async generation pipeline and return the resulting personas
  * and content packs as a single resolved bundle.
  *
