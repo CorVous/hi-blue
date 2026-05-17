@@ -1385,11 +1385,15 @@ describe("renderGame — chat_lockout event", () => {
 		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
 		const sendBtn = getEl<HTMLButtonElement>("#send");
 
-		// Wait for round to complete — red should be locked out by the injected chat_lockout
+		// Wait for round to complete (promptInput cleared and re-prefilled with *Sage)
+		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
+
+		// chat_lockout should have applied to red — verify panel has the locked class
+		const redPanel = document.querySelector<HTMLElement>(
+			'.ai-panel[data-ai="red"]',
+		);
 		await vi.waitFor(() => {
-			promptInput.value = "*Ember hi";
-			promptInput.dispatchEvent(new Event("input"));
-			expect(sendBtn.disabled).toBe(true);
+			expect(redPanel?.classList.contains("panel--locked")).toBe(true);
 		});
 
 		// The chat_lockout event should NOT append any message to the transcript —
