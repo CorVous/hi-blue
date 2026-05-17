@@ -51,3 +51,7 @@ View the HTML report after a run:
 ```sh
 pnpm exec playwright show-report
 ```
+
+## Detecting flakes
+
+`pnpm test:repeat [N] [<vitest pattern>]` runs `vitest run` up to N times (default 20), failing fast on the first failure. `pnpm smoke:repeat [N] [<spec filter>]` does the same for Playwright (default 10). Use these on demand to verify a flake fix.
