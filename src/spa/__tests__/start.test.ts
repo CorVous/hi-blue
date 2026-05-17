@@ -169,6 +169,27 @@ describe("renderStart — screen visibility", () => {
 		expect(panelsEl?.hasAttribute("hidden")).toBe(true);
 		expect(composerEl?.hasAttribute("hidden")).toBe(true);
 	});
+
+	it("renders dial with colored status spans when animation is skipped", async () => {
+		// shouldSkipAnimation() short-circuits the typed animation and paints
+		// the full transcript synchronously. The DIAL_LINES status strings
+		// embed `<span class="ok">` / `<span class="hot">` HTML; assigning
+		// them via `textContent` would escape the tags and lose the coloring.
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.resetModules();
+		const { renderStart } = await import("../routes/start.js");
+
+		setSearch("skipDialup=1");
+		try {
+			await renderStart(getMain());
+		} catch {
+			// generation may reject in test environment — ok
+		}
+
+		const dialEl = document.querySelector<HTMLElement>("#dial");
+		expect(dialEl?.querySelectorAll(".ok").length ?? 0).toBeGreaterThan(0);
+		expect(dialEl?.querySelectorAll(".hot").length ?? 0).toBeGreaterThan(0);
+	});
 });
 
 describe("renderStart — BEGIN button state", () => {

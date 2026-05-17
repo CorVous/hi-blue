@@ -382,7 +382,10 @@ export function renderStart(
 	};
 
 	if (skipAnimation) {
-		if (dialEl) dialEl.textContent = renderDialFinalText();
+		// renderDialFinalText() embeds the .ok / .hot status spans as HTML
+		// markup — assign via innerHTML so they parse, otherwise the tags
+		// render as literal text and the dial loses its coloring.
+		if (dialEl) dialEl.innerHTML = renderDialFinalText();
 		revealLogin();
 	} else if (dialEl) {
 		typeDialUp(dialEl, () => setTimeout(revealLogin, 220));
