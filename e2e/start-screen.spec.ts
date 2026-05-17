@@ -118,8 +118,9 @@ test("[ BEGIN ] is enabled after persona synthesis and content-pack generation c
 	await page.goto("/");
 
 	// Wait for [ BEGIN ] to be enabled (generation complete)
+	// Fast-synthesis stub returns instantly; 10s is ample — down from 30s.
 	const beginBtn = page.locator("#begin");
-	await expect(beginBtn).toBeEnabled({ timeout: 30_000 });
+	await expect(beginBtn).toBeEnabled({ timeout: 10_000 });
 
 	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
 });
@@ -136,8 +137,9 @@ test("clicking [ BEGIN ] transitions to the game view and shows panels", async (
 	await page.goto("/?skipDialup=1");
 
 	// Wait for [ CONNECT ] to be enabled
+	// Fast-synthesis stub returns instantly; 10s is ample — down from 30s.
 	const beginBtn = page.locator("#begin");
-	await expect(beginBtn).toBeEnabled({ timeout: 30_000 });
+	await expect(beginBtn).toBeEnabled({ timeout: 10_000 });
 
 	// Enter the password and click CONNECT
 	await page.locator("#password").fill("password");
@@ -172,8 +174,9 @@ test("refreshing on the game view with an active session stays on the game view"
 	await page.goto("/?skipDialup=1");
 
 	// Complete the new-game flow: wait for CONNECT, fill password, click
+	// Fast-synthesis stub returns instantly; 10s is ample — down from 30s.
 	const beginBtn = page.locator("#begin");
-	await expect(beginBtn).toBeEnabled({ timeout: 30_000 });
+	await expect(beginBtn).toBeEnabled({ timeout: 10_000 });
 	await page.locator("#password").fill("password");
 	await beginBtn.click();
 	await expect(page.locator('main[data-view="game"]')).toBeAttached({
@@ -235,7 +238,8 @@ test("CapHit during generation surfaces #cap-hit", async ({ page }) => {
 	await page.goto("/");
 
 	// #cap-hit should become visible after the 429 response
-	await expect(page.locator("#cap-hit")).toBeVisible({ timeout: 15_000 });
+	// Stub returns 429 instantly; 10s is ample — down from 15s.
+	await expect(page.locator("#cap-hit")).toBeVisible({ timeout: 10_000 });
 
 	// Start screen should be hidden when cap-hit is shown
 	await expect(page.locator("#start-screen")).toBeHidden();
@@ -308,7 +312,8 @@ test("refresh during generation re-enters start screen and restarts generation",
 	expect(engineDat).toBeNull();
 
 	// Generation restarts on the second load: BEGIN re-enables once synthesis completes
-	await expect(beginBtn).toBeEnabled({ timeout: 30_000 });
+	// Fast-synthesis stub returns instantly; 10s is ample — down from 30s.
+	await expect(beginBtn).toBeEnabled({ timeout: 10_000 });
 
 	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
 });

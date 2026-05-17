@@ -251,9 +251,7 @@ test("[ load ] flow: click load on non-active row → game view", async ({
 	await rowB.locator(".ops button", { hasText: "[ load ]" }).click();
 
 	// Should transition to the game view
-	await expect(page.locator('main[data-view="game"]')).toBeAttached({
-		timeout: 10_000,
-	});
+	await expect(page.locator('main[data-view="game"]')).toBeAttached();
 
 	// Active session should be BBBB
 	const activeId = await page.evaluate(() =>
@@ -359,9 +357,7 @@ test("sessions-icon click → sessions view", async ({ page }) => {
 	await sessionsIcon.click();
 
 	// Should transition to the sessions view
-	await expect(page.locator('main[data-view="sessions"]')).toBeAttached({
-		timeout: 10_000,
-	});
+	await expect(page.locator('main[data-view="sessions"]')).toBeAttached();
 	await expect(page.locator("#sessions-screen")).toBeVisible();
 
 	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
@@ -375,14 +371,10 @@ test("sessions-icon toggles back to game on second click", async ({ page }) => {
 	const sessionsIcon = page.locator("#sessions-icon");
 
 	await sessionsIcon.click();
-	await expect(page.locator('main[data-view="sessions"]')).toBeAttached({
-		timeout: 10_000,
-	});
+	await expect(page.locator('main[data-view="sessions"]')).toBeAttached();
 
 	await sessionsIcon.click();
-	await expect(page.locator('main[data-view="game"]')).toBeAttached({
-		timeout: 10_000,
-	});
+	await expect(page.locator('main[data-view="game"]')).toBeAttached();
 	await expect(page.locator("#composer")).toBeVisible();
 
 	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
@@ -399,9 +391,7 @@ test("refresh while picker is open lands on the game view (picker state is in-me
 
 	await goToGame(page);
 	await page.locator("#sessions-icon").click();
-	await expect(page.locator('main[data-view="sessions"]')).toBeAttached({
-		timeout: 10_000,
-	});
+	await expect(page.locator('main[data-view="sessions"]')).toBeAttached();
 
 	await page.reload();
 	// After reload, the game view is restored from storage.
@@ -423,14 +413,10 @@ test("Escape on the picker returns to the game view", async ({ page }) => {
 
 	await goToGame(page);
 	await page.locator("#sessions-icon").click();
-	await expect(page.locator('main[data-view="sessions"]')).toBeAttached({
-		timeout: 10_000,
-	});
+	await expect(page.locator('main[data-view="sessions"]')).toBeAttached();
 
 	await page.keyboard.press("Escape");
-	await expect(page.locator('main[data-view="game"]')).toBeAttached({
-		timeout: 10_000,
-	});
+	await expect(page.locator('main[data-view="game"]')).toBeAttached();
 	await expect(page.locator("#composer")).toBeVisible();
 
 	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
@@ -453,9 +439,7 @@ test("broken-session banner: active session with missing engine.dat → sessions
 	await page.goto("/");
 
 	// Dispatcher routes broken sessions to the picker with reason=broken (sticky).
-	await expect(page.locator('main[data-view="sessions"]')).toBeAttached({
-		timeout: 10_000,
-	});
+	await expect(page.locator('main[data-view="sessions"]')).toBeAttached();
 	await expect(page.locator("main")).toHaveAttribute("data-reason", "broken");
 
 	// Banner should be visible with the broken copy
@@ -492,9 +476,7 @@ test("[ + new session ] flow: click → start view, new active pointer", async (
 	await page.locator("#sessions-new").click();
 
 	// Should transition to the start view
-	await expect(page.locator('main[data-view="start"]')).toBeAttached({
-		timeout: 10_000,
-	});
+	await expect(page.locator('main[data-view="start"]')).toBeAttached();
 	await expect(page.locator("#start-screen")).toBeVisible();
 
 	// Active pointer should now be a new id (not 0xAAAA)

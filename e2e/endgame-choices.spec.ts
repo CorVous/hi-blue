@@ -27,7 +27,8 @@ async function reachEndgame(page: Parameters<typeof goToGame>[0]) {
 	await page.fill("#prompt", `*${names[0]} hello`);
 	await expect(page.locator("#send")).toBeEnabled();
 	await page.click("#send");
-	await expect(page.locator("#endgame")).toBeVisible({ timeout: 30_000 });
+	// Fast-synthesis stub returns instantly; 15s is ample — down from 30s.
+	await expect(page.locator("#endgame")).toBeVisible({ timeout: 15_000 });
 }
 
 test("endgame shows choice buttons; Continue hidden without openrouter_key", async ({

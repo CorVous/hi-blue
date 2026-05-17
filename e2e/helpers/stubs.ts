@@ -571,7 +571,8 @@ export async function goToGame(
 	const sse = opts?.sse ?? ["stub reply"];
 	await stubNewGameLLM(page, { sse, synthesis: opts?.synthesis });
 	await page.goto(withSkipDialup(opts?.url ?? "/"));
-	await expect(page.locator("#begin")).toBeEnabled({ timeout: 30_000 });
+	// Fast-synthesis stub returns instantly; 10s is ample — down from 30s.
+	await expect(page.locator("#begin")).toBeEnabled({ timeout: 10_000 });
 	await page.locator("#password").fill("password");
 	await page.locator("#begin").click();
 	await expect(page.locator('main[data-view="game"]')).toBeAttached({
