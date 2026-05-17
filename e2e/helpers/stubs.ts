@@ -253,6 +253,7 @@ function buildDualContentPackResponseBody(body: ParsedBody): string {
 						satisfactionFlavor: `The ${spaceName} settles into completion.`,
 						postExamineDescription: `The ${spaceName} now sits dormant after activation.`,
 						postLookFlavor: `The ${spaceName} rests, its purpose fulfilled.`,
+						proximityFlavor: `A pull radiates from the ${spaceName}.`,
 						convergenceTier1Flavor: `A presence lingers at the ${spaceName}.`,
 						convergenceTier2Flavor: `Two presences converge at the ${spaceName}.`,
 						convergenceTier1ActorFlavor: `You stand alone on the ${spaceName}; the air anticipates company.`,
@@ -269,6 +270,7 @@ function buildDualContentPackResponseBody(body: ParsedBody): string {
 				activationFlavor: `The stub item ${tag}-int-${i} ${ab} clicks into action.`,
 				postExamineDescription: `The stub item ${tag}-int-${i} ${ab} sits used and inert.`,
 				postLookFlavor: `The stub item ${tag}-int-${i} ${ab} rests, spent.`,
+				proximityFlavor: `The stub item ${tag}-int-${i} ${ab} draws the eye.`,
 			}));
 			const obstacles = Array.from({ length: phase.m }, (_, i) => ({
 				id: `${tag}-obs-${i}`,
@@ -332,6 +334,7 @@ function buildContentPackResponseBody(body: ParsedBody): string {
 					satisfactionFlavor: `Stub space ${tag}-${i} settles into completion.`,
 					postExamineDescription: `Stub space ${tag}-${i} now sits dormant after activation.`,
 					postLookFlavor: `Stub space ${tag}-${i} rests, its purpose fulfilled.`,
+					proximityFlavor: `A pull radiates from stub space ${tag}-${i}.`,
 					convergenceTier1Flavor: `A presence lingers at stub space ${tag}-${i}.`,
 					convergenceTier2Flavor: `Two presences converge at stub space ${tag}-${i}.`,
 					convergenceTier1ActorFlavor: `You stand alone on stub space ${tag}-${i}; the air anticipates company.`,
@@ -348,6 +351,7 @@ function buildContentPackResponseBody(body: ParsedBody): string {
 			activationFlavor: `Stub interesting ${tag}-${i} clicks into action.`,
 			postExamineDescription: `Stub interesting ${tag}-${i} sits used and inert.`,
 			postLookFlavor: `Stub interesting ${tag}-${i} rests, spent.`,
+			proximityFlavor: `Stub interesting ${tag}-${i} draws the eye.`,
 		}));
 		const obstacles = Array.from({ length: phase.m }, (_, i) => ({
 			id: `${tag}-obs-${i}`,
