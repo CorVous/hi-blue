@@ -1439,9 +1439,13 @@ export function validateContentPacks(
 				if (
 					!examineMentionsPairedSpace(object.examineDescription, space.name)
 				) {
-					console.warn(
-						`${phaseLabel}: object ${object.id} examineDescription does not mention paired space "${space.name}" (the AI-discoverable pairing tell).`,
-					);
+					errors.push({
+						entityId: object.id,
+						field: "examineDescription",
+						rule: "paired-space-tell",
+						message: `${phaseLabel}: object ${object.id} examineDescription does not mention paired space "${space.name}" (the AI-discoverable pairing tell). Reference the space's name or a clear noun-phrase synonym.`,
+						retryUnit,
+					});
 				}
 				if (!examineMentionsUseTell(space.examineDescription)) {
 					console.warn(
@@ -1830,9 +1834,13 @@ function validateSinglePack(
 				continue;
 			}
 			if (!examineMentionsPairedSpace(object.examineDescription, space.name)) {
-				console.warn(
-					`${label}: object ${object.id} examineDescription does not mention paired space "${space.name}" (the AI-discoverable pairing tell).`,
-				);
+				errors.push({
+					entityId: object.id,
+					field: "examineDescription",
+					rule: "paired-space-tell",
+					message: `${label}: object ${object.id} examineDescription does not mention paired space "${space.name}" (the AI-discoverable pairing tell). Reference the space's name or a clear noun-phrase synonym.`,
+					retryUnit,
+				});
 			}
 			if (!examineMentionsUseTell(space.examineDescription)) {
 				console.warn(

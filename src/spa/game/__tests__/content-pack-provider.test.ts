@@ -258,17 +258,29 @@ describe("validateContentPacks — prose tell contract", () => {
 		).toBe(true);
 	});
 
-	it("warns but does not throw when objective_object examine does not mention the paired space", () => {
-		expectWarnNotThrow(
-			() =>
-				validateContentPacksOrThrow(
-					buildResponse(
-						"rusted iron key, heavily corroded but still intact. The teeth are worn smooth from use",
-					),
-					input,
-				),
-			/examineDescription does not mention paired space/,
+	it("throws ContentPackError when objective_object examine does not mention the paired space", () => {
+		const result = validateContentPacks(
+			buildResponse(
+				"rusted iron key, heavily corroded but still intact. The teeth are worn smooth from use",
+			),
+			input,
 		);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			const error = result.errors.find((e) => e.field === "examineDescription");
+			expect(error).toBeDefined();
+			expect(error?.rule).toBe("paired-space-tell");
+			expect(error?.entityId).toBe("obj1");
+			expect(error?.retryUnit.kind).toBe("objective-pair");
+		}
+		expect(() =>
+			validateContentPacksOrThrow(
+				buildResponse(
+					"rusted iron key, heavily corroded but still intact. The teeth are worn smooth from use",
+				),
+				input,
+			),
+		).toThrow(/examineDescription does not mention paired space/);
 	});
 
 	it("rejects a content pack whose objective_object is missing proximityFlavor", () => {
@@ -2385,5 +2397,86 @@ describe("BrowserContentPackProvider — partial-retry layer", () => {
 		expect(
 			result.packs[0]?.interestingObjects[0]?.examineDescription,
 		).not.toMatch(/porcelain figurine/);
+	});
+
+	it("Test 8 — paired-space tell missing in objective_object examineDescription → repaired in round 1 (2 chatFn calls)", async () => {
+		const mockChatFn = vi.fn();
+
+		// Call 1: broken pack (no paired-space mention in examineDescription)
+		const brokenPack = buildValidPack();
+		const brokenPackPacks = (brokenPack as Record<string, unknown>).packs as
+			| Record<string, unknown>[]
+			| undefined;
+		if (brokenPackPacks?.[0]) {
+			const pair = (
+				(brokenPackPacks[0] as Record<string, unknown>)
+					.objectivePairs as Record<string, unknown>[]
+			)[0];
+			if (pair) {
+				const obj = pair.object as Record<string, unknown>;
+				obj.examineDescription =
+					"rusted iron key, heavily corroded but still intact. The teeth are worn smooth from use";
+			}
+		}
+		mockChatFn.mockResolvedValueOnce({
+			content: JSON.stringify(brokenPack),
+			reasoning: null,
+		});
+
+		// Call 2: repair response with valid examineDescription (has paired-space mention)
+		const repair: ContentPackRepair = {
+			unitKind: "objective-pair",
+			phaseIndex: 0,
+			object: {
+				id: "obj1",
+				kind: "objective_object",
+				name: "Iron Key",
+				examineDescription:
+					"An iron key. It looks like it belongs on the brass pedestal across the room.",
+				useOutcome: "You turn the key over in your hands.",
+				pairsWithSpaceId: "space1",
+				placementFlavor: "{actor} sets the key on its mount.",
+				proximityFlavor: "The key hums faintly near the pedestal.",
+			},
+			space: {
+				id: "space1",
+				kind: "objective_space",
+				name: "Brass Pedestal",
+				examineDescription:
+					"A sturdy brass mount. Press an item onto it to activate the mechanism; the space awaits a shared presence.",
+				activationFlavor:
+					"The pedestal hums to life and its surface flushes with warmth.",
+				satisfactionFlavor:
+					"The pedestal glows brightly as the objective completes.",
+				postExamineDescription: "The pedestal glows softly after activation.",
+				postLookFlavor: "the pedestal hums with residual warmth.",
+				convergenceTier1Flavor: "A lone figure stands at the pedestal.",
+				convergenceTier2Flavor: "Two figures converge at the pedestal.",
+				convergenceTier1ActorFlavor:
+					"You linger at the pedestal; the place feels poised for company.",
+				convergenceTier2ActorFlavor:
+					"You share the pedestal with another presence; the runes thrum.",
+			},
+		};
+		mockChatFn.mockResolvedValueOnce({
+			content: buildBatchedRepair([repair]),
+			reasoning: null,
+		});
+
+		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
+		const result = await provider.generateContentPacks(baseInput);
+
+		expect(mockChatFn).toHaveBeenCalledTimes(2);
+		expect(result.packs[0]?.objectivePairs[0]?.object.examineDescription).toBe(
+			"An iron key. It looks like it belongs on the brass pedestal across the room.",
+		);
+		expect(
+			result.packs[0]?.objectivePairs[0]?.object.examineDescription.toLowerCase(),
+		).toContain("brass pedestal");
+
+		const call2Messages = mockChatFn.mock.calls[1]?.[0]?.messages as
+			| Array<{ role: string; content: string }>
+			| undefined;
+		expect(call2Messages?.[1]?.content).toContain("Brass Pedestal");
 	});
 });
