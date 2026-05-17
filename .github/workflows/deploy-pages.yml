@@ -6,12 +6,10 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
-  group: pages
+  group: gh-pages-write
   cancel-in-progress: false
 
 jobs:
@@ -33,9 +31,6 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-
       - name: Build SPA
         env:
           WORKER_BASE_URL: ${{ vars.WORKER_BASE_URL }}
@@ -48,17 +43,10 @@ jobs:
       - name: Add .nojekyll
         run: touch dist/.nojekyll
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          path: dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          destination_dir: ''
+          keep_files: true
