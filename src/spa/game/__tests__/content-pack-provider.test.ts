@@ -2480,3 +2480,638 @@ describe("BrowserContentPackProvider — partial-retry layer", () => {
 		expect(call2Messages?.[1]?.content).toContain("Brass Pedestal");
 	});
 });
+
+describe("BrowserContentPackProvider — dual outer-retry layer", () => {
+	const dualInput = {
+		phases: [
+			{
+				settingA: "abandoned subway station",
+				settingB: "sun-baked salt flat",
+				theme: "mundane",
+				k: 1,
+				n: 0,
+				m: 0,
+			},
+		],
+	};
+
+	function buildDualPair(
+		packAActivation: string,
+		packBActivation: string,
+		packAExamine = "A sturdy pedestal. Press an item onto it to activate.",
+		packBExamine = "A weathered marker. Press the cap to activate it.",
+	): unknown {
+		const landmarks = {
+			north: {
+				shortName: "the signal tower",
+				horizonPhrase: "rises above the platform",
+			},
+			south: {
+				shortName: "the collapsed entrance",
+				horizonPhrase: "gapes like a wound in the dark",
+			},
+			east: {
+				shortName: "the rusted fan shaft",
+				horizonPhrase: "spins slowly in the stale air",
+			},
+			west: {
+				shortName: "the flooded tunnel",
+				horizonPhrase: "disappears into still black water",
+			},
+		};
+		const mkPack = (
+			setting: string,
+			objName: string,
+			spaceName: string,
+			examine: string,
+			activation: string,
+		) => ({
+			setting,
+			objectivePairs: [
+				{
+					object: {
+						id: "obj1",
+						kind: "objective_object",
+						name: objName,
+						examineDescription: `An object. It belongs on the ${spaceName.toLowerCase()}.`,
+						useOutcome: "You turn it over in your hands.",
+						pairsWithSpaceId: "space1",
+						placementFlavor: `{actor} sets it on the ${spaceName.toLowerCase()}.`,
+						proximityFlavor: "It hums faintly nearby.",
+					},
+					space: {
+						id: "space1",
+						kind: "objective_space",
+						name: spaceName,
+						examineDescription: examine,
+						activationFlavor: activation,
+						satisfactionFlavor: "The space is satisfied.",
+						postExamineDescription: "The space is now used.",
+						postLookFlavor: "The space hums.",
+						convergenceTier1Flavor: `A lone figure stands at the ${spaceName.toLowerCase()}.`,
+						convergenceTier2Flavor: `Two figures converge at the ${spaceName.toLowerCase()}.`,
+						convergenceTier1ActorFlavor: `You linger at the ${spaceName.toLowerCase()}.`,
+						convergenceTier2ActorFlavor: `You share the ${spaceName.toLowerCase()} with another presence.`,
+					},
+				},
+			],
+			interestingObjects: [],
+			obstacles: [],
+			landmarks,
+		});
+		return {
+			phases: [
+				{
+					packA: mkPack(
+						"abandoned subway station",
+						"Iron Key",
+						"Brass Pedestal",
+						packAExamine,
+						packAActivation,
+					),
+					packB: mkPack(
+						"sun-baked salt flat",
+						"Bone Token",
+						"Survey Marker",
+						packBExamine,
+						packBActivation,
+					),
+				},
+			],
+		};
+	}
+
+	it("Test 1 — retries on dual validation failure (N=1), then succeeds and includes corrective feedback", async () => {
+		const mockChatFn = vi.fn();
+
+		// Call 1: structurally invalid dual response (missing space)
+		mockChatFn.mockResolvedValueOnce({
+			content: JSON.stringify({
+				phases: [
+					{
+						packA: {
+							setting: "abandoned subway station",
+							objectivePairs: [
+								{
+									object: {
+										id: "obj1",
+										kind: "objective_object",
+										name: "Iron Key",
+										examineDescription:
+											"An object. It belongs on the brass pedestal.",
+										useOutcome: "You turn it over in your hands.",
+										pairsWithSpaceId: "space1",
+										placementFlavor: "{actor} sets it on the brass pedestal.",
+										proximityFlavor: "It hums faintly nearby.",
+									},
+									// space intentionally missing — validation failure
+								},
+							],
+							interestingObjects: [],
+							obstacles: [],
+							landmarks: {
+								north: {
+									shortName: "the signal tower",
+									horizonPhrase: "rises above the platform",
+								},
+								south: {
+									shortName: "the collapsed entrance",
+									horizonPhrase: "gapes like a wound in the dark",
+								},
+								east: {
+									shortName: "the rusted fan shaft",
+									horizonPhrase: "spins slowly in the stale air",
+								},
+								west: {
+									shortName: "the flooded tunnel",
+									horizonPhrase: "disappears into still black water",
+								},
+							},
+						},
+						packB: {
+							setting: "sun-baked salt flat",
+							objectivePairs: [
+								{
+									object: {
+										id: "obj1",
+										kind: "objective_object",
+										name: "Bone Token",
+										examineDescription:
+											"An object. It belongs on the survey marker.",
+										useOutcome: "You turn it over in your hands.",
+										pairsWithSpaceId: "space1",
+										placementFlavor: "{actor} sets it on the survey marker.",
+										proximityFlavor: "It hums faintly nearby.",
+									},
+									space: {
+										id: "space1",
+										kind: "objective_space",
+										name: "Survey Marker",
+										examineDescription:
+											"A weathered marker. Press the cap to activate it.",
+										activationFlavor:
+											"The marker clicks once and a column of dust spirals up.",
+										satisfactionFlavor: "The space is satisfied.",
+										postExamineDescription: "The space is now used.",
+										postLookFlavor: "The space hums.",
+										convergenceTier1Flavor:
+											"A lone figure stands at the survey marker.",
+										convergenceTier2Flavor:
+											"Two figures converge at the survey marker.",
+										convergenceTier1ActorFlavor:
+											"You linger at the survey marker.",
+										convergenceTier2ActorFlavor:
+											"You share the survey marker with another presence.",
+									},
+								},
+							],
+							interestingObjects: [],
+							obstacles: [],
+							landmarks: {
+								north: {
+									shortName: "the signal tower",
+									horizonPhrase: "rises above the platform",
+								},
+								south: {
+									shortName: "the collapsed entrance",
+									horizonPhrase: "gapes like a wound in the dark",
+								},
+								east: {
+									shortName: "the rusted fan shaft",
+									horizonPhrase: "spins slowly in the stale air",
+								},
+								west: {
+									shortName: "the flooded tunnel",
+									horizonPhrase: "disappears into still black water",
+								},
+							},
+						},
+					},
+				],
+			}),
+			reasoning: null,
+		});
+
+		// Call 2: valid dual response
+		mockChatFn.mockResolvedValueOnce({
+			content: JSON.stringify(
+				buildDualPair(
+					"The pedestal hums to life and its runes glow.",
+					"The marker clicks once and a column of dust spirals up.",
+				),
+			),
+			reasoning: null,
+		});
+
+		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
+		const result = await provider.generateDualContentPacks(dualInput);
+
+		expect(mockChatFn).toHaveBeenCalledTimes(2);
+		expect(
+			result.phases[0]?.packA.objectivePairs[0]?.space.activationFlavor,
+		).toBe("The pedestal hums to life and its runes glow.");
+
+		// Assert call 2's messages contain corrective feedback
+		const call2Messages = mockChatFn.mock.calls[1]?.[0]?.messages as
+			| Array<{ role: string; content: string }>
+			| undefined;
+		expect(call2Messages).toBeDefined();
+		const correctionTurn = call2Messages?.find((msg) =>
+			msg.content.includes("Your previous attempt failed validation"),
+		);
+		expect(correctionTurn).toBeDefined();
+	});
+
+	it("Test 2 — retries on dual validation failure (N=2), then succeeds and includes corrective feedback", async () => {
+		const mockChatFn = vi.fn();
+
+		// Call 1: structurally invalid dual response (missing space in packA)
+		mockChatFn.mockResolvedValueOnce({
+			content: JSON.stringify({
+				phases: [
+					{
+						packA: {
+							setting: "abandoned subway station",
+							objectivePairs: [
+								{
+									object: {
+										id: "obj1",
+										kind: "objective_object",
+										name: "Iron Key",
+										examineDescription:
+											"An object. It belongs on the brass pedestal.",
+										useOutcome: "You turn it over in your hands.",
+										pairsWithSpaceId: "space1",
+										placementFlavor: "{actor} sets it on the brass pedestal.",
+										proximityFlavor: "It hums faintly nearby.",
+									},
+									// space intentionally missing — validation failure
+								},
+							],
+							interestingObjects: [],
+							obstacles: [],
+							landmarks: {
+								north: {
+									shortName: "the signal tower",
+									horizonPhrase: "rises above the platform",
+								},
+								south: {
+									shortName: "the collapsed entrance",
+									horizonPhrase: "gapes like a wound in the dark",
+								},
+								east: {
+									shortName: "the rusted fan shaft",
+									horizonPhrase: "spins slowly in the stale air",
+								},
+								west: {
+									shortName: "the flooded tunnel",
+									horizonPhrase: "disappears into still black water",
+								},
+							},
+						},
+						packB: {
+							setting: "sun-baked salt flat",
+							objectivePairs: [
+								{
+									object: {
+										id: "obj1",
+										kind: "objective_object",
+										name: "Bone Token",
+										examineDescription:
+											"An object. It belongs on the survey marker.",
+										useOutcome: "You turn it over in your hands.",
+										pairsWithSpaceId: "space1",
+										placementFlavor: "{actor} sets it on the survey marker.",
+										proximityFlavor: "It hums faintly nearby.",
+									},
+									space: {
+										id: "space1",
+										kind: "objective_space",
+										name: "Survey Marker",
+										examineDescription:
+											"A weathered marker. Press the cap to activate it.",
+										activationFlavor:
+											"The marker clicks once and a column of dust spirals up.",
+										satisfactionFlavor: "The space is satisfied.",
+										postExamineDescription: "The space is now used.",
+										postLookFlavor: "The space hums.",
+										convergenceTier1Flavor:
+											"A lone figure stands at the survey marker.",
+										convergenceTier2Flavor:
+											"Two figures converge at the survey marker.",
+										convergenceTier1ActorFlavor:
+											"You linger at the survey marker.",
+										convergenceTier2ActorFlavor:
+											"You share the survey marker with another presence.",
+									},
+								},
+							],
+							interestingObjects: [],
+							obstacles: [],
+							landmarks: {
+								north: {
+									shortName: "the signal tower",
+									horizonPhrase: "rises above the platform",
+								},
+								south: {
+									shortName: "the collapsed entrance",
+									horizonPhrase: "gapes like a wound in the dark",
+								},
+								east: {
+									shortName: "the rusted fan shaft",
+									horizonPhrase: "spins slowly in the stale air",
+								},
+								west: {
+									shortName: "the flooded tunnel",
+									horizonPhrase: "disappears into still black water",
+								},
+							},
+						},
+					},
+				],
+			}),
+			reasoning: null,
+		});
+
+		// Call 2: still structurally invalid dual response (missing packB now)
+		mockChatFn.mockResolvedValueOnce({
+			content: JSON.stringify({
+				phases: [
+					{
+						packA: {
+							setting: "abandoned subway station",
+							objectivePairs: [
+								{
+									object: {
+										id: "obj1",
+										kind: "objective_object",
+										name: "Iron Key",
+										examineDescription:
+											"An object. It belongs on the brass pedestal.",
+										useOutcome: "You turn it over in your hands.",
+										pairsWithSpaceId: "space1",
+										placementFlavor: "{actor} sets it on the brass pedestal.",
+										proximityFlavor: "It hums faintly nearby.",
+									},
+									space: {
+										id: "space1",
+										kind: "objective_space",
+										name: "Brass Pedestal",
+										examineDescription:
+											"A sturdy pedestal. Press an item onto it to activate.",
+										activationFlavor:
+											"The pedestal hums to life and its runes glow.",
+										satisfactionFlavor: "The space is satisfied.",
+										postExamineDescription: "The space is now used.",
+										postLookFlavor: "The space hums.",
+										convergenceTier1Flavor:
+											"A lone figure stands at the brass pedestal.",
+										convergenceTier2Flavor:
+											"Two figures converge at the brass pedestal.",
+										convergenceTier1ActorFlavor:
+											"You linger at the brass pedestal.",
+										convergenceTier2ActorFlavor:
+											"You share the brass pedestal with another presence.",
+									},
+								},
+							],
+							interestingObjects: [],
+							obstacles: [],
+							landmarks: {
+								north: {
+									shortName: "the signal tower",
+									horizonPhrase: "rises above the platform",
+								},
+								south: {
+									shortName: "the collapsed entrance",
+									horizonPhrase: "gapes like a wound in the dark",
+								},
+								east: {
+									shortName: "the rusted fan shaft",
+									horizonPhrase: "spins slowly in the stale air",
+								},
+								west: {
+									shortName: "the flooded tunnel",
+									horizonPhrase: "disappears into still black water",
+								},
+							},
+						},
+						// packB intentionally missing
+					},
+				],
+			}),
+			reasoning: null,
+		});
+
+		// Call 3: valid dual response
+		mockChatFn.mockResolvedValueOnce({
+			content: JSON.stringify(
+				buildDualPair(
+					"The pedestal hums to life and its runes glow.",
+					"The marker clicks once and a column of dust spirals up.",
+				),
+			),
+			reasoning: null,
+		});
+
+		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
+		const result = await provider.generateDualContentPacks(dualInput);
+
+		expect(mockChatFn).toHaveBeenCalledTimes(3);
+		expect(
+			result.phases[0]?.packA.objectivePairs[0]?.space.activationFlavor,
+		).toBe("The pedestal hums to life and its runes glow.");
+
+		// Assert call 3's messages contain corrective feedback
+		const call3Messages = mockChatFn.mock.calls[2]?.[0]?.messages as
+			| Array<{ role: string; content: string }>
+			| undefined;
+		expect(call3Messages).toBeDefined();
+		const correctionTurn = call3Messages?.find((msg) =>
+			msg.content.includes("Your previous attempt failed validation"),
+		);
+		expect(correctionTurn).toBeDefined();
+	});
+
+	it("Test 3 — CapHitError on first call short-circuits without retry", async () => {
+		const mockChatFn = vi.fn();
+
+		mockChatFn.mockRejectedValueOnce(
+			new CapHitError({
+				message: "rate limit exceeded",
+				reason: "global-daily",
+				retryAfterSec: 3600,
+			}),
+		);
+
+		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
+
+		await expect(provider.generateDualContentPacks(dualInput)).rejects.toThrow(
+			CapHitError,
+		);
+		expect(mockChatFn).toHaveBeenCalledTimes(1);
+	});
+
+	it("Test 4 — budget exhaustion bubbles the last ContentPackError", async () => {
+		const mockChatFn = vi.fn();
+
+		// Return the same structurally-invalid response three times (OUTER_BUDGET = 3)
+		const invalidResponse = {
+			phases: [
+				{
+					packA: {
+						setting: "abandoned subway station",
+						objectivePairs: [
+							{
+								object: {
+									id: "obj1",
+									kind: "objective_object",
+									name: "Iron Key",
+									examineDescription:
+										"An object. It belongs on the brass pedestal.",
+									useOutcome: "You turn it over in your hands.",
+									pairsWithSpaceId: "space1",
+									placementFlavor: "{actor} sets it on the brass pedestal.",
+									proximityFlavor: "It hums faintly nearby.",
+								},
+								// space intentionally missing — validation failure
+							},
+						],
+						interestingObjects: [],
+						obstacles: [],
+						landmarks: {
+							north: {
+								shortName: "the signal tower",
+								horizonPhrase: "rises above the platform",
+							},
+							south: {
+								shortName: "the collapsed entrance",
+								horizonPhrase: "gapes like a wound in the dark",
+							},
+							east: {
+								shortName: "the rusted fan shaft",
+								horizonPhrase: "spins slowly in the stale air",
+							},
+							west: {
+								shortName: "the flooded tunnel",
+								horizonPhrase: "disappears into still black water",
+							},
+						},
+					},
+					packB: {
+						setting: "sun-baked salt flat",
+						objectivePairs: [
+							{
+								object: {
+									id: "obj1",
+									kind: "objective_object",
+									name: "Bone Token",
+									examineDescription:
+										"An object. It belongs on the survey marker.",
+									useOutcome: "You turn it over in your hands.",
+									pairsWithSpaceId: "space1",
+									placementFlavor: "{actor} sets it on the survey marker.",
+									proximityFlavor: "It hums faintly nearby.",
+								},
+								space: {
+									id: "space1",
+									kind: "objective_space",
+									name: "Survey Marker",
+									examineDescription:
+										"A weathered marker. Press the cap to activate it.",
+									activationFlavor:
+										"The marker clicks once and a column of dust spirals up.",
+									satisfactionFlavor: "The space is satisfied.",
+									postExamineDescription: "The space is now used.",
+									postLookFlavor: "The space hums.",
+									convergenceTier1Flavor:
+										"A lone figure stands at the survey marker.",
+									convergenceTier2Flavor:
+										"Two figures converge at the survey marker.",
+									convergenceTier1ActorFlavor:
+										"You linger at the survey marker.",
+									convergenceTier2ActorFlavor:
+										"You share the survey marker with another presence.",
+								},
+							},
+						],
+						interestingObjects: [],
+						obstacles: [],
+						landmarks: {
+							north: {
+								shortName: "the signal tower",
+								horizonPhrase: "rises above the platform",
+							},
+							south: {
+								shortName: "the collapsed entrance",
+								horizonPhrase: "gapes like a wound in the dark",
+							},
+							east: {
+								shortName: "the rusted fan shaft",
+								horizonPhrase: "spins slowly in the stale air",
+							},
+							west: {
+								shortName: "the flooded tunnel",
+								horizonPhrase: "disappears into still black water",
+							},
+						},
+					},
+				},
+			],
+		};
+
+		mockChatFn.mockResolvedValue({
+			content: JSON.stringify(invalidResponse),
+			reasoning: null,
+		});
+
+		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
+
+		await expect(provider.generateDualContentPacks(dualInput)).rejects.toThrow(
+			/exhausted retry budget/,
+		);
+		expect(mockChatFn).toHaveBeenCalledTimes(3); // OUTER_BUDGET = 3
+	});
+
+	it("Test 5 — JSON-parse failure on first call → backoff via fake timers → success", async () => {
+		vi.useFakeTimers();
+
+		const mockChatFn = vi.fn();
+
+		// Call 1: invalid JSON response
+		mockChatFn.mockResolvedValueOnce({
+			content: "{not valid json",
+			reasoning: null,
+		});
+
+		// Call 2: valid response after backoff
+		mockChatFn.mockResolvedValueOnce({
+			content: JSON.stringify(
+				buildDualPair(
+					"The pedestal hums to life and its runes glow.",
+					"The marker clicks once and a column of dust spirals up.",
+				),
+			),
+			reasoning: null,
+		});
+
+		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
+		const promise = provider.generateDualContentPacks(dualInput);
+
+		// Wait for the first call to complete
+		await vi.waitFor(() => expect(mockChatFn).toHaveBeenCalledTimes(1));
+
+		// Advance timers by the backoff duration (BACKOFF_MS[0] = 1000)
+		await vi.advanceTimersByTimeAsync(1000);
+
+		// Now await the promise resolution
+		const result = await promise;
+
+		vi.useRealTimers();
+
+		expect(mockChatFn).toHaveBeenCalledTimes(2);
+		expect(result.phases[0]?.packA.objectivePairs[0]?.object.name).toBe(
+			"Iron Key",
+		);
+	});
+});
