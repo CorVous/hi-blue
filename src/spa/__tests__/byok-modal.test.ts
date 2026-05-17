@@ -340,7 +340,7 @@ describe("openByokModal UI", () => {
 		vi.stubGlobal("fetch", mockFetch);
 
 		getEl("byok-validate-save").click();
-		await new Promise((resolve) => setTimeout(resolve, 10));
+		await Promise.resolve();
 
 		expect(getEl("byok-status").textContent).toBeTruthy();
 		expect(mockFetch).not.toHaveBeenCalled();
@@ -362,9 +362,10 @@ describe("openByokModal UI", () => {
 		);
 
 		getEl("byok-validate-save").click();
-		await new Promise((resolve) => setTimeout(resolve, 50));
+		await vi.waitFor(() => {
+			expect(store.openrouter_key).toBe("sk-or-v1-goodkey");
+		});
 
-		expect(store.openrouter_key).toBe("sk-or-v1-goodkey");
 		expect(getEl("byok-status").textContent).toBe("Key validated.");
 	});
 
@@ -378,11 +379,12 @@ describe("openByokModal UI", () => {
 		vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ status: 401 }));
 
 		getEl("byok-validate-save").click();
-		await new Promise((resolve) => setTimeout(resolve, 50));
+		await vi.waitFor(() => {
+			expect(getEl("byok-status").textContent).toContain(
+				"That key didn't authenticate",
+			);
+		});
 
-		expect(getEl("byok-status").textContent).toContain(
-			"That key didn't authenticate",
-		);
 		expect(store.openrouter_key).toBeUndefined();
 	});
 
@@ -396,9 +398,10 @@ describe("openByokModal UI", () => {
 		vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ status: 402 }));
 
 		getEl("byok-validate-save").click();
-		await new Promise((resolve) => setTimeout(resolve, 50));
+		await vi.waitFor(() => {
+			expect(getEl("byok-status").textContent).toContain("out of credit");
+		});
 
-		expect(getEl("byok-status").textContent).toContain("out of credit");
 		expect(store.openrouter_key).toBeUndefined();
 	});
 
@@ -412,11 +415,12 @@ describe("openByokModal UI", () => {
 		vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ status: 502 }));
 
 		getEl("byok-validate-save").click();
-		await new Promise((resolve) => setTimeout(resolve, 50));
+		await vi.waitFor(() => {
+			expect(getEl("byok-status").textContent).toContain(
+				"Couldn't reach OpenRouter",
+			);
+		});
 
-		expect(getEl("byok-status").textContent).toContain(
-			"Couldn't reach OpenRouter",
-		);
 		expect(getEl("byok-save-unverified").hidden).toBe(false);
 	});
 
@@ -430,11 +434,13 @@ describe("openByokModal UI", () => {
 		// Simulate 5xx first to reveal the button
 		vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ status: 502 }));
 		getEl("byok-validate-save").click();
-		await new Promise((resolve) => setTimeout(resolve, 50));
+		await vi.waitFor(() => {
+			expect(getEl("byok-save-unverified").hidden).toBe(false);
+		});
 
 		// Now click Save unverified
 		getEl("byok-save-unverified").click();
-		await new Promise((resolve) => setTimeout(resolve, 10));
+		await Promise.resolve();
 
 		expect(store.openrouter_key).toBe("sk-or-v1-somekey1234");
 		// biome-ignore lint/style/noNonNullAssertion: test assertion
@@ -464,7 +470,9 @@ describe("openByokModal UI", () => {
 		);
 
 		getEl("byok-revalidate").click();
-		await new Promise((resolve) => setTimeout(resolve, 50));
+		await vi.waitFor(() => {
+			expect(getEl("byok-status").textContent).toBe("Key validated.");
+		});
 
 		const meta = JSON.parse(store.openrouter_key_meta);
 		expect(meta.status).toBe("validated");
@@ -487,7 +495,7 @@ describe("openByokModal UI", () => {
 		vi.stubGlobal("confirm", confirmSpy);
 
 		getEl("byok-clear").click();
-		await new Promise((resolve) => setTimeout(resolve, 10));
+		await Promise.resolve();
 
 		expect(store.openrouter_key).toBeUndefined();
 		expect(store.openrouter_key_meta).toBeUndefined();
@@ -510,7 +518,7 @@ describe("openByokModal UI", () => {
 		expect(keyInput.hasAttribute("readonly")).toBe(true);
 
 		getEl("byok-replace").click();
-		await new Promise((resolve) => setTimeout(resolve, 10));
+		await Promise.resolve();
 
 		expect(keyInput.value).toBe("");
 		expect(keyInput.hasAttribute("readonly")).toBe(false);
