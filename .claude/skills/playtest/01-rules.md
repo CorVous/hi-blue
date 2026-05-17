@@ -269,5 +269,16 @@ between two of your hypotheses? You don't have to run it — just name it.
 Fill it in. Be honest — if a hypothesis is weak ("I don't know"), say so.
 Don't manufacture certainty.
 
-When the Hypotheses section is complete, read
-`.claude/skills/playtest/02-explore.md`.
+---
+
+## Finishing Stage 2
+
+You are done with Stage 2 when **all** of these are true:
+
+- Every hypothesis prompt above has a response in your session log (even
+  if the answer is "I don't know" or "no evidence").
+- You have not read any source file, log, or non-rules documentation yet.
+
+**Then — and only then — read `.claude/skills/playtest/02-explore.md`.**
+That file opens Stage 3: full codebase access for hypothesis refinement.
+Do not skip ahead; the staged reveal is the point of the exercise.
