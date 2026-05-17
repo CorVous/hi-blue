@@ -41,9 +41,10 @@ import {
 	mintAndActivateNewSession,
 	saveActiveSession,
 } from "../persistence/session-storage.js";
+import { type RenderOpts, renderApp } from "../render-app.js";
 
 /** Maximum time allowed for bootstrap loading (personas + content packs) before
- * timing out and bouncing to #/start?reason=stuck. */
+ * timing out and surfacing the recovery UI. */
 export const BOOTSTRAP_LOADING_TIMEOUT_MS = 120_000;
 
 /** Lowercased persona name for transcript prefixes (`> *ember <msg>`). */
@@ -223,7 +224,7 @@ let cachedEpoch: number = 1;
 
 export function renderGame(
 	root: HTMLElement,
-	params?: URLSearchParams,
+	opts?: RenderOpts,
 ): Promise<void> {
 	const doc = root.ownerDocument;
 	const form = doc.querySelector<HTMLFormElement>("#composer");
@@ -385,16 +386,8 @@ export function renderGame(
 	// Reasoning is disabled by default for routine daemon turns (see
 	// BrowserLLMProvider). Dev-only `?think=1` opts the model's thinking
 	// step back on for prompt-tuning. Gated to wrangler-dev (see isDevHost).
-	//
-	// Merge hash-query-string params (from the router) with location.search
-	// params so flags like ?think=1, ?winImmediately=1 work whether
-	// they appear in the search string (e.g. "/?winImmediately=1") or after the hash
-	// (e.g. "/#/?winImmediately=1"). Hash params win on conflict.
-	const effectiveParams = new URLSearchParams(location.search);
-	if (params) {
-		for (const [k, v] of params) effectiveParams.set(k, v);
-	}
-	const enableReasoning = isDevHost() && effectiveParams.get("think") === "1";
+	const searchParams = new URLSearchParams(location.search);
+	const enableReasoning = isDevHost() && searchParams.get("think") === "1";
 
 	/** Show the persistence warning banner once (idempotent). */
 	function showPersistenceWarning(reason: string): void {
@@ -624,7 +617,7 @@ export function renderGame(
 						assets,
 						gameSessionRng ? { rng: gameSessionRng } : undefined,
 					);
-					built = applyTestAffordances(built, effectiveParams);
+					built = applyTestAffordances(built, searchParams);
 
 					// Defensive: if the active session is no longer empty, another
 					// navigation invalidated the bootstrap mid-flight. Abort rather
@@ -632,10 +625,9 @@ export function renderGame(
 					const midFlightCheck = loadActiveSession();
 					if (midFlightCheck.kind !== "none") {
 						clearPendingBootstrap();
-						// If a concurrent save landed a valid session, send the player to
-						// the game rather than the sessions picker.
-						location.hash =
-							midFlightCheck.kind === "ok" ? "#/game" : "#/sessions";
+						// renderApp routes by storage state — populated→game,
+						// broken/version-mismatch→sessions picker.
+						renderApp(root);
 						return;
 					}
 
@@ -668,7 +660,7 @@ export function renderGame(
 					// and the localStorage restore path.
 					session = built;
 					cachedSessionId = getActiveSessionId();
-					return renderGame(root, params);
+					return renderGame(root, opts);
 				});
 
 			// Create a timeout promise that rejects after BOOTSTRAP_LOADING_TIMEOUT_MS
@@ -713,11 +705,11 @@ export function renderGame(
 			);
 
 			// If recovery UI can't be shown (missing DOM),
-			// fall back to bouncing to #/start?reason=broken.
+			// fall back to a fresh start with the broken reason surfaced.
 			if (!recoveryEl || !recoveryTitleEl || !recoveryBodyEl) {
 				clearActiveSession();
 				clearPendingBootstrap();
-				location.hash = "#/start?reason=broken";
+				renderApp(root, { reason: "broken" });
 				return;
 			}
 
@@ -813,9 +805,7 @@ export function renderGame(
 						e.preventDefault();
 						clearActiveSession();
 						clearPendingBootstrap();
-						if (typeof location !== "undefined") {
-							location.hash = "#/start?reason=broken";
-						}
+						renderApp(root, { reason: "broken" });
 					});
 				}
 			}
@@ -840,14 +830,9 @@ export function renderGame(
 				return renderBootstrapLoadingFlow(pendingBootstrap);
 			}
 			clearPendingBootstrap();
-			if (loadCheck.kind === "ok") {
-				// Session is already populated (e.g. restored concurrently); play it.
-				location.hash = "#/game";
-			} else {
-				const reason =
-					loadCheck.kind === "version-mismatch" ? "version-mismatch" : "broken";
-				location.hash = `#/sessions?reason=${reason}`;
-			}
+			// renderApp routes by storage state — populated→game,
+			// broken/version-mismatch→sessions picker with reason.
+			renderApp(root);
 			return Promise.resolve();
 		}
 
@@ -870,8 +855,8 @@ export function renderGame(
 		} else {
 			const activeId = getActiveSessionId();
 			if (activeId === null) {
-				// No active session pointer → redirect to #/start
-				location.hash = "#/start";
+				// No active session pointer → fall back to start (dispatcher mints).
+				renderApp(root);
 				return Promise.resolve();
 			}
 
@@ -959,13 +944,13 @@ export function renderGame(
 					}
 				});
 			} else {
-				// broken or version-mismatch or none — redirect to #/start with reason
-				const reasonParam =
+				// broken or version-mismatch — clear and surface the reason on start.
+				const reasonParam: "broken" | "version-mismatch" =
 					loadResult.kind === "version-mismatch"
 						? "version-mismatch"
 						: "broken";
 				clearActiveSession();
-				location.hash = `#/start?reason=${reasonParam}`;
+				renderApp(root, { reason: reasonParam });
 				return Promise.resolve();
 			}
 		}
@@ -979,7 +964,7 @@ export function renderGame(
 		// __WORKER_BASE_URL__ === "http://localhost:8787" (local dev).
 		// Note: we use location.search (not the hash params) because these flags are
 		// intended to be set on the page URL itself, matching the legacy worker pattern.
-		session = applyTestAffordances(session, effectiveParams);
+		session = applyTestAffordances(session, searchParams);
 
 		// Build persona maps from runtime state (after affordances may have replaced session)
 		const runtimePersonas = session.getState().personas;
@@ -1139,7 +1124,7 @@ export function renderGame(
 	registerPanelClickHandlers(aiIdList);
 
 	// Debug toggle: show action log if ?debug=1
-	const debug = effectiveParams.get("debug") === "1";
+	const debug = searchParams.get("debug") === "1";
 	if (actionLogEl) {
 		if (debug) {
 			actionLogEl.removeAttribute("hidden");
@@ -1589,13 +1574,13 @@ export function renderGame(
 										clearActiveSession();
 										session = null;
 										cachedSessionId = null;
-										location.hash = "#/start";
+										renderApp(root);
 									})
 									.catch(() => {
 										clearActiveSession();
 										session = null;
 										cachedSessionId = null;
-										location.hash = "#/start";
+										renderApp(root);
 									});
 							});
 						}
@@ -1604,7 +1589,7 @@ export function renderGame(
 							sameDaemonsBtn.addEventListener("click", () => {
 								disableChoiceButtons();
 								if (!endedState) {
-									location.hash = "#/start";
+									renderApp(root);
 									return;
 								}
 								if (choiceStatus) choiceStatus.textContent = "archiving…";
@@ -1624,13 +1609,13 @@ export function renderGame(
 										session = null;
 										cachedSessionId = null;
 										gameEnded = false;
-										location.hash = `#/game?${Date.now()}`;
+										renderApp(root);
 									})
 									.catch(() => {
 										clearActiveSession();
 										session = null;
 										cachedSessionId = null;
-										location.hash = "#/start";
+										renderApp(root);
 									});
 							});
 						}
@@ -1639,7 +1624,7 @@ export function renderGame(
 							continueBtn.addEventListener("click", () => {
 								disableChoiceButtons();
 								if (!endedState) {
-									location.hash = "#/start";
+									renderApp(root);
 									return;
 								}
 								if (choiceStatus)
@@ -1655,12 +1640,12 @@ export function renderGame(
 										session = null;
 										cachedSessionId = null;
 										gameEnded = false;
-										location.hash = `#/game?${Date.now()}`;
+										renderApp(root);
 									})
 									.catch(() => {
 										session = null;
 										cachedSessionId = null;
-										location.hash = "#/start";
+										renderApp(root);
 									});
 							});
 						}

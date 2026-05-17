@@ -30,6 +30,7 @@ import {
 	startBootstrap,
 } from "../game/pending-bootstrap.js";
 import { getSpikeRng, setSpikeSeed } from "../game/spike-seed.js";
+import { type RenderOpts, renderApp } from "../render-app.js";
 
 /** Warning reason strings shown in the persistence warning banner. */
 export const PERSISTENCE_WARNING_MESSAGES: Record<string, string> = {
@@ -85,8 +86,8 @@ function renderDialFinalText(): string {
 }
 
 /** Detect when motion should be suppressed. */
-function shouldSkipAnimation(params: URLSearchParams): boolean {
-	if (params.get("skipDialup") === "1") return true;
+function shouldSkipAnimation(searchParams: URLSearchParams): boolean {
+	if (searchParams.get("skipDialup") === "1") return true;
 	if (
 		typeof window !== "undefined" &&
 		typeof window.matchMedia === "function"
@@ -260,7 +261,7 @@ export function formatUptime(elapsedMs: number): string {
 
 export function renderStart(
 	root: HTMLElement,
-	params?: URLSearchParams,
+	opts?: RenderOpts,
 ): Promise<void> {
 	const doc = root.ownerDocument;
 
@@ -283,17 +284,17 @@ export function renderStart(
 	if (topinfoEl) topinfoEl.hidden = true;
 	if (bannerEl) bannerEl.hidden = true;
 
-	// Show persistence warning if reason param is present
-	const reason = params?.get("reason") ?? null;
-	if (reason) {
+	// Show persistence warning only for reasons we have copy for. Dispatcher
+	// reasons like "empty" or "no-active-pointer" reach this point too but
+	// are not user-facing problems — silently skip them.
+	const reason = opts?.reason ?? null;
+	if (reason && PERSISTENCE_WARNING_MESSAGES[reason]) {
 		const persistenceWarningEl = doc.querySelector<HTMLElement>(
 			"#persistence-warning",
 		);
 		if (persistenceWarningEl) {
-			const msg =
-				PERSISTENCE_WARNING_MESSAGES[reason] ??
-				`Saved game data could not be loaded (${reason}). Starting a new game.`;
-			persistenceWarningEl.textContent = msg;
+			persistenceWarningEl.textContent =
+				PERSISTENCE_WARNING_MESSAGES[reason] ?? "";
 			persistenceWarningEl.removeAttribute("hidden");
 		}
 	}
@@ -339,15 +340,11 @@ export function renderStart(
 		_activeUptimeInterval = undefined;
 	}
 
-	// Merge hash-query-string params with location.search so ?winImmediately=1 etc. work
-	const effectiveParams = new URLSearchParams(
+	const searchParams = new URLSearchParams(
 		typeof location !== "undefined" ? location.search : "",
 	);
-	if (params) {
-		for (const [k, v] of params) effectiveParams.set(k, v);
-	}
 
-	const skipAnimation = shouldSkipAnimation(effectiveParams);
+	const skipAnimation = shouldSkipAnimation(searchParams);
 
 	const revealLogin = () => {
 		if (!revealEl) return;
@@ -414,7 +411,7 @@ export function renderStart(
 		// The game route reads the in-flight bootstrap from pending-bootstrap.ts
 		// and progressively renders the loading UI as personas, then content
 		// packs, resolve. The session is built and persisted there, not here.
-		location.hash = "#/game";
+		renderApp(root);
 	};
 
 	const handleSubmit = (e?: Event) => {
@@ -444,18 +441,8 @@ export function renderStart(
 	// Spike #239: `?seed=N` pins persona archetype, setting noun, and
 	// spatial layout via Mulberry32 sub-streams. Production paths leave
 	// _spikeSeed null and fall back to Math.random.
-	//
-	// Read both hash-query params (passed in from the router) and
-	// location.search — the router only parses hash params, but daemon URLs
-	// like `http://localhost:8787/?seed=42` keep the seed in the search
-	// string. Mirror the merge in routes/game.ts:413.
-	const searchParams =
-		typeof window !== "undefined" && window.location !== undefined
-			? new URLSearchParams(window.location.search)
-			: new URLSearchParams();
-	const seedRaw = params?.get("seed") ?? searchParams.get("seed");
-	const seedNum =
-		seedRaw !== null && seedRaw !== undefined ? Number(seedRaw) : Number.NaN;
+	const seedRaw = searchParams.get("seed");
+	const seedNum = seedRaw !== null ? Number(seedRaw) : Number.NaN;
 	if (Number.isFinite(seedNum)) {
 		setSpikeSeed(seedNum | 0);
 	}
@@ -463,9 +450,7 @@ export function renderStart(
 	// Spike #239 step 8: `?engagementClauses=1` opts into per-persona engagement
 	// clauses appended to each daemon's blurb at synthesis time. Off by default;
 	// any value other than the literal "1" is treated as off.
-	const engagementClausesRaw =
-		params?.get("engagementClauses") ?? searchParams.get("engagementClauses");
-	const engagementClauses = engagementClausesRaw === "1";
+	const engagementClauses = searchParams.get("engagementClauses") === "1";
 
 	// Kick off (or reuse) the in-flight bootstrap. If the user backed out to
 	// the start screen after a previous render, startBootstrap returns the

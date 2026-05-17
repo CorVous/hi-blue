@@ -206,7 +206,7 @@ describe("renderSessions — screen visibility", () => {
 	it("shows #sessions-screen and hides #start-screen, #panels, #composer, #endgame, #cap-hit", async () => {
 		vi.resetModules();
 		const { renderSessions } = await import("../routes/sessions.js");
-		renderSessions(getMain(), new URLSearchParams());
+		renderSessions(getMain());
 
 		expect(
 			document.querySelector<HTMLElement>("#sessions-screen")?.hidden,
@@ -236,7 +236,7 @@ describe("renderSessions — banner", () => {
 	it("?reason=broken shows the broken banner", async () => {
 		vi.resetModules();
 		const { renderSessions } = await import("../routes/sessions.js");
-		renderSessions(getMain(), new URLSearchParams({ reason: "broken" }));
+		renderSessions(getMain(), { reason: "broken" });
 		const banner = document.querySelector<HTMLElement>("#sessions-banner");
 		expect(banner?.hidden).toBe(false);
 		expect(banner?.textContent).toContain("unreadable");
@@ -245,10 +245,7 @@ describe("renderSessions — banner", () => {
 	it("?reason=version-mismatch shows the version-mismatch banner", async () => {
 		vi.resetModules();
 		const { renderSessions } = await import("../routes/sessions.js");
-		renderSessions(
-			getMain(),
-			new URLSearchParams({ reason: "version-mismatch" }),
-		);
+		renderSessions(getMain(), { reason: "version-mismatch" });
 		const banner = document.querySelector<HTMLElement>("#sessions-banner");
 		expect(banner?.hidden).toBe(false);
 		expect(banner?.textContent).toContain("older version");
@@ -257,7 +254,7 @@ describe("renderSessions — banner", () => {
 	it("no reason param => banner hidden", async () => {
 		vi.resetModules();
 		const { renderSessions } = await import("../routes/sessions.js");
-		renderSessions(getMain(), new URLSearchParams());
+		renderSessions(getMain());
 		const banner = document.querySelector<HTMLElement>("#sessions-banner");
 		expect(banner?.hidden).toBe(true);
 	});
@@ -285,7 +282,7 @@ describe("renderSessions — row rendering", () => {
 		await seedVersionMismatchSession(stub, "0xDDDD");
 
 		const { renderSessions } = await import("../routes/sessions.js");
-		renderSessions(getMain(), new URLSearchParams());
+		renderSessions(getMain());
 
 		const rows = document.querySelectorAll(".session-row");
 		expect(rows).toHaveLength(4);
@@ -299,7 +296,7 @@ describe("renderSessions — row rendering", () => {
 		stub._store[ACTIVE_KEY] = "0xAAAA";
 
 		const { renderSessions } = await import("../routes/sessions.js");
-		renderSessions(getMain(), new URLSearchParams());
+		renderSessions(getMain());
 
 		const row = document.querySelector<HTMLElement>(
 			'.session-row[data-session-id="0xAAAA"]',
@@ -319,7 +316,7 @@ describe("renderSessions — row rendering", () => {
 		await seedBrokenSession(stub, "0xCCCC");
 
 		const { renderSessions } = await import("../routes/sessions.js");
-		renderSessions(getMain(), new URLSearchParams());
+		renderSessions(getMain());
 
 		const row = document.querySelector<HTMLElement>(
 			'.session-row[data-session-id="0xCCCC"]',
@@ -340,7 +337,7 @@ describe("renderSessions — row rendering", () => {
 		await seedVersionMismatchSession(stub, "0xDDDD");
 
 		const { renderSessions } = await import("../routes/sessions.js");
-		renderSessions(getMain(), new URLSearchParams());
+		renderSessions(getMain());
 
 		const row = document.querySelector<HTMLElement>(
 			'.session-row[data-session-id="0xDDDD"]',
@@ -361,7 +358,7 @@ describe("renderSessions — row rendering", () => {
 		await seedBrokenSession(stub, "0xCCCC");
 
 		const { renderSessions } = await import("../routes/sessions.js");
-		renderSessions(getMain(), new URLSearchParams());
+		renderSessions(getMain());
 
 		const row = document.querySelector<HTMLElement>(
 			'.session-row[data-session-id="0xCCCC"]',
@@ -388,7 +385,7 @@ describe("renderSessions — [ rm ] confirm/cancel", () => {
 		await seedOkSession(stub, "0xAAAA");
 
 		const { renderSessions } = await import("../routes/sessions.js");
-		renderSessions(getMain(), new URLSearchParams());
+		renderSessions(getMain());
 
 		const row = document.querySelector<HTMLElement>(
 			'.session-row[data-session-id="0xAAAA"]',
@@ -414,7 +411,7 @@ describe("renderSessions — [ rm ] confirm/cancel", () => {
 		await seedOkSession(stub, "0xAAAA");
 
 		const { renderSessions } = await import("../routes/sessions.js");
-		renderSessions(getMain(), new URLSearchParams());
+		renderSessions(getMain());
 
 		const row = document.querySelector<HTMLElement>(
 			'.session-row[data-session-id="0xAAAA"]',
@@ -444,7 +441,7 @@ describe("renderSessions — [ rm ] confirm/cancel", () => {
 		await seedOkSession(stub, "0xAAAA");
 
 		const { renderSessions } = await import("../routes/sessions.js");
-		renderSessions(getMain(), new URLSearchParams());
+		renderSessions(getMain());
 
 		expect(document.querySelectorAll(".session-row")).toHaveLength(1);
 
@@ -475,10 +472,6 @@ describe("renderSessions — [ rm ] confirm/cancel", () => {
 describe("renderSessions — [ + new session ] button", () => {
 	beforeEach(() => {
 		document.body.innerHTML = INDEX_BODY_HTML;
-		vi.stubGlobal("location", {
-			hash: "#/sessions",
-			assign: vi.fn(),
-		});
 	});
 	afterEach(() => {
 		vi.restoreAllMocks();
@@ -487,13 +480,13 @@ describe("renderSessions — [ + new session ] button", () => {
 		document.body.innerHTML = "";
 	});
 
-	it("mints a new session, sets active pointer, and navigates to #/start", async () => {
+	it("mints a new session and transitions the view to start", async () => {
 		vi.resetModules();
 		const stub = makeLocalStorageStub();
 		vi.stubGlobal("localStorage", stub);
 
 		const { renderSessions } = await import("../routes/sessions.js");
-		renderSessions(getMain(), new URLSearchParams());
+		renderSessions(getMain());
 
 		const newBtn = document.querySelector<HTMLButtonElement>("#sessions-new");
 		expect(newBtn).toBeTruthy();
@@ -503,17 +496,15 @@ describe("renderSessions — [ + new session ] button", () => {
 		const activeId = stub._store[ACTIVE_KEY];
 		expect(activeId).toMatch(/^0x[0-9A-F]{4}$/);
 
-		// location.hash should be set to #/start
-		expect(location.hash).toBe("#/start");
+		// renderApp resolves the new state (active session id with no save yet)
+		// → "empty" verdict → start view.
+		expect(getMain().dataset.view).toBe("start");
 	});
 });
 
 describe("renderSessions — [ load ] button", () => {
 	beforeEach(() => {
 		document.body.innerHTML = INDEX_BODY_HTML;
-		vi.stubGlobal("location", {
-			hash: "#/sessions",
-		});
 	});
 	afterEach(() => {
 		vi.restoreAllMocks();
@@ -522,7 +513,7 @@ describe("renderSessions — [ load ] button", () => {
 		document.body.innerHTML = "";
 	});
 
-	it("sets active pointer and navigates to #/game when loading a non-active session", async () => {
+	it("sets active pointer and transitions the view to game when loading a non-active session", async () => {
 		vi.resetModules();
 		const stub = makeLocalStorageStub();
 		vi.stubGlobal("localStorage", stub);
@@ -533,7 +524,7 @@ describe("renderSessions — [ load ] button", () => {
 		stub._store[ACTIVE_KEY] = "0xAAAA";
 
 		const { renderSessions } = await import("../routes/sessions.js");
-		renderSessions(getMain(), new URLSearchParams());
+		renderSessions(getMain());
 
 		// Find the [ load ] button for session B
 		const rowB = document.querySelector<HTMLElement>(
@@ -547,8 +538,8 @@ describe("renderSessions — [ load ] button", () => {
 
 		// Active pointer should now be 0xBBBB
 		expect(stub._store[ACTIVE_KEY]).toBe("0xBBBB");
-		// location.hash should be #/game
-		expect(location.hash).toBe("#/game");
+		// renderApp resolves the new active pointer → "populated" verdict → game view.
+		expect(getMain().dataset.view).toBe("game");
 	});
 });
 
@@ -607,7 +598,7 @@ describe("renderSessions — archived sessions section", () => {
 		await seedArchivedSessionInStore(stub, "0xARCH");
 
 		const { renderSessions } = await import("../routes/sessions.js");
-		renderSessions(getMain(), new URLSearchParams());
+		renderSessions(getMain());
 
 		const headings = Array.from(
 			document.querySelectorAll(".sessions-section-heading"),
@@ -628,7 +619,7 @@ describe("renderSessions — archived sessions section", () => {
 		await seedArchivedSessionInStore(stub, "0xARCH");
 
 		const { renderSessions } = await import("../routes/sessions.js");
-		renderSessions(getMain(), new URLSearchParams());
+		renderSessions(getMain());
 
 		const archivedRow = document.querySelector<HTMLElement>(
 			'.session-row[data-session-id="0xARCH"]',
@@ -644,7 +635,7 @@ describe("renderSessions — archived sessions section", () => {
 		await seedArchivedSessionInStore(stub, "0xARCH");
 
 		const { renderSessions } = await import("../routes/sessions.js");
-		renderSessions(getMain(), new URLSearchParams());
+		renderSessions(getMain());
 
 		const archivedRow = document.querySelector<HTMLElement>(
 			'.session-row[data-session-id="0xARCH"]',
@@ -664,7 +655,7 @@ describe("renderSessions — archived sessions section", () => {
 		await seedArchivedSessionInStore(stub, "0xARCH");
 
 		const { renderSessions } = await import("../routes/sessions.js");
-		renderSessions(getMain(), new URLSearchParams());
+		renderSessions(getMain());
 
 		const archivedRow = document.querySelector<HTMLElement>(
 			'.session-row[data-session-id="0xARCH"]',
@@ -679,7 +670,7 @@ describe("renderSessions — archived sessions section", () => {
 		await seedOkSession(stub, "0xAAAA");
 
 		const { renderSessions } = await import("../routes/sessions.js");
-		renderSessions(getMain(), new URLSearchParams());
+		renderSessions(getMain());
 
 		const activeRow = document.querySelector<HTMLElement>(
 			'.session-row[data-session-id="0xAAAA"]',
@@ -696,7 +687,7 @@ describe("renderSessions — archived sessions section", () => {
 		await seedArchivedSessionInStore(stub, "0xARCH");
 
 		const { renderSessions } = await import("../routes/sessions.js");
-		renderSessions(getMain(), new URLSearchParams());
+		renderSessions(getMain());
 
 		const headings = Array.from(
 			document.querySelectorAll(".sessions-section-heading"),
@@ -730,7 +721,7 @@ describe("renderSessions — archived Continue button", () => {
 		await seedArchivedSessionInStore(stub, "0xARCH");
 
 		const { renderSessions } = await import("../routes/sessions.js");
-		renderSessions(getMain(), new URLSearchParams());
+		renderSessions(getMain());
 
 		const archivedRow = document.querySelector<HTMLElement>(
 			'.session-row[data-session-id="0xARCH"]',
@@ -750,7 +741,7 @@ describe("renderSessions — archived Continue button", () => {
 		await seedArchivedSessionInStore(stub, "0xARCH");
 
 		const { renderSessions } = await import("../routes/sessions.js");
-		renderSessions(getMain(), new URLSearchParams());
+		renderSessions(getMain());
 
 		const archivedRow = document.querySelector<HTMLElement>(
 			'.session-row[data-session-id="0xARCH"]',

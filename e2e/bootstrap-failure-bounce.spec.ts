@@ -7,7 +7,8 @@ import { expect, test } from "@playwright/test";
  * 1. Content-pack request returns HTTP 500 → click CONNECT → shows #bootstrap-recovery
  * 2. Content-pack request returns HTTP 200 with error body → click CONNECT → shows #bootstrap-recovery
  *
- * Both scenarios verify that location.hash stays at #/game (not #/start?reason=broken).
+ * Both scenarios verify the view stays on "game" (recovery UI lives inside it)
+ * rather than flipping to "start" with reason=broken.
  */
 test("content-pack request returns HTTP 500 → shows recovery UI", async ({
 	page,
@@ -74,18 +75,20 @@ test("content-pack request returns HTTP 500 → shows recovery UI", async ({
 	await page.locator("#password").fill("password");
 	await page.locator("#begin").click();
 
-	// Wait until the SPA has navigated to #/game so the start-screen catch is bypassed
-	await page.waitForURL(/#\/game/, { timeout: 10_000 });
+	// Wait until the SPA has transitioned to the game view so the start-screen catch is bypassed
+	await expect(page.locator('main[data-view="game"]')).toBeAttached({
+		timeout: 10_000,
+	});
 
 	// NOW release the content-pack rejection. game.ts's loading-flow catch
 	// (the recovery UI path) handles it.
 	releaseContentPack();
 
-	// Expect recovery UI to become visible and location.hash to stay at #/game
+	// Expect recovery UI to become visible — the view stays at "game"
 	await expect(page.locator("#bootstrap-recovery")).toBeVisible({
 		timeout: 30_000,
 	});
-	await expect(page).toHaveURL(/#\/game\/?$/, { timeout: 5_000 });
+	await expect(page.locator("main")).toHaveAttribute("data-view", "game");
 
 	// Verify recovery UI title and buttons are present
 	const titleEl = page.locator("#bootstrap-recovery-title");
@@ -168,18 +171,20 @@ test("content-pack request returns HTTP 200 with error body → shows recovery U
 	await page.locator("#password").fill("password");
 	await page.locator("#begin").click();
 
-	// Wait until the SPA has navigated to #/game so the start-screen catch is bypassed
-	await page.waitForURL(/#\/game/, { timeout: 10_000 });
+	// Wait until the SPA has transitioned to the game view so the start-screen catch is bypassed
+	await expect(page.locator('main[data-view="game"]')).toBeAttached({
+		timeout: 10_000,
+	});
 
 	// NOW release the content-pack rejection. game.ts's loading-flow catch
 	// (the recovery UI path) handles it.
 	releaseContentPack();
 
-	// Expect recovery UI to become visible and location.hash to stay at #/game
+	// Expect recovery UI to become visible — the view stays at "game"
 	await expect(page.locator("#bootstrap-recovery")).toBeVisible({
 		timeout: 30_000,
 	});
-	await expect(page).toHaveURL(/#\/game\/?$/, { timeout: 5_000 });
+	await expect(page.locator("main")).toHaveAttribute("data-view", "game");
 
 	// Verify recovery UI title and buttons are present
 	const titleEl = page.locator("#bootstrap-recovery-title");

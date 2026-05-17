@@ -1,18 +1,19 @@
 /**
  * sessions-picker.spec.ts
  *
- * Playwright e2e tests for the #/sessions picker.
+ * Playwright e2e tests for the sessions picker.
  *
  * Covers:
  *  - Picker rendering for ok / broken / version-mismatch row states
- *  - [ load ] flow: picker → #/game → topinfo shows session id
+ *  - [ load ] flow: picker → game view → topinfo shows session id
  *  - [ dup ] flow: picker → two rows, active pointer unchanged
  *  - [ rm ] confirm/cancel flow
- *  - Sessions-icon ([ ls ] button) click → #/sessions
- *  - Broken-session banner: active session with missing engine.dat → #/sessions?reason=broken
- *  - [ + new session ] flow: picker → #/start, new active pointer
+ *  - Sessions-icon ([ ls ] button) click → sessions view
+ *  - Broken-session banner: active session with missing engine.dat → sessions view with reason
+ *  - [ + new session ] flow: picker → start view, new active pointer
  *
- * Issue #174 (parent #155).
+ * Post-ADR-0011: the picker is opened by clicking the sessions icon, not by
+ * navigating to a URL. Sticky for broken / version-mismatch active sessions.
  */
 import { expect, test } from "@playwright/test";
 import { goToGame, stubNewGameLLM } from "./helpers";
@@ -174,7 +175,10 @@ test("picker renders ok/broken/version-mismatch rows with correct tags and butto
 		new Function(seedVersionMismatchScript("0xCCCC")) as () => void,
 	);
 
-	await page.goto("/#/sessions");
+	await page.goto("/");
+	// Open the picker by clicking the sessions icon (active session is "ok",
+	// so the dispatcher's natural view is "game" — picker opens on top).
+	await page.locator("#sessions-icon").click();
 	await expect(page.locator("#sessions-screen")).toBeVisible();
 
 	// ok row
@@ -215,7 +219,7 @@ test("picker renders ok/broken/version-mismatch rows with correct tags and butto
 	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
 });
 
-test("[ load ] flow: click load on non-active row → URL becomes #/game", async ({
+test("[ load ] flow: click load on non-active row → game view", async ({
 	page,
 }) => {
 	const pageErrors: Error[] = [];
@@ -238,15 +242,18 @@ test("[ load ] flow: click load on non-active row → URL becomes #/game", async
 		) as () => void,
 	);
 
-	await page.goto("/#/sessions");
+	await page.goto("/");
+	await page.locator("#sessions-icon").click();
 	await expect(page.locator("#sessions-screen")).toBeVisible();
 
 	// Click load on session BBBB (non-active)
 	const rowB = page.locator('.session-row[data-session-id="0xBBBB"]');
 	await rowB.locator(".ops button", { hasText: "[ load ]" }).click();
 
-	// Should navigate to #/game
-	await page.waitForURL(/.*#\/game/, { timeout: 10_000 });
+	// Should transition to the game view
+	await expect(page.locator('main[data-view="game"]')).toBeAttached({
+		timeout: 10_000,
+	});
 
 	// Active session should be BBBB
 	const activeId = await page.evaluate(() =>
@@ -272,7 +279,8 @@ test("[ dup ] flow: click dup → two rows, active pointer unchanged", async ({
 		) as () => void,
 	);
 
-	await page.goto("/#/sessions");
+	await page.goto("/");
+	await page.locator("#sessions-icon").click();
 	await expect(page.locator("#sessions-screen")).toBeVisible();
 
 	// Initially 1 row
@@ -307,7 +315,8 @@ test("[ rm ] confirm/cancel flow", async ({ page }) => {
 		) as () => void,
 	);
 
-	await page.goto("/#/sessions");
+	await page.goto("/");
+	await page.locator("#sessions-icon").click();
 	await expect(page.locator("#sessions-screen")).toBeVisible();
 	await expect(page.locator(".session-row")).toHaveCount(1);
 
@@ -338,7 +347,7 @@ test("[ rm ] confirm/cancel flow", async ({ page }) => {
 	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
 });
 
-test("sessions-icon click → #/sessions", async ({ page }) => {
+test("sessions-icon click → sessions view", async ({ page }) => {
 	const pageErrors: Error[] = [];
 	page.on("pageerror", (err) => pageErrors.push(err));
 
@@ -349,8 +358,10 @@ test("sessions-icon click → #/sessions", async ({ page }) => {
 	await expect(sessionsIcon).toBeVisible();
 	await sessionsIcon.click();
 
-	// Should navigate to #/sessions
-	await page.waitForURL(/.*#\/sessions/, { timeout: 10_000 });
+	// Should transition to the sessions view
+	await expect(page.locator('main[data-view="sessions"]')).toBeAttached({
+		timeout: 10_000,
+	});
 	await expect(page.locator("#sessions-screen")).toBeVisible();
 
 	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
@@ -364,25 +375,38 @@ test("sessions-icon toggles back to game on second click", async ({ page }) => {
 	const sessionsIcon = page.locator("#sessions-icon");
 
 	await sessionsIcon.click();
-	await page.waitForURL(/.*#\/sessions/, { timeout: 10_000 });
+	await expect(page.locator('main[data-view="sessions"]')).toBeAttached({
+		timeout: 10_000,
+	});
 
 	await sessionsIcon.click();
-	await page.waitForURL(/.*#\/game/, { timeout: 10_000 });
+	await expect(page.locator('main[data-view="game"]')).toBeAttached({
+		timeout: 10_000,
+	});
 	await expect(page.locator("#composer")).toBeVisible();
 
 	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
 });
 
-test("refresh on #/sessions paints banner and topinfo", async ({ page }) => {
+test("refresh while picker is open lands on the game view (picker state is in-memory)", async ({
+	page,
+}) => {
+	// Post-ADR-0011: pickerOpen lives in memory only, so a refresh drops it
+	// and the dispatcher's natural view (game, given the populated active
+	// session) takes over. The chrome must still paint on the game view.
 	const pageErrors: Error[] = [];
 	page.on("pageerror", (err) => pageErrors.push(err));
 
 	await goToGame(page);
 	await page.locator("#sessions-icon").click();
-	await page.waitForURL(/.*#\/sessions/, { timeout: 10_000 });
+	await expect(page.locator('main[data-view="sessions"]')).toBeAttached({
+		timeout: 10_000,
+	});
 
 	await page.reload();
-	await expect(page.locator("#sessions-screen")).toBeVisible();
+	// After reload, the game view is restored from storage.
+	await expect(page.locator('main[data-view="game"]')).toBeAttached();
+	await expect(page.locator("#composer")).toBeVisible();
 	await expect(page.locator("#banner")).not.toBeEmpty();
 	await expect(page.locator("#topinfo-left")).toContainText("SESSION 0x");
 	await expect(page.locator("#topinfo-left")).toContainText("EPOCH");
@@ -393,22 +417,26 @@ test("refresh on #/sessions paints banner and topinfo", async ({ page }) => {
 	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
 });
 
-test("Escape on #/sessions navigates back to game", async ({ page }) => {
+test("Escape on the picker returns to the game view", async ({ page }) => {
 	const pageErrors: Error[] = [];
 	page.on("pageerror", (err) => pageErrors.push(err));
 
 	await goToGame(page);
 	await page.locator("#sessions-icon").click();
-	await page.waitForURL(/.*#\/sessions/, { timeout: 10_000 });
+	await expect(page.locator('main[data-view="sessions"]')).toBeAttached({
+		timeout: 10_000,
+	});
 
 	await page.keyboard.press("Escape");
-	await page.waitForURL(/.*#\/game/, { timeout: 10_000 });
+	await expect(page.locator('main[data-view="game"]')).toBeAttached({
+		timeout: 10_000,
+	});
 	await expect(page.locator("#composer")).toBeVisible();
 
 	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
 });
 
-test("broken-session banner: active session with missing engine.dat → #/sessions?reason=broken", async ({
+test("broken-session banner: active session with missing engine.dat → sessions view with reason", async ({
 	page,
 }) => {
 	const pageErrors: Error[] = [];
@@ -424,11 +452,11 @@ test("broken-session banner: active session with missing engine.dat → #/sessio
 
 	await page.goto("/");
 
-	// Dispatcher should route to #/sessions?reason=broken
-	await page.waitForURL(/.*#\/sessions/, { timeout: 10_000 });
-
-	const url = page.url();
-	expect(url).toContain("reason=broken");
+	// Dispatcher routes broken sessions to the picker with reason=broken (sticky).
+	await expect(page.locator('main[data-view="sessions"]')).toBeAttached({
+		timeout: 10_000,
+	});
+	await expect(page.locator("main")).toHaveAttribute("data-reason", "broken");
 
 	// Banner should be visible with the broken copy
 	const banner = page.locator("#sessions-banner");
@@ -438,7 +466,7 @@ test("broken-session banner: active session with missing engine.dat → #/sessio
 	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
 });
 
-test("[ + new session ] flow: click → URL becomes #/start, new active pointer", async ({
+test("[ + new session ] flow: click → start view, new active pointer", async ({
 	page,
 }) => {
 	const pageErrors: Error[] = [];
@@ -456,14 +484,17 @@ test("[ + new session ] flow: click → URL becomes #/start, new active pointer"
 		) as () => void,
 	);
 
-	await page.goto("/#/sessions");
+	await page.goto("/");
+	await page.locator("#sessions-icon").click();
 	await expect(page.locator("#sessions-screen")).toBeVisible();
 
 	// Click [ + new session ]
 	await page.locator("#sessions-new").click();
 
-	// Should navigate to #/start
-	await page.waitForURL(/.*#\/start/, { timeout: 10_000 });
+	// Should transition to the start view
+	await expect(page.locator('main[data-view="start"]')).toBeAttached({
+		timeout: 10_000,
+	});
 	await expect(page.locator("#start-screen")).toBeVisible();
 
 	// Active pointer should now be a new id (not 0xAAAA)

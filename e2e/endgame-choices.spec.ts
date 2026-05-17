@@ -5,8 +5,8 @@ import { goToGame } from "./helpers";
  * E2E — end-game choice screen (issue #307)
  *
  * Verifies the three choice buttons that appear after game_ended:
- *   1. New Daemons    — archives current session, navigates to #/start
- *   2. Same Daemons New Room — archives, mints new session, navigates to #/game
+ *   1. New Daemons    — archives current session, transitions to start view
+ *   2. Same Daemons New Room — archives, mints new session, transitions to game view
  *   3. Continue       — shown only when openrouter_key is present in localStorage
  *
  * Tests that depend on full content-pack generation (Same Daemons, Continue)
@@ -70,7 +70,7 @@ test("Continue button visible when openrouter_key is set in localStorage", async
 	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
 });
 
-test("New Daemons click archives session and navigates to #/start", async ({
+test("New Daemons click archives session and transitions to start view", async ({
 	page,
 }) => {
 	const pageErrors: Error[] = [];
@@ -87,17 +87,18 @@ test("New Daemons click archives session and navigates to #/start", async ({
 	// Click New Daemons
 	await page.locator("#endgame-new-daemons-btn").click();
 
-	// Should navigate to #/start
-	await page.waitForURL(/.*#\/start/, { timeout: 15_000 });
+	// Should transition to the start view (dispatcher mints a fresh session).
+	await expect(page.locator('main[data-view="start"]')).toBeAttached({
+		timeout: 15_000,
+	});
 
-	// Active session pointer cleared after the choice
+	// New Daemons clears the active pointer, then renderApp's dispatcher mints
+	// a fresh one — so we expect a NEW session id, not the original.
 	const sessionAfter = await page.evaluate(() =>
 		localStorage.getItem("hi-blue:active-session"),
 	);
-	expect(
-		sessionAfter,
-		"active-session pointer must be cleared after New Daemons",
-	).toBeNull();
+	expect(sessionAfter).not.toBeNull();
+	expect(sessionAfter).not.toBe(sessionBefore);
 
 	// No page errors
 	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);

@@ -181,6 +181,12 @@ function getEl<T extends HTMLElement>(selector: string): T {
 	return el;
 }
 
+/** Set location.search via history.replaceState so route renderers can read
+ *  test affordances (debug, winImmediately, …) from it. */
+function setSearch(query: string): void {
+	window.history.replaceState({}, "", `/?${query}`);
+}
+
 function makeSSEStream(chunks: string[]): ReadableStream<Uint8Array> {
 	const encoder = new TextEncoder();
 	return new ReadableStream<Uint8Array>({
@@ -454,8 +460,8 @@ describe("renderGame (game route — three-AI)", () => {
 		expect(actionLog.hasAttribute("hidden")).toBe(true);
 
 		// With debug=1: action log should be visible
-		const params = new URLSearchParams("debug=1");
-		await renderGame(getEl<HTMLElement>("main"), params);
+		setSearch("debug=1");
+		await renderGame(getEl<HTMLElement>("main"));
 		expect(actionLog.hasAttribute("hidden")).toBe(false);
 	});
 
@@ -472,8 +478,8 @@ describe("renderGame (game route — three-AI)", () => {
 		const { renderGame } = await import("../routes/game.js");
 
 		// Show debug so we can verify entries
-		const params = new URLSearchParams("debug=1");
-		await renderGame(getEl<HTMLElement>("main"), params);
+		setSearch("debug=1");
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -702,10 +708,8 @@ describe("renderGame (game route — three-AI)", () => {
 
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		await renderGame(
-			getEl<HTMLElement>("main"),
-			new URLSearchParams("winImmediately=1"),
-		);
+		setSearch("winImmediately=1");
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -773,10 +777,8 @@ describe("renderGame (game route — three-AI)", () => {
 
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		await renderGame(
-			getEl<HTMLElement>("main"),
-			new URLSearchParams("winImmediately=1"),
-		);
+		setSearch("winImmediately=1");
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -815,10 +817,8 @@ describe("renderGame (game route — three-AI)", () => {
 
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		await renderGame(
-			getEl<HTMLElement>("main"),
-			new URLSearchParams("winImmediately=1"),
-		);
+		setSearch("winImmediately=1");
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -861,10 +861,8 @@ describe("renderGame (game route — three-AI)", () => {
 
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		await renderGame(
-			getEl<HTMLElement>("main"),
-			new URLSearchParams("winImmediately=1"),
-		);
+		setSearch("winImmediately=1");
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -1223,8 +1221,8 @@ describe("renderGame — localStorage persistence", () => {
 		).toContain("RED_RESPONSE_UNIQUE_TAG");
 
 		// Seed a brand-new Session B alongside Session A and point the active
-		// pointer at it. This mirrors the [ load ] click in #/sessions:
-		// `setActiveSessionId(B); location.hash = "#/game"`.
+		// pointer at it. This mirrors the [ load ] click in the sessions picker:
+		// `setActiveSessionId(B); renderApp(root)`.
 		const { buildSessionFromAssets } = await import("../game/bootstrap.js");
 		const { setActiveSessionId, saveActiveSession } = await import(
 			"../persistence/session-storage.js"
@@ -1650,12 +1648,8 @@ describe("renderGame — URL param sourcing", () => {
 		document.body.innerHTML = "";
 	});
 
-	it("hash-only: debug=1 in hash params (no location.search) shows action log", async () => {
-		vi.stubGlobal("location", {
-			search: "",
-			origin: "http://localhost:8787",
-			hash: "#/?debug=1",
-		});
+	it("reads debug=1 from location.search", async () => {
+		setSearch("debug=1");
 		const mockFetch = makeThreeAiFetchMock(
 			PASS_ACTION,
 			PASS_ACTION,
@@ -1666,41 +1660,10 @@ describe("renderGame — URL param sourcing", () => {
 
 		vi.resetModules();
 		const { renderGame } = await import("../routes/game.js");
-		// Router parses debug=1 from the hash and passes it as params
-		await renderGame(
-			getEl<HTMLElement>("main"),
-			new URLSearchParams("debug=1"),
-		);
+		await renderGame(getEl<HTMLElement>("main"));
 
 		const actionLog = getEl<HTMLElement>("#action-log");
 		expect(actionLog.hasAttribute("hidden")).toBe(false);
-	});
-
-	it("conflict: location.search has debug=1 but hash params have debug=0 → hash wins, log is hidden", async () => {
-		vi.stubGlobal("location", {
-			search: "?debug=1",
-			origin: "http://localhost:8787",
-			hash: "#/?debug=0",
-		});
-		const mockFetch = makeThreeAiFetchMock(
-			PASS_ACTION,
-			PASS_ACTION,
-			PASS_ACTION,
-		);
-		vi.stubGlobal("fetch", mockFetch);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
-
-		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
-		// Router passes debug=0 from the hash; location.search has debug=1
-		await renderGame(
-			getEl<HTMLElement>("main"),
-			new URLSearchParams("debug=0"),
-		);
-
-		const actionLog = getEl<HTMLElement>("#action-log");
-		// Hash wins: debug=0 → log must remain hidden
-		expect(actionLog.hasAttribute("hidden")).toBe(true);
 	});
 });
 
@@ -2587,8 +2550,9 @@ describe("renderGame — version-mismatch session with pending bootstrap (regres
 		const { renderGame } = await import("../routes/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
-		// The route must redirect to the sessions picker with the reason.
-		expect(location.hash).toBe("#/sessions?reason=version-mismatch");
+		// The route must surface the sessions picker with the version-mismatch reason.
+		expect(getEl<HTMLElement>("main").dataset.view).toBe("sessions");
+		expect(getEl<HTMLElement>("main").dataset.reason).toBe("version-mismatch");
 		// The active-session pointer must NOT be cleared — only the sessions
 		// picker (or an explicit user action) should touch it.
 		expect(stub.getItem("hi-blue:active-session")).toBe(SESSION_ID);
@@ -2648,7 +2612,8 @@ describe("renderGame — version-mismatch session with pending bootstrap (regres
 		const { renderGame } = await import("../routes/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
-		expect(location.hash).toBe("#/sessions?reason=broken");
+		expect(getEl<HTMLElement>("main").dataset.view).toBe("sessions");
+		expect(getEl<HTMLElement>("main").dataset.reason).toBe("broken");
 		expect(stub.getItem("hi-blue:active-session")).toBe(SESSION_ID);
 		const { getPendingBootstrap } = await import(
 			"../game/pending-bootstrap.js"
@@ -2725,8 +2690,8 @@ describe("renderBootstrapLoadingFlow — happy path", () => {
 		// Wait for render to complete
 		await renderPromise;
 
-		// Assert NO bounce to #/start?reason=stuck (which would indicate timeout)
-		expect(location.hash).not.toMatch(/reason=stuck/);
+		// Assert NO bounce to start with reason=stuck (which would indicate timeout)
+		expect(getEl<HTMLElement>("main").dataset.reason).not.toBe("stuck");
 	});
 });
 
@@ -2899,20 +2864,18 @@ describe("renderBootstrapLoadingFlow — promise propagation", () => {
 		const { startBootstrap } = await import("../game/pending-bootstrap.js");
 		startBootstrap();
 
-		// Simulate start-screen navigation to #/game when player clicks CONNECT.
-		// This is where the start route would navigate before renderGame is called.
-		location.hash = "#/game";
-
 		const { renderGame } = await import("../routes/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		// When personas fail, recovery UI is still shown (generic bootstrap failure).
-		// Location hash should remain at #/game (not bounced to #/start?reason=broken).
-		expect(location.hash).toBe("#/game");
+		// The game route owns this UI — we should NOT have bounced to start.
 		const recoveryEl = document.querySelector("#bootstrap-recovery");
 		expect(recoveryEl?.hasAttribute("hidden")).toBe(false);
 		const titleEl = document.querySelector("#bootstrap-recovery-title");
 		expect(titleEl?.textContent).toBe("the room collapsed");
+		// The data-view should not have flipped to start with the broken reason
+		// during this path — recovery UI lives inside the game view.
+		expect(getEl<HTMLElement>("main").dataset.reason).not.toBe("broken");
 	});
 
 	it("shows #cap-hit panel when personasPromise rejects with CapHitError (stays at #/game)", async () => {

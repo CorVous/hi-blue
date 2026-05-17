@@ -148,10 +148,9 @@ describe("renderStart — legacy-save-discarded banner (via reason param)", () =
 		vi.resetModules();
 		const { renderStart } = await import("../routes/start.js");
 
-		// Simulate what main.ts does: pass reason=legacy-save-discarded as param
-		const params = new URLSearchParams("reason=legacy-save-discarded");
+		// Simulate what main.ts does: pass reason=legacy-save-discarded as an opt
 		try {
-			await renderStart(getMain(), params);
+			await renderStart(getMain(), { reason: "legacy-save-discarded" });
 		} catch {
 			// generation may reject in test environment — that's ok
 		}
@@ -174,9 +173,9 @@ describe("renderStart — legacy-save-discarded banner (via reason param)", () =
 		vi.resetModules();
 		const { renderStart } = await import("../routes/start.js");
 
-		// No reason param — no banner should be shown
+		// No reason opt — no banner should be shown
 		try {
-			await renderStart(getMain(), new URLSearchParams());
+			await renderStart(getMain());
 		} catch {
 			// generation may reject — ok
 		}
