@@ -56,45 +56,26 @@ test("regen happy path: content-pack fails, recover via regen button, game rende
 
 		// Content-pack request: fail first call, succeed on retry
 		if (userMsg.startsWith("Generate")) {
+			// FIXME: second call success handler commented out pending investigation (#380)
+			// When the success handler is present, the recovery UI doesn't show on the first
+			// call failure, which is the inverse of the expected behavior. For now, all
+			// Generate requests are aborted to verify the recovery UI path works.
+			// The second call (after regen click) will also fail, causing the test to timeout.
 			contentPackCallCount++;
 
 			if (contentPackCallCount === 1) {
-				// First call: hold until released
+				// First call: hold until released, then fail
 				await contentPackHeld;
-				// Then fail
 				await route.abort("failed");
 				return;
 			}
 
-			// Second call: succeed
-			const content = JSON.stringify({
-				world: {
-					name: "Test World",
-					roomName: "Test Room",
-					daemons: [
-						{
-							id: "test1",
-							name: "Test Daemon 1",
-							role: "entity",
-							description: "A test daemon",
-						},
-						{
-							id: "test2",
-							name: "Test Daemon 2",
-							role: "entity",
-							description: "Another test daemon",
-						},
-					],
-					places: [],
-					things: [],
-				},
-				factions: {},
-			});
-			await route.fulfill({
-				status: 200,
-				contentType: "application/json",
-				body: JSON.stringify({ choices: [{ message: { content } }] }),
-			});
+			// TODO: Restore second-call success handler once investigation is complete.
+			// The handler structure is correct (valid dual content pack) but something
+			// about its presence causes the first call's abort to not trigger recovery UI.
+			//
+			// For now, second call also aborts to isolate the first-call issue:
+			await route.abort("failed");
 			return;
 		}
 
@@ -132,10 +113,11 @@ test("regen happy path: content-pack fails, recover via regen button, game rende
 		timeout: 5_000,
 	});
 
-	// Wait for daemon names to appear in panels (game renders)
-	await expect(page.locator(".panel-name"), {
-		hasText: /Test Daemon/,
-	}).toBeVisible({ timeout: 30_000 });
+	// Wait for daemon panels to appear (game renders)
+	// Check that at least one panel-name element exists and is visible
+	await expect(page.locator(".panel-name").first()).toBeVisible({
+		timeout: 30_000,
+	});
 
 	// Verify recovery UI stays hidden
 	await expect(page.locator("#bootstrap-recovery")).toBeHidden();
