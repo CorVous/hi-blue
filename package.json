@@ -1,5 +1,6 @@
 {
 	"name": "hi-blue",
+	"version": "0.0.0",
 	"private": true,
 	"type": "module",
 	"engines": {
@@ -19,7 +20,8 @@
 		"smoke:ui": "playwright test --ui",
 		"eval:directions": "npx tsx evals/relative-directions/runner.mts",
 		"eval:drift": "npx tsx evals/free-text-drift/runner.mts",
-		"prepare": "husky"
+		"prepare": "husky",
+		"release": "changelogen --release"
 	},
 	"pnpm": {
 		"onlyBuiltDependencies": [
@@ -30,11 +32,12 @@
 	},
 	"devDependencies": {
 		"@ai-hero/sandcastle": "^0.5.6",
-		"@playwright/test": "^1.52.0",
 		"@biomejs/biome": "2.4.13",
 		"@cloudflare/vitest-pool-workers": "0.15.1",
 		"@cloudflare/workers-types": "4.20260430.1",
+		"@playwright/test": "^1.52.0",
 		"@typescript/native-preview": "7.0.0-dev.20260430.1",
+		"changelogen": "^0.6.2",
 		"esbuild": "^0.27.3",
 		"husky": "^9.1.7",
 		"jsdom": "29.1.1",
