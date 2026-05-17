@@ -1,0 +1,95 @@
+name: Release SPA to versioned URL
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (e.g. v0.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gh-pages-write
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve tag
+        id: tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          TAG="${INPUT_TAG:-$REF_NAME}"
+          if [ -z "$TAG" ]; then
+            echo "::error::Could not resolve a tag from inputs.tag or github.ref_name"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+
+      - name: Validate tag
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          STABLE_RE='^v[0-9]+\.[0-9]+\.[0-9]+$'
+          BETA_RE='^v[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$'
+          if [[ "$TAG" =~ $STABLE_RE ]]; then
+            echo "Matched stable tag: $TAG"
+          elif [[ "$TAG" =~ $BETA_RE ]]; then
+            echo "Matched beta tag: $TAG"
+          else
+            echo "::error::Tag '$TAG' does not match stable ($STABLE_RE) or beta ($BETA_RE) regex"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          ref: ${{ steps.tag.outputs.tag }}
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build SPA
+        env:
+          WORKER_BASE_URL: ${{ vars.WORKER_BASE_URL }}
+        run: |
+          if [ -z "${WORKER_BASE_URL}" ]; then
+            echo "::warning::WORKER_BASE_URL repo variable is not set — bundle will default to http://localhost:8787 and the deployed SPA will not work. Set it under repo Settings → Secrets and variables → Actions → Variables."
+          fi
+          pnpm run build
+
+      - name: Add .nojekyll
+        run: touch dist/.nojekyll
+
+      - name: Compute version path
+        id: path
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          VERSION_PATH="${TAG#v}"
+          echo "version_path=$VERSION_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          destination_dir: v/${{ steps.path.outputs.version_path }}
+          keep_files: true
