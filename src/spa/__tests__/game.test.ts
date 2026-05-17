@@ -395,15 +395,15 @@ describe("renderGame (game route — three-AI)", () => {
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 
-		await new Promise((resolve) => setTimeout(resolve, 300));
-
 		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
 		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
 		const cyanTranscript = getEl<HTMLElement>('[data-transcript="cyan"]');
 
-		expect(redTranscript.textContent?.trim()).toBeTruthy();
-		expect(greenTranscript.textContent?.trim()).toBeTruthy();
-		expect(cyanTranscript.textContent?.trim()).toBeTruthy();
+		await vi.waitFor(() => {
+			expect(redTranscript.textContent?.trim()).toBeTruthy();
+			expect(greenTranscript.textContent?.trim()).toBeTruthy();
+			expect(cyanTranscript.textContent?.trim()).toBeTruthy();
+		});
 	});
 
 	it("each panel only contains its own AI's completion text", async () => {
@@ -424,16 +424,18 @@ describe("renderGame (game route — three-AI)", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
-
 		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
 		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
 		const cyanTranscript = getEl<HTMLElement>('[data-transcript="cyan"]');
 
 		// Each panel should contain its AI's unique tag
-		expect(redTranscript.textContent).toContain("RED_RESPONSE_UNIQUE_TAG");
-		expect(greenTranscript.textContent).toContain("GREEN_RESPONSE_UNIQUE_TAG");
-		expect(cyanTranscript.textContent).toContain("CYAN_RESPONSE_UNIQUE_TAG");
+		await vi.waitFor(() => {
+			expect(redTranscript.textContent).toContain("RED_RESPONSE_UNIQUE_TAG");
+			expect(greenTranscript.textContent).toContain(
+				"GREEN_RESPONSE_UNIQUE_TAG",
+			);
+			expect(cyanTranscript.textContent).toContain("CYAN_RESPONSE_UNIQUE_TAG");
+		});
 
 		// Red panel should not contain green or cyan content
 		expect(redTranscript.textContent).not.toContain(
@@ -488,10 +490,8 @@ describe("renderGame (game route — three-AI)", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
-
 		const logList = getEl<HTMLUListElement>("#action-log-list");
-		expect(logList.children.length).toBeGreaterThan(0);
+		await vi.waitFor(() => expect(logList.children.length).toBeGreaterThan(0));
 	});
 
 	it("budgets decrement after a round (5 -> 4 for all AIs)", async () => {
@@ -526,10 +526,8 @@ describe("renderGame (game route — three-AI)", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
-
 		// After one round, budgets should be 4
-		expect(redBudget?.textContent).toContain("4");
+		await vi.waitFor(() => expect(redBudget?.textContent).toContain("4"));
 		expect(greenBudget?.textContent).toContain("4");
 		expect(cyanBudget?.textContent).toContain("4");
 	});
@@ -554,9 +552,7 @@ describe("renderGame (game route — three-AI)", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
-
-		expect(mockFetch).toHaveBeenCalledTimes(3);
+		await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(3));
 	});
 
 	it("shows per-daemon braille spinners during the round, stripped after responses arrive", async () => {
@@ -599,10 +595,10 @@ describe("renderGame (game route — three-AI)", () => {
 		expect(greenTranscript.textContent).toContain("> hello");
 		expect(greenTranscript.textContent).not.toContain("> *Sage hello");
 
-		await new Promise((resolve) => setTimeout(resolve, 300));
-
 		// After the round resolves, no spinners remain on any panel.
-		expect(redPanel.querySelector(".panel-spinner")).toBeNull();
+		await vi.waitFor(() =>
+			expect(redPanel.querySelector(".panel-spinner")).toBeNull(),
+		);
 		expect(greenPanel.querySelector(".panel-spinner")).toBeNull();
 		expect(cyanPanel.querySelector(".panel-spinner")).toBeNull();
 		expect(greenTranscript.textContent).toContain("GREEN_RESPONSE_UNIQUE_TAG");
@@ -645,13 +641,16 @@ describe("renderGame (game route — three-AI)", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
-
 		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
 		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
 		const cyanTranscript = getEl<HTMLElement>('[data-transcript="cyan"]');
 
 		// Peer-to-peer content must be invisible in ALL panels
+		await vi.waitFor(() =>
+			expect(greenTranscript.textContent).toContain(
+				"GREEN_RESPONSE_UNIQUE_TAG",
+			),
+		);
 		expect(redTranscript.textContent).not.toContain("PEER_PEER_TAG");
 		expect(greenTranscript.textContent).not.toContain("PEER_PEER_TAG");
 		expect(cyanTranscript.textContent).not.toContain("PEER_PEER_TAG");
@@ -682,14 +681,14 @@ describe("renderGame (game route — three-AI)", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
-
 		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
 
 		// Player line appears exactly once and without any "blue:" self-attribution prefix
-		const occurrences =
-			(greenTranscript.textContent ?? "").split("> hello").length - 1;
-		expect(occurrences).toBe(1);
+		await vi.waitFor(() => {
+			const occurrences =
+				(greenTranscript.textContent ?? "").split("> hello").length - 1;
+			expect(occurrences).toBe(1);
+		});
 		expect(greenTranscript.textContent).not.toContain("blue:");
 		expect(greenTranscript.textContent).not.toContain("blue: hello");
 	});
@@ -720,7 +719,8 @@ describe("renderGame (game route — three-AI)", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
+		// Wait for round 1 to complete: prompt resets to prefix when roundInFlight clears
+		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
 
 		// Submit 2: phase 2 → phase 3 (phase_advanced)
 		promptInput.value = "*Sage two";
@@ -728,7 +728,8 @@ describe("renderGame (game route — three-AI)", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
+		// Wait for round 2 to complete
+		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
 
 		// Submit 3: phase 3 → game_ended
 		promptInput.value = "*Sage three";
@@ -736,12 +737,12 @@ describe("renderGame (game route — three-AI)", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
-
-		// Chat panels and composer should be hidden
+		// Wait for game_ended (panels hidden)
 		const panelsEl = document.querySelector<HTMLElement>("#panels");
+		await vi.waitFor(() => expect(panelsEl?.hidden).toBe(true));
+
+		// Chat panels and composer should also be hidden
 		const composerEl = document.querySelector<HTMLElement>("#composer");
-		expect(panelsEl?.hidden).toBe(true);
 		expect(composerEl?.hidden).toBe(true);
 
 		// Endgame screen should be visible
@@ -783,19 +784,37 @@ describe("renderGame (game route — three-AI)", () => {
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
-		for (const msg of ["*Sage one", "*Sage two", "*Sage three"]) {
-			promptInput.value = msg;
-			promptInput.dispatchEvent(new Event("input"));
-			form.dispatchEvent(
-				new Event("submit", { bubbles: true, cancelable: true }),
-			);
-			await new Promise((resolve) => setTimeout(resolve, 300));
-		}
+		// Round 1
+		promptInput.value = "*Sage one";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
+
+		// Round 2
+		promptInput.value = "*Sage two";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
+
+		// Round 3 (→ game_ended)
+		promptInput.value = "*Sage three";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+
+		// Wait for game_ended state: endgame section becomes visible
+		const endgameEl2 = getEl<HTMLElement>("#endgame");
+		await vi.waitFor(() =>
+			expect(endgameEl2.hasAttribute("hidden")).toBe(false),
+		);
 
 		const downloadBtn = getEl<HTMLButtonElement>("#download-ais-btn");
 		const downloadStatus = getEl<HTMLElement>("#download-status");
-
-		expect(downloadBtn.disabled).toBe(false);
 		downloadBtn.click();
 
 		expect(createObjectURLSpy).toHaveBeenCalledTimes(1);
@@ -823,14 +842,34 @@ describe("renderGame (game route — three-AI)", () => {
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
-		for (const msg of ["*Sage one", "*Sage two", "*Sage three"]) {
-			promptInput.value = msg;
-			promptInput.dispatchEvent(new Event("input"));
-			form.dispatchEvent(
-				new Event("submit", { bubbles: true, cancelable: true }),
-			);
-			await new Promise((resolve) => setTimeout(resolve, 300));
-		}
+		// Round 1
+		promptInput.value = "*Sage one";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
+
+		// Round 2
+		promptInput.value = "*Sage two";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
+
+		// Round 3 (→ game_ended)
+		promptInput.value = "*Sage three";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+
+		// Wait for game_ended state: endgame section becomes visible
+		const endgameEl = getEl<HTMLElement>("#endgame");
+		await vi.waitFor(() =>
+			expect(endgameEl.hasAttribute("hidden")).toBe(false),
+		);
 
 		const callCountBeforeDiagnostics = mockFetch.mock.calls.length;
 
@@ -867,14 +906,34 @@ describe("renderGame (game route — three-AI)", () => {
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
-		for (const msg of ["*Sage one", "*Sage two", "*Sage three"]) {
-			promptInput.value = msg;
-			promptInput.dispatchEvent(new Event("input"));
-			form.dispatchEvent(
-				new Event("submit", { bubbles: true, cancelable: true }),
-			);
-			await new Promise((resolve) => setTimeout(resolve, 300));
-		}
+		// Round 1
+		promptInput.value = "*Sage one";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
+
+		// Round 2
+		promptInput.value = "*Sage two";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
+
+		// Round 3 (→ game_ended)
+		promptInput.value = "*Sage three";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+
+		// Wait for game_ended state: endgame section becomes visible
+		const endgameEl = getEl<HTMLElement>("#endgame");
+		await vi.waitFor(() =>
+			expect(endgameEl.hasAttribute("hidden")).toBe(false),
+		);
 
 		const callCountBeforeDiagnostics = mockFetch.mock.calls.length;
 
@@ -889,11 +948,10 @@ describe("renderGame (game route — three-AI)", () => {
 		diagnosticsSummaryInput.value = "curious";
 		submitDiagnosticsBtn.click();
 
-		// Allow the fetch to settle
-		await new Promise((resolve) => setTimeout(resolve, 50));
-
-		// One extra fetch call for diagnostics
-		expect(mockFetch.mock.calls.length).toBe(callCountBeforeDiagnostics + 1);
+		// Wait for the diagnostics fetch to settle
+		await vi.waitFor(() =>
+			expect(mockFetch.mock.calls.length).toBe(callCountBeforeDiagnostics + 1),
+		);
 		const [diagnosticsUrl, diagnosticsOptions] = mockFetch.mock.calls[
 			callCountBeforeDiagnostics
 		] as [string, RequestInit];
@@ -967,13 +1025,14 @@ describe("renderGame — localStorage persistence", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
-
 		// setItem should have been called with the engine.dat commit key (new format)
-		const engineKey = Object.keys(stub._store).find((k) =>
-			k.endsWith("/engine.dat"),
-		);
-		expect(engineKey).toBeDefined();
+		const engineKey = await vi.waitFor(() => {
+			const key = Object.keys(stub._store).find((k) =>
+				k.endsWith("/engine.dat"),
+			);
+			expect(key).toBeDefined();
+			return key;
+		});
 		// engine.dat value is a base64-encoded obfuscated blob (not plain JSON)
 		if (!engineKey) throw new Error("engineKey should be defined");
 		expect(stub._store[engineKey]).toMatch(/^[A-Za-z0-9+/=]+$/);
@@ -999,21 +1058,23 @@ describe("renderGame — localStorage persistence", () => {
 		form1.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
-
 		// Verify state was saved in the new multi-file format (engine.dat is commit signal)
-		expect(stub.setItem).toHaveBeenCalled();
-		const engineKey = Object.keys(stub._store).find((k) =>
-			k.endsWith("/engine.dat"),
-		);
-		expect(engineKey).toBeDefined();
+		await vi.waitFor(() => {
+			expect(stub.setItem).toHaveBeenCalled();
+			const key = Object.keys(stub._store).find((k) =>
+				k.endsWith("/engine.dat"),
+			);
+			expect(key).toBeDefined();
+		});
 
 		// Daemon .txt files should contain the AI response tag (chat histories are editable)
-		const daemonKeys = Object.keys(stub._store).filter(
-			(k) => k.endsWith(".txt") && !k.endsWith("whispers.txt"),
-		);
-		const daemonContents = daemonKeys.map((k) => stub._store[k] ?? "").join("");
-		expect(daemonContents).toContain("RED_RESPONSE_UNIQUE_TAG");
+		await vi.waitFor(() => {
+			const keys = Object.keys(stub._store).filter(
+				(k) => k.endsWith(".txt") && !k.endsWith("whispers.txt"),
+			);
+			const contents = keys.map((k) => stub._store[k] ?? "").join("");
+			expect(contents).toContain("RED_RESPONSE_UNIQUE_TAG");
+		});
 
 		// Second: simulate a fresh page load with the saved state
 		document.body.innerHTML = INDEX_BODY_HTML;
@@ -1073,16 +1134,15 @@ describe("renderGame — localStorage persistence", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
-
 		// Send button should be in a known state after round (round completed,
 		// prompt was cleared so Send is disabled until a new @mention is typed).
 		const sendBtn = getEl<HTMLButtonElement>("#send");
-		// roundInFlight is false (round finished), so disabled reflects empty prompt.
-		// Typing a valid mention re-enables it.
-		promptInput.value = "*Sage hi";
-		promptInput.dispatchEvent(new Event("input"));
-		expect(sendBtn.disabled).toBe(false);
+		// Wait for round to complete and verify send button re-enables with a valid mention.
+		await vi.waitFor(() => {
+			promptInput.value = "*Sage hi";
+			promptInput.dispatchEvent(new Event("input"));
+			expect(sendBtn.disabled).toBe(false);
+		});
 
 		// Warning banner should be visible
 		const warningEl = document.querySelector<HTMLElement>(
@@ -1155,18 +1215,18 @@ describe("renderGame — localStorage persistence", () => {
 		form1.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
-
 		// Verify message tool call content was persisted to daemon .txt files
 		// (message tool calls land in conversationLogs → daemon files; live transcript text
 		//  only appears for free-form assistantText, not tool calls)
-		const daemonKeys = Object.keys(stub._store).filter(
-			(k) => k.endsWith(".txt") && !k.endsWith("whispers.txt"),
-		);
-		const daemonContentsAfterRound = daemonKeys
-			.map((k) => stub._store[k] ?? "")
-			.join("");
-		expect(daemonContentsAfterRound).toContain("RED_RESPONSE_UNIQUE_TAG");
+		await vi.waitFor(() => {
+			const daemonKeys = Object.keys(stub._store).filter(
+				(k) => k.endsWith(".txt") && !k.endsWith("whispers.txt"),
+			);
+			const daemonContentsAfterRound = daemonKeys
+				.map((k) => stub._store[k] ?? "")
+				.join("");
+			expect(daemonContentsAfterRound).toContain("RED_RESPONSE_UNIQUE_TAG");
+		});
 
 		// Verify state is saved in the new multi-file format (engine.dat as commit signal)
 		const engineKey = Object.keys(stub._store).find((k) =>
@@ -1212,13 +1272,13 @@ describe("renderGame — localStorage persistence", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
-
 		// Sanity: Session A chat is in the DOM.
-		expect(
-			document.querySelector<HTMLElement>('[data-transcript="red"]')
-				?.textContent ?? "",
-		).toContain("RED_RESPONSE_UNIQUE_TAG");
+		await vi.waitFor(() =>
+			expect(
+				document.querySelector<HTMLElement>('[data-transcript="red"]')
+					?.textContent ?? "",
+			).toContain("RED_RESPONSE_UNIQUE_TAG"),
+		);
 
 		// Seed a brand-new Session B alongside Session A and point the active
 		// pointer at it. This mirrors the [ load ] click in the sessions picker:
@@ -1322,15 +1382,25 @@ describe("renderGame — chat_lockout event", () => {
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 
-		await new Promise((resolve) => setTimeout(resolve, 300));
+		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
+		const sendBtn = getEl<HTMLButtonElement>("#send");
+
+		// Wait for round to complete (promptInput cleared and re-prefilled with *Sage)
+		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
+
+		// chat_lockout should have applied to red — verify panel has the locked class
+		const redPanel = document.querySelector<HTMLElement>(
+			'.ai-panel[data-ai="red"]',
+		);
+		await vi.waitFor(() => {
+			expect(redPanel?.classList.contains("panel--locked")).toBe(true);
+		});
 
 		// The chat_lockout event should NOT append any message to the transcript —
 		// complications are silent to the player.
-		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
 		expect(redTranscript.textContent).not.toContain("[Ember is unresponsive…]");
 
 		// After the chat_lockout fires for red, typing *Ember should leave Send disabled.
-		const sendBtn = getEl<HTMLButtonElement>("#send");
 		promptInput.value = "*Ember hi";
 		promptInput.dispatchEvent(new Event("input"));
 		expect(sendBtn.disabled).toBe(true);
@@ -1407,13 +1477,13 @@ describe("renderGame — mention-based addressing", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
-
 		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
 		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
 		const cyanTranscript = getEl<HTMLElement>('[data-transcript="cyan"]');
 
-		expect(greenTranscript.textContent).toContain("> hi");
+		await vi.waitFor(() =>
+			expect(greenTranscript.textContent).toContain("> hi"),
+		);
 		expect(greenTranscript.textContent).not.toContain("> *Sage hi");
 		expect(redTranscript.textContent).not.toContain("> *Sage");
 		expect(cyanTranscript.textContent).not.toContain("> *Sage");
@@ -1467,10 +1537,9 @@ describe("renderGame — mention-based addressing", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
 
 		// After a successful send with green locked, the persisted prefix is written.
-		expect(promptInput.value).toBe("*Sage ");
+		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
 
 		// Now typing *Sage should leave Send disabled (green is locked)
 		promptInput.value = "*Sage hi";
@@ -1604,7 +1673,11 @@ describe("renderGame — panel-click addressee", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
+		// Wait for the round to complete and red to be locked
+		await vi.waitFor(() => {
+			const panel = document.querySelector('.ai-panel[data-ai="red"]');
+			expect(panel?.classList.contains("panel--locked")).toBe(true);
+		});
 
 		// Now click red panel — should be no-op because red is locked
 		promptInput.value = "";
@@ -1718,9 +1791,7 @@ describe("renderGame — addressee persistence after send", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
-
-		expect(promptInput.value).toBe("*Sage ");
+		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
 		expect(promptInput.selectionStart).toBe(6);
 		expect(promptInput.selectionEnd).toBe(6);
 		expect(sendBtn.disabled).toBe(true);
@@ -1748,14 +1819,13 @@ describe("renderGame — addressee persistence after send", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
-
-		// Send disabled after first send (only prefix remains)
-		expect(sendBtn.disabled).toBe(true);
-
-		// Typing body text after the persisted prefix re-enables Send
-		promptInput.value = "*Sage how are you";
-		promptInput.dispatchEvent(new Event("input"));
+		// Wait for round to complete, then verify typing body text re-enables Send
+		await vi.waitFor(() => {
+			promptInput.value = "*Sage how are you";
+			promptInput.dispatchEvent(new Event("input"));
+			expect(sendBtn.disabled).toBe(false);
+		});
+		// Send disabled after first send (only prefix remains), re-enabled with body text
 		expect(sendBtn.disabled).toBe(false);
 	});
 
@@ -1782,10 +1852,8 @@ describe("renderGame — addressee persistence after send", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
-
 		// Prefix persists after first send
-		expect(promptInput.value).toBe("*Sage ");
+		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
 
 		// Second turn: extend the persisted prefix
 		promptInput.value = "*Sage how are you";
@@ -1793,10 +1861,8 @@ describe("renderGame — addressee persistence after send", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
-
 		// Prefix persists again after second send
-		expect(promptInput.value).toBe("*Sage ");
+		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
 
 		// Both messages should be in the green transcript (with leading mention stripped)
 		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
@@ -1825,10 +1891,8 @@ describe("renderGame — addressee persistence after send", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
-
 		// Should use canonical name from PERSONAS (Sage, not sage)
-		expect(promptInput.value).toBe("*Sage ");
+		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
 	});
 
 	it("locked-AI at round-completion: mention prefix persists but Send stays disabled", async () => {
@@ -1876,12 +1940,11 @@ describe("renderGame — addressee persistence after send", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
-
-		// Prefix persists even when green is locked
-		expect(promptInput.value).toBe("*Sage ");
-		// Send must be disabled: green is locked and no body text
-		expect(sendBtn.disabled).toBe(true);
+		// Prefix persists even when green is locked, and send is disabled (green locked)
+		await vi.waitFor(() => {
+			expect(promptInput.value).toBe("*Sage ");
+			expect(sendBtn.disabled).toBe(true);
+		});
 	});
 });
 
@@ -2114,7 +2177,12 @@ describe("visual feedback for active addressee", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		// Wait for green to become locked
+		const greenPanelLock = getEl<HTMLElement>('.ai-panel[data-ai="green"]');
+		await vi.waitFor(() =>
+			expect(greenPanelLock.classList.contains("panel--locked")).toBe(true),
+		);
 
 		// Now type *Sage hi (green is locked)
 		promptInput.value = "*Sage hi";
@@ -2197,11 +2265,11 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
-
 		const redPanel = getEl<HTMLElement>('.ai-panel[data-ai="red"]');
-		expect(redPanel.classList.contains("panel--locked")).toBe(true);
-		expect(redPanel.getAttribute("aria-disabled")).toBe("true");
+		await vi.waitFor(() => {
+			expect(redPanel.classList.contains("panel--locked")).toBe(true);
+			expect(redPanel.getAttribute("aria-disabled")).toBe("true");
+		});
 
 		// Green and cyan panels should NOT be locked
 		const greenPanel = getEl<HTMLElement>('.ai-panel[data-ai="green"]');
@@ -2232,15 +2300,16 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
-
 		// Type *Sage hi while green is locked
+		const lockoutError = getEl<HTMLOutputElement>("#lockout-error");
+		await vi.waitFor(() =>
+			expect(lockoutError.hasAttribute("hidden")).toBe(false),
+		);
 		promptInput.value = "*Sage hi";
 		promptInput.dispatchEvent(new Event("input"));
 
 		expect(sendBtn.disabled).toBe(true);
 
-		const lockoutError = getEl<HTMLOutputElement>("#lockout-error");
 		expect(lockoutError.hasAttribute("hidden")).toBe(false);
 		expect(lockoutError.textContent).toContain("Sage");
 	});
@@ -2304,11 +2373,12 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
 
 		// Verify green is locked
 		const greenPanel = getEl<HTMLElement>('.ai-panel[data-ai="green"]');
-		expect(greenPanel.classList.contains("panel--locked")).toBe(true);
+		await vi.waitFor(() =>
+			expect(greenPanel.classList.contains("panel--locked")).toBe(true),
+		);
 
 		// Round 2 via *Ember: resolve green lockout
 		promptInput.value = "*Ember hi";
@@ -2316,10 +2386,11 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
 
 		// Green panel should no longer be locked
-		expect(greenPanel.classList.contains("panel--locked")).toBe(false);
+		await vi.waitFor(() =>
+			expect(greenPanel.classList.contains("panel--locked")).toBe(false),
+		);
 
 		// Type *Sage again: should now enable Send and hide error
 		promptInput.value = "*Sage hi";
@@ -2353,15 +2424,16 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
+
+		// Green panel is muted (locked)
+		const greenPanel = getEl<HTMLElement>('.ai-panel[data-ai="green"]');
+		await vi.waitFor(() =>
+			expect(greenPanel.classList.contains("panel--locked")).toBe(true),
+		);
 
 		// Clear input (empty text)
 		promptInput.value = "";
 		promptInput.dispatchEvent(new Event("input"));
-
-		// Green panel is muted (locked)
-		const greenPanel = getEl<HTMLElement>('.ai-panel[data-ai="green"]');
-		expect(greenPanel.classList.contains("panel--locked")).toBe(true);
 
 		// Error element is hidden (no addressee)
 		const lockoutError = getEl<HTMLOutputElement>("#lockout-error");
@@ -2422,12 +2494,12 @@ describe("renderGame — round error surfacing (issue #231)", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
-
 		// 1. Inline error visible with non-empty player-readable text.
 		const roundError = getEl<HTMLOutputElement>("#round-error");
-		expect(roundError.hasAttribute("hidden")).toBe(false);
-		expect(roundError.textContent?.trim()).toBeTruthy();
+		await vi.waitFor(() => {
+			expect(roundError.hasAttribute("hidden")).toBe(false);
+			expect(roundError.textContent?.trim()).toBeTruthy();
+		});
 
 		// 2. Topinfo right cell shows the unstable warn pip.
 		const topinfoRight = getEl<HTMLElement>("#topinfo-right");
@@ -2448,11 +2520,11 @@ describe("renderGame — round error surfacing (issue #231)", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
-
-		expect(roundError.hasAttribute("hidden")).toBe(true);
+		await vi.waitFor(() => {
+			expect(roundError.hasAttribute("hidden")).toBe(true);
+			expect(topinfoRight.textContent).toContain("connection stable");
+		});
 		expect(roundError.textContent ?? "").toBe("");
-		expect(topinfoRight.textContent).toContain("connection stable");
 		const pipAfter = topinfoRight.querySelector("span");
 		expect(pipAfter?.className).toBe("ok");
 	});
