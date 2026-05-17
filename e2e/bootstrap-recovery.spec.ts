@@ -55,7 +55,7 @@ test("regen happy path: content-pack fails, recover via regen button, game rende
 	});
 
 	await expect(page.locator("#composer")).toBeVisible({ timeout: 30_000 });
-	await expect(page.locator(".panel-name").first()).toBeVisible({
+	await expect(page.locator("article.ai-panel")).toHaveCount(3, {
 		timeout: 30_000,
 	});
 	await expect(page).toHaveURL(/#\/game\/?$/);
