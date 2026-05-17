@@ -85,7 +85,7 @@ If `start.sh` fails, fix the underlying issue rather than retrying blindly. It
 prints a `FAILED: <reason>` line plus the relevant log to stderr. Two common
 failure modes worth knowing:
 
-- **Bootstrap recovery UI** — world generation timed out (the SPA's 120 s
+- **Bootstrap recovery UI** — world generation timed out (the SPA's 5-minute
   bootstrap limit) or produced a malformed pack. The daemon detects the
   `#bootstrap-recovery` section and exits non-zero rather than waiting out
   its 5-minute stable-state poll; re-run `start.sh` to try again.

@@ -44,8 +44,11 @@ import {
 import { type RenderOpts, renderApp } from "../render-app.js";
 
 /** Maximum time allowed for bootstrap loading (personas + content packs) before
- * timing out and surfacing the recovery UI. */
-export const BOOTSTRAP_LOADING_TIMEOUT_MS = 120_000;
+ * timing out and surfacing the recovery UI. Sized to absorb a slow first-attempt
+ * persona-synthesis call (~95s observed cold) plus the retry-once-on-fail path
+ * and a parallel content-pack outer retry, matching the daemon harness's
+ * stable-state wait window. */
+export const BOOTSTRAP_LOADING_TIMEOUT_MS = 300_000;
 
 /** Lowercased persona name for transcript prefixes (`> *ember <msg>`). */
 function transcriptName(name: string): string {
