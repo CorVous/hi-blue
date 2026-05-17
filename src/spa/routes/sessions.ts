@@ -33,6 +33,7 @@ import {
 	seedFromArchive,
 	setActiveSessionId,
 } from "../persistence/session-storage.js";
+import { type RenderOpts, renderApp, setPickerOpen } from "../render-app.js";
 
 // ── Banner copy ───────────────────────────────────────────────────────────────────
 
@@ -86,10 +87,7 @@ function fileLabel(name: string, size: number): string {
 
 // ── Main renderer ────────────────────────────────────────────────────────────────────
 
-export function renderSessions(
-	root: HTMLElement,
-	params?: URLSearchParams,
-): void {
+export function renderSessions(root: HTMLElement, opts?: RenderOpts): void {
 	const doc = root.ownerDocument;
 
 	// Route-entry visibility
@@ -116,7 +114,7 @@ export function renderSessions(
 
 	// Banner
 	const bannerEl = doc.querySelector<HTMLElement>("#sessions-banner");
-	const reason = params?.get("reason") ?? null;
+	const reason = opts?.reason ?? null;
 	if (bannerEl) {
 		if (reason && SESSIONS_BANNER_MESSAGES[reason]) {
 			bannerEl.textContent = SESSIONS_BANNER_MESSAGES[reason] ?? "";
@@ -132,7 +130,7 @@ export function renderSessions(
 	if (!listEl) return;
 
 	// Re-render helper (re-renders list + re-wires new button)
-	const reRender = (): void => renderSessions(root, params);
+	const reRender = (): void => renderSessions(root, opts);
 
 	// Gather + sort sessions
 	const ids = listSessions();
@@ -172,7 +170,7 @@ export function renderSessions(
 	listEl.appendChild(activeHeading);
 
 	for (const row of rowData) {
-		const rowEl = buildSessionRow(doc, row.id, activeId, reRender);
+		const rowEl = buildSessionRow(root, row.id, activeId, reRender);
 		listEl.appendChild(rowEl);
 	}
 
@@ -192,7 +190,7 @@ export function renderSessions(
 	// Archived rows
 	const archivedIds = listArchivedSessions();
 	for (const id of archivedIds) {
-		listEl.appendChild(buildArchivedSessionRow(doc, id, reRender));
+		listEl.appendChild(buildArchivedSessionRow(root, id, reRender));
 	}
 	if (archivedIds.length === 0) {
 		const empty = doc.createElement("p");
@@ -210,7 +208,8 @@ export function renderSessions(
 		fresh.addEventListener("click", () => {
 			const newId = mintSession();
 			setActiveSessionId(newId);
-			location.hash = "#/start";
+			setPickerOpen(false);
+			renderApp(root);
 		});
 	}
 }
@@ -218,11 +217,12 @@ export function renderSessions(
 // ── Row builder ──────────────────────────────────────────────────────────────────────
 
 function buildSessionRow(
-	doc: Document,
+	root: HTMLElement,
 	id: string,
 	activeId: string | null,
 	reRender: () => void,
 ): HTMLElement {
+	const doc = root.ownerDocument;
 	const info = getSessionInfo(id);
 	const isActive = id === activeId;
 
@@ -280,7 +280,8 @@ function buildSessionRow(
 			if (!isActive) {
 				setActiveSessionId(id);
 			}
-			location.hash = "#/game";
+			setPickerOpen(false);
+			renderApp(root);
 		});
 		opsEl.appendChild(loadBtn);
 
@@ -400,10 +401,11 @@ function hasOpenRouterKey(): boolean {
 // ── Archived row builder ─────────────────────────────────────────────────────
 
 function buildArchivedSessionRow(
-	doc: Document,
+	root: HTMLElement,
 	id: string,
 	reRender: () => void,
 ): HTMLElement {
+	const doc = root.ownerDocument;
 	const info = getArchivedSessionInfo(id);
 
 	const rowEl = doc.createElement("div");
@@ -471,7 +473,8 @@ function buildArchivedSessionRow(
 					const freshState = newSession.getState();
 					const newId = seedFromArchive(id, freshState);
 					setActiveSessionId(newId);
-					location.hash = `#/game?${Date.now()}`;
+					setPickerOpen(false);
+					renderApp(root);
 				} catch {
 					continueBtn.disabled = false;
 				}

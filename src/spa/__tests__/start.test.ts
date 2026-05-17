@@ -125,6 +125,12 @@ function getMain(): HTMLElement {
 	return main;
 }
 
+/** Set location.search via history.replaceState so route renderers can read
+ *  test affordances (skipDialup, winImmediately, seed, …) from it. */
+function setSearch(query: string): void {
+	window.history.replaceState({}, "", `/?${query}`);
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe("renderStart — screen visibility", () => {
@@ -149,7 +155,8 @@ describe("renderStart — screen visibility", () => {
 		const { renderStart } = await import("../routes/start.js");
 
 		try {
-			await renderStart(getMain(), new URLSearchParams("skipDialup=1"));
+			setSearch("skipDialup=1");
+			await renderStart(getMain());
 		} catch {
 			// generation may reject in test environment — ok
 		}
@@ -189,10 +196,8 @@ describe("renderStart — BEGIN button state", () => {
 		// the login form reveals synchronously; BEGIN should be available
 		// immediately so the player can click through to the progressive-loading
 		// game route while content packs are still resolving.
-		const renderPromise = renderStart(
-			getMain(),
-			new URLSearchParams("skipDialup=1"),
-		);
+		setSearch("skipDialup=1");
+		const renderPromise = renderStart(getMain());
 
 		const beginBtn = document.querySelector<HTMLButtonElement>("#begin");
 		expect(beginBtn?.disabled).toBe(false);
@@ -211,7 +216,8 @@ describe("renderStart — BEGIN button state", () => {
 		vi.resetModules();
 		const { renderStart } = await import("../routes/start.js");
 
-		await renderStart(getMain(), new URLSearchParams("skipDialup=1"));
+		setSearch("skipDialup=1");
+		await renderStart(getMain());
 
 		const beginBtn = document.querySelector<HTMLButtonElement>("#begin");
 		expect(beginBtn?.disabled).toBe(false);
@@ -233,13 +239,14 @@ describe("renderStart — BEGIN click saves session and navigates", () => {
 		document.body.innerHTML = "";
 	});
 
-	it("BEGIN click sets location.hash to #/game", async () => {
+	it("BEGIN click transitions the view to game", async () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
 		const { renderStart } = await import("../routes/start.js");
 
-		await renderStart(getMain(), new URLSearchParams("skipDialup=1"));
+		setSearch("skipDialup=1");
+		await renderStart(getMain());
 
 		const beginBtn = document.querySelector<HTMLButtonElement>("#begin");
 		expect(beginBtn?.disabled).toBe(false);
@@ -247,10 +254,13 @@ describe("renderStart — BEGIN click saves session and navigates", () => {
 		const pwEl = document.querySelector<HTMLInputElement>("#password");
 		if (pwEl) pwEl.dataset.real = "password";
 
-		// Click BEGIN — start.ts will call saveActiveSession then set location.hash
+		// Click BEGIN — start.ts calls renderApp, which sets data-view on <main>.
+		// The dispatcher sees no active session, mints one; with an in-flight
+		// bootstrap (from renderStart's startBootstrap) the game view owns the
+		// progressive-loading UI rather than bouncing back to start.
 		beginBtn?.click();
 
-		expect(location.hash).toBe("#/game");
+		expect(getMain().dataset.view).toBe("game");
 	});
 
 	it("BEGIN click is idempotent: button is disabled after first click", async () => {
@@ -259,7 +269,8 @@ describe("renderStart — BEGIN click saves session and navigates", () => {
 		vi.resetModules();
 		const { renderStart } = await import("../routes/start.js");
 
-		await renderStart(getMain(), new URLSearchParams("skipDialup=1"));
+		setSearch("skipDialup=1");
+		await renderStart(getMain());
 
 		const beginBtn = document.querySelector<HTMLButtonElement>("#begin");
 		const pwEl = document.querySelector<HTMLInputElement>("#password");
@@ -277,7 +288,8 @@ describe("renderStart — BEGIN click saves session and navigates", () => {
 		vi.resetModules();
 		const { renderStart } = await import("../routes/start.js");
 
-		await renderStart(getMain(), new URLSearchParams("skipDialup=1"));
+		setSearch("skipDialup=1");
+		await renderStart(getMain());
 
 		const beginBtn = document.querySelector<HTMLButtonElement>("#begin");
 		const pwEl = document.querySelector<HTMLInputElement>("#password");
@@ -287,11 +299,11 @@ describe("renderStart — BEGIN click saves session and navigates", () => {
 		// which is fine because the gate reads dataset.real.
 		if (pwEl) pwEl.dataset.real = "wrong";
 
-		const hashBefore = location.hash;
+		const viewBefore = getMain().dataset.view;
 		beginBtn?.click();
 
-		// Hash didn't change → did not navigate.
-		expect(location.hash).toBe(hashBefore);
+		// renderApp not called → data-view unchanged.
+		expect(getMain().dataset.view).toBe(viewBefore);
 		// Error revealed and CONNECT remains enabled for retry.
 		expect(errorEl?.hasAttribute("hidden")).toBe(false);
 		expect(errorEl?.textContent).toContain("access denied");
@@ -348,7 +360,8 @@ describe("renderStart — CapHitError handling", () => {
 		const { renderStart } = await import("../routes/start.js");
 
 		try {
-			await renderStart(getMain(), new URLSearchParams("skipDialup=1"));
+			setSearch("skipDialup=1");
+			await renderStart(getMain());
 		} catch {
 			// renderStart re-throws generation errors — expected
 		}
@@ -381,11 +394,9 @@ describe("renderStart — persistence warning banners", () => {
 		vi.resetModules();
 		const { renderStart } = await import("../routes/start.js");
 
+		setSearch("skipDialup=1");
 		try {
-			await renderStart(
-				getMain(),
-				new URLSearchParams("reason=broken&skipDialup=1"),
-			);
+			await renderStart(getMain(), { reason: "broken" });
 		} catch {
 			// ok
 		}
@@ -404,11 +415,9 @@ describe("renderStart — persistence warning banners", () => {
 		vi.resetModules();
 		const { renderStart } = await import("../routes/start.js");
 
+		setSearch("skipDialup=1");
 		try {
-			await renderStart(
-				getMain(),
-				new URLSearchParams("reason=stuck&skipDialup=1"),
-			);
+			await renderStart(getMain(), { reason: "stuck" });
 		} catch {
 			// ok
 		}
@@ -427,11 +436,9 @@ describe("renderStart — persistence warning banners", () => {
 		vi.resetModules();
 		const { renderStart } = await import("../routes/start.js");
 
+		setSearch("skipDialup=1");
 		try {
-			await renderStart(
-				getMain(),
-				new URLSearchParams("reason=version-mismatch&skipDialup=1"),
-			);
+			await renderStart(getMain(), { reason: "version-mismatch" });
 		} catch {
 			// ok
 		}
@@ -450,11 +457,9 @@ describe("renderStart — persistence warning banners", () => {
 		vi.resetModules();
 		const { renderStart } = await import("../routes/start.js");
 
+		setSearch("skipDialup=1");
 		try {
-			await renderStart(
-				getMain(),
-				new URLSearchParams("reason=legacy-save-discarded&skipDialup=1"),
-			);
+			await renderStart(getMain(), { reason: "legacy-save-discarded" });
 		} catch {
 			// ok
 		}
@@ -468,13 +473,14 @@ describe("renderStart — persistence warning banners", () => {
 		);
 	});
 
-	it("shows no banner when reason param is absent", async () => {
+	it("shows no banner when reason opt is absent", async () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 		vi.resetModules();
 		const { renderStart } = await import("../routes/start.js");
 
+		setSearch("skipDialup=1");
 		try {
-			await renderStart(getMain(), new URLSearchParams("skipDialup=1"));
+			await renderStart(getMain());
 		} catch {
 			// ok
 		}
@@ -485,16 +491,17 @@ describe("renderStart — persistence warning banners", () => {
 		expect(warningEl?.hasAttribute("hidden")).toBe(true);
 	});
 
-	it("shows fallback banner text for an unknown reason string", async () => {
+	it("silently skips a reason that has no copy", async () => {
+		// Dispatcher reasons like "empty" and "no-active-pointer" reach
+		// renderStart but are not user-facing problems — no banner shown.
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 		vi.resetModules();
 		const { renderStart } = await import("../routes/start.js");
 
+		setSearch("skipDialup=1");
 		try {
-			await renderStart(
-				getMain(),
-				new URLSearchParams("reason=totally-unknown&skipDialup=1"),
-			);
+			// "empty" is a dispatcher reason with no PERSISTENCE_WARNING_MESSAGES entry.
+			await renderStart(getMain(), { reason: "empty" });
 		} catch {
 			// ok
 		}
@@ -502,8 +509,6 @@ describe("renderStart — persistence warning banners", () => {
 		const warningEl = document.querySelector<HTMLElement>(
 			"#persistence-warning",
 		);
-		expect(warningEl?.hasAttribute("hidden")).toBe(false);
-		// Fallback message includes the unknown reason string
-		expect(warningEl?.textContent).toContain("totally-unknown");
+		expect(warningEl?.hasAttribute("hidden")).toBe(true);
 	});
 });

@@ -1,19 +1,20 @@
 /**
  * start-screen.spec.ts
  *
- * Playwright e2e tests for the start-screen route (#/start).
+ * Playwright e2e tests for the start screen.
  *
  * Covers:
  *  - New visitor → start screen shown, panels and composer hidden
  *  - [ BEGIN ] is disabled while generation is in flight
  *  - [ BEGIN ] is enabled after persona synthesis + content-pack generation resolve
- *  - Clicking [ BEGIN ] navigates to #/game and shows panels
- *  - Refreshing on #/game with a valid active session stays on #/game (no redirect)
+ *  - Clicking [ BEGIN ] transitions main[data-view] to "game" and shows panels
+ *  - Refreshing on the game view with a valid active session stays on the game view
  *  - CapHit during generation surfaces #cap-hit
  *  - Refresh during generation re-enters start screen and restarts generation
- *  - #/game direct entry with empty active session redirects to #/start
  *
- * Issue #173 (parent #155).
+ * Post-ADR-0011: the URL is no longer load-bearing — the SPA decides what to
+ * render from localStorage. Test assertions use main[data-view] / [data-reason]
+ * instead of location.hash.
  */
 import { expect, type Request, type Route, test } from "@playwright/test";
 import {
@@ -51,7 +52,7 @@ test("new visitor sees start screen with disabled [ BEGIN ] button initially", a
 
 	await page.goto("/");
 
-	// #/start route should be active: start-screen visible, panels and composer hidden
+	// Start view active: start-screen visible, panels and composer hidden
 	await expect(page.locator("#start-screen")).toBeVisible();
 	await expect(page.locator("#panels")).toBeHidden();
 	await expect(page.locator("#composer")).toBeHidden();
@@ -123,7 +124,7 @@ test("[ BEGIN ] is enabled after persona synthesis and content-pack generation c
 	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
 });
 
-test("clicking [ BEGIN ] navigates to #/game and shows panels", async ({
+test("clicking [ BEGIN ] transitions to the game view and shows panels", async ({
 	page,
 }) => {
 	const pageErrors: Error[] = [];
@@ -142,8 +143,10 @@ test("clicking [ BEGIN ] navigates to #/game and shows panels", async ({
 	await page.locator("#password").fill("password");
 	await beginBtn.click();
 
-	// Should navigate to #/game
-	await page.waitForURL(/.*#\/game/, { timeout: 10_000 });
+	// Should transition to the game view
+	await expect(page.locator('main[data-view="game"]')).toBeAttached({
+		timeout: 10_000,
+	});
 
 	// Panels and composer should now be visible
 	await expect(page.locator("#panels")).toBeVisible();
@@ -157,7 +160,7 @@ test("clicking [ BEGIN ] navigates to #/game and shows panels", async ({
 	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
 });
 
-test("refreshing on #/game with an active session stays on #/game (no redirect to #/start)", async ({
+test("refreshing on the game view with an active session stays on the game view", async ({
 	page,
 }) => {
 	const pageErrors: Error[] = [];
@@ -173,7 +176,9 @@ test("refreshing on #/game with an active session stays on #/game (no redirect t
 	await expect(beginBtn).toBeEnabled({ timeout: 30_000 });
 	await page.locator("#password").fill("password");
 	await beginBtn.click();
-	await page.waitForURL(/.*#\/game/, { timeout: 10_000 });
+	await expect(page.locator('main[data-view="game"]')).toBeAttached({
+		timeout: 10_000,
+	});
 
 	// Make sure session is saved before reload
 	await waitForActiveSession(page);
@@ -182,7 +187,8 @@ test("refreshing on #/game with an active session stays on #/game (no redirect t
 	await stubChatCompletions(page, ["stub reply"]);
 	await page.reload();
 
-	// Should still be on the game screen (session restored from localStorage)
+	// Should still be on the game view (session restored from localStorage)
+	await expect(page.locator('main[data-view="game"]')).toBeAttached();
 	await expect(page.locator("#panels")).toBeVisible();
 	await expect(page.locator("#composer")).toBeVisible();
 	await expect(page.locator("#start-screen")).toBeHidden();
@@ -307,13 +313,13 @@ test("refresh during generation re-enters start screen and restarts generation",
 	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);
 });
 
-test("#/game direct entry with empty active session redirects to #/start", async ({
+test("empty active-session pointer surfaces the start screen on load", async ({
 	page,
 }) => {
 	const pageErrors: Error[] = [];
 	page.on("pageerror", (err) => pageErrors.push(err));
 
-	// Stub LLM for the start screen generation that will follow the redirect
+	// Stub LLM for the start screen generation
 	await stubNewGameLLM(page, { sse: ["stub reply"] });
 
 	// Set up a fresh-minted active session id with NO daemon/engine files —
@@ -324,11 +330,12 @@ test("#/game direct entry with empty active session redirects to #/start", async
 		// Deliberately do NOT write any session files — daemon, engine.dat, etc.
 	});
 
-	// Navigate directly to #/game
-	await page.goto("/#/game");
+	await page.goto("/");
 
-	// The dispatcher should detect the empty session and redirect to #/start
-	await page.waitForURL(/.*#\/start/, { timeout: 10_000 });
+	// The dispatcher detects the empty session and surfaces the start screen.
+	await expect(page.locator('main[data-view="start"]')).toBeAttached({
+		timeout: 10_000,
+	});
 	await expect(page.locator("#start-screen")).toBeVisible();
 
 	expect(pageErrors, pageErrors.map((e) => e.message).join("\n")).toEqual([]);

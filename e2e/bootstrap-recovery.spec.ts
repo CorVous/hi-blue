@@ -8,7 +8,8 @@ import {
 /**
  * Acceptance spec for issue #380: Bootstrap recovery UI with regenerate and
  * abandon paths. The regen path re-kicks content-pack generation without
- * re-resolving personas; the abandon path bounces to #/start?reason=broken.
+ * re-resolving personas; the abandon path returns to the start view with the
+ * broken reason surfaced.
  */
 
 test("regen happy path: content-pack fails, recover via regen button, game renders", async ({
@@ -41,12 +42,15 @@ test("regen happy path: content-pack fails, recover via regen button, game rende
 	await expect(page.locator("#begin")).toBeEnabled({ timeout: 30_000 });
 	await page.locator("#password").fill("password");
 	await page.locator("#begin").click();
-	await page.waitForURL(/#\/game/, { timeout: 10_000 });
+	await expect(page.locator('main[data-view="game"]')).toBeAttached({
+		timeout: 10_000,
+	});
 
 	await expect(page.locator("#bootstrap-recovery")).toBeVisible({
 		timeout: 30_000,
 	});
-	await expect(page).toHaveURL(/#\/game\/?$/);
+	// Recovery UI lives inside the game view — view should not have flipped.
+	await expect(page.locator("main")).toHaveAttribute("data-view", "game");
 
 	await page.locator("#bootstrap-recovery-regen").click();
 
@@ -58,10 +62,10 @@ test("regen happy path: content-pack fails, recover via regen button, game rende
 	await expect(page.locator("article.ai-panel")).toHaveCount(3, {
 		timeout: 30_000,
 	});
-	await expect(page).toHaveURL(/#\/game\/?$/);
+	await expect(page.locator("main")).toHaveAttribute("data-view", "game");
 });
 
-test("abandon path: recovery UI visible, click abandon to bounce to #/start?reason=broken", async ({
+test("abandon path: recovery UI visible, click abandon to return to start with broken reason", async ({
 	page,
 }) => {
 	await stubPersonaSynthesis(page);
@@ -83,7 +87,9 @@ test("abandon path: recovery UI visible, click abandon to bounce to #/start?reas
 	await expect(page.locator("#begin")).toBeEnabled({ timeout: 30_000 });
 	await page.locator("#password").fill("password");
 	await page.locator("#begin").click();
-	await page.waitForURL(/#\/game/, { timeout: 10_000 });
+	await expect(page.locator('main[data-view="game"]')).toBeAttached({
+		timeout: 10_000,
+	});
 
 	await expect(page.locator("#bootstrap-recovery")).toBeVisible({
 		timeout: 30_000,
@@ -91,7 +97,8 @@ test("abandon path: recovery UI visible, click abandon to bounce to #/start?reas
 
 	await page.locator("#bootstrap-recovery-abandon").click();
 
-	await expect(page).toHaveURL(/#\/start\?reason=broken/, {
+	await expect(page.locator('main[data-view="start"]')).toBeAttached({
 		timeout: 5_000,
 	});
+	await expect(page.locator("main")).toHaveAttribute("data-reason", "broken");
 });

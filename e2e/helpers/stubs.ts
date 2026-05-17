@@ -558,7 +558,7 @@ export type GoToGameOptions = {
  *  c. Waits for `#begin` (CONNECT) to be enabled (generation complete).
  *  d. Fills `#password` with the accepted password.
  *  e. Clicks `#begin`.
- *  f. Waits for `#/game` URL and `#composer` visibility.
+ *  f. Waits for `main[data-view="game"]` and `#composer` visibility.
  *  g. Returns AiHandles from `getAiHandles(page)`.
  *
  * Specs that test the start-screen path itself should NOT use this helper —
@@ -574,7 +574,9 @@ export async function goToGame(
 	await expect(page.locator("#begin")).toBeEnabled({ timeout: 30_000 });
 	await page.locator("#password").fill("password");
 	await page.locator("#begin").click();
-	await page.waitForURL(/.*#\/game/, { timeout: 10_000 });
+	await expect(page.locator('main[data-view="game"]')).toBeAttached({
+		timeout: 10_000,
+	});
 	await expect(page.locator("#composer")).toBeVisible();
 	return getAiHandles(page);
 }
