@@ -2031,6 +2031,9 @@ export function validateDualContentPacksOrThrow(
 
 // ── Helpers for layered retry ────────────────────────────────────────────────
 
+const OUTER_BUDGET = 3;
+const BACKOFF_MS = [1_000, 2_000, 4_000];
+
 function sleep(ms: number): Promise<void> {
 	return new Promise((r) => setTimeout(r, ms));
 }
@@ -2114,8 +2117,6 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 	async generateContentPacks(
 		input: ContentPackProviderInput,
 	): Promise<ContentPackProviderResult> {
-		const OUTER_BUDGET = 3;
-		const BACKOFF_MS = [1_000, 2_000, 4_000];
 		const PARTIAL_ROUNDS = 2;
 
 		const systemPrompt = CONTENT_PACK_SYSTEM_PROMPT;
@@ -2197,45 +2198,41 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 	async generateDualContentPacks(
 		input: DualContentPackProviderInput,
 	): Promise<DualContentPackProviderResult> {
-		const messages = [
-			{ role: "system" as const, content: DUAL_CONTENT_PACK_SYSTEM_PROMPT },
-			{
-				role: "user" as const,
-				content: buildDualContentPackUserMessage(input),
-			},
-		];
+		const systemPrompt = DUAL_CONTENT_PACK_SYSTEM_PROMPT;
+		const baseUserPrompt = buildDualContentPackUserMessage(input);
+		let correctiveFeedback: string | null = null;
 
-		const attempt = async (): Promise<DualContentPackProviderResult> => {
-			const { content, reasoning } = await this.chatFn({
-				messages,
-				disableReasoning: this.disableReasoning,
-			});
+		for (let outer = 0; outer < OUTER_BUDGET; outer++) {
+			let rawPackJson: unknown;
+			let validationResult: ValidationResult<DualContentPackProviderResult>;
 
-			const raw = content !== null && content !== "" ? content : reasoning;
-			if (raw === null || raw === "") {
-				throw new ContentPackError(
-					"dual content-pack response has neither content nor reasoning",
-				);
-			}
-
-			let parsed: unknown;
 			try {
-				parsed = JSON.parse(raw);
-			} catch {
-				throw new ContentPackError(
-					`dual content-pack JSON parse failed: ${raw}`,
+				const messages = buildOuterMessages(
+					systemPrompt,
+					baseUserPrompt,
+					correctiveFeedback,
 				);
+				rawPackJson = await this.callAndParse(messages, "dual content-pack");
+				validationResult = validateDualContentPacks(rawPackJson, input);
+			} catch (err) {
+				if (err instanceof CapHitError) throw err;
+				if (outer === OUTER_BUDGET - 1) throw err;
+				const backoffMs = BACKOFF_MS[outer];
+				if (backoffMs !== undefined) {
+					await sleep(backoffMs);
+				}
+				correctiveFeedback = null;
+				continue;
 			}
 
-			return validateDualContentPacksOrThrow(parsed, input);
-		};
+			if (validationResult.ok) return validationResult.value;
 
-		try {
-			return await attempt();
-		} catch (err) {
-			if (err instanceof CapHitError) throw err;
-			return await attempt();
+			correctiveFeedback = buildCorrectiveFeedback(validationResult.errors);
 		}
+
+		throw new ContentPackError(
+			"dual content-pack generation exhausted retry budget",
+		);
 	}
 }
 
