@@ -48,6 +48,6 @@
 		// Comma-separated list of origins allowed to call POST /v1/chat/completions
 		// via a browser (CORS). Add localhost ports via .dev.vars or
 		// `wrangler dev --var ALLOWED_ORIGINS=...` to keep local ports out of prod.
-		"ALLOWED_ORIGINS": "https://corvous.github.io"
+		"ALLOWED_ORIGINS": "https://hi-blue.cor.gg"
 	}
 }
