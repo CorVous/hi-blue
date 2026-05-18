@@ -71,8 +71,11 @@ import {
  *     by keeping only the first entry of each array.
  *
  * v10 (issue #374): add `wallName` to `ContentPack`.
- *   - Old v9 saves have no `wallName`; version-mismatch result (consistent
- *     with v7/v8 policy — no migration provided).
+ *   - Old v9 saves have no `wallName`; migration defaults it to an empty
+ *     string on every `ContentPack` in `contentPacksA`/`contentPacksB`.
+ *     The empty default round-trips through the existing OOB cone
+ *     renderer (which already treats blank `wallName` as "no flavored
+ *     wall noun").
  *
  * Bumping this constant requires either a `migrateV<old>To...` function below
  * or a new entry in `SCHEMA_ARCHIVE_MAP` (see AGENTS.md → "Bumping
@@ -225,15 +228,34 @@ export function serializeSession(
 // ── Migration helpers ─────────────────────────────────────────────────────────
 
 /**
- * Migrate a v8 SealedEngine to v9 by truncating contentPacksA and contentPacksB
- * to their first entry.
+ * Migrate a v8 sealed payload to v9 by truncating contentPacksA and
+ * contentPacksB to their first entry. v8 stored one pack per phase (3
+ * entries); v9 keeps a single pack per side.
+ *
+ * Sets schemaVersion to 9 so callers can chain into `migrateV9ToV10`.
  */
 function migrateV8ToV9(sealed: SealedEngine): SealedEngine {
 	return {
 		...sealed,
-		schemaVersion: SESSION_SCHEMA_VERSION,
+		schemaVersion: 9 as unknown as typeof SESSION_SCHEMA_VERSION,
 		contentPacksA: (sealed.contentPacksA ?? []).slice(0, 1),
 		contentPacksB: (sealed.contentPacksB ?? []).slice(0, 1),
+	};
+}
+
+/**
+ * Migrate a v9 sealed payload to v10 by defaulting `wallName` to `""` on
+ * every ContentPack in `contentPacksA`/`contentPacksB`. v9 packs had no
+ * `wallName` field.
+ */
+function migrateV9ToV10(sealed: SealedEngine): SealedEngine {
+	const addWallName = (pack: ContentPack): ContentPack =>
+		typeof pack?.wallName === "string" ? pack : { ...pack, wallName: "" };
+	return {
+		...sealed,
+		schemaVersion: SESSION_SCHEMA_VERSION,
+		contentPacksA: (sealed.contentPacksA ?? []).map(addWallName),
+		contentPacksB: (sealed.contentPacksB ?? []).map(addWallName),
 	};
 }
 
@@ -272,13 +294,24 @@ export function deserializeSession(
 		return { kind: "broken" };
 	}
 
-	// Schema version check and migration
-	if ((sealed as { schemaVersion: number }).schemaVersion === 8) {
+	// Schema version check and migration chain.
+	// Migrations are stepwise (v8→v9→v10) so each entry stays focused on
+	// one schema diff and new bumps only need a single new step.
+	const rawVersion = (sealed as { schemaVersion: unknown }).schemaVersion;
+	if (typeof rawVersion !== "number" || !Number.isFinite(rawVersion)) {
+		return { kind: "broken" };
+	}
+	let version = rawVersion;
+	if (version === 8) {
 		sealed = migrateV8ToV9(sealed);
-	} else if (sealed.schemaVersion !== SESSION_SCHEMA_VERSION) {
-		const sv = Number(sealed.schemaVersion);
-		if (!Number.isFinite(sv)) return { kind: "broken" };
-		return { kind: "version-mismatch", schemaVersion: sv };
+		version = 9;
+	}
+	if (version === 9) {
+		sealed = migrateV9ToV10(sealed);
+		version = 10;
+	}
+	if (version !== SESSION_SCHEMA_VERSION) {
+		return { kind: "version-mismatch", schemaVersion: version };
 	}
 
 	// Parse meta.json
