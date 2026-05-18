@@ -173,4 +173,12 @@ if (watchMode) {
 	await ctx.rebuild();
 	await ctx.dispose();
 	console.log("Build complete: dist/index.html + dist/assets/index.{js,css}");
+
+	// Generate version list page
+	const { execSync } = await import("node:child_process");
+	try {
+		execSync("node scripts/generate-version-list.mjs", { cwd: root });
+	} catch (error) {
+		console.warn("Warning: Failed to generate version list:", error.message);
+	}
 }
