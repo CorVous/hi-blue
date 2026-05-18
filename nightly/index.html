@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<title>hi-blue · BBS terminal</title>
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+		<link rel="stylesheet" href="./assets/index-6MJIYIUD.css" />
+	</head>
+	<body>
+		<div id="stage">
+			<header>
+				<span class="mobile-title" aria-hidden="true">HI-<span class="banner-blue">BLUE</span></span>
+				<button id="sessions-icon" type="button" aria-label="Sessions" title="Sessions">[ ls ]</button>
+				<button id="byok-cog" type="button" aria-label="Settings" title="Settings">[ cfg ]</button>
+			</header>
+			<pre class="banner" id="banner" aria-hidden="true"></pre>
+			<div id="topinfo" class="topinfo">
+				<span id="topinfo-left"></span>
+				<span id="topinfo-mobile"></span>
+				<span id="topinfo-mobile-status" aria-hidden="true"><span class="ok"> ● stable</span></span>
+				<span id="topinfo-right"></span>
+			</div>
+			<main>
+				<section id="start-screen" hidden>
+					<pre id="dial" class="dial" aria-hidden="true"></pre>
+					<div id="login-reveal" class="login-reveal" hidden>
+						<pre class="banner-login banner-login-full" aria-hidden="true">   ██╗  ██╗██╗      <span class="banner-blue">██████╗ ██╗     ██╗   ██╗███████╗</span>
+   ██║  ██║██║      <span class="banner-blue">██╔══██╗██║     ██║   ██║██╔════╝</span>
+   ███████║██║█████╗<span class="banner-blue">██████╔╝██║     ██║   ██║█████╗  </span>
+   ██╔══██║██║╚════╝<span class="banner-blue">██╔══██╗██║     ██║   ██║██╔══╝  </span>
+   ██║  ██║██║      <span class="banner-blue">██████╔╝███████╗╚██████╔╝███████╗</span>
+   ╚═╝  ╚═╝╚═╝      <span class="banner-blue">╚═════╝ ╚══════╝ ╚═════╝ ╚══════╝</span></pre>
+						<pre class="banner-login banner-login-mini" aria-hidden="true"> ██╗  ██╗██╗ ▄▄ <span class="banner-blue">██████╗ ██╗    ██╗   ██╗███████╗</span>
+ ██║  ██║██║    <span class="banner-blue">██╔══██╗██║    ██║   ██║██╔════╝</span>
+ ███████║██║▄▄▄▄<span class="banner-blue">██████╔╝██║    ██║   ██║█████╗  </span>
+ ██╔══██║██║    <span class="banner-blue">██╔══██╗██║    ██║   ██║██╔══╝  </span>
+ ██║  ██║██║    <span class="banner-blue">██████╔╝███████╗╚█████╔╝███████╗</span>
+ ╚═╝  ╚═╝╚═╝    <span class="banner-blue">╚═════╝ ╚══════╝ ╚════╝ ╚══════╝</span></pre>
+						<div class="login-tag">// <b class="banner-blue">blue</b>'s personal bbs · est <b>1996</b> · running on a <b>486</b> in a closet</div>
+						<div class="login-rule" aria-hidden="true">─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</div>
+						<div class="login-sysinfo">
+							<div class="row"><span class="k">sysop</span> <b class="banner-blue">blue</b></div>
+							<div class="row"><span class="k">node</span> <span>01/01</span></div>
+							<div class="row"><span class="k">location</span> <span>cold storage</span></div>
+							<div class="row"><span class="k">uptime</span> <span id="login-uptime">--d --h --m</span></div>
+						</div>
+						<div class="login-rule" aria-hidden="true">─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</div>
+						<div class="login-frame">
+							<div class="login-frame-brow"><span>┌──[ </span><span>last visit</span><span> ]──</span><span class="fill">─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</span><span class="corner-r">┐</span></div>
+							<div class="login-frame-body">
+								<span class="side">│
+│
+│</span>
+								<div class="inner"><span class="who">02:14</span> prior · <span class="banner-blue">&gt; @blue</span> <span class="dim">treat them well</span></div>
+								<span class="side">│
+│
+│</span>
+							</div>
+							<div class="login-frame-brow"><span>└</span><span class="fill">──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</span><span class="corner-r">┘</span></div>
+						</div>
+						<pre id="login-keyart" class="login-keyart" aria-hidden="true"></pre>
+						<form id="login-form" class="login-form" autocomplete="off">
+							<div class="login-field">
+								<label class="lbl" for="password">password:</label>
+								<input id="password" type="text" maxlength="32" autocomplete="off" spellcheck="false" data-real="" />
+								<button id="begin" class="login-connect" type="submit" disabled>[ CONNECT ]</button>
+							</div>
+							<output id="login-error" class="login-error" role="status" aria-live="polite" hidden></output>
+						</form>
+						<pre id="login-postlog" class="dial dial-postlog" aria-hidden="true"></pre>
+					</div>
+				</section>
+				<section id="sessions-screen" hidden>
+					<aside id="sessions-banner" hidden role="status" aria-live="polite"></aside>
+					<div id="sessions-list"></div>
+					<button id="sessions-new" type="button">[ + new session ]</button>
+				</section>
+				<div id="phase-banner" hidden></div>
+				<div id="panels" class="row">
+					<article class="ai-panel panel">
+						<div class="brow brow-top">
+							<span class="corner corner-tl"></span>
+							<span class="brow-label panel-name"></span>
+							<span class="brow-fill brow-fill-thin"></span>
+							<span class="brow-fill brow-fill-heavy"></span>
+							<span class="corner corner-tr"></span>
+						</div>
+						<div class="body">
+							<span class="side side-left side-thin"></span>
+							<span class="side side-left side-heavy"></span>
+							<div class="panel-content">
+								<div class="panel-meta dim"><span class="panel-budget" data-budget=""></span></div>
+								<div class="scroll"><div class="transcript" data-transcript=""></div></div>
+							</div>
+							<span class="side side-right side-thin"></span>
+							<span class="side side-right side-heavy"></span>
+						</div>
+						<div class="brow brow-bot">
+							<span class="corner corner-bl"></span>
+							<span class="brow-label panel-name"></span>
+							<span class="brow-fill brow-fill-thin"></span>
+							<span class="brow-fill brow-fill-heavy"></span>
+							<span class="corner corner-br"></span>
+						</div>
+					</article>
+					<article class="ai-panel panel">
+						<div class="brow brow-top">
+							<span class="corner corner-tl"></span>
+							<span class="brow-label panel-name"></span>
+							<span class="brow-fill brow-fill-thin"></span>
+							<span class="brow-fill brow-fill-heavy"></span>
+							<span class="corner corner-tr"></span>
+						</div>
+						<div class="body">
+							<span class="side side-left side-thin"></span>
+							<span class="side side-left side-heavy"></span>
+							<div class="panel-content">
+								<div class="panel-meta dim"><span class="panel-budget" data-budget=""></span></div>
+								<div class="scroll"><div class="transcript" data-transcript=""></div></div>
+							</div>
+							<span class="side side-right side-thin"></span>
+							<span class="side side-right side-heavy"></span>
+						</div>
+						<div class="brow brow-bot">
+							<span class="corner corner-bl"></span>
+							<span class="brow-label panel-name"></span>
+							<span class="brow-fill brow-fill-thin"></span>
+							<span class="brow-fill brow-fill-heavy"></span>
+							<span class="corner corner-br"></span>
+						</div>
+					</article>
+					<article class="ai-panel panel">
+						<div class="brow brow-top">
+							<span class="corner corner-tl"></span>
+							<span class="brow-label panel-name"></span>
+							<span class="brow-fill brow-fill-thin"></span>
+							<span class="brow-fill brow-fill-heavy"></span>
+							<span class="corner corner-tr"></span>
+						</div>
+						<div class="body">
+							<span class="side side-left side-thin"></span>
+							<span class="side side-left side-heavy"></span>
+							<div class="panel-content">
+								<div class="panel-meta dim"><span class="panel-budget" data-budget=""></span></div>
+								<div class="scroll"><div class="transcript" data-transcript=""></div></div>
+							</div>
+							<span class="side side-right side-thin"></span>
+							<span class="side side-right side-heavy"></span>
+						</div>
+						<div class="brow brow-bot">
+							<span class="corner corner-bl"></span>
+							<span class="brow-label panel-name"></span>
+							<span class="brow-fill brow-fill-thin"></span>
+							<span class="brow-fill brow-fill-heavy"></span>
+							<span class="corner corner-br"></span>
+						</div>
+					</article>
+				</div>
+				<form id="composer" class="cmd">
+					<span class="prompt-prefix"><span class="prompt-host"><b>root</b><span class="at">@</span>hi-blue:</span><span class="prompt-target">/?????</span><span class="at">&gt; </span></span>
+					<div class="prompt-wrap">
+						<div id="prompt-overlay" aria-hidden="true"></div>
+						<input id="prompt" type="text" placeholder="" autocomplete="off" spellcheck="false" />
+					</div>
+					<output id="lockout-error" class="lockout-error" role="status" aria-live="polite" hidden></output>
+					<output id="round-error" class="round-error" role="status" aria-live="polite" hidden></output>
+					<button id="send" class="send" type="submit">[ tx ]</button>
+				</form>
+				<section id="cap-hit" hidden>
+					<h2>the AIs are sleeping</h2>
+					<pre class="cap-hit-body">the AIs are sleeping.
+come back tomorrow — they wake at midnight UTC.</pre>
+					<p class="cap-hit-byok"><a href="#/byok" data-byok-placeholder>or paste your own OpenRouter key to keep playing — coming soon.</a></p>
+				</section>
+				<section id="bootstrap-recovery" hidden>
+					<h2 id="bootstrap-recovery-title"></h2>
+					<pre id="bootstrap-recovery-body" class="cap-hit-body"></pre>
+					<div class="bootstrap-recovery-actions">
+						<button type="button" id="bootstrap-recovery-regen">[ regenerate world ]</button>
+						<a id="bootstrap-recovery-abandon" href="#/start?reason=broken">abandon and reconnect</a>
+					</div>
+				</section>
+				<aside id="persistence-warning" hidden role="status" aria-live="polite"></aside>
+				<aside id="action-log" hidden>
+					<h3>action_log :: debug</h3>
+					<ul id="action-log-list"></ul>
+				</aside>
+				<section id="endgame" hidden>
+					<h2>hi-blue — endgame</h2>
+					<div id="endgame-subtitle">The three phases are complete. The room is still.</div>
+					<div id="endgame-choices" class="endgame-section">
+						<button type="button" id="endgame-new-daemons-btn">[ new daemons ]</button>
+						<button type="button" id="endgame-same-daemons-btn">[ same daemons, new room ]</button>
+						<button type="button" id="endgame-continue-btn" hidden>[ continue ]</button>
+						<output id="endgame-choice-status" aria-live="polite"></output>
+					</div>
+					<div class="endgame-section">
+						<h3>save the AIs to USB</h3>
+						<p>Download a file containing each AI's persona and the full transcript of your time together.</p>
+						<button type="button" id="download-ais-btn">[ download AIs ]</button>
+						<output id="download-status" aria-live="polite"></output>
+					</div>
+					<div class="endgame-section">
+						<h3>submit anonymous diagnostics</h3>
+						<p>Optional. Help the developer understand how the game landed. No identifying data is collected.</p>
+						<input type="text" id="diagnostics-summary" placeholder="one word (e.g. curious)" aria-label="One-word engagement summary" maxlength="30" />
+						<button type="button" id="submit-diagnostics-btn">[ submit ]</button>
+						<output id="diagnostics-status" aria-live="polite"></output>
+					</div>
+				</section>
+			</main>
+		</div>
+		<dialog id="byok-dialog" aria-labelledby="byok-title">
+			<form method="dialog" id="byok-form">
+				<h2 id="byok-title">OpenRouter API Key</h2>
+				<p id="byok-build-info" hidden></p>
+				<p id="byok-mode-line"></p>
+				<label for="byok-key-input">API key</label>
+				<input id="byok-key-input" type="password" autocomplete="off" spellcheck="false" />
+				<p id="byok-status" role="status" aria-live="polite"></p>
+				<div id="byok-buttons">
+					<button id="byok-validate-save" type="button">[ validate &amp; save ]</button>
+					<button id="byok-save-unverified" type="button" hidden>[ save unverified ]</button>
+					<button id="byok-revalidate" type="button" hidden>[ re-validate ]</button>
+					<button id="byok-replace" type="button" hidden>[ replace key ]</button>
+					<button id="byok-clear" type="button" hidden>[ clear key &amp; use free tier ]</button>
+				</div>
+				<button id="byok-close" type="button" aria-label="Close">[ close ]</button>
+			</form>
+		</dialog>
+		<script type="module" src="./assets/index-OWS5IZAR.js"></script>
+	</body>
+</html>
