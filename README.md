@@ -2,7 +2,7 @@
 
 ## Play
 
-The canonical play URL is **https://corvous.github.io/hi-blue/** (GitHub Pages).
+The canonical play URL is **https://hi-blue.cor.gg/** (Cloudflare Pages).
 
 The Cloudflare Worker is API-only (`POST /v1/chat/completions`, `POST /diagnostics`,
 and `OPTIONS` preflights). It does not serve the game UI; the SPA is built and
