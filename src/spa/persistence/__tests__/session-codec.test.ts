@@ -715,6 +715,160 @@ describe("serializeSession / deserializeSession", () => {
 		}
 	});
 
+	it("v8 save chains through to current: wallName defaulted alongside pack truncation", () => {
+		// v8 saves had neither wallName (v10 addition) nor single-pack arrays
+		// (v9 change). Chained migration must apply both fixes.
+		const game = makeFreshGame();
+		const packNoWall = {
+			setting: "v8 setting",
+			weather: "sunny",
+			timeOfDay: "noon",
+			objectivePairs: [],
+			interestingObjects: [] as WorldEntity[],
+			obstacles: [] as WorldEntity[],
+			landmarks: DEFAULT_LANDMARKS,
+			aiStarts: {},
+		};
+		const v8SealedPayload = {
+			schemaVersion: 8,
+			world: game.world,
+			budgets: game.budgets,
+			lockedOut: Array.from(game.lockedOut),
+			personaSpatial: game.personaSpatial,
+			contentPacksA: [packNoWall, packNoWall, packNoWall],
+			contentPacksB: [packNoWall, packNoWall, packNoWall],
+			activePackId: "A" as const,
+			weather: game.weather,
+			objectives: game.objectives,
+			complicationSchedule: game.complicationSchedule,
+			activeComplications: game.activeComplications,
+			isComplete: game.isComplete,
+		};
+		const engine = obfuscate(JSON.stringify(v8SealedPayload));
+		const meta = JSON.stringify({
+			createdAt: CREATED_AT,
+			lastSavedAt: NOW,
+			epoch: 1,
+			round: 0,
+			personaOrder: Object.keys(game.personas),
+		});
+		const daemons: Record<AiId, string> = {};
+		for (const [aiId, persona] of Object.entries(game.personas)) {
+			const daemonFile: DaemonFile = { aiId, persona, conversationLog: [] };
+			daemons[aiId] = JSON.stringify(daemonFile);
+		}
+
+		const result = deserializeSession({ meta, daemons, engine });
+		expect(result.kind).toBe("ok");
+		if (result.kind === "ok") {
+			expect(result.state.contentPacksA).toHaveLength(1);
+			expect(result.state.contentPacksB).toHaveLength(1);
+			expect(result.state.contentPacksA[0]?.wallName).toBe("");
+			expect(result.state.contentPacksB[0]?.wallName).toBe("");
+		}
+	});
+
+	it("v9 save without wallName is migrated to v10 by defaulting wallName to empty string", () => {
+		const game = makeFreshGame();
+		const packNoWall = {
+			setting: "v9 setting",
+			weather: "stormy",
+			timeOfDay: "dusk",
+			objectivePairs: [],
+			interestingObjects: [] as WorldEntity[],
+			obstacles: [] as WorldEntity[],
+			landmarks: DEFAULT_LANDMARKS,
+			aiStarts: {},
+		};
+		const v9SealedPayload = {
+			schemaVersion: 9,
+			world: game.world,
+			budgets: game.budgets,
+			lockedOut: Array.from(game.lockedOut),
+			personaSpatial: game.personaSpatial,
+			contentPacksA: [packNoWall],
+			contentPacksB: [packNoWall],
+			activePackId: "A" as const,
+			weather: game.weather,
+			objectives: game.objectives,
+			complicationSchedule: game.complicationSchedule,
+			activeComplications: game.activeComplications,
+			isComplete: game.isComplete,
+		};
+		const engine = obfuscate(JSON.stringify(v9SealedPayload));
+		const meta = JSON.stringify({
+			createdAt: CREATED_AT,
+			lastSavedAt: NOW,
+			epoch: 1,
+			round: 0,
+			personaOrder: Object.keys(game.personas),
+		});
+		const daemons: Record<AiId, string> = {};
+		for (const [aiId, persona] of Object.entries(game.personas)) {
+			const daemonFile: DaemonFile = { aiId, persona, conversationLog: [] };
+			daemons[aiId] = JSON.stringify(daemonFile);
+		}
+
+		const result = deserializeSession({ meta, daemons, engine });
+		expect(result.kind).toBe("ok");
+		if (result.kind === "ok") {
+			expect(result.state.contentPacksA[0]?.wallName).toBe("");
+			expect(result.state.contentPacksB[0]?.wallName).toBe("");
+			expect(result.state.contentPacksA[0]?.setting).toBe("v9 setting");
+		}
+	});
+
+	it("v9 save preserves an existing string wallName if present", () => {
+		const game = makeFreshGame();
+		const pack: ContentPack = {
+			setting: "v9 with wall",
+			weather: "clear",
+			timeOfDay: "noon",
+			objectivePairs: [],
+			interestingObjects: [],
+			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
+			wallName: "salt-encrusted edge",
+			aiStarts: {},
+		};
+		const v9SealedPayload = {
+			schemaVersion: 9,
+			world: game.world,
+			budgets: game.budgets,
+			lockedOut: Array.from(game.lockedOut),
+			personaSpatial: game.personaSpatial,
+			contentPacksA: [pack],
+			contentPacksB: [pack],
+			activePackId: "A" as const,
+			weather: game.weather,
+			objectives: game.objectives,
+			complicationSchedule: game.complicationSchedule,
+			activeComplications: game.activeComplications,
+			isComplete: game.isComplete,
+		};
+		const engine = obfuscate(JSON.stringify(v9SealedPayload));
+		const meta = JSON.stringify({
+			createdAt: CREATED_AT,
+			lastSavedAt: NOW,
+			epoch: 1,
+			round: 0,
+			personaOrder: Object.keys(game.personas),
+		});
+		const daemons: Record<AiId, string> = {};
+		for (const [aiId, persona] of Object.entries(game.personas)) {
+			const daemonFile: DaemonFile = { aiId, persona, conversationLog: [] };
+			daemons[aiId] = JSON.stringify(daemonFile);
+		}
+
+		const result = deserializeSession({ meta, daemons, engine });
+		expect(result.kind).toBe("ok");
+		if (result.kind === "ok") {
+			expect(result.state.contentPacksA[0]?.wallName).toBe(
+				"salt-encrusted edge",
+			);
+		}
+	});
+
 	it("round-trips correctly with flat state (no phase config re-attachment needed)", () => {
 		// In the flat model (#295), there are no nextPhaseConfig / winCondition
 		// fields to re-attach. The round-trip should still succeed.
