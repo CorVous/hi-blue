@@ -68,11 +68,16 @@ describe("dispatchActiveSession — five-state truth table", () => {
 	it("Row 5 — version-mismatch load result → #/sessions, version-mismatch, needsMint false", () => {
 		const snapshot: DispatcherSnapshot = {
 			activeSessionId: "0xABCD",
-			loadResult: { kind: "version-mismatch", sessionId: "0xABCD" },
+			loadResult: {
+				kind: "version-mismatch",
+				sessionId: "0xABCD",
+				schemaVersion: 9,
+			},
 		};
 		const verdict = dispatchActiveSession(snapshot);
 		expect(verdict.route).toBe("#/sessions");
 		expect(verdict.reason).toBe("version-mismatch");
 		expect(verdict.needsMint).toBe(false);
+		expect(verdict.schemaVersion).toBe(9);
 	});
 });

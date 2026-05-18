@@ -93,3 +93,31 @@ jobs:
           publish_dir: ./dist
           destination_dir: v/${{ steps.path.outputs.version_path }}
           keep_files: true
+
+      - name: Check if highest stable
+        id: stable_check
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          PUSHED="${TAG}"
+          if [[ ! "$PUSHED" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "is_highest=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          HIGHEST=$(git tag --list 'v*' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -V | tail -1)
+          if [ "$PUSHED" = "$HIGHEST" ]; then
+            echo "is_highest=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_highest=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy to root (latest stable mirror)
+        if: steps.stable_check.outputs.is_highest == 'true'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          destination_dir: ''
+          keep_files: true

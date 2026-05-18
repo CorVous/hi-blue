@@ -76,7 +76,7 @@ export type LoadResult =
 			epoch: number;
 	  }
 	| { kind: "broken"; sessionId: string }
-	| { kind: "version-mismatch"; sessionId: string };
+	| { kind: "version-mismatch"; sessionId: string; schemaVersion: number };
 
 // ── Session ID ────────────────────────────────────────────────────────────────
 
@@ -337,7 +337,11 @@ function _loadSessionById(
 			};
 		}
 		if (result.kind === "version-mismatch") {
-			return { kind: "version-mismatch", sessionId };
+			return {
+				kind: "version-mismatch",
+				sessionId,
+				schemaVersion: result.schemaVersion,
+			};
 		}
 		return { kind: "broken", sessionId };
 	} catch {

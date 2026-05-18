@@ -73,6 +73,10 @@ import {
  * v10 (issue #374): add `wallName` to `ContentPack`.
  *   - Old v9 saves have no `wallName`; version-mismatch result (consistent
  *     with v7/v8 policy — no migration provided).
+ *
+ * Bumping this constant requires either a `migrateV<old>To...` function below
+ * or a new entry in `SCHEMA_ARCHIVE_MAP` (see AGENTS.md → "Bumping
+ * SESSION_SCHEMA_VERSION"). `scripts/check-schema-map.mjs` enforces this on PRs.
  */
 export const SESSION_SCHEMA_VERSION = 10 as const;
 
@@ -148,7 +152,7 @@ export type DeserializeResult =
 			epoch: number;
 	  }
 	| { kind: "broken" }
-	| { kind: "version-mismatch" };
+	| { kind: "version-mismatch"; schemaVersion: number };
 
 // ── serializeSession ──────────────────────────────────────────────────────────
 
@@ -272,7 +276,9 @@ export function deserializeSession(
 	if ((sealed as { schemaVersion: number }).schemaVersion === 8) {
 		sealed = migrateV8ToV9(sealed);
 	} else if (sealed.schemaVersion !== SESSION_SCHEMA_VERSION) {
-		return { kind: "version-mismatch" };
+		const sv = Number(sealed.schemaVersion);
+		if (!Number.isFinite(sv)) return { kind: "broken" };
+		return { kind: "version-mismatch", schemaVersion: sv };
 	}
 
 	// Parse meta.json

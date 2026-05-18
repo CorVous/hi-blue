@@ -25,3 +25,21 @@ The pinned model is `z-ai/glm-4.7` (`src/model.ts`). Daemon system prompts are a
 ### Commit messages
 
 We follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/#specification). Squash-merge PR titles are the source of truth — `changelogen` parses them to bump the version and write `CHANGELOG.md`. See `docs/agents/commits.md`.
+
+## Bumping SESSION_SCHEMA_VERSION
+
+When you bump SESSION_SCHEMA_VERSION in
+`src/spa/persistence/session-codec.ts`, you must do ONE of:
+
+- **Add a migrateV<old>To... function** in session-codec.ts so old
+  saves migrate in place. No further action needed.
+- **Add an entry to SCHEMA_ARCHIVE_MAP** in
+  `src/spa/persistence/archive-map.ts` mapping the OLD schema number to
+  the latest released version that shipped it. Find that version with:
+
+      git describe --tags --abbrev=0 --match 'v*' HEAD~1
+
+If the schema bumps twice without a release in between, the
+intermediate schema number was never shipped — skip its map entry.
+
+`scripts/check-schema-map.mjs` enforces this on PRs.

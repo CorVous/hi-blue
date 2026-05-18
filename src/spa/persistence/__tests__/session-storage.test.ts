@@ -303,6 +303,9 @@ describe("loadActiveSession", () => {
 
 		const result = loadActiveSession();
 		expect(result.kind).toBe("version-mismatch");
+		if (result.kind === "version-mismatch") {
+			expect(result.schemaVersion).toBe(999);
+		}
 	});
 
 	it("save → load round-trip returns ok with correct state", () => {

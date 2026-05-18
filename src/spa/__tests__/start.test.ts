@@ -452,14 +452,18 @@ describe("renderStart — persistence warning banners", () => {
 		);
 	});
 
-	it("shows 'version-mismatch' banner text when reason=version-mismatch", async () => {
+	it("shows 'version-mismatch' map-miss banner text when no archive entry exists", async () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 		vi.resetModules();
+		// Default SCHEMA_ARCHIVE_MAP is empty — any schemaVersion is a miss.
 		const { renderStart } = await import("../routes/start.js");
 
 		setSearch("skipDialup=1");
 		try {
-			await renderStart(getMain(), { reason: "version-mismatch" });
+			await renderStart(getMain(), {
+				reason: "version-mismatch",
+				schemaVersion: 9,
+			});
 		} catch {
 			// ok
 		}
@@ -471,6 +475,43 @@ describe("renderStart — persistence warning banners", () => {
 		expect(warningEl?.textContent).toContain(
 			"Saved game data is from an older version and has been discarded",
 		);
+		// Map miss: no anchor.
+		expect(warningEl?.querySelector("a")).toBeNull();
+	});
+
+	it("shows 'version-mismatch' map-hit banner with archive link when entry exists", async () => {
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.resetModules();
+		// Inject a test-only entry into SCHEMA_ARCHIVE_MAP before the route runs.
+		const archiveMapModule = await import("../persistence/archive-map.js");
+		archiveMapModule.SCHEMA_ARCHIVE_MAP[9] = "0.1.1";
+		try {
+			const { renderStart } = await import("../routes/start.js");
+
+			setSearch("skipDialup=1");
+			try {
+				await renderStart(getMain(), {
+					reason: "version-mismatch",
+					schemaVersion: 9,
+				});
+			} catch {
+				// ok
+			}
+
+			const warningEl = document.querySelector<HTMLElement>(
+				"#persistence-warning",
+			);
+			expect(warningEl?.hasAttribute("hidden")).toBe(false);
+			expect(warningEl?.textContent).toContain(
+				"Your saved Session is from an older version of hi-blue",
+			);
+			expect(warningEl?.textContent).toContain("v0.1.1");
+			const link = warningEl?.querySelector("a");
+			expect(link).not.toBeNull();
+			expect(link?.getAttribute("href")).toBe("./v/0.1.1/");
+		} finally {
+			delete archiveMapModule.SCHEMA_ARCHIVE_MAP[9];
+		}
 	});
 
 	it("shows 'legacy-save-discarded' banner text when reason=legacy-save-discarded", async () => {

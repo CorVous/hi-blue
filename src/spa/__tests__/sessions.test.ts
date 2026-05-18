@@ -251,6 +251,30 @@ describe("renderSessions — banner", () => {
 		expect(banner?.textContent).toContain("older version");
 	});
 
+	it("?reason=version-mismatch with map-hit schemaVersion renders archive link", async () => {
+		vi.resetModules();
+		const archiveMapModule = await import("../persistence/archive-map.js");
+		archiveMapModule.SCHEMA_ARCHIVE_MAP[9] = "0.1.1";
+		try {
+			const { renderSessions } = await import("../routes/sessions.js");
+			renderSessions(getMain(), {
+				reason: "version-mismatch",
+				schemaVersion: 9,
+			});
+			const banner = document.querySelector<HTMLElement>("#sessions-banner");
+			expect(banner?.hidden).toBe(false);
+			expect(banner?.textContent).toContain(
+				"Your saved Session is from an older version",
+			);
+			expect(banner?.textContent).toContain("v0.1.1");
+			const link = banner?.querySelector("a");
+			expect(link).not.toBeNull();
+			expect(link?.getAttribute("href")).toBe("./v/0.1.1/");
+		} finally {
+			delete archiveMapModule.SCHEMA_ARCHIVE_MAP[9];
+		}
+	});
+
 	it("no reason param => banner hidden", async () => {
 		vi.resetModules();
 		const { renderSessions } = await import("../routes/sessions.js");

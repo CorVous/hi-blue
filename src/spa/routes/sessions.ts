@@ -18,6 +18,7 @@
  */
 
 import { paintBanner, paintTopInfo } from "../bbs-chrome.js";
+import { lookupArchiveVersion } from "../persistence/archive-map.js";
 import {
 	dupSession,
 	getActiveSessionId,
@@ -40,8 +41,36 @@ import { type RenderOpts, renderApp, setPickerOpen } from "../render-app.js";
 export const SESSIONS_BANNER_MESSAGES: Record<string, string> = {
 	broken: "The active Session was unreadable and could not be loaded.",
 	"version-mismatch":
-		"The active Session is from an older version of hi-blue and could not be loaded.",
+		"Saved game data is from an older version and has been discarded. Starting a new game.",
 };
+
+/**
+ * Paint the version-mismatch banner. When the schema number maps to a known
+ * archived release, the banner offers a link to `./v/<version>/` so the user
+ * can continue their Session in the build that last understood its schema.
+ */
+function renderVersionMismatchBanner(
+	doc: Document,
+	bannerEl: HTMLElement,
+	schemaVersion: number | undefined,
+): void {
+	bannerEl.textContent = "";
+	const archivedVersion = lookupArchiveVersion(schemaVersion);
+	if (archivedVersion === null) {
+		bannerEl.textContent = SESSIONS_BANNER_MESSAGES["version-mismatch"] ?? "";
+		return;
+	}
+	bannerEl.appendChild(
+		doc.createTextNode(
+			"Your saved Session is from an older version of hi-blue. Continue it in ",
+		),
+	);
+	const link = doc.createElement("a");
+	link.href = `./v/${archivedVersion}/`;
+	link.textContent = `v${archivedVersion} →`;
+	bannerEl.appendChild(link);
+	bannerEl.appendChild(doc.createTextNode(", or start a new Session below."));
+}
 
 // ── Visibility helpers ──────────────────────────────────────────────────────────
 
@@ -116,7 +145,10 @@ export function renderSessions(root: HTMLElement, opts?: RenderOpts): void {
 	const bannerEl = doc.querySelector<HTMLElement>("#sessions-banner");
 	const reason = opts?.reason ?? null;
 	if (bannerEl) {
-		if (reason && SESSIONS_BANNER_MESSAGES[reason]) {
+		if (reason === "version-mismatch") {
+			renderVersionMismatchBanner(doc, bannerEl, opts?.schemaVersion);
+			bannerEl.hidden = false;
+		} else if (reason && SESSIONS_BANNER_MESSAGES[reason]) {
 			bannerEl.textContent = SESSIONS_BANNER_MESSAGES[reason] ?? "";
 			bannerEl.hidden = false;
 		} else {
