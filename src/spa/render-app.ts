@@ -31,6 +31,13 @@ export type RenderReason = DispatcherReason | "legacy-save-discarded" | "stuck";
 
 export interface RenderOpts {
 	reason?: RenderReason | null;
+	/**
+	 * The schema version embedded in the saved session that triggered a
+	 * version-mismatch. Threaded through from the dispatcher so the banner
+	 * can look up the archived build URL (see archive-map.ts). Only meaningful
+	 * when reason === "version-mismatch".
+	 */
+	schemaVersion?: number;
 }
 
 export type ViewRenderer = (
@@ -117,7 +124,20 @@ export function renderApp(
 		delete root.dataset.reason;
 	}
 
+	// Thread schemaVersion through to the route when the effective reason is
+	// version-mismatch. Explicit opts.schemaVersion (e.g. game.ts passing it
+	// through after clearActiveSession) wins over the dispatcher-derived value.
+	let effectiveSchemaVersion: number | undefined;
+	if (effectiveReason === "version-mismatch") {
+		effectiveSchemaVersion = opts?.schemaVersion ?? verdict.schemaVersion;
+	}
+
 	const renderer = renderers.get(view);
 	if (!renderer) return;
-	return renderer(root, { reason: effectiveReason });
+	return renderer(root, {
+		reason: effectiveReason,
+		...(effectiveSchemaVersion !== undefined
+			? { schemaVersion: effectiveSchemaVersion }
+			: {}),
+	});
 }

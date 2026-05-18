@@ -617,6 +617,21 @@ describe("serializeSession / deserializeSession", () => {
 		const tampered = obfuscate(JSON.stringify(sealed));
 		const result = deserializeSession({ ...files, engine: tampered });
 		expect(result.kind).toBe("version-mismatch");
+		if (result.kind === "version-mismatch") {
+			expect(result.schemaVersion).toBe(5);
+		}
+	});
+
+	it("version-mismatch: non-numeric schemaVersion → broken (NaN guard)", () => {
+		const game = makeFreshGame();
+		const files = serializeSession(game, NOW, CREATED_AT);
+		if (!files.engine) throw new Error("engine should not be null");
+		const rawJson = deobfuscate(files.engine);
+		const sealed = JSON.parse(rawJson);
+		sealed.schemaVersion = "not-a-number";
+		const tampered = obfuscate(JSON.stringify(sealed));
+		const result = deserializeSession({ ...files, engine: tampered });
+		expect(result.kind).toBe("broken");
 	});
 
 	it("v8 save with multi-entry contentPacksA/B is migrated to v9 by truncating to first entry", () => {

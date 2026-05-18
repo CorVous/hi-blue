@@ -952,8 +952,15 @@ export function renderGame(
 					loadResult.kind === "version-mismatch"
 						? "version-mismatch"
 						: "broken";
+				const schemaVersion =
+					loadResult.kind === "version-mismatch"
+						? loadResult.schemaVersion
+						: undefined;
 				clearActiveSession();
-				renderApp(root, { reason: reasonParam });
+				renderApp(root, {
+					reason: reasonParam,
+					...(schemaVersion !== undefined ? { schemaVersion } : {}),
+				});
 				return Promise.resolve();
 			}
 		}

@@ -27,6 +27,8 @@ export interface DispatcherVerdict {
 	route: "#/start" | "#/game" | "#/sessions";
 	reason: DispatcherReason;
 	needsMint: boolean;
+	/** Populated only when reason === "version-mismatch". */
+	schemaVersion?: number;
 }
 
 export interface DispatcherSnapshot {
@@ -66,6 +68,7 @@ export function dispatchActiveSession(
 				route: "#/sessions",
 				reason: "version-mismatch",
 				needsMint: false,
+				schemaVersion: loadResult.schemaVersion,
 			};
 	}
 }

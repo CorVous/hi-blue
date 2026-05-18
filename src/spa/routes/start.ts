@@ -30,6 +30,7 @@ import {
 	startBootstrap,
 } from "../game/pending-bootstrap.js";
 import { getSpikeRng, setSpikeSeed } from "../game/spike-seed.js";
+import { lookupArchiveVersion } from "../persistence/archive-map.js";
 import { type RenderOpts, renderApp } from "../render-app.js";
 
 /** Warning reason strings shown in the persistence warning banner. */
@@ -43,6 +44,36 @@ export const PERSISTENCE_WARNING_MESSAGES: Record<string, string> = {
 	stuck:
 		"Game initialization took too long and was cancelled. Starting a new game.",
 };
+
+/**
+ * Render the version-mismatch banner. When the schema number maps to a known
+ * archived release, the banner offers a link to `./v/<version>/` so the user
+ * can continue their Session in the build that last understood its schema.
+ * Otherwise we fall back to the plain "discarded" copy.
+ */
+function renderVersionMismatchBanner(
+	doc: Document,
+	bannerEl: HTMLElement,
+	schemaVersion: number | undefined,
+): void {
+	bannerEl.textContent = "";
+	const archivedVersion = lookupArchiveVersion(schemaVersion);
+	if (archivedVersion === null) {
+		bannerEl.textContent =
+			PERSISTENCE_WARNING_MESSAGES["version-mismatch"] ?? "";
+		return;
+	}
+	bannerEl.appendChild(
+		doc.createTextNode(
+			"Your saved Session is from an older version of hi-blue. Continue it in ",
+		),
+	);
+	const link = doc.createElement("a");
+	link.href = `./v/${archivedVersion}/`;
+	link.textContent = `v${archivedVersion} →`;
+	bannerEl.appendChild(link);
+	bannerEl.appendChild(doc.createTextNode(", or start a new Session below."));
+}
 
 /** The password that gates entry. */
 const ACCEPTED_PASSWORD = "password";
@@ -293,8 +324,16 @@ export function renderStart(
 			"#persistence-warning",
 		);
 		if (persistenceWarningEl) {
-			persistenceWarningEl.textContent =
-				PERSISTENCE_WARNING_MESSAGES[reason] ?? "";
+			if (reason === "version-mismatch") {
+				renderVersionMismatchBanner(
+					doc,
+					persistenceWarningEl,
+					opts?.schemaVersion,
+				);
+			} else {
+				persistenceWarningEl.textContent =
+					PERSISTENCE_WARNING_MESSAGES[reason] ?? "";
+			}
 			persistenceWarningEl.removeAttribute("hidden");
 		}
 	}
