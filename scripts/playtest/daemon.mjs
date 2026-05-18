@@ -82,7 +82,7 @@ if (process.env.SPIKE_PARALLEL_FRAMING) {
 if (process.env.SPIKE_ENGAGEMENT_CLAUSES) {
 	extras.push(`engagementClauses=${process.env.SPIKE_ENGAGEMENT_CLAUSES}`);
 }
-const startUrl = `http://localhost:8787/?skipDialup=1${extras.length ? `&${extras.join("&")}` : ""}`;
+const startUrl = `http://localhost:8787/?skipDialup=1&winImmediately=1${extras.length ? `&${extras.join("&")}` : ""}`;
 log(`navigating to ${startUrl}`);
 await page.goto(startUrl, {
 	waitUntil: "domcontentloaded",
