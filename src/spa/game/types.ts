@@ -2,6 +2,14 @@ import type { CardinalDirection, GridPosition } from "./direction.js";
 
 export type { CardinalDirection, GridPosition };
 
+export type ObjectiveType = "carry" | "use_space" | "use_item" | "convergence";
+export const OBJECTIVE_TYPES: readonly ObjectiveType[] = [
+	"carry",
+	"use_space",
+	"use_item",
+	"convergence",
+] as const;
+
 export type AiId = string;
 
 export interface AiPersona {
