@@ -133,6 +133,14 @@ header {
 	display: none;
 }
 
+/* Banner row: banner + dev world map side by side */
+#banner-row {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	min-width: 0;
+}
+
 /* Banner */
 .banner {
 	margin: 0;
@@ -1362,6 +1370,10 @@ main {
 		gap: 6px;
 	}
 
+	#banner-row {
+		display: none;
+	}
+
 	.banner {
 		display: none;
 	}
@@ -1688,9 +1700,17 @@ main {
 	color: var(--amber);
 }
 
-#dev-game-strip,
-#dev-world-map {
+#dev-game-strip {
 	margin-top: 8px;
+	padding: 6px 8px;
+	border: 1px dashed rgba(255, 180, 84, 0.3);
+	color: var(--amber-dim);
+	font-family: var(--mono);
+	font-size: 11px;
+	min-height: 16px;
+}
+
+#dev-world-map {
 	padding: 6px 8px;
 	border: 1px dashed rgba(255, 180, 84, 0.3);
 	color: var(--amber-dim);
