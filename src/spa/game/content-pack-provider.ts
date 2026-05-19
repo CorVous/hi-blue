@@ -447,6 +447,51 @@ export function examineMentionsUseTell(examineDescription: string): boolean {
 }
 
 /**
+ * Returns the use-cue keywords that appear in `examineDescription`. Used by
+ * the corrective-feedback path so the LLM is told *which* word tripped the
+ * "must NOT contain a use-cue keyword" decoy rule, rather than having to
+ * guess from the system-prompt list.
+ */
+export function findMatchedUseTellKeywords(
+	examineDescription: string,
+): string[] {
+	const tokens = examineDescription.toLowerCase().match(/[a-z]+/g) ?? [];
+	if (tokens.length === 0) return [];
+	const tokenSet = new Set(tokens);
+	const matched: string[] = [];
+	for (const kw of USE_TELL_KEYWORDS) {
+		if (tokenSet.has(kw)) matched.push(kw);
+	}
+	return matched;
+}
+
+/**
+ * Canonical base use-cue keywords inlined in corrective feedback for the
+ * "must contain a use-cue keyword" rule. Subset of USE_TELL_KEYWORDS chosen
+ * to mirror the lists enumerated in CONTENT_PACK_SYSTEM_PROMPT.
+ */
+export const USE_CUE_KEYWORD_HINTS: readonly string[] = [
+	"use",
+	"activate",
+	"press",
+	"pull",
+	"turn",
+	"trigger",
+	"engage",
+	"operate",
+	"lever",
+	"button",
+	"switch",
+	"control",
+	"panel",
+	"console",
+	"dial",
+	"knob",
+	"interact",
+	"mechanism",
+];
+
+/**
  * Convergence prose-tell strategy (issue #336):
  *
  * Convergence objectives also need an AI-discoverable signal that the
@@ -1749,38 +1794,85 @@ function sleep(ms: number): Promise<void> {
 	return new Promise((r) => setTimeout(r, ms));
 }
 
+type OuterChatMessage =
+	| { role: "system"; content: string }
+	| { role: "user"; content: string }
+	| { role: "assistant"; content: string };
+
 function buildOuterMessages(
 	systemPrompt: string,
 	userPrompt: string,
+	prevAssistant: string | null,
 	corrective: string | null,
-): Array<{ role: "system" | "user"; content: string }> {
-	const messages: Array<{ role: "system" | "user"; content: string }> = [
+): OuterChatMessage[] {
+	const messages: OuterChatMessage[] = [
 		{ role: "system", content: systemPrompt },
 		{ role: "user", content: userPrompt },
 	];
 
+	if (prevAssistant !== null) {
+		messages.push({ role: "assistant", content: prevAssistant });
+	}
+
 	if (corrective !== null) {
 		messages.push({
 			role: "user",
-			content: `Your previous attempt failed validation. Specific issues:\n${corrective}\n\nProduce a fully valid response.`,
+			content: `Your previous attempt failed validation. Specific issues:\n${corrective}\n\nProduce a fully valid response that addresses every issue above. Repair the previous JSON in-place where possible — keep entity IDs, structure, and any fields that already passed.`,
 		});
 	}
 
 	return messages;
 }
 
+function retryUnitLabel(unit: ValidationError["retryUnit"]): string {
+	switch (unit.kind) {
+		case "objective-pair":
+			return `objective pair ${unit.pairId}`;
+		case "interesting-object":
+			return `interesting object ${unit.entityId}`;
+		case "obstacle":
+			return `obstacle ${unit.entityId}`;
+		case "carry-binding":
+			return `carry binding ${unit.bindingId}`;
+		case "use-space-binding":
+			return `use-space binding ${unit.bindingId}`;
+		case "use-item-binding":
+			return `use-item binding ${unit.bindingId}`;
+		case "convergence-binding":
+			return `convergence binding ${unit.bindingId}`;
+		case "decoy":
+			return `decoy ${unit.decoyId}`;
+	}
+}
+
 function buildCorrectiveFeedback(errors: ValidationError[]): string {
-	const seen = new Set<string>();
-	const lines: string[] = [];
+	// Group by retryUnit so the LLM sees all rules for a given entity together
+	// rather than as a flat dedup'd list — easier to act on per-entity.
+	const groups = new Map<string, { label: string; messages: string[] }>();
+	const order: string[] = [];
 
 	for (const err of errors) {
-		if (!seen.has(err.message)) {
-			seen.add(err.message);
-			lines.push(err.message);
+		const key = JSON.stringify(err.retryUnit);
+		let group = groups.get(key);
+		if (!group) {
+			group = { label: retryUnitLabel(err.retryUnit), messages: [] };
+			groups.set(key, group);
+			order.push(key);
+		}
+		if (!group.messages.includes(err.message)) {
+			group.messages.push(err.message);
 		}
 	}
 
-	return lines.join("\n");
+	const sections: string[] = [];
+	for (const key of order) {
+		const group = groups.get(key);
+		if (!group) continue;
+		const bullets = group.messages.map((m) => `  - ${m}`).join("\n");
+		sections.push(`For ${group.label}:\n${bullets}`);
+	}
+
+	return sections.join("\n");
 }
 
 // ── BrowserContentPackProvider ────────────────────────────────────────────────
@@ -1800,9 +1892,9 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 	}
 
 	private async callAndParse(
-		messages: Array<{ role: "system" | "user"; content: string }>,
+		messages: OuterChatMessage[],
 		label: string,
-	): Promise<unknown> {
+	): Promise<{ parsed: unknown; raw: string }> {
 		const { content, reasoning } = await this.chatFn({
 			messages,
 			disableReasoning: this.disableReasoning,
@@ -1822,7 +1914,7 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 			throw new ContentPackError(`${label} JSON parse failed: ${raw}`);
 		}
 
-		return parsed;
+		return { parsed, raw };
 	}
 
 	async generateContentPacks(
@@ -1845,17 +1937,20 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 
 		const systemPrompt = CONTENT_PACK_SYSTEM_PROMPT;
 		let correctiveFeedback: string | null = null;
+		let prevAssistantRaw: string | null = null;
 
 		for (let outer = 0; outer < OUTER_BUDGET; outer++) {
-			let rawJson: unknown;
-
 			try {
 				const messages = buildOuterMessages(
 					systemPrompt,
 					baseUserPrompt,
+					prevAssistantRaw,
 					correctiveFeedback,
 				);
-				rawJson = await this.callAndParse(messages, "content-pack");
+				const { parsed: rawJson, raw } = await this.callAndParse(
+					messages,
+					"content-pack",
+				);
 				const validationResult = validateBoundContentPack(rawJson, schedule);
 				if (validationResult.ok) {
 					return {
@@ -1868,6 +1963,7 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 					};
 				}
 				correctiveFeedback = buildCorrectiveFeedback(validationResult.errors);
+				prevAssistantRaw = raw;
 			} catch (err) {
 				if (err instanceof CapHitError) throw err;
 				if (outer === OUTER_BUDGET - 1) throw err;
@@ -1876,6 +1972,7 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 					await sleep(backoffMs);
 				}
 				correctiveFeedback = null;
+				prevAssistantRaw = null;
 			}
 		}
 
@@ -1907,17 +2004,20 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 
 		const systemPrompt = DUAL_CONTENT_PACK_SYSTEM_PROMPT;
 		let correctiveFeedback: string | null = null;
+		let prevAssistantRaw: string | null = null;
 
 		for (let outer = 0; outer < OUTER_BUDGET; outer++) {
-			let rawJson: unknown;
-
 			try {
 				const messages = buildOuterMessages(
 					systemPrompt,
 					baseUserPrompt,
+					prevAssistantRaw,
 					correctiveFeedback,
 				);
-				rawJson = await this.callAndParse(messages, "dual content-pack");
+				const { parsed: rawJson, raw } = await this.callAndParse(
+					messages,
+					"dual content-pack",
+				);
 				const validationResult = validateBoundDualContentPack(
 					rawJson,
 					schedule,
@@ -1937,6 +2037,7 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 					};
 				}
 				correctiveFeedback = buildCorrectiveFeedback(validationResult.errors);
+				prevAssistantRaw = raw;
 			} catch (err) {
 				if (err instanceof CapHitError) throw err;
 				if (outer === OUTER_BUDGET - 1) throw err;
@@ -1945,6 +2046,7 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 					await sleep(backoffMs);
 				}
 				correctiveFeedback = null;
+				prevAssistantRaw = null;
 			}
 		}
 

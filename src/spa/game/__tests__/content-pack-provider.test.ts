@@ -2492,3 +2492,319 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 		);
 	});
 });
+
+// ── BrowserContentPackProvider — strengthened corrective feedback ──────────
+
+describe("BrowserContentPackProvider — corrective feedback strengthening", () => {
+	const carryInput: import("../content-pack-provider.js").BindingContentPackInput =
+		{
+			phases: [
+				{
+					setting: "abandoned subway station",
+					theme: "mundane",
+					weather: "overcast",
+					timeOfDay: "night",
+					bindings: [
+						{
+							type: "carry",
+							objectId: "carry-0-obj",
+							spaceId: "carry-0-space",
+						},
+					],
+					decoyIds: ["decoy-0", "decoy-1"],
+					obstacleCount: 1,
+				},
+			],
+		};
+
+	const useSpaceInput: import("../content-pack-provider.js").BindingContentPackInput =
+		{
+			phases: [
+				{
+					setting: "abandoned subway station",
+					theme: "mundane",
+					weather: "overcast",
+					timeOfDay: "night",
+					bindings: [
+						{
+							type: "use_space",
+							spaceId: "useSpace-0-space",
+						},
+					],
+					decoyIds: ["decoy-0", "decoy-1"],
+					obstacleCount: 1,
+				},
+			],
+		};
+
+	function buildValidCarryPack(): unknown {
+		return {
+			pack: {
+				setting: "abandoned subway station",
+				wallName: "concrete barrier",
+				landmarks: {
+					north: {
+						shortName: "the signal tower",
+						horizonPhrase: "rises above the platform",
+					},
+					south: {
+						shortName: "the collapsed entrance",
+						horizonPhrase: "gapes like a wound in the dark",
+					},
+					east: {
+						shortName: "the rusted fan shaft",
+						horizonPhrase: "spins slowly in the stale air",
+					},
+					west: {
+						shortName: "the flooded tunnel",
+						horizonPhrase: "disappears into still black water",
+					},
+				},
+				bindings: [
+					{
+						id: "carry-0",
+						type: "carry",
+						object: {
+							id: "carry-0-obj",
+							name: "Iron Key",
+							examineDescription:
+								"An iron key. It looks like it belongs on the brass pedestal.",
+							useOutcome: "You turn the key over in your hands.",
+							placementFlavor: "{actor} sets the key on its mount.",
+							proximityFlavor: "The key hums faintly near the pedestal.",
+						},
+						space: {
+							id: "carry-0-space",
+							name: "Brass Pedestal",
+							examineDescription:
+								"A sturdy brass mount with a subtle indentation on its surface.",
+							proximityFlavor: "The pedestal thrums softly nearby.",
+						},
+					},
+				],
+				decoys: [
+					{
+						id: "decoy-0",
+						name: "Brass Disc",
+						examineDescription: "A small decorative disc of tarnished brass.",
+						proximityFlavor: "The disc gleams faintly.",
+						useOutcome: "Nothing happens.",
+					},
+					{
+						id: "decoy-1",
+						name: "Old Coin",
+						examineDescription: "A weathered coin from a past era.",
+						proximityFlavor: "The coin catches the light.",
+						useOutcome: "Nothing happens.",
+					},
+				],
+				obstacles: [
+					{
+						id: "obstacle-0",
+						name: "Rusted Gate",
+						examineDescription: "An old rusted gate blocking the path.",
+						shiftFlavor:
+							"The rusted gate scrapes along the floor with a grinding shriek.",
+					},
+				],
+			},
+		};
+	}
+
+	function buildValidUseSpacePack(): unknown {
+		return {
+			pack: {
+				setting: "abandoned subway station",
+				wallName: "concrete barrier",
+				landmarks: {
+					north: {
+						shortName: "the signal tower",
+						horizonPhrase: "rises above the platform",
+					},
+					south: {
+						shortName: "the collapsed entrance",
+						horizonPhrase: "gapes like a wound in the dark",
+					},
+					east: {
+						shortName: "the rusted fan shaft",
+						horizonPhrase: "spins slowly in the stale air",
+					},
+					west: {
+						shortName: "the flooded tunnel",
+						horizonPhrase: "disappears into still black water",
+					},
+				},
+				bindings: [
+					{
+						id: "useSpace-0",
+						type: "use_space",
+						space: {
+							id: "useSpace-0-space",
+							name: "Control Panel",
+							examineDescription:
+								"A panel with buttons and levers you can press.",
+							proximityFlavor: "The panel hums faintly.",
+							activationFlavor: "The panel lights up.",
+							satisfactionFlavor: "The panel fires a burst of light.",
+							postExamineDescription: "The panel is now active.",
+							postLookFlavor: "The panel glows.",
+						},
+					},
+				],
+				decoys: [
+					{
+						id: "decoy-0",
+						name: "Old Disc",
+						examineDescription: "A small tarnished disc.",
+						proximityFlavor: "The disc gleams.",
+						useOutcome: "Nothing.",
+					},
+					{
+						id: "decoy-1",
+						name: "Plain Coin",
+						examineDescription: "A coin from another era.",
+						proximityFlavor: "The coin catches light.",
+						useOutcome: "Nothing.",
+					},
+				],
+				obstacles: [
+					{
+						id: "obstacle-0",
+						name: "Rusted Gate",
+						examineDescription: "An old rusted gate blocking the path.",
+						shiftFlavor: "The gate grinds across the floor.",
+					},
+				],
+			},
+		};
+	}
+
+	it("includes the previous raw JSON as an assistant turn on the corrective retry", async () => {
+		const mockChatFn = vi.fn();
+
+		// Call 1: decoy with a forbidden use-cue keyword ("switch")
+		const brokenPack = buildValidCarryPack();
+		const packObj = (brokenPack as Record<string, unknown>).pack as Record<
+			string,
+			unknown
+		>;
+		const decoys = packObj.decoys as Record<string, unknown>[];
+		decoys[0]!.examineDescription =
+			"An old switch you might find in a forgotten panel.";
+		const brokenRaw = JSON.stringify(brokenPack);
+		mockChatFn.mockResolvedValueOnce({ content: brokenRaw, reasoning: null });
+
+		// Call 2: valid pack
+		mockChatFn.mockResolvedValueOnce({
+			content: JSON.stringify(buildValidCarryPack()),
+			reasoning: null,
+		});
+
+		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
+		await provider.generateContentPacks(carryInput);
+
+		expect(mockChatFn).toHaveBeenCalledTimes(2);
+
+		const call2Messages = mockChatFn.mock.calls[1]?.[0]?.messages as
+			| Array<{ role: string; content: string }>
+			| undefined;
+		expect(call2Messages).toBeDefined();
+
+		const assistantTurn = call2Messages?.find((m) => m.role === "assistant");
+		expect(assistantTurn).toBeDefined();
+		expect(assistantTurn?.content).toBe(brokenRaw);
+
+		// Ordering: assistant turn precedes the corrective user turn
+		const assistantIdx =
+			call2Messages?.findIndex((m) => m.role === "assistant") ?? -1;
+		const correctiveIdx =
+			call2Messages?.findIndex((m) =>
+				m.content.includes("Your previous attempt failed validation"),
+			) ?? -1;
+		expect(assistantIdx).toBeGreaterThanOrEqual(0);
+		expect(correctiveIdx).toBeGreaterThan(assistantIdx);
+	});
+
+	it("names the offending keyword in the corrective feedback for a forbidden-use-cue decoy", async () => {
+		const mockChatFn = vi.fn();
+
+		// Call 1: decoy whose examineDescription contains "switch"
+		const brokenPack = buildValidCarryPack();
+		const packObj = (brokenPack as Record<string, unknown>).pack as Record<
+			string,
+			unknown
+		>;
+		const decoys = packObj.decoys as Record<string, unknown>[];
+		decoys[0]!.examineDescription =
+			"An old switch you might find in a forgotten panel.";
+		mockChatFn.mockResolvedValueOnce({
+			content: JSON.stringify(brokenPack),
+			reasoning: null,
+		});
+
+		// Call 2: valid pack
+		mockChatFn.mockResolvedValueOnce({
+			content: JSON.stringify(buildValidCarryPack()),
+			reasoning: null,
+		});
+
+		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
+		await provider.generateContentPacks(carryInput);
+
+		const call2Messages = mockChatFn.mock.calls[1]?.[0]?.messages as
+			| Array<{ role: string; content: string }>
+			| undefined;
+		const correctionTurn = call2Messages?.find((m) =>
+			m.content.includes("Your previous attempt failed validation"),
+		);
+		expect(correctionTurn).toBeDefined();
+
+		// The corrective message names the specific offending keyword
+		expect(correctionTurn?.content).toMatch(/"switch"/);
+		// And targets the right decoy
+		expect(correctionTurn?.content).toMatch(/decoy-0/);
+	});
+
+	it("includes the use-cue keyword hint list for a missing-use-cue UseSpace error", async () => {
+		const mockChatFn = vi.fn();
+
+		// Call 1: use_space with examineDescription lacking any use-cue keyword
+		const brokenPack = buildValidUseSpacePack();
+		const packObj = (brokenPack as Record<string, unknown>).pack as Record<
+			string,
+			unknown
+		>;
+		const bindings = packObj.bindings as Record<string, unknown>[];
+		const space = bindings[0]!.space as Record<string, unknown>;
+		space.examineDescription = "A featureless surface set into the wall.";
+		mockChatFn.mockResolvedValueOnce({
+			content: JSON.stringify(brokenPack),
+			reasoning: null,
+		});
+
+		// Call 2: valid pack
+		mockChatFn.mockResolvedValueOnce({
+			content: JSON.stringify(buildValidUseSpacePack()),
+			reasoning: null,
+		});
+
+		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
+		await provider.generateContentPacks(useSpaceInput);
+
+		const call2Messages = mockChatFn.mock.calls[1]?.[0]?.messages as
+			| Array<{ role: string; content: string }>
+			| undefined;
+		const correctionTurn = call2Messages?.find((m) =>
+			m.content.includes("Your previous attempt failed validation"),
+		);
+		expect(correctionTurn).toBeDefined();
+
+		// The corrective message enumerates several canonical use-cue keywords
+		// inline so the LLM doesn't have to recall them from the system prompt.
+		expect(correctionTurn?.content).toMatch(/"use"/);
+		expect(correctionTurn?.content).toMatch(/"activate"/);
+		expect(correctionTurn?.content).toMatch(/"press"/);
+		// And targets the use-space binding
+		expect(correctionTurn?.content).toMatch(/use-space binding/);
+	});
+});
