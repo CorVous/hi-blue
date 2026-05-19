@@ -8,8 +8,12 @@ import {
 	topInfoStatus,
 } from "../bbs-chrome.js";
 import {
+	recordDaemonError,
+	recordDaemonRound,
+	recordDaemonSystemPrompt,
 	recordDaemonTurnResult,
 	setDaemonFooterInFlight,
+	updateDaemonFooterDetails,
 	updateDaemonFooterSummary,
 } from "../dev-inspector/daemon-footer.js";
 import { updateGameStripSummary } from "../dev-inspector/game-strip.js";
@@ -1397,6 +1401,9 @@ export function renderGame(
 				disableReasoning: !enableReasoning,
 			});
 
+			// session is guaranteed non-null here due to the check above; capture for closure
+			const sessionRef = session;
+
 			// Wrap provider in __DEV__ gate that records turn results for dev inspector footers
 			const provider: RoundLLMProvider = __DEV__
 				? {
@@ -1407,6 +1414,11 @@ export function renderGame(
 							daemonId,
 							onLifecycle,
 						) => {
+							if (daemonId && messages[0]?.role === "system") {
+								recordDaemonSystemPrompt(daemonId, messages[0].content);
+								if (sessionRef)
+									recordDaemonRound(daemonId, sessionRef.getState().round);
+							}
 							const result = await rawProvider.streamRound(
 								messages,
 								tools,
@@ -1414,7 +1426,16 @@ export function renderGame(
 								daemonId,
 								onLifecycle,
 							);
-							if (daemonId) recordDaemonTurnResult(daemonId, result);
+							if (daemonId) {
+								recordDaemonTurnResult(daemonId, {
+									...result,
+									lastRawCompletion: result.assistantText,
+									lastToolCalls: result.toolCalls.map((tc) => ({
+										name: tc.name,
+										argumentsJson: tc.argumentsJson,
+									})),
+								});
+							}
 							return result;
 						},
 					}
@@ -1432,8 +1453,10 @@ export function renderGame(
 							setDaemonFooterInFlight(panel, "in-flight");
 						else if (event.phase === "completed")
 							setDaemonFooterInFlight(panel, "idle");
-						else if (event.phase === "errored")
+						else if (event.phase === "errored") {
 							setDaemonFooterInFlight(panel, "errored");
+							recordDaemonError(event.daemonId, event.error);
+						}
 						// first-token: no-op
 					}
 				: undefined;
@@ -1798,7 +1821,7 @@ export function renderGame(
 				const stripEl = document.querySelector<HTMLElement>("#dev-game-strip");
 				if (stripEl) updateGameStripSummary(stripEl, session);
 
-				// Update per-Daemon footer summaries
+				// Update per-Daemon footer summaries and details
 				const aiIdList = Object.keys(nextState.personas);
 				for (const aiId of aiIdList) {
 					const panel = document.querySelector<HTMLElement>(
@@ -1806,6 +1829,7 @@ export function renderGame(
 					);
 					if (panel) {
 						updateDaemonFooterSummary(panel, aiId, session);
+						updateDaemonFooterDetails(panel, aiId, session);
 					}
 				}
 			}

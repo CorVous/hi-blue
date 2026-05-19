@@ -9,10 +9,10 @@
  */
 
 import type { GameSession } from "../game/game-session";
-import type { AiId, ConversationEntry } from "../game/types";
+import type { AiId, AiPersona, ConversationEntry } from "../game/types";
 
 /**
- * Side-channel storage for per-AI turn results (tokens, cost).
+ * Side-channel storage for per-AI turn results (tokens, cost, completion, tool calls).
  * RoundTurnResult is not stored in GameState, so we maintain this
  * map separately. The provider wrapper populates it; updateDaemonFooterSummary
  * reads from it.
@@ -24,8 +24,25 @@ export const daemonTurnResults: Record<
 		completionTokens?: number;
 		cachedPromptTokens?: number;
 		costUsd?: number;
+		lastRawCompletion?: string;
+		lastToolCalls?: Array<{ name: string; argumentsJson: string }>;
 	}
 > = {};
+
+/**
+ * Side-channel storage for per-AI system prompts.
+ */
+const daemonSystemPrompts: Record<string, string> = {};
+
+/**
+ * Side-channel storage for per-AI errors with optional status codes.
+ */
+const daemonErrors: Record<string, { text: string; statusCode?: number }> = {};
+
+/**
+ * Side-channel storage for per-AI round numbers.
+ */
+const daemonRounds: Record<string, number> = {};
 
 /**
  * Record a turn result for an AI (called by the provider wrapper in routes/game.ts).
@@ -38,6 +55,8 @@ export function recordDaemonTurnResult(
 		completionTokens?: number;
 		cachedPromptTokens?: number;
 		costUsd?: number;
+		lastRawCompletion?: string;
+		lastToolCalls?: Array<{ name: string; argumentsJson: string }>;
 	},
 ): void {
 	daemonTurnResults[aiId] = result;
@@ -50,6 +69,51 @@ export function clearDaemonTurnResults(): void {
 	for (const key of Object.keys(daemonTurnResults)) {
 		delete daemonTurnResults[key];
 	}
+	for (const key of Object.keys(daemonSystemPrompts)) {
+		delete daemonSystemPrompts[key];
+	}
+	for (const key of Object.keys(daemonErrors)) {
+		delete daemonErrors[key];
+	}
+	for (const key of Object.keys(daemonRounds)) {
+		delete daemonRounds[key];
+	}
+}
+
+/**
+ * Record a system prompt for an AI (called by the provider wrapper in routes/game.ts).
+ */
+export function recordDaemonSystemPrompt(
+	aiId: AiId,
+	systemPrompt: string,
+): void {
+	daemonSystemPrompts[aiId] = systemPrompt;
+}
+
+/**
+ * Record an error for an AI (called by the provider wrapper in routes/game.ts).
+ * Extracts the error message and status code (if present).
+ */
+export function recordDaemonError(aiId: AiId, error: unknown): void {
+	const text = error instanceof Error ? error.message : String(error);
+	const statusCode =
+		typeof error === "object" &&
+		error !== null &&
+		"status" in error &&
+		typeof (error as any).status === "number"
+			? (error as any).status
+			: undefined;
+	daemonErrors[aiId] = {
+		text,
+		...(statusCode !== undefined && { statusCode }),
+	};
+}
+
+/**
+ * Record the current round number for an AI (called by the provider wrapper in routes/game.ts).
+ */
+export function recordDaemonRound(aiId: AiId, round: number): void {
+	daemonRounds[aiId] = round;
 }
 
 /**
@@ -89,19 +153,21 @@ function buildFooterFields(): HTMLElement[] {
 
 /**
  * Initialize the footer DOM for a Daemon. Builds the summary line with
- * four field spans. Removes the hidden attribute.
+ * four field spans, then five <details> disclosure blocks. Removes the hidden attribute.
  */
 export function renderDaemonFooter(
 	panelEl: HTMLElement,
-	_aiId: AiId,
-	_session: GameSession,
+	aiId: AiId,
+	session: GameSession,
 ): void {
 	const footerEl = panelEl.querySelector<HTMLElement>(".dev-daemon-footer");
 	if (!footerEl) return;
 
+	const doc = panelEl.ownerDocument;
+
 	// Clear and build the summary line
 	footerEl.replaceChildren();
-	const summaryDiv = panelEl.ownerDocument.createElement("div");
+	const summaryDiv = doc.createElement("div");
 	summaryDiv.className = "dev-footer-summary";
 	summaryDiv.setAttribute("data-line", "summary");
 
@@ -111,6 +177,114 @@ export function renderDaemonFooter(
 	}
 
 	footerEl.appendChild(summaryDiv);
+
+	// Build the five <details> blocks
+	const detailsBlocks = [
+		{
+			disclosure: "system-prompt",
+			summary: "last system prompt",
+		},
+		{
+			disclosure: "raw-completion",
+			summary: "last raw completion",
+		},
+		{
+			disclosure: "tool-calls",
+			summary: "last tool calls",
+		},
+		{
+			disclosure: "error",
+			summary: "last error",
+		},
+		{
+			disclosure: "persona-card",
+			summary: "persona card",
+		},
+	];
+
+	for (const block of detailsBlocks) {
+		const details = doc.createElement("details");
+		details.className = "dev-footer-details";
+		details.setAttribute("data-disclosure", block.disclosure);
+
+		const summaryEl = doc.createElement("summary");
+		summaryEl.textContent = block.summary;
+		details.appendChild(summaryEl);
+
+		if (block.disclosure === "persona-card") {
+			// Persona card has a special div structure
+			const personaDiv = doc.createElement("div");
+			personaDiv.className = "dev-footer-persona";
+			personaDiv.setAttribute("data-content", "persona-card");
+
+			const personaFields = [
+				"handle",
+				"color",
+				"temperaments",
+				"persona-goal",
+				"blurb",
+			];
+			for (const field of personaFields) {
+				const fieldDiv = doc.createElement("div");
+				fieldDiv.setAttribute("data-persona-field", field);
+				personaDiv.appendChild(fieldDiv);
+			}
+
+			details.appendChild(personaDiv);
+
+			// Populate persona card content immediately (static within session)
+			const state = session.getState();
+			const persona = state.personas[aiId] as AiPersona | undefined;
+			if (persona) {
+				const handleEl = personaDiv.querySelector<HTMLElement>(
+					'[data-persona-field="handle"]',
+				);
+				if (handleEl) {
+					handleEl.textContent = `*${persona.name}`;
+				}
+
+				const colorEl = personaDiv.querySelector<HTMLElement>(
+					'[data-persona-field="color"]',
+				);
+				if (colorEl) {
+					const swatch = doc.createElement("span");
+					swatch.className = "dev-footer-color-swatch";
+					swatch.style.backgroundColor = persona.color;
+					colorEl.appendChild(swatch);
+					colorEl.appendChild(doc.createTextNode(persona.color));
+				}
+
+				const tempEl = personaDiv.querySelector<HTMLElement>(
+					'[data-persona-field="temperaments"]',
+				);
+				if (tempEl) {
+					tempEl.textContent = `${persona.temperaments[0]} / ${persona.temperaments[1]}`;
+				}
+
+				const goalEl = personaDiv.querySelector<HTMLElement>(
+					'[data-persona-field="persona-goal"]',
+				);
+				if (goalEl) {
+					goalEl.textContent = persona.personaGoal;
+				}
+
+				const blurbEl = personaDiv.querySelector<HTMLElement>(
+					'[data-persona-field="blurb"]',
+				);
+				if (blurbEl) {
+					blurbEl.textContent = persona.blurb;
+				}
+			}
+		} else {
+			// Non-persona blocks have a <pre> with data-content
+			const pre = doc.createElement("pre");
+			pre.setAttribute("data-content", block.disclosure);
+			pre.textContent = "";
+			details.appendChild(pre);
+		}
+
+		footerEl.appendChild(details);
+	}
 
 	// Remove hidden attribute
 	footerEl.removeAttribute("hidden");
@@ -298,4 +472,78 @@ export function updateDaemonFooterSummary(
 		const newChips = buildComplicationChips(doc, aiId, session);
 		chipsSpan.replaceChildren(...newChips);
 	}
+}
+
+/**
+ * Update the five <details> disclosure blocks with current daemon state.
+ * MUST NOT modify the <details> element itself or its open attribute.
+ * Persona card is already populated in renderDaemonFooter and is not re-touched.
+ */
+export function updateDaemonFooterDetails(
+	panelEl: HTMLElement,
+	aiId: AiId,
+	_session: GameSession,
+): void {
+	const footerEl = panelEl.querySelector<HTMLElement>(".dev-daemon-footer");
+	if (!footerEl) return;
+
+	const round = daemonRounds[aiId];
+
+	// Helper to update a disclosure block's summary with optional round suffix
+	const updateSummary = (disclosure: string, baseLabel: string): void => {
+		const details = footerEl.querySelector<HTMLElement>(
+			`[data-disclosure="${disclosure}"]`,
+		);
+		if (!details) return;
+		const summary = details.querySelector<HTMLElement>("summary");
+		if (summary) {
+			summary.textContent = `${baseLabel}${round ? ` (round ${round})` : ""}`;
+		}
+	};
+
+	// Helper to update pre content
+	const updatePreContent = (disclosure: string, content: string): void => {
+		const details = footerEl.querySelector<HTMLElement>(
+			`[data-disclosure="${disclosure}"]`,
+		);
+		if (!details) return;
+		const pre = details.querySelector<HTMLElement>(
+			`[data-content="${disclosure}"]`,
+		);
+		if (pre) {
+			pre.textContent = content;
+		}
+	};
+
+	// Update system-prompt
+	updateSummary("system-prompt", "last system prompt");
+	updatePreContent("system-prompt", daemonSystemPrompts[aiId] ?? "");
+
+	// Update raw-completion
+	updateSummary("raw-completion", "last raw completion");
+	updatePreContent(
+		"raw-completion",
+		daemonTurnResults[aiId]?.lastRawCompletion ?? "",
+	);
+
+	// Update tool-calls
+	updateSummary("tool-calls", "last tool calls");
+	const toolCalls = daemonTurnResults[aiId]?.lastToolCalls ?? [];
+	const toolCallsText = toolCalls
+		.map((tc) => `${tc.name}(${tc.argumentsJson})`)
+		.join("\n");
+	updatePreContent("tool-calls", toolCallsText);
+
+	// Update error
+	updateSummary("error", "last error");
+	const error = daemonErrors[aiId];
+	let errorText = "";
+	if (error) {
+		errorText = error.statusCode
+			? `${error.statusCode} ${error.text}`
+			: error.text;
+	}
+	updatePreContent("error", errorText);
+
+	// Note: persona-card is NOT updated here — it's already populated in renderDaemonFooter
 }
