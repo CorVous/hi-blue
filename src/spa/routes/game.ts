@@ -7,8 +7,8 @@ import {
 	renderTopInfoLeft,
 	topInfoStatus,
 } from "../bbs-chrome.js";
-import { renderInspector } from "../dev-inspector/index.js";
 import { updateGameStripSummary } from "../dev-inspector/game-strip.js";
+import { renderInspector } from "../dev-inspector/index.js";
 import {
 	buildSameDaemonsSession,
 	buildSessionFromAssets,
