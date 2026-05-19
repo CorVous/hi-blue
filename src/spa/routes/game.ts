@@ -11,6 +11,7 @@ import {
 	buildSameDaemonsSession,
 	buildSessionFromAssets,
 } from "../game/bootstrap.js";
+import { renderInspector } from "../dev-inspector/index.js";
 import { BrowserLLMProvider } from "../game/browser-llm-provider.js";
 import { isPlayerChatLockedOut } from "../game/complication-engine.js";
 import { deriveComposerState } from "../game/composer-reducer.js";
@@ -1132,6 +1133,13 @@ export function renderGame(
 	}
 
 	registerPanelClickHandlers(aiIdList);
+
+	if (__DEV__ && session !== null) {
+		renderInspector(root, {
+			session,
+			pendingBootstrap: getPendingBootstrap(),
+		});
+	}
 
 	// Debug toggle: show action log if ?debug=1
 	const debug = searchParams.get("debug") === "1";
