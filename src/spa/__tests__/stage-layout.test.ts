@@ -11,10 +11,18 @@ const cssPath = path.join(__dirname, "../styles.css");
 const cssStr = fs.readFileSync(cssPath, "utf-8");
 
 describe("#stage layout contract", () => {
-	it("uses min-height: 100dvh (not height) so dev surfaces can grow the page", () => {
+	it("uses min-height: 100dvh (not height: 100dvh) so the stage never collapses", () => {
 		expect(cssStr).toMatch(/#stage\s*\{[^}]*min-height:\s*100dvh/);
-		// Negative lookahead ensures "height: 100dvh" doesn't appear (only "min-height" is ok)
+		// height: 100dvh would also conflict — only height: 100% is allowed alongside
+		// min-height: 100dvh (resolves via parent chain to viewport height).
 		expect(cssStr).not.toMatch(/#stage\s*\{[^}]*\nheight:\s*100dvh/);
+	});
+
+	it("sets height: 100% on #stage so CSS Grid has a definite size for 1fr calculation", () => {
+		// Without a definite height, the 1fr panels row expands to content size
+		// (ignoring the viewport), pushing the composer off the bottom of the screen.
+		// height: 100% resolves through html > body (both height: 100%) to the viewport.
+		expect(cssStr).toMatch(/#stage\s*\{[^}]*height:\s*100%/);
 	});
 
 	it("retains main { display: contents } so direct children flatten into #stage's grid", () => {

@@ -75,6 +75,11 @@ body::before {
 /* Layout — single screen */
 #stage {
 	min-height: 100dvh;
+	/* height: 100% gives CSS Grid a definite size so the 1fr panels row
+	   resolves against the viewport rather than expanding to content size.
+	   min-height: 100dvh stays so the stage never collapses shorter than
+	   the viewport (also required by the stage-layout contract test). */
+	height: 100%;
 	display: grid;
 	grid-template-rows: auto auto auto auto 1fr auto;
 	gap: 6px;
