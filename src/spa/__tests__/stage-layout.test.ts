@@ -20,4 +20,15 @@ describe("#stage layout contract", () => {
 	it("retains main { display: contents } so direct children flatten into #stage's grid", () => {
 		expect(cssStr).toMatch(/^main\s*\{\s*display:\s*contents/m);
 	});
+
+	it("pins #panels to grid-row 5 (the 1fr row) so it always gets the stretchy slot", () => {
+		// #phase-banner uses display:none when hidden, removing it from grid flow.
+		// Without explicit placement, #panels lands on row 4 (auto) and #composer
+		// takes row 5 (1fr), causing the game to overflow off the bottom of the screen.
+		expect(cssStr).toMatch(/#panels\.row\s*\{[^}]*grid-row:\s*5/);
+	});
+
+	it("pins #composer to grid-row 6 (trailing auto row) to stay below panels", () => {
+		expect(cssStr).toMatch(/#composer\s*\{[^}]*grid-row:\s*6/);
+	});
 });

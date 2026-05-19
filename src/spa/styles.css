@@ -82,6 +82,17 @@ body::before {
 	animation: crt-flicker 6s infinite;
 }
 
+/* #phase-banner uses display:none when hidden, removing it from grid flow.
+   Pin panels to the 1fr row (5) and composer to the trailing auto row (6)
+   so they land correctly whether or not phase-banner is currently visible. */
+#panels.row {
+	grid-row: 5;
+}
+
+#composer {
+	grid-row: 6;
+}
+
 header {
 	display: flex;
 	justify-content: flex-end;
