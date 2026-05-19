@@ -30,6 +30,12 @@ import type {
 	DualBindingContentPackInput,
 } from "../spa/game/content-pack-provider.js";
 import { rollObjectiveTypes } from "../spa/game/objective-type-roll.js";
+import {
+	boundSpaces,
+	carryPairs,
+	interestingObjects,
+	obstacles as obstacleEntities,
+} from "../spa/game/pack-selectors.js";
 import type {
 	AiId,
 	CardinalDirection,
@@ -165,11 +171,16 @@ function tryPlacePhase(
 	pack: ContentPack,
 	aiIds: AiId[],
 ): ContentPack | null {
-	const k = pack.objectivePairs.length; // carry pairs
-	const s = (pack.boundSpaces ?? []).length; // standalone bound spaces
+	const packCarryPairs = carryPairs(pack);
+	const packBoundSpaces = boundSpaces(pack);
+	const packInteresting = interestingObjects(pack);
+	const packObstacles = obstacleEntities(pack);
+
+	const k = packCarryPairs.length; // carry pairs
+	const s = packBoundSpaces.length; // standalone bound spaces
 	const totalSpaces = k + s;
-	const n = pack.interestingObjects.length;
-	const m = pack.obstacles.length;
+	const n = packInteresting.length;
+	const m = packObstacles.length;
 
 	// nonObstacleNeeded: AI starts + all spaces + carry objects + interesting objects
 	const nonObstacleNeeded = aiIds.length + totalSpaces + k + n;
@@ -247,7 +258,7 @@ function tryPlacePhase(
 	}
 
 	// Build updated pack with placements
-	const updatedObjectivePairs = pack.objectivePairs.map((pair, i) => {
+	const updatedObjectivePairs = packCarryPairs.map((pair, i) => {
 		const spaceKey = spaceKeys[i] as number;
 		const objectKey = objectKeys[i] as number;
 		return {
@@ -256,19 +267,19 @@ function tryPlacePhase(
 		};
 	});
 
-	const updatedInterestingObjects = pack.interestingObjects.map((obj, i) => ({
+	const updatedInterestingObjects = packInteresting.map((obj, i) => ({
 		...obj,
 		holder: keyToPos(interestingKeys[i] as number),
 	}));
 
-	const updatedObstacles = pack.obstacles.map((obs, i) => ({
+	const updatedObstacles = packObstacles.map((obs, i) => ({
 		...obs,
 		holder: keyToPos(obstacleKeys[i] as number),
 	}));
 
 	// Place standalone bound spaces
 	const standaloneSpaceKeys = allSpaceKeys.slice(k);
-	const updatedBoundSpaces = (pack.boundSpaces ?? []).map((space, i) => ({
+	const updatedBoundSpaces = packBoundSpaces.map((space, i) => ({
 		...space,
 		holder: keyToPos(standaloneSpaceKeys[i] as number),
 	}));
@@ -299,7 +310,7 @@ function placePhases(
 		}
 		throw new Error(
 			`generateContentPacks: could not place phase ${i + 1} after ${MAX_ATTEMPTS} attempts. ` +
-				`Check that m (${pack.obstacles.length}) obstacles leave enough room for AI starts and entities.`,
+				`Check that m (${obstacleEntities(pack).length}) obstacles leave enough room for AI starts and entities.`,
 		);
 	});
 }
@@ -709,15 +720,16 @@ export async function generateDualContentPacks(
 
 	// Build ID → holder map from placed Pack A (include boundSpaces)
 	const holderById = new Map<string, AiId | GridPosition>();
-	for (const pair of placedPackA.objectivePairs) {
+	for (const pair of carryPairs(placedPackA)) {
 		holderById.set(pair.object.id, pair.object.holder);
 		holderById.set(pair.space.id, pair.space.holder);
 	}
-	for (const space of placedPackA.boundSpaces ?? [])
+	for (const space of boundSpaces(placedPackA))
 		holderById.set(space.id, space.holder);
-	for (const obj of placedPackA.interestingObjects)
+	for (const obj of interestingObjects(placedPackA))
 		holderById.set(obj.id, obj.holder);
-	for (const obs of placedPackA.obstacles) holderById.set(obs.id, obs.holder);
+	for (const obs of obstacleEntities(placedPackA))
+		holderById.set(obs.id, obs.holder);
 
 	const applyHolder = (entity: WorldEntity): WorldEntity => ({
 		...entity,
@@ -727,13 +739,13 @@ export async function generateDualContentPacks(
 	// Apply the same placements to Pack B by matching entity IDs
 	const packB: ContentPack = {
 		...unplacedPackB,
-		objectivePairs: unplacedPackB.objectivePairs.map((pair) => ({
+		objectivePairs: carryPairs(unplacedPackB).map((pair) => ({
 			object: applyHolder(pair.object),
 			space: applyHolder(pair.space),
 		})),
-		boundSpaces: (unplacedPackB.boundSpaces ?? []).map(applyHolder),
-		interestingObjects: unplacedPackB.interestingObjects.map(applyHolder),
-		obstacles: unplacedPackB.obstacles.map(applyHolder),
+		boundSpaces: boundSpaces(unplacedPackB).map(applyHolder),
+		interestingObjects: interestingObjects(unplacedPackB).map(applyHolder),
+		obstacles: obstacleEntities(unplacedPackB).map(applyHolder),
 		aiStarts: { ...placedPackA.aiStarts },
 	};
 

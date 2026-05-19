@@ -60,3 +60,19 @@ export function objectiveSpaces(pack: ContentPack): WorldEntity[] {
 	const pairedSpaces = pack.objectivePairs.map((p) => p.space);
 	return [...pairedSpaces, ...boundSpaces(pack)];
 }
+
+/**
+ * Returns the carry-paired objective_object entity with the given id, or
+ * `undefined` if no carry pair in the pack has an object with that id.
+ *
+ * This is a targeted lookup used by dispatcher when it needs to recover the
+ * authored object definition (e.g. for raw placementFlavor) from an entity id.
+ */
+export function carryObjectById(
+	id: string,
+	pack: ContentPack,
+): WorldEntity | undefined {
+	return carryPairs(pack)
+		.map((p) => p.object)
+		.find((o) => o.id === id);
+}

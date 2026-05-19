@@ -8,6 +8,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	boundSpaces,
+	carryObjectById,
 	carryPairs,
 	interestingObjects,
 	objectiveSpaces,
@@ -369,6 +370,55 @@ describe("objectiveSpaces", () => {
 		for (const e of result) {
 			expect(e.kind).toBe("objective_space");
 		}
+	});
+});
+
+// ── carryObjectById ───────────────────────────────────────────────────────────
+
+describe("carryObjectById", () => {
+	it("returns undefined for an empty pack", () => {
+		expect(carryObjectById("anything", makePack())).toBeUndefined();
+	});
+
+	it("returns the matching carry object", () => {
+		const pair0 = makeObjectivePair(0);
+		const pair1 = makeObjectivePair(1);
+		const pack = makePack({ objectivePairs: [pair0, pair1] });
+		const result = carryObjectById("obj-1", pack);
+		expect(result).toBeDefined();
+		expect(result?.id).toBe("obj-1");
+		expect(result?.kind).toBe("objective_object");
+	});
+
+	it("returns undefined when id does not match any carry object", () => {
+		const pack = makePack({
+			objectivePairs: [makeObjectivePair(0), makeObjectivePair(1)],
+		});
+		expect(carryObjectById("missing", pack)).toBeUndefined();
+	});
+
+	it("does not match by carry-space id, interesting-object id, bound-space id, or obstacle id", () => {
+		const pair = makeObjectivePair(0); // object id "obj-0", space id "space-0"
+		const pack = makePack({
+			objectivePairs: [pair],
+			interestingObjects: [makeInterestingObject(0)], // id "interesting-0"
+			boundSpaces: [makeBoundSpace(0)], // id "bound-space-0"
+			obstacles: [makeObstacle(0)], // id "obstacle-0"
+		});
+		expect(carryObjectById("space-0", pack)).toBeUndefined();
+		expect(carryObjectById("interesting-0", pack)).toBeUndefined();
+		expect(carryObjectById("bound-space-0", pack)).toBeUndefined();
+		expect(carryObjectById("obstacle-0", pack)).toBeUndefined();
+		// Sanity: the actual object id still resolves.
+		expect(carryObjectById("obj-0", pack)?.id).toBe("obj-0");
+	});
+
+	it("picks the first match if duplicate ids exist (insertion order)", () => {
+		const pair0 = makeObjectivePair(0);
+		const pair1 = makeObjectivePair(0); // same ids — pathological but well-defined
+		const pack = makePack({ objectivePairs: [pair0, pair1] });
+		const result = carryObjectById("obj-0", pack);
+		expect(result).toBe(pair0.object);
 	});
 });
 
