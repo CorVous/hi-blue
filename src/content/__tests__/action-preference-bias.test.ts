@@ -75,20 +75,29 @@ describe("action-preference-bias", () => {
 		}
 	});
 
-	it("names every preferred tool (bias ≥ 2) explicitly", () => {
+	it("names every preferred tool (bias ≥ 2) explicitly with a lean", () => {
 		// curious + meticulous: examine=4, look=3, use=2 → all three named.
 		const clause = actionProfileFor("a", "meticulous", "curious");
-		expect(clause).toContain("STRICTLY prefers");
+		expect(clause).toContain("leans toward");
 		expect(clause).toContain("`examine`");
 		expect(clause).toContain("`look`");
 		expect(clause).toContain("`use`");
 	});
 
-	it("calls out avoided tools (bias ≤ -1) by name", () => {
+	it("encodes a ~70/30 split intent (variety over fixation)", () => {
+		// Any preferred-list clause should signal that other tools still fire.
+		const clause = actionProfileFor("a", "meticulous", "curious");
+		expect(clause).toMatch(/70|30/);
+		expect(clause.toLowerCase()).toMatch(/variety|other available|spread/);
+	});
+
+	it("flags avoided tools (bias ≤ -1) without making them zero-emission", () => {
 		// zealous + hot-headed: examine = -1 (the only negative); other tools positive.
 		const clause = actionProfileFor("b", "zealous", "hot-headed");
-		expect(clause).toContain("AVOIDS");
+		expect(clause.toLowerCase()).toMatch(/hesitant|less often/);
 		expect(clause).toContain("`examine`");
+		// Cautious personas must still emit avoided tools occasionally.
+		expect(clause.toLowerCase()).toMatch(/still|when.*calls/);
 	});
 
 	it("orders preferred tools by descending bias", () => {
@@ -131,7 +140,7 @@ describe("action-preference-bias", () => {
 		// → examine hits +2, no balanced default. Negative tools (go, pick_up) hit
 		// avoided. Asserts the avoided shape instead:
 		const clause = actionProfileFor("e", "anxious", "earnest");
-		expect(clause).toContain("AVOIDS");
+		expect(clause.toLowerCase()).toMatch(/hesitant|less often/);
 	});
 
 	it("is byte-stable across calls (deterministic ordering)", () => {

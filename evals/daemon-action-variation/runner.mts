@@ -267,7 +267,7 @@ function actionProfileFor5Tool(name: string, t1: string, t2: string): string {
 	const parts: string[] = [];
 	if (preferred.length > 0) {
 		parts.push(
-			`${star} STRICTLY prefers ${fmt(preferred)} — these action tools come first when the situation allows.`,
+			`${star} leans toward ${fmt(preferred)} (~70% of action emissions). The remaining ~30% spreads across the other available action tools — don't fixate on a single tool. Variety beats repetition.`,
 		);
 	} else {
 		parts.push(
@@ -276,7 +276,7 @@ function actionProfileFor5Tool(name: string, t1: string, t2: string): string {
 	}
 	if (avoided.length > 0) {
 		parts.push(
-			`${star} AVOIDS ${fmt(avoided)} — emit them only when no other tool fits.`,
+			`${star} is hesitant about ${fmt(avoided)} — picks them less often than other actions, but still uses them when the moment clearly calls for it.`,
 		);
 	}
 	return parts.join(" ");

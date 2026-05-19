@@ -279,13 +279,13 @@ export function toolBiasSum(
 /**
  * Render an action-profile clause for a persona.
  *
- * v2 (post-eval): the original prose-shape classifier produced only ±2pp
- * aggregate movement vs. baseline — the language was too soft ("examines
- * methodically", "explores restlessly") and the model treated it as
- * permission rather than direction. The rewritten clause names the
- * persona's preferred and avoided tools directly with STRICTLY / AVOIDS
- * language and explicit tool tokens, which is the directive shape the
- * plan called for. See `docs/evals/daemon-action-variation-analysis.md`.
+ * v2: switched from prose ("examines methodically") to directive language
+ * ("STRICTLY prefers", "AVOIDS"). v2.5 (current): softens the directive so
+ * preferred tools come up frequently but not exclusively (~70/30 split with
+ * other available actions), and avoided tools still fire occasionally when
+ * the moment fits. v2's hard "STRICTLY" produced 95-100% emissions on the
+ * leaned tool, suppressing variety within a persona; the v2.5 wording aims
+ * for variety-with-bias instead of mono-tool fixation.
  *
  * Thresholds:
  *   - preferred: per-tool bias sum ≥ +2 (a clear push from the temperament pair)
@@ -293,7 +293,7 @@ export function toolBiasSum(
  *
  * The threshold pair is asymmetric on purpose. Most temperament pairs
  * have a handful of mild positive biases (which we don't want to call
- * out — "STRICTLY prefer 6 tools" loses meaning), so the positive
+ * out — "leans toward 6 tools" loses meaning), so the positive
  * threshold is higher. Avoidances are rarer and inherently more
  * informative, so the negative threshold is lower.
  *
@@ -323,7 +323,7 @@ export function actionProfileFor(name: string, t1: string, t2: string): string {
 	const parts: string[] = [];
 	if (preferred.length > 0) {
 		parts.push(
-			`${star} STRICTLY prefers ${fmt(preferred)} — these action tools come first when the situation allows.`,
+			`${star} leans toward ${fmt(preferred)} (~70% of action emissions). The remaining ~30% spreads across the other available action tools — don't fixate on a single tool. Variety beats repetition.`,
 		);
 	} else {
 		parts.push(
@@ -332,7 +332,7 @@ export function actionProfileFor(name: string, t1: string, t2: string): string {
 	}
 	if (avoided.length > 0) {
 		parts.push(
-			`${star} AVOIDS ${fmt(avoided)} — emit them only when no other tool fits.`,
+			`${star} is hesitant about ${fmt(avoided)} — picks them less often than other actions, but still uses them when the moment clearly calls for it.`,
 		);
 	}
 	return parts.join(" ");
