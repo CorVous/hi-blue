@@ -23,10 +23,7 @@
  * | obstacle   | name, examineDescription, shiftFlavor                         |                                                                      |
  */
 
-import type {
-	BindingPromptResult,
-	BindingSkeleton,
-} from "./binding-prompt-builder.js";
+import type { BindingSkeleton } from "./binding-prompt-builder.js";
 import type {
 	ValidationError,
 	ValidationResult,
