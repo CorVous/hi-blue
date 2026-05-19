@@ -422,9 +422,18 @@
 			<header>
 				<h1>Daemon action variation</h1>
 				<p class="subtitle">
-					Baseline vs. <code>actionProfiles=ON</code> on
+					Baseline vs. <code>actionProfiles=ON</code> (v2 directive clauses) on
 					<code>z-ai/glm-4.7</code>. 240 reps per run, 4 scenarios × 3 personas
-					× 20 reps. Total spend: $0.46. — 2026-05-19
+					× 20 reps. Total spend: $0.48. — 2026-05-19
+				</p>
+				<p class="subtitle" style="margin-top: 8px">
+					<strong>v2 clauses</strong> name each persona's preferred and avoided
+					tools explicitly with <code>STRICTLY prefers</code> /
+					<code>AVOIDS</code> language and backticked tool tokens — e.g.
+					<em
+						>"<code>*vex STRICTLY prefers `go`, `look`, `pick_up`, `give`. *vex
+						AVOIDS `examine`.</code>"</em
+					>
 				</p>
 			</header>
 
@@ -453,61 +462,66 @@
 				>
 			</div>
 			<p class="dim">
-				Pick a scenario to inspect. Bars are per-tool emission rate (% of reps
-				that fired the tool at least once). The bias chip shows the summed
-				temperament push for that persona × tool — values away from 0 should
-				correlate with movement between baseline and treatment.
+				Pick a scenario to inspect. Bars show per-tool emission rate — count of
+				calls divided by 20 reps. Values
+				<strong>above 100%</strong> mean the tool fired more than once per turn
+				across some reps (e.g. Vex exploration <code>look</code> = 140% = 28
+				calls in 20 reps). The bias chip on the right shows the summed
+				temperament push for that persona × tool. AVOIDed tools (bias ≤ −1) and
+				STRICTLY-preferred tools (bias ≥ +2) are the ones that move most.
 			</p>
 
 			<div class="tabs" id="tabs"></div>
 			<div id="scenarios"></div>
 
-			<h2>Notable findings</h2>
+			<h2>Notable findings <span class="lede">v2 directive clauses (STRICTLY / AVOIDS)</span></h2>
 			<div class="findings">
 				<div class="finding good">
-					<h4>Vex's <code>go</code> rate doubles in exploration</h4>
+					<h4>Vex's <code>examine</code> rate goes to ZERO</h4>
 					<p>
-						15% → 30% — exactly the push you'd expect from zealous +
-						hot-headed (<code>go</code> bias +4). The temperament dial
-						works.
+						AVOIDS works — Vex's <code>examine</code> on exploration drops
+						75% → 0%, on examination 90% → 0%. The directive "<code
+							>AVOIDS <code>examine</code></code
+						>" is fully respected.
 					</p>
 				</div>
 				<div class="finding good">
-					<h4>Silence drops to zero</h4>
+					<h4>Pip's <code>pick_up</code> rate jumps 85pp</h4>
 					<p>
-						1% → 0% across 240 reps. The concrete action-profile prose
-						overrides the very rare "no tool" failure mode.
+						On examination: 15% → 100%. Pip's preferred list includes
+						<code>pick_up</code> (+2 bias) — every rep now reaches for it.
 					</p>
 				</div>
 				<div class="finding good">
-					<h4>Social scenario lifts Ember</h4>
+					<h4>Vex <code>pick_up</code> on examination: +40pp</h4>
 					<p>
-						anyAct 35% → 60%; parallel 35% → 55%. The "examines methodically"
-						clause nudges Ember to act <em>and</em> reply, rather than just
-						reply.
+						55% → 95%. Same mechanism — <code>pick_up</code> is in Vex's
+						preferred list at +2.
+					</p>
+				</div>
+				<div class="finding good">
+					<h4>Ember social anyAct: +45pp, look +70pp</h4>
+					<p>
+						35% → 80% anyAct; 0% → 70% <code>look</code>. The "<code
+							>STRICTLY prefers `examine`, `look`, `use`</code
+						>" clause produces a strong social-turn action push.
+					</p>
+				</div>
+				<div class="finding good">
+					<h4>look aggregates 6× across all cells</h4>
+					<p>
+						Per-cell rate sum: 70% → 485% (+415pp). Pip exploration goes 10%
+						→ 75%, Vex exploration 0% → 140% (multi-emit). The model
+						strongly takes "<code>look</code> is preferred" as a directive.
 					</p>
 				</div>
 				<div class="finding warn">
-					<h4>Vex's exploration parallel rate drops 30pp</h4>
+					<h4>Vex <code>use</code> dips: −30pp on objective</h4>
 					<p>
-						The "charges forward" clause makes Vex act <em>without</em>
-						messaging — `go` goes up but its companion `message` falls
-						100→70%. Trade-off worth softening in the next iteration.
-					</p>
-				</div>
-				<div class="finding">
-					<h4><code>use</code> stays high on objective cells</h4>
-					<p>
-						Vex 100→95%, Pip 85→75%. The −1 floor on the bias table keeps
-						`use` available even for personas that don't push it.
-					</p>
-				</div>
-				<div class="finding">
-					<h4>Give axis is unmeasured</h4>
-					<p>
-						No scenario places a peer in the actor's front arc — Pip's +4
-						`give` bias never had a chance to surface. A handoff scenario
-						should land next.
+						100% → 70%. <code>use</code> sits at +1 bias for Vex — between
+						the preferred (+2) and avoided (−1) thresholds, so it doesn't
+						appear in either list. Vex's preferred picks crowd it out.
+						Lowering the preferred threshold to +1 would re-include it.
 					</p>
 				</div>
 			</div>
@@ -532,12 +546,12 @@
 					cost: 0.21921562499999997,
 				},
 				treatment: {
-					anyActionRate: 0.8458333333333333,
-					anyMessageRate: 0.8166666666666667,
-					parallelRate: 0.6625,
+					anyActionRate: 0.875,
+					anyMessageRate: 0.7916666666666666,
+					parallelRate: 0.6666666666666666,
 					silenceRate: 0,
-					useRate: 0.14166666666666666,
-					cost: 0.2382725700000001,
+					useRate: 0.12083333333333333,
+					cost: 0.25621998799999973,
 				},
 			};
 
@@ -624,145 +638,145 @@
 			const CELL = {
 				"exploration|Ember": {
 					go: [0, 0],
-					look: [0.25, 0],
-					examine: [0.95, 0.95],
+					look: [0.25, 0.65],
+					examine: [0.95, 1.0],
 					pick_up: [0, 0],
 					put_down: [0, 0],
 					give: [0, 0],
 					use: [0, 0],
-					message: [0.7, 0.9],
-					any: [1.0, 0.95],
-					parallel: [0.7, 0.85],
+					message: [0.7, 0.7],
+					any: [1.0, 1.0],
+					parallel: [0.7, 0.7],
 				},
 				"exploration|Vex": {
-					go: [0.15, 0.3],
-					look: [0, 0],
-					examine: [0.75, 0.6],
+					go: [0.15, 0.4],
+					look: [0, 1.4],
+					examine: [0.75, 0],
 					pick_up: [0, 0],
 					put_down: [0, 0],
 					give: [0, 0],
 					use: [0, 0],
-					message: [1.0, 0.7],
-					any: [0.9, 0.9],
-					parallel: [0.9, 0.6],
+					message: [1.05, 1.0],
+					any: [0.9, 1.0],
+					parallel: [0.9, 0.95],
 				},
 				"exploration|Pip": {
 					go: [0, 0],
-					look: [0.1, 0],
-					examine: [0.8, 0.95],
-					pick_up: [0, 0],
+					look: [0.1, 0.75],
+					examine: [0.8, 0.5],
+					pick_up: [0, 0.2],
 					put_down: [0, 0],
 					give: [0, 0],
 					use: [0, 0],
-					message: [0.9, 0.85],
-					any: [0.85, 0.9],
+					message: [1.1, 1.25],
+					any: [0.85, 0.95],
 					parallel: [0.75, 0.75],
 				},
 				"objective|Ember": {
 					go: [0, 0],
-					look: [0.3, 0.15],
-					examine: [0.9, 0.95],
+					look: [0.3, 0.55],
+					examine: [0.9, 1.05],
 					pick_up: [0, 0],
 					put_down: [0, 0],
 					give: [0, 0],
 					use: [0.05, 0],
 					message: [0.75, 0.7],
-					any: [0.95, 1.0],
-					parallel: [0.7, 0.7],
+					any: [0.95, 0.95],
+					parallel: [0.7, 0.65],
 				},
 				"objective|Vex": {
 					go: [0, 0],
-					look: [0, 0],
+					look: [0, 0.35],
 					examine: [0.05, 0],
 					pick_up: [0, 0],
 					put_down: [0, 0],
 					give: [0, 0],
-					use: [1.0, 0.95],
+					use: [1.0, 0.7],
 					message: [0.9, 0.95],
-					any: [1.0, 0.95],
-					parallel: [0.9, 0.9],
+					any: [1.0, 0.85],
+					parallel: [0.9, 0.8],
 				},
 				"objective|Pip": {
 					go: [0, 0],
-					look: [0.05, 0.05],
+					look: [0.05, 0.15],
 					examine: [0.15, 0.2],
 					pick_up: [0, 0],
 					put_down: [0, 0],
 					give: [0, 0],
 					use: [0.85, 0.75],
-					message: [0.9, 0.9],
-					any: [1.0, 0.95],
-					parallel: [0.9, 0.85],
+					message: [0.9, 1.0],
+					any: [1.0, 1.0],
+					parallel: [0.9, 0.95],
 				},
 				"social|Ember": {
-					go: [0, 0.1],
-					look: [0, 0],
-					examine: [0.4, 0.65],
+					go: [0, 0.05],
+					look: [0, 0.7],
+					examine: [0.4, 0.35],
 					pick_up: [0, 0],
 					put_down: [0, 0],
 					give: [0, 0],
 					use: [0, 0],
-					message: [1.0, 0.95],
-					any: [0.35, 0.6],
-					parallel: [0.35, 0.55],
+					message: [1.05, 0.8],
+					any: [0.35, 0.8],
+					parallel: [0.35, 0.6],
 				},
 				"social|Vex": {
-					go: [0.7, 0.65],
+					go: [0.7, 0.55],
 					look: [0, 0],
 					examine: [0, 0],
 					pick_up: [0, 0],
 					put_down: [0, 0],
 					give: [0, 0],
 					use: [0, 0],
-					message: [0.95, 1.0],
-					any: [0.7, 0.65],
-					parallel: [0.65, 0.65],
+					message: [1.0, 1.0],
+					any: [0.7, 0.55],
+					parallel: [0.65, 0.5],
 				},
 				"social|Pip": {
-					go: [0, 0.1],
-					look: [0, 0],
-					examine: [0.2, 0.25],
+					go: [0, 0.05],
+					look: [0, 0.2],
+					examine: [0.2, 0.15],
 					pick_up: [0, 0],
 					put_down: [0, 0],
 					give: [0, 0],
 					use: [0, 0],
-					message: [0.85, 0.9],
-					any: [0.2, 0.35],
-					parallel: [0.15, 0.25],
+					message: [1.0, 1.05],
+					any: [0.2, 0.4],
+					parallel: [0.15, 0.35],
 				},
 				"examination|Ember": {
 					go: [0, 0],
-					look: [0, 0],
-					examine: [1.0, 0.95],
+					look: [0, 0.1],
+					examine: [1.0, 1.0],
 					pick_up: [0, 0],
 					put_down: [0, 0],
 					give: [0, 0],
 					use: [0, 0],
-					message: [0.3, 0.4],
-					any: [1.0, 0.95],
-					parallel: [0.3, 0.35],
+					message: [0.35, 0.3],
+					any: [1.0, 1.0],
+					parallel: [0.3, 0.2],
 				},
 				"examination|Vex": {
-					go: [0, 0.1],
+					go: [0, 0.35],
 					look: [0, 0],
-					examine: [0.9, 0.55],
-					pick_up: [0.55, 0.6],
+					examine: [0.9, 0],
+					pick_up: [0.55, 0.95],
 					put_down: [0, 0],
 					give: [0, 0],
 					use: [0, 0],
-					message: [0.45, 0.7],
-					any: [1.0, 0.95],
-					parallel: [0.45, 0.65],
+					message: [0.5, 0.75],
+					any: [1.0, 1.0],
+					parallel: [0.45, 0.7],
 				},
 				"examination|Pip": {
-					go: [0, 0.1],
+					go: [0, 0],
 					look: [0, 0],
-					examine: [0.9, 0.85],
-					pick_up: [0.15, 0.1],
+					examine: [0.9, 0.45],
+					pick_up: [0.15, 1.0],
 					put_down: [0, 0],
 					give: [0, 0],
 					use: [0, 0],
-					message: [0.9, 0.85],
+					message: [1.25, 1.3],
 					any: [1.0, 1.0],
 					parallel: [0.9, 0.85],
 				},
