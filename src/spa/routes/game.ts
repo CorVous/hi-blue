@@ -7,6 +7,11 @@ import {
 	renderTopInfoLeft,
 	topInfoStatus,
 } from "../bbs-chrome.js";
+import {
+	recordDaemonTurnResult,
+	setDaemonFooterInFlight,
+	updateDaemonFooterSummary,
+} from "../dev-inspector/daemon-footer.js";
 import { updateGameStripSummary } from "../dev-inspector/game-strip.js";
 import { renderInspector } from "../dev-inspector/index.js";
 import {
@@ -30,6 +35,10 @@ import {
 	getPendingBootstrap,
 	restartContentPacks,
 } from "../game/pending-bootstrap.js";
+import type {
+	LifecyclePhase,
+	RoundLLMProvider,
+} from "../game/round-llm-provider.js";
 import { encodeRoundResult } from "../game/round-result-encoder.js";
 import { getSpikeRng } from "../game/spike-seed.js";
 import type { AiId, AiPersona } from "../game/types";
@@ -1384,9 +1393,51 @@ export function renderGame(
 		let roundGameEnded = false;
 
 		try {
-			const provider = new BrowserLLMProvider({
+			const rawProvider = new BrowserLLMProvider({
 				disableReasoning: !enableReasoning,
 			});
+
+			// Wrap provider in __DEV__ gate that records turn results for dev inspector footers
+			const provider: RoundLLMProvider = __DEV__
+				? {
+						streamRound: async (
+							messages,
+							tools,
+							onDelta,
+							daemonId,
+							onLifecycle,
+						) => {
+							const result = await rawProvider.streamRound(
+								messages,
+								tools,
+								onDelta,
+								daemonId,
+								onLifecycle,
+							);
+							if (daemonId) recordDaemonTurnResult(daemonId, result);
+							return result;
+						},
+					}
+				: rawProvider;
+
+			// Lifecycle callback (dev-only) for per-Daemon footer pip state
+			const onLifecycle: ((event: LifecyclePhase) => void) | undefined = __DEV__
+				? (event: LifecyclePhase) => {
+						if (!event.daemonId) return;
+						const panel = document.querySelector<HTMLElement>(
+							`.ai-panel[data-ai="${event.daemonId}"]`,
+						);
+						if (!panel) return;
+						if (event.phase === "started")
+							setDaemonFooterInFlight(panel, "in-flight");
+						else if (event.phase === "completed")
+							setDaemonFooterInFlight(panel, "idle");
+						else if (event.phase === "errored")
+							setDaemonFooterInFlight(panel, "errored");
+						// first-token: no-op
+					}
+				: undefined;
+
 			// Strip each daemon's spinner as the coordinator finishes its
 			// turn (post-retry per #254). Coordinator awaits AIs serially in
 			// initiative order, so this fires staged in real time —
@@ -1399,6 +1450,7 @@ export function renderGame(
 				initiative,
 				undefined,
 				(aiId) => stripSpinner(aiId),
+				onLifecycle,
 			);
 
 			const events = encodeRoundResult(
@@ -1745,6 +1797,17 @@ export function renderGame(
 			if (__DEV__ && session) {
 				const stripEl = document.querySelector<HTMLElement>("#dev-game-strip");
 				if (stripEl) updateGameStripSummary(stripEl, session);
+
+				// Update per-Daemon footer summaries
+				const aiIdList = Object.keys(nextState.personas);
+				for (const aiId of aiIdList) {
+					const panel = document.querySelector<HTMLElement>(
+						`.ai-panel[data-ai="${aiId}"]`,
+					);
+					if (panel) {
+						updateDaemonFooterSummary(panel, aiId, session);
+					}
+				}
 			}
 
 			// Persist state after the encoder render loop completes.

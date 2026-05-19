@@ -1,5 +1,6 @@
 import type { GameSession } from "../game/game-session.js";
 import type { PendingBootstrap } from "../game/pending-bootstrap.js";
+import { renderDaemonFooter } from "./daemon-footer.js";
 import { renderGameStrip } from "./game-strip.js";
 
 export interface RenderInspectorOpts {
@@ -22,4 +23,15 @@ export function renderInspector(
 	const footers = doc.querySelectorAll<HTMLElement>(".dev-daemon-footer");
 	for (const f of footers) f.removeAttribute("hidden");
 	if (strip && opts.session) renderGameStrip(strip, opts.session);
+
+	// Render per-Daemon footers for each AI
+	const state = opts.session.getState();
+	for (const aiId of Object.keys(state.personas)) {
+		const panel = doc.querySelector<HTMLElement>(
+			`.ai-panel[data-ai="${aiId}"]`,
+		);
+		if (panel) {
+			renderDaemonFooter(panel, aiId, opts.session);
+		}
+	}
 }

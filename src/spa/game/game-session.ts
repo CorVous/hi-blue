@@ -109,6 +109,9 @@ export class GameSession {
 		initiative?: AiId[],
 		onAiDelta?: (aiId: AiId, text: string) => void,
 		onAiTurnComplete?: (aiId: AiId) => void,
+		onLifecycle?: (
+			event: import("./round-llm-provider.js").LifecyclePhase,
+		) => void,
 	): Promise<SubmitMessageResult> {
 		const turnOrder = initiative ?? Object.keys(this.state.personas);
 
@@ -136,6 +139,7 @@ export class GameSession {
 			onAiDelta,
 			this.coneSnapshots,
 			onAiTurnComplete,
+			onLifecycle,
 		);
 
 		// Fill in empty string for AIs whose completions weren't captured

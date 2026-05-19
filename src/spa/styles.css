@@ -1739,3 +1739,48 @@ main {
 	font-size: 11px;
 	min-height: 14px;
 }
+
+.dev-footer-summary {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+	flex-wrap: wrap;
+}
+
+.dev-footer-pip {
+	font-weight: bold;
+	min-width: 1ch;
+}
+
+.dev-footer-pip[data-state="in-flight"] {
+	color: var(--amber-bright);
+	animation: pulse-bright 0.5s ease-in-out infinite;
+}
+
+.dev-footer-pip[data-state="errored"] {
+	color: #ff6b6b;
+}
+
+.dev-footer-tools,
+.dev-footer-llm,
+.dev-footer-chips {
+	font-size: 10px;
+}
+
+.dev-footer-chip {
+	display: inline-block;
+	margin-right: 2px;
+	opacity: 0.8;
+}
+
+.dev-footer-chip[data-chip-kind="sysadm-dir"] {
+	color: #ff9900;
+}
+
+.dev-footer-chip[data-chip-kind="tool-dis"] {
+	color: #ffcc00;
+}
+
+.dev-footer-chip[data-chip-kind="chat-lock"] {
+	color: #ff6b6b;
+}
