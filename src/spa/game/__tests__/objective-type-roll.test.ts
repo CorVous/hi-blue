@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { OBJECTIVE_TYPES } from "../types.js";
 import { rollObjectiveTypes } from "../objective-type-roll.js";
+import { OBJECTIVE_TYPES } from "../types.js";
 
 describe("rollObjectiveTypes", () => {
 	it("count=0 returns [] without calling rng", () => {

@@ -64,14 +64,10 @@ export class GameSession {
 		 */
 		objectiveTypes?: ObjectiveType[],
 	) {
-		const game = startGame(
-			personas,
-			contentPack,
-			{
-				...(rng !== undefined ? { rng } : {}),
-				...(objectiveTypes !== undefined ? { objectiveTypes } : {}),
-			},
-		);
+		const game = startGame(personas, contentPack, {
+			...(rng !== undefined ? { rng } : {}),
+			...(objectiveTypes !== undefined ? { objectiveTypes } : {}),
+		});
 		this.state = {
 			...game,
 			contentPacksA: contentPacksA ?? [],

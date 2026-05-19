@@ -132,7 +132,9 @@ const CONTENT_PACK_WITH_ITEMS: ContentPack = {
 };
 
 /** Objective types matching CONTENT_PACK_WITH_ITEMS (one carry at index 0). */
-const CONTENT_PACK_OBJECTIVE_TYPES: import("../types.js").ObjectiveType[] = ["carry"];
+const CONTENT_PACK_OBJECTIVE_TYPES: import("../types.js").ObjectiveType[] = [
+	"carry",
+];
 
 /**
  * ContentPack with key held by red (for the non-adjacent give test).
@@ -437,7 +439,14 @@ describe("GameSession — win / lose via checkWinCondition / checkLoseCondition"
 	it("gameEnded is false when objective pairs are not satisfied", async () => {
 		// CONTENT_PACK_WITH_ITEMS has one pair (carry-0-obj at (0,0), carry-0-space at (4,4))
 		// After a pass round, the object is still not on the space → no win.
-		const session = new GameSession(CONTENT_PACK_WITH_ITEMS, TEST_PERSONAS, undefined, undefined, undefined, CONTENT_PACK_OBJECTIVE_TYPES);
+		const session = new GameSession(
+			CONTENT_PACK_WITH_ITEMS,
+			TEST_PERSONAS,
+			undefined,
+			undefined,
+			undefined,
+			CONTENT_PACK_OBJECTIVE_TYPES,
+		);
 
 		const { result } = await session.submitMessage(
 			"red",

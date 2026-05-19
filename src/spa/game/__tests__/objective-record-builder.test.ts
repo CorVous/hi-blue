@@ -188,10 +188,17 @@ describe("buildObjectiveRecords — convergence type", () => {
 describe("buildObjectiveRecords — all satisfactionState are pending", () => {
 	it("all objectives start with satisfactionState: pending", () => {
 		const pack = makePack({
-			objectivePairs: [makeCarryPair(0), makeUseSpacePair(1), makeConvergencePair(2)],
+			objectivePairs: [
+				makeCarryPair(0),
+				makeUseSpacePair(1),
+				makeConvergencePair(2),
+			],
 			interestingObjects: [],
 		});
-		const objectives = buildObjectiveRecords(["carry", "use_space", "convergence"], pack);
+		const objectives = buildObjectiveRecords(
+			["carry", "use_space", "convergence"],
+			pack,
+		);
 		for (const obj of objectives) {
 			expect(obj?.satisfactionState).toBe("pending");
 		}
@@ -201,9 +208,16 @@ describe("buildObjectiveRecords — all satisfactionState are pending", () => {
 describe("buildObjectiveRecords — sequential ids", () => {
 	it("assigns ids obj-0, obj-1, obj-2 in order", () => {
 		const pack = makePack({
-			objectivePairs: [makeCarryPair(0), makeUseSpacePair(1), makeConvergencePair(2)],
+			objectivePairs: [
+				makeCarryPair(0),
+				makeUseSpacePair(1),
+				makeConvergencePair(2),
+			],
 		});
-		const objectives = buildObjectiveRecords(["carry", "use_space", "convergence"], pack);
+		const objectives = buildObjectiveRecords(
+			["carry", "use_space", "convergence"],
+			pack,
+		);
 		expect(objectives[0]?.id).toBe("obj-0");
 		expect(objectives[1]?.id).toBe("obj-1");
 		expect(objectives[2]?.id).toBe("obj-2");
@@ -218,7 +232,9 @@ describe("buildObjectiveRecords — missing entity throws", () => {
 
 	it("throws if use_space space not found in pack", () => {
 		const pack = makePack({});
-		expect(() => buildObjectiveRecords(["use_space"], pack)).toThrow(RangeError);
+		expect(() => buildObjectiveRecords(["use_space"], pack)).toThrow(
+			RangeError,
+		);
 	});
 
 	it("throws if use_item item not found in pack", () => {
@@ -228,7 +244,9 @@ describe("buildObjectiveRecords — missing entity throws", () => {
 
 	it("throws if convergence space not found in pack", () => {
 		const pack = makePack({});
-		expect(() => buildObjectiveRecords(["convergence"], pack)).toThrow(RangeError);
+		expect(() => buildObjectiveRecords(["convergence"], pack)).toThrow(
+			RangeError,
+		);
 	});
 });
 

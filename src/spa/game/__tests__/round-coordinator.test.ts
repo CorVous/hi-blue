@@ -1977,7 +1977,10 @@ describe("placement flavor + win condition (issue #126)", () => {
 			],
 		};
 		// In flat model, checkWinCondition compares obj/space positions automatically.
-		const game = startGame(TEST_PERSONAS, packMismatch, { budgetPerAi: 5, objectiveTypes: ["carry"] });
+		const game = startGame(TEST_PERSONAS, packMismatch, {
+			budgetPerAi: 5,
+			objectiveTypes: ["carry"],
+		});
 		const provider = new MockRoundLLMProvider([
 			{
 				assistantText: "",

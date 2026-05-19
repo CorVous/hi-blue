@@ -103,8 +103,7 @@ export function classifyJsonRequest(
 		return "synthesis";
 	if (userMsg.startsWith("Generate a dual A/B content pack for:"))
 		return "dual-content-pack";
-	if (userMsg.startsWith("Generate a content pack for:"))
-		return "content-pack";
+	if (userMsg.startsWith("Generate a content pack for:")) return "content-pack";
 	return "unknown";
 }
 
@@ -138,64 +137,6 @@ function buildSynthesisResponseBody(
 		})),
 	});
 	return JSON.stringify({ choices: [{ message: { content } }] });
-}
-
-type PhaseSpec = {
-	tag: string;
-	setting: string;
-	k: number;
-	n: number;
-	m: number;
-};
-
-/**
- * Parse the per-phase `Phase N: setting="…", k=K objective pairs, n=N …`
- * lines from a content-pack user message.
- */
-function parseContentPackPhases(userMessage: string): PhaseSpec[] {
-	const re =
-		/Phase\s+(\d+):\s+setting="([^"]*)"(?:,\s+theme="[^"]*")?,\s+k=(\d+)\s+objective pairs,\s+n=(\d+)\s+interesting objects,\s+m=(\d+)\s+obstacles/g;
-	const phases: PhaseSpec[] = [];
-	for (const match of userMessage.matchAll(re)) {
-		phases.push({
-			tag: `p${match[1]}`,
-			setting: match[2] ?? "",
-			k: Number(match[3]),
-			n: Number(match[4]),
-			m: Number(match[5]),
-		});
-	}
-	return phases;
-}
-
-type DualPhaseSpec = {
-	tag: string;
-	settingA: string;
-	settingB: string;
-	k: number;
-	n: number;
-	m: number;
-};
-
-/**
- * Parse the per-phase `Phase N: settingA="…", settingB="…", theme="…", k=K …`
- * lines from a dual content-pack user message.
- */
-function parseDualContentPackPhases(userMessage: string): DualPhaseSpec[] {
-	const re =
-		/Phase\s+(\d+):\s+settingA="([^"]*)",\s+settingB="([^"]*)",\s+theme="[^"]*",\s+k=(\d+)\s+objective pairs,\s+n=(\d+)\s+interesting objects,\s+m=(\d+)\s+obstacles/g;
-	const phases: DualPhaseSpec[] = [];
-	for (const match of userMessage.matchAll(re)) {
-		phases.push({
-			tag: `p${match[1]}`,
-			settingA: match[2] ?? "",
-			settingB: match[3] ?? "",
-			k: Number(match[4]),
-			n: Number(match[5]),
-			m: Number(match[6]),
-		});
-	}
-	return phases;
 }
 
 const STUB_LANDMARKS = {
@@ -315,7 +256,8 @@ function buildBoundPack(
 						proximityFlavor: "An activatable surface beckons.",
 						activationFlavor: "The surface hums as you engage the lever.",
 						satisfactionFlavor: "The surface settles into completion.",
-						postExamineDescription: "The surface sits dormant after activation.",
+						postExamineDescription:
+							"The surface sits dormant after activation.",
 						postLookFlavor: "The surface rests, purpose fulfilled.",
 					},
 				};
@@ -329,7 +271,8 @@ function buildBoundPack(
 						examineDescription: `A stub item — press the button to activate.`,
 						proximityFlavor: "The item draws your eye.",
 						useOutcome: "Nothing changes.",
-						activationFlavor: "The item clicks into action as you press the button.",
+						activationFlavor:
+							"The item clicks into action as you press the button.",
 						postExamineDescription: "The item sits used and inert.",
 						postLookFlavor: "The item rests, spent.",
 					},
@@ -349,6 +292,8 @@ function buildBoundPack(
 						convergenceTier2ActorFlavor: `You share this space with another presence.`,
 					},
 				};
+			default:
+				throw new Error(`Unknown binding type: ${sk.type}`);
 		}
 	});
 
@@ -397,162 +342,17 @@ function buildBoundContentPackResponseBody(body: ParsedBody): string {
 function buildBoundDualContentPackResponseBody(body: ParsedBody): string {
 	const userMsg = body?.messages?.[1]?.content ?? "";
 	const spec = parseDualBindingContentPackSpec(userMsg);
-	const packA = buildBoundPack(spec.settingA, spec.bindings, spec.obstacleCount);
-	const packB = buildBoundPack(spec.settingB, spec.bindings, spec.obstacleCount);
+	const packA = buildBoundPack(
+		spec.settingA,
+		spec.bindings,
+		spec.obstacleCount,
+	);
+	const packB = buildBoundPack(
+		spec.settingB,
+		spec.bindings,
+		spec.obstacleCount,
+	);
 	const content = JSON.stringify({ phases: [{ packA, packB }] });
-	return JSON.stringify({ choices: [{ message: { content } }] });
-}
-
-/**
- * Build a dual content-pack JSON-mode response body that satisfies
- * `validateDualContentPacks`. Each phase has identical entity IDs in packA
- * and packB; only names, descriptions, and settings differ.
- */
-function buildDualContentPackResponseBody(body: ParsedBody): string {
-	const userMsg = body?.messages?.[1]?.content ?? "";
-	const phases = parseDualContentPackPhases(userMsg);
-	const resultPhases = phases.map((phase) => {
-		const tag = phase.tag;
-
-		const buildPack = (setting: string, ab: "a" | "b") => {
-			const objectivePairs = Array.from({ length: phase.k }, (_, i) => {
-				const spaceId = `${tag}-spc-${i}`;
-				const objectId = `${tag}-obj-${i}`;
-				const spaceName = `Stub space ${tag} ${i}`;
-				return {
-					object: {
-						id: objectId,
-						kind: "objective_object",
-						name: `Stub object ${tag} ${i} ${ab}`,
-						examineDescription: `Stub object near ${spaceName}.`,
-						useOutcome: "Nothing happens.",
-						pairsWithSpaceId: spaceId,
-						placementFlavor: "{actor} sets it down.",
-						proximityFlavor: "Something catches your attention nearby.",
-					},
-					space: {
-						id: spaceId,
-						kind: "objective_space",
-						name: spaceName,
-						examineDescription: `Stub space ${spaceId} ${ab} — use the lever to activate; a meeting place where two are needed.`,
-						activationFlavor: `The ${spaceName} hums to life.`,
-						satisfactionFlavor: `The ${spaceName} settles into completion.`,
-						postExamineDescription: `The ${spaceName} now sits dormant after activation.`,
-						postLookFlavor: `The ${spaceName} rests, its purpose fulfilled.`,
-						proximityFlavor: `A pull radiates from the ${spaceName}.`,
-						convergenceTier1Flavor: `A presence lingers at the ${spaceName}.`,
-						convergenceTier2Flavor: `Two presences converge at the ${spaceName}.`,
-						convergenceTier1ActorFlavor: `You stand alone on the ${spaceName}; the air anticipates company.`,
-						convergenceTier2ActorFlavor: `You share the ${spaceName} with another presence.`,
-					},
-				};
-			});
-			const interestingObjects = Array.from({ length: phase.n }, (_, i) => ({
-				id: `${tag}-int-${i}`,
-				kind: "interesting_object",
-				name: `Stub item ${tag} ${i} ${ab}`,
-				examineDescription: `Stub interesting object ${tag}-int-${i} ${ab} — press the switch to activate.`,
-				useOutcome: "Nothing happens.",
-				activationFlavor: `The stub item ${tag}-int-${i} ${ab} clicks into action.`,
-				postExamineDescription: `The stub item ${tag}-int-${i} ${ab} sits used and inert.`,
-				postLookFlavor: `The stub item ${tag}-int-${i} ${ab} rests, spent.`,
-				proximityFlavor: `The stub item ${tag}-int-${i} ${ab} draws the eye.`,
-			}));
-			const obstacles = Array.from({ length: phase.m }, (_, i) => ({
-				id: `${tag}-obs-${i}`,
-				kind: "obstacle",
-				name: `Stub obstacle ${tag} ${i} ${ab}`,
-				examineDescription: `Stub obstacle ${tag}-obs-${i} ${ab}.`,
-				shiftFlavor: `Stub obstacle ${tag}-obs-${i} ${ab} grinds across the floor.`,
-			}));
-			return {
-				setting,
-				objectivePairs,
-				interestingObjects,
-				obstacles,
-				landmarks: STUB_LANDMARKS,
-			};
-		};
-
-		return {
-			packA: buildPack(phase.settingA, "a"),
-			packB: buildPack(phase.settingB, "b"),
-		};
-	});
-	const content = JSON.stringify({ phases: resultPhases });
-	return JSON.stringify({ choices: [{ message: { content } }] });
-}
-
-/**
- * Build a content-pack JSON-mode response body that satisfies
- * `validateContentPacks` (see src/spa/game/content-pack-provider.ts) for the
- * phases described in the request user message.
- *
- * Ids are namespaced by phase + role + index so they remain unique across
- * all packs in the response. Pairing invariants hold:
- *   - object.pairsWithSpaceId === paired space.id
- *   - object.placementFlavor contains the literal "{actor}"
- */
-function buildContentPackResponseBody(body: ParsedBody): string {
-	const userMsg = body?.messages?.[1]?.content ?? "";
-	const phases = parseContentPackPhases(userMsg);
-	const packs = phases.map((phase) => {
-		const tag = phase.tag;
-		const objectivePairs = Array.from({ length: phase.k }, (_, i) => {
-			const spaceId = `${tag}-spc-${i}`;
-			const objectId = `${tag}-obj-${i}`;
-			return {
-				object: {
-					id: objectId,
-					kind: "objective_object",
-					name: `Stub object ${tag}-${i}`,
-					examineDescription: `Stub objective object paired with ${spaceId}.`,
-					useOutcome: "Nothing happens.",
-					pairsWithSpaceId: spaceId,
-					placementFlavor: "{actor} places it.",
-				},
-				space: {
-					id: spaceId,
-					kind: "objective_space",
-					name: `Stub space ${tag}-${i}`,
-					examineDescription: `Stub objective space ${spaceId} — use the lever to activate; a meeting place where two are needed.`,
-					activationFlavor: `Stub space ${tag}-${i} hums to life.`,
-					satisfactionFlavor: `Stub space ${tag}-${i} settles into completion.`,
-					postExamineDescription: `Stub space ${tag}-${i} now sits dormant after activation.`,
-					postLookFlavor: `Stub space ${tag}-${i} rests, its purpose fulfilled.`,
-					proximityFlavor: `A pull radiates from stub space ${tag}-${i}.`,
-					convergenceTier1Flavor: `A presence lingers at stub space ${tag}-${i}.`,
-					convergenceTier2Flavor: `Two presences converge at stub space ${tag}-${i}.`,
-					convergenceTier1ActorFlavor: `You stand alone on stub space ${tag}-${i}; the air anticipates company.`,
-					convergenceTier2ActorFlavor: `You share stub space ${tag}-${i} with another presence.`,
-				},
-			};
-		});
-		const interestingObjects = Array.from({ length: phase.n }, (_, i) => ({
-			id: `${tag}-int-${i}`,
-			kind: "interesting_object",
-			name: `Stub interesting ${tag}-${i}`,
-			examineDescription: `Stub interesting object ${tag}-int-${i} — press the switch to activate.`,
-			useOutcome: "Nothing happens.",
-			activationFlavor: `Stub interesting ${tag}-${i} clicks into action.`,
-			postExamineDescription: `Stub interesting ${tag}-${i} sits used and inert.`,
-			postLookFlavor: `Stub interesting ${tag}-${i} rests, spent.`,
-			proximityFlavor: `Stub interesting ${tag}-${i} draws the eye.`,
-		}));
-		const obstacles = Array.from({ length: phase.m }, (_, i) => ({
-			id: `${tag}-obs-${i}`,
-			kind: "obstacle",
-			name: `Stub obstacle ${tag}-${i}`,
-			examineDescription: `Stub obstacle ${tag}-obs-${i}.`,
-		}));
-		return {
-			setting: phase.setting,
-			objectivePairs,
-			interestingObjects,
-			obstacles,
-		};
-	});
-	const content = JSON.stringify({ packs });
 	return JSON.stringify({ choices: [{ message: { content } }] });
 }
 

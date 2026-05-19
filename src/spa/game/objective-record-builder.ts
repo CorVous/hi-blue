@@ -19,7 +19,12 @@
  * Throws RangeError if any entity is not found in the pack.
  */
 
-import type { ContentPack, Objective, ObjectiveType, WorldEntity } from "./types.js";
+import type {
+	ContentPack,
+	Objective,
+	ObjectiveType,
+	WorldEntity,
+} from "./types.js";
 
 /**
  * Build an array of Objective records from a types list and a placed ContentPack.

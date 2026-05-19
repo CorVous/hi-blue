@@ -18,19 +18,25 @@
  */
 
 import type {
+	RawBinding,
+	RawBoundPack,
+} from "../spa/game/binding-aware-validator.js";
+import {
+	buildBindingPrompt,
+	buildDualBindingPrompt,
+} from "../spa/game/binding-prompt-builder.js";
+import type {
 	ContentPackProvider,
 	DualBindingContentPackInput,
 } from "../spa/game/content-pack-provider.js";
 import { rollObjectiveTypes } from "../spa/game/objective-type-roll.js";
-import { buildBindingPrompt, buildDualBindingPrompt } from "../spa/game/binding-prompt-builder.js";
-import type { RawBoundPack, RawBinding } from "../spa/game/binding-aware-validator.js";
 import type {
 	AiId,
 	CardinalDirection,
 	ContentPack,
 	GridPosition,
-	ObjectiveType,
 	ObjectivePair,
+	ObjectiveType,
 	PersonaSpatialState,
 	WorldEntity,
 } from "../spa/game/types.js";
@@ -159,8 +165,8 @@ function tryPlacePhase(
 	pack: ContentPack,
 	aiIds: AiId[],
 ): ContentPack | null {
-	const k = pack.objectivePairs.length;       // carry pairs
-	const s = (pack.boundSpaces ?? []).length;  // standalone bound spaces
+	const k = pack.objectivePairs.length; // carry pairs
+	const s = (pack.boundSpaces ?? []).length; // standalone bound spaces
 	const totalSpaces = k + s;
 	const n = pack.interestingObjects.length;
 	const m = pack.obstacles.length;
@@ -315,8 +321,7 @@ function rawBoundPackToContentPack(
 	const obstacles: WorldEntity[] = [];
 
 	const bindings = rawPack.bindings ?? [];
-	for (let i = 0; i < objectiveTypes.length; i++) {
-		const type = objectiveTypes[i]!;
+	for (const [i, type] of objectiveTypes.entries()) {
 		const binding: RawBinding | undefined = bindings[i];
 		if (!binding) continue;
 
@@ -360,10 +365,14 @@ function rawBoundPackToContentPack(
 						proximityFlavor: spc.proximityFlavor ?? "",
 						holder: { row: 0, col: 0 },
 					};
-					if (spc.activationFlavor !== undefined) entity.activationFlavor = spc.activationFlavor;
-					if (spc.satisfactionFlavor !== undefined) entity.satisfactionFlavor = spc.satisfactionFlavor;
-					if (spc.postExamineDescription !== undefined) entity.postExamineDescription = spc.postExamineDescription;
-					if (spc.postLookFlavor !== undefined) entity.postLookFlavor = spc.postLookFlavor;
+					if (spc.activationFlavor !== undefined)
+						entity.activationFlavor = spc.activationFlavor;
+					if (spc.satisfactionFlavor !== undefined)
+						entity.satisfactionFlavor = spc.satisfactionFlavor;
+					if (spc.postExamineDescription !== undefined)
+						entity.postExamineDescription = spc.postExamineDescription;
+					if (spc.postLookFlavor !== undefined)
+						entity.postLookFlavor = spc.postLookFlavor;
 					boundSpaces.push(entity);
 				}
 				break;
@@ -379,10 +388,16 @@ function rawBoundPackToContentPack(
 						proximityFlavor: spc.proximityFlavor ?? "",
 						holder: { row: 0, col: 0 },
 					};
-					if (spc.convergenceTier1Flavor !== undefined) entity.convergenceTier1Flavor = spc.convergenceTier1Flavor;
-					if (spc.convergenceTier2Flavor !== undefined) entity.convergenceTier2Flavor = spc.convergenceTier2Flavor;
-					if (spc.convergenceTier1ActorFlavor !== undefined) entity.convergenceTier1ActorFlavor = spc.convergenceTier1ActorFlavor;
-					if (spc.convergenceTier2ActorFlavor !== undefined) entity.convergenceTier2ActorFlavor = spc.convergenceTier2ActorFlavor;
+					if (spc.convergenceTier1Flavor !== undefined)
+						entity.convergenceTier1Flavor = spc.convergenceTier1Flavor;
+					if (spc.convergenceTier2Flavor !== undefined)
+						entity.convergenceTier2Flavor = spc.convergenceTier2Flavor;
+					if (spc.convergenceTier1ActorFlavor !== undefined)
+						entity.convergenceTier1ActorFlavor =
+							spc.convergenceTier1ActorFlavor;
+					if (spc.convergenceTier2ActorFlavor !== undefined)
+						entity.convergenceTier2ActorFlavor =
+							spc.convergenceTier2ActorFlavor;
 					boundSpaces.push(entity);
 				}
 				break;
@@ -398,10 +413,14 @@ function rawBoundPackToContentPack(
 						proximityFlavor: item.proximityFlavor ?? "",
 						holder: { row: 0, col: 0 },
 					};
-					if (item.useOutcome !== undefined) entity.useOutcome = item.useOutcome;
-					if (item.activationFlavor !== undefined) entity.activationFlavor = item.activationFlavor;
-					if (item.postExamineDescription !== undefined) entity.postExamineDescription = item.postExamineDescription;
-					if (item.postLookFlavor !== undefined) entity.postLookFlavor = item.postLookFlavor;
+					if (item.useOutcome !== undefined)
+						entity.useOutcome = item.useOutcome;
+					if (item.activationFlavor !== undefined)
+						entity.activationFlavor = item.activationFlavor;
+					if (item.postExamineDescription !== undefined)
+						entity.postExamineDescription = item.postExamineDescription;
+					if (item.postLookFlavor !== undefined)
+						entity.postLookFlavor = item.postLookFlavor;
 					interestingObjects.push(entity);
 				}
 				break;
@@ -503,18 +522,27 @@ export async function generateContentPacks(
 	);
 
 	// Roll m per phase and type-first objective types
-	const phaseMValues = configs.map((cfg) => rollInt(rng, cfg.mRange[0], cfg.mRange[1]));
+	const phaseMValues = configs.map((cfg) =>
+		rollInt(rng, cfg.mRange[0], cfg.mRange[1]),
+	);
 	const phaseObjectiveTypes = configs.map(() => rollObjectiveTypes(rng, 3));
 
 	// Build binding-format phases for LLM
 	const phaseInputs = configs.map((_cfg, i) => {
-		const objectiveTypes = phaseObjectiveTypes[i]!;
-		const m = phaseMValues[i]!;
-		const weather = drawnWeather[i]!;
-		const timeOfDay = drawnTimeOfDay[i]!;
-		const theme = drawnThemes[i]!;
-		const setting = drawnSettings[i]!;
-		const bp = buildBindingPrompt(objectiveTypes, setting, theme, weather, timeOfDay, m);
+		const objectiveTypes = phaseObjectiveTypes[i] ?? [];
+		const m = phaseMValues[i] ?? 0;
+		const weather = drawnWeather[i] ?? "clear";
+		const timeOfDay = drawnTimeOfDay[i] ?? "morning";
+		const theme = drawnThemes[i] ?? "mundane";
+		const setting = drawnSettings[i] ?? "";
+		const bp = buildBindingPrompt(
+			objectiveTypes,
+			setting,
+			theme,
+			weather,
+			timeOfDay,
+			m,
+		);
 		return {
 			setting,
 			theme,
@@ -537,10 +565,15 @@ export async function generateContentPacks(
 
 	// Build unplaced ContentPack structures from LLM result using converter
 	const unplacedPacks: ContentPack[] = llmResult.phases.map((phase, i) => {
-		const objectiveTypes = phaseObjectiveTypes[i]!;
-		const weather = drawnWeather[i]!;
-		const timeOfDay = drawnTimeOfDay[i]!;
-		return rawBoundPackToContentPack(phase.rawPack, objectiveTypes, weather, timeOfDay);
+		const objectiveTypes = phaseObjectiveTypes[i] ?? [];
+		const weather = drawnWeather[i] ?? "clear";
+		const timeOfDay = drawnTimeOfDay[i] ?? "morning";
+		return rawBoundPackToContentPack(
+			phase.rawPack,
+			objectiveTypes,
+			weather,
+			timeOfDay,
+		);
 	});
 
 	// Run placement engine
@@ -568,7 +601,11 @@ export async function generateDualContentPacks(
 	config: PhaseConfig,
 	llm: ContentPackProvider,
 	aiIdsOrPromise: AiId[] | Promise<AiId[]>,
-): Promise<{ packA: ContentPack; packB: ContentPack; objectiveTypes: ObjectiveType[] }> {
+): Promise<{
+	packA: ContentPack;
+	packB: ContentPack;
+	objectiveTypes: ObjectiveType[];
+}> {
 	if (settings.length < 2) {
 		throw new Error(
 			`generateDualContentPacks: setting pool must have at least 2 entries (has ${settings.length})`,
@@ -623,18 +660,20 @@ export async function generateDualContentPacks(
 	);
 
 	const llmInput: DualBindingContentPackInput = {
-		phases: [{
-			settingA,
-			settingB,
-			theme,
-			weatherA,
-			weatherB,
-			timeOfDayA,
-			timeOfDayB,
-			bindings: bindingPrompt.skeletons,
-			decoyIds: ["decoy-0", "decoy-1"],
-			obstacleCount: m,
-		}],
+		phases: [
+			{
+				settingA,
+				settingB,
+				theme,
+				weatherA,
+				weatherB,
+				timeOfDayA,
+				timeOfDayB,
+				bindings: bindingPrompt.skeletons,
+				decoyIds: ["decoy-0", "decoy-1"],
+				obstacleCount: m,
+			},
+		],
 	};
 
 	// Kick off dual LLM call and aiIds resolution in parallel
@@ -645,11 +684,22 @@ export async function generateDualContentPacks(
 	]);
 
 	const phase = llmResult.phases[0];
-	if (!phase) throw new Error("generateDualContentPacks: LLM returned no phases");
+	if (!phase)
+		throw new Error("generateDualContentPacks: LLM returned no phases");
 
 	// Convert binding-shaped packs to ContentPack (no placements yet)
-	const unplacedPackA = rawBoundPackToContentPack(phase.rawPackA, objectiveTypes, weatherA, timeOfDayA);
-	const unplacedPackB = rawBoundPackToContentPack(phase.rawPackB, objectiveTypes, weatherB, timeOfDayB);
+	const unplacedPackA = rawBoundPackToContentPack(
+		phase.rawPackA,
+		objectiveTypes,
+		weatherA,
+		timeOfDayA,
+	);
+	const unplacedPackB = rawBoundPackToContentPack(
+		phase.rawPackB,
+		objectiveTypes,
+		weatherB,
+		timeOfDayB,
+	);
 
 	// Run placement engine on Pack A
 	const placedPacksA = placePhases(rng, [unplacedPackA], aiIds);
@@ -663,7 +713,8 @@ export async function generateDualContentPacks(
 		holderById.set(pair.object.id, pair.object.holder);
 		holderById.set(pair.space.id, pair.space.holder);
 	}
-	for (const space of placedPackA.boundSpaces ?? []) holderById.set(space.id, space.holder);
+	for (const space of placedPackA.boundSpaces ?? [])
+		holderById.set(space.id, space.holder);
 	for (const obj of placedPackA.interestingObjects)
 		holderById.set(obj.id, obj.holder);
 	for (const obs of placedPackA.obstacles) holderById.set(obs.id, obs.holder);
@@ -729,7 +780,14 @@ export async function generateContentPack(
 	const objectiveTypes = rollObjectiveTypes(rng, 3);
 
 	// Build binding prompt
-	const bp = buildBindingPrompt(objectiveTypes, setting, theme, weather, timeOfDay, m);
+	const bp = buildBindingPrompt(
+		objectiveTypes,
+		setting,
+		theme,
+		weather,
+		timeOfDay,
+		m,
+	);
 	const phaseInput = {
 		setting,
 		theme,
@@ -753,7 +811,12 @@ export async function generateContentPack(
 	const phase = llmResult.phases[0];
 	if (!phase) throw new Error("generateContentPack: LLM returned no phases");
 
-	const unplacedPack = rawBoundPackToContentPack(phase.rawPack, objectiveTypes, weather, timeOfDay);
+	const unplacedPack = rawBoundPackToContentPack(
+		phase.rawPack,
+		objectiveTypes,
+		weather,
+		timeOfDay,
+	);
 
 	// Run placement engine
 	const placed = placePhases(rng, [unplacedPack], aiIds);

@@ -82,9 +82,10 @@ export function startGame(
 	// Build type-first objectives from pre-rolled ObjectiveTypes.
 	// When objectiveTypes is not provided, no objectives are created (vacuous win).
 	// When provided, buildObjectiveRecords maps each type to an entity by convention id.
-	const objectives = opts.objectiveTypes && opts.objectiveTypes.length > 0
-		? buildObjectiveRecords(opts.objectiveTypes, contentPack)
-		: [];
+	const objectives =
+		opts.objectiveTypes && opts.objectiveTypes.length > 0
+			? buildObjectiveRecords(opts.objectiveTypes, contentPack)
+			: [];
 
 	// Initial countdown: random in [1, 5]
 	const initialCountdown = 1 + Math.floor(rng() * 5);

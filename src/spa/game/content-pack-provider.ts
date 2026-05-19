@@ -15,6 +15,16 @@
  */
 
 import { CapHitError, chatCompletionJson } from "../llm-client.js";
+import type { RawBoundPack } from "./binding-aware-validator.js";
+import {
+	validateBoundContentPack,
+	validateBoundDualContentPack,
+} from "./binding-aware-validator.js";
+import type { BindingSkeleton } from "./binding-prompt-builder.js";
+import {
+	buildBindingPrompt,
+	buildDualBindingPrompt,
+} from "./binding-prompt-builder.js";
 import type {
 	AiId,
 	ContentPack,
@@ -22,10 +32,6 @@ import type {
 	ObjectivePair,
 	WorldEntity,
 } from "./types";
-import type { BindingSkeleton, BindingPromptResult } from "./binding-prompt-builder.js";
-import { buildBindingPrompt, buildDualBindingPrompt } from "./binding-prompt-builder.js";
-import { validateBoundContentPack, validateBoundDualContentPack } from "./binding-aware-validator.js";
-import type { RawBoundPack } from "./binding-aware-validator.js";
 
 // ── Content-pack prompt ───────────────────────────────────────────────────────
 
@@ -176,8 +182,12 @@ export interface ContentPackProviderResult {
 }
 
 export interface ContentPackProvider {
-	generateContentPacks(input: BindingContentPackInput): Promise<BindingContentPackProviderResult>;
-	generateDualContentPacks(input: DualBindingContentPackInput): Promise<DualBindingContentPackProviderResult>;
+	generateContentPacks(
+		input: BindingContentPackInput,
+	): Promise<BindingContentPackProviderResult>;
+	generateDualContentPacks(
+		input: DualBindingContentPackInput,
+	): Promise<DualBindingContentPackProviderResult>;
 }
 
 // ── Dual-pack types (issue #302) ──────────────────────────────────────────────
@@ -693,7 +703,12 @@ export function groupErrorsByRetryUnit(errors: ValidationError[]): RetryUnit[] {
 			key = `${unit.kind}:${unit.phaseIndex}:${unit.entityId}`;
 		} else if (unit.kind === "obstacle") {
 			key = `${unit.kind}:${unit.phaseIndex}:${unit.entityId}`;
-		} else if (unit.kind === "carry-binding" || unit.kind === "use-space-binding" || unit.kind === "use-item-binding" || unit.kind === "convergence-binding") {
+		} else if (
+			unit.kind === "carry-binding" ||
+			unit.kind === "use-space-binding" ||
+			unit.kind === "use-item-binding" ||
+			unit.kind === "convergence-binding"
+		) {
 			key = `${unit.kind}:${unit.phaseIndex}:${unit.bindingId}`;
 		} else {
 			// decoy
@@ -2244,7 +2259,14 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 				rawJson = await this.callAndParse(messages, "content-pack");
 				const validationResult = validateBoundContentPack(rawJson, schedule);
 				if (validationResult.ok) {
-					return { phases: [{ rawPack: (rawJson as Record<string, unknown>).pack as RawBoundPack }] };
+					return {
+						phases: [
+							{
+								rawPack: (rawJson as Record<string, unknown>)
+									.pack as RawBoundPack,
+							},
+						],
+					};
 				}
 				correctiveFeedback = buildCorrectiveFeedback(validationResult.errors);
 			} catch (err) {
@@ -2297,15 +2319,22 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 					correctiveFeedback,
 				);
 				rawJson = await this.callAndParse(messages, "dual content-pack");
-				const validationResult = validateBoundDualContentPack(rawJson, schedule);
+				const validationResult = validateBoundDualContentPack(
+					rawJson,
+					schedule,
+				);
 				if (validationResult.ok) {
-					const phases = (rawJson as Record<string, unknown>).phases as Array<Record<string, unknown>>;
+					const phases = (rawJson as Record<string, unknown>).phases as Array<
+						Record<string, unknown>
+					>;
 					const phase0 = phases[0]!;
 					return {
-						phases: [{
-							rawPackA: phase0.packA as RawBoundPack,
-							rawPackB: phase0.packB as RawBoundPack,
-						}],
+						phases: [
+							{
+								rawPackA: phase0.packA as RawBoundPack,
+								rawPackB: phase0.packB as RawBoundPack,
+							},
+						],
 					};
 				}
 				correctiveFeedback = buildCorrectiveFeedback(validationResult.errors);
@@ -2331,12 +2360,18 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 export class MockContentPackProvider implements ContentPackProvider {
 	readonly calls: BindingContentPackInput[] = [];
 	readonly dualCalls: DualBindingContentPackInput[] = [];
-	private readonly fn: (input: BindingContentPackInput) => BindingContentPackProviderResult;
-	private readonly dualFn: (input: DualBindingContentPackInput) => DualBindingContentPackProviderResult;
+	private readonly fn: (
+		input: BindingContentPackInput,
+	) => BindingContentPackProviderResult;
+	private readonly dualFn: (
+		input: DualBindingContentPackInput,
+	) => DualBindingContentPackProviderResult;
 
 	constructor(
 		fn: (input: BindingContentPackInput) => BindingContentPackProviderResult,
-		dualFn?: (input: DualBindingContentPackInput) => DualBindingContentPackProviderResult,
+		dualFn?: (
+			input: DualBindingContentPackInput,
+		) => DualBindingContentPackProviderResult,
 	) {
 		this.fn = fn;
 		this.dualFn = dualFn ?? (() => ({ phases: [] }));

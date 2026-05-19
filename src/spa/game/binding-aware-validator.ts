@@ -23,9 +23,15 @@
  * | obstacle   | name, examineDescription, shiftFlavor                         |                                                                      |
  */
 
-import type { BindingPromptResult, BindingSkeleton } from "./binding-prompt-builder.js";
+import type {
+	BindingPromptResult,
+	BindingSkeleton,
+} from "./binding-prompt-builder.js";
+import type {
+	ValidationError,
+	ValidationResult,
+} from "./content-pack-provider.js";
 import { examineMentionsUseTell } from "./content-pack-provider.js";
-import type { ValidationError, ValidationResult } from "./content-pack-provider.js";
 
 // ── Use-cue keywords (re-export from content-pack-provider) ──────────────────
 
@@ -216,11 +222,21 @@ function validateCarryBinding(
 		});
 	} else {
 		checkWrongId(obj, sk.objectId!, bindingRetryUnit, errors);
-		for (const f of ["name", "examineDescription", "useOutcome", "placementFlavor", "proximityFlavor"]) {
+		for (const f of [
+			"name",
+			"examineDescription",
+			"useOutcome",
+			"placementFlavor",
+			"proximityFlavor",
+		]) {
 			requiredString(obj, f, sk.objectId!, bindingRetryUnit, errors);
 		}
 		// placementFlavor must contain {actor}
-		if (typeof obj.placementFlavor === "string" && obj.placementFlavor.length > 0 && !obj.placementFlavor.includes("{actor}")) {
+		if (
+			typeof obj.placementFlavor === "string" &&
+			obj.placementFlavor.length > 0 &&
+			!obj.placementFlavor.includes("{actor}")
+		) {
 			errors.push({
 				entityId: sk.objectId!,
 				field: "placementFlavor",
@@ -230,7 +246,11 @@ function validateCarryBinding(
 			});
 		}
 		// object.examineDescription MUST reference paired space (hard)
-		if (typeof obj.examineDescription === "string" && obj.examineDescription.length > 0 && sk.spaceId) {
+		if (
+			typeof obj.examineDescription === "string" &&
+			obj.examineDescription.length > 0 &&
+			sk.spaceId
+		) {
 			// Check that it at least mentions the space id string (or we just check the space name from the space entity)
 			// We'll check this after we have the space name below
 		}
@@ -250,11 +270,23 @@ function validateCarryBinding(
 			requiredString(space, f, sk.spaceId!, bindingRetryUnit, errors);
 		}
 		// Forbidden fields on carry space
-		for (const f of ["activationFlavor", "satisfactionFlavor", "postExamineDescription", "postLookFlavor", "convergenceTier1Flavor", "convergenceTier2Flavor", "convergenceTier1ActorFlavor", "convergenceTier2ActorFlavor"]) {
+		for (const f of [
+			"activationFlavor",
+			"satisfactionFlavor",
+			"postExamineDescription",
+			"postLookFlavor",
+			"convergenceTier1Flavor",
+			"convergenceTier2Flavor",
+			"convergenceTier1ActorFlavor",
+			"convergenceTier2ActorFlavor",
+		]) {
 			forbiddenField(space, f, sk.spaceId!, bindingRetryUnit, errors);
 		}
 		// Use-cue in carry space examineDescription = warn only
-		if (typeof space.examineDescription === "string" && space.examineDescription.length > 0) {
+		if (
+			typeof space.examineDescription === "string" &&
+			space.examineDescription.length > 0
+		) {
 			if (examineMentionsUseTell(space.examineDescription)) {
 				warnings.push({
 					entityId: sk.spaceId!,
@@ -293,15 +325,33 @@ function validateUseSpaceBinding(
 	}
 
 	checkWrongId(space, sk.spaceId!, bindingRetryUnit, errors);
-	for (const f of ["name", "examineDescription", "proximityFlavor", "activationFlavor", "satisfactionFlavor", "postExamineDescription", "postLookFlavor"]) {
+	for (const f of [
+		"name",
+		"examineDescription",
+		"proximityFlavor",
+		"activationFlavor",
+		"satisfactionFlavor",
+		"postExamineDescription",
+		"postLookFlavor",
+	]) {
 		requiredString(space, f, sk.spaceId!, bindingRetryUnit, errors);
 	}
 	// Forbidden: convergence tier fields, pairsWithSpaceId, placementFlavor
-	for (const f of ["convergenceTier1Flavor", "convergenceTier2Flavor", "convergenceTier1ActorFlavor", "convergenceTier2ActorFlavor", "pairsWithSpaceId", "placementFlavor"]) {
+	for (const f of [
+		"convergenceTier1Flavor",
+		"convergenceTier2Flavor",
+		"convergenceTier1ActorFlavor",
+		"convergenceTier2ActorFlavor",
+		"pairsWithSpaceId",
+		"placementFlavor",
+	]) {
 		forbiddenField(space, f, sk.spaceId!, bindingRetryUnit, errors);
 	}
 	// examineDescription MUST contain use-cue = hard error
-	if (typeof space.examineDescription === "string" && space.examineDescription.length > 0) {
+	if (
+		typeof space.examineDescription === "string" &&
+		space.examineDescription.length > 0
+	) {
 		if (!examineMentionsUseTell(space.examineDescription)) {
 			errors.push({
 				entityId: sk.spaceId!,
@@ -339,11 +389,22 @@ function validateUseItemBinding(
 	}
 
 	checkWrongId(item, sk.itemId!, bindingRetryUnit, errors);
-	for (const f of ["name", "examineDescription", "proximityFlavor", "useOutcome", "activationFlavor", "postExamineDescription", "postLookFlavor"]) {
+	for (const f of [
+		"name",
+		"examineDescription",
+		"proximityFlavor",
+		"useOutcome",
+		"activationFlavor",
+		"postExamineDescription",
+		"postLookFlavor",
+	]) {
 		requiredString(item, f, sk.itemId!, bindingRetryUnit, errors);
 	}
 	// examineDescription MUST contain use-cue = hard error
-	if (typeof item.examineDescription === "string" && item.examineDescription.length > 0) {
+	if (
+		typeof item.examineDescription === "string" &&
+		item.examineDescription.length > 0
+	) {
 		if (!examineMentionsUseTell(item.examineDescription)) {
 			errors.push({
 				entityId: sk.itemId!,
@@ -382,15 +443,32 @@ function validateConvergenceBinding(
 	}
 
 	checkWrongId(space, sk.spaceId!, bindingRetryUnit, errors);
-	for (const f of ["name", "examineDescription", "proximityFlavor", "convergenceTier1Flavor", "convergenceTier2Flavor", "convergenceTier1ActorFlavor", "convergenceTier2ActorFlavor"]) {
+	for (const f of [
+		"name",
+		"examineDescription",
+		"proximityFlavor",
+		"convergenceTier1Flavor",
+		"convergenceTier2Flavor",
+		"convergenceTier1ActorFlavor",
+		"convergenceTier2ActorFlavor",
+	]) {
 		requiredString(space, f, sk.spaceId!, bindingRetryUnit, errors);
 	}
 	// Forbidden: activationFlavor, satisfactionFlavor, postExamineDescription, postLookFlavor, useAvailable
-	for (const f of ["activationFlavor", "satisfactionFlavor", "postExamineDescription", "postLookFlavor", "useAvailable"]) {
+	for (const f of [
+		"activationFlavor",
+		"satisfactionFlavor",
+		"postExamineDescription",
+		"postLookFlavor",
+		"useAvailable",
+	]) {
 		forbiddenField(space, f, sk.spaceId!, bindingRetryUnit, errors);
 	}
 	// Use-cue in convergence space examineDescription = warn only
-	if (typeof space.examineDescription === "string" && space.examineDescription.length > 0) {
+	if (
+		typeof space.examineDescription === "string" &&
+		space.examineDescription.length > 0
+	) {
 		if (examineMentionsUseTell(space.examineDescription)) {
 			warnings.push({
 				entityId: sk.spaceId!,
@@ -426,7 +504,12 @@ function validateDecoy(
 	}
 
 	const entityId = decoy.id ?? expectedId;
-	for (const f of ["name", "examineDescription", "proximityFlavor", "useOutcome"]) {
+	for (const f of [
+		"name",
+		"examineDescription",
+		"proximityFlavor",
+		"useOutcome",
+	]) {
 		const val = (decoy as Record<string, unknown>)[f];
 		if (typeof val !== "string" || val.length === 0) {
 			errors.push({
@@ -439,7 +522,11 @@ function validateDecoy(
 		}
 	}
 	// Forbidden: activationFlavor, postExamineDescription, postLookFlavor
-	for (const f of ["activationFlavor", "postExamineDescription", "postLookFlavor"]) {
+	for (const f of [
+		"activationFlavor",
+		"postExamineDescription",
+		"postLookFlavor",
+	]) {
 		if ((decoy as Record<string, unknown>)[f] !== undefined) {
 			errors.push({
 				entityId,
@@ -451,7 +538,10 @@ function validateDecoy(
 		}
 	}
 	// examineDescription MUST NOT contain use-cue = hard error
-	if (typeof decoy.examineDescription === "string" && decoy.examineDescription.length > 0) {
+	if (
+		typeof decoy.examineDescription === "string" &&
+		decoy.examineDescription.length > 0
+	) {
 		if (examineMentionsUseTell(decoy.examineDescription)) {
 			errors.push({
 				entityId,
@@ -500,7 +590,10 @@ function validateObstacle(
 		}
 	}
 	// shiftFlavor MUST NOT contain {actor}
-	if (typeof obstacle.shiftFlavor === "string" && obstacle.shiftFlavor.includes("{actor}")) {
+	if (
+		typeof obstacle.shiftFlavor === "string" &&
+		obstacle.shiftFlavor.includes("{actor}")
+	) {
 		errors.push({
 			entityId,
 			field: "shiftFlavor",
@@ -669,7 +762,9 @@ export function validateBoundDualContentPack(
 	}
 
 	const resp = rawResponse as Record<string, unknown>;
-	const phases = resp.phases as Array<{ packA?: RawBoundPack; packB?: RawBoundPack }> | undefined;
+	const phases = resp.phases as
+		| Array<{ packA?: RawBoundPack; packB?: RawBoundPack }>
+		| undefined;
 
 	if (!Array.isArray(phases) || phases.length === 0) {
 		errors.push({

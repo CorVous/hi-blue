@@ -164,7 +164,12 @@ export async function generateNewGameAssets(
 		personasPromise,
 		contentPacksPromise,
 	]);
-	return { personas, contentPacksA: packsA, contentPacksB: packsB, objectiveTypes };
+	return {
+		personas,
+		contentPacksA: packsA,
+		contentPacksB: packsB,
+		objectiveTypes,
+	};
 }
 
 /**
@@ -192,7 +197,12 @@ export async function buildSameDaemonsSession(
 		Object.keys(personas),
 	);
 	return buildSessionFromAssets(
-		{ personas, contentPacksA: [packA], contentPacksB: [packB], objectiveTypes },
+		{
+			personas,
+			contentPacksA: [packA],
+			contentPacksB: [packB],
+			objectiveTypes,
+		},
 		opts,
 	);
 }

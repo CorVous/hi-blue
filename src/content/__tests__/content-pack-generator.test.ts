@@ -7,6 +7,10 @@
 
 import { describe, expect, it } from "vitest";
 import type {
+	RawBinding,
+	RawBoundPack,
+} from "../../spa/game/binding-aware-validator.js";
+import type {
 	BindingContentPackInput,
 	BindingContentPackProviderResult,
 	DualBindingContentPackInput,
@@ -15,7 +19,6 @@ import type {
 import { MockContentPackProvider } from "../../spa/game/content-pack-provider.js";
 import { DEFAULT_LANDMARKS } from "../../spa/game/direction.js";
 import type { ContentPack } from "../../spa/game/types.js";
-import type { RawBoundPack, RawBinding } from "../../spa/game/binding-aware-validator.js";
 import {
 	generateContentPacks,
 	generateDualContentPacks,
@@ -81,7 +84,11 @@ const AI_IDS = ["red", "green", "cyan"];
 /**
  * Build a raw binding from a skeleton binding (given the bindings in the input).
  */
-function makeRawBinding(binding: BindingContentPackInput["phases"][number]["bindings"][number], phaseIdx: number, bindingIdx: number): RawBinding {
+function makeRawBinding(
+	binding: BindingContentPackInput["phases"][number]["bindings"][number],
+	phaseIdx: number,
+	bindingIdx: number,
+): RawBinding {
 	switch (binding.type) {
 		case "carry":
 			return {
@@ -158,8 +165,9 @@ function makeMockProvider(): MockContentPackProvider {
 	return new MockContentPackProvider(
 		(input: BindingContentPackInput): BindingContentPackProviderResult => {
 			const phases = input.phases.map((phase, phaseIdx) => {
-				const bindings: RawBinding[] = phase.bindings.map((binding, bindingIdx) =>
-					makeRawBinding(binding, phaseIdx, bindingIdx)
+				const bindings: RawBinding[] = phase.bindings.map(
+					(binding, bindingIdx) =>
+						makeRawBinding(binding, phaseIdx, bindingIdx),
 				);
 
 				const rawPack: RawBoundPack = {
@@ -477,8 +485,20 @@ describe("generateContentPacks — degenerate config throws after MAX_ATTEMPTS",
 						landmarks: DEFAULT_LANDMARKS as unknown as undefined,
 						bindings: [],
 						decoys: [
-							{ id: "decoy-0", name: "Decoy 0", examineDescription: "A plain item.", proximityFlavor: "A decoy.", useOutcome: "Nothing." },
-							{ id: "decoy-1", name: "Decoy 1", examineDescription: "Another plain item.", proximityFlavor: "Another decoy.", useOutcome: "Nothing." },
+							{
+								id: "decoy-0",
+								name: "Decoy 0",
+								examineDescription: "A plain item.",
+								proximityFlavor: "A decoy.",
+								useOutcome: "Nothing.",
+							},
+							{
+								id: "decoy-1",
+								name: "Decoy 1",
+								examineDescription: "Another plain item.",
+								proximityFlavor: "Another decoy.",
+								useOutcome: "Nothing.",
+							},
 						],
 						obstacles: Array.from({ length: phase.obstacleCount }, (_, i) => ({
 							id: `obstacle-${i}`,
@@ -511,25 +531,53 @@ function makeDualMockProvider(): MockContentPackProvider {
 		(_input: BindingContentPackInput): BindingContentPackProviderResult => ({
 			phases: [],
 		}),
-		(input: DualBindingContentPackInput): DualBindingContentPackProviderResult => {
+		(
+			input: DualBindingContentPackInput,
+		): DualBindingContentPackProviderResult => {
 			const phases = input.phases.map((phase, phaseIdx) => {
-				const makeRawPackVariant = (setting: string, suffix: string): RawBoundPack => {
-					const bindings: RawBinding[] = phase.bindings.map((binding, bindingIdx) => {
-						const raw = makeRawBinding(binding, phaseIdx, bindingIdx);
-						// Re-flavor names for this variant
-						if (raw.object) raw.object = { ...raw.object, name: `${raw.object.name} ${suffix}` };
-						if (raw.space) raw.space = { ...raw.space, name: `${raw.space.name} ${suffix}` };
-						if (raw.item) raw.item = { ...raw.item, name: `${raw.item.name} ${suffix}` };
-						return raw;
-					});
+				const makeRawPackVariant = (
+					setting: string,
+					suffix: string,
+				): RawBoundPack => {
+					const bindings: RawBinding[] = phase.bindings.map(
+						(binding, bindingIdx) => {
+							const raw = makeRawBinding(binding, phaseIdx, bindingIdx);
+							// Re-flavor names for this variant
+							if (raw.object)
+								raw.object = {
+									...raw.object,
+									name: `${raw.object.name} ${suffix}`,
+								};
+							if (raw.space)
+								raw.space = {
+									...raw.space,
+									name: `${raw.space.name} ${suffix}`,
+								};
+							if (raw.item)
+								raw.item = { ...raw.item, name: `${raw.item.name} ${suffix}` };
+							return raw;
+						},
+					);
 					return {
 						setting,
 						wallName: `wall ${suffix}`,
 						landmarks: DEFAULT_LANDMARKS as unknown as undefined,
 						bindings,
 						decoys: [
-							{ id: "decoy-0", name: `Decoy 0 ${suffix}`, examineDescription: `A plain item (${suffix}).`, proximityFlavor: `A decoy.`, useOutcome: `Nothing.` },
-							{ id: "decoy-1", name: `Decoy 1 ${suffix}`, examineDescription: `Another plain item (${suffix}).`, proximityFlavor: `Another decoy.`, useOutcome: `Nothing.` },
+							{
+								id: "decoy-0",
+								name: `Decoy 0 ${suffix}`,
+								examineDescription: `A plain item (${suffix}).`,
+								proximityFlavor: `A decoy.`,
+								useOutcome: `Nothing.`,
+							},
+							{
+								id: "decoy-1",
+								name: `Decoy 1 ${suffix}`,
+								examineDescription: `Another plain item (${suffix}).`,
+								proximityFlavor: `Another decoy.`,
+								useOutcome: `Nothing.`,
+							},
 						],
 						obstacles: Array.from({ length: phase.obstacleCount }, (_, i) => ({
 							id: `obstacle-${i}`,

@@ -11,10 +11,10 @@
  */
 import { describe, expect, it } from "vitest";
 import { DEFAULT_LANDMARKS } from "../direction.js";
-import { buildObjectiveRecords } from "../objective-record-builder.js";
-import { rollObjectiveTypes } from "../objective-type-roll.js";
 import { startGame } from "../engine.js";
 import { GameSession } from "../game-session.js";
+import { buildObjectiveRecords } from "../objective-record-builder.js";
+import { rollObjectiveTypes } from "../objective-type-roll.js";
 import type { AiPersona, ContentPack, ObjectiveType } from "../types.js";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────

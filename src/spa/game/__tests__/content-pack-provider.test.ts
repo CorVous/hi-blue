@@ -147,9 +147,7 @@ describe("CONTENT_PACK_SYSTEM_PROMPT", () => {
 
 	it("includes a worked example so the model knows what a tell looks like", () => {
 		// The binding-aware prompt includes the carry-0 entity ID convention in its example.
-		expect(CONTENT_PACK_SYSTEM_PROMPT.toLowerCase()).toContain(
-			"carry-0",
-		);
+		expect(CONTENT_PACK_SYSTEM_PROMPT.toLowerCase()).toContain("carry-0");
 	});
 });
 
@@ -1868,21 +1866,26 @@ describe("validateContentPacks — pure-result API with multiple failures", () =
 // ── BrowserContentPackProvider — outer-retry layer ─────────────────────────
 
 describe("BrowserContentPackProvider — partial-retry layer", () => {
-	const baseInput: import("../content-pack-provider.js").BindingContentPackInput = {
-		phases: [
-			{
-				setting: "abandoned subway station",
-				theme: "mundane",
-				weather: "overcast",
-				timeOfDay: "night",
-				bindings: [
-					{ type: "carry", objectId: "carry-0-obj", spaceId: "carry-0-space" },
-				],
-				decoyIds: ["decoy-0", "decoy-1"],
-				obstacleCount: 1,
-			},
-		],
-	};
+	const baseInput: import("../content-pack-provider.js").BindingContentPackInput =
+		{
+			phases: [
+				{
+					setting: "abandoned subway station",
+					theme: "mundane",
+					weather: "overcast",
+					timeOfDay: "night",
+					bindings: [
+						{
+							type: "carry",
+							objectId: "carry-0-obj",
+							spaceId: "carry-0-space",
+						},
+					],
+					decoyIds: ["decoy-0", "decoy-1"],
+					obstacleCount: 1,
+				},
+			],
+		};
 
 	/** Build a valid binding-shaped pack response for comparison. */
 	function buildValidPack(): unknown {
@@ -1968,7 +1971,9 @@ describe("BrowserContentPackProvider — partial-retry layer", () => {
 			| Record<string, unknown>
 			| undefined;
 		if (packObj) {
-			const bindings = packObj.bindings as Record<string, unknown>[] | undefined;
+			const bindings = packObj.bindings as
+				| Record<string, unknown>[]
+				| undefined;
 			if (bindings?.[0]) {
 				const space = bindings[0].space as Record<string, unknown>;
 				delete space.examineDescription;
@@ -2013,7 +2018,9 @@ describe("BrowserContentPackProvider — partial-retry layer", () => {
 			| Record<string, unknown>
 			| undefined;
 		if (packObj1) {
-			const bindings = packObj1.bindings as Record<string, unknown>[] | undefined;
+			const bindings = packObj1.bindings as
+				| Record<string, unknown>[]
+				| undefined;
 			if (bindings?.[0]) {
 				const obj = bindings[0].object as Record<string, unknown>;
 				obj.placementFlavor = "Sets the key on its mount."; // missing {actor}
@@ -2030,7 +2037,9 @@ describe("BrowserContentPackProvider — partial-retry layer", () => {
 			| Record<string, unknown>
 			| undefined;
 		if (packObj2) {
-			const bindings = packObj2.bindings as Record<string, unknown>[] | undefined;
+			const bindings = packObj2.bindings as
+				| Record<string, unknown>[]
+				| undefined;
 			if (bindings?.[0]) {
 				const obj = bindings[0].object as Record<string, unknown>;
 				delete obj.useOutcome;
@@ -2065,7 +2074,9 @@ describe("BrowserContentPackProvider — partial-retry layer", () => {
 			| Record<string, unknown>
 			| undefined;
 		if (packObj) {
-			const bindings = packObj.bindings as Record<string, unknown>[] | undefined;
+			const bindings = packObj.bindings as
+				| Record<string, unknown>[]
+				| undefined;
 			if (bindings?.[0]) {
 				const obj = bindings[0].object as Record<string, unknown>;
 				delete obj.examineDescription;
@@ -2093,7 +2104,9 @@ describe("BrowserContentPackProvider — partial-retry layer", () => {
 			| Record<string, unknown>
 			| undefined;
 		if (packObj) {
-			const bindings = packObj.bindings as Record<string, unknown>[] | undefined;
+			const bindings = packObj.bindings as
+				| Record<string, unknown>[]
+				| undefined;
 			if (bindings?.[0]) {
 				const obj = bindings[0].object as Record<string, unknown>;
 				delete obj.name;
@@ -2125,9 +2138,9 @@ describe("BrowserContentPackProvider — partial-retry layer", () => {
 		);
 		expect(correctionTurn).toBeDefined();
 
-		expect(
-			result.phases[0]?.rawPack.bindings?.[0]?.object?.name,
-		).toBe("Iron Key");
+		expect(result.phases[0]?.rawPack.bindings?.[0]?.object?.name).toBe(
+			"Iron Key",
+		);
 	});
 
 	it("Test 5 — JSON parse failure on initial response → backoff → success", async () => {
@@ -2189,24 +2202,29 @@ describe("BrowserContentPackProvider — partial-retry layer", () => {
 });
 
 describe("BrowserContentPackProvider — dual outer-retry layer", () => {
-	const dualInput: import("../content-pack-provider.js").DualBindingContentPackInput = {
-		phases: [
-			{
-				settingA: "abandoned subway station",
-				settingB: "sun-baked salt flat",
-				theme: "mundane",
-				weatherA: "overcast",
-				weatherB: "clear",
-				timeOfDayA: "night",
-				timeOfDayB: "midday",
-				bindings: [
-					{ type: "carry", objectId: "carry-0-obj", spaceId: "carry-0-space" },
-				],
-				decoyIds: ["decoy-0", "decoy-1"],
-				obstacleCount: 0,
-			},
-		],
-	};
+	const dualInput: import("../content-pack-provider.js").DualBindingContentPackInput =
+		{
+			phases: [
+				{
+					settingA: "abandoned subway station",
+					settingB: "sun-baked salt flat",
+					theme: "mundane",
+					weatherA: "overcast",
+					weatherB: "clear",
+					timeOfDayA: "night",
+					timeOfDayB: "midday",
+					bindings: [
+						{
+							type: "carry",
+							objectId: "carry-0-obj",
+							spaceId: "carry-0-space",
+						},
+					],
+					decoyIds: ["decoy-0", "decoy-1"],
+					obstacleCount: 0,
+				},
+			],
+		};
 
 	/** Build a valid binding-shaped dual response. */
 	function buildDualResponse(
@@ -2214,10 +2232,22 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 		packBObjectName = "Bone Token",
 	): unknown {
 		const landmarks = {
-			north: { shortName: "the signal tower", horizonPhrase: "rises above the platform" },
-			south: { shortName: "the collapsed entrance", horizonPhrase: "gapes like a wound in the dark" },
-			east: { shortName: "the rusted fan shaft", horizonPhrase: "spins slowly in the stale air" },
-			west: { shortName: "the flooded tunnel", horizonPhrase: "disappears into still black water" },
+			north: {
+				shortName: "the signal tower",
+				horizonPhrase: "rises above the platform",
+			},
+			south: {
+				shortName: "the collapsed entrance",
+				horizonPhrase: "gapes like a wound in the dark",
+			},
+			east: {
+				shortName: "the rusted fan shaft",
+				horizonPhrase: "spins slowly in the stale air",
+			},
+			west: {
+				shortName: "the flooded tunnel",
+				horizonPhrase: "disappears into still black water",
+			},
 		};
 		const mkPack = (setting: string, objName: string, spaceName: string) => ({
 			setting,
@@ -2244,16 +2274,36 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 				},
 			],
 			decoys: [
-				{ id: "decoy-0", name: "Old Disc", examineDescription: "A small tarnished disc.", proximityFlavor: "The disc gleams.", useOutcome: "Nothing." },
-				{ id: "decoy-1", name: "Plain Coin", examineDescription: "A coin from another era.", proximityFlavor: "The coin catches light.", useOutcome: "Nothing." },
+				{
+					id: "decoy-0",
+					name: "Old Disc",
+					examineDescription: "A small tarnished disc.",
+					proximityFlavor: "The disc gleams.",
+					useOutcome: "Nothing.",
+				},
+				{
+					id: "decoy-1",
+					name: "Plain Coin",
+					examineDescription: "A coin from another era.",
+					proximityFlavor: "The coin catches light.",
+					useOutcome: "Nothing.",
+				},
 			],
 			obstacles: [],
 		});
 		return {
 			phases: [
 				{
-					packA: mkPack("abandoned subway station", packAObjectName, "Brass Pedestal"),
-					packB: mkPack("sun-baked salt flat", packBObjectName, "Survey Marker"),
+					packA: mkPack(
+						"abandoned subway station",
+						packAObjectName,
+						"Brass Pedestal",
+					),
+					packB: mkPack(
+						"sun-baked salt flat",
+						packBObjectName,
+						"Survey Marker",
+					),
 				},
 			],
 		};
@@ -2264,7 +2314,8 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 
 		// Call 1: invalid dual response (carry-0-obj missing examineDescription in packA)
 		const invalidResponse = buildDualResponse();
-		const phases = (invalidResponse as Record<string, unknown>).phases as Record<string, unknown>[];
+		const phases = (invalidResponse as Record<string, unknown>)
+			.phases as Record<string, unknown>[];
 		const packA = phases[0]!.packA as Record<string, unknown>;
 		const bindings = packA.bindings as Record<string, unknown>[];
 		const obj = bindings[0]!.object as Record<string, unknown>;
@@ -2284,12 +2335,12 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 		const result = await provider.generateDualContentPacks(dualInput);
 
 		expect(mockChatFn).toHaveBeenCalledTimes(2);
-		expect(
-			result.phases[0]?.rawPackA.bindings?.[0]?.object?.name,
-		).toBe("Iron Key");
-		expect(
-			result.phases[0]?.rawPackB.bindings?.[0]?.object?.name,
-		).toBe("Bone Token");
+		expect(result.phases[0]?.rawPackA.bindings?.[0]?.object?.name).toBe(
+			"Iron Key",
+		);
+		expect(result.phases[0]?.rawPackB.bindings?.[0]?.object?.name).toBe(
+			"Bone Token",
+		);
 
 		// Assert call 2's messages contain corrective feedback
 		const call2Messages = mockChatFn.mock.calls[1]?.[0]?.messages as
@@ -2307,21 +2358,33 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 
 		// Call 1: invalid response (missing carry object name)
 		const invalid1 = buildDualResponse();
-		const phases1 = (invalid1 as Record<string, unknown>).phases as Record<string, unknown>[];
+		const phases1 = (invalid1 as Record<string, unknown>).phases as Record<
+			string,
+			unknown
+		>[];
 		const packA1 = phases1[0]!.packA as Record<string, unknown>;
 		const bindings1 = packA1.bindings as Record<string, unknown>[];
 		const obj1 = bindings1[0]!.object as Record<string, unknown>;
 		delete obj1.name;
-		mockChatFn.mockResolvedValueOnce({ content: JSON.stringify(invalid1), reasoning: null });
+		mockChatFn.mockResolvedValueOnce({
+			content: JSON.stringify(invalid1),
+			reasoning: null,
+		});
 
 		// Call 2: still invalid (missing placementFlavor {actor})
 		const invalid2 = buildDualResponse();
-		const phases2 = (invalid2 as Record<string, unknown>).phases as Record<string, unknown>[];
+		const phases2 = (invalid2 as Record<string, unknown>).phases as Record<
+			string,
+			unknown
+		>[];
 		const packA2 = phases2[0]!.packA as Record<string, unknown>;
 		const bindings2 = packA2.bindings as Record<string, unknown>[];
 		const obj2 = bindings2[0]!.object as Record<string, unknown>;
 		obj2.placementFlavor = "Sets it on the pedestal."; // missing {actor}
-		mockChatFn.mockResolvedValueOnce({ content: JSON.stringify(invalid2), reasoning: null });
+		mockChatFn.mockResolvedValueOnce({
+			content: JSON.stringify(invalid2),
+			reasoning: null,
+		});
 
 		// Call 3: valid dual response
 		mockChatFn.mockResolvedValueOnce({
@@ -2333,9 +2396,9 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 		const result = await provider.generateDualContentPacks(dualInput);
 
 		expect(mockChatFn).toHaveBeenCalledTimes(3);
-		expect(
-			result.phases[0]?.rawPackA.bindings?.[0]?.object?.name,
-		).toBe("Iron Key");
+		expect(result.phases[0]?.rawPackA.bindings?.[0]?.object?.name).toBe(
+			"Iron Key",
+		);
 
 		// Assert call 3's messages contain corrective feedback
 		const call3Messages = mockChatFn.mock.calls[2]?.[0]?.messages as
@@ -2372,7 +2435,8 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 
 		// Return the same structurally-invalid response three times (OUTER_BUDGET = 3)
 		const invalidResponse = buildDualResponse();
-		const phases = (invalidResponse as Record<string, unknown>).phases as Record<string, unknown>[];
+		const phases = (invalidResponse as Record<string, unknown>)
+			.phases as Record<string, unknown>[];
 		const packA = phases[0]!.packA as Record<string, unknown>;
 		const bindings = packA.bindings as Record<string, unknown>[];
 		const obj = bindings[0]!.object as Record<string, unknown>;
@@ -2428,4 +2492,3 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 		);
 	});
 });
-
