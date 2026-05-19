@@ -277,42 +277,65 @@ export function toolBiasSum(
 }
 
 /**
- * Render an action-profile clause for a persona — same third-person voice
- * as the synthesised blurb so it reads as one more sentence about the
- * persona rather than a tacked-on directive.
+ * Render an action-profile clause for a persona.
  *
- * Clauses use concrete action language ("examines methodically",
- * "explores restlessly") instead of abstract "may/might" framings —
- * step-6 of spike #239 showed that abstract permissions flatten to
- * uniform opt-outs across all daemons (see `engagement-clauses.ts`).
+ * v2 (post-eval): the original prose-shape classifier produced only ±2pp
+ * aggregate movement vs. baseline — the language was too soft ("examines
+ * methodically", "explores restlessly") and the model treated it as
+ * permission rather than direction. The rewritten clause names the
+ * persona's preferred and avoided tools directly with STRICTLY / AVOIDS
+ * language and explicit tool tokens, which is the directive shape the
+ * plan called for. See `docs/evals/daemon-action-variation-analysis.md`.
  *
- * The classifier reads the summed biases on the dominant axes
- * (examine vs go, use, give) and dispatches to a small set of clause
- * shapes; a balanced default catches anything that doesn't fit a
- * pronounced pattern.
+ * Thresholds:
+ *   - preferred: per-tool bias sum ≥ +2 (a clear push from the temperament pair)
+ *   - avoided:   per-tool bias sum ≤ -1 (a non-trivial pull-back)
+ *
+ * The threshold pair is asymmetric on purpose. Most temperament pairs
+ * have a handful of mild positive biases (which we don't want to call
+ * out — "STRICTLY prefer 6 tools" loses meaning), so the positive
+ * threshold is higher. Avoidances are rarer and inherently more
+ * informative, so the negative threshold is lower.
+ *
+ * Personas whose summed bias table is featureless (no tool ≥ +2 and no
+ * tool ≤ -1) get a balanced-default clause so the `<action_profile>`
+ * block is never empty.
  */
 export function actionProfileFor(name: string, t1: string, t2: string): string {
 	const biases = toolBiasSum(t1, t2);
 	const star = `*${name}`;
-	const { go: goScore, examine: examineScore, give: giveScore } = biases;
 
-	if (examineScore >= 3 && goScore <= 0) {
-		return `${star} examines things methodically and must understand an item before acting on it. They move carefully, deliberately, and reach for \`examine\` before \`use\`.`;
-	}
-	if (goScore >= 3 && examineScore <= 0) {
-		return `${star} explores restlessly, often acting before understanding. They charge forward and \`go\` readily, and will \`use\` interactive objects when the opportunity arises.`;
-	}
-	if (examineScore >= 1 && goScore >= 1) {
-		return `${star} balances curiosity with action — they \`examine\` interesting finds, \`go\` to explore with equal drive, and reach for \`use\` when an object seems relevant.`;
-	}
-	if (goScore <= -2 && examineScore <= -1) {
-		return `${star} is cautious and reserved. They move and act only when necessary; when an interactive object is in front of them they will still \`use\` it if it matters.`;
-	}
-	if (giveScore >= 2) {
-		return `${star} readily passes items to peers — \`give\` is a natural reflex. They also \`examine\` and \`go\` as the moment calls for it, and \`use\` objects when relevant.`;
-	}
+	// Tools sorted by bias descending — used to pick stable, deterministic
+	// preferred / avoided orderings (highest-magnitude first).
+	const sorted = [...ACTION_TOOLS]
+		.map((tool) => ({ tool, bias: biases[tool] }))
+		.sort((a, b) => b.bias - a.bias);
 
-	return `${star} engages with the environment — they \`examine\` items, \`go\` to explore spaces, and \`use\` interactive objects when they seem relevant. Action and caution are balanced.`;
+	const preferred = sorted.filter((x) => x.bias >= 2).map((x) => x.tool);
+	const avoided = sorted
+		.filter((x) => x.bias <= -1)
+		.sort((a, b) => a.bias - b.bias)
+		.map((x) => x.tool);
+
+	const fmt = (arr: ActionTool[]): string =>
+		arr.map((t) => `\`${t}\``).join(", ");
+
+	const parts: string[] = [];
+	if (preferred.length > 0) {
+		parts.push(
+			`${star} STRICTLY prefers ${fmt(preferred)} — these action tools come first when the situation allows.`,
+		);
+	} else {
+		parts.push(
+			`${star} engages with the action surface in a balanced way — no single tool dominates their reflexes.`,
+		);
+	}
+	if (avoided.length > 0) {
+		parts.push(
+			`${star} AVOIDS ${fmt(avoided)} — emit them only when no other tool fits.`,
+		);
+	}
+	return parts.join(" ");
 }
 
 /**
