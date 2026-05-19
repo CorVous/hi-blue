@@ -116,7 +116,7 @@
       <div class="delta" id="delta">—</div>
     </div>
     <div class="chart-wrap">
-      <svg id="chart" viewBox="0 0 720 280" preserveAspectRatio="none" aria-label="Line chart"></svg>
+      <svg id="chart" viewBox="0 0 720 280" preserveAspectRatio="none" role="img" aria-label="Weekly active users line chart"><title>Weekly active users line chart</title></svg>
       <div class="tip" id="tip"></div>
     </div>
     <footer>
@@ -225,7 +225,6 @@
     const d = data[i];
     ring.setAttribute("cx", x(i));
     ring.setAttribute("cy", y(d.v));
-    const pxX = rect.left + x(i) * scale - rect.left + window.scrollX + rect.left;
     tip.style.left = `${x(i) * scale}px`;
     tip.style.top = `${y(d.v) * scale}px`;
     tip.textContent = `${d.w}: ${d.v.toLocaleString()} users`;
