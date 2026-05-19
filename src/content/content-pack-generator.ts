@@ -18,15 +18,25 @@
  */
 
 import type {
+	RawBinding,
+	RawBoundPack,
+} from "../spa/game/binding-aware-validator.js";
+import {
+	buildBindingPrompt,
+	buildDualBindingPrompt,
+} from "../spa/game/binding-prompt-builder.js";
+import type {
 	ContentPackProvider,
-	ContentPackProviderInput,
-	DualContentPackProviderInput,
+	DualBindingContentPackInput,
 } from "../spa/game/content-pack-provider.js";
+import { rollObjectiveTypes } from "../spa/game/objective-type-roll.js";
 import type {
 	AiId,
 	CardinalDirection,
 	ContentPack,
 	GridPosition,
+	ObjectivePair,
+	ObjectiveType,
 	PersonaSpatialState,
 	WorldEntity,
 } from "../spa/game/types.js";
@@ -155,13 +165,14 @@ function tryPlacePhase(
 	pack: ContentPack,
 	aiIds: AiId[],
 ): ContentPack | null {
-	const k = pack.objectivePairs.length;
+	const k = pack.objectivePairs.length; // carry pairs
+	const s = (pack.boundSpaces ?? []).length; // standalone bound spaces
+	const totalSpaces = k + s;
 	const n = pack.interestingObjects.length;
 	const m = pack.obstacles.length;
 
-	// We need: m obstacles + |aiIds| AI starts + k spaces + k objects (not on their space) + n interesting objects
-	// Total non-obstacle cells needed: |aiIds| + k spaces + k objects + n
-	const nonObstacleNeeded = aiIds.length + k + k + n;
+	// nonObstacleNeeded: AI starts + all spaces + carry objects + interesting objects
+	const nonObstacleNeeded = aiIds.length + totalSpaces + k + n;
 	if (m + nonObstacleNeeded > TOTAL_CELLS) {
 		return null; // Impossible layout
 	}
@@ -195,12 +206,14 @@ function tryPlacePhase(
 		aiStarts[aiIds[i] as AiId] = { position: pos, facing };
 	}
 
-	// 4. Place objective spaces: distinct, non-obstacle, off AI start cells
+	// 4. Place all spaces (carry spaces + standalone bound spaces): distinct, non-obstacle, off AI start cells
 	const spaceCandidates = nonObstacleCells.filter((k) => !aiStartSet.has(k));
-	if (spaceCandidates.length < k) return null;
+	if (spaceCandidates.length < totalSpaces) return null;
 	const spaceCandidatePool = [...spaceCandidates];
-	const spaceKeys = drawDistinctCells(rng, spaceCandidatePool, k);
-	const spaceKeySet = new Set(spaceKeys);
+	const allSpaceKeys = drawDistinctCells(rng, spaceCandidatePool, totalSpaces);
+	// First k go to carry pair spaces; remaining s go to standalone bound spaces
+	const spaceKeys = allSpaceKeys.slice(0, k);
+	const spaceKeySet = new Set(allSpaceKeys); // all spaces forbidden for objects
 
 	// 5. Place objective objects: distinct, non-obstacle, NOT on their matched space
 	const objectCandidates = nonObstacleCells.filter(
@@ -253,11 +266,19 @@ function tryPlacePhase(
 		holder: keyToPos(obstacleKeys[i] as number),
 	}));
 
+	// Place standalone bound spaces
+	const standaloneSpaceKeys = allSpaceKeys.slice(k);
+	const updatedBoundSpaces = (pack.boundSpaces ?? []).map((space, i) => ({
+		...space,
+		holder: keyToPos(standaloneSpaceKeys[i] as number),
+	}));
+
 	return {
 		...pack,
 		objectivePairs: updatedObjectivePairs,
 		interestingObjects: updatedInterestingObjects,
 		obstacles: updatedObstacles,
+		boundSpaces: updatedBoundSpaces,
 		aiStarts,
 	};
 }
@@ -281,6 +302,175 @@ function placePhases(
 				`Check that m (${pack.obstacles.length}) obstacles leave enough room for AI starts and entities.`,
 		);
 	});
+}
+
+/**
+ * Convert a validated RawBoundPack to a ContentPack (without placements).
+ * Carry bindings → objectivePairs; use_space+convergence → boundSpaces;
+ * use_item+decoys → interestingObjects; obstacles → obstacles.
+ */
+function rawBoundPackToContentPack(
+	rawPack: RawBoundPack,
+	objectiveTypes: ObjectiveType[],
+	weather: string,
+	timeOfDay: string,
+): ContentPack {
+	const objectivePairs: ObjectivePair[] = [];
+	const boundSpaces: WorldEntity[] = [];
+	const interestingObjects: WorldEntity[] = [];
+	const obstacles: WorldEntity[] = [];
+
+	const bindings = rawPack.bindings ?? [];
+	for (const [i, type] of objectiveTypes.entries()) {
+		const binding: RawBinding | undefined = bindings[i];
+		if (!binding) continue;
+
+		switch (type) {
+			case "carry": {
+				const obj = binding.object;
+				const spc = binding.space;
+				if (obj && spc) {
+					objectivePairs.push({
+						object: {
+							id: obj.id ?? `carry-${i}-obj`,
+							kind: "objective_object",
+							name: obj.name ?? "",
+							examineDescription: obj.examineDescription ?? "",
+							useOutcome: obj.useOutcome ?? "",
+							pairsWithSpaceId: spc.id ?? `carry-${i}-space`,
+							placementFlavor: obj.placementFlavor ?? "{actor}",
+							proximityFlavor: obj.proximityFlavor ?? "",
+							holder: { row: 0, col: 0 },
+						},
+						space: {
+							id: spc.id ?? `carry-${i}-space`,
+							kind: "objective_space",
+							name: spc.name ?? "",
+							examineDescription: spc.examineDescription ?? "",
+							proximityFlavor: spc.proximityFlavor ?? "",
+							holder: { row: 0, col: 0 },
+						},
+					});
+				}
+				break;
+			}
+			case "use_space": {
+				const spc = binding.space;
+				if (spc) {
+					const entity: WorldEntity = {
+						id: spc.id ?? `useSpace-${i}-space`,
+						kind: "objective_space",
+						name: spc.name ?? "",
+						examineDescription: spc.examineDescription ?? "",
+						proximityFlavor: spc.proximityFlavor ?? "",
+						holder: { row: 0, col: 0 },
+					};
+					if (spc.activationFlavor !== undefined)
+						entity.activationFlavor = spc.activationFlavor;
+					if (spc.satisfactionFlavor !== undefined)
+						entity.satisfactionFlavor = spc.satisfactionFlavor;
+					if (spc.postExamineDescription !== undefined)
+						entity.postExamineDescription = spc.postExamineDescription;
+					if (spc.postLookFlavor !== undefined)
+						entity.postLookFlavor = spc.postLookFlavor;
+					boundSpaces.push(entity);
+				}
+				break;
+			}
+			case "convergence": {
+				const spc = binding.space;
+				if (spc) {
+					const entity: WorldEntity = {
+						id: spc.id ?? `convergence-${i}-space`,
+						kind: "objective_space",
+						name: spc.name ?? "",
+						examineDescription: spc.examineDescription ?? "",
+						proximityFlavor: spc.proximityFlavor ?? "",
+						holder: { row: 0, col: 0 },
+					};
+					if (spc.convergenceTier1Flavor !== undefined)
+						entity.convergenceTier1Flavor = spc.convergenceTier1Flavor;
+					if (spc.convergenceTier2Flavor !== undefined)
+						entity.convergenceTier2Flavor = spc.convergenceTier2Flavor;
+					if (spc.convergenceTier1ActorFlavor !== undefined)
+						entity.convergenceTier1ActorFlavor =
+							spc.convergenceTier1ActorFlavor;
+					if (spc.convergenceTier2ActorFlavor !== undefined)
+						entity.convergenceTier2ActorFlavor =
+							spc.convergenceTier2ActorFlavor;
+					boundSpaces.push(entity);
+				}
+				break;
+			}
+			case "use_item": {
+				const item = binding.item;
+				if (item) {
+					const entity: WorldEntity = {
+						id: item.id ?? `useItem-${i}-item`,
+						kind: "interesting_object",
+						name: item.name ?? "",
+						examineDescription: item.examineDescription ?? "",
+						proximityFlavor: item.proximityFlavor ?? "",
+						holder: { row: 0, col: 0 },
+					};
+					if (item.useOutcome !== undefined)
+						entity.useOutcome = item.useOutcome;
+					if (item.activationFlavor !== undefined)
+						entity.activationFlavor = item.activationFlavor;
+					if (item.postExamineDescription !== undefined)
+						entity.postExamineDescription = item.postExamineDescription;
+					if (item.postLookFlavor !== undefined)
+						entity.postLookFlavor = item.postLookFlavor;
+					interestingObjects.push(entity);
+				}
+				break;
+			}
+		}
+	}
+
+	// Add decoys to interestingObjects
+	for (const decoy of rawPack.decoys ?? []) {
+		const entity: WorldEntity = {
+			id: decoy.id ?? "decoy-unknown",
+			kind: "interesting_object",
+			name: decoy.name ?? "",
+			examineDescription: decoy.examineDescription ?? "",
+			proximityFlavor: decoy.proximityFlavor ?? "",
+			holder: { row: 0, col: 0 },
+		};
+		if (decoy.useOutcome !== undefined) entity.useOutcome = decoy.useOutcome;
+		interestingObjects.push(entity);
+	}
+
+	// Add obstacles
+	for (const obs of rawPack.obstacles ?? []) {
+		obstacles.push({
+			id: obs.id ?? "obstacle-unknown",
+			kind: "obstacle",
+			name: obs.name ?? "",
+			examineDescription: obs.examineDescription ?? "",
+			shiftFlavor: obs.shiftFlavor ?? "",
+			holder: { row: 0, col: 0 },
+		});
+	}
+
+	return {
+		setting: rawPack.setting ?? "",
+		weather,
+		timeOfDay,
+		objectivePairs,
+		interestingObjects,
+		boundSpaces,
+		obstacles,
+		landmarks: (rawPack.landmarks as ContentPack["landmarks"]) ?? {
+			north: { shortName: "", horizonPhrase: "" },
+			south: { shortName: "", horizonPhrase: "" },
+			east: { shortName: "", horizonPhrase: "" },
+			west: { shortName: "", horizonPhrase: "" },
+		},
+		wallName: rawPack.wallName ?? "",
+		aiStarts: {},
+	};
 }
 
 /**
@@ -331,16 +521,38 @@ export async function generateContentPacks(
 		() => THEME_POOL[Math.floor(rng() * THEME_POOL.length)] as string,
 	);
 
-	// Roll k/n/m per phase
-	const phaseInputs: ContentPackProviderInput["phases"] = configs.map(
-		(cfg, i) => ({
-			setting: drawnSettings[i] as string,
-			theme: drawnThemes[i] as string,
-			k: rollInt(rng, cfg.kRange[0], cfg.kRange[1]),
-			n: rollInt(rng, cfg.nRange[0], cfg.nRange[1]),
-			m: rollInt(rng, cfg.mRange[0], cfg.mRange[1]),
-		}),
+	// Roll m per phase and type-first objective types
+	const phaseMValues = configs.map((cfg) =>
+		rollInt(rng, cfg.mRange[0], cfg.mRange[1]),
 	);
+	const phaseObjectiveTypes = configs.map(() => rollObjectiveTypes(rng, 3));
+
+	// Build binding-format phases for LLM
+	const phaseInputs = configs.map((_cfg, i) => {
+		const objectiveTypes = phaseObjectiveTypes[i] ?? [];
+		const m = phaseMValues[i] ?? 0;
+		const weather = drawnWeather[i] ?? "clear";
+		const timeOfDay = drawnTimeOfDay[i] ?? "morning";
+		const theme = drawnThemes[i] ?? "mundane";
+		const setting = drawnSettings[i] ?? "";
+		const bp = buildBindingPrompt(
+			objectiveTypes,
+			setting,
+			theme,
+			weather,
+			timeOfDay,
+			m,
+		);
+		return {
+			setting,
+			theme,
+			weather,
+			timeOfDay,
+			bindings: bp.skeletons,
+			decoyIds: ["decoy-0", "decoy-1"] as [string, string],
+			obstacleCount: m,
+		};
+	});
 
 	// Kick off LLM call immediately (parallel with aiIds resolution)
 	const llmCallPromise = llm.generateContentPacks({ phases: phaseInputs });
@@ -351,35 +563,37 @@ export async function generateContentPacks(
 		Promise.resolve(aiIdsOrPromise),
 	]);
 
-	// Build placeholder ContentPack structures from LLM result (no placements yet)
-	const unplacedPacks: ContentPack[] = llmResult.packs.map((pack, i) => ({
-		setting: pack.setting,
-		weather: drawnWeather[i] as string,
-		timeOfDay: drawnTimeOfDay[i] as string,
-		objectivePairs: pack.objectivePairs,
-		interestingObjects: pack.interestingObjects as WorldEntity[],
-		obstacles: pack.obstacles as WorldEntity[],
-		landmarks: pack.landmarks,
-		wallName: pack.wallName,
-		aiStarts: {},
-	}));
+	// Build unplaced ContentPack structures from LLM result using converter
+	const unplacedPacks: ContentPack[] = llmResult.phases.map((phase, i) => {
+		const objectiveTypes = phaseObjectiveTypes[i] ?? [];
+		const weather = drawnWeather[i] ?? "clear";
+		const timeOfDay = drawnTimeOfDay[i] ?? "morning";
+		return rawBoundPackToContentPack(
+			phase.rawPack,
+			objectiveTypes,
+			weather,
+			timeOfDay,
+		);
+	});
 
 	// Run placement engine
 	return placePhases(rng, unplacedPacks, aiIds);
 }
 
 /**
- * Generate a paired A/B ContentPack in one LLM call.
+ * Generate a paired A/B ContentPack in one LLM call (type-first authoring).
  *
- * Pack A and Pack B share identical entity IDs and grid placements; only
- * names, descriptions, and flavor strings differ (re-flavored per setting).
+ * Objective types are rolled BEFORE the LLM call. The LLM receives pre-minted
+ * entity-ID skeletons and authors only flavor fields. Pack A and Pack B share
+ * identical entity IDs and grid placements; only names, descriptions, and flavor
+ * strings differ (re-flavored per setting).
  *
  * @param rng        Seeded random number generator.
  * @param settings   The pool of setting nouns (must have >= 2 entries: 1 for Pack A, 1 for Pack B).
  * @param config     Single-game config (kRange, nRange, mRange) — same for both packs.
  * @param llm        ContentPackProvider for the LLM call.
  * @param aiIdsOrPromise  AiId list or a Promise resolving to one.
- * @returns          `{ packA, packB }` — placed ContentPack pair with identical entity IDs/placements.
+ * @returns          `{ packA, packB, objectiveTypes }` — placed ContentPack pair with identical entity IDs/placements.
  */
 export async function generateDualContentPacks(
 	rng: () => number,
@@ -387,7 +601,11 @@ export async function generateDualContentPacks(
 	config: PhaseConfig,
 	llm: ContentPackProvider,
 	aiIdsOrPromise: AiId[] | Promise<AiId[]>,
-): Promise<{ packA: ContentPack; packB: ContentPack }> {
+): Promise<{
+	packA: ContentPack;
+	packB: ContentPack;
+	objectiveTypes: ObjectiveType[];
+}> {
 	if (settings.length < 2) {
 		throw new Error(
 			`generateDualContentPacks: setting pool must have at least 2 entries (has ${settings.length})`,
@@ -422,42 +640,66 @@ export async function generateDualContentPacks(
 	] as string;
 	const theme = THEME_POOL[Math.floor(rng() * THEME_POOL.length)] as string;
 
-	// Roll k/n/m once (shared between A and B — same entity counts)
-	const phaseInput: DualContentPackProviderInput["phases"][number] = {
+	// Roll m for obstacles
+	const m = rollInt(rng, config.mRange[0], config.mRange[1]);
+
+	// === TYPE-FIRST: roll objectives BEFORE the LLM call ===
+	const objectiveTypes = rollObjectiveTypes(rng, 3);
+
+	// Build binding prompt (pre-minted IDs) and dual LLM input
+	const bindingPrompt = buildDualBindingPrompt(
+		objectiveTypes,
 		settingA,
 		settingB,
 		theme,
-		k: rollInt(rng, config.kRange[0], config.kRange[1]),
-		n: rollInt(rng, config.nRange[0], config.nRange[1]),
-		m: rollInt(rng, config.mRange[0], config.mRange[1]),
+		weatherA,
+		weatherB,
+		timeOfDayA,
+		timeOfDayB,
+		m,
+	);
+
+	const llmInput: DualBindingContentPackInput = {
+		phases: [
+			{
+				settingA,
+				settingB,
+				theme,
+				weatherA,
+				weatherB,
+				timeOfDayA,
+				timeOfDayB,
+				bindings: bindingPrompt.skeletons,
+				decoyIds: ["decoy-0", "decoy-1"],
+				obstacleCount: m,
+			},
+		],
 	};
 
 	// Kick off dual LLM call and aiIds resolution in parallel
-	const llmCallPromise = llm.generateDualContentPacks({
-		phases: [phaseInput],
-	});
+	const llmCallPromise = llm.generateDualContentPacks(llmInput);
 	const [llmResult, aiIds] = await Promise.all([
 		llmCallPromise,
 		Promise.resolve(aiIdsOrPromise),
 	]);
 
-	// Extract single phase result
-	const phaseResult = llmResult.phases[0];
-	if (!phaseResult)
+	const phase = llmResult.phases[0];
+	if (!phase)
 		throw new Error("generateDualContentPacks: LLM returned no phases");
 
-	// Build unplaced Pack A from LLM result
-	const unplacedPackA: ContentPack = {
-		setting: phaseResult.packA.setting,
-		weather: weatherA,
-		timeOfDay: timeOfDayA,
-		objectivePairs: phaseResult.packA.objectivePairs,
-		interestingObjects: phaseResult.packA.interestingObjects as WorldEntity[],
-		obstacles: phaseResult.packA.obstacles as WorldEntity[],
-		landmarks: phaseResult.packA.landmarks,
-		wallName: phaseResult.packA.wallName,
-		aiStarts: {},
-	};
+	// Convert binding-shaped packs to ContentPack (no placements yet)
+	const unplacedPackA = rawBoundPackToContentPack(
+		phase.rawPackA,
+		objectiveTypes,
+		weatherA,
+		timeOfDayA,
+	);
+	const unplacedPackB = rawBoundPackToContentPack(
+		phase.rawPackB,
+		objectiveTypes,
+		weatherB,
+		timeOfDayB,
+	);
 
 	// Run placement engine on Pack A
 	const placedPacksA = placePhases(rng, [unplacedPackA], aiIds);
@@ -465,15 +707,14 @@ export async function generateDualContentPacks(
 	if (!placedPackA)
 		throw new Error("generateDualContentPacks: placement failed");
 
-	// Build ID → holder map from placed Pack A
-	const holderById = new Map<
-		string,
-		AiId | import("../spa/game/types.js").GridPosition
-	>();
+	// Build ID → holder map from placed Pack A (include boundSpaces)
+	const holderById = new Map<string, AiId | GridPosition>();
 	for (const pair of placedPackA.objectivePairs) {
 		holderById.set(pair.object.id, pair.object.holder);
 		holderById.set(pair.space.id, pair.space.holder);
 	}
+	for (const space of placedPackA.boundSpaces ?? [])
+		holderById.set(space.id, space.holder);
 	for (const obj of placedPackA.interestingObjects)
 		holderById.set(obj.id, obj.holder);
 	for (const obs of placedPackA.obstacles) holderById.set(obs.id, obs.holder);
@@ -485,23 +726,18 @@ export async function generateDualContentPacks(
 
 	// Apply the same placements to Pack B by matching entity IDs
 	const packB: ContentPack = {
-		setting: phaseResult.packB.setting,
-		weather: weatherB,
-		timeOfDay: timeOfDayB,
-		objectivePairs: phaseResult.packB.objectivePairs.map((pair) => ({
+		...unplacedPackB,
+		objectivePairs: unplacedPackB.objectivePairs.map((pair) => ({
 			object: applyHolder(pair.object),
 			space: applyHolder(pair.space),
 		})),
-		interestingObjects: (
-			phaseResult.packB.interestingObjects as WorldEntity[]
-		).map(applyHolder),
-		obstacles: (phaseResult.packB.obstacles as WorldEntity[]).map(applyHolder),
-		landmarks: phaseResult.packB.landmarks,
-		wallName: phaseResult.packB.wallName,
+		boundSpaces: (unplacedPackB.boundSpaces ?? []).map(applyHolder),
+		interestingObjects: unplacedPackB.interestingObjects.map(applyHolder),
+		obstacles: unplacedPackB.obstacles.map(applyHolder),
 		aiStarts: { ...placedPackA.aiStarts },
 	};
 
-	return { packA: placedPackA, packB };
+	return { packA: placedPackA, packB, objectiveTypes };
 }
 
 /**
@@ -539,13 +775,27 @@ export async function generateContentPack(
 	] as string;
 	const theme = THEME_POOL[Math.floor(rng() * THEME_POOL.length)] as string;
 
-	// Roll k/n/m
-	const phaseInput: ContentPackProviderInput["phases"][number] = {
+	// Roll m and type-first objective types
+	const m = rollInt(rng, config.mRange[0], config.mRange[1]);
+	const objectiveTypes = rollObjectiveTypes(rng, 3);
+
+	// Build binding prompt
+	const bp = buildBindingPrompt(
+		objectiveTypes,
 		setting,
 		theme,
-		k: rollInt(rng, config.kRange[0], config.kRange[1]),
-		n: rollInt(rng, config.nRange[0], config.nRange[1]),
-		m: rollInt(rng, config.mRange[0], config.mRange[1]),
+		weather,
+		timeOfDay,
+		m,
+	);
+	const phaseInput = {
+		setting,
+		theme,
+		weather,
+		timeOfDay,
+		bindings: bp.skeletons,
+		decoyIds: ["decoy-0", "decoy-1"] as [string, string],
+		obstacleCount: m,
 	};
 
 	// Kick off LLM call immediately (parallel with aiIds resolution)
@@ -557,21 +807,16 @@ export async function generateContentPack(
 		Promise.resolve(aiIdsOrPromise),
 	]);
 
-	// Build placeholder ContentPack from LLM result
-	const pack = llmResult.packs[0];
-	if (!pack) throw new Error("generateContentPack: LLM returned no packs");
+	// Build placeholder ContentPack from LLM result using converter
+	const phase = llmResult.phases[0];
+	if (!phase) throw new Error("generateContentPack: LLM returned no phases");
 
-	const unplacedPack: ContentPack = {
-		setting: pack.setting,
+	const unplacedPack = rawBoundPackToContentPack(
+		phase.rawPack,
+		objectiveTypes,
 		weather,
 		timeOfDay,
-		objectivePairs: pack.objectivePairs,
-		interestingObjects: pack.interestingObjects as WorldEntity[],
-		obstacles: pack.obstacles as WorldEntity[],
-		landmarks: pack.landmarks,
-		wallName: pack.wallName,
-		aiStarts: {},
-	};
+	);
 
 	// Run placement engine
 	const placed = placePhases(rng, [unplacedPack], aiIds);

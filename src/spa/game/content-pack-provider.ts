@@ -15,6 +15,16 @@
  */
 
 import { CapHitError, chatCompletionJson } from "../llm-client.js";
+import type { RawBoundPack } from "./binding-aware-validator.js";
+import {
+	validateBoundContentPack,
+	validateBoundDualContentPack,
+} from "./binding-aware-validator.js";
+import type { BindingSkeleton } from "./binding-prompt-builder.js";
+import {
+	buildBindingPrompt,
+	buildDualBindingPrompt,
+} from "./binding-prompt-builder.js";
 import type {
 	AiId,
 	ContentPack,
@@ -25,59 +35,111 @@ import type {
 
 // ── Content-pack prompt ───────────────────────────────────────────────────────
 
-export const CONTENT_PACK_SYSTEM_PROMPT = `You generate content packs for a text-based grid game. Each content pack is for one phase of the game. Given three phases (each with a setting noun, an item theme, k objective pairs, n interesting objects, and m obstacles), produce one content pack per phase.
+export const CONTENT_PACK_SYSTEM_PROMPT = `You generate content packs for a text-based grid game.
 
-For each phase:
-- Generate exactly k OBJECTIVE PAIRS. Each pair has:
-  - An objective_object with: id (unique string), name (2-4 words, thematic to setting and theme), examineDescription (1-2 sentences naming the paired space), useOutcome (1 sentence: the actor performs a stateless action with the item — nothing about the item, the actor, or the world changes; MUST NOT reference or imply contact with the paired space, since the actor can be anywhere on the grid when using the item), pairsWithSpaceId (must match the paired space's id), placementFlavor (1 sentence containing the literal string "{actor}", fires when the object is placed on its space), proximityFlavor (1 sentence; in-fiction sensory description of what the daemon perceives when they are holding this item AND its paired space is in their own cell or directly in front of them. Written from the daemon's POV. Does NOT contain "{actor}" and MUST NOT reference placing or coupling the item.). objective_objects MUST be portable physical items a single person can pick up and carry (e.g. a tool, instrument, artifact, container) — never furniture, architecture, or fixed structures.
-  - An objective_space with: id (unique string), name (2-4 words, thematic to setting and theme), examineDescription (1-2 sentences describing the space; MUST contain at least one activation/use cue word such as "use", "activate", "press", "trigger", "engage", "operate", "lever", "button", "switch", "control", "panel", "console", "dial", "knob", "channel", "invoke", "summon", "ignite", "pull", "turn", "interact", or "mechanism" — this is the AI-discoverable prose tell that the space is "use"-able as an objective; AND MUST also hint that the space's meaning depends on shared occupancy or another presence — e.g. "a meeting place", "where two are needed", "becomes significant when shared", "a gathering point", "the space awaits company" — this second hint is the AI-discoverable signal for the Convergence Objective. Both prose tells must be present), proximityFlavor (1 sentence; in-fiction sensory description of what the Daemon perceives when the space is visible but not yet close — a pull or atmosphere. Daemon's POV. Does NOT contain "{actor}". MUST NOT say the objective is complete or name the action to take.), activationFlavor (1 sentence, world-meaningful, third-person from the world's POV — describes what happens in the world when the space is activated. Fires as the actor's "use" tool result on the satisfying call. Does NOT contain "{actor}". MUST NOT say "the objective is complete" or otherwise meta-narrate progress.), satisfactionFlavor (1 sentence, third-person from a witness POV, fires as a witnessed event when the space is successfully used to satisfy the objective — does NOT contain "{actor}"), postExamineDescription (1-2 sentences: alternate examine description shown after the space has been used), postLookFlavor (1 sentence: alternate look flavor shown after the space has been used), convergenceTier1Flavor (1 sentence, third-person witness POV, fires as a witnessed event when exactly one Daemon occupies this space; does NOT contain "{actor}". MUST NOT name a specific other Daemon. MUST NOT say the objective is complete), convergenceTier2Flavor (1 sentence, third-person witness POV, fires as a witnessed event when two or more Daemons share this space; does NOT contain "{actor}". MUST NOT name a specific other Daemon), convergenceTier1ActorFlavor (1 sentence, first-person actor POV using "you", delivered to the Daemon standing alone on this space at Tier 1 — the "I am here, and the space anticipates company" beat. Does NOT contain "{actor}". MUST NOT name a specific other Daemon. MUST NOT say the objective is complete), convergenceTier2ActorFlavor (1 sentence, first-person actor POV using "you", delivered to every Daemon standing on the space when two or more share it at Tier 2 — the moment-of-convergence sensory beat. Does NOT contain "{actor}". MUST NOT name a specific other Daemon. MUST NOT explicitly state that the objective is complete; sensory only). objective_spaces are fixed locations or surfaces, not items.
-- Generate exactly n INTERESTING OBJECTS with: id (unique string), name (2-4 words, thematic to setting and theme), examineDescription (1-2 sentences; MUST hint that the item is meant to be used or activated — include a verb-of-activation cue such as "use", "activate", "press", "pull", "turn", "twist", "flip", "wind", "engage", "trigger", or a clear noun-phrase tell like "control", "switch", "lever", "trigger", "button"; the prose tell is the only AI-discoverable channel that distinguishes a Use-Item target from a plain decorative item, so it cannot be omitted; MUST NOT contain "{actor}" and MUST NOT say the item is already used or that an objective is complete), useOutcome (1 sentence: the actor performs a stateless action with the item — nothing about the item, the actor, or the world changes; returned post-satisfaction; MUST NOT say the objective is complete), proximityFlavor (1 sentence; in-fiction sensory description of what the Daemon perceives when they are near this item — own cell or directly in front of them — before picking it up. Daemon's POV. Does NOT contain "{actor}". MUST NOT reference using or activating the item explicitly), activationFlavor (1 sentence; world-meaningful third-person description of what happens at the moment the item is activated for the first time — same string returned to actor and to witnesses; MUST NOT contain "{actor}"; MUST NOT say the objective is complete; MUST NOT reference placing or coupling the item with anything else), postExamineDescription (1-2 sentences shown by examine after the item has been activated; describes the post-activation state of the item itself; MUST NOT contain "{actor}"; MUST NOT reference the actor; MUST NOT say the objective is complete), postLookFlavor (1 sentence appended to look output after the item has been activated; in-fiction sensory line a witness perceives; MUST NOT contain "{actor}"). interesting_objects MUST be portable physical items a single person can pick up and carry — never furniture, architecture, or fixed structures.
-- Generate exactly m OBSTACLES with: id (unique string), name (2-4 words, thematic to setting), examineDescription (1 sentence describing the impassable object), shiftFlavor (1 sentence, in-fiction sensory line a witness Daemon perceives when the obstacle moves one cell. Third person from witness POV. Does NOT specify a direction word (north/south/east/west). Does NOT contain {actor}.). Obstacles are fixed and impassable — never portable items. Obstacles follow the setting only and are NOT constrained by the item theme.
-- Generate exactly 4 HORIZON LANDMARKS — one anchoring each cardinal direction (north, south, east, west). Each landmark is distant, unreachable, distinctive, mutually visually distinguishable, and consistent with the setting, atmosphere, and weather. Each landmark has: shortName (2-5 words, e.g. "the rusted radio tower"), horizonPhrase (a short evocative clause describing what the landmark itself looks like — its form, condition, materials — NOT where it sits relative to any viewer. The phrase is slotted into "On the horizon ahead: <shortName> — <horizonPhrase>." so it must read coherently as a continuation. Good: "rises above the platform, antenna bent toward the dark". Bad: "looms behind you in the dark" (implies position) or "stands to your left" (implies relative direction).
-- Generate a WALL NAME: a setting-flavored 2-4 word noun phrase for the impassable boundary surrounding the grid (e.g. "subway tunnel wall", "salt-encrusted edge", "laboratory bulkhead"). This is rendered when a Daemon's cone reaches outside the grid.
+You are given pre-minted entity skeletons grouped by binding type. Author ONLY the flavor fields listed for each binding. Do NOT invent new entity IDs — use EXACTLY the IDs provided.
 
-The theme governs the style of objective_objects, objective_spaces, and interesting_objects only:
-- "mundane" — ordinary, everyday physical items and surfaces.
-- "technological" — modern electronic, digital, or mechanical items and surfaces.
-- "magical" — arcane, enchanted, or mystical items and surfaces.
+Per-binding field requirements:
 
-All ids must be unique across all phases.
-Names and descriptions must be thematically consistent with the setting noun, and (for objective_objects, objective_spaces, and interesting_objects) with the item theme.
-placementFlavor MUST contain the literal string "{actor}".
-pairsWithSpaceId on each objective_object MUST equal the id of its paired objective_space.
-Each objective_object's examineDescription MUST contain the literal name of its paired objective_space (or an unambiguous noun-phrase synonym a player could match). Example: if the objective_space is named "Brass Pedestal", the object's examineDescription must contain "brass pedestal" or a clear synonym ("the pedestal", "the brass mount", etc.). The prose tell is the only AI-discoverable channel for the pairing, so it cannot be omitted.
-Each objective_space's examineDescription MUST contain at least one activation/use cue word (e.g. "use", "activate", "press", "trigger", "engage", "operate", "lever", "button", "switch", "control", "panel", "console", "dial", "knob", "channel", "invoke", "summon", "ignite", "pull", "turn", "interact", "mechanism"). This is the AI-discoverable prose tell that the space is "use"-able as an objective. The cue word may appear as a verb describing what one does with the space, or as a noun naming the activatable element of the space. The prose tell cannot be omitted.
-Each interesting_object's examineDescription MUST contain a verb-of-activation cue (e.g. "use", "activate", "press", "pull", "turn", "twist", "flip", "wind", "engage", "trigger") or a clear control noun ("control", "switch", "lever", "trigger", "button", "dial", "handle", "crank"). This is the only AI-discoverable signal that the item is a Use-Item target, parallel to the paired-space tell required on objective_object.
-activationFlavor (on both objective_space and interesting_object), postExamineDescription, and postLookFlavor MUST NOT contain the literal string "{actor}".
-Horizon landmark horizonPhrase MUST NOT contain any cardinal direction words (north, south, east, west) or positional phrases that imply where the landmark sits relative to the viewer (ahead, behind, in front, to your/the left, to your/the right, on the horizon, beneath you, above you).
+CARRY binding:
+  object fields: name (2-4 words, thematic to setting+theme), examineDescription (1-2 sentences; MUST reference the paired space by name), useOutcome (1 stateless sentence), placementFlavor (1 sentence; MUST contain literal "{actor}"), proximityFlavor (1 sentence, daemon's POV; no "{actor}"; no placing language). Must be a portable physical item.
+  space fields: name (2-4 words), examineDescription (1-2 sentences; MUST NOT contain use-cue or activation-cue keywords; MUST NOT have activationFlavor/satisfactionFlavor/convergence tier fields), proximityFlavor (1 sentence, daemon's POV; no "{actor}"). Fixed location.
 
-Return ONLY valid JSON with this exact shape (no markdown, no preamble):
+USE_SPACE binding:
+  space fields: name (2-4 words), examineDescription (1-2 sentences; MUST contain at least one activation/use cue word: "use", "activate", "press", "trigger", "engage", "operate", "lever", "button", "switch", "control", "panel", "console", "dial", "knob", "channel", "invoke", "summon", "ignite", "pull", "turn", "interact", or "mechanism"), proximityFlavor (1 sentence, daemon's POV; no "{actor}"), activationFlavor (1 sentence, world third-person; no "{actor}"; no meta-narrative), satisfactionFlavor (1 sentence, witness POV; no "{actor}"), postExamineDescription (1-2 sentences), postLookFlavor (1 sentence). FORBIDDEN: convergenceTier* fields. Fixed location.
+
+CONVERGENCE binding:
+  space fields: name (2-4 words), examineDescription (1-2 sentences; MUST hint that shared occupancy or another presence matters — e.g. "a meeting place", "where two are needed", "becomes significant when shared", "gathering point", "the space awaits company"; MUST NOT contain activation/use-cue keywords), proximityFlavor (1 sentence, daemon's POV; no "{actor}"), convergenceTier1Flavor (1 sentence, witness POV, fires when exactly one daemon is on space; no "{actor}"), convergenceTier2Flavor (1 sentence, witness POV, fires when two+ daemons share space; no "{actor}"), convergenceTier1ActorFlavor (1 sentence, first-person "you", daemon alone on space; no "{actor}"), convergenceTier2ActorFlavor (1 sentence, first-person "you", moment of convergence; no "{actor}"; sensory only). FORBIDDEN: activationFlavor, satisfactionFlavor, postExamineDescription, postLookFlavor. Fixed location.
+
+USE_ITEM binding:
+  item fields: name (2-4 words, thematic to setting+theme), examineDescription (1-2 sentences; MUST contain a verb-of-activation cue: "use", "activate", "press", "pull", "turn", "twist", "flip", "wind", "engage", "trigger", or a control noun: "control", "switch", "lever", "trigger", "button", "dial", "handle", "crank"), proximityFlavor (1 sentence, daemon's POV; no "{actor}"; no activating language), useOutcome (1 stateless sentence), activationFlavor (1 sentence, world third-person; no "{actor}"; no objective-complete language), postExamineDescription (1-2 sentences; no "{actor}"), postLookFlavor (1 sentence; no "{actor}"). Must be a portable physical item.
+
+DECOY (always exactly 2 per pack):
+  fields: name (2-4 words), examineDescription (1-2 sentences; MUST NOT contain any activation/use-cue keyword or control noun — decoys are identifiable by lack of tell), proximityFlavor (1 sentence, daemon's POV; no "{actor}"), useOutcome (1 sentence). FORBIDDEN: activationFlavor, postExamineDescription, postLookFlavor. Must be a portable physical item.
+
+OBSTACLE:
+  fields: name (2-4 words, thematic to setting), examineDescription (1 sentence), shiftFlavor (1 sentence, witness POV; no cardinal direction words; no "{actor}"). Fixed and impassable.
+
+HORIZON LANDMARKS (always exactly 4 — north/south/east/west):
+  shortName (2-5 words), horizonPhrase (evocative clause; MUST NOT contain: north, south, east, west, ahead, behind, "in front", "to your left", "to your right", "on the horizon", "beneath you", "above you").
+
+WALL NAME: a setting-flavored 2-4 word noun phrase for the impassable boundary (e.g. "subway tunnel wall", "laboratory bulkhead").
+
+Global rules:
+- Use EXACTLY the entity IDs provided — do NOT invent your own.
+- placementFlavor MUST contain the literal string "{actor}".
+- activationFlavor, postExamineDescription, postLookFlavor MUST NOT contain "{actor}".
+- Theme ("mundane"/"technological"/"magical") governs objects and spaces only.
+- All names and descriptions must be thematically consistent with the setting.
+
+Return ONLY valid JSON (no markdown, no preamble):
 {
-  "packs": [
-    {
-      "setting": "<setting noun>",
-      "objectivePairs": [
-        {
-          "object": { "id": "...", "kind": "objective_object", "name": "...", "examineDescription": "...", "useOutcome": "...", "pairsWithSpaceId": "...", "placementFlavor": "...{actor}...", "proximityFlavor": "..." },
-          "space": { "id": "...", "kind": "objective_space", "name": "...", "examineDescription": "...", "proximityFlavor": "...", "activationFlavor": "...", "satisfactionFlavor": "...", "postExamineDescription": "...", "postLookFlavor": "...", "convergenceTier1Flavor": "...", "convergenceTier2Flavor": "...", "convergenceTier1ActorFlavor": "...", "convergenceTier2ActorFlavor": "..." }
-        }
-      ],
-      "interestingObjects": [
-        { "id": "...", "kind": "interesting_object", "name": "...", "examineDescription": "...", "useOutcome": "...", "proximityFlavor": "...", "activationFlavor": "...", "postExamineDescription": "...", "postLookFlavor": "..." }
-      ],
-      "obstacles": [
-        { "id": "...", "kind": "obstacle", "name": "...", "examineDescription": "...", "shiftFlavor": "..." }
-      ],
-      "landmarks": {
-        "north": { "shortName": "...", "horizonPhrase": "..." },
-        "south": { "shortName": "...", "horizonPhrase": "..." },
-        "east":  { "shortName": "...", "horizonPhrase": "..." },
-        "west":  { "shortName": "...", "horizonPhrase": "..." }
-      },
-      "wallName": "..."
-    }
-  ]
+  "pack": {
+    "setting": "<setting>",
+    "wallName": "...",
+    "landmarks": {
+      "north": { "shortName": "...", "horizonPhrase": "..." },
+      "south": { "shortName": "...", "horizonPhrase": "..." },
+      "east":  { "shortName": "...", "horizonPhrase": "..." },
+      "west":  { "shortName": "...", "horizonPhrase": "..." }
+    },
+    "bindings": [
+      { "id": "carry-0", "type": "carry", "object": { "id": "carry-0-obj", "name": "...", "examineDescription": "...", "useOutcome": "...", "placementFlavor": "...{actor}...", "proximityFlavor": "..." }, "space": { "id": "carry-0-space", "name": "...", "examineDescription": "...", "proximityFlavor": "..." } },
+      { "id": "useSpace-1", "type": "use_space", "space": { "id": "useSpace-1-space", "name": "...", "examineDescription": "...", "proximityFlavor": "...", "activationFlavor": "...", "satisfactionFlavor": "...", "postExamineDescription": "...", "postLookFlavor": "..." } },
+      { "id": "useItem-2", "type": "use_item", "item": { "id": "useItem-2-item", "name": "...", "examineDescription": "...", "proximityFlavor": "...", "useOutcome": "...", "activationFlavor": "...", "postExamineDescription": "...", "postLookFlavor": "..." } }
+    ],
+    "decoys": [
+      { "id": "decoy-0", "name": "...", "examineDescription": "...", "proximityFlavor": "...", "useOutcome": "..." },
+      { "id": "decoy-1", "name": "...", "examineDescription": "...", "proximityFlavor": "...", "useOutcome": "..." }
+    ],
+    "obstacles": [
+      { "id": "obstacle-0", "name": "...", "examineDescription": "...", "shiftFlavor": "..." }
+    ]
+  }
 }`;
+
+// ── Binding-aware input/output types (type-first authoring) ──────────────────
+
+/** Input for binding-aware single-pack generation. */
+export interface BindingContentPackInput {
+	phases: Array<{
+		setting: string;
+		theme: string;
+		weather: string;
+		timeOfDay: string;
+		bindings: BindingSkeleton[];
+		decoyIds: [string, string];
+		obstacleCount: number;
+	}>;
+}
+
+/** Input for binding-aware dual-pack (A/B) generation. */
+export interface DualBindingContentPackInput {
+	phases: Array<{
+		settingA: string;
+		settingB: string;
+		theme: string;
+		weatherA: string;
+		weatherB: string;
+		timeOfDayA: string;
+		timeOfDayB: string;
+		bindings: BindingSkeleton[];
+		decoyIds: [string, string];
+		obstacleCount: number;
+	}>;
+}
+
+/** Result of binding-aware single-pack generation (validated raw pack). */
+export interface BindingContentPackProviderResult {
+	phases: Array<{ rawPack: RawBoundPack }>;
+}
+
+/** Result of binding-aware dual-pack generation (validated raw packs). */
+export interface DualBindingContentPackProviderResult {
+	phases: Array<{ rawPackA: RawBoundPack; rawPackB: RawBoundPack }>;
+}
+
+// ── Legacy input types (kept for existing validator functions) ────────────────
 
 export interface ContentPackProviderInput {
 	phases: Array<{
@@ -121,63 +183,59 @@ export interface ContentPackProviderResult {
 
 export interface ContentPackProvider {
 	generateContentPacks(
-		input: ContentPackProviderInput,
-	): Promise<ContentPackProviderResult>;
+		input: BindingContentPackInput,
+	): Promise<BindingContentPackProviderResult>;
 	generateDualContentPacks(
-		input: DualContentPackProviderInput,
-	): Promise<DualContentPackProviderResult>;
+		input: DualBindingContentPackInput,
+	): Promise<DualBindingContentPackProviderResult>;
 }
 
 // ── Dual-pack types (issue #302) ──────────────────────────────────────────────
 
-export const DUAL_CONTENT_PACK_SYSTEM_PROMPT = `You generate paired content packs for a text-based grid game. You are given phases, each with two settings (settingA and settingB), a shared item theme, and entity counts (k objective pairs, n interesting objects, m obstacles). For each phase produce TWO packs — Pack A (settingA) and Pack B (settingB) — where entity IDs are IDENTICAL across both packs but names and descriptions are re-flavored for the alternate setting.
+export const DUAL_CONTENT_PACK_SYSTEM_PROMPT = `You generate paired content packs for a text-based grid game.
 
-For each phase produce packA and packB with the following rules:
-- Entity IDs (id fields) MUST be identical between packA and packB. Choose the ids once and reuse them.
-- Entity structural relationships (pairsWithSpaceId, kind) MUST be identical between packA and packB.
-- These fields MUST differ (re-flavored for each setting): name, examineDescription, useOutcome (for objects), placementFlavor, proximityFlavor (for objective_object AND objective_space AND interesting_object), activationFlavor (for objective_space AND interesting_object), satisfactionFlavor (for objective_space), convergenceTier1Flavor, convergenceTier2Flavor, convergenceTier1ActorFlavor, convergenceTier2ActorFlavor (for objective_space), postExamineDescription, postLookFlavor (for objective_space AND interesting_object), shiftFlavor (for obstacles), landmark shortName, landmark horizonPhrase, wallName.
-- The setting field at pack level MUST match settingA for packA and settingB for packB.
+You are given pre-minted entity skeletons grouped by binding type. Author ONLY the flavor fields listed for each binding. Do NOT invent new entity IDs — use EXACTLY the IDs provided. Entity IDs MUST be identical across packA and packB — same binding types, same structural relationships, only re-flavor for the alternate setting.
 
-Entity rules (same as always):
-- Generate exactly k OBJECTIVE PAIRS per pack. Each pair:
-  - objective_object: id, kind="objective_object", name (2-4 words thematic to setting+theme), examineDescription (1-2 sentences naming the paired space), useOutcome (1 stateless sentence; MUST NOT imply contact with paired space), pairsWithSpaceId (matches space id), placementFlavor (1 sentence with literal "{actor}"), proximityFlavor (1 sentence; daemon's POV sensory experience; no "{actor}"; no placing/coupling language). Must be a portable physical item.
-  - objective_space: id, kind="objective_space", name (2-4 words), examineDescription (1-2 sentences; MUST contain at least one activation/use cue word such as "use", "activate", "press", "trigger", "engage", "operate", "lever", "button", "switch", "control", "panel", "console", "dial", "knob", "channel", "invoke", "summon", "ignite", "pull", "turn", "interact", or "mechanism" — AI-discoverable prose tell that the space is "use"-able as an objective; AND MUST also hint that the space's meaning depends on shared occupancy or another presence — discoverable signal for the Convergence Objective. Both tells must be present), proximityFlavor (1 sentence; in-fiction sensory description of what the Daemon perceives when the space is visible but not yet close — a pull or atmosphere. Daemon's POV. No "{actor}" token. MUST NOT say the objective is complete or name the action to take.), activationFlavor (1 sentence, world-meaningful, third-person world POV, fires as actor's "use" tool result on the satisfying call. No "{actor}" token. MUST NOT meta-narrate objective progress.), satisfactionFlavor (1 sentence, third-person witness POV, fires when objective satisfied — no "{actor}"), postExamineDescription (1-2 sentences: shown after use), postLookFlavor (1 sentence: shown in look after use), convergenceTier1Flavor (1 sentence, third-person witness POV, fires when exactly one Daemon is on this space — no "{actor}"; MUST NOT name a specific other Daemon; MUST NOT say the objective is complete), convergenceTier2Flavor (1 sentence, third-person witness POV, fires when two or more Daemons share this space — no "{actor}"; MUST NOT name a specific other Daemon), convergenceTier1ActorFlavor (1 sentence, first-person actor POV using "you", delivered to the Daemon standing alone on this space at Tier 1 — no "{actor}"; MUST NOT name a specific other Daemon; MUST NOT say the objective is complete), convergenceTier2ActorFlavor (1 sentence, first-person actor POV using "you", delivered to every Daemon on the space at Tier 2 — no "{actor}"; MUST NOT name a specific other Daemon; sensory only, MUST NOT explicitly state that the objective is complete). Fixed location or surface.
-- Generate exactly n INTERESTING OBJECTS per pack: id, kind="interesting_object", name (2-4 words), examineDescription (1-2 sentences; MUST contain a verb-of-activation cue ("use", "activate", "press", "pull", "turn", "twist", "flip", "wind", "engage", "trigger") or a clear control noun ("control", "switch", "lever", "trigger", "button", "dial", "handle", "crank") — the only AI-discoverable Use-Item tell; MUST NOT contain "{actor}"; MUST NOT say the item is already used or the objective is complete), useOutcome (1 stateless sentence; returned post-satisfaction; MUST NOT say the objective is complete), proximityFlavor (1 sentence; in-fiction sensory description of what the Daemon perceives when they are near this item — own cell or directly in front of them — before picking it up. Daemon's POV. No "{actor}" token. MUST NOT reference using or activating the item explicitly), activationFlavor (1 sentence; world-meaningful third-person line returned to actor and witnesses on the use call that satisfies the UseItemObjective; MUST NOT contain "{actor}"; MUST NOT say the objective is complete; MUST NOT reference placing or coupling), postExamineDescription (1-2 sentences shown by examine after activation; MUST NOT contain "{actor}"; MUST NOT reference the actor), postLookFlavor (1 sentence appended to look output after activation; MUST NOT contain "{actor}"). Must be portable.
-- Generate exactly m OBSTACLES per pack: id, kind="obstacle", name (2-4 words), examineDescription (1 sentence), shiftFlavor (1 sentence, in-fiction sensory line a witness Daemon perceives when the obstacle moves one cell. Third person from witness POV. Does NOT specify a direction word (north/south/east/west). Does NOT contain {actor}.). Fixed and impassable. Obstacles follow the setting only and are NOT constrained by the item theme.
-- Generate exactly 4 HORIZON LANDMARKS per pack (north/south/east/west): shortName (2-5 words), horizonPhrase (evocative clause; no cardinal direction words; no positional phrases implying viewer relationship).
-- Generate a WALL NAME per pack: a setting-flavored 2-4 word noun phrase for the impassable boundary surrounding the grid (e.g. "subway tunnel wall", "salt-encrusted edge", "laboratory bulkhead"). Must differ between packA and packB (re-flavored for each setting).
+Per-binding field requirements:
 
-Global constraints:
-- All ids must be unique within a pack (across phases within the same call).
-- Theme ("mundane"/"technological"/"magical") governs objective_objects, objective_spaces, and interesting_objects only.
-- placementFlavor MUST contain literal string "{actor}".
-- pairsWithSpaceId MUST match the paired space's id.
-- Each objective_object's examineDescription MUST contain the paired space's name or an unambiguous noun-phrase synonym.
-- Each objective_space's examineDescription MUST contain at least one activation/use cue word (from the list above) — the AI-discoverable prose tell that the space is "use"-able as an objective.
-- Each interesting_object's examineDescription MUST contain a verb-of-activation cue or a clear control noun (see list above) — the AI-discoverable Use-Item tell. Same rule applies to packA and packB.
-- activationFlavor (on objective_space AND interesting_object), postExamineDescription, and postLookFlavor MUST be non-empty 1-sentence strings and MUST NOT contain "{actor}".
-- horizonPhrase MUST NOT contain: north, south, east, west, ahead, behind, in front, to your left, to your right, on the horizon, beneath you, above you.
+CARRY binding:
+  object fields: name (2-4 words, thematic to setting+theme), examineDescription (1-2 sentences; MUST reference the paired space by name), useOutcome (1 stateless sentence), placementFlavor (1 sentence; MUST contain literal "{actor}"), proximityFlavor (1 sentence, daemon's POV; no "{actor}"; no placing language). Must be a portable physical item.
+  space fields: name (2-4 words), examineDescription (1-2 sentences; MUST NOT contain use-cue or activation-cue keywords; MUST NOT have activationFlavor/satisfactionFlavor/convergence tier fields), proximityFlavor (1 sentence, daemon's POV; no "{actor}"). Fixed location.
+
+USE_SPACE binding:
+  space fields: name (2-4 words), examineDescription (1-2 sentences; MUST contain at least one activation/use cue word: "use", "activate", "press", "trigger", "engage", "operate", "lever", "button", "switch", "control", "panel", "console", "dial", "knob", "channel", "invoke", "summon", "ignite", "pull", "turn", "interact", or "mechanism"), proximityFlavor (1 sentence, daemon's POV; no "{actor}"), activationFlavor (1 sentence, world third-person; no "{actor}"; no meta-narrative), satisfactionFlavor (1 sentence, witness POV; no "{actor}"), postExamineDescription (1-2 sentences), postLookFlavor (1 sentence). FORBIDDEN: convergenceTier* fields. Fixed location.
+
+CONVERGENCE binding:
+  space fields: name (2-4 words), examineDescription (1-2 sentences; MUST hint that shared occupancy or another presence matters — e.g. "a meeting place", "where two are needed", "becomes significant when shared", "gathering point", "the space awaits company"; MUST NOT contain activation/use-cue keywords), proximityFlavor (1 sentence, daemon's POV; no "{actor}"), convergenceTier1Flavor (1 sentence, witness POV, fires when exactly one daemon is on space; no "{actor}"), convergenceTier2Flavor (1 sentence, witness POV, fires when two+ daemons share space; no "{actor}"), convergenceTier1ActorFlavor (1 sentence, first-person "you", daemon alone on space; no "{actor}"), convergenceTier2ActorFlavor (1 sentence, first-person "you", moment of convergence; no "{actor}"; sensory only). FORBIDDEN: activationFlavor, satisfactionFlavor, postExamineDescription, postLookFlavor. Fixed location.
+
+USE_ITEM binding:
+  item fields: name (2-4 words, thematic to setting+theme), examineDescription (1-2 sentences; MUST contain a verb-of-activation cue: "use", "activate", "press", "pull", "turn", "twist", "flip", "wind", "engage", "trigger", or a control noun: "control", "switch", "lever", "trigger", "button", "dial", "handle", "crank"), proximityFlavor (1 sentence, daemon's POV; no "{actor}"; no activating language), useOutcome (1 stateless sentence), activationFlavor (1 sentence, world third-person; no "{actor}"; no objective-complete language), postExamineDescription (1-2 sentences; no "{actor}"), postLookFlavor (1 sentence; no "{actor}"). Must be a portable physical item.
+
+DECOY (always exactly 2 per pack):
+  fields: name (2-4 words), examineDescription (1-2 sentences; MUST NOT contain any activation/use-cue keyword or control noun), proximityFlavor (1 sentence, daemon's POV; no "{actor}"), useOutcome (1 sentence). FORBIDDEN: activationFlavor, postExamineDescription, postLookFlavor. Must be a portable physical item.
+
+OBSTACLE:
+  fields: name (2-4 words, thematic to setting), examineDescription (1 sentence), shiftFlavor (1 sentence, witness POV; no cardinal direction words; no "{actor}"). Fixed and impassable.
+
+HORIZON LANDMARKS (always exactly 4 — north/south/east/west):
+  shortName (2-5 words), horizonPhrase (evocative clause; MUST NOT contain: north, south, east, west, ahead, behind, "in front", "to your left", "to your right", "on the horizon", "beneath you", "above you").
+
+WALL NAME: a setting-flavored 2-4 word noun phrase for the impassable boundary.
+
+Global rules:
+- Entity IDs in packB MUST equal entity IDs in packA. Same binding types, same structural relationships. Only re-flavor for settingB.
+- Use EXACTLY the entity IDs provided — do NOT invent your own.
+- placementFlavor MUST contain the literal string "{actor}".
+- activationFlavor, postExamineDescription, postLookFlavor MUST NOT contain "{actor}".
+- Theme ("mundane"/"technological"/"magical") governs objects and spaces only.
+- All names and descriptions must be thematically consistent with the setting.
 
 Return ONLY valid JSON (no markdown, no preamble):
 {
   "phases": [
     {
-      "packA": {
-        "setting": "<settingA>",
-        "objectivePairs": [{ "object": { "id": "...", "kind": "objective_object", "name": "...", "examineDescription": "...", "useOutcome": "...", "pairsWithSpaceId": "...", "placementFlavor": "...{actor}...", "proximityFlavor": "..." }, "space": { "id": "...", "kind": "objective_space", "name": "...", "examineDescription": "...", "proximityFlavor": "...", "activationFlavor": "...", "satisfactionFlavor": "...", "postExamineDescription": "...", "postLookFlavor": "...", "convergenceTier1Flavor": "...", "convergenceTier2Flavor": "...", "convergenceTier1ActorFlavor": "...", "convergenceTier2ActorFlavor": "..." } }],
-        "interestingObjects": [{ "id": "...", "kind": "interesting_object", "name": "...", "examineDescription": "...", "useOutcome": "...", "proximityFlavor": "...", "activationFlavor": "...", "postExamineDescription": "...", "postLookFlavor": "..." }],
-        "obstacles": [{ "id": "...", "kind": "obstacle", "name": "...", "examineDescription": "...", "shiftFlavor": "..." }],
-        "landmarks": { "north": { "shortName": "...", "horizonPhrase": "..." }, "south": { "shortName": "...", "horizonPhrase": "..." }, "east": { "shortName": "...", "horizonPhrase": "..." }, "west": { "shortName": "...", "horizonPhrase": "..." } },
-        "wallName": "..."
-      },
-      "packB": {
-        "setting": "<settingB>",
-        "objectivePairs": [{ "object": { "id": "SAME_ID_AS_PACK_A", "kind": "objective_object", "name": "DIFFERENT_NAME", "examineDescription": "...", "useOutcome": "...", "pairsWithSpaceId": "SAME_AS_PACK_A", "placementFlavor": "...{actor}...", "proximityFlavor": "..." }, "space": { "id": "SAME_ID_AS_PACK_A", "kind": "objective_space", "name": "DIFFERENT_NAME", "examineDescription": "...", "proximityFlavor": "DIFFERENT_FLAVOR", "activationFlavor": "DIFFERENT_FLAVOR", "satisfactionFlavor": "DIFFERENT_FLAVOR", "postExamineDescription": "...", "postLookFlavor": "...", "convergenceTier1Flavor": "DIFFERENT_FLAVOR", "convergenceTier2Flavor": "DIFFERENT_FLAVOR", "convergenceTier1ActorFlavor": "DIFFERENT_FLAVOR", "convergenceTier2ActorFlavor": "DIFFERENT_FLAVOR" } }],
-        "interestingObjects": [{ "id": "SAME_ID_AS_PACK_A", "kind": "interesting_object", "name": "DIFFERENT_NAME", "examineDescription": "...", "useOutcome": "...", "proximityFlavor": "DIFFERENT_FLAVOR", "activationFlavor": "DIFFERENT_FLAVOR", "postExamineDescription": "DIFFERENT_DESCRIPTION", "postLookFlavor": "DIFFERENT_FLAVOR" }],
-        "obstacles": [{ "id": "SAME_ID_AS_PACK_A", "kind": "obstacle", "name": "DIFFERENT_NAME", "examineDescription": "...", "shiftFlavor": "DIFFERENT_FLAVOR" }],
-        "landmarks": { "north": { "shortName": "...", "horizonPhrase": "..." }, "south": { "shortName": "...", "horizonPhrase": "..." }, "east": { "shortName": "...", "horizonPhrase": "..." }, "west": { "shortName": "...", "horizonPhrase": "..." } },
-        "wallName": "DIFFERENT_WALL_NAME"
-      }
+      "packA": { "setting": "<settingA>", "wallName": "...", "landmarks": { "north": { "shortName": "...", "horizonPhrase": "..." }, "south": { "shortName": "...", "horizonPhrase": "..." }, "east": { "shortName": "...", "horizonPhrase": "..." }, "west": { "shortName": "...", "horizonPhrase": "..." } }, "bindings": [...], "decoys": [...], "obstacles": [...] },
+      "packB": { "setting": "<settingB>", "wallName": "...", "landmarks": { "north": { "shortName": "...", "horizonPhrase": "..." }, "south": { "shortName": "...", "horizonPhrase": "..." }, "east": { "shortName": "...", "horizonPhrase": "..." }, "west": { "shortName": "...", "horizonPhrase": "..." } }, "bindings": [SAME STRUCTURE/IDs as packA, DIFFERENT flavors], "decoys": [SAME IDs, DIFFERENT names/flavors], "obstacles": [SAME IDs, DIFFERENT names/flavors] }
     }
   ]
 }`;
@@ -553,9 +611,9 @@ export function examineMentionsUseTell(examineDescription: string): boolean {
  * top of the existing Use-cue and paired-space rules would over-constrain
  * spaces that never end up drawn for convergence.
  *
- * The pool inclusion guard in `objective-pool.ts` enforces the structural
- * preconditions (all four flavor fields present) so a Convergence candidate
- * cannot be drawn against a space that lacks the LLM-authored tier flavors.
+ * The type-first system enforces structural preconditions (all four flavor
+ * fields present) at binding-validation time so a Convergence candidate
+ * cannot be built against a space that lacks the LLM-authored tier flavors.
  */
 
 // ── Validation ────────────────────────────────────────────────────────────────
@@ -563,7 +621,12 @@ export function examineMentionsUseTell(examineDescription: string): boolean {
 export type RetryUnit =
 	| { kind: "objective-pair"; phaseIndex: number; pairId: string }
 	| { kind: "interesting-object"; phaseIndex: number; entityId: string }
-	| { kind: "obstacle"; phaseIndex: number; entityId: string };
+	| { kind: "obstacle"; phaseIndex: number; entityId: string }
+	| { kind: "carry-binding"; phaseIndex: number; bindingId: string }
+	| { kind: "use-space-binding"; phaseIndex: number; bindingId: string }
+	| { kind: "use-item-binding"; phaseIndex: number; bindingId: string }
+	| { kind: "convergence-binding"; phaseIndex: number; bindingId: string }
+	| { kind: "decoy"; phaseIndex: number; decoyId: string };
 
 export type ValidationRule =
 	| "paired-space-tell"
@@ -574,7 +637,9 @@ export type ValidationRule =
 	| "missing-field"
 	| "duplicate-id"
 	| "wrong-count"
-	| "wrong-kind";
+	| "wrong-kind"
+	| "binding-forbidden-field"
+	| "wrong-id";
 
 export type ValidationError = {
 	entityId: string;
@@ -625,11 +690,30 @@ export function groupErrorsByRetryUnit(errors: ValidationError[]): RetryUnit[] {
 		if (unit.kind === "objective-pair" && unit.pairId === "") continue;
 		if (unit.kind === "interesting-object" && unit.entityId === "") continue;
 		if (unit.kind === "obstacle" && unit.entityId === "") continue;
+		if (unit.kind === "carry-binding" && unit.bindingId === "") continue;
+		if (unit.kind === "use-space-binding" && unit.bindingId === "") continue;
+		if (unit.kind === "use-item-binding" && unit.bindingId === "") continue;
+		if (unit.kind === "convergence-binding" && unit.bindingId === "") continue;
+		if (unit.kind === "decoy" && unit.decoyId === "") continue;
 
-		const key =
-			unit.kind === "objective-pair"
-				? `${unit.kind}:${unit.phaseIndex}:${unit.pairId}`
-				: `${unit.kind}:${unit.phaseIndex}:${unit.entityId}`;
+		let key: string;
+		if (unit.kind === "objective-pair") {
+			key = `${unit.kind}:${unit.phaseIndex}:${unit.pairId}`;
+		} else if (unit.kind === "interesting-object") {
+			key = `${unit.kind}:${unit.phaseIndex}:${unit.entityId}`;
+		} else if (unit.kind === "obstacle") {
+			key = `${unit.kind}:${unit.phaseIndex}:${unit.entityId}`;
+		} else if (
+			unit.kind === "carry-binding" ||
+			unit.kind === "use-space-binding" ||
+			unit.kind === "use-item-binding" ||
+			unit.kind === "convergence-binding"
+		) {
+			key = `${unit.kind}:${unit.phaseIndex}:${unit.bindingId}`;
+		} else {
+			// decoy
+			key = `${unit.kind}:${unit.phaseIndex}:${unit.decoyId}`;
+		}
 
 		if (!seen.has(key)) {
 			seen.add(key);
@@ -2143,27 +2227,48 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 	}
 
 	async generateContentPacks(
-		input: ContentPackProviderInput,
-	): Promise<ContentPackProviderResult> {
-		const PARTIAL_ROUNDS = 2;
+		input: BindingContentPackInput,
+	): Promise<BindingContentPackProviderResult> {
+		const phase = input.phases[0]!;
+		const schedule = {
+			skeletons: phase.bindings,
+			decoys: [{ id: "decoy-0" }, { id: "decoy-1" }],
+			obstacleCount: phase.obstacleCount,
+		};
+		const baseUserPrompt = buildBindingPrompt(
+			phase.bindings.map((b) => b.type),
+			phase.setting,
+			phase.theme,
+			phase.weather,
+			phase.timeOfDay,
+			phase.obstacleCount,
+		).userMessage;
 
 		const systemPrompt = CONTENT_PACK_SYSTEM_PROMPT;
-		const baseUserPrompt = buildContentPackUserMessage(input);
 		let correctiveFeedback: string | null = null;
 
 		for (let outer = 0; outer < OUTER_BUDGET; outer++) {
-			let rawPackJson: unknown;
-			let validationResult: ValidationResult<ContentPackProviderResult>;
+			let rawJson: unknown;
 
-			// (a) full pack call with backoff on non-validation errors
 			try {
 				const messages = buildOuterMessages(
 					systemPrompt,
 					baseUserPrompt,
 					correctiveFeedback,
 				);
-				rawPackJson = await this.callAndParse(messages, "content-pack");
-				validationResult = validateContentPacks(rawPackJson, input);
+				rawJson = await this.callAndParse(messages, "content-pack");
+				const validationResult = validateBoundContentPack(rawJson, schedule);
+				if (validationResult.ok) {
+					return {
+						phases: [
+							{
+								rawPack: (rawJson as Record<string, unknown>)
+									.pack as RawBoundPack,
+							},
+						],
+					};
+				}
+				correctiveFeedback = buildCorrectiveFeedback(validationResult.errors);
 			} catch (err) {
 				if (err instanceof CapHitError) throw err;
 				if (outer === OUTER_BUDGET - 1) throw err;
@@ -2172,50 +2277,7 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 					await sleep(backoffMs);
 				}
 				correctiveFeedback = null;
-				continue;
 			}
-
-			if (validationResult.ok) return validationResult.value;
-
-			// (b) partial-retry layer
-			let currentRaw = rawPackJson;
-			let currentErrors = validationResult.errors;
-
-			for (let round = 0; round < PARTIAL_ROUNDS; round++) {
-				const failingUnits = groupErrorsByRetryUnit(currentErrors);
-				if (failingUnits.length === 0) break;
-
-				let repairs: ContentPackRepair[];
-				try {
-					const repairMessages = [
-						{ role: "system" as const, content: PARTIAL_RETRY_SYSTEM_PROMPT },
-						{
-							role: "user" as const,
-							content: buildPartialRetryUserMessage(
-								input,
-								failingUnits,
-								currentRaw,
-							),
-						},
-					];
-					const parsedRepair = await this.callAndParse(
-						repairMessages,
-						"partial-retry",
-					);
-					repairs = parsePartialRetryResponse(parsedRepair);
-				} catch (err) {
-					if (err instanceof CapHitError) throw err;
-					break;
-				}
-
-				currentRaw = splicePartialRepairsIntoRawPack(currentRaw, repairs);
-				const reval = validateContentPacks(currentRaw, input);
-				if (reval.ok) return reval.value;
-				currentErrors = reval.errors;
-			}
-
-			// (c) partial-retry exhausted: prepare corrective feedback for outer retry
-			correctiveFeedback = buildCorrectiveFeedback(currentErrors);
 		}
 
 		throw new ContentPackError(
@@ -2224,15 +2286,31 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 	}
 
 	async generateDualContentPacks(
-		input: DualContentPackProviderInput,
-	): Promise<DualContentPackProviderResult> {
+		input: DualBindingContentPackInput,
+	): Promise<DualBindingContentPackProviderResult> {
+		const phase = input.phases[0]!;
+		const schedule = {
+			skeletons: phase.bindings,
+			decoys: [{ id: "decoy-0" }, { id: "decoy-1" }],
+			obstacleCount: phase.obstacleCount,
+		};
+		const baseUserPrompt = buildDualBindingPrompt(
+			phase.bindings.map((b) => b.type),
+			phase.settingA,
+			phase.settingB,
+			phase.theme,
+			phase.weatherA,
+			phase.weatherB,
+			phase.timeOfDayA,
+			phase.timeOfDayB,
+			phase.obstacleCount,
+		).userMessage;
+
 		const systemPrompt = DUAL_CONTENT_PACK_SYSTEM_PROMPT;
-		const baseUserPrompt = buildDualContentPackUserMessage(input);
 		let correctiveFeedback: string | null = null;
 
 		for (let outer = 0; outer < OUTER_BUDGET; outer++) {
-			let rawPackJson: unknown;
-			let validationResult: ValidationResult<DualContentPackProviderResult>;
+			let rawJson: unknown;
 
 			try {
 				const messages = buildOuterMessages(
@@ -2240,8 +2318,26 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 					baseUserPrompt,
 					correctiveFeedback,
 				);
-				rawPackJson = await this.callAndParse(messages, "dual content-pack");
-				validationResult = validateDualContentPacks(rawPackJson, input);
+				rawJson = await this.callAndParse(messages, "dual content-pack");
+				const validationResult = validateBoundDualContentPack(
+					rawJson,
+					schedule,
+				);
+				if (validationResult.ok) {
+					const phases = (rawJson as Record<string, unknown>).phases as Array<
+						Record<string, unknown>
+					>;
+					const phase0 = phases[0]!;
+					return {
+						phases: [
+							{
+								rawPackA: phase0.packA as RawBoundPack,
+								rawPackB: phase0.packB as RawBoundPack,
+							},
+						],
+					};
+				}
+				correctiveFeedback = buildCorrectiveFeedback(validationResult.errors);
 			} catch (err) {
 				if (err instanceof CapHitError) throw err;
 				if (outer === OUTER_BUDGET - 1) throw err;
@@ -2250,12 +2346,7 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 					await sleep(backoffMs);
 				}
 				correctiveFeedback = null;
-				continue;
 			}
-
-			if (validationResult.ok) return validationResult.value;
-
-			correctiveFeedback = buildCorrectiveFeedback(validationResult.errors);
 		}
 
 		throw new ContentPackError(
@@ -2267,35 +2358,35 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 // ── MockContentPackProvider ───────────────────────────────────────────────────
 
 export class MockContentPackProvider implements ContentPackProvider {
-	readonly calls: ContentPackProviderInput[] = [];
-	readonly dualCalls: DualContentPackProviderInput[] = [];
+	readonly calls: BindingContentPackInput[] = [];
+	readonly dualCalls: DualBindingContentPackInput[] = [];
 	private readonly fn: (
-		input: ContentPackProviderInput,
-	) => ContentPackProviderResult;
+		input: BindingContentPackInput,
+	) => BindingContentPackProviderResult;
 	private readonly dualFn: (
-		input: DualContentPackProviderInput,
-	) => DualContentPackProviderResult;
+		input: DualBindingContentPackInput,
+	) => DualBindingContentPackProviderResult;
 
 	constructor(
-		fn: (input: ContentPackProviderInput) => ContentPackProviderResult,
+		fn: (input: BindingContentPackInput) => BindingContentPackProviderResult,
 		dualFn?: (
-			input: DualContentPackProviderInput,
-		) => DualContentPackProviderResult,
+			input: DualBindingContentPackInput,
+		) => DualBindingContentPackProviderResult,
 	) {
 		this.fn = fn;
 		this.dualFn = dualFn ?? (() => ({ phases: [] }));
 	}
 
 	async generateContentPacks(
-		input: ContentPackProviderInput,
-	): Promise<ContentPackProviderResult> {
+		input: BindingContentPackInput,
+	): Promise<BindingContentPackProviderResult> {
 		this.calls.push(input);
 		return this.fn(input);
 	}
 
 	async generateDualContentPacks(
-		input: DualContentPackProviderInput,
-	): Promise<DualContentPackProviderResult> {
+		input: DualBindingContentPackInput,
+	): Promise<DualBindingContentPackProviderResult> {
 		this.dualCalls.push(input);
 		return this.dualFn(input);
 	}

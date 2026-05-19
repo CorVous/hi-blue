@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { STATIC_CONTENT_PACKS } from "../../__tests__/fixtures/static-content-packs";
+import {
+	STATIC_CONTENT_PACKS,
+	STATIC_OBJECTIVE_TYPES,
+} from "../../__tests__/fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "../../__tests__/fixtures/static-personas";
 import { GameSession } from "../../game/game-session";
 import type { GameState } from "../../game/types";
@@ -76,7 +79,15 @@ describe("game-strip", () => {
 	it("lists every objective inside the details with its kind and satisfaction state", () => {
 		const contentPack = STATIC_CONTENT_PACKS[0];
 		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
+		// Pass STATIC_OBJECTIVE_TYPES so the session has objectives to list
+		const session = new GameSession(
+			contentPack,
+			STATIC_PERSONAS,
+			undefined,
+			undefined,
+			undefined,
+			STATIC_OBJECTIVE_TYPES,
+		);
 		const containerEl = document.getElementById(
 			"dev-game-strip",
 		) as HTMLElement;

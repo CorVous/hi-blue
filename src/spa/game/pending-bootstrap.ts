@@ -17,7 +17,7 @@ import {
 	generateNewGameAssetsSplit,
 	type SplitNewGameAssets,
 } from "./bootstrap.js";
-import type { AiId, AiPersona, ContentPack } from "./types.js";
+import type { AiId, AiPersona, ContentPack, ObjectiveType } from "./types.js";
 
 export type PendingBootstrapStatus =
 	| "pending"
@@ -30,6 +30,7 @@ export interface PendingBootstrap {
 	contentPacksPromise: Promise<{
 		packsA: ContentPack[];
 		packsB: ContentPack[];
+		objectiveTypes: ObjectiveType[];
 	}>;
 	status: PendingBootstrapStatus;
 	error?: unknown;

@@ -624,10 +624,11 @@ export function renderGame(
 					startSpinners();
 					startBrightnessWipe();
 					return pendingBootstrap.contentPacksPromise.then(
-						({ packsA, packsB }) => ({
+						({ packsA, packsB, objectiveTypes }) => ({
 							personas,
 							contentPacksA: packsA,
 							contentPacksB: packsB,
+							objectiveTypes,
 						}),
 					);
 				})

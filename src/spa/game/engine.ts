@@ -1,5 +1,5 @@
 import { CARDINAL_DIRECTIONS, GRID_COLS, GRID_ROWS } from "./direction.js";
-import { drawObjectives } from "./objective-pool.js";
+import { buildObjectiveRecords } from "./objective-record-builder.js";
 import type {
 	ActiveComplication,
 	AiBudget,
@@ -11,6 +11,7 @@ import type {
 	ConversationEntry,
 	GameState,
 	GridPosition,
+	ObjectiveType,
 	PersonaSpatialState,
 	ToolName,
 	WorldEntity,
@@ -28,9 +29,9 @@ export const FAREWELL_LINE = (name: string): string =>
  *
  * Replaces the old createGame + startPhase pair. Budget is $0.50 per AI
  * (no per-phase reset). The content pack drives all spatial placement and
- * world entities. Objectives are drawn from the pack's candidate pool
- * (carry / use_space / use_item / convergence) via drawObjectives;
- * `opts.objectiveCount` controls how many are drawn (default 3).
+ * world entities. Objectives are built from `opts.objectiveTypes` using
+ * `buildObjectiveRecords`. When `objectiveTypes` is omitted, no objectives
+ * are created (vacuous win — appropriate for tests that don't exercise objectives).
  */
 export function startGame(
 	personas: Record<AiId, AiPersona>,
@@ -38,12 +39,21 @@ export function startGame(
 	opts: {
 		budgetPerAi?: number;
 		rng?: () => number;
+		/**
+		 * Type-first objective types. When provided, buildObjectiveRecords is
+		 * called to build Objective records from the pack entities using the
+		 * type-first naming convention. When omitted, no objectives are created.
+		 */
+		objectiveTypes?: ObjectiveType[];
+		/**
+		 * @deprecated Use objectiveTypes instead. Kept for backward-compat in
+		 * tests that don't care about objectives (produces no objectives when set).
+		 */
 		objectiveCount?: number;
 	} = {},
 ): GameState {
 	const rng = opts.rng ?? Math.random;
 	const budgetPerAi = opts.budgetPerAi ?? 0.5;
-	const objectiveCount = opts.objectiveCount ?? 3;
 	const aiIds = Object.keys(personas);
 
 	const budgets: Record<AiId, AiBudget> = {};
@@ -69,11 +79,13 @@ export function startGame(
 			? { ...contentPack.aiStarts }
 			: drawSpatialPlacements(rng, aiIds);
 
-	// Draw a mixed objective set (carry / use_space / use_item / convergence)
-	// from the pack using the seeded rng. Count is opts.objectiveCount (default 3).
-	// Packs with no objectivePairs and no interestingObjects produce an empty pool,
-	// in which case drawObjectives returns [] — yielding a vacuous win.
-	const objectives = drawObjectives(contentPack, rng, objectiveCount);
+	// Build type-first objectives from pre-rolled ObjectiveTypes.
+	// When objectiveTypes is not provided, no objectives are created (vacuous win).
+	// When provided, buildObjectiveRecords maps each type to an entity by convention id.
+	const objectives =
+		opts.objectiveTypes && opts.objectiveTypes.length > 0
+			? buildObjectiveRecords(opts.objectiveTypes, contentPack)
+			: [];
 
 	// Initial countdown: random in [1, 5]
 	const initialCountdown = 1 + Math.floor(rng() * 5);

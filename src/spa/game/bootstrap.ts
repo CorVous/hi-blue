@@ -21,12 +21,13 @@ import { BrowserContentPackProvider } from "./content-pack-provider.js";
 import { GameSession } from "./game-session.js";
 import type { LlmSynthesisProvider } from "./llm-synthesis-provider.js";
 import { BrowserSynthesisProvider } from "./llm-synthesis-provider.js";
-import type { AiId, AiPersona, ContentPack } from "./types.js";
+import type { AiId, AiPersona, ContentPack, ObjectiveType } from "./types.js";
 
 export interface NewGameAssets {
 	personas: Record<AiId, AiPersona>;
 	contentPacksA: ContentPack[];
 	contentPacksB: ContentPack[];
+	objectiveTypes?: ObjectiveType[];
 }
 
 export interface SplitNewGameAssets {
@@ -34,6 +35,7 @@ export interface SplitNewGameAssets {
 	contentPacksPromise: Promise<{
 		packsA: ContentPack[];
 		packsB: ContentPack[];
+		objectiveTypes: ObjectiveType[];
 	}>;
 }
 
@@ -85,7 +87,7 @@ export function generateNewGameAssetsSplit(
 	aiIdsPromise.catch(() => {});
 
 	const contentPacksPromise = (async () => {
-		const { packA, packB } = await generateDualContentPacks(
+		const { packA, packB, objectiveTypes } = await generateDualContentPacks(
 			contentPackRng,
 			SETTING_POOL,
 			{
@@ -98,7 +100,7 @@ export function generateNewGameAssetsSplit(
 			packLLM,
 			aiIdsPromise,
 		);
-		return { packsA: [packA], packsB: [packB] };
+		return { packsA: [packA], packsB: [packB], objectiveTypes };
 	})();
 	contentPacksPromise.catch(() => {});
 
@@ -125,7 +127,7 @@ export function generateContentPacksOnlySplit(
 	personasPromise.catch(() => {});
 
 	const contentPacksPromise = (async () => {
-		const { packA, packB } = await generateDualContentPacks(
+		const { packA, packB, objectiveTypes } = await generateDualContentPacks(
 			contentPackRng,
 			SETTING_POOL,
 			{
@@ -138,7 +140,7 @@ export function generateContentPacksOnlySplit(
 			packLLM,
 			Promise.resolve(aiIds),
 		);
-		return { packsA: [packA], packsB: [packB] };
+		return { packsA: [packA], packsB: [packB], objectiveTypes };
 	})();
 	contentPacksPromise.catch(() => {});
 
@@ -158,11 +160,16 @@ export async function generateNewGameAssets(
 ): Promise<NewGameAssets> {
 	const { personasPromise, contentPacksPromise } =
 		generateNewGameAssetsSplit(opts);
-	const [personas, { packsA, packsB }] = await Promise.all([
+	const [personas, { packsA, packsB, objectiveTypes }] = await Promise.all([
 		personasPromise,
 		contentPacksPromise,
 	]);
-	return { personas, contentPacksA: packsA, contentPacksB: packsB };
+	return {
+		personas,
+		contentPacksA: packsA,
+		contentPacksB: packsB,
+		objectiveTypes,
+	};
 }
 
 /**
@@ -176,7 +183,7 @@ export async function buildSameDaemonsSession(
 ): Promise<GameSession> {
 	const rng = opts?.rng ?? Math.random;
 	const packLLM = new BrowserContentPackProvider();
-	const { packA, packB } = await generateDualContentPacks(
+	const { packA, packB, objectiveTypes } = await generateDualContentPacks(
 		rng,
 		SETTING_POOL,
 		{
@@ -190,7 +197,12 @@ export async function buildSameDaemonsSession(
 		Object.keys(personas),
 	);
 	return buildSessionFromAssets(
-		{ personas, contentPacksA: [packA], contentPacksB: [packB] },
+		{
+			personas,
+			contentPacksA: [packA],
+			contentPacksB: [packB],
+			objectiveTypes,
+		},
 		opts,
 	);
 }
@@ -230,5 +242,6 @@ export function buildSessionFromAssets(
 		assets.contentPacksA,
 		assets.contentPacksB,
 		opts?.rng,
+		assets.objectiveTypes,
 	);
 }
