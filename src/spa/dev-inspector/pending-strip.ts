@@ -90,7 +90,7 @@ function updatePendingStripContent(
 	const retryEl = containerEl.querySelector<HTMLElement>(
 		'[data-field="retry"]',
 	);
-	const showRetry = callMeta && callMeta.retryCount && callMeta.retryCount > 0;
+	const showRetry = callMeta?.retryCount && callMeta.retryCount > 0;
 	if (sepRetryEl) {
 		sepRetryEl.setAttribute("hidden", "");
 		if (showRetry) sepRetryEl.removeAttribute("hidden");
@@ -132,7 +132,7 @@ function updatePendingStripContent(
 	const lastErrorEl = containerEl.querySelector<HTMLElement>(
 		'[data-field="last-error"]',
 	);
-	const showError = callMeta && callMeta.lastError;
+	const showError = callMeta?.lastError;
 	if (sepErrorEl) {
 		sepErrorEl.setAttribute("hidden", "");
 		if (showError) sepErrorEl.removeAttribute("hidden");
@@ -247,7 +247,7 @@ export function renderPendingStrip(
 
 	// Start ticker for elapsed time updates (~100ms)
 	_tickerInterval = setInterval(() => {
-		if (!_tickerContainer || !_tickerContainer.isConnected) {
+		if (!_tickerContainer?.isConnected) {
 			if (_tickerInterval) {
 				clearInterval(_tickerInterval);
 				_tickerInterval = undefined;

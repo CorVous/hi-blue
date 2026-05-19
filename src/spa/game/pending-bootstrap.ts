@@ -62,14 +62,18 @@ export function startBootstrap(opts?: BootstrapOpts): PendingBootstrap {
 		status: "pending",
 	};
 
+	recordPendingCall("persona-synthesis");
+
 	split.personasPromise.then(
 		(personas) => {
 			entry.personas = personas;
 			if (entry.status === "pending") entry.status = "personas-ready";
+			recordPendingCall("content-pack");
 		},
 		(err: unknown) => {
 			entry.status = "failed";
 			entry.error = err;
+			recordPendingRetry(err);
 		},
 	);
 	split.contentPacksPromise.then(
@@ -79,6 +83,7 @@ export function startBootstrap(opts?: BootstrapOpts): PendingBootstrap {
 		(err: unknown) => {
 			entry.status = "failed";
 			entry.error = err;
+			recordPendingRetry(err);
 		},
 	);
 
@@ -117,6 +122,8 @@ export function restartContentPacks(opts?: BootstrapOpts): PendingBootstrap {
 		return startBootstrap(opts);
 	}
 
+	recordPendingCall("content-pack");
+
 	const split = generateContentPacksOnlySplit(cached, opts);
 	const entry: PendingBootstrap = {
 		personasPromise: split.personasPromise,
@@ -132,6 +139,7 @@ export function restartContentPacks(opts?: BootstrapOpts): PendingBootstrap {
 		(err: unknown) => {
 			entry.status = "failed";
 			entry.error = err;
+			recordPendingRetry(err);
 		},
 	);
 

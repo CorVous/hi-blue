@@ -1843,7 +1843,7 @@ main {
 }
 
 .dev-pending-strip [hidden] {
-	display: none !important;
+	display: none;
 }
 
 .dev-strip-line {

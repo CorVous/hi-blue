@@ -304,12 +304,12 @@ describe("cone-focus", () => {
 			expect(greenBtn).toBeTruthy();
 
 			setMapFocus("red");
-			expect(redBtn!.getAttribute("data-focus-active")).toBe("true");
-			expect(greenBtn!.getAttribute("data-focus-active")).toBe("false");
+			expect(redBtn?.getAttribute("data-focus-active")).toBe("true");
+			expect(greenBtn?.getAttribute("data-focus-active")).toBe("false");
 
 			setMapFocus("green");
-			expect(redBtn!.getAttribute("data-focus-active")).toBe("false");
-			expect(greenBtn!.getAttribute("data-focus-active")).toBe("true");
+			expect(redBtn?.getAttribute("data-focus-active")).toBe("false");
+			expect(greenBtn?.getAttribute("data-focus-active")).toBe("true");
 		});
 	});
 

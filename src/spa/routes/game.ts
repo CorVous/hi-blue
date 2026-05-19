@@ -533,6 +533,10 @@ export function renderGame(
 		setStageLoadState("loading-daemons");
 		renderLoadingTopInfo("loading-daemons");
 
+		if (__DEV__) {
+			renderInspector(root, { pendingBootstrap: pending });
+		}
+
 		// Braille spinner machinery — duplicated from the round-submit path so
 		// we can ride spinners on the panel-name labels while content packs
 		// load (no session yet, so we can't share that closure).
@@ -619,6 +623,9 @@ export function renderGame(
 					buildLoadingPersonaShape(personas);
 					setStageLoadState("generating-room");
 					renderLoadingTopInfo("generating-room");
+					if (__DEV__) {
+						renderInspector(root, { pendingBootstrap });
+					}
 					startSpinners();
 					startBrightnessWipe();
 					return pendingBootstrap.contentPacksPromise.then(
@@ -701,6 +708,10 @@ export function renderGame(
 		// Run the initial bootstrap chain with error handling
 		return runBootstrapChain(pending).catch(async (err: unknown) => {
 			cleanupLoadingTimers();
+
+			if (__DEV__) {
+				renderInspector(root, { pendingBootstrap: pending });
+			}
 
 			if (err instanceof CapHitError && capHitEl) {
 				capHitEl.removeAttribute("hidden");
