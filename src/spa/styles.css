@@ -74,7 +74,7 @@ body::before {
 
 /* Layout — single screen */
 #stage {
-	height: 100dvh;
+	min-height: 100dvh;
 	display: grid;
 	grid-template-rows: auto auto auto auto 1fr auto;
 	gap: 6px;
