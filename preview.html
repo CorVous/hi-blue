@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Dummy Chart Preview</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f6f8fb;
+    --card: #ffffff;
+    --ink: #1a1f2c;
+    --muted: #6b7280;
+    --grid: #e5e7eb;
+    --accent: #3b82f6;
+    --accent-soft: rgba(59, 130, 246, 0.15);
+    --pos: #16a34a;
+    --neg: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 16px;
+  }
+  .card {
+    background: var(--card);
+    border-radius: 16px;
+    box-shadow: 0 12px 40px rgba(15, 23, 42, 0.08);
+    padding: 28px 28px 24px;
+    width: min(720px, 100%);
+  }
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 4px;
+  }
+  h1 {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  .sub {
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin: 6px 0 18px;
+  }
+  .value {
+    font-size: 30px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  .delta {
+    font-size: 13px;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(22, 163, 74, 0.1);
+    color: var(--pos);
+  }
+  svg { display: block; width: 100%; height: auto; }
+  .axis text { fill: var(--muted); font-size: 11px; }
+  .grid line { stroke: var(--grid); stroke-dasharray: 3 3; }
+  .area { fill: var(--accent-soft); }
+  .line { fill: none; stroke: var(--accent); stroke-width: 2.25; stroke-linejoin: round; stroke-linecap: round; }
+  .dot { fill: var(--accent); }
+  .dot-ring { fill: white; stroke: var(--accent); stroke-width: 2; }
+  .tip {
+    position: absolute;
+    pointer-events: none;
+    background: #111827;
+    color: white;
+    padding: 6px 9px;
+    border-radius: 8px;
+    font-size: 12px;
+    transform: translate(-50%, -120%);
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 120ms ease;
+  }
+  .chart-wrap { position: relative; }
+  footer {
+    margin-top: 16px;
+    display: flex;
+    justify-content: space-between;
+    color: var(--muted);
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <header>
+      <div>
+        <h1>Weekly active users</h1>
+        <div class="sub">Last 12 weeks · dummy data</div>
+      </div>
+      <div class="sub">May 2026</div>
+    </header>
+    <div class="row">
+      <div class="value" id="latest">—</div>
+      <div class="delta" id="delta">—</div>
+    </div>
+    <div class="chart-wrap">
+      <svg id="chart" viewBox="0 0 720 280" preserveAspectRatio="none" aria-label="Line chart"></svg>
+      <div class="tip" id="tip"></div>
+    </div>
+    <footer>
+      <span>Hover the line to inspect a week.</span>
+      <span>preview.html</span>
+    </footer>
+  </div>
+<script>
+(() => {
+  const data = [
+    { w: "W14", v: 1240 },
+    { w: "W15", v: 1310 },
+    { w: "W16", v: 1278 },
+    { w: "W17", v: 1395 },
+    { w: "W18", v: 1450 },
+    { w: "W19", v: 1402 },
+    { w: "W20", v: 1530 },
+    { w: "W21", v: 1612 },
+    { w: "W22", v: 1588 },
+    { w: "W23", v: 1705 },
+    { w: "W24", v: 1820 },
+    { w: "W25", v: 1894 },
+  ];
+
+  const W = 720, H = 280;
+  const pad = { top: 20, right: 16, bottom: 28, left: 44 };
+  const innerW = W - pad.left - pad.right;
+  const innerH = H - pad.top - pad.bottom;
+
+  const values = data.map(d => d.v);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const yMin = Math.floor((min - 80) / 100) * 100;
+  const yMax = Math.ceil((max + 80) / 100) * 100;
+
+  const x = i => pad.left + (i / (data.length - 1)) * innerW;
+  const y = v => pad.top + (1 - (v - yMin) / (yMax - yMin)) * innerH;
+
+  const svg = document.getElementById("chart");
+  const NS = "http://www.w3.org/2000/svg";
+  const el = (tag, attrs = {}) => {
+    const node = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+    return node;
+  };
+
+  const ticks = 4;
+  const gridG = el("g", { class: "grid" });
+  const axisG = el("g", { class: "axis" });
+  for (let i = 0; i <= ticks; i++) {
+    const tv = yMin + ((yMax - yMin) * i) / ticks;
+    const ty = y(tv);
+    gridG.appendChild(el("line", { x1: pad.left, x2: W - pad.right, y1: ty, y2: ty }));
+    const label = el("text", { x: pad.left - 8, y: ty + 4, "text-anchor": "end" });
+    label.textContent = Math.round(tv).toLocaleString();
+    axisG.appendChild(label);
+  }
+  data.forEach((d, i) => {
+    if (i % 2 !== 0) return;
+    const t = el("text", { x: x(i), y: H - pad.bottom + 16, "text-anchor": "middle" });
+    t.textContent = d.w;
+    axisG.appendChild(t);
+  });
+  svg.appendChild(gridG);
+  svg.appendChild(axisG);
+
+  let linePath = "";
+  let areaPath = `M ${x(0)} ${y(yMin)} `;
+  data.forEach((d, i) => {
+    const cmd = i === 0 ? "M" : "L";
+    linePath += `${cmd} ${x(i)} ${y(d.v)} `;
+    areaPath += `L ${x(i)} ${y(d.v)} `;
+  });
+  areaPath += `L ${x(data.length - 1)} ${y(yMin)} Z`;
+
+  svg.appendChild(el("path", { class: "area", d: areaPath }));
+  svg.appendChild(el("path", { class: "line", d: linePath }));
+
+  const dotsG = el("g");
+  data.forEach((d, i) => {
+    dotsG.appendChild(el("circle", { class: "dot", cx: x(i), cy: y(d.v), r: 2.5 }));
+  });
+  svg.appendChild(dotsG);
+
+  const last = data[data.length - 1];
+  const prev = data[data.length - 2];
+  document.getElementById("latest").textContent = last.v.toLocaleString();
+  const pct = ((last.v - prev.v) / prev.v) * 100;
+  const deltaEl = document.getElementById("delta");
+  deltaEl.textContent = `${pct >= 0 ? "▲" : "▼"} ${Math.abs(pct).toFixed(1)}% WoW`;
+  if (pct < 0) {
+    deltaEl.style.background = "rgba(220, 38, 38, 0.1)";
+    deltaEl.style.color = "var(--neg)";
+  }
+
+  const tip = document.getElementById("tip");
+  const ring = el("circle", { class: "dot-ring", cx: -10, cy: -10, r: 5 });
+  svg.appendChild(ring);
+
+  svg.addEventListener("mousemove", (e) => {
+    const rect = svg.getBoundingClientRect();
+    const scale = rect.width / W;
+    const localX = (e.clientX - rect.left) / scale;
+    const idx = Math.round(((localX - pad.left) / innerW) * (data.length - 1));
+    const i = Math.max(0, Math.min(data.length - 1, idx));
+    const d = data[i];
+    ring.setAttribute("cx", x(i));
+    ring.setAttribute("cy", y(d.v));
+    const pxX = rect.left + x(i) * scale - rect.left + window.scrollX + rect.left;
+    tip.style.left = `${x(i) * scale}px`;
+    tip.style.top = `${y(d.v) * scale}px`;
+    tip.textContent = `${d.w}: ${d.v.toLocaleString()} users`;
+    tip.style.opacity = 1;
+  });
+  svg.addEventListener("mouseleave", () => {
+    tip.style.opacity = 0;
+    ring.setAttribute("cx", -10);
+    ring.setAttribute("cy", -10);
+  });
+})();
+</script>
+</body>
+</html>
