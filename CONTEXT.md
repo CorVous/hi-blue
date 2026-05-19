@@ -117,7 +117,7 @@ A single line in the **Conversation log** describing something an AI saw happen 
 The following terms are being introduced as part of a planned restructure from a three-phase model to a single-game model. These are under active design and will be promoted to the main glossary once stabilised.
 
 **Objective (revised)**:
-The player's win condition for the whole game — not per-phase. Objectives are drawn from a pool at game start, with replacement (the same type can appear more than once; entities are always distinct). Objectives are *not* revealed to the player upfront and have no UI tracker; they are discovered implicitly through Daemon examination and conversation. Each Objective has a satisfaction condition and cannot be deactivated once satisfied. Four Objective types exist in the pool:
+The player's win condition for the whole game — not per-phase. Three Objectives are drawn at game start by rolling types uniformly with replacement over the four kinds below (in code, via the seeded RNG, *before* the LLM **Content Pack** call). Same-type duplicates are allowed; entities are strict 1-to-1 with Objectives — no entity is referenced by more than one Objective binding. See [ADR 0014](docs/adr/0014-type-first-objective-authoring.md). Objectives are *not* revealed to the player upfront and have no UI tracker; they are discovered implicitly through Daemon examination and conversation. Each Objective has a satisfaction condition and cannot be deactivated once satisfied. Four Objective types exist:
 1. **Carry Objective** — A Daemon brings a specific object to a specific space (existing mechanic). The object's `examineDescription` names the target space.
 2. **Use-Item Objective** — A Daemon uses (`use` tool) a specific pickupable item. The item's `examineDescription` hints at use. After satisfaction, the item becomes inert but stays on the grid, behaving like an **Interesting Object** (`use` still fires flavor, no mechanical effect). Examine/look flavor updates to reflect completion.
 3. **Use-Space Objective** — A Daemon uses the `use` tool while standing on a specific space or while the space is in the three front-arc cells directly ahead (the daemon can interact at short range, not only underfoot). Regardless of whether the daemon is holding an item. After satisfaction, `use` is no longer available on that space; a generated flavor event fires; examine/look flavor updates to reflect completion.
@@ -162,3 +162,11 @@ Retired in favour of **Complication** (specifically **Sysadmin Directive**). Per
 
 **Broadcast message**:
 A system message delivered to all Daemons simultaneously, not attributed to any Daemon or the Sysadmin. Currently used only for **Weather Change** complications. Distinct from a **Sysadmin** directive (targeted, attributed) and a **Witnessed event** (cone-gated).
+
+**Objective binding**:
+The label that ties an entity in the **Content Pack** to the specific **Objective** type it satisfies. Determined in code at game start (after the type-first Objective draw, before the LLM call) and embedded in the LLM prompt so flavor is scoped to that binding only. A Carry binding spans an object+space pair; UseSpace, Convergence, and UseItem bindings each cover one entity. Entities with no Objective binding are **Decoy**s. See [ADR 0014](docs/adr/0014-type-first-objective-authoring.md).
+_Avoid_: Mapping, link, association.
+
+**Decoy**:
+An entity in the **Content Pack** with no **Objective binding**. Always an `interesting_object` with only `examineDescription` + `proximityFlavor` + `useOutcome` authored — no activation-cue tell, no `activationFlavor`. Exactly two per pack. Identifiable as a decoy via examine (lacks the AI-discoverable Use-Item tell); serves as atmospheric and negotiation filler, not puzzle deception.
+_Avoid_: Filler (ambiguous), red herring (rejected — they don't deceive).
