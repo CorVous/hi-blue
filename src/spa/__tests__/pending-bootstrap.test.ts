@@ -209,4 +209,216 @@ describe("pending-bootstrap.ts", () => {
 		// Personas should be gone
 		expect(getCachedPersonas()).toBeUndefined();
 	});
+
+	it("recordPendingCall sets callName + startedAtMs", async () => {
+		vi.resetModules();
+
+		const { recordPendingCall, getPendingCallMeta } = await import(
+			"../game/pending-bootstrap.js"
+		);
+
+		const beforeMs = Date.now();
+		recordPendingCall("persona-synthesis");
+		const afterMs = Date.now();
+
+		const meta = getPendingCallMeta();
+		expect(meta.callName).toBe("persona-synthesis");
+		expect(meta.startedAtMs).toBeGreaterThanOrEqual(beforeMs);
+		expect(meta.startedAtMs).toBeLessThanOrEqual(afterMs);
+		expect(meta.retryCount).toBe(0);
+		expect(meta.retryMax).toBe(3);
+		expect(meta.lastError).toBeUndefined();
+	});
+
+	it("recordPendingRetry increments retryCount and stores lastError", async () => {
+		vi.resetModules();
+
+		const { recordPendingCall, recordPendingRetry, getPendingCallMeta } =
+			await import("../game/pending-bootstrap.js");
+
+		recordPendingCall("content-pack");
+
+		recordPendingRetry(new Error("502 upstream"));
+
+		const meta = getPendingCallMeta();
+		expect(meta.callName).toBe("content-pack");
+		expect(meta.retryCount).toBe(1);
+		expect(meta.lastError).toBe("502 upstream");
+
+		// Retry again
+		recordPendingRetry(new Error("503 service unavailable"));
+
+		const meta2 = getPendingCallMeta();
+		expect(meta2.retryCount).toBe(2);
+		expect(meta2.lastError).toBe("503 service unavailable");
+	});
+
+	it("clearPendingBootstrap clears meta", async () => {
+		vi.resetModules();
+
+		const { recordPendingCall, clearPendingBootstrap, getPendingCallMeta } =
+			await import("../game/pending-bootstrap.js");
+
+		recordPendingCall("persona-synthesis");
+		expect(getPendingCallMeta().callName).toBe("persona-synthesis");
+
+		clearPendingBootstrap();
+
+		const meta = getPendingCallMeta();
+		expect(meta.callName).toBeUndefined();
+		expect(meta.startedAtMs).toBeUndefined();
+		expect(meta.retryCount).toBeUndefined();
+		expect(meta.lastError).toBeUndefined();
+	});
+
+	it("startBootstrap calls recordPendingCall('persona-synthesis') synchronously", async () => {
+		vi.doMock("../game/bootstrap.js", () => ({
+			generateNewGameAssetsSplit: () => ({
+				personasPromise: Promise.resolve(STATIC_PERSONAS),
+				contentPacksPromise: Promise.resolve(STATIC_CONTENT),
+			}),
+			generateContentPacksOnlySplit: (_personas: Record<AiId, AiPersona>) => ({
+				personasPromise: Promise.resolve(_personas),
+				contentPacksPromise: Promise.resolve(STATIC_CONTENT),
+			}),
+		}));
+		vi.resetModules();
+
+		const { startBootstrap, getPendingCallMeta } = await import(
+			"../game/pending-bootstrap.js"
+		);
+
+		startBootstrap();
+
+		// Check that recordPendingCall was called synchronously with "persona-synthesis"
+		const meta = getPendingCallMeta();
+		expect(meta.callName).toBe("persona-synthesis");
+		expect(meta.startedAtMs).toBeDefined();
+		expect(meta.retryCount).toBe(0);
+	});
+
+	it("startBootstrap calls recordPendingCall('content-pack') when personas resolve", async () => {
+		vi.doMock("../game/bootstrap.js", () => ({
+			generateNewGameAssetsSplit: () => ({
+				personasPromise: Promise.resolve(STATIC_PERSONAS),
+				contentPacksPromise: Promise.resolve(STATIC_CONTENT),
+			}),
+			generateContentPacksOnlySplit: (_personas: Record<AiId, AiPersona>) => ({
+				personasPromise: Promise.resolve(_personas),
+				contentPacksPromise: Promise.resolve(STATIC_CONTENT),
+			}),
+		}));
+		vi.resetModules();
+
+		const { startBootstrap, getPendingCallMeta } = await import(
+			"../game/pending-bootstrap.js"
+		);
+
+		const pending = startBootstrap();
+
+		// Initially should be persona-synthesis
+		expect(getPendingCallMeta().callName).toBe("persona-synthesis");
+
+		// Wait for personas to resolve
+		await pending.personasPromise;
+
+		// Should now be content-pack
+		expect(getPendingCallMeta().callName).toBe("content-pack");
+	});
+
+	it("startBootstrap calls recordPendingRetry when personas fail", async () => {
+		vi.doMock("../game/bootstrap.js", () => ({
+			generateNewGameAssetsSplit: () => ({
+				personasPromise: Promise.reject(new Error("persona generation failed")),
+				contentPacksPromise: Promise.resolve(STATIC_CONTENT),
+			}),
+			generateContentPacksOnlySplit: (_personas: Record<AiId, AiPersona>) => ({
+				personasPromise: Promise.resolve(_personas),
+				contentPacksPromise: Promise.resolve(STATIC_CONTENT),
+			}),
+		}));
+		vi.resetModules();
+
+		const { startBootstrap, getPendingCallMeta } = await import(
+			"../game/pending-bootstrap.js"
+		);
+
+		const pending = startBootstrap();
+
+		try {
+			await pending.personasPromise;
+		} catch {
+			// Expected to fail
+		}
+
+		const meta = getPendingCallMeta();
+		expect(meta.retryCount).toBe(1);
+		expect(meta.lastError).toBe("persona generation failed");
+	});
+
+	it("restartContentPacks calls recordPendingCall('content-pack') synchronously", async () => {
+		vi.doMock("../game/bootstrap.js", () => ({
+			generateNewGameAssetsSplit: () => ({
+				personasPromise: Promise.resolve(STATIC_PERSONAS),
+				contentPacksPromise: Promise.resolve(STATIC_CONTENT),
+			}),
+			generateContentPacksOnlySplit: (_personas: Record<AiId, AiPersona>) => ({
+				personasPromise: Promise.resolve(_personas),
+				contentPacksPromise: Promise.resolve(STATIC_CONTENT),
+			}),
+		}));
+		vi.resetModules();
+
+		const { startBootstrap, restartContentPacks, getPendingCallMeta } =
+			await import("../game/pending-bootstrap.js");
+
+		const initial = startBootstrap();
+		await initial.personasPromise;
+
+		// Reset meta by manually clearing it (simulating a clean state before restart)
+		const { recordPendingCall } = await import("../game/pending-bootstrap.js");
+		recordPendingCall("placeholder");
+
+		// Now restart content packs
+		restartContentPacks();
+
+		// Should be content-pack now
+		const meta = getPendingCallMeta();
+		expect(meta.callName).toBe("content-pack");
+		expect(meta.startedAtMs).toBeDefined();
+	});
+
+	it("restartContentPacks calls recordPendingRetry when content packs fail", async () => {
+		vi.doMock("../game/bootstrap.js", () => ({
+			generateNewGameAssetsSplit: () => ({
+				personasPromise: Promise.resolve(STATIC_PERSONAS),
+				contentPacksPromise: Promise.resolve(STATIC_CONTENT),
+			}),
+			generateContentPacksOnlySplit: (_personas: Record<AiId, AiPersona>) => ({
+				personasPromise: Promise.resolve(_personas),
+				contentPacksPromise: Promise.reject(
+					new Error("content pack generation failed"),
+				),
+			}),
+		}));
+		vi.resetModules();
+
+		const { startBootstrap, restartContentPacks, getPendingCallMeta } =
+			await import("../game/pending-bootstrap.js");
+
+		const initial = startBootstrap();
+		await initial.personasPromise;
+
+		const restarted = restartContentPacks();
+
+		try {
+			await restarted.contentPacksPromise;
+		} catch {
+			// Expected to fail
+		}
+
+		const meta = getPendingCallMeta();
+		expect(meta.retryCount).toBe(1);
+		expect(meta.lastError).toBe("content pack generation failed");
+	});
 });

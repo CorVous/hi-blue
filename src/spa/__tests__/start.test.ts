@@ -88,10 +88,6 @@ const INDEX_BODY_HTML = `
   </form>
   <section id="cap-hit" hidden></section>
   <aside id="persistence-warning" hidden role="status" aria-live="polite"></aside>
-  <aside id="action-log" hidden>
-    <h3>Action Log (debug)</h3>
-    <ul id="action-log-list"></ul>
-  </aside>
   <section id="endgame" hidden></section>
 </main>
 `;

@@ -36,7 +36,16 @@ export interface PendingBootstrap {
 	personas?: Record<AiId, AiPersona>;
 }
 
+export interface PendingCallMeta {
+	callName?: string;
+	startedAtMs?: number;
+	retryCount?: number;
+	retryMax?: number;
+	lastError?: string;
+}
+
 let _current: PendingBootstrap | undefined;
+let _meta: PendingCallMeta = {};
 
 /**
  * Kick off (or reuse) a bootstrap and stash it in module scope so the game
@@ -53,14 +62,18 @@ export function startBootstrap(opts?: BootstrapOpts): PendingBootstrap {
 		status: "pending",
 	};
 
+	recordPendingCall("persona-synthesis");
+
 	split.personasPromise.then(
 		(personas) => {
 			entry.personas = personas;
 			if (entry.status === "pending") entry.status = "personas-ready";
+			recordPendingCall("content-pack");
 		},
 		(err: unknown) => {
 			entry.status = "failed";
 			entry.error = err;
+			recordPendingRetry(err);
 		},
 	);
 	split.contentPacksPromise.then(
@@ -70,6 +83,7 @@ export function startBootstrap(opts?: BootstrapOpts): PendingBootstrap {
 		(err: unknown) => {
 			entry.status = "failed";
 			entry.error = err;
+			recordPendingRetry(err);
 		},
 	);
 
@@ -108,6 +122,8 @@ export function restartContentPacks(opts?: BootstrapOpts): PendingBootstrap {
 		return startBootstrap(opts);
 	}
 
+	recordPendingCall("content-pack");
+
 	const split = generateContentPacksOnlySplit(cached, opts);
 	const entry: PendingBootstrap = {
 		personasPromise: split.personasPromise,
@@ -123,6 +139,7 @@ export function restartContentPacks(opts?: BootstrapOpts): PendingBootstrap {
 		(err: unknown) => {
 			entry.status = "failed";
 			entry.error = err;
+			recordPendingRetry(err);
 		},
 	);
 
@@ -137,4 +154,46 @@ export function restartContentPacks(opts?: BootstrapOpts): PendingBootstrap {
  */
 export function clearPendingBootstrap(): void {
 	_current = undefined;
+	recordPendingDone();
+}
+
+/**
+ * Record the start of a pending call (e.g., "persona-synthesis" or "content-pack").
+ * Sets the call name, start timestamp, and initializes retry count.
+ */
+export function recordPendingCall(callName: string): void {
+	_meta = {
+		callName,
+		startedAtMs: Date.now(),
+		retryCount: 0,
+		retryMax: 3,
+	};
+}
+
+/**
+ * Record a retry attempt on the pending call, with an optional error.
+ * Increments retry count and stores the error message if provided.
+ */
+export function recordPendingRetry(error?: unknown): void {
+	const text = error instanceof Error ? error.message : String(error);
+	_meta = {
+		..._meta,
+		retryCount: (_meta.retryCount ?? 0) + 1,
+		lastError: text,
+	};
+}
+
+/**
+ * Record successful completion of a pending call. Clears the metadata.
+ */
+export function recordPendingDone(): void {
+	_meta = {};
+}
+
+/**
+ * Get the current pending call metadata. Returns a shallow copy to prevent
+ * external mutations.
+ */
+export function getPendingCallMeta(): PendingCallMeta {
+	return { ..._meta };
 }

@@ -8,6 +8,18 @@ import {
 	topInfoStatus,
 } from "../bbs-chrome.js";
 import {
+	recordDaemonError,
+	recordDaemonRound,
+	recordDaemonSystemPrompt,
+	recordDaemonTurnResult,
+	setDaemonFooterInFlight,
+	updateDaemonFooterDetails,
+	updateDaemonFooterSummary,
+} from "../dev-inspector/daemon-footer.js";
+import { updateGameStripSummary } from "../dev-inspector/game-strip.js";
+import { renderInspector } from "../dev-inspector/index.js";
+import { updateWorldMap } from "../dev-inspector/world-map.js";
+import {
 	buildSameDaemonsSession,
 	buildSessionFromAssets,
 } from "../game/bootstrap.js";
@@ -28,6 +40,10 @@ import {
 	getPendingBootstrap,
 	restartContentPacks,
 } from "../game/pending-bootstrap.js";
+import type {
+	LifecyclePhase,
+	RoundLLMProvider,
+} from "../game/round-llm-provider.js";
 import { encodeRoundResult } from "../game/round-result-encoder.js";
 import { getSpikeRng } from "../game/spike-seed.js";
 import type { AiId, AiPersona } from "../game/types";
@@ -234,8 +250,6 @@ export function renderGame(
 	const promptInput = doc.querySelector<HTMLInputElement>("#prompt");
 	const sendBtn = doc.querySelector<HTMLButtonElement>("#send");
 	const capHitEl = doc.querySelector<HTMLElement>("#cap-hit");
-	const actionLogEl = doc.querySelector<HTMLElement>("#action-log");
-	const actionLogList = doc.querySelector<HTMLUListElement>("#action-log-list");
 	const persistenceWarningEl = doc.querySelector<HTMLElement>(
 		"#persistence-warning",
 	);
@@ -251,9 +265,6 @@ export function renderGame(
 		session = null;
 		cachedSessionId = null;
 		gameEnded = false;
-		// Action log is live-only (no restore), so clear it for parity with
-		// a hard refresh — otherwise entries from the previous session linger.
-		if (actionLogList) actionLogList.textContent = "";
 	}
 
 	// Mention-based addressing state — built lazily after session init below,
@@ -517,6 +528,10 @@ export function renderGame(
 		setStageLoadState("loading-daemons");
 		renderLoadingTopInfo("loading-daemons");
 
+		if (__DEV__) {
+			renderInspector(root, { pendingBootstrap: pending });
+		}
+
 		// Braille spinner machinery — duplicated from the round-submit path so
 		// we can ride spinners on the panel-name labels while content packs
 		// load (no session yet, so we can't share that closure).
@@ -603,6 +618,9 @@ export function renderGame(
 					buildLoadingPersonaShape(personas);
 					setStageLoadState("generating-room");
 					renderLoadingTopInfo("generating-room");
+					if (__DEV__) {
+						renderInspector(root, { pendingBootstrap });
+					}
 					startSpinners();
 					startBrightnessWipe();
 					return pendingBootstrap.contentPacksPromise.then(
@@ -685,6 +703,10 @@ export function renderGame(
 		// Run the initial bootstrap chain with error handling
 		return runBootstrapChain(pending).catch(async (err: unknown) => {
 			cleanupLoadingTimers();
+
+			if (__DEV__) {
+				renderInspector(root, { pendingBootstrap: pending });
+			}
 
 			if (err instanceof CapHitError && capHitEl) {
 				capHitEl.removeAttribute("hidden");
@@ -1133,14 +1155,10 @@ export function renderGame(
 
 	registerPanelClickHandlers(aiIdList);
 
-	// Debug toggle: show action log if ?debug=1
-	const debug = searchParams.get("debug") === "1";
-	if (actionLogEl) {
-		if (debug) {
-			actionLogEl.removeAttribute("hidden");
-		} else {
-			actionLogEl.setAttribute("hidden", "");
-		}
+	if (__DEV__ && session !== null) {
+		renderInspector(root, {
+			session,
+		});
 	}
 
 	// Helper: get transcript element for an AI
@@ -1375,9 +1393,70 @@ export function renderGame(
 		let roundGameEnded = false;
 
 		try {
-			const provider = new BrowserLLMProvider({
+			const rawProvider = new BrowserLLMProvider({
 				disableReasoning: !enableReasoning,
 			});
+
+			// session is guaranteed non-null here due to the check above; capture for closure
+			const sessionRef = session;
+
+			// Wrap provider in __DEV__ gate that records turn results for dev inspector footers
+			const provider: RoundLLMProvider = __DEV__
+				? {
+						streamRound: async (
+							messages,
+							tools,
+							onDelta,
+							daemonId,
+							onLifecycle,
+						) => {
+							if (daemonId && messages[0]?.role === "system") {
+								recordDaemonSystemPrompt(daemonId, messages[0].content);
+								if (sessionRef)
+									recordDaemonRound(daemonId, sessionRef.getState().round);
+							}
+							const result = await rawProvider.streamRound(
+								messages,
+								tools,
+								onDelta,
+								daemonId,
+								onLifecycle,
+							);
+							if (daemonId) {
+								recordDaemonTurnResult(daemonId, {
+									...result,
+									lastRawCompletion: result.assistantText,
+									lastToolCalls: result.toolCalls.map((tc) => ({
+										name: tc.name,
+										argumentsJson: tc.argumentsJson,
+									})),
+								});
+							}
+							return result;
+						},
+					}
+				: rawProvider;
+
+			// Lifecycle callback (dev-only) for per-Daemon footer pip state
+			const onLifecycle: ((event: LifecyclePhase) => void) | undefined = __DEV__
+				? (event: LifecyclePhase) => {
+						if (!event.daemonId) return;
+						const panel = document.querySelector<HTMLElement>(
+							`.ai-panel[data-ai="${event.daemonId}"]`,
+						);
+						if (!panel) return;
+						if (event.phase === "started")
+							setDaemonFooterInFlight(panel, "in-flight");
+						else if (event.phase === "completed")
+							setDaemonFooterInFlight(panel, "idle");
+						else if (event.phase === "errored") {
+							setDaemonFooterInFlight(panel, "errored");
+							recordDaemonError(event.daemonId, event.error);
+						}
+						// first-token: no-op
+					}
+				: undefined;
+
 			// Strip each daemon's spinner as the coordinator finishes its
 			// turn (post-retry per #254). Coordinator awaits AIs serially in
 			// initiative order, so this fires staged in real time —
@@ -1390,6 +1469,7 @@ export function renderGame(
 				initiative,
 				undefined,
 				(aiId) => stripSpinner(aiId),
+				onLifecycle,
 			);
 
 			const events = encodeRoundResult(
@@ -1459,12 +1539,8 @@ export function renderGame(
 						break;
 
 					case "action_log":
-						// Always accumulate in the DOM (even if hidden) so ?debug=1 shows history
-						if (actionLogList) {
-							const li = doc.createElement("li");
-							li.textContent = `[Round ${event.entry.round}] ${event.entry.description}`;
-							actionLogList.appendChild(li);
-						}
+						// Event type still produced by round-result-encoder but no longer
+						// rendered in player-facing UI. Inspector supersedes this debug surface.
 						break;
 
 					case "phase_advanced": {
@@ -1533,13 +1609,10 @@ export function renderGame(
 						const panelsEl = doc.querySelector<HTMLElement>("#panels");
 						const composerEl = doc.querySelector<HTMLElement>("#composer");
 						const capHitSection = doc.querySelector<HTMLElement>("#cap-hit");
-						const actionLogSection =
-							doc.querySelector<HTMLElement>("#action-log");
 						const endgameEl = doc.querySelector<HTMLElement>("#endgame");
 						if (panelsEl) panelsEl.hidden = true;
 						if (composerEl) composerEl.hidden = true;
 						if (capHitSection) capHitSection.hidden = true;
-						if (actionLogSection) actionLogSection.hidden = true;
 
 						// Show endgame screen
 						if (endgameEl) endgameEl.removeAttribute("hidden");
@@ -1729,6 +1802,26 @@ export function renderGame(
 						session = null;
 						cachedSessionId = null;
 						break;
+					}
+				}
+			}
+
+			if (__DEV__ && session) {
+				const stripEl = document.querySelector<HTMLElement>("#dev-game-strip");
+				if (stripEl) updateGameStripSummary(stripEl, session);
+
+				const mapEl = document.querySelector<HTMLElement>("#dev-world-map");
+				if (mapEl) updateWorldMap(mapEl, session);
+
+				// Update per-Daemon footer summaries and details
+				const aiIdList = Object.keys(nextState.personas);
+				for (const aiId of aiIdList) {
+					const panel = document.querySelector<HTMLElement>(
+						`.ai-panel[data-ai="${aiId}"]`,
+					);
+					if (panel) {
+						updateDaemonFooterSummary(panel, aiId, session);
+						updateDaemonFooterDetails(panel, aiId, session);
 					}
 				}
 			}

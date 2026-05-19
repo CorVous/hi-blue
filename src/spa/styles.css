@@ -74,7 +74,7 @@ body::before {
 
 /* Layout — single screen */
 #stage {
-	height: 100dvh;
+	min-height: 100dvh;
 	display: grid;
 	grid-template-rows: auto auto auto auto 1fr auto;
 	gap: 6px;
@@ -708,53 +708,6 @@ main {
 .transcript .msg-you {
 	color: var(--you);
 	text-shadow: 0 0 6px rgba(255, 245, 224, 0.5);
-}
-
-/* Action log (?debug=1) */
-#action-log {
-	margin-top: 8px;
-	padding: 8px 10px;
-	color: var(--amber-dim);
-	border: 1px solid transparent;
-	background-color: rgba(255, 180, 84, 0.04);
-	background-image:
-		linear-gradient(to right, rgba(255, 180, 84, 0.3) 6px, transparent 6px),
-		linear-gradient(to right, rgba(255, 180, 84, 0.3) 6px, transparent 6px),
-		linear-gradient(to bottom, rgba(255, 180, 84, 0.3) 6px, transparent 6px),
-		linear-gradient(to bottom, rgba(255, 180, 84, 0.3) 6px, transparent 6px);
-	background-size:
-		9px 1px,
-		9px 1px,
-		1px 9px,
-		1px 9px;
-	background-position:
-		0 0,
-		0 100%,
-		0 0,
-		100% 0;
-	background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
-	background-origin: border-box;
-	background-clip: border-box;
-	font-family: var(--mono);
-	font-size: 11px;
-}
-
-#action-log h3 {
-	margin: 0 0 4px;
-	font-size: 11px;
-	font-weight: 500;
-	color: var(--amber);
-	letter-spacing: 0.08em;
-}
-
-#action-log-list {
-	margin: 0;
-	padding-left: 14px;
-	list-style: square;
-}
-
-#action-log-list li {
-	margin-bottom: 2px;
 }
 
 /* Start screen — CRT dial-up login */
@@ -1717,4 +1670,137 @@ main {
 
 #sessions-icon:hover {
 	color: var(--amber);
+}
+
+#dev-game-strip,
+#dev-world-map {
+	margin-top: 8px;
+	padding: 6px 8px;
+	border: 1px dashed rgba(255, 180, 84, 0.3);
+	color: var(--amber-dim);
+	font-family: var(--mono);
+	font-size: 11px;
+	min-height: 16px;
+}
+
+.dev-daemon-footer {
+	margin-top: 4px;
+	padding: 4px 6px;
+	border-top: 1px dashed rgba(255, 180, 84, 0.3);
+	color: var(--amber-dim);
+	font-family: var(--mono);
+	font-size: 11px;
+	min-height: 14px;
+}
+
+.dev-footer-summary {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+	flex-wrap: wrap;
+}
+
+.dev-footer-pip {
+	font-weight: bold;
+	min-width: 1ch;
+}
+
+.dev-footer-pip[data-state="in-flight"] {
+	color: var(--amber-bright);
+	animation: pulse-bright 0.5s ease-in-out infinite;
+}
+
+.dev-footer-pip[data-state="errored"] {
+	color: #ff6b6b;
+}
+
+.dev-footer-tools,
+.dev-footer-llm,
+.dev-footer-chips {
+	font-size: 10px;
+}
+
+.dev-footer-chip {
+	display: inline-block;
+	margin-right: 2px;
+	opacity: 0.8;
+}
+
+.dev-footer-chip[data-chip-kind="sysadm-dir"] {
+	color: #ff9900;
+}
+
+.dev-footer-chip[data-chip-kind="tool-dis"] {
+	color: #ffcc00;
+}
+
+.dev-footer-chip[data-chip-kind="chat-lock"] {
+	color: #ff6b6b;
+}
+
+.dev-map-grid {
+	display: grid;
+	grid-template-columns: repeat(7, 1ch);
+	column-gap: 1ch;
+	row-gap: 0;
+	font-family: var(--mono);
+	white-space: pre;
+	line-height: 1;
+}
+
+.dev-map-cell {
+	position: relative;
+}
+
+.dev-map-tooltip {
+	display: none;
+	position: absolute;
+	bottom: 100%;
+	left: 0;
+	background: #000;
+	color: #ffb454;
+	border: 1px dashed rgba(255, 180, 84, 0.5);
+	padding: 2px 4px;
+	white-space: nowrap;
+	z-index: 10;
+	font-size: 10px;
+}
+
+.dev-map-cell:hover .dev-map-tooltip {
+	display: inline-block;
+}
+
+/* Focus cone button */
+.dev-footer-focus-cone {
+	background: none;
+	border: 1px dashed rgba(255, 180, 84, 0.4);
+	color: var(--amber-dim);
+	font-family: var(--mono);
+	font-size: 10px;
+	padding: 0 4px;
+	cursor: pointer;
+}
+
+.dev-footer-focus-cone[data-focus-active="true"] {
+	color: var(--amber);
+	border-color: rgba(255, 180, 84, 0.8);
+}
+
+/* Pending bootstrap strip */
+.dev-pending-strip {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+	font-family: var(--mono);
+	font-size: 11px;
+}
+
+.dev-pending-strip [hidden] {
+	display: none;
+}
+
+.dev-strip-line {
+	display: flex;
+	gap: 6px;
+	align-items: center;
 }

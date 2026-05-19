@@ -152,10 +152,6 @@ const INDEX_BODY_HTML = `
     </div>
   </section>
   <aside id="persistence-warning" hidden role="status" aria-live="polite"></aside>
-  <aside id="action-log" hidden>
-    <h3>Action Log (debug)</h3>
-    <ul id="action-log-list"></ul>
-  </aside>
   <section id="endgame" hidden>
     <h2>hi-blue — endgame</h2>
     <div id="endgame-subtitle">The three phases are complete. The room is still.</div>
@@ -442,56 +438,6 @@ describe("renderGame (game route — three-AI)", () => {
 			"GREEN_RESPONSE_UNIQUE_TAG",
 		);
 		expect(redTranscript.textContent).not.toContain("CYAN_RESPONSE_UNIQUE_TAG");
-	});
-
-	it("action-log is hidden by default and visible with debug=1", async () => {
-		const mockFetch = makeThreeAiFetchMock(
-			PASS_ACTION,
-			PASS_ACTION,
-			PASS_ACTION,
-		);
-		vi.stubGlobal("fetch", mockFetch);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
-
-		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
-
-		// Without debug param: action log should be hidden
-		await renderGame(getEl<HTMLElement>("main"));
-		const actionLog = getEl<HTMLElement>("#action-log");
-		expect(actionLog.hasAttribute("hidden")).toBe(true);
-
-		// With debug=1: action log should be visible
-		setSearch("debug=1");
-		await renderGame(getEl<HTMLElement>("main"));
-		expect(actionLog.hasAttribute("hidden")).toBe(false);
-	});
-
-	it("action-log entries are populated after a round (hidden or visible)", async () => {
-		const mockFetch = makeThreeAiFetchMock(
-			PASS_ACTION,
-			PASS_ACTION,
-			PASS_ACTION,
-		);
-		vi.stubGlobal("fetch", mockFetch);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
-
-		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
-
-		// Show debug so we can verify entries
-		setSearch("debug=1");
-		await renderGame(getEl<HTMLElement>("main"));
-
-		const form = getEl<HTMLFormElement>("#composer");
-		const promptInput = getEl<HTMLInputElement>("#prompt");
-		promptInput.value = "*Sage test";
-		promptInput.dispatchEvent(new Event("input"));
-		form.dispatchEvent(
-			new Event("submit", { bubbles: true, cancelable: true }),
-		);
-		const logList = getEl<HTMLUListElement>("#action-log-list");
-		await vi.waitFor(() => expect(logList.children.length).toBeGreaterThan(0));
 	});
 
 	it("budgets decrement after a round (5 -> 4 for all AIs)", async () => {
@@ -1701,42 +1647,6 @@ describe("renderGame — panel-click addressee", () => {
 		cyanPanel.click();
 
 		expect(promptInput.value).toBe("*Frost *nonpersona hi");
-	});
-});
-
-describe("renderGame — URL param sourcing", () => {
-	beforeEach(async () => {
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
-		document.body.innerHTML = INDEX_BODY_HTML;
-		const _stub = makeLocalStorageStub();
-		await seedSessionInStub(_stub);
-		vi.stubGlobal("localStorage", _stub);
-	});
-
-	afterEach(() => {
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
-	});
-
-	it("reads debug=1 from location.search", async () => {
-		setSearch("debug=1");
-		const mockFetch = makeThreeAiFetchMock(
-			PASS_ACTION,
-			PASS_ACTION,
-			PASS_ACTION,
-		);
-		vi.stubGlobal("fetch", mockFetch);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
-
-		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
-		await renderGame(getEl<HTMLElement>("main"));
-
-		const actionLog = getEl<HTMLElement>("#action-log");
-		expect(actionLog.hasAttribute("hidden")).toBe(false);
 	});
 });
 

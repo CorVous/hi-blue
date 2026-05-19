@@ -132,6 +132,9 @@ export async function runRound(
 	onAiDelta?: (aiId: AiId, text: string) => void,
 	priorConeSnapshots?: Partial<Record<AiId, string>>,
 	onAiTurnComplete?: (aiId: AiId) => void,
+	onLifecycle?: (
+		event: import("./round-llm-provider.js").LifecyclePhase,
+	) => void,
 ): Promise<RunRoundResult> {
 	const aiOrder = Object.keys(game.personas);
 
@@ -204,6 +207,7 @@ export async function runRound(
 			tools,
 			onAiDelta ? (text) => onAiDelta(aiId, text) : undefined,
 			aiId,
+			onLifecycle,
 		);
 
 		// Drift-to-silence recovery (#254): if the model returned free-form
@@ -227,6 +231,7 @@ export async function runRound(
 				tools,
 				onAiDelta ? (text) => onAiDelta(aiId, text) : undefined,
 				aiId,
+				onLifecycle,
 			);
 			assistantText = retry.assistantText;
 			toolCalls = retry.toolCalls;
