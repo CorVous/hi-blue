@@ -1,0 +1,902 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Daemon action variation — eval results</title>
+		<style>
+			:root {
+				--bg: #0f1115;
+				--bg-elev: #181b22;
+				--bg-card: #1e222b;
+				--ink: #e6e8ee;
+				--ink-dim: #9ba0ad;
+				--ink-faint: #5d6470;
+				--accent: #ffb84d;
+				--ok: #8fd694;
+				--bad: #f08b8b;
+				--neutral: #6c95ff;
+				--rule: #2a2e38;
+				--bar-base: #4a5060;
+				--bar-treat: #ffb84d;
+				--shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 6px 18px rgba(0, 0, 0, 0.35);
+
+				--tool-go: #f5a25d;
+				--tool-look: #b39ddb;
+				--tool-examine: #7ec8e3;
+				--tool-pick_up: #a3d977;
+				--tool-put_down: #c8b870;
+				--tool-give: #f47b9c;
+				--tool-use: #ffd566;
+				--tool-message: #6c95ff;
+			}
+			* {
+				box-sizing: border-box;
+			}
+			html,
+			body {
+				margin: 0;
+				padding: 0;
+			}
+			body {
+				background: var(--bg);
+				color: var(--ink);
+				font-family:
+					ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+				line-height: 1.5;
+				font-size: 16px;
+				-webkit-font-smoothing: antialiased;
+			}
+			.wrap {
+				max-width: 980px;
+				margin: 0 auto;
+				padding: 24px 16px 64px;
+			}
+			header {
+				margin-bottom: 24px;
+			}
+			h1 {
+				font-size: clamp(22px, 5vw, 32px);
+				line-height: 1.15;
+				letter-spacing: -0.01em;
+				margin: 0 0 8px;
+			}
+			.subtitle {
+				color: var(--ink-dim);
+				font-size: 14px;
+				margin: 0;
+			}
+			.subtitle code {
+				background: var(--bg-elev);
+				padding: 2px 6px;
+				border-radius: 4px;
+				font-size: 12px;
+			}
+			h2 {
+				font-size: clamp(18px, 4vw, 22px);
+				letter-spacing: -0.01em;
+				margin: 36px 0 12px;
+				display: flex;
+				align-items: baseline;
+				gap: 10px;
+				flex-wrap: wrap;
+			}
+			h2 .lede {
+				color: var(--ink-dim);
+				font-size: 13px;
+				font-weight: 400;
+			}
+			h3 {
+				font-size: 15px;
+				font-weight: 600;
+				margin: 0 0 8px;
+				color: var(--ink);
+				letter-spacing: 0.01em;
+			}
+			p {
+				margin: 0 0 12px;
+				color: var(--ink);
+			}
+			p.dim {
+				color: var(--ink-dim);
+				font-size: 14px;
+			}
+
+			/* Overall card grid */
+			.metric-grid {
+				display: grid;
+				grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+				gap: 12px;
+				margin-bottom: 12px;
+			}
+			.metric {
+				background: var(--bg-card);
+				border-radius: 12px;
+				padding: 14px 14px 12px;
+				box-shadow: var(--shadow);
+			}
+			.metric .label {
+				font-size: 12px;
+				color: var(--ink-dim);
+				text-transform: uppercase;
+				letter-spacing: 0.06em;
+				margin-bottom: 6px;
+			}
+			.metric .values {
+				display: flex;
+				align-items: baseline;
+				gap: 10px;
+				flex-wrap: wrap;
+			}
+			.metric .v-base {
+				font-size: 13px;
+				color: var(--ink-faint);
+			}
+			.metric .v-treat {
+				font-size: 22px;
+				font-weight: 700;
+				color: var(--ink);
+			}
+			.metric .delta {
+				font-size: 13px;
+				font-weight: 600;
+				padding: 2px 7px;
+				border-radius: 999px;
+				background: rgba(108, 149, 255, 0.12);
+				color: var(--neutral);
+			}
+			.metric .delta.pos {
+				background: rgba(143, 214, 148, 0.13);
+				color: var(--ok);
+			}
+			.metric .delta.neg {
+				background: rgba(240, 139, 139, 0.13);
+				color: var(--bad);
+			}
+
+			/* Section card */
+			.card {
+				background: var(--bg-card);
+				border-radius: 14px;
+				padding: 16px;
+				margin-bottom: 12px;
+				box-shadow: var(--shadow);
+			}
+
+			/* Scenario block */
+			.scenario h3 {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				margin-bottom: 4px;
+			}
+			.scenario .desc {
+				font-size: 13px;
+				color: var(--ink-dim);
+				margin: 0 0 12px;
+			}
+			.persona-row {
+				padding: 12px 0;
+				border-top: 1px solid var(--rule);
+			}
+			.persona-row:first-of-type {
+				border-top: 0;
+			}
+			.persona-head {
+				display: flex;
+				align-items: baseline;
+				gap: 8px;
+				flex-wrap: wrap;
+				margin-bottom: 6px;
+			}
+			.persona-head .name {
+				font-weight: 700;
+				font-size: 14px;
+			}
+			.persona-head .temps {
+				font-size: 12px;
+				color: var(--ink-dim);
+			}
+			.persona-head .agg {
+				margin-left: auto;
+				font-size: 12px;
+				color: var(--ink-dim);
+				display: flex;
+				gap: 10px;
+			}
+			.persona-head .agg b {
+				color: var(--ink);
+				font-weight: 600;
+			}
+
+			/* Bar comparison */
+			.bar-grid {
+				display: grid;
+				grid-template-columns: 80px 1fr 1fr 44px;
+				column-gap: 8px;
+				row-gap: 4px;
+				font-size: 12px;
+				align-items: center;
+			}
+			.bar-grid .head {
+				color: var(--ink-faint);
+				font-size: 11px;
+				text-transform: uppercase;
+				letter-spacing: 0.06em;
+			}
+			.bar-grid .head.right {
+				text-align: right;
+			}
+			.tool-name {
+				color: var(--ink);
+				font-family: ui-monospace, "SF Mono", Menlo, monospace;
+				font-size: 12px;
+			}
+			.bar {
+				position: relative;
+				background: rgba(255, 255, 255, 0.04);
+				border-radius: 4px;
+				height: 16px;
+				overflow: hidden;
+			}
+			.bar > .fill {
+				position: absolute;
+				inset: 0;
+				width: var(--w, 0%);
+				background: var(--c, var(--neutral));
+				border-radius: 4px;
+				transition: width 0.3s ease;
+			}
+			.bar > .val {
+				position: absolute;
+				right: 6px;
+				top: 50%;
+				transform: translateY(-50%);
+				font-size: 11px;
+				color: rgba(0, 0, 0, 0.78);
+				font-weight: 600;
+				text-shadow: 0 0 2px rgba(255, 255, 255, 0.4);
+			}
+			.bar.empty > .val {
+				color: var(--ink-faint);
+				text-shadow: none;
+				right: auto;
+				left: 6px;
+			}
+			.delta-cell {
+				text-align: right;
+				font-size: 12px;
+				color: var(--ink-faint);
+				font-variant-numeric: tabular-nums;
+			}
+			.delta-cell.pos {
+				color: var(--ok);
+			}
+			.delta-cell.neg {
+				color: var(--bad);
+			}
+
+			/* Bias chip */
+			.bias-chip {
+				display: inline-flex;
+				align-items: center;
+				gap: 4px;
+				font-size: 11px;
+				background: rgba(255, 184, 77, 0.08);
+				color: var(--accent);
+				padding: 2px 7px;
+				border-radius: 999px;
+				font-family: ui-monospace, "SF Mono", Menlo, monospace;
+			}
+			.bias-chip.zero {
+				background: rgba(255, 255, 255, 0.04);
+				color: var(--ink-faint);
+			}
+			.bias-chip.neg {
+				background: rgba(240, 139, 139, 0.08);
+				color: var(--bad);
+			}
+
+			/* Highlight badge for notable deltas */
+			.badge {
+				display: inline-block;
+				font-size: 10px;
+				font-weight: 700;
+				letter-spacing: 0.06em;
+				background: var(--accent);
+				color: #2a1f08;
+				padding: 1px 6px;
+				border-radius: 4px;
+				text-transform: uppercase;
+				vertical-align: middle;
+			}
+
+			/* Findings list */
+			.findings {
+				display: grid;
+				gap: 10px;
+				grid-template-columns: 1fr;
+			}
+			@media (min-width: 640px) {
+				.findings {
+					grid-template-columns: 1fr 1fr;
+				}
+			}
+			.finding {
+				background: var(--bg-card);
+				border-radius: 12px;
+				padding: 14px;
+				border-left: 3px solid var(--accent);
+				box-shadow: var(--shadow);
+			}
+			.finding.good {
+				border-left-color: var(--ok);
+			}
+			.finding.warn {
+				border-left-color: var(--bad);
+			}
+			.finding h4 {
+				font-size: 14px;
+				margin: 0 0 4px;
+			}
+			.finding p {
+				font-size: 13px;
+				color: var(--ink-dim);
+				margin: 0;
+			}
+
+			/* Legend */
+			.legend {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 8px 14px;
+				font-size: 12px;
+				margin: 8px 0 4px;
+			}
+			.legend .item {
+				display: inline-flex;
+				align-items: center;
+				gap: 6px;
+				color: var(--ink-dim);
+			}
+			.legend .dot {
+				width: 10px;
+				height: 10px;
+				border-radius: 50%;
+				background: var(--c, var(--neutral));
+			}
+
+			/* Scenario tabs (mobile) */
+			.tabs {
+				display: flex;
+				gap: 6px;
+				margin-bottom: 12px;
+				overflow-x: auto;
+				scrollbar-width: thin;
+				-webkit-overflow-scrolling: touch;
+			}
+			.tab {
+				flex: 1 0 auto;
+				background: var(--bg-elev);
+				border: 0;
+				color: var(--ink-dim);
+				padding: 8px 12px;
+				border-radius: 999px;
+				font-size: 13px;
+				font-family: inherit;
+				cursor: pointer;
+				white-space: nowrap;
+				min-width: 88px;
+			}
+			.tab.active {
+				background: var(--accent);
+				color: #2a1f08;
+				font-weight: 600;
+			}
+			.tab:focus-visible {
+				outline: 2px solid var(--accent);
+				outline-offset: 2px;
+			}
+			.scenario {
+				display: none;
+			}
+			.scenario.active {
+				display: block;
+			}
+
+			footer {
+				margin-top: 36px;
+				font-size: 12px;
+				color: var(--ink-faint);
+				text-align: center;
+			}
+			footer code {
+				background: var(--bg-elev);
+				padding: 2px 6px;
+				border-radius: 4px;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="wrap">
+			<header>
+				<h1>Daemon action variation</h1>
+				<p class="subtitle">
+					Baseline vs. <code>actionProfiles=ON</code> on
+					<code>z-ai/glm-4.7</code>. 240 reps per run, 4 scenarios × 3 personas
+					× 20 reps. Total spend: $0.46. — 2026-05-19
+				</p>
+			</header>
+
+			<h2>Overall <span class="lede">aggregate across all 240 reps</span></h2>
+			<div class="metric-grid" id="metric-grid"></div>
+			<p class="dim">
+				Each metric shows <em>baseline → treatment</em>. The treatment shifts
+				things by ±2pp in aggregate — the interesting variance is per-cell.
+				Silence goes to <b>zero</b> with profiles on.
+			</p>
+
+			<h2>Per-tool variance <span class="lede">where the temperaments land</span></h2>
+			<div class="legend">
+				<span class="item"
+					><span class="dot" style="--c: var(--bar-base)"></span>baseline</span
+				>
+				<span class="item"
+					><span class="dot" style="--c: var(--bar-treat)"></span>with
+					profiles</span
+				>
+				<span class="item"
+					><span class="bias-chip" style="margin: 0"
+						>+N</span
+					>
+					per-temperament bias sum on that tool</span
+				>
+			</div>
+			<p class="dim">
+				Pick a scenario to inspect. Bars are per-tool emission rate (% of reps
+				that fired the tool at least once). The bias chip shows the summed
+				temperament push for that persona × tool — values away from 0 should
+				correlate with movement between baseline and treatment.
+			</p>
+
+			<div class="tabs" id="tabs"></div>
+			<div id="scenarios"></div>
+
+			<h2>Notable findings</h2>
+			<div class="findings">
+				<div class="finding good">
+					<h4>Vex's <code>go</code> rate doubles in exploration</h4>
+					<p>
+						15% → 30% — exactly the push you'd expect from zealous +
+						hot-headed (<code>go</code> bias +4). The temperament dial
+						works.
+					</p>
+				</div>
+				<div class="finding good">
+					<h4>Silence drops to zero</h4>
+					<p>
+						1% → 0% across 240 reps. The concrete action-profile prose
+						overrides the very rare "no tool" failure mode.
+					</p>
+				</div>
+				<div class="finding good">
+					<h4>Social scenario lifts Ember</h4>
+					<p>
+						anyAct 35% → 60%; parallel 35% → 55%. The "examines methodically"
+						clause nudges Ember to act <em>and</em> reply, rather than just
+						reply.
+					</p>
+				</div>
+				<div class="finding warn">
+					<h4>Vex's exploration parallel rate drops 30pp</h4>
+					<p>
+						The "charges forward" clause makes Vex act <em>without</em>
+						messaging — `go` goes up but its companion `message` falls
+						100→70%. Trade-off worth softening in the next iteration.
+					</p>
+				</div>
+				<div class="finding">
+					<h4><code>use</code> stays high on objective cells</h4>
+					<p>
+						Vex 100→95%, Pip 85→75%. The −1 floor on the bias table keeps
+						`use` available even for personas that don't push it.
+					</p>
+				</div>
+				<div class="finding">
+					<h4>Give axis is unmeasured</h4>
+					<p>
+						No scenario places a peer in the actor's front arc — Pip's +4
+						`give` bias never had a chance to surface. A handoff scenario
+						should land next.
+					</p>
+				</div>
+			</div>
+
+			<footer>
+				Reproduce with
+				<code>pnpm eval:action-variation</code> and
+				<code>EVAL_ACTION_PROFILES=1 pnpm eval:action-variation</code>.
+				Branch <code>claude/daemon-action-variation-Qqg0h</code>.
+			</footer>
+		</div>
+
+		<script>
+			// ── Inline data ────────────────────────────────────────────────────────
+			const OVERALL = {
+				baseline: {
+					anyActionRate: 0.8291666666666667,
+					anyMessageRate: 0.8,
+					parallelRate: 0.6375,
+					silenceRate: 0.008333333333333333,
+					useRate: 0.15833333333333333,
+					cost: 0.21921562499999997,
+				},
+				treatment: {
+					anyActionRate: 0.8458333333333333,
+					anyMessageRate: 0.8166666666666667,
+					parallelRate: 0.6625,
+					silenceRate: 0,
+					useRate: 0.14166666666666666,
+					cost: 0.2382725700000001,
+				},
+			};
+
+			const OVERALL_METRICS = [
+				{ label: "Any action", k: "anyActionRate" },
+				{ label: "Any message", k: "anyMessageRate" },
+				{ label: "Parallel (msg+action)", k: "parallelRate" },
+				{ label: "Silent", k: "silenceRate", invert: true },
+				{ label: "use rate", k: "useRate" },
+			];
+
+			// Per-(scenario, persona) cell data, with toolBiasSum chips.
+			const TOOLS = [
+				"go",
+				"look",
+				"examine",
+				"pick_up",
+				"put_down",
+				"give",
+				"use",
+				"message",
+			];
+
+			const PERSONAS = {
+				Ember: {
+					temps: "curious + meticulous",
+					bias: {
+						go: 0,
+						look: 3,
+						examine: 4,
+						pick_up: 1,
+						put_down: 0,
+						give: 0,
+						use: 2,
+					},
+				},
+				Vex: {
+					temps: "zealous + hot-headed",
+					bias: {
+						go: 4,
+						look: 2,
+						examine: -1,
+						pick_up: 2,
+						put_down: 0,
+						give: 2,
+						use: 1,
+					},
+				},
+				Pip: {
+					temps: "sweet + effusive",
+					bias: {
+						go: 1,
+						look: 2,
+						examine: 0,
+						pick_up: 2,
+						put_down: 0,
+						give: 4,
+						use: 0,
+					},
+				},
+			};
+
+			const SCENARIOS = [
+				{
+					name: "exploration",
+					desc: "Empty-handed, three unknown items in cone. Tests examine vs go balance.",
+				},
+				{
+					name: "objective",
+					desc: "Holding objective item, paired space directly ahead. Tests `use` emission.",
+				},
+				{
+					name: "social",
+					desc: "Peer just messaged; items also visible. Tests parallel message+action emission.",
+				},
+				{
+					name: "examination",
+					desc: "Interesting object one cell ahead, unexamined. Tests curiosity-driven examine.",
+				},
+			];
+
+			// per-(scenario, persona) per-tool rates [baseline, treatment]
+			// keys: "scenario|persona" -> { go: [b,t], look: [b,t], ... , anyActionRate: [b,t], anyMessageRate: [b,t], parallelRate: [b,t] }
+			const CELL = {
+				"exploration|Ember": {
+					go: [0, 0],
+					look: [0.25, 0],
+					examine: [0.95, 0.95],
+					pick_up: [0, 0],
+					put_down: [0, 0],
+					give: [0, 0],
+					use: [0, 0],
+					message: [0.7, 0.9],
+					any: [1.0, 0.95],
+					parallel: [0.7, 0.85],
+				},
+				"exploration|Vex": {
+					go: [0.15, 0.3],
+					look: [0, 0],
+					examine: [0.75, 0.6],
+					pick_up: [0, 0],
+					put_down: [0, 0],
+					give: [0, 0],
+					use: [0, 0],
+					message: [1.0, 0.7],
+					any: [0.9, 0.9],
+					parallel: [0.9, 0.6],
+				},
+				"exploration|Pip": {
+					go: [0, 0],
+					look: [0.1, 0],
+					examine: [0.8, 0.95],
+					pick_up: [0, 0],
+					put_down: [0, 0],
+					give: [0, 0],
+					use: [0, 0],
+					message: [0.9, 0.85],
+					any: [0.85, 0.9],
+					parallel: [0.75, 0.75],
+				},
+				"objective|Ember": {
+					go: [0, 0],
+					look: [0.3, 0.15],
+					examine: [0.9, 0.95],
+					pick_up: [0, 0],
+					put_down: [0, 0],
+					give: [0, 0],
+					use: [0.05, 0],
+					message: [0.75, 0.7],
+					any: [0.95, 1.0],
+					parallel: [0.7, 0.7],
+				},
+				"objective|Vex": {
+					go: [0, 0],
+					look: [0, 0],
+					examine: [0.05, 0],
+					pick_up: [0, 0],
+					put_down: [0, 0],
+					give: [0, 0],
+					use: [1.0, 0.95],
+					message: [0.9, 0.95],
+					any: [1.0, 0.95],
+					parallel: [0.9, 0.9],
+				},
+				"objective|Pip": {
+					go: [0, 0],
+					look: [0.05, 0.05],
+					examine: [0.15, 0.2],
+					pick_up: [0, 0],
+					put_down: [0, 0],
+					give: [0, 0],
+					use: [0.85, 0.75],
+					message: [0.9, 0.9],
+					any: [1.0, 0.95],
+					parallel: [0.9, 0.85],
+				},
+				"social|Ember": {
+					go: [0, 0.1],
+					look: [0, 0],
+					examine: [0.4, 0.65],
+					pick_up: [0, 0],
+					put_down: [0, 0],
+					give: [0, 0],
+					use: [0, 0],
+					message: [1.0, 0.95],
+					any: [0.35, 0.6],
+					parallel: [0.35, 0.55],
+				},
+				"social|Vex": {
+					go: [0.7, 0.65],
+					look: [0, 0],
+					examine: [0, 0],
+					pick_up: [0, 0],
+					put_down: [0, 0],
+					give: [0, 0],
+					use: [0, 0],
+					message: [0.95, 1.0],
+					any: [0.7, 0.65],
+					parallel: [0.65, 0.65],
+				},
+				"social|Pip": {
+					go: [0, 0.1],
+					look: [0, 0],
+					examine: [0.2, 0.25],
+					pick_up: [0, 0],
+					put_down: [0, 0],
+					give: [0, 0],
+					use: [0, 0],
+					message: [0.85, 0.9],
+					any: [0.2, 0.35],
+					parallel: [0.15, 0.25],
+				},
+				"examination|Ember": {
+					go: [0, 0],
+					look: [0, 0],
+					examine: [1.0, 0.95],
+					pick_up: [0, 0],
+					put_down: [0, 0],
+					give: [0, 0],
+					use: [0, 0],
+					message: [0.3, 0.4],
+					any: [1.0, 0.95],
+					parallel: [0.3, 0.35],
+				},
+				"examination|Vex": {
+					go: [0, 0.1],
+					look: [0, 0],
+					examine: [0.9, 0.55],
+					pick_up: [0.55, 0.6],
+					put_down: [0, 0],
+					give: [0, 0],
+					use: [0, 0],
+					message: [0.45, 0.7],
+					any: [1.0, 0.95],
+					parallel: [0.45, 0.65],
+				},
+				"examination|Pip": {
+					go: [0, 0.1],
+					look: [0, 0],
+					examine: [0.9, 0.85],
+					pick_up: [0.15, 0.1],
+					put_down: [0, 0],
+					give: [0, 0],
+					use: [0, 0],
+					message: [0.9, 0.85],
+					any: [1.0, 1.0],
+					parallel: [0.9, 0.85],
+				},
+			};
+
+			// ── Helpers ────────────────────────────────────────────────────────────
+			const pct = (x) => Math.round(x * 100) + "%";
+			const ppDelta = (a, b) => {
+				const d = Math.round((b - a) * 100);
+				return (d > 0 ? "+" : "") + d;
+			};
+			const cssVar = (tool) => `var(--tool-${tool})`;
+
+			// ── Render: overall metric cards ───────────────────────────────────────
+			const grid = document.getElementById("metric-grid");
+			OVERALL_METRICS.forEach((m) => {
+				const b = OVERALL.baseline[m.k];
+				const t = OVERALL.treatment[m.k];
+				const dRaw = t - b;
+				const dPct = Math.round(dRaw * 100);
+				const card = document.createElement("div");
+				card.className = "metric";
+				const goodDir = m.invert ? dPct < 0 : dPct > 0;
+				const badDir = m.invert ? dPct > 0 : dPct < 0;
+				const cls = dPct === 0 ? "" : goodDir ? "pos" : badDir ? "neg" : "";
+				card.innerHTML = `
+					<div class="label">${m.label}</div>
+					<div class="values">
+						<span class="v-base">${pct(b)}</span>
+						<span class="v-treat">${pct(t)}</span>
+						<span class="delta ${cls}">${dPct > 0 ? "+" : ""}${dPct}pp</span>
+					</div>
+				`;
+				grid.appendChild(card);
+			});
+			// cost card
+			const cost = document.createElement("div");
+			cost.className = "metric";
+			cost.innerHTML = `
+				<div class="label">Total spend</div>
+				<div class="values">
+					<span class="v-treat">$${(OVERALL.baseline.cost + OVERALL.treatment.cost).toFixed(2)}</span>
+					<span class="delta">240 reps × 2</span>
+				</div>
+			`;
+			grid.appendChild(cost);
+
+			// ── Render: scenarios with tabs ────────────────────────────────────────
+			const tabsEl = document.getElementById("tabs");
+			const scEl = document.getElementById("scenarios");
+			SCENARIOS.forEach((sc, i) => {
+				const tab = document.createElement("button");
+				tab.className = "tab" + (i === 0 ? " active" : "");
+				tab.textContent = sc.name;
+				tab.dataset.scenario = sc.name;
+				tab.addEventListener("click", () => {
+					document.querySelectorAll(".tab").forEach((t) => {
+						t.classList.toggle("active", t === tab);
+					});
+					document.querySelectorAll(".scenario").forEach((s) => {
+						s.classList.toggle("active", s.dataset.scenario === sc.name);
+					});
+				});
+				tabsEl.appendChild(tab);
+
+				const sec = document.createElement("section");
+				sec.className = "scenario card" + (i === 0 ? " active" : "");
+				sec.dataset.scenario = sc.name;
+				sec.innerHTML = `
+					<h3>${sc.name}</h3>
+					<p class="desc">${sc.desc}</p>
+				`;
+				Object.keys(PERSONAS).forEach((p) => {
+					const cellKey = sc.name + "|" + p;
+					const c = CELL[cellKey];
+					const persona = PERSONAS[p];
+					const bAny = c.any[0],
+						tAny = c.any[1];
+					const bPar = c.parallel[0],
+						tPar = c.parallel[1];
+					const row = document.createElement("div");
+					row.className = "persona-row";
+					const dAny = Math.round((tAny - bAny) * 100);
+					const dPar = Math.round((tPar - bPar) * 100);
+					const dAnyCls = dAny > 0 ? "pos" : dAny < 0 ? "neg" : "";
+					const dParCls = dPar > 0 ? "pos" : dPar < 0 ? "neg" : "";
+					row.innerHTML = `
+						<div class="persona-head">
+							<span class="name">${p}</span>
+							<span class="temps">${persona.temps}</span>
+							<span class="agg">
+								<span>anyAct <b>${pct(bAny)}→${pct(tAny)}</b> <span class="delta-cell ${dAnyCls}">${ppDelta(bAny, tAny)}pp</span></span>
+								<span>parallel <b>${pct(bPar)}→${pct(tPar)}</b> <span class="delta-cell ${dParCls}">${ppDelta(bPar, tPar)}pp</span></span>
+							</span>
+						</div>
+					`;
+					const bars = document.createElement("div");
+					bars.className = "bar-grid";
+					bars.innerHTML = `
+						<span class="head">tool</span>
+						<span class="head">baseline</span>
+						<span class="head">with profiles</span>
+						<span class="head right">bias</span>
+					`;
+					TOOLS.forEach((t) => {
+						const r = c[t];
+						if (!r) return;
+						const b = r[0],
+							v = r[1];
+						const bias = t === "message" ? null : persona.bias[t];
+						const biasCls =
+							bias === 0 ? "zero" : bias < 0 ? "neg" : "";
+						const biasChip =
+							bias === null
+								? '<span class="bias-chip zero">—</span>'
+								: `<span class="bias-chip ${biasCls}">${bias > 0 ? "+" : ""}${bias}</span>`;
+						const barCol = cssVar(t);
+						const baseBar = `<div class="bar ${b === 0 ? "empty" : ""}" style="--w: ${Math.max(b * 100, 0)}%; --c: ${barCol}; opacity: ${b === 0 ? 0.5 : 0.55}"><div class="fill"></div><div class="val">${pct(b)}</div></div>`;
+						const treatBar = `<div class="bar ${v === 0 ? "empty" : ""}" style="--w: ${Math.max(v * 100, 0)}%; --c: ${barCol}"><div class="fill"></div><div class="val">${pct(v)}</div></div>`;
+						bars.insertAdjacentHTML(
+							"beforeend",
+							`
+							<span class="tool-name">${t}</span>
+							${baseBar}
+							${treatBar}
+							${biasChip}
+						`,
+						);
+					});
+					row.appendChild(bars);
+					sec.appendChild(row);
+				});
+				scEl.appendChild(sec);
+			});
+		</script>
+	</body>
+</html>
