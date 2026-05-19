@@ -124,20 +124,15 @@ const CONTENT_PACK_OBJECTIVE_TYPES: import("../types.js").ObjectiveType[] = [
 
 /**
  * ContentPack with key held by red (for the non-adjacent give test).
- * Override the bucketed interestingObjects directly since we're swapping a
- * single entity within a pack derived from CONTENT_PACK_WITH_ITEMS.
+ * Swap the single `interesting_object` entity (the key) for one held by red.
  */
 const CONTENT_PACK_KEY_HELD_BY_RED: ContentPack = {
 	...CONTENT_PACK_WITH_ITEMS,
-	interestingObjects: [
-		{
-			id: "key",
-			kind: "interesting_object",
-			name: "key",
-			examineDescription: "A key",
-			holder: "red",
-		},
-	],
+	entities: CONTENT_PACK_WITH_ITEMS.entities.map((e) =>
+		e.kind === "interesting_object" && e.id === "key"
+			? { ...e, holder: "red" as const }
+			: e,
+	),
 };
 
 function makePassProvider() {

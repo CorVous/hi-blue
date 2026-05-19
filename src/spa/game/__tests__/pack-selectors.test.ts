@@ -1,9 +1,13 @@
 /**
  * Unit tests for pack-selectors.ts
  *
- * Covers: empty pack, each bucket-only configuration, mixed packs,
- * the pairsWithSpaceId-vs-not discriminator for boundSpaces, and
- * order-stability for every selector.
+ * Selectors derive bucketing on demand from `pack.entities`. These tests build
+ * entity arrays directly and exercise:
+ *  - empty pack
+ *  - each kind-only configuration
+ *  - mixed packs
+ *  - the `pairsWithSpaceId`-vs-not discriminator for `boundSpaces`
+ *  - order-stability for every selector
  */
 import { describe, expect, it } from "vitest";
 import {
@@ -14,7 +18,7 @@ import {
 	objectiveSpaces,
 	obstacles,
 } from "../pack-selectors.js";
-import type { ContentPack, ObjectivePair, WorldEntity } from "../types.js";
+import type { ContentPack, WorldEntity } from "../types.js";
 
 // ── Fixture helpers ───────────────────────────────────────────────────────────
 
@@ -23,9 +27,7 @@ function makePack(overrides?: Partial<ContentPack>): ContentPack {
 		setting: "test",
 		weather: "clear",
 		timeOfDay: "noon",
-		objectivePairs: [],
-		interestingObjects: [],
-		obstacles: [],
+		entities: [],
 		landmarks: {
 			north: { shortName: "tower", horizonPhrase: "a rusted tower" },
 			south: { shortName: "spire", horizonPhrase: "a glowing spire" },
@@ -38,31 +40,32 @@ function makePack(overrides?: Partial<ContentPack>): ContentPack {
 	};
 }
 
-function makeObjectivePair(
-	index: number,
+/**
+ * Returns the two entities (object + paired space) for a carry pair at index
+ * `i`. When `withPairsWithSpaceId` is false, the object omits the field so the
+ * discriminator treats the space as unpaired.
+ */
+function makeCarryPairEntities(
+	i: number,
 	withPairsWithSpaceId = true,
-): ObjectivePair {
-	const spaceId = `space-${index}`;
-	const objectBase: WorldEntity = {
-		id: `obj-${index}`,
+): WorldEntity[] {
+	const spaceId = `space-${i}`;
+	const object: WorldEntity = {
+		id: `obj-${i}`,
 		kind: "objective_object",
-		name: `object ${index}`,
+		name: `object ${i}`,
 		examineDescription: "An object.",
-		holder: { row: 0, col: index },
+		holder: { row: 0, col: i },
 	};
-	if (withPairsWithSpaceId) {
-		objectBase.pairsWithSpaceId = spaceId;
-	}
-	return {
-		object: objectBase,
-		space: {
-			id: spaceId,
-			kind: "objective_space",
-			name: `space ${index}`,
-			examineDescription: "A space.",
-			holder: { row: 1, col: index },
-		},
+	if (withPairsWithSpaceId) object.pairsWithSpaceId = spaceId;
+	const space: WorldEntity = {
+		id: spaceId,
+		kind: "objective_space",
+		name: `space ${i}`,
+		examineDescription: "A space.",
+		holder: { row: 1, col: i },
 	};
+	return [object, space];
 }
 
 function makeInterestingObject(index: number): WorldEntity {
@@ -102,31 +105,32 @@ describe("carryPairs", () => {
 		expect(carryPairs(makePack())).toEqual([]);
 	});
 
-	it("returns a copy of objectivePairs", () => {
-		const pair0 = makeObjectivePair(0);
-		const pair1 = makeObjectivePair(1);
-		const pack = makePack({ objectivePairs: [pair0, pair1] });
+	it("returns pairs derived from entities (in object-iteration order)", () => {
+		const entities = [...makeCarryPairEntities(0), ...makeCarryPairEntities(1)];
+		const pack = makePack({ entities });
 		const result = carryPairs(pack);
 		expect(result).toHaveLength(2);
-		expect(result[0]).toBe(pair0);
-		expect(result[1]).toBe(pair1);
+		expect(result[0]?.object.id).toBe("obj-0");
+		expect(result[0]?.space.id).toBe("space-0");
+		expect(result[1]?.object.id).toBe("obj-1");
+		expect(result[1]?.space.id).toBe("space-1");
 	});
 
 	it("does not mutate the original pack", () => {
-		const pair0 = makeObjectivePair(0);
-		const pack = makePack({ objectivePairs: [pair0] });
+		const entities = makeCarryPairEntities(0);
+		const pack = makePack({ entities });
 		const result = carryPairs(pack);
-		result.push(makeObjectivePair(99));
-		expect(pack.objectivePairs).toHaveLength(1);
+		result.push({ object: entities[0]!, space: entities[1]! });
+		expect(pack.entities).toHaveLength(2);
 	});
 
-	it("preserves insertion order for 3 pairs", () => {
-		const pairs = [
-			makeObjectivePair(0),
-			makeObjectivePair(1),
-			makeObjectivePair(2),
+	it("preserves carry-object order for 3 pairs", () => {
+		const entities = [
+			...makeCarryPairEntities(0),
+			...makeCarryPairEntities(1),
+			...makeCarryPairEntities(2),
 		];
-		const pack = makePack({ objectivePairs: pairs });
+		const pack = makePack({ entities });
 		const result = carryPairs(pack);
 		expect(result.map((p) => p.object.id)).toEqual(["obj-0", "obj-1", "obj-2"]);
 	});
@@ -142,7 +146,7 @@ describe("interestingObjects", () => {
 	it("returns interesting objects in insertion order", () => {
 		const io0 = makeInterestingObject(0);
 		const io1 = makeInterestingObject(1);
-		const pack = makePack({ interestingObjects: [io0, io1] });
+		const pack = makePack({ entities: [io0, io1] });
 		const result = interestingObjects(pack);
 		expect(result).toHaveLength(2);
 		expect(result[0]).toBe(io0);
@@ -151,17 +155,19 @@ describe("interestingObjects", () => {
 
 	it("does not mutate the original pack", () => {
 		const io0 = makeInterestingObject(0);
-		const pack = makePack({ interestingObjects: [io0] });
+		const pack = makePack({ entities: [io0] });
 		const result = interestingObjects(pack);
 		result.push(makeInterestingObject(99));
-		expect(pack.interestingObjects).toHaveLength(1);
+		expect(pack.entities).toHaveLength(1);
 	});
 
-	it("only returns interesting objects (bucket isolation)", () => {
+	it("only returns interesting objects (kind isolation)", () => {
 		const pack = makePack({
-			objectivePairs: [makeObjectivePair(0)],
-			interestingObjects: [makeInterestingObject(0)],
-			obstacles: [makeObstacle(0)],
+			entities: [
+				...makeCarryPairEntities(0),
+				makeInterestingObject(0),
+				makeObstacle(0),
+			],
 		});
 		const result = interestingObjects(pack);
 		expect(result).toHaveLength(1);
@@ -180,7 +186,7 @@ describe("obstacles", () => {
 		const o0 = makeObstacle(0);
 		const o1 = makeObstacle(1);
 		const o2 = makeObstacle(2);
-		const pack = makePack({ obstacles: [o0, o1, o2] });
+		const pack = makePack({ entities: [o0, o1, o2] });
 		const result = obstacles(pack);
 		expect(result.map((e) => e.id)).toEqual([
 			"obstacle-0",
@@ -191,17 +197,19 @@ describe("obstacles", () => {
 
 	it("does not mutate the original pack", () => {
 		const o0 = makeObstacle(0);
-		const pack = makePack({ obstacles: [o0] });
+		const pack = makePack({ entities: [o0] });
 		const result = obstacles(pack);
 		result.push(makeObstacle(99));
-		expect(pack.obstacles).toHaveLength(1);
+		expect(pack.entities).toHaveLength(1);
 	});
 
-	it("only returns obstacles (bucket isolation)", () => {
+	it("only returns obstacles (kind isolation)", () => {
 		const pack = makePack({
-			objectivePairs: [makeObjectivePair(0)],
-			interestingObjects: [makeInterestingObject(0)],
-			obstacles: [makeObstacle(0)],
+			entities: [
+				...makeCarryPairEntities(0),
+				makeInterestingObject(0),
+				makeObstacle(0),
+			],
 		});
 		const result = obstacles(pack);
 		expect(result).toHaveLength(1);
@@ -212,91 +220,59 @@ describe("obstacles", () => {
 // ── boundSpaces ───────────────────────────────────────────────────────────────
 
 describe("boundSpaces", () => {
-	it("returns empty array when pack has no boundSpaces field", () => {
-		const pack = makePack(); // no boundSpaces key
-		expect(boundSpaces(pack)).toEqual([]);
-	});
-
-	it("returns empty array when boundSpaces is explicitly empty", () => {
-		const pack = makePack({ boundSpaces: [] });
+	it("returns empty array when pack has no objective_space entities", () => {
+		const pack = makePack(); // empty entities
 		expect(boundSpaces(pack)).toEqual([]);
 	});
 
 	it("returns bound spaces in insertion order when there are no carry pairs", () => {
 		const bs0 = makeBoundSpace(0);
 		const bs1 = makeBoundSpace(1);
-		const pack = makePack({ boundSpaces: [bs0, bs1] });
+		const pack = makePack({ entities: [bs0, bs1] });
 		const result = boundSpaces(pack);
 		expect(result.map((e) => e.id)).toEqual(["bound-space-0", "bound-space-1"]);
 	});
 
 	it("does not mutate the original pack", () => {
 		const bs0 = makeBoundSpace(0);
-		const pack = makePack({ boundSpaces: [bs0] });
+		const pack = makePack({ entities: [bs0] });
 		const result = boundSpaces(pack);
 		result.push(makeBoundSpace(99));
-		expect(pack.boundSpaces).toHaveLength(1);
+		expect(pack.entities).toHaveLength(1);
 	});
 
-	it("excludes bound spaces whose id is referenced by a pairsWithSpaceId on an objective_object", () => {
-		// Simulate a scenario where a space that IS in boundSpaces is also
-		// referenced by pairsWithSpaceId — the discriminator should filter it out.
-		const pairedSpaceId = "bound-space-0";
-		const pair: ObjectivePair = {
-			object: {
-				id: "obj-paired",
-				kind: "objective_object",
-				name: "paired object",
-				examineDescription: "Paired.",
-				pairsWithSpaceId: pairedSpaceId,
-				holder: { row: 0, col: 0 },
-			},
-			space: {
-				id: pairedSpaceId,
-				kind: "objective_space",
-				name: "paired space",
-				examineDescription: "A paired space.",
-				holder: { row: 1, col: 0 },
-			},
-		};
+	it("excludes objective_space entities referenced by a pairsWithSpaceId", () => {
+		// The space `space-0` is referenced by `obj-0`'s pairsWithSpaceId — it
+		// should be classified as a carry-paired space, NOT a bound space.
+		const [pairObj, pairSpace] = makeCarryPairEntities(0);
 		const genuineBound = makeBoundSpace(1);
 		const pack = makePack({
-			objectivePairs: [pair],
-			// The paired space is also listed in boundSpaces (erroneous but
-			// should be excluded by the discriminator).
-			boundSpaces: [
-				{ ...pair.space }, // same id — should be filtered out
-				genuineBound,
-			],
+			entities: [pairObj!, pairSpace!, genuineBound],
 		});
 		const result = boundSpaces(pack);
 		expect(result).toHaveLength(1);
 		expect(result[0]?.id).toBe("bound-space-1");
 	});
 
-	it("includes bound spaces whose id is NOT referenced by any pairsWithSpaceId", () => {
-		// A carry pair whose object has pairsWithSpaceId pointing to a different id.
-		const pair = makeObjectivePair(0); // pairsWithSpaceId = "space-0"
-		const bs0 = makeBoundSpace(0); // id = "bound-space-0" — NOT "space-0"
-		const pack = makePack({
-			objectivePairs: [pair],
-			boundSpaces: [bs0],
-		});
+	it("includes objective_space entities NOT referenced by any pairsWithSpaceId", () => {
+		// A carry pair whose object pairsWithSpaceId points to "space-0"; the
+		// extra `bound-space-0` entity is NOT referenced, so it stays bound.
+		const [pairObj, pairSpace] = makeCarryPairEntities(0);
+		const bs0 = makeBoundSpace(0);
+		const pack = makePack({ entities: [pairObj!, pairSpace!, bs0] });
 		const result = boundSpaces(pack);
 		expect(result).toHaveLength(1);
 		expect(result[0]?.id).toBe("bound-space-0");
 	});
 
-	it("handles carry pairs without pairsWithSpaceId gracefully", () => {
-		const pair = makeObjectivePair(0, false); // pairsWithSpaceId = undefined
+	it("handles objective_object without pairsWithSpaceId gracefully", () => {
+		const [pairObj, pairSpace] = makeCarryPairEntities(0, false);
 		const bs0 = makeBoundSpace(0);
-		const pack = makePack({
-			objectivePairs: [pair],
-			boundSpaces: [bs0],
-		});
+		const pack = makePack({ entities: [pairObj!, pairSpace!, bs0] });
+		// Neither `space-0` nor `bound-space-0` is referenced — both are
+		// classified as bound (the carry object has no partner).
 		const result = boundSpaces(pack);
-		expect(result).toHaveLength(1);
-		expect(result[0]?.id).toBe("bound-space-0");
+		expect(result.map((e) => e.id)).toEqual(["space-0", "bound-space-0"]);
 	});
 });
 
@@ -308,9 +284,8 @@ describe("objectiveSpaces", () => {
 	});
 
 	it("returns paired spaces only when there are no bound spaces", () => {
-		const pair0 = makeObjectivePair(0);
-		const pair1 = makeObjectivePair(1);
-		const pack = makePack({ objectivePairs: [pair0, pair1] });
+		const entities = [...makeCarryPairEntities(0), ...makeCarryPairEntities(1)];
+		const pack = makePack({ entities });
 		const result = objectiveSpaces(pack);
 		expect(result.map((e) => e.id)).toEqual(["space-0", "space-1"]);
 	});
@@ -318,19 +293,19 @@ describe("objectiveSpaces", () => {
 	it("returns bound spaces only when there are no carry pairs", () => {
 		const bs0 = makeBoundSpace(0);
 		const bs1 = makeBoundSpace(1);
-		const pack = makePack({ boundSpaces: [bs0, bs1] });
+		const pack = makePack({ entities: [bs0, bs1] });
 		const result = objectiveSpaces(pack);
 		expect(result.map((e) => e.id)).toEqual(["bound-space-0", "bound-space-1"]);
 	});
 
 	it("returns paired spaces before bound spaces in a mixed pack", () => {
-		const pair0 = makeObjectivePair(0);
-		const pair1 = makeObjectivePair(1);
-		const bs0 = makeBoundSpace(0);
-		const bs1 = makeBoundSpace(1);
 		const pack = makePack({
-			objectivePairs: [pair0, pair1],
-			boundSpaces: [bs0, bs1],
+			entities: [
+				...makeCarryPairEntities(0),
+				...makeCarryPairEntities(1),
+				makeBoundSpace(0),
+				makeBoundSpace(1),
+			],
 		});
 		const result = objectiveSpaces(pack);
 		expect(result.map((e) => e.id)).toEqual([
@@ -341,14 +316,16 @@ describe("objectiveSpaces", () => {
 		]);
 	});
 
-	it("preserves insertion order within each group", () => {
-		const pairs = [
-			makeObjectivePair(2),
-			makeObjectivePair(0),
-			makeObjectivePair(1),
-		];
-		const bound = [makeBoundSpace(5), makeBoundSpace(3)];
-		const pack = makePack({ objectivePairs: pairs, boundSpaces: bound });
+	it("preserves carry-pair order and bound-space order", () => {
+		const pack = makePack({
+			entities: [
+				...makeCarryPairEntities(2),
+				...makeCarryPairEntities(0),
+				...makeCarryPairEntities(1),
+				makeBoundSpace(5),
+				makeBoundSpace(3),
+			],
+		});
 		const result = objectiveSpaces(pack);
 		expect(result.map((e) => e.id)).toEqual([
 			"space-2",
@@ -361,10 +338,12 @@ describe("objectiveSpaces", () => {
 
 	it("does not include interesting_objects or obstacles", () => {
 		const pack = makePack({
-			objectivePairs: [makeObjectivePair(0)],
-			interestingObjects: [makeInterestingObject(0)],
-			boundSpaces: [makeBoundSpace(0)],
-			obstacles: [makeObstacle(0)],
+			entities: [
+				...makeCarryPairEntities(0),
+				makeInterestingObject(0),
+				makeBoundSpace(0),
+				makeObstacle(0),
+			],
 		});
 		const result = objectiveSpaces(pack);
 		for (const e of result) {
@@ -381,9 +360,9 @@ describe("carryObjectById", () => {
 	});
 
 	it("returns the matching carry object", () => {
-		const pair0 = makeObjectivePair(0);
-		const pair1 = makeObjectivePair(1);
-		const pack = makePack({ objectivePairs: [pair0, pair1] });
+		const pack = makePack({
+			entities: [...makeCarryPairEntities(0), ...makeCarryPairEntities(1)],
+		});
 		const result = carryObjectById("obj-1", pack);
 		expect(result).toBeDefined();
 		expect(result?.id).toBe("obj-1");
@@ -392,18 +371,20 @@ describe("carryObjectById", () => {
 
 	it("returns undefined when id does not match any carry object", () => {
 		const pack = makePack({
-			objectivePairs: [makeObjectivePair(0), makeObjectivePair(1)],
+			entities: [...makeCarryPairEntities(0), ...makeCarryPairEntities(1)],
 		});
 		expect(carryObjectById("missing", pack)).toBeUndefined();
 	});
 
 	it("does not match by carry-space id, interesting-object id, bound-space id, or obstacle id", () => {
-		const pair = makeObjectivePair(0); // object id "obj-0", space id "space-0"
+		// object id "obj-0", paired space id "space-0".
 		const pack = makePack({
-			objectivePairs: [pair],
-			interestingObjects: [makeInterestingObject(0)], // id "interesting-0"
-			boundSpaces: [makeBoundSpace(0)], // id "bound-space-0"
-			obstacles: [makeObstacle(0)], // id "obstacle-0"
+			entities: [
+				...makeCarryPairEntities(0),
+				makeInterestingObject(0), // id "interesting-0"
+				makeBoundSpace(0), // id "bound-space-0"
+				makeObstacle(0), // id "obstacle-0"
+			],
 		});
 		expect(carryObjectById("space-0", pack)).toBeUndefined();
 		expect(carryObjectById("interesting-0", pack)).toBeUndefined();
@@ -414,30 +395,27 @@ describe("carryObjectById", () => {
 	});
 
 	it("picks the first match if duplicate ids exist (insertion order)", () => {
-		const pair0 = makeObjectivePair(0);
-		const pair1 = makeObjectivePair(0); // same ids — pathological but well-defined
-		const pack = makePack({ objectivePairs: [pair0, pair1] });
+		const pair0 = makeCarryPairEntities(0);
+		const pair1 = makeCarryPairEntities(0); // same ids — pathological but well-defined
+		const pack = makePack({ entities: [...pair0, ...pair1] });
 		const result = carryObjectById("obj-0", pack);
-		expect(result).toBe(pair0.object);
+		expect(result).toBe(pair0[0]);
 	});
 });
 
-// ── Mixed pack (all buckets populated) ───────────────────────────────────────
+// ── Mixed pack (all kinds populated) ──────────────────────────────────────────
 
 describe("all selectors on a fully-populated mixed pack", () => {
-	const pair0 = makeObjectivePair(0);
-	const pair1 = makeObjectivePair(1);
-	const io0 = makeInterestingObject(0);
-	const io1 = makeInterestingObject(1);
-	const bs0 = makeBoundSpace(0);
-	const ob0 = makeObstacle(0);
-	const ob1 = makeObstacle(1);
-
 	const pack = makePack({
-		objectivePairs: [pair0, pair1],
-		interestingObjects: [io0, io1],
-		boundSpaces: [bs0],
-		obstacles: [ob0, ob1],
+		entities: [
+			...makeCarryPairEntities(0),
+			...makeCarryPairEntities(1),
+			makeInterestingObject(0),
+			makeInterestingObject(1),
+			makeBoundSpace(0),
+			makeObstacle(0),
+			makeObstacle(1),
+		],
 	});
 
 	it("carryPairs returns the 2 pairs", () => {

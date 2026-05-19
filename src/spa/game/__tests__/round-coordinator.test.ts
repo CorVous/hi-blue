@@ -3177,10 +3177,10 @@ describe("complication countdown — coordinator integration", () => {
 		// COMPLICATIONS (index 1 = obstacleShift if the pool were unfiltered),
 		// by returning 0.99. With obstacleShift excluded, only weatherChange remains
 		// and it must fire (weather changes).
-		// TEST_CONTENT_PACK has no obstacles field — use it directly (obstacles: [])
+		// TEST_CONTENT_PACK has no obstacles in its entities — use it directly.
 		const pack: ContentPack = {
 			...TEST_CONTENT_PACK,
-			obstacles: [],
+			entities: TEST_CONTENT_PACK.entities.filter((e) => e.kind !== "obstacle"),
 		};
 		const started = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		// Force countdown to 0 so the complication engine fires this round.

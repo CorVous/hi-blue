@@ -24,7 +24,9 @@ import type {
 	ConversationEntry,
 	GameState,
 	Objective,
+	ObjectivePair,
 	PersonaSpatialState,
+	WorldEntity,
 	WorldState,
 } from "../game/types.js";
 import {
@@ -77,11 +79,20 @@ import {
  *     renderer (which already treats blank `wallName` as "no flavored
  *     wall noun").
  *
+ * v11 (issue #462): collapse ContentPack buckets into a flat `entities` array.
+ *   - `objectivePairs`, `interestingObjects`, `boundSpaces`, `obstacles`
+ *     are removed from `ContentPack`; replaced with one
+ *     `entities: WorldEntity[]`.
+ *   - Bucketing is derived on demand via `pack-selectors.ts`.
+ *   - Migration flattens every v10 ContentPack on `contentPacksA` and
+ *     `contentPacksB`, preserving canonical order: per pair, object then
+ *     space; then bound spaces; then interesting objects; then obstacles.
+ *
  * Bumping this constant requires either a `migrateV<old>To...` function below
  * or a new entry in `SCHEMA_ARCHIVE_MAP` (see AGENTS.md → "Bumping
  * SESSION_SCHEMA_VERSION"). `scripts/check-schema-map.mjs` enforces this on PRs.
  */
-export const SESSION_SCHEMA_VERSION = 10 as const;
+export const SESSION_SCHEMA_VERSION = 11 as const;
 
 // ── File shapes ────────────────────────────────────────────────────────────────
 
@@ -247,15 +258,91 @@ function migrateV8ToV9(sealed: SealedEngine): SealedEngine {
  * Migrate a v9 sealed payload to v10 by defaulting `wallName` to `""` on
  * every ContentPack in `contentPacksA`/`contentPacksB`. v9 packs had no
  * `wallName` field.
+ *
+ * Sets schemaVersion to 10 so callers can chain into `migrateV10ToV11`.
  */
 function migrateV9ToV10(sealed: SealedEngine): SealedEngine {
 	const addWallName = (pack: ContentPack): ContentPack =>
 		typeof pack?.wallName === "string" ? pack : { ...pack, wallName: "" };
 	return {
 		...sealed,
-		schemaVersion: SESSION_SCHEMA_VERSION,
+		schemaVersion: 10 as unknown as typeof SESSION_SCHEMA_VERSION,
 		contentPacksA: (sealed.contentPacksA ?? []).map(addWallName),
 		contentPacksB: (sealed.contentPacksB ?? []).map(addWallName),
+	};
+}
+
+/**
+ * Migrate a v10 sealed payload to v11 by flattening each ContentPack's four
+ * bucket fields (`objectivePairs`, `interestingObjects`, `boundSpaces`,
+ * `obstacles`) into a single `entities: WorldEntity[]` array.
+ *
+ * Order preserved (matches the canonical order used by the v11 generator and
+ * by the `pack-selectors` discriminators):
+ *   1. For each `objectivePairs[i]`: object then space.
+ *   2. All `boundSpaces` (in input order).
+ *   3. All `interestingObjects` (in input order).
+ *   4. All `obstacles` (in input order).
+ *
+ * Defensive: if a pack already carries an `entities` array (e.g. an in-flight
+ * partial migration), it is used as-is rather than rebuilt from absent
+ * buckets.
+ */
+function migrateV10ToV11(sealed: SealedEngine): SealedEngine {
+	const flatten = (pack: ContentPack): ContentPack => {
+		const raw = pack as unknown as {
+			setting: string;
+			weather: string;
+			timeOfDay: string;
+			objectivePairs?: ObjectivePair[];
+			interestingObjects?: WorldEntity[];
+			boundSpaces?: WorldEntity[];
+			obstacles?: WorldEntity[];
+			entities?: WorldEntity[];
+			landmarks: ContentPack["landmarks"];
+			wallName: string;
+			aiStarts: ContentPack["aiStarts"];
+		};
+
+		if (Array.isArray(raw.entities)) {
+			// Already v11-shaped; preserve as-is and strip any leftover bucket
+			// fields so downstream code sees a clean ContentPack.
+			return {
+				setting: raw.setting,
+				weather: raw.weather,
+				timeOfDay: raw.timeOfDay,
+				entities: raw.entities,
+				landmarks: raw.landmarks,
+				wallName: raw.wallName,
+				aiStarts: raw.aiStarts,
+			};
+		}
+
+		const entities: WorldEntity[] = [];
+		for (const pair of raw.objectivePairs ?? []) {
+			entities.push(pair.object);
+			entities.push(pair.space);
+		}
+		for (const space of raw.boundSpaces ?? []) entities.push(space);
+		for (const io of raw.interestingObjects ?? []) entities.push(io);
+		for (const ob of raw.obstacles ?? []) entities.push(ob);
+
+		return {
+			setting: raw.setting,
+			weather: raw.weather,
+			timeOfDay: raw.timeOfDay,
+			entities,
+			landmarks: raw.landmarks,
+			wallName: raw.wallName,
+			aiStarts: raw.aiStarts,
+		};
+	};
+
+	return {
+		...sealed,
+		schemaVersion: SESSION_SCHEMA_VERSION,
+		contentPacksA: (sealed.contentPacksA ?? []).map(flatten),
+		contentPacksB: (sealed.contentPacksB ?? []).map(flatten),
 	};
 }
 
@@ -309,6 +396,10 @@ export function deserializeSession(
 	if (version === 9) {
 		sealed = migrateV9ToV10(sealed);
 		version = 10;
+	}
+	if (version === 10) {
+		sealed = migrateV10ToV11(sealed);
+		version = 11;
 	}
 	if (version !== SESSION_SCHEMA_VERSION) {
 		return { kind: "version-mismatch", schemaVersion: version };
@@ -371,9 +462,7 @@ export function deserializeSession(
 			setting: "",
 			weather: "",
 			timeOfDay: "",
-			objectivePairs: [],
-			interestingObjects: [],
-			obstacles: [],
+			entities: [],
 			landmarks: DEFAULT_LANDMARKS,
 			wallName: "",
 			aiStarts: {},

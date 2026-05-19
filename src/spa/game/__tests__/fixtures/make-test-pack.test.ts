@@ -1,8 +1,13 @@
 /**
  * Smoke tests for the makeTestPack fixture helper.
  *
- * Covers: type validity, bucket-split by kind + pairing, override merging,
- * insertion order, error cases, no entity dropped or duplicated.
+ * Since the v11 schema flip (#462), `makeTestPack` is a thin shim that drops
+ * the input entity list onto `pack.entities` with default scaffolding. These
+ * tests confirm:
+ *  - defaults are sensible (empty `entities`, DEFAULT_LANDMARKS, etc.)
+ *  - entities are forwarded unmodified and in insertion order
+ *  - selectors classify entities correctly off a `makeTestPack` result
+ *  - overrides win (including overriding `entities` outright)
  */
 import { describe, expect, it } from "vitest";
 import { DEFAULT_LANDMARKS } from "../../direction.js";
@@ -65,33 +70,30 @@ describe("makeTestPack", () => {
 		expect(pack.wallName).toBe("");
 		expect(pack.aiStarts).toEqual({});
 		expect(pack.landmarks).toEqual(DEFAULT_LANDMARKS);
-		expect(pack.objectivePairs).toEqual([]);
-		expect(pack.interestingObjects).toEqual([]);
-		expect(pack.boundSpaces).toEqual([]);
-		expect(pack.obstacles).toEqual([]);
+		expect(pack.entities).toEqual([]);
 	});
 
-	it("buckets interesting_object into interestingObjects", () => {
+	it("forwards interesting_object entities to interestingObjects selector", () => {
 		const a = interestingObject("a");
 		const b = interestingObject("b");
 		const pack = makeTestPack([a, b]);
 		expect(interestingObjects(pack)).toEqual([a, b]);
-		expect(pack.obstacles).toEqual([]);
-		expect(pack.objectivePairs).toEqual([]);
-		expect(pack.boundSpaces).toEqual([]);
+		expect(obstacles(pack)).toEqual([]);
+		expect(carryPairs(pack)).toEqual([]);
+		expect(boundSpaces(pack)).toEqual([]);
 	});
 
-	it("buckets obstacle into obstacles", () => {
+	it("forwards obstacle entities to obstacles selector", () => {
 		const a = obstacle("o1");
 		const b = obstacle("o2");
 		const pack = makeTestPack([a, b]);
 		expect(obstacles(pack)).toEqual([a, b]);
-		expect(pack.interestingObjects).toEqual([]);
-		expect(pack.objectivePairs).toEqual([]);
-		expect(pack.boundSpaces).toEqual([]);
+		expect(interestingObjects(pack)).toEqual([]);
+		expect(carryPairs(pack)).toEqual([]);
+		expect(boundSpaces(pack)).toEqual([]);
 	});
 
-	it("pairs objective_object with its objective_space into objectivePairs", () => {
+	it("carryPairs derives pairs from objective_object + objective_space entities", () => {
 		const object = objectiveObject("obj-1", "space-1");
 		const space = objectiveSpace("space-1");
 		const pack = makeTestPack([object, space]);
@@ -99,15 +101,15 @@ describe("makeTestPack", () => {
 		expect(pairs).toHaveLength(1);
 		expect(pairs[0]?.object).toBe(object);
 		expect(pairs[0]?.space).toBe(space);
-		// The paired space is NOT also emitted as a bound space.
+		// The paired space is NOT also returned as a bound space.
 		expect(boundSpaces(pack)).toEqual([]);
 	});
 
-	it("treats unpaired objective_space as boundSpaces", () => {
+	it("treats unpaired objective_space as a bound space", () => {
 		const space = objectiveSpace("use-space-1");
 		const pack = makeTestPack([space]);
-		expect(pack.boundSpaces).toEqual([space]);
-		expect(pack.objectivePairs).toEqual([]);
+		expect(boundSpaces(pack)).toEqual([space]);
+		expect(carryPairs(pack)).toEqual([]);
 	});
 
 	it("handles mixed kinds without dropping or duplicating any entity", () => {
@@ -118,35 +120,38 @@ describe("makeTestPack", () => {
 		const obs = obstacle("ob-1");
 		const pack = makeTestPack([obj, space, unboundSpace, io, obs]);
 
-		const flattened = [
-			...pack.objectivePairs.flatMap((p) => [p.object, p.space]),
-			...pack.interestingObjects,
-			...(pack.boundSpaces ?? []),
-			...pack.obstacles,
-		];
-		// Every input entity appears exactly once in the bucketed pack.
-		expect(flattened).toHaveLength(5);
-		expect(new Set(flattened.map((e) => e.id))).toEqual(
+		// Every input entity appears exactly once in pack.entities.
+		expect(pack.entities).toHaveLength(5);
+		expect(new Set(pack.entities.map((e) => e.id))).toEqual(
 			new Set(["o-1", "s-1", "s-2", "io-1", "ob-1"]),
 		);
 	});
 
-	it("preserves insertion order within each bucket", () => {
+	it("preserves insertion order", () => {
 		const io1 = interestingObject("io-1");
 		const io2 = interestingObject("io-2");
 		const io3 = interestingObject("io-3");
 		const ob1 = obstacle("ob-1");
 		const ob2 = obstacle("ob-2");
 		const pack = makeTestPack([io1, ob1, io2, ob2, io3]);
-		expect(pack.interestingObjects.map((e) => e.id)).toEqual([
+		// The entities array preserves caller order verbatim.
+		expect(pack.entities.map((e) => e.id)).toEqual([
+			"io-1",
+			"ob-1",
+			"io-2",
+			"ob-2",
+			"io-3",
+		]);
+		// Selectors filter by kind without re-sorting.
+		expect(interestingObjects(pack).map((e) => e.id)).toEqual([
 			"io-1",
 			"io-2",
 			"io-3",
 		]);
-		expect(pack.obstacles.map((e) => e.id)).toEqual(["ob-1", "ob-2"]);
+		expect(obstacles(pack).map((e) => e.id)).toEqual(["ob-1", "ob-2"]);
 	});
 
-	it("merges overrides on top of derived buckets and defaults", () => {
+	it("merges overrides on top of derived defaults", () => {
 		const io = interestingObject("io-1");
 		const pack = makeTestPack([io], {
 			setting: "abandoned subway station",
@@ -164,51 +169,18 @@ describe("makeTestPack", () => {
 			position: { row: 0, col: 0 },
 			facing: "north",
 		});
-		// Derived bucket untouched.
-		expect(pack.interestingObjects).toEqual([io]);
+		// Derived entities untouched.
+		expect(pack.entities).toEqual([io]);
 	});
 
-	it("lets overrides win when the same bucket field is supplied", () => {
+	it("lets overrides win when entities is supplied directly", () => {
 		const io = interestingObject("io-1");
 		const replacementIo = interestingObject("io-99");
 		const pack = makeTestPack([io], {
-			interestingObjects: [replacementIo],
+			entities: [replacementIo],
 		});
-		// Override wins entirely (documented behaviour — escape hatch for tests
-		// that need to inject unusual shapes).
-		expect(pack.interestingObjects).toEqual([replacementIo]);
-	});
-
-	it("throws when an objective_object is missing pairsWithSpaceId", () => {
-		const orphan: WorldEntity = {
-			id: "orphan",
-			kind: "objective_object",
-			name: "orphan",
-			examineDescription: "orphan",
-			holder: { row: 0, col: 0 },
-		};
-		expect(() => makeTestPack([orphan])).toThrow(/pairsWithSpaceId/);
-	});
-
-	it("throws when an objective_object references a missing objective_space", () => {
-		const obj = objectiveObject("obj-1", "missing-space");
-		expect(() => makeTestPack([obj])).toThrow(/missing objective_space/);
-	});
-
-	it("throws when two objective_objects pair with the same space", () => {
-		const objA = objectiveObject("obj-a", "shared-space");
-		const objB = objectiveObject("obj-b", "shared-space");
-		const space = objectiveSpace("shared-space");
-		expect(() => makeTestPack([objA, objB, space])).toThrow(
-			/more than one objective_object/,
-		);
-	});
-
-	it("throws on duplicate objective_space ids", () => {
-		const dup1 = objectiveSpace("dup");
-		const dup2 = objectiveSpace("dup");
-		expect(() => makeTestPack([dup1, dup2])).toThrow(
-			/duplicate objective_space/,
-		);
+		// Override wins entirely (documented escape hatch for tests that need
+		// to inject unusual shapes).
+		expect(pack.entities).toEqual([replacementIo]);
 	});
 });

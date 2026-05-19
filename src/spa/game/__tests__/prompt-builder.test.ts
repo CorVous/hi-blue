@@ -1832,7 +1832,7 @@ describe("postLookFlavor swap covers satisfied interesting_object", () => {
 	it("does NOT append postLookFlavor when entity is not satisfied", () => {
 		const pack = buildPackWithSatisfiedItem({ withPostLook: true });
 		// Flip satisfactionState back to pending.
-		const item = pack.interestingObjects[0];
+		const item = pack.entities.find((e) => e.kind === "interesting_object");
 		if (item) item.satisfactionState = "pending";
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");

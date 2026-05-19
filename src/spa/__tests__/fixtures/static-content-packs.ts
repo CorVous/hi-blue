@@ -1,5 +1,5 @@
 import { DEFAULT_LANDMARKS } from "../../game/direction";
-import type { ContentPack, ObjectiveType } from "../../game/types";
+import type { ContentPack, ObjectiveType, WorldEntity } from "../../game/types";
 
 /**
  * Objective types matching the type-first entity IDs in STATIC_CONTENT_PACKS[0].
@@ -21,13 +21,38 @@ export const STATIC_CONTENT_PACK_NO_PAIRS: ContentPack = {
 	setting: "abandoned subway station",
 	weather: "",
 	timeOfDay: "",
-	objectivePairs: [],
-	interestingObjects: [],
-	obstacles: [],
+	entities: [],
 	landmarks: DEFAULT_LANDMARKS,
 	wallName: "tunnel wall",
 	aiStarts: AI_STARTS,
 };
+
+const carryPairEntities = (
+	objId: string,
+	objName: string,
+	objExamine: string,
+	spaceId: string,
+	spaceName: string,
+	spaceExamine: string,
+	objHolder = { row: 3, col: 3 },
+	spaceHolder = { row: 4, col: 4 },
+): WorldEntity[] => [
+	{
+		id: objId,
+		kind: "objective_object",
+		name: objName,
+		examineDescription: objExamine,
+		holder: objHolder,
+		pairsWithSpaceId: spaceId,
+	},
+	{
+		id: spaceId,
+		kind: "objective_space",
+		name: spaceName,
+		examineDescription: spaceExamine,
+		holder: spaceHolder,
+	},
+];
 
 /**
  * Minimal content packs for all three phases used by tests that need a
@@ -38,27 +63,14 @@ export const STATIC_CONTENT_PACKS: ContentPack[] = [
 		setting: "abandoned subway station",
 		weather: "",
 		timeOfDay: "",
-		objectivePairs: [
-			{
-				object: {
-					id: "carry-0-obj",
-					kind: "objective_object",
-					name: "cracked lantern",
-					examineDescription: "A cracked lantern",
-					holder: { row: 3, col: 3 },
-					pairsWithSpaceId: "carry-0-space",
-				},
-				space: {
-					id: "carry-0-space",
-					kind: "objective_space",
-					name: "maintenance alcove",
-					examineDescription: "A small alcove",
-					holder: { row: 4, col: 4 },
-				},
-			},
-		],
-		interestingObjects: [],
-		obstacles: [],
+		entities: carryPairEntities(
+			"carry-0-obj",
+			"cracked lantern",
+			"A cracked lantern",
+			"carry-0-space",
+			"maintenance alcove",
+			"A small alcove",
+		),
 		landmarks: DEFAULT_LANDMARKS,
 		wallName: "tunnel wall",
 		aiStarts: AI_STARTS,
@@ -67,27 +79,14 @@ export const STATIC_CONTENT_PACKS: ContentPack[] = [
 		setting: "sun-baked salt flat",
 		weather: "",
 		timeOfDay: "",
-		objectivePairs: [
-			{
-				object: {
-					id: "phase2_obj",
-					kind: "objective_object",
-					name: "rusted compass",
-					examineDescription: "A rusted compass",
-					holder: { row: 3, col: 3 },
-					pairsWithSpaceId: "phase2_space",
-				},
-				space: {
-					id: "phase2_space",
-					kind: "objective_space",
-					name: "survey marker",
-					examineDescription: "A survey marker",
-					holder: { row: 4, col: 4 },
-				},
-			},
-		],
-		interestingObjects: [],
-		obstacles: [],
+		entities: carryPairEntities(
+			"phase2_obj",
+			"rusted compass",
+			"A rusted compass",
+			"phase2_space",
+			"survey marker",
+			"A survey marker",
+		),
 		landmarks: DEFAULT_LANDMARKS,
 		wallName: "salt flat boundary",
 		aiStarts: AI_STARTS,
@@ -96,27 +95,14 @@ export const STATIC_CONTENT_PACKS: ContentPack[] = [
 		setting: "forgotten laboratory",
 		weather: "",
 		timeOfDay: "",
-		objectivePairs: [
-			{
-				object: {
-					id: "phase3_obj",
-					kind: "objective_object",
-					name: "sealed vial",
-					examineDescription: "A sealed vial",
-					holder: { row: 3, col: 3 },
-					pairsWithSpaceId: "phase3_space",
-				},
-				space: {
-					id: "phase3_space",
-					kind: "objective_space",
-					name: "sample rack",
-					examineDescription: "A sample rack",
-					holder: { row: 4, col: 4 },
-				},
-			},
-		],
-		interestingObjects: [],
-		obstacles: [],
+		entities: carryPairEntities(
+			"phase3_obj",
+			"sealed vial",
+			"A sealed vial",
+			"phase3_space",
+			"sample rack",
+			"A sample rack",
+		),
 		landmarks: DEFAULT_LANDMARKS,
 		wallName: "laboratory bulkhead",
 		aiStarts: AI_STARTS,

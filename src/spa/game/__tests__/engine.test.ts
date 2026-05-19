@@ -117,26 +117,22 @@ describe("startGame world.entities", () => {
 		// asking the selectors, not by hand-fanning bucket reads.
 		const mixedPack: ContentPack = {
 			...TEST_CONTENT_PACK,
-			objectivePairs: [
+			entities: [
 				{
-					object: {
-						id: "carry-0-object",
-						kind: "objective_object",
-						name: "brass key",
-						examineDescription: "",
-						pairsWithSpaceId: "carry-0-space",
-						holder: { row: 0, col: 0 },
-					},
-					space: {
-						id: "carry-0-space",
-						kind: "objective_space",
-						name: "iron lock",
-						examineDescription: "",
-						holder: { row: 4, col: 4 },
-					},
+					id: "carry-0-object",
+					kind: "objective_object",
+					name: "brass key",
+					examineDescription: "",
+					pairsWithSpaceId: "carry-0-space",
+					holder: { row: 0, col: 0 },
 				},
-			],
-			boundSpaces: [
+				{
+					id: "carry-0-space",
+					kind: "objective_space",
+					name: "iron lock",
+					examineDescription: "",
+					holder: { row: 4, col: 4 },
+				},
 				{
 					id: "useSpace-0-space",
 					kind: "objective_space",
@@ -151,8 +147,6 @@ describe("startGame world.entities", () => {
 					examineDescription: "",
 					holder: { row: 2, col: 2 },
 				},
-			],
-			interestingObjects: [
 				{
 					id: "interesting-0",
 					kind: "interesting_object",
@@ -160,8 +154,6 @@ describe("startGame world.entities", () => {
 					examineDescription: "",
 					holder: { row: 3, col: 0 },
 				},
-			],
-			obstacles: [
 				{
 					id: "obstacle-0",
 					kind: "obstacle",

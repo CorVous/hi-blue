@@ -626,8 +626,12 @@ describe("serializeSession / deserializeSession", () => {
 	});
 
 	it("v8 save with multi-entry contentPacksA/B is migrated to v9 by truncating to first entry", () => {
-		// Create a v8-style sealed engine with 3 content packs each
-		const testPack: ContentPack = {
+		// Create a v8-style sealed engine with 3 content packs each.
+		// v8/v9/v10 packs used the old bucketed shape — emit it via an
+		// `unknown` cast so the literal can carry fields that no longer exist
+		// on the v11 `ContentPack` type. The migration pipeline must accept
+		// these legacy shapes and flatten them into `entities` on the way out.
+		const testPack = {
 			setting: "test setting",
 			weather: "sunny",
 			timeOfDay: "morning",
@@ -637,7 +641,7 @@ describe("serializeSession / deserializeSession", () => {
 			landmarks: DEFAULT_LANDMARKS,
 			wallName: "wall",
 			aiStarts: {},
-		};
+		} as unknown as ContentPack;
 		const testPackVariant2: ContentPack = {
 			...testPack,
 			setting: "test setting 2",
@@ -811,7 +815,9 @@ describe("serializeSession / deserializeSession", () => {
 
 	it("v9 save preserves an existing string wallName if present", () => {
 		const game = makeFreshGame();
-		const pack: ContentPack = {
+		// v9 pack — pre-bucket-flip shape, declared as `unknown as ContentPack`
+		// to keep the v9-shaped literal compiling against the v11 type.
+		const pack = {
 			setting: "v9 with wall",
 			weather: "clear",
 			timeOfDay: "noon",
@@ -821,7 +827,7 @@ describe("serializeSession / deserializeSession", () => {
 			landmarks: DEFAULT_LANDMARKS,
 			wallName: "salt-encrusted edge",
 			aiStarts: {},
-		};
+		} as unknown as ContentPack;
 		const v9SealedPayload = {
 			schemaVersion: 9,
 			world: game.world,
@@ -858,6 +864,271 @@ describe("serializeSession / deserializeSession", () => {
 				"salt-encrusted edge",
 			);
 		}
+	});
+
+	// ── v10 → v11 migration (issue #462) ──────────────────────────────────────
+	//
+	// v10 packs stored four bucket fields (objectivePairs, interestingObjects,
+	// boundSpaces, obstacles); v11 collapses them into a single `entities`
+	// array. The migration must:
+	//   1. Concatenate the buckets in canonical order: per pair, object then
+	//      space; then bound spaces; then interesting objects; then obstacles.
+	//   2. Apply to every ContentPack in contentPacksA and contentPacksB.
+	//   3. Leave v11-shaped saves unchanged on round-trip.
+
+	it("v10 save with bucketed ContentPack is migrated to v11 by flattening buckets into entities", () => {
+		const game = makeFreshGame();
+
+		const pairObj: WorldEntity = {
+			id: "carry-0-obj",
+			kind: "objective_object",
+			name: "iron key",
+			examineDescription: "An iron key for the brass lock",
+			pairsWithSpaceId: "carry-0-space",
+			holder: { row: 0, col: 0 },
+		};
+		const pairSpace: WorldEntity = {
+			id: "carry-0-space",
+			kind: "objective_space",
+			name: "brass lock",
+			examineDescription: "A heavy brass lock",
+			holder: { row: 4, col: 4 },
+		};
+		const boundSpace: WorldEntity = {
+			id: "useSpace-1-space",
+			kind: "objective_space",
+			name: "control panel",
+			examineDescription: "A panel with switches",
+			holder: { row: 2, col: 2 },
+		};
+		const interestingEntity: WorldEntity = {
+			id: "useItem-2-item",
+			kind: "interesting_object",
+			name: "old radio",
+			examineDescription: "An old radio",
+			holder: { row: 3, col: 1 },
+		};
+		const obstacleEntity: WorldEntity = {
+			id: "obstacle-0",
+			kind: "obstacle",
+			name: "rubble pile",
+			examineDescription: "A pile of rubble",
+			shiftFlavor: "The pile shifts.",
+			holder: { row: 1, col: 3 },
+		};
+
+		// v10-shape ContentPack (bucketed). Authored as a plain object cast to
+		// ContentPack so the literal can carry the v10 bucket fields.
+		const v10Pack = {
+			setting: "v10 setting",
+			weather: "clear",
+			timeOfDay: "noon",
+			objectivePairs: [{ object: pairObj, space: pairSpace }],
+			interestingObjects: [interestingEntity],
+			boundSpaces: [boundSpace],
+			obstacles: [obstacleEntity],
+			landmarks: DEFAULT_LANDMARKS,
+			wallName: "tunnel wall",
+			aiStarts: {},
+		} as unknown as ContentPack;
+
+		const v10SealedPayload = {
+			schemaVersion: 10,
+			world: game.world,
+			budgets: game.budgets,
+			lockedOut: Array.from(game.lockedOut),
+			personaSpatial: game.personaSpatial,
+			contentPacksA: [v10Pack],
+			contentPacksB: [v10Pack],
+			activePackId: "A" as const,
+			weather: game.weather,
+			objectives: game.objectives,
+			complicationSchedule: game.complicationSchedule,
+			activeComplications: game.activeComplications,
+			isComplete: game.isComplete,
+		};
+		const engine = obfuscate(JSON.stringify(v10SealedPayload));
+		const meta = JSON.stringify({
+			createdAt: CREATED_AT,
+			lastSavedAt: NOW,
+			epoch: 1,
+			round: 0,
+			personaOrder: Object.keys(game.personas),
+		});
+		const daemons: Record<AiId, string> = {};
+		for (const [aiId, persona] of Object.entries(game.personas)) {
+			const daemonFile: DaemonFile = { aiId, persona, conversationLog: [] };
+			daemons[aiId] = JSON.stringify(daemonFile);
+		}
+
+		const result = deserializeSession({ meta, daemons, engine });
+		expect(result.kind).toBe("ok");
+		if (result.kind !== "ok") return;
+
+		// Canonical entity order after migration:
+		// [pair.object, pair.space, boundSpace, interesting, obstacle].
+		const expectedOrder = [
+			"carry-0-obj",
+			"carry-0-space",
+			"useSpace-1-space",
+			"useItem-2-item",
+			"obstacle-0",
+		];
+
+		const packA0 = result.state.contentPacksA[0];
+		expect(packA0).toBeDefined();
+		expect(packA0?.entities.map((e) => e.id)).toEqual(expectedOrder);
+
+		const packB0 = result.state.contentPacksB[0];
+		expect(packB0).toBeDefined();
+		expect(packB0?.entities.map((e) => e.id)).toEqual(expectedOrder);
+
+		// The active contentPack (state.contentPack) mirrors contentPacksA[0].
+		expect(result.state.contentPack.entities.map((e) => e.id)).toEqual(
+			expectedOrder,
+		);
+
+		// Non-bucket fields preserved verbatim.
+		expect(packA0?.setting).toBe("v10 setting");
+		expect(packA0?.wallName).toBe("tunnel wall");
+	});
+
+	it("v10→v11 migration preserves multi-pair carry order: [p0.obj, p0.spc, p1.obj, p1.spc, …]", () => {
+		const game = makeFreshGame();
+
+		const pairs = [
+			{
+				object: {
+					id: "carry-0-obj",
+					kind: "objective_object",
+					name: "key",
+					examineDescription: "key",
+					pairsWithSpaceId: "carry-0-space",
+					holder: { row: 0, col: 0 },
+				} as WorldEntity,
+				space: {
+					id: "carry-0-space",
+					kind: "objective_space",
+					name: "lock",
+					examineDescription: "lock",
+					holder: { row: 1, col: 0 },
+				} as WorldEntity,
+			},
+			{
+				object: {
+					id: "carry-1-obj",
+					kind: "objective_object",
+					name: "card",
+					examineDescription: "card",
+					pairsWithSpaceId: "carry-1-space",
+					holder: { row: 0, col: 1 },
+				} as WorldEntity,
+				space: {
+					id: "carry-1-space",
+					kind: "objective_space",
+					name: "slot",
+					examineDescription: "slot",
+					holder: { row: 1, col: 1 },
+				} as WorldEntity,
+			},
+		];
+
+		const v10Pack = {
+			setting: "two-pair",
+			weather: "",
+			timeOfDay: "",
+			objectivePairs: pairs,
+			interestingObjects: [],
+			boundSpaces: [],
+			obstacles: [],
+			landmarks: DEFAULT_LANDMARKS,
+			wallName: "",
+			aiStarts: {},
+		} as unknown as ContentPack;
+
+		const sealed = {
+			schemaVersion: 10,
+			world: game.world,
+			budgets: game.budgets,
+			lockedOut: Array.from(game.lockedOut),
+			personaSpatial: game.personaSpatial,
+			contentPacksA: [v10Pack],
+			contentPacksB: [v10Pack],
+			activePackId: "A" as const,
+			weather: game.weather,
+			objectives: game.objectives,
+			complicationSchedule: game.complicationSchedule,
+			activeComplications: game.activeComplications,
+			isComplete: game.isComplete,
+		};
+		const engine = obfuscate(JSON.stringify(sealed));
+		const meta = JSON.stringify({
+			createdAt: CREATED_AT,
+			lastSavedAt: NOW,
+			epoch: 1,
+			round: 0,
+			personaOrder: Object.keys(game.personas),
+		});
+		const daemons: Record<AiId, string> = {};
+		for (const [aiId, persona] of Object.entries(game.personas)) {
+			daemons[aiId] = JSON.stringify({ aiId, persona, conversationLog: [] });
+		}
+
+		const result = deserializeSession({ meta, daemons, engine });
+		expect(result.kind).toBe("ok");
+		if (result.kind !== "ok") return;
+
+		expect(result.state.contentPacksA[0]?.entities.map((e) => e.id)).toEqual([
+			"carry-0-obj",
+			"carry-0-space",
+			"carry-1-obj",
+			"carry-1-space",
+		]);
+	});
+
+	it("v11-shape sealed save round-trips with entities unchanged", () => {
+		// Build a fresh game (already v11), serialize and deserialize.
+		const game = makeFreshGame();
+		// Inject an entity so we can verify it round-trips.
+		const flatPack: ContentPack = {
+			setting: "fresh v11",
+			weather: "",
+			timeOfDay: "",
+			entities: [
+				{
+					id: "carry-0-obj",
+					kind: "objective_object",
+					name: "key",
+					examineDescription: "key",
+					pairsWithSpaceId: "carry-0-space",
+					holder: { row: 0, col: 0 },
+				},
+				{
+					id: "carry-0-space",
+					kind: "objective_space",
+					name: "lock",
+					examineDescription: "lock",
+					holder: { row: 4, col: 4 },
+				},
+			],
+			landmarks: DEFAULT_LANDMARKS,
+			wallName: "wall",
+			aiStarts: {},
+		};
+		const modified: GameState = {
+			...game,
+			contentPacksA: [flatPack],
+			contentPacksB: [flatPack],
+			contentPack: flatPack,
+		};
+		const files = serializeSession(modified, NOW, CREATED_AT);
+		const result = deserializeSession(files);
+		expect(result.kind).toBe("ok");
+		if (result.kind !== "ok") return;
+		expect(result.state.contentPacksA[0]?.entities.map((e) => e.id)).toEqual([
+			"carry-0-obj",
+			"carry-0-space",
+		]);
 	});
 
 	it("round-trips correctly with flat state (no phase config re-attachment needed)", () => {
