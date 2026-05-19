@@ -19,6 +19,11 @@
  * Throws RangeError if any entity is not found in the pack.
  */
 
+import {
+	boundSpaces,
+	carryPairs,
+	interestingObjects,
+} from "./pack-selectors.js";
 import type {
 	ContentPack,
 	Objective,
@@ -42,14 +47,14 @@ export function buildObjectiveRecords(
 	const spaceById = new Map<string, WorldEntity>();
 	const interestingById = new Map<string, WorldEntity>();
 
-	for (const pair of pack.objectivePairs) {
+	for (const pair of carryPairs(pack)) {
 		objectById.set(pair.object.id, pair.object);
 		spaceById.set(pair.space.id, pair.space);
 	}
-	for (const space of pack.boundSpaces ?? []) {
+	for (const space of boundSpaces(pack)) {
 		spaceById.set(space.id, space);
 	}
-	for (const obj of pack.interestingObjects) {
+	for (const obj of interestingObjects(pack)) {
 		interestingById.set(obj.id, obj);
 	}
 
