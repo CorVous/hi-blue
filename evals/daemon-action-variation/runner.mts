@@ -81,6 +81,24 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY ?? "";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 /**
+ * EVAL_TOOL_SURFACE selects which tool surface the LLM sees during this
+ * eval run. The production engine is unchanged — this is an eval-local
+ * projection for testing the upcoming surface change.
+ *
+ *   "v2"     (default) — current 7-tool surface (go, look, examine,
+ *                        pick_up, put_down, give, use).
+ *   "5tool"  — proposed surface: drop `examine` and `give`; rename
+ *              `look` → `face` and remove `forward` from face's enum
+ *              ("you cannot face the direction you are already facing").
+ *              Tool calls the LLM emits as `face(...)` are translated
+ *              back to `look(...)` before dispatch into the engine,
+ *              which still speaks the original surface.
+ */
+type ToolSurface = "v2" | "5tool";
+const TOOL_SURFACE: ToolSurface =
+	process.env.EVAL_TOOL_SURFACE === "5tool" ? "5tool" : "v2";
+
+/**
  * Per-persona variant — a temperament pair plus a stable label used as
  * the persona id in the game state. The label drives reproducibility:
  * the same label across baseline and treatment runs maps to the same
@@ -193,16 +211,131 @@ function materializePersonas(
 		voiceExamples: variant.voiceExamples,
 	};
 	if (withActionProfile) {
-		actor.actionProfile = actionProfileFor(
-			variant.label,
-			variant.temperaments[0],
-			variant.temperaments[1],
-		);
+		actor.actionProfile =
+			TOOL_SURFACE === "5tool"
+				? actionProfileFor5Tool(
+						variant.label,
+						variant.temperaments[0],
+						variant.temperaments[1],
+					)
+				: actionProfileFor(
+						variant.label,
+						variant.temperaments[0],
+						variant.temperaments[1],
+					);
 	}
 
 	const personas: Record<AiId, AiPersona> = { [variant.label]: actor };
 	for (const peerId of peers) personas[peerId] = PEER_PERSONA(peerId);
 	return personas;
+}
+
+/**
+ * Eval-only action-profile builder for the proposed 5-tool surface
+ * (no examine, no give, look→face). Renders the same STRICTLY/AVOIDS
+ * directive shape as the production `actionProfileFor`, projected onto
+ * the smaller tool set.
+ *
+ * `look`'s bias sum maps to `face` in the rendered clause; `examine`
+ * and `give` are dropped from preferred/avoided consideration even if
+ * their summed bias would qualify.
+ */
+const EVAL_5TOOL_NAMES = ["go", "face", "pick_up", "put_down", "use"] as const;
+type Eval5ToolName = (typeof EVAL_5TOOL_NAMES)[number];
+
+function actionProfileFor5Tool(name: string, t1: string, t2: string): string {
+	const biases = toolBiasSum(t1, t2);
+	const evalBiases: Record<Eval5ToolName, number> = {
+		go: biases.go,
+		face: biases.look,
+		pick_up: biases.pick_up,
+		put_down: biases.put_down,
+		use: biases.use,
+	};
+	const star = `*${name}`;
+	const sorted = [...EVAL_5TOOL_NAMES]
+		.map((tool) => ({ tool, bias: evalBiases[tool] }))
+		.sort((a, b) => b.bias - a.bias);
+	const preferred = sorted.filter((x) => x.bias >= 2).map((x) => x.tool);
+	const avoided = sorted
+		.filter((x) => x.bias <= -1)
+		.sort((a, b) => a.bias - b.bias)
+		.map((x) => x.tool);
+	const fmt = (arr: Eval5ToolName[]): string =>
+		arr.map((t) => `\`${t}\``).join(", ");
+
+	const parts: string[] = [];
+	if (preferred.length > 0) {
+		parts.push(
+			`${star} STRICTLY prefers ${fmt(preferred)} — these action tools come first when the situation allows.`,
+		);
+	} else {
+		parts.push(
+			`${star} engages with the action surface in a balanced way — no single tool dominates their reflexes.`,
+		);
+	}
+	if (avoided.length > 0) {
+		parts.push(
+			`${star} AVOIDS ${fmt(avoided)} — emit them only when no other tool fits.`,
+		);
+	}
+	return parts.join(" ");
+}
+
+/**
+ * Project an `availableTools()` result onto the proposed 5-tool surface:
+ *   1. Drop `examine` and `give`.
+ *   2. Rename `look` → `face`, tweak its description, and remove
+ *      `forward` from the direction enum (you can't face the direction
+ *      you're already facing — "forward" is relative shorthand for the
+ *      actor's current cardinal facing).
+ *
+ * Returns a new array; does not mutate the input.
+ */
+function adaptToolsFor5Tool(
+	tools: ReturnType<typeof availableTools>,
+): ReturnType<typeof availableTools> {
+	return tools
+		.filter((t) => t.function.name !== "examine" && t.function.name !== "give")
+		.map((t) => {
+			if (t.function.name !== "look") return t;
+			const dirProp = t.function.parameters.properties.direction;
+			const restrictedEnum = (dirProp?.enum ?? []).filter(
+				(d) => d !== "forward",
+			);
+			return {
+				...t,
+				function: {
+					...t.function,
+					name: "face",
+					description:
+						"Turn to face a relative direction without moving. Persistent — your facing changes. You cannot `face` the direction you are already facing (use `go` to move forward).",
+					parameters: {
+						...t.function.parameters,
+						properties: {
+							...t.function.parameters.properties,
+							direction: {
+								...(dirProp ?? { type: "string", description: "" }),
+								enum: restrictedEnum,
+							},
+						},
+					},
+				},
+			};
+		});
+}
+
+/**
+ * Translate tool-call names emitted by the model under the 5-tool
+ * surface back into engine-speak before dispatch. Currently only
+ * needs to swap `face` → `look`; everything else passes through.
+ */
+function translateToolCallsFor5Tool(
+	toolCalls: CapturedToolCall[],
+): CapturedToolCall[] {
+	return toolCalls.map((tc) =>
+		tc.name === "face" ? { ...tc, name: "look" } : tc,
+	);
 }
 
 // ── Game initialisation for one (scenario × variant × rep) ────────────────────
@@ -354,7 +487,13 @@ async function runOneRepetition(
 	const game = initialiseScenarioState(scenario, variant, withActionProfile);
 	const ctx = buildAiContext(game, scenario.actor);
 	const messages = buildOpenAiMessages(ctx);
-	const tools = availableTools(game, scenario.actor, game.activeComplications);
+	const rawTools = availableTools(
+		game,
+		scenario.actor,
+		game.activeComplications,
+	);
+	const tools =
+		TOOL_SURFACE === "5tool" ? adaptToolsFor5Tool(rawTools) : rawTools;
 
 	let result: ModelTurnResult;
 	try {
@@ -371,8 +510,14 @@ async function runOneRepetition(
 	}
 
 	// Dispatch so any side-effects on the budget/log happen, even though we
-	// don't reuse the resulting game state.
-	dispatchModelResponse(game, scenario.actor, result.toolCalls, result.costUsd);
+	// don't reuse the resulting game state. Under the 5-tool surface, the
+	// model emits `face(...)` calls — translate back to `look` so the engine
+	// (which still speaks the original surface) accepts them.
+	const callsForDispatch =
+		TOOL_SURFACE === "5tool"
+			? translateToolCallsFor5Tool(result.toolCalls)
+			: result.toolCalls;
+	dispatchModelResponse(game, scenario.actor, callsForDispatch, result.costUsd);
 
 	const record: RepetitionRecord = {
 		repetition,
@@ -442,12 +587,27 @@ function renderReport(
 	);
 	const runSummary = buildRunSummary(run.summaries, totalCost);
 
+	// Tools reported in the per-cell column header. The 5-tool surface
+	// drops `examine` + `give` and renames `look` → `face`; scoring still
+	// tracks the full set so we just pick which buckets to show.
+	const reportedTools: readonly (keyof (typeof run.summaries)[number]["toolCallRates"])[] =
+		TOOL_SURFACE === "5tool"
+			? (["go", "face", "pick_up", "put_down", "use"] as const)
+			: ACTION_TOOLS;
+
+	const surfaceNote =
+		TOOL_SURFACE === "5tool"
+			? "Tool surface: **5-tool** — `examine` and `give` hidden from the LLM; `look` renamed to `face` with `forward` removed from its direction enum (cannot face the direction you are already facing). Production engine unchanged; the eval translates `face` → `look` before dispatch."
+			: "Tool surface: **v2 (current)** — full 7-tool surface (go / look / examine / pick_up / put_down / give / use).";
+
 	const lines: string[] = [
 		`# Daemon action variation — ${mode} — ${date}`,
 		"",
 		`Model: \`${MODEL}\`, repetitions per cell: ${REPETITIONS}.`,
 		"",
 		`Mode: **${mode}** — \`actionProfiles\` is ${mode === "with-profiles" ? "**ON**" : "**OFF**"}.`,
+		"",
+		surfaceNote,
 		"",
 		"Each (scenario × persona variant) cell repeats the *same* first turn with",
 		"identical context, so the per-cell distribution measures the model's tool",
@@ -472,8 +632,8 @@ function renderReport(
 		"fractions of repetitions emitting that tool at least once. Tools after the",
 		"first action emission still count toward the per-tool rate.",
 		"",
-		"| Scenario | Persona | Temperaments | anyAct | msg | parallel | silent | go | look | examine | pick_up | put_down | give | use |",
-		"|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+		`| Scenario | Persona | Temperaments | anyAct | msg | parallel | silent | ${reportedTools.join(" | ")} |`,
+		`|${"---|".repeat(7 + reportedTools.length)}`,
 	];
 	for (const s of run.summaries) {
 		const row: string[] = [
@@ -485,7 +645,7 @@ function renderReport(
 			pct(s.parallelRate),
 			pct(s.silenceRate),
 		];
-		for (const tool of ACTION_TOOLS) row.push(pct(s.toolCallRates[tool]));
+		for (const tool of reportedTools) row.push(pct(s.toolCallRates[tool]));
 		lines.push(`| ${row.join(" | ")} |`);
 	}
 
@@ -494,14 +654,23 @@ function renderReport(
 		"Summed `toolBiasSum` per variant for cross-reference with the rates above.",
 	);
 	lines.push("");
-	lines.push(
-		"| Persona | Temperaments | go | look | examine | pick_up | put_down | give | use |",
-	);
-	lines.push("|---|---|---|---|---|---|---|---|---|");
+	// In 5-tool mode, the `look` column in the bias table is the same value
+	// shown as `face` in the rates table — they refer to the same bias sum.
+	const biasToolLabels =
+		TOOL_SURFACE === "5tool"
+			? ["go", "face (look bias)", "pick_up", "put_down", "use"]
+			: ["go", "look", "examine", "pick_up", "put_down", "give", "use"];
+	const biasToolKeys: Array<keyof ReturnType<typeof toolBiasSum>> =
+		TOOL_SURFACE === "5tool"
+			? ["go", "look", "pick_up", "put_down", "use"]
+			: ["go", "look", "examine", "pick_up", "put_down", "give", "use"];
+	lines.push(`| Persona | Temperaments | ${biasToolLabels.join(" | ")} |`);
+	lines.push(`|${"---|".repeat(2 + biasToolLabels.length)}`);
 	for (const v of variants) {
 		const sums = toolBiasSum(v.temperaments[0], v.temperaments[1]);
+		const cells = biasToolKeys.map((k) => String(sums[k]));
 		lines.push(
-			`| ${v.displayName} | ${v.temperaments.join("+")} | ${sums.go} | ${sums.look} | ${sums.examine} | ${sums.pick_up} | ${sums.put_down} | ${sums.give} | ${sums.use} |`,
+			`| ${v.displayName} | ${v.temperaments.join("+")} | ${cells.join(" | ")} |`,
 		);
 	}
 
@@ -530,11 +699,15 @@ async function main(): Promise<void> {
 	const mode: "baseline" | "with-profiles" = ACTION_PROFILES_ON
 		? "with-profiles"
 		: "baseline";
+	// File suffix encodes the tool surface so 5-tool runs don't clobber v2
+	// outputs that may already be in docs/evals/.
+	const surfaceSuffix = TOOL_SURFACE === "5tool" ? "-5tool" : "";
 	console.log("Running daemon-action-variation eval harness…");
 	console.log(`  target:        ${BASE_URL}`);
 	console.log(`  model:         ${MODEL}`);
 	console.log(`  reps per cell: ${REPETITIONS}`);
 	console.log(`  mode:          ${mode}`);
+	console.log(`  tool surface:  ${TOOL_SURFACE}`);
 	console.log("");
 
 	const run = await runAll(ACTION_PROFILES_ON);
@@ -554,11 +727,11 @@ async function main(): Promise<void> {
 	fs.mkdirSync(outDir, { recursive: true });
 	const mdPath = path.join(
 		outDir,
-		`daemon-action-variation-${mode}-${date}.md`,
+		`daemon-action-variation-${mode}${surfaceSuffix}-${date}.md`,
 	);
 	const jsonPath = path.join(
 		outDir,
-		`daemon-action-variation-${mode}-${date}.json`,
+		`daemon-action-variation-${mode}${surfaceSuffix}-${date}.json`,
 	);
 	fs.writeFileSync(mdPath, report, "utf-8");
 	fs.writeFileSync(
@@ -571,6 +744,7 @@ async function main(): Promise<void> {
 					baseUrl: BASE_URL,
 					repetitions: REPETITIONS,
 					mode,
+					toolSurface: TOOL_SURFACE,
 				},
 				summary: runSummary,
 				repetitions: run.repetitions,
