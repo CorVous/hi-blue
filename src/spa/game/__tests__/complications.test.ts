@@ -14,7 +14,6 @@ import {
 	toolDisableComplication,
 	weatherChangeComplication,
 } from "../complications.js";
-import { DEFAULT_LANDMARKS } from "../direction.js";
 import { startGame } from "../engine.js";
 import type {
 	ActiveComplication,
@@ -23,6 +22,7 @@ import type {
 	GridPosition,
 	WorldEntity,
 } from "../types.js";
+import { makeTestPack } from "./fixtures/make-test-pack.js";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -66,23 +66,21 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 	},
 };
 
+const RGC_AI_STARTS: ContentPack["aiStarts"] = {
+	red: { position: { row: 0, col: 0 }, facing: "north" },
+	green: { position: { row: 0, col: 1 }, facing: "north" },
+	cyan: { position: { row: 0, col: 2 }, facing: "north" },
+};
+
 /** Build a game with a specific weather value in the active phase. */
 function makeGameWithWeather(weather: string) {
-	const pack: ContentPack = {
+	const pack = makeTestPack([], {
 		setting: "abandoned subway station",
 		weather,
 		timeOfDay: "night",
-		objectivePairs: [],
-		interestingObjects: [],
-		obstacles: [],
-		landmarks: DEFAULT_LANDMARKS,
 		wallName: "wall",
-		aiStarts: {
-			red: { position: { row: 0, col: 0 }, facing: "north" },
-			green: { position: { row: 0, col: 1 }, facing: "north" },
-			cyan: { position: { row: 0, col: 2 }, facing: "north" },
-		},
-	};
+		aiStarts: RGC_AI_STARTS,
+	});
 	return startGame(TEST_PERSONAS, pack, { budgetPerAi: 5, rng: () => 0 });
 }
 
@@ -202,21 +200,13 @@ function makeObstacle(
  */
 function makeGameWithObstacle(obstaclePos: GridPosition, shiftFlavor?: string) {
 	const obstacle = makeObstacle("obs1", obstaclePos, shiftFlavor);
-	const pack: ContentPack = {
+	const pack = makeTestPack([obstacle], {
 		setting: "test setting",
 		weather: "clear",
 		timeOfDay: "day",
-		objectivePairs: [],
-		interestingObjects: [],
-		obstacles: [obstacle],
-		landmarks: DEFAULT_LANDMARKS,
 		wallName: "wall",
-		aiStarts: {
-			red: { position: { row: 0, col: 0 }, facing: "north" },
-			green: { position: { row: 0, col: 1 }, facing: "north" },
-			cyan: { position: { row: 0, col: 2 }, facing: "north" },
-		},
-	};
+		aiStarts: RGC_AI_STARTS,
+	});
 	return startGame(TEST_PERSONAS, pack, { budgetPerAi: 5, rng: () => 0 });
 }
 
@@ -272,21 +262,17 @@ describe("obstacleShiftComplication", () => {
 			{ row: 3, col: 2 },
 			"A heavy crate scrapes across the floor.",
 		);
-		const pack: ContentPack = {
+		const pack = makeTestPack([obstacle], {
 			setting: "test setting",
 			weather: "clear",
 			timeOfDay: "day",
-			objectivePairs: [],
-			interestingObjects: [],
-			obstacles: [obstacle],
-			landmarks: DEFAULT_LANDMARKS,
 			wallName: "wall",
 			aiStarts: {
 				red: { position: { row: 2, col: 2 }, facing: "south" }, // cone covers (3,2)
 				green: { position: { row: 0, col: 0 }, facing: "north" }, // cone does not cover (3,2)
 				cyan: { position: { row: 0, col: 1 }, facing: "north" }, // cone does not cover (3,2)
 			},
-		};
+		});
 		const started = startGame(TEST_PERSONAS, pack, {
 			budgetPerAi: 5,
 			rng: () => 0,
@@ -318,21 +304,17 @@ describe("obstacleShiftComplication", () => {
 	it("witnessed-obstacle-shift entry has correct obstacleId, fromCell, toCell, and flavor", () => {
 		const flavor = "A heavy crate scrapes across the floor.";
 		const obstacle = makeObstacle("obs1", { row: 3, col: 2 }, flavor);
-		const pack: ContentPack = {
+		const pack = makeTestPack([obstacle], {
 			setting: "test setting",
 			weather: "clear",
 			timeOfDay: "day",
-			objectivePairs: [],
-			interestingObjects: [],
-			obstacles: [obstacle],
-			landmarks: DEFAULT_LANDMARKS,
 			wallName: "wall",
 			aiStarts: {
 				red: { position: { row: 2, col: 2 }, facing: "south" }, // cone covers (3,2)
 				green: { position: { row: 0, col: 0 }, facing: "north" },
 				cyan: { position: { row: 0, col: 1 }, facing: "north" },
 			},
-		};
+		});
 		const started = startGame(TEST_PERSONAS, pack, {
 			budgetPerAi: 5,
 			rng: () => 0,
@@ -359,21 +341,17 @@ describe("obstacleShiftComplication", () => {
 	it("falls back to 'Something shifts.' when obstacle has no shiftFlavor", () => {
 		// Obstacle without shiftFlavor field
 		const obstacle = makeObstacle("obs1", { row: 3, col: 2 });
-		const pack: ContentPack = {
+		const pack = makeTestPack([obstacle], {
 			setting: "test setting",
 			weather: "clear",
 			timeOfDay: "day",
-			objectivePairs: [],
-			interestingObjects: [],
-			obstacles: [obstacle],
-			landmarks: DEFAULT_LANDMARKS,
 			wallName: "wall",
 			aiStarts: {
 				red: { position: { row: 2, col: 2 }, facing: "south" },
 				green: { position: { row: 0, col: 0 }, facing: "north" },
 				cyan: { position: { row: 0, col: 1 }, facing: "north" },
 			},
-		};
+		});
 		const started = startGame(TEST_PERSONAS, pack, {
 			budgetPerAi: 5,
 			rng: () => 0,

@@ -8,16 +8,11 @@
  * objectives.
  */
 import { describe, expect, it } from "vitest";
-import { DEFAULT_LANDMARKS } from "../direction";
 import { startGame } from "../engine";
 import { runRound } from "../round-coordinator";
 import { MockRoundLLMProvider } from "../round-llm-provider";
-import type {
-	AiPersona,
-	ContentPack,
-	ConvergenceObjective,
-	WorldEntity,
-} from "../types";
+import type { AiPersona, ConvergenceObjective, WorldEntity } from "../types";
+import { makeTestPack } from "./fixtures/make-test-pack";
 
 // ── Fixtures ───────────────────────────────────────────────────────────────────
 
@@ -80,23 +75,19 @@ const CONVERGENCE_OBJECT: WorldEntity = {
 	placementFlavor: "{actor} places it on the altar.",
 };
 
-const TEST_CONTENT_PACK: ContentPack = {
-	setting: "",
-	weather: "",
-	timeOfDay: "",
-	objectivePairs: [{ object: CONVERGENCE_OBJECT, space: CONVERGENCE_SPACE }],
-	interestingObjects: [],
-	obstacles: [],
-	landmarks: DEFAULT_LANDMARKS,
-	wallName: "wall",
-	// red at (4,4), green at (0,0), cyan at (0,2)
-	// cyan faces south so (4,4) is not in its cone.
-	aiStarts: {
-		red: { position: { row: 4, col: 4 }, facing: "north" },
-		green: { position: { row: 0, col: 0 }, facing: "south" },
-		cyan: { position: { row: 0, col: 2 }, facing: "south" },
+const TEST_CONTENT_PACK = makeTestPack(
+	[CONVERGENCE_OBJECT, CONVERGENCE_SPACE],
+	{
+		wallName: "wall",
+		// red at (4,4), green at (0,0), cyan at (0,2)
+		// cyan faces south so (4,4) is not in its cone.
+		aiStarts: {
+			red: { position: { row: 4, col: 4 }, facing: "north" },
+			green: { position: { row: 0, col: 0 }, facing: "south" },
+			cyan: { position: { row: 0, col: 2 }, facing: "south" },
+		},
 	},
-};
+);
 
 /** A ConvergenceObjective pointing at altar_space. */
 const CONVERGENCE_OBJECTIVE: ConvergenceObjective = {

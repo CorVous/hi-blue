@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_LANDMARKS } from "../direction";
 import {
 	dispatchAiTurn,
 	executeToolCall,
@@ -16,6 +15,7 @@ import type {
 	UseSpaceObjective,
 	WorldEntity,
 } from "../types";
+import { makeTestPack } from "./fixtures/make-test-pack";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -89,6 +89,18 @@ function makeEntity(
 	};
 }
 
+const RGC_AI_STARTS: ContentPack["aiStarts"] = {
+	red: { position: { row: 0, col: 0 }, facing: "north" },
+	green: { position: { row: 0, col: 1 }, facing: "north" },
+	cyan: { position: { row: 0, col: 2 }, facing: "north" },
+};
+
+const RGC_AI_STARTS_RED_SOUTH: ContentPack["aiStarts"] = {
+	red: { position: { row: 0, col: 0 }, facing: "south" },
+	green: { position: { row: 0, col: 1 }, facing: "north" },
+	cyan: { position: { row: 0, col: 2 }, facing: "north" },
+};
+
 /** Build a ContentPack for phase 1 with specific entities and AI starts. */
 function makePackWithEntities(
 	entities: {
@@ -102,21 +114,11 @@ function makePackWithEntities(
 	const obstacles = obstaclePositions.map((pos, i) =>
 		makeEntity(`obs${i}`, "obstacle", pos),
 	);
-	return {
+	return makeTestPack([flower, key, ...obstacles], {
 		setting: "test setting",
-		weather: "",
-		timeOfDay: "",
-		objectivePairs: [],
-		interestingObjects: [flower, key],
-		obstacles,
-		landmarks: DEFAULT_LANDMARKS,
 		wallName: "wall",
-		aiStarts: {
-			red: { position: { row: 0, col: 0 }, facing: "north" },
-			green: { position: { row: 0, col: 1 }, facing: "north" },
-			cyan: { position: { row: 0, col: 2 }, facing: "north" },
-		},
-	};
+		aiStarts: RGC_AI_STARTS,
+	});
 }
 
 /** Create a game with deterministic spatial placement: red→(0,0), green→(0,1), cyan→(0,2) */
@@ -349,21 +351,11 @@ describe("validateToolCall", () => {
 			holder: { row: 4, col: 4 },
 			pairsWithSpaceId: "space1",
 		};
-		const pack: ContentPack = {
+		const pack = makeTestPack([objObj, objSpace], {
 			setting: "test",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [{ object: objObj, space: objSpace }],
-			interestingObjects: [],
-			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
 			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "north" },
-				green: { position: { row: 0, col: 1 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
-			},
-		};
+			aiStarts: RGC_AI_STARTS,
+		});
 		const game = startGame(TEST_PERSONAS, pack, {
 			budgetPerAi: 5,
 			rng: FIXED_RNG,
@@ -395,21 +387,11 @@ describe("executeToolCall — use placement via front arc", () => {
 			examineDescription: "A stone pedestal.",
 			holder: { row: 1, col: 0 },
 		};
-		const pack: ContentPack = {
+		const pack = makeTestPack([gem, pedestal], {
 			setting: "test",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [{ object: gem, space: pedestal }],
-			interestingObjects: [],
-			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
 			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "south" },
-				green: { position: { row: 0, col: 1 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
-			},
-		};
+			aiStarts: RGC_AI_STARTS_RED_SOUTH,
+		});
 		const game = startGame(TEST_PERSONAS, pack, {
 			budgetPerAi: 5,
 			rng: FIXED_RNG,
@@ -440,21 +422,11 @@ describe("executeToolCall — use placement via front arc", () => {
 			examineDescription: "A stone pedestal.",
 			holder: { row: 1, col: 0 },
 		};
-		const pack: ContentPack = {
+		const pack = makeTestPack([gem, pedestal], {
 			setting: "test",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [{ object: gem, space: pedestal }],
-			interestingObjects: [],
-			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
 			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "north" },
-				green: { position: { row: 0, col: 1 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
-			},
-		};
+			aiStarts: RGC_AI_STARTS,
+		});
 		const game = startGame(TEST_PERSONAS, pack, {
 			budgetPerAi: 5,
 			rng: FIXED_RNG,
@@ -858,21 +830,11 @@ describe("dispatchAiTurn", () => {
 			examineDescription: "A pedestal.",
 			holder: { row: 0, col: 0 }, // red's cell
 		};
-		const pack: ContentPack = {
+		const pack = makeTestPack([gemObject, altarSpace], {
 			setting: "test",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [{ object: gemObject, space: altarSpace }],
-			interestingObjects: [],
-			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
 			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "north" },
-				green: { position: { row: 0, col: 1 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
-			},
-		};
+			aiStarts: RGC_AI_STARTS,
+		});
 		const game = startGame(TEST_PERSONAS, pack, {
 			budgetPerAi: 5,
 			rng: FIXED_RNG,
@@ -956,21 +918,11 @@ describe("dispatchAiTurn", () => {
 			examineDescription: "A pedestal.",
 			holder: { row: 3, col: 3 }, // different from red's cell (0,0)
 		};
-		const pack: ContentPack = {
+		const pack = makeTestPack([gemObject, altarSpace], {
 			setting: "test",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [{ object: gemObject, space: altarSpace }],
-			interestingObjects: [],
-			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
 			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "north" },
-				green: { position: { row: 0, col: 1 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
-			},
-		};
+			aiStarts: RGC_AI_STARTS,
+		});
 		const game = startGame(TEST_PERSONAS, pack, {
 			budgetPerAi: 5,
 			rng: FIXED_RNG,
@@ -1004,21 +956,15 @@ describe("dispatchAiTurn", () => {
 			row: 2,
 			col: 0,
 		});
-		const packWithCone: ContentPack = {
+		const packWithCone = makeTestPack([flower], {
 			setting: "cone test",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [],
-			interestingObjects: [flower],
-			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
 			wallName: "wall",
 			aiStarts: {
 				red: { position: { row: 2, col: 0 }, facing: "south" },
 				green: { position: { row: 0, col: 0 }, facing: "south" },
 				cyan: { position: { row: 0, col: 2 }, facing: "south" },
 			},
-		};
+		});
 		const coneGame = startGame(TEST_PERSONAS, packWithCone, {
 			budgetPerAi: 5,
 			rng: FIXED_RNG,
@@ -1377,21 +1323,15 @@ function makeGameWithSpaceObjective(
 		satisfactionState: "pending",
 		spaceId: "shrine",
 	};
-	const pack: ContentPack = {
+	const pack = makeTestPack([obj, space], {
 		setting: "test",
-		weather: "",
-		timeOfDay: "",
-		objectivePairs: [{ object: obj, space }],
-		interestingObjects: [],
-		obstacles: [],
-		landmarks: DEFAULT_LANDMARKS,
 		wallName: "wall",
 		aiStarts: {
 			red: { position: actorPos, facing: actorFacing },
 			green: { position: { row: 0, col: 0 }, facing: "north" },
 			cyan: { position: { row: 4, col: 4 }, facing: "north" },
 		},
-	};
+	});
 	const started = startGame(TEST_PERSONAS, pack, {
 		budgetPerAi: 5,
 		rng: () => 0,
@@ -1527,14 +1467,8 @@ describe("dispatchAiTurn — use on objective_space witnesses satisfactionFlavor
 			satisfactionState: "pending",
 			spaceId: "shrine",
 		};
-		const pack: ContentPack = {
+		const pack = makeTestPack([obj, space], {
 			setting: "test",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [{ object: obj, space }],
-			interestingObjects: [],
-			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
 			wallName: "wall",
 			aiStarts: {
 				// red at (2,2) facing south
@@ -1543,7 +1477,7 @@ describe("dispatchAiTurn — use on objective_space witnesses satisfactionFlavor
 				green: { position: { row: 2, col: 0 }, facing: "east" },
 				cyan: { position: { row: 4, col: 4 }, facing: "north" },
 			},
-		};
+		});
 		const started = startGame(TEST_PERSONAS, pack, {
 			budgetPerAi: 5,
 			rng: () => 0,
@@ -1798,21 +1732,15 @@ describe("dispatchAiTurn — use on objective_space surfaces activationFlavor to
 			satisfactionState: "pending",
 			spaceId: "shrine",
 		};
-		const pack: ContentPack = {
+		const pack = makeTestPack([obj, space], {
 			setting: "test",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [{ object: obj, space }],
-			interestingObjects: [],
-			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
 			wallName: "wall",
 			aiStarts: {
 				red: { position: { row: 2, col: 2 }, facing: "south" },
 				green: { position: { row: 2, col: 0 }, facing: "east" },
 				cyan: { position: { row: 4, col: 4 }, facing: "north" },
 			},
-		};
+		});
 		const started = startGame(TEST_PERSONAS, pack, {
 			budgetPerAi: 5,
 			rng: () => 0,

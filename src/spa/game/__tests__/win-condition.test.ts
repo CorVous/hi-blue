@@ -9,7 +9,6 @@
  * null otherwise.
  */
 import { describe, expect, it } from "vitest";
-import { DEFAULT_LANDMARKS } from "../direction";
 import type {
 	AiTurnAction,
 	CarryObjective,
@@ -32,6 +31,7 @@ import {
 	isUseItemObjectiveSatisfied,
 	isUseSpaceObjectiveSatisfied,
 } from "../win-condition";
+import { makeTestPack } from "./fixtures/make-test-pack";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -63,17 +63,8 @@ function makeObjectivePair(
 }
 
 function makeContentPack(pairs: ObjectivePair[]): ContentPack {
-	return {
-		setting: "test",
-		weather: "",
-		timeOfDay: "",
-		objectivePairs: pairs,
-		interestingObjects: [],
-		obstacles: [],
-		landmarks: DEFAULT_LANDMARKS,
-		wallName: "wall",
-		aiStarts: {},
-	};
+	const entities = pairs.flatMap((p) => [p.object, p.space]);
+	return makeTestPack(entities, { setting: "test", wallName: "wall" });
 }
 
 function makeWorld(entities: WorldEntity[]): WorldState {

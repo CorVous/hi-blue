@@ -9,12 +9,12 @@
  *   4. Keeps sysadmin messages private (only target's log receives them).
  */
 import { describe, expect, it } from "vitest";
-import { DEFAULT_LANDMARKS } from "../direction";
 import { appendMessage, startGame } from "../engine";
 import { buildAiContext } from "../prompt-builder";
 import { runRound } from "../round-coordinator";
 import { MockRoundLLMProvider } from "../round-llm-provider";
-import type { AiId, AiPersona, ContentPack } from "../types";
+import type { AiId, AiPersona } from "../types";
+import { makeTestPack } from "./fixtures/make-test-pack";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -54,21 +54,14 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 	},
 };
 
-const TEST_CONTENT_PACK: ContentPack = {
-	setting: "",
-	weather: "",
-	timeOfDay: "",
-	objectivePairs: [],
-	interestingObjects: [],
-	obstacles: [],
-	landmarks: DEFAULT_LANDMARKS,
+const TEST_CONTENT_PACK = makeTestPack([], {
 	wallName: "wall",
 	aiStarts: {
 		red: { position: { row: 0, col: 0 }, facing: "north" },
 		green: { position: { row: 0, col: 1 }, facing: "north" },
 		cyan: { position: { row: 0, col: 2 }, facing: "north" },
 	},
-};
+});
 
 function makeGame() {
 	return startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });

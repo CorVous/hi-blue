@@ -13,11 +13,11 @@
  */
 import { describe, expect, it } from "vitest";
 import type { OpenAiMessage } from "../../llm-client";
-import { DEFAULT_LANDMARKS } from "../direction";
 import { GameSession } from "../game-session";
 import type { RoundLLMProvider } from "../round-llm-provider";
 import { MockRoundLLMProvider } from "../round-llm-provider";
 import type { AiPersona, ContentPack } from "../types";
+import { makeTestPack } from "./fixtures/make-test-pack";
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -63,25 +63,21 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 	},
 };
 
+const RGC_AI_STARTS: ContentPack["aiStarts"] = {
+	red: { position: { row: 0, col: 0 }, facing: "north" },
+	green: { position: { row: 0, col: 1 }, facing: "north" },
+	cyan: { position: { row: 0, col: 2 }, facing: "north" },
+};
+
 /**
  * Minimal ContentPack with no objective pairs (vacuous win = always true).
  * Used by tests that don't care about world content.
  */
-const MINIMAL_CONTENT_PACK: ContentPack = {
+const MINIMAL_CONTENT_PACK = makeTestPack([], {
 	setting: "test station",
-	weather: "",
-	timeOfDay: "",
-	objectivePairs: [],
-	interestingObjects: [],
-	obstacles: [],
-	landmarks: DEFAULT_LANDMARKS,
 	wallName: "wall",
-	aiStarts: {
-		red: { position: { row: 0, col: 0 }, facing: "north" },
-		green: { position: { row: 0, col: 1 }, facing: "north" },
-		cyan: { position: { row: 0, col: 2 }, facing: "north" },
-	},
-};
+	aiStarts: RGC_AI_STARTS,
+});
 
 /**
  * A ContentPack fixture that places carry-0-obj at (0,0) and key held by red,
@@ -89,30 +85,23 @@ const MINIMAL_CONTENT_PACK: ContentPack = {
  * Uses type-first entity IDs so buildObjectiveRecords can create carry objectives
  * when CONTENT_PACK_OBJECTIVE_TYPES is passed to GameSession.
  */
-const CONTENT_PACK_WITH_ITEMS: ContentPack = {
-	setting: "test setting",
-	weather: "",
-	timeOfDay: "",
-	objectivePairs: [
+const CONTENT_PACK_WITH_ITEMS = makeTestPack(
+	[
 		{
-			object: {
-				id: "carry-0-obj",
-				kind: "objective_object",
-				name: "flower",
-				examineDescription: "A flower",
-				holder: { row: 0, col: 0 },
-				pairsWithSpaceId: "carry-0-space",
-			},
-			space: {
-				id: "carry-0-space",
-				kind: "objective_space",
-				name: "flower space",
-				examineDescription: "A designated space",
-				holder: { row: 4, col: 4 },
-			},
+			id: "carry-0-obj",
+			kind: "objective_object",
+			name: "flower",
+			examineDescription: "A flower",
+			holder: { row: 0, col: 0 },
+			pairsWithSpaceId: "carry-0-space",
 		},
-	],
-	interestingObjects: [
+		{
+			id: "carry-0-space",
+			kind: "objective_space",
+			name: "flower space",
+			examineDescription: "A designated space",
+			holder: { row: 4, col: 4 },
+		},
 		{
 			id: "key",
 			kind: "interesting_object",
@@ -121,15 +110,12 @@ const CONTENT_PACK_WITH_ITEMS: ContentPack = {
 			holder: { row: 1, col: 1 },
 		},
 	],
-	obstacles: [],
-	landmarks: DEFAULT_LANDMARKS,
-	wallName: "wall",
-	aiStarts: {
-		red: { position: { row: 0, col: 0 }, facing: "north" },
-		green: { position: { row: 0, col: 1 }, facing: "north" },
-		cyan: { position: { row: 0, col: 2 }, facing: "north" },
+	{
+		setting: "test setting",
+		wallName: "wall",
+		aiStarts: RGC_AI_STARTS,
 	},
-};
+);
 
 /** Objective types matching CONTENT_PACK_WITH_ITEMS (one carry at index 0). */
 const CONTENT_PACK_OBJECTIVE_TYPES: import("../types.js").ObjectiveType[] = [
@@ -138,6 +124,8 @@ const CONTENT_PACK_OBJECTIVE_TYPES: import("../types.js").ObjectiveType[] = [
 
 /**
  * ContentPack with key held by red (for the non-adjacent give test).
+ * Override the bucketed interestingObjects directly since we're swapping a
+ * single entity within a pack derived from CONTENT_PACK_WITH_ITEMS.
  */
 const CONTENT_PACK_KEY_HELD_BY_RED: ContentPack = {
 	...CONTENT_PACK_WITH_ITEMS,

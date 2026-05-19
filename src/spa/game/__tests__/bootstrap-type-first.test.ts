@@ -10,12 +10,12 @@
  * works end-to-end using static fixtures (no LLM call).
  */
 import { describe, expect, it } from "vitest";
-import { DEFAULT_LANDMARKS } from "../direction.js";
 import { startGame } from "../engine.js";
 import { GameSession } from "../game-session.js";
 import { buildObjectiveRecords } from "../objective-record-builder.js";
 import { rollObjectiveTypes } from "../objective-type-roll.js";
-import type { AiPersona, ContentPack, ObjectiveType } from "../types.js";
+import type { AiPersona, ObjectiveType } from "../types.js";
+import { makeTestPack } from "./fixtures/make-test-pack.js";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -56,39 +56,36 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
  * A content pack pre-minted with type-first convention IDs for a single
  * "carry" objective (carry-0-obj → carry-0-space).
  */
-const CARRY_PACK: ContentPack = {
-	setting: "abandoned subway station",
-	weather: "foggy",
-	timeOfDay: "midnight",
-	objectivePairs: [
+const CARRY_PACK = makeTestPack(
+	[
 		{
-			object: {
-				id: "carry-0-obj",
-				kind: "objective_object",
-				name: "cracked lantern",
-				examineDescription: "A cracked lantern that flickers faintly.",
-				holder: { row: 2, col: 2 },
-				pairsWithSpaceId: "carry-0-space",
-			},
-			space: {
-				id: "carry-0-space",
-				kind: "objective_space",
-				name: "maintenance alcove",
-				examineDescription: "A small alcove with a hook on the wall.",
-				holder: { row: 4, col: 4 },
-			},
+			id: "carry-0-obj",
+			kind: "objective_object",
+			name: "cracked lantern",
+			examineDescription: "A cracked lantern that flickers faintly.",
+			holder: { row: 2, col: 2 },
+			pairsWithSpaceId: "carry-0-space",
+		},
+		{
+			id: "carry-0-space",
+			kind: "objective_space",
+			name: "maintenance alcove",
+			examineDescription: "A small alcove with a hook on the wall.",
+			holder: { row: 4, col: 4 },
 		},
 	],
-	interestingObjects: [],
-	obstacles: [],
-	landmarks: DEFAULT_LANDMARKS,
-	wallName: "tunnel wall",
-	aiStarts: {
-		red: { position: { row: 0, col: 0 }, facing: "north" },
-		green: { position: { row: 0, col: 1 }, facing: "north" },
-		cyan: { position: { row: 0, col: 2 }, facing: "north" },
+	{
+		setting: "abandoned subway station",
+		weather: "foggy",
+		timeOfDay: "midnight",
+		wallName: "tunnel wall",
+		aiStarts: {
+			red: { position: { row: 0, col: 0 }, facing: "north" },
+			green: { position: { row: 0, col: 1 }, facing: "north" },
+			cyan: { position: { row: 0, col: 2 }, facing: "north" },
+		},
 	},
-};
+);
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 

@@ -8,15 +8,14 @@
 
 import { describe, expect, it } from "vitest";
 import { availableTools } from "../available-tools.js";
-import { DEFAULT_LANDMARKS } from "../direction.js";
 import { startGame } from "../engine.js";
 import type {
 	ActiveComplication,
 	AiPersona,
-	ContentPack,
 	GameState,
 	WorldEntity,
 } from "../types.js";
+import { makeTestPack } from "./fixtures/make-test-pack.js";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -55,21 +54,17 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 
 /** Build a minimal game with three daemons and no interesting entities in the world. */
 function makeGame() {
-	const pack: ContentPack = {
+	const pack = makeTestPack([], {
 		setting: "abandoned subway station",
 		weather: "clear",
 		timeOfDay: "night",
-		objectivePairs: [],
-		interestingObjects: [],
-		obstacles: [],
-		landmarks: DEFAULT_LANDMARKS,
 		wallName: "wall",
 		aiStarts: {
 			red: { position: { row: 2, col: 2 }, facing: "north" },
 			green: { position: { row: 0, col: 0 }, facing: "north" },
 			cyan: { position: { row: 4, col: 4 }, facing: "south" },
 		},
-	};
+	});
 	return startGame(TEST_PERSONAS, pack, { budgetPerAi: 5, rng: () => 0 });
 }
 
@@ -237,21 +232,15 @@ function makeGameWithSpace(
 		holder: { row: 0, col: 0 },
 		pairsWithSpaceId: "space1",
 	};
-	const pack: ContentPack = {
+	const pack = makeTestPack([obj, space], {
 		setting: "test",
-		weather: "",
-		timeOfDay: "",
-		objectivePairs: [{ object: obj, space }],
-		interestingObjects: [],
-		obstacles: [],
-		landmarks: DEFAULT_LANDMARKS,
 		wallName: "wall",
 		aiStarts: {
 			red: { position: { row: 2, col: 2 }, facing: actorFacing },
 			green: { position: { row: 0, col: 0 }, facing: "north" },
 			cyan: { position: { row: 4, col: 4 }, facing: "south" },
 		},
-	};
+	});
 	return startGame(TEST_PERSONAS, pack, { budgetPerAi: 5, rng: () => 0 });
 }
 
