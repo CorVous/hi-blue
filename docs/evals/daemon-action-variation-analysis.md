@@ -1,9 +1,69 @@
-# Daemon action variation — v2 (directive clauses) results
+# Daemon action variation — eval analysis
 
 **Date:** 2026-05-19
 **Model:** `z-ai/glm-4.7`
 **Reps:** 20 per (scenario × persona) cell — 240 reps per run
-**Cost:** baseline $0.22 + v2 treatment $0.26 = $0.48
+
+This file aggregates two pairs of runs:
+
+1. **v2 (7-tool surface, directive clauses)** — baseline $0.22 + treatment $0.26 = $0.48
+2. **5-tool surface projection** (remove `examine` + `give`, rename `look` →
+   `face`, disallow `face(forward)`) — baseline $0.22 + treatment $0.24 = $0.46
+
+The 5-tool section is the headline since it covers the proposed production
+surface change. v2 results remain valid as the calibration data for the
+current production engine.
+
+## Headline: 5-tool surface, treatment vs. baseline
+
+| Metric | Baseline (5-tool, no profiles) | Treatment (5-tool + profiles) | Δ |
+|---|---|---|---|
+| Any action emission | 52% | **73%** | **+21 pp** |
+| Any `message` emission | 94% | 87% | −7 |
+| Parallel (msg + action) | 46% | **60%** | **+14** |
+| Silent | 0% | 0% | 0 |
+| `use` emission rate | 19% | 18% | −1 |
+
+**The directive clauses produce a 21pp lift in any-action emission on the
+5-tool surface.** That's the "20% variance" the calibration goal was aiming
+for, reached because without `examine` to fall back on, the baseline has more
+headroom for the clause to lift.
+
+### Per-cell highlights — 5-tool
+
+| Cell | metric | baseline | treatment | Δ pp |
+|---|---|---|---|---|
+| exploration × Ember | anyAct  | 0%  | **70%** | **+70** |
+| exploration × Vex   | anyAct  | 40% | **95%** | **+55** |
+| exploration × Pip   | anyAct  | 10% | **60%** | **+50** |
+| exploration × Pip   | pick_up | 0%  | **55%** | **+55** |
+| social × Vex        | anyAct  | 40% | **90%** | **+50** |
+| social × Vex        | parallel| 40% | **90%** | **+50** |
+| social × Vex        | go      | 40% | **80%** | **+40** |
+| examination × Ember | go      | 5%  | 20%     | +15 |
+
+### Per-tool aggregate (5-tool, sum across 12 cells)
+
+| Tool | Baseline | Treatment | Δ |
+|---|---|---|---|
+| `go`      | 95%  | **195%** | +100 pp (~2×) |
+| `face`    | 10%  | **150%** | **+140 pp (~15×)** |
+| `pick_up` | 290% | 360%  | +70 |
+| `use`     | 230% | 215%  | −15 |
+| `message` | 1265%| 1175% | −90 |
+
+`face` is a new lexical element to the model — the baseline rarely uses it.
+The directive clause naming `face` in preferred lists is what teaches the
+model to reach for it.
+
+### Tradeoff — 5-tool
+
+**Vex objective parallel −20 pp.** Vex emits `use` at 100% in both runs
+(critical-path correctness is preserved), but treatment cuts companion
+`message` from 95% → 75%. The action-heavy directive suppresses messaging
+when the daemon already knows what to do.
+
+## v2 (7-tool surface, directive clauses)
 
 Second iteration of the
 [daemon-action-variation eval](./daemon-action-variation-with-profiles-2026-05-19.md).
