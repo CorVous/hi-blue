@@ -14,6 +14,7 @@ import {
 	deductBudget,
 	isAiLockedOut,
 } from "./engine";
+import { carryObjectById } from "./pack-selectors.js";
 import {
 	buildAiContext,
 	buildConeSnapshot,
@@ -680,9 +681,10 @@ export function dispatchAiTurn(
 						// Find the raw placementFlavor (before {actor} substitution)
 						// by looking at the content pack's object entity definition
 						const itemId = call.args.item;
-						const packObject = state.contentPack.objectivePairs
-							.map((p) => p.object)
-							.find((o) => o.id === itemId);
+						const packObject =
+							itemId !== undefined
+								? carryObjectById(itemId, state.contentPack)
+								: undefined;
 						if (packObject?.placementFlavor && flavorDescription) {
 							// flavorDescription is non-null only when the match fired
 							placementFlavorRaw = packObject.placementFlavor;

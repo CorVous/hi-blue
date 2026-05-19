@@ -1315,11 +1315,20 @@ export function validateContentPacks(
 				? pack.wallName
 				: "";
 
+		// Flatten the buckets into the canonical entities array used by
+		// ContentPack (v11+): per pair, object then space; then interesting
+		// objects; then obstacles.
+		const entities: WorldEntity[] = [];
+		for (const pair of objectivePairs) {
+			entities.push(pair.object);
+			entities.push(pair.space);
+		}
+		for (const io of interestingObjects) entities.push(io);
+		for (const ob of obstacles) entities.push(ob);
+
 		packs.push({
 			setting: pack.setting as string,
-			objectivePairs,
-			interestingObjects,
-			obstacles,
+			entities,
 			landmarks,
 			wallName,
 			aiStarts: {} as Record<AiId, never>,
@@ -1443,13 +1452,17 @@ export function validateDualContentPacks(
 			continue;
 		}
 
-		// Enforce pairsWithSpaceId parity
-		const pairingsA = new Map(
-			packA.objectivePairs.map((p) => [p.object.id, p.object.pairsWithSpaceId]),
-		);
-		const pairingsB = new Map(
-			packB.objectivePairs.map((p) => [p.object.id, p.object.pairsWithSpaceId]),
-		);
+		// Enforce pairsWithSpaceId parity (walk entities directly — no buckets).
+		const pairingsA = new Map<string, string | undefined>();
+		for (const e of packA.entities) {
+			if (e.kind === "objective_object")
+				pairingsA.set(e.id, e.pairsWithSpaceId);
+		}
+		const pairingsB = new Map<string, string | undefined>();
+		for (const e of packB.entities) {
+			if (e.kind === "objective_object")
+				pairingsB.set(e.id, e.pairsWithSpaceId);
+		}
 		for (const [objId, spaceId] of pairingsA) {
 			if (pairingsB.get(objId) !== spaceId) {
 				errors.push({
@@ -1708,11 +1721,20 @@ function validateSinglePack(
 			? pack.wallName
 			: "";
 
+	// Flatten the buckets into the canonical entities array used by
+	// ContentPack (v11+): per pair, object then space; then interesting
+	// objects; then obstacles.
+	const entities: WorldEntity[] = [];
+	for (const pair of objectivePairs) {
+		entities.push(pair.object);
+		entities.push(pair.space);
+	}
+	for (const io of interestingObjects) entities.push(io);
+	for (const ob of obstacles) entities.push(ob);
+
 	return {
 		setting: pack.setting,
-		objectivePairs,
-		interestingObjects,
-		obstacles,
+		entities,
 		landmarks,
 		wallName,
 		aiStarts: {} as Record<AiId, never>,

@@ -20,6 +20,21 @@ import {
 	validateDualContentPacks,
 	validateDualContentPacksOrThrow,
 } from "../content-pack-provider.js";
+import {
+	carryPairs,
+	interestingObjects,
+	obstacles,
+} from "../pack-selectors.js";
+import type { ContentPack } from "../types.js";
+
+/**
+ * Test-only narrowing helper: the validator returns a ContentPack-shaped pack
+ * (sans aiStarts/weather/timeOfDay). Cast it for selector consumption so the
+ * tests can assert against the bucketed views derived by pack-selectors.ts.
+ */
+function asPack(p: unknown): ContentPack {
+	return p as ContentPack;
+}
 
 /**
  * Run `fn` and assert it does NOT throw, but that a `console.warn` call was
@@ -245,7 +260,8 @@ describe("validateContentPacks — prose tell contract", () => {
 			),
 			input,
 		);
-		const pair = result.packs[0]?.objectivePairs[0];
+		const pack0 = result.packs[0];
+		const pair = pack0 ? carryPairs(asPack(pack0))[0] : undefined;
 		expect(pair).toBeDefined();
 		if (!pair) return;
 		expect(
@@ -303,7 +319,8 @@ describe("validateContentPacks — prose tell contract", () => {
 			),
 			input,
 		);
-		const pair = result.packs[0]?.objectivePairs[0];
+		const pack0 = result.packs[0];
+		const pair = pack0 ? carryPairs(asPack(pack0))[0] : undefined;
 		expect(pair?.object.proximityFlavor).toBe(
 			"The key hums faintly near the pedestal.",
 		);
@@ -371,7 +388,8 @@ describe("validateContentPacks — obstacle shiftFlavor validation", () => {
 			),
 			inputWithObstacle,
 		);
-		const obstacle = result.packs[0]?.obstacles[0];
+		const pack0 = result.packs[0];
+		const obstacle = pack0 ? obstacles(asPack(pack0))[0] : undefined;
 		expect(obstacle?.shiftFlavor).toBe(
 			"The rusted gate scrapes along the floor with a grinding shriek.",
 		);
@@ -419,7 +437,8 @@ describe("validateContentPacks — obstacle shiftFlavor validation", () => {
 			buildObstacleResponse(flavor),
 			inputWithObstacle,
 		);
-		const obstacle = result.packs[0]?.obstacles[0];
+		const pack0 = result.packs[0];
+		const obstacle = pack0 ? obstacles(asPack(pack0))[0] : undefined;
 		expect(obstacle?.shiftFlavor).toBe(flavor);
 	});
 
@@ -610,7 +629,8 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 			),
 			inputWithPair,
 		);
-		const space = result.packs[0]?.objectivePairs[0]?.space;
+		const pack0 = result.packs[0];
+		const space = pack0 ? carryPairs(asPack(pack0))[0]?.space : undefined;
 		expect(space?.convergenceTier1Flavor).toBe(
 			"A lone figure stands at the pedestal.",
 		);
@@ -711,7 +731,8 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 			buildConvergenceResponse(),
 			inputWithPair,
 		);
-		const space = result.packs[0]?.objectivePairs[0]?.space;
+		const pack0 = result.packs[0];
+		const space = pack0 ? carryPairs(asPack(pack0))[0]?.space : undefined;
 		expect(space?.convergenceTier1ActorFlavor).toBe(
 			"You linger at the pedestal; the place feels poised for company.",
 		);
@@ -986,7 +1007,8 @@ describe("validateContentPacks — interesting_object Use-Item flavor validation
 			buildInterestingResponse({}),
 			inputWithInteresting,
 		);
-		const item = result.packs[0]?.interestingObjects[0];
+		const pack0 = result.packs[0];
+		const item = pack0 ? interestingObjects(asPack(pack0))[0] : undefined;
 		expect(item?.activationFlavor).toContain("mechanical thunk");
 		expect(item?.postExamineDescription).toContain("locked in its on position");
 		expect(item?.postLookFlavor).toContain("amber pinpoint");
@@ -1128,7 +1150,8 @@ describe("validateContentPacks — interesting_object Use-Item flavor validation
 			buildInterestingResponse({ postLookFlavor: undefined }),
 			inputWithInteresting,
 		);
-		const item = result.packs[0]?.interestingObjects[0];
+		const pack0 = result.packs[0];
+		const item = pack0 ? interestingObjects(asPack(pack0))[0] : undefined;
 		expect(item?.activationFlavor).toBeDefined();
 		expect(item?.postLookFlavor).toBeUndefined();
 	});
@@ -1218,7 +1241,8 @@ describe("validateContentPacks — objective_space activationFlavor & prose tell
 			}),
 			inputWithPair,
 		);
-		const space = result.packs[0]?.objectivePairs[0]?.space;
+		const pack0 = result.packs[0];
+		const space = pack0 ? carryPairs(asPack(pack0))[0]?.space : undefined;
 		expect(space?.activationFlavor).toBe(
 			"The pedestal hums to life and its runes glow.",
 		);
@@ -1581,8 +1605,13 @@ describe("validateDualContentPacks — objective_space activationFlavor", () => 
 			),
 			dualInput,
 		);
-		const packA = result.phases[0]?.packA.objectivePairs[0]?.space;
-		const packB = result.phases[0]?.packB.objectivePairs[0]?.space;
+		const phase0 = result.phases[0];
+		const packA = phase0
+			? carryPairs(asPack(phase0.packA))[0]?.space
+			: undefined;
+		const packB = phase0
+			? carryPairs(asPack(phase0.packB))[0]?.space
+			: undefined;
 		expect(packA?.activationFlavor).toBe(
 			"The pedestal hums to life and its runes glow.",
 		);
@@ -1697,12 +1726,13 @@ describe("validateDualContentPacks — obstacle shiftFlavor validation", () => {
 			),
 			dualInputWithObstacle,
 		);
-		expect(result.phases[0]?.packA.obstacles[0]?.shiftFlavor).toBe(
-			"The rusted gate scrapes along the floor.",
-		);
-		expect(result.phases[0]?.packB.obstacles[0]?.shiftFlavor).toBe(
-			"The mossy gate slides through wet leaves.",
-		);
+		const phase0 = result.phases[0];
+		expect(
+			phase0 ? obstacles(asPack(phase0.packA))[0]?.shiftFlavor : undefined,
+		).toBe("The rusted gate scrapes along the floor.");
+		expect(
+			phase0 ? obstacles(asPack(phase0.packB))[0]?.shiftFlavor : undefined,
+		).toBe("The mossy gate slides through wet leaves.");
 	});
 
 	it("rejects a dual-pack obstacle missing shiftFlavor on packA", () => {

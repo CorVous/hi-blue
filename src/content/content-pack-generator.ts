@@ -30,12 +30,17 @@ import type {
 	DualBindingContentPackInput,
 } from "../spa/game/content-pack-provider.js";
 import { rollObjectiveTypes } from "../spa/game/objective-type-roll.js";
+import {
+	boundSpaces,
+	carryPairs,
+	interestingObjects,
+	obstacles as obstacleEntities,
+} from "../spa/game/pack-selectors.js";
 import type {
 	AiId,
 	CardinalDirection,
 	ContentPack,
 	GridPosition,
-	ObjectivePair,
 	ObjectiveType,
 	PersonaSpatialState,
 	WorldEntity,
@@ -165,11 +170,16 @@ function tryPlacePhase(
 	pack: ContentPack,
 	aiIds: AiId[],
 ): ContentPack | null {
-	const k = pack.objectivePairs.length; // carry pairs
-	const s = (pack.boundSpaces ?? []).length; // standalone bound spaces
+	const packCarryPairs = carryPairs(pack);
+	const packBoundSpaces = boundSpaces(pack);
+	const packInteresting = interestingObjects(pack);
+	const packObstacles = obstacleEntities(pack);
+
+	const k = packCarryPairs.length; // carry pairs
+	const s = packBoundSpaces.length; // standalone bound spaces
 	const totalSpaces = k + s;
-	const n = pack.interestingObjects.length;
-	const m = pack.obstacles.length;
+	const n = packInteresting.length;
+	const m = packObstacles.length;
 
 	// nonObstacleNeeded: AI starts + all spaces + carry objects + interesting objects
 	const nonObstacleNeeded = aiIds.length + totalSpaces + k + n;
@@ -246,39 +256,32 @@ function tryPlacePhase(
 		}
 	}
 
-	// Build updated pack with placements
-	const updatedObjectivePairs = pack.objectivePairs.map((pair, i) => {
-		const spaceKey = spaceKeys[i] as number;
-		const objectKey = objectKeys[i] as number;
-		return {
-			object: { ...pair.object, holder: keyToPos(objectKey) },
-			space: { ...pair.space, holder: keyToPos(spaceKey) },
-		};
+	// Build holder map keyed by entity id from the placement draws.
+	const holderById = new Map<string, GridPosition>();
+	packCarryPairs.forEach((pair, i) => {
+		holderById.set(pair.object.id, keyToPos(objectKeys[i] as number));
+		holderById.set(pair.space.id, keyToPos(spaceKeys[i] as number));
+	});
+	const standaloneSpaceKeys = allSpaceKeys.slice(k);
+	packBoundSpaces.forEach((space, i) => {
+		holderById.set(space.id, keyToPos(standaloneSpaceKeys[i] as number));
+	});
+	packInteresting.forEach((obj, i) => {
+		holderById.set(obj.id, keyToPos(interestingKeys[i] as number));
+	});
+	packObstacles.forEach((obs, i) => {
+		holderById.set(obs.id, keyToPos(obstacleKeys[i] as number));
 	});
 
-	const updatedInterestingObjects = pack.interestingObjects.map((obj, i) => ({
-		...obj,
-		holder: keyToPos(interestingKeys[i] as number),
-	}));
-
-	const updatedObstacles = pack.obstacles.map((obs, i) => ({
-		...obs,
-		holder: keyToPos(obstacleKeys[i] as number),
-	}));
-
-	// Place standalone bound spaces
-	const standaloneSpaceKeys = allSpaceKeys.slice(k);
-	const updatedBoundSpaces = (pack.boundSpaces ?? []).map((space, i) => ({
-		...space,
-		holder: keyToPos(standaloneSpaceKeys[i] as number),
-	}));
+	// Write the placements back via one entities.map, preserving pack-order.
+	const updatedEntities = pack.entities.map((entity) => {
+		const holder = holderById.get(entity.id);
+		return holder !== undefined ? { ...entity, holder } : entity;
+	});
 
 	return {
 		...pack,
-		objectivePairs: updatedObjectivePairs,
-		interestingObjects: updatedInterestingObjects,
-		obstacles: updatedObstacles,
-		boundSpaces: updatedBoundSpaces,
+		entities: updatedEntities,
 		aiStarts,
 	};
 }
@@ -299,15 +302,20 @@ function placePhases(
 		}
 		throw new Error(
 			`generateContentPacks: could not place phase ${i + 1} after ${MAX_ATTEMPTS} attempts. ` +
-				`Check that m (${pack.obstacles.length}) obstacles leave enough room for AI starts and entities.`,
+				`Check that m (${obstacleEntities(pack).length}) obstacles leave enough room for AI starts and entities.`,
 		);
 	});
 }
 
 /**
  * Convert a validated RawBoundPack to a ContentPack (without placements).
- * Carry bindings → objectivePairs; use_space+convergence → boundSpaces;
- * use_item+decoys → interestingObjects; obstacles → obstacles.
+ *
+ * All entities are accumulated into a single `entities` array in canonical
+ * order: per binding index, carry pairs emit object then space; use_space and
+ * convergence bindings emit a space; use_item bindings emit an item. Decoys
+ * then obstacles are appended at the end. This is the same order the v10→v11
+ * migration uses, so persisted packs and freshly-generated packs walk
+ * `entities` identically.
  */
 function rawBoundPackToContentPack(
 	rawPack: RawBoundPack,
@@ -315,10 +323,7 @@ function rawBoundPackToContentPack(
 	weather: string,
 	timeOfDay: string,
 ): ContentPack {
-	const objectivePairs: ObjectivePair[] = [];
-	const boundSpaces: WorldEntity[] = [];
-	const interestingObjects: WorldEntity[] = [];
-	const obstacles: WorldEntity[] = [];
+	const entities: WorldEntity[] = [];
 
 	const bindings = rawPack.bindings ?? [];
 	for (const [i, type] of objectiveTypes.entries()) {
@@ -330,26 +335,24 @@ function rawBoundPackToContentPack(
 				const obj = binding.object;
 				const spc = binding.space;
 				if (obj && spc) {
-					objectivePairs.push({
-						object: {
-							id: obj.id ?? `carry-${i}-obj`,
-							kind: "objective_object",
-							name: obj.name ?? "",
-							examineDescription: obj.examineDescription ?? "",
-							useOutcome: obj.useOutcome ?? "",
-							pairsWithSpaceId: spc.id ?? `carry-${i}-space`,
-							placementFlavor: obj.placementFlavor ?? "{actor}",
-							proximityFlavor: obj.proximityFlavor ?? "",
-							holder: { row: 0, col: 0 },
-						},
-						space: {
-							id: spc.id ?? `carry-${i}-space`,
-							kind: "objective_space",
-							name: spc.name ?? "",
-							examineDescription: spc.examineDescription ?? "",
-							proximityFlavor: spc.proximityFlavor ?? "",
-							holder: { row: 0, col: 0 },
-						},
+					entities.push({
+						id: obj.id ?? `carry-${i}-obj`,
+						kind: "objective_object",
+						name: obj.name ?? "",
+						examineDescription: obj.examineDescription ?? "",
+						useOutcome: obj.useOutcome ?? "",
+						pairsWithSpaceId: spc.id ?? `carry-${i}-space`,
+						placementFlavor: obj.placementFlavor ?? "{actor}",
+						proximityFlavor: obj.proximityFlavor ?? "",
+						holder: { row: 0, col: 0 },
+					});
+					entities.push({
+						id: spc.id ?? `carry-${i}-space`,
+						kind: "objective_space",
+						name: spc.name ?? "",
+						examineDescription: spc.examineDescription ?? "",
+						proximityFlavor: spc.proximityFlavor ?? "",
+						holder: { row: 0, col: 0 },
 					});
 				}
 				break;
@@ -373,7 +376,7 @@ function rawBoundPackToContentPack(
 						entity.postExamineDescription = spc.postExamineDescription;
 					if (spc.postLookFlavor !== undefined)
 						entity.postLookFlavor = spc.postLookFlavor;
-					boundSpaces.push(entity);
+					entities.push(entity);
 				}
 				break;
 			}
@@ -398,7 +401,7 @@ function rawBoundPackToContentPack(
 					if (spc.convergenceTier2ActorFlavor !== undefined)
 						entity.convergenceTier2ActorFlavor =
 							spc.convergenceTier2ActorFlavor;
-					boundSpaces.push(entity);
+					entities.push(entity);
 				}
 				break;
 			}
@@ -421,14 +424,14 @@ function rawBoundPackToContentPack(
 						entity.postExamineDescription = item.postExamineDescription;
 					if (item.postLookFlavor !== undefined)
 						entity.postLookFlavor = item.postLookFlavor;
-					interestingObjects.push(entity);
+					entities.push(entity);
 				}
 				break;
 			}
 		}
 	}
 
-	// Add decoys to interestingObjects
+	// Add decoys (interesting_object kind) after binding-derived entities
 	for (const decoy of rawPack.decoys ?? []) {
 		const entity: WorldEntity = {
 			id: decoy.id ?? "decoy-unknown",
@@ -439,12 +442,12 @@ function rawBoundPackToContentPack(
 			holder: { row: 0, col: 0 },
 		};
 		if (decoy.useOutcome !== undefined) entity.useOutcome = decoy.useOutcome;
-		interestingObjects.push(entity);
+		entities.push(entity);
 	}
 
-	// Add obstacles
+	// Add obstacles last
 	for (const obs of rawPack.obstacles ?? []) {
-		obstacles.push({
+		entities.push({
 			id: obs.id ?? "obstacle-unknown",
 			kind: "obstacle",
 			name: obs.name ?? "",
@@ -458,10 +461,7 @@ function rawBoundPackToContentPack(
 		setting: rawPack.setting ?? "",
 		weather,
 		timeOfDay,
-		objectivePairs,
-		interestingObjects,
-		boundSpaces,
-		obstacles,
+		entities,
 		landmarks: (rawPack.landmarks as ContentPack["landmarks"]) ?? {
 			north: { shortName: "", horizonPhrase: "" },
 			south: { shortName: "", horizonPhrase: "" },
@@ -707,33 +707,19 @@ export async function generateDualContentPacks(
 	if (!placedPackA)
 		throw new Error("generateDualContentPacks: placement failed");
 
-	// Build ID → holder map from placed Pack A (include boundSpaces)
+	// Build ID → holder map from placed Pack A by walking entities directly.
 	const holderById = new Map<string, AiId | GridPosition>();
-	for (const pair of placedPackA.objectivePairs) {
-		holderById.set(pair.object.id, pair.object.holder);
-		holderById.set(pair.space.id, pair.space.holder);
+	for (const entity of placedPackA.entities) {
+		holderById.set(entity.id, entity.holder);
 	}
-	for (const space of placedPackA.boundSpaces ?? [])
-		holderById.set(space.id, space.holder);
-	for (const obj of placedPackA.interestingObjects)
-		holderById.set(obj.id, obj.holder);
-	for (const obs of placedPackA.obstacles) holderById.set(obs.id, obs.holder);
 
-	const applyHolder = (entity: WorldEntity): WorldEntity => ({
-		...entity,
-		holder: holderById.get(entity.id) ?? { row: 0, col: 0 },
-	});
-
-	// Apply the same placements to Pack B by matching entity IDs
+	// Apply the same placements to Pack B by matching entity IDs (one entities.map).
 	const packB: ContentPack = {
 		...unplacedPackB,
-		objectivePairs: unplacedPackB.objectivePairs.map((pair) => ({
-			object: applyHolder(pair.object),
-			space: applyHolder(pair.space),
+		entities: unplacedPackB.entities.map((entity) => ({
+			...entity,
+			holder: holderById.get(entity.id) ?? { row: 0, col: 0 },
 		})),
-		boundSpaces: (unplacedPackB.boundSpaces ?? []).map(applyHolder),
-		interestingObjects: unplacedPackB.interestingObjects.map(applyHolder),
-		obstacles: unplacedPackB.obstacles.map(applyHolder),
 		aiStarts: { ...placedPackA.aiStarts },
 	};
 

@@ -18,13 +18,13 @@
 
 import { describe, expect, it } from "vitest";
 import { renderEntry } from "../conversation-log.js";
-import { DEFAULT_LANDMARKS } from "../direction";
 import { startGame } from "../engine";
 import { buildOpenAiMessages } from "../openai-message-builder";
 import { buildAiContext } from "../prompt-builder";
 import { runRound } from "../round-coordinator";
 import { MockRoundLLMProvider } from "../round-llm-provider";
-import type { AiPersona, ContentPack } from "../types";
+import type { AiPersona } from "../types";
+import { makeTestPack } from "./fixtures/make-test-pack";
 
 /** Concatenate all role-turn message contents into a single searchable string. */
 function flattenMessageContents(
@@ -94,31 +94,24 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
  *   dist-1: (1,1), (1,0), (1,-1 OOB)
  *   dist-2: (2,2), (2,1), (2,0), (2,-1 OOB), (2,-2 OOB)
  */
-const TEST_CONTENT_PACK: ContentPack = {
-	setting: "test chamber",
-	weather: "",
-	timeOfDay: "",
-	objectivePairs: [
+const TEST_CONTENT_PACK = makeTestPack(
+	[
 		{
-			object: {
-				id: "flower",
-				kind: "objective_object",
-				name: "Flower",
-				examineDescription: "A delicate flower.",
-				holder: { row: 2, col: 0 },
-				pairsWithSpaceId: "flower_space",
-				placementFlavor: "{actor} places the flower on the pedestal.",
-			},
-			space: {
-				id: "flower_space",
-				kind: "objective_space",
-				name: "pedestal",
-				examineDescription: "A stone pedestal.",
-				holder: { row: 2, col: 2 },
-			},
+			id: "flower",
+			kind: "objective_object",
+			name: "Flower",
+			examineDescription: "A delicate flower.",
+			holder: { row: 2, col: 0 },
+			pairsWithSpaceId: "flower_space",
+			placementFlavor: "{actor} places the flower on the pedestal.",
 		},
-	],
-	interestingObjects: [
+		{
+			id: "flower_space",
+			kind: "objective_space",
+			name: "pedestal",
+			examineDescription: "A stone pedestal.",
+			holder: { row: 2, col: 2 },
+		},
 		{
 			id: "lamp",
 			kind: "interesting_object",
@@ -128,15 +121,16 @@ const TEST_CONTENT_PACK: ContentPack = {
 			useOutcome: "{actor} holds up the lamp. It glows.",
 		},
 	],
-	obstacles: [],
-	landmarks: DEFAULT_LANDMARKS,
-	wallName: "wall",
-	aiStarts: {
-		red: { position: { row: 2, col: 0 }, facing: "south" },
-		green: { position: { row: 0, col: 0 }, facing: "south" },
-		cyan: { position: { row: 0, col: 2 }, facing: "south" },
+	{
+		setting: "test chamber",
+		wallName: "wall",
+		aiStarts: {
+			red: { position: { row: 2, col: 0 }, facing: "south" },
+			green: { position: { row: 0, col: 0 }, facing: "south" },
+			cyan: { position: { row: 0, col: 2 }, facing: "south" },
+		},
 	},
-};
+);
 
 function makeGame() {
 	return startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 10 });
@@ -473,13 +467,8 @@ describe("conversation log integration — put_down placementFlavor", () => {
 describe("conversation log integration — action-failure (issue #287)", () => {
 	it("dispatch invalid go then buildConversationLog contains one line matching 'Your `go` action failed:'", async () => {
 		// Use a ContentPack where red faces south and there's an obstacle directly south.
-		const obstacleAtSouth: ContentPack = {
-			setting: "blocked test",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [],
-			interestingObjects: [],
-			obstacles: [
+		const obstacleAtSouth = makeTestPack(
+			[
 				{
 					id: "wall_s",
 					kind: "obstacle",
@@ -488,14 +477,16 @@ describe("conversation log integration — action-failure (issue #287)", () => {
 					holder: { row: 3, col: 0 },
 				},
 			],
-			landmarks: DEFAULT_LANDMARKS,
-			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 2, col: 0 }, facing: "south" },
-				green: { position: { row: 0, col: 0 }, facing: "south" },
-				cyan: { position: { row: 0, col: 2 }, facing: "south" },
+			{
+				setting: "blocked test",
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 2, col: 0 }, facing: "south" },
+					green: { position: { row: 0, col: 0 }, facing: "south" },
+					cyan: { position: { row: 0, col: 2 }, facing: "south" },
+				},
 			},
-		};
+		);
 		const game = startGame(TEST_PERSONAS, obstacleAtSouth, { budgetPerAi: 10 });
 
 		// red tries to go south → blocked by wall at (3,0)

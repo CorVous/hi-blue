@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_LANDMARKS } from "../direction";
 import {
 	advanceRound,
 	appendActionFailure,
@@ -10,7 +9,14 @@ import {
 	shiftToBPack,
 	startGame,
 } from "../engine";
+import {
+	boundSpaces,
+	carryPairs,
+	interestingObjects,
+	obstacles,
+} from "../pack-selectors";
 import type { AiPersona, ContentPack, GameState } from "../types";
+import { makeTestPack } from "./fixtures/make-test-pack";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -54,17 +60,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 	},
 };
 
-const TEST_CONTENT_PACK: ContentPack = {
-	setting: "",
-	weather: "",
-	timeOfDay: "",
-	objectivePairs: [],
-	interestingObjects: [],
-	obstacles: [],
-	landmarks: DEFAULT_LANDMARKS,
-	wallName: "wall",
-	aiStarts: {},
-};
+const TEST_CONTENT_PACK = makeTestPack([], { wallName: "wall" });
 
 describe("advanceRound", () => {
 	it("increments the round counter", () => {
@@ -78,9 +74,8 @@ describe("advanceRound", () => {
 
 describe("startGame world.entities", () => {
 	it("places use_space and convergence bound spaces on the grid", () => {
-		const packWithBoundSpaces: ContentPack = {
-			...TEST_CONTENT_PACK,
-			boundSpaces: [
+		const packWithBoundSpaces = makeTestPack(
+			[
 				{
 					id: "useSpace-0-space",
 					kind: "objective_space",
@@ -103,7 +98,8 @@ describe("startGame world.entities", () => {
 					holder: { row: 3, col: 3 },
 				},
 			],
-		};
+			{ wallName: "wall" },
+		);
 		const game = startGame(TEST_PERSONAS, packWithBoundSpaces, {
 			budgetPerAi: 5,
 		});
@@ -111,6 +107,74 @@ describe("startGame world.entities", () => {
 		expect(ids).toContain("useSpace-0-space");
 		expect(ids).toContain("useSpace-1-space");
 		expect(ids).toContain("convergence-2-space");
+	});
+
+	it("world.entities id-set equals selector-derived id-set for a mixed pack", () => {
+		// Mixed pack: one carry pair (object + space), two bound spaces,
+		// one interesting object, one obstacle. The invariant under test is
+		// that startGame's world.entities membership is exactly the union of
+		// the pack-selector outputs — i.e. engine.ts must build entities by
+		// asking the selectors, not by hand-fanning bucket reads.
+		const mixedPack: ContentPack = {
+			...TEST_CONTENT_PACK,
+			entities: [
+				{
+					id: "carry-0-object",
+					kind: "objective_object",
+					name: "brass key",
+					examineDescription: "",
+					pairsWithSpaceId: "carry-0-space",
+					holder: { row: 0, col: 0 },
+				},
+				{
+					id: "carry-0-space",
+					kind: "objective_space",
+					name: "iron lock",
+					examineDescription: "",
+					holder: { row: 4, col: 4 },
+				},
+				{
+					id: "useSpace-0-space",
+					kind: "objective_space",
+					name: "cracked pedestal",
+					examineDescription: "",
+					holder: { row: 1, col: 1 },
+				},
+				{
+					id: "convergence-1-space",
+					kind: "objective_space",
+					name: "central tile",
+					examineDescription: "",
+					holder: { row: 2, col: 2 },
+				},
+				{
+					id: "interesting-0",
+					kind: "interesting_object",
+					name: "old radio",
+					examineDescription: "",
+					holder: { row: 3, col: 0 },
+				},
+				{
+					id: "obstacle-0",
+					kind: "obstacle",
+					name: "rubble pile",
+					examineDescription: "",
+					holder: { row: 0, col: 4 },
+				},
+			],
+		};
+
+		const game = startGame(TEST_PERSONAS, mixedPack, { budgetPerAi: 5 });
+
+		const actualIds = new Set(game.world.entities.map((e) => e.id));
+		const expectedIds = new Set<string>([
+			...carryPairs(mixedPack).flatMap((p) => [p.object.id, p.space.id]),
+			...boundSpaces(mixedPack).map((e) => e.id),
+			...interestingObjects(mixedPack).map((e) => e.id),
+			...obstacles(mixedPack).map((e) => e.id),
+		]);
+
+		expect(actualIds).toEqual(expectedIds);
 	});
 });
 
@@ -336,29 +400,19 @@ describe("appendActionFailure", () => {
 });
 
 describe("shiftToBPack", () => {
-	const PACK_A: ContentPack = {
+	const PACK_A = makeTestPack([], {
 		setting: "neon arcade",
 		weather: "clear",
 		timeOfDay: "night",
-		objectivePairs: [],
-		interestingObjects: [],
-		obstacles: [],
-		landmarks: DEFAULT_LANDMARKS,
 		wallName: "wall",
-		aiStarts: {},
-	};
+	});
 
-	const PACK_B: ContentPack = {
+	const PACK_B = makeTestPack([], {
 		setting: "sun-baked salt flat",
 		weather: "hot",
 		timeOfDay: "day",
-		objectivePairs: [],
-		interestingObjects: [],
-		obstacles: [],
-		landmarks: DEFAULT_LANDMARKS,
 		wallName: "wall",
-		aiStarts: {},
-	};
+	});
 
 	function makeDualPackGame(): GameState {
 		const game = startGame(TEST_PERSONAS, PACK_A, { budgetPerAi: 5 });

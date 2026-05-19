@@ -9,11 +9,11 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { DEFAULT_LANDMARKS } from "../direction";
 import { appendMessage, startGame } from "../engine";
 import { buildOpenAiMessages } from "../openai-message-builder";
 import { buildAiContext } from "../prompt-builder";
 import type { AiPersona, ConversationEntry } from "../types";
+import { makeTestPack } from "./fixtures/make-test-pack";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -41,19 +41,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 	},
 };
 
-import type { ContentPack } from "../types";
-
-const TEST_CONTENT_PACK: ContentPack = {
-	setting: "",
-	weather: "",
-	timeOfDay: "",
-	objectivePairs: [],
-	interestingObjects: [],
-	obstacles: [],
-	landmarks: DEFAULT_LANDMARKS,
-	wallName: "wall",
-	aiStarts: {},
-};
+const TEST_CONTENT_PACK = makeTestPack([], { wallName: "wall" });
 
 function makeGame() {
 	return startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });

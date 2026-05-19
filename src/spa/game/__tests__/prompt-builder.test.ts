@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_LANDMARKS } from "../direction";
 import {
 	advanceRound,
 	appendBroadcast,
@@ -13,6 +12,7 @@ import {
 	renderWhatsNew,
 } from "../prompt-builder";
 import type { AiPersona, ContentPack, WorldEntity } from "../types";
+import { makeTestPack } from "./fixtures/make-test-pack";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -65,17 +65,20 @@ function makeEntity(
 	return { id, kind, name: id, examineDescription: `A ${id}.`, holder };
 }
 
-const TEST_CONTENT_PACK: ContentPack = {
-	setting: "",
-	weather: "",
-	timeOfDay: "",
-	objectivePairs: [],
-	interestingObjects: [],
-	obstacles: [],
-	landmarks: DEFAULT_LANDMARKS,
-	wallName: "wall",
-	aiStarts: {},
+const RGC_AI_STARTS: ContentPack["aiStarts"] = {
+	red: { position: { row: 0, col: 0 }, facing: "north" },
+	green: { position: { row: 0, col: 1 }, facing: "north" },
+	cyan: { position: { row: 0, col: 2 }, facing: "north" },
 };
+
+/** Same neighbours as RGC_AI_STARTS but red faces south (used by the many cone tests). */
+const RGC_AI_STARTS_RED_SOUTH: ContentPack["aiStarts"] = {
+	red: { position: { row: 0, col: 0 }, facing: "south" },
+	green: { position: { row: 0, col: 1 }, facing: "north" },
+	cyan: { position: { row: 0, col: 2 }, facing: "north" },
+};
+
+const TEST_CONTENT_PACK = makeTestPack([], { wallName: "wall" });
 
 describe("buildAiContext", () => {
 	it("includes the AI's own blurb", () => {
@@ -179,24 +182,13 @@ describe("buildAiContext", () => {
 
 	it("renders to a system prompt string", () => {
 		// Use a ContentPack with items at (0,0) so red sees them in its cell
-		const pack: ContentPack = {
-			setting: "",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [],
-			interestingObjects: [
+		const pack = makeTestPack(
+			[
 				makeEntity("flower", "interesting_object", { row: 0, col: 0 }),
 				makeEntity("key", "interesting_object", { row: 0, col: 0 }),
 			],
-			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
-			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "north" },
-				green: { position: { row: 0, col: 1 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
-			},
-		};
+			{ wallName: "wall", aiStarts: RGC_AI_STARTS },
+		);
 		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5, rng: () => 0 });
 		game = appendMessage(game, "blue", "red", "Hi");
 		const ctx = buildAiContext(game, "red");
@@ -225,21 +217,11 @@ describe("buildAiContext", () => {
 // ----------------------------------------------------------------------------
 describe("<setting> block", () => {
 	it("emits <setting> block when phase has a setting noun", () => {
-		const pack: ContentPack = {
+		const pack = makeTestPack([], {
 			setting: "abandoned subway station",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [],
-			interestingObjects: [],
-			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
 			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "north" },
-				green: { position: { row: 0, col: 1 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
-			},
-		};
+			aiStarts: RGC_AI_STARTS,
+		});
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
@@ -259,21 +241,11 @@ describe("<setting> block", () => {
 
 	it("setting noun appears verbatim in the Setting section", () => {
 		const settingNoun = "sun-baked salt flat";
-		const pack: ContentPack = {
+		const pack = makeTestPack([], {
 			setting: settingNoun,
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [],
-			interestingObjects: [],
-			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
 			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "north" },
-				green: { position: { row: 0, col: 1 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
-			},
-		};
+			aiStarts: RGC_AI_STARTS,
+		});
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();
@@ -315,24 +287,13 @@ describe("prompt-builder — spatial 'Where you are' section (current-state user
 	});
 
 	it("lists items in the actor's cell under 'Where you are'", () => {
-		const pack: ContentPack = {
-			setting: "",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [],
-			interestingObjects: [
+		const pack = makeTestPack(
+			[
 				makeEntity("flower", "interesting_object", { row: 0, col: 0 }),
 				makeEntity("key", "interesting_object", { row: 0, col: 0 }),
 			],
-			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
-			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "north" },
-				green: { position: { row: 0, col: 1 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
-			},
-		};
+			{ wallName: "wall", aiStarts: RGC_AI_STARTS },
+		);
 		const game = startGame(TEST_PERSONAS, pack, {
 			budgetPerAi: 5,
 			rng: () => 0,
@@ -748,23 +709,17 @@ describe("<what_you_see> (cone)", () => {
 
 	it("item in cone cell is listed under 'Directly in front'", () => {
 		// Place flower at (1,0) and use ContentPack with aiStarts so red is at (0,0) facing south.
-		const pack: ContentPack = {
-			setting: "",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [],
-			interestingObjects: [
-				makeEntity("flower", "interesting_object", { row: 1, col: 0 }),
-			],
-			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
-			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "south" },
-				green: { position: { row: 0, col: 1 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
+		const pack = makeTestPack(
+			[makeEntity("flower", "interesting_object", { row: 1, col: 0 })],
+			{
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 0, col: 0 }, facing: "south" },
+					green: { position: { row: 0, col: 1 }, facing: "north" },
+					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				},
 			},
-		};
+		);
 
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		// Verify red is at (0,0) facing south (flat model: access from game directly)
@@ -803,15 +758,10 @@ describe("<what_you_see> (cone)", () => {
 
 	it("out-of-bounds cone cells render as wall markers in <what_you_see>", () => {
 		// rng=()=>0: red→(0,0) facing north → all 8 non-own cone cells are OOB
-		const wallPack: ContentPack = {
-			...TEST_CONTENT_PACK,
+		const wallPack = makeTestPack([], {
 			wallName: "concrete platform wall",
-			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "north" },
-				green: { position: { row: 0, col: 1 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
-			},
-		};
+			aiStarts: RGC_AI_STARTS,
+		});
 		const game = startGame(TEST_PERSONAS, wallPack, {
 			budgetPerAi: 5,
 		});
@@ -836,15 +786,14 @@ describe("<what_you_see> (cone)", () => {
 
 	it("partial edge: only OOB cells render as walls — in-bounds cells render normally", () => {
 		// red at (1,0) facing north: directly-in-front-left (0,-1) is OOB; front (0,0) and front-right (0,1) are in-bounds
-		const wallPack: ContentPack = {
-			...TEST_CONTENT_PACK,
+		const wallPack = makeTestPack([], {
 			wallName: "concrete platform wall",
 			aiStarts: {
 				red: { position: { row: 1, col: 0 }, facing: "north" },
 				green: { position: { row: 4, col: 4 }, facing: "north" },
 				cyan: { position: { row: 4, col: 3 }, facing: "north" },
 			},
-		};
+		});
 		const game = startGame(TEST_PERSONAS, wallPack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
@@ -864,21 +813,17 @@ describe("<what_you_see> (cone)", () => {
 	it("obstacles in the cone are listed by their name", () => {
 		// Place an obstacle named "concrete column" at (1,0) via ContentPack.
 		// Red faces south from (0,0).
-		const pack: ContentPack = {
-			setting: "",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [],
-			interestingObjects: [],
-			obstacles: [makeEntity("col1", "obstacle", { row: 1, col: 0 })],
-			landmarks: DEFAULT_LANDMARKS,
-			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "south" },
-				green: { position: { row: 0, col: 1 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
+		const pack = makeTestPack(
+			[makeEntity("col1", "obstacle", { row: 1, col: 0 })],
+			{
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 0, col: 0 }, facing: "south" },
+					green: { position: { row: 0, col: 1 }, facing: "north" },
+					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				},
 			},
-		};
+		);
 
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
@@ -890,21 +835,14 @@ describe("<what_you_see> (cone)", () => {
 
 	it("other AI visible in cone is rendered with its color in parentheses", () => {
 		// Use ContentPack to place red at (0,0) facing south, green at (1,0).
-		const pack: ContentPack = {
-			setting: "",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [],
-			interestingObjects: [],
-			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
+		const pack = makeTestPack([], {
 			wallName: "wall",
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "south" },
 				green: { position: { row: 1, col: 0 }, facing: "north" },
 				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
-		};
+		});
 
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		// Verify spatial placements (flat model: access from game directly)
@@ -1191,7 +1129,7 @@ describe("proximityFlavor sense line", () => {
 		actorPosition: { row: number; col: number };
 		actorFacing: "north" | "south" | "east" | "west";
 		spacePosition: { row: number; col: number };
-	}): ContentPack {
+	}) {
 		const gem: WorldEntity = {
 			id: "gem",
 			kind: "objective_object",
@@ -1210,21 +1148,14 @@ describe("proximityFlavor sense line", () => {
 			examineDescription: "A stone pedestal.",
 			holder: opts.spacePosition,
 		};
-		return {
-			setting: "",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [{ object: gem, space: pedestal }],
-			interestingObjects: [],
-			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
+		return makeTestPack([gem, pedestal], {
 			wallName: "wall",
 			aiStarts: {
 				red: { position: opts.actorPosition, facing: opts.actorFacing },
 				green: { position: { row: 0, col: 1 }, facing: "north" },
 				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
-		};
+		});
 	}
 
 	it("proximity flavor appears in <what_you_see> when paired space is in own cell", () => {
@@ -1347,21 +1278,10 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			postLookFlavor: "a steady amber glow lingers near the switch",
 			useOutcome: "You toggle the switch.",
 		};
-		const pack: ContentPack = {
-			setting: "",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [],
-			interestingObjects: [item],
-			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
+		const pack = makeTestPack([item], {
 			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "south" },
-				green: { position: { row: 0, col: 1 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
-			},
-		};
+			aiStarts: RGC_AI_STARTS_RED_SOUTH,
+		});
 		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		// Add a pending UseItemObjective for the switch
 		game = {
@@ -1396,21 +1316,10 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			postLookFlavor: "a steady amber glow lingers near the switch",
 			useOutcome: "You toggle the switch.",
 		};
-		const pack: ContentPack = {
-			setting: "",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [],
-			interestingObjects: [item],
-			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
+		const pack = makeTestPack([item], {
 			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "south" },
-				green: { position: { row: 0, col: 1 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
-			},
-		};
+			aiStarts: RGC_AI_STARTS_RED_SOUTH,
+		});
 		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		game = {
 			...game,
@@ -1444,21 +1353,10 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			postLookFlavor: "a steady amber glow lingers near the switch",
 			useOutcome: "You toggle the switch.",
 		};
-		const pack: ContentPack = {
-			setting: "",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [],
-			interestingObjects: [item],
-			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
+		const pack = makeTestPack([item], {
 			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "south" },
-				green: { position: { row: 0, col: 1 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
-			},
-		};
+			aiStarts: RGC_AI_STARTS_RED_SOUTH,
+		});
 		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		game = {
 			...game,
@@ -1492,21 +1390,10 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			postLookFlavor: "a steady amber glow lingers near the switch",
 			useOutcome: "You toggle the switch.",
 		};
-		const pack: ContentPack = {
-			setting: "",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [],
-			interestingObjects: [item],
-			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
+		const pack = makeTestPack([item], {
 			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "south" },
-				green: { position: { row: 0, col: 1 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
-			},
-		};
+			aiStarts: RGC_AI_STARTS_RED_SOUTH,
+		});
 		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		// Replace the auto-generated pending objective with a satisfied one
 		game = {
@@ -1539,21 +1426,10 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			postLookFlavor: "a steady amber glow lingers near the switch",
 			useOutcome: "You toggle the switch.",
 		};
-		const pack: ContentPack = {
-			setting: "",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [],
-			interestingObjects: [item],
-			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
+		const pack = makeTestPack([item], {
 			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "north" },
-				green: { position: { row: 0, col: 1 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
-			},
-		};
+			aiStarts: RGC_AI_STARTS,
+		});
 		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		game = {
 			...game,
@@ -1593,21 +1469,10 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			convergenceTier1ActorFlavor: "You linger alone.",
 			convergenceTier2ActorFlavor: "You share the space.",
 		};
-		const pack: ContentPack = {
-			setting: "",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [],
-			interestingObjects: [],
-			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
+		const pack = makeTestPack([], {
 			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "south" },
-				green: { position: { row: 0, col: 1 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
-			},
-		};
+			aiStarts: RGC_AI_STARTS_RED_SOUTH,
+		});
 		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		game = {
 			...game,
@@ -1653,21 +1518,10 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			convergenceTier1ActorFlavor: "You linger alone.",
 			convergenceTier2ActorFlavor: "You share the space.",
 		};
-		const pack: ContentPack = {
-			setting: "",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [],
-			interestingObjects: [],
-			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
+		const pack = makeTestPack([], {
 			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "south" },
-				green: { position: { row: 0, col: 1 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
-			},
-		};
+			aiStarts: RGC_AI_STARTS_RED_SOUTH,
+		});
 		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		game = {
 			...game,
@@ -1715,21 +1569,10 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			convergenceTier1ActorFlavor: "You linger alone.",
 			convergenceTier2ActorFlavor: "You share the space.",
 		};
-		const pack: ContentPack = {
-			setting: "",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [],
-			interestingObjects: [],
-			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
+		const pack = makeTestPack([], {
 			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "south" },
-				green: { position: { row: 0, col: 1 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
-			},
-		};
+			aiStarts: RGC_AI_STARTS_RED_SOUTH,
+		});
 		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		game = {
 			...game,
@@ -1778,21 +1621,10 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			convergenceTier1ActorFlavor: "You stand alone, waiting.",
 			convergenceTier2ActorFlavor: "You share this moment.",
 		};
-		const pack: ContentPack = {
-			setting: "",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [],
-			interestingObjects: [],
-			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
+		const pack = makeTestPack([], {
 			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "south" },
-				green: { position: { row: 0, col: 1 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
-			},
-		};
+			aiStarts: RGC_AI_STARTS_RED_SOUTH,
+		});
 		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		game = {
 			...game,
@@ -1969,7 +1801,7 @@ describe("activeDirectives — buildAiContext and system prompt injection", () =
 describe("postLookFlavor swap covers satisfied interesting_object", () => {
 	function buildPackWithSatisfiedItem(
 		opts: { withPostLook: boolean } = { withPostLook: true },
-	): ContentPack {
+	) {
 		const item: WorldEntity = {
 			id: "switch",
 			kind: "interesting_object",
@@ -1982,21 +1814,10 @@ describe("postLookFlavor swap covers satisfied interesting_object", () => {
 				? { postLookFlavor: "a steady amber glow lingers near the switch" }
 				: {}),
 		};
-		return {
-			setting: "",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [],
-			interestingObjects: [item],
-			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
+		return makeTestPack([item], {
 			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "south" },
-				green: { position: { row: 0, col: 1 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
-			},
-		};
+			aiStarts: RGC_AI_STARTS_RED_SOUTH,
+		});
 	}
 
 	it("appends postLookFlavor to the cell line in <what_you_see> for a satisfied interesting_object", () => {
@@ -2011,7 +1832,7 @@ describe("postLookFlavor swap covers satisfied interesting_object", () => {
 	it("does NOT append postLookFlavor when entity is not satisfied", () => {
 		const pack = buildPackWithSatisfiedItem({ withPostLook: true });
 		// Flip satisfactionState back to pending.
-		const item = pack.interestingObjects[0];
+		const item = pack.entities.find((e) => e.kind === "interesting_object");
 		if (item) item.satisfactionState = "pending";
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
@@ -2043,21 +1864,14 @@ describe("<whats_new> wall diff (issue #374)", () => {
 		wallName?: string;
 	}) {
 		const wallName = opts.wallName ?? "concrete platform wall";
-		const pack: ContentPack = {
-			setting: "",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [],
-			interestingObjects: [],
-			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
+		const pack = makeTestPack([], {
 			wallName,
 			aiStarts: {
 				red: { position: opts.position, facing: opts.facing },
 				green: { position: { row: 4, col: 4 }, facing: "north" },
 				cyan: { position: { row: 4, col: 3 }, facing: "north" },
 			},
-		};
+		});
 		return startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 	}
 

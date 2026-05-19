@@ -8,6 +8,10 @@
  */
 export const SCHEMA_ARCHIVE_MAP: Record<number, string> = {
 	// 9: "0.1.1",  // example: schema 9 last shipped in v0.1.1
+	// Schema 10 shipped in pre-tagged builds (no release tag exists at the
+	// time of the v11 bump). Migration `migrateV10ToV11` makes the archive
+	// lookup unnecessary in practice; this entry is reserved for future use
+	// once releases are tagged. See AGENTS.md → "Bumping SESSION_SCHEMA_VERSION".
 };
 
 /** Look up the archived version string for an old schema number. */

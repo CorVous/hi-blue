@@ -115,11 +115,16 @@ export interface ContentPack {
 	setting: string;
 	weather: string;
 	timeOfDay: string;
-	objectivePairs: ObjectivePair[];
-	interestingObjects: WorldEntity[];
-	/** Objective-capable spaces that are NOT part of a carry pair (use_space and convergence bindings). */
-	boundSpaces?: WorldEntity[];
-	obstacles: WorldEntity[];
+	/**
+	 * Flat array of all authored/placed entities in this pack — carry objects,
+	 * carry spaces (objective_object's `pairsWithSpaceId` references them),
+	 * bound objective_spaces (use_space / convergence targets, NOT referenced
+	 * by any object's `pairsWithSpaceId`), interesting_objects, and obstacles.
+	 *
+	 * Bucketing is derived on demand via `pack-selectors.ts` (`carryPairs`,
+	 * `interestingObjects`, `boundSpaces`, `obstacles`, `objectiveSpaces`).
+	 */
+	entities: WorldEntity[];
 	aiStarts: Record<AiId, PersonaSpatialState>;
 	/**
 	 * Four distant horizon landmarks, one per cardinal anchor.

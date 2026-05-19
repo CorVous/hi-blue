@@ -18,6 +18,11 @@ import type {
 } from "../../spa/game/content-pack-provider.js";
 import { MockContentPackProvider } from "../../spa/game/content-pack-provider.js";
 import { DEFAULT_LANDMARKS } from "../../spa/game/direction.js";
+import {
+	carryPairs,
+	interestingObjects,
+	obstacles,
+} from "../../spa/game/pack-selectors.js";
 import type { ContentPack } from "../../spa/game/types.js";
 import {
 	generateContentPacks,
@@ -282,8 +287,8 @@ describe("generateContentPacks — placement constraints", () => {
 		for (let packIdx = 0; packIdx < packs.length; packIdx++) {
 			const pack = packs[packIdx] as ContentPack;
 			// Build obstacle set
-			const obstacleKeys = new Set(
-				pack.obstacles.map((obs) => {
+			const obstacleKeys = new Set<number>(
+				obstacles(pack).map((obs) => {
 					const pos = obs.holder as { row: number; col: number };
 					return gridPosKey(pos);
 				}),
@@ -299,7 +304,7 @@ describe("generateContentPacks — placement constraints", () => {
 			}
 
 			// 2. For every objective pair, object.holder ≠ space.holder
-			for (const pair of pack.objectivePairs) {
+			for (const pair of carryPairs(pack)) {
 				const objPos = pair.object.holder as { row: number; col: number };
 				const spacePos = pair.space.holder as { row: number; col: number };
 				expect(
@@ -310,8 +315,8 @@ describe("generateContentPacks — placement constraints", () => {
 
 			// 3. No non-obstacle entity shares a cell with an obstacle
 			const allNonObstacleEntities = [
-				...pack.objectivePairs.flatMap((p) => [p.object, p.space]),
-				...pack.interestingObjects,
+				...carryPairs(pack).flatMap((p) => [p.object, p.space]),
+				...interestingObjects(pack),
 			];
 			for (const entity of allNonObstacleEntities) {
 				const pos = entity.holder as { row: number; col: number };
@@ -353,12 +358,12 @@ describe("generateContentPacks — placement constraints", () => {
 			}
 
 			// 6. pairsWithSpaceId links
-			for (const pair of pack.objectivePairs) {
+			for (const pair of carryPairs(pack)) {
 				expect(pair.object.pairsWithSpaceId).toBe(pair.space.id);
 			}
 
 			// 7. placementFlavor contains "{actor}"
-			for (const pair of pack.objectivePairs) {
+			for (const pair of carryPairs(pack)) {
 				expect(
 					pair.object.placementFlavor,
 					`Pack ${packIdx}: object ${pair.object.id} missing placementFlavor`,
@@ -367,12 +372,12 @@ describe("generateContentPacks — placement constraints", () => {
 			}
 
 			// 8. useOutcome and examineDescription are non-empty
-			for (const pair of pack.objectivePairs) {
+			for (const pair of carryPairs(pack)) {
 				expect(pair.object.useOutcome).toBeTruthy();
 				expect(pair.object.examineDescription).toBeTruthy();
 				expect(pair.space.examineDescription).toBeTruthy();
 			}
-			for (const obj of pack.interestingObjects) {
+			for (const obj of interestingObjects(pack)) {
 				expect(obj.useOutcome).toBeTruthy();
 				expect(obj.examineDescription).toBeTruthy();
 			}
@@ -600,12 +605,7 @@ function makeDualMockProvider(): MockContentPackProvider {
 
 /** Extract all entity IDs from a ContentPack. */
 function allEntityIds(pack: ContentPack): string[] {
-	return [
-		...pack.objectivePairs.flatMap((p) => [p.object.id, p.space.id]),
-		...(pack.boundSpaces ?? []).map((e) => e.id),
-		...pack.interestingObjects.map((e) => e.id),
-		...pack.obstacles.map((e) => e.id),
-	].sort();
+	return pack.entities.map((e) => e.id).sort();
 }
 
 describe("generateDualContentPacks — entity ID parity (issue #302)", () => {
@@ -651,28 +651,12 @@ describe("generateDualContentPacks — entity ID parity (issue #302)", () => {
 			AI_IDS,
 		);
 
-		// Build ID→holder map for A
+		// Build ID→holder map for A by walking the flat entities array.
 		const holdersA = new Map<string, unknown>();
-		for (const pair of packA.objectivePairs) {
-			holdersA.set(pair.object.id, pair.object.holder);
-			holdersA.set(pair.space.id, pair.space.holder);
-		}
-		for (const e of packA.boundSpaces ?? []) holdersA.set(e.id, e.holder);
-		for (const e of packA.interestingObjects) holdersA.set(e.id, e.holder);
-		for (const e of packA.obstacles) holdersA.set(e.id, e.holder);
+		for (const e of packA.entities) holdersA.set(e.id, e.holder);
 
-		// Verify B holders match A holders by entity ID
-		for (const pair of packB.objectivePairs) {
-			expect(pair.object.holder).toEqual(holdersA.get(pair.object.id));
-			expect(pair.space.holder).toEqual(holdersA.get(pair.space.id));
-		}
-		for (const e of packB.boundSpaces ?? []) {
-			expect(e.holder).toEqual(holdersA.get(e.id));
-		}
-		for (const e of packB.interestingObjects) {
-			expect(e.holder).toEqual(holdersA.get(e.id));
-		}
-		for (const e of packB.obstacles) {
+		// Verify B holders match A holders by entity ID.
+		for (const e of packB.entities) {
 			expect(e.holder).toEqual(holdersA.get(e.id));
 		}
 	});

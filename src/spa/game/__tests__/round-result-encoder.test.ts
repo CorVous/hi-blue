@@ -9,14 +9,14 @@
  *   chat_lockout, chat_lockout_resolved, action_log
  */
 import { describe, expect, it } from "vitest";
-import { DEFAULT_LANDMARKS } from "../direction";
 import { appendMessage, deductBudget, startGame } from "../engine";
 import {
 	encodeRoundResult,
 	type SseEvent,
 	splitIntoWordChunks,
 } from "../round-result-encoder";
-import type { AiId, AiPersona, ContentPack, RoundResult } from "../types";
+import type { AiId, AiPersona, RoundResult } from "../types";
+import { makeTestPack } from "./fixtures/make-test-pack";
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -62,17 +62,7 @@ const TEST_PERSONAS: Record<AiId, AiPersona> = {
 	},
 };
 
-const TEST_CONTENT_PACK: ContentPack = {
-	setting: "",
-	weather: "",
-	timeOfDay: "",
-	objectivePairs: [],
-	interestingObjects: [],
-	obstacles: [],
-	landmarks: DEFAULT_LANDMARKS,
-	wallName: "wall",
-	aiStarts: {},
-};
+const TEST_CONTENT_PACK = makeTestPack([], { wallName: "wall" });
 
 function makePhase(
 	mutate?: (g: ReturnType<typeof startGame>) => ReturnType<typeof startGame>,

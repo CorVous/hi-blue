@@ -226,9 +226,7 @@ export function buildSessionFromAssets(
 				setting: "",
 				weather: "",
 				timeOfDay: "",
-				objectivePairs: [],
-				interestingObjects: [],
-				obstacles: [],
+				entities: [],
 				landmarks: {
 					north: { shortName: "", horizonPhrase: "" },
 					south: { shortName: "", horizonPhrase: "" },

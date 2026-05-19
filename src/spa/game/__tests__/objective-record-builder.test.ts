@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { buildObjectiveRecords } from "../objective-record-builder.js";
-import type { ContentPack } from "../types.js";
+import type { ContentPack, WorldEntity } from "../types.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -12,9 +12,7 @@ function makePack(overrides?: Partial<ContentPack>): ContentPack {
 		setting: "test setting",
 		weather: "clear",
 		timeOfDay: "noon",
-		objectivePairs: [],
-		interestingObjects: [],
-		obstacles: [],
+		entities: [],
 		landmarks: {
 			north: { shortName: "tower", horizonPhrase: "rusted tower" },
 			south: { shortName: "spire", horizonPhrase: "glowing spire" },
@@ -27,67 +25,53 @@ function makePack(overrides?: Partial<ContentPack>): ContentPack {
 	};
 }
 
-function makeCarryPair(i: number) {
-	return {
-		object: {
+/** Two entities (object + paired space) for a carry binding at index i. */
+function makeCarryEntities(i: number): WorldEntity[] {
+	return [
+		{
 			id: `carry-${i}-obj`,
-			kind: "objective_object" as const,
+			kind: "objective_object",
 			name: `carry object ${i}`,
 			examineDescription: "An object.",
 			holder: { row: 0, col: 0 },
+			pairsWithSpaceId: `carry-${i}-space`,
 		},
-		space: {
+		{
 			id: `carry-${i}-space`,
-			kind: "objective_space" as const,
+			kind: "objective_space",
 			name: `carry space ${i}`,
 			examineDescription: "A space.",
 			holder: { row: 1, col: 0 },
 		},
-	};
+	];
 }
 
-function makeUseSpacePair(i: number) {
+/** A single bound `objective_space` for a use_space binding at index i. */
+function makeUseSpaceEntity(i: number): WorldEntity {
 	return {
-		object: {
-			id: `useSpace-${i}-obj-dummy`,
-			kind: "objective_object" as const,
-			name: "dummy object",
-			examineDescription: "Dummy.",
-			holder: { row: 0, col: 0 },
-		},
-		space: {
-			id: `useSpace-${i}-space`,
-			kind: "objective_space" as const,
-			name: `use space ${i}`,
-			examineDescription: "A space to use.",
-			holder: { row: 1, col: 1 },
-		},
+		id: `useSpace-${i}-space`,
+		kind: "objective_space",
+		name: `use space ${i}`,
+		examineDescription: "A space to use.",
+		holder: { row: 1, col: 1 },
 	};
 }
 
-function makeConvergencePair(i: number) {
+/** A single bound `objective_space` for a convergence binding at index i. */
+function makeConvergenceEntity(i: number): WorldEntity {
 	return {
-		object: {
-			id: `convergence-${i}-obj-dummy`,
-			kind: "objective_object" as const,
-			name: "dummy object",
-			examineDescription: "Dummy.",
-			holder: { row: 0, col: 0 },
-		},
-		space: {
-			id: `convergence-${i}-space`,
-			kind: "objective_space" as const,
-			name: `convergence space ${i}`,
-			examineDescription: "A convergence point.",
-			holder: { row: 2, col: 2 },
-		},
+		id: `convergence-${i}-space`,
+		kind: "objective_space",
+		name: `convergence space ${i}`,
+		examineDescription: "A convergence point.",
+		holder: { row: 2, col: 2 },
 	};
 }
 
-function makeUseItem(i: number) {
+function makeUseItem(i: number): WorldEntity {
 	return {
 		id: `useItem-${i}-item`,
-		kind: "interesting_object" as const,
+		kind: "interesting_object",
 		name: `use item ${i}`,
 		examineDescription: "An item to use.",
 		holder: { row: 3, col: 3 },
@@ -98,9 +82,7 @@ function makeUseItem(i: number) {
 
 describe("buildObjectiveRecords — carry type", () => {
 	it("returns a CarryObjective with correct shape", () => {
-		const pack = makePack({
-			objectivePairs: [makeCarryPair(0)],
-		});
+		const pack = makePack({ entities: makeCarryEntities(0) });
 		const objectives = buildObjectiveRecords(["carry"], pack);
 		expect(objectives).toHaveLength(1);
 		const obj = objectives[0];
@@ -117,7 +99,11 @@ describe("buildObjectiveRecords — carry type", () => {
 
 	it("3-carry → 3 CarryObjectives with ids obj-0, obj-1, obj-2", () => {
 		const pack = makePack({
-			objectivePairs: [makeCarryPair(0), makeCarryPair(1), makeCarryPair(2)],
+			entities: [
+				...makeCarryEntities(0),
+				...makeCarryEntities(1),
+				...makeCarryEntities(2),
+			],
 		});
 		const objectives = buildObjectiveRecords(["carry", "carry", "carry"], pack);
 		expect(objectives).toHaveLength(3);
@@ -133,9 +119,7 @@ describe("buildObjectiveRecords — carry type", () => {
 
 describe("buildObjectiveRecords — use_space type", () => {
 	it("returns a UseSpaceObjective with correct shape", () => {
-		const pack = makePack({
-			objectivePairs: [makeUseSpacePair(0)],
-		});
+		const pack = makePack({ entities: [makeUseSpaceEntity(0)] });
 		const objectives = buildObjectiveRecords(["use_space"], pack);
 		expect(objectives).toHaveLength(1);
 		const obj = objectives[0];
@@ -151,9 +135,7 @@ describe("buildObjectiveRecords — use_space type", () => {
 
 describe("buildObjectiveRecords — use_item type", () => {
 	it("returns a UseItemObjective with correct shape", () => {
-		const pack = makePack({
-			interestingObjects: [makeUseItem(0)],
-		});
+		const pack = makePack({ entities: [makeUseItem(0)] });
 		const objectives = buildObjectiveRecords(["use_item"], pack);
 		expect(objectives).toHaveLength(1);
 		const obj = objectives[0];
@@ -169,9 +151,7 @@ describe("buildObjectiveRecords — use_item type", () => {
 
 describe("buildObjectiveRecords — convergence type", () => {
 	it("returns a ConvergenceObjective with correct shape", () => {
-		const pack = makePack({
-			objectivePairs: [makeConvergencePair(0)],
-		});
+		const pack = makePack({ entities: [makeConvergenceEntity(0)] });
 		const objectives = buildObjectiveRecords(["convergence"], pack);
 		expect(objectives).toHaveLength(1);
 		const obj = objectives[0];
@@ -188,12 +168,11 @@ describe("buildObjectiveRecords — convergence type", () => {
 describe("buildObjectiveRecords — all satisfactionState are pending", () => {
 	it("all objectives start with satisfactionState: pending", () => {
 		const pack = makePack({
-			objectivePairs: [
-				makeCarryPair(0),
-				makeUseSpacePair(1),
-				makeConvergencePair(2),
+			entities: [
+				...makeCarryEntities(0),
+				makeUseSpaceEntity(1),
+				makeConvergenceEntity(2),
 			],
-			interestingObjects: [],
 		});
 		const objectives = buildObjectiveRecords(
 			["carry", "use_space", "convergence"],
@@ -208,10 +187,10 @@ describe("buildObjectiveRecords — all satisfactionState are pending", () => {
 describe("buildObjectiveRecords — sequential ids", () => {
 	it("assigns ids obj-0, obj-1, obj-2 in order", () => {
 		const pack = makePack({
-			objectivePairs: [
-				makeCarryPair(0),
-				makeUseSpacePair(1),
-				makeConvergencePair(2),
+			entities: [
+				...makeCarryEntities(0),
+				makeUseSpaceEntity(1),
+				makeConvergenceEntity(2),
 			],
 		});
 		const objectives = buildObjectiveRecords(
@@ -226,7 +205,7 @@ describe("buildObjectiveRecords — sequential ids", () => {
 
 describe("buildObjectiveRecords — missing entity throws", () => {
 	it("throws if carry object not found in pack", () => {
-		const pack = makePack({}); // empty objectivePairs
+		const pack = makePack({}); // empty entities
 		expect(() => buildObjectiveRecords(["carry"], pack)).toThrow(RangeError);
 	});
 
