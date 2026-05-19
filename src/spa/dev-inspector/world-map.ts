@@ -148,7 +148,7 @@ function findHeldEntity(
 /**
  * Determine the glyph and tooltip for a single cell.
  * Precedence (highest → lowest):
- * 1. Daemon (@<arrow>)
+ * 1. Daemon (^/v/>/< )
  * 2. Obstacle (##)
  * 3. Objective object on paired space (**)
  * 4. Objective object alone (* )
@@ -205,7 +205,7 @@ function computeCellInfo(visualPos: GridPosition, state: GameState): CellInfo {
 				: "nothing";
 
 			return {
-				glyph: `@${arrow}`,
+				glyph: `${arrow} `,
 				tooltip: `*${persona.name} — facing ${facing} — holds: ${holdText}`,
 				kind: "daemon",
 				aiId,

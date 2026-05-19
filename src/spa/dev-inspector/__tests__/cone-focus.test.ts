@@ -187,9 +187,9 @@ describe("cone-focus", () => {
 			) as HTMLElement;
 			expect(redCell).toBeTruthy();
 
-			// Glyph should still be @<arrow>
+			// Glyph should still be the facing arrow
 			const glyph = redCell.querySelector(".dev-map-glyph");
-			expect(glyph?.textContent).toMatch(/^@[<>^v]$/);
+			expect(glyph?.textContent).toMatch(/^[<>^v] $/);
 
 			// AI marker should be preserved
 			expect(redCell.getAttribute("data-ai")).toBe("red");
