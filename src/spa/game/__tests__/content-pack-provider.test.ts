@@ -1865,7 +1865,7 @@ describe("validateContentPacks — pure-result API with multiple failures", () =
 
 // ── BrowserContentPackProvider — outer-retry layer ─────────────────────────
 
-describe("BrowserContentPackProvider — partial-retry layer", () => {
+describe("BrowserContentPackProvider — outer-retry layer", () => {
 	const baseInput: import("../content-pack-provider.js").BindingContentPackInput =
 		{
 			phases: [
