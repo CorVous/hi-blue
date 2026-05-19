@@ -8,6 +8,7 @@
  * - Active complications affecting this Daemon
  */
 
+import { getMapFocus, setMapFocus } from "./world-map.js";
 import type { GameSession } from "../game/game-session";
 import type { AiId, AiPersona, ConversationEntry } from "../game/types";
 
@@ -117,8 +118,8 @@ export function recordDaemonRound(aiId: AiId, round: number): void {
 }
 
 /**
- * Build the four field spans inside the footer summary line.
- * Returns an array of span elements ready to append to a container.
+ * Build the footer fields (pip, tools, llm, chips, focus button).
+ * Returns an array of elements ready to append to a container.
  */
 function buildFooterFields(): HTMLElement[] {
 	const spans: HTMLElement[] = [];
@@ -147,6 +148,14 @@ function buildFooterFields(): HTMLElement[] {
 	chipsSpan.setAttribute("data-field", "complication-chips");
 	chipsSpan.textContent = "";
 	spans.push(chipsSpan);
+
+	const focusBtn = document.createElement("button");
+	focusBtn.className = "dev-footer-focus-cone";
+	focusBtn.setAttribute("data-field", "focus-cone");
+	focusBtn.setAttribute("type", "button");
+	focusBtn.textContent = "[ focus cone ]";
+	focusBtn.setAttribute("data-focus-active", "false");
+	spans.push(focusBtn);
 
 	return spans;
 }
@@ -288,6 +297,17 @@ export function renderDaemonFooter(
 
 	// Remove hidden attribute
 	footerEl.removeAttribute("hidden");
+
+	// Attach click handler to focus-cone button
+	const focusBtnEl = panelEl.querySelector<HTMLButtonElement>(
+		'[data-field="focus-cone"]',
+	);
+	if (focusBtnEl) {
+		focusBtnEl.addEventListener("click", () => {
+			const current = getMapFocus();
+			setMapFocus(current === aiId ? null : aiId);
+		});
+	}
 }
 
 /**

@@ -7,8 +7,13 @@
  * Two-function API:
  * - renderWorldMap: builds the DOM skeleton once
  * - updateWorldMap: mutates existing cell contents in-place
+ *
+ * Cone-focus feature:
+ * - setMapFocus(aiId): tint cells in a daemon's cone view with persona color
+ * - getMapFocus(): check if focus is active
  */
 
+import { coneMaskForDaemon } from "./cone-mask.js";
 import type { GameSession } from "../game/game-session.js";
 import type {
 	AiId,
@@ -17,10 +22,83 @@ import type {
 	WorldEntity,
 } from "../game/types.js";
 
+// Module-level state for cone focus
+let mapFocus: AiId | null = null;
+let activeSession: GameSession | null = null;
+
 const VISUAL_ROWS = 7;
 const VISUAL_COLS = 7;
 
 type CardinalDirection = "north" | "south" | "east" | "west";
+
+/**
+ * Convert hex color to rgba with given alpha.
+ * @param hex Color in hex format (e.g., "#e07a5f")
+ * @param alpha Alpha value in range [0, 1]
+ * @returns CSS rgba string
+ */
+function hexToRgba(hex: string, alpha: number): string {
+	const h = hex.replace("#", "");
+	const expanded =
+		h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+	const r = parseInt(expanded.substring(0, 2), 16);
+	const g = parseInt(expanded.substring(2, 4), 16);
+	const b = parseInt(expanded.substring(4, 6), 16);
+	return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/**
+ * Apply cone tint to world map cells based on active focus.
+ * Tints cells in the focused daemon's cone with persona color at 0.25 alpha.
+ * @param containerEl The map container element
+ * @param state The current game state
+ */
+function applyConeTint(containerEl: HTMLElement, state: GameState): void {
+	const mask = mapFocus ? coneMaskForDaemon(state, mapFocus) : null;
+	const tintColor = mapFocus ? state.personas[mapFocus]?.color : null;
+
+	for (const cell of containerEl.querySelectorAll<HTMLElement>(
+		".dev-map-cell",
+	)) {
+		const dataCell = cell.getAttribute("data-cell");
+		if (mask && tintColor && dataCell && mask.has(dataCell)) {
+			cell.style.backgroundColor = hexToRgba(tintColor, 0.25);
+			cell.setAttribute("data-cone-focus", mapFocus!);
+		} else {
+			cell.style.backgroundColor = "";
+			cell.removeAttribute("data-cone-focus");
+		}
+	}
+}
+
+/**
+ * Set the active focus daemon and update tint on the map.
+ * @param aiId The daemon to focus, or null to clear focus
+ */
+export function setMapFocus(aiId: AiId | null): void {
+	mapFocus = aiId;
+	const containerEl = document.querySelector<HTMLElement>("#dev-world-map");
+	if (containerEl && activeSession) {
+		applyConeTint(containerEl, activeSession.getState());
+	}
+
+	// Sweep all focus-cone buttons to update data-focus-active
+	for (const btn of document.querySelectorAll<HTMLElement>(
+		'[data-field="focus-cone"]',
+	)) {
+		const panel = btn.closest<HTMLElement>(".ai-panel");
+		const panelAi = panel?.getAttribute("data-ai") ?? null;
+		btn.setAttribute("data-focus-active", String(panelAi === mapFocus));
+	}
+}
+
+/**
+ * Get the currently focused daemon, or null if no focus is active.
+ * @returns The focused AiId, or null
+ */
+export function getMapFocus(): AiId | null {
+	return mapFocus;
+}
 
 function isGridPosition(holder: AiId | GridPosition): holder is GridPosition {
 	return typeof holder === "object" && holder !== null;
@@ -278,6 +356,10 @@ export function renderWorldMap(
 	}
 
 	containerEl.appendChild(grid);
+
+	// Update active session and apply cone tint
+	activeSession = session;
+	applyConeTint(containerEl, state);
 }
 
 /**
@@ -341,4 +423,8 @@ export function updateWorldMap(
 			cell.removeAttribute("data-satisfaction");
 		}
 	});
+
+	// Update active session and re-apply cone tint
+	activeSession = session;
+	applyConeTint(containerEl, state);
 }

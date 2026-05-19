@@ -1816,3 +1816,19 @@ main {
 .dev-map-cell:hover .dev-map-tooltip {
 	display: inline-block;
 }
+
+/* Focus cone button */
+.dev-footer-focus-cone {
+	background: none;
+	border: 1px dashed rgba(255, 180, 84, 0.4);
+	color: var(--amber-dim);
+	font-family: var(--mono);
+	font-size: 10px;
+	padding: 0 4px;
+	cursor: pointer;
+}
+
+.dev-footer-focus-cone[data-focus-active="true"] {
+	color: var(--amber);
+	border-color: rgba(255, 180, 84, 0.8);
+}

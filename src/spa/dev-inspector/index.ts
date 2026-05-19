@@ -2,12 +2,14 @@ import type { GameSession } from "../game/game-session.js";
 import type { PendingBootstrap } from "../game/pending-bootstrap.js";
 import { clearDaemonTurnResults, renderDaemonFooter } from "./daemon-footer.js";
 import { renderGameStrip } from "./game-strip.js";
-import { renderWorldMap } from "./world-map.js";
+import { getMapFocus, renderWorldMap, setMapFocus } from "./world-map.js";
 
 export interface RenderInspectorOpts {
 	session?: GameSession;
 	pendingBootstrap: PendingBootstrap | undefined;
 }
+
+let escapeListenerAttached = false;
 
 export function renderInspector(
 	root: HTMLElement,
@@ -39,4 +41,22 @@ export function renderInspector(
 			renderDaemonFooter(panel, aiId, opts.session);
 		}
 	}
+
+	// Attach Escape listener (only once per document)
+	if (!escapeListenerAttached) {
+		escapeListenerAttached = true;
+		doc.addEventListener("keydown", (e) => {
+			if (e.key === "Escape" && getMapFocus() !== null) {
+				setMapFocus(null);
+			}
+		});
+	}
+}
+
+/**
+ * Test-only helper to reset inspector state between tests.
+ */
+export function __resetInspectorForTests(): void {
+	escapeListenerAttached = false;
+	setMapFocus(null);
 }
