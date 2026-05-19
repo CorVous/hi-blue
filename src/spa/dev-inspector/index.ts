@@ -1,5 +1,6 @@
 import type { GameSession } from "../game/game-session.js";
 import type { PendingBootstrap } from "../game/pending-bootstrap.js";
+import { renderGameStrip } from "./game-strip.js";
 
 export interface RenderInspectorOpts {
 	session?: GameSession;
@@ -20,4 +21,5 @@ export function renderInspector(
 	if (map) map.removeAttribute("hidden");
 	const footers = doc.querySelectorAll<HTMLElement>(".dev-daemon-footer");
 	for (const f of footers) f.removeAttribute("hidden");
+	if (strip && opts.session) renderGameStrip(strip, opts.session);
 }

@@ -8,6 +8,7 @@ import {
 	topInfoStatus,
 } from "../bbs-chrome.js";
 import { renderInspector } from "../dev-inspector/index.js";
+import { updateGameStripSummary } from "../dev-inspector/game-strip.js";
 import {
 	buildSameDaemonsSession,
 	buildSessionFromAssets,
@@ -1739,6 +1740,11 @@ export function renderGame(
 						break;
 					}
 				}
+			}
+
+			if (__DEV__ && session) {
+				const stripEl = document.querySelector<HTMLElement>("#dev-game-strip");
+				if (stripEl) updateGameStripSummary(stripEl, session);
 			}
 
 			// Persist state after the encoder render loop completes.
