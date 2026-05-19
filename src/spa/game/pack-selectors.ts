@@ -73,6 +73,17 @@ export function obstacles(pack: ContentPack): WorldEntity[] {
 }
 
 /**
+ * Returns standalone objective_object entities — those WITHOUT a pairsWithSpaceId.
+ * These are objective objects that exist independently (e.g. a satisfied objective
+ * that doesn't pair with a space).
+ */
+export function standaloneObjectives(pack: ContentPack): WorldEntity[] {
+	return pack.entities.filter(
+		(e) => e.kind === "objective_object" && !e.pairsWithSpaceId,
+	);
+}
+
+/**
  * Returns ALL objective_space entities: carry-paired spaces first (in pair
  * order), then bound spaces (in entity-array order).
  */

@@ -3405,3 +3405,286 @@ describe("complication countdown — coordinator integration", () => {
 		});
 	});
 });
+
+// ============================================================================
+// coneDelta persistence across rounds (issue #469)
+// ============================================================================
+describe("coneDelta persistence via coneEntities", () => {
+	it("passes coneEntities from round 1 as priorConeEntities to round 2, emitting first-sight line", async () => {
+		// Round 1: red and green both pass, item initially NOT in red's cone
+		// Round 2: item is moved into red's cone, and red takes an action
+		// Expect perception-delta line in the action tool-call's coneDelta
+		const pack = makeTestPack(
+			[
+				{
+					id: "item",
+					kind: "interesting_object",
+					name: "TestItem",
+					examineDescription: "It shimmers.",
+					holder: { row: 10, col: 10 }, // Far away, not in cone
+				},
+			],
+			{
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 0, col: 0 }, facing: "south" },
+					green: { position: { row: 0, col: 1 }, facing: "north" },
+					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				},
+			},
+		);
+		const game1 = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const provider1 = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] }, // red pass
+			{ assistantText: "", toolCalls: [] }, // green pass
+			{ assistantText: "", toolCalls: [] }, // cyan pass
+		]);
+
+		const round1Result = await runRound(game1, "red", "hello", provider1);
+		const game2 = round1Result.nextState;
+
+		// Move item into red's cone for round 2 (directly in front when facing south)
+		const gameWithItem = {
+			...game2,
+			world: {
+				...game2.world,
+				entities: game2.world.entities.map((e) =>
+					e.id === "item" ? { ...e, holder: { row: 1, col: 0 } } : e,
+				),
+			},
+		};
+
+		// Round 2: red does something with the new item in cone
+		const provider2 = new MockRoundLLMProvider([
+			{
+				assistantText: "I see the item",
+				toolCalls: [
+					{
+						id: "1",
+						name: "go",
+						argumentsJson: JSON.stringify({ direction: "north" }),
+					},
+				],
+			}, // red moves
+			{ assistantText: "", toolCalls: [] }, // green pass
+			{ assistantText: "", toolCalls: [] }, // cyan pass
+		]);
+
+		// Pass round1's coneEntities as priorConeEntities to round 2
+		const round2Result = await runRound(
+			gameWithItem,
+			"red",
+			"move",
+			provider2,
+			Math.random,
+			undefined,
+			{}, // no prior tool roundtrip
+			undefined,
+			undefined,
+			{}, // no prior cone snapshots
+			undefined,
+			undefined,
+			round1Result.coneEntities, // Pass coneEntities from round 1
+		);
+
+		// Check that red's action tool-call includes the perception-delta line
+		const redLog = round2Result.nextState.conversationLogs.red ?? [];
+		const redActionToolCall = redLog.find(
+			(e) => e.kind === "tool-call" && e.toolName === "go",
+		);
+		expect(redActionToolCall?.kind === "tool-call").toBe(true);
+		expect(
+			redActionToolCall?.kind === "tool-call" && redActionToolCall.coneDelta,
+		).toBeDefined();
+		const coneDelta =
+			redActionToolCall?.kind === "tool-call"
+				? redActionToolCall.coneDelta
+				: "";
+		expect(coneDelta).toContain("Came into view: TestItem");
+	});
+
+	it("merges perception-delta with actorConeDelta when both exist", async () => {
+		// red moves while an item enters its cone
+		// Expect both the move result and the first-sight line in coneDelta
+		const pack = makeTestPack(
+			[
+				{
+					id: "item",
+					kind: "interesting_object",
+					name: "Treasure",
+					examineDescription: "Gold coins.",
+					holder: { row: 10, col: 10 }, // Initially far away
+				},
+			],
+			{
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 0, col: 0 }, facing: "south" },
+					green: { position: { row: 0, col: 1 }, facing: "north" },
+					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				},
+			},
+		);
+		const game1 = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const provider1 = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const round1Result = await runRound(game1, "red", "hi", provider1);
+
+		// Round 2 with item now visible in red's cone
+		const gameWithItem = {
+			...round1Result.nextState,
+			world: {
+				...round1Result.nextState.world,
+				entities: round1Result.nextState.world.entities.map((e) =>
+					e.id === "item" ? { ...e, holder: { row: 1, col: 0 } } : e,
+				),
+			},
+		};
+
+		const provider2 = new MockRoundLLMProvider([
+			{
+				assistantText: "Moving north",
+				toolCalls: [
+					{
+						id: "1",
+						name: "go",
+						argumentsJson: JSON.stringify({ direction: "north" }),
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const round2Result = await runRound(
+			gameWithItem,
+			"red",
+			"move",
+			provider2,
+			Math.random,
+			undefined,
+			{},
+			undefined,
+			undefined,
+			{},
+			undefined,
+			undefined,
+			round1Result.coneEntities,
+		);
+
+		const redLog = round2Result.nextState.conversationLogs.red ?? [];
+		const redGo = redLog.find(
+			(e) => e.kind === "tool-call" && e.toolName === "go",
+		);
+		expect(redGo?.kind === "tool-call" && redGo.coneDelta).toBeDefined();
+		const delta = redGo?.kind === "tool-call" ? redGo.coneDelta : "";
+		// Should contain both the movement result and the perception delta
+		expect(delta).toMatch(/Treasure|moved|north/i);
+		expect(delta).toContain("Came into view: Treasure");
+	});
+
+	it("only emits perception delta for first action tool-call in multi-action turn", async () => {
+		// red emits two messages and one action in the same turn
+		// Only the action should get the perception delta appended
+		const pack = makeTestPack(
+			[
+				{
+					id: "item",
+					kind: "interesting_object",
+					name: "Mysterious Box",
+					examineDescription: "A sealed box.",
+					holder: { row: 10, col: 10 }, // Initially far away
+				},
+			],
+			{
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 0, col: 0 }, facing: "south" },
+					green: { position: { row: 0, col: 1 }, facing: "north" },
+					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				},
+			},
+		);
+		const game1 = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const provider1 = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const round1Result = await runRound(game1, "red", "hi", provider1);
+
+		const gameWithItem = {
+			...round1Result.nextState,
+			world: {
+				...round1Result.nextState.world,
+				entities: round1Result.nextState.world.entities.map((e) =>
+					e.id === "item" ? { ...e, holder: { row: 1, col: 0 } } : e,
+				),
+			},
+		};
+
+		const provider2 = new MockRoundLLMProvider([
+			{
+				assistantText: "I see something",
+				toolCalls: [
+					{
+						id: "1",
+						name: "message",
+						argumentsJson: JSON.stringify({
+							to: "blue",
+							content: "Look at this!",
+						}),
+					},
+					{
+						id: "2",
+						name: "go",
+						argumentsJson: JSON.stringify({ direction: "north" }),
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const round2Result = await runRound(
+			gameWithItem,
+			"red",
+			"move",
+			provider2,
+			Math.random,
+			undefined,
+			{},
+			undefined,
+			undefined,
+			{},
+			undefined,
+			undefined,
+			round1Result.coneEntities,
+		);
+
+		const redLog = round2Result.nextState.conversationLogs.red ?? [];
+		const messageEntry = redLog.find((e) => e.kind === "message");
+		const actionEntry = redLog.find(
+			(e) => e.kind === "tool-call" && e.toolName === "go",
+		);
+
+		// Message entry should NOT have coneDelta (messages don't have coneDelta, only actions do)
+		expect(messageEntry?.kind === "message").toBe(true);
+		expect(
+			(messageEntry as { coneDelta?: unknown } | undefined)?.coneDelta,
+		).toBeUndefined();
+
+		// Action entry should have coneDelta with perception delta (merged on first action)
+		expect(
+			actionEntry?.kind === "tool-call" && actionEntry.coneDelta,
+		).toBeDefined();
+		const delta =
+			actionEntry?.kind === "tool-call" ? actionEntry.coneDelta : "";
+		expect(delta).toContain("Came into view: Mysterious Box");
+	});
+});

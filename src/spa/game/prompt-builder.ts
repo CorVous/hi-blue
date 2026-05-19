@@ -15,6 +15,12 @@ import type {
 	WorldState,
 } from "./types";
 
+/** Structured entity state for perception-delta diffing. */
+export interface ConeEntityState {
+	inCone: boolean;
+	satisfied: boolean;
+}
+
 export interface AiContext {
 	name: string;
 	aiId: AiId;
@@ -34,6 +40,8 @@ export interface AiContext {
 	personaSpatial: Record<AiId, PersonaSpatialState>;
 	/** Color for each AI, keyed by AiId — used in cone rendering. */
 	personaColors: Record<AiId, string>;
+	/** Name for each AI, keyed by AiId — used in perception-delta rendering. */
+	personaNames: Record<AiId, string>;
 	/**
 	 * Four distant horizon landmarks, one per cardinal anchor.
 	 * Used to render the "On the horizon ahead:" line in `<where_you_are>`.
@@ -52,6 +60,13 @@ export interface AiContext {
 	 * rather than re-reading an unchanged cone.
 	 */
 	prevConeSnapshot?: string;
+	/**
+	 * Structured entity perception state from the previous turn, keyed by entity id.
+	 * Used to diff entity entry/exit/satisfaction changes and emit perception-delta lines
+	 * that persist via coneDelta into the conversation log.
+	 * Undefined on the first turn of a phase.
+	 */
+	prevConeEntities?: Record<string, ConeEntityState>;
 	/**
 	 * Broadcast entry contents for the current round — world announcements
 	 * (e.g. weather change) that fired after the previous turn's LLM calls.
@@ -88,6 +103,11 @@ export interface BuildAiContextOpts {
 	 * model gets a fresh delta rather than re-reading an unchanged cone.
 	 */
 	prevConeSnapshot?: string;
+	/**
+	 * Structured entity perception state from this AI's previous turn.
+	 * When supplied, used to emit perception-delta lines (first-sight, departure, transition).
+	 */
+	prevConeEntities?: Record<string, ConeEntityState>;
 }
 
 export function buildAiContext(
@@ -125,6 +145,10 @@ export function buildAiContext(
 		Object.entries(game.personas).map(([id, p]) => [id, p.color]),
 	);
 
+	const personaNames: Record<AiId, string> = Object.fromEntries(
+		Object.entries(game.personas).map(([id, p]) => [id, p.name]),
+	);
+
 	return {
 		name: persona.name,
 		aiId,
@@ -140,6 +164,7 @@ export function buildAiContext(
 		budget,
 		personaSpatial,
 		personaColors,
+		personaNames,
 		landmarks,
 		wallName,
 		pendingBroadcasts,
@@ -147,6 +172,9 @@ export function buildAiContext(
 		objectives: game.objectives,
 		...(opts?.prevConeSnapshot !== undefined
 			? { prevConeSnapshot: opts.prevConeSnapshot }
+			: {}),
+		...(opts?.prevConeEntities !== undefined
+			? { prevConeEntities: opts.prevConeEntities }
 			: {}),
 		toSystemPrompt() {
 			return renderSystemPrompt(this);
@@ -476,6 +504,188 @@ export function getParallelFraming(): ParallelFraming | null {
 
 function facingLabel(facing: CardinalDirection): string {
 	return facing.charAt(0).toUpperCase() + facing.slice(1);
+}
+
+/**
+ * Build a structured perception state for all renderable entities in the actor's cone.
+ * Returns a map keyed by entity id, tracking whether each entity is in-cone and satisfied.
+ * Covers renderable items, obstacles, objective_spaces, and other personas in viewCells
+ * (NOT including the actor's own cell — first-sight is about coming into view).
+ */
+export function buildConeEntityState(
+	ctx: AiContext,
+): Record<string, ConeEntityState> {
+	const actorSpatial = ctx.personaSpatial[ctx.aiId];
+	if (!actorSpatial) return {};
+
+	const state: Record<string, ConeEntityState> = {};
+	const coneCells = projectCone(actorSpatial.position, actorSpatial.facing);
+	const viewCells = coneCells.filter((c) => !c.isOwnCell);
+
+	// Iterate through view cells and track entities
+	for (const cell of viewCells) {
+		if (cell.isWall) continue; // Wall sentinel — skip
+
+		const { position } = cell;
+
+		// Other personas
+		for (const [otherId, otherSpatial] of Object.entries(ctx.personaSpatial)) {
+			if (otherId === ctx.aiId) continue;
+			if (!positionsEqual(otherSpatial.position, position)) continue;
+			state[otherId] = { inCone: true, satisfied: false };
+		}
+
+		// Renderable items
+		const items = renderableItems(ctx.worldSnapshot.entities);
+		for (const item of items) {
+			const h = item.holder;
+			if (isGridPosition(h) && positionsEqual(h, position)) {
+				state[item.id] = {
+					inCone: true,
+					satisfied: item.satisfactionState === "satisfied",
+				};
+			}
+		}
+
+		// Obstacles
+		for (const obs of ctx.worldSnapshot.entities) {
+			if (obs.kind !== "obstacle") continue;
+			const h = obs.holder;
+			if (isGridPosition(h) && positionsEqual(h, position)) {
+				state[obs.id] = { inCone: true, satisfied: false };
+			}
+		}
+
+		// Objective spaces
+		for (const space of ctx.worldSnapshot.entities) {
+			if (space.kind !== "objective_space") continue;
+			const h = space.holder;
+			if (isGridPosition(h) && positionsEqual(h, position)) {
+				state[space.id] = {
+					inCone: true,
+					satisfied: space.satisfactionState === "satisfied",
+				};
+			}
+		}
+	}
+
+	return state;
+}
+
+/**
+ * Compute perception-delta lines from a diff of entity state.
+ * Emits first-sight, departure, and satisfaction-transition lines.
+ * Returns an array of strings (one per perception change).
+ *
+ * - First-sight: "Came into view: <name> — <description>" (uses postExamineDescription when satisfied)
+ * - Departure: "Lost from view: <name>" (no flavor)
+ * - Transition: "<name> is now <postExamineDescription>" when satisfaction flips to satisfied
+ *
+ * Edge cases:
+ * - Entity new AND satisfied this turn: emit ONLY the transition line (skip first-sight to avoid duplication)
+ * - Entity moves within cone: inCone stays true → no line
+ * - Entity destroyed/not in world: treated as departure if previously inCone
+ * - Persona enters/leaves: emit first-sight/departure with persona name, NO flavor
+ * - Pick-up suppression: entity from cone-cell to held → suppress departure if entity.holder === ctx.aiId
+ */
+export function renderPerceptionDelta(
+	ctx: AiContext,
+	prevEntities: Record<string, ConeEntityState> | undefined,
+): string[] {
+	if (prevEntities === undefined) return []; // No prior state, no delta
+
+	const currEntities = buildConeEntityState(ctx);
+	const lines: string[] = [];
+
+	// Track entities we've emitted transition lines for (to suppress duplicate first-sight)
+	const transitionEmitted = new Set<string>();
+
+	// Check satisfaction transitions first (before entry/exit logic)
+	for (const [entityId, currState] of Object.entries(currEntities)) {
+		const prevState = prevEntities[entityId];
+		if (!prevState || !currState.inCone) continue; // Not in prev cone, or not in current cone — skip
+
+		// Satisfaction flip to satisfied
+		if (!prevState.satisfied && currState.satisfied) {
+			const entity = ctx.worldSnapshot.entities.find((e) => e.id === entityId);
+			if (!entity) continue;
+			if (entity.kind === "obstacle") continue; // Obstacles don't satisfy
+
+			// For personas, skip (they don't have postExamineDescription)
+			const isPersona = ctx.personaSpatial[entityId] !== undefined;
+			if (isPersona) continue;
+
+			const description =
+				entity.postExamineDescription ?? entity.examineDescription;
+			if (description) {
+				lines.push(`${entity.name} is now ${description}`);
+				transitionEmitted.add(entityId);
+			}
+		}
+	}
+
+	// Check departures (was in prev cone, not in current cone)
+	for (const [entityId, prevState] of Object.entries(prevEntities)) {
+		const currState = currEntities[entityId];
+		if (!prevState.inCone) continue; // Was not in cone before, skip
+		if (currState?.inCone) continue; // Still in cone, skip
+
+		// Check if it's a persona first
+		const isPersona = ctx.personaSpatial[entityId] !== undefined;
+		if (isPersona) {
+			// Emit departure for persona with name only
+			const personaName = ctx.personaNames[entityId] ?? entityId;
+			lines.push(`Lost from view: ${personaName}`);
+			continue;
+		}
+
+		const entity = ctx.worldSnapshot.entities.find((e) => e.id === entityId);
+
+		// Check pick-up suppression: if entity is now held by the actor, suppress departure
+		if (entity && entity.holder === ctx.aiId) continue;
+
+		// Emit departure line with no flavor
+		const name = entity?.name ?? entityId;
+		lines.push(`Lost from view: ${name}`);
+	}
+
+	// Check first-sight (not in prev cone, in current cone)
+	for (const [entityId, currState] of Object.entries(currEntities)) {
+		const prevState = prevEntities[entityId];
+		if (prevState?.inCone) continue; // Was already in cone, skip
+		if (!currState.inCone) continue; // Not in current cone, skip (shouldn't happen)
+
+		// Skip if transition was emitted (entity new AND satisfied)
+		if (transitionEmitted.has(entityId)) continue;
+
+		// Check if it's a persona first
+		const isPersona = ctx.personaSpatial[entityId] !== undefined;
+		if (isPersona) {
+			// Emit first-sight for persona with name only
+			const personaName = ctx.personaNames[entityId] ?? entityId;
+			lines.push(`Came into view: ${personaName}`);
+			continue;
+		}
+
+		const entity = ctx.worldSnapshot.entities.find((e) => e.id === entityId);
+		if (!entity) continue;
+
+		// For items/spaces, emit with appropriate description
+		if (entity.kind === "obstacle") {
+			// Obstacles don't have examine description typically, skip flavor
+			lines.push(`Came into view: ${entity.name}`);
+		} else {
+			// Use postExamineDescription if satisfied, else examineDescription
+			const description = chooseExamineDescription(entity);
+			if (description) {
+				lines.push(`Came into view: ${entity.name} — ${description}`);
+			} else {
+				lines.push(`Came into view: ${entity.name}`);
+			}
+		}
+	}
+
+	return lines;
 }
 
 /** True when `holder` is a GridPosition (not an AiId string). */
@@ -862,12 +1072,21 @@ function parseYouLine(line: string): {
 function renderCurrentState(ctx: AiContext): string {
 	const lines: string[] = [];
 
-	if (ctx.prevConeSnapshot !== undefined || ctx.pendingBroadcasts.length > 0) {
+	if (
+		ctx.prevConeSnapshot !== undefined ||
+		ctx.pendingBroadcasts.length > 0 ||
+		ctx.prevConeEntities !== undefined
+	) {
 		lines.push("<whats_new>");
 		if (ctx.prevConeSnapshot !== undefined) {
 			const current = buildConeSnapshot(ctx);
 			const diff = renderWhatsNew(ctx.prevConeSnapshot, current);
 			lines.push(diff ?? "(no change)");
+		}
+		// Append perception-delta lines (first-sight, departure, transition)
+		const perceptionDelta = renderPerceptionDelta(ctx, ctx.prevConeEntities);
+		for (const line of perceptionDelta) {
+			lines.push(line);
 		}
 		for (const content of ctx.pendingBroadcasts) {
 			lines.push(`[announcement] ${content}`);
