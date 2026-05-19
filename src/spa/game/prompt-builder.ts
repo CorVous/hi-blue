@@ -495,6 +495,17 @@ function renderableItems(entities: WorldEntity[]): WorldEntity[] {
 	);
 }
 
+/**
+ * Choose the appropriate examine description for an entity based on its satisfaction state.
+ * Returns postExamineDescription if the entity is satisfied and has one, otherwise examineDescription.
+ */
+function chooseExamineDescription(entity: WorldEntity): string | undefined {
+	return entity.satisfactionState === "satisfied" &&
+		entity.postExamineDescription
+		? entity.postExamineDescription
+		: entity.examineDescription;
+}
+
 function renderSystemPrompt(ctx: AiContext): string {
 	const lines: string[] = [];
 
@@ -883,6 +894,13 @@ function renderCurrentState(ctx: AiContext): string {
 		const heldItems = items.filter((item) => item.holder === ctx.aiId);
 		if (heldItems.length > 0) {
 			lines.push(`You are holding: ${heldItems.map((i) => i.name).join(", ")}`);
+			// Auto-emit examineDescription for each held item
+			for (const item of heldItems) {
+				const chosenDescription = chooseExamineDescription(item);
+				// Skip if empty/undefined
+				if (!chosenDescription) continue;
+				lines.push(`    ${item.name}: ${chosenDescription}`);
+			}
 		} else {
 			lines.push("You are holding: nothing");
 		}
@@ -1008,12 +1026,8 @@ function renderCurrentState(ctx: AiContext): string {
 				// Skip entities held by the actor
 				if (entity.holder === ctx.aiId) continue;
 
-				// Choose description: postExamineDescription if satisfied and present, else examineDescription
-				const chosenDescription =
-					entity.satisfactionState === "satisfied" &&
-					entity.postExamineDescription
-						? entity.postExamineDescription
-						: entity.examineDescription;
+				// Choose description using helper
+				const chosenDescription = chooseExamineDescription(entity);
 
 				// Skip if empty/undefined
 				if (!chosenDescription) continue;

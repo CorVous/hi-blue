@@ -1651,6 +1651,176 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 		);
 	});
 
+	// ─ Auto-emit examineDescription for held items (issue #467) ─
+	describe("auto-emit examineDescription for held items (issue #467)", () => {
+		it("emits examineDescription for a single held item", () => {
+			// red holds a switch
+			const item: WorldEntity = {
+				id: "switch",
+				kind: "interesting_object",
+				name: "brass switch",
+				examineDescription: "A small brass switch ready to be pressed.",
+				holder: "red",
+			};
+			const pack = makeTestPack([item], {
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS,
+			});
+			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// Examine description should appear as an indented continuation
+			expect(stateMsg).toContain(
+				"brass switch: A small brass switch ready to be pressed.",
+			);
+		});
+
+		it("emits examineDescription for multiple held items", () => {
+			// red holds two items
+			const switch_item: WorldEntity = {
+				id: "switch",
+				kind: "interesting_object",
+				name: "brass switch",
+				examineDescription: "A small brass switch ready to be pressed.",
+				holder: "red",
+			};
+			const key_item: WorldEntity = {
+				id: "key",
+				kind: "interesting_object",
+				name: "blue key",
+				examineDescription: "A worn brass key.",
+				holder: "red",
+			};
+			const pack = makeTestPack([switch_item, key_item], {
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS,
+			});
+			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// Both descriptions should appear
+			expect(stateMsg).toContain(
+				"brass switch: A small brass switch ready to be pressed.",
+			);
+			expect(stateMsg).toContain("blue key: A worn brass key.");
+		});
+
+		it("uses postExamineDescription when held item is satisfied", () => {
+			// red holds an item that is satisfied
+			const item: WorldEntity = {
+				id: "switch",
+				kind: "interesting_object",
+				name: "brass switch",
+				examineDescription: "A small brass switch ready to be pressed.",
+				postExamineDescription: "The switch is now activated.",
+				holder: "red",
+				satisfactionState: "satisfied",
+			};
+			const pack = makeTestPack([item], {
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS,
+			});
+			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// postExamineDescription should be emitted, not examineDescription
+			expect(stateMsg).toContain("brass switch: The switch is now activated.");
+			expect(stateMsg).not.toContain(
+				"brass switch: A small brass switch ready to be pressed.",
+			);
+		});
+
+		it("falls back to examineDescription when held item is satisfied but no postExamineDescription", () => {
+			// red holds an item that is satisfied but has no postExamineDescription
+			const item: WorldEntity = {
+				id: "switch",
+				kind: "interesting_object",
+				name: "brass switch",
+				examineDescription: "A small brass switch ready to be pressed.",
+				holder: "red",
+				satisfactionState: "satisfied",
+				// no postExamineDescription property
+			};
+			const pack = makeTestPack([item], {
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS,
+			});
+			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// Should fall back to examineDescription
+			expect(stateMsg).toContain(
+				"brass switch: A small brass switch ready to be pressed.",
+			);
+		});
+
+		it("'holding nothing' branch unchanged (no sub-lines emitted)", () => {
+			const pack = makeTestPack([], {
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS,
+			});
+			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// Should have exactly "You are holding: nothing" with no sub-lines
+			expect(stateMsg).toContain("You are holding: nothing");
+		});
+
+		it("skips held items with empty examineDescription", () => {
+			// red holds an item with empty examineDescription
+			const item: WorldEntity = {
+				id: "mystery",
+				kind: "interesting_object",
+				name: "mystery object",
+				examineDescription: "", // empty
+				holder: "red",
+			};
+			const pack = makeTestPack([item], {
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS,
+			});
+			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// Should have the summary line but no indented sub-line
+			expect(stateMsg).toContain("You are holding: mystery object");
+			expect(stateMsg).not.toContain("mystery object: ");
+		});
+
+		it("held-item descriptions appear under <where_you_are>, not <what_you_see>", () => {
+			// red holds an item
+			const item: WorldEntity = {
+				id: "switch",
+				kind: "interesting_object",
+				name: "brass switch",
+				examineDescription: "A small brass switch ready to be pressed.",
+				holder: "red",
+			};
+			const pack = makeTestPack([item], {
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS,
+			});
+			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// Split by tags
+			const whereStart = stateMsg.indexOf("<where_you_are>");
+			const whereEnd = stateMsg.indexOf("</where_you_are>");
+			const whatStart = stateMsg.indexOf("<what_you_see>");
+			const whatEnd = stateMsg.indexOf("</what_you_see>");
+			const whereSection = stateMsg.substring(whereStart, whereEnd);
+			const whatSection = stateMsg.substring(whatStart, whatEnd);
+			// Description should appear in where_you_are
+			expect(whereSection).toContain(
+				"brass switch: A small brass switch ready to be pressed.",
+			);
+			// Should NOT appear in what_you_see
+			expect(whatSection).not.toContain(
+				"brass switch: A small brass switch ready to be pressed.",
+			);
+		});
+	});
+
 	// ─ Auto-emit examineDescription tests (issue #466) ─
 	describe("auto-emit examineDescription for entities in cone (issue #466)", () => {
 		it("emits examineDescription for interesting_object in cone", () => {
