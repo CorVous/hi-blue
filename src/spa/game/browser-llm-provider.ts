@@ -47,9 +47,7 @@ export class BrowserLLMProvider implements RoundLLMProvider {
 			let firstTokenFired = false;
 
 			onLifecycle?.(
-				daemonId
-					? { phase: "started", daemonId }
-					: { phase: "started" },
+				daemonId ? { phase: "started", daemonId } : { phase: "started" },
 			);
 
 			await streamCompletion({
@@ -121,9 +119,7 @@ export class BrowserLLMProvider implements RoundLLMProvider {
 
 			const assistantText = textParts.join("") || reasoningParts.join("");
 			onLifecycle?.(
-				daemonId
-					? { phase: "completed", daemonId }
-					: { phase: "completed" },
+				daemonId ? { phase: "completed", daemonId } : { phase: "completed" },
 			);
 			return {
 				assistantText,

@@ -12,9 +12,15 @@ describe("MockRoundLLMProvider — onLifecycle callback", () => {
 		const provider = new MockRoundLLMProvider(["hello world"]);
 		const events: string[] = [];
 
-		const result = await provider.streamRound([], [], undefined, undefined, (event) => {
-			events.push(event.phase);
-		});
+		const result = await provider.streamRound(
+			[],
+			[],
+			undefined,
+			undefined,
+			(event) => {
+				events.push(event.phase);
+			},
+		);
 
 		expect(events).toEqual(["started", "first-token", "completed"]);
 		expect(result.assistantText).toBe("hello world");

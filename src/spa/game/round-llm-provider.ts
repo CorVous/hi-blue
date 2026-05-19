@@ -99,9 +99,7 @@ export class MockRoundLLMProvider implements RoundLLMProvider {
 		try {
 			this.calls.push({ messages, tools });
 			onLifecycle?.(
-				daemonId
-					? { phase: "started", daemonId }
-					: { phase: "started" },
+				daemonId ? { phase: "started", daemonId } : { phase: "started" },
 			);
 
 			const raw =
@@ -128,9 +126,7 @@ export class MockRoundLLMProvider implements RoundLLMProvider {
 			}
 
 			onLifecycle?.(
-				daemonId
-					? { phase: "completed", daemonId }
-					: { phase: "completed" },
+				daemonId ? { phase: "completed", daemonId } : { phase: "completed" },
 			);
 			return result;
 		} catch (error) {

@@ -203,15 +203,9 @@ describe("BrowserLLMProvider.streamRound — onLifecycle callback", () => {
 		const provider = new BrowserLLMProvider();
 		const events: string[] = [];
 
-		await provider.streamRound(
-			[],
-			[],
-			undefined,
-			undefined,
-			(event) => {
-				events.push(event.phase);
-			},
-		);
+		await provider.streamRound([], [], undefined, undefined, (event) => {
+			events.push(event.phase);
+		});
 
 		const firstTokenCount = events.filter((p) => p === "first-token").length;
 		expect(firstTokenCount).toBe(1);
@@ -235,17 +229,11 @@ describe("BrowserLLMProvider.streamRound — onLifecycle callback", () => {
 		const provider = new BrowserLLMProvider();
 		const events: Array<string> = [];
 
-		await provider.streamRound(
-			[],
-			[],
-			undefined,
-			"daemon-456",
-			(event) => {
-				events.push(
-					event.daemonId ? `${event.phase}:${event.daemonId}` : event.phase,
-				);
-			},
-		);
+		await provider.streamRound([], [], undefined, "daemon-456", (event) => {
+			events.push(
+				event.daemonId ? `${event.phase}:${event.daemonId}` : event.phase,
+			);
+		});
 
 		expect(events).toEqual([
 			"started:daemon-456",
@@ -259,24 +247,15 @@ describe("BrowserLLMProvider.streamRound — onLifecycle callback", () => {
 	it("fires started then errored when fetch rejects", async () => {
 		const fetchError = new Error("Network failed");
 
-		vi.stubGlobal(
-			"fetch",
-			vi.fn().mockRejectedValue(fetchError),
-		);
+		vi.stubGlobal("fetch", vi.fn().mockRejectedValue(fetchError));
 
 		const provider = new BrowserLLMProvider();
 		const events: Array<string> = [];
 
 		try {
-			await provider.streamRound(
-				[],
-				[],
-				undefined,
-				undefined,
-				(event) => {
-					events.push(event.phase);
-				},
-			);
+			await provider.streamRound([], [], undefined, undefined, (event) => {
+				events.push(event.phase);
+			});
 		} catch {
 			// Expected to throw
 		}
@@ -310,15 +289,9 @@ describe("BrowserLLMProvider.streamRound — onLifecycle callback", () => {
 		const events: string[] = [];
 
 		try {
-			await provider.streamRound(
-				[],
-				[],
-				undefined,
-				undefined,
-				(event) => {
-					events.push(event.phase);
-				},
-			);
+			await provider.streamRound([], [], undefined, undefined, (event) => {
+				events.push(event.phase);
+			});
 		} catch {
 			// Expected to throw
 		}
