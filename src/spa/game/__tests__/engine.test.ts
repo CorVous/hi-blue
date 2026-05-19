@@ -10,6 +10,12 @@ import {
 	shiftToBPack,
 	startGame,
 } from "../engine";
+import {
+	boundSpaces,
+	carryPairs,
+	interestingObjects,
+	obstacles,
+} from "../pack-selectors";
 import type { AiPersona, ContentPack, GameState } from "../types";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
@@ -111,6 +117,82 @@ describe("startGame world.entities", () => {
 		expect(ids).toContain("useSpace-0-space");
 		expect(ids).toContain("useSpace-1-space");
 		expect(ids).toContain("convergence-2-space");
+	});
+
+	it("world.entities id-set equals selector-derived id-set for a mixed pack", () => {
+		// Mixed pack: one carry pair (object + space), two bound spaces,
+		// one interesting object, one obstacle. The invariant under test is
+		// that startGame's world.entities membership is exactly the union of
+		// the pack-selector outputs — i.e. engine.ts must build entities by
+		// asking the selectors, not by hand-fanning bucket reads.
+		const mixedPack: ContentPack = {
+			...TEST_CONTENT_PACK,
+			objectivePairs: [
+				{
+					object: {
+						id: "carry-0-object",
+						kind: "objective_object",
+						name: "brass key",
+						examineDescription: "",
+						pairsWithSpaceId: "carry-0-space",
+						holder: { row: 0, col: 0 },
+					},
+					space: {
+						id: "carry-0-space",
+						kind: "objective_space",
+						name: "iron lock",
+						examineDescription: "",
+						holder: { row: 4, col: 4 },
+					},
+				},
+			],
+			boundSpaces: [
+				{
+					id: "useSpace-0-space",
+					kind: "objective_space",
+					name: "cracked pedestal",
+					examineDescription: "",
+					holder: { row: 1, col: 1 },
+				},
+				{
+					id: "convergence-1-space",
+					kind: "objective_space",
+					name: "central tile",
+					examineDescription: "",
+					holder: { row: 2, col: 2 },
+				},
+			],
+			interestingObjects: [
+				{
+					id: "interesting-0",
+					kind: "interesting_object",
+					name: "old radio",
+					examineDescription: "",
+					holder: { row: 3, col: 0 },
+				},
+			],
+			obstacles: [
+				{
+					id: "obstacle-0",
+					kind: "obstacle",
+					name: "rubble pile",
+					examineDescription: "",
+					holder: { row: 0, col: 4 },
+				},
+			],
+		};
+
+		const game = startGame(TEST_PERSONAS, mixedPack, { budgetPerAi: 5 });
+
+		const actualIds = new Set(game.world.entities.map((e) => e.id));
+		const expectedIds = new Set<string>([
+			...carryPairs(mixedPack).flatMap((p) => [p.object.id, p.space.id]),
+			...boundSpaces(mixedPack).map((e) => e.id),
+			...interestingObjects(mixedPack).map((e) => e.id),
+			...obstacles(mixedPack).map((e) => e.id),
+		]);
+
+		expect(actualIds).toEqual(expectedIds);
 	});
 });
 
