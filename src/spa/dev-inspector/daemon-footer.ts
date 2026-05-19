@@ -8,9 +8,9 @@
  * - Active complications affecting this Daemon
  */
 
-import { getMapFocus, setMapFocus } from "./world-map.js";
 import type { GameSession } from "../game/game-session";
 import type { AiId, AiPersona, ConversationEntry } from "../game/types";
+import { getMapFocus, setMapFocus } from "./world-map.js";
 
 /**
  * Side-channel storage for per-AI turn results (tokens, cost, completion, tool calls).

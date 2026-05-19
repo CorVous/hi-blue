@@ -13,7 +13,6 @@
  * - getMapFocus(): check if focus is active
  */
 
-import { coneMaskForDaemon } from "./cone-mask.js";
 import type { GameSession } from "../game/game-session.js";
 import type {
 	AiId,
@@ -21,6 +20,7 @@ import type {
 	GridPosition,
 	WorldEntity,
 } from "../game/types.js";
+import { coneMaskForDaemon } from "./cone-mask.js";
 
 // Module-level state for cone focus
 let mapFocus: AiId | null = null;
@@ -40,7 +40,12 @@ type CardinalDirection = "north" | "south" | "east" | "west";
 function hexToRgba(hex: string, alpha: number): string {
 	const h = hex.replace("#", "");
 	const expanded =
-		h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+		h.length === 3
+			? h
+					.split("")
+					.map((c) => c + c)
+					.join("")
+			: h;
 	const r = parseInt(expanded.substring(0, 2), 16);
 	const g = parseInt(expanded.substring(2, 4), 16);
 	const b = parseInt(expanded.substring(4, 6), 16);
