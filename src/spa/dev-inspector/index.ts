@@ -2,6 +2,7 @@ import type { GameSession } from "../game/game-session.js";
 import type { PendingBootstrap } from "../game/pending-bootstrap.js";
 import { clearDaemonTurnResults, renderDaemonFooter } from "./daemon-footer.js";
 import { renderGameStrip } from "./game-strip.js";
+import { renderWorldMap } from "./world-map.js";
 
 export interface RenderInspectorOpts {
 	session?: GameSession;
@@ -26,6 +27,7 @@ export function renderInspector(
 	const footers = doc.querySelectorAll<HTMLElement>(".dev-daemon-footer");
 	for (const f of footers) f.removeAttribute("hidden");
 	if (strip && opts.session) renderGameStrip(strip, opts.session);
+	if (map && opts.session) renderWorldMap(map, opts.session);
 
 	// Render per-Daemon footers for each AI
 	const state = opts.session.getState();

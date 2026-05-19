@@ -1784,3 +1784,35 @@ main {
 .dev-footer-chip[data-chip-kind="chat-lock"] {
 	color: #ff6b6b;
 }
+
+.dev-map-grid {
+	display: grid;
+	grid-template-columns: repeat(7, 1ch);
+	column-gap: 1ch;
+	row-gap: 0;
+	font-family: var(--mono);
+	white-space: pre;
+	line-height: 1;
+}
+
+.dev-map-cell {
+	position: relative;
+}
+
+.dev-map-tooltip {
+	display: none;
+	position: absolute;
+	bottom: 100%;
+	left: 0;
+	background: #000;
+	color: #ffb454;
+	border: 1px dashed rgba(255, 180, 84, 0.5);
+	padding: 2px 4px;
+	white-space: nowrap;
+	z-index: 10;
+	font-size: 10px;
+}
+
+.dev-map-cell:hover .dev-map-tooltip {
+	display: inline-block;
+}

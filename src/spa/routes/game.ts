@@ -18,6 +18,7 @@ import {
 } from "../dev-inspector/daemon-footer.js";
 import { updateGameStripSummary } from "../dev-inspector/game-strip.js";
 import { renderInspector } from "../dev-inspector/index.js";
+import { updateWorldMap } from "../dev-inspector/world-map.js";
 import {
 	buildSameDaemonsSession,
 	buildSessionFromAssets,
@@ -1820,6 +1821,9 @@ export function renderGame(
 			if (__DEV__ && session) {
 				const stripEl = document.querySelector<HTMLElement>("#dev-game-strip");
 				if (stripEl) updateGameStripSummary(stripEl, session);
+
+				const mapEl = document.querySelector<HTMLElement>("#dev-world-map");
+				if (mapEl) updateWorldMap(mapEl, session);
 
 				// Update per-Daemon footer summaries and details
 				const aiIdList = Object.keys(nextState.personas);
