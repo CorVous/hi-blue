@@ -13,7 +13,6 @@
 import { describe, expect, it } from "vitest";
 import type { OpenAiMessage } from "../../llm-client";
 import { isPlayerChatLockedOut } from "../complication-engine";
-import { DEFAULT_LANDMARKS } from "../direction";
 import {
 	deductBudget,
 	FAREWELL_LINE,
@@ -32,6 +31,7 @@ import type {
 	PersonaSpatialState,
 	UseItemObjective,
 } from "../types";
+import { makeTestPack } from "./fixtures/make-test-pack";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -79,30 +79,29 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
  * ContentPack placing flower at (0,0), key at (0,1), with
  * red→(0,0), green→(0,1), cyan→(0,2) facing north.
  */
-const TEST_CONTENT_PACK: ContentPack = {
-	setting: "",
-	weather: "",
-	timeOfDay: "",
-	objectivePairs: [
+const RGC_AI_STARTS: ContentPack["aiStarts"] = {
+	red: { position: { row: 0, col: 0 }, facing: "north" },
+	green: { position: { row: 0, col: 1 }, facing: "north" },
+	cyan: { position: { row: 0, col: 2 }, facing: "north" },
+};
+
+const TEST_CONTENT_PACK = makeTestPack(
+	[
 		{
-			object: {
-				id: "flower",
-				kind: "objective_object",
-				name: "flower",
-				examineDescription: "A flower",
-				holder: { row: 0, col: 0 },
-				pairsWithSpaceId: "flower_space",
-			},
-			space: {
-				id: "flower_space",
-				kind: "objective_space",
-				name: "flower space",
-				examineDescription: "A designated space",
-				holder: { row: 4, col: 4 },
-			},
+			id: "flower",
+			kind: "objective_object",
+			name: "flower",
+			examineDescription: "A flower",
+			holder: { row: 0, col: 0 },
+			pairsWithSpaceId: "flower_space",
 		},
-	],
-	interestingObjects: [
+		{
+			id: "flower_space",
+			kind: "objective_space",
+			name: "flower space",
+			examineDescription: "A designated space",
+			holder: { row: 4, col: 4 },
+		},
 		{
 			id: "key",
 			kind: "interesting_object",
@@ -111,15 +110,8 @@ const TEST_CONTENT_PACK: ContentPack = {
 			holder: { row: 0, col: 1 },
 		},
 	],
-	obstacles: [],
-	landmarks: DEFAULT_LANDMARKS,
-	wallName: "wall",
-	aiStarts: {
-		red: { position: { row: 0, col: 0 }, facing: "north" },
-		green: { position: { row: 0, col: 1 }, facing: "north" },
-		cyan: { position: { row: 0, col: 2 }, facing: "north" },
-	},
-};
+	{ wallName: "wall", aiStarts: RGC_AI_STARTS },
+);
 
 function makeGame() {
 	return startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
@@ -1142,58 +1134,34 @@ describe("tool-call dispatch", () => {
 // ----------------------------------------------------------------------------
 describe("game-end conditions — checkWinCondition / checkLoseCondition", () => {
 	// Content pack with no pairs → K=0 → checkWinCondition vacuously true after any round.
-	const NO_PAIRS_PACK: ContentPack = {
-		setting: "",
-		weather: "",
-		timeOfDay: "",
-		objectivePairs: [],
-		interestingObjects: [],
-		obstacles: [],
-		landmarks: DEFAULT_LANDMARKS,
+	const NO_PAIRS_PACK = makeTestPack([], {
 		wallName: "wall",
-		aiStarts: {
-			red: { position: { row: 0, col: 0 }, facing: "north" },
-			green: { position: { row: 0, col: 1 }, facing: "north" },
-			cyan: { position: { row: 0, col: 2 }, facing: "north" },
-		},
-	};
+		aiStarts: RGC_AI_STARTS,
+	});
 
 	// Content pack with a single carry pair using type-first IDs.
 	// Object is at (0,0); space is at (4,4) — different cells, so the carry
 	// objective is NOT immediately satisfied after a pass round.
-	const CARRY_PACK_UNSATISFIED: ContentPack = {
-		setting: "",
-		weather: "",
-		timeOfDay: "",
-		objectivePairs: [
+	const CARRY_PACK_UNSATISFIED = makeTestPack(
+		[
 			{
-				object: {
-					id: "carry-0-obj",
-					kind: "objective_object",
-					name: "gem",
-					examineDescription: "A glowing gem.",
-					holder: { row: 0, col: 0 },
-					pairsWithSpaceId: "carry-0-space",
-				},
-				space: {
-					id: "carry-0-space",
-					kind: "objective_space",
-					name: "altar",
-					examineDescription: "A stone altar.",
-					holder: { row: 4, col: 4 },
-				},
+				id: "carry-0-obj",
+				kind: "objective_object",
+				name: "gem",
+				examineDescription: "A glowing gem.",
+				holder: { row: 0, col: 0 },
+				pairsWithSpaceId: "carry-0-space",
+			},
+			{
+				id: "carry-0-space",
+				kind: "objective_space",
+				name: "altar",
+				examineDescription: "A stone altar.",
+				holder: { row: 4, col: 4 },
 			},
 		],
-		interestingObjects: [],
-		obstacles: [],
-		landmarks: DEFAULT_LANDMARKS,
-		wallName: "wall",
-		aiStarts: {
-			red: { position: { row: 0, col: 0 }, facing: "north" },
-			green: { position: { row: 0, col: 1 }, facing: "north" },
-			cyan: { position: { row: 0, col: 2 }, facing: "north" },
-		},
-	};
+		{ wallName: "wall", aiStarts: RGC_AI_STARTS },
+	);
 
 	it("RoundResult.phaseEnded is always false (phase-based model removed)", async () => {
 		// phaseEnded is always false in the flat model.
@@ -1267,12 +1235,8 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 		 * We override the objectives on the started game to inject the UseItemObjective.
 		 * The key entity must be an interesting_object held by red (so use is valid).
 		 */
-		const packWithKey: ContentPack = {
-			setting: "",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [],
-			interestingObjects: [
+		const packWithKey = makeTestPack(
+			[
 				{
 					id: "key",
 					kind: "interesting_object",
@@ -1282,15 +1246,8 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 					useOutcome: "You turn the key. Click.",
 				},
 			],
-			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
-			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "north" },
-				green: { position: { row: 0, col: 1 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
-			},
-		};
+			{ wallName: "wall", aiStarts: RGC_AI_STARTS },
+		);
 		const baseGame = startGame(TEST_PERSONAS, packWithKey, { budgetPerAi: 5 });
 
 		// Inject the UseItemObjective (engine.ts doesn't generate these from
@@ -1864,40 +1821,31 @@ describe("placement flavor + win condition (issue #126)", () => {
 	const GEM_SPACE_ID = "carry-0-space";
 	const FLAVOR = "{actor} places the gem on the altar.";
 
-	const PHASE1_PACK_K1: ContentPack = {
-		setting: "temple",
-		weather: "",
-		timeOfDay: "",
-		objectivePairs: [
+	const PHASE1_PACK_K1 = makeTestPack(
+		[
 			{
-				object: {
-					id: GEM_OBJ_ID,
-					kind: "objective_object",
-					name: "gem",
-					examineDescription: "A glowing gem.",
-					holder: "red", // held by red initially
-					pairsWithSpaceId: GEM_SPACE_ID,
-					placementFlavor: FLAVOR,
-				},
-				space: {
-					id: GEM_SPACE_ID,
-					kind: "objective_space",
-					name: "altar",
-					examineDescription: "A stone altar.",
-					holder: { row: 0, col: 0 }, // red's starting cell
-				},
+				id: GEM_OBJ_ID,
+				kind: "objective_object",
+				name: "gem",
+				examineDescription: "A glowing gem.",
+				holder: "red", // held by red initially
+				pairsWithSpaceId: GEM_SPACE_ID,
+				placementFlavor: FLAVOR,
+			},
+			{
+				id: GEM_SPACE_ID,
+				kind: "objective_space",
+				name: "altar",
+				examineDescription: "A stone altar.",
+				holder: { row: 0, col: 0 }, // red's starting cell
 			},
 		],
-		interestingObjects: [],
-		obstacles: [],
-		landmarks: DEFAULT_LANDMARKS,
-		wallName: "wall",
-		aiStarts: {
-			red: { position: { row: 0, col: 0 }, facing: "north" },
-			green: { position: { row: 0, col: 1 }, facing: "north" },
-			cyan: { position: { row: 0, col: 2 }, facing: "north" },
+		{
+			setting: "temple",
+			wallName: "wall",
+			aiStarts: RGC_AI_STARTS,
 		},
-	};
+	);
 
 	it("K=1: drop on matching space fires placementFlavor in tool_success description", async () => {
 		const game = startGame(TEST_PERSONAS, PHASE1_PACK_K1, { budgetPerAi: 5 });
@@ -1953,29 +1901,31 @@ describe("placement flavor + win condition (issue #126)", () => {
 
 	it("K=1: drop on non-matching cell does NOT fire flavor and does NOT advance phase", async () => {
 		// Rebuild pack so gem_space is at (3,3) — different from red's cell (0,0)
-		const packMismatch: ContentPack = {
-			...PHASE1_PACK_K1,
-			objectivePairs: [
+		const packMismatch = makeTestPack(
+			[
 				{
-					object: {
-						id: GEM_OBJ_ID,
-						kind: "objective_object" as const,
-						name: "gem",
-						examineDescription: "A glowing gem.",
-						holder: "red",
-						pairsWithSpaceId: GEM_SPACE_ID,
-						placementFlavor: FLAVOR,
-					},
-					space: {
-						id: GEM_SPACE_ID,
-						kind: "objective_space" as const,
-						name: "altar",
-						examineDescription: "A stone altar.",
-						holder: { row: 3, col: 3 }, // mismatch
-					},
+					id: GEM_OBJ_ID,
+					kind: "objective_object" as const,
+					name: "gem",
+					examineDescription: "A glowing gem.",
+					holder: "red",
+					pairsWithSpaceId: GEM_SPACE_ID,
+					placementFlavor: FLAVOR,
+				},
+				{
+					id: GEM_SPACE_ID,
+					kind: "objective_space" as const,
+					name: "altar",
+					examineDescription: "A stone altar.",
+					holder: { row: 3, col: 3 }, // mismatch
 				},
 			],
-		};
+			{
+				setting: "temple",
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS,
+			},
+		);
 		// In flat model, checkWinCondition compares obj/space positions automatically.
 		const game = startGame(TEST_PERSONAS, packMismatch, {
 			budgetPerAi: 5,
@@ -2013,58 +1963,47 @@ describe("placement flavor + win condition (issue #126)", () => {
 		const ORB_OBJ_ID = "carry-1-obj";
 		const ORB_SPACE_ID = "carry-1-space";
 
-		const packK2: ContentPack = {
-			setting: "vault",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: [
+		const packK2 = makeTestPack(
+			[
 				{
-					object: {
-						id: GEM_OBJ_ID,
-						kind: "objective_object",
-						name: "gem",
-						examineDescription: "A gem.",
-						holder: "red", // held by red — not on ground yet
-						pairsWithSpaceId: GEM_SPACE_ID,
-						placementFlavor: "{actor} sets the gem.",
-					},
-					space: {
-						id: GEM_SPACE_ID,
-						kind: "objective_space",
-						name: "gem altar",
-						examineDescription: "Gem altar.",
-						holder: { row: 0, col: 0 },
-					},
+					id: GEM_OBJ_ID,
+					kind: "objective_object",
+					name: "gem",
+					examineDescription: "A gem.",
+					holder: "red", // held by red — not on ground yet
+					pairsWithSpaceId: GEM_SPACE_ID,
+					placementFlavor: "{actor} sets the gem.",
 				},
 				{
-					object: {
-						id: ORB_OBJ_ID,
-						kind: "objective_object",
-						name: "orb",
-						examineDescription: "An orb.",
-						holder: { row: 2, col: 2 }, // already on ground at (2,2)
-						pairsWithSpaceId: ORB_SPACE_ID,
-						placementFlavor: "{actor} sets the orb.",
-					},
-					space: {
-						id: ORB_SPACE_ID,
-						kind: "objective_space",
-						name: "orb plinth",
-						examineDescription: "Orb plinth.",
-						holder: { row: 2, col: 2 }, // matches orb_obj position → already satisfied
-					},
+					id: GEM_SPACE_ID,
+					kind: "objective_space",
+					name: "gem altar",
+					examineDescription: "Gem altar.",
+					holder: { row: 0, col: 0 },
+				},
+				{
+					id: ORB_OBJ_ID,
+					kind: "objective_object",
+					name: "orb",
+					examineDescription: "An orb.",
+					holder: { row: 2, col: 2 }, // already on ground at (2,2)
+					pairsWithSpaceId: ORB_SPACE_ID,
+					placementFlavor: "{actor} sets the orb.",
+				},
+				{
+					id: ORB_SPACE_ID,
+					kind: "objective_space",
+					name: "orb plinth",
+					examineDescription: "Orb plinth.",
+					holder: { row: 2, col: 2 }, // matches orb_obj position → already satisfied
 				},
 			],
-			interestingObjects: [],
-			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
-			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "north" },
-				green: { position: { row: 0, col: 1 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
+			{
+				setting: "vault",
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS,
 			},
-		};
+		);
 
 		// In flat model, checkWinCondition compares all obj/space positions automatically.
 		// objectiveTypes: ["carry", "carry"] activates both carry objectives for the type-first system.
@@ -2108,41 +2047,28 @@ describe("examine tool", () => {
 	 * Red starts at (0,0) holding the objective object.
 	 * Green starts at (0,1) facing north — so (0,0) is NOT in green's cone.
 	 */
-	const EXAMINE_PACK: ContentPack = {
-		setting: "vault",
-		weather: "",
-		timeOfDay: "",
-		objectivePairs: [
+	const EXAMINE_PACK = makeTestPack(
+		[
 			{
-				object: {
-					id: "orb",
-					kind: "objective_object",
-					name: "orb",
-					examineDescription:
-						"A swirling orb. It feels drawn toward the stone pedestal.",
-					holder: "red", // red holds orb
-					pairsWithSpaceId: "pedestal",
-					placementFlavor: "{actor} places the orb on the pedestal.",
-				},
-				space: {
-					id: "pedestal",
-					kind: "objective_space",
-					name: "stone pedestal",
-					examineDescription: "A stone pedestal awaiting an offering.",
-					holder: { row: 4, col: 4 },
-				},
+				id: "orb",
+				kind: "objective_object",
+				name: "orb",
+				examineDescription:
+					"A swirling orb. It feels drawn toward the stone pedestal.",
+				holder: "red", // red holds orb
+				pairsWithSpaceId: "pedestal",
+				placementFlavor: "{actor} places the orb on the pedestal.",
+			},
+			{
+				id: "pedestal",
+				kind: "objective_space",
+				name: "stone pedestal",
+				examineDescription: "A stone pedestal awaiting an offering.",
+				holder: { row: 4, col: 4 },
 			},
 		],
-		interestingObjects: [],
-		obstacles: [],
-		landmarks: DEFAULT_LANDMARKS,
-		wallName: "wall",
-		aiStarts: {
-			red: { position: { row: 0, col: 0 }, facing: "north" },
-			green: { position: { row: 0, col: 1 }, facing: "north" },
-			cyan: { position: { row: 0, col: 2 }, facing: "north" },
-		},
-	};
+		{ setting: "vault", wallName: "wall", aiStarts: RGC_AI_STARTS },
+	);
 
 	function makeExamineGame() {
 		return startGame(TEST_PERSONAS, EXAMINE_PACK, { budgetPerAi: 5 });
@@ -3046,13 +2972,8 @@ describe("action-failure entries — round-coordinator integration", () => {
 	 * ContentPack: red at (0,0) facing north; obstacle at (0,1) east of red.
 	 * go east → blocked by obstacle → action-failure entry.
 	 */
-	const OBSTACLE_PACK: ContentPack = {
-		setting: "blocked corridor",
-		weather: "",
-		timeOfDay: "",
-		objectivePairs: [],
-		interestingObjects: [],
-		obstacles: [
+	const OBSTACLE_PACK = makeTestPack(
+		[
 			{
 				id: "wall",
 				kind: "obstacle",
@@ -3061,14 +2982,16 @@ describe("action-failure entries — round-coordinator integration", () => {
 				holder: { row: 0, col: 1 },
 			},
 		],
-		landmarks: DEFAULT_LANDMARKS,
-		wallName: "wall",
-		aiStarts: {
-			red: { position: { row: 0, col: 0 }, facing: "north" },
-			green: { position: { row: 2, col: 2 }, facing: "north" },
-			cyan: { position: { row: 4, col: 4 }, facing: "north" },
+		{
+			setting: "blocked corridor",
+			wallName: "wall",
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "north" },
+				green: { position: { row: 2, col: 2 }, facing: "north" },
+				cyan: { position: { row: 4, col: 4 }, facing: "north" },
+			},
 		},
-	};
+	);
 
 	it("parse-fail (unknown tool) → tool_failure in result, no action-failure entry in any log", async () => {
 		const game = startGame(TEST_PERSONAS, OBSTACLE_PACK, { budgetPerAi: 10 });

@@ -14,14 +14,12 @@ import {
 	resolveExpiredChatLockouts,
 	tickComplication,
 } from "../complication-engine.js";
-import { DEFAULT_LANDMARKS } from "../direction.js";
 import { startGame } from "../engine.js";
 import type {
 	ActiveComplication,
 	AiId,
 	AiPersona,
 	ComplicationSchedule,
-	ContentPack,
 	GameState,
 	GridPosition,
 	PersonaSpatialState,
@@ -29,6 +27,7 @@ import type {
 	WorldEntity,
 	WorldState,
 } from "../types.js";
+import { makeTestPack } from "./fixtures/make-test-pack.js";
 
 // ── RNG helper ────────────────────────────────────────────────────────────────
 
@@ -113,17 +112,13 @@ function makePhase(overrides: Partial<GameState> = {}): GameState {
 		conversationLogs[id] = [];
 	}
 
-	const contentPack: ContentPack = {
+	const contentPack = makeTestPack([], {
 		setting: "test",
 		weather: "clear",
 		timeOfDay: "day",
-		objectivePairs: [],
-		interestingObjects: [],
-		obstacles: [],
-		landmarks: DEFAULT_LANDMARKS,
 		wallName: "wall",
 		aiStarts: personaSpatial,
-	};
+	});
 
 	const complicationSchedule: ComplicationSchedule = {
 		countdown: 3,
@@ -808,29 +803,21 @@ describe("applyComplicationResult — activeComplications appends", () => {
 // ── Setting Shift A/B pack swap (issue #302) ──────────────────────────────────
 
 describe("applyComplicationResult — setting_shift swaps active pack", () => {
-	const PACK_A: ContentPack = {
+	const PACK_A = makeTestPack([], {
 		setting: "neon arcade",
 		weather: "clear",
 		timeOfDay: "night",
-		objectivePairs: [],
-		interestingObjects: [],
-		obstacles: [],
-		landmarks: DEFAULT_LANDMARKS,
 		wallName: "wall",
 		aiStarts: makePersonaSpatial(),
-	};
+	});
 
-	const PACK_B: ContentPack = {
+	const PACK_B = makeTestPack([], {
 		setting: "sun-baked salt flat",
 		weather: "hot",
 		timeOfDay: "day",
-		objectivePairs: [],
-		interestingObjects: [],
-		obstacles: [],
-		landmarks: DEFAULT_LANDMARKS,
 		wallName: "wall",
 		aiStarts: makePersonaSpatial(),
-	};
+	});
 
 	function makeGameWithDualPacks(): GameState {
 		const phase = makePhase({
@@ -1027,29 +1014,21 @@ describe("applyComplicationResult — setting_shift reprojects world entities", 
 		holder: { row: 9, col: 9 },
 	};
 
-	const PACK_A: ContentPack = {
+	const PACK_A = makeTestPack([A_OBJECT, A_SPACE, A_ITEM, A_OBSTACLE], {
 		setting: "abandoned workshop",
 		weather: "humid",
 		timeOfDay: "dusk",
-		objectivePairs: [{ object: A_OBJECT, space: A_SPACE }],
-		interestingObjects: [A_ITEM],
-		obstacles: [A_OBSTACLE],
-		landmarks: DEFAULT_LANDMARKS,
 		wallName: "wall",
 		aiStarts: makePersonaSpatial(),
-	};
+	});
 
-	const PACK_B: ContentPack = {
+	const PACK_B = makeTestPack([B_OBJECT, B_SPACE, B_ITEM, B_OBSTACLE], {
 		setting: "sun-baked salt flat",
 		weather: "scorching",
 		timeOfDay: "noon",
-		objectivePairs: [{ object: B_OBJECT, space: B_SPACE }],
-		interestingObjects: [B_ITEM],
-		obstacles: [B_OBSTACLE],
-		landmarks: DEFAULT_LANDMARKS,
 		wallName: "wall",
 		aiStarts: makePersonaSpatial(),
-	};
+	});
 
 	function findEntity(game: GameState, id: string): WorldEntity | undefined {
 		return game.world.entities.find((e) => e.id === id);
@@ -1157,17 +1136,7 @@ describe("startGame — complicationSchedule initialisation", () => {
 	it("initialises activeComplications to an empty array", () => {
 		const phase = startGame(
 			TEST_PERSONAS,
-			{
-				setting: "",
-				weather: "",
-				timeOfDay: "",
-				objectivePairs: [],
-				interestingObjects: [],
-				obstacles: [],
-				landmarks: DEFAULT_LANDMARKS,
-				wallName: "wall",
-				aiStarts: {},
-			},
+			makeTestPack([], { wallName: "wall" }),
 			{ budgetPerAi: 0.5 },
 		);
 		expect(phase.activeComplications).toEqual([]);

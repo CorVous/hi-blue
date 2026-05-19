@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_LANDMARKS } from "../../game/direction.js";
+import { makeTestPack } from "../../game/__tests__/fixtures/make-test-pack.js";
 import { startGame } from "../../game/engine.js";
-import type { AiPersona, ContentPack, GameState } from "../../game/types.js";
+import type { AiPersona, GameState } from "../../game/types.js";
 import { deobfuscate, obfuscate } from "../sealed-blob-codec.js";
 import {
 	ACTIVE_KEY,
@@ -33,17 +33,7 @@ import {
 
 // ── Test fixtures ─────────────────────────────────────────────────────────────
 
-const TEST_CONTENT_PACK: ContentPack = {
-	setting: "",
-	weather: "",
-	timeOfDay: "",
-	objectivePairs: [],
-	interestingObjects: [],
-	obstacles: [],
-	landmarks: DEFAULT_LANDMARKS,
-	wallName: "wall",
-	aiStarts: {},
-};
+const TEST_CONTENT_PACK = makeTestPack([], { wallName: "wall" });
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {

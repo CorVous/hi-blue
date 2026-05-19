@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_LANDMARKS } from "../direction";
 import {
 	advanceRound,
 	appendActionFailure,
@@ -17,6 +16,7 @@ import {
 	obstacles,
 } from "../pack-selectors";
 import type { AiPersona, ContentPack, GameState } from "../types";
+import { makeTestPack } from "./fixtures/make-test-pack";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -60,17 +60,7 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 	},
 };
 
-const TEST_CONTENT_PACK: ContentPack = {
-	setting: "",
-	weather: "",
-	timeOfDay: "",
-	objectivePairs: [],
-	interestingObjects: [],
-	obstacles: [],
-	landmarks: DEFAULT_LANDMARKS,
-	wallName: "wall",
-	aiStarts: {},
-};
+const TEST_CONTENT_PACK = makeTestPack([], { wallName: "wall" });
 
 describe("advanceRound", () => {
 	it("increments the round counter", () => {
@@ -84,9 +74,8 @@ describe("advanceRound", () => {
 
 describe("startGame world.entities", () => {
 	it("places use_space and convergence bound spaces on the grid", () => {
-		const packWithBoundSpaces: ContentPack = {
-			...TEST_CONTENT_PACK,
-			boundSpaces: [
+		const packWithBoundSpaces = makeTestPack(
+			[
 				{
 					id: "useSpace-0-space",
 					kind: "objective_space",
@@ -109,7 +98,8 @@ describe("startGame world.entities", () => {
 					holder: { row: 3, col: 3 },
 				},
 			],
-		};
+			{ wallName: "wall" },
+		);
 		const game = startGame(TEST_PERSONAS, packWithBoundSpaces, {
 			budgetPerAi: 5,
 		});
@@ -418,29 +408,19 @@ describe("appendActionFailure", () => {
 });
 
 describe("shiftToBPack", () => {
-	const PACK_A: ContentPack = {
+	const PACK_A = makeTestPack([], {
 		setting: "neon arcade",
 		weather: "clear",
 		timeOfDay: "night",
-		objectivePairs: [],
-		interestingObjects: [],
-		obstacles: [],
-		landmarks: DEFAULT_LANDMARKS,
 		wallName: "wall",
-		aiStarts: {},
-	};
+	});
 
-	const PACK_B: ContentPack = {
+	const PACK_B = makeTestPack([], {
 		setting: "sun-baked salt flat",
 		weather: "hot",
 		timeOfDay: "day",
-		objectivePairs: [],
-		interestingObjects: [],
-		obstacles: [],
-		landmarks: DEFAULT_LANDMARKS,
 		wallName: "wall",
-		aiStarts: {},
-	};
+	});
 
 	function makeDualPackGame(): GameState {
 		const game = startGame(TEST_PERSONAS, PACK_A, { budgetPerAi: 5 });

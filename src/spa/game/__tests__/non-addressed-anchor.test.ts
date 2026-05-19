@@ -12,11 +12,11 @@
  * non-addressed daemon, anchoring the current round.
  */
 import { describe, expect, it } from "vitest";
-import { DEFAULT_LANDMARKS } from "../direction";
 import { startGame } from "../engine";
 import { runRound } from "../round-coordinator";
 import { MockRoundLLMProvider } from "../round-llm-provider";
-import type { AiId, AiPersona, ContentPack } from "../types";
+import type { AiId, AiPersona } from "../types";
+import { makeTestPack } from "./fixtures/make-test-pack";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -65,30 +65,23 @@ function expectedSilentTurn(_self: AiId): string {
 	return "You have received no messages.";
 }
 
-const TEST_CONTENT_PACK: ContentPack = {
-	setting: "",
-	weather: "",
-	timeOfDay: "",
-	objectivePairs: [
+const TEST_CONTENT_PACK = makeTestPack(
+	[
 		{
-			object: {
-				id: "flower",
-				kind: "objective_object",
-				name: "flower",
-				examineDescription: "A flower",
-				holder: { row: 0, col: 0 },
-				pairsWithSpaceId: "flower_space",
-			},
-			space: {
-				id: "flower_space",
-				kind: "objective_space",
-				name: "flower space",
-				examineDescription: "A space",
-				holder: { row: 4, col: 4 },
-			},
+			id: "flower",
+			kind: "objective_object",
+			name: "flower",
+			examineDescription: "A flower",
+			holder: { row: 0, col: 0 },
+			pairsWithSpaceId: "flower_space",
 		},
-	],
-	interestingObjects: [
+		{
+			id: "flower_space",
+			kind: "objective_space",
+			name: "flower space",
+			examineDescription: "A space",
+			holder: { row: 4, col: 4 },
+		},
 		{
 			id: "key",
 			kind: "interesting_object",
@@ -97,15 +90,15 @@ const TEST_CONTENT_PACK: ContentPack = {
 			holder: { row: 0, col: 1 },
 		},
 	],
-	obstacles: [],
-	landmarks: DEFAULT_LANDMARKS,
-	wallName: "wall",
-	aiStarts: {
-		red: { position: { row: 0, col: 0 }, facing: "north" },
-		green: { position: { row: 0, col: 1 }, facing: "north" },
-		cyan: { position: { row: 0, col: 2 }, facing: "north" },
+	{
+		wallName: "wall",
+		aiStarts: {
+			red: { position: { row: 0, col: 0 }, facing: "north" },
+			green: { position: { row: 0, col: 1 }, facing: "north" },
+			cyan: { position: { row: 0, col: 2 }, facing: "north" },
+		},
 	},
-};
+);
 
 function makeGame() {
 	return startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });

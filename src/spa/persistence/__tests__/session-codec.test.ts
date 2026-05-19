@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { makeTestPack } from "../../game/__tests__/fixtures/make-test-pack.js";
 import { DEFAULT_LANDMARKS } from "../../game/direction.js";
 import { startGame } from "../../game/engine.js";
 import type {
@@ -18,17 +19,7 @@ import {
 
 // ── Test fixtures ─────────────────────────────────────────────────────────────
 
-const TEST_CONTENT_PACK: ContentPack = {
-	setting: "",
-	weather: "",
-	timeOfDay: "",
-	objectivePairs: [],
-	interestingObjects: [],
-	obstacles: [],
-	landmarks: DEFAULT_LANDMARKS,
-	wallName: "wall",
-	aiStarts: {},
-};
+const TEST_CONTENT_PACK = makeTestPack([], { wallName: "wall" });
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
