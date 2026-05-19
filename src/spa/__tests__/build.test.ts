@@ -3,9 +3,10 @@
  * Uses vitest's ?raw import to read the HTML file as a string without node:fs.
  */
 // @ts-expect-error — node types not available in SPA project
-import { fileURLToPath } from "node:url";
+
 // @ts-expect-error — node types not available in SPA project
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error — vitest handles ?raw suffix; no TS type for it

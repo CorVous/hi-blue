@@ -7,11 +7,11 @@ import {
 	renderTopInfoLeft,
 	topInfoStatus,
 } from "../bbs-chrome.js";
+import { renderInspector } from "../dev-inspector/index.js";
 import {
 	buildSameDaemonsSession,
 	buildSessionFromAssets,
 } from "../game/bootstrap.js";
-import { renderInspector } from "../dev-inspector/index.js";
 import { BrowserLLMProvider } from "../game/browser-llm-provider.js";
 import { isPlayerChatLockedOut } from "../game/complication-engine.js";
 import { deriveComposerState } from "../game/composer-reducer.js";
