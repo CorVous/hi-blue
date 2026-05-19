@@ -31,7 +31,11 @@ import type {
 	ValidationError,
 	ValidationResult,
 } from "./content-pack-provider.js";
-import { examineMentionsUseTell } from "./content-pack-provider.js";
+import {
+	examineMentionsUseTell,
+	findMatchedUseTellKeywords,
+	USE_CUE_KEYWORD_HINTS,
+} from "./content-pack-provider.js";
 
 // ── Use-cue keywords (re-export from content-pack-provider) ──────────────────
 
@@ -357,7 +361,7 @@ function validateUseSpaceBinding(
 				entityId: sk.spaceId!,
 				field: "examineDescription",
 				rule: "verb-of-activation",
-				message: `UseSpace space ${sk.spaceId}: examineDescription must contain a use-cue keyword`,
+				message: `UseSpace space ${sk.spaceId}: examineDescription must contain at least one use-cue keyword (e.g. ${USE_CUE_KEYWORD_HINTS.map((k) => `"${k}"`).join(", ")}). Current text: ${JSON.stringify(space.examineDescription)}`,
 				retryUnit: bindingRetryUnit,
 			});
 		}
@@ -410,7 +414,7 @@ function validateUseItemBinding(
 				entityId: sk.itemId!,
 				field: "examineDescription",
 				rule: "verb-of-activation",
-				message: `UseItem item ${sk.itemId}: examineDescription must contain a use-cue keyword`,
+				message: `UseItem item ${sk.itemId}: examineDescription must contain at least one use-cue keyword (e.g. ${USE_CUE_KEYWORD_HINTS.map((k) => `"${k}"`).join(", ")}). Current text: ${JSON.stringify(item.examineDescription)}`,
 				retryUnit: bindingRetryUnit,
 			});
 		}
@@ -542,12 +546,14 @@ function validateDecoy(
 		typeof decoy.examineDescription === "string" &&
 		decoy.examineDescription.length > 0
 	) {
-		if (examineMentionsUseTell(decoy.examineDescription)) {
+		const matched = findMatchedUseTellKeywords(decoy.examineDescription);
+		if (matched.length > 0) {
+			const matchedList = matched.map((k) => `"${k}"`).join(", ");
 			errors.push({
 				entityId,
 				field: "examineDescription",
 				rule: "verb-of-activation",
-				message: `Decoy ${entityId}: examineDescription must NOT contain a use-cue keyword`,
+				message: `Decoy ${entityId}: examineDescription must NOT contain any use-cue keyword — found forbidden keyword(s): ${matchedList}. Rewrite the examineDescription using only neutral descriptive language (no activation/control verbs, no control nouns like "lever"/"button"/"switch"/"dial").`,
 				retryUnit,
 			});
 		}
