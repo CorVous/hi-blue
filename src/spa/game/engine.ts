@@ -1,5 +1,11 @@
 import { CARDINAL_DIRECTIONS, GRID_COLS, GRID_ROWS } from "./direction.js";
 import { buildObjectiveRecords } from "./objective-record-builder.js";
+import {
+	boundSpaces,
+	carryPairs,
+	interestingObjects,
+	obstacles,
+} from "./pack-selectors.js";
 import type {
 	ActiveComplication,
 	AiBudget,
@@ -66,12 +72,13 @@ export function startGame(
 		conversationLogs[aiId] = [];
 	}
 
-	// Build WorldState from pack entities (all entities flat)
+	// Build WorldState from pack entities (all entities flat) via pack-selectors,
+	// so engine.ts depends on the selector contract rather than the bucket layout.
 	const worldEntities = [
-		...contentPack.objectivePairs.flatMap((pair) => [pair.object, pair.space]),
-		...(contentPack.boundSpaces ?? []),
-		...contentPack.interestingObjects,
-		...contentPack.obstacles,
+		...carryPairs(contentPack).flatMap((pair) => [pair.object, pair.space]),
+		...boundSpaces(contentPack),
+		...interestingObjects(contentPack),
+		...obstacles(contentPack),
 	];
 
 	// Use AI starts from the pack if available; otherwise draw spatially
@@ -185,14 +192,16 @@ function reprojectEntitiesOnto(
 	entities: WorldEntity[],
 	bPack: ContentPack,
 ): WorldEntity[] {
+	// Build byId via pack-selectors so reprojection sees exactly the same entity
+	// set that startGame placed in the world.
 	const byId = new Map<string, WorldEntity>();
-	for (const pair of bPack.objectivePairs) {
+	for (const pair of carryPairs(bPack)) {
 		byId.set(pair.object.id, pair.object);
 		byId.set(pair.space.id, pair.space);
 	}
-	for (const space of bPack.boundSpaces ?? []) byId.set(space.id, space);
-	for (const obj of bPack.interestingObjects) byId.set(obj.id, obj);
-	for (const obs of bPack.obstacles) byId.set(obs.id, obs);
+	for (const space of boundSpaces(bPack)) byId.set(space.id, space);
+	for (const obj of interestingObjects(bPack)) byId.set(obj.id, obj);
+	for (const obs of obstacles(bPack)) byId.set(obs.id, obs);
 
 	return entities.map((entity) => {
 		const bEntity = byId.get(entity.id);
