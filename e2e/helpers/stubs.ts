@@ -89,8 +89,8 @@ function isJsonModeRequest(body: ParsedBody): boolean {
  * Classify a JSON-mode request by its user-message preamble. Callers fire
  * JSON-mode `/v1/chat/completions` at game start:
  *   - persona synthesis (`Synthesize blurbs for these personas:` …)
- *   - dual content-pack generation (`Generate dual A/B content packs for these phases:` …)
- *   - single content-pack generation (`Generate content packs for these phases:` …)
+ *   - dual content-pack generation (`Generate a dual A/B content pack for:` …)
+ *   - single content-pack generation (`Generate a content pack for:` …)
  *
  * Returns "unknown" for callers we don't recognise so future additions surface
  * loudly instead of silently receiving a persona-shaped reply.
@@ -101,9 +101,9 @@ export function classifyJsonRequest(
 	const userMsg = body?.messages?.[1]?.content ?? "";
 	if (userMsg.startsWith("Synthesize blurbs for these personas:"))
 		return "synthesis";
-	if (userMsg.startsWith("Generate dual A/B content packs for these phases:"))
+	if (userMsg.startsWith("Generate a dual A/B content pack for:"))
 		return "dual-content-pack";
-	if (userMsg.startsWith("Generate content packs for these phases:"))
+	if (userMsg.startsWith("Generate a content pack for:"))
 		return "content-pack";
 	return "unknown";
 }
@@ -216,6 +216,192 @@ const STUB_LANDMARKS = {
 		horizonPhrase: "A dark canopy blurs into fog.",
 	},
 };
+
+// ── Binding-shaped content-pack stub helpers ─────────────────────────────────
+
+type BindingSpec = {
+	type: "carry" | "use_space" | "use_item" | "convergence";
+	index: number;
+};
+
+type BindingContentPackSpec = {
+	setting: string;
+	bindings: BindingSpec[];
+	obstacleCount: number;
+};
+
+type DualBindingContentPackSpec = {
+	settingA: string;
+	settingB: string;
+	bindings: BindingSpec[];
+	obstacleCount: number;
+};
+
+function parseBindingContentPackSpec(userMsg: string): BindingContentPackSpec {
+	const settingMatch = /setting="([^"]*)"/.exec(userMsg);
+	const setting = settingMatch?.[1] ?? "stub-setting";
+
+	const bindingMatches = [
+		...userMsg.matchAll(/Binding\s+(\d+)\s+\(([^)]+)\):/g),
+	];
+	const bindings: BindingSpec[] = bindingMatches.map((m) => ({
+		index: Number(m[1]),
+		type: m[2] as BindingSpec["type"],
+	}));
+
+	const obstacleIds = [...userMsg.matchAll(/obstacle id="([^"]+)"/g)];
+	const obstacleCount = obstacleIds.length;
+
+	return { setting, bindings, obstacleCount };
+}
+
+function parseDualBindingContentPackSpec(
+	userMsg: string,
+): DualBindingContentPackSpec {
+	const settingAMatch = /settingA="([^"]*)"/.exec(userMsg);
+	const settingBMatch = /settingB="([^"]*)"/.exec(userMsg);
+	const settingA = settingAMatch?.[1] ?? "stub-setting-a";
+	const settingB = settingBMatch?.[1] ?? "stub-setting-b";
+
+	const bindingMatches = [
+		...userMsg.matchAll(/Binding\s+(\d+)\s+\(([^)]+)\):/g),
+	];
+	const bindings: BindingSpec[] = bindingMatches.map((m) => ({
+		index: Number(m[1]),
+		type: m[2] as BindingSpec["type"],
+	}));
+
+	const obstacleIds = [...userMsg.matchAll(/obstacle id="([^"]+)"/g)];
+	const obstacleCount = obstacleIds.length;
+
+	return { settingA, settingB, bindings, obstacleCount };
+}
+
+function buildBoundPack(
+	setting: string,
+	bindings: BindingSpec[],
+	obstacleCount: number,
+): object {
+	const builtBindings = bindings.map((sk) => {
+		const i = sk.index;
+		switch (sk.type) {
+			case "carry":
+				return {
+					id: `carry-${i}`,
+					type: "carry",
+					object: {
+						id: `carry-${i}-obj`,
+						name: `Stub carry object ${i}`,
+						examineDescription: `A stub carry object; place it at the carry-${i}-space.`,
+						useOutcome: "Nothing happens.",
+						placementFlavor: "{actor} sets it down carefully.",
+						proximityFlavor: "Something draws your attention nearby.",
+					},
+					space: {
+						id: `carry-${i}-space`,
+						name: `Stub carry space ${i}`,
+						examineDescription: `A stub destination space, awaiting delivery.`,
+						proximityFlavor: "A quiet pull draws you toward this area.",
+					},
+				};
+			case "use_space":
+				return {
+					id: `useSpace-${i}`,
+					type: "use_space",
+					space: {
+						id: `useSpace-${i}-space`,
+						name: `Stub use-space ${i}`,
+						examineDescription: `A stub interactive surface — use the lever to activate it.`,
+						proximityFlavor: "An activatable surface beckons.",
+						activationFlavor: "The surface hums as you engage the lever.",
+						satisfactionFlavor: "The surface settles into completion.",
+						postExamineDescription: "The surface sits dormant after activation.",
+						postLookFlavor: "The surface rests, purpose fulfilled.",
+					},
+				};
+			case "use_item":
+				return {
+					id: `useItem-${i}`,
+					type: "use_item",
+					item: {
+						id: `useItem-${i}-item`,
+						name: `Stub use-item ${i}`,
+						examineDescription: `A stub item — press the button to activate.`,
+						proximityFlavor: "The item draws your eye.",
+						useOutcome: "Nothing changes.",
+						activationFlavor: "The item clicks into action as you press the button.",
+						postExamineDescription: "The item sits used and inert.",
+						postLookFlavor: "The item rests, spent.",
+					},
+				};
+			case "convergence":
+				return {
+					id: `convergence-${i}`,
+					type: "convergence",
+					space: {
+						id: `convergence-${i}-space`,
+						name: `Stub convergence space ${i}`,
+						examineDescription: `A stub gathering point — a meeting place where two are needed.`,
+						proximityFlavor: "The space seems to anticipate company.",
+						convergenceTier1Flavor: `A presence lingers at the convergence space.`,
+						convergenceTier2Flavor: `Two presences converge at the space.`,
+						convergenceTier1ActorFlavor: `You stand alone; the space awaits another presence.`,
+						convergenceTier2ActorFlavor: `You share this space with another presence.`,
+					},
+				};
+		}
+	});
+
+	const decoys = [
+		{
+			id: "decoy-0",
+			name: "Stub decoy A",
+			examineDescription: "A harmless stub item.",
+			proximityFlavor: "Something inert nearby.",
+			useOutcome: "Nothing happens.",
+		},
+		{
+			id: "decoy-1",
+			name: "Stub decoy B",
+			examineDescription: "Another harmless stub item.",
+			proximityFlavor: "Something inert nearby.",
+			useOutcome: "Nothing happens.",
+		},
+	];
+
+	const obstacles = Array.from({ length: obstacleCount }, (_, i) => ({
+		id: `obstacle-${i}`,
+		name: `Stub obstacle ${i}`,
+		examineDescription: `A stub obstacle.`,
+		shiftFlavor: `The obstacle grinds across the floor.`,
+	}));
+
+	return {
+		setting,
+		wallName: "stub boundary wall",
+		landmarks: STUB_LANDMARKS,
+		bindings: builtBindings,
+		decoys,
+		obstacles,
+	};
+}
+
+function buildBoundContentPackResponseBody(body: ParsedBody): string {
+	const userMsg = body?.messages?.[1]?.content ?? "";
+	const spec = parseBindingContentPackSpec(userMsg);
+	const pack = buildBoundPack(spec.setting, spec.bindings, spec.obstacleCount);
+	const content = JSON.stringify({ pack });
+	return JSON.stringify({ choices: [{ message: { content } }] });
+}
+
+function buildBoundDualContentPackResponseBody(body: ParsedBody): string {
+	const userMsg = body?.messages?.[1]?.content ?? "";
+	const spec = parseDualBindingContentPackSpec(userMsg);
+	const packA = buildBoundPack(spec.settingA, spec.bindings, spec.obstacleCount);
+	const packB = buildBoundPack(spec.settingB, spec.bindings, spec.obstacleCount);
+	const content = JSON.stringify({ phases: [{ packA, packB }] });
+	return JSON.stringify({ choices: [{ message: { content } }] });
+}
 
 /**
  * Build a dual content-pack JSON-mode response body that satisfies
@@ -397,9 +583,9 @@ async function tryFulfillJsonMode(
 		kind === "synthesis"
 			? buildSynthesisResponseBody(body, blurbFn)
 			: kind === "dual-content-pack"
-				? buildDualContentPackResponseBody(body)
+				? buildBoundDualContentPackResponseBody(body)
 				: kind === "content-pack"
-					? buildContentPackResponseBody(body)
+					? buildBoundContentPackResponseBody(body)
 					: null;
 	if (responseBody === null) {
 		throw new Error(
