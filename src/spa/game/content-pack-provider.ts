@@ -553,9 +553,9 @@ export function examineMentionsUseTell(examineDescription: string): boolean {
  * top of the existing Use-cue and paired-space rules would over-constrain
  * spaces that never end up drawn for convergence.
  *
- * The pool inclusion guard in `objective-pool.ts` enforces the structural
- * preconditions (all four flavor fields present) so a Convergence candidate
- * cannot be drawn against a space that lacks the LLM-authored tier flavors.
+ * The type-first system enforces structural preconditions (all four flavor
+ * fields present) at binding-validation time so a Convergence candidate
+ * cannot be built against a space that lacks the LLM-authored tier flavors.
  */
 
 // ── Validation ────────────────────────────────────────────────────────────────
@@ -563,7 +563,12 @@ export function examineMentionsUseTell(examineDescription: string): boolean {
 export type RetryUnit =
 	| { kind: "objective-pair"; phaseIndex: number; pairId: string }
 	| { kind: "interesting-object"; phaseIndex: number; entityId: string }
-	| { kind: "obstacle"; phaseIndex: number; entityId: string };
+	| { kind: "obstacle"; phaseIndex: number; entityId: string }
+	| { kind: "carry-binding"; phaseIndex: number; bindingId: string }
+	| { kind: "use-space-binding"; phaseIndex: number; bindingId: string }
+	| { kind: "use-item-binding"; phaseIndex: number; bindingId: string }
+	| { kind: "convergence-binding"; phaseIndex: number; bindingId: string }
+	| { kind: "decoy"; phaseIndex: number; decoyId: string };
 
 export type ValidationRule =
 	| "paired-space-tell"
@@ -574,7 +579,9 @@ export type ValidationRule =
 	| "missing-field"
 	| "duplicate-id"
 	| "wrong-count"
-	| "wrong-kind";
+	| "wrong-kind"
+	| "binding-forbidden-field"
+	| "wrong-id";
 
 export type ValidationError = {
 	entityId: string;
@@ -625,11 +632,25 @@ export function groupErrorsByRetryUnit(errors: ValidationError[]): RetryUnit[] {
 		if (unit.kind === "objective-pair" && unit.pairId === "") continue;
 		if (unit.kind === "interesting-object" && unit.entityId === "") continue;
 		if (unit.kind === "obstacle" && unit.entityId === "") continue;
+		if (unit.kind === "carry-binding" && unit.bindingId === "") continue;
+		if (unit.kind === "use-space-binding" && unit.bindingId === "") continue;
+		if (unit.kind === "use-item-binding" && unit.bindingId === "") continue;
+		if (unit.kind === "convergence-binding" && unit.bindingId === "") continue;
+		if (unit.kind === "decoy" && unit.decoyId === "") continue;
 
-		const key =
-			unit.kind === "objective-pair"
-				? `${unit.kind}:${unit.phaseIndex}:${unit.pairId}`
-				: `${unit.kind}:${unit.phaseIndex}:${unit.entityId}`;
+		let key: string;
+		if (unit.kind === "objective-pair") {
+			key = `${unit.kind}:${unit.phaseIndex}:${unit.pairId}`;
+		} else if (unit.kind === "interesting-object") {
+			key = `${unit.kind}:${unit.phaseIndex}:${unit.entityId}`;
+		} else if (unit.kind === "obstacle") {
+			key = `${unit.kind}:${unit.phaseIndex}:${unit.entityId}`;
+		} else if (unit.kind === "carry-binding" || unit.kind === "use-space-binding" || unit.kind === "use-item-binding" || unit.kind === "convergence-binding") {
+			key = `${unit.kind}:${unit.phaseIndex}:${unit.bindingId}`;
+		} else {
+			// decoy
+			key = `${unit.kind}:${unit.phaseIndex}:${unit.decoyId}`;
+		}
 
 		if (!seen.has(key)) {
 			seen.add(key);

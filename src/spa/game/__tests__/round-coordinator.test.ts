@@ -1158,6 +1158,43 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 		},
 	};
 
+	// Content pack with a single carry pair using type-first IDs.
+	// Object is at (0,0); space is at (4,4) — different cells, so the carry
+	// objective is NOT immediately satisfied after a pass round.
+	const CARRY_PACK_UNSATISFIED: ContentPack = {
+		setting: "",
+		weather: "",
+		timeOfDay: "",
+		objectivePairs: [
+			{
+				object: {
+					id: "carry-0-obj",
+					kind: "objective_object",
+					name: "gem",
+					examineDescription: "A glowing gem.",
+					holder: { row: 0, col: 0 },
+					pairsWithSpaceId: "carry-0-space",
+				},
+				space: {
+					id: "carry-0-space",
+					kind: "objective_space",
+					name: "altar",
+					examineDescription: "A stone altar.",
+					holder: { row: 4, col: 4 },
+				},
+			},
+		],
+		interestingObjects: [],
+		obstacles: [],
+		landmarks: DEFAULT_LANDMARKS,
+		wallName: "wall",
+		aiStarts: {
+			red: { position: { row: 0, col: 0 }, facing: "north" },
+			green: { position: { row: 0, col: 1 }, facing: "north" },
+			cyan: { position: { row: 0, col: 2 }, facing: "north" },
+		},
+	};
+
 	it("RoundResult.phaseEnded is always false (phase-based model removed)", async () => {
 		// phaseEnded is always false in the flat model.
 		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
@@ -1173,9 +1210,10 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 	});
 
 	it("gameEnded is false when objective pairs are not satisfied", async () => {
-		// TEST_CONTENT_PACK: flower at (0,0), flower_space at (4,4) — not same cell.
-		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+		// CARRY_PACK_UNSATISFIED: carry-0-obj at (0,0), carry-0-space at (4,4) — not same cell.
+		const game = startGame(TEST_PERSONAS, CARRY_PACK_UNSATISFIED, {
 			budgetPerAi: 5,
+			objectiveTypes: ["carry"],
 		});
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
@@ -1818,12 +1856,12 @@ describe("runRound — onAiDelta callback", () => {
 // ----------------------------------------------------------------------------
 describe("placement flavor + win condition (issue #126)", () => {
 	/**
-	 * Build a ContentPack with K=1 objective pair.
-	 * gem_obj starts held by red (at 0,0); gem_space is at (0,0).
-	 * When red puts down gem_obj, it lands at (0,0) = gem_space's cell → win.
+	 * Build a ContentPack with K=1 objective pair using type-first entity IDs.
+	 * carry-0-obj (gem) starts held by red (at 0,0); carry-0-space (altar) is at (0,0).
+	 * When red puts down the gem, it lands at (0,0) = altar's cell → win.
 	 */
-	const GEM_OBJ_ID = "gem_obj";
-	const GEM_SPACE_ID = "gem_space";
+	const GEM_OBJ_ID = "carry-0-obj";
+	const GEM_SPACE_ID = "carry-0-space";
 	const FLAVOR = "{actor} places the gem on the altar.";
 
 	const PHASE1_PACK_K1: ContentPack = {
@@ -1886,10 +1924,11 @@ describe("placement flavor + win condition (issue #126)", () => {
 	});
 
 	it("K=1: drop on matching space ends the game (checkWinCondition fires)", async () => {
-		// rng: () => 0 ensures drawObjectives always picks carry objectives (index 0 in pool)
+		// objectiveTypes: ["carry"] activates the carry objective for the type-first system
 		const game = startGame(TEST_PERSONAS, PHASE1_PACK_K1, {
 			budgetPerAi: 5,
 			rng: () => 0,
+			objectiveTypes: ["carry"],
 		});
 		const provider = new MockRoundLLMProvider([
 			{
@@ -1938,7 +1977,7 @@ describe("placement flavor + win condition (issue #126)", () => {
 			],
 		};
 		// In flat model, checkWinCondition compares obj/space positions automatically.
-		const game = startGame(TEST_PERSONAS, packMismatch, { budgetPerAi: 5 });
+		const game = startGame(TEST_PERSONAS, packMismatch, { budgetPerAi: 5, objectiveTypes: ["carry"] });
 		const provider = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -1968,8 +2007,8 @@ describe("placement flavor + win condition (issue #126)", () => {
 		// Two objective pairs:
 		//   gem_obj (held by red, at 0,0) → gem_space (at 0,0) [auto-satisfied by put_down]
 		//   orb_obj (at 2,2)              → orb_space (at 2,2) [already satisfied from start]
-		const ORB_OBJ_ID = "orb_obj";
-		const ORB_SPACE_ID = "orb_space";
+		const ORB_OBJ_ID = "carry-1-obj";
+		const ORB_SPACE_ID = "carry-1-space";
 
 		const packK2: ContentPack = {
 			setting: "vault",
@@ -2025,11 +2064,12 @@ describe("placement flavor + win condition (issue #126)", () => {
 		};
 
 		// In flat model, checkWinCondition compares all obj/space positions automatically.
-		// rng: () => 0 ensures drawObjectives always picks carry-gem objectives (index 0 in pool).
-		// After put_down, all carry-gem objectives are satisfied → game ends.
+		// objectiveTypes: ["carry", "carry"] activates both carry objectives for the type-first system.
+		// After put_down of gem, all carry objectives are satisfied → game ends.
 		const game = startGame(TEST_PERSONAS, packK2, {
 			budgetPerAi: 5,
 			rng: () => 0,
+			objectiveTypes: ["carry", "carry"],
 		});
 
 		// At game start: orb pair already satisfied; gem pair not (gem_obj held by red).

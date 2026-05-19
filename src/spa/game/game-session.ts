@@ -28,6 +28,7 @@ import type {
 	AiPersona,
 	ContentPack,
 	GameState,
+	ObjectiveType,
 	RoundResult,
 	ToolRoundtripMessage,
 } from "./types";
@@ -56,11 +57,20 @@ export class GameSession {
 		contentPacksA?: ContentPack[],
 		contentPacksB?: ContentPack[],
 		rng?: () => number,
+		/**
+		 * Type-first objective types. When provided, buildObjectiveRecords is used
+		 * to create Objective records from the pack entities using the type-first
+		 * naming convention. When omitted, no objectives are created.
+		 */
+		objectiveTypes?: ObjectiveType[],
 	) {
 		const game = startGame(
 			personas,
 			contentPack,
-			rng !== undefined ? { rng } : {},
+			{
+				...(rng !== undefined ? { rng } : {}),
+				...(objectiveTypes !== undefined ? { objectiveTypes } : {}),
+			},
 		);
 		this.state = {
 			...game,

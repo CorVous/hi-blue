@@ -84,8 +84,10 @@ const MINIMAL_CONTENT_PACK: ContentPack = {
 };
 
 /**
- * A ContentPack fixture that places flower at (0,0) and key held by red,
+ * A ContentPack fixture that places carry-0-obj at (0,0) and key held by red,
  * with AIs at (0,0)=red, (0,1)=green, (0,2)=cyan facing north.
+ * Uses type-first entity IDs so buildObjectiveRecords can create carry objectives
+ * when CONTENT_PACK_OBJECTIVE_TYPES is passed to GameSession.
  */
 const CONTENT_PACK_WITH_ITEMS: ContentPack = {
 	setting: "test setting",
@@ -94,15 +96,15 @@ const CONTENT_PACK_WITH_ITEMS: ContentPack = {
 	objectivePairs: [
 		{
 			object: {
-				id: "flower",
+				id: "carry-0-obj",
 				kind: "objective_object",
 				name: "flower",
 				examineDescription: "A flower",
 				holder: { row: 0, col: 0 },
-				pairsWithSpaceId: "flower_space",
+				pairsWithSpaceId: "carry-0-space",
 			},
 			space: {
-				id: "flower_space",
+				id: "carry-0-space",
 				kind: "objective_space",
 				name: "flower space",
 				examineDescription: "A designated space",
@@ -128,6 +130,9 @@ const CONTENT_PACK_WITH_ITEMS: ContentPack = {
 		cyan: { position: { row: 0, col: 2 }, facing: "north" },
 	},
 };
+
+/** Objective types matching CONTENT_PACK_WITH_ITEMS (one carry at index 0). */
+const CONTENT_PACK_OBJECTIVE_TYPES: import("../types.js").ObjectiveType[] = ["carry"];
 
 /**
  * ContentPack with key held by red (for the non-adjacent give test).
@@ -259,10 +264,10 @@ describe("GameSession — state mutation across rounds", () => {
 	});
 
 	it("second round builds on first round's state", async () => {
-		// ContentPack places flower at (0,0) and red at (0,0)
+		// ContentPack places carry-0-obj (flower) at (0,0) and red at (0,0)
 		const session = new GameSession(CONTENT_PACK_WITH_ITEMS, TEST_PERSONAS);
 
-		// Red picks up flower in round 1
+		// Red picks up carry-0-obj in round 1
 		const provider1 = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -270,7 +275,7 @@ describe("GameSession — state mutation across rounds", () => {
 					{
 						id: "call_1",
 						name: "pick_up",
-						argumentsJson: '{"item":"flower"}',
+						argumentsJson: '{"item":"carry-0-obj"}',
 					},
 				],
 			},
@@ -279,11 +284,11 @@ describe("GameSession — state mutation across rounds", () => {
 		]);
 		await session.submitMessage("red", "hi", provider1);
 
-		// In round 2, flower should still be held by red
+		// In round 2, carry-0-obj should still be held by red
 		await session.submitMessage("green", "hi", makePassProvider());
 
 		const phase = session.getState();
-		const flower = phase.world.entities.find((i) => i.id === "flower");
+		const flower = phase.world.entities.find((i) => i.id === "carry-0-obj");
 		expect(flower?.holder).toBe("red");
 	});
 });
@@ -430,9 +435,9 @@ describe("GameSession — result from submitMessage", () => {
 
 describe("GameSession — win / lose via checkWinCondition / checkLoseCondition", () => {
 	it("gameEnded is false when objective pairs are not satisfied", async () => {
-		// CONTENT_PACK_WITH_ITEMS has one pair (flower at (0,0), space at (4,4))
-		// After a pass round, flower is still not on the space → no win.
-		const session = new GameSession(CONTENT_PACK_WITH_ITEMS, TEST_PERSONAS);
+		// CONTENT_PACK_WITH_ITEMS has one pair (carry-0-obj at (0,0), carry-0-space at (4,4))
+		// After a pass round, the object is still not on the space → no win.
+		const session = new GameSession(CONTENT_PACK_WITH_ITEMS, TEST_PERSONAS, undefined, undefined, undefined, CONTENT_PACK_OBJECTIVE_TYPES);
 
 		const { result } = await session.submitMessage(
 			"red",
@@ -554,10 +559,10 @@ describe("GameSession — onAiDelta propagation", () => {
 
 describe("GameSession — tool roundtrip persistence", () => {
 	it("two-round scenario: round-2 Red messages include round-1 assistant tool_call + tool result", async () => {
-		// ContentPack places flower at (0,0) and red at (0,0)
+		// ContentPack places carry-0-obj (flower) at (0,0) and red at (0,0)
 		const session = new GameSession(CONTENT_PACK_WITH_ITEMS, TEST_PERSONAS);
 
-		// Round 1: Red emits a tool_call (pick_up flower)
+		// Round 1: Red emits a tool_call (pick_up carry-0-obj)
 		const round1Provider = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -565,7 +570,7 @@ describe("GameSession — tool roundtrip persistence", () => {
 					{
 						id: "call_r1",
 						name: "pick_up",
-						argumentsJson: '{"item":"flower"}',
+						argumentsJson: '{"item":"carry-0-obj"}',
 					},
 				],
 			},
@@ -710,7 +715,7 @@ describe("parallel tool calls integration (#238)", () => {
 							{
 								id: "pickup_parallel_id",
 								name: "pick_up",
-								argumentsJson: JSON.stringify({ item: "flower" }),
+								argumentsJson: JSON.stringify({ item: "carry-0-obj" }),
 							},
 						],
 						costUsd: 1,
@@ -739,8 +744,8 @@ describe("parallel tool calls integration (#238)", () => {
 		const phase = session.getState();
 		expect(phase.budgets.red?.remaining).toBeCloseTo(-0.5, 10);
 
-		// Flower is picked up
-		const flower = phase.world.entities.find((e) => e.id === "flower");
+		// carry-0-obj (flower) is picked up
+		const flower = phase.world.entities.find((e) => e.id === "carry-0-obj");
 		expect(flower?.holder).toBe("red");
 
 		// Conversation log has the message

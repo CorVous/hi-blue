@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	STATIC_CONTENT_PACK_NO_PAIRS,
 	STATIC_CONTENT_PACKS,
+	STATIC_OBJECTIVE_TYPES,
 } from "./fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "./fixtures/static-personas";
 
@@ -20,6 +21,7 @@ vi.mock("../../content/content-pack-generator", () => ({
 	generateDualContentPacks: async () => ({
 		packA: STATIC_CONTENT_PACKS[0],
 		packB: STATIC_CONTENT_PACKS[0],
+		objectiveTypes: STATIC_OBJECTIVE_TYPES,
 	}),
 	generateContentPack: async () => STATIC_CONTENT_PACKS[0],
 }));
@@ -90,6 +92,7 @@ async function seedSessionInStub(
 			personas: STATIC_PERSONAS,
 			contentPacksA: STATIC_CONTENT_PACKS,
 			contentPacksB: STATIC_CONTENT_PACKS,
+			objectiveTypes: opts?.noPairs ? [] : STATIC_OBJECTIVE_TYPES,
 		});
 		saveActiveSession(session.getState());
 	} finally {

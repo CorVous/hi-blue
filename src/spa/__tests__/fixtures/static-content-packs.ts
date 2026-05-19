@@ -1,5 +1,11 @@
 import { DEFAULT_LANDMARKS } from "../../game/direction";
-import type { ContentPack } from "../../game/types";
+import type { ContentPack, ObjectiveType } from "../../game/types";
+
+/**
+ * Objective types matching the type-first entity IDs in STATIC_CONTENT_PACKS[0].
+ * Pass to GameSession / startGame when you need carry objectives to be active.
+ */
+export const STATIC_OBJECTIVE_TYPES: ObjectiveType[] = ["carry"];
 
 const AI_STARTS: ContentPack["aiStarts"] = {
 	red: { position: { row: 0, col: 0 }, facing: "north" },
@@ -35,15 +41,15 @@ export const STATIC_CONTENT_PACKS: ContentPack[] = [
 		objectivePairs: [
 			{
 				object: {
-					id: "phase1_obj",
+					id: "carry-0-obj",
 					kind: "objective_object",
 					name: "cracked lantern",
 					examineDescription: "A cracked lantern",
 					holder: { row: 3, col: 3 },
-					pairsWithSpaceId: "phase1_space",
+					pairsWithSpaceId: "carry-0-space",
 				},
 				space: {
-					id: "phase1_space",
+					id: "carry-0-space",
 					kind: "objective_space",
 					name: "maintenance alcove",
 					examineDescription: "A small alcove",

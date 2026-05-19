@@ -22,11 +22,13 @@ import type {
 	ContentPackProviderInput,
 	DualContentPackProviderInput,
 } from "../spa/game/content-pack-provider.js";
+import { rollObjectiveTypes } from "../spa/game/objective-type-roll.js";
 import type {
 	AiId,
 	CardinalDirection,
 	ContentPack,
 	GridPosition,
+	ObjectiveType,
 	PersonaSpatialState,
 	WorldEntity,
 } from "../spa/game/types.js";
@@ -387,7 +389,7 @@ export async function generateDualContentPacks(
 	config: PhaseConfig,
 	llm: ContentPackProvider,
 	aiIdsOrPromise: AiId[] | Promise<AiId[]>,
-): Promise<{ packA: ContentPack; packB: ContentPack }> {
+): Promise<{ packA: ContentPack; packB: ContentPack; objectiveTypes: ObjectiveType[] }> {
 	if (settings.length < 2) {
 		throw new Error(
 			`generateDualContentPacks: setting pool must have at least 2 entries (has ${settings.length})`,
@@ -501,7 +503,10 @@ export async function generateDualContentPacks(
 		aiStarts: { ...placedPackA.aiStarts },
 	};
 
-	return { packA: placedPackA, packB };
+	// Roll 3 objective types (type-first authoring — same types for A and B)
+	const objectiveTypes = rollObjectiveTypes(rng, 3);
+
+	return { packA: placedPackA, packB, objectiveTypes };
 }
 
 /**
