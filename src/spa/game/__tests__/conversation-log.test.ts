@@ -199,7 +199,7 @@ describe("renderEntry — action-failure", () => {
 	it("handles each in-scope tool name in the rendered line", () => {
 		const tools = [
 			"go",
-			"look",
+			"face",
 			"pick_up",
 			"put_down",
 			"give",

@@ -53,10 +53,10 @@ export interface DispatchResult {
 	 */
 	actorPrivateToolResult?: { description: string; success: boolean };
 	/**
-	 * For go/look actions where the actor's cone shift reveals new content,
+	 * For go/face actions where the actor's cone shift reveals new content,
 	 * this field carries the renderWhatsNew output. Only set for successful
-	 * go/look tool calls where the pre/post cone snapshots differ.
-	 * (Issue #376: persist cone-delta on go/look tool-call log entries)
+	 * go/face tool calls where the pre/post cone snapshots differ.
+	 * (Issue #376: persist cone-delta on go/face tool-call log entries)
 	 */
 	actorConeDelta?: string;
 }
@@ -247,13 +247,20 @@ export function validateToolCall(
 			return { valid: true };
 		}
 
-		case "look": {
+		case "face": {
 			// Only accept relative directions (relative to daemon's facing).
 			const rawDir = call.args.direction;
 			if (!RELATIVE_DIRECTIONS.includes(rawDir as RelativeDirection)) {
 				return {
 					valid: false,
 					reason: `"${rawDir}" is not a valid direction. Use relative directions: forward, back, left, right.`,
+				};
+			}
+			// Reject facing the current direction (forward) as a no-op
+			if (rawDir === "forward") {
+				return {
+					valid: false,
+					reason: "You already face that direction",
 				};
 			}
 			return { valid: true };
@@ -418,13 +425,13 @@ export function executeToolCall(
 				},
 			};
 		}
-		case "look": {
+		case "face": {
 			if (!actorSpatial) break;
 			// Convert relative direction to cardinal
-			const rawLookDir = call.args.direction;
+			const rawFaceDir = call.args.direction;
 			const direction = relativeToCardinal(
 				actorSpatial.facing,
-				rawLookDir as RelativeDirection,
+				rawFaceDir as RelativeDirection,
 			);
 			return {
 				...game,
@@ -472,8 +479,8 @@ function describeToolCall(game: GameState, aiId: AiId, call: ToolCall): string {
 		}
 		case "go":
 			return `${name} walks ${call.args.direction}.`;
-		case "look":
-			return `${name} looks ${call.args.direction}`;
+		case "face":
+			return `${name} turns to face ${call.args.direction}`;
 		default:
 			return `${name} attempted an unknown action`;
 	}
@@ -579,8 +586,8 @@ export function dispatchAiTurn(
 			// satisfactionState transitions for activation-flavor detection.
 			const preExecuteWorld = state.world;
 
-			// For go/look, compute cone delta pre-execution to capture the state before the action
-			if (action.toolCall.name === "go" || action.toolCall.name === "look") {
+			// For go/face, compute cone delta pre-execution to capture the state before the action
+			if (action.toolCall.name === "go" || action.toolCall.name === "face") {
 				const prevCtx = buildAiContext(state, aiId);
 				const prevSnap = buildConeSnapshot(prevCtx);
 				state = executeToolCall(state, aiId, action.toolCall);
@@ -633,7 +640,7 @@ export function dispatchAiTurn(
 			}
 
 			// Build and append a PhysicalActionRecord for observable physical actions.
-			// look is excluded (facing-change only, not observable); examine doesn't exist yet.
+			// face is excluded (facing-change only, not observable); examine doesn't exist yet.
 			const call = action.toolCall;
 			if (
 				call.name === "go" ||
@@ -762,7 +769,7 @@ export function dispatchAiTurn(
 				round,
 				tool: action.toolCall.name as
 					| "go"
-					| "look"
+					| "face"
 					| "pick_up"
 					| "put_down"
 					| "give"

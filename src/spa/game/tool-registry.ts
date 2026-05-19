@@ -2,7 +2,7 @@
  * Tool Registry
  *
  * Single source of truth for the OpenAI-spec `tools` array.
- * Declares one `function` per dispatcher tool: `pick_up`, `put_down`, `give`, `use`, `go`, `look`.
+ * Declares one `function` per dispatcher tool: `pick_up`, `put_down`, `give`, `use`, `go`, `face`.
  * Names and argument keys mirror `validateToolCall` in `dispatcher.ts` 1:1.
  */
 
@@ -134,9 +134,9 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 	{
 		type: "function",
 		function: {
-			name: "look",
+			name: "face",
 			description:
-				'Turn to face a relative direction without moving. Persistent — your facing changes. Use this tool when you want to "turn", "face", "glance", or "orient" yourself toward a direction without moving.',
+				"Turn your body to face a different direction without moving. Persistent — your facing changes for subsequent turns. Use this tool when you want to turn, pivot, or orient yourself toward something to your left, right, or behind you. You cannot face the direction you already face.",
 			parameters: {
 				type: "object",
 				properties: {
@@ -207,7 +207,7 @@ type PutDownArgs = { item: string };
 type GiveArgs = { item: string; to: string };
 type UseArgs = { item: string };
 type GoArgs = { direction: string };
-type LookArgs = { direction: string };
+type FaceArgs = { direction: string };
 type ExamineArgs = { item: string };
 type MessageArgs = { to: string; content: string };
 
@@ -217,7 +217,7 @@ type ToolArgs = {
 	give: GiveArgs;
 	use: UseArgs;
 	go: GoArgs;
-	look: LookArgs;
+	face: FaceArgs;
 	examine: ExamineArgs;
 	message: MessageArgs;
 };
@@ -274,7 +274,7 @@ export function parseToolCallArguments<N extends ToolName>(
 			};
 		}
 		case "go":
-		case "look": {
+		case "face": {
 			if (typeof obj.direction !== "string" || obj.direction.length === 0) {
 				return {
 					ok: false,

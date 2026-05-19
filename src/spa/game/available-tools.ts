@@ -6,7 +6,7 @@
  * game state (empty item cell for pick_up, no held items for put_down/use,
  * no adjacent AI for give, no legal direction for go).
  *
- * `look` is always present with the full 4-direction enum.
+ * `face` is always present with the 3-direction enum (excludes "forward", the current facing).
  */
 
 import { projectCone } from "./cone-projector.js";
@@ -100,7 +100,7 @@ function cloneToolWithEnums(
  *
  * Algorithm:
  * 0. `message` — always present; `to` enum = "blue" + live peer daemon ids.
- * 1. `look` — always present, full RELATIVE_DIRECTIONS enum.
+ * 1. `face` — always present, RELATIVE_DIRECTIONS enum excluding "forward" (current facing is no-op).
  * 2. `go` — included only when at least one direction is in-bounds AND non-obstacle.
  *    Enum restricted to legal directions.
  * 3. `pick_up` — included only when pickable entities are in the actor's own cell
@@ -150,11 +150,10 @@ export function availableTools(
 		);
 	}
 
-	// 1. look — always present
-	if (!disabledTools.has("look")) {
-		tools.push(
-			cloneToolWithEnums("look", { direction: [...RELATIVE_DIRECTIONS] }),
-		);
+	// 1. face — always present, excluding "forward" (current facing is no-op)
+	if (!disabledTools.has("face")) {
+		const faceDirections = RELATIVE_DIRECTIONS.filter((d) => d !== "forward");
+		tools.push(cloneToolWithEnums("face", { direction: faceDirections }));
 	}
 
 	// 2. go — restricted to legal directions

@@ -722,7 +722,7 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 		await armRoute(
 			page,
 			witnessName,
-			toolCallSseBody("look", { direction: witnessLookRelative }),
+			toolCallSseBody("face", { direction: witnessLookRelative }),
 		);
 
 		// Address the witness to trigger the setup round

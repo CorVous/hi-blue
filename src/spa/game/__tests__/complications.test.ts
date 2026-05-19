@@ -472,7 +472,7 @@ describe("toolDisableComplication", () => {
 			"give",
 			"use",
 			"go",
-			"look",
+			"face",
 			"examine",
 			"message",
 		] as const;

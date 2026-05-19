@@ -562,7 +562,7 @@ describe("Tool Disable exclusion", () => {
 			"give",
 			"use",
 			"go",
-			"look",
+			"face",
 			"examine",
 			"message",
 		];

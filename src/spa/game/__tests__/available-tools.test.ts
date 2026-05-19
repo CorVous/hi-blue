@@ -76,9 +76,9 @@ describe("availableTools — tool_disable filtering", () => {
 		const tools = availableTools(game, "red", []);
 		const toolNames = tools.map((t) => t.function.name);
 
-		// message and look are always present; go is present (red is at (2,2), not cornered)
+		// message and face are always present; go is present (red is at (2,2), not cornered)
 		expect(toolNames).toContain("message");
-		expect(toolNames).toContain("look");
+		expect(toolNames).toContain("face");
 		expect(toolNames).toContain("go");
 	});
 
@@ -98,7 +98,7 @@ describe("availableTools — tool_disable filtering", () => {
 		expect(toolNames).not.toContain("go");
 		// Other tools still present
 		expect(toolNames).toContain("message");
-		expect(toolNames).toContain("look");
+		expect(toolNames).toContain("face");
 	});
 
 	it("a tool_disable for a different daemon does not affect the acting daemon's tools", () => {
@@ -132,8 +132,8 @@ describe("availableTools — tool_disable filtering", () => {
 		const toolNames = tools.map((t) => t.function.name);
 
 		expect(toolNames).not.toContain("message");
-		// look still present
-		expect(toolNames).toContain("look");
+		// face still present
+		expect(toolNames).toContain("face");
 	});
 
 	it("two tool_disable entries on same daemon (different tools) removes both", () => {
@@ -148,7 +148,7 @@ describe("availableTools — tool_disable filtering", () => {
 			{
 				kind: "tool_disable",
 				target: "red",
-				tool: "look",
+				tool: "face",
 				resolveAtRound: game.round + 4,
 			},
 		];
@@ -156,7 +156,7 @@ describe("availableTools — tool_disable filtering", () => {
 		const toolNames = tools.map((t) => t.function.name);
 
 		expect(toolNames).not.toContain("go");
-		expect(toolNames).not.toContain("look");
+		expect(toolNames).not.toContain("face");
 		// message still present
 		expect(toolNames).toContain("message");
 	});
@@ -181,24 +181,39 @@ describe("availableTools — tool_disable filtering", () => {
 
 		// Neither sysadmin_directive nor chat_lockout should remove any tool
 		expect(toolNames).toContain("message");
-		expect(toolNames).toContain("look");
+		expect(toolNames).toContain("face");
 		expect(toolNames).toContain("go");
 	});
 
-	it("disabling 'look' removes look tool", () => {
+	it("disabling 'face' removes face tool", () => {
 		const game = makeGame();
 		const complications: ActiveComplication[] = [
 			{
 				kind: "tool_disable",
 				target: "cyan",
-				tool: "look",
+				tool: "face",
 				resolveAtRound: game.round + 3,
 			},
 		];
 		const tools = availableTools(game, "cyan", complications);
 		const toolNames = tools.map((t) => t.function.name);
 
-		expect(toolNames).not.toContain("look");
+		expect(toolNames).not.toContain("face");
+	});
+
+	it("face tool direction enum excludes 'forward'", () => {
+		const game = makeGame();
+		const tools = availableTools(game, "red", []);
+		const faceTool = tools.find((t) => t.function.name === "face");
+
+		expect(faceTool).toBeDefined();
+		const directionEnum =
+			faceTool?.function.parameters.properties.direction?.enum;
+		expect(directionEnum).toBeDefined();
+		expect(directionEnum).toEqual(
+			expect.arrayContaining(["back", "left", "right"]),
+		);
+		expect(directionEnum).not.toContain("forward");
 	});
 });
 

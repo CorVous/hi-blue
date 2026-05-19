@@ -1121,10 +1121,10 @@ describe("tool-call dispatch", () => {
 
 		// All three AI calls should receive tools from availableTools
 		expect(provider.calls).toHaveLength(3);
-		// All three calls should include "look" in their tool list
+		// All three calls should include "face" in their tool list
 		for (const call of provider.calls) {
 			expect(call.tools).toBeDefined();
-			expect(call.tools?.some((t) => t.function.name === "look")).toBe(true);
+			expect(call.tools?.some((t) => t.function.name === "face")).toBe(true);
 		}
 	});
 });
@@ -3270,8 +3270,8 @@ describe("complication countdown — coordinator integration", () => {
 			}
 		});
 
-		it("Test B: look reveals an item → tool-call entry carries coneDelta", async () => {
-			// Red at (0,0) facing north — north cone is all walls. After looking
+		it("Test B: face reveals an item → tool-call entry carries coneDelta", async () => {
+			// Red at (0,0) facing north — north cone is all walls. After facing
 			// right (now facing east), the key at (0,1) sits at "directly in front".
 			const game = makeGame();
 
@@ -3281,7 +3281,7 @@ describe("complication countdown — coordinator integration", () => {
 					toolCalls: [
 						{
 							id: "look_1",
-							name: "look",
+							name: "face",
 							argumentsJson: JSON.stringify({ direction: "right" }),
 						},
 					],
@@ -3294,7 +3294,7 @@ describe("complication countdown — coordinator integration", () => {
 
 			const redLog = nextState.conversationLogs.red ?? [];
 			const toolCallEntry = redLog.find(
-				(e) => e.kind === "tool-call" && e.toolName === "look",
+				(e) => e.kind === "tool-call" && e.toolName === "face",
 			);
 			expect(toolCallEntry).toBeDefined();
 			if (toolCallEntry?.kind === "tool-call") {
@@ -3303,9 +3303,9 @@ describe("complication countdown — coordinator integration", () => {
 			}
 		});
 
-		it("Test C: empty delta no-op (look forward when already facing forward)", async () => {
-			// Red at (0,0) facing north. Red looks forward (still facing north).
-			// The cone snapshot before and after are identical → no enrichment.
+		it("Test C: face forward is rejected at validation (already facing that way)", async () => {
+			// Red at (0,0) facing north. Red tries to face forward (already facing north).
+			// This is rejected as a no-op at validation, so red remains facing north.
 			const game = makeGame();
 
 			const provider = new MockRoundLLMProvider([
@@ -3313,8 +3313,8 @@ describe("complication countdown — coordinator integration", () => {
 					assistantText: "",
 					toolCalls: [
 						{
-							id: "look_1",
-							name: "look",
+							id: "face_1",
+							name: "face",
 							argumentsJson: JSON.stringify({ direction: "forward" }),
 						},
 					],
@@ -3323,20 +3323,13 @@ describe("complication countdown — coordinator integration", () => {
 				{ assistantText: "", toolCalls: [] },
 			]);
 
-			const { nextState } = await runRound(game, "red", "start", provider);
+			const roundResult = await runRound(game, "red", "start", provider);
 
-			const redLog = nextState.conversationLogs.red ?? [];
-			const toolCallEntry = redLog.find(
-				(e) => e.kind === "tool-call" && e.toolName === "look",
-			);
-			expect(toolCallEntry).toBeDefined();
-			if (toolCallEntry?.kind === "tool-call") {
-				// coneDelta should be undefined (not present or undefined).
-				expect(toolCallEntry.coneDelta).toBeUndefined();
-			}
+			// Red should still be facing north (unchanged from the no-op rejection)
+			expect(roundResult.nextState.personaSpatial.red?.facing).toBe("north");
 		});
 
-		it("Test D: non-go/look tools never enrich (pick_up does not get coneDelta)", async () => {
+		it("Test D: non-go/face tools never enrich (pick_up does not get coneDelta)", async () => {
 			const game = makeGame();
 
 			const provider = new MockRoundLLMProvider([

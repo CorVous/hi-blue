@@ -61,7 +61,7 @@ export interface TurnRecord {
  */
 export interface ToolCallDetail {
 	name: string;
-	/** For go/look: the relative direction argument, if present. */
+	/** For go/face: the relative direction argument, if present. */
 	direction?: RelativeDirection;
 	/** For message: the recipient AiId or "blue". */
 	recipient?: AiId | "blue";
@@ -111,7 +111,7 @@ export function parseToolCallDetail(tc: CapturedToolCall): ToolCallDetail {
 
 	switch (tc.name) {
 		case "go":
-		case "look": {
+		case "face": {
 			const dir = typeof args.direction === "string" ? args.direction : "";
 			if (RELATIVE_DIRS.has(dir as RelativeDirection)) {
 				detail.direction = dir as RelativeDirection;
@@ -181,7 +181,7 @@ export function looksLikeFreeTextMessage(text: string): boolean {
  * Same caveats as `looksLikeFreeTextMessage` — best-effort, regex-only.
  */
 const FREE_TEXT_ACTION_RE =
-	/\bI(?:'ll| will| am| 'm)?\s*(?:go|move|step|walk|head|turn|look|pick\s*up|put\s*down|drop|give|hand|use|activate|examine|inspect|study)\b/i;
+	/\bI(?:'ll| will| am| 'm)?\s*(?:go|move|step|walk|head|turn|face|pick\s*up|put\s*down|drop|give|hand|use|activate|examine|inspect|study)\b/i;
 
 /**
  * Return true when the assistant text reads like an attempt to take a physical
@@ -327,7 +327,7 @@ export interface DriftRunSeries {
 	 * "blue"), and "malformed" (recipient missing/unparseable).
 	 */
 	recipientCounts: Record<string, number[]>;
-	/** Per-relative-direction per-round count series for go/look calls. */
+	/** Per-relative-direction per-round count series for go/face calls. */
 	directionCounts: Record<string, number[]>;
 }
 
@@ -453,7 +453,7 @@ export function buildPerRoundSeries(
 							: "unknown";
 					bump(recipientCounts, bucket, idx);
 				}
-				if ((tc.name === "go" || tc.name === "look") && detail.direction) {
+				if ((tc.name === "go" || tc.name === "face") && detail.direction) {
 					bump(directionCounts, detail.direction, idx);
 				}
 			}
