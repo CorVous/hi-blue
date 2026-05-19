@@ -1,4 +1,5 @@
 import type { LlmSynthesisProvider } from "../spa/game/llm-synthesis-provider.js";
+import { actionProfileFor } from "./action-preference-bias.js";
 import { COLOR_PALETTE } from "./color-palette.js";
 import {
 	biasSum,
@@ -84,11 +85,16 @@ function drawWithReplacement<T>(pool: T[], rng: () => number): T {
  * engagement clause derived from the persona's temperament pair to the
  * synthesized blurb. Off by default; production behaviour byte-identical
  * when the flag is unset. See `engagement-clauses.ts` for the rationale.
+ *
+ * Daemon-action-variation: when `actionProfiles` is true, attach a per-
+ * persona action-tool preference clause to the synthesised persona. Off
+ * by default; production behaviour byte-identical when unset. See
+ * `action-preference-bias.ts`.
  */
 export async function generatePersonas(
 	rng: () => number = Math.random,
 	llm?: LlmSynthesisProvider,
-	opts?: { engagementClauses?: boolean },
+	opts?: { engagementClauses?: boolean; actionProfiles?: boolean },
 ): Promise<Record<string, import("../spa/game/types.js").AiPersona>> {
 	const takenNames = new Set<string>();
 	const names: string[] = [];
@@ -178,7 +184,7 @@ export async function generatePersonas(
 		}
 		const voiceExamples =
 			synthesized?.voiceExamples ?? buildFallbackVoiceExamples(tuple);
-		personas[name] = {
+		const persona: import("../spa/game/types.js").AiPersona = {
 			id: name,
 			name,
 			color,
@@ -188,6 +194,11 @@ export async function generatePersonas(
 			blurb,
 			voiceExamples,
 		};
+		if (opts?.actionProfiles) {
+			const [t1, t2] = tuple.temperaments;
+			persona.actionProfile = actionProfileFor(name, t1, t2);
+		}
+		personas[name] = persona;
 	}
 	return personas;
 }

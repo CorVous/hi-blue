@@ -22,6 +22,13 @@ export interface AiContext {
 	typingQuirks: [string, string, ...string[]];
 	/** Three short in-character utterances; rendered as `<voice_examples>` in the system prompt. */
 	voiceExamples: string[];
+	/**
+	 * Optional per-persona action-tool preference clause (daemon-action-variation).
+	 * Rendered as `<action_profile>` in the system prompt between personality
+	 * and voice examples. Absent personas (loaded from pre-feature saves) skip
+	 * the block — production behaviour byte-identical when unset.
+	 */
+	actionProfile?: string;
 	personaGoal: string;
 	setting: string;
 	weather: string;
@@ -131,6 +138,9 @@ export function buildAiContext(
 		blurb: persona.blurb,
 		typingQuirks: persona.typingQuirks,
 		voiceExamples: persona.voiceExamples,
+		...(persona.actionProfile !== undefined
+			? { actionProfile: persona.actionProfile }
+			: {}),
 		personaGoal: persona.personaGoal,
 		setting,
 		weather,
@@ -534,6 +544,18 @@ function renderSystemPrompt(ctx: AiContext): string {
 	lines.push(ctx.blurb);
 	lines.push("</personality>");
 	lines.push("");
+
+	// Action profile — per-persona action-tool preference clause derived
+	// from temperaments. Sits between <personality> and <typing_quirks> so
+	// the daemon reads it in the same authorial-voice block as the other
+	// persona shaping. Emitted only when present; older personas (loaded
+	// from saves predating the feature) skip the block.
+	if (ctx.actionProfile !== undefined) {
+		lines.push("<action_profile>");
+		lines.push(ctx.actionProfile);
+		lines.push("</action_profile>");
+		lines.push("");
+	}
 
 	// Typing quirks — per-persona surface signals to prevent voice bleed
 	// across daemons (issue #167; GLM-4.7 guide §4.5).
