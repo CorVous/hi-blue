@@ -637,7 +637,6 @@ function collectObjectiveHints(ctx: AiContext): string[] {
 	}
 
 	// ── UseSpace / Convergence proximity flavor (new) ──────────────────────────
-	// (Auto-examine is handled separately in collectAutoExamines)
 	for (const entity of ctx.worldSnapshot.entities) {
 		if (entity.kind !== "objective_space") continue;
 		if (!isGridPosition(entity.holder)) continue;
@@ -671,46 +670,6 @@ function collectObjectiveHints(ctx: AiContext): string[] {
 	}
 
 	return hints;
-}
-
-/**
- * Returns zero or more auto-examine lines for UseSpace/Convergence objectives
- * when the actor is in the own cell or front arc (close proximity).
- * These are rendered separately from proximity hints in renderCurrentState.
- */
-function collectAutoExamines(ctx: AiContext): string[] {
-	const actorSpatial = ctx.personaSpatial[ctx.aiId];
-	if (!actorSpatial) return [];
-
-	const arc = frontArc(actorSpatial.position, actorSpatial.facing);
-	const exams: string[] = [];
-
-	for (const entity of ctx.worldSnapshot.entities) {
-		if (entity.kind !== "objective_space") continue;
-		if (!isGridPosition(entity.holder)) continue;
-
-		// Check if there's a pending UseSpaceObjective or ConvergenceObjective referencing this space
-		const pendingObjective = ctx.objectives.find(
-			(obj) =>
-				(obj.kind === "use_space" || obj.kind === "convergence") &&
-				obj.satisfactionState === "pending" &&
-				obj.spaceId === entity.id,
-		);
-
-		if (!pendingObjective) continue;
-
-		const spacePos = entity.holder;
-
-		// Fire auto-examine only when in own cell or front arc
-		const inOwnCell = positionsEqual(spacePos, actorSpatial.position);
-		const inFrontArc = arc.some((p) => positionsEqual(p, spacePos));
-
-		if ((inOwnCell || inFrontArc) && entity.examineDescription) {
-			exams.push(entity.examineDescription);
-		}
-	}
-
-	return exams;
 }
 
 /**
@@ -1038,6 +997,29 @@ function renderCurrentState(ctx: AiContext): string {
 				cellLine += ` ${flavor}`;
 			}
 			lines.push(cellLine);
+
+			// Auto-emit examineDescription for each entity in this cell (excluding held-by-actor).
+			// Uses postExamineDescription when satisfied, else examineDescription.
+			const cellEntities = ctx.worldSnapshot.entities.filter((e) => {
+				const h = e.holder;
+				return isGridPosition(h) && positionsEqual(h, position);
+			});
+			for (const entity of cellEntities) {
+				// Skip entities held by the actor
+				if (entity.holder === ctx.aiId) continue;
+
+				// Choose description: postExamineDescription if satisfied and present, else examineDescription
+				const chosenDescription =
+					entity.satisfactionState === "satisfied" &&
+					entity.postExamineDescription
+						? entity.postExamineDescription
+						: entity.examineDescription;
+
+				// Skip if empty/undefined
+				if (!chosenDescription) continue;
+
+				lines.push(`    ${entity.name}: ${chosenDescription}`);
+			}
 		}
 		if (viewCells.length === 0) {
 			lines.push("(nothing visible)");
@@ -1046,11 +1028,6 @@ function renderCurrentState(ctx: AiContext): string {
 		// Objective hint lines — rendered after the cone listing when applicable.
 		for (const hint of collectObjectiveHints(ctx)) {
 			lines.push(hint);
-		}
-
-		// Auto-examine lines for UseSpace/Convergence when close to the space.
-		for (const exam of collectAutoExamines(ctx)) {
-			lines.push(exam);
 		}
 	} else {
 		lines.push("(no spatial data)");

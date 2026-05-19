@@ -1650,6 +1650,219 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			"proximity: The place emanates a strange presence, drawing you forward.",
 		);
 	});
+
+	// ─ Auto-emit examineDescription tests (issue #466) ─
+	describe("auto-emit examineDescription for entities in cone (issue #466)", () => {
+		it("emits examineDescription for interesting_object in cone", () => {
+			// red at (0,0) facing south; switch at (1,0) = directly in front
+			const item: WorldEntity = {
+				id: "switch",
+				kind: "interesting_object",
+				name: "brass switch",
+				examineDescription: "A small brass switch ready to be pressed.",
+				holder: { row: 1, col: 0 },
+			};
+			const pack = makeTestPack([item], {
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS_RED_SOUTH,
+			});
+			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// Examine description should appear as an indented continuation
+			expect(stateMsg).toContain(
+				"brass switch: A small brass switch ready to be pressed.",
+			);
+		});
+
+		it("emits examineDescription for obstacle in cone", () => {
+			// red at (0,0) facing south; obstacle at (1,0) = directly in front
+			const obstacle: WorldEntity = {
+				id: "col1",
+				kind: "obstacle",
+				name: "stone column",
+				examineDescription: "A weathered stone column, ancient and sturdy.",
+				holder: { row: 1, col: 0 },
+			};
+			const pack = makeTestPack([obstacle], {
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS_RED_SOUTH,
+			});
+			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// Examine description should appear for obstacle too
+			expect(stateMsg).toContain(
+				"stone column: A weathered stone column, ancient and sturdy.",
+			);
+		});
+
+		it("uses postExamineDescription when entity is satisfied", () => {
+			// red at (0,0) facing south; space at (1,0) = directly in front
+			const space: WorldEntity = {
+				id: "pedestal",
+				kind: "objective_space",
+				name: "Pedestal",
+				examineDescription: "A brass pedestal.",
+				postExamineDescription: "The pedestal glows softly now.",
+				holder: { row: 1, col: 0 },
+				satisfactionState: "satisfied" as const,
+			};
+			const pack = makeTestPack([], {
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS_RED_SOUTH,
+			});
+			let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			game = {
+				...game,
+				world: { ...game.world, entities: [space] },
+			};
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// postExamineDescription should be emitted, not examineDescription
+			expect(stateMsg).toContain("Pedestal: The pedestal glows softly now.");
+			expect(stateMsg).not.toContain("Pedestal: A brass pedestal.");
+		});
+
+		it("falls back to examineDescription when satisfied but no postExamineDescription", () => {
+			// red at (0,0) facing south; space at (1,0) = directly in front
+			const space: WorldEntity = {
+				id: "pedestal",
+				kind: "objective_space",
+				name: "Pedestal",
+				examineDescription: "A brass pedestal.",
+				holder: { row: 1, col: 0 },
+				satisfactionState: "satisfied" as const,
+				// no postExamineDescription property
+			};
+			const pack = makeTestPack([], {
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS_RED_SOUTH,
+			});
+			let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			game = {
+				...game,
+				world: { ...game.world, entities: [space] },
+			};
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// Should fall back to examineDescription when postExamineDescription is absent
+			expect(stateMsg).toContain("Pedestal: A brass pedestal.");
+		});
+
+		it("does NOT emit examineDescription for entity in own cell", () => {
+			// red at (0,0) facing south; item at (0,0) = own cell
+			const item: WorldEntity = {
+				id: "switch",
+				kind: "interesting_object",
+				name: "brass switch",
+				examineDescription: "A small brass switch ready to be pressed.",
+				holder: { row: 0, col: 0 }, // own cell
+			};
+			const pack = makeTestPack([item], {
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS_RED_SOUTH,
+			});
+			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// Own cell entities should NOT appear under <what_you_see>, only in "Your cell contains"
+			const whatYouSeeBlock = stateMsg.split("<what_you_see>")[1];
+			expect(whatYouSeeBlock).not.toContain(
+				"A small brass switch ready to be pressed.",
+			);
+		});
+
+		it("does NOT emit examineDescription for entity held by actor", () => {
+			// red holds the switch
+			const item: WorldEntity = {
+				id: "switch",
+				kind: "interesting_object",
+				name: "brass switch",
+				examineDescription: "A small brass switch ready to be pressed.",
+				holder: "red", // held by actor
+			};
+			const pack = makeTestPack([item], {
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS_RED_SOUTH,
+			});
+			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// Held-by-actor items should NOT appear under <what_you_see>
+			const whatYouSeeBlock = stateMsg.split("<what_you_see>")[1];
+			expect(whatYouSeeBlock).not.toContain(
+				"brass switch: A small brass switch ready to be pressed.",
+			);
+		});
+
+		it("wall sentinels still render correctly", () => {
+			// red at (0,0) facing north (cone goes north, into OOB)
+			const pack = makeTestPack([], {
+				wallName: "boundary wall",
+				aiStarts: RGC_AI_STARTS, // red faces north by default
+			});
+			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// OOB cells should still render as walls
+			expect(stateMsg).toContain("boundary wall");
+		});
+
+		it("skips entities with empty examineDescription", () => {
+			// Create entity with empty examineDescription
+			const item: WorldEntity = {
+				id: "empty_item",
+				kind: "interesting_object",
+				name: "mystery object",
+				examineDescription: "", // empty
+				holder: { row: 1, col: 0 },
+			};
+			const pack = makeTestPack([item], {
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS_RED_SOUTH,
+			});
+			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// Empty description should not produce an indented line
+			expect(stateMsg).not.toContain("mystery object: ");
+		});
+
+		it("emits examineDescription every turn while entity is in range", () => {
+			// red at (0,0) facing south; switch at (1,0) = directly in front
+			const item: WorldEntity = {
+				id: "switch",
+				kind: "interesting_object",
+				name: "brass switch",
+				examineDescription: "A small brass switch ready to be pressed.",
+				holder: { row: 1, col: 0 },
+			};
+			const pack = makeTestPack([item], {
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS_RED_SOUTH,
+			});
+			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			const ctx1 = buildAiContext(game, "red");
+			const stateMsg1 = ctx1.toCurrentStateUserMessage();
+			// First turn: description appears
+			expect(stateMsg1).toContain(
+				"brass switch: A small brass switch ready to be pressed.",
+			);
+
+			// Second turn (no-op advance, item still in same place): description appears again
+			const game2 = {
+				...game,
+				round: game.round + 1,
+			};
+			const ctx2 = buildAiContext(game2, "red");
+			const stateMsg2 = ctx2.toCurrentStateUserMessage();
+			// Description should appear again (no dedup)
+			expect(stateMsg2).toContain(
+				"brass switch: A small brass switch ready to be pressed.",
+			);
+		});
+	});
 });
 
 describe("<whats_new> broadcast announcements", () => {
