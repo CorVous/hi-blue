@@ -117,6 +117,8 @@ export interface ContentPack {
 	timeOfDay: string;
 	objectivePairs: ObjectivePair[];
 	interestingObjects: WorldEntity[];
+	/** Objective-capable spaces that are NOT part of a carry pair (use_space and convergence bindings). */
+	boundSpaces?: WorldEntity[];
 	obstacles: WorldEntity[];
 	aiStarts: Record<AiId, PersonaSpatialState>;
 	/**

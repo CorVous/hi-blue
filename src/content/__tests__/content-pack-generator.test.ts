@@ -7,14 +7,15 @@
 
 import { describe, expect, it } from "vitest";
 import type {
-	ContentPackProviderInput,
-	ContentPackProviderResult,
-	DualContentPackProviderInput,
-	DualContentPackProviderResult,
+	BindingContentPackInput,
+	BindingContentPackProviderResult,
+	DualBindingContentPackInput,
+	DualBindingContentPackProviderResult,
 } from "../../spa/game/content-pack-provider.js";
 import { MockContentPackProvider } from "../../spa/game/content-pack-provider.js";
 import { DEFAULT_LANDMARKS } from "../../spa/game/direction.js";
 import type { ContentPack } from "../../spa/game/types.js";
+import type { RawBoundPack, RawBinding } from "../../spa/game/binding-aware-validator.js";
 import {
 	generateContentPacks,
 	generateDualContentPacks,
@@ -78,65 +79,120 @@ const AI_IDS = ["red", "green", "cyan"];
 // ── MockContentPackProvider factory ──────────────────────────────────────────
 
 /**
- * Build a MockContentPackProvider that returns exactly the entity counts
- * requested (k=1, n=1, m=1) with well-formed data.
- * All placementFlavor strings contain "{actor}" as required.
+ * Build a raw binding from a skeleton binding (given the bindings in the input).
+ */
+function makeRawBinding(binding: BindingContentPackInput["phases"][number]["bindings"][number], phaseIdx: number, bindingIdx: number): RawBinding {
+	switch (binding.type) {
+		case "carry":
+			return {
+				id: `carry-${bindingIdx}`,
+				type: "carry",
+				object: {
+					id: binding.objectId ?? `carry-${bindingIdx}-obj`,
+					name: `Carry Object p${phaseIdx + 1}-${bindingIdx}`,
+					examineDescription: `An object in phase ${phaseIdx + 1} that belongs on Carry Space p${phaseIdx + 1}-${bindingIdx}.`,
+					useOutcome: `You use the carry object.`,
+					placementFlavor: `{actor} places the carry object on its space.`,
+					proximityFlavor: `The carry object hums near its space.`,
+				},
+				space: {
+					id: binding.spaceId ?? `carry-${bindingIdx}-space`,
+					name: `Carry Space p${phaseIdx + 1}-${bindingIdx}`,
+					examineDescription: `A carry destination space in phase ${phaseIdx + 1}.`,
+					proximityFlavor: `The carry space emanates a faint pull.`,
+				},
+			};
+		case "use_space":
+			return {
+				id: `useSpace-${bindingIdx}`,
+				type: "use_space",
+				space: {
+					id: binding.spaceId ?? `useSpace-${bindingIdx}-space`,
+					name: `Use Space p${phaseIdx + 1}-${bindingIdx}`,
+					examineDescription: `A panel with a button to press in phase ${phaseIdx + 1}.`,
+					proximityFlavor: `The use space glows faintly.`,
+					activationFlavor: `The panel activates.`,
+					satisfactionFlavor: `The panel has been activated.`,
+					postExamineDescription: `The panel is now active.`,
+					postLookFlavor: `The panel glows steadily.`,
+				},
+			};
+		case "convergence":
+			return {
+				id: `convergence-${bindingIdx}`,
+				type: "convergence",
+				space: {
+					id: binding.spaceId ?? `convergence-${bindingIdx}-space`,
+					name: `Convergence Space p${phaseIdx + 1}-${bindingIdx}`,
+					examineDescription: `A meeting place where two are needed in phase ${phaseIdx + 1}.`,
+					proximityFlavor: `The convergence space awaits company.`,
+					convergenceTier1Flavor: `A daemon stands here alone.`,
+					convergenceTier2Flavor: `Two daemons share this space.`,
+					convergenceTier1ActorFlavor: `You stand here alone, waiting.`,
+					convergenceTier2ActorFlavor: `You feel the convergence complete.`,
+				},
+			};
+		case "use_item":
+			return {
+				id: `useItem-${bindingIdx}`,
+				type: "use_item",
+				item: {
+					id: binding.itemId ?? `useItem-${bindingIdx}-item`,
+					name: `Use Item p${phaseIdx + 1}-${bindingIdx}`,
+					examineDescription: `An item with a switch to activate in phase ${phaseIdx + 1}.`,
+					proximityFlavor: `The use item sits nearby.`,
+					useOutcome: `You use the item.`,
+					activationFlavor: `The item activates.`,
+					postExamineDescription: `The item is now used.`,
+					postLookFlavor: `The item glows.`,
+				},
+			};
+	}
+}
+
+/**
+ * Build a MockContentPackProvider that returns binding-shaped packs based on
+ * the input binding schedule. Well-formed data for placement constraint tests.
  */
 function makeMockProvider(): MockContentPackProvider {
 	return new MockContentPackProvider(
-		(input: ContentPackProviderInput): ContentPackProviderResult => {
-			const packs: ContentPackProviderResult["packs"] = input.phases.map(
-				(phase, phaseIdx) => {
-					const pn = phaseIdx + 1;
-					const spaceId = `p${pn}_space`;
-					const objId = `p${pn}_obj`;
-					const interestingId = `p${pn}_interesting`;
-					const obstacleId = `p${pn}_obstacle`;
+		(input: BindingContentPackInput): BindingContentPackProviderResult => {
+			const phases = input.phases.map((phase, phaseIdx) => {
+				const bindings: RawBinding[] = phase.bindings.map((binding, bindingIdx) =>
+					makeRawBinding(binding, phaseIdx, bindingIdx)
+				);
 
-					return {
-						setting: phase.setting,
-						objectivePairs: Array.from({ length: phase.k }, (_, i) => ({
-							space: {
-								id: `${spaceId}_${i}`,
-								kind: "objective_space" as const,
-								name: `Space ${pn} ${i}`,
-								examineDescription: `A space in phase ${pn}.`,
-								holder: { row: 0, col: 0 } as never,
-							},
-							object: {
-								id: `${objId}_${i}`,
-								kind: "objective_object" as const,
-								name: `Object ${pn} ${i}`,
-								examineDescription: `An object in phase ${pn} that belongs on Space ${pn} ${i}.`,
-								useOutcome: `You use object ${pn} ${i}.`,
-								pairsWithSpaceId: `${spaceId}_${i}`,
-								placementFlavor: `{actor} places the object on the space in phase ${pn}.`,
-								proximityFlavor: `The object hums near its space in phase ${pn}.`,
-								holder: { row: 0, col: 0 } as never,
-							},
-						})),
-						interestingObjects: Array.from({ length: phase.n }, (_, i) => ({
-							id: `${interestingId}_${i}`,
-							kind: "interesting_object" as const,
-							name: `Interesting ${pn} ${i}`,
-							examineDescription: `Something interesting in phase ${pn}.`,
-							useOutcome: `You interact with interesting ${pn} ${i}.`,
-							holder: { row: 0, col: 0 } as never,
-						})),
-						obstacles: Array.from({ length: phase.m }, (_, i) => ({
-							id: `${obstacleId}_${i}`,
-							kind: "obstacle" as const,
-							name: `Obstacle ${pn} ${i}`,
-							examineDescription: `An impassable obstacle in phase ${pn}.`,
-							holder: { row: 0, col: 0 } as never,
-						})),
-						landmarks: DEFAULT_LANDMARKS,
-						wallName: "wall",
-						aiStarts: {} as Record<string, never>,
-					};
-				},
-			);
-			return { packs };
+				const rawPack: RawBoundPack = {
+					setting: phase.setting,
+					wallName: "wall",
+					landmarks: DEFAULT_LANDMARKS as unknown as undefined,
+					bindings,
+					decoys: [
+						{
+							id: "decoy-0",
+							name: `Decoy 0 p${phaseIdx + 1}`,
+							examineDescription: `A plain item in phase ${phaseIdx + 1}.`,
+							proximityFlavor: `A decoy sits nearby.`,
+							useOutcome: `Nothing happens.`,
+						},
+						{
+							id: "decoy-1",
+							name: `Decoy 1 p${phaseIdx + 1}`,
+							examineDescription: `Another plain item in phase ${phaseIdx + 1}.`,
+							proximityFlavor: `Another decoy sits nearby.`,
+							useOutcome: `Nothing happens.`,
+						},
+					],
+					obstacles: Array.from({ length: phase.obstacleCount }, (_, i) => ({
+						id: `obstacle-${i}`,
+						name: `Obstacle ${i} p${phaseIdx + 1}`,
+						examineDescription: `An impassable obstacle in phase ${phaseIdx + 1}.`,
+						shiftFlavor: `The obstacle shifts.`,
+					})),
+				};
+				return { rawPack };
+			});
+			return { phases };
 		},
 	);
 }
@@ -413,21 +469,24 @@ describe("generateContentPacks — degenerate config throws after MAX_ATTEMPTS",
 		const rng = seededRng(42);
 
 		const impossibleProvider = new MockContentPackProvider(
-			(input: ContentPackProviderInput): ContentPackProviderResult => ({
-				packs: input.phases.map((phase, phaseIdx) => ({
-					setting: phase.setting,
-					objectivePairs: [],
-					interestingObjects: [],
-					obstacles: Array.from({ length: phase.m }, (_, i) => ({
-						id: `obstacle_p${phaseIdx + 1}_${i}`,
-						kind: "obstacle" as const,
-						name: `Obstacle ${i}`,
-						examineDescription: "An impassable obstacle.",
-						holder: { row: 0, col: 0 } as never,
-					})),
-					landmarks: DEFAULT_LANDMARKS,
-					wallName: "wall",
-					aiStarts: {} as Record<string, never>,
+			(input: BindingContentPackInput): BindingContentPackProviderResult => ({
+				phases: input.phases.map((phase, phaseIdx) => ({
+					rawPack: {
+						setting: phase.setting,
+						wallName: "wall",
+						landmarks: DEFAULT_LANDMARKS as unknown as undefined,
+						bindings: [],
+						decoys: [
+							{ id: "decoy-0", name: "Decoy 0", examineDescription: "A plain item.", proximityFlavor: "A decoy.", useOutcome: "Nothing." },
+							{ id: "decoy-1", name: "Decoy 1", examineDescription: "Another plain item.", proximityFlavor: "Another decoy.", useOutcome: "Nothing." },
+						],
+						obstacles: Array.from({ length: phase.obstacleCount }, (_, i) => ({
+							id: `obstacle-${i}`,
+							name: `Obstacle ${i}`,
+							examineDescription: "An impassable obstacle.",
+							shiftFlavor: `The obstacle ${phaseIdx} shifts.`,
+						})),
+					},
 				})),
 			}),
 		);
@@ -449,65 +508,41 @@ describe("generateContentPacks — degenerate config throws after MAX_ATTEMPTS",
 /** Build a dual-pack MockContentPackProvider for entity ID parity tests. */
 function makeDualMockProvider(): MockContentPackProvider {
 	return new MockContentPackProvider(
-		(_input: ContentPackProviderInput): ContentPackProviderResult => ({
-			packs: [],
+		(_input: BindingContentPackInput): BindingContentPackProviderResult => ({
+			phases: [],
 		}),
-		(input: DualContentPackProviderInput): DualContentPackProviderResult => {
+		(input: DualBindingContentPackInput): DualBindingContentPackProviderResult => {
 			const phases = input.phases.map((phase, phaseIdx) => {
-				const pn = phaseIdx + 1;
-				const spaceId = `p${pn}_space`;
-				const objId = `p${pn}_obj`;
-				const intId = `p${pn}_interesting`;
-				const obsId = `p${pn}_obstacle`;
-
-				const makePackVariant = (
-					setting: string,
-					suffix: string,
-				): DualContentPackProviderResult["phases"][number]["packA"] => ({
-					setting,
-					objectivePairs: Array.from({ length: phase.k }, (_, i) => ({
-						space: {
-							id: `${spaceId}_${i}`,
-							kind: "objective_space" as const,
-							name: `Space ${i} ${suffix}`,
-							examineDescription: `A space (${suffix}).`,
-							holder: { row: 0, col: 0 } as never,
-						},
-						object: {
-							id: `${objId}_${i}`,
-							kind: "objective_object" as const,
-							name: `Object ${i} ${suffix}`,
-							examineDescription: `An object for Space ${i} ${suffix}.`,
-							useOutcome: `You use it (${suffix}).`,
-							pairsWithSpaceId: `${spaceId}_${i}`,
-							placementFlavor: `{actor} places the object (${suffix}).`,
-							proximityFlavor: `Near its space (${suffix}).`,
-							holder: { row: 0, col: 0 } as never,
-						},
-					})),
-					interestingObjects: Array.from({ length: phase.n }, (_, i) => ({
-						id: `${intId}_${i}`,
-						kind: "interesting_object" as const,
-						name: `Interesting ${i} ${suffix}`,
-						examineDescription: `Interesting (${suffix}).`,
-						useOutcome: `You interact (${suffix}).`,
-						holder: { row: 0, col: 0 } as never,
-					})),
-					obstacles: Array.from({ length: phase.m }, (_, i) => ({
-						id: `${obsId}_${i}`,
-						kind: "obstacle" as const,
-						name: `Obstacle ${i} ${suffix}`,
-						examineDescription: `An obstacle (${suffix}).`,
-						holder: { row: 0, col: 0 } as never,
-					})),
-					landmarks: DEFAULT_LANDMARKS,
-					wallName: `wall ${suffix}`,
-					aiStarts: {} as never,
-				});
+				const makeRawPackVariant = (setting: string, suffix: string): RawBoundPack => {
+					const bindings: RawBinding[] = phase.bindings.map((binding, bindingIdx) => {
+						const raw = makeRawBinding(binding, phaseIdx, bindingIdx);
+						// Re-flavor names for this variant
+						if (raw.object) raw.object = { ...raw.object, name: `${raw.object.name} ${suffix}` };
+						if (raw.space) raw.space = { ...raw.space, name: `${raw.space.name} ${suffix}` };
+						if (raw.item) raw.item = { ...raw.item, name: `${raw.item.name} ${suffix}` };
+						return raw;
+					});
+					return {
+						setting,
+						wallName: `wall ${suffix}`,
+						landmarks: DEFAULT_LANDMARKS as unknown as undefined,
+						bindings,
+						decoys: [
+							{ id: "decoy-0", name: `Decoy 0 ${suffix}`, examineDescription: `A plain item (${suffix}).`, proximityFlavor: `A decoy.`, useOutcome: `Nothing.` },
+							{ id: "decoy-1", name: `Decoy 1 ${suffix}`, examineDescription: `Another plain item (${suffix}).`, proximityFlavor: `Another decoy.`, useOutcome: `Nothing.` },
+						],
+						obstacles: Array.from({ length: phase.obstacleCount }, (_, i) => ({
+							id: `obstacle-${i}`,
+							name: `Obstacle ${i} ${suffix}`,
+							examineDescription: `An obstacle (${suffix}).`,
+							shiftFlavor: `The obstacle shifts.`,
+						})),
+					};
+				};
 
 				return {
-					packA: makePackVariant(phase.settingA, "A"),
-					packB: makePackVariant(phase.settingB, "B"),
+					rawPackA: makeRawPackVariant(phase.settingA, "A"),
+					rawPackB: makeRawPackVariant(phase.settingB, "B"),
 				};
 			});
 			return { phases };
@@ -519,6 +554,7 @@ function makeDualMockProvider(): MockContentPackProvider {
 function allEntityIds(pack: ContentPack): string[] {
 	return [
 		...pack.objectivePairs.flatMap((p) => [p.object.id, p.space.id]),
+		...(pack.boundSpaces ?? []).map((e) => e.id),
 		...pack.interestingObjects.map((e) => e.id),
 		...pack.obstacles.map((e) => e.id),
 	].sort();
@@ -573,6 +609,7 @@ describe("generateDualContentPacks — entity ID parity (issue #302)", () => {
 			holdersA.set(pair.object.id, pair.object.holder);
 			holdersA.set(pair.space.id, pair.space.holder);
 		}
+		for (const e of packA.boundSpaces ?? []) holdersA.set(e.id, e.holder);
 		for (const e of packA.interestingObjects) holdersA.set(e.id, e.holder);
 		for (const e of packA.obstacles) holdersA.set(e.id, e.holder);
 
@@ -580,6 +617,9 @@ describe("generateDualContentPacks — entity ID parity (issue #302)", () => {
 		for (const pair of packB.objectivePairs) {
 			expect(pair.object.holder).toEqual(holdersA.get(pair.object.id));
 			expect(pair.space.holder).toEqual(holdersA.get(pair.space.id));
+		}
+		for (const e of packB.boundSpaces ?? []) {
+			expect(e.holder).toEqual(holdersA.get(e.id));
 		}
 		for (const e of packB.interestingObjects) {
 			expect(e.holder).toEqual(holdersA.get(e.id));

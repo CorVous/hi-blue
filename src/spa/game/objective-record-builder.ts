@@ -41,6 +41,9 @@ export function buildObjectiveRecords(
 		objectById.set(pair.object.id, pair.object);
 		spaceById.set(pair.space.id, pair.space);
 	}
+	for (const space of pack.boundSpaces ?? []) {
+		spaceById.set(space.id, space);
+	}
 	for (const obj of pack.interestingObjects) {
 		interestingById.set(obj.id, obj);
 	}
@@ -85,7 +88,7 @@ export function buildObjectiveRecords(
 				const space = spaceById.get(spaceId);
 				if (!space) {
 					throw new RangeError(
-						`buildObjectiveRecords: use_space space "${spaceId}" not found in pack.objectivePairs`,
+						`buildObjectiveRecords: use_space space "${spaceId}" not found in pack.objectivePairs or pack.boundSpaces`,
 					);
 				}
 
@@ -123,7 +126,7 @@ export function buildObjectiveRecords(
 				const space = spaceById.get(spaceId);
 				if (!space) {
 					throw new RangeError(
-						`buildObjectiveRecords: convergence space "${spaceId}" not found in pack.objectivePairs`,
+						`buildObjectiveRecords: convergence space "${spaceId}" not found in pack.objectivePairs or pack.boundSpaces`,
 					);
 				}
 

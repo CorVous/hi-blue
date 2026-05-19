@@ -9,14 +9,12 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { CapHitError } from "../../llm-client.js";
-import type { ContentPackRepair } from "../content-pack-provider.js";
 import {
 	BrowserContentPackProvider,
 	CONTENT_PACK_SYSTEM_PROMPT,
 	DUAL_CONTENT_PACK_SYSTEM_PROMPT,
 	examineMentionsPairedSpace,
 	examineMentionsUseTell,
-	PARTIAL_RETRY_SYSTEM_PROMPT,
 	validateContentPacks,
 	validateContentPacksOrThrow,
 	validateDualContentPacks,
@@ -143,13 +141,14 @@ describe("CONTENT_PACK_SYSTEM_PROMPT", () => {
 		// The exact wording is allowed to drift, but the rule must be MUST-level
 		// and reference both examineDescription and the paired space.
 		expect(CONTENT_PACK_SYSTEM_PROMPT).toMatch(
-			/examineDescription[\s\S]*MUST[\s\S]*paired objective_space/,
+			/examineDescription[\s\S]*MUST[\s\S]*paired space/,
 		);
 	});
 
 	it("includes a worked example so the model knows what a tell looks like", () => {
+		// The binding-aware prompt includes the carry-0 entity ID convention in its example.
 		expect(CONTENT_PACK_SYSTEM_PROMPT.toLowerCase()).toContain(
-			"brass pedestal",
+			"carry-0",
 		);
 	});
 });
@@ -1443,14 +1442,16 @@ describe("CONTENT_PACK_SYSTEM_PROMPT — issue #335 rules", () => {
 	});
 
 	it("requires the objective_space prose tell at MUST strength", () => {
+		// The binding-aware prompt uses use_space binding type instead of objective_space.
 		expect(CONTENT_PACK_SYSTEM_PROMPT).toMatch(
-			/objective_space[\s\S]*examineDescription[\s\S]*MUST/i,
+			/use_space[\s\S]*examineDescription[\s\S]*MUST/i,
 		);
 	});
 
 	it("forbids {actor} in activationFlavor at MUST strength", () => {
+		// The binding-aware prompt says "no {actor}" for activationFlavor.
 		expect(CONTENT_PACK_SYSTEM_PROMPT).toMatch(
-			/activationFlavor[\s\S]*MUST NOT contain[\s\S]*\{actor\}/i,
+			/activationFlavor[\s\S]*no.*\{actor\}/i,
 		);
 	});
 });
@@ -1461,14 +1462,15 @@ describe("DUAL_CONTENT_PACK_SYSTEM_PROMPT — issue #335 rules", () => {
 	});
 
 	it("includes activationFlavor in the MUST-differ delta list", () => {
-		expect(DUAL_CONTENT_PACK_SYSTEM_PROMPT).toMatch(
-			/MUST differ[\s\S]*activationFlavor/,
-		);
+		// The binding-aware dual prompt instructs that only flavors differ between packs.
+		// The activationFlavor must be present in the dual prompt.
+		expect(DUAL_CONTENT_PACK_SYSTEM_PROMPT).toMatch(/activationFlavor/);
 	});
 
 	it("requires the objective_space prose tell at MUST strength", () => {
+		// The binding-aware prompt uses use_space binding type instead of objective_space.
 		expect(DUAL_CONTENT_PACK_SYSTEM_PROMPT).toMatch(
-			/objective_space[\s\S]*examineDescription[\s\S]*MUST/i,
+			/use_space[\s\S]*examineDescription[\s\S]*MUST/i,
 		);
 	});
 });
@@ -1863,133 +1865,112 @@ describe("validateContentPacks — pure-result API with multiple failures", () =
 	});
 });
 
-// ── Helper for batching repairs into partial-retry response ────────────────────
-
-function buildBatchedRepair(repairs: ContentPackRepair[]): string {
-	return JSON.stringify({ repairs });
-}
-
-// ── BrowserContentPackProvider — partial-retry layer ─────────────────────────
+// ── BrowserContentPackProvider — outer-retry layer ─────────────────────────
 
 describe("BrowserContentPackProvider — partial-retry layer", () => {
-	const baseInput = {
+	const baseInput: import("../content-pack-provider.js").BindingContentPackInput = {
 		phases: [
 			{
 				setting: "abandoned subway station",
 				theme: "mundane",
-				k: 1,
-				n: 1,
-				m: 1,
+				weather: "overcast",
+				timeOfDay: "night",
+				bindings: [
+					{ type: "carry", objectId: "carry-0-obj", spaceId: "carry-0-space" },
+				],
+				decoyIds: ["decoy-0", "decoy-1"],
+				obstacleCount: 1,
 			},
 		],
 	};
 
-	/** Build a valid baseline pack for comparison. */
+	/** Build a valid binding-shaped pack response for comparison. */
 	function buildValidPack(): unknown {
 		return {
-			packs: [
-				{
-					setting: "abandoned subway station",
-					objectivePairs: [
-						{
-							object: {
-								id: "obj1",
-								kind: "objective_object",
-								name: "Iron Key",
-								examineDescription:
-									"An iron key. It looks like it belongs on the brass pedestal.",
-								useOutcome: "You turn the key over in your hands.",
-								pairsWithSpaceId: "space1",
-								placementFlavor: "{actor} sets the key on its mount.",
-								proximityFlavor: "The key hums faintly near the pedestal.",
-							},
-							space: {
-								id: "space1",
-								kind: "objective_space",
-								name: "Brass Pedestal",
-								examineDescription:
-									"A sturdy brass mount. Press an item onto it to activate the mechanism; the space awaits a shared presence.",
-								activationFlavor:
-									"The pedestal hums to life and its surface flushes with warmth.",
-								proximityFlavor: "The pedestal thrums softly nearby.",
-								satisfactionFlavor:
-									"The pedestal glows brightly as the objective completes.",
-								postExamineDescription:
-									"The pedestal glows softly after activation.",
-								postLookFlavor: "the pedestal hums with residual warmth.",
-								convergenceTier1Flavor: "A lone figure stands at the pedestal.",
-								convergenceTier2Flavor: "Two figures converge at the pedestal.",
-								convergenceTier1ActorFlavor:
-									"You linger at the pedestal; the place feels poised for company.",
-								convergenceTier2ActorFlavor:
-									"You share the pedestal with another presence; the runes thrum.",
-							},
-						},
-					],
-					interestingObjects: [
-						{
-							id: "item1",
-							kind: "interesting_object",
-							name: "Brass Switch",
+			pack: {
+				setting: "abandoned subway station",
+				wallName: "concrete barrier",
+				landmarks: {
+					north: {
+						shortName: "the signal tower",
+						horizonPhrase: "rises above the platform",
+					},
+					south: {
+						shortName: "the collapsed entrance",
+						horizonPhrase: "gapes like a wound in the dark",
+					},
+					east: {
+						shortName: "the rusted fan shaft",
+						horizonPhrase: "spins slowly in the stale air",
+					},
+					west: {
+						shortName: "the flooded tunnel",
+						horizonPhrase: "disappears into still black water",
+					},
+				},
+				bindings: [
+					{
+						id: "carry-0",
+						type: "carry",
+						object: {
+							id: "carry-0-obj",
+							name: "Iron Key",
 							examineDescription:
-								"A small brass switch mounted on a panel. It looks like it should be pressed.",
-							useOutcome: "The switch clicks under your finger.",
-							activationFlavor: "The switch snaps loudly into place.",
-							proximityFlavor: "The brass switch gleams softly.",
-							postExamineDescription:
-								"The switch sits locked in its on position.",
-							postLookFlavor:
-								"an amber pinpoint of light glows beside the panel.",
+								"An iron key. It looks like it belongs on the brass pedestal.",
+							useOutcome: "You turn the key over in your hands.",
+							placementFlavor: "{actor} sets the key on its mount.",
+							proximityFlavor: "The key hums faintly near the pedestal.",
 						},
-					],
-					obstacles: [
-						{
-							id: "obs1",
-							kind: "obstacle",
-							name: "Rusted Gate",
-							examineDescription: "An old rusted gate blocking the path.",
-							shiftFlavor:
-								"The rusted gate scrapes along the floor with a grinding shriek.",
-						},
-					],
-					landmarks: {
-						north: {
-							shortName: "the signal tower",
-							horizonPhrase: "rises above the platform",
-						},
-						south: {
-							shortName: "the collapsed entrance",
-							horizonPhrase: "gapes like a wound in the dark",
-						},
-						east: {
-							shortName: "the rusted fan shaft",
-							horizonPhrase: "spins slowly in the stale air",
-						},
-						west: {
-							shortName: "the flooded tunnel",
-							horizonPhrase: "disappears into still black water",
+						space: {
+							id: "carry-0-space",
+							name: "Brass Pedestal",
+							examineDescription:
+								"A sturdy brass mount with a subtle indentation on its surface.",
+							proximityFlavor: "The pedestal thrums softly nearby.",
 						},
 					},
-					wallName: "concrete barrier",
-				},
-			],
+				],
+				decoys: [
+					{
+						id: "decoy-0",
+						name: "Brass Disc",
+						examineDescription: "A small decorative disc of tarnished brass.",
+						proximityFlavor: "The disc gleams faintly.",
+						useOutcome: "Nothing happens.",
+					},
+					{
+						id: "decoy-1",
+						name: "Old Coin",
+						examineDescription: "A weathered coin from a past era.",
+						proximityFlavor: "The coin catches the light.",
+						useOutcome: "Nothing happens.",
+					},
+				],
+				obstacles: [
+					{
+						id: "obstacle-0",
+						name: "Rusted Gate",
+						examineDescription: "An old rusted gate blocking the path.",
+						shiftFlavor:
+							"The rusted gate scrapes along the floor with a grinding shriek.",
+					},
+				],
+			},
 		};
 	}
 
-	it("Test 1 — Single objective-pair failure repaired in round 1", async () => {
+	it("Test 1 — Invalid binding pack on first call → corrective feedback → success on second call", async () => {
 		const mockChatFn = vi.fn();
 
-		// Call 1: broken pack (missing examineDescription on space)
+		// Call 1: broken pack (missing examineDescription on carry space)
 		const brokenPack = buildValidPack();
-		const brokenPackPacks = (brokenPack as Record<string, unknown>).packs as
-			| Record<string, unknown>[]
+		const packObj = (brokenPack as Record<string, unknown>).pack as
+			| Record<string, unknown>
 			| undefined;
-		if (brokenPackPacks?.[0]) {
-			const pairs = (brokenPackPacks[0] as Record<string, unknown>)
-				.objectivePairs as Record<string, unknown>[] | undefined;
-			if (pairs?.[0]) {
-				const pair = pairs[0] as Record<string, unknown>;
-				const space = pair.space as Record<string, unknown>;
+		if (packObj) {
+			const bindings = packObj.bindings as Record<string, unknown>[] | undefined;
+			if (bindings?.[0]) {
+				const space = bindings[0].space as Record<string, unknown>;
 				delete space.examineDescription;
 			}
 		}
@@ -1998,349 +1979,7 @@ describe("BrowserContentPackProvider — partial-retry layer", () => {
 			reasoning: null,
 		});
 
-		// Call 2: repair response with valid space
-		const repair: ContentPackRepair = {
-			unitKind: "objective-pair",
-			phaseIndex: 0,
-			object: {
-				id: "obj1",
-				kind: "objective_object",
-				name: "Iron Key",
-				examineDescription:
-					"An iron key. It looks like it belongs on the brass pedestal.",
-				useOutcome: "You turn the key over in your hands.",
-				pairsWithSpaceId: "space1",
-				placementFlavor: "{actor} sets the key on its mount.",
-				proximityFlavor: "The key hums faintly near the pedestal.",
-			},
-			space: {
-				id: "space1",
-				kind: "objective_space",
-				name: "Brass Pedestal",
-				examineDescription:
-					"A sturdy brass mount. Press an item onto it to activate the mechanism; the space awaits a shared presence.",
-				activationFlavor:
-					"The pedestal hums to life and its surface flushes with warmth.",
-				proximityFlavor: "The pedestal thrums softly nearby.",
-				satisfactionFlavor:
-					"The pedestal glows brightly as the objective completes.",
-				postExamineDescription: "The pedestal glows softly after activation.",
-				postLookFlavor: "the pedestal hums with residual warmth.",
-				convergenceTier1Flavor: "A lone figure stands at the pedestal.",
-				convergenceTier2Flavor: "Two figures converge at the pedestal.",
-				convergenceTier1ActorFlavor:
-					"You linger at the pedestal; the place feels poised for company.",
-				convergenceTier2ActorFlavor:
-					"You share the pedestal with another presence; the runes thrum.",
-			},
-		};
-		mockChatFn.mockResolvedValueOnce({
-			content: buildBatchedRepair([repair]),
-			reasoning: null,
-		});
-
-		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
-		const result = await provider.generateContentPacks(baseInput);
-
-		expect(mockChatFn).toHaveBeenCalledTimes(2);
-		expect(result.packs[0]?.objectivePairs[0]?.space.examineDescription).toBe(
-			"A sturdy brass mount. Press an item onto it to activate the mechanism; the space awaits a shared presence.",
-		);
-
-		// Assert call 2's messages contain PARTIAL_RETRY_SYSTEM_PROMPT
-		const call2Messages = mockChatFn.mock.calls[1]?.[0]?.messages as
-			| Array<{ role: string; content: string }>
-			| undefined;
-		expect(call2Messages?.[0]?.content).toBe(PARTIAL_RETRY_SYSTEM_PROMPT);
-	});
-
-	it("Test 2 — Two failing retry-units (pair + interesting-object) → round 1 succeeds", async () => {
-		const mockChatFn = vi.fn();
-
-		// Call 1: broken pack (missing examineDescription on space and item)
-		const brokenPack = buildValidPack();
-		const brokenPackPacks = (brokenPack as Record<string, unknown>).packs as
-			| Record<string, unknown>[]
-			| undefined;
-		if (brokenPackPacks?.[0]) {
-			const pack = brokenPackPacks[0] as Record<string, unknown>;
-			const pairs = pack.objectivePairs as
-				| Record<string, unknown>[]
-				| undefined;
-			if (pairs?.[0]) {
-				const pair = pairs[0] as Record<string, unknown>;
-				const space = pair.space as Record<string, unknown>;
-				delete space.examineDescription;
-			}
-			const items = pack.interestingObjects as
-				| Record<string, unknown>[]
-				| undefined;
-			if (items?.[0]) {
-				delete (items[0] as Record<string, unknown>).useOutcome;
-			}
-		}
-		mockChatFn.mockResolvedValueOnce({
-			content: JSON.stringify(brokenPack),
-			reasoning: null,
-		});
-
-		// Call 2: batched repair with TWO entries
-		const repairs: ContentPackRepair[] = [
-			{
-				unitKind: "objective-pair",
-				phaseIndex: 0,
-				object: {
-					id: "obj1",
-					kind: "objective_object",
-					name: "Iron Key",
-					examineDescription:
-						"An iron key. It looks like it belongs on the brass pedestal.",
-					useOutcome: "You turn the key over in your hands.",
-					pairsWithSpaceId: "space1",
-					placementFlavor: "{actor} sets the key on its mount.",
-					proximityFlavor: "The key hums faintly near the pedestal.",
-				},
-				space: {
-					id: "space1",
-					kind: "objective_space",
-					name: "Brass Pedestal",
-					examineDescription:
-						"A sturdy brass mount. Press an item onto it to activate the mechanism; the space awaits a shared presence.",
-					activationFlavor:
-						"The pedestal hums to life and its surface flushes with warmth.",
-					proximityFlavor: "The pedestal thrums softly nearby.",
-					satisfactionFlavor:
-						"The pedestal glows brightly as the objective completes.",
-					postExamineDescription: "The pedestal glows softly after activation.",
-					postLookFlavor: "the pedestal hums with residual warmth.",
-					convergenceTier1Flavor: "A lone figure stands at the pedestal.",
-					convergenceTier2Flavor: "Two figures converge at the pedestal.",
-					convergenceTier1ActorFlavor:
-						"You linger at the pedestal; the place feels poised for company.",
-					convergenceTier2ActorFlavor:
-						"You share the pedestal with another presence; the runes thrum.",
-				},
-			},
-			{
-				unitKind: "interesting-object",
-				phaseIndex: 0,
-				entity: {
-					id: "item1",
-					kind: "interesting_object",
-					name: "Brass Switch",
-					examineDescription:
-						"A small brass switch mounted on a panel. It looks like it should be pressed.",
-					useOutcome: "The switch clicks under your finger.",
-					activationFlavor: "The switch snaps loudly into place.",
-					proximityFlavor: "The brass switch gleams softly.",
-					postExamineDescription: "The switch sits locked in its on position.",
-					postLookFlavor: "an amber pinpoint of light glows beside the panel.",
-				},
-			},
-		];
-		mockChatFn.mockResolvedValueOnce({
-			content: buildBatchedRepair(repairs),
-			reasoning: null,
-		});
-
-		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
-		const result = await provider.generateContentPacks(baseInput);
-
-		expect(mockChatFn).toHaveBeenCalledTimes(2);
-		expect(result.packs[0]?.objectivePairs[0]?.space.examineDescription).toBe(
-			"A sturdy brass mount. Press an item onto it to activate the mechanism; the space awaits a shared presence.",
-		);
-		expect(result.packs[0]?.interestingObjects[0]?.examineDescription).toBe(
-			"A small brass switch mounted on a panel. It looks like it should be pressed.",
-		);
-	});
-
-	it("Test 3 — Round 1 still invalid → round 2 succeeds", async () => {
-		const mockChatFn = vi.fn();
-
-		// Call 1: broken pack (missing examineDescription on space)
-		const brokenPack = buildValidPack();
-		const brokenPackPacks = (brokenPack as Record<string, unknown>).packs as
-			| Record<string, unknown>[]
-			| undefined;
-		if (brokenPackPacks?.[0]) {
-			const pair = (
-				(brokenPackPacks[0] as Record<string, unknown>)
-					.objectivePairs as Record<string, unknown>[]
-			)[0];
-			if (pair) {
-				const space = pair.space as Record<string, unknown>;
-				delete space.examineDescription;
-			}
-		}
-		mockChatFn.mockResolvedValueOnce({
-			content: JSON.stringify(brokenPack),
-			reasoning: null,
-		});
-
-		// Call 2: repair that still leaves it broken (omits useOutcome)
-		const stillBrokenRepair: ContentPackRepair = {
-			unitKind: "objective-pair",
-			phaseIndex: 0,
-			object: {
-				id: "obj1",
-				kind: "objective_object",
-				name: "Iron Key",
-				examineDescription:
-					"An iron key. It looks like it belongs on the brass pedestal.",
-				// useOutcome intentionally omitted — still broken
-				pairsWithSpaceId: "space1",
-				placementFlavor: "{actor} sets the key on its mount.",
-				proximityFlavor: "The key hums faintly near the pedestal.",
-			} as Record<string, unknown>,
-			space: {
-				id: "space1",
-				kind: "objective_space",
-				name: "Brass Pedestal",
-				examineDescription:
-					"A sturdy brass mount. Press an item onto it to activate the mechanism; the space awaits a shared presence.",
-				activationFlavor:
-					"The pedestal hums to life and its surface flushes with warmth.",
-				proximityFlavor: "The pedestal thrums softly nearby.",
-				satisfactionFlavor:
-					"The pedestal glows brightly as the objective completes.",
-				postExamineDescription: "The pedestal glows softly after activation.",
-				postLookFlavor: "the pedestal hums with residual warmth.",
-				convergenceTier1Flavor: "A lone figure stands at the pedestal.",
-				convergenceTier2Flavor: "Two figures converge at the pedestal.",
-				convergenceTier1ActorFlavor:
-					"You linger at the pedestal; the place feels poised for company.",
-				convergenceTier2ActorFlavor:
-					"You share the pedestal with another presence; the runes thrum.",
-			},
-		};
-		mockChatFn.mockResolvedValueOnce({
-			content: buildBatchedRepair([stillBrokenRepair]),
-			reasoning: null,
-		});
-
-		// Call 3: fully valid repair
-		const validRepair: ContentPackRepair = {
-			unitKind: "objective-pair",
-			phaseIndex: 0,
-			object: {
-				id: "obj1",
-				kind: "objective_object",
-				name: "Iron Key",
-				examineDescription:
-					"An iron key. It looks like it belongs on the brass pedestal.",
-				useOutcome: "You turn the key over in your hands.",
-				pairsWithSpaceId: "space1",
-				placementFlavor: "{actor} sets the key on its mount.",
-				proximityFlavor: "The key hums faintly near the pedestal.",
-			},
-			space: {
-				id: "space1",
-				kind: "objective_space",
-				name: "Brass Pedestal",
-				examineDescription:
-					"A sturdy brass mount. Press an item onto it to activate the mechanism; the space awaits a shared presence.",
-				activationFlavor:
-					"The pedestal hums to life and its surface flushes with warmth.",
-				proximityFlavor: "The pedestal thrums softly nearby.",
-				satisfactionFlavor:
-					"The pedestal glows brightly as the objective completes.",
-				postExamineDescription: "The pedestal glows softly after activation.",
-				postLookFlavor: "the pedestal hums with residual warmth.",
-				convergenceTier1Flavor: "A lone figure stands at the pedestal.",
-				convergenceTier2Flavor: "Two figures converge at the pedestal.",
-				convergenceTier1ActorFlavor:
-					"You linger at the pedestal; the place feels poised for company.",
-				convergenceTier2ActorFlavor:
-					"You share the pedestal with another presence; the runes thrum.",
-			},
-		};
-		mockChatFn.mockResolvedValueOnce({
-			content: buildBatchedRepair([validRepair]),
-			reasoning: null,
-		});
-
-		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
-		const result = await provider.generateContentPacks(baseInput);
-
-		expect(mockChatFn).toHaveBeenCalledTimes(3);
-		expect(result.packs[0]?.objectivePairs[0]?.object.useOutcome).toBe(
-			"You turn the key over in your hands.",
-		);
-	});
-
-	it("Test 4 — Both partial rounds fail → outer retry with corrective feedback → succeeds", async () => {
-		const mockChatFn = vi.fn();
-
-		// Call 1: broken pack (missing examineDescription)
-		const brokenPack1 = buildValidPack();
-		const brokenPacks1 = (brokenPack1 as Record<string, unknown>).packs as
-			| Record<string, unknown>[]
-			| undefined;
-		if (brokenPacks1?.[0]) {
-			const pair = (
-				(brokenPacks1[0] as Record<string, unknown>).objectivePairs as Record<
-					string,
-					unknown
-				>[]
-			)[0];
-			if (pair) {
-				const space = pair.space as Record<string, unknown>;
-				delete space.examineDescription;
-			}
-		}
-		mockChatFn.mockResolvedValueOnce({
-			content: JSON.stringify(brokenPack1),
-			reasoning: null,
-		});
-
-		// Call 2: repair that is still broken (misses activationFlavor)
-		const stillBrokenRepair: ContentPackRepair = {
-			unitKind: "objective-pair",
-			phaseIndex: 0,
-			object: {
-				id: "obj1",
-				kind: "objective_object",
-				name: "Iron Key",
-				examineDescription:
-					"An iron key. It looks like it belongs on the brass pedestal.",
-				useOutcome: "You turn the key over in your hands.",
-				pairsWithSpaceId: "space1",
-				placementFlavor: "{actor} sets the key on its mount.",
-				proximityFlavor: "The key hums faintly near the pedestal.",
-			},
-			space: {
-				id: "space1",
-				kind: "objective_space",
-				name: "Brass Pedestal",
-				examineDescription:
-					"A sturdy brass mount. Press an item onto it to activate the mechanism; the space awaits a shared presence.",
-				// activationFlavor intentionally omitted
-				proximityFlavor: "The pedestal thrums softly nearby.",
-				satisfactionFlavor:
-					"The pedestal glows brightly as the objective completes.",
-				postExamineDescription: "The pedestal glows softly after activation.",
-				postLookFlavor: "the pedestal hums with residual warmth.",
-				convergenceTier1Flavor: "A lone figure stands at the pedestal.",
-				convergenceTier2Flavor: "Two figures converge at the pedestal.",
-				convergenceTier1ActorFlavor:
-					"You linger at the pedestal; the place feels poised for company.",
-				convergenceTier2ActorFlavor:
-					"You share the pedestal with another presence; the runes thrum.",
-			} as Record<string, unknown>,
-		};
-		mockChatFn.mockResolvedValueOnce({
-			content: buildBatchedRepair([stillBrokenRepair]),
-			reasoning: null,
-		});
-
-		// Call 3: still broken repair (same as call 2)
-		mockChatFn.mockResolvedValueOnce({
-			content: buildBatchedRepair([stillBrokenRepair]),
-			reasoning: null,
-		});
-
-		// Call 4: full pack with corrective feedback succeeds
+		// Call 2: valid binding-shaped response
 		mockChatFn.mockResolvedValueOnce({
 			content: JSON.stringify(buildValidPack()),
 			reasoning: null,
@@ -2349,24 +1988,149 @@ describe("BrowserContentPackProvider — partial-retry layer", () => {
 		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
 		const result = await provider.generateContentPacks(baseInput);
 
-		expect(mockChatFn).toHaveBeenCalledTimes(4);
+		expect(mockChatFn).toHaveBeenCalledTimes(2);
+		expect(
+			result.phases[0]?.rawPack.bindings?.[0]?.space?.examineDescription,
+		).toBe("A sturdy brass mount with a subtle indentation on its surface.");
 
-		// Assert call 4's messages include corrective feedback
-		const call4Messages = mockChatFn.mock.calls[3]?.[0]?.messages as
+		// Call 2 messages should include corrective feedback
+		const call2Messages = mockChatFn.mock.calls[1]?.[0]?.messages as
 			| Array<{ role: string; content: string }>
 			| undefined;
-		expect(call4Messages).toBeDefined();
-		const correctionTurn = call4Messages?.find((msg) =>
+		expect(call2Messages).toBeDefined();
+		const correctionTurn = call2Messages?.find((msg) =>
+			msg.content.includes("Your previous attempt failed validation"),
+		);
+		expect(correctionTurn).toBeDefined();
+	});
+
+	it("Test 2 — Two consecutive invalid responses → success on third call", async () => {
+		const mockChatFn = vi.fn();
+
+		// Call 1: broken pack (missing placementFlavor {actor})
+		const brokenPack1 = buildValidPack();
+		const packObj1 = (brokenPack1 as Record<string, unknown>).pack as
+			| Record<string, unknown>
+			| undefined;
+		if (packObj1) {
+			const bindings = packObj1.bindings as Record<string, unknown>[] | undefined;
+			if (bindings?.[0]) {
+				const obj = bindings[0].object as Record<string, unknown>;
+				obj.placementFlavor = "Sets the key on its mount."; // missing {actor}
+			}
+		}
+		mockChatFn.mockResolvedValueOnce({
+			content: JSON.stringify(brokenPack1),
+			reasoning: null,
+		});
+
+		// Call 2: still broken (missing useOutcome on carry object)
+		const brokenPack2 = buildValidPack();
+		const packObj2 = (brokenPack2 as Record<string, unknown>).pack as
+			| Record<string, unknown>
+			| undefined;
+		if (packObj2) {
+			const bindings = packObj2.bindings as Record<string, unknown>[] | undefined;
+			if (bindings?.[0]) {
+				const obj = bindings[0].object as Record<string, unknown>;
+				delete obj.useOutcome;
+			}
+		}
+		mockChatFn.mockResolvedValueOnce({
+			content: JSON.stringify(brokenPack2),
+			reasoning: null,
+		});
+
+		// Call 3: fully valid response
+		mockChatFn.mockResolvedValueOnce({
+			content: JSON.stringify(buildValidPack()),
+			reasoning: null,
+		});
+
+		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
+		const result = await provider.generateContentPacks(baseInput);
+
+		expect(mockChatFn).toHaveBeenCalledTimes(3);
+		expect(result.phases[0]?.rawPack.bindings?.[0]?.object?.useOutcome).toBe(
+			"You turn the key over in your hands.",
+		);
+	});
+
+	it("Test 3 — Budget exhaustion after three invalid responses → throws ContentPackError", async () => {
+		const mockChatFn = vi.fn();
+
+		// Return the same broken pack three times (OUTER_BUDGET = 3)
+		const brokenPack = buildValidPack();
+		const packObj = (brokenPack as Record<string, unknown>).pack as
+			| Record<string, unknown>
+			| undefined;
+		if (packObj) {
+			const bindings = packObj.bindings as Record<string, unknown>[] | undefined;
+			if (bindings?.[0]) {
+				const obj = bindings[0].object as Record<string, unknown>;
+				delete obj.examineDescription;
+			}
+		}
+		mockChatFn.mockResolvedValue({
+			content: JSON.stringify(brokenPack),
+			reasoning: null,
+		});
+
+		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
+
+		await expect(provider.generateContentPacks(baseInput)).rejects.toThrow(
+			/exhausted retry budget/,
+		);
+		expect(mockChatFn).toHaveBeenCalledTimes(3); // OUTER_BUDGET = 3
+	});
+
+	it("Test 4 — corrective feedback message is present on second outer attempt", async () => {
+		const mockChatFn = vi.fn();
+
+		// Call 1: broken pack (missing object name)
+		const brokenPack = buildValidPack();
+		const packObj = (brokenPack as Record<string, unknown>).pack as
+			| Record<string, unknown>
+			| undefined;
+		if (packObj) {
+			const bindings = packObj.bindings as Record<string, unknown>[] | undefined;
+			if (bindings?.[0]) {
+				const obj = bindings[0].object as Record<string, unknown>;
+				delete obj.name;
+			}
+		}
+		mockChatFn.mockResolvedValueOnce({
+			content: JSON.stringify(brokenPack),
+			reasoning: null,
+		});
+
+		// Call 2: valid response
+		mockChatFn.mockResolvedValueOnce({
+			content: JSON.stringify(buildValidPack()),
+			reasoning: null,
+		});
+
+		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
+		const result = await provider.generateContentPacks(baseInput);
+
+		expect(mockChatFn).toHaveBeenCalledTimes(2);
+
+		// Assert call 2's messages include corrective feedback
+		const call2Messages = mockChatFn.mock.calls[1]?.[0]?.messages as
+			| Array<{ role: string; content: string }>
+			| undefined;
+		expect(call2Messages).toBeDefined();
+		const correctionTurn = call2Messages?.find((msg) =>
 			msg.content.includes("Your previous attempt failed validation"),
 		);
 		expect(correctionTurn).toBeDefined();
 
-		expect(result.packs[0]?.objectivePairs[0]?.space.activationFlavor).toBe(
-			"The pedestal hums to life and its surface flushes with warmth.",
-		);
+		expect(
+			result.phases[0]?.rawPack.bindings?.[0]?.object?.name,
+		).toBe("Iron Key");
 	});
 
-	it("Test 5 — JSON parse failure on initial response → backoff → succeeds", async () => {
+	it("Test 5 — JSON parse failure on initial response → backoff → success", async () => {
 		vi.useFakeTimers();
 
 		const mockChatFn = vi.fn();
@@ -2377,7 +2141,7 @@ describe("BrowserContentPackProvider — partial-retry layer", () => {
 			reasoning: null,
 		});
 
-		// Call 2: valid response after backoff
+		// Call 2: valid binding-shaped response after backoff
 		mockChatFn.mockResolvedValueOnce({
 			content: JSON.stringify(buildValidPack()),
 			reasoning: null,
@@ -2398,7 +2162,9 @@ describe("BrowserContentPackProvider — partial-retry layer", () => {
 		vi.useRealTimers();
 
 		expect(mockChatFn).toHaveBeenCalledTimes(2);
-		expect(result.packs[0]?.objectivePairs[0]?.object.name).toBe("Iron Key");
+		expect(result.phases[0]?.rawPack.bindings?.[0]?.object?.name).toBe(
+			"Iron Key",
+		);
 	});
 
 	it("Test 6 — CapHitError short-circuits", async () => {
@@ -2420,319 +2186,74 @@ describe("BrowserContentPackProvider — partial-retry layer", () => {
 		);
 		expect(mockChatFn).toHaveBeenCalledTimes(1);
 	});
-
-	it("Test 7 — {actor} drift in convergenceTier1Flavor → repaired in round 1 (2 chatFn calls)", async () => {
-		const mockChatFn = vi.fn();
-
-		// Call 1: broken pack ({actor} in convergenceTier1Flavor)
-		const brokenPack = buildValidPack();
-		const brokenPackPacks = (brokenPack as Record<string, unknown>).packs as
-			| Record<string, unknown>[]
-			| undefined;
-		if (brokenPackPacks?.[0]) {
-			const pair = (
-				(brokenPackPacks[0] as Record<string, unknown>)
-					.objectivePairs as Record<string, unknown>[]
-			)[0];
-			if (pair) {
-				const space = pair.space as Record<string, unknown>;
-				space.convergenceTier1Flavor = "{actor} stands at the pedestal.";
-			}
-		}
-		mockChatFn.mockResolvedValueOnce({
-			content: JSON.stringify(brokenPack),
-			reasoning: null,
-		});
-
-		// Call 2: repair response with valid convergenceTier1Flavor (no {actor})
-		const repair: ContentPackRepair = {
-			unitKind: "objective-pair",
-			phaseIndex: 0,
-			object: {
-				id: "obj1",
-				kind: "objective_object",
-				name: "Iron Key",
-				examineDescription:
-					"An iron key. It looks like it belongs on the brass pedestal.",
-				useOutcome: "You turn the key over in your hands.",
-				pairsWithSpaceId: "space1",
-				placementFlavor: "{actor} sets the key on its mount.",
-				proximityFlavor: "The key hums faintly near the pedestal.",
-			},
-			space: {
-				id: "space1",
-				kind: "objective_space",
-				name: "Brass Pedestal",
-				examineDescription:
-					"A sturdy brass mount. Press an item onto it to activate the mechanism; the space awaits a shared presence.",
-				activationFlavor:
-					"The pedestal hums to life and its surface flushes with warmth.",
-				proximityFlavor: "The pedestal thrums softly nearby.",
-				satisfactionFlavor:
-					"The pedestal glows brightly as the objective completes.",
-				postExamineDescription: "The pedestal glows softly after activation.",
-				postLookFlavor: "the pedestal hums with residual warmth.",
-				convergenceTier1Flavor: "A lone figure stands at the pedestal.",
-				convergenceTier2Flavor: "Two figures converge at the pedestal.",
-				convergenceTier1ActorFlavor:
-					"You linger at the pedestal; the place feels poised for company.",
-				convergenceTier2ActorFlavor:
-					"You share the pedestal with another presence; the runes thrum.",
-			},
-		};
-		mockChatFn.mockResolvedValueOnce({
-			content: buildBatchedRepair([repair]),
-			reasoning: null,
-		});
-
-		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
-		const result = await provider.generateContentPacks(baseInput);
-
-		expect(mockChatFn).toHaveBeenCalledTimes(2);
-		expect(
-			result.packs[0]?.objectivePairs[0]?.space.convergenceTier1Flavor,
-		).toBe("A lone figure stands at the pedestal.");
-		expect(
-			result.packs[0]?.objectivePairs[0]?.space.convergenceTier1Flavor,
-		).not.toMatch(/{actor}/);
-	});
-
-	it("Test 7 — verb-of-activation cue missing in interesting_object examineDescription → repaired in round 1 (2 chatFn calls)", async () => {
-		const mockChatFn = vi.fn();
-
-		// Call 1: broken pack (no verb-of-activation cue in examineDescription)
-		const brokenPack = buildValidPack();
-		const brokenPackPacks = (brokenPack as Record<string, unknown>).packs as
-			| Record<string, unknown>[]
-			| undefined;
-		if (brokenPackPacks?.[0]) {
-			const pack = brokenPackPacks[0] as Record<string, unknown>;
-			const items = pack.interestingObjects as
-				| Record<string, unknown>[]
-				| undefined;
-			if (items?.[0]) {
-				(items[0] as Record<string, unknown>).examineDescription =
-					"A small porcelain figurine, chipped along one edge but otherwise intact.";
-			}
-		}
-		mockChatFn.mockResolvedValueOnce({
-			content: JSON.stringify(brokenPack),
-			reasoning: null,
-		});
-
-		// Call 2: repair response with valid examineDescription (has verb-of-activation cue)
-		const repair: ContentPackRepair = {
-			unitKind: "interesting-object",
-			phaseIndex: 0,
-			entity: {
-				id: "item1",
-				kind: "interesting_object",
-				name: "Brass Switch",
-				examineDescription:
-					"A small brass switch mounted on a panel. It looks like it should be pressed.",
-				useOutcome: "The switch clicks under your finger.",
-				activationFlavor: "The switch snaps loudly into place.",
-				proximityFlavor: "The brass switch gleams softly.",
-				postExamineDescription: "The switch sits locked in its on position.",
-				postLookFlavor: "an amber pinpoint of light glows beside the panel.",
-			},
-		};
-		mockChatFn.mockResolvedValueOnce({
-			content: buildBatchedRepair([repair]),
-			reasoning: null,
-		});
-
-		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
-		const result = await provider.generateContentPacks(baseInput);
-
-		expect(mockChatFn).toHaveBeenCalledTimes(2);
-		expect(result.packs[0]?.interestingObjects[0]?.examineDescription).toBe(
-			"A small brass switch mounted on a panel. It looks like it should be pressed.",
-		);
-		expect(
-			result.packs[0]?.interestingObjects[0]?.examineDescription,
-		).not.toMatch(/porcelain figurine/);
-	});
-
-	it("Test 8 — paired-space tell missing in objective_object examineDescription → repaired in round 1 (2 chatFn calls)", async () => {
-		const mockChatFn = vi.fn();
-
-		// Call 1: broken pack (no paired-space mention in examineDescription)
-		const brokenPack = buildValidPack();
-		const brokenPackPacks = (brokenPack as Record<string, unknown>).packs as
-			| Record<string, unknown>[]
-			| undefined;
-		if (brokenPackPacks?.[0]) {
-			const pair = (
-				(brokenPackPacks[0] as Record<string, unknown>)
-					.objectivePairs as Record<string, unknown>[]
-			)[0];
-			if (pair) {
-				const obj = pair.object as Record<string, unknown>;
-				obj.examineDescription =
-					"rusted iron key, heavily corroded but still intact. The teeth are worn smooth from use";
-			}
-		}
-		mockChatFn.mockResolvedValueOnce({
-			content: JSON.stringify(brokenPack),
-			reasoning: null,
-		});
-
-		// Call 2: repair response with valid examineDescription (has paired-space mention)
-		const repair: ContentPackRepair = {
-			unitKind: "objective-pair",
-			phaseIndex: 0,
-			object: {
-				id: "obj1",
-				kind: "objective_object",
-				name: "Iron Key",
-				examineDescription:
-					"An iron key. It looks like it belongs on the brass pedestal across the room.",
-				useOutcome: "You turn the key over in your hands.",
-				pairsWithSpaceId: "space1",
-				placementFlavor: "{actor} sets the key on its mount.",
-				proximityFlavor: "The key hums faintly near the pedestal.",
-			},
-			space: {
-				id: "space1",
-				kind: "objective_space",
-				name: "Brass Pedestal",
-				examineDescription:
-					"A sturdy brass mount. Press an item onto it to activate the mechanism; the space awaits a shared presence.",
-				activationFlavor:
-					"The pedestal hums to life and its surface flushes with warmth.",
-				proximityFlavor: "The pedestal thrums softly nearby.",
-				satisfactionFlavor:
-					"The pedestal glows brightly as the objective completes.",
-				postExamineDescription: "The pedestal glows softly after activation.",
-				postLookFlavor: "the pedestal hums with residual warmth.",
-				convergenceTier1Flavor: "A lone figure stands at the pedestal.",
-				convergenceTier2Flavor: "Two figures converge at the pedestal.",
-				convergenceTier1ActorFlavor:
-					"You linger at the pedestal; the place feels poised for company.",
-				convergenceTier2ActorFlavor:
-					"You share the pedestal with another presence; the runes thrum.",
-			},
-		};
-		mockChatFn.mockResolvedValueOnce({
-			content: buildBatchedRepair([repair]),
-			reasoning: null,
-		});
-
-		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
-		const result = await provider.generateContentPacks(baseInput);
-
-		expect(mockChatFn).toHaveBeenCalledTimes(2);
-		expect(result.packs[0]?.objectivePairs[0]?.object.examineDescription).toBe(
-			"An iron key. It looks like it belongs on the brass pedestal across the room.",
-		);
-		expect(
-			result.packs[0]?.objectivePairs[0]?.object.examineDescription.toLowerCase(),
-		).toContain("brass pedestal");
-
-		const call2Messages = mockChatFn.mock.calls[1]?.[0]?.messages as
-			| Array<{ role: string; content: string }>
-			| undefined;
-		expect(call2Messages?.[1]?.content).toContain("Brass Pedestal");
-	});
 });
 
 describe("BrowserContentPackProvider — dual outer-retry layer", () => {
-	const dualInput = {
+	const dualInput: import("../content-pack-provider.js").DualBindingContentPackInput = {
 		phases: [
 			{
 				settingA: "abandoned subway station",
 				settingB: "sun-baked salt flat",
 				theme: "mundane",
-				k: 1,
-				n: 0,
-				m: 0,
+				weatherA: "overcast",
+				weatherB: "clear",
+				timeOfDayA: "night",
+				timeOfDayB: "midday",
+				bindings: [
+					{ type: "carry", objectId: "carry-0-obj", spaceId: "carry-0-space" },
+				],
+				decoyIds: ["decoy-0", "decoy-1"],
+				obstacleCount: 0,
 			},
 		],
 	};
 
-	function buildDualPair(
-		packAActivation: string,
-		packBActivation: string,
-		packAExamine = "A sturdy pedestal. Press an item onto it to activate.",
-		packBExamine = "A weathered marker. Press the cap to activate it.",
+	/** Build a valid binding-shaped dual response. */
+	function buildDualResponse(
+		packAObjectName = "Iron Key",
+		packBObjectName = "Bone Token",
 	): unknown {
 		const landmarks = {
-			north: {
-				shortName: "the signal tower",
-				horizonPhrase: "rises above the platform",
-			},
-			south: {
-				shortName: "the collapsed entrance",
-				horizonPhrase: "gapes like a wound in the dark",
-			},
-			east: {
-				shortName: "the rusted fan shaft",
-				horizonPhrase: "spins slowly in the stale air",
-			},
-			west: {
-				shortName: "the flooded tunnel",
-				horizonPhrase: "disappears into still black water",
-			},
+			north: { shortName: "the signal tower", horizonPhrase: "rises above the platform" },
+			south: { shortName: "the collapsed entrance", horizonPhrase: "gapes like a wound in the dark" },
+			east: { shortName: "the rusted fan shaft", horizonPhrase: "spins slowly in the stale air" },
+			west: { shortName: "the flooded tunnel", horizonPhrase: "disappears into still black water" },
 		};
-		const mkPack = (
-			setting: string,
-			objName: string,
-			spaceName: string,
-			examine: string,
-			activation: string,
-		) => ({
+		const mkPack = (setting: string, objName: string, spaceName: string) => ({
 			setting,
-			objectivePairs: [
+			wallName: "concrete barrier",
+			landmarks,
+			bindings: [
 				{
+					id: "carry-0",
+					type: "carry",
 					object: {
-						id: "obj1",
-						kind: "objective_object",
+						id: "carry-0-obj",
 						name: objName,
 						examineDescription: `An object. It belongs on the ${spaceName.toLowerCase()}.`,
 						useOutcome: "You turn it over in your hands.",
-						pairsWithSpaceId: "space1",
 						placementFlavor: `{actor} sets it on the ${spaceName.toLowerCase()}.`,
 						proximityFlavor: "It hums faintly nearby.",
 					},
 					space: {
-						id: "space1",
-						kind: "objective_space",
+						id: "carry-0-space",
 						name: spaceName,
-						examineDescription: examine,
-						activationFlavor: activation,
+						examineDescription: "A sturdy mount with a subtle indentation.",
 						proximityFlavor: "The space vibrates softly.",
-						satisfactionFlavor: "The space is satisfied.",
-						postExamineDescription: "The space is now used.",
-						postLookFlavor: "The space hums.",
-						convergenceTier1Flavor: `A lone figure stands at the ${spaceName.toLowerCase()}.`,
-						convergenceTier2Flavor: `Two figures converge at the ${spaceName.toLowerCase()}.`,
-						convergenceTier1ActorFlavor: `You linger at the ${spaceName.toLowerCase()}.`,
-						convergenceTier2ActorFlavor: `You share the ${spaceName.toLowerCase()} with another presence.`,
 					},
 				},
 			],
-			interestingObjects: [],
+			decoys: [
+				{ id: "decoy-0", name: "Old Disc", examineDescription: "A small tarnished disc.", proximityFlavor: "The disc gleams.", useOutcome: "Nothing." },
+				{ id: "decoy-1", name: "Plain Coin", examineDescription: "A coin from another era.", proximityFlavor: "The coin catches light.", useOutcome: "Nothing." },
+			],
 			obstacles: [],
-			landmarks,
 		});
 		return {
 			phases: [
 				{
-					packA: mkPack(
-						"abandoned subway station",
-						"Iron Key",
-						"Brass Pedestal",
-						packAExamine,
-						packAActivation,
-					),
-					packB: mkPack(
-						"sun-baked salt flat",
-						"Bone Token",
-						"Survey Marker",
-						packBExamine,
-						packBActivation,
-					),
+					packA: mkPack("abandoned subway station", packAObjectName, "Brass Pedestal"),
+					packB: mkPack("sun-baked salt flat", packBObjectName, "Survey Marker"),
 				},
 			],
 		};
@@ -2741,123 +2262,21 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 	it("Test 1 — retries on dual validation failure (N=1), then succeeds and includes corrective feedback", async () => {
 		const mockChatFn = vi.fn();
 
-		// Call 1: structurally invalid dual response (missing space)
+		// Call 1: invalid dual response (carry-0-obj missing examineDescription in packA)
+		const invalidResponse = buildDualResponse();
+		const phases = (invalidResponse as Record<string, unknown>).phases as Record<string, unknown>[];
+		const packA = phases[0]!.packA as Record<string, unknown>;
+		const bindings = packA.bindings as Record<string, unknown>[];
+		const obj = bindings[0]!.object as Record<string, unknown>;
+		delete obj.examineDescription;
 		mockChatFn.mockResolvedValueOnce({
-			content: JSON.stringify({
-				phases: [
-					{
-						packA: {
-							setting: "abandoned subway station",
-							objectivePairs: [
-								{
-									object: {
-										id: "obj1",
-										kind: "objective_object",
-										name: "Iron Key",
-										examineDescription:
-											"An object. It belongs on the brass pedestal.",
-										useOutcome: "You turn it over in your hands.",
-										pairsWithSpaceId: "space1",
-										placementFlavor: "{actor} sets it on the brass pedestal.",
-										proximityFlavor: "It hums faintly nearby.",
-									},
-									// space intentionally missing — validation failure
-								},
-							],
-							interestingObjects: [],
-							obstacles: [],
-							landmarks: {
-								north: {
-									shortName: "the signal tower",
-									horizonPhrase: "rises above the platform",
-								},
-								south: {
-									shortName: "the collapsed entrance",
-									horizonPhrase: "gapes like a wound in the dark",
-								},
-								east: {
-									shortName: "the rusted fan shaft",
-									horizonPhrase: "spins slowly in the stale air",
-								},
-								west: {
-									shortName: "the flooded tunnel",
-									horizonPhrase: "disappears into still black water",
-								},
-							},
-						},
-						packB: {
-							setting: "sun-baked salt flat",
-							objectivePairs: [
-								{
-									object: {
-										id: "obj1",
-										kind: "objective_object",
-										name: "Bone Token",
-										examineDescription:
-											"An object. It belongs on the survey marker.",
-										useOutcome: "You turn it over in your hands.",
-										pairsWithSpaceId: "space1",
-										placementFlavor: "{actor} sets it on the survey marker.",
-										proximityFlavor: "It hums faintly nearby.",
-									},
-									space: {
-										id: "space1",
-										kind: "objective_space",
-										name: "Survey Marker",
-										examineDescription:
-											"A weathered marker. Press the cap to activate it.",
-										activationFlavor:
-											"The marker clicks once and a column of dust spirals up.",
-										proximityFlavor: "The space vibrates softly.",
-										satisfactionFlavor: "The space is satisfied.",
-										postExamineDescription: "The space is now used.",
-										postLookFlavor: "The space hums.",
-										convergenceTier1Flavor:
-											"A lone figure stands at the survey marker.",
-										convergenceTier2Flavor:
-											"Two figures converge at the survey marker.",
-										convergenceTier1ActorFlavor:
-											"You linger at the survey marker.",
-										convergenceTier2ActorFlavor:
-											"You share the survey marker with another presence.",
-									},
-								},
-							],
-							interestingObjects: [],
-							obstacles: [],
-							landmarks: {
-								north: {
-									shortName: "the signal tower",
-									horizonPhrase: "rises above the platform",
-								},
-								south: {
-									shortName: "the collapsed entrance",
-									horizonPhrase: "gapes like a wound in the dark",
-								},
-								east: {
-									shortName: "the rusted fan shaft",
-									horizonPhrase: "spins slowly in the stale air",
-								},
-								west: {
-									shortName: "the flooded tunnel",
-									horizonPhrase: "disappears into still black water",
-								},
-							},
-						},
-					},
-				],
-			}),
+			content: JSON.stringify(invalidResponse),
 			reasoning: null,
 		});
 
 		// Call 2: valid dual response
 		mockChatFn.mockResolvedValueOnce({
-			content: JSON.stringify(
-				buildDualPair(
-					"The pedestal hums to life and its runes glow.",
-					"The marker clicks once and a column of dust spirals up.",
-				),
-			),
+			content: JSON.stringify(buildDualResponse()),
 			reasoning: null,
 		});
 
@@ -2866,8 +2285,11 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 
 		expect(mockChatFn).toHaveBeenCalledTimes(2);
 		expect(
-			result.phases[0]?.packA.objectivePairs[0]?.space.activationFlavor,
-		).toBe("The pedestal hums to life and its runes glow.");
+			result.phases[0]?.rawPackA.bindings?.[0]?.object?.name,
+		).toBe("Iron Key");
+		expect(
+			result.phases[0]?.rawPackB.bindings?.[0]?.object?.name,
+		).toBe("Bone Token");
 
 		// Assert call 2's messages contain corrective feedback
 		const call2Messages = mockChatFn.mock.calls[1]?.[0]?.messages as
@@ -2883,194 +2305,27 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 	it("Test 2 — retries on dual validation failure (N=2), then succeeds and includes corrective feedback", async () => {
 		const mockChatFn = vi.fn();
 
-		// Call 1: structurally invalid dual response (missing space in packA)
-		mockChatFn.mockResolvedValueOnce({
-			content: JSON.stringify({
-				phases: [
-					{
-						packA: {
-							setting: "abandoned subway station",
-							objectivePairs: [
-								{
-									object: {
-										id: "obj1",
-										kind: "objective_object",
-										name: "Iron Key",
-										examineDescription:
-											"An object. It belongs on the brass pedestal.",
-										useOutcome: "You turn it over in your hands.",
-										pairsWithSpaceId: "space1",
-										placementFlavor: "{actor} sets it on the brass pedestal.",
-										proximityFlavor: "It hums faintly nearby.",
-									},
-									// space intentionally missing — validation failure
-								},
-							],
-							interestingObjects: [],
-							obstacles: [],
-							landmarks: {
-								north: {
-									shortName: "the signal tower",
-									horizonPhrase: "rises above the platform",
-								},
-								south: {
-									shortName: "the collapsed entrance",
-									horizonPhrase: "gapes like a wound in the dark",
-								},
-								east: {
-									shortName: "the rusted fan shaft",
-									horizonPhrase: "spins slowly in the stale air",
-								},
-								west: {
-									shortName: "the flooded tunnel",
-									horizonPhrase: "disappears into still black water",
-								},
-							},
-						},
-						packB: {
-							setting: "sun-baked salt flat",
-							objectivePairs: [
-								{
-									object: {
-										id: "obj1",
-										kind: "objective_object",
-										name: "Bone Token",
-										examineDescription:
-											"An object. It belongs on the survey marker.",
-										useOutcome: "You turn it over in your hands.",
-										pairsWithSpaceId: "space1",
-										placementFlavor: "{actor} sets it on the survey marker.",
-										proximityFlavor: "It hums faintly nearby.",
-									},
-									space: {
-										id: "space1",
-										kind: "objective_space",
-										name: "Survey Marker",
-										examineDescription:
-											"A weathered marker. Press the cap to activate it.",
-										activationFlavor:
-											"The marker clicks once and a column of dust spirals up.",
-										proximityFlavor: "The space vibrates softly.",
-										satisfactionFlavor: "The space is satisfied.",
-										postExamineDescription: "The space is now used.",
-										postLookFlavor: "The space hums.",
-										convergenceTier1Flavor:
-											"A lone figure stands at the survey marker.",
-										convergenceTier2Flavor:
-											"Two figures converge at the survey marker.",
-										convergenceTier1ActorFlavor:
-											"You linger at the survey marker.",
-										convergenceTier2ActorFlavor:
-											"You share the survey marker with another presence.",
-									},
-								},
-							],
-							interestingObjects: [],
-							obstacles: [],
-							landmarks: {
-								north: {
-									shortName: "the signal tower",
-									horizonPhrase: "rises above the platform",
-								},
-								south: {
-									shortName: "the collapsed entrance",
-									horizonPhrase: "gapes like a wound in the dark",
-								},
-								east: {
-									shortName: "the rusted fan shaft",
-									horizonPhrase: "spins slowly in the stale air",
-								},
-								west: {
-									shortName: "the flooded tunnel",
-									horizonPhrase: "disappears into still black water",
-								},
-							},
-						},
-					},
-				],
-			}),
-			reasoning: null,
-		});
+		// Call 1: invalid response (missing carry object name)
+		const invalid1 = buildDualResponse();
+		const phases1 = (invalid1 as Record<string, unknown>).phases as Record<string, unknown>[];
+		const packA1 = phases1[0]!.packA as Record<string, unknown>;
+		const bindings1 = packA1.bindings as Record<string, unknown>[];
+		const obj1 = bindings1[0]!.object as Record<string, unknown>;
+		delete obj1.name;
+		mockChatFn.mockResolvedValueOnce({ content: JSON.stringify(invalid1), reasoning: null });
 
-		// Call 2: still structurally invalid dual response (missing packB now)
-		mockChatFn.mockResolvedValueOnce({
-			content: JSON.stringify({
-				phases: [
-					{
-						packA: {
-							setting: "abandoned subway station",
-							objectivePairs: [
-								{
-									object: {
-										id: "obj1",
-										kind: "objective_object",
-										name: "Iron Key",
-										examineDescription:
-											"An object. It belongs on the brass pedestal.",
-										useOutcome: "You turn it over in your hands.",
-										pairsWithSpaceId: "space1",
-										placementFlavor: "{actor} sets it on the brass pedestal.",
-										proximityFlavor: "It hums faintly nearby.",
-									},
-									space: {
-										id: "space1",
-										kind: "objective_space",
-										name: "Brass Pedestal",
-										examineDescription:
-											"A sturdy pedestal. Press an item onto it to activate.",
-										activationFlavor:
-											"The pedestal hums to life and its runes glow.",
-										proximityFlavor: "The space vibrates softly.",
-										satisfactionFlavor: "The space is satisfied.",
-										postExamineDescription: "The space is now used.",
-										postLookFlavor: "The space hums.",
-										convergenceTier1Flavor:
-											"A lone figure stands at the brass pedestal.",
-										convergenceTier2Flavor:
-											"Two figures converge at the brass pedestal.",
-										convergenceTier1ActorFlavor:
-											"You linger at the brass pedestal.",
-										convergenceTier2ActorFlavor:
-											"You share the brass pedestal with another presence.",
-									},
-								},
-							],
-							interestingObjects: [],
-							obstacles: [],
-							landmarks: {
-								north: {
-									shortName: "the signal tower",
-									horizonPhrase: "rises above the platform",
-								},
-								south: {
-									shortName: "the collapsed entrance",
-									horizonPhrase: "gapes like a wound in the dark",
-								},
-								east: {
-									shortName: "the rusted fan shaft",
-									horizonPhrase: "spins slowly in the stale air",
-								},
-								west: {
-									shortName: "the flooded tunnel",
-									horizonPhrase: "disappears into still black water",
-								},
-							},
-						},
-						// packB intentionally missing
-					},
-				],
-			}),
-			reasoning: null,
-		});
+		// Call 2: still invalid (missing placementFlavor {actor})
+		const invalid2 = buildDualResponse();
+		const phases2 = (invalid2 as Record<string, unknown>).phases as Record<string, unknown>[];
+		const packA2 = phases2[0]!.packA as Record<string, unknown>;
+		const bindings2 = packA2.bindings as Record<string, unknown>[];
+		const obj2 = bindings2[0]!.object as Record<string, unknown>;
+		obj2.placementFlavor = "Sets it on the pedestal."; // missing {actor}
+		mockChatFn.mockResolvedValueOnce({ content: JSON.stringify(invalid2), reasoning: null });
 
 		// Call 3: valid dual response
 		mockChatFn.mockResolvedValueOnce({
-			content: JSON.stringify(
-				buildDualPair(
-					"The pedestal hums to life and its runes glow.",
-					"The marker clicks once and a column of dust spirals up.",
-				),
-			),
+			content: JSON.stringify(buildDualResponse()),
 			reasoning: null,
 		});
 
@@ -3079,8 +2334,8 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 
 		expect(mockChatFn).toHaveBeenCalledTimes(3);
 		expect(
-			result.phases[0]?.packA.objectivePairs[0]?.space.activationFlavor,
-		).toBe("The pedestal hums to life and its runes glow.");
+			result.phases[0]?.rawPackA.bindings?.[0]?.object?.name,
+		).toBe("Iron Key");
 
 		// Assert call 3's messages contain corrective feedback
 		const call3Messages = mockChatFn.mock.calls[2]?.[0]?.messages as
@@ -3116,110 +2371,12 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 		const mockChatFn = vi.fn();
 
 		// Return the same structurally-invalid response three times (OUTER_BUDGET = 3)
-		const invalidResponse = {
-			phases: [
-				{
-					packA: {
-						setting: "abandoned subway station",
-						objectivePairs: [
-							{
-								object: {
-									id: "obj1",
-									kind: "objective_object",
-									name: "Iron Key",
-									examineDescription:
-										"An object. It belongs on the brass pedestal.",
-									useOutcome: "You turn it over in your hands.",
-									pairsWithSpaceId: "space1",
-									placementFlavor: "{actor} sets it on the brass pedestal.",
-									proximityFlavor: "It hums faintly nearby.",
-								},
-								// space intentionally missing — validation failure
-							},
-						],
-						interestingObjects: [],
-						obstacles: [],
-						landmarks: {
-							north: {
-								shortName: "the signal tower",
-								horizonPhrase: "rises above the platform",
-							},
-							south: {
-								shortName: "the collapsed entrance",
-								horizonPhrase: "gapes like a wound in the dark",
-							},
-							east: {
-								shortName: "the rusted fan shaft",
-								horizonPhrase: "spins slowly in the stale air",
-							},
-							west: {
-								shortName: "the flooded tunnel",
-								horizonPhrase: "disappears into still black water",
-							},
-						},
-					},
-					packB: {
-						setting: "sun-baked salt flat",
-						objectivePairs: [
-							{
-								object: {
-									id: "obj1",
-									kind: "objective_object",
-									name: "Bone Token",
-									examineDescription:
-										"An object. It belongs on the survey marker.",
-									useOutcome: "You turn it over in your hands.",
-									pairsWithSpaceId: "space1",
-									placementFlavor: "{actor} sets it on the survey marker.",
-									proximityFlavor: "It hums faintly nearby.",
-								},
-								space: {
-									id: "space1",
-									kind: "objective_space",
-									name: "Survey Marker",
-									examineDescription:
-										"A weathered marker. Press the cap to activate it.",
-									activationFlavor:
-										"The marker clicks once and a column of dust spirals up.",
-									proximityFlavor: "The space vibrates softly.",
-									satisfactionFlavor: "The space is satisfied.",
-									postExamineDescription: "The space is now used.",
-									postLookFlavor: "The space hums.",
-									convergenceTier1Flavor:
-										"A lone figure stands at the survey marker.",
-									convergenceTier2Flavor:
-										"Two figures converge at the survey marker.",
-									convergenceTier1ActorFlavor:
-										"You linger at the survey marker.",
-									convergenceTier2ActorFlavor:
-										"You share the survey marker with another presence.",
-								},
-							},
-						],
-						interestingObjects: [],
-						obstacles: [],
-						landmarks: {
-							north: {
-								shortName: "the signal tower",
-								horizonPhrase: "rises above the platform",
-							},
-							south: {
-								shortName: "the collapsed entrance",
-								horizonPhrase: "gapes like a wound in the dark",
-							},
-							east: {
-								shortName: "the rusted fan shaft",
-								horizonPhrase: "spins slowly in the stale air",
-							},
-							west: {
-								shortName: "the flooded tunnel",
-								horizonPhrase: "disappears into still black water",
-							},
-						},
-					},
-				},
-			],
-		};
+		const invalidResponse = buildDualResponse();
+		const phases = (invalidResponse as Record<string, unknown>).phases as Record<string, unknown>[];
+		const packA = phases[0]!.packA as Record<string, unknown>;
+		const bindings = packA.bindings as Record<string, unknown>[];
+		const obj = bindings[0]!.object as Record<string, unknown>;
+		delete obj.useOutcome; // missing required field
 
 		mockChatFn.mockResolvedValue({
 			content: JSON.stringify(invalidResponse),
@@ -3247,12 +2404,7 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 
 		// Call 2: valid response after backoff
 		mockChatFn.mockResolvedValueOnce({
-			content: JSON.stringify(
-				buildDualPair(
-					"The pedestal hums to life and its runes glow.",
-					"The marker clicks once and a column of dust spirals up.",
-				),
-			),
+			content: JSON.stringify(buildDualResponse()),
 			reasoning: null,
 		});
 
@@ -3271,8 +2423,9 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 		vi.useRealTimers();
 
 		expect(mockChatFn).toHaveBeenCalledTimes(2);
-		expect(result.phases[0]?.packA.objectivePairs[0]?.object.name).toBe(
+		expect(result.phases[0]?.rawPackA.bindings?.[0]?.object?.name).toBe(
 			"Iron Key",
 		);
 	});
 });
+
