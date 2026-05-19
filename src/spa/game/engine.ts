@@ -69,6 +69,7 @@ export function startGame(
 	// Build WorldState from pack entities (all entities flat)
 	const worldEntities = [
 		...contentPack.objectivePairs.flatMap((pair) => [pair.object, pair.space]),
+		...(contentPack.boundSpaces ?? []),
 		...contentPack.interestingObjects,
 		...contentPack.obstacles,
 	];
@@ -189,6 +190,7 @@ function reprojectEntitiesOnto(
 		byId.set(pair.object.id, pair.object);
 		byId.set(pair.space.id, pair.space);
 	}
+	for (const space of bPack.boundSpaces ?? []) byId.set(space.id, space);
 	for (const obj of bPack.interestingObjects) byId.set(obj.id, obj);
 	for (const obs of bPack.obstacles) byId.set(obs.id, obs);
 
