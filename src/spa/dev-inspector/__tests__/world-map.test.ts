@@ -80,7 +80,7 @@ describe("world-map", () => {
 		}
 	});
 
-	it("daemon cell renders @<arrow> with persona color and data-ai", () => {
+	it("daemon cell renders <arrow> with persona color and data-ai", () => {
 		const contentPack = STATIC_CONTENT_PACKS[0];
 		if (!contentPack) throw new Error("Content pack missing");
 		const session = new GameSession(contentPack, STATIC_PERSONAS);
@@ -95,7 +95,7 @@ describe("world-map", () => {
 		expect(daemonCell).toBeTruthy();
 
 		const glyph = daemonCell?.querySelector(".dev-map-glyph");
-		expect(glyph?.textContent).toMatch(/^@[<>^v]$/);
+		expect(glyph?.textContent).toMatch(/^[<>^v] $/);
 
 		// Color is set; browsers convert hex to rgb, so just check it's not empty
 		if (daemonCell instanceof HTMLElement) {
@@ -120,7 +120,7 @@ describe("world-map", () => {
 
 		const redCell = containerEl.querySelector('.dev-map-cell[data-ai="red"]');
 		const glyph = redCell?.querySelector(".dev-map-glyph");
-		expect(glyph?.textContent).toBe("@^");
+		expect(glyph?.textContent).toBe("^ ");
 	});
 
 	it("daemon tooltip format: *<name> — facing <N|S|E|W> — holds: <item> (<id>)", () => {
@@ -339,7 +339,7 @@ describe("world-map", () => {
 		expect(cell).toBeTruthy();
 
 		const glyph = cell?.querySelector(".dev-map-glyph");
-		expect(glyph?.textContent).toMatch(/^@[<>^v]$/);
+		expect(glyph?.textContent).toMatch(/^[<>^v] $/);
 	});
 
 	it("obstacle glyph beats objective object on same cell", () => {
@@ -499,10 +499,10 @@ describe("world-map", () => {
 		// Update
 		updateWorldMap(containerEl, session);
 
-		// Glyph should now be @>
+		// Glyph should now be >
 		const redCell = containerEl.querySelector('.dev-map-cell[data-ai="red"]');
 		const glyph = redCell?.querySelector(".dev-map-glyph");
-		expect(glyph?.textContent).toBe("@>");
+		expect(glyph?.textContent).toBe("> ");
 	});
 
 	it("updateWorldMap reflects satisfaction state change in data-satisfaction and tooltip", () => {

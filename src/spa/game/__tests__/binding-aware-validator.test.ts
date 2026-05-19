@@ -242,7 +242,7 @@ describe("validateBoundContentPack — forbidden fields", () => {
 		const pack = makeGoodCarryPack();
 		// biome-ignore lint/style/noNonNullAssertion: test fixture access
 		(
-			pack.pack.bindings[0]!.space as Record<string, unknown>
+			pack.pack.bindings[0]?.space as Record<string, unknown>
 		).convergenceTier1Flavor = "someone stands here";
 		const result = validateBoundContentPack(pack, makeCarrySchedule());
 		expect(result.ok).toBe(false);
@@ -258,7 +258,7 @@ describe("validateBoundContentPack — forbidden fields", () => {
 		const pack = makeGoodUseSpacePack();
 		// biome-ignore lint/style/noNonNullAssertion: test fixture access
 		(
-			pack.pack.bindings[0]!.space as Record<string, unknown>
+			pack.pack.bindings[0]?.space as Record<string, unknown>
 		).convergenceTier1Flavor = "someone";
 		const result = validateBoundContentPack(pack, makeUseSpaceSchedule());
 		expect(result.ok).toBe(false);
@@ -291,7 +291,7 @@ describe("validateBoundContentPack — use-cue rules", () => {
 		const pack = makeGoodCarryPack();
 		// biome-ignore lint/style/noNonNullAssertion: test fixture access
 		(
-			pack.pack.bindings[0]!.space as Record<string, unknown>
+			pack.pack.bindings[0]?.space as Record<string, unknown>
 		).examineDescription = "Press the button here.";
 		const result = validateBoundContentPack(pack, makeCarrySchedule());
 		// Should still pass (it's a warning)
@@ -302,7 +302,7 @@ describe("validateBoundContentPack — use-cue rules", () => {
 		const pack = makeGoodUseSpacePack();
 		// biome-ignore lint/style/noNonNullAssertion: test fixture access
 		(
-			pack.pack.bindings[0]!.space as Record<string, unknown>
+			pack.pack.bindings[0]?.space as Record<string, unknown>
 		).examineDescription = "A plain surface with no features.";
 		const result = validateBoundContentPack(pack, makeUseSpaceSchedule());
 		expect(result.ok).toBe(false);
@@ -319,7 +319,7 @@ describe("validateBoundContentPack — use-cue rules", () => {
 		const pack = makeGoodUseItemPack();
 		// biome-ignore lint/style/noNonNullAssertion: test fixture access
 		(
-			pack.pack.bindings[0]!.item as Record<string, unknown>
+			pack.pack.bindings[0]?.item as Record<string, unknown>
 		).examineDescription = "A strange cylindrical object.";
 		const result = validateBoundContentPack(pack, makeUseItemSchedule());
 		expect(result.ok).toBe(false);
@@ -349,7 +349,7 @@ describe("validateBoundContentPack — use-cue rules", () => {
 		const pack = makeGoodConvergencePack();
 		// biome-ignore lint/style/noNonNullAssertion: test fixture access
 		(
-			pack.pack.bindings[0]!.space as Record<string, unknown>
+			pack.pack.bindings[0]?.space as Record<string, unknown>
 		).examineDescription =
 			"A convergence point where you can press the button.";
 		const result = validateBoundContentPack(pack, makeConvergenceSchedule());

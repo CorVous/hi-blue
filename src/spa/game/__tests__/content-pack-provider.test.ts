@@ -2316,9 +2316,9 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 		const invalidResponse = buildDualResponse();
 		const phases = (invalidResponse as Record<string, unknown>)
 			.phases as Record<string, unknown>[];
-		const packA = phases[0]!.packA as Record<string, unknown>;
+		const packA = phases[0]?.packA as Record<string, unknown>;
 		const bindings = packA.bindings as Record<string, unknown>[];
-		const obj = bindings[0]!.object as Record<string, unknown>;
+		const obj = bindings[0]?.object as Record<string, unknown>;
 		delete obj.examineDescription;
 		mockChatFn.mockResolvedValueOnce({
 			content: JSON.stringify(invalidResponse),
@@ -2362,9 +2362,9 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 			string,
 			unknown
 		>[];
-		const packA1 = phases1[0]!.packA as Record<string, unknown>;
+		const packA1 = phases1[0]?.packA as Record<string, unknown>;
 		const bindings1 = packA1.bindings as Record<string, unknown>[];
-		const obj1 = bindings1[0]!.object as Record<string, unknown>;
+		const obj1 = bindings1[0]?.object as Record<string, unknown>;
 		delete obj1.name;
 		mockChatFn.mockResolvedValueOnce({
 			content: JSON.stringify(invalid1),
@@ -2377,9 +2377,9 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 			string,
 			unknown
 		>[];
-		const packA2 = phases2[0]!.packA as Record<string, unknown>;
+		const packA2 = phases2[0]?.packA as Record<string, unknown>;
 		const bindings2 = packA2.bindings as Record<string, unknown>[];
-		const obj2 = bindings2[0]!.object as Record<string, unknown>;
+		const obj2 = bindings2[0]?.object as Record<string, unknown>;
 		obj2.placementFlavor = "Sets it on the pedestal."; // missing {actor}
 		mockChatFn.mockResolvedValueOnce({
 			content: JSON.stringify(invalid2),
@@ -2437,9 +2437,9 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 		const invalidResponse = buildDualResponse();
 		const phases = (invalidResponse as Record<string, unknown>)
 			.phases as Record<string, unknown>[];
-		const packA = phases[0]!.packA as Record<string, unknown>;
+		const packA = phases[0]?.packA as Record<string, unknown>;
 		const bindings = packA.bindings as Record<string, unknown>[];
-		const obj = bindings[0]!.object as Record<string, unknown>;
+		const obj = bindings[0]?.object as Record<string, unknown>;
 		delete obj.useOutcome; // missing required field
 
 		mockChatFn.mockResolvedValue({

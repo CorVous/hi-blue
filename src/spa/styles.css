@@ -75,11 +75,27 @@ body::before {
 /* Layout — single screen */
 #stage {
 	min-height: 100dvh;
+	/* height: 100% gives CSS Grid a definite size so the 1fr panels row
+	   resolves against the viewport rather than expanding to content size.
+	   min-height: 100dvh stays so the stage never collapses shorter than
+	   the viewport (also required by the stage-layout contract test). */
+	height: 100%;
 	display: grid;
 	grid-template-rows: auto auto auto auto 1fr auto;
 	gap: 6px;
 	padding: 8px 12px 6px;
 	animation: crt-flicker 6s infinite;
+}
+
+/* #phase-banner uses display:none when hidden, removing it from grid flow.
+   Pin panels to the 1fr row (5) and composer to the trailing auto row (6)
+   so they land correctly whether or not phase-banner is currently visible. */
+#panels.row {
+	grid-row: 5;
+}
+
+#composer {
+	grid-row: 6;
 }
 
 header {
@@ -115,6 +131,14 @@ header {
 #topinfo-mobile,
 #topinfo-mobile-status {
 	display: none;
+}
+
+/* Banner row: banner + dev world map side by side */
+#banner-row {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	min-width: 0;
 }
 
 /* Banner */
@@ -1346,6 +1370,10 @@ main {
 		gap: 6px;
 	}
 
+	#banner-row {
+		display: none;
+	}
+
 	.banner {
 		display: none;
 	}
@@ -1672,11 +1700,18 @@ main {
 	color: var(--amber);
 }
 
-#dev-game-strip,
-#dev-world-map {
+#dev-game-strip {
 	margin-top: 8px;
 	padding: 6px 8px;
 	border: 1px dashed rgba(255, 180, 84, 0.3);
+	color: var(--amber-dim);
+	font-family: var(--mono);
+	font-size: 11px;
+	min-height: 16px;
+}
+
+#dev-world-map {
+	padding: 6px 8px;
 	color: var(--amber-dim);
 	font-family: var(--mono);
 	font-size: 11px;

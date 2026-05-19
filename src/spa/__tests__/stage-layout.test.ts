@@ -11,13 +11,32 @@ const cssPath = path.join(__dirname, "../styles.css");
 const cssStr = fs.readFileSync(cssPath, "utf-8");
 
 describe("#stage layout contract", () => {
-	it("uses min-height: 100dvh (not height) so dev surfaces can grow the page", () => {
+	it("uses min-height: 100dvh (not height: 100dvh) so the stage never collapses", () => {
 		expect(cssStr).toMatch(/#stage\s*\{[^}]*min-height:\s*100dvh/);
-		// Negative lookahead ensures "height: 100dvh" doesn't appear (only "min-height" is ok)
+		// height: 100dvh would also conflict — only height: 100% is allowed alongside
+		// min-height: 100dvh (resolves via parent chain to viewport height).
 		expect(cssStr).not.toMatch(/#stage\s*\{[^}]*\nheight:\s*100dvh/);
+	});
+
+	it("sets height: 100% on #stage so CSS Grid has a definite size for 1fr calculation", () => {
+		// Without a definite height, the 1fr panels row expands to content size
+		// (ignoring the viewport), pushing the composer off the bottom of the screen.
+		// height: 100% resolves through html > body (both height: 100%) to the viewport.
+		expect(cssStr).toMatch(/#stage\s*\{[^}]*height:\s*100%/);
 	});
 
 	it("retains main { display: contents } so direct children flatten into #stage's grid", () => {
 		expect(cssStr).toMatch(/^main\s*\{\s*display:\s*contents/m);
+	});
+
+	it("pins #panels to grid-row 5 (the 1fr row) so it always gets the stretchy slot", () => {
+		// #phase-banner uses display:none when hidden, removing it from grid flow.
+		// Without explicit placement, #panels lands on row 4 (auto) and #composer
+		// takes row 5 (1fr), causing the game to overflow off the bottom of the screen.
+		expect(cssStr).toMatch(/#panels\.row\s*\{[^}]*grid-row:\s*5/);
+	});
+
+	it("pins #composer to grid-row 6 (trailing auto row) to stay below panels", () => {
+		expect(cssStr).toMatch(/#composer\s*\{[^}]*grid-row:\s*6/);
 	});
 });
