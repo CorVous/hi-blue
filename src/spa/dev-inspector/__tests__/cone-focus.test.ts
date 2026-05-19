@@ -228,7 +228,7 @@ describe("cone-focus", () => {
 	describe("focus button", () => {
 		it("button rendered in footer", () => {
 			const root = document.body;
-			renderInspector(root, { session, pendingBootstrap: undefined });
+			renderInspector(root, { session });
 
 			const focusBtn = document.querySelector(
 				'[data-field="focus-cone"]',
@@ -239,7 +239,7 @@ describe("cone-focus", () => {
 
 		it("button click sets focus", () => {
 			const root = document.body;
-			renderInspector(root, { session, pendingBootstrap: undefined });
+			renderInspector(root, { session });
 
 			const focusBtn = document.querySelector(
 				'[data-field="focus-cone"]',
@@ -257,7 +257,7 @@ describe("cone-focus", () => {
 
 		it("button click toggles focus off when already focused", () => {
 			const root = document.body;
-			renderInspector(root, { session, pendingBootstrap: undefined });
+			renderInspector(root, { session });
 
 			const redPanel = document.querySelector('[data-ai="red"]') as HTMLElement;
 			expect(redPanel).toBeTruthy();
@@ -281,7 +281,7 @@ describe("cone-focus", () => {
 
 		it("data-focus-active reflects focus state", () => {
 			const root = document.body;
-			renderInspector(root, { session, pendingBootstrap: undefined });
+			renderInspector(root, { session });
 
 			// Get all buttons
 			const allBtns = document.querySelectorAll(
@@ -316,7 +316,7 @@ describe("cone-focus", () => {
 	describe("Escape key handling", () => {
 		it("Escape clears active focus", () => {
 			const root = document.body;
-			renderInspector(root, { session, pendingBootstrap: undefined });
+			renderInspector(root, { session });
 
 			setMapFocus("red");
 			expect(getMapFocus()).toBe("red");
@@ -335,7 +335,7 @@ describe("cone-focus", () => {
 			const containerEl = document.getElementById(
 				"dev-world-map",
 			) as HTMLElement;
-			renderInspector(root, { session, pendingBootstrap: undefined });
+			renderInspector(root, { session });
 			renderWorldMap(containerEl, session);
 
 			setMapFocus("red");
@@ -360,7 +360,7 @@ describe("cone-focus", () => {
 
 		it("Escape no-op when no focus is active", () => {
 			const root = document.body;
-			renderInspector(root, { session, pendingBootstrap: undefined });
+			renderInspector(root, { session });
 
 			expect(getMapFocus()).toBeNull();
 
@@ -378,11 +378,11 @@ describe("cone-focus", () => {
 			const root = document.body;
 
 			// First render
-			renderInspector(root, { session, pendingBootstrap: undefined });
+			renderInspector(root, { session });
 
 			// Re-render (simulating re-init)
 			__resetInspectorForTests();
-			renderInspector(root, { session, pendingBootstrap: undefined });
+			renderInspector(root, { session });
 
 			// Set focus and press Escape
 			setMapFocus("red");
@@ -398,7 +398,7 @@ describe("cone-focus", () => {
 
 		it("other keys do not clear focus", () => {
 			const root = document.body;
-			renderInspector(root, { session, pendingBootstrap: undefined });
+			renderInspector(root, { session });
 
 			setMapFocus("red");
 			expect(getMapFocus()).toBe("red");

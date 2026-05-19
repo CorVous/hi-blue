@@ -1832,3 +1832,22 @@ main {
 	color: var(--amber);
 	border-color: rgba(255, 180, 84, 0.8);
 }
+
+/* Pending bootstrap strip */
+.dev-pending-strip {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+	font-family: var(--mono);
+	font-size: 11px;
+}
+
+.dev-pending-strip [hidden] {
+	display: none !important;
+}
+
+.dev-strip-line {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+}

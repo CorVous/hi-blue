@@ -1152,7 +1152,6 @@ export function renderGame(
 	if (__DEV__ && session !== null) {
 		renderInspector(root, {
 			session,
-			pendingBootstrap: getPendingBootstrap(),
 		});
 	}
 

@@ -488,7 +488,7 @@ describe("daemon-footer", () => {
 
 		// Now renderInspector should clear the stale results
 		// First, renderInspector will call clearDaemonTurnResults internally
-		renderInspector(document.body, { session, pendingBootstrap: undefined });
+		renderInspector(document.body, { session });
 
 		// After renderInspector clears and renders, the daemonTurnResults should be empty
 		// Re-query for the llmSpan since renderInspector rebuilds the footer DOM
@@ -1019,7 +1019,7 @@ describe("daemon-footer", () => {
 		expect(systemPromptPre?.textContent).toBe("test prompt");
 
 		// renderInspector clears everything
-		renderInspector(document.body, { session, pendingBootstrap: undefined });
+		renderInspector(document.body, { session });
 
 		// Re-query and verify cleared
 		systemPromptPre = redPanel.querySelector(

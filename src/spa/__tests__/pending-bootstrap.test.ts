@@ -209,4 +209,65 @@ describe("pending-bootstrap.ts", () => {
 		// Personas should be gone
 		expect(getCachedPersonas()).toBeUndefined();
 	});
+
+	it("recordPendingCall sets callName + startedAtMs", async () => {
+		vi.resetModules();
+
+		const { recordPendingCall, getPendingCallMeta } = await import(
+			"../game/pending-bootstrap.js"
+		);
+
+		const beforeMs = Date.now();
+		recordPendingCall("persona-synthesis");
+		const afterMs = Date.now();
+
+		const meta = getPendingCallMeta();
+		expect(meta.callName).toBe("persona-synthesis");
+		expect(meta.startedAtMs).toBeGreaterThanOrEqual(beforeMs);
+		expect(meta.startedAtMs).toBeLessThanOrEqual(afterMs);
+		expect(meta.retryCount).toBe(0);
+		expect(meta.retryMax).toBe(3);
+		expect(meta.lastError).toBeUndefined();
+	});
+
+	it("recordPendingRetry increments retryCount and stores lastError", async () => {
+		vi.resetModules();
+
+		const { recordPendingCall, recordPendingRetry, getPendingCallMeta } =
+			await import("../game/pending-bootstrap.js");
+
+		recordPendingCall("content-pack");
+
+		recordPendingRetry(new Error("502 upstream"));
+
+		const meta = getPendingCallMeta();
+		expect(meta.callName).toBe("content-pack");
+		expect(meta.retryCount).toBe(1);
+		expect(meta.lastError).toBe("502 upstream");
+
+		// Retry again
+		recordPendingRetry(new Error("503 service unavailable"));
+
+		const meta2 = getPendingCallMeta();
+		expect(meta2.retryCount).toBe(2);
+		expect(meta2.lastError).toBe("503 service unavailable");
+	});
+
+	it("clearPendingBootstrap clears meta", async () => {
+		vi.resetModules();
+
+		const { recordPendingCall, clearPendingBootstrap, getPendingCallMeta } =
+			await import("../game/pending-bootstrap.js");
+
+		recordPendingCall("persona-synthesis");
+		expect(getPendingCallMeta().callName).toBe("persona-synthesis");
+
+		clearPendingBootstrap();
+
+		const meta = getPendingCallMeta();
+		expect(meta.callName).toBeUndefined();
+		expect(meta.startedAtMs).toBeUndefined();
+		expect(meta.retryCount).toBeUndefined();
+		expect(meta.lastError).toBeUndefined();
+	});
 });
