@@ -15,6 +15,7 @@
 
 import { streamCompletion } from "../llm-client.js";
 import type {
+	LifecyclePhase,
 	OpenAiMessage,
 	RoundLLMProvider,
 	RoundTurnResult,
@@ -33,82 +34,112 @@ export class BrowserLLMProvider implements RoundLLMProvider {
 		tools: OpenAiTool[],
 		onDelta?: (text: string) => void,
 		daemonId?: string,
+		onLifecycle?: (event: LifecyclePhase) => void,
 	): Promise<RoundTurnResult> {
-		const textParts: string[] = [];
-		const reasoningParts: string[] = [];
-		const toolCalls: RoundTurnResult["toolCalls"] = [];
-		let costUsd: number | undefined;
-		let promptTokens: number | undefined;
-		let completionTokens: number | undefined;
-		let cachedPromptTokens: number | undefined;
+		try {
+			const textParts: string[] = [];
+			const reasoningParts: string[] = [];
+			const toolCalls: RoundTurnResult["toolCalls"] = [];
+			let costUsd: number | undefined;
+			let promptTokens: number | undefined;
+			let completionTokens: number | undefined;
+			let cachedPromptTokens: number | undefined;
+			let firstTokenFired = false;
 
-		await streamCompletion({
-			messages,
-			tools,
-			onDelta: (text) => {
-				textParts.push(text);
-				onDelta?.(text);
-			},
-			onReasoning: (text) => {
-				reasoningParts.push(text);
-			},
-			onToolCall: (call) => {
-				toolCalls.push(call);
-			},
-			onUsage: (usage) => {
-				if (typeof usage.cost === "number") costUsd = usage.cost;
-				if (typeof usage.prompt_tokens === "number") {
-					promptTokens = usage.prompt_tokens;
-				}
-				if (typeof usage.completion_tokens === "number") {
-					completionTokens = usage.completion_tokens;
-				}
-				if (typeof usage.cached_tokens === "number") {
-					cachedPromptTokens = usage.cached_tokens;
-				}
-			},
-			disableReasoning: this.disableReasoning,
-		});
+			onLifecycle?.(
+				daemonId
+					? { phase: "started", daemonId }
+					: { phase: "started" },
+			);
 
-		if (promptTokens !== undefined && cachedPromptTokens !== undefined) {
-			const pct =
-				promptTokens > 0
-					? Math.round((cachedPromptTokens / promptTokens) * 100)
-					: 0;
+			await streamCompletion({
+				messages,
+				tools,
+				onDelta: (text) => {
+					textParts.push(text);
+					onDelta?.(text);
+					if (!firstTokenFired) {
+						firstTokenFired = true;
+						onLifecycle?.(
+							daemonId
+								? { phase: "first-token", daemonId }
+								: { phase: "first-token" },
+						);
+					}
+				},
+				onReasoning: (text) => {
+					reasoningParts.push(text);
+				},
+				onToolCall: (call) => {
+					toolCalls.push(call);
+				},
+				onUsage: (usage) => {
+					if (typeof usage.cost === "number") costUsd = usage.cost;
+					if (typeof usage.prompt_tokens === "number") {
+						promptTokens = usage.prompt_tokens;
+					}
+					if (typeof usage.completion_tokens === "number") {
+						completionTokens = usage.completion_tokens;
+					}
+					if (typeof usage.cached_tokens === "number") {
+						cachedPromptTokens = usage.cached_tokens;
+					}
+				},
+				disableReasoning: this.disableReasoning,
+			});
+
+			if (promptTokens !== undefined && cachedPromptTokens !== undefined) {
+				const pct =
+					promptTokens > 0
+						? Math.round((cachedPromptTokens / promptTokens) * 100)
+						: 0;
+				if (__DEV__) {
+					console.log(
+						`[cache] prompt ${cachedPromptTokens}/${promptTokens} cached (${pct}%)`,
+					);
+				}
+			}
+
+			// Spike #239: log the per-turn tool-name array so an A/B playtest can
+			// compute parallel-emission rate = rounds-with-≥2-calls / rounds-with-≥1-call.
+			// For `message` calls, append the recipient so per-recipient counts can
+			// be derived (e.g. "message:blue" vs "message:*xqr9"). Devtools-only
+			// signal; not persisted.
 			if (__DEV__) {
+				const calls = toolCalls.map((c) => {
+					try {
+						const args = JSON.parse(c.argumentsJson);
+						return { name: c.name, args };
+					} catch {
+						return { name: c.name, args: c.argumentsJson };
+					}
+				});
 				console.log(
-					`[cache] prompt ${cachedPromptTokens}/${promptTokens} cached (${pct}%)`,
+					`[tools] daemon=${daemonId ?? "?"} toolCalls=${JSON.stringify(calls)}`,
 				);
 			}
-		}
 
-		// Spike #239: log the per-turn tool-name array so an A/B playtest can
-		// compute parallel-emission rate = rounds-with-≥2-calls / rounds-with-≥1-call.
-		// For `message` calls, append the recipient so per-recipient counts can
-		// be derived (e.g. "message:blue" vs "message:*xqr9"). Devtools-only
-		// signal; not persisted.
-		if (__DEV__) {
-			const calls = toolCalls.map((c) => {
-				try {
-					const args = JSON.parse(c.argumentsJson);
-					return { name: c.name, args };
-				} catch {
-					return { name: c.name, args: c.argumentsJson };
-				}
-			});
-			console.log(
-				`[tools] daemon=${daemonId ?? "?"} toolCalls=${JSON.stringify(calls)}`,
+			const assistantText = textParts.join("") || reasoningParts.join("");
+			onLifecycle?.(
+				daemonId
+					? { phase: "completed", daemonId }
+					: { phase: "completed" },
 			);
+			return {
+				assistantText,
+				toolCalls,
+				...(costUsd !== undefined ? { costUsd } : {}),
+				...(promptTokens !== undefined ? { promptTokens } : {}),
+				...(completionTokens !== undefined ? { completionTokens } : {}),
+				...(cachedPromptTokens !== undefined ? { cachedPromptTokens } : {}),
+			};
+		} catch (error) {
+			onLifecycle?.(
+				daemonId
+					? { phase: "errored", daemonId, error }
+					: { phase: "errored", error },
+			);
+			throw error;
 		}
-
-		const assistantText = textParts.join("") || reasoningParts.join("");
-		return {
-			assistantText,
-			toolCalls,
-			...(costUsd !== undefined ? { costUsd } : {}),
-			...(promptTokens !== undefined ? { promptTokens } : {}),
-			...(completionTokens !== undefined ? { completionTokens } : {}),
-			...(cachedPromptTokens !== undefined ? { cachedPromptTokens } : {}),
-		};
 	}
 }

@@ -44,12 +44,19 @@ export interface RoundTurnResult {
 	cachedPromptTokens?: number;
 }
 
+export type LifecyclePhase =
+	| { phase: "started"; daemonId?: string }
+	| { phase: "first-token"; daemonId?: string }
+	| { phase: "completed"; daemonId?: string }
+	| { phase: "errored"; daemonId?: string; error: unknown };
+
 export interface RoundLLMProvider {
 	streamRound(
 		messages: OpenAiMessage[],
 		tools: OpenAiTool[],
 		onDelta?: (text: string) => void,
 		daemonId?: string,
+		onLifecycle?: (event: LifecyclePhase) => void,
 	): Promise<RoundTurnResult>;
 }
 
@@ -86,23 +93,53 @@ export class MockRoundLLMProvider implements RoundLLMProvider {
 		messages: OpenAiMessage[],
 		tools: OpenAiTool[],
 		_onDelta?: (text: string) => void,
-		_daemonId?: string,
+		daemonId?: string,
+		onLifecycle?: (event: LifecyclePhase) => void,
 	): Promise<RoundTurnResult> {
-		this.calls.push({ messages, tools });
-		const raw =
-			this.results[this.index % this.results.length] ??
-			({ assistantText: "", toolCalls: [] } satisfies RoundTurnResult);
-		this.index++;
+		try {
+			this.calls.push({ messages, tools });
+			onLifecycle?.(
+				daemonId
+					? { phase: "started", daemonId }
+					: { phase: "started" },
+			);
 
-		if (typeof raw === "string") {
-			return { assistantText: raw, toolCalls: [] };
+			const raw =
+				this.results[this.index % this.results.length] ??
+				({ assistantText: "", toolCalls: [] } satisfies RoundTurnResult);
+			this.index++;
+
+			onLifecycle?.(
+				daemonId
+					? { phase: "first-token", daemonId }
+					: { phase: "first-token" },
+			);
+
+			let result: RoundTurnResult;
+			if (typeof raw === "string") {
+				result = { assistantText: raw, toolCalls: [] };
+			} else if ("toolCall" in raw) {
+				result = {
+					assistantText: raw.assistantText ?? "",
+					toolCalls: [raw.toolCall],
+				};
+			} else {
+				result = raw;
+			}
+
+			onLifecycle?.(
+				daemonId
+					? { phase: "completed", daemonId }
+					: { phase: "completed" },
+			);
+			return result;
+		} catch (error) {
+			onLifecycle?.(
+				daemonId
+					? { phase: "errored", daemonId, error }
+					: { phase: "errored", error },
+			);
+			throw error;
 		}
-		if ("toolCall" in raw) {
-			return {
-				assistantText: raw.assistantText ?? "",
-				toolCalls: [raw.toolCall],
-			};
-		}
-		return raw;
 	}
 }
