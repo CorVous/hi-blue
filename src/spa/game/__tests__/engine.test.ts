@@ -76,6 +76,44 @@ describe("advanceRound", () => {
 	});
 });
 
+describe("startGame world.entities", () => {
+	it("places use_space and convergence bound spaces on the grid", () => {
+		const packWithBoundSpaces: ContentPack = {
+			...TEST_CONTENT_PACK,
+			boundSpaces: [
+				{
+					id: "useSpace-0-space",
+					kind: "objective_space",
+					name: "cracked pedestal",
+					examineDescription: "",
+					holder: { row: 1, col: 1 },
+				},
+				{
+					id: "useSpace-1-space",
+					kind: "objective_space",
+					name: "rusted lever",
+					examineDescription: "",
+					holder: { row: 2, col: 2 },
+				},
+				{
+					id: "convergence-2-space",
+					kind: "objective_space",
+					name: "central tile",
+					examineDescription: "",
+					holder: { row: 3, col: 3 },
+				},
+			],
+		};
+		const game = startGame(TEST_PERSONAS, packWithBoundSpaces, {
+			budgetPerAi: 5,
+		});
+		const ids = game.world.entities.map((e) => e.id);
+		expect(ids).toContain("useSpace-0-space");
+		expect(ids).toContain("useSpace-1-space");
+		expect(ids).toContain("convergence-2-space");
+	});
+});
+
 describe("budget and lockout", () => {
 	it("reports an AI as not locked out when budget remains", () => {
 		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
