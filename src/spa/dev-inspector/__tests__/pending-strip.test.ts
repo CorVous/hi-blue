@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { PendingBootstrap, PendingCallMeta } from "../../game/pending-bootstrap.js";
+import type {
+	PendingBootstrap,
+	PendingCallMeta,
+} from "../../game/pending-bootstrap.js";
 import {
 	__resetPendingStripForTests,
 	clearPendingStrip,
@@ -38,7 +41,9 @@ describe("pending-strip.ts", () => {
 			retryCount: 0,
 			retryMax: 3,
 		};
-		const containerEl = document.getElementById("dev-game-strip") as HTMLElement;
+		const containerEl = document.getElementById(
+			"dev-game-strip",
+		) as HTMLElement;
 
 		renderPendingStrip(containerEl, pending, meta);
 
@@ -46,7 +51,9 @@ describe("pending-strip.ts", () => {
 		expect(pipEl?.textContent).toBe("●");
 		expect(pipEl?.getAttribute("data-state")).toBe("in-flight");
 
-		const statusWordEl = containerEl.querySelector('[data-field="status-word"]');
+		const statusWordEl = containerEl.querySelector(
+			'[data-field="status-word"]',
+		);
 		expect(statusWordEl?.textContent).toBe("fetching");
 
 		const callNameEl = containerEl.querySelector('[data-field="call-name"]');
@@ -66,7 +73,9 @@ describe("pending-strip.ts", () => {
 			retryCount: 0,
 			retryMax: 3,
 		};
-		const containerEl = document.getElementById("dev-game-strip") as HTMLElement;
+		const containerEl = document.getElementById(
+			"dev-game-strip",
+		) as HTMLElement;
 
 		renderPendingStrip(containerEl, pending, meta);
 
@@ -85,7 +94,9 @@ describe("pending-strip.ts", () => {
 			retryCount: 1,
 			retryMax: 3,
 		};
-		const containerEl = document.getElementById("dev-game-strip") as HTMLElement;
+		const containerEl = document.getElementById(
+			"dev-game-strip",
+		) as HTMLElement;
 
 		renderPendingStrip(containerEl, pending, meta);
 
@@ -106,7 +117,9 @@ describe("pending-strip.ts", () => {
 			retryMax: 3,
 			lastError: "502 upstream",
 		};
-		const containerEl = document.getElementById("dev-game-strip") as HTMLElement;
+		const containerEl = document.getElementById(
+			"dev-game-strip",
+		) as HTMLElement;
 
 		renderPendingStrip(containerEl, pending, meta);
 
@@ -127,7 +140,9 @@ describe("pending-strip.ts", () => {
 			retryMax: 3,
 			lastError: "test error",
 		};
-		const containerEl = document.getElementById("dev-game-strip") as HTMLElement;
+		const containerEl = document.getElementById(
+			"dev-game-strip",
+		) as HTMLElement;
 
 		renderPendingStrip(containerEl, pending, meta);
 
@@ -135,7 +150,9 @@ describe("pending-strip.ts", () => {
 		expect(pipEl?.textContent).toBe("✕");
 		expect(pipEl?.getAttribute("data-state")).toBe("errored");
 
-		const statusWordEl = containerEl.querySelector('[data-field="status-word"]');
+		const statusWordEl = containerEl.querySelector(
+			'[data-field="status-word"]',
+		);
 		expect(statusWordEl?.textContent).toBe("errored");
 	});
 
@@ -147,7 +164,9 @@ describe("pending-strip.ts", () => {
 			retryCount: 0,
 			retryMax: 3,
 		};
-		const containerEl = document.getElementById("dev-game-strip") as HTMLElement;
+		const containerEl = document.getElementById(
+			"dev-game-strip",
+		) as HTMLElement;
 
 		renderPendingStrip(containerEl, pending, meta);
 
@@ -155,7 +174,9 @@ describe("pending-strip.ts", () => {
 		expect(pipEl?.textContent).toBe("○");
 		expect(pipEl?.getAttribute("data-state")).toBe("idle");
 
-		const statusWordEl = containerEl.querySelector('[data-field="status-word"]');
+		const statusWordEl = containerEl.querySelector(
+			'[data-field="status-word"]',
+		);
 		expect(statusWordEl?.textContent).toBe("ready");
 	});
 
@@ -168,7 +189,9 @@ describe("pending-strip.ts", () => {
 			retryCount: 0,
 			retryMax: 3,
 		};
-		const containerEl = document.getElementById("dev-game-strip") as HTMLElement;
+		const containerEl = document.getElementById(
+			"dev-game-strip",
+		) as HTMLElement;
 
 		renderPendingStrip(containerEl, pending, meta);
 
@@ -199,7 +222,9 @@ describe("pending-strip.ts", () => {
 			retryCount: 0,
 			retryMax: 3,
 		};
-		const containerEl = document.getElementById("dev-game-strip") as HTMLElement;
+		const containerEl = document.getElementById(
+			"dev-game-strip",
+		) as HTMLElement;
 
 		renderPendingStrip(containerEl, pending, meta1);
 		expect(setIntervalSpy).toHaveBeenCalledTimes(1);
@@ -231,7 +256,9 @@ describe("pending-strip.ts", () => {
 			retryCount: 0,
 			retryMax: 3,
 		};
-		const containerEl = document.getElementById("dev-game-strip") as HTMLElement;
+		const containerEl = document.getElementById(
+			"dev-game-strip",
+		) as HTMLElement;
 
 		renderPendingStrip(containerEl, pending, meta);
 		expect(containerEl.querySelector('[data-field="pip"]')).toBeTruthy();
@@ -258,7 +285,9 @@ describe("pending-strip.ts", () => {
 			retryCount: 0,
 			retryMax: 3,
 		};
-		const containerEl = document.getElementById("dev-game-strip") as HTMLElement;
+		const containerEl = document.getElementById(
+			"dev-game-strip",
+		) as HTMLElement;
 
 		renderPendingStrip(containerEl, pending, meta);
 		expect(clearIntervalSpy).not.toHaveBeenCalled();
@@ -291,7 +320,9 @@ describe("pending-strip.ts", () => {
 		footerEl.className = "dev-daemon-footer";
 		document.body.appendChild(footerEl);
 
-		const containerEl = document.getElementById("dev-game-strip") as HTMLElement;
+		const containerEl = document.getElementById(
+			"dev-game-strip",
+		) as HTMLElement;
 
 		// Mock getPendingCallMeta
 		vi.doMock("../../game/pending-bootstrap.js", () => ({
@@ -329,7 +360,9 @@ describe("pending-strip.ts", () => {
 		footerEl.className = "dev-daemon-footer";
 		document.body.appendChild(footerEl);
 
-		const containerEl = document.getElementById("dev-game-strip") as HTMLElement;
+		const containerEl = document.getElementById(
+			"dev-game-strip",
+		) as HTMLElement;
 
 		renderInspector(document.body, { session });
 
@@ -352,7 +385,9 @@ describe("pending-strip.ts", () => {
 		footerEl.className = "dev-daemon-footer";
 		document.body.appendChild(footerEl);
 
-		const containerEl = document.getElementById("dev-game-strip") as HTMLElement;
+		const containerEl = document.getElementById(
+			"dev-game-strip",
+		) as HTMLElement;
 
 		renderInspector(document.body, {});
 
