@@ -1,6 +1,6 @@
 import type { GameSession } from "../game/game-session.js";
 import type { PendingBootstrap } from "../game/pending-bootstrap.js";
-import { renderDaemonFooter } from "./daemon-footer.js";
+import { clearDaemonTurnResults, renderDaemonFooter } from "./daemon-footer.js";
 import { renderGameStrip } from "./game-strip.js";
 
 export interface RenderInspectorOpts {
@@ -14,6 +14,9 @@ export function renderInspector(
 ): void {
 	if (!__DEV__) return;
 	if (!opts.session) return;
+
+	// Clear stale daemon turn results from previous sessions
+	clearDaemonTurnResults();
 
 	const doc = root.ownerDocument;
 	const strip = doc.querySelector<HTMLElement>("#dev-game-strip");

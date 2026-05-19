@@ -10,6 +10,7 @@ import {
 	setDaemonFooterInFlight,
 	updateDaemonFooterSummary,
 } from "../daemon-footer";
+import { renderInspector } from "../index";
 
 describe("daemon-footer", () => {
 	beforeEach(() => {
@@ -421,5 +422,76 @@ describe("daemon-footer", () => {
 		expect(redTools).toBe("go");
 		expect(greenTools).toBe("pick_up");
 		expect(cyanTools).toBe("use");
+	});
+
+	it("updateDaemonFooterSummary shows empty last-tools when conversation log is empty", () => {
+		const contentPack = STATIC_CONTENT_PACKS[0];
+		if (!contentPack) throw new Error("Content pack missing");
+		const session = new GameSession(contentPack, STATIC_PERSONAS);
+		const state = session.getState();
+
+		// Create a modified state with an empty conversation log for red
+		const modifiedState: GameState = {
+			...state,
+			conversationLogs: {
+				...state.conversationLogs,
+				red: [],
+			},
+		};
+
+		const restoredSession = GameSession.restore(modifiedState);
+
+		const redPanel = document.querySelector<HTMLElement>(
+			'.ai-panel[data-ai="red"]',
+		);
+		if (!redPanel) throw new Error("Red panel not found");
+
+		renderDaemonFooter(redPanel, "red", restoredSession);
+		updateDaemonFooterSummary(redPanel, "red", restoredSession);
+
+		const toolsSpan = redPanel.querySelector<HTMLElement>(
+			'[data-field="last-tools"]',
+		);
+		expect(toolsSpan?.textContent).toBe("");
+	});
+
+	it("renderInspector clears stale daemon turn results from previous sessions", () => {
+		const contentPack = STATIC_CONTENT_PACKS[0];
+		if (!contentPack) throw new Error("Content pack missing");
+		const session = new GameSession(contentPack, STATIC_PERSONAS);
+
+		const redPanel = document.querySelector<HTMLElement>(
+			'.ai-panel[data-ai="red"]',
+		);
+		if (!redPanel) throw new Error("Red panel not found");
+
+		// Record a turn result simulating a previous session
+		recordDaemonTurnResult("red", {
+			promptTokens: 1200,
+			completionTokens: 80,
+			cachedPromptTokens: 600,
+			costUsd: 0.0042,
+		});
+
+		// Verify the result was recorded
+		renderDaemonFooter(redPanel, "red", session);
+		updateDaemonFooterSummary(redPanel, "red", session);
+		let llmSpan = redPanel.querySelector<HTMLElement>(
+			'[data-field="llm-line"]',
+		);
+		expect(llmSpan?.textContent).toBe("[tok 1200→80 cache 50% $0.0042]");
+
+		// Now renderInspector should clear the stale results
+		// First, renderInspector will call clearDaemonTurnResults internally
+		renderInspector(document.body, { session, pendingBootstrap: undefined });
+
+		// After renderInspector clears and renders, the daemonTurnResults should be empty
+		// Re-query for the llmSpan since renderInspector rebuilds the footer DOM
+		llmSpan = redPanel.querySelector<HTMLElement>('[data-field="llm-line"]');
+
+		// Now if we update the summary again, the llm-line should be empty
+		// because the turn results were cleared
+		updateDaemonFooterSummary(redPanel, "red", session);
+		expect(llmSpan?.textContent).toBe("");
 	});
 });
