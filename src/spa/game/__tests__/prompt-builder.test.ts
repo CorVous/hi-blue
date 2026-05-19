@@ -547,6 +547,67 @@ describe("<personality> block", () => {
 	});
 });
 
+describe("<action_profile> block", () => {
+	it("is absent when persona.actionProfile is undefined (default)", () => {
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
+		const prompt = buildAiContext(game, "red").toSystemPrompt();
+		expect(prompt).not.toContain("<action_profile>");
+	});
+
+	it("is rendered between <personality> and <typing_quirks> when present", () => {
+		const personasWithProfile: Record<string, AiPersona> = {
+			...TEST_PERSONAS,
+			red: {
+				...(TEST_PERSONAS.red as AiPersona),
+				actionProfile:
+					"*red examines things methodically and must understand first.",
+			},
+		};
+		const game = startGame(personasWithProfile, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
+		const prompt = buildAiContext(game, "red").toSystemPrompt();
+		expect(prompt).toContain("<action_profile>");
+		expect(prompt).toContain(
+			"*red examines things methodically and must understand first.",
+		);
+		// Ordering: personality block → action_profile block → typing_quirks
+		// block. Use line-start anchors so the assertion ignores incidental
+		// mentions of these tag strings inside <rules> framings.
+		const personalityIdx = prompt.indexOf("\n<personality>\n");
+		const profileIdx = prompt.indexOf("\n<action_profile>\n");
+		const quirksIdx = prompt.indexOf("\n<typing_quirks>\n");
+		expect(personalityIdx).toBeGreaterThanOrEqual(0);
+		expect(profileIdx).toBeGreaterThan(personalityIdx);
+		expect(quirksIdx).toBeGreaterThan(profileIdx);
+	});
+
+	it("is per-persona: different daemons get different profile bodies", () => {
+		const personasWithProfile: Record<string, AiPersona> = {
+			...TEST_PERSONAS,
+			red: {
+				...(TEST_PERSONAS.red as AiPersona),
+				actionProfile: "*red is the explorer.",
+			},
+			green: {
+				...(TEST_PERSONAS.green as AiPersona),
+				actionProfile: "*green is the examiner.",
+			},
+		};
+		const game = startGame(personasWithProfile, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
+		const redPrompt = buildAiContext(game, "red").toSystemPrompt();
+		const greenPrompt = buildAiContext(game, "green").toSystemPrompt();
+		expect(redPrompt).toContain("*red is the explorer.");
+		expect(redPrompt).not.toContain("*green is the examiner.");
+		expect(greenPrompt).toContain("*green is the examiner.");
+		expect(greenPrompt).not.toContain("*red is the explorer.");
+	});
+});
+
 describe("<voice_examples> block", () => {
 	it("renders <voice_examples> block with the persona's three deterministic examples", () => {
 		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
