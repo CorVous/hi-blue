@@ -710,53 +710,6 @@ main {
 	text-shadow: 0 0 6px rgba(255, 245, 224, 0.5);
 }
 
-/* Action log (?debug=1) */
-#action-log {
-	margin-top: 8px;
-	padding: 8px 10px;
-	color: var(--amber-dim);
-	border: 1px solid transparent;
-	background-color: rgba(255, 180, 84, 0.04);
-	background-image:
-		linear-gradient(to right, rgba(255, 180, 84, 0.3) 6px, transparent 6px),
-		linear-gradient(to right, rgba(255, 180, 84, 0.3) 6px, transparent 6px),
-		linear-gradient(to bottom, rgba(255, 180, 84, 0.3) 6px, transparent 6px),
-		linear-gradient(to bottom, rgba(255, 180, 84, 0.3) 6px, transparent 6px);
-	background-size:
-		9px 1px,
-		9px 1px,
-		1px 9px,
-		1px 9px;
-	background-position:
-		0 0,
-		0 100%,
-		0 0,
-		100% 0;
-	background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
-	background-origin: border-box;
-	background-clip: border-box;
-	font-family: var(--mono);
-	font-size: 11px;
-}
-
-#action-log h3 {
-	margin: 0 0 4px;
-	font-size: 11px;
-	font-weight: 500;
-	color: var(--amber);
-	letter-spacing: 0.08em;
-}
-
-#action-log-list {
-	margin: 0;
-	padding-left: 14px;
-	list-style: square;
-}
-
-#action-log-list li {
-	margin-bottom: 2px;
-}
-
 /* Start screen — CRT dial-up login */
 :root {
 	--amber-faint: #4a3618;

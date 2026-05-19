@@ -250,8 +250,6 @@ export function renderGame(
 	const promptInput = doc.querySelector<HTMLInputElement>("#prompt");
 	const sendBtn = doc.querySelector<HTMLButtonElement>("#send");
 	const capHitEl = doc.querySelector<HTMLElement>("#cap-hit");
-	const actionLogEl = doc.querySelector<HTMLElement>("#action-log");
-	const actionLogList = doc.querySelector<HTMLUListElement>("#action-log-list");
 	const persistenceWarningEl = doc.querySelector<HTMLElement>(
 		"#persistence-warning",
 	);
@@ -267,9 +265,6 @@ export function renderGame(
 		session = null;
 		cachedSessionId = null;
 		gameEnded = false;
-		// Action log is live-only (no restore), so clear it for parity with
-		// a hard refresh — otherwise entries from the previous session linger.
-		if (actionLogList) actionLogList.textContent = "";
 	}
 
 	// Mention-based addressing state — built lazily after session init below,
@@ -1166,16 +1161,6 @@ export function renderGame(
 		});
 	}
 
-	// Debug toggle: show action log if ?debug=1
-	const debug = searchParams.get("debug") === "1";
-	if (actionLogEl) {
-		if (debug) {
-			actionLogEl.removeAttribute("hidden");
-		} else {
-			actionLogEl.setAttribute("hidden", "");
-		}
-	}
-
 	// Helper: get transcript element for an AI
 	function getTranscript(aiId: AiId): HTMLElement | null {
 		return doc.querySelector<HTMLElement>(`[data-transcript="${aiId}"]`);
@@ -1554,12 +1539,8 @@ export function renderGame(
 						break;
 
 					case "action_log":
-						// Always accumulate in the DOM (even if hidden) so ?debug=1 shows history
-						if (actionLogList) {
-							const li = doc.createElement("li");
-							li.textContent = `[Round ${event.entry.round}] ${event.entry.description}`;
-							actionLogList.appendChild(li);
-						}
+						// Event type still produced by round-result-encoder but no longer
+						// rendered in player-facing UI. Inspector supersedes this debug surface.
 						break;
 
 					case "phase_advanced": {
@@ -1628,13 +1609,10 @@ export function renderGame(
 						const panelsEl = doc.querySelector<HTMLElement>("#panels");
 						const composerEl = doc.querySelector<HTMLElement>("#composer");
 						const capHitSection = doc.querySelector<HTMLElement>("#cap-hit");
-						const actionLogSection =
-							doc.querySelector<HTMLElement>("#action-log");
 						const endgameEl = doc.querySelector<HTMLElement>("#endgame");
 						if (panelsEl) panelsEl.hidden = true;
 						if (composerEl) composerEl.hidden = true;
 						if (capHitSection) capHitSection.hidden = true;
-						if (actionLogSection) actionLogSection.hidden = true;
 
 						// Show endgame screen
 						if (endgameEl) endgameEl.removeAttribute("hidden");

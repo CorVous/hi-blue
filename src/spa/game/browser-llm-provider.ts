@@ -87,35 +87,10 @@ export class BrowserLLMProvider implements RoundLLMProvider {
 			});
 
 			if (promptTokens !== undefined && cachedPromptTokens !== undefined) {
-				const pct =
-					promptTokens > 0
-						? Math.round((cachedPromptTokens / promptTokens) * 100)
-						: 0;
-				if (__DEV__) {
-					console.log(
-						`[cache] prompt ${cachedPromptTokens}/${promptTokens} cached (${pct}%)`,
-					);
-				}
+				// Inspector provides visibility into cache behavior; devtools logging removed
 			}
 
-			// Spike #239: log the per-turn tool-name array so an A/B playtest can
-			// compute parallel-emission rate = rounds-with-≥2-calls / rounds-with-≥1-call.
-			// For `message` calls, append the recipient so per-recipient counts can
-			// be derived (e.g. "message:blue" vs "message:*xqr9"). Devtools-only
-			// signal; not persisted.
-			if (__DEV__) {
-				const calls = toolCalls.map((c) => {
-					try {
-						const args = JSON.parse(c.argumentsJson);
-						return { name: c.name, args };
-					} catch {
-						return { name: c.name, args: c.argumentsJson };
-					}
-				});
-				console.log(
-					`[tools] daemon=${daemonId ?? "?"} toolCalls=${JSON.stringify(calls)}`,
-				);
-			}
+			// Inspector provides visibility into tool calling patterns; devtools logging removed
 
 			const assistantText = textParts.join("") || reasoningParts.join("");
 			onLifecycle?.(
