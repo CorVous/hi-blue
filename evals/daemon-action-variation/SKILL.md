@@ -43,12 +43,15 @@ pnpm eval:action-variation
 EVAL_ACTION_PROFILES=1 pnpm eval:action-variation
 ```
 
-The harness writes one report per mode under `docs/evals/`:
+The harness writes one report per mode under
+`docs/evals/daemon-action-variation/`:
 
-- `daemon-action-variation-baseline-<date>.md` / `.json`
-- `daemon-action-variation-with-profiles-<date>.md` / `.json`
+- `baseline<-surface>-<date>.md` / `.json`
+- `with-profiles<-surface>-<date>.md` / `.json`
 
-Compare the two files to read the lift from the action-profile clauses.
+`<-surface>` is empty for the v2 surface, `-5tool` when
+`EVAL_TOOL_SURFACE=5tool`. Compare the two modes to read the lift from
+the action-profile clauses.
 
 ## Environment
 

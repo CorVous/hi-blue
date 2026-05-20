@@ -137,7 +137,7 @@ when the daemon already knows what to do.
 ## v2 (7-tool surface, directive clauses)
 
 Second iteration of the
-[daemon-action-variation eval](./daemon-action-variation-with-profiles-2026-05-19.md).
+[daemon-action-variation eval](./with-profiles-2026-05-19.md).
 v1 clauses ("examines methodically", "explores restlessly") moved the
 aggregate dial only ±2pp because the model read the soft prose as
 permission rather than direction. v2 names each persona's preferred and

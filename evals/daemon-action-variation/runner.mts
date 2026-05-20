@@ -24,10 +24,11 @@
  *   - The `actionProfiles` flag is toggled by EVAL_ACTION_PROFILES (0=off,
  *     1=on) so the same harness produces baseline and treatment runs.
  *
- * Output (under docs/evals/):
- *   - daemon-action-variation-<mode>-<date>.md  — human-readable summary.
- *   - daemon-action-variation-<mode>-<date>.json — machine-readable rows.
- *   <mode> is `baseline` or `with-profiles` depending on the flag value.
+ * Output (under docs/evals/daemon-action-variation/):
+ *   - <mode><surface>-<date>.md   — human-readable summary.
+ *   - <mode><surface>-<date>.json — machine-readable rows.
+ *   <mode> is `baseline` or `with-profiles`; <surface> is `` (v2) or
+ *   `-5tool` depending on EVAL_TOOL_SURFACE.
  */
 
 import * as fs from "node:fs";
@@ -722,17 +723,11 @@ async function main(): Promise<void> {
 
 	const outDir = path.resolve(
 		path.dirname(fileURLToPath(import.meta.url)),
-		"../../docs/evals",
+		"../../docs/evals/daemon-action-variation",
 	);
 	fs.mkdirSync(outDir, { recursive: true });
-	const mdPath = path.join(
-		outDir,
-		`daemon-action-variation-${mode}${surfaceSuffix}-${date}.md`,
-	);
-	const jsonPath = path.join(
-		outDir,
-		`daemon-action-variation-${mode}${surfaceSuffix}-${date}.json`,
-	);
+	const mdPath = path.join(outDir, `${mode}${surfaceSuffix}-${date}.md`);
+	const jsonPath = path.join(outDir, `${mode}${surfaceSuffix}-${date}.json`);
 	fs.writeFileSync(mdPath, report, "utf-8");
 	fs.writeFileSync(
 		jsonPath,
