@@ -1,5 +1,5 @@
 ---
-name: html-preview
+name: html
 description: Build a single static HTML page and give the user a temporary URL to view it in their browser. Use whenever the user asks to "show", "preview", "mock up", "demo", or "build" a webpage, landing page, or one-file HTML design.
 ---
 
