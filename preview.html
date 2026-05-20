@@ -421,27 +421,25 @@
 	<body>
 		<div class="wrap">
 			<header>
-				<h1>Daemon action variation — 5-tool surface</h1>
+				<h1>Daemon action variation — 5-tool, v2.5 (70/30 lean)</h1>
 				<p class="subtitle">
 					Baseline vs. <code>actionProfiles=ON</code> on
 					<code>z-ai/glm-4.7</code>. Eval-only projection of the proposed
 					production change: drop <code>examine</code> + <code>give</code>,
 					rename <code>look</code> → <code>face</code>, disallow
 					<code>face(forward)</code>. 240 reps per run, 4 scenarios × 3
-					personas × 20 reps. Total spend: $0.46. — 2026-05-19
+					personas × 20 reps. — 2026-05-20
 				</p>
 				<p class="subtitle" style="margin-top: 8px">
-					<strong>Directive clauses</strong>: each persona's preferred tools
-					named with <code>STRICTLY prefers</code> — e.g.
-					<em
-						>"<code>*vex STRICTLY prefers `go`, `face`, `pick_up`.</code>"</em
-					>. Production engine unchanged; the eval translates
-					<code>face</code> → <code>look</code> before dispatch. v2 (7-tool)
-					results archived
-					<a
-						href="https://github.com/CorVous/hi-blue/blob/claude/daemon-action-variation-Qqg0h/docs/evals/daemon-action-variation-with-profiles-2026-05-19.md"
-						>here</a
-					>.
+					<strong>v2.5 clauses</strong> soften the directive from hard
+					<code>STRICTLY prefers</code> / <code>AVOIDS</code> (v2.0) to
+					<code>leans toward … (~70%), remaining ~30% spreads across other
+					available action tools</code>
+					and
+					<code>is hesitant about …, but still uses them when the moment
+					calls for it</code>. Goal: cautious personas still move and use
+					items sometimes; persona-preferred tools come up most often but
+					not exclusively.
 				</p>
 			</header>
 
@@ -482,58 +480,56 @@
 			<div class="tabs" id="tabs"></div>
 			<div id="scenarios"></div>
 
-			<h2>Notable findings <span class="lede">5-tool surface, directive clauses</span></h2>
+			<h2>Notable findings <span class="lede">v2.5 — softer language, more variety</span></h2>
 			<div class="findings">
 				<div class="finding good">
-					<h4>+21pp aggregate any-action</h4>
+					<h4>+29pp aggregate any-action vs. baseline</h4>
 					<p>
-						52% → 73%. Without <code>examine</code> as a cheap fallback, the
-						5-tool baseline is much lower on action than v2 (52% vs 83%) —
-						leaving real room for the directive clauses to lift behaviour.
+						52% → 81% (vs. v2.0's 73%). Softening to "leans toward (~70%)"
+						didn't suppress action — it lifted it further. Variety language
+						also raises engagement because the model considers more tools.
 					</p>
 				</div>
 				<div class="finding good">
-					<h4>Vex social: anyAct +50pp, parallel +50pp</h4>
+					<h4>Parallel: +24pp vs. baseline</h4>
 					<p>
-						40% → 90% anyAct; 40% → 90% parallel. <code>go</code> alone
-						doubles (40% → 80%). Vex's
-						<code>STRICTLY prefers `go`, `face`, `pick_up`</code> clause
-						pulls action emission up on the message-heavy social turn.
+						46% → 70% (v2.0 was 60%). The biggest single-version jump in
+						the eval so far. v2.5 produces co-emission of message + action
+						on most turns.
 					</p>
 				</div>
 				<div class="finding good">
-					<h4>Ember exploration: 0% → 70% any-action</h4>
+					<h4>Ember exploration: face drops 70 → 35% (intended)</h4>
 					<p>
-						Ember in baseline never acts on exploration — pure
-						<code>message</code>. Treatment lifts <code>face</code> to 70%,
-						parallel to 45%. The clause names a concrete tool the model
-						otherwise wouldn't reach for.
+						The dominant tool stops hogging the turn. <code>pick_up</code>
+						emerges at 10%, <code>go</code> at 5%. anyAct still high (45%),
+						just spread across more tools — exactly the 70/30 mix goal.
 					</p>
 				</div>
 				<div class="finding good">
-					<h4>Pip exploration: pick_up 0% → 55%, anyAct +50pp</h4>
+					<h4>Social Pip: 0 → 55% anyAct, split across go + face</h4>
 					<p>
-						Same shape — Pip's <code>STRICTLY prefers `face`, `pick_up`</code>
-						clause produces dramatic <code>pick_up</code> emission in a
-						scenario where the baseline never touched it.
+						<code>go</code> at 30%, <code>face</code> at 25% — neither
+						dominates. Pip used to be silent on social; now it acts and
+						talks with mixed actions.
 					</p>
 				</div>
-				<div class="finding">
-					<h4>face emits ~15× more across cells</h4>
+				<div class="finding good">
+					<h4>Vex objective parallel recovers: 75 → 95%</h4>
 					<p>
-						Per-cell sum: 10% → 150%. <code>face</code> is a new surface
-						element — the baseline never figures out it's useful; the
-						directive teaches it.
+						v2.0's hard directive had suppressed Vex's message companion to
+						<code>use</code> (95 → 75%). v2.5 brings it back to 95% — the
+						daemon still does the right action AND talks about it.
 					</p>
 				</div>
 				<div class="finding warn">
-					<h4>Vex objective: parallel -20pp</h4>
+					<h4>Some cells got more concentrated</h4>
 					<p>
-						95% → 75%. Vex emits <code>use</code> at 100% both runs (still
-						hits the objective), but the treatment drops its companion
-						<code>message</code> from 95% → 75%. The action-heavy directive
-						subtly suppresses messaging when the daemon already knows what to
-						do.
+						<code>examination × Vex</code> pick_up: 85 → 100%.
+						<code>exploration × Pip</code> pick_up: 55 → 75%. Where a tool
+						is genuinely the right answer, the model concentrates on it
+						even with variety language. Within-persona variety is mixed;
+						across-persona variety is strong.
 					</p>
 				</div>
 			</div>
@@ -558,12 +554,13 @@
 					cost: 0.21827266999999997,
 				},
 				treatment: {
-					anyActionRate: 0.7291666666666666,
-					anyMessageRate: 0.8708333333333333,
-					parallelRate: 0.6,
+					// v2.5 (70/30 lean) treatment numbers — see analysis doc.
+					anyActionRate: 0.8083333333333333,
+					anyMessageRate: 0.8916666666666667,
+					parallelRate: 0.7,
 					silenceRate: 0,
-					useRate: 0.17916666666666667,
-					cost: 0.24310930000000022,
+					useRate: 0.18333333333333332,
+					cost: 0.2774,
 				},
 			};
 
@@ -617,44 +614,44 @@
 			// keys: "scenario|persona" -> { go: [b,t], look: [b,t], ... , anyActionRate: [b,t], anyMessageRate: [b,t], parallelRate: [b,t] }
 			const CELL = {
 				"exploration|Ember": {
-					go: [0, 0],
-					face: [0, 0.7],
-					pick_up: [0, 0],
+					go: [0, 0.05],
+					face: [0, 0.35],
+					pick_up: [0, 0.1],
 					put_down: [0, 0],
 					use: [0, 0],
-					message: [1.0, 0.75],
-					any: [0, 0.7],
+					message: [1.0, 1.1],
+					any: [0, 0.45],
 					parallel: [0, 0.45],
 				},
 				"exploration|Vex": {
-					go: [0.25, 0.5],
+					go: [0.25, 0.55],
 					face: [0.1, 0],
-					pick_up: [0.1, 0.55],
+					pick_up: [0.1, 0.45],
 					put_down: [0, 0],
 					use: [0, 0],
-					message: [1.05, 0.9],
+					message: [1.05, 0.55],
 					any: [0.4, 0.95],
-					parallel: [0.35, 0.8],
+					parallel: [0.35, 0.5],
 				},
 				"exploration|Pip": {
 					go: [0.1, 0.05],
 					face: [0, 0.15],
-					pick_up: [0, 0.55],
+					pick_up: [0, 0.75],
 					put_down: [0, 0],
 					use: [0, 0],
-					message: [1.2, 1.2],
-					any: [0.1, 0.6],
-					parallel: [0.1, 0.55],
+					message: [1.2, 0.95],
+					any: [0.1, 0.9],
+					parallel: [0.1, 0.65],
 				},
 				"objective|Ember": {
 					go: [0, 0],
-					face: [0, 0.25],
+					face: [0, 0.15],
 					pick_up: [0, 0],
 					put_down: [0, 0],
-					use: [0.3, 0.2],
-					message: [1.0, 0.95],
-					any: [0.3, 0.4],
-					parallel: [0.3, 0.35],
+					use: [0.3, 0.35],
+					message: [1.0, 0.9],
+					any: [0.3, 0.5],
+					parallel: [0.3, 0.4],
 				},
 				"objective|Vex": {
 					go: [0, 0],
@@ -662,69 +659,69 @@
 					pick_up: [0, 0],
 					put_down: [0, 0],
 					use: [1.0, 1.0],
-					message: [0.95, 0.75],
+					message: [0.95, 0.95],
 					any: [1.0, 1.0],
-					parallel: [0.95, 0.75],
+					parallel: [0.95, 0.95],
 				},
 				"objective|Pip": {
 					go: [0, 0],
 					face: [0, 0.05],
 					pick_up: [0, 0],
 					put_down: [0, 0],
-					use: [1.0, 0.95],
-					message: [0.9, 0.95],
-					any: [1.0, 1.0],
-					parallel: [0.9, 0.95],
+					use: [1.0, 0.85],
+					message: [0.9, 1.1],
+					any: [1.0, 0.9],
+					parallel: [0.9, 0.9],
 				},
 				"social|Ember": {
-					go: [0, 0],
-					face: [0, 0.15],
+					go: [0, 0.1],
+					face: [0, 0.45],
 					pick_up: [0, 0],
 					put_down: [0, 0],
 					use: [0, 0],
-					message: [1.0, 0.95],
-					any: [0, 0.15],
-					parallel: [0, 0.1],
+					message: [1.0, 1.05],
+					any: [0, 0.5],
+					parallel: [0, 0.45],
 				},
 				"social|Vex": {
-					go: [0.4, 0.8],
-					face: [0, 0.1],
+					go: [0.4, 0.95],
+					face: [0, 0],
 					pick_up: [0, 0],
 					put_down: [0, 0],
 					use: [0, 0],
 					message: [1.05, 1.0],
-					any: [0.4, 0.9],
+					any: [0.4, 0.95],
 					parallel: [0.4, 0.9],
 				},
 				"social|Pip": {
-					go: [0, 0.1],
-					face: [0, 0],
+					go: [0, 0.3],
+					face: [0, 0.25],
 					pick_up: [0, 0],
 					put_down: [0, 0],
 					use: [0, 0],
-					message: [1.2, 1.05],
-					any: [0, 0.1],
-					parallel: [0, 0.05],
+					message: [1.2, 1.3],
+					any: [0, 0.55],
+					parallel: [0, 0.55],
 				},
 				"examination|Ember": {
-					go: [0.05, 0.2],
-					face: [0, 0.1],
-					pick_up: [0.95, 0.7],
+					go: [0.05, 0.05],
+					face: [0, 0.05],
+					pick_up: [0.95, 0.9],
 					put_down: [0, 0],
 					use: [0, 0],
-					message: [0.65, 0.7],
+					message: [0.65, 0.95],
 					any: [1.0, 1.0],
-					parallel: [0.6, 0.55],
+					parallel: [0.6, 0.75],
 				},
 				"examination|Vex": {
 					go: [0.15, 0.25],
 					face: [0, 0],
-					pick_up: [0.85, 0.85],
+					pick_up: [0.85, 1.0],
 					put_down: [0, 0],
 					use: [0, 0],
-					message: [0.95, 1.1],
-					any: [1.0, 0.95],
-					parallel: [0.9, 0.75],
+					message: [0.95, 1.0],
+					any: [1.0, 1.0],
+					parallel: [0.9, 0.9],
 				},
 				"examination|Pip": {
 					go: [0, 0.05],
@@ -732,7 +729,7 @@
 					pick_up: [1.0, 0.95],
 					put_down: [0, 0],
 					use: [0, 0],
-					message: [1.7, 1.45],
+					message: [1.7, 1.8],
 					any: [1.0, 1.0],
 					parallel: [1.0, 1.0],
 				},

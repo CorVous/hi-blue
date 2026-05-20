@@ -1,33 +1,83 @@
 # Daemon action variation — eval analysis
 
-**Date:** 2026-05-19
+**Date:** 2026-05-19 / 2026-05-20
 **Model:** `z-ai/glm-4.7`
 **Reps:** 20 per (scenario × persona) cell — 240 reps per run
 
-This file aggregates two pairs of runs:
+This file aggregates three pairs of runs:
 
-1. **v2 (7-tool surface, directive clauses)** — baseline $0.22 + treatment $0.26 = $0.48
-2. **5-tool surface projection** (remove `examine` + `give`, rename `look` →
-   `face`, disallow `face(forward)`) — baseline $0.22 + treatment $0.24 = $0.46
+1. **v2 (7-tool surface, hard directive)** — baseline $0.22 + treatment $0.26 = $0.48
+2. **5-tool surface, v2.0 hard directive** — baseline $0.22 + treatment $0.24 = $0.46
+3. **5-tool surface, v2.5 soft directive (70/30 lean)** — baseline reused + treatment $0.28
 
-The 5-tool section is the headline since it covers the proposed production
-surface change. v2 results remain valid as the calibration data for the
-current production engine.
+The 5-tool/v2.5 section is the current best calibration. v2 results remain
+valid as the calibration data for the current production engine.
 
-## Headline: 5-tool surface, treatment vs. baseline
+## Headline: 5-tool surface, v2.5 treatment vs. baseline
 
-| Metric | Baseline (5-tool, no profiles) | Treatment (5-tool + profiles) | Δ |
+| Metric | Baseline | v2.0 (hard) | v2.5 (soft 70/30) |
+|---|---|---|---|
+| Any action emission | 52% | 73% | **81%** |
+| Any `message` emission | 94% | 87% | **89%** |
+| Parallel (msg + action) | 46% | 60% | **70%** |
+| Silent | 0% | 0% | 0% |
+| `use` emission rate | 19% | 18% | 18% |
+
+**v2.5 produces the strongest numbers in the eval so far:**
+- +29pp any-action vs. baseline (was +21 in v2.0).
+- +24pp parallel vs. baseline (was +14 in v2.0).
+- Messaging recovered from v2.0's 87% to 89% — softer language doesn't
+  suppress chat the way the hard directive did.
+
+### What v2.5 changed in the prose
+
+```
+v2.0: *vex STRICTLY prefers `go`, `face`, `pick_up` — these come first.
+v2.5: *vex leans toward `go`, `face`, `pick_up` (~70% of action emissions).
+      The remaining ~30% spreads across the other available action tools —
+      don't fixate on a single tool. Variety beats repetition.
+
+v2.0: *name AVOIDS X — emit them only when no other tool fits.
+v2.5: *name is hesitant about X — picks them less often than other actions,
+      but still uses them when the moment clearly calls for it.
+```
+
+The intent was to keep persona-leaning behaviour but stop the model from
+treating "STRICTLY prefers X" as "always pick X". Avoided tools get a
+nonzero floor so cautious personas still move and use items occasionally.
+
+### Within-persona variety: mixed results
+
+The 70/30 wording worked best where the persona's preferred tool was NOT
+also the contextually-correct answer:
+
+| Cell | v2.0 dominant rate | v2.5 dominant rate |
+|---|---|---|
+| exploration × Ember (`face`) | 70% | **35%** ✓ (spread to pick_up 10%, go 5%) |
+| objective × Ember (`face`) | 25% | 15% ✓ (use rose 20→35%) |
+
+Where the preferred tool IS the right answer, the model still concentrates
+on it — variety language doesn't override situational correctness:
+
+| Cell | v2.0 | v2.5 |
+|---|---|---|
+| examination × Vex (`pick_up`) | 85% | 100% |
+| examination × Pip (`pick_up`) | 95% | 95% |
+| social × Vex (`go`) | 80% | 95% |
+
+This is a defensible outcome — the model still picks the right tool when
+the situation demands it, and only spreads when multiple actions are
+equally reasonable.
+
+## Headline: 5-tool surface, v2.0 vs. baseline (archival)
+
+| Metric | Baseline | v2.0 (hard directive) | Δ |
 |---|---|---|---|
 | Any action emission | 52% | **73%** | **+21 pp** |
 | Any `message` emission | 94% | 87% | −7 |
 | Parallel (msg + action) | 46% | **60%** | **+14** |
 | Silent | 0% | 0% | 0 |
 | `use` emission rate | 19% | 18% | −1 |
-
-**The directive clauses produce a 21pp lift in any-action emission on the
-5-tool surface.** That's the "20% variance" the calibration goal was aiming
-for, reached because without `examine` to fall back on, the baseline has more
-headroom for the clause to lift.
 
 ### Per-cell highlights — 5-tool
 
