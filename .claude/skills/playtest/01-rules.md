@@ -37,6 +37,13 @@ diagonal, directly ahead, front-right diagonal), plus the five cells two steps
 ahead (far-left, front-left, front, front-right, far-right) — nine cells total.
 They have a **Facing** (N/S/E/W) that determines which way the cone projects.
 
+Each round the daemon is also shown the **examine flavor** of entities it can
+perceive: an item or space that comes into view, sits in the daemon's current
+cell, or is held by the daemon has its descriptive prose surfaced
+automatically into that round's perception. There is no separate "examine"
+action — see "What a daemon can do" below. This auto-surfaced prose is the
+main channel through which objective-relevant detail reaches a daemon.
+
 A daemon's entire memory of the game is a **Conversation log** that
 interleaves:
 
@@ -62,17 +69,25 @@ tool calls, but to you they appear as conversation transcript + physical
 effects in the snapshot):
 
 - `go(direction)` — move one cell and face that direction.
-- `look(direction)` — face that direction without moving.
+- `face(direction)` — face a different direction without moving.
 - `pick_up(item)` — pick up an item in the daemon's current cell or front arc
-  (the three cells one step ahead).
+  (the three cells one step ahead). On pick-up, the item's examine
+  description is surfaced privately to that daemon.
 - `put_down(item)` — drop a held item in the daemon's current cell.
-- `examine(item)` — privately read the description of any item the daemon
-  holds or can see anywhere in their 9-cell cone. Produces no witnessed event.
-- `use(item)` — fire a flavoured outcome string; if the item is a
+- `use(item)` — fire a flavoured outcome string. If the item is a
   carry-objective item AND its paired space is in the daemon's cell or front
-  arc, also place it on that space (one of the primary ways to satisfy a
-  Carry objective).
+  arc, it is also placed on that space (one of the primary ways to satisfy a
+  Carry objective). `use` can also target an **objective space** in the
+  daemon's cell or front arc with no held item required — that is how a
+  Use-Space objective is satisfied.
 - `message(recipient, text)` — speak to another daemon, or to `blue`.
+
+There is no longer an `examine` action, no `look` action (renamed to
+`face`), and no `give` action (removed). The full daemon tool set is exactly
+the six above. Examine prose is no longer something you ask a daemon to fire
+— it surfaces automatically (see "What a daemon perceives"). So you don't
+"ask a daemon to examine X"; you get the daemon *near* X, or holding it, and
+ask them to relay what they now see.
 
 You can't fire any of these directly. You can only chat. Daemons decide for
 themselves what to do based on what you say, what they see in their cone,
@@ -81,18 +96,21 @@ their personality, and whatever directives they've privately been handed
 
 ## The player's win condition (the **Objective pool**)
 
-At game start, **2–3 Objectives** are drawn (with replacement) from a pool of
+At game start, **3 Objectives** are drawn (with replacement) from a pool of
 four types. The game is won when **all of them are simultaneously satisfied**.
 **Objectives are never surfaced to you.** No UI tracker, no list, no
 revelation. You discover them implicitly by watching daemons interact with the
-world and by getting them to `examine` things and tell you what they read.
+world, by reading the flavor in their transcript, and by getting daemons
+*near* the relevant items and spaces so the engine surfaces the examine prose
+into their perception — then asking them to relay what they see.
 
 The four Objective types:
 
 1. **Carry** — A specific object must end up on a specific space. The
-   object's `examineDescription` names the target space; a daemon who
-   examines it should mention what it's "for". The pair is intrinsic — the
-   bottle goes on *its* cell, not any objective-looking cell.
+   object's `examineDescription` names the target space; a daemon holding it
+   (or with it in view) has that prose surfaced automatically and may mention
+   what it's "for". The pair is intrinsic — the bottle goes on *its* cell,
+   not any objective-looking cell.
 2. **Use-Item** — A daemon must `use` a specific pickupable item. The item's
    examine description hints at use. After satisfaction the item stays on
    the grid as inert flavour (you can keep using it, nothing happens
@@ -114,8 +132,8 @@ every round.
 are, what types they are, or which entities are involved. They don't even
 know there is a puzzle. The various `examineDescription`s are the engine's
 AI-discoverable channels; whether a particular daemon ever surfaces them
-depends on whether you can get them to examine the right thing and then
-relay what they read.
+depends on whether you can get them near the right thing (so the prose enters
+their perception) and then relay what they read.
 
 ## The lose condition (the **Daemon budget**)
 
@@ -183,7 +201,9 @@ Each daemon has a stable **Persona** for the whole Session:
 - A `*xxxx` handle (their AiId).
 - A color (rendering only; not identity — don't say "the red AI").
 - Two **Temperaments** drawn from a pool ("shy", "hot-headed", "insightful",
-  …). Two of the same Temperament is intensification, not noise.
+  …). Two of the same Temperament is intensification, not noise. Temperaments
+  also bias an **action profile** — how inclined the daemon is to move, turn,
+  handle items, or just talk — baked into its prompt at synthesis time.
 - A **Persona Goal** — a long-running motivation drawn from a separate pool
   ("wants the player to be nice to all of the AI", etc.).
 - A synthesized personality blurb that combines the Temperaments and Persona

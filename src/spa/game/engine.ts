@@ -35,7 +35,7 @@ export const FAREWELL_LINE = (name: string): string =>
  * Initialize a new flat GameState from personas + a single ContentPack.
  *
  * Replaces the old createGame + startPhase pair. Budget is $0.50 per AI
- * (no per-phase reset). The content pack drives all spatial placement and
+ * for the whole game. The content pack drives all spatial placement and
  * world entities. Objectives are built from `opts.objectiveTypes` using
  * `buildObjectiveRecords`. When `objectiveTypes` is omitted, no objectives
  * are created (vacuous win — appropriate for tests that don't exercise objectives).
