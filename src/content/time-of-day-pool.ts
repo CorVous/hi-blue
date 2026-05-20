@@ -1,7 +1,7 @@
 /**
  * TIME_OF_DAY_POOL
  *
- * Noun phrases drawn once per phase.
+ * Noun phrases; one is drawn per Content Pack.
  * Rendered as "It is {timeOfDay}." in the <setting> block.
  */
 export const TIME_OF_DAY_POOL: readonly string[] = [

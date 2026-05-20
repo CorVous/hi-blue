@@ -1341,8 +1341,8 @@ export function validateContentPacks(
 }
 
 /**
- * Validate a dual-pack LLM response. Ensures each phase has packA and packB
- * with identical entity IDs and matching structural relationships.
+ * Validate a dual-pack LLM response. Ensures the response carries packA and
+ * packB with identical entity IDs and matching structural relationships.
  */
 export function validateDualContentPacks(
 	raw: unknown,

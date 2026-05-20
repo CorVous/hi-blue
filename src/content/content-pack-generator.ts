@@ -1,11 +1,16 @@
 /**
  * content-pack-generator.ts
  *
- * Generates all three ContentPacks at game start:
- * 1. Draws 3 distinct settings from the pool (partial Fisher-Yates).
- * 2. Rolls k/n/m per phase.
- * 3. Makes one batched LLM call.
+ * Generates the game's ContentPacks at game start. The current single-game
+ * path (`generateDualContentPacks`) produces a Pack A / Pack B pair for one
+ * continuous game:
+ * 1. Draws a setting for each pack from the pool.
+ * 2. Rolls n/m and the type-first objective types.
+ * 3. Makes one batched LLM call covering both packs.
  * 4. Runs engine-randomized placement under constraints.
+ *
+ * `generateContentPacks` is the retired three-phase generator, kept only for
+ * backward-compat; new code uses the single-game path.
  *
  * Placement constraints:
  * - Obstacles placed first, m distinct cells.
@@ -474,7 +479,8 @@ function rawBoundPackToContentPack(
 }
 
 /**
- * Generate all three ContentPacks for a game.
+ * Generate three ContentPacks (retired three-phase path — see file header;
+ * kept for backward-compat only, new code uses `generateDualContentPacks`).
  *
  * @param rng        Seeded random number generator.
  * @param settings   The pool of setting nouns to draw from (must have >= 3 entries).

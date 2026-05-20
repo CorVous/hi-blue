@@ -6,8 +6,8 @@
  *
  * Files:
  *   meta.json        — createdAt, lastSavedAt, epoch, round
- *   <aiId>.txt × 3  — per-daemon conversation log (all three phases collapsed into one)
- *                      (includes chat, whisper, and witnessed-event entries inline)
+ *   <aiId>.txt × 3  — per-daemon conversation log, one file per Daemon
+ *                      (message, witnessed-event, and broadcast entries inline)
  *   engine.dat       — sealed (XOR-obfuscated) engine state
  *
  * See docs/adr/0004-editable-vs-sealed-save-surface.md
@@ -133,9 +133,9 @@ export interface SealedEngine {
 	budgets: Record<AiId, AiBudget>;
 	lockedOut: AiId[];
 	personaSpatial: Record<AiId, PersonaSpatialState>;
-	/** All Setting A content packs (one per phase). */
+	/** Setting A content packs — single-element array since v9 (one game, one pack). */
 	contentPacksA: ContentPack[];
-	/** All Setting B content packs (one per phase, same entity IDs as A). */
+	/** Setting B content packs — single-element array since v9, same entity IDs as A. */
 	contentPacksB: ContentPack[];
 	activePackId: "A" | "B";
 	weather: string;

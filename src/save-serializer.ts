@@ -4,12 +4,15 @@
  * Takes a completed (or in-progress) GameState and produces a deterministic,
  * JSON-serializable payload containing:
  * - Each AI's persona
- * - Each AI's per-phase transcript (unified conversationLog including chat,
- *   whispers, and witnessed events, grouped by phase)
- * - All three ContentPacks (setting, entities, placements)
+ * - Each AI's conversation transcript — the unified per-Daemon conversationLog
+ *   (directional messages and witnessed events). Carried inside a vestigial
+ *   single-element `phases` array: the three-phase model is retired but the
+ *   save shape kept the wrapper.
+ * - The Setting A and Setting B ContentPacks.
  *
- * The format is versioned (v3) so future schema changes can be detected.
- * v2 → v3: whispers moved inline into conversationLog (per-Daemon logs).
+ * The format is versioned (`GameSave.version`) so future schema changes can be
+ * detected. v2 → v3: whispers moved inline into conversationLog. v3 → v4:
+ * chat/whisper collapsed into the directional message primitive.
  */
 
 import type {

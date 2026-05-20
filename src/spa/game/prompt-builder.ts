@@ -736,7 +736,8 @@ function renderSystemPrompt(ctx: AiContext): string {
 
 	// Identity line. Authorial framing — the model writes *${name} rather than
 	// being addressed as *${name}. The disorientation phrase anchors Daemons
-	// to their setting without phase-phase memory-wipe fiction.
+	// to their setting; the game is a single continuous game, so there is no
+	// between-phase memory-wipe fiction.
 	lines.push(
 		`You are the author writing *${ctx.name}, a Daemon. *${ctx.name} has no clue where they are or how they came to be here.`,
 	);
