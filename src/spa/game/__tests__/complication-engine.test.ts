@@ -260,8 +260,15 @@ describe("tickComplication — fires when countdown is 0", () => {
 		});
 		const game = makeGameStateAround(phase);
 		// rng[0]=0.0 → index 0 of 6 → weather_change
+		// rng[1]=0.5 → draw from weather candidates (excludes "clear")
 		const result = tickComplication(game, seededRng([0.0, 0.5]));
 		expect(result?.fired.kind).toBe("weather_change");
+		if (result?.fired.kind === "weather_change") {
+			// weather should be different from the current "clear"
+			expect(result.fired.weather).not.toBe("clear");
+			// weather should be a valid WEATHER_POOL entry
+			expect(result.fired.weather).toMatch(/^[A-Z]|^[a-z]/);
+		}
 	});
 
 	it("draws sysadmin_directive when type-draw selects index 1", () => {
@@ -755,7 +762,9 @@ describe("applyComplicationResult — activeComplications appends", () => {
 	it("does NOT append to activeComplications for weather_change", () => {
 		const phase = makePhase();
 		const game = makeGameStateAround(phase);
-		const result = { fired: { kind: "weather_change" as const } };
+		const result = {
+			fired: { kind: "weather_change" as const, weather: "rainy" },
+		};
 		const updated = applyComplicationResult(game, result, seededRng([0.5]));
 		const updatedPhase = updated;
 		expect(updatedPhase.activeComplications).toHaveLength(0);
@@ -912,10 +921,12 @@ describe("applyComplicationResult — setting_shift swaps active pack", () => {
 
 	it("does NOT change activePackId when a non-shift complication fires", () => {
 		const game = makeGameWithDualPacks();
-		const result = { fired: { kind: "weather_change" as const } };
+		const result = {
+			fired: { kind: "weather_change" as const, weather: "stormy" },
+		};
 		const updated = applyComplicationResult(game, result, seededRng([0.5]));
 		expect(updated.activePackId).toBe("A");
-		expect(updated.weather).toBe("clear");
+		expect(updated.weather).toBe("stormy");
 		expect(updated.timeOfDay).toBe("night");
 	});
 });
