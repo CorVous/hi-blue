@@ -14,7 +14,7 @@ const NAME_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789";
 const NAME_LENGTH = 4;
 const PERSONA_COUNT = 3;
 
-export function generatePersonaName(
+function generatePersonaName(
 	rng: () => number,
 	taken: ReadonlySet<string>,
 ): string {
@@ -47,7 +47,7 @@ export function generatePersonaName(
 	throw new Error("Exhausted persona-name space");
 }
 
-export function buildBlurb(
+function buildBlurb(
 	name: string,
 	temperaments: [string, string],
 	personaGoal: string,
@@ -63,7 +63,7 @@ export function buildBlurb(
  * Intentionally low-quality — exists only so the type stays satisfied.
  * The real value comes from the LLM synthesis path.
  */
-export function buildFallbackVoiceExamples(tuple: {
+function buildFallbackVoiceExamples(tuple: {
 	temperaments: [string, string];
 	personaGoal: string;
 }): string[] {

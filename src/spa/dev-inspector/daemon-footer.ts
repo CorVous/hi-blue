@@ -18,7 +18,7 @@ import { getMapFocus, setMapFocus } from "./world-map.js";
  * map separately. The provider wrapper populates it; updateDaemonFooterSummary
  * reads from it.
  */
-export const daemonTurnResults: Record<
+const daemonTurnResults: Record<
 	string,
 	{
 		promptTokens?: number;

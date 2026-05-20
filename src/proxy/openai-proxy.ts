@@ -12,7 +12,7 @@ export { PINNED_MODEL };
 
 export const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
-export function openAiError(
+function openAiError(
 	status: number,
 	type: "invalid_request_error" | "upstream_error",
 	message: string,

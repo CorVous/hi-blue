@@ -34,7 +34,7 @@ import { lookupArchiveVersion } from "../persistence/archive-map.js";
 import { type RenderOpts, renderApp } from "../render-app.js";
 
 /** Warning reason strings shown in the persistence warning banner. */
-export const PERSISTENCE_WARNING_MESSAGES: Record<string, string> = {
+const PERSISTENCE_WARNING_MESSAGES: Record<string, string> = {
 	broken:
 		"Saved game data was unreadable and has been discarded. Starting a new game.",
 	"version-mismatch":
@@ -254,7 +254,7 @@ function attachPasswordMask(pwEl: HTMLInputElement): void {
  * Callers can provide alternative providers via the params sentinel trick:
  * we expose a module-level override hook used by tests.
  */
-export interface StartTestOverrides {
+interface StartTestOverrides {
 	synthesis?: SynthesisProvider;
 	packProvider?: ContentPackProvider;
 	rng?: () => number;
@@ -262,12 +262,6 @@ export interface StartTestOverrides {
 
 /** Module-level test overrides — set by tests, cleared after each render. */
 let _testOverrides: StartTestOverrides | undefined;
-
-export function _setTestOverrides(
-	overrides: StartTestOverrides | undefined,
-): void {
-	_testOverrides = overrides;
-}
 
 /** Set once a successful CONNECT submit is mid-flight, to debounce double-clicks. */
 let _beginClickPending = false;
@@ -281,7 +275,7 @@ let _activeUptimeInterval: ReturnType<typeof setInterval> | undefined;
  * the look of the placeholder text the design system uses for the BBS uptime
  * line (e.g. `11d 04h 22m`). Negative or zero spans render as `0d 00h 00m`.
  */
-export function formatUptime(elapsedMs: number): string {
+function formatUptime(elapsedMs: number): string {
 	const safe = Math.max(0, Math.floor(elapsedMs / 1000));
 	const days = Math.floor(safe / 86400);
 	const hours = Math.floor((safe % 86400) / 3600);

@@ -18,7 +18,7 @@ export interface BindingSkeleton {
 	itemId?: string; // use_item
 }
 
-export interface DecoySkeleton {
+interface DecoySkeleton {
 	id: string; // "decoy-0", "decoy-1"
 }
 

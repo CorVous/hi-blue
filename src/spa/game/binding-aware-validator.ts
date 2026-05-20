@@ -34,37 +34,9 @@ import {
 	USE_CUE_KEYWORD_HINTS,
 } from "./content-pack-provider.js";
 
-// ── Use-cue keywords (re-export from content-pack-provider) ──────────────────
-
-/** Keys checked in carry-space examineDescription (warn only). */
-export const USE_CUE_KEYWORDS = [
-	"use",
-	"activate",
-	"press",
-	"trigger",
-	"engage",
-	"operate",
-	"lever",
-	"button",
-	"switch",
-	"control",
-	"panel",
-	"console",
-	"dial",
-	"knob",
-	"channel",
-	"invoke",
-	"summon",
-	"ignite",
-	"pull",
-	"turn",
-	"interact",
-	"mechanism",
-];
-
 // ── Raw binding-shaped response types ────────────────────────────────────────
 
-export interface RawBindingEntity {
+interface RawBindingEntity {
 	id?: string;
 	name?: string;
 	examineDescription?: string;
@@ -93,7 +65,7 @@ export interface RawBinding {
 	item?: RawBindingEntity;
 }
 
-export interface RawDecoy {
+interface RawDecoy {
 	id?: string;
 	name?: string;
 	examineDescription?: string;
@@ -102,7 +74,7 @@ export interface RawDecoy {
 	[key: string]: unknown;
 }
 
-export interface RawObstacle {
+interface RawObstacle {
 	id?: string;
 	name?: string;
 	examineDescription?: string;
@@ -117,17 +89,6 @@ export interface RawBoundPack {
 	bindings?: RawBinding[];
 	decoys?: RawDecoy[];
 	obstacles?: RawObstacle[];
-}
-
-export interface RawBoundResponse {
-	pack?: RawBoundPack;
-}
-
-export interface RawBoundDualResponse {
-	phases?: Array<{
-		packA?: RawBoundPack;
-		packB?: RawBoundPack;
-	}>;
 }
 
 // ── Validation schedule type ──────────────────────────────────────────────────

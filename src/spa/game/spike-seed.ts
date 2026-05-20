@@ -28,10 +28,6 @@ export function setSpikeSeed(seed: number | null): void {
 	_spikeSeed = seed;
 }
 
-export function getSpikeSeed(): number | null {
-	return _spikeSeed;
-}
-
 export type SpikeRngLabel = "personas" | "contentPack" | "gameSession";
 
 function hashLabel(label: string): number {

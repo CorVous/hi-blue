@@ -38,7 +38,7 @@ import { type RenderOpts, renderApp, setPickerOpen } from "../render-app.js";
 
 // ── Banner copy ───────────────────────────────────────────────────────────────────
 
-export const SESSIONS_BANNER_MESSAGES: Record<string, string> = {
+const SESSIONS_BANNER_MESSAGES: Record<string, string> = {
 	broken: "The active Session was unreadable and could not be loaded.",
 	"version-mismatch":
 		"Saved game data is from an older version and has been discarded. Starting a new game.",

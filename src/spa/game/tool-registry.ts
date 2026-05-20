@@ -9,7 +9,7 @@
 import { RELATIVE_DIRECTIONS } from "./direction.js";
 import type { ToolName } from "./types";
 
-export interface OpenAiToolFunction {
+interface OpenAiToolFunction {
 	name: string;
 	description: string;
 	parameters: {

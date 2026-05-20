@@ -19,7 +19,7 @@ import type { OpenAiTool } from "./tool-registry.js";
  * Defined here (not in llm-client.ts) so this file can be imported by
  * both browser code and the server-side proxy without pulling in browser globals.
  */
-export interface OpenAiToolCall {
+interface OpenAiToolCall {
 	id: string;
 	type: "function";
 	function: { name: string; arguments: string };

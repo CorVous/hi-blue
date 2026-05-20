@@ -16,21 +16,6 @@ export type WordsFactory = (request: Request) => string[] | Promise<string[]>;
  *   data: {"choices":[{"delta":{"content":"<text>"},"finish_reason":null}]}\n\n
  *   data: [DONE]\n\n
  *
- * Post-#214 free-form `delta.content` is no longer painted into player panels —
- * panels paint exclusively from `message` tool-call entries in conversationLogs.
- * The default SSE-body helper used by `stubChatCompletions` is now
- * `messageToolCallToBlueSseBody`. This helper is retained for tests that
- * specifically need to exercise the free-form-delta wire path (e.g. asserting
- * that free-form text is silently dropped).
- */
-export function wordsToOpenAiSseBody(words: string[]): string {
-	const lines: string[] = words.map(
-		(word) =>
-			`data: ${JSON.stringify({ choices: [{ delta: { content: word }, finish_reason: null }] })}\n\n`,
-	);
-	lines.push("data: [DONE]\n\n");
-	return lines.join("");
-}
 
 /**
  * Build a minimal OpenAI-compatible SSE body that emits a single `message`
@@ -41,7 +26,7 @@ export function wordsToOpenAiSseBody(words: string[]): string {
  * Includes a final usage chunk so the budget-deduction path sees a non-zero
  * cost. Mirrors `makeMessageToolCallSseStream` from `src/spa/__tests__/game.test.ts`.
  */
-export function messageToolCallToBlueSseBody(words: string[]): string {
+function messageToolCallToBlueSseBody(words: string[]): string {
 	const args = JSON.stringify({ to: "blue", content: words.join("") });
 	const headerChunk = `data: ${JSON.stringify({
 		choices: [

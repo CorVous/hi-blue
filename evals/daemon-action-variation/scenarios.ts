@@ -178,7 +178,7 @@ function makeSocialPack(): ContentPack {
 
 // ── Scenario assembly ────────────────────────────────────────────────────────
 
-export type ScenarioName = "exploration" | "objective" | "social";
+type ScenarioName = "exploration" | "objective" | "social";
 
 export interface Scenario {
 	name: ScenarioName;

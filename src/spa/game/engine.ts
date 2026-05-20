@@ -168,17 +168,6 @@ function drawSpatialPlacements(
 }
 
 /**
- * Returns the active ContentPack for the game, honoring `activePackId`.
- * Falls back to the game's embedded `contentPack` if no matching pack is found
- * in the A/B arrays (e.g. in tests that construct GameState directly).
- */
-export function getActivePack(game: GameState): ContentPack {
-	const packs =
-		game.activePackId === "B" ? game.contentPacksB : game.contentPacksA;
-	return packs[0] ?? game.contentPack;
-}
-
-/**
  * Reproject the current `world.entities` onto their pack-B counterparts.
  *
  * Pack B is id-mirrored to pack A by construction (see

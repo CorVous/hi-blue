@@ -66,7 +66,6 @@ export interface SingleGameConfig {
 
 /**
  * Legacy per-phase config shape. Kept for backward-compat with generateContentPacks.
- * @deprecated use SingleGameConfig + generateContentPack
  */
 export interface PhaseConfig {
 	kRange: [number, number];
@@ -730,89 +729,4 @@ export async function generateDualContentPacks(
 	};
 
 	return { packA: placedPackA, packB, objectiveTypes };
-}
-
-/**
- * Generate a single ContentPack for a single-game session.
- *
- * @param rng        Seeded random number generator.
- * @param settings   The pool of setting nouns to draw from (must have >= 1 entry).
- * @param config     Single-game config (kRange, nRange, mRange).
- * @param llm        ContentPackProvider for the LLM call.
- * @param aiIdsOrPromise  AiId list or a Promise resolving to one.
- */
-export async function generateContentPack(
-	rng: () => number,
-	settings: readonly string[],
-	config: SingleGameConfig,
-	llm: ContentPackProvider,
-	aiIdsOrPromise: AiId[] | Promise<AiId[]>,
-): Promise<ContentPack> {
-	if (settings.length < 1) {
-		throw new Error(
-			`generateContentPack: setting pool must have at least 1 entry (has ${settings.length})`,
-		);
-	}
-
-	// Draw 1 setting
-	const settingIdx = Math.floor(rng() * settings.length);
-	const setting = settings[settingIdx] as string;
-
-	// Draw weather, time-of-day, and theme
-	const weather = WEATHER_POOL[
-		Math.floor(rng() * WEATHER_POOL.length)
-	] as string;
-	const timeOfDay = TIME_OF_DAY_POOL[
-		Math.floor(rng() * TIME_OF_DAY_POOL.length)
-	] as string;
-	const theme = THEME_POOL[Math.floor(rng() * THEME_POOL.length)] as string;
-
-	// Roll m and type-first objective types
-	const m = rollInt(rng, config.mRange[0], config.mRange[1]);
-	const objectiveTypes = rollObjectiveTypes(rng, 3);
-
-	// Build binding prompt
-	const bp = buildBindingPrompt(
-		objectiveTypes,
-		setting,
-		theme,
-		weather,
-		timeOfDay,
-		m,
-	);
-	const phaseInput = {
-		setting,
-		theme,
-		weather,
-		timeOfDay,
-		bindings: bp.skeletons,
-		decoyIds: ["decoy-0", "decoy-1"] as [string, string],
-		obstacleCount: m,
-	};
-
-	// Kick off LLM call immediately (parallel with aiIds resolution)
-	const llmCallPromise = llm.generateContentPacks({ phases: [phaseInput] });
-
-	// Await both in parallel
-	const [llmResult, aiIds] = await Promise.all([
-		llmCallPromise,
-		Promise.resolve(aiIdsOrPromise),
-	]);
-
-	// Build placeholder ContentPack from LLM result using converter
-	const phase = llmResult.phases[0];
-	if (!phase) throw new Error("generateContentPack: LLM returned no phases");
-
-	const unplacedPack = rawBoundPackToContentPack(
-		phase.rawPack,
-		objectiveTypes,
-		weather,
-		timeOfDay,
-	);
-
-	// Run placement engine
-	const placed = placePhases(rng, [unplacedPack], aiIds);
-	const result = placed[0];
-	if (!result) throw new Error("generateContentPack: placement failed");
-	return result;
 }

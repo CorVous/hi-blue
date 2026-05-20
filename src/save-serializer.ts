@@ -22,12 +22,12 @@ import type {
 	GameState,
 } from "./spa/game/types";
 
-export interface PhaseTranscript {
+interface PhaseTranscript {
 	phaseNumber: 1 | 2 | 3;
 	conversationLog: ConversationEntry[];
 }
 
-export interface AiSaveEntry {
+interface AiSaveEntry {
 	persona: AiPersona;
 	phases: PhaseTranscript[];
 }

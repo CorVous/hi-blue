@@ -453,7 +453,7 @@ const PARALLEL_FRAMING_MAP: Record<ParallelFraming, string> = {
  * turn for framings that opt into the re-anchor mechanism (C1, C5, C8,
  * C12). Returns null otherwise.
  */
-export function getParallelPerTurnReminder(): string | null {
+function getParallelPerTurnReminder(): string | null {
 	const framing = getParallelFraming();
 	if (framing === "C1") return PARALLEL_FRAMING_C1_PER_TURN;
 	if (framing === "C5") return PARALLEL_FRAMING_C5_PER_TURN;
@@ -482,7 +482,7 @@ const PRODUCTION_PARALLEL_FRAMING: ParallelFraming = "C12";
  * present; `?parallelFraming=off` (or any string not in the framing
  * map) suppresses the framing entirely.
  */
-export function getParallelFraming(): ParallelFraming | null {
+function getParallelFraming(): ParallelFraming | null {
 	if (typeof window !== "undefined" && window.location !== undefined) {
 		try {
 			const fromUrl = new URLSearchParams(window.location.search).get(
