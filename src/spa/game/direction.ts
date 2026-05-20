@@ -158,6 +158,16 @@ export function areAdjacent4(a: GridPosition, b: GridPosition): boolean {
 	return manhattan(a, b) === 1;
 }
 
+/** True when two GridPositions refer to the same cell. */
+export function positionsEqual(a: GridPosition, b: GridPosition): boolean {
+	return a.row === b.row && a.col === b.col;
+}
+
+/** True when `holder` is a GridPosition (not an AiId string). */
+export function isGridPosition(holder: unknown): holder is GridPosition {
+	return typeof holder === "object" && holder !== null;
+}
+
 /**
  * The 3 cells forming the immediate front arc: front-left diagonal, directly
  * in front, and front-right diagonal. Out-of-bounds cells are omitted.
@@ -173,12 +183,4 @@ export function frontArc(
 		{ row: pos.row + fwd.drow, col: pos.col + fwd.dcol },
 		{ row: pos.row + fwd.drow - lft.drow, col: pos.col + fwd.dcol - lft.dcol },
 	].filter(inBounds);
-}
-
-/**
- * Format a GridPosition as a labeled string for engine-internal logs.
- * NOT surfaced to daemons; used only in action-log records and dev tools.
- */
-export function formatPosition(pos: GridPosition): string {
-	return `(row ${pos.row}, col ${pos.col})`;
 }

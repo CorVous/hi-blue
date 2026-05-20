@@ -18,6 +18,9 @@ import { PINNED_MODEL } from "../model.js";
 
 export const OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models";
 
+/** Micro-USD per USD: all proxy cost accounting is denominated in micro-USD. */
+export const USD_TO_MICRO_USD = 1_000_000;
+
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 3_000;
 
@@ -77,8 +80,8 @@ export async function getModelPricing(
 			throw new Error(`pricing parse failed for ${model}`);
 		}
 		const pricing: ModelPricing = {
-			promptMicroUsdPerToken: promptUsd * 1e6,
-			completionMicroUsdPerToken: completionUsd * 1e6,
+			promptMicroUsdPerToken: promptUsd * USD_TO_MICRO_USD,
+			completionMicroUsdPerToken: completionUsd * USD_TO_MICRO_USD,
 		};
 		cache = { pricing, fetchedAtMs: nowMs };
 		return pricing;

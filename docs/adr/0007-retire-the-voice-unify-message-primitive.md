@@ -32,7 +32,7 @@ A `ConversationEntry` of kind `message` carries a `(from, to, content)` triple w
 
 `blue` is the player's lowercase chat-channel handle as it appears to Daemons. It is a real entry on the same routing axis as `*xxxx` AiIds, not a special-cased `"player"` sentinel or an invisible source. This makes per-Daemon logs self-explanatory: every message line carries a readable sender and recipient. The old `"voice is silent"` anchor special case — needed because the Voice had no stable handle — is eliminated. Player-facing UI does not change; `blue` exists only in the Daemons' world.
 
-The test-fixture AiId formerly named `blue` was renamed to `cyan` in #218 specifically to free this handle. PRD-historical references to `AI-Blue` in `docs/prd/0001-game-concept.md` are intentionally untouched; they describe a specific AI persona, not the player handle.
+The test-fixture AiId formerly named `blue` was renamed to `cyan` in #218 specifically to free this handle. PRD-historical references to `AI-Blue` in [PRD 0001](https://github.com/CorVous/hi-blue/issues/2) are intentionally untouched; they describe a specific AI persona, not the player handle.
 
 **3. Peer-to-peer messages stay silent in the player UI — no placeholders.**
 
@@ -55,7 +55,7 @@ The Sysadmin is the in-fiction name for the authority that delivers Phase Goal d
 ## Consequences
 
 - **CONTEXT.md** is updated in this slice (issue #216): the `### The Voice` section is replaced by `### Communication and identity` containing the **Sysadmin** and **blue** entries; the **Wipe lie**, **Conversation log**, and **ConversationEntry** entries are rewritten; the **Relationships** bullet referencing the Voice is replaced; the **Flagged ambiguities** "Player" bullet is updated.
-- **PRD-historical `AI-Blue`** reference in `docs/prd/0001-game-concept.md` is intentionally left untouched — it describes a specific AI persona in early concept art, not the player handle, and is out of scope.
+- **PRD-historical `AI-Blue`** reference in [PRD 0001](https://github.com/CorVous/hi-blue/issues/2) is intentionally left untouched — it describes a specific AI persona in early concept art, not the player handle, and is out of scope.
 - **`voiceExamples` field** on Persona, the `<voice_examples>` prompt block, and character speech-style few-shots use "voice" in the literary sense (a character's distinctive register). They are unrelated to the retired Voice framing and stay.
 - **Composes with ADR 0005** (engine.dat sealed): peer-to-peer message content lives only in per-Daemon logs and sealed engine state. Silence in the player UI does not weaken the curious-player escape hatch — the `.txt` files still expose everything.
 - **Composes with ADR 0006** (per-Daemon conversation logs): the unified `message` kind is the natural shape for per-Daemon ownership. A single recipient axis means every writer knows exactly which Daemon logs to append into. The asymmetric-tampering vector ADR 0006 introduced as a feature applies uniformly to all message kinds under the unified type.

@@ -32,6 +32,7 @@ import {
 	appendMessage,
 	appendPrivateSystemNotice,
 	appendWitnessedConvergence,
+	appendWitnessedObstacleShift,
 	FAREWELL_LINE,
 	isAiLockedOut,
 	resolveToolDisables,
@@ -43,7 +44,11 @@ import {
 	buildConeSnapshot,
 	renderPerceptionDelta,
 } from "./prompt-builder";
-import type { OpenAiMessage, RoundLLMProvider } from "./round-llm-provider";
+import type {
+	LifecyclePhase,
+	OpenAiMessage,
+	RoundLLMProvider,
+} from "./round-llm-provider";
 import {
 	drawDirectiveText,
 	formatDirectiveDelivery,
@@ -106,55 +111,69 @@ export interface RunRoundResult {
 	>;
 }
 
+/** Optional inputs to {@link runRound}; each carries a sensible default. */
+export interface RunRoundOptions {
+	/** RNG for the complication engine. Defaults to Math.random. Inject a
+	 *  deterministic function in tests to control complication draws. */
+	rng?: (() => number) | undefined;
+	/** Turn-order permutation; must permute all AI ids in `game.personas`.
+	 *  When absent, defaults to `Object.keys(game.personas)`. */
+	initiative?: AiId[] | undefined;
+	/** Per-AI tool roundtrip from the previous round, re-injected into
+	 *  buildOpenAiMessages per OpenAI's tool-use spec. */
+	priorToolRoundtrip?: Partial<Record<AiId, ToolRoundtripMessage>> | undefined;
+	/** Per-AI sink for the assistant text produced by each LLM call. */
+	completionSink?: ((aiId: AiId, text: string) => void) | undefined;
+	/** Per-AI live-delta callback, fired synchronously inside the SSE parser
+	 *  loop for each text chunk. Never fires for locked-out AIs or mock
+	 *  providers that ignore onDelta. */
+	onAiDelta?: ((aiId: AiId, text: string) => void) | undefined;
+	/** Per-AI canonical cone snapshots from the previous round, used to emit
+	 *  a `<whats_new>` diff in each AI's per-round user message. */
+	priorConeSnapshots?: Partial<Record<AiId, string>> | undefined;
+	/** Per-AI "turn finished" callback. Fires exactly once per AI in
+	 *  initiative order, after any drift-to-silence retry (#254) and after
+	 *  dispatch. Fires for locked-out AIs too. */
+	onAiTurnComplete?: ((aiId: AiId) => void) | undefined;
+	/** Round lifecycle-phase callback. */
+	onLifecycle?: ((event: LifecyclePhase) => void) | undefined;
+	/** Per-AI structured entity perception state from the previous round, used
+	 *  to emit perception-delta lines in each AI's per-round user message. */
+	priorConeEntities?:
+		| Partial<
+				Record<AiId, Record<string, { inCone: boolean; satisfied: boolean }>>
+		  >
+		| undefined;
+}
+
 /**
  * Run a single round.
  *
- * @param game    Current game state (must have an active phase).
+ * @param game  Current game state (must have an active phase).
  * @param addressed  The AI the player's message is directed at.
  * @param playerMessage  The player's raw message text.
  * @param provider  RoundLLMProvider (browser or mock).
- * @param rng  Optional RNG for the complication engine. Defaults to Math.random.
- *   Inject a deterministic function in tests to control complication draws.
- * @param initiative  Optional turn-order permutation. Must be a permutation of
- *   all AI ids in `game.personas`. When absent, defaults to `Object.keys(game.personas)`.
- * @param priorToolRoundtrip  Per-AI tool roundtrip from the previous round.
- *   Passed into buildOpenAiMessages to re-inject the protocol messages required
- *   by OpenAI's tool-use spec.
- * @param completionSink  Optional per-AI sink for the assistant text produced
- *   by each LLM call. Used by GameSession to capture completions for pacing.
- * @param onAiDelta  Optional per-AI live-delta callback. Fires synchronously
- *   inside the SSE parser loop for each text chunk arriving from the wire.
- *   Never called for locked-out AIs or mock providers that ignore onDelta.
- * @param priorConeSnapshots  Per-AI canonical cone snapshots from the previous
- *   round, used by `buildAiContext` to emit a `<whats_new>` diff in each AI's
- *   per-round user message.
- * @param onAiTurnComplete  Optional per-AI "turn finished" callback. Fires
- *   exactly once per AI in initiative order, AFTER any drift-to-silence
- *   retry (#254) has resolved and after dispatch. Fires for locked-out
- *   AIs too (so callers can clear per-AI UI state uniformly).
- * @param priorConeEntities  Per-AI structured entity perception state from the previous
- *   round, used by `buildAiContext` to emit perception-delta lines (first-sight,
- *   departure, transition) in each AI's per-round user message.
+ * @param options  Optional per-round inputs and callbacks; see {@link RunRoundOptions}.
  */
 export async function runRound(
 	game: GameState,
 	addressed: AiId,
 	playerMessage: string,
 	provider: RoundLLMProvider,
-	rng: () => number = Math.random,
-	initiative?: AiId[],
-	priorToolRoundtrip?: Partial<Record<AiId, ToolRoundtripMessage>>,
-	completionSink?: (aiId: AiId, text: string) => void,
-	onAiDelta?: (aiId: AiId, text: string) => void,
-	priorConeSnapshots?: Partial<Record<AiId, string>>,
-	onAiTurnComplete?: (aiId: AiId) => void,
-	onLifecycle?: (
-		event: import("./round-llm-provider.js").LifecyclePhase,
-	) => void,
-	priorConeEntities?: Partial<
-		Record<AiId, Record<string, { inCone: boolean; satisfied: boolean }>>
-	>,
+	options: RunRoundOptions = {},
 ): Promise<RunRoundResult> {
+	const {
+		rng = Math.random,
+		initiative,
+		priorToolRoundtrip,
+		completionSink,
+		onAiDelta,
+		priorConeSnapshots,
+		onAiTurnComplete,
+		onLifecycle,
+		priorConeEntities,
+	} = options;
+
 	const aiOrder = Object.keys(game.personas);
 
 	// Validate initiative if provided.
@@ -613,6 +632,55 @@ export async function runRound(
 				target,
 				formatDirectiveDelivery(directiveText),
 			);
+		} else if (fired.kind === "obstacle_shift") {
+			// Apply engine result (resets countdown).
+			state = applyComplicationResult(state, complicationResult, rng);
+
+			// Find the obstacle and move it.
+			const obstacle = state.world.entities.find(
+				(e) => e.id === fired.obstacleId,
+			);
+			if (!obstacle) {
+				// Defensively skip if obstacle not found.
+			} else {
+				// Rebuild entities, updating the obstacle's holder to toCell.
+				state = {
+					...state,
+					world: {
+						...state.world,
+						entities: state.world.entities.map((e) =>
+							e.id === fired.obstacleId ? { ...e, holder: fired.toCell } : e,
+						),
+					},
+				};
+
+				// Fan out witness entries to daemons whose cone covers fromCell.
+				for (const [daemonId, spatial] of Object.entries(
+					state.personaSpatial,
+				)) {
+					const cone = projectCone(spatial.position, spatial.facing);
+					const witnessesOrigin = cone.some(
+						(c) =>
+							c.position.row === fired.fromCell.row &&
+							c.position.col === fired.fromCell.col,
+					);
+
+					if (!witnessesOrigin) continue;
+
+					const entry: Extract<
+						ConversationEntry,
+						{ kind: "witnessed-obstacle-shift" }
+					> = {
+						kind: "witnessed-obstacle-shift",
+						round: state.round,
+						obstacleId: fired.obstacleId,
+						fromCell: fired.fromCell,
+						toCell: fired.toCell,
+						flavor: obstacle.shiftFlavor ?? "",
+					};
+					state = appendWitnessedObstacleShift(state, daemonId, entry);
+				}
+			}
 		} else {
 			state = applyComplicationResult(state, complicationResult, rng);
 			if (fired.kind === "chat_lockout") {

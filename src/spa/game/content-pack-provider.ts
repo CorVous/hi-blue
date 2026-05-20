@@ -151,19 +151,9 @@ export interface ContentPackProviderInput {
 	}>;
 }
 
-export function buildContentPackUserMessage(
-	input: ContentPackProviderInput,
-): string {
-	const lines = input.phases.map(
-		(p, i) =>
-			`Phase ${i + 1}: setting="${p.setting}", theme="${p.theme}", k=${p.k} objective pairs, n=${p.n} interesting objects, m=${p.m} obstacles`,
-	);
-	return `Generate content packs for these phases:\n${lines.join("\n")}`;
-}
-
 // ── Error type ────────────────────────────────────────────────────────────────
 
-export class ContentPackError extends Error {
+class ContentPackError extends Error {
 	constructor(message: string) {
 		super(message);
 		this.name = "ContentPackError";
@@ -264,16 +254,6 @@ export interface DualContentPackProviderResult {
 	}>;
 }
 
-export function buildDualContentPackUserMessage(
-	input: DualContentPackProviderInput,
-): string {
-	const lines = input.phases.map(
-		(p, i) =>
-			`Phase ${i + 1}: settingA="${p.settingA}", settingB="${p.settingB}", theme="${p.theme}", k=${p.k} objective pairs, n=${p.n} interesting objects, m=${p.m} obstacles`,
-	);
-	return `Generate dual A/B content packs for these phases:\n${lines.join("\n")}`;
-}
-
 const STOPWORDS = new Set([
 	"the",
 	"and",
@@ -328,7 +308,7 @@ export function examineMentionsPairedSpace(
  * objective_space rule (issue #335) and the interesting_object rule (#334)
  * draw from this shared set.
  */
-export const USE_TELL_KEYWORDS: readonly string[] = [
+const USE_TELL_KEYWORDS: readonly string[] = [
 	"use",
 	"used",
 	"uses",
@@ -516,7 +496,7 @@ export const USE_CUE_KEYWORD_HINTS: readonly string[] = [
 
 // ── Validation ────────────────────────────────────────────────────────────────
 
-export type RetryUnit =
+type RetryUnit =
 	| { kind: "objective-pair"; phaseIndex: number; pairId: string }
 	| { kind: "interesting-object"; phaseIndex: number; entityId: string }
 	| { kind: "obstacle"; phaseIndex: number; entityId: string }
@@ -526,7 +506,7 @@ export type RetryUnit =
 	| { kind: "convergence-binding"; phaseIndex: number; bindingId: string }
 	| { kind: "decoy"; phaseIndex: number; decoyId: string };
 
-export type ValidationRule =
+type ValidationRule =
 	| "paired-space-tell"
 	| "verb-of-activation"
 	| "actor-presence"
@@ -1341,8 +1321,8 @@ export function validateContentPacks(
 }
 
 /**
- * Validate a dual-pack LLM response. Ensures each phase has packA and packB
- * with identical entity IDs and matching structural relationships.
+ * Validate a dual-pack LLM response. Ensures the response carries packA and
+ * packB with identical entity IDs and matching structural relationships.
  */
 export function validateDualContentPacks(
 	raw: unknown,
@@ -1942,7 +1922,10 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 	async generateContentPacks(
 		input: BindingContentPackInput,
 	): Promise<BindingContentPackProviderResult> {
-		const phase = input.phases[0]!;
+		const phase = input.phases[0];
+		if (!phase) {
+			throw new ContentPackError("generateContentPacks: input.phases is empty");
+		}
 		const schedule = {
 			skeletons: phase.bindings,
 			decoys: [{ id: "decoy-0" }, { id: "decoy-1" }],
@@ -2006,7 +1989,12 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 	async generateDualContentPacks(
 		input: DualBindingContentPackInput,
 	): Promise<DualBindingContentPackProviderResult> {
-		const phase = input.phases[0]!;
+		const phase = input.phases[0];
+		if (!phase) {
+			throw new ContentPackError(
+				"generateDualContentPacks: input.phases is empty",
+			);
+		}
 		const schedule = {
 			skeletons: phase.bindings,
 			decoys: [{ id: "decoy-0" }, { id: "decoy-1" }],
@@ -2048,7 +2036,12 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 					const phases = (rawJson as Record<string, unknown>).phases as Array<
 						Record<string, unknown>
 					>;
-					const phase0 = phases[0]!;
+					const phase0 = phases[0];
+					if (!phase0) {
+						throw new ContentPackError(
+							"dual content-pack: validated response has no phases",
+						);
+					}
 					return {
 						phases: [
 							{

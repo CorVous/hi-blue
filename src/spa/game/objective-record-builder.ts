@@ -60,8 +60,7 @@ export function buildObjectiveRecords(
 
 	const objectives: Objective[] = [];
 
-	for (let i = 0; i < types.length; i++) {
-		const type = types[i]!;
+	for (const [i, type] of types.entries()) {
 		const id = `obj-${i}`;
 
 		switch (type) {

@@ -48,7 +48,7 @@ function makePack(overrides?: Partial<ContentPack>): ContentPack {
 function makeCarryPairEntities(
 	i: number,
 	withPairsWithSpaceId = true,
-): WorldEntity[] {
+): [WorldEntity, WorldEntity] {
 	const spaceId = `space-${i}`;
 	const object: WorldEntity = {
 		id: `obj-${i}`,
@@ -120,7 +120,7 @@ describe("carryPairs", () => {
 		const entities = makeCarryPairEntities(0);
 		const pack = makePack({ entities });
 		const result = carryPairs(pack);
-		result.push({ object: entities[0]!, space: entities[1]! });
+		result.push({ object: entities[0], space: entities[1] });
 		expect(pack.entities).toHaveLength(2);
 	});
 
@@ -247,7 +247,7 @@ describe("boundSpaces", () => {
 		const [pairObj, pairSpace] = makeCarryPairEntities(0);
 		const genuineBound = makeBoundSpace(1);
 		const pack = makePack({
-			entities: [pairObj!, pairSpace!, genuineBound],
+			entities: [pairObj, pairSpace, genuineBound],
 		});
 		const result = boundSpaces(pack);
 		expect(result).toHaveLength(1);
@@ -259,7 +259,7 @@ describe("boundSpaces", () => {
 		// extra `bound-space-0` entity is NOT referenced, so it stays bound.
 		const [pairObj, pairSpace] = makeCarryPairEntities(0);
 		const bs0 = makeBoundSpace(0);
-		const pack = makePack({ entities: [pairObj!, pairSpace!, bs0] });
+		const pack = makePack({ entities: [pairObj, pairSpace, bs0] });
 		const result = boundSpaces(pack);
 		expect(result).toHaveLength(1);
 		expect(result[0]?.id).toBe("bound-space-0");
@@ -268,7 +268,7 @@ describe("boundSpaces", () => {
 	it("handles objective_object without pairsWithSpaceId gracefully", () => {
 		const [pairObj, pairSpace] = makeCarryPairEntities(0, false);
 		const bs0 = makeBoundSpace(0);
-		const pack = makePack({ entities: [pairObj!, pairSpace!, bs0] });
+		const pack = makePack({ entities: [pairObj, pairSpace, bs0] });
 		// Neither `space-0` nor `bound-space-0` is referenced — both are
 		// classified as bound (the carry object has no partner).
 		const result = boundSpaces(pack);

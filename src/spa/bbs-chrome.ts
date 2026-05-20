@@ -102,7 +102,7 @@ export interface TopInfoInputs {
 	turn: number;
 }
 
-export function formatTopInfoLeft(i: TopInfoInputs): string {
+function formatTopInfoLeft(i: TopInfoInputs): string {
 	const epoch = `${String(i.epoch).padStart(2, "0")}`;
 	const turn = String(i.turn).padStart(1, "0");
 	return `SESSION ${i.sessionId} · EPOCH ${epoch} · TURN ${turn}`;
@@ -123,15 +123,15 @@ export function formatTopInfoMobile(i: TopInfoInputs): string {
 	return `${i.sessionId} · EPC ${epoch} · TRN ${i.turn}`;
 }
 
-export const TOPINFO_RIGHT_OK_TEXT = "● connection stable";
-export const TOPINFO_RIGHT_LOADING_TEXT = "● loading daemons";
-export const TOPINFO_RIGHT_GENERATING_TEXT = "● generating room";
-export const TOPINFO_RIGHT_UNSTABLE_TEXT = "● connection unstable";
+const TOPINFO_RIGHT_OK_TEXT = "● connection stable";
+const TOPINFO_RIGHT_LOADING_TEXT = "● loading daemons";
+const TOPINFO_RIGHT_GENERATING_TEXT = "● generating room";
+const TOPINFO_RIGHT_UNSTABLE_TEXT = "● connection unstable";
 
-export const TOPINFO_MOBILE_OK_TEXT = "● stable";
-export const TOPINFO_MOBILE_LOADING_TEXT = "● loading";
-export const TOPINFO_MOBILE_GENERATING_TEXT = "● generating";
-export const TOPINFO_MOBILE_UNSTABLE_TEXT = "● unstable";
+const TOPINFO_MOBILE_OK_TEXT = "● stable";
+const TOPINFO_MOBILE_LOADING_TEXT = "● loading";
+const TOPINFO_MOBILE_GENERATING_TEXT = "● generating";
+const TOPINFO_MOBILE_UNSTABLE_TEXT = "● unstable";
 
 /** Right-cell connection states. `loading-daemons`/`generating-room` are the
  * progressive boot phases; `unstable` is set by the game route after a round

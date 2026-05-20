@@ -18,7 +18,7 @@ import { getMapFocus, setMapFocus } from "./world-map.js";
  * map separately. The provider wrapper populates it; updateDaemonFooterSummary
  * reads from it.
  */
-export const daemonTurnResults: Record<
+const daemonTurnResults: Record<
 	string,
 	{
 		promptTokens?: number;
@@ -101,8 +101,8 @@ export function recordDaemonError(aiId: AiId, error: unknown): void {
 		typeof error === "object" &&
 		error !== null &&
 		"status" in error &&
-		typeof (error as any).status === "number"
-			? (error as any).status
+		typeof error.status === "number"
+			? error.status
 			: undefined;
 	daemonErrors[aiId] = {
 		text,

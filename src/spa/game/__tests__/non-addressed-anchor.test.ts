@@ -131,23 +131,19 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 			{ assistantText: "", toolCalls: [] },
 		]);
 
-		const r1 = await runRound(
-			game,
-			"red",
-			"are you alive?",
-			provider,
-			undefined,
+		const r1 = await runRound(game, "red", "are you alive?", provider, {
 			initiative,
-		);
+		});
 
 		await runRound(
 			r1.nextState,
 			"cyan",
 			"different question for cyan",
 			provider,
-			undefined,
-			initiative,
-			r1.toolRoundtrip,
+			{
+				initiative,
+				priorToolRoundtrip: r1.toolRoundtrip,
+			},
 		);
 
 		expect(provider.calls).toHaveLength(6);
@@ -212,7 +208,7 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 			{ assistantText: "", toolCalls: [] },
 		]);
 
-		await runRound(game, "red", "hello red", provider, undefined, initiative);
+		await runRound(game, "red", "hello red", provider, { initiative });
 
 		// Green was never addressed; green's call (index 1) must have the anchor
 		// immediately before the trailing current-state turn.
@@ -253,7 +249,7 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 			{ assistantText: "", toolCalls: [] },
 		]);
 
-		await runRound(game, "red", "hi red", provider, undefined, initiative);
+		await runRound(game, "red", "hi red", provider, { initiative });
 
 		expect(provider.calls).toHaveLength(3);
 
@@ -293,7 +289,7 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 			{ assistantText: "", toolCalls: [] },
 		]);
 
-		await runRound(game, "cyan", "hello cyan", provider, undefined, initiative);
+		await runRound(game, "cyan", "hello cyan", provider, { initiative });
 
 		expect(provider.calls).toHaveLength(3);
 

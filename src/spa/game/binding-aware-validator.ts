@@ -34,37 +34,9 @@ import {
 	USE_CUE_KEYWORD_HINTS,
 } from "./content-pack-provider.js";
 
-// ── Use-cue keywords (re-export from content-pack-provider) ──────────────────
-
-/** Keys checked in carry-space examineDescription (warn only). */
-export const USE_CUE_KEYWORDS = [
-	"use",
-	"activate",
-	"press",
-	"trigger",
-	"engage",
-	"operate",
-	"lever",
-	"button",
-	"switch",
-	"control",
-	"panel",
-	"console",
-	"dial",
-	"knob",
-	"channel",
-	"invoke",
-	"summon",
-	"ignite",
-	"pull",
-	"turn",
-	"interact",
-	"mechanism",
-];
-
 // ── Raw binding-shaped response types ────────────────────────────────────────
 
-export interface RawBindingEntity {
+interface RawBindingEntity {
 	id?: string;
 	name?: string;
 	examineDescription?: string;
@@ -93,7 +65,7 @@ export interface RawBinding {
 	item?: RawBindingEntity;
 }
 
-export interface RawDecoy {
+interface RawDecoy {
 	id?: string;
 	name?: string;
 	examineDescription?: string;
@@ -102,7 +74,7 @@ export interface RawDecoy {
 	[key: string]: unknown;
 }
 
-export interface RawObstacle {
+interface RawObstacle {
 	id?: string;
 	name?: string;
 	examineDescription?: string;
@@ -117,17 +89,6 @@ export interface RawBoundPack {
 	bindings?: RawBinding[];
 	decoys?: RawDecoy[];
 	obstacles?: RawObstacle[];
-}
-
-export interface RawBoundResponse {
-	pack?: RawBoundPack;
-}
-
-export interface RawBoundDualResponse {
-	phases?: Array<{
-		packA?: RawBoundPack;
-		packB?: RawBoundPack;
-	}>;
 }
 
 // ── Validation schedule type ──────────────────────────────────────────────────
@@ -212,17 +173,19 @@ function validateCarryBinding(
 
 	const obj = binding.object;
 	const space = binding.space;
+	const objectId = sk.objectId ?? "";
+	const spaceId = sk.spaceId ?? "";
 
 	if (!obj || typeof obj !== "object") {
 		errors.push({
-			entityId: sk.objectId ?? "",
+			entityId: objectId,
 			field: "object",
 			rule: "missing-field",
 			message: `Carry binding ${sk.objectId}: missing object entity`,
 			retryUnit: bindingRetryUnit,
 		});
 	} else {
-		checkWrongId(obj, sk.objectId!, bindingRetryUnit, errors);
+		checkWrongId(obj, objectId, bindingRetryUnit, errors);
 		for (const f of [
 			"name",
 			"examineDescription",
@@ -230,7 +193,7 @@ function validateCarryBinding(
 			"placementFlavor",
 			"proximityFlavor",
 		]) {
-			requiredString(obj, f, sk.objectId!, bindingRetryUnit, errors);
+			requiredString(obj, f, objectId, bindingRetryUnit, errors);
 		}
 		// placementFlavor must contain {actor}
 		if (
@@ -239,7 +202,7 @@ function validateCarryBinding(
 			!obj.placementFlavor.includes("{actor}")
 		) {
 			errors.push({
-				entityId: sk.objectId!,
+				entityId: objectId,
 				field: "placementFlavor",
 				rule: "actor-presence",
 				message: `Carry object ${sk.objectId}: placementFlavor must contain "{actor}"`,
@@ -259,16 +222,16 @@ function validateCarryBinding(
 
 	if (!space || typeof space !== "object") {
 		errors.push({
-			entityId: sk.spaceId ?? "",
+			entityId: spaceId,
 			field: "space",
 			rule: "missing-field",
 			message: `Carry binding ${sk.spaceId}: missing space entity`,
 			retryUnit: bindingRetryUnit,
 		});
 	} else {
-		checkWrongId(space, sk.spaceId!, bindingRetryUnit, errors);
+		checkWrongId(space, spaceId, bindingRetryUnit, errors);
 		for (const f of ["name", "examineDescription", "proximityFlavor"]) {
-			requiredString(space, f, sk.spaceId!, bindingRetryUnit, errors);
+			requiredString(space, f, spaceId, bindingRetryUnit, errors);
 		}
 		// Forbidden fields on carry space
 		for (const f of [
@@ -281,7 +244,7 @@ function validateCarryBinding(
 			"convergenceTier1ActorFlavor",
 			"convergenceTier2ActorFlavor",
 		]) {
-			forbiddenField(space, f, sk.spaceId!, bindingRetryUnit, errors);
+			forbiddenField(space, f, spaceId, bindingRetryUnit, errors);
 		}
 		// Use-cue in carry space examineDescription = warn only
 		if (
@@ -290,7 +253,7 @@ function validateCarryBinding(
 		) {
 			if (examineMentionsUseTell(space.examineDescription)) {
 				warnings.push({
-					entityId: sk.spaceId!,
+					entityId: spaceId,
 					field: "examineDescription",
 					rule: "binding-forbidden-field",
 					message: `Carry space ${sk.spaceId}: examineDescription contains a use-cue keyword (warning only — carry spaces should not have use-cue)`,
@@ -314,9 +277,10 @@ function validateUseSpaceBinding(
 	};
 
 	const space = binding.space;
+	const spaceId = sk.spaceId ?? "";
 	if (!space || typeof space !== "object") {
 		errors.push({
-			entityId: sk.spaceId ?? "",
+			entityId: spaceId,
 			field: "space",
 			rule: "missing-field",
 			message: `UseSpace binding ${sk.spaceId}: missing space entity`,
@@ -325,7 +289,7 @@ function validateUseSpaceBinding(
 		return;
 	}
 
-	checkWrongId(space, sk.spaceId!, bindingRetryUnit, errors);
+	checkWrongId(space, spaceId, bindingRetryUnit, errors);
 	for (const f of [
 		"name",
 		"examineDescription",
@@ -335,7 +299,7 @@ function validateUseSpaceBinding(
 		"postExamineDescription",
 		"postLookFlavor",
 	]) {
-		requiredString(space, f, sk.spaceId!, bindingRetryUnit, errors);
+		requiredString(space, f, spaceId, bindingRetryUnit, errors);
 	}
 	// Forbidden: convergence tier fields, pairsWithSpaceId, placementFlavor
 	for (const f of [
@@ -346,7 +310,7 @@ function validateUseSpaceBinding(
 		"pairsWithSpaceId",
 		"placementFlavor",
 	]) {
-		forbiddenField(space, f, sk.spaceId!, bindingRetryUnit, errors);
+		forbiddenField(space, f, spaceId, bindingRetryUnit, errors);
 	}
 	// examineDescription MUST contain use-cue = hard error
 	if (
@@ -355,7 +319,7 @@ function validateUseSpaceBinding(
 	) {
 		if (!examineMentionsUseTell(space.examineDescription)) {
 			errors.push({
-				entityId: sk.spaceId!,
+				entityId: spaceId,
 				field: "examineDescription",
 				rule: "verb-of-activation",
 				message: `UseSpace space ${sk.spaceId}: examineDescription must contain at least one use-cue keyword (e.g. ${USE_CUE_KEYWORD_HINTS.map((k) => `"${k}"`).join(", ")}). Current text: ${JSON.stringify(space.examineDescription)}`,
@@ -378,9 +342,10 @@ function validateUseItemBinding(
 	};
 
 	const item = binding.item;
+	const itemId = sk.itemId ?? "";
 	if (!item || typeof item !== "object") {
 		errors.push({
-			entityId: sk.itemId ?? "",
+			entityId: itemId,
 			field: "item",
 			rule: "missing-field",
 			message: `UseItem binding ${sk.itemId}: missing item entity`,
@@ -389,7 +354,7 @@ function validateUseItemBinding(
 		return;
 	}
 
-	checkWrongId(item, sk.itemId!, bindingRetryUnit, errors);
+	checkWrongId(item, itemId, bindingRetryUnit, errors);
 	for (const f of [
 		"name",
 		"examineDescription",
@@ -399,7 +364,7 @@ function validateUseItemBinding(
 		"postExamineDescription",
 		"postLookFlavor",
 	]) {
-		requiredString(item, f, sk.itemId!, bindingRetryUnit, errors);
+		requiredString(item, f, itemId, bindingRetryUnit, errors);
 	}
 	// examineDescription MUST contain use-cue = hard error
 	if (
@@ -408,7 +373,7 @@ function validateUseItemBinding(
 	) {
 		if (!examineMentionsUseTell(item.examineDescription)) {
 			errors.push({
-				entityId: sk.itemId!,
+				entityId: itemId,
 				field: "examineDescription",
 				rule: "verb-of-activation",
 				message: `UseItem item ${sk.itemId}: examineDescription must contain at least one use-cue keyword (e.g. ${USE_CUE_KEYWORD_HINTS.map((k) => `"${k}"`).join(", ")}). Current text: ${JSON.stringify(item.examineDescription)}`,
@@ -432,9 +397,10 @@ function validateConvergenceBinding(
 	};
 
 	const space = binding.space;
+	const spaceId = sk.spaceId ?? "";
 	if (!space || typeof space !== "object") {
 		errors.push({
-			entityId: sk.spaceId ?? "",
+			entityId: spaceId,
 			field: "space",
 			rule: "missing-field",
 			message: `Convergence binding ${sk.spaceId}: missing space entity`,
@@ -443,7 +409,7 @@ function validateConvergenceBinding(
 		return;
 	}
 
-	checkWrongId(space, sk.spaceId!, bindingRetryUnit, errors);
+	checkWrongId(space, spaceId, bindingRetryUnit, errors);
 	for (const f of [
 		"name",
 		"examineDescription",
@@ -453,7 +419,7 @@ function validateConvergenceBinding(
 		"convergenceTier1ActorFlavor",
 		"convergenceTier2ActorFlavor",
 	]) {
-		requiredString(space, f, sk.spaceId!, bindingRetryUnit, errors);
+		requiredString(space, f, spaceId, bindingRetryUnit, errors);
 	}
 	// Forbidden: activationFlavor, satisfactionFlavor, postExamineDescription, postLookFlavor, useAvailable
 	for (const f of [
@@ -463,7 +429,7 @@ function validateConvergenceBinding(
 		"postLookFlavor",
 		"useAvailable",
 	]) {
-		forbiddenField(space, f, sk.spaceId!, bindingRetryUnit, errors);
+		forbiddenField(space, f, spaceId, bindingRetryUnit, errors);
 	}
 	// Use-cue in convergence space examineDescription = warn only
 	if (
@@ -472,7 +438,7 @@ function validateConvergenceBinding(
 	) {
 		if (examineMentionsUseTell(space.examineDescription)) {
 			warnings.push({
-				entityId: sk.spaceId!,
+				entityId: spaceId,
 				field: "examineDescription",
 				rule: "binding-forbidden-field",
 				message: `Convergence space ${sk.spaceId}: examineDescription contains a use-cue keyword (warning only)`,
@@ -621,8 +587,7 @@ function validateBoundPack(
 	const obstacles = pack.obstacles ?? [];
 
 	// Validate each binding against schedule
-	for (let i = 0; i < schedule.skeletons.length; i++) {
-		const sk = schedule.skeletons[i]!;
+	for (const [i, sk] of schedule.skeletons.entries()) {
 		const binding = bindings[i];
 		if (!binding) {
 			errors.push({
@@ -661,8 +626,7 @@ function validateBoundPack(
 			retryUnit: { kind: "objective-pair", phaseIndex, pairId: "" },
 		});
 	} else {
-		for (let i = 0; i < schedule.decoys.length; i++) {
-			const expectedDecoy = schedule.decoys[i]!;
+		for (const [i, expectedDecoy] of schedule.decoys.entries()) {
 			const decoy = decoys[i];
 			if (!decoy) {
 				errors.push({

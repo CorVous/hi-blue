@@ -11,29 +11,19 @@
  * matching space's cell, or null otherwise.
  */
 
+import { isGridPosition, positionsEqual } from "./direction";
 import type {
 	AiId,
 	AiTurnAction,
 	CarryObjective,
 	ContentPack,
 	ConvergenceObjective,
-	GridPosition,
 	Objective,
 	PersonaSpatialState,
 	UseItemObjective,
 	UseSpaceObjective,
 	WorldState,
 } from "./types";
-
-/** Narrow-check: is `holder` a GridPosition (not an AiId string)? */
-function isGridPosition(holder: unknown): holder is GridPosition {
-	return typeof holder === "object" && holder !== null;
-}
-
-/** Return true when two GridPositions refer to the same cell. */
-function positionsEqual(a: GridPosition, b: GridPosition): boolean {
-	return a.row === b.row && a.col === b.col;
-}
 
 /**
  * Returns true when a CarryObjective is satisfied:

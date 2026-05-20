@@ -4,7 +4,7 @@ The shared **action log** broadcast to player + all three AIs is removed. Each A
 
 ## Status
 
-Accepted. Supersedes [PRD 0001](../prd/0001-game-concept.md) User Stories 8, 9, 10 and the World Model "Action log broadcasts to everyone … Failures are public" decision.
+Accepted. Supersedes [PRD 0001](https://github.com/CorVous/hi-blue/issues/2) User Stories 8, 9, 10 and the World Model "Action log broadcasts to everyone … Failures are public" decision.
 
 ## Considered Options
 

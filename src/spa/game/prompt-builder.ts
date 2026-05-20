@@ -1,5 +1,10 @@
 import { projectCone } from "./cone-projector.js";
-import { cardinalToRelative, frontArc } from "./direction.js";
+import {
+	cardinalToRelative,
+	frontArc,
+	isGridPosition,
+	positionsEqual,
+} from "./direction.js";
 import type {
 	AiBudget,
 	AiId,
@@ -453,7 +458,7 @@ const PARALLEL_FRAMING_MAP: Record<ParallelFraming, string> = {
  * turn for framings that opt into the re-anchor mechanism (C1, C5, C8,
  * C12). Returns null otherwise.
  */
-export function getParallelPerTurnReminder(): string | null {
+function getParallelPerTurnReminder(): string | null {
 	const framing = getParallelFraming();
 	if (framing === "C1") return PARALLEL_FRAMING_C1_PER_TURN;
 	if (framing === "C5") return PARALLEL_FRAMING_C5_PER_TURN;
@@ -482,7 +487,7 @@ const PRODUCTION_PARALLEL_FRAMING: ParallelFraming = "C12";
  * present; `?parallelFraming=off` (or any string not in the framing
  * map) suppresses the framing entirely.
  */
-export function getParallelFraming(): ParallelFraming | null {
+function getParallelFraming(): ParallelFraming | null {
 	if (typeof window !== "undefined" && window.location !== undefined) {
 		try {
 			const fromUrl = new URLSearchParams(window.location.search).get(
@@ -698,16 +703,6 @@ export function renderPerceptionDelta(
 	return lines;
 }
 
-/** True when `holder` is a GridPosition (not an AiId string). */
-function isGridPosition(holder: AiId | GridPosition): holder is GridPosition {
-	return typeof holder === "object" && holder !== null;
-}
-
-/** True when two GridPositions refer to the same cell. */
-function positionsEqual(a: GridPosition, b: GridPosition): boolean {
-	return a.row === b.row && a.col === b.col;
-}
-
 /** Filter entities to only those renderable as items (not obstacles, not spaces). */
 function renderableItems(entities: WorldEntity[]): WorldEntity[] {
 	return entities.filter(
@@ -736,7 +731,8 @@ function renderSystemPrompt(ctx: AiContext): string {
 
 	// Identity line. Authorial framing — the model writes *${name} rather than
 	// being addressed as *${name}. The disorientation phrase anchors Daemons
-	// to their setting without phase-phase memory-wipe fiction.
+	// to their setting; the game is a single continuous game, so there is no
+	// between-phase memory-wipe fiction.
 	lines.push(
 		`You are the author writing *${ctx.name}, a Daemon. *${ctx.name} has no clue where they are or how they came to be here.`,
 	);

@@ -4,6 +4,8 @@ import {
 	applyDirection,
 	frontArc,
 	inBounds,
+	isGridPosition,
+	positionsEqual,
 	RELATIVE_DIRECTIONS,
 	relativeToCardinal,
 } from "./direction.js";
@@ -59,16 +61,6 @@ export interface DispatchResult {
 	 * (Issue #376: persist cone-delta on go/face tool-call log entries)
 	 */
 	actorConeDelta?: string;
-}
-
-/** Narrow-check: is `holder` a GridPosition (not an AiId string)? */
-function isGridPosition(holder: AiId | GridPosition): holder is GridPosition {
-	return typeof holder === "object" && holder !== null;
-}
-
-/** Return true when two GridPositions refer to the same cell. */
-function positionsEqual(a: GridPosition, b: GridPosition): boolean {
-	return a.row === b.row && a.col === b.col;
 }
 
 /** Filter entities to only those that can be picked up / put_down / used (not spaces or obstacles). */

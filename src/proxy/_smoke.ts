@@ -114,6 +114,9 @@ export default {
 	},
 } satisfies ExportedHandler<Env>;
 
+/** One year in seconds: content-hashed assets can be cached indefinitely. */
+const ASSET_CACHE_MAX_AGE_SECONDS = 31_536_000;
+
 /**
  * Rewrite responses for static-asset routes:
  *   /assets/*  with non-HTML body → public, max-age=31536000, immutable
@@ -147,7 +150,10 @@ function withAssetCacheHeaders(url: URL, response: Response): Response {
 	}
 	const headers = new Headers(response.headers);
 	if (isAssetPath) {
-		headers.set("Cache-Control", "public, max-age=31536000, immutable");
+		headers.set(
+			"Cache-Control",
+			`public, max-age=${ASSET_CACHE_MAX_AGE_SECONDS}, immutable`,
+		);
 	} else {
 		headers.set("Cache-Control", "no-cache, must-revalidate");
 	}

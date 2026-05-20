@@ -12,8 +12,6 @@
  *   - summarizeRun(byScenario) → RunSummary
  */
 
-import type { AiId, ToolName } from "../../src/spa/game/types.js";
-
 // ── Recorded shapes ──────────────────────────────────────────────────────────
 
 export interface CapturedToolCall {
@@ -208,10 +206,6 @@ export function buildRunSummary(
 
 export { ACTION_TOOLS };
 
-export function actionToolHeader(): string {
-	return ACTION_TOOLS.join(" | ");
-}
-
 /**
  * Convenience: format a number as a percent with no decimal places, e.g.
  * `0.357 → "36%"`. Used by the markdown report writer.
@@ -219,6 +213,3 @@ export function actionToolHeader(): string {
 export function pct(x: number): string {
 	return `${Math.round(x * 100)}%`;
 }
-
-// Re-export ToolName / AiId for downstream typing convenience.
-export type { AiId, ToolName };
