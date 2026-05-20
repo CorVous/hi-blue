@@ -57,7 +57,7 @@ export async function validateOpenRouterKey(
 	return { kind: "validated" };
 }
 
-export function readKey(): string | null {
+function readKey(): string | null {
 	try {
 		const val = localStorage.getItem(LOCALSTORAGE_KEY);
 		return val || null;

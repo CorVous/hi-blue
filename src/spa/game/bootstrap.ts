@@ -156,31 +156,6 @@ export function generateContentPacksOnlySplit(
 }
 
 /**
- * Run the full async generation pipeline and return the resulting personas
- * and content packs as a single resolved bundle.
- *
- * Thin wrapper around `generateNewGameAssetsSplit` for callers (mostly tests)
- * that don't care about the per-stage timing. Does NOT create a GameSession
- * or touch localStorage.
- */
-export async function generateNewGameAssets(
-	opts?: BootstrapOpts,
-): Promise<NewGameAssets> {
-	const { personasPromise, contentPacksPromise } =
-		generateNewGameAssetsSplit(opts);
-	const [personas, { packsA, packsB, objectiveTypes }] = await Promise.all([
-		personasPromise,
-		contentPacksPromise,
-	]);
-	return {
-		personas,
-		contentPacksA: packsA,
-		contentPacksB: packsB,
-		objectiveTypes,
-	};
-}
-
-/**
  * Build a new GameSession reusing existing personas but generating fresh
  * content packs. Used by the end-game "Same Daemons, New Room" and
  * "Continue" choices (issue #307).

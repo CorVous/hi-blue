@@ -19,11 +19,7 @@ import {
 } from "./bootstrap.js";
 import type { AiId, AiPersona, ContentPack, ObjectiveType } from "./types.js";
 
-export type PendingBootstrapStatus =
-	| "pending"
-	| "personas-ready"
-	| "ready"
-	| "failed";
+type PendingBootstrapStatus = "pending" | "personas-ready" | "ready" | "failed";
 
 export interface PendingBootstrap {
 	personasPromise: Promise<Record<AiId, AiPersona>>;
@@ -187,7 +183,7 @@ export function recordPendingRetry(error?: unknown): void {
 /**
  * Record successful completion of a pending call. Clears the metadata.
  */
-export function recordPendingDone(): void {
+function recordPendingDone(): void {
 	_meta = {};
 }
 

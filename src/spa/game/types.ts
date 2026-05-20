@@ -39,7 +39,7 @@ export interface AiPersona {
 	actionProfile?: string;
 }
 
-export type WorldEntityKind =
+type WorldEntityKind =
 	| "objective_object"
 	| "objective_space"
 	| "interesting_object"
@@ -158,8 +158,6 @@ export interface ContentPack {
 	wallName: string;
 }
 
-export type ObjectiveKind = "carry" | "use_item" | "use_space" | "convergence";
-
 export interface CarryObjective {
 	id: string;
 	kind: "carry";
@@ -201,14 +199,6 @@ export type Objective =
 	| ConvergenceObjective;
 
 // ── Complication types ────────────────────────────────────────────────────────
-
-export type ComplicationKind =
-	| "weather_change"
-	| "sysadmin_directive"
-	| "tool_disable"
-	| "obstacle_shift"
-	| "chat_lockout"
-	| "setting_shift";
 
 /**
  * Persistent active complications stored on PhaseState.
@@ -458,12 +448,6 @@ export type ToolName =
 export interface ToolCall {
 	name: ToolName;
 	args: Record<string, string>;
-}
-
-export interface ToolResult {
-	success: boolean;
-	description: string;
-	reason?: string;
 }
 
 export interface AiTurnAction {

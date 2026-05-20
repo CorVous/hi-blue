@@ -33,7 +33,6 @@ vi.mock("../../content/content-pack-generator", () => ({
 		packA: STATIC_CONTENT_PACKS[0],
 		packB: STATIC_CONTENT_PACKS[0],
 	}),
-	generateContentPack: async () => STATIC_CONTENT_PACKS[0],
 }));
 
 // ── HTML fixture ──────────────────────────────────────────────────────────────
@@ -367,9 +366,6 @@ describe("renderStart — CapHitError handling", () => {
 					personasPromise: Promise.reject(err),
 					contentPacksPromise: Promise.reject(err),
 				}),
-				generateNewGameAssets: async () => {
-					throw err;
-				},
 			};
 		});
 

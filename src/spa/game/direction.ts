@@ -174,11 +174,3 @@ export function frontArc(
 		{ row: pos.row + fwd.drow - lft.drow, col: pos.col + fwd.dcol - lft.dcol },
 	].filter(inBounds);
 }
-
-/**
- * Format a GridPosition as a labeled string for engine-internal logs.
- * NOT surfaced to daemons; used only in action-log records and dev tools.
- */
-export function formatPosition(pos: GridPosition): string {
-	return `(row ${pos.row}, col ${pos.col})`;
-}

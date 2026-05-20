@@ -25,7 +25,7 @@ import {
 	inBounds,
 } from "./direction.js";
 
-export type ConePhrasing =
+type ConePhrasing =
 	| "your cell"
 	| "directly in front, left"
 	| "directly in front"

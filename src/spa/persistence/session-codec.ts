@@ -127,7 +127,7 @@ export interface MetaFile {
 }
 
 /** Shape of the sealed payload inside `engine.dat`. */
-export interface SealedEngine {
+interface SealedEngine {
 	schemaVersion: typeof SESSION_SCHEMA_VERSION;
 	world: WorldState;
 	budgets: Record<AiId, AiBudget>;

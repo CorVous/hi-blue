@@ -23,7 +23,6 @@ vi.mock("../../content/content-pack-generator", () => ({
 		packB: STATIC_CONTENT_PACKS[0],
 		objectiveTypes: STATIC_OBJECTIVE_TYPES,
 	}),
-	generateContentPack: async () => STATIC_CONTENT_PACKS[0],
 }));
 
 // ── Shared localStorage stub helpers ──────────────────────────────────────────

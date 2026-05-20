@@ -118,12 +118,9 @@ export function resolveLLMTarget(): {
 	};
 }
 
-// Re-export the message types from round-llm-provider (canonical definition)
+// Re-export the message type from round-llm-provider (canonical definition)
 // and OpenAiTool from tool-registry so callers can import from one place.
-export type {
-	OpenAiMessage,
-	OpenAiToolCall,
-} from "./game/round-llm-provider.js";
+export type { OpenAiMessage } from "./game/round-llm-provider.js";
 export type { OpenAiTool } from "./game/tool-registry.js";
 
 export type { UsageInfo } from "./streaming.js";

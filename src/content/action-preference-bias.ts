@@ -29,8 +29,6 @@
  *     using interactive objects (critical for objective-completion).
  */
 
-import { TEMPERAMENT_POOL } from "./temperament-pool.js";
-
 export const ACTION_TOOLS = [
 	"go",
 	"face",
@@ -162,12 +160,4 @@ export function actionProfileFor(name: string, t1: string, t2: string): string {
 		);
 	}
 	return parts.join(" ");
-}
-
-/**
- * List the temperaments present in the bias table — convenience for tests
- * that want to walk the full set without re-importing the pool.
- */
-export function knownTemperaments(): readonly string[] {
-	return TEMPERAMENT_POOL;
 }
