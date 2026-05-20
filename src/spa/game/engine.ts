@@ -52,11 +52,6 @@ export function startGame(
 		 * type-first naming convention. When omitted, no objectives are created.
 		 */
 		objectiveTypes?: ObjectiveType[];
-		/**
-		 * @deprecated Use objectiveTypes instead. Kept for backward-compat in
-		 * tests that don't care about objectives (produces no objectives when set).
-		 */
-		objectiveCount?: number;
 	} = {},
 ): GameState {
 	const rng = opts.rng ?? Math.random;
