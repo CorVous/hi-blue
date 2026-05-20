@@ -119,13 +119,9 @@ describe("runRound — sysadmin_directive complication", () => {
 		const game = withCountdownZero(makeGame());
 		const rng = sysadminRng([0.2, 0.0, 0.0, 0.0]);
 
-		const { nextState } = await runRound(
-			game,
-			"red",
-			"hi",
-			makeProvider(),
+		const { nextState } = await runRound(game, "red", "hi", makeProvider(), {
 			rng,
-		);
+		});
 
 		const phase = nextState;
 		const directives = phase.activeComplications.filter(
@@ -145,13 +141,9 @@ describe("runRound — sysadmin_directive complication", () => {
 		// rng[0]=0.2 → sysadmin_directive; rng[1]=0.0 → target=first AI; rng[2]=0.0 → directive idx 0
 		const rng = sysadminRng([0.2, 0.0, 0.0, 0.0]);
 
-		const { nextState } = await runRound(
-			game,
-			"red",
-			"hi",
-			makeProvider(),
+		const { nextState } = await runRound(game, "red", "hi", makeProvider(), {
 			rng,
-		);
+		});
 
 		const phase = nextState;
 		const directive = phase.activeComplications.find(
@@ -179,13 +171,9 @@ describe("runRound — sysadmin_directive complication", () => {
 		// Force target to be "red" (index 0 via rng[1]=0.0)
 		const rng = sysadminRng([0.2, 0.0, 0.0, 0.0]);
 
-		const { nextState } = await runRound(
-			game,
-			"red",
-			"hi",
-			makeProvider(),
+		const { nextState } = await runRound(game, "red", "hi", makeProvider(), {
 			rng,
-		);
+		});
 
 		const phase = nextState;
 		const directive = phase.activeComplications.find(
@@ -223,13 +211,9 @@ describe("runRound — sysadmin_directive complication", () => {
 		// Force target to "red": rng[0]=0.2 → sysadmin_directive, rng[1]=0.0 → target=red
 		const rng = sysadminRng([0.2, 0.0, 0.0, 0.0]);
 
-		const { nextState } = await runRound(
-			game,
-			"red",
-			"hi",
-			makeProvider(),
+		const { nextState } = await runRound(game, "red", "hi", makeProvider(), {
 			rng,
-		);
+		});
 
 		const phase = nextState;
 
@@ -267,13 +251,9 @@ describe("runRound — sysadmin_directive complication", () => {
 		// Force sysadmin_directive on red (index 0 target)
 		const rng = sysadminRng([0.2, 0.0, 0.0, 0.0]);
 
-		const { nextState } = await runRound(
-			game,
-			"red",
-			"hi",
-			makeProvider(),
+		const { nextState } = await runRound(game, "red", "hi", makeProvider(), {
 			rng,
-		);
+		});
 
 		const phase = nextState;
 		const directive = phase.activeComplications.find(

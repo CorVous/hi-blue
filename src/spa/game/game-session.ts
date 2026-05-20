@@ -143,21 +143,17 @@ export class GameSession {
 			toolRoundtrip: newToolRoundtrip,
 			coneSnapshots: newConeSnapshots,
 			coneEntities: newConeEntities,
-		} = await runRound(
-			this.state,
-			addressed,
-			message,
-			provider,
-			Math.random,
+		} = await runRound(this.state, addressed, message, provider, {
+			rng: Math.random,
 			initiative,
-			this.toolRoundtrip,
+			priorToolRoundtrip: this.toolRoundtrip,
 			completionSink,
 			onAiDelta,
-			this.coneSnapshots,
+			priorConeSnapshots: this.coneSnapshots,
 			onAiTurnComplete,
 			onLifecycle,
-			this.coneEntities,
-		);
+			priorConeEntities: this.coneEntities,
+		});
 
 		// Fill in empty string for AIs whose completions weren't captured
 		// (only possible if the sink was never called, shouldn't happen normally)
