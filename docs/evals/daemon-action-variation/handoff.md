@@ -38,12 +38,15 @@ e.g.:
 | `?actionProfiles=1` opt-in flag | ✅ plumbed end-to-end |
 | Eval harness | ✅ built, runs natively against the merged engine |
 | Eval data — real merged surface | ❌ **not yet collected** (see §6) |
-| Enabled by default | ❌ **no** — flag-gated, off |
+| Enabled by default | 🟢 **decided: yes** — ship action profiles ON; see §4 for the rollout |
+| Default flipped in code | ❌ not yet — calibration is the gate (see §4, §6) |
 | Bias table calibration | 🟡 first-pass; needs tuning against fresh eval data |
 
-**The feature is wired and safe to merge** — it is byte-identical to
-current production when the flag is off. What remains is *calibration
-and the decision to enable it* (§6).
+**The decision is made: action profiles ship ON by default.** The
+feature is wired and the merge is safe — it is still byte-identical to
+current production *until the default is flipped*. What remains is
+calibration against fresh native eval data, then flipping the default
+(§4) and validating (§6).
 
 ---
 
@@ -89,18 +92,33 @@ and the decision to enable it* (§6).
 
 ---
 
-## 4. The flag
+## 4. The flag → the rollout
 
-Off by default. Enable per-game with `?actionProfiles=1` in the URL
-(works alongside `?engagementClauses=1`). There is **no** localStorage
-or settings toggle — it is URL-only, matching the engagement-clause
-spike's pattern.
+**Decision: action profiles ship ON by default.** Today the feature is
+still opt-in (`?actionProfiles=1` in the URL, alongside
+`?engagementClauses=1`) so the merge stays byte-identical to production
+— but the plan is to flip the default once the bias table is
+calibrated (§6).
 
-To enable by default in production: set `actionProfiles: true` in the
-`generatePersonas` call inside `src/spa/game/bootstrap.ts`
-(`generateNewGameAssetsSplit`), or flip the default in
-`generatePersonas`'s `opts`. **Do not do this until the bias table is
-calibrated against fresh eval data** (§6).
+### Flipping the default — what it takes
+
+1. **Flip the source default.** The flag flows
+   `start.ts` → `BootstrapOpts.actionProfiles` →
+   `generateNewGameAssetsSplit` → `generatePersonas(..., { actionProfiles })`.
+   Set the default to `true` at the `generatePersonas` call in
+   `src/spa/game/bootstrap.ts` (`generateNewGameAssetsSplit`).
+2. **Invert the URL flag to a kill-switch.** `src/spa/routes/start.ts`
+   currently reads `searchParams.get("actionProfiles") === "1"` —
+   strictly opt-in. Once ON is the default, change it so the URL can
+   *disable* it (`?actionProfiles=0`) for A/B comparison and debugging,
+   defaulting to ON when the param is absent. Keep the engagement-clause
+   flag's pattern consistent if you touch it.
+3. **Leave the merge as-is until calibration passes.** Do **not** flip
+   the default in this PR — land it as a follow-up once §6 steps 1–4
+   are done, so the enable is backed by fresh native eval data.
+
+The `actionProfile` field is persisted (session-codec) and
+save-compatible, so flipping the default does not need a schema bump.
 
 ---
 
@@ -148,6 +166,9 @@ perception signal that used to route through `examine` survives.
 
 ## 6. Open work — what's left to ship this
 
+The end state is decided: **action profiles ON by default.** The
+remaining steps are the calibration gate before flipping that default.
+
 1. **Collect fresh eval data on the real merged surface.** All eval
    numbers in `analysis.md` came from the *pre-merge eval-local
    projection*. The harness now runs natively — re-run:
@@ -167,8 +188,11 @@ perception signal that used to route through `examine` survives.
    more pairs (or all 24 temperaments) to catch pairs whose clause
    reads badly or whose behaviour doesn't match the bias.
 5. **Decide whether `use` needs the third tier** (§5).
-6. **Decide to enable by default** (§4) — flip the flag, or keep it
-   URL-gated for a playtest first.
+6. **Flip the default ON** (§4) — set `actionProfiles: true` in
+   `bootstrap.ts` and invert the URL flag to a `?actionProfiles=0`
+   kill-switch. Land as a follow-up PR once steps 1–5 are done, so the
+   enable is backed by fresh native data. Consider one playtest with
+   the URL flag before flipping, but the default destination is ON.
 7. **Drop `preview.html`** — it's a throwaway eval-results preview
    (html-preview skill), not part of the feature. Exclude from merge.
 
@@ -213,8 +237,13 @@ the branch.
 
 ## 9. Risk notes
 
-- **Off by default = safe to merge.** Nothing changes for production
-  users until the flag is flipped.
+- **This PR is still safe to merge** — the default is not flipped here;
+  it stays opt-in until the calibration gate (§6) clears. Flipping the
+  default to ON is a deliberate follow-up.
+- **When the default flips**, every new game gets action profiles.
+  That's the intended end state — but it's why the calibration gate
+  exists: a mis-tuned bias table would ship to all players at once.
+  Validate with fresh native eval data first.
 - The bias table is a content artifact, not load-bearing logic — a bad
   value produces a slightly-off clause, never a crash.
 - `actionProfile` is an optional field — saves written before the
