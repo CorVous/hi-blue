@@ -17,7 +17,6 @@ export const COLOR_PALETTE: string[] = [
 	"#fa9d68", // apricot
 	"#adc35e", // chartreuse
 	"#61d19a", // jade
-	"#a7adff", // periwinkle
 	"#dc9beb", // orchid
 	"#f594c3", // flamingo
 ];
