@@ -68,6 +68,15 @@ test("chat lockout disables send for locked-out AI and is silent to player", asy
 
 	const { names: reloadNames } = await getAiHandles(page);
 
+	// 3b. The locked AI's panel must be visually muted immediately on restore,
+	//     before any composer interaction. refreshComposerState paints
+	//     `panel--locked` by `[data-ai]`, so it must run after the panel-setup
+	//     loop assigns those attributes — running earlier left a restored
+	//     lockout looking unlocked until the player typed something.
+	const lockedPanel = page.locator(`.ai-panel[data-ai="${ids[0]}"]`);
+	await expect(lockedPanel).toHaveClass(/panel--locked/);
+	await expect(lockedPanel).toHaveAttribute("aria-disabled", "true");
+
 	// 4. Typing *<locked AI> should disable Send.
 	await page.fill("#prompt", `*${reloadNames[0]} hi`);
 	await expect(page.locator("#send")).toBeDisabled();

@@ -1036,9 +1036,6 @@ export function renderGame(
 	if (topinfoEl) topinfoEl.removeAttribute("hidden");
 	if (bannerWrapEl) bannerWrapEl.removeAttribute("hidden");
 
-	// Set initial composer state (Send starts disabled until a valid *mention).
-	refreshComposerState();
-
 	const aiIdList: string[] =
 		session !== null ? Object.keys(session.getState().personas) : [];
 
@@ -1074,6 +1071,14 @@ export function renderGame(
 			.join(" | ");
 		if (handles) _promptInput.placeholder = `${handles} …`;
 	}
+
+	// Set the initial composer state — Send starts disabled until a valid
+	// *mention. Deferred until after the panel-setup loop above assigns
+	// `data-ai` to every `.ai-panel`: refreshComposerState's panel-muting pass
+	// selects panels by `[data-ai]`, so running it before those attributes
+	// exist skips the `panel--locked` paint, leaving a restored chat-lockout
+	// looking unlocked until the next composer interaction.
+	refreshComposerState();
 
 	// One-time chrome: ASCII banner + initial top-info row.
 	const bannerEl = doc.querySelector<HTMLElement>("#banner");
