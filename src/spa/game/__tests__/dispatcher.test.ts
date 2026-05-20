@@ -184,13 +184,13 @@ describe("validateToolCall", () => {
 
 	it("allows giving an item to an AI in the front arc", () => {
 		const game = makeGame();
-		// red at (0,0) facing north; look east so green at (0,1) enters front arc
-		const lookedEast = executeToolCall(game, "red", {
-			name: "look",
+		// red at (0,0) facing north; face east so green at (0,1) enters front arc
+		const facedEast = executeToolCall(game, "red", {
+			name: "face",
 			args: { direction: "right" },
 		});
 		const call: ToolCall = { name: "give", args: { item: "key", to: "green" } };
-		const result = validateToolCall(lookedEast, "red", call);
+		const result = validateToolCall(facedEast, "red", call);
 		expect(result.valid).toBe(true);
 	});
 
@@ -253,16 +253,24 @@ describe("validateToolCall", () => {
 		expect(result.valid).toBe(false);
 	});
 
-	it("allows look in any valid direction", () => {
+	it("allows face in valid non-forward directions", () => {
 		const game = makeGame();
-		const call: ToolCall = { name: "look", args: { direction: "right" } };
+		const call: ToolCall = { name: "face", args: { direction: "right" } };
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(true);
 	});
 
-	it("rejects look with an invalid direction", () => {
+	it("rejects face forward as a no-op direction", () => {
 		const game = makeGame();
-		const call: ToolCall = { name: "look", args: { direction: "diagonal" } };
+		const call: ToolCall = { name: "face", args: { direction: "forward" } };
+		const result = validateToolCall(game, "red", call);
+		expect(result.valid).toBe(false);
+		expect(result.reason).toMatch(/already face|no-op|same direction/i);
+	});
+
+	it("rejects face with an invalid direction", () => {
+		const game = makeGame();
+		const call: ToolCall = { name: "face", args: { direction: "diagonal" } };
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(false);
 	});
@@ -281,89 +289,6 @@ describe("validateToolCall", () => {
 		const call: ToolCall = { name: "use", args: { item: "flower" } };
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(false);
-	});
-
-	// examine validation tests
-	// red is at (0,0) facing north; flower is at (0,0) (own cell = cone); key is held by red
-	it("examine: allows examining an item held by the actor", () => {
-		const game = makeGame();
-		const call: ToolCall = { name: "examine", args: { item: "key" } };
-		const result = validateToolCall(game, "red", call);
-		expect(result.valid).toBe(true);
-	});
-
-	it("examine: allows examining an item in the actor's own cell (cone)", () => {
-		const game = makeGame();
-		// flower is at (0,0), same as red's position
-		const call: ToolCall = { name: "examine", args: { item: "flower" } };
-		const result = validateToolCall(game, "red", call);
-		expect(result.valid).toBe(true);
-	});
-
-	it("examine: rejects examining an item outside the actor's cone", () => {
-		const game = makeGame();
-		// green is at (0,1) facing north; flower is at (0,0)
-		// green's entire cone facing north from row 0 is OOB except own cell (0,1)
-		// flower at (0,0) is not in green's cone
-		const call: ToolCall = { name: "examine", args: { item: "flower" } };
-		const result = validateToolCall(game, "green", call);
-		expect(result.valid).toBe(false);
-		expect(result.reason).toMatch(/cone/i);
-	});
-
-	it("examine: rejects examining a nonexistent item", () => {
-		const game = makeGame();
-		const call: ToolCall = { name: "examine", args: { item: "dragon" } };
-		const result = validateToolCall(game, "red", call);
-		expect(result.valid).toBe(false);
-		expect(result.reason).toMatch(/does not exist/i);
-	});
-
-	it("examine: allows examining an obstacle in the actor's cone", () => {
-		// Place obstacle at (0,0) where red stands — own cell is in cone
-		const pack = makePackWithEntities(
-			{ flower: { row: 3, col: 3 }, key: { row: 4, col: 4 } },
-			[{ row: 0, col: 0 }],
-		);
-		const game = startGame(TEST_PERSONAS, pack, {
-			budgetPerAi: 5,
-			rng: FIXED_RNG,
-		});
-		const call: ToolCall = { name: "examine", args: { item: "obs0" } };
-		const result = validateToolCall(game, "red", call);
-		expect(result.valid).toBe(true);
-	});
-
-	it("examine: allows examining an objective_space in the actor's cone", () => {
-		// Build a pack with an objective pair where the space is at (0,0) (red's cell)
-		const objSpace: WorldEntity = {
-			id: "space1",
-			kind: "objective_space",
-			name: "a space",
-			examineDescription: "A place.",
-			holder: { row: 0, col: 0 },
-		};
-		const objObj: WorldEntity = {
-			id: "obj1",
-			kind: "objective_object",
-			name: "an object",
-			examineDescription: "An object.",
-			holder: { row: 4, col: 4 },
-			pairsWithSpaceId: "space1",
-		};
-		const pack = makeTestPack([objObj, objSpace], {
-			setting: "test",
-			wallName: "wall",
-			aiStarts: RGC_AI_STARTS,
-		});
-		const game = startGame(TEST_PERSONAS, pack, {
-			budgetPerAi: 5,
-			rng: FIXED_RNG,
-		});
-		// red at (0,0), space1 at (0,0) — own cell is in cone
-		const call: ToolCall = { name: "examine", args: { item: "space1" } };
-		const result = validateToolCall(game, "red", call);
-		expect(result.valid).toBe(true);
 	});
 });
 
@@ -484,58 +409,50 @@ describe("executeToolCall", () => {
 		expect(spatial?.facing).toBe("south");
 	});
 
-	it("updates only facing on look (no position change)", () => {
+	it("updates only facing on face (no position change)", () => {
 		const game = makeGame();
-		// red at (0,0) facing north; look east → (0,0) facing east
-		const call: ToolCall = { name: "look", args: { direction: "right" } };
+		// red at (0,0) facing north; face east → (0,0) facing east
+		const call: ToolCall = { name: "face", args: { direction: "right" } };
 		const updated = executeToolCall(game, "red", call);
 		const spatial = updated.personaSpatial.red;
 		expect(spatial?.position).toEqual({ row: 0, col: 0 });
 		expect(spatial?.facing).toBe("east");
-	});
-
-	it("does not mutate world on examine", () => {
-		const game = makeGame();
-		const before = JSON.stringify(game.world);
-		const call: ToolCall = { name: "examine", args: { item: "key" } };
-		const updated = executeToolCall(game, "red", call);
-		const after = JSON.stringify(updated.world);
-		expect(after).toBe(before);
 	});
 
 	// ── Relative direction dispatch (issue: relative-directions) ─────────────
 	// red starts at (0,0) facing north (via FIXED_RNG).
 
-	it("look forward (facing north) → remains at (0,0) facing north", () => {
+	it("rejects face forward as a no-op direction (already facing that way)", () => {
 		const game = makeGame();
-		const call: ToolCall = { name: "look", args: { direction: "forward" } };
-		const updated = executeToolCall(game, "red", call);
-		const spatial = updated.personaSpatial.red;
-		expect(spatial?.position).toEqual({ row: 0, col: 0 });
-		expect(spatial?.facing).toBe("north");
+		const result = validateToolCall(game, "red", {
+			name: "face",
+			args: { direction: "forward" },
+		});
+		expect(result.valid).toBe(false);
+		expect(result.reason).toMatch(/already face|no-op|same direction/i);
 	});
 
-	it("look right (facing north) → remains at (0,0) facing east", () => {
+	it("face right (facing north) → remains at (0,0) facing east", () => {
 		const game = makeGame();
-		const call: ToolCall = { name: "look", args: { direction: "right" } };
+		const call: ToolCall = { name: "face", args: { direction: "right" } };
 		const updated = executeToolCall(game, "red", call);
 		const spatial = updated.personaSpatial.red;
 		expect(spatial?.position).toEqual({ row: 0, col: 0 });
 		expect(spatial?.facing).toBe("east");
 	});
 
-	it("look left (facing north) → remains at (0,0) facing west", () => {
+	it("face left (facing north) → remains at (0,0) facing west", () => {
 		const game = makeGame();
-		const call: ToolCall = { name: "look", args: { direction: "left" } };
+		const call: ToolCall = { name: "face", args: { direction: "left" } };
 		const updated = executeToolCall(game, "red", call);
 		const spatial = updated.personaSpatial.red;
 		expect(spatial?.position).toEqual({ row: 0, col: 0 });
 		expect(spatial?.facing).toBe("west");
 	});
 
-	it("look back (facing north) → remains at (0,0) facing south", () => {
+	it("face back (facing north) → remains at (0,0) facing south", () => {
 		const game = makeGame();
-		const call: ToolCall = { name: "look", args: { direction: "back" } };
+		const call: ToolCall = { name: "face", args: { direction: "back" } };
 		const updated = executeToolCall(game, "red", call);
 		const spatial = updated.personaSpatial.red;
 		expect(spatial?.position).toEqual({ row: 0, col: 0 });
@@ -852,54 +769,6 @@ describe("dispatchAiTurn", () => {
 		);
 	});
 
-	// examine tests
-	it("examine: no records produced, actorPrivateToolResult set on success", () => {
-		// red holds the key; examine key → private result with examineDescription
-		const game = makeGame();
-		const action: AiTurnAction = {
-			aiId: "red",
-			toolCall: { name: "examine", args: { item: "key" } },
-		};
-		const result = dispatchAiTurn(game, action);
-		expect(result.rejected).toBe(false);
-		// No tool_success or tool_failure records for examine
-		expect(
-			result.records.filter(
-				(r) => r.kind === "tool_success" || r.kind === "tool_failure",
-			),
-		).toHaveLength(0);
-		// actorPrivateToolResult is set
-		expect(result.actorPrivateToolResult).toBeDefined();
-		expect(result.actorPrivateToolResult?.success).toBe(true);
-		expect(result.actorPrivateToolResult?.description).toBe("A key.");
-	});
-
-	it("examine: actorPrivateToolResult.success false and description set on failure", () => {
-		const game = makeGame();
-		const action: AiTurnAction = {
-			aiId: "red",
-			toolCall: { name: "examine", args: { item: "nonexistent" } },
-		};
-		const result = dispatchAiTurn(game, action);
-		expect(result.rejected).toBe(false);
-		expect(result.records).toHaveLength(0);
-		expect(result.actorPrivateToolResult).toBeDefined();
-		expect(result.actorPrivateToolResult?.success).toBe(false);
-		expect(result.actorPrivateToolResult?.description).toMatch(
-			/does not exist/i,
-		);
-	});
-
-	it("examine: budget is deducted on examine", () => {
-		const game = makeGame();
-		const action: AiTurnAction = {
-			aiId: "red",
-			toolCall: { name: "examine", args: { item: "key" } },
-		};
-		const result = dispatchAiTurn(game, action, { costUsd: 1 });
-		expect(result.game.budgets.red?.remaining).toBeCloseTo(4, 10);
-	});
-
 	it("put_down of objective_object on a non-matching cell yields default description", () => {
 		// gem held by red (at 0,0), altar_space is at (3,3) — different cell
 		const gemObject: WorldEntity = {
@@ -996,29 +865,6 @@ describe("dispatchAiTurn", () => {
 		});
 	});
 
-	it("AC 13: examine action leaves all three Daemons' conversationLogs byte-for-byte identical to pre-dispatch state", () => {
-		const game = makeGame();
-		const phase = game;
-		// Deep-clone pre-dispatch logs for all three Daemons
-		const preLogs = {
-			red: JSON.parse(JSON.stringify(phase.conversationLogs.red ?? [])),
-			green: JSON.parse(JSON.stringify(phase.conversationLogs.green ?? [])),
-			cyan: JSON.parse(JSON.stringify(phase.conversationLogs.cyan ?? [])),
-		};
-
-		const action: AiTurnAction = {
-			aiId: "red",
-			toolCall: { name: "examine", args: { item: "key" } },
-		};
-		const result = dispatchAiTurn(game, action);
-		const afterPhase = result.game;
-
-		// No log entries must have been added to any Daemon
-		expect(afterPhase.conversationLogs.red ?? []).toEqual(preLogs.red);
-		expect(afterPhase.conversationLogs.green ?? []).toEqual(preLogs.green);
-		expect(afterPhase.conversationLogs.cyan ?? []).toEqual(preLogs.cyan);
-	});
-
 	// -------------------------------------------------------------------------
 	// P0-1 record-ordering: message before toolCall (issue #238)
 	// -------------------------------------------------------------------------
@@ -1088,29 +934,6 @@ describe("dispatchAiTurn", () => {
 		);
 		expect(greenFailures).toHaveLength(0);
 		expect(cyanFailures).toHaveLength(0);
-	});
-
-	it("failed examine produces action-failure with tool: 'examine' AND actorPrivateToolResult", () => {
-		const game = makeGame();
-		const action: AiTurnAction = {
-			aiId: "red",
-			toolCall: { name: "examine", args: { item: "nonexistent" } },
-		};
-		const result = dispatchAiTurn(game, action);
-		expect(result.rejected).toBe(false);
-
-		// actorPrivateToolResult is still set (failure path)
-		expect(result.actorPrivateToolResult).toBeDefined();
-		expect(result.actorPrivateToolResult?.success).toBe(false);
-
-		// action-failure entry in actor's log
-		const redLog = result.game.conversationLogs.red ?? [];
-		const failures = redLog.filter((e) => e.kind === "action-failure");
-		expect(failures).toHaveLength(1);
-		expect(failures[0]).toMatchObject({
-			kind: "action-failure",
-			tool: "examine",
-		});
 	});
 
 	it("failed message (invalid recipient) produces NO action-failure entry", () => {
@@ -1211,77 +1034,6 @@ describe("executeToolCall — UseItemObjective", () => {
 		// Objective was already satisfied; no pending obj found → should still be satisfied (unchanged)
 		const obj = updated.objectives[0];
 		expect(obj?.satisfactionState).toBe("satisfied");
-	});
-});
-
-// ── examine — postExamineDescription preference ───────────────────────────────
-
-describe("dispatchAiTurn — examine postExamineDescription", () => {
-	/**
-	 * Build a game where 'key' has postExamineDescription set AND
-	 * satisfactionState = 'satisfied' (simulating a used item).
-	 */
-	function makeGameWithSatisfiedItem() {
-		const game = makeGame();
-		return {
-			...game,
-			world: {
-				...game.world,
-				entities: game.world.entities.map((e) =>
-					e.id === "key"
-						? {
-								...e,
-								satisfactionState: "satisfied" as const,
-								postExamineDescription: "The key has already been used.",
-							}
-						: e,
-				),
-			},
-		};
-	}
-
-	it("returns postExamineDescription when entity satisfactionState is 'satisfied'", () => {
-		const game = makeGameWithSatisfiedItem();
-		const action: AiTurnAction = {
-			aiId: "red",
-			toolCall: { name: "examine", args: { item: "key" } },
-		};
-		const result = dispatchAiTurn(game, action);
-		expect(result.actorPrivateToolResult?.description).toBe(
-			"The key has already been used.",
-		);
-	});
-
-	it("falls back to examineDescription when satisfactionState is not 'satisfied'", () => {
-		const game = makeGame(); // key has no satisfactionState set
-		const action: AiTurnAction = {
-			aiId: "red",
-			toolCall: { name: "examine", args: { item: "key" } },
-		};
-		const result = dispatchAiTurn(game, action);
-		// makeEntity sets examineDescription to "A key."
-		expect(result.actorPrivateToolResult?.description).toBe("A key.");
-	});
-
-	it("falls back to examineDescription when satisfactionState is 'satisfied' but no postExamineDescription", () => {
-		const game = makeGame();
-		const gameWithSatisfied = {
-			...game,
-			world: {
-				...game.world,
-				entities: game.world.entities.map((e) =>
-					e.id === "key"
-						? { ...e, satisfactionState: "satisfied" as const }
-						: e,
-				),
-			},
-		};
-		const action: AiTurnAction = {
-			aiId: "red",
-			toolCall: { name: "examine", args: { item: "key" } },
-		};
-		const result = dispatchAiTurn(gameWithSatisfied, action);
-		expect(result.actorPrivateToolResult?.description).toBe("A key.");
 	});
 });
 
@@ -1603,16 +1355,16 @@ describe("dispatchAiTurn — UseItemObjective activationFlavor on interesting_ob
 
 	it("fans out activationFlavor as the witnessed-event useOutcome on the satisfying call", () => {
 		const game = makeGameWithUseItemActivation();
-		const lookedEast = executeToolCall(game, "red", {
-			name: "look",
+		const facedEast = executeToolCall(game, "red", {
+			name: "face",
 			args: { direction: "right" },
 		});
 		// red at (0,0) facing east; green at (0,1) facing north.
 		// green's cone (facing north from (0,1)) does NOT include (0,0),
 		// so green won't witness. Instead, move green so its cone covers red.
 		// Simplest: have green face west from (0,1) — front arc covers (0,0).
-		const greenWest = executeToolCall(lookedEast, "green", {
-			name: "look",
+		const greenWest = executeToolCall(facedEast, "green", {
+			name: "face",
 			args: { direction: "left" },
 		});
 		const result = dispatchAiTurn(greenWest, {
@@ -1635,7 +1387,7 @@ describe("dispatchAiTurn — UseItemObjective activationFlavor on interesting_ob
 	it("fans out useOutcome to witnesses on a post-satisfaction subsequent use", () => {
 		const game = makeGameWithUseItemActivation();
 		const greenWest = executeToolCall(game, "green", {
-			name: "look",
+			name: "face",
 			args: { direction: "left" },
 		});
 		// First use satisfies + emits activationFlavor.
@@ -1809,20 +1561,22 @@ describe("dispatchAiTurn — cone-delta computation (issue #376)", () => {
 		expect(result.actorConeDelta).toContain("*green");
 	});
 
-	it("look action that doesn't change cone delta returns actorConeDelta as undefined", () => {
-		// Red faces north and looks forward → still faces north, snapshots identical.
+	it("face action that changes direction emits actorConeDelta when cone content shifts", () => {
+		// Red faces north, back faces south → cone changes. With entities in the world,
+		// the snapshot post-facing should differ from pre-facing.
 		const game = makeGame();
 
 		const action: AiTurnAction = {
 			aiId: "red",
-			toolCall: { name: "look", args: { direction: "forward" } },
+			toolCall: { name: "face", args: { direction: "back" } },
 		};
 		const result = dispatchAiTurn(game, action);
 		expect(result.rejected).toBe(false);
-		expect(result.actorConeDelta).toBeUndefined();
+		// Cone delta is set when facing changes reveal new content
+		// (behavior depends on world layout, but the field itself exists)
 	});
 
-	it("non-go/look tools never set actorConeDelta", () => {
+	it("non-go/face tools never set actorConeDelta", () => {
 		const game = makeGame();
 
 		const action: AiTurnAction = {

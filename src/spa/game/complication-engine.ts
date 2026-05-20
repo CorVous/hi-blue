@@ -37,8 +37,7 @@ export const DISABLABLE_TOOLS: ToolName[] = [
 	"give",
 	"use",
 	"go",
-	"look",
-	"examine",
+	"face",
 	"message",
 ];
 

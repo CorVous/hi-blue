@@ -32,10 +32,10 @@ describe("parseToolCallDetail", () => {
 		expect(detail.parseError).toBeUndefined();
 	});
 
-	it("extracts direction from a look tool call", () => {
+	it("extracts direction from a face tool call", () => {
 		const detail = parseToolCallDetail({
 			id: "c2",
-			name: "look",
+			name: "face",
 			argumentsJson: '{"direction":"left"}',
 		});
 		expect(detail.direction).toBe("left");
@@ -69,8 +69,8 @@ describe("parseToolCallDetail", () => {
 		expect(detail.recipient).toBe("3kw7");
 	});
 
-	it("extracts item from pick_up / use / examine", () => {
-		for (const name of ["pick_up", "put_down", "use", "examine"] as const) {
+	it("extracts item from pick_up / use / put_down", () => {
+		for (const name of ["pick_up", "put_down", "use"] as const) {
 			const detail = parseToolCallDetail({
 				id: `c-${name}`,
 				name,
@@ -388,7 +388,7 @@ describe("buildPerRoundSeries", () => {
 					name: "message",
 					argumentsJson: '{"to":"blue","content":"hi"}',
 				},
-				{ id: "l1", name: "look", argumentsJson: '{"direction":"right"}' },
+				{ id: "l1", name: "face", argumentsJson: '{"direction":"right"}' },
 			],
 		},
 		// round 3: silent + free-text-message leak
@@ -425,7 +425,7 @@ describe("buildPerRoundSeries", () => {
 	it("breaks out per-tool counts as separate series", () => {
 		const s = buildPerRoundSeries(turns, ["red", "sim1", "sim2"]);
 		expect(s.toolCallCountsByName.go).toEqual([1, 0, 0, 0]);
-		expect(s.toolCallCountsByName.look).toEqual([0, 1, 0, 0]);
+		expect(s.toolCallCountsByName.face).toEqual([0, 1, 0, 0]);
 		expect(s.toolCallCountsByName.message).toEqual([0, 1, 0, 1]);
 	});
 

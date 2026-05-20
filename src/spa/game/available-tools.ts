@@ -6,10 +6,9 @@
  * game state (empty item cell for pick_up, no held items for put_down/use,
  * no adjacent AI for give, no legal direction for go).
  *
- * `look` is always present with the full 4-direction enum.
+ * `face` is always present with the 3-direction enum (excludes "forward", the current facing).
  */
 
-import { projectCone } from "./cone-projector.js";
 import {
 	applyDirection,
 	frontArc,
@@ -100,7 +99,7 @@ function cloneToolWithEnums(
  *
  * Algorithm:
  * 0. `message` — always present; `to` enum = "blue" + live peer daemon ids.
- * 1. `look` — always present, full RELATIVE_DIRECTIONS enum.
+ * 1. `face` — always present, RELATIVE_DIRECTIONS enum excluding "forward" (current facing is no-op).
  * 2. `go` — included only when at least one direction is in-bounds AND non-obstacle.
  *    Enum restricted to legal directions.
  * 3. `pick_up` — included only when pickable entities are in the actor's own cell
@@ -110,9 +109,6 @@ function cloneToolWithEnums(
  *    Enum restricted to held entity ids.
  * 5. `give` — included only when actor holds pickable entities AND has AIs in the
  *    actor's own cell or front arc. item enum = held entity ids, to enum = reachable AI ids.
- * 6. `examine` — included when any entity (any kind) is held by the actor OR rests
- *    anywhere in the full 9-cell cone (own + dist-1 arc + dist-2 fan).
- *    Enum restricted to those entity ids.
  *
  * Spaces and obstacles are never pickupable.
  *
@@ -150,11 +146,10 @@ export function availableTools(
 		);
 	}
 
-	// 1. look — always present
-	if (!disabledTools.has("look")) {
-		tools.push(
-			cloneToolWithEnums("look", { direction: [...RELATIVE_DIRECTIONS] }),
-		);
+	// 1. face — always present, excluding "forward" (current facing is no-op)
+	if (!disabledTools.has("face")) {
+		const faceDirections = RELATIVE_DIRECTIONS.filter((d) => d !== "forward");
+		tools.push(cloneToolWithEnums("face", { direction: faceDirections }));
 	}
 
 	// 2. go — restricted to legal directions
@@ -240,27 +235,6 @@ export function availableTools(
 					to: reachableAiIds,
 				}),
 			);
-		}
-	}
-
-	// 6. examine — items held or in cone (own cell + dist-1 arc + dist-2 fan)
-	if (actorSpatial && !disabledTools.has("examine")) {
-		const cone = projectCone(actorSpatial.position, actorSpatial.facing);
-		const conePositions = cone.map((c) => c.position);
-		const examineableIds = world.entities
-			.filter((entity) => {
-				if (entity.holder === aiId) return true;
-				if (isGridPosition(entity.holder)) {
-					return conePositions.some((p) =>
-						positionsEqual(p, entity.holder as GridPosition),
-					);
-				}
-				return false;
-			})
-			.map((e) => e.id);
-
-		if (examineableIds.length > 0) {
-			tools.push(cloneToolWithEnums("examine", { item: examineableIds }));
 		}
 	}
 

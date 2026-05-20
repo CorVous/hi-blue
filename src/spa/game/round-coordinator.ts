@@ -37,7 +37,12 @@ import {
 	resolveToolDisables,
 } from "./engine";
 import { buildOpenAiMessages } from "./openai-message-builder";
-import { buildAiContext, buildConeSnapshot } from "./prompt-builder";
+import {
+	buildAiContext,
+	buildConeEntityState,
+	buildConeSnapshot,
+	renderPerceptionDelta,
+} from "./prompt-builder";
 import type { OpenAiMessage, RoundLLMProvider } from "./round-llm-provider";
 import {
 	drawDirectiveText,
@@ -91,6 +96,14 @@ export interface RunRoundResult {
 	 * can include a `<whats_new>` diff against its own last view.
 	 */
 	coneSnapshots: Partial<Record<AiId, string>>;
+	/**
+	 * Per-AI structured entity perception state captured at prompt-build time this round.
+	 * The caller should persist this and pass it back as `priorConeEntities` on the next
+	 * runRound call so each AI's next prompt can emit perception-delta lines.
+	 */
+	coneEntities: Partial<
+		Record<AiId, Record<string, { inCone: boolean; satisfied: boolean }>>
+	>;
 }
 
 /**
@@ -119,6 +132,9 @@ export interface RunRoundResult {
  *   exactly once per AI in initiative order, AFTER any drift-to-silence
  *   retry (#254) has resolved and after dispatch. Fires for locked-out
  *   AIs too (so callers can clear per-AI UI state uniformly).
+ * @param priorConeEntities  Per-AI structured entity perception state from the previous
+ *   round, used by `buildAiContext` to emit perception-delta lines (first-sight,
+ *   departure, transition) in each AI's per-round user message.
  */
 export async function runRound(
 	game: GameState,
@@ -135,6 +151,9 @@ export async function runRound(
 	onLifecycle?: (
 		event: import("./round-llm-provider.js").LifecyclePhase,
 	) => void,
+	priorConeEntities?: Partial<
+		Record<AiId, Record<string, { inCone: boolean; satisfied: boolean }>>
+	>,
 ): Promise<RunRoundResult> {
 	const aiOrder = Object.keys(game.personas);
 
@@ -166,6 +185,12 @@ export async function runRound(
 	// to caller so the next round's prompt can render a `<whats_new>` diff).
 	const newConeSnapshots: Partial<Record<AiId, string>> = {};
 
+	// Track cone entity states captured at prompt-build time this round (returned
+	// to caller so the next round's prompt can emit perception-delta lines).
+	const newConeEntities: Partial<
+		Record<AiId, Record<string, { inCone: boolean; satisfied: boolean }>>
+	> = {};
+
 	// 2. Each AI acts in turn
 	for (const aiId of turnOrder) {
 		if (isAiLockedOut(state, aiId)) {
@@ -185,16 +210,22 @@ export async function runRound(
 		}
 
 		// Build OpenAI messages for this AI. Pass the prior-round cone snapshot
-		// so the per-round user turn can prepend a `<whats_new>` diff.
+		// so the per-round user turn can prepend a `<whats_new>` diff, and prior
+		// cone entities so it can emit perception-delta lines.
 		const priorSnapshot = priorConeSnapshots?.[aiId];
-		const ctx = buildAiContext(
-			state,
-			aiId,
-			priorSnapshot !== undefined ? { prevConeSnapshot: priorSnapshot } : {},
-		);
-		// Capture the snapshot we just built against — the caller stores this
-		// and passes it back as priorConeSnapshots next round.
+		const priorEntities = priorConeEntities?.[aiId];
+		const ctx = buildAiContext(state, aiId, {
+			...(priorSnapshot !== undefined
+				? { prevConeSnapshot: priorSnapshot }
+				: {}),
+			...(priorEntities !== undefined
+				? { prevConeEntities: priorEntities }
+				: {}),
+		});
+		// Capture the snapshots we just built against — the caller stores these
+		// and passes them back next round.
 		newConeSnapshots[aiId] = buildConeSnapshot(ctx);
+		newConeEntities[aiId] = buildConeEntityState(ctx);
 		const priorRoundtrip = priorToolRoundtrip?.[aiId];
 		const messages = buildOpenAiMessages(ctx, priorRoundtrip, state.round);
 
@@ -380,7 +411,7 @@ export async function runRound(
 			});
 		}
 
-		// Collect records produced by this dispatch (examine produces none)
+		// Collect records produced by this dispatch
 		for (const record of dispatchResult.records) {
 			roundActions.push(record);
 		}
@@ -388,14 +419,17 @@ export async function runRound(
 		// Pair dispatcher records back to their originating tool calls.
 		// dispatcher.ts emits exactly one record per entry in action.messages,
 		// in order, followed by (if action accepted) one record for the
-		// non-message action — except for examine, which produces no record
-		// and feeds back via actorPrivateToolResult instead.
+		// non-message action — except for pick_up auto-examine, which feeds back
+		// via actorPrivateToolResult instead of a public record.
 		const messageRecordCount = action.messages?.length ?? 0;
 		const messageRecords = dispatchResult.records.slice(0, messageRecordCount);
 		const actionRecord =
 			actionAssigned && dispatchResult.actorPrivateToolResult === undefined
 				? dispatchResult.records[messageRecordCount]
 				: undefined;
+
+		// Compute perception-delta lines to merge into coneDelta for the first action tool call
+		const perceptionDeltaLines = renderPerceptionDelta(ctx, priorEntities);
 
 		// Now walk pending in emission order and build the roundtrip.
 		const recordedAssistantToolCalls: Array<{
@@ -409,6 +443,9 @@ export async function runRound(
 			description: string;
 			reason?: string;
 		}> = [];
+
+		// Track whether we've appended perception delta to the action tool call
+		let perceptionDeltaMerged = false;
 
 		/** Helper to append a tool-call entry to the actor's conversation log. */
 		function appendToolCallEntry(
@@ -473,7 +510,7 @@ export async function runRound(
 				// actionAccepted
 				recordedAssistantToolCalls.push(entry.tc);
 				if (dispatchResult.actorPrivateToolResult !== undefined) {
-					// examine: private result fed back to actor only
+					// pick_up auto-examine: private result fed back to actor only
 					const { description, success } =
 						dispatchResult.actorPrivateToolResult;
 					recordedToolResults.push({
@@ -490,12 +527,16 @@ export async function runRound(
 						success,
 						description,
 					});
-					appendToolCallEntry(
-						entry,
-						success,
-						description,
-						dispatchResult.actorConeDelta,
-					);
+					// Merge perception-delta lines into the action tool call's coneDelta
+					let coneDelta = dispatchResult.actorConeDelta;
+					if (!perceptionDeltaMerged && perceptionDeltaLines.length > 0) {
+						const perceptionDeltaText = perceptionDeltaLines.join("\n");
+						coneDelta = coneDelta
+							? `${coneDelta}\n${perceptionDeltaText}`
+							: perceptionDeltaText;
+						perceptionDeltaMerged = true;
+					}
+					appendToolCallEntry(entry, success, description, coneDelta);
 				}
 			}
 		}
@@ -725,5 +766,6 @@ export async function runRound(
 		result,
 		toolRoundtrip: newToolRoundtrip,
 		coneSnapshots: newConeSnapshots,
+		coneEntities: newConeEntities,
 	};
 }

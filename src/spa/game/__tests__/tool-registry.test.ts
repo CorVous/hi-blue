@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseToolCallArguments, TOOL_DEFINITIONS } from "../tool-registry";
 
 describe("TOOL_DEFINITIONS", () => {
-	it("lists exactly the eight tools: pick_up, put_down, give, use, go, look, examine, message", () => {
+	it("lists exactly seven tools: pick_up, put_down, give, use, go, face, message", () => {
 		const names = TOOL_DEFINITIONS.map((t) => t.function.name);
 		expect(names).toEqual([
 			"pick_up",
@@ -10,8 +10,7 @@ describe("TOOL_DEFINITIONS", () => {
 			"give",
 			"use",
 			"go",
-			"look",
-			"examine",
+			"face",
 			"message",
 		]);
 	});
@@ -70,34 +69,19 @@ describe("TOOL_DEFINITIONS", () => {
 		expect(dirEnum).toContain("right");
 	});
 
-	it("look requires 'direction'", () => {
-		const look = TOOL_DEFINITIONS.find((t) => t.function.name === "look");
-		expect(look?.function.parameters.required).toContain("direction");
+	it("face requires 'direction'", () => {
+		const face = TOOL_DEFINITIONS.find((t) => t.function.name === "face");
+		expect(face?.function.parameters.required).toContain("direction");
 	});
 
-	it("look.direction has a 4-value enum of relative directions", () => {
-		const look = TOOL_DEFINITIONS.find((t) => t.function.name === "look");
-		const dirEnum = look?.function.parameters.properties.direction?.enum;
+	it("face.direction has a 4-value enum of relative directions", () => {
+		const face = TOOL_DEFINITIONS.find((t) => t.function.name === "face");
+		const dirEnum = face?.function.parameters.properties.direction?.enum;
 		expect(dirEnum).toHaveLength(4);
 		expect(dirEnum).toContain("forward");
 		expect(dirEnum).toContain("back");
 		expect(dirEnum).toContain("left");
 		expect(dirEnum).toContain("right");
-	});
-
-	it("examine requires 'item'", () => {
-		const examine = TOOL_DEFINITIONS.find((t) => t.function.name === "examine");
-		expect(examine?.function.parameters.required).toContain("item");
-	});
-
-	it("examine has a non-empty description mentioning 'Private'", () => {
-		const examine = TOOL_DEFINITIONS.find((t) => t.function.name === "examine");
-		expect(examine?.function.description).toMatch(/private/i);
-	});
-
-	it("examine.item has no enum constraint in base definition", () => {
-		const examine = TOOL_DEFINITIONS.find((t) => t.function.name === "examine");
-		expect(examine?.function.parameters.properties.item?.enum).toBeUndefined();
 	});
 });
 
@@ -264,8 +248,8 @@ describe("parseToolCallArguments", () => {
 		}
 	});
 
-	it("parses valid look arguments", () => {
-		const result = parseToolCallArguments("look", '{"direction":"left"}');
+	it("parses valid face arguments", () => {
+		const result = parseToolCallArguments("face", '{"direction":"left"}');
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.args).toEqual({ direction: "left" });
@@ -280,35 +264,11 @@ describe("parseToolCallArguments", () => {
 		}
 	});
 
-	it("returns ok:false with /required/i reason when 'direction' is missing for look", () => {
-		const result = parseToolCallArguments("look", "{}");
+	it("returns ok:false with /required/i reason when 'direction' is missing for face", () => {
+		const result = parseToolCallArguments("face", "{}");
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
 			expect(result.reason).toMatch(/required/i);
-		}
-	});
-
-	it("parses valid examine arguments", () => {
-		const result = parseToolCallArguments("examine", '{"item":"artifact"}');
-		expect(result.ok).toBe(true);
-		if (result.ok) {
-			expect(result.args).toEqual({ item: "artifact" });
-		}
-	});
-
-	it("returns ok:false with /required/i reason when 'item' is missing for examine", () => {
-		const result = parseToolCallArguments("examine", "{}");
-		expect(result.ok).toBe(false);
-		if (!result.ok) {
-			expect(result.reason).toMatch(/required/i);
-		}
-	});
-
-	it("returns ok:false with /malformed/i reason for malformed JSON on examine", () => {
-		const result = parseToolCallArguments("examine", "not json");
-		expect(result.ok).toBe(false);
-		if (!result.ok) {
-			expect(result.reason).toMatch(/malformed/i);
 		}
 	});
 });

@@ -472,8 +472,7 @@ describe("toolDisableComplication", () => {
 			"give",
 			"use",
 			"go",
-			"look",
-			"examine",
+			"face",
 			"message",
 		] as const;
 		const aiIds = Object.keys(TEST_PERSONAS);

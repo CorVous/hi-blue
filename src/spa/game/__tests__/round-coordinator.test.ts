@@ -1121,10 +1121,10 @@ describe("tool-call dispatch", () => {
 
 		// All three AI calls should receive tools from availableTools
 		expect(provider.calls).toHaveLength(3);
-		// All three calls should include "look" in their tool list
+		// All three calls should include "face" in their tool list
 		for (const call of provider.calls) {
 			expect(call.tools).toBeDefined();
-			expect(call.tools?.some((t) => t.function.name === "look")).toBe(true);
+			expect(call.tools?.some((t) => t.function.name === "face")).toBe(true);
 		}
 	});
 });
@@ -2039,260 +2039,6 @@ describe("placement flavor + win condition (issue #126)", () => {
 });
 
 // ----------------------------------------------------------------------------
-// examine tool (issue #127)
-// ----------------------------------------------------------------------------
-describe("examine tool", () => {
-	/**
-	 * ContentPack with an objective_object that has pair-tell prose in examineDescription.
-	 * Red starts at (0,0) holding the objective object.
-	 * Green starts at (0,1) facing north — so (0,0) is NOT in green's cone.
-	 */
-	const EXAMINE_PACK = makeTestPack(
-		[
-			{
-				id: "orb",
-				kind: "objective_object",
-				name: "orb",
-				examineDescription:
-					"A swirling orb. It feels drawn toward the stone pedestal.",
-				holder: "red", // red holds orb
-				pairsWithSpaceId: "pedestal",
-				placementFlavor: "{actor} places the orb on the pedestal.",
-			},
-			{
-				id: "pedestal",
-				kind: "objective_space",
-				name: "stone pedestal",
-				examineDescription: "A stone pedestal awaiting an offering.",
-				holder: { row: 4, col: 4 },
-			},
-		],
-		{ setting: "vault", wallName: "wall", aiStarts: RGC_AI_STARTS },
-	);
-
-	function makeExamineGame() {
-		return startGame(TEST_PERSONAS, EXAMINE_PACK, { budgetPerAi: 5 });
-	}
-
-	it("AC #5: examine on objective_object surfaces examineDescription with pair-tell prose to actor's tool result", async () => {
-		const game = makeExamineGame();
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "call_examine",
-						name: "examine",
-						argumentsJson: '{"item":"orb"}',
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
-
-		const capturedMessages: OpenAiMessage[][] = [];
-		const trackingProvider: RoundLLMProvider = {
-			async streamRound(messages, tools) {
-				capturedMessages.push(messages);
-				return provider.streamRound(messages, tools);
-			},
-		};
-
-		const { toolRoundtrip } = await runRound(
-			game,
-			"red",
-			"hi",
-			trackingProvider,
-		);
-
-		// The actor (red) should have an examine tool result in the roundtrip
-		const redRoundtrip = toolRoundtrip.red;
-		expect(redRoundtrip).toBeDefined();
-		const toolResult = redRoundtrip?.toolResults[0];
-		expect(toolResult).toBeDefined();
-		expect(toolResult?.success).toBe(true);
-		expect(toolResult?.description).toBe(
-			"A swirling orb. It feels drawn toward the stone pedestal.",
-		);
-	});
-
-	it("AC #6: examine produces no entry in result.actions", async () => {
-		const game = makeExamineGame();
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "call_examine",
-						name: "examine",
-						argumentsJson: '{"item":"orb"}',
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
-
-		const { result } = await runRound(game, "red", "hi", provider);
-
-		// No tool_success or tool_failure record for examine
-		const examineRecord = result.actions.find(
-			(a) => a.kind === "tool_success" || a.kind === "tool_failure",
-		);
-		expect(examineRecord).toBeUndefined();
-	});
-
-	it("AC #6: cone-mate's next-round system prompt does NOT contain examineDescription text", async () => {
-		const game = makeExamineGame();
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "call_examine",
-						name: "examine",
-						argumentsJson: '{"item":"orb"}',
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
-
-		const { nextState } = await runRound(game, "red", "hi", provider);
-
-		// Green is at (0,1) and could be in cone range; check its prompt
-		for (const aiId of ["green", "cyan"] as AiId[]) {
-			const ctx = buildAiContext(nextState, aiId);
-			const prompt = ctx.toSystemPrompt();
-			expect(prompt).not.toContain(
-				"A swirling orb. It feels drawn toward the stone pedestal.",
-			);
-		}
-	});
-
-	it("availableTools includes examine when item is in actor's cone", async () => {
-		// red at (0,0) facing north; orb is held by red → examine should be available
-		const game = makeExamineGame();
-		const capturedTools: Array<Array<{ function: { name: string } }>> = [];
-		const trackingProvider: RoundLLMProvider = {
-			async streamRound(_messages, tools) {
-				capturedTools.push(tools as Array<{ function: { name: string } }>);
-				return { assistantText: "", toolCalls: [] };
-			},
-		};
-
-		await runRound(game, "red", "hi", trackingProvider);
-
-		// Red's tools (first call) should include examine
-		const redTools = capturedTools[0];
-		expect(redTools?.some((t) => t.function.name === "examine")).toBe(true);
-	});
-
-	it("availableTools examine enum lists held items for actor holding an item", async () => {
-		const game = makeExamineGame();
-		let capturedRedTools:
-			| Array<{
-					function: {
-						name: string;
-						parameters: { properties: { item?: { enum?: string[] } } };
-					};
-			  }>
-			| undefined;
-		let callCount = 0;
-		const trackingProvider: RoundLLMProvider = {
-			async streamRound(_messages, tools) {
-				callCount++;
-				if (callCount === 1) {
-					// Red is first in turn order
-					capturedRedTools = tools as typeof capturedRedTools;
-				}
-				return { assistantText: "", toolCalls: [] };
-			},
-		};
-
-		await runRound(game, "red", "hi", trackingProvider, undefined, [
-			"red",
-			"green",
-			"cyan",
-		]);
-
-		const examineTool = capturedRedTools?.find(
-			(t) => t.function.name === "examine",
-		);
-		expect(examineTool).toBeDefined();
-		const itemEnum = examineTool?.function.parameters.properties.item?.enum;
-		expect(itemEnum).toContain("orb");
-	});
-
-	it("examine tool roundtrip re-injected into actor's next-round messages", async () => {
-		const game = makeExamineGame();
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "call_examine_r1",
-						name: "examine",
-						argumentsJson: '{"item":"orb"}',
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
-
-		const { nextState: state1, toolRoundtrip } = await runRound(
-			game,
-			"red",
-			"hi",
-			provider,
-		);
-
-		// Round 2: pass tool roundtrip back in and capture messages
-		const capturedCalls: Array<{ messages: OpenAiMessage[] }> = [];
-		const provider2: RoundLLMProvider = {
-			async streamRound(messages, _tools) {
-				capturedCalls.push({ messages });
-				return { assistantText: "", toolCalls: [] };
-			},
-		};
-
-		await runRound(
-			state1,
-			"red",
-			"round 2",
-			provider2,
-			undefined,
-			["red", "green", "cyan"],
-			toolRoundtrip,
-		);
-
-		// Red's round-2 messages should include assistant{tool_calls} + tool result
-		const redMessages = capturedCalls[0]?.messages ?? [];
-		const hasAssistantWithToolCalls = redMessages.some(
-			(m) =>
-				m.role === "assistant" &&
-				"tool_calls" in m &&
-				Array.isArray((m as { tool_calls?: unknown }).tool_calls),
-		);
-		const hasToolResult = redMessages.some((m) => m.role === "tool");
-		expect(hasAssistantWithToolCalls).toBe(true);
-		expect(hasToolResult).toBe(true);
-
-		// The tool result message should contain the examineDescription
-		const toolMsg = redMessages.find((m) => m.role === "tool");
-		const toolMsgContent =
-			toolMsg && "content" in toolMsg
-				? (toolMsg as { content: string }).content
-				: "";
-		expect(toolMsgContent).toContain(
-			"A swirling orb. It feels drawn toward the stone pedestal.",
-		);
-	});
-});
-
 // ----------------------------------------------------------------------------
 // AC #10 regression tests: conversationLogs isolation (#194)
 // ----------------------------------------------------------------------------
@@ -3270,8 +3016,8 @@ describe("complication countdown — coordinator integration", () => {
 			}
 		});
 
-		it("Test B: look reveals an item → tool-call entry carries coneDelta", async () => {
-			// Red at (0,0) facing north — north cone is all walls. After looking
+		it("Test B: face reveals an item → tool-call entry carries coneDelta", async () => {
+			// Red at (0,0) facing north — north cone is all walls. After facing
 			// right (now facing east), the key at (0,1) sits at "directly in front".
 			const game = makeGame();
 
@@ -3281,7 +3027,7 @@ describe("complication countdown — coordinator integration", () => {
 					toolCalls: [
 						{
 							id: "look_1",
-							name: "look",
+							name: "face",
 							argumentsJson: JSON.stringify({ direction: "right" }),
 						},
 					],
@@ -3294,7 +3040,7 @@ describe("complication countdown — coordinator integration", () => {
 
 			const redLog = nextState.conversationLogs.red ?? [];
 			const toolCallEntry = redLog.find(
-				(e) => e.kind === "tool-call" && e.toolName === "look",
+				(e) => e.kind === "tool-call" && e.toolName === "face",
 			);
 			expect(toolCallEntry).toBeDefined();
 			if (toolCallEntry?.kind === "tool-call") {
@@ -3303,9 +3049,9 @@ describe("complication countdown — coordinator integration", () => {
 			}
 		});
 
-		it("Test C: empty delta no-op (look forward when already facing forward)", async () => {
-			// Red at (0,0) facing north. Red looks forward (still facing north).
-			// The cone snapshot before and after are identical → no enrichment.
+		it("Test C: face forward is rejected at validation (already facing that way)", async () => {
+			// Red at (0,0) facing north. Red tries to face forward (already facing north).
+			// This is rejected as a no-op at validation, so red remains facing north.
 			const game = makeGame();
 
 			const provider = new MockRoundLLMProvider([
@@ -3313,8 +3059,8 @@ describe("complication countdown — coordinator integration", () => {
 					assistantText: "",
 					toolCalls: [
 						{
-							id: "look_1",
-							name: "look",
+							id: "face_1",
+							name: "face",
 							argumentsJson: JSON.stringify({ direction: "forward" }),
 						},
 					],
@@ -3323,20 +3069,13 @@ describe("complication countdown — coordinator integration", () => {
 				{ assistantText: "", toolCalls: [] },
 			]);
 
-			const { nextState } = await runRound(game, "red", "start", provider);
+			const roundResult = await runRound(game, "red", "start", provider);
 
-			const redLog = nextState.conversationLogs.red ?? [];
-			const toolCallEntry = redLog.find(
-				(e) => e.kind === "tool-call" && e.toolName === "look",
-			);
-			expect(toolCallEntry).toBeDefined();
-			if (toolCallEntry?.kind === "tool-call") {
-				// coneDelta should be undefined (not present or undefined).
-				expect(toolCallEntry.coneDelta).toBeUndefined();
-			}
+			// Red should still be facing north (unchanged from the no-op rejection)
+			expect(roundResult.nextState.personaSpatial.red?.facing).toBe("north");
 		});
 
-		it("Test D: non-go/look tools never enrich (pick_up does not get coneDelta)", async () => {
+		it("Test D: non-go/face tools never enrich (pick_up does not get coneDelta)", async () => {
 			const game = makeGame();
 
 			const provider = new MockRoundLLMProvider([
@@ -3410,5 +3149,288 @@ describe("complication countdown — coordinator integration", () => {
 				}
 			}
 		});
+	});
+});
+
+// ============================================================================
+// coneDelta persistence across rounds (issue #469)
+// ============================================================================
+describe("coneDelta persistence via coneEntities", () => {
+	it("passes coneEntities from round 1 as priorConeEntities to round 2, emitting first-sight line", async () => {
+		// Round 1: red and green both pass, item initially NOT in red's cone
+		// Round 2: item is moved into red's cone, and red takes an action
+		// Expect perception-delta line in the action tool-call's coneDelta
+		const pack = makeTestPack(
+			[
+				{
+					id: "item",
+					kind: "interesting_object",
+					name: "TestItem",
+					examineDescription: "It shimmers.",
+					holder: { row: 10, col: 10 }, // Far away, not in cone
+				},
+			],
+			{
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 0, col: 0 }, facing: "south" },
+					green: { position: { row: 0, col: 1 }, facing: "north" },
+					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				},
+			},
+		);
+		const game1 = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const provider1 = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] }, // red pass
+			{ assistantText: "", toolCalls: [] }, // green pass
+			{ assistantText: "", toolCalls: [] }, // cyan pass
+		]);
+
+		const round1Result = await runRound(game1, "red", "hello", provider1);
+		const game2 = round1Result.nextState;
+
+		// Move item into red's cone for round 2 (directly in front when facing south)
+		const gameWithItem = {
+			...game2,
+			world: {
+				...game2.world,
+				entities: game2.world.entities.map((e) =>
+					e.id === "item" ? { ...e, holder: { row: 1, col: 0 } } : e,
+				),
+			},
+		};
+
+		// Round 2: red does something with the new item in cone
+		const provider2 = new MockRoundLLMProvider([
+			{
+				assistantText: "I see the item",
+				toolCalls: [
+					{
+						id: "1",
+						name: "go",
+						argumentsJson: JSON.stringify({ direction: "north" }),
+					},
+				],
+			}, // red moves
+			{ assistantText: "", toolCalls: [] }, // green pass
+			{ assistantText: "", toolCalls: [] }, // cyan pass
+		]);
+
+		// Pass round1's coneEntities as priorConeEntities to round 2
+		const round2Result = await runRound(
+			gameWithItem,
+			"red",
+			"move",
+			provider2,
+			Math.random,
+			undefined,
+			{}, // no prior tool roundtrip
+			undefined,
+			undefined,
+			{}, // no prior cone snapshots
+			undefined,
+			undefined,
+			round1Result.coneEntities, // Pass coneEntities from round 1
+		);
+
+		// Check that red's action tool-call includes the perception-delta line
+		const redLog = round2Result.nextState.conversationLogs.red ?? [];
+		const redActionToolCall = redLog.find(
+			(e) => e.kind === "tool-call" && e.toolName === "go",
+		);
+		expect(redActionToolCall?.kind === "tool-call").toBe(true);
+		expect(
+			redActionToolCall?.kind === "tool-call" && redActionToolCall.coneDelta,
+		).toBeDefined();
+		const coneDelta =
+			redActionToolCall?.kind === "tool-call"
+				? redActionToolCall.coneDelta
+				: "";
+		expect(coneDelta).toContain("Came into view: TestItem");
+	});
+
+	it("merges perception-delta with actorConeDelta when both exist", async () => {
+		// red moves while an item enters its cone
+		// Expect both the move result and the first-sight line in coneDelta
+		const pack = makeTestPack(
+			[
+				{
+					id: "item",
+					kind: "interesting_object",
+					name: "Treasure",
+					examineDescription: "Gold coins.",
+					holder: { row: 10, col: 10 }, // Initially far away
+				},
+			],
+			{
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 0, col: 0 }, facing: "south" },
+					green: { position: { row: 0, col: 1 }, facing: "north" },
+					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				},
+			},
+		);
+		const game1 = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const provider1 = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const round1Result = await runRound(game1, "red", "hi", provider1);
+
+		// Round 2 with item now visible in red's cone
+		const gameWithItem = {
+			...round1Result.nextState,
+			world: {
+				...round1Result.nextState.world,
+				entities: round1Result.nextState.world.entities.map((e) =>
+					e.id === "item" ? { ...e, holder: { row: 1, col: 0 } } : e,
+				),
+			},
+		};
+
+		const provider2 = new MockRoundLLMProvider([
+			{
+				assistantText: "Moving north",
+				toolCalls: [
+					{
+						id: "1",
+						name: "go",
+						argumentsJson: JSON.stringify({ direction: "north" }),
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const round2Result = await runRound(
+			gameWithItem,
+			"red",
+			"move",
+			provider2,
+			Math.random,
+			undefined,
+			{},
+			undefined,
+			undefined,
+			{},
+			undefined,
+			undefined,
+			round1Result.coneEntities,
+		);
+
+		const redLog = round2Result.nextState.conversationLogs.red ?? [];
+		const redGo = redLog.find(
+			(e) => e.kind === "tool-call" && e.toolName === "go",
+		);
+		expect(redGo?.kind === "tool-call" && redGo.coneDelta).toBeDefined();
+		const delta = redGo?.kind === "tool-call" ? redGo.coneDelta : "";
+		// Should contain both the movement result and the perception delta
+		expect(delta).toMatch(/Treasure|moved|north/i);
+		expect(delta).toContain("Came into view: Treasure");
+	});
+
+	it("only emits perception delta for first action tool-call in multi-action turn", async () => {
+		// red emits two messages and one action in the same turn
+		// Only the action should get the perception delta appended
+		const pack = makeTestPack(
+			[
+				{
+					id: "item",
+					kind: "interesting_object",
+					name: "Mysterious Box",
+					examineDescription: "A sealed box.",
+					holder: { row: 10, col: 10 }, // Initially far away
+				},
+			],
+			{
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 0, col: 0 }, facing: "south" },
+					green: { position: { row: 0, col: 1 }, facing: "north" },
+					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				},
+			},
+		);
+		const game1 = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const provider1 = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const round1Result = await runRound(game1, "red", "hi", provider1);
+
+		const gameWithItem = {
+			...round1Result.nextState,
+			world: {
+				...round1Result.nextState.world,
+				entities: round1Result.nextState.world.entities.map((e) =>
+					e.id === "item" ? { ...e, holder: { row: 1, col: 0 } } : e,
+				),
+			},
+		};
+
+		const provider2 = new MockRoundLLMProvider([
+			{
+				assistantText: "I see something",
+				toolCalls: [
+					{
+						id: "1",
+						name: "message",
+						argumentsJson: JSON.stringify({
+							to: "blue",
+							content: "Look at this!",
+						}),
+					},
+					{
+						id: "2",
+						name: "go",
+						argumentsJson: JSON.stringify({ direction: "north" }),
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const round2Result = await runRound(
+			gameWithItem,
+			"red",
+			"move",
+			provider2,
+			Math.random,
+			undefined,
+			{},
+			undefined,
+			undefined,
+			{},
+			undefined,
+			undefined,
+			round1Result.coneEntities,
+		);
+
+		const redLog = round2Result.nextState.conversationLogs.red ?? [];
+		const messageEntry = redLog.find((e) => e.kind === "message");
+		const actionEntry = redLog.find(
+			(e) => e.kind === "tool-call" && e.toolName === "go",
+		);
+
+		// Message entry should NOT have coneDelta (messages don't have coneDelta, only actions do)
+		expect(messageEntry?.kind === "message").toBe(true);
+		expect(
+			(messageEntry as { coneDelta?: unknown } | undefined)?.coneDelta,
+		).toBeUndefined();
+
+		// Action entry should have coneDelta with perception delta (merged on first action)
+		expect(
+			actionEntry?.kind === "tool-call" && actionEntry.coneDelta,
+		).toBeDefined();
+		const delta =
+			actionEntry?.kind === "tool-call" ? actionEntry.coneDelta : "";
+		expect(delta).toContain("Came into view: Mysterious Box");
 	});
 });

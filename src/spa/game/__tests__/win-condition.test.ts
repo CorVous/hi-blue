@@ -489,7 +489,7 @@ describe("checkPlacementFlavor", () => {
 		const world = makeWorld([]);
 		const action: AiTurnAction = {
 			aiId: "red",
-			toolCall: { name: "look", args: { direction: "east" } },
+			toolCall: { name: "face", args: { direction: "east" } },
 		};
 		expect(checkPlacementFlavor(action, pack, world)).toBeNull();
 	});

@@ -267,10 +267,10 @@ function dispatchModelResponse(
 		costUsd !== undefined ? { costUsd } : {},
 	);
 
-	// Resolve toolCallDirection: check the go/look action's relative direction
+	// Resolve toolCallDirection: check the go/face action's relative direction
 	if (
 		action.toolCall &&
-		(action.toolCall.name === "go" || action.toolCall.name === "look")
+		(action.toolCall.name === "go" || action.toolCall.name === "face")
 	) {
 		const rawDir = action.toolCall.args.direction;
 		if (RELATIVE_DIRECTIONS.includes(rawDir as RelativeDirection)) {
