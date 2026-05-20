@@ -3,6 +3,10 @@ import { execSync } from "node:child_process";
 const base = process.env.GITHUB_BASE_REF ?? "main";
 const diff = execSync(`git diff origin/${base}...HEAD --unified=0`, {
 	encoding: "utf8",
+	// Default maxBuffer is 1 MiB; a PR that touches large committed
+	// artifacts (e.g. eval JSON dumps) produces a diff bigger than that
+	// and would crash execSync with ENOBUFS. 256 MiB is comfortably ample.
+	maxBuffer: 256 * 1024 * 1024,
 });
 
 const schemaChanged = /^[+-].*SESSION_SCHEMA_VERSION\s*=\s*\d+/m.test(diff);
