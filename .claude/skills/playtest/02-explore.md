@@ -23,7 +23,7 @@ someone else's writeup.
   first if any vocabulary from `01-rules.md` was unclear.
 - **`AGENTS.md`** — points at the testing surfaces, prompt files, and
   domain docs.
-- **`docs/prd/0005-restructure-game-mechanics.md`** — the PRD that
+- **[PRD 0005 — restructure game mechanics](https://github.com/CorVous/hi-blue/issues/292)** — the PRD that
   introduced single-game mode, the four Objective types, and the six
   Complication types. Worth a read if any structural hypothesis is fuzzy.
 - **`src/spa/game/prompt-builder.ts`** — the file that assembles each

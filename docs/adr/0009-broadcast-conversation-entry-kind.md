@@ -8,7 +8,7 @@ Environmental events that affect the whole room — Weather Change and Setting S
 
 Introduce a third `ConversationEntry` kind — `broadcast` — that carries a neutral system message with no `from` field. A broadcast entry is appended to all three Daemons' logs in a single logical write. It renders in the conversation log as a voice that belongs to neither the Sysadmin nor any Daemon: environmental narration, not command.
 
-`SESSION_SCHEMA_VERSION` bumps from 4 to 5 at this boundary (alongside the broader single-game restructure in PRD 0005).
+`SESSION_SCHEMA_VERSION` bumps from 4 to 5 at this boundary (alongside the broader single-game restructure in [PRD 0005](https://github.com/CorVous/hi-blue/issues/292)).
 
 ## Considered Options
 

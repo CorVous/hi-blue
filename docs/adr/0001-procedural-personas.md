@@ -4,7 +4,7 @@ Each playthrough now generates its three **Persona**s procedurally at game start
 
 ## Status
 
-Accepted. Supersedes the "stable hand-authored personalities across all three phases" decision in [PRD 0001 §107](../prd/0001-game-concept.md) — that PRD's "highest-value writing investment" framing now applies to the **temperament pool, persona-goal pool, and synthesis prompt**, not to three fixed characters.
+Accepted. Supersedes the "stable hand-authored personalities across all three phases" decision in [PRD 0001 §107](https://github.com/CorVous/hi-blue/issues/2) — that PRD's "highest-value writing investment" framing now applies to the **temperament pool, persona-goal pool, and synthesis prompt**, not to three fixed characters.
 
 ## Considered Options
 
