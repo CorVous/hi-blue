@@ -151,7 +151,6 @@ export interface ContentPackProviderInput {
 	}>;
 }
 
-
 // ── Error type ────────────────────────────────────────────────────────────────
 
 class ContentPackError extends Error {
@@ -254,7 +253,6 @@ export interface DualContentPackProviderResult {
 		packB: UnplacedPack;
 	}>;
 }
-
 
 const STOPWORDS = new Set([
 	"the",
