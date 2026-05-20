@@ -590,7 +590,7 @@ describe("Tool Disable exclusion", () => {
 		// 5-item pool (no obstacle_shift): index 2 → tool_disable
 		// rng[0]=0.4 → floor(0.4*5)=2 → tool_disable → pairs exhausted
 		// → re-draw from 4-item fallback pool (no obstacle_shift, no tool_disable)
-		// rng[1]=0.0 → index 0 → weather_change, rng[2]=0.5 → countdown
+		// rng[1]=0.0 → index 0 → weather_change, rng[2]=0.5 → new weather draw
 		const result = tickComplication(game, seededRng([0.4, 0.0, 0.5]));
 		expect(result?.fired.kind).not.toBe("tool_disable");
 	});
