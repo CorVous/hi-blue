@@ -22,7 +22,8 @@
 		"eval:directions": "npx tsx evals/relative-directions/runner.mts",
 		"eval:drift": "npx tsx evals/free-text-drift/runner.mts",
 		"prepare": "husky",
-		"release": "changelogen --release"
+		"release": "changelogen --release",
+		"release:beta": "changelogen --release --prerelease beta"
 	},
 	"pnpm": {
 		"onlyBuiltDependencies": [
