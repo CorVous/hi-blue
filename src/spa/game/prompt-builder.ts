@@ -1,5 +1,10 @@
 import { projectCone } from "./cone-projector.js";
-import { cardinalToRelative, frontArc } from "./direction.js";
+import {
+	cardinalToRelative,
+	frontArc,
+	isGridPosition,
+	positionsEqual,
+} from "./direction.js";
 import type {
 	AiBudget,
 	AiId,
@@ -696,16 +701,6 @@ export function renderPerceptionDelta(
 	}
 
 	return lines;
-}
-
-/** True when `holder` is a GridPosition (not an AiId string). */
-function isGridPosition(holder: AiId | GridPosition): holder is GridPosition {
-	return typeof holder === "object" && holder !== null;
-}
-
-/** True when two GridPositions refer to the same cell. */
-function positionsEqual(a: GridPosition, b: GridPosition): boolean {
-	return a.row === b.row && a.col === b.col;
 }
 
 /** Filter entities to only those renderable as items (not obstacles, not spaces). */

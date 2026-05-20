@@ -1,5 +1,9 @@
 import { PINNED_MODEL } from "../model.js";
-import { computeCostMicroUsd, getModelPricing } from "./pricing";
+import {
+	computeCostMicroUsd,
+	getModelPricing,
+	USD_TO_MICRO_USD,
+} from "./pricing";
 import {
 	configFromEnv,
 	preCharge,
@@ -316,7 +320,7 @@ async function resolveCostMicroUsd(
 	}>,
 ): Promise<number> {
 	if (usage.costUsd !== undefined) {
-		return Math.ceil(usage.costUsd * 1e6);
+		return Math.ceil(usage.costUsd * USD_TO_MICRO_USD);
 	}
 	const pricing = await pricingPromise;
 	return computeCostMicroUsd(

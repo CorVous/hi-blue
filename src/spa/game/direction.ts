@@ -158,6 +158,16 @@ export function areAdjacent4(a: GridPosition, b: GridPosition): boolean {
 	return manhattan(a, b) === 1;
 }
 
+/** True when two GridPositions refer to the same cell. */
+export function positionsEqual(a: GridPosition, b: GridPosition): boolean {
+	return a.row === b.row && a.col === b.col;
+}
+
+/** True when `holder` is a GridPosition (not an AiId string). */
+export function isGridPosition(holder: unknown): holder is GridPosition {
+	return typeof holder === "object" && holder !== null;
+}
+
 /**
  * The 3 cells forming the immediate front arc: front-left diagonal, directly
  * in front, and front-right diagonal. Out-of-bounds cells are omitted.

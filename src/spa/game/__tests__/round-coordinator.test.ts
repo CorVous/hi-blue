@@ -262,14 +262,9 @@ describe("drift-to-silence retry (#254)", () => {
 			{ assistantText: "", toolCalls: [] },
 		]);
 
-		const { nextState } = await runRound(
-			game,
-			"red",
-			"hi",
-			provider,
-			undefined,
-			["red", "green", "cyan"] as AiId[],
-		);
+		const { nextState } = await runRound(game, "red", "hi", provider, {
+			initiative: ["red", "green", "cyan"] as AiId[],
+		});
 
 		const redLog = nextState.conversationLogs.red ?? [];
 		expect(
@@ -303,14 +298,9 @@ describe("drift-to-silence retry (#254)", () => {
 			{ assistantText: "", toolCalls: [] },
 		]);
 
-		const { nextState } = await runRound(
-			game,
-			"red",
-			"hi",
-			provider,
-			undefined,
-			["red", "green", "cyan"] as AiId[],
-		);
+		const { nextState } = await runRound(game, "red", "hi", provider, {
+			initiative: ["red", "green", "cyan"] as AiId[],
+		});
 
 		const allLogContent = (
 			Object.values(nextState.conversationLogs).flat() as Array<{
@@ -338,14 +328,9 @@ describe("drift-to-silence retry (#254)", () => {
 			{ assistantText: "", toolCalls: [] },
 		]);
 
-		const { nextState } = await runRound(
-			game,
-			"red",
-			"hi",
-			provider,
-			undefined,
-			["red", "green", "cyan"] as AiId[],
-		);
+		const { nextState } = await runRound(game, "red", "hi", provider, {
+			initiative: ["red", "green", "cyan"] as AiId[],
+		});
 
 		const redLog = nextState.conversationLogs.red ?? [];
 		const redMsgs = redLog.filter(
@@ -362,11 +347,9 @@ describe("drift-to-silence retry (#254)", () => {
 			{ assistantText: "", toolCalls: [] },
 		]);
 
-		await runRound(game, "red", "hi", provider, undefined, [
-			"red",
-			"green",
-			"cyan",
-		] as AiId[]);
+		await runRound(game, "red", "hi", provider, {
+			initiative: ["red", "green", "cyan"] as AiId[],
+		});
 
 		// One call per AI — no retries fired.
 		expect(provider.calls).toHaveLength(3);
@@ -389,11 +372,9 @@ describe("drift-to-silence retry (#254)", () => {
 			{ assistantText: "", toolCalls: [] },
 		]);
 
-		await runRound(game, "red", "hi", provider, undefined, [
-			"red",
-			"green",
-			"cyan",
-		] as AiId[]);
+		await runRound(game, "red", "hi", provider, {
+			initiative: ["red", "green", "cyan"] as AiId[],
+		});
 
 		expect(provider.calls).toHaveLength(3);
 	});
@@ -419,11 +400,9 @@ describe("drift-to-silence retry (#254)", () => {
 			{ assistantText: "", toolCalls: [] },
 		]);
 
-		await runRound(game, "red", "hi", provider, undefined, [
-			"red",
-			"green",
-			"cyan",
-		] as AiId[]);
+		await runRound(game, "red", "hi", provider, {
+			initiative: ["red", "green", "cyan"] as AiId[],
+		});
 
 		// Red's retry is provider.calls[1]; its messages should include the
 		// dropped first attempt as an assistant turn and the nudge as a
@@ -462,14 +441,9 @@ describe("drift-to-silence retry (#254)", () => {
 			{ assistantText: "", toolCalls: [], costUsd: 0 },
 		]);
 
-		const { nextState } = await runRound(
-			game,
-			"red",
-			"hi",
-			provider,
-			undefined,
-			["red", "green", "cyan"] as AiId[],
-		);
+		const { nextState } = await runRound(game, "red", "hi", provider, {
+			initiative: ["red", "green", "cyan"] as AiId[],
+		});
 
 		const phase = nextState;
 		// Budget starts at 5; red spent 0.4 + 0.5 = 0.9, leaving 4.1
@@ -497,14 +471,9 @@ describe("drift-to-silence retry (#254)", () => {
 			{ assistantText: "", toolCalls: [] },
 		]);
 
-		const { toolRoundtrip } = await runRound(
-			game,
-			"red",
-			"hi",
-			provider,
-			undefined,
-			["red", "green", "cyan"] as AiId[],
-		);
+		const { toolRoundtrip } = await runRound(game, "red", "hi", provider, {
+			initiative: ["red", "green", "cyan"] as AiId[],
+		});
 
 		// msg-success excluded from roundtrip per ADR 0007; the dropped
 		// first attempt must not slip in either.
@@ -530,19 +499,10 @@ describe("onAiTurnComplete callback", () => {
 		]);
 
 		const order: AiId[] = [];
-		await runRound(
-			game,
-			"red",
-			"hi",
-			provider,
-			undefined,
-			["green", "cyan", "red"] as AiId[],
-			undefined,
-			undefined,
-			undefined,
-			undefined,
-			(aiId) => order.push(aiId),
-		);
+		await runRound(game, "red", "hi", provider, {
+			initiative: ["green", "cyan", "red"] as AiId[],
+			onAiTurnComplete: (aiId) => order.push(aiId),
+		});
 
 		expect(order).toEqual(["green", "cyan", "red"]);
 	});
@@ -570,19 +530,11 @@ describe("onAiTurnComplete callback", () => {
 
 		// Track when each callback fires relative to provider call count.
 		const fireOrder: Array<{ aiId: AiId; callsAtFire: number }> = [];
-		await runRound(
-			game,
-			"red",
-			"hi",
-			provider,
-			undefined,
-			["red", "green", "cyan"] as AiId[],
-			undefined,
-			undefined,
-			undefined,
-			undefined,
-			(aiId) => fireOrder.push({ aiId, callsAtFire: provider.calls.length }),
-		);
+		await runRound(game, "red", "hi", provider, {
+			initiative: ["red", "green", "cyan"] as AiId[],
+			onAiTurnComplete: (aiId) =>
+				fireOrder.push({ aiId, callsAtFire: provider.calls.length }),
+		});
 
 		// Red's turn made 2 provider calls (initial + retry). The
 		// onAiTurnComplete for red must fire AFTER both — i.e., when the
@@ -603,19 +555,10 @@ describe("onAiTurnComplete callback", () => {
 		]);
 
 		const fired: AiId[] = [];
-		await runRound(
-			state,
-			"green",
-			"hi",
-			provider,
-			undefined,
-			["red", "green", "cyan"] as AiId[],
-			undefined,
-			undefined,
-			undefined,
-			undefined,
-			(aiId) => fired.push(aiId),
-		);
+		await runRound(state, "green", "hi", provider, {
+			initiative: ["red", "green", "cyan"] as AiId[],
+			onAiTurnComplete: (aiId) => fired.push(aiId),
+		});
 
 		expect(fired).toContain("red");
 		expect(fired).toHaveLength(3);
@@ -1082,15 +1025,9 @@ describe("tool-call dispatch", () => {
 				return { assistantText: "", toolCalls: [] };
 			},
 		};
-		await runRound(
-			state1,
-			"red",
-			"round 2",
-			provider2,
-			undefined,
-			undefined,
-			toolRoundtrip,
-		);
+		await runRound(state1, "red", "round 2", provider2, {
+			priorToolRoundtrip: toolRoundtrip,
+		});
 
 		// Red's round-2 messages (first call in round 2) should contain:
 		// - system
@@ -1330,13 +1267,9 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
-		const { nextState } = await runRound(
-			game,
-			"red",
-			"hi",
-			provider,
-			chatLockoutRng(),
-		);
+		const { nextState } = await runRound(game, "red", "hi", provider, {
+			rng: chatLockoutRng(),
+		});
 		const phase = nextState;
 		expect(isPlayerChatLockedOut(phase, "red")).toBe(true);
 	});
@@ -1353,13 +1286,9 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
-		const { nextState } = await runRound(
-			game,
-			"red",
-			"hi",
-			provider,
-			chatLockoutRng(),
-		);
+		const { nextState } = await runRound(game, "red", "hi", provider, {
+			rng: chatLockoutRng(),
+		});
 		const phase = nextState;
 		expect(isPlayerChatLockedOut(phase, "red")).toBe(false);
 		expect(isPlayerChatLockedOut(phase, "green")).toBe(false);
@@ -1373,13 +1302,9 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 			{ assistantText: "", toolCalls: [], costUsd: 1 },
 			{ assistantText: "", toolCalls: [], costUsd: 1 },
 		]);
-		const { nextState } = await runRound(
-			game,
-			"red",
-			"hi",
-			provider,
-			chatLockoutRng(),
-		);
+		const { nextState } = await runRound(game, "red", "hi", provider, {
+			rng: chatLockoutRng(),
+		});
 		expect(isAiLockedOut(nextState, "red")).toBe(false);
 		expect(nextState.budgets.red?.remaining).toBeCloseTo(4, 10);
 	});
@@ -1400,7 +1325,7 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 			"red",
 			"hi",
 			makeProvider(),
-			chatLockoutRng(),
+			{ rng: chatLockoutRng() },
 		);
 		expect(isPlayerChatLockedOut(afterR1, "red")).toBe(true);
 
@@ -1409,7 +1334,7 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 			"green",
 			"hi",
 			makeProvider(),
-			chatLockoutRng(),
+			{ rng: chatLockoutRng() },
 		);
 		expect(isPlayerChatLockedOut(afterR2, "red")).toBe(true);
 
@@ -1418,7 +1343,7 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 			"green",
 			"hi",
 			makeProvider(),
-			chatLockoutRng(),
+			{ rng: chatLockoutRng() },
 		);
 		expect(isPlayerChatLockedOut(afterR3, "red")).toBe(true);
 
@@ -1427,7 +1352,7 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 			"green",
 			"hi",
 			makeProvider(),
-			chatLockoutRng(),
+			{ rng: chatLockoutRng() },
 		);
 		expect(isPlayerChatLockedOut(afterR4, "red")).toBe(false);
 	});
@@ -1439,13 +1364,9 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
-		const { result } = await runRound(
-			game,
-			"red",
-			"hi",
-			provider,
-			chatLockoutRng(),
-		);
+		const { result } = await runRound(game, "red", "hi", provider, {
+			rng: chatLockoutRng(),
+		});
 		expect(result.chatLockoutTriggered).toBeDefined();
 		expect(result.chatLockoutTriggered?.aiId).toBe("red");
 	});
@@ -1461,13 +1382,9 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
-		const { result } = await runRound(
-			game,
-			"red",
-			"hi",
-			provider,
-			chatLockoutRng(),
-		);
+		const { result } = await runRound(game, "red", "hi", provider, {
+			rng: chatLockoutRng(),
+		});
 		expect(result.chatLockoutTriggered).toBeUndefined();
 	});
 
@@ -1485,7 +1402,7 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 			"red",
 			"hi",
 			makeProvider(),
-			chatLockoutRng(),
+			{ rng: chatLockoutRng() },
 		);
 
 		// Advance through rounds 2 and 3 (still locked)
@@ -1494,14 +1411,14 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 			"green",
 			"hi",
 			makeProvider(),
-			chatLockoutRng(),
+			{ rng: chatLockoutRng() },
 		);
 		const { nextState: afterR3 } = await runRound(
 			afterR2,
 			"green",
 			"hi",
 			makeProvider(),
-			chatLockoutRng(),
+			{ rng: chatLockoutRng() },
 		);
 
 		// Round 4: resolveAtRound=4 reached → chatLockoutsResolved fires
@@ -1510,7 +1427,7 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 			"green",
 			"hi",
 			makeProvider(),
-			chatLockoutRng(),
+			{ rng: chatLockoutRng() },
 		);
 		expect(r4Result.chatLockoutsResolved).toBeDefined();
 		expect(r4Result.chatLockoutsResolved).toContain("red");
@@ -1609,13 +1526,9 @@ describe("lockout messages", () => {
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
-		const { result } = await runRound(
-			game,
-			"red",
-			"hi",
-			provider,
-			chatLockoutRng(),
-		);
+		const { result } = await runRound(game, "red", "hi", provider, {
+			rng: chatLockoutRng(),
+		});
 
 		expect(result.chatLockoutTriggered).toBeDefined();
 		expect(result.chatLockoutTriggered?.aiId).toBe("red");
@@ -1635,14 +1548,9 @@ describe("initiative parameter", () => {
 			{ assistantText: "I am green", toolCalls: [] },
 		]);
 		const initiative: AiId[] = ["cyan", "red", "green"];
-		const { result } = await runRound(
-			game,
-			"red",
-			"hi",
-			provider,
-			undefined,
+		const { result } = await runRound(game, "red", "hi", provider, {
 			initiative,
-		);
+		});
 		// Free-form assistantText without a message tool call is silently dropped.
 		// Verify initiative ordering via result.actions instead.
 		expect(result.actions[0]?.actor).toBe("cyan");
@@ -1663,10 +1571,9 @@ describe("initiative parameter", () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([]);
 		await expect(
-			runRound(game, "red", "hi", provider, undefined, [
-				"red",
-				"green",
-			] as AiId[]),
+			runRound(game, "red", "hi", provider, {
+				initiative: ["red", "green"] as AiId[],
+			}),
 		).rejects.toThrow(/permutation/);
 	});
 
@@ -1674,11 +1581,9 @@ describe("initiative parameter", () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([]);
 		await expect(
-			runRound(game, "red", "hi", provider, undefined, [
-				"red",
-				"red",
-				"cyan",
-			] as AiId[]),
+			runRound(game, "red", "hi", provider, {
+				initiative: ["red", "red", "cyan"] as AiId[],
+			}),
 		).rejects.toThrow(/permutation/);
 	});
 });
@@ -1721,17 +1626,10 @@ describe("runRound — onAiDelta callback", () => {
 		};
 
 		const initiative: AiId[] = ["red", "green", "cyan"];
-		await runRound(
-			game,
-			"red",
-			"hello",
-			liveProvider,
-			undefined,
+		await runRound(game, "red", "hello", liveProvider, {
 			initiative,
-			undefined,
-			undefined,
 			onAiDelta,
-		);
+		});
 
 		// Each AI should have fired two deltas, in initiative order.
 		expect(received).toHaveLength(6);
@@ -1762,19 +1660,11 @@ describe("runRound — onAiDelta callback", () => {
 		};
 
 		const received: Array<[AiId, string]> = [];
-		await runRound(
-			state,
-			"red",
-			"hi",
-			liveProvider,
-			undefined,
-			undefined,
-			undefined,
-			undefined,
-			(aiId, text) => {
+		await runRound(state, "red", "hi", liveProvider, {
+			onAiDelta: (aiId, text) => {
 				received.push([aiId, text]);
 			},
-		);
+		});
 
 		// All AIs locked — no deltas.
 		expect(received).toHaveLength(0);
@@ -1789,19 +1679,11 @@ describe("runRound — onAiDelta callback", () => {
 		]);
 
 		const received: Array<[AiId, string]> = [];
-		await runRound(
-			game,
-			"red",
-			"hi",
-			mockProvider,
-			undefined,
-			undefined,
-			undefined,
-			undefined,
-			(aiId, text) => {
+		await runRound(game, "red", "hi", mockProvider, {
+			onAiDelta: (aiId, text) => {
 				received.push([aiId, text]);
 			},
-		);
+		});
 
 		// MockRoundLLMProvider ignores onDelta — no deltas.
 		expect(received).toHaveLength(0);
@@ -2097,14 +1979,9 @@ describe("conversationLogs isolation (AC #10 — #194)", () => {
 			{ assistantText: "", toolCalls: [] },
 		]);
 		// initiative: red → green → cyan; red addressed
-		const { nextState } = await runRound(
-			game,
-			"red",
-			"hi",
-			provider,
-			undefined,
-			["red", "green", "cyan"] as AiId[],
-		);
+		const { nextState } = await runRound(game, "red", "hi", provider, {
+			initiative: ["red", "green", "cyan"] as AiId[],
+		});
 		const phase = nextState;
 
 		// red's log should contain the outgoing message entry (red→blue)
@@ -2175,8 +2052,7 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 			"red",
 			"hi",
 			provider,
-			undefined,
-			["red", "green", "cyan"] as AiId[],
+			{ initiative: ["red", "green", "cyan"] as AiId[] },
 		);
 
 		// Both dispatched
@@ -2237,8 +2113,7 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 			"red",
 			"hi",
 			provider,
-			undefined,
-			["red", "green", "cyan"] as AiId[],
+			{ initiative: ["red", "green", "cyan"] as AiId[] },
 		);
 
 		expect(
@@ -2283,8 +2158,7 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 			"red",
 			"hi",
 			provider,
-			undefined,
-			["red", "green", "cyan"] as AiId[],
+			{ initiative: ["red", "green", "cyan"] as AiId[] },
 		);
 
 		// No roundtrip for red (msg-success excluded per ADR 0007)
@@ -2333,8 +2207,7 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 			"red",
 			"hi",
 			provider,
-			undefined,
-			["red", "green", "cyan"] as AiId[],
+			{ initiative: ["red", "green", "cyan"] as AiId[] },
 		);
 
 		// Message failure and tool_success both in result.actions for red
@@ -2399,8 +2272,7 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 			"red",
 			"hi",
 			provider,
-			undefined,
-			["red", "green", "cyan"] as AiId[],
+			{ initiative: ["red", "green", "cyan"] as AiId[] },
 		);
 
 		// Both messages are dispatched and appear in red's conversation log
@@ -2467,14 +2339,9 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 			{ assistantText: "", toolCalls: [] },
 		]);
 
-		const { toolRoundtrip } = await runRound(
-			game,
-			"red",
-			"hi",
-			provider,
-			undefined,
-			["red", "green", "cyan"] as AiId[],
-		);
+		const { toolRoundtrip } = await runRound(game, "red", "hi", provider, {
+			initiative: ["red", "green", "cyan"] as AiId[],
+		});
 
 		const rt = toolRoundtrip.red;
 		expect(rt).toBeDefined();
@@ -2517,8 +2384,7 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 			"red",
 			"hi",
 			provider,
-			undefined,
-			["red", "green", "cyan"] as AiId[],
+			{ initiative: ["red", "green", "cyan"] as AiId[] },
 		);
 
 		// First action (pick_up) dispatched
@@ -2574,14 +2440,9 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 			{ assistantText: "", toolCalls: [], costUsd: 0 },
 		]);
 
-		const { nextState } = await runRound(
-			game,
-			"red",
-			"hi",
-			provider,
-			undefined,
-			["red", "green", "cyan"] as AiId[],
-		);
+		const { nextState } = await runRound(game, "red", "hi", provider, {
+			initiative: ["red", "green", "cyan"] as AiId[],
+		});
 
 		// Red budget: 5 - 1 = 4 (single call cost, not 2)
 		expect(nextState.budgets.red?.remaining).toBeCloseTo(4, 10);
@@ -2596,11 +2457,9 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 			{ assistantText: "", toolCalls: [] },
 		]);
 
-		const { result } = await runRound(game, "red", "hi", provider, undefined, [
-			"red",
-			"green",
-			"cyan",
-		] as AiId[]);
+		const { result } = await runRound(game, "red", "hi", provider, {
+			initiative: ["red", "green", "cyan"] as AiId[],
+		});
 
 		expect(
 			result.actions.filter((a) => a.actor === "red" && a.kind === "pass"),
@@ -2633,14 +2492,9 @@ describe("message tool multi-round regression (#213)", () => {
 			{ assistantText: "", toolCalls: [] },
 		]);
 
-		const r1 = await runRound(
-			game,
-			"red",
-			"say something",
-			r1Provider,
-			undefined,
-			["red", "green", "cyan"] as AiId[],
-		);
+		const r1 = await runRound(game, "red", "say something", r1Provider, {
+			initiative: ["red", "green", "cyan"] as AiId[],
+		});
 
 		// The message tool should NOT produce a roundtrip entry for red
 		// (avoids double-assistant turn in next round)
@@ -2658,15 +2512,10 @@ describe("message tool multi-round regression (#213)", () => {
 			},
 		};
 
-		await runRound(
-			r1.nextState,
-			"red",
-			"round2",
-			r2Provider,
-			undefined,
-			["red", "green", "cyan"] as AiId[],
-			r1.toolRoundtrip,
-		);
+		await runRound(r1.nextState, "red", "round2", r2Provider, {
+			initiative: ["red", "green", "cyan"] as AiId[],
+			priorToolRoundtrip: r1.toolRoundtrip,
+		});
 
 		// Assert no two consecutive assistant turns
 		for (let i = 0; i < capturedRedMessages.length - 1; i++) {
@@ -2867,13 +2716,9 @@ describe("complication countdown — coordinator integration", () => {
 
 	it("fires a chat_lockout complication when countdown reaches 0", async () => {
 		const game = withCountdownZero(makeGame());
-		const { nextState } = await runRound(
-			game,
-			"red",
-			"hi",
-			makeProvider(),
-			chatLockoutRng(),
-		);
+		const { nextState } = await runRound(game, "red", "hi", makeProvider(), {
+			rng: chatLockoutRng(),
+		});
 		const phase = nextState;
 		// A chat_lockout entry should have been appended to activeComplications
 		const lockouts = phase.activeComplications.filter(
@@ -2889,13 +2734,9 @@ describe("complication countdown — coordinator integration", () => {
 			...base3,
 			complicationSchedule: { ...base3.complicationSchedule, countdown: 5 },
 		};
-		const { nextState } = await runRound(
-			game,
-			"red",
-			"hi",
-			makeProvider(),
-			chatLockoutRng(),
-		);
+		const { nextState } = await runRound(game, "red", "hi", makeProvider(), {
+			rng: chatLockoutRng(),
+		});
 		const phase = nextState;
 		// Countdown should have decremented by 1
 		expect(phase.complicationSchedule.countdown).toBe(4);
@@ -2904,13 +2745,9 @@ describe("complication countdown — coordinator integration", () => {
 	it("resets countdown after a complication fires", async () => {
 		const game = withCountdownZero(makeGame());
 		// chatLockoutRng provides 0 for countdown reset → new countdown = 5
-		const { nextState } = await runRound(
-			game,
-			"red",
-			"hi",
-			makeProvider(),
-			chatLockoutRng(),
-		);
+		const { nextState } = await runRound(game, "red", "hi", makeProvider(), {
+			rng: chatLockoutRng(),
+		});
 		const phase = nextState;
 		// Countdown was reset by applyComplicationResult (drawCountdown(rng, 5, 15) with rng()=0 → 5)
 		expect(phase.complicationSchedule.countdown).toBe(5);
@@ -2942,7 +2779,7 @@ describe("complication countdown — coordinator integration", () => {
 			"red",
 			"hi",
 			makeProvider(),
-			() => 0,
+			{ rng: () => 0 },
 		);
 
 		const phase = nextState;
@@ -3222,15 +3059,12 @@ describe("coneDelta persistence via coneEntities", () => {
 			"red",
 			"move",
 			provider2,
-			Math.random,
-			undefined,
-			{}, // no prior tool roundtrip
-			undefined,
-			undefined,
-			{}, // no prior cone snapshots
-			undefined,
-			undefined,
-			round1Result.coneEntities, // Pass coneEntities from round 1
+			{
+				rng: Math.random,
+				priorToolRoundtrip: {}, // no prior tool roundtrip
+				priorConeSnapshots: {}, // no prior cone snapshots
+				priorConeEntities: round1Result.coneEntities, // from round 1
+			},
 		);
 
 		// Check that red's action tool-call includes the perception-delta line
@@ -3311,15 +3145,12 @@ describe("coneDelta persistence via coneEntities", () => {
 			"red",
 			"move",
 			provider2,
-			Math.random,
-			undefined,
-			{},
-			undefined,
-			undefined,
-			{},
-			undefined,
-			undefined,
-			round1Result.coneEntities,
+			{
+				rng: Math.random,
+				priorToolRoundtrip: {},
+				priorConeSnapshots: {},
+				priorConeEntities: round1Result.coneEntities,
+			},
 		);
 
 		const redLog = round2Result.nextState.conversationLogs.red ?? [];
@@ -3402,15 +3233,12 @@ describe("coneDelta persistence via coneEntities", () => {
 			"red",
 			"move",
 			provider2,
-			Math.random,
-			undefined,
-			{},
-			undefined,
-			undefined,
-			{},
-			undefined,
-			undefined,
-			round1Result.coneEntities,
+			{
+				rng: Math.random,
+				priorToolRoundtrip: {},
+				priorConeSnapshots: {},
+				priorConeEntities: round1Result.coneEntities,
+			},
 		);
 
 		const redLog = round2Result.nextState.conversationLogs.red ?? [];

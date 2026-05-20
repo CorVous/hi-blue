@@ -228,7 +228,7 @@ export function initByokModal(): void {
 			if (saveUnverifiedBtn) saveUnverifiedBtn.hidden = true;
 
 			const result = await validateOpenRouterKey(key);
-			handleValidationResult(result, key, statusEl, saveUnverifiedBtn);
+			handleValidationResult({ result, key, statusEl, saveUnverifiedBtn });
 		});
 	}
 
@@ -271,7 +271,12 @@ export function initByokModal(): void {
 				renderModalState();
 				statusEl.textContent = "Key validated.";
 			} else {
-				handleValidationResult(result, storedKey, statusEl, saveUnverifiedBtn);
+				handleValidationResult({
+					result,
+					key: storedKey,
+					statusEl,
+					saveUnverifiedBtn,
+				});
 			}
 		});
 	}
@@ -311,12 +316,17 @@ export function initByokModal(): void {
 	}
 }
 
-function handleValidationResult(
-	result: ValidationResult,
-	key: string,
-	statusEl: HTMLElement,
-	saveUnverifiedBtn: HTMLElement | null,
-): void {
+function handleValidationResult({
+	result,
+	key,
+	statusEl,
+	saveUnverifiedBtn,
+}: {
+	result: ValidationResult;
+	key: string;
+	statusEl: HTMLElement;
+	saveUnverifiedBtn: HTMLElement | null;
+}): void {
 	if (result.kind === "validated") {
 		const keySuffix = key.slice(-4);
 		writeKeyAndMeta(key, {

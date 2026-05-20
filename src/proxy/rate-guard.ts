@@ -189,6 +189,11 @@ export function rateLimitResponse(
 	);
 }
 
+/** Cost-guard defaults applied when the matching env var is unset. */
+const DEFAULT_PER_IP_DAILY_MICRO_USD = 1_000_000; // $1.00
+const DEFAULT_GLOBAL_DAILY_MICRO_USD = 10_000_000; // $10.00
+const DEFAULT_PRE_CHARGE_MICRO_USD = 5_000; // $0.005
+
 /** Build cost-guard config from Worker environment variables. */
 export function configFromEnv(env: {
 	PER_IP_DAILY_MICRO_USD_MAX?: string;
@@ -196,10 +201,17 @@ export function configFromEnv(env: {
 	PRE_CHARGE_MICRO_USD?: string;
 }): CostGuardConfig {
 	return {
-		perIpDailyMicroUsdMax: Number(env.PER_IP_DAILY_MICRO_USD_MAX ?? "1000000"),
-		globalDailyMicroUsdMax: Number(
-			env.GLOBAL_DAILY_MICRO_USD_MAX ?? "10000000",
-		),
-		preChargeMicroUsd: Number(env.PRE_CHARGE_MICRO_USD ?? "5000"),
+		perIpDailyMicroUsdMax:
+			env.PER_IP_DAILY_MICRO_USD_MAX != null
+				? Number(env.PER_IP_DAILY_MICRO_USD_MAX)
+				: DEFAULT_PER_IP_DAILY_MICRO_USD,
+		globalDailyMicroUsdMax:
+			env.GLOBAL_DAILY_MICRO_USD_MAX != null
+				? Number(env.GLOBAL_DAILY_MICRO_USD_MAX)
+				: DEFAULT_GLOBAL_DAILY_MICRO_USD,
+		preChargeMicroUsd:
+			env.PRE_CHARGE_MICRO_USD != null
+				? Number(env.PRE_CHARGE_MICRO_USD)
+				: DEFAULT_PRE_CHARGE_MICRO_USD,
 	};
 }
