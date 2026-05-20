@@ -201,97 +201,56 @@ function drawComplication(
 	// biome-ignore lint/style/noNonNullAssertion: bounded index into non-empty pool
 	const kind = pool[idx]!;
 
-	switch (kind) {
-		case "weather_change":
-			return { kind: "weather_change" };
-
-		case "sysadmin_directive": {
-			const aiIds = Object.keys(phase.personaSpatial);
-			const target = aiIds[Math.floor(rng() * aiIds.length)] as AiId;
-			const duration = 3 + Math.floor(rng() * 3); // [3, 5]
-			return { kind: "sysadmin_directive", target, duration };
-		}
-
-		case "tool_disable": {
-			// Build the cross-product of (daemon, tool) pairs, filtered by already-active disables
-			const aiIds = Object.keys(phase.personaSpatial);
-			const existingDisables = new Set<string>(
-				phase.activeComplications
-					.filter(
-						(c): c is Extract<ActiveComplication, { kind: "tool_disable" }> =>
-							c.kind === "tool_disable",
-					)
-					.map((c) => `${c.target}:${c.tool}`),
-			);
-
-			const validPairs: Array<{ target: AiId; tool: ToolName }> = [];
-			for (const aiId of aiIds) {
-				for (const tool of DISABLABLE_TOOLS) {
-					if (!existingDisables.has(`${aiId}:${tool}`)) {
-						validPairs.push({ target: aiId as AiId, tool });
-					}
-				}
-			}
-
-			if (validPairs.length === 0) {
-				// All (daemon, tool) pairs are already disabled — re-draw excluding tool_disable
-				const fallbackPool = availableComplicationTypes(phase, true);
-				const fallbackIdx = Math.floor(rng() * fallbackPool.length);
-				// biome-ignore lint/style/noNonNullAssertion: bounded index
-				const fallbackKind = fallbackPool[fallbackIdx]!;
-				// Recursive sub-draw with fallback kind (only one level, no unbounded recursion)
-				return drawFallbackComplication(fallbackKind, phase, rng);
-			}
-
-			const pairIdx = Math.floor(rng() * validPairs.length);
-			// biome-ignore lint/style/noNonNullAssertion: bounded index
-			const pair = validPairs[pairIdx]!;
-			const duration = drawCountdown(rng, 3, 5);
-			return {
-				kind: "tool_disable",
-				target: pair.target,
-				tool: pair.tool,
-				duration,
-			};
-		}
-
-		case "obstacle_shift": {
-			const tuples = validObstacleShiftTuples(
-				phase.world,
-				phase.personaSpatial,
-			);
-			const tupleIdx = Math.floor(rng() * tuples.length);
-			// biome-ignore lint/style/noNonNullAssertion: bounded index (obstacle_shift only in pool when tuples non-empty)
-			const tuple = tuples[tupleIdx]!;
-			return {
-				kind: "obstacle_shift",
-				obstacleId: tuple.obstacleId,
-				fromCell: tuple.fromCell,
-				toCell: tuple.toCell,
-			};
-		}
-
-		case "chat_lockout": {
-			const aiIds = Object.keys(phase.personaSpatial);
-			const target = aiIds[Math.floor(rng() * aiIds.length)] as AiId;
-			const duration = 3 + Math.floor(rng() * 3); // [3, 5]
-			return { kind: "chat_lockout", target, duration };
-		}
-
-		case "setting_shift":
-			return { kind: "setting_shift" };
-
-		default:
-			// Unreachable — exhaustive over pool values
-			return { kind: "weather_change" };
+	if (kind !== "tool_disable") {
+		return buildSimpleComplication(kind, phase, rng);
 	}
+
+	// Build the cross-product of (daemon, tool) pairs, filtered by already-active disables
+	const aiIds = Object.keys(phase.personaSpatial);
+	const existingDisables = new Set<string>(
+		phase.activeComplications
+			.filter(
+				(c): c is Extract<ActiveComplication, { kind: "tool_disable" }> =>
+					c.kind === "tool_disable",
+			)
+			.map((c) => `${c.target}:${c.tool}`),
+	);
+
+	const validPairs: Array<{ target: AiId; tool: ToolName }> = [];
+	for (const aiId of aiIds) {
+		for (const tool of DISABLABLE_TOOLS) {
+			if (!existingDisables.has(`${aiId}:${tool}`)) {
+				validPairs.push({ target: aiId as AiId, tool });
+			}
+		}
+	}
+
+	if (validPairs.length === 0) {
+		// All (daemon, tool) pairs are already disabled — re-draw excluding tool_disable
+		const fallbackPool = availableComplicationTypes(phase, true);
+		const fallbackIdx = Math.floor(rng() * fallbackPool.length);
+		// biome-ignore lint/style/noNonNullAssertion: bounded index
+		const fallbackKind = fallbackPool[fallbackIdx]!;
+		return buildSimpleComplication(fallbackKind, phase, rng);
+	}
+
+	const pairIdx = Math.floor(rng() * validPairs.length);
+	// biome-ignore lint/style/noNonNullAssertion: bounded index
+	const pair = validPairs[pairIdx]!;
+	const duration = drawCountdown(rng, 3, 5);
+	return {
+		kind: "tool_disable",
+		target: pair.target,
+		tool: pair.tool,
+		duration,
+	};
 }
 
 /**
- * Draw a non-tool_disable complication given a pre-selected kind.
- * Used only in the tool_disable exhaustion fallback path.
+ * Build a complication variant for a pre-selected, non-tool_disable kind.
+ * Shared by the normal draw and the tool_disable exhaustion fallback.
  */
-function drawFallbackComplication(
+function buildSimpleComplication(
 	kind: string,
 	phase: GameState,
 	rng: () => number,
