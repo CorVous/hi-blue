@@ -2718,8 +2718,11 @@ describe("BrowserContentPackProvider — corrective feedback strengthening", () 
 			string,
 			unknown
 		>;
-		const decoys = packObj.decoys as Record<string, unknown>[];
-		decoys[0]!.examineDescription =
+		const decoys = packObj.decoys as [
+			Record<string, unknown>,
+			...Record<string, unknown>[],
+		];
+		decoys[0].examineDescription =
 			"An old switch you might find in a forgotten panel.";
 		const brokenRaw = JSON.stringify(brokenPack);
 		mockChatFn.mockResolvedValueOnce({ content: brokenRaw, reasoning: null });
@@ -2764,8 +2767,11 @@ describe("BrowserContentPackProvider — corrective feedback strengthening", () 
 			string,
 			unknown
 		>;
-		const decoys = packObj.decoys as Record<string, unknown>[];
-		decoys[0]!.examineDescription =
+		const decoys = packObj.decoys as [
+			Record<string, unknown>,
+			...Record<string, unknown>[],
+		];
+		decoys[0].examineDescription =
 			"An old switch you might find in a forgotten panel.";
 		mockChatFn.mockResolvedValueOnce({
 			content: JSON.stringify(brokenPack),
@@ -2804,8 +2810,11 @@ describe("BrowserContentPackProvider — corrective feedback strengthening", () 
 			string,
 			unknown
 		>;
-		const bindings = packObj.bindings as Record<string, unknown>[];
-		const space = bindings[0]!.space as Record<string, unknown>;
+		const bindings = packObj.bindings as [
+			Record<string, unknown>,
+			...Record<string, unknown>[],
+		];
+		const space = bindings[0].space as Record<string, unknown>;
 		space.examineDescription = "A featureless surface set into the wall.";
 		mockChatFn.mockResolvedValueOnce({
 			content: JSON.stringify(brokenPack),

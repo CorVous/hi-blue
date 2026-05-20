@@ -145,7 +145,7 @@ describe("cone-focus", () => {
 				".dev-map-cell",
 			)) {
 				const dataCell = cell.getAttribute("data-cell");
-				if (mask.has(dataCell!)) {
+				if (dataCell !== null && mask.has(dataCell)) {
 					// Should have non-empty backgroundColor
 					expect(cell.style.backgroundColor).toBeTruthy();
 					expect(cell.getAttribute("data-cone-focus")).toBe("red");

@@ -240,7 +240,6 @@ describe("validateBoundContentPack — forbidden fields", () => {
 
 	it("carry space with convergenceTier1Flavor raises binding-forbidden-field", () => {
 		const pack = makeGoodCarryPack();
-		// biome-ignore lint/style/noNonNullAssertion: test fixture access
 		(
 			pack.pack.bindings[0]?.space as Record<string, unknown>
 		).convergenceTier1Flavor = "someone stands here";
@@ -256,7 +255,6 @@ describe("validateBoundContentPack — forbidden fields", () => {
 
 	it("use_space space with convergenceTier1Flavor raises binding-forbidden-field", () => {
 		const pack = makeGoodUseSpacePack();
-		// biome-ignore lint/style/noNonNullAssertion: test fixture access
 		(
 			pack.pack.bindings[0]?.space as Record<string, unknown>
 		).convergenceTier1Flavor = "someone";
@@ -289,7 +287,6 @@ describe("validateBoundContentPack — forbidden fields", () => {
 describe("validateBoundContentPack — use-cue rules", () => {
 	it("carry space examineDescription with use-cue = warning, not error", () => {
 		const pack = makeGoodCarryPack();
-		// biome-ignore lint/style/noNonNullAssertion: test fixture access
 		(
 			pack.pack.bindings[0]?.space as Record<string, unknown>
 		).examineDescription = "Press the button here.";
@@ -300,7 +297,6 @@ describe("validateBoundContentPack — use-cue rules", () => {
 
 	it("use_space without use-cue in examineDescription = hard error", () => {
 		const pack = makeGoodUseSpacePack();
-		// biome-ignore lint/style/noNonNullAssertion: test fixture access
 		(
 			pack.pack.bindings[0]?.space as Record<string, unknown>
 		).examineDescription = "A plain surface with no features.";
@@ -317,7 +313,6 @@ describe("validateBoundContentPack — use-cue rules", () => {
 
 	it("use_item without use-cue in examineDescription = hard error", () => {
 		const pack = makeGoodUseItemPack();
-		// biome-ignore lint/style/noNonNullAssertion: test fixture access
 		(
 			pack.pack.bindings[0]?.item as Record<string, unknown>
 		).examineDescription = "A strange cylindrical object.";
@@ -347,7 +342,6 @@ describe("validateBoundContentPack — use-cue rules", () => {
 
 	it("convergence space with use-cue in examineDescription = warning only", () => {
 		const pack = makeGoodConvergencePack();
-		// biome-ignore lint/style/noNonNullAssertion: test fixture access
 		(
 			pack.pack.bindings[0]?.space as Record<string, unknown>
 		).examineDescription =

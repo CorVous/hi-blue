@@ -2522,7 +2522,7 @@ describe("buildConeEntityState", () => {
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
 		const state = buildConeEntityState(ctx);
-		expect(state["green"]).toEqual({ inCone: true, satisfied: false });
+		expect(state.green).toEqual({ inCone: true, satisfied: false });
 	});
 
 	it("includes objective spaces in the cone", () => {
@@ -2548,7 +2548,7 @@ describe("buildConeEntityState", () => {
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
 		const state = buildConeEntityState(ctx);
-		expect(state["flower_space"]).toEqual({ inCone: true, satisfied: false });
+		expect(state.flower_space).toEqual({ inCone: true, satisfied: false });
 	});
 });
 
