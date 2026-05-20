@@ -14,7 +14,7 @@ Unit-level coverage for SPA modules — pure logic, encoder/decoder round-trips,
 
 Live browser end-to-end against `pnpm build` + `wrangler dev` on `:8787` — the production-shaped surface (built SPA from `dist/` served by the same Worker that handles the API). Run with `pnpm test:e2e`. Use this when:
 
-- You change anything under `src/spa/` that affects rendered DOM, user interaction, or the loaded-page experience — panel rendering, form behaviour, SSE streaming, phase transitions, endgame overlay, the `/endgame` route, lockouts, cap-hit handling.
+- You change anything under `src/spa/` that affects rendered DOM, user interaction, or the loaded-page experience — panel rendering, form behaviour, SSE streaming, round transitions, endgame overlay, the `/endgame` route, lockouts, cap-hit handling.
 - You touch the `assets` block in `wrangler.jsonc` or `scripts/build-spa.mjs` (the build/serve surface the e2e exercises).
 
 **Vitest jsdom does not substitute for Playwright on these changes** — add or update a spec under `e2e/`.
