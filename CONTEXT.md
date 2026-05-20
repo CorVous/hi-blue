@@ -84,7 +84,15 @@ The single chronological per-Daemon section of the system prompt that interleave
 _Avoid_: Action log (deprecated; do not reintroduce), event delta, transcript.
 
 **ConversationEntry**:
-A single tagged item inside a Daemon's **Conversation log**. Discriminated union of four kinds — `message` (a directional `(from, to, content)` triple where `from` is an `AiId`, `blue`, or `sysadmin`, and `to` is an `AiId` or `blue`), `witnessed-event`, `action-failure` (actor-only; a verbatim dispatcher rejection reason that persists so a Daemon stops repeating a failed action), and `broadcast` — each carrying a `round` and the smallest payload needed to render its line. The shape a player sees when they open a `*xxxx.txt` file in devtools.
+A single tagged item inside a Daemon's **Conversation log**. Discriminated union of seven kinds, each carrying a `round` and the smallest payload needed to render its line:
+- `message` — a directional `(from, to, content)` triple where `from` is an `AiId`, `blue`, or `sysadmin`, and `to` is an `AiId` or `blue`.
+- `witnessed-event` — an observable physical action (`go`/`pick_up`/`put_down`/`use`) another Daemon performed inside this Daemon's **Cone**. See **Witnessed event**.
+- `action-failure` — actor-only; a verbatim dispatcher rejection reason that persists so a Daemon stops repeating a failed action.
+- `broadcast` — a sender-less system announcement appended to all three Daemon logs at once. See **Broadcast message**.
+- `tool-call` — the actor's own tool call plus its result, replayed into the next round's prompt; carries an optional `coneDelta` capturing new perception revealed by a `go`/`face`.
+- `witnessed-obstacle-shift` — the flavor line a Daemon perceives when an **Obstacle Shift** moves an Obstacle inside its **Cone**.
+- `witnessed-convergence` — the tiered flavor line for a **Convergence Objective**, tagged `actor` or `witness` by audience.
+The shape a player sees when they open a `*xxxx.txt` file in devtools.
 _Avoid_: Log entry (ambiguous), event (use **Witnessed event** for the specific witness-cone case).
 
 **Witnessed event**:
@@ -121,12 +129,12 @@ An entity in the **Content Pack** with no **Objective binding**. Always an `inte
 _Avoid_: Filler (ambiguous), red herring (rejected — they don't deceive).
 
 **Complication**:
-A mid-game disruption that fires on a schedule. Only one Complication fires per turn. Replaces the retired Phase Goal as the primary mid-game pressure mechanism. Six Complication types:
-1. **Weather Change** — Permanent. A new weather string replaces the current one. Delivered as a neutral **Broadcast message**: *"The weather has changed to X."* No Sysadmin attribution.
-2. **Sysadmin Directive** — Temporary, open-ended. A behavioral instruction delivered by the **Sysadmin** to one Daemon privately, with a meta-instruction not to reveal the directive. Revoked by a follow-up Sysadmin message. Multiple Sysadmin Directives can be active simultaneously across different (or the same) Daemons.
-3. **Tool Disable** — Temporary. A specific tool is mechanically removed from one Daemon's available tools. The Sysadmin notifies the Daemon on disable and on restore. No secrecy instruction (the tool's absence is self-evident). Multiple Tool Disables can be active simultaneously.
+A mid-game disruption that fires on a schedule. Only one Complication fires per round. Replaces the retired Phase Goal as the primary mid-game pressure mechanism. Six Complication types:
+1. **Weather Change** — Permanent. A new weather string replaces the current one. Delivered as a neutral **Broadcast message** (`[SYSTEM] The weather has changed. <new weather>`). No Sysadmin attribution.
+2. **Sysadmin Directive** — Temporary, fixed `[3, 5]`-round duration. A behavioral instruction delivered by the **Sysadmin** to one Daemon privately, with a meta-instruction not to reveal the directive. Auto-expires when its countdown elapses (the Sysadmin sends a closing message); a Daemon holds at most one directive at a time, so a new directive targeting a Daemon that already has one revokes the old one first. Up to three can be active at once — one per Daemon.
+3. **Tool Disable** — Temporary, fixed `[3, 5]`-round duration. A specific tool is mechanically removed from one Daemon's available tools. The Sysadmin notifies the Daemon on disable and on restore. No secrecy instruction (the tool's absence is self-evident). Multiple Tool Disables can be active simultaneously, but never the same `(Daemon, tool)` pair twice.
 4. **Obstacle Shift** — Permanent per-event. One Obstacle moves one adjacent cell to an empty space; if no valid adjacent empty cell exists, a different Obstacle is chosen. Only Daemons with that cell in their **Cone** at the moment it fires see a generated flavor **Witnessed event**. The same Obstacle can shift again in a later draw.
-5. **Chat Lockout** — Temporary. The player cannot message one specific Daemon.
+5. **Chat Lockout** — Temporary, fixed `[3, 5]`-round duration. The player cannot message one specific Daemon.
 6. **Setting Shift** — Permanent, fires at most once per game (removed from the pool after firing). The room's **Setting** changes; the active **Content Pack** swaps from Pack A to the pre-generated Pack B. Entities are paired by structural role (same IDs, satisfaction states preserved, names and descriptions replaced). Announced to Daemons via a **Broadcast message**.
 _Avoid_: Phase Goal (retired), event, trigger.
 
