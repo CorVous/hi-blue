@@ -155,25 +155,6 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 	{
 		type: "function",
 		function: {
-			name: "examine",
-			description:
-				'Examine an item to read a detailed description of it. Private — no other AI sees you do this. Available for items in your cell, directly in front of you, or held by you. Use this tool when you want to "investigate", "look at", "inspect", "study", "scrutinize", or "check" an item.',
-			parameters: {
-				type: "object",
-				properties: {
-					item: {
-						type: "string",
-						description: "The id of the item to examine.",
-					},
-				},
-				required: ["item"],
-				additionalProperties: false,
-			},
-		},
-	},
-	{
-		type: "function",
-		function: {
 			name: "message",
 			description:
 				'Send a direct message to a specific recipient — blue (the player) or a peer Daemon. The recipient receives the message in their conversation log. Only the sender and recipient see this message. Use this tool when you want to "tell", "say to", "speak to", "talk to", "whisper to", or "communicate with" someone.',
@@ -208,7 +189,6 @@ type GiveArgs = { item: string; to: string };
 type UseArgs = { item: string };
 type GoArgs = { direction: string };
 type FaceArgs = { direction: string };
-type ExamineArgs = { item: string };
 type MessageArgs = { to: string; content: string };
 
 type ToolArgs = {
@@ -218,7 +198,6 @@ type ToolArgs = {
 	use: UseArgs;
 	go: GoArgs;
 	face: FaceArgs;
-	examine: ExamineArgs;
 	message: MessageArgs;
 };
 
@@ -248,8 +227,7 @@ export function parseToolCallArguments<N extends ToolName>(
 	switch (name) {
 		case "pick_up":
 		case "put_down":
-		case "use":
-		case "examine": {
+		case "use": {
 			if (typeof obj.item !== "string" || obj.item.length === 0) {
 				return { ok: false, reason: "Required argument 'item' is missing" };
 			}

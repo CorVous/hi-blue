@@ -563,7 +563,6 @@ describe("Tool Disable exclusion", () => {
 			"use",
 			"go",
 			"face",
-			"examine",
 			"message",
 		];
 		const activeComplications: ActiveComplication[] = [];

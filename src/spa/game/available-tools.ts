@@ -9,7 +9,6 @@
  * `face` is always present with the 3-direction enum (excludes "forward", the current facing).
  */
 
-import { projectCone } from "./cone-projector.js";
 import {
 	applyDirection,
 	frontArc,
@@ -110,9 +109,6 @@ function cloneToolWithEnums(
  *    Enum restricted to held entity ids.
  * 5. `give` — included only when actor holds pickable entities AND has AIs in the
  *    actor's own cell or front arc. item enum = held entity ids, to enum = reachable AI ids.
- * 6. `examine` — included when any entity (any kind) is held by the actor OR rests
- *    anywhere in the full 9-cell cone (own + dist-1 arc + dist-2 fan).
- *    Enum restricted to those entity ids.
  *
  * Spaces and obstacles are never pickupable.
  *
@@ -239,27 +235,6 @@ export function availableTools(
 					to: reachableAiIds,
 				}),
 			);
-		}
-	}
-
-	// 6. examine — items held or in cone (own cell + dist-1 arc + dist-2 fan)
-	if (actorSpatial && !disabledTools.has("examine")) {
-		const cone = projectCone(actorSpatial.position, actorSpatial.facing);
-		const conePositions = cone.map((c) => c.position);
-		const examineableIds = world.entities
-			.filter((entity) => {
-				if (entity.holder === aiId) return true;
-				if (isGridPosition(entity.holder)) {
-					return conePositions.some((p) =>
-						positionsEqual(p, entity.holder as GridPosition),
-					);
-				}
-				return false;
-			})
-			.map((e) => e.id);
-
-		if (examineableIds.length > 0) {
-			tools.push(cloneToolWithEnums("examine", { item: examineableIds }));
 		}
 	}
 

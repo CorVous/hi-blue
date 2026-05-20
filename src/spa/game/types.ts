@@ -263,7 +263,7 @@ export type RoundActionRecord = {
  * A physical action that was observable by other AIs (via cone visibility).
  * Computed by the dispatcher at write time and consumed once to fan out witnessed-event
  * entries into per-Daemon conversationLogs; no longer stored on PhaseState.
- * Does NOT include face (facing-change only, no observable physical event) or examine.
+ * Does NOT include face (facing-change only, no observable physical event).
  */
 export interface PhysicalActionRecord {
 	round: number;
@@ -346,7 +346,7 @@ export type ConversationEntry =
 	| {
 			kind: "action-failure";
 			round: number;
-			tool: "go" | "face" | "pick_up" | "put_down" | "give" | "use" | "examine";
+			tool: "go" | "face" | "pick_up" | "put_down" | "give" | "use";
 			/** Verbatim dispatcher rejection reason (e.g. "That cell is blocked by an obstacle"). */
 			reason: string;
 	  }
@@ -446,7 +446,6 @@ export type ToolName =
 	| "use"
 	| "go"
 	| "face"
-	| "examine"
 	| "message";
 
 export interface ToolCall {

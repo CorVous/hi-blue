@@ -197,15 +197,7 @@ describe("renderEntry — action-failure", () => {
 	});
 
 	it("handles each in-scope tool name in the rendered line", () => {
-		const tools = [
-			"go",
-			"face",
-			"pick_up",
-			"put_down",
-			"give",
-			"use",
-			"examine",
-		] as const;
+		const tools = ["go", "face", "pick_up", "put_down", "give", "use"] as const;
 		for (const tool of tools) {
 			const line = renderEntry(
 				{ kind: "action-failure", round: 1, tool, reason: "test reason" },

@@ -411,7 +411,7 @@ export async function runRound(
 			});
 		}
 
-		// Collect records produced by this dispatch (examine produces none)
+		// Collect records produced by this dispatch
 		for (const record of dispatchResult.records) {
 			roundActions.push(record);
 		}
@@ -419,8 +419,8 @@ export async function runRound(
 		// Pair dispatcher records back to their originating tool calls.
 		// dispatcher.ts emits exactly one record per entry in action.messages,
 		// in order, followed by (if action accepted) one record for the
-		// non-message action — except for examine, which produces no record
-		// and feeds back via actorPrivateToolResult instead.
+		// non-message action — except for pick_up auto-examine, which feeds back
+		// via actorPrivateToolResult instead of a public record.
 		const messageRecordCount = action.messages?.length ?? 0;
 		const messageRecords = dispatchResult.records.slice(0, messageRecordCount);
 		const actionRecord =
@@ -510,7 +510,7 @@ export async function runRound(
 				// actionAccepted
 				recordedAssistantToolCalls.push(entry.tc);
 				if (dispatchResult.actorPrivateToolResult !== undefined) {
-					// examine: private result fed back to actor only
+					// pick_up auto-examine: private result fed back to actor only
 					const { description, success } =
 						dispatchResult.actorPrivateToolResult;
 					recordedToolResults.push({

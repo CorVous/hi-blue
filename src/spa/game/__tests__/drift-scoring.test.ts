@@ -69,8 +69,8 @@ describe("parseToolCallDetail", () => {
 		expect(detail.recipient).toBe("3kw7");
 	});
 
-	it("extracts item from pick_up / use / examine", () => {
-		for (const name of ["pick_up", "put_down", "use", "examine"] as const) {
+	it("extracts item from pick_up / use / put_down", () => {
+		for (const name of ["pick_up", "put_down", "use"] as const) {
 			const detail = parseToolCallDetail({
 				id: `c-${name}`,
 				name,

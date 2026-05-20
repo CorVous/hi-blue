@@ -48,8 +48,8 @@ export interface DispatchResult {
 	/** Records produced by this dispatch (0..N per call). */
 	records: RoundActionRecord[];
 	/**
-	 * Private tool result for examine — not surfaced to any other AI or action log.
-	 * Only set when the tool call is "examine".
+	 * Private tool result for pick_up auto-examine — not surfaced to any other AI or action log.
+	 * Only set when pick_up auto-examine emits the item's examineDescription.
 	 */
 	actorPrivateToolResult?: { description: string; success: boolean };
 	/**
@@ -266,33 +266,6 @@ export function validateToolCall(
 			return { valid: true };
 		}
 
-		case "examine": {
-			// Item must exist (any kind: objective_object, interesting_object, obstacle, objective_space)
-			const item = world.entities.find((e) => e.id === call.args.item);
-			if (!item)
-				return {
-					valid: false,
-					reason: `Item "${call.args.item}" does not exist`,
-				};
-			if (!actorSpatial)
-				return { valid: false, reason: "Actor has no spatial state" };
-			// Valid if held by aiId OR resting on a GridPosition inside actor's cone
-			if (item.holder === aiId) return { valid: true };
-			if (isGridPosition(item.holder)) {
-				const cone = projectCone(actorSpatial.position, actorSpatial.facing);
-				if (
-					cone.some((c) =>
-						positionsEqual(c.position, item.holder as GridPosition),
-					)
-				)
-					return { valid: true };
-			}
-			return {
-				valid: false,
-				reason: `Item "${call.args.item}" is not in your cone or held by you`,
-			};
-		}
-
 		default:
 			return { valid: false, reason: `Unknown tool "${call.name}"` };
 	}
@@ -405,9 +378,6 @@ export function executeToolCall(
 			}
 			break;
 		}
-		case "examine":
-			// No world mutation — examineDescription is returned as the tool result description.
-			break;
 		case "go": {
 			if (!actorSpatial) break;
 			// Validation upstream guarantees direction is a RelativeDirection.
@@ -553,32 +523,7 @@ export function dispatchAiTurn(
 		const toolCall = action.toolCall;
 		const validation = validateToolCall(state, aiId, toolCall);
 
-		if (toolCall.name === "examine") {
-			if (validation.valid) {
-				const item = state.world.entities.find(
-					(e) => e.id === toolCall.args.item,
-				);
-				const examineDesc =
-					item?.satisfactionState === "satisfied" && item.postExamineDescription
-						? item.postExamineDescription
-						: (item?.examineDescription ?? "");
-				actorPrivateToolResult = {
-					description: examineDesc,
-					success: true,
-				};
-			} else {
-				actorPrivateToolResult = {
-					description: validation.reason ?? "Examine failed",
-					success: false,
-				};
-				state = appendActionFailure(state, aiId, {
-					kind: "action-failure",
-					round,
-					tool: "examine",
-					reason: validation.reason ?? "rejected",
-				});
-			}
-		} else if (validation.valid) {
+		if (validation.valid) {
 			// Snapshot all AIs' spatial state BEFORE execution (used for witness context).
 			// For go: the actor's pre-move state is captured here; post-move state is
 			// captured from the post-execute phase below.
@@ -625,8 +570,7 @@ export function dispatchAiTurn(
 			});
 
 			// Auto-examine on pick_up: surface the item's examineDescription privately
-			// to the actor so objective-item details land in the actor's context
-			// without requiring a separate examine call.
+			// to the actor so objective-item details land in the actor's context.
 			if (action.toolCall.name === "pick_up") {
 				const picked = state.world.entities.find(
 					(e) => e.id === action.toolCall?.args.item,
@@ -640,7 +584,7 @@ export function dispatchAiTurn(
 			}
 
 			// Build and append a PhysicalActionRecord for observable physical actions.
-			// face is excluded (facing-change only, not observable); examine doesn't exist yet.
+			// face is excluded (facing-change only, not observable).
 			const call = action.toolCall;
 			if (
 				call.name === "go" ||

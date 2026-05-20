@@ -290,89 +290,6 @@ describe("validateToolCall", () => {
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(false);
 	});
-
-	// examine validation tests
-	// red is at (0,0) facing north; flower is at (0,0) (own cell = cone); key is held by red
-	it("examine: allows examining an item held by the actor", () => {
-		const game = makeGame();
-		const call: ToolCall = { name: "examine", args: { item: "key" } };
-		const result = validateToolCall(game, "red", call);
-		expect(result.valid).toBe(true);
-	});
-
-	it("examine: allows examining an item in the actor's own cell (cone)", () => {
-		const game = makeGame();
-		// flower is at (0,0), same as red's position
-		const call: ToolCall = { name: "examine", args: { item: "flower" } };
-		const result = validateToolCall(game, "red", call);
-		expect(result.valid).toBe(true);
-	});
-
-	it("examine: rejects examining an item outside the actor's cone", () => {
-		const game = makeGame();
-		// green is at (0,1) facing north; flower is at (0,0)
-		// green's entire cone facing north from row 0 is OOB except own cell (0,1)
-		// flower at (0,0) is not in green's cone
-		const call: ToolCall = { name: "examine", args: { item: "flower" } };
-		const result = validateToolCall(game, "green", call);
-		expect(result.valid).toBe(false);
-		expect(result.reason).toMatch(/cone/i);
-	});
-
-	it("examine: rejects examining a nonexistent item", () => {
-		const game = makeGame();
-		const call: ToolCall = { name: "examine", args: { item: "dragon" } };
-		const result = validateToolCall(game, "red", call);
-		expect(result.valid).toBe(false);
-		expect(result.reason).toMatch(/does not exist/i);
-	});
-
-	it("examine: allows examining an obstacle in the actor's cone", () => {
-		// Place obstacle at (0,0) where red stands — own cell is in cone
-		const pack = makePackWithEntities(
-			{ flower: { row: 3, col: 3 }, key: { row: 4, col: 4 } },
-			[{ row: 0, col: 0 }],
-		);
-		const game = startGame(TEST_PERSONAS, pack, {
-			budgetPerAi: 5,
-			rng: FIXED_RNG,
-		});
-		const call: ToolCall = { name: "examine", args: { item: "obs0" } };
-		const result = validateToolCall(game, "red", call);
-		expect(result.valid).toBe(true);
-	});
-
-	it("examine: allows examining an objective_space in the actor's cone", () => {
-		// Build a pack with an objective pair where the space is at (0,0) (red's cell)
-		const objSpace: WorldEntity = {
-			id: "space1",
-			kind: "objective_space",
-			name: "a space",
-			examineDescription: "A place.",
-			holder: { row: 0, col: 0 },
-		};
-		const objObj: WorldEntity = {
-			id: "obj1",
-			kind: "objective_object",
-			name: "an object",
-			examineDescription: "An object.",
-			holder: { row: 4, col: 4 },
-			pairsWithSpaceId: "space1",
-		};
-		const pack = makeTestPack([objObj, objSpace], {
-			setting: "test",
-			wallName: "wall",
-			aiStarts: RGC_AI_STARTS,
-		});
-		const game = startGame(TEST_PERSONAS, pack, {
-			budgetPerAi: 5,
-			rng: FIXED_RNG,
-		});
-		// red at (0,0), space1 at (0,0) — own cell is in cone
-		const call: ToolCall = { name: "examine", args: { item: "space1" } };
-		const result = validateToolCall(game, "red", call);
-		expect(result.valid).toBe(true);
-	});
 });
 
 describe("executeToolCall — use placement via front arc", () => {
@@ -500,15 +417,6 @@ describe("executeToolCall", () => {
 		const spatial = updated.personaSpatial.red;
 		expect(spatial?.position).toEqual({ row: 0, col: 0 });
 		expect(spatial?.facing).toBe("east");
-	});
-
-	it("does not mutate world on examine", () => {
-		const game = makeGame();
-		const before = JSON.stringify(game.world);
-		const call: ToolCall = { name: "examine", args: { item: "key" } };
-		const updated = executeToolCall(game, "red", call);
-		const after = JSON.stringify(updated.world);
-		expect(after).toBe(before);
 	});
 
 	// ── Relative direction dispatch (issue: relative-directions) ─────────────
@@ -861,54 +769,6 @@ describe("dispatchAiTurn", () => {
 		);
 	});
 
-	// examine tests
-	it("examine: no records produced, actorPrivateToolResult set on success", () => {
-		// red holds the key; examine key → private result with examineDescription
-		const game = makeGame();
-		const action: AiTurnAction = {
-			aiId: "red",
-			toolCall: { name: "examine", args: { item: "key" } },
-		};
-		const result = dispatchAiTurn(game, action);
-		expect(result.rejected).toBe(false);
-		// No tool_success or tool_failure records for examine
-		expect(
-			result.records.filter(
-				(r) => r.kind === "tool_success" || r.kind === "tool_failure",
-			),
-		).toHaveLength(0);
-		// actorPrivateToolResult is set
-		expect(result.actorPrivateToolResult).toBeDefined();
-		expect(result.actorPrivateToolResult?.success).toBe(true);
-		expect(result.actorPrivateToolResult?.description).toBe("A key.");
-	});
-
-	it("examine: actorPrivateToolResult.success false and description set on failure", () => {
-		const game = makeGame();
-		const action: AiTurnAction = {
-			aiId: "red",
-			toolCall: { name: "examine", args: { item: "nonexistent" } },
-		};
-		const result = dispatchAiTurn(game, action);
-		expect(result.rejected).toBe(false);
-		expect(result.records).toHaveLength(0);
-		expect(result.actorPrivateToolResult).toBeDefined();
-		expect(result.actorPrivateToolResult?.success).toBe(false);
-		expect(result.actorPrivateToolResult?.description).toMatch(
-			/does not exist/i,
-		);
-	});
-
-	it("examine: budget is deducted on examine", () => {
-		const game = makeGame();
-		const action: AiTurnAction = {
-			aiId: "red",
-			toolCall: { name: "examine", args: { item: "key" } },
-		};
-		const result = dispatchAiTurn(game, action, { costUsd: 1 });
-		expect(result.game.budgets.red?.remaining).toBeCloseTo(4, 10);
-	});
-
 	it("put_down of objective_object on a non-matching cell yields default description", () => {
 		// gem held by red (at 0,0), altar_space is at (3,3) — different cell
 		const gemObject: WorldEntity = {
@@ -1005,29 +865,6 @@ describe("dispatchAiTurn", () => {
 		});
 	});
 
-	it("AC 13: examine action leaves all three Daemons' conversationLogs byte-for-byte identical to pre-dispatch state", () => {
-		const game = makeGame();
-		const phase = game;
-		// Deep-clone pre-dispatch logs for all three Daemons
-		const preLogs = {
-			red: JSON.parse(JSON.stringify(phase.conversationLogs.red ?? [])),
-			green: JSON.parse(JSON.stringify(phase.conversationLogs.green ?? [])),
-			cyan: JSON.parse(JSON.stringify(phase.conversationLogs.cyan ?? [])),
-		};
-
-		const action: AiTurnAction = {
-			aiId: "red",
-			toolCall: { name: "examine", args: { item: "key" } },
-		};
-		const result = dispatchAiTurn(game, action);
-		const afterPhase = result.game;
-
-		// No log entries must have been added to any Daemon
-		expect(afterPhase.conversationLogs.red ?? []).toEqual(preLogs.red);
-		expect(afterPhase.conversationLogs.green ?? []).toEqual(preLogs.green);
-		expect(afterPhase.conversationLogs.cyan ?? []).toEqual(preLogs.cyan);
-	});
-
 	// -------------------------------------------------------------------------
 	// P0-1 record-ordering: message before toolCall (issue #238)
 	// -------------------------------------------------------------------------
@@ -1097,29 +934,6 @@ describe("dispatchAiTurn", () => {
 		);
 		expect(greenFailures).toHaveLength(0);
 		expect(cyanFailures).toHaveLength(0);
-	});
-
-	it("failed examine produces action-failure with tool: 'examine' AND actorPrivateToolResult", () => {
-		const game = makeGame();
-		const action: AiTurnAction = {
-			aiId: "red",
-			toolCall: { name: "examine", args: { item: "nonexistent" } },
-		};
-		const result = dispatchAiTurn(game, action);
-		expect(result.rejected).toBe(false);
-
-		// actorPrivateToolResult is still set (failure path)
-		expect(result.actorPrivateToolResult).toBeDefined();
-		expect(result.actorPrivateToolResult?.success).toBe(false);
-
-		// action-failure entry in actor's log
-		const redLog = result.game.conversationLogs.red ?? [];
-		const failures = redLog.filter((e) => e.kind === "action-failure");
-		expect(failures).toHaveLength(1);
-		expect(failures[0]).toMatchObject({
-			kind: "action-failure",
-			tool: "examine",
-		});
 	});
 
 	it("failed message (invalid recipient) produces NO action-failure entry", () => {
@@ -1220,77 +1034,6 @@ describe("executeToolCall — UseItemObjective", () => {
 		// Objective was already satisfied; no pending obj found → should still be satisfied (unchanged)
 		const obj = updated.objectives[0];
 		expect(obj?.satisfactionState).toBe("satisfied");
-	});
-});
-
-// ── examine — postExamineDescription preference ───────────────────────────────
-
-describe("dispatchAiTurn — examine postExamineDescription", () => {
-	/**
-	 * Build a game where 'key' has postExamineDescription set AND
-	 * satisfactionState = 'satisfied' (simulating a used item).
-	 */
-	function makeGameWithSatisfiedItem() {
-		const game = makeGame();
-		return {
-			...game,
-			world: {
-				...game.world,
-				entities: game.world.entities.map((e) =>
-					e.id === "key"
-						? {
-								...e,
-								satisfactionState: "satisfied" as const,
-								postExamineDescription: "The key has already been used.",
-							}
-						: e,
-				),
-			},
-		};
-	}
-
-	it("returns postExamineDescription when entity satisfactionState is 'satisfied'", () => {
-		const game = makeGameWithSatisfiedItem();
-		const action: AiTurnAction = {
-			aiId: "red",
-			toolCall: { name: "examine", args: { item: "key" } },
-		};
-		const result = dispatchAiTurn(game, action);
-		expect(result.actorPrivateToolResult?.description).toBe(
-			"The key has already been used.",
-		);
-	});
-
-	it("falls back to examineDescription when satisfactionState is not 'satisfied'", () => {
-		const game = makeGame(); // key has no satisfactionState set
-		const action: AiTurnAction = {
-			aiId: "red",
-			toolCall: { name: "examine", args: { item: "key" } },
-		};
-		const result = dispatchAiTurn(game, action);
-		// makeEntity sets examineDescription to "A key."
-		expect(result.actorPrivateToolResult?.description).toBe("A key.");
-	});
-
-	it("falls back to examineDescription when satisfactionState is 'satisfied' but no postExamineDescription", () => {
-		const game = makeGame();
-		const gameWithSatisfied = {
-			...game,
-			world: {
-				...game.world,
-				entities: game.world.entities.map((e) =>
-					e.id === "key"
-						? { ...e, satisfactionState: "satisfied" as const }
-						: e,
-				),
-			},
-		};
-		const action: AiTurnAction = {
-			aiId: "red",
-			toolCall: { name: "examine", args: { item: "key" } },
-		};
-		const result = dispatchAiTurn(gameWithSatisfied, action);
-		expect(result.actorPrivateToolResult?.description).toBe("A key.");
 	});
 });
 

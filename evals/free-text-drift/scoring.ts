@@ -67,7 +67,7 @@ export interface ToolCallDetail {
 	recipient?: AiId | "blue";
 	/** For message: the message body. */
 	content?: string;
-	/** For pick_up/put_down/use/examine: the item id. */
+	/** For pick_up/put_down/use: the item id. */
 	item?: string;
 	/** For give: the receiving AiId. */
 	to?: AiId;
@@ -135,8 +135,7 @@ export function parseToolCallDetail(tc: CapturedToolCall): ToolCallDetail {
 		}
 		case "pick_up":
 		case "put_down":
-		case "use":
-		case "examine": {
+		case "use": {
 			if (typeof args.item === "string") detail.item = args.item;
 			break;
 		}

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseToolCallArguments, TOOL_DEFINITIONS } from "../tool-registry";
 
 describe("TOOL_DEFINITIONS", () => {
-	it("lists exactly the eight tools: pick_up, put_down, give, use, go, face, examine, message", () => {
+	it("lists exactly seven tools: pick_up, put_down, give, use, go, face, message", () => {
 		const names = TOOL_DEFINITIONS.map((t) => t.function.name);
 		expect(names).toEqual([
 			"pick_up",
@@ -11,7 +11,6 @@ describe("TOOL_DEFINITIONS", () => {
 			"use",
 			"go",
 			"face",
-			"examine",
 			"message",
 		]);
 	});
@@ -83,21 +82,6 @@ describe("TOOL_DEFINITIONS", () => {
 		expect(dirEnum).toContain("back");
 		expect(dirEnum).toContain("left");
 		expect(dirEnum).toContain("right");
-	});
-
-	it("examine requires 'item'", () => {
-		const examine = TOOL_DEFINITIONS.find((t) => t.function.name === "examine");
-		expect(examine?.function.parameters.required).toContain("item");
-	});
-
-	it("examine has a non-empty description mentioning 'Private'", () => {
-		const examine = TOOL_DEFINITIONS.find((t) => t.function.name === "examine");
-		expect(examine?.function.description).toMatch(/private/i);
-	});
-
-	it("examine.item has no enum constraint in base definition", () => {
-		const examine = TOOL_DEFINITIONS.find((t) => t.function.name === "examine");
-		expect(examine?.function.parameters.properties.item?.enum).toBeUndefined();
 	});
 });
 
@@ -285,30 +269,6 @@ describe("parseToolCallArguments", () => {
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
 			expect(result.reason).toMatch(/required/i);
-		}
-	});
-
-	it("parses valid examine arguments", () => {
-		const result = parseToolCallArguments("examine", '{"item":"artifact"}');
-		expect(result.ok).toBe(true);
-		if (result.ok) {
-			expect(result.args).toEqual({ item: "artifact" });
-		}
-	});
-
-	it("returns ok:false with /required/i reason when 'item' is missing for examine", () => {
-		const result = parseToolCallArguments("examine", "{}");
-		expect(result.ok).toBe(false);
-		if (!result.ok) {
-			expect(result.reason).toMatch(/required/i);
-		}
-	});
-
-	it("returns ok:false with /malformed/i reason for malformed JSON on examine", () => {
-		const result = parseToolCallArguments("examine", "not json");
-		expect(result.ok).toBe(false);
-		if (!result.ok) {
-			expect(result.reason).toMatch(/malformed/i);
 		}
 	});
 });
