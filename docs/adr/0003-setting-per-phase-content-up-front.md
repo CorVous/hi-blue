@@ -4,7 +4,7 @@ Each playthrough draws three distinct **Setting**s without replacement from a ha
 
 ## Status
 
-Accepted. Supersedes [PRD 0001](../prd/0001-game-concept.md)'s "Same room across phases, with different starting items and objectives" decision.
+Accepted. Supersedes [PRD 0001](https://github.com/CorVous/hi-blue/issues/2)'s "Same room across phases, with different starting items and objectives" decision.
 
 ## Considered Options
 
