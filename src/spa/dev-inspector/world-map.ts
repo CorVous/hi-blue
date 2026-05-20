@@ -59,16 +59,17 @@ function hexToRgba(hex: string, alpha: number): string {
  * @param state The current game state
  */
 function applyConeTint(containerEl: HTMLElement, state: GameState): void {
-	const mask = mapFocus ? coneMaskForDaemon(state, mapFocus) : null;
-	const tintColor = mapFocus ? state.personas[mapFocus]?.color : null;
+	const focus = mapFocus;
+	const mask = focus ? coneMaskForDaemon(state, focus) : null;
+	const tintColor = focus ? state.personas[focus]?.color : null;
 
 	for (const cell of containerEl.querySelectorAll<HTMLElement>(
 		".dev-map-cell",
 	)) {
 		const dataCell = cell.getAttribute("data-cell");
-		if (mask && tintColor && dataCell && mask.has(dataCell)) {
+		if (focus && mask && tintColor && dataCell && mask.has(dataCell)) {
 			cell.style.backgroundColor = hexToRgba(tintColor, 0.25);
-			cell.setAttribute("data-cone-focus", mapFocus!);
+			cell.setAttribute("data-cone-focus", focus);
 		} else {
 			cell.style.backgroundColor = "";
 			cell.removeAttribute("data-cone-focus");

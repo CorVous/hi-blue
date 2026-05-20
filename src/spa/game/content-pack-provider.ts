@@ -1922,7 +1922,10 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 	async generateContentPacks(
 		input: BindingContentPackInput,
 	): Promise<BindingContentPackProviderResult> {
-		const phase = input.phases[0]!;
+		const phase = input.phases[0];
+		if (!phase) {
+			throw new ContentPackError("generateContentPacks: input.phases is empty");
+		}
 		const schedule = {
 			skeletons: phase.bindings,
 			decoys: [{ id: "decoy-0" }, { id: "decoy-1" }],
@@ -1986,7 +1989,12 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 	async generateDualContentPacks(
 		input: DualBindingContentPackInput,
 	): Promise<DualBindingContentPackProviderResult> {
-		const phase = input.phases[0]!;
+		const phase = input.phases[0];
+		if (!phase) {
+			throw new ContentPackError(
+				"generateDualContentPacks: input.phases is empty",
+			);
+		}
 		const schedule = {
 			skeletons: phase.bindings,
 			decoys: [{ id: "decoy-0" }, { id: "decoy-1" }],
@@ -2028,7 +2036,12 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 					const phases = (rawJson as Record<string, unknown>).phases as Array<
 						Record<string, unknown>
 					>;
-					const phase0 = phases[0]!;
+					const phase0 = phases[0];
+					if (!phase0) {
+						throw new ContentPackError(
+							"dual content-pack: validated response has no phases",
+						);
+					}
 					return {
 						phases: [
 							{

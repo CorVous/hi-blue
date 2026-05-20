@@ -11,7 +11,7 @@
 		"build": "node scripts/build-spa.mjs",
 		"dev": "wrangler dev",
 		"sandcastle": "npx tsx .sandcastle/main.mts",
-		"lint": "biome ci .",
+		"lint": "biome ci --error-on-warnings .",
 		"typecheck": "tsgo --noEmit -p tsconfig.json && tsgo --noEmit -p src/proxy/tsconfig.json",
 		"test": "vitest run",
 		"test:repeat": "node scripts/repeat-vitest.mjs",
