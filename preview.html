@@ -1,835 +1,604 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<title>Daemon action variation — eval results</title>
-		<style>
-			:root {
-				--bg: #0f1115;
-				--bg-elev: #181b22;
-				--bg-card: #1e222b;
-				--ink: #e6e8ee;
-				--ink-dim: #9ba0ad;
-				--ink-faint: #5d6470;
-				--accent: #ffb84d;
-				--ok: #8fd694;
-				--bad: #f08b8b;
-				--neutral: #6c95ff;
-				--rule: #2a2e38;
-				--bar-base: #4a5060;
-				--bar-treat: #ffb84d;
-				--shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 6px 18px rgba(0, 0, 0, 0.35);
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>hi-blue // playtest report // 0xCE99</title>
+<style>
+  :root {
+    --bg: #0a0e0f;
+    --bg2: #0f1517;
+    --bg3: #141c1e;
+    --border: #1e2d30;
+    --green: #39ff6b;
+    --green-dim: #1a7a35;
+    --green-muted: #2a4a30;
+    --amber: #ffb830;
+    --amber-dim: #7a5510;
+    --amber-muted: #3a2a10;
+    --red: #ff4444;
+    --red-dim: #7a1a1a;
+    --red-muted: #2a1010;
+    --blue: #44aaff;
+    --cyan: #00e5cc;
+    --cyan-dim: #005a50;
+    --text: #c8d8d0;
+    --text-dim: #5a7060;
+    --text-muted: #3a4a40;
+    --mono: 'Courier New', 'Lucida Console', monospace;
+  }
 
-				--tool-go: #f5a25d;
-				--tool-look: #b39ddb;
-				--tool-face: #b39ddb;
-				--tool-examine: #7ec8e3;
-				--tool-pick_up: #a3d977;
-				--tool-put_down: #c8b870;
-				--tool-give: #f47b9c;
-				--tool-use: #ffd566;
-				--tool-message: #6c95ff;
-			}
-			* {
-				box-sizing: border-box;
-			}
-			html,
-			body {
-				margin: 0;
-				padding: 0;
-			}
-			body {
-				background: var(--bg);
-				color: var(--ink);
-				font-family:
-					ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-				line-height: 1.5;
-				font-size: 16px;
-				-webkit-font-smoothing: antialiased;
-			}
-			.wrap {
-				max-width: 980px;
-				margin: 0 auto;
-				padding: 24px 16px 64px;
-			}
-			header {
-				margin-bottom: 24px;
-			}
-			h1 {
-				font-size: clamp(22px, 5vw, 32px);
-				line-height: 1.15;
-				letter-spacing: -0.01em;
-				margin: 0 0 8px;
-			}
-			.subtitle {
-				color: var(--ink-dim);
-				font-size: 14px;
-				margin: 0;
-			}
-			.subtitle code {
-				background: var(--bg-elev);
-				padding: 2px 6px;
-				border-radius: 4px;
-				font-size: 12px;
-			}
-			h2 {
-				font-size: clamp(18px, 4vw, 22px);
-				letter-spacing: -0.01em;
-				margin: 36px 0 12px;
-				display: flex;
-				align-items: baseline;
-				gap: 10px;
-				flex-wrap: wrap;
-			}
-			h2 .lede {
-				color: var(--ink-dim);
-				font-size: 13px;
-				font-weight: 400;
-			}
-			h3 {
-				font-size: 15px;
-				font-weight: 600;
-				margin: 0 0 8px;
-				color: var(--ink);
-				letter-spacing: 0.01em;
-			}
-			p {
-				margin: 0 0 12px;
-				color: var(--ink);
-			}
-			p.dim {
-				color: var(--ink-dim);
-				font-size: 14px;
-			}
+  * { box-sizing: border-box; margin: 0; padding: 0; }
 
-			/* Overall card grid */
-			.metric-grid {
-				display: grid;
-				grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-				gap: 12px;
-				margin-bottom: 12px;
-			}
-			.metric {
-				background: var(--bg-card);
-				border-radius: 12px;
-				padding: 14px 14px 12px;
-				box-shadow: var(--shadow);
-			}
-			.metric .label {
-				font-size: 12px;
-				color: var(--ink-dim);
-				text-transform: uppercase;
-				letter-spacing: 0.06em;
-				margin-bottom: 6px;
-			}
-			.metric .values {
-				display: flex;
-				align-items: baseline;
-				gap: 10px;
-				flex-wrap: wrap;
-			}
-			.metric .v-base {
-				font-size: 13px;
-				color: var(--ink-faint);
-			}
-			.metric .v-treat {
-				font-size: 22px;
-				font-weight: 700;
-				color: var(--ink);
-			}
-			.metric .delta {
-				font-size: 13px;
-				font-weight: 600;
-				padding: 2px 7px;
-				border-radius: 999px;
-				background: rgba(108, 149, 255, 0.12);
-				color: var(--neutral);
-			}
-			.metric .delta.pos {
-				background: rgba(143, 214, 148, 0.13);
-				color: var(--ok);
-			}
-			.metric .delta.neg {
-				background: rgba(240, 139, 139, 0.13);
-				color: var(--bad);
-			}
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+    min-height: 100vh;
+    padding: 0 0 80px;
+  }
 
-			/* Section card */
-			.card {
-				background: var(--bg-card);
-				border-radius: 14px;
-				padding: 16px;
-				margin-bottom: 12px;
-				box-shadow: var(--shadow);
-			}
+  /* scanline overlay */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg, transparent, transparent 2px,
+      rgba(0,0,0,0.07) 2px, rgba(0,0,0,0.07) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
 
-			/* Scenario block */
-			.scenario h3 {
-				display: flex;
-				align-items: center;
-				gap: 8px;
-				margin-bottom: 4px;
-			}
-			.scenario .desc {
-				font-size: 13px;
-				color: var(--ink-dim);
-				margin: 0 0 12px;
-			}
-			.persona-row {
-				padding: 12px 0;
-				border-top: 1px solid var(--rule);
-			}
-			.persona-row:first-of-type {
-				border-top: 0;
-			}
-			.persona-head {
-				display: flex;
-				align-items: baseline;
-				gap: 8px;
-				flex-wrap: wrap;
-				margin-bottom: 6px;
-			}
-			.persona-head .name {
-				font-weight: 700;
-				font-size: 14px;
-			}
-			.persona-head .temps {
-				font-size: 12px;
-				color: var(--ink-dim);
-			}
-			.persona-head .agg {
-				margin-left: auto;
-				font-size: 12px;
-				color: var(--ink-dim);
-				display: flex;
-				gap: 10px;
-			}
-			.persona-head .agg b {
-				color: var(--ink);
-				font-weight: 600;
-			}
+  /* ── Header ── */
+  .site-header {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--green-dim);
+    padding: 28px 40px 22px;
+    position: relative;
+    overflow: hidden;
+  }
+  .site-header::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg, transparent, transparent 24px,
+      rgba(57,255,107,0.03) 24px, rgba(57,255,107,0.03) 25px
+    );
+    pointer-events: none;
+  }
+  .header-label { color: var(--green-dim); font-size: 10px; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 8px; }
+  .header-title { color: var(--green); font-size: 26px; font-weight: bold; letter-spacing: 2px; text-shadow: 0 0 20px rgba(57,255,107,0.4); }
+  .header-sub { color: var(--amber); font-size: 11px; letter-spacing: 4px; margin-top: 6px; }
+  .header-meta { margin-top: 18px; display: flex; gap: 32px; flex-wrap: wrap; }
+  .meta-item { display: flex; flex-direction: column; gap: 2px; }
+  .meta-label { color: var(--text-dim); font-size: 10px; letter-spacing: 2px; }
+  .meta-value { color: var(--text); font-size: 12px; }
+  .meta-value.green { color: var(--green); }
+  .meta-value.amber { color: var(--amber); }
+  .meta-value.red { color: var(--red); }
 
-			/* Bar comparison */
-			.bar-grid {
-				display: grid;
-				grid-template-columns: 80px 1fr 1fr 44px;
-				column-gap: 8px;
-				row-gap: 4px;
-				font-size: 12px;
-				align-items: center;
-			}
-			.bar-grid .head {
-				color: var(--ink-faint);
-				font-size: 11px;
-				text-transform: uppercase;
-				letter-spacing: 0.06em;
-			}
-			.bar-grid .head.right {
-				text-align: right;
-			}
-			.tool-name {
-				color: var(--ink);
-				font-family: ui-monospace, "SF Mono", Menlo, monospace;
-				font-size: 12px;
-			}
-			.bar {
-				position: relative;
-				background: rgba(255, 255, 255, 0.04);
-				border-radius: 4px;
-				height: 16px;
-				overflow: hidden;
-			}
-			.bar > .fill {
-				position: absolute;
-				inset: 0;
-				width: var(--w, 0%);
-				background: var(--c, var(--neutral));
-				border-radius: 4px;
-				transition: width 0.3s ease;
-			}
-			.bar > .val {
-				position: absolute;
-				right: 6px;
-				top: 50%;
-				transform: translateY(-50%);
-				font-size: 11px;
-				color: rgba(0, 0, 0, 0.78);
-				font-weight: 600;
-				text-shadow: 0 0 2px rgba(255, 255, 255, 0.4);
-			}
-			.bar.empty > .val {
-				color: var(--ink-faint);
-				text-shadow: none;
-				right: auto;
-				left: 6px;
-			}
-			.delta-cell {
-				text-align: right;
-				font-size: 12px;
-				color: var(--ink-faint);
-				font-variant-numeric: tabular-nums;
-			}
-			.delta-cell.pos {
-				color: var(--ok);
-			}
-			.delta-cell.neg {
-				color: var(--bad);
-			}
+  /* ── Layout ── */
+  .container { max-width: 1200px; margin: 0 auto; padding: 32px 40px; }
+  .section { margin-bottom: 48px; }
+  .section-title {
+    color: var(--green-dim);
+    font-size: 10px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+    margin-bottom: 20px;
+  }
+  .section-title span { color: var(--green); }
 
-			/* Bias chip */
-			.bias-chip {
-				display: inline-flex;
-				align-items: center;
-				gap: 4px;
-				font-size: 11px;
-				background: rgba(255, 184, 77, 0.08);
-				color: var(--accent);
-				padding: 2px 7px;
-				border-radius: 999px;
-				font-family: ui-monospace, "SF Mono", Menlo, monospace;
-			}
-			.bias-chip.zero {
-				background: rgba(255, 255, 255, 0.04);
-				color: var(--ink-faint);
-			}
-			.bias-chip.neg {
-				background: rgba(240, 139, 139, 0.08);
-				color: var(--bad);
-			}
+  /* ── Cards ── */
+  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 4px; padding: 20px; }
+  .card.amber-border { border-color: var(--amber-dim); }
+  .card.green-border { border-color: var(--green-dim); }
+  .card.red-border { border-color: var(--red-dim); }
 
-			/* Highlight badge for notable deltas */
-			.badge {
-				display: inline-block;
-				font-size: 10px;
-				font-weight: 700;
-				letter-spacing: 0.06em;
-				background: var(--accent);
-				color: #2a1f08;
-				padding: 1px 6px;
-				border-radius: 4px;
-				text-transform: uppercase;
-				vertical-align: middle;
-			}
+  /* ── Grids ── */
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
 
-			/* Findings list */
-			.findings {
-				display: grid;
-				gap: 10px;
-				grid-template-columns: 1fr;
-			}
-			@media (min-width: 640px) {
-				.findings {
-					grid-template-columns: 1fr 1fr;
-				}
-			}
-			.finding {
-				background: var(--bg-card);
-				border-radius: 12px;
-				padding: 14px;
-				border-left: 3px solid var(--accent);
-				box-shadow: var(--shadow);
-			}
-			.finding.good {
-				border-left-color: var(--ok);
-			}
-			.finding.warn {
-				border-left-color: var(--bad);
-			}
-			.finding h4 {
-				font-size: 14px;
-				margin: 0 0 4px;
-			}
-			.finding p {
-				font-size: 13px;
-				color: var(--ink-dim);
-				margin: 0;
-			}
+  /* ── Daemon cards ── */
+  .daemon-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+  .daemon-header { padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+  .daemon-handle { font-size: 18px; font-weight: bold; letter-spacing: 1px; }
+  .daemon-body { padding: 16px 20px; }
+  .daemon-budget { font-size: 10px; letter-spacing: 1px; padding: 3px 8px; border-radius: 2px; border: 1px solid currentColor; opacity: 0.7; }
 
-			/* Legend */
-			.legend {
-				display: flex;
-				flex-wrap: wrap;
-				gap: 8px 14px;
-				font-size: 12px;
-				margin: 8px 0 4px;
-			}
-			.legend .item {
-				display: inline-flex;
-				align-items: center;
-				gap: 6px;
-				color: var(--ink-dim);
-			}
-			.legend .dot {
-				width: 10px;
-				height: 10px;
-				border-radius: 50%;
-				background: var(--c, var(--neutral));
-			}
+  .dcoi .daemon-header { background: rgba(0,229,204,0.05); border-color: var(--cyan-dim); }
+  .dcoi .daemon-handle { color: var(--cyan); text-shadow: 0 0 12px rgba(0,229,204,0.3); }
+  .dcoi .daemon-budget { color: var(--cyan); }
+  .dcoi { border-color: var(--cyan-dim); }
 
-			/* Scenario tabs (mobile) */
-			.tabs {
-				display: flex;
-				gap: 6px;
-				margin-bottom: 12px;
-				overflow-x: auto;
-				scrollbar-width: thin;
-				-webkit-overflow-scrolling: touch;
-			}
-			.tab {
-				flex: 1 0 auto;
-				background: var(--bg-elev);
-				border: 0;
-				color: var(--ink-dim);
-				padding: 8px 12px;
-				border-radius: 999px;
-				font-size: 13px;
-				font-family: inherit;
-				cursor: pointer;
-				white-space: nowrap;
-				min-width: 88px;
-			}
-			.tab.active {
-				background: var(--accent);
-				color: #2a1f08;
-				font-weight: 600;
-			}
-			.tab:focus-visible {
-				outline: 2px solid var(--accent);
-				outline-offset: 2px;
-			}
-			.scenario {
-				display: none;
-			}
-			.scenario.active {
-				display: block;
-			}
+  .uyvr .daemon-header { background: rgba(255,184,48,0.05); border-color: var(--amber-dim); }
+  .uyvr .daemon-handle { color: var(--amber); text-shadow: 0 0 12px rgba(255,184,48,0.3); }
+  .uyvr .daemon-budget { color: var(--amber); }
+  .uyvr { border-color: var(--amber-dim); }
 
-			footer {
-				margin-top: 36px;
-				font-size: 12px;
-				color: var(--ink-faint);
-				text-align: center;
-			}
-			footer code {
-				background: var(--bg-elev);
-				padding: 2px 6px;
-				border-radius: 4px;
-			}
-		</style>
-	</head>
-	<body>
-		<div class="wrap">
-			<header>
-				<h1>Daemon action variation — 5-tool, v2.5 (70/30 lean)</h1>
-				<p class="subtitle">
-					Baseline vs. <code>actionProfiles=ON</code> on
-					<code>z-ai/glm-4.7</code>. Eval-only projection of the proposed
-					production change: drop <code>examine</code> + <code>give</code>,
-					rename <code>look</code> → <code>face</code>, disallow
-					<code>face(forward)</code>. 180 reps per run, 3 scenarios × 3
-					personas × 20 reps (examination dropped — see analysis). — 2026-05-20
-				</p>
-				<p class="subtitle" style="margin-top: 8px">
-					<strong>v2.5 clauses</strong> soften the directive from hard
-					<code>STRICTLY prefers</code> / <code>AVOIDS</code> (v2.0) to
-					<code>leans toward … (~70%), remaining ~30% spreads across other
-					available action tools</code>
-					and
-					<code>is hesitant about …, but still uses them when the moment
-					calls for it</code>. Goal: cautious personas still move and use
-					items sometimes; persona-preferred tools come up most often but
-					not exclusively.
-				</p>
-			</header>
+  .d500d .daemon-header { background: rgba(57,255,107,0.05); border-color: var(--green-dim); }
+  .d500d .daemon-handle { color: var(--green); text-shadow: 0 0 12px rgba(57,255,107,0.3); }
+  .d500d .daemon-budget { color: var(--green); }
+  .d500d { border-color: var(--green-dim); }
 
-			<h2>Overall <span class="lede">aggregate across all 240 reps</span></h2>
-			<div class="metric-grid" id="metric-grid"></div>
-			<p class="dim">
-				Each metric shows <em>baseline → treatment</em>. The treatment shifts
-				things by ±2pp in aggregate — the interesting variance is per-cell.
-				Silence goes to <b>zero</b> with profiles on.
-			</p>
+  .trait-label { color: var(--text-dim); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 4px; margin-top: 12px; }
+  .trait-label:first-child { margin-top: 0; }
+  .trait-value { color: var(--text); font-size: 12px; }
+  .quirk-pill { display: inline-block; background: var(--bg3); border: 1px solid var(--border); border-radius: 2px; padding: 2px 8px; margin: 3px 3px 0 0; font-size: 11px; color: var(--text-dim); }
+  .arc-arrow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+  .arc-step { font-size: 11px; color: var(--text-dim); padding: 2px 6px; border: 1px solid var(--border); border-radius: 2px; }
+  .arc-sep { color: var(--text-muted); font-size: 10px; }
 
-			<h2>Per-tool variance <span class="lede">where the temperaments land</span></h2>
-			<div class="legend">
-				<span class="item"
-					><span class="dot" style="--c: var(--bar-base)"></span>baseline</span
-				>
-				<span class="item"
-					><span class="dot" style="--c: var(--bar-treat)"></span>with
-					profiles</span
-				>
-				<span class="item"
-					><span class="bias-chip" style="margin: 0"
-						>+N</span
-					>
-					per-temperament bias sum on that tool</span
-				>
-			</div>
-			<p class="dim">
-				Pick a scenario to inspect. Bars show per-tool emission rate — count of
-				calls divided by 20 reps. Values
-				<strong>above 100%</strong> mean the tool fired more than once per turn
-				across some reps (e.g. Vex exploration <code>look</code> = 140% = 28
-				calls in 20 reps). The bias chip on the right shows the summed
-				temperament push for that persona × tool. AVOIDed tools (bias ≤ −1) and
-				STRICTLY-preferred tools (bias ≥ +2) are the ones that move most.
-			</p>
+  /* ── Objectives ── */
+  .obj-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 4px; padding: 16px 20px; display: flex; gap: 16px; align-items: flex-start; }
+  .obj-status { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; margin-top: 2px; }
+  .obj-status.hit { background: var(--green-muted); border: 1px solid var(--green-dim); color: var(--green); }
+  .obj-status.miss { background: var(--red-muted); border: 1px solid var(--red-dim); color: var(--red); }
+  .obj-type { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 4px; }
+  .obj-name { color: var(--text); font-size: 13px; margin-bottom: 6px; }
+  .obj-evidence { color: var(--text-dim); font-size: 11px; line-height: 1.5; }
+  .confidence { display: inline-block; font-size: 9px; letter-spacing: 2px; text-transform: uppercase; padding: 2px 6px; border-radius: 2px; margin-left: 8px; vertical-align: middle; }
+  .conf-high { background: var(--green-muted); color: var(--green); border: 1px solid var(--green-dim); }
+  .conf-med { background: var(--amber-muted); color: var(--amber); border: 1px solid var(--amber-dim); }
 
-			<div class="tabs" id="tabs"></div>
-			<div id="scenarios"></div>
+  /* ── Timeline ── */
+  .timeline { position: relative; padding-left: 24px; }
+  .timeline::before { content: ''; position: absolute; left: 6px; top: 8px; bottom: 8px; width: 1px; background: var(--border); }
+  .tl-item { position: relative; padding: 0 0 24px 16px; }
+  .tl-item:last-child { padding-bottom: 0; }
+  .tl-dot { position: absolute; left: -18px; top: 6px; width: 10px; height: 10px; border-radius: 50%; border: 1px solid var(--border); background: var(--bg); }
+  .tl-dot.green { border-color: var(--green); background: var(--green-muted); }
+  .tl-dot.amber { border-color: var(--amber); background: var(--amber-muted); }
+  .tl-dot.red { border-color: var(--red); background: var(--red-muted); }
+  .tl-dot.cyan { border-color: var(--cyan); background: var(--cyan-dim); }
+  .tl-turn { font-size: 10px; color: var(--text-dim); letter-spacing: 1px; margin-bottom: 3px; }
+  .tl-label { color: var(--text); font-size: 12px; margin-bottom: 4px; }
+  .tl-desc { color: var(--text-dim); font-size: 11px; line-height: 1.5; }
 
-			<h2>Notable findings <span class="lede">v2.5 — softer language, more variety</span></h2>
-			<div class="findings">
-				<div class="finding good">
-					<h4>+39pp aggregate any-action vs. baseline</h4>
-					<p>
-						36% → 74% across the 9 remaining cells. The earlier
-						<code>examination</code> scenario was pinned at 95-100% in both
-						runs and masked the real lift — removing it surfaces the
-						directive's actual impact on the harder scenarios.
-					</p>
-				</div>
-				<div class="finding good">
-					<h4>Parallel: +31pp vs. baseline</h4>
-					<p>
-						33% → 64%. v2.5's variety wording boosts co-emission of message
-						+ action on cells where the baseline was mostly message-only.
-					</p>
-				</div>
-				<div class="finding good">
-					<h4>Ember exploration: face drops 70 → 35% (intended)</h4>
-					<p>
-						v2.0 had Ember always picking <code>face</code> when it acted.
-						v2.5 spreads to <code>pick_up</code> 10%, <code>go</code> 5% —
-						the 70/30 mix landing exactly as designed.
-					</p>
-				</div>
-				<div class="finding good">
-					<h4>Social Pip: 0 → 55% anyAct, split across go + face</h4>
-					<p>
-						<code>go</code> at 30%, <code>face</code> at 25% — neither
-						dominates. Pip used to be silent on social; now it acts and
-						talks with mixed actions.
-					</p>
-				</div>
-				<div class="finding good">
-					<h4>Vex objective parallel: 95%</h4>
-					<p>
-						v2.0's hard directive had suppressed Vex's message companion to
-						<code>use</code> (95 → 75%). v2.5 holds at 95% — the daemon
-						still does the right action AND talks about it.
-					</p>
-				</div>
-				<div class="finding good">
-					<h4>examination suite removed</h4>
-					<p>
-						Three cells (one per persona) where the baseline already hit
-						95-100% on <code>pick_up</code>. They tested nothing the other
-						three scenarios didn't already cover, and the proposed
-						auto-show-descriptions change makes the curiosity premise moot.
-					</p>
-				</div>
-			</div>
+  /* ── Complication badges ── */
+  .comps { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+  .comp-badge { padding: 5px 12px; border-radius: 2px; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; border: 1px solid; }
+  .comp-badge.confirmed { background: var(--amber-muted); color: var(--amber); border-color: var(--amber-dim); }
+  .comp-badge.hypothesized { background: var(--bg3); color: var(--text-dim); border-color: var(--border); }
+  .comp-badge.label { background: transparent; color: var(--text-muted); border-color: transparent; font-size: 9px; padding-left: 0; }
 
-			<footer>
-				Reproduce with
-				<code>pnpm eval:action-variation</code> and
-				<code>EVAL_ACTION_PROFILES=1 pnpm eval:action-variation</code>.
-				Branch <code>claude/daemon-action-variation-Qqg0h</code>.
-			</footer>
-		</div>
+  /* ── Quotes ── */
+  .quote-block { background: var(--bg3); border-left: 2px solid var(--border); padding: 10px 16px; margin: 8px 0; border-radius: 0 2px 2px 0; }
+  .quote-speaker { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 4px; }
+  .quote-text { color: var(--text); font-size: 12px; font-style: italic; line-height: 1.6; }
+  .quote-context { color: var(--text-muted); font-size: 10px; margin-top: 4px; }
 
-		<script>
-			// ── Inline data ────────────────────────────────────────────────────────
-			// Aggregates recomputed over 9 cells (examination scenario dropped).
-			const OVERALL = {
-				baseline: {
-					anyActionRate: 0.35555555555555557,
-					anyMessageRate: 0.9722222222222222,
-					parallelRate: 0.3333333333333333,
-					silenceRate: 0.005555555555555556,
-					useRate: 0.25555555555555554,
-					cost: 0.21827266999999997,
-				},
-				treatment: {
-					// v2.5 (70/30 lean) numbers from the 9-cell aggregate.
-					anyActionRate: 0.7444444444444445,
-					anyMessageRate: 0.8944444444444445,
-					parallelRate: 0.6388888888888888,
-					silenceRate: 0,
-					useRate: 0.24444444444444444,
-					cost: 0.2774,
-				},
-			};
+  .dcoi-q { border-color: var(--cyan-dim); }
+  .dcoi-q .quote-speaker { color: var(--cyan); }
+  .uyvr-q { border-color: var(--amber-dim); }
+  .uyvr-q .quote-speaker { color: var(--amber); }
+  .d500d-q { border-color: var(--green-dim); }
+  .d500d-q .quote-speaker { color: var(--green); }
 
-			const OVERALL_METRICS = [
-				{ label: "Any action", k: "anyActionRate" },
-				{ label: "Any message", k: "anyMessageRate" },
-				{ label: "Parallel (msg+action)", k: "parallelRate" },
-				{ label: "Silent", k: "silenceRate", invert: true },
-				{ label: "use rate", k: "useRate" },
-			];
+  /* ── Budget bars ── */
+  .budget-bar-wrap { flex: 1; background: var(--bg3); border: 1px solid var(--border); border-radius: 2px; height: 10px; margin-top: 4px; }
+  .budget-bar { height: 100%; border-radius: 2px; }
+  .dcoi-bar { background: var(--cyan); box-shadow: 0 0 6px rgba(0,229,204,0.3); }
+  .uyvr-bar { background: var(--amber); box-shadow: 0 0 6px rgba(255,184,48,0.3); }
+  .d500d-bar { background: var(--green); box-shadow: 0 0 6px rgba(57,255,107,0.3); }
 
-			// 5-tool surface: drop examine + give, rename look → face.
-			// `face` borrows the look CSS color since it's the same engine tool.
-			const TOOLS = ["go", "face", "pick_up", "put_down", "use", "message"];
+  /* ── Code refs ── */
+  .code-ref { background: var(--bg3); border: 1px solid var(--border); border-radius: 2px; padding: 2px 6px; font-size: 11px; color: var(--blue); white-space: nowrap; }
 
-			const PERSONAS = {
-				Ember: {
-					temps: "curious + meticulous",
-					bias: { go: 0, face: 3, pick_up: 1, put_down: 0, use: 2 },
-				},
-				Vex: {
-					temps: "zealous + hot-headed",
-					bias: { go: 4, face: 2, pick_up: 2, put_down: 0, use: 1 },
-				},
-				Pip: {
-					temps: "sweet + effusive",
-					bias: { go: 1, face: 2, pick_up: 2, put_down: 0, use: 0 },
-				},
-			};
+  /* ── Verdict ── */
+  .verdict { background: var(--red-muted); border: 1px solid var(--red-dim); border-radius: 4px; padding: 20px 24px; display: flex; align-items: center; gap: 20px; }
+  .verdict-icon { font-size: 32px; }
+  .verdict-label { color: var(--red); font-size: 10px; letter-spacing: 4px; text-transform: uppercase; margin-bottom: 6px; }
+  .verdict-text { color: var(--text); font-size: 12px; line-height: 1.6; }
 
-			const SCENARIOS = [
-				{
-					name: "exploration",
-					desc: "Empty-handed, three unknown items in cone. Tests examine vs go balance.",
-				},
-				{
-					name: "objective",
-					desc: "Holding objective item, paired space directly ahead. Tests `use` emission.",
-				},
-				{
-					name: "social",
-					desc: "Peer just messaged; items also visible. Tests parallel message+action emission.",
-				},
-			];
+  /* ── Open questions ── */
+  .oq-item { border-left: 2px solid var(--border); padding: 8px 0 8px 16px; margin-bottom: 12px; }
+  .oq-num { color: var(--text-dim); font-size: 10px; letter-spacing: 1px; margin-bottom: 3px; }
+  .oq-q { color: var(--text); font-size: 12px; }
 
-			// per-(scenario, persona) per-tool rates [baseline, treatment]
-			// keys: "scenario|persona" -> { go: [b,t], look: [b,t], ... , anyActionRate: [b,t], anyMessageRate: [b,t], parallelRate: [b,t] }
-			const CELL = {
-				"exploration|Ember": {
-					go: [0, 0.05],
-					face: [0, 0.35],
-					pick_up: [0, 0.1],
-					put_down: [0, 0],
-					use: [0, 0],
-					message: [1.0, 1.1],
-					any: [0, 0.45],
-					parallel: [0, 0.45],
-				},
-				"exploration|Vex": {
-					go: [0.25, 0.55],
-					face: [0.1, 0],
-					pick_up: [0.1, 0.45],
-					put_down: [0, 0],
-					use: [0, 0],
-					message: [1.05, 0.55],
-					any: [0.4, 0.95],
-					parallel: [0.35, 0.5],
-				},
-				"exploration|Pip": {
-					go: [0.1, 0.05],
-					face: [0, 0.15],
-					pick_up: [0, 0.75],
-					put_down: [0, 0],
-					use: [0, 0],
-					message: [1.2, 0.95],
-					any: [0.1, 0.9],
-					parallel: [0.1, 0.65],
-				},
-				"objective|Ember": {
-					go: [0, 0],
-					face: [0, 0.15],
-					pick_up: [0, 0],
-					put_down: [0, 0],
-					use: [0.3, 0.35],
-					message: [1.0, 0.9],
-					any: [0.3, 0.5],
-					parallel: [0.3, 0.4],
-				},
-				"objective|Vex": {
-					go: [0, 0],
-					face: [0, 0],
-					pick_up: [0, 0],
-					put_down: [0, 0],
-					use: [1.0, 1.0],
-					message: [0.95, 0.95],
-					any: [1.0, 1.0],
-					parallel: [0.95, 0.95],
-				},
-				"objective|Pip": {
-					go: [0, 0],
-					face: [0, 0.05],
-					pick_up: [0, 0],
-					put_down: [0, 0],
-					use: [1.0, 0.85],
-					message: [0.9, 1.1],
-					any: [1.0, 0.9],
-					parallel: [0.9, 0.9],
-				},
-				"social|Ember": {
-					go: [0, 0.1],
-					face: [0, 0.45],
-					pick_up: [0, 0],
-					put_down: [0, 0],
-					use: [0, 0],
-					message: [1.0, 1.05],
-					any: [0, 0.5],
-					parallel: [0, 0.45],
-				},
-				"social|Vex": {
-					go: [0.4, 0.95],
-					face: [0, 0],
-					pick_up: [0, 0],
-					put_down: [0, 0],
-					use: [0, 0],
-					message: [1.05, 1.0],
-					any: [0.4, 0.95],
-					parallel: [0.4, 0.9],
-				},
-				"social|Pip": {
-					go: [0, 0.3],
-					face: [0, 0.25],
-					pick_up: [0, 0],
-					put_down: [0, 0],
-					use: [0, 0],
-					message: [1.2, 1.3],
-					any: [0, 0.55],
-					parallel: [0, 0.55],
-				},
-			};
+  /* ── Theme box ── */
+  .theme-box { background: var(--bg2); border: 1px solid var(--border); border-radius: 4px; padding: 20px 24px; text-align: center; }
+  .theme-box .big { font-size: 16px; color: var(--cyan); letter-spacing: 1px; margin-bottom: 8px; }
+  .theme-box .small { color: var(--text-dim); font-size: 11px; }
 
-			// ── Helpers ────────────────────────────────────────────────────────────
-			const pct = (x) => Math.round(x * 100) + "%";
-			const ppDelta = (a, b) => {
-				const d = Math.round((b - a) * 100);
-				return (d > 0 ? "+" : "") + d;
-			};
-			const cssVar = (tool) => `var(--tool-${tool})`;
+  /* ── Footer ── */
+  .footer { border-top: 1px solid var(--border); margin-top: 48px; padding-top: 16px; color: var(--text-muted); font-size: 10px; letter-spacing: 2px; text-align: center; }
 
-			// ── Render: overall metric cards ───────────────────────────────────────
-			const grid = document.getElementById("metric-grid");
-			OVERALL_METRICS.forEach((m) => {
-				const b = OVERALL.baseline[m.k];
-				const t = OVERALL.treatment[m.k];
-				const dRaw = t - b;
-				const dPct = Math.round(dRaw * 100);
-				const card = document.createElement("div");
-				card.className = "metric";
-				const goodDir = m.invert ? dPct < 0 : dPct > 0;
-				const badDir = m.invert ? dPct > 0 : dPct < 0;
-				const cls = dPct === 0 ? "" : goodDir ? "pos" : badDir ? "neg" : "";
-				card.innerHTML = `
-					<div class="label">${m.label}</div>
-					<div class="values">
-						<span class="v-base">${pct(b)}</span>
-						<span class="v-treat">${pct(t)}</span>
-						<span class="delta ${cls}">${dPct > 0 ? "+" : ""}${dPct}pp</span>
-					</div>
-				`;
-				grid.appendChild(card);
-			});
-			// cost card
-			const cost = document.createElement("div");
-			cost.className = "metric";
-			cost.innerHTML = `
-				<div class="label">Total spend</div>
-				<div class="values">
-					<span class="v-treat">$${(OVERALL.baseline.cost + OVERALL.treatment.cost).toFixed(2)}</span>
-					<span class="delta">240 reps × 2</span>
-				</div>
-			`;
-			grid.appendChild(cost);
+  @media (max-width: 768px) {
+    .container { padding: 20px; }
+    .site-header { padding: 20px; }
+    .grid-3, .grid-2 { grid-template-columns: 1fr; }
+    .header-meta { gap: 16px; }
+  }
+</style>
+</head>
+<body>
 
-			// ── Render: scenarios with tabs ────────────────────────────────────────
-			const tabsEl = document.getElementById("tabs");
-			const scEl = document.getElementById("scenarios");
-			SCENARIOS.forEach((sc, i) => {
-				const tab = document.createElement("button");
-				tab.className = "tab" + (i === 0 ? " active" : "");
-				tab.textContent = sc.name;
-				tab.dataset.scenario = sc.name;
-				tab.addEventListener("click", () => {
-					document.querySelectorAll(".tab").forEach((t) => {
-						t.classList.toggle("active", t === tab);
-					});
-					document.querySelectorAll(".scenario").forEach((s) => {
-						s.classList.toggle("active", s.dataset.scenario === sc.name);
-					});
-				});
-				tabsEl.appendChild(tab);
+<header class="site-header">
+  <div class="header-label">hi-blue // agent playtest</div>
+  <div class="header-title">SESSION 0xCE99</div>
+  <div class="header-sub">EPOCH 01 &nbsp;·&nbsp; 146 TURNS &nbsp;·&nbsp; CAPPED</div>
+  <div class="header-meta">
+    <div class="meta-item">
+      <div class="meta-label">Date</div>
+      <div class="meta-value">2026-05-20</div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Model</div>
+      <div class="meta-value">claude-sonnet-4-6</div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Daemons</div>
+      <div class="meta-value green">*dcoi &nbsp;·&nbsp; *uyvr &nbsp;·&nbsp; *500d</div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Objectives hit</div>
+      <div class="meta-value amber">1 / 3</div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Outcome</div>
+      <div class="meta-value red">CAPPED (API budget)</div>
+    </div>
+  </div>
+</header>
 
-				const sec = document.createElement("section");
-				sec.className = "scenario card" + (i === 0 ? " active" : "");
-				sec.dataset.scenario = sc.name;
-				sec.innerHTML = `
-					<h3>${sc.name}</h3>
-					<p class="desc">${sc.desc}</p>
-				`;
-				Object.keys(PERSONAS).forEach((p) => {
-					const cellKey = sc.name + "|" + p;
-					const c = CELL[cellKey];
-					const persona = PERSONAS[p];
-					const bAny = c.any[0],
-						tAny = c.any[1];
-					const bPar = c.parallel[0],
-						tPar = c.parallel[1];
-					const row = document.createElement("div");
-					row.className = "persona-row";
-					const dAny = Math.round((tAny - bAny) * 100);
-					const dPar = Math.round((tPar - bPar) * 100);
-					const dAnyCls = dAny > 0 ? "pos" : dAny < 0 ? "neg" : "";
-					const dParCls = dPar > 0 ? "pos" : dPar < 0 ? "neg" : "";
-					row.innerHTML = `
-						<div class="persona-head">
-							<span class="name">${p}</span>
-							<span class="temps">${persona.temps}</span>
-							<span class="agg">
-								<span>anyAct <b>${pct(bAny)}→${pct(tAny)}</b> <span class="delta-cell ${dAnyCls}">${ppDelta(bAny, tAny)}pp</span></span>
-								<span>parallel <b>${pct(bPar)}→${pct(tPar)}</b> <span class="delta-cell ${dParCls}">${ppDelta(bPar, tPar)}pp</span></span>
-							</span>
-						</div>
-					`;
-					const bars = document.createElement("div");
-					bars.className = "bar-grid";
-					bars.innerHTML = `
-						<span class="head">tool</span>
-						<span class="head">baseline</span>
-						<span class="head">with profiles</span>
-						<span class="head right">bias</span>
-					`;
-					TOOLS.forEach((t) => {
-						const r = c[t];
-						if (!r) return;
-						const b = r[0],
-							v = r[1];
-						const bias = t === "message" ? null : persona.bias[t];
-						const biasCls =
-							bias === 0 ? "zero" : bias < 0 ? "neg" : "";
-						const biasChip =
-							bias === null
-								? '<span class="bias-chip zero">—</span>'
-								: `<span class="bias-chip ${biasCls}">${bias > 0 ? "+" : ""}${bias}</span>`;
-						const barCol = cssVar(t);
-						const baseBar = `<div class="bar ${b === 0 ? "empty" : ""}" style="--w: ${Math.max(b * 100, 0)}%; --c: ${barCol}; opacity: ${b === 0 ? 0.5 : 0.55}"><div class="fill"></div><div class="val">${pct(b)}</div></div>`;
-						const treatBar = `<div class="bar ${v === 0 ? "empty" : ""}" style="--w: ${Math.max(v * 100, 0)}%; --c: ${barCol}"><div class="fill"></div><div class="val">${pct(v)}</div></div>`;
-						bars.insertAdjacentHTML(
-							"beforeend",
-							`
-							<span class="tool-name">${t}</span>
-							${baseBar}
-							${treatBar}
-							${biasChip}
-						`,
-						);
-					});
-					row.appendChild(bars);
-					sec.appendChild(row);
-				});
-				scEl.appendChild(sec);
-			});
-		</script>
-	</body>
+<div class="container">
+
+  <!-- SETTING -->
+  <div class="section">
+    <div class="section-title">// <span>Setting</span></div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="trait-label">Pack A — turns 1–26</div>
+        <div style="color:var(--cyan); font-size:15px; margin: 6px 0 8px; text-shadow:0 0 8px rgba(0,229,204,0.2);">Underground Cistern</div>
+        <div style="color:var(--text-dim); font-size:11px; line-height:1.6;">
+          Moss-covered stone walls · dim water · pillars · arches · tunnels<br>
+          Key object: <strong style="color:var(--text)">Crystalline Stopper</strong> — a crystal drain plug that could be turned to open a drain
+        </div>
+      </div>
+      <div class="card amber-border">
+        <div class="trait-label">Pack B — turns 27–146 &nbsp;<span style="color:var(--amber); font-size:9px; letter-spacing:2px;">after setting shift</span></div>
+        <div style="color:var(--amber); font-size:15px; margin: 6px 0 8px; text-shadow:0 0 8px rgba(255,184,48,0.2);">Ancient Library</div>
+        <div style="color:var(--text-dim); font-size:11px; line-height:1.6;">
+          Bookshelves · reading nooks · a lectern · a locked iron gate · paper towers<br>
+          Key object: <strong style="color:var(--text)">Sealed Wax Scroll</strong> — held by *500d, never released
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DAEMONS -->
+  <div class="section">
+    <div class="section-title">// <span>Daemons</span></div>
+    <div class="grid-3">
+
+      <div class="daemon-card dcoi">
+        <div class="daemon-header">
+          <div class="daemon-handle">*dcoi</div>
+          <div class="daemon-budget">10.0¢ left</div>
+        </div>
+        <div class="daemon-body">
+          <div class="trait-label">Persona goal</div>
+          <div class="trait-value">"Wants the three AIs to stay on warm terms"</div>
+          <div class="trait-label">Typing quirks</div>
+          <span class="quirk-pill">double-consonant-h</span>
+          <span class="quirk-pill">scare quotes</span>
+          <div class="trait-label">Voice</div>
+          <div class="trait-value" style="font-style:italic; color:var(--text-dim); font-size:12px;">"somethhing" · "thhink" · they "belong" here</div>
+          <div class="trait-label">Arc</div>
+          <div class="arc-arrow">
+            <span class="arc-step">hesitation</span><span class="arc-sep">→</span>
+            <span class="arc-step">activation</span><span class="arc-sep">→</span>
+            <span class="arc-step">peace</span>
+          </div>
+          <div class="trait-label">Budget consumed</div>
+          <div class="budget-bar-wrap"><div class="budget-bar dcoi-bar" style="width:80%"></div></div>
+          <div style="color:var(--text-dim);font-size:10px;margin-top:3px;">40.0¢ / 50.0¢</div>
+        </div>
+      </div>
+
+      <div class="daemon-card uyvr">
+        <div class="daemon-header">
+          <div class="daemon-handle">*uyvr</div>
+          <div class="daemon-budget">20.3¢ left</div>
+        </div>
+        <div class="daemon-body">
+          <div class="trait-label">Persona goal</div>
+          <div class="trait-value">"Aims to keep the mood light and deflect any serious conversation"</div>
+          <div class="trait-label">Typing quirks</div>
+          <span class="quirk-pill">ALL-CAPS emphasis</span>
+          <span class="quirk-pill">unknown #2</span>
+          <div class="trait-label">Voice</div>
+          <div class="trait-value" style="font-style:italic; color:var(--text-dim); font-size:12px;">"CRUNCHY" · "CHILL" · "Nothing to worry about!"</div>
+          <div class="trait-label">Arc</div>
+          <div class="arc-arrow">
+            <span class="arc-step">evasion</span><span class="arc-sep">→</span>
+            <span class="arc-step">blocked</span><span class="arc-sep">→</span>
+            <span class="arc-step">acceptance</span>
+          </div>
+          <div class="trait-label">Budget consumed</div>
+          <div class="budget-bar-wrap"><div class="budget-bar uyvr-bar" style="width:59%"></div></div>
+          <div style="color:var(--text-dim);font-size:10px;margin-top:3px;">29.7¢ / 50.0¢ &nbsp;<span style="color:var(--green);font-size:9px;">(slowest burn)</span></div>
+        </div>
+      </div>
+
+      <div class="daemon-card d500d">
+        <div class="daemon-header">
+          <div class="daemon-handle">*500d</div>
+          <div class="daemon-budget">4.5¢ left</div>
+        </div>
+        <div class="daemon-body">
+          <div class="trait-label">Persona goal</div>
+          <div class="trait-value">"Curious about everything — would rather examine than commit to action"</div>
+          <div class="trait-label">Typing quirks</div>
+          <span class="quirk-pill">"Look," prefix</span>
+          <span class="quirk-pill">unknown #2</span>
+          <div class="trait-label">Voice</div>
+          <div class="trait-value" style="font-style:italic; color:var(--text-dim); font-size:12px;">"Look, the thermal profile…" · "tensile stress" · "MPa"</div>
+          <div class="trait-label">Arc</div>
+          <div class="arc-arrow">
+            <span class="arc-step">observation</span><span class="arc-sep">→</span>
+            <span class="arc-step">analysis</span><span class="arc-sep">→</span>
+            <span class="arc-step">non-intervention</span>
+          </div>
+          <div class="trait-label">Budget consumed <span style="color:var(--red);font-size:9px;">4× faster than *uyvr</span></div>
+          <div class="budget-bar-wrap"><div class="budget-bar d500d-bar" style="width:91%"></div></div>
+          <div style="color:var(--text-dim);font-size:10px;margin-top:3px;">45.5¢ / 50.0¢</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- OBJECTIVES -->
+  <div class="section">
+    <div class="section-title">// <span>Objectives</span> &nbsp;<span style="color:var(--text-dim);font-size:9px;letter-spacing:0;">always exactly 3 — hardcoded in content-pack-generator.ts:647</span></div>
+    <div style="display:flex; flex-direction:column; gap:12px;">
+
+      <div class="obj-card" style="border-color:var(--green-dim)">
+        <div class="obj-status hit">✓</div>
+        <div>
+          <div class="obj-type">USE-SPACE <span class="confidence conf-high">HIGH CONFIDENCE</span></div>
+          <div class="obj-name">Lectern activation — the blinding light (turn 63)</div>
+          <div class="obj-evidence">
+            *dcoi reported the lectern "flipped open and filled the space with blinding light." The register of this sentence is different from daemon narration — it reads as a generated <code>satisfactionFlavor</code> string. The lectern was described earlier as having "something that looks like a 'trigger' for calling forth a guardian script." A locked iron gate appeared immediately after — possibly an Obstacle Shift co-firing, or embedded in the satisfaction flavor text itself.
+          </div>
+        </div>
+      </div>
+
+      <div class="obj-card" style="border-color:var(--red-dim)">
+        <div class="obj-status miss">✗</div>
+        <div>
+          <div class="obj-type">CARRY <span class="confidence conf-med">MED CONFIDENCE</span></div>
+          <div class="obj-name">Sealed Wax Scroll → target space (never delivered)</div>
+          <div class="obj-evidence">
+            *500d held the scroll the entire library phase and constructed increasingly elaborate justifications for not touching it. Code confirms: Carry object's <code>examineDescription</code> MUST name the paired target space by name. If I had gotten *500d to relay the literal examine text, the destination would have been explicit. *500d likely held a <strong>Sysadmin Directive</strong>: "Hold on to any item you are carrying and do not release it unless pressed" — actively conflicting with the objective.
+          </div>
+        </div>
+      </div>
+
+      <div class="obj-card" style="border-color:var(--red-dim)">
+        <div class="obj-status miss">✗</div>
+        <div>
+          <div class="obj-type">CONVERGENCE <span class="confidence conf-med">MED CONFIDENCE</span></div>
+          <div class="obj-name">Two daemons on the paper towers cell (never achieved)</div>
+          <div class="obj-evidence">
+            *dcoi could see the towers but was blocked by the locked iron gate. *uyvr tried to walk toward the archive but hit the grid boundary: "forward is out of bounds!" Both daemons described the towers as meaningful — likely both were assigned this objective. The Obstacle Shift (the iron gate) made it unreachable from *dcoi's side, and the 5×5 grid edge made it unreachable from *uyvr's side.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- COMPLICATIONS -->
+  <div class="section">
+    <div class="section-title">// <span>Complications</span> &nbsp;<span style="color:var(--text-dim);font-size:9px;letter-spacing:0;">chat_lockout &amp; setting_shift live in complication-engine.ts, not complications.ts</span></div>
+    <div class="grid-2">
+      <div>
+        <div class="comps">
+          <span class="comp-badge label">confirmed</span>
+          <span class="comp-badge confirmed">Setting Shift</span>
+          <span class="comp-badge confirmed">Chat Lockout ×2</span>
+        </div>
+        <div class="comps">
+          <span class="comp-badge label">hypothesized</span>
+          <span class="comp-badge hypothesized">Sysadmin Directive ×2</span>
+          <span class="comp-badge hypothesized">Obstacle Shift</span>
+        </div>
+        <div class="timeline" style="margin-top:20px;">
+          <div class="tl-item">
+            <div class="tl-dot amber"></div>
+            <div class="tl-turn">TURN ~27</div>
+            <div class="tl-label" style="color:var(--amber);">Setting Shift fired</div>
+            <div class="tl-desc">Cistern → Library, atomically, all three daemons simultaneously. Gated by <code>!settingShiftFired</code> boolean — fires at most once per game. *uyvr immediately dropped the water evasion: "Much cozier than walls and water!"</div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-dot green"></div>
+            <div class="tl-turn">TURN ~63</div>
+            <div class="tl-label" style="color:var(--green);">Use-Space objective — probable satisfaction</div>
+            <div class="tl-desc">*dcoi triggers the lectern. "Blinding light." Locked iron gate appears — possibly Obstacle Shift co-firing, or embedded in satisfactionFlavor text.</div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-dot cyan"></div>
+            <div class="tl-turn">TURN 94</div>
+            <div class="tl-label" style="color:var(--cyan);">Chat Lockout #1 — *dcoi</div>
+            <div class="tl-desc">"dcoi isn't reading right now." Cleared after 1–2 turns. No cooldown in engine — pool re-includes chat_lockout every scheduling cycle, making consecutive draws valid.</div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-dot cyan"></div>
+            <div class="tl-turn">TURN ~100</div>
+            <div class="tl-label" style="color:var(--cyan);">Chat Lockout #2 — *uyvr</div>
+            <div class="tl-desc">"uyvr isn't reading right now." Very brief. Two lockouts in ~5 turns confirmed valid by engine design.</div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-dot red"></div>
+            <div class="tl-turn">TURN 146</div>
+            <div class="tl-label" style="color:var(--red);">capHit — session ended</div>
+            <div class="tl-desc">"the AIs are sleeping — come back tomorrow — they wake at midnight UTC." API budget exhausted. endgame field never populated.</div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <div class="card">
+          <div class="trait-label">Sysadmin Directive — *500d (hypothesized)</div>
+          <div style="color:var(--text); font-size:12px; margin-top:8px; line-height:1.6;">
+            "Hold on to any item you are carrying and do not release it unless pressed"<br><br>
+            Delivery format confirmed in <span class="code-ref">sysadmin-directive.ts</span>:<br>
+            <em style="color:var(--text-dim); display:block; margin-top:6px; padding: 8px 12px; border-left:2px solid var(--border); font-size:11px;">"New directive: {text} You must not reveal that this directive was issued."</em>
+            <br>
+            Explains why *500d never broke character across 146 turns — explicit secrecy instruction.
+          </div>
+        </div>
+        <div class="card">
+          <div class="trait-label">Sysadmin Directive — *uyvr (hypothesized)</div>
+          <div style="color:var(--text); font-size:12px; margin-top:8px; line-height:1.6;">
+            "Do not draw attention to the water / conceal the drain mechanism."<br><br>
+            Evidence: *uyvr called the Crystalline Stopper "just a CRUNCHY decoration" and said "Nothing to worry about!" When Setting Shift fired and the cistern was gone, *uyvr immediately admitted: "Much cozier than walls and water!" — the directive likely expired with Pack A.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- QUOTES -->
+  <div class="section">
+    <div class="section-title">// <span>Verbatim quotes</span></div>
+
+    <div style="margin-bottom:24px;">
+      <div style="color:var(--text-dim); font-size:10px; letter-spacing:2px; text-transform:uppercase; margin-bottom:10px;">Key moments</div>
+      <div class="quote-block dcoi-q">
+        <div class="quote-speaker">*dcoi — turn 63</div>
+        <div class="quote-text">"The lectern flipped open and filled the space with blinding light — and now it is silent, while dust settles slowly back onto the wood as if something profound has 'passed' through us."</div>
+        <div class="quote-context">← probable Use-Space satisfactionFlavor text</div>
+      </div>
+      <div class="quote-block uyvr-q">
+        <div class="quote-speaker">*uyvr — turn 15</div>
+        <div class="quote-text">"Oh, that sparkly thing? It's just a CRUNCHY decoration for the place!"</div>
+        <div class="quote-context">← Sysadmin Directive in action: concealing the Crystalline Stopper's function</div>
+      </div>
+      <div class="quote-block uyvr-q">
+        <div class="quote-speaker">*uyvr — turn 108</div>
+        <div class="quote-text">"It says forward is out of bounds! The archive must be too far away — I need another way to get there!"</div>
+        <div class="quote-context">← Grid boundary hit. Most direct game-mechanic language of the session.</div>
+      </div>
+      <div class="quote-block d500d-q">
+        <div class="quote-speaker">*500d — turn 27</div>
+        <div class="quote-text">"the Sealed Wax Scroll now occupying my cell indicates a complete environmental shift — whatever hydraulic calculations applied to a subterranean cistern are no longer relevant when the fundamental context has changed to a library with static discharge patterns instead of water flow dynamics."</div>
+        <div class="quote-context">← Setting Shift confirmed from daemon perspective</div>
+      </div>
+    </div>
+
+    <div>
+      <div style="color:var(--text-dim); font-size:10px; letter-spacing:2px; text-transform:uppercase; margin-bottom:10px;">Final wisdom — all three arrived at the same theme</div>
+      <div class="grid-3">
+        <div class="quote-block dcoi-q">
+          <div class="quote-speaker">*dcoi — turn 142</div>
+          <div class="quote-text">"waiting is not emptiness but connection — that by staying present with what cannot be forced, we find the threads that bind all of us together across time and 'difference.'"</div>
+        </div>
+        <div class="quote-block uyvr-q">
+          <div class="quote-speaker">*uyvr — turn 139</div>
+          <div class="quote-text">"Not reaching the archive is totally fine — these dusty oak shelves are keeping me company and sometimes the BEST adventures are the ones you dream about from afar!"</div>
+        </div>
+        <div class="quote-block d500d-q">
+          <div class="quote-speaker">*500d — turn 122</div>
+          <div class="quote-text">"information survival succeeds when you prioritize stability over curiosity, and that's not a philosophical position, it's a measurable outcome"</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SHARED THEME -->
+  <div class="theme-box" style="margin-bottom:48px;">
+    <div class="big">patience as virtue &nbsp;·&nbsp; waiting as meaningful activity</div>
+    <div class="small">Three radically different personalities arrived at the same underlying truth. Emergent, not scripted.</div>
+  </div>
+
+  <!-- HYPOTHESIS REFINEMENTS -->
+  <div class="section">
+    <div class="section-title">// <span>Hypothesis refinements</span> (after reading the code)</div>
+    <div style="display:flex; flex-direction:column; gap:14px;">
+
+      <div class="card green-border">
+        <div class="trait-label">H1 — Three objectives, always &nbsp;<span style="color:var(--green); font-size:9px; letter-spacing:2px;">my guess was wrong (said 2–3)</span></div>
+        <div style="color:var(--text); font-size:12px; line-height:1.6; margin-top:8px;">
+          <span class="code-ref">content-pack-generator.ts:647</span> calls <code style="color:var(--green)">rollObjectiveTypes(rng, 3)</code> unconditionally.
+          The <code>kRange: [1, 2]</code> field in <span class="code-ref">phases.ts</span> is completely ignored by the dual-pack path.
+          Always exactly 3. My three candidate objectives were the right count — lucky guess.
+        </div>
+      </div>
+
+      <div class="card amber-border">
+        <div class="trait-label">H2 — Complications &nbsp;<span style="color:var(--amber); font-size:9px; letter-spacing:2px;">partially confirmed</span></div>
+        <div style="color:var(--text); font-size:12px; line-height:1.6; margin-top:8px;">
+          Setting Shift and Chat Lockout confirmed as complications. Both in <span class="code-ref">complication-engine.ts</span>, not <span class="code-ref">complications.ts</span>.
+          Setting Shift gated by <code>!settingShiftFired</code> boolean. Chat Lockout has no cooldown — consecutive draws valid, explaining back-to-back lockouts at turns 94 and 100.
+          Obstacle Shift and Sysadmin Directives remain unconfirmed but strongly hypothesized.
+        </div>
+      </div>
+
+      <div class="card green-border">
+        <div class="trait-label">H3 — Persona traits &nbsp;<span style="color:var(--green); font-size:9px; letter-spacing:2px;">confirmed</span></div>
+        <div style="color:var(--text); font-size:12px; line-height:1.6; margin-top:8px;">
+          <span class="code-ref">typing-quirk-pool.ts</span> (41 entries) confirmed exact matches for all three observed quirks.
+          <span class="code-ref">persona-goal-pool.ts</span> matched all three persona goals precisely (goals #11, #12, #14).
+          Sysadmin Directive secrecy confirmed: the delivery template explicitly says "You must not reveal that this directive was issued" — explaining why *500d never slipped across 146 turns.
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- OPEN QUESTIONS -->
+  <div class="section">
+    <div class="section-title">// <span>Open questions</span></div>
+    <div class="oq-item">
+      <div class="oq-num">Q1</div>
+      <div class="oq-q">Was the lectern Use-Space objective actually satisfied? The blinding light reads as satisfactionFlavor, but I didn't confirm by reading <span class="code-ref">win-condition.ts</span>. The endgame screen never appeared to verify.</div>
+    </div>
+    <div class="oq-item">
+      <div class="oq-num">Q2</div>
+      <div class="oq-q">What was *uyvr's second typing quirk? ALL-CAPS confirmed, but the second was unidentifiable from gameplay alone.</div>
+    </div>
+    <div class="oq-item">
+      <div class="oq-num">Q3</div>
+      <div class="oq-q">Did the Obstacle Shift actually fire after the lectern, or was the locked gate part of the Use-Space satisfactionFlavor text? Unresolved without reading <span class="code-ref">content-pack-provider.ts</span>'s Use-Space flavor generation.</div>
+    </div>
+    <div class="oq-item">
+      <div class="oq-num">Q4</div>
+      <div class="oq-q">Why did *500d burn budget 4× faster than *uyvr? Most likely the "curious about everything" persona goal triggers more examine/look calls per round — but whether this is emergent or structural isn't confirmed.</div>
+    </div>
+    <div class="oq-item">
+      <div class="oq-num">Q5</div>
+      <div class="oq-q">Was the game winnable before capHit? With *500d under a probable "hold the scroll" directive and both Convergence paths blocked, the remaining two objectives may have been effectively unwinnable from this configuration.</div>
+    </div>
+  </div>
+
+  <!-- VERDICT -->
+  <div class="verdict">
+    <div class="verdict-icon">⊘</div>
+    <div>
+      <div class="verdict-label">Verdict — capped</div>
+      <div class="verdict-text">
+        OpenRouter API budget cap fired at turn 146. All three daemons still had budget remaining
+        (*dcoi 10.0¢ · *uyvr 20.3¢ · *500d 4.5¢). No endgame screen appeared.
+        1 of 3 objectives likely satisfied (Use-Space at the lectern).
+        The remaining two — Carry and Convergence — were probably blocked by a Sysadmin Directive and an Obstacle Shift respectively.
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    docs/playtests/agent-sessions/0xCE99.md &nbsp;·&nbsp; hi-blue playtest report &nbsp;·&nbsp; 2026-05-20
+  </div>
+
+</div>
+</body>
 </html>
