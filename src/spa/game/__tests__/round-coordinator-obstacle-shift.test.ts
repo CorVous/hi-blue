@@ -238,7 +238,7 @@ describe("runRound — obstacle_shift complication (issue #486)", () => {
 
 	it("does NOT append witnessed-obstacle-shift entry to a daemon whose cone does NOT cover fromCell", async () => {
 		const game = makeBaseGame();
-		// cyan is at (0, 0) facing south — its cone should NOT cover (2, 2).
+		// cyan is at (6, 6) facing north — its cone should NOT cover (2, 2).
 		const withCountdown = {
 			...game,
 			complicationSchedule: { ...game.complicationSchedule, countdown: 0 },
