@@ -32,7 +32,7 @@ import type {
  * All tools that can be disabled by a Tool Disable complication.
  * Covers every ToolName in the discriminated union.
  */
-export const DISABLABLE_TOOLS: ToolName[] = [
+const DISABLABLE_TOOLS: ToolName[] = [
 	"pick_up",
 	"put_down",
 	"use",
@@ -118,7 +118,7 @@ function isObstacleShiftAvailable(
  * Build valid (obstacle, direction) tuples for the obstacle_shift draw.
  * Returns an array of { obstacleId, fromCell, toCell } for each valid shift.
  */
-export function validObstacleShiftTuples(
+function validObstacleShiftTuples(
 	world: WorldState,
 	personaSpatial: GameState["personaSpatial"],
 ): Array<{ obstacleId: string; fromCell: GridPosition; toCell: GridPosition }> {
