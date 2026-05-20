@@ -13,6 +13,8 @@ import {
 	applyDirection,
 	frontArc,
 	inBounds,
+	isGridPosition,
+	positionsEqual,
 	RELATIVE_DIRECTIONS,
 	relativeToCardinal,
 } from "./direction.js";
@@ -25,16 +27,6 @@ import type {
 	ToolName,
 	WorldEntity,
 } from "./types.js";
-
-/** Narrow-check: is `holder` a GridPosition (not an AiId string)? */
-function isGridPosition(holder: AiId | GridPosition): holder is GridPosition {
-	return typeof holder === "object" && holder !== null;
-}
-
-/** True when two GridPositions refer to the same cell. */
-function positionsEqual(a: GridPosition, b: GridPosition): boolean {
-	return a.row === b.row && a.col === b.col;
-}
 
 /** Entities that can be picked up/used/given (objective_object and interesting_object). */
 function pickableEntities(entities: WorldEntity[]): WorldEntity[] {
