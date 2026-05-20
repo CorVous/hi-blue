@@ -494,10 +494,10 @@ export function renderStart(
 	// any value other than the literal "1" is treated as off.
 	const engagementClauses = searchParams.get("engagementClauses") === "1";
 
-	// Daemon-action-variation: `?actionProfiles=1` opts into per-persona
-	// `<action_profile>` clauses derived from temperaments. Off by default;
-	// any value other than the literal "1" is treated as off.
-	const actionProfiles = searchParams.get("actionProfiles") === "1";
+	// Daemon-action-variation: per-persona `<action_profile>` clauses derived
+	// from temperaments are ON by default. `?actionProfiles=0` is a kill-switch
+	// for A/B comparison and debugging; any other value leaves them on.
+	const actionProfilesDisabled = searchParams.get("actionProfiles") === "0";
 
 	// Kick off (or reuse) the in-flight bootstrap. If the user backed out to
 	// the start screen after a previous render, startBootstrap returns the
@@ -510,8 +510,8 @@ export function renderStart(
 	const engagementOpts = engagementClauses
 		? { engagementClauses: true }
 		: undefined;
-	const actionProfileOpts = actionProfiles
-		? { actionProfiles: true }
+	const actionProfileOpts = actionProfilesDisabled
+		? { actionProfiles: false }
 		: undefined;
 	const mergedOpts =
 		_testOverrides || spikeOpts || engagementOpts || actionProfileOpts

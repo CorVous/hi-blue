@@ -133,15 +133,9 @@ describe("action-preference-bias", () => {
 	});
 
 	it("falls through to the balanced default when no tool reaches ±threshold", () => {
-		// stoic + glib: go = -1+1 = 0, face = 0+0 = 0, pick_up = 0, put_down = 0,
-		// use = 0 + (-1) = -1 → use hits the avoided threshold.
-		// Use mercurial + earnest instead: go 1+0=1, face 1+1=2 → face preferred.
-		// Need a genuinely featureless pair. taciturn + glib:
-		//   go -1+1=0, face 0, pick_up 0, put_down 0, use -1+-1=-2→floored-1.
-		//   use hits avoided. Try haughty + verbose:
-		//   go 1+1=2 → go preferred. Not featureless.
 		// stoic + earnest: go -1+0=-1, face 0+1=1, pick_up 0, put_down 0,
-		//   use 0+1=1 → go hits avoided (-1), nothing ≥ 2.
+		// use 0+1=1 — nothing reaches the +2 preferred threshold, so no
+		// "leans toward"; go = -1 trips the avoided threshold instead.
 		const clause = actionProfileFor("e", "stoic", "earnest");
 		// No tool reaches +2, so no "leans toward"; go = -1 triggers hesitant.
 		expect(clause).not.toContain("leans toward");
