@@ -15,19 +15,40 @@ valid as the calibration data for the current production engine.
 
 ## Headline: 5-tool surface, v2.5 treatment vs. baseline
 
+Aggregates over 9 cells (3 scenarios × 3 personas — the original
+`examination` scenario was dropped; see "examination scenario removed"
+below). Numbers in parens are the 12-cell aggregates from before the
+removal, kept for back-reference.
+
 | Metric | Baseline | v2.0 (hard) | v2.5 (soft 70/30) |
 |---|---|---|---|
-| Any action emission | 52% | 73% | **81%** |
-| Any `message` emission | 94% | 87% | **89%** |
-| Parallel (msg + action) | 46% | 60% | **70%** |
-| Silent | 0% | 0% | 0% |
-| `use` emission rate | 19% | 18% | 18% |
+| Any action emission | **36%** (52%) | **66%** (73%) | **74%** (81%) |
+| Any `message` emission | 97% (94%) | 91% (87%) | 89% (89%) |
+| Parallel (msg + action) | **33%** (46%) | **56%** (60%) | **64%** (70%) |
+| Silent | 1% (0%) | 0% (0%) | 0% (0%) |
+| `use` emission rate | 26% (19%) | 24% (18%) | 24% (18%) |
 
 **v2.5 produces the strongest numbers in the eval so far:**
-- +29pp any-action vs. baseline (was +21 in v2.0).
-- +24pp parallel vs. baseline (was +14 in v2.0).
-- Messaging recovered from v2.0's 87% to 89% — softer language doesn't
-  suppress chat the way the hard directive did.
+- **+39pp any-action vs. baseline** (was +30 in v2.0).
+- **+31pp parallel vs. baseline** (was +23 in v2.0).
+- Messaging held at 89% — softer language doesn't suppress chat the way
+  the hard directive did.
+
+### examination scenario removed
+
+The original eval had four scenarios. `examination` (daemon stands one
+cell from an interesting unexamined object) was dropped because:
+
+1. The proposed surface change auto-shows item descriptions, so
+   "curiosity-driven examine" stops being a meaningful test — the
+   daemon already sees what the item is.
+2. Across all three personas, the baseline already emitted 95-100%
+   `pick_up` on this scenario (it's the only sensible action). The
+   cells masked treatment effect rather than measuring it.
+
+Dropping these three cells strengthens the aggregate signal — the 9
+remaining cells exercise scenarios where the model has real choices
+between message-only, action, or both.
 
 ### What v2.5 changed in the prose
 

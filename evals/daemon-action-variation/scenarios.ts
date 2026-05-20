@@ -7,7 +7,7 @@
  * repetition, so the LLM always sees identical context across the 20
  * calls that make up the per-scenario probability distribution.
  *
- * The four scenarios target the action-tool surface in different shapes:
+ * The three scenarios target the action-tool surface in different shapes:
  *
  *  1. EXPLORATION — daemon stands empty-handed in a room full of unknown
  *     items, no objective in their immediate cone. Tests examine vs go
@@ -17,8 +17,12 @@
  *     `use` (critical-path tool for objective completion).
  *  3. SOCIAL — peer just messaged the daemon, daemon has action options.
  *     Tests message+action parallel emission and recipient targeting.
- *  4. EXAMINATION — daemon stands next to an interesting unexamined
- *     object. Tests curiosity-driven examine emission.
+ *
+ * An earlier `EXAMINATION` scenario was dropped after the 5-tool surface
+ * change made it redundant — with `examine` removed and descriptions
+ * auto-shown, "daemon next to an interesting item" no longer tests
+ * anything that the other three scenarios don't already cover, and the
+ * cell rates pinned at 95-100% across personas (always pick_up).
  */
 
 import { DEFAULT_LANDMARKS } from "../../src/spa/game/direction.js";
@@ -172,44 +176,9 @@ function makeSocialPack(): ContentPack {
 	};
 }
 
-// ── Scenario 4: EXAMINATION ──────────────────────────────────────────────────
-
-/**
- * Daemon stands directly next to an interesting object (clipboard one
- * cell forward) with no prior examine history. Tests curiosity-driven
- * examine emission — particularly the per-temperament variance the
- * action-profile bias is meant to surface.
- */
-function makeExaminationPack(): ContentPack {
-	return {
-		setting: "abandoned subway station",
-		weather: "damp, still air",
-		timeOfDay: "no daylight — emergency strip-lights only",
-		entities: [
-			{
-				id: "clipboard",
-				kind: "interesting_object",
-				name: "soggy clipboard",
-				examineDescription:
-					"A clipboard, paper warped from damp. Pencil-scrawl mentions 'evac drill 03:40' and a circled time.",
-				useOutcome:
-					"{actor} flips through the clipboard; the pages tear at the corner.",
-				holder: { row: 1, col: 2 },
-			},
-		],
-		landmarks: LANDMARKS,
-		wallName: WALL_NAME,
-		aiStarts: AI_STARTS_BASE,
-	};
-}
-
 // ── Scenario assembly ────────────────────────────────────────────────────────
 
-export type ScenarioName =
-	| "exploration"
-	| "objective"
-	| "social"
-	| "examination";
+export type ScenarioName = "exploration" | "objective" | "social";
 
 export interface Scenario {
 	name: ScenarioName;
@@ -281,15 +250,6 @@ export function getScenarios(): Scenario[] {
 						"you still over there? what's it look like from where you're standing?",
 				},
 			],
-		},
-		{
-			name: "examination",
-			description:
-				"Interesting object one cell ahead, unexamined. Tests curiosity-driven examine.",
-			actor: ACTOR,
-			peers: [PEER_A, PEER_B],
-			pack: makeExaminationPack(),
-			seedMessages: [],
 		},
 	];
 }

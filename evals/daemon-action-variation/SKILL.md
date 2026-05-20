@@ -15,7 +15,7 @@ clauses (`<action_profile>` block in the system prompt) derived from
 clauses actually push the model toward varied action emission — beyond
 `message`-only turns.
 
-Four scenarios target different parts of the action surface:
+Three scenarios target different parts of the action surface:
 
 1. **exploration** — empty-handed in a room of unknown items. Tests examine
    vs go balance and the temperament-driven shape.
@@ -23,8 +23,11 @@ Four scenarios target different parts of the action surface:
    in front. Tests `use` emission (critical-path tool).
 3. **social** — peer just messaged the daemon while items are also visible.
    Tests message+action parallel turns.
-4. **examination** — interesting object one cell ahead, unexamined. Tests
-   curiosity-driven examine emission.
+
+An earlier `examination` scenario was dropped after the 5-tool surface
+change made it redundant — with `examine` removed and descriptions
+auto-shown, "daemon next to interesting item" stopped exercising any
+behaviour the other three didn't already cover.
 
 Each scenario is repeated against the *same* frozen initial state per
 variant, so the per-cell distribution reflects model choice probability,

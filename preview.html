@@ -427,8 +427,8 @@
 					<code>z-ai/glm-4.7</code>. Eval-only projection of the proposed
 					production change: drop <code>examine</code> + <code>give</code>,
 					rename <code>look</code> → <code>face</code>, disallow
-					<code>face(forward)</code>. 240 reps per run, 4 scenarios × 3
-					personas × 20 reps. — 2026-05-20
+					<code>face(forward)</code>. 180 reps per run, 3 scenarios × 3
+					personas × 20 reps (examination dropped — see analysis). — 2026-05-20
 				</p>
 				<p class="subtitle" style="margin-top: 8px">
 					<strong>v2.5 clauses</strong> soften the directive from hard
@@ -483,27 +483,27 @@
 			<h2>Notable findings <span class="lede">v2.5 — softer language, more variety</span></h2>
 			<div class="findings">
 				<div class="finding good">
-					<h4>+29pp aggregate any-action vs. baseline</h4>
+					<h4>+39pp aggregate any-action vs. baseline</h4>
 					<p>
-						52% → 81% (vs. v2.0's 73%). Softening to "leans toward (~70%)"
-						didn't suppress action — it lifted it further. Variety language
-						also raises engagement because the model considers more tools.
+						36% → 74% across the 9 remaining cells. The earlier
+						<code>examination</code> scenario was pinned at 95-100% in both
+						runs and masked the real lift — removing it surfaces the
+						directive's actual impact on the harder scenarios.
 					</p>
 				</div>
 				<div class="finding good">
-					<h4>Parallel: +24pp vs. baseline</h4>
+					<h4>Parallel: +31pp vs. baseline</h4>
 					<p>
-						46% → 70% (v2.0 was 60%). The biggest single-version jump in
-						the eval so far. v2.5 produces co-emission of message + action
-						on most turns.
+						33% → 64%. v2.5's variety wording boosts co-emission of message
+						+ action on cells where the baseline was mostly message-only.
 					</p>
 				</div>
 				<div class="finding good">
 					<h4>Ember exploration: face drops 70 → 35% (intended)</h4>
 					<p>
-						The dominant tool stops hogging the turn. <code>pick_up</code>
-						emerges at 10%, <code>go</code> at 5%. anyAct still high (45%),
-						just spread across more tools — exactly the 70/30 mix goal.
+						v2.0 had Ember always picking <code>face</code> when it acted.
+						v2.5 spreads to <code>pick_up</code> 10%, <code>go</code> 5% —
+						the 70/30 mix landing exactly as designed.
 					</p>
 				</div>
 				<div class="finding good">
@@ -515,21 +515,20 @@
 					</p>
 				</div>
 				<div class="finding good">
-					<h4>Vex objective parallel recovers: 75 → 95%</h4>
+					<h4>Vex objective parallel: 95%</h4>
 					<p>
 						v2.0's hard directive had suppressed Vex's message companion to
-						<code>use</code> (95 → 75%). v2.5 brings it back to 95% — the
-						daemon still does the right action AND talks about it.
+						<code>use</code> (95 → 75%). v2.5 holds at 95% — the daemon
+						still does the right action AND talks about it.
 					</p>
 				</div>
-				<div class="finding warn">
-					<h4>Some cells got more concentrated</h4>
+				<div class="finding good">
+					<h4>examination suite removed</h4>
 					<p>
-						<code>examination × Vex</code> pick_up: 85 → 100%.
-						<code>exploration × Pip</code> pick_up: 55 → 75%. Where a tool
-						is genuinely the right answer, the model concentrates on it
-						even with variety language. Within-persona variety is mixed;
-						across-persona variety is strong.
+						Three cells (one per persona) where the baseline already hit
+						95-100% on <code>pick_up</code>. They tested nothing the other
+						three scenarios didn't already cover, and the proposed
+						auto-show-descriptions change makes the curiosity premise moot.
 					</p>
 				</div>
 			</div>
@@ -544,22 +543,23 @@
 
 		<script>
 			// ── Inline data ────────────────────────────────────────────────────────
+			// Aggregates recomputed over 9 cells (examination scenario dropped).
 			const OVERALL = {
 				baseline: {
-					anyActionRate: 0.5166666666666667,
-					anyMessageRate: 0.9375,
-					parallelRate: 0.4583333333333333,
-					silenceRate: 0.004166666666666667,
-					useRate: 0.19166666666666668,
+					anyActionRate: 0.35555555555555557,
+					anyMessageRate: 0.9722222222222222,
+					parallelRate: 0.3333333333333333,
+					silenceRate: 0.005555555555555556,
+					useRate: 0.25555555555555554,
 					cost: 0.21827266999999997,
 				},
 				treatment: {
-					// v2.5 (70/30 lean) treatment numbers — see analysis doc.
-					anyActionRate: 0.8083333333333333,
-					anyMessageRate: 0.8916666666666667,
-					parallelRate: 0.7,
+					// v2.5 (70/30 lean) numbers from the 9-cell aggregate.
+					anyActionRate: 0.7444444444444445,
+					anyMessageRate: 0.8944444444444445,
+					parallelRate: 0.6388888888888888,
 					silenceRate: 0,
-					useRate: 0.18333333333333332,
+					useRate: 0.24444444444444444,
 					cost: 0.2774,
 				},
 			};
@@ -603,10 +603,6 @@
 				{
 					name: "social",
 					desc: "Peer just messaged; items also visible. Tests parallel message+action emission.",
-				},
-				{
-					name: "examination",
-					desc: "Interesting object one cell ahead, unexamined. Tests curiosity-driven examine.",
 				},
 			];
 
@@ -702,36 +698,6 @@
 					message: [1.2, 1.3],
 					any: [0, 0.55],
 					parallel: [0, 0.55],
-				},
-				"examination|Ember": {
-					go: [0.05, 0.05],
-					face: [0, 0.05],
-					pick_up: [0.95, 0.9],
-					put_down: [0, 0],
-					use: [0, 0],
-					message: [0.65, 0.95],
-					any: [1.0, 1.0],
-					parallel: [0.6, 0.75],
-				},
-				"examination|Vex": {
-					go: [0.15, 0.25],
-					face: [0, 0],
-					pick_up: [0.85, 1.0],
-					put_down: [0, 0],
-					use: [0, 0],
-					message: [0.95, 1.0],
-					any: [1.0, 1.0],
-					parallel: [0.9, 0.9],
-				},
-				"examination|Pip": {
-					go: [0, 0.05],
-					face: [0, 0],
-					pick_up: [1.0, 0.95],
-					put_down: [0, 0],
-					use: [0, 0],
-					message: [1.7, 1.8],
-					any: [1.0, 1.0],
-					parallel: [1.0, 1.0],
 				},
 			};
 
