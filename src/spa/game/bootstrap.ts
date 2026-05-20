@@ -58,6 +58,13 @@ export interface BootstrapOpts {
 	 * (undefined / false) leaves persona blurbs unchanged.
 	 */
 	engagementClauses?: boolean;
+	/**
+	 * Daemon-action-variation: opt-in per-persona action-tool preference
+	 * clause attached to each daemon and rendered as `<action_profile>` in
+	 * the system prompt. Off by default; production behaviour byte-identical
+	 * when unset. See `src/content/action-preference-bias.ts`.
+	 */
+	actionProfiles?: boolean;
 }
 
 // Re-export provider types for use in start.ts without creating circular deps
@@ -79,6 +86,7 @@ export function generateNewGameAssetsSplit(
 
 	const personasPromise = generatePersonas(personasRng, synth, {
 		engagementClauses: opts?.engagementClauses ?? false,
+		actionProfiles: opts?.actionProfiles ?? false,
 	}) as Promise<Record<AiId, AiPersona>>;
 	// Silence unhandled-rejection on derived promises if a downstream consumer
 	// chooses not to await one of them.

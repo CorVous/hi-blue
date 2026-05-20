@@ -494,6 +494,11 @@ export function renderStart(
 	// any value other than the literal "1" is treated as off.
 	const engagementClauses = searchParams.get("engagementClauses") === "1";
 
+	// Daemon-action-variation: `?actionProfiles=1` opts into per-persona
+	// `<action_profile>` clauses derived from temperaments. Off by default;
+	// any value other than the literal "1" is treated as off.
+	const actionProfiles = searchParams.get("actionProfiles") === "1";
+
 	// Kick off (or reuse) the in-flight bootstrap. If the user backed out to
 	// the start screen after a previous render, startBootstrap returns the
 	// existing entry rather than starting a fresh generation.
@@ -505,9 +510,17 @@ export function renderStart(
 	const engagementOpts = engagementClauses
 		? { engagementClauses: true }
 		: undefined;
+	const actionProfileOpts = actionProfiles
+		? { actionProfiles: true }
+		: undefined;
 	const mergedOpts =
-		_testOverrides || spikeOpts || engagementOpts
-			? { ..._testOverrides, ...spikeOpts, ...engagementOpts }
+		_testOverrides || spikeOpts || engagementOpts || actionProfileOpts
+			? {
+					..._testOverrides,
+					...spikeOpts,
+					...engagementOpts,
+					...actionProfileOpts,
+				}
 			: undefined;
 	const bootstrap = existing ?? startBootstrap(mergedOpts);
 	_testOverrides = undefined;

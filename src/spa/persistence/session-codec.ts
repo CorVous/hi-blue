@@ -205,6 +205,11 @@ export function serializeSession(
 				blurb: persona.blurb,
 				typingQuirks: persona.typingQuirks,
 				voiceExamples: persona.voiceExamples,
+				// Optional — only present when the action-profile feature is on.
+				// Spread so saves stay byte-identical when the field is unset.
+				...(persona.actionProfile !== undefined
+					? { actionProfile: persona.actionProfile }
+					: {}),
 			},
 			conversationLog: state.conversationLogs[aiId] ?? [],
 		};

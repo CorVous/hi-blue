@@ -26,6 +26,17 @@ export interface AiPersona {
 	 * Length is exactly 3.
 	 */
 	voiceExamples: string[];
+	/**
+	 * Per-persona action-tool preference clause derived from temperaments.
+	 * Rendered as `<action_profile>` in the system prompt. Drives variation in
+	 * action-tool emission (go / look / examine / pick_up / put_down / give /
+	 * use) the same way `blurb` drives engagement. See
+	 * `src/content/action-preference-bias.ts`.
+	 *
+	 * Optional for back-compat with saves written before the field existed;
+	 * prompt-builder falls back gracefully when absent.
+	 */
+	actionProfile?: string;
 }
 
 export type WorldEntityKind =

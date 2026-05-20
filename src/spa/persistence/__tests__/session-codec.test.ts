@@ -118,6 +118,34 @@ describe("serializeSession / deserializeSession", () => {
 		);
 	});
 
+	it("omits actionProfile from the persona block when unset", () => {
+		const game = makeFreshGame();
+		const files = serializeSession(game, NOW, CREATED_AT);
+		// biome-ignore lint/style/noNonNullAssertion: daemons.red always exists for this fixture
+		const daemon = JSON.parse(files.daemons.red!);
+		expect(daemon.persona).not.toHaveProperty("actionProfile");
+	});
+
+	it("round-trips actionProfile when a persona has one", () => {
+		const game = makeFreshGame();
+		const red = game.personas.red;
+		expect(red).toBeDefined();
+		if (red) red.actionProfile = "*red leans toward `go`, `face`.";
+		const files = serializeSession(game, NOW, CREATED_AT);
+		// biome-ignore lint/style/noNonNullAssertion: daemons.red always exists for this fixture
+		const daemon = JSON.parse(files.daemons.red!);
+		expect(daemon.persona.actionProfile).toBe(
+			"*red leans toward `go`, `face`.",
+		);
+		const result = deserializeSession(files);
+		expect(result.kind).toBe("ok");
+		if (result.kind === "ok") {
+			expect(result.state.personas.red?.actionProfile).toBe(
+				"*red leans toward `go`, `face`.",
+			);
+		}
+	});
+
 	it("pretty-printed with 2-space indent", () => {
 		const game = makeFreshGame();
 		const files = serializeSession(game, NOW, CREATED_AT);
