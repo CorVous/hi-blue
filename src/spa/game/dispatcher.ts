@@ -48,15 +48,15 @@ export interface DispatchResult {
 	/** Records produced by this dispatch (0..N per call). */
 	records: RoundActionRecord[];
 	/**
-	 * Private tool result for examine — not surfaced to any other AI or action log.
-	 * Only set when the tool call is "examine".
+	 * Private tool result for pick_up auto-examine — not surfaced to any other AI or action log.
+	 * Only set when pick_up auto-examine emits the item's examineDescription.
 	 */
 	actorPrivateToolResult?: { description: string; success: boolean };
 	/**
-	 * For go/look actions where the actor's cone shift reveals new content,
+	 * For go/face actions where the actor's cone shift reveals new content,
 	 * this field carries the renderWhatsNew output. Only set for successful
-	 * go/look tool calls where the pre/post cone snapshots differ.
-	 * (Issue #376: persist cone-delta on go/look tool-call log entries)
+	 * go/face tool calls where the pre/post cone snapshots differ.
+	 * (Issue #376: persist cone-delta on go/face tool-call log entries)
 	 */
 	actorConeDelta?: string;
 }
@@ -247,7 +247,7 @@ export function validateToolCall(
 			return { valid: true };
 		}
 
-		case "look": {
+		case "face": {
 			// Only accept relative directions (relative to daemon's facing).
 			const rawDir = call.args.direction;
 			if (!RELATIVE_DIRECTIONS.includes(rawDir as RelativeDirection)) {
@@ -256,34 +256,14 @@ export function validateToolCall(
 					reason: `"${rawDir}" is not a valid direction. Use relative directions: forward, back, left, right.`,
 				};
 			}
-			return { valid: true };
-		}
-
-		case "examine": {
-			// Item must exist (any kind: objective_object, interesting_object, obstacle, objective_space)
-			const item = world.entities.find((e) => e.id === call.args.item);
-			if (!item)
+			// Reject facing the current direction (forward) as a no-op
+			if (rawDir === "forward") {
 				return {
 					valid: false,
-					reason: `Item "${call.args.item}" does not exist`,
+					reason: "You already face that direction",
 				};
-			if (!actorSpatial)
-				return { valid: false, reason: "Actor has no spatial state" };
-			// Valid if held by aiId OR resting on a GridPosition inside actor's cone
-			if (item.holder === aiId) return { valid: true };
-			if (isGridPosition(item.holder)) {
-				const cone = projectCone(actorSpatial.position, actorSpatial.facing);
-				if (
-					cone.some((c) =>
-						positionsEqual(c.position, item.holder as GridPosition),
-					)
-				)
-					return { valid: true };
 			}
-			return {
-				valid: false,
-				reason: `Item "${call.args.item}" is not in your cone or held by you`,
-			};
+			return { valid: true };
 		}
 
 		default:
@@ -398,9 +378,6 @@ export function executeToolCall(
 			}
 			break;
 		}
-		case "examine":
-			// No world mutation — examineDescription is returned as the tool result description.
-			break;
 		case "go": {
 			if (!actorSpatial) break;
 			// Validation upstream guarantees direction is a RelativeDirection.
@@ -418,13 +395,13 @@ export function executeToolCall(
 				},
 			};
 		}
-		case "look": {
+		case "face": {
 			if (!actorSpatial) break;
 			// Convert relative direction to cardinal
-			const rawLookDir = call.args.direction;
+			const rawFaceDir = call.args.direction;
 			const direction = relativeToCardinal(
 				actorSpatial.facing,
-				rawLookDir as RelativeDirection,
+				rawFaceDir as RelativeDirection,
 			);
 			return {
 				...game,
@@ -472,8 +449,8 @@ function describeToolCall(game: GameState, aiId: AiId, call: ToolCall): string {
 		}
 		case "go":
 			return `${name} walks ${call.args.direction}.`;
-		case "look":
-			return `${name} looks ${call.args.direction}`;
+		case "face":
+			return `${name} turns to face ${call.args.direction}`;
 		default:
 			return `${name} attempted an unknown action`;
 	}
@@ -546,32 +523,7 @@ export function dispatchAiTurn(
 		const toolCall = action.toolCall;
 		const validation = validateToolCall(state, aiId, toolCall);
 
-		if (toolCall.name === "examine") {
-			if (validation.valid) {
-				const item = state.world.entities.find(
-					(e) => e.id === toolCall.args.item,
-				);
-				const examineDesc =
-					item?.satisfactionState === "satisfied" && item.postExamineDescription
-						? item.postExamineDescription
-						: (item?.examineDescription ?? "");
-				actorPrivateToolResult = {
-					description: examineDesc,
-					success: true,
-				};
-			} else {
-				actorPrivateToolResult = {
-					description: validation.reason ?? "Examine failed",
-					success: false,
-				};
-				state = appendActionFailure(state, aiId, {
-					kind: "action-failure",
-					round,
-					tool: "examine",
-					reason: validation.reason ?? "rejected",
-				});
-			}
-		} else if (validation.valid) {
+		if (validation.valid) {
 			// Snapshot all AIs' spatial state BEFORE execution (used for witness context).
 			// For go: the actor's pre-move state is captured here; post-move state is
 			// captured from the post-execute phase below.
@@ -579,8 +531,8 @@ export function dispatchAiTurn(
 			// satisfactionState transitions for activation-flavor detection.
 			const preExecuteWorld = state.world;
 
-			// For go/look, compute cone delta pre-execution to capture the state before the action
-			if (action.toolCall.name === "go" || action.toolCall.name === "look") {
+			// For go/face, compute cone delta pre-execution to capture the state before the action
+			if (action.toolCall.name === "go" || action.toolCall.name === "face") {
 				const prevCtx = buildAiContext(state, aiId);
 				const prevSnap = buildConeSnapshot(prevCtx);
 				state = executeToolCall(state, aiId, action.toolCall);
@@ -618,8 +570,7 @@ export function dispatchAiTurn(
 			});
 
 			// Auto-examine on pick_up: surface the item's examineDescription privately
-			// to the actor so objective-item details land in the actor's context
-			// without requiring a separate examine call.
+			// to the actor so objective-item details land in the actor's context.
 			if (action.toolCall.name === "pick_up") {
 				const picked = state.world.entities.find(
 					(e) => e.id === action.toolCall?.args.item,
@@ -633,7 +584,7 @@ export function dispatchAiTurn(
 			}
 
 			// Build and append a PhysicalActionRecord for observable physical actions.
-			// look is excluded (facing-change only, not observable); examine doesn't exist yet.
+			// face is excluded (facing-change only, not observable).
 			const call = action.toolCall;
 			if (
 				call.name === "go" ||
@@ -762,7 +713,7 @@ export function dispatchAiTurn(
 				round,
 				tool: action.toolCall.name as
 					| "go"
-					| "look"
+					| "face"
 					| "pick_up"
 					| "put_down"
 					| "give"

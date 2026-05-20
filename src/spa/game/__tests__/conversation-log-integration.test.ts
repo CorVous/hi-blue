@@ -148,8 +148,8 @@ describe("conversation log integration — no ## Whispers Received ever", () => 
 				toolCalls: [
 					{
 						id: "tc1",
-						name: "look",
-						argumentsJson: JSON.stringify({ direction: "forward" }),
+						name: "face",
+						argumentsJson: JSON.stringify({ direction: "left" }),
 					},
 				],
 			}, // cyan
@@ -223,11 +223,11 @@ describe("conversation log integration — witnessed pick_up", () => {
 				toolCalls: [
 					{
 						id: "tc0",
-						name: "look",
+						name: "face",
 						argumentsJson: JSON.stringify({ direction: "back" }),
 					},
 				],
-			}, // cyan looks north
+			}, // cyan faces north
 		]);
 		const { nextState: setup } = await runRound(
 			game,
@@ -386,7 +386,7 @@ describe("conversation log integration — put_down placementFlavor", () => {
 				toolCalls: [
 					{
 						id: "tc2g",
-						name: "look",
+						name: "face",
 						argumentsJson: JSON.stringify({ direction: "right" }),
 					},
 				],

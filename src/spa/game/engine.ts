@@ -5,6 +5,7 @@ import {
 	carryPairs,
 	interestingObjects,
 	obstacles,
+	standaloneObjectives,
 } from "./pack-selectors.js";
 import type {
 	ActiveComplication,
@@ -78,6 +79,7 @@ export function startGame(
 		...carryPairs(contentPack).flatMap((pair) => [pair.object, pair.space]),
 		...boundSpaces(contentPack),
 		...interestingObjects(contentPack),
+		...standaloneObjectives(contentPack),
 		...obstacles(contentPack),
 	];
 

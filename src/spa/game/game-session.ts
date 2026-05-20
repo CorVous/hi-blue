@@ -50,6 +50,14 @@ export class GameSession {
 	 * include a `<whats_new>` diff. Empty until the first round completes.
 	 */
 	private coneSnapshots: Partial<Record<AiId, string>> = {};
+	/**
+	 * Per-AI structured entity perception state captured during the last round's prompt
+	 * build. Fed back into runRound so the next round's per-AI user message can
+	 * emit perception-delta lines (first-sight, departure, transition). Empty until the first round completes.
+	 */
+	private coneEntities: Partial<
+		Record<AiId, Record<string, { inCone: boolean; satisfied: boolean }>>
+	> = {};
 
 	constructor(
 		contentPack: ContentPack,
@@ -89,6 +97,7 @@ export class GameSession {
 		session.state = state;
 		session.toolRoundtrip = {};
 		session.coneSnapshots = {};
+		session.coneEntities = {};
 		return session;
 	}
 
@@ -133,6 +142,7 @@ export class GameSession {
 			result,
 			toolRoundtrip: newToolRoundtrip,
 			coneSnapshots: newConeSnapshots,
+			coneEntities: newConeEntities,
 		} = await runRound(
 			this.state,
 			addressed,
@@ -146,6 +156,7 @@ export class GameSession {
 			this.coneSnapshots,
 			onAiTurnComplete,
 			onLifecycle,
+			this.coneEntities,
 		);
 
 		// Fill in empty string for AIs whose completions weren't captured
@@ -169,6 +180,12 @@ export class GameSession {
 		// the diff resumes cleanly when the lockout lifts.
 		for (const [aiId, snap] of Object.entries(newConeSnapshots)) {
 			this.coneSnapshots[aiId as AiId] = snap;
+		}
+		// Replace cone entities with this round's captures. Locked-out AIs
+		// don't appear in newConeEntities — they keep their prior state so
+		// perception-delta lines resume cleanly when the lockout lifts.
+		for (const [aiId, entities] of Object.entries(newConeEntities)) {
+			this.coneEntities[aiId as AiId] = entities;
 		}
 
 		return { result, completions, nextState };

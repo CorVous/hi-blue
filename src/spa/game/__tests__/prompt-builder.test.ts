@@ -8,7 +8,9 @@ import {
 import { buildOpenAiMessages } from "../openai-message-builder";
 import {
 	buildAiContext,
+	buildConeEntityState,
 	buildConeSnapshot,
+	renderPerceptionDelta,
 	renderWhatsNew,
 } from "../prompt-builder";
 import type { AiPersona, ContentPack, WorldEntity } from "../types";
@@ -1711,6 +1713,389 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			"proximity: The place emanates a strange presence, drawing you forward.",
 		);
 	});
+
+	// ─ Auto-emit examineDescription for held items (issue #467) ─
+	describe("auto-emit examineDescription for held items (issue #467)", () => {
+		it("emits examineDescription for a single held item", () => {
+			// red holds a switch
+			const item: WorldEntity = {
+				id: "switch",
+				kind: "interesting_object",
+				name: "brass switch",
+				examineDescription: "A small brass switch ready to be pressed.",
+				holder: "red",
+			};
+			const pack = makeTestPack([item], {
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS,
+			});
+			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// Examine description should appear as an indented continuation
+			expect(stateMsg).toContain(
+				"brass switch: A small brass switch ready to be pressed.",
+			);
+		});
+
+		it("emits examineDescription for multiple held items", () => {
+			// red holds two items
+			const switch_item: WorldEntity = {
+				id: "switch",
+				kind: "interesting_object",
+				name: "brass switch",
+				examineDescription: "A small brass switch ready to be pressed.",
+				holder: "red",
+			};
+			const key_item: WorldEntity = {
+				id: "key",
+				kind: "interesting_object",
+				name: "blue key",
+				examineDescription: "A worn brass key.",
+				holder: "red",
+			};
+			const pack = makeTestPack([switch_item, key_item], {
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS,
+			});
+			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// Both descriptions should appear
+			expect(stateMsg).toContain(
+				"brass switch: A small brass switch ready to be pressed.",
+			);
+			expect(stateMsg).toContain("blue key: A worn brass key.");
+		});
+
+		it("uses postExamineDescription when held item is satisfied", () => {
+			// red holds an item that is satisfied
+			const item: WorldEntity = {
+				id: "switch",
+				kind: "interesting_object",
+				name: "brass switch",
+				examineDescription: "A small brass switch ready to be pressed.",
+				postExamineDescription: "The switch is now activated.",
+				holder: "red",
+				satisfactionState: "satisfied",
+			};
+			const pack = makeTestPack([item], {
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS,
+			});
+			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// postExamineDescription should be emitted, not examineDescription
+			expect(stateMsg).toContain("brass switch: The switch is now activated.");
+			expect(stateMsg).not.toContain(
+				"brass switch: A small brass switch ready to be pressed.",
+			);
+		});
+
+		it("falls back to examineDescription when held item is satisfied but no postExamineDescription", () => {
+			// red holds an item that is satisfied but has no postExamineDescription
+			const item: WorldEntity = {
+				id: "switch",
+				kind: "interesting_object",
+				name: "brass switch",
+				examineDescription: "A small brass switch ready to be pressed.",
+				holder: "red",
+				satisfactionState: "satisfied",
+				// no postExamineDescription property
+			};
+			const pack = makeTestPack([item], {
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS,
+			});
+			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// Should fall back to examineDescription
+			expect(stateMsg).toContain(
+				"brass switch: A small brass switch ready to be pressed.",
+			);
+		});
+
+		it("'holding nothing' branch unchanged (no sub-lines emitted)", () => {
+			const pack = makeTestPack([], {
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS,
+			});
+			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// Should have exactly "You are holding: nothing" with no sub-lines
+			expect(stateMsg).toContain("You are holding: nothing");
+		});
+
+		it("skips held items with empty examineDescription", () => {
+			// red holds an item with empty examineDescription
+			const item: WorldEntity = {
+				id: "mystery",
+				kind: "interesting_object",
+				name: "mystery object",
+				examineDescription: "", // empty
+				holder: "red",
+			};
+			const pack = makeTestPack([item], {
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS,
+			});
+			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// Should have the summary line but no indented sub-line
+			expect(stateMsg).toContain("You are holding: mystery object");
+			expect(stateMsg).not.toContain("mystery object: ");
+		});
+
+		it("held-item descriptions appear under <where_you_are>, not <what_you_see>", () => {
+			// red holds an item
+			const item: WorldEntity = {
+				id: "switch",
+				kind: "interesting_object",
+				name: "brass switch",
+				examineDescription: "A small brass switch ready to be pressed.",
+				holder: "red",
+			};
+			const pack = makeTestPack([item], {
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS,
+			});
+			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// Split by tags
+			const whereStart = stateMsg.indexOf("<where_you_are>");
+			const whereEnd = stateMsg.indexOf("</where_you_are>");
+			const whatStart = stateMsg.indexOf("<what_you_see>");
+			const whatEnd = stateMsg.indexOf("</what_you_see>");
+			const whereSection = stateMsg.substring(whereStart, whereEnd);
+			const whatSection = stateMsg.substring(whatStart, whatEnd);
+			// Description should appear in where_you_are
+			expect(whereSection).toContain(
+				"brass switch: A small brass switch ready to be pressed.",
+			);
+			// Should NOT appear in what_you_see
+			expect(whatSection).not.toContain(
+				"brass switch: A small brass switch ready to be pressed.",
+			);
+		});
+	});
+
+	// ─ Auto-emit examineDescription tests (issue #466) ─
+	describe("auto-emit examineDescription for entities in cone (issue #466)", () => {
+		it("emits examineDescription for interesting_object in cone", () => {
+			// red at (0,0) facing south; switch at (1,0) = directly in front
+			const item: WorldEntity = {
+				id: "switch",
+				kind: "interesting_object",
+				name: "brass switch",
+				examineDescription: "A small brass switch ready to be pressed.",
+				holder: { row: 1, col: 0 },
+			};
+			const pack = makeTestPack([item], {
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS_RED_SOUTH,
+			});
+			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// Examine description should appear as an indented continuation
+			expect(stateMsg).toContain(
+				"brass switch: A small brass switch ready to be pressed.",
+			);
+		});
+
+		it("emits examineDescription for obstacle in cone", () => {
+			// red at (0,0) facing south; obstacle at (1,0) = directly in front
+			const obstacle: WorldEntity = {
+				id: "col1",
+				kind: "obstacle",
+				name: "stone column",
+				examineDescription: "A weathered stone column, ancient and sturdy.",
+				holder: { row: 1, col: 0 },
+			};
+			const pack = makeTestPack([obstacle], {
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS_RED_SOUTH,
+			});
+			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// Examine description should appear for obstacle too
+			expect(stateMsg).toContain(
+				"stone column: A weathered stone column, ancient and sturdy.",
+			);
+		});
+
+		it("uses postExamineDescription when entity is satisfied", () => {
+			// red at (0,0) facing south; space at (1,0) = directly in front
+			const space: WorldEntity = {
+				id: "pedestal",
+				kind: "objective_space",
+				name: "Pedestal",
+				examineDescription: "A brass pedestal.",
+				postExamineDescription: "The pedestal glows softly now.",
+				holder: { row: 1, col: 0 },
+				satisfactionState: "satisfied" as const,
+			};
+			const pack = makeTestPack([], {
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS_RED_SOUTH,
+			});
+			let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			game = {
+				...game,
+				world: { ...game.world, entities: [space] },
+			};
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// postExamineDescription should be emitted, not examineDescription
+			expect(stateMsg).toContain("Pedestal: The pedestal glows softly now.");
+			expect(stateMsg).not.toContain("Pedestal: A brass pedestal.");
+		});
+
+		it("falls back to examineDescription when satisfied but no postExamineDescription", () => {
+			// red at (0,0) facing south; space at (1,0) = directly in front
+			const space: WorldEntity = {
+				id: "pedestal",
+				kind: "objective_space",
+				name: "Pedestal",
+				examineDescription: "A brass pedestal.",
+				holder: { row: 1, col: 0 },
+				satisfactionState: "satisfied" as const,
+				// no postExamineDescription property
+			};
+			const pack = makeTestPack([], {
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS_RED_SOUTH,
+			});
+			let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			game = {
+				...game,
+				world: { ...game.world, entities: [space] },
+			};
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// Should fall back to examineDescription when postExamineDescription is absent
+			expect(stateMsg).toContain("Pedestal: A brass pedestal.");
+		});
+
+		it("does NOT emit examineDescription for entity in own cell", () => {
+			// red at (0,0) facing south; item at (0,0) = own cell
+			const item: WorldEntity = {
+				id: "switch",
+				kind: "interesting_object",
+				name: "brass switch",
+				examineDescription: "A small brass switch ready to be pressed.",
+				holder: { row: 0, col: 0 }, // own cell
+			};
+			const pack = makeTestPack([item], {
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS_RED_SOUTH,
+			});
+			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// Own cell entities should NOT appear under <what_you_see>, only in "Your cell contains"
+			const whatYouSeeBlock = stateMsg.split("<what_you_see>")[1];
+			expect(whatYouSeeBlock).not.toContain(
+				"A small brass switch ready to be pressed.",
+			);
+		});
+
+		it("does NOT emit examineDescription for entity held by actor", () => {
+			// red holds the switch
+			const item: WorldEntity = {
+				id: "switch",
+				kind: "interesting_object",
+				name: "brass switch",
+				examineDescription: "A small brass switch ready to be pressed.",
+				holder: "red", // held by actor
+			};
+			const pack = makeTestPack([item], {
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS_RED_SOUTH,
+			});
+			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// Held-by-actor items should NOT appear under <what_you_see>
+			const whatYouSeeBlock = stateMsg.split("<what_you_see>")[1];
+			expect(whatYouSeeBlock).not.toContain(
+				"brass switch: A small brass switch ready to be pressed.",
+			);
+		});
+
+		it("wall sentinels still render correctly", () => {
+			// red at (0,0) facing north (cone goes north, into OOB)
+			const pack = makeTestPack([], {
+				wallName: "boundary wall",
+				aiStarts: RGC_AI_STARTS, // red faces north by default
+			});
+			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// OOB cells should still render as walls
+			expect(stateMsg).toContain("boundary wall");
+		});
+
+		it("skips entities with empty examineDescription", () => {
+			// Create entity with empty examineDescription
+			const item: WorldEntity = {
+				id: "empty_item",
+				kind: "interesting_object",
+				name: "mystery object",
+				examineDescription: "", // empty
+				holder: { row: 1, col: 0 },
+			};
+			const pack = makeTestPack([item], {
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS_RED_SOUTH,
+			});
+			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// Empty description should not produce an indented line
+			expect(stateMsg).not.toContain("mystery object: ");
+		});
+
+		it("emits examineDescription every turn while entity is in range", () => {
+			// red at (0,0) facing south; switch at (1,0) = directly in front
+			const item: WorldEntity = {
+				id: "switch",
+				kind: "interesting_object",
+				name: "brass switch",
+				examineDescription: "A small brass switch ready to be pressed.",
+				holder: { row: 1, col: 0 },
+			};
+			const pack = makeTestPack([item], {
+				wallName: "wall",
+				aiStarts: RGC_AI_STARTS_RED_SOUTH,
+			});
+			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			const ctx1 = buildAiContext(game, "red");
+			const stateMsg1 = ctx1.toCurrentStateUserMessage();
+			// First turn: description appears
+			expect(stateMsg1).toContain(
+				"brass switch: A small brass switch ready to be pressed.",
+			);
+
+			// Second turn (no-op advance, item still in same place): description appears again
+			const game2 = {
+				...game,
+				round: game.round + 1,
+			};
+			const ctx2 = buildAiContext(game2, "red");
+			const stateMsg2 = ctx2.toCurrentStateUserMessage();
+			// Description should appear again (no dedup)
+			expect(stateMsg2).toContain(
+				"brass switch: A small brass switch ready to be pressed.",
+			);
+		});
+	});
 });
 
 describe("<whats_new> broadcast announcements", () => {
@@ -2008,5 +2393,428 @@ describe("<whats_new> wall diff (issue #374)", () => {
 		const snap = buildConeSnapshot(ctx);
 		expect(snap).toContain("laboratory bulkhead");
 		expect(snap).not.toContain("concrete platform wall");
+	});
+});
+
+// ============================================================================
+// buildConeEntityState and renderPerceptionDelta tests (issue #469)
+// ============================================================================
+
+describe("buildConeEntityState", () => {
+	it("returns item in cone with unsatisfied state when at a cone cell", () => {
+		// red at (0,0) facing south; item at (1,0) is directly in front
+		const pack = makeTestPack(
+			[
+				{
+					id: "item-cone",
+					kind: "interesting_object",
+					name: "Item in cone",
+					examineDescription: "An item",
+					holder: { row: 1, col: 0 },
+				},
+			],
+			{
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 0, col: 0 }, facing: "south" },
+					green: { position: { row: 0, col: 1 }, facing: "north" },
+					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				},
+			},
+		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const ctx = buildAiContext(game, "red");
+		const state = buildConeEntityState(ctx);
+		expect(state["item-cone"]).toEqual({ inCone: true, satisfied: false });
+	});
+
+	it("returns item with satisfied state when satisfaction state is satisfied", () => {
+		const pack = makeTestPack(
+			[
+				{
+					id: "satisfied-item",
+					kind: "objective_object",
+					name: "Satisfied Item",
+					examineDescription: "Before",
+					postExamineDescription: "After",
+					holder: { row: 1, col: 0 },
+					satisfactionState: "satisfied" as const,
+				},
+			],
+			{
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 0, col: 0 }, facing: "south" },
+					green: { position: { row: 0, col: 1 }, facing: "north" },
+					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				},
+			},
+		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const ctx = buildAiContext(game, "red");
+		const state = buildConeEntityState(ctx);
+		expect(state["satisfied-item"]).toEqual({ inCone: true, satisfied: true });
+	});
+
+	it("excludes items held by the actor", () => {
+		const pack = makeTestPack(
+			[
+				{
+					id: "held-item",
+					kind: "interesting_object",
+					name: "Held Item",
+					examineDescription: "An item",
+					holder: "red",
+				},
+			],
+			{
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 0, col: 0 }, facing: "south" },
+					green: { position: { row: 0, col: 1 }, facing: "north" },
+					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				},
+			},
+		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const ctx = buildAiContext(game, "red");
+		const state = buildConeEntityState(ctx);
+		expect(state["held-item"]).toBeUndefined();
+	});
+
+	it("excludes items beyond the cone", () => {
+		// red at (0,0) facing south; place item far away
+		const pack = makeTestPack(
+			[
+				{
+					id: "far-item",
+					kind: "interesting_object",
+					name: "Far Item",
+					examineDescription: "An item",
+					holder: { row: 10, col: 10 },
+				},
+			],
+			{
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 0, col: 0 }, facing: "south" },
+					green: { position: { row: 0, col: 1 }, facing: "north" },
+					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				},
+			},
+		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const ctx = buildAiContext(game, "red");
+		const state = buildConeEntityState(ctx);
+		expect(state["far-item"]).toBeUndefined();
+	});
+
+	it("includes other personas in the cone", () => {
+		// red at (0,0) facing south, green at (1,0) — green is directly in front
+		const pack = makeTestPack([], {
+			wallName: "wall",
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "south" },
+				green: { position: { row: 1, col: 0 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
+			},
+		});
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const ctx = buildAiContext(game, "red");
+		const state = buildConeEntityState(ctx);
+		expect(state["green"]).toEqual({ inCone: true, satisfied: false });
+	});
+
+	it("includes objective spaces in the cone", () => {
+		const pack = makeTestPack(
+			[
+				{
+					id: "flower_space",
+					kind: "objective_space",
+					name: "Flower Space",
+					examineDescription: "A space",
+					holder: { row: 1, col: 0 },
+				},
+			],
+			{
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 0, col: 0 }, facing: "south" },
+					green: { position: { row: 0, col: 1 }, facing: "north" },
+					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				},
+			},
+		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const ctx = buildAiContext(game, "red");
+		const state = buildConeEntityState(ctx);
+		expect(state["flower_space"]).toEqual({ inCone: true, satisfied: false });
+	});
+});
+
+describe("renderPerceptionDelta", () => {
+	it("returns empty array when no prior entities", () => {
+		const pack = makeTestPack([], {
+			wallName: "wall",
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "south" },
+				green: { position: { row: 0, col: 1 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
+			},
+		});
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const ctx = buildAiContext(game, "red");
+		const delta = renderPerceptionDelta(ctx, undefined);
+		expect(delta).toEqual([]);
+	});
+
+	it("emits 'Came into view' when entity enters cone", () => {
+		const pack = makeTestPack(
+			[
+				{
+					id: "new-item",
+					kind: "interesting_object",
+					name: "Shiny Object",
+					examineDescription: "It gleams.",
+					holder: { row: 1, col: 0 },
+				},
+			],
+			{
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 0, col: 0 }, facing: "south" },
+					green: { position: { row: 0, col: 1 }, facing: "north" },
+					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				},
+			},
+		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const ctx = buildAiContext(game, "red");
+		const delta = renderPerceptionDelta(ctx, {});
+		expect(delta).toContain("Came into view: Shiny Object — It gleams.");
+	});
+
+	it("emits 'Came into view' with postExamineDescription when entity enters satisfied", () => {
+		const pack = makeTestPack(
+			[
+				{
+					id: "satisfied-new",
+					kind: "objective_object",
+					name: "Glowing Gem",
+					examineDescription: "A gem",
+					postExamineDescription: "It shines brilliantly.",
+					holder: { row: 1, col: 0 },
+					satisfactionState: "satisfied" as const,
+				},
+			],
+			{
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 0, col: 0 }, facing: "south" },
+					green: { position: { row: 0, col: 1 }, facing: "north" },
+					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				},
+			},
+		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const ctx = buildAiContext(game, "red");
+		const delta = renderPerceptionDelta(ctx, {});
+		expect(delta).toContain(
+			"Came into view: Glowing Gem — It shines brilliantly.",
+		);
+	});
+
+	it("emits 'Lost from view' when entity leaves cone", () => {
+		const pack = makeTestPack(
+			[
+				{
+					id: "departing-item",
+					kind: "interesting_object",
+					name: "Vanishing Item",
+					examineDescription: "It fades.",
+					holder: { row: 1, col: 0 },
+				},
+			],
+			{
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 0, col: 0 }, facing: "north" },
+					green: { position: { row: 0, col: 1 }, facing: "north" },
+					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				},
+			},
+		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const ctx = buildAiContext(game, "red");
+		// Item was in cone before (when red was facing south)
+		const prevEntities = {
+			"departing-item": { inCone: true, satisfied: false },
+		};
+		const delta = renderPerceptionDelta(ctx, prevEntities);
+		expect(delta).toContain("Lost from view: Vanishing Item");
+	});
+
+	it("emits satisfaction transition line when entity becomes satisfied", () => {
+		const pack = makeTestPack(
+			[
+				{
+					id: "became-satisfied",
+					kind: "objective_object",
+					name: "Awakening Stone",
+					examineDescription: "Dormant",
+					postExamineDescription: "Radiant",
+					holder: { row: 1, col: 0 }, // Directly in front (facing south)
+					satisfactionState: "satisfied" as const,
+				},
+			],
+			{
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 0, col: 0 }, facing: "south" },
+					green: { position: { row: 0, col: 1 }, facing: "north" },
+					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				},
+			},
+		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const ctx = buildAiContext(game, "red");
+		// Item was in cone but not satisfied before
+		const prevEntities = {
+			"became-satisfied": { inCone: true, satisfied: false },
+		};
+		const delta = renderPerceptionDelta(ctx, prevEntities);
+		expect(delta).toContain("Awakening Stone is now Radiant");
+	});
+
+	it("does not emit line when entity stays in cone unchanged", () => {
+		const pack = makeTestPack(
+			[
+				{
+					id: "static-item",
+					kind: "interesting_object",
+					name: "Static Item",
+					examineDescription: "Unmoved",
+					holder: { row: 1, col: 0 }, // Directly in front of red (facing south)
+				},
+			],
+			{
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 0, col: 0 }, facing: "south" },
+					green: { position: { row: 0, col: 1 }, facing: "north" },
+					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				},
+			},
+		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const ctx = buildAiContext(game, "red");
+		const prevEntities = { "static-item": { inCone: true, satisfied: false } };
+		const delta = renderPerceptionDelta(ctx, prevEntities);
+		expect(delta).toHaveLength(0);
+	});
+
+	it("suppresses departure line when entity is picked up by actor", () => {
+		const pack = makeTestPack(
+			[
+				{
+					id: "picked-up",
+					kind: "interesting_object",
+					name: "Picked Item",
+					examineDescription: "On ground",
+					holder: "red", // Held by red
+				},
+			],
+			{
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 0, col: 0 }, facing: "south" },
+					green: { position: { row: 0, col: 1 }, facing: "north" },
+					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				},
+			},
+		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const ctx = buildAiContext(game, "red");
+		// Item was in cone before (at a grid position)
+		const prevEntities = { "picked-up": { inCone: true, satisfied: false } };
+		const delta = renderPerceptionDelta(ctx, prevEntities);
+		expect(delta).toHaveLength(0); // No departure line
+	});
+
+	it("emits persona first-sight with name only, no flavor", () => {
+		// green at (1,0), visible to red at (0,0) facing south (directly in front)
+		const pack = makeTestPack([], {
+			wallName: "wall",
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "south" },
+				green: { position: { row: 1, col: 0 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
+			},
+		});
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const ctx = buildAiContext(game, "red");
+		const prevEntities = {}; // green was not in cone before
+		const delta = renderPerceptionDelta(ctx, prevEntities);
+		const greenLine = delta.find((line) => line.includes("Sage"));
+		expect(greenLine).toBe("Came into view: Sage");
+	});
+
+	it("emits persona departure with name only, no flavor", () => {
+		// green at (1,0), not visible to red at (0,0) facing north
+		// But prevEntities says green WAS in cone before
+		const pack = makeTestPack([], {
+			wallName: "wall",
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "north" },
+				green: { position: { row: 1, col: 0 }, facing: "north" },
+				cyan: { position: { row: 0, col: 2 }, facing: "north" },
+			},
+		});
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const ctx = buildAiContext(game, "red");
+		// Green was in cone before (when red was facing south)
+		const prevEntities = { green: { inCone: true, satisfied: false } };
+		const delta = renderPerceptionDelta(ctx, prevEntities);
+		const greenLine = delta.find((line) => line.includes("Sage"));
+		expect(greenLine).toBe("Lost from view: Sage");
+	});
+
+	it("does not emit both first-sight and transition for newly satisfied entity", () => {
+		const pack = makeTestPack(
+			[
+				{
+					id: "gem",
+					kind: "interesting_object",
+					name: "Fresh Gem",
+					examineDescription: "Dormant gem",
+					postExamineDescription: "Brilliant gem",
+					holder: { row: 0, col: 1 },
+					satisfactionState: "satisfied" as const,
+				},
+			],
+			{
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 0, col: 0 }, facing: "east" },
+					green: { position: { row: 0, col: 1 }, facing: "north" },
+					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				},
+			},
+		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const ctx = buildAiContext(game, "red");
+		// Gem and green were both in cone before, gem unsatisfied
+		const prevEntities = {
+			gem: { inCone: true, satisfied: false },
+			green: { inCone: true, satisfied: false },
+		};
+		const delta = renderPerceptionDelta(ctx, prevEntities);
+		// Should emit only transition line for gem, not "Came into view" (to avoid duplication)
+		const transitionLine = delta.find((line) => line.includes("is now"));
+		const entryLine = delta.find(
+			(line) => line.includes("Came into view") && line.includes("Gem"),
+		);
+		expect(transitionLine).toBe("Fresh Gem is now Brilliant gem");
+		expect(entryLine).toBeUndefined();
 	});
 });
