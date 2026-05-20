@@ -299,12 +299,11 @@ export interface PhysicalActionRecord {
 /**
  * A single tagged item inside a Daemon's conversation log.
  *
- * Discriminated union of four kinds — `message`, `witnessed-event`, `action-failure`,
- * `broadcast` — each carrying a `round` and the smallest payload needed to render its
- * line in the system prompt. This is the per-Daemon storage shape *and* the
- * prompt-rendered shape (per CONTEXT.md's `Conversation log` glossary entry). The `kind`
- * tag is chosen so a player editing a `*xxxx.txt` file in devtools can tell entry kinds
- * apart at a glance.
+ * Discriminated union of seven kinds — each carrying a `round` and the smallest
+ * payload needed to render its line in the system prompt. This is the per-Daemon
+ * storage shape *and* the prompt-rendered shape (per CONTEXT.md's `Conversation log`
+ * glossary entry). The `kind` tag is chosen so a player editing a `*xxxx.txt` file in
+ * devtools can tell entry kinds apart at a glance.
  *
  * - `message`: a directional message from `from: AiId | "blue" | "sysadmin"` to `to: AiId | "blue"`.
  *   Both sender's and recipient's per-Daemon logs receive the same entry. `"sysadmin"` is a
@@ -318,6 +317,13 @@ export interface PhysicalActionRecord {
  *   Daemons do not repeat the same failed action (e.g. walking into a wall) indefinitely.
  * - `broadcast`: sender-less system announcement appended to ALL three Daemon logs at once
  *   (e.g. a weather change complication). Has no `from` / `to` fields.
+ * - `tool-call`: the actor's own tool call plus its result, re-injected into the next round's
+ *   messages array per the OpenAI tool-use protocol. Carries an optional `coneDelta` capturing
+ *   new perception revealed by a `go`/`face`.
+ * - `witnessed-obstacle-shift`: fanned out to Daemons whose cone covered the obstacle's origin
+ *   cell when an obstacle_shift complication fired; carries the obstacle's `shiftFlavor`.
+ * - `witnessed-convergence`: the tiered flavor line for a Convergence Objective space; `audience`
+ *   distinguishes the actor (standing on the space) from a witness (cone covered it).
  */
 export type ConversationEntry =
 	| {
