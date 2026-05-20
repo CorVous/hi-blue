@@ -34,7 +34,6 @@ import type {
 export const DISABLABLE_TOOLS: ToolName[] = [
 	"pick_up",
 	"put_down",
-	"give",
 	"use",
 	"go",
 	"face",

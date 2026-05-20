@@ -2,12 +2,11 @@ import { describe, expect, it } from "vitest";
 import { parseToolCallArguments, TOOL_DEFINITIONS } from "../tool-registry";
 
 describe("TOOL_DEFINITIONS", () => {
-	it("lists exactly seven tools: pick_up, put_down, give, use, go, face, message", () => {
+	it("lists exactly six tools: pick_up, put_down, use, go, face, message", () => {
 		const names = TOOL_DEFINITIONS.map((t) => t.function.name);
 		expect(names).toEqual([
 			"pick_up",
 			"put_down",
-			"give",
 			"use",
 			"go",
 			"face",
@@ -40,18 +39,6 @@ describe("TOOL_DEFINITIONS", () => {
 	it("pick_up requires 'item'", () => {
 		const pickUp = TOOL_DEFINITIONS.find((t) => t.function.name === "pick_up");
 		expect(pickUp?.function.parameters.required).toContain("item");
-	});
-
-	it("give requires 'item' and 'to'", () => {
-		const give = TOOL_DEFINITIONS.find((t) => t.function.name === "give");
-		expect(give?.function.parameters.required).toContain("item");
-		expect(give?.function.parameters.required).toContain("to");
-	});
-
-	it("give.to has no enum constraint (accepts any AI id string)", () => {
-		const give = TOOL_DEFINITIONS.find((t) => t.function.name === "give");
-		expect(give?.function.parameters.properties.to?.enum).toBeUndefined();
-		expect(give?.function.parameters.properties.to?.type).toBe("string");
 	});
 
 	it("go requires 'direction'", () => {
@@ -94,17 +81,6 @@ describe("parseToolCallArguments", () => {
 		}
 	});
 
-	it("parses valid give arguments", () => {
-		const result = parseToolCallArguments(
-			"give",
-			'{"item":"flower","to":"cyan"}',
-		);
-		expect(result.ok).toBe(true);
-		if (result.ok) {
-			expect(result.args).toEqual({ item: "flower", to: "cyan" });
-		}
-	});
-
 	it("parses valid put_down arguments", () => {
 		const result = parseToolCallArguments("put_down", '{"item":"key"}');
 		expect(result.ok).toBe(true);
@@ -139,41 +115,6 @@ describe("parseToolCallArguments", () => {
 
 	it("returns ok:false with /required/i reason when 'item' is missing for pick_up", () => {
 		const result = parseToolCallArguments("pick_up", "{}");
-		expect(result.ok).toBe(false);
-		if (!result.ok) {
-			expect(result.reason).toMatch(/required/i);
-		}
-	});
-
-	it("returns ok:false with /required/i reason when 'to' is missing for give", () => {
-		const result = parseToolCallArguments("give", '{"item":"flower"}');
-		expect(result.ok).toBe(false);
-		if (!result.ok) {
-			expect(result.reason).toMatch(/required/i);
-		}
-	});
-
-	it("returns ok:false with /required/i reason when 'item' is missing for give", () => {
-		const result = parseToolCallArguments("give", '{"to":"cyan"}');
-		expect(result.ok).toBe(false);
-		if (!result.ok) {
-			expect(result.reason).toMatch(/required/i);
-		}
-	});
-
-	it("strips a leading '*' from give.to (conversation log renders ids as *foo)", () => {
-		const result = parseToolCallArguments(
-			"give",
-			'{"item":"flower","to":"*cyan"}',
-		);
-		expect(result.ok).toBe(true);
-		if (result.ok) {
-			expect(result.args).toEqual({ item: "flower", to: "cyan" });
-		}
-	});
-
-	it("returns ok:false when give.to is just '*' (empty after strip)", () => {
-		const result = parseToolCallArguments("give", '{"item":"flower","to":"*"}');
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
 			expect(result.reason).toMatch(/required/i);

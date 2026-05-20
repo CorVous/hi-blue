@@ -102,12 +102,6 @@ export function renderEntry(
 					return `[Round ${round}] You watch ${actorSub} put down the ${name}.`;
 				}
 
-				case "give": {
-					const name = entry.item ? itemName(entities, entry.item) : "item";
-					const toStr = entry.to === aiId ? "you" : `*${entry.to}`;
-					return `[Round ${round}] You watch ${actorSub} give the ${name} to ${toStr}.`;
-				}
-
 				case "use": {
 					if (entry.placementFlavorRaw) {
 						return `[Round ${round}] ${substituteActor(entry.placementFlavorRaw, actorSub)}`;

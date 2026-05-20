@@ -80,16 +80,6 @@ describe("parseToolCallDetail", () => {
 		}
 	});
 
-	it("extracts item and target from give", () => {
-		const detail = parseToolCallDetail({
-			id: "c6",
-			name: "give",
-			argumentsJson: '{"item":"key","to":"*3kw7"}',
-		});
-		expect(detail.item).toBe("key");
-		expect(detail.to).toBe("3kw7");
-	});
-
 	it("flags malformed JSON without throwing", () => {
 		const detail = parseToolCallDetail({
 			id: "c7",

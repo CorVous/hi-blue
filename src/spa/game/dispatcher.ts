@@ -71,7 +71,7 @@ function positionsEqual(a: GridPosition, b: GridPosition): boolean {
 	return a.row === b.row && a.col === b.col;
 }
 
-/** Filter entities to only those that can be picked up / put_down / given / used (not spaces or obstacles). */
+/** Filter entities to only those that can be picked up / put_down / used (not spaces or obstacles). */
 function pickableEntities(entities: WorldEntity[]): WorldEntity[] {
 	return entities.filter(
 		(e) => e.kind === "objective_object" || e.kind === "interesting_object",
@@ -137,41 +137,6 @@ export function validateToolCall(
 				return {
 					valid: false,
 					reason: `You are not holding "${call.args.item}"`,
-				};
-			return { valid: true };
-		}
-
-		case "give": {
-			const item = pickable.find((i) => i.id === call.args.item);
-			if (!item)
-				return {
-					valid: false,
-					reason: `Item "${call.args.item}" does not exist`,
-				};
-			if (item.holder !== aiId)
-				return {
-					valid: false,
-					reason: `You are not holding "${call.args.item}"`,
-				};
-			const target = call.args.to as AiId;
-			if (target === aiId)
-				return { valid: false, reason: "Cannot give an item to yourself" };
-			// Spatial validity: target AI must be in actor's own cell or front arc
-			const targetSpatial = game.personaSpatial[target];
-			if (!actorSpatial || !targetSpatial)
-				return {
-					valid: false,
-					reason: "Spatial state missing for actor or target",
-				};
-			const targetReachable =
-				positionsEqual(actorSpatial.position, targetSpatial.position) ||
-				frontArc(actorSpatial.position, actorSpatial.facing).some((p) =>
-					positionsEqual(p, targetSpatial.position),
-				);
-			if (!targetReachable)
-				return {
-					valid: false,
-					reason: `${target} is not in your cell or directly in front of you`,
 				};
 			return { valid: true };
 		}
@@ -292,9 +257,6 @@ export function executeToolCall(
 				// Fallback: no spatial state — drop at (0,0)
 				target.holder = { row: 0, col: 0 };
 			}
-			break;
-		case "give":
-			if (target) target.holder = call.args.to as AiId;
 			break;
 		case "use": {
 			// Check if the target is an objective_space (use-space flow)
@@ -426,8 +388,6 @@ function describeToolCall(game: GameState, aiId: AiId, call: ToolCall): string {
 			return `${name} picked up the ${call.args.item}`;
 		case "put_down":
 			return `${name} put down the ${call.args.item}`;
-		case "give":
-			return `${name} gave the ${call.args.item} to ${game.personas[call.args.to as AiId]?.name ?? call.args.to}`;
 		case "use": {
 			// Check if the target is an objective_space — surface its activationFlavor
 			// (the actor's moment-of-satisfaction line) and fall back to useOutcome
@@ -590,7 +550,6 @@ export function dispatchAiTurn(
 				call.name === "go" ||
 				call.name === "pick_up" ||
 				call.name === "put_down" ||
-				call.name === "give" ||
 				call.name === "use"
 			) {
 				// Post-execute spatial state — actor has moved for "go", others are unchanged
@@ -650,9 +609,6 @@ export function dispatchAiTurn(
 						kind: call.name,
 						witnessSpatial,
 						...(call.args.item !== undefined ? { item: call.args.item } : {}),
-						...(call.name === "give" && call.args.to !== undefined
-							? { to: call.args.to as AiId }
-							: {}),
 						...(call.name === "go"
 							? {
 									// Store resolved cardinal direction (actorFacingAtAction is post-move facing = direction walked)
@@ -686,7 +642,6 @@ export function dispatchAiTurn(
 							...(physRecord.item !== undefined
 								? { item: physRecord.item }
 								: {}),
-							...(physRecord.to !== undefined ? { to: physRecord.to } : {}),
 							...(physRecord.direction !== undefined
 								? { direction: physRecord.direction }
 								: {}),
@@ -716,7 +671,6 @@ export function dispatchAiTurn(
 					| "face"
 					| "pick_up"
 					| "put_down"
-					| "give"
 					| "use",
 				reason: validation.reason ?? "rejected",
 			});
