@@ -29,9 +29,14 @@ someone else's writeup.
 - **`src/spa/game/prompt-builder.ts`** — the file that assembles each
   daemon's system prompt every round. Read this if any hypothesis touches
   what a daemon knows or sees.
-- **`src/spa/game/objective-pool.ts`** — the four-type Objective pool and
-  the per-type satisfaction predicates. Pair with
-  `src/spa/game/win-condition.ts` for the all-objectives-satisfied check.
+- **`src/spa/game/objective-type-roll.ts`** — draws the game's three
+  Objective types (uniform, with replacement) from the four-type pool
+  (`OBJECTIVE_TYPES` in `src/spa/game/types.ts`).
+  **`src/spa/game/win-condition.ts`** holds the per-type satisfaction
+  predicates and the all-objectives-satisfied check;
+  **`src/spa/game/objective-record-builder.ts`** assembles the objective
+  records. The old `objective-pool.ts` was removed in the type-first
+  Objective authoring migration — see `docs/adr/0014-type-first-objective-authoring.md`.
 - **`src/spa/game/complications.ts`** and
   **`src/spa/game/complication-engine.ts`** — the six Complication types
   and the schedule that draws them.
@@ -48,8 +53,9 @@ someone else's writeup.
   `PHASE_*_CONFIG` constants have been removed.
 - **`/tmp/wrangler.log`** — the worker proxy log for this run. Now in
   bounds. Useful for confirming which tool calls a daemon actually fired
-  in a given round (look for `["pick_up","examine","message:0jmn"]`-style
-  entries).
+  in a given round (look for `["pick_up","face","message:0jmn"]`-style
+  entries — the daemon tool set is `pick_up`, `put_down`, `use`, `go`,
+  `face`, `message`).
 - **`/tmp/playtest-daemon.log`** — the Chromium driver log. Useful for
   debugging snapshot weirdness.
 
