@@ -122,19 +122,6 @@ const CONTENT_PACK_OBJECTIVE_TYPES: import("../types.js").ObjectiveType[] = [
 	"carry",
 ];
 
-/**
- * ContentPack with key held by red (for the non-adjacent give test).
- * Swap the single `interesting_object` entity (the key) for one held by red.
- */
-const CONTENT_PACK_KEY_HELD_BY_RED: ContentPack = {
-	...CONTENT_PACK_WITH_ITEMS,
-	entities: CONTENT_PACK_WITH_ITEMS.entities.map((e) =>
-		e.kind === "interesting_object" && e.id === "key"
-			? { ...e, holder: "red" as const }
-			: e,
-	),
-};
-
 function makePassProvider() {
 	return new MockRoundLLMProvider([
 		{ assistantText: "", toolCalls: [] },
@@ -642,38 +629,6 @@ describe("GameSession — spatial mechanics", () => {
 		const phase = session.getState();
 		expect(phase.personaSpatial.red?.position).toEqual({ row: 1, col: 0 });
 		expect(phase.personaSpatial.red?.facing).toBe("south");
-	});
-
-	it("non-adjacent give produces a tool_failure in result.actions", async () => {
-		// ContentPack: red→(0,0), green→(0,1), cyan→(0,2); key held by red
-		// red tries to give key to cyan (distance 2 — not adjacent)
-		const session = new GameSession(
-			CONTENT_PACK_KEY_HELD_BY_RED,
-			TEST_PERSONAS,
-		);
-
-		// red at (0,0), cyan at (0,2) → distance 2
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "give1",
-						name: "give",
-						argumentsJson: '{"item":"key","to":"cyan"}',
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
-		const { result } = await session.submitMessage("red", "hi", provider);
-
-		const failures = result.actions.filter((a) => a.kind === "tool_failure");
-		expect(failures.length).toBeGreaterThan(0);
-		// Key should still be held by red
-		const key = session.getState().world.entities.find((i) => i.id === "key");
-		expect(key?.holder).toBe("red");
 	});
 });
 

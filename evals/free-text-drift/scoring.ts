@@ -69,8 +69,6 @@ export interface ToolCallDetail {
 	content?: string;
 	/** For pick_up/put_down/use: the item id. */
 	item?: string;
-	/** For give: the receiving AiId. */
-	to?: AiId;
 	/** True when JSON.parse failed on `argumentsJson`. */
 	parseError?: boolean;
 }
@@ -126,11 +124,6 @@ export function parseToolCallDetail(tc: CapturedToolCall): ToolCallDetail {
 			if (typeof args.content === "string") {
 				detail.content = args.content;
 			}
-			break;
-		}
-		case "give": {
-			if (typeof args.item === "string") detail.item = args.item;
-			if (typeof args.to === "string") detail.to = stripStar(args.to) as AiId;
 			break;
 		}
 		case "pick_up":

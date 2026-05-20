@@ -68,8 +68,6 @@ effects in the snapshot):
 - `put_down(item)` — drop a held item in the daemon's current cell.
 - `examine(item)` — privately read the description of any item the daemon
   holds or can see anywhere in their 9-cell cone. Produces no witnessed event.
-- `give(item, recipient)` — hand an item to another daemon in the same cell
-  or front arc.
 - `use(item)` — fire a flavoured outcome string; if the item is a
   carry-objective item AND its paired space is in the daemon's cell or front
   arc, also place it on that space (one of the primary ways to satisfy a

@@ -2,7 +2,7 @@
  * Tool Registry
  *
  * Single source of truth for the OpenAI-spec `tools` array.
- * Declares one `function` per dispatcher tool: `pick_up`, `put_down`, `give`, `use`, `go`, `face`.
+ * Declares one `function` per dispatcher tool: `pick_up`, `put_down`, `use`, `go`, `face`.
  * Names and argument keys mirror `validateToolCall` in `dispatcher.ts` 1:1.
  */
 
@@ -63,30 +63,6 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 					},
 				},
 				required: ["item"],
-				additionalProperties: false,
-			},
-		},
-	},
-	{
-		type: "function",
-		function: {
-			name: "give",
-			description:
-				'Give an item you are holding to another AI. The target must be in your current cell or directly in front of you (the 3-cell front arc). Use this tool when you want to "hand", "pass", "deliver", "offer", or "hand over" an item to someone.',
-			parameters: {
-				type: "object",
-				properties: {
-					item: {
-						type: "string",
-						description: "The id of the item you are holding.",
-					},
-					to: {
-						type: "string",
-						description:
-							"The AI to give the item to (must be in an adjacent cell).",
-					},
-				},
-				required: ["item", "to"],
 				additionalProperties: false,
 			},
 		},
@@ -185,7 +161,6 @@ type ParseResult<T> = ParseSuccess<T> | ParseFailure;
 /** Argument shapes per tool */
 type PickUpArgs = { item: string };
 type PutDownArgs = { item: string };
-type GiveArgs = { item: string; to: string };
 type UseArgs = { item: string };
 type GoArgs = { direction: string };
 type FaceArgs = { direction: string };
@@ -194,7 +169,6 @@ type MessageArgs = { to: string; content: string };
 type ToolArgs = {
 	pick_up: PickUpArgs;
 	put_down: PutDownArgs;
-	give: GiveArgs;
 	use: UseArgs;
 	go: GoArgs;
 	face: FaceArgs;
@@ -232,24 +206,6 @@ export function parseToolCallArguments<N extends ToolName>(
 				return { ok: false, reason: "Required argument 'item' is missing" };
 			}
 			return { ok: true, args: { item: obj.item } as ToolArgs[N] };
-		}
-		case "give": {
-			if (typeof obj.item !== "string" || obj.item.length === 0) {
-				return { ok: false, reason: "Required argument 'item' is missing" };
-			}
-			if (typeof obj.to !== "string") {
-				return { ok: false, reason: "Required argument 'to' is missing" };
-			}
-			// Strip a leading `*` — the conversation log renders AI ids as `*foo`,
-			// and the model occasionally parrots that prefix into the structured arg.
-			const to = obj.to.startsWith("*") ? obj.to.slice(1) : obj.to;
-			if (to.length === 0) {
-				return { ok: false, reason: "Required argument 'to' is missing" };
-			}
-			return {
-				ok: true,
-				args: { item: obj.item, to } as ToolArgs[N],
-			};
 		}
 		case "go":
 		case "face": {

@@ -469,7 +469,6 @@ describe("toolDisableComplication", () => {
 		const toolNames = [
 			"pick_up",
 			"put_down",
-			"give",
 			"use",
 			"go",
 			"face",

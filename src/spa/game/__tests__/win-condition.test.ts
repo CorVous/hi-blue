@@ -494,16 +494,6 @@ describe("checkPlacementFlavor", () => {
 		expect(checkPlacementFlavor(action, pack, world)).toBeNull();
 	});
 
-	it("returns null for a give action", () => {
-		const pack = makeContentPack([]);
-		const world = makeWorld([]);
-		const action: AiTurnAction = {
-			aiId: "red",
-			toolCall: { name: "give", args: { item: "gem", to: "cyan" } },
-		};
-		expect(checkPlacementFlavor(action, pack, world)).toBeNull();
-	});
-
 	it("returns null when object is dropped on coords that coincide with a DIFFERENT pair's space", () => {
 		// objA.pairsWithSpaceId = "spcA" (at row 2, col 2)
 		// spcB is also at row 2, col 2 — same coords but wrong pair

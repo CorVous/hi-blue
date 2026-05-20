@@ -4,7 +4,7 @@
  * Computes the per-AI per-turn list of legal OpenAI tool definitions.
  * Filters out tools that are structurally impossible given the current
  * game state (empty item cell for pick_up, no held items for put_down/use,
- * no adjacent AI for give, no legal direction for go).
+ * no legal direction for go).
  *
  * `face` is always present with the 3-direction enum (excludes "forward", the current facing).
  */
@@ -107,8 +107,6 @@ function cloneToolWithEnums(
  *    Enum restricted to those entity ids.
  * 4. `put_down`, `use` — included only when actor holds at least one pickable entity.
  *    Enum restricted to held entity ids.
- * 5. `give` — included only when actor holds pickable entities AND has AIs in the
- *    actor's own cell or front arc. item enum = held entity ids, to enum = reachable AI ids.
  *
  * Spaces and obstacles are never pickupable.
  *
@@ -213,28 +211,6 @@ export function availableTools(
 		const useIds = [...heldIds, ...reachableSpaceIds];
 		if (useIds.length > 0) {
 			tools.push(cloneToolWithEnums("use", { item: useIds }));
-		}
-	}
-
-	// 5. give — held items AND AIs in own cell or front arc
-	if (actorSpatial && heldItems.length > 0 && !disabledTools.has("give")) {
-		const arc = frontArc(actorSpatial.position, actorSpatial.facing);
-		const reachableAiIds = Object.entries(game.personaSpatial)
-			.filter(([otherId, otherSpatial]) => {
-				if (otherId === aiId) return false;
-				if (positionsEqual(actorSpatial.position, otherSpatial.position))
-					return true;
-				return arc.some((p) => positionsEqual(p, otherSpatial.position));
-			})
-			.map(([otherId]) => otherId);
-
-		if (reachableAiIds.length > 0) {
-			tools.push(
-				cloneToolWithEnums("give", {
-					item: heldItems.map((i) => i.id),
-					to: reachableAiIds,
-				}),
-			);
 		}
 	}
 
