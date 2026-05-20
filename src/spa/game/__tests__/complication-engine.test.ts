@@ -559,7 +559,6 @@ describe("Tool Disable exclusion", () => {
 		const toolNames: ToolName[] = [
 			"pick_up",
 			"put_down",
-			"give",
 			"use",
 			"go",
 			"face",

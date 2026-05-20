@@ -197,7 +197,7 @@ describe("renderEntry — action-failure", () => {
 	});
 
 	it("handles each in-scope tool name in the rendered line", () => {
-		const tools = ["go", "face", "pick_up", "put_down", "give", "use"] as const;
+		const tools = ["go", "face", "pick_up", "put_down", "use"] as const;
 		for (const tool of tools) {
 			const line = renderEntry(
 				{ kind: "action-failure", round: 1, tool, reason: "test reason" },
@@ -290,43 +290,6 @@ describe("renderEntry — witnessed put_down", () => {
 			[],
 		);
 		expect(line).toBe("[Round 2] *red sets the gem perfectly in the pedestal.");
-	});
-});
-
-// ── Witnessed events — give ────────────────────────────────────────────────────
-
-describe("renderEntry — witnessed give", () => {
-	it("renders give with *<to> when recipient is not the witness", () => {
-		const line = renderEntry(
-			{
-				kind: "witnessed-event",
-				round: 0,
-				actor: "red",
-				actionKind: "give",
-				item: "key-1",
-				to: "cyan",
-			},
-			"green",
-			[makeItem("key-1", "Key")],
-		);
-		expect(line).toBe("[Round 0] You watch *red give the Key to *cyan.");
-	});
-
-	it("renders give with 'you' when recipient is the witness (aiId)", () => {
-		// cyan witnesses red giving to cyan — should say "to you"
-		const line = renderEntry(
-			{
-				kind: "witnessed-event",
-				round: 0,
-				actor: "red",
-				actionKind: "give",
-				item: "key-1",
-				to: "cyan",
-			},
-			"cyan",
-			[makeItem("key-1", "Key")],
-		);
-		expect(line).toBe("[Round 0] You watch *red give the Key to you.");
 	});
 });
 

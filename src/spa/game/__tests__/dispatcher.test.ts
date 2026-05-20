@@ -182,44 +182,6 @@ describe("validateToolCall", () => {
 		expect(result.valid).toBe(false);
 	});
 
-	it("allows giving an item to an AI in the front arc", () => {
-		const game = makeGame();
-		// red at (0,0) facing north; face east so green at (0,1) enters front arc
-		const facedEast = executeToolCall(game, "red", {
-			name: "face",
-			args: { direction: "right" },
-		});
-		const call: ToolCall = { name: "give", args: { item: "key", to: "green" } };
-		const result = validateToolCall(facedEast, "red", call);
-		expect(result.valid).toBe(true);
-	});
-
-	it("rejects giving an item to an AI not in cell or front arc", () => {
-		const game = makeGame();
-		// red at (0,0) facing north; green at (0,1) — not same cell, not in north front arc (all OOB)
-		const call: ToolCall = { name: "give", args: { item: "key", to: "green" } };
-		const result = validateToolCall(game, "red", call);
-		expect(result.valid).toBe(false);
-		expect(result.reason).toMatch(/in front/i);
-	});
-
-	it("rejects giving an item not held by the AI", () => {
-		const game = makeGame();
-		const call: ToolCall = {
-			name: "give",
-			args: { item: "flower", to: "green" },
-		};
-		const result = validateToolCall(game, "red", call);
-		expect(result.valid).toBe(false);
-	});
-
-	it("rejects giving to self", () => {
-		const game = makeGame();
-		const call: ToolCall = { name: "give", args: { item: "key", to: "red" } };
-		const result = validateToolCall(game, "red", call);
-		expect(result.valid).toBe(false);
-	});
-
 	it("allows go in a valid direction", () => {
 		const game = makeGame();
 		// red at (0,0), going south → (1,0), which is in bounds
@@ -380,14 +342,6 @@ describe("executeToolCall", () => {
 		const updated = executeToolCall(game, "red", call);
 		const item = updated.world.entities.find((e) => e.id === "key");
 		expect(item?.holder).toEqual({ row: 0, col: 0 });
-	});
-
-	it("transfers item between AIs on give", () => {
-		const game = makeGame();
-		const call: ToolCall = { name: "give", args: { item: "key", to: "cyan" } };
-		const updated = executeToolCall(game, "red", call);
-		const item = updated.world.entities.find((e) => e.id === "key");
-		expect(item?.holder).toBe("cyan");
 	});
 
 	it("does not mutate world on use when not on paired objective space", () => {
@@ -623,26 +577,6 @@ describe("dispatchAiTurn", () => {
 		const spatial = result.game.personaSpatial.red;
 		expect(spatial?.position).toEqual({ row: 1, col: 0 });
 		expect(spatial?.facing).toBe("south");
-	});
-
-	it("give at distance > 1 produces tool_failure record, item still held", () => {
-		const game = makeGame();
-		// red at (0,0), cyan at (0,2) — distance 2, not adjacent
-		const action: AiTurnAction = {
-			aiId: "red",
-			toolCall: { name: "give", args: { item: "key", to: "cyan" } },
-		};
-		const result = dispatchAiTurn(game, action);
-		expect(result.rejected).toBe(false);
-		expect(result.records[0]?.kind).toBe("tool_failure");
-		// Key still held by red
-		const key = result.game.world.entities.find((e) => e.id === "key");
-		expect(key?.holder).toBe("red");
-		// action-failure entry added to actor's log with tool: "give"
-		const redLog = result.game.conversationLogs.red ?? [];
-		const failures = redLog.filter((e) => e.kind === "action-failure");
-		expect(failures).toHaveLength(1);
-		expect(failures[0]).toMatchObject({ kind: "action-failure", tool: "give" });
 	});
 
 	it("use returns tool_success with entity's useOutcome as description when not on paired space", () => {

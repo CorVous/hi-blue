@@ -93,7 +93,7 @@ A single tagged item inside a Daemon's **Conversation log**. Discriminated union
 _Avoid_: Log entry (ambiguous), event (use **Witnessed event** for the specific witness-cone case).
 
 **Witnessed event**:
-A single line in the **Conversation log** describing something an AI saw happen inside their **Cone**. Rendered second-person: `You watch *xxxx [verb]…` for movement / pick-up / put-down / give, and the `{actor}`-substituted use-outcome flavor string for `use`. `examine` produces no Witnessed event (it is a private query, not an observable physical act).
+A single line in the **Conversation log** describing something an AI saw happen inside their **Cone**. Rendered second-person: `You watch *xxxx [verb]…` for movement / pick-up / put-down, and the `{actor}`-substituted use-outcome flavor string for `use`. `examine` produces no Witnessed event (it is a private query, not an observable physical act).
 
 ## Relationships
 

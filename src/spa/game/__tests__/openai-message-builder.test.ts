@@ -197,15 +197,15 @@ describe("buildOpenAiMessages", () => {
 			assistantToolCalls: [
 				{
 					id: "call_xyz",
-					name: "give",
-					argumentsJson: '{"item":"flower","to":"cyan"}',
+					name: "put_down",
+					argumentsJson: '{"item":"flower"}',
 				},
 			],
 			toolResults: [
 				{
 					tool_call_id: "call_xyz",
 					success: true,
-					description: "Ember gave the flower to Frost",
+					description: "Ember put down the flower",
 				},
 			],
 		};

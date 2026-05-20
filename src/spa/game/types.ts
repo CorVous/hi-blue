@@ -284,11 +284,9 @@ export interface PhysicalActionRecord {
 	/** The actor's facing at the time the action resolved. */
 	actorFacingAtAction: CardinalDirection;
 	/** The observable action kind. */
-	kind: "go" | "pick_up" | "put_down" | "give" | "use";
-	/** Item id (for pick_up, put_down, give, use). */
+	kind: "go" | "pick_up" | "put_down" | "use";
+	/** Item id (for pick_up, put_down, use). */
 	item?: string;
-	/** Recipient AI id (for give). */
-	to?: AiId;
 	/**
 	 * Raw useOutcome string with {actor} token un-substituted (for use).
 	 * Witnesses render this with {actor}→"*<actor>"; actor sees {actor}→"you".
@@ -347,9 +345,8 @@ export type ConversationEntry =
 			kind: "witnessed-event";
 			round: number;
 			actor: AiId;
-			actionKind: "go" | "pick_up" | "put_down" | "give" | "use";
+			actionKind: "go" | "pick_up" | "put_down" | "use";
 			item?: string;
-			to?: AiId;
 			direction?: CardinalDirection;
 			useOutcome?: string;
 			placementFlavorRaw?: string;
@@ -357,7 +354,7 @@ export type ConversationEntry =
 	| {
 			kind: "action-failure";
 			round: number;
-			tool: "go" | "face" | "pick_up" | "put_down" | "give" | "use";
+			tool: "go" | "face" | "pick_up" | "put_down" | "use";
 			/** Verbatim dispatcher rejection reason (e.g. "That cell is blocked by an obstacle"). */
 			reason: string;
 	  }
@@ -453,7 +450,6 @@ export interface GameState {
 export type ToolName =
 	| "pick_up"
 	| "put_down"
-	| "give"
 	| "use"
 	| "go"
 	| "face"

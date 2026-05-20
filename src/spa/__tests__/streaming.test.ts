@@ -370,8 +370,8 @@ describe("parseSSEStream — tool_call delta assembly", () => {
 								id: "call_z",
 								type: "function",
 								function: {
-									name: "give",
-									arguments: '{"item":"key","to":"cyan"}',
+									name: "put_down",
+									arguments: '{"item":"key"}',
 								},
 							},
 						],
@@ -386,6 +386,6 @@ describe("parseSSEStream — tool_call delta assembly", () => {
 		);
 
 		expect(calls).toHaveLength(1);
-		expect(calls[0]?.name).toBe("give");
+		expect(calls[0]?.name).toBe("put_down");
 	});
 });
