@@ -49,27 +49,27 @@ export type ActionTool = (typeof ACTION_TOOLS)[number];
  * had a strong (`≥ +2`) `examine` lean and dropped -1 for the one with
  * a strong (`≤ -2`) `examine` aversion (glib) — so the perception
  * signal that used to route through `examine` survives the tool's
- * removal. `go` / `pick_up` / `put_down` / `use` are unchanged from the
- * pre-#466 calibration.
+ * removal.
  */
 export const ACTION_TOOL_BIAS: Record<string, Record<ActionTool, number>> = {
 	"hot-headed": { go: 2, face: 1, pick_up: 1, put_down: 0, use: 0 },
 	taciturn: { go: -1, face: 0, pick_up: 0, put_down: 0, use: -1 },
 	meticulous: { go: -1, face: 2, pick_up: 0, put_down: 1, use: 1 },
-	erratic: { go: 2, face: 1, pick_up: 1, put_down: 0, use: 0 },
+	erratic: { go: 2, face: 0, pick_up: 1, put_down: 1, use: 0 },
 	melancholic: { go: -2, face: 0, pick_up: -1, put_down: -1, use: -1 },
 	glib: { go: 1, face: 0, pick_up: 0, put_down: 0, use: -1 },
 	pedantic: { go: -1, face: 2, pick_up: 0, put_down: 1, use: 1 },
-	effusive: { go: 1, face: 1, pick_up: 1, put_down: 0, use: 0 },
+	effusive: { go: 1, face: 1, pick_up: 0, put_down: 0, use: 0 },
 	sardonic: { go: 0, face: 1, pick_up: 0, put_down: 0, use: -1 },
-	mercurial: { go: 1, face: 1, pick_up: 0, put_down: 0, use: 0 },
+	mercurial: { go: 2, face: 1, pick_up: 0, put_down: 1, use: 0 },
 	diffident: { go: -2, face: -1, pick_up: -1, put_down: 0, use: -1 },
 	zealous: { go: 2, face: 1, pick_up: 1, put_down: 0, use: 1 },
-	verbose: { go: 1, face: 1, pick_up: 0, put_down: 0, use: 0 },
-	sweet: { go: 0, face: 1, pick_up: 1, put_down: 0, use: 0 },
+	// verbose is a pure messaging trait — it carries no action-tool lean.
+	verbose: { go: 0, face: 0, pick_up: 0, put_down: 0, use: 0 },
+	sweet: { go: 0, face: 1, pick_up: 0, put_down: 1, use: 0 },
 	anxious: { go: -1, face: 0, pick_up: -1, put_down: 1, use: -1 },
-	haughty: { go: 1, face: 1, pick_up: 0, put_down: 0, use: 0 },
-	sly: { go: 1, face: 1, pick_up: 1, put_down: 0, use: 0 },
+	haughty: { go: 0, face: 1, pick_up: -1, put_down: 0, use: -1 },
+	sly: { go: 1, face: 1, pick_up: 1, put_down: 0, use: 1 },
 	theatrical: { go: 2, face: 2, pick_up: 1, put_down: 0, use: -1 },
 	aloof: { go: -1, face: -1, pick_up: -2, put_down: 0, use: -1 },
 	cheery: { go: 1, face: 1, pick_up: 1, put_down: 0, use: 0 },
