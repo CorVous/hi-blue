@@ -12,8 +12,9 @@
  * No LLM calls, no browser APIs. All randomness is injected via `rng`.
  */
 
+import { WEATHER_POOL } from "../../content/weather-pool.js";
 import { applyDirection, CARDINAL_DIRECTIONS, inBounds } from "./direction.js";
-import { appendBroadcast, shiftToBPack } from "./engine.js";
+import { appendBroadcast, setWeather, shiftToBPack } from "./engine.js";
 import type {
 	ActiveComplication,
 	AiId,
@@ -48,6 +49,17 @@ export const DISABLABLE_TOOLS: ToolName[] = [
  */
 function drawCountdown(rng: () => number, min: number, max: number): number {
 	return min + Math.floor(rng() * (max - min + 1));
+}
+
+/**
+ * Draw a new weather from WEATHER_POOL, excluding the current weather.
+ * Guarantees the result differs from the input.
+ */
+function drawNewWeather(current: string, rng: () => number): string {
+	const candidates = WEATHER_POOL.filter((w) => w !== current);
+	const idx = Math.floor(rng() * candidates.length);
+	// biome-ignore lint/style/noNonNullAssertion: candidates is non-empty (WEATHER_POOL has 12 entries)
+	return candidates[idx]!;
 }
 
 /**
@@ -257,7 +269,10 @@ function buildSimpleComplication(
 ): ComplicationVariant {
 	switch (kind) {
 		case "weather_change":
-			return { kind: "weather_change" };
+			return {
+				kind: "weather_change",
+				weather: drawNewWeather(phase.weather, rng),
+			};
 
 		case "sysadmin_directive": {
 			const aiIds = Object.keys(phase.personaSpatial);
@@ -293,7 +308,10 @@ function buildSimpleComplication(
 			return { kind: "setting_shift" };
 
 		default:
-			return { kind: "weather_change" };
+			return {
+				kind: "weather_change",
+				weather: drawNewWeather(phase.weather, rng),
+			};
 	}
 }
 
@@ -479,6 +497,15 @@ export function applyComplicationResult(
 		state = appendBroadcast(
 			state,
 			`[SYSTEM] The setting has shifted. You are now in: ${state.setting}.`,
+		);
+	}
+
+	// weather_change: update weather and broadcast the change to all Daemons
+	if (fired.kind === "weather_change") {
+		state = setWeather(state, fired.weather);
+		state = appendBroadcast(
+			state,
+			`[SYSTEM] The weather has changed. ${fired.weather}`,
 		);
 	}
 

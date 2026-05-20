@@ -32,6 +32,7 @@ import {
 	appendMessage,
 	appendPrivateSystemNotice,
 	appendWitnessedConvergence,
+	appendWitnessedObstacleShift,
 	FAREWELL_LINE,
 	isAiLockedOut,
 	resolveToolDisables,
@@ -631,6 +632,55 @@ export async function runRound(
 				target,
 				formatDirectiveDelivery(directiveText),
 			);
+		} else if (fired.kind === "obstacle_shift") {
+			// Apply engine result (resets countdown).
+			state = applyComplicationResult(state, complicationResult, rng);
+
+			// Find the obstacle and move it.
+			const obstacle = state.world.entities.find(
+				(e) => e.id === fired.obstacleId,
+			);
+			if (!obstacle) {
+				// Defensively skip if obstacle not found.
+			} else {
+				// Rebuild entities, updating the obstacle's holder to toCell.
+				state = {
+					...state,
+					world: {
+						...state.world,
+						entities: state.world.entities.map((e) =>
+							e.id === fired.obstacleId ? { ...e, holder: fired.toCell } : e,
+						),
+					},
+				};
+
+				// Fan out witness entries to daemons whose cone covers fromCell.
+				for (const [daemonId, spatial] of Object.entries(
+					state.personaSpatial,
+				)) {
+					const cone = projectCone(spatial.position, spatial.facing);
+					const witnessesOrigin = cone.some(
+						(c) =>
+							c.position.row === fired.fromCell.row &&
+							c.position.col === fired.fromCell.col,
+					);
+
+					if (!witnessesOrigin) continue;
+
+					const entry: Extract<
+						ConversationEntry,
+						{ kind: "witnessed-obstacle-shift" }
+					> = {
+						kind: "witnessed-obstacle-shift",
+						round: state.round,
+						obstacleId: fired.obstacleId,
+						fromCell: fired.fromCell,
+						toCell: fired.toCell,
+						flavor: obstacle.shiftFlavor ?? "",
+					};
+					state = appendWitnessedObstacleShift(state, daemonId, entry);
+				}
+			}
 		} else {
 			state = applyComplicationResult(state, complicationResult, rng);
 			if (fired.kind === "chat_lockout") {

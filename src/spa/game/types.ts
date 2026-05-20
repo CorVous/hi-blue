@@ -231,7 +231,7 @@ export interface ComplicationSchedule {
  * ComplicationKind. Carries only the data needed to dispatch the complication.
  */
 export type ComplicationVariant =
-	| { kind: "weather_change" }
+	| { kind: "weather_change"; weather: string }
 	| { kind: "sysadmin_directive"; target: AiId; duration: number }
 	| { kind: "tool_disable"; target: AiId; tool: ToolName; duration: number }
 	| {
