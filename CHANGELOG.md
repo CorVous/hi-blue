@@ -1,6 +1,19 @@
 # Changelog
 
 
+## v0.0.2-beta.0
+
+[compare changes](https://github.com/CorVous/hi-blue/compare/v0.0.1-beta.0...v0.0.2-beta.0)
+
+### 🏡 Chore
+
+- Add release:beta script for beta releases ([#477](https://github.com/CorVous/hi-blue/pull/477))
+- Release v0.0.1 ([d1aebf9](https://github.com/CorVous/hi-blue/commit/d1aebf9))
+
+### ❤️ Contributors
+
+- CorVous ([@CorVous](https://github.com/CorVous))
+
 ## v0.0.1-beta.0
 
 [compare changes](https://github.com/CorVous/hi-blue/compare/v0.0.0...v0.0.1-beta.0)
