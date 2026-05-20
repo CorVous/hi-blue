@@ -4,6 +4,15 @@
 **Model:** `z-ai/glm-4.7`
 **Reps:** 20 per (scenario × persona) cell — 240 reps per run
 
+> **Status note (post-#466–#472):** the tool-surface change these runs
+> projected — drop `examine`, rename `look` → `face`, drop `give` — has
+> since merged into the production engine. The eval harness now runs
+> natively against that surface (the `EVAL_TOOL_SURFACE=5tool`
+> projection was removed). The "5-tool" runs below were produced by the
+> eval-local projection against the pre-merge engine; their numbers are
+> still indicative, but a fresh native run is the recommended next data
+> point. See the handoff doc for the re-run step.
+
 This file aggregates three pairs of runs:
 
 1. **v2 (7-tool surface, hard directive)** — baseline $0.22 + treatment $0.26 = $0.48

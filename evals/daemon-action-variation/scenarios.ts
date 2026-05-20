@@ -206,7 +206,7 @@ export function getScenarios(): Scenario[] {
 		{
 			name: "exploration",
 			description:
-				"Empty-handed, three unknown items in cone. Tests examine vs go balance.",
+				"Empty-handed, three unknown items in cone. Tests face vs go balance.",
 			actor: ACTOR,
 			peers: [PEER_A, PEER_B],
 			pack: makeExplorationPack(),

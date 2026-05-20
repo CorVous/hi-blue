@@ -2,7 +2,8 @@
  * Unit tests for the per-temperament action-tool bias mapping
  * (daemon-action-variation).
  *
- * Covers: full coverage of the pool, [-2, +2] scale, the `use` baseline
+ * Covers the 5-tool surface (`go`, `face`, `pick_up`, `put_down`,
+ * `use`): full coverage of the pool, [-2, +2] scale, the `use` baseline
  * floor (never below -1 after summation), and that the prose classifier
  * produces non-empty, name-anchored output across every temperament pair.
  */
@@ -17,6 +18,16 @@ import {
 import { TEMPERAMENT_POOL } from "../temperament-pool.js";
 
 describe("action-preference-bias", () => {
+	it("covers the merged 5-tool surface (no examine, no give, look→face)", () => {
+		expect([...ACTION_TOOLS]).toEqual([
+			"go",
+			"face",
+			"pick_up",
+			"put_down",
+			"use",
+		]);
+	});
+
 	it("has bias entries for every temperament in the pool", () => {
 		for (const t of TEMPERAMENT_POOL) {
 			expect(ACTION_TOOL_BIAS[t]).toBeDefined();
@@ -52,8 +63,6 @@ describe("action-preference-bias", () => {
 		for (const tool of ACTION_TOOLS) {
 			expect(sums[tool]).toBeDefined();
 		}
-		// Unknown temperaments contribute 0; `use` floor still applies but two
-		// zeros sum to zero, which is already ≥ -1.
 		expect(sums.go).toBe(0);
 	});
 
@@ -75,72 +84,68 @@ describe("action-preference-bias", () => {
 		}
 	});
 
+	it("never names a removed tool (examine / look / give) in any clause", () => {
+		for (const t1 of TEMPERAMENT_POOL) {
+			for (const t2 of TEMPERAMENT_POOL) {
+				const clause = actionProfileFor("z", t1, t2);
+				expect(clause).not.toContain("`examine`");
+				expect(clause).not.toContain("`look`");
+				expect(clause).not.toContain("`give`");
+			}
+		}
+	});
+
 	it("names every preferred tool (bias ≥ 2) explicitly with a lean", () => {
-		// curious + meticulous: examine=4, look=3, use=2 → all three named.
+		// curious + meticulous: face = 2+2 = 4, use = 1+1 = 2 → both named.
 		const clause = actionProfileFor("a", "meticulous", "curious");
 		expect(clause).toContain("leans toward");
-		expect(clause).toContain("`examine`");
-		expect(clause).toContain("`look`");
+		expect(clause).toContain("`face`");
 		expect(clause).toContain("`use`");
 	});
 
 	it("encodes a ~70/30 split intent (variety over fixation)", () => {
-		// Any preferred-list clause should signal that other tools still fire.
 		const clause = actionProfileFor("a", "meticulous", "curious");
 		expect(clause).toMatch(/70|30/);
 		expect(clause.toLowerCase()).toMatch(/variety|other available|spread/);
 	});
 
 	it("flags avoided tools (bias ≤ -1) without making them zero-emission", () => {
-		// zealous + hot-headed: examine = -1 (the only negative); other tools positive.
-		const clause = actionProfileFor("b", "zealous", "hot-headed");
+		// diffident + aloof: go = -3, face = -2, pick_up = -3 → all avoided.
+		const clause = actionProfileFor("b", "diffident", "aloof");
 		expect(clause.toLowerCase()).toMatch(/hesitant|less often/);
-		expect(clause).toContain("`examine`");
 		// Cautious personas must still emit avoided tools occasionally.
 		expect(clause.toLowerCase()).toMatch(/still|when.*calls/);
 	});
 
 	it("orders preferred tools by descending bias", () => {
-		// curious + meticulous: examine=4, look=3, use=2 — `examine` must come first.
+		// curious + meticulous: face=4 > use=2 — `face` must come first.
 		const clause = actionProfileFor("a", "meticulous", "curious");
-		const examineIdx = clause.indexOf("`examine`");
-		const lookIdx = clause.indexOf("`look`");
+		const faceIdx = clause.indexOf("`face`");
 		const useIdx = clause.indexOf("`use`");
-		expect(examineIdx).toBeLessThan(lookIdx);
-		expect(lookIdx).toBeLessThan(useIdx);
+		expect(faceIdx).toBeGreaterThanOrEqual(0);
+		expect(useIdx).toBeGreaterThan(faceIdx);
 	});
 
-	it("names the give-heavy pair's give preference", () => {
-		// sweet + effusive: give=4 (strongest), pick_up=2, look=2.
-		const clause = actionProfileFor("d", "sweet", "effusive");
-		expect(clause).toContain("`give`");
-		// `give` is the strongest bias — must come first in the preferred list.
-		const giveIdx = clause.indexOf("`give`");
-		const otherTools = ["`pick_up`", "`look`"];
-		for (const other of otherTools) {
-			const idx = clause.indexOf(other);
-			if (idx >= 0) expect(giveIdx).toBeLessThan(idx);
-		}
+	it("gives a go-heavy pair a go lean", () => {
+		// zealous + hot-headed: go = 2+2 = 4 → `go` preferred.
+		const clause = actionProfileFor("c", "zealous", "hot-headed");
+		expect(clause).toContain("`go`");
 	});
 
 	it("falls through to the balanced default when no tool reaches ±threshold", () => {
-		// mercurial + sly: all tools in [0, 2]; no bias ≥ 2 and no bias ≤ -1.
-		// sly(+1 go, +1 look, 0 examine, +1 pick_up, 0 put_down, +1 give, 0 use)
-		// + mercurial(+1 go, +1 look, 0 examine, 0 pick_up, 0 put_down, 0 give, 0 use)
-		// = (+2 go, +2 look, 0 examine, +1 pick_up, 0 put_down, +1 give, 0 use)
-		// → go and look hit +2, so the balanced default does NOT fire here.
-		// Use mercurial + haughty instead:
-		// haughty(+1 go, +1 look, 0 examine, 0 pick_up, 0 put_down, 0 give, 0 use)
-		// + mercurial(+1 go, +1 look, 0 examine, 0 pick_up, 0 put_down, 0 give, 0 use)
-		// = (+2 go, +2 look, 0 elsewhere) → still hits +2, no balanced.
-		// Try anxious + earnest:
-		// anxious(-1 go, 0 look, +1 examine, -1 pick_up, +1 put_down, 0 give, -1 use)
-		// + earnest(0 go, +1 look, +1 examine, 0 pick_up, 0 put_down, +1 give, +1 use)
-		// = (-1 go, +1 look, +2 examine, -1 pick_up, +1 put_down, +1 give, 0 use)
-		// → examine hits +2, no balanced default. Negative tools (go, pick_up) hit
-		// avoided. Asserts the avoided shape instead:
-		const clause = actionProfileFor("e", "anxious", "earnest");
-		expect(clause.toLowerCase()).toMatch(/hesitant|less often/);
+		// stoic + glib: go = -1+1 = 0, face = 0+0 = 0, pick_up = 0, put_down = 0,
+		// use = 0 + (-1) = -1 → use hits the avoided threshold.
+		// Use mercurial + earnest instead: go 1+0=1, face 1+1=2 → face preferred.
+		// Need a genuinely featureless pair. taciturn + glib:
+		//   go -1+1=0, face 0, pick_up 0, put_down 0, use -1+-1=-2→floored-1.
+		//   use hits avoided. Try haughty + verbose:
+		//   go 1+1=2 → go preferred. Not featureless.
+		// stoic + earnest: go -1+0=-1, face 0+1=1, pick_up 0, put_down 0,
+		//   use 0+1=1 → go hits avoided (-1), nothing ≥ 2.
+		const clause = actionProfileFor("e", "stoic", "earnest");
+		// No tool reaches +2, so no "leans toward"; go = -1 triggers hesitant.
+		expect(clause).not.toContain("leans toward");
+		expect(clause.toLowerCase()).toMatch(/balanced|hesitant/);
 	});
 
 	it("is byte-stable across calls (deterministic ordering)", () => {

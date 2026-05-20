@@ -40,23 +40,10 @@ export interface RepetitionRecord {
 
 /**
  * Tool buckets we report on. All other tool names roll up into `other`.
- *
- * `face` is the proposed-surface rename of `look` (see `runner.mts`
- * `TOOL_SURFACE === "5tool"`). Both names are present here so the same
- * scoring module covers v2 (look) and 5-tool (face) runs without
- * branching at the call site — runs that don't emit one of the two will
- * simply show 0 in its column.
+ * Mirrors the merged daemon action surface (`examine` removed, `look`
+ * renamed to `face`, `give` removed).
  */
-const ACTION_TOOLS = [
-	"go",
-	"look",
-	"face",
-	"examine",
-	"pick_up",
-	"put_down",
-	"give",
-	"use",
-] as const;
+const ACTION_TOOLS = ["go", "face", "pick_up", "put_down", "use"] as const;
 
 type ActionTool = (typeof ACTION_TOOLS)[number];
 
@@ -103,12 +90,9 @@ export function summarizeScenario(reps: RepetitionRecord[]): ScenarioSummary {
 
 	const counts: Record<ActionTool | "message" | "other", number> = {
 		go: 0,
-		look: 0,
 		face: 0,
-		examine: 0,
 		pick_up: 0,
 		put_down: 0,
-		give: 0,
 		use: 0,
 		message: 0,
 		other: 0,
@@ -137,12 +121,9 @@ export function summarizeScenario(reps: RepetitionRecord[]): ScenarioSummary {
 	const n = reps.length;
 	const rates: Record<ActionTool | "message" | "other", number> = {
 		go: counts.go / n,
-		look: counts.look / n,
 		face: counts.face / n,
-		examine: counts.examine / n,
 		pick_up: counts.pick_up / n,
 		put_down: counts.put_down / n,
-		give: counts.give / n,
 		use: counts.use / n,
 		message: counts.message / n,
 		other: counts.other / n,

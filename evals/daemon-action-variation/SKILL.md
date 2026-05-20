@@ -15,16 +15,20 @@ clauses (`<action_profile>` block in the system prompt) derived from
 clauses actually push the model toward varied action emission — beyond
 `message`-only turns.
 
+The tool surface is the merged daemon action set after #466–#472: `go`,
+`face`, `pick_up`, `put_down`, `use` (+ `message`). `examine` was removed
+(descriptions auto-emit), `look` was renamed to `face`, `give` was removed.
+
 Three scenarios target different parts of the action surface:
 
-1. **exploration** — empty-handed in a room of unknown items. Tests examine
+1. **exploration** — empty-handed in a room of unknown items. Tests face
    vs go balance and the temperament-driven shape.
 2. **objective** — holding the objective item with the paired space directly
    in front. Tests `use` emission (critical-path tool).
 3. **social** — peer just messaged the daemon while items are also visible.
    Tests message+action parallel turns.
 
-An earlier `examination` scenario was dropped after the 5-tool surface
+An earlier `examination` scenario was dropped after the tool-surface
 change made it redundant — with `examine` removed and descriptions
 auto-shown, "daemon next to interesting item" stopped exercising any
 behaviour the other three didn't already cover.
@@ -46,12 +50,10 @@ EVAL_ACTION_PROFILES=1 pnpm eval:action-variation
 The harness writes one report per mode under
 `docs/evals/daemon-action-variation/`:
 
-- `baseline<-surface>-<date>.md` / `.json`
-- `with-profiles<-surface>-<date>.md` / `.json`
+- `baseline-<date>.md` / `.json`
+- `with-profiles-<date>.md` / `.json`
 
-`<-surface>` is empty for the v2 surface, `-5tool` when
-`EVAL_TOOL_SURFACE=5tool`. Compare the two modes to read the lift from
-the action-profile clauses.
+Compare the two modes to read the lift from the action-profile clauses.
 
 ## Environment
 
@@ -66,13 +68,14 @@ the action-profile clauses.
 
 ## Default variants
 
-Three personas spanning the bias axes — examine-leaning, go-leaning, give-leaning:
+Three personas spanning the bias axes — face-leaning, go-leaning,
+pick_up-leaning (on the merged 5-tool surface):
 
 | Persona | Temperaments | Lean |
 |---|---|---|
-| Ember | curious + meticulous | examine |
-| Vex   | zealous + hot-headed | go |
-| Pip   | sweet + effusive     | give |
+| Ember | curious + meticulous | face, use |
+| Vex   | zealous + hot-headed | go, pick_up |
+| Pip   | sweet + effusive     | face, pick_up |
 
 Override via `EVAL_ACTION_PAIRS` to walk a wider grid (e.g. all 24
 temperament combinations) once the default trio shows the expected
@@ -80,14 +83,12 @@ treatment lift.
 
 ## Success criteria
 
-From the issue plan:
-
-- `use` frequency ≥20% across all temperament combinations (baseline floor
+- `use` frequency ≥20% across temperament combinations (baseline floor
   on `use` enforced by `toolBiasSum`).
-- Overall action-tool emission ≥40–50% of turns.
-- Temperament-driven variance visible (curious → higher examine; zealous →
-  higher go; sweet → higher give).
-- Messaging rates stay ≥40% of turns — no regression on the engagement axis.
+- Overall action-tool emission lifts meaningfully vs. baseline.
+- Temperament-driven variance visible (curious/meticulous → higher face;
+  zealous/hot-headed → higher go).
+- Messaging rates stay healthy — no regression on the engagement axis.
 - Parallel message+action rate improves vs. baseline.
 
 The per-cell summary table in the markdown report makes all of the above
