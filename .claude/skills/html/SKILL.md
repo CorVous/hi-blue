@@ -5,9 +5,10 @@ description: Build a single static HTML page and give the user a temporary URL t
 
 # HTML Preview (single, temporary)
 
-Previews live on a dedicated `html-previews` branch that holds **only** preview
-`.html` files — never any other repo content. Each preview is its own
-uniquely-named file. Never merge this branch into or out of your working branch.
+Previews live on a dedicated `html-previews` branch that holds preview `.html`
+files (and the `continuous/` folder used by the `/continuous` skill) — never
+other repo content. Each preview is its own uniquely-named file. Never merge
+this branch into or out of your working branch.
 
 When invoked:
 
@@ -54,5 +55,5 @@ Notes:
   for htmlpreview to fetch it.
 - Don't try to spin up a local server — the cloud sandbox isn't reachable from
   the user's browser.
-- The `html-previews` branch is throwaway and only ever contains preview `.html`
-  files. To clean up, delete individual files or the whole branch.
+- The `html-previews` branch is shared with the `/continuous` skill. Don't delete
+  files from it or delete the branch — other skills and sessions rely on it.
