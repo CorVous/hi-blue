@@ -43,7 +43,7 @@ When invoked:
 
 4. Give the user this URL (substitute owner, repo, filename):
 
-   `https://htmlpreview.github.io/?https://raw.githubusercontent.com/<owner>/<repo>/html-previews/preview-<random>.html`
+   `http://htmlpreview.github.io/?http://raw.githubusercontent.com/<owner>/<repo>/html-previews/preview-<random>.html`
 
 5. For revisions: edit that same file in `../html-previews-wt/`, commit, and push
    again. The URL stays the same; they just refresh. For a brand-new preview,
