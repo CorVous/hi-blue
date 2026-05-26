@@ -1,0 +1,620 @@
+{
+  "summary": {
+    "successOnFirst": 1,
+    "successAfterRetry": 6,
+    "exhausted": 1,
+    "thrown": 0,
+    "ruleHistogram": {
+      "missing-field": 40,
+      "verb-of-activation": 1,
+      "wrong-id": 18
+    },
+    "retryUnitHistogram": {
+      "convergence-binding": 12,
+      "carry-binding": 12,
+      "decoy": 1,
+      "use-space-binding": 16,
+      "use-item-binding": 18
+    },
+    "avgAttemptsToSuccess": 2,
+    "totalCostUsd": 0.09249543400000002
+  },
+  "iterations": [
+    {
+      "iter": 1,
+      "settingA": "forgotten laboratory",
+      "settingB": "sun-baked salt flat",
+      "theme": "mundane",
+      "objectiveTypes": [
+        "convergence",
+        "carry",
+        "convergence"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 1,
+          "attempt": 0,
+          "outcome": "validation-failed",
+          "rawLength": 8222,
+          "validationErrors": [
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "missing-field",
+              "entityId": "convergence-0-space",
+              "field": "space"
+            },
+            {
+              "retryUnitKind": "carry-binding",
+              "rule": "missing-field",
+              "entityId": "carry-1-obj",
+              "field": "object"
+            },
+            {
+              "retryUnitKind": "carry-binding",
+              "rule": "missing-field",
+              "entityId": "carry-1-space",
+              "field": "space"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "missing-field",
+              "entityId": "convergence-2-space",
+              "field": "space"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "missing-field",
+              "entityId": "convergence-0-space",
+              "field": "space"
+            },
+            {
+              "retryUnitKind": "carry-binding",
+              "rule": "missing-field",
+              "entityId": "carry-1-obj",
+              "field": "object"
+            },
+            {
+              "retryUnitKind": "carry-binding",
+              "rule": "missing-field",
+              "entityId": "carry-1-space",
+              "field": "space"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "missing-field",
+              "entityId": "convergence-2-space",
+              "field": "space"
+            }
+          ]
+        },
+        {
+          "iter": 1,
+          "attempt": 1,
+          "outcome": "ok",
+          "rawLength": 8702
+        }
+      ],
+      "totalCostUsd": 0.00786466
+    },
+    {
+      "iter": 2,
+      "settingA": "collapsed market arcade",
+      "settingB": "sun-baked salt flat",
+      "theme": "magical",
+      "objectiveTypes": [
+        "use_space",
+        "convergence",
+        "carry"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 2,
+          "attempt": 0,
+          "outcome": "ok",
+          "rawLength": 9283
+        }
+      ],
+      "totalCostUsd": 0.00442092
+    },
+    {
+      "iter": 3,
+      "settingA": "moonlit greenhouse ruin",
+      "settingB": "hollowed glacier cave",
+      "theme": "technological",
+      "objectiveTypes": [
+        "carry",
+        "convergence",
+        "use_item"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 3,
+          "attempt": 0,
+          "outcome": "validation-failed",
+          "rawLength": 9211,
+          "validationErrors": [
+            {
+              "retryUnitKind": "decoy",
+              "rule": "verb-of-activation",
+              "entityId": "decoy-0",
+              "field": "examineDescription"
+            }
+          ]
+        },
+        {
+          "iter": 3,
+          "attempt": 1,
+          "outcome": "ok",
+          "rawLength": 9214
+        }
+      ],
+      "totalCostUsd": 0.016479
+    },
+    {
+      "iter": 4,
+      "settingA": "dust-filled opera hall",
+      "settingB": "ink-stained printing hall",
+      "theme": "mundane",
+      "objectiveTypes": [
+        "convergence",
+        "use_space",
+        "carry"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 4,
+          "attempt": 0,
+          "outcome": "validation-failed",
+          "rawLength": 7488,
+          "validationErrors": [
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "carry-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "carry-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            }
+          ]
+        },
+        {
+          "iter": 4,
+          "attempt": 1,
+          "outcome": "ok",
+          "rawLength": 7497
+        }
+      ],
+      "totalCostUsd": 0.008379109999999999
+    },
+    {
+      "iter": 5,
+      "settingA": "flooded underground cistern",
+      "settingB": "collapsed market arcade",
+      "theme": "technological",
+      "objectiveTypes": [
+        "carry",
+        "convergence",
+        "use_item"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 5,
+          "attempt": 0,
+          "outcome": "validation-failed",
+          "rawLength": 7864,
+          "validationErrors": [
+            {
+              "retryUnitKind": "carry-binding",
+              "rule": "missing-field",
+              "entityId": "carry-0-obj",
+              "field": "object"
+            },
+            {
+              "retryUnitKind": "carry-binding",
+              "rule": "missing-field",
+              "entityId": "carry-0-space",
+              "field": "space"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "missing-field",
+              "entityId": "convergence-1-space",
+              "field": "space"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "missing-field",
+              "entityId": "useItem-2-item",
+              "field": "item"
+            },
+            {
+              "retryUnitKind": "carry-binding",
+              "rule": "missing-field",
+              "entityId": "carry-0-obj",
+              "field": "object"
+            },
+            {
+              "retryUnitKind": "carry-binding",
+              "rule": "missing-field",
+              "entityId": "carry-0-space",
+              "field": "space"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "missing-field",
+              "entityId": "convergence-1-space",
+              "field": "space"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "missing-field",
+              "entityId": "useItem-2-item",
+              "field": "item"
+            }
+          ]
+        },
+        {
+          "iter": 5,
+          "attempt": 1,
+          "outcome": "ok",
+          "rawLength": 8349
+        }
+      ],
+      "totalCostUsd": 0.010465064
+    },
+    {
+      "iter": 6,
+      "settingA": "moonlit greenhouse ruin",
+      "settingB": "stripped server vault",
+      "theme": "mundane",
+      "objectiveTypes": [
+        "use_item",
+        "convergence",
+        "use_item"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 6,
+          "attempt": 0,
+          "outcome": "validation-failed",
+          "rawLength": 7568,
+          "validationErrors": [
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "missing-field",
+              "entityId": "useItem-0-item",
+              "field": "item"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "missing-field",
+              "entityId": "convergence-1-space",
+              "field": "space"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "missing-field",
+              "entityId": "useItem-2-item",
+              "field": "item"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "missing-field",
+              "entityId": "useItem-0-item",
+              "field": "item"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "missing-field",
+              "entityId": "convergence-1-space",
+              "field": "space"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "missing-field",
+              "entityId": "useItem-2-item",
+              "field": "item"
+            }
+          ]
+        },
+        {
+          "iter": 6,
+          "attempt": 1,
+          "outcome": "validation-failed",
+          "rawLength": 7870,
+          "validationErrors": [
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            }
+          ]
+        },
+        {
+          "iter": 6,
+          "attempt": 2,
+          "outcome": "ok",
+          "rawLength": 8108
+        }
+      ],
+      "totalCostUsd": 0.01129115
+    },
+    {
+      "iter": 7,
+      "settingA": "stripped server vault",
+      "settingB": "flooded underground cistern",
+      "theme": "mundane",
+      "objectiveTypes": [
+        "carry",
+        "use_item",
+        "use_space"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 7,
+          "attempt": 0,
+          "outcome": "validation-failed",
+          "rawLength": 7500,
+          "validationErrors": [
+            {
+              "retryUnitKind": "carry-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "carry-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            }
+          ]
+        },
+        {
+          "iter": 7,
+          "attempt": 1,
+          "outcome": "ok",
+          "rawLength": 7512
+        }
+      ],
+      "totalCostUsd": 0.01016442
+    },
+    {
+      "iter": 8,
+      "settingA": "silent planetarium dome",
+      "settingB": "ink-stained printing hall",
+      "theme": "technological",
+      "objectiveTypes": [
+        "use_space",
+        "use_item",
+        "use_space"
+      ],
+      "finalOutcome": "exhausted",
+      "attempts": [
+        {
+          "iter": 8,
+          "attempt": 0,
+          "outcome": "validation-failed",
+          "rawLength": 10732,
+          "validationErrors": [
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "missing-field",
+              "entityId": "useSpace-0-space",
+              "field": "space"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "missing-field",
+              "entityId": "useItem-1-item",
+              "field": "item"
+            },
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "missing-field",
+              "entityId": "useSpace-2-space",
+              "field": "space"
+            },
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "missing-field",
+              "entityId": "useSpace-0-space",
+              "field": "space"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "missing-field",
+              "entityId": "useItem-1-item",
+              "field": "item"
+            },
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "missing-field",
+              "entityId": "useSpace-2-space",
+              "field": "space"
+            }
+          ]
+        },
+        {
+          "iter": 8,
+          "attempt": 1,
+          "outcome": "validation-failed",
+          "rawLength": 10922,
+          "validationErrors": [
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "missing-field",
+              "entityId": "useSpace-0-space",
+              "field": "space"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "missing-field",
+              "entityId": "useItem-1-item",
+              "field": "item"
+            },
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "missing-field",
+              "entityId": "useSpace-2-space",
+              "field": "space"
+            },
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "missing-field",
+              "entityId": "useSpace-0-space",
+              "field": "space"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "missing-field",
+              "entityId": "useItem-1-item",
+              "field": "item"
+            },
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "missing-field",
+              "entityId": "useSpace-2-space",
+              "field": "space"
+            }
+          ]
+        },
+        {
+          "iter": 8,
+          "attempt": 2,
+          "outcome": "validation-failed",
+          "rawLength": 10922,
+          "validationErrors": [
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "missing-field",
+              "entityId": "useSpace-0-space",
+              "field": "space"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "missing-field",
+              "entityId": "useItem-1-item",
+              "field": "item"
+            },
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "missing-field",
+              "entityId": "useSpace-2-space",
+              "field": "space"
+            },
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "missing-field",
+              "entityId": "useSpace-0-space",
+              "field": "space"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "missing-field",
+              "entityId": "useItem-1-item",
+              "field": "item"
+            },
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "missing-field",
+              "entityId": "useSpace-2-space",
+              "field": "space"
+            }
+          ]
+        }
+      ],
+      "totalCostUsd": 0.023431109999999998
+    }
+  ]
+}

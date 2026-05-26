@@ -139,18 +139,46 @@ function forbiddenField(
 	}
 }
 
+type EntitySubKey = "object" | "space" | "item";
+
+function bindingShapeHint(
+	subKey: EntitySubKey,
+	expectedId: string,
+	retryUnit: ValidationError["retryUnit"],
+): string {
+	switch (retryUnit.kind) {
+		case "carry-binding":
+			return subKey === "object"
+				? `{ "type": "carry", "object": { "id": "${expectedId}", "name": ..., "examineDescription": ..., ... }, "space": { ... } }`
+				: `{ "type": "carry", "object": { ... }, "space": { "id": "${expectedId}", "name": ..., "examineDescription": ..., ... } }`;
+		case "use-space-binding":
+			return `{ "type": "use_space", "space": { "id": "${expectedId}", "name": ..., "examineDescription": ..., "activationFlavor": ..., ... } }`;
+		case "use-item-binding":
+			return `{ "type": "use_item", "item": { "id": "${expectedId}", "name": ..., "examineDescription": ..., "useOutcome": ..., ... } }`;
+		case "convergence-binding":
+			return `{ "type": "convergence", "space": { "id": "${expectedId}", "name": ..., "convergenceTier1Flavor": ..., ... } }`;
+		default:
+			return `{ "id": "${expectedId}", ... }`;
+	}
+}
+
 function checkWrongId(
 	entity: RawBindingEntity,
 	expectedId: string,
 	retryUnit: ValidationError["retryUnit"],
 	errors: ValidationError[],
+	subKey: EntitySubKey,
 ): void {
 	if (entity.id !== expectedId) {
+		const actual = entity.id === undefined ? "(missing)" : `"${entity.id}"`;
+		const shape = bindingShapeHint(subKey, expectedId, retryUnit);
 		errors.push({
 			entityId: entity.id ?? "",
 			field: "id",
 			rule: "wrong-id",
-			message: `Entity id "${entity.id}" does not match expected id "${expectedId}"`,
+			message:
+				`The "${subKey}" sub-object inside this binding must include a top-level string field "id" equal to "${expectedId}". ` +
+				`Got ${actual}. Required shape: ${shape}`,
 			retryUnit,
 		});
 	}
@@ -185,7 +213,7 @@ function validateCarryBinding(
 			retryUnit: bindingRetryUnit,
 		});
 	} else {
-		checkWrongId(obj, objectId, bindingRetryUnit, errors);
+		checkWrongId(obj, objectId, bindingRetryUnit, errors, "object");
 		for (const f of [
 			"name",
 			"examineDescription",
@@ -229,7 +257,7 @@ function validateCarryBinding(
 			retryUnit: bindingRetryUnit,
 		});
 	} else {
-		checkWrongId(space, spaceId, bindingRetryUnit, errors);
+		checkWrongId(space, spaceId, bindingRetryUnit, errors, "space");
 		for (const f of ["name", "examineDescription", "proximityFlavor"]) {
 			requiredString(space, f, spaceId, bindingRetryUnit, errors);
 		}
@@ -289,7 +317,7 @@ function validateUseSpaceBinding(
 		return;
 	}
 
-	checkWrongId(space, spaceId, bindingRetryUnit, errors);
+	checkWrongId(space, spaceId, bindingRetryUnit, errors, "space");
 	for (const f of [
 		"name",
 		"examineDescription",
@@ -354,7 +382,7 @@ function validateUseItemBinding(
 		return;
 	}
 
-	checkWrongId(item, itemId, bindingRetryUnit, errors);
+	checkWrongId(item, itemId, bindingRetryUnit, errors, "item");
 	for (const f of [
 		"name",
 		"examineDescription",
@@ -409,7 +437,7 @@ function validateConvergenceBinding(
 		return;
 	}
 
-	checkWrongId(space, spaceId, bindingRetryUnit, errors);
+	checkWrongId(space, spaceId, bindingRetryUnit, errors, "space");
 	for (const f of [
 		"name",
 		"examineDescription",
