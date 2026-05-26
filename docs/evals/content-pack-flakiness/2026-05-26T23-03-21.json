@@ -1,0 +1,85 @@
+{
+  "summary": {
+    "successOnFirst": 0,
+    "successAfterRetry": 1,
+    "exhausted": 0,
+    "thrown": 0,
+    "ruleHistogram": {
+      "missing-field": 6
+    },
+    "retryUnitHistogram": {
+      "use-item-binding": 2,
+      "convergence-binding": 2,
+      "use-space-binding": 2
+    },
+    "avgAttemptsToSuccess": 2,
+    "totalCostUsd": 0.00811237
+  },
+  "iterations": [
+    {
+      "iter": 1,
+      "settingA": "collapsed market arcade",
+      "settingB": "hollowed glacier cave",
+      "theme": "magical",
+      "objectiveTypes": [
+        "use_item",
+        "convergence",
+        "use_space"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 1,
+          "attempt": 0,
+          "outcome": "validation-failed",
+          "rawLength": 8586,
+          "validationErrors": [
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "missing-field",
+              "entityId": "useItem-0-item",
+              "field": "item"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "missing-field",
+              "entityId": "convergence-1-space",
+              "field": "space"
+            },
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "missing-field",
+              "entityId": "useSpace-2-space",
+              "field": "space"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "missing-field",
+              "entityId": "useItem-0-item",
+              "field": "item"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "missing-field",
+              "entityId": "convergence-1-space",
+              "field": "space"
+            },
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "missing-field",
+              "entityId": "useSpace-2-space",
+              "field": "space"
+            }
+          ]
+        },
+        {
+          "iter": 1,
+          "attempt": 1,
+          "outcome": "ok",
+          "rawLength": 8901
+        }
+      ],
+      "totalCostUsd": 0.00811237
+    }
+  ]
+}

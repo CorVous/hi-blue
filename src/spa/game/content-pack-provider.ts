@@ -1797,12 +1797,12 @@ function sleep(ms: number): Promise<void> {
 	return new Promise((r) => setTimeout(r, ms));
 }
 
-type OuterChatMessage =
+export type OuterChatMessage =
 	| { role: "system"; content: string }
 	| { role: "user"; content: string }
 	| { role: "assistant"; content: string };
 
-function buildOuterMessages(
+export function buildOuterMessages(
 	systemPrompt: string,
 	userPrompt: string,
 	prevAssistant: string | null,
@@ -1848,7 +1848,7 @@ function retryUnitLabel(unit: ValidationError["retryUnit"]): string {
 	}
 }
 
-function buildCorrectiveFeedback(errors: ValidationError[]): string {
+export function buildCorrectiveFeedback(errors: ValidationError[]): string {
 	// Group by retryUnit so the LLM sees all rules for a given entity together
 	// rather than as a flat dedup'd list — easier to act on per-entity.
 	const groups = new Map<string, { label: string; messages: string[] }>();
