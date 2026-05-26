@@ -25,6 +25,7 @@ import {
 	buildBindingPrompt,
 	buildDualBindingPrompt,
 } from "./binding-prompt-builder.js";
+import { recordContentPackAttempt } from "./content-pack-attempts.js";
 import type {
 	AiId,
 	ContentPack,
@@ -1958,6 +1959,12 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 				);
 				const validationResult = validateBoundContentPack(rawJson, schedule);
 				if (validationResult.ok) {
+					recordContentPackAttempt({
+						op: "single",
+						attempt: outer,
+						outcome: "ok",
+						rawLength: raw.length,
+					});
 					return {
 						phases: [
 							{
@@ -1967,10 +1974,23 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 						],
 					};
 				}
+				recordContentPackAttempt({
+					op: "single",
+					attempt: outer,
+					outcome: "validation-failed",
+					validationErrors: validationResult.errors,
+					rawLength: raw.length,
+				});
 				correctiveFeedback = buildCorrectiveFeedback(validationResult.errors);
 				prevAssistantRaw = raw;
 			} catch (err) {
 				if (err instanceof CapHitError) throw err;
+				recordContentPackAttempt({
+					op: "single",
+					attempt: outer,
+					outcome: "hard-error",
+					errorMessage: err instanceof Error ? err.message : String(err),
+				});
 				if (outer === OUTER_BUDGET - 1) throw err;
 				const backoffMs = BACKOFF_MS[outer];
 				if (backoffMs !== undefined) {
@@ -2042,6 +2062,12 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 							"dual content-pack: validated response has no phases",
 						);
 					}
+					recordContentPackAttempt({
+						op: "dual",
+						attempt: outer,
+						outcome: "ok",
+						rawLength: raw.length,
+					});
 					return {
 						phases: [
 							{
@@ -2051,10 +2077,23 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 						],
 					};
 				}
+				recordContentPackAttempt({
+					op: "dual",
+					attempt: outer,
+					outcome: "validation-failed",
+					validationErrors: validationResult.errors,
+					rawLength: raw.length,
+				});
 				correctiveFeedback = buildCorrectiveFeedback(validationResult.errors);
 				prevAssistantRaw = raw;
 			} catch (err) {
 				if (err instanceof CapHitError) throw err;
+				recordContentPackAttempt({
+					op: "dual",
+					attempt: outer,
+					outcome: "hard-error",
+					errorMessage: err instanceof Error ? err.message : String(err),
+				});
 				if (outer === OUTER_BUDGET - 1) throw err;
 				const backoffMs = BACKOFF_MS[outer];
 				if (backoffMs !== undefined) {
