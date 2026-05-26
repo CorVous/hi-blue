@@ -209,7 +209,9 @@ function validateCarryBinding(
 			entityId: objectId,
 			field: "object",
 			rule: "missing-field",
-			message: `Carry binding ${sk.objectId}: missing object entity`,
+			message:
+				`Carry binding: the binding object has no "object" key. ` +
+				`Add a top-level "object" sub-object with id "${objectId}". Required shape: ${bindingShapeHint("object", objectId, bindingRetryUnit)}`,
 			retryUnit: bindingRetryUnit,
 		});
 	} else {
@@ -253,7 +255,9 @@ function validateCarryBinding(
 			entityId: spaceId,
 			field: "space",
 			rule: "missing-field",
-			message: `Carry binding ${sk.spaceId}: missing space entity`,
+			message:
+				`Carry binding: the binding object has no "space" key. ` +
+				`Add a top-level "space" sub-object with id "${spaceId}". Required shape: ${bindingShapeHint("space", spaceId, bindingRetryUnit)}`,
 			retryUnit: bindingRetryUnit,
 		});
 	} else {
@@ -311,7 +315,9 @@ function validateUseSpaceBinding(
 			entityId: spaceId,
 			field: "space",
 			rule: "missing-field",
-			message: `UseSpace binding ${sk.spaceId}: missing space entity`,
+			message:
+				`UseSpace binding: the binding object has no "space" key. ` +
+				`Add a top-level "space" sub-object with id "${spaceId}". Required shape: ${bindingShapeHint("space", spaceId, bindingRetryUnit)}`,
 			retryUnit: bindingRetryUnit,
 		});
 		return;
@@ -376,7 +382,9 @@ function validateUseItemBinding(
 			entityId: itemId,
 			field: "item",
 			rule: "missing-field",
-			message: `UseItem binding ${sk.itemId}: missing item entity`,
+			message:
+				`UseItem binding: the binding object has no "item" key. ` +
+				`Add a top-level "item" sub-object with id "${itemId}". Required shape: ${bindingShapeHint("item", itemId, bindingRetryUnit)}`,
 			retryUnit: bindingRetryUnit,
 		});
 		return;
@@ -431,7 +439,9 @@ function validateConvergenceBinding(
 			entityId: spaceId,
 			field: "space",
 			rule: "missing-field",
-			message: `Convergence binding ${sk.spaceId}: missing space entity`,
+			message:
+				`Convergence binding: the binding object has no "space" key. ` +
+				`Add a top-level "space" sub-object with id "${spaceId}". Required shape: ${bindingShapeHint("space", spaceId, bindingRetryUnit)}`,
 			retryUnit: bindingRetryUnit,
 		});
 		return;

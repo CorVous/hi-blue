@@ -1,0 +1,229 @@
+{
+  "summary": {
+    "successOnFirst": 5,
+    "successAfterRetry": 3,
+    "exhausted": 0,
+    "thrown": 0,
+    "ruleHistogram": {
+      "verb-of-activation": 3
+    },
+    "retryUnitHistogram": {
+      "decoy": 2,
+      "use-item-binding": 1
+    },
+    "avgAttemptsToSuccess": 1.375,
+    "totalCostUsd": 0.052974904
+  },
+  "iterations": [
+    {
+      "iter": 1,
+      "settingA": "tide-flooded boardwalk",
+      "settingB": "abandoned subway station",
+      "theme": "mundane",
+      "objectiveTypes": [
+        "use_space",
+        "use_item",
+        "convergence"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 1,
+          "attempt": 0,
+          "outcome": "ok",
+          "rawLength": 8002
+        }
+      ],
+      "totalCostUsd": 0.00384708
+    },
+    {
+      "iter": 2,
+      "settingA": "rusted oil platform deck",
+      "settingB": "library overflowing with books",
+      "theme": "technological",
+      "objectiveTypes": [
+        "carry",
+        "convergence",
+        "carry"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 2,
+          "attempt": 0,
+          "outcome": "validation-failed",
+          "rawLength": 9602,
+          "validationErrors": [
+            {
+              "retryUnitKind": "decoy",
+              "rule": "verb-of-activation",
+              "entityId": "decoy-0",
+              "field": "examineDescription"
+            }
+          ]
+        },
+        {
+          "iter": 2,
+          "attempt": 1,
+          "outcome": "ok",
+          "rawLength": 9606
+        }
+      ],
+      "totalCostUsd": 0.01224533
+    },
+    {
+      "iter": 3,
+      "settingA": "stripped server vault",
+      "settingB": "dust-filled opera hall",
+      "theme": "mundane",
+      "objectiveTypes": [
+        "carry",
+        "carry",
+        "use_space"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 3,
+          "attempt": 0,
+          "outcome": "ok",
+          "rawLength": 8491
+        }
+      ],
+      "totalCostUsd": 0.00463729
+    },
+    {
+      "iter": 4,
+      "settingA": "hollowed glacier cave",
+      "settingB": "humid and dense bog",
+      "theme": "mundane",
+      "objectiveTypes": [
+        "use_space",
+        "use_space",
+        "carry"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 4,
+          "attempt": 0,
+          "outcome": "ok",
+          "rawLength": 8234
+        }
+      ],
+      "totalCostUsd": 0.00497895
+    },
+    {
+      "iter": 5,
+      "settingA": "library overflowing with books",
+      "settingB": "dust-filled opera hall",
+      "theme": "technological",
+      "objectiveTypes": [
+        "convergence",
+        "carry",
+        "use_item"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 5,
+          "attempt": 0,
+          "outcome": "validation-failed",
+          "rawLength": 9035,
+          "validationErrors": [
+            {
+              "retryUnitKind": "decoy",
+              "rule": "verb-of-activation",
+              "entityId": "decoy-0",
+              "field": "examineDescription"
+            }
+          ]
+        },
+        {
+          "iter": 5,
+          "attempt": 1,
+          "outcome": "ok",
+          "rawLength": 9035
+        }
+      ],
+      "totalCostUsd": 0.00817959
+    },
+    {
+      "iter": 6,
+      "settingA": "tide-flooded boardwalk",
+      "settingB": "humid and dense bog",
+      "theme": "mundane",
+      "objectiveTypes": [
+        "convergence",
+        "use_item",
+        "use_item"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 6,
+          "attempt": 0,
+          "outcome": "validation-failed",
+          "rawLength": 7995,
+          "validationErrors": [
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "verb-of-activation",
+              "entityId": "useItem-2-item",
+              "field": "examineDescription"
+            }
+          ]
+        },
+        {
+          "iter": 6,
+          "attempt": 1,
+          "outcome": "ok",
+          "rawLength": 8026
+        }
+      ],
+      "totalCostUsd": 0.010529284
+    },
+    {
+      "iter": 7,
+      "settingA": "moonlit greenhouse ruin",
+      "settingB": "throne room of a pagoda",
+      "theme": "magical",
+      "objectiveTypes": [
+        "use_space",
+        "use_space",
+        "use_item"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 7,
+          "attempt": 0,
+          "outcome": "ok",
+          "rawLength": 7922
+        }
+      ],
+      "totalCostUsd": 0.00345546
+    },
+    {
+      "iter": 8,
+      "settingA": "flooded underground cistern",
+      "settingB": "moonlit greenhouse ruin",
+      "theme": "magical",
+      "objectiveTypes": [
+        "carry",
+        "use_item",
+        "use_space"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 8,
+          "attempt": 0,
+          "outcome": "ok",
+          "rawLength": 8771
+        }
+      ],
+      "totalCostUsd": 0.00510192
+    }
+  ]
+}
