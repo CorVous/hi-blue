@@ -25,6 +25,7 @@ import {
 	buildBindingPrompt,
 	buildDualBindingPrompt,
 } from "./binding-prompt-builder.js";
+import { recordContentPackAttempt } from "./content-pack-attempts.js";
 import type {
 	AiId,
 	ContentPack,
@@ -1796,12 +1797,12 @@ function sleep(ms: number): Promise<void> {
 	return new Promise((r) => setTimeout(r, ms));
 }
 
-type OuterChatMessage =
+export type OuterChatMessage =
 	| { role: "system"; content: string }
 	| { role: "user"; content: string }
 	| { role: "assistant"; content: string };
 
-function buildOuterMessages(
+export function buildOuterMessages(
 	systemPrompt: string,
 	userPrompt: string,
 	prevAssistant: string | null,
@@ -1847,7 +1848,7 @@ function retryUnitLabel(unit: ValidationError["retryUnit"]): string {
 	}
 }
 
-function buildCorrectiveFeedback(errors: ValidationError[]): string {
+export function buildCorrectiveFeedback(errors: ValidationError[]): string {
 	// Group by retryUnit so the LLM sees all rules for a given entity together
 	// rather than as a flat dedup'd list — easier to act on per-entity.
 	const groups = new Map<string, { label: string; messages: string[] }>();
@@ -1958,6 +1959,12 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 				);
 				const validationResult = validateBoundContentPack(rawJson, schedule);
 				if (validationResult.ok) {
+					recordContentPackAttempt({
+						op: "single",
+						attempt: outer,
+						outcome: "ok",
+						rawLength: raw.length,
+					});
 					return {
 						phases: [
 							{
@@ -1967,10 +1974,23 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 						],
 					};
 				}
+				recordContentPackAttempt({
+					op: "single",
+					attempt: outer,
+					outcome: "validation-failed",
+					validationErrors: validationResult.errors,
+					rawLength: raw.length,
+				});
 				correctiveFeedback = buildCorrectiveFeedback(validationResult.errors);
 				prevAssistantRaw = raw;
 			} catch (err) {
 				if (err instanceof CapHitError) throw err;
+				recordContentPackAttempt({
+					op: "single",
+					attempt: outer,
+					outcome: "hard-error",
+					errorMessage: err instanceof Error ? err.message : String(err),
+				});
 				if (outer === OUTER_BUDGET - 1) throw err;
 				const backoffMs = BACKOFF_MS[outer];
 				if (backoffMs !== undefined) {
@@ -2042,6 +2062,12 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 							"dual content-pack: validated response has no phases",
 						);
 					}
+					recordContentPackAttempt({
+						op: "dual",
+						attempt: outer,
+						outcome: "ok",
+						rawLength: raw.length,
+					});
 					return {
 						phases: [
 							{
@@ -2051,10 +2077,23 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 						],
 					};
 				}
+				recordContentPackAttempt({
+					op: "dual",
+					attempt: outer,
+					outcome: "validation-failed",
+					validationErrors: validationResult.errors,
+					rawLength: raw.length,
+				});
 				correctiveFeedback = buildCorrectiveFeedback(validationResult.errors);
 				prevAssistantRaw = raw;
 			} catch (err) {
 				if (err instanceof CapHitError) throw err;
+				recordContentPackAttempt({
+					op: "dual",
+					attempt: outer,
+					outcome: "hard-error",
+					errorMessage: err instanceof Error ? err.message : String(err),
+				});
 				if (outer === OUTER_BUDGET - 1) throw err;
 				const backoffMs = BACKOFF_MS[outer];
 				if (backoffMs !== undefined) {

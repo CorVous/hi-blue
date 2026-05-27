@@ -1,0 +1,214 @@
+{
+  "summary": {
+    "successOnFirst": 6,
+    "successAfterRetry": 2,
+    "exhausted": 0,
+    "thrown": 0,
+    "ruleHistogram": {
+      "verb-of-activation": 2
+    },
+    "retryUnitHistogram": {
+      "decoy": 2
+    },
+    "avgAttemptsToSuccess": 1.25,
+    "totalCostUsd": 0.053203134
+  },
+  "iterations": [
+    {
+      "iter": 1,
+      "settingA": "hollowed glacier cave",
+      "settingB": "stripped server vault",
+      "theme": "magical",
+      "objectiveTypes": [
+        "use_item",
+        "use_item",
+        "convergence"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 1,
+          "attempt": 0,
+          "outcome": "ok",
+          "rawLength": 7874
+        }
+      ],
+      "totalCostUsd": 0.0046863
+    },
+    {
+      "iter": 2,
+      "settingA": "dust-filled opera hall",
+      "settingB": "collapsed market arcade",
+      "theme": "magical",
+      "objectiveTypes": [
+        "use_space",
+        "convergence",
+        "carry"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 2,
+          "attempt": 0,
+          "outcome": "ok",
+          "rawLength": 9067
+        }
+      ],
+      "totalCostUsd": 0.00601997
+    },
+    {
+      "iter": 3,
+      "settingA": "rusted oil platform deck",
+      "settingB": "collapsed market arcade",
+      "theme": "magical",
+      "objectiveTypes": [
+        "convergence",
+        "use_item",
+        "convergence"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 3,
+          "attempt": 0,
+          "outcome": "validation-failed",
+          "rawLength": 8837,
+          "validationErrors": [
+            {
+              "retryUnitKind": "decoy",
+              "rule": "verb-of-activation",
+              "entityId": "decoy-0",
+              "field": "examineDescription"
+            }
+          ]
+        },
+        {
+          "iter": 3,
+          "attempt": 1,
+          "outcome": "ok",
+          "rawLength": 8838
+        }
+      ],
+      "totalCostUsd": 0.015072760000000001
+    },
+    {
+      "iter": 4,
+      "settingA": "throne room of a pagoda",
+      "settingB": "tide-flooded boardwalk",
+      "theme": "magical",
+      "objectiveTypes": [
+        "use_space",
+        "convergence",
+        "convergence"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 4,
+          "attempt": 0,
+          "outcome": "validation-failed",
+          "rawLength": 10076,
+          "validationErrors": [
+            {
+              "retryUnitKind": "decoy",
+              "rule": "verb-of-activation",
+              "entityId": "decoy-1",
+              "field": "examineDescription"
+            }
+          ]
+        },
+        {
+          "iter": 4,
+          "attempt": 1,
+          "outcome": "ok",
+          "rawLength": 10072
+        }
+      ],
+      "totalCostUsd": 0.011894214
+    },
+    {
+      "iter": 5,
+      "settingA": "forgotten laboratory",
+      "settingB": "tide-flooded boardwalk",
+      "theme": "mundane",
+      "objectiveTypes": [
+        "use_item",
+        "use_item",
+        "use_item"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 5,
+          "attempt": 0,
+          "outcome": "ok",
+          "rawLength": 7708
+        }
+      ],
+      "totalCostUsd": 0.00409308
+    },
+    {
+      "iter": 6,
+      "settingA": "collapsed market arcade",
+      "settingB": "stripped server vault",
+      "theme": "technological",
+      "objectiveTypes": [
+        "convergence",
+        "use_item",
+        "use_space"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 6,
+          "attempt": 0,
+          "outcome": "ok",
+          "rawLength": 9154
+        }
+      ],
+      "totalCostUsd": 0.00417383
+    },
+    {
+      "iter": 7,
+      "settingA": "throne room of a pagoda",
+      "settingB": "library overflowing with books",
+      "theme": "mundane",
+      "objectiveTypes": [
+        "use_item",
+        "use_item",
+        "use_item"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 7,
+          "attempt": 0,
+          "outcome": "ok",
+          "rawLength": 6855
+        }
+      ],
+      "totalCostUsd": 0.00359852
+    },
+    {
+      "iter": 8,
+      "settingA": "hollowed glacier cave",
+      "settingB": "forgotten laboratory",
+      "theme": "magical",
+      "objectiveTypes": [
+        "convergence",
+        "convergence",
+        "convergence"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 8,
+          "attempt": 0,
+          "outcome": "ok",
+          "rawLength": 8249
+        }
+      ],
+      "totalCostUsd": 0.00366446
+    }
+  ]
+}

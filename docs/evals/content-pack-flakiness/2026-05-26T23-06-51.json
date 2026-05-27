@@ -1,0 +1,719 @@
+{
+  "summary": {
+    "successOnFirst": 2,
+    "successAfterRetry": 4,
+    "exhausted": 2,
+    "thrown": 0,
+    "ruleHistogram": {
+      "verb-of-activation": 3,
+      "wrong-id": 48,
+      "missing-field": 24
+    },
+    "retryUnitHistogram": {
+      "use-item-binding": 25,
+      "decoy": 2,
+      "use-space-binding": 14,
+      "convergence-binding": 22,
+      "objective-pair": 8,
+      "carry-binding": 4
+    },
+    "avgAttemptsToSuccess": 1.8333333333333333,
+    "totalCostUsd": 0.095059514
+  },
+  "iterations": [
+    {
+      "iter": 1,
+      "settingA": "hollowed glacier cave",
+      "settingB": "ink-stained printing hall",
+      "theme": "mundane",
+      "objectiveTypes": [
+        "carry",
+        "use_item",
+        "carry"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 1,
+          "attempt": 0,
+          "outcome": "validation-failed",
+          "rawLength": 8184,
+          "validationErrors": [
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "verb-of-activation",
+              "entityId": "useItem-1-item",
+              "field": "examineDescription"
+            }
+          ]
+        },
+        {
+          "iter": 1,
+          "attempt": 1,
+          "outcome": "ok",
+          "rawLength": 8178
+        }
+      ],
+      "totalCostUsd": 0.00901036
+    },
+    {
+      "iter": 2,
+      "settingA": "collapsed market arcade",
+      "settingB": "hollowed glacier cave",
+      "theme": "magical",
+      "objectiveTypes": [
+        "carry",
+        "use_item",
+        "convergence"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 2,
+          "attempt": 0,
+          "outcome": "validation-failed",
+          "rawLength": 8547,
+          "validationErrors": [
+            {
+              "retryUnitKind": "decoy",
+              "rule": "verb-of-activation",
+              "entityId": "decoy-1",
+              "field": "examineDescription"
+            }
+          ]
+        },
+        {
+          "iter": 2,
+          "attempt": 1,
+          "outcome": "ok",
+          "rawLength": 8555
+        }
+      ],
+      "totalCostUsd": 0.01120385
+    },
+    {
+      "iter": 3,
+      "settingA": "ink-stained printing hall",
+      "settingB": "tide-flooded boardwalk",
+      "theme": "magical",
+      "objectiveTypes": [
+        "use_space",
+        "use_item",
+        "use_item"
+      ],
+      "finalOutcome": "exhausted",
+      "attempts": [
+        {
+          "iter": 3,
+          "attempt": 0,
+          "outcome": "validation-failed",
+          "rawLength": 8753,
+          "validationErrors": [
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            }
+          ]
+        },
+        {
+          "iter": 3,
+          "attempt": 1,
+          "outcome": "validation-failed",
+          "rawLength": 8755,
+          "validationErrors": [
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            }
+          ]
+        },
+        {
+          "iter": 3,
+          "attempt": 2,
+          "outcome": "validation-failed",
+          "rawLength": 8755,
+          "validationErrors": [
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            }
+          ]
+        }
+      ],
+      "totalCostUsd": 0.01764063
+    },
+    {
+      "iter": 4,
+      "settingA": "collapsed market arcade",
+      "settingB": "hollowed glacier cave",
+      "theme": "mundane",
+      "objectiveTypes": [
+        "carry",
+        "use_item",
+        "use_space"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 4,
+          "attempt": 0,
+          "outcome": "ok",
+          "rawLength": 9603
+        }
+      ],
+      "totalCostUsd": 0.00860875
+    },
+    {
+      "iter": 5,
+      "settingA": "abandoned subway station",
+      "settingB": "hollowed glacier cave",
+      "theme": "magical",
+      "objectiveTypes": [
+        "convergence",
+        "use_item",
+        "use_space"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 5,
+          "attempt": 0,
+          "outcome": "ok",
+          "rawLength": 7943
+        }
+      ],
+      "totalCostUsd": 0.00405558
+    },
+    {
+      "iter": 6,
+      "settingA": "stripped server vault",
+      "settingB": "sun-baked salt flat",
+      "theme": "mundane",
+      "objectiveTypes": [
+        "use_space",
+        "use_item",
+        "use_item"
+      ],
+      "finalOutcome": "exhausted",
+      "attempts": [
+        {
+          "iter": 6,
+          "attempt": 0,
+          "outcome": "validation-failed",
+          "rawLength": 7539,
+          "validationErrors": [
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            }
+          ]
+        },
+        {
+          "iter": 6,
+          "attempt": 1,
+          "outcome": "validation-failed",
+          "rawLength": 7539,
+          "validationErrors": [
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            }
+          ]
+        },
+        {
+          "iter": 6,
+          "attempt": 2,
+          "outcome": "validation-failed",
+          "rawLength": 7539,
+          "validationErrors": [
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-item-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            }
+          ]
+        }
+      ],
+      "totalCostUsd": 0.01464619
+    },
+    {
+      "iter": 7,
+      "settingA": "humid and dense bog",
+      "settingB": "forgotten laboratory",
+      "theme": "mundane",
+      "objectiveTypes": [
+        "convergence",
+        "use_item",
+        "carry"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 7,
+          "attempt": 0,
+          "outcome": "validation-failed",
+          "rawLength": 6448,
+          "validationErrors": [
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "wrong-id",
+              "entityId": "carry-2-space",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "missing-field",
+              "entityId": "convergence-0-space",
+              "field": "convergenceTier1Flavor"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "missing-field",
+              "entityId": "convergence-0-space",
+              "field": "convergenceTier2Flavor"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "missing-field",
+              "entityId": "convergence-0-space",
+              "field": "convergenceTier1ActorFlavor"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "missing-field",
+              "entityId": "convergence-0-space",
+              "field": "convergenceTier2ActorFlavor"
+            },
+            {
+              "retryUnitKind": "objective-pair",
+              "rule": "missing-field",
+              "entityId": "",
+              "field": "bindings"
+            },
+            {
+              "retryUnitKind": "objective-pair",
+              "rule": "missing-field",
+              "entityId": "",
+              "field": "bindings"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "wrong-id",
+              "entityId": "carry-2-space",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "missing-field",
+              "entityId": "convergence-0-space",
+              "field": "convergenceTier1Flavor"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "missing-field",
+              "entityId": "convergence-0-space",
+              "field": "convergenceTier2Flavor"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "missing-field",
+              "entityId": "convergence-0-space",
+              "field": "convergenceTier1ActorFlavor"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "missing-field",
+              "entityId": "convergence-0-space",
+              "field": "convergenceTier2ActorFlavor"
+            },
+            {
+              "retryUnitKind": "objective-pair",
+              "rule": "missing-field",
+              "entityId": "",
+              "field": "bindings"
+            },
+            {
+              "retryUnitKind": "objective-pair",
+              "rule": "missing-field",
+              "entityId": "",
+              "field": "bindings"
+            }
+          ]
+        },
+        {
+          "iter": 7,
+          "attempt": 1,
+          "outcome": "validation-failed",
+          "rawLength": 6448,
+          "validationErrors": [
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "wrong-id",
+              "entityId": "carry-2-space",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "missing-field",
+              "entityId": "convergence-0-space",
+              "field": "convergenceTier1Flavor"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "missing-field",
+              "entityId": "convergence-0-space",
+              "field": "convergenceTier2Flavor"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "missing-field",
+              "entityId": "convergence-0-space",
+              "field": "convergenceTier1ActorFlavor"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "missing-field",
+              "entityId": "convergence-0-space",
+              "field": "convergenceTier2ActorFlavor"
+            },
+            {
+              "retryUnitKind": "objective-pair",
+              "rule": "missing-field",
+              "entityId": "",
+              "field": "bindings"
+            },
+            {
+              "retryUnitKind": "objective-pair",
+              "rule": "missing-field",
+              "entityId": "",
+              "field": "bindings"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "wrong-id",
+              "entityId": "carry-2-space",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "missing-field",
+              "entityId": "convergence-0-space",
+              "field": "convergenceTier1Flavor"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "missing-field",
+              "entityId": "convergence-0-space",
+              "field": "convergenceTier2Flavor"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "missing-field",
+              "entityId": "convergence-0-space",
+              "field": "convergenceTier1ActorFlavor"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "missing-field",
+              "entityId": "convergence-0-space",
+              "field": "convergenceTier2ActorFlavor"
+            },
+            {
+              "retryUnitKind": "objective-pair",
+              "rule": "missing-field",
+              "entityId": "",
+              "field": "bindings"
+            },
+            {
+              "retryUnitKind": "objective-pair",
+              "rule": "missing-field",
+              "entityId": "",
+              "field": "bindings"
+            }
+          ]
+        },
+        {
+          "iter": 7,
+          "attempt": 2,
+          "outcome": "ok",
+          "rawLength": 9028
+        }
+      ],
+      "totalCostUsd": 0.01975679
+    },
+    {
+      "iter": 8,
+      "settingA": "hollowed glacier cave",
+      "settingB": "stripped server vault",
+      "theme": "technological",
+      "objectiveTypes": [
+        "use_space",
+        "carry",
+        "convergence"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 8,
+          "attempt": 0,
+          "outcome": "validation-failed",
+          "rawLength": 8151,
+          "validationErrors": [
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "carry-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "carry-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "use-space-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "carry-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "carry-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "convergence-binding",
+              "rule": "wrong-id",
+              "entityId": "",
+              "field": "id"
+            },
+            {
+              "retryUnitKind": "decoy",
+              "rule": "verb-of-activation",
+              "entityId": "decoy-1",
+              "field": "examineDescription"
+            }
+          ]
+        },
+        {
+          "iter": 8,
+          "attempt": 1,
+          "outcome": "ok",
+          "rawLength": 8171
+        }
+      ],
+      "totalCostUsd": 0.010137364
+    }
+  ]
+}

@@ -69,26 +69,77 @@ function obstacleIds(count: number): string[] {
 function describeSkeletonInUserMessage(sk: BindingSkeleton, i: number): string {
 	switch (sk.type) {
 		case "carry":
-			return (
-				`Binding ${i} (carry):\n` +
-				`  object id="${sk.objectId}": name, examineDescription (MUST reference paired space "${sk.spaceId}"), useOutcome, placementFlavor (MUST contain {actor}), proximityFlavor\n` +
-				`  space  id="${sk.spaceId}": name, examineDescription (MUST NOT contain use-cue; MUST NOT have activationFlavor/satisfactionFlavor/convergence tier fields), proximityFlavor`
-			);
+			return [
+				`Binding ${i} (carry): use this exact JSON shape (as element ${i} of "bindings"):`,
+				`{`,
+				`  "type": "carry",`,
+				`  "object": {`,
+				`    "id": "${sk.objectId}",`,
+				`    "name": "<2-4 words>",`,
+				`    "examineDescription": "<1-2 sentences; MUST reference the paired space '${sk.spaceId}' by name>",`,
+				`    "useOutcome": "<1 stateless sentence>",`,
+				`    "placementFlavor": "<1 sentence; MUST contain literal {actor}>",`,
+				`    "proximityFlavor": "<1 sentence; daemon POV; no {actor}>"`,
+				`  },`,
+				`  "space": {`,
+				`    "id": "${sk.spaceId}",`,
+				`    "name": "<2-4 words>",`,
+				`    "examineDescription": "<1-2 sentences; MUST NOT contain any use-cue keyword>",`,
+				`    "proximityFlavor": "<1 sentence; daemon POV; no {actor}>"`,
+				`  }`,
+				`}`,
+			].join("\n");
 		case "use_space":
-			return (
-				`Binding ${i} (use_space):\n` +
-				`  space  id="${sk.spaceId}": name, examineDescription (MUST contain use-cue keyword), proximityFlavor, activationFlavor (no {actor}), satisfactionFlavor (no {actor}), postExamineDescription, postLookFlavor`
-			);
+			return [
+				`Binding ${i} (use_space): use this exact JSON shape (as element ${i} of "bindings"):`,
+				`{`,
+				`  "type": "use_space",`,
+				`  "space": {`,
+				`    "id": "${sk.spaceId}",`,
+				`    "name": "<2-4 words>",`,
+				`    "examineDescription": "<1-2 sentences; MUST contain a use-cue keyword>",`,
+				`    "proximityFlavor": "<1 sentence; daemon POV; no {actor}>",`,
+				`    "activationFlavor": "<1 sentence; world third-person; no {actor}>",`,
+				`    "satisfactionFlavor": "<1 sentence; witness POV; no {actor}>",`,
+				`    "postExamineDescription": "<1-2 sentences>",`,
+				`    "postLookFlavor": "<1 sentence>"`,
+				`  }`,
+				`}`,
+			].join("\n");
 		case "use_item":
-			return (
-				`Binding ${i} (use_item):\n` +
-				`  item   id="${sk.itemId}": name, examineDescription (MUST contain use-cue keyword), proximityFlavor, useOutcome, activationFlavor (no {actor}), postExamineDescription (no {actor}), postLookFlavor (no {actor})`
-			);
+			return [
+				`Binding ${i} (use_item): use this exact JSON shape (as element ${i} of "bindings"):`,
+				`{`,
+				`  "type": "use_item",`,
+				`  "item": {`,
+				`    "id": "${sk.itemId}",`,
+				`    "name": "<2-4 words>",`,
+				`    "examineDescription": "<1-2 sentences; MUST contain a use-cue keyword>",`,
+				`    "proximityFlavor": "<1 sentence; daemon POV; no {actor}>",`,
+				`    "useOutcome": "<1 stateless sentence>",`,
+				`    "activationFlavor": "<1 sentence; world third-person; no {actor}>",`,
+				`    "postExamineDescription": "<1-2 sentences; no {actor}>",`,
+				`    "postLookFlavor": "<1 sentence; no {actor}>"`,
+				`  }`,
+				`}`,
+			].join("\n");
 		case "convergence":
-			return (
-				`Binding ${i} (convergence):\n` +
-				`  space  id="${sk.spaceId}": name, examineDescription, proximityFlavor, convergenceTier1Flavor, convergenceTier2Flavor, convergenceTier1ActorFlavor, convergenceTier2ActorFlavor (all no {actor}; NO activationFlavor/satisfactionFlavor/postExamineDescription/postLookFlavor)`
-			);
+			return [
+				`Binding ${i} (convergence): use this exact JSON shape (as element ${i} of "bindings"):`,
+				`{`,
+				`  "type": "convergence",`,
+				`  "space": {`,
+				`    "id": "${sk.spaceId}",`,
+				`    "name": "<2-4 words>",`,
+				`    "examineDescription": "<1-2 sentences; hint at shared-occupancy significance; MUST NOT contain use-cue keyword>",`,
+				`    "proximityFlavor": "<1 sentence; daemon POV; no {actor}>",`,
+				`    "convergenceTier1Flavor": "<1 sentence; witness POV; no {actor}>",`,
+				`    "convergenceTier2Flavor": "<1 sentence; witness POV; no {actor}>",`,
+				`    "convergenceTier1ActorFlavor": "<1 sentence; first-person; no {actor}>",`,
+				`    "convergenceTier2ActorFlavor": "<1 sentence; first-person; no {actor}>"`,
+				`  }`,
+				`}`,
+			].join("\n");
 	}
 }
 
