@@ -668,6 +668,31 @@ export function renderGame(
 						sp.remove();
 					}
 
+					// Tear down any recovery UI left over from a prior timeout
+					// (Path A). The bootstrap promise is not cancelled when the
+					// timeout fires, so a late success must undo the recovery
+					// side effects — otherwise the banner stays mounted on top
+					// of the now-functional game and its regen/abandon
+					// listeners can destroy the running session if clicked.
+					const lateRecoveryEl = doc.querySelector<HTMLElement>(
+						"#bootstrap-recovery",
+					);
+					if (lateRecoveryEl) {
+						lateRecoveryEl.setAttribute("hidden", "");
+						const staleRegenBtn = doc.querySelector<HTMLButtonElement>(
+							"#bootstrap-recovery-regen",
+						);
+						if (staleRegenBtn) {
+							staleRegenBtn.replaceWith(staleRegenBtn.cloneNode(true));
+						}
+						const staleAbandonLink = doc.querySelector<HTMLAnchorElement>(
+							"#bootstrap-recovery-abandon",
+						);
+						if (staleAbandonLink) {
+							staleAbandonLink.replaceWith(staleAbandonLink.cloneNode(true));
+						}
+					}
+
 					setStageLoadState("stable");
 
 					// Re-enable composer; the recursive renderGame call below will
