@@ -1,6 +1,39 @@
 # Changelog
 
 
+## v0.0.2-beta.1
+
+[compare changes](https://github.com/CorVous/hi-blue/compare/v0.0.2-beta.0...v0.0.2-beta.1)
+
+### 🚀 Enhancements
+
+- **skills:** Add /continuous live HTML handoff skill ([#497](https://github.com/CorVous/hi-blue/pull/497))
+
+### 🩹 Fixes
+
+- Resolve biome lint warnings ([#484](https://github.com/CorVous/hi-blue/pull/484))
+- **spa:** Apply obstacle_shift and weather_change complications ([#489](https://github.com/CorVous/hi-blue/pull/489))
+- **content-pack:** Eliminate dual-pack generation flakiness against GLM-4.7 ([#498](https://github.com/CorVous/hi-blue/pull/498))
+
+### 📖 Documentation
+
+- **playtest:** Refresh skill for current daemon tool set and objective draw ([#480](https://github.com/CorVous/hi-blue/pull/480))
+- Add playtest session log 0xFA73 ([#490](https://github.com/CorVous/hi-blue/pull/490))
+- **playtests:** Add agent playtest session 0x7101 ([#492](https://github.com/CorVous/hi-blue/pull/492))
+- Correct CONTEXT.md complication and ConversationEntry drift ([#495](https://github.com/CorVous/hi-blue/pull/495))
+
+### 🏡 Chore
+
+- Remove dead code identified in repo-wide dead-code audit ([#482](https://github.com/CorVous/hi-blue/pull/482))
+- Remove dead complications module ([#483](https://github.com/CorVous/hi-blue/pull/483))
+- **skills:** Sync Matt Pocock engineering skills, add prototype and handoff ([#488](https://github.com/CorVous/hi-blue/pull/488))
+- Add TypeScript clean-code skills ([#485](https://github.com/CorVous/hi-blue/pull/485))
+- Remove dead code found in repo-wide audit ([#494](https://github.com/CorVous/hi-blue/pull/494))
+
+### ❤️ Contributors
+
+- CorVous ([@CorVous](https://github.com/CorVous))
+
 ## v0.0.2-beta.0
 
 [compare changes](https://github.com/CorVous/hi-blue/compare/v0.0.1-beta.0...v0.0.2-beta.0)
