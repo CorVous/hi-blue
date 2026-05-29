@@ -27,7 +27,9 @@ corepack enable && pnpm install
 | `pnpm typecheck` | Typecheck |
 | `pnpm test` | Test |
 | `pnpm build` | Build the static SPA into `dist/` |
-| `pnpm dev` | Run the SPA + Worker dev loop via `wrangler dev` (press **b** to open the SPA). SPA edits under `src/spa` re-trigger the build; Worker edits live-reload through Wrangler. |
+| `pnpm dev` | Run the SPA + Worker dev loop via `wrangler dev` (press **b** to open the SPA). SPA edits under `src/spa` re-trigger the build; Worker edits live-reload through Wrangler. Requires a Cloudflare login because `RATE_GUARD_KV` is bound in remote mode. |
+| `pnpm dev:local` | Same loop, but `--local` disables remote bindings (KV runs in-process) so no Cloudflare login is needed, and `--ip 0.0.0.0` exposes it on your LAN for UI preview from another device. In-app API calls still target `localhost`, so the proxy won't work cross-device — use `dev:lan` for that. |
+| `pnpm dev:lan` | Fully functional cross-device dev. Detects your machine's LAN IP, bakes it into `WORKER_BASE_URL` so the SPA's API calls reach the Worker, and serves on `0.0.0.0:8787`. Prints the URL to open on the other device. Note: this turns `__DEV__` off (no dev inspector / debug footers / BYOK localhost shortcut). Both devices must share a network and inbound `8787` must be allowed. |
 | `pnpm smoke` | Run the Playwright integration / smoke suite (see below). |
 | `pnpm release` | Cut a release: bump version, update `CHANGELOG.md`, commit, tag. Push with `git push --follow-tags`. Driven by [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/#specification) — see `docs/agents/commits.md`. |
 
