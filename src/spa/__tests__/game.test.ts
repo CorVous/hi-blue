@@ -2754,6 +2754,90 @@ describe("renderBootstrapLoadingFlow — timeout", () => {
 		// (We might bounce to #/sessions, but only AFTER recovery UI has been rendered)
 		// This allows users to click regen before the bounce takes effect
 	});
+
+	it("hides #bootstrap-recovery when bootstrap promise resolves after timeout has fired", async () => {
+		vi.useFakeTimers();
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
+		document.body.innerHTML = INDEX_BODY_HTML;
+
+		let resolveContentPacks: (value: {
+			packsA: unknown;
+			packsB: unknown;
+			objectiveTypes: unknown;
+		}) => void = () => {};
+		const lateContentPacksPromise = new Promise<{
+			packsA: unknown;
+			packsB: unknown;
+			objectiveTypes: unknown;
+		}>((resolve) => {
+			resolveContentPacks = resolve;
+		});
+
+		vi.doMock("../game/bootstrap.js", async (importOriginal) => {
+			const actual =
+				await importOriginal<typeof import("../game/bootstrap.js")>();
+			return {
+				...actual,
+				generateNewGameAssetsSplit: () => ({
+					personasPromise: Promise.resolve(STATIC_PERSONAS),
+					contentPacksPromise: lateContentPacksPromise,
+				}),
+			};
+		});
+
+		vi.resetModules();
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+
+		const { mintAndActivateNewSession } = await import(
+			"../persistence/session-storage.js"
+		);
+		mintAndActivateNewSession();
+
+		const { startBootstrap } = await import("../game/pending-bootstrap.js");
+		startBootstrap();
+
+		const { renderGame } = await import("../routes/game.js");
+		const renderPromise = renderGame(getEl<HTMLElement>("main"));
+
+		// Path A: advance past timeout to fire BootstrapTimeoutError → recovery UI.
+		const { BOOTSTRAP_LOADING_TIMEOUT_MS } = await import("../routes/game.js");
+		await vi.advanceTimersByTimeAsync(BOOTSTRAP_LOADING_TIMEOUT_MS + 1);
+		await vi.runAllTimersAsync();
+		await renderPromise;
+
+		// Confirm recovery UI is shown (Path A fired).
+		const recoveryEl = document.querySelector("#bootstrap-recovery");
+		expect(recoveryEl?.hasAttribute("hidden")).toBe(false);
+
+		// Path B: the underlying bootstrap promise resolves late.
+		resolveContentPacks({
+			packsA: [STATIC_CONTENT_PACKS[0]],
+			packsB: [STATIC_CONTENT_PACKS[0]],
+			objectiveTypes: STATIC_OBJECTIVE_TYPES,
+		});
+		await vi.runAllTimersAsync();
+
+		// After late success, recovery UI should be hidden (game is functional now).
+		expect(recoveryEl?.hasAttribute("hidden")).toBe(true);
+
+		// The regenerate button's stale click handler must be torn down so a
+		// mid-game click cannot blow away the now-running session.
+		const regenBtn = document.querySelector<HTMLButtonElement>(
+			"#bootstrap-recovery-regen",
+		);
+		let regenClicked = false;
+		regenBtn?.addEventListener("click", () => {
+			regenClicked = true;
+		});
+		regenBtn?.click();
+		expect(regenClicked).toBe(true);
+		// The synthetic listener fired (DOM still works); the original
+		// runRegenerate handler was detached by replaceWith, so no recovery UI
+		// reappears as a side effect.
+		expect(recoveryEl?.hasAttribute("hidden")).toBe(true);
+	});
 });
 
 // ── Bootstrap promise propagation tests (Lever 2) ───────────────────────────────
