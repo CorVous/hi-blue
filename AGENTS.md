@@ -26,6 +26,20 @@ The pinned model is `z-ai/glm-4.7` (`src/model.ts`). Daemon system prompts are a
 
 We follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/#specification). Squash-merge PR titles are the source of truth — `changelogen` parses them to bump the version and write `CHANGELOG.md`. See `docs/agents/commits.md`.
 
+## Local development
+
+`pnpm dev` runs `wrangler dev`, which fails without a Cloudflare login because
+`RATE_GUARD_KV` is bound in remote mode (`"remote": true` in `wrangler.jsonc`).
+In a sandbox or any environment without `wrangler login`, use:
+
+- **`pnpm dev:local`** — adds `--local` (KV runs in-process, no login) and
+  `--ip 0.0.0.0`. The page is reachable from another device, but in-app API
+  calls still target `localhost`, so the proxy won't work cross-device.
+- **`pnpm dev:lan`** (`scripts/dev-lan.mjs`) — detects the LAN IP, bakes it into
+  `WORKER_BASE_URL`, and serves on `0.0.0.0:8787` for a fully functional app on
+  another device. This sets `WORKER_BASE_URL` off `localhost`, so `__DEV__` is
+  false (no dev inspector / debug footers / BYOK localhost shortcut).
+
 ## Bumping SESSION_SCHEMA_VERSION
 
 When you bump SESSION_SCHEMA_VERSION in
