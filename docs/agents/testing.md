@@ -50,7 +50,7 @@ await stubChatCompletions(page, (_request) => {
 `stubChatCompletions` fulfils with `Content-Type: text/event-stream` and
 OpenAI-format delta chunks (`choices[0].delta.content`), matching what the
 SPA's streaming parser expects. The SPA's own token-pacing loop
-(`TOKEN_PACE_MS × AI_TYPING_SPEED` in `src/spa/routes/game.ts`) drives the
+(`TOKEN_PACE_MS × AI_TYPING_SPEED` in `src/spa/views/game.ts`) drives the
 observable inter-token animation after the fetch resolves — the stub does
 **not** need to throttle delivery.
 
