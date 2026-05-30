@@ -212,4 +212,14 @@ describe("parseToolCallArguments", () => {
 			expect(result.reason).toMatch(/required/i);
 		}
 	});
+
+	it("pick_up description states that pick_up must come before use", () => {
+		const pickUp = TOOL_DEFINITIONS.find((t) => t.function.name === "pick_up");
+		expect(pickUp?.function.description).toMatch(/before.*use|must pick_up/i);
+	});
+
+	it("use description states the item must be held to use it", () => {
+		const use = TOOL_DEFINITIONS.find((t) => t.function.name === "use");
+		expect(use?.function.description).toMatch(/must be holding/i);
+	});
 });

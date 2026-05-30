@@ -173,11 +173,27 @@ export function validateToolCall(
 					valid: false,
 					reason: `Item "${call.args.item}" does not exist`,
 				};
-			if (item.holder !== aiId)
+			if (item.holder !== aiId) {
+				// Check if item is on the ground in a cell the daemon can reach with pick_up
+				if (isGridPosition(item.holder) && actorSpatial) {
+					const itemPos = item.holder as GridPosition;
+					const inOwnCell = positionsEqual(itemPos, actorSpatial.position);
+					const inFront = frontArc(
+						actorSpatial.position,
+						actorSpatial.facing,
+					).some((p) => positionsEqual(p, itemPos));
+					if (inOwnCell || inFront) {
+						return {
+							valid: false,
+							reason: `"${call.args.item}" is on the ground, not in your hands. Use pick_up first.`,
+						};
+					}
+				}
 				return {
 					valid: false,
 					reason: `You are not holding "${call.args.item}"`,
 				};
+			}
 			return { valid: true };
 		}
 
