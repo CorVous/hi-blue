@@ -382,7 +382,7 @@ describe("renderGame (game route — three-AI)", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -412,7 +412,7 @@ describe("renderGame (game route — three-AI)", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
@@ -452,7 +452,7 @@ describe("renderGame (game route — three-AI)", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		// Initial budgets should show 5
@@ -490,7 +490,7 @@ describe("renderGame (game route — three-AI)", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
@@ -511,7 +511,7 @@ describe("renderGame (game route — three-AI)", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -579,7 +579,7 @@ describe("renderGame (game route — three-AI)", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -619,7 +619,7 @@ describe("renderGame (game route — three-AI)", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -654,7 +654,7 @@ describe("renderGame (game route — three-AI)", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		setSearch("winImmediately=1");
 		await renderGame(getEl<HTMLElement>("main"));
 
@@ -725,7 +725,7 @@ describe("renderGame (game route — three-AI)", () => {
 			.mockReturnValue(undefined);
 
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		setSearch("winImmediately=1");
 		await renderGame(getEl<HTMLElement>("main"));
 
@@ -783,7 +783,7 @@ describe("renderGame (game route — three-AI)", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		setSearch("winImmediately=1");
 		await renderGame(getEl<HTMLElement>("main"));
 
@@ -847,7 +847,7 @@ describe("renderGame (game route — three-AI)", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		setSearch("winImmediately=1");
 		await renderGame(getEl<HTMLElement>("main"));
 
@@ -963,7 +963,7 @@ describe("renderGame — localStorage persistence", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
@@ -996,7 +996,7 @@ describe("renderGame — localStorage persistence", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderGame: renderGame1 } = await import("../routes/game.js");
+		const { renderGame: renderGame1 } = await import("../views/game.js");
 		await renderGame1(getEl<HTMLElement>("main"));
 
 		const form1 = getEl<HTMLFormElement>("#composer");
@@ -1028,7 +1028,7 @@ describe("renderGame — localStorage persistence", () => {
 		document.body.innerHTML = INDEX_BODY_HTML;
 		vi.resetModules();
 		// getItem should return the previously saved state
-		const { renderGame: renderGame2 } = await import("../routes/game.js");
+		const { renderGame: renderGame2 } = await import("../views/game.js");
 		await renderGame2(getEl<HTMLElement>("main"));
 
 		// Budget should reflect round 1 complete: 50¢ - 1¢ cost = 49.000¢
@@ -1072,7 +1072,7 @@ describe("renderGame — localStorage persistence", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
@@ -1131,7 +1131,7 @@ describe("renderGame — localStorage persistence", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		// Warning banner should be shown immediately (storage unavailable)
@@ -1153,7 +1153,7 @@ describe("renderGame — localStorage persistence", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderGame: renderGame1 } = await import("../routes/game.js");
+		const { renderGame: renderGame1 } = await import("../views/game.js");
 		await renderGame1(getEl<HTMLElement>("main"));
 
 		const form1 = getEl<HTMLFormElement>("#composer");
@@ -1185,7 +1185,7 @@ describe("renderGame — localStorage persistence", () => {
 		// Simulate page refresh: fresh renderGame with the same localStorage stub
 		document.body.innerHTML = INDEX_BODY_HTML;
 		vi.resetModules();
-		const { renderGame: renderGame2 } = await import("../routes/game.js");
+		const { renderGame: renderGame2 } = await import("../views/game.js");
 		await renderGame2(getEl<HTMLElement>("main"));
 
 		// Message responses must be visible after reload (restored from conversationLogs)
@@ -1209,7 +1209,7 @@ describe("renderGame — localStorage persistence", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		// Run a round so Session A's transcripts hold chat content.
@@ -1319,7 +1319,7 @@ describe("renderGame — chat_lockout event", () => {
 			},
 		);
 
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
@@ -1374,7 +1374,7 @@ describe("renderGame — mention-based addressing", () => {
 
 	it("empty input on initial load leaves Send disabled", async () => {
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const sendBtn = getEl<HTMLButtonElement>("#send");
@@ -1383,7 +1383,7 @@ describe("renderGame — mention-based addressing", () => {
 
 	it("typing 'hi' (no mention) leaves Send disabled", async () => {
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -1395,7 +1395,7 @@ describe("renderGame — mention-based addressing", () => {
 
 	it("typing '*Sage hi' enables Send", async () => {
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -1415,7 +1415,7 @@ describe("renderGame — mention-based addressing", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
@@ -1472,7 +1472,7 @@ describe("renderGame — mention-based addressing", () => {
 			},
 		);
 
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
@@ -1515,7 +1515,7 @@ describe("renderGame — panel-click addressee", () => {
 
 	it("empty input + click red panel → '*Ember ', Send stays disabled (no body)", async () => {
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -1532,7 +1532,7 @@ describe("renderGame — panel-click addressee", () => {
 
 	it("'*Sage hi' in input + click red panel → '*Ember hi'", async () => {
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -1547,7 +1547,7 @@ describe("renderGame — panel-click addressee", () => {
 
 	it("multi-mention '*Sage tell *Frost go' + click red → only first mention replaced", async () => {
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -1562,7 +1562,7 @@ describe("renderGame — panel-click addressee", () => {
 
 	it("cursor is preserved after mention mutation (after the mention)", async () => {
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -1609,7 +1609,7 @@ describe("renderGame — panel-click addressee", () => {
 			},
 		);
 
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
@@ -1638,7 +1638,7 @@ describe("renderGame — panel-click addressee", () => {
 
 	it("'*Nonpersona hi' + click cyan → prepends '*Frost '", async () => {
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -1671,7 +1671,7 @@ describe("renderGame — addressee persistence after send", () => {
 
 	it("first-load: input empty and Send disabled (#107 preserved)", async () => {
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -1691,7 +1691,7 @@ describe("renderGame — addressee persistence after send", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
@@ -1719,7 +1719,7 @@ describe("renderGame — addressee persistence after send", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
@@ -1752,7 +1752,7 @@ describe("renderGame — addressee persistence after send", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
@@ -1792,7 +1792,7 @@ describe("renderGame — addressee persistence after send", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
@@ -1840,7 +1840,7 @@ describe("renderGame — addressee persistence after send", () => {
 			},
 		);
 
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
@@ -1879,7 +1879,7 @@ describe("visual feedback for active addressee", () => {
 
 	it("empty input → neutral state: no composer-border-*, no panel--addressed, no mention-highlight", async () => {
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -1902,7 +1902,7 @@ describe("visual feedback for active addressee", () => {
 
 	it("typing '*Sage hi' → green border, green panel highlight, *Sage span in overlay", async () => {
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -1934,7 +1934,7 @@ describe("visual feedback for active addressee", () => {
 
 	it("multi-mention '*Sage tell *Frost ...' → exactly one mention-highlight for *Sage only", async () => {
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -1952,7 +1952,7 @@ describe("visual feedback for active addressee", () => {
 
 	it("trailing punctuation '*Sage,' → overlay mention-highlight has textContent '*Sage' (comma is plain text)", async () => {
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -1969,7 +1969,7 @@ describe("visual feedback for active addressee", () => {
 
 	it("clearing input → all visual feedback removed", async () => {
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -1997,7 +1997,7 @@ describe("visual feedback for active addressee", () => {
 
 	it("panel-click transfers highlight: type *Sage hi then click cyan panel → cyan border, cyan panel, *Frost span", async () => {
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -2076,7 +2076,7 @@ describe("visual feedback for active addressee", () => {
 		});
 		vi.stubGlobal("fetch", mockFetch);
 
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
@@ -2166,7 +2166,7 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 
 		await setupLockoutMock("red", "Ember is unresponsive…");
 
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
@@ -2199,7 +2199,7 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 
 		await setupLockoutMock("green", "Sage is unresponsive…");
 
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
@@ -2273,7 +2273,7 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 		});
 		vi.stubGlobal("fetch", mockFetch);
 
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
@@ -2324,7 +2324,7 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 
 		await setupLockoutMock("green", "Sage is unresponsive…");
 
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");
@@ -2396,7 +2396,7 @@ describe("renderGame — round error surfacing (issue #231)", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
@@ -2531,7 +2531,7 @@ describe("renderGame — version-mismatch session with pending bootstrap (regres
 		const sessionStorage = await import("../persistence/session-storage.js");
 		const saveSpy = vi.spyOn(sessionStorage, "saveActiveSession");
 
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		// The route must surface the sessions picker with the version-mismatch reason.
@@ -2593,7 +2593,7 @@ describe("renderGame — version-mismatch session with pending bootstrap (regres
 		const sessionStorage = await import("../persistence/session-storage.js");
 		const saveSpy = vi.spyOn(sessionStorage, "saveActiveSession");
 
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		expect(getEl<HTMLElement>("main").dataset.view).toBe("sessions");
@@ -2664,7 +2664,7 @@ describe("renderBootstrapLoadingFlow — happy path", () => {
 		const { startBootstrap } = await import("../game/pending-bootstrap.js");
 		startBootstrap();
 
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		const renderPromise = renderGame(getEl<HTMLElement>("main"));
 
 		// Advance time to 60 seconds (below 90s timeout)
@@ -2730,11 +2730,11 @@ describe("renderBootstrapLoadingFlow — timeout", () => {
 		const { startBootstrap } = await import("../game/pending-bootstrap.js");
 		startBootstrap();
 
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		const renderPromise = renderGame(getEl<HTMLElement>("main"));
 
 		// Advance time past the timeout (90s + 1ms to be safe).
-		const { BOOTSTRAP_LOADING_TIMEOUT_MS } = await import("../routes/game.js");
+		const { BOOTSTRAP_LOADING_TIMEOUT_MS } = await import("../views/game.js");
 		await vi.advanceTimersByTimeAsync(BOOTSTRAP_LOADING_TIMEOUT_MS + 1);
 		// Flush microtasks so the timeout settler races ahead.
 		await vi.runAllTimersAsync();
@@ -2798,11 +2798,11 @@ describe("renderBootstrapLoadingFlow — timeout", () => {
 		const { startBootstrap } = await import("../game/pending-bootstrap.js");
 		startBootstrap();
 
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		const renderPromise = renderGame(getEl<HTMLElement>("main"));
 
 		// Path A: advance past timeout to fire BootstrapTimeoutError → recovery UI.
-		const { BOOTSTRAP_LOADING_TIMEOUT_MS } = await import("../routes/game.js");
+		const { BOOTSTRAP_LOADING_TIMEOUT_MS } = await import("../views/game.js");
 		await vi.advanceTimersByTimeAsync(BOOTSTRAP_LOADING_TIMEOUT_MS + 1);
 		await vi.runAllTimersAsync();
 		await renderPromise;
@@ -2886,7 +2886,7 @@ describe("renderBootstrapLoadingFlow — promise propagation", () => {
 		const { startBootstrap } = await import("../game/pending-bootstrap.js");
 		startBootstrap();
 
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		// Assert recovery UI is shown with "broken" copy (key behavior: inline recovery instead of immediate bounce)
@@ -2932,7 +2932,7 @@ describe("renderBootstrapLoadingFlow — promise propagation", () => {
 		const { startBootstrap } = await import("../game/pending-bootstrap.js");
 		startBootstrap();
 
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		// When personas fail, recovery UI is still shown (generic bootstrap failure).
@@ -2985,7 +2985,7 @@ describe("renderBootstrapLoadingFlow — promise propagation", () => {
 		const { startBootstrap } = await import("../game/pending-bootstrap.js");
 		startBootstrap();
 
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		// Should stay at #/game (location not changed by cap-hit handler)
@@ -3029,7 +3029,7 @@ describe("renderBootstrapLoadingFlow — promise propagation", () => {
 		const { startBootstrap } = await import("../game/pending-bootstrap.js");
 		startBootstrap();
 
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		// Assert recovery UI is shown (key behavior: inline recovery instead of immediate bounce)

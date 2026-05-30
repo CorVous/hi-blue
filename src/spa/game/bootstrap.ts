@@ -1,7 +1,7 @@
 /**
  * bootstrap.ts
  *
- * Generation glue for new-game asset creation, extracted from routes/game.ts.
+ * Generation glue for new-game asset creation, extracted from views/game.ts.
  *
  * Owns the async bootstrap path: generatePersonas + generateContentPacks.
  * Does NOT write to localStorage (that remains the start-screen's responsibility

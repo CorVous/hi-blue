@@ -151,7 +151,7 @@ describe("renderGame — session restore (formerly async bootstrap)", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		// STATIC_PERSONAS uses red/green/cyan as ids, Ember/Sage/Frost as names

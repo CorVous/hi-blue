@@ -23,9 +23,9 @@ import {
 	setPickerOpen,
 	togglePickerOpen,
 } from "./render-app.js";
-import { renderGame } from "./routes/game.js";
-import { renderSessions } from "./routes/sessions.js";
-import { renderStart } from "./routes/start.js";
+import { renderGame } from "./views/game.js";
+import { renderSessions } from "./views/sessions.js";
+import { renderStart } from "./views/start.js";
 
 // One-time legacy-save check at boot: if the old single-key save exists and
 // no active-session pointer is set, discard the legacy save and stash the

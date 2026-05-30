@@ -282,7 +282,7 @@ async function send(text) {
 }
 
 async function waitForRoundEnd(maxMs = 90_000) {
-	// The round handler in routes/game.ts flips `data-round-in-flight` on
+	// The round handler in views/game.ts flips `data-round-in-flight` on
 	// `#stage` to "true" synchronously at submit-time, then removes it in the
 	// finally block after the events loop has painted every transcript update.
 	// Waiting on that attribute is deterministic: it fires whether daemons

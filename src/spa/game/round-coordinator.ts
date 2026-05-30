@@ -73,7 +73,7 @@ import {
 	checkWinCondition,
 } from "./win-condition";
 
-// Match the SPA dev-host gate used in src/spa/routes/game.ts. The
+// Match the SPA dev-host gate used in src/spa/views/game.ts. The
 // `typeof` guard keeps this safe in test environments that don't stub
 // the build-time constant.
 function isDevHost(): boolean {

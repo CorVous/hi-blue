@@ -71,7 +71,7 @@ test("typing '*<ai1> hi' enables Send and submits to that transcript only", asyn
 
 	// player message appears only in addressed panel. The SPA strips the
 	// leading `*<name>` mention from the rendered player line (see
-	// src/spa/routes/game.ts), so the displayed form is `> hi`.
+	// src/spa/views/game.ts), so the displayed form is `> hi`.
 	expect(addressedTranscript ?? "").toContain("> hi");
 	expect(otherTranscript0 ?? "").not.toContain("> hi");
 	expect(otherTranscript2 ?? "").not.toContain("> hi");

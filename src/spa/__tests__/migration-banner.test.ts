@@ -142,7 +142,7 @@ describe("renderStart — legacy-save-discarded banner (via reason param)", () =
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderStart } = await import("../routes/start.js");
+		const { renderStart } = await import("../views/start.js");
 
 		// Simulate what main.ts does: pass reason=legacy-save-discarded as an opt
 		try {
@@ -167,7 +167,7 @@ describe("renderStart — legacy-save-discarded banner (via reason param)", () =
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderStart } = await import("../routes/start.js");
+		const { renderStart } = await import("../views/start.js");
 
 		// No reason opt — no banner should be shown
 		try {
