@@ -1,7 +1,7 @@
 /**
  * start.test.ts
  *
- * Unit tests for the renderStart() route renderer (routes/start.ts).
+ * Unit tests for the renderStart() route renderer (views/start.ts).
  *
  * Covers:
  *  - Generation kicks off on mount; BEGIN starts disabled

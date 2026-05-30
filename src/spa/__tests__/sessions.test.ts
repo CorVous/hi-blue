@@ -1,7 +1,7 @@
 /**
  * sessions.test.ts
  *
- * Unit tests for renderSessions() (routes/sessions.ts).
+ * Unit tests for renderSessions() (views/sessions.ts).
  *
  * Uses jsdom (vitest default) with a minimal HTML fixture. Prepopulates
  * localStorage with ok/broken/version-mismatch sessions and verifies DOM output.
