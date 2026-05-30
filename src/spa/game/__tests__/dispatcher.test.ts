@@ -285,8 +285,9 @@ describe("validateToolCall", () => {
 		expect(result.reason).toMatch(/pick_up/i);
 	});
 
-	it("use on ground item at distance 2 (still in full cone) returns friendlier message", () => {
+	it("use on ground item at distance 2 (not pick_up-reachable) returns generic message", () => {
 		// Place a ground item at (2,0); red faces south from (0,0)
+		// Distance 2 is in the cone but not in pick_up's reachable cells
 		const pack = makeTestPack(
 			[makeEntity("flower", "interesting_object", { row: 2, col: 0 })],
 			{
@@ -303,8 +304,7 @@ describe("validateToolCall", () => {
 		const call: ToolCall = { name: "use", args: { item: "flower" } };
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(false);
-		expect(result.reason).toMatch(/on the ground/);
-		expect(result.reason).toMatch(/pick_up/i);
+		expect(result.reason).toContain("You are not holding");
 	});
 
 	it("use on item held by another AI retains generic not-holding message", () => {
