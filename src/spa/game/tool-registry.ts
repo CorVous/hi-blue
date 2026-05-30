@@ -34,7 +34,7 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 		function: {
 			name: "pick_up",
 			description:
-				'Pick up an item that is currently in your cell. Fails if the item is not in your current cell. Use this tool when you want to "grab", "take", "collect", "snatch", or "get" an item.',
+				'Pick up an item that is on the ground in your own cell or within your cone of vision. You must pick_up an item BEFORE you can use it. Fails if the item is not on the ground and reachable. Use this tool when you want to "grab", "take", "collect", "snatch", or "get" an item.',
 			parameters: {
 				type: "object",
 				properties: {
@@ -72,7 +72,7 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 		function: {
 			name: "use",
 			description:
-				'Use an item you are holding, OR activate an objective space in your cell or front arc. Fires a flavoured outcome string. For held items: if the item is an objective item AND its paired space is in the daemon\'s cell or front arc, also places it on that space. For spaces: activates the space to satisfy a UseSpace objective. Use this tool when you want to "interact with", "play with", "activate", "operate", "employ", or "wield" an item or space.',
+				'You must be holding the item to use it. Use an item you are holding, OR activate an objective space in your cell or front arc. Fires a flavoured outcome string. For held items: if the item is an objective item AND its paired space is in the daemon\'s cell or front arc, also places it on that space. For spaces: activates the space to satisfy a UseSpace objective. Use this tool when you want to "interact with", "play with", "activate", "operate", "employ", or "wield" an item or space.',
 			parameters: {
 				type: "object",
 				properties: {

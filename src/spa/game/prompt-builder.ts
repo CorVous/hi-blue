@@ -1149,7 +1149,7 @@ function renderCurrentState(ctx: AiContext): string {
 		});
 		if (cellItems.length > 0) {
 			lines.push(
-				`Your cell contains: ${cellItems.map((i) => i.name).join(", ")}`,
+				`Your cell contains: ${cellItems.map((i) => i.name).join(", ")} (on the ground — not held)`,
 			);
 		} else {
 			lines.push("Your cell contains: nothing");
@@ -1208,13 +1208,15 @@ function renderCurrentState(ctx: AiContext): string {
 				);
 			}
 
-			// 2. Items resting on this cell
+			// 2. Items resting on this cell (not held by anyone — explicitly tagged)
 			const cellItems = items.filter((item) => {
 				const h = item.holder;
 				return isGridPosition(h) && positionsEqual(h, position);
 			});
 			if (cellItems.length > 0) {
-				contentParts.push(cellItems.map((i) => i.name).join(", "));
+				contentParts.push(
+					`${cellItems.map((i) => i.name).join(", ")} (on the ground — not held)`,
+				);
 			}
 
 			// 3. Obstacles in this cell — rendered by name

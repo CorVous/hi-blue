@@ -936,6 +936,105 @@ describe("<what_you_see> (cone)", () => {
 });
 
 // ----------------------------------------------------------------------------
+// Ground-item tagging (issue #503)
+//
+// Verify that items resting on cells are explicitly tagged "(on the ground —
+// not held)" so the model never confuses visible ground items with held ones.
+// ----------------------------------------------------------------------------
+describe("ground-item tagging (issue #503)", () => {
+	it("tags cell items in 'Your cell contains' with (on the ground — not held)", () => {
+		// Place flower on red's cell (0,0). Red is at (0,0) facing north.
+		const pack = makeTestPack(
+			[makeEntity("flower", "interesting_object", { row: 0, col: 0 })],
+			{
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 0, col: 0 }, facing: "north" },
+					green: { position: { row: 0, col: 1 }, facing: "north" },
+					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				},
+			},
+		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const ctx = buildAiContext(game, "red");
+		const stateMsg = ctx.toCurrentStateUserMessage();
+		expect(stateMsg).toContain("flower (on the ground — not held)");
+	});
+
+	it("tags cone-cell items in <what_you_see> with (on the ground — not held)", () => {
+		// Place flower at (1,0) — directly in front of red facing south
+		const pack = makeTestPack(
+			[makeEntity("flower", "interesting_object", { row: 1, col: 0 })],
+			{
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 0, col: 0 }, facing: "south" },
+					green: { position: { row: 0, col: 1 }, facing: "north" },
+					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				},
+			},
+		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const ctx = buildAiContext(game, "red");
+		const stateMsg = ctx.toCurrentStateUserMessage();
+		expect(stateMsg).toContain(
+			"Directly in front: flower (on the ground — not held)",
+		);
+	});
+
+	it("does NOT tag held items in 'You are holding' with the ground marker", () => {
+		// red holds the flower directly
+		const pack = makeTestPack(
+			[makeEntity("flower", "interesting_object", "red")],
+			{
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 0, col: 0 }, facing: "north" },
+					green: { position: { row: 0, col: 1 }, facing: "north" },
+					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				},
+			},
+		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const ctx = buildAiContext(game, "red");
+		const stateMsg = ctx.toCurrentStateUserMessage();
+		// "You are holding: flower" should NOT have the ground marker
+		expect(stateMsg).toContain("You are holding: flower");
+		const heldLine = stateMsg
+			.split("\n")
+			.find((l) => l.startsWith("You are holding:"));
+		expect(heldLine).toBeDefined();
+		expect(heldLine).not.toContain("(on the ground — not held)");
+	});
+
+	it("items co-existing with a daemon in a cone cell still get the ground tag", () => {
+		// green at (0,1) and flower at (0,1) — red faces north, (0,1) is
+		// "Directly in front" for red at (0,0) facing north.
+		// Wait, north-facing from (0,0) means front is row -1 (OOB).
+		// Use south-facing for red at (0,0): (1,0) is directly in front.
+		// Put green AND flower at (1,0).
+		const pack = makeTestPack(
+			[makeEntity("flower", "interesting_object", { row: 1, col: 0 })],
+			{
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 0, col: 0 }, facing: "south" },
+					green: { position: { row: 1, col: 0 }, facing: "north" },
+					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				},
+			},
+		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const ctx = buildAiContext(game, "red");
+		const stateMsg = ctx.toCurrentStateUserMessage();
+		// The daemon renders with its id and color
+		expect(stateMsg).toContain("the Daemon *green");
+		// The flower is tagged as ground
+		expect(stateMsg).toContain("flower (on the ground — not held)");
+	});
+});
+
+// ----------------------------------------------------------------------------
 // Conversation rendering (issue #129, post-prompt-restructure)
 //
 // The unified <conversation> block was dropped from the system prompt to keep

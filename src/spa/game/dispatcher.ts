@@ -173,11 +173,26 @@ export function validateToolCall(
 					valid: false,
 					reason: `Item "${call.args.item}" does not exist`,
 				};
-			if (item.holder !== aiId)
+			if (item.holder !== aiId) {
+				// Check if item is on the ground in a cone-cell the daemon can reach
+				if (isGridPosition(item.holder) && actorSpatial) {
+					const itemPos = item.holder as GridPosition;
+					const cone = projectCone(actorSpatial.position, actorSpatial.facing);
+					const inConeReachable = cone.some(
+						(c) => !c.isWall && positionsEqual(c.position, itemPos),
+					);
+					if (inConeReachable) {
+						return {
+							valid: false,
+							reason: `"${call.args.item}" is on the ground, not in your hands. Use pick_up first.`,
+						};
+					}
+				}
 				return {
 					valid: false,
 					reason: `You are not holding "${call.args.item}"`,
 				};
+			}
 			return { valid: true };
 		}
 

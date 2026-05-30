@@ -252,6 +252,91 @@ describe("validateToolCall", () => {
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(false);
 	});
+
+	it("use on ground item in own cell returns friendlier message suggesting pick_up", () => {
+		const game = makeGame();
+		// flower is on the ground in red's own cell (0,0)
+		const call: ToolCall = { name: "use", args: { item: "flower" } };
+		const result = validateToolCall(game, "red", call);
+		expect(result.valid).toBe(false);
+		expect(result.reason).toMatch(/on the ground/);
+		expect(result.reason).toMatch(/pick_up/i);
+	});
+
+	it("use on ground item in cone (front arc, distance 1) returns friendlier message", () => {
+		// Place a ground item at (1,0); red faces south from (0,0)
+		const pack = makeTestPack(
+			[makeEntity("flower", "interesting_object", { row: 1, col: 0 })],
+			{
+				setting: "test",
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 0, col: 0 }, facing: "south" },
+					green: { position: { row: 0, col: 1 }, facing: "north" },
+					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				},
+			},
+		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const call: ToolCall = { name: "use", args: { item: "flower" } };
+		const result = validateToolCall(game, "red", call);
+		expect(result.valid).toBe(false);
+		expect(result.reason).toMatch(/on the ground/);
+		expect(result.reason).toMatch(/pick_up/i);
+	});
+
+	it("use on ground item at distance 2 (still in full cone) returns friendlier message", () => {
+		// Place a ground item at (2,0); red faces south from (0,0)
+		const pack = makeTestPack(
+			[makeEntity("flower", "interesting_object", { row: 2, col: 0 })],
+			{
+				setting: "test",
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 0, col: 0 }, facing: "south" },
+					green: { position: { row: 0, col: 1 }, facing: "north" },
+					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				},
+			},
+		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const call: ToolCall = { name: "use", args: { item: "flower" } };
+		const result = validateToolCall(game, "red", call);
+		expect(result.valid).toBe(false);
+		expect(result.reason).toMatch(/on the ground/);
+		expect(result.reason).toMatch(/pick_up/i);
+	});
+
+	it("use on item held by another AI retains generic not-holding message", () => {
+		const game = makeGame();
+		// key is held by red (a string AiId, not a GridPosition)
+		const call: ToolCall = { name: "use", args: { item: "key" } };
+		const result = validateToolCall(game, "green", call);
+		expect(result.valid).toBe(false);
+		expect(result.reason).toContain("You are not holding");
+	});
+
+	it("use on ground item outside the cone retains generic not-holding message", () => {
+		// Place flower at (4,4). Red faces south from (0,0) — cone only covers
+		// rows 0-2, cols -2..2. (4,4) is far outside.
+		const pack = makeTestPack(
+			[makeEntity("flower", "interesting_object", { row: 4, col: 4 })],
+			{
+				setting: "test",
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 0, col: 0 }, facing: "south" },
+					green: { position: { row: 0, col: 1 }, facing: "north" },
+					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				},
+			},
+		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const call: ToolCall = { name: "use", args: { item: "flower" } };
+		const result = validateToolCall(game, "red", call);
+		expect(result.valid).toBe(false);
+		expect(result.reason).toContain("You are not holding");
+	});
 });
 
 describe("executeToolCall — use placement via front arc", () => {
