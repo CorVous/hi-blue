@@ -361,7 +361,7 @@ main {
 }
 
 /* ── Progressive-loading states (start → game transition) ─────────────────
- * #stage carries a `data-load-state` attribute set by routes/game.ts:
+ * #stage carries a `data-load-state` attribute set by views/game.ts:
  *   loading-daemons   — empty panel frames; composer disabled; status red
  *   generating-room   — names + braille spinners; bottom→top brightness
  *                       wipe driven by --fill-pct; status yellow

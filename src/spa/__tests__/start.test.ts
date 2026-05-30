@@ -147,7 +147,7 @@ describe("renderStart — screen visibility", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderStart } = await import("../routes/start.js");
+		const { renderStart } = await import("../views/start.js");
 
 		try {
 			setSearch("skipDialup=1");
@@ -172,7 +172,7 @@ describe("renderStart — screen visibility", () => {
 		// them via `textContent` would escape the tags and lose the coloring.
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 		vi.resetModules();
-		const { renderStart } = await import("../routes/start.js");
+		const { renderStart } = await import("../views/start.js");
 
 		setSearch("skipDialup=1");
 		try {
@@ -206,7 +206,7 @@ describe("renderStart — BEGIN button state", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderStart } = await import("../routes/start.js");
+		const { renderStart } = await import("../views/start.js");
 
 		// renderStart kicks off generation and returns a promise. With skipDialup,
 		// the login form reveals synchronously; BEGIN should be available
@@ -230,7 +230,7 @@ describe("renderStart — BEGIN button state", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderStart } = await import("../routes/start.js");
+		const { renderStart } = await import("../views/start.js");
 
 		setSearch("skipDialup=1");
 		await renderStart(getMain());
@@ -259,7 +259,7 @@ describe("renderStart — BEGIN click saves session and navigates", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderStart } = await import("../routes/start.js");
+		const { renderStart } = await import("../views/start.js");
 
 		setSearch("skipDialup=1");
 		await renderStart(getMain());
@@ -283,7 +283,7 @@ describe("renderStart — BEGIN click saves session and navigates", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderStart } = await import("../routes/start.js");
+		const { renderStart } = await import("../views/start.js");
 
 		setSearch("skipDialup=1");
 		await renderStart(getMain());
@@ -302,7 +302,7 @@ describe("renderStart — BEGIN click saves session and navigates", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderStart } = await import("../routes/start.js");
+		const { renderStart } = await import("../views/start.js");
 
 		setSearch("skipDialup=1");
 		await renderStart(getMain());
@@ -370,7 +370,7 @@ describe("renderStart — CapHitError handling", () => {
 		});
 
 		// Re-import after doMock so the mock takes effect
-		const { renderStart } = await import("../routes/start.js");
+		const { renderStart } = await import("../views/start.js");
 
 		try {
 			setSearch("skipDialup=1");
@@ -405,7 +405,7 @@ describe("renderStart — persistence warning banners", () => {
 	it("shows 'broken' banner text when reason=broken", async () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 		vi.resetModules();
-		const { renderStart } = await import("../routes/start.js");
+		const { renderStart } = await import("../views/start.js");
 
 		setSearch("skipDialup=1");
 		try {
@@ -426,7 +426,7 @@ describe("renderStart — persistence warning banners", () => {
 	it("shows 'stuck' banner text when reason=stuck", async () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 		vi.resetModules();
-		const { renderStart } = await import("../routes/start.js");
+		const { renderStart } = await import("../views/start.js");
 
 		setSearch("skipDialup=1");
 		try {
@@ -448,7 +448,7 @@ describe("renderStart — persistence warning banners", () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 		vi.resetModules();
 		// Default SCHEMA_ARCHIVE_MAP is empty — any schemaVersion is a miss.
-		const { renderStart } = await import("../routes/start.js");
+		const { renderStart } = await import("../views/start.js");
 
 		setSearch("skipDialup=1");
 		try {
@@ -478,7 +478,7 @@ describe("renderStart — persistence warning banners", () => {
 		const archiveMapModule = await import("../persistence/archive-map.js");
 		archiveMapModule.SCHEMA_ARCHIVE_MAP[9] = "0.1.1";
 		try {
-			const { renderStart } = await import("../routes/start.js");
+			const { renderStart } = await import("../views/start.js");
 
 			setSearch("skipDialup=1");
 			try {
@@ -509,7 +509,7 @@ describe("renderStart — persistence warning banners", () => {
 	it("shows 'legacy-save-discarded' banner text when reason=legacy-save-discarded", async () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 		vi.resetModules();
-		const { renderStart } = await import("../routes/start.js");
+		const { renderStart } = await import("../views/start.js");
 
 		setSearch("skipDialup=1");
 		try {
@@ -530,7 +530,7 @@ describe("renderStart — persistence warning banners", () => {
 	it("shows no banner when reason opt is absent", async () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 		vi.resetModules();
-		const { renderStart } = await import("../routes/start.js");
+		const { renderStart } = await import("../views/start.js");
 
 		setSearch("skipDialup=1");
 		try {
@@ -550,7 +550,7 @@ describe("renderStart — persistence warning banners", () => {
 		// renderStart but are not user-facing problems — no banner shown.
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 		vi.resetModules();
-		const { renderStart } = await import("../routes/start.js");
+		const { renderStart } = await import("../views/start.js");
 
 		setSearch("skipDialup=1");
 		try {

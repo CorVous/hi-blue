@@ -75,7 +75,7 @@ test("addressed message lands only on first panel; all three panels render progr
 
 	// Player message appears in the first transcript exactly once. The SPA's
 	// form-submit handler strips the leading `*<handle>` mention before
-	// rendering the player line (see `src/spa/routes/game.ts`: "Append the
+	// rendering the player line (see `src/spa/views/game.ts`: "Append the
 	// (mention-stripped) player message to the addressed panel."), so the
 	// assertion checks for the stripped body, not the original input.
 	expect(firstTranscript ?? "").toContain("> hello first panel");

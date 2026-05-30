@@ -21,7 +21,7 @@ import { DEFAULT_LANDMARKS } from "../game/direction";
 import { GameSession } from "../game/game-session";
 import { MockRoundLLMProvider } from "../game/round-llm-provider";
 import type { AiPersona, ContentPack } from "../game/types";
-import { applyTestAffordances } from "../routes/game";
+import { applyTestAffordances } from "../views/game";
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 

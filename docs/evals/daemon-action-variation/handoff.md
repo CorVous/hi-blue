@@ -61,7 +61,7 @@ calibration against fresh native eval data, then flipping the default
 | `src/content/persona-generator.ts` | `generatePersonas(..., { actionProfiles })` calls `actionProfileFor` and sets `persona.actionProfile` when the flag is on. |
 | `src/spa/game/prompt-builder.ts` | `AiContext.actionProfile`; `renderSystemPrompt` emits the `<action_profile>` block between `<personality>` and `<typing_quirks>`. |
 | `src/spa/game/bootstrap.ts` | `BootstrapOpts.actionProfiles` → forwarded to `generatePersonas`. |
-| `src/spa/routes/start.ts` | Reads `?actionProfiles=1` from the URL into `BootstrapOpts`. |
+| `src/spa/views/start.ts` | Reads `?actionProfiles=1` from the URL into `BootstrapOpts`. |
 
 ### Data flow
 
@@ -107,7 +107,7 @@ calibrated (§6).
    `generateNewGameAssetsSplit` → `generatePersonas(..., { actionProfiles })`.
    Set the default to `true` at the `generatePersonas` call in
    `src/spa/game/bootstrap.ts` (`generateNewGameAssetsSplit`).
-2. **Invert the URL flag to a kill-switch.** `src/spa/routes/start.ts`
+2. **Invert the URL flag to a kill-switch.** `src/spa/views/start.ts`
    currently reads `searchParams.get("actionProfiles") === "1"` —
    strictly opt-in. Once ON is the default, change it so the URL can
    *disable* it (`?actionProfiles=0`) for A/B comparison and debugging,

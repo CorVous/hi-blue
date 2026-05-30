@@ -46,7 +46,7 @@ const daemonErrors: Record<string, { text: string; statusCode?: number }> = {};
 const daemonRounds: Record<string, number> = {};
 
 /**
- * Record a turn result for an AI (called by the provider wrapper in routes/game.ts).
+ * Record a turn result for an AI (called by the provider wrapper in views/game.ts).
  * Stores token/cost data for later rendering in the footer summary.
  */
 export function recordDaemonTurnResult(
@@ -82,7 +82,7 @@ export function clearDaemonTurnResults(): void {
 }
 
 /**
- * Record a system prompt for an AI (called by the provider wrapper in routes/game.ts).
+ * Record a system prompt for an AI (called by the provider wrapper in views/game.ts).
  */
 export function recordDaemonSystemPrompt(
 	aiId: AiId,
@@ -92,7 +92,7 @@ export function recordDaemonSystemPrompt(
 }
 
 /**
- * Record an error for an AI (called by the provider wrapper in routes/game.ts).
+ * Record an error for an AI (called by the provider wrapper in views/game.ts).
  * Extracts the error message and status code (if present).
  */
 export function recordDaemonError(aiId: AiId, error: unknown): void {
@@ -111,7 +111,7 @@ export function recordDaemonError(aiId: AiId, error: unknown): void {
 }
 
 /**
- * Record the current round number for an AI (called by the provider wrapper in routes/game.ts).
+ * Record the current round number for an AI (called by the provider wrapper in views/game.ts).
  */
 export function recordDaemonRound(aiId: AiId, round: number): void {
 	daemonRounds[aiId] = round;

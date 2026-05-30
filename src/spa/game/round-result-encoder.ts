@@ -12,7 +12,7 @@
  * strings. Only entries where `from === "blue"` or `to === "blue"` are emitted;
  * daemon-to-daemon entries are silently dropped (the DM-thread filter, AC #1/2).
  *
- * Event types emitted (consumed by src/spa/routes/game.ts):
+ * Event types emitted (consumed by src/spa/views/game.ts):
  *   ai_start   — { type, aiId }
  *   message    — { type, from, to, content }  (replaces token/lockout for panel painting)
  *   ai_end     — { type }

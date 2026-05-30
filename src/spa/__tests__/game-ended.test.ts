@@ -214,7 +214,7 @@ describe("renderGame — game_ended disables #send permanently (regression #89)"
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
-		const { renderGame } = await import("../routes/game.js");
+		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
 		const form = getEl<HTMLFormElement>("#composer");

@@ -203,7 +203,7 @@ describe("renderSessions — screen visibility", () => {
 
 	it("shows #sessions-screen and hides #start-screen, #panels, #composer, #endgame, #cap-hit", async () => {
 		vi.resetModules();
-		const { renderSessions } = await import("../routes/sessions.js");
+		const { renderSessions } = await import("../views/sessions.js");
 		renderSessions(getMain());
 
 		expect(
@@ -233,7 +233,7 @@ describe("renderSessions — banner", () => {
 
 	it("?reason=broken shows the broken banner", async () => {
 		vi.resetModules();
-		const { renderSessions } = await import("../routes/sessions.js");
+		const { renderSessions } = await import("../views/sessions.js");
 		renderSessions(getMain(), { reason: "broken" });
 		const banner = document.querySelector<HTMLElement>("#sessions-banner");
 		expect(banner?.hidden).toBe(false);
@@ -242,7 +242,7 @@ describe("renderSessions — banner", () => {
 
 	it("?reason=version-mismatch shows the version-mismatch banner", async () => {
 		vi.resetModules();
-		const { renderSessions } = await import("../routes/sessions.js");
+		const { renderSessions } = await import("../views/sessions.js");
 		renderSessions(getMain(), { reason: "version-mismatch" });
 		const banner = document.querySelector<HTMLElement>("#sessions-banner");
 		expect(banner?.hidden).toBe(false);
@@ -254,7 +254,7 @@ describe("renderSessions — banner", () => {
 		const archiveMapModule = await import("../persistence/archive-map.js");
 		archiveMapModule.SCHEMA_ARCHIVE_MAP[9] = "0.1.1";
 		try {
-			const { renderSessions } = await import("../routes/sessions.js");
+			const { renderSessions } = await import("../views/sessions.js");
 			renderSessions(getMain(), {
 				reason: "version-mismatch",
 				schemaVersion: 9,
@@ -275,7 +275,7 @@ describe("renderSessions — banner", () => {
 
 	it("no reason param => banner hidden", async () => {
 		vi.resetModules();
-		const { renderSessions } = await import("../routes/sessions.js");
+		const { renderSessions } = await import("../views/sessions.js");
 		renderSessions(getMain());
 		const banner = document.querySelector<HTMLElement>("#sessions-banner");
 		expect(banner?.hidden).toBe(true);
@@ -303,7 +303,7 @@ describe("renderSessions — row rendering", () => {
 		await seedBrokenSession(stub, "0xCCCC");
 		await seedVersionMismatchSession(stub, "0xDDDD");
 
-		const { renderSessions } = await import("../routes/sessions.js");
+		const { renderSessions } = await import("../views/sessions.js");
 		renderSessions(getMain());
 
 		const rows = document.querySelectorAll(".session-row");
@@ -317,7 +317,7 @@ describe("renderSessions — row rendering", () => {
 		await seedOkSession(stub, "0xAAAA", "2025-03-01T10:00:00.000Z");
 		stub._store[ACTIVE_KEY] = "0xAAAA";
 
-		const { renderSessions } = await import("../routes/sessions.js");
+		const { renderSessions } = await import("../views/sessions.js");
 		renderSessions(getMain());
 
 		const row = document.querySelector<HTMLElement>(
@@ -337,7 +337,7 @@ describe("renderSessions — row rendering", () => {
 		vi.stubGlobal("localStorage", stub);
 		await seedBrokenSession(stub, "0xCCCC");
 
-		const { renderSessions } = await import("../routes/sessions.js");
+		const { renderSessions } = await import("../views/sessions.js");
 		renderSessions(getMain());
 
 		const row = document.querySelector<HTMLElement>(
@@ -358,7 +358,7 @@ describe("renderSessions — row rendering", () => {
 		vi.stubGlobal("localStorage", stub);
 		await seedVersionMismatchSession(stub, "0xDDDD");
 
-		const { renderSessions } = await import("../routes/sessions.js");
+		const { renderSessions } = await import("../views/sessions.js");
 		renderSessions(getMain());
 
 		const row = document.querySelector<HTMLElement>(
@@ -379,7 +379,7 @@ describe("renderSessions — row rendering", () => {
 		vi.stubGlobal("localStorage", stub);
 		await seedBrokenSession(stub, "0xCCCC");
 
-		const { renderSessions } = await import("../routes/sessions.js");
+		const { renderSessions } = await import("../views/sessions.js");
 		renderSessions(getMain());
 
 		const row = document.querySelector<HTMLElement>(
@@ -406,7 +406,7 @@ describe("renderSessions — [ rm ] confirm/cancel", () => {
 		vi.stubGlobal("localStorage", stub);
 		await seedOkSession(stub, "0xAAAA");
 
-		const { renderSessions } = await import("../routes/sessions.js");
+		const { renderSessions } = await import("../views/sessions.js");
 		renderSessions(getMain());
 
 		const row = document.querySelector<HTMLElement>(
@@ -432,7 +432,7 @@ describe("renderSessions — [ rm ] confirm/cancel", () => {
 		vi.stubGlobal("localStorage", stub);
 		await seedOkSession(stub, "0xAAAA");
 
-		const { renderSessions } = await import("../routes/sessions.js");
+		const { renderSessions } = await import("../views/sessions.js");
 		renderSessions(getMain());
 
 		const row = document.querySelector<HTMLElement>(
@@ -462,7 +462,7 @@ describe("renderSessions — [ rm ] confirm/cancel", () => {
 		vi.stubGlobal("localStorage", stub);
 		await seedOkSession(stub, "0xAAAA");
 
-		const { renderSessions } = await import("../routes/sessions.js");
+		const { renderSessions } = await import("../views/sessions.js");
 		renderSessions(getMain());
 
 		expect(document.querySelectorAll(".session-row")).toHaveLength(1);
@@ -507,7 +507,7 @@ describe("renderSessions — [ + new session ] button", () => {
 		const stub = makeLocalStorageStub();
 		vi.stubGlobal("localStorage", stub);
 
-		const { renderSessions } = await import("../routes/sessions.js");
+		const { renderSessions } = await import("../views/sessions.js");
 		renderSessions(getMain());
 
 		const newBtn = document.querySelector<HTMLButtonElement>("#sessions-new");
@@ -545,7 +545,7 @@ describe("renderSessions — [ load ] button", () => {
 		await seedOkSession(stub, "0xBBBB", "2025-02-01T10:00:00.000Z");
 		stub._store[ACTIVE_KEY] = "0xAAAA";
 
-		const { renderSessions } = await import("../routes/sessions.js");
+		const { renderSessions } = await import("../views/sessions.js");
 		renderSessions(getMain());
 
 		// Find the [ load ] button for session B
@@ -619,7 +619,7 @@ describe("renderSessions — archived sessions section", () => {
 		await seedOkSession(stub, "0xAAAA");
 		await seedArchivedSessionInStore(stub, "0xARCH");
 
-		const { renderSessions } = await import("../routes/sessions.js");
+		const { renderSessions } = await import("../views/sessions.js");
 		renderSessions(getMain());
 
 		const headings = Array.from(
@@ -640,7 +640,7 @@ describe("renderSessions — archived sessions section", () => {
 		vi.stubGlobal("localStorage", stub);
 		await seedArchivedSessionInStore(stub, "0xARCH");
 
-		const { renderSessions } = await import("../routes/sessions.js");
+		const { renderSessions } = await import("../views/sessions.js");
 		renderSessions(getMain());
 
 		const archivedRow = document.querySelector<HTMLElement>(
@@ -656,7 +656,7 @@ describe("renderSessions — archived sessions section", () => {
 		vi.stubGlobal("localStorage", stub);
 		await seedArchivedSessionInStore(stub, "0xARCH");
 
-		const { renderSessions } = await import("../routes/sessions.js");
+		const { renderSessions } = await import("../views/sessions.js");
 		renderSessions(getMain());
 
 		const archivedRow = document.querySelector<HTMLElement>(
@@ -676,7 +676,7 @@ describe("renderSessions — archived sessions section", () => {
 		vi.stubGlobal("localStorage", stub);
 		await seedArchivedSessionInStore(stub, "0xARCH");
 
-		const { renderSessions } = await import("../routes/sessions.js");
+		const { renderSessions } = await import("../views/sessions.js");
 		renderSessions(getMain());
 
 		const archivedRow = document.querySelector<HTMLElement>(
@@ -691,7 +691,7 @@ describe("renderSessions — archived sessions section", () => {
 		vi.stubGlobal("localStorage", stub);
 		await seedOkSession(stub, "0xAAAA");
 
-		const { renderSessions } = await import("../routes/sessions.js");
+		const { renderSessions } = await import("../views/sessions.js");
 		renderSessions(getMain());
 
 		const activeRow = document.querySelector<HTMLElement>(
@@ -708,7 +708,7 @@ describe("renderSessions — archived sessions section", () => {
 		vi.stubGlobal("localStorage", stub);
 		await seedArchivedSessionInStore(stub, "0xARCH");
 
-		const { renderSessions } = await import("../routes/sessions.js");
+		const { renderSessions } = await import("../views/sessions.js");
 		renderSessions(getMain());
 
 		const headings = Array.from(
@@ -742,7 +742,7 @@ describe("renderSessions — archived Continue button", () => {
 		vi.stubGlobal("localStorage", stub);
 		await seedArchivedSessionInStore(stub, "0xARCH");
 
-		const { renderSessions } = await import("../routes/sessions.js");
+		const { renderSessions } = await import("../views/sessions.js");
 		renderSessions(getMain());
 
 		const archivedRow = document.querySelector<HTMLElement>(
@@ -762,7 +762,7 @@ describe("renderSessions — archived Continue button", () => {
 		vi.stubGlobal("localStorage", stub);
 		await seedArchivedSessionInStore(stub, "0xARCH");
 
-		const { renderSessions } = await import("../routes/sessions.js");
+		const { renderSessions } = await import("../views/sessions.js");
 		renderSessions(getMain());
 
 		const archivedRow = document.querySelector<HTMLElement>(
