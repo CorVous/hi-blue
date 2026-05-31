@@ -25,7 +25,7 @@
 		"eval:drift": "npx tsx evals/free-text-drift/runner.mts",
 		"prepare": "husky",
 		"release": "changelogen --release",
-		"release:beta": "changelogen --release --prerelease beta"
+		"release:beta": "changelogen --release --prerelease beta && gh release edit v$(node -p \"JSON.parse(require('fs').readFileSync('package.json','utf8')).version\") --prerelease"
 	},
 	"pnpm": {
 		"onlyBuiltDependencies": [
