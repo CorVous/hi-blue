@@ -1,6 +1,42 @@
 # Changelog
 
 
+## v0.0.2-beta.2
+
+[compare changes](https://github.com/CorVous/hi-blue/compare/v0.0.2-beta.1...v0.0.2-beta.2)
+
+### 🚀 Enhancements
+
+- **dev:** Add local + LAN dev scripts that skip Cloudflare login ([#501](https://github.com/CorVous/hi-blue/pull/501))
+
+### 🩹 Fixes
+
+- **game:** Hide #bootstrap-recovery on late-success after timeout ([#500](https://github.com/CorVous/hi-blue/pull/500))
+- **prompt-builder:** Tag ground items as not-held in cone and cell rendering ([ac9c0ae](https://github.com/CorVous/hi-blue/commit/ac9c0ae))
+- **dispatcher:** Gate friendly use message to pick_up-reachable cells only ([ec929b2](https://github.com/CorVous/hi-blue/commit/ec929b2))
+
+### 💅 Refactors
+
+- **spa:** Rename routes/ directory to views/ ([f69735c](https://github.com/CorVous/hi-blue/commit/f69735c))
+
+### 📖 Documentation
+
+- **testing:** Update stale path reference to routes/ -> views/ ([e77f730](https://github.com/CorVous/hi-blue/commit/e77f730))
+
+### 🏡 Chore
+
+- **release:** V0.0.2-beta.1 ([7e9df5f](https://github.com/CorVous/hi-blue/commit/7e9df5f))
+- **settings:** Remove SessionStart pnpm install hook ([63a02c2](https://github.com/CorVous/hi-blue/commit/63a02c2))
+
+### ✅ Tests
+
+- **spa:** Update stale route/ comment references in test file headers ([3c46e2f](https://github.com/CorVous/hi-blue/commit/3c46e2f))
+
+### ❤️ Contributors
+
+- Cor Vous <birb@cor.gg>
+- CorVous ([@CorVous](https://github.com/CorVous))
+
 ## v0.0.2-beta.1
 
 [compare changes](https://github.com/CorVous/hi-blue/compare/v0.0.2-beta.0...v0.0.2-beta.1)
