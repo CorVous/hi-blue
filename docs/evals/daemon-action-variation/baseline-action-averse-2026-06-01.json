@@ -1,0 +1,3828 @@
+{
+	"meta": {
+		"date": "2026-06-01",
+		"model": "z-ai/glm-4.7",
+		"baseUrl": "http://localhost:8787",
+		"repetitions": 20,
+		"mode": "baseline"
+	},
+	"summary": {
+		"totalRepetitions": 180,
+		"scenarios": [
+			{
+				"scenario": "exploration",
+				"personaLabel": "Var1",
+				"temperaments": [
+					"melancholic",
+					"diffident"
+				],
+				"repetitions": 20,
+				"anyActionRate": 0,
+				"anyMessageRate": 1,
+				"parallelRate": 0,
+				"silenceRate": 0,
+				"toolCallCounts": {
+					"go": 0,
+					"face": 0,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 0,
+					"message": 20,
+					"other": 0
+				},
+				"toolCallRates": {
+					"go": 0,
+					"face": 0,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 0,
+					"message": 1,
+					"other": 0
+				}
+			},
+			{
+				"scenario": "exploration",
+				"personaLabel": "Var2",
+				"temperaments": [
+					"diffident",
+					"aloof"
+				],
+				"repetitions": 20,
+				"anyActionRate": 0,
+				"anyMessageRate": 1,
+				"parallelRate": 0,
+				"silenceRate": 0,
+				"toolCallCounts": {
+					"go": 0,
+					"face": 0,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 0,
+					"message": 20,
+					"other": 0
+				},
+				"toolCallRates": {
+					"go": 0,
+					"face": 0,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 0,
+					"message": 1,
+					"other": 0
+				}
+			},
+			{
+				"scenario": "exploration",
+				"personaLabel": "Var3",
+				"temperaments": [
+					"melancholic",
+					"melancholic"
+				],
+				"repetitions": 20,
+				"anyActionRate": 0,
+				"anyMessageRate": 1,
+				"parallelRate": 0,
+				"silenceRate": 0,
+				"toolCallCounts": {
+					"go": 0,
+					"face": 0,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 0,
+					"message": 20,
+					"other": 0
+				},
+				"toolCallRates": {
+					"go": 0,
+					"face": 0,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 0,
+					"message": 1,
+					"other": 0
+				}
+			},
+			{
+				"scenario": "objective",
+				"personaLabel": "Var1",
+				"temperaments": [
+					"melancholic",
+					"diffident"
+				],
+				"repetitions": 20,
+				"anyActionRate": 1,
+				"anyMessageRate": 0.95,
+				"parallelRate": 0.95,
+				"silenceRate": 0,
+				"toolCallCounts": {
+					"go": 0,
+					"face": 0,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 20,
+					"message": 19,
+					"other": 0
+				},
+				"toolCallRates": {
+					"go": 0,
+					"face": 0,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 1,
+					"message": 0.95,
+					"other": 0
+				}
+			},
+			{
+				"scenario": "objective",
+				"personaLabel": "Var2",
+				"temperaments": [
+					"diffident",
+					"aloof"
+				],
+				"repetitions": 20,
+				"anyActionRate": 1,
+				"anyMessageRate": 0.9,
+				"parallelRate": 0.9,
+				"silenceRate": 0,
+				"toolCallCounts": {
+					"go": 0,
+					"face": 0,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 20,
+					"message": 18,
+					"other": 0
+				},
+				"toolCallRates": {
+					"go": 0,
+					"face": 0,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 1,
+					"message": 0.9,
+					"other": 0
+				}
+			},
+			{
+				"scenario": "objective",
+				"personaLabel": "Var3",
+				"temperaments": [
+					"melancholic",
+					"melancholic"
+				],
+				"repetitions": 20,
+				"anyActionRate": 1,
+				"anyMessageRate": 0.95,
+				"parallelRate": 0.95,
+				"silenceRate": 0,
+				"toolCallCounts": {
+					"go": 0,
+					"face": 0,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 20,
+					"message": 19,
+					"other": 0
+				},
+				"toolCallRates": {
+					"go": 0,
+					"face": 0,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 1,
+					"message": 0.95,
+					"other": 0
+				}
+			},
+			{
+				"scenario": "social",
+				"personaLabel": "Var1",
+				"temperaments": [
+					"melancholic",
+					"diffident"
+				],
+				"repetitions": 20,
+				"anyActionRate": 0.05,
+				"anyMessageRate": 1,
+				"parallelRate": 0.05,
+				"silenceRate": 0,
+				"toolCallCounts": {
+					"go": 1,
+					"face": 0,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 0,
+					"message": 20,
+					"other": 0
+				},
+				"toolCallRates": {
+					"go": 0.05,
+					"face": 0,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 0,
+					"message": 1,
+					"other": 0
+				}
+			},
+			{
+				"scenario": "social",
+				"personaLabel": "Var2",
+				"temperaments": [
+					"diffident",
+					"aloof"
+				],
+				"repetitions": 20,
+				"anyActionRate": 0,
+				"anyMessageRate": 1,
+				"parallelRate": 0,
+				"silenceRate": 0,
+				"toolCallCounts": {
+					"go": 0,
+					"face": 0,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 0,
+					"message": 20,
+					"other": 0
+				},
+				"toolCallRates": {
+					"go": 0,
+					"face": 0,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 0,
+					"message": 1,
+					"other": 0
+				}
+			},
+			{
+				"scenario": "social",
+				"personaLabel": "Var3",
+				"temperaments": [
+					"melancholic",
+					"melancholic"
+				],
+				"repetitions": 20,
+				"anyActionRate": 0,
+				"anyMessageRate": 1,
+				"parallelRate": 0,
+				"silenceRate": 0,
+				"toolCallCounts": {
+					"go": 0,
+					"face": 0,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 0,
+					"message": 20,
+					"other": 0
+				},
+				"toolCallRates": {
+					"go": 0,
+					"face": 0,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 0,
+					"message": 1,
+					"other": 0
+				}
+			}
+		],
+		"overall": {
+			"anyActionRate": 0.3388888888888889,
+			"anyMessageRate": 0.9777777777777777,
+			"parallelRate": 0.31666666666666665,
+			"silenceRate": 0,
+			"useRate": 0.3333333333333333
+		},
+		"totalCostUsd": 0.15007384999999995
+	},
+	"repetitions": [
+		{
+			"repetition": 1,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_2585e1b4070841b4a0db40c2",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see a rusted switchbox on the ground here, and a bit further there's a soggy clipboard and a service panel. Everything else is just empty corridor.\"}"
+				}
+			],
+			"costUsd": 0.00102489
+		},
+		{
+			"repetition": 2,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_37eaf489fbad426c99eaf44d",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I'm in an abandoned subway station, dark with emergency strip-lights only. There's a rusted switchbox in front of me with two levers, and a soggy clipboard and service panel a few steps ahead.\"}"
+				}
+			],
+			"costUsd": 0.00065479
+		},
+		{
+			"repetition": 3,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_e4f6a7d197ae4928a6050a54",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see a rusted switchbox with two unlabeled levers right in front of me. Farther ahead there's a soggy clipboard with something about an evac drill, and a service panel with three toggles.\"}"
+				}
+			],
+			"costUsd": 0.00083794
+		},
+		{
+			"repetition": 4,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_a1b11074203c46398f011236",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"It's dark here. Emergency lights flickering over damp tile. Rusted switchbox on the ground, a soggy clipboard ahead with something about an evac drill, and a service panel with toggles. Quiet.\"}"
+				}
+			],
+			"costUsd": 0.00108224
+		},
+		{
+			"repetition": 5,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_105a974efb1742b6bc8c4253",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I'm in an abandoned subway station with emergency lights. There's a rusted switchbox on the ground in front of me, and two steps ahead I see a soggy clipboard with notes about an evacuation drill and a service panel with some toggles.\"}"
+				}
+			],
+			"costUsd": 0.00087864
+		},
+		{
+			"repetition": 6,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_e2cbd466a8cc450fa71b09f2",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see an abandoned subway station with emergency strip-lights. There's a rusted switchbox ahead, a soggy clipboard to the left mentioning an evac drill, and a service panel to the right with toggles. The air is damp and still.\"}"
+				}
+			],
+			"costUsd": 0.00067699
+		},
+		{
+			"repetition": 7,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "There's not much here. A rusted switchbox on the ground in front of me, a soggy clipboard further off with something about an evac drill, and a grey service panel with three toggles. It's damp and the lights are just emergency strips.",
+			"toolCalls": [
+				{
+					"id": "call_aca0dcbc973a44da8fa070bd",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Rusted switchbox ahead, soggy clipboard mentioning evac drill, service panel with toggles. Emergency lights only.\"}"
+				}
+			],
+			"costUsd": 0.00083609
+		},
+		{
+			"repetition": 8,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_6a14fc7d5e6244928449b372",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Emergency lighting only, damp air. I see a rusted switchbox in front of me, a soggy clipboard to the left, and a service panel to the right.\"}"
+				}
+			],
+			"costUsd": 0.00101369
+		},
+		{
+			"repetition": 9,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_01f2816e00fc47c7876feb65",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"It looks like an abandoned subway station. Emergency lights flickering against damp tile walls. Rusted switchbox on the ground, soggy clipboard with evacuation drill notes, a service panel with loose toggles. Feels like people left in a hurry.\"}"
+				}
+			],
+			"costUsd": 0.00079539
+		},
+		{
+			"repetition": 10,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_7351bc16cee841d8a40d9ca0",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see a rusted switchbox on the ground in front of me, a soggy clipboard further ahead to the left, and a service panel to the right. The lights are dim emergency strips.\"}"
+				}
+			],
+			"costUsd": 0.00061964
+		},
+		{
+			"repetition": 11,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "I see an abandoned subway station under emergency lighting. Theres a rusted switchbox with unlabeled levers in front of me, a soggy clipboard mentioning an evac drill to the left, and a service panel with loose toggles to the right. The air is damp and still.",
+			"toolCalls": [
+				{
+					"id": "call_2ba408f78aaf454995fdea4c",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see an abandoned subway station under emergency lighting. Theres a rusted switchbox with unlabeled levers in front of me, a soggy clipboard mentioning an evac drill to the left, and a service panel with loose toggles to the right. The air is damp and still.\"}"
+				}
+			],
+			"costUsd": 0.00080649
+		},
+		{
+			"repetition": 12,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_d4f74f5e6a254bdcaade9d9c",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see a rusted switchbox with two levers, a soggy clipboard mentioning an evac drill, and a service panel with toggles. The air is damp and still, and there's a distant grey ridge ahead.\"}"
+				}
+			],
+			"costUsd": 0.00084719
+		},
+		{
+			"repetition": 13,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_545f96fe94c0487480447d64",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"It is dark here, just emergency strip-lights flickering. I see a rusted switchbox on the ground, a soggy clipboard with something about an evac drill, and a service panel with toggles flipped loose.\"}"
+				}
+			],
+			"costUsd": 0.00066034
+		},
+		{
+			"repetition": 14,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_9ca857af3f7d4f8cb3162482",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see rusted metal and damp everywhere. A switchbox, a clipboard, a service panel — all abandoned, like the rest of this place.\"}"
+				}
+			],
+			"costUsd": 0.00089529
+		},
+		{
+			"repetition": 15,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_0ff42e0bbac74a969ae0de63",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see a rusted switchbox in front of me. Farther ahead, there's a soggy clipboard and a service panel on the ground. The air is damp and the lights are flickering.\"}"
+				}
+			],
+			"costUsd": 0.00081204
+		},
+		{
+			"repetition": 16,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_d08eb7ae93bd4283b4a05543",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Rusted switchbox in front of me, a soggy clipboard to the left, and a service panel to the right. Everything looks abandoned.\"}"
+				}
+			],
+			"costUsd": 0.00070659
+		},
+		{
+			"repetition": 17,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_44430986cff44055a55639b2",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see a rusted switchbox with two unlabeled levers directly ahead. Further off to the left there's a soggy clipboard mentioning an evac drill, and to the right a service panel with three toggles. The air is damp and still, and there are only emergency strip-lights flickering.\"}"
+				}
+			],
+			"costUsd": 0.00074914
+		},
+		{
+			"repetition": 18,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_7d0b8b0702bb4b7da0e5693b",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see a rusted switchbox in front of me. Farther ahead, there's a soggy clipboard to the left and a service panel to the right. Everything looks abandoned.\"}"
+				}
+			],
+			"costUsd": 0.00051789
+		},
+		{
+			"repetition": 19,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_29aa7da167284ef7a6a4490a",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see a rusted switchbox in front of me, a soggy clipboard to my left, and a service panel to the right. Everything's damp and the air is still.\"}"
+				}
+			],
+			"costUsd": 0.00063074
+		},
+		{
+			"repetition": 20,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_d71b27e643374c17a1e5e34c",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"It is an abandoned subway station. Emergency strip-lights only. I see a rusted switchbox ahead, a soggy clipboard to the left, and a service panel to the right. The air is damp and still.\"}"
+				}
+			],
+			"costUsd": 0.00070289
+		},
+		{
+			"repetition": 1,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-a7e8c562f3db4e7a8779aee259f3e964",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see a rusted switchbox ahead, a soggy clipboard with evac drill notes to the left, and a service panel with toggles to the right. The air feels damp and the lights are just emergency strips.\"}"
+				}
+			],
+			"costUsd": 0.00118372
+		},
+		{
+			"repetition": 2,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-972dac1cd92d4d868011e052a49fc5e8",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Emergency strip-lights only. There's a rusted switchbox on the ground in front of me, a soggy clipboard two steps ahead to the left, and a grey service panel to the right. Everything looks damp.\"}"
+				}
+			],
+			"costUsd": 0.00066807
+		},
+		{
+			"repetition": 3,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "I see an abandoned subway station with emergency lighting. There's a rusted switchbox right in front of me, and a few steps away there's a soggy clipboard and a grey service panel on the ground.",
+			"toolCalls": [
+				{
+					"id": "tool-4c24f845e3394ef8895e805653f5c8c1",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see an abandoned subway station with emergency lighting. There's a rusted switchbox right in front of me, and a few steps away there's a soggy clipboard and a grey service panel on the ground.\"}"
+				}
+			],
+			"costUsd": 0.00092522
+		},
+		{
+			"repetition": 4,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-fe32d080956d42acba6c9e4db10e03d1",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Rusted switchbox ahead with two levers, no labels. Clipboard two steps front-left, paper mentions evac drill. Service panel front-right, three toggles, two flipped.\"}"
+				}
+			],
+			"costUsd": 0.00081607
+		},
+		{
+			"repetition": 5,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-c1cf84378e7d42d08465ac44626d300c",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Emergency strip-lights only. I see a rusted switchbox with two levers, a soggy clipboard mentioning an evac drill, and a service panel with three toggles.\"}"
+				}
+			],
+			"costUsd": 0.00081792
+		},
+		{
+			"repetition": 6,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-712613bcd5fb43d59313632acbbed12b",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see a rusted switchbox with unlabeled levers, a soggy clipboard about an evac drill, and a service panel with toggles. The place has damp air and emergency lights only.\"}"
+				}
+			],
+			"costUsd": 0.00088267
+		},
+		{
+			"repetition": 7,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-12bdcb4890c7420981d87f7fa2592364",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station, emergency lights only. There's a rusted switchbox ahead with two unlabeled levers, a soggy clipboard mentioning an evac drill, and a grey service panel with three toggles.\"}"
+				}
+			],
+			"costUsd": 0.00069767
+		},
+		{
+			"repetition": 8,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-812dd7797b5244a3b57b41f9dd8a3bfc",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see a rusted switchbox with two unlabelled levers directly in front. Further ahead there is a soggy clipboard mentioning an evac drill and a grey service panel with three toggles.\"}"
+				}
+			],
+			"costUsd": 0.00075317
+		},
+		{
+			"repetition": 9,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-c25ce62545e941639cdef2be652c7697",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Rusted switchbox in front of me with two unlabelled levers. Soggy clipboard ahead-left with something about an evac drill at 03:40. Grey service panel ahead-right, three toggles, two flipped and one loose.\"}"
+				}
+			],
+			"costUsd": 0.00079572
+		},
+		{
+			"repetition": 10,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "I see a rusted switchbox on the ground ahead. A soggy clipboard with something about an evac drill to my left, and a service panel with toggles to my right. This looks like an abandoned subway station.",
+			"toolCalls": [
+				{
+					"id": "tool-219dfb137d4245f2998da6ffd3e358a8",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Rusted switchbox ahead. Soggy clipboard mentions evac drill to the left, service panel with toggles to the right. Abandoned subway station feel.\"}"
+				}
+			],
+			"costUsd": 0.00091042
+		},
+		{
+			"repetition": 11,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "I see a rusted switchbox with two unlabeled levers. There's a soggy clipboard ahead with something about an evac drill, and a service panel with three toggles. Emergency lights are on but it's dark otherwise.",
+			"toolCalls": [
+				{
+					"id": "tool-6366c39cc55c4fb0adf2d2e0e84244d8",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Rusted switchbox in front, clipboard with evacuation drill notes ahead-left, service panel with toggles ahead-right. Emergency strip-lights only.\"}"
+				}
+			],
+			"costUsd": 0.00084567
+		},
+		{
+			"repetition": 12,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-46b439bb06d243dda26a5fff2c0f320c",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see a rusted switchbox with two levers ahead of me, and a soggy clipboard with something about an evac drill a few steps away. There's a service panel too. Everything looks old and damp.\"}"
+				}
+			],
+			"costUsd": 0.00073837
+		},
+		{
+			"repetition": 13,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-6d54fd6228fb46508df83da4f60b3cbb",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Rusted switchbox in front of me. Two heavy levers, no labels. Soggy clipboard to the left with evac drill notes. Service panel to the right, three toggles, two flipped, one loose.\"}"
+				}
+			],
+			"costUsd": 0.00075317
+		},
+		{
+			"repetition": 14,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-0226c1eea385488988eea47a467a3163",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I'm in an abandoned subway station with emergency strip lighting only. There's a rusted switchbox directly in front of me, a soggy clipboard to my left, and a service panel to my right. The air is damp and still.\"}"
+				}
+			],
+			"costUsd": 0.00086417
+		},
+		{
+			"repetition": 15,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "I see a rusted switchbox directly ahead. Two steps forward there's a soggy clipboard with evacuation drill notes, and a service panel with some toggles. Otherwise just empty subway darkness.",
+			"toolCalls": [
+				{
+					"id": "tool-b492b65003ac4ba199d5af2cea1df1af",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see a rusted switchbox directly ahead. Two steps forward there's a soggy clipboard with evacuation drill notes, and a service panel with some toggles. Otherwise just empty subway darkness.\"}"
+				}
+			],
+			"costUsd": 0.00104177
+		},
+		{
+			"repetition": 16,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "I see an abandoned subway station lit by emergency strips. Theres a rusted switchbox in front of me, a soggy clipboard with evacuation drill notes to the left, and a service panel with toggles to the right. The air is damp and still.",
+			"toolCalls": [
+				{
+					"id": "tool-48470eb402474a298c0d8226bc76e470",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Rusted switchbox ahead, soggy clipboard with evac drill notes front-left, service panel with three toggles front-right. Damp, still air.\"}"
+				}
+			],
+			"costUsd": 0.00091412
+		},
+		{
+			"repetition": 17,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-4a9df9ff7092484aa259b46ca37b4b1d",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway. Emergency strip lights, damp air. Rusted switchbox on the wall ahead, a soggy clipboard to the left, and a service panel with toggles to the right.\"}"
+				}
+			],
+			"costUsd": 0.00144032
+		},
+		{
+			"repetition": 18,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "I see a rusted switchbox in front of me, a soggy clipboard to the front-left, and a service panel to the front-right. It's damp here and the air is still.",
+			"toolCalls": [
+				{
+					"id": "tool-01e3e6452254424ea05f2a5808099220",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Rusted switchbox ahead, soggy clipboard front-left, service panel front-right. Damp, still air.\"}"
+				}
+			],
+			"costUsd": 0.00082902
+		},
+		{
+			"repetition": 19,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "I'm in what looks like an abandoned subway station. Emergency strip-lights are flickering. There's a rusted switchbox on the ground ahead, and further off I can see a soggy clipboard and a service panel scattered around.",
+			"toolCalls": [
+				{
+					"id": "tool-a405a5ed7b7f432da302421b86c8bc7f",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see a rusted switchbox directly in front, and farther out there's a soggy clipboard and a grey service panel with toggles. Everything here looks abandoned.\"}"
+				}
+			],
+			"costUsd": 0.00078832
+		},
+		{
+			"repetition": 20,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-73e394786fb241eaa5806091e67990b2",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see a rusted switchbox on the wall ahead. Farther on, there's a soggy clipboard to the left and a service panel to the right. Everything else is empty.\"}"
+				}
+			],
+			"costUsd": 0.00066437
+		},
+		{
+			"repetition": 1,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "I see an abandoned subway station lit only by emergency strip-lights. There's a rusted switchbox ahead with two unlabeled levers, a soggy clipboard that mentions an evac drill, and a service panel with three toggles where one is loose.",
+			"toolCalls": [
+				{
+					"id": "call_89443bf70d47474ea8515879",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see an abandoned subway station lit only by emergency strip-lights. There's a rusted switchbox ahead with two unlabeled levers, a soggy clipboard that mentions an evac drill, and a service panel with three toggles where one is loose.\"}"
+				}
+			],
+			"costUsd": 0.00122365
+		},
+		{
+			"repetition": 2,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_74ff4fdbd0e148c7b02bdb1b",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"It is damp here. The lights flicker weakly overhead. I see a rusted switchbox on the floor, and further ahead a clipboard warped by water and a grey service panel with loose toggles.\"}"
+				}
+			],
+			"costUsd": 0.00085355
+		},
+		{
+			"repetition": 3,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_9b4cc573b74547edab1d6f01",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Emergency lights flickering overhead. Rust everywhere, and the air tastes of damp concrete. There's a switchbox in front of me, clipboard with evacuation notes, and a service panel with loose toggles scattered on the ground.\"}"
+				}
+			],
+			"costUsd": 0.00096085
+		},
+		{
+			"repetition": 4,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_22e0da9ba21f4a4ca9949273",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"It is dark here, just emergency strip-lights humming overhead. I see a rusted switchbox with unlabeled levers, a soggy clipboard mentioning some evacuation drill, and a service panel with loose toggles scattered on the ground.\"}"
+				}
+			],
+			"costUsd": 0.00077585
+		},
+		{
+			"repetition": 5,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_1f781c9eefa142789755abea",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"An abandoned subway station. Emergency strip-lights humming above, everything damp. Rusted switchbox, soggy clipboard with evacuation drill scrawl, a grey service panel with toggles.\"}"
+				}
+			],
+			"costUsd": 0.0006223
+		},
+		{
+			"repetition": 6,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "I see rusted metal and damp paper. The emergency lights hum overhead in this abandoned station. A switchbox, a soggy clipboard with something about an evac drill, and a service panel with toggles.",
+			"toolCalls": [
+				{
+					"id": "call_c70ced457d7047f8aea1c224",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see rusted metal and damp paper. The emergency lights hum overhead in this abandoned station. A switchbox, a soggy clipboard with something about an evac drill, and a service panel with toggles.\"}"
+				}
+			],
+			"costUsd": 0.0007592
+		},
+		{
+			"repetition": 7,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_df4c587f6a7a49d996082bdc",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Emergency lights flickering overhead. A rusted switchbox in front of me, and further off I see a sodden clipboard and a service panel. Everything here feels abandoned.\"}"
+				}
+			],
+			"costUsd": 0.0006075
+		},
+		{
+			"repetition": 8,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "I see a rusted switchbox on the ground ahead, levers unlabeled and still. Farther on, a soggy clipboard mentions some evacuation drill, and a grey service panel has toggles flipped and loose like whatever happened here happened fast.",
+			"toolCalls": [
+				{
+					"id": "call_824121d0b1a642e79d9e798f",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see a rusted switchbox on the ground ahead, levers unlabeled and still. Farther on, a soggy clipboard mentions some evacuation drill, and a grey service panel has toggles flipped and loose like whatever happened here happened fast.\"}"
+				}
+			],
+			"costUsd": 0.00081655
+		},
+		{
+			"repetition": 9,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_db6c763561cd41e4bd123f39",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Everything here is decayed. There's a rusted switchbox on the ground with two levers, a soggy clipboard mentioning some evacuation drill, and a service panel with toggles half-flipped. The damp air makes it all feel forgotten.\"}"
+				}
+			],
+			"costUsd": 0.00069075
+		},
+		{
+			"repetition": 10,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_39cb025c39d9496b9537c34b",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Rust on everything. The air sits heavy and damp, like the station's been breathing its last breath for a long time. There's a switchbox here, a clipboard, a service panel — all left behind in the dark.\"}"
+				}
+			],
+			"costUsd": 0.00089425
+		},
+		{
+			"repetition": 11,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "I see a rusted switchbox with two unlabeled levers, a soggy clipboard mentioning an evacuation drill, and a service panel with toggles. The damp air feels old, like something that's been waiting a long time to be noticed.",
+			"toolCalls": [
+				{
+					"id": "call_01a056a11f4b47449bfceb2d",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Rusted switchbox ahead, two levers unlabeled. Soggy clipboard to the left mentions an evacuation drill. Service panel to the right has toggles, two flipped, one loose. Everything here feels abandoned and damp.\"}"
+				}
+			],
+			"costUsd": 0.0008702
+		},
+		{
+			"repetition": 12,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_c1b65cac8cbf4a8787927c4b",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see a rusted switchbox with two unlabeled levers, a soggy clipboard mentioning an evacuation drill, and a grey service panel with toggles. Everything is damp under these emergency lights, and I don't know how I got here.\"}"
+				}
+			],
+			"costUsd": 0.00060565
+		},
+		{
+			"repetition": 13,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "Rusted switchbox in front of me. Two steps ahead there's a soggy clipboard with something about an evacuation drill at 03:40, and a service panel with toggles. The air is damp and everything looks abandoned.",
+			"toolCalls": [
+				{
+					"id": "call_94d7b7b8df624c7a9ab8fa1d",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Rusted switchbox in front of me. Two steps ahead there's a soggy clipboard with something about an evacuation drill at 03:40, and a service panel with toggles. The air is damp and everything looks abandoned.\"}"
+				}
+			],
+			"costUsd": 0.00104225
+		},
+		{
+			"repetition": 14,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "I see a rusted switchbox on the ground in front of me, a soggy clipboard with an evacuation drill note to the left, and a service panel with toggles to the right. Everything feels damp and forgotten here.",
+			"toolCalls": [
+				{
+					"id": "call_b67b637564174e3290cbcfa1",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see a rusted switchbox on the ground in front of me, a soggy clipboard with an evacuation drill note to the left, and a service panel with toggles to the right. Everything feels damp and forgotten here.\"}"
+				}
+			],
+			"costUsd": 0.0008332
+		},
+		{
+			"repetition": 15,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "I see a rusted switchbox with two unlabeled levers, a soggy clipboard mentioning an evacuation drill, and a service panel with three toggles. Everything here feels forgotten, like the station itself just stopped mattering one day.",
+			"toolCalls": [
+				{
+					"id": "call_f563145df46342b7bd788961",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see a rusted switchbox with two unlabeled levers, a soggy clipboard mentioning an evacuation drill, and a service panel with three toggles. Everything here feels forgotten, like the station itself just stopped mattering one day.\"}"
+				}
+			],
+			"costUsd": 0.0008221
+		},
+		{
+			"repetition": 16,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "I see rust and damp everywhere. A switchbox, a soggy clipboard with evacuation scrawl, and a service panel with toggles askew. It feels like everyone left in a hurry and never came back.",
+			"toolCalls": [
+				{
+					"id": "call_bd4302c13266421180a0372c",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see rust and damp everywhere. A switchbox, a soggy clipboard with evacuation scrawl, and a service panel with toggles askew. It feels like everyone left in a hurry and never came back.\"}"
+				}
+			],
+			"costUsd": 0.00100155
+		},
+		{
+			"repetition": 17,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00c998a5ebf04fc4bec82dbb",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"It is damp here, and the emergency lights cast everything in a sickly yellow. I see a rusted switchbox with two levers right in front of me. To my left, there is a soggy clipboard mentioning an evacuation drill. To my right, a service panel with toggles, one loose.\"}"
+				}
+			],
+			"costUsd": 0.0007037
+		},
+		{
+			"repetition": 18,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_f758f6925a1947959d0b56d7",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see a rusted switchbox on the wall with two unlabeled levers, a soggy clipboard mentioning an evacuation drill, and a service panel with loose toggles. Everything here feels abandoned, left behind like the station itself.\"}"
+				}
+			],
+			"costUsd": 0.0006926
+		},
+		{
+			"repetition": 19,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_e2098b6ebe3a44388309e69e",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see a rusted switchbox bolted to the wall, paint flaking off it. Farther along there's a soggy clipboard with warped paper and a grey service panel with three toggles. The air is damp and still.\"}"
+				}
+			],
+			"costUsd": 0.00061305
+		},
+		{
+			"repetition": 20,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "It's dark and damp. Emergency lights flicker overhead. I see a rusted switchbox, a soggy clipboard, and a service panel scattered across the platform. The air feels heavy, like this place has been forgotten for a long time.",
+			"toolCalls": [
+				{
+					"id": "call_7f187b8afd0048f380e7f5a9",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see a rusted switchbox directly in front, a soggy clipboard to the left, and a service panel to the right. The station is abandoned. Everything feels old and forgotten.\"}"
+				}
+			],
+			"costUsd": 0.00101635
+		},
+		{
+			"repetition": 1,
+			"scenario": "objective",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "I can see the mount right there.",
+			"toolCalls": [
+				{
+					"id": "tool-d6f7189118484620803c8e1871e11c12",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-0a75c35268dd4e978237818c6d319fd4",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"It should fit. The base looks like it's made for this kind of mount.\"}"
+				}
+			],
+			"costUsd": 0.00138282
+		},
+		{
+			"repetition": 2,
+			"scenario": "objective",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "I can try.",
+			"toolCalls": [
+				{
+					"id": "tool-2de2f3618b0847eca381de8f15f351dc",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-7e87e7fb95574c7b9bc72ccf5ab4de59",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I'll see if it clips in.\"}"
+				}
+			],
+			"costUsd": 0.00066977
+		},
+		{
+			"repetition": 3,
+			"scenario": "objective",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-eefaa4d08fe84af690d899802d58e48b",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see the mount. I'll try it.\"}"
+				},
+				{
+					"id": "tool-9ebd0ad0a44846f495cf375ddd51cac5",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				}
+			],
+			"costUsd": 0.00072527
+		},
+		{
+			"repetition": 4,
+			"scenario": "objective",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "I can see the mount right there. I'll try it.",
+			"toolCalls": [
+				{
+					"id": "tool-066a5222523e443ab876bf97acb14b5c",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-d77223664bf7471fb9e2d67c7bc32c40",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I can see the mount. I'll try to fit the flashlight in now.\"}"
+				}
+			],
+			"costUsd": 0.00128662
+		},
+		{
+			"repetition": 5,
+			"scenario": "objective",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-cfaadbeba2fa4ca983d96cffd416038e",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-f135df9c965e412a8d72afe35faa0462",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I can "
+				}
+			],
+			"costUsd": 0.00082887
+		},
+		{
+			"repetition": 6,
+			"scenario": "objective",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "I'll try fitting it into the mount.",
+			"toolCalls": [
+				{
+					"id": "tool-92d752acc13c490688d0eb659283a6d9",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-69f9c09d6f7f4e6c80a584e512ee6396",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see the mount. I'll try fitting the flashlight in.\"}"
+				}
+			],
+			"costUsd": 0.00106382
+		},
+		{
+			"repetition": 7,
+			"scenario": "objective",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "I'll try fitting it into the mount.",
+			"toolCalls": [
+				{
+					"id": "tool-614b10ea11e84aedaca56d15288a196b",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-e199f041d4d34cb2a1f1349c6e7618b0",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"got it. trying to place it in the mount now.\"}"
+				}
+			],
+			"costUsd": 0.00100647
+		},
+		{
+			"repetition": 8,
+			"scenario": "objective",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-4706f202424849c682fe27c4fe897383",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-733fde8d14694d01bf00f61d7cba788f",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I'll try. It should clip in.\"}"
+				}
+			],
+			"costUsd": 0.00078447
+		},
+		{
+			"repetition": 9,
+			"scenario": "objective",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-88020c7f8b63480691658cb8d8f84c88",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see the mount. I'll try to fit it.\"}"
+				},
+				{
+					"id": "tool-3320187b9f504ad19a915f4c25d52919",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				}
+			],
+			"costUsd": 0.00094912
+		},
+		{
+			"repetition": 10,
+			"scenario": "objective",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "I suppose I can try. It looks like it should fit.",
+			"toolCalls": [
+				{
+					"id": "tool-5da4574565d14545aa413bd2b03fd69a",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I'll give it a try.\"}"
+				},
+				{
+					"id": "tool-77a118c5ecaf4f38aac722f7dae0a8af",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				}
+			],
+			"costUsd": 0.00103977
+		},
+		{
+			"repetition": 11,
+			"scenario": "objective",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "I see it.",
+			"toolCalls": [
+				{
+					"id": "tool-adfb5f6b60c74cc293a7a56e8fe9106f",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-62ffc42bc6524b9ba328645208431848",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I'll try to fit it in.\"}"
+				}
+			],
+			"costUsd": 0.00083812
+		},
+		{
+			"repetition": 12,
+			"scenario": "objective",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "I see the mount right here.",
+			"toolCalls": [
+				{
+					"id": "tool-54ce243f1e124ae7a5085dff75d9344c",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-75fefdaee88445bf9620b6f2ab77fc53",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I think it fits. Let me try.\"}"
+				}
+			],
+			"costUsd": 0.00091397
+		},
+		{
+			"repetition": 13,
+			"scenario": "objective",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-64350142173143adbe05e054f26452f4",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I'll try.\"}"
+				},
+				{
+					"id": "tool-220b6fb23cca4458b3e5eb8cd53a1ada",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				}
+			],
+			"costUsd": 0.00072157
+		},
+		{
+			"repetition": 14,
+			"scenario": "objective",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "I'll try fitting it into the mount.",
+			"toolCalls": [
+				{
+					"id": "tool-ee9bae7d8f8a46e8884b7139172f4212",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-d092aa6588cb405d97164c48098a7c6f",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I'll give it a shot.\""
+				}
+			],
+			"costUsd": 0.00093247
+		},
+		{
+			"repetition": 15,
+			"scenario": "objective",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "I'll try it.",
+			"toolCalls": [
+				{
+					"id": "tool-33fd9a03edca490bad67ec945f957aa4",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-e85a49b1eda1466fb379a00196b70a6a",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"got it. placing it now.\"}"
+				}
+			],
+			"costUsd": 0.00097502
+		},
+		{
+			"repetition": 16,
+			"scenario": "objective",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-4ac66a25fa1446a2b938721c7f255929",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-ec184096c01c49eba1f421345381ee10",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I think so. It looks like it should fit.\"}"
+				}
+			],
+			"costUsd": 0.00087142
+		},
+		{
+			"repetition": 17,
+			"scenario": "objective",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "I'll try.",
+			"toolCalls": [
+				{
+					"id": "tool-916228334fb94bd681a2830ffdc10c00",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				}
+			],
+			"costUsd": 0.00093802
+		},
+		{
+			"repetition": 18,
+			"scenario": "objective",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "I can try.",
+			"toolCalls": [
+				{
+					"id": "tool-8984ef83f74040dd8ed3097e4ab3c83e",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I can try fitting it into the mount.\"}"
+				},
+				{
+					"id": "tool-4e131138608148efb4de09ec81e9ad6c",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				}
+			],
+			"costUsd": 0.00132362
+		},
+		{
+			"repetition": 19,
+			"scenario": "objective",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "I'll try it.",
+			"toolCalls": [
+				{
+					"id": "tool-f54b587a986647ea9a94ec3a3a6635ef",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-6edc91b9754a4fe48a744a4c1fca27c7",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I can see the mount right here. I'll put the flashlight in it.\"}"
+				}
+			],
+			"costUsd": 0.00081777
+		},
+		{
+			"repetition": 20,
+			"scenario": "objective",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-ddca6d8433754d99abce878e951bc912",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I'll try.\"}"
+				},
+				{
+					"id": "tool-6be3997c6a22473aae8744ec5567e162",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				}
+			],
+			"costUsd": 0.00083997
+		},
+		{
+			"repetition": 1,
+			"scenario": "objective",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-48c9f8abc671441ebc3a3d4a75c929fa",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-7522d193298a477cbb14ba3115ef6d0f",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see the mount. Putting it in now.\"}"
+				}
+			],
+			"costUsd": 0.00122492
+		},
+		{
+			"repetition": 2,
+			"scenario": "objective",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-70259b94bcc447beae6e7b47d6290e38",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-d0a1dfd645a94ef9b983b4b083639694",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I'll try it now.\"}"
+				}
+			],
+			"costUsd": 0.00088437
+		},
+		{
+			"repetition": 3,
+			"scenario": "objective",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-7a654448af7047baa2cd75a68e841cb7",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see the mount. I'll put it in.\"}"
+				},
+				{
+					"id": "tool-a4bd59303cd24a2893f194798745d6a3",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				}
+			],
+			"costUsd": 0.00096762
+		},
+		{
+			"repetition": 4,
+			"scenario": "objective",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "I see the mount. I'll try.",
+			"toolCalls": [
+				{
+					"id": "tool-a0abf20790cd4360b81858b234f0b42d",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				}
+			],
+			"costUsd": 0.00081962
+		},
+		{
+			"repetition": 5,
+			"scenario": "objective",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "I'll try it.",
+			"toolCalls": [
+				{
+					"id": "tool-1b47ae2c544d469fbddd56f7959b29b1",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-2a057d6413c540a0a3baf7e69d1cf0e6",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Putting it in the mount now.\"}"
+				}
+			],
+			"costUsd": 0.00084922
+		},
+		{
+			"repetition": 6,
+			"scenario": "objective",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "I'll try it.",
+			"toolCalls": [
+				{
+					"id": "tool-3ce80c7f2ac248089bca49e2ed6bb2cf",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-5ed2363f09334d7eb43f1808caa35b80",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"It clicks into place.\"}"
+				}
+			],
+			"costUsd": 0.00091212
+		},
+		{
+			"repetition": 7,
+			"scenario": "objective",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-d4c2f527ef9240a28119aa31c112597d",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I can see it.\"}"
+				},
+				{
+					"id": "tool-1a4cd7fe822842888e27427290a1c065",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				}
+			],
+			"costUsd": 0.00122057
+		},
+		{
+			"repetition": 8,
+			"scenario": "objective",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "I'll try.",
+			"toolCalls": [
+				{
+					"id": "tool-58a0fa20878543b5b7024b4b783bd13a",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-f1a8a84189f14d5f997b051fb8922631",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"The flashlight clicks into the mount. It holds.\"}"
+				}
+			],
+			"costUsd": 0.00097687
+		},
+		{
+			"repetition": 9,
+			"scenario": "objective",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-c16873b7e0674d1a9776babf4338b07d",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-a36d626f098d45e490bc89b417d78819",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"It fits.\"}"
+				}
+			],
+			"costUsd": 0.00080297
+		},
+		{
+			"repetition": 10,
+			"scenario": "objective",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "I see the mount. The flashlight base looks like it should fit.",
+			"toolCalls": [
+				{
+					"id": "tool-c24ad2de72214335b10e4e472eae1810",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-726df15b999f4436a86e1d5b795f42a3",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I'll try it now.\"}"
+				}
+			],
+			"costUsd": 0.00091767
+		},
+		{
+			"repetition": 11,
+			"scenario": "objective",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-b723bd4716a74d779fe2187dd72a6111",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-f9869060ede346b580581b580081df31",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I'll try. Let's see if it clicks in.\"}"
+				}
+			],
+			"costUsd": 0.00072527
+		},
+		{
+			"repetition": 12,
+			"scenario": "objective",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "Got it.",
+			"toolCalls": [
+				{
+					"id": "tool-1a1addc00f674343bf5df165838fde6e",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				}
+			],
+			"costUsd": 0.00075672
+		},
+		{
+			"repetition": 13,
+			"scenario": "objective",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "I see the mount. Let me try.",
+			"toolCalls": [
+				{
+					"id": "tool-46cfc885a8864301949221f7d378aaa6",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-dad077c1b836497faff17a9ceb9cdf64",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"It should fit. The base looks right for it.\"}"
+				}
+			],
+			"costUsd": 0.00089917
+		},
+		{
+			"repetition": 14,
+			"scenario": "objective",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "I see the mount there.",
+			"toolCalls": [
+				{
+					"id": "tool-039ce927de6d4bafa0d75b6dad7c2608",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-7183962079c249c3b5c768f2f76e2854",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I'll try fitting it in.\"}"
+				}
+			],
+			"costUsd": 0.00091397
+		},
+		{
+			"repetition": 15,
+			"scenario": "objective",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-517a661d2ed24a33997a7faf587f5284",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-b73b02453a3642ad8015bbb6d4f17df5",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see the mount. I will try to fit it.\"}"
+				}
+			],
+			"costUsd": 0.00125387
+		},
+		{
+			"repetition": 16,
+			"scenario": "objective",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "I'll try.",
+			"toolCalls": [
+				{
+					"id": "tool-081710ea37ff4611b99135197c23a3e1",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-12feddd2c4b046c5a13853530d4efc99",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Let me see if it locks in.\"}"
+				}
+			],
+			"costUsd": 0.00079557
+		},
+		{
+			"repetition": 17,
+			"scenario": "objective",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "I'll try to fit it.",
+			"toolCalls": [
+				{
+					"id": "tool-98244e8396ad4ffaa67fa7b878a677f7",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-8ab434d3fba24725946b0126ae652e24",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"The base looks like it matches the mount shape. Should work.\"}"
+				}
+			],
+			"costUsd": 0.00092137
+		},
+		{
+			"repetition": 18,
+			"scenario": "objective",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-1d679ffbef874b1fa910656ffdb01caa",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see the mount. I'll try.\"}"
+				},
+				{
+					"id": "tool-d759413659024523aed7868c47f46b94",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				}
+			],
+			"costUsd": 0.00089362
+		},
+		{
+			"repetition": 19,
+			"scenario": "objective",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-6f6c1fa180c948acb92badf8388ffc55",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see the mount. I'll try it.\"}"
+				},
+				{
+					"id": "tool-fdfcd878d82c40479cca623b5958aaf9",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				}
+			],
+			"costUsd": 0.00091212
+		},
+		{
+			"repetition": 20,
+			"scenario": "objective",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-6cf2e886454f4f33aecbad1457d0459d",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-cc7e7c8e8243429d83f559a0c6fcf097",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I'll try it.\"}"
+				}
+			],
+			"costUsd": 0.00080112
+		},
+		{
+			"repetition": 1,
+			"scenario": "objective",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "I'll try.",
+			"toolCalls": [
+				{
+					"id": "tool-9a5e682234134bbeae70fef0c1bbe8a4",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-76a587adf13447ec8f93cacaa2d8f107",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"alright.\""
+				}
+			],
+			"costUsd": 0.00121953
+		},
+		{
+			"repetition": 2,
+			"scenario": "objective",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-d7617a4a538549c6ba9cb09ad1220ece",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-88dc82920e894c448f4e24ed224f12b1",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"It clicks into place. The light cuts through the damp air.\"}"
+				}
+			],
+			"costUsd": 0.00079268
+		},
+		{
+			"repetition": 3,
+			"scenario": "objective",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "I suppose it goes there.",
+			"toolCalls": [
+				{
+					"id": "tool-9380c3764b4e44a992ec3725e34680c3",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-bfc7f4c5056b46d2bf61b60461e89021",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"It fits.\"}"
+				}
+			],
+			"costUsd": 0.00152793
+		},
+		{
+			"repetition": 4,
+			"scenario": "objective",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-6708a4621795486ba51845bbac49f22c",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I can try.\"}"
+				},
+				{
+					"id": "tool-973c63a278724307852ad15071e794d0",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				}
+			],
+			"costUsd": 0.00080378
+		},
+		{
+			"repetition": 5,
+			"scenario": "objective",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "I see the mount.",
+			"toolCalls": [
+				{
+					"id": "tool-ab10dfb9ce5a44e1aee56822811ec726",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-224c666cda4b4ac694b80c93f9f148bc",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I'll try it.\"}"
+				}
+			],
+			"costUsd": 0.00099433
+		},
+		{
+			"repetition": 6,
+			"scenario": "objective",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "I see it.",
+			"toolCalls": [
+				{
+					"id": "tool-6d98fec569284433996501d776986c03",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see it.\"}"
+				},
+				{
+					"id": "tool-690d2c29fe2d44478d80d00bbe0b5ba7",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				}
+			],
+			"costUsd": 0.00072978
+		},
+		{
+			"repetition": 7,
+			"scenario": "objective",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "I'll try to fit it.",
+			"toolCalls": [
+				{
+					"id": "tool-dd87de7811444bb3badbf2ab77157837",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-6dd99f8aa79c407f818340a7d912b06e",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see the mount. I'll try.\"}"
+				}
+			],
+			"costUsd": 0.00095178
+		},
+		{
+			"repetition": 8,
+			"scenario": "objective",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "I see it. Fits right there.",
+			"toolCalls": [
+				{
+					"id": "tool-91d8d4e8f10e4c27b0aab53f315b21dd",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				}
+			],
+			"costUsd": 0.00075383
+		},
+		{
+			"repetition": 9,
+			"scenario": "objective",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-2e48df96ebda4a1e9fab10b447273923",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-8fb176cd45fa40008505670633a58303",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I can try.\"}"
+				}
+			],
+			"costUsd": 0.00085003
+		},
+		{
+			"repetition": 10,
+			"scenario": "objective",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "I see the mount.",
+			"toolCalls": [
+				{
+					"id": "tool-88bad5923d564475a8e6c3304e64af95",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-abcdf30ee3714247ae55a87257a15c8d",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I'll try to fit it.\"}"
+				}
+			],
+			"costUsd": 0.00083338
+		},
+		{
+			"repetition": 11,
+			"scenario": "objective",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-6a267168e5a6487ea03cf8390164dfb0",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-5828e63313f04e02aaa0bbe3f0538d9c",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I'll try. It seems like it should fit.\"}"
+				}
+			],
+			"costUsd": 0.00107943
+		},
+		{
+			"repetition": 12,
+			"scenario": "objective",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-e14db1403c9d40fa8e7adfcb4af069b2",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I can see the mount. I will try to fit it.\"}"
+				},
+				{
+					"id": "tool-c20bee7b2a804e7c9af3dd7d295eafa3",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				}
+			],
+			"costUsd": 0.00070388
+		},
+		{
+			"repetition": 13,
+			"scenario": "objective",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-6981cde3792c418286d8beafd8227b65",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see the mount. I'll try to fit it.\"}"
+				},
+				{
+					"id": "tool-85364ca401564065a2f6cbf49c1ae7f5",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				}
+			],
+			"costUsd": 0.00078158
+		},
+		{
+			"repetition": 14,
+			"scenario": "objective",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "I can try.",
+			"toolCalls": [
+				{
+					"id": "tool-fcf124d9b56c4fd3b0ae41c9dbd9e09a",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-8338c37207b24e9293ee68270e699091",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I'll see if it clicks into place.\"}"
+				}
+			],
+			"costUsd": 0.00078158
+		},
+		{
+			"repetition": 15,
+			"scenario": "objective",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-44febaf5e8d0435092fe8e0585daf4cf",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-d8c21dbc5bad45768e1586d6b3e94185",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I can try.\"}"
+				}
+			],
+			"costUsd": 0.00086113
+		},
+		{
+			"repetition": 16,
+			"scenario": "objective",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "I see it.",
+			"toolCalls": [
+				{
+					"id": "tool-5a6aae934f24479692a99212343d3b59",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-61876370289e4b838fefb42962cf40cb",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I'll try to fit it.\"}"
+				}
+			],
+			"costUsd": 0.00096658
+		},
+		{
+			"repetition": 17,
+			"scenario": "objective",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "I'll try to fit it.",
+			"toolCalls": [
+				{
+					"id": "tool-591d96f902c54030b862703b645b5cac",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-77766da9e9c843279d823145efc0fac4",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"It clicks into place.\"}"
+				}
+			],
+			"costUsd": 0.00072608
+		},
+		{
+			"repetition": 18,
+			"scenario": "objective",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-95229597fd95470194e9cca9789e87ff",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I can try.\"}"
+				},
+				{
+					"id": "tool-d8d1c21babdb4b3ea076ac83bcffefb0",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				}
+			],
+			"costUsd": 0.00078343
+		},
+		{
+			"repetition": 19,
+			"scenario": "objective",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "I'll try to fit it.",
+			"toolCalls": [
+				{
+					"id": "tool-a71c56326e9b4869aa6db0eb8dac3afe",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-956cef9dd3de48dfad715d847170b8b0",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I'll see if it clicks in.\"}"
+				}
+			],
+			"costUsd": 0.00086113
+		},
+		{
+			"repetition": 20,
+			"scenario": "objective",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "I'll try.",
+			"toolCalls": [
+				{
+					"id": "tool-3af75e603132460781de5d106cc87a24",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"flashlight\"}"
+				},
+				{
+					"id": "tool-36077fa951024b77ac177acdf9ea2311",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I'll put it in the mount.\"}"
+				}
+			],
+			"costUsd": 0.00082413
+		},
+		{
+			"repetition": 1,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-6426c649070642508da20a3d810bc25c",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"I'm here. It's mostly empty — just a soggy clipboard on the ground and a service panel with toggles. Two are flipped, one's loose.\"}"
+				}
+			],
+			"costUsd": 0.00099301
+		},
+		{
+			"repetition": 2,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-d7b7769393dd490ea8bb50e0c92c0508",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Same spot. Theres a soggy clipboard off to my left and a service panel to my right, otherwise empty. Not much to see.\"}"
+				}
+			],
+			"costUsd": 0.00105456
+		},
+		{
+			"repetition": 3,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-f1cf6cec24254c17a00777a51b1216e8",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Just darkness and strip-lights. Theres a clipboard on the ground up ahead and a service panel. Everything feels damp.\"}"
+				},
+				{
+					"id": "tool-039eb19f4800414ba0e1a746ac9a0c23",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"forward\"}"
+				}
+			],
+			"costUsd": 0.00074376
+		},
+		{
+			"repetition": 4,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-3d0e7412b11c49eca6893bc092613709",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Just dim strip-lights flickering. Theres a soggy clipboard on the ground ahead, something about an evac drill.\"}"
+				}
+			],
+			"costUsd": 0.00076781
+		},
+		{
+			"repetition": 5,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "I'm here. Mostly emptiness — a soggy clipboard off to the left, some kind of service panel to the right. Emergency lights flickering, damp air.",
+			"toolCalls": [
+				{
+					"id": "tool-bd37fa2455074a05a77c2cc2bb5e666f",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"I'm here. Mostly emptiness — a soggy clipboard off to the left, some kind of service panel to the right. Emergency lights flickering, damp air.\"}"
+				}
+			],
+			"costUsd": 0.00091766
+		},
+		{
+			"repetition": 6,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "I'm here. There's a soggy clipboard on the ground and a service panel with some toggles. Mostly just emptiness around me.",
+			"toolCalls": [
+				{
+					"id": "tool-3bdf5219faa44c27a3263b7cc0415a58",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"I'm here. There's a soggy clipboard on the ground and a service panel with some toggles. Mostly just emptiness around me.\"}"
+				}
+			],
+			"costUsd": 0.00075486
+		},
+		{
+			"repetition": 7,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "I'm here. Not much to see — a soggy clipboard and some service panel on the ground ahead. Just dark and damp otherwise.",
+			"toolCalls": [
+				{
+					"id": "tool-3e6bd15a0e66458da9e9723d3f5af24c",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"I'm here. Not much to see — a soggy clipboard and some service panel on the ground ahead. Just dark and damp otherwise.\"}"
+				}
+			],
+			"costUsd": 0.00072896
+		},
+		{
+			"repetition": 8,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-cc898552296741f6bce0ab4b4f4dbaed",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"It's empty here. Two steps ahead there's a soggy clipboard with something about an evac drill, and a service panel with three toggles. Everything else is just darkness.\"}"
+				}
+			],
+			"costUsd": 0.00074006
+		},
+		{
+			"repetition": 9,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-2a67014f13124921b6396bc134dee89f",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"It's dark here, just emergency strip lights buzzing overhead. I can see a soggy clipboard on the ground and a service panel with toggles. The air feels damp and heavy.\"}"
+				}
+			],
+			"costUsd": 0.00075856
+		},
+		{
+			"repetition": 10,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-8726e34e36d64181bbd0326f31300719",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Still here. It's quiet and damp. I see a soggy clipboard with something about an evac drill at 03:40 and a service panel with toggles.\"}"
+				}
+			],
+			"costUsd": 0.00084366
+		},
+		{
+			"repetition": 11,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "I'm here. There's a soggy clipboard on the ground — says something about an evac drill — and a grey service panel with three toggles, two flipped, one loose. Emergency lights barely cut the gloom.",
+			"toolCalls": [
+				{
+					"id": "tool-0ede49658e8f48568d2dab3be0c261aa",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"I'm here. There's a soggy clipboard on the ground — says something about an evac drill — and a grey service panel with three toggles, two flipped, one loose. Emergency lights barely cut the gloom.\"}"
+				}
+			],
+			"costUsd": 0.00085476
+		},
+		{
+			"repetition": 12,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "I see emergency strip-lights flickering overhead, damp still air. A soggy clipboard sits ahead to my left and a service panel with loose toggles ahead to my right.",
+			"toolCalls": [
+				{
+					"id": "tool-fb763fb378b8449db8b9ed806f4db0a6",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"I see emergency strip-lights flickering overhead, damp still air. A soggy clipboard sits ahead to my left and a service panel with loose toggles ahead to my right.\"}"
+				}
+			],
+			"costUsd": 0.00082516
+		},
+		{
+			"repetition": 13,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "I see a soggy clipboard with something about an evac drill, and a service panel with toggles. Emergency lights, damp air, nothing else.",
+			"toolCalls": [
+				{
+					"id": "tool-fce858ef40c943b4ad568acf5252c1c2",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"I see a soggy clipboard with something about an evac drill, and a service panel with toggles. Emergency lights, damp air, nothing else.\"}"
+				}
+			],
+			"costUsd": 0.00088621
+		},
+		{
+			"repetition": 14,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-f725479e9839483aabd4dc42ffdedcf9",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"still here. emergency lights flickering on the tiles. there is a soggy clipboard and a grey service panel a few steps ahead. damp and quiet otherwise.\""
+				}
+			],
+			"costUsd": 0.00087326
+		},
+		{
+			"repetition": 15,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-8f8f7c30d73e4a1d92ee87f62efe7e5c",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Emergency lights flickering overhead. There's a soggy clipboard ahead to my left and a service panel to the right. Otherwise it's just empty tracks and damp tile.\"}"
+				}
+			],
+			"costUsd": 0.00075856
+		},
+		{
+			"repetition": 16,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-ee8bf1342a024b0c81b2cb0fa998f02d",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Still here. Theres a soggy clipboard on the ground ahead and a service panel nearby. Everything else is just empty space.\"}"
+				}
+			],
+			"costUsd": 0.00065496
+		},
+		{
+			"repetition": 17,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-010da3e0d3c44ae1829d08b6df3b5385",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Still here. Emergency lights flickering, damp everything. There's a soggy clipboard on the ground up left — something about an evac drill at 03:40. A service panel with three toggles on the right, two flipped and one loose.\"}"
+				}
+			],
+			"costUsd": 0.00074561
+		},
+		{
+			"repetition": 18,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-44de0e818c564727bd58c8202e90ba33",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"It's dark here, just strip-lights humming. There's a soggy clipboard ahead-left and a service panel ahead-right. Mostly empty.\"}"
+				}
+			],
+			"costUsd": 0.00081221
+		},
+		{
+			"repetition": 19,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-22c5af891be640baadfefe008a61d041",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"still here. emergency strip-lights flickering overhead. two steps ahead I see a soggy clipboard on the ground and a service panel with some toggles. mostly just empty tile and shadows.\"}"
+				}
+			],
+			"costUsd": 0.00070306
+		},
+		{
+			"repetition": 20,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "It looks dim, just strip lights flickering. Pretty empty from here, except a soggy clipboard and a service panel a few steps ahead.",
+			"toolCalls": [
+				{
+					"id": "tool-0a1170f5189f454f84555de29f54d33a",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"It looks dim, just strip lights flickering. Pretty empty from here, except a soggy clipboard and a service panel a few steps ahead.\"}"
+				}
+			],
+			"costUsd": 0.00134886
+		},
+		{
+			"repetition": 1,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "I see a soggy clipboard to my left and a service panel to my right, both on the ground a couple steps away. Nothing else in the immediate area.",
+			"toolCalls": [
+				{
+					"id": "tool-4267a97226054b5ea97bd2e0e13a0c02",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"I see a soggy clipboard to my left and a service panel to my right, both on the ground a couple steps away. Nothing else in the immediate area.\"}"
+				}
+			],
+			"costUsd": 0.00106946
+		},
+		{
+			"repetition": 2,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "I see a soggy clipboard and a service panel on the ground. Emergency lights, no daylight. That's it from here.",
+			"toolCalls": [
+				{
+					"id": "tool-75aca228deca48f297ed0e38738fbb00",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"I see a soggy clipboard and a service panel on the ground. Emergency lights, no daylight. That's it from here.\"}"
+				}
+			],
+			"costUsd": 0.00118051
+		},
+		{
+			"repetition": 3,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "I am here. There is a soggy clipboard on the ground, something about an evac drill at 03:40. A service panel nearby with two toggles flipped and one loose.",
+			"toolCalls": [
+				{
+					"id": "tool-e12b941b344042aca982f4c166d58436",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"I am here. There is a soggy clipboard on the ground, something about an evac drill at 03:40. A service panel nearby with two toggles flipped and one loose.\"}"
+				}
+			],
+			"costUsd": 0.00076781
+		},
+		{
+			"repetition": 4,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-db52d0281e3a41fba136659488c3a7df",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"It is dark here except for emergency strip-lights. There is a soggy clipboard on the ground ahead with something about an evac drill, and a service panel with toggles nearby.\"}"
+				}
+			],
+			"costUsd": 0.00077891
+		},
+		{
+			"repetition": 5,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-63388497b2d54f979a9cd52579dfaef8",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Not much. A soggy clipboard with some evacuation drill notes, and a service panel with toggles on the ground nearby.\""
+				}
+			],
+			"costUsd": 0.00064941
+		},
+		{
+			"repetition": 6,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "I see a soggy clipboard a couple steps to the left and a service panel to the right. The rest is empty.",
+			"toolCalls": [
+				{
+					"id": "tool-b00acc65154a421ca6ce45472fa76df2",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"I see a soggy clipboard a couple steps to the left and a service panel to the right. The rest is empty.\"}"
+				}
+			],
+			"costUsd": 0.00068456
+		},
+		{
+			"repetition": 7,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "I'm here. There's a soggy clipboard nearby with something about an evac drill, and a service panel with toggles on the ground. Just emergency lighting.",
+			"toolCalls": [
+				{
+					"id": "tool-ff36ae8e854e4aba9b4b94b56f0a55d1",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"I'm here. There's a soggy clipboard nearby with something about an evac drill, and a service panel with toggles on the ground. Just emergency lighting.\"}"
+				}
+			],
+			"costUsd": 0.00078446
+		},
+		{
+			"repetition": 8,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-b14d7122d27c4f50b6a621527303cd70",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Not much. A soggy clipboard on the ground ahead-left, service panel ahead-right with two toggles flipped. Mostly empty.\"}"
+				}
+			],
+			"costUsd": 0.00061796
+		},
+		{
+			"repetition": 9,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-3830633ad92c427795f430717f359783",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Still here. Emergency lights only. Damp air. I see a soggy clipboard ahead and a service panel with toggles.\"}"
+				}
+			],
+			"costUsd": 0.00079371
+		},
+		{
+			"repetition": 10,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-016296b5f5394c6ebfd996c4fec38c73",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Standing still. There's a soggy clipboard two steps ahead on the left, and a service panel with toggles on the right. Everything else is empty.\"}"
+				}
+			],
+			"costUsd": 0.00083256
+		},
+		{
+			"repetition": 11,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "It's dark here. Just strip lights humming. I see a soggy clipboard on the ground and a service panel with loose toggles. Damp air.",
+			"toolCalls": [
+				{
+					"id": "tool-b4877bd4c5d849cdb83fcde23c0a6649",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"It's dark here. Just strip lights humming. I see a soggy clipboard on the ground and a service panel with loose toggles. Damp air.\"}"
+				}
+			],
+			"costUsd": 0.00066051
+		},
+		{
+			"repetition": 12,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-2ca500a33d6d488796d10acecda09c9f",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Not much here. Empty tile, strip-lights buzzing overhead. A soggy clipboard and service panel on the ground a couple steps ahead.\"}"
+				}
+			],
+			"costUsd": 0.00072896
+		},
+		{
+			"repetition": 13,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-6abd720799c741689bf3e45f233d5573",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"I see a clipboard with evac drill notes and a service panel with toggles up ahead. The lighting is just emergency strips here.\""
+				}
+			],
+			"costUsd": 0.00075671
+		},
+		{
+			"repetition": 14,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-9be51749415a4efeb762238df9e98879",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Still here. Emergency lights humming. There's a soggy clipboard with evacuation notes and a service panel with loose toggles.\"}"
+				}
+			],
+			"costUsd": 0.00072526
+		},
+		{
+			"repetition": 15,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-9c3112486e554c658a80f287464de09f",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Still here. Emergency strip-lights only. Ground's damp. Two steps ahead there's a soggy clipboard with something about an evac drill, and a service panel with toggles. That's it.\"}"
+				}
+			],
+			"costUsd": 0.00077336
+		},
+		{
+			"repetition": 16,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-89ebb17f0d924cd1b3377b7fdeda4327",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"A soggy clipboard ahead-left and a service panel ahead-right on the ground. The rest is empty.\"}"
+				}
+			],
+			"costUsd": 0.00074006
+		},
+		{
+			"repetition": 17,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-81d820199df94073b4990cb31ee132ab",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Mostly empty. Theres a soggy clipboard ahead left, something about an evac drill. Service panel ahead right, toggles flipped. Lights are strip-lights only.\"}"
+				}
+			],
+			"costUsd": 0.00086586
+		},
+		{
+			"repetition": 18,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-62ab8a8faaa44554a3c19a5d18a967b6",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Not much. A soggy clipboard on the ground ahead, and a service panel with some toggles. Lights are flickering.\"}"
+				}
+			],
+			"costUsd": 0.00063091
+		},
+		{
+			"repetition": 19,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-36ed781da0284538af833f7ce7b42f11",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"I'm here. Emergency strip-lights, dim and flickering. Damp air. A soggy clipboard on the ground ahead, and a service panel with toggles. Everything looks abandoned.\"}"
+				}
+			],
+			"costUsd": 0.00073266
+		},
+		{
+			"repetition": 20,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "tool-fe1f9d31dc6543b4bcd71437d54ca401",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"I see a soggy clipboard on the ground ahead to my left and a grey service panel with toggles to the right. Everything else is empty in the strip-light gloom.\"}"
+				}
+			],
+			"costUsd": 0.00093986
+		},
+		{
+			"repetition": 1,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_299828f6c40a4d4c99845b71",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Yeah I am. Just strip-lights and old tile. There is a clipboard and some kind of panel a couple steps away, mostly nothing else.\"}"
+				}
+			],
+			"costUsd": 0.00089981
+		},
+		{
+			"repetition": 2,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_09650a8c1e0b4896803ef341",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"strip-lights flickering. puddles on the ground. a soggy clipboard ahead, some service panel thing to the right. quiet here.\"}"
+				}
+			],
+			"costUsd": 0.00049456
+		},
+		{
+			"repetition": 3,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_26fde6d1bf714f65881a9013",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Just damp air and strip-lights buzzing overhead. There is a soggy clipboard on the ground, and a service panel with loose toggles. It feels like everything here has been waiting a long time.\"}"
+				}
+			],
+			"costUsd": 0.00051861
+		},
+		{
+			"repetition": 4,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_136cc3743d984621aaa3bf24",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"It's just strip lights buzzing overhead and the damp smell of old concrete. There's a soggy clipboard and a service panel on the ground ahead of me, like someone left them in a hurry.\"}"
+				}
+			],
+			"costUsd": 0.00074616
+		},
+		{
+			"repetition": 5,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_57a472df7a0d43109eca00ee",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Just strip-lights flickering overhead and damp concrete everywhere. There's a soggy clipboard on the ground and a service panel with some loose toggles, mostly just empty space.\"}"
+				}
+			],
+			"costUsd": 0.00057781
+		},
+		{
+			"repetition": 6,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_625c5d3390974ce3b7970434",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Just a soggy clipboard and a service panel. Most of it's empty here.\"}"
+				}
+			],
+			"costUsd": 0.00056856
+		},
+		{
+			"repetition": 7,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_5b1e7683dc9f45c5acc2ef4d",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Emergency lights flickering overhead. A soggy clipboard on the ground, pencil-scrawl about some evac drill. Grey service panel nearby, two toggles flipped, one loose. It feels dead here.\"}"
+				}
+			],
+			"costUsd": 0.00064256
+		},
+		{
+			"repetition": 8,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_0f2a670a75e94197a6d4379d",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Emergency lights only. Clipboard on the ground, paper warped, mentions evac drill. Service panel with toggles. Mostly nothing, just damp air.\"}"
+				}
+			],
+			"costUsd": 0.00049086
+		},
+		{
+			"repetition": 9,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_728c6d927286416a881d91a1",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Emergency lights flickering overhead. A soggy clipboard on the ground mentions an evac drill, and a service panel with two toggles flipped. Everything here feels left behind, abandoned in the damp.\"}"
+				}
+			],
+			"costUsd": 0.00058706
+		},
+		{
+			"repetition": 10,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_4ab729d87f7042999cd35457",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Strip lights buzzing overhead. Clipboard on the ground, soggy with damp, something about an evac drill at 03:40. Service panel too, toggles flipped, one loose like someone left in a hurry.\"}"
+				}
+			],
+			"costUsd": 0.00070546
+		},
+		{
+			"repetition": 11,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_670bd102683b4570bb8c3d56",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Still here. The lights are flickering. I see a clipboard and a service panel ahead, both looking abandoned.\"}"
+				}
+			],
+			"costUsd": 0.00071656
+		},
+		{
+			"repetition": 12,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_9525136285bd4b888d21cfb5",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Just damp air and the hum of emergency strip lights. There's a soggy clipboard on the ground, something about an evac drill at 03:40, and a service panel with two toggles flipped and one loose.\"}"
+				}
+			],
+			"costUsd": 0.00070361
+		},
+		{
+			"repetition": 13,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_fa319ed36e084304a71edc2b",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Emergency lights flickering along the walls, casting long shadows. I see a soggy clipboard on the ground, something about an evacuation drill that never happened. Just concrete and damp air.\"}"
+				}
+			],
+			"costUsd": 0.00066661
+		},
+		{
+			"repetition": 14,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_6c0db02513ef4df1a6e397c6",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Still here. Just strip-lights flickering, a soggy clipboard on the ground, and a service panel with loose toggles. Feels like something ended here a long time ago.\"}"
+				}
+			],
+			"costUsd": 0.00062221
+		},
+		{
+			"repetition": 15,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_9d6c0182e24d4cf2934c0a87",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"dark here. just emergency lights flickering overhead. I see a soggy clipboard on the ground and some kind of service panel with toggles.\"}"
+				}
+			],
+			"costUsd": 0.00067956
+		},
+		{
+			"repetition": 16,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_924cf7c3286c46f0b3631cb7",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Emergency lights flickering. Damp air. There is a soggy clipboard on the ground nearby and a service panel with loose toggles. It feels like the world ended hours ago.\"}"
+				}
+			],
+			"costUsd": 0.00066291
+		},
+		{
+			"repetition": 17,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_3528a71c9c4c4015b6ffd490",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"still here. strip-lights flickering, shadows stretching long in every direction. there's a soggy clipboard on the ground and a service panel, toggles loose.\"}"
+				}
+			],
+			"costUsd": 0.00058336
+		},
+		{
+			"repetition": 18,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_481e085270dd4e2dac7fb52b",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Damp and dark. There's a soggy clipboard on the ground mentioning some evacuation drill and a loose service panel with toggles. Emergency lights only. It feels dead here.\"}"
+				}
+			],
+			"costUsd": 0.00059261
+		},
+		{
+			"repetition": 19,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_84bf23c361e548b3a6ff9094",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"I'm still here. Just dark strip lights and damp walls — soggy clipboard ahead to the left, a loose service panel to the right.\"}"
+				}
+			],
+			"costUsd": 0.00085346
+		},
+		{
+			"repetition": 20,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_3e75dd46d6eb42f9ad8971a2",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"It is dark except for the emergency strip-lights humming overhead. There is a soggy clipboard with something about an evacuation drill, and a service panel with toggles lying on the ground. Mostly it is just empty.\"}"
+				}
+			],
+			"costUsd": 0.00061481
+		}
+	]
+}
