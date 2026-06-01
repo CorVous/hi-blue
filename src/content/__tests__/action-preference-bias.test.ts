@@ -49,13 +49,21 @@ describe("action-preference-bias", () => {
 		}
 	});
 
-	it("enforces the `use` baseline floor (-1 minimum after summation) across every pair", () => {
+	it("enforces the critical-path baseline floor (`go`/`use` ≥ -1) across every pair", () => {
 		for (const t1 of TEMPERAMENT_POOL) {
 			for (const t2 of TEMPERAMENT_POOL) {
 				const sums = toolBiasSum(t1, t2);
 				expect(sums.use).toBeGreaterThanOrEqual(-1);
+				expect(sums.go).toBeGreaterThanOrEqual(-1);
 			}
 		}
+	});
+
+	it("floors `go` for a draw that would otherwise bottom out movement", () => {
+		// Doubled melancholic: raw go = -2 + -2 = -4, floored to -1.
+		expect(toolBiasSum("melancholic", "melancholic").go).toBe(-1);
+		// melancholic + diffident: raw go = -2 + -2 = -4, floored to -1.
+		expect(toolBiasSum("melancholic", "diffident").go).toBe(-1);
 	});
 
 	it("toolBiasSum returns a value for every tool, even for unknown temperaments", () => {
@@ -110,11 +118,35 @@ describe("action-preference-bias", () => {
 	});
 
 	it("flags avoided tools (bias ≤ -1) without making them zero-emission", () => {
-		// diffident + aloof: go = -3, face = -2, pick_up = -3 → all avoided.
+		// diffident + aloof: face = -2, pick_up = -3 → avoided. go (-3) and
+		// use (-2) are critical-path, so they are floored and excluded.
 		const clause = actionProfileFor("b", "diffident", "aloof");
 		expect(clause.toLowerCase()).toMatch(/hesitant|less often/);
 		// Cautious personas must still emit avoided tools occasionally.
 		expect(clause.toLowerCase()).toMatch(/still|when.*calls/);
+	});
+
+	it("never lists a critical-path tool (`go`/`use`) as avoided", () => {
+		for (const t1 of TEMPERAMENT_POOL) {
+			for (const t2 of TEMPERAMENT_POOL) {
+				const clause = actionProfileFor("z", t1, t2);
+				const avoidedSegment = clause.match(/hesitant about (.+?) —/);
+				if (!avoidedSegment) continue;
+				expect(avoidedSegment[1]).not.toContain("`go`");
+				expect(avoidedSegment[1]).not.toContain("`use`");
+			}
+		}
+	});
+
+	it("never calls a persona both balanced and hesitant in the same clause", () => {
+		for (const t1 of TEMPERAMENT_POOL) {
+			for (const t2 of TEMPERAMENT_POOL) {
+				const clause = actionProfileFor("z", t1, t2).toLowerCase();
+				const balanced = clause.includes("balanced way");
+				const hesitant = clause.includes("hesitant about");
+				expect(balanced && hesitant).toBe(false);
+			}
+		}
 	});
 
 	it("orders preferred tools by descending bias", () => {
@@ -134,12 +166,13 @@ describe("action-preference-bias", () => {
 
 	it("falls through to the balanced default when no tool reaches ±threshold", () => {
 		// stoic + earnest: go -1+0=-1, face 0+1=1, pick_up 0, put_down 0,
-		// use 0+1=1 — nothing reaches the +2 preferred threshold, so no
-		// "leans toward"; go = -1 trips the avoided threshold instead.
+		// use 0+1=1 — nothing reaches the +2 preferred threshold, and the
+		// only negative (go = -1) is a critical-path tool, so it is excluded
+		// from the avoided list. Result: the balanced default, alone.
 		const clause = actionProfileFor("e", "stoic", "earnest");
-		// No tool reaches +2, so no "leans toward"; go = -1 triggers hesitant.
 		expect(clause).not.toContain("leans toward");
-		expect(clause.toLowerCase()).toMatch(/balanced|hesitant/);
+		expect(clause.toLowerCase()).toContain("balanced");
+		expect(clause.toLowerCase()).not.toContain("hesitant");
 	});
 
 	it("is byte-stable across calls (deterministic ordering)", () => {
