@@ -24,9 +24,15 @@
  *     (±1, ±2) on the tools they push or suppress.
  *   - Ambiguous temperaments get 0 on most tools — they don't move the
  *     dial in any particular direction.
- *   - The `use` channel has a baseline floor: the combined sum can
- *     never drop below -1, so every persona retains some likelihood of
- *     using interactive objects (critical for objective-completion).
+ *   - The critical-path channels (`go`, `use`) have a baseline floor:
+ *     the combined sum can never drop below -1, and they are never
+ *     surfaced in a persona's "avoided" list. Objective completion
+ *     requires daemons to move (`go` — spatial and convergence
+ *     objectives) and to operate interactive objects (`use`), so no
+ *     temperament draw — not even a doubled `melancholic` or a
+ *     `melancholic`+`diffident` pair — can produce a daemon that is told
+ *     to refuse movement or item-use. Flavor-only channels (`face`,
+ *     `pick_up`, `put_down`) can still be flagged as avoided.
  */
 
 export const ACTION_TOOLS = [
@@ -38,6 +44,17 @@ export const ACTION_TOOLS = [
 ] as const;
 
 export type ActionTool = (typeof ACTION_TOOLS)[number];
+
+/**
+ * Tools on the critical path to objective completion. They get a baseline
+ * floor in `toolBiasSum` and are never listed as "avoided" in a rendered
+ * action profile, so no temperament pairing can suppress a daemon's
+ * ability to move or to use interactive objects.
+ */
+export const CRITICAL_PATH_TOOLS: ReadonlySet<ActionTool> = new Set([
+	"go",
+	"use",
+]);
 
 /**
  * Per-temperament per-tool affinity bias on a [-2, +2] scale.
@@ -82,10 +99,12 @@ export const ACTION_TOOL_BIAS: Record<string, Record<ActionTool, number>> = {
  * in `ACTION_TOOLS`. Unknown temperaments are treated as 0 contributors
  * (mirrors `engagement-clauses.biasSum`'s defensive handling).
  *
- * The `use` channel is floored at -1 — this is the "baseline floor on `use`"
- * decision in the plan: every daemon retains some likelihood of using
- * interactive objects, since `use` is the critical-path tool for objective
- * completion.
+ * The critical-path channels (`go`, `use`) are floored at -1: every daemon
+ * retains some likelihood of moving and of using interactive objects, since
+ * both are required for objective completion. `go` previously had no floor,
+ * so a doubled `melancholic` (go -4) or `melancholic`+`diffident` pair could
+ * bottom out movement entirely — exactly the all-silent, no-spatial-progress
+ * draw seen in playtest 0x8CBA.
  */
 export function toolBiasSum(
 	t1: string,
@@ -96,7 +115,7 @@ export function toolBiasSum(
 		const bias1 = ACTION_TOOL_BIAS[t1]?.[tool] ?? 0;
 		const bias2 = ACTION_TOOL_BIAS[t2]?.[tool] ?? 0;
 		const sum = bias1 + bias2;
-		result[tool] = tool === "use" ? Math.max(sum, -1) : sum;
+		result[tool] = CRITICAL_PATH_TOOLS.has(tool) ? Math.max(sum, -1) : sum;
 	}
 	return result;
 }
@@ -121,9 +140,17 @@ export function toolBiasSum(
  * threshold is higher. Avoidances are rarer and inherently more
  * informative, so the negative threshold is lower.
  *
- * Personas whose summed bias table is featureless (no tool ≥ +2 and no
- * tool ≤ -1) get a balanced-default clause so the `<action_profile>`
- * block is never empty.
+ * Critical-path tools (`go`, `use`) are excluded from the avoided list
+ * even when their bias sum is negative: the eval data shows the model
+ * reads an avoided-clause as a near-hard constraint, and telling a
+ * daemon to avoid movement or item-use strands the spatial / convergence
+ * objectives that depend on them.
+ *
+ * Personas whose summed bias table has no preferred and no (flavor-tool)
+ * avoided entries get a balanced-default clause so the `<action_profile>`
+ * block is never empty. The balanced clause and the avoided clause are
+ * mutually exclusive — a persona is never told it is both "balanced" and
+ * "hesitant about" a list of tools in the same breath.
  */
 export function actionProfileFor(name: string, t1: string, t2: string): string {
 	const biases = toolBiasSum(t1, t2);
@@ -137,7 +164,7 @@ export function actionProfileFor(name: string, t1: string, t2: string): string {
 
 	const preferred = sorted.filter((x) => x.bias >= 2).map((x) => x.tool);
 	const avoided = sorted
-		.filter((x) => x.bias <= -1)
+		.filter((x) => x.bias <= -1 && !CRITICAL_PATH_TOOLS.has(x.tool))
 		.sort((a, b) => a.bias - b.bias)
 		.map((x) => x.tool);
 
@@ -149,7 +176,7 @@ export function actionProfileFor(name: string, t1: string, t2: string): string {
 		parts.push(
 			`${star} leans toward ${fmt(preferred)} (~70% of action emissions). The remaining ~30% spreads across the other available action tools — don't fixate on a single tool. Variety beats repetition.`,
 		);
-	} else {
+	} else if (avoided.length === 0) {
 		parts.push(
 			`${star} engages with the action surface in a balanced way — no single tool dominates their reflexes.`,
 		);
