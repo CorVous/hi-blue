@@ -10,8 +10,9 @@
 > natively against that surface (the `EVAL_TOOL_SURFACE=5tool`
 > projection was removed). The "5-tool" runs below were produced by the
 > eval-local projection against the pre-merge engine; their numbers are
-> still indicative, but a fresh native run is the recommended next data
-> point. See the handoff doc for the re-run step.
+> still indicative. **The recommended fresh native run has now been
+> collected — see the [2026-06-01 native run](#native-run-2026-06-01)
+> section immediately below, which supersedes the projected numbers.**
 
 This file aggregates three pairs of runs:
 
@@ -21,6 +22,105 @@ This file aggregates three pairs of runs:
 
 The 5-tool/v2.5 section is the current best calibration. v2 results remain
 valid as the calibration data for the current production engine.
+
+---
+
+## Native run 2026-06-01
+
+**Date:** 2026-06-01 · **Model:** `z-ai/glm-4.7` · **Reps:** 20 per cell,
+180 reps per run. First run on the *real* merged 5-tool surface (no
+eval-local projection), collected on branch
+`fix/action-averse-daemon-draws` (PR #506). An HTML summary of this run
+lives at `~/html/eval-report.html`.
+
+This run does two things: (1) confirms the action-profile lift survives
+the native surface, and (2) adds a dedicated **action-averse** pass that
+exercises the guardrails added in PR #506 — which the representative
+personas never trigger.
+
+Output files:
+`{baseline,with-profiles}-default-2026-06-01.{md,json}` (representative
+personas) and `{baseline,with-profiles}-action-averse-2026-06-01.{md,json}`
+(the three worst action-averse pairs).
+
+### Representative personas (action-positive)
+
+Personas: Ember (curious+meticulous), Vex (zealous+hot-headed), Pip
+(sweet+effusive). These all have `go`/`use` bias sums ≥ 0, so the PR's
+floor and avoided-exclusion never fire — the per-persona bias tables are
+byte-identical between baseline and treatment. This cell validates the
+*feature*, not the *fix*.
+
+| Metric | Baseline | With profiles | Δ |
+|---|---|---|---|
+| Any action emission | 46% | **70%** | **+24 pp** |
+| Any `message` emission | 99% | 93% | −6 |
+| Parallel (message + action) | 44% | **63%** | **+18 pp** |
+| Silent | 0% | 0% | 0 |
+| `use` emission rate | 30% | 28% | −2 |
+| Cost | $0.262 | $0.186 | — |
+
+The +24 pp any-action / +18 pp parallel lift holds on the native surface,
+messaging stays healthy at 93%, and silence stays at 0%. The big movers
+are the exploration cells, where `face` — near-absent at baseline —
+emerges as a real choice (Ember 0→50%, Pip 0→70%).
+
+Two single-cell soft spots, both within 20-rep noise (~±10 pp) and
+consistent with the known 70/30-spread tradeoff:
+
+| Cell | tool | baseline | treatment | Δ pp |
+|---|---|---|---|---|
+| objective × Ember | `use` | 70% | 55% | −15 |
+| social × Vex | `go` | 70% | 50% | −20 |
+
+Not enough to retune on one run — the bar is ~3 consecutive runs showing a
+stable shift.
+
+### Action-averse pairs (the PR's guardrails)
+
+Pairs: `melancholic+diffident`, `diffident+aloof`, `melancholic+melancholic`
+— the worst action-averse draws. The summed bias debug confirms the
+guardrails are active: `go = −1` for all three (raw `−3` to `−4` before the
+floor) and `use = −1` (raw `−2`); with the avoided-exclusion, neither
+`go` nor `use` is ever named in a "hesitant about" clause.
+
+| Metric | Baseline | With profiles | Δ |
+|---|---|---|---|
+| Any action emission | 34% | 32% | −2 |
+| Any `message` emission | 98% | 96% | −2 |
+| Parallel (message + action) | 32% | 28% | −4 |
+| Silent | 0% | 0% | 0 |
+| `use` emission rate | 33% | 32% | −1 |
+
+Per-cell, the shape is the story:
+
+- **objective scenario:** treatment `use` stays **90–100%** across all
+  three pairs, and silence is 0% everywhere — cautious draws still
+  complete objectives. This is the guardrail's core promise, kept.
+- **exploration / social scenarios:** ~0% action in *both* baseline and
+  treatment. For deeply action-averse pairs the temperament prose
+  dominates; the profile cannot manufacture engagement the personality
+  refuses.
+
+**Interpretation.** The guardrails do their job — cap the downside (no
+avoid-the-critical-path, no silence, `use` preserved) rather than boost
+action. The flat-to-slightly-negative aggregate (34→32%) is within noise,
+but its direction is a hint: for pairs with *no* preferred tool the
+rendered clause is now pure-avoidance, which may mildly reinforce
+inaction. Candidate follow-up (not this PR): A/B whether omitting the
+`<action_profile>` block entirely for no-preferred personas reads better
+than a pure-avoidance clause. Gate on ≥3 runs before acting.
+
+### Verdict
+
+- **Ship the feature** — clears every success bar on the native surface
+  (any-action 70%, parallel 63%, messaging 93%, zero silence).
+- **Ship the guardrails** — validated: `use` 90–100% on objective, zero
+  silence, floor provably active.
+- **No `ACTION_TOOL_BIAS` retune indicated** — the action-positive soft
+  spots and the action-averse flat delta are both within noise.
+
+---
 
 ## Headline: 5-tool surface, v2.5 treatment vs. baseline
 
