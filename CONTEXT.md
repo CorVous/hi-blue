@@ -23,7 +23,7 @@ The 4-character `*xxxx` lowercase-alphanumeric handle (e.g. `*3kw7`). The Person
 _Avoid_: "the red AI" — color is rendering, not identity.
 
 **Temperament**:
-A single trait drawn from a curated pool (e.g. "shy", "hot-headed", "insightful"). Each Persona has two. Duplicate Temperaments on one Persona are *intensification* (shy + shy = pathologically reserved), not noise. Together with the **Persona Goal** they are the input to personality synthesis; they also drive an **action profile** — a per-tool affinity bias over `go`/`face`/`pick_up`/`put_down`/`use`, baked into the system prompt as an `<action_profile>` clause that shapes which actions a Daemon tends to take when it acts.
+A single trait drawn from a curated pool (e.g. "shy", "hot-headed", "insightful"). Each Persona has two. Duplicate Temperaments on one Persona are *intensification* (shy + shy = pathologically reserved), not noise. Together with the **Persona Goal** they are the input to personality synthesis; they also drive an **action profile** — a per-tool affinity bias over `go`/`pick_up`/`put_down`/`use`, baked into the system prompt as an `<action_profile>` clause that shapes which actions a Daemon tends to take when it acts.
 _Avoid_: Trait, mood, attribute.
 
 **Persona Goal**:
@@ -57,7 +57,7 @@ The structured LLM content-pack output: setting-flavored names, examine descript
 The two **Content Pack**s generated in a single batched LLM call at game start — one per **Setting** (the starting Setting and the alternate Setting used if a **Setting Shift** Complication fires). Entities across Pack A and Pack B are paired by structural role: same entity IDs, same satisfaction state, but Setting-appropriate names, descriptions, and flavor strings.
 
 **Placement flavor**:
-A per-objective-pair flavor string in the **Content Pack** that fires when an objective object is `put_down` on its matching objective space — the moment a pair gets satisfied. Distinct from `useOutcome` (which fires on `use(item)` and has no mechanical effect). Renders as the actor's tool-result and a **Witnessed event** for in-cone observers, with `{actor}` substitution.
+A per-objective-pair flavor string in the **Content Pack** that fires when an objective object is `put_down` on its matching objective space — the moment a pair gets satisfied. Distinct from `useOutcome` (which fires on `use(item)` and has no mechanical effect). Renders as the actor's tool-result and a **Witnessed event** for in-Vista observers, with `{actor}` substitution.
 
 **Objective Pair**:
 A pair of (objective object, objective space) backing a **Carry Objective** — the object must end up on its specific space to count toward the win. The `examineDescription` of the objective object names the space it belongs on.
@@ -70,14 +70,12 @@ A non-win item present on the grid for flavor and negotiation currency. Has a `u
 A static, impassable cell occupant, named to match the Setting (e.g. "moss-covered concrete column"). Cannot share a cell with anything else.
 
 **Wall**:
-The impassable boundary surrounding the 5×5 grid, perceived by a Daemon as a setting-flavored noun phrase (e.g. "crumbling tile wall") when an out-of-bounds cell falls inside the Daemon's **Cone**. Authored on the **Content Pack** (paired across Pack A / Pack B for Setting Shift) as `wallName`. Rendered alongside obstacles in `<what_you_see>` and `<whats_new>`. Not a `WorldEntity`, not a separate cell occupant — purely a perception sentinel for OOB cone cells.
+The impassable boundary surrounding the 5×5 grid, perceived by a Daemon as a setting-flavored noun phrase (e.g. "crumbling tile wall") when an out-of-bounds cell falls inside the Daemon's **Vista**. Authored on the **Content Pack** (paired across Pack A / Pack B for Setting Shift) as `wallName`. Rendered alongside obstacles in `<what_you_see>` and `<whats_new>`. Not a `WorldEntity`, not a separate cell occupant — purely a perception sentinel for OOB Vista cells.
 _Avoid_: Edge (positional, not lexical), barrier (less setting-natural).
 
-**Cone**:
-The wedge-shaped region of nine cells an AI can see each turn: the AI's own cell, the three cells one step ahead (front-left, ahead, front-right), and the five cells two steps ahead (far-left, front-left, front, front-right, far-right). Projects from the AI's **Facing**. Out-of-bounds cells inside the cone render as **Wall** sentinels. Obstacles do not occlude — the cone is a fixed-shape mask, not a raycast.
-
-**Facing**:
-The cardinal direction (N/S/E/W) an AI is currently looking. Stored internally as a cardinal alongside `(row, col)` in the AI's spatial state. Updated by `go(direction)` (move and face) and `face(direction)` (face without moving); both tools take a relative direction argument (`forward | back | left | right`) which the dispatcher translates against the current Facing — Daemons never see cardinals (ADR 0008).
+**Vista**:
+The proximity disk: the region of cells a Daemon can perceive each turn, centered on their position and extending a fixed radius in every direction — a 360° region, not a wedge. Projects from the Daemon's position alone, independent of any orientation. Out-of-bounds cells inside the Vista render as **Wall** sentinels. Obstacles do not occlude — the Vista is a fixed-shape mask, not a raycast. Supersedes the **Cone** (ADR 0015).
+_Avoid_: Cone (retired), field of view (plain English is fine; the domain term is Vista).
 
 **Conversation log**:
 The single chronological per-Daemon section of the system prompt that interleaves directional **message**s (incoming and outgoing, including **Sysadmin** traffic), **Witnessed event**s, and **Broadcast message**s — all tagged by round. The Daemon's complete game memory: nothing the Daemon has experienced exists outside this log. Also the per-Daemon storage shape — see **ConversationEntry**. The unified `message` kind replaces the previous chat/whisper split (per ADR 0007 / commit c60e995, schema v4).
@@ -86,29 +84,29 @@ _Avoid_: Action log (deprecated; do not reintroduce), event delta, transcript.
 **ConversationEntry**:
 A single tagged item inside a Daemon's **Conversation log**. Discriminated union of seven kinds, each carrying a `round` and the smallest payload needed to render its line:
 - `message` — a directional `(from, to, content)` triple where `from` is an `AiId`, `blue`, or `sysadmin`, and `to` is an `AiId` or `blue`.
-- `witnessed-event` — an observable physical action (`go`/`pick_up`/`put_down`/`use`) another Daemon performed inside this Daemon's **Cone**. See **Witnessed event**.
+- `witnessed-event` — an observable physical action (`go`/`pick_up`/`put_down`/`use`) another Daemon performed inside this Daemon's **Vista**. See **Witnessed event**.
 - `action-failure` — actor-only; a verbatim dispatcher rejection reason that persists so a Daemon stops repeating a failed action.
 - `broadcast` — a sender-less system announcement appended to all three Daemon logs at once. See **Broadcast message**.
-- `tool-call` — the actor's own tool call plus its result, replayed into the next round's prompt; carries an optional `coneDelta` capturing new perception revealed by a `go`/`face`.
-- `witnessed-obstacle-shift` — the flavor line a Daemon perceives when an **Obstacle Shift** moves an Obstacle inside its **Cone**.
+- `tool-call` — the actor's own tool call plus its result, replayed into the next round's prompt; carries an optional `vistaDelta` capturing new perception revealed by a `go`.
+- `witnessed-obstacle-shift` — the flavor line a Daemon perceives when an **Obstacle Shift** moves an Obstacle inside its **Vista**.
 - `witnessed-convergence` — the tiered flavor line for a **Convergence Objective**, tagged `actor` or `witness` by audience.
 The shape a player sees when they open a `*xxxx.txt` file in devtools.
-_Avoid_: Log entry (ambiguous), event (use **Witnessed event** for the specific witness-cone case).
+_Avoid_: Log entry (ambiguous), event (use **Witnessed event** for the specific in-Vista witness case).
 
 **Witnessed event**:
-A single line in the **Conversation log** describing something an AI saw happen inside their **Cone**. Rendered second-person: `You watch *xxxx [verb]…` for movement / pick-up / put-down, and the `{actor}`-substituted use-outcome flavor string for `use`. A `face` action produces no Witnessed event — a facing change is not an observable physical act.
+A single line in the **Conversation log** describing something another Daemon did inside this Daemon's **Vista**. Rendered second-person: `You watch *xxxx [verb]…` for movement / pick-up / put-down, and the `{actor}`-substituted use-outcome flavor string for `use`.
 
 **Broadcast message**:
-A system message delivered to all three Daemons simultaneously, not attributed to any Daemon or the **Sysadmin**. Used for **Weather Change** and **Setting Shift** complications. Distinct from a **Sysadmin** directive (targeted, attributed) and a **Witnessed event** (cone-gated). Stored as the `broadcast` **ConversationEntry** kind.
+A system message delivered to all three Daemons simultaneously, not attributed to any Daemon or the **Sysadmin**. Used for **Weather Change** and **Setting Shift** complications. Distinct from a **Sysadmin** directive (targeted, attributed) and a **Witnessed event** (Vista-gated). Stored as the `broadcast` **ConversationEntry** kind.
 
 ### Daemon actions
 
 **Daemon tool set**:
-The six tools a Daemon can call each round — `pick_up`, `put_down`, `use`, `go`, `face`, and `message`. Tool calls appear to the player as conversation transcript plus physical effects. The set after #466–#472: the old `examine` tool was removed in favour of auto-emitted examine flavor, `look` was renamed to `face`, and `give` was removed.
-_Avoid_: `examine` / `look` / `give` (all retired).
+The five tools a Daemon can call each round — `pick_up`, `put_down`, `use`, `go`, and `message`. Tool calls appear to the player as conversation transcript plus physical effects. The set after #466–#472: the old `examine` tool was removed in favour of auto-emitted **Examine flavor**, and `give` was removed; the former `look` tool became `face`, and `face` is itself now retired (ADR 0015).
+_Avoid_: `examine` / `face` / `give` (all retired; `look` was renamed to `face`).
 
 **Examine flavor**:
-An entity's descriptive prose (`examineDescription`, or `postExamineDescription` once satisfied) surfaced *automatically* into a Daemon's per-round perception — when an entity comes into view in the **Cone**, sits in the Daemon's current cell, or is held — and surfaced privately to the actor on `pick_up`. There is no `examine` tool; the player elicits this prose by getting a Daemon near (or holding) the relevant entity and asking them to relay what they see.
+An entity's descriptive prose (`examineDescription`, or `postExamineDescription` once satisfied) surfaced *automatically* into a Daemon's per-round perception — when an entity comes into view in the **Vista**, sits in the Daemon's current cell, or is held — and surfaced privately to the actor on `pick_up`. There is no `examine` tool; the player elicits this prose by getting a Daemon near (or holding) the relevant entity and asking them to relay what they see.
 
 ### Objectives and Complications
 
@@ -116,7 +114,7 @@ An entity's descriptive prose (`examineDescription`, or `postExamineDescription`
 One of four kinds an **Objective** can be. Types are rolled uniformly with replacement at game start (in code, via the seeded RNG, *before* the LLM **Content Pack** call); same-type duplicates are allowed and entities are strict 1-to-1 with Objectives. See [ADR 0014](docs/adr/0014-type-first-objective-authoring.md).
 1. **Carry Objective** — A Daemon brings a specific object to a specific space (an **Objective Pair**). The object's `examineDescription` names the target space.
 2. **Use-Item Objective** — A Daemon uses (`use` tool) a specific pickupable item. The item's `examineDescription` hints at use. After satisfaction the item becomes inert but stays on the grid, behaving like an **Interesting Object**; examine flavor updates to reflect completion.
-3. **Use-Space Objective** — A Daemon uses the `use` tool while standing on a specific space, or while that space is in the three front-arc cells directly ahead — no held item required. After satisfaction `use` is no longer available on that space; a generated flavor event fires and examine flavor updates.
+3. **Use-Space Objective** — A Daemon uses the `use` tool while standing on a specific space, or while that space is inside their **Vista** — no held item required. After satisfaction `use` is no longer available on that space; a generated flavor event fires and examine flavor updates.
 4. **Convergence Objective** — Any two Daemons occupy the same cell as a specific space simultaneously. The space has tiered generated flavor: distinct lines for one Daemon present vs. two (satisfaction). Satisfied the moment two Daemons share the cell.
 _Avoid_: Win condition (use Objective), mission.
 
@@ -133,7 +131,7 @@ A mid-game disruption that fires on a schedule. Only one Complication fires per 
 1. **Weather Change** — Permanent. A new weather string replaces the current one. Delivered as a neutral **Broadcast message** (`[SYSTEM] The weather has changed. <new weather>`). No Sysadmin attribution.
 2. **Sysadmin Directive** — Temporary, fixed `[3, 5]`-round duration. A behavioral instruction delivered by the **Sysadmin** to one Daemon privately, with a meta-instruction not to reveal the directive. Auto-expires when its countdown elapses (the Sysadmin sends a closing message); a Daemon holds at most one directive at a time, so a new directive targeting a Daemon that already has one revokes the old one first. Up to three can be active at once — one per Daemon.
 3. **Tool Disable** — Temporary, fixed `[3, 5]`-round duration. A specific tool is mechanically removed from one Daemon's available tools. The Sysadmin notifies the Daemon on disable and on restore. No secrecy instruction (the tool's absence is self-evident). Multiple Tool Disables can be active simultaneously, but never the same `(Daemon, tool)` pair twice.
-4. **Obstacle Shift** — Permanent per-event. One Obstacle moves one adjacent cell to an empty space; if no valid adjacent empty cell exists, a different Obstacle is chosen. Only Daemons with that cell in their **Cone** at the moment it fires see a generated flavor **Witnessed event**. The same Obstacle can shift again in a later draw.
+4. **Obstacle Shift** — Permanent per-event. One Obstacle moves one adjacent cell to an empty space; if no valid adjacent empty cell exists, a different Obstacle is chosen. Only Daemons with that cell in their **Vista** at the moment it fires see a generated flavor **Witnessed event**. The same Obstacle can shift again in a later draw.
 5. **Chat Lockout** — Temporary, fixed `[3, 5]`-round duration. The player cannot message one specific Daemon.
 6. **Setting Shift** — Permanent, fires at most once per game (removed from the pool after firing). The room's **Setting** changes; the active **Content Pack** swaps from Pack A to the pre-generated Pack B. Entities are paired by structural role (same IDs, satisfaction states preserved, names and descriptions replaced). Announced to Daemons via a **Broadcast message**.
 _Avoid_: Phase Goal (retired), event, trigger.
@@ -181,5 +179,8 @@ Earlier-design vocabulary that should not be reintroduced:
 - **the Voice** — the opaque directive source, replaced by the named **Sysadmin** (ADR 0007).
 - **examine / look / give tools** — `examine` is now auto-emitted **Examine flavor**, `look` is renamed `face`, `give` is removed.
 - **Action log** — replaced by the per-Daemon **Conversation log**; do not reintroduce.
+- **Cone** — the nine-cell wedge a Daemon could see, oriented by its **Facing**. Retired in favour of the 360° **Vista** (ADR 0015).
+- **Facing** — the cardinal direction a Daemon was assumed to be looking, the basis for the relative directions (`forward`/`back`/`left`/`right`) and the old **Cone**. Retired: a Daemon perceives a 360° **Vista** and is not oriented in any one direction, so "facing" has no meaningful referent; spatial references now use the grid's cardinal axes directly (ADR 0015).
+- **Horizon landmarks** — the four named landmarks (one per cardinal) that anchored a Daemon's facing. Retired along with facing (ADR 0015).
 </content>
 </invoke>

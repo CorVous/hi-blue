@@ -1,6 +1,6 @@
 # ADR 0008 — Relative directions and horizon landmarks
 
-**Status:** Accepted
+**Status:** Superseded by ADR 0015
 
 ## Context
 
