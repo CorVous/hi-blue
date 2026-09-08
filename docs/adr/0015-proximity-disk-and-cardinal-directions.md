@@ -1,6 +1,6 @@
 # ADR 0015 — The Vista, cardinal directions, and the retirement of facing and horizon landmarks
 
-**Status:** Accepted
+**Status:** Superseded by ADR 0016 (the final spec, which consolidates the ripples)
 
 **Supersedes:** [ADR 0008 — Relative directions and horizon landmarks](../adr/0008-relative-directions-and-horizon-landmarks.md)
 

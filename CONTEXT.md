@@ -47,7 +47,7 @@ _Avoid_: The Voice (retired), the player (when describing what the Daemon sees),
 ### World
 
 **Setting**:
-The noun describing where the game takes place ("abandoned subway station", "sun-baked salt flat", "forgotten laboratory"). Drawn from a hand-authored `SETTING_POOL` at game start. One Setting per game; a **Setting Shift** **Complication** can swap it once mid-game (active **Content Pack** A → B).
+The noun describing where the game takes place ("abandoned subway station", "sun-baked salt flat", "forgotten laboratory"). Drawn from a hand-authored `SETTING_POOL` at game start. One Setting per game; a **Setting Shift** **Complication** can swap it once mid-game (active **Content Pack** A → B). The room's orientation — the four compass words as the room's own geography — is established once, in-fiction, in the stable system prompt: a property of the room, not of its contents, so it survives a **Setting Shift** (ADR 0016).
 _Avoid_: Level, scene, location.
 
 **Content Pack**:
@@ -74,7 +74,7 @@ The impassable boundary surrounding the 5×5 grid, perceived by a Daemon as a se
 _Avoid_: Edge (positional, not lexical), barrier (less setting-natural).
 
 **Vista**:
-The proximity disk: the region of cells a Daemon can perceive each turn, centered on their position and extending a fixed radius in every direction — a 360° region, not a wedge. Projects from the Daemon's position alone, independent of any orientation. Out-of-bounds cells inside the Vista render as **Wall** sentinels. Obstacles do not occlude — the Vista is a fixed-shape mask, not a raycast. Supersedes the **Cone** (ADR 0015).
+The proximity disk: the region of cells a Daemon can perceive each turn, centered on their position and extending a fixed radius in every direction — a 360° region, not a wedge. Projects from the Daemon's position alone, independent of any orientation. Out-of-bounds cells inside the Vista render as **Wall** sentinels. Obstacles do not occlude — the Vista is a fixed-shape mask, not a raycast. Supersedes the **Cone** (ADR 0016).
 _Avoid_: Cone (retired), field of view (plain English is fine; the domain term is Vista).
 
 **Conversation log**:
@@ -102,7 +102,7 @@ A system message delivered to all three Daemons simultaneously, not attributed t
 ### Daemon actions
 
 **Daemon tool set**:
-The five tools a Daemon can call each round — `pick_up`, `put_down`, `use`, `go`, and `message`. Tool calls appear to the player as conversation transcript plus physical effects. The set after #466–#472: the old `examine` tool was removed in favour of auto-emitted **Examine flavor**, and `give` was removed; the former `look` tool became `face`, and `face` is itself now retired (ADR 0015).
+The five tools a Daemon can call each round — `pick_up`, `put_down`, `use`, `go`, and `message`. Tool calls appear to the player as conversation transcript plus physical effects. The set after #466–#472: the old `examine` tool was removed in favour of auto-emitted **Examine flavor**, and `give` was removed; the former `look` tool became `face`, and `face` is itself now retired (ADR 0016).
 _Avoid_: `examine` / `face` / `give` (all retired; `look` was renamed to `face`).
 
 **Examine flavor**:
@@ -177,10 +177,11 @@ Earlier-design vocabulary that should not be reintroduced:
 - **Phase / Phase Goal** — the game is a single continuous game; mid-game pressure is the **Complication** schedule. Retired with the single-game restructure (PRD 0005).
 - **Wipe lie** — the fiction that AIs' memories were wiped between phases. Gone with the phase structure; **Same Daemons, New Room** produces genuine disorientation via empty logs.
 - **the Voice** — the opaque directive source, replaced by the named **Sysadmin** (ADR 0007).
-- **examine / look / give tools** — `examine` is now auto-emitted **Examine flavor**, `look` is renamed `face`, `give` is removed.
+- **examine / look / give tools** — `examine` is now auto-emitted **Examine flavor**, `look` was renamed to `face` (itself retired — see **face** below), `give` is removed.
 - **Action log** — replaced by the per-Daemon **Conversation log**; do not reintroduce.
-- **Cone** — the nine-cell wedge a Daemon could see, oriented by its **Facing**. Retired in favour of the 360° **Vista** (ADR 0015).
-- **Facing** — the cardinal direction a Daemon was assumed to be looking, the basis for the relative directions (`forward`/`back`/`left`/`right`) and the old **Cone**. Retired: a Daemon perceives a 360° **Vista** and is not oriented in any one direction, so "facing" has no meaningful referent; spatial references now use the grid's cardinal axes directly (ADR 0015).
-- **Horizon landmarks** — the four named landmarks (one per cardinal) that anchored a Daemon's facing. Retired along with facing (ADR 0015).
+- **Cone** — the nine-cell wedge a Daemon could see, oriented by its **Facing**. Retired in favour of the 360° **Vista** (ADR 0016).
+- **Facing** — the cardinal direction a Daemon was assumed to be looking, the basis for the relative directions (`forward`/`back`/`left`/`right`) and the old **Cone**. Retired: a Daemon perceives a 360° **Vista** and is not oriented in any one direction, so "facing" has no meaningful referent; spatial references now use the grid's cardinal axes directly (ADR 0016).
+- **Horizon landmarks** — the four named landmarks (one per cardinal) that anchored a Daemon's facing. Retired along with facing (ADR 0016).
+- **face** — the retired perception tool (the renamed `look`): with the 360° **Vista** there is no direction to face (ADR 0016).
 </content>
 </invoke>
