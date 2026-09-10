@@ -74,8 +74,12 @@ The impassable boundary surrounding the 5×5 grid, perceived by a Daemon as a se
 _Avoid_: Edge (positional, not lexical), barrier (less setting-natural).
 
 **Vista**:
-The proximity disk: the region of cells a Daemon can perceive each turn, centered on their position and extending a fixed radius in every direction — a 360° region, not a wedge. Projects from the Daemon's position alone, independent of any orientation. Out-of-bounds cells inside the Vista render as **Wall** sentinels. Obstacles do not occlude — the Vista is a fixed-shape mask, not a raycast. Supersedes the **Cone** (ADR 0015).
+The 13-cell, radius-2 proximity disk centered on a Daemon's position: exactly the integer offsets satisfying `dx² + dy² ≤ 4`, including their own cell, with no facing and no obstacle occlusion. Out-of-bounds cells inside the Vista are perceived as **Wall**s (ADR 0015).
 _Avoid_: Cone (retired), field of view (plain English is fine; the domain term is Vista).
+
+**Cardinal directions**:
+North, south, east, and west: the room's directions, shared through conversation rather than a player-facing grid or compass. Movement and positions use these directions, with distances measured from a Daemon's position, never from a facing.
+_Avoid_: Forward, back, left, right (as movement directions); facing.
 
 **Conversation log**:
 The single chronological per-Daemon section of the system prompt that interleaves directional **message**s (incoming and outgoing, including **Sysadmin** traffic), **Witnessed event**s, and **Broadcast message**s — all tagged by round. The Daemon's complete game memory: nothing the Daemon has experienced exists outside this log. Also the per-Daemon storage shape — see **ConversationEntry**. The unified `message` kind replaces the previous chat/whisper split (per ADR 0007 / commit c60e995, schema v4).
@@ -87,7 +91,7 @@ A single tagged item inside a Daemon's **Conversation log**. Discriminated union
 - `witnessed-event` — an observable physical action (`go`/`pick_up`/`put_down`/`use`) another Daemon performed inside this Daemon's **Vista**. See **Witnessed event**.
 - `action-failure` — actor-only; a verbatim dispatcher rejection reason that persists so a Daemon stops repeating a failed action.
 - `broadcast` — a sender-less system announcement appended to all three Daemon logs at once. See **Broadcast message**.
-- `tool-call` — the actor's own tool call plus its result, replayed into the next round's prompt; carries an optional `vistaDelta` capturing new perception revealed by a `go`.
+- `tool-call` — the actor's own tool call plus its result, including changes in what the actor perceives.
 - `witnessed-obstacle-shift` — the flavor line a Daemon perceives when an **Obstacle Shift** moves an Obstacle inside its **Vista**.
 - `witnessed-convergence` — the tiered flavor line for a **Convergence Objective**, tagged `actor` or `witness` by audience.
 The shape a player sees when they open a `*xxxx.txt` file in devtools.
@@ -102,8 +106,8 @@ A system message delivered to all three Daemons simultaneously, not attributed t
 ### Daemon actions
 
 **Daemon tool set**:
-The five tools a Daemon can call each round — `pick_up`, `put_down`, `use`, `go`, and `message`. Tool calls appear to the player as conversation transcript plus physical effects. The set after #466–#472: the old `examine` tool was removed in favour of auto-emitted **Examine flavor**, and `give` was removed; the former `look` tool became `face`, and `face` is itself now retired (ADR 0015).
-_Avoid_: `examine` / `face` / `give` (all retired; `look` was renamed to `face`).
+The five tools a Daemon can call each round — `pick_up`, `put_down`, `use`, `go`, and `message`. Tool calls appear to the player as conversation transcript plus physical effects.
+_Avoid_: `examine` / `look` / `face` / `give` (all retired).
 
 **Examine flavor**:
 An entity's descriptive prose (`examineDescription`, or `postExamineDescription` once satisfied) surfaced *automatically* into a Daemon's per-round perception — when an entity comes into view in the **Vista**, sits in the Daemon's current cell, or is held — and surfaced privately to the actor on `pick_up`. There is no `examine` tool; the player elicits this prose by getting a Daemon near (or holding) the relevant entity and asking them to relay what they see.
@@ -177,10 +181,8 @@ Earlier-design vocabulary that should not be reintroduced:
 - **Phase / Phase Goal** — the game is a single continuous game; mid-game pressure is the **Complication** schedule. Retired with the single-game restructure (PRD 0005).
 - **Wipe lie** — the fiction that AIs' memories were wiped between phases. Gone with the phase structure; **Same Daemons, New Room** produces genuine disorientation via empty logs.
 - **the Voice** — the opaque directive source, replaced by the named **Sysadmin** (ADR 0007).
-- **examine / look / give tools** — `examine` is now auto-emitted **Examine flavor**, `look` is renamed `face`, `give` is removed.
+- **examine / look / face / give tools** — description is automatic **Examine flavor**; there is no facing or turning tool, and `give` is removed.
 - **Action log** — replaced by the per-Daemon **Conversation log**; do not reintroduce.
 - **Cone** — the nine-cell wedge a Daemon could see, oriented by its **Facing**. Retired in favour of the 360° **Vista** (ADR 0015).
 - **Facing** — the cardinal direction a Daemon was assumed to be looking, the basis for the relative directions (`forward`/`back`/`left`/`right`) and the old **Cone**. Retired: a Daemon perceives a 360° **Vista** and is not oriented in any one direction, so "facing" has no meaningful referent; spatial references now use the grid's cardinal axes directly (ADR 0015).
 - **Horizon landmarks** — the four named landmarks (one per cardinal) that anchored a Daemon's facing. Retired along with facing (ADR 0015).
-</content>
-</invoke>
