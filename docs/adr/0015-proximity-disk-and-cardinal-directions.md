@@ -1,67 +1,55 @@
-# ADR 0015 — The Vista, cardinal directions, and the retirement of facing and horizon landmarks
+# ADR 0015 — Vista and cardinal movement
 
 **Status:** Accepted
 
-**Supersedes:** [ADR 0008 — Relative directions and horizon landmarks](../adr/0008-relative-directions-and-horizon-landmarks.md)
+Spatial reasoning is about proximity and position, not orientation. Daemons perceive a radius-2 Vista and describe movement and relative positions using cardinal directions. This document is the authoritative movement-and-sight specification.
 
-## Context
+## Vista
 
-ADR 0008 established the daemon's spatial model: a narrow, facing-dependent **Cone** of nine cells, a persistent **Facing** state, a relative-direction tool API (`go forward | back | left | right`), and four per-phase **horizon landmarks** as mnemonic anchors for that facing. Its stated motivation was to prevent "cardinal leakage into daemon cognition" — the idea that a daemon should reason in ego-relative and landmark-relative terms rather than in an absolute compass frame it has no in-fiction reason to know.
+The Vista is an omnidirectional disk centered on the Daemon's position. It contains exactly the 13 integer offsets satisfying `dx² + dy² ≤ 4`:
 
-That premise assumed a *cone* view. A cone is a facing-dependent shape: it only makes sense if the daemon is oriented in some particular direction, and it is what makes "which way am I facing?" a meaningful question. But the design direction for this game is that spatial reasoning should be about **proximity** — what is near me, who is close to whom, how far the objective is — rather than about **orientation**. A wedge that opens in one direction is the opposite of that: it is pure orientation, and it makes the daemon's knowledge depend on an arbitrary pose.
+```text
+                  ( 0, 2)
+         (-1, 1)  ( 0, 1)  ( 1, 1)
+(-2, 0)  (-1, 0)  ( 0, 0)  ( 1, 0)  ( 2, 0)
+         (-1,-1)  ( 0,-1)  ( 1,-1)
+                  ( 0,-2)
+```
 
-So the view should be a **Vista** — a *proximity disk*: a fixed-radius region centered on the daemon's position, computed from position alone and independent of any orientation. Once the view is a 360° disk, the daemon is not *facing* anything — it perceives a whole region around itself, and "which way am I facing?" stops having a meaningful answer. There is no privileged "forward." The whole facing subsystem — the `facing` state, the `face` tool, the relative-direction API, and the horizon landmarks that existed to anchor a facing — loses its foundation and should be retired.
+Here `dx` and `dy` denote offsets along the east–west and north–south directions, not an engine storage convention. The disk includes the Daemon's own cell, the four adjacent diagonals, and cells two steps in each cardinal direction; offsets such as `(2, 1)` are excluded.
 
-That in turn answers the question ADR 0008 was asking: *without a facing-relative frame, how does a daemon refer to directions?* 0008's answer was "relative directions plus named landmarks." But if facing itself is gone, "relative to my facing" has nothing to be relative to. The natural fallback is the world's own fixed axes — **cardinals** (north / south / east / west). Cardinals here are not an imposed "compass": they are the four axes of the grid the daemon is standing on, and a daemon perceiving a 360° **Vista** from a grid position can always see all four edges of the world, so the axes are always available as a reference. Naming them is just naming the grid's own geometry.
+Obstacles do not occlude the Vista. Intervening obstacles do not hide cells in the footprint; their movement-blocking behavior is unchanged. Out-of-bounds cells in the Vista are perceived as Walls. Sight does not depend on facing.
 
-With cardinals supplying the directional frame, the horizon landmarks become redundant. Their entire job under 0008 was to give the daemon a named mnemonic for "which way am I facing?" If there is no facing, there is no mnemonic to anchor, and the landmarks can go — along with the LLM cost of generating four distinct landmarks per content pack and the always-on "On the horizon ahead: …" line.
+## Directions and movement
 
-## Decision
+- `go` moves one block in a named cardinal direction: `north`, `south`, `east`, or `west`.
+- Daemons have positions but no facing or turning. There is no `face` tool or facing-relative movement vocabulary.
+- Cardinal directions describe the room's own geography. Establish them once, in-fiction, in the stable prompt's `<setting>` block. Their meaning does not depend on seeing the whole room or its walls.
+- The four Content-Pack horizon landmarks and the `On the horizon ahead` line are removed. No per-round anchor line replaces it.
+- Directions remain stable across a Setting Shift and Same Daemons, New Room. The latter clears conversation logs; changing contents does not redefine the cardinal directions.
+- Describe perceived positions using cardinal direction and distance from the observing Daemon's position, never its orientation. For example: “another daemon is one step north and one step east of you.” This is illustrative wording, not a required literal template.
+- The player learns directions through conversation. There is no player-facing grid or compass UI.
 
-1. **The field of view is the **Vista** (a proximity disk), not a cone.** The region a daemon can perceive is a fixed-radius disk centered on its position, computed from position alone. It no longer depends on a facing. The radius is a single tunable constant, chosen to keep the Vista a close neighborhood rather than the whole room — large enough that proximity is always informative, small enough that part of the grid stays out of sight.
+## Tools and temperament
 
-2. **"Facing" is retired as a first-class concept.** A daemon's spatial state is just its position `(row, col)` plus its inventory. There is no `facing` field and no `face` tool. A daemon's "orientation," in the loose sense, is simply the world's axes.
+The Daemon tool set is `go`, `pick_up`, `put_down`, `use`, and `message`. Remove `face` from the tool set and the Tool Disable pool.
 
-3. **Movement uses cardinals.** `go` takes `north | south | east | west` directly. The relative→cardinal translation and the `face` action are gone.
+The action-profile bias table covers four tools: `go`, `pick_up`, `put_down`, and `use`. Drop the `face` column without transferring its perception bias to another tool or to `message`; perception traits live in temperament prose. Keep the `go`/`use` critical-path floor at −1 and the existing preferred/avoided thresholds.
 
-4. **Horizon landmarks are dropped.** `ContentPack.landmarks`, the `LandmarkDescription` type, the "generate four landmarks" content-pack instructions, and the always-on horizon line are all removed. The setting-flavored **wall name** for the grid edge stays — it is a property of the world, not of the daemon's orientation.
+## Mechanics
 
-5. **The ripples: every mechanic that reads Facing or the Cone.** Every phrasing that previously spoke in facing-relative terms now speaks in the grid's own axes, and the five mechanics raised in #524 are pinned down as follows:
-   - **(a) Use-Space objective predicate** — a daemon satisfies it while standing on the space, *or* while the space is inside their **Vista**. The old "one of the three front-arc cells directly ahead" becomes a plain disk-membership check on the space.
-   - **(b) Witnessed-movement phrasing** — `You watch *X walk north.` The raw cardinal of the step, not a direction relative to the witness. (A `face` was never an observable physical act, so it produces no Witnessed event.)
-   - **(c) Perceived facing of other daemons** — a daemon has no orientation left to perceive, so the peer line drops "facing <relative>" and renders the peer's *position* in cardinals instead: `the Daemon *X (crimson), two cells to the north, holding nothing`.
-   - **(d) Obstacle-Shift / Convergence witnessing** — the gate becomes disk membership. An Obstacle-Shift is witnessed by any daemon whose **Vista** covers the obstacle's origin cell; a Convergence "witness" is a daemon whose **Vista** covers the space (but who is not standing on it), while the "actor" audience — the daemon standing on the space — is unchanged.
-   - **(e) `coneDelta` / `<whats_new>`** — the pre/post perception snapshot becomes a *disk* snapshot, and the diff it drives becomes the daemon's `diskDelta`. "New" now means *a cell or content that entered or left the daemon's Vista since their last round*. The block cannot balloon: it is a +/- diff of entries and exits, not a re-listing of the whole view, and it renders only when the snapshot actually changes (an identical snapshot renders nothing). The modest disk radius bounds how many lines any single diff can produce.
-   - The `<what_you_see>` cell listing likewise adopts cardinal-offset phrasings ("one cell north", "two cells northeast") in place of the facing-relative "directly in front" / "two steps ahead".
+- **Use-Space:** the Daemon may use the space while standing on it or while it is inside the Daemon's Vista. Eligibility is disk membership, not a front arc.
+- **Witnessed movement:** describe the cardinal direction of the step, for example, “You watch *X walk north.”
+- **Peer perception:** describe the peer's position in cardinal directions and distances, with no facing description.
+- **Obstacle Shift and Convergence:** witness eligibility uses Vista membership of the affected cell or space. The actor audience is unchanged.
+- **Perception changes:** use disk snapshots and `diskDelta` in place of cone snapshots and `coneDelta`. The `<whats_new>` entry/exit diff renders only on an actual snapshot change, rather than repeating the whole Vista.
 
-## Consequences
+## Save compatibility
 
-**Positive:**
+Removing facing and horizon landmarks changes the persisted format. Bump the session schema from v11 to v12 and the USB schema from v4 to v5, using archive-map entries for both formats, not in-place migration.
 
-- The daemon's spatial model is now purely positional: a point on the grid, and a **Vista** around it. "Facing" and the entire relative-direction subsystem (`relativeToCardinal`, `cardinalToRelative`, the `face` tool, the horizon line) are gone.
-- A 360° **Vista** makes the daemon perceive its whole immediate neighborhood, so "proximity, not orientation" becomes a structural fact about the model rather than an aspiration.
-- Cardinals are a stable, always-available frame (the grid's axes are always in view), so spatial statements need no mnemonic to survive across rounds.
-- Dropping landmarks removes an LLM generation cost and a source of content-pack drift — no more requirement that the pack generator produce four distinct landmarks per phase.
-- The model is simpler and more internally consistent: a daemon is a point that sees a disk around itself and talks about the world in the grid's own axes.
+Old saves are identified as belonging to an older version rather than silently rewritten. Session saves offer a link to the compatible archived build; USB saves identify their compatible build. The recorded target for both old schemas is `0.0.2-beta.2`; finalize each entry at bump time against the latest released build that shipped that schema.
 
-**Negative / watch-out:**
+## Scope
 
-- We are partially walking back ADR 0008's "cardinals leak into cognition" argument. The reconciliation: 0008's concern was well-founded in a *cone* model, where the daemon has a facing and "forward" is the natural frame. In a *disk* model, facing is incoherent, so "relative to my facing" has no referent, and cardinals — the grid's own axes — become the minimal, always-available frame. Cardinals are the geometry of the grid, not an abstract compass.
-- Daemons now always "know" the four world axes. That is a small loss of the "no compass in fiction" flavor, but acceptable: a daemon perceiving a bounded grid from the center has a perfectly in-fiction reason to distinguish its four edges.
-- The `<what_you_see>` block lists more cells than the old cone (a disk is wider), so the perception portion of the per-round prompt grows somewhat. The modest disk radius keeps this in check.
-- Persisted sessions carry `facing` (in each daemon's spatial state) and `landmarks` (in the content pack) today. Removing them is a change to the shape of persisted state, so this is a **session schema bump** (v11 → v12) with a migration that drops the now-dead fields on load.
-- Content packs no longer carry landmarks, so any stored pack or generation path that expects them must tolerate their absence.
-
-## Files changed (implementation surface)
-
-- **`src/spa/game/direction.ts`** — remove `RelativeDirection` / `RELATIVE_DIRECTIONS`, `relativeToCardinal`, `cardinalToRelative`, `DEFAULT_LANDMARKS`, and `frontArc`. Keep `CARDINAL_DIRECTIONS`, `directionDelta`, `applyDirection`, `inBounds`, and the distance helpers. Add a disk-membership helper to replace `frontArc` for reachability checks.
-- **`src/spa/game/cone-projector.ts` → `disk-projector.ts`** — `projectCone(position, facing)` becomes `projectDisk(position)` (no facing argument), returning the fixed-radius disk's cells. Rework the per-cell phrasing list to be cardinal-based. Rename `ConeCell` → `DiskCell`.
-- **`src/spa/game/types.ts`** — remove `facing` from `PersonaSpatialState`; remove `LandmarkDescription` and `ContentPack.landmarks`; remove `actorFacingAtAction` from `PhysicalActionRecord` and drop the `"face"` entry from the `PhysicalAction` union; rename the `tool-call` record's `coneDelta` field to its disk equivalent.
-- **`src/spa/game/tool-registry.ts`** — `go`'s `direction` enum becomes the four cardinals; remove the `face` tool definition; update tool descriptions to cardinal phrasing.
-- **`src/spa/game/dispatcher.ts`** — `go` takes cardinals directly (drop the `relativeToCardinal` translation); remove the `case "face"`; stop emitting `actorFacingAtAction`; use the disk for the use-space reachability check.
-- **`src/spa/game/available-tools.ts`** — drop `face` from the per-turn tool list; `go`'s legal-direction filter becomes "cardinal is in-bounds and not blocked"; `pick_up` / `use` reachability uses disk membership instead of `frontArc`.
-- **`src/spa/game/prompt-builder.ts`** — drop the always-on horizon/landmark line and `ctx.landmarks`; drop `facing` from the `you:` state line and from `parseYouLine`; rework `<what_you_see>` to the disk with cardinal-offset cell phrasings; drop "facing <relative>" from the peer-perception line; rename the `buildConeSnapshot` / `renderWhatsNew` / `renderPerceptionDelta` / `ConeEntityState` surface to its disk equivalent.
-- **`src/spa/game/conversation-log.ts`** — the witnessed-`go` line renders the raw cardinal direction (drop the `cardinalToRelative(witnessState.facing, …)` conversion and, if it is used only for that, the `witnessState` parameter).
-- **`src/spa/game/content-pack-provider.ts` / `src/content/content-pack-generator.ts` / `src/spa/game/binding-prompt-builder.ts`** — remove the "generate four horizon landmarks" instruction and the landmark validation/parsing.
-- **`src/spa/persistence/session-codec.ts`** — bump `SESSION_SCHEMA_VERSION` from 11 to 12 and add a v11 → v12 migration that drops `facing` from each daemon's spatial state and `landmarks` from the persisted content pack; drop the `DEFAULT_LANDMARKS` deserialization fallback.
-- **Tests** — update fixtures (`make-test-pack.ts`, `static-content-packs.ts`, the content-pack and session-codec test suites) and any assertions that reference facing, landmarks, or the old cone phrasings.
+This is a design handoff, not an implementation plan. Implementation sequencing, internal storage choices, and dev-inspector visual design are not prescribed here. Carry, Use-Item, and Convergence satisfaction rules remain unchanged; Convergence witness eligibility follows the Vista rule above.
