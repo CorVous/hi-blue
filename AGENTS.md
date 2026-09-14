@@ -26,6 +26,10 @@ The pinned model is `z-ai/glm-4.7` (`src/model.ts`). Daemon system prompts are a
 
 We follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/#specification). Squash-merge PR titles are the source of truth — `changelogen` parses them to bump the version and write `CHANGELOG.md`. See `docs/agents/commits.md`.
 
+## Vista implementation handoff
+
+For movement/sight work, start with [docs/agents/vista-implementation.md](docs/agents/vista-implementation.md) and [implementation map #535](https://github.com/CorVous/hi-blue/issues/535). ADR 0015 and CONTEXT.md describe the approved target, not proof that the runtime has been converted. The design is settled; use the live map to select an unblocked implementation ticket.
+
 ## Local development
 
 `pnpm dev` runs `wrangler dev`, which fails without a Cloudflare login because

@@ -47,7 +47,7 @@ Run the suite:
 pnpm smoke
 ```
 
-The `webServer` config in `playwright.config.ts` automatically runs `pnpm build` and then `wrangler dev --port 8787` before the tests start. No manual dev server needed.
+The `webServer` config in `playwright.config.ts` automatically builds the SPA and starts `wrangler dev --local --port 8787` with a test API key. No Cloudflare login or manual dev server is needed. Outside CI, Playwright may reuse an existing server: ensure port 8787 is not serving an unrelated or differently configured build.
 
 View the HTML report after a run:
 
