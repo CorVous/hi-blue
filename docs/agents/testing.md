@@ -12,9 +12,9 @@ Unit-level coverage for SPA modules — pure logic, encoder/decoder round-trips,
 
 ## Playwright e2e (`e2e/**/*.spec.ts`)
 
-Live browser end-to-end against `pnpm build` + `wrangler dev` on `:8787` — the production-shaped surface (built SPA from `dist/` served by the same Worker that handles the API). Run with `pnpm test:e2e`. Use this when:
+Live browser end-to-end against the built SPA on `http://localhost:8787`. Run with `pnpm smoke`; `playwright.config.ts` starts `pnpm build` followed by local Wrangler with a test API key, so no Cloudflare login or manual server is needed. Install the browser once with `pnpm exec playwright install chromium`. Outside CI an existing server may be reused: ensure port 8787 is not serving an unrelated or differently configured build. Use this when:
 
-- You change anything under `src/spa/` that affects rendered DOM, user interaction, or the loaded-page experience — panel rendering, form behaviour, SSE streaming, round transitions, endgame overlay, the `/endgame` route, lockouts, cap-hit handling.
+- You change anything under `src/spa/` that affects rendered DOM, user interaction, or the loaded-page experience — panel rendering, form behaviour, SSE streaming, round transitions, endgame overlay, lockouts, cap-hit handling.
 - You touch the `assets` block in `wrangler.jsonc` or `scripts/build-spa.mjs` (the build/serve surface the e2e exercises).
 
 **Vitest jsdom does not substitute for Playwright on these changes** — add or update a spec under `e2e/`.
