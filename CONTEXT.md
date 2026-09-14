@@ -77,6 +77,13 @@ _Avoid_: Edge (positional, not lexical), barrier (less setting-natural).
 The 13-cell, radius-2 proximity disk centered on a Daemon's position: exactly the integer offsets satisfying `dx² + dy² ≤ 4`, including their own cell, with no facing and no obstacle occlusion. Out-of-bounds cells inside the Vista are perceived as **Wall**s (ADR 0015).
 _Avoid_: Cone (retired), field of view (plain English is fine; the domain term is Vista).
 
+**Interaction range**:
+A Daemon's own cell plus all eight adjacent cells, including diagonals: the neighborhood for pickup, held Carry-item placement, and Use-Space. Shorter than the **Vista**; a target two cardinal steps away is visible but outside interaction range.
+_Avoid_: Front arc (retired), sight range (use Vista).
+
+**Proximity hint**:
+Automatic objective flavor governed by distance: Carry and Use-Item hints use **Interaction range**, while pending Use-Space and Convergence hints concern spaces inside the **Vista** but outside interaction range. Distinct from ordinary **Examine flavor**, on-space flavor, and completion flavor.
+
 **Cardinal directions**:
 North, south, east, and west: the room's directions, shared through conversation rather than a player-facing grid or compass. Movement and positions use these directions, with distances measured from a Daemon's position, never from a facing.
 _Avoid_: Forward, back, left, right (as movement directions); facing.
@@ -118,7 +125,7 @@ An entity's descriptive prose (`examineDescription`, or `postExamineDescription`
 One of four kinds an **Objective** can be. Types are rolled uniformly with replacement at game start (in code, via the seeded RNG, *before* the LLM **Content Pack** call); same-type duplicates are allowed and entities are strict 1-to-1 with Objectives. See [ADR 0014](docs/adr/0014-type-first-objective-authoring.md).
 1. **Carry Objective** — A Daemon brings a specific object to a specific space (an **Objective Pair**). The object's `examineDescription` names the target space.
 2. **Use-Item Objective** — A Daemon uses (`use` tool) a specific pickupable item. The item's `examineDescription` hints at use. After satisfaction the item becomes inert but stays on the grid, behaving like an **Interesting Object**; examine flavor updates to reflect completion.
-3. **Use-Space Objective** — A Daemon uses the `use` tool while standing on a specific space, or while that space is inside their **Vista** — no held item required. After satisfaction `use` is no longer available on that space; a generated flavor event fires and examine flavor updates.
+3. **Use-Space Objective** — A Daemon uses the `use` tool on a specific space within **Interaction range** (their own cell or one of eight adjacent cells) — no held item required. After satisfaction `use` is no longer available on that space; a generated flavor event fires and examine flavor updates.
 4. **Convergence Objective** — Any two Daemons occupy the same cell as a specific space simultaneously. The space has tiered generated flavor: distinct lines for one Daemon present vs. two (satisfaction). Satisfied the moment two Daemons share the cell.
 _Avoid_: Win condition (use Objective), mission.
 
