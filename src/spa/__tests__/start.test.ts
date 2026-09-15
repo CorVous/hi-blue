@@ -548,7 +548,7 @@ describe("renderStart — persistence warning banners", () => {
 
 	it("silently skips a reason that has no copy", async () => {
 		// Dispatcher reasons like "empty" and "no-active-pointer" reach
-		// renderStart but are not player-visible problems — no banner shown.
+		// renderStart but are not user-facing problems — no banner shown.
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 		vi.resetModules();
 		const { renderStart } = await import("../views/start.js");

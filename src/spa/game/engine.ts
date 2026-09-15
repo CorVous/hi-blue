@@ -346,7 +346,7 @@ export function appendWitnessedEvent(
 /**
  * Append a `kind: "witnessed-convergence"` ConversationEntry to a single
  * witness's per-Daemon log. Called by the Round Coordinator's end-of-round
- * convergence evaluation for each Daemon whose cone contains the space cell.
+ * convergence evaluation for each Daemon whose Vista contains the space cell.
  */
 export function appendWitnessedConvergence(
 	game: GameState,
@@ -365,7 +365,7 @@ export function appendWitnessedConvergence(
 /**
  * Append a `kind: "witnessed-obstacle-shift"` ConversationEntry to a single
  * witness's per-Daemon log. Called by the Obstacle Shift complication handler
- * for each Daemon whose cone contained the obstacle's origin cell.
+ * for each Daemon whose Vista contained the obstacle's origin cell.
  */
 export function appendWitnessedObstacleShift(
 	game: GameState,

@@ -24,13 +24,10 @@ import { expect, test } from "@playwright/test";
 import {
 	expectNoPageErrors,
 	goToGame,
+	obfuscateEngineBlob,
 	pickerOkSessionSeedScript,
 	stubNewGameLLM,
 } from "./helpers";
-
-// ── Obfuscation key (embedded in the version-mismatch seed script) ────────────
-
-const OBFUSCATION_KEY = "hi-blue:engine/v1@kJvN3pX8wQmR2sZt";
 
 // ── Session seed helpers ──────────────────────────────────────────────────────
 
@@ -60,6 +57,7 @@ function seedBrokenSessionScript(id: string): string {
  * pre-v12 schema, which the live build maps to the archived `0.0.2-beta.2`.
  */
 function seedVersionMismatchScript(id: string, schemaVersion = 999): string {
+	const engineDat = obfuscateEngineBlob(JSON.stringify({ schemaVersion }));
 	return `
 		(function() {
 			const prefix = 'hi-blue:sessions/${id}/';
@@ -72,16 +70,8 @@ function seedVersionMismatchScript(id: string, schemaVersion = 999): string {
 			localStorage.setItem(prefix + 'meta.json', meta);
 			localStorage.setItem(prefix + 'red.txt', '{}');
 
-			// Build engine.dat with schemaVersion=${schemaVersion} (mismatch)
-			const OBFUSCATION_KEY = '${OBFUSCATION_KEY}';
-			const keyBytes = Array.from(new TextEncoder().encode(OBFUSCATION_KEY));
-			const payload = JSON.stringify({ schemaVersion: ${schemaVersion} });
-			const jsonBytes = Array.from(new TextEncoder().encode(payload));
-			const xored = jsonBytes.map((b,i) => b ^ (keyBytes[i % keyBytes.length] ?? 0));
-			let iso = '';
-			for (const b of xored) iso += String.fromCharCode(b);
-			const engineDat = btoa(iso);
-			localStorage.setItem(prefix + 'engine.dat', engineDat);
+			// engine.dat sealed with schemaVersion=${schemaVersion} (mismatch)
+			localStorage.setItem(prefix + 'engine.dat', '${engineDat}');
 		})();
 	`;
 }
@@ -93,16 +83,7 @@ function seedVersionMismatchScript(id: string, schemaVersion = 999): string {
  * can prove the mismatch route left the stored bytes untouched.
  */
 function expectedSeededEngineBytes(schemaVersion: number): string {
-	const keyBytes = Array.from(new TextEncoder().encode(OBFUSCATION_KEY));
-	const jsonBytes = Array.from(
-		new TextEncoder().encode(JSON.stringify({ schemaVersion })),
-	);
-	const xored = jsonBytes.map(
-		(b, i) => b ^ (keyBytes[i % keyBytes.length] ?? 0),
-	);
-	let iso = "";
-	for (const b of xored) iso += String.fromCharCode(b);
-	return btoa(iso);
+	return obfuscateEngineBlob(JSON.stringify({ schemaVersion }));
 }
 
 test("picker renders ok/broken/version-mismatch rows with correct tags and buttons", async ({

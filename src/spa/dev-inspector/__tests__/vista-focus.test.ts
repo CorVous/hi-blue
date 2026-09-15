@@ -1,10 +1,9 @@
 /**
- * cone-focus.test.ts
+ * vista-focus.test.ts
  *
  * Focus coverage for the dev inspector's world map. The control highlights a
  * Daemon's Vista (ADR 0015), so these tests pin the Vista highlight, the
- * per-Daemon focus state, and the click/Escape clearing paths. The file name
- * predates the Vista cutover; the ticket's verification command runs this path.
+ * per-Daemon focus state, and the click/Escape clearing paths.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -44,9 +43,10 @@ function expectedVistaMask(position: GridPosition): Set<string> {
 }
 
 /**
- * The runtime still carries a retired orientation field that a later chunk of
- * this PR removes. The inspector must ignore it, so these tests write it
- * through a computed key: no source under this directory names it.
+ * The runtime no longer stores an orientation on a Daemon's spatial state, so
+ * these tests write the retired key directly to prove the inspector's highlight
+ * ignores any such field if one is present. The key is computed rather than
+ * written literally because no source under this directory names it.
  */
 const RETIRED_ORIENTATION_KEY = ["fac", "ing"].join("");
 

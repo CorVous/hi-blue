@@ -822,7 +822,7 @@ function validateEntity(
 			});
 		}
 		// First-person actor variants (#336): delivered to Daemons standing on
-		// the space; existing tier1/2 flavors fan out to non-occupant cone-witnesses.
+		// the space; existing tier1/2 flavors fan out to non-occupant Vista-witnesses.
 		if (
 			typeof e.convergenceTier1ActorFlavor !== "string" ||
 			e.convergenceTier1ActorFlavor.length === 0

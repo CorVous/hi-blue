@@ -362,9 +362,11 @@ export type ConversationEntry =
 			 * Used to enrich future-round prompts with the persisted perception.
 			 * Undefined for other tools, failed actions, or when the delta is empty.
 			 * (Issue #376: persist the perception delta on go tool-call log
-			 * entries; the field was renamed to `diskDelta` in #539. The
-			 * persisted save-format boundary for that rename is a later chunk
-			 * of the cutover, not this one.)
+			 * entries; the field was renamed to `diskDelta` in #539. That
+			 * rename is a persisted save-format break, and this branch carries
+			 * it: the same branch activates session v12 and USB v5, so
+			 * pre-rename saves surface as version-mismatch rather than loading
+			 * with the field silently absent.)
 			 */
 			diskDelta?: string;
 	  }

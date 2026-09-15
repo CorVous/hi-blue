@@ -985,7 +985,7 @@ function collectObjectiveHints(ctx: AiContext): string[] {
 }
 
 /**
- * Build a canonical, position-keyed perception-disk snapshot for diffing. Cells
+ * Build a canonical, direction-keyed perception-disk snapshot for diffing. Cells
  * are keyed by their cardinal direction and distance from the observer (e.g.
  * "at two steps north: …") rather than by absolute coordinates, so the snapshot
  * describes exactly the Vista and depends on the observer's position alone —

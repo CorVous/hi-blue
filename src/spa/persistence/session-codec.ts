@@ -80,7 +80,7 @@ import { SESSION_SCHEMA_VERSION } from "./version-constants.js";
  * v10 (issue #374): add `wallName` to `ContentPack`.
  *   - Old v9 saves have no `wallName`; migration defaults it to an empty
  *     string on every `ContentPack` in `contentPacksA`/`contentPacksB`.
- *     The empty default round-trips through the existing OOB cone
+ *     The empty default round-trips through the existing OOB Vista
  *     renderer (which already treats blank `wallName` as "no flavored
  *     wall noun").
  *

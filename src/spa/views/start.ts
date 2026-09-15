@@ -309,7 +309,7 @@ export function renderStart(
 
 	// Show persistence warning only for reasons we have copy for. Dispatcher
 	// reasons like "empty" or "no-active-pointer" reach this point too but
-	// are not user-visible problems — silently skip them.
+	// are not user-facing problems — silently skip them.
 	const reason = opts?.reason ?? null;
 	if (reason && PERSISTENCE_WARNING_MESSAGES[reason]) {
 		const persistenceWarningEl = doc.querySelector<HTMLElement>(

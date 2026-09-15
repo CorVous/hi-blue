@@ -880,8 +880,8 @@ describe("<what_you_see> (Vista)", () => {
 	});
 
 	it("peer Daemons are rendered with their id, color, cardinal position, and held items", () => {
-		// No rng trickery: positions come straight from the pack. Facing values
-		// are deliberately varied — perception never reads them.
+		// No rng trickery: positions come straight from the pack, and the pack
+		// carries no orientation values at all.
 		const pack = makeTestPack([], {
 			wallName: "wall",
 			aiStarts: {

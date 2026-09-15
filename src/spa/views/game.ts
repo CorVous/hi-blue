@@ -937,7 +937,7 @@ export function renderGame(
 					// zero) chat entries for this panel slot.
 					transcript.textContent = "";
 					// Filter to message entries where blue is involved (from blue or to blue).
-					// Skip daemon-to-daemon messages and broadcast entries from the player-visible transcript.
+					// Skip daemon-to-daemon messages and broadcast entries from the player-facing transcript.
 					// Broadcasts live in Daemon conversationLogs for LLM context only.
 					const visibleEntries = (
 						restoredPhase.conversationLogs[aiId] ?? []
@@ -1572,13 +1572,13 @@ export function renderGame(
 						break;
 
 					case "system_broadcast":
-						// Intentionally not rendered in the player-visible UI.
+						// Intentionally not rendered in the player-facing UI.
 						// The broadcast lives in each Daemon's conversationLog for LLM context only.
 						break;
 
 					case "action_log":
 						// Event type still produced by round-result-encoder but no longer
-						// rendered in the player-visible UI. Inspector supersedes this debug surface.
+						// rendered in player-facing UI. Inspector supersedes this debug surface.
 						break;
 
 					case "phase_advanced": {
