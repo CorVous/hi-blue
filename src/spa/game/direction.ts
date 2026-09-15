@@ -13,6 +13,19 @@ export const CARDINAL_DIRECTIONS = ["north", "south", "east", "west"] as const;
 
 export type CardinalDirection = (typeof CARDINAL_DIRECTIONS)[number];
 
+/**
+ * The cardinal directions in compass rotation order: north, east, south,
+ * west (clockwise). The single source for what "clockwise from here" means —
+ * relative-direction conversion, and the ordering of multi-axis spatial
+ * descriptions.
+ */
+export const COMPASS_ORDER: readonly CardinalDirection[] = [
+	"north",
+	"east",
+	"south",
+	"west",
+];
+
 export const RELATIVE_DIRECTIONS = [
 	"forward",
 	"back",
@@ -39,17 +52,15 @@ export function relativeToCardinal(
 ): CardinalDirection {
 	if (relative === "forward") return facing;
 
-	// Cardinal order around the compass: N, E, S, W (clockwise).
-	const CW: CardinalDirection[] = ["north", "east", "south", "west"];
-	const idx = CW.indexOf(facing);
+	const idx = COMPASS_ORDER.indexOf(facing);
 
 	switch (relative) {
 		case "back":
-			return CW[(idx + 2) % 4] as CardinalDirection;
+			return COMPASS_ORDER[(idx + 2) % 4] as CardinalDirection;
 		case "right":
-			return CW[(idx + 1) % 4] as CardinalDirection;
+			return COMPASS_ORDER[(idx + 1) % 4] as CardinalDirection;
 		case "left":
-			return CW[(idx + 3) % 4] as CardinalDirection;
+			return COMPASS_ORDER[(idx + 3) % 4] as CardinalDirection;
 	}
 }
 
@@ -64,9 +75,8 @@ export function cardinalToRelative(
 	facing: CardinalDirection,
 	absolute: CardinalDirection,
 ): RelativeDirection {
-	const CW: CardinalDirection[] = ["north", "east", "south", "west"];
-	const facingIdx = CW.indexOf(facing);
-	const absIdx = CW.indexOf(absolute);
+	const facingIdx = COMPASS_ORDER.indexOf(facing);
+	const absIdx = COMPASS_ORDER.indexOf(absolute);
 	const delta = (absIdx - facingIdx + 4) % 4;
 	switch (delta) {
 		case 0:
