@@ -57,7 +57,7 @@ function messageToolCallToBlueSseBody(words: string[]): string {
 
 // ── Pure helpers (request classification + canned responses) ─────────────────
 
-type ParsedBody = {
+export type ParsedBody = {
 	stream?: boolean;
 	response_format?: unknown;
 	messages?: Array<{ role?: string; content?: string }>;
@@ -321,7 +321,8 @@ function buildBoundDualContentPackResponseBody(body: ParsedBody): string {
 	return JSON.stringify({ choices: [{ message: { content } }] });
 }
 
-function parseRequestBody(request: Request): ParsedBody {
+/** Parse a request body as the OpenAI-ish shape these specs inspect. */
+export function parseRequestBody(request: Request): ParsedBody {
 	try {
 		return JSON.parse(request.postData() ?? "null") as ParsedBody;
 	} catch {
@@ -542,4 +543,529 @@ function withSkipDialup(url: string): string {
 	if (/[?&]skipDialup=/.test(url)) return url;
 	const sep = url.includes("?") ? "&" : "?";
 	return `${url}${sep}skipDialup=1`;
+}
+
+// ── Live tool-call SSE bodies ────────────────────────────────────────────────
+
+/**
+ * Build a minimal OpenAI-compatible SSE body that emits a single tool call with
+ * `args` and then closes. The parser in `src/spa/streaming.ts` collects
+ * `tool_calls` deltas by index and flushes them on
+ * `finish_reason:"tool_calls"` or `[DONE]`.
+ *
+ * Specs use this to drive one live action for a chosen Daemon (`go`, `pick_up`)
+ * instead of the `message` tool call `stubChatCompletions` emits.
+ */
+export function toolCallSseBody(
+	name: string,
+	args: Record<string, string>,
+): string {
+	const toolCallChunk = JSON.stringify({
+		choices: [
+			{
+				delta: {
+					tool_calls: [
+						{
+							index: 0,
+							id: "call_e2e_tc",
+							function: { name, arguments: JSON.stringify(args) },
+						},
+					],
+				},
+				finish_reason: null,
+			},
+		],
+	});
+	const finishChunk = JSON.stringify({
+		choices: [{ delta: {}, finish_reason: "tool_calls" }],
+	});
+	return `data: ${toolCallChunk}\n\ndata: ${finishChunk}\n\ndata: [DONE]\n\n`;
+}
+
+// ── Vista geometry (ADR 0015) ────────────────────────────────────────────────
+
+/** A room cell. Row 0 is the room's north edge; columns increase eastward. */
+export interface GridPosition {
+	row: number;
+	col: number;
+}
+
+/** The four directions `go` accepts. */
+export type CardinalDirection = "north" | "south" | "east" | "west";
+
+/** The four movement directions, in the order the specs iterate them. */
+export const CARDINAL_DIRECTIONS: readonly CardinalDirection[] = [
+	"north",
+	"south",
+	"east",
+	"west",
+];
+
+/** Compass order used to order the axis steps of a cell label (ADR 0015). */
+const COMPASS_ORDER: readonly CardinalDirection[] = [
+	"north",
+	"east",
+	"south",
+	"west",
+];
+
+/** Spelled-out distances, as `describeSteps` renders them. */
+const DISTANCE_WORDS: readonly string[] = [
+	"zero",
+	"one",
+	"two",
+	"three",
+	"four",
+	"five",
+];
+
+/** Row/column delta for one cardinal step. North decreases the row. */
+export function stepDelta(direction: CardinalDirection): {
+	drow: number;
+	dcol: number;
+} {
+	switch (direction) {
+		case "north":
+			return { drow: -1, dcol: 0 };
+		case "south":
+			return { drow: 1, dcol: 0 };
+		case "east":
+			return { drow: 0, dcol: 1 };
+		case "west":
+			return { drow: 0, dcol: -1 };
+	}
+}
+
+/** True when an entity holder is a grid cell rather than a Daemon id. */
+export function isGridPosition(holder: unknown): holder is GridPosition {
+	return (
+		typeof holder === "object" &&
+		holder !== null &&
+		typeof (holder as GridPosition).row === "number" &&
+		typeof (holder as GridPosition).col === "number"
+	);
+}
+
+/** True when both positions name the same cell. */
+export function positionsEqual(a: GridPosition, b: GridPosition): boolean {
+	return a.row === b.row && a.col === b.col;
+}
+
+/** True when `position` is inside the 5×5 room. */
+export function inRoom(position: GridPosition): boolean {
+	return (
+		position.row >= 0 &&
+		position.row < 5 &&
+		position.col >= 0 &&
+		position.col < 5
+	);
+}
+
+/**
+ * The runtime's witness gate (ADR 0015): `cell` is inside the Vista centred on
+ * `observer` when `dx² + dy² ≤ 4`, where north decreases the row. Mirrors
+ * `vistaContains` in `src/spa/game/vista-projector.ts` — position only, with
+ * obstacles never occluding membership.
+ */
+export function inVista(observer: GridPosition, cell: GridPosition): boolean {
+	const dx = cell.col - observer.col;
+	const dy = observer.row - cell.row;
+	return dx * dx + dy * dy <= 4;
+}
+
+/** One cell of the projected Vista, with the label the listing renders. */
+export interface VistaCell {
+	position: GridPosition;
+	isOwnCell: boolean;
+	isWall: boolean;
+	label: string;
+}
+
+/**
+ * The 13 Vista offsets (ADR 0015): `dx` runs east–west and `dy` north–south.
+ * Mirrors `VISTA_OFFSETS` in `src/spa/game/vista-projector.ts`.
+ */
+const VISTA_OFFSETS: ReadonlyArray<{ dx: number; dy: number }> = [
+	{ dx: 0, dy: 0 },
+	{ dx: 0, dy: 2 },
+	{ dx: -1, dy: 1 },
+	{ dx: 0, dy: 1 },
+	{ dx: 1, dy: 1 },
+	{ dx: -2, dy: 0 },
+	{ dx: -1, dy: 0 },
+	{ dx: 1, dy: 0 },
+	{ dx: 2, dy: 0 },
+	{ dx: -1, dy: -1 },
+	{ dx: 0, dy: -1 },
+	{ dx: 1, dy: -1 },
+	{ dx: 0, dy: -2 },
+];
+
+/**
+ * Cardinal label for one Vista offset, capitalised as the listing renders it
+ * ("one step north and one step east" → "One step north and one step east").
+ * Mirrors `describeSteps` + `capitalize` in `src/spa/game/prompt-builder.ts`.
+ */
+function vistaLabel(dx: number, dy: number): string {
+	if (dx === 0 && dy === 0) return "Your cell";
+	const steps: Array<{ direction: CardinalDirection; distance: number }> = [];
+	if (dy !== 0) {
+		steps.push({
+			direction: dy > 0 ? "north" : "south",
+			distance: Math.abs(dy),
+		});
+	}
+	if (dx !== 0) {
+		steps.push({ direction: dx > 0 ? "east" : "west", distance: Math.abs(dx) });
+	}
+	steps.sort(
+		(a, b) =>
+			COMPASS_ORDER.indexOf(a.direction) - COMPASS_ORDER.indexOf(b.direction),
+	);
+	const label = steps
+		.map(
+			(step) =>
+				`${DISTANCE_WORDS[step.distance] ?? String(step.distance)} ` +
+				`${step.distance === 1 ? "step" : "steps"} ${step.direction}`,
+		)
+		.join(" and ");
+	return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+/**
+ * Project the position-only 13-cell Vista from `observer`, flagging the
+ * out-of-bounds cells the Daemon perceives as Walls. Mirrors `projectVista`.
+ */
+export function vistaCells(observer: GridPosition): VistaCell[] {
+	return VISTA_OFFSETS.map((offset) => {
+		const position = {
+			row: observer.row - offset.dy,
+			col: observer.col + offset.dx,
+		};
+		return {
+			position,
+			isOwnCell: offset.dx === 0 && offset.dy === 0,
+			isWall: !inRoom(position),
+			label: vistaLabel(offset.dx, offset.dy),
+		};
+	});
+}
+
+/** The cell labels of a rendered `<what_you_see>` block ("- <label>: <contents>"). */
+export function listingLabels(block: string): string[] {
+	return block
+		.split("\n")
+		.filter((line) => line.startsWith("- "))
+		.map((line) => {
+			const separator = line.indexOf(": ");
+			return separator === -1 ? line.slice(2) : line.slice(2, separator);
+		});
+}
+
+/** The text between the last `open` marker and the `close` that follows it. */
+export function sectionBetween(
+	text: string,
+	open: string,
+	close: string,
+): string {
+	const start = text.lastIndexOf(open);
+	if (start === -1) return "";
+	const end = text.indexOf(close, start);
+	if (end === -1) return "";
+	return text.slice(start + open.length, end);
+}
+
+/**
+ * Relative-direction vocabulary ADR 0015 retired in favour of the room's
+ * cardinal axes: a listing must never phrase a position relative to a Daemon.
+ * Not a Vista shape — an absence check on rendered prompt prose.
+ */
+export const RELATIVE_DIRECTION_WORDS =
+	/\b(ahead|behind|forward|backward|left|right)\b/i;
+
+// ── Sealed engine.dat storage ────────────────────────────────────────────────
+
+/**
+ * XOR obfuscation key for `engine.dat`, mirrored from
+ * `src/spa/persistence/sealed-blob-codec.ts`. The blob is obfuscated, not
+ * encrypted, and specs need to read (and occasionally seed) persisted engine
+ * state, so the codec lives here rather than importing the SPA module.
+ */
+export const ENGINE_OBFUSCATION_KEY = "hi-blue:engine/v1@kJvN3pX8wQmR2sZt";
+
+/** Reverse the engine.dat obfuscation. Mirrors `deobfuscate` in the codec. */
+export function deobfuscateEngineBlob(blob: string): string {
+	const keyBytes = new TextEncoder().encode(ENGINE_OBFUSCATION_KEY);
+	const binary = atob(blob);
+	const bytes = new Uint8Array(binary.length);
+	for (let i = 0; i < binary.length; i++) {
+		bytes[i] =
+			(binary.charCodeAt(i) & 0xff) ^ (keyBytes[i % keyBytes.length] as number);
+	}
+	return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+}
+
+/** Apply the engine.dat obfuscation. Mirrors `obfuscate` in the codec. */
+export function obfuscateEngineBlob(json: string): string {
+	const keyBytes = new TextEncoder().encode(ENGINE_OBFUSCATION_KEY);
+	const bytes = new TextEncoder().encode(json);
+	for (let i = 0; i < bytes.length; i++) {
+		bytes[i] = (bytes[i] as number) ^ (keyBytes[i % keyBytes.length] as number);
+	}
+	let binary = "";
+	for (let i = 0; i < bytes.length; i++) {
+		binary += String.fromCharCode(bytes[i] as number);
+	}
+	return btoa(binary);
+}
+
+/** An entity holder: a Daemon holding the entity, or the cell it rests on. */
+export type EntityHolder = string | GridPosition;
+
+/** The persisted subset of `WorldEntity` these specs read back. */
+export interface SealedEntity {
+	id: string;
+	kind: string;
+	name: string;
+	holder: EntityHolder;
+	satisfactionState?: string;
+}
+
+/** The persisted subset of `ContentPack` these specs read back. */
+export interface SealedContentPack {
+	setting: string;
+	wallName: string;
+	/** Flat entity list (session v11+). */
+	entities?: SealedEntity[];
+	/** Bucketed obstacle list (pre-v11 blobs). */
+	obstacles?: Array<{ holder: GridPosition | null }>;
+}
+
+/** The persisted subset of the sealed `engine.dat` payload (session v12). */
+export interface SealedEngine {
+	schemaVersion: number;
+	personaSpatial: Record<string, { position: GridPosition }>;
+	world: { entities: SealedEntity[] };
+	contentPacksA: SealedContentPack[];
+	contentPacksB: SealedContentPack[];
+	activePackId: "A" | "B";
+	weather?: string;
+}
+
+/** One entry of a persisted `<aiId>.txt` conversation log. */
+export interface SealedConversationEntry {
+	kind: string;
+	round: number;
+	actor?: string;
+	actionKind?: string;
+	direction?: string;
+	toolName?: string;
+	success?: boolean;
+	diskDelta?: string;
+	content?: string;
+	from?: string;
+	to?: string;
+}
+
+/** The persisted subset of a Daemon's `<aiId>.txt` file. */
+export interface SealedDaemonFile {
+	aiId: string;
+	persona: { name: string };
+	conversationLog: SealedConversationEntry[];
+}
+
+/** The Content Pack the sealed engine has active (A unless a Setting Shift). */
+export function activePackOf(
+	sealed: SealedEngine,
+): SealedContentPack | undefined {
+	const packs =
+		sealed.activePackId === "B" ? sealed.contentPacksB : sealed.contentPacksA;
+	return packs?.[0];
+}
+
+/**
+ * Grid cells of every Obstacle in a Content Pack, read from the flat `entities`
+ * list the runtime places and persists (v11+). The bucketed pre-v11
+ * `obstacles` field is a fallback for blobs written before the flattening.
+ */
+export function obstacleCellsOf(pack: SealedContentPack): GridPosition[] {
+	const fromEntities = (pack.entities ?? [])
+		.filter((entity) => entity.kind === "obstacle")
+		.map((entity) => entity.holder)
+		.filter(isGridPosition);
+	if (fromEntities.length > 0) return fromEntities;
+	return (pack.obstacles ?? [])
+		.map((obstacle) => obstacle.holder)
+		.filter(isGridPosition);
+}
+
+/** Read the active session's sealed engine payload, decoded. */
+export async function readActiveSessionEngine(
+	page: Page,
+): Promise<{ sessionId: string; sealed: SealedEngine }> {
+	const raw = await page.evaluate(() => {
+		const sessionId = localStorage.getItem("hi-blue:active-session");
+		if (sessionId === null) return null;
+		const blob = localStorage.getItem(
+			`hi-blue:sessions/${sessionId}/engine.dat`,
+		);
+		if (blob === null) return null;
+		return { sessionId, blob };
+	});
+	if (raw === null) {
+		throw new Error("e2e: no active session engine.dat in localStorage");
+	}
+	return {
+		sessionId: raw.sessionId,
+		sealed: JSON.parse(deobfuscateEngineBlob(raw.blob)) as SealedEngine,
+	};
+}
+
+/** Overwrite the active session's `engine.dat` with `sealed`, obfuscated. */
+export async function writeActiveSessionEngine(
+	page: Page,
+	sessionId: string,
+	sealed: SealedEngine,
+): Promise<void> {
+	const value = obfuscateEngineBlob(JSON.stringify(sealed));
+	await page.evaluate(
+		({ key, blob }: { key: string; blob: string }) => {
+			localStorage.setItem(key, blob);
+		},
+		{ key: `hi-blue:sessions/${sessionId}/engine.dat`, blob: value },
+	);
+}
+
+/** Read one Daemon's persisted `<aiId>.txt`. */
+export async function readDaemonFile(
+	page: Page,
+	sessionId: string,
+	aiId: string,
+): Promise<SealedDaemonFile> {
+	const raw = await page.evaluate(
+		(key: string) => localStorage.getItem(key),
+		`hi-blue:sessions/${sessionId}/${aiId}.txt`,
+	);
+	if (raw === null)
+		throw new Error(`e2e: ${aiId}.txt not found in localStorage`);
+	return JSON.parse(raw) as SealedDaemonFile;
+}
+
+/**
+ * Every plain-text file the session wrote: `meta.json`, each `<aiId>.txt`, and
+ * the decoded `engine.dat` payload. Used to assert on what a save actually
+ * carries (rather than on one field at a time).
+ */
+export async function readActiveSessionFiles(page: Page): Promise<{
+	meta: string;
+	daemons: Record<string, string>;
+	engineJson: string;
+}> {
+	const raw = await page.evaluate(() => {
+		const sessionId = localStorage.getItem("hi-blue:active-session") ?? "";
+		const prefix = `hi-blue:sessions/${sessionId}/`;
+		const daemons: Record<string, string> = {};
+		let meta = "";
+		let engine = "";
+		for (let i = 0; i < localStorage.length; i++) {
+			const key = localStorage.key(i);
+			if (key === null || !key.startsWith(prefix)) continue;
+			const name = key.slice(prefix.length);
+			const value = localStorage.getItem(key) ?? "";
+			if (name === "meta.json") meta = value;
+			else if (name === "engine.dat") engine = value;
+			else if (name.endsWith(".txt")) daemons[name] = value;
+		}
+		return { meta, daemons, engine };
+	});
+	return {
+		meta: raw.meta,
+		daemons: raw.daemons,
+		engineJson: raw.engine === "" ? "" : deobfuscateEngineBlob(raw.engine),
+	};
+}
+
+/**
+ * Wait until `meta.json` reports at least `expectedRound`. The save writes
+ * meta.json first and `engine.dat` last, so this alone does not prove the
+ * round's engine state is committed — pair it with
+ * {@link waitForSavedPosition} when the assertion depends on engine data.
+ */
+export async function waitForRound(
+	page: Page,
+	sessionId: string,
+	expectedRound: number,
+	timeoutMs = 30_000,
+): Promise<void> {
+	await page.waitForFunction(
+		({ sid, expectedRound: round }: { sid: string; expectedRound: number }) => {
+			const raw = localStorage.getItem(`hi-blue:sessions/${sid}/meta.json`);
+			if (raw === null) return false;
+			try {
+				const meta = JSON.parse(raw) as { round?: number };
+				return (meta.round ?? 0) >= round;
+			} catch {
+				return false;
+			}
+		},
+		{ sid: sessionId, expectedRound },
+		{ timeout: timeoutMs },
+	);
+}
+
+/**
+ * Wait until the committed `engine.dat` stores `expected` as `aiId`'s position.
+ * `engine.dat` is written last in the save order, so it is the commit signal
+ * for a round's engine state.
+ */
+export async function waitForSavedPosition(
+	page: Page,
+	sessionId: string,
+	aiId: string,
+	expected: GridPosition,
+	timeoutMs = 30_000,
+): Promise<void> {
+	await page.waitForFunction(
+		({
+			sid,
+			id,
+			row,
+			col,
+			key,
+		}: {
+			sid: string;
+			id: string;
+			row: number;
+			col: number;
+			key: string;
+		}) => {
+			const blob = localStorage.getItem(`hi-blue:sessions/${sid}/engine.dat`);
+			if (blob === null) return false;
+			try {
+				const keyBytes = new TextEncoder().encode(key);
+				const binary = atob(blob);
+				const bytes = new Uint8Array(binary.length);
+				for (let i = 0; i < binary.length; i++) {
+					bytes[i] =
+						(binary.charCodeAt(i) & 0xff) ^
+						(keyBytes[i % keyBytes.length] as number);
+				}
+				const sealed = JSON.parse(
+					new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+				) as { personaSpatial?: Record<string, { position?: GridPosition }> };
+				const position = sealed.personaSpatial?.[id]?.position;
+				return position?.row === row && position?.col === col;
+			} catch {
+				return false;
+			}
+		},
+		{
+			sid: sessionId,
+			id: aiId,
+			row: expected.row,
+			col: expected.col,
+			key: ENGINE_OBFUSCATION_KEY,
+		},
+		{ timeout: timeoutMs },
+	);
 }
