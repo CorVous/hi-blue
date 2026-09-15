@@ -166,12 +166,12 @@ describe("serializeGameSave", () => {
 		expect(parsed.ais).toHaveLength(3);
 	});
 
-	it("output has a version field of 4 (v4 = chat/whisper collapsed into message primitive)", () => {
+	it("output has a version field of 5 (v5 = facing and horizon landmarks retired, #539)", () => {
 		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
 			budgetPerAi: 5,
 		});
 		const save = serializeGameSave(game);
-		expect(save.version).toBe(4);
+		expect(save.version).toBe(5);
 	});
 
 	it("stamps the exported GAME_SAVE_VERSION constant", () => {
@@ -179,8 +179,39 @@ describe("serializeGameSave", () => {
 			budgetPerAi: 5,
 		});
 		const save = serializeGameSave(game);
-		expect(GAME_SAVE_VERSION).toBe(4);
+		expect(GAME_SAVE_VERSION).toBe(5);
 		expect(save.version).toBe(GAME_SAVE_VERSION);
+	});
+
+	it("exports neither facing nor landmark fields (ADR 0015)", () => {
+		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
+		game = appendMessage(game, "blue", "red", "Hello Ember");
+		const save = serializeGameSave(game);
+		const json = JSON.stringify(save);
+		expect(json).not.toMatch(/facing/i);
+		expect(json).not.toMatch(/landmark/i);
+
+		// Walk the parsed payload so a nested field cannot hide from the match.
+		const seenKeys = new Set<string>();
+		const walk = (value: unknown): void => {
+			if (Array.isArray(value)) {
+				for (const item of value) walk(item);
+				return;
+			}
+			if (value && typeof value === "object") {
+				for (const [key, nested] of Object.entries(value)) {
+					seenKeys.add(key);
+					walk(nested);
+				}
+			}
+		};
+		walk(save);
+		for (const key of seenKeys) {
+			expect(key).not.toMatch(/facing/i);
+			expect(key).not.toMatch(/landmark/i);
+		}
 	});
 
 	it("peer message in green's log only if green is sender or recipient", () => {

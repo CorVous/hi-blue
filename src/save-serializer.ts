@@ -12,7 +12,14 @@
  *
  * The format is versioned (`GameSave.version`) so future schema changes can be
  * detected. v2 → v3: whispers moved inline into conversationLog. v3 → v4:
- * chat/whisper collapsed into the directional message primitive.
+ * chat/whisper collapsed into the directional message primitive. v4 → v5
+ * (issue #539): facing and horizon landmarks are retired from the persisted
+ * spatial state, so a save stamped 4 is no longer readable here.
+ *
+ * The gs axis has no in-place migration: a save stamped with an older
+ * `version` is identified as older and pointed at the archived build that
+ * still reads it (see `GAME_SAVE_ARCHIVE_MAP` in
+ * `src/spa/persistence/archive-map.ts`).
  */
 
 import type {
@@ -28,7 +35,7 @@ import type {
  * (see `src/spa/persistence/version-boundary.ts`) can reason about "is this
  * save from the current build?" without hardcoding the number in two places.
  */
-export const GAME_SAVE_VERSION = 4 as const;
+export const GAME_SAVE_VERSION = 5 as const;
 
 interface PhaseTranscript {
 	phaseNumber: 1 | 2 | 3;
@@ -41,7 +48,7 @@ interface AiSaveEntry {
 }
 
 export interface GameSave {
-	/** Schema version. v4 = chat/whisper collapsed into directional message primitive. */
+	/** Schema version. v5 = facing and horizon landmarks retired from the payload. */
 	version: typeof GAME_SAVE_VERSION;
 	ais: AiSaveEntry[];
 	/** Setting A content packs (generated at game start). */

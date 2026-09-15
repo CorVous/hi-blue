@@ -1,9 +1,10 @@
 /**
  * Tests for the version boundary and its compatibility helpers.
  *
- * The boundary is a plain, testable value, so these tests reason about the
- * v12/v5 contract (a boundary at `{ session: 12, gs: 5 }`) without touching
- * the live `SESSION_SCHEMA_VERSION` / `GAME_SAVE_VERSION` constants.
+ * The boundary is a plain, testable value, so these tests reason about both
+ * the live v12/v5 boundary (#539) and a cutoff at some other version (e.g.
+ * `{ session: 11, gs: 4 }`, the boundary the historical migration chain still
+ * lands on) without hardcoding the live constants.
  */
 import { describe, expect, it } from "vitest";
 import { GAME_SAVE_VERSION } from "../../../save-serializer.js";
@@ -20,10 +21,22 @@ import {
 	type VersionBoundary,
 } from "../version-boundary.js";
 
-// The v12/v5 contract: the boundary the preparation is preparing for. Once the
-// live boundary moves past 11/4, those versions stop being "current" and are
-// surfaced as mismatches that link to the archived build that reads them.
+// The live v12/v5 boundary (#539). Retired 11/4 saves are mismatches from here.
 const V12_V5: VersionBoundary = { session: 12, gs: 5 };
+
+describe("live boundary constants (#539)", () => {
+	it("is schema 12 on the session axis", () => {
+		expect(SESSION_SCHEMA_VERSION).toBe(12);
+	});
+
+	it("is game-save 5 on the USB axis", () => {
+		expect(GAME_SAVE_VERSION).toBe(5);
+	});
+
+	it("activates both axes together", () => {
+		expect(liveVersionBoundary()).toEqual({ session: 12, gs: 5 });
+	});
+});
 
 describe("liveVersionBoundary", () => {
 	it("is sourced from the live version constants", () => {
@@ -58,6 +71,20 @@ describe("checkVersionCompatibility (live boundary)", () => {
 		});
 	});
 
+	it("surfaces a session stamped 11 as a mismatch carrying the archived build", () => {
+		expect(checkVersionCompatibility("session", 11)).toEqual({
+			kind: "mismatch",
+			archivedBuild: "0.0.2-beta.2",
+		});
+	});
+
+	it("surfaces a USB save stamped 4 as a mismatch carrying the archived build", () => {
+		expect(checkVersionCompatibility("gs", 4)).toEqual({
+			kind: "mismatch",
+			archivedBuild: "0.0.2-beta.2",
+		});
+	});
+
 	it("surfaces unknown versions as mismatches with no known provenance", () => {
 		expect(checkVersionCompatibility("session", 100)).toEqual({
 			kind: "mismatch",
@@ -81,7 +108,7 @@ describe("checkVersionCompatibility (live boundary)", () => {
 	});
 });
 
-describe("checkVersionCompatibility (v12/v5 contract boundary)", () => {
+describe("checkVersionCompatibility (explicit v12/v5 boundary)", () => {
 	it("at (12, 5): a v11 session is a mismatch linking to 0.0.2-beta.2", () => {
 		expect(checkVersionCompatibility("session", 11, V12_V5)).toEqual({
 			kind: "mismatch",
@@ -110,16 +137,19 @@ describe("checkVersionCompatibility (v12/v5 contract boundary)", () => {
 });
 
 describe("provenance maps", () => {
-	it("maps the last pre-bump session schema to the current release", () => {
-		expect(lookupArchiveVersion(SESSION_SCHEMA_VERSION)).toBe("0.0.2-beta.2");
-		expect(SCHEMA_ARCHIVE_MAP[SESSION_SCHEMA_VERSION]).toBe("0.0.2-beta.2");
+	it("maps the retired session schema 11 to the archived build that shipped it", () => {
+		expect(lookupArchiveVersion(11)).toBe("0.0.2-beta.2");
+		expect(SCHEMA_ARCHIVE_MAP[11]).toBe("0.0.2-beta.2");
 	});
 
-	it("maps the game-save format to the current release", () => {
-		expect(lookupGameSaveArchiveVersion(GAME_SAVE_VERSION)).toBe(
-			"0.0.2-beta.2",
-		);
-		expect(GAME_SAVE_ARCHIVE_MAP[GAME_SAVE_VERSION]).toBe("0.0.2-beta.2");
+	it("maps the retired game-save format 4 to the archived build that shipped it", () => {
+		expect(lookupGameSaveArchiveVersion(4)).toBe("0.0.2-beta.2");
+		expect(GAME_SAVE_ARCHIVE_MAP[4]).toBe("0.0.2-beta.2");
+	});
+
+	it("does not map the live versions as archived", () => {
+		expect(lookupArchiveVersion(SESSION_SCHEMA_VERSION)).toBeNull();
+		expect(lookupGameSaveArchiveVersion(GAME_SAVE_VERSION)).toBeNull();
 	});
 
 	it("returns null for versions with no known archived build", () => {

@@ -2,12 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeTestPack } from "../../game/__tests__/fixtures/make-test-pack.js";
 import { startGame } from "../../game/engine.js";
 import type { AiPersona, GameState } from "../../game/types.js";
+import { lookupArchiveVersion } from "../archive-map.js";
 import { deobfuscate, obfuscate } from "../sealed-blob-codec.js";
 import {
 	ACTIVE_KEY,
 	ARCHIVE_PREFIX,
 	archiveSession,
 	clearActiveSession,
+	deactivateActiveSession,
 	deleteLegacySaveKey,
 	dupSession,
 	getActiveSessionId,
@@ -1357,5 +1359,93 @@ describe("seedFromArchive", () => {
 			.map((c) => c[0] as string)
 			.filter((k) => k.startsWith(newPrefix));
 		expect(newCalls[newCalls.length - 1]).toMatch(/engine\.dat$/);
+	});
+});
+
+// ── v12 boundary (#539) ───────────────────────────────────────────────────────
+
+describe("v12 boundary (archive-only)", () => {
+	/** Save a fresh game, then restamp engine.dat's sealed schemaVersion. */
+	function seedSessionAtSchema(
+		stub: ReturnType<typeof makeLocalStorageStub>,
+		schemaVersion: number,
+	): { sessionId: string; bytes: Record<string, string> } {
+		const sessionId = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+
+		const engineKey = `${SESSIONS_PREFIX}${sessionId}/engine.dat`;
+		const engineBlob = stub._store[engineKey];
+		if (!engineBlob) throw new Error("engine.dat should exist after save");
+		const sealed = JSON.parse(deobfuscate(engineBlob));
+		sealed.schemaVersion = schemaVersion;
+		stub._store[engineKey] = obfuscate(JSON.stringify(sealed));
+
+		const prefix = `${SESSIONS_PREFIX}${sessionId}/`;
+		const bytes: Record<string, string> = {};
+		for (const [key, value] of Object.entries(stub._store)) {
+			if (key.startsWith(prefix) && typeof value === "string") {
+				bytes[key] = value;
+			}
+		}
+		return { sessionId, bytes };
+	}
+
+	it("writes new saves at schema 12", () => {
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		const sessionId = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+
+		const engineBlob = stub._store[`${SESSIONS_PREFIX}${sessionId}/engine.dat`];
+		if (!engineBlob) throw new Error("engine.dat should exist after save");
+		const sealed = JSON.parse(deobfuscate(engineBlob));
+		expect(sealed.schemaVersion).toBe(12);
+		expect(loadActiveSession().kind).toBe("ok");
+	});
+
+	it("surfaces a session stamped 11 as a version-mismatch carrying the archived build", () => {
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		const { sessionId } = seedSessionAtSchema(stub, 11);
+
+		const info = getSessionInfo(sessionId);
+		expect(info.kind).toBe("version-mismatch");
+		if (info.kind === "version-mismatch") {
+			expect(info.schemaVersion).toBe(11);
+			expect(lookupArchiveVersion(info.schemaVersion)).toBe("0.0.2-beta.2");
+		}
+		expect(loadSession(sessionId).kind).toBe("version-mismatch");
+	});
+
+	it("preserves the original bytes when a stale session hits the mismatch route", () => {
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		const { sessionId, bytes } = seedSessionAtSchema(stub, 11);
+		expect(Object.keys(bytes).length).toBeGreaterThanOrEqual(5);
+
+		// The route's own sequence (views/game.ts): load, then deactivate the
+		// pointer for a version-mismatch so the bytes stay put.
+		expect(loadActiveSession().kind).toBe("version-mismatch");
+		expect(getSessionInfo(sessionId).kind).toBe("version-mismatch");
+		deactivateActiveSession();
+
+		expect(getActiveSessionId()).toBeNull();
+		for (const [key, value] of Object.entries(bytes)) {
+			expect(stub._store[key], key).toBe(value);
+		}
+		// Still listed and still a mismatch — nothing was rewritten or removed.
+		expect(listSessions()).toContain(sessionId);
+		expect(getSessionInfo(sessionId).kind).toBe("version-mismatch");
+	});
+
+	it("keeps a session stamped 4 (pre-horizon-landmark era) as an older mismatch too", () => {
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		const { sessionId, bytes } = seedSessionAtSchema(stub, 4);
+
+		expect(loadSession(sessionId).kind).toBe("version-mismatch");
+		for (const [key, value] of Object.entries(bytes)) {
+			expect(stub._store[key], key).toBe(value);
+		}
 	});
 });

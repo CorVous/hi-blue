@@ -93,9 +93,19 @@ import { SESSION_SCHEMA_VERSION } from "./version-constants.js";
  *     `contentPacksB`, preserving canonical order: per pair, object then
  *     space; then bound spaces; then interesting objects; then obstacles.
  *
+ * v12 (issue #539): retire `facing` and the horizon landmarks from the
+ *   persisted spatial state (ADR 0015). This is the first schema bump handled
+ *   archive-only: there is deliberately no v11 → v12 migration function. A save
+ *   sealed at 11 is identified as older and pointed at the archived build that
+ *   still reads it (`SCHEMA_ARCHIVE_MAP[11]` in `archive-map.ts`) rather than
+ *   being rewritten. The historical chain below still runs — v8 → v9 → v10 → v11 —
+ *   but it stops *at* 11, so a migrated save can never be presented as
+ *   current at this boundary.
+ *
  * Bumping this constant requires either a `migrateV<old>To...` function below
  * or a new entry in `SCHEMA_ARCHIVE_MAP` (see AGENTS.md → "Bumping
  * save-format versions"). `scripts/check-schema-map.mjs` enforces this on PRs.
+ * v11 → v12 chose the archive-map route; do not add a migration for it.
  */
 export { SESSION_SCHEMA_VERSION };
 
@@ -297,6 +307,11 @@ function migrateV9ToV10(sealed: SealedEngine): SealedEngine {
  * Defensive: if a pack already carries an `entities` array (e.g. an in-flight
  * partial migration), it is used as-is rather than rebuilt from absent
  * buckets.
+ *
+ * Stamps the literal 11 (not `SESSION_SCHEMA_VERSION`): 11 is the last schema
+ * this chain understands. Migrating a save must never promote it past the
+ * v11 → v12 archive-only boundary, so the chain terminates at 11 and the
+ * version gate then surfaces the migrated save as older.
  */
 function migrateV10ToV11(sealed: SealedEngine): SealedEngine {
 	const flatten = (pack: ContentPack): ContentPack => {
@@ -347,7 +362,7 @@ function migrateV10ToV11(sealed: SealedEngine): SealedEngine {
 
 	return {
 		...sealed,
-		schemaVersion: SESSION_SCHEMA_VERSION,
+		schemaVersion: 11 as unknown as typeof SESSION_SCHEMA_VERSION,
 		contentPacksA: (sealed.contentPacksA ?? []).map(flatten),
 		contentPacksB: (sealed.contentPacksB ?? []).map(flatten),
 	};
@@ -395,8 +410,10 @@ export function deserializeSession(
 	}
 
 	// Schema version check and migration chain.
-	// Migrations are stepwise (v8→v9→v10) so each entry stays focused on
-	// one schema diff and new bumps only need a single new step.
+	// Migrations are stepwise (v8→v9→v10→v11) so each entry stays focused on
+	// one schema diff and new bumps only need a single new step. The chain
+	// terminates at 11 — the last schema it understands — so a migrated save
+	// is never silently promoted into the live v12 format.
 	const rawVersion = (sealed as { schemaVersion: unknown }).schemaVersion;
 	if (typeof rawVersion !== "number" || !Number.isFinite(rawVersion)) {
 		return { kind: "broken" };

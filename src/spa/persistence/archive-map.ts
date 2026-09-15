@@ -17,18 +17,36 @@
  */
 
 /**
- * Session-schema provenance. `11` (the last pre-boundary-bump schema) shipped
- * in the current release, `0.0.2-beta.2`; once the live boundary moves past
- * 11, saves sealed at 11 surface as a version-mismatch that links here.
+ * Session-schema provenance for the live boundary (`SESSION_SCHEMA_VERSION`
+ * is 12). `SCHEMA_ARCHIVE_MAP` keys the retired schema number `11` — the last
+ * schema the released build `0.0.2-beta.2` shipped — to that build, so a save
+ * sealed at 11 surfaces as a version-mismatch that links to
+ * `/v/0.0.2-beta.2/` rather than being rewritten.
+ *
+ * `0.0.2-beta.2` is the latest released build that shipped schema 11:
+ *   - `git describe --tags --abbrev=0 --match 'v*' HEAD~1` → `v0.0.2-beta.2`
+ *     (the newest `v*` tag).
+ *   - The *tagged tree* reads `SESSION_SCHEMA_VERSION = 11`, and the commit
+ *     that introduced 11 is an ancestor of the tag. The tagged commit's own
+ *     `package.json` still says `0.0.2-beta.1` — the release bump is a later
+ *     child commit — so the tag name, not `package.json`, names the release.
+ *   - `origin/gh-pages` publishes `/v/0.0.2-beta.2/`, the archive the
+ *     version-mismatch surface links to.
  */
 export const SCHEMA_ARCHIVE_MAP: Record<number, string> = {
 	11: "0.0.2-beta.2",
 };
 
 /**
- * Game-save ("gs") provenance. `4` (the current game-save format) shipped in
- * `0.0.2-beta.2`; once the live boundary moves the gs axis past 4, saves
- * stamped `4` link to that archived build.
+ * Game-save ("gs") provenance for the live boundary (`GAME_SAVE_VERSION` is
+ * 5). `GAME_SAVE_ARCHIVE_MAP` keys the retired game-save number `4` to the
+ * released build `0.0.2-beta.2`, which shipped it, so a save stamped `4`
+ * identifies that build as the one that still reads it.
+ *
+ * Same evidence as the session axis above: the `v0.0.2-beta.2` tagged tree is
+ * the latest release and writes `version: 4` in `src/save-serializer.ts`,
+ * while its `package.json` lags one release behind at `0.0.2-beta.1` because
+ * the version bump lands in a child commit.
  */
 export const GAME_SAVE_ARCHIVE_MAP: Record<number, string> = {
 	4: "0.0.2-beta.2",

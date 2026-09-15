@@ -11,9 +11,10 @@
  *  - Sessions-icon ([ ls ] button) click → sessions view
  *  - Broken-session banner: active session with missing engine.dat → sessions view with reason
  *  - Version-mismatch banner: active session with a stale schema → sessions view with reason
- *  - Version-mismatch archived-build note (picker row): needs a schema that is
- *    both stale and in SCHEMA_ARCHIVE_MAP, but only 11 is mapped and 11 is still
- *    current, so no live build can render it. Pinned in jsdom via a temporary map entry; re-add Playwright coverage on the v12 bump (#539).
+ *  - Version-mismatch archived-build note (banner + picker row): a session
+ *    stamped with the retired schema 11 (mapped to `0.0.2-beta.2` in
+ *    SCHEMA_ARCHIVE_MAP) links to `./v/0.0.2-beta.2/`; an unmapped schema
+ *    (999) keeps the plain mismatch copy and adds no note.
  *  - [ + new session ] flow: picker → start view, new active pointer
  *
  * Post-ADR-0011: the picker is opened by clicking the sessions icon, not by
@@ -120,8 +121,10 @@ function seedBrokenSessionScript(id: string): string {
 
 /**
  * Seed a version-mismatch session (bumped schemaVersion) for addInitScript use.
+ * Defaults to schema 999 (no archive-map entry); pass 11 to seed the retired
+ * pre-v12 schema, which the live build maps to the archived `0.0.2-beta.2`.
  */
-function seedVersionMismatchScript(id: string): string {
+function seedVersionMismatchScript(id: string, schemaVersion = 999): string {
 	return `
 		(function() {
 			const prefix = 'hi-blue:sessions/${id}/';
@@ -134,10 +137,10 @@ function seedVersionMismatchScript(id: string): string {
 			localStorage.setItem(prefix + 'meta.json', meta);
 			localStorage.setItem(prefix + 'red.txt', '{}');
 
-			// Build engine.dat with schemaVersion=999 (mismatch)
+			// Build engine.dat with schemaVersion=${schemaVersion} (mismatch)
 			const OBFUSCATION_KEY = '${OBFUSCATION_KEY}';
 			const keyBytes = Array.from(new TextEncoder().encode(OBFUSCATION_KEY));
-			const payload = JSON.stringify({ schemaVersion: 999 });
+			const payload = JSON.stringify({ schemaVersion: ${schemaVersion} });
 			const jsonBytes = Array.from(new TextEncoder().encode(payload));
 			const xored = jsonBytes.map((b,i) => b ^ (keyBytes[i % keyBytes.length] ?? 0));
 			let iso = '';
@@ -149,6 +152,23 @@ function seedVersionMismatchScript(id: string): string {
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Recompute the engine.dat bytes `seedVersionMismatchScript` writes, so a test
+ * can prove the mismatch route left the stored bytes untouched.
+ */
+function expectedSeededEngineBytes(schemaVersion: number): string {
+	const keyBytes = Array.from(new TextEncoder().encode(OBFUSCATION_KEY));
+	const jsonBytes = Array.from(
+		new TextEncoder().encode(JSON.stringify({ schemaVersion })),
+	);
+	const xored = jsonBytes.map(
+		(b, i) => b ^ (keyBytes[i % keyBytes.length] ?? 0),
+	);
+	let iso = "";
+	for (const b of xored) iso += String.fromCharCode(b);
+	return btoa(iso);
+}
 
 test("picker renders ok/broken/version-mismatch rows with correct tags and buttons", async ({
 	page,
@@ -478,6 +498,64 @@ test("version-mismatch banner: active session with stale schema → sessions vie
 	const banner = page.locator("#sessions-banner");
 	await expect(banner).toBeVisible();
 	await expect(banner).toContainText("It has been kept");
+
+	await expectNoPageErrors(page, pageErrors);
+});
+
+test("version-mismatch archive link: a session stamped with retired schema 11 links to the archived build", async ({
+	page,
+}) => {
+	const pageErrors: Error[] = [];
+	page.on("pageerror", (err) => pageErrors.push(err));
+
+	// Schema 11 is the last schema shipped by the released build
+	// (0.0.2-beta.2) and is mapped in SCHEMA_ARCHIVE_MAP, so a save stamped 11
+	// must surface as a mismatch that links to that archived build instead of
+	// being rewritten.
+	await page.addInitScript(() => {
+		localStorage.setItem("hi-blue:active-session", "0xV11X");
+	});
+	await page.addInitScript(
+		new Function(seedVersionMismatchScript("0xV11X", 11)) as () => void,
+	);
+
+	await page.goto("/");
+
+	// Same sticky routing as any other version-mismatch active session.
+	await expect(page.locator('main[data-view="sessions"]')).toBeAttached();
+	await expect(page.locator("main")).toHaveAttribute(
+		"data-reason",
+		"version-mismatch",
+	);
+
+	// Banner offers the archived build.
+	const banner = page.locator("#sessions-banner");
+	await expect(banner).toBeVisible();
+	await expect(banner).toContainText("Continue it in");
+	await expect(banner.locator("a")).toHaveAttribute(
+		"href",
+		"./v/0.0.2-beta.2/",
+	);
+
+	// The picker row carries the same link note, with no [ load ] button.
+	const row = page.locator('.session-row[data-session-id="0xV11X"]');
+	await expect(row.locator(".tag-version-mismatch")).toBeVisible();
+	const note = row.locator(".session-version-note");
+	await expect(note).toContainText("v0.0.2-beta.2");
+	await expect(note.locator("a")).toHaveAttribute("href", "./v/0.0.2-beta.2/");
+	await expect(row.locator(".ops button", { hasText: "[ load ]" })).toHaveCount(
+		0,
+	);
+
+	// The save's bytes are preserved byte-for-byte, not rewritten or removed.
+	const engineAfter = await page.evaluate(() =>
+		localStorage.getItem("hi-blue:sessions/0xV11X/engine.dat"),
+	);
+	expect(engineAfter).toBe(expectedSeededEngineBytes(11));
+	const daemonAfter = await page.evaluate(() =>
+		localStorage.getItem("hi-blue:sessions/0xV11X/red.txt"),
+	);
+	expect(daemonAfter).toBe("{}");
 
 	await expectNoPageErrors(page, pageErrors);
 });

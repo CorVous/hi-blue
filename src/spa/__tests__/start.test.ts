@@ -447,7 +447,8 @@ describe("renderStart — persistence warning banners", () => {
 	it("shows 'version-mismatch' map-miss banner text when no archive entry exists", async () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 		vi.resetModules();
-		// Default SCHEMA_ARCHIVE_MAP is empty — any schemaVersion is a miss.
+		// Schema 9 has no SCHEMA_ARCHIVE_MAP entry, so the banner falls back to
+		// the plain "kept" copy with no archived-build link.
 		const { renderStart } = await import("../views/start.js");
 
 		setSearch("skipDialup=1");
