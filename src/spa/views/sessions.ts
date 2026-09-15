@@ -37,6 +37,7 @@ import {
 	setActiveSessionId,
 } from "../persistence/session-storage.js";
 import { type RenderOpts, renderApp, setPickerOpen } from "../render-app.js";
+import { buildArchivedBuildLink } from "./archived-build-link.js";
 
 // ── Banner copy ───────────────────────────────────────────────────────────────────
 
@@ -67,10 +68,7 @@ function renderVersionMismatchBanner(
 			"Your saved Session is from an older version of hi-blue. Continue it in ",
 		),
 	);
-	const link = doc.createElement("a");
-	link.href = `./v/${archivedVersion}/`;
-	link.textContent = `v${archivedVersion} →`;
-	bannerEl.appendChild(link);
+	bannerEl.appendChild(buildArchivedBuildLink(doc, archivedVersion));
 	bannerEl.appendChild(doc.createTextNode(", or start a new Session below."));
 }
 
@@ -404,10 +402,7 @@ function appendVersionMismatchNote(
 	const noteEl = doc.createElement("div");
 	noteEl.className = "session-version-note";
 	noteEl.textContent = "older version · continue in ";
-	const link = doc.createElement("a");
-	link.href = `./v/${archivedVersion}/`;
-	link.textContent = `v${archivedVersion} →`;
-	noteEl.appendChild(link);
+	noteEl.appendChild(buildArchivedBuildLink(doc, archivedVersion));
 	rowEl.appendChild(noteEl);
 }
 

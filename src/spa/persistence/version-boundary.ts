@@ -18,7 +18,10 @@
  */
 
 import { GAME_SAVE_VERSION } from "../../save-serializer.js";
-import { GAME_SAVE_ARCHIVE_MAP, SCHEMA_ARCHIVE_MAP } from "./archive-map.js";
+import {
+	lookupArchiveVersion,
+	lookupGameSaveArchiveVersion,
+} from "./archive-map.js";
 import { SESSION_SCHEMA_VERSION } from "./session-codec.js";
 
 /** The two save-format version axes a boundary spans. */
@@ -61,14 +64,16 @@ export function checkVersionCompatibility(
 	saveVersion: number | undefined,
 	boundary: VersionBoundary = liveVersionBoundary(),
 ): CompatibilityVerdict {
-	if (typeof saveVersion !== "number" || !Number.isFinite(saveVersion)) {
-		// A missing/corrupt version can't be proven current; surface it as a
-		// mismatch with no known provenance.
-		return { kind: "mismatch", archivedBuild: null };
-	}
-	if (saveVersion === boundary[axis]) {
+	const archivedBuild =
+		axis === "session"
+			? lookupArchiveVersion(saveVersion)
+			: lookupGameSaveArchiveVersion(saveVersion);
+	if (
+		typeof saveVersion === "number" &&
+		Number.isFinite(saveVersion) &&
+		saveVersion === boundary[axis]
+	) {
 		return { kind: "current" };
 	}
-	const map = axis === "session" ? SCHEMA_ARCHIVE_MAP : GAME_SAVE_ARCHIVE_MAP;
-	return { kind: "mismatch", archivedBuild: map[saveVersion] ?? null };
+	return { kind: "mismatch", archivedBuild };
 }

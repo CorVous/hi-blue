@@ -32,6 +32,7 @@ import {
 import { getSpikeRng, setSpikeSeed } from "../game/spike-seed.js";
 import { lookupArchiveVersion } from "../persistence/archive-map.js";
 import { type RenderOpts, renderApp } from "../render-app.js";
+import { buildArchivedBuildLink } from "./archived-build-link.js";
 
 /** Warning reason strings shown in the persistence warning banner. */
 const PERSISTENCE_WARNING_MESSAGES: Record<string, string> = {
@@ -68,10 +69,7 @@ function renderVersionMismatchBanner(
 			"Your saved Session is from an older version of hi-blue. Continue it in ",
 		),
 	);
-	const link = doc.createElement("a");
-	link.href = `./v/${archivedVersion}/`;
-	link.textContent = `v${archivedVersion} →`;
-	bannerEl.appendChild(link);
+	bannerEl.appendChild(buildArchivedBuildLink(doc, archivedVersion));
 	bannerEl.appendChild(doc.createTextNode(", or start a new Session below."));
 }
 

@@ -44,7 +44,7 @@ In a sandbox or any environment without `wrangler login`, use:
   another device. This sets `WORKER_BASE_URL` off `localhost`, so `__DEV__` is
   false (no dev inspector / debug footers / BYOK localhost shortcut).
 
-## Bumping SESSION_SCHEMA_VERSION
+## Bumping save-format versions
 
 When you bump SESSION_SCHEMA_VERSION in
 `src/spa/persistence/session-codec.ts`, you must do ONE of:

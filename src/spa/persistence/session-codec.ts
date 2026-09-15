@@ -95,7 +95,7 @@ import {
  *
  * Bumping this constant requires either a `migrateV<old>To...` function below
  * or a new entry in `SCHEMA_ARCHIVE_MAP` (see AGENTS.md → "Bumping
- * SESSION_SCHEMA_VERSION"). `scripts/check-schema-map.mjs` enforces this on PRs.
+ * save-format versions"). `scripts/check-schema-map.mjs` enforces this on PRs.
  */
 export const SESSION_SCHEMA_VERSION = 11 as const;
 

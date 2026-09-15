@@ -13,7 +13,7 @@
  *
  * Both maps key the OLD format version (no `v` prefix) to the version string
  * of the latest released build that shipped it. See
- * AGENTS.md → "Bumping SESSION_SCHEMA_VERSION".
+ * AGENTS.md → "Bumping save-format versions".
  */
 
 /**
@@ -44,12 +44,12 @@ export function lookupArchiveVersion(
 	return SCHEMA_ARCHIVE_MAP[schemaVersion] ?? null;
 }
 
-/** Look up the archived version string for an old game-save ("gs") version. */
+/** Look up the archived version string for an old game-save (`gs`) version. */
 export function lookupGameSaveArchiveVersion(
-	ksVersion: number | undefined,
+	gsVersion: number | undefined,
 ): string | null {
-	if (typeof ksVersion !== "number" || !Number.isFinite(ksVersion)) {
+	if (typeof gsVersion !== "number" || !Number.isFinite(gsVersion)) {
 		return null;
 	}
-	return GAME_SAVE_ARCHIVE_MAP[ksVersion] ?? null;
+	return GAME_SAVE_ARCHIVE_MAP[gsVersion] ?? null;
 }
