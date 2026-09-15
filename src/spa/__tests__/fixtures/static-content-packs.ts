@@ -1,4 +1,3 @@
-import { DEFAULT_LANDMARKS } from "../../game/direction";
 import type { ContentPack, ObjectiveType, WorldEntity } from "../../game/types";
 
 /**
@@ -22,7 +21,6 @@ export const STATIC_CONTENT_PACK_NO_PAIRS: ContentPack = {
 	weather: "",
 	timeOfDay: "",
 	entities: [],
-	landmarks: DEFAULT_LANDMARKS,
 	wallName: "tunnel wall",
 	aiStarts: AI_STARTS,
 };
@@ -71,7 +69,6 @@ export const STATIC_CONTENT_PACKS: ContentPack[] = [
 			"maintenance alcove",
 			"A small alcove",
 		),
-		landmarks: DEFAULT_LANDMARKS,
 		wallName: "tunnel wall",
 		aiStarts: AI_STARTS,
 	},
@@ -87,7 +84,6 @@ export const STATIC_CONTENT_PACKS: ContentPack[] = [
 			"survey marker",
 			"A survey marker",
 		),
-		landmarks: DEFAULT_LANDMARKS,
 		wallName: "salt flat boundary",
 		aiStarts: AI_STARTS,
 	},
@@ -103,7 +99,6 @@ export const STATIC_CONTENT_PACKS: ContentPack[] = [
 			"sample rack",
 			"A sample rack",
 		),
-		landmarks: DEFAULT_LANDMARKS,
 		wallName: "laboratory bulkhead",
 		aiStarts: AI_STARTS,
 	},

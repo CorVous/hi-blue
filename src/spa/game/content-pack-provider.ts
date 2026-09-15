@@ -26,13 +26,7 @@ import {
 	buildDualBindingPrompt,
 } from "./binding-prompt-builder.js";
 import { recordContentPackAttempt } from "./content-pack-attempts.js";
-import type {
-	AiId,
-	ContentPack,
-	LandmarkDescription,
-	ObjectivePair,
-	WorldEntity,
-} from "./types";
+import type { AiId, ContentPack, ObjectivePair, WorldEntity } from "./types";
 
 // ── Content-pack prompt ───────────────────────────────────────────────────────
 
@@ -61,9 +55,6 @@ DECOY (always exactly 2 per pack):
 OBSTACLE:
   fields: name (2-4 words, thematic to setting), examineDescription (1 sentence), shiftFlavor (1 sentence, witness POV; no cardinal direction words; no "{actor}"). Fixed and impassable.
 
-HORIZON LANDMARKS (always exactly 4 — north/south/east/west):
-  shortName (2-5 words), horizonPhrase (evocative clause; MUST NOT contain: north, south, east, west, ahead, behind, "in front", "to your left", "to your right", "on the horizon", "beneath you", "above you").
-
 WALL NAME: a setting-flavored 2-4 word noun phrase for the impassable boundary (e.g. "subway tunnel wall", "laboratory bulkhead").
 
 Global rules:
@@ -78,12 +69,6 @@ Return ONLY valid JSON (no markdown, no preamble):
   "pack": {
     "setting": "<setting>",
     "wallName": "...",
-    "landmarks": {
-      "north": { "shortName": "...", "horizonPhrase": "..." },
-      "south": { "shortName": "...", "horizonPhrase": "..." },
-      "east":  { "shortName": "...", "horizonPhrase": "..." },
-      "west":  { "shortName": "...", "horizonPhrase": "..." }
-    },
     "bindings": [
       { "id": "carry-0", "type": "carry", "object": { "id": "carry-0-obj", "name": "...", "examineDescription": "...", "useOutcome": "...", "placementFlavor": "...{actor}...", "proximityFlavor": "..." }, "space": { "id": "carry-0-space", "name": "...", "examineDescription": "...", "proximityFlavor": "..." } },
       { "id": "useSpace-1", "type": "use_space", "space": { "id": "useSpace-1-space", "name": "...", "examineDescription": "...", "proximityFlavor": "...", "activationFlavor": "...", "satisfactionFlavor": "...", "postExamineDescription": "...", "postLookFlavor": "..." } },
@@ -208,9 +193,6 @@ DECOY (always exactly 2 per pack):
 OBSTACLE:
   fields: name (2-4 words, thematic to setting), examineDescription (1 sentence), shiftFlavor (1 sentence, witness POV; no cardinal direction words; no "{actor}"). Fixed and impassable.
 
-HORIZON LANDMARKS (always exactly 4 — north/south/east/west):
-  shortName (2-5 words), horizonPhrase (evocative clause; MUST NOT contain: north, south, east, west, ahead, behind, "in front", "to your left", "to your right", "on the horizon", "beneath you", "above you").
-
 WALL NAME: a setting-flavored 2-4 word noun phrase for the impassable boundary.
 
 Global rules:
@@ -225,8 +207,8 @@ Return ONLY valid JSON (no markdown, no preamble):
 {
   "phases": [
     {
-      "packA": { "setting": "<settingA>", "wallName": "...", "landmarks": { "north": { "shortName": "...", "horizonPhrase": "..." }, "south": { "shortName": "...", "horizonPhrase": "..." }, "east": { "shortName": "...", "horizonPhrase": "..." }, "west": { "shortName": "...", "horizonPhrase": "..." } }, "bindings": [...], "decoys": [...], "obstacles": [...] },
-      "packB": { "setting": "<settingB>", "wallName": "...", "landmarks": { "north": { "shortName": "...", "horizonPhrase": "..." }, "south": { "shortName": "...", "horizonPhrase": "..." }, "east": { "shortName": "...", "horizonPhrase": "..." }, "west": { "shortName": "...", "horizonPhrase": "..." } }, "bindings": [SAME STRUCTURE/IDs as packA, DIFFERENT flavors], "decoys": [SAME IDs, DIFFERENT names/flavors], "obstacles": [SAME IDs, DIFFERENT names/flavors] }
+      "packA": { "setting": "<settingA>", "wallName": "...", "bindings": [...], "decoys": [...], "obstacles": [...] },
+      "packB": { "setting": "<settingB>", "wallName": "...", "bindings": [SAME STRUCTURE/IDs as packA, DIFFERENT flavors], "decoys": [SAME IDs, DIFFERENT names/flavors], "obstacles": [SAME IDs, DIFFERENT names/flavors] }
     }
   ]
 }`;
@@ -1247,50 +1229,6 @@ export function validateContentPacks(
 			}
 		}
 
-		// Validate landmarks
-		const landmarksRaw = pack.landmarks;
-		if (landmarksRaw == null || typeof landmarksRaw !== "object") {
-			errors.push({
-				entityId: "",
-				field: "landmarks",
-				rule: "missing-field",
-				message: `${phaseLabel}: missing or invalid landmarks object`,
-				retryUnit: { kind: "objective-pair", phaseIndex: i, pairId: "" },
-			});
-			continue;
-		}
-		const lm = landmarksRaw as Record<string, unknown>;
-		const landmarks: ContentPack["landmarks"] = {
-			north: validateLandmark(
-				lm.north,
-				i + 1,
-				"north",
-				{ kind: "objective-pair", phaseIndex: i, pairId: "" },
-				errors,
-			) ?? { shortName: "", horizonPhrase: "" },
-			south: validateLandmark(
-				lm.south,
-				i + 1,
-				"south",
-				{ kind: "objective-pair", phaseIndex: i, pairId: "" },
-				errors,
-			) ?? { shortName: "", horizonPhrase: "" },
-			east: validateLandmark(
-				lm.east,
-				i + 1,
-				"east",
-				{ kind: "objective-pair", phaseIndex: i, pairId: "" },
-				errors,
-			) ?? { shortName: "", horizonPhrase: "" },
-			west: validateLandmark(
-				lm.west,
-				i + 1,
-				"west",
-				{ kind: "objective-pair", phaseIndex: i, pairId: "" },
-				errors,
-			) ?? { shortName: "", horizonPhrase: "" },
-		};
-
 		const wallName =
 			typeof pack.wallName === "string" && pack.wallName.length > 0
 				? pack.wallName
@@ -1310,7 +1248,6 @@ export function validateContentPacks(
 		packs.push({
 			setting: pack.setting as string,
 			entities,
-			landmarks,
 			wallName,
 			aiStarts: {} as Record<AiId, never>,
 		});
@@ -1654,49 +1591,6 @@ function validateSinglePack(
 		}
 	}
 
-	const landmarksRaw = pack.landmarks;
-	if (landmarksRaw == null || typeof landmarksRaw !== "object") {
-		errors.push({
-			entityId: "",
-			field: "landmarks",
-			rule: "missing-field",
-			message: `${label}: missing or invalid landmarks`,
-			retryUnit: { kind: "objective-pair", phaseIndex, pairId: "" },
-		});
-		return null;
-	}
-	const lm = landmarksRaw as Record<string, unknown>;
-	const landmarks: ContentPack["landmarks"] = {
-		north: validateLandmark(
-			lm.north,
-			phaseIndex + 1,
-			"north",
-			{ kind: "objective-pair", phaseIndex, pairId: "" },
-			errors,
-		) ?? { shortName: "", horizonPhrase: "" },
-		south: validateLandmark(
-			lm.south,
-			phaseIndex + 1,
-			"south",
-			{ kind: "objective-pair", phaseIndex, pairId: "" },
-			errors,
-		) ?? { shortName: "", horizonPhrase: "" },
-		east: validateLandmark(
-			lm.east,
-			phaseIndex + 1,
-			"east",
-			{ kind: "objective-pair", phaseIndex, pairId: "" },
-			errors,
-		) ?? { shortName: "", horizonPhrase: "" },
-		west: validateLandmark(
-			lm.west,
-			phaseIndex + 1,
-			"west",
-			{ kind: "objective-pair", phaseIndex, pairId: "" },
-			errors,
-		) ?? { shortName: "", horizonPhrase: "" },
-	};
-
 	const wallName =
 		typeof pack.wallName === "string" && pack.wallName.length > 0
 			? pack.wallName
@@ -1716,56 +1610,9 @@ function validateSinglePack(
 	return {
 		setting: pack.setting,
 		entities,
-		landmarks,
 		wallName,
 		aiStarts: {} as Record<AiId, never>,
 	};
-}
-
-/** Validate a single landmark entry from the LLM response. */
-function validateLandmark(
-	raw: unknown,
-	phaseLabel: number,
-	direction: string,
-	retryUnit: RetryUnit,
-	errors: ValidationError[],
-): LandmarkDescription | null {
-	if (raw == null || typeof raw !== "object") {
-		errors.push({
-			entityId: "",
-			field: `landmark-${direction}`,
-			rule: "structural",
-			message: `Phase ${phaseLabel}: landmark "${direction}" is not an object`,
-			retryUnit,
-		});
-		return null;
-	}
-	const lm = raw as Record<string, unknown>;
-	if (typeof lm.shortName !== "string" || lm.shortName.length === 0) {
-		errors.push({
-			entityId: "",
-			field: `landmark-${direction}-shortName`,
-			rule: "missing-field",
-			message: `Phase ${phaseLabel}: landmark "${direction}" missing shortName`,
-			retryUnit,
-		});
-	}
-	if (typeof lm.horizonPhrase !== "string" || lm.horizonPhrase.length === 0) {
-		errors.push({
-			entityId: "",
-			field: `landmark-${direction}-horizonPhrase`,
-			rule: "missing-field",
-			message: `Phase ${phaseLabel}: landmark "${direction}" missing horizonPhrase`,
-			retryUnit,
-		});
-	}
-	if (
-		typeof lm.shortName === "string" &&
-		typeof lm.horizonPhrase === "string"
-	) {
-		return { shortName: lm.shortName, horizonPhrase: lm.horizonPhrase };
-	}
-	return null;
 }
 
 export function validateContentPacksOrThrow(

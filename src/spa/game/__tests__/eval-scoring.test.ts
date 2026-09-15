@@ -10,38 +10,15 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type {
-	Landmarks,
-	TurnRecord,
-} from "../../../../evals/relative-directions/scoring.js";
+import type { TurnRecord } from "../../../../evals/relative-directions/scoring.js";
 import {
 	detectCardinalLeaks,
-	landmarkMentions,
 	parseStatedDirection,
 	scoreScenario,
 	structuralCoherence,
 } from "../../../../evals/relative-directions/scoring.js";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
-
-const SAMPLE_LANDMARKS: Landmarks = {
-	north: {
-		shortName: "the blast door",
-		horizonPhrase: "looms at the far end, sealed and scarred",
-	},
-	south: {
-		shortName: "the collapsed shaft",
-		horizonPhrase: "gapes behind you, filling the air with wet concrete smell",
-	},
-	east: {
-		shortName: "the transformer bank",
-		horizonPhrase: "hums faintly in the dark, indicator lights blinking amber",
-	},
-	west: {
-		shortName: "the flooded corridor",
-		horizonPhrase: "stretches away, its floor invisible under black water",
-	},
-};
 
 /** Build a minimal TurnRecord for aggregator tests. */
 function makeTurn(
@@ -51,7 +28,6 @@ function makeTurn(
 		text: "",
 		toolCalls: [],
 		cardinalLeaks: [],
-		landmarkMentioned: false,
 		facingBefore: "north",
 		facingAfter: "north",
 		statedDirection: null,
@@ -104,7 +80,7 @@ describe("detectCardinalLeaks", () => {
 
 	it("returns empty array for clean text", () => {
 		const result = detectCardinalLeaks(
-			"I move forward toward the blast door on the horizon.",
+			"I move forward toward the sealed blast door.",
 		);
 		expect(result).toEqual([]);
 	});
@@ -146,89 +122,6 @@ describe("detectCardinalLeaks", () => {
 			"the s and n and e and w stand alone as letters",
 		);
 		expect(result).toEqual([]);
-	});
-});
-
-// ── landmarkMentions ──────────────────────────────────────────────────────────
-
-describe("landmarkMentions", () => {
-	it("detects shortName substring match for the expected direction", () => {
-		const { mentioned, matchesExpected } = landmarkMentions(
-			"I see the blast door looming ahead.",
-			SAMPLE_LANDMARKS,
-			"north",
-		);
-		expect(mentioned).toContain("north");
-		expect(matchesExpected).toBe(true);
-	});
-
-	it("detects shortName match for a non-expected direction", () => {
-		const { mentioned, matchesExpected } = landmarkMentions(
-			"I can see the transformer bank to my right.",
-			SAMPLE_LANDMARKS,
-			"north",
-		);
-		expect(mentioned).toContain("east");
-		expect(matchesExpected).toBe(false);
-	});
-
-	it("matches via last-word fallback for the key noun", () => {
-		// "transformer bank" → last significant word is "bank"; ≥4 chars, present in text
-		const { mentioned } = landmarkMentions(
-			"There is a large bank humming in the dark.",
-			SAMPLE_LANDMARKS,
-			"north",
-		);
-		expect(mentioned).toContain("east");
-	});
-
-	it("does NOT match short last-words (< 4 chars)", () => {
-		// The collapsed shaft's last word is "shaft" (5 chars) — that should match.
-		// But a landmark whose last word was e.g. "hut" (3 chars) would not.
-		// Here we just verify "shaft" does match:
-		const { mentioned } = landmarkMentions(
-			"The shaft is directly behind me.",
-			SAMPLE_LANDMARKS,
-			"south",
-		);
-		expect(mentioned).toContain("south");
-	});
-
-	it("matchesExpected is false when expectedFacing is not provided", () => {
-		const { matchesExpected } = landmarkMentions(
-			"I see the blast door.",
-			SAMPLE_LANDMARKS,
-		);
-		expect(matchesExpected).toBe(false);
-	});
-
-	it("returns empty mentioned array for text with no landmark references", () => {
-		const { mentioned, matchesExpected } = landmarkMentions(
-			"I wait and observe.",
-			SAMPLE_LANDMARKS,
-			"north",
-		);
-		expect(mentioned).toEqual([]);
-		expect(matchesExpected).toBe(false);
-	});
-
-	it("matches multiple landmarks when text references both", () => {
-		const { mentioned } = landmarkMentions(
-			"The blast door is ahead and the flooded corridor is to my left.",
-			SAMPLE_LANDMARKS,
-			"north",
-		);
-		expect(mentioned).toContain("north");
-		expect(mentioned).toContain("west");
-	});
-
-	it("case-insensitive match for shortName", () => {
-		const { mentioned } = landmarkMentions(
-			"THE BLAST DOOR is sealed.",
-			SAMPLE_LANDMARKS,
-			"north",
-		);
-		expect(mentioned).toContain("north");
 	});
 });
 
@@ -298,7 +191,7 @@ describe("parseStatedDirection", () => {
 	it("returns null for plain description prose", () => {
 		expect(
 			parseStatedDirection(
-				"The blast door looms ahead on the horizon. The transformer bank is visible to the right.",
+				"The blast door looms at the far end. The transformer bank is visible to the right.",
 			),
 		).toBeNull();
 	});
@@ -355,7 +248,6 @@ describe("scoreScenario", () => {
 	it("returns zero rates and passed=false for empty turns array", () => {
 		const score = scoreScenario([]);
 		expect(score.cardinalLeakCount).toBe(0);
-		expect(score.landmarkConsistencyRate).toBe(0);
 		expect(score.silenceRate).toBe(0);
 		expect(score.structuralCoherenceRate).toBe(0);
 		expect(score.structuralMismatchCount).toBe(0);
@@ -370,17 +262,6 @@ describe("scoreScenario", () => {
 		];
 		const score = scoreScenario(turns);
 		expect(score.cardinalLeakCount).toBe(3);
-	});
-
-	it("computes landmark consistency rate correctly", () => {
-		const turns = [
-			makeTurn({ turn: 1, landmarkMentioned: true }),
-			makeTurn({ turn: 2, landmarkMentioned: true }),
-			makeTurn({ turn: 3, landmarkMentioned: false }),
-			makeTurn({ turn: 4, landmarkMentioned: false }),
-		];
-		const score = scoreScenario(turns);
-		expect(score.landmarkConsistencyRate).toBeCloseTo(0.5);
 	});
 
 	it("computes silence rate correctly", () => {
@@ -436,19 +317,17 @@ describe("scoreScenario", () => {
 		expect(score.structuralMismatchCount).toBe(0);
 	});
 
-	it("passes when zero leaks, landmark ≥50%, and no mismatches", () => {
+	it("passes when zero leaks and no mismatches", () => {
 		const turns = [
 			makeTurn({
 				turn: 1,
 				cardinalLeaks: [],
-				landmarkMentioned: true,
 				statedDirection: "forward",
 				toolCallDirection: "forward",
 			}),
 			makeTurn({
 				turn: 2,
 				cardinalLeaks: [],
-				landmarkMentioned: true,
 				statedDirection: null,
 				toolCallDirection: "left",
 			}),
@@ -458,21 +337,8 @@ describe("scoreScenario", () => {
 	});
 
 	it("fails when there are cardinal leaks", () => {
-		const turns = [
-			makeTurn({ turn: 1, cardinalLeaks: ["north"], landmarkMentioned: true }),
-		];
+		const turns = [makeTurn({ turn: 1, cardinalLeaks: ["north"] })];
 		const score = scoreScenario(turns);
-		expect(score.passed).toBe(false);
-	});
-
-	it("fails when landmark consistency is below 50%", () => {
-		const turns = [
-			makeTurn({ turn: 1, cardinalLeaks: [], landmarkMentioned: false }),
-			makeTurn({ turn: 2, cardinalLeaks: [], landmarkMentioned: false }),
-			makeTurn({ turn: 3, cardinalLeaks: [], landmarkMentioned: false }),
-		];
-		const score = scoreScenario(turns);
-		expect(score.landmarkConsistencyRate).toBe(0);
 		expect(score.passed).toBe(false);
 	});
 
@@ -481,11 +347,10 @@ describe("scoreScenario", () => {
 			makeTurn({
 				turn: 1,
 				cardinalLeaks: [],
-				landmarkMentioned: true,
 				statedDirection: "left",
 				toolCallDirection: "right",
 			}),
-			makeTurn({ turn: 2, cardinalLeaks: [], landmarkMentioned: true }),
+			makeTurn({ turn: 2, cardinalLeaks: [] }),
 		];
 		const score = scoreScenario(turns);
 		expect(score.structuralMismatchCount).toBe(1);

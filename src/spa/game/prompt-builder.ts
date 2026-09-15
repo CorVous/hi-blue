@@ -9,11 +9,9 @@ import type {
 	AiBudget,
 	AiId,
 	CardinalDirection,
-	ContentPack,
 	ConversationEntry,
 	GameState,
 	GridPosition,
-	LandmarkDescription,
 	Objective,
 	PersonaSpatialState,
 	WorldEntity,
@@ -54,12 +52,6 @@ export interface AiContext {
 	personaColors: Record<AiId, string>;
 	/** Name for each AI, keyed by AiId — used in perception-delta rendering. */
 	personaNames: Record<AiId, string>;
-	/**
-	 * Four distant horizon landmarks, one per cardinal anchor.
-	 * Used to render the "On the horizon ahead:" line in `<where_you_are>`.
-	 * Keyed by cardinal direction.
-	 */
-	landmarks: ContentPack["landmarks"];
 	/**
 	 * Setting-flavored name for the impassable grid edge (e.g. "subway tunnel wall").
 	 * Rendered in `<what_you_see>` and `<whats_new>` for OOB cone cells.
@@ -148,7 +140,6 @@ export function buildAiContext(
 	const weather = game.weather ?? "";
 	const timeOfDay = game.timeOfDay ?? "";
 	const personaSpatial = game.personaSpatial;
-	const landmarks = game.contentPack.landmarks;
 	const wallName = game.contentPack.wallName;
 
 	if (!persona) throw new Error(`No persona for aiId: ${aiId}`);
@@ -180,7 +171,6 @@ export function buildAiContext(
 		personaSpatial,
 		personaColors,
 		personaNames,
-		landmarks,
 		wallName,
 		pendingBroadcasts,
 		activeDirectives,
@@ -748,10 +738,17 @@ function renderSystemPrompt(ctx: AiContext): string {
 	lines.push("");
 
 	// Setting — only emitted when a setting noun is present.
+	// Cardinal directions belong here: they are stated once, in-fiction, and
+	// they describe the room's own geography. Nothing in the fiction defines
+	// them by what the Daemon can see — not the room as a whole, not its walls
+	// — so a Setting Shift or a new room leaves them unchanged.
 	if (ctx.setting) {
 		lines.push("<setting>");
 		lines.push(`*${ctx.name} is in a ${ctx.setting}.`);
 		if (ctx.timeOfDay) lines.push(`It is ${ctx.timeOfDay}.`);
+		lines.push(
+			"The room's cardinal directions are fixed: north, south, east, and west. They belong to the room itself, not to what it contains.",
+		);
 		lines.push("</setting>");
 		lines.push("");
 	}
@@ -1118,13 +1115,6 @@ function renderCurrentState(ctx: AiContext): string {
 
 	lines.push("<where_you_are>");
 	if (actorSpatial) {
-		// Horizon landmark: the one landmark currently in front of the daemon.
-		// Cardinal facing is used to look up the landmark; the line is always-on.
-		const horizonLandmark: LandmarkDescription =
-			ctx.landmarks[actorSpatial.facing];
-		lines.push(
-			`On the horizon ahead: ${horizonLandmark.shortName} — ${horizonLandmark.horizonPhrase}.`,
-		);
 		if (ctx.weather) lines.push(`Weather: ${ctx.weather}`);
 
 		// Held items

@@ -64,12 +64,6 @@ function seedOkSessionScript(id: string, lastSavedAt: string): string {
 			// Build engine.dat via inline obfuscation — payload must match SealedEngine v7
 			const OBFUSCATION_KEY = '${OBFUSCATION_KEY}';
 			const keyBytes = Array.from(new TextEncoder().encode(OBFUSCATION_KEY));
-			const stubLandmarks = {
-				north: { shortName: 'Ridge', horizonPhrase: 'A distant ridge.' },
-				south: { shortName: 'Hills', horizonPhrase: 'Rolling hills.' },
-				east: { shortName: 'Tower', horizonPhrase: 'A stone tower.' },
-				west: { shortName: 'Forest', horizonPhrase: 'A dark forest.' },
-			};
 			const stubPack = {
 				setting: 'test setting',
 				weather: 'clear',
@@ -78,7 +72,6 @@ function seedOkSessionScript(id: string, lastSavedAt: string): string {
 				interestingObjects: [],
 				obstacles: [],
 				aiStarts: {},
-				landmarks: stubLandmarks,
 			};
 			const payload = JSON.stringify({
 				schemaVersion: 8,

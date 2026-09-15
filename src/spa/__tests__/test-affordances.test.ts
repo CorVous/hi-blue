@@ -17,7 +17,6 @@ import { describe, expect, it, vi } from "vitest";
 vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 vi.stubGlobal("__DEV__", true);
 
-import { DEFAULT_LANDMARKS } from "../game/direction";
 import { GameSession } from "../game/game-session";
 import { MockRoundLLMProvider } from "../game/round-llm-provider";
 import type { AiPersona, ContentPack } from "../game/types";
@@ -78,7 +77,6 @@ const TEST_CONTENT_PACK: ContentPack = {
 	weather: "",
 	timeOfDay: "",
 	entities: [],
-	landmarks: DEFAULT_LANDMARKS,
 	wallName: "wall",
 	aiStarts: AI_STARTS,
 };

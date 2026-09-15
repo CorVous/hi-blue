@@ -33,7 +33,6 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { availableTools } from "../../src/spa/game/available-tools.js";
-import { DEFAULT_LANDMARKS } from "../../src/spa/game/direction.js";
 import { dispatchAiTurn } from "../../src/spa/game/dispatcher.js";
 import {
 	advanceRound,
@@ -204,7 +203,6 @@ function makePack(): ContentPack {
 				holder: { row: 3, col: 3 },
 			},
 		],
-		landmarks: DEFAULT_LANDMARKS,
 		wallName: "tiled tunnel wall",
 		aiStarts: {
 			red: { position: { row: 2, col: 2 }, facing: "north" },

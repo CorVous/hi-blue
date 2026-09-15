@@ -253,6 +253,84 @@ describe("<setting> block", () => {
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain(settingNoun);
 	});
+
+	it("establishes the four cardinal directions exactly once, inside <setting>", () => {
+		const pack = makeTestPack([], {
+			setting: "abandoned subway station",
+			wallName: "wall",
+			aiStarts: RGC_AI_STARTS,
+		});
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const prompt = buildAiContext(game, "red").toSystemPrompt();
+
+		const settingBlock = /<setting>([\s\S]*?)<\/setting>/.exec(prompt)?.[1];
+		expect(settingBlock).toBeDefined();
+		for (const dir of ["north", "south", "east", "west"]) {
+			expect(settingBlock?.match(new RegExp(`\\b${dir}\\b`, "g"))?.length).toBe(
+				1,
+			);
+		}
+		// Nowhere else in the stable prompt establishes them.
+		expect(
+			prompt
+				.replace(settingBlock ?? "", "")
+				.match(/\b(north|south|east|west)\b/gi),
+		).toBeNull();
+	});
+});
+
+// ----------------------------------------------------------------------------
+// Cardinal directions (ADR 0015)
+// ----------------------------------------------------------------------------
+
+/** The `<setting>` line that establishes the room's cardinal directions. */
+function cardinalClause(prompt: string): string {
+	const settingBlock = /<setting>([\s\S]*?)<\/setting>/.exec(prompt)?.[1] ?? "";
+	return (
+		settingBlock
+			.split("\n")
+			.find((line) => /\bnorth\b/.test(line) && /\bsouth\b/.test(line)) ?? ""
+	);
+}
+
+describe("cardinal directions", () => {
+	const ROOM_A = makeTestPack([], {
+		setting: "neon arcade",
+		wallName: "wall",
+		aiStarts: RGC_AI_STARTS,
+	});
+	const ROOM_B = makeTestPack([], {
+		setting: "sun-baked salt flat",
+		wallName: "wall",
+		aiStarts: RGC_AI_STARTS,
+	});
+
+	it("keeps the same directions after Same Daemons, New Room", () => {
+		// Same Daemons, New Room: same personas, a freshly generated room, and
+		// cleared conversation logs. Changing the room's contents must not
+		// redefine the cardinal directions.
+		let firstRoom = startGame(TEST_PERSONAS, ROOM_A, {
+			budgetPerAi: 5,
+			rng: () => 0,
+		});
+		firstRoom = appendMessage(firstRoom, "blue", "red", "Remember this room.");
+		expect(firstRoom.conversationLogs.red).toHaveLength(1);
+
+		const newRoom = startGame(TEST_PERSONAS, ROOM_B, {
+			budgetPerAi: 5,
+			rng: () => 0,
+		});
+		expect(newRoom.conversationLogs.red).toEqual([]);
+
+		const before = cardinalClause(
+			buildAiContext(firstRoom, "red").toSystemPrompt(),
+		);
+		const after = cardinalClause(
+			buildAiContext(newRoom, "red").toSystemPrompt(),
+		);
+		expect(before).not.toBe("");
+		expect(after).toBe(before);
+	});
 });
 
 // ----------------------------------------------------------------------------
@@ -273,19 +351,19 @@ describe("prompt-builder — spatial 'Where you are' section (current-state user
 		expect(ctx.toSystemPrompt()).not.toContain("<where_you_are>");
 	});
 
-	it("reports horizon landmark in the current-state user turn (replaces old Facing: line)", () => {
+	it("omits any per-round direction anchor from the current-state user turn", () => {
 		// rng=()=>0 places red at (0,0) facing north
-		// With DEFAULT_LANDMARKS, facing north → "the distant ridge"
 		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
 			budgetPerAi: 5,
 			rng: () => 0,
 		});
 		const ctx = buildAiContext(game, "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
-		expect(stateMsg).toMatch(/on the horizon ahead/i);
-		expect(stateMsg).toContain("the distant ridge");
-		// No cardinal direction should appear in the where_you_are section
+		// The retired always-on anchor line left no replacement.
+		expect(stateMsg).not.toMatch(/^On the .*ahead/im);
 		expect(stateMsg).not.toMatch(/<where_you_are>[\s\S]*Facing:/i);
+		// Directions live in the stable prompt's <setting> block only.
+		expect(stateMsg.match(/\b(north|south|east|west)\b/gi)).toBeNull();
 	});
 
 	it("lists items in the actor's cell under 'Where you are'", () => {

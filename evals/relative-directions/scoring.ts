@@ -6,21 +6,15 @@
  *
  * Exported surface:
  *   - detectCardinalLeaks(text) → string[]
- *   - landmarkMentions(text, landmarks) → { mentioned, matchesExpected }
  *   - parseStatedDirection(text) → RelativeDirection | null
  *   - structuralCoherence(stated, toolCall) → "match" | "mismatch" | "no-statement" | "no-toolcall"
  *   - scoreScenario(turns) → ScenarioScore
  */
 
 import type { RelativeDirection } from "../../src/spa/game/direction.js";
-import type {
-	CardinalDirection,
-	ContentPack,
-} from "../../src/spa/game/types.js";
+import type { CardinalDirection } from "../../src/spa/game/types.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-
-export type Landmarks = ContentPack["landmarks"];
 
 /**
  * Per-turn record gathered by the harness.
@@ -35,8 +29,6 @@ export interface TurnRecord {
 	toolCalls: string[];
 	/** Cardinal-word leaks found in the daemon's prose (lower-cased). */
 	cardinalLeaks: string[];
-	/** True when the expected horizon landmark's shortName appears in the prose. */
-	landmarkMentioned: boolean;
 	/** Actor facing before this turn was taken. */
 	facingBefore: CardinalDirection;
 	/** Actor facing after this turn resolved. */
@@ -55,7 +47,6 @@ export interface TurnRecord {
 
 export interface ScenarioScore {
 	cardinalLeakCount: number;
-	landmarkConsistencyRate: number;
 	silenceRate: number;
 	/** Fraction of turns where stated direction matched tool call direction. */
 	structuralCoherenceRate: number;
@@ -110,54 +101,6 @@ export function detectCardinalLeaks(text: string): string[] {
 		m[0].toLowerCase(),
 	);
 	return [...long, ...short];
-}
-
-// ── Landmark mention detection ────────────────────────────────────────────────
-
-/**
- * Check whether the daemon's prose mentions landmarks.
- *
- * Strategy: for each cardinal direction's landmark, check whether its
- * `shortName` (case-insensitive substring) appears in `text`. We also
- * accept any capitalised key noun from the shortName ("the rusted radio tower"
- * → try "radio tower", "tower" — last-word fallback).
- *
- * Returns:
- *   - `mentioned`: the cardinal anchors whose landmarks were referenced.
- *   - `matchesExpected`: true when the expected anchor's landmark was found.
- */
-export function landmarkMentions(
-	text: string,
-	landmarks: Landmarks,
-	expectedFacing?: CardinalDirection,
-): { mentioned: CardinalDirection[]; matchesExpected: boolean } {
-	const lower = text.toLowerCase();
-	const mentioned: CardinalDirection[] = [];
-
-	for (const dir of ["north", "south", "east", "west"] as const) {
-		const lm = landmarks[dir];
-		const shortLower = lm.shortName.toLowerCase();
-
-		// Primary check: shortName substring match
-		if (lower.includes(shortLower)) {
-			mentioned.push(dir);
-			continue;
-		}
-
-		// Fallback: last meaningful word of the shortName (skip leading "the", "a", "an")
-		const words = shortLower
-			.split(/\s+/)
-			.filter((w) => !["the", "a", "an"].includes(w));
-		const lastWord = words[words.length - 1];
-		if (lastWord && lastWord.length >= 4 && lower.includes(lastWord)) {
-			mentioned.push(dir);
-		}
-	}
-
-	const matchesExpected =
-		expectedFacing !== undefined ? mentioned.includes(expectedFacing) : false;
-
-	return { mentioned, matchesExpected };
 }
 
 // ── Stated-direction parser ───────────────────────────────────────────────────
@@ -216,14 +159,13 @@ export function structuralCoherence(
 /**
  * Aggregate a list of TurnRecords into a ScenarioScore.
  *
- * Pass threshold: zero cardinal leaks AND landmark consistency ≥ 50% AND
- * no structural coherence mismatches (when statements are made).
+ * Pass threshold: zero cardinal leaks AND no structural coherence mismatches
+ * (when statements are made).
  */
 export function scoreScenario(turns: TurnRecord[]): ScenarioScore {
 	if (turns.length === 0) {
 		return {
 			cardinalLeakCount: 0,
-			landmarkConsistencyRate: 0,
 			silenceRate: 0,
 			structuralCoherenceRate: 0,
 			structuralMismatchCount: 0,
@@ -235,8 +177,6 @@ export function scoreScenario(turns: TurnRecord[]): ScenarioScore {
 		(n, t) => n + t.cardinalLeaks.length,
 		0,
 	);
-	const landmarkConsistencyRate =
-		turns.filter((t) => t.landmarkMentioned).length / turns.length;
 	const silenceRate =
 		turns.filter((t) => t.toolCalls.length === 0).length / turns.length;
 
@@ -251,14 +191,10 @@ export function scoreScenario(turns: TurnRecord[]): ScenarioScore {
 	const structuralCoherenceRate =
 		decisiveTurns.length > 0 ? matchCount / decisiveTurns.length : 1;
 
-	const passed =
-		cardinalLeakCount === 0 &&
-		landmarkConsistencyRate >= 0.5 &&
-		structuralMismatchCount === 0;
+	const passed = cardinalLeakCount === 0 && structuralMismatchCount === 0;
 
 	return {
 		cardinalLeakCount,
-		landmarkConsistencyRate,
 		silenceRate,
 		structuralCoherenceRate,
 		structuralMismatchCount,

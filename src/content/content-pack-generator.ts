@@ -466,12 +466,6 @@ function rawBoundPackToContentPack(
 		weather,
 		timeOfDay,
 		entities,
-		landmarks: (rawPack.landmarks as ContentPack["landmarks"]) ?? {
-			north: { shortName: "", horizonPhrase: "" },
-			south: { shortName: "", horizonPhrase: "" },
-			east: { shortName: "", horizonPhrase: "" },
-			west: { shortName: "", horizonPhrase: "" },
-		},
 		wallName: rawPack.wallName ?? "",
 		aiStarts: {},
 	};

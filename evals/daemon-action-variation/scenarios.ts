@@ -25,10 +25,8 @@
  * cell rates pinned at 95-100% across personas (always pick_up).
  */
 
-import { DEFAULT_LANDMARKS } from "../../src/spa/game/direction.js";
 import type { AiId, ContentPack } from "../../src/spa/game/types.js";
 
-const LANDMARKS = DEFAULT_LANDMARKS;
 const WALL_NAME = "tiled tunnel wall";
 
 const ACTOR: AiId = "red";
@@ -88,7 +86,6 @@ function makeExplorationPack(): ContentPack {
 				holder: { row: 1, col: 2 },
 			},
 		],
-		landmarks: LANDMARKS,
 		wallName: WALL_NAME,
 		aiStarts: AI_STARTS_BASE,
 	};
@@ -132,7 +129,6 @@ function makeObjectivePack(): ContentPack {
 				proximityFlavor: "the wall mount sits just ahead, primed and empty.",
 			},
 		],
-		landmarks: LANDMARKS,
 		wallName: WALL_NAME,
 		aiStarts: AI_STARTS_BASE,
 	};
@@ -170,7 +166,6 @@ function makeSocialPack(): ContentPack {
 				holder: { row: 0, col: 3 },
 			},
 		],
-		landmarks: LANDMARKS,
 		wallName: WALL_NAME,
 		aiStarts: AI_STARTS_BASE,
 	};

@@ -11,7 +11,6 @@
  */
 import { describe, expect, it } from "vitest";
 import { GAME_SAVE_VERSION, serializeGameSave } from "../save-serializer";
-import { DEFAULT_LANDMARKS } from "../spa/game/direction";
 import { appendMessage, startGame } from "../spa/game/engine";
 import type { AiPersona, ContentPack } from "../spa/game/types";
 
@@ -62,7 +61,6 @@ const TEST_CONTENT_PACK: ContentPack = {
 	weather: "",
 	timeOfDay: "",
 	entities: [],
-	landmarks: DEFAULT_LANDMARKS,
 	wallName: "wall",
 	aiStarts: {},
 };

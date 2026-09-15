@@ -93,30 +93,6 @@ export function cardinalToRelative(
 	}
 }
 
-/**
- * Default fallback landmarks used in tests and backward-compat engine paths.
- * These are minimal placeholder values — real content packs always have richer
- * LLM-generated landmarks.
- */
-export const DEFAULT_LANDMARKS = {
-	north: {
-		shortName: "the distant ridge",
-		horizonPhrase: "rises at the edge of the world, grey and unmoving",
-	},
-	south: {
-		shortName: "the far shore",
-		horizonPhrase: "curves away behind a low haze",
-	},
-	east: {
-		shortName: "the ruined tower",
-		horizonPhrase: "stands alone against the pale sky",
-	},
-	west: {
-		shortName: "the old bridge",
-		horizonPhrase: "vanishes into the mist beyond the tree line",
-	},
-} as const;
-
 export const GRID_ROWS = 5;
 export const GRID_COLS = 5;
 

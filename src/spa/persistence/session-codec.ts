@@ -14,7 +14,6 @@
  * See docs/adr/0005-engine-dat-obfuscation-method.md
  */
 
-import { DEFAULT_LANDMARKS } from "../game/direction.js";
 import type {
 	ActiveComplication,
 	AiBudget,
@@ -310,7 +309,6 @@ function migrateV10ToV11(sealed: SealedEngine): SealedEngine {
 			boundSpaces?: WorldEntity[];
 			obstacles?: WorldEntity[];
 			entities?: WorldEntity[];
-			landmarks: ContentPack["landmarks"];
 			wallName: string;
 			aiStarts: ContentPack["aiStarts"];
 		};
@@ -323,7 +321,6 @@ function migrateV10ToV11(sealed: SealedEngine): SealedEngine {
 				weather: raw.weather,
 				timeOfDay: raw.timeOfDay,
 				entities: raw.entities,
-				landmarks: raw.landmarks,
 				wallName: raw.wallName,
 				aiStarts: raw.aiStarts,
 			};
@@ -343,7 +340,6 @@ function migrateV10ToV11(sealed: SealedEngine): SealedEngine {
 			weather: raw.weather,
 			timeOfDay: raw.timeOfDay,
 			entities,
-			landmarks: raw.landmarks,
 			wallName: raw.wallName,
 			aiStarts: raw.aiStarts,
 		};
@@ -485,7 +481,6 @@ export function deserializeSession(
 			weather: "",
 			timeOfDay: "",
 			entities: [],
-			landmarks: DEFAULT_LANDMARKS,
 			wallName: "",
 			aiStarts: {},
 		};

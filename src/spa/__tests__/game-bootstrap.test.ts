@@ -5,7 +5,6 @@
  * Also covers the persistence round-trip for LLM-shaped blurbs.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_LANDMARKS } from "../game/direction.js";
 import type { ContentPack } from "../game/types.js";
 import { STATIC_CONTENT_PACKS } from "./fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "./fixtures/static-personas";
@@ -179,7 +178,6 @@ describe("persistence — LLM-shaped blurb round-trips verbatim", () => {
 		weather: "",
 		timeOfDay: "",
 		entities: [],
-		landmarks: DEFAULT_LANDMARKS,
 		wallName: "wall",
 		aiStarts: {},
 	};

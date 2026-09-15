@@ -75,7 +75,6 @@ function makeGoodCarryPack(i = 0) {
 		pack: {
 			setting: "lab",
 			wallName: "wall",
-			landmarks: {},
 			bindings: [
 				{
 					id: `carry-${i}`,
@@ -107,7 +106,6 @@ function makeGoodUseSpacePack(i = 0) {
 		pack: {
 			setting: "lab",
 			wallName: "wall",
-			landmarks: {},
 			bindings: [
 				{
 					id: `useSpace-${i}`,
@@ -135,7 +133,6 @@ function makeGoodUseItemPack(i = 0) {
 		pack: {
 			setting: "lab",
 			wallName: "wall",
-			landmarks: {},
 			bindings: [
 				{
 					id: `useItem-${i}`,
@@ -163,7 +160,6 @@ function makeGoodConvergencePack(i = 0) {
 		pack: {
 			setting: "lab",
 			wallName: "wall",
-			landmarks: {},
 			bindings: [
 				{
 					id: `convergence-${i}`,

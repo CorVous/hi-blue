@@ -124,25 +124,6 @@ function buildSynthesisResponseBody(
 	return JSON.stringify({ choices: [{ message: { content } }] });
 }
 
-const STUB_LANDMARKS = {
-	north: {
-		shortName: "Distant ridge",
-		horizonPhrase: "A jagged ridge cuts the skyline.",
-	},
-	south: {
-		shortName: "Rolling hills",
-		horizonPhrase: "Gentle slopes melt into haze.",
-	},
-	east: {
-		shortName: "Stone tower",
-		horizonPhrase: "A weathered tower breaks the treeline.",
-	},
-	west: {
-		shortName: "Misty forest",
-		horizonPhrase: "A dark canopy blurs into fog.",
-	},
-};
-
 // ── Binding-shaped content-pack stub helpers ─────────────────────────────────
 
 type BindingSpec = {
@@ -309,7 +290,6 @@ function buildBoundPack(
 	return {
 		setting,
 		wallName: "stub boundary wall",
-		landmarks: STUB_LANDMARKS,
 		bindings: builtBindings,
 		decoys,
 		obstacles,

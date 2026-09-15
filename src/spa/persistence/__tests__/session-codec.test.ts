@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { makeTestPack } from "../../game/__tests__/fixtures/make-test-pack.js";
-import { DEFAULT_LANDMARKS } from "../../game/direction.js";
 import { startGame } from "../../game/engine.js";
 import type {
 	AiId,
@@ -681,7 +680,6 @@ describe("serializeSession / deserializeSession", () => {
 			objectivePairs: [],
 			interestingObjects: [],
 			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
 			wallName: "wall",
 			aiStarts: {},
 		} as unknown as ContentPack;
@@ -764,7 +762,6 @@ describe("serializeSession / deserializeSession", () => {
 			objectivePairs: [],
 			interestingObjects: [] as WorldEntity[],
 			obstacles: [] as WorldEntity[],
-			landmarks: DEFAULT_LANDMARKS,
 			aiStarts: {},
 		};
 		const v8SealedPayload = {
@@ -826,7 +823,6 @@ describe("serializeSession / deserializeSession", () => {
 			objectivePairs: [],
 			interestingObjects: [] as WorldEntity[],
 			obstacles: [] as WorldEntity[],
-			landmarks: DEFAULT_LANDMARKS,
 			aiStarts: {},
 		};
 		const v9SealedPayload = {
@@ -878,7 +874,6 @@ describe("serializeSession / deserializeSession", () => {
 			objectivePairs: [],
 			interestingObjects: [],
 			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
 			wallName: "salt-encrusted edge",
 			aiStarts: {},
 		} as unknown as ContentPack;
@@ -981,7 +976,6 @@ describe("serializeSession / deserializeSession", () => {
 			interestingObjects: [interestingEntity],
 			boundSpaces: [boundSpace],
 			obstacles: [obstacleEntity],
-			landmarks: DEFAULT_LANDMARKS,
 			wallName: "tunnel wall",
 			aiStarts: {},
 		} as unknown as ContentPack;
@@ -1095,7 +1089,6 @@ describe("serializeSession / deserializeSession", () => {
 			interestingObjects: [],
 			boundSpaces: [],
 			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
 			wallName: "",
 			aiStarts: {},
 		} as unknown as ContentPack;
@@ -1165,7 +1158,6 @@ describe("serializeSession / deserializeSession", () => {
 					holder: { row: 4, col: 4 },
 				},
 			],
-			landmarks: DEFAULT_LANDMARKS,
 			wallName: "wall",
 			aiStarts: {},
 		};

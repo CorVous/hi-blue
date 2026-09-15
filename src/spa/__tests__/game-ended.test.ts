@@ -8,7 +8,6 @@
  * re-enable on `if (!gameEnded)`.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_LANDMARKS } from "../game/direction.js";
 import type { ContentPack } from "../game/types.js";
 
 // Provide globals before importing the module
@@ -23,7 +22,6 @@ const TEST_CONTENT_PACK: ContentPack = {
 	weather: "",
 	timeOfDay: "",
 	entities: [],
-	landmarks: DEFAULT_LANDMARKS,
 	wallName: "wall",
 	aiStarts: {},
 };

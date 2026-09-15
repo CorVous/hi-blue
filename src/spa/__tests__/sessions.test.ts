@@ -9,7 +9,6 @@
  * Issue #174 (parent #155).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_LANDMARKS } from "../game/direction.js";
 import { startGame } from "../game/engine.js";
 import type { AiPersona, ContentPack, GameState } from "../game/types.js";
 import { deobfuscate, obfuscate } from "../persistence/sealed-blob-codec.js";
@@ -26,7 +25,6 @@ const TEST_CONTENT_PACK: ContentPack = {
 	weather: "",
 	timeOfDay: "",
 	entities: [],
-	landmarks: DEFAULT_LANDMARKS,
 	wallName: "wall",
 	aiStarts: {},
 };

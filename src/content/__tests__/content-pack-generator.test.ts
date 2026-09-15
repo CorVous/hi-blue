@@ -17,7 +17,6 @@ import type {
 	DualBindingContentPackProviderResult,
 } from "../../spa/game/content-pack-provider.js";
 import { MockContentPackProvider } from "../../spa/game/content-pack-provider.js";
-import { DEFAULT_LANDMARKS } from "../../spa/game/direction.js";
 import {
 	carryPairs,
 	interestingObjects,
@@ -178,7 +177,6 @@ function makeMockProvider(): MockContentPackProvider {
 				const rawPack: RawBoundPack = {
 					setting: phase.setting,
 					wallName: "wall",
-					landmarks: DEFAULT_LANDMARKS as unknown as undefined,
 					bindings,
 					decoys: [
 						{
@@ -381,24 +379,6 @@ describe("generateContentPacks — placement constraints", () => {
 				expect(obj.useOutcome).toBeTruthy();
 				expect(obj.examineDescription).toBeTruthy();
 			}
-
-			// 9. All four horizon landmarks are present, non-empty, and distinct
-			const dirs = ["north", "south", "east", "west"] as const;
-			for (const dir of dirs) {
-				const lm = pack.landmarks[dir];
-				expect(
-					lm.shortName,
-					`Pack ${packIdx}: landmarks.${dir}.shortName missing`,
-				).toBeTruthy();
-				expect(
-					lm.horizonPhrase,
-					`Pack ${packIdx}: landmarks.${dir}.horizonPhrase missing`,
-				).toBeTruthy();
-			}
-			// All four shortNames should be distinct (the mock returns DEFAULT_LANDMARKS
-			// which has four different shortNames)
-			const shortNames = dirs.map((d) => pack.landmarks[d].shortName);
-			expect(new Set(shortNames).size).toBe(4);
 		}
 	});
 
@@ -487,7 +467,6 @@ describe("generateContentPacks — degenerate config throws after MAX_ATTEMPTS",
 					rawPack: {
 						setting: phase.setting,
 						wallName: "wall",
-						landmarks: DEFAULT_LANDMARKS as unknown as undefined,
 						bindings: [],
 						decoys: [
 							{
@@ -566,7 +545,6 @@ function makeDualMockProvider(): MockContentPackProvider {
 					return {
 						setting,
 						wallName: `wall ${suffix}`,
-						landmarks: DEFAULT_LANDMARKS as unknown as undefined,
 						bindings,
 						decoys: [
 							{
