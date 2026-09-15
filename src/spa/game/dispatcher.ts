@@ -184,9 +184,9 @@ export function validateToolCall(
 		}
 
 		case "go": {
-			// Cardinal-only: Daemons have no facing, so relative movement
-			// vocabulary (forward/back/left/right) is rejected even when it
-			// arrives as a raw tool call that bypassed the tool enum.
+			// Cardinal-only: Daemons have positions but no orientation, so
+			// relative movement vocabulary (forward/back/left/right) is rejected
+			// even when it arrives as a raw tool call that bypassed the tool enum.
 			const rawDir = call.args.direction;
 			if (!actorSpatial)
 				return { valid: false, reason: "Actor has no spatial state" };
@@ -312,10 +312,9 @@ export function executeToolCall(
 		}
 		case "go": {
 			if (!actorSpatial) break;
-			// Validation upstream guarantees a cardinal direction. `facing` is
-			// still stored for now (a later chunk of this cutover removes it),
-			// but nothing here reads it back: the step direction is the named
-			// cardinal and perception is position-only.
+			// Validation upstream guarantees a cardinal direction. A step writes
+			// the new position and nothing else: the named cardinal is the whole
+			// of the movement, and perception is position-only.
 			const direction = call.args.direction as CardinalDirection;
 			const nextPos = applyDirection(actorSpatial.position, direction);
 			return {
@@ -323,7 +322,7 @@ export function executeToolCall(
 				world: { ...game.world, entities },
 				personaSpatial: {
 					...game.personaSpatial,
-					[aiId]: { position: nextPos, facing: direction },
+					[aiId]: { position: nextPos },
 				},
 			};
 		}

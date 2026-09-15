@@ -572,8 +572,8 @@ function axisStepsFor(dx: number, dy: number): readonly VistaAxisStep[] {
 /**
  * Cardinal direction-and-distance prose locating `target` from `observer`,
  * e.g. "one step north and one step east of you" (ADR 0015). Built from the
- * two positions alone: no facing enters the description, so the same pair of
- * cells always reads the same way however either Daemon is stored.
+ * two positions alone: no orientation enters the description, so the same
+ * pair of cells always reads the same way however either Daemon is stored.
  * Positions equal reads "in your cell".
  */
 export function describeRelativePosition(
@@ -988,8 +988,8 @@ function collectObjectiveHints(ctx: AiContext): string[] {
  * Build a canonical, position-keyed perception-disk snapshot for diffing. Cells
  * are keyed by their cardinal direction and distance from the observer (e.g.
  * "at two steps north: …") rather than by absolute coordinates, so the snapshot
- * describes exactly the Vista and is stable under any facing the engine still
- * stores — perception never reads facing.
+ * describes exactly the Vista and depends on the observer's position alone —
+ * perception reads no orientation, because there is none to read.
  *
  * The string is private to `renderWhatsNew`; not part of the prompt itself.
  */
@@ -1238,7 +1238,7 @@ function renderCurrentState(ctx: AiContext): string {
 
 	// What you see — the Vista: the position-only 13-cell proximity disk
 	// (ADR 0015). Cells are labelled by cardinal direction and distance from
-	// the Daemon's position, so no facing-relative phrasing — and no implied
+	// the Daemon's position, so no relative-direction phrasing — and no implied
 	// orientation — enters the listing. The Daemon's own cell is covered by
 	// `<where_you_are>`, so the remaining 12 cells are listed here.
 	lines.push("<what_you_see>");
@@ -1261,7 +1261,7 @@ function renderCurrentState(ctx: AiContext): string {
 
 			// 1. Other Daemons in this cell. Position is described in cardinal
 			// direction and distance from the observer's position — never from
-			// its orientation — and carries no facing description.
+			// an orientation — and carries no orientation description.
 			for (const [otherId, otherSpatial] of Object.entries(
 				ctx.personaSpatial,
 			)) {

@@ -85,13 +85,13 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
  *   - flower at (2,0): objective object that pairs with flower_space at (2,2)
  *     placementFlavor: "{actor} places the flower on the pedestal."
  *   - lamp at (0,2): interesting object with useOutcome "{actor} holds up the lamp. It glows."
- *   - red at (2,0) facing south (can walk further south or see forward)
- *   - green at (0,0) facing south
- *   - cyan at (0,2) facing south
+ *   - red at (2,0) (can walk further south or see forward)
+ *   - green at (0,0)
+ *   - cyan at (0,2)
  *
  * Note: the Vista is the position-only 13-cell radius-2 disk from (0,0) —
  * own cell, the four adjacent diagonals, and the four cardinal cells two steps
- * away — with out-of-bounds cells perceived as Walls. Stored facings are inert.
+ * away — with out-of-bounds cells perceived as Walls. Position is all there is.
  */
 const TEST_CONTENT_PACK = makeTestPack(
 	[
@@ -124,9 +124,9 @@ const TEST_CONTENT_PACK = makeTestPack(
 		setting: "test chamber",
 		wallName: "wall",
 		aiStarts: {
-			red: { position: { row: 2, col: 0 }, facing: "south" },
-			green: { position: { row: 0, col: 0 }, facing: "south" },
-			cyan: { position: { row: 0, col: 2 }, facing: "south" },
+			red: { position: { row: 2, col: 0 } },
+			green: { position: { row: 0, col: 0 } },
+			cyan: { position: { row: 0, col: 2 } },
 		},
 	},
 );
@@ -210,7 +210,7 @@ describe("conversation log integration — witnessed pick_up", () => {
 
 	it("cyan does NOT see red's pick_up: cyan at (0,2) is outside red's cell's Vista", async () => {
 		// cyan at (0,2) sits at offset (2,2) from red's cell (2,0) —
-		// 2² + 2² = 8 > 4 — so the Vista excludes it whatever cyan's facing is.
+		// 2² + 2² = 8 > 4 — so the Vista excludes it.
 		const game = makeGame();
 
 		// Main round: red picks up flower; cyan is outside the Vista
@@ -322,7 +322,7 @@ describe("conversation log integration — use outcome rendering", () => {
 describe("conversation log integration — put_down placementFlavor", () => {
 	it("green is outside the Vista of red's put_down at (2,2) → no placementFlavor line", async () => {
 		// (2,2) is offset (2,2) from green's cell (0,0) — 2² + 2² = 8 > 4 — so the
-		// Vista excludes it whatever green's facing is.
+		// Vista excludes it.
 		const game = makeGame();
 		// Round 0: red picks up flower
 		const provider1 = new MockRoundLLMProvider([
@@ -449,9 +449,9 @@ describe("conversation log integration — action-failure (issue #287)", () => {
 				setting: "blocked test",
 				wallName: "wall",
 				aiStarts: {
-					red: { position: { row: 2, col: 0 }, facing: "south" },
-					green: { position: { row: 0, col: 0 }, facing: "south" },
-					cyan: { position: { row: 0, col: 2 }, facing: "south" },
+					red: { position: { row: 2, col: 0 } },
+					green: { position: { row: 0, col: 0 } },
+					cyan: { position: { row: 0, col: 2 } },
 				},
 			},
 		);

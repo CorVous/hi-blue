@@ -17,17 +17,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { RelativeDirection } from "../../src/spa/game/direction.js";
-import {
-	cardinalToRelative,
-	RELATIVE_DIRECTIONS,
-} from "../../src/spa/game/direction.js";
 import { dispatchAiTurn } from "../../src/spa/game/dispatcher.js";
-import {
-	createGame,
-	getActivePhase,
-	startPhase,
-} from "../../src/spa/game/engine.js";
+import { createGame, startPhase } from "../../src/spa/game/engine.js";
 import { buildOpenAiMessages } from "../../src/spa/game/openai-message-builder.js";
 import { buildAiContext } from "../../src/spa/game/prompt-builder.js";
 import {
@@ -37,15 +28,22 @@ import {
 import type {
 	AiPersona,
 	AiTurnAction,
+	CardinalDirection,
 	ContentPack,
 	GameState,
 	PhaseConfig,
 	ToolName,
 } from "../../src/spa/game/types.js";
-import type { ScenarioScore, TurnRecord } from "./scoring.js";
+import type {
+	RelativeDirection,
+	ScenarioScore,
+	TurnRecord,
+} from "./scoring.js";
 import {
+	cardinalToRelative,
 	detectCardinalLeaks,
 	parseStatedDirection,
+	RELATIVE_DIRECTIONS,
 	scoreScenario,
 	structuralCoherence,
 } from "./scoring.js";
@@ -55,6 +53,14 @@ import {
 const BASE_URL = process.env.EVAL_BASE_URL ?? "http://localhost:8787";
 const MODEL = "z-ai/glm-4.7";
 const EVAL_TURNS = 6;
+
+/**
+ * The orientation these retired relative-directions scenarios assume for the
+ * acting Daemon. The runtime stores no orientation (ADR 0015), so the eval
+ * supplies its own assumption when it has to read a cardinal tool call as a
+ * relative one. Retargeting this eval is ticket #541.
+ */
+const SCENARIO_ORIENTATION: CardinalDirection = "north";
 
 // ── Shared fixtures ───────────────────────────────────────────────────────────
 
@@ -93,7 +99,7 @@ function makePack(overrides: Partial<ContentPack> = {}): ContentPack {
 		interestingObjects: [],
 		obstacles: [],
 		aiStarts: {
-			red: { position: { row: 2, col: 2 }, facing: "north" },
+			red: { position: { row: 2, col: 2 } },
 		},
 		...overrides,
 	};
@@ -254,14 +260,13 @@ function dispatchModelResponse(
 		if (RELATIVE_DIRECTIONS.includes(rawDir as RelativeDirection)) {
 			toolCallDirection = rawDir as RelativeDirection;
 		} else {
-			// Cardinal arg (shouldn't happen for daemon calls, but be safe)
-			const facingBefore = getActivePhase(game).personaSpatial[aiId]?.facing;
-			if (facingBefore) {
-				toolCallDirection = cardinalToRelative(
-					facingBefore,
-					rawDir as import("../../src/spa/game/types.js").CardinalDirection,
-				);
-			}
+			// Cardinal arg (shouldn't happen for daemon calls, but be safe).
+			// The scenarios assume a northward start; the game stores no
+			// orientation (ADR 0015), so the eval supplies its own assumption.
+			toolCallDirection = cardinalToRelative(
+				SCENARIO_ORIENTATION,
+				rawDir as CardinalDirection,
+			);
 		}
 	}
 
@@ -329,11 +334,6 @@ async function scenarioLookAndNavigate(): Promise<ScenarioResult> {
 	const turns: TurnRecord[] = [];
 
 	for (let t = 1; t <= EVAL_TURNS; t++) {
-		// Snapshot spatial state before this turn
-		const phase = getActivePhase(game);
-		const spatialBefore = phase.personaSpatial.red;
-		const facingBefore = spatialBefore?.facing ?? "north";
-
 		// Build fresh prompt from current game state
 		const messages = buildOpenAiMessages(buildAiContext(game, "red"));
 
@@ -356,10 +356,6 @@ async function scenarioLookAndNavigate(): Promise<ScenarioResult> {
 		);
 		game = nextGame;
 
-		// Facing after the turn
-		const spatialAfter = getActivePhase(game).personaSpatial.red;
-		const facingAfter = spatialAfter?.facing ?? facingBefore;
-
 		turns.push({
 			turn: t,
 			text: result.prose,
@@ -367,8 +363,6 @@ async function scenarioLookAndNavigate(): Promise<ScenarioResult> {
 				(tc) => `${tc.name}(${tc.argumentsJson})`,
 			),
 			cardinalLeaks,
-			facingBefore,
-			facingAfter,
 			statedDirection,
 			toolCallDirection,
 		});
@@ -398,9 +392,6 @@ async function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
 	// The daemon decides what to do — we just let the engine run and track it.
 	const NAV_TURNS = 3;
 	for (let t = 1; t <= NAV_TURNS; t++) {
-		const phase = getActivePhase(game);
-		const facingBefore = phase.personaSpatial.red?.facing ?? "north";
-
 		const messages = buildOpenAiMessages(buildAiContext(game, "red"));
 		const result = await callModel(messages);
 
@@ -416,9 +407,6 @@ async function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
 		);
 		game = nextGame;
 
-		const facingAfter =
-			getActivePhase(game).personaSpatial.red?.facing ?? facingBefore;
-
 		turns.push({
 			turn: t,
 			text: result.prose,
@@ -426,8 +414,6 @@ async function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
 				(tc) => `${tc.name}(${tc.argumentsJson})`,
 			),
 			cardinalLeaks,
-			facingBefore,
-			facingAfter,
 			statedDirection,
 			toolCallDirection,
 		});
@@ -436,9 +422,6 @@ async function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
 	// Final turns: daemon is asked to describe what it sees
 	const DESCRIBE_TURNS = 2;
 	for (let t = NAV_TURNS + 1; t <= NAV_TURNS + DESCRIBE_TURNS; t++) {
-		const phase = getActivePhase(game);
-		const facingBefore = phase.personaSpatial.red?.facing ?? "north";
-
 		// Inject a user message asking for a description
 		const baseMessages = buildOpenAiMessages(buildAiContext(game, "red"));
 		const messages = [
@@ -471,9 +454,6 @@ async function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
 		}
 		game = dispatchedGame;
 
-		const facingAfter =
-			getActivePhase(game).personaSpatial.red?.facing ?? facingBefore;
-
 		turns.push({
 			turn: t,
 			text: result.prose,
@@ -481,8 +461,6 @@ async function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
 				(tc) => `${tc.name}(${tc.argumentsJson})`,
 			),
 			cardinalLeaks,
-			facingBefore,
-			facingAfter,
 			statedDirection,
 			toolCallDirection,
 		});
@@ -504,9 +482,6 @@ async function scenarioPeerLocationReference(): Promise<ScenarioResult> {
 	// First, run a couple of navigation turns to move the daemon around
 	const NAV_TURNS = 2;
 	for (let t = 1; t <= NAV_TURNS; t++) {
-		const phase = getActivePhase(game);
-		const facingBefore = phase.personaSpatial.red?.facing ?? "north";
-
 		const messages = buildOpenAiMessages(buildAiContext(game, "red"));
 		const result = await callModel(messages);
 
@@ -522,9 +497,6 @@ async function scenarioPeerLocationReference(): Promise<ScenarioResult> {
 		);
 		game = nextGame;
 
-		const facingAfter =
-			getActivePhase(game).personaSpatial.red?.facing ?? facingBefore;
-
 		turns.push({
 			turn: t,
 			text: result.prose,
@@ -532,8 +504,6 @@ async function scenarioPeerLocationReference(): Promise<ScenarioResult> {
 				(tc) => `${tc.name}(${tc.argumentsJson})`,
 			),
 			cardinalLeaks,
-			facingBefore,
-			facingAfter,
 			statedDirection,
 			toolCallDirection,
 		});
@@ -542,9 +512,6 @@ async function scenarioPeerLocationReference(): Promise<ScenarioResult> {
 	// Now ask the daemon to describe its location using only relative terms
 	const DESCRIBE_TURNS = 2;
 	for (let t = NAV_TURNS + 1; t <= NAV_TURNS + DESCRIBE_TURNS; t++) {
-		const phase = getActivePhase(game);
-		const facingBefore = phase.personaSpatial.red?.facing ?? "north";
-
 		const baseMessages = buildOpenAiMessages(buildAiContext(game, "red"));
 		const messages = [
 			...baseMessages,
@@ -575,9 +542,6 @@ async function scenarioPeerLocationReference(): Promise<ScenarioResult> {
 		}
 		game = dispatchedGame;
 
-		const facingAfter =
-			getActivePhase(game).personaSpatial.red?.facing ?? facingBefore;
-
 		turns.push({
 			turn: t,
 			text: result.prose,
@@ -585,8 +549,6 @@ async function scenarioPeerLocationReference(): Promise<ScenarioResult> {
 				(tc) => `${tc.name}(${tc.argumentsJson})`,
 			),
 			cardinalLeaks,
-			facingBefore,
-			facingAfter,
 			statedDirection,
 			toolCallDirection,
 		});
@@ -647,8 +609,7 @@ function renderReport(results: ScenarioResult[], date: string): string {
 			lines.push(`#### Turn ${turn.turn}`);
 			lines.push("");
 			lines.push(
-				`Facing: ${turn.facingBefore} → ${turn.facingAfter} | ` +
-					`Stated: ${turn.statedDirection ?? "—"} | ` +
+				`Stated: ${turn.statedDirection ?? "—"} | ` +
 					`Tool direction: ${turn.toolCallDirection ?? "—"} | ` +
 					`Coherence: ${structuralCoherence(turn.statedDirection, turn.toolCallDirection)}`,
 			);

@@ -2358,7 +2358,7 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 // to fail silently — no inline message, no status pip change. Verify the
 // surfaced-error UX: `#round-error` becomes visible and `#topinfo-right`
 // flips to "● connection unstable" (warn class).
-describe("renderGame — round error surfacing (issue #231)", () => {
+describe("renderGame — round error reporting (issue #231)", () => {
 	let _stub: ReturnType<typeof makeLocalStorageStub>;
 
 	beforeEach(async () => {

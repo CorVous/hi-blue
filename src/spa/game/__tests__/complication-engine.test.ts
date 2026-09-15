@@ -96,7 +96,7 @@ function makePersonaSpatial(
 	const merged = { ...defaults, ...positions };
 	const result: Record<AiId, PersonaSpatialState> = {};
 	for (const [id, pos] of Object.entries(merged)) {
-		result[id] = { position: pos, facing: "north" };
+		result[id] = { position: pos };
 	}
 	return result;
 }
@@ -485,9 +485,9 @@ describe("Obstacle Shift exclusion", () => {
 		// Two personas block both; the corner obstacle has no valid shift target.
 		const cornerObstacle = makeObstacle("corner_obs", { row: 0, col: 0 });
 		const corneredPersonas: Record<AiId, PersonaSpatialState> = {
-			red: { position: { row: 1, col: 0 }, facing: "north" }, // south of (0,0)
-			green: { position: { row: 0, col: 1 }, facing: "west" }, // east of (0,0)
-			cyan: { position: { row: 2, col: 0 }, facing: "north" }, // elsewhere
+			red: { position: { row: 1, col: 0 } }, // south of (0,0)
+			green: { position: { row: 0, col: 1 } }, // east of (0,0)
+			cyan: { position: { row: 2, col: 0 } }, // elsewhere
 		};
 		const draws: string[] = [];
 		for (let i = 0; i < 5; i++) {
@@ -511,9 +511,9 @@ describe("Obstacle Shift exclusion", () => {
 		// Obstacle at (0,0): neighbours are south(1,0) and east(0,1). Place persona at (1,0), leave (0,1) free.
 		const obs = makeObstacle("obs", { row: 0, col: 0 });
 		const personaSpatial: Record<AiId, PersonaSpatialState> = {
-			red: { position: { row: 1, col: 0 }, facing: "north" },
-			green: { position: { row: 4, col: 4 }, facing: "south" },
-			cyan: { position: { row: 3, col: 3 }, facing: "east" },
+			red: { position: { row: 1, col: 0 } },
+			green: { position: { row: 4, col: 4 } },
+			cyan: { position: { row: 3, col: 3 } },
 		};
 		// Pool: [weather_change, sysadmin_directive, tool_disable, obstacle_shift, chat_lockout, setting_shift]
 		// Draw index 3 → obstacle_shift: rng[0] = 3/6 + ε = 0.501

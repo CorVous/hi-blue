@@ -352,11 +352,11 @@ describe("projectVista — the position-only 13-cell disk", () => {
 	});
 });
 
-describe("Vista footprint — no facing, no occluders", () => {
+describe("Vista footprint — no orientation, no occluders", () => {
 	it("takes only the observer's position, so no occluder can remove a cell", () => {
 		// ADR 0015: obstacles do not occlude the Vista. The guarantee is
 		// structural — `projectVista` accepts the observer's position and
-		// nothing else, so no facing and no occluder set can reach the
+		// nothing else, so no orientation and no occluder set can reach the
 		// footprint. The other half of the rule (no cell is ever dropped) is
 		// pinned by the translation test above, which compares the projected
 		// offsets with the ADR diagram at all 25 room positions.

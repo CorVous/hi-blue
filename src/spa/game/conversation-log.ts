@@ -66,8 +66,8 @@ export function renderEntry(
 			switch (entry.actionKind) {
 				case "go": {
 					// The cardinal direction of the step (ADR 0015). Daemons have
-					// no facing, so nothing is rendered relative to an observer's
-					// orientation. Entries written before `direction` was recorded
+					// positions but no orientation, so nothing is rendered relative
+					// to an observer. Entries written before `direction` was recorded
 					// fall back to a directionless line rather than inventing one.
 					if (!entry.direction) {
 						return `[Round ${round}] You watch ${actorSub} move.`;

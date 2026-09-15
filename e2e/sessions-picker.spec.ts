@@ -79,7 +79,7 @@ function seedOkSessionScript(id: string, lastSavedAt: string): string {
 				world: { entities: [] },
 				budgets: { red: { remaining: 50, total: 50 } },
 				lockedOut: [],
-				personaSpatial: { red: { position: { row: 2, col: 2 }, facing: 'north' } },
+				personaSpatial: { red: { position: { row: 2, col: 2 } } },
 				contentPacksA: [stubPack],
 				contentPacksB: [{ ...stubPack, setting: 'test setting B' }],
 				activePackId: 'A',

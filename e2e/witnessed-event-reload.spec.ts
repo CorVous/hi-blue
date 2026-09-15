@@ -15,12 +15,12 @@ import {
  * Strategy:
  *   1. Drive the start screen through goToGame → game is live, all three
  *      <aiId>.txt DaemonFiles exist in localStorage.
- *   2. Decode engine.dat → read personaSpatial (actor positions + facings)
+ *   2. Decode engine.dat → read personaSpatial (actor positions)
  *      and obstacle positions.
  *   3. Compute a walk plan: find (actorId, direction, witnessId) such that
  *      after the actor walks one cardinal step `direction`, their post-move
  *      cell falls inside the witness's Vista (ADR 0015: the 13-cell radius-2
- *      disk, position-only — a Daemon's facing no longer gates witnesses).
+ *      disk, position-only — position alone gates witnesses).
  *      - Try a "direct plan" with the witness where they already stand.
  *      - Otherwise patch engine.dat to relocate the witness entirely, so the
  *        move is seen.
@@ -155,7 +155,6 @@ function deobfuscateEngineBlob(blob: string): string {
 
 interface PersonaSpatial {
 	position: GridPosition;
-	facing: CardinalDirection;
 }
 
 interface DirectPlan {
@@ -224,8 +223,6 @@ interface PatchPlan {
 	witnessId: string;
 	/** The new position to place the witness in engine.dat. */
 	witnessNewPosition: GridPosition;
-	/** The new facing for the witness; the save still carries the field. */
-	witnessNewFacing: CardinalDirection;
 	roundAtDispatch: 0;
 }
 
@@ -234,10 +231,10 @@ interface PatchPlan {
  * degenerate (every Daemon too far from every neighbour of every actor), patch
  * engine.dat to reposition the witness so a direct witnessed event is possible.
  *
- * Strategy: place the witness 1 cell BEHIND the actor's starting position,
- * facing the same direction as the actor's planned move. The actor's post-move
- * cell is then exactly 2 cardinal steps away — inside the witness's Vista under
- * ADR 0015 (`2² + 0² = 4 ≤ 4`), so the facing is cosmetic.
+ * Strategy: place the witness 1 cell BEHIND the actor's starting position.
+ * The actor's post-move cell is then exactly 2 cardinal steps away — inside the
+ * witness's Vista under ADR 0015 (`2² + 0² = 4 ≤ 4`), and the Vista is
+ * position-only.
  *
  * We ensure the new witness position is:
  * - In-bounds
@@ -296,7 +293,6 @@ function findPatchPlan(
 					direction,
 					witnessId,
 					witnessNewPosition: backPos,
-					witnessNewFacing: direction,
 					roundAtDispatch: 0,
 				};
 			}
@@ -487,9 +483,8 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 
 	// ── 4. Patch engine.dat if needed ────────────────────────────────────────
 	// When the layout makes witnessing geometrically impossible, relocate the
-	// witness next to the actor. (The stored `facing` is patched along with the
-	// position for consistency, but perception never reads it: the Vista is
-	// position-only.)
+	// witness next to the actor. Only the position is patched: spatial state is
+	// position-only (ADR 0015), so there is nothing else to move.
 	// The actual witnessed-event is still produced by a live go tool call in
 	// step 7; only the starting spatial layout is patched.
 	if (plan.kind === "patch") {
@@ -499,13 +494,11 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 				sid,
 				wId,
 				newPos,
-				newFacing,
 				engineKey,
 			}: {
 				sid: string;
 				wId: string;
 				newPos: { row: number; col: number };
-				newFacing: string;
 				engineKey: string;
 			}) => {
 				const key = `hi-blue:sessions/${sid}/engine.dat`;
@@ -525,10 +518,7 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 				const data = JSON.parse(json) as {
 					personaSpatial: Record<
 						string,
-						Record<
-							string,
-							{ position: { row: number; col: number }; facing: string }
-						>
+						Record<string, { position: { row: number; col: number } }>
 					>;
 				};
 
@@ -538,15 +528,8 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 				(
 					phase1[wId] as {
 						position: { row: number; col: number };
-						facing: string;
 					}
 				).position = newPos;
-				(
-					phase1[wId] as {
-						position: { row: number; col: number };
-						facing: string;
-					}
-				).facing = newFacing;
 
 				// Inline encode
 				const patchedJson = JSON.stringify(data);
@@ -566,7 +549,6 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 				sid: storageInfo.sessionId,
 				wId: witnessId,
 				newPos: patchPlan.witnessNewPosition,
-				newFacing: patchPlan.witnessNewFacing,
 				engineKey: OBFUSCATION_KEY,
 			},
 		);
@@ -597,7 +579,8 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 	// ── 7. Action round: actor does `go <cardinal>`, others pass ─────────────
 	// Register route: actor emits the go tool call, others get stub reply.
 	// Directions are cardinal (ADR 0015): `go` names the room's own geography,
-	// so the planned direction is sent verbatim, not resolved against facing.
+	// so the planned direction is sent verbatim, not resolved against an
+	// orientation.
 	await armRoute(page, actorName, toolCallSseBody("go", { direction }));
 
 	// Address the actor.
@@ -693,7 +676,7 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 
 	// ── 14. Assert witnessed-event line in witness role turns ────────────────
 	// conversation-log.ts renders the cardinal direction of the step (ADR 0015):
-	// Daemons have no facing, so nothing is rendered relative to an orientation.
+	// Daemons have no orientation, so nothing is rendered relative to one.
 	const expectedLine = `[Round ${roundAtDispatch}] You watch *${actorId} walk ${direction}.`;
 
 	const witnessAllContent = (

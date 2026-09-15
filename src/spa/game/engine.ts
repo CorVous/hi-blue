@@ -1,4 +1,4 @@
-import { CARDINAL_DIRECTIONS, GRID_COLS, GRID_ROWS } from "./direction.js";
+import { GRID_COLS, GRID_ROWS } from "./direction.js";
 import { buildObjectiveRecords } from "./objective-record-builder.js";
 import {
 	boundSpaces,
@@ -12,7 +12,6 @@ import type {
 	AiBudget,
 	AiId,
 	AiPersona,
-	CardinalDirection,
 	ComplicationSchedule,
 	ContentPack,
 	ConversationEntry,
@@ -124,8 +123,9 @@ export function startGame(
 
 /**
  * Draw distinct starting cells (via Fisher–Yates partial shuffle over all 25
- * cells) and a uniform-random facing per AI, using the provided rng.
- * Used as fallback when no ContentPack aiStarts are available.
+ * cells), using the provided rng. Position only: a Daemon start carries no
+ * orientation (ADR 0015). Used as fallback when no ContentPack aiStarts are
+ * available.
  */
 function drawSpatialPlacements(
 	rng: () => number,
@@ -151,13 +151,8 @@ function drawSpatialPlacements(
 		cells[i] = cells[j]!;
 		cells[j] = tmp;
 
-		// Pick a random facing
-		const facingIdx = Math.floor(rng() * CARDINAL_DIRECTIONS.length);
 		// biome-ignore lint/style/noNonNullAssertion: bounded index into non-empty array
-		const facing: CardinalDirection = CARDINAL_DIRECTIONS[facingIdx]!;
-
-		// biome-ignore lint/style/noNonNullAssertion: bounded index into non-empty array
-		result[aiIds[i]!] = { position: cells[i]!, facing };
+		result[aiIds[i]!] = { position: cells[i]! };
 	}
 	return result;
 }

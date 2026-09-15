@@ -238,7 +238,7 @@ describe("renderEntry — witnessed go", () => {
 		expect(line).toBe("[Round 0] You watch *red walk south.");
 	});
 
-	it("pins the step as a cardinal direction, never a facing-relative one", () => {
+	it("pins the step as a cardinal direction, never a relative one", () => {
 		const relativeWords = ["forward", "back", "left", "right"];
 		for (const direction of ["north", "south", "east", "west"] as const) {
 			const line = renderEntry(

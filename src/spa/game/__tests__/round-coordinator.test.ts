@@ -77,12 +77,12 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 
 /**
  * ContentPack placing flower at (0,0), key at (0,1), with
- * red→(0,0), green→(0,1), cyan→(0,2) facing north.
+ * red→(0,0), green→(0,1), cyan→(0,2).
  */
 const RGC_AI_STARTS: ContentPack["aiStarts"] = {
-	red: { position: { row: 0, col: 0 }, facing: "north" },
-	green: { position: { row: 0, col: 1 }, facing: "north" },
-	cyan: { position: { row: 0, col: 2 }, facing: "north" },
+	red: { position: { row: 0, col: 0 } },
+	green: { position: { row: 0, col: 1 } },
+	cyan: { position: { row: 0, col: 2 } },
 };
 
 const TEST_CONTENT_PACK = makeTestPack(
@@ -2571,7 +2571,7 @@ describe("message tool multi-round regression (#213)", () => {
 // ----------------------------------------------------------------------------
 describe("action-failure entries — round-coordinator integration", () => {
 	/**
-	 * ContentPack: red at (0,0) facing north; obstacle at (0,1) east of red.
+	 * ContentPack: red at (0,0); obstacle at (0,1) east of red.
 	 * go east → blocked by obstacle → action-failure entry.
 	 */
 	const OBSTACLE_PACK = makeTestPack(
@@ -2588,9 +2588,9 @@ describe("action-failure entries — round-coordinator integration", () => {
 			setting: "blocked corridor",
 			wallName: "wall",
 			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "north" },
-				green: { position: { row: 2, col: 2 }, facing: "north" },
-				cyan: { position: { row: 4, col: 4 }, facing: "north" },
+				red: { position: { row: 0, col: 0 } },
+				green: { position: { row: 2, col: 2 } },
+				cyan: { position: { row: 4, col: 4 } },
 			},
 		},
 	);
@@ -2639,7 +2639,7 @@ describe("action-failure entries — round-coordinator integration", () => {
 		}
 	});
 
-	it("wall-collision repro: daemon facing a wall issues go east on rounds 1, 2, 3 → 3 action-failure user turns; peers 0", async () => {
+	it("wall-collision repro: daemon blocked by a wall issues go east on rounds 1, 2, 3 → 3 action-failure user turns; peers 0", async () => {
 		const started = startGame(TEST_PERSONAS, OBSTACLE_PACK, {
 			budgetPerAi: 10,
 		});
@@ -2654,7 +2654,7 @@ describe("action-failure entries — round-coordinator integration", () => {
 			},
 		};
 
-		// red at (0,0) facing north; obstacle at (0,1) east; go east → blocked
+		// red at (0,0); obstacle at (0,1) east; go east → blocked
 		const goEastToolCall = {
 			id: "go_e",
 			name: "go",
@@ -2731,8 +2731,8 @@ describe("physical-action witness fan-out — Vista membership (ADR 0015)", () =
 	 * position-only:
 	 *   green at (2, 2) is the (2, 0) offset → 2² + 0² = 4 ≤ 4 → witness
 	 *   cyan at (1, 2) is the (2, 1) offset → 2² + 1² = 5 > 4 → no witness
-	 * cyan faces west, so the retired cone would have covered (2, 0): the
-	 * negative case pins eligibility to the Vista rather than to a facing.
+	 * The retired cone would have covered (2, 0): the negative case pins
+	 * eligibility to the Vista rather than to an orientation.
 	 */
 	const VISTA_PACK = makeTestPack(
 		[
@@ -2756,9 +2756,9 @@ describe("physical-action witness fan-out — Vista membership (ADR 0015)", () =
 		{
 			wallName: "wall",
 			aiStarts: {
-				red: { position: { row: 2, col: 0 }, facing: "north" },
-				green: { position: { row: 2, col: 2 }, facing: "west" },
-				cyan: { position: { row: 1, col: 2 }, facing: "west" },
+				red: { position: { row: 2, col: 0 } },
+				green: { position: { row: 2, col: 2 } },
+				cyan: { position: { row: 1, col: 2 } },
 			},
 		},
 	);
@@ -2922,14 +2922,14 @@ describe("complication countdown — coordinator integration", () => {
 		}
 
 		it("Test A: go reveals a stationary actor → tool-call entry carries diskDelta", async () => {
-			// Red at (2,0) facing north; green at (0,1) facing south.
+			// Red at (2,0); green at (0,1).
 			// Red goes north to (1,0). From (1,0)/north green sits at
 			// "directly in front, right"; from (2,0)/north it sat at
 			// "two steps ahead, front-right" — different line, so the diff fires.
 			const game = makeGameWithCustomStarts({
-				red: { position: { row: 2, col: 0 }, facing: "north" },
-				green: { position: { row: 0, col: 1 }, facing: "south" },
-				cyan: { position: { row: 4, col: 4 }, facing: "north" },
+				red: { position: { row: 2, col: 0 } },
+				green: { position: { row: 0, col: 1 } },
+				cyan: { position: { row: 4, col: 4 } },
 			});
 
 			const provider = new MockRoundLLMProvider([
@@ -3006,17 +3006,15 @@ describe("complication countdown — coordinator integration", () => {
 					? toolCallEntry.diskDelta
 					: undefined,
 			).toBeUndefined();
-			// Nothing changed: no turning, no movement.
-			expect(nextState.personaSpatial.red?.position).toEqual({
-				row: 0,
-				col: 0,
+			// Nothing changed: no movement, no spatial write of any kind.
+			expect(nextState.personaSpatial.red).toEqual({
+				position: { row: 0, col: 0 },
 			});
-			expect(nextState.personaSpatial.red?.facing).toBe("north");
 		});
 
 		it("Test C: a relative `go` argument supplied as a raw tool call is rejected (cardinal only)", async () => {
-			// Red at (0,0) facing north. "forward" is retired vocabulary: a raw
-			// tool call carrying it is rejected rather than resolved against facing.
+			// Red at (0,0). "forward" is retired vocabulary: a raw tool call
+			// carrying it is rejected rather than resolved against an orientation.
 			const game = makeGame();
 
 			const provider = new MockRoundLLMProvider([
@@ -3085,9 +3083,9 @@ describe("complication countdown — coordinator integration", () => {
 
 		it("Test E: no cross-Daemon contamination (go action doesn't enrich other logs)", async () => {
 			const game = makeGameWithCustomStarts({
-				red: { position: { row: 4, col: 0 }, facing: "north" },
-				green: { position: { row: 2, col: 0 }, facing: "north" },
-				cyan: { position: { row: 4, col: 4 }, facing: "north" },
+				red: { position: { row: 4, col: 0 } },
+				green: { position: { row: 2, col: 0 } },
+				cyan: { position: { row: 4, col: 4 } },
 			});
 
 			const provider = new MockRoundLLMProvider([
@@ -3150,9 +3148,9 @@ describe("diskDelta persistence via diskEntities", () => {
 			{
 				wallName: "wall",
 				aiStarts: {
-					red: { position: { row: 0, col: 0 }, facing: "south" },
-					green: { position: { row: 0, col: 1 }, facing: "north" },
-					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+					red: { position: { row: 0, col: 0 } },
+					green: { position: { row: 0, col: 1 } },
+					cyan: { position: { row: 0, col: 2 } },
 				},
 			},
 		);
@@ -3239,9 +3237,9 @@ describe("diskDelta persistence via diskEntities", () => {
 			{
 				wallName: "wall",
 				aiStarts: {
-					red: { position: { row: 0, col: 0 }, facing: "south" },
-					green: { position: { row: 0, col: 1 }, facing: "north" },
-					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+					red: { position: { row: 0, col: 0 } },
+					green: { position: { row: 0, col: 1 } },
+					cyan: { position: { row: 0, col: 2 } },
 				},
 			},
 		);
@@ -3320,9 +3318,9 @@ describe("diskDelta persistence via diskEntities", () => {
 			{
 				wallName: "wall",
 				aiStarts: {
-					red: { position: { row: 0, col: 0 }, facing: "south" },
-					green: { position: { row: 0, col: 1 }, facing: "north" },
-					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+					red: { position: { row: 0, col: 0 } },
+					green: { position: { row: 0, col: 1 } },
+					cyan: { position: { row: 0, col: 2 } },
 				},
 			},
 		);

@@ -5,10 +5,10 @@
  * for the 5×5 gridded world model.
  *
  * Movement is cardinal-only (ADR 0015): `go` names `north`, `south`, `east`,
- * or `west`, and a Daemon has no facing. There is no relative-direction
- * movement vocabulary. `cardinalToRelative` survives for the peer-position
- * and witness prose that still renders relative directions until a later
- * chunk of the cutover retires it.
+ * or `west`, and a Daemon has no orientation. There is no relative-direction
+ * vocabulary anywhere in this module — nothing converts a cardinal into
+ * left/right/forward/back, because nothing has a point of view to convert
+ * from. Position prose names cardinals and distances.
  */
 
 export const CARDINAL_DIRECTIONS = ["north", "south", "east", "west"] as const;
@@ -17,8 +17,7 @@ export type CardinalDirection = (typeof CARDINAL_DIRECTIONS)[number];
 
 /**
  * The cardinal directions in compass rotation order: north, east, south,
- * west (clockwise). The single source for what "clockwise from here" means —
- * relative-direction conversion, and the ordering of multi-axis spatial
+ * west (clockwise). The single source for the ordering of multi-axis spatial
  * descriptions.
  */
 export const COMPASS_ORDER: readonly CardinalDirection[] = [
@@ -27,48 +26,6 @@ export const COMPASS_ORDER: readonly CardinalDirection[] = [
 	"south",
 	"west",
 ];
-
-/**
- * The relative directions still used by the peer-position and witness prose
- * descriptions. Not a movement vocabulary: no tool accepts them.
- */
-export const RELATIVE_DIRECTIONS = [
-	"forward",
-	"back",
-	"left",
-	"right",
-] as const;
-
-export type RelativeDirection = (typeof RELATIVE_DIRECTIONS)[number];
-
-/**
- * Convert an absolute cardinal direction to a relative direction from the
- * daemon's current facing.
- *
- * Examples (facing="north"):
- *   "north" → "forward", "south" → "back", "west" → "left", "east" → "right"
- */
-export function cardinalToRelative(
-	facing: CardinalDirection,
-	absolute: CardinalDirection,
-): RelativeDirection {
-	const facingIdx = COMPASS_ORDER.indexOf(facing);
-	const absIdx = COMPASS_ORDER.indexOf(absolute);
-	const delta = (absIdx - facingIdx + 4) % 4;
-	switch (delta) {
-		case 0:
-			return "forward";
-		case 1:
-			return "right";
-		case 2:
-			return "back";
-		case 3:
-			return "left";
-		default:
-			// unreachable; TypeScript exhaustiveness
-			return "forward";
-	}
-}
 
 export const GRID_ROWS = 5;
 export const GRID_COLS = 5;
@@ -129,21 +86,4 @@ export function positionsEqual(a: GridPosition, b: GridPosition): boolean {
 /** True when `holder` is a GridPosition (not an AiId string). */
 export function isGridPosition(holder: unknown): holder is GridPosition {
 	return typeof holder === "object" && holder !== null;
-}
-
-/**
- * The 3 cells forming the immediate front arc: front-left diagonal, directly
- * in front, and front-right diagonal. Out-of-bounds cells are omitted.
- */
-export function frontArc(
-	pos: GridPosition,
-	facing: CardinalDirection,
-): GridPosition[] {
-	const fwd = directionDelta(facing);
-	const lft = { drow: -fwd.dcol, dcol: fwd.drow };
-	return [
-		{ row: pos.row + fwd.drow + lft.drow, col: pos.col + fwd.dcol + lft.dcol },
-		{ row: pos.row + fwd.drow, col: pos.col + fwd.dcol },
-		{ row: pos.row + fwd.drow - lft.drow, col: pos.col + fwd.dcol - lft.dcol },
-	].filter(inBounds);
 }

@@ -28,8 +28,6 @@ function makeTurn(
 		text: "",
 		toolCalls: [],
 		cardinalLeaks: [],
-		facingBefore: "north",
-		facingAfter: "north",
 		statedDirection: null,
 		toolCallDirection: null,
 		...overrides,
@@ -112,7 +110,7 @@ describe("detectCardinalLeaks", () => {
 		// in JS regex). Earlier case-insensitive \bs\b matched it as a fake leak.
 		// Case-sensitive single-letter matching avoids that.
 		const result = detectCardinalLeaks(
-			"I stand at the water's edge, facing the sealed door.",
+			"I stand at the water's edge, before the sealed door.",
 		);
 		expect(result).toEqual([]);
 	});

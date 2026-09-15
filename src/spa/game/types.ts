@@ -227,9 +227,12 @@ export interface ComplicationResult {
 	fired: ComplicationVariant;
 }
 
+/**
+ * A Daemon's spatial state: a position, and nothing else. Daemons have no
+ * orientation and no turning (ADR 0015), so no orientation is stored here.
+ */
 export interface PersonaSpatialState {
 	position: GridPosition;
-	facing: CardinalDirection;
 }
 
 export type RoundActionRecord = {
@@ -409,7 +412,7 @@ export interface GameState {
 	conversationLogs: Record<AiId, ConversationEntry[]>;
 	/** Budget-exhaustion lockout: prevents the AI from acting at all. */
 	lockedOut: Set<AiId>;
-	/** Per-AI spatial state (position + facing). */
+	/** Per-AI spatial state (position only). */
 	personaSpatial: Record<AiId, PersonaSpatialState>;
 	/** Complication countdown + once-per-game flags (e.g. settingShiftFired). */
 	complicationSchedule: ComplicationSchedule;
@@ -427,8 +430,8 @@ export interface GameState {
 
 /**
  * The Daemon tool set (ADR 0015): the five tools a Daemon can call. There is
- * no `face` — Daemons have no facing and no turning, and `go` takes a named
- * cardinal direction.
+ * no `face` — Daemons have positions but no orientation and no turning, and
+ * `go` takes a named cardinal direction.
  */
 export type ToolName = "pick_up" | "put_down" | "use" | "go" | "message";
 

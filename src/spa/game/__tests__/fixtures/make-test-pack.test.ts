@@ -156,7 +156,7 @@ describe("makeTestPack", () => {
 			weather: "rainy",
 			wallName: "tunnel wall",
 			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "north" },
+				red: { position: { row: 0, col: 0 } },
 			},
 		});
 		// Overrides applied.
@@ -165,7 +165,6 @@ describe("makeTestPack", () => {
 		expect(pack.wallName).toBe("tunnel wall");
 		expect(pack.aiStarts.red).toEqual({
 			position: { row: 0, col: 0 },
-			facing: "north",
 		});
 		// Derived entities untouched.
 		expect(pack.entities).toEqual([io]);

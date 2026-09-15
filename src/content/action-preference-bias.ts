@@ -9,8 +9,9 @@
  * when they do act.
  *
  * Tool surface: `go`, `pick_up`, `put_down`, `use` — the Daemon action set
- * after the ADR 0015 cutover retired `face` (a Daemon has no facing and no
- * turning, so there is nothing to lean toward or away from). Retiring `face`
+ * after the ADR 0015 cutover retired `face` (a Daemon has a position but no
+ * orientation and no turning, so there is nothing to lean toward or away
+ * from). Retiring `face`
  * drops its perception bias from this table rather than handing it to another
  * tool or to `message`: perception traits live in the temperament prose, and
  * `message` is not an action tool here.

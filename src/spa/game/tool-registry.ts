@@ -4,8 +4,8 @@
  * Single source of truth for the OpenAI-spec `tools` array.
  * Declares one `function` per dispatcher tool: `pick_up`, `put_down`, `use`,
  * `go`, `message` — the five-tool Daemon tool set (ADR 0015). There is no
- * `face` tool and no facing-relative movement vocabulary: a Daemon has a
- * position but no facing, and `go` takes a named cardinal direction.
+ * `face` tool and no relative-direction movement vocabulary: a Daemon has a
+ * position and no orientation, and `go` takes a named cardinal direction.
  * Names and argument keys mirror `validateToolCall` in `dispatcher.ts` 1:1.
  */
 

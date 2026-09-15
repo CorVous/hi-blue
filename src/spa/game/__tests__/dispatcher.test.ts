@@ -27,6 +27,10 @@ import {
 	isUseItemObjectiveSatisfied,
 } from "../win-condition";
 import { makeTestPack } from "./fixtures/make-test-pack";
+import {
+	retiredOrientationOf,
+	withRetiredOrientation,
+} from "./fixtures/retired-orientation";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -71,10 +75,10 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 };
 
 /**
- * With rng = () => 0 (Fisher-Yates + facing):
- *   red   → (0,0) facing north
- *   green → (0,1) facing north  (adjacent to red)
- *   cyan  → (0,2) facing north
+ * With rng = () => 0 (Fisher-Yates):
+ *   red   → (0,0)
+ *   green → (0,1)  (adjacent to red)
+ *   cyan  → (0,2)
  *
  * Entities:
  *   flower → holder: { row:0, col:0 }  (same cell as red)
@@ -91,26 +95,13 @@ function rawToolCall(name: string, args: Record<string, string>): ToolCall {
 	return { name, args } as unknown as ToolCall;
 }
 
-/**
- * Test-only: set a Daemon's stored facing without a tool call. Daemons still
- * keep a `facing` field (a later chunk removes it), but nothing in perception
- * reads it — the Vista is position-only and no tool turns a Daemon. This
- * stands in for the retired `face` tool in older fixtures.
- */
+/** Test-only: attach the retired per-Daemon orientation without a tool call. */
 function withFacing(
 	game: GameState,
 	aiId: AiId,
-	facing: CardinalDirection,
+	orientation: CardinalDirection,
 ): GameState {
-	const spatial = game.personaSpatial[aiId];
-	if (!spatial) throw new Error(`No spatial state for ${aiId}`);
-	return {
-		...game,
-		personaSpatial: {
-			...game.personaSpatial,
-			[aiId]: { ...spatial, facing },
-		},
-	};
+	return withRetiredOrientation(game, aiId, orientation);
 }
 
 /** Helper to make a WorldEntity */
@@ -132,15 +123,15 @@ function makeEntity(
 }
 
 const RGC_AI_STARTS: ContentPack["aiStarts"] = {
-	red: { position: { row: 0, col: 0 }, facing: "north" },
-	green: { position: { row: 0, col: 1 }, facing: "north" },
-	cyan: { position: { row: 0, col: 2 }, facing: "north" },
+	red: { position: { row: 0, col: 0 } },
+	green: { position: { row: 0, col: 1 } },
+	cyan: { position: { row: 0, col: 2 } },
 };
 
 const RGC_AI_STARTS_RED_SOUTH: ContentPack["aiStarts"] = {
-	red: { position: { row: 0, col: 0 }, facing: "south" },
-	green: { position: { row: 0, col: 1 }, facing: "north" },
-	cyan: { position: { row: 0, col: 2 }, facing: "north" },
+	red: { position: { row: 0, col: 0 } },
+	green: { position: { row: 0, col: 1 } },
+	cyan: { position: { row: 0, col: 2 } },
 };
 
 /** Build a ContentPack for phase 1 with specific entities and AI starts. */
@@ -203,9 +194,9 @@ describe("validateToolCall", () => {
 		expect(result.reason).toBeDefined();
 	});
 
-	it("allows picking up an item one step away, whatever the facing", () => {
+	it("allows picking up an item one step away, whatever the approach", () => {
 		const game = makeGame();
-		// flower is at (0,0); green is at (0,1) facing north — west of green,
+		// flower is at (0,0); green is at (0,1) — west of green,
 		// so the retired front arc excluded it and the interaction range includes it.
 		const call: ToolCall = { name: "pick_up", args: { item: "flower" } };
 		expect(validateToolCall(game, "green", call).valid).toBe(true);
@@ -326,9 +317,9 @@ describe("validateToolCall", () => {
 				setting: "test",
 				wallName: "wall",
 				aiStarts: {
-					red: { position: { row: 0, col: 0 }, facing: "south" },
-					green: { position: { row: 0, col: 1 }, facing: "north" },
-					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+					red: { position: { row: 0, col: 0 } },
+					green: { position: { row: 0, col: 1 } },
+					cyan: { position: { row: 0, col: 2 } },
 				},
 			},
 		);
@@ -350,9 +341,9 @@ describe("validateToolCall", () => {
 				setting: "test",
 				wallName: "wall",
 				aiStarts: {
-					red: { position: { row: 0, col: 0 }, facing: "south" },
-					green: { position: { row: 0, col: 1 }, facing: "north" },
-					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+					red: { position: { row: 0, col: 0 } },
+					green: { position: { row: 0, col: 1 } },
+					cyan: { position: { row: 0, col: 2 } },
 				},
 			},
 		);
@@ -381,9 +372,9 @@ describe("validateToolCall", () => {
 				setting: "test",
 				wallName: "wall",
 				aiStarts: {
-					red: { position: { row: 0, col: 0 }, facing: "south" },
-					green: { position: { row: 0, col: 1 }, facing: "north" },
-					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+					red: { position: { row: 0, col: 0 } },
+					green: { position: { row: 0, col: 1 } },
+					cyan: { position: { row: 0, col: 2 } },
 				},
 			},
 		);
@@ -397,7 +388,7 @@ describe("validateToolCall", () => {
 
 describe("executeToolCall — use placement within interaction range", () => {
 	it("use: places the item on the paired space's cell when the space is in the actor's own cell or adjacent", () => {
-		// red at (0,0) facing south; pedestal at (1,0) = one step away
+		// red at (0,0); pedestal at (1,0) = one step away
 		const gem: WorldEntity = {
 			id: "gem",
 			kind: "objective_object",
@@ -432,7 +423,7 @@ describe("executeToolCall — use placement within interaction range", () => {
 	});
 
 	it("use: places the item when the paired space is diagonal and behind the actor", () => {
-		// red at (0,0) facing south; pedestal at (1,1) = diagonal south-east
+		// red at (0,0); pedestal at (1,1) = diagonal south-east
 		// (retired front arc: directly in front, left, right only)
 		const gem: WorldEntity = {
 			id: "gem",
@@ -468,7 +459,7 @@ describe("executeToolCall — use placement within interaction range", () => {
 	});
 
 	it("use: leaves the item held when the paired space is outside interaction range", () => {
-		// red at (2,2) facing north; pedestal at offset (2,0) = (2,4), two
+		// red at (2,2); pedestal at offset (2,0) = (2,4), two
 		// cardinal steps east — visible but out of reach.
 		const gem: WorldEntity = {
 			id: "gem",
@@ -491,9 +482,9 @@ describe("executeToolCall — use placement within interaction range", () => {
 			setting: "test",
 			wallName: "wall",
 			aiStarts: {
-				red: { position: { row: 2, col: 2 }, facing: "north" },
-				green: { position: { row: 0, col: 0 }, facing: "north" },
-				cyan: { position: { row: 4, col: 4 }, facing: "north" },
+				red: { position: { row: 2, col: 2 } },
+				green: { position: { row: 0, col: 0 } },
+				cyan: { position: { row: 4, col: 4 } },
 			},
 		});
 		const game = startGame(TEST_PERSONAS, pack, {
@@ -535,18 +526,17 @@ describe("executeToolCall", () => {
 		expect(after).toBe(before);
 	});
 
-	it("updates position and facing on go", () => {
+	it("updates position and nothing else on go", () => {
 		const game = makeGame();
-		// red at (0,0); go south → (1,0), facing tracked as the direction walked
+		// red at (0,0); go south → (1,0). Nothing else is written.
 		const call: ToolCall = { name: "go", args: { direction: "south" } };
 		const updated = executeToolCall(game, "red", call);
 		const spatial = updated.personaSpatial.red;
 		expect(spatial?.position).toEqual({ row: 1, col: 0 });
-		expect(spatial?.facing).toBe("south");
 	});
 
 	// ── Cardinal direction dispatch (ADR 0015: cardinal-only movement) ────────
-	// red starts at (0,0) facing north (via FIXED_RNG).
+	// red starts at (0,0) (via FIXED_RNG).
 
 	it("go south moves to (1,0)", () => {
 		const game = makeGame();
@@ -554,7 +544,6 @@ describe("executeToolCall", () => {
 		const updated = executeToolCall(game, "red", call);
 		const spatial = updated.personaSpatial.red;
 		expect(spatial?.position).toEqual({ row: 1, col: 0 });
-		expect(spatial?.facing).toBe("south");
 	});
 
 	it("go east moves to (0,1)", () => {
@@ -563,7 +552,6 @@ describe("executeToolCall", () => {
 		const updated = executeToolCall(game, "red", call);
 		const spatial = updated.personaSpatial.red;
 		expect(spatial?.position).toEqual({ row: 0, col: 1 });
-		expect(spatial?.facing).toBe("east");
 	});
 
 	it("go west from (0,0) is rejected (out of bounds at col -1)", () => {
@@ -602,7 +590,6 @@ describe("executeToolCall", () => {
 		expect(result.rejected).toBe(false);
 		const spatial = result.game.personaSpatial.red;
 		expect(spatial?.position).toEqual({ row: 1, col: 0 });
-		expect(spatial?.facing).toBe("south");
 	});
 });
 
@@ -711,7 +698,6 @@ describe("dispatchAiTurn", () => {
 		expect(result.records[0]?.kind).toBe("tool_success");
 		const spatial = result.game.personaSpatial.red;
 		expect(spatial?.position).toEqual({ row: 1, col: 0 });
-		expect(spatial?.facing).toBe("south");
 	});
 
 	it("use returns tool_success with entity's useOutcome as description when not on paired space", () => {
@@ -886,7 +872,7 @@ describe("dispatchAiTurn", () => {
 	it("AC 12: actor's own pick_up does NOT append witnessed-event to actor's log; in-Vista witness receives one", () => {
 		/**
 		 * Fixture (mirrors conversation-log-integration.test.ts):
-		 *   - red at (2,0) — picks up flower (facing no longer gates witnesses)
+		 *   - red at (2,0) — picks up flower (position alone gates witnesses)
 		 *   - green at (0,0) — Vista offset of (2,0) is (0,2): 0² + 2² = 4 ≤ 4 ← in Vista
 		 *   - cyan at (0,2) — Vista offset of (2,0) is (2,2): 2² + 2² = 8 > 4 — NOT in Vista
 		 */
@@ -898,9 +884,9 @@ describe("dispatchAiTurn", () => {
 			setting: "Vista test",
 			wallName: "wall",
 			aiStarts: {
-				red: { position: { row: 2, col: 0 }, facing: "south" },
-				green: { position: { row: 0, col: 0 }, facing: "south" },
-				cyan: { position: { row: 0, col: 2 }, facing: "south" },
+				red: { position: { row: 2, col: 0 } },
+				green: { position: { row: 0, col: 0 } },
+				cyan: { position: { row: 0, col: 2 } },
 			},
 		});
 		const vistaGame = startGame(TEST_PERSONAS, packWithVista, {
@@ -1108,11 +1094,10 @@ describe("executeToolCall — UseItemObjective", () => {
 
 // ── UseSpaceObjective — dispatcher tests ──────────────────────────────────────
 
-/** Build a game with red at (2,2) facing south, and an objective_space at (3,2)
- * (directly in front) with a pending UseSpaceObjective. */
+/** Build a game with red at (2,2), and an objective_space at (3,2)
+ * (one step south) with a pending UseSpaceObjective. */
 function makeGameWithSpaceObjective(
 	actorPos: { row: number; col: number } = { row: 2, col: 2 },
-	actorFacing: "north" | "south" | "east" | "west" = "south",
 	spacePos: { row: number; col: number } = { row: 3, col: 2 },
 	spaceOpts: Partial<WorldEntity> = {},
 ): GameState {
@@ -1148,9 +1133,9 @@ function makeGameWithSpaceObjective(
 		setting: "test",
 		wallName: "wall",
 		aiStarts: {
-			red: { position: actorPos, facing: actorFacing },
-			green: { position: { row: 0, col: 0 }, facing: "north" },
-			cyan: { position: { row: 4, col: 4 }, facing: "north" },
+			red: { position: actorPos },
+			green: { position: { row: 0, col: 0 } },
+			cyan: { position: { row: 4, col: 4 } },
 		},
 	});
 	const started = startGame(TEST_PERSONAS, pack, {
@@ -1172,10 +1157,13 @@ describe("executeToolCall — use on objective_space", () => {
 
 	it("flips pending UseSpaceObjective to satisfied when space is in actor's own cell", () => {
 		// red at (2,2), space at (2,2) (own cell)
-		const game = makeGameWithSpaceObjective({ row: 2, col: 2 }, "south", {
-			row: 2,
-			col: 2,
-		});
+		const game = makeGameWithSpaceObjective(
+			{ row: 2, col: 2 },
+			{
+				row: 2,
+				col: 2,
+			},
+		);
 		const call: ToolCall = { name: "use", args: { item: "shrine" } };
 		const updated = executeToolCall(game, "red", call);
 		const objective = updated.objectives.find((o) => o.id === "obj-0");
@@ -1202,25 +1190,21 @@ describe("executeToolCall — use on objective_space", () => {
 describe("validateToolCall — use on objective_space", () => {
 	it("accepts use on a space one step away (own cell plus eight neighbours)", () => {
 		const game = makeGameWithSpaceObjective();
-		// red at (2,2) facing south; shrine at (3,2) = directly south
+		// red at (2,2); shrine at (3,2) = directly south
 		const call: ToolCall = { name: "use", args: { item: "shrine" } };
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(true);
 	});
 
 	it("accepts use on a diagonal space and on a space behind the actor", () => {
-		// red at (2,2) facing south; (1,1) and (1,2) are diagonal/behind
+		// red at (2,2); (1,1) and (1,2) are diagonal/behind
 		for (const spacePos of [
 			{ row: 1, col: 1 },
 			{ row: 1, col: 2 },
 			{ row: 1, col: 3 },
 			{ row: 3, col: 3 },
 		]) {
-			const game = makeGameWithSpaceObjective(
-				{ row: 2, col: 2 },
-				"south",
-				spacePos,
-			);
+			const game = makeGameWithSpaceObjective({ row: 2, col: 2 }, spacePos);
 			const result = validateToolCall(game, "red", {
 				name: "use",
 				args: { item: "shrine" },
@@ -1230,21 +1214,27 @@ describe("validateToolCall — use on objective_space", () => {
 	});
 
 	it("accepts use on a space in the actor's own cell", () => {
-		const game = makeGameWithSpaceObjective({ row: 2, col: 2 }, "south", {
-			row: 2,
-			col: 2,
-		});
+		const game = makeGameWithSpaceObjective(
+			{ row: 2, col: 2 },
+			{
+				row: 2,
+				col: 2,
+			},
+		);
 		const call: ToolCall = { name: "use", args: { item: "shrine" } };
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(true);
 	});
 
 	it("rejects use on a space at offset (2,0) — in the Vista, outside interaction range", () => {
-		// red at (2,2) facing south; shrine at (4,2) = 2 cells south
-		const game = makeGameWithSpaceObjective({ row: 2, col: 2 }, "south", {
-			row: 4,
-			col: 2,
-		});
+		// red at (2,2); shrine at (4,2) = 2 cells south
+		const game = makeGameWithSpaceObjective(
+			{ row: 2, col: 2 },
+			{
+				row: 4,
+				col: 2,
+			},
+		);
 		const call: ToolCall = { name: "use", args: { item: "shrine" } };
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(false);
@@ -1252,11 +1242,14 @@ describe("validateToolCall — use on objective_space", () => {
 	});
 
 	it("rejects use on a space at offset (2,1) — outside the Vista too", () => {
-		// red at (2,2) facing south; shrine at (1,4) = two steps east, one north
-		const game = makeGameWithSpaceObjective({ row: 2, col: 2 }, "south", {
-			row: 1,
-			col: 4,
-		});
+		// red at (2,2); shrine at (1,4) = two steps east, one north
+		const game = makeGameWithSpaceObjective(
+			{ row: 2, col: 2 },
+			{
+				row: 1,
+				col: 4,
+			},
+		);
 		const call: ToolCall = { name: "use", args: { item: "shrine" } };
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(false);
@@ -1312,11 +1305,11 @@ describe("dispatchAiTurn — use on objective_space witnesses satisfactionFlavor
 			setting: "test",
 			wallName: "wall",
 			aiStarts: {
-				// red at (2,2) facing south
-				red: { position: { row: 2, col: 2 }, facing: "south" },
+				// red at (2,2)
+				red: { position: { row: 2, col: 2 } },
 				// green at (2,0): red's cell (2,2) is two steps east — inside its Vista
-				green: { position: { row: 2, col: 0 }, facing: "east" },
-				cyan: { position: { row: 4, col: 4 }, facing: "north" },
+				green: { position: { row: 2, col: 0 } },
+				cyan: { position: { row: 4, col: 4 } },
 			},
 		});
 		const started = startGame(TEST_PERSONAS, pack, {
@@ -1497,7 +1490,6 @@ describe("dispatchAiTurn — use on objective_space surfaces activationFlavor to
 	it("uses activationFlavor as the tool_success description for the actor on the satisfying call", () => {
 		const game = makeGameWithSpaceObjective(
 			{ row: 2, col: 2 },
-			"south",
 			{ row: 3, col: 2 },
 			{
 				activationFlavor:
@@ -1519,10 +1511,13 @@ describe("dispatchAiTurn — use on objective_space surfaces activationFlavor to
 	it("falls back to useOutcome when activationFlavor is absent (backward compat with pre-#335 saves)", () => {
 		// Default fixture has useOutcome but no activationFlavor — exercises the
 		// fallback branch.
-		const game = makeGameWithSpaceObjective({ row: 2, col: 2 }, "south", {
-			row: 3,
-			col: 2,
-		});
+		const game = makeGameWithSpaceObjective(
+			{ row: 2, col: 2 },
+			{
+				row: 3,
+				col: 2,
+			},
+		);
 		const action: AiTurnAction = {
 			aiId: "red",
 			toolCall: { name: "use", args: { item: "shrine" } },
@@ -1567,9 +1562,9 @@ describe("dispatchAiTurn — use on objective_space surfaces activationFlavor to
 			setting: "test",
 			wallName: "wall",
 			aiStarts: {
-				red: { position: { row: 2, col: 2 }, facing: "south" },
-				green: { position: { row: 2, col: 0 }, facing: "east" },
-				cyan: { position: { row: 4, col: 4 }, facing: "north" },
+				red: { position: { row: 2, col: 2 } },
+				green: { position: { row: 2, col: 0 } },
+				cyan: { position: { row: 4, col: 4 } },
 			},
 		});
 		const started = startGame(TEST_PERSONAS, pack, {
@@ -1606,8 +1601,8 @@ describe("dispatchAiTurn — use on objective_space surfaces activationFlavor to
 // ── disk-delta on dispatcher result (issue #376) ──────────────────────────────
 describe("dispatchAiTurn — disk-delta computation (issue #376)", () => {
 	it("go action that reveals a stationary actor sets actorDiskDelta on DispatchResult", () => {
-		// Setup: red at (2,0) facing north, green at (0,1) facing south.
-		// Red goes north to (1,0) — now green at (0,1) is visible (distance 1, front-right).
+		// Setup: red at (2,0), green at (0,1).
+		// Red goes north to (1,0) — now green at (0,1) is a visible neighbour.
 		const pack = makePackWithEntities(
 			{
 				flower: { row: 3, col: 3 },
@@ -1619,9 +1614,9 @@ describe("dispatchAiTurn — disk-delta computation (issue #376)", () => {
 		const packWithCustomStarts: ContentPack = {
 			...pack,
 			aiStarts: {
-				red: { position: { row: 2, col: 0 }, facing: "north" },
-				green: { position: { row: 0, col: 1 }, facing: "south" },
-				cyan: { position: { row: 5, col: 0 }, facing: "north" },
+				red: { position: { row: 2, col: 0 } },
+				green: { position: { row: 0, col: 1 } },
+				cyan: { position: { row: 5, col: 0 } },
 			},
 		};
 
@@ -1653,7 +1648,8 @@ describe("dispatchAiTurn — disk-delta computation (issue #376)", () => {
 		expect(result.records[0]?.kind).toBe("tool_failure");
 		expect(result.records[0]?.description).toMatch(/unknown tool/i);
 		expect(result.actorDiskDelta).toBeUndefined();
-		expect(result.game.personaSpatial.red?.facing).toBe("north");
+		// A rejected call changes no spatial state.
+		expect(result.game.personaSpatial).toEqual(game.personaSpatial);
 		// The rejection is recorded for the actor.
 		const failures = (result.game.conversationLogs.red ?? []).filter(
 			(e) => e.kind === "action-failure",
@@ -1686,7 +1682,7 @@ describe("interaction range — availability, validation, and effects agree", ()
 		return { row: 2 - o.dy, col: 2 + o.dx };
 	}
 
-	/** Red at (2,2) facing north; the given entities and objectives on top. */
+	/** Red at (2,2); the given entities and objectives on top. */
 	function makeRangeGame(
 		entities: WorldEntity[],
 		objectives: Objective[] = [],
@@ -1695,9 +1691,9 @@ describe("interaction range — availability, validation, and effects agree", ()
 			setting: "test",
 			wallName: "wall",
 			aiStarts: {
-				red: { position: { row: 2, col: 2 }, facing: "north" },
-				green: { position: { row: 0, col: 0 }, facing: "north" },
-				cyan: { position: { row: 4, col: 4 }, facing: "north" },
+				red: { position: { row: 2, col: 2 } },
+				green: { position: { row: 0, col: 0 } },
+				cyan: { position: { row: 4, col: 4 } },
 			},
 		});
 		const started = startGame(TEST_PERSONAS, pack, {
@@ -1777,7 +1773,7 @@ describe("interaction range — availability, validation, and effects agree", ()
 	});
 
 	it("the pickup-first advice does not grant ground-item use", () => {
-		// Offset (-1,-1) is a diagonal behind red's north facing: in range,
+		// Offset (-1,-1) is a diagonal neighbour of red: in range,
 		// outside the retired front arc.
 		const game = makeRangeGame([makeGroundItem({ dx: -1, dy: -1 })]);
 		const result = validateToolCall(game, "red", {
@@ -1909,7 +1905,7 @@ describe("interaction range — availability, validation, and effects agree", ()
 		};
 		const game = makeRangeGame([space], [convergence]);
 
-		/** Move green to a cell without disturbing its facing. */
+		/** Move green to a cell. */
 		function withGreenAt(
 			state: GameState,
 			pos: { row: number; col: number },
@@ -1918,10 +1914,7 @@ describe("interaction range — availability, validation, and effects agree", ()
 				...state,
 				personaSpatial: {
 					...state.personaSpatial,
-					green: {
-						facing: state.personaSpatial.green?.facing ?? "north",
-						position: pos,
-					},
+					green: { position: pos },
 				},
 			};
 		}
@@ -1945,5 +1938,60 @@ describe("interaction range — availability, validation, and effects agree", ()
 				shared.personaSpatial,
 			).tier,
 		).toBe(2);
+	});
+});
+
+// ── The retired orientation field is inert (ADR 0015) ─────────────────────────
+
+describe("dispatchAiTurn — a retired orientation field changes nothing", () => {
+	/**
+	 * Dispatch the same `go` from a state whose named Daemon also carries the
+	 * retired orientation field. Two such states differ only in that field, so
+	 * their spatial state, records, and witness decisions must match exactly.
+	 */
+	function goSouthFrom(aiId: AiId, orientation: string) {
+		const game = withRetiredOrientation(makeGame(), aiId, orientation);
+		// The fixture really does carry the retired field.
+		expect(retiredOrientationOf(game, aiId)).toBe(orientation);
+		return dispatchAiTurn(game, {
+			aiId: "red",
+			toolCall: { name: "go", args: { direction: "south" } },
+		});
+	}
+
+	it("the actor's retired orientation changes neither state nor records", () => {
+		const baseline = goSouthFrom("red", "north");
+		expect(baseline.rejected).toBe(false);
+		// red at (0,0) → south to (1,0); the move writes the position alone.
+		expect(baseline.game.personaSpatial.red).toEqual({
+			position: { row: 1, col: 0 },
+		});
+		expect(retiredOrientationOf(baseline.game, "red")).toBeUndefined();
+
+		for (const orientation of ["south", "east", "west"]) {
+			const other = goSouthFrom("red", orientation);
+			expect(other.game.personaSpatial).toEqual(baseline.game.personaSpatial);
+			expect(other.records).toEqual(baseline.records);
+			expect(other.actorDiskDelta).toBe(baseline.actorDiskDelta);
+		}
+	});
+
+	it("a witness's retired orientation changes no witness decision", () => {
+		// green at (0,1) is inside the Vista of red's post-move cell (1,0), so
+		// green witnesses the step.
+		const baseline = goSouthFrom("green", "north");
+		const baselineGreenLog = baseline.game.conversationLogs.green ?? [];
+		const witnessed = baselineGreenLog.filter(
+			(e) => e.kind === "witnessed-event",
+		);
+		expect(witnessed.length).toBeGreaterThan(0);
+
+		for (const orientation of ["south", "east", "west"]) {
+			const other = goSouthFrom("green", orientation);
+			expect(other.game.conversationLogs.green).toEqual(baselineGreenLog);
+			expect(other.game.conversationLogs.red).toEqual(
+				baseline.game.conversationLogs.red,
+			);
+		}
 	});
 });

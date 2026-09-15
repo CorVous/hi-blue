@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseToolCallArguments, TOOL_DEFINITIONS } from "../tool-registry";
 import type { ToolName } from "../types";
+import { RETIRED_ORIENTATION_KEY } from "./fixtures/retired-orientation";
 
 const DAEMON_TOOLS: ToolName[] = [
 	"pick_up",
@@ -65,19 +66,19 @@ describe("TOOL_DEFINITIONS", () => {
 		expect(dirEnum).not.toContain("right");
 	});
 
-	it("go's description names cardinal directions, not facing or relative movement", () => {
+	it("go's description names cardinal directions, not relative movement", () => {
 		const go = TOOL_DEFINITIONS.find((t) => t.function.name === "go");
 		const description = go?.function.description ?? "";
 		expect(description).toMatch(/north/);
 		expect(description).toMatch(/south/);
 		expect(description).toMatch(/east/);
 		expect(description).toMatch(/west/);
-		expect(description).not.toMatch(/facing/i);
+		expect(description).not.toMatch(new RegExp(RETIRED_ORIENTATION_KEY, "i"));
 		expect(description).not.toMatch(/relative/i);
 		expect(description).not.toMatch(/forward|backward/i);
 	});
 
-	it("describes reach without facing-relative vocabulary (no cone, no front arc)", () => {
+	it("describes reach without relative vocabulary (no cone, no front arc)", () => {
 		for (const name of ["pick_up", "use"]) {
 			const def = TOOL_DEFINITIONS.find((t) => t.function.name === name);
 			const description = def?.function.description ?? "";
@@ -85,7 +86,7 @@ describe("TOOL_DEFINITIONS", () => {
 			expect(description).not.toMatch(/cone/i);
 			expect(description).not.toMatch(/front arc/i);
 			expect(description).not.toMatch(/in front/i);
-			expect(description).not.toMatch(/facing/i);
+			expect(description).not.toMatch(new RegExp(RETIRED_ORIENTATION_KEY, "i"));
 			expect(description).not.toMatch(/behind you|to your left|to your right/i);
 		}
 	});

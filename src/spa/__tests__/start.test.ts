@@ -349,7 +349,7 @@ describe("renderStart — CapHitError handling", () => {
 
 		// Override the bootstrap module so the split generation rejects with
 		// CapHitError on both promises. Pending-bootstrap subscribes to each
-		// promise; surfacing CapHitError on either is enough to trigger the
+		// promise; raising CapHitError on either is enough to trigger the
 		// start route's #cap-hit fallback.
 		vi.doMock("../game/bootstrap.js", async (importOriginal) => {
 			const actual =
@@ -547,7 +547,7 @@ describe("renderStart — persistence warning banners", () => {
 
 	it("silently skips a reason that has no copy", async () => {
 		// Dispatcher reasons like "empty" and "no-active-pointer" reach
-		// renderStart but are not user-facing problems — no banner shown.
+		// renderStart but are not player-visible problems — no banner shown.
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 		vi.resetModules();
 		const { renderStart } = await import("../views/start.js");

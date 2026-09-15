@@ -14,7 +14,7 @@
  *
  * Placement constraints:
  * - Obstacles placed first, m distinct cells.
- * - AI starts: distinct non-obstacle cells, uniform-random cardinal facing.
+ * - AI starts: distinct non-obstacle cells, position only.
  * - Objective spaces: distinct, non-obstacle, off AI start cells.
  * - Objective objects: distinct, non-obstacle, NOT on their matched space's cell.
  * - Interesting objects: distinct from obstacle and AI start cells (may stack with other items).
@@ -43,7 +43,6 @@ import {
 } from "../spa/game/pack-selectors.js";
 import type {
 	AiId,
-	CardinalDirection,
 	ContentPack,
 	GridPosition,
 	ObjectiveType,
@@ -82,12 +81,6 @@ import { WEATHER_POOL } from "./weather-pool.js";
 const GRID_ROWS = 5;
 const GRID_COLS = 5;
 const TOTAL_CELLS = GRID_ROWS * GRID_COLS;
-const CARDINAL_DIRECTIONS: CardinalDirection[] = [
-	"north",
-	"south",
-	"east",
-	"west",
-];
 const MAX_ATTEMPTS = 200;
 
 /** Roll an integer in [lo, hi] inclusive using the provided rng. */
@@ -208,16 +201,13 @@ function tryPlacePhase(
 	const aiStartKeys = drawDistinctCells(rng, nonObstaclePool, aiIds.length);
 	const aiStartSet = new Set(aiStartKeys);
 
-	// Draw AI facings
+	// Draw AI starts: position only — a Daemon start carries no orientation
+	// (ADR 0015), so no extra draw happens here.
 	const aiStarts: Record<AiId, PersonaSpatialState> = {};
 	for (let i = 0; i < aiIds.length; i++) {
 		const key = aiStartKeys[i] as number;
 		const pos = keyToPos(key);
-		const facingIdx = Math.floor(rng() * CARDINAL_DIRECTIONS.length);
-		const facing: CardinalDirection = CARDINAL_DIRECTIONS[
-			facingIdx
-		] as CardinalDirection;
-		aiStarts[aiIds[i] as AiId] = { position: pos, facing };
+		aiStarts[aiIds[i] as AiId] = { position: pos };
 	}
 
 	// 4. Place all spaces (carry spaces + standalone bound spaces): distinct, non-obstacle, off AI start cells

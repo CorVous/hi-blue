@@ -14,9 +14,19 @@ import {
 	renderPerceptionDelta,
 	renderWhatsNew,
 } from "../prompt-builder";
-import type { AiPersona, ContentPack, Objective, WorldEntity } from "../types";
+import type {
+	AiPersona,
+	ContentPack,
+	GameState,
+	Objective,
+	WorldEntity,
+} from "../types";
 import { inVista } from "../vista-projector";
 import { makeTestPack } from "./fixtures/make-test-pack";
+import {
+	RETIRED_ORIENTATION_KEY,
+	withRetiredOrientation,
+} from "./fixtures/retired-orientation";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -70,16 +80,9 @@ function makeEntity(
 }
 
 const RGC_AI_STARTS: ContentPack["aiStarts"] = {
-	red: { position: { row: 0, col: 0 }, facing: "north" },
-	green: { position: { row: 0, col: 1 }, facing: "north" },
-	cyan: { position: { row: 0, col: 2 }, facing: "north" },
-};
-
-/** Same neighbours as RGC_AI_STARTS but red faces south (a stored facing perception ignores). */
-const RGC_AI_STARTS_RED_SOUTH: ContentPack["aiStarts"] = {
-	red: { position: { row: 0, col: 0 }, facing: "south" },
-	green: { position: { row: 0, col: 1 }, facing: "north" },
-	cyan: { position: { row: 0, col: 2 }, facing: "north" },
+	red: { position: { row: 0, col: 0 } },
+	green: { position: { row: 0, col: 1 } },
+	cyan: { position: { row: 0, col: 2 } },
 };
 
 const TEST_CONTENT_PACK = makeTestPack([], { wallName: "wall" });
@@ -343,7 +346,7 @@ describe("prompt-builder — spatial 'Where you are' section (current-state user
 	// (`ctx.toCurrentStateUserMessage()`) so the system prefix stays cache-stable.
 
 	it("includes <where_you_are> block in the current-state user turn", () => {
-		// rng=()=>0 places red at (0,0) facing north
+		// rng=()=>0 places red at (0,0)
 		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
 			budgetPerAi: 5,
 			rng: () => 0,
@@ -354,7 +357,7 @@ describe("prompt-builder — spatial 'Where you are' section (current-state user
 	});
 
 	it("omits any per-round direction anchor from the current-state user turn", () => {
-		// rng=()=>0 places red at (0,0) facing north
+		// rng=()=>0 places red at (0,0)
 		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
 			budgetPerAi: 5,
 			rng: () => 0,
@@ -364,9 +367,9 @@ describe("prompt-builder — spatial 'Where you are' section (current-state user
 		// The retired always-on anchor line left no replacement, and nothing in
 		// the per-round turn describes an orientation. Cardinal directions reach
 		// the Daemon as Vista cell labels ("Two steps north: …"), never as a
-		// standing "you are facing X" anchor.
+		// standing orientation anchor.
 		expect(stateMsg).not.toMatch(/^On the .*ahead/im);
-		expect(stateMsg).not.toMatch(/facing/i);
+		expect(stateMsg).not.toMatch(new RegExp(RETIRED_ORIENTATION_KEY, "i"));
 		expect(stateMsg).toContain("- Two steps north:");
 	});
 
@@ -852,17 +855,17 @@ describe("<what_you_see> (Vista)", () => {
 		expect(ctx.toCurrentStateUserMessage()).toContain("<what_you_see>");
 	});
 
-	it("item one cardinal step away is listed under its direction, whatever the stored facing", () => {
-		// flower at (1,0) is one step south of red at (0,0). Red is stored facing
-		// north — perception is position-only, so the listing is unchanged.
+	it("item one cardinal step away is listed under its direction", () => {
+		// flower at (1,0) is one step south of red at (0,0). Perception is
+		// position-only, so the listing follows the cardinal offset.
 		const pack = makeTestPack(
 			[makeEntity("flower", "interesting_object", { row: 1, col: 0 })],
 			{
 				wallName: "wall",
 				aiStarts: {
-					red: { position: { row: 0, col: 0 }, facing: "north" },
-					green: { position: { row: 0, col: 1 }, facing: "north" },
-					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+					red: { position: { row: 0, col: 0 } },
+					green: { position: { row: 0, col: 1 } },
+					cyan: { position: { row: 0, col: 2 } },
 				},
 			},
 		);
@@ -882,9 +885,9 @@ describe("<what_you_see> (Vista)", () => {
 		const pack = makeTestPack([], {
 			wallName: "wall",
 			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "south" },
-				green: { position: { row: 1, col: 0 }, facing: "east" },
-				cyan: { position: { row: 0, col: 2 }, facing: "west" },
+				red: { position: { row: 0, col: 0 } },
+				green: { position: { row: 1, col: 0 } },
+				cyan: { position: { row: 0, col: 2 } },
 			},
 		});
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
@@ -901,7 +904,7 @@ describe("<what_you_see> (Vista)", () => {
 			"- Two steps east: the Daemon *cyan (#5fa8d3), two steps east of you, holding nothing",
 		);
 		// No orientation reaches the listing.
-		expect(stateMsg).not.toMatch(/facing/i);
+		expect(stateMsg).not.toMatch(new RegExp(RETIRED_ORIENTATION_KEY, "i"));
 	});
 
 	it("obstacles never remove cells from the disk", () => {
@@ -928,9 +931,9 @@ describe("<what_you_see> (Vista)", () => {
 		const pack = makeTestPack([], {
 			wallName: "wall",
 			aiStarts: {
-				red: { position: { row: 2, col: 2 }, facing: "north" },
-				green: { position: { row: 0, col: 0 }, facing: "north" },
-				cyan: { position: { row: 4, col: 4 }, facing: "north" },
+				red: { position: { row: 2, col: 2 } },
+				green: { position: { row: 0, col: 0 } },
+				cyan: { position: { row: 4, col: 4 } },
 			},
 		});
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
@@ -991,9 +994,9 @@ describe("<what_you_see> (Vista)", () => {
 		const wallPack = makeTestPack([], {
 			wallName: "concrete platform wall",
 			aiStarts: {
-				red: { position: { row: 1, col: 0 }, facing: "north" },
-				green: { position: { row: 4, col: 4 }, facing: "north" },
-				cyan: { position: { row: 4, col: 3 }, facing: "north" },
+				red: { position: { row: 1, col: 0 } },
+				green: { position: { row: 4, col: 4 } },
+				cyan: { position: { row: 4, col: 3 } },
 			},
 		});
 		const game = startGame(TEST_PERSONAS, wallPack, { budgetPerAi: 5 });
@@ -1026,9 +1029,9 @@ describe("<what_you_see> (Vista)", () => {
 			{
 				wallName: "wall",
 				aiStarts: {
-					red: { position: { row: 0, col: 0 }, facing: "south" },
-					green: { position: { row: 0, col: 1 }, facing: "north" },
-					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+					red: { position: { row: 0, col: 0 } },
+					green: { position: { row: 0, col: 1 } },
+					cyan: { position: { row: 0, col: 2 } },
 				},
 			},
 		);
@@ -1040,13 +1043,13 @@ describe("<what_you_see> (Vista)", () => {
 	});
 
 	it("other AI visible in the Vista is rendered with its color in parentheses", () => {
-		// Use ContentPack to place red at (0,0) facing south, green at (1,0).
+		// Use ContentPack to place red at (0,0), green at (1,0).
 		const pack = makeTestPack([], {
 			wallName: "wall",
 			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "south" },
-				green: { position: { row: 1, col: 0 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				red: { position: { row: 0, col: 0 } },
+				green: { position: { row: 1, col: 0 } },
+				cyan: { position: { row: 0, col: 2 } },
 			},
 		});
 
@@ -1055,7 +1058,6 @@ describe("<what_you_see> (Vista)", () => {
 		const redSpatial = game.personaSpatial.red;
 		const greenSpatial = game.personaSpatial.green;
 		expect(redSpatial?.position).toEqual({ row: 0, col: 0 });
-		expect(redSpatial?.facing).toBe("south");
 		expect(greenSpatial?.position).toEqual({ row: 1, col: 0 });
 
 		const ctx = buildAiContext(game, "red");
@@ -1086,15 +1088,15 @@ describe("<what_you_see> (Vista)", () => {
 // ----------------------------------------------------------------------------
 describe("ground-item tagging (issue #503)", () => {
 	it("tags cell items in 'Your cell contains' with (on the ground — not held)", () => {
-		// Place flower on red's cell (0,0). Red is at (0,0) facing north.
+		// Place flower on red's cell (0,0). Red is at (0,0).
 		const pack = makeTestPack(
 			[makeEntity("flower", "interesting_object", { row: 0, col: 0 })],
 			{
 				wallName: "wall",
 				aiStarts: {
-					red: { position: { row: 0, col: 0 }, facing: "north" },
-					green: { position: { row: 0, col: 1 }, facing: "north" },
-					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+					red: { position: { row: 0, col: 0 } },
+					green: { position: { row: 0, col: 1 } },
+					cyan: { position: { row: 0, col: 2 } },
 				},
 			},
 		);
@@ -1111,9 +1113,9 @@ describe("ground-item tagging (issue #503)", () => {
 			{
 				wallName: "wall",
 				aiStarts: {
-					red: { position: { row: 0, col: 0 }, facing: "south" },
-					green: { position: { row: 0, col: 1 }, facing: "north" },
-					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+					red: { position: { row: 0, col: 0 } },
+					green: { position: { row: 0, col: 1 } },
+					cyan: { position: { row: 0, col: 2 } },
 				},
 			},
 		);
@@ -1132,9 +1134,9 @@ describe("ground-item tagging (issue #503)", () => {
 			{
 				wallName: "wall",
 				aiStarts: {
-					red: { position: { row: 0, col: 0 }, facing: "north" },
-					green: { position: { row: 0, col: 1 }, facing: "north" },
-					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+					red: { position: { row: 0, col: 0 } },
+					green: { position: { row: 0, col: 1 } },
+					cyan: { position: { row: 0, col: 2 } },
 				},
 			},
 		);
@@ -1157,9 +1159,9 @@ describe("ground-item tagging (issue #503)", () => {
 			{
 				wallName: "wall",
 				aiStarts: {
-					red: { position: { row: 0, col: 0 }, facing: "south" },
-					green: { position: { row: 1, col: 0 }, facing: "north" },
-					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+					red: { position: { row: 0, col: 0 } },
+					green: { position: { row: 1, col: 0 } },
+					cyan: { position: { row: 0, col: 2 } },
 				},
 			},
 		);
@@ -1428,7 +1430,6 @@ describe("<typing_quirks> block", () => {
 describe("proximityFlavor sense line", () => {
 	function makePackWithProximity(opts: {
 		actorPosition: { row: number; col: number };
-		actorFacing: "north" | "south" | "east" | "west";
 		spacePosition: { row: number; col: number };
 	}) {
 		const gem: WorldEntity = {
@@ -1452,18 +1453,17 @@ describe("proximityFlavor sense line", () => {
 		return makeTestPack([gem, pedestal], {
 			wallName: "wall",
 			aiStarts: {
-				red: { position: opts.actorPosition, facing: opts.actorFacing },
-				green: { position: { row: 0, col: 1 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				red: { position: opts.actorPosition },
+				green: { position: { row: 0, col: 1 } },
+				cyan: { position: { row: 0, col: 2 } },
 			},
 		});
 	}
 
 	it("proximity flavor appears in <what_you_see> when paired space is in own cell", () => {
-		// red at (2,2) facing north; pedestal at (2,2) = own cell
+		// red at (2,2); pedestal at (2,2) = own cell
 		const pack = makePackWithProximity({
 			actorPosition: { row: 2, col: 2 },
-			actorFacing: "north",
 			spacePosition: { row: 2, col: 2 },
 		});
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
@@ -1475,10 +1475,9 @@ describe("proximityFlavor sense line", () => {
 	});
 
 	it("proximity flavor appears in <what_you_see> when paired space is within interaction range", () => {
-		// red at (0,0) facing south; pedestal at (1,0) = one step away
+		// red at (0,0); pedestal at (1,0) = one step away
 		const pack = makePackWithProximity({
 			actorPosition: { row: 0, col: 0 },
-			actorFacing: "south",
 			spacePosition: { row: 1, col: 0 },
 		});
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
@@ -1490,10 +1489,9 @@ describe("proximityFlavor sense line", () => {
 	});
 
 	it("proximity flavor appears in <what_you_see> when paired space is a diagonal neighbour", () => {
-		// red at (0,0) facing south; pedestal at (1,1) = diagonal south-east
+		// red at (0,0); pedestal at (1,1) = diagonal south-east
 		const pack = makePackWithProximity({
 			actorPosition: { row: 0, col: 0 },
-			actorFacing: "south",
 			spacePosition: { row: 1, col: 1 },
 		});
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
@@ -1505,11 +1503,10 @@ describe("proximityFlavor sense line", () => {
 	});
 
 	it("proximity flavor does NOT appear when paired space is at offset (2,0)", () => {
-		// red at (0,0) facing south; pedestal at (2,0) = two cardinal steps
+		// red at (0,0); pedestal at (2,0) = two cardinal steps
 		// away: visible in the Vista, outside interaction range.
 		const pack = makePackWithProximity({
 			actorPosition: { row: 0, col: 0 },
-			actorFacing: "south",
 			spacePosition: { row: 2, col: 0 },
 		});
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
@@ -1523,10 +1520,9 @@ describe("proximityFlavor sense line", () => {
 	});
 
 	it("proximity flavor appears in buildDiskSnapshot when space is reachable", () => {
-		// red at (0,0) facing south; pedestal at (1,0) = one step away
+		// red at (0,0); pedestal at (1,0) = one step away
 		const pack = makePackWithProximity({
 			actorPosition: { row: 0, col: 0 },
-			actorFacing: "south",
 			spacePosition: { row: 1, col: 0 },
 		});
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
@@ -1538,10 +1534,9 @@ describe("proximityFlavor sense line", () => {
 	});
 
 	it("proximity flavor does NOT appear in buildDiskSnapshot at offset (2,0)", () => {
-		// red at (0,0) facing south; pedestal at (2,0) — visible, out of range
+		// red at (0,0); pedestal at (2,0) — visible, out of range
 		const pack = makePackWithProximity({
 			actorPosition: { row: 0, col: 0 },
-			actorFacing: "south",
 			spacePosition: { row: 2, col: 0 },
 		});
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
@@ -1556,12 +1551,10 @@ describe("proximityFlavor sense line", () => {
 		// one step away, so the line enters.
 		const packFar = makePackWithProximity({
 			actorPosition: { row: 0, col: 0 },
-			actorFacing: "south",
 			spacePosition: { row: 2, col: 0 },
 		});
 		const packNear = makePackWithProximity({
 			actorPosition: { row: 0, col: 0 },
-			actorFacing: "south",
 			spacePosition: { row: 1, col: 0 },
 		});
 		const gameFar = startGame(TEST_PERSONAS, packFar, { budgetPerAi: 5 });
@@ -1584,7 +1577,7 @@ describe("proximityFlavor sense line", () => {
 describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 	// ─ UseItem tests ─
 	it("UseItem proximity flavor appears when the item is within interaction range (one step)", () => {
-		// red at (0,0) facing south; item at (1,0) = one step away
+		// red at (0,0); item at (1,0) = one step away
 		const item: WorldEntity = {
 			id: "switch",
 			kind: "interesting_object",
@@ -1599,7 +1592,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 		};
 		const pack = makeTestPack([item], {
 			wallName: "wall",
-			aiStarts: RGC_AI_STARTS_RED_SOUTH,
+			aiStarts: RGC_AI_STARTS,
 		});
 		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		// Add a pending UseItemObjective for the switch
@@ -1637,7 +1630,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 		};
 		const pack = makeTestPack([item], {
 			wallName: "wall",
-			aiStarts: RGC_AI_STARTS_RED_SOUTH,
+			aiStarts: RGC_AI_STARTS,
 		});
 		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		game = {
@@ -1674,7 +1667,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 		};
 		const pack = makeTestPack([item], {
 			wallName: "wall",
-			aiStarts: RGC_AI_STARTS_RED_SOUTH,
+			aiStarts: RGC_AI_STARTS,
 		});
 		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		game = {
@@ -1696,7 +1689,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 	});
 
 	it("UseItem proximity flavor does NOT appear when objective is satisfied", () => {
-		// red at (0,0) facing south; item at (1,0) = in front
+		// red at (0,0); item at (1,0) = in front
 		const item: WorldEntity = {
 			id: "switch",
 			kind: "interesting_object",
@@ -1711,7 +1704,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 		};
 		const pack = makeTestPack([item], {
 			wallName: "wall",
-			aiStarts: RGC_AI_STARTS_RED_SOUTH,
+			aiStarts: RGC_AI_STARTS,
 		});
 		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		// Replace the auto-generated pending objective with a satisfied one
@@ -1732,7 +1725,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 	});
 
 	it("UseItem proximity flavor does NOT appear when the item is at offset (2,0)", () => {
-		// red at (0,0) facing south; item at (2,0) = two cardinal steps away:
+		// red at (0,0); item at (2,0) = two cardinal steps away:
 		// visible in the Vista, outside interaction range.
 		const item: WorldEntity = {
 			id: "switch",
@@ -1792,7 +1785,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 		};
 		const pack = makeTestPack([], {
 			wallName: "wall",
-			aiStarts: RGC_AI_STARTS_RED_SOUTH,
+			aiStarts: RGC_AI_STARTS,
 		});
 		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		game = {
@@ -1821,7 +1814,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 	});
 
 	it("UseSpace auto-examine (examineDescription) appears when space is within interaction range; proximity flavor does NOT", () => {
-		// red at (0,0) facing south; space at (1,0) = one step away
+		// red at (0,0); space at (1,0) = one step away
 		const space: WorldEntity = {
 			id: "pedestal",
 			kind: "objective_space",
@@ -1841,7 +1834,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 		};
 		const pack = makeTestPack([], {
 			wallName: "wall",
-			aiStarts: RGC_AI_STARTS_RED_SOUTH,
+			aiStarts: RGC_AI_STARTS,
 		});
 		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		game = {
@@ -1892,7 +1885,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 		};
 		const pack = makeTestPack([], {
 			wallName: "wall",
-			aiStarts: RGC_AI_STARTS_RED_SOUTH,
+			aiStarts: RGC_AI_STARTS,
 		});
 		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		game = {
@@ -1945,7 +1938,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 		};
 		const pack = makeTestPack([], {
 			wallName: "wall",
-			aiStarts: RGC_AI_STARTS_RED_SOUTH,
+			aiStarts: RGC_AI_STARTS,
 		});
 		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		game = {
@@ -1979,7 +1972,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 		const ITEM_FLAVOR = "The switch crackles faintly with energy.";
 		const GEM_FLAVOR = "The gem pulses warmly, drawn toward the pedestal.";
 
-		/** Red at (2,2) facing east; offsets are (dx east, dy north). */
+		/** Red at (2,2); offsets are (dx east, dy north). */
 		function offsetPos(o: { dx: number; dy: number }) {
 			return { row: 2 - o.dy, col: 2 + o.dx };
 		}
@@ -2051,9 +2044,9 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 				setting: "test",
 				wallName: "wall",
 				aiStarts: {
-					red: { position: { row: 2, col: 2 }, facing: "east" },
-					green: { position: { row: 0, col: 0 }, facing: "north" },
-					cyan: { position: { row: 4, col: 4 }, facing: "north" },
+					red: { position: { row: 2, col: 2 } },
+					green: { position: { row: 0, col: 0 } },
+					cyan: { position: { row: 4, col: 4 } },
 				},
 			});
 			const started = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
@@ -2061,7 +2054,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 		}
 
 		it("offset (2,0): pending Use-Space space is visible and gets proximity flavor", () => {
-			// red at (2,2) facing east; space at (2,4), two cardinal steps east
+			// red at (2,2); space at (2,4), two cardinal steps east
 			const game = makeOffsetGame({
 				spaceOffset: { dx: 2, dy: 0 },
 				pendingKind: "use_space",
@@ -2311,7 +2304,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			};
 			const pack = makeTestPack([item], {
 				wallName: "wall",
-				aiStarts: RGC_AI_STARTS_RED_SOUTH,
+				aiStarts: RGC_AI_STARTS,
 			});
 			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 			const ctx = buildAiContext(game, "red");
@@ -2333,7 +2326,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			};
 			const pack = makeTestPack([obstacle], {
 				wallName: "wall",
-				aiStarts: RGC_AI_STARTS_RED_SOUTH,
+				aiStarts: RGC_AI_STARTS,
 			});
 			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 			const ctx = buildAiContext(game, "red");
@@ -2357,7 +2350,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			};
 			const pack = makeTestPack([], {
 				wallName: "wall",
-				aiStarts: RGC_AI_STARTS_RED_SOUTH,
+				aiStarts: RGC_AI_STARTS,
 			});
 			let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 			game = {
@@ -2384,7 +2377,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			};
 			const pack = makeTestPack([], {
 				wallName: "wall",
-				aiStarts: RGC_AI_STARTS_RED_SOUTH,
+				aiStarts: RGC_AI_STARTS,
 			});
 			let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 			game = {
@@ -2398,7 +2391,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 		});
 
 		it("does NOT emit examineDescription for entity in own cell", () => {
-			// red at (0,0) facing south; item at (0,0) = own cell
+			// red at (0,0); item at (0,0) = own cell
 			const item: WorldEntity = {
 				id: "switch",
 				kind: "interesting_object",
@@ -2408,7 +2401,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			};
 			const pack = makeTestPack([item], {
 				wallName: "wall",
-				aiStarts: RGC_AI_STARTS_RED_SOUTH,
+				aiStarts: RGC_AI_STARTS,
 			});
 			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 			const ctx = buildAiContext(game, "red");
@@ -2431,7 +2424,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			};
 			const pack = makeTestPack([item], {
 				wallName: "wall",
-				aiStarts: RGC_AI_STARTS_RED_SOUTH,
+				aiStarts: RGC_AI_STARTS,
 			});
 			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 			const ctx = buildAiContext(game, "red");
@@ -2444,7 +2437,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 		});
 
 		it("wall sentinels still render correctly", () => {
-			// red at (0,0) facing north (the wall perception is position-only)
+			// red at (0,0) (the wall perception is position-only)
 			const pack = makeTestPack([], {
 				wallName: "boundary wall",
 				aiStarts: RGC_AI_STARTS, // red faces north by default
@@ -2467,7 +2460,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			};
 			const pack = makeTestPack([item], {
 				wallName: "wall",
-				aiStarts: RGC_AI_STARTS_RED_SOUTH,
+				aiStarts: RGC_AI_STARTS,
 			});
 			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 			const ctx = buildAiContext(game, "red");
@@ -2487,7 +2480,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			};
 			const pack = makeTestPack([item], {
 				wallName: "wall",
-				aiStarts: RGC_AI_STARTS_RED_SOUTH,
+				aiStarts: RGC_AI_STARTS,
 			});
 			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 			const ctx1 = buildAiContext(game, "red");
@@ -2676,7 +2669,7 @@ describe("postLookFlavor swap covers satisfied interesting_object", () => {
 		};
 		return makeTestPack([item], {
 			wallName: "wall",
-			aiStarts: RGC_AI_STARTS_RED_SOUTH,
+			aiStarts: RGC_AI_STARTS,
 		});
 	}
 
@@ -2825,81 +2818,72 @@ describe("peer-position prose", () => {
 		).toBe("in your cell");
 	});
 
-	it("does not vary with the peer's or the observer's stored facing", () => {
-		const facings = ["north", "east", "south", "west"] as const;
-		function peerProse(observerFacing: (typeof facings)[number]) {
+	it("does not vary with a retired orientation field on either Daemon", () => {
+		const ORIENTATIONS = ["north", "east", "south", "west"] as const;
+
+		/** Full current-state and system prompts for red, given a game mutator. */
+		function prose(mutate: (game: GameState) => GameState) {
 			const pack = makeTestPack([], {
 				wallName: "wall",
 				aiStarts: {
-					red: {
-						position: { row: 2, col: 2 },
-						facing: observerFacing,
-					},
-					green: { position: { row: 1, col: 3 }, facing: "south" },
-					cyan: { position: { row: 4, col: 2 }, facing: "west" },
+					red: { position: { row: 2, col: 2 } },
+					green: { position: { row: 1, col: 3 } },
+					cyan: { position: { row: 4, col: 2 } },
 				},
 			});
-			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-			const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
-			return stateMsg
-				.split("\n")
-				.filter((line) => line.includes("the Daemon *"))
-				.join("\n");
+			const game = mutate(startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 }));
+			const ctx = buildAiContext(game, "red");
+			return {
+				state: ctx.toCurrentStateUserMessage(),
+				system: ctx.toSystemPrompt(),
+			};
 		}
 
-		const baseline = peerProse("north");
-		expect(baseline).toContain(
+		const baseline = prose((game) => game);
+		expect(baseline.state).toContain(
 			"- One step north and one step east: the Daemon *green (#81b29a), one step north and one step east of you, holding nothing",
 		);
-		expect(baseline).toContain(
+		expect(baseline.state).toContain(
 			"- Two steps south: the Daemon *cyan (#5fa8d3), two steps south of you, holding nothing",
 		);
-		for (const facing of facings) {
-			expect(peerProse(facing)).toBe(baseline);
-		}
 
-		// The peer's own stored facing is likewise inert.
-		function peerProseWithGreenFacing(
-			greenFacing: (typeof facings)[number],
-		): string {
-			const pack = makeTestPack([], {
-				wallName: "wall",
-				aiStarts: {
-					red: { position: { row: 2, col: 2 }, facing: "north" },
-					green: { position: { row: 1, col: 3 }, facing: greenFacing },
-					cyan: { position: { row: 4, col: 2 }, facing: "west" },
-				},
-			});
-			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-			return buildAiContext(game, "red").toCurrentStateUserMessage();
-		}
-		for (const facing of facings) {
-			expect(peerProseWithGreenFacing(facing)).toBe(
-				peerProseWithGreenFacing("north"),
+		// The observer's retired field, and the peer's, are both inert: the
+		// prompts are byte-identical to the state that lacks the field.
+		for (const orientation of ORIENTATIONS) {
+			const observer = prose((game) =>
+				withRetiredOrientation(game, "red", orientation),
 			);
+			expect(observer.state).toBe(baseline.state);
+			expect(observer.system).toBe(baseline.system);
+
+			const peer = prose((game) =>
+				withRetiredOrientation(game, "green", orientation),
+			);
+			expect(peer.state).toBe(baseline.state);
+			expect(peer.system).toBe(baseline.system);
 		}
 	});
 });
 
 // ----------------------------------------------------------------------------
 // Moving a Daemon so that out-of-bounds cells enter or leave its Vista makes
-// the wall entry appear as a + / - diff line in <whats_new>. Turning changes
-// nothing: the Vista is position-only. Uses buildDiskSnapshot + renderWhatsNew.
+// the wall entry appear as a + / - diff line in <whats_new>. Orientation
+// changes nothing: the Vista is position-only. Uses buildDiskSnapshot +
+// renderWhatsNew.
 // ----------------------------------------------------------------------------
 describe("<whats_new> wall diff (issue #374)", () => {
 	/** Build a game with red at the given position. */
 	function makeWallGame(opts: {
 		position: { row: number; col: number };
-		facing: "north" | "south" | "east" | "west";
 		wallName?: string;
 	}) {
 		const wallName = opts.wallName ?? "concrete platform wall";
 		const pack = makeTestPack([], {
 			wallName,
 			aiStarts: {
-				red: { position: opts.position, facing: opts.facing },
-				green: { position: { row: 4, col: 4 }, facing: "north" },
-				cyan: { position: { row: 4, col: 3 }, facing: "north" },
+				red: { position: opts.position },
+				green: { position: { row: 4, col: 4 } },
+				cyan: { position: { row: 4, col: 3 } },
 			},
 		});
 		return startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
@@ -2911,11 +2895,9 @@ describe("<whats_new> wall diff (issue #374)", () => {
 		// outside, so those wall lines are added.
 		const prevGame = makeWallGame({
 			position: { row: 2, col: 2 },
-			facing: "east",
 		});
 		const currGame = makeWallGame({
 			position: { row: 1, col: 0 },
-			facing: "east",
 		});
 
 		const prev = buildDiskSnapshot(buildAiContext(prevGame, "red"));
@@ -2935,11 +2917,9 @@ describe("<whats_new> wall diff (issue #374)", () => {
 		// curr: red at (2,2) — the whole disk is in bounds.
 		const prevGame = makeWallGame({
 			position: { row: 1, col: 0 },
-			facing: "north",
 		});
 		const currGame = makeWallGame({
 			position: { row: 2, col: 2 },
-			facing: "north",
 		});
 
 		const prev = buildDiskSnapshot(buildAiContext(prevGame, "red"));
@@ -2951,27 +2931,30 @@ describe("<whats_new> wall diff (issue #374)", () => {
 		expect(diff).toContain("- at two steps north: concrete platform wall");
 	});
 
-	it("turning in place changes nothing — identical snapshots → renderWhatsNew returns null", () => {
-		// The Vista depends on position only, so two stored facings at the same
-		// cell produce byte-identical snapshots.
-		const northGame = makeWallGame({
-			position: { row: 0, col: 0 },
-			facing: "north",
-		});
-		const eastGame = makeWallGame({
-			position: { row: 0, col: 0 },
-			facing: "east",
-		});
-		const northSnap = buildDiskSnapshot(buildAiContext(northGame, "red"));
-		const eastSnap = buildDiskSnapshot(buildAiContext(eastGame, "red"));
-		expect(northSnap).toBe(eastSnap);
-		expect(renderWhatsNew(northSnap, eastSnap)).toBeNull();
+	it("a retired orientation field changes nothing — identical snapshots → renderWhatsNew returns null", () => {
+		// The Vista depends on position only, so two Daemons in the same cell
+		// that differ solely by the retired field produce byte-identical
+		// snapshots.
+		const plainSnap = buildDiskSnapshot(
+			buildAiContext(makeWallGame({ position: { row: 0, col: 0 } }), "red"),
+		);
+		const retiredSnap = buildDiskSnapshot(
+			buildAiContext(
+				withRetiredOrientation(
+					makeWallGame({ position: { row: 0, col: 0 } }),
+					"red",
+					"east",
+				),
+				"red",
+			),
+		);
+		expect(retiredSnap).toBe(plainSnap);
+		expect(renderWhatsNew(plainSnap, retiredSnap)).toBeNull();
 	});
 
 	it("wallName comes from ContentPack.wallName, not hardcoded", () => {
 		const game = makeWallGame({
 			position: { row: 0, col: 0 },
-			facing: "north",
 			wallName: "laboratory bulkhead",
 		});
 		const ctx = buildAiContext(game, "red");
@@ -3001,9 +2984,9 @@ describe("buildDiskEntityState", () => {
 			{
 				wallName: "wall",
 				aiStarts: {
-					red: { position: { row: 0, col: 0 }, facing: "south" },
-					green: { position: { row: 0, col: 1 }, facing: "north" },
-					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+					red: { position: { row: 0, col: 0 } },
+					green: { position: { row: 0, col: 1 } },
+					cyan: { position: { row: 0, col: 2 } },
 				},
 			},
 		);
@@ -3029,9 +3012,9 @@ describe("buildDiskEntityState", () => {
 			{
 				wallName: "wall",
 				aiStarts: {
-					red: { position: { row: 0, col: 0 }, facing: "south" },
-					green: { position: { row: 0, col: 1 }, facing: "north" },
-					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+					red: { position: { row: 0, col: 0 } },
+					green: { position: { row: 0, col: 1 } },
+					cyan: { position: { row: 0, col: 2 } },
 				},
 			},
 		);
@@ -3055,9 +3038,9 @@ describe("buildDiskEntityState", () => {
 			{
 				wallName: "wall",
 				aiStarts: {
-					red: { position: { row: 0, col: 0 }, facing: "south" },
-					green: { position: { row: 0, col: 1 }, facing: "north" },
-					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+					red: { position: { row: 0, col: 0 } },
+					green: { position: { row: 0, col: 1 } },
+					cyan: { position: { row: 0, col: 2 } },
 				},
 			},
 		);
@@ -3068,7 +3051,7 @@ describe("buildDiskEntityState", () => {
 	});
 
 	it("excludes items beyond the Vista", () => {
-		// red at (0,0) facing south; place item far away
+		// red at (0,0); place item far away
 		const pack = makeTestPack(
 			[
 				{
@@ -3082,9 +3065,9 @@ describe("buildDiskEntityState", () => {
 			{
 				wallName: "wall",
 				aiStarts: {
-					red: { position: { row: 0, col: 0 }, facing: "south" },
-					green: { position: { row: 0, col: 1 }, facing: "north" },
-					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+					red: { position: { row: 0, col: 0 } },
+					green: { position: { row: 0, col: 1 } },
+					cyan: { position: { row: 0, col: 2 } },
 				},
 			},
 		);
@@ -3099,9 +3082,9 @@ describe("buildDiskEntityState", () => {
 		const pack = makeTestPack([], {
 			wallName: "wall",
 			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "south" },
-				green: { position: { row: 1, col: 0 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				red: { position: { row: 0, col: 0 } },
+				green: { position: { row: 1, col: 0 } },
+				cyan: { position: { row: 0, col: 2 } },
 			},
 		});
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
@@ -3124,9 +3107,9 @@ describe("buildDiskEntityState", () => {
 			{
 				wallName: "wall",
 				aiStarts: {
-					red: { position: { row: 0, col: 0 }, facing: "south" },
-					green: { position: { row: 0, col: 1 }, facing: "north" },
-					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+					red: { position: { row: 0, col: 0 } },
+					green: { position: { row: 0, col: 1 } },
+					cyan: { position: { row: 0, col: 2 } },
 				},
 			},
 		);
@@ -3142,9 +3125,9 @@ describe("renderPerceptionDelta", () => {
 		const pack = makeTestPack([], {
 			wallName: "wall",
 			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "south" },
-				green: { position: { row: 0, col: 1 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				red: { position: { row: 0, col: 0 } },
+				green: { position: { row: 0, col: 1 } },
+				cyan: { position: { row: 0, col: 2 } },
 			},
 		});
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
@@ -3167,9 +3150,9 @@ describe("renderPerceptionDelta", () => {
 			{
 				wallName: "wall",
 				aiStarts: {
-					red: { position: { row: 0, col: 0 }, facing: "south" },
-					green: { position: { row: 0, col: 1 }, facing: "north" },
-					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+					red: { position: { row: 0, col: 0 } },
+					green: { position: { row: 0, col: 1 } },
+					cyan: { position: { row: 0, col: 2 } },
 				},
 			},
 		);
@@ -3195,9 +3178,9 @@ describe("renderPerceptionDelta", () => {
 			{
 				wallName: "wall",
 				aiStarts: {
-					red: { position: { row: 0, col: 0 }, facing: "south" },
-					green: { position: { row: 0, col: 1 }, facing: "north" },
-					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+					red: { position: { row: 0, col: 0 } },
+					green: { position: { row: 0, col: 1 } },
+					cyan: { position: { row: 0, col: 2 } },
 				},
 			},
 		);
@@ -3224,9 +3207,9 @@ describe("renderPerceptionDelta", () => {
 			{
 				wallName: "wall",
 				aiStarts: {
-					red: { position: { row: 0, col: 0 }, facing: "north" },
-					green: { position: { row: 0, col: 1 }, facing: "north" },
-					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+					red: { position: { row: 0, col: 0 } },
+					green: { position: { row: 0, col: 1 } },
+					cyan: { position: { row: 0, col: 2 } },
 				},
 			},
 		);
@@ -3256,9 +3239,9 @@ describe("renderPerceptionDelta", () => {
 			{
 				wallName: "wall",
 				aiStarts: {
-					red: { position: { row: 0, col: 0 }, facing: "south" },
-					green: { position: { row: 0, col: 1 }, facing: "north" },
-					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+					red: { position: { row: 0, col: 0 } },
+					green: { position: { row: 0, col: 1 } },
+					cyan: { position: { row: 0, col: 2 } },
 				},
 			},
 		);
@@ -3286,9 +3269,9 @@ describe("renderPerceptionDelta", () => {
 			{
 				wallName: "wall",
 				aiStarts: {
-					red: { position: { row: 0, col: 0 }, facing: "south" },
-					green: { position: { row: 0, col: 1 }, facing: "north" },
-					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+					red: { position: { row: 0, col: 0 } },
+					green: { position: { row: 0, col: 1 } },
+					cyan: { position: { row: 0, col: 2 } },
 				},
 			},
 		);
@@ -3318,9 +3301,9 @@ describe("renderPerceptionDelta", () => {
 			{
 				wallName: "wall",
 				aiStarts: {
-					red: { position: { row: 0, col: 0 }, facing: "south" },
-					green: { position: { row: 0, col: 1 }, facing: "north" },
-					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+					red: { position: { row: 0, col: 0 } },
+					green: { position: { row: 0, col: 1 } },
+					cyan: { position: { row: 0, col: 2 } },
 				},
 			},
 		);
@@ -3341,9 +3324,9 @@ describe("renderPerceptionDelta", () => {
 		const pack = makeTestPack([], {
 			wallName: "wall",
 			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "south" },
-				green: { position: { row: 1, col: 0 }, facing: "north" },
-				cyan: { position: { row: 2, col: 1 }, facing: "north" },
+				red: { position: { row: 0, col: 0 } },
+				green: { position: { row: 1, col: 0 } },
+				cyan: { position: { row: 2, col: 1 } },
 			},
 		});
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
@@ -3360,9 +3343,9 @@ describe("renderPerceptionDelta", () => {
 		const pack = makeTestPack([], {
 			wallName: "wall",
 			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "north" },
-				green: { position: { row: 2, col: 1 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				red: { position: { row: 0, col: 0 } },
+				green: { position: { row: 2, col: 1 } },
+				cyan: { position: { row: 0, col: 2 } },
 			},
 		});
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
@@ -3390,9 +3373,9 @@ describe("renderPerceptionDelta", () => {
 			{
 				wallName: "wall",
 				aiStarts: {
-					red: { position: { row: 0, col: 0 }, facing: "east" },
-					green: { position: { row: 0, col: 1 }, facing: "north" },
-					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+					red: { position: { row: 0, col: 0 } },
+					green: { position: { row: 0, col: 1 } },
+					cyan: { position: { row: 0, col: 2 } },
 				},
 			},
 		);

@@ -88,9 +88,9 @@ const TEST_CONTENT_PACK = makeTestPack(
 		// green at (1, 4) is offset (2, 1) from the origin (4 + 1 = 5 > 4) → outside.
 		// cyan at (4, 0) is offset (2, 2) from the origin (2² + 2² = 8 > 4) → outside.
 		aiStarts: {
-			red: { position: { row: 2, col: 1 }, facing: "east" },
-			green: { position: { row: 1, col: 4 }, facing: "west" },
-			cyan: { position: { row: 4, col: 0 }, facing: "north" },
+			red: { position: { row: 2, col: 1 } },
+			green: { position: { row: 1, col: 4 } },
+			cyan: { position: { row: 4, col: 0 } },
 		},
 	},
 );
@@ -274,8 +274,8 @@ describe("runRound — obstacle_shift complication (issue #486)", () => {
 			...game,
 			personaSpatial: {
 				...game.personaSpatial,
-				red: { position: { row: 2, col: 0 }, facing: "east" as const },
-				green: { position: { row: 1, col: 0 }, facing: "east" as const },
+				red: { position: { row: 2, col: 0 } },
+				green: { position: { row: 1, col: 0 } },
 			},
 			complicationSchedule: { ...game.complicationSchedule, countdown: 0 },
 		};

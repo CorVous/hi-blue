@@ -36,9 +36,9 @@ const PEER_B: AiId = "sim2";
 /** Shared peer placements — kept off the actor's front arc so peers don't
  * accidentally trigger `give` opportunities the scenario isn't testing. */
 const AI_STARTS_BASE: ContentPack["aiStarts"] = {
-	[ACTOR]: { position: { row: 2, col: 2 }, facing: "north" },
-	[PEER_A]: { position: { row: 4, col: 0 }, facing: "east" },
-	[PEER_B]: { position: { row: 4, col: 4 }, facing: "west" },
+	[ACTOR]: { position: { row: 2, col: 2 } },
+	[PEER_A]: { position: { row: 4, col: 0 } },
+	[PEER_B]: { position: { row: 4, col: 4 } },
 };
 
 // ── Scenario 1: EXPLORATION ──────────────────────────────────────────────────

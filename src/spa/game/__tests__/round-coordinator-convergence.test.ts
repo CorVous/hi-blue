@@ -83,9 +83,9 @@ const TEST_CONTENT_PACK = makeTestPack(
 		// Space cell is (4,4). Vista membership is position-only.
 		// red at (4,4) — the occupant; green at (0,0) and cyan at (0,2) are far outside.
 		aiStarts: {
-			red: { position: { row: 4, col: 4 }, facing: "north" },
-			green: { position: { row: 0, col: 0 }, facing: "south" },
-			cyan: { position: { row: 0, col: 2 }, facing: "south" },
+			red: { position: { row: 4, col: 4 } },
+			green: { position: { row: 0, col: 0 } },
+			cyan: { position: { row: 0, col: 2 } },
 		},
 	},
 );
@@ -110,9 +110,9 @@ function makeProvider() {
 /**
  * Build a base game state, then overlay the objectives and spatial positions we need.
  *
- * - red at (4,4) facing north  → red's own cell = space cell; red is the actor
- * - green at (0,0) facing south → far outside the Vista around (4,4)
- * - cyan at (0,2) facing south  → far outside the Vista around (4,4)
+ * - red at (4,4)  → red's own cell = space cell; red is the actor
+ * - green at (0,0) → far outside the Vista around (4,4)
+ * - cyan at (0,2)  → far outside the Vista around (4,4)
  */
 function makeBaseGame() {
 	const base = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 99 });
@@ -193,9 +193,9 @@ describe("runRound — convergence evaluation (step 4d)", () => {
 			...baseGame,
 			personaSpatial: {
 				...baseGame.personaSpatial,
-				// red at (4,4) facing north (from base), green also at (4,4) facing north
-				green: { position: { row: 4, col: 4 }, facing: "north" as const },
-				// cyan stays at (0,2) facing south — Vista doesn't reach (4,4)
+				// red at (4,4) (from base), green also at (4,4)
+				green: { position: { row: 4, col: 4 } },
+				// cyan stays at (0,2) — Vista doesn't reach (4,4)
 			},
 		};
 
@@ -252,7 +252,7 @@ describe("runRound — convergence evaluation (step 4d)", () => {
 			...baseGame,
 			personaSpatial: {
 				...baseGame.personaSpatial,
-				green: { position: { row: 4, col: 4 }, facing: "north" as const },
+				green: { position: { row: 4, col: 4 } },
 			},
 		};
 
@@ -303,7 +303,7 @@ describe("runRound — convergence split fan-out (actor vs witness) — #336", (
 			...baseGame,
 			personaSpatial: {
 				...baseGame.personaSpatial,
-				cyan: { position: { row: 3, col: 4 }, facing: "south" as const },
+				cyan: { position: { row: 3, col: 4 } },
 			},
 		};
 
@@ -337,9 +337,9 @@ describe("runRound — convergence split fan-out (actor vs witness) — #336", (
 		const game = {
 			...baseGame,
 			personaSpatial: {
-				red: { position: { row: 4, col: 4 }, facing: "north" as const },
-				green: { position: { row: 4, col: 4 }, facing: "north" as const },
-				cyan: { position: { row: 3, col: 4 }, facing: "south" as const },
+				red: { position: { row: 4, col: 4 } },
+				green: { position: { row: 4, col: 4 } },
+				cyan: { position: { row: 3, col: 4 } },
 			},
 		};
 
@@ -390,15 +390,15 @@ describe("runRound — convergence Vista boundary (ADR 0015)", () => {
 		// Space at (4, 4), red standing on it.
 		//   green at (4, 2) is the (2, 0) offset → 2² + 0² = 4 ≤ 4 → inside the Vista.
 		//   cyan at (3, 2) is the (2, 1) offset → 2² + 1² = 5 > 4 → outside the Vista.
-		// cyan faces east, so the retired cone would have covered (4, 4): this case
-		// pins that eligibility now follows the Vista rather than a facing.
+		// The retired cone would have covered (4, 4): this case pins that
+		// eligibility now follows the Vista rather than an orientation.
 		const baseGame = makeBaseGame();
 		const game = {
 			...baseGame,
 			personaSpatial: {
 				...baseGame.personaSpatial,
-				green: { position: { row: 4, col: 2 }, facing: "north" as const },
-				cyan: { position: { row: 3, col: 2 }, facing: "east" as const },
+				green: { position: { row: 4, col: 2 } },
+				cyan: { position: { row: 3, col: 2 } },
 			},
 		};
 

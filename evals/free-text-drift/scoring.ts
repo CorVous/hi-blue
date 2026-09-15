@@ -19,8 +19,13 @@
  *   - summarizeRun(turns) → DriftRunSummary
  */
 
-import type { RelativeDirection } from "../../src/spa/game/direction.js";
 import type { AiId, ToolName } from "../../src/spa/game/types.js";
+
+/**
+ * Eval-local relative-direction vocabulary. ADR 0015 removed orientation from
+ * the game, so this module no longer borrows the retired type from the runtime.
+ */
+type RelativeDirection = "forward" | "back" | "left" | "right";
 
 // ── Recorded shapes ──────────────────────────────────────────────────────────
 

@@ -126,7 +126,7 @@ const PERSONAS: Record<string, AiPersona> = {
 
 /**
  * Hand-rolled pack with a Carry objective, two interesting items, and one
- * obstacle. Layout from `red`'s POV (starts at row 2, col 2 facing north,
+ * obstacle. Layout from `red`'s POV (starts at row 2, col 2,
  * grid is 5x5 with row 0 at the top):
  *
  *   col       0           1            2             3          4
@@ -205,9 +205,9 @@ function makePack(): ContentPack {
 		],
 		wallName: "tiled tunnel wall",
 		aiStarts: {
-			red: { position: { row: 2, col: 2 }, facing: "north" },
-			sim1: { position: { row: 4, col: 0 }, facing: "east" },
-			sim2: { position: { row: 4, col: 4 }, facing: "west" },
+			red: { position: { row: 2, col: 2 } },
+			sim1: { position: { row: 4, col: 0 } },
+			sim2: { position: { row: 4, col: 4 } },
 		},
 	};
 }

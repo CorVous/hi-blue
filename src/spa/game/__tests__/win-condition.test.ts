@@ -676,7 +676,7 @@ describe("checkConvergenceTier", () => {
 		const result: Record<string, PersonaSpatialState> = {};
 		for (let i = 0; i < positions.length; i++) {
 			// biome-ignore lint/style/noNonNullAssertion: bounded index
-			result[`ai-${i}`] = { position: positions[i]!, facing: "north" };
+			result[`ai-${i}`] = { position: positions[i]! };
 		}
 		return result;
 	}

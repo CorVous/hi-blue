@@ -8,7 +8,7 @@
  *
  * The surface is the five-tool Daemon tool set (ADR 0015): `go`, `pick_up`,
  * `put_down`, `use`, `message`. There is no `face` tool and no
- * facing-relative movement vocabulary.
+ * relative-direction movement vocabulary.
  *
  * Reach is the **Interaction range** (ADR 0015): the Daemon's own cell plus
  * all eight adjacent cells, including diagonals. It is strictly shorter than

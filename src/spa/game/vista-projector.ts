@@ -7,7 +7,7 @@
  * The Vista is the region a Daemon perceives: it contains exactly the integer
  * offsets satisfying `dx² + dy² ≤ 4`, where `dx`/`dy` denote offsets along
  * the east–west and north–south directions. Unlike the retired Cone, it takes
- * no facing and no occluder input: obstacles never remove cells from the
+ * no orientation and no occluder input: obstacles never remove cells from the
  * footprint, and out-of-bounds cells are perceived as **Wall**s
  * (`isWall: true`), the sentinel CONTEXT.md's **Wall** entry describes.
  *
@@ -166,8 +166,8 @@ export interface VistaCell {
  *
  * Returns exactly 13 cells in canonical order (see `VISTA_OFFSETS`).
  * Out-of-bounds cells are Wall sentinels (`isWall: true`); the observer's own
- * cell is always in-bounds, so it is never a Wall. No facing and no obstacle
- * information enters the projection, so the footprint is position-only and
+ * cell is always in-bounds, so it is never a Wall. No orientation and no
+ * obstacle information enters the projection, so the footprint is position-only and
  * never occluded.
  *
  * @throws RangeError when `position` lies outside the room bounds. An

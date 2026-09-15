@@ -509,9 +509,9 @@ describe("serializeSession / deserializeSession", () => {
 		const modified: GameState = {
 			...game,
 			personaSpatial: {
-				red: { position: { row: 2, col: 3 }, facing: "east" as const },
-				green: { position: { row: 1, col: 1 }, facing: "south" as const },
-				cyan: { position: { row: 4, col: 4 }, facing: "west" as const },
+				red: { position: { row: 2, col: 3 } },
+				green: { position: { row: 1, col: 1 } },
+				cyan: { position: { row: 4, col: 4 } },
 			},
 		};
 		const files = serializeSession(modified, NOW, CREATED_AT);
@@ -520,7 +520,6 @@ describe("serializeSession / deserializeSession", () => {
 		if (result.kind === "ok") {
 			expect(result.state.personaSpatial.red).toEqual({
 				position: { row: 2, col: 3 },
-				facing: "east",
 			});
 		}
 	});

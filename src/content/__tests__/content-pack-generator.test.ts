@@ -47,7 +47,6 @@ function seededRng(seed: number): () => number {
 
 const GRID_ROWS = 5;
 const GRID_COLS = 5;
-const CARDINAL = new Set(["north", "south", "east", "west"]);
 
 // ── Fixed phase configs for tests ─────────────────────────────────────────────
 
@@ -347,20 +346,12 @@ describe("generateContentPacks — placement constraints", () => {
 				}
 			}
 
-			// 5. Each AI's facing is a cardinal direction
-			for (const [aiId, spatial] of Object.entries(pack.aiStarts)) {
-				expect(
-					CARDINAL.has(spatial.facing),
-					`Pack ${packIdx}: AI ${aiId} has non-cardinal facing "${spatial.facing}"`,
-				).toBe(true);
-			}
-
-			// 6. pairsWithSpaceId links
+			// 5. pairsWithSpaceId links
 			for (const pair of carryPairs(pack)) {
 				expect(pair.object.pairsWithSpaceId).toBe(pair.space.id);
 			}
 
-			// 7. placementFlavor contains "{actor}"
+			// 6. placementFlavor contains "{actor}"
 			for (const pair of carryPairs(pack)) {
 				expect(
 					pair.object.placementFlavor,
@@ -369,7 +360,7 @@ describe("generateContentPacks — placement constraints", () => {
 				expect(pair.object.placementFlavor).toContain("{actor}");
 			}
 
-			// 8. useOutcome and examineDescription are non-empty
+			// 7. useOutcome and examineDescription are non-empty
 			for (const pair of carryPairs(pack)) {
 				expect(pair.object.useOutcome).toBeTruthy();
 				expect(pair.object.examineDescription).toBeTruthy();

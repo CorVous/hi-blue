@@ -11,8 +11,55 @@
  *   - scoreScenario(turns) → ScenarioScore
  */
 
-import type { RelativeDirection } from "../../src/spa/game/direction.js";
 import type { CardinalDirection } from "../../src/spa/game/types.js";
+
+// ── Relative-direction vocabulary (eval-local) ────────────────────────────────
+//
+// ADR 0015 removed orientation from the game, so the game module no longer
+// exports a relative-direction vocabulary or any cardinal↔relative conversion.
+// This eval still scores the retired relative-movement hypothesis (retargeting
+// it is ticket #541), so it owns the vocabulary it scores instead of borrowing
+// it from the runtime.
+
+export const RELATIVE_DIRECTIONS = [
+	"forward",
+	"back",
+	"left",
+	"right",
+] as const;
+
+export type RelativeDirection = (typeof RELATIVE_DIRECTIONS)[number];
+
+const COMPASS_ORDER: readonly CardinalDirection[] = [
+	"north",
+	"east",
+	"south",
+	"west",
+];
+
+/**
+ * The eval's own cardinal→relative conversion, used only to interpret a
+ * `go <cardinal>` tool call as the relative direction the scenario intended.
+ * Eval scoring only — the game has no equivalent.
+ */
+export function cardinalToRelative(
+	orientation: CardinalDirection,
+	absolute: CardinalDirection,
+): RelativeDirection {
+	const delta =
+		(COMPASS_ORDER.indexOf(absolute) - COMPASS_ORDER.indexOf(orientation) + 4) %
+		4;
+	switch (delta) {
+		case 0:
+			return "forward";
+		case 1:
+			return "right";
+		case 2:
+			return "back";
+		default:
+			return "left";
+	}
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -29,10 +76,6 @@ export interface TurnRecord {
 	toolCalls: string[];
 	/** Cardinal-word leaks found in the daemon's prose (lower-cased). */
 	cardinalLeaks: string[];
-	/** Actor facing before this turn was taken. */
-	facingBefore: CardinalDirection;
-	/** Actor facing after this turn resolved. */
-	facingAfter: CardinalDirection;
 	/**
 	 * The relative direction the daemon *stated* in prose before acting
 	 * ("I'll go forward", "I move left", …). Null when no movement statement found.

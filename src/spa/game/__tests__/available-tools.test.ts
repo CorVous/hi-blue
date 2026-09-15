@@ -61,9 +61,9 @@ function makeGame() {
 		timeOfDay: "night",
 		wallName: "wall",
 		aiStarts: {
-			red: { position: { row: 2, col: 2 }, facing: "north" },
-			green: { position: { row: 0, col: 0 }, facing: "north" },
-			cyan: { position: { row: 4, col: 4 }, facing: "south" },
+			red: { position: { row: 2, col: 2 } },
+			green: { position: { row: 0, col: 0 } },
+			cyan: { position: { row: 4, col: 4 } },
 		},
 	});
 	return startGame(TEST_PERSONAS, pack, { budgetPerAi: 5, rng: () => 0 });
@@ -114,9 +114,9 @@ describe("availableTools — tool_disable filtering", () => {
 			setting: "test",
 			wallName: "wall",
 			aiStarts: {
-				red: { position: { row: 2, col: 2 }, facing: "north" },
-				green: { position: { row: 0, col: 0 }, facing: "north" },
-				cyan: { position: { row: 4, col: 4 }, facing: "south" },
+				red: { position: { row: 2, col: 2 } },
+				green: { position: { row: 0, col: 0 } },
+				cyan: { position: { row: 4, col: 4 } },
 			},
 		});
 		const game = startGame(TEST_PERSONAS, pack, {
@@ -232,25 +232,23 @@ describe("availableTools — tool_disable filtering", () => {
 		expect(toolNames).toContain("go");
 	});
 
-	it("never offers the retired `face` tool, whatever the facing or disable set", () => {
-		for (const facing of ["north", "south", "east", "west"] as const) {
-			const game = makeGameWithSpace(facing, { row: 2, col: 2 });
-			const complications: ActiveComplication[] = [
-				{ kind: "tool_disable", target: "red", tool: "go", resolveAtRound: 5 },
-				{
-					kind: "tool_disable",
-					target: "red",
-					tool: "message",
-					resolveAtRound: 5,
-				},
-			];
-			const variants: ActiveComplication[][] = [[], complications];
-			for (const active of variants) {
-				const toolNames = availableTools(game, "red", active).map(
-					(t) => t.function.name,
-				);
-				expect(toolNames).not.toContain("face");
-			}
+	it("never offers the retired `face` tool, whatever the disable set", () => {
+		const game = makeGameWithSpace({ row: 2, col: 2 });
+		const complications: ActiveComplication[] = [
+			{ kind: "tool_disable", target: "red", tool: "go", resolveAtRound: 5 },
+			{
+				kind: "tool_disable",
+				target: "red",
+				tool: "message",
+				resolveAtRound: 5,
+			},
+		];
+		const variants: ActiveComplication[][] = [[], complications];
+		for (const active of variants) {
+			const toolNames = availableTools(game, "red", active).map(
+				(t) => t.function.name,
+			);
+			expect(toolNames).not.toContain("face");
 		}
 	});
 
@@ -277,11 +275,10 @@ describe("availableTools — tool_disable filtering", () => {
 // ── UseSpace: use tool includes objective_space ids ──────────────────────────
 
 /**
- * Build a GameState with red at (2,2) facing a given cardinal direction,
- * and an objective_space at the given position, with useAvailable = true unless overridden.
+ * Build a GameState with red at (2,2) and an objective_space at the given
+ * position, with useAvailable = true unless overridden.
  */
 function makeGameWithSpace(
-	actorFacing: "north" | "south" | "east" | "west",
 	spacePos: { row: number; col: number },
 	spaceOpts: Partial<WorldEntity> = {},
 ): GameState {
@@ -308,9 +305,9 @@ function makeGameWithSpace(
 		setting: "test",
 		wallName: "wall",
 		aiStarts: {
-			red: { position: { row: 2, col: 2 }, facing: actorFacing },
-			green: { position: { row: 0, col: 0 }, facing: "north" },
-			cyan: { position: { row: 4, col: 4 }, facing: "south" },
+			red: { position: { row: 2, col: 2 } },
+			green: { position: { row: 0, col: 0 } },
+			cyan: { position: { row: 4, col: 4 } },
 		},
 	});
 	return startGame(TEST_PERSONAS, pack, { budgetPerAi: 5, rng: () => 0 });
@@ -318,8 +315,8 @@ function makeGameWithSpace(
 
 describe("availableTools — use includes objective_space ids", () => {
 	it("use includes space id when actor stands ON the space", () => {
-		// red at (2,2) facing north; space at (2,2)
-		const game = makeGameWithSpace("north", { row: 2, col: 2 });
+		// red at (2,2); space at (2,2)
+		const game = makeGameWithSpace({ row: 2, col: 2 });
 		const tools = availableTools(game, "red", []);
 		const useTool = tools.find((t) => t.function.name === "use");
 		expect(useTool).toBeDefined();
@@ -327,9 +324,9 @@ describe("availableTools — use includes objective_space ids", () => {
 		expect(itemEnum).toContain("space1");
 	});
 
-	it("use includes space id when space is directly in front (north facing)", () => {
-		// red at (2,2) facing north; space at (1,2) = directly north
-		const game = makeGameWithSpace("north", { row: 1, col: 2 });
+	it("use includes space id when space is one step north", () => {
+		// red at (2,2); space at (1,2) = one step north
+		const game = makeGameWithSpace({ row: 1, col: 2 });
 		const tools = availableTools(game, "red", []);
 		const useTool = tools.find((t) => t.function.name === "use");
 		expect(useTool).toBeDefined();
@@ -337,28 +334,28 @@ describe("availableTools — use includes objective_space ids", () => {
 		expect(itemEnum).toContain("space1");
 	});
 
-	it("use includes space id when space is in front-left arc (north facing)", () => {
-		// red at (2,2) facing north; front-left for north = (1,1)
-		const game = makeGameWithSpace("north", { row: 1, col: 1 });
+	it("use includes space id when space is the north-west diagonal", () => {
+		// red at (2,2); (1,1) = one step north and one step west
+		const game = makeGameWithSpace({ row: 1, col: 1 });
 		const tools = availableTools(game, "red", []);
 		const useTool = tools.find((t) => t.function.name === "use");
 		const itemEnum = useTool?.function.parameters.properties.item?.enum;
 		expect(itemEnum).toContain("space1");
 	});
 
-	it("use includes space id when space is in front-right arc (north facing)", () => {
-		// red at (2,2) facing north; front-right for north = (1,3)
-		const game = makeGameWithSpace("north", { row: 1, col: 3 });
+	it("use includes space id when space is the north-east diagonal", () => {
+		// red at (2,2); (1,3) = one step north and one step east
+		const game = makeGameWithSpace({ row: 1, col: 3 });
 		const tools = availableTools(game, "red", []);
 		const useTool = tools.find((t) => t.function.name === "use");
 		const itemEnum = useTool?.function.parameters.properties.item?.enum;
 		expect(itemEnum).toContain("space1");
 	});
 
-	it("use does NOT include space id when space is at distance 2 (two ahead)", () => {
-		// red at (2,2) facing north; space at (0,2) = 2 cells directly north
+	it("use does NOT include space id when space is two cardinal steps away", () => {
+		// red at (2,2); space at (0,2) = 2 cells north
 		// Offset (2,0): inside the Vista, outside interaction range.
-		const game = makeGameWithSpace("north", { row: 0, col: 2 });
+		const game = makeGameWithSpace({ row: 0, col: 2 });
 		const tools = availableTools(game, "red", []);
 		const useTool = tools.find((t) => t.function.name === "use");
 		// useTool may be undefined (no held items either) or defined without space1
@@ -366,11 +363,11 @@ describe("availableTools — use includes objective_space ids", () => {
 		expect(itemEnum).not.toContain("space1");
 	});
 
-	it("use includes space id when space is one step behind the actor", () => {
-		// red at (2,2) facing north; space at (3,2) = directly south (behind).
-		// Interaction range is omnidirectional: behind counts (the retired
-		// front arc excluded it).
-		const game = makeGameWithSpace("north", { row: 3, col: 2 });
+	it("use includes space id when space is one step south of the actor", () => {
+		// red at (2,2); space at (3,2) = one step south.
+		// Interaction range is omnidirectional (the retired front arc excluded
+		// this cell).
+		const game = makeGameWithSpace({ row: 3, col: 2 });
 		const tools = availableTools(game, "red", []);
 		const useTool = tools.find((t) => t.function.name === "use");
 		const itemEnum = useTool?.function.parameters.properties.item?.enum ?? [];
@@ -378,12 +375,8 @@ describe("availableTools — use includes objective_space ids", () => {
 	});
 
 	it("use does NOT include space id when useAvailable is false", () => {
-		// red at (2,2) facing north; space at (1,2) with useAvailable=false
-		const game = makeGameWithSpace(
-			"north",
-			{ row: 1, col: 2 },
-			{ useAvailable: false },
-		);
+		// red at (2,2); space at (1,2) with useAvailable=false
+		const game = makeGameWithSpace({ row: 1, col: 2 }, { useAvailable: false });
 		const tools = availableTools(game, "red", []);
 		const useTool = tools.find((t) => t.function.name === "use");
 		const itemEnum = useTool?.function.parameters.properties.item?.enum ?? [];
@@ -392,7 +385,7 @@ describe("availableTools — use includes objective_space ids", () => {
 
 	it("use is present with space id only when Daemon holds NO item but stands on space", () => {
 		// red at (2,2) holding nothing; space at (2,2)
-		const game = makeGameWithSpace("north", { row: 2, col: 2 });
+		const game = makeGameWithSpace({ row: 2, col: 2 });
 		const tools = availableTools(game, "red", []);
 		const useTool = tools.find((t) => t.function.name === "use");
 		expect(useTool).toBeDefined();
@@ -417,7 +410,6 @@ describe("availableTools — interaction range", () => {
 
 	/** Red at (2,2) with a ground item and/or an objective_space at the given offsets. */
 	function makeGameAtOffsets(opts: {
-		facing?: "north" | "south" | "east" | "west";
 		itemOffset?: { dx: number; dy: number };
 		spaceOffset?: { dx: number; dy: number };
 	}): GameState {
@@ -446,9 +438,9 @@ describe("availableTools — interaction range", () => {
 			setting: "test",
 			wallName: "wall",
 			aiStarts: {
-				red: { position: { row: 2, col: 2 }, facing: opts.facing ?? "north" },
-				green: { position: { row: 0, col: 0 }, facing: "north" },
-				cyan: { position: { row: 4, col: 4 }, facing: "south" },
+				red: { position: { row: 2, col: 2 } },
+				green: { position: { row: 0, col: 0 } },
+				cyan: { position: { row: 4, col: 4 } },
 			},
 		});
 		return startGame(TEST_PERSONAS, pack, { budgetPerAi: 5, rng: () => 0 });
@@ -515,12 +507,16 @@ describe("availableTools — interaction range", () => {
 		expect(enumOf(game, "use", "item")).not.toContain("space1");
 	});
 
-	it("reach does not depend on facing: one step south is reachable while facing north", () => {
-		for (const facing of ["north", "south", "east", "west"] as const) {
+	it("reach is omnidirectional: one step in every cardinal direction is reachable", () => {
+		for (const step of [
+			{ dx: 0, dy: 1 },
+			{ dx: 0, dy: -1 },
+			{ dx: 1, dy: 0 },
+			{ dx: -1, dy: 0 },
+		]) {
 			const game = makeGameAtOffsets({
-				facing,
-				itemOffset: { dx: 0, dy: -1 },
-				spaceOffset: { dx: 0, dy: -1 },
+				itemOffset: step,
+				spaceOffset: step,
 			});
 			expect(enumOf(game, "pick_up", "item")).toContain("ground-item");
 			expect(enumOf(game, "use", "item")).toContain("space1");
