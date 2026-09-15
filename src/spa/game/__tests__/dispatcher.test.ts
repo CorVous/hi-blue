@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { availableTools } from "../available-tools";
+import type { CardinalDirection } from "../direction";
 import {
 	dispatchAiTurn,
 	executeToolCall,
@@ -7,6 +8,7 @@ import {
 } from "../dispatcher";
 import { deductBudget, startGame } from "../engine";
 import type {
+	AiId,
 	AiPersona,
 	AiTurnAction,
 	CarryObjective,
@@ -79,6 +81,37 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
  *   key    → holder: "red"             (held by red)
  */
 const FIXED_RNG = () => 0;
+
+/**
+ * A raw tool call as an LLM could hand it over: a name outside `ToolName`
+ * (e.g. the retired `face` tool) reaching the dispatcher without the tool
+ * enum having filtered it out.
+ */
+function rawToolCall(name: string, args: Record<string, string>): ToolCall {
+	return { name, args } as unknown as ToolCall;
+}
+
+/**
+ * Test-only: set a Daemon's stored facing without a tool call. Daemons still
+ * keep a `facing` field and the witness-cone fan-out still reads it, but no
+ * tool turns a Daemon any more — this stands in for the retired `face` tool
+ * when a test needs to arrange an observer's cone.
+ */
+function withFacing(
+	game: GameState,
+	aiId: AiId,
+	facing: CardinalDirection,
+): GameState {
+	const spatial = game.personaSpatial[aiId];
+	if (!spatial) throw new Error(`No spatial state for ${aiId}`);
+	return {
+		...game,
+		personaSpatial: {
+			...game.personaSpatial,
+			[aiId]: { ...spatial, facing },
+		},
+	};
+}
 
 /** Helper to make a WorldEntity */
 function makeEntity(
@@ -199,10 +232,10 @@ describe("validateToolCall", () => {
 		expect(result.valid).toBe(false);
 	});
 
-	it("allows go in a valid direction", () => {
+	it("allows go in a valid cardinal direction", () => {
 		const game = makeGame();
 		// red at (0,0), going south → (1,0), which is in bounds
-		const call: ToolCall = { name: "go", args: { direction: "back" } };
+		const call: ToolCall = { name: "go", args: { direction: "south" } };
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(true);
 	});
@@ -210,7 +243,7 @@ describe("validateToolCall", () => {
 	it("rejects go out of bounds", () => {
 		const game = makeGame();
 		// red at (0,0), going north → (-1,0), out of bounds
-		const call: ToolCall = { name: "go", args: { direction: "forward" } };
+		const call: ToolCall = { name: "go", args: { direction: "north" } };
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(false);
 		expect(result.reason).toMatch(/out of bounds/i);
@@ -219,7 +252,7 @@ describe("validateToolCall", () => {
 	it("rejects go into an obstacle cell", () => {
 		const game = makeGame([{ row: 1, col: 0 }]);
 		// red at (0,0), going south → (1,0), which has an obstacle
-		const call: ToolCall = { name: "go", args: { direction: "back" } };
+		const call: ToolCall = { name: "go", args: { direction: "south" } };
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(false);
 		expect(result.reason).toMatch(/obstacle/i);
@@ -232,26 +265,31 @@ describe("validateToolCall", () => {
 		expect(result.valid).toBe(false);
 	});
 
-	it("allows face in valid non-forward directions", () => {
+	it("rejects every retired relative `go` argument supplied as a raw tool call", () => {
 		const game = makeGame();
-		const call: ToolCall = { name: "face", args: { direction: "right" } };
-		const result = validateToolCall(game, "red", call);
-		expect(result.valid).toBe(true);
+		// These bypass the tool enum (and `go`'s cardinal-only direction enum)
+		// exactly as a hand-supplied raw tool call would.
+		for (const direction of ["forward", "back", "left", "right"]) {
+			const result = validateToolCall(
+				game,
+				"red",
+				rawToolCall("go", { direction }),
+			);
+			expect(result.valid, `relative direction "${direction}"`).toBe(false);
+			expect(result.reason, `relative direction "${direction}"`).toMatch(
+				/north, south, east, or west/i,
+			);
+		}
 	});
 
-	it("rejects face forward as a no-op direction", () => {
+	it("rejects a manually supplied `face` tool call as an unknown tool", () => {
 		const game = makeGame();
-		const call: ToolCall = { name: "face", args: { direction: "forward" } };
+		// `face` is no longer in `ToolName`; a raw call can still carry the name.
+		const call = rawToolCall("face", { direction: "right" });
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(false);
-		expect(result.reason).toMatch(/already face|no-op|same direction/i);
-	});
-
-	it("rejects face with an invalid direction", () => {
-		const game = makeGame();
-		const call: ToolCall = { name: "face", args: { direction: "diagonal" } };
-		const result = validateToolCall(game, "red", call);
-		expect(result.valid).toBe(false);
+		expect(result.reason).toMatch(/unknown tool/i);
+		expect(result.reason).toContain("face");
 	});
 
 	it("allows use of an item held by the AI", () => {
@@ -499,113 +537,66 @@ describe("executeToolCall", () => {
 
 	it("updates position and facing on go", () => {
 		const game = makeGame();
-		// red at (0,0) facing north; go south → (1,0) facing south
-		const call: ToolCall = { name: "go", args: { direction: "back" } };
+		// red at (0,0); go south → (1,0), facing tracked as the direction walked
+		const call: ToolCall = { name: "go", args: { direction: "south" } };
 		const updated = executeToolCall(game, "red", call);
 		const spatial = updated.personaSpatial.red;
 		expect(spatial?.position).toEqual({ row: 1, col: 0 });
 		expect(spatial?.facing).toBe("south");
 	});
 
-	it("updates only facing on face (no position change)", () => {
-		const game = makeGame();
-		// red at (0,0) facing north; face east → (0,0) facing east
-		const call: ToolCall = { name: "face", args: { direction: "right" } };
-		const updated = executeToolCall(game, "red", call);
-		const spatial = updated.personaSpatial.red;
-		expect(spatial?.position).toEqual({ row: 0, col: 0 });
-		expect(spatial?.facing).toBe("east");
-	});
-
-	// ── Relative direction dispatch (issue: relative-directions) ─────────────
+	// ── Cardinal direction dispatch (ADR 0015: cardinal-only movement) ────────
 	// red starts at (0,0) facing north (via FIXED_RNG).
 
-	it("rejects face forward as a no-op direction (already facing that way)", () => {
+	it("go south moves to (1,0)", () => {
 		const game = makeGame();
-		const result = validateToolCall(game, "red", {
-			name: "face",
-			args: { direction: "forward" },
-		});
-		expect(result.valid).toBe(false);
-		expect(result.reason).toMatch(/already face|no-op|same direction/i);
-	});
-
-	it("face right (facing north) → remains at (0,0) facing east", () => {
-		const game = makeGame();
-		const call: ToolCall = { name: "face", args: { direction: "right" } };
-		const updated = executeToolCall(game, "red", call);
-		const spatial = updated.personaSpatial.red;
-		expect(spatial?.position).toEqual({ row: 0, col: 0 });
-		expect(spatial?.facing).toBe("east");
-	});
-
-	it("face left (facing north) → remains at (0,0) facing west", () => {
-		const game = makeGame();
-		const call: ToolCall = { name: "face", args: { direction: "left" } };
-		const updated = executeToolCall(game, "red", call);
-		const spatial = updated.personaSpatial.red;
-		expect(spatial?.position).toEqual({ row: 0, col: 0 });
-		expect(spatial?.facing).toBe("west");
-	});
-
-	it("face back (facing north) → remains at (0,0) facing south", () => {
-		const game = makeGame();
-		const call: ToolCall = { name: "face", args: { direction: "back" } };
-		const updated = executeToolCall(game, "red", call);
-		const spatial = updated.personaSpatial.red;
-		expect(spatial?.position).toEqual({ row: 0, col: 0 });
-		expect(spatial?.facing).toBe("south");
-	});
-
-	it("go forward (facing north) is rejected (out of bounds at row -1)", () => {
-		// red at (0,0) facing north; forward = north → row -1, which is OOB
-		const game = makeGame();
-		const result = validateToolCall(game, "red", {
-			name: "go",
-			args: { direction: "forward" },
-		});
-		expect(result.valid).toBe(false);
-		expect(result.reason).toMatch(/out of bounds/i);
-	});
-
-	it("go back (facing north) → moves to (1,0) facing south", () => {
-		// back = south from north-facing → row+1
-		const game = makeGame();
-		const call: ToolCall = { name: "go", args: { direction: "back" } };
+		const call: ToolCall = { name: "go", args: { direction: "south" } };
 		const updated = executeToolCall(game, "red", call);
 		const spatial = updated.personaSpatial.red;
 		expect(spatial?.position).toEqual({ row: 1, col: 0 });
 		expect(spatial?.facing).toBe("south");
 	});
 
-	it("go right (facing north) → moves to (0,1) facing east", () => {
-		// right = east from north-facing
+	it("go east moves to (0,1)", () => {
 		const game = makeGame();
-		const call: ToolCall = { name: "go", args: { direction: "right" } };
+		const call: ToolCall = { name: "go", args: { direction: "east" } };
 		const updated = executeToolCall(game, "red", call);
 		const spatial = updated.personaSpatial.red;
 		expect(spatial?.position).toEqual({ row: 0, col: 1 });
 		expect(spatial?.facing).toBe("east");
 	});
 
-	it("go left (facing north) is rejected (out of bounds at col -1)", () => {
-		// red at (0,0) facing north; left = west → col -1, which is OOB
+	it("go west from (0,0) is rejected (out of bounds at col -1)", () => {
 		const game = makeGame();
 		const result = validateToolCall(game, "red", {
 			name: "go",
-			args: { direction: "left" },
+			args: { direction: "west" },
 		});
 		expect(result.valid).toBe(false);
 		expect(result.reason).toMatch(/out of bounds/i);
 	});
 
-	it("go back (relative) resolves correctly: actor ends up facing south and at (1,0)", () => {
-		// Verifies the resolved cardinal is applied to spatial state (not the raw "back" arg).
-		// red at (0,0) facing north; back = south = row+1.
+	it("a retired relative go argument never moves the actor", () => {
+		for (const direction of ["forward", "back", "left", "right"]) {
+			const game = makeGame();
+			const result = dispatchAiTurn(game, {
+				aiId: "red",
+				toolCall: rawToolCall("go", { direction }),
+			});
+			expect(result.records[0]?.kind).toBe("tool_failure");
+			expect(result.game.personaSpatial.red?.position).toEqual({
+				row: 0,
+				col: 0,
+			});
+		}
+	});
+
+	it("go south via dispatchAiTurn leaves red at (1,0)", () => {
+		// Verifies the cardinal direction is applied to spatial state.
 		const game = makeGame();
 		const action: AiTurnAction = {
 			aiId: "red",
-			toolCall: { name: "go", args: { direction: "back" } },
+			toolCall: { name: "go", args: { direction: "south" } },
 		};
 		const result = dispatchAiTurn(game, action);
 		expect(result.rejected).toBe(false);
@@ -713,7 +704,7 @@ describe("dispatchAiTurn", () => {
 		// red at (0,0), going south
 		const action: AiTurnAction = {
 			aiId: "red",
-			toolCall: { name: "go", args: { direction: "back" } },
+			toolCall: { name: "go", args: { direction: "south" } },
 		};
 		const result = dispatchAiTurn(game, action);
 		expect(result.rejected).toBe(false);
@@ -984,10 +975,10 @@ describe("dispatchAiTurn", () => {
 
 	it("go against a wall produces one action-failure entry in actor's log; peers untouched", () => {
 		const game = makeGame([{ row: 1, col: 0 }]);
-		// red at (0,0) facing north; obstacle at (1,0); go south → blocked
+		// red at (0,0); obstacle at (1,0); go south → blocked
 		const action: AiTurnAction = {
 			aiId: "red",
-			toolCall: { name: "go", args: { direction: "back" } },
+			toolCall: { name: "go", args: { direction: "south" } },
 		};
 		const result = dispatchAiTurn(game, action);
 		expect(result.rejected).toBe(false);
@@ -1454,20 +1445,14 @@ describe("dispatchAiTurn — UseItemObjective activationFlavor on interesting_ob
 	});
 
 	it("fans out activationFlavor as the witnessed-event useOutcome on the satisfying call", () => {
-		const game = makeGameWithUseItemActivation();
-		const facedEast = executeToolCall(game, "red", {
-			name: "face",
-			args: { direction: "right" },
-		});
-		// red at (0,0) facing east; green at (0,1) facing north.
-		// green's cone (facing north from (0,1)) does NOT include (0,0),
-		// so green won't witness. Instead, move green so its cone covers red.
-		// Simplest: have green face west from (0,1) — front arc covers (0,0).
-		const greenWest = executeToolCall(facedEast, "green", {
-			name: "face",
-			args: { direction: "left" },
-		});
-		const result = dispatchAiTurn(greenWest, {
+		// red at (0,0) facing east; green at (0,1) facing west — green's cone
+		// (facing west from (0,1)) covers (0,0), so green witnesses the use.
+		const game = withFacing(
+			withFacing(makeGameWithUseItemActivation(), "red", "east"),
+			"green",
+			"west",
+		);
+		const result = dispatchAiTurn(game, {
 			aiId: "red",
 			toolCall: { name: "use", args: { item: "key" } },
 		});
@@ -1485,13 +1470,9 @@ describe("dispatchAiTurn — UseItemObjective activationFlavor on interesting_ob
 	});
 
 	it("fans out useOutcome to witnesses on a post-satisfaction subsequent use", () => {
-		const game = makeGameWithUseItemActivation();
-		const greenWest = executeToolCall(game, "green", {
-			name: "face",
-			args: { direction: "left" },
-		});
+		const game = withFacing(makeGameWithUseItemActivation(), "green", "west");
 		// First use satisfies + emits activationFlavor.
-		const after = dispatchAiTurn(greenWest, {
+		const after = dispatchAiTurn(game, {
 			aiId: "red",
 			toolCall: { name: "use", args: { item: "key" } },
 		});
@@ -1653,7 +1634,7 @@ describe("dispatchAiTurn — cone-delta computation (issue #376)", () => {
 
 		const action: AiTurnAction = {
 			aiId: "red",
-			toolCall: { name: "go", args: { direction: "forward" } },
+			toolCall: { name: "go", args: { direction: "north" } },
 		};
 		const result = dispatchAiTurn(game, action);
 		expect(result.rejected).toBe(false);
@@ -1661,22 +1642,29 @@ describe("dispatchAiTurn — cone-delta computation (issue #376)", () => {
 		expect(result.actorConeDelta).toContain("*green");
 	});
 
-	it("face action that changes direction emits actorConeDelta when cone content shifts", () => {
-		// Red faces north, back faces south → cone changes. With entities in the world,
-		// the snapshot post-facing should differ from pre-facing.
+	it("a rejected raw `face` tool call sets no actorConeDelta and no success record", () => {
 		const game = makeGame();
 
 		const action: AiTurnAction = {
 			aiId: "red",
-			toolCall: { name: "face", args: { direction: "back" } },
+			toolCall: rawToolCall("face", { direction: "back" }),
 		};
 		const result = dispatchAiTurn(game, action);
 		expect(result.rejected).toBe(false);
-		// Cone delta is set when facing changes reveal new content
-		// (behavior depends on world layout, but the field itself exists)
+		// Rejected, not ignored and not a no-op success.
+		expect(result.records[0]?.kind).toBe("tool_failure");
+		expect(result.records[0]?.description).toMatch(/unknown tool/i);
+		expect(result.actorConeDelta).toBeUndefined();
+		expect(result.game.personaSpatial.red?.facing).toBe("north");
+		// The rejection is recorded for the actor.
+		const failures = (result.game.conversationLogs.red ?? []).filter(
+			(e) => e.kind === "action-failure",
+		);
+		expect(failures).toHaveLength(1);
+		expect(failures[0]).toMatchObject({ tool: "face" });
 	});
 
-	it("non-go/face tools never set actorConeDelta", () => {
+	it("non-go tools never set actorConeDelta", () => {
 		const game = makeGame();
 
 		const action: AiTurnAction = {

@@ -568,7 +568,6 @@ describe("Tool Disable exclusion", () => {
 			"put_down",
 			"use",
 			"go",
-			"face",
 			"message",
 		];
 		const activeComplications: ActiveComplication[] = [];
@@ -596,8 +595,8 @@ describe("Tool Disable exclusion", () => {
 	});
 
 	it("excludes a (daemon, tool) pair already present in activeComplications", () => {
-		// Only red+pick_up is already disabled. With 3 daemons × 8 tools = 24 pairs,
-		// 1 excluded, 23 valid pairs remain.
+		// Only red+pick_up is already disabled. With 3 daemons × 5 tools = 15 pairs,
+		// 1 excluded, 14 valid pairs remain.
 		const activeComplications: ActiveComplication[] = [
 			{
 				kind: "tool_disable",
@@ -665,6 +664,35 @@ describe("Tool Disable exclusion", () => {
 				result.fired.target === "green" && result.fired.tool === "pick_up",
 			).toBe(false);
 		}
+	});
+});
+
+// ── Tool Disable pool surface (ADR 0015) ──────────────────────────────────────
+
+describe("Tool Disable pool — the retired `face` tool is not selectable", () => {
+	it("draws only the five Daemon tools across every (daemon, tool) pair", () => {
+		// 3 daemons × 5 tools = 15 pairs. rng[0]=0.4 lands on tool_disable in the
+		// 5-item pool; sweeping rng[1] across the 15 pair slots visits every pair.
+		const drawn = new Set<string>();
+		for (let i = 0; i < 15; i++) {
+			const phase = makePhase({
+				complicationSchedule: { countdown: 0, settingShiftFired: false },
+			});
+			const game = makeGameStateAround(phase);
+			const result = tickComplication(game, seededRng([0.4, i / 15, 0.5]));
+			expect(result?.fired.kind).toBe("tool_disable");
+			if (result?.fired.kind === "tool_disable") {
+				expect(result.fired.tool).not.toBe("face");
+				drawn.add(result.fired.tool);
+			}
+		}
+		expect([...drawn].sort()).toEqual([
+			"go",
+			"message",
+			"pick_up",
+			"put_down",
+			"use",
+		]);
 	});
 });
 

@@ -129,18 +129,16 @@ describe("serializeSession / deserializeSession", () => {
 		const game = makeFreshGame();
 		const red = game.personas.red;
 		expect(red).toBeDefined();
-		if (red) red.actionProfile = "*red leans toward `go`, `face`.";
+		if (red) red.actionProfile = "*red leans toward `go`, `use`.";
 		const files = serializeSession(game, NOW, CREATED_AT);
 		// biome-ignore lint/style/noNonNullAssertion: daemons.red always exists for this fixture
 		const daemon = JSON.parse(files.daemons.red!);
-		expect(daemon.persona.actionProfile).toBe(
-			"*red leans toward `go`, `face`.",
-		);
+		expect(daemon.persona.actionProfile).toBe("*red leans toward `go`, `use`.");
 		const result = deserializeSession(files);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
 			expect(result.state.personas.red?.actionProfile).toBe(
-				"*red leans toward `go`, `face`.",
+				"*red leans toward `go`, `use`.",
 			);
 		}
 	});
@@ -380,9 +378,9 @@ describe("serializeSession / deserializeSession", () => {
 			round: 4,
 			aiId: "red" as AiId,
 			toolCallId: "go_call_1",
-			toolArgumentsJson: '{"direction":"forward"}',
+			toolArgumentsJson: '{"direction":"north"}',
 			toolName: "go",
-			result: "Ember moved forward.",
+			result: "Ember walks north.",
 			success: true,
 			coneDelta: "+ at directly in front, right: *green",
 		};

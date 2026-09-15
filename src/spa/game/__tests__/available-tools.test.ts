@@ -77,10 +77,59 @@ describe("availableTools — tool_disable filtering", () => {
 		const tools = availableTools(game, "red", []);
 		const toolNames = tools.map((t) => t.function.name);
 
-		// message and face are always present; go is present (red is at (2,2), not cornered)
-		expect(toolNames).toContain("message");
-		expect(toolNames).toContain("face");
-		expect(toolNames).toContain("go");
+		// message is always present; go is present (red is at (2,2), not cornered).
+		// The world holds no pickable entities and red holds nothing, so
+		// pick_up / put_down / use have nothing to act on.
+		expect(toolNames).toEqual(["message", "go"]);
+		expect(toolNames).not.toContain("face");
+	});
+
+	it("exposes exactly the five Daemon tools when every tool is feasible", () => {
+		// red at (2,2): a ground item in reach (pick_up), a held item
+		// (put_down), a reachable objective_space (use), and legal steps (go).
+		const groundItem: WorldEntity = {
+			id: "ground-item",
+			kind: "objective_object",
+			name: "Ground Item",
+			examineDescription: "An item on the ground.",
+			holder: { row: 2, col: 2 },
+		};
+		const heldItem: WorldEntity = {
+			id: "held-item",
+			kind: "objective_object",
+			name: "Held Item",
+			examineDescription: "An item in hand.",
+			holder: "red",
+		};
+		const space: WorldEntity = {
+			id: "space1",
+			kind: "objective_space",
+			name: "Test Space",
+			examineDescription: "A test space.",
+			holder: { row: 2, col: 2 },
+			useAvailable: true,
+			useOutcome: "You activate the space.",
+		};
+		const pack = makeTestPack([groundItem, heldItem, space], {
+			setting: "test",
+			wallName: "wall",
+			aiStarts: {
+				red: { position: { row: 2, col: 2 }, facing: "north" },
+				green: { position: { row: 0, col: 0 }, facing: "north" },
+				cyan: { position: { row: 4, col: 4 }, facing: "south" },
+			},
+		});
+		const game = startGame(TEST_PERSONAS, pack, {
+			budgetPerAi: 5,
+			rng: () => 0,
+		});
+
+		const toolNames = availableTools(game, "red", []).map(
+			(t) => t.function.name,
+		);
+		expect(toolNames).toEqual(["message", "go", "pick_up", "put_down", "use"]);
+		expect(toolNames).toHaveLength(5);
+		expect(toolNames).not.toContain("face");
 	});
 
 	it("removes 'go' when tool_disable targets aiId with tool='go'", () => {
@@ -99,7 +148,6 @@ describe("availableTools — tool_disable filtering", () => {
 		expect(toolNames).not.toContain("go");
 		// Other tools still present
 		expect(toolNames).toContain("message");
-		expect(toolNames).toContain("face");
 	});
 
 	it("a tool_disable for a different daemon does not affect the acting daemon's tools", () => {
@@ -133,8 +181,8 @@ describe("availableTools — tool_disable filtering", () => {
 		const toolNames = tools.map((t) => t.function.name);
 
 		expect(toolNames).not.toContain("message");
-		// face still present
-		expect(toolNames).toContain("face");
+		// go still present
+		expect(toolNames).toContain("go");
 	});
 
 	it("two tool_disable entries on same daemon (different tools) removes both", () => {
@@ -149,7 +197,7 @@ describe("availableTools — tool_disable filtering", () => {
 			{
 				kind: "tool_disable",
 				target: "red",
-				tool: "face",
+				tool: "message",
 				resolveAtRound: game.round + 4,
 			},
 		];
@@ -157,9 +205,8 @@ describe("availableTools — tool_disable filtering", () => {
 		const toolNames = tools.map((t) => t.function.name);
 
 		expect(toolNames).not.toContain("go");
-		expect(toolNames).not.toContain("face");
-		// message still present
-		expect(toolNames).toContain("message");
+		expect(toolNames).not.toContain("message");
+		expect(toolNames).toHaveLength(0);
 	});
 
 	it("non-tool_disable complications do not affect tool list", () => {
@@ -182,39 +229,48 @@ describe("availableTools — tool_disable filtering", () => {
 
 		// Neither sysadmin_directive nor chat_lockout should remove any tool
 		expect(toolNames).toContain("message");
-		expect(toolNames).toContain("face");
 		expect(toolNames).toContain("go");
 	});
 
-	it("disabling 'face' removes face tool", () => {
-		const game = makeGame();
-		const complications: ActiveComplication[] = [
-			{
-				kind: "tool_disable",
-				target: "cyan",
-				tool: "face",
-				resolveAtRound: game.round + 3,
-			},
-		];
-		const tools = availableTools(game, "cyan", complications);
-		const toolNames = tools.map((t) => t.function.name);
-
-		expect(toolNames).not.toContain("face");
+	it("never offers the retired `face` tool, whatever the facing or disable set", () => {
+		for (const facing of ["north", "south", "east", "west"] as const) {
+			const game = makeGameWithSpace(facing, { row: 2, col: 2 });
+			const complications: ActiveComplication[] = [
+				{ kind: "tool_disable", target: "red", tool: "go", resolveAtRound: 5 },
+				{
+					kind: "tool_disable",
+					target: "red",
+					tool: "message",
+					resolveAtRound: 5,
+				},
+			];
+			const variants: ActiveComplication[][] = [[], complications];
+			for (const active of variants) {
+				const toolNames = availableTools(game, "red", active).map(
+					(t) => t.function.name,
+				);
+				expect(toolNames).not.toContain("face");
+			}
+		}
 	});
 
-	it("face tool direction enum excludes 'forward'", () => {
+	it("go tool direction enum is cardinal-only", () => {
 		const game = makeGame();
 		const tools = availableTools(game, "red", []);
-		const faceTool = tools.find((t) => t.function.name === "face");
+		const goTool = tools.find((t) => t.function.name === "go");
 
-		expect(faceTool).toBeDefined();
+		expect(goTool).toBeDefined();
 		const directionEnum =
-			faceTool?.function.parameters.properties.direction?.enum;
+			goTool?.function.parameters.properties.direction?.enum;
 		expect(directionEnum).toBeDefined();
-		expect(directionEnum).toEqual(
-			expect.arrayContaining(["back", "left", "right"]),
-		);
+		expect(directionEnum?.length).toBeGreaterThan(0);
+		for (const dir of directionEnum ?? []) {
+			expect(["north", "south", "east", "west"]).toContain(dir);
+		}
 		expect(directionEnum).not.toContain("forward");
+		expect(directionEnum).not.toContain("back");
+		expect(directionEnum).not.toContain("left");
+		expect(directionEnum).not.toContain("right");
 	});
 });
 

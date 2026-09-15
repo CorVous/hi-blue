@@ -1,17 +1,26 @@
 import { describe, expect, it } from "vitest";
 import { parseToolCallArguments, TOOL_DEFINITIONS } from "../tool-registry";
+import type { ToolName } from "../types";
+
+const DAEMON_TOOLS: ToolName[] = [
+	"pick_up",
+	"put_down",
+	"use",
+	"go",
+	"message",
+];
 
 describe("TOOL_DEFINITIONS", () => {
-	it("lists exactly six tools: pick_up, put_down, use, go, face, message", () => {
+	it("lists exactly five tools: pick_up, put_down, use, go, message", () => {
 		const names = TOOL_DEFINITIONS.map((t) => t.function.name);
-		expect(names).toEqual([
-			"pick_up",
-			"put_down",
-			"use",
-			"go",
-			"face",
-			"message",
-		]);
+		expect(names).toEqual(["pick_up", "put_down", "use", "go", "message"]);
+		expect(names).toEqual(DAEMON_TOOLS);
+	});
+
+	it("has no `face` tool", () => {
+		expect(
+			TOOL_DEFINITIONS.find((t) => t.function.name === "face"),
+		).toBeUndefined();
 	});
 
 	it("each definition has type: 'function'", () => {
@@ -46,29 +55,39 @@ describe("TOOL_DEFINITIONS", () => {
 		expect(go?.function.parameters.required).toContain("direction");
 	});
 
-	it("go.direction has a 4-value enum of relative directions", () => {
+	it("go.direction has a 4-value enum of cardinal directions", () => {
 		const go = TOOL_DEFINITIONS.find((t) => t.function.name === "go");
 		const dirEnum = go?.function.parameters.properties.direction?.enum;
-		expect(dirEnum).toHaveLength(4);
-		expect(dirEnum).toContain("forward");
-		expect(dirEnum).toContain("back");
-		expect(dirEnum).toContain("left");
-		expect(dirEnum).toContain("right");
+		expect(dirEnum).toEqual(["north", "south", "east", "west"]);
+		expect(dirEnum).not.toContain("forward");
+		expect(dirEnum).not.toContain("back");
+		expect(dirEnum).not.toContain("left");
+		expect(dirEnum).not.toContain("right");
 	});
 
-	it("face requires 'direction'", () => {
-		const face = TOOL_DEFINITIONS.find((t) => t.function.name === "face");
-		expect(face?.function.parameters.required).toContain("direction");
+	it("go's description names cardinal directions, not facing or relative movement", () => {
+		const go = TOOL_DEFINITIONS.find((t) => t.function.name === "go");
+		const description = go?.function.description ?? "";
+		expect(description).toMatch(/north/);
+		expect(description).toMatch(/south/);
+		expect(description).toMatch(/east/);
+		expect(description).toMatch(/west/);
+		expect(description).not.toMatch(/facing/i);
+		expect(description).not.toMatch(/relative/i);
+		expect(description).not.toMatch(/forward|backward/i);
 	});
 
-	it("face.direction has a 4-value enum of relative directions", () => {
-		const face = TOOL_DEFINITIONS.find((t) => t.function.name === "face");
-		const dirEnum = face?.function.parameters.properties.direction?.enum;
-		expect(dirEnum).toHaveLength(4);
-		expect(dirEnum).toContain("forward");
-		expect(dirEnum).toContain("back");
-		expect(dirEnum).toContain("left");
-		expect(dirEnum).toContain("right");
+	it("describes reach without facing-relative vocabulary (no cone, no front arc)", () => {
+		for (const name of ["pick_up", "use"]) {
+			const def = TOOL_DEFINITIONS.find((t) => t.function.name === name);
+			const description = def?.function.description ?? "";
+			expect(description.length).toBeGreaterThan(0);
+			expect(description).not.toMatch(/cone/i);
+			expect(description).not.toMatch(/front arc/i);
+			expect(description).not.toMatch(/in front/i);
+			expect(description).not.toMatch(/facing/i);
+			expect(description).not.toMatch(/behind you|to your left|to your right/i);
+		}
 	});
 });
 
@@ -181,32 +200,28 @@ describe("parseToolCallArguments", () => {
 		}
 	});
 
-	it("parses valid go arguments", () => {
-		const result = parseToolCallArguments("go", '{"direction":"forward"}');
+	it("parses valid go arguments with a cardinal direction", () => {
+		const result = parseToolCallArguments("go", '{"direction":"north"}');
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			expect(result.args).toEqual({ direction: "forward" });
+			expect(result.args).toEqual({ direction: "north" });
 		}
 	});
 
-	it("parses valid face arguments", () => {
-		const result = parseToolCallArguments("face", '{"direction":"left"}');
-		expect(result.ok).toBe(true);
-		if (result.ok) {
-			expect(result.args).toEqual({ direction: "left" });
+	it("rejects a raw `face` tool call as an unknown tool (retired vocabulary)", () => {
+		const result = parseToolCallArguments(
+			"face" as ToolName,
+			'{"direction":"left"}',
+		);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.reason).toMatch(/unknown tool/i);
+			expect(result.reason).toContain("face");
 		}
 	});
 
 	it("returns ok:false with /required/i reason when 'direction' is missing for go", () => {
 		const result = parseToolCallArguments("go", "{}");
-		expect(result.ok).toBe(false);
-		if (!result.ok) {
-			expect(result.reason).toMatch(/required/i);
-		}
-	});
-
-	it("returns ok:false with /required/i reason when 'direction' is missing for face", () => {
-		const result = parseToolCallArguments("face", "{}");
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
 			expect(result.reason).toMatch(/required/i);

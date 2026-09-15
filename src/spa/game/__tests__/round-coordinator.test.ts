@@ -1056,12 +1056,19 @@ describe("tool-call dispatch", () => {
 		]);
 		await runRound(game, "red", "hi", provider);
 
-		// All three AI calls should receive tools from availableTools
+		// All three AI calls should receive tools from availableTools — the
+		// five-tool Daemon surface, never the retired `face`.
 		expect(provider.calls).toHaveLength(3);
-		// All three calls should include "face" in their tool list
+		const daemonTools = ["go", "pick_up", "put_down", "use", "message"];
 		for (const call of provider.calls) {
 			expect(call.tools).toBeDefined();
-			expect(call.tools?.some((t) => t.function.name === "face")).toBe(true);
+			const names = (call.tools ?? []).map((t) => t.function.name);
+			expect(names.length).toBeGreaterThan(0);
+			expect(names).toContain("message");
+			expect(names).not.toContain("face");
+			for (const name of names) {
+				expect(daemonTools).toContain(name);
+			}
 		}
 	});
 });
@@ -2816,7 +2823,7 @@ describe("complication countdown — coordinator integration", () => {
 
 		it("Test A: go reveals a stationary actor → tool-call entry carries coneDelta", async () => {
 			// Red at (2,0) facing north; green at (0,1) facing south.
-			// Red goes forward (north) to (1,0). From (1,0)/north green sits at
+			// Red goes north to (1,0). From (1,0)/north green sits at
 			// "directly in front, right"; from (2,0)/north it sat at
 			// "two steps ahead, front-right" — different line, so the diff fires.
 			const game = makeGameWithCustomStarts({
@@ -2832,7 +2839,7 @@ describe("complication countdown — coordinator integration", () => {
 						{
 							id: "go_1",
 							name: "go",
-							argumentsJson: JSON.stringify({ direction: "forward" }),
+							argumentsJson: JSON.stringify({ direction: "north" }),
 						},
 					],
 				},
@@ -2853,42 +2860,9 @@ describe("complication countdown — coordinator integration", () => {
 			}
 		});
 
-		it("Test B: face reveals an item → tool-call entry carries coneDelta", async () => {
-			// Red at (0,0) facing north — north cone is all walls. After facing
-			// right (now facing east), the key at (0,1) sits at "directly in front".
-			const game = makeGame();
-
-			const provider = new MockRoundLLMProvider([
-				{
-					assistantText: "",
-					toolCalls: [
-						{
-							id: "look_1",
-							name: "face",
-							argumentsJson: JSON.stringify({ direction: "right" }),
-						},
-					],
-				},
-				{ assistantText: "", toolCalls: [] },
-				{ assistantText: "", toolCalls: [] },
-			]);
-
-			const { nextState } = await runRound(game, "red", "start", provider);
-
-			const redLog = nextState.conversationLogs.red ?? [];
-			const toolCallEntry = redLog.find(
-				(e) => e.kind === "tool-call" && e.toolName === "face",
-			);
-			expect(toolCallEntry).toBeDefined();
-			if (toolCallEntry?.kind === "tool-call") {
-				expect(toolCallEntry.coneDelta).toBeDefined();
-				expect(toolCallEntry.coneDelta).toContain("key");
-			}
-		});
-
-		it("Test C: face forward is rejected at validation (already facing that way)", async () => {
-			// Red at (0,0) facing north. Red tries to face forward (already facing north).
-			// This is rejected as a no-op at validation, so red remains facing north.
+		it("Test B: a raw `face` tool call is rejected (unknown tool), never a no-op success", async () => {
+			// `face` is retired and outside the tool enum, but a model can still
+			// emit it — the coordinator must reject it, not silently drop it.
 			const game = makeGame();
 
 			const provider = new MockRoundLLMProvider([
@@ -2898,6 +2872,60 @@ describe("complication countdown — coordinator integration", () => {
 						{
 							id: "face_1",
 							name: "face",
+							argumentsJson: JSON.stringify({ direction: "right" }),
+						},
+					],
+				},
+				{ assistantText: "", toolCalls: [] },
+				{ assistantText: "", toolCalls: [] },
+			]);
+
+			const { nextState, result } = await runRound(
+				game,
+				"red",
+				"start",
+				provider,
+			);
+
+			const failure = result.actions.find((e) => e.kind === "tool_failure");
+			expect(failure).toBeDefined();
+			expect(failure?.description).toMatch(/unknown tool/i);
+			expect(failure?.description).toContain("face");
+
+			const redLog = nextState.conversationLogs.red ?? [];
+			const toolCallEntry = redLog.find(
+				(e) => e.kind === "tool-call" && e.toolName === "face",
+			);
+			// Recorded as a failed roundtrip entry, never a success, and the
+			// retired tool sets no coneDelta.
+			expect(toolCallEntry?.kind === "tool-call" && toolCallEntry.success).toBe(
+				false,
+			);
+			expect(
+				toolCallEntry?.kind === "tool-call"
+					? toolCallEntry.coneDelta
+					: undefined,
+			).toBeUndefined();
+			// Nothing changed: no turning, no movement.
+			expect(nextState.personaSpatial.red?.position).toEqual({
+				row: 0,
+				col: 0,
+			});
+			expect(nextState.personaSpatial.red?.facing).toBe("north");
+		});
+
+		it("Test C: a relative `go` argument supplied as a raw tool call is rejected (cardinal only)", async () => {
+			// Red at (0,0) facing north. "forward" is retired vocabulary: a raw
+			// tool call carrying it is rejected rather than resolved against facing.
+			const game = makeGame();
+
+			const provider = new MockRoundLLMProvider([
+				{
+					assistantText: "",
+					toolCalls: [
+						{
+							id: "go_rel_1",
+							name: "go",
 							argumentsJson: JSON.stringify({ direction: "forward" }),
 						},
 					],
@@ -2906,13 +2934,25 @@ describe("complication countdown — coordinator integration", () => {
 				{ assistantText: "", toolCalls: [] },
 			]);
 
-			const roundResult = await runRound(game, "red", "start", provider);
+			const { nextState, result } = await runRound(
+				game,
+				"red",
+				"start",
+				provider,
+			);
 
-			// Red should still be facing north (unchanged from the no-op rejection)
-			expect(roundResult.nextState.personaSpatial.red?.facing).toBe("north");
+			const failure = result.actions.find((e) => e.kind === "tool_failure");
+			expect(failure).toBeDefined();
+			expect(failure?.description).toMatch(/north, south, east, or west/i);
+
+			// Rejected: the actor did not move.
+			expect(nextState.personaSpatial.red?.position).toEqual({
+				row: 0,
+				col: 0,
+			});
 		});
 
-		it("Test D: non-go/face tools never enrich (pick_up does not get coneDelta)", async () => {
+		it("Test D: non-go tools never enrich (pick_up does not get coneDelta)", async () => {
 			const game = makeGame();
 
 			const provider = new MockRoundLLMProvider([
@@ -2957,7 +2997,7 @@ describe("complication countdown — coordinator integration", () => {
 						{
 							id: "go_1",
 							name: "go",
-							argumentsJson: JSON.stringify({ direction: "forward" }),
+							argumentsJson: JSON.stringify({ direction: "north" }),
 						},
 					],
 				},

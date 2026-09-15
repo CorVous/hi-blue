@@ -4,9 +4,11 @@
  * Computes the per-AI per-turn list of legal OpenAI tool definitions.
  * Filters out tools that are structurally impossible given the current
  * game state (empty item cell for pick_up, no held items for put_down/use,
- * no legal direction for go).
+ * no legal cardinal step for go).
  *
- * `face` is always present with the 3-direction enum (excludes "forward", the current facing).
+ * The surface is the five-tool Daemon tool set (ADR 0015): `go`, `pick_up`,
+ * `put_down`, `use`, `message`. There is no `face` tool and no
+ * facing-relative movement vocabulary.
  *
  * Reach is the **Interaction range** (ADR 0015): the Daemon's own cell plus
  * all eight adjacent cells, including diagonals. It is strictly shorter than
@@ -16,11 +18,10 @@
 
 import {
 	applyDirection,
+	CARDINAL_DIRECTIONS,
 	inBounds,
 	isGridPosition,
 	positionsEqual,
-	RELATIVE_DIRECTIONS,
-	relativeToCardinal,
 } from "./direction.js";
 import { type OpenAiTool, TOOL_DEFINITIONS } from "./tool-registry.js";
 import type {
@@ -119,13 +120,12 @@ function cloneToolWithEnums(
  *
  * Algorithm:
  * 0. `message` — always present; `to` enum = "blue" + live peer daemon ids.
- * 1. `face` — always present, RELATIVE_DIRECTIONS enum excluding "forward" (current facing is no-op).
- * 2. `go` — included only when at least one direction is in-bounds AND non-obstacle.
- *    Enum restricted to legal directions.
- * 3. `pick_up` — included only when pickable entities are on the ground within
+ * 1. `go` — included only when at least one cardinal direction is in-bounds
+ *    AND non-obstacle. Enum restricted to those legal directions.
+ * 2. `pick_up` — included only when pickable entities are on the ground within
  *    the actor's interaction range (own cell plus the eight adjacent cells).
  *    Enum restricted to those entity ids.
- * 4. `put_down`, `use` — included only when actor holds at least one pickable entity.
+ * 3. `put_down`, `use` — included only when actor holds at least one pickable entity.
  *    Enum restricted to held entity ids.
  *
  * Spaces and obstacles are never pickupable.
@@ -164,16 +164,9 @@ export function availableTools(
 		);
 	}
 
-	// 1. face — always present, excluding "forward" (current facing is no-op)
-	if (!disabledTools.has("face")) {
-		const faceDirections = RELATIVE_DIRECTIONS.filter((d) => d !== "forward");
-		tools.push(cloneToolWithEnums("face", { direction: faceDirections }));
-	}
-
-	// 2. go — restricted to legal directions
+	// 1. go — restricted to legal cardinal directions
 	if (actorSpatial && !disabledTools.has("go")) {
-		const legalDirections = RELATIVE_DIRECTIONS.filter((relDir) => {
-			const cardinal = relativeToCardinal(actorSpatial.facing, relDir);
+		const legalDirections = CARDINAL_DIRECTIONS.filter((cardinal) => {
 			const next = applyDirection(actorSpatial.position, cardinal);
 			if (!inBounds(next)) return false;
 			if (obstacles.some((o) => positionsEqual(o, next))) return false;
@@ -184,7 +177,7 @@ export function availableTools(
 		}
 	}
 
-	// 3. pick_up — pickable entities on the ground within interaction range
+	// 2. pick_up — pickable entities on the ground within interaction range
 	if (actorSpatial && !disabledTools.has("pick_up")) {
 		const reachableItems = pickable.filter(
 			(item) =>
@@ -200,7 +193,7 @@ export function availableTools(
 		}
 	}
 
-	// 4. put_down and use — pickable entities held by this actor; also spaces in reach
+	// 3. put_down and use — pickable entities held by this actor; also spaces in reach
 	const heldItems = pickable.filter((item) => item.holder === aiId);
 	if (!disabledTools.has("put_down") && heldItems.length > 0) {
 		const heldIds = heldItems.map((i) => i.id);

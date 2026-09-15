@@ -243,7 +243,7 @@ export type RoundActionRecord = {
  * A physical action that was observable by other AIs (via cone visibility).
  * Computed by the dispatcher at write time and consumed once to fan out witnessed-event
  * entries into per-Daemon conversationLogs; no longer stored on PhaseState.
- * Does NOT include face (facing-change only, no observable physical event).
+ * Covers exactly the observable action tools: go, pick_up, put_down, use.
  */
 export interface PhysicalActionRecord {
 	round: number;
@@ -298,7 +298,7 @@ export interface PhysicalActionRecord {
  *   (e.g. a weather change complication). Has no `from` / `to` fields.
  * - `tool-call`: the actor's own tool call plus its result, re-injected into the next round's
  *   messages array per the OpenAI tool-use protocol. Carries an optional `coneDelta` capturing
- *   new perception revealed by a `go`/`face`.
+ *   new perception revealed by a `go`.
  * - `witnessed-obstacle-shift`: fanned out to Daemons whose cone covered the obstacle's origin
  *   cell when an obstacle_shift complication fired; carries the obstacle's `shiftFlavor`.
  * - `witnessed-convergence`: the tiered flavor line for a Convergence Objective space; `audience`
@@ -329,7 +329,8 @@ export type ConversationEntry =
 	| {
 			kind: "action-failure";
 			round: number;
-			tool: "go" | "face" | "pick_up" | "put_down" | "use";
+			/** The attempted tool. See `ActionFailureTool`. */
+			tool: ActionFailureTool;
 			/** Verbatim dispatcher rejection reason (e.g. "That cell is blocked by an obstacle"). */
 			reason: string;
 	  }
@@ -354,11 +355,11 @@ export type ConversationEntry =
 			/** Whether the tool call succeeded. */
 			success: boolean;
 			/**
-			 * For go/face actions that reveal new content in the actor's cone,
+			 * For go actions that reveal new content in the actor's cone,
 			 * this field carries the renderWhatsNew output captured at write-time.
 			 * Used to enrich future-round prompts with the persisted perception.
-			 * Undefined for non-go/face tools, failed actions, or when the delta is empty.
-			 * (Issue #376: persist cone-delta on go/face tool-call log entries)
+			 * Undefined for other tools, failed actions, or when the delta is empty.
+			 * (Issue #376: persist cone-delta on go tool-call log entries)
 			 */
 			coneDelta?: string;
 	  }
@@ -422,13 +423,20 @@ export interface GameState {
 	objectives: Objective[];
 }
 
-export type ToolName =
-	| "pick_up"
-	| "put_down"
-	| "use"
-	| "go"
-	| "face"
-	| "message";
+/**
+ * The Daemon tool set (ADR 0015): the five tools a Daemon can call. There is
+ * no `face` — Daemons have no facing and no turning, and `go` takes a named
+ * cardinal direction.
+ */
+export type ToolName = "pick_up" | "put_down" | "use" | "go" | "message";
+
+/**
+ * Tool name recorded on a persisted `action-failure` entry. Wider than
+ * `ToolName` on purpose: legacy saves recorded `face`, and a retired tool call
+ * supplied as a raw tool call still records its rejection here rather than
+ * vanishing. This is a log field, not a callable tool.
+ */
+export type ActionFailureTool = ToolName | "face";
 
 export interface ToolCall {
 	name: ToolName;

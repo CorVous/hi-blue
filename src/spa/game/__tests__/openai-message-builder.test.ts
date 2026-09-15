@@ -742,9 +742,9 @@ describe("buildOpenAiMessages — tool-call coneDelta (#376)", () => {
 			round: 1,
 			aiId: "red",
 			toolCallId: "go_call_1",
-			toolArgumentsJson: '{"direction":"forward"}',
+			toolArgumentsJson: '{"direction":"north"}',
 			toolName: "go",
-			result: "Ember moved forward.",
+			result: "Ember walks north.",
 			success: true,
 			coneDelta: "+ at directly in front, right: *green",
 		};
@@ -763,7 +763,7 @@ describe("buildOpenAiMessages — tool-call coneDelta (#376)", () => {
 		);
 		expect(toolMsg).toBeDefined();
 		if (toolMsg?.role === "tool") {
-			expect(toolMsg.content).toContain("Ember moved forward.");
+			expect(toolMsg.content).toContain("Ember walks north.");
 			expect(toolMsg.content).toContain("<noticed>");
 			expect(toolMsg.content).toContain(
 				"+ at directly in front, right: *green",

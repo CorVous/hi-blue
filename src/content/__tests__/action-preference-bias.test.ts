@@ -2,10 +2,11 @@
  * Unit tests for the per-temperament action-tool bias mapping
  * (daemon-action-variation).
  *
- * Covers the 5-tool surface (`go`, `face`, `pick_up`, `put_down`,
- * `use`): full coverage of the pool, [-2, +2] scale, the `use` baseline
- * floor (never below -1 after summation), and that the prose classifier
- * produces non-empty, name-anchored output across every temperament pair.
+ * Covers the 4-tool surface (`go`, `pick_up`, `put_down`, `use` — `face` was
+ * retired by ADR 0015): full coverage of the pool, [-2, +2] scale, the
+ * `go`/`use` baseline floor (never below -1 after summation), and that the
+ * prose classifier produces non-empty, name-anchored output across every
+ * temperament pair.
  */
 
 import { describe, expect, it } from "vitest";
@@ -18,14 +19,59 @@ import {
 import { TEMPERAMENT_POOL } from "../temperament-pool.js";
 
 describe("action-preference-bias", () => {
-	it("covers the merged 5-tool surface (no examine, no give, look→face)", () => {
-		expect([...ACTION_TOOLS]).toEqual([
-			"go",
-			"face",
-			"pick_up",
-			"put_down",
-			"use",
-		]);
+	it("covers exactly the 4-tool surface (no examine, no give, no face)", () => {
+		expect([...ACTION_TOOLS]).toEqual(["go", "pick_up", "put_down", "use"]);
+	});
+
+	it("has exactly four tool columns per temperament and no `face` column", () => {
+		for (const t of TEMPERAMENT_POOL) {
+			const entry = ACTION_TOOL_BIAS[t];
+			expect(entry, t).toBeDefined();
+			if (!entry) continue;
+			expect(Object.keys(entry), t).toEqual([
+				"go",
+				"pick_up",
+				"put_down",
+				"use",
+			]);
+			expect(entry).not.toHaveProperty("face");
+		}
+	});
+
+	it("did not transfer the retired `face` column onto another tool or `message`", () => {
+		// The temperaments that leaned hardest on `face` (bias 2) must not have
+		// moved that weight onto pick_up / put_down / use, and `message` is not
+		// an action tool at all.
+		expect(ACTION_TOOL_BIAS.meticulous).toEqual({
+			go: -1,
+			pick_up: 0,
+			put_down: 1,
+			use: 1,
+		});
+		expect(ACTION_TOOL_BIAS.pedantic).toEqual({
+			go: -1,
+			pick_up: 0,
+			put_down: 1,
+			use: 1,
+		});
+		expect(ACTION_TOOL_BIAS.theatrical).toEqual({
+			go: 2,
+			pick_up: 1,
+			put_down: 0,
+			use: -1,
+		});
+		expect(ACTION_TOOL_BIAS.curious).toEqual({
+			go: 1,
+			pick_up: 1,
+			put_down: -1,
+			use: 1,
+		});
+		expect(ACTION_TOOL_BIAS.verbose).toEqual({
+			go: 0,
+			pick_up: 0,
+			put_down: 0,
+			use: 0,
+		});
 	});
 
 	it("has bias entries for every temperament in the pool", () => {
@@ -92,23 +138,24 @@ describe("action-preference-bias", () => {
 		}
 	});
 
-	it("never names a removed tool (examine / look / give) in any clause", () => {
+	it("never names a removed tool (examine / look / give / face) in any clause", () => {
 		for (const t1 of TEMPERAMENT_POOL) {
 			for (const t2 of TEMPERAMENT_POOL) {
 				const clause = actionProfileFor("z", t1, t2);
 				expect(clause).not.toContain("`examine`");
 				expect(clause).not.toContain("`look`");
 				expect(clause).not.toContain("`give`");
+				expect(clause).not.toContain("`face`");
 			}
 		}
 	});
 
 	it("names every preferred tool (bias ≥ 2) explicitly with a lean", () => {
-		// curious + meticulous: face = 2+2 = 4, use = 1+1 = 2 → both named.
+		// meticulous + curious: use = 1+1 = 2 → named (the old `face` column is gone).
 		const clause = actionProfileFor("a", "meticulous", "curious");
 		expect(clause).toContain("leans toward");
-		expect(clause).toContain("`face`");
 		expect(clause).toContain("`use`");
+		expect(clause).not.toContain("`face`");
 	});
 
 	it("encodes a ~70/30 split intent (variety over fixation)", () => {
@@ -118,10 +165,11 @@ describe("action-preference-bias", () => {
 	});
 
 	it("flags avoided tools (bias ≤ -1) without making them zero-emission", () => {
-		// diffident + aloof: face = -2, pick_up = -3 → avoided. go (-3) and
-		// use (-2) are critical-path, so they are floored and excluded.
+		// diffident + aloof: pick_up = -3 → avoided. go (-3) and use (-2) are
+		// critical-path, so they are floored and excluded.
 		const clause = actionProfileFor("b", "diffident", "aloof");
 		expect(clause.toLowerCase()).toMatch(/hesitant|less often/);
+		expect(clause).toContain("`pick_up`");
 		// Cautious personas must still emit avoided tools occasionally.
 		expect(clause.toLowerCase()).toMatch(/still|when.*calls/);
 	});
@@ -150,12 +198,12 @@ describe("action-preference-bias", () => {
 	});
 
 	it("orders preferred tools by descending bias", () => {
-		// curious + meticulous: face=4 > use=2 — `face` must come first.
-		const clause = actionProfileFor("a", "meticulous", "curious");
-		const faceIdx = clause.indexOf("`face`");
-		const useIdx = clause.indexOf("`use`");
-		expect(faceIdx).toBeGreaterThanOrEqual(0);
-		expect(useIdx).toBeGreaterThan(faceIdx);
+		// zealous + hot-headed: go = 2+2 = 4, pick_up = 1+1 = 2 — `go` first.
+		const clause = actionProfileFor("a", "zealous", "hot-headed");
+		const goIdx = clause.indexOf("`go`");
+		const pickUpIdx = clause.indexOf("`pick_up`");
+		expect(goIdx).toBeGreaterThanOrEqual(0);
+		expect(pickUpIdx).toBeGreaterThan(goIdx);
 	});
 
 	it("gives a go-heavy pair a go lean", () => {
@@ -165,10 +213,9 @@ describe("action-preference-bias", () => {
 	});
 
 	it("falls through to the balanced default when no tool reaches ±threshold", () => {
-		// stoic + earnest: go -1+0=-1, face 0+1=1, pick_up 0, put_down 0,
-		// use 0+1=1 — nothing reaches the +2 preferred threshold, and the
-		// only negative (go = -1) is a critical-path tool, so it is excluded
-		// from the avoided list. Result: the balanced default, alone.
+		// stoic + earnest: go -1+0=-1 (critical-path, excluded from avoided),
+		// pick_up 0, put_down 0, use 0+1=1 — nothing reaches the +2 preferred
+		// threshold and no flavor tool is avoided. Result: the balanced default.
 		const clause = actionProfileFor("e", "stoic", "earnest");
 		expect(clause).not.toContain("leans toward");
 		expect(clause.toLowerCase()).toContain("balanced");

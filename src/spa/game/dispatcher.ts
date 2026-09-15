@@ -1,13 +1,12 @@
 import { withinInteractionRange } from "./available-tools.js";
 import { projectCone } from "./cone-projector.js";
-import type { RelativeDirection } from "./direction.js";
 import {
 	applyDirection,
+	CARDINAL_DIRECTIONS,
+	type CardinalDirection,
 	inBounds,
 	isGridPosition,
 	positionsEqual,
-	RELATIVE_DIRECTIONS,
-	relativeToCardinal,
 } from "./direction.js";
 import {
 	appendActionFailure,
@@ -55,10 +54,10 @@ export interface DispatchResult {
 	 */
 	actorPrivateToolResult?: { description: string; success: boolean };
 	/**
-	 * For go/face actions where the actor's cone shift reveals new content,
-	 * this field carries the renderWhatsNew output. Only set for successful
-	 * go/face tool calls where the pre/post cone snapshots differ.
-	 * (Issue #376: persist cone-delta on go/face tool-call log entries)
+	 * For a `go` action whose cone shift reveals new content, this field
+	 * carries the renderWhatsNew output. Only set for successful `go` tool
+	 * calls where the pre/post cone snapshots differ.
+	 * (Issue #376: persist cone-delta on go tool-call log entries)
 	 */
 	actorConeDelta?: string;
 }
@@ -185,44 +184,24 @@ export function validateToolCall(
 		}
 
 		case "go": {
-			// Only accept relative directions (relative to daemon's facing).
+			// Cardinal-only: Daemons have no facing, so relative movement
+			// vocabulary (forward/back/left/right) is rejected even when it
+			// arrives as a raw tool call that bypassed the tool enum.
 			const rawDir = call.args.direction;
 			if (!actorSpatial)
 				return { valid: false, reason: "Actor has no spatial state" };
-			if (!RELATIVE_DIRECTIONS.includes(rawDir as RelativeDirection)) {
+			if (!CARDINAL_DIRECTIONS.includes(rawDir as CardinalDirection)) {
 				return {
 					valid: false,
-					reason: `"${rawDir}" is not a valid direction. Use relative directions: forward, back, left, right.`,
+					reason: `"${rawDir}" is not a valid direction. Use a cardinal direction: north, south, east, or west.`,
 				};
 			}
-			const direction = relativeToCardinal(
-				actorSpatial.facing,
-				rawDir as RelativeDirection,
-			);
+			const direction = rawDir as CardinalDirection;
 			const next = applyDirection(actorSpatial.position, direction);
 			if (!inBounds(next))
 				return { valid: false, reason: "That direction is out of bounds" };
 			if (obstacles.some((o) => positionsEqual(o, next)))
 				return { valid: false, reason: "That cell is blocked by an obstacle" };
-			return { valid: true };
-		}
-
-		case "face": {
-			// Only accept relative directions (relative to daemon's facing).
-			const rawDir = call.args.direction;
-			if (!RELATIVE_DIRECTIONS.includes(rawDir as RelativeDirection)) {
-				return {
-					valid: false,
-					reason: `"${rawDir}" is not a valid direction. Use relative directions: forward, back, left, right.`,
-				};
-			}
-			// Reject facing the current direction (forward) as a no-op
-			if (rawDir === "forward") {
-				return {
-					valid: false,
-					reason: "You already face that direction",
-				};
-			}
 			return { valid: true };
 		}
 
@@ -333,11 +312,11 @@ export function executeToolCall(
 		}
 		case "go": {
 			if (!actorSpatial) break;
-			// Validation upstream guarantees direction is a RelativeDirection.
-			const direction = relativeToCardinal(
-				actorSpatial.facing,
-				call.args.direction as RelativeDirection,
-			);
+			// Validation upstream guarantees a cardinal direction.
+			// `facing` is still stored (a later chunk of this cutover removes
+			// it) and tracks the cardinal direction walked, so the cone-based
+			// witness fan-out below keeps working unchanged.
+			const direction = call.args.direction as CardinalDirection;
 			const nextPos = applyDirection(actorSpatial.position, direction);
 			return {
 				...game,
@@ -345,23 +324,6 @@ export function executeToolCall(
 				personaSpatial: {
 					...game.personaSpatial,
 					[aiId]: { position: nextPos, facing: direction },
-				},
-			};
-		}
-		case "face": {
-			if (!actorSpatial) break;
-			// Convert relative direction to cardinal
-			const rawFaceDir = call.args.direction;
-			const direction = relativeToCardinal(
-				actorSpatial.facing,
-				rawFaceDir as RelativeDirection,
-			);
-			return {
-				...game,
-				world: { ...game.world, entities },
-				personaSpatial: {
-					...game.personaSpatial,
-					[aiId]: { ...actorSpatial, facing: direction },
 				},
 			};
 		}
@@ -400,8 +362,6 @@ function describeToolCall(game: GameState, aiId: AiId, call: ToolCall): string {
 		}
 		case "go":
 			return `${name} walks ${call.args.direction}.`;
-		case "face":
-			return `${name} turns to face ${call.args.direction}`;
 		default:
 			return `${name} attempted an unknown action`;
 	}
@@ -482,8 +442,8 @@ export function dispatchAiTurn(
 			// satisfactionState transitions for activation-flavor detection.
 			const preExecuteWorld = state.world;
 
-			// For go/face, compute cone delta pre-execution to capture the state before the action
-			if (action.toolCall.name === "go" || action.toolCall.name === "face") {
+			// For go, compute cone delta pre-execution to capture the state before the action
+			if (action.toolCall.name === "go") {
 				const prevCtx = buildAiContext(state, aiId);
 				const prevSnap = buildConeSnapshot(prevCtx);
 				state = executeToolCall(state, aiId, action.toolCall);
@@ -535,7 +495,7 @@ export function dispatchAiTurn(
 			}
 
 			// Build and append a PhysicalActionRecord for observable physical actions.
-			// face is excluded (facing-change only, not observable).
+			// Only the four observable action tools reach this branch.
 			const call = action.toolCall;
 			if (
 				call.name === "go" ||
@@ -657,12 +617,7 @@ export function dispatchAiTurn(
 			state = appendActionFailure(state, aiId, {
 				kind: "action-failure",
 				round,
-				tool: action.toolCall.name as
-					| "go"
-					| "face"
-					| "pick_up"
-					| "put_down"
-					| "use",
+				tool: action.toolCall.name,
 				reason: validation.reason ?? "rejected",
 			});
 		}

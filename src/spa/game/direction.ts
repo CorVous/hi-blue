@@ -4,9 +4,11 @@
  * Cardinal direction types, grid constants, and spatial helper functions
  * for the 5×5 gridded world model.
  *
- * Relative direction API: daemons receive/emit "forward|back|left|right".
- * The engine keeps all internal state in cardinal coordinates.
- * Use relativeToCardinal / cardinalToRelative at the tool/prompt boundary.
+ * Movement is cardinal-only (ADR 0015): `go` names `north`, `south`, `east`,
+ * or `west`, and a Daemon has no facing. There is no relative-direction
+ * movement vocabulary. `cardinalToRelative` survives for the peer-position
+ * and witness prose that still renders relative directions until a later
+ * chunk of the cutover retires it.
  */
 
 export const CARDINAL_DIRECTIONS = ["north", "south", "east", "west"] as const;
@@ -26,6 +28,10 @@ export const COMPASS_ORDER: readonly CardinalDirection[] = [
 	"west",
 ];
 
+/**
+ * The relative directions still used by the peer-position and witness prose
+ * descriptions. Not a movement vocabulary: no tool accepts them.
+ */
 export const RELATIVE_DIRECTIONS = [
 	"forward",
 	"back",
@@ -34,35 +40,6 @@ export const RELATIVE_DIRECTIONS = [
 ] as const;
 
 export type RelativeDirection = (typeof RELATIVE_DIRECTIONS)[number];
-
-/**
- * Convert a relative direction (from the daemon's point of view) to a
- * cardinal direction given the daemon's current facing.
- *
- * Examples (facing="north"):
- *   forward → "north", back → "south", left → "west", right → "east"
- *
- * "go back" means: turn 180° and walk one cell — the daemon ends up facing
- * the direction it walked. This keeps the engine invariant that `go` always
- * sets facing.
- */
-export function relativeToCardinal(
-	facing: CardinalDirection,
-	relative: RelativeDirection,
-): CardinalDirection {
-	if (relative === "forward") return facing;
-
-	const idx = COMPASS_ORDER.indexOf(facing);
-
-	switch (relative) {
-		case "back":
-			return COMPASS_ORDER[(idx + 2) % 4] as CardinalDirection;
-		case "right":
-			return COMPASS_ORDER[(idx + 1) % 4] as CardinalDirection;
-		case "left":
-			return COMPASS_ORDER[(idx + 3) % 4] as CardinalDirection;
-	}
-}
 
 /**
  * Convert an absolute cardinal direction to a relative direction from the

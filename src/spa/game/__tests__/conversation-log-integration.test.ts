@@ -18,12 +18,13 @@
 
 import { describe, expect, it } from "vitest";
 import { renderEntry } from "../conversation-log.js";
+import type { CardinalDirection } from "../direction";
 import { startGame } from "../engine";
 import { buildOpenAiMessages } from "../openai-message-builder";
 import { buildAiContext } from "../prompt-builder";
 import { runRound } from "../round-coordinator";
 import { MockRoundLLMProvider } from "../round-llm-provider";
-import type { AiPersona } from "../types";
+import type { AiId, AiPersona, GameState } from "../types";
 import { makeTestPack } from "./fixtures/make-test-pack";
 
 /** Concatenate all role-turn message contents into a single searchable string. */
@@ -36,6 +37,27 @@ function flattenMessageContents(
 			return typeof c === "string" ? c : "";
 		})
 		.join("\n");
+}
+
+/**
+ * Test-only: set a Daemon's stored facing directly. Daemons still carry a
+ * `facing` field and the witness cone still reads it, but no tool turns a
+ * Daemon any more (ADR 0015) — this stands in for the retired `face` tool.
+ */
+function withFacing(
+	game: GameState,
+	aiId: AiId,
+	facing: CardinalDirection,
+): GameState {
+	const spatial = game.personaSpatial[aiId];
+	if (!spatial) throw new Error(`No spatial state for ${aiId}`);
+	return {
+		...game,
+		personaSpatial: {
+			...game.personaSpatial,
+			[aiId]: { ...spatial, facing },
+		},
+	};
 }
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
@@ -139,7 +161,7 @@ function makeGame() {
 describe("conversation log integration — no ## Whispers Received ever", () => {
 	it("no ## Whispers Received section even with whispers present", async () => {
 		const game = makeGame();
-		// Round 0: red does nothing, green does nothing, cyan looks
+		// Round 0: red does nothing, green does nothing, cyan moves east
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] }, // red
 			{ assistantText: "", toolCalls: [] }, // green
@@ -148,8 +170,8 @@ describe("conversation log integration — no ## Whispers Received ever", () => 
 				toolCalls: [
 					{
 						id: "tc1",
-						name: "face",
-						argumentsJson: JSON.stringify({ direction: "left" }),
+						name: "go",
+						argumentsJson: JSON.stringify({ direction: "east" }),
 					},
 				],
 			}, // cyan
@@ -211,30 +233,9 @@ describe("conversation log integration — witnessed pick_up", () => {
 
 	it("cyan does NOT see red's pick_up when cyan faces north (all cone cells OOB from (0,2))", async () => {
 		// cyan at (0,2) facing south includes (2,0) in the new 9-cell cone.
-		// Turn cyan north first so its cone is just own cell — (2,0) falls outside.
-		const game = makeGame();
-
-		// Preliminary round: cyan looks north; others pass
-		const setupProvider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] }, // red
-			{ assistantText: "", toolCalls: [] }, // green
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "tc0",
-						name: "face",
-						argumentsJson: JSON.stringify({ direction: "back" }),
-					},
-				],
-			}, // cyan faces north
-		]);
-		const { nextState: setup } = await runRound(
-			game,
-			"red",
-			"setup",
-			setupProvider,
-		);
+		// Daemons cannot turn any more (ADR 0015), so set cyan's stored facing
+		// north directly: its cone is just its own cell — (2,0) falls outside.
+		const game = withFacing(makeGame(), "cyan", "north");
 
 		// Main round: red picks up flower; cyan now faces north → (2,0) not in cone
 		const provider = new MockRoundLLMProvider([
@@ -251,7 +252,7 @@ describe("conversation log integration — witnessed pick_up", () => {
 			{ assistantText: "", toolCalls: [] }, // green passes
 			{ assistantText: "", toolCalls: [] }, // cyan passes
 		]);
-		const { nextState } = await runRound(setup, "red", "hello", provider);
+		const { nextState } = await runRound(game, "red", "hello", provider);
 
 		// cyan's conversationLog should have no witnessed-event for pick_up
 		const phase = nextState;
@@ -344,7 +345,10 @@ describe("conversation log integration — use outcome rendering", () => {
 
 describe("conversation log integration — put_down placementFlavor", () => {
 	it("green sees placementFlavor with *red substitution when red places flower", async () => {
-		const game = makeGame();
+		// Green faces west so its cone is only its own cell — (2,2) enters the
+		// 9-cell south cone but not the west cone from (0,0). Daemons cannot turn
+		// (ADR 0015), so the facing is set directly.
+		const game = withFacing(makeGame(), "green", "west");
 		// Round 0: red picks up flower
 		const provider1 = new MockRoundLLMProvider([
 			{
@@ -367,9 +371,7 @@ describe("conversation log integration — put_down placementFlavor", () => {
 			provider1,
 		);
 
-		// Red needs to move to (2,2) to put_down on flower_space.
-		// Green looks west so its cone is only own cell by the put_down round —
-		// (2,2) enters the new 9-cell south cone but not the west cone from (0,0).
+		// Red needs to move east twice to (2,2) to put_down on flower_space.
 		const provider2 = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -377,20 +379,11 @@ describe("conversation log integration — put_down placementFlavor", () => {
 					{
 						id: "tc2",
 						name: "go",
-						argumentsJson: JSON.stringify({ direction: "left" }),
+						argumentsJson: JSON.stringify({ direction: "east" }),
 					},
 				],
 			},
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "tc2g",
-						name: "face",
-						argumentsJson: JSON.stringify({ direction: "right" }),
-					},
-				],
-			},
+			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
 		const { nextState: state2 } = await runRound(
@@ -407,7 +400,7 @@ describe("conversation log integration — put_down placementFlavor", () => {
 					{
 						id: "tc3",
 						name: "go",
-						argumentsJson: JSON.stringify({ direction: "left" }),
+						argumentsJson: JSON.stringify({ direction: "east" }),
 					},
 				],
 			},
@@ -451,7 +444,7 @@ describe("conversation log integration — put_down placementFlavor", () => {
 			(e) => e.kind === "witnessed-event" && e.actionKind === "put_down",
 		);
 
-		// Green looked west in round 2; facing west from (0,0) has only own cell in cone.
+		// Green faces west from (0,0), whose cone is only its own cell.
 		// (2,2) is not visible → green should NOT see this put_down.
 		expect(putEntry).toBeUndefined();
 
@@ -497,7 +490,7 @@ describe("conversation log integration — action-failure (issue #287)", () => {
 					{
 						id: "go_fail",
 						name: "go",
-						argumentsJson: JSON.stringify({ direction: "forward" }),
+						argumentsJson: JSON.stringify({ direction: "south" }),
 					},
 				],
 			},

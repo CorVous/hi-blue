@@ -2,11 +2,14 @@
  * Tool Registry
  *
  * Single source of truth for the OpenAI-spec `tools` array.
- * Declares one `function` per dispatcher tool: `pick_up`, `put_down`, `use`, `go`, `face`.
+ * Declares one `function` per dispatcher tool: `pick_up`, `put_down`, `use`,
+ * `go`, `message` — the five-tool Daemon tool set (ADR 0015). There is no
+ * `face` tool and no facing-relative movement vocabulary: a Daemon has a
+ * position but no facing, and `go` takes a named cardinal direction.
  * Names and argument keys mirror `validateToolCall` in `dispatcher.ts` 1:1.
  */
 
-import { RELATIVE_DIRECTIONS } from "./direction.js";
+import { CARDINAL_DIRECTIONS } from "./direction.js";
 import type { ToolName } from "./types";
 
 interface OpenAiToolFunction {
@@ -34,7 +37,7 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 		function: {
 			name: "pick_up",
 			description:
-				'Pick up an item that is on the ground in your own cell or within your cone of vision. You must pick_up an item BEFORE you can use it. Fails if the item is not on the ground and reachable. Use this tool when you want to "grab", "take", "collect", "snatch", or "get" an item.',
+				'Pick up an item that is on the ground in your own cell or in one of the eight cells around you. You must pick_up an item BEFORE you can use it. Fails if the item is not on the ground and reachable. Use this tool when you want to "grab", "take", "collect", "snatch", or "get" an item.',
 			parameters: {
 				type: "object",
 				properties: {
@@ -72,7 +75,7 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 		function: {
 			name: "use",
 			description:
-				'You must be holding the item to use it. Use an item you are holding, OR activate an objective space in your cell or front arc. Fires a flavoured outcome string. For held items: if the item is an objective item AND its paired space is in the daemon\'s cell or front arc, also places it on that space. For spaces: activates the space to satisfy a UseSpace objective. Use this tool when you want to "interact with", "play with", "activate", "operate", "employ", or "wield" an item or space.',
+				'You must be holding the item to use it. Use an item you are holding, OR activate an objective space in your own cell or in one of the eight cells around you. Fires a flavoured outcome string. For held items: if the item is an objective item AND its paired space is in your own cell or in one of the eight cells around you, also places it on that space. For spaces: activates the space to satisfy a UseSpace objective. Use this tool when you want to "interact with", "play with", "activate", "operate", "employ", or "wield" an item or space.',
 			parameters: {
 				type: "object",
 				properties: {
@@ -91,36 +94,15 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 		function: {
 			name: "go",
 			description:
-				'Move one cell in a relative direction and set your facing to that direction. Fails if the destination is out of bounds or blocked by an obstacle. Use this tool when you want to "move", "walk", "head", "step", or "travel" in a direction.',
+				'Move one block in a named cardinal direction: north, south, east, or west. Fails if the destination is out of bounds or blocked by an obstacle. Use this tool when you want to "move", "walk", "head", "step", or "travel" in a direction.',
 			parameters: {
 				type: "object",
 				properties: {
 					direction: {
 						type: "string",
 						description:
-							"The relative direction to move (relative to your current facing).",
-						enum: [...RELATIVE_DIRECTIONS],
-					},
-				},
-				required: ["direction"],
-				additionalProperties: false,
-			},
-		},
-	},
-	{
-		type: "function",
-		function: {
-			name: "face",
-			description:
-				"Turn your body to face a different direction without moving. Persistent — your facing changes for subsequent turns. Use this tool when you want to turn, pivot, or orient yourself toward something to your left, right, or behind you. You cannot face the direction you already face.",
-			parameters: {
-				type: "object",
-				properties: {
-					direction: {
-						type: "string",
-						description:
-							"The relative direction to face (relative to your current facing).",
-						enum: [...RELATIVE_DIRECTIONS],
+							"The cardinal direction to move: north, south, east, or west.",
+						enum: [...CARDINAL_DIRECTIONS],
 					},
 				},
 				required: ["direction"],
@@ -163,7 +145,6 @@ type PickUpArgs = { item: string };
 type PutDownArgs = { item: string };
 type UseArgs = { item: string };
 type GoArgs = { direction: string };
-type FaceArgs = { direction: string };
 type MessageArgs = { to: string; content: string };
 
 type ToolArgs = {
@@ -171,7 +152,6 @@ type ToolArgs = {
 	put_down: PutDownArgs;
 	use: UseArgs;
 	go: GoArgs;
-	face: FaceArgs;
 	message: MessageArgs;
 };
 
@@ -180,6 +160,9 @@ type ToolArgs = {
  *
  * Returns `{ ok: true, args }` on success or `{ ok: false, reason }` on failure.
  * Validates that all required arguments for the named tool are present.
+ *
+ * A retired tool name supplied as a raw tool call (bypassing the tool enum)
+ * fails here with `Unknown tool` — it is rejected, never silently accepted.
  */
 export function parseToolCallArguments<N extends ToolName>(
 	name: N,
@@ -207,8 +190,7 @@ export function parseToolCallArguments<N extends ToolName>(
 			}
 			return { ok: true, args: { item: obj.item } as ToolArgs[N] };
 		}
-		case "go":
-		case "face": {
+		case "go": {
 			if (typeof obj.direction !== "string" || obj.direction.length === 0) {
 				return {
 					ok: false,

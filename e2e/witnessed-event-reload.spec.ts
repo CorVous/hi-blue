@@ -17,22 +17,18 @@ import {
  *      <aiId>.txt DaemonFiles exist in localStorage.
  *   2. Decode engine.dat → read personaSpatial (actor positions + facings)
  *      and obstacle positions.
- *   3. Compute a walk plan: find (actorId, direction, witnessId,
- *      witnessLookDir?) such that after the actor walks `direction`, their
- *      post-move cell falls inside the witness's (possibly updated) cone.
+ *   3. Compute a walk plan: find (actorId, direction, witnessId) such that
+ *      after the actor walks one cardinal step `direction`, their post-move
+ *      cell falls inside the witness's cone.
  *      - First try a "direct plan" with the witness's current facing.
- *      - If no direct plan exists, compute a "setup plan": find witnessLookDir
- *        such that reorienting the witness first (via `look`) makes the actor's
- *        post-move visible, then drive round 0 as a setup round where the
- *        witness `look`s and others pass.
- *      - If after setup still no plan, fail with full spatial layout.
+ *      - Otherwise patch engine.dat: reorient the witness (no `face` tool
+ *        exists — ADR 0015), or relocate them entirely, so the move is seen.
  *   4. Reload (first reload) — after reload, renderGame is called only once
  *      (restore path), so page.fill correctly enables #send.  The engine.dat
  *      and DaemonFiles from step 1 are preserved in localStorage.
  *   5. Re-register the JSON-mode and SSE stubs (route handlers are cleared on
  *      reload).
- *   6. If a setup round was needed, drive it first (witness `look`s, others pass).
- *   7. Drive the action round: actor `go direction`, others pass.
+ *   6. Drive the action round: actor `go <cardinal>`, others pass.
  *   8. Sanity-check: the witness's DaemonFile has a witnessed-event entry.
  *   9. Reload (second reload) → the SPA deserialises from storage → reconstructs.
  *  10. Capture the next round's /v1/chat/completions request bodies.
@@ -42,10 +38,8 @@ import {
  *
  * The round number in the witnessed-event entry is the phase.round at
  * dispatch time. The first dispatched round (after the first reload) is
- * round=0; after advanceRound it becomes 1. A setup round increments round
- * to 1, so the action round dispatches at round=1 and the witnessed-event
- * line reads "[Round 1]…". Without a setup round the action round dispatches
- * at round=0.
+ * round=0; after advanceRound it becomes 1, so the action round dispatches at
+ * round=0 and the witnessed-event line reads "[Round 0]…".
  *
  * Key source references:
  *   src/spa/game/conversation-log.ts:63-65 — witnessed-event "go" line format
@@ -139,17 +133,6 @@ function inBounds(pos: GridPosition): boolean {
 	return pos.row >= 0 && pos.row < 5 && pos.col >= 0 && pos.col < 5;
 }
 
-type RelativeDirection = "forward" | "back" | "left" | "right";
-
-function cardinalToRelative(
-	facing: CardinalDirection,
-	absolute: CardinalDirection,
-): RelativeDirection {
-	const CW: CardinalDirection[] = ["north", "east", "south", "west"];
-	const delta = (CW.indexOf(absolute) - CW.indexOf(facing) + 4) % 4;
-	return (["forward", "right", "back", "left"] as const)[delta] ?? "forward";
-}
-
 function coneCells(
 	pos: GridPosition,
 	facing: CardinalDirection,
@@ -207,25 +190,15 @@ interface DirectPlan {
 	roundAtDispatch: number;
 }
 
-interface SetupPlan {
-	kind: "setup";
-	actorId: string;
-	direction: CardinalDirection;
-	witnessId: string;
-	witnessLookDir: CardinalDirection;
-	/** The phase.round value at dispatch time (1 after the setup round advances it). */
-	roundAtDispatch: number;
-}
-
-type WalkPlan = DirectPlan | SetupPlan | PatchPlan;
+type WalkPlan = DirectPlan | PatchPlan;
 
 /**
- * Find a walk plan such that after the actor moves, their post-move cell
- * falls in the witness's cone (current or post-look cone).
+ * Find a walk plan such that after the actor moves one cardinal step, their
+ * post-move cell falls in the witness's current cone.
  *
  * @param spatials      personaSpatial for phase 1 (aiId → spatial state)
  * @param obstacles     obstacle positions for phase 1
- * @param currentRound  current phase.round value (0 initially, 1 after a setup round)
+ * @param currentRound  current phase.round value (0 for the first round)
  */
 function findWalkPlan(
 	spatials: Record<string, PersonaSpatial>,
@@ -269,13 +242,15 @@ function findWalkPlan(
 }
 
 /**
- * Find a setup plan: reorient the witness (via `look`) so that after they
- * turn, the actor's post-move cell falls in the witness's new cone.
+ * Find a reorientation plan: patch the witness's facing in engine.dat so the
+ * actor's post-move cell falls in the witness's new cone. There is no `face`
+ * tool any more (ADR 0015), so the facing is written straight into the save
+ * instead of being driven through a setup round.
  */
 function findSetupPlan(
 	spatials: Record<string, PersonaSpatial>,
 	obstacles: GridPosition[],
-): SetupPlan | null {
+): PatchPlan | null {
 	const aiIds = Object.keys(spatials);
 
 	for (const actorId of aiIds) {
@@ -291,7 +266,7 @@ function findSetupPlan(
 			if (!inBounds(nextPos)) continue;
 			if (obstacles.some((o) => posEqual(o, nextPos))) continue;
 
-			// Try all possible look directions for each witness
+			// Try all possible facings for each witness
 			for (const witnessId of aiIds) {
 				if (witnessId === actorId) continue;
 				const witnessSpatial = spatials[witnessId];
@@ -301,14 +276,16 @@ function findSetupPlan(
 					if (lookDir === witnessSpatial.facing) continue; // skip no-op
 					const cone = coneCells(witnessSpatial.position, lookDir);
 					if (cone.some((c) => posEqual(c, nextPos))) {
-						// Round 0 is setup (witness looks), round 1 is action
+						// Facing-only patch: same cell, new facing, so the action
+						// round still dispatches at round 0.
 						return {
-							kind: "setup",
+							kind: "patch",
 							actorId,
 							direction,
 							witnessId,
-							witnessLookDir: lookDir,
-							roundAtDispatch: 1, // after setup round advances to round=1
+							witnessNewPosition: witnessSpatial.position,
+							witnessNewFacing: lookDir,
+							roundAtDispatch: 0,
 						};
 					}
 				}
@@ -331,8 +308,9 @@ interface PatchPlan {
 }
 
 /**
- * Last-resort fallback: when no direct or setup plan is possible due to a
- * degenerate spatial layout (all agents near corners facing outward), patch
+ * Last-resort fallback: when neither a direct plan nor a facing-only patch is
+ * possible due to a degenerate spatial layout (all agents near corners facing
+ * outward), patch
  * engine.dat to reposition the witness so a direct witnessed event is possible.
  *
  * Strategy: place the witness 1 cell BEHIND the actor's starting position,
@@ -552,14 +530,13 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 	// ── 3. Compute walk plan ──────────────────────────────────────────────────
 	// Try direct plan first (witness's current facing covers actor's next cell).
 	let plan: WalkPlan | null = findWalkPlan(phase1Spatial, obstaclePositions, 0);
-	let setupPlanUsed = false;
 
 	if (!plan) {
-		// Try setup plan: reorient witness in round 0, then act in round 1.
+		// Otherwise patch the witness's facing in engine.dat — there is no `face`
+		// tool to reorient them with a setup round any more (ADR 0015).
 		const sp = findSetupPlan(phase1Spatial, obstaclePositions);
 		if (sp) {
 			plan = sp;
-			setupPlanUsed = true;
 		}
 	}
 
@@ -576,7 +553,7 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 
 	if (!plan) {
 		throw new Error(
-			`Could not find any valid walk plan (direct, setup, or patch).\n` +
+			`Could not find any valid walk plan (direct or patch).\n` +
 				`Spatial layout: ${JSON.stringify(phase1Spatial, null, 2)}\n` +
 				`Obstacles: ${JSON.stringify(obstaclePositions, null, 2)}\n` +
 				`AI ids: ${JSON.stringify(ids)}`,
@@ -594,12 +571,11 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 		);
 	}
 
-	// ── 4. Patch engine.dat if needed (degenerate spatial layout) ────────────
-	// For the rare case where agents are placed in a corner/edge configuration
-	// that makes witnessing geometrically impossible even with a setup round,
-	// we directly rewrite engine.dat's personaSpatial to reposition the witness
-	// adjacent to the actor.  The actual witnessed-event is still produced by a
-	// live go tool call in step 7; only the starting positions are patched.
+	// ── 4. Patch engine.dat if needed ────────────────────────────────────────
+	// Either reorient the witness (facing-only patch) or, when the layout makes
+	// witnessing geometrically impossible, relocate them next to the actor.
+	// The actual witnessed-event is still produced by a live go tool call in
+	// step 7; only the starting spatial layout is patched.
 	if (plan.kind === "patch") {
 		const patchPlan = plan;
 		await page.evaluate(
@@ -702,56 +678,14 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 	// fallback stub here so the JSON-mode guard works if needed.
 	await stubChatCompletions(page, () => ["stub reply"]);
 
-	// ── 7. Setup round (if needed): reorient witness via `look` ─────────────
-	// When no direct plan exists, we drive a setup round where the witness
-	// looks in a direction that will put the actor's post-move cell in their cone.
-	// After this round, meta.round advances to 1, and the action round dispatches
-	// at round=1, so roundAtDispatch=1 (set in findSetupPlan).
-	if (setupPlanUsed && plan.kind === "setup") {
-		const { witnessLookDir } = plan;
-		const witnessFacing = phase1Spatial[witnessId]?.facing;
-		if (!witnessFacing) {
-			throw new Error(`No facing for witness ${witnessId}`);
-		}
-		const witnessLookRelative = cardinalToRelative(
-			witnessFacing,
-			witnessLookDir,
-		);
-
-		// Register route: witness does `look witnessLookRelative`, others stub reply
-		await armRoute(
-			page,
-			witnessName,
-			toolCallSseBody("face", { direction: witnessLookRelative }),
-		);
-
-		// Address the witness to trigger the setup round
-		await page.locator("#prompt").fill(`*${witnessName} look around!`);
-		await expect(page.locator("#send")).toBeEnabled({ timeout: 15_000 });
-		await page.locator("#send").click();
-
-		// Wait for the setup round to complete: meta.round becomes 1
-		await waitForRound(page, storageInfo.sessionId, 1);
-	}
-
-	// ── 8. Action round: actor does `go direction`, others pass ──────────────
-	// Register route: actor emits go tool call, others get stub reply.
-	// This prepends a new route on top of any existing ones (Playwright prepends
-	// new routes for priority), so it overrides the setup round's route if one
-	// was registered above.
-	const actorFacing = phase1Spatial[actorId]?.facing;
-	if (!actorFacing) {
-		throw new Error(`No facing for actor ${actorId}`);
-	}
-	const goRelative = cardinalToRelative(actorFacing, direction);
-	await armRoute(
-		page,
-		actorName,
-		toolCallSseBody("go", { direction: goRelative }),
-	);
+	// ── 7. Action round: actor does `go <cardinal>`, others pass ─────────────
+	// Register route: actor emits the go tool call, others get stub reply.
+	// Directions are cardinal (ADR 0015): `go` names the room's own geography,
+	// so the planned direction is sent verbatim, not resolved against facing.
+	await armRoute(page, actorName, toolCallSseBody("go", { direction }));
 
 	// Address the actor.
-	await page.locator("#prompt").fill(`*${actorName} go!`);
+	await page.locator("#prompt").fill(`*${actorName} go ${direction}!`);
 	await expect(page.locator("#send")).toBeEnabled({ timeout: 15_000 });
 	await page.locator("#send").click();
 
@@ -849,9 +783,7 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 
 	// Determine the witness's effective facing after any plan-driven mutations.
 	let witnessFacing: CardinalDirection;
-	if (plan.kind === "setup") {
-		witnessFacing = plan.witnessLookDir;
-	} else if (plan.kind === "patch") {
+	if (plan.kind === "patch") {
 		witnessFacing = plan.witnessNewFacing;
 	} else {
 		// "direct": no mutation, use phase1 snapshot

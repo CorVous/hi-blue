@@ -10,7 +10,6 @@ import {
 	inBounds,
 	manhattan,
 	RELATIVE_DIRECTIONS,
-	relativeToCardinal,
 } from "../direction";
 
 describe("constants", () => {
@@ -39,14 +38,11 @@ describe("COMPASS_ORDER — the shared compass rotation", () => {
 		expect(COMPASS_ORDER).toEqual(["north", "east", "south", "west"]);
 	});
 
-	it("is the rotation both relative-direction helpers agree with", () => {
+	it("is the rotation cardinalToRelative agrees with", () => {
 		for (const facing of COMPASS_ORDER) {
 			const right = rotated(facing, 1);
 			const back = rotated(facing, 2);
 			const left = rotated(facing, 3);
-			expect(relativeToCardinal(facing, "right")).toBe(right);
-			expect(relativeToCardinal(facing, "back")).toBe(back);
-			expect(relativeToCardinal(facing, "left")).toBe(left);
 			expect(cardinalToRelative(facing, right)).toBe("right");
 			expect(cardinalToRelative(facing, back)).toBe("back");
 			expect(cardinalToRelative(facing, left)).toBe("left");
@@ -192,50 +188,6 @@ describe("RELATIVE_DIRECTIONS", () => {
 	});
 });
 
-// ── relativeToCardinal — 16 cases (4 facings × 4 relatives) ──────────────────
-
-describe("relativeToCardinal", () => {
-	// facing north
-	it("north + forward → north", () =>
-		expect(relativeToCardinal("north", "forward")).toBe("north"));
-	it("north + back → south", () =>
-		expect(relativeToCardinal("north", "back")).toBe("south"));
-	it("north + left → west", () =>
-		expect(relativeToCardinal("north", "left")).toBe("west"));
-	it("north + right → east", () =>
-		expect(relativeToCardinal("north", "right")).toBe("east"));
-
-	// facing south
-	it("south + forward → south", () =>
-		expect(relativeToCardinal("south", "forward")).toBe("south"));
-	it("south + back → north", () =>
-		expect(relativeToCardinal("south", "back")).toBe("north"));
-	it("south + left → east", () =>
-		expect(relativeToCardinal("south", "left")).toBe("east"));
-	it("south + right → west", () =>
-		expect(relativeToCardinal("south", "right")).toBe("west"));
-
-	// facing east
-	it("east + forward → east", () =>
-		expect(relativeToCardinal("east", "forward")).toBe("east"));
-	it("east + back → west", () =>
-		expect(relativeToCardinal("east", "back")).toBe("west"));
-	it("east + left → north", () =>
-		expect(relativeToCardinal("east", "left")).toBe("north"));
-	it("east + right → south", () =>
-		expect(relativeToCardinal("east", "right")).toBe("south"));
-
-	// facing west
-	it("west + forward → west", () =>
-		expect(relativeToCardinal("west", "forward")).toBe("west"));
-	it("west + back → east", () =>
-		expect(relativeToCardinal("west", "back")).toBe("east"));
-	it("west + left → south", () =>
-		expect(relativeToCardinal("west", "left")).toBe("south"));
-	it("west + right → north", () =>
-		expect(relativeToCardinal("west", "right")).toBe("north"));
-});
-
 // ── cardinalToRelative — 16 cases (4 facings × 4 absolutes) ──────────────────
 
 describe("cardinalToRelative", () => {
@@ -280,26 +232,17 @@ describe("cardinalToRelative", () => {
 		expect(cardinalToRelative("west", "north")).toBe("right"));
 });
 
-// ── Round-trip ────────────────────────────────────────────────────────────────
+// ── cardinalToRelative is a bijection per facing ─────────────────────────────
 
-describe("relativeToCardinal / cardinalToRelative round-trip", () => {
-	it("cardinalToRelative(facing, relativeToCardinal(facing, rel)) === rel for all combinations", () => {
+describe("cardinalToRelative — bijection per facing", () => {
+	it("maps the four cardinals onto the four relatives exactly once for each facing", () => {
 		for (const facing of CARDINAL_DIRECTIONS) {
-			for (const rel of RELATIVE_DIRECTIONS) {
-				const cardinal = relativeToCardinal(facing, rel);
-				const back = cardinalToRelative(facing, cardinal);
-				expect(back, `facing=${facing} rel=${rel}`).toBe(rel);
-			}
-		}
-	});
-
-	it("relativeToCardinal(facing, cardinalToRelative(facing, abs)) === abs for all combinations", () => {
-		for (const facing of CARDINAL_DIRECTIONS) {
-			for (const abs of CARDINAL_DIRECTIONS) {
-				const rel = cardinalToRelative(facing, abs);
-				const back = relativeToCardinal(facing, rel);
-				expect(back, `facing=${facing} abs=${abs}`).toBe(abs);
-			}
+			const relatives = CARDINAL_DIRECTIONS.map((abs) =>
+				cardinalToRelative(facing, abs),
+			);
+			expect([...relatives].sort(), `facing=${facing}`).toEqual(
+				[...RELATIVE_DIRECTIONS].sort(),
+			);
 		}
 	});
 });
