@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseToolCallArguments, TOOL_DEFINITIONS } from "../tool-registry";
 import type { ToolName } from "../types";
-import { RETIRED_ORIENTATION_KEY } from "./fixtures/retired-orientation";
 
 const DAEMON_TOOLS: ToolName[] = [
 	"pick_up",
@@ -73,7 +72,7 @@ describe("TOOL_DEFINITIONS", () => {
 		expect(description).toMatch(/south/);
 		expect(description).toMatch(/east/);
 		expect(description).toMatch(/west/);
-		expect(description).not.toMatch(new RegExp(RETIRED_ORIENTATION_KEY, "i"));
+		expect(description).not.toMatch(/facing/i);
 		expect(description).not.toMatch(/relative/i);
 		expect(description).not.toMatch(/forward|backward/i);
 	});
@@ -86,7 +85,7 @@ describe("TOOL_DEFINITIONS", () => {
 			expect(description).not.toMatch(/cone/i);
 			expect(description).not.toMatch(/front arc/i);
 			expect(description).not.toMatch(/in front/i);
-			expect(description).not.toMatch(new RegExp(RETIRED_ORIENTATION_KEY, "i"));
+			expect(description).not.toMatch(/facing/i);
 			expect(description).not.toMatch(/behind you|to your left|to your right/i);
 		}
 	});

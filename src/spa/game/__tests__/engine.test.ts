@@ -388,7 +388,7 @@ describe("appendActionFailure", () => {
 		const entry2 = {
 			kind: "action-failure" as const,
 			round: 2,
-			tool: "face" as const,
+			tool: "put_down" as const,
 			reason: "second",
 		};
 		game = appendActionFailure(game, "red", entry1);

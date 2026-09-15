@@ -438,12 +438,12 @@ export interface GameState {
 export type ToolName = "pick_up" | "put_down" | "use" | "go" | "message";
 
 /**
- * Tool name recorded on a persisted `action-failure` entry. Wider than
- * `ToolName` on purpose: legacy saves recorded `face`, and a retired tool call
- * supplied as a raw tool call still records its rejection here rather than
- * vanishing. This is a log field, not a callable tool.
+ * Tool name recorded on a persisted `action-failure` entry: the live tool set,
+ * and nothing wider. The dispatcher writes this field from `ToolCall.name`, and
+ * the only caller that could carry a retired name — a raw tool call from the
+ * model — is rejected by `parseToolCallArguments` before any `ToolCall` exists.
  */
-export type ActionFailureTool = ToolName | "face";
+export type ActionFailureTool = ToolName;
 
 export interface ToolCall {
 	name: ToolName;

@@ -141,7 +141,7 @@ export interface MetaFile {
 	lastPlayedAt?: string;
 }
 
-/** Shape of the sealed payload inside `engine.dat`. */
+/** Shape of the sealed payload this build writes inside `engine.dat`. */
 interface SealedEngine {
 	schemaVersion: typeof SESSION_SCHEMA_VERSION;
 	world: WorldState;
@@ -158,6 +158,18 @@ interface SealedEngine {
 	complicationSchedule: { countdown: number; settingShiftFired: boolean };
 	activeComplications: ActiveComplication[];
 	isComplete: boolean;
+}
+
+/**
+ * A sealed payload as read back from disk, before the version gate. Its
+ * `schemaVersion` is a plain number on purpose: the migration chain stamps the
+ * historical versions it walks (9, 10, 11), and none of those is the version
+ * this build writes. `deserializeSession` only rebuilds state once
+ * `checkVersionCompatibility` has accepted that number, so a stored payload is
+ * never treated as current on the strength of its own field.
+ */
+interface StoredSealedEngine extends Omit<SealedEngine, "schemaVersion"> {
+	schemaVersion: number;
 }
 
 /**
@@ -265,10 +277,10 @@ export function serializeSession(
  *
  * Sets schemaVersion to 9 so callers can chain into `migrateV9ToV10`.
  */
-function migrateV8ToV9(sealed: SealedEngine): SealedEngine {
+function migrateV8ToV9(sealed: StoredSealedEngine): StoredSealedEngine {
 	return {
 		...sealed,
-		schemaVersion: 9 as unknown as typeof SESSION_SCHEMA_VERSION,
+		schemaVersion: 9,
 		contentPacksA: (sealed.contentPacksA ?? []).slice(0, 1),
 		contentPacksB: (sealed.contentPacksB ?? []).slice(0, 1),
 	};
@@ -281,12 +293,12 @@ function migrateV8ToV9(sealed: SealedEngine): SealedEngine {
  *
  * Sets schemaVersion to 10 so callers can chain into `migrateV10ToV11`.
  */
-function migrateV9ToV10(sealed: SealedEngine): SealedEngine {
+function migrateV9ToV10(sealed: StoredSealedEngine): StoredSealedEngine {
 	const addWallName = (pack: ContentPack): ContentPack =>
 		typeof pack?.wallName === "string" ? pack : { ...pack, wallName: "" };
 	return {
 		...sealed,
-		schemaVersion: 10 as unknown as typeof SESSION_SCHEMA_VERSION,
+		schemaVersion: 10,
 		contentPacksA: (sealed.contentPacksA ?? []).map(addWallName),
 		contentPacksB: (sealed.contentPacksB ?? []).map(addWallName),
 	};
@@ -308,12 +320,12 @@ function migrateV9ToV10(sealed: SealedEngine): SealedEngine {
  * partial migration), it is used as-is rather than rebuilt from absent
  * buckets.
  *
- * Stamps the literal 11 (not `SESSION_SCHEMA_VERSION`): 11 is the last schema
- * this chain understands. Migrating a save must never promote it past the
- * v11 → v12 archive-only boundary, so the chain terminates at 11 and the
- * version gate then surfaces the migrated save as older.
+ * Stamps 11, the last schema this chain understands. Migrating a save must
+ * never promote it past the v11 → v12 archive-only boundary, so the chain
+ * terminates at 11 and the version gate then surfaces the migrated save as
+ * older.
  */
-function migrateV10ToV11(sealed: SealedEngine): SealedEngine {
+function migrateV10ToV11(sealed: StoredSealedEngine): StoredSealedEngine {
 	const flatten = (pack: ContentPack): ContentPack => {
 		const raw = pack as unknown as {
 			setting: string;
@@ -362,7 +374,7 @@ function migrateV10ToV11(sealed: SealedEngine): SealedEngine {
 
 	return {
 		...sealed,
-		schemaVersion: 11 as unknown as typeof SESSION_SCHEMA_VERSION,
+		schemaVersion: 11,
 		contentPacksA: (sealed.contentPacksA ?? []).map(flatten),
 		contentPacksB: (sealed.contentPacksB ?? []).map(flatten),
 	};
@@ -399,12 +411,13 @@ export function deserializeSession(
 		return { kind: "broken" };
 	}
 
-	// Parse sealed payload
-	let sealed: SealedEngine;
+	// Parse sealed payload. It is typed as stored, not as current: only the
+	// version gate below can vouch for the schema number it carries.
+	let sealed: StoredSealedEngine;
 	try {
 		const parsed = JSON.parse(sealedJson);
 		if (!parsed || typeof parsed !== "object") return { kind: "broken" };
-		sealed = parsed as unknown as SealedEngine;
+		sealed = parsed as StoredSealedEngine;
 	} catch {
 		return { kind: "broken" };
 	}
@@ -414,7 +427,7 @@ export function deserializeSession(
 	// one schema diff and new bumps only need a single new step. The chain
 	// terminates at 11 — the last schema it understands — so a migrated save
 	// is never silently promoted into the live v12 format.
-	const rawVersion = (sealed as { schemaVersion: unknown }).schemaVersion;
+	const rawVersion: unknown = sealed.schemaVersion;
 	if (typeof rawVersion !== "number" || !Number.isFinite(rawVersion)) {
 		return { kind: "broken" };
 	}

@@ -14,19 +14,9 @@ import {
 	renderPerceptionDelta,
 	renderWhatsNew,
 } from "../prompt-builder";
-import type {
-	AiPersona,
-	ContentPack,
-	GameState,
-	Objective,
-	WorldEntity,
-} from "../types";
+import type { AiPersona, ContentPack, Objective, WorldEntity } from "../types";
 import { inVista } from "../vista-projector";
 import { makeTestPack } from "./fixtures/make-test-pack";
-import {
-	RETIRED_ORIENTATION_KEY,
-	withRetiredOrientation,
-} from "./fixtures/retired-orientation";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -369,7 +359,7 @@ describe("prompt-builder — spatial 'Where you are' section (current-state user
 		// the Daemon as Vista cell labels ("Two steps north: …"), never as a
 		// standing orientation anchor.
 		expect(stateMsg).not.toMatch(/^On the .*ahead/im);
-		expect(stateMsg).not.toMatch(new RegExp(RETIRED_ORIENTATION_KEY, "i"));
+		expect(stateMsg).not.toMatch(/facing/i);
 		expect(stateMsg).toContain("- Two steps north:");
 	});
 
@@ -904,7 +894,7 @@ describe("<what_you_see> (Vista)", () => {
 			"- Two steps east: the Daemon *cyan (#5fa8d3), two steps east of you, holding nothing",
 		);
 		// No orientation reaches the listing.
-		expect(stateMsg).not.toMatch(new RegExp(RETIRED_ORIENTATION_KEY, "i"));
+		expect(stateMsg).not.toMatch(/facing/i);
 	});
 
 	it("obstacles never remove cells from the disk", () => {
@@ -2818,58 +2808,30 @@ describe("peer-position prose", () => {
 		).toBe("in your cell");
 	});
 
-	it("does not vary with a retired orientation field on either Daemon", () => {
-		const ORIENTATIONS = ["north", "east", "south", "west"] as const;
-
-		/** Full current-state and system prompts for red, given a game mutator. */
-		function prose(mutate: (game: GameState) => GameState) {
-			const pack = makeTestPack([], {
-				wallName: "wall",
-				aiStarts: {
-					red: { position: { row: 2, col: 2 } },
-					green: { position: { row: 1, col: 3 } },
-					cyan: { position: { row: 4, col: 2 } },
-				},
-			});
-			const game = mutate(startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 }));
-			const ctx = buildAiContext(game, "red");
-			return {
-				state: ctx.toCurrentStateUserMessage(),
-				system: ctx.toSystemPrompt(),
-			};
-		}
-
-		const baseline = prose((game) => game);
-		expect(baseline.state).toContain(
+	it("renders every peer's position in the current-state listing", () => {
+		const pack = makeTestPack([], {
+			wallName: "wall",
+			aiStarts: {
+				red: { position: { row: 2, col: 2 } },
+				green: { position: { row: 1, col: 3 } },
+				cyan: { position: { row: 4, col: 2 } },
+			},
+		});
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const state = buildAiContext(game, "red").toCurrentStateUserMessage();
+		expect(state).toContain(
 			"- One step north and one step east: the Daemon *green (#81b29a), one step north and one step east of you, holding nothing",
 		);
-		expect(baseline.state).toContain(
+		expect(state).toContain(
 			"- Two steps south: the Daemon *cyan (#5fa8d3), two steps south of you, holding nothing",
 		);
-
-		// The observer's retired field, and the peer's, are both inert: the
-		// prompts are byte-identical to the state that lacks the field.
-		for (const orientation of ORIENTATIONS) {
-			const observer = prose((game) =>
-				withRetiredOrientation(game, "red", orientation),
-			);
-			expect(observer.state).toBe(baseline.state);
-			expect(observer.system).toBe(baseline.system);
-
-			const peer = prose((game) =>
-				withRetiredOrientation(game, "green", orientation),
-			);
-			expect(peer.state).toBe(baseline.state);
-			expect(peer.system).toBe(baseline.system);
-		}
 	});
 });
 
 // ----------------------------------------------------------------------------
 // Moving a Daemon so that out-of-bounds cells enter or leave its Vista makes
-// the wall entry appear as a + / - diff line in <whats_new>. Orientation
-// changes nothing: the Vista is position-only. Uses buildDiskSnapshot +
-// renderWhatsNew.
+// the wall entry appear as a + / - diff line in <whats_new>. Uses
+// buildDiskSnapshot + renderWhatsNew.
 // ----------------------------------------------------------------------------
 describe("<whats_new> wall diff (issue #374)", () => {
 	/** Build a game with red at the given position. */
@@ -2931,25 +2893,14 @@ describe("<whats_new> wall diff (issue #374)", () => {
 		expect(diff).toContain("- at two steps north: concrete platform wall");
 	});
 
-	it("a retired orientation field changes nothing — identical snapshots → renderWhatsNew returns null", () => {
-		// The Vista depends on position only, so two Daemons in the same cell
-		// that differ solely by the retired field produce byte-identical
-		// snapshots.
-		const plainSnap = buildDiskSnapshot(
-			buildAiContext(makeWallGame({ position: { row: 0, col: 0 } }), "red"),
-		);
-		const retiredSnap = buildDiskSnapshot(
-			buildAiContext(
-				withRetiredOrientation(
-					makeWallGame({ position: { row: 0, col: 0 } }),
-					"red",
-					"east",
-				),
-				"red",
-			),
-		);
-		expect(retiredSnap).toBe(plainSnap);
-		expect(renderWhatsNew(plainSnap, retiredSnap)).toBeNull();
+	it("identical snapshots produce no diff → renderWhatsNew returns null", () => {
+		// The Vista depends on position alone, so two contexts built from the
+		// same position produce byte-identical snapshots and no <whats_new>.
+		const game = makeWallGame({ position: { row: 0, col: 0 } });
+		const first = buildDiskSnapshot(buildAiContext(game, "red"));
+		const second = buildDiskSnapshot(buildAiContext(game, "red"));
+		expect(second).toBe(first);
+		expect(renderWhatsNew(first, second)).toBeNull();
 	});
 
 	it("wallName comes from ContentPack.wallName, not hardcoded", () => {

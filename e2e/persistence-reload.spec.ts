@@ -40,16 +40,6 @@ const SSE_HEADERS = {
 	"X-Content-Type-Options": "nosniff",
 };
 
-/**
- * The retired save-format state keys ADR 0015 removed, spelled from parts the
- * way `src/spa/game/__tests__/fixtures/retired-orientation.ts` spells its key:
- * a literal mention anywhere under `e2e/` is a regression, so the removal stays
- * greppable. One is the per-Daemon spatial key, the other the Content-Pack
- * anchor key.
- */
-const RETIRED_ORIENTATION_KEY = ["fac", "ing"].join("");
-const RETIRED_ANCHOR_KEY = ["land", "mark"].join("");
-
 /** The last captured `/v1/chat/completions` body whose system prompt names `name`. */
 function findLastBodyForName(bodies: unknown[], name: string): ParsedBody {
 	for (let i = bodies.length - 1; i >= 0; i--) {
@@ -467,6 +457,8 @@ test("a schema 12 session reloads with position, inventory, content state, conve
 	expect(content.tools).toContain(destinationItem.name);
 
 	// ── 13. The re-saved session carries no retired state ───────────────────
+	// A real round trip must not write the retired per-Daemon orientation key
+	// or the retired Content-Pack anchor key into any saved byte.
 	await waitForRound(page, created.sessionId, 2);
 	const saved = await readActiveSessionFiles(page);
 	const savedBytes = [
@@ -474,8 +466,8 @@ test("a schema 12 session reloads with position, inventory, content state, conve
 		...Object.values(saved.daemons),
 		saved.engineJson,
 	].join("\n");
-	expect(savedBytes).not.toMatch(new RegExp(RETIRED_ORIENTATION_KEY, "i"));
-	expect(savedBytes).not.toMatch(new RegExp(RETIRED_ANCHOR_KEY, "i"));
+	expect(savedBytes).not.toMatch(/facing/i);
+	expect(savedBytes).not.toMatch(/landmark/i);
 
 	// The state the round trip carries is still there in the re-saved engine.
 	const resaved = await readActiveSessionEngine(page);

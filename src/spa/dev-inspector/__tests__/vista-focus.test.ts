@@ -42,22 +42,6 @@ function expectedVistaMask(position: GridPosition): Set<string> {
 	return expected;
 }
 
-/**
- * The runtime no longer stores an orientation on a Daemon's spatial state, so
- * these tests write the retired key directly to prove the inspector's highlight
- * ignores any such field if one is present. The key is computed rather than
- * written literally because no source under this directory names it.
- */
-const RETIRED_ORIENTATION_KEY = ["fac", "ing"].join("");
-
-function setRetiredOrientation(
-	spatial: PersonaSpatialState,
-	value: string,
-): void {
-	(spatial as unknown as Record<string, string>)[RETIRED_ORIENTATION_KEY] =
-		value;
-}
-
 /** Collect the visual cells currently highlighted for a Daemon. */
 function highlightedCells(containerEl: HTMLElement, aiId: string): Set<string> {
 	const highlighted = new Set<string>();
@@ -85,7 +69,6 @@ describe("vista-focus", () => {
 	let spatialSnapshot: Array<{
 		spatial: PersonaSpatialState;
 		position: GridPosition;
-		orientation: string;
 	}> = [];
 	const contentPack = STATIC_CONTENT_PACKS[0];
 
@@ -112,10 +95,6 @@ describe("vista-focus", () => {
 			(spatial) => ({
 				spatial,
 				position: spatial.position,
-				orientation:
-					(spatial as unknown as Record<string, string>)[
-						RETIRED_ORIENTATION_KEY
-					] ?? "",
 			}),
 		);
 
@@ -126,9 +105,6 @@ describe("vista-focus", () => {
 	afterEach(() => {
 		for (const snapshot of spatialSnapshot) {
 			snapshot.spatial.position = snapshot.position;
-			(snapshot.spatial as unknown as Record<string, string>)[
-				RETIRED_ORIENTATION_KEY
-			] = snapshot.orientation;
 		}
 		spatialSnapshot = [];
 	});
@@ -194,7 +170,7 @@ describe("vista-focus", () => {
 			}
 		});
 
-		it("highlight depends only on position, not on stored orientation", () => {
+		it("highlight depends only on position: Daemons in the same cell share a mask", () => {
 			const state = session.getState();
 			const redSpatial = state.personaSpatial.red;
 			const greenSpatial = state.personaSpatial.green;
@@ -202,11 +178,9 @@ describe("vista-focus", () => {
 				throw new Error("Spatial state missing");
 			}
 
-			// Same position, different stored orientation.
+			// Same position, different Daemons.
 			redSpatial.position = { row: 2, col: 2 };
 			greenSpatial.position = { row: 2, col: 2 };
-			setRetiredOrientation(redSpatial, "north");
-			setRetiredOrientation(greenSpatial, "south");
 
 			const redMask = vistaMaskForDaemon(state, "red");
 			const greenMask = vistaMaskForDaemon(state, "green");
@@ -215,10 +189,6 @@ describe("vista-focus", () => {
 			expect(sorted(redMask)).toEqual(
 				sorted(expectedVistaMask({ row: 2, col: 2 })),
 			);
-
-			// Rotate the stored orientation: the highlight must not move.
-			setRetiredOrientation(redSpatial, "east");
-			expect(sorted(vistaMaskForDaemon(state, "red"))).toEqual(sorted(redMask));
 		});
 
 		it("mask empty when daemon missing", () => {

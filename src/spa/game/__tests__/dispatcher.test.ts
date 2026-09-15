@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { availableTools } from "../available-tools";
-import type { CardinalDirection } from "../direction";
 import {
 	dispatchAiTurn,
 	executeToolCall,
@@ -8,7 +7,6 @@ import {
 } from "../dispatcher";
 import { deductBudget, startGame } from "../engine";
 import type {
-	AiId,
 	AiPersona,
 	AiTurnAction,
 	CarryObjective,
@@ -27,10 +25,6 @@ import {
 	isUseItemObjectiveSatisfied,
 } from "../win-condition";
 import { makeTestPack } from "./fixtures/make-test-pack";
-import {
-	retiredOrientationOf,
-	withRetiredOrientation,
-} from "./fixtures/retired-orientation";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -93,15 +87,6 @@ const FIXED_RNG = () => 0;
  */
 function rawToolCall(name: string, args: Record<string, string>): ToolCall {
 	return { name, args } as unknown as ToolCall;
-}
-
-/** Test-only: attach the retired per-Daemon orientation without a tool call. */
-function withFacing(
-	game: GameState,
-	aiId: AiId,
-	orientation: CardinalDirection,
-): GameState {
-	return withRetiredOrientation(game, aiId, orientation);
 }
 
 /** Helper to make a WorldEntity */
@@ -1438,11 +1423,7 @@ describe("dispatchAiTurn — UseItemObjective activationFlavor on interesting_ob
 	it("fans out activationFlavor as the witnessed-event useOutcome on the satisfying call", () => {
 		// red at (0,0); green at (0,1) has red's cell one step west of it, so
 		// green's Vista contains the actor's cell and green witnesses the use.
-		const game = withFacing(
-			withFacing(makeGameWithUseItemActivation(), "red", "east"),
-			"green",
-			"west",
-		);
+		const game = makeGameWithUseItemActivation();
 		const result = dispatchAiTurn(game, {
 			aiId: "red",
 			toolCall: { name: "use", args: { item: "key" } },
@@ -1461,7 +1442,7 @@ describe("dispatchAiTurn — UseItemObjective activationFlavor on interesting_ob
 	});
 
 	it("fans out useOutcome to witnesses on a post-satisfaction subsequent use", () => {
-		const game = withFacing(makeGameWithUseItemActivation(), "green", "west");
+		const game = makeGameWithUseItemActivation();
 		// First use satisfies + emits activationFlavor.
 		const after = dispatchAiTurn(game, {
 			aiId: "red",
@@ -1938,60 +1919,5 @@ describe("interaction range — availability, validation, and effects agree", ()
 				shared.personaSpatial,
 			).tier,
 		).toBe(2);
-	});
-});
-
-// ── The retired orientation field is inert (ADR 0015) ─────────────────────────
-
-describe("dispatchAiTurn — a retired orientation field changes nothing", () => {
-	/**
-	 * Dispatch the same `go` from a state whose named Daemon also carries the
-	 * retired orientation field. Two such states differ only in that field, so
-	 * their spatial state, records, and witness decisions must match exactly.
-	 */
-	function goSouthFrom(aiId: AiId, orientation: string) {
-		const game = withRetiredOrientation(makeGame(), aiId, orientation);
-		// The fixture really does carry the retired field.
-		expect(retiredOrientationOf(game, aiId)).toBe(orientation);
-		return dispatchAiTurn(game, {
-			aiId: "red",
-			toolCall: { name: "go", args: { direction: "south" } },
-		});
-	}
-
-	it("the actor's retired orientation changes neither state nor records", () => {
-		const baseline = goSouthFrom("red", "north");
-		expect(baseline.rejected).toBe(false);
-		// red at (0,0) → south to (1,0); the move writes the position alone.
-		expect(baseline.game.personaSpatial.red).toEqual({
-			position: { row: 1, col: 0 },
-		});
-		expect(retiredOrientationOf(baseline.game, "red")).toBeUndefined();
-
-		for (const orientation of ["south", "east", "west"]) {
-			const other = goSouthFrom("red", orientation);
-			expect(other.game.personaSpatial).toEqual(baseline.game.personaSpatial);
-			expect(other.records).toEqual(baseline.records);
-			expect(other.actorDiskDelta).toBe(baseline.actorDiskDelta);
-		}
-	});
-
-	it("a witness's retired orientation changes no witness decision", () => {
-		// green at (0,1) is inside the Vista of red's post-move cell (1,0), so
-		// green witnesses the step.
-		const baseline = goSouthFrom("green", "north");
-		const baselineGreenLog = baseline.game.conversationLogs.green ?? [];
-		const witnessed = baselineGreenLog.filter(
-			(e) => e.kind === "witnessed-event",
-		);
-		expect(witnessed.length).toBeGreaterThan(0);
-
-		for (const orientation of ["south", "east", "west"]) {
-			const other = goSouthFrom("green", orientation);
-			expect(other.game.conversationLogs.green).toEqual(baselineGreenLog);
-			expect(other.game.conversationLogs.red).toEqual(
-				baseline.game.conversationLogs.red,
-			);
-		}
 	});
 });

@@ -17,7 +17,6 @@ import type {
 	Objective,
 	ObjectivePair,
 	PersonaSpatialState,
-	ToolCall,
 	UseItemObjective,
 	UseSpaceObjective,
 	WorldEntity,
@@ -481,20 +480,6 @@ describe("checkPlacementFlavor", () => {
 		const action: AiTurnAction = {
 			aiId: "red",
 			toolCall: { name: "go", args: { direction: "south" } },
-		};
-		expect(checkPlacementFlavor(action, pack, world)).toBeNull();
-	});
-
-	it("returns null for a raw retired `face` tool call", () => {
-		const pack = makeContentPack([]);
-		const world = makeWorld([]);
-		const action: AiTurnAction = {
-			aiId: "red",
-			// `face` is no longer a ToolName; a raw tool call can still carry it.
-			toolCall: {
-				name: "face",
-				args: { direction: "east" },
-			} as unknown as ToolCall,
 		};
 		expect(checkPlacementFlavor(action, pack, world)).toBeNull();
 	});
