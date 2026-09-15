@@ -47,7 +47,7 @@ In a sandbox or any environment without `wrangler login`, use:
 ## Bumping save-format versions
 
 When you bump SESSION_SCHEMA_VERSION in
-`src/spa/persistence/session-codec.ts`, you must do ONE of:
+`src/spa/persistence/version-constants.ts`, you must do ONE of:
 
 - **Add a migrateV<old>To... function** in session-codec.ts so old
   saves migrate in place. No further action needed.

@@ -22,7 +22,7 @@ import {
 	lookupArchiveVersion,
 	lookupGameSaveArchiveVersion,
 } from "./archive-map.js";
-import { SESSION_SCHEMA_VERSION } from "./session-codec.js";
+import { SESSION_SCHEMA_VERSION } from "./version-constants.js";
 
 /** The two save-format version axes a boundary spans. */
 export type VersionAxis = "session" | "gs";
@@ -38,8 +38,8 @@ export interface VersionBoundary {
 /**
  * The boundary the live build uses, sourced from the real version constants.
  * Exposed as a function (not a top-level `const`) so the constants are read
- * at call-time, which keeps the `session-codec` ↔ `version-boundary` import
- * edge free of a temporal-dead-zone surprise.
+ * at call-time. That keeps a build's boundary from being baked in at
+ * module-evaluation time.
  */
 export function liveVersionBoundary(): VersionBoundary {
 	return { session: SESSION_SCHEMA_VERSION, gs: GAME_SAVE_VERSION };

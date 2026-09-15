@@ -39,6 +39,7 @@ import {
 	liveVersionBoundary,
 	type VersionBoundary,
 } from "./version-boundary.js";
+import { SESSION_SCHEMA_VERSION } from "./version-constants.js";
 
 // ── Schema version ─────────────────────────────────────────────────────────────
 
@@ -97,7 +98,7 @@ import {
  * or a new entry in `SCHEMA_ARCHIVE_MAP` (see AGENTS.md → "Bumping
  * save-format versions"). `scripts/check-schema-map.mjs` enforces this on PRs.
  */
-export const SESSION_SCHEMA_VERSION = 11 as const;
+export { SESSION_SCHEMA_VERSION };
 
 // ── File shapes ────────────────────────────────────────────────────────────────
 
