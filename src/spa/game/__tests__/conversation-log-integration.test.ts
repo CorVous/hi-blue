@@ -5,9 +5,9 @@
  * across multiple rounds and verifies that the resulting conversation logs
  * correctly surface, via `buildOpenAiMessages` role turns:
  *   - Voice-chat interleaved with witnessed events by round
- *   - Distinct cone-based visibility (witnesses see only what's in their cone)
- *     resolved at write-time (ADR 0006, issue #195)
- *   - put_down placementFlavor rendered for in-cone witnesses
+ *   - Distinct Vista-based witness visibility (witnesses see only what their
+ *     13-cell disk contains) resolved at write-time (ADR 0015, issue #195)
+ *   - put_down placementFlavor rendered for in-Vista witnesses
  *   - use outcome flavor rendered to actor as "you" and to witness as "*<actor>"
  *   - No "## Whispers Received" section ever
  *
@@ -18,13 +18,12 @@
 
 import { describe, expect, it } from "vitest";
 import { renderEntry } from "../conversation-log.js";
-import type { CardinalDirection } from "../direction";
 import { startGame } from "../engine";
 import { buildOpenAiMessages } from "../openai-message-builder";
 import { buildAiContext } from "../prompt-builder";
 import { runRound } from "../round-coordinator";
 import { MockRoundLLMProvider } from "../round-llm-provider";
-import type { AiId, AiPersona, GameState } from "../types";
+import type { AiPersona } from "../types";
 import { makeTestPack } from "./fixtures/make-test-pack";
 
 /** Concatenate all role-turn message contents into a single searchable string. */
@@ -37,27 +36,6 @@ function flattenMessageContents(
 			return typeof c === "string" ? c : "";
 		})
 		.join("\n");
-}
-
-/**
- * Test-only: set a Daemon's stored facing directly. Daemons still carry a
- * `facing` field and the witness cone still reads it, but no tool turns a
- * Daemon any more (ADR 0015) — this stands in for the retired `face` tool.
- */
-function withFacing(
-	game: GameState,
-	aiId: AiId,
-	facing: CardinalDirection,
-): GameState {
-	const spatial = game.personaSpatial[aiId];
-	if (!spatial) throw new Error(`No spatial state for ${aiId}`);
-	return {
-		...game,
-		personaSpatial: {
-			...game.personaSpatial,
-			[aiId]: { ...spatial, facing },
-		},
-	};
 }
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
@@ -187,7 +165,7 @@ describe("conversation log integration — no ## Whispers Received ever", () => 
 });
 
 describe("conversation log integration — witnessed pick_up", () => {
-	it("green sees red pick up flower (red at (2,0) is in green's cone at (2,0))", async () => {
+	it("green sees red pick up flower (red at (2,0) is inside green's Vista at (0,0))", async () => {
 		const game = makeGame();
 		// Round 0: red picks up flower; green and cyan pass
 		const provider = new MockRoundLLMProvider([
@@ -231,13 +209,12 @@ describe("conversation log integration — witnessed pick_up", () => {
 		expect(redWitnessed).toHaveLength(0);
 	});
 
-	it("cyan does NOT see red's pick_up when cyan faces north (all cone cells OOB from (0,2))", async () => {
-		// cyan at (0,2) facing south includes (2,0) in the new 9-cell cone.
-		// Daemons cannot turn any more (ADR 0015), so set cyan's stored facing
-		// north directly: its cone is just its own cell — (2,0) falls outside.
-		const game = withFacing(makeGame(), "cyan", "north");
+	it("cyan does NOT see red's pick_up: cyan at (0,2) is outside red's cell's Vista", async () => {
+		// cyan at (0,2) sits at offset (2,2) from red's cell (2,0) —
+		// 2² + 2² = 8 > 4 — so the Vista excludes it whatever cyan's facing is.
+		const game = makeGame();
 
-		// Main round: red picks up flower; cyan now faces north → (2,0) not in cone
+		// Main round: red picks up flower; cyan is outside the Vista
 		const provider = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -344,11 +321,10 @@ describe("conversation log integration — use outcome rendering", () => {
 });
 
 describe("conversation log integration — put_down placementFlavor", () => {
-	it("green sees placementFlavor with *red substitution when red places flower", async () => {
-		// Green faces west so its cone is only its own cell — (2,2) enters the
-		// 9-cell south cone but not the west cone from (0,0). Daemons cannot turn
-		// (ADR 0015), so the facing is set directly.
-		const game = withFacing(makeGame(), "green", "west");
+	it("green is outside the Vista of red's put_down at (2,2) → no placementFlavor line", async () => {
+		// (2,2) is offset (2,2) from green's cell (0,0) — 2² + 2² = 8 > 4 — so the
+		// Vista excludes it whatever green's facing is.
+		const game = makeGame();
 		// Round 0: red picks up flower
 		const provider1 = new MockRoundLLMProvider([
 			{
@@ -444,7 +420,7 @@ describe("conversation log integration — put_down placementFlavor", () => {
 			(e) => e.kind === "witnessed-event" && e.actionKind === "put_down",
 		);
 
-		// Green faces west from (0,0), whose cone is only its own cell.
+		// green at (0,0) is outside the Vista of red's cell (2,2).
 		// (2,2) is not visible → green should NOT see this put_down.
 		expect(putEntry).toBeUndefined();
 

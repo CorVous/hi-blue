@@ -19,10 +19,11 @@ import {
  *      and obstacle positions.
  *   3. Compute a walk plan: find (actorId, direction, witnessId) such that
  *      after the actor walks one cardinal step `direction`, their post-move
- *      cell falls inside the witness's cone.
- *      - First try a "direct plan" with the witness's current facing.
- *      - Otherwise patch engine.dat: reorient the witness (no `face` tool
- *        exists — ADR 0015), or relocate them entirely, so the move is seen.
+ *      cell falls inside the witness's Vista (ADR 0015: the 13-cell radius-2
+ *      disk, position-only — a Daemon's facing no longer gates witnesses).
+ *      - Try a "direct plan" with the witness where they already stand.
+ *      - Otherwise patch engine.dat to relocate the witness entirely, so the
+ *        move is seen.
  *   4. Reload (first reload) — after reload, renderGame is called only once
  *      (restore path), so page.fill correctly enables #send.  The engine.dat
  *      and DaemonFiles from step 1 are preserved in localStorage.
@@ -43,7 +44,7 @@ import {
  *
  * Key source references:
  *   src/spa/game/conversation-log.ts:63-65 — witnessed-event "go" line format
- *   src/spa/game/dispatcher.ts:460-493     — write-time cone fan-out
+ *   src/spa/game/vista-projector.ts        — the Vista witness gate (ADR 0015)
  *   src/spa/game/dispatcher.ts:342         — round = state.round
  *   src/spa/persistence/session-codec.ts   — DaemonFile round-trip
  *   src/spa/persistence/sealed-blob-codec.ts:18 — OBFUSCATION_KEY
@@ -90,7 +91,7 @@ function stubReplySseBody(): string {
 	return `data: ${chunk}\n\ndata: [DONE]\n\n`;
 }
 
-// ── Cone projection (inlined from src/spa/game/cone-projector.ts) ─────────────
+// ── Vista membership (ADR 0015) ──────────────────────────────────────────────
 
 interface GridPosition {
 	row: number;
@@ -116,43 +117,19 @@ function forwardDelta(facing: CardinalDirection): {
 	}
 }
 
-function leftDelta(facing: CardinalDirection): { drow: number; dcol: number } {
-	switch (facing) {
-		case "north":
-			return { drow: 0, dcol: -1 };
-		case "south":
-			return { drow: 0, dcol: 1 };
-		case "east":
-			return { drow: -1, dcol: 0 };
-		case "west":
-			return { drow: 1, dcol: 0 };
-	}
-}
-
 function inBounds(pos: GridPosition): boolean {
 	return pos.row >= 0 && pos.row < 5 && pos.col >= 0 && pos.col < 5;
 }
 
-function coneCells(
-	pos: GridPosition,
-	facing: CardinalDirection,
-): GridPosition[] {
-	const fwd = forwardDelta(facing);
-	const lft = leftDelta(facing);
-	const candidates: GridPosition[] = [
-		{ row: pos.row, col: pos.col },
-		{ row: pos.row + fwd.drow, col: pos.col + fwd.dcol },
-		{
-			row: pos.row + 2 * fwd.drow + lft.drow,
-			col: pos.col + 2 * fwd.dcol + lft.dcol,
-		},
-		{ row: pos.row + 2 * fwd.drow, col: pos.col + 2 * fwd.dcol },
-		{
-			row: pos.row + 2 * fwd.drow - lft.drow,
-			col: pos.col + 2 * fwd.dcol - lft.dcol,
-		},
-	];
-	return candidates.filter((c, i) => i === 0 || inBounds(c));
+/**
+ * The runtime witness gate after the Vista cutover: `cell` is witnessed by an
+ * observer at `observer` when it falls inside the radius-2 disk
+ * (`dx² + dy² ≤ 4`), where north decreases the row. Facing plays no part.
+ */
+function inVista(observer: GridPosition, cell: GridPosition): boolean {
+	const dy = observer.row - cell.row;
+	const dx = cell.col - observer.col;
+	return dx * dx + dy * dy <= 4;
 }
 
 function posEqual(a: GridPosition, b: GridPosition): boolean {
@@ -194,7 +171,8 @@ type WalkPlan = DirectPlan | PatchPlan;
 
 /**
  * Find a walk plan such that after the actor moves one cardinal step, their
- * post-move cell falls in the witness's current cone.
+ * post-move cell falls inside the witness's Vista (ADR 0015). Facing is not
+ * consulted: witness eligibility is position-only.
  *
  * @param spatials      personaSpatial for phase 1 (aiId → spatial state)
  * @param obstacles     obstacle positions for phase 1
@@ -220,13 +198,11 @@ function findWalkPlan(
 			if (!inBounds(nextPos)) continue;
 			if (obstacles.some((o) => posEqual(o, nextPos))) continue;
 
-			// Try current facing of each other daemon
 			for (const witnessId of aiIds) {
 				if (witnessId === actorId) continue;
 				const witnessSpatial = spatials[witnessId];
 				if (!witnessSpatial) continue;
-				const cone = coneCells(witnessSpatial.position, witnessSpatial.facing);
-				if (cone.some((c) => posEqual(c, nextPos))) {
+				if (inVista(witnessSpatial.position, nextPos)) {
 					return {
 						kind: "direct",
 						actorId,
@@ -241,60 +217,6 @@ function findWalkPlan(
 	return null;
 }
 
-/**
- * Find a reorientation plan: patch the witness's facing in engine.dat so the
- * actor's post-move cell falls in the witness's new cone. There is no `face`
- * tool any more (ADR 0015), so the facing is written straight into the save
- * instead of being driven through a setup round.
- */
-function findSetupPlan(
-	spatials: Record<string, PersonaSpatial>,
-	obstacles: GridPosition[],
-): PatchPlan | null {
-	const aiIds = Object.keys(spatials);
-
-	for (const actorId of aiIds) {
-		const actorSpatial = spatials[actorId];
-		if (!actorSpatial) continue;
-
-		for (const direction of DIRECTIONS) {
-			const delta = forwardDelta(direction);
-			const nextPos: GridPosition = {
-				row: actorSpatial.position.row + delta.drow,
-				col: actorSpatial.position.col + delta.dcol,
-			};
-			if (!inBounds(nextPos)) continue;
-			if (obstacles.some((o) => posEqual(o, nextPos))) continue;
-
-			// Try all possible facings for each witness
-			for (const witnessId of aiIds) {
-				if (witnessId === actorId) continue;
-				const witnessSpatial = spatials[witnessId];
-				if (!witnessSpatial) continue;
-
-				for (const lookDir of DIRECTIONS) {
-					if (lookDir === witnessSpatial.facing) continue; // skip no-op
-					const cone = coneCells(witnessSpatial.position, lookDir);
-					if (cone.some((c) => posEqual(c, nextPos))) {
-						// Facing-only patch: same cell, new facing, so the action
-						// round still dispatches at round 0.
-						return {
-							kind: "patch",
-							actorId,
-							direction,
-							witnessId,
-							witnessNewPosition: witnessSpatial.position,
-							witnessNewFacing: lookDir,
-							roundAtDispatch: 0,
-						};
-					}
-				}
-			}
-		}
-	}
-	return null;
-}
-
 interface PatchPlan {
 	kind: "patch";
 	actorId: string;
@@ -302,20 +224,20 @@ interface PatchPlan {
 	witnessId: string;
 	/** The new position to place the witness in engine.dat. */
 	witnessNewPosition: GridPosition;
-	/** The new facing for the witness (same as actor's direction so cone covers next cell). */
+	/** The new facing for the witness; the save still carries the field. */
 	witnessNewFacing: CardinalDirection;
 	roundAtDispatch: 0;
 }
 
 /**
- * Last-resort fallback: when neither a direct plan nor a facing-only patch is
- * possible due to a degenerate spatial layout (all agents near corners facing
- * outward), patch
+ * Last-resort fallback: when no direct plan is possible because the layout is
+ * degenerate (every Daemon too far from every neighbour of every actor), patch
  * engine.dat to reposition the witness so a direct witnessed event is possible.
  *
  * Strategy: place the witness 1 cell BEHIND the actor's starting position,
- * facing the same direction as the actor's planned move.  The actor's
- * post-move cell will be exactly 2 steps ahead in the witness's cone.
+ * facing the same direction as the actor's planned move. The actor's post-move
+ * cell is then exactly 2 cardinal steps away — inside the witness's Vista under
+ * ADR 0015 (`2² + 0² = 4 ≤ 4`), so the facing is cosmetic.
  *
  * We ensure the new witness position is:
  * - In-bounds
@@ -364,9 +286,9 @@ function findPatchPlan(
 				);
 				if (blocked) continue;
 
-				// Verify the actor's post-move cell is in the witness's cone from backPos.
-				const cone = coneCells(backPos, direction);
-				if (!cone.some((c) => posEqual(c, nextPos))) continue;
+				// Verify the actor's post-move cell is in the witness's Vista
+				// from backPos — two cardinal steps away, so `2² + 0² = 4 ≤ 4`.
+				if (!inVista(backPos, nextPos)) continue;
 
 				return {
 					kind: "patch",
@@ -528,21 +450,13 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 		.filter((h): h is GridPosition => h !== null);
 
 	// ── 3. Compute walk plan ──────────────────────────────────────────────────
-	// Try direct plan first (witness's current facing covers actor's next cell).
+	// Try a direct plan first: the actor's next cell is already inside some
+	// other Daemon's Vista.
 	let plan: WalkPlan | null = findWalkPlan(phase1Spatial, obstaclePositions, 0);
 
 	if (!plan) {
-		// Otherwise patch the witness's facing in engine.dat — there is no `face`
-		// tool to reorient them with a setup round any more (ADR 0015).
-		const sp = findSetupPlan(phase1Spatial, obstaclePositions);
-		if (sp) {
-			plan = sp;
-		}
-	}
-
-	if (!plan) {
 		// Last-resort: patch engine.dat to relocate a witness into a position
-		// where the actor's next move will land in their cone.  The round itself
+		// where the actor's next move will land in their Vista.  The round itself
 		// is still driven via a live go tool call — only the starting spatial
 		// layout is adjusted via direct localStorage mutation.
 		const pp = findPatchPlan(phase1Spatial, obstaclePositions);

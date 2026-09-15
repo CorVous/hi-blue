@@ -2640,7 +2640,19 @@ describe("action-failure entries — round-coordinator integration", () => {
 	});
 
 	it("wall-collision repro: daemon facing a wall issues go east on rounds 1, 2, 3 → 3 action-failure user turns; peers 0", async () => {
-		const game = startGame(TEST_PERSONAS, OBSTACLE_PACK, { budgetPerAi: 10 });
+		const started = startGame(TEST_PERSONAS, OBSTACLE_PACK, {
+			budgetPerAi: 10,
+		});
+		// Pin the complication countdown: the initial draw is random, and a
+		// randomly-fired obstacle_shift can move the blocking obstacle out of the
+		// way, making one of the three `go east` calls succeed instead.
+		const game = {
+			...started,
+			complicationSchedule: {
+				...started.complicationSchedule,
+				countdown: 99,
+			},
+		};
 
 		// red at (0,0) facing north; obstacle at (0,1) east; go east → blocked
 		const goEastToolCall = {
@@ -2706,6 +2718,94 @@ describe("action-failure entries — round-coordinator integration", () => {
 				(m as { content: string }).content.match(/action failed:/),
 		);
 		expect(greenFailureMsgs).toHaveLength(0);
+	});
+});
+
+// ----------------------------------------------------------------------------
+// witnessed-event fan-out — Vista membership (ADR 0015)
+// ----------------------------------------------------------------------------
+describe("physical-action witness fan-out — Vista membership (ADR 0015)", () => {
+	/**
+	 * ContentPack: flower at (2, 0) sits on red's own cell, so red's pick_up has
+	 * a definite actor cell to gate on. Vista membership of that cell is
+	 * position-only:
+	 *   green at (2, 2) is the (2, 0) offset → 2² + 0² = 4 ≤ 4 → witness
+	 *   cyan at (1, 2) is the (2, 1) offset → 2² + 1² = 5 > 4 → no witness
+	 * cyan faces west, so the retired cone would have covered (2, 0): the
+	 * negative case pins eligibility to the Vista rather than to a facing.
+	 */
+	const VISTA_PACK = makeTestPack(
+		[
+			{
+				id: "flower",
+				kind: "objective_object",
+				name: "flower",
+				examineDescription: "A flower",
+				holder: { row: 2, col: 0 },
+				pairsWithSpaceId: "flower_space",
+				placementFlavor: "{actor} places the flower on the pedestal.",
+			},
+			{
+				id: "flower_space",
+				kind: "objective_space",
+				name: "flower space",
+				examineDescription: "A designated space",
+				holder: { row: 4, col: 4 },
+			},
+		],
+		{
+			wallName: "wall",
+			aiStarts: {
+				red: { position: { row: 2, col: 0 }, facing: "north" },
+				green: { position: { row: 2, col: 2 }, facing: "west" },
+				cyan: { position: { row: 1, col: 2 }, facing: "west" },
+			},
+		},
+	);
+
+	it("a Daemon at offset (2, 0) from the actor's cell witnesses the action; one at (2, 1) does not", async () => {
+		const game = startGame(TEST_PERSONAS, VISTA_PACK, { budgetPerAi: 5 });
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "tc1",
+						name: "pick_up",
+						argumentsJson: JSON.stringify({ item: "flower" }),
+					},
+				],
+			}, // red picks up the flower on its own cell
+			{ assistantText: "", toolCalls: [] }, // green passes
+			{ assistantText: "", toolCalls: [] }, // cyan passes
+		]);
+
+		const { nextState } = await runRound(game, "red", "hi", provider);
+
+		// Inside the Vista → a witnessed-event entry naming the actor.
+		const greenWitnessed = (nextState.conversationLogs.green ?? []).filter(
+			(e) => e.kind === "witnessed-event",
+		);
+		expect(greenWitnessed).toHaveLength(1);
+		if (greenWitnessed[0]?.kind === "witnessed-event") {
+			expect(greenWitnessed[0].actor).toBe("red");
+			expect(greenWitnessed[0].actionKind).toBe("pick_up");
+		}
+
+		// Outside the Vista → nothing, even though cyan is only two columns east
+		// and one row north of the actor's cell.
+		expect(
+			(nextState.conversationLogs.cyan ?? []).filter(
+				(e) => e.kind === "witnessed-event",
+			),
+		).toHaveLength(0);
+
+		// The actor audience is unchanged: red is not a witness of its own action.
+		expect(
+			(nextState.conversationLogs.red ?? []).filter(
+				(e) => e.kind === "witnessed-event",
+			),
+		).toHaveLength(0);
 	});
 });
 

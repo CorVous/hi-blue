@@ -880,22 +880,22 @@ describe("dispatchAiTurn", () => {
 	});
 
 	// -------------------------------------------------------------------------
-	// write-time cone + per-Daemon whispers (issue #195, AC 12 & AC 13)
+	// write-time Vista fan-out + per-Daemon whispers (issue #195, AC 12 & AC 13)
 	// -------------------------------------------------------------------------
 
-	it("AC 12: actor's own pick_up does NOT append witnessed-event to actor's log; in-cone witness receives one", () => {
+	it("AC 12: actor's own pick_up does NOT append witnessed-event to actor's log; in-Vista witness receives one", () => {
 		/**
 		 * Fixture (mirrors conversation-log-integration.test.ts):
-		 *   - red at (2,0) facing south — picks up flower
-		 *   - green at (0,0) facing south — cone: own (0,0), front (1,0), two-ahead (2,0) ← in cone
-		 *   - cyan at (0,2) facing south — cone: own (0,2), front (1,2), two-ahead (2,2) — (2,0) NOT in cone
+		 *   - red at (2,0) — picks up flower (facing no longer gates witnesses)
+		 *   - green at (0,0) — Vista offset of (2,0) is (0,2): 0² + 2² = 4 ≤ 4 ← in Vista
+		 *   - cyan at (0,2) — Vista offset of (2,0) is (2,2): 2² + 2² = 8 > 4 — NOT in Vista
 		 */
 		const flower = makeEntity("flower", "interesting_object", {
 			row: 2,
 			col: 0,
 		});
-		const packWithCone = makeTestPack([flower], {
-			setting: "cone test",
+		const packWithVista = makeTestPack([flower], {
+			setting: "Vista test",
 			wallName: "wall",
 			aiStarts: {
 				red: { position: { row: 2, col: 0 }, facing: "south" },
@@ -903,7 +903,7 @@ describe("dispatchAiTurn", () => {
 				cyan: { position: { row: 0, col: 2 }, facing: "south" },
 			},
 		});
-		const coneGame = startGame(TEST_PERSONAS, packWithCone, {
+		const vistaGame = startGame(TEST_PERSONAS, packWithVista, {
 			budgetPerAi: 5,
 			rng: FIXED_RNG,
 		});
@@ -912,7 +912,7 @@ describe("dispatchAiTurn", () => {
 			aiId: "red",
 			toolCall: { name: "pick_up", args: { item: "flower" } },
 		};
-		const result = dispatchAiTurn(coneGame, action);
+		const result = dispatchAiTurn(vistaGame, action);
 		const phase = result.game;
 
 		// Actor (red) must NOT have any witnessed-event in their own log
@@ -921,7 +921,7 @@ describe("dispatchAiTurn", () => {
 		);
 		expect(redWitnessed).toHaveLength(0);
 
-		// green's cone at (0,0) facing south includes (2,0) as "two steps ahead"
+		// green's Vista at (0,0) contains (2,0) — two cells north
 		// → green must have a witnessed-event entry for the pick_up
 		const greenWitnessed = (phase.conversationLogs.green ?? []).filter(
 			(e) => e.kind === "witnessed-event",

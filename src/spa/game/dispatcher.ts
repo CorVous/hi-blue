@@ -1,5 +1,4 @@
 import { withinInteractionRange } from "./available-tools.js";
-import { projectCone } from "./cone-projector.js";
 import {
 	applyDirection,
 	CARDINAL_DIRECTIONS,
@@ -32,6 +31,7 @@ import type {
 	ToolCall,
 	WorldEntity,
 } from "./types";
+import { vistaContains } from "./vista-projector.js";
 import {
 	checkPlacementFlavor,
 	checkUseItemActivation,
@@ -572,18 +572,15 @@ export function dispatchAiTurn(
 						...(placementFlavorRaw !== undefined ? { placementFlavorRaw } : {}),
 					};
 
-					// Write-time cone fan-out: append a witnessed-event entry to each
+					// Write-time Vista fan-out: append a witnessed-event entry to each
 					// qualifying witness's per-Daemon log. The actor gets nothing here —
 					// their tool-result string is their channel.
 					for (const [witnessId, witnessSp] of Object.entries(witnessSpatial)) {
-						const witnessCone = projectCone(
+						const actorInVista = vistaContains(
 							witnessSp.position,
-							witnessSp.facing,
+							physRecord.actorCellAtAction,
 						);
-						const actorInCone = witnessCone.some((cell) =>
-							positionsEqual(cell.position, physRecord.actorCellAtAction),
-						);
-						if (!actorInCone) continue;
+						if (!actorInVista) continue;
 
 						const witnessEntry = {
 							kind: "witnessed-event" as const,

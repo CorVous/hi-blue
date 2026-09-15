@@ -17,8 +17,9 @@
  * dispatcher's job (bounds + obstacle checks), and Vista cells are
  * perception, not a movement authority. **Interaction range**
  * (`max(|dx|, |dy|) ≤ 1`) is the separate, shorter region for pickup, Carry
- * placement, and Use-Space. The live runtime keeps using the Cone until the
- * coordinated cutover (#539).
+ * placement, and Use-Space. Witness eligibility already reads this disk
+ * (`vistaContains`); the prompt's sight listing still uses the Cone until the
+ * rest of the coordinated cutover (#539).
  */
 
 import type { CardinalDirection, GridPosition } from "./direction.js";
@@ -122,6 +123,24 @@ export const VISTA_OFFSETS: readonly VistaOffset[] = Object.freeze([
  */
 export function inVista(dx: number, dy: number): boolean {
 	return dx * dx + dy * dy <= 4;
+}
+
+/**
+ * True when `cell` falls inside the Vista centered on `observer` — the
+ * position-only witness gate for **Witnessed event**, Obstacle Shift, and
+ * Convergence eligibility (ADR 0015). Offsets such as `(2, 1)` are outside;
+ * the four cardinal distance-2 cells are inside. Obstacles never occlude
+ * membership: only the two positions are read, and the observer may be
+ * out-of-bounds for callers that hold one (unlike {@link projectVista},
+ * which rejects that case because its own-cell guarantee depends on it).
+ */
+export function vistaContains(
+	observer: GridPosition,
+	cell: GridPosition,
+): boolean {
+	// Row 0 is the north edge, so a cell `dy` steps north of the observer has
+	// a smaller row: dy = observer.row − cell.row.
+	return inVista(cell.col - observer.col, observer.row - cell.row);
 }
 
 /**

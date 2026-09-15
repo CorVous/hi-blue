@@ -25,7 +25,6 @@ import {
 	resolveExpiredDirectives,
 	tickComplication,
 } from "./complication-engine";
-import { projectCone } from "./cone-projector";
 import { dispatchAiTurn } from "./dispatcher";
 import {
 	advanceRound,
@@ -67,6 +66,7 @@ import type {
 	ToolName,
 	ToolRoundtripMessage,
 } from "./types";
+import { vistaContains } from "./vista-projector";
 import {
 	checkConvergenceTier,
 	checkLoseCondition,
@@ -654,18 +654,11 @@ export async function runRound(
 					},
 				};
 
-				// Fan out witness entries to daemons whose cone covers fromCell.
+				// Fan out witness entries to daemons whose Vista covers fromCell.
 				for (const [daemonId, spatial] of Object.entries(
 					state.personaSpatial,
 				)) {
-					const cone = projectCone(spatial.position, spatial.facing);
-					const witnessesOrigin = cone.some(
-						(c) =>
-							c.position.row === fired.fromCell.row &&
-							c.position.col === fired.fromCell.col,
-					);
-
-					if (!witnessesOrigin) continue;
+					if (!vistaContains(spatial.position, fired.fromCell)) continue;
 
 					const entry: Extract<
 						ConversationEntry,
@@ -757,7 +750,7 @@ export async function runRound(
 		if (!spaceCell) continue;
 
 		// Split fan-out (#336): Daemons standing on the space cell receive the
-		// first-person actor flavor on a dedicated channel; cone-witnesses NOT
+		// first-person actor flavor on a dedicated channel; Vista-witnesses NOT
 		// on the cell receive the third-person witness flavor. No Daemon
 		// receives both.
 		const witnessFlavor =
@@ -775,12 +768,9 @@ export async function runRound(
 			const isOccupant =
 				spatial.position.row === spaceCell.row &&
 				spatial.position.col === spaceCell.col;
-			const cone = projectCone(spatial.position, spatial.facing);
-			const witnessesCell = cone.some(
-				(cell) =>
-					cell.position.row === spaceCell.row &&
-					cell.position.col === spaceCell.col,
-			);
+			// Occupants keep their actor treatment regardless of Vista membership;
+			// everyone else must have the space cell inside their Vista.
+			const witnessesCell = vistaContains(spatial.position, spaceCell);
 			if (!isOccupant && !witnessesCell) continue;
 
 			const entry: Extract<
