@@ -8,9 +8,13 @@
  * - renderWorldMap: builds the DOM skeleton once
  * - updateWorldMap: mutates existing cell contents in-place
  *
- * Cone-focus feature:
- * - setMapFocus(aiId): tint cells in a daemon's cone view with persona color
+ * Vista-focus feature:
+ * - setMapFocus(aiId): tint the cells of a daemon's Vista with persona color
  * - getMapFocus(): check if focus is active
+ *
+ * Daemon markers show identity and position only: their identifying color,
+ * their `data-ai` attribute, and the `*name` tooltip label. They carry no
+ * direction arrow, direction letter, or last-movement marker (ADR 0015).
  */
 
 import type { GameSession } from "../game/game-session.js";
@@ -20,16 +24,21 @@ import type {
 	GridPosition,
 	WorldEntity,
 } from "../game/types.js";
-import { coneMaskForDaemon } from "./cone-mask.js";
+import { vistaMaskForDaemon } from "./vista-mask.js";
 
-// Module-level state for cone focus
+// Module-level state for Vista focus
 let mapFocus: AiId | null = null;
 let activeSession: GameSession | null = null;
 
 const VISUAL_ROWS = 7;
 const VISUAL_COLS = 7;
 
-type CardinalDirection = "north" | "south" | "east" | "west";
+/**
+ * The identity marker drawn on a Daemon's cell. Position-only: colour,
+ * `data-ai`, and the tooltip carry identity, so the glyph itself is the same
+ * for every Daemon and direction-independent.
+ */
+const DAEMON_GLYPH = "@ ";
 
 /**
  * Convert hex color to rgba with given alpha.
@@ -53,14 +62,16 @@ function hexToRgba(hex: string, alpha: number): string {
 }
 
 /**
- * Apply cone tint to world map cells based on active focus.
- * Tints cells in the focused daemon's cone with persona color at 0.25 alpha.
+ * Apply Vista tint to world map cells based on active focus.
+ * Tints the focused daemon's in-bounds Vista cells with persona color at
+ * 0.25 alpha. The mask is position-only, so the tint follows the daemon as
+ * it moves.
  * @param containerEl The map container element
  * @param state The current game state
  */
-function applyConeTint(containerEl: HTMLElement, state: GameState): void {
+function applyVistaTint(containerEl: HTMLElement, state: GameState): void {
 	const focus = mapFocus;
-	const mask = focus ? coneMaskForDaemon(state, focus) : null;
+	const mask = focus ? vistaMaskForDaemon(state, focus) : null;
 	const tintColor = focus ? state.personas[focus]?.color : null;
 
 	for (const cell of containerEl.querySelectorAll<HTMLElement>(
@@ -69,10 +80,10 @@ function applyConeTint(containerEl: HTMLElement, state: GameState): void {
 		const dataCell = cell.getAttribute("data-cell");
 		if (focus && mask && tintColor && dataCell && mask.has(dataCell)) {
 			cell.style.backgroundColor = hexToRgba(tintColor, 0.25);
-			cell.setAttribute("data-cone-focus", focus);
+			cell.setAttribute("data-vista-focus", focus);
 		} else {
 			cell.style.backgroundColor = "";
-			cell.removeAttribute("data-cone-focus");
+			cell.removeAttribute("data-vista-focus");
 		}
 	}
 }
@@ -85,12 +96,12 @@ export function setMapFocus(aiId: AiId | null): void {
 	mapFocus = aiId;
 	const containerEl = document.querySelector<HTMLElement>("#dev-world-map");
 	if (containerEl && activeSession) {
-		applyConeTint(containerEl, activeSession.getState());
+		applyVistaTint(containerEl, activeSession.getState());
 	}
 
-	// Sweep all focus-cone buttons to update data-focus-active
+	// Sweep all focus-Vista buttons to update data-focus-active
 	for (const btn of document.querySelectorAll<HTMLElement>(
-		'[data-field="focus-cone"]',
+		'[data-field="focus-vista"]',
 	)) {
 		const panel = btn.closest<HTMLElement>(".ai-panel");
 		const panelAi = panel?.getAttribute("data-ai") ?? null;
@@ -110,32 +121,6 @@ function isGridPosition(holder: AiId | GridPosition): holder is GridPosition {
 	return typeof holder === "object" && holder !== null;
 }
 
-function facingArrow(facing: CardinalDirection): string {
-	switch (facing) {
-		case "north":
-			return "^";
-		case "south":
-			return "v";
-		case "east":
-			return ">";
-		case "west":
-			return "<";
-	}
-}
-
-function facingLetter(facing: CardinalDirection): string {
-	switch (facing) {
-		case "north":
-			return "N";
-		case "south":
-			return "S";
-		case "east":
-			return "E";
-		case "west":
-			return "W";
-	}
-}
-
 /**
  * Get the entity held by the given AI, or undefined.
  */
@@ -149,7 +134,7 @@ function findHeldEntity(
 /**
  * Determine the glyph and tooltip for a single cell.
  * Precedence (highest → lowest):
- * 1. Daemon (^/v/>/< )
+ * 1. Daemon (@ )
  * 2. Obstacle (##)
  * 3. Objective object on paired space (**)
  * 4. Objective object alone (* )
@@ -199,15 +184,13 @@ function computeCellInfo(visualPos: GridPosition, state: GameState): CellInfo {
 			if (!persona) continue; // Skip if persona is missing
 
 			const heldEntity = findHeldEntity(aiId, state.world.entities);
-			const arrow = facingArrow(spatial.facing);
-			const facing = facingLetter(spatial.facing);
 			const holdText = heldEntity
 				? `${heldEntity.name} (${heldEntity.id})`
 				: "nothing";
 
 			return {
-				glyph: `${arrow} `,
-				tooltip: `*${persona.name} — facing ${facing} — holds: ${holdText}`,
+				glyph: DAEMON_GLYPH,
+				tooltip: `*${persona.name} — holds: ${holdText}`,
 				kind: "daemon",
 				aiId,
 			};
@@ -363,9 +346,9 @@ export function renderWorldMap(
 
 	containerEl.appendChild(grid);
 
-	// Update active session and apply cone tint
+	// Update active session and apply the Vista tint
 	activeSession = session;
-	applyConeTint(containerEl, state);
+	applyVistaTint(containerEl, state);
 }
 
 /**
@@ -430,7 +413,8 @@ export function updateWorldMap(
 		}
 	});
 
-	// Update active session and re-apply cone tint
+	// Update active session and re-apply the Vista tint so the highlight
+	// follows the focused Daemon's current position
 	activeSession = session;
-	applyConeTint(containerEl, state);
+	applyVistaTint(containerEl, state);
 }

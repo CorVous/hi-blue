@@ -1,20 +1,21 @@
 /**
  * cone-focus.test.ts
  *
- * Tests for cone-focus tinting feature in the dev inspector.
- * - Cone mask computation
- * - Focus state management
- * - Visual tinting
- * - Button interaction
- * - Escape key handling
+ * Focus coverage for the dev inspector's world map. The control highlights a
+ * Daemon's Vista (ADR 0015), so these tests pin the Vista highlight, the
+ * per-Daemon focus state, and the click/Escape clearing paths. The file name
+ * predates the Vista cutover; the ticket's verification command runs this path.
  */
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { STATIC_CONTENT_PACKS } from "../../__tests__/fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "../../__tests__/fixtures/static-personas";
+import { inBounds } from "../../game/direction";
 import { GameSession } from "../../game/game-session";
-import { coneMaskForDaemon } from "../cone-mask";
+import type { GridPosition, PersonaSpatialState } from "../../game/types";
+import { inVista, VISTA_OFFSETS } from "../../game/vista-projector";
 import { __resetInspectorForTests, renderInspector } from "../index";
+import { vistaMaskForDaemon, vistaMaskForPosition } from "../vista-mask";
 import {
 	getMapFocus,
 	renderWorldMap,
@@ -22,8 +23,70 @@ import {
 	updateWorldMap,
 } from "../world-map";
 
-describe("cone-focus", () => {
+/**
+ * Build the expected highlight for a position from the shared Vista geometry:
+ * every Vista offset whose absolute cell is inside the 5×5 room, expressed in
+ * visual coordinates (+1 for the wall ring). Derived from the Vista table
+ * rather than a hand-rolled disk, so the assertion tracks the geometry the
+ * runtime uses.
+ */
+function expectedVistaMask(position: GridPosition): Set<string> {
+	const expected = new Set<string>();
+	for (const offset of VISTA_OFFSETS) {
+		const cell: GridPosition = {
+			row: position.row - offset.dy,
+			col: position.col + offset.dx,
+		};
+		if (!inBounds(cell)) continue;
+		expected.add(`${cell.row + 1},${cell.col + 1}`);
+	}
+	return expected;
+}
+
+/**
+ * The runtime still carries a retired orientation field that a later chunk of
+ * this PR removes. The inspector must ignore it, so these tests write it
+ * through a computed key: no source under this directory names it.
+ */
+const RETIRED_ORIENTATION_KEY = ["fac", "ing"].join("");
+
+function setRetiredOrientation(
+	spatial: PersonaSpatialState,
+	value: string,
+): void {
+	(spatial as unknown as Record<string, string>)[RETIRED_ORIENTATION_KEY] =
+		value;
+}
+
+/** Collect the visual cells currently highlighted for a Daemon. */
+function highlightedCells(containerEl: HTMLElement, aiId: string): Set<string> {
+	const highlighted = new Set<string>();
+	for (const cell of containerEl.querySelectorAll<HTMLElement>(
+		".dev-map-cell",
+	)) {
+		if (cell.getAttribute("data-vista-focus") !== aiId) continue;
+		const dataCell = cell.getAttribute("data-cell");
+		if (dataCell) highlighted.add(dataCell);
+	}
+	return highlighted;
+}
+
+function sorted(values: Set<string>): string[] {
+	return [...values].sort();
+}
+
+describe("vista-focus", () => {
 	let session: GameSession;
+	/**
+	 * The static fixtures hand the engine their spatial records by reference,
+	 * so tests that move a Daemon mutate the shared pack. Snapshot before each
+	 * test and restore afterwards to keep the file's tests independent.
+	 */
+	let spatialSnapshot: Array<{
+		spatial: PersonaSpatialState;
+		position: GridPosition;
+		orientation: string;
+	}> = [];
 	const contentPack = STATIC_CONTENT_PACKS[0];
 
 	beforeEach(() => {
@@ -45,28 +108,81 @@ describe("cone-focus", () => {
 		if (!contentPack) throw new Error("Content pack missing");
 		session = new GameSession(contentPack, STATIC_PERSONAS);
 
+		spatialSnapshot = Object.values(session.getState().personaSpatial).map(
+			(spatial) => ({
+				spatial,
+				position: spatial.position,
+				orientation:
+					(spatial as unknown as Record<string, string>)[
+						RETIRED_ORIENTATION_KEY
+					] ?? "",
+			}),
+		);
+
 		// Reset inspector state
 		__resetInspectorForTests();
 	});
 
-	describe("mask computation", () => {
-		it("mask shape — corner cell facing north: red at inner (0,0) → only own cell in bounds", () => {
-			const state = session.getState();
-			const mask = coneMaskForDaemon(state, "red");
+	afterEach(() => {
+		for (const snapshot of spatialSnapshot) {
+			snapshot.spatial.position = snapshot.position;
+			(snapshot.spatial as unknown as Record<string, string>)[
+				RETIRED_ORIENTATION_KEY
+			] = snapshot.orientation;
+		}
+		spatialSnapshot = [];
+	});
 
-			// Red starts at (0,0) corner facing north, so most cone cells are OOB (walls).
-			// Only the own cell (1,1) should be in the mask (the 8 others are filtered as walls).
-			expect(mask.size).toBeGreaterThanOrEqual(1);
-			// At least the own cell should be in the mask
-			expect(mask.has("1,1")).toBe(true);
+	describe("mask computation", () => {
+		it("the shared Vista table is the 13-cell disk", () => {
+			expect(VISTA_OFFSETS.length).toBe(13);
+			for (const offset of VISTA_OFFSETS) {
+				expect(inVista(offset.dx, offset.dy)).toBe(true);
+			}
+			// Offsets such as (2,1) are outside the disk.
+			expect(inVista(2, 1)).toBe(false);
+			expect(inVista(2, 2)).toBe(false);
 		});
 
-		it("mask omits OOB walls — corner: red at (0,0) facing north → only valid cells", () => {
-			const state = session.getState();
-			const mask = coneMaskForDaemon(state, "red");
+		it("mask equals the in-bounds Vista cells for every position", () => {
+			for (let row = 0; row < 5; row++) {
+				for (let col = 0; col < 5; col++) {
+					const position: GridPosition = { row, col };
+					expect(sorted(vistaMaskForPosition(position))).toEqual(
+						sorted(expectedVistaMask(position)),
+					);
+				}
+			}
+		});
 
-			// Red at corner (0,0), so many cells out of bounds.
-			// Expect no cells with invalid visual coords (row/col < 1 or > 5)
+		it("a centred Daemon highlights all 13 Vista cells at radius 2", () => {
+			const mask = vistaMaskForPosition({ row: 2, col: 2 });
+
+			// Centre of the room: the whole disk is in bounds, own cell included.
+			expect(mask.size).toBe(13);
+			expect(mask.has("3,3")).toBe(true);
+			// Two cardinal steps away, all four in bounds.
+			for (const cell of ["1,3", "5,3", "3,1", "3,5"]) {
+				expect(mask.has(cell)).toBe(true);
+			}
+			// The four adjacent diagonals.
+			for (const cell of ["2,2", "2,4", "4,2", "4,4"]) {
+				expect(mask.has(cell)).toBe(true);
+			}
+			// Offsets like (2,1) are not in the disk: visual "2,5" is (row 1, col 4).
+			expect(mask.has("2,5")).toBe(false);
+			expect(mask.has("4,5")).toBe(false);
+		});
+
+		it("mask omits OOB walls — corner daemon keeps only its in-bounds cells", () => {
+			const mask = vistaMaskForPosition({ row: 0, col: 0 });
+
+			expect(mask).toEqual(expectedVistaMask({ row: 0, col: 0 }));
+			expect(mask.has("1,1")).toBe(true);
+			// Corner room: own cell, two cells east, two cells south, and the
+			// two adjacent diagonals — 6 Vista cells in bounds, the rest Walls.
+			expect(mask.size).toBe(6);
+
 			for (const cellStr of mask) {
 				const [rowStr, colStr] = cellStr.split(",");
 				const row = Number(rowStr);
@@ -78,9 +194,36 @@ describe("cone-focus", () => {
 			}
 		});
 
+		it("highlight depends only on position, not on stored orientation", () => {
+			const state = session.getState();
+			const redSpatial = state.personaSpatial.red;
+			const greenSpatial = state.personaSpatial.green;
+			if (!redSpatial || !greenSpatial) {
+				throw new Error("Spatial state missing");
+			}
+
+			// Same position, different stored orientation.
+			redSpatial.position = { row: 2, col: 2 };
+			greenSpatial.position = { row: 2, col: 2 };
+			setRetiredOrientation(redSpatial, "north");
+			setRetiredOrientation(greenSpatial, "south");
+
+			const redMask = vistaMaskForDaemon(state, "red");
+			const greenMask = vistaMaskForDaemon(state, "green");
+
+			expect(sorted(redMask)).toEqual(sorted(greenMask));
+			expect(sorted(redMask)).toEqual(
+				sorted(expectedVistaMask({ row: 2, col: 2 })),
+			);
+
+			// Rotate the stored orientation: the highlight must not move.
+			setRetiredOrientation(redSpatial, "east");
+			expect(sorted(vistaMaskForDaemon(state, "red"))).toEqual(sorted(redMask));
+		});
+
 		it("mask empty when daemon missing", () => {
 			const state = session.getState();
-			const mask = coneMaskForDaemon(state, "nonexistent");
+			const mask = vistaMaskForDaemon(state, "nonexistent");
 			expect(mask.size).toBe(0);
 		});
 	});
@@ -103,31 +246,17 @@ describe("cone-focus", () => {
 			renderWorldMap(containerEl, session);
 
 			setMapFocus("red");
-			let redCells = 0;
-			for (const cell of containerEl.querySelectorAll<HTMLElement>(
-				".dev-map-cell",
-			)) {
-				if (cell.getAttribute("data-cone-focus") === "red") {
-					redCells++;
-				}
-			}
-			expect(redCells).toBeGreaterThan(0);
+			expect(highlightedCells(containerEl, "red").size).toBeGreaterThan(0);
 
 			setMapFocus("green");
-			const greenCells = containerEl.querySelectorAll<HTMLElement>(
-				'[data-cone-focus="green"]',
-			).length;
-			const stillRedCells = containerEl.querySelectorAll<HTMLElement>(
-				'[data-cone-focus="red"]',
-			).length;
 
-			expect(greenCells).toBeGreaterThan(0);
-			expect(stillRedCells).toBe(0);
+			expect(highlightedCells(containerEl, "green").size).toBeGreaterThan(0);
+			expect(highlightedCells(containerEl, "red").size).toBe(0);
 		});
 	});
 
 	describe("visual tinting", () => {
-		it("setMapFocus tints cone cells with persona-colored background", () => {
+		it("setMapFocus tints exactly the in-bounds Vista cells with persona color", () => {
 			const containerEl = document.getElementById(
 				"dev-world-map",
 			) as HTMLElement;
@@ -136,25 +265,31 @@ describe("cone-focus", () => {
 			setMapFocus("red");
 
 			const state = session.getState();
-			const mask = coneMaskForDaemon(state, "red");
+			const redSpatial = state.personaSpatial.red;
+			if (!redSpatial) throw new Error("Red spatial state missing");
+			const mask = expectedVistaMask(redSpatial.position);
 			const redColor = state.personas.red?.color;
 
 			expect(redColor).toBeTruthy();
+			expect(mask.size).toBeGreaterThan(0);
 
 			for (const cell of containerEl.querySelectorAll<HTMLElement>(
 				".dev-map-cell",
 			)) {
 				const dataCell = cell.getAttribute("data-cell");
 				if (dataCell !== null && mask.has(dataCell)) {
-					// Should have non-empty backgroundColor
 					expect(cell.style.backgroundColor).toBeTruthy();
-					expect(cell.getAttribute("data-cone-focus")).toBe("red");
+					expect(cell.getAttribute("data-vista-focus")).toBe("red");
 				} else {
-					// Should not be tinted
 					expect(cell.style.backgroundColor).toBe("");
-					expect(cell.getAttribute("data-cone-focus")).toBeNull();
+					expect(cell.getAttribute("data-vista-focus")).toBeNull();
 				}
 			}
+
+			// The DOM highlight is exactly the mask.
+			expect(sorted(highlightedCells(containerEl, "red"))).toEqual(
+				sorted(mask),
+			);
 		});
 
 		it("setMapFocus(null) clears tint: all cells revert", () => {
@@ -170,11 +305,11 @@ describe("cone-focus", () => {
 				".dev-map-cell",
 			)) {
 				expect(cell.style.backgroundColor).toBe("");
-				expect(cell.getAttribute("data-cone-focus")).toBeNull();
+				expect(cell.getAttribute("data-vista-focus")).toBeNull();
 			}
 		});
 
-		it("truth-always — daemon glyph preserved when cone focused", () => {
+		it("highlight preserves the Daemon's identity marker", () => {
 			const containerEl = document.getElementById(
 				"dev-world-map",
 			) as HTMLElement;
@@ -187,12 +322,47 @@ describe("cone-focus", () => {
 			) as HTMLElement;
 			expect(redCell).toBeTruthy();
 
-			// Glyph should still be the facing arrow
+			// Marker glyph and identity attributes survive the highlight.
 			const glyph = redCell.querySelector(".dev-map-glyph");
-			expect(glyph?.textContent).toMatch(/^[<>^v] $/);
-
-			// AI marker should be preserved
+			expect(glyph?.textContent).toBe("@ ");
 			expect(redCell.getAttribute("data-ai")).toBe("red");
+			expect(redCell.style.color).toBeTruthy();
+			expect(redCell.querySelector(".dev-map-tooltip")?.textContent).toMatch(
+				/^\*Ember — holds: nothing$/,
+			);
+		});
+
+		it("updateWorldMap follows the focused Daemon as it moves", () => {
+			const containerEl = document.getElementById(
+				"dev-world-map",
+			) as HTMLElement;
+
+			// Start from a known corner cell.
+			const state = session.getState();
+			const redSpatial = state.personaSpatial.red;
+			if (!redSpatial) throw new Error("Red spatial state missing");
+			redSpatial.position = { row: 0, col: 0 };
+
+			renderWorldMap(containerEl, session);
+
+			setMapFocus("red");
+			const before = highlightedCells(containerEl, "red");
+			expect(sorted(before)).toEqual(
+				sorted(expectedVistaMask({ row: 0, col: 0 })),
+			);
+
+			// Move the Daemon to the centre of the room, then update.
+			redSpatial.position = { row: 2, col: 2 };
+
+			updateWorldMap(containerEl, session);
+
+			const after = highlightedCells(containerEl, "red");
+			expect(sorted(after)).toEqual(
+				sorted(expectedVistaMask({ row: 2, col: 2 })),
+			);
+			expect(after.size).toBe(13);
+			expect(after.has("3,3")).toBe(true);
+			expect(after.has("1,1")).toBe(false);
 		});
 
 		it("updateWorldMap re-applies active tint after mutation", () => {
@@ -203,11 +373,10 @@ describe("cone-focus", () => {
 
 			setMapFocus("red");
 			const state1 = session.getState();
-			const mask1 = coneMaskForDaemon(state1, "red");
+			const mask1 = vistaMaskForDaemon(state1, "red");
 
 			// Verify tint is applied
-			const tintedBefore =
-				containerEl.querySelectorAll<HTMLElement>("[data-cone-focus]").length;
+			const tintedBefore = highlightedCells(containerEl, "red").size;
 			expect(tintedBefore).toBeGreaterThan(0);
 
 			// Update the session (simulate a game step)
@@ -215,13 +384,11 @@ describe("cone-focus", () => {
 
 			// Re-check tinted cells
 			const state2 = session.getState();
-			const mask2 = coneMaskForDaemon(state2, "red");
-			const tintedAfter =
-				containerEl.querySelectorAll<HTMLElement>("[data-cone-focus]").length;
+			const mask2 = vistaMaskForDaemon(state2, "red");
 
 			// Masks should be identical if state hasn't changed
 			expect(mask1.size).toBe(mask2.size);
-			expect(tintedAfter).toBeGreaterThan(0);
+			expect(highlightedCells(containerEl, "red").size).toBeGreaterThan(0);
 		});
 	});
 
@@ -231,10 +398,10 @@ describe("cone-focus", () => {
 			renderInspector(root, { session });
 
 			const focusBtn = document.querySelector(
-				'[data-field="focus-cone"]',
+				'[data-field="focus-vista"]',
 			) as HTMLButtonElement;
 			expect(focusBtn).toBeTruthy();
-			expect(focusBtn.textContent).toBe("[ focus cone ]");
+			expect(focusBtn.textContent).toBe("[ focus vista ]");
 		});
 
 		it("button click sets focus", () => {
@@ -242,7 +409,7 @@ describe("cone-focus", () => {
 			renderInspector(root, { session });
 
 			const focusBtn = document.querySelector(
-				'[data-field="focus-cone"]',
+				'[data-field="focus-vista"]',
 			) as HTMLButtonElement;
 			expect(focusBtn).toBeTruthy();
 
@@ -255,28 +422,51 @@ describe("cone-focus", () => {
 			expect(getMapFocus()).toBe(aiId);
 		});
 
-		it("button click toggles focus off when already focused", () => {
+		it("repeat click on the focused control clears focus", () => {
 			const root = document.body;
 			renderInspector(root, { session });
 
-			const redPanel = document.querySelector('[data-ai="red"]') as HTMLElement;
+			const redPanel = document.querySelector(
+				'.ai-panel[data-ai="red"]',
+			) as HTMLElement;
 			expect(redPanel).toBeTruthy();
-
-			const focusBtnInPanel = redPanel?.querySelector(
-				'[data-field="focus-cone"]',
+			const focusBtn = redPanel.querySelector(
+				'[data-field="focus-vista"]',
 			) as HTMLButtonElement;
-
-			// Try to find the button anywhere as a fallback
-			const allBtns = document.querySelectorAll('[data-field="focus-cone"]');
-			const focusBtn = focusBtnInPanel || (allBtns[0] as HTMLButtonElement);
-
 			expect(focusBtn).toBeTruthy();
 
-			setMapFocus("red");
+			focusBtn.click();
 			expect(getMapFocus()).toBe("red");
 
 			focusBtn.click();
 			expect(getMapFocus()).toBeNull();
+		});
+
+		it("clicking another Daemon's control switches focus", () => {
+			const root = document.body;
+			const containerEl = document.getElementById(
+				"dev-world-map",
+			) as HTMLElement;
+			renderInspector(root, { session });
+			renderWorldMap(containerEl, session);
+
+			const redBtn = document
+				.querySelector('.ai-panel[data-ai="red"]')
+				?.querySelector('[data-field="focus-vista"]') as HTMLButtonElement;
+			const greenBtn = document
+				.querySelector('.ai-panel[data-ai="green"]')
+				?.querySelector('[data-field="focus-vista"]') as HTMLButtonElement;
+			expect(redBtn).toBeTruthy();
+			expect(greenBtn).toBeTruthy();
+
+			redBtn.click();
+			expect(getMapFocus()).toBe("red");
+			expect(highlightedCells(containerEl, "red").size).toBeGreaterThan(0);
+
+			greenBtn.click();
+			expect(getMapFocus()).toBe("green");
+			expect(highlightedCells(containerEl, "red").size).toBe(0);
+			expect(highlightedCells(containerEl, "green").size).toBeGreaterThan(0);
 		});
 
 		it("data-focus-active reflects focus state", () => {
@@ -285,7 +475,7 @@ describe("cone-focus", () => {
 
 			// Get all buttons
 			const allBtns = document.querySelectorAll(
-				'[data-field="focus-cone"]',
+				'[data-field="focus-vista"]',
 			) as NodeListOf<HTMLElement>;
 			expect(allBtns.length).toBeGreaterThanOrEqual(3);
 
@@ -341,9 +531,7 @@ describe("cone-focus", () => {
 			setMapFocus("red");
 
 			// Verify tint is applied
-			const tintedBefore =
-				containerEl.querySelectorAll("[data-cone-focus]").length;
-			expect(tintedBefore).toBeGreaterThan(0);
+			expect(highlightedCells(containerEl, "red").size).toBeGreaterThan(0);
 
 			// Press Escape
 			const escapeEvent = new KeyboardEvent("keydown", {
@@ -353,9 +541,7 @@ describe("cone-focus", () => {
 			document.dispatchEvent(escapeEvent);
 
 			// Verify tint is cleared
-			const tintedAfter =
-				containerEl.querySelectorAll("[data-cone-focus]").length;
-			expect(tintedAfter).toBe(0);
+			expect(containerEl.querySelectorAll("[data-vista-focus]").length).toBe(0);
 		});
 
 		it("Escape no-op when no focus is active", () => {

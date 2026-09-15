@@ -1810,8 +1810,8 @@ main {
 	display: inline-block;
 }
 
-/* Focus cone button */
-.dev-footer-focus-cone {
+/* Focus Vista button */
+.dev-footer-focus-vista {
 	background: none;
 	border: 1px dashed rgba(255, 180, 84, 0.4);
 	color: var(--amber-dim);
@@ -1821,7 +1821,7 @@ main {
 	cursor: pointer;
 }
 
-.dev-footer-focus-cone[data-focus-active="true"] {
+.dev-footer-focus-vista[data-focus-active="true"] {
 	color: var(--amber);
 	border-color: rgba(255, 180, 84, 0.8);
 }

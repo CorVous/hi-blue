@@ -80,7 +80,7 @@ describe("world-map", () => {
 		}
 	});
 
-	it("daemon cell renders <arrow> with persona color and data-ai", () => {
+	it("daemon cell renders the identity marker with persona color and data-ai", () => {
 		const contentPack = STATIC_CONTENT_PACKS[0];
 		if (!contentPack) throw new Error("Content pack missing");
 		const session = new GameSession(contentPack, STATIC_PERSONAS);
@@ -95,7 +95,7 @@ describe("world-map", () => {
 		expect(daemonCell).toBeTruthy();
 
 		const glyph = daemonCell?.querySelector(".dev-map-glyph");
-		expect(glyph?.textContent).toMatch(/^[<>^v] $/);
+		expect(glyph?.textContent).toBe("@ ");
 
 		// Color is set; browsers convert hex to rgb, so just check it's not empty
 		if (daemonCell instanceof HTMLElement) {
@@ -103,27 +103,33 @@ describe("world-map", () => {
 		}
 	});
 
-	it("facing-arrow mapping: north→^, south→v, east→>, west→<", () => {
+	it("daemon markers show identity and position only — no arrow glyph, no direction text", () => {
 		const contentPack = STATIC_CONTENT_PACKS[0];
 		if (!contentPack) throw new Error("Content pack missing");
 		const session = new GameSession(contentPack, STATIC_PERSONAS);
-		const state = session.getState();
-
-		// Red faces north initially
-		const redSpatial = state.personaSpatial.red;
-		expect(redSpatial).toBeTruthy();
-		if (!redSpatial) throw new Error("Red spatial state missing");
-		expect(redSpatial.facing).toBe("north");
-
 		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
+
 		renderWorldMap(containerEl, session);
 
-		const redCell = containerEl.querySelector('.dev-map-cell[data-ai="red"]');
-		const glyph = redCell?.querySelector(".dev-map-glyph");
-		expect(glyph?.textContent).toBe("^ ");
+		const daemonCells = containerEl.querySelectorAll(".dev-map-cell[data-ai]");
+		expect(daemonCells.length).toBe(3);
+
+		for (const cell of daemonCells) {
+			const glyph = cell.querySelector(".dev-map-glyph")?.textContent;
+			expect(glyph).toBe("@ ");
+			expect(glyph).not.toMatch(/[<>^v]/);
+
+			// Exact tooltip: identity label plus held item, nothing else.
+			const tooltip = cell.querySelector(".dev-map-tooltip")?.textContent;
+			expect(tooltip).toMatch(/^\*[A-Za-z]+ — holds: .+$/);
+
+			// The whole marker text is glyph + tooltip; exact match rules out
+			// any direction arrow, direction letter, or direction wording.
+			expect(cell.textContent).toMatch(/^@ \*[A-Za-z]+ — holds: .+$/);
+		}
 	});
 
-	it("daemon tooltip format: *<name> — facing <N|S|E|W> — holds: <item> (<id>)", () => {
+	it("daemon tooltip format: *<name> — holds: <item> (<id>)", () => {
 		const contentPack = STATIC_CONTENT_PACKS[0];
 		if (!contentPack) throw new Error("Content pack missing");
 		const session = new GameSession(contentPack, STATIC_PERSONAS);
@@ -133,9 +139,7 @@ describe("world-map", () => {
 
 		const redCell = containerEl.querySelector('.dev-map-cell[data-ai="red"]');
 		const tooltip = redCell?.querySelector(".dev-map-tooltip");
-		expect(tooltip?.textContent).toMatch(
-			/^\*Ember — facing N — holds: nothing$/,
-		);
+		expect(tooltip?.textContent).toMatch(/^\*Ember — holds: nothing$/);
 	});
 
 	it("daemon tooltip 'holds: nothing' when no held entity", () => {
@@ -339,7 +343,7 @@ describe("world-map", () => {
 		expect(cell).toBeTruthy();
 
 		const glyph = cell?.querySelector(".dev-map-glyph");
-		expect(glyph?.textContent).toMatch(/^[<>^v] $/);
+		expect(glyph?.textContent).toBe("@ ");
 	});
 
 	it("obstacle glyph beats objective object on same cell", () => {
@@ -467,6 +471,10 @@ describe("world-map", () => {
 
 		renderWorldMap(containerEl, session);
 
+		const tooltipBefore = containerEl
+			.querySelector('.dev-map-cell[data-ai="red"] .dev-map-tooltip')
+			?.textContent.trim();
+
 		// Move red daemon to (2,2)
 		const redSpatial = state.personaSpatial.red;
 		if (!redSpatial) throw new Error("Red spatial state missing");
@@ -480,29 +488,18 @@ describe("world-map", () => {
 			'.dev-map-cell[data-cell="3,3"]',
 		);
 		expect(redCellAfter?.getAttribute("data-ai")).toBe("red");
-	});
 
-	it("updateWorldMap reflects facing-only changes", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-		const state = session.getState();
-		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
+		// The identity marker moved with the daemon, unchanged in content.
+		expect(redCellAfter?.querySelector(".dev-map-glyph")?.textContent).toBe(
+			"@ ",
+		);
+		expect(
+			redCellAfter?.querySelector(".dev-map-tooltip")?.textContent.trim(),
+		).toBe(tooltipBefore);
 
-		renderWorldMap(containerEl, session);
-
-		// Change red daemon facing from north to east
-		const redSpatial = state.personaSpatial.red;
-		if (!redSpatial) throw new Error("Red spatial state missing");
-		redSpatial.facing = "east";
-
-		// Update
-		updateWorldMap(containerEl, session);
-
-		// Glyph should now be >
-		const redCell = containerEl.querySelector('.dev-map-cell[data-ai="red"]');
-		const glyph = redCell?.querySelector(".dev-map-glyph");
-		expect(glyph?.textContent).toBe("> ");
+		// The old cell no longer carries the marker.
+		const oldCell = containerEl.querySelector('.dev-map-cell[data-cell="1,1"]');
+		expect(oldCell?.getAttribute("data-ai")).toBeNull();
 	});
 
 	it("updateWorldMap reflects satisfaction state change in data-satisfaction and tooltip", () => {
