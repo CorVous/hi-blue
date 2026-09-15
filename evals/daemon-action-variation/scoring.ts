@@ -12,6 +12,8 @@
  *   - summarizeRun(byScenario) → RunSummary
  */
 
+import { ACTION_TOOLS } from "../../src/content/action-preference-bias.js";
+
 // ── Recorded shapes ──────────────────────────────────────────────────────────
 
 export interface CapturedToolCall {
@@ -38,11 +40,15 @@ export interface RepetitionRecord {
 
 /**
  * Tool buckets we report on. All other tool names roll up into `other`.
- * Mirrors the merged daemon action surface (`examine` removed, `look`
- * renamed to `face`, `give` removed).
+ *
+ * Imported from the shipped action surface rather than restated here, so the
+ * eval's columns, buckets, and per-tool rates track
+ * `src/content/action-preference-bias.ts` automatically. The bucket records
+ * below are typed as `Record<ActionTool | …>` and list their keys
+ * exhaustively, so a tool added to or removed from the shipped surface is a
+ * typecheck error rather than a silent drift (`face` drifted this way once,
+ * leaving `toolBiasSum` indexed with a column the table no longer had).
  */
-const ACTION_TOOLS = ["go", "face", "pick_up", "put_down", "use"] as const;
-
 type ActionTool = (typeof ACTION_TOOLS)[number];
 
 function isActionTool(name: string): name is ActionTool {
@@ -88,7 +94,6 @@ export function summarizeScenario(reps: RepetitionRecord[]): ScenarioSummary {
 
 	const counts: Record<ActionTool | "message" | "other", number> = {
 		go: 0,
-		face: 0,
 		pick_up: 0,
 		put_down: 0,
 		use: 0,
@@ -119,7 +124,6 @@ export function summarizeScenario(reps: RepetitionRecord[]): ScenarioSummary {
 	const n = reps.length;
 	const rates: Record<ActionTool | "message" | "other", number> = {
 		go: counts.go / n,
-		face: counts.face / n,
 		pick_up: counts.pick_up / n,
 		put_down: counts.put_down / n,
 		use: counts.use / n,

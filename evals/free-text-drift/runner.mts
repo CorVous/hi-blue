@@ -220,7 +220,7 @@ function makePack(): ContentPack {
  * of-input, not lack of input.
  *
  * The schedule mixes pure-chat prompts with action-nudges spanning every
- * tool family (face, pick_up, use, put_down, go). This way one run
+ * tool family (pick_up, use, put_down, go). This way one run
  * exercises the full tool surface and the per-tool per-round series in the
  * JSON sidecar carries real signal across tool names, not just `message`.
  * Prompts are intentionally suggestive rather than imperative — they invite

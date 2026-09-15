@@ -16,15 +16,15 @@
  * Shape:
  *   - 3 static scenarios (see scenarios.ts).
  *   - 1..N persona variants per scenario — by default 3 representative
- *     temperament pairs spanning the bias axes (face-leaning, go-leaning,
- *     pick_up-leaning). Override with EVAL_ACTION_PAIRS.
+ *     temperament pairs spanning the bias axes (use-leaning,
+ *     go/pick_up-leaning, balanced). Override with EVAL_ACTION_PAIRS.
  *   - Each (scenario × persona) is repeated REPETITIONS times against the
  *     same frozen initial state. The harness rebuilds a fresh GameState
  *     for every repetition so the LLM always sees identical context.
  *   - The `actionProfiles` flag is toggled by EVAL_ACTION_PROFILES (0=off,
  *     1=on) so the same harness produces baseline and treatment runs.
- *   - Runs against the real merged tool surface (go / face / pick_up /
- *     put_down / use); no eval-local tool projection.
+ *   - Runs against the real shipped tool surface (go / pick_up / put_down /
+ *     use); no eval-local tool projection.
  *
  * Output (under docs/evals/daemon-action-variation/):
  *   - <mode>-<date>.md   — human-readable summary.
@@ -88,8 +88,8 @@ const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
  * the same label across baseline and treatment runs maps to the same
  * conversation-log persona handle, so the data is directly comparable.
  *
- * Default set: three pairs that span the action-bias axes (face-leaning,
- * go-leaning, pick_up-leaning), so the harness produces a useful
+ * Default set: three pairs that span the action-bias axes (use-leaning,
+ * go/pick_up-leaning, balanced), so the harness produces a useful
  * single-page report even when the user doesn't override EVAL_ACTION_PAIRS.
  */
 interface PersonaVariant {
@@ -444,8 +444,9 @@ function renderReport(
 	);
 	const runSummary = buildRunSummary(run.summaries, totalCost);
 
-	// Action tools reported in the per-cell column header — the merged
-	// daemon surface (go / face / pick_up / put_down / use).
+	// Action tools reported in the per-cell column header — the shipped
+	// daemon surface (go / pick_up / put_down / use), imported from
+	// `src/content/action-preference-bias.ts` via the scoring module.
 	const reportedTools = ACTION_TOOLS;
 
 	const lines: string[] = [
@@ -455,9 +456,9 @@ function renderReport(
 		"",
 		`Mode: **${mode}** — \`actionProfiles\` is ${mode === "with-profiles" ? "**ON**" : "**OFF**"}.`,
 		"",
-		"Tool surface: `go` / `face` / `pick_up` / `put_down` / `use` (+ `message`) —",
-		"the daemon action set after #466–#472 (`examine` removed, `look` renamed to",
-		"`face`, `give` removed).",
+		"Tool surface: `go` / `pick_up` / `put_down` / `use` (+ `message`) —",
+		"the daemon action set after the ADR 0015 Vista cutover (`examine` and",
+		"`give` removed by #466–#472, `face` retired with facing itself).",
 		"",
 		"Each (scenario × persona variant) cell repeats the *same* first turn with",
 		"identical context, so the per-cell distribution measures the model's tool",
