@@ -373,6 +373,32 @@ describe("renderSessions — row rendering", () => {
 		expect(btnTexts).toContain("[ rm ]");
 	});
 
+	it("version-mismatch row with a mapped schema renders the archived-build note", async () => {
+		vi.resetModules();
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		await seedVersionMismatchSession(stub, "0xDDDD");
+		const archiveMapModule = await import("../persistence/archive-map.js");
+		archiveMapModule.SCHEMA_ARCHIVE_MAP[999] = "0.0.2-beta.2";
+		try {
+			const { renderSessions } = await import("../views/sessions.js");
+			renderSessions(getMain());
+
+			const row = document.querySelector<HTMLElement>(
+				'.session-row[data-session-id="0xDDDD"]',
+			);
+			expect(row).toBeTruthy();
+			const note = row?.querySelector<HTMLElement>(".session-version-note");
+			expect(note).toBeTruthy();
+			expect(note?.textContent).toContain("v0.0.2-beta.2");
+			const link = note?.querySelector("a");
+			expect(link).not.toBeNull();
+			expect(link?.getAttribute("href")).toBe("./v/0.0.2-beta.2/");
+		} finally {
+			delete archiveMapModule.SCHEMA_ARCHIVE_MAP[999];
+		}
+	});
+
 	it("broken row shows <corrupted> placeholder text", async () => {
 		vi.resetModules();
 		const stub = makeLocalStorageStub();
