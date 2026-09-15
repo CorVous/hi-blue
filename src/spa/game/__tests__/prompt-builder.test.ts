@@ -2826,6 +2826,88 @@ describe("peer-position prose", () => {
 			"- Two steps south: the Daemon *cyan (#5fa8d3), two steps south of you, holding nothing",
 		);
 	});
+
+	it("describes a Daemon sharing the observer's own cell", () => {
+		// red and green stand on the same cell. The own cell is part of the
+		// Vista (ADR 0015) and Convergence is built on joint occupancy, so the
+		// co-located peer must be perceived — cyan, two diagonal steps away, is
+		// outside dx² + dy² ≤ 4 and must stay absent.
+		const pack = makeTestPack([], {
+			wallName: "wall",
+			aiStarts: {
+				red: { position: { row: 2, col: 2 } },
+				green: { position: { row: 2, col: 2 } },
+				cyan: { position: { row: 0, col: 0 } },
+			},
+		});
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const ctx = buildAiContext(game, "red");
+		const state = ctx.toCurrentStateUserMessage();
+
+		expect(state).toContain(
+			"Your cell: the Daemon *green (#81b29a), in your cell, holding nothing",
+		);
+		// The co-located peer is perceived inside the Vista listing.
+		const listing = state.slice(
+			state.indexOf("<what_you_see>"),
+			state.indexOf("</what_you_see>"),
+		);
+		expect(listing).toContain(
+			"the Daemon *green (#81b29a), in your cell, holding nothing",
+		);
+		// A Daemon outside the Vista is still not described at all.
+		expect(state).not.toContain("the Daemon *cyan");
+
+		// The same text is the trailing user turn the model receives.
+		const messages = buildOpenAiMessages(ctx);
+		expect(messages[messages.length - 1]?.content).toContain(
+			"the Daemon *green (#81b29a), in your cell, holding nothing",
+		);
+	});
+
+	it("gives the co-located peer no cardinal direction", () => {
+		const pack = makeTestPack([], {
+			wallName: "wall",
+			aiStarts: {
+				red: { position: { row: 2, col: 2 } },
+				green: { position: { row: 2, col: 2 } },
+				cyan: { position: { row: 4, col: 4 } },
+			},
+		});
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const state = buildAiContext(game, "red").toCurrentStateUserMessage();
+
+		const peerLine = state
+			.split("\n")
+			.find((line) => line.includes("the Daemon *green"));
+		expect(peerLine).toBeDefined();
+		// Zero distance has no direction: the own-cell phrasing and nothing else.
+		expect(peerLine).toContain("in your cell");
+		expect(peerLine).not.toMatch(/north|south|east|west/i);
+		expect(peerLine).not.toContain("of you");
+	});
+
+	it("describes no own-cell line when no Daemon shares the cell", () => {
+		const pack = makeTestPack([], {
+			wallName: "wall",
+			aiStarts: {
+				red: { position: { row: 2, col: 2 } },
+				green: { position: { row: 1, col: 3 } },
+				cyan: { position: { row: 4, col: 2 } },
+			},
+		});
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const state = buildAiContext(game, "red").toCurrentStateUserMessage();
+		expect(state).not.toContain("Your cell: the Daemon");
+	});
+
+	it("has no prose for a cell outside the Vista", () => {
+		// (2, 1)-style offsets are outside dx² + dy² ≤ 4. The observer does not
+		// perceive that cell, so no cardinal description is invented for it.
+		expect(() =>
+			describeRelativePosition({ row: 2, col: 2 }, { row: 1, col: 4 }),
+		).toThrow(RangeError);
+	});
 });
 
 // ----------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 import { withinInteractionRange } from "./available-tools.js";
-import { COMPASS_ORDER, isGridPosition, positionsEqual } from "./direction.js";
+import { isGridPosition, positionsEqual } from "./direction.js";
 import type {
 	AiBudget,
 	AiId,
@@ -12,10 +12,10 @@ import type {
 	WorldState,
 } from "./types";
 import {
-	inVista,
 	projectVista,
 	VISTA_OFFSETS,
 	type VistaAxisStep,
+	vistaContains,
 } from "./vista-projector.js";
 
 /** Structured entity state for perception-delta diffing. */
@@ -507,13 +507,15 @@ function getParallelFraming(): ParallelFraming | null {
 	return PRODUCTION_PARALLEL_FRAMING;
 }
 
-/** Spelled-out distance for the cardinal direction-and-distance prose. */
+/**
+ * Spelled-out distance for the cardinal direction-and-distance prose.
+ * Every offset the Vista projects is at distance two or less, so no word
+ * beyond those is reachable.
+ */
 const DISTANCE_WORDS: Record<number, string> = {
 	0: "zero",
 	1: "one",
 	2: "two",
-	3: "three",
-	4: "four",
 };
 
 function distanceWord(distance: number): string {
@@ -541,32 +543,23 @@ export function describeSteps(steps: readonly VistaAxisStep[]): string {
 }
 
 /**
- * Axis steps for an observer→target offset, read from the shared Vista table
- * when the offset is inside the disk. Outside the disk (callers describing a
- * cell the observer does not perceive) the offset is described by its cardinal
- * components, ordered by compass rotation.
+ * Axis steps for an observer→target offset, read from the shared Vista table.
+ * Every caller describes a cell the observer perceives, and the perceived
+ * offsets are exactly `VISTA_OFFSETS`, so the lookup always hits. An offset
+ * outside the disk has no prose: the observer does not see that cell, so there
+ * is no cardinal description to build for it.
+ *
+ * @throws RangeError when the offset is outside the Vista — a caller describing
+ * an unperceived cell is a bug, not a cell shape to render.
  */
 function axisStepsFor(dx: number, dy: number): readonly VistaAxisStep[] {
 	const known = VISTA_OFFSETS.find((o) => o.dx === dx && o.dy === dy);
-	if (known) return known.steps;
-
-	const steps: VistaAxisStep[] = [];
-	if (dy !== 0) {
-		steps.push({
-			direction: dy > 0 ? "north" : "south",
-			distance: Math.abs(dy),
-		});
+	if (known === undefined) {
+		throw new RangeError(
+			`axisStepsFor: offset (${dx}, ${dy}) is outside the Vista`,
+		);
 	}
-	if (dx !== 0) {
-		steps.push({
-			direction: dx > 0 ? "east" : "west",
-			distance: Math.abs(dx),
-		});
-	}
-	return steps.sort(
-		(a, b) =>
-			COMPASS_ORDER.indexOf(a.direction) - COMPASS_ORDER.indexOf(b.direction),
-	);
+	return known.steps;
 }
 
 /**
@@ -574,7 +567,8 @@ function axisStepsFor(dx: number, dy: number): readonly VistaAxisStep[] {
  * e.g. "one step north and one step east of you" (ADR 0015). Built from the
  * two positions alone: no orientation enters the description, so the same
  * pair of cells always reads the same way however either Daemon is stored.
- * Positions equal reads "in your cell".
+ * Positions equal reads "in your cell" — zero distance has no cardinal
+ * direction to state. `target` must lie inside the observer's Vista.
  */
 export function describeRelativePosition(
 	observer: GridPosition,
@@ -969,12 +963,9 @@ function collectObjectiveHints(ctx: AiContext): string[] {
 		// flavor, not availability.
 		if (withinInteractionRange(actorSpatial.position, spacePos)) continue;
 
-		// `inVista` reads offsets east–west / north–south, so the row delta is
-		// negated (row 0 is the north edge).
-		const inSight = inVista(
-			spacePos.col - actorSpatial.position.col,
-			actorSpatial.position.row - spacePos.row,
-		);
+		// Vista membership comes from the shared gate, so the prompt and the
+		// witness rules read the same definition.
+		const inSight = vistaContains(actorSpatial.position, spacePos);
 
 		if (inSight && entity.proximityFlavor) {
 			hints.push(entity.proximityFlavor);
@@ -1240,28 +1231,22 @@ function renderCurrentState(ctx: AiContext): string {
 	// (ADR 0015). Cells are labelled by cardinal direction and distance from
 	// the Daemon's position, so no relative-direction phrasing — and no implied
 	// orientation — enters the listing. The Daemon's own cell is covered by
-	// `<where_you_are>`, so the remaining 12 cells are listed here.
+	// `<where_you_are>`, so the remaining 12 cells are the listing's cell lines;
+	// a peer Daemon standing on the own cell is still perceived, and is
+	// described ahead of them.
 	lines.push("<what_you_see>");
 	if (actorSpatial) {
-		const viewCells = projectVista(actorSpatial.position).filter(
-			(c) => !c.isOwnCell,
-		);
+		const viewCells = projectVista(actorSpatial.position);
 		for (const cell of viewCells) {
 			const { position } = cell;
-			const label = capitalize(describeSteps(cell.steps));
-
-			// Wall sentinel — OOB cell, still perceived as a Wall.
-			if (cell.isWall) {
-				lines.push(`- ${label}: ${ctx.wallName}`);
-				continue;
-			}
-
-			// Build contents of this cell
-			const contentParts: string[] = [];
 
 			// 1. Other Daemons in this cell. Position is described in cardinal
 			// direction and distance from the observer's position — never from
-			// an orientation — and carries no orientation description.
+			// an orientation — and carries no orientation description. The own
+			// cell belongs to the Vista, so a peer sharing it is perceived too:
+			// at zero distance there is no cardinal direction to state, and
+			// `describeRelativePosition` reads it as "in your cell".
+			const peers: string[] = [];
 			for (const [otherId, otherSpatial] of Object.entries(
 				ctx.personaSpatial,
 			)) {
@@ -1277,10 +1262,34 @@ function renderCurrentState(ctx: AiContext): string {
 					actorSpatial.position,
 					otherSpatial.position,
 				);
-				contentParts.push(
+				peers.push(
 					`the Daemon *${otherId} (${otherColor}), ${where}, holding ${holdingStr}`,
 				);
 			}
+
+			// The own cell is `<where_you_are>`'s to describe — it carries the
+			// actor's inventory and the items on the ground there — so it is not
+			// one of the 12 cell lines. A peer sharing it is still perceived, and
+			// reads as a perception line labelled with the own cell.
+			if (cell.isOwnCell) {
+				if (peers.length > 0) {
+					lines.push(
+						`${capitalize(describeSteps(cell.steps))}: ${peers.join("; ")}`,
+					);
+				}
+				continue;
+			}
+
+			const label = capitalize(describeSteps(cell.steps));
+
+			// Wall sentinel — OOB cell, still perceived as a Wall.
+			if (cell.isWall) {
+				lines.push(`- ${label}: ${ctx.wallName}`);
+				continue;
+			}
+
+			// Build contents of this cell
+			const contentParts: string[] = [...peers];
 
 			// 2. Items resting on this cell (not held by anyone — explicitly tagged)
 			const cellItems = items.filter((item) => {
