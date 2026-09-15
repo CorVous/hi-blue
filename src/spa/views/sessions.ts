@@ -43,7 +43,7 @@ import { type RenderOpts, renderApp, setPickerOpen } from "../render-app.js";
 const SESSIONS_BANNER_MESSAGES: Record<string, string> = {
 	broken: "The active Session was unreadable and could not be loaded.",
 	"version-mismatch":
-		"Saved game data is from an older version and has been discarded. Starting a new game.",
+		"Saved game data is from an older version of hi-blue and cannot be loaded by this build. It has been kept — start a new game, or remove it from your Sessions list.",
 };
 
 /**

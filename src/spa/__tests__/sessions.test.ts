@@ -246,7 +246,7 @@ describe("renderSessions — banner", () => {
 		renderSessions(getMain(), { reason: "version-mismatch" });
 		const banner = document.querySelector<HTMLElement>("#sessions-banner");
 		expect(banner?.hidden).toBe(false);
-		expect(banner?.textContent).toContain("older version");
+		expect(banner?.textContent).toContain("It has been kept");
 	});
 
 	it("?reason=version-mismatch with map-hit schemaVersion renders archive link", async () => {
@@ -373,6 +373,9 @@ describe("renderSessions — row rendering", () => {
 		expect(btnTexts).toContain("[ rm ]");
 	});
 
+	// Version-mismatch archived-build note (picker row): needs a schema that is
+	// both stale and in SCHEMA_ARCHIVE_MAP, but only 11 is mapped and 11 is still
+	// current, so no live build can render it. Pinned in jsdom via a temporary map entry; re-add Playwright coverage on the v12 bump (#539).
 	it("version-mismatch row with a mapped schema renders the archived-build note", async () => {
 		vi.resetModules();
 		const stub = makeLocalStorageStub();
