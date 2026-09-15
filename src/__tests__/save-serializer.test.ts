@@ -10,7 +10,7 @@
  * The payload must be stable for round-tripping.
  */
 import { describe, expect, it } from "vitest";
-import { serializeGameSave } from "../save-serializer";
+import { GAME_SAVE_VERSION, serializeGameSave } from "../save-serializer";
 import { DEFAULT_LANDMARKS } from "../spa/game/direction";
 import { appendMessage, startGame } from "../spa/game/engine";
 import type { AiPersona, ContentPack } from "../spa/game/types";
@@ -174,6 +174,15 @@ describe("serializeGameSave", () => {
 		});
 		const save = serializeGameSave(game);
 		expect(save.version).toBe(4);
+	});
+
+	it("stamps the exported GAME_SAVE_VERSION constant", () => {
+		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
+			budgetPerAi: 5,
+		});
+		const save = serializeGameSave(game);
+		expect(GAME_SAVE_VERSION).toBe(4);
+		expect(save.version).toBe(GAME_SAVE_VERSION);
 	});
 
 	it("peer message in green's log only if green is sender or recipient", () => {

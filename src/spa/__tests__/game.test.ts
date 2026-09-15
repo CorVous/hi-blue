@@ -2605,6 +2605,88 @@ describe("renderGame — version-mismatch session with pending bootstrap (regres
 		expect(getPendingBootstrap()).toBeUndefined();
 		expect(saveSpy).not.toHaveBeenCalled();
 	});
+
+	it("preserves the seeded session bytes when the active session is version-mismatched", async () => {
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
+		document.body.innerHTML = INDEX_BODY_HTML;
+
+		vi.resetModules();
+		const { obfuscate } = await import("../persistence/sealed-blob-codec.js");
+
+		const stub = makeLocalStorageStub();
+
+		const SESSION_ID = "0xC0FFEE";
+		const prefix = `hi-blue:sessions/${SESSION_ID}/`;
+		stub._store["hi-blue:active-session"] = SESSION_ID;
+
+		// Keep the raw strings we seed so the test can assert they survive
+		// renderGame byte-for-byte: the archived-build link must point at
+		// real, intact bytes, not a wiped session.
+		const metaBytes = JSON.stringify({
+			createdAt: "2024-01-01T00:00:00.000Z",
+			lastSavedAt: "2024-01-01T00:00:00.000Z",
+			phase: 1,
+			round: 0,
+			personaOrder: ["red", "green", "cyan"],
+		});
+		stub._store[`${prefix}meta.json`] = metaBytes;
+
+		const daemonPhases = {
+			"1": { conversationLog: [] },
+			"2": { conversationLog: [] },
+			"3": { conversationLog: [] },
+		};
+		const daemonBytes: Record<string, string> = {};
+		for (const aiId of ["red", "green", "cyan"] as const) {
+			const raw = JSON.stringify({
+				aiId,
+				persona: STATIC_PERSONAS[aiId],
+				phases: daemonPhases,
+			});
+			stub._store[`${prefix}${aiId}.txt`] = raw;
+			daemonBytes[aiId] = raw;
+		}
+
+		// Engine.dat stamped with a stale schemaVersion so
+		// loadActiveSession() returns { kind: "version-mismatch" }.
+		const staleEnginePayload = {
+			schemaVersion: 4,
+			world: {
+				1: { entities: [] },
+				2: { entities: [] },
+				3: { entities: [] },
+			},
+			contentPacks: [],
+			budgets: { 1: {}, 2: {}, 3: {} },
+			lockouts: {
+				1: { lockedOut: [], chatLockouts: [] },
+				2: { lockedOut: [], chatLockouts: [] },
+				3: { lockedOut: [], chatLockouts: [] },
+			},
+			currentPhase: 1,
+			isComplete: false,
+			personaSpatial: { 1: {}, 2: {}, 3: {} },
+		};
+		const engineBytes = obfuscate(JSON.stringify(staleEnginePayload));
+		stub._store[`${prefix}engine.dat`] = engineBytes;
+
+		vi.stubGlobal("localStorage", stub);
+
+		const { renderGame } = await import("../views/game.js");
+		await renderGame(getEl<HTMLElement>("main"));
+
+		// The route must surface the version-mismatch reason.
+		expect(getEl<HTMLElement>("main").dataset.reason).toBe("version-mismatch");
+		// The stale pointer is replaced by the freshly-minted session, and
+		// the seeded session bytes must survive unchanged.
+		expect(stub.getItem("hi-blue:active-session")).not.toBe(SESSION_ID);
+		expect(stub.getItem(`${prefix}meta.json`)).toBe(metaBytes);
+		for (const aiId of ["red", "green", "cyan"] as const) {
+			expect(stub.getItem(`${prefix}${aiId}.txt`)).toBe(daemonBytes[aiId]);
+		}
+		expect(stub.getItem(`${prefix}engine.dat`)).toBe(engineBytes);
+	});
 });
 
 // ── Bootstrap happy-path tests ──────────────────────────────────────────────

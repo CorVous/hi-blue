@@ -27,3 +27,22 @@ See AGENTS.md for the full schema-bump workflow.`,
 	);
 	process.exit(1);
 }
+
+// The "Save the AIs to USB" game-save (gs) format is not migrated in place —
+// an older save is surfaced as a version-mismatch that links the user to the
+// archived build that still reads it. So a gs bump must be accompanied by a
+// GAME_SAVE_ARCHIVE_MAP entry (there is no migrateV* fallback for this axis).
+const gameSaveChanged = /^[+-].*GAME_SAVE_VERSION\s*=\s*\d+/m.test(diff);
+const gameSaveMapChanged = /^[+-].*GAME_SAVE_ARCHIVE_MAP/m.test(diff);
+
+if (gameSaveChanged && !gameSaveMapChanged) {
+	console.error(
+		`GAME_SAVE_VERSION changed without a GAME_SAVE_ARCHIVE_MAP entry.
+
+  Add a GAME_SAVE_ARCHIVE_MAP entry in src/spa/persistence/archive-map.ts
+  mapping the OLD game-save number to the latest released version that
+  shipped it, so the version-mismatch can link the user to an archived
+  build.`,
+	);
+	process.exit(1);
+}

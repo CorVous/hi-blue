@@ -61,3 +61,12 @@ If the schema bumps twice without a release in between, the
 intermediate schema number was never shipped — skip its map entry.
 
 `scripts/check-schema-map.mjs` enforces this on PRs.
+
+The same idea covers the "Save the AIs to USB" game-save format
+(`GAME_SAVE_VERSION` in `src/save-serializer.ts`). That axis is not migrated
+in place, so a bump must add a `GAME_SAVE_ARCHIVE_MAP` entry (in
+`src/spa/persistence/archive-map.ts`) mapping the OLD number to the latest
+released version that shipped it, so the version-mismatch can link the user to
+the archived build. The same checker enforces this on PRs. Both axes share the
+version-boundary compatibility helpers in
+`src/spa/persistence/version-boundary.ts`.

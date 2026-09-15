@@ -52,6 +52,7 @@ import { CapHitError } from "../llm-client.js";
 import {
 	archiveSession,
 	clearActiveSession,
+	deactivateActiveSession,
 	getActiveSessionId,
 	loadActiveSession,
 	mintAndActivateNewSession,
@@ -995,7 +996,9 @@ export function renderGame(
 					}
 				});
 			} else {
-				// broken or version-mismatch — clear and surface the reason on start.
+				// broken or version-mismatch — surface the reason on start. A
+				// stale save (version-mismatch) keeps its bytes; a broken
+				// session does not.
 				const reasonParam: "broken" | "version-mismatch" =
 					loadResult.kind === "version-mismatch"
 						? "version-mismatch"
@@ -1004,7 +1007,11 @@ export function renderGame(
 					loadResult.kind === "version-mismatch"
 						? loadResult.schemaVersion
 						: undefined;
-				clearActiveSession();
+				if (loadResult.kind === "version-mismatch") {
+					deactivateActiveSession();
+				} else {
+					clearActiveSession();
+				}
 				renderApp(root, {
 					reason: reasonParam,
 					...(schemaVersion !== undefined ? { schemaVersion } : {}),

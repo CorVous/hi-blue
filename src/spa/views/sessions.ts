@@ -10,7 +10,9 @@
  *   - Render a row per session returned by listSessions():
  *       ok    → [ load ] [ dup ] [ rm ] with tree-glyph file listing
  *       broken  → [ corrupt ] tag + [ rm ] only
- *       version-mismatch → [ version mismatch ] tag + [ rm ] only
+ *       version-mismatch → [ version mismatch ] tag, a note linking the
+ *           save to the archived build that still reads it (when the schema
+ *           number is in SCHEMA_ARCHIVE_MAP), + [ rm ] only
  *   - Inline [ rm ] confirmation: swaps button cell to [ confirm rm ] + [ cancel ].
  *   - [ + new session ] at bottom: mint → setActive → #/start.
  *
@@ -357,6 +359,7 @@ function buildSessionRow(
 		tagEl.className = "tag-version-mismatch";
 		tagEl.textContent = "[ version mismatch ]";
 		rowEl.appendChild(tagEl);
+		appendVersionMismatchNote(doc, rowEl, info.schemaVersion);
 
 		// Tree lines from whatever files exist
 		const treeFiles: Array<{ glyph: string; label: string }> = [];
@@ -380,6 +383,32 @@ function buildSessionRow(
 	}
 
 	return rowEl;
+}
+
+// ── Version-mismatch row note ────────────────────────────────────────────────
+
+/**
+ * Append a one-line note to a version-mismatch row linking the save to the
+ * archived build that still reads it. Mirrors the banner: when the schema
+ * number maps to a known archived release the note offers the `./v/<version>/`
+ * link; when it doesn't, the [ version mismatch ] tag is the whole story and
+ * no note is added.
+ */
+function appendVersionMismatchNote(
+	doc: Document,
+	rowEl: HTMLElement,
+	schemaVersion: number,
+): void {
+	const archivedVersion = lookupArchiveVersion(schemaVersion);
+	if (archivedVersion === null) return;
+	const noteEl = doc.createElement("div");
+	noteEl.className = "session-version-note";
+	noteEl.textContent = "older version · continue in ";
+	const link = doc.createElement("a");
+	link.href = `./v/${archivedVersion}/`;
+	link.textContent = `v${archivedVersion} →`;
+	noteEl.appendChild(link);
+	rowEl.appendChild(noteEl);
 }
 
 // ── Rm confirmation controls ──────────────────────────────────────────────────
@@ -538,6 +567,7 @@ function buildArchivedSessionRow(
 		tagEl.className = "tag-version-mismatch";
 		tagEl.textContent = "[ version mismatch ]";
 		rowEl.appendChild(tagEl);
+		appendVersionMismatchNote(doc, rowEl, info.schemaVersion);
 
 		const treeFiles: Array<{ glyph: string; label: string }> = [];
 		for (let i = 0; i < info.daemonFiles.length; i++) {

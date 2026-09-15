@@ -1608,6 +1608,11 @@ main {
 	font-size: 11px;
 }
 
+.session-version-note {
+	color: var(--amber-dim);
+	font-size: 11px;
+}
+
 .session-tree {
 	margin: 0;
 	white-space: pre;

@@ -22,6 +22,14 @@ import type {
 	GameState,
 } from "./spa/game/types";
 
+/**
+ * The game-save format version this build writes (`GameSave.version`).
+ * Exposed as a named constant so the version-boundary compatibility helpers
+ * (see `src/spa/persistence/version-boundary.ts`) can reason about "is this
+ * save from the current build?" without hardcoding the number in two places.
+ */
+export const GAME_SAVE_VERSION = 4 as const;
+
 interface PhaseTranscript {
 	phaseNumber: 1 | 2 | 3;
 	conversationLog: ConversationEntry[];
@@ -34,7 +42,7 @@ interface AiSaveEntry {
 
 export interface GameSave {
 	/** Schema version. v4 = chat/whisper collapsed into directional message primitive. */
-	version: 4;
+	version: typeof GAME_SAVE_VERSION;
 	ais: AiSaveEntry[];
 	/** Setting A content packs (generated at game start). */
 	contentPacksA: ContentPack[];
@@ -65,7 +73,7 @@ export function serializeGameSave(game: GameState): GameSave {
 	});
 
 	return {
-		version: 4,
+		version: GAME_SAVE_VERSION,
 		ais,
 		contentPacksA: game.contentPacksA,
 		contentPacksB: game.contentPacksB,
