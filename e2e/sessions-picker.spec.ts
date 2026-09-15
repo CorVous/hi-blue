@@ -21,83 +21,18 @@
  * navigating to a URL. Sticky for broken / version-mismatch active sessions.
  */
 import { expect, test } from "@playwright/test";
-import { expectNoPageErrors, goToGame, stubNewGameLLM } from "./helpers";
+import {
+	expectNoPageErrors,
+	goToGame,
+	pickerOkSessionSeedScript,
+	stubNewGameLLM,
+} from "./helpers";
 
-// ── Obfuscation key (embedded in seed scripts) ────────────────────────────────
+// ── Obfuscation key (embedded in the version-mismatch seed script) ────────────
 
 const OBFUSCATION_KEY = "hi-blue:engine/v1@kJvN3pX8wQmR2sZt";
 
 // ── Session seed helpers ──────────────────────────────────────────────────────
-
-/**
- * Seed an ok session in localStorage for addInitScript use.
- */
-function seedOkSessionScript(id: string, lastSavedAt: string): string {
-	return `
-		(function() {
-			const prefix = 'hi-blue:sessions/${id}/';
-			const meta = JSON.stringify({
-				createdAt: '2025-01-01T00:00:00.000Z',
-				lastSavedAt: '${lastSavedAt}',
-				epoch: 1,
-				round: 0,
-				personaOrder: ['red'],
-			});
-			localStorage.setItem(prefix + 'meta.json', meta);
-
-			// Daemon file: flat DaemonFile shape (v6+)
-			const daemonFile = JSON.stringify({
-				aiId: 'red',
-				persona: {
-					id: 'red',
-					name: 'Red',
-					color: '#ff0000',
-					temperaments: ['bold', 'calm'],
-					personaGoal: 'stub',
-					blurb: 'stub',
-					typingQuirks: ['...', '!'],
-					voiceExamples: ['Hello.', 'Indeed.', 'Farewell.'],
-				},
-				conversationLog: [],
-			});
-			localStorage.setItem(prefix + 'red.txt', daemonFile);
-
-			// Build engine.dat via inline obfuscation — payload must match SealedEngine v7
-			const OBFUSCATION_KEY = '${OBFUSCATION_KEY}';
-			const keyBytes = Array.from(new TextEncoder().encode(OBFUSCATION_KEY));
-			const stubPack = {
-				setting: 'test setting',
-				weather: 'clear',
-				timeOfDay: 'morning',
-				objectivePairs: [],
-				interestingObjects: [],
-				obstacles: [],
-				aiStarts: {},
-			};
-			const payload = JSON.stringify({
-				schemaVersion: 8,
-				isComplete: false,
-				world: { entities: [] },
-				budgets: { red: { remaining: 50, total: 50 } },
-				lockedOut: [],
-				personaSpatial: { red: { position: { row: 2, col: 2 } } },
-				contentPacksA: [stubPack],
-				contentPacksB: [{ ...stubPack, setting: 'test setting B' }],
-				activePackId: 'A',
-				weather: 'clear',
-				objectives: [],
-				complicationSchedule: { countdown: 5, settingShiftFired: false },
-				activeComplications: [],
-			});
-			const jsonBytes = Array.from(new TextEncoder().encode(payload));
-			const xored = jsonBytes.map((b,i) => b ^ (keyBytes[i % keyBytes.length] ?? 0));
-			let iso = '';
-			for (const b of xored) iso += String.fromCharCode(b);
-			const engineDat = btoa(iso);
-			localStorage.setItem(prefix + 'engine.dat', engineDat);
-		})();
-	`;
-}
 
 /**
  * Seed a broken session (missing engine.dat) for addInitScript use.
@@ -182,7 +117,7 @@ test("picker renders ok/broken/version-mismatch rows with correct tags and butto
 	});
 	await page.addInitScript(
 		new Function(
-			seedOkSessionScript("0xAAAA", "2025-03-01T10:00:00.000Z"),
+			pickerOkSessionSeedScript("0xAAAA", "2025-03-01T10:00:00.000Z"),
 		) as () => void,
 	);
 	await page.addInitScript(
@@ -250,12 +185,12 @@ test("[ load ] flow: click load on non-active row → game view", async ({
 	});
 	await page.addInitScript(
 		new Function(
-			seedOkSessionScript("0xAAAA", "2025-03-01T10:00:00.000Z"),
+			pickerOkSessionSeedScript("0xAAAA", "2025-03-01T10:00:00.000Z"),
 		) as () => void,
 	);
 	await page.addInitScript(
 		new Function(
-			seedOkSessionScript("0xBBBB", "2025-02-01T10:00:00.000Z"),
+			pickerOkSessionSeedScript("0xBBBB", "2025-02-01T10:00:00.000Z"),
 		) as () => void,
 	);
 
@@ -290,7 +225,7 @@ test("[ dup ] flow: click dup → two rows, active pointer unchanged", async ({
 	});
 	await page.addInitScript(
 		new Function(
-			seedOkSessionScript("0xAAAA", "2025-03-01T10:00:00.000Z"),
+			pickerOkSessionSeedScript("0xAAAA", "2025-03-01T10:00:00.000Z"),
 		) as () => void,
 	);
 
@@ -326,7 +261,7 @@ test("[ rm ] confirm/cancel flow", async ({ page }) => {
 	});
 	await page.addInitScript(
 		new Function(
-			seedOkSessionScript("0xAAAA", "2025-03-01T10:00:00.000Z"),
+			pickerOkSessionSeedScript("0xAAAA", "2025-03-01T10:00:00.000Z"),
 		) as () => void,
 	);
 
@@ -574,7 +509,7 @@ test("[ + new session ] flow: click → start view, new active pointer", async (
 	});
 	await page.addInitScript(
 		new Function(
-			seedOkSessionScript("0xAAAA", "2025-03-01T10:00:00.000Z"),
+			pickerOkSessionSeedScript("0xAAAA", "2025-03-01T10:00:00.000Z"),
 		) as () => void,
 	);
 

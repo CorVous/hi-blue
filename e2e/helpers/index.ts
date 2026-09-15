@@ -1,6 +1,10 @@
 export { getAiHandles } from "./handles";
 export { expectNoPageErrors } from "./page-errors";
 export {
+	pickerOkSessionFiles,
+	pickerOkSessionSeedScript,
+} from "./picker-seeds";
+export {
 	activePackOf,
 	CARDINAL_DIRECTIONS,
 	type CardinalDirection,

@@ -1,4 +1,5 @@
 import { expect, type Page, type Request } from "@playwright/test";
+import { deobfuscateEngineBlob, obfuscateEngineBlob } from "./engine-blob.js";
 import type { AiHandles } from "./handles.js";
 import { getAiHandles } from "./handles.js";
 
@@ -786,38 +787,15 @@ export const RELATIVE_DIRECTION_WORDS =
 // ── Sealed engine.dat storage ────────────────────────────────────────────────
 
 /**
- * XOR obfuscation key for `engine.dat`, mirrored from
- * `src/spa/persistence/sealed-blob-codec.ts`. The blob is obfuscated, not
- * encrypted, and specs need to read (and occasionally seed) persisted engine
- * state, so the codec lives here rather than importing the SPA module.
+ * The engine.dat obfuscation codec lives in its own Playwright-free module so
+ * that session fixtures can seal payloads without pulling in `@playwright/test`.
+ * Re-exported here because specs reach it through this helper surface.
  */
-export const ENGINE_OBFUSCATION_KEY = "hi-blue:engine/v1@kJvN3pX8wQmR2sZt";
-
-/** Reverse the engine.dat obfuscation. Mirrors `deobfuscate` in the codec. */
-export function deobfuscateEngineBlob(blob: string): string {
-	const keyBytes = new TextEncoder().encode(ENGINE_OBFUSCATION_KEY);
-	const binary = atob(blob);
-	const bytes = new Uint8Array(binary.length);
-	for (let i = 0; i < binary.length; i++) {
-		bytes[i] =
-			(binary.charCodeAt(i) & 0xff) ^ (keyBytes[i % keyBytes.length] as number);
-	}
-	return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-}
-
-/** Apply the engine.dat obfuscation. Mirrors `obfuscate` in the codec. */
-export function obfuscateEngineBlob(json: string): string {
-	const keyBytes = new TextEncoder().encode(ENGINE_OBFUSCATION_KEY);
-	const bytes = new TextEncoder().encode(json);
-	for (let i = 0; i < bytes.length; i++) {
-		bytes[i] = (bytes[i] as number) ^ (keyBytes[i % keyBytes.length] as number);
-	}
-	let binary = "";
-	for (let i = 0; i < bytes.length; i++) {
-		binary += String.fromCharCode(bytes[i] as number);
-	}
-	return btoa(binary);
-}
+export {
+	deobfuscateEngineBlob,
+	ENGINE_OBFUSCATION_KEY,
+	obfuscateEngineBlob,
+} from "./engine-blob.js";
 
 /** An entity holder: a Daemon holding the entity, or the cell it rests on. */
 export type EntityHolder = string | GridPosition;
