@@ -1,7 +1,7 @@
+import { withinInteractionRange } from "./available-tools.js";
 import { projectCone } from "./cone-projector.js";
 import {
 	cardinalToRelative,
-	frontArc,
 	isGridPosition,
 	positionsEqual,
 } from "./direction.js";
@@ -11,12 +11,12 @@ import type {
 	CardinalDirection,
 	ConversationEntry,
 	GameState,
-	GridPosition,
 	Objective,
 	PersonaSpatialState,
 	WorldEntity,
 	WorldState,
 } from "./types";
+import { inVista } from "./vista-projector.js";
 
 /** Structured entity state for perception-delta diffing. */
 export interface ConeEntityState {
@@ -809,8 +809,14 @@ function renderSystemPrompt(ctx: AiContext): string {
 
 /**
  * Returns zero or more hint lines to append after the cone listing.
- * Covers carry proximity (existing), UseItem proximity (new),
- * and UseSpace/Convergence proximity-or-auto-examine (new).
+ * Distances follow ADR 0015:
+ *   - Carry: the held item's matching space is within **Interaction range**.
+ *   - Use-Item: the unheld item is within **Interaction range**.
+ *   - Use-Space / Convergence: the pending objective's space is inside the
+ *     **Vista** but outside interaction range — the four cells two cardinal
+ *     steps away.
+ * Ordinary descriptions, on-space flavor, and completion flavor stay
+ * separate: this only ever emits `proximityFlavor`.
  *
  * Used by both `buildConeSnapshot` (so the `<whats_new>` diff tracks entry/exit)
  * and `renderCurrentState` (to append sense lines after the cone listing).
@@ -819,11 +825,9 @@ function collectObjectiveHints(ctx: AiContext): string[] {
 	const actorSpatial = ctx.personaSpatial[ctx.aiId];
 	if (!actorSpatial) return [];
 
-	const arc = frontArc(actorSpatial.position, actorSpatial.facing);
-	const coneCells = projectCone(actorSpatial.position, actorSpatial.facing);
 	const hints: string[] = [];
 
-	// ── Carry (existing, moved into new function) ──────────────────────────────
+	// ── Carry: held item whose matching space is within interaction range ─────
 	for (const entity of ctx.worldSnapshot.entities) {
 		if (entity.kind !== "objective_object") continue;
 		if (entity.holder !== ctx.aiId) continue;
@@ -834,30 +838,20 @@ function collectObjectiveHints(ctx: AiContext): string[] {
 		);
 		if (!space || !isGridPosition(space.holder)) continue;
 
-		const spacePos = space.holder as GridPosition;
-		const reachable =
-			positionsEqual(spacePos, actorSpatial.position) ||
-			arc.some((p) => positionsEqual(p, spacePos));
-
-		if (reachable) hints.push(entity.proximityFlavor);
+		if (withinInteractionRange(actorSpatial.position, space.holder)) {
+			hints.push(entity.proximityFlavor);
+		}
 	}
 
-	// ── UseItem (new) ──────────────────────────────────────────────────────────
+	// ── UseItem: unheld item within interaction range ─────────────────────────
 	for (const entity of ctx.worldSnapshot.entities) {
 		if (entity.kind !== "interesting_object") continue;
 		if (!entity.proximityFlavor) continue;
 		// Skip if held by actor
 		if (entity.holder === ctx.aiId) continue;
+		if (!isGridPosition(entity.holder)) continue;
 
-		// Check if in actor's own cell or front arc
-		const inOwnCell =
-			isGridPosition(entity.holder) &&
-			positionsEqual(entity.holder, actorSpatial.position);
-		const inFrontArc =
-			isGridPosition(entity.holder) &&
-			arc.some((p) => positionsEqual(p, entity.holder as GridPosition));
-
-		if (!inOwnCell && !inFrontArc) continue;
+		if (!withinInteractionRange(actorSpatial.position, entity.holder)) continue;
 
 		// Check if there's a pending UseItemObjective referencing this entity
 		const hasPendingObjective = ctx.objectives.some(
@@ -872,7 +866,7 @@ function collectObjectiveHints(ctx: AiContext): string[] {
 		}
 	}
 
-	// ── UseSpace / Convergence proximity flavor (new) ──────────────────────────
+	// ── UseSpace / Convergence: pending space in the Vista, out of range ──────
 	for (const entity of ctx.worldSnapshot.entities) {
 		if (entity.kind !== "objective_space") continue;
 		if (!isGridPosition(entity.holder)) continue;
@@ -889,19 +883,20 @@ function collectObjectiveHints(ctx: AiContext): string[] {
 
 		const spacePos = entity.holder;
 
-		// Only fire proximity flavor when in full cone but NOT in own cell or front arc
-		const inOwnCell = positionsEqual(spacePos, actorSpatial.position);
-		const inFrontArc = arc.some((p) => positionsEqual(p, spacePos));
+		// Out of reach but still visible: the four cells two cardinal steps
+		// away. Vista membership alone never makes a space usable — this is
+		// flavor, not availability.
+		if (withinInteractionRange(actorSpatial.position, spacePos)) continue;
 
-		if (!inOwnCell && !inFrontArc) {
-			// Check if in full cone but outside front arc/own cell
-			const inCone = coneCells.some(
-				(cell) => !cell.isWall && positionsEqual(cell.position, spacePos),
-			);
+		// `inVista` reads offsets east–west / north–south, so the row delta is
+		// negated (row 0 is the north edge).
+		const inSight = inVista(
+			spacePos.col - actorSpatial.position.col,
+			actorSpatial.position.row - spacePos.row,
+		);
 
-			if (inCone && entity.proximityFlavor) {
-				hints.push(entity.proximityFlavor);
-			}
+		if (inSight && entity.proximityFlavor) {
+			hints.push(entity.proximityFlavor);
 		}
 	}
 

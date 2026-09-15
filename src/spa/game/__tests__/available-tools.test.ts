@@ -15,6 +15,7 @@ import type {
 	GameState,
 	WorldEntity,
 } from "../types.js";
+import { inVista } from "../vista-projector.js";
 import { makeTestPack } from "./fixtures/make-test-pack.js";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -300,6 +301,7 @@ describe("availableTools — use includes objective_space ids", () => {
 
 	it("use does NOT include space id when space is at distance 2 (two ahead)", () => {
 		// red at (2,2) facing north; space at (0,2) = 2 cells directly north
+		// Offset (2,0): inside the Vista, outside interaction range.
 		const game = makeGameWithSpace("north", { row: 0, col: 2 });
 		const tools = availableTools(game, "red", []);
 		const useTool = tools.find((t) => t.function.name === "use");
@@ -308,13 +310,15 @@ describe("availableTools — use includes objective_space ids", () => {
 		expect(itemEnum).not.toContain("space1");
 	});
 
-	it("use does NOT include space id when space is directly behind actor", () => {
-		// red at (2,2) facing north; space at (3,2) = directly south (behind)
+	it("use includes space id when space is one step behind the actor", () => {
+		// red at (2,2) facing north; space at (3,2) = directly south (behind).
+		// Interaction range is omnidirectional: behind counts (the retired
+		// front arc excluded it).
 		const game = makeGameWithSpace("north", { row: 3, col: 2 });
 		const tools = availableTools(game, "red", []);
 		const useTool = tools.find((t) => t.function.name === "use");
 		const itemEnum = useTool?.function.parameters.properties.item?.enum ?? [];
-		expect(itemEnum).not.toContain("space1");
+		expect(itemEnum).toContain("space1");
 	});
 
 	it("use does NOT include space id when useAvailable is false", () => {
@@ -340,5 +344,130 @@ describe("availableTools — use includes objective_space ids", () => {
 		expect(itemEnum).toContain("space1");
 		// No held items → only the space id
 		expect(itemEnum).toHaveLength(1);
+	});
+});
+
+// ── Interaction range (ADR 0015) ─────────────────────────────────────────────
+
+describe("availableTools — interaction range", () => {
+	/**
+	 * Red sits at (2,2), the room's centre, so the ADR's integer offsets map
+	 * onto in-bounds cells for the whole 5×5 room. Offsets are expressed as
+	 * (dx east–west, dy north–south), the ADR's axes; row 0 is the north edge.
+	 */
+	function offsetPos(o: { dx: number; dy: number }) {
+		return { row: 2 - o.dy, col: 2 + o.dx };
+	}
+
+	/** Red at (2,2) with a ground item and/or an objective_space at the given offsets. */
+	function makeGameAtOffsets(opts: {
+		facing?: "north" | "south" | "east" | "west";
+		itemOffset?: { dx: number; dy: number };
+		spaceOffset?: { dx: number; dy: number };
+	}): GameState {
+		const entities: WorldEntity[] = [];
+		if (opts.itemOffset) {
+			entities.push({
+				id: "ground-item",
+				kind: "objective_object",
+				name: "Ground Item",
+				examineDescription: "An item on the ground.",
+				holder: offsetPos(opts.itemOffset),
+			});
+		}
+		if (opts.spaceOffset) {
+			entities.push({
+				id: "space1",
+				kind: "objective_space",
+				name: "Test Space",
+				examineDescription: "A test space.",
+				holder: offsetPos(opts.spaceOffset),
+				useAvailable: true,
+				useOutcome: "You activate the space.",
+			});
+		}
+		const pack = makeTestPack(entities, {
+			setting: "test",
+			wallName: "wall",
+			aiStarts: {
+				red: { position: { row: 2, col: 2 }, facing: opts.facing ?? "north" },
+				green: { position: { row: 0, col: 0 }, facing: "north" },
+				cyan: { position: { row: 4, col: 4 }, facing: "south" },
+			},
+		});
+		return startGame(TEST_PERSONAS, pack, { budgetPerAi: 5, rng: () => 0 });
+	}
+
+	/** The id enum of one tool's parameter, or [] when the tool is absent. */
+	function enumOf(game: GameState, tool: string, key: string): string[] {
+		const def = availableTools(game, "red", []).find(
+			(t) => t.function.name === tool,
+		);
+		return def?.function.parameters.properties[key]?.enum ?? [];
+	}
+
+	it("offset (0,0) own cell and offset (1,1) diagonal are within interaction range", () => {
+		const ownCell = makeGameAtOffsets({
+			itemOffset: { dx: 0, dy: 0 },
+			spaceOffset: { dx: 0, dy: 0 },
+		});
+		expect(enumOf(ownCell, "pick_up", "item")).toContain("ground-item");
+		expect(enumOf(ownCell, "use", "item")).toContain("space1");
+
+		const diagonal = makeGameAtOffsets({
+			// (1,1) = one step east and one step north — a diagonal neighbour
+			itemOffset: { dx: 1, dy: 1 },
+			spaceOffset: { dx: 1, dy: 1 },
+		});
+		expect(enumOf(diagonal, "pick_up", "item")).toContain("ground-item");
+		expect(enumOf(diagonal, "use", "item")).toContain("space1");
+
+		// Every one of the nine interactions-range cells is a single offset step
+		for (let dx = -1; dx <= 1; dx++) {
+			for (let dy = -1; dy <= 1; dy++) {
+				const game = makeGameAtOffsets({
+					itemOffset: { dx, dy },
+					spaceOffset: { dx, dy },
+				});
+				expect(enumOf(game, "pick_up", "item")).toContain("ground-item");
+				expect(enumOf(game, "use", "item")).toContain("space1");
+			}
+		}
+	});
+
+	it("offset (2,0) is inside the Vista but outside interaction range", () => {
+		// Two cardinal steps east: visible (dx² + dy² = 4 ≤ 4) but unreachable.
+		expect(inVista(2, 0)).toBe(true);
+
+		const game = makeGameAtOffsets({
+			itemOffset: { dx: 2, dy: 0 },
+			spaceOffset: { dx: 2, dy: 0 },
+		});
+		expect(enumOf(game, "pick_up", "item")).not.toContain("ground-item");
+		expect(enumOf(game, "use", "item")).not.toContain("space1");
+	});
+
+	it("offset (2,1) is outside both the Vista and interaction range", () => {
+		// dx² + dy² = 5 > 4: not visible, and not reachable.
+		expect(inVista(2, 1)).toBe(false);
+
+		const game = makeGameAtOffsets({
+			itemOffset: { dx: 2, dy: 1 },
+			spaceOffset: { dx: 2, dy: 1 },
+		});
+		expect(enumOf(game, "pick_up", "item")).not.toContain("ground-item");
+		expect(enumOf(game, "use", "item")).not.toContain("space1");
+	});
+
+	it("reach does not depend on facing: one step south is reachable while facing north", () => {
+		for (const facing of ["north", "south", "east", "west"] as const) {
+			const game = makeGameAtOffsets({
+				facing,
+				itemOffset: { dx: 0, dy: -1 },
+				spaceOffset: { dx: 0, dy: -1 },
+			});
+			expect(enumOf(game, "pick_up", "item")).toContain("ground-item");
+			expect(enumOf(game, "use", "item")).toContain("space1");
+		}
 	});
 });

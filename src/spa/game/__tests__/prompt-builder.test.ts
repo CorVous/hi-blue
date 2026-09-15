@@ -13,7 +13,8 @@ import {
 	renderPerceptionDelta,
 	renderWhatsNew,
 } from "../prompt-builder";
-import type { AiPersona, ContentPack, WorldEntity } from "../types";
+import type { AiPersona, ContentPack, Objective, WorldEntity } from "../types";
+import { inVista } from "../vista-projector";
 import { makeTestPack } from "./fixtures/make-test-pack";
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
@@ -1413,8 +1414,8 @@ describe("proximityFlavor sense line", () => {
 		);
 	});
 
-	it("proximity flavor appears in <what_you_see> when paired space is in front arc", () => {
-		// red at (0,0) facing south; pedestal at (1,0) = directly in front
+	it("proximity flavor appears in <what_you_see> when paired space is within interaction range", () => {
+		// red at (0,0) facing south; pedestal at (1,0) = one step away
 		const pack = makePackWithProximity({
 			actorPosition: { row: 0, col: 0 },
 			actorFacing: "south",
@@ -1428,23 +1429,41 @@ describe("proximityFlavor sense line", () => {
 		);
 	});
 
-	it("proximity flavor does NOT appear when paired space is out of reach", () => {
-		// red at (0,0) facing north; pedestal at (1,0) — not in north front arc (all OOB)
+	it("proximity flavor appears in <what_you_see> when paired space is a diagonal neighbour", () => {
+		// red at (0,0) facing south; pedestal at (1,1) = diagonal south-east
 		const pack = makePackWithProximity({
 			actorPosition: { row: 0, col: 0 },
-			actorFacing: "north",
-			spacePosition: { row: 1, col: 0 },
+			actorFacing: "south",
+			spacePosition: { row: 1, col: 1 },
 		});
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
+		expect(stateMsg).toContain(
+			"The gem pulses warmly, drawn toward the pedestal.",
+		);
+	});
+
+	it("proximity flavor does NOT appear when paired space is at offset (2,0)", () => {
+		// red at (0,0) facing south; pedestal at (2,0) = two cardinal steps
+		// away: visible in the Vista, outside interaction range.
+		const pack = makePackWithProximity({
+			actorPosition: { row: 0, col: 0 },
+			actorFacing: "south",
+			spacePosition: { row: 2, col: 0 },
+		});
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const ctx = buildAiContext(game, "red");
+		const stateMsg = ctx.toCurrentStateUserMessage();
+		// Still visible: the pedestal's cell and name are rendered.
+		expect(stateMsg).toContain("Stone Pedestal");
 		expect(stateMsg).not.toContain(
 			"The gem pulses warmly, drawn toward the pedestal.",
 		);
 	});
 
 	it("proximity flavor appears in buildConeSnapshot when space is reachable", () => {
-		// red at (0,0) facing south; pedestal at (1,0) = front arc
+		// red at (0,0) facing south; pedestal at (1,0) = one step away
 		const pack = makePackWithProximity({
 			actorPosition: { row: 0, col: 0 },
 			actorFacing: "south",
@@ -1458,12 +1477,12 @@ describe("proximityFlavor sense line", () => {
 		);
 	});
 
-	it("proximity flavor does NOT appear in buildConeSnapshot when space is out of reach", () => {
-		// red at (0,0) facing north; pedestal at (1,0) — not in north front arc
+	it("proximity flavor does NOT appear in buildConeSnapshot at offset (2,0)", () => {
+		// red at (0,0) facing south; pedestal at (2,0) — visible, out of range
 		const pack = makePackWithProximity({
 			actorPosition: { row: 0, col: 0 },
-			actorFacing: "north",
-			spacePosition: { row: 1, col: 0 },
+			actorFacing: "south",
+			spacePosition: { row: 2, col: 0 },
 		});
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
@@ -1472,25 +1491,25 @@ describe("proximityFlavor sense line", () => {
 	});
 
 	it("proximity line entry/exit shows as +/- in whats_new diff", () => {
-		// Build two contexts: one where space is reachable (prev: space not reachable; current: reachable)
-		// Previous snapshot: red at (0,0) facing north (space at (1,0) is OOB-reachable)
-		// Current snapshot: red at (0,0) facing south (space at (1,0) is in front arc)
-		const packOOB = makePackWithProximity({
+		// Previous snapshot: the pedestal sits at offset (2,0) — visible but out
+		// of interaction range, so no proximity line. Current snapshot: it sits
+		// one step away, so the line enters.
+		const packFar = makePackWithProximity({
 			actorPosition: { row: 0, col: 0 },
-			actorFacing: "north",
-			spacePosition: { row: 1, col: 0 },
+			actorFacing: "south",
+			spacePosition: { row: 2, col: 0 },
 		});
-		const packFront = makePackWithProximity({
+		const packNear = makePackWithProximity({
 			actorPosition: { row: 0, col: 0 },
 			actorFacing: "south",
 			spacePosition: { row: 1, col: 0 },
 		});
-		const gameOOB = startGame(TEST_PERSONAS, packOOB, { budgetPerAi: 5 });
-		const gameFront = startGame(TEST_PERSONAS, packFront, { budgetPerAi: 5 });
-		const ctxOOB = buildAiContext(gameOOB, "red");
-		const prevSnapshot = buildConeSnapshot(ctxOOB);
+		const gameFar = startGame(TEST_PERSONAS, packFar, { budgetPerAi: 5 });
+		const gameNear = startGame(TEST_PERSONAS, packNear, { budgetPerAi: 5 });
+		const ctxFar = buildAiContext(gameFar, "red");
+		const prevSnapshot = buildConeSnapshot(ctxFar);
 		// Build current state with prevConeSnapshot set
-		const ctxWithPrev = buildAiContext(gameFront, "red", {
+		const ctxWithPrev = buildAiContext(gameNear, "red", {
 			prevConeSnapshot: prevSnapshot,
 		});
 		const stateMsg = ctxWithPrev.toCurrentStateUserMessage();
@@ -1504,8 +1523,8 @@ describe("proximityFlavor sense line", () => {
 // ── UseItem and UseSpace/Convergence proximity flavor (issue #335) ─────────────
 describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 	// ─ UseItem tests ─
-	it("UseItem proximity flavor appears in cone when item is in front arc (3-arc)", () => {
-		// red at (0,0) facing south; item at (1,0) = directly in front (3-arc includes directly in front)
+	it("UseItem proximity flavor appears in cone when item is within interaction range (one step)", () => {
+		// red at (0,0) facing south; item at (1,0) = one step away
 		const item: WorldEntity = {
 			id: "switch",
 			kind: "interesting_object",
@@ -1652,14 +1671,15 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 		expect(stateMsg).not.toContain("The switch crackles faintly with energy.");
 	});
 
-	it("UseItem proximity flavor does NOT appear when item is out of range", () => {
-		// red at (0,0) facing north (cone goes up-north, OOB); item at (1,0) (south) = out of range
+	it("UseItem proximity flavor does NOT appear when the item is at offset (2,0)", () => {
+		// red at (0,0) facing south; item at (2,0) = two cardinal steps away:
+		// visible in the Vista, outside interaction range.
 		const item: WorldEntity = {
 			id: "switch",
 			kind: "interesting_object",
 			name: "brass switch",
 			examineDescription: "A small brass switch ready to be pressed.",
-			holder: { row: 1, col: 0 }, // south of actor facing north
+			holder: { row: 2, col: 0 },
 			proximityFlavor: "The switch crackles faintly with energy.",
 			activationFlavor: "The switch clicks with a satisfying snap.",
 			postExamineDescription: "The switch is now activated.",
@@ -1690,8 +1710,9 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 	});
 
 	// ─ UseSpace tests ─
-	it("UseSpace proximity flavor appears in cone when space is visible but outside 3-arc", () => {
-		// red at (0,0) facing south; space at (2,0) = "two steps ahead" (in cone but beyond front arc)
+	it("UseSpace proximity flavor appears when space is visible but outside interaction range", () => {
+		// red at (0,0) facing south; space at (2,0) = "two steps ahead":
+		// offset (2,0), in the Vista but beyond interaction range
 		const space: WorldEntity = {
 			id: "pedestal",
 			kind: "objective_space",
@@ -1739,8 +1760,8 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 		);
 	});
 
-	it("UseSpace auto-examine (examineDescription) appears when space is in 3-arc/own cell; proximity flavor does NOT", () => {
-		// red at (0,0) facing south; space at (1,0) = directly in front (3-arc)
+	it("UseSpace auto-examine (examineDescription) appears when space is within interaction range; proximity flavor does NOT", () => {
+		// red at (0,0) facing south; space at (1,0) = one step away
 		const space: WorldEntity = {
 			id: "pedestal",
 			kind: "objective_space",
@@ -1839,8 +1860,9 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 	});
 
 	// ─ Convergence tests ─
-	it("Convergence proximity flavor appears in cone when space is visible but outside 3-arc", () => {
-		// red at (0,0) facing south; space at (2,0) = "two steps ahead" (in cone but beyond front arc)
+	it("Convergence proximity flavor appears when space is visible but outside interaction range", () => {
+		// red at (0,0) facing south; space at (2,0) = "two steps ahead":
+		// offset (2,0), in the Vista but beyond interaction range
 		const space: WorldEntity = {
 			id: "convergence",
 			kind: "objective_space",
@@ -1885,10 +1907,165 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 		};
 		const ctx = buildAiContext(game, "red");
 		const snapshot = buildConeSnapshot(ctx);
-		// At distance > 3: proximity flavor appears in cone snapshot
+		// Offset (2,0): proximity flavor appears in the cone snapshot
 		expect(snapshot).toContain(
 			"proximity: The place emanates a strange presence, drawing you forward.",
 		);
+	});
+
+	// ─ Proximity hints at the interaction-range / Vista boundary (ADR 0015) ─
+	describe("proximity hints — interaction range versus Vista", () => {
+		const SPACE_FLAVOR = "The pedestal pulses with a faint hum.";
+		const ITEM_FLAVOR = "The switch crackles faintly with energy.";
+		const GEM_FLAVOR = "The gem pulses warmly, drawn toward the pedestal.";
+
+		/** Red at (2,2) facing east; offsets are (dx east, dy north). */
+		function offsetPos(o: { dx: number; dy: number }) {
+			return { row: 2 - o.dy, col: 2 + o.dx };
+		}
+
+		function makeOffsetGame(opts: {
+			spaceOffset?: { dx: number; dy: number };
+			pendingKind?: "use_space" | "convergence";
+			itemOffset?: { dx: number; dy: number };
+			heldCarrySpaceOffset?: { dx: number; dy: number };
+		}) {
+			const entities: WorldEntity[] = [];
+			const objectives: Objective[] = [];
+			if (opts.spaceOffset) {
+				entities.push({
+					id: "pedestal",
+					kind: "objective_space",
+					name: "Brass Pedestal",
+					examineDescription: "A sturdy brass pedestal.",
+					holder: offsetPos(opts.spaceOffset),
+					proximityFlavor: SPACE_FLAVOR,
+				});
+				objectives.push({
+					id: "obj-space",
+					kind: opts.pendingKind ?? "use_space",
+					description: "Use the pedestal",
+					spaceId: "pedestal",
+					satisfactionState: "pending" as const,
+				});
+			}
+			if (opts.itemOffset) {
+				entities.push({
+					id: "switch",
+					kind: "interesting_object",
+					name: "brass switch",
+					examineDescription: "A small brass switch.",
+					holder: offsetPos(opts.itemOffset),
+					proximityFlavor: ITEM_FLAVOR,
+				});
+				objectives.push({
+					id: "obj-item",
+					kind: "use_item",
+					description: "Use the switch",
+					itemId: "switch",
+					satisfactionState: "pending" as const,
+				});
+			}
+			if (opts.heldCarrySpaceOffset) {
+				entities.push(
+					{
+						id: "gem",
+						kind: "objective_object",
+						name: "Glowing Gem",
+						examineDescription: "A gem.",
+						holder: "red",
+						pairsWithSpaceId: "pedestal",
+						proximityFlavor: GEM_FLAVOR,
+					},
+					{
+						id: "pedestal",
+						kind: "objective_space",
+						name: "Stone Pedestal",
+						examineDescription: "A stone pedestal.",
+						holder: offsetPos(opts.heldCarrySpaceOffset),
+					},
+				);
+			}
+
+			const pack = makeTestPack(entities, {
+				setting: "test",
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 2, col: 2 }, facing: "east" },
+					green: { position: { row: 0, col: 0 }, facing: "north" },
+					cyan: { position: { row: 4, col: 4 }, facing: "north" },
+				},
+			});
+			const started = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			return { ...started, objectives };
+		}
+
+		it("offset (2,0): pending Use-Space space is visible and gets proximity flavor", () => {
+			// red at (2,2) facing east; space at (2,4), two cardinal steps east
+			const game = makeOffsetGame({
+				spaceOffset: { dx: 2, dy: 0 },
+				pendingKind: "use_space",
+			});
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// Visible in the cone listing ...
+			expect(stateMsg).toContain("Brass Pedestal");
+			expect(stateMsg).toContain("A sturdy brass pedestal.");
+			// ... and flavored because it is in the Vista but out of reach.
+			expect(stateMsg).toContain(SPACE_FLAVOR);
+		});
+
+		it("offset (2,0): pending Convergence space gets proximity flavor", () => {
+			const game = makeOffsetGame({
+				spaceOffset: { dx: 2, dy: 0 },
+				pendingKind: "convergence",
+			});
+			const ctx = buildAiContext(game, "red");
+			const snapshot = buildConeSnapshot(ctx);
+			expect(snapshot).toContain(`proximity: ${SPACE_FLAVOR}`);
+		});
+
+		it("offset (2,0): held Carry item gets no proximity flavor", () => {
+			const game = makeOffsetGame({
+				heldCarrySpaceOffset: { dx: 2, dy: 0 },
+			});
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			// The matching space is visible ...
+			expect(stateMsg).toContain("Stone Pedestal");
+			// ... but out of reach, so Carry placement is not hinted.
+			expect(stateMsg).not.toContain(GEM_FLAVOR);
+		});
+
+		it("offset (2,0): unheld Use-Item target gets no proximity flavor", () => {
+			const game = makeOffsetGame({ itemOffset: { dx: 2, dy: 0 } });
+			const ctx = buildAiContext(game, "red");
+			const stateMsg = ctx.toCurrentStateUserMessage();
+			expect(stateMsg).toContain("brass switch");
+			expect(stateMsg).not.toContain(ITEM_FLAVOR);
+		});
+
+		it("offset (2,1): outside the Vista and outside interaction range, so no proximity flavor", () => {
+			expect(inVista(2, 1)).toBe(false);
+			for (const pendingKind of ["use_space", "convergence"] as const) {
+				const game = makeOffsetGame({
+					spaceOffset: { dx: 2, dy: 1 },
+					pendingKind,
+				});
+				const ctx = buildAiContext(game, "red");
+				expect(buildConeSnapshot(ctx)).not.toContain("proximity:");
+			}
+
+			const carry = makeOffsetGame({ heldCarrySpaceOffset: { dx: 2, dy: 1 } });
+			expect(
+				buildAiContext(carry, "red").toCurrentStateUserMessage(),
+			).not.toContain(GEM_FLAVOR);
+
+			const item = makeOffsetGame({ itemOffset: { dx: 2, dy: 1 } });
+			expect(
+				buildAiContext(item, "red").toCurrentStateUserMessage(),
+			).not.toContain(ITEM_FLAVOR);
+		});
 	});
 
 	// ─ Auto-emit examineDescription for held items (issue #467) ─

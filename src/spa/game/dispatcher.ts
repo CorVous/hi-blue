@@ -1,8 +1,8 @@
+import { withinInteractionRange } from "./available-tools.js";
 import { projectCone } from "./cone-projector.js";
 import type { RelativeDirection } from "./direction.js";
 import {
 	applyDirection,
-	frontArc,
 	inBounds,
 	isGridPosition,
 	positionsEqual,
@@ -106,14 +106,10 @@ export function validateToolCall(
 				};
 			if (!actorSpatial)
 				return { valid: false, reason: "Actor has no spatial state" };
-			const inOwnCell = positionsEqual(item.holder, actorSpatial.position);
-			const inFront = frontArc(actorSpatial.position, actorSpatial.facing).some(
-				(p) => positionsEqual(p, item.holder as GridPosition),
-			);
-			if (!inOwnCell && !inFront)
+			if (!withinInteractionRange(actorSpatial.position, item.holder))
 				return {
 					valid: false,
-					reason: `Item "${call.args.item}" is not in your cell or directly in front of you`,
+					reason: `Item "${call.args.item}" is out of reach — you can only pick up items in your own cell or the eight cells around it`,
 				};
 			return { valid: true };
 		}
@@ -153,15 +149,10 @@ export function validateToolCall(
 				if (!actorSpatial)
 					return { valid: false, reason: "Actor has no spatial state" };
 				const spacePos = spaceTarget.holder as GridPosition;
-				const inOwnCell = positionsEqual(spacePos, actorSpatial.position);
-				const inFront = frontArc(
-					actorSpatial.position,
-					actorSpatial.facing,
-				).some((p) => positionsEqual(p, spacePos));
-				if (!inOwnCell && !inFront)
+				if (!withinInteractionRange(actorSpatial.position, spacePos))
 					return {
 						valid: false,
-						reason: `Space "${call.args.item}" is not in your cell or directly in front of you`,
+						reason: `Space "${call.args.item}" is out of reach — you can only use a space in your own cell or the eight cells around it`,
 					};
 				return { valid: true };
 			}
@@ -174,15 +165,11 @@ export function validateToolCall(
 					reason: `Item "${call.args.item}" does not exist`,
 				};
 			if (item.holder !== aiId) {
-				// Check if item is on the ground in a cell the daemon can reach with pick_up
+				// Check if item is on the ground within interaction range, where
+				// pick_up is the action to advise.
 				if (isGridPosition(item.holder) && actorSpatial) {
 					const itemPos = item.holder as GridPosition;
-					const inOwnCell = positionsEqual(itemPos, actorSpatial.position);
-					const inFront = frontArc(
-						actorSpatial.position,
-						actorSpatial.facing,
-					).some((p) => positionsEqual(p, itemPos));
-					if (inOwnCell || inFront) {
+					if (withinInteractionRange(actorSpatial.position, itemPos)) {
 						return {
 							valid: false,
 							reason: `"${call.args.item}" is on the ground, not in your hands. Use pick_up first.`,
@@ -300,20 +287,16 @@ export function executeToolCall(
 				break;
 			}
 
-			// Place item on the paired space's cell when the paired space is in
-			// the actor's own cell OR front arc. Otherwise no world mutation.
+			// Place item on the paired space's cell when the paired space is
+			// within the actor's interaction range (own cell plus the eight
+			// adjacent cells). Otherwise no world mutation.
 			if (target && actorSpatial && target.pairsWithSpaceId) {
 				const pairedSpace = entities.find(
 					(e) => e.id === target.pairsWithSpaceId,
 				);
 				if (pairedSpace && isGridPosition(pairedSpace.holder)) {
 					const spacePos = pairedSpace.holder as GridPosition;
-					const spaceReachable =
-						positionsEqual(spacePos, actorSpatial.position) ||
-						frontArc(actorSpatial.position, actorSpatial.facing).some((p) =>
-							positionsEqual(p, spacePos),
-						);
-					if (spaceReachable) {
+					if (withinInteractionRange(actorSpatial.position, spacePos)) {
 						target.holder = { ...spacePos };
 					}
 				}

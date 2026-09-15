@@ -56,9 +56,10 @@ export interface WorldEntity {
 	pairsWithSpaceId?: string;
 	/** For objective_object: flavor string with {actor} substitution, fires on put_down match. */
 	placementFlavor?: string;
-	/** For objective_object: in-fiction sensory line rendered when held and paired space is near.
-	 *  For interesting_object: sensory line rendered when the item is in the Daemon's own cell or front arc (before pickup).
-	 *  For objective_space: sensory line rendered when the space is visible in the Daemon's cone but outside the front arc/own cell (suppressed by auto-examine when close). */
+	/** For objective_object: in-fiction sensory line rendered when held and the paired space is within the Daemon's interaction range (own cell plus the eight adjacent cells).
+	 *  For interesting_object: sensory line rendered when the unheld item is within interaction range (before pickup).
+	 *  For objective_space: sensory line rendered when the space is inside the Daemon's Vista but outside interaction range (the four cells two cardinal steps away; suppressed by auto-examine when close).
+	 *  Proximity has its own channel: ordinary descriptions, on-space flavor, and completion flavor stay distinct from it. */
 	proximityFlavor?: string;
 	/** For obstacle: 1-sentence sensory line a witness Daemon perceives when the obstacle moves one cell. Third person from witness POV. Does NOT contain {actor}. */
 	shiftFlavor?: string;
