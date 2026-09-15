@@ -93,9 +93,9 @@ function rawToolCall(name: string, args: Record<string, string>): ToolCall {
 
 /**
  * Test-only: set a Daemon's stored facing without a tool call. Daemons still
- * keep a `facing` field and the witness-cone fan-out still reads it, but no
- * tool turns a Daemon any more — this stands in for the retired `face` tool
- * when a test needs to arrange an observer's cone.
+ * keep a `facing` field (a later chunk removes it), but nothing in perception
+ * reads it — the Vista is position-only and no tool turns a Daemon. This
+ * stands in for the retired `face` tool in older fixtures.
  */
 function withFacing(
 	game: GameState,
@@ -372,9 +372,9 @@ describe("validateToolCall", () => {
 		expect(result.reason).toContain("You are not holding");
 	});
 
-	it("use on ground item outside the cone retains generic not-holding message", () => {
-		// Place flower at (4,4). Red faces south from (0,0) — cone only covers
-		// rows 0-2, cols -2..2. (4,4) is far outside.
+	it("use on a ground item out of reach retains the generic not-holding message", () => {
+		// Place flower at (4,4). Red is at (0,0) — (4,4) is far outside both the
+		// Vista and interaction range, so no reach-aware hint applies.
 		const pack = makeTestPack(
 			[makeEntity("flower", "interesting_object", { row: 4, col: 4 })],
 			{
@@ -1279,12 +1279,10 @@ describe("validateToolCall — use on objective_space", () => {
 });
 
 describe("dispatchAiTurn — use on objective_space witnesses satisfactionFlavor", () => {
-	it("emits witnessed event with satisfactionFlavor to witness whose cone contains the space's cell", () => {
-		// red at (2,2) facing south; shrine at (3,2) — in red's front arc
-		// cyan at (4,4) facing north: cone includes (3,4), (3,3), (3,2)? Let's verify.
-		// Actually we need a setup where a witness can see the actor's cell (not the space's cell).
-		// Per dispatcher logic: witness cone must contain the ACTOR's cell.
-		// We'll put green at (2,0) facing east so red's cell (2,2) is in its cone.
+	it("emits witnessed event with satisfactionFlavor to a witness whose Vista contains the actor's cell", () => {
+		// Witness eligibility is Vista membership of the ACTOR's cell — not the
+		// space's cell. green at (2,0) is two steps east of red's cell (2,2):
+		// 2² + 0² = 4 ≤ 4, so the cell is inside green's Vista.
 		const space: WorldEntity = {
 			id: "shrine",
 			kind: "objective_space",
@@ -1316,7 +1314,7 @@ describe("dispatchAiTurn — use on objective_space witnesses satisfactionFlavor
 			aiStarts: {
 				// red at (2,2) facing south
 				red: { position: { row: 2, col: 2 }, facing: "south" },
-				// green at (2,0) facing east — cone goes east, so (2,1), (2,2) in arc
+				// green at (2,0): red's cell (2,2) is two steps east — inside its Vista
 				green: { position: { row: 2, col: 0 }, facing: "east" },
 				cyan: { position: { row: 4, col: 4 }, facing: "north" },
 			},
@@ -1445,8 +1443,8 @@ describe("dispatchAiTurn — UseItemObjective activationFlavor on interesting_ob
 	});
 
 	it("fans out activationFlavor as the witnessed-event useOutcome on the satisfying call", () => {
-		// red at (0,0) facing east; green at (0,1) facing west — green's cone
-		// (facing west from (0,1)) covers (0,0), so green witnesses the use.
+		// red at (0,0); green at (0,1) has red's cell one step west of it, so
+		// green's Vista contains the actor's cell and green witnesses the use.
 		const game = withFacing(
 			withFacing(makeGameWithUseItemActivation(), "red", "east"),
 			"green",
@@ -1605,9 +1603,9 @@ describe("dispatchAiTurn — use on objective_space surfaces activationFlavor to
 	});
 });
 
-// ── cone-delta on dispatcher result (issue #376) ──────────────────────────────
-describe("dispatchAiTurn — cone-delta computation (issue #376)", () => {
-	it("go action that reveals a stationary actor sets actorConeDelta on DispatchResult", () => {
+// ── disk-delta on dispatcher result (issue #376) ──────────────────────────────
+describe("dispatchAiTurn — disk-delta computation (issue #376)", () => {
+	it("go action that reveals a stationary actor sets actorDiskDelta on DispatchResult", () => {
 		// Setup: red at (2,0) facing north, green at (0,1) facing south.
 		// Red goes north to (1,0) — now green at (0,1) is visible (distance 1, front-right).
 		const pack = makePackWithEntities(
@@ -1638,11 +1636,11 @@ describe("dispatchAiTurn — cone-delta computation (issue #376)", () => {
 		};
 		const result = dispatchAiTurn(game, action);
 		expect(result.rejected).toBe(false);
-		expect(result.actorConeDelta).toBeDefined();
-		expect(result.actorConeDelta).toContain("*green");
+		expect(result.actorDiskDelta).toBeDefined();
+		expect(result.actorDiskDelta).toContain("*green");
 	});
 
-	it("a rejected raw `face` tool call sets no actorConeDelta and no success record", () => {
+	it("a rejected raw `face` tool call sets no actorDiskDelta and no success record", () => {
 		const game = makeGame();
 
 		const action: AiTurnAction = {
@@ -1654,7 +1652,7 @@ describe("dispatchAiTurn — cone-delta computation (issue #376)", () => {
 		// Rejected, not ignored and not a no-op success.
 		expect(result.records[0]?.kind).toBe("tool_failure");
 		expect(result.records[0]?.description).toMatch(/unknown tool/i);
-		expect(result.actorConeDelta).toBeUndefined();
+		expect(result.actorDiskDelta).toBeUndefined();
 		expect(result.game.personaSpatial.red?.facing).toBe("north");
 		// The rejection is recorded for the actor.
 		const failures = (result.game.conversationLogs.red ?? []).filter(
@@ -1664,7 +1662,7 @@ describe("dispatchAiTurn — cone-delta computation (issue #376)", () => {
 		expect(failures[0]).toMatchObject({ tool: "face" });
 	});
 
-	it("non-go tools never set actorConeDelta", () => {
+	it("non-go tools never set actorDiskDelta", () => {
 		const game = makeGame();
 
 		const action: AiTurnAction = {
@@ -1673,7 +1671,7 @@ describe("dispatchAiTurn — cone-delta computation (issue #376)", () => {
 		};
 		const result = dispatchAiTurn(game, action);
 		expect(result.rejected).toBe(false);
-		expect(result.actorConeDelta).toBeUndefined();
+		expect(result.actorDiskDelta).toBeUndefined();
 	});
 });
 

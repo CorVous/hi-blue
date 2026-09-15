@@ -17,9 +17,8 @@
  * dispatcher's job (bounds + obstacle checks), and Vista cells are
  * perception, not a movement authority. **Interaction range**
  * (`max(|dx|, |dy|) ≤ 1`) is the separate, shorter region for pickup, Carry
- * placement, and Use-Space. Witness eligibility already reads this disk
- * (`vistaContains`); the prompt's sight listing still uses the Cone until the
- * rest of the coordinated cutover (#539).
+ * placement, and Use-Space. Witness eligibility (`vistaContains`) and the
+ * prompt's sight listing both read this disk (ticket #539).
  */
 
 import type { CardinalDirection, GridPosition } from "./direction.js";

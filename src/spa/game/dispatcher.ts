@@ -17,7 +17,7 @@ import {
 import { carryObjectById } from "./pack-selectors.js";
 import {
 	buildAiContext,
-	buildConeSnapshot,
+	buildDiskSnapshot,
 	renderWhatsNew,
 } from "./prompt-builder.js";
 import type {
@@ -54,12 +54,12 @@ export interface DispatchResult {
 	 */
 	actorPrivateToolResult?: { description: string; success: boolean };
 	/**
-	 * For a `go` action whose cone shift reveals new content, this field
+	 * For a `go` action whose Vista shift reveals new content, this field
 	 * carries the renderWhatsNew output. Only set for successful `go` tool
-	 * calls where the pre/post cone snapshots differ.
-	 * (Issue #376: persist cone-delta on go tool-call log entries)
+	 * calls where the pre/post perception-disk snapshots differ.
+	 * (Issue #376: persist the perception delta on go tool-call log entries)
 	 */
-	actorConeDelta?: string;
+	actorDiskDelta?: string;
 }
 
 /** Filter entities to only those that can be picked up / put_down / used (not spaces or obstacles). */
@@ -312,10 +312,10 @@ export function executeToolCall(
 		}
 		case "go": {
 			if (!actorSpatial) break;
-			// Validation upstream guarantees a cardinal direction.
-			// `facing` is still stored (a later chunk of this cutover removes
-			// it) and tracks the cardinal direction walked, so the cone-based
-			// witness fan-out below keeps working unchanged.
+			// Validation upstream guarantees a cardinal direction. `facing` is
+			// still stored for now (a later chunk of this cutover removes it),
+			// but nothing here reads it back: the step direction is the named
+			// cardinal and perception is position-only.
 			const direction = call.args.direction as CardinalDirection;
 			const nextPos = applyDirection(actorSpatial.position, direction);
 			return {
@@ -391,7 +391,7 @@ export function dispatchAiTurn(
 		| { description: string; success: boolean }
 		| undefined;
 
-	let actorConeDelta: string | undefined;
+	let actorDiskDelta: string | undefined;
 
 	// Process messages BEFORE toolCall so that result.records reflects
 	// speak-then-act order (P0-1 fix for issue #238).
@@ -442,16 +442,17 @@ export function dispatchAiTurn(
 			// satisfactionState transitions for activation-flavor detection.
 			const preExecuteWorld = state.world;
 
-			// For go, compute cone delta pre-execution to capture the state before the action
+			// For go, compute the perception-disk delta pre-execution to capture
+			// the state before the action.
 			if (action.toolCall.name === "go") {
 				const prevCtx = buildAiContext(state, aiId);
-				const prevSnap = buildConeSnapshot(prevCtx);
+				const prevSnap = buildDiskSnapshot(prevCtx);
 				state = executeToolCall(state, aiId, action.toolCall);
 				const currCtx = buildAiContext(state, aiId);
-				const currSnap = buildConeSnapshot(currCtx);
+				const currSnap = buildDiskSnapshot(currCtx);
 				const delta = renderWhatsNew(prevSnap, currSnap);
 				if (delta !== null) {
-					actorConeDelta = delta;
+					actorDiskDelta = delta;
 				}
 			} else {
 				state = executeToolCall(state, aiId, action.toolCall);
@@ -556,14 +557,14 @@ export function dispatchAiTurn(
 						round,
 						actor: aiId,
 						actorCellAtAction: actorSpatialPost.position,
-						actorFacingAtAction: actorSpatialPost.facing,
 						kind: call.name,
 						witnessSpatial,
 						...(call.args.item !== undefined ? { item: call.args.item } : {}),
 						...(call.name === "go"
 							? {
-									// Store resolved cardinal direction (actorFacingAtAction is post-move facing = direction walked)
-									direction: actorSpatialPost.facing,
+									// The step's cardinal direction, taken from the named
+									// direction the tool call carried.
+									direction: call.args.direction as CardinalDirection,
 								}
 							: {}),
 						...(useOutcomeRaw !== undefined
@@ -641,6 +642,6 @@ export function dispatchAiTurn(
 		game: state,
 		records,
 		...(actorPrivateToolResult !== undefined ? { actorPrivateToolResult } : {}),
-		...(actorConeDelta !== undefined ? { actorConeDelta } : {}),
+		...(actorDiskDelta !== undefined ? { actorDiskDelta } : {}),
 	};
 }

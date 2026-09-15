@@ -45,18 +45,18 @@ export class GameSession {
 	/** Per-AI tool roundtrip from the last round, fed back in as prior context. */
 	private toolRoundtrip: Partial<Record<AiId, ToolRoundtripMessage>> = {};
 	/**
-	 * Per-AI canonical cone snapshots captured during the last round's prompt
+	 * Per-AI perception-disk snapshots captured during the last round's prompt
 	 * build. Fed back into runRound so the next round's per-AI user message can
 	 * include a `<whats_new>` diff. Empty until the first round completes.
 	 */
-	private coneSnapshots: Partial<Record<AiId, string>> = {};
+	private diskSnapshots: Partial<Record<AiId, string>> = {};
 	/**
 	 * Per-AI structured entity perception state captured during the last round's prompt
 	 * build. Fed back into runRound so the next round's per-AI user message can
 	 * emit perception-delta lines (first-sight, departure, transition). Empty until the first round completes.
 	 */
-	private coneEntities: Partial<
-		Record<AiId, Record<string, { inCone: boolean; satisfied: boolean }>>
+	private diskEntities: Partial<
+		Record<AiId, Record<string, { inVista: boolean; satisfied: boolean }>>
 	> = {};
 
 	constructor(
@@ -96,8 +96,8 @@ export class GameSession {
 		const session = Object.create(GameSession.prototype) as GameSession;
 		session.state = state;
 		session.toolRoundtrip = {};
-		session.coneSnapshots = {};
-		session.coneEntities = {};
+		session.diskSnapshots = {};
+		session.diskEntities = {};
 		return session;
 	}
 
@@ -141,18 +141,18 @@ export class GameSession {
 			nextState,
 			result,
 			toolRoundtrip: newToolRoundtrip,
-			coneSnapshots: newConeSnapshots,
-			coneEntities: newConeEntities,
+			diskSnapshots: newDiskSnapshots,
+			diskEntities: newDiskEntities,
 		} = await runRound(this.state, addressed, message, provider, {
 			rng: Math.random,
 			initiative,
 			priorToolRoundtrip: this.toolRoundtrip,
 			completionSink,
 			onAiDelta,
-			priorConeSnapshots: this.coneSnapshots,
+			priorDiskSnapshots: this.diskSnapshots,
 			onAiTurnComplete,
 			onLifecycle,
-			priorConeEntities: this.coneEntities,
+			priorDiskEntities: this.diskEntities,
 		});
 
 		// Fill in empty string for AIs whose completions weren't captured
@@ -171,17 +171,17 @@ export class GameSession {
 		for (const [aiId, roundtrip] of Object.entries(newToolRoundtrip)) {
 			this.toolRoundtrip[aiId as AiId] = roundtrip;
 		}
-		// Replace cone snapshots with this round's captures. Locked-out AIs
-		// don't appear in newConeSnapshots — they keep their prior snapshot so
+		// Replace perception-disk snapshots with this round's captures. Locked-out AIs
+		// don't appear in newDiskSnapshots — they keep their prior snapshot so
 		// the diff resumes cleanly when the lockout lifts.
-		for (const [aiId, snap] of Object.entries(newConeSnapshots)) {
-			this.coneSnapshots[aiId as AiId] = snap;
+		for (const [aiId, snap] of Object.entries(newDiskSnapshots)) {
+			this.diskSnapshots[aiId as AiId] = snap;
 		}
-		// Replace cone entities with this round's captures. Locked-out AIs
-		// don't appear in newConeEntities — they keep their prior state so
+		// Replace entity perception states with this round's captures. Locked-out AIs
+		// don't appear in newDiskEntities — they keep their prior state so
 		// perception-delta lines resume cleanly when the lockout lifts.
-		for (const [aiId, entities] of Object.entries(newConeEntities)) {
-			this.coneEntities[aiId as AiId] = entities;
+		for (const [aiId, entities] of Object.entries(newDiskEntities)) {
+			this.diskEntities[aiId as AiId] = entities;
 		}
 
 		return { result, completions, nextState };

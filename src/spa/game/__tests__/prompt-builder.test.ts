@@ -8,8 +8,9 @@ import {
 import { buildOpenAiMessages } from "../openai-message-builder";
 import {
 	buildAiContext,
-	buildConeEntityState,
-	buildConeSnapshot,
+	buildDiskEntityState,
+	buildDiskSnapshot,
+	describeRelativePosition,
 	renderPerceptionDelta,
 	renderWhatsNew,
 } from "../prompt-builder";
@@ -74,7 +75,7 @@ const RGC_AI_STARTS: ContentPack["aiStarts"] = {
 	cyan: { position: { row: 0, col: 2 }, facing: "north" },
 };
 
-/** Same neighbours as RGC_AI_STARTS but red faces south (used by the many cone tests). */
+/** Same neighbours as RGC_AI_STARTS but red faces south (a stored facing perception ignores). */
 const RGC_AI_STARTS_RED_SOUTH: ContentPack["aiStarts"] = {
 	red: { position: { row: 0, col: 0 }, facing: "south" },
 	green: { position: { row: 0, col: 1 }, facing: "north" },
@@ -360,11 +361,13 @@ describe("prompt-builder — spatial 'Where you are' section (current-state user
 		});
 		const ctx = buildAiContext(game, "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
-		// The retired always-on anchor line left no replacement.
+		// The retired always-on anchor line left no replacement, and nothing in
+		// the per-round turn describes an orientation. Cardinal directions reach
+		// the Daemon as Vista cell labels ("Two steps north: …"), never as a
+		// standing "you are facing X" anchor.
 		expect(stateMsg).not.toMatch(/^On the .*ahead/im);
-		expect(stateMsg).not.toMatch(/<where_you_are>[\s\S]*Facing:/i);
-		// Directions live in the stable prompt's <setting> block only.
-		expect(stateMsg.match(/\b(north|south|east|west)\b/gi)).toBeNull();
+		expect(stateMsg).not.toMatch(/facing/i);
+		expect(stateMsg).toContain("- Two steps north:");
 	});
 
 	it("lists items in the actor's cell under 'Where you are'", () => {
@@ -386,7 +389,7 @@ describe("prompt-builder — spatial 'Where you are' section (current-state user
 		expect(stateMsg).toContain("key");
 	});
 
-	it("lists other AIs visible in the cone under <what_you_see>", () => {
+	it("lists other AIs visible in the Vista under <what_you_see>", () => {
 		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
 			budgetPerAi: 5,
 			rng: () => 0,
@@ -835,9 +838,9 @@ describe("byte-identical sections across phases", () => {
 });
 
 // ----------------------------------------------------------------------------
-// "<what_you_see>" cone section tests (issue #124)
+// "<what_you_see>" Vista section tests (issue #124, ADR 0015)
 // ----------------------------------------------------------------------------
-describe("<what_you_see> (cone)", () => {
+describe("<what_you_see> (Vista)", () => {
 	// `<what_you_see>` lives in the trailing current-state user turn now.
 
 	it("<what_you_see> block is present in every phase's current-state turn", () => {
@@ -849,14 +852,15 @@ describe("<what_you_see> (cone)", () => {
 		expect(ctx.toCurrentStateUserMessage()).toContain("<what_you_see>");
 	});
 
-	it("item in cone cell is listed under 'Directly in front'", () => {
-		// Place flower at (1,0) and use ContentPack with aiStarts so red is at (0,0) facing south.
+	it("item one cardinal step away is listed under its direction, whatever the stored facing", () => {
+		// flower at (1,0) is one step south of red at (0,0). Red is stored facing
+		// north — perception is position-only, so the listing is unchanged.
 		const pack = makeTestPack(
 			[makeEntity("flower", "interesting_object", { row: 1, col: 0 })],
 			{
 				wallName: "wall",
 				aiStarts: {
-					red: { position: { row: 0, col: 0 }, facing: "south" },
+					red: { position: { row: 0, col: 0 }, facing: "north" },
 					green: { position: { row: 0, col: 1 }, facing: "north" },
 					cyan: { position: { row: 0, col: 2 }, facing: "north" },
 				},
@@ -864,42 +868,88 @@ describe("<what_you_see> (cone)", () => {
 		);
 
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		// Verify red is at (0,0) facing south (flat model: access from game directly)
 		const redSpatial = game.personaSpatial.red;
 		expect(redSpatial?.position).toEqual({ row: 0, col: 0 });
-		expect(redSpatial?.facing).toBe("south");
 
 		const ctx = buildAiContext(game, "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
-		// flower at (1,0) is directly in front of red (facing south)
-		expect(stateMsg).toContain("Directly in front: flower");
+		expect(stateMsg).toContain("- One step south: flower");
 	});
 
-	it("AIs visible in cone are rendered with their id, facing, and held items", () => {
-		// Use south-facing rng trick (fallback spatial placement)
-		let callIdx2 = 0;
-		const seq2 = [0, 0.25, 0, 0, 0, 0];
-		const rng2 = () => {
-			const v = seq2[callIdx2 % seq2.length] ?? 0;
-			callIdx2++;
-			return v;
-		};
-
-		// green at (0,1) facing north, cyan at (0,2) facing north
-		// red at (0,0) facing south — cone: (1,0), (2,1), (2,0), (2,-1→OOB)
-		// green at (0,1) is NOT in red's southward cone
-		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
-			budgetPerAi: 5,
-			rng: rng2,
+	it("peer Daemons are rendered with their id, color, cardinal position, and held items", () => {
+		// No rng trickery: positions come straight from the pack. Facing values
+		// are deliberately varied — perception never reads them.
+		const pack = makeTestPack([], {
+			wallName: "wall",
+			aiStarts: {
+				red: { position: { row: 0, col: 0 }, facing: "south" },
+				green: { position: { row: 1, col: 0 }, facing: "east" },
+				cyan: { position: { row: 0, col: 2 }, facing: "west" },
+			},
 		});
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
+
 		expect(stateMsg).not.toContain("Player");
 		expect(stateMsg).not.toContain("the player");
+		// green is one step south of red; cyan is two steps east.
+		expect(stateMsg).toContain(
+			"- One step south: the Daemon *green (#81b29a), one step south of you, holding nothing",
+		);
+		expect(stateMsg).toContain(
+			"- Two steps east: the Daemon *cyan (#5fa8d3), two steps east of you, holding nothing",
+		);
+		// No orientation reaches the listing.
+		expect(stateMsg).not.toMatch(/facing/i);
 	});
 
-	it("out-of-bounds cone cells render as wall markers in <what_you_see>", () => {
-		// rng=()=>0: red→(0,0) facing north → all 8 non-own cone cells are OOB
+	it("obstacles never remove cells from the disk", () => {
+		// An obstacle at (1,0) is one step south of red (0,0); the cell beyond it
+		// at (2,0) is still part of the Vista and still lists its contents.
+		const pack = makeTestPack(
+			[
+				makeEntity("col1", "obstacle", { row: 1, col: 0 }),
+				makeEntity("flower", "interesting_object", { row: 2, col: 0 }),
+			],
+			{ wallName: "wall", aiStarts: RGC_AI_STARTS },
+		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
+		expect(stateMsg).toContain("- One step south: col1");
+		expect(stateMsg).toContain(
+			"- Two steps south: flower (on the ground — not held)",
+		);
+	});
+
+	it("lists the 12 non-own cells of the disk and no offset outside it", () => {
+		// red at (2,2): the whole disk is in bounds, so every cell renders as
+		// contents rather than a Wall.
+		const pack = makeTestPack([], {
+			wallName: "wall",
+			aiStarts: {
+				red: { position: { row: 2, col: 2 }, facing: "north" },
+				green: { position: { row: 0, col: 0 }, facing: "north" },
+				cyan: { position: { row: 4, col: 4 }, facing: "north" },
+			},
+		});
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
+		const start = stateMsg.indexOf("<what_you_see>");
+		const end = stateMsg.indexOf("</what_you_see>", start);
+		const cellLines = stateMsg
+			.slice(start, end)
+			.split("\n")
+			.filter((line) => line.startsWith("- "));
+		// 13-cell disk minus the own cell (covered by <where_you_are>).
+		expect(cellLines).toHaveLength(12);
+		// (2,1)-style offsets are outside dx² + dy² ≤ 4 and are never labelled.
+		expect(stateMsg).not.toContain("two steps north and one step east");
+		expect(stateMsg).not.toContain("one step north and two steps east");
+	});
+
+	it("out-of-bounds Vista cells render as wall markers in <what_you_see>", () => {
+		// red at (0,0): the north and west halves of the disk fall outside the room.
 		const wallPack = makeTestPack([], {
 			wallName: "concrete platform wall",
 			aiStarts: RGC_AI_STARTS,
@@ -912,22 +962,32 @@ describe("<what_you_see> (cone)", () => {
 		const start = stateMsg.indexOf("<what_you_see>");
 		const end = stateMsg.indexOf("</what_you_see>", start);
 		const sectionContent = stateMsg.slice(start, end);
-		// All 8 OOB cells render as wall markers — wallName from ContentPack
+		// OOB cells render as wall markers — wallName from ContentPack
 		expect(sectionContent).toContain(
-			"- Directly in front, left: concrete platform wall",
+			"- One step north: concrete platform wall",
 		);
 		expect(sectionContent).toContain(
-			"- Directly in front: concrete platform wall",
+			"- Two steps north: concrete platform wall",
+		);
+		expect(sectionContent).toContain("- One step west: concrete platform wall");
+		expect(sectionContent).toContain(
+			"- Two steps west: concrete platform wall",
 		);
 		expect(sectionContent).toContain(
-			"- Directly in front, right: concrete platform wall",
+			"- One step north and one step east: concrete platform wall",
+		);
+		// In-bounds cells on the disk still render normally.
+		expect(sectionContent).toContain("- Two steps south: nothing");
+		expect(sectionContent).toContain(
+			"- One step east and one step south: nothing",
 		);
 		// wallName comes from ContentPack, not hardcoded
 		expect(sectionContent).toContain("concrete platform wall");
 	});
 
 	it("partial edge: only OOB cells render as walls — in-bounds cells render normally", () => {
-		// red at (1,0) facing north: directly-in-front-left (0,-1) is OOB; front (0,0) and front-right (0,1) are in-bounds
+		// red at (1,0): the west column and the far north cell are OOB; the rest
+		// of the disk is inside the room.
 		const wallPack = makeTestPack([], {
 			wallName: "concrete platform wall",
 			aiStarts: {
@@ -942,19 +1002,25 @@ describe("<what_you_see> (cone)", () => {
 		const start = stateMsg.indexOf("<what_you_see>");
 		const end = stateMsg.indexOf("</what_you_see>", start);
 		const sectionContent = stateMsg.slice(start, end);
-		// OOB cell: directly in front, left → wall
+		// OOB cells: west column, far north, and the north-west diagonal.
 		expect(sectionContent).toContain(
-			"- Directly in front, left: concrete platform wall",
+			"- Two steps west: concrete platform wall",
 		);
-		// In-bounds cell: directly in front (0,0) → "nothing" (no entities there)
-		expect(sectionContent).toContain("- Directly in front: nothing");
-		// In-bounds cell: directly in front, right (0,1) → "nothing"
-		expect(sectionContent).toContain("- Directly in front, right: nothing");
+		expect(sectionContent).toContain("- One step west: concrete platform wall");
+		expect(sectionContent).toContain(
+			"- Two steps north: concrete platform wall",
+		);
+		expect(sectionContent).toContain(
+			"- One step north and one step west: concrete platform wall",
+		);
+		// In-bounds cells → "nothing" (no entities there)
+		expect(sectionContent).toContain("- One step north: nothing");
+		expect(sectionContent).toContain("- One step east: nothing");
+		expect(sectionContent).toContain("- Two steps east: nothing");
 	});
 
-	it("obstacles in the cone are listed by their name", () => {
-		// Place an obstacle named "concrete column" at (1,0) via ContentPack.
-		// Red faces south from (0,0).
+	it("obstacles in the Vista are listed by their name", () => {
+		// Place an obstacle named "col1" at (1,0) — one step south of red (0,0).
 		const pack = makeTestPack(
 			[makeEntity("col1", "obstacle", { row: 1, col: 0 })],
 			{
@@ -970,12 +1036,10 @@ describe("<what_you_see> (cone)", () => {
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
-		// Obstacle at (1,0) is directly in front of red (facing south)
-		expect(stateMsg).toContain("Directly in front:");
-		expect(stateMsg).toContain("col1");
+		expect(stateMsg).toContain("- One step south: col1");
 	});
 
-	it("other AI visible in cone is rendered with its color in parentheses", () => {
+	it("other AI visible in the Vista is rendered with its color in parentheses", () => {
 		// Use ContentPack to place red at (0,0) facing south, green at (1,0).
 		const pack = makeTestPack([], {
 			wallName: "wall",
@@ -1040,8 +1104,8 @@ describe("ground-item tagging (issue #503)", () => {
 		expect(stateMsg).toContain("flower (on the ground — not held)");
 	});
 
-	it("tags cone-cell items in <what_you_see> with (on the ground — not held)", () => {
-		// Place flower at (1,0) — directly in front of red facing south
+	it("tags Vista-cell items in <what_you_see> with (on the ground — not held)", () => {
+		// Place flower at (1,0) — one step south of red at (0,0)
 		const pack = makeTestPack(
 			[makeEntity("flower", "interesting_object", { row: 1, col: 0 })],
 			{
@@ -1057,7 +1121,7 @@ describe("ground-item tagging (issue #503)", () => {
 		const ctx = buildAiContext(game, "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
 		expect(stateMsg).toContain(
-			"Directly in front: flower (on the ground — not held)",
+			"- One step south: flower (on the ground — not held)",
 		);
 	});
 
@@ -1086,12 +1150,8 @@ describe("ground-item tagging (issue #503)", () => {
 		expect(heldLine).not.toContain("(on the ground — not held)");
 	});
 
-	it("items co-existing with a daemon in a cone cell still get the ground tag", () => {
-		// green at (0,1) and flower at (0,1) — red faces north, (0,1) is
-		// "Directly in front" for red at (0,0) facing north.
-		// Wait, north-facing from (0,0) means front is row -1 (OOB).
-		// Use south-facing for red at (0,0): (1,0) is directly in front.
-		// Put green AND flower at (1,0).
+	it("items co-existing with a daemon in a Vista cell still get the ground tag", () => {
+		// Put green AND flower at (1,0) — one step south of red at (0,0).
 		const pack = makeTestPack(
 			[makeEntity("flower", "interesting_object", { row: 1, col: 0 })],
 			{
@@ -1362,7 +1422,7 @@ describe("<typing_quirks> block", () => {
 //
 // When the actor holds an objective_object AND its paired space is in own cell
 // or front arc, a proximity flavor sentence is appended to both:
-//   - buildConeSnapshot (so <whats_new> diff shows +/- on entry/exit)
+//   - buildDiskSnapshot (so <whats_new> diff shows +/- on entry/exit)
 //   - toCurrentStateUserMessage (inside <what_you_see> block)
 // ----------------------------------------------------------------------------
 describe("proximityFlavor sense line", () => {
@@ -1462,7 +1522,7 @@ describe("proximityFlavor sense line", () => {
 		);
 	});
 
-	it("proximity flavor appears in buildConeSnapshot when space is reachable", () => {
+	it("proximity flavor appears in buildDiskSnapshot when space is reachable", () => {
 		// red at (0,0) facing south; pedestal at (1,0) = one step away
 		const pack = makePackWithProximity({
 			actorPosition: { row: 0, col: 0 },
@@ -1471,13 +1531,13 @@ describe("proximityFlavor sense line", () => {
 		});
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
-		const snapshot = buildConeSnapshot(ctx);
+		const snapshot = buildDiskSnapshot(ctx);
 		expect(snapshot).toContain(
 			"proximity: The gem pulses warmly, drawn toward the pedestal.",
 		);
 	});
 
-	it("proximity flavor does NOT appear in buildConeSnapshot at offset (2,0)", () => {
+	it("proximity flavor does NOT appear in buildDiskSnapshot at offset (2,0)", () => {
 		// red at (0,0) facing south; pedestal at (2,0) — visible, out of range
 		const pack = makePackWithProximity({
 			actorPosition: { row: 0, col: 0 },
@@ -1486,7 +1546,7 @@ describe("proximityFlavor sense line", () => {
 		});
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
-		const snapshot = buildConeSnapshot(ctx);
+		const snapshot = buildDiskSnapshot(ctx);
 		expect(snapshot).not.toContain("proximity:");
 	});
 
@@ -1507,10 +1567,10 @@ describe("proximityFlavor sense line", () => {
 		const gameFar = startGame(TEST_PERSONAS, packFar, { budgetPerAi: 5 });
 		const gameNear = startGame(TEST_PERSONAS, packNear, { budgetPerAi: 5 });
 		const ctxFar = buildAiContext(gameFar, "red");
-		const prevSnapshot = buildConeSnapshot(ctxFar);
-		// Build current state with prevConeSnapshot set
+		const prevSnapshot = buildDiskSnapshot(ctxFar);
+		// Build current state with prevDiskSnapshot set
 		const ctxWithPrev = buildAiContext(gameNear, "red", {
-			prevConeSnapshot: prevSnapshot,
+			prevDiskSnapshot: prevSnapshot,
 		});
 		const stateMsg = ctxWithPrev.toCurrentStateUserMessage();
 		// The proximity line should appear as a new addition in whats_new
@@ -1523,7 +1583,7 @@ describe("proximityFlavor sense line", () => {
 // ── UseItem and UseSpace/Convergence proximity flavor (issue #335) ─────────────
 describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 	// ─ UseItem tests ─
-	it("UseItem proximity flavor appears in cone when item is within interaction range (one step)", () => {
+	it("UseItem proximity flavor appears when the item is within interaction range (one step)", () => {
 		// red at (0,0) facing south; item at (1,0) = one step away
 		const item: WorldEntity = {
 			id: "switch",
@@ -1711,7 +1771,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 
 	// ─ UseSpace tests ─
 	it("UseSpace proximity flavor appears when space is visible but outside interaction range", () => {
-		// red at (0,0) facing south; space at (2,0) = "two steps ahead":
+		// red at (0,0); space at (2,0) = two steps south:
 		// offset (2,0), in the Vista but beyond interaction range
 		const space: WorldEntity = {
 			id: "pedestal",
@@ -1719,7 +1779,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			name: "Brass Pedestal",
 			examineDescription:
 				"A sturdy brass pedestal. Press an item onto it to activate.",
-			holder: { row: 2, col: 0 }, // two steps ahead (beyond 3-arc but in cone)
+			holder: { row: 2, col: 0 }, // two steps south — in the Vista, out of interaction range
 			proximityFlavor: "The pedestal pulses with a faint hum.",
 			activationFlavor: "The pedestal hums to life.",
 			satisfactionFlavor: "The pedestal glows brightly.",
@@ -1753,8 +1813,8 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			],
 		};
 		const ctx = buildAiContext(game, "red");
-		const snapshot = buildConeSnapshot(ctx);
-		// At distance > 3: proximity flavor should appear in cone snapshot
+		const snapshot = buildDiskSnapshot(ctx);
+		// Two cardinal steps away: proximity flavor should appear in the disk snapshot
 		expect(snapshot).toContain(
 			"proximity: The pedestal pulses with a faint hum.",
 		);
@@ -1812,7 +1872,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 	});
 
 	it("UseSpace proximity flavor does NOT appear when objective is satisfied", () => {
-		// red at (0,0) facing south; space at (2,0) = in full cone but beyond 3-arc
+		// red at (0,0); space at (2,0) = two steps south, in the Vista
 		const space: WorldEntity = {
 			id: "pedestal",
 			kind: "objective_space",
@@ -1853,7 +1913,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			],
 		};
 		const ctx = buildAiContext(game, "red");
-		const snapshot = buildConeSnapshot(ctx);
+		const snapshot = buildDiskSnapshot(ctx);
 		expect(snapshot).not.toContain(
 			"proximity: The pedestal pulses with a faint hum.",
 		);
@@ -1861,7 +1921,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 
 	// ─ Convergence tests ─
 	it("Convergence proximity flavor appears when space is visible but outside interaction range", () => {
-		// red at (0,0) facing south; space at (2,0) = "two steps ahead":
+		// red at (0,0); space at (2,0) = two steps south:
 		// offset (2,0), in the Vista but beyond interaction range
 		const space: WorldEntity = {
 			id: "convergence",
@@ -1869,7 +1929,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			name: "Gathering Place",
 			examineDescription:
 				"A gathering point. Becoming significant when shared.",
-			holder: { row: 2, col: 0 }, // two steps ahead (beyond 3-arc but in cone)
+			holder: { row: 2, col: 0 }, // two steps south — in the Vista, out of interaction range
 			proximityFlavor:
 				"The place emanates a strange presence, drawing you forward.",
 			activationFlavor:
@@ -1906,8 +1966,8 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			],
 		};
 		const ctx = buildAiContext(game, "red");
-		const snapshot = buildConeSnapshot(ctx);
-		// Offset (2,0): proximity flavor appears in the cone snapshot
+		const snapshot = buildDiskSnapshot(ctx);
+		// Offset (2,0): proximity flavor appears in the disk snapshot
 		expect(snapshot).toContain(
 			"proximity: The place emanates a strange presence, drawing you forward.",
 		);
@@ -2008,7 +2068,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			});
 			const ctx = buildAiContext(game, "red");
 			const stateMsg = ctx.toCurrentStateUserMessage();
-			// Visible in the cone listing ...
+			// Visible in the Vista listing ...
 			expect(stateMsg).toContain("Brass Pedestal");
 			expect(stateMsg).toContain("A sturdy brass pedestal.");
 			// ... and flavored because it is in the Vista but out of reach.
@@ -2021,7 +2081,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 				pendingKind: "convergence",
 			});
 			const ctx = buildAiContext(game, "red");
-			const snapshot = buildConeSnapshot(ctx);
+			const snapshot = buildDiskSnapshot(ctx);
 			expect(snapshot).toContain(`proximity: ${SPACE_FLAVOR}`);
 		});
 
@@ -2053,7 +2113,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 					pendingKind,
 				});
 				const ctx = buildAiContext(game, "red");
-				expect(buildConeSnapshot(ctx)).not.toContain("proximity:");
+				expect(buildDiskSnapshot(ctx)).not.toContain("proximity:");
 			}
 
 			const carry = makeOffsetGame({ heldCarrySpaceOffset: { dx: 2, dy: 1 } });
@@ -2239,9 +2299,9 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 	});
 
 	// ─ Auto-emit examineDescription tests (issue #466) ─
-	describe("auto-emit examineDescription for entities in cone (issue #466)", () => {
-		it("emits examineDescription for interesting_object in cone", () => {
-			// red at (0,0) facing south; switch at (1,0) = directly in front
+	describe("auto-emit examineDescription for entities in the Vista (issue #466)", () => {
+		it("emits examineDescription for interesting_object in the Vista", () => {
+			// red at (0,0); switch at (1,0) = one step south
 			const item: WorldEntity = {
 				id: "switch",
 				kind: "interesting_object",
@@ -2262,8 +2322,8 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			);
 		});
 
-		it("emits examineDescription for obstacle in cone", () => {
-			// red at (0,0) facing south; obstacle at (1,0) = directly in front
+		it("emits examineDescription for obstacle in the Vista", () => {
+			// red at (0,0); obstacle at (1,0) = one step south
 			const obstacle: WorldEntity = {
 				id: "col1",
 				kind: "obstacle",
@@ -2285,7 +2345,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 		});
 
 		it("uses postExamineDescription when entity is satisfied", () => {
-			// red at (0,0) facing south; space at (1,0) = directly in front
+			// red at (0,0); space at (1,0) = one step south
 			const space: WorldEntity = {
 				id: "pedestal",
 				kind: "objective_space",
@@ -2312,7 +2372,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 		});
 
 		it("falls back to examineDescription when satisfied but no postExamineDescription", () => {
-			// red at (0,0) facing south; space at (1,0) = directly in front
+			// red at (0,0); space at (1,0) = one step south
 			const space: WorldEntity = {
 				id: "pedestal",
 				kind: "objective_space",
@@ -2384,7 +2444,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 		});
 
 		it("wall sentinels still render correctly", () => {
-			// red at (0,0) facing north (cone goes north, into OOB)
+			// red at (0,0) facing north (the wall perception is position-only)
 			const pack = makeTestPack([], {
 				wallName: "boundary wall",
 				aiStarts: RGC_AI_STARTS, // red faces north by default
@@ -2417,7 +2477,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 		});
 
 		it("emits examineDescription every turn while entity is in range", () => {
-			// red at (0,0) facing south; switch at (1,0) = directly in front
+			// red at (0,0); switch at (1,0) = one step south
 			const item: WorldEntity = {
 				id: "switch",
 				kind: "interesting_object",
@@ -2457,8 +2517,8 @@ describe("<whats_new> broadcast announcements", () => {
 		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		game = advanceRound(game); // round advances to 1
 		game = appendBroadcast(game, "The weather has changed to heavy fog.");
-		const prevSnapshot = buildConeSnapshot(buildAiContext(game, "red"));
-		const ctx = buildAiContext(game, "red", { prevConeSnapshot: prevSnapshot });
+		const prevSnapshot = buildDiskSnapshot(buildAiContext(game, "red"));
+		const ctx = buildAiContext(game, "red", { prevDiskSnapshot: prevSnapshot });
 		const stateMsg = ctx.toCurrentStateUserMessage();
 		expect(stateMsg).toContain("<whats_new>");
 		expect(stateMsg).toContain(
@@ -2466,7 +2526,7 @@ describe("<whats_new> broadcast announcements", () => {
 		);
 	});
 
-	it("emits <whats_new> with the announcement even without a prevConeSnapshot", () => {
+	it("emits <whats_new> with the announcement even without a prevDiskSnapshot", () => {
 		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		game = advanceRound(game);
 		game = appendBroadcast(game, "The weather has changed to heavy fog.");
@@ -2478,7 +2538,7 @@ describe("<whats_new> broadcast announcements", () => {
 		);
 	});
 
-	it("does not emit <whats_new> when there are no broadcasts and no prevConeSnapshot", () => {
+	it("does not emit <whats_new> when there are no broadcasts and no prevDiskSnapshot", () => {
 		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
 			budgetPerAi: 5,
 		});
@@ -2625,7 +2685,8 @@ describe("postLookFlavor swap covers satisfied interesting_object", () => {
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
-		expect(stateMsg).toContain("Directly in front:");
+		// switch is at (1,0), one step south of red at (0,0).
+		expect(stateMsg).toContain("- One step south:");
 		expect(stateMsg).toContain("a steady amber glow lingers near the switch");
 	});
 
@@ -2642,22 +2703,191 @@ describe("postLookFlavor swap covers satisfied interesting_object", () => {
 		);
 	});
 
-	it("postLookFlavor also appears in buildConeSnapshot for satisfied interesting_object", () => {
+	it("postLookFlavor also appears in buildDiskSnapshot for satisfied interesting_object", () => {
 		const pack = buildPackWithSatisfiedItem({ withPostLook: true });
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
-		const snapshot = buildConeSnapshot(ctx);
+		const snapshot = buildDiskSnapshot(ctx);
 		expect(snapshot).toContain("a steady amber glow lingers near the switch");
 	});
 });
 
 // ----------------------------------------------------------------------------
-// <whats_new> wall diff (issue #374)
-// When a daemon turns toward or away from a wall, the wall entry appears as
-// a + / - diff line in <whats_new>. Uses buildConeSnapshot + renderWhatsNew.
+// Vista perception changes (ADR 0015): an unchanged Vista emits no diff at all,
+// while real entity/content changes stay observable.
+// ----------------------------------------------------------------------------
+describe("<whats_new> — Vista perception changes", () => {
+	function vistaGame(entities: WorldEntity[]) {
+		return startGame(
+			TEST_PERSONAS,
+			makeTestPack(entities, { wallName: "wall", aiStarts: RGC_AI_STARTS }),
+			{ budgetPerAi: 5 },
+		);
+	}
+
+	it("emits no <whats_new> diff when the Vista is unchanged", () => {
+		const game = vistaGame([
+			makeEntity("flower", "interesting_object", { row: 1, col: 0 }),
+		]);
+		const first = buildAiContext(game, "red");
+		const snapshot = buildDiskSnapshot(first);
+
+		// Same position, same world → byte-identical snapshot.
+		const next = buildAiContext(game, "red", { prevDiskSnapshot: snapshot });
+		expect(buildDiskSnapshot(next)).toBe(snapshot);
+
+		const stateMsg = next.toCurrentStateUserMessage();
+		// No entry/exit diff, no "(no change)" placeholder, no re-printed listing.
+		expect(stateMsg).not.toContain("<whats_new>");
+		expect(stateMsg).not.toContain("(no change)");
+		expect(stateMsg).not.toContain("+ at ");
+		// The fresh listing is still there — it is simply not a diff.
+		expect(stateMsg).toContain("<what_you_see>");
+		expect(stateMsg).toContain("- One step south: flower");
+	});
+
+	it("still emits the entry diff when an entity moves into the Vista", () => {
+		// flower starts far outside red's Vista: offset (3, 3) → 9 + 9 > 4.
+		const game = vistaGame([
+			makeEntity("flower", "interesting_object", { row: 3, col: 3 }),
+		]);
+		const snapshot = buildDiskSnapshot(buildAiContext(game, "red"));
+
+		// Move it to (1,0) — one step south of red.
+		const moved = {
+			...game,
+			world: {
+				entities: game.world.entities.map((e) =>
+					e.id === "flower" ? { ...e, holder: { row: 1, col: 0 } } : e,
+				),
+			},
+		};
+		const next = buildAiContext(moved, "red", { prevDiskSnapshot: snapshot });
+		const stateMsg = next.toCurrentStateUserMessage();
+		expect(stateMsg).toContain("<whats_new>");
+		expect(stateMsg).toContain("+ at one step south: flower");
+	});
+
+	it("still emits a satisfaction/content change for an entity already in the Vista", () => {
+		const item: WorldEntity = {
+			id: "switch",
+			kind: "interesting_object",
+			name: "brass switch",
+			examineDescription: "A small brass switch ready to be pressed.",
+			postExamineDescription: "The switch sits pressed and humming.",
+			postLookFlavor: "a steady amber glow lingers near the switch",
+			holder: { row: 1, col: 0 },
+			satisfactionState: "pending",
+		};
+		const game = vistaGame([item]);
+		const snapshot = buildDiskSnapshot(buildAiContext(game, "red"));
+
+		const satisfied = {
+			...game,
+			world: {
+				entities: game.world.entities.map((e) =>
+					e.id === "switch"
+						? { ...e, satisfactionState: "satisfied" as const }
+						: e,
+				),
+			},
+		};
+		const next = buildAiContext(satisfied, "red", {
+			prevDiskSnapshot: snapshot,
+			prevDiskEntities: { switch: { inVista: true, satisfied: false } },
+		});
+		const stateMsg = next.toCurrentStateUserMessage();
+		expect(stateMsg).toContain("<whats_new>");
+		expect(stateMsg).toContain(
+			"brass switch is now The switch sits pressed and humming.",
+		);
+		expect(stateMsg).toContain(
+			"+ at one step south: brass switch a steady amber glow lingers near the switch",
+		);
+	});
+});
+
+// ----------------------------------------------------------------------------
+// Peer-position prose (ADR 0015): cardinal direction and distance from the
+// observer's position, built from position alone.
+// ----------------------------------------------------------------------------
+describe("peer-position prose", () => {
+	it("describes the ADR's worked example from positions alone", () => {
+		// One step north and one step east of the observer.
+		expect(
+			describeRelativePosition({ row: 2, col: 2 }, { row: 1, col: 3 }),
+		).toBe("one step north and one step east of you");
+		expect(
+			describeRelativePosition({ row: 2, col: 2 }, { row: 4, col: 2 }),
+		).toBe("two steps south of you");
+		expect(
+			describeRelativePosition({ row: 2, col: 2 }, { row: 2, col: 2 }),
+		).toBe("in your cell");
+	});
+
+	it("does not vary with the peer's or the observer's stored facing", () => {
+		const facings = ["north", "east", "south", "west"] as const;
+		function peerProse(observerFacing: (typeof facings)[number]) {
+			const pack = makeTestPack([], {
+				wallName: "wall",
+				aiStarts: {
+					red: {
+						position: { row: 2, col: 2 },
+						facing: observerFacing,
+					},
+					green: { position: { row: 1, col: 3 }, facing: "south" },
+					cyan: { position: { row: 4, col: 2 }, facing: "west" },
+				},
+			});
+			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
+			return stateMsg
+				.split("\n")
+				.filter((line) => line.includes("the Daemon *"))
+				.join("\n");
+		}
+
+		const baseline = peerProse("north");
+		expect(baseline).toContain(
+			"- One step north and one step east: the Daemon *green (#81b29a), one step north and one step east of you, holding nothing",
+		);
+		expect(baseline).toContain(
+			"- Two steps south: the Daemon *cyan (#5fa8d3), two steps south of you, holding nothing",
+		);
+		for (const facing of facings) {
+			expect(peerProse(facing)).toBe(baseline);
+		}
+
+		// The peer's own stored facing is likewise inert.
+		function peerProseWithGreenFacing(
+			greenFacing: (typeof facings)[number],
+		): string {
+			const pack = makeTestPack([], {
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 2, col: 2 }, facing: "north" },
+					green: { position: { row: 1, col: 3 }, facing: greenFacing },
+					cyan: { position: { row: 4, col: 2 }, facing: "west" },
+				},
+			});
+			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+			return buildAiContext(game, "red").toCurrentStateUserMessage();
+		}
+		for (const facing of facings) {
+			expect(peerProseWithGreenFacing(facing)).toBe(
+				peerProseWithGreenFacing("north"),
+			);
+		}
+	});
+});
+
+// ----------------------------------------------------------------------------
+// Moving a Daemon so that out-of-bounds cells enter or leave its Vista makes
+// the wall entry appear as a + / - diff line in <whats_new>. Turning changes
+// nothing: the Vista is position-only. Uses buildDiskSnapshot + renderWhatsNew.
 // ----------------------------------------------------------------------------
 describe("<whats_new> wall diff (issue #374)", () => {
-	/** Build a game with red at the given position and facing. */
+	/** Build a game with red at the given position. */
 	function makeWallGame(opts: {
 		position: { row: number; col: number };
 		facing: "north" | "south" | "east" | "west";
@@ -2675,66 +2905,67 @@ describe("<whats_new> wall diff (issue #374)", () => {
 		return startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 	}
 
-	it("turning toward a wall produces + lines in <whats_new>", () => {
-		// prev: red at (0,0) facing east (cone goes right — hits east wall, no north wall)
-		// curr: red at (0,0) facing north (cone goes up — all OOB)
+	it("moving so that a new cell of the disk falls out of bounds produces + lines in <whats_new>", () => {
+		// prev: red at (2,2) — the whole disk is inside the room, no walls.
+		// curr: red at (1,0) — the west column and the far north cell now fall
+		// outside, so those wall lines are added.
 		const prevGame = makeWallGame({
-			position: { row: 0, col: 0 },
+			position: { row: 2, col: 2 },
 			facing: "east",
 		});
 		const currGame = makeWallGame({
-			position: { row: 0, col: 0 },
-			facing: "north",
+			position: { row: 1, col: 0 },
+			facing: "east",
 		});
 
-		const prevCtx = buildAiContext(prevGame, "red");
-		const currCtx = buildAiContext(currGame, "red");
+		const prev = buildDiskSnapshot(buildAiContext(prevGame, "red"));
+		const curr = buildDiskSnapshot(buildAiContext(currGame, "red"));
 
-		const prev = buildConeSnapshot(prevCtx);
-		const curr = buildConeSnapshot(currCtx);
-
-		// The snapshots must differ (east vs north cone)
+		// The snapshots must differ (one disk has walls, the other does not)
 		expect(prev).not.toBe(curr);
 
 		const diff = renderWhatsNew(prev, curr);
 		expect(diff).not.toBeNull();
-		// North cone from (0,0) has all walls — "directly in front" line should appear as added
-		expect(diff).toContain("+ at directly in front: concrete platform wall");
+		expect(diff).toContain("+ at two steps west: concrete platform wall");
+		expect(diff).toContain("+ at two steps north: concrete platform wall");
 	});
 
-	it("turning away from a wall produces - lines in <whats_new>", () => {
-		// prev: red at (0,0) facing north (all walls)
-		// curr: red at (0,0) facing south (cone goes down — in-bounds)
+	it("moving away from the edge produces - lines in <whats_new>", () => {
+		// prev: red at (1,0) — the west column and far north cell are OOB.
+		// curr: red at (2,2) — the whole disk is in bounds.
 		const prevGame = makeWallGame({
-			position: { row: 0, col: 0 },
+			position: { row: 1, col: 0 },
 			facing: "north",
 		});
 		const currGame = makeWallGame({
-			position: { row: 0, col: 0 },
-			facing: "south",
+			position: { row: 2, col: 2 },
+			facing: "north",
 		});
 
-		const prevCtx = buildAiContext(prevGame, "red");
-		const currCtx = buildAiContext(currGame, "red");
-
-		const prev = buildConeSnapshot(prevCtx);
-		const curr = buildConeSnapshot(currCtx);
+		const prev = buildDiskSnapshot(buildAiContext(prevGame, "red"));
+		const curr = buildDiskSnapshot(buildAiContext(currGame, "red"));
 
 		const diff = renderWhatsNew(prev, curr);
 		expect(diff).not.toBeNull();
-		// "directly in front" was a wall in north cone, now it's in-bounds in south cone → removed
-		expect(diff).toContain("- at directly in front: concrete platform wall");
+		expect(diff).toContain("- at two steps west: concrete platform wall");
+		expect(diff).toContain("- at two steps north: concrete platform wall");
 	});
 
-	it("identical snapshots at the wall → renderWhatsNew returns null", () => {
-		// Same position and facing → cone snapshot is byte-identical
-		const game = makeWallGame({
+	it("turning in place changes nothing — identical snapshots → renderWhatsNew returns null", () => {
+		// The Vista depends on position only, so two stored facings at the same
+		// cell produce byte-identical snapshots.
+		const northGame = makeWallGame({
 			position: { row: 0, col: 0 },
 			facing: "north",
 		});
-		const ctx = buildAiContext(game, "red");
-		const snap = buildConeSnapshot(ctx);
-		expect(renderWhatsNew(snap, snap)).toBeNull();
+		const eastGame = makeWallGame({
+			position: { row: 0, col: 0 },
+			facing: "east",
+		});
+		const northSnap = buildDiskSnapshot(buildAiContext(northGame, "red"));
+		const eastSnap = buildDiskSnapshot(buildAiContext(eastGame, "red"));
+		expect(northSnap).toBe(eastSnap);
+		expect(renderWhatsNew(northSnap, eastSnap)).toBeNull();
 	});
 
 	it("wallName comes from ContentPack.wallName, not hardcoded", () => {
@@ -2744,25 +2975,25 @@ describe("<whats_new> wall diff (issue #374)", () => {
 			wallName: "laboratory bulkhead",
 		});
 		const ctx = buildAiContext(game, "red");
-		const snap = buildConeSnapshot(ctx);
+		const snap = buildDiskSnapshot(ctx);
 		expect(snap).toContain("laboratory bulkhead");
 		expect(snap).not.toContain("concrete platform wall");
 	});
 });
 
 // ============================================================================
-// buildConeEntityState and renderPerceptionDelta tests (issue #469)
+// buildDiskEntityState and renderPerceptionDelta tests (issue #469)
 // ============================================================================
 
-describe("buildConeEntityState", () => {
-	it("returns item in cone with unsatisfied state when at a cone cell", () => {
-		// red at (0,0) facing south; item at (1,0) is directly in front
+describe("buildDiskEntityState", () => {
+	it("returns item in the Vista with unsatisfied state when at a Vista cell", () => {
+		// red at (0,0); item at (1,0) is one step south
 		const pack = makeTestPack(
 			[
 				{
-					id: "item-cone",
+					id: "item-vista",
 					kind: "interesting_object",
-					name: "Item in cone",
+					name: "Item in Vista",
 					examineDescription: "An item",
 					holder: { row: 1, col: 0 },
 				},
@@ -2778,8 +3009,8 @@ describe("buildConeEntityState", () => {
 		);
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
-		const state = buildConeEntityState(ctx);
-		expect(state["item-cone"]).toEqual({ inCone: true, satisfied: false });
+		const state = buildDiskEntityState(ctx);
+		expect(state["item-vista"]).toEqual({ inVista: true, satisfied: false });
 	});
 
 	it("returns item with satisfied state when satisfaction state is satisfied", () => {
@@ -2806,8 +3037,8 @@ describe("buildConeEntityState", () => {
 		);
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
-		const state = buildConeEntityState(ctx);
-		expect(state["satisfied-item"]).toEqual({ inCone: true, satisfied: true });
+		const state = buildDiskEntityState(ctx);
+		expect(state["satisfied-item"]).toEqual({ inVista: true, satisfied: true });
 	});
 
 	it("excludes items held by the actor", () => {
@@ -2832,11 +3063,11 @@ describe("buildConeEntityState", () => {
 		);
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
-		const state = buildConeEntityState(ctx);
+		const state = buildDiskEntityState(ctx);
 		expect(state["held-item"]).toBeUndefined();
 	});
 
-	it("excludes items beyond the cone", () => {
+	it("excludes items beyond the Vista", () => {
 		// red at (0,0) facing south; place item far away
 		const pack = makeTestPack(
 			[
@@ -2859,12 +3090,12 @@ describe("buildConeEntityState", () => {
 		);
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
-		const state = buildConeEntityState(ctx);
+		const state = buildDiskEntityState(ctx);
 		expect(state["far-item"]).toBeUndefined();
 	});
 
-	it("includes other personas in the cone", () => {
-		// red at (0,0) facing south, green at (1,0) — green is directly in front
+	it("includes other personas in the Vista", () => {
+		// red at (0,0), green at (1,0) — green is one step south
 		const pack = makeTestPack([], {
 			wallName: "wall",
 			aiStarts: {
@@ -2875,11 +3106,11 @@ describe("buildConeEntityState", () => {
 		});
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
-		const state = buildConeEntityState(ctx);
-		expect(state.green).toEqual({ inCone: true, satisfied: false });
+		const state = buildDiskEntityState(ctx);
+		expect(state.green).toEqual({ inVista: true, satisfied: false });
 	});
 
-	it("includes objective spaces in the cone", () => {
+	it("includes objective spaces in the Vista", () => {
 		const pack = makeTestPack(
 			[
 				{
@@ -2901,8 +3132,8 @@ describe("buildConeEntityState", () => {
 		);
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
-		const state = buildConeEntityState(ctx);
-		expect(state.flower_space).toEqual({ inCone: true, satisfied: false });
+		const state = buildDiskEntityState(ctx);
+		expect(state.flower_space).toEqual({ inVista: true, satisfied: false });
 	});
 });
 
@@ -2922,7 +3153,7 @@ describe("renderPerceptionDelta", () => {
 		expect(delta).toEqual([]);
 	});
 
-	it("emits 'Came into view' when entity enters cone", () => {
+	it("emits 'Came into view' when entity enters the Vista", () => {
 		const pack = makeTestPack(
 			[
 				{
@@ -2978,7 +3209,7 @@ describe("renderPerceptionDelta", () => {
 		);
 	});
 
-	it("emits 'Lost from view' when entity leaves cone", () => {
+	it("emits 'Lost from view' when entity leaves the Vista", () => {
 		const pack = makeTestPack(
 			[
 				{
@@ -2986,7 +3217,8 @@ describe("renderPerceptionDelta", () => {
 					kind: "interesting_object",
 					name: "Vanishing Item",
 					examineDescription: "It fades.",
-					holder: { row: 1, col: 0 },
+					// offset (dx 1, dy −2) from red at (0,0): 1 + 4 > 4, outside the Vista
+					holder: { row: 2, col: 1 },
 				},
 			],
 			{
@@ -3000,9 +3232,9 @@ describe("renderPerceptionDelta", () => {
 		);
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
-		// Item was in cone before (when red was facing south)
+		// The item was inside the Vista on the previous turn.
 		const prevEntities = {
-			"departing-item": { inCone: true, satisfied: false },
+			"departing-item": { inVista: true, satisfied: false },
 		};
 		const delta = renderPerceptionDelta(ctx, prevEntities);
 		expect(delta).toContain("Lost from view: Vanishing Item");
@@ -3017,7 +3249,7 @@ describe("renderPerceptionDelta", () => {
 					name: "Awakening Stone",
 					examineDescription: "Dormant",
 					postExamineDescription: "Radiant",
-					holder: { row: 1, col: 0 }, // Directly in front (facing south)
+					holder: { row: 1, col: 0 }, // one step south of red
 					satisfactionState: "satisfied" as const,
 				},
 			],
@@ -3032,15 +3264,15 @@ describe("renderPerceptionDelta", () => {
 		);
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
-		// Item was in cone but not satisfied before
+		// Item was in the Vista but not satisfied before
 		const prevEntities = {
-			"became-satisfied": { inCone: true, satisfied: false },
+			"became-satisfied": { inVista: true, satisfied: false },
 		};
 		const delta = renderPerceptionDelta(ctx, prevEntities);
 		expect(delta).toContain("Awakening Stone is now Radiant");
 	});
 
-	it("does not emit line when entity stays in cone unchanged", () => {
+	it("does not emit line when entity stays in the Vista unchanged", () => {
 		const pack = makeTestPack(
 			[
 				{
@@ -3048,7 +3280,7 @@ describe("renderPerceptionDelta", () => {
 					kind: "interesting_object",
 					name: "Static Item",
 					examineDescription: "Unmoved",
-					holder: { row: 1, col: 0 }, // Directly in front of red (facing south)
+					holder: { row: 1, col: 0 }, // one step south of red
 				},
 			],
 			{
@@ -3062,7 +3294,12 @@ describe("renderPerceptionDelta", () => {
 		);
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
-		const prevEntities = { "static-item": { inCone: true, satisfied: false } };
+		// Every perceived entity was already in the Vista last turn.
+		const prevEntities = {
+			"static-item": { inVista: true, satisfied: false },
+			green: { inVista: true, satisfied: false },
+			cyan: { inVista: true, satisfied: false },
+		};
 		const delta = renderPerceptionDelta(ctx, prevEntities);
 		expect(delta).toHaveLength(0);
 	});
@@ -3089,45 +3326,49 @@ describe("renderPerceptionDelta", () => {
 		);
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
-		// Item was in cone before (at a grid position)
-		const prevEntities = { "picked-up": { inCone: true, satisfied: false } };
+		// The item was in the Vista last turn; it is now held, so no departure.
+		const prevEntities = {
+			"picked-up": { inVista: true, satisfied: false },
+			green: { inVista: true, satisfied: false },
+			cyan: { inVista: true, satisfied: false },
+		};
 		const delta = renderPerceptionDelta(ctx, prevEntities);
 		expect(delta).toHaveLength(0); // No departure line
 	});
 
 	it("emits persona first-sight with name only, no flavor", () => {
-		// green at (1,0), visible to red at (0,0) facing south (directly in front)
+		// green at (1,0) is inside red's Vista (one step south)
 		const pack = makeTestPack([], {
 			wallName: "wall",
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "south" },
 				green: { position: { row: 1, col: 0 }, facing: "north" },
-				cyan: { position: { row: 0, col: 2 }, facing: "north" },
+				cyan: { position: { row: 2, col: 1 }, facing: "north" },
 			},
 		});
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
-		const prevEntities = {}; // green was not in cone before
+		const prevEntities = {}; // green was not in the Vista before
 		const delta = renderPerceptionDelta(ctx, prevEntities);
 		const greenLine = delta.find((line) => line.includes("Sage"));
 		expect(greenLine).toBe("Came into view: Sage");
 	});
 
 	it("emits persona departure with name only, no flavor", () => {
-		// green at (1,0), not visible to red at (0,0) facing north
-		// But prevEntities says green WAS in cone before
+		// green at (2,1): offset (dx 1, dy −2) from red at (0,0) — outside the Vista.
+		// But prevEntities says green WAS in the Vista before.
 		const pack = makeTestPack([], {
 			wallName: "wall",
 			aiStarts: {
 				red: { position: { row: 0, col: 0 }, facing: "north" },
-				green: { position: { row: 1, col: 0 }, facing: "north" },
+				green: { position: { row: 2, col: 1 }, facing: "north" },
 				cyan: { position: { row: 0, col: 2 }, facing: "north" },
 			},
 		});
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
-		// Green was in cone before (when red was facing south)
-		const prevEntities = { green: { inCone: true, satisfied: false } };
+		// Green was in the Vista last turn.
+		const prevEntities = { green: { inVista: true, satisfied: false } };
 		const delta = renderPerceptionDelta(ctx, prevEntities);
 		const greenLine = delta.find((line) => line.includes("Sage"));
 		expect(greenLine).toBe("Lost from view: Sage");
@@ -3157,10 +3398,10 @@ describe("renderPerceptionDelta", () => {
 		);
 		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const ctx = buildAiContext(game, "red");
-		// Gem and green were both in cone before, gem unsatisfied
+		// Gem and green were both in the Vista before, gem unsatisfied
 		const prevEntities = {
-			gem: { inCone: true, satisfied: false },
-			green: { inCone: true, satisfied: false },
+			gem: { inVista: true, satisfied: false },
+			green: { inVista: true, satisfied: false },
 		};
 		const delta = renderPerceptionDelta(ctx, prevEntities);
 		// Should emit only transition line for gem, not "Came into view" (to avoid duplication)

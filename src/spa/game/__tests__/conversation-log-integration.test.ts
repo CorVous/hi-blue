@@ -89,10 +89,9 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
  *   - green at (0,0) facing south
  *   - cyan at (0,2) facing south
  *
- * Note: green's southward 9-cell cone from (0,0):
- *   own: (0,0)
- *   dist-1: (1,1), (1,0), (1,-1 OOB)
- *   dist-2: (2,2), (2,1), (2,0), (2,-1 OOB), (2,-2 OOB)
+ * Note: the Vista is the position-only 13-cell radius-2 disk from (0,0) —
+ * own cell, the four adjacent diagonals, and the four cardinal cells two steps
+ * away — with out-of-bounds cells perceived as Walls. Stored facings are inert.
  */
 const TEST_CONTENT_PACK = makeTestPack(
 	[
@@ -547,7 +546,7 @@ describe("conversation log integration — multi-round chronological order", () 
 		expect(round0Idx).toBeLessThan(round1Idx);
 
 		// Verify green's role turns include the witnessed pick_up in round 1.
-		// green at (0,0) facing south: two steps ahead is (2,0) — red's position.
+		// green at (0,0): (2,0) is two steps south — red's position, inside green's Vista.
 		// Witnessed events keep the rich "[Round N] You watch *X do Y." form
 		// since that's how renderEntry formats them.
 		const greenCtx = buildAiContext(state2, "green");

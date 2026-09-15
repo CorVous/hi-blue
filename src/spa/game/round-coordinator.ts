@@ -39,8 +39,8 @@ import {
 import { buildOpenAiMessages } from "./openai-message-builder";
 import {
 	buildAiContext,
-	buildConeEntityState,
-	buildConeSnapshot,
+	buildDiskEntityState,
+	buildDiskSnapshot,
 	renderPerceptionDelta,
 } from "./prompt-builder";
 import type {
@@ -95,19 +95,19 @@ export interface RunRoundResult {
 	 */
 	toolRoundtrip: Partial<Record<AiId, ToolRoundtripMessage>>;
 	/**
-	 * Per-AI canonical cone snapshot captured at the moment that AI's prompt
-	 * was built this round. The caller should persist this and pass it back as
-	 * `priorConeSnapshots` on the next runRound call so each AI's next prompt
-	 * can include a `<whats_new>` diff against its own last view.
+	 * Per-AI canonical perception-disk snapshot captured at the moment that AI's
+	 * prompt was built this round. The caller should persist this and pass it
+	 * back as `priorDiskSnapshots` on the next runRound call so each AI's next
+	 * prompt can include a `<whats_new>` diff against its own last view.
 	 */
-	coneSnapshots: Partial<Record<AiId, string>>;
+	diskSnapshots: Partial<Record<AiId, string>>;
 	/**
 	 * Per-AI structured entity perception state captured at prompt-build time this round.
-	 * The caller should persist this and pass it back as `priorConeEntities` on the next
+	 * The caller should persist this and pass it back as `priorDiskEntities` on the next
 	 * runRound call so each AI's next prompt can emit perception-delta lines.
 	 */
-	coneEntities: Partial<
-		Record<AiId, Record<string, { inCone: boolean; satisfied: boolean }>>
+	diskEntities: Partial<
+		Record<AiId, Record<string, { inVista: boolean; satisfied: boolean }>>
 	>;
 }
 
@@ -128,9 +128,9 @@ export interface RunRoundOptions {
 	 *  loop for each text chunk. Never fires for locked-out AIs or mock
 	 *  providers that ignore onDelta. */
 	onAiDelta?: ((aiId: AiId, text: string) => void) | undefined;
-	/** Per-AI canonical cone snapshots from the previous round, used to emit
+	/** Per-AI perception-disk snapshots from the previous round, used to emit
 	 *  a `<whats_new>` diff in each AI's per-round user message. */
-	priorConeSnapshots?: Partial<Record<AiId, string>> | undefined;
+	priorDiskSnapshots?: Partial<Record<AiId, string>> | undefined;
 	/** Per-AI "turn finished" callback. Fires exactly once per AI in
 	 *  initiative order, after any drift-to-silence retry (#254) and after
 	 *  dispatch. Fires for locked-out AIs too. */
@@ -139,9 +139,9 @@ export interface RunRoundOptions {
 	onLifecycle?: ((event: LifecyclePhase) => void) | undefined;
 	/** Per-AI structured entity perception state from the previous round, used
 	 *  to emit perception-delta lines in each AI's per-round user message. */
-	priorConeEntities?:
+	priorDiskEntities?:
 		| Partial<
-				Record<AiId, Record<string, { inCone: boolean; satisfied: boolean }>>
+				Record<AiId, Record<string, { inVista: boolean; satisfied: boolean }>>
 		  >
 		| undefined;
 }
@@ -168,10 +168,10 @@ export async function runRound(
 		priorToolRoundtrip,
 		completionSink,
 		onAiDelta,
-		priorConeSnapshots,
+		priorDiskSnapshots,
 		onAiTurnComplete,
 		onLifecycle,
-		priorConeEntities,
+		priorDiskEntities,
 	} = options;
 
 	const aiOrder = Object.keys(game.personas);
@@ -200,14 +200,16 @@ export async function runRound(
 	// Track tool roundtrip produced this round (to be returned to caller)
 	const newToolRoundtrip: Partial<Record<AiId, ToolRoundtripMessage>> = {};
 
-	// Track cone snapshots captured at prompt-build time this round (returned
-	// to caller so the next round's prompt can render a `<whats_new>` diff).
-	const newConeSnapshots: Partial<Record<AiId, string>> = {};
+	// Track perception-disk snapshots captured at prompt-build time this round
+	// (returned to caller so the next round's prompt can render a `<whats_new>`
+	// diff).
+	const newDiskSnapshots: Partial<Record<AiId, string>> = {};
 
-	// Track cone entity states captured at prompt-build time this round (returned
-	// to caller so the next round's prompt can emit perception-delta lines).
-	const newConeEntities: Partial<
-		Record<AiId, Record<string, { inCone: boolean; satisfied: boolean }>>
+	// Track entity perception states captured at prompt-build time this round
+	// (returned to caller so the next round's prompt can emit perception-delta
+	// lines).
+	const newDiskEntities: Partial<
+		Record<AiId, Record<string, { inVista: boolean; satisfied: boolean }>>
 	> = {};
 
 	// 2. Each AI acts in turn
@@ -228,23 +230,23 @@ export async function runRound(
 			continue;
 		}
 
-		// Build OpenAI messages for this AI. Pass the prior-round cone snapshot
-		// so the per-round user turn can prepend a `<whats_new>` diff, and prior
-		// cone entities so it can emit perception-delta lines.
-		const priorSnapshot = priorConeSnapshots?.[aiId];
-		const priorEntities = priorConeEntities?.[aiId];
+		// Build OpenAI messages for this AI. Pass the prior-round perception-disk
+		// snapshot so the per-round user turn can prepend a `<whats_new>` diff, and
+		// prior entity perception states so it can emit perception-delta lines.
+		const priorSnapshot = priorDiskSnapshots?.[aiId];
+		const priorEntities = priorDiskEntities?.[aiId];
 		const ctx = buildAiContext(state, aiId, {
 			...(priorSnapshot !== undefined
-				? { prevConeSnapshot: priorSnapshot }
+				? { prevDiskSnapshot: priorSnapshot }
 				: {}),
 			...(priorEntities !== undefined
-				? { prevConeEntities: priorEntities }
+				? { prevDiskEntities: priorEntities }
 				: {}),
 		});
 		// Capture the snapshots we just built against — the caller stores these
 		// and passes them back next round.
-		newConeSnapshots[aiId] = buildConeSnapshot(ctx);
-		newConeEntities[aiId] = buildConeEntityState(ctx);
+		newDiskSnapshots[aiId] = buildDiskSnapshot(ctx);
+		newDiskEntities[aiId] = buildDiskEntityState(ctx);
 		const priorRoundtrip = priorToolRoundtrip?.[aiId];
 		const messages = buildOpenAiMessages(ctx, priorRoundtrip, state.round);
 
@@ -447,7 +449,7 @@ export async function runRound(
 				? dispatchResult.records[messageRecordCount]
 				: undefined;
 
-		// Compute perception-delta lines to merge into coneDelta for the first action tool call
+		// Compute perception-delta lines to merge into diskDelta for the first action tool call
 		const perceptionDeltaLines = renderPerceptionDelta(ctx, priorEntities);
 
 		// Now walk pending in emission order and build the roundtrip.
@@ -471,7 +473,7 @@ export async function runRound(
 			entry: (typeof pending)[number],
 			success: boolean,
 			description: string,
-			coneDelta?: string,
+			diskDelta?: string,
 		) {
 			const toolCallEntry: ConversationEntry = {
 				kind: "tool-call",
@@ -482,7 +484,7 @@ export async function runRound(
 				toolName: entry.tc.name,
 				result: description,
 				success,
-				...(coneDelta !== undefined ? { coneDelta } : {}),
+				...(diskDelta !== undefined ? { diskDelta } : {}),
 			};
 			state = {
 				...state,
@@ -546,16 +548,16 @@ export async function runRound(
 						success,
 						description,
 					});
-					// Merge perception-delta lines into the action tool call's coneDelta
-					let coneDelta = dispatchResult.actorConeDelta;
+					// Merge perception-delta lines into the action tool call's diskDelta
+					let diskDelta = dispatchResult.actorDiskDelta;
 					if (!perceptionDeltaMerged && perceptionDeltaLines.length > 0) {
 						const perceptionDeltaText = perceptionDeltaLines.join("\n");
-						coneDelta = coneDelta
-							? `${coneDelta}\n${perceptionDeltaText}`
+						diskDelta = diskDelta
+							? `${diskDelta}\n${perceptionDeltaText}`
 							: perceptionDeltaText;
 						perceptionDeltaMerged = true;
 					}
-					appendToolCallEntry(entry, success, description, coneDelta);
+					appendToolCallEntry(entry, success, description, diskDelta);
 				}
 			}
 		}
@@ -823,7 +825,7 @@ export async function runRound(
 		nextState: state,
 		result,
 		toolRoundtrip: newToolRoundtrip,
-		coneSnapshots: newConeSnapshots,
-		coneEntities: newConeEntities,
+		diskSnapshots: newDiskSnapshots,
+		diskEntities: newDiskEntities,
 	};
 }

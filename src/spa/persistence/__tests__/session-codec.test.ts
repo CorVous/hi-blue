@@ -371,7 +371,7 @@ describe("serializeSession / deserializeSession", () => {
 		}
 	});
 
-	it("round-trips tool-call entries with coneDelta (#376)", () => {
+	it("round-trips tool-call entries with diskDelta (#376)", () => {
 		const game = makeFreshGame();
 		const toolCallWithDelta: ConversationEntry = {
 			kind: "tool-call",
@@ -382,7 +382,7 @@ describe("serializeSession / deserializeSession", () => {
 			toolName: "go",
 			result: "Ember walks north.",
 			success: true,
-			coneDelta: "+ at directly in front, right: *green",
+			diskDelta: "+ at one step north and one step east: *green",
 		};
 		const modified: GameState = {
 			...game,
@@ -396,7 +396,7 @@ describe("serializeSession / deserializeSession", () => {
 		}
 	});
 
-	it("loads pre-#376 tool-call entries (no coneDelta field) cleanly", () => {
+	it("loads pre-#376 tool-call entries (no diskDelta field) cleanly", () => {
 		const game = makeFreshGame();
 		const legacyToolCall: ConversationEntry = {
 			kind: "tool-call",
@@ -419,7 +419,7 @@ describe("serializeSession / deserializeSession", () => {
 			const loaded = result.state.conversationLogs.red?.[0];
 			expect(loaded).toEqual(legacyToolCall);
 			if (loaded?.kind === "tool-call") {
-				expect(loaded.coneDelta).toBeUndefined();
+				expect(loaded.diskDelta).toBeUndefined();
 			}
 		}
 	});

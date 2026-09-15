@@ -6,7 +6,7 @@
  * (sort by round, then render each entry) — keeping the sort+render assertion
  * close to the rendering tests it accompanies.
  *
- * Cone visibility is resolved at write-time (ADR 0006) — these tests
+ * Vista membership is resolved at write-time (ADR 0006) — these tests
  * operate on pre-filtered ConversationEntry[] arrays, just like the
  * dispatcher provides after its write-time fan-out.
  */
@@ -223,7 +223,7 @@ describe("renderEntry — action-failure", () => {
 
 describe("renderEntry — witnessed go", () => {
 	it("renders 'You watch *actor walk <dir>'", () => {
-		// Cone check is write-time: this entry already passed cone check.
+		// Vista check is write-time: this entry already passed census.
 		const line = renderEntry(
 			{
 				kind: "witnessed-event",
@@ -236,6 +236,41 @@ describe("renderEntry — witnessed go", () => {
 			[],
 		);
 		expect(line).toBe("[Round 0] You watch *red walk south.");
+	});
+
+	it("pins the step as a cardinal direction, never a facing-relative one", () => {
+		const relativeWords = ["forward", "back", "left", "right"];
+		for (const direction of ["north", "south", "east", "west"] as const) {
+			const line = renderEntry(
+				{
+					kind: "witnessed-event",
+					round: 3,
+					actor: "cyan",
+					actionKind: "go",
+					direction,
+				},
+				"green",
+				[],
+			);
+			expect(line).toBe(`[Round 3] You watch *cyan walk ${direction}.`);
+			for (const relative of relativeWords) {
+				expect(line).not.toContain(relative);
+			}
+		}
+	});
+
+	it("falls back to a directionless line when a legacy entry carries no direction", () => {
+		const line = renderEntry(
+			{
+				kind: "witnessed-event",
+				round: 2,
+				actor: "red",
+				actionKind: "go",
+			},
+			"green",
+			[],
+		);
+		expect(line).toBe("[Round 2] You watch *red move.");
 	});
 });
 

@@ -86,11 +86,11 @@ const TEST_CONTENT_PACK = makeTestPack(
 		// The obstacle origin is (2, 2). Vista membership is position-only.
 		// red at (2, 1) is one cell west → inside the Vista.
 		// green at (1, 4) is offset (2, 1) from the origin (4 + 1 = 5 > 4) → outside.
-		// cyan at (6, 6) is far away → outside.
+		// cyan at (4, 0) is offset (2, 2) from the origin (2² + 2² = 8 > 4) → outside.
 		aiStarts: {
 			red: { position: { row: 2, col: 1 }, facing: "east" },
 			green: { position: { row: 1, col: 4 }, facing: "west" },
-			cyan: { position: { row: 6, col: 6 }, facing: "north" },
+			cyan: { position: { row: 4, col: 0 }, facing: "north" },
 		},
 	},
 );
@@ -241,7 +241,7 @@ describe("runRound — obstacle_shift complication (issue #486)", () => {
 
 	it("does NOT append witnessed-obstacle-shift entry to a daemon whose Vista does NOT contain fromCell", async () => {
 		const game = makeBaseGame();
-		// cyan is at (6, 6) — far outside the Vista around (2, 2).
+		// cyan is at (4, 0) — offset (2, 2) from (2, 2), outside the Vista.
 		const withCountdown = {
 			...game,
 			complicationSchedule: { ...game.complicationSchedule, countdown: 0 },

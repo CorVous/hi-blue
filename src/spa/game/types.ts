@@ -130,8 +130,8 @@ export interface ContentPack {
 	/**
 	 * Setting-flavored 2-4 word name for the impassable grid edge
 	 * (e.g. "subway tunnel wall", "salt-encrusted edge", "laboratory bulkhead").
-	 * Rendered in `<what_you_see>` and `<whats_new>` when an out-of-bounds cone
-	 * cell falls inside the Daemon's cone. Paired across Pack A / Pack B for
+	 * Rendered in `<what_you_see>` and `<whats_new>` when an out-of-bounds cell
+	 * falls inside the Daemon's Vista. Paired across Pack A / Pack B for
 	 * Setting Shift.
 	 */
 	wallName: string;
@@ -240,18 +240,17 @@ export type RoundActionRecord = {
 };
 
 /**
- * A physical action that was observable by other AIs (via cone visibility).
- * Computed by the dispatcher at write time and consumed once to fan out witnessed-event
- * entries into per-Daemon conversationLogs; no longer stored on PhaseState.
- * Covers exactly the observable action tools: go, pick_up, put_down, use.
+ * A physical action that was observable by other AIs (via Vista membership of
+ * the actor's cell). Computed by the dispatcher at write time and consumed once
+ * to fan out witnessed-event entries into per-Daemon conversationLogs; no longer
+ * stored on PhaseState. Covers exactly the observable action tools: go, pick_up,
+ * put_down, use.
  */
 export interface PhysicalActionRecord {
 	round: number;
 	actor: AiId;
 	/** The actor's cell at the time the action resolved (post-move for "go"). */
 	actorCellAtAction: GridPosition;
-	/** The actor's facing at the time the action resolved. */
-	actorFacingAtAction: CardinalDirection;
 	/** The observable action kind. */
 	kind: "go" | "pick_up" | "put_down" | "use";
 	/** Item id (for pick_up, put_down, use). */
@@ -266,11 +265,11 @@ export interface PhysicalActionRecord {
 	 * triggers a pair match). Witnesses render this with {actor}→"*<actor>".
 	 */
 	placementFlavorRaw?: string;
-	/** Direction of movement (for go). */
+	/** Cardinal direction of the step (for go). */
 	direction?: CardinalDirection;
 	/**
 	 * Snapshot of every other AI's spatial state at the moment this action resolved.
-	 * Used to determine cone-visibility for witnesses without re-walking history.
+	 * Used to determine Vista membership for witnesses without re-walking history.
 	 */
 	witnessSpatial: Record<AiId, PersonaSpatialState>;
 }
@@ -288,21 +287,21 @@ export interface PhysicalActionRecord {
  *   Both sender's and recipient's per-Daemon logs receive the same entry. `"sysadmin"` is a
  *   special sender for privately-delivered system directives (not a real Daemon — has no log slot).
  * - `witnessed-event`: projects the render-relevant subset of PhysicalActionRecord for an action
- *   this Daemon observed inside its cone. The cone-snapshot fields (`actorCellAtAction`,
- *   `actorFacingAtAction`, `witnessSpatial`) are omitted — cone visibility is resolved at
- *   write-time (ADR 0006), not re-evaluated at read-time.
+ *   this Daemon observed inside its Vista. The snapshot fields (`actorCellAtAction`,
+ *   `witnessSpatial`) are omitted — Vista membership is resolved at write-time (ADR 0006), not
+ *   re-evaluated at read-time.
  * - `action-failure`: actor-only; persists across rounds; written by the dispatcher when an
  *   in-scope action tool is rejected. Surfaces the rejection reason directly to the actor so
  *   Daemons do not repeat the same failed action (e.g. walking into a wall) indefinitely.
  * - `broadcast`: sender-less system announcement appended to ALL three Daemon logs at once
  *   (e.g. a weather change complication). Has no `from` / `to` fields.
  * - `tool-call`: the actor's own tool call plus its result, re-injected into the next round's
- *   messages array per the OpenAI tool-use protocol. Carries an optional `coneDelta` capturing
+ *   messages array per the OpenAI tool-use protocol. Carries an optional `diskDelta` capturing
  *   new perception revealed by a `go`.
- * - `witnessed-obstacle-shift`: fanned out to Daemons whose cone covered the obstacle's origin
+ * - `witnessed-obstacle-shift`: fanned out to Daemons whose Vista contained the obstacle's origin
  *   cell when an obstacle_shift complication fired; carries the obstacle's `shiftFlavor`.
  * - `witnessed-convergence`: the tiered flavor line for a Convergence Objective space; `audience`
- *   distinguishes the actor (standing on the space) from a witness (cone covered it).
+ *   distinguishes the actor (standing on the space) from a witness (whose Vista contained it).
  */
 export type ConversationEntry =
 	| {
@@ -355,13 +354,16 @@ export type ConversationEntry =
 			/** Whether the tool call succeeded. */
 			success: boolean;
 			/**
-			 * For go actions that reveal new content in the actor's cone,
+			 * For go actions that reveal new content in the actor's Vista,
 			 * this field carries the renderWhatsNew output captured at write-time.
 			 * Used to enrich future-round prompts with the persisted perception.
 			 * Undefined for other tools, failed actions, or when the delta is empty.
-			 * (Issue #376: persist cone-delta on go tool-call log entries)
+			 * (Issue #376: persist the perception delta on go tool-call log
+			 * entries; the field was renamed to `diskDelta` in #539. The
+			 * persisted save-format boundary for that rename is a later chunk
+			 * of the cutover, not this one.)
 			 */
-			coneDelta?: string;
+			diskDelta?: string;
 	  }
 	| {
 			kind: "witnessed-obstacle-shift";
@@ -379,7 +381,7 @@ export type ConversationEntry =
 			flavor: string;
 			/**
 			 * "actor" — receiver was standing on the space; flavor is the first-person actor line.
-			 * "witness" — receiver's cone covered the space but they were NOT on it; flavor is the third-person witness line.
+			 * "witness" — the space was inside the receiver's Vista but they were NOT on it; flavor is the third-person witness line.
 			 * Optional for backward-compat with saves written before #336 (treat as "witness").
 			 */
 			audience?: "actor" | "witness";

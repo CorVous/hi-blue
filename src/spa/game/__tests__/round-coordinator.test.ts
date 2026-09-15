@@ -2909,8 +2909,8 @@ describe("complication countdown — coordinator integration", () => {
 
 	// ── sysadmin_directive dispatch ─────────────────────────────────────────────
 
-	// ── cone-delta persistence (issue #376) ──────────────────────────────────────
-	describe("cone-delta persistence (issue #376)", () => {
+	// ── disk-delta persistence (issue #376) ──────────────────────────────────────
+	describe("disk-delta persistence (issue #376)", () => {
 		/**
 		 * Helper to create a game with custom AI starting positions.
 		 */
@@ -2921,7 +2921,7 @@ describe("complication countdown — coordinator integration", () => {
 			return startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		}
 
-		it("Test A: go reveals a stationary actor → tool-call entry carries coneDelta", async () => {
+		it("Test A: go reveals a stationary actor → tool-call entry carries diskDelta", async () => {
 			// Red at (2,0) facing north; green at (0,1) facing south.
 			// Red goes north to (1,0). From (1,0)/north green sits at
 			// "directly in front, right"; from (2,0)/north it sat at
@@ -2955,8 +2955,8 @@ describe("complication countdown — coordinator integration", () => {
 			);
 			expect(toolCallEntry).toBeDefined();
 			if (toolCallEntry?.kind === "tool-call") {
-				expect(toolCallEntry.coneDelta).toBeDefined();
-				expect(toolCallEntry.coneDelta).toContain("*green");
+				expect(toolCallEntry.diskDelta).toBeDefined();
+				expect(toolCallEntry.diskDelta).toContain("*green");
 			}
 		});
 
@@ -2997,13 +2997,13 @@ describe("complication countdown — coordinator integration", () => {
 				(e) => e.kind === "tool-call" && e.toolName === "face",
 			);
 			// Recorded as a failed roundtrip entry, never a success, and the
-			// retired tool sets no coneDelta.
+			// retired tool sets no diskDelta.
 			expect(toolCallEntry?.kind === "tool-call" && toolCallEntry.success).toBe(
 				false,
 			);
 			expect(
 				toolCallEntry?.kind === "tool-call"
-					? toolCallEntry.coneDelta
+					? toolCallEntry.diskDelta
 					: undefined,
 			).toBeUndefined();
 			// Nothing changed: no turning, no movement.
@@ -3052,7 +3052,7 @@ describe("complication countdown — coordinator integration", () => {
 			});
 		});
 
-		it("Test D: non-go tools never enrich (pick_up does not get coneDelta)", async () => {
+		it("Test D: non-go tools never enrich (pick_up does not get diskDelta)", async () => {
 			const game = makeGame();
 
 			const provider = new MockRoundLLMProvider([
@@ -3078,8 +3078,8 @@ describe("complication countdown — coordinator integration", () => {
 			);
 			expect(toolCallEntry).toBeDefined();
 			if (toolCallEntry?.kind === "tool-call") {
-				// pick_up should never have coneDelta.
-				expect(toolCallEntry.coneDelta).toBeUndefined();
+				// pick_up should never have diskDelta.
+				expect(toolCallEntry.diskDelta).toBeUndefined();
 			}
 		});
 
@@ -3107,22 +3107,22 @@ describe("complication countdown — coordinator integration", () => {
 
 			const { nextState } = await runRound(game, "red", "start", provider);
 
-			// Red should have a tool-call with coneDelta
+			// Red should have a tool-call with diskDelta
 			const redLog = nextState.conversationLogs.red ?? [];
 			const redToolCall = redLog.find(
 				(e) => e.kind === "tool-call" && e.toolName === "go",
 			);
 			expect(
-				redToolCall?.kind === "tool-call" && redToolCall.coneDelta,
+				redToolCall?.kind === "tool-call" && redToolCall.diskDelta,
 			).toBeDefined();
 
-			// Green should NOT have a tool-call entry with coneDelta from red's action
-			// (Green may have witnessed-event entries, but not coneDelta on tool-calls)
+			// Green should NOT have a tool-call entry with diskDelta from red's action
+			// (Green may have witnessed-event entries, but not diskDelta on tool-calls)
 			const greenLog = nextState.conversationLogs.green ?? [];
 			const greenToolCalls = greenLog.filter((e) => e.kind === "tool-call");
 			for (const entry of greenToolCalls) {
 				if (entry.kind === "tool-call") {
-					expect(entry.coneDelta).toBeUndefined();
+					expect(entry.diskDelta).toBeUndefined();
 				}
 			}
 		});
@@ -3130,13 +3130,13 @@ describe("complication countdown — coordinator integration", () => {
 });
 
 // ============================================================================
-// coneDelta persistence across rounds (issue #469)
+// diskDelta persistence across rounds (issue #469)
 // ============================================================================
-describe("coneDelta persistence via coneEntities", () => {
-	it("passes coneEntities from round 1 as priorConeEntities to round 2, emitting first-sight line", async () => {
-		// Round 1: red and green both pass, item initially NOT in red's cone
-		// Round 2: item is moved into red's cone, and red takes an action
-		// Expect perception-delta line in the action tool-call's coneDelta
+describe("diskDelta persistence via diskEntities", () => {
+	it("passes diskEntities from round 1 as priorDiskEntities to round 2, emitting first-sight line", async () => {
+		// Round 1: red and green both pass, item initially outside red's Vista
+		// Round 2: item is moved into red's Vista, and red takes an action
+		// Expect perception-delta line in the action tool-call's diskDelta
 		const pack = makeTestPack(
 			[
 				{
@@ -3144,7 +3144,7 @@ describe("coneDelta persistence via coneEntities", () => {
 					kind: "interesting_object",
 					name: "TestItem",
 					examineDescription: "It shimmers.",
-					holder: { row: 10, col: 10 }, // Far away, not in cone
+					holder: { row: 10, col: 10 }, // Far away, outside the Vista
 				},
 			],
 			{
@@ -3166,7 +3166,7 @@ describe("coneDelta persistence via coneEntities", () => {
 		const round1Result = await runRound(game1, "red", "hello", provider1);
 		const game2 = round1Result.nextState;
 
-		// Move item into red's cone for round 2 (directly in front when facing south)
+		// Move item into red's Vista for round 2 (one step south of red)
 		const gameWithItem = {
 			...game2,
 			world: {
@@ -3177,7 +3177,7 @@ describe("coneDelta persistence via coneEntities", () => {
 			},
 		};
 
-		// Round 2: red does something with the new item in cone
+		// Round 2: red does something with the new item in its Vista
 		const provider2 = new MockRoundLLMProvider([
 			{
 				assistantText: "I see the item",
@@ -3193,7 +3193,7 @@ describe("coneDelta persistence via coneEntities", () => {
 			{ assistantText: "", toolCalls: [] }, // cyan pass
 		]);
 
-		// Pass round1's coneEntities as priorConeEntities to round 2
+		// Pass round1's diskEntities as priorDiskEntities to round 2
 		const round2Result = await runRound(
 			gameWithItem,
 			"red",
@@ -3202,8 +3202,8 @@ describe("coneDelta persistence via coneEntities", () => {
 			{
 				rng: Math.random,
 				priorToolRoundtrip: {}, // no prior tool roundtrip
-				priorConeSnapshots: {}, // no prior cone snapshots
-				priorConeEntities: round1Result.coneEntities, // from round 1
+				priorDiskSnapshots: {}, // no prior perception-disk snapshots
+				priorDiskEntities: round1Result.diskEntities, // from round 1
 			},
 		);
 
@@ -3214,18 +3214,18 @@ describe("coneDelta persistence via coneEntities", () => {
 		);
 		expect(redActionToolCall?.kind === "tool-call").toBe(true);
 		expect(
-			redActionToolCall?.kind === "tool-call" && redActionToolCall.coneDelta,
+			redActionToolCall?.kind === "tool-call" && redActionToolCall.diskDelta,
 		).toBeDefined();
-		const coneDelta =
+		const diskDelta =
 			redActionToolCall?.kind === "tool-call"
-				? redActionToolCall.coneDelta
+				? redActionToolCall.diskDelta
 				: "";
-		expect(coneDelta).toContain("Came into view: TestItem");
+		expect(diskDelta).toContain("Came into view: TestItem");
 	});
 
-	it("merges perception-delta with actorConeDelta when both exist", async () => {
-		// red moves while an item enters its cone
-		// Expect both the move result and the first-sight line in coneDelta
+	it("merges perception-delta with actorDiskDelta when both exist", async () => {
+		// red moves while an item enters its Vista
+		// Expect both the move result and the first-sight line in diskDelta
 		const pack = makeTestPack(
 			[
 				{
@@ -3254,7 +3254,7 @@ describe("coneDelta persistence via coneEntities", () => {
 
 		const round1Result = await runRound(game1, "red", "hi", provider1);
 
-		// Round 2 with item now visible in red's cone
+		// Round 2 with item now visible in red's Vista
 		const gameWithItem = {
 			...round1Result.nextState,
 			world: {
@@ -3288,8 +3288,8 @@ describe("coneDelta persistence via coneEntities", () => {
 			{
 				rng: Math.random,
 				priorToolRoundtrip: {},
-				priorConeSnapshots: {},
-				priorConeEntities: round1Result.coneEntities,
+				priorDiskSnapshots: {},
+				priorDiskEntities: round1Result.diskEntities,
 			},
 		);
 
@@ -3297,8 +3297,8 @@ describe("coneDelta persistence via coneEntities", () => {
 		const redGo = redLog.find(
 			(e) => e.kind === "tool-call" && e.toolName === "go",
 		);
-		expect(redGo?.kind === "tool-call" && redGo.coneDelta).toBeDefined();
-		const delta = redGo?.kind === "tool-call" ? redGo.coneDelta : "";
+		expect(redGo?.kind === "tool-call" && redGo.diskDelta).toBeDefined();
+		const delta = redGo?.kind === "tool-call" ? redGo.diskDelta : "";
 		// Should contain both the movement result and the perception delta
 		expect(delta).toMatch(/Treasure|moved|north/i);
 		expect(delta).toContain("Came into view: Treasure");
@@ -3376,8 +3376,8 @@ describe("coneDelta persistence via coneEntities", () => {
 			{
 				rng: Math.random,
 				priorToolRoundtrip: {},
-				priorConeSnapshots: {},
-				priorConeEntities: round1Result.coneEntities,
+				priorDiskSnapshots: {},
+				priorDiskEntities: round1Result.diskEntities,
 			},
 		);
 
@@ -3387,18 +3387,18 @@ describe("coneDelta persistence via coneEntities", () => {
 			(e) => e.kind === "tool-call" && e.toolName === "go",
 		);
 
-		// Message entry should NOT have coneDelta (messages don't have coneDelta, only actions do)
+		// Message entry should NOT have diskDelta (messages don't have diskDelta, only actions do)
 		expect(messageEntry?.kind === "message").toBe(true);
 		expect(
-			(messageEntry as { coneDelta?: unknown } | undefined)?.coneDelta,
+			(messageEntry as { diskDelta?: unknown } | undefined)?.diskDelta,
 		).toBeUndefined();
 
-		// Action entry should have coneDelta with perception delta (merged on first action)
+		// Action entry should have diskDelta with perception delta (merged on first action)
 		expect(
-			actionEntry?.kind === "tool-call" && actionEntry.coneDelta,
+			actionEntry?.kind === "tool-call" && actionEntry.diskDelta,
 		).toBeDefined();
 		const delta =
-			actionEntry?.kind === "tool-call" ? actionEntry.coneDelta : "";
+			actionEntry?.kind === "tool-call" ? actionEntry.diskDelta : "";
 		expect(delta).toContain("Came into view: Mysterious Box");
 	});
 });

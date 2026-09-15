@@ -101,11 +101,11 @@ interface GridPosition {
 type CardinalDirection = "north" | "south" | "east" | "west";
 const DIRECTIONS: CardinalDirection[] = ["north", "south", "east", "west"];
 
-function forwardDelta(facing: CardinalDirection): {
+function directionDelta(direction: CardinalDirection): {
 	drow: number;
 	dcol: number;
 } {
-	switch (facing) {
+	switch (direction) {
 		case "north":
 			return { drow: -1, dcol: 0 };
 		case "south":
@@ -190,7 +190,7 @@ function findWalkPlan(
 		if (!actorSpatial) continue;
 
 		for (const direction of DIRECTIONS) {
-			const delta = forwardDelta(direction);
+			const delta = directionDelta(direction);
 			const nextPos: GridPosition = {
 				row: actorSpatial.position.row + delta.drow,
 				col: actorSpatial.position.col + delta.dcol,
@@ -258,7 +258,7 @@ function findPatchPlan(
 		if (!actorSpatial) continue;
 
 		for (const direction of DIRECTIONS) {
-			const fwd = forwardDelta(direction);
+			const fwd = directionDelta(direction);
 			const nextPos: GridPosition = {
 				row: actorSpatial.position.row + fwd.drow,
 				col: actorSpatial.position.col + fwd.dcol,
@@ -486,8 +486,10 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 	}
 
 	// ── 4. Patch engine.dat if needed ────────────────────────────────────────
-	// Either reorient the witness (facing-only patch) or, when the layout makes
-	// witnessing geometrically impossible, relocate them next to the actor.
+	// When the layout makes witnessing geometrically impossible, relocate the
+	// witness next to the actor. (The stored `facing` is patched along with the
+	// position for consistency, but perception never reads it: the Vista is
+	// position-only.)
 	// The actual witnessed-event is still produced by a live go tool call in
 	// step 7; only the starting spatial layout is patched.
 	if (plan.kind === "patch") {
@@ -690,27 +692,9 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 	).not.toBeNull();
 
 	// ── 14. Assert witnessed-event line in witness role turns ────────────────
-	// conversation-log.ts renders direction relative to witness's facing.
-	// Compute the relative direction from the plan's absolute cardinal.
-	const CARDINALS = ["north", "east", "south", "west"];
-	const RELATIVES = ["forward", "right", "back", "left"];
-
-	// Determine the witness's effective facing after any plan-driven mutations.
-	let witnessFacing: CardinalDirection;
-	if (plan.kind === "patch") {
-		witnessFacing = plan.witnessNewFacing;
-	} else {
-		// "direct": no mutation, use phase1 snapshot
-		witnessFacing =
-			(phase1Spatial?.[witnessId] as PersonaSpatial | undefined)?.facing ??
-			"north";
-	}
-
-	const facingIdx = CARDINALS.indexOf(witnessFacing);
-	const dirIdx = CARDINALS.indexOf(direction);
-	const relativeDirection =
-		RELATIVES[(dirIdx - facingIdx + 4) % 4] ?? direction;
-	const expectedLine = `[Round ${roundAtDispatch}] You watch *${actorId} walk ${relativeDirection}.`;
+	// conversation-log.ts renders the cardinal direction of the step (ADR 0015):
+	// Daemons have no facing, so nothing is rendered relative to an orientation.
+	const expectedLine = `[Round ${roundAtDispatch}] You watch *${actorId} walk ${direction}.`;
 
 	const witnessAllContent = (
 		witnessBody as { messages: Array<{ content: string | null }> }
