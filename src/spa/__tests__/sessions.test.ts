@@ -663,6 +663,42 @@ describe("renderSessions — archived sessions section", () => {
 		expect(archivedRow).toBeTruthy();
 	});
 
+	it("archived version-mismatch row with a mapped schema renders the archived-build note", async () => {
+		vi.resetModules();
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		await seedArchivedSessionInStore(stub, "0xVMAR");
+
+		// Stamp the archived engine with a stale schema so the row is a mismatch.
+		const { deobfuscate, obfuscate } = await import(
+			"../persistence/sealed-blob-codec.js"
+		);
+		const engineKey = `${ARCHIVE_PREFIX}0xVMAR/engine.dat`;
+		const sealed = JSON.parse(deobfuscate(stub._store[engineKey] ?? ""));
+		sealed.schemaVersion = 999;
+		stub._store[engineKey] = obfuscate(JSON.stringify(sealed));
+
+		const archiveMapModule = await import("../persistence/archive-map.js");
+		archiveMapModule.SCHEMA_ARCHIVE_MAP[999] = "0.0.2-beta.2";
+		try {
+			const { renderSessions } = await import("../views/sessions.js");
+			renderSessions(getMain());
+
+			const row = document.querySelector<HTMLElement>(
+				'.session-row[data-session-id="0xVMAR"]',
+			);
+			expect(row).toBeTruthy();
+			const note = row?.querySelector<HTMLElement>(".session-version-note");
+			expect(note).toBeTruthy();
+			expect(note?.textContent).toContain("v0.0.2-beta.2");
+			const link = note?.querySelector("a");
+			expect(link).not.toBeNull();
+			expect(link?.getAttribute("href")).toBe("./v/0.0.2-beta.2/");
+		} finally {
+			delete archiveMapModule.SCHEMA_ARCHIVE_MAP[999];
+		}
+	});
+
 	it("archived row textContent contains 'epoch 1' and 'last played'", async () => {
 		vi.resetModules();
 		const stub = makeLocalStorageStub();

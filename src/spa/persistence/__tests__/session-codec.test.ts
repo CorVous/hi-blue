@@ -804,6 +804,17 @@ describe("serializeSession / deserializeSession", () => {
 			expect(result.state.contentPacksA[0]?.wallName).toBe("");
 			expect(result.state.contentPacksB[0]?.wallName).toBe("");
 		}
+
+		// The chain lands on 11, so at a v12 boundary the same save surfaces as
+		// "older" instead of being silently promoted past the boundary.
+		const atV12 = deserializeSession(
+			{ meta, daemons, engine },
+			{ session: 12, gs: 5 },
+		);
+		expect(atV12.kind).toBe("version-mismatch");
+		if (atV12.kind === "version-mismatch") {
+			expect(atV12.schemaVersion).toBe(11);
+		}
 	});
 
 	it("v9 save without wallName is migrated to v10 by defaulting wallName to empty string", () => {
