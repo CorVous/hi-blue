@@ -2982,7 +2982,24 @@ describe("<whats_new> wall diff (issue #374)", () => {
 		const first = buildDiskSnapshot(buildAiContext(game, "red"));
 		const second = buildDiskSnapshot(buildAiContext(game, "red"));
 		expect(second).toBe(first);
-		expect(renderWhatsNew(first, second)).toBeNull();
+
+		// The unchanged Vista reaches the prompt with no <whats_new> block at
+		// all — this is the assertion that fails when identical snapshots start
+		// producing a diff.
+		const unchanged = buildAiContext(game, "red", {
+			prevDiskSnapshot: first,
+		}).toCurrentStateUserMessage();
+		expect(unchanged).not.toContain("<whats_new>");
+
+		// The renderer is not a stub that never emits: a genuinely different
+		// Vista — red at (2,2), the whole disk in bounds, so every wall line
+		// differs — does produce a diff. The no-diff case above is therefore
+		// about sameness, not about the renderer being silent.
+		const moved = buildDiskSnapshot(
+			buildAiContext(makeWallGame({ position: { row: 2, col: 2 } }), "red"),
+		);
+		expect(moved).not.toBe(first);
+		expect(renderWhatsNew(first, moved)).not.toBeNull();
 	});
 
 	it("wallName comes from ContentPack.wallName, not hardcoded", () => {
