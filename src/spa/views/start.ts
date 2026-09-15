@@ -32,13 +32,14 @@ import {
 import { getSpikeRng, setSpikeSeed } from "../game/spike-seed.js";
 import { lookupArchiveVersion } from "../persistence/archive-map.js";
 import { type RenderOpts, renderApp } from "../render-app.js";
+import { buildArchivedBuildLink } from "./archived-build-link.js";
 
 /** Warning reason strings shown in the persistence warning banner. */
 const PERSISTENCE_WARNING_MESSAGES: Record<string, string> = {
 	broken:
 		"Saved game data was unreadable and has been discarded. Starting a new game.",
 	"version-mismatch":
-		"Saved game data is from an older version and has been discarded. Starting a new game.",
+		"Saved game data is from an older version of hi-blue and cannot be loaded by this build. It has been kept — start a new game, or remove it from your Sessions list.",
 	"legacy-save-discarded":
 		"Saved game data from an older format has been discarded. Starting a new game.",
 	stuck:
@@ -68,10 +69,7 @@ function renderVersionMismatchBanner(
 			"Your saved Session is from an older version of hi-blue. Continue it in ",
 		),
 	);
-	const link = doc.createElement("a");
-	link.href = `./v/${archivedVersion}/`;
-	link.textContent = `v${archivedVersion} →`;
-	bannerEl.appendChild(link);
+	bannerEl.appendChild(buildArchivedBuildLink(doc, archivedVersion));
 	bannerEl.appendChild(doc.createTextNode(", or start a new Session below."));
 }
 

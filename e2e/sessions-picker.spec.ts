@@ -10,6 +10,10 @@
  *  - [ rm ] confirm/cancel flow
  *  - Sessions-icon ([ ls ] button) click → sessions view
  *  - Broken-session banner: active session with missing engine.dat → sessions view with reason
+ *  - Version-mismatch banner: active session with a stale schema → sessions view with reason
+ *  - Version-mismatch archived-build note (picker row): needs a schema that is
+ *    both stale and in SCHEMA_ARCHIVE_MAP, but only 11 is mapped and 11 is still
+ *    current, so no live build can render it. Pinned in jsdom via a temporary map entry; re-add Playwright coverage on the v12 bump (#539).
  *  - [ + new session ] flow: picker → start view, new active pointer
  *
  * Post-ADR-0011: the picker is opened by clicking the sessions icon, not by
@@ -446,6 +450,41 @@ test("broken-session banner: active session with missing engine.dat → sessions
 	const banner = page.locator("#sessions-banner");
 	await expect(banner).toBeVisible();
 	await expect(banner).toContainText("unreadable");
+
+	await expectNoPageErrors(page, pageErrors);
+});
+
+test("version-mismatch banner: active session with stale schema → sessions view with reason", async ({
+	page,
+}) => {
+	const pageErrors: Error[] = [];
+	page.on("pageerror", (err) => pageErrors.push(err));
+
+	// Seed an active session whose sealed schema is stale (999) so the
+	// active-session dispatcher reports a version-mismatch.
+	await page.addInitScript(() => {
+		localStorage.setItem("hi-blue:active-session", "0xSTAL");
+	});
+	await page.addInitScript(
+		new Function(seedVersionMismatchScript("0xSTAL")) as () => void,
+	);
+
+	await page.goto("/");
+
+	// Dispatcher routes version-mismatch sessions to the picker with
+	// reason=version-mismatch (sticky).
+	await expect(page.locator('main[data-view="sessions"]')).toBeAttached();
+	await expect(page.locator("main")).toHaveAttribute(
+		"data-reason",
+		"version-mismatch",
+	);
+
+	// Banner should be visible with the version-mismatch copy. Schema 999 is
+	// not in the archive map, so the banner shows the plain "older version"
+	// text rather than an archived-build link.
+	const banner = page.locator("#sessions-banner");
+	await expect(banner).toBeVisible();
+	await expect(banner).toContainText("It has been kept");
 
 	await expectNoPageErrors(page, pageErrors);
 });

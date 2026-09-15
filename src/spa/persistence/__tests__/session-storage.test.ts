@@ -746,6 +746,9 @@ describe("getSessionInfo", () => {
 		const info = getSessionInfo(id);
 		expect(info.kind).toBe("version-mismatch");
 		if (info.kind === "version-mismatch") {
+			// The stale schema number rides along so the picker row can link
+			// the save to the archived build that still reads it.
+			expect(info.schemaVersion).toBe(999);
 			expect(Array.isArray(info.daemonFiles)).toBe(true);
 		}
 	});
@@ -1086,6 +1089,11 @@ describe("getArchivedSessionInfo", () => {
 
 		const info = getArchivedSessionInfo(id);
 		expect(info.kind).toBe("version-mismatch");
+		if (info.kind === "version-mismatch") {
+			// The stale schema number rides along so the picker row can link
+			// the save to the archived build that still reads it.
+			expect(info.schemaVersion).toBe(999);
+		}
 	});
 });
 

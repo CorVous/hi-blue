@@ -44,10 +44,10 @@ In a sandbox or any environment without `wrangler login`, use:
   another device. This sets `WORKER_BASE_URL` off `localhost`, so `__DEV__` is
   false (no dev inspector / debug footers / BYOK localhost shortcut).
 
-## Bumping SESSION_SCHEMA_VERSION
+## Bumping save-format versions
 
 When you bump SESSION_SCHEMA_VERSION in
-`src/spa/persistence/session-codec.ts`, you must do ONE of:
+`src/spa/persistence/version-constants.ts`, you must do ONE of:
 
 - **Add a migrateV<old>To... function** in session-codec.ts so old
   saves migrate in place. No further action needed.
@@ -61,3 +61,12 @@ If the schema bumps twice without a release in between, the
 intermediate schema number was never shipped — skip its map entry.
 
 `scripts/check-schema-map.mjs` enforces this on PRs.
+
+The same idea covers the "Save the AIs to USB" game-save format
+(`GAME_SAVE_VERSION` in `src/save-serializer.ts`). That axis is not migrated
+in place, so a bump must add a `GAME_SAVE_ARCHIVE_MAP` entry (in
+`src/spa/persistence/archive-map.ts`) mapping the OLD number to the latest
+released version that shipped it, so the version-mismatch can link the user to
+the archived build. The same checker enforces this on PRs. Both axes share the
+version-boundary compatibility helpers in
+`src/spa/persistence/version-boundary.ts`.

@@ -465,7 +465,7 @@ describe("renderStart — persistence warning banners", () => {
 		);
 		expect(warningEl?.hasAttribute("hidden")).toBe(false);
 		expect(warningEl?.textContent).toContain(
-			"Saved game data is from an older version and has been discarded",
+			"Saved game data is from an older version of hi-blue and cannot be loaded by this build. It has been kept — start a new game, or remove it from your Sessions list.",
 		);
 		// Map miss: no anchor.
 		expect(warningEl?.querySelector("a")).toBeNull();

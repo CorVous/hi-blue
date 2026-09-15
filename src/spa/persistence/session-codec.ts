@@ -34,6 +34,12 @@ import {
 	obfuscate,
 	SealedBlobCorrupt,
 } from "./sealed-blob-codec.js";
+import {
+	checkVersionCompatibility,
+	liveVersionBoundary,
+	type VersionBoundary,
+} from "./version-boundary.js";
+import { SESSION_SCHEMA_VERSION } from "./version-constants.js";
 
 // ── Schema version ─────────────────────────────────────────────────────────────
 
@@ -90,9 +96,9 @@ import {
  *
  * Bumping this constant requires either a `migrateV<old>To...` function below
  * or a new entry in `SCHEMA_ARCHIVE_MAP` (see AGENTS.md → "Bumping
- * SESSION_SCHEMA_VERSION"). `scripts/check-schema-map.mjs` enforces this on PRs.
+ * save-format versions"). `scripts/check-schema-map.mjs` enforces this on PRs.
  */
-export const SESSION_SCHEMA_VERSION = 11 as const;
+export { SESSION_SCHEMA_VERSION };
 
 // ── File shapes ────────────────────────────────────────────────────────────────
 
@@ -356,6 +362,11 @@ function migrateV10ToV11(sealed: SealedEngine): SealedEngine {
 /**
  * Deserialize a session from its multi-file representation.
  *
+ * `boundary` is the version boundary the build uses (see
+ * `version-boundary.ts`); the sealed schema is checked against its `session`
+ * axis, and anything not at the boundary is surfaced as `version-mismatch`.
+ * It defaults to the live boundary, so callers that don't care pass nothing.
+ *
  * Returns:
  *   { kind: "ok", state, createdAt, lastSavedAt }
  *   { kind: "broken" }          — missing/corrupt engine or parse failure
@@ -363,6 +374,7 @@ function migrateV10ToV11(sealed: SealedEngine): SealedEngine {
  */
 export function deserializeSession(
 	files: SerializedSessionFiles,
+	boundary: VersionBoundary = liveVersionBoundary(),
 ): DeserializeResult {
 	// engine.dat must be present
 	if (files.engine === null) return { kind: "broken" };
@@ -406,7 +418,12 @@ export function deserializeSession(
 		sealed = migrateV10ToV11(sealed);
 		version = 11;
 	}
-	if (version !== SESSION_SCHEMA_VERSION) {
+	// The version gate runs against the boundary's session axis, so the
+	// cutoff is a plain, testable value (see version-boundary.ts) rather than
+	// a hardcoded constant. A mismatch is surfaced — not discarded — so the
+	// UI can link the older save to the archived build that reads it.
+	const verdict = checkVersionCompatibility("session", version, boundary);
+	if (verdict.kind === "mismatch") {
 		return { kind: "version-mismatch", schemaVersion: version };
 	}
 

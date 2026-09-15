@@ -653,6 +653,21 @@ describe("serializeSession / deserializeSession", () => {
 		expect(result.kind).toBe("broken");
 	});
 
+	it("a current (v11) save is a version-mismatch at the v12 boundary", () => {
+		const game = makeFreshGame();
+		const files = serializeSession(game, NOW, CREATED_AT);
+		// The live boundary is 11, so a fresh v11 save deserializes "ok" with
+		// no argument. At the v12 boundary it is "older" and surfaces as a
+		// version-mismatch — the cutoff is a parameter, not a hardcoded
+		// constant (see version-boundary.ts / the v12/v5 contract).
+		expect(deserializeSession(files).kind).toBe("ok");
+		const result = deserializeSession(files, { session: 12, gs: 5 });
+		expect(result.kind).toBe("version-mismatch");
+		if (result.kind === "version-mismatch") {
+			expect(result.schemaVersion).toBe(11);
+		}
+	});
+
 	it("v8 save with multi-entry contentPacksA/B is migrated to v9 by truncating to first entry", () => {
 		// Create a v8-style sealed engine with 3 content packs each.
 		// v8/v9/v10 packs used the old bucketed shape — emit it via an
@@ -788,6 +803,17 @@ describe("serializeSession / deserializeSession", () => {
 			expect(result.state.contentPacksB).toHaveLength(1);
 			expect(result.state.contentPacksA[0]?.wallName).toBe("");
 			expect(result.state.contentPacksB[0]?.wallName).toBe("");
+		}
+
+		// The chain lands on 11, so at a v12 boundary the same save surfaces as
+		// "older" instead of being silently promoted past the boundary.
+		const atV12 = deserializeSession(
+			{ meta, daemons, engine },
+			{ session: 12, gs: 5 },
+		);
+		expect(atV12.kind).toBe("version-mismatch");
+		if (atV12.kind === "version-mismatch") {
+			expect(atV12.schemaVersion).toBe(11);
 		}
 	});
 

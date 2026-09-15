@@ -36,6 +36,9 @@ export type SessionInfo =
 	| { kind: "broken"; daemonFiles: Array<{ name: string; size: number }> }
 	| {
 			kind: "version-mismatch";
+			// The stale schema number sealed into the save, so the picker can
+			// link it to the archived build that still reads it.
+			schemaVersion: number;
 			lastSavedAt?: string;
 			epoch?: number;
 			daemonFiles: Array<{ name: string; size: number }>;
@@ -229,7 +232,8 @@ export function loadActiveSession(): LoadResult {
 // ── Clear ─────────────────────────────────────────────────────────────────────
 
 /**
- * Delete all session files plus the active pointer.
+ * Delete all session files plus the active pointer. Intended for genuinely
+ * broken sessions that should not be preserved.
  * Best-effort: errors are silently swallowed.
  */
 export function clearActiveSession(): void {
@@ -252,6 +256,20 @@ export function clearActiveSession(): void {
 		for (const key of keysToRemove) {
 			localStorage.removeItem(key);
 		}
+	} catch {
+		// swallow
+	}
+}
+
+/**
+ * Remove only the active pointer, leaving all session files in place.
+ * Intended for version-mismatch sessions whose bytes should be preserved
+ * and linked to an archived build rather than deleted.
+ * Best-effort: errors are silently swallowed.
+ */
+export function deactivateActiveSession(): void {
+	try {
+		localStorage.removeItem(ACTIVE_KEY);
 	} catch {
 		// swallow
 	}
@@ -474,8 +492,12 @@ export function loadArchivedSession(sessionId: string): LoadResult {
 /**
  * Convenience info for the archived sessions picker.
  * Returns `kind: "archived"` for ok-loadable archived sessions.
+ * A stale `kind: "version-mismatch"` carries the sealed `schemaVersion` so
+ * the row can link the save to the archived build that still reads it.
  */
-export function getArchivedSessionInfo(id: string): SessionInfo {
+export function getArchivedSessionInfo(
+	id: string,
+): Extract<SessionInfo, { kind: "archived" | "broken" | "version-mismatch" }> {
 	const prefix = `${ARCHIVE_PREFIX}${id}/`;
 
 	function getDaemonFiles(): Array<{ name: string; size: number }> {
@@ -501,7 +523,11 @@ export function getArchivedSessionInfo(id: string): SessionInfo {
 	if (result.kind === "broken")
 		return { kind: "broken", daemonFiles: getDaemonFiles() };
 	if (result.kind === "version-mismatch")
-		return { kind: "version-mismatch", daemonFiles: getDaemonFiles() };
+		return {
+			kind: "version-mismatch",
+			schemaVersion: result.schemaVersion,
+			daemonFiles: getDaemonFiles(),
+		};
 	if (result.kind === "none") return { kind: "broken", daemonFiles: [] };
 
 	// ok: read lastPlayedAt and epoch from meta.json directly
@@ -677,7 +703,9 @@ export function seedFromArchive(
  * Convenience info for the sessions picker.
  * Reads metadata from localStorage; calls loadSession to determine kind.
  */
-export function getSessionInfo(id: string): SessionInfo {
+export function getSessionInfo(
+	id: string,
+): Extract<SessionInfo, { kind: "ok" | "broken" | "version-mismatch" }> {
 	const prefix = `${SESSIONS_PREFIX}${id}/`;
 
 	// Helper: enumerate daemon files on disk for this session
@@ -729,6 +757,7 @@ export function getSessionInfo(id: string): SessionInfo {
 		}
 		const vmResult: SessionInfo = {
 			kind: "version-mismatch",
+			schemaVersion: result.schemaVersion,
 			daemonFiles: getDaemonFiles(),
 			...(lastSavedAt !== undefined ? { lastSavedAt } : {}),
 			...(epoch !== undefined ? { epoch } : {}),
