@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import type { CardinalDirection } from "../direction";
 import {
 	applyDirection,
 	areAdjacent4,
 	CARDINAL_DIRECTIONS,
+	COMPASS_ORDER,
 	cardinalToRelative,
 	directionDelta,
 	inBounds,
@@ -18,6 +20,37 @@ describe("constants", () => {
 		expect(CARDINAL_DIRECTIONS).toContain("south");
 		expect(CARDINAL_DIRECTIONS).toContain("east");
 		expect(CARDINAL_DIRECTIONS).toContain("west");
+	});
+});
+
+describe("COMPASS_ORDER — the shared compass rotation", () => {
+	/** The direction `quarters` quarter-turns clockwise from `facing`. */
+	function rotated(
+		facing: CardinalDirection,
+		quarters: number,
+	): CardinalDirection {
+		const index = COMPASS_ORDER.indexOf(facing);
+		const turned = COMPASS_ORDER[(index + quarters) % COMPASS_ORDER.length];
+		if (!turned) throw new Error(`COMPASS_ORDER does not contain ${facing}`);
+		return turned;
+	}
+
+	it("is north, east, south, west (clockwise)", () => {
+		expect(COMPASS_ORDER).toEqual(["north", "east", "south", "west"]);
+	});
+
+	it("is the rotation both relative-direction helpers agree with", () => {
+		for (const facing of COMPASS_ORDER) {
+			const right = rotated(facing, 1);
+			const back = rotated(facing, 2);
+			const left = rotated(facing, 3);
+			expect(relativeToCardinal(facing, "right")).toBe(right);
+			expect(relativeToCardinal(facing, "back")).toBe(back);
+			expect(relativeToCardinal(facing, "left")).toBe(left);
+			expect(cardinalToRelative(facing, right)).toBe("right");
+			expect(cardinalToRelative(facing, back)).toBe("back");
+			expect(cardinalToRelative(facing, left)).toBe("left");
+		}
 	});
 });
 
