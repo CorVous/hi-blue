@@ -230,24 +230,6 @@ describe("validateContentPacks — prose tell contract", () => {
 					],
 					interestingObjects: [],
 					obstacles: [],
-					landmarks: {
-						north: {
-							shortName: "the signal tower",
-							horizonPhrase: "rises above the platform",
-						},
-						south: {
-							shortName: "the collapsed entrance",
-							horizonPhrase: "gapes like a wound in the dark",
-						},
-						east: {
-							shortName: "the rusted fan shaft",
-							horizonPhrase: "spins slowly in the stale air",
-						},
-						west: {
-							shortName: "the flooded tunnel",
-							horizonPhrase: "disappears into still black water",
-						},
-					},
 				},
 			],
 		};
@@ -358,24 +340,6 @@ describe("validateContentPacks — obstacle shiftFlavor validation", () => {
 							...(shiftFlavor !== undefined ? { shiftFlavor } : {}),
 						},
 					],
-					landmarks: {
-						north: {
-							shortName: "the signal tower",
-							horizonPhrase: "rises above the platform",
-						},
-						south: {
-							shortName: "the collapsed entrance",
-							horizonPhrase: "gapes like a wound in the dark",
-						},
-						east: {
-							shortName: "the rusted fan shaft",
-							horizonPhrase: "spins slowly in the stale air",
-						},
-						west: {
-							shortName: "the flooded tunnel",
-							horizonPhrase: "disappears into still black water",
-						},
-					},
 				},
 			],
 		};
@@ -493,18 +457,6 @@ describe("validateContentPacks — obstacle shiftFlavor validation", () => {
 					],
 					interestingObjects: [],
 					obstacles: [],
-					landmarks: {
-						north: {
-							shortName: "the tower",
-							horizonPhrase: "rises high",
-						},
-						south: {
-							shortName: "the entrance",
-							horizonPhrase: "gapes wide",
-						},
-						east: { shortName: "the shaft", horizonPhrase: "spins slowly" },
-						west: { shortName: "the tunnel", horizonPhrase: "fades black" },
-					},
 				},
 			],
 		};
@@ -598,24 +550,6 @@ describe("validateContentPacks — convergence tier flavor validation", () => {
 					],
 					interestingObjects: [],
 					obstacles: [],
-					landmarks: {
-						north: {
-							shortName: "the signal tower",
-							horizonPhrase: "rises above the platform",
-						},
-						south: {
-							shortName: "the collapsed entrance",
-							horizonPhrase: "gapes like a wound in the dark",
-						},
-						east: {
-							shortName: "the rusted fan shaft",
-							horizonPhrase: "spins slowly in the stale air",
-						},
-						west: {
-							shortName: "the flooded tunnel",
-							horizonPhrase: "disappears into still black water",
-						},
-					},
 				},
 			],
 		};
@@ -979,24 +913,6 @@ describe("validateContentPacks — interesting_object Use-Item flavor validation
 					objectivePairs: [],
 					interestingObjects: [item],
 					obstacles: [],
-					landmarks: {
-						north: {
-							shortName: "the signal tower",
-							horizonPhrase: "rises above the platform",
-						},
-						south: {
-							shortName: "the collapsed entrance",
-							horizonPhrase: "gapes like a wound in the dark",
-						},
-						east: {
-							shortName: "the rusted fan shaft",
-							horizonPhrase: "spins slowly in the stale air",
-						},
-						west: {
-							shortName: "the flooded tunnel",
-							horizonPhrase: "disappears into still black water",
-						},
-					},
 				},
 			],
 		};
@@ -1209,24 +1125,6 @@ describe("validateContentPacks — objective_space activationFlavor & prose tell
 					],
 					interestingObjects: [],
 					obstacles: [],
-					landmarks: {
-						north: {
-							shortName: "the signal tower",
-							horizonPhrase: "rises above the platform",
-						},
-						south: {
-							shortName: "the collapsed entrance",
-							horizonPhrase: "gapes like a wound in the dark",
-						},
-						east: {
-							shortName: "the rusted fan shaft",
-							horizonPhrase: "spins slowly in the stale air",
-						},
-						west: {
-							shortName: "the flooded tunnel",
-							horizonPhrase: "disappears into still black water",
-						},
-					},
 				},
 			],
 		};
@@ -1365,24 +1263,6 @@ describe("validateContentPacks — proximityFlavor rejection tests", () => {
 						},
 					],
 					obstacles: [],
-					landmarks: {
-						north: {
-							shortName: "the signal tower",
-							horizonPhrase: "rises above the platform",
-						},
-						south: {
-							shortName: "the collapsed entrance",
-							horizonPhrase: "gapes like a wound in the dark",
-						},
-						east: {
-							shortName: "the rusted fan shaft",
-							horizonPhrase: "spins slowly in the stale air",
-						},
-						west: {
-							shortName: "the flooded tunnel",
-							horizonPhrase: "disappears into still black water",
-						},
-					},
 				},
 			],
 		};
@@ -1429,24 +1309,6 @@ describe("validateContentPacks — proximityFlavor rejection tests", () => {
 					],
 					interestingObjects: [],
 					obstacles: [],
-					landmarks: {
-						north: {
-							shortName: "the signal tower",
-							horizonPhrase: "rises above the platform",
-						},
-						south: {
-							shortName: "the collapsed entrance",
-							horizonPhrase: "gapes like a wound in the dark",
-						},
-						east: {
-							shortName: "the rusted fan shaft",
-							horizonPhrase: "spins slowly in the stale air",
-						},
-						west: {
-							shortName: "the flooded tunnel",
-							horizonPhrase: "disappears into still black water",
-						},
-					},
 				},
 			],
 		};
@@ -1519,24 +1381,6 @@ describe("validateDualContentPacks — objective_space activationFlavor", () => 
 		packAExamine = "A sturdy pedestal. Press an item onto it to activate.",
 		packBExamine = "A weathered marker. Press the cap to activate it.",
 	): unknown {
-		const landmarks = {
-			north: {
-				shortName: "the signal tower",
-				horizonPhrase: "rises above the platform",
-			},
-			south: {
-				shortName: "the collapsed entrance",
-				horizonPhrase: "gapes like a wound in the dark",
-			},
-			east: {
-				shortName: "the rusted fan shaft",
-				horizonPhrase: "spins slowly in the stale air",
-			},
-			west: {
-				shortName: "the flooded tunnel",
-				horizonPhrase: "disappears into still black water",
-			},
-		};
 		const mkPack = (
 			setting: string,
 			objName: string,
@@ -1573,7 +1417,6 @@ describe("validateDualContentPacks — objective_space activationFlavor", () => 
 			],
 			interestingObjects: [],
 			obstacles: [],
-			landmarks,
 		});
 		return {
 			phases: [
@@ -1678,13 +1521,6 @@ describe("validateDualContentPacks — obstacle shiftFlavor validation", () => {
 		],
 	};
 
-	const STUB_LANDMARKS = {
-		north: { shortName: "the signal tower", horizonPhrase: "rises high" },
-		south: { shortName: "the collapsed entrance", horizonPhrase: "gapes wide" },
-		east: { shortName: "the rusted shaft", horizonPhrase: "spins slowly" },
-		west: { shortName: "the flooded tunnel", horizonPhrase: "fades to black" },
-	};
-
 	function buildDualObstacleResponse(
 		packAShift: unknown,
 		packBShift: unknown,
@@ -1704,14 +1540,12 @@ describe("validateDualContentPacks — obstacle shiftFlavor validation", () => {
 						objectivePairs: [],
 						interestingObjects: [],
 						obstacles: [buildObstacle(packAShift, "a")],
-						landmarks: STUB_LANDMARKS,
 					},
 					packB: {
 						setting: "overgrown ruin",
 						objectivePairs: [],
 						interestingObjects: [],
 						obstacles: [buildObstacle(packBShift, "b")],
-						landmarks: STUB_LANDMARKS,
 					},
 				},
 			],
@@ -1835,24 +1669,6 @@ describe("validateContentPacks — pure-result API with multiple failures", () =
 							// Missing shiftFlavor — this is the second error
 						},
 					],
-					landmarks: {
-						north: {
-							shortName: "the signal tower",
-							horizonPhrase: "rises above the platform",
-						},
-						south: {
-							shortName: "the collapsed entrance",
-							horizonPhrase: "gapes like a wound in the dark",
-						},
-						east: {
-							shortName: "the rusted fan shaft",
-							horizonPhrase: "spins slowly in the stale air",
-						},
-						west: {
-							shortName: "the flooded tunnel",
-							horizonPhrase: "disappears into still black water",
-						},
-					},
 				},
 			],
 		};
@@ -1923,24 +1739,6 @@ describe("BrowserContentPackProvider — outer-retry layer", () => {
 			pack: {
 				setting: "abandoned subway station",
 				wallName: "concrete barrier",
-				landmarks: {
-					north: {
-						shortName: "the signal tower",
-						horizonPhrase: "rises above the platform",
-					},
-					south: {
-						shortName: "the collapsed entrance",
-						horizonPhrase: "gapes like a wound in the dark",
-					},
-					east: {
-						shortName: "the rusted fan shaft",
-						horizonPhrase: "spins slowly in the stale air",
-					},
-					west: {
-						shortName: "the flooded tunnel",
-						horizonPhrase: "disappears into still black water",
-					},
-				},
 				bindings: [
 					{
 						id: "carry-0",
@@ -2261,28 +2059,9 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 		packAObjectName = "Iron Key",
 		packBObjectName = "Bone Token",
 	): unknown {
-		const landmarks = {
-			north: {
-				shortName: "the signal tower",
-				horizonPhrase: "rises above the platform",
-			},
-			south: {
-				shortName: "the collapsed entrance",
-				horizonPhrase: "gapes like a wound in the dark",
-			},
-			east: {
-				shortName: "the rusted fan shaft",
-				horizonPhrase: "spins slowly in the stale air",
-			},
-			west: {
-				shortName: "the flooded tunnel",
-				horizonPhrase: "disappears into still black water",
-			},
-		};
 		const mkPack = (setting: string, objName: string, spaceName: string) => ({
 			setting,
 			wallName: "concrete barrier",
-			landmarks,
 			bindings: [
 				{
 					id: "carry-0",
@@ -2572,24 +2351,6 @@ describe("BrowserContentPackProvider — corrective feedback strengthening", () 
 			pack: {
 				setting: "abandoned subway station",
 				wallName: "concrete barrier",
-				landmarks: {
-					north: {
-						shortName: "the signal tower",
-						horizonPhrase: "rises above the platform",
-					},
-					south: {
-						shortName: "the collapsed entrance",
-						horizonPhrase: "gapes like a wound in the dark",
-					},
-					east: {
-						shortName: "the rusted fan shaft",
-						horizonPhrase: "spins slowly in the stale air",
-					},
-					west: {
-						shortName: "the flooded tunnel",
-						horizonPhrase: "disappears into still black water",
-					},
-				},
 				bindings: [
 					{
 						id: "carry-0",
@@ -2646,24 +2407,6 @@ describe("BrowserContentPackProvider — corrective feedback strengthening", () 
 			pack: {
 				setting: "abandoned subway station",
 				wallName: "concrete barrier",
-				landmarks: {
-					north: {
-						shortName: "the signal tower",
-						horizonPhrase: "rises above the platform",
-					},
-					south: {
-						shortName: "the collapsed entrance",
-						horizonPhrase: "gapes like a wound in the dark",
-					},
-					east: {
-						shortName: "the rusted fan shaft",
-						horizonPhrase: "spins slowly in the stale air",
-					},
-					west: {
-						shortName: "the flooded tunnel",
-						horizonPhrase: "disappears into still black water",
-					},
-				},
 				bindings: [
 					{
 						id: "useSpace-0",

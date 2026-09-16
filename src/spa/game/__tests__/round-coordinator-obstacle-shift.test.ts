@@ -3,8 +3,10 @@
  *
  * Issue #486: obstacle_shift complication fires and:
  * 1. Moves the obstacle entity from fromCell to toCell in world.entities.
- * 2. Appends witnessed-obstacle-shift entries only to daemons whose cone covers fromCell.
- * 3. Daemons whose cone does NOT cover fromCell receive no entry.
+ * 2. Appends witnessed-obstacle-shift entries only to daemons whose
+ *    **Vista** contains fromCell (ADR 0015; position-only, never occluded).
+ * 3. Daemons whose Vista does NOT contain fromCell receive no entry, even
+ *    when they are close in Manhattan terms — (2, 1) is outside the disk.
  */
 import { describe, expect, it } from "vitest";
 import { startGame } from "../engine";
@@ -81,13 +83,14 @@ const TEST_CONTENT_PACK = makeTestPack(
 	[OBJECTIVE_OBJECT, OBJECTIVE_SPACE, OBSTACLE],
 	{
 		wallName: "wall",
-		// red at (2, 1) facing east — cone should include (2, 2) = obstacle origin
-		// green at (1, 4) facing west — cone should include (2, 2) if in range
-		// cyan at (6, 6) facing north — cone should NOT include (2, 2) (too far away)
+		// The obstacle origin is (2, 2). Vista membership is position-only.
+		// red at (2, 1) is one cell west → inside the Vista.
+		// green at (1, 4) is offset (2, 1) from the origin (4 + 1 = 5 > 4) → outside.
+		// cyan at (4, 0) is offset (2, 2) from the origin (2² + 2² = 8 > 4) → outside.
 		aiStarts: {
-			red: { position: { row: 2, col: 1 }, facing: "east" },
-			green: { position: { row: 1, col: 4 }, facing: "west" },
-			cyan: { position: { row: 6, col: 6 }, facing: "north" },
+			red: { position: { row: 2, col: 1 } },
+			green: { position: { row: 1, col: 4 } },
+			cyan: { position: { row: 4, col: 0 } },
 		},
 	},
 );
@@ -198,9 +201,9 @@ describe("runRound — obstacle_shift complication (issue #486)", () => {
 		}
 	});
 
-	it("appends witnessed-obstacle-shift entry to a daemon whose cone covers fromCell", async () => {
+	it("appends witnessed-obstacle-shift entry to a daemon whose Vista contains fromCell", async () => {
 		const game = makeBaseGame();
-		// red is at (2, 1) facing east, so its cone should cover (2, 2) = obstacle origin.
+		// red is at (2, 1), one cell from the origin (2, 2) → inside red's Vista.
 		const withCountdown = {
 			...game,
 			complicationSchedule: { ...game.complicationSchedule, countdown: 0 },
@@ -219,7 +222,7 @@ describe("runRound — obstacle_shift complication (issue #486)", () => {
 			(e) => e.kind === "witnessed-obstacle-shift",
 		);
 
-		// red's cone should cover the obstacle origin, so expect at least one entry.
+		// red's Vista contains the obstacle origin, so expect at least one entry.
 		expect(shiftEntries.length).toBeGreaterThan(0);
 
 		const entry = shiftEntries[0];
@@ -236,9 +239,9 @@ describe("runRound — obstacle_shift complication (issue #486)", () => {
 		}
 	});
 
-	it("does NOT append witnessed-obstacle-shift entry to a daemon whose cone does NOT cover fromCell", async () => {
+	it("does NOT append witnessed-obstacle-shift entry to a daemon whose Vista does NOT contain fromCell", async () => {
 		const game = makeBaseGame();
-		// cyan is at (6, 6) facing north — its cone should NOT cover (2, 2).
+		// cyan is at (4, 0) — offset (2, 2) from (2, 2), outside the Vista.
 		const withCountdown = {
 			...game,
 			complicationSchedule: { ...game.complicationSchedule, countdown: 0 },
@@ -257,8 +260,44 @@ describe("runRound — obstacle_shift complication (issue #486)", () => {
 			(e) => e.kind === "witnessed-obstacle-shift",
 		);
 
-		// cyan's cone does not cover the obstacle origin at (2, 2), so no entries.
+		// cyan's Vista does not contain the obstacle origin at (2, 2), so no entries.
 		expect(shiftEntries).toHaveLength(0);
+	});
+
+	it("Vista boundary: a Daemon at offset (2, 0) from the origin witnesses the shift; one at (2, 1) does not", async () => {
+		const game = makeBaseGame();
+		// Origin is (2, 2):
+		//   red at (2, 0) is the (2, 0) offset — 2² + 0² = 4 ≤ 4 → inside the Vista.
+		//   green at (1, 0) is the (2, 1) offset — 2² + 1² = 5 > 4 → outside the Vista,
+		//   even though it is no more than two cells away on either axis.
+		const withCountdown = {
+			...game,
+			personaSpatial: {
+				...game.personaSpatial,
+				red: { position: { row: 2, col: 0 } },
+				green: { position: { row: 1, col: 0 } },
+			},
+			complicationSchedule: { ...game.complicationSchedule, countdown: 0 },
+		};
+
+		const { nextState } = await runRound(
+			withCountdown,
+			"red",
+			"hi",
+			makeProvider(),
+			{ rng: makeObstacleShiftRng(0) },
+		);
+
+		expect(
+			(nextState.conversationLogs.red ?? []).filter(
+				(e) => e.kind === "witnessed-obstacle-shift",
+			),
+		).toHaveLength(1);
+		expect(
+			(nextState.conversationLogs.green ?? []).filter(
+				(e) => e.kind === "witnessed-obstacle-shift",
+			),
+		).toHaveLength(0);
 	});
 
 	it("resets the complication countdown after obstacle_shift fires", async () => {

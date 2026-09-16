@@ -1,6 +1,13 @@
 import { expect, type Page, type Request } from "@playwright/test";
+import {
+	deobfuscateEngineBlob,
+	ENGINE_OBFUSCATION_KEY,
+	obfuscateEngineBlob,
+} from "./engine-blob.js";
 import type { AiHandles } from "./handles.js";
 import { getAiHandles } from "./handles.js";
+import type { GridPosition } from "./vista-geometry.js";
+import { isGridPosition } from "./vista-geometry.js";
 
 /**
  * A factory function that produces word chunks for a `/v1/chat/completions`
@@ -57,7 +64,7 @@ function messageToolCallToBlueSseBody(words: string[]): string {
 
 // ── Pure helpers (request classification + canned responses) ─────────────────
 
-type ParsedBody = {
+export type ParsedBody = {
 	stream?: boolean;
 	response_format?: unknown;
 	messages?: Array<{ role?: string; content?: string }>;
@@ -123,25 +130,6 @@ function buildSynthesisResponseBody(
 	});
 	return JSON.stringify({ choices: [{ message: { content } }] });
 }
-
-const STUB_LANDMARKS = {
-	north: {
-		shortName: "Distant ridge",
-		horizonPhrase: "A jagged ridge cuts the skyline.",
-	},
-	south: {
-		shortName: "Rolling hills",
-		horizonPhrase: "Gentle slopes melt into haze.",
-	},
-	east: {
-		shortName: "Stone tower",
-		horizonPhrase: "A weathered tower breaks the treeline.",
-	},
-	west: {
-		shortName: "Misty forest",
-		horizonPhrase: "A dark canopy blurs into fog.",
-	},
-};
 
 // ── Binding-shaped content-pack stub helpers ─────────────────────────────────
 
@@ -309,7 +297,6 @@ function buildBoundPack(
 	return {
 		setting,
 		wallName: "stub boundary wall",
-		landmarks: STUB_LANDMARKS,
 		bindings: builtBindings,
 		decoys,
 		obstacles,
@@ -341,7 +328,8 @@ function buildBoundDualContentPackResponseBody(body: ParsedBody): string {
 	return JSON.stringify({ choices: [{ message: { content } }] });
 }
 
-function parseRequestBody(request: Request): ParsedBody {
+/** Parse a request body as the OpenAI-ish shape these specs inspect. */
+export function parseRequestBody(request: Request): ParsedBody {
 	try {
 		return JSON.parse(request.postData() ?? "null") as ParsedBody;
 	} catch {
@@ -562,4 +550,334 @@ function withSkipDialup(url: string): string {
 	if (/[?&]skipDialup=/.test(url)) return url;
 	const sep = url.includes("?") ? "&" : "?";
 	return `${url}${sep}skipDialup=1`;
+}
+
+// ── Live tool-call SSE bodies ────────────────────────────────────────────────
+
+/**
+ * Build a minimal OpenAI-compatible SSE body that emits a single tool call with
+ * `args` and then closes. The parser in `src/spa/streaming.ts` collects
+ * `tool_calls` deltas by index and flushes them on
+ * `finish_reason:"tool_calls"` or `[DONE]`.
+ *
+ * Specs use this to drive one live action for a chosen Daemon (`go`, `pick_up`)
+ * instead of the `message` tool call `stubChatCompletions` emits.
+ */
+export function toolCallSseBody(
+	name: string,
+	args: Record<string, string>,
+): string {
+	const toolCallChunk = JSON.stringify({
+		choices: [
+			{
+				delta: {
+					tool_calls: [
+						{
+							index: 0,
+							id: "call_e2e_tc",
+							function: { name, arguments: JSON.stringify(args) },
+						},
+					],
+				},
+				finish_reason: null,
+			},
+		],
+	});
+	const finishChunk = JSON.stringify({
+		choices: [{ delta: {}, finish_reason: "tool_calls" }],
+	});
+	return `data: ${toolCallChunk}\n\ndata: ${finishChunk}\n\ndata: [DONE]\n\n`;
+}
+
+// ── Vista geometry (ADR 0015) ────────────────────────────────────────────────
+
+/**
+ * The ADR 0015 Vista oracle — the disk, the cell labels, the room-bounds
+ * check and the witness-membership predicate — lives in `./vista-geometry.js`,
+ * a Playwright-free leaf module, so that
+ * `src/spa/game/__tests__/e2e-vista-oracle.test.ts` can bind this copy to the
+ * shared production geometry without pulling `@playwright/test` into the
+ * unit-test program. Re-exported here because the specs read these helpers
+ * through this surface.
+ */
+export type {
+	CardinalDirection,
+	GridPosition,
+	VistaCell,
+} from "./vista-geometry.js";
+export {
+	CARDINAL_DIRECTIONS,
+	inRoom,
+	inVista,
+	isGridPosition,
+	listingLabels,
+	positionsEqual,
+	RELATIVE_DIRECTION_WORDS,
+	sectionBetween,
+	stepDelta,
+	vistaCells,
+} from "./vista-geometry.js";
+
+// ── Sealed engine.dat storage ────────────────────────────────────────────────
+
+/**
+ * The engine.dat obfuscation codec lives in its own Playwright-free module so
+ * that session fixtures can seal payloads without pulling in `@playwright/test`.
+ * Re-exported here because specs reach it through this helper surface.
+ */
+export {
+	deobfuscateEngineBlob,
+	ENGINE_OBFUSCATION_KEY,
+	obfuscateEngineBlob,
+} from "./engine-blob.js";
+
+/** An entity holder: a Daemon holding the entity, or the cell it rests on. */
+export type EntityHolder = string | GridPosition;
+
+/** The persisted subset of `WorldEntity` these specs read back. */
+export interface SealedEntity {
+	id: string;
+	kind: string;
+	name: string;
+	holder: EntityHolder;
+	satisfactionState?: string;
+}
+
+/** The persisted subset of `ContentPack` these specs read back. */
+export interface SealedContentPack {
+	setting: string;
+	wallName: string;
+	/** Flat entity list (session v11+). */
+	entities?: SealedEntity[];
+	/** Bucketed obstacle list (pre-v11 blobs). */
+	obstacles?: Array<{ holder: GridPosition | null }>;
+}
+
+/** The persisted subset of the sealed `engine.dat` payload (session v12). */
+export interface SealedEngine {
+	schemaVersion: number;
+	personaSpatial: Record<string, { position: GridPosition }>;
+	world: { entities: SealedEntity[] };
+	contentPacksA: SealedContentPack[];
+	contentPacksB: SealedContentPack[];
+	activePackId: "A" | "B";
+	weather?: string;
+}
+
+/** One entry of a persisted `<aiId>.txt` conversation log. */
+export interface SealedConversationEntry {
+	kind: string;
+	round: number;
+	actor?: string;
+	actionKind?: string;
+	direction?: string;
+	toolName?: string;
+	success?: boolean;
+	diskDelta?: string;
+	content?: string;
+	from?: string;
+	to?: string;
+}
+
+/** The persisted subset of a Daemon's `<aiId>.txt` file. */
+export interface SealedDaemonFile {
+	aiId: string;
+	persona: { name: string };
+	conversationLog: SealedConversationEntry[];
+}
+
+/** The Content Pack the sealed engine has active (A unless a Setting Shift). */
+export function activePackOf(
+	sealed: SealedEngine,
+): SealedContentPack | undefined {
+	const packs =
+		sealed.activePackId === "B" ? sealed.contentPacksB : sealed.contentPacksA;
+	return packs?.[0];
+}
+
+/**
+ * Grid cells of every Obstacle in a Content Pack, read from the flat `entities`
+ * list the runtime places and persists (v11+). The bucketed pre-v11
+ * `obstacles` field is a fallback for blobs written before the flattening.
+ */
+export function obstacleCellsOf(pack: SealedContentPack): GridPosition[] {
+	const fromEntities = (pack.entities ?? [])
+		.filter((entity) => entity.kind === "obstacle")
+		.map((entity) => entity.holder)
+		.filter(isGridPosition);
+	if (fromEntities.length > 0) return fromEntities;
+	return (pack.obstacles ?? [])
+		.map((obstacle) => obstacle.holder)
+		.filter(isGridPosition);
+}
+
+/** Read the active session's sealed engine payload, decoded. */
+export async function readActiveSessionEngine(
+	page: Page,
+): Promise<{ sessionId: string; sealed: SealedEngine }> {
+	const raw = await page.evaluate(() => {
+		const sessionId = localStorage.getItem("hi-blue:active-session");
+		if (sessionId === null) return null;
+		const blob = localStorage.getItem(
+			`hi-blue:sessions/${sessionId}/engine.dat`,
+		);
+		if (blob === null) return null;
+		return { sessionId, blob };
+	});
+	if (raw === null) {
+		throw new Error("e2e: no active session engine.dat in localStorage");
+	}
+	return {
+		sessionId: raw.sessionId,
+		sealed: JSON.parse(deobfuscateEngineBlob(raw.blob)) as SealedEngine,
+	};
+}
+
+/** Overwrite the active session's `engine.dat` with `sealed`, obfuscated. */
+export async function writeActiveSessionEngine(
+	page: Page,
+	sessionId: string,
+	sealed: SealedEngine,
+): Promise<void> {
+	const value = obfuscateEngineBlob(JSON.stringify(sealed));
+	await page.evaluate(
+		({ key, blob }: { key: string; blob: string }) => {
+			localStorage.setItem(key, blob);
+		},
+		{ key: `hi-blue:sessions/${sessionId}/engine.dat`, blob: value },
+	);
+}
+
+/** Read one Daemon's persisted `<aiId>.txt`. */
+export async function readDaemonFile(
+	page: Page,
+	sessionId: string,
+	aiId: string,
+): Promise<SealedDaemonFile> {
+	const raw = await page.evaluate(
+		(key: string) => localStorage.getItem(key),
+		`hi-blue:sessions/${sessionId}/${aiId}.txt`,
+	);
+	if (raw === null)
+		throw new Error(`e2e: ${aiId}.txt not found in localStorage`);
+	return JSON.parse(raw) as SealedDaemonFile;
+}
+
+/**
+ * Every plain-text file the session wrote: `meta.json`, each `<aiId>.txt`, and
+ * the decoded `engine.dat` payload. Used to assert on what a save actually
+ * carries (rather than on one field at a time).
+ */
+export async function readActiveSessionFiles(page: Page): Promise<{
+	meta: string;
+	daemons: Record<string, string>;
+	engineJson: string;
+}> {
+	const raw = await page.evaluate(() => {
+		const sessionId = localStorage.getItem("hi-blue:active-session") ?? "";
+		const prefix = `hi-blue:sessions/${sessionId}/`;
+		const daemons: Record<string, string> = {};
+		let meta = "";
+		let engine = "";
+		for (let i = 0; i < localStorage.length; i++) {
+			const key = localStorage.key(i);
+			if (key === null || !key.startsWith(prefix)) continue;
+			const name = key.slice(prefix.length);
+			const value = localStorage.getItem(key) ?? "";
+			if (name === "meta.json") meta = value;
+			else if (name === "engine.dat") engine = value;
+			else if (name.endsWith(".txt")) daemons[name] = value;
+		}
+		return { meta, daemons, engine };
+	});
+	return {
+		meta: raw.meta,
+		daemons: raw.daemons,
+		engineJson: raw.engine === "" ? "" : deobfuscateEngineBlob(raw.engine),
+	};
+}
+
+/**
+ * Wait until `meta.json` reports at least `expectedRound`. The save writes
+ * meta.json first and `engine.dat` last, so this alone does not prove the
+ * round's engine state is committed — pair it with
+ * {@link waitForSavedPosition} when the assertion depends on engine data.
+ */
+export async function waitForRound(
+	page: Page,
+	sessionId: string,
+	expectedRound: number,
+	timeoutMs = 30_000,
+): Promise<void> {
+	await page.waitForFunction(
+		({ sid, expectedRound: round }: { sid: string; expectedRound: number }) => {
+			const raw = localStorage.getItem(`hi-blue:sessions/${sid}/meta.json`);
+			if (raw === null) return false;
+			try {
+				const meta = JSON.parse(raw) as { round?: number };
+				return (meta.round ?? 0) >= round;
+			} catch {
+				return false;
+			}
+		},
+		{ sid: sessionId, expectedRound },
+		{ timeout: timeoutMs },
+	);
+}
+
+/**
+ * Wait until the committed `engine.dat` stores `expected` as `aiId`'s position.
+ * `engine.dat` is written last in the save order, so it is the commit signal
+ * for a round's engine state.
+ */
+export async function waitForSavedPosition(
+	page: Page,
+	sessionId: string,
+	aiId: string,
+	expected: GridPosition,
+	timeoutMs = 30_000,
+): Promise<void> {
+	await page.waitForFunction(
+		({
+			sid,
+			id,
+			row,
+			col,
+			key,
+		}: {
+			sid: string;
+			id: string;
+			row: number;
+			col: number;
+			key: string;
+		}) => {
+			const blob = localStorage.getItem(`hi-blue:sessions/${sid}/engine.dat`);
+			if (blob === null) return false;
+			try {
+				const keyBytes = new TextEncoder().encode(key);
+				const binary = atob(blob);
+				const bytes = new Uint8Array(binary.length);
+				for (let i = 0; i < binary.length; i++) {
+					bytes[i] =
+						(binary.charCodeAt(i) & 0xff) ^
+						(keyBytes[i % keyBytes.length] as number);
+				}
+				const sealed = JSON.parse(
+					new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+				) as { personaSpatial?: Record<string, { position?: GridPosition }> };
+				const position = sealed.personaSpatial?.[id]?.position;
+				return position?.row === row && position?.col === col;
+			} catch {
+				return false;
+			}
+		},
+		{
+			sid: sessionId,
+			id: aiId,
+			row: expected.row,
+			col: expected.col,
+			key: ENGINE_OBFUSCATION_KEY,
+		},
+		{ timeout: timeoutMs },
+	);
 }

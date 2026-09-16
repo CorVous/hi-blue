@@ -150,10 +150,10 @@ function buildFooterFields(): HTMLElement[] {
 	spans.push(chipsSpan);
 
 	const focusBtn = document.createElement("button");
-	focusBtn.className = "dev-footer-focus-cone";
-	focusBtn.setAttribute("data-field", "focus-cone");
+	focusBtn.className = "dev-footer-focus-vista";
+	focusBtn.setAttribute("data-field", "focus-vista");
 	focusBtn.setAttribute("type", "button");
-	focusBtn.textContent = "[ focus cone ]";
+	focusBtn.textContent = "[ focus vista ]";
 	focusBtn.setAttribute("data-focus-active", "false");
 	spans.push(focusBtn);
 
@@ -298,9 +298,9 @@ export function renderDaemonFooter(
 	// Remove hidden attribute
 	footerEl.removeAttribute("hidden");
 
-	// Attach click handler to focus-cone button
+	// Attach click handler to the focus-Vista button
 	const focusBtnEl = panelEl.querySelector<HTMLButtonElement>(
-		'[data-field="focus-cone"]',
+		'[data-field="focus-vista"]',
 	);
 	if (focusBtnEl) {
 		focusBtnEl.addEventListener("click", () => {

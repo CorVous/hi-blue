@@ -1,28 +1,26 @@
-import { projectCone } from "./cone-projector.js";
-import {
-	cardinalToRelative,
-	frontArc,
-	isGridPosition,
-	positionsEqual,
-} from "./direction.js";
+import { withinInteractionRange } from "./available-tools.js";
+import { isGridPosition, positionsEqual } from "./direction.js";
 import type {
 	AiBudget,
 	AiId,
-	CardinalDirection,
-	ContentPack,
 	ConversationEntry,
 	GameState,
 	GridPosition,
-	LandmarkDescription,
 	Objective,
 	PersonaSpatialState,
 	WorldEntity,
 	WorldState,
 } from "./types";
+import {
+	projectVista,
+	VISTA_OFFSETS,
+	type VistaAxisStep,
+	vistaContains,
+} from "./vista-projector.js";
 
 /** Structured entity state for perception-delta diffing. */
-export interface ConeEntityState {
-	inCone: boolean;
+export interface DiskEntityState {
+	inVista: boolean;
 	satisfied: boolean;
 }
 
@@ -50,35 +48,29 @@ export interface AiContext {
 	budget: AiBudget;
 	/** Spatial state for all AIs. */
 	personaSpatial: Record<AiId, PersonaSpatialState>;
-	/** Color for each AI, keyed by AiId — used in cone rendering. */
+	/** Color for each AI, keyed by AiId — used in the Vista listing. */
 	personaColors: Record<AiId, string>;
 	/** Name for each AI, keyed by AiId — used in perception-delta rendering. */
 	personaNames: Record<AiId, string>;
 	/**
-	 * Four distant horizon landmarks, one per cardinal anchor.
-	 * Used to render the "On the horizon ahead:" line in `<where_you_are>`.
-	 * Keyed by cardinal direction.
-	 */
-	landmarks: ContentPack["landmarks"];
-	/**
 	 * Setting-flavored name for the impassable grid edge (e.g. "subway tunnel wall").
-	 * Rendered in `<what_you_see>` and `<whats_new>` for OOB cone cells.
+	 * Rendered in `<what_you_see>` and `<whats_new>` for out-of-bounds Vista cells.
 	 */
 	wallName: string;
 	/**
-	 * Canonical cone-snapshot string captured at the end of this AI's last turn,
-	 * or undefined on the first turn of a phase. Used by `renderCurrentState`
-	 * to emit a `<whats_new>` diff so the model has a fresh delta to react to
-	 * rather than re-reading an unchanged cone.
+	 * Canonical perception-disk snapshot string captured at the end of this AI's
+	 * last turn, or undefined on the first turn of a phase. Used by
+	 * `renderCurrentState` to emit a `<whats_new>` diff so the model has a fresh
+	 * delta to react to rather than re-reading an unchanged Vista.
 	 */
-	prevConeSnapshot?: string;
+	prevDiskSnapshot?: string;
 	/**
 	 * Structured entity perception state from the previous turn, keyed by entity id.
 	 * Used to diff entity entry/exit/satisfaction changes and emit perception-delta lines
-	 * that persist via coneDelta into the conversation log.
+	 * that persist via diskDelta into the conversation log.
 	 * Undefined on the first turn of a phase.
 	 */
-	prevConeEntities?: Record<string, ConeEntityState>;
+	prevDiskEntities?: Record<string, DiskEntityState>;
 	/**
 	 * Broadcast entry contents for the current round — world announcements
 	 * (e.g. weather change) that fired after the previous turn's LLM calls.
@@ -110,16 +102,16 @@ export interface AiContext {
 
 export interface BuildAiContextOpts {
 	/**
-	 * Canonical cone snapshot from this AI's previous turn. When supplied,
-	 * `toCurrentStateUserMessage()` prepends a `<whats_new>` diff so the
-	 * model gets a fresh delta rather than re-reading an unchanged cone.
+	 * Canonical perception-disk snapshot from this AI's previous turn. When
+	 * supplied, `toCurrentStateUserMessage()` prepends a `<whats_new>` diff so
+	 * the model gets a fresh delta rather than re-reading an unchanged Vista.
 	 */
-	prevConeSnapshot?: string;
+	prevDiskSnapshot?: string;
 	/**
 	 * Structured entity perception state from this AI's previous turn.
 	 * When supplied, used to emit perception-delta lines (first-sight, departure, transition).
 	 */
-	prevConeEntities?: Record<string, ConeEntityState>;
+	prevDiskEntities?: Record<string, DiskEntityState>;
 }
 
 export function buildAiContext(
@@ -148,7 +140,6 @@ export function buildAiContext(
 	const weather = game.weather ?? "";
 	const timeOfDay = game.timeOfDay ?? "";
 	const personaSpatial = game.personaSpatial;
-	const landmarks = game.contentPack.landmarks;
 	const wallName = game.contentPack.wallName;
 
 	if (!persona) throw new Error(`No persona for aiId: ${aiId}`);
@@ -180,16 +171,15 @@ export function buildAiContext(
 		personaSpatial,
 		personaColors,
 		personaNames,
-		landmarks,
 		wallName,
 		pendingBroadcasts,
 		activeDirectives,
 		objectives: game.objectives,
-		...(opts?.prevConeSnapshot !== undefined
-			? { prevConeSnapshot: opts.prevConeSnapshot }
+		...(opts?.prevDiskSnapshot !== undefined
+			? { prevDiskSnapshot: opts.prevDiskSnapshot }
 			: {}),
-		...(opts?.prevConeEntities !== undefined
-			? { prevConeEntities: opts.prevConeEntities }
+		...(opts?.prevDiskEntities !== undefined
+			? { prevDiskEntities: opts.prevDiskEntities }
 			: {}),
 		toSystemPrompt() {
 			return renderSystemPrompt(this);
@@ -517,37 +507,112 @@ function getParallelFraming(): ParallelFraming | null {
 	return PRODUCTION_PARALLEL_FRAMING;
 }
 
-function facingLabel(facing: CardinalDirection): string {
-	return facing.charAt(0).toUpperCase() + facing.slice(1);
+/**
+ * Spelled-out distance for the cardinal direction-and-distance prose.
+ * Every offset the Vista projects is at distance two or less, so no word
+ * beyond those is reachable.
+ */
+const DISTANCE_WORDS: Record<number, string> = {
+	0: "zero",
+	1: "one",
+	2: "two",
+};
+
+function distanceWord(distance: number): string {
+	return DISTANCE_WORDS[distance] ?? String(distance);
+}
+
+/** Capitalise a cell label for the rendered listing ("one step north" → "One step north"). */
+function capitalize(label: string): string {
+	return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function stepPhrase(step: VistaAxisStep): string {
+	const unit = step.distance === 1 ? "step" : "steps";
+	return `${distanceWord(step.distance)} ${unit} ${step.direction}`;
 }
 
 /**
- * Build a structured perception state for all renderable entities in the actor's cone.
- * Returns a map keyed by entity id, tracking whether each entity is in-cone and satisfied.
- * Covers renderable items, obstacles, objective_spaces, and other personas in viewCells
- * (NOT including the actor's own cell — first-sight is about coming into view).
+ * Render a set of Vista axis steps as cardinal direction-and-distance prose,
+ * e.g. "one step north and one step east", or "two steps south". The own cell
+ * carries no steps and reads "your cell".
  */
-export function buildConeEntityState(
+export function describeSteps(steps: readonly VistaAxisStep[]): string {
+	if (steps.length === 0) return "your cell";
+	return steps.map(stepPhrase).join(" and ");
+}
+
+/**
+ * Axis steps for an observer→target offset, read from the shared Vista table.
+ * Every caller describes a cell the observer perceives, and the perceived
+ * offsets are exactly `VISTA_OFFSETS`, so the lookup always hits. An offset
+ * outside the disk has no prose: the observer does not see that cell, so there
+ * is no cardinal description to build for it.
+ *
+ * @throws RangeError when the offset is outside the Vista — a caller describing
+ * an unperceived cell is a bug, not a cell shape to render.
+ */
+function axisStepsFor(dx: number, dy: number): readonly VistaAxisStep[] {
+	const known = VISTA_OFFSETS.find((o) => o.dx === dx && o.dy === dy);
+	if (known === undefined) {
+		throw new RangeError(
+			`axisStepsFor: offset (${dx}, ${dy}) is outside the Vista`,
+		);
+	}
+	return known.steps;
+}
+
+/**
+ * Cardinal direction-and-distance prose locating `target` from `observer`,
+ * e.g. "one step north and one step east of you" (ADR 0015). Built from the
+ * two positions alone: no orientation enters the description, so the same
+ * pair of cells always reads the same way however either Daemon is stored.
+ * Positions equal reads "in your cell" — zero distance has no cardinal
+ * direction to state. `target` must lie inside the observer's Vista.
+ */
+export function describeRelativePosition(
+	observer: GridPosition,
+	target: GridPosition,
+): string {
+	if (positionsEqual(observer, target)) return "in your cell";
+	// Row 0 is the north edge, so a cell `dy` steps north of the observer has a
+	// smaller row: dy = observer.row − target.row. Columns increase eastward.
+	const steps = axisStepsFor(
+		target.col - observer.col,
+		observer.row - target.row,
+	);
+	return `${describeSteps(steps)} of you`;
+}
+
+/**
+ * Build a structured perception state for all renderable entities in the actor's
+ * Vista — the position-only 13-cell proximity disk. Returns a map keyed by entity
+ * id, tracking whether each entity is in-Vista and satisfied. Covers renderable
+ * items, obstacles, objective_spaces, and other personas (NOT including the
+ * actor's own cell — first-sight is about coming into view). Obstacles never
+ * remove cells from the footprint; out-of-bounds cells are Wall sentinels and
+ * carry no entities.
+ */
+export function buildDiskEntityState(
 	ctx: AiContext,
-): Record<string, ConeEntityState> {
+): Record<string, DiskEntityState> {
 	const actorSpatial = ctx.personaSpatial[ctx.aiId];
 	if (!actorSpatial) return {};
 
-	const state: Record<string, ConeEntityState> = {};
-	const coneCells = projectCone(actorSpatial.position, actorSpatial.facing);
-	const viewCells = coneCells.filter((c) => !c.isOwnCell);
+	const state: Record<string, DiskEntityState> = {};
+	const viewCells = projectVista(actorSpatial.position).filter(
+		(c) => !c.isOwnCell && !c.isWall,
+	);
 
 	// Iterate through view cells and track entities
 	for (const cell of viewCells) {
-		if (cell.isWall) continue; // Wall sentinel — skip
-
 		const { position } = cell;
 
 		// Other personas
 		for (const [otherId, otherSpatial] of Object.entries(ctx.personaSpatial)) {
 			if (otherId === ctx.aiId) continue;
 			if (!positionsEqual(otherSpatial.position, position)) continue;
-			state[otherId] = { inCone: true, satisfied: false };
+			state[otherId] = { inVista: true, satisfied: false };
 		}
 
 		// Renderable items
@@ -556,7 +621,7 @@ export function buildConeEntityState(
 			const h = item.holder;
 			if (isGridPosition(h) && positionsEqual(h, position)) {
 				state[item.id] = {
-					inCone: true,
+					inVista: true,
 					satisfied: item.satisfactionState === "satisfied",
 				};
 			}
@@ -567,7 +632,7 @@ export function buildConeEntityState(
 			if (obs.kind !== "obstacle") continue;
 			const h = obs.holder;
 			if (isGridPosition(h) && positionsEqual(h, position)) {
-				state[obs.id] = { inCone: true, satisfied: false };
+				state[obs.id] = { inVista: true, satisfied: false };
 			}
 		}
 
@@ -577,7 +642,7 @@ export function buildConeEntityState(
 			const h = space.holder;
 			if (isGridPosition(h) && positionsEqual(h, position)) {
 				state[space.id] = {
-					inCone: true,
+					inVista: true,
 					satisfied: space.satisfactionState === "satisfied",
 				};
 			}
@@ -598,18 +663,18 @@ export function buildConeEntityState(
  *
  * Edge cases:
  * - Entity new AND satisfied this turn: emit ONLY the transition line (skip first-sight to avoid duplication)
- * - Entity moves within cone: inCone stays true → no line
- * - Entity destroyed/not in world: treated as departure if previously inCone
+ * - Entity moves within the Vista: inVista stays true → no line
+ * - Entity destroyed/not in world: treated as departure if previously inVista
  * - Persona enters/leaves: emit first-sight/departure with persona name, NO flavor
- * - Pick-up suppression: entity from cone-cell to held → suppress departure if entity.holder === ctx.aiId
+ * - Pick-up suppression: entity from a Vista cell to held → suppress departure if entity.holder === ctx.aiId
  */
 export function renderPerceptionDelta(
 	ctx: AiContext,
-	prevEntities: Record<string, ConeEntityState> | undefined,
+	prevEntities: Record<string, DiskEntityState> | undefined,
 ): string[] {
 	if (prevEntities === undefined) return []; // No prior state, no delta
 
-	const currEntities = buildConeEntityState(ctx);
+	const currEntities = buildDiskEntityState(ctx);
 	const lines: string[] = [];
 
 	// Track entities we've emitted transition lines for (to suppress duplicate first-sight)
@@ -618,7 +683,7 @@ export function renderPerceptionDelta(
 	// Check satisfaction transitions first (before entry/exit logic)
 	for (const [entityId, currState] of Object.entries(currEntities)) {
 		const prevState = prevEntities[entityId];
-		if (!prevState || !currState.inCone) continue; // Not in prev cone, or not in current cone — skip
+		if (!prevState || !currState.inVista) continue; // Not in prev Vista, or not in current Vista — skip
 
 		// Satisfaction flip to satisfied
 		if (!prevState.satisfied && currState.satisfied) {
@@ -639,11 +704,11 @@ export function renderPerceptionDelta(
 		}
 	}
 
-	// Check departures (was in prev cone, not in current cone)
+	// Check departures (was in prev Vista, not in current Vista)
 	for (const [entityId, prevState] of Object.entries(prevEntities)) {
 		const currState = currEntities[entityId];
-		if (!prevState.inCone) continue; // Was not in cone before, skip
-		if (currState?.inCone) continue; // Still in cone, skip
+		if (!prevState.inVista) continue; // Was not in the Vista before, skip
+		if (currState?.inVista) continue; // Still in the Vista, skip
 
 		// Check if it's a persona first
 		const isPersona = ctx.personaSpatial[entityId] !== undefined;
@@ -664,11 +729,11 @@ export function renderPerceptionDelta(
 		lines.push(`Lost from view: ${name}`);
 	}
 
-	// Check first-sight (not in prev cone, in current cone)
+	// Check first-sight (not in prev Vista, in current Vista)
 	for (const [entityId, currState] of Object.entries(currEntities)) {
 		const prevState = prevEntities[entityId];
-		if (prevState?.inCone) continue; // Was already in cone, skip
-		if (!currState.inCone) continue; // Not in current cone, skip (shouldn't happen)
+		if (prevState?.inVista) continue; // Was already in the Vista, skip
+		if (!currState.inVista) continue; // Not in the current Vista, skip (shouldn't happen)
 
 		// Skip if transition was emitted (entity new AND satisfied)
 		if (transitionEmitted.has(entityId)) continue;
@@ -748,10 +813,17 @@ function renderSystemPrompt(ctx: AiContext): string {
 	lines.push("");
 
 	// Setting — only emitted when a setting noun is present.
+	// Cardinal directions belong here: they are stated once, in-fiction, and
+	// they describe the room's own geography. Nothing in the fiction defines
+	// them by what the Daemon can see — not the room as a whole, not its walls
+	// — so a Setting Shift or a new room leaves them unchanged.
 	if (ctx.setting) {
 		lines.push("<setting>");
 		lines.push(`*${ctx.name} is in a ${ctx.setting}.`);
 		if (ctx.timeOfDay) lines.push(`It is ${ctx.timeOfDay}.`);
+		lines.push(
+			"The room's cardinal directions are fixed: north, south, east, and west. They belong to the room itself, not to what it contains.",
+		);
 		lines.push("</setting>");
 		lines.push("");
 	}
@@ -811,22 +883,26 @@ function renderSystemPrompt(ctx: AiContext): string {
 }
 
 /**
- * Returns zero or more hint lines to append after the cone listing.
- * Covers carry proximity (existing), UseItem proximity (new),
- * and UseSpace/Convergence proximity-or-auto-examine (new).
+ * Returns zero or more hint lines to append after the Vista listing.
+ * Distances follow ADR 0015:
+ *   - Carry: the held item's matching space is within **Interaction range**.
+ *   - Use-Item: the unheld item is within **Interaction range**.
+ *   - Use-Space / Convergence: the pending objective's space is inside the
+ *     **Vista** but outside interaction range — the four cells two cardinal
+ *     steps away.
+ * Ordinary descriptions, on-space flavor, and completion flavor stay
+ * separate: this only ever emits `proximityFlavor`.
  *
- * Used by both `buildConeSnapshot` (so the `<whats_new>` diff tracks entry/exit)
- * and `renderCurrentState` (to append sense lines after the cone listing).
+ * Used by both `buildDiskSnapshot` (so the `<whats_new>` diff tracks entry/exit)
+ * and `renderCurrentState` (to append sense lines after the Vista listing).
  */
 function collectObjectiveHints(ctx: AiContext): string[] {
 	const actorSpatial = ctx.personaSpatial[ctx.aiId];
 	if (!actorSpatial) return [];
 
-	const arc = frontArc(actorSpatial.position, actorSpatial.facing);
-	const coneCells = projectCone(actorSpatial.position, actorSpatial.facing);
 	const hints: string[] = [];
 
-	// ── Carry (existing, moved into new function) ──────────────────────────────
+	// ── Carry: held item whose matching space is within interaction range ─────
 	for (const entity of ctx.worldSnapshot.entities) {
 		if (entity.kind !== "objective_object") continue;
 		if (entity.holder !== ctx.aiId) continue;
@@ -837,30 +913,20 @@ function collectObjectiveHints(ctx: AiContext): string[] {
 		);
 		if (!space || !isGridPosition(space.holder)) continue;
 
-		const spacePos = space.holder as GridPosition;
-		const reachable =
-			positionsEqual(spacePos, actorSpatial.position) ||
-			arc.some((p) => positionsEqual(p, spacePos));
-
-		if (reachable) hints.push(entity.proximityFlavor);
+		if (withinInteractionRange(actorSpatial.position, space.holder)) {
+			hints.push(entity.proximityFlavor);
+		}
 	}
 
-	// ── UseItem (new) ──────────────────────────────────────────────────────────
+	// ── UseItem: unheld item within interaction range ─────────────────────────
 	for (const entity of ctx.worldSnapshot.entities) {
 		if (entity.kind !== "interesting_object") continue;
 		if (!entity.proximityFlavor) continue;
 		// Skip if held by actor
 		if (entity.holder === ctx.aiId) continue;
+		if (!isGridPosition(entity.holder)) continue;
 
-		// Check if in actor's own cell or front arc
-		const inOwnCell =
-			isGridPosition(entity.holder) &&
-			positionsEqual(entity.holder, actorSpatial.position);
-		const inFrontArc =
-			isGridPosition(entity.holder) &&
-			arc.some((p) => positionsEqual(p, entity.holder as GridPosition));
-
-		if (!inOwnCell && !inFrontArc) continue;
+		if (!withinInteractionRange(actorSpatial.position, entity.holder)) continue;
 
 		// Check if there's a pending UseItemObjective referencing this entity
 		const hasPendingObjective = ctx.objectives.some(
@@ -875,7 +941,7 @@ function collectObjectiveHints(ctx: AiContext): string[] {
 		}
 	}
 
-	// ── UseSpace / Convergence proximity flavor (new) ──────────────────────────
+	// ── UseSpace / Convergence: pending space in the Vista, out of range ──────
 	for (const entity of ctx.worldSnapshot.entities) {
 		if (entity.kind !== "objective_space") continue;
 		if (!isGridPosition(entity.holder)) continue;
@@ -892,19 +958,17 @@ function collectObjectiveHints(ctx: AiContext): string[] {
 
 		const spacePos = entity.holder;
 
-		// Only fire proximity flavor when in full cone but NOT in own cell or front arc
-		const inOwnCell = positionsEqual(spacePos, actorSpatial.position);
-		const inFrontArc = arc.some((p) => positionsEqual(p, spacePos));
+		// Out of reach but still visible: the four cells two cardinal steps
+		// away. Vista membership alone never makes a space usable — this is
+		// flavor, not availability.
+		if (withinInteractionRange(actorSpatial.position, spacePos)) continue;
 
-		if (!inOwnCell && !inFrontArc) {
-			// Check if in full cone but outside front arc/own cell
-			const inCone = coneCells.some(
-				(cell) => !cell.isWall && positionsEqual(cell.position, spacePos),
-			);
+		// Vista membership comes from the shared gate, so the prompt and the
+		// witness rules read the same definition.
+		const inSight = vistaContains(actorSpatial.position, spacePos);
 
-			if (inCone && entity.proximityFlavor) {
-				hints.push(entity.proximityFlavor);
-			}
+		if (inSight && entity.proximityFlavor) {
+			hints.push(entity.proximityFlavor);
 		}
 	}
 
@@ -912,14 +976,15 @@ function collectObjectiveHints(ctx: AiContext): string[] {
 }
 
 /**
- * Build a canonical, position-keyed cone snapshot for diffing. Stable under
- * actor movement (cells are keyed by absolute `(row,col)` rather than the
- * "two cells ahead-front" relative phrasing used in the rendered prompt), so
- * a `<whats_new>` diff fires only on real content changes.
+ * Build a canonical, direction-keyed perception-disk snapshot for diffing. Cells
+ * are keyed by their cardinal direction and distance from the observer (e.g.
+ * "at two steps north: …") rather than by absolute coordinates, so the snapshot
+ * describes exactly the Vista and depends on the observer's position alone —
+ * perception reads no orientation, because there is none to read.
  *
  * The string is private to `renderWhatsNew`; not part of the prompt itself.
  */
-export function buildConeSnapshot(ctx: AiContext): string {
+export function buildDiskSnapshot(ctx: AiContext): string {
 	const actorSpatial = ctx.personaSpatial[ctx.aiId];
 	if (!actorSpatial) return "";
 
@@ -941,12 +1006,17 @@ export function buildConeSnapshot(ctx: AiContext): string {
 		`you: holding=[${heldItems.join(", ") || "nothing"}] cell=[${ownCellItems.join(", ") || "nothing"}]`,
 	);
 
-	const coneCells = projectCone(actorSpatial.position, actorSpatial.facing);
-	const viewCells = coneCells.filter((c) => !c.isOwnCell);
+	// The Vista is position-only: the same 13 offsets for every Daemon, with
+	// out-of-bounds cells as Wall sentinels. Obstacles never remove a cell.
+	const viewCells = projectVista(actorSpatial.position).filter(
+		(c) => !c.isOwnCell,
+	);
 	for (const cell of viewCells) {
+		const label = describeSteps(cell.steps);
+
 		// Wall sentinel — OOB cell
 		if (cell.isWall) {
-			lines.push(`at ${cell.phrasing}: ${ctx.wallName}`);
+			lines.push(`at ${label}: ${ctx.wallName}`);
 			continue;
 		}
 
@@ -990,7 +1060,7 @@ export function buildConeSnapshot(ctx: AiContext): string {
 			})
 			.map((e) => e.postLookFlavor as string);
 
-		let cellLine = `at ${cell.phrasing}: ${contents}`;
+		let cellLine = `at ${label}: ${contents}`;
 		for (const flavor of satisfiedFlavors) {
 			cellLine += ` ${flavor}`;
 		}
@@ -1006,13 +1076,13 @@ export function buildConeSnapshot(ctx: AiContext): string {
 }
 
 /**
- * Diff two cone snapshots (from `buildConeSnapshot`) into a `<whats_new>`
- * body. Returns null when the snapshots are equivalent (no diff to render).
+ * Diff two perception-disk snapshots (from `buildDiskSnapshot`) into a
+ * `<whats_new>` body. Returns null when the snapshots are equivalent — an
+ * unchanged Vista emits no diff at all.
  *
  * Lines are added with `+ ` and removed with `- `. The `you:` line is split
- * into its own field-level diff so position / facing / holding / cell
- * changes surface as a single readable line rather than a paired
- * remove + add.
+ * into its own field-level diff so holding / own-cell changes surface as a
+ * single readable line rather than a paired remove + add.
  */
 export function renderWhatsNew(prev = "", current = ""): string | null {
 	if (prev === current) return null;
@@ -1036,7 +1106,7 @@ export function renderWhatsNew(prev = "", current = ""): string | null {
 	if (prevYou !== currYou && prevYou !== "" && currYou !== "") {
 		const prevFields = parseYouLine(prevYou);
 		const currFields = parseYouLine(currYou);
-		for (const key of ["pos", "holding", "cell"] as const) {
+		for (const key of ["holding", "cell"] as const) {
 			if (prevFields[key] !== currFields[key]) {
 				out.push(`~ self.${key}: ${prevFields[key]} → ${currFields[key]}`);
 			}
@@ -1065,23 +1135,19 @@ export function renderWhatsNew(prev = "", current = ""): string | null {
 }
 
 function parseYouLine(line: string): {
-	pos: string;
-	facing: string;
 	holding: string;
 	cell: string;
 } {
-	// Format: "you: pos=(R,C) facing=Dir holding=[…] cell=[…]"
-	const pos = /pos=(\([^)]*\))/.exec(line)?.[1] ?? "";
-	const facing = /facing=(\S+)/.exec(line)?.[1] ?? "";
+	// Format: "you: holding=[…] cell=[…]"
 	const holding = /holding=(\[[^\]]*\])/.exec(line)?.[1] ?? "";
 	const cell = /cell=(\[[^\]]*\])/.exec(line)?.[1] ?? "";
-	return { pos, facing, holding, cell };
+	return { holding, cell };
 }
 
 /**
  * Render the per-round volatile state — `<where_you_are>` + `<what_you_see>`,
- * preceded by an optional `<whats_new>` diff when the AI has a prior cone
- * snapshot from its last turn.
+ * preceded by an optional `<whats_new>` diff when the AI has a prior
+ * perception-disk snapshot from its last turn.
  *
  * Emitted by `buildOpenAiMessages` as the final user turn each round, so the
  * stable system prompt stays byte-identical (and OpenRouter-cacheable) within
@@ -1090,25 +1156,26 @@ function parseYouLine(line: string): {
 function renderCurrentState(ctx: AiContext): string {
 	const lines: string[] = [];
 
-	if (
-		ctx.prevConeSnapshot !== undefined ||
-		ctx.pendingBroadcasts.length > 0 ||
-		ctx.prevConeEntities !== undefined
-	) {
+	// `<whats_new>` carries only changes: the entry/exit diff against the
+	// previous snapshot, perception-delta lines, and pending announcements. An
+	// unchanged Vista produces no diff and no block — the whole listing is
+	// already rendered fresh below.
+	const whatsNew: string[] = [];
+	if (ctx.prevDiskSnapshot !== undefined) {
+		const current = buildDiskSnapshot(ctx);
+		const diff = renderWhatsNew(ctx.prevDiskSnapshot, current);
+		if (diff !== null) whatsNew.push(diff);
+	}
+	// Append perception-delta lines (first-sight, departure, transition)
+	for (const line of renderPerceptionDelta(ctx, ctx.prevDiskEntities)) {
+		whatsNew.push(line);
+	}
+	for (const content of ctx.pendingBroadcasts) {
+		whatsNew.push(`[announcement] ${content}`);
+	}
+	if (whatsNew.length > 0) {
 		lines.push("<whats_new>");
-		if (ctx.prevConeSnapshot !== undefined) {
-			const current = buildConeSnapshot(ctx);
-			const diff = renderWhatsNew(ctx.prevConeSnapshot, current);
-			lines.push(diff ?? "(no change)");
-		}
-		// Append perception-delta lines (first-sight, departure, transition)
-		const perceptionDelta = renderPerceptionDelta(ctx, ctx.prevConeEntities);
-		for (const line of perceptionDelta) {
-			lines.push(line);
-		}
-		for (const content of ctx.pendingBroadcasts) {
-			lines.push(`[announcement] ${content}`);
-		}
+		lines.push(...whatsNew);
 		lines.push("</whats_new>");
 		lines.push("");
 	}
@@ -1118,13 +1185,6 @@ function renderCurrentState(ctx: AiContext): string {
 
 	lines.push("<where_you_are>");
 	if (actorSpatial) {
-		// Horizon landmark: the one landmark currently in front of the daemon.
-		// Cardinal facing is used to look up the landmark; the line is always-on.
-		const horizonLandmark: LandmarkDescription =
-			ctx.landmarks[actorSpatial.facing];
-		lines.push(
-			`On the horizon ahead: ${horizonLandmark.shortName} — ${horizonLandmark.horizonPhrase}.`,
-		);
 		if (ctx.weather) lines.push(`Weather: ${ctx.weather}`);
 
 		// Held items
@@ -1167,46 +1227,69 @@ function renderCurrentState(ctx: AiContext): string {
 	lines.push("</where_you_are>");
 	lines.push("");
 
-	// What you see — cone projection.
+	// What you see — the Vista: the position-only 13-cell proximity disk
+	// (ADR 0015). Cells are labelled by cardinal direction and distance from
+	// the Daemon's position, so no relative-direction phrasing — and no implied
+	// orientation — enters the listing. The Daemon's own cell is covered by
+	// `<where_you_are>`, so the remaining 12 cells are the listing's cell lines;
+	// a peer Daemon standing on the own cell is still perceived, and is
+	// described ahead of them.
 	lines.push("<what_you_see>");
 	if (actorSpatial) {
-		const coneCells = projectCone(actorSpatial.position, actorSpatial.facing);
-		// Skip own cell (first entry) — it's covered by "Where you are"
-		const viewCells = coneCells.filter((c) => !c.isOwnCell);
+		const viewCells = projectVista(actorSpatial.position);
 		for (const cell of viewCells) {
-			const { position, phrasing } = cell;
+			const { position } = cell;
 
-			// Wall sentinel — OOB cell
-			if (cell.isWall) {
-				const label = phrasing.charAt(0).toUpperCase() + phrasing.slice(1);
-				lines.push(`- ${label}: ${ctx.wallName}`);
-				continue;
-			}
-
-			// Build contents of this cell
-			const contentParts: string[] = [];
-
-			// 1. Other Daemons in this cell
+			// 1. Other Daemons in this cell. Position is described in cardinal
+			// direction and distance from the observer's position — never from
+			// an orientation — and carries no orientation description. The own
+			// cell belongs to the Vista, so a peer sharing it is perceived too:
+			// at zero distance there is no cardinal direction to state, and
+			// `describeRelativePosition` reads it as "in your cell".
+			const peers: string[] = [];
 			for (const [otherId, otherSpatial] of Object.entries(
 				ctx.personaSpatial,
 			)) {
 				if (otherId === ctx.aiId) continue;
 				if (!positionsEqual(otherSpatial.position, position)) continue;
-				// Format: "the Daemon *<id>, facing <relative>, holding <items|nothing>"
-				// Other daemon's facing is rendered relative to the observer's facing.
 				const heldByOther = items
 					.filter((item) => item.holder === otherId)
 					.map((item) => item.name);
 				const holdingStr =
 					heldByOther.length > 0 ? heldByOther.join(", ") : "nothing";
 				const otherColor = ctx.personaColors[otherId] ?? "unknown";
-				const otherFacingRelative = actorSpatial
-					? cardinalToRelative(actorSpatial.facing, otherSpatial.facing)
-					: facingLabel(otherSpatial.facing);
-				contentParts.push(
-					`the Daemon *${otherId} (${otherColor}), facing ${otherFacingRelative}, holding ${holdingStr}`,
+				const where = describeRelativePosition(
+					actorSpatial.position,
+					otherSpatial.position,
+				);
+				peers.push(
+					`the Daemon *${otherId} (${otherColor}), ${where}, holding ${holdingStr}`,
 				);
 			}
+
+			// The own cell is `<where_you_are>`'s to describe — it carries the
+			// actor's inventory and the items on the ground there — so it is not
+			// one of the 12 cell lines. A peer sharing it is still perceived, and
+			// reads as a perception line labelled with the own cell.
+			if (cell.isOwnCell) {
+				if (peers.length > 0) {
+					lines.push(
+						`${capitalize(describeSteps(cell.steps))}: ${peers.join("; ")}`,
+					);
+				}
+				continue;
+			}
+
+			const label = capitalize(describeSteps(cell.steps));
+
+			// Wall sentinel — OOB cell, still perceived as a Wall.
+			if (cell.isWall) {
+				lines.push(`- ${label}: ${ctx.wallName}`);
+				continue;
+			}
+
+			// Build contents of this cell
+			const contentParts: string[] = [...peers];
 
 			// 2. Items resting on this cell (not held by anyone — explicitly tagged)
 			const cellItems = items.filter((item) => {
@@ -1247,8 +1330,6 @@ function renderCurrentState(ctx: AiContext): string {
 				})
 				.map((e) => e.postLookFlavor as string);
 
-			// Capitalise the phrasing for display
-			const label = phrasing.charAt(0).toUpperCase() + phrasing.slice(1);
 			let cellLine = `- ${label}: ${contents}`;
 			for (const flavor of satisfiedFlavors) {
 				cellLine += ` ${flavor}`;
@@ -1278,7 +1359,7 @@ function renderCurrentState(ctx: AiContext): string {
 			lines.push("(nothing visible)");
 		}
 
-		// Objective hint lines — rendered after the cone listing when applicable.
+		// Objective hint lines — rendered after the Vista listing when applicable.
 		for (const hint of collectObjectiveHints(ctx)) {
 			lines.push(hint);
 		}

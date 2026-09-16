@@ -17,7 +17,6 @@ import type {
 	DualBindingContentPackProviderResult,
 } from "../../spa/game/content-pack-provider.js";
 import { MockContentPackProvider } from "../../spa/game/content-pack-provider.js";
-import { DEFAULT_LANDMARKS } from "../../spa/game/direction.js";
 import {
 	carryPairs,
 	interestingObjects,
@@ -48,7 +47,6 @@ function seededRng(seed: number): () => number {
 
 const GRID_ROWS = 5;
 const GRID_COLS = 5;
-const CARDINAL = new Set(["north", "south", "east", "west"]);
 
 // ── Fixed phase configs for tests ─────────────────────────────────────────────
 
@@ -178,7 +176,6 @@ function makeMockProvider(): MockContentPackProvider {
 				const rawPack: RawBoundPack = {
 					setting: phase.setting,
 					wallName: "wall",
-					landmarks: DEFAULT_LANDMARKS as unknown as undefined,
 					bindings,
 					decoys: [
 						{
@@ -349,20 +346,12 @@ describe("generateContentPacks — placement constraints", () => {
 				}
 			}
 
-			// 5. Each AI's facing is a cardinal direction
-			for (const [aiId, spatial] of Object.entries(pack.aiStarts)) {
-				expect(
-					CARDINAL.has(spatial.facing),
-					`Pack ${packIdx}: AI ${aiId} has non-cardinal facing "${spatial.facing}"`,
-				).toBe(true);
-			}
-
-			// 6. pairsWithSpaceId links
+			// 5. pairsWithSpaceId links
 			for (const pair of carryPairs(pack)) {
 				expect(pair.object.pairsWithSpaceId).toBe(pair.space.id);
 			}
 
-			// 7. placementFlavor contains "{actor}"
+			// 6. placementFlavor contains "{actor}"
 			for (const pair of carryPairs(pack)) {
 				expect(
 					pair.object.placementFlavor,
@@ -371,7 +360,7 @@ describe("generateContentPacks — placement constraints", () => {
 				expect(pair.object.placementFlavor).toContain("{actor}");
 			}
 
-			// 8. useOutcome and examineDescription are non-empty
+			// 7. useOutcome and examineDescription are non-empty
 			for (const pair of carryPairs(pack)) {
 				expect(pair.object.useOutcome).toBeTruthy();
 				expect(pair.object.examineDescription).toBeTruthy();
@@ -381,24 +370,6 @@ describe("generateContentPacks — placement constraints", () => {
 				expect(obj.useOutcome).toBeTruthy();
 				expect(obj.examineDescription).toBeTruthy();
 			}
-
-			// 9. All four horizon landmarks are present, non-empty, and distinct
-			const dirs = ["north", "south", "east", "west"] as const;
-			for (const dir of dirs) {
-				const lm = pack.landmarks[dir];
-				expect(
-					lm.shortName,
-					`Pack ${packIdx}: landmarks.${dir}.shortName missing`,
-				).toBeTruthy();
-				expect(
-					lm.horizonPhrase,
-					`Pack ${packIdx}: landmarks.${dir}.horizonPhrase missing`,
-				).toBeTruthy();
-			}
-			// All four shortNames should be distinct (the mock returns DEFAULT_LANDMARKS
-			// which has four different shortNames)
-			const shortNames = dirs.map((d) => pack.landmarks[d].shortName);
-			expect(new Set(shortNames).size).toBe(4);
 		}
 	});
 
@@ -487,7 +458,6 @@ describe("generateContentPacks — degenerate config throws after MAX_ATTEMPTS",
 					rawPack: {
 						setting: phase.setting,
 						wallName: "wall",
-						landmarks: DEFAULT_LANDMARKS as unknown as undefined,
 						bindings: [],
 						decoys: [
 							{
@@ -566,7 +536,6 @@ function makeDualMockProvider(): MockContentPackProvider {
 					return {
 						setting,
 						wallName: `wall ${suffix}`,
-						landmarks: DEFAULT_LANDMARKS as unknown as undefined,
 						bindings,
 						decoys: [
 							{

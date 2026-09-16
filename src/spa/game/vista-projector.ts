@@ -7,7 +7,7 @@
  * The Vista is the region a Daemon perceives: it contains exactly the integer
  * offsets satisfying `dx² + dy² ≤ 4`, where `dx`/`dy` denote offsets along
  * the east–west and north–south directions. Unlike the retired Cone, it takes
- * no facing and no occluder input: obstacles never remove cells from the
+ * no orientation and no occluder input: obstacles never remove cells from the
  * footprint, and out-of-bounds cells are perceived as **Wall**s
  * (`isWall: true`), the sentinel CONTEXT.md's **Wall** entry describes.
  *
@@ -17,8 +17,8 @@
  * dispatcher's job (bounds + obstacle checks), and Vista cells are
  * perception, not a movement authority. **Interaction range**
  * (`max(|dx|, |dy|) ≤ 1`) is the separate, shorter region for pickup, Carry
- * placement, and Use-Space. The live runtime keeps using the Cone until the
- * coordinated cutover (#539).
+ * placement, and Use-Space. Witness eligibility (`vistaContains`) and the
+ * prompt's sight listing both read this disk (ticket #539).
  */
 
 import type { CardinalDirection, GridPosition } from "./direction.js";
@@ -125,6 +125,24 @@ export function inVista(dx: number, dy: number): boolean {
 }
 
 /**
+ * True when `cell` falls inside the Vista centered on `observer` — the
+ * position-only witness gate for **Witnessed event**, Obstacle Shift, and
+ * Convergence eligibility (ADR 0015). Offsets such as `(2, 1)` are outside;
+ * the four cardinal distance-2 cells are inside. Obstacles never occlude
+ * membership: only the two positions are read, and the observer may be
+ * out-of-bounds for callers that hold one (unlike {@link projectVista},
+ * which rejects that case because its own-cell guarantee depends on it).
+ */
+export function vistaContains(
+	observer: GridPosition,
+	cell: GridPosition,
+): boolean {
+	// Row 0 is the north edge, so a cell `dy` steps north of the observer has
+	// a smaller row: dy = observer.row − cell.row.
+	return inVista(cell.col - observer.col, observer.row - cell.row);
+}
+
+/**
  * A projected Vista cell: an absolute room position (or out-of-bounds
  * position to be perceived as a Wall) plus the axis steps that locate it
  * relative to the observer.
@@ -148,8 +166,8 @@ export interface VistaCell {
  *
  * Returns exactly 13 cells in canonical order (see `VISTA_OFFSETS`).
  * Out-of-bounds cells are Wall sentinels (`isWall: true`); the observer's own
- * cell is always in-bounds, so it is never a Wall. No facing and no obstacle
- * information enters the projection, so the footprint is position-only and
+ * cell is always in-bounds, so it is never a Wall. No orientation and no
+ * obstacle information enters the projection, so the footprint is position-only and
  * never occluded.
  *
  * @throws RangeError when `position` lies outside the room bounds. An

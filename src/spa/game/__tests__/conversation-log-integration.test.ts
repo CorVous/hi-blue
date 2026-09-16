@@ -5,9 +5,9 @@
  * across multiple rounds and verifies that the resulting conversation logs
  * correctly surface, via `buildOpenAiMessages` role turns:
  *   - Voice-chat interleaved with witnessed events by round
- *   - Distinct cone-based visibility (witnesses see only what's in their cone)
- *     resolved at write-time (ADR 0006, issue #195)
- *   - put_down placementFlavor rendered for in-cone witnesses
+ *   - Distinct Vista-based witness visibility (witnesses see only what their
+ *     13-cell disk contains) resolved at write-time (ADR 0015, issue #195)
+ *   - put_down placementFlavor rendered for in-Vista witnesses
  *   - use outcome flavor rendered to actor as "you" and to witness as "*<actor>"
  *   - No "## Whispers Received" section ever
  *
@@ -85,14 +85,13 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
  *   - flower at (2,0): objective object that pairs with flower_space at (2,2)
  *     placementFlavor: "{actor} places the flower on the pedestal."
  *   - lamp at (0,2): interesting object with useOutcome "{actor} holds up the lamp. It glows."
- *   - red at (2,0) facing south (can walk further south or see forward)
- *   - green at (0,0) facing south
- *   - cyan at (0,2) facing south
+ *   - red at (2,0) (can walk further south or see forward)
+ *   - green at (0,0)
+ *   - cyan at (0,2)
  *
- * Note: green's southward 9-cell cone from (0,0):
- *   own: (0,0)
- *   dist-1: (1,1), (1,0), (1,-1 OOB)
- *   dist-2: (2,2), (2,1), (2,0), (2,-1 OOB), (2,-2 OOB)
+ * Note: the Vista is the position-only 13-cell radius-2 disk from (0,0) —
+ * own cell, the four adjacent diagonals, and the four cardinal cells two steps
+ * away — with out-of-bounds cells perceived as Walls. Position is all there is.
  */
 const TEST_CONTENT_PACK = makeTestPack(
 	[
@@ -125,9 +124,9 @@ const TEST_CONTENT_PACK = makeTestPack(
 		setting: "test chamber",
 		wallName: "wall",
 		aiStarts: {
-			red: { position: { row: 2, col: 0 }, facing: "south" },
-			green: { position: { row: 0, col: 0 }, facing: "south" },
-			cyan: { position: { row: 0, col: 2 }, facing: "south" },
+			red: { position: { row: 2, col: 0 } },
+			green: { position: { row: 0, col: 0 } },
+			cyan: { position: { row: 0, col: 2 } },
 		},
 	},
 );
@@ -139,7 +138,7 @@ function makeGame() {
 describe("conversation log integration — no ## Whispers Received ever", () => {
 	it("no ## Whispers Received section even with whispers present", async () => {
 		const game = makeGame();
-		// Round 0: red does nothing, green does nothing, cyan looks
+		// Round 0: red does nothing, green does nothing, cyan moves east
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] }, // red
 			{ assistantText: "", toolCalls: [] }, // green
@@ -148,8 +147,8 @@ describe("conversation log integration — no ## Whispers Received ever", () => 
 				toolCalls: [
 					{
 						id: "tc1",
-						name: "face",
-						argumentsJson: JSON.stringify({ direction: "left" }),
+						name: "go",
+						argumentsJson: JSON.stringify({ direction: "east" }),
 					},
 				],
 			}, // cyan
@@ -165,7 +164,7 @@ describe("conversation log integration — no ## Whispers Received ever", () => 
 });
 
 describe("conversation log integration — witnessed pick_up", () => {
-	it("green sees red pick up flower (red at (2,0) is in green's cone at (2,0))", async () => {
+	it("green sees red pick up flower (red at (2,0) is inside green's Vista at (0,0))", async () => {
 		const game = makeGame();
 		// Round 0: red picks up flower; green and cyan pass
 		const provider = new MockRoundLLMProvider([
@@ -209,34 +208,12 @@ describe("conversation log integration — witnessed pick_up", () => {
 		expect(redWitnessed).toHaveLength(0);
 	});
 
-	it("cyan does NOT see red's pick_up when cyan faces north (all cone cells OOB from (0,2))", async () => {
-		// cyan at (0,2) facing south includes (2,0) in the new 9-cell cone.
-		// Turn cyan north first so its cone is just own cell — (2,0) falls outside.
+	it("cyan does NOT see red's pick_up: cyan at (0,2) is outside red's cell's Vista", async () => {
+		// cyan at (0,2) sits at offset (2,2) from red's cell (2,0) —
+		// 2² + 2² = 8 > 4 — so the Vista excludes it.
 		const game = makeGame();
 
-		// Preliminary round: cyan looks north; others pass
-		const setupProvider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] }, // red
-			{ assistantText: "", toolCalls: [] }, // green
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "tc0",
-						name: "face",
-						argumentsJson: JSON.stringify({ direction: "back" }),
-					},
-				],
-			}, // cyan faces north
-		]);
-		const { nextState: setup } = await runRound(
-			game,
-			"red",
-			"setup",
-			setupProvider,
-		);
-
-		// Main round: red picks up flower; cyan now faces north → (2,0) not in cone
+		// Main round: red picks up flower; cyan is outside the Vista
 		const provider = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -251,7 +228,7 @@ describe("conversation log integration — witnessed pick_up", () => {
 			{ assistantText: "", toolCalls: [] }, // green passes
 			{ assistantText: "", toolCalls: [] }, // cyan passes
 		]);
-		const { nextState } = await runRound(setup, "red", "hello", provider);
+		const { nextState } = await runRound(game, "red", "hello", provider);
 
 		// cyan's conversationLog should have no witnessed-event for pick_up
 		const phase = nextState;
@@ -343,7 +320,9 @@ describe("conversation log integration — use outcome rendering", () => {
 });
 
 describe("conversation log integration — put_down placementFlavor", () => {
-	it("green sees placementFlavor with *red substitution when red places flower", async () => {
+	it("green is outside the Vista of red's put_down at (2,2) → no placementFlavor line", async () => {
+		// (2,2) is offset (2,2) from green's cell (0,0) — 2² + 2² = 8 > 4 — so the
+		// Vista excludes it.
 		const game = makeGame();
 		// Round 0: red picks up flower
 		const provider1 = new MockRoundLLMProvider([
@@ -367,9 +346,7 @@ describe("conversation log integration — put_down placementFlavor", () => {
 			provider1,
 		);
 
-		// Red needs to move to (2,2) to put_down on flower_space.
-		// Green looks west so its cone is only own cell by the put_down round —
-		// (2,2) enters the new 9-cell south cone but not the west cone from (0,0).
+		// Red needs to move east twice to (2,2) to put_down on flower_space.
 		const provider2 = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -377,20 +354,11 @@ describe("conversation log integration — put_down placementFlavor", () => {
 					{
 						id: "tc2",
 						name: "go",
-						argumentsJson: JSON.stringify({ direction: "left" }),
+						argumentsJson: JSON.stringify({ direction: "east" }),
 					},
 				],
 			},
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "tc2g",
-						name: "face",
-						argumentsJson: JSON.stringify({ direction: "right" }),
-					},
-				],
-			},
+			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
 		const { nextState: state2 } = await runRound(
@@ -407,7 +375,7 @@ describe("conversation log integration — put_down placementFlavor", () => {
 					{
 						id: "tc3",
 						name: "go",
-						argumentsJson: JSON.stringify({ direction: "left" }),
+						argumentsJson: JSON.stringify({ direction: "east" }),
 					},
 				],
 			},
@@ -451,7 +419,7 @@ describe("conversation log integration — put_down placementFlavor", () => {
 			(e) => e.kind === "witnessed-event" && e.actionKind === "put_down",
 		);
 
-		// Green looked west in round 2; facing west from (0,0) has only own cell in cone.
+		// green at (0,0) is outside the Vista of red's cell (2,2).
 		// (2,2) is not visible → green should NOT see this put_down.
 		expect(putEntry).toBeUndefined();
 
@@ -481,9 +449,9 @@ describe("conversation log integration — action-failure (issue #287)", () => {
 				setting: "blocked test",
 				wallName: "wall",
 				aiStarts: {
-					red: { position: { row: 2, col: 0 }, facing: "south" },
-					green: { position: { row: 0, col: 0 }, facing: "south" },
-					cyan: { position: { row: 0, col: 2 }, facing: "south" },
+					red: { position: { row: 2, col: 0 } },
+					green: { position: { row: 0, col: 0 } },
+					cyan: { position: { row: 0, col: 2 } },
 				},
 			},
 		);
@@ -497,7 +465,7 @@ describe("conversation log integration — action-failure (issue #287)", () => {
 					{
 						id: "go_fail",
 						name: "go",
-						argumentsJson: JSON.stringify({ direction: "forward" }),
+						argumentsJson: JSON.stringify({ direction: "south" }),
 					},
 				],
 			},
@@ -578,7 +546,7 @@ describe("conversation log integration — multi-round chronological order", () 
 		expect(round0Idx).toBeLessThan(round1Idx);
 
 		// Verify green's role turns include the witnessed pick_up in round 1.
-		// green at (0,0) facing south: two steps ahead is (2,0) — red's position.
+		// green at (0,0): (2,0) is two steps south — red's position, inside green's Vista.
 		// Witnessed events keep the rich "[Round N] You watch *X do Y." form
 		// since that's how renderEntry formats them.
 		const greenCtx = buildAiContext(state2, "green");

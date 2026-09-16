@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { GAME_SAVE_VERSION } from "../../save-serializer";
 import {
 	STATIC_CONTENT_PACK_NO_PAIRS,
 	STATIC_CONTENT_PACKS,
@@ -702,7 +703,8 @@ describe("renderGame (game route — three-AI)", () => {
 		const saveJson = downloadBtn.dataset.savePayload;
 		expect(saveJson).toBeTruthy();
 		const save = JSON.parse(saveJson as string);
-		expect(save.version).toBe(4);
+		// Live USB format is gs v5 (#539); the endgame export must stamp it.
+		expect(save.version).toBe(GAME_SAVE_VERSION);
 		expect(save.ais).toHaveLength(3);
 	});
 
@@ -2358,7 +2360,7 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 // to fail silently — no inline message, no status pip change. Verify the
 // surfaced-error UX: `#round-error` becomes visible and `#topinfo-right`
 // flips to "● connection unstable" (warn class).
-describe("renderGame — round error surfacing (issue #231)", () => {
+describe("renderGame — round error reporting (issue #231)", () => {
 	let _stub: ReturnType<typeof makeLocalStorageStub>;
 
 	beforeEach(async () => {

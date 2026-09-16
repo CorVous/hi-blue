@@ -734,19 +734,19 @@ describe("buildOpenAiMessages — action-failure entries", () => {
 	});
 });
 
-describe("buildOpenAiMessages — tool-call coneDelta (#376)", () => {
-	it("tool-call entry with coneDelta renders tool message with <noticed> block", () => {
+describe("buildOpenAiMessages — tool-call diskDelta (#376)", () => {
+	it("tool-call entry with diskDelta renders tool message with <noticed> block", () => {
 		const game = makeGame();
 		const toolCallWithDelta: ConversationEntry = {
 			kind: "tool-call",
 			round: 1,
 			aiId: "red",
 			toolCallId: "go_call_1",
-			toolArgumentsJson: '{"direction":"forward"}',
+			toolArgumentsJson: '{"direction":"north"}',
 			toolName: "go",
-			result: "Ember moved forward.",
+			result: "Ember walks north.",
 			success: true,
-			coneDelta: "+ at directly in front, right: *green",
+			diskDelta: "+ at one step north and one step east: *green",
 		};
 		const modified = {
 			...game,
@@ -763,16 +763,16 @@ describe("buildOpenAiMessages — tool-call coneDelta (#376)", () => {
 		);
 		expect(toolMsg).toBeDefined();
 		if (toolMsg?.role === "tool") {
-			expect(toolMsg.content).toContain("Ember moved forward.");
+			expect(toolMsg.content).toContain("Ember walks north.");
 			expect(toolMsg.content).toContain("<noticed>");
 			expect(toolMsg.content).toContain(
-				"+ at directly in front, right: *green",
+				"+ at one step north and one step east: *green",
 			);
 			expect(toolMsg.content).toContain("</noticed>");
 		}
 	});
 
-	it("tool-call entry without coneDelta renders tool message as plain result (back-compat)", () => {
+	it("tool-call entry without diskDelta renders tool message as plain result (back-compat)", () => {
 		const game = makeGame();
 		const legacyToolCall: ConversationEntry = {
 			kind: "tool-call",

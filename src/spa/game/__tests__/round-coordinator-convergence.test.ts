@@ -3,9 +3,10 @@
  * block (step 4d).
  *
  * Issue #305: ConvergenceObjective — fans witnessed-convergence entries to every
- * Daemon whose cone contains the space cell, flips satisfactionState to
- * "satisfied" on tier-2, and guards against re-triggering already-satisfied
- * objectives.
+ * Daemon whose **Vista** contains the space cell (ADR 0015: position-only, and
+ * a space two cardinal steps away is inside while an offset such as (2, 1) is
+ * not), flips satisfactionState to "satisfied" on tier-2, and guards against
+ * re-triggering already-satisfied objectives.
  */
 import { describe, expect, it } from "vitest";
 import { startGame } from "../engine";
@@ -79,12 +80,12 @@ const TEST_CONTENT_PACK = makeTestPack(
 	[CONVERGENCE_OBJECT, CONVERGENCE_SPACE],
 	{
 		wallName: "wall",
-		// red at (4,4), green at (0,0), cyan at (0,2)
-		// cyan faces south so (4,4) is not in its cone.
+		// Space cell is (4,4). Vista membership is position-only.
+		// red at (4,4) — the occupant; green at (0,0) and cyan at (0,2) are far outside.
 		aiStarts: {
-			red: { position: { row: 4, col: 4 }, facing: "north" },
-			green: { position: { row: 0, col: 0 }, facing: "south" },
-			cyan: { position: { row: 0, col: 2 }, facing: "south" },
+			red: { position: { row: 4, col: 4 } },
+			green: { position: { row: 0, col: 0 } },
+			cyan: { position: { row: 0, col: 2 } },
 		},
 	},
 );
@@ -109,9 +110,9 @@ function makeProvider() {
 /**
  * Build a base game state, then overlay the objectives and spatial positions we need.
  *
- * - red at (4,4) facing north  → red's own cell = space cell; red witnesses
- * - green at (0,0) facing south → cone is (0,0)…(2,2); does NOT contain (4,4)
- * - cyan at (0,2) facing south  → cone is (0,2)…(2,4); does NOT contain (4,4)
+ * - red at (4,4)  → red's own cell = space cell; red is the actor
+ * - green at (0,0) → far outside the Vista around (4,4)
+ * - cyan at (0,2)  → far outside the Vista around (4,4)
  */
 function makeBaseGame() {
 	const base = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 99 });
@@ -133,7 +134,7 @@ function makeBaseGame() {
 
 describe("runRound — convergence evaluation (step 4d)", () => {
 	it("tier-1: one Daemon on the space → witnessed-convergence tier-1 entry in their log", async () => {
-		// red at (4,4) — on the space.  green + cyan elsewhere and facing away.
+		// red at (4,4) — on the space.  green + cyan elsewhere, outside the Vista.
 		const game = makeBaseGame();
 
 		const { nextState } = await runRound(game, "red", "hi", makeProvider());
@@ -154,9 +155,8 @@ describe("runRound — convergence evaluation (step 4d)", () => {
 		}
 	});
 
-	it("tier-1: a Daemon whose cone does NOT contain the space cell does NOT receive an entry", async () => {
-		// green at (0,0) facing south; cyan at (0,2) facing south.
-		// Neither cone reaches (4,4).
+	it("tier-1: a Daemon whose Vista does NOT contain the space cell does NOT receive an entry", async () => {
+		// green at (0,0); cyan at (0,2). Neither Vista reaches (4,4).
 		const game = makeBaseGame();
 
 		const { nextState } = await runRound(game, "red", "hi", makeProvider());
@@ -193,9 +193,9 @@ describe("runRound — convergence evaluation (step 4d)", () => {
 			...baseGame,
 			personaSpatial: {
 				...baseGame.personaSpatial,
-				// red at (4,4) facing north (from base), green also at (4,4) facing north
-				green: { position: { row: 4, col: 4 }, facing: "north" as const },
-				// cyan stays at (0,2) facing south — cone doesn't reach (4,4)
+				// red at (4,4) (from base), green also at (4,4)
+				green: { position: { row: 4, col: 4 } },
+				// cyan stays at (0,2) — Vista doesn't reach (4,4)
 			},
 		};
 
@@ -235,7 +235,7 @@ describe("runRound — convergence evaluation (step 4d)", () => {
 			);
 		}
 
-		// cyan's cone at (0,2) facing south does not include (4,4).
+		// cyan's Vista at (0,2) does not contain (4,4).
 		expect(cyanConvergence).toHaveLength(0);
 
 		// satisfactionState must flip to "satisfied".
@@ -252,7 +252,7 @@ describe("runRound — convergence evaluation (step 4d)", () => {
 			...baseGame,
 			personaSpatial: {
 				...baseGame.personaSpatial,
-				green: { position: { row: 4, col: 4 }, facing: "north" as const },
+				green: { position: { row: 4, col: 4 } },
 			},
 		};
 
@@ -294,16 +294,16 @@ describe("runRound — convergence evaluation (step 4d)", () => {
 });
 
 describe("runRound — convergence split fan-out (actor vs witness) — #336", () => {
-	it("tier-1: the sole occupant gets the actor flavor; a non-occupant cone-witness gets the witness flavor", async () => {
-		// red on the space at (4,4). Move cyan to (3,4) facing south so cyan's
-		// cone covers (4,4) but cyan is NOT on the cell. green stays at (0,0)
-		// facing south — out of cone.
+	it("tier-1: the sole occupant gets the actor flavor; a non-occupant Vista-witness gets the witness flavor", async () => {
+		// red on the space at (4,4). Move cyan to (3,4) so cyan's Vista contains
+		// (4,4) — one cell away — but cyan is NOT on the cell. green stays at
+		// (0,0) — outside the Vista.
 		const baseGame = makeBaseGame();
 		const game = {
 			...baseGame,
 			personaSpatial: {
 				...baseGame.personaSpatial,
-				cyan: { position: { row: 3, col: 4 }, facing: "south" as const },
+				cyan: { position: { row: 3, col: 4 } },
 			},
 		};
 
@@ -330,16 +330,16 @@ describe("runRound — convergence split fan-out (actor vs witness) — #336", (
 		}
 	});
 
-	it("tier-2: every occupant gets the actor flavor; a non-occupant cone-witness gets the witness flavor", async () => {
-		// red and green both at (4,4). cyan at (3,4) facing south — cone covers (4,4)
+	it("tier-2: every occupant gets the actor flavor; a non-occupant Vista-witness gets the witness flavor", async () => {
+		// red and green both at (4,4). cyan at (3,4) — Vista contains (4,4)
 		// but cyan is not on the cell.
 		const baseGame = makeBaseGame();
 		const game = {
 			...baseGame,
 			personaSpatial: {
-				red: { position: { row: 4, col: 4 }, facing: "north" as const },
-				green: { position: { row: 4, col: 4 }, facing: "north" as const },
-				cyan: { position: { row: 3, col: 4 }, facing: "south" as const },
+				red: { position: { row: 4, col: 4 } },
+				green: { position: { row: 4, col: 4 } },
+				cyan: { position: { row: 3, col: 4 } },
 			},
 		};
 
@@ -369,8 +369,8 @@ describe("runRound — convergence split fan-out (actor vs witness) — #336", (
 	});
 
 	it("no double-emission: a Daemon standing on the space receives exactly one entry (the actor variant)", async () => {
-		// red is on the space and faces north so red's own cone trivially covers
-		// (4,4) too — verify red does NOT receive both actor and witness entries.
+		// red is on the space, which sits inside red's own Vista as its centre —
+		// verify red still receives the actor variant only, never both.
 		const game = makeBaseGame();
 
 		const { nextState } = await runRound(game, "red", "hi", makeProvider());
@@ -382,5 +382,57 @@ describe("runRound — convergence split fan-out (actor vs witness) — #336", (
 		if (redConvergence[0]?.kind === "witnessed-convergence") {
 			expect(redConvergence[0].audience).toBe("actor");
 		}
+	});
+});
+
+describe("runRound — convergence Vista boundary (ADR 0015)", () => {
+	it("a Daemon at offset (2, 0) from the space is a witness; one at (2, 1) is not — the occupant stays the actor", async () => {
+		// Space at (4, 4), red standing on it.
+		//   green at (4, 2) is the (2, 0) offset → 2² + 0² = 4 ≤ 4 → inside the Vista.
+		//   cyan at (3, 2) is the (2, 1) offset → 2² + 1² = 5 > 4 → outside the Vista.
+		// The retired cone would have covered (4, 4): this case pins that
+		// eligibility now follows the Vista rather than an orientation.
+		const baseGame = makeBaseGame();
+		const game = {
+			...baseGame,
+			personaSpatial: {
+				...baseGame.personaSpatial,
+				green: { position: { row: 4, col: 2 } },
+				cyan: { position: { row: 3, col: 2 } },
+			},
+		};
+
+		const { nextState } = await runRound(game, "red", "hi", makeProvider());
+
+		// The occupant keeps the actor treatment, unchanged.
+		const redEntries = (nextState.conversationLogs.red ?? []).filter(
+			(e) => e.kind === "witnessed-convergence",
+		);
+		expect(redEntries).toHaveLength(1);
+		if (redEntries[0]?.kind === "witnessed-convergence") {
+			expect(redEntries[0].audience).toBe("actor");
+			expect(redEntries[0].flavor).toBe(
+				CONVERGENCE_SPACE.convergenceTier1ActorFlavor,
+			);
+		}
+
+		// Inside the Vista → witness audience.
+		const greenEntries = (nextState.conversationLogs.green ?? []).filter(
+			(e) => e.kind === "witnessed-convergence",
+		);
+		expect(greenEntries).toHaveLength(1);
+		if (greenEntries[0]?.kind === "witnessed-convergence") {
+			expect(greenEntries[0].audience).toBe("witness");
+			expect(greenEntries[0].flavor).toBe(
+				CONVERGENCE_SPACE.convergenceTier1Flavor,
+			);
+		}
+
+		// Outside the Vista → no entry at all, so nothing leaks off-Vista.
+		expect(
+			(nextState.conversationLogs.cyan ?? []).filter(
+				(e) => e.kind === "witnessed-convergence",
+			),
+		).toHaveLength(0);
 	});
 });

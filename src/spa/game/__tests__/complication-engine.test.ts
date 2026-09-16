@@ -96,7 +96,7 @@ function makePersonaSpatial(
 	const merged = { ...defaults, ...positions };
 	const result: Record<AiId, PersonaSpatialState> = {};
 	for (const [id, pos] of Object.entries(merged)) {
-		result[id] = { position: pos, facing: "north" };
+		result[id] = { position: pos };
 	}
 	return result;
 }
@@ -485,9 +485,9 @@ describe("Obstacle Shift exclusion", () => {
 		// Two personas block both; the corner obstacle has no valid shift target.
 		const cornerObstacle = makeObstacle("corner_obs", { row: 0, col: 0 });
 		const corneredPersonas: Record<AiId, PersonaSpatialState> = {
-			red: { position: { row: 1, col: 0 }, facing: "north" }, // south of (0,0)
-			green: { position: { row: 0, col: 1 }, facing: "west" }, // east of (0,0)
-			cyan: { position: { row: 2, col: 0 }, facing: "north" }, // elsewhere
+			red: { position: { row: 1, col: 0 } }, // south of (0,0)
+			green: { position: { row: 0, col: 1 } }, // east of (0,0)
+			cyan: { position: { row: 2, col: 0 } }, // elsewhere
 		};
 		const draws: string[] = [];
 		for (let i = 0; i < 5; i++) {
@@ -511,9 +511,9 @@ describe("Obstacle Shift exclusion", () => {
 		// Obstacle at (0,0): neighbours are south(1,0) and east(0,1). Place persona at (1,0), leave (0,1) free.
 		const obs = makeObstacle("obs", { row: 0, col: 0 });
 		const personaSpatial: Record<AiId, PersonaSpatialState> = {
-			red: { position: { row: 1, col: 0 }, facing: "north" },
-			green: { position: { row: 4, col: 4 }, facing: "south" },
-			cyan: { position: { row: 3, col: 3 }, facing: "east" },
+			red: { position: { row: 1, col: 0 } },
+			green: { position: { row: 4, col: 4 } },
+			cyan: { position: { row: 3, col: 3 } },
 		};
 		// Pool: [weather_change, sysadmin_directive, tool_disable, obstacle_shift, chat_lockout, setting_shift]
 		// Draw index 3 → obstacle_shift: rng[0] = 3/6 + ε = 0.501
@@ -568,7 +568,6 @@ describe("Tool Disable exclusion", () => {
 			"put_down",
 			"use",
 			"go",
-			"face",
 			"message",
 		];
 		const activeComplications: ActiveComplication[] = [];
@@ -596,8 +595,8 @@ describe("Tool Disable exclusion", () => {
 	});
 
 	it("excludes a (daemon, tool) pair already present in activeComplications", () => {
-		// Only red+pick_up is already disabled. With 3 daemons × 8 tools = 24 pairs,
-		// 1 excluded, 23 valid pairs remain.
+		// Only red+pick_up is already disabled. With 3 daemons × 5 tools = 15 pairs,
+		// 1 excluded, 14 valid pairs remain.
 		const activeComplications: ActiveComplication[] = [
 			{
 				kind: "tool_disable",
@@ -665,6 +664,35 @@ describe("Tool Disable exclusion", () => {
 				result.fired.target === "green" && result.fired.tool === "pick_up",
 			).toBe(false);
 		}
+	});
+});
+
+// ── Tool Disable pool surface (ADR 0015) ──────────────────────────────────────
+
+describe("Tool Disable pool — the retired `face` tool is not selectable", () => {
+	it("draws only the five Daemon tools across every (daemon, tool) pair", () => {
+		// 3 daemons × 5 tools = 15 pairs. rng[0]=0.4 lands on tool_disable in the
+		// 5-item pool; sweeping rng[1] across the 15 pair slots visits every pair.
+		const drawn = new Set<string>();
+		for (let i = 0; i < 15; i++) {
+			const phase = makePhase({
+				complicationSchedule: { countdown: 0, settingShiftFired: false },
+			});
+			const game = makeGameStateAround(phase);
+			const result = tickComplication(game, seededRng([0.4, i / 15, 0.5]));
+			expect(result?.fired.kind).toBe("tool_disable");
+			if (result?.fired.kind === "tool_disable") {
+				expect(result.fired.tool).not.toBe("face");
+				drawn.add(result.fired.tool);
+			}
+		}
+		expect([...drawn].sort()).toEqual([
+			"go",
+			"message",
+			"pick_up",
+			"put_down",
+			"use",
+		]);
 	});
 });
 

@@ -28,12 +28,6 @@ function makePack(overrides?: Partial<ContentPack>): ContentPack {
 		weather: "clear",
 		timeOfDay: "noon",
 		entities: [],
-		landmarks: {
-			north: { shortName: "tower", horizonPhrase: "a rusted tower" },
-			south: { shortName: "spire", horizonPhrase: "a glowing spire" },
-			east: { shortName: "cliff", horizonPhrase: "a jagged cliff" },
-			west: { shortName: "ruin", horizonPhrase: "a crumbling ruin" },
-		},
 		wallName: "test wall",
 		aiStarts: {},
 		...overrides,

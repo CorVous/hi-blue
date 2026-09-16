@@ -190,9 +190,7 @@ export function buildBindingPrompt(
 	}
 
 	lines.push(``);
-	lines.push(
-		`Also generate: landmarks (north/south/east/west with shortName+horizonPhrase), wallName.`,
-	);
+	lines.push(`Also generate: wallName.`);
 
 	return {
 		skeletons,
@@ -252,9 +250,7 @@ export function buildDualBindingPrompt(
 	}
 
 	lines.push(``);
-	lines.push(
-		`Also generate per-setting: landmarks (north/south/east/west with shortName+horizonPhrase), wallName.`,
-	);
+	lines.push(`Also generate per-setting: wallName.`);
 	lines.push(
 		`settingA and settingB must reference the same entity IDs but use different names/flavors.`,
 	);

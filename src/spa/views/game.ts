@@ -61,7 +61,7 @@ import {
 import { type RenderOpts, renderApp } from "../render-app.js";
 
 /** Maximum time allowed for bootstrap loading (personas + content packs) before
- * timing out and surfacing the recovery UI. Sized to absorb a slow first-attempt
+ * timing out and showing the recovery UI. Sized to absorb a slow first-attempt
  * persona-synthesis call (~95s observed cold) plus the retry-once-on-fail path
  * and a parallel content-pack outer retry, matching the daemon harness's
  * stable-state wait window. */

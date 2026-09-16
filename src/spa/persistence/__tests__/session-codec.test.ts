@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { makeTestPack } from "../../game/__tests__/fixtures/make-test-pack.js";
-import { DEFAULT_LANDMARKS } from "../../game/direction.js";
 import { startGame } from "../../game/engine.js";
 import type {
 	AiId,
@@ -14,10 +13,20 @@ import { deobfuscate, obfuscate } from "../sealed-blob-codec.js";
 import {
 	type DaemonFile,
 	deserializeSession,
+	SESSION_SCHEMA_VERSION,
 	serializeSession,
 } from "../session-codec.js";
+import type { VersionBoundary } from "../version-boundary.js";
 
 // ── Test fixtures ─────────────────────────────────────────────────────────────
+
+/**
+ * The boundary the historical migration chain still lands on. The chain
+ * terminates at schema 11, so observing what it actually produced requires a
+ * boundary that treats 11 as current; at the live v12 boundary the same save
+ * is a version-mismatch (pinned separately below).
+ */
+const PRE_BOUNDARY: VersionBoundary = { session: 11, gs: 4 };
 
 const TEST_CONTENT_PACK = makeTestPack([], { wallName: "wall" });
 
@@ -130,18 +139,16 @@ describe("serializeSession / deserializeSession", () => {
 		const game = makeFreshGame();
 		const red = game.personas.red;
 		expect(red).toBeDefined();
-		if (red) red.actionProfile = "*red leans toward `go`, `face`.";
+		if (red) red.actionProfile = "*red leans toward `go`, `use`.";
 		const files = serializeSession(game, NOW, CREATED_AT);
 		// biome-ignore lint/style/noNonNullAssertion: daemons.red always exists for this fixture
 		const daemon = JSON.parse(files.daemons.red!);
-		expect(daemon.persona.actionProfile).toBe(
-			"*red leans toward `go`, `face`.",
-		);
+		expect(daemon.persona.actionProfile).toBe("*red leans toward `go`, `use`.");
 		const result = deserializeSession(files);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
 			expect(result.state.personas.red?.actionProfile).toBe(
-				"*red leans toward `go`, `face`.",
+				"*red leans toward `go`, `use`.",
 			);
 		}
 	});
@@ -374,18 +381,18 @@ describe("serializeSession / deserializeSession", () => {
 		}
 	});
 
-	it("round-trips tool-call entries with coneDelta (#376)", () => {
+	it("round-trips tool-call entries with diskDelta (#376)", () => {
 		const game = makeFreshGame();
 		const toolCallWithDelta: ConversationEntry = {
 			kind: "tool-call",
 			round: 4,
 			aiId: "red" as AiId,
 			toolCallId: "go_call_1",
-			toolArgumentsJson: '{"direction":"forward"}',
+			toolArgumentsJson: '{"direction":"north"}',
 			toolName: "go",
-			result: "Ember moved forward.",
+			result: "Ember walks north.",
 			success: true,
-			coneDelta: "+ at directly in front, right: *green",
+			diskDelta: "+ at one step north and one step east: *green",
 		};
 		const modified: GameState = {
 			...game,
@@ -399,7 +406,7 @@ describe("serializeSession / deserializeSession", () => {
 		}
 	});
 
-	it("loads pre-#376 tool-call entries (no coneDelta field) cleanly", () => {
+	it("loads pre-#376 tool-call entries (no diskDelta field) cleanly", () => {
 		const game = makeFreshGame();
 		const legacyToolCall: ConversationEntry = {
 			kind: "tool-call",
@@ -422,7 +429,7 @@ describe("serializeSession / deserializeSession", () => {
 			const loaded = result.state.conversationLogs.red?.[0];
 			expect(loaded).toEqual(legacyToolCall);
 			if (loaded?.kind === "tool-call") {
-				expect(loaded.coneDelta).toBeUndefined();
+				expect(loaded.diskDelta).toBeUndefined();
 			}
 		}
 	});
@@ -512,9 +519,9 @@ describe("serializeSession / deserializeSession", () => {
 		const modified: GameState = {
 			...game,
 			personaSpatial: {
-				red: { position: { row: 2, col: 3 }, facing: "east" as const },
-				green: { position: { row: 1, col: 1 }, facing: "south" as const },
-				cyan: { position: { row: 4, col: 4 }, facing: "west" as const },
+				red: { position: { row: 2, col: 3 } },
+				green: { position: { row: 1, col: 1 } },
+				cyan: { position: { row: 4, col: 4 } },
 			},
 		};
 		const files = serializeSession(modified, NOW, CREATED_AT);
@@ -523,7 +530,6 @@ describe("serializeSession / deserializeSession", () => {
 		if (result.kind === "ok") {
 			expect(result.state.personaSpatial.red).toEqual({
 				position: { row: 2, col: 3 },
-				facing: "east",
 			});
 		}
 	});
@@ -653,19 +659,151 @@ describe("serializeSession / deserializeSession", () => {
 		expect(result.kind).toBe("broken");
 	});
 
-	it("a current (v11) save is a version-mismatch at the v12 boundary", () => {
+	it("a v11 save is current at the pre-boundary and a version-mismatch at the live v12 boundary", () => {
 		const game = makeFreshGame();
+		// Serialize at the live boundary, then restamp the sealed payload to 11:
+		// the only way a v11 save exists now is from the archived build.
 		const files = serializeSession(game, NOW, CREATED_AT);
-		// The live boundary is 11, so a fresh v11 save deserializes "ok" with
-		// no argument. At the v12 boundary it is "older" and surfaces as a
-		// version-mismatch — the cutoff is a parameter, not a hardcoded
-		// constant (see version-boundary.ts / the v12/v5 contract).
-		expect(deserializeSession(files).kind).toBe("ok");
-		const result = deserializeSession(files, { session: 12, gs: 5 });
+		if (!files.engine) throw new Error("engine should not be null");
+		const sealed = JSON.parse(deobfuscate(files.engine));
+		expect(sealed.schemaVersion).toBe(SESSION_SCHEMA_VERSION);
+		expect(SESSION_SCHEMA_VERSION).toBe(12);
+		sealed.schemaVersion = 11;
+		const v11 = { ...files, engine: obfuscate(JSON.stringify(sealed)) };
+
+		// The cutoff is a parameter, not a hardcoded constant
+		// (see version-boundary.ts), so the migration chain can still be
+		// observed at the boundary it lands on.
+		expect(deserializeSession(v11, PRE_BOUNDARY).kind).toBe("ok");
+
+		// Live boundary: the same save is "older" and surfaces as a
+		// version-mismatch carrying the retired schema number.
+		const result = deserializeSession(v11);
 		expect(result.kind).toBe("version-mismatch");
 		if (result.kind === "version-mismatch") {
 			expect(result.schemaVersion).toBe(11);
 		}
+	});
+
+	it("a new v12 session round-trips position, inventory, content state, conversation, and perception changes", () => {
+		const game = makeFreshGame();
+		const heldItem: WorldEntity = {
+			id: "ent-flower",
+			kind: "objective_object",
+			name: "Glass Flower",
+			examineDescription: "A flower of blown glass.",
+			pairsWithSpaceId: "ent-altar",
+			holder: "red",
+		};
+		const space: WorldEntity = {
+			id: "ent-altar",
+			kind: "objective_space",
+			name: "Altar",
+			examineDescription: "A low stone altar.",
+			holder: { row: 4, col: 4 },
+			satisfactionState: "satisfied",
+		};
+		const diskDelta =
+			"+ at one step north and one step east: *green\n- at two steps west: *cyan";
+		const packA: ContentPack = {
+			setting: "greenhouse",
+			weather: "humid",
+			timeOfDay: "morning",
+			entities: [heldItem, space],
+			wallName: "glass wall",
+			aiStarts: {},
+		};
+		const modified: GameState = {
+			...game,
+			round: 7,
+			personaSpatial: {
+				...game.personaSpatial,
+				red: { position: { row: 2, col: 1 } },
+			},
+			world: { entities: [heldItem, space] },
+			contentPacksA: [packA],
+			contentPacksB: [packA],
+			conversationLogs: {
+				...game.conversationLogs,
+				red: [
+					{
+						kind: "message",
+						round: 7,
+						from: "blue",
+						to: "red",
+						content: "move north",
+					},
+					{
+						kind: "tool-call",
+						round: 7,
+						aiId: "red",
+						toolCallId: "go_call_7",
+						toolArgumentsJson: '{"direction":"north"}',
+						toolName: "go",
+						result: "Ember walks north.",
+						success: true,
+						diskDelta,
+					},
+				],
+			},
+		};
+
+		const files = serializeSession(modified, NOW, CREATED_AT, 3);
+		const result = deserializeSession(files);
+		expect(result.kind).toBe("ok");
+		if (result.kind !== "ok") return;
+
+		// position
+		expect(result.state.personaSpatial.red).toEqual({
+			position: { row: 2, col: 1 },
+		});
+		// inventory (an entity held by a Daemon, not a grid position)
+		expect(
+			result.state.world.entities.find((e) => e.id === "ent-flower")?.holder,
+		).toBe("red");
+		// content state
+		expect(result.state.contentPack.setting).toBe("greenhouse");
+		expect(
+			result.state.contentPacksA[0]?.entities.find((e) => e.id === "ent-altar")
+				?.satisfactionState,
+		).toBe("satisfied");
+		// conversation + perception change (the diskDelta on the tool call)
+		const log = result.state.conversationLogs.red ?? [];
+		expect(log).toHaveLength(2);
+		expect(log[0]).toEqual({
+			kind: "message",
+			round: 7,
+			from: "blue",
+			to: "red",
+			content: "move north",
+		});
+		expect(log[1]?.kind === "tool-call" ? log[1].diskDelta : undefined).toBe(
+			diskDelta,
+		);
+		// round-trip metadata survives too
+		expect(result.epoch).toBe(3);
+		expect(result.state.round).toBe(7);
+	});
+
+	it("seals new sessions at schema 12 with neither facing nor landmarks", () => {
+		const game = makeFreshGame();
+		const files = serializeSession(game, NOW, CREATED_AT);
+		if (!files.engine) throw new Error("engine should not be null");
+		const sealed = JSON.parse(deobfuscate(files.engine)) as {
+			schemaVersion: number;
+		};
+		expect(sealed.schemaVersion).toBe(12);
+		expect(SESSION_SCHEMA_VERSION).toBe(12);
+
+		// The whole export — meta, daemon files, and the sealed engine — must be
+		// free of the retired orientation and horizon fields (ADR 0015).
+		const allBytes = [
+			files.meta,
+			...Object.values(files.daemons),
+			deobfuscate(files.engine),
+		].join("\n");
+		expect(allBytes).not.toMatch(/facing/i);
+		expect(allBytes).not.toMatch(/landmark/i);
 	});
 
 	it("v8 save with multi-entry contentPacksA/B is migrated to v9 by truncating to first entry", () => {
@@ -681,7 +819,6 @@ describe("serializeSession / deserializeSession", () => {
 			objectivePairs: [],
 			interestingObjects: [],
 			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
 			wallName: "wall",
 			aiStarts: {},
 		} as unknown as ContentPack;
@@ -741,7 +878,7 @@ describe("serializeSession / deserializeSession", () => {
 			daemons[aiId] = JSON.stringify(daemonFile, null, 2);
 		}
 
-		const result = deserializeSession({ meta, daemons, engine });
+		const result = deserializeSession({ meta, daemons, engine }, PRE_BOUNDARY);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
 			// v8 packs (3 entries each) should be migrated to v9 by truncating to 1 entry
@@ -753,9 +890,11 @@ describe("serializeSession / deserializeSession", () => {
 		}
 	});
 
-	it("v8 save chains through to current: wallName defaulted alongside pack truncation", () => {
+	it("v8 save chains to v11 but never silently enters v12: the live boundary calls it older", () => {
 		// v8 saves had neither wallName (v10 addition) nor single-pack arrays
-		// (v9 change). Chained migration must apply both fixes.
+		// (v9 change). Chained migration must apply both fixes and then stop at
+		// 11 — the last schema the chain understands — rather than stamping the
+		// live 12 and presenting the save as current.
 		const game = makeFreshGame();
 		const packNoWall = {
 			setting: "v8 setting",
@@ -764,7 +903,6 @@ describe("serializeSession / deserializeSession", () => {
 			objectivePairs: [],
 			interestingObjects: [] as WorldEntity[],
 			obstacles: [] as WorldEntity[],
-			landmarks: DEFAULT_LANDMARKS,
 			aiStarts: {},
 		};
 		const v8SealedPayload = {
@@ -796,7 +934,7 @@ describe("serializeSession / deserializeSession", () => {
 			daemons[aiId] = JSON.stringify(daemonFile);
 		}
 
-		const result = deserializeSession({ meta, daemons, engine });
+		const result = deserializeSession({ meta, daemons, engine }, PRE_BOUNDARY);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
 			expect(result.state.contentPacksA).toHaveLength(1);
@@ -805,15 +943,67 @@ describe("serializeSession / deserializeSession", () => {
 			expect(result.state.contentPacksB[0]?.wallName).toBe("");
 		}
 
-		// The chain lands on 11, so at a v12 boundary the same save surfaces as
-		// "older" instead of being silently promoted past the boundary.
-		const atV12 = deserializeSession(
-			{ meta, daemons, engine },
-			{ session: 12, gs: 5 },
-		);
-		expect(atV12.kind).toBe("version-mismatch");
-		if (atV12.kind === "version-mismatch") {
-			expect(atV12.schemaVersion).toBe(11);
+		// Same save at the live v12 boundary: the chain stops at 11, so it
+		// surfaces as "older" instead of being silently promoted past the
+		// boundary. This is the archive-only contract: no v11→v12 migration.
+		const atLiveBoundary = deserializeSession({ meta, daemons, engine });
+		expect(atLiveBoundary.kind).toBe("version-mismatch");
+		if (atLiveBoundary.kind === "version-mismatch") {
+			expect(atLiveBoundary.schemaVersion).toBe(11);
+		}
+	});
+
+	it("no historical chain can produce a save the live boundary calls current", () => {
+		// Every schema the chain accepts (8, 9, 10) migrates forward only as far
+		// as 11, so `deserializeSession` at the live boundary must surface each
+		// one as a version-mismatch stamped 11 — never `ok`.
+		const game = makeFreshGame();
+		const meta = JSON.stringify({
+			createdAt: CREATED_AT,
+			lastSavedAt: NOW,
+			epoch: 1,
+			round: 0,
+			personaOrder: Object.keys(game.personas),
+		});
+		const daemons: Record<AiId, string> = {};
+		for (const [aiId, persona] of Object.entries(game.personas)) {
+			const daemonFile: DaemonFile = { aiId, persona, conversationLog: [] };
+			daemons[aiId] = JSON.stringify(daemonFile);
+		}
+		const legacyPack = {
+			setting: "legacy",
+			weather: "",
+			timeOfDay: "",
+			objectivePairs: [],
+			interestingObjects: [] as WorldEntity[],
+			boundSpaces: [] as WorldEntity[],
+			obstacles: [] as WorldEntity[],
+			wallName: "wall",
+			aiStarts: {},
+		} as unknown as ContentPack;
+
+		for (const schemaVersion of [8, 9, 10]) {
+			const sealedPayload = {
+				schemaVersion,
+				world: game.world,
+				budgets: game.budgets,
+				lockedOut: Array.from(game.lockedOut),
+				personaSpatial: game.personaSpatial,
+				contentPacksA: [legacyPack],
+				contentPacksB: [legacyPack],
+				activePackId: "A" as const,
+				weather: game.weather,
+				objectives: game.objectives,
+				complicationSchedule: game.complicationSchedule,
+				activeComplications: game.activeComplications,
+				isComplete: game.isComplete,
+			};
+			const engine = obfuscate(JSON.stringify(sealedPayload));
+			const result = deserializeSession({ meta, daemons, engine });
+			expect(result.kind, `schema ${schemaVersion}`).toBe("version-mismatch");
+			if (result.kind === "version-mismatch") {
+				expect(result.schemaVersion).toBe(11);
+			}
 		}
 	});
 
@@ -826,7 +1016,6 @@ describe("serializeSession / deserializeSession", () => {
 			objectivePairs: [],
 			interestingObjects: [] as WorldEntity[],
 			obstacles: [] as WorldEntity[],
-			landmarks: DEFAULT_LANDMARKS,
 			aiStarts: {},
 		};
 		const v9SealedPayload = {
@@ -858,7 +1047,7 @@ describe("serializeSession / deserializeSession", () => {
 			daemons[aiId] = JSON.stringify(daemonFile);
 		}
 
-		const result = deserializeSession({ meta, daemons, engine });
+		const result = deserializeSession({ meta, daemons, engine }, PRE_BOUNDARY);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
 			expect(result.state.contentPacksA[0]?.wallName).toBe("");
@@ -878,7 +1067,6 @@ describe("serializeSession / deserializeSession", () => {
 			objectivePairs: [],
 			interestingObjects: [],
 			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
 			wallName: "salt-encrusted edge",
 			aiStarts: {},
 		} as unknown as ContentPack;
@@ -911,7 +1099,7 @@ describe("serializeSession / deserializeSession", () => {
 			daemons[aiId] = JSON.stringify(daemonFile);
 		}
 
-		const result = deserializeSession({ meta, daemons, engine });
+		const result = deserializeSession({ meta, daemons, engine }, PRE_BOUNDARY);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
 			expect(result.state.contentPacksA[0]?.wallName).toBe(
@@ -981,7 +1169,6 @@ describe("serializeSession / deserializeSession", () => {
 			interestingObjects: [interestingEntity],
 			boundSpaces: [boundSpace],
 			obstacles: [obstacleEntity],
-			landmarks: DEFAULT_LANDMARKS,
 			wallName: "tunnel wall",
 			aiStarts: {},
 		} as unknown as ContentPack;
@@ -1015,7 +1202,7 @@ describe("serializeSession / deserializeSession", () => {
 			daemons[aiId] = JSON.stringify(daemonFile);
 		}
 
-		const result = deserializeSession({ meta, daemons, engine });
+		const result = deserializeSession({ meta, daemons, engine }, PRE_BOUNDARY);
 		expect(result.kind).toBe("ok");
 		if (result.kind !== "ok") return;
 
@@ -1095,7 +1282,6 @@ describe("serializeSession / deserializeSession", () => {
 			interestingObjects: [],
 			boundSpaces: [],
 			obstacles: [],
-			landmarks: DEFAULT_LANDMARKS,
 			wallName: "",
 			aiStarts: {},
 		} as unknown as ContentPack;
@@ -1128,7 +1314,7 @@ describe("serializeSession / deserializeSession", () => {
 			daemons[aiId] = JSON.stringify({ aiId, persona, conversationLog: [] });
 		}
 
-		const result = deserializeSession({ meta, daemons, engine });
+		const result = deserializeSession({ meta, daemons, engine }, PRE_BOUNDARY);
 		expect(result.kind).toBe("ok");
 		if (result.kind !== "ok") return;
 
@@ -1165,7 +1351,6 @@ describe("serializeSession / deserializeSession", () => {
 					holder: { row: 4, col: 4 },
 				},
 			],
-			landmarks: DEFAULT_LANDMARKS,
 			wallName: "wall",
 			aiStarts: {},
 		};

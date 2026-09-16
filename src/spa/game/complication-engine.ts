@@ -30,14 +30,14 @@ import type {
 
 /**
  * All tools that can be disabled by a Tool Disable complication.
- * Covers every ToolName in the discriminated union.
+ * The five-tool Daemon tool set (ADR 0015) — the retired `face` tool is not
+ * in the pool and can never be selected.
  */
 const DISABLABLE_TOOLS: ToolName[] = [
 	"pick_up",
 	"put_down",
 	"use",
 	"go",
-	"face",
 	"message",
 ];
 

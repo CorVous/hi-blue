@@ -7,4 +7,4 @@
  * from there would form an import cycle. `session-codec.ts` re-exports this
  * constant, so existing `from "./session-codec.js"` imports keep working.
  */
-export const SESSION_SCHEMA_VERSION = 11 as const;
+export const SESSION_SCHEMA_VERSION = 12 as const;

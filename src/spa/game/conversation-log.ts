@@ -2,7 +2,7 @@
  * conversation-log.ts
  *
  * Renders a single ConversationEntry (one AI's view of one log line) to its
- * formatted string. Cone visibility is resolved at write-time (ADR 0006), not
+ * formatted string. Vista membership is resolved at write-time (ADR 0006), not
  * here. Sorting + interleaving with role turns happens in openai-message-builder.
  *
  * Supported entry kinds:
@@ -12,14 +12,7 @@
  *   - `broadcast`: sender-less system announcement rendered as `[Round N] <content>`.
  */
 
-import { cardinalToRelative } from "./direction.js";
-import type {
-	AiId,
-	CardinalDirection,
-	ConversationEntry,
-	PersonaSpatialState,
-	WorldEntity,
-} from "./types.js";
+import type { AiId, ConversationEntry, WorldEntity } from "./types.js";
 
 /**
  * Substitute `{actor}` tokens in a flavor string.
@@ -42,16 +35,11 @@ function itemName(entities: WorldEntity[], itemId: string): string {
 
 /**
  * Render a single ConversationEntry line for the owning AI.
- *
- * @param witnessState  Optional spatial state of the witnessing AI. When
- *   provided, movement directions in witnessed-event lines are rendered
- *   relative to the witness's facing rather than as raw cardinals.
  */
 export function renderEntry(
 	entry: ConversationEntry,
 	aiId: AiId,
 	entities: WorldEntity[],
-	witnessState?: PersonaSpatialState,
 ): string {
 	const round = entry.round;
 	switch (entry.kind) {
@@ -77,16 +65,14 @@ export function renderEntry(
 			const actorSub = `*${entry.actor}`;
 			switch (entry.actionKind) {
 				case "go": {
-					// Render direction relative to the witness's facing if available,
-					// falling back to the raw cardinal for logs and dev tools.
-					let dirLabel: string = entry.direction ?? "forward";
-					if (entry.direction && witnessState) {
-						dirLabel = cardinalToRelative(
-							witnessState.facing,
-							entry.direction as CardinalDirection,
-						);
+					// The cardinal direction of the step (ADR 0015). Daemons have
+					// positions but no orientation, so nothing is rendered relative
+					// to an observer. Entries written before `direction` was recorded
+					// fall back to a directionless line rather than inventing one.
+					if (!entry.direction) {
+						return `[Round ${round}] You watch ${actorSub} move.`;
 					}
-					return `[Round ${round}] You watch ${actorSub} walk ${dirLabel}.`;
+					return `[Round ${round}] You watch ${actorSub} walk ${entry.direction}.`;
 				}
 
 				case "pick_up": {
@@ -138,7 +124,7 @@ export function renderEntry(
 
 		case "tool-call": {
 			// Note: renderEntry is not used for tool-call in openai-message-builder.ts;
-			// that path renders directly with entry.result and optional coneDelta enrichment.
+			// that path renders directly with entry.result and optional diskDelta enrichment.
 			// This function is kept for completeness but not on the render path.
 			const successStr = entry.success ? "succeeded" : "failed";
 			return `[Round ${round}] Your \`${entry.toolName}\` action ${successStr}: ${entry.result}`;

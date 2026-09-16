@@ -64,9 +64,9 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 };
 
 const RGC_AI_STARTS: ContentPack["aiStarts"] = {
-	red: { position: { row: 0, col: 0 }, facing: "north" },
-	green: { position: { row: 0, col: 1 }, facing: "north" },
-	cyan: { position: { row: 0, col: 2 }, facing: "north" },
+	red: { position: { row: 0, col: 0 } },
+	green: { position: { row: 0, col: 1 } },
+	cyan: { position: { row: 0, col: 2 } },
 };
 
 /**
@@ -81,7 +81,7 @@ const MINIMAL_CONTENT_PACK = makeTestPack([], {
 
 /**
  * A ContentPack fixture that places carry-0-obj at (0,0) and key held by red,
- * with AIs at (0,0)=red, (0,1)=green, (0,2)=cyan facing north.
+ * with AIs at (0,0)=red, (0,1)=green, (0,2)=cyan.
  * Uses type-first entity IDs so buildObjectiveRecords can create carry objectives
  * when CONTENT_PACK_OBJECTIVE_TYPES is passed to GameSession.
  */
@@ -606,19 +606,18 @@ describe("GameSession — tool roundtrip persistence", () => {
 // ── Spatial mechanics (issue #123) ──────────────────────────────────────────
 
 describe("GameSession — spatial mechanics", () => {
-	it("go updates personaSpatial position and facing across rounds", async () => {
-		// ContentPack places red at (0,0) facing north
+	it("go updates personaSpatial position across rounds", async () => {
+		// ContentPack places red at (0,0)
 		const session = new GameSession(CONTENT_PACK_WITH_ITEMS, TEST_PERSONAS);
 		const phase0 = session.getState();
-		expect(phase0.personaSpatial.red?.position).toEqual({ row: 0, col: 0 });
-		expect(phase0.personaSpatial.red?.facing).toBe("north");
+		expect(phase0.personaSpatial.red).toEqual({ position: { row: 0, col: 0 } });
 
 		// Red moves south; green and cyan pass
 		const provider = new MockRoundLLMProvider([
 			{
 				assistantText: "",
 				toolCalls: [
-					{ id: "go1", name: "go", argumentsJson: '{"direction":"back"}' },
+					{ id: "go1", name: "go", argumentsJson: '{"direction":"south"}' },
 				],
 			},
 			{ assistantText: "", toolCalls: [] },
@@ -627,8 +626,7 @@ describe("GameSession — spatial mechanics", () => {
 		await session.submitMessage("red", "hi", provider);
 
 		const phase = session.getState();
-		expect(phase.personaSpatial.red?.position).toEqual({ row: 1, col: 0 });
-		expect(phase.personaSpatial.red?.facing).toBe("south");
+		expect(phase.personaSpatial.red).toEqual({ position: { row: 1, col: 0 } });
 	});
 });
 

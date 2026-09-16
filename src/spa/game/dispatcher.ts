@@ -1,13 +1,11 @@
-import { projectCone } from "./cone-projector.js";
-import type { RelativeDirection } from "./direction.js";
+import { withinInteractionRange } from "./available-tools.js";
 import {
 	applyDirection,
-	frontArc,
+	CARDINAL_DIRECTIONS,
+	type CardinalDirection,
 	inBounds,
 	isGridPosition,
 	positionsEqual,
-	RELATIVE_DIRECTIONS,
-	relativeToCardinal,
 } from "./direction.js";
 import {
 	appendActionFailure,
@@ -19,7 +17,7 @@ import {
 import { carryObjectById } from "./pack-selectors.js";
 import {
 	buildAiContext,
-	buildConeSnapshot,
+	buildDiskSnapshot,
 	renderWhatsNew,
 } from "./prompt-builder.js";
 import type {
@@ -33,6 +31,7 @@ import type {
 	ToolCall,
 	WorldEntity,
 } from "./types";
+import { vistaContains } from "./vista-projector.js";
 import {
 	checkPlacementFlavor,
 	checkUseItemActivation,
@@ -55,12 +54,12 @@ export interface DispatchResult {
 	 */
 	actorPrivateToolResult?: { description: string; success: boolean };
 	/**
-	 * For go/face actions where the actor's cone shift reveals new content,
-	 * this field carries the renderWhatsNew output. Only set for successful
-	 * go/face tool calls where the pre/post cone snapshots differ.
-	 * (Issue #376: persist cone-delta on go/face tool-call log entries)
+	 * For a `go` action whose Vista shift reveals new content, this field
+	 * carries the renderWhatsNew output. Only set for successful `go` tool
+	 * calls where the pre/post perception-disk snapshots differ.
+	 * (Issue #376: persist the perception delta on go tool-call log entries)
 	 */
-	actorConeDelta?: string;
+	actorDiskDelta?: string;
 }
 
 /** Filter entities to only those that can be picked up / put_down / used (not spaces or obstacles). */
@@ -106,14 +105,10 @@ export function validateToolCall(
 				};
 			if (!actorSpatial)
 				return { valid: false, reason: "Actor has no spatial state" };
-			const inOwnCell = positionsEqual(item.holder, actorSpatial.position);
-			const inFront = frontArc(actorSpatial.position, actorSpatial.facing).some(
-				(p) => positionsEqual(p, item.holder as GridPosition),
-			);
-			if (!inOwnCell && !inFront)
+			if (!withinInteractionRange(actorSpatial.position, item.holder))
 				return {
 					valid: false,
-					reason: `Item "${call.args.item}" is not in your cell or directly in front of you`,
+					reason: `Item "${call.args.item}" is out of reach — you can only pick up items in your own cell or the eight cells around it`,
 				};
 			return { valid: true };
 		}
@@ -153,15 +148,10 @@ export function validateToolCall(
 				if (!actorSpatial)
 					return { valid: false, reason: "Actor has no spatial state" };
 				const spacePos = spaceTarget.holder as GridPosition;
-				const inOwnCell = positionsEqual(spacePos, actorSpatial.position);
-				const inFront = frontArc(
-					actorSpatial.position,
-					actorSpatial.facing,
-				).some((p) => positionsEqual(p, spacePos));
-				if (!inOwnCell && !inFront)
+				if (!withinInteractionRange(actorSpatial.position, spacePos))
 					return {
 						valid: false,
-						reason: `Space "${call.args.item}" is not in your cell or directly in front of you`,
+						reason: `Space "${call.args.item}" is out of reach — you can only use a space in your own cell or the eight cells around it`,
 					};
 				return { valid: true };
 			}
@@ -174,15 +164,11 @@ export function validateToolCall(
 					reason: `Item "${call.args.item}" does not exist`,
 				};
 			if (item.holder !== aiId) {
-				// Check if item is on the ground in a cell the daemon can reach with pick_up
+				// Check if item is on the ground within interaction range, where
+				// pick_up is the action to advise.
 				if (isGridPosition(item.holder) && actorSpatial) {
 					const itemPos = item.holder as GridPosition;
-					const inOwnCell = positionsEqual(itemPos, actorSpatial.position);
-					const inFront = frontArc(
-						actorSpatial.position,
-						actorSpatial.facing,
-					).some((p) => positionsEqual(p, itemPos));
-					if (inOwnCell || inFront) {
+					if (withinInteractionRange(actorSpatial.position, itemPos)) {
 						return {
 							valid: false,
 							reason: `"${call.args.item}" is on the ground, not in your hands. Use pick_up first.`,
@@ -198,44 +184,24 @@ export function validateToolCall(
 		}
 
 		case "go": {
-			// Only accept relative directions (relative to daemon's facing).
+			// Cardinal-only: Daemons have positions but no orientation, so
+			// relative movement vocabulary (forward/back/left/right) is rejected
+			// even when it arrives as a raw tool call that bypassed the tool enum.
 			const rawDir = call.args.direction;
 			if (!actorSpatial)
 				return { valid: false, reason: "Actor has no spatial state" };
-			if (!RELATIVE_DIRECTIONS.includes(rawDir as RelativeDirection)) {
+			if (!CARDINAL_DIRECTIONS.includes(rawDir as CardinalDirection)) {
 				return {
 					valid: false,
-					reason: `"${rawDir}" is not a valid direction. Use relative directions: forward, back, left, right.`,
+					reason: `"${rawDir}" is not a valid direction. Use a cardinal direction: north, south, east, or west.`,
 				};
 			}
-			const direction = relativeToCardinal(
-				actorSpatial.facing,
-				rawDir as RelativeDirection,
-			);
+			const direction = rawDir as CardinalDirection;
 			const next = applyDirection(actorSpatial.position, direction);
 			if (!inBounds(next))
 				return { valid: false, reason: "That direction is out of bounds" };
 			if (obstacles.some((o) => positionsEqual(o, next)))
 				return { valid: false, reason: "That cell is blocked by an obstacle" };
-			return { valid: true };
-		}
-
-		case "face": {
-			// Only accept relative directions (relative to daemon's facing).
-			const rawDir = call.args.direction;
-			if (!RELATIVE_DIRECTIONS.includes(rawDir as RelativeDirection)) {
-				return {
-					valid: false,
-					reason: `"${rawDir}" is not a valid direction. Use relative directions: forward, back, left, right.`,
-				};
-			}
-			// Reject facing the current direction (forward) as a no-op
-			if (rawDir === "forward") {
-				return {
-					valid: false,
-					reason: "You already face that direction",
-				};
-			}
 			return { valid: true };
 		}
 
@@ -300,20 +266,16 @@ export function executeToolCall(
 				break;
 			}
 
-			// Place item on the paired space's cell when the paired space is in
-			// the actor's own cell OR front arc. Otherwise no world mutation.
+			// Place item on the paired space's cell when the paired space is
+			// within the actor's interaction range (own cell plus the eight
+			// adjacent cells). Otherwise no world mutation.
 			if (target && actorSpatial && target.pairsWithSpaceId) {
 				const pairedSpace = entities.find(
 					(e) => e.id === target.pairsWithSpaceId,
 				);
 				if (pairedSpace && isGridPosition(pairedSpace.holder)) {
 					const spacePos = pairedSpace.holder as GridPosition;
-					const spaceReachable =
-						positionsEqual(spacePos, actorSpatial.position) ||
-						frontArc(actorSpatial.position, actorSpatial.facing).some((p) =>
-							positionsEqual(p, spacePos),
-						);
-					if (spaceReachable) {
+					if (withinInteractionRange(actorSpatial.position, spacePos)) {
 						target.holder = { ...spacePos };
 					}
 				}
@@ -350,35 +312,17 @@ export function executeToolCall(
 		}
 		case "go": {
 			if (!actorSpatial) break;
-			// Validation upstream guarantees direction is a RelativeDirection.
-			const direction = relativeToCardinal(
-				actorSpatial.facing,
-				call.args.direction as RelativeDirection,
-			);
+			// Validation upstream guarantees a cardinal direction. A step writes
+			// the new position and nothing else: the named cardinal is the whole
+			// of the movement, and perception is position-only.
+			const direction = call.args.direction as CardinalDirection;
 			const nextPos = applyDirection(actorSpatial.position, direction);
 			return {
 				...game,
 				world: { ...game.world, entities },
 				personaSpatial: {
 					...game.personaSpatial,
-					[aiId]: { position: nextPos, facing: direction },
-				},
-			};
-		}
-		case "face": {
-			if (!actorSpatial) break;
-			// Convert relative direction to cardinal
-			const rawFaceDir = call.args.direction;
-			const direction = relativeToCardinal(
-				actorSpatial.facing,
-				rawFaceDir as RelativeDirection,
-			);
-			return {
-				...game,
-				world: { ...game.world, entities },
-				personaSpatial: {
-					...game.personaSpatial,
-					[aiId]: { ...actorSpatial, facing: direction },
+					[aiId]: { position: nextPos },
 				},
 			};
 		}
@@ -417,8 +361,6 @@ function describeToolCall(game: GameState, aiId: AiId, call: ToolCall): string {
 		}
 		case "go":
 			return `${name} walks ${call.args.direction}.`;
-		case "face":
-			return `${name} turns to face ${call.args.direction}`;
 		default:
 			return `${name} attempted an unknown action`;
 	}
@@ -448,7 +390,7 @@ export function dispatchAiTurn(
 		| { description: string; success: boolean }
 		| undefined;
 
-	let actorConeDelta: string | undefined;
+	let actorDiskDelta: string | undefined;
 
 	// Process messages BEFORE toolCall so that result.records reflects
 	// speak-then-act order (P0-1 fix for issue #238).
@@ -499,16 +441,17 @@ export function dispatchAiTurn(
 			// satisfactionState transitions for activation-flavor detection.
 			const preExecuteWorld = state.world;
 
-			// For go/face, compute cone delta pre-execution to capture the state before the action
-			if (action.toolCall.name === "go" || action.toolCall.name === "face") {
+			// For go, compute the perception-disk delta pre-execution to capture
+			// the state before the action.
+			if (action.toolCall.name === "go") {
 				const prevCtx = buildAiContext(state, aiId);
-				const prevSnap = buildConeSnapshot(prevCtx);
+				const prevSnap = buildDiskSnapshot(prevCtx);
 				state = executeToolCall(state, aiId, action.toolCall);
 				const currCtx = buildAiContext(state, aiId);
-				const currSnap = buildConeSnapshot(currCtx);
+				const currSnap = buildDiskSnapshot(currCtx);
 				const delta = renderWhatsNew(prevSnap, currSnap);
 				if (delta !== null) {
-					actorConeDelta = delta;
+					actorDiskDelta = delta;
 				}
 			} else {
 				state = executeToolCall(state, aiId, action.toolCall);
@@ -552,7 +495,7 @@ export function dispatchAiTurn(
 			}
 
 			// Build and append a PhysicalActionRecord for observable physical actions.
-			// face is excluded (facing-change only, not observable).
+			// Only the four observable action tools reach this branch.
 			const call = action.toolCall;
 			if (
 				call.name === "go" ||
@@ -613,14 +556,14 @@ export function dispatchAiTurn(
 						round,
 						actor: aiId,
 						actorCellAtAction: actorSpatialPost.position,
-						actorFacingAtAction: actorSpatialPost.facing,
 						kind: call.name,
 						witnessSpatial,
 						...(call.args.item !== undefined ? { item: call.args.item } : {}),
 						...(call.name === "go"
 							? {
-									// Store resolved cardinal direction (actorFacingAtAction is post-move facing = direction walked)
-									direction: actorSpatialPost.facing,
+									// The step's cardinal direction, taken from the named
+									// direction the tool call carried.
+									direction: call.args.direction as CardinalDirection,
 								}
 							: {}),
 						...(useOutcomeRaw !== undefined
@@ -629,18 +572,15 @@ export function dispatchAiTurn(
 						...(placementFlavorRaw !== undefined ? { placementFlavorRaw } : {}),
 					};
 
-					// Write-time cone fan-out: append a witnessed-event entry to each
+					// Write-time Vista fan-out: append a witnessed-event entry to each
 					// qualifying witness's per-Daemon log. The actor gets nothing here —
 					// their tool-result string is their channel.
 					for (const [witnessId, witnessSp] of Object.entries(witnessSpatial)) {
-						const witnessCone = projectCone(
+						const actorInVista = vistaContains(
 							witnessSp.position,
-							witnessSp.facing,
+							physRecord.actorCellAtAction,
 						);
-						const actorInCone = witnessCone.some((cell) =>
-							positionsEqual(cell.position, physRecord.actorCellAtAction),
-						);
-						if (!actorInCone) continue;
+						if (!actorInVista) continue;
 
 						const witnessEntry = {
 							kind: "witnessed-event" as const,
@@ -674,12 +614,7 @@ export function dispatchAiTurn(
 			state = appendActionFailure(state, aiId, {
 				kind: "action-failure",
 				round,
-				tool: action.toolCall.name as
-					| "go"
-					| "face"
-					| "pick_up"
-					| "put_down"
-					| "use",
+				tool: action.toolCall.name,
 				reason: validation.reason ?? "rejected",
 			});
 		}
@@ -706,6 +641,6 @@ export function dispatchAiTurn(
 		game: state,
 		records,
 		...(actorPrivateToolResult !== undefined ? { actorPrivateToolResult } : {}),
-		...(actorConeDelta !== undefined ? { actorConeDelta } : {}),
+		...(actorDiskDelta !== undefined ? { actorDiskDelta } : {}),
 	};
 }

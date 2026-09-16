@@ -4,19 +4,24 @@
  * Computes the per-AI per-turn list of legal OpenAI tool definitions.
  * Filters out tools that are structurally impossible given the current
  * game state (empty item cell for pick_up, no held items for put_down/use,
- * no legal direction for go).
+ * no legal cardinal step for go).
  *
- * `face` is always present with the 3-direction enum (excludes "forward", the current facing).
+ * The surface is the five-tool Daemon tool set (ADR 0015): `go`, `pick_up`,
+ * `put_down`, `use`, `message`. There is no `face` tool and no
+ * relative-direction movement vocabulary.
+ *
+ * Reach is the **Interaction range** (ADR 0015): the Daemon's own cell plus
+ * all eight adjacent cells, including diagonals. It is strictly shorter than
+ * the 13-cell **Vista**, so a target two cardinal steps away is visible but
+ * out of reach.
  */
 
 import {
 	applyDirection,
-	frontArc,
+	CARDINAL_DIRECTIONS,
 	inBounds,
 	isGridPosition,
 	positionsEqual,
-	RELATIVE_DIRECTIONS,
-	relativeToCardinal,
 } from "./direction.js";
 import { type OpenAiTool, TOOL_DEFINITIONS } from "./tool-registry.js";
 import type {
@@ -27,6 +32,30 @@ import type {
 	ToolName,
 	WorldEntity,
 } from "./types.js";
+
+/**
+ * True when `target` lies inside `origin`'s **Interaction range**: the
+ * Daemon's own cell plus all eight adjacent cells, including diagonals —
+ * integer offsets with `max(|drow|, |dcol|) ≤ 1`, nine cells total
+ * (ADR 0015). Strictly shorter than the **Vista**: cells two cardinal steps
+ * away are visible but outside this range. Facing plays no part — the range
+ * is omnidirectional.
+ *
+ * This is the single source of truth for that range: availability here,
+ * validation and effects in the dispatcher, and proximity hints in the
+ * prompt builder all agree on it.
+ */
+export function withinInteractionRange(
+	origin: GridPosition,
+	target: GridPosition,
+): boolean {
+	return (
+		Math.max(
+			Math.abs(target.row - origin.row),
+			Math.abs(target.col - origin.col),
+		) <= 1
+	);
+}
 
 /** Entities that can be picked up/used/given (objective_object and interesting_object). */
 function pickableEntities(entities: WorldEntity[]): WorldEntity[] {
@@ -91,13 +120,12 @@ function cloneToolWithEnums(
  *
  * Algorithm:
  * 0. `message` — always present; `to` enum = "blue" + live peer daemon ids.
- * 1. `face` — always present, RELATIVE_DIRECTIONS enum excluding "forward" (current facing is no-op).
- * 2. `go` — included only when at least one direction is in-bounds AND non-obstacle.
- *    Enum restricted to legal directions.
- * 3. `pick_up` — included only when pickable entities are in the actor's own cell
- *    OR the 3-cell front arc (dist-1: front-left, ahead, front-right).
+ * 1. `go` — included only when at least one cardinal direction is in-bounds
+ *    AND non-obstacle. Enum restricted to those legal directions.
+ * 2. `pick_up` — included only when pickable entities are on the ground within
+ *    the actor's interaction range (own cell plus the eight adjacent cells).
  *    Enum restricted to those entity ids.
- * 4. `put_down`, `use` — included only when actor holds at least one pickable entity.
+ * 3. `put_down`, `use` — included only when actor holds at least one pickable entity.
  *    Enum restricted to held entity ids.
  *
  * Spaces and obstacles are never pickupable.
@@ -136,16 +164,9 @@ export function availableTools(
 		);
 	}
 
-	// 1. face — always present, excluding "forward" (current facing is no-op)
-	if (!disabledTools.has("face")) {
-		const faceDirections = RELATIVE_DIRECTIONS.filter((d) => d !== "forward");
-		tools.push(cloneToolWithEnums("face", { direction: faceDirections }));
-	}
-
-	// 2. go — restricted to legal directions
+	// 1. go — restricted to legal cardinal directions
 	if (actorSpatial && !disabledTools.has("go")) {
-		const legalDirections = RELATIVE_DIRECTIONS.filter((relDir) => {
-			const cardinal = relativeToCardinal(actorSpatial.facing, relDir);
+		const legalDirections = CARDINAL_DIRECTIONS.filter((cardinal) => {
 			const next = applyDirection(actorSpatial.position, cardinal);
 			if (!inBounds(next)) return false;
 			if (obstacles.some((o) => positionsEqual(o, next))) return false;
@@ -156,14 +177,13 @@ export function availableTools(
 		}
 	}
 
-	// 3. pick_up — pickable entities in actor's own cell or front arc
+	// 2. pick_up — pickable entities on the ground within interaction range
 	if (actorSpatial && !disabledTools.has("pick_up")) {
-		const arc = frontArc(actorSpatial.position, actorSpatial.facing);
-		const reachableItems = pickable.filter((item) => {
-			if (!isGridPosition(item.holder)) return false;
-			if (positionsEqual(item.holder, actorSpatial.position)) return true;
-			return arc.some((p) => positionsEqual(p, item.holder as GridPosition));
-		});
+		const reachableItems = pickable.filter(
+			(item) =>
+				isGridPosition(item.holder) &&
+				withinInteractionRange(actorSpatial.position, item.holder),
+		);
 		if (reachableItems.length > 0) {
 			tools.push(
 				cloneToolWithEnums("pick_up", {
@@ -173,7 +193,7 @@ export function availableTools(
 		}
 	}
 
-	// 4. put_down and use — pickable entities held by this actor; also spaces in reach
+	// 3. put_down and use — pickable entities held by this actor; also spaces in reach
 	const heldItems = pickable.filter((item) => item.holder === aiId);
 	if (!disabledTools.has("put_down") && heldItems.length > 0) {
 		const heldIds = heldItems.map((i) => i.id);
@@ -183,19 +203,17 @@ export function availableTools(
 		// Held item ids
 		const heldIds = heldItems.map((i) => i.id);
 
-		// Reachable objective_space ids: space must be in actor's own cell or front arc,
-		// and must have useAvailable !== false.
+		// Reachable objective_space ids: space must be within interaction range
+		// (including the actor's own cell), and must have useAvailable !== false.
+		// No held item is required.
 		let reachableSpaceIds: string[] = [];
 		if (actorSpatial) {
-			const arc = frontArc(actorSpatial.position, actorSpatial.facing);
 			reachableSpaceIds = world.entities
 				.filter((e) => {
 					if (e.kind !== "objective_space") return false;
 					if (e.useAvailable === false) return false;
 					if (!isGridPosition(e.holder)) return false;
-					const spacePos = e.holder as GridPosition;
-					if (positionsEqual(spacePos, actorSpatial.position)) return true;
-					return arc.some((p) => positionsEqual(p, spacePos));
+					return withinInteractionRange(actorSpatial.position, e.holder);
 				})
 				.map((e) => e.id);
 		}

@@ -349,7 +349,7 @@ describe("renderStart — CapHitError handling", () => {
 
 		// Override the bootstrap module so the split generation rejects with
 		// CapHitError on both promises. Pending-bootstrap subscribes to each
-		// promise; surfacing CapHitError on either is enough to trigger the
+		// promise; raising CapHitError on either is enough to trigger the
 		// start route's #cap-hit fallback.
 		vi.doMock("../game/bootstrap.js", async (importOriginal) => {
 			const actual =
@@ -447,7 +447,8 @@ describe("renderStart — persistence warning banners", () => {
 	it("shows 'version-mismatch' map-miss banner text when no archive entry exists", async () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 		vi.resetModules();
-		// Default SCHEMA_ARCHIVE_MAP is empty — any schemaVersion is a miss.
+		// Schema 9 has no SCHEMA_ARCHIVE_MAP entry, so the banner falls back to
+		// the plain "kept" copy with no archived-build link.
 		const { renderStart } = await import("../views/start.js");
 
 		setSearch("skipDialup=1");

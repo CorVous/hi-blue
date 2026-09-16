@@ -33,7 +33,6 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { availableTools } from "../../src/spa/game/available-tools.js";
-import { DEFAULT_LANDMARKS } from "../../src/spa/game/direction.js";
 import { dispatchAiTurn } from "../../src/spa/game/dispatcher.js";
 import {
 	advanceRound,
@@ -127,7 +126,7 @@ const PERSONAS: Record<string, AiPersona> = {
 
 /**
  * Hand-rolled pack with a Carry objective, two interesting items, and one
- * obstacle. Layout from `red`'s POV (starts at row 2, col 2 facing north,
+ * obstacle. Layout from `red`'s POV (starts at row 2, col 2,
  * grid is 5x5 with row 0 at the top):
  *
  *   col       0           1            2             3          4
@@ -204,12 +203,11 @@ function makePack(): ContentPack {
 				holder: { row: 3, col: 3 },
 			},
 		],
-		landmarks: DEFAULT_LANDMARKS,
 		wallName: "tiled tunnel wall",
 		aiStarts: {
-			red: { position: { row: 2, col: 2 }, facing: "north" },
-			sim1: { position: { row: 4, col: 0 }, facing: "east" },
-			sim2: { position: { row: 4, col: 4 }, facing: "west" },
+			red: { position: { row: 2, col: 2 } },
+			sim1: { position: { row: 4, col: 0 } },
+			sim2: { position: { row: 4, col: 4 } },
 		},
 	};
 }
@@ -222,7 +220,7 @@ function makePack(): ContentPack {
  * of-input, not lack of input.
  *
  * The schedule mixes pure-chat prompts with action-nudges spanning every
- * tool family (face, pick_up, use, put_down, go). This way one run
+ * tool family (pick_up, use, put_down, go). This way one run
  * exercises the full tool surface and the per-tool per-round series in the
  * JSON sidecar carries real signal across tool names, not just `message`.
  * Prompts are intentionally suggestive rather than imperative — they invite

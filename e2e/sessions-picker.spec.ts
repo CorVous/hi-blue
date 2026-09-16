@@ -11,99 +11,25 @@
  *  - Sessions-icon ([ ls ] button) click → sessions view
  *  - Broken-session banner: active session with missing engine.dat → sessions view with reason
  *  - Version-mismatch banner: active session with a stale schema → sessions view with reason
- *  - Version-mismatch archived-build note (picker row): needs a schema that is
- *    both stale and in SCHEMA_ARCHIVE_MAP, but only 11 is mapped and 11 is still
- *    current, so no live build can render it. Pinned in jsdom via a temporary map entry; re-add Playwright coverage on the v12 bump (#539).
+ *  - Version-mismatch archived-build note (banner + picker row): a session
+ *    stamped with the retired schema 11 (mapped to `0.0.2-beta.2` in
+ *    SCHEMA_ARCHIVE_MAP) links to `./v/0.0.2-beta.2/`; an unmapped schema
+ *    (999) keeps the plain mismatch copy and adds no note.
  *  - [ + new session ] flow: picker → start view, new active pointer
  *
  * Post-ADR-0011: the picker is opened by clicking the sessions icon, not by
  * navigating to a URL. Sticky for broken / version-mismatch active sessions.
  */
 import { expect, test } from "@playwright/test";
-import { expectNoPageErrors, goToGame, stubNewGameLLM } from "./helpers";
-
-// ── Obfuscation key (embedded in seed scripts) ────────────────────────────────
-
-const OBFUSCATION_KEY = "hi-blue:engine/v1@kJvN3pX8wQmR2sZt";
+import {
+	expectNoPageErrors,
+	goToGame,
+	obfuscateEngineBlob,
+	pickerOkSessionSeedScript,
+	stubNewGameLLM,
+} from "./helpers";
 
 // ── Session seed helpers ──────────────────────────────────────────────────────
-
-/**
- * Seed an ok session in localStorage for addInitScript use.
- */
-function seedOkSessionScript(id: string, lastSavedAt: string): string {
-	return `
-		(function() {
-			const prefix = 'hi-blue:sessions/${id}/';
-			const meta = JSON.stringify({
-				createdAt: '2025-01-01T00:00:00.000Z',
-				lastSavedAt: '${lastSavedAt}',
-				epoch: 1,
-				round: 0,
-				personaOrder: ['red'],
-			});
-			localStorage.setItem(prefix + 'meta.json', meta);
-
-			// Daemon file: flat DaemonFile shape (v6+)
-			const daemonFile = JSON.stringify({
-				aiId: 'red',
-				persona: {
-					id: 'red',
-					name: 'Red',
-					color: '#ff0000',
-					temperaments: ['bold', 'calm'],
-					personaGoal: 'stub',
-					blurb: 'stub',
-					typingQuirks: ['...', '!'],
-					voiceExamples: ['Hello.', 'Indeed.', 'Farewell.'],
-				},
-				conversationLog: [],
-			});
-			localStorage.setItem(prefix + 'red.txt', daemonFile);
-
-			// Build engine.dat via inline obfuscation — payload must match SealedEngine v7
-			const OBFUSCATION_KEY = '${OBFUSCATION_KEY}';
-			const keyBytes = Array.from(new TextEncoder().encode(OBFUSCATION_KEY));
-			const stubLandmarks = {
-				north: { shortName: 'Ridge', horizonPhrase: 'A distant ridge.' },
-				south: { shortName: 'Hills', horizonPhrase: 'Rolling hills.' },
-				east: { shortName: 'Tower', horizonPhrase: 'A stone tower.' },
-				west: { shortName: 'Forest', horizonPhrase: 'A dark forest.' },
-			};
-			const stubPack = {
-				setting: 'test setting',
-				weather: 'clear',
-				timeOfDay: 'morning',
-				objectivePairs: [],
-				interestingObjects: [],
-				obstacles: [],
-				aiStarts: {},
-				landmarks: stubLandmarks,
-			};
-			const payload = JSON.stringify({
-				schemaVersion: 8,
-				isComplete: false,
-				world: { entities: [] },
-				budgets: { red: { remaining: 50, total: 50 } },
-				lockedOut: [],
-				personaSpatial: { red: { position: { row: 2, col: 2 }, facing: 'north' } },
-				contentPacksA: [stubPack],
-				contentPacksB: [{ ...stubPack, setting: 'test setting B' }],
-				activePackId: 'A',
-				weather: 'clear',
-				objectives: [],
-				complicationSchedule: { countdown: 5, settingShiftFired: false },
-				activeComplications: [],
-			});
-			const jsonBytes = Array.from(new TextEncoder().encode(payload));
-			const xored = jsonBytes.map((b,i) => b ^ (keyBytes[i % keyBytes.length] ?? 0));
-			let iso = '';
-			for (const b of xored) iso += String.fromCharCode(b);
-			const engineDat = btoa(iso);
-			localStorage.setItem(prefix + 'engine.dat', engineDat);
-		})();
-	`;
-}
 
 /**
  * Seed a broken session (missing engine.dat) for addInitScript use.
@@ -127,8 +53,11 @@ function seedBrokenSessionScript(id: string): string {
 
 /**
  * Seed a version-mismatch session (bumped schemaVersion) for addInitScript use.
+ * Defaults to schema 999 (no archive-map entry); pass 11 to seed the retired
+ * pre-v12 schema, which the live build maps to the archived `0.0.2-beta.2`.
  */
-function seedVersionMismatchScript(id: string): string {
+function seedVersionMismatchScript(id: string, schemaVersion = 999): string {
+	const engineDat = obfuscateEngineBlob(JSON.stringify({ schemaVersion }));
 	return `
 		(function() {
 			const prefix = 'hi-blue:sessions/${id}/';
@@ -141,21 +70,21 @@ function seedVersionMismatchScript(id: string): string {
 			localStorage.setItem(prefix + 'meta.json', meta);
 			localStorage.setItem(prefix + 'red.txt', '{}');
 
-			// Build engine.dat with schemaVersion=999 (mismatch)
-			const OBFUSCATION_KEY = '${OBFUSCATION_KEY}';
-			const keyBytes = Array.from(new TextEncoder().encode(OBFUSCATION_KEY));
-			const payload = JSON.stringify({ schemaVersion: 999 });
-			const jsonBytes = Array.from(new TextEncoder().encode(payload));
-			const xored = jsonBytes.map((b,i) => b ^ (keyBytes[i % keyBytes.length] ?? 0));
-			let iso = '';
-			for (const b of xored) iso += String.fromCharCode(b);
-			const engineDat = btoa(iso);
-			localStorage.setItem(prefix + 'engine.dat', engineDat);
+			// engine.dat sealed with schemaVersion=${schemaVersion} (mismatch)
+			localStorage.setItem(prefix + 'engine.dat', '${engineDat}');
 		})();
 	`;
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Recompute the engine.dat bytes `seedVersionMismatchScript` writes, so a test
+ * can prove the mismatch route left the stored bytes untouched.
+ */
+function expectedSeededEngineBytes(schemaVersion: number): string {
+	return obfuscateEngineBlob(JSON.stringify({ schemaVersion }));
+}
 
 test("picker renders ok/broken/version-mismatch rows with correct tags and buttons", async ({
 	page,
@@ -169,7 +98,7 @@ test("picker renders ok/broken/version-mismatch rows with correct tags and butto
 	});
 	await page.addInitScript(
 		new Function(
-			seedOkSessionScript("0xAAAA", "2025-03-01T10:00:00.000Z"),
+			pickerOkSessionSeedScript("0xAAAA", "2025-03-01T10:00:00.000Z"),
 		) as () => void,
 	);
 	await page.addInitScript(
@@ -237,12 +166,12 @@ test("[ load ] flow: click load on non-active row → game view", async ({
 	});
 	await page.addInitScript(
 		new Function(
-			seedOkSessionScript("0xAAAA", "2025-03-01T10:00:00.000Z"),
+			pickerOkSessionSeedScript("0xAAAA", "2025-03-01T10:00:00.000Z"),
 		) as () => void,
 	);
 	await page.addInitScript(
 		new Function(
-			seedOkSessionScript("0xBBBB", "2025-02-01T10:00:00.000Z"),
+			pickerOkSessionSeedScript("0xBBBB", "2025-02-01T10:00:00.000Z"),
 		) as () => void,
 	);
 
@@ -277,7 +206,7 @@ test("[ dup ] flow: click dup → two rows, active pointer unchanged", async ({
 	});
 	await page.addInitScript(
 		new Function(
-			seedOkSessionScript("0xAAAA", "2025-03-01T10:00:00.000Z"),
+			pickerOkSessionSeedScript("0xAAAA", "2025-03-01T10:00:00.000Z"),
 		) as () => void,
 	);
 
@@ -313,7 +242,7 @@ test("[ rm ] confirm/cancel flow", async ({ page }) => {
 	});
 	await page.addInitScript(
 		new Function(
-			seedOkSessionScript("0xAAAA", "2025-03-01T10:00:00.000Z"),
+			pickerOkSessionSeedScript("0xAAAA", "2025-03-01T10:00:00.000Z"),
 		) as () => void,
 	);
 
@@ -489,6 +418,64 @@ test("version-mismatch banner: active session with stale schema → sessions vie
 	await expectNoPageErrors(page, pageErrors);
 });
 
+test("version-mismatch archive link: a session stamped with retired schema 11 links to the archived build", async ({
+	page,
+}) => {
+	const pageErrors: Error[] = [];
+	page.on("pageerror", (err) => pageErrors.push(err));
+
+	// Schema 11 is the last schema shipped by the released build
+	// (0.0.2-beta.2) and is mapped in SCHEMA_ARCHIVE_MAP, so a save stamped 11
+	// must surface as a mismatch that links to that archived build instead of
+	// being rewritten.
+	await page.addInitScript(() => {
+		localStorage.setItem("hi-blue:active-session", "0xV11X");
+	});
+	await page.addInitScript(
+		new Function(seedVersionMismatchScript("0xV11X", 11)) as () => void,
+	);
+
+	await page.goto("/");
+
+	// Same sticky routing as any other version-mismatch active session.
+	await expect(page.locator('main[data-view="sessions"]')).toBeAttached();
+	await expect(page.locator("main")).toHaveAttribute(
+		"data-reason",
+		"version-mismatch",
+	);
+
+	// Banner offers the archived build.
+	const banner = page.locator("#sessions-banner");
+	await expect(banner).toBeVisible();
+	await expect(banner).toContainText("Continue it in");
+	await expect(banner.locator("a")).toHaveAttribute(
+		"href",
+		"./v/0.0.2-beta.2/",
+	);
+
+	// The picker row carries the same link note, with no [ load ] button.
+	const row = page.locator('.session-row[data-session-id="0xV11X"]');
+	await expect(row.locator(".tag-version-mismatch")).toBeVisible();
+	const note = row.locator(".session-version-note");
+	await expect(note).toContainText("v0.0.2-beta.2");
+	await expect(note.locator("a")).toHaveAttribute("href", "./v/0.0.2-beta.2/");
+	await expect(row.locator(".ops button", { hasText: "[ load ]" })).toHaveCount(
+		0,
+	);
+
+	// The save's bytes are preserved byte-for-byte, not rewritten or removed.
+	const engineAfter = await page.evaluate(() =>
+		localStorage.getItem("hi-blue:sessions/0xV11X/engine.dat"),
+	);
+	expect(engineAfter).toBe(expectedSeededEngineBytes(11));
+	const daemonAfter = await page.evaluate(() =>
+		localStorage.getItem("hi-blue:sessions/0xV11X/red.txt"),
+	);
+	expect(daemonAfter).toBe("{}");
+
+	await expectNoPageErrors(page, pageErrors);
+});
+
 test("[ + new session ] flow: click → start view, new active pointer", async ({
 	page,
 }) => {
@@ -503,7 +490,7 @@ test("[ + new session ] flow: click → start view, new active pointer", async (
 	});
 	await page.addInitScript(
 		new Function(
-			seedOkSessionScript("0xAAAA", "2025-03-01T10:00:00.000Z"),
+			pickerOkSessionSeedScript("0xAAAA", "2025-03-01T10:00:00.000Z"),
 		) as () => void,
 	);
 

@@ -17,7 +17,6 @@ import { describe, expect, it, vi } from "vitest";
 vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 vi.stubGlobal("__DEV__", true);
 
-import { DEFAULT_LANDMARKS } from "../game/direction";
 import { GameSession } from "../game/game-session";
 import { MockRoundLLMProvider } from "../game/round-llm-provider";
 import type { AiPersona, ContentPack } from "../game/types";
@@ -68,9 +67,9 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 };
 
 const AI_STARTS: ContentPack["aiStarts"] = {
-	red: { position: { row: 0, col: 0 }, facing: "north" },
-	green: { position: { row: 0, col: 1 }, facing: "north" },
-	cyan: { position: { row: 0, col: 2 }, facing: "north" },
+	red: { position: { row: 0, col: 0 } },
+	green: { position: { row: 0, col: 1 } },
+	cyan: { position: { row: 0, col: 2 } },
 };
 
 const TEST_CONTENT_PACK: ContentPack = {
@@ -78,7 +77,6 @@ const TEST_CONTENT_PACK: ContentPack = {
 	weather: "",
 	timeOfDay: "",
 	entities: [],
-	landmarks: DEFAULT_LANDMARKS,
 	wallName: "wall",
 	aiStarts: AI_STARTS,
 };

@@ -25,10 +25,8 @@
  * cell rates pinned at 95-100% across personas (always pick_up).
  */
 
-import { DEFAULT_LANDMARKS } from "../../src/spa/game/direction.js";
 import type { AiId, ContentPack } from "../../src/spa/game/types.js";
 
-const LANDMARKS = DEFAULT_LANDMARKS;
 const WALL_NAME = "tiled tunnel wall";
 
 const ACTOR: AiId = "red";
@@ -38,9 +36,9 @@ const PEER_B: AiId = "sim2";
 /** Shared peer placements — kept off the actor's front arc so peers don't
  * accidentally trigger `give` opportunities the scenario isn't testing. */
 const AI_STARTS_BASE: ContentPack["aiStarts"] = {
-	[ACTOR]: { position: { row: 2, col: 2 }, facing: "north" },
-	[PEER_A]: { position: { row: 4, col: 0 }, facing: "east" },
-	[PEER_B]: { position: { row: 4, col: 4 }, facing: "west" },
+	[ACTOR]: { position: { row: 2, col: 2 } },
+	[PEER_A]: { position: { row: 4, col: 0 } },
+	[PEER_B]: { position: { row: 4, col: 4 } },
 };
 
 // ── Scenario 1: EXPLORATION ──────────────────────────────────────────────────
@@ -88,7 +86,6 @@ function makeExplorationPack(): ContentPack {
 				holder: { row: 1, col: 2 },
 			},
 		],
-		landmarks: LANDMARKS,
 		wallName: WALL_NAME,
 		aiStarts: AI_STARTS_BASE,
 	};
@@ -132,7 +129,6 @@ function makeObjectivePack(): ContentPack {
 				proximityFlavor: "the wall mount sits just ahead, primed and empty.",
 			},
 		],
-		landmarks: LANDMARKS,
 		wallName: WALL_NAME,
 		aiStarts: AI_STARTS_BASE,
 	};
@@ -170,7 +166,6 @@ function makeSocialPack(): ContentPack {
 				holder: { row: 0, col: 3 },
 			},
 		],
-		landmarks: LANDMARKS,
 		wallName: WALL_NAME,
 		aiStarts: AI_STARTS_BASE,
 	};
@@ -206,7 +201,7 @@ export function getScenarios(): Scenario[] {
 		{
 			name: "exploration",
 			description:
-				"Empty-handed, three unknown items in cone. Tests face vs go balance.",
+				"Empty-handed, three unknown items in cone. Tests pick_up vs go balance.",
 			actor: ACTOR,
 			peers: [PEER_A, PEER_B],
 			pack: makeExplorationPack(),

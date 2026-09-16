@@ -2,7 +2,7 @@
  * makeTestPack — entity-first fixture helper for ContentPack literals in tests.
  *
  * Tests usually want to express "here are the entities in this pack" without
- * concerning themselves with the surrounding scaffolding (landmarks, wallName,
+ * concerning themselves with the surrounding scaffolding (wallName,
  * aiStarts, ambient draws). This helper takes a flat `WorldEntity[]` plus
  * optional pack overrides and produces a fully-typed `ContentPack`.
  *
@@ -12,7 +12,6 @@
  *
  * Insertion order is preserved.
  */
-import { DEFAULT_LANDMARKS } from "../../direction.js";
 import type { ContentPack, WorldEntity } from "../../types.js";
 
 /**
@@ -33,7 +32,6 @@ export function makeTestPack(
 		weather: "",
 		timeOfDay: "",
 		entities: [...entities],
-		landmarks: DEFAULT_LANDMARKS,
 		wallName: "",
 		aiStarts: {},
 	};

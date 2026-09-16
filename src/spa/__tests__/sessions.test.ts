@@ -9,7 +9,6 @@
  * Issue #174 (parent #155).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_LANDMARKS } from "../game/direction.js";
 import { startGame } from "../game/engine.js";
 import type { AiPersona, ContentPack, GameState } from "../game/types.js";
 import { deobfuscate, obfuscate } from "../persistence/sealed-blob-codec.js";
@@ -26,7 +25,6 @@ const TEST_CONTENT_PACK: ContentPack = {
 	weather: "",
 	timeOfDay: "",
 	entities: [],
-	landmarks: DEFAULT_LANDMARKS,
 	wallName: "wall",
 	aiStarts: {},
 };
@@ -164,11 +162,14 @@ async function seedBrokenSession(
 }
 
 /**
- * Write a version-mismatch session into the store.
+ * Write a version-mismatch session into the store. Defaults to schema 999 (no
+ * archive-map entry); pass 11 for the retired pre-v12 schema, which the live
+ * map links to `0.0.2-beta.2`.
  */
 async function seedVersionMismatchSession(
 	stub: ReturnType<typeof makeLocalStorageStub>,
 	id: string,
+	schemaVersion = 999,
 ): Promise<void> {
 	const { serializeSession } = await import("../persistence/session-codec.js");
 	const game = makeFreshGame();
@@ -179,11 +180,11 @@ async function seedVersionMismatchSession(
 	for (const [aiId, daemonJson] of Object.entries(files.daemons)) {
 		stub._store[`${prefix}${aiId}.txt`] = daemonJson;
 	}
-	// Write engine.dat with bumped schemaVersion
+	// Write engine.dat with the stale schemaVersion
 	// biome-ignore lint/style/noNonNullAssertion: serializeSession always returns engine
 	const rawJson = deobfuscate(files.engine!);
 	const sealed = JSON.parse(rawJson);
-	sealed.schemaVersion = 999;
+	sealed.schemaVersion = schemaVersion;
 	stub._store[`${prefix}engine.dat`] = obfuscate(JSON.stringify(sealed));
 }
 
@@ -373,33 +374,45 @@ describe("renderSessions — row rendering", () => {
 		expect(btnTexts).toContain("[ rm ]");
 	});
 
-	// Version-mismatch archived-build note (picker row): needs a schema that is
-	// both stale and in SCHEMA_ARCHIVE_MAP, but only 11 is mapped and 11 is still
-	// current, so no live build can render it. Pinned in jsdom via a temporary map entry; re-add Playwright coverage on the v12 bump (#539).
+	// Version-mismatch archived-build note (picker row): a save stamped with the
+	// retired schema 11 is mapped in SCHEMA_ARCHIVE_MAP to the released build
+	// that still reads it, so the live build renders the note. The Playwright
+	// equivalent lives in e2e/sessions-picker.spec.ts.
 	it("version-mismatch row with a mapped schema renders the archived-build note", async () => {
 		vi.resetModules();
 		const stub = makeLocalStorageStub();
 		vi.stubGlobal("localStorage", stub);
-		await seedVersionMismatchSession(stub, "0xDDDD");
-		const archiveMapModule = await import("../persistence/archive-map.js");
-		archiveMapModule.SCHEMA_ARCHIVE_MAP[999] = "0.0.2-beta.2";
-		try {
-			const { renderSessions } = await import("../views/sessions.js");
-			renderSessions(getMain());
+		await seedVersionMismatchSession(stub, "0xDDDD", 11);
 
-			const row = document.querySelector<HTMLElement>(
-				'.session-row[data-session-id="0xDDDD"]',
-			);
-			expect(row).toBeTruthy();
-			const note = row?.querySelector<HTMLElement>(".session-version-note");
-			expect(note).toBeTruthy();
-			expect(note?.textContent).toContain("v0.0.2-beta.2");
-			const link = note?.querySelector("a");
-			expect(link).not.toBeNull();
-			expect(link?.getAttribute("href")).toBe("./v/0.0.2-beta.2/");
-		} finally {
-			delete archiveMapModule.SCHEMA_ARCHIVE_MAP[999];
-		}
+		const { renderSessions } = await import("../views/sessions.js");
+		renderSessions(getMain());
+
+		const row = document.querySelector<HTMLElement>(
+			'.session-row[data-session-id="0xDDDD"]',
+		);
+		expect(row).toBeTruthy();
+		const note = row?.querySelector<HTMLElement>(".session-version-note");
+		expect(note).toBeTruthy();
+		expect(note?.textContent).toContain("v0.0.2-beta.2");
+		const link = note?.querySelector("a");
+		expect(link).not.toBeNull();
+		expect(link?.getAttribute("href")).toBe("./v/0.0.2-beta.2/");
+	});
+
+	it("version-mismatch row with an unmapped schema renders no archived-build note", async () => {
+		vi.resetModules();
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+		await seedVersionMismatchSession(stub, "0xEEEE", 999);
+
+		const { renderSessions } = await import("../views/sessions.js");
+		renderSessions(getMain());
+
+		const row = document.querySelector<HTMLElement>(
+			'.session-row[data-session-id="0xEEEE"]',
+		);
+		expect(row?.querySelector(".tag-version-mismatch")).toBeTruthy();
+		expect(row?.querySelector(".session-version-note")).toBeNull();
 	});
 
 	it("broken row shows <corrupted> placeholder text", async () => {
@@ -669,34 +682,29 @@ describe("renderSessions — archived sessions section", () => {
 		vi.stubGlobal("localStorage", stub);
 		await seedArchivedSessionInStore(stub, "0xVMAR");
 
-		// Stamp the archived engine with a stale schema so the row is a mismatch.
+		// Stamp the archived engine with the retired schema 11 so the row is a
+		// mismatch that the live archive map can link.
 		const { deobfuscate, obfuscate } = await import(
 			"../persistence/sealed-blob-codec.js"
 		);
 		const engineKey = `${ARCHIVE_PREFIX}0xVMAR/engine.dat`;
 		const sealed = JSON.parse(deobfuscate(stub._store[engineKey] ?? ""));
-		sealed.schemaVersion = 999;
+		sealed.schemaVersion = 11;
 		stub._store[engineKey] = obfuscate(JSON.stringify(sealed));
 
-		const archiveMapModule = await import("../persistence/archive-map.js");
-		archiveMapModule.SCHEMA_ARCHIVE_MAP[999] = "0.0.2-beta.2";
-		try {
-			const { renderSessions } = await import("../views/sessions.js");
-			renderSessions(getMain());
+		const { renderSessions } = await import("../views/sessions.js");
+		renderSessions(getMain());
 
-			const row = document.querySelector<HTMLElement>(
-				'.session-row[data-session-id="0xVMAR"]',
-			);
-			expect(row).toBeTruthy();
-			const note = row?.querySelector<HTMLElement>(".session-version-note");
-			expect(note).toBeTruthy();
-			expect(note?.textContent).toContain("v0.0.2-beta.2");
-			const link = note?.querySelector("a");
-			expect(link).not.toBeNull();
-			expect(link?.getAttribute("href")).toBe("./v/0.0.2-beta.2/");
-		} finally {
-			delete archiveMapModule.SCHEMA_ARCHIVE_MAP[999];
-		}
+		const row = document.querySelector<HTMLElement>(
+			'.session-row[data-session-id="0xVMAR"]',
+		);
+		expect(row).toBeTruthy();
+		const note = row?.querySelector<HTMLElement>(".session-version-note");
+		expect(note).toBeTruthy();
+		expect(note?.textContent).toContain("v0.0.2-beta.2");
+		const link = note?.querySelector("a");
+		expect(link).not.toBeNull();
+		expect(link?.getAttribute("href")).toBe("./v/0.0.2-beta.2/");
 	});
 
 	it("archived row textContent contains 'epoch 1' and 'last played'", async () => {

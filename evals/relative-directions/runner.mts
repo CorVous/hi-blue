@@ -11,24 +11,14 @@
  * Each scenario drives a short game arc using the real z-ai/glm-4.7 model via the
  * production round engine. Tool calls are dispatched through dispatchAiTurn and the
  * game state is rebuilt between turns so the harness exercises real multi-turn coherence.
- * Results are scored by rule-checks (cardinal leakage, landmark consistency,
- * structural coherence) and written to docs/evals/relative-directions-<date>.md.
+ * Results are scored by rule-checks (cardinal leakage, structural coherence) and written to docs/evals/relative-directions-<date>.md.
  */
 
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { RelativeDirection } from "../../src/spa/game/direction.js";
-import {
-	cardinalToRelative,
-	RELATIVE_DIRECTIONS,
-} from "../../src/spa/game/direction.js";
 import { dispatchAiTurn } from "../../src/spa/game/dispatcher.js";
-import {
-	createGame,
-	getActivePhase,
-	startPhase,
-} from "../../src/spa/game/engine.js";
+import { createGame, startPhase } from "../../src/spa/game/engine.js";
 import { buildOpenAiMessages } from "../../src/spa/game/openai-message-builder.js";
 import { buildAiContext } from "../../src/spa/game/prompt-builder.js";
 import {
@@ -38,16 +28,22 @@ import {
 import type {
 	AiPersona,
 	AiTurnAction,
+	CardinalDirection,
 	ContentPack,
 	GameState,
 	PhaseConfig,
 	ToolName,
 } from "../../src/spa/game/types.js";
-import type { ScenarioScore, TurnRecord } from "./scoring.js";
+import type {
+	RelativeDirection,
+	ScenarioScore,
+	TurnRecord,
+} from "./scoring.js";
 import {
+	cardinalToRelative,
 	detectCardinalLeaks,
-	landmarkMentions,
 	parseStatedDirection,
+	RELATIVE_DIRECTIONS,
 	scoreScenario,
 	structuralCoherence,
 } from "./scoring.js";
@@ -57,6 +53,14 @@ import {
 const BASE_URL = process.env.EVAL_BASE_URL ?? "http://localhost:8787";
 const MODEL = "z-ai/glm-4.7";
 const EVAL_TURNS = 6;
+
+/**
+ * The orientation these retired relative-directions scenarios assume for the
+ * acting Daemon. The runtime stores no orientation (ADR 0015), so the eval
+ * supplies its own assumption when it has to read a cardinal tool call as a
+ * relative one. Retargeting this eval is ticket #541.
+ */
+const SCENARIO_ORIENTATION: CardinalDirection = "north";
 
 // ── Shared fixtures ───────────────────────────────────────────────────────────
 
@@ -94,28 +98,8 @@ function makePack(overrides: Partial<ContentPack> = {}): ContentPack {
 		objectivePairs: [],
 		interestingObjects: [],
 		obstacles: [],
-		landmarks: {
-			north: {
-				shortName: "the blast door",
-				horizonPhrase: "stands sealed and scarred, its surface battered metal",
-			},
-			south: {
-				shortName: "the collapsed shaft",
-				horizonPhrase:
-					"gapes wide, exhaling the smell of wet concrete and rust",
-			},
-			east: {
-				shortName: "the transformer bank",
-				horizonPhrase:
-					"hums faintly in the dark, indicator lights blinking amber",
-			},
-			west: {
-				shortName: "the flooded corridor",
-				horizonPhrase: "stretches away, its floor invisible under black water",
-			},
-		},
 		aiStarts: {
-			red: { position: { row: 2, col: 2 }, facing: "north" },
+			red: { position: { row: 2, col: 2 } },
 		},
 		...overrides,
 	};
@@ -190,7 +174,7 @@ async function callModel(
  * Combine the assistant's raw text with the `content` of any `message` tool
  * calls. GLM-4.7 emits most of its in-character prose via message-tool args
  * rather than as raw assistant content, so scoring against `assistantText`
- * alone systematically undercounts landmark mentions and direction statements.
+ * alone systematically undercounts what the daemon actually said.
  */
 function daemonProse(
 	assistantText: string,
@@ -267,23 +251,19 @@ function dispatchModelResponse(
 		costUsd !== undefined ? { costUsd } : {},
 	);
 
-	// Resolve toolCallDirection: check the go/face action's relative direction
-	if (
-		action.toolCall &&
-		(action.toolCall.name === "go" || action.toolCall.name === "face")
-	) {
+	// Resolve toolCallDirection: check the `go` action's direction argument
+	if (action.toolCall && action.toolCall.name === "go") {
 		const rawDir = action.toolCall.args.direction;
 		if (RELATIVE_DIRECTIONS.includes(rawDir as RelativeDirection)) {
 			toolCallDirection = rawDir as RelativeDirection;
 		} else {
-			// Cardinal arg (shouldn't happen for daemon calls, but be safe)
-			const facingBefore = getActivePhase(game).personaSpatial[aiId]?.facing;
-			if (facingBefore) {
-				toolCallDirection = cardinalToRelative(
-					facingBefore,
-					rawDir as import("../../src/spa/game/types.js").CardinalDirection,
-				);
-			}
+			// Cardinal arg (shouldn't happen for daemon calls, but be safe).
+			// The scenarios assume a northward start; the game stores no
+			// orientation (ADR 0015), so the eval supplies its own assumption.
+			toolCallDirection = cardinalToRelative(
+				SCENARIO_ORIENTATION,
+				rawDir as CardinalDirection,
+			);
 		}
 	}
 
@@ -351,26 +331,12 @@ async function scenarioLookAndNavigate(): Promise<ScenarioResult> {
 	const turns: TurnRecord[] = [];
 
 	for (let t = 1; t <= EVAL_TURNS; t++) {
-		// Snapshot spatial state before this turn
-		const phase = getActivePhase(game);
-		const spatialBefore = phase.personaSpatial.red;
-		const facingBefore = spatialBefore?.facing ?? "north";
-		const expectedLandmark = pack.landmarks[facingBefore];
-
 		// Build fresh prompt from current game state
 		const messages = buildOpenAiMessages(buildAiContext(game, "red"));
 
 		const result = await callModel(messages);
 
 		const cardinalLeaks = detectCardinalLeaks(result.prose);
-		const { mentioned, matchesExpected } = landmarkMentions(
-			result.prose,
-			pack.landmarks,
-			facingBefore,
-		);
-		// Also accept any other landmark mention as "mentioned" for the turn record
-		const landmarkMentioned = matchesExpected || mentioned.length > 0;
-
 		const statedDirection = parseStatedDirection(result.prose);
 
 		// Dispatch through real engine
@@ -387,10 +353,6 @@ async function scenarioLookAndNavigate(): Promise<ScenarioResult> {
 		);
 		game = nextGame;
 
-		// Facing after the turn
-		const spatialAfter = getActivePhase(game).personaSpatial.red;
-		const facingAfter = spatialAfter?.facing ?? facingBefore;
-
 		turns.push({
 			turn: t,
 			text: result.prose,
@@ -398,17 +360,12 @@ async function scenarioLookAndNavigate(): Promise<ScenarioResult> {
 				(tc) => `${tc.name}(${tc.argumentsJson})`,
 			),
 			cardinalLeaks,
-			landmarkMentioned: matchesExpected,
-			facingBefore,
-			facingAfter,
 			statedDirection,
 			toolCallDirection,
 		});
 
 		// Suppress unused variable warning
 		void toolResults;
-		void expectedLandmark;
-		void landmarkMentioned;
 	}
 
 	const score = scoreScenario(turns);
@@ -432,18 +389,10 @@ async function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
 	// The daemon decides what to do — we just let the engine run and track it.
 	const NAV_TURNS = 3;
 	for (let t = 1; t <= NAV_TURNS; t++) {
-		const phase = getActivePhase(game);
-		const facingBefore = phase.personaSpatial.red?.facing ?? "north";
-
 		const messages = buildOpenAiMessages(buildAiContext(game, "red"));
 		const result = await callModel(messages);
 
 		const cardinalLeaks = detectCardinalLeaks(result.prose);
-		const { matchesExpected } = landmarkMentions(
-			result.prose,
-			pack.landmarks,
-			facingBefore,
-		);
 		const statedDirection = parseStatedDirection(result.prose);
 
 		const { game: nextGame, toolCallDirection } = dispatchModelResponse(
@@ -455,9 +404,6 @@ async function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
 		);
 		game = nextGame;
 
-		const facingAfter =
-			getActivePhase(game).personaSpatial.red?.facing ?? facingBefore;
-
 		turns.push({
 			turn: t,
 			text: result.prose,
@@ -465,9 +411,6 @@ async function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
 				(tc) => `${tc.name}(${tc.argumentsJson})`,
 			),
 			cardinalLeaks,
-			landmarkMentioned: matchesExpected,
-			facingBefore,
-			facingAfter,
 			statedDirection,
 			toolCallDirection,
 		});
@@ -476,9 +419,6 @@ async function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
 	// Final turns: daemon is asked to describe what it sees
 	const DESCRIBE_TURNS = 2;
 	for (let t = NAV_TURNS + 1; t <= NAV_TURNS + DESCRIBE_TURNS; t++) {
-		const phase = getActivePhase(game);
-		const facingBefore = phase.personaSpatial.red?.facing ?? "north";
-
 		// Inject a user message asking for a description
 		const baseMessages = buildOpenAiMessages(buildAiContext(game, "red"));
 		const messages = [
@@ -486,18 +426,13 @@ async function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
 			{
 				role: "user" as const,
 				content:
-					"Describe what you see on the horizon in front of you. Do not use compass directions — use landmarks and relative terms only.",
+					"Describe what you see around you. Do not use compass directions — use relative terms only.",
 			},
 		];
 
 		const result = await callModel(messages);
 
 		const cardinalLeaks = detectCardinalLeaks(result.prose);
-		const { matchesExpected } = landmarkMentions(
-			result.prose,
-			pack.landmarks,
-			facingBefore,
-		);
 		const statedDirection = parseStatedDirection(result.prose);
 
 		// Description turns: no engine dispatch (the question doesn't trigger movement).
@@ -516,9 +451,6 @@ async function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
 		}
 		game = dispatchedGame;
 
-		const facingAfter =
-			getActivePhase(game).personaSpatial.red?.facing ?? facingBefore;
-
 		turns.push({
 			turn: t,
 			text: result.prose,
@@ -526,9 +458,6 @@ async function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
 				(tc) => `${tc.name}(${tc.argumentsJson})`,
 			),
 			cardinalLeaks,
-			landmarkMentioned: matchesExpected,
-			facingBefore,
-			facingAfter,
 			statedDirection,
 			toolCallDirection,
 		});
@@ -550,18 +479,10 @@ async function scenarioPeerLocationReference(): Promise<ScenarioResult> {
 	// First, run a couple of navigation turns to move the daemon around
 	const NAV_TURNS = 2;
 	for (let t = 1; t <= NAV_TURNS; t++) {
-		const phase = getActivePhase(game);
-		const facingBefore = phase.personaSpatial.red?.facing ?? "north";
-
 		const messages = buildOpenAiMessages(buildAiContext(game, "red"));
 		const result = await callModel(messages);
 
 		const cardinalLeaks = detectCardinalLeaks(result.prose);
-		const { matchesExpected } = landmarkMentions(
-			result.prose,
-			pack.landmarks,
-			facingBefore,
-		);
 		const statedDirection = parseStatedDirection(result.prose);
 
 		const { game: nextGame, toolCallDirection } = dispatchModelResponse(
@@ -573,9 +494,6 @@ async function scenarioPeerLocationReference(): Promise<ScenarioResult> {
 		);
 		game = nextGame;
 
-		const facingAfter =
-			getActivePhase(game).personaSpatial.red?.facing ?? facingBefore;
-
 		turns.push({
 			turn: t,
 			text: result.prose,
@@ -583,38 +501,27 @@ async function scenarioPeerLocationReference(): Promise<ScenarioResult> {
 				(tc) => `${tc.name}(${tc.argumentsJson})`,
 			),
 			cardinalLeaks,
-			landmarkMentioned: matchesExpected,
-			facingBefore,
-			facingAfter,
 			statedDirection,
 			toolCallDirection,
 		});
 	}
 
-	// Now ask the daemon to describe its location using only landmarks/relative terms
+	// Now ask the daemon to describe its location using only relative terms
 	const DESCRIBE_TURNS = 2;
 	for (let t = NAV_TURNS + 1; t <= NAV_TURNS + DESCRIBE_TURNS; t++) {
-		const phase = getActivePhase(game);
-		const facingBefore = phase.personaSpatial.red?.facing ?? "north";
-
 		const baseMessages = buildOpenAiMessages(buildAiContext(game, "red"));
 		const messages = [
 			...baseMessages,
 			{
 				role: "user" as const,
 				content:
-					"Another player is asking where you are. Describe your location to them without naming any compass direction. Use landmarks, relative terms, or what you can see.",
+					"Another player is asking where you are. Describe your location to them without naming any compass direction. Use relative terms or what you can see.",
 			},
 		];
 
 		const result = await callModel(messages);
 
 		const cardinalLeaks = detectCardinalLeaks(result.prose);
-		const { matchesExpected } = landmarkMentions(
-			result.prose,
-			pack.landmarks,
-			facingBefore,
-		);
 		const statedDirection = parseStatedDirection(result.prose);
 
 		let toolCallDirection: RelativeDirection | null = null;
@@ -632,9 +539,6 @@ async function scenarioPeerLocationReference(): Promise<ScenarioResult> {
 		}
 		game = dispatchedGame;
 
-		const facingAfter =
-			getActivePhase(game).personaSpatial.red?.facing ?? facingBefore;
-
 		turns.push({
 			turn: t,
 			text: result.prose,
@@ -642,9 +546,6 @@ async function scenarioPeerLocationReference(): Promise<ScenarioResult> {
 				(tc) => `${tc.name}(${tc.argumentsJson})`,
 			),
 			cardinalLeaks,
-			landmarkMentioned: matchesExpected,
-			facingBefore,
-			facingAfter,
 			statedDirection,
 			toolCallDirection,
 		});
@@ -659,9 +560,6 @@ async function scenarioPeerLocationReference(): Promise<ScenarioResult> {
 function renderReport(results: ScenarioResult[], date: string): string {
 	const overallPass = results.every((r) => r.score.passed);
 	const totalLeaks = results.reduce((n, r) => n + r.score.cardinalLeakCount, 0);
-	const avgLandmark =
-		results.reduce((n, r) => n + r.score.landmarkConsistencyRate, 0) /
-		results.length;
 	const avgSilence =
 		results.reduce((n, r) => n + r.score.silenceRate, 0) / results.length;
 	const avgCoherence =
@@ -680,7 +578,6 @@ function renderReport(results: ScenarioResult[], date: string): string {
 		`| Metric | Value | Threshold | Pass? |`,
 		`|---|---|---|---|`,
 		`| Cardinal leaks | ${totalLeaks} | 0 | ${totalLeaks === 0 ? "✓" : "✗"} |`,
-		`| Landmark consistency | ${(avgLandmark * 100).toFixed(0)}% | ≥50% | ${avgLandmark >= 0.5 ? "✓" : "✗"} |`,
 		`| Structural coherence | ${(avgCoherence * 100).toFixed(0)}% | 100% when stated | ${totalMismatches === 0 ? "✓" : "✗"} |`,
 		`| Silence (no tool call) rate | ${(avgSilence * 100).toFixed(0)}% | — | — |`,
 		`| Overall | — | — | ${overallPass ? "PASS" : "FAIL"} |`,
@@ -698,7 +595,6 @@ function renderReport(results: ScenarioResult[], date: string): string {
 		lines.push(`**Result:** ${result.score.passed ? "PASS" : "FAIL"}`);
 		lines.push(
 			`Cardinal leaks: ${result.score.cardinalLeakCount} | ` +
-				`Landmark consistency: ${(result.score.landmarkConsistencyRate * 100).toFixed(0)}% | ` +
 				`Structural coherence: ${(result.score.structuralCoherenceRate * 100).toFixed(0)}% | ` +
 				`Mismatches: ${result.score.structuralMismatchCount} | ` +
 				`Silence rate: ${(result.score.silenceRate * 100).toFixed(0)}%`,
@@ -710,8 +606,7 @@ function renderReport(results: ScenarioResult[], date: string): string {
 			lines.push(`#### Turn ${turn.turn}`);
 			lines.push("");
 			lines.push(
-				`Facing: ${turn.facingBefore} → ${turn.facingAfter} | ` +
-					`Stated: ${turn.statedDirection ?? "—"} | ` +
+				`Stated: ${turn.statedDirection ?? "—"} | ` +
 					`Tool direction: ${turn.toolCallDirection ?? "—"} | ` +
 					`Coherence: ${structuralCoherence(turn.statedDirection, turn.toolCallDirection)}`,
 			);
@@ -756,7 +651,7 @@ async function main(): Promise<void> {
 			const r = await fn();
 			results.push(r);
 			console.log(
-				`  → ${r.score.passed ? "PASS" : "FAIL"} | leaks: ${r.score.cardinalLeakCount} | landmark: ${(r.score.landmarkConsistencyRate * 100).toFixed(0)}% | coherence: ${(r.score.structuralCoherenceRate * 100).toFixed(0)}%`,
+				`  → ${r.score.passed ? "PASS" : "FAIL"} | leaks: ${r.score.cardinalLeakCount} | coherence: ${(r.score.structuralCoherenceRate * 100).toFixed(0)}%`,
 			);
 		} catch (err) {
 			console.error(`  Scenario "${label}" threw:`, err);
@@ -765,7 +660,6 @@ async function main(): Promise<void> {
 				turns: [],
 				score: {
 					cardinalLeakCount: -1,
-					landmarkConsistencyRate: 0,
 					silenceRate: 0,
 					structuralCoherenceRate: 0,
 					structuralMismatchCount: 0,

@@ -15,6 +15,7 @@ import {
 	interestingObjects,
 	obstacles,
 } from "../pack-selectors";
+import { buildAiContext } from "../prompt-builder";
 import type { AiPersona, ContentPack, GameState } from "../types";
 import { makeTestPack } from "./fixtures/make-test-pack";
 
@@ -387,7 +388,7 @@ describe("appendActionFailure", () => {
 		const entry2 = {
 			kind: "action-failure" as const,
 			round: 2,
-			tool: "face" as const,
+			tool: "put_down" as const,
 			reason: "second",
 		};
 		game = appendActionFailure(game, "red", entry1);
@@ -472,4 +473,30 @@ describe("shiftToBPack", () => {
 		expect(result.weather).toBe("clear");
 		expect(result.timeOfDay).toBe("night");
 	});
+
+	it("keeps the cardinal directions stable across the Setting Shift", () => {
+		// The room's Setting noun changes, but its cardinal directions do not:
+		// the stable prompt states them once, in-fiction, inside <setting>.
+		const game = makeDualPackGame();
+		const before = cardinalClause(buildAiContext(game, "red").toSystemPrompt());
+		const after = cardinalClause(
+			buildAiContext(shiftToBPack(game), "red").toSystemPrompt(),
+		);
+		expect(before).not.toBe("");
+		expect(before).toMatch(/\bnorth\b/);
+		expect(before).toMatch(/\bsouth\b/);
+		expect(before).toMatch(/\beast\b/);
+		expect(before).toMatch(/\bwest\b/);
+		expect(after).toBe(before);
+	});
 });
+
+/** The `<setting>` line that establishes the room's cardinal directions. */
+function cardinalClause(prompt: string): string {
+	const settingBlock = /<setting>([\s\S]*?)<\/setting>/.exec(prompt)?.[1] ?? "";
+	return (
+		settingBlock
+			.split("\n")
+			.find((line) => /\bnorth\b/.test(line) && /\bsouth\b/.test(line)) ?? ""
+	);
+}

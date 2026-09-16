@@ -85,7 +85,6 @@ interface RawObstacle {
 export interface RawBoundPack {
 	setting?: string;
 	wallName?: string;
-	landmarks?: unknown;
 	bindings?: RawBinding[];
 	decoys?: RawDecoy[];
 	obstacles?: RawObstacle[];

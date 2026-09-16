@@ -13,8 +13,9 @@
  *
  * The boundary is a plain, pure value — the point being that it is
  * *testable*. Production calls the helpers with `liveVersionBoundary()`;
- * tests construct a boundary at some other cutoff (e.g. `{ session: 12, gs: 5 }`)
- * to reason about the v12/v5 contract without touching the live constants.
+ * tests construct a boundary at some other cutoff (e.g. `{ session: 11, gs: 4 }`,
+ * the pre-v12/v5 boundary the historical migration chain still lands on) to
+ * reason about a contract without touching the live constants.
  */
 
 import { GAME_SAVE_VERSION } from "../../save-serializer.js";

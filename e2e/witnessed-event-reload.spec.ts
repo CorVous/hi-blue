@@ -1,9 +1,28 @@
 import { expect, test } from "@playwright/test";
 import {
+	activePackOf,
+	CARDINAL_DIRECTIONS,
+	type CardinalDirection,
 	expectNoPageErrors,
+	type GridPosition,
 	getAiHandles,
 	goToGame,
+	inRoom,
+	inVista,
+	listingLabels,
+	obstacleCellsOf,
+	parseRequestBody,
+	positionsEqual,
+	RELATIVE_DIRECTION_WORDS,
+	readActiveSessionEngine,
+	type SealedEngine,
+	sectionBetween,
+	stepDelta,
 	stubChatCompletions,
+	toolCallSseBody,
+	vistaCells,
+	waitForRound,
+	writeActiveSessionEngine,
 } from "./helpers";
 
 /**
@@ -15,78 +34,45 @@ import {
  * Strategy:
  *   1. Drive the start screen through goToGame → game is live, all three
  *      <aiId>.txt DaemonFiles exist in localStorage.
- *   2. Decode engine.dat → read personaSpatial (actor positions + facings)
+ *   2. Decode engine.dat → read personaSpatial (actor positions)
  *      and obstacle positions.
- *   3. Compute a walk plan: find (actorId, direction, witnessId,
- *      witnessLookDir?) such that after the actor walks `direction`, their
- *      post-move cell falls inside the witness's (possibly updated) cone.
- *      - First try a "direct plan" with the witness's current facing.
- *      - If no direct plan exists, compute a "setup plan": find witnessLookDir
- *        such that reorienting the witness first (via `look`) makes the actor's
- *        post-move visible, then drive round 0 as a setup round where the
- *        witness `look`s and others pass.
- *      - If after setup still no plan, fail with full spatial layout.
+ *   3. Compute a walk plan: find (actorId, direction, witnessId) such that
+ *      after the actor walks one cardinal step `direction`, their post-move
+ *      cell falls inside the witness's Vista (ADR 0015: the 13-cell radius-2
+ *      disk, position-only — position alone gates witnesses).
+ *      - Try a "direct plan" with the witness where they already stand.
+ *      - Otherwise patch engine.dat to relocate the witness entirely, so the
+ *        move is seen.
  *   4. Reload (first reload) — after reload, renderGame is called only once
  *      (restore path), so page.fill correctly enables #send.  The engine.dat
  *      and DaemonFiles from step 1 are preserved in localStorage.
  *   5. Re-register the JSON-mode and SSE stubs (route handlers are cleared on
  *      reload).
- *   6. If a setup round was needed, drive it first (witness `look`s, others pass).
- *   7. Drive the action round: actor `go direction`, others pass.
- *   8. Sanity-check: the witness's DaemonFile has a witnessed-event entry.
+ *   6. Drive the action round: actor `go <cardinal>`, others pass.
+ *   8. Sanity-check: the witness's DaemonFile has a witnessed-event entry
+ *      recording the cardinal direction of the step.
  *   9. Reload (second reload) → the SPA deserialises from storage → reconstructs.
  *  10. Capture the next round's /v1/chat/completions request bodies.
  *  11. Assert: the witness's system prompt contains the witnessed-event line
- *      inside <conversation>...</conversation>.
+ *      inside <conversation>...</conversation>, and the actor's own
+ *      <what_you_see> listing is the position-only Vista of the cell the step
+ *      landed on.
  *  12. Assert: the actor's system prompt does NOT contain the line.
  *
  * The round number in the witnessed-event entry is the phase.round at
  * dispatch time. The first dispatched round (after the first reload) is
- * round=0; after advanceRound it becomes 1. A setup round increments round
- * to 1, so the action round dispatches at round=1 and the witnessed-event
- * line reads "[Round 1]…". Without a setup round the action round dispatches
- * at round=0.
+ * round=0; after advanceRound it becomes 1, so the action round dispatches at
+ * round=0 and the witnessed-event line reads "[Round 0]…".
  *
  * Key source references:
  *   src/spa/game/conversation-log.ts:63-65 — witnessed-event "go" line format
- *   src/spa/game/dispatcher.ts:460-493     — write-time cone fan-out
+ *   src/spa/game/vista-projector.ts        — the Vista witness gate (ADR 0015)
  *   src/spa/game/dispatcher.ts:342         — round = state.round
  *   src/spa/persistence/session-codec.ts   — DaemonFile round-trip
  *   src/spa/persistence/sealed-blob-codec.ts:18 — OBFUSCATION_KEY
  */
 
 // ── Tool-call SSE body helpers ────────────────────────────────────────────────
-
-/**
- * Build a minimal OpenAI-compatible SSE body that emits a single tool call
- * and then closes. The parser in streaming.ts collects tool_calls deltas by
- * index and flushes them on finish_reason:"tool_calls" or [DONE].
- */
-function toolCallSseBody(name: string, args: Record<string, string>): string {
-	const toolCallChunk = JSON.stringify({
-		choices: [
-			{
-				delta: {
-					tool_calls: [
-						{
-							index: 0,
-							id: "call_e2e_tc",
-							function: {
-								name,
-								arguments: JSON.stringify(args),
-							},
-						},
-					],
-				},
-				finish_reason: null,
-			},
-		],
-	});
-	const finishChunk = JSON.stringify({
-		choices: [{ delta: {}, finish_reason: "tool_calls" }],
-	});
-	return `data: ${toolCallChunk}\n\ndata: ${finishChunk}\n\ndata: [DONE]\n\n`;
-}
 
 /** SSE body that returns a plain text reply ("stub reply"). */
 function stubReplySseBody(): string {
@@ -96,106 +82,20 @@ function stubReplySseBody(): string {
 	return `data: ${chunk}\n\ndata: [DONE]\n\n`;
 }
 
-// ── Cone projection (inlined from src/spa/game/cone-projector.ts) ─────────────
+// ── Vista membership (ADR 0015) ──────────────────────────────────────────────
 
-interface GridPosition {
-	row: number;
-	col: number;
-}
-
-type CardinalDirection = "north" | "south" | "east" | "west";
-const DIRECTIONS: CardinalDirection[] = ["north", "south", "east", "west"];
-
-function forwardDelta(facing: CardinalDirection): {
-	drow: number;
-	dcol: number;
-} {
-	switch (facing) {
-		case "north":
-			return { drow: -1, dcol: 0 };
-		case "south":
-			return { drow: 1, dcol: 0 };
-		case "east":
-			return { drow: 0, dcol: 1 };
-		case "west":
-			return { drow: 0, dcol: -1 };
-	}
-}
-
-function leftDelta(facing: CardinalDirection): { drow: number; dcol: number } {
-	switch (facing) {
-		case "north":
-			return { drow: 0, dcol: -1 };
-		case "south":
-			return { drow: 0, dcol: 1 };
-		case "east":
-			return { drow: -1, dcol: 0 };
-		case "west":
-			return { drow: 1, dcol: 0 };
-	}
-}
-
-function inBounds(pos: GridPosition): boolean {
-	return pos.row >= 0 && pos.row < 5 && pos.col >= 0 && pos.col < 5;
-}
-
-type RelativeDirection = "forward" | "back" | "left" | "right";
-
-function cardinalToRelative(
-	facing: CardinalDirection,
-	absolute: CardinalDirection,
-): RelativeDirection {
-	const CW: CardinalDirection[] = ["north", "east", "south", "west"];
-	const delta = (CW.indexOf(absolute) - CW.indexOf(facing) + 4) % 4;
-	return (["forward", "right", "back", "left"] as const)[delta] ?? "forward";
-}
-
-function coneCells(
-	pos: GridPosition,
-	facing: CardinalDirection,
-): GridPosition[] {
-	const fwd = forwardDelta(facing);
-	const lft = leftDelta(facing);
-	const candidates: GridPosition[] = [
-		{ row: pos.row, col: pos.col },
-		{ row: pos.row + fwd.drow, col: pos.col + fwd.dcol },
-		{
-			row: pos.row + 2 * fwd.drow + lft.drow,
-			col: pos.col + 2 * fwd.dcol + lft.dcol,
-		},
-		{ row: pos.row + 2 * fwd.drow, col: pos.col + 2 * fwd.dcol },
-		{
-			row: pos.row + 2 * fwd.drow - lft.drow,
-			col: pos.col + 2 * fwd.dcol - lft.dcol,
-		},
-	];
-	return candidates.filter((c, i) => i === 0 || inBounds(c));
-}
-
-function posEqual(a: GridPosition, b: GridPosition): boolean {
-	return a.row === b.row && a.col === b.col;
-}
-
-// ── engine.dat codec (inlined from src/spa/persistence/sealed-blob-codec.ts) ──
-
-const OBFUSCATION_KEY = "hi-blue:engine/v1@kJvN3pX8wQmR2sZt";
-
-function deobfuscateEngineBlob(blob: string): string {
-	const keyBytes = new TextEncoder().encode(OBFUSCATION_KEY);
-	const binary = atob(blob);
-	const bytes = new Uint8Array(binary.length);
-	for (let i = 0; i < binary.length; i++) {
-		bytes[i] =
-			(binary.charCodeAt(i) & 0xff) ^ (keyBytes[i % keyBytes.length] as number);
-	}
-	return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-}
+/**
+ * The runtime witness gate after the Vista cutover: `cell` is witnessed by an
+ * observer at `observer` when it falls inside the radius-2 disk
+ * (`dx² + dy² ≤ 4`), where north decreases the row. Position alone gates
+ * membership — no orientation enters, and obstacles never occlude.
+ * `inVista` (e2e/helpers/stubs.ts) mirrors `vistaContains` in the runtime.
+ */
 
 // ── Spatial planning ─────────────────────────────────────────────────────────
 
 interface PersonaSpatial {
 	position: GridPosition;
-	facing: CardinalDirection;
 }
 
 interface DirectPlan {
@@ -207,25 +107,17 @@ interface DirectPlan {
 	roundAtDispatch: number;
 }
 
-interface SetupPlan {
-	kind: "setup";
-	actorId: string;
-	direction: CardinalDirection;
-	witnessId: string;
-	witnessLookDir: CardinalDirection;
-	/** The phase.round value at dispatch time (1 after the setup round advances it). */
-	roundAtDispatch: number;
-}
-
-type WalkPlan = DirectPlan | SetupPlan | PatchPlan;
+type WalkPlan = DirectPlan | PatchPlan;
 
 /**
- * Find a walk plan such that after the actor moves, their post-move cell
- * falls in the witness's cone (current or post-look cone).
+ * Find a walk plan such that after the actor moves one cardinal step, their
+ * post-move cell falls inside the witness's Vista (ADR 0015). No orientation
+ * is consulted: witness eligibility is position-only, and `inVista` mirrors the
+ * runtime's `vistaContains` gate (src/spa/game/vista-projector.ts).
  *
  * @param spatials      personaSpatial for phase 1 (aiId → spatial state)
  * @param obstacles     obstacle positions for phase 1
- * @param currentRound  current phase.round value (0 initially, 1 after a setup round)
+ * @param currentRound  current phase.round value (0 for the first round)
  */
 function findWalkPlan(
 	spatials: Record<string, PersonaSpatial>,
@@ -238,22 +130,20 @@ function findWalkPlan(
 		const actorSpatial = spatials[actorId];
 		if (!actorSpatial) continue;
 
-		for (const direction of DIRECTIONS) {
-			const delta = forwardDelta(direction);
+		for (const direction of CARDINAL_DIRECTIONS) {
+			const delta = stepDelta(direction);
 			const nextPos: GridPosition = {
 				row: actorSpatial.position.row + delta.drow,
 				col: actorSpatial.position.col + delta.dcol,
 			};
-			if (!inBounds(nextPos)) continue;
-			if (obstacles.some((o) => posEqual(o, nextPos))) continue;
+			if (!inRoom(nextPos)) continue;
+			if (obstacles.some((o) => positionsEqual(o, nextPos))) continue;
 
-			// Try current facing of each other daemon
 			for (const witnessId of aiIds) {
 				if (witnessId === actorId) continue;
 				const witnessSpatial = spatials[witnessId];
 				if (!witnessSpatial) continue;
-				const cone = coneCells(witnessSpatial.position, witnessSpatial.facing);
-				if (cone.some((c) => posEqual(c, nextPos))) {
+				if (inVista(witnessSpatial.position, nextPos)) {
 					return {
 						kind: "direct",
 						actorId,
@@ -268,56 +158,6 @@ function findWalkPlan(
 	return null;
 }
 
-/**
- * Find a setup plan: reorient the witness (via `look`) so that after they
- * turn, the actor's post-move cell falls in the witness's new cone.
- */
-function findSetupPlan(
-	spatials: Record<string, PersonaSpatial>,
-	obstacles: GridPosition[],
-): SetupPlan | null {
-	const aiIds = Object.keys(spatials);
-
-	for (const actorId of aiIds) {
-		const actorSpatial = spatials[actorId];
-		if (!actorSpatial) continue;
-
-		for (const direction of DIRECTIONS) {
-			const delta = forwardDelta(direction);
-			const nextPos: GridPosition = {
-				row: actorSpatial.position.row + delta.drow,
-				col: actorSpatial.position.col + delta.dcol,
-			};
-			if (!inBounds(nextPos)) continue;
-			if (obstacles.some((o) => posEqual(o, nextPos))) continue;
-
-			// Try all possible look directions for each witness
-			for (const witnessId of aiIds) {
-				if (witnessId === actorId) continue;
-				const witnessSpatial = spatials[witnessId];
-				if (!witnessSpatial) continue;
-
-				for (const lookDir of DIRECTIONS) {
-					if (lookDir === witnessSpatial.facing) continue; // skip no-op
-					const cone = coneCells(witnessSpatial.position, lookDir);
-					if (cone.some((c) => posEqual(c, nextPos))) {
-						// Round 0 is setup (witness looks), round 1 is action
-						return {
-							kind: "setup",
-							actorId,
-							direction,
-							witnessId,
-							witnessLookDir: lookDir,
-							roundAtDispatch: 1, // after setup round advances to round=1
-						};
-					}
-				}
-			}
-		}
-	}
-	return null;
-}
-
 interface PatchPlan {
 	kind: "patch";
 	actorId: string;
@@ -325,19 +165,18 @@ interface PatchPlan {
 	witnessId: string;
 	/** The new position to place the witness in engine.dat. */
 	witnessNewPosition: GridPosition;
-	/** The new facing for the witness (same as actor's direction so cone covers next cell). */
-	witnessNewFacing: CardinalDirection;
 	roundAtDispatch: 0;
 }
 
 /**
- * Last-resort fallback: when no direct or setup plan is possible due to a
- * degenerate spatial layout (all agents near corners facing outward), patch
+ * Last-resort fallback: when no direct plan is possible because the layout is
+ * degenerate (every Daemon too far from every neighbour of every actor), patch
  * engine.dat to reposition the witness so a direct witnessed event is possible.
  *
- * Strategy: place the witness 1 cell BEHIND the actor's starting position,
- * facing the same direction as the actor's planned move.  The actor's
- * post-move cell will be exactly 2 steps ahead in the witness's cone.
+ * Strategy: place the witness 1 cell BEHIND the actor's starting position.
+ * The actor's post-move cell is then exactly 2 cardinal steps away — inside the
+ * witness's Vista under ADR 0015 (`2² + 0² = 4 ≤ 4`), and the Vista is
+ * position-only.
  *
  * We ensure the new witness position is:
  * - In-bounds
@@ -357,14 +196,14 @@ function findPatchPlan(
 		const actorSpatial = spatials[actorId];
 		if (!actorSpatial) continue;
 
-		for (const direction of DIRECTIONS) {
-			const fwd = forwardDelta(direction);
+		for (const direction of CARDINAL_DIRECTIONS) {
+			const fwd = stepDelta(direction);
 			const nextPos: GridPosition = {
 				row: actorSpatial.position.row + fwd.drow,
 				col: actorSpatial.position.col + fwd.dcol,
 			};
-			if (!inBounds(nextPos)) continue;
-			if (obstacles.some((o) => posEqual(o, nextPos))) continue;
+			if (!inRoom(nextPos)) continue;
+			if (obstacles.some((o) => positionsEqual(o, nextPos))) continue;
 
 			// Try to place a witness 1 step behind the actor (opposite of direction).
 			// The actor starts at actorSpatial.position; 1 step back is:
@@ -375,20 +214,23 @@ function findPatchPlan(
 
 			for (const witnessId of aiIds) {
 				if (witnessId === actorId) continue;
-				if (!inBounds(backPos)) continue;
-				if (obstacles.some((o) => posEqual(o, backPos))) continue;
+				if (!inRoom(backPos)) continue;
+				if (obstacles.some((o) => positionsEqual(o, backPos))) continue;
 				// Make sure no other agent (besides the witness we're relocating) is there.
 				const blocked = aiIds.some(
 					(otherId) =>
 						otherId !== witnessId &&
 						spatials[otherId] &&
-						posEqual((spatials[otherId] as PersonaSpatial).position, backPos),
+						positionsEqual(
+							(spatials[otherId] as PersonaSpatial).position,
+							backPos,
+						),
 				);
 				if (blocked) continue;
 
-				// Verify the actor's post-move cell is in the witness's cone from backPos.
-				const cone = coneCells(backPos, direction);
-				if (!cone.some((c) => posEqual(c, nextPos))) continue;
+				// Verify the actor's post-move cell is in the witness's Vista
+				// from backPos — two cardinal steps away, so `2² + 0² = 4 ≤ 4`.
+				if (!inVista(backPos, nextPos)) continue;
 
 				return {
 					kind: "patch",
@@ -396,7 +238,6 @@ function findPatchPlan(
 					direction,
 					witnessId,
 					witnessNewPosition: backPos,
-					witnessNewFacing: direction,
 					roundAtDispatch: 0,
 				};
 			}
@@ -419,17 +260,7 @@ async function armRoute(
 	actorSseBody: string,
 ): Promise<void> {
 	await page.route("**/v1/chat/completions", async (route, request) => {
-		const bodyText = request.postData() ?? "null";
-		let bodyParsed: {
-			stream?: boolean;
-			response_format?: unknown;
-			messages?: Array<{ content?: string }>;
-		} | null = null;
-		try {
-			bodyParsed = JSON.parse(bodyText) as typeof bodyParsed;
-		} catch {
-			// ignore
-		}
+		const bodyParsed = parseRequestBody(request);
 
 		// JSON-mode: fall through to the earlier stub registered by stubChatCompletions
 		if (
@@ -465,37 +296,6 @@ async function armRoute(
 	});
 }
 
-/**
- * Poll localStorage until meta.json reflects the given expectedRound for
- * the active phase. After `advanceRound`, phase.round becomes expectedRound.
- */
-async function waitForRound(
-	page: import("@playwright/test").Page,
-	sessionId: string,
-	expectedRound: number,
-): Promise<void> {
-	await page.waitForFunction(
-		({
-			sid,
-			expectedRound: expRound,
-		}: {
-			sid: string;
-			expectedRound: number;
-		}) => {
-			const metaRaw = localStorage.getItem(`hi-blue:sessions/${sid}/meta.json`);
-			if (!metaRaw) return false;
-			try {
-				const meta = JSON.parse(metaRaw) as { round?: number };
-				return (meta.round ?? 0) >= expRound;
-			} catch {
-				return false;
-			}
-		},
-		{ sid: sessionId, expectedRound },
-		{ timeout: 30_000 },
-	);
-}
-
 // ── Main test ────────────────────────────────────────────────────────────────
 
 test("live go tool-call produces witnessed-event that survives reload and appears in witness system prompt", async ({
@@ -512,27 +312,8 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 	// ── 2. Decode engine.dat → personaSpatial + obstacles ────────────────────
 	// Read engine.dat from localStorage now (before reload) since the session
 	// is already fully initialised after goToGame.
-	const storageInfo = await page.evaluate(() => {
-		const sessionId = localStorage.getItem("hi-blue:active-session");
-		if (!sessionId) throw new Error("No active session in localStorage");
-		const engineBlob = localStorage.getItem(
-			`hi-blue:sessions/${sessionId}/engine.dat`,
-		);
-		if (!engineBlob) throw new Error("engine.dat not found in localStorage");
-		return { engineBlob, sessionId };
-	});
-
-	const engineJson = deobfuscateEngineBlob(storageInfo.engineBlob);
-	const engineData = JSON.parse(engineJson) as {
-		personaSpatial: Record<string, PersonaSpatial>;
-		contentPacksA: Array<{
-			obstacles: Array<{ holder: GridPosition | null }>;
-		}>;
-		contentPacksB: Array<{
-			obstacles: Array<{ holder: GridPosition | null }>;
-		}>;
-		activePackId: "A" | "B";
-	};
+	const storageInfo = await readActiveSessionEngine(page);
+	const engineData: SealedEngine = storageInfo.sealed;
 
 	const phase1Spatial = engineData.personaSpatial as
 		| Record<string, PersonaSpatial>
@@ -540,32 +321,21 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 	if (!phase1Spatial || Object.keys(phase1Spatial).length === 0)
 		throw new Error("No phase 1 spatial data in engine.dat");
 
-	const activePacks =
-		engineData.activePackId === "B"
-			? engineData.contentPacksB
-			: engineData.contentPacksA;
-	const phase1Pack = activePacks[0];
-	const obstaclePositions: GridPosition[] = (phase1Pack?.obstacles ?? [])
-		.map((o) => o.holder)
-		.filter((h): h is GridPosition => h !== null);
+	const phase1Pack = activePackOf(engineData);
+	if (!phase1Pack) throw new Error("No active content pack in engine.dat");
+	const obstaclePositions = obstacleCellsOf(phase1Pack);
+	// The Wall a Daemon perceives on an out-of-bounds Vista cell is the Content
+	// Pack's wallName; the actor's listing uses it for every such cell.
+	const wallName = phase1Pack.wallName;
 
 	// ── 3. Compute walk plan ──────────────────────────────────────────────────
-	// Try direct plan first (witness's current facing covers actor's next cell).
+	// Try a direct plan first: the actor's next cell is already inside some
+	// other Daemon's Vista.
 	let plan: WalkPlan | null = findWalkPlan(phase1Spatial, obstaclePositions, 0);
-	let setupPlanUsed = false;
-
-	if (!plan) {
-		// Try setup plan: reorient witness in round 0, then act in round 1.
-		const sp = findSetupPlan(phase1Spatial, obstaclePositions);
-		if (sp) {
-			plan = sp;
-			setupPlanUsed = true;
-		}
-	}
 
 	if (!plan) {
 		// Last-resort: patch engine.dat to relocate a witness into a position
-		// where the actor's next move will land in their cone.  The round itself
+		// where the actor's next move will land in their Vista.  The round itself
 		// is still driven via a live go tool call — only the starting spatial
 		// layout is adjusted via direct localStorage mutation.
 		const pp = findPatchPlan(phase1Spatial, obstaclePositions);
@@ -576,7 +346,7 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 
 	if (!plan) {
 		throw new Error(
-			`Could not find any valid walk plan (direct, setup, or patch).\n` +
+			`Could not find any valid walk plan (direct or patch).\n` +
 				`Spatial layout: ${JSON.stringify(phase1Spatial, null, 2)}\n` +
 				`Obstacles: ${JSON.stringify(obstaclePositions, null, 2)}\n` +
 				`AI ids: ${JSON.stringify(ids)}`,
@@ -594,91 +364,31 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 		);
 	}
 
-	// ── 4. Patch engine.dat if needed (degenerate spatial layout) ────────────
-	// For the rare case where agents are placed in a corner/edge configuration
-	// that makes witnessing geometrically impossible even with a setup round,
-	// we directly rewrite engine.dat's personaSpatial to reposition the witness
-	// adjacent to the actor.  The actual witnessed-event is still produced by a
-	// live go tool call in step 7; only the starting positions are patched.
+	// ── 4. Patch engine.dat if needed ────────────────────────────────────────
+	// When the layout makes witnessing geometrically impossible, relocate the
+	// witness next to the actor. Only the position is patched: spatial state is
+	// position-only (ADR 0015), so there is nothing else to move.
+	// The actual witnessed-event is still produced by a live go tool call in
+	// step 7; only the starting spatial layout is patched.
 	if (plan.kind === "patch") {
-		const patchPlan = plan;
-		await page.evaluate(
-			({
-				sid,
-				wId,
-				newPos,
-				newFacing,
-				engineKey,
-			}: {
-				sid: string;
-				wId: string;
-				newPos: { row: number; col: number };
-				newFacing: string;
-				engineKey: string;
-			}) => {
-				const key = `hi-blue:sessions/${sid}/engine.dat`;
-				const blob = localStorage.getItem(key);
-				if (!blob) throw new Error("engine.dat not found");
-
-				// Inline decode
-				const keyBytes = new TextEncoder().encode(engineKey);
-				const binary = atob(blob);
-				const bytes = new Uint8Array(binary.length);
-				for (let i = 0; i < binary.length; i++) {
-					bytes[i] =
-						(binary.charCodeAt(i) & 0xff) ^
-						(keyBytes[i % keyBytes.length] as number);
-				}
-				const json = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-				const data = JSON.parse(json) as {
-					personaSpatial: Record<
-						string,
-						Record<
-							string,
-							{ position: { row: number; col: number }; facing: string }
-						>
-					>;
-				};
-
-				// Patch witness position in phase "1"
-				const phase1 = data.personaSpatial["1"];
-				if (!phase1?.[wId]) throw new Error(`No spatial for ${wId}`);
-				(
-					phase1[wId] as {
-						position: { row: number; col: number };
-						facing: string;
-					}
-				).position = newPos;
-				(
-					phase1[wId] as {
-						position: { row: number; col: number };
-						facing: string;
-					}
-				).facing = newFacing;
-
-				// Inline encode
-				const patchedJson = JSON.stringify(data);
-				const patchBytes = new TextEncoder().encode(patchedJson);
-				for (let i = 0; i < patchBytes.length; i++) {
-					patchBytes[i] =
-						(patchBytes[i] as number) ^
-						(keyBytes[i % keyBytes.length] as number);
-				}
-				let binOut = "";
-				for (let i = 0; i < patchBytes.length; i++) {
-					binOut += String.fromCharCode(patchBytes[i] as number);
-				}
-				localStorage.setItem(key, btoa(binOut));
-			},
-			{
-				sid: storageInfo.sessionId,
-				wId: witnessId,
-				newPos: patchPlan.witnessNewPosition,
-				newFacing: patchPlan.witnessNewFacing,
-				engineKey: OBFUSCATION_KEY,
-			},
-		);
+		const witnessSpatial = engineData.personaSpatial[witnessId];
+		if (!witnessSpatial) {
+			throw new Error(`No spatial state for ${witnessId} in engine.dat`);
+		}
+		witnessSpatial.position = plan.witnessNewPosition;
+		await writeActiveSessionEngine(page, storageInfo.sessionId, engineData);
 	}
+
+	// The live step lands the actor one cardinal step from where the phase-1
+	// layout placed them; the list of cells their own Vista then contains is
+	// the disk projected from that cell.
+	const actorStart = phase1Spatial[actorId]?.position;
+	if (!actorStart) throw new Error(`No phase 1 position for ${actorId}`);
+	const actorStep = stepDelta(direction);
+	const actorPosition: GridPosition = {
+		row: actorStart.row + actorStep.drow,
+		col: actorStart.col + actorStep.dcol,
+	};
 
 	// ── 5. First reload ───────────────────────────────────────────────────────
 	// After goToGame (new game), renderGame is called twice: once for the
@@ -702,56 +412,15 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 	// fallback stub here so the JSON-mode guard works if needed.
 	await stubChatCompletions(page, () => ["stub reply"]);
 
-	// ── 7. Setup round (if needed): reorient witness via `look` ─────────────
-	// When no direct plan exists, we drive a setup round where the witness
-	// looks in a direction that will put the actor's post-move cell in their cone.
-	// After this round, meta.round advances to 1, and the action round dispatches
-	// at round=1, so roundAtDispatch=1 (set in findSetupPlan).
-	if (setupPlanUsed && plan.kind === "setup") {
-		const { witnessLookDir } = plan;
-		const witnessFacing = phase1Spatial[witnessId]?.facing;
-		if (!witnessFacing) {
-			throw new Error(`No facing for witness ${witnessId}`);
-		}
-		const witnessLookRelative = cardinalToRelative(
-			witnessFacing,
-			witnessLookDir,
-		);
-
-		// Register route: witness does `look witnessLookRelative`, others stub reply
-		await armRoute(
-			page,
-			witnessName,
-			toolCallSseBody("face", { direction: witnessLookRelative }),
-		);
-
-		// Address the witness to trigger the setup round
-		await page.locator("#prompt").fill(`*${witnessName} look around!`);
-		await expect(page.locator("#send")).toBeEnabled({ timeout: 15_000 });
-		await page.locator("#send").click();
-
-		// Wait for the setup round to complete: meta.round becomes 1
-		await waitForRound(page, storageInfo.sessionId, 1);
-	}
-
-	// ── 8. Action round: actor does `go direction`, others pass ──────────────
-	// Register route: actor emits go tool call, others get stub reply.
-	// This prepends a new route on top of any existing ones (Playwright prepends
-	// new routes for priority), so it overrides the setup round's route if one
-	// was registered above.
-	const actorFacing = phase1Spatial[actorId]?.facing;
-	if (!actorFacing) {
-		throw new Error(`No facing for actor ${actorId}`);
-	}
-	const goRelative = cardinalToRelative(actorFacing, direction);
-	await armRoute(
-		page,
-		actorName,
-		toolCallSseBody("go", { direction: goRelative }),
-	);
+	// ── 7. Action round: actor does `go <cardinal>`, others pass ─────────────
+	// Register route: actor emits the go tool call, others get stub reply.
+	// Directions are cardinal (ADR 0015): `go` names the room's own geography,
+	// so the planned direction is sent verbatim, not resolved against an
+	// orientation.
+	await armRoute(page, actorName, toolCallSseBody("go", { direction }));
 
 	// Address the actor.
-	await page.locator("#prompt").fill(`*${actorName} go!`);
+	await page.locator("#prompt").fill(`*${actorName} go ${direction}!`);
 	await expect(page.locator("#send")).toBeEnabled({ timeout: 15_000 });
 	await page.locator("#send").click();
 
@@ -759,19 +428,26 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 	await waitForRound(page, storageInfo.sessionId, roundAtDispatch + 1);
 
 	// ── 9. Sanity-check: witness DaemonFile has witnessed-event entry ──────────
+	// The entry is the witness's transcript record of the step: it carries the
+	// actor and the cardinal direction the step named (ADR 0015).
 	const witnessFileCheck = await page.evaluate(
 		({ sid, wId, aId }: { sid: string; wId: string; aId: string }) => {
 			const key = `hi-blue:sessions/${sid}/${wId}.txt`;
 			const raw = localStorage.getItem(key);
-			if (!raw) return { found: false, log: [] as unknown[] };
+			if (!raw) return { found: false, entry: null, log: [] as unknown[] };
 			const df = JSON.parse(raw) as {
-				conversationLog: Array<{ kind: string; actor?: string }>;
+				conversationLog: Array<{
+					kind: string;
+					actor?: string;
+					actionKind?: string;
+					direction?: string;
+				}>;
 			};
 			const log = df.conversationLog;
-			const found = log.some(
-				(e) => e.kind === "witnessed-event" && e.actor === aId,
-			);
-			return { found, log };
+			const entry =
+				log.find((e) => e.kind === "witnessed-event" && e.actor === aId) ??
+				null;
+			return { found: entry !== null, entry, log };
 		},
 		{ sid: storageInfo.sessionId, wId: witnessId, aId: actorId },
 	);
@@ -781,6 +457,17 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 		`Expected a witnessed-event entry in witness's DaemonFile before reload. ` +
 			`conversationLog: ${JSON.stringify(witnessFileCheck.log, null, 2)}`,
 	).toBe(true);
+
+	// The witnessed-movement line states the cardinal direction of the step.
+	expect(
+		witnessFileCheck.entry?.actionKind,
+		"the witnessed event must record the observable action kind",
+	).toBe("go");
+	expect(
+		witnessFileCheck.entry?.direction,
+		`the witnessed movement must record the cardinal step ` +
+			`(planned ${direction}); entry: ${JSON.stringify(witnessFileCheck.entry)}`,
+	).toBe(direction);
 
 	// ── 10. Second reload ──────────────────────────────────────────────────────
 	// Reload the SPA, which deserialises from localStorage and reconstructs all
@@ -842,29 +529,9 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 	).not.toBeNull();
 
 	// ── 14. Assert witnessed-event line in witness role turns ────────────────
-	// conversation-log.ts renders direction relative to witness's facing.
-	// Compute the relative direction from the plan's absolute cardinal.
-	const CARDINALS = ["north", "east", "south", "west"];
-	const RELATIVES = ["forward", "right", "back", "left"];
-
-	// Determine the witness's effective facing after any plan-driven mutations.
-	let witnessFacing: CardinalDirection;
-	if (plan.kind === "setup") {
-		witnessFacing = plan.witnessLookDir;
-	} else if (plan.kind === "patch") {
-		witnessFacing = plan.witnessNewFacing;
-	} else {
-		// "direct": no mutation, use phase1 snapshot
-		witnessFacing =
-			(phase1Spatial?.[witnessId] as PersonaSpatial | undefined)?.facing ??
-			"north";
-	}
-
-	const facingIdx = CARDINALS.indexOf(witnessFacing);
-	const dirIdx = CARDINALS.indexOf(direction);
-	const relativeDirection =
-		RELATIVES[(dirIdx - facingIdx + 4) % 4] ?? direction;
-	const expectedLine = `[Round ${roundAtDispatch}] You watch *${actorId} walk ${relativeDirection}.`;
+	// conversation-log.ts renders the cardinal direction of the step (ADR 0015):
+	// Daemons have no orientation, so nothing is rendered relative to one.
+	const expectedLine = `[Round ${roundAtDispatch}] You watch *${actorId} walk ${direction}.`;
 
 	const witnessAllContent = (
 		witnessBody as { messages: Array<{ content: string | null }> }
@@ -894,6 +561,47 @@ test("live go tool-call produces witnessed-event that survives reload and appear
 		"Actor must not have the witnessed-event line in their messages",
 	).not.toContain(expectedLine);
 
-	// ── 16. No page errors ────────────────────────────────────────────────────
+	// ── 16. The actor's own listing is the position-only Vista ───────────────
+	// After the live step, the actor's <what_you_see> is the radius-2 disk
+	// centred on the cell the step landed on, minus the actor's own cell (which
+	// <where_you_are> covers): 12 cells, each labelled by cardinal direction and
+	// distance from the actor's position. Cells outside the room are perceived
+	// as the Content Pack's Wall. Nothing is phrased relative to an
+	// orientation — a Daemon has none (ADR 0015).
+	const actorListing = sectionBetween(
+		actorAllContent,
+		"<what_you_see>",
+		"</what_you_see>",
+	);
+	const actorVista = vistaCells(actorPosition).filter(
+		(cell) => !cell.isOwnCell,
+	);
+
+	expect(
+		listingLabels(actorListing),
+		`Expected the 12 non-own cells of the Vista at ` +
+			`(${actorPosition.row}, ${actorPosition.col}).\nListing:\n${actorListing}`,
+	).toHaveLength(actorVista.length);
+
+	expect(
+		new Set(listingLabels(actorListing)),
+		`Expected exactly the cells of the radius-2 Vista at ` +
+			`(${actorPosition.row}, ${actorPosition.col}).\nListing:\n${actorListing}`,
+	).toEqual(new Set(actorVista.map((cell) => cell.label)));
+
+	for (const cell of actorVista) {
+		if (!cell.isWall) continue;
+		expect(
+			actorListing,
+			`Out-of-bounds cell "${cell.label}" must be listed as a Wall`,
+		).toContain(`- ${cell.label}: ${wallName}`);
+	}
+
+	expect(
+		actorListing,
+		"A Daemon's listing must not phrase anything relative to an orientation",
+	).not.toMatch(RELATIVE_DIRECTION_WORDS);
+
+	// ── 17. No page errors ────────────────────────────────────────────────────
 	await expectNoPageErrors(page, pageErrors);
 });

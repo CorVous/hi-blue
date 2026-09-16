@@ -19,8 +19,13 @@
  *   - summarizeRun(turns) → DriftRunSummary
  */
 
-import type { RelativeDirection } from "../../src/spa/game/direction.js";
 import type { AiId, ToolName } from "../../src/spa/game/types.js";
+
+/**
+ * Eval-local relative-direction vocabulary. ADR 0015 removed orientation from
+ * the game, so this module no longer borrows the retired type from the runtime.
+ */
+type RelativeDirection = "forward" | "back" | "left" | "right";
 
 // ── Recorded shapes ──────────────────────────────────────────────────────────
 
@@ -61,7 +66,13 @@ export interface TurnRecord {
  */
 export interface ToolCallDetail {
 	name: string;
-	/** For go/face: the relative direction argument, if present. */
+	/**
+	 * The `direction` argument, when present and one of the relative
+	 * directions. Read off the arguments rather than gated on the tool name:
+	 * `go` is the only shipped tool that carries one, and keying the rule on
+	 * the argument keeps the direction axis measurable across surface
+	 * changes instead of hard-coding a tool name.
+	 */
 	direction?: RelativeDirection;
 	/** For message: the recipient AiId or "blue". */
 	recipient?: AiId | "blue";
@@ -107,15 +118,16 @@ export function parseToolCallDetail(tc: CapturedToolCall): ToolCallDetail {
 
 	const stripStar = (s: string): string => (s.startsWith("*") ? s.slice(1) : s);
 
+	// `direction` is an argument shape, not a tool-name case. The shipped
+	// surface emits it on `go` alone, but reading it off the arguments keeps
+	// the direction series measuring the direction axis without naming a tool
+	// that the surface can retire.
+	const dir = typeof args.direction === "string" ? args.direction : "";
+	if (RELATIVE_DIRS.has(dir as RelativeDirection)) {
+		detail.direction = dir as RelativeDirection;
+	}
+
 	switch (tc.name) {
-		case "go":
-		case "face": {
-			const dir = typeof args.direction === "string" ? args.direction : "";
-			if (RELATIVE_DIRS.has(dir as RelativeDirection)) {
-				detail.direction = dir as RelativeDirection;
-			}
-			break;
-		}
 		case "message": {
 			if (typeof args.to === "string" && args.to.length > 0) {
 				const to = stripStar(args.to);
@@ -319,7 +331,7 @@ export interface DriftRunSeries {
 	 * "blue"), and "malformed" (recipient missing/unparseable).
 	 */
 	recipientCounts: Record<string, number[]>;
-	/** Per-relative-direction per-round count series for go/face calls. */
+	/** Per-direction per-round count series. */
 	directionCounts: Record<string, number[]>;
 }
 
@@ -445,7 +457,7 @@ export function buildPerRoundSeries(
 							: "unknown";
 					bump(recipientCounts, bucket, idx);
 				}
-				if ((tc.name === "go" || tc.name === "face") && detail.direction) {
+				if (detail.direction) {
 					bump(directionCounts, detail.direction, idx);
 				}
 			}

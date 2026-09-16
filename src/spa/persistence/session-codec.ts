@@ -14,7 +14,6 @@
  * See docs/adr/0005-engine-dat-obfuscation-method.md
  */
 
-import { DEFAULT_LANDMARKS } from "../game/direction.js";
 import type {
 	ActiveComplication,
 	AiBudget,
@@ -81,7 +80,7 @@ import { SESSION_SCHEMA_VERSION } from "./version-constants.js";
  * v10 (issue #374): add `wallName` to `ContentPack`.
  *   - Old v9 saves have no `wallName`; migration defaults it to an empty
  *     string on every `ContentPack` in `contentPacksA`/`contentPacksB`.
- *     The empty default round-trips through the existing OOB cone
+ *     The empty default round-trips through the existing OOB Vista
  *     renderer (which already treats blank `wallName` as "no flavored
  *     wall noun").
  *
@@ -94,9 +93,19 @@ import { SESSION_SCHEMA_VERSION } from "./version-constants.js";
  *     `contentPacksB`, preserving canonical order: per pair, object then
  *     space; then bound spaces; then interesting objects; then obstacles.
  *
+ * v12 (issue #539): retire `facing` and the horizon landmarks from the
+ *   persisted spatial state (ADR 0015). This is the first schema bump handled
+ *   archive-only: there is deliberately no v11 → v12 migration function. A save
+ *   sealed at 11 is identified as older and pointed at the archived build that
+ *   still reads it (`SCHEMA_ARCHIVE_MAP[11]` in `archive-map.ts`) rather than
+ *   being rewritten. The historical chain below still runs — v8 → v9 → v10 → v11 —
+ *   but it stops *at* 11, so a migrated save can never be presented as
+ *   current at this boundary.
+ *
  * Bumping this constant requires either a `migrateV<old>To...` function below
  * or a new entry in `SCHEMA_ARCHIVE_MAP` (see AGENTS.md → "Bumping
  * save-format versions"). `scripts/check-schema-map.mjs` enforces this on PRs.
+ * v11 → v12 chose the archive-map route; do not add a migration for it.
  */
 export { SESSION_SCHEMA_VERSION };
 
@@ -132,7 +141,7 @@ export interface MetaFile {
 	lastPlayedAt?: string;
 }
 
-/** Shape of the sealed payload inside `engine.dat`. */
+/** Shape of the sealed payload this build writes inside `engine.dat`. */
 interface SealedEngine {
 	schemaVersion: typeof SESSION_SCHEMA_VERSION;
 	world: WorldState;
@@ -149,6 +158,18 @@ interface SealedEngine {
 	complicationSchedule: { countdown: number; settingShiftFired: boolean };
 	activeComplications: ActiveComplication[];
 	isComplete: boolean;
+}
+
+/**
+ * A sealed payload as read back from disk, before the version gate. Its
+ * `schemaVersion` is a plain number on purpose: the migration chain stamps the
+ * historical versions it walks (9, 10, 11), and none of those is the version
+ * this build writes. `deserializeSession` only rebuilds state once
+ * `checkVersionCompatibility` has accepted that number, so a stored payload is
+ * never treated as current on the strength of its own field.
+ */
+interface StoredSealedEngine extends Omit<SealedEngine, "schemaVersion"> {
+	schemaVersion: number;
 }
 
 /**
@@ -256,10 +277,10 @@ export function serializeSession(
  *
  * Sets schemaVersion to 9 so callers can chain into `migrateV9ToV10`.
  */
-function migrateV8ToV9(sealed: SealedEngine): SealedEngine {
+function migrateV8ToV9(sealed: StoredSealedEngine): StoredSealedEngine {
 	return {
 		...sealed,
-		schemaVersion: 9 as unknown as typeof SESSION_SCHEMA_VERSION,
+		schemaVersion: 9,
 		contentPacksA: (sealed.contentPacksA ?? []).slice(0, 1),
 		contentPacksB: (sealed.contentPacksB ?? []).slice(0, 1),
 	};
@@ -272,12 +293,12 @@ function migrateV8ToV9(sealed: SealedEngine): SealedEngine {
  *
  * Sets schemaVersion to 10 so callers can chain into `migrateV10ToV11`.
  */
-function migrateV9ToV10(sealed: SealedEngine): SealedEngine {
+function migrateV9ToV10(sealed: StoredSealedEngine): StoredSealedEngine {
 	const addWallName = (pack: ContentPack): ContentPack =>
 		typeof pack?.wallName === "string" ? pack : { ...pack, wallName: "" };
 	return {
 		...sealed,
-		schemaVersion: 10 as unknown as typeof SESSION_SCHEMA_VERSION,
+		schemaVersion: 10,
 		contentPacksA: (sealed.contentPacksA ?? []).map(addWallName),
 		contentPacksB: (sealed.contentPacksB ?? []).map(addWallName),
 	};
@@ -298,8 +319,13 @@ function migrateV9ToV10(sealed: SealedEngine): SealedEngine {
  * Defensive: if a pack already carries an `entities` array (e.g. an in-flight
  * partial migration), it is used as-is rather than rebuilt from absent
  * buckets.
+ *
+ * Stamps 11, the last schema this chain understands. Migrating a save must
+ * never promote it past the v11 → v12 archive-only boundary, so the chain
+ * terminates at 11 and the version gate then surfaces the migrated save as
+ * older.
  */
-function migrateV10ToV11(sealed: SealedEngine): SealedEngine {
+function migrateV10ToV11(sealed: StoredSealedEngine): StoredSealedEngine {
 	const flatten = (pack: ContentPack): ContentPack => {
 		const raw = pack as unknown as {
 			setting: string;
@@ -310,7 +336,6 @@ function migrateV10ToV11(sealed: SealedEngine): SealedEngine {
 			boundSpaces?: WorldEntity[];
 			obstacles?: WorldEntity[];
 			entities?: WorldEntity[];
-			landmarks: ContentPack["landmarks"];
 			wallName: string;
 			aiStarts: ContentPack["aiStarts"];
 		};
@@ -323,7 +348,6 @@ function migrateV10ToV11(sealed: SealedEngine): SealedEngine {
 				weather: raw.weather,
 				timeOfDay: raw.timeOfDay,
 				entities: raw.entities,
-				landmarks: raw.landmarks,
 				wallName: raw.wallName,
 				aiStarts: raw.aiStarts,
 			};
@@ -343,7 +367,6 @@ function migrateV10ToV11(sealed: SealedEngine): SealedEngine {
 			weather: raw.weather,
 			timeOfDay: raw.timeOfDay,
 			entities,
-			landmarks: raw.landmarks,
 			wallName: raw.wallName,
 			aiStarts: raw.aiStarts,
 		};
@@ -351,7 +374,7 @@ function migrateV10ToV11(sealed: SealedEngine): SealedEngine {
 
 	return {
 		...sealed,
-		schemaVersion: SESSION_SCHEMA_VERSION,
+		schemaVersion: 11,
 		contentPacksA: (sealed.contentPacksA ?? []).map(flatten),
 		contentPacksB: (sealed.contentPacksB ?? []).map(flatten),
 	};
@@ -388,20 +411,23 @@ export function deserializeSession(
 		return { kind: "broken" };
 	}
 
-	// Parse sealed payload
-	let sealed: SealedEngine;
+	// Parse sealed payload. It is typed as stored, not as current: only the
+	// version gate below can vouch for the schema number it carries.
+	let sealed: StoredSealedEngine;
 	try {
 		const parsed = JSON.parse(sealedJson);
 		if (!parsed || typeof parsed !== "object") return { kind: "broken" };
-		sealed = parsed as unknown as SealedEngine;
+		sealed = parsed as StoredSealedEngine;
 	} catch {
 		return { kind: "broken" };
 	}
 
 	// Schema version check and migration chain.
-	// Migrations are stepwise (v8→v9→v10) so each entry stays focused on
-	// one schema diff and new bumps only need a single new step.
-	const rawVersion = (sealed as { schemaVersion: unknown }).schemaVersion;
+	// Migrations are stepwise (v8→v9→v10→v11) so each entry stays focused on
+	// one schema diff and new bumps only need a single new step. The chain
+	// terminates at 11 — the last schema it understands — so a migrated save
+	// is never silently promoted into the live v12 format.
+	const rawVersion: unknown = sealed.schemaVersion;
 	if (typeof rawVersion !== "number" || !Number.isFinite(rawVersion)) {
 		return { kind: "broken" };
 	}
@@ -485,7 +511,6 @@ export function deserializeSession(
 			weather: "",
 			timeOfDay: "",
 			entities: [],
-			landmarks: DEFAULT_LANDMARKS,
 			wallName: "",
 			aiStarts: {},
 		};

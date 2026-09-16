@@ -77,12 +77,12 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 
 /**
  * ContentPack placing flower at (0,0), key at (0,1), with
- * red→(0,0), green→(0,1), cyan→(0,2) facing north.
+ * red→(0,0), green→(0,1), cyan→(0,2).
  */
 const RGC_AI_STARTS: ContentPack["aiStarts"] = {
-	red: { position: { row: 0, col: 0 }, facing: "north" },
-	green: { position: { row: 0, col: 1 }, facing: "north" },
-	cyan: { position: { row: 0, col: 2 }, facing: "north" },
+	red: { position: { row: 0, col: 0 } },
+	green: { position: { row: 0, col: 1 } },
+	cyan: { position: { row: 0, col: 2 } },
 };
 
 const TEST_CONTENT_PACK = makeTestPack(
@@ -1056,12 +1056,19 @@ describe("tool-call dispatch", () => {
 		]);
 		await runRound(game, "red", "hi", provider);
 
-		// All three AI calls should receive tools from availableTools
+		// All three AI calls should receive tools from availableTools — the
+		// five-tool Daemon surface, never the retired `face`.
 		expect(provider.calls).toHaveLength(3);
-		// All three calls should include "face" in their tool list
+		const daemonTools = ["go", "pick_up", "put_down", "use", "message"];
 		for (const call of provider.calls) {
 			expect(call.tools).toBeDefined();
-			expect(call.tools?.some((t) => t.function.name === "face")).toBe(true);
+			const names = (call.tools ?? []).map((t) => t.function.name);
+			expect(names.length).toBeGreaterThan(0);
+			expect(names).toContain("message");
+			expect(names).not.toContain("face");
+			for (const name of names) {
+				expect(daemonTools).toContain(name);
+			}
 		}
 	});
 });
@@ -2564,7 +2571,7 @@ describe("message tool multi-round regression (#213)", () => {
 // ----------------------------------------------------------------------------
 describe("action-failure entries — round-coordinator integration", () => {
 	/**
-	 * ContentPack: red at (0,0) facing north; obstacle at (0,1) east of red.
+	 * ContentPack: red at (0,0); obstacle at (0,1) east of red.
 	 * go east → blocked by obstacle → action-failure entry.
 	 */
 	const OBSTACLE_PACK = makeTestPack(
@@ -2581,9 +2588,9 @@ describe("action-failure entries — round-coordinator integration", () => {
 			setting: "blocked corridor",
 			wallName: "wall",
 			aiStarts: {
-				red: { position: { row: 0, col: 0 }, facing: "north" },
-				green: { position: { row: 2, col: 2 }, facing: "north" },
-				cyan: { position: { row: 4, col: 4 }, facing: "north" },
+				red: { position: { row: 0, col: 0 } },
+				green: { position: { row: 2, col: 2 } },
+				cyan: { position: { row: 4, col: 4 } },
 			},
 		},
 	);
@@ -2632,10 +2639,22 @@ describe("action-failure entries — round-coordinator integration", () => {
 		}
 	});
 
-	it("wall-collision repro: daemon facing a wall issues go east on rounds 1, 2, 3 → 3 action-failure user turns; peers 0", async () => {
-		const game = startGame(TEST_PERSONAS, OBSTACLE_PACK, { budgetPerAi: 10 });
+	it("wall-collision repro: daemon blocked by a wall issues go east on rounds 1, 2, 3 → 3 action-failure user turns; peers 0", async () => {
+		const started = startGame(TEST_PERSONAS, OBSTACLE_PACK, {
+			budgetPerAi: 10,
+		});
+		// Pin the complication countdown: the initial draw is random, and a
+		// randomly-fired obstacle_shift can move the blocking obstacle out of the
+		// way, making one of the three `go east` calls succeed instead.
+		const game = {
+			...started,
+			complicationSchedule: {
+				...started.complicationSchedule,
+				countdown: 99,
+			},
+		};
 
-		// red at (0,0) facing north; obstacle at (0,1) east; go east → blocked
+		// red at (0,0); obstacle at (0,1) east; go east → blocked
 		const goEastToolCall = {
 			id: "go_e",
 			name: "go",
@@ -2699,6 +2718,94 @@ describe("action-failure entries — round-coordinator integration", () => {
 				(m as { content: string }).content.match(/action failed:/),
 		);
 		expect(greenFailureMsgs).toHaveLength(0);
+	});
+});
+
+// ----------------------------------------------------------------------------
+// witnessed-event fan-out — Vista membership (ADR 0015)
+// ----------------------------------------------------------------------------
+describe("physical-action witness fan-out — Vista membership (ADR 0015)", () => {
+	/**
+	 * ContentPack: flower at (2, 0) sits on red's own cell, so red's pick_up has
+	 * a definite actor cell to gate on. Vista membership of that cell is
+	 * position-only:
+	 *   green at (2, 2) is the (2, 0) offset → 2² + 0² = 4 ≤ 4 → witness
+	 *   cyan at (1, 2) is the (2, 1) offset → 2² + 1² = 5 > 4 → no witness
+	 * The retired cone would have covered (2, 0): the negative case pins
+	 * eligibility to the Vista rather than to an orientation.
+	 */
+	const VISTA_PACK = makeTestPack(
+		[
+			{
+				id: "flower",
+				kind: "objective_object",
+				name: "flower",
+				examineDescription: "A flower",
+				holder: { row: 2, col: 0 },
+				pairsWithSpaceId: "flower_space",
+				placementFlavor: "{actor} places the flower on the pedestal.",
+			},
+			{
+				id: "flower_space",
+				kind: "objective_space",
+				name: "flower space",
+				examineDescription: "A designated space",
+				holder: { row: 4, col: 4 },
+			},
+		],
+		{
+			wallName: "wall",
+			aiStarts: {
+				red: { position: { row: 2, col: 0 } },
+				green: { position: { row: 2, col: 2 } },
+				cyan: { position: { row: 1, col: 2 } },
+			},
+		},
+	);
+
+	it("a Daemon at offset (2, 0) from the actor's cell witnesses the action; one at (2, 1) does not", async () => {
+		const game = startGame(TEST_PERSONAS, VISTA_PACK, { budgetPerAi: 5 });
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "tc1",
+						name: "pick_up",
+						argumentsJson: JSON.stringify({ item: "flower" }),
+					},
+				],
+			}, // red picks up the flower on its own cell
+			{ assistantText: "", toolCalls: [] }, // green passes
+			{ assistantText: "", toolCalls: [] }, // cyan passes
+		]);
+
+		const { nextState } = await runRound(game, "red", "hi", provider);
+
+		// Inside the Vista → a witnessed-event entry naming the actor.
+		const greenWitnessed = (nextState.conversationLogs.green ?? []).filter(
+			(e) => e.kind === "witnessed-event",
+		);
+		expect(greenWitnessed).toHaveLength(1);
+		if (greenWitnessed[0]?.kind === "witnessed-event") {
+			expect(greenWitnessed[0].actor).toBe("red");
+			expect(greenWitnessed[0].actionKind).toBe("pick_up");
+		}
+
+		// Outside the Vista → nothing, even though cyan is only two columns east
+		// and one row north of the actor's cell.
+		expect(
+			(nextState.conversationLogs.cyan ?? []).filter(
+				(e) => e.kind === "witnessed-event",
+			),
+		).toHaveLength(0);
+
+		// The actor audience is unchanged: red is not a witness of its own action.
+		expect(
+			(nextState.conversationLogs.red ?? []).filter(
+				(e) => e.kind === "witnessed-event",
+			),
+		).toHaveLength(0);
 	});
 });
 
@@ -2802,8 +2909,8 @@ describe("complication countdown — coordinator integration", () => {
 
 	// ── sysadmin_directive dispatch ─────────────────────────────────────────────
 
-	// ── cone-delta persistence (issue #376) ──────────────────────────────────────
-	describe("cone-delta persistence (issue #376)", () => {
+	// ── disk-delta persistence (issue #376) ──────────────────────────────────────
+	describe("disk-delta persistence (issue #376)", () => {
 		/**
 		 * Helper to create a game with custom AI starting positions.
 		 */
@@ -2814,15 +2921,15 @@ describe("complication countdown — coordinator integration", () => {
 			return startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		}
 
-		it("Test A: go reveals a stationary actor → tool-call entry carries coneDelta", async () => {
-			// Red at (2,0) facing north; green at (0,1) facing south.
-			// Red goes forward (north) to (1,0). From (1,0)/north green sits at
+		it("Test A: go reveals a stationary actor → tool-call entry carries diskDelta", async () => {
+			// Red at (2,0); green at (0,1).
+			// Red goes north to (1,0). From (1,0)/north green sits at
 			// "directly in front, right"; from (2,0)/north it sat at
 			// "two steps ahead, front-right" — different line, so the diff fires.
 			const game = makeGameWithCustomStarts({
-				red: { position: { row: 2, col: 0 }, facing: "north" },
-				green: { position: { row: 0, col: 1 }, facing: "south" },
-				cyan: { position: { row: 4, col: 4 }, facing: "north" },
+				red: { position: { row: 2, col: 0 } },
+				green: { position: { row: 0, col: 1 } },
+				cyan: { position: { row: 4, col: 4 } },
 			});
 
 			const provider = new MockRoundLLMProvider([
@@ -2832,7 +2939,7 @@ describe("complication countdown — coordinator integration", () => {
 						{
 							id: "go_1",
 							name: "go",
-							argumentsJson: JSON.stringify({ direction: "forward" }),
+							argumentsJson: JSON.stringify({ direction: "north" }),
 						},
 					],
 				},
@@ -2848,47 +2955,14 @@ describe("complication countdown — coordinator integration", () => {
 			);
 			expect(toolCallEntry).toBeDefined();
 			if (toolCallEntry?.kind === "tool-call") {
-				expect(toolCallEntry.coneDelta).toBeDefined();
-				expect(toolCallEntry.coneDelta).toContain("*green");
+				expect(toolCallEntry.diskDelta).toBeDefined();
+				expect(toolCallEntry.diskDelta).toContain("*green");
 			}
 		});
 
-		it("Test B: face reveals an item → tool-call entry carries coneDelta", async () => {
-			// Red at (0,0) facing north — north cone is all walls. After facing
-			// right (now facing east), the key at (0,1) sits at "directly in front".
-			const game = makeGame();
-
-			const provider = new MockRoundLLMProvider([
-				{
-					assistantText: "",
-					toolCalls: [
-						{
-							id: "look_1",
-							name: "face",
-							argumentsJson: JSON.stringify({ direction: "right" }),
-						},
-					],
-				},
-				{ assistantText: "", toolCalls: [] },
-				{ assistantText: "", toolCalls: [] },
-			]);
-
-			const { nextState } = await runRound(game, "red", "start", provider);
-
-			const redLog = nextState.conversationLogs.red ?? [];
-			const toolCallEntry = redLog.find(
-				(e) => e.kind === "tool-call" && e.toolName === "face",
-			);
-			expect(toolCallEntry).toBeDefined();
-			if (toolCallEntry?.kind === "tool-call") {
-				expect(toolCallEntry.coneDelta).toBeDefined();
-				expect(toolCallEntry.coneDelta).toContain("key");
-			}
-		});
-
-		it("Test C: face forward is rejected at validation (already facing that way)", async () => {
-			// Red at (0,0) facing north. Red tries to face forward (already facing north).
-			// This is rejected as a no-op at validation, so red remains facing north.
+		it("Test B: a raw `face` tool call is rejected (unknown tool), never a no-op success", async () => {
+			// `face` is retired and outside the tool enum, but a model can still
+			// emit it — the coordinator must reject it, not silently drop it.
 			const game = makeGame();
 
 			const provider = new MockRoundLLMProvider([
@@ -2898,6 +2972,58 @@ describe("complication countdown — coordinator integration", () => {
 						{
 							id: "face_1",
 							name: "face",
+							argumentsJson: JSON.stringify({ direction: "right" }),
+						},
+					],
+				},
+				{ assistantText: "", toolCalls: [] },
+				{ assistantText: "", toolCalls: [] },
+			]);
+
+			const { nextState, result } = await runRound(
+				game,
+				"red",
+				"start",
+				provider,
+			);
+
+			const failure = result.actions.find((e) => e.kind === "tool_failure");
+			expect(failure).toBeDefined();
+			expect(failure?.description).toMatch(/unknown tool/i);
+			expect(failure?.description).toContain("face");
+
+			const redLog = nextState.conversationLogs.red ?? [];
+			const toolCallEntry = redLog.find(
+				(e) => e.kind === "tool-call" && e.toolName === "face",
+			);
+			// Recorded as a failed roundtrip entry, never a success, and the
+			// retired tool sets no diskDelta.
+			expect(toolCallEntry?.kind === "tool-call" && toolCallEntry.success).toBe(
+				false,
+			);
+			expect(
+				toolCallEntry?.kind === "tool-call"
+					? toolCallEntry.diskDelta
+					: undefined,
+			).toBeUndefined();
+			// Nothing changed: no movement, no spatial write of any kind.
+			expect(nextState.personaSpatial.red).toEqual({
+				position: { row: 0, col: 0 },
+			});
+		});
+
+		it("Test C: a relative `go` argument supplied as a raw tool call is rejected (cardinal only)", async () => {
+			// Red at (0,0). "forward" is retired vocabulary: a raw tool call
+			// carrying it is rejected rather than resolved against an orientation.
+			const game = makeGame();
+
+			const provider = new MockRoundLLMProvider([
+				{
+					assistantText: "",
+					toolCalls: [
+						{
+							id: "go_rel_1",
+							name: "go",
 							argumentsJson: JSON.stringify({ direction: "forward" }),
 						},
 					],
@@ -2906,13 +3032,25 @@ describe("complication countdown — coordinator integration", () => {
 				{ assistantText: "", toolCalls: [] },
 			]);
 
-			const roundResult = await runRound(game, "red", "start", provider);
+			const { nextState, result } = await runRound(
+				game,
+				"red",
+				"start",
+				provider,
+			);
 
-			// Red should still be facing north (unchanged from the no-op rejection)
-			expect(roundResult.nextState.personaSpatial.red?.facing).toBe("north");
+			const failure = result.actions.find((e) => e.kind === "tool_failure");
+			expect(failure).toBeDefined();
+			expect(failure?.description).toMatch(/north, south, east, or west/i);
+
+			// Rejected: the actor did not move.
+			expect(nextState.personaSpatial.red?.position).toEqual({
+				row: 0,
+				col: 0,
+			});
 		});
 
-		it("Test D: non-go/face tools never enrich (pick_up does not get coneDelta)", async () => {
+		it("Test D: non-go tools never enrich (pick_up does not get diskDelta)", async () => {
 			const game = makeGame();
 
 			const provider = new MockRoundLLMProvider([
@@ -2938,16 +3076,16 @@ describe("complication countdown — coordinator integration", () => {
 			);
 			expect(toolCallEntry).toBeDefined();
 			if (toolCallEntry?.kind === "tool-call") {
-				// pick_up should never have coneDelta.
-				expect(toolCallEntry.coneDelta).toBeUndefined();
+				// pick_up should never have diskDelta.
+				expect(toolCallEntry.diskDelta).toBeUndefined();
 			}
 		});
 
 		it("Test E: no cross-Daemon contamination (go action doesn't enrich other logs)", async () => {
 			const game = makeGameWithCustomStarts({
-				red: { position: { row: 4, col: 0 }, facing: "north" },
-				green: { position: { row: 2, col: 0 }, facing: "north" },
-				cyan: { position: { row: 4, col: 4 }, facing: "north" },
+				red: { position: { row: 4, col: 0 } },
+				green: { position: { row: 2, col: 0 } },
+				cyan: { position: { row: 4, col: 4 } },
 			});
 
 			const provider = new MockRoundLLMProvider([
@@ -2957,7 +3095,7 @@ describe("complication countdown — coordinator integration", () => {
 						{
 							id: "go_1",
 							name: "go",
-							argumentsJson: JSON.stringify({ direction: "forward" }),
+							argumentsJson: JSON.stringify({ direction: "north" }),
 						},
 					],
 				},
@@ -2967,22 +3105,22 @@ describe("complication countdown — coordinator integration", () => {
 
 			const { nextState } = await runRound(game, "red", "start", provider);
 
-			// Red should have a tool-call with coneDelta
+			// Red should have a tool-call with diskDelta
 			const redLog = nextState.conversationLogs.red ?? [];
 			const redToolCall = redLog.find(
 				(e) => e.kind === "tool-call" && e.toolName === "go",
 			);
 			expect(
-				redToolCall?.kind === "tool-call" && redToolCall.coneDelta,
+				redToolCall?.kind === "tool-call" && redToolCall.diskDelta,
 			).toBeDefined();
 
-			// Green should NOT have a tool-call entry with coneDelta from red's action
-			// (Green may have witnessed-event entries, but not coneDelta on tool-calls)
+			// Green should NOT have a tool-call entry with diskDelta from red's action
+			// (Green may have witnessed-event entries, but not diskDelta on tool-calls)
 			const greenLog = nextState.conversationLogs.green ?? [];
 			const greenToolCalls = greenLog.filter((e) => e.kind === "tool-call");
 			for (const entry of greenToolCalls) {
 				if (entry.kind === "tool-call") {
-					expect(entry.coneDelta).toBeUndefined();
+					expect(entry.diskDelta).toBeUndefined();
 				}
 			}
 		});
@@ -2990,13 +3128,13 @@ describe("complication countdown — coordinator integration", () => {
 });
 
 // ============================================================================
-// coneDelta persistence across rounds (issue #469)
+// diskDelta persistence across rounds (issue #469)
 // ============================================================================
-describe("coneDelta persistence via coneEntities", () => {
-	it("passes coneEntities from round 1 as priorConeEntities to round 2, emitting first-sight line", async () => {
-		// Round 1: red and green both pass, item initially NOT in red's cone
-		// Round 2: item is moved into red's cone, and red takes an action
-		// Expect perception-delta line in the action tool-call's coneDelta
+describe("diskDelta persistence via diskEntities", () => {
+	it("passes diskEntities from round 1 as priorDiskEntities to round 2, emitting first-sight line", async () => {
+		// Round 1: red and green both pass, item initially outside red's Vista
+		// Round 2: item is moved into red's Vista, and red takes an action
+		// Expect perception-delta line in the action tool-call's diskDelta
 		const pack = makeTestPack(
 			[
 				{
@@ -3004,15 +3142,15 @@ describe("coneDelta persistence via coneEntities", () => {
 					kind: "interesting_object",
 					name: "TestItem",
 					examineDescription: "It shimmers.",
-					holder: { row: 10, col: 10 }, // Far away, not in cone
+					holder: { row: 10, col: 10 }, // Far away, outside the Vista
 				},
 			],
 			{
 				wallName: "wall",
 				aiStarts: {
-					red: { position: { row: 0, col: 0 }, facing: "south" },
-					green: { position: { row: 0, col: 1 }, facing: "north" },
-					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+					red: { position: { row: 0, col: 0 } },
+					green: { position: { row: 0, col: 1 } },
+					cyan: { position: { row: 0, col: 2 } },
 				},
 			},
 		);
@@ -3026,7 +3164,7 @@ describe("coneDelta persistence via coneEntities", () => {
 		const round1Result = await runRound(game1, "red", "hello", provider1);
 		const game2 = round1Result.nextState;
 
-		// Move item into red's cone for round 2 (directly in front when facing south)
+		// Move item into red's Vista for round 2 (one step south of red)
 		const gameWithItem = {
 			...game2,
 			world: {
@@ -3037,7 +3175,7 @@ describe("coneDelta persistence via coneEntities", () => {
 			},
 		};
 
-		// Round 2: red does something with the new item in cone
+		// Round 2: red does something with the new item in its Vista
 		const provider2 = new MockRoundLLMProvider([
 			{
 				assistantText: "I see the item",
@@ -3053,7 +3191,7 @@ describe("coneDelta persistence via coneEntities", () => {
 			{ assistantText: "", toolCalls: [] }, // cyan pass
 		]);
 
-		// Pass round1's coneEntities as priorConeEntities to round 2
+		// Pass round1's diskEntities as priorDiskEntities to round 2
 		const round2Result = await runRound(
 			gameWithItem,
 			"red",
@@ -3062,8 +3200,8 @@ describe("coneDelta persistence via coneEntities", () => {
 			{
 				rng: Math.random,
 				priorToolRoundtrip: {}, // no prior tool roundtrip
-				priorConeSnapshots: {}, // no prior cone snapshots
-				priorConeEntities: round1Result.coneEntities, // from round 1
+				priorDiskSnapshots: {}, // no prior perception-disk snapshots
+				priorDiskEntities: round1Result.diskEntities, // from round 1
 			},
 		);
 
@@ -3074,18 +3212,18 @@ describe("coneDelta persistence via coneEntities", () => {
 		);
 		expect(redActionToolCall?.kind === "tool-call").toBe(true);
 		expect(
-			redActionToolCall?.kind === "tool-call" && redActionToolCall.coneDelta,
+			redActionToolCall?.kind === "tool-call" && redActionToolCall.diskDelta,
 		).toBeDefined();
-		const coneDelta =
+		const diskDelta =
 			redActionToolCall?.kind === "tool-call"
-				? redActionToolCall.coneDelta
+				? redActionToolCall.diskDelta
 				: "";
-		expect(coneDelta).toContain("Came into view: TestItem");
+		expect(diskDelta).toContain("Came into view: TestItem");
 	});
 
-	it("merges perception-delta with actorConeDelta when both exist", async () => {
-		// red moves while an item enters its cone
-		// Expect both the move result and the first-sight line in coneDelta
+	it("merges perception-delta with actorDiskDelta when both exist", async () => {
+		// red moves while an item enters its Vista
+		// Expect both the move result and the first-sight line in diskDelta
 		const pack = makeTestPack(
 			[
 				{
@@ -3099,9 +3237,9 @@ describe("coneDelta persistence via coneEntities", () => {
 			{
 				wallName: "wall",
 				aiStarts: {
-					red: { position: { row: 0, col: 0 }, facing: "south" },
-					green: { position: { row: 0, col: 1 }, facing: "north" },
-					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+					red: { position: { row: 0, col: 0 } },
+					green: { position: { row: 0, col: 1 } },
+					cyan: { position: { row: 0, col: 2 } },
 				},
 			},
 		);
@@ -3114,7 +3252,7 @@ describe("coneDelta persistence via coneEntities", () => {
 
 		const round1Result = await runRound(game1, "red", "hi", provider1);
 
-		// Round 2 with item now visible in red's cone
+		// Round 2 with item now visible in red's Vista
 		const gameWithItem = {
 			...round1Result.nextState,
 			world: {
@@ -3148,8 +3286,8 @@ describe("coneDelta persistence via coneEntities", () => {
 			{
 				rng: Math.random,
 				priorToolRoundtrip: {},
-				priorConeSnapshots: {},
-				priorConeEntities: round1Result.coneEntities,
+				priorDiskSnapshots: {},
+				priorDiskEntities: round1Result.diskEntities,
 			},
 		);
 
@@ -3157,8 +3295,8 @@ describe("coneDelta persistence via coneEntities", () => {
 		const redGo = redLog.find(
 			(e) => e.kind === "tool-call" && e.toolName === "go",
 		);
-		expect(redGo?.kind === "tool-call" && redGo.coneDelta).toBeDefined();
-		const delta = redGo?.kind === "tool-call" ? redGo.coneDelta : "";
+		expect(redGo?.kind === "tool-call" && redGo.diskDelta).toBeDefined();
+		const delta = redGo?.kind === "tool-call" ? redGo.diskDelta : "";
 		// Should contain both the movement result and the perception delta
 		expect(delta).toMatch(/Treasure|moved|north/i);
 		expect(delta).toContain("Came into view: Treasure");
@@ -3180,9 +3318,9 @@ describe("coneDelta persistence via coneEntities", () => {
 			{
 				wallName: "wall",
 				aiStarts: {
-					red: { position: { row: 0, col: 0 }, facing: "south" },
-					green: { position: { row: 0, col: 1 }, facing: "north" },
-					cyan: { position: { row: 0, col: 2 }, facing: "north" },
+					red: { position: { row: 0, col: 0 } },
+					green: { position: { row: 0, col: 1 } },
+					cyan: { position: { row: 0, col: 2 } },
 				},
 			},
 		);
@@ -3236,8 +3374,8 @@ describe("coneDelta persistence via coneEntities", () => {
 			{
 				rng: Math.random,
 				priorToolRoundtrip: {},
-				priorConeSnapshots: {},
-				priorConeEntities: round1Result.coneEntities,
+				priorDiskSnapshots: {},
+				priorDiskEntities: round1Result.diskEntities,
 			},
 		);
 
@@ -3247,18 +3385,18 @@ describe("coneDelta persistence via coneEntities", () => {
 			(e) => e.kind === "tool-call" && e.toolName === "go",
 		);
 
-		// Message entry should NOT have coneDelta (messages don't have coneDelta, only actions do)
+		// Message entry should NOT have diskDelta (messages don't have diskDelta, only actions do)
 		expect(messageEntry?.kind === "message").toBe(true);
 		expect(
-			(messageEntry as { coneDelta?: unknown } | undefined)?.coneDelta,
+			(messageEntry as { diskDelta?: unknown } | undefined)?.diskDelta,
 		).toBeUndefined();
 
-		// Action entry should have coneDelta with perception delta (merged on first action)
+		// Action entry should have diskDelta with perception delta (merged on first action)
 		expect(
-			actionEntry?.kind === "tool-call" && actionEntry.coneDelta,
+			actionEntry?.kind === "tool-call" && actionEntry.diskDelta,
 		).toBeDefined();
 		const delta =
-			actionEntry?.kind === "tool-call" ? actionEntry.coneDelta : "";
+			actionEntry?.kind === "tool-call" ? actionEntry.diskDelta : "";
 		expect(delta).toContain("Came into view: Mysterious Box");
 	});
 });

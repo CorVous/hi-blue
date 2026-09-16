@@ -210,12 +210,6 @@ export function buildSessionFromAssets(
 				weather: "",
 				timeOfDay: "",
 				entities: [],
-				landmarks: {
-					north: { shortName: "", horizonPhrase: "" },
-					south: { shortName: "", horizonPhrase: "" },
-					east: { shortName: "", horizonPhrase: "" },
-					west: { shortName: "", horizonPhrase: "" },
-				},
 				wallName: "",
 				aiStarts: {},
 			},

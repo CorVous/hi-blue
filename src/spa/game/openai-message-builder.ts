@@ -71,9 +71,6 @@ export function buildOpenAiMessages(
 
 	// Sort by round ascending — stable, so ties preserve append order.
 	const sortedLog = [...ctx.conversationLog].sort((a, b) => a.round - b.round);
-	// Current spatial state of this AI — used to render movement directions
-	// relative to the witness's facing in witnessed-event lines.
-	const witnessState = ctx.personaSpatial[ctx.aiId];
 	for (const entry of sortedLog) {
 		if (entry.kind === "message") {
 			if (entry.from === ctx.aiId) {
@@ -103,23 +100,13 @@ export function buildOpenAiMessages(
 					messages.push({
 						role: "tool",
 						tool_call_id: outgoingEntry.toolCallId,
-						content: renderEntry(
-							entry,
-							ctx.aiId,
-							ctx.worldSnapshot.entities,
-							witnessState,
-						),
+						content: renderEntry(entry, ctx.aiId, ctx.worldSnapshot.entities),
 					});
 				} else {
 					// Legacy: render as free-text assistant message (backward compatibility)
 					messages.push({
 						role: "assistant",
-						content: renderEntry(
-							entry,
-							ctx.aiId,
-							ctx.worldSnapshot.entities,
-							witnessState,
-						),
+						content: renderEntry(entry, ctx.aiId, ctx.worldSnapshot.entities),
 					});
 				}
 			} else {
@@ -128,53 +115,28 @@ export function buildOpenAiMessages(
 				// sender. Routing-context need surfaced by review of a704b81.
 				messages.push({
 					role: "user",
-					content: renderEntry(
-						entry,
-						ctx.aiId,
-						ctx.worldSnapshot.entities,
-						witnessState,
-					),
+					content: renderEntry(entry, ctx.aiId, ctx.worldSnapshot.entities),
 				});
 			}
 		} else if (entry.kind === "witnessed-event") {
 			messages.push({
 				role: "user",
-				content: renderEntry(
-					entry,
-					ctx.aiId,
-					ctx.worldSnapshot.entities,
-					witnessState,
-				),
+				content: renderEntry(entry, ctx.aiId, ctx.worldSnapshot.entities),
 			});
 		} else if (entry.kind === "action-failure") {
 			messages.push({
 				role: "user",
-				content: renderEntry(
-					entry,
-					ctx.aiId,
-					ctx.worldSnapshot.entities,
-					witnessState,
-				),
+				content: renderEntry(entry, ctx.aiId, ctx.worldSnapshot.entities),
 			});
 		} else if (entry.kind === "witnessed-obstacle-shift") {
 			messages.push({
 				role: "user",
-				content: renderEntry(
-					entry,
-					ctx.aiId,
-					ctx.worldSnapshot.entities,
-					witnessState,
-				),
+				content: renderEntry(entry, ctx.aiId, ctx.worldSnapshot.entities),
 			});
 		} else if (entry.kind === "witnessed-convergence") {
 			messages.push({
 				role: "user",
-				content: renderEntry(
-					entry,
-					ctx.aiId,
-					ctx.worldSnapshot.entities,
-					witnessState,
-				),
+				content: renderEntry(entry, ctx.aiId, ctx.worldSnapshot.entities),
 			});
 		} else if (entry.kind === "tool-call") {
 			// Render as tool call pair (assistant with tool_calls + tool result)
@@ -192,10 +154,10 @@ export function buildOpenAiMessages(
 					},
 				],
 			});
-			// Tool result message with optional cone-delta enrichment
-			// Issue #376: append the persisted cone-delta so prior-round perceptions persist
-			const toolContent = entry.coneDelta
-				? `${entry.result}\n\n<noticed>\n${entry.coneDelta}\n</noticed>`
+			// Tool result message with optional perception-delta enrichment
+			// Issue #376: append the persisted disk delta so prior-round perceptions persist
+			const toolContent = entry.diskDelta
+				? `${entry.result}\n\n<noticed>\n${entry.diskDelta}\n</noticed>`
 				: entry.result;
 			messages.push({
 				role: "tool",
@@ -205,12 +167,7 @@ export function buildOpenAiMessages(
 		} else if (entry.kind === "broadcast") {
 			messages.push({
 				role: "user",
-				content: renderEntry(
-					entry,
-					ctx.aiId,
-					ctx.worldSnapshot.entities,
-					witnessState,
-				),
+				content: renderEntry(entry, ctx.aiId, ctx.worldSnapshot.entities),
 			});
 		}
 	}

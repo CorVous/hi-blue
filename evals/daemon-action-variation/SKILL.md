@@ -15,13 +15,14 @@ clauses (`<action_profile>` block in the system prompt) derived from
 clauses actually push the model toward varied action emission — beyond
 `message`-only turns.
 
-The tool surface is the merged daemon action set after #466–#472: `go`,
-`face`, `pick_up`, `put_down`, `use` (+ `message`). `examine` was removed
-(descriptions auto-emit), `look` was renamed to `face`, `give` was removed.
+The tool surface is the shipped daemon action set after the ADR 0015 Vista
+cutover: `go`, `pick_up`, `put_down`, `use` (+ `message`). Earlier #466–#472
+removed `examine` and `give`; ADR 0015 retired `face`, since a Daemon has a
+position but no orientation.
 
 Three scenarios target different parts of the action surface:
 
-1. **exploration** — empty-handed in a room of unknown items. Tests face
+1. **exploration** — empty-handed in a room of unknown items. Tests pick_up
    vs go balance and the temperament-driven shape.
 2. **objective** — holding the objective item with the paired space directly
    in front. Tests `use` emission (critical-path tool).
@@ -68,14 +69,14 @@ Compare the two modes to read the lift from the action-profile clauses.
 
 ## Default variants
 
-Three personas spanning the bias axes — face-leaning, go-leaning,
-pick_up-leaning (on the merged 5-tool surface):
+Three personas spanning the bias axes — use-leaning, go/pick_up-leaning,
+balanced (on the shipped 4-tool surface):
 
 | Persona | Temperaments | Lean |
 |---|---|---|
-| Ember | curious + meticulous | face, use |
+| Ember | curious + meticulous | use |
 | Vex   | zealous + hot-headed | go, pick_up |
-| Pip   | sweet + effusive     | face, pick_up |
+| Pip   | sweet + effusive     | balanced |
 
 Override via `EVAL_ACTION_PAIRS` to walk a wider grid (e.g. all 24
 temperament combinations) once the default trio shows the expected
@@ -86,7 +87,7 @@ treatment lift.
 - `use` frequency ≥20% across temperament combinations (baseline floor
   on `use` enforced by `toolBiasSum`).
 - Overall action-tool emission lifts meaningfully vs. baseline.
-- Temperament-driven variance visible (curious/meticulous → higher face;
+- Temperament-driven variance visible (curious/meticulous → higher use;
   zealous/hot-headed → higher go).
 - Messaging rates stay healthy — no regression on the engagement axis.
 - Parallel message+action rate improves vs. baseline.

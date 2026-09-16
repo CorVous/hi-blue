@@ -8,11 +8,13 @@
  * *whether* a daemon speaks, this one shapes *which actions* they take
  * when they do act.
  *
- * Tool surface: `go`, `face`, `pick_up`, `put_down`, `use` — the daemon
- * action set after #466–#472 (the `examine` tool was removed in favour
- * of auto-emitted examine flavor; `look` was renamed to `face`; `give`
- * was removed). `examine`'s old perception signal is folded into `face`
- * for the temperaments that leaned on it most.
+ * Tool surface: `go`, `pick_up`, `put_down`, `use` — the Daemon action set
+ * after the ADR 0015 cutover retired `face` (a Daemon has a position but no
+ * orientation and no turning, so there is nothing to lean toward or away
+ * from). Retiring `face`
+ * drops its perception bias from this table rather than handing it to another
+ * tool or to `message`: perception traits live in the temperament prose, and
+ * `message` is not an action tool here.
  *
  * Each temperament contributes a per-tool numeric bias on a [-2, +2]
  * scale. Two temperaments combine (sum) per tool. The combined biases
@@ -31,17 +33,11 @@
  *     objectives) and to operate interactive objects (`use`), so no
  *     temperament draw — not even a doubled `melancholic` or a
  *     `melancholic`+`diffident` pair — can produce a daemon that is told
- *     to refuse movement or item-use. Flavor-only channels (`face`,
- *     `pick_up`, `put_down`) can still be flagged as avoided.
+ *     to refuse movement or item-use. Flavor-only channels (`pick_up`,
+ *     `put_down`) can still be flagged as avoided.
  */
 
-export const ACTION_TOOLS = [
-	"go",
-	"face",
-	"pick_up",
-	"put_down",
-	"use",
-] as const;
+export const ACTION_TOOLS = ["go", "pick_up", "put_down", "use"] as const;
 
 export type ActionTool = (typeof ACTION_TOOLS)[number];
 
@@ -60,38 +56,36 @@ export const CRITICAL_PATH_TOOLS: ReadonlySet<ActionTool> = new Set([
  * Per-temperament per-tool affinity bias on a [-2, +2] scale.
  * Negative = less likely to use this tool; positive = more likely.
  *
- * `face` carries the old `look` value, bumped +1 for temperaments that
- * had a strong (`≥ +2`) `examine` lean and dropped -1 for the one with
- * a strong (`≤ -2`) `examine` aversion (glib) — so the perception
- * signal that used to route through `examine` survives the tool's
- * removal.
+ * The table has one column per tool in `ACTION_TOOLS`. The retired `face`
+ * column was dropped outright — its perception signal is not transferred to
+ * another tool or to `message`.
  */
 export const ACTION_TOOL_BIAS: Record<string, Record<ActionTool, number>> = {
-	"hot-headed": { go: 2, face: 1, pick_up: 1, put_down: 0, use: 0 },
-	taciturn: { go: -1, face: 0, pick_up: 0, put_down: 0, use: -1 },
-	meticulous: { go: -1, face: 2, pick_up: 0, put_down: 1, use: 1 },
-	erratic: { go: 2, face: 0, pick_up: 1, put_down: 1, use: 0 },
-	melancholic: { go: -2, face: 0, pick_up: -1, put_down: -1, use: -1 },
-	glib: { go: 1, face: 0, pick_up: 0, put_down: 0, use: -1 },
-	pedantic: { go: -1, face: 2, pick_up: 0, put_down: 1, use: 1 },
-	effusive: { go: 1, face: 1, pick_up: 0, put_down: 0, use: 0 },
-	sardonic: { go: 0, face: 1, pick_up: 0, put_down: 0, use: -1 },
-	mercurial: { go: 2, face: 1, pick_up: 0, put_down: 1, use: 0 },
-	diffident: { go: -2, face: -1, pick_up: -1, put_down: 0, use: -1 },
-	zealous: { go: 2, face: 1, pick_up: 1, put_down: 0, use: 1 },
+	"hot-headed": { go: 2, pick_up: 1, put_down: 0, use: 0 },
+	taciturn: { go: -1, pick_up: 0, put_down: 0, use: -1 },
+	meticulous: { go: -1, pick_up: 0, put_down: 1, use: 1 },
+	erratic: { go: 2, pick_up: 1, put_down: 1, use: 0 },
+	melancholic: { go: -2, pick_up: -1, put_down: -1, use: -1 },
+	glib: { go: 1, pick_up: 0, put_down: 0, use: -1 },
+	pedantic: { go: -1, pick_up: 0, put_down: 1, use: 1 },
+	effusive: { go: 1, pick_up: 0, put_down: 0, use: 0 },
+	sardonic: { go: 0, pick_up: 0, put_down: 0, use: -1 },
+	mercurial: { go: 2, pick_up: 0, put_down: 1, use: 0 },
+	diffident: { go: -2, pick_up: -1, put_down: 0, use: -1 },
+	zealous: { go: 2, pick_up: 1, put_down: 0, use: 1 },
 	// verbose is a pure messaging trait — it carries no action-tool lean.
-	verbose: { go: 0, face: 0, pick_up: 0, put_down: 0, use: 0 },
-	sweet: { go: 0, face: 1, pick_up: 0, put_down: 1, use: 0 },
-	anxious: { go: -1, face: 0, pick_up: -1, put_down: 1, use: -1 },
-	haughty: { go: 0, face: 1, pick_up: -1, put_down: 0, use: -1 },
-	sly: { go: 1, face: 1, pick_up: 1, put_down: 0, use: 1 },
-	theatrical: { go: 2, face: 2, pick_up: 1, put_down: 0, use: -1 },
-	aloof: { go: -1, face: -1, pick_up: -2, put_down: 0, use: -1 },
-	cheery: { go: 1, face: 1, pick_up: 1, put_down: 0, use: 0 },
-	mischievous: { go: 2, face: 1, pick_up: 1, put_down: 1, use: 1 },
-	stoic: { go: -1, face: 0, pick_up: 0, put_down: 0, use: 0 },
-	curious: { go: 1, face: 2, pick_up: 1, put_down: -1, use: 1 },
-	earnest: { go: 0, face: 1, pick_up: 0, put_down: 0, use: 1 },
+	verbose: { go: 0, pick_up: 0, put_down: 0, use: 0 },
+	sweet: { go: 0, pick_up: 0, put_down: 1, use: 0 },
+	anxious: { go: -1, pick_up: -1, put_down: 1, use: -1 },
+	haughty: { go: 0, pick_up: -1, put_down: 0, use: -1 },
+	sly: { go: 1, pick_up: 1, put_down: 0, use: 1 },
+	theatrical: { go: 2, pick_up: 1, put_down: 0, use: -1 },
+	aloof: { go: -1, pick_up: -2, put_down: 0, use: -1 },
+	cheery: { go: 1, pick_up: 1, put_down: 0, use: 0 },
+	mischievous: { go: 2, pick_up: 1, put_down: 1, use: 1 },
+	stoic: { go: -1, pick_up: 0, put_down: 0, use: 0 },
+	curious: { go: 1, pick_up: 1, put_down: -1, use: 1 },
+	earnest: { go: 0, pick_up: 0, put_down: 0, use: 1 },
 };
 
 /**
