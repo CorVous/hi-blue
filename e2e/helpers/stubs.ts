@@ -1,5 +1,9 @@
 import { expect, type Page, type Request } from "@playwright/test";
-import { deobfuscateEngineBlob, obfuscateEngineBlob } from "./engine-blob.js";
+import {
+	deobfuscateEngineBlob,
+	ENGINE_OBFUSCATION_KEY,
+	obfuscateEngineBlob,
+} from "./engine-blob.js";
 import type { AiHandles } from "./handles.js";
 import { getAiHandles } from "./handles.js";
 import type { GridPosition } from "./vista-geometry.js";
