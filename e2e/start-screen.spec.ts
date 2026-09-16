@@ -16,13 +16,34 @@
  * render from localStorage. Test assertions use main[data-view] / [data-reason]
  * instead of location.hash.
  */
-import { expect, type Request, type Route, test } from "@playwright/test";
+import {
+	expect,
+	type Page,
+	type Request,
+	type Route,
+	test,
+} from "@playwright/test";
 import {
 	classifyJsonRequest,
 	expectNoPageErrors,
 	stubChatCompletions,
 	stubNewGameLLM,
 } from "./helpers";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Shape of the JSON bodies the SPA posts to `/v1/chat/completions`.
+ *
+ * Named rather than expressed with `typeof body`: at the point of the `as`
+ * assertion the variable's *narrowed* type is `null`, which would make every
+ * later `!== null` check collapse to `never`.
+ */
+type ParsedRequestBody = {
+	stream?: boolean;
+	response_format?: unknown;
+	messages?: Array<{ role?: string; content?: string }>;
+} | null;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -31,7 +52,7 @@ import {
  * that BEGIN was clicked and saveActiveSession ran.
  */
 async function waitForActiveSession(
-	page: Parameters<Parameters<typeof test>[1]>[0]["page"],
+	page: Page,
 	timeoutMs = 15_000,
 ): Promise<void> {
 	await page.waitForFunction(
@@ -208,13 +229,9 @@ test("CapHit during generation surfaces #cap-hit", async ({ page }) => {
 	// normal responses for anything else. The synthesis call fires first at
 	// new-game time, so a 429 there triggers CapHitError and shows #cap-hit.
 	await page.route("**/v1/chat/completions", async (route, request) => {
-		let body: {
-			stream?: boolean;
-			response_format?: unknown;
-			messages?: Array<{ role?: string; content?: string }>;
-		} | null = null;
+		let body: ParsedRequestBody = null;
 		try {
-			body = JSON.parse(request.postData() ?? "null") as typeof body;
+			body = JSON.parse(request.postData() ?? "null") as ParsedRequestBody;
 		} catch {
 			body = null;
 		}
@@ -264,12 +281,9 @@ test("refresh during generation re-enters start screen and restarts generation",
 	// The handler blocks on a never-resolving promise; Playwright aborts the
 	// in-flight request when the page reloads, so the test does not stall.
 	const slowSynthesisHandler = async (route: Route, request: Request) => {
-		let body: {
-			stream?: boolean;
-			response_format?: unknown;
-		} | null = null;
+		let body: ParsedRequestBody = null;
 		try {
-			body = JSON.parse(request.postData() ?? "null") as typeof body;
+			body = JSON.parse(request.postData() ?? "null") as ParsedRequestBody;
 		} catch {
 			body = null;
 		}
