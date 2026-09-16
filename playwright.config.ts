@@ -5,7 +5,9 @@ export default defineConfig({
 	fullyParallel: true,
 	forbidOnly: !!process.env.CI,
 	retries: process.env.CI ? 2 : 0,
-	workers: process.env.CI ? 1 : undefined,
+	// `exactOptionalPropertyTypes` forbids an explicit `undefined` here, and an
+	// absent `workers` key means the same thing to Playwright: auto-detect.
+	...(process.env.CI ? { workers: 1 } : {}),
 	reporter: [["list"], ["html", { open: "never" }]],
 	use: {
 		baseURL: "http://localhost:8787",

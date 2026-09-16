@@ -532,7 +532,12 @@ export async function goToGame(
 	opts?: GoToGameOptions,
 ): Promise<AiHandles> {
 	const sse = opts?.sse ?? ["stub reply"];
-	await stubNewGameLLM(page, { sse, synthesis: opts?.synthesis });
+	// Spread conditionally: `exactOptionalPropertyTypes` forbids passing an
+	// explicit `undefined` for an optional property.
+	await stubNewGameLLM(page, {
+		sse,
+		...(opts?.synthesis === undefined ? {} : { synthesis: opts.synthesis }),
+	});
 	await page.goto(withSkipDialup(opts?.url ?? "/"));
 	// Fast-synthesis stub returns instantly; 10s is ample — down from 30s.
 	await expect(page.locator("#begin")).toBeEnabled({ timeout: 10_000 });
