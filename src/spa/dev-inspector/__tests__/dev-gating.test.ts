@@ -8,9 +8,11 @@
  * explicitly.
  *
  * The production *bundle* is verified separately: a build with a non-localhost
- * WORKER_BASE_URL contains none of the inspector's DOM identifiers, because
- * esbuild eliminates the gated code. Unit tests cannot assert that; they can
- * assert the runtime guard on the branch they are able to reach.
+ * WORKER_BASE_URL contains none of the inspector's DOM identifiers **in its
+ * compiled JS**, because esbuild eliminates the gated code. The CSS bundle is
+ * not tree-shaken, so the inspector's selectors do remain in the stylesheet —
+ * dead bytes, no leak. Unit tests cannot assert either; they can assert the
+ * runtime guard on the branch they are able to reach.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

@@ -12,11 +12,7 @@ import { STATIC_PERSONAS } from "../../__tests__/fixtures/static-personas";
 import { inBounds } from "../../game/direction";
 import { GameSession } from "../../game/game-session";
 import type { GridPosition, PersonaSpatialState } from "../../game/types";
-import {
-	inVista,
-	projectVista,
-	VISTA_OFFSETS,
-} from "../../game/vista-projector";
+import { inVista, VISTA_OFFSETS } from "../../game/vista-projector";
 import { __resetInspectorForTests, renderInspector } from "../index";
 import { vistaMaskForDaemon, vistaMaskForPosition } from "../vista-mask";
 import {
@@ -27,11 +23,16 @@ import {
 } from "../world-map";
 
 /**
- * Build the expected highlight for a position from the shared Vista geometry:
+ * Build the expected highlight for a position from the shared Vista table:
  * every Vista offset whose absolute cell is inside the 5×5 room, expressed in
  * room coordinates — the inspector grid is room-only, so room (r,c) is also
- * display cell "r,c". Derived from the Vista table rather than a hand-rolled
- * disk, so the assertion tracks the geometry the runtime uses.
+ * display cell "r,c".
+ *
+ * The oracle here is the runtime's own `VISTA_OFFSETS`, so this tracks the
+ * geometry the game uses but cannot detect a wrong table: `vista-mask.ts`
+ * consumes the same table. The brute-force `dx² + dy² ≤ 4` assertion in the
+ * suite is the guard for the table's contents; the two are complementary, not
+ * interchangeable.
  */
 function expectedVistaMask(position: GridPosition): Set<string> {
 	const expected = new Set<string>();
@@ -167,22 +168,30 @@ describe("vista-focus", () => {
 			}
 		});
 
-		it("mask equals projectVista's non-wall cells for all 25 positions", () => {
-			// The anti-approximation guard: the inspector mask is bound to the
-			// shared projector itself, not to a re-derivation of the disk. Any
-			// future divergence between the inspector and the runtime geometry
-			// fails here instead of silently mis-tinting the dev map.
+		it("mask equals the ADR's dx² + dy² ≤ 4 disk clipped to the room, for all 25 positions", () => {
+			// The anti-approximation guard. The oracle is the ADR 0015 predicate
+			// written out by brute force over the room — deliberately NOT
+			// `projectVista` filtered by `isWall`, because that is the
+			// implementation's own loop (`vista-mask.ts`): comparing the two
+			// would assert the code equals itself, and a wrong disk would
+			// change both sides identically and pass.
+			const RADIUS_SQUARED = 4;
 			for (let row = 0; row < 5; row++) {
 				for (let col = 0; col < 5; col++) {
 					const position: GridPosition = { row, col };
-					const projected = new Set<string>();
-					for (const cell of projectVista(position)) {
-						if (cell.isWall) continue;
-						projected.add(`${cell.position.row},${cell.position.col}`);
+					const expected = new Set<string>();
+					for (let r = 0; r < 5; r++) {
+						for (let c = 0; c < 5; c++) {
+							const dx = c - col;
+							const dy = r - row;
+							if (dx * dx + dy * dy <= RADIUS_SQUARED) {
+								expected.add(`${r},${c}`);
+							}
+						}
 					}
 
 					expect(sorted(vistaMaskForPosition(position))).toEqual(
-						sorted(projected),
+						sorted(expected),
 					);
 				}
 			}
