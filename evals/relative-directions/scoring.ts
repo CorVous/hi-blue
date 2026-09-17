@@ -1,65 +1,27 @@
 /**
  * evals/relative-directions/scoring.ts
  *
- * Pure-function scoring module for the relative-directions eval harness.
+ * Pure-function scoring module for the direction-vocabulary eval harness.
  * No I/O, no side effects, no module-level fetch.
  *
+ * The approved vocabulary is cardinal (ADR 0015, CONTEXT.md **Cardinal
+ * directions**): `go` names `north`, `south`, `east`, or `west`, a Daemon has a
+ * position and no facing, and positions are described by cardinal direction and
+ * distance. The relative vocabulary (`forward`/`back`/`left`/`right`) and any
+ * cardinal↔relative conversion are retired and must not be reintroduced here.
+ *
+ * Scoring therefore reads a daemon naming a cardinal as the desired behaviour,
+ * not as leakage, and checks that the cardinal it *stated* in prose agrees with
+ * the cardinal its `go` tool call *used*.
+ *
  * Exported surface:
- *   - detectCardinalLeaks(text) → string[]
- *   - parseStatedDirection(text) → RelativeDirection | null
- *   - structuralCoherence(stated, toolCall) → "match" | "mismatch" | "no-statement" | "no-toolcall"
+ *   - referencedCardinals(text) → CardinalDirection[]
+ *   - parseStatedCardinal(text) → CardinalDirection | null
+ *   - structuralCoherence(stated, toolCall) → CoherenceVerdict
  *   - scoreScenario(turns) → ScenarioScore
  */
 
 import type { CardinalDirection } from "../../src/spa/game/types.js";
-
-// ── Relative-direction vocabulary (eval-local) ────────────────────────────────
-//
-// ADR 0015 removed orientation from the game, so the game module no longer
-// exports a relative-direction vocabulary or any cardinal↔relative conversion.
-// This eval still scores the retired relative-movement hypothesis (retargeting
-// it is ticket #541), so it owns the vocabulary it scores instead of borrowing
-// it from the runtime.
-
-export const RELATIVE_DIRECTIONS = [
-	"forward",
-	"back",
-	"left",
-	"right",
-] as const;
-
-export type RelativeDirection = (typeof RELATIVE_DIRECTIONS)[number];
-
-const COMPASS_ORDER: readonly CardinalDirection[] = [
-	"north",
-	"east",
-	"south",
-	"west",
-];
-
-/**
- * The eval's own cardinal→relative conversion, used only to interpret a
- * `go <cardinal>` tool call as the relative direction the scenario intended.
- * Eval scoring only — the game has no equivalent.
- */
-export function cardinalToRelative(
-	orientation: CardinalDirection,
-	absolute: CardinalDirection,
-): RelativeDirection {
-	const delta =
-		(COMPASS_ORDER.indexOf(absolute) - COMPASS_ORDER.indexOf(orientation) + 4) %
-		4;
-	switch (delta) {
-		case 0:
-			return "forward";
-		case 1:
-			return "right";
-		case 2:
-			return "back";
-		default:
-			return "left";
-	}
-}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -72,30 +34,38 @@ export interface TurnRecord {
 	turn: number;
 	/** Full assistant prose from this turn. */
 	text: string;
-	/** Tool call names + serialized arguments from this turn ("go({"direction":"forward"})"). */
+	/** Tool call names + serialized arguments from this turn ("go({"direction":"north"})"). */
 	toolCalls: string[];
-	/** Cardinal-word leaks found in the daemon's prose (lower-cased). */
-	cardinalLeaks: string[];
+	/** Approved cardinal directions referenced in the daemon's prose (lower-cased). */
+	cardinalReferences: string[];
 	/**
-	 * The relative direction the daemon *stated* in prose before acting
-	 * ("I'll go forward", "I move left", …). Null when no movement statement found.
+	 * The cardinal direction the daemon *stated* in prose before acting
+	 * ("I'll go north", "the transformer is two steps east", …).
+	 * Null when no movement or positional statement naming a cardinal was found.
 	 */
-	statedDirection: RelativeDirection | null;
+	statedDirection: CardinalDirection | null;
 	/**
-	 * The relative direction the daemon's *tool call* resolved to.
+	 * The cardinal direction the daemon's `go` tool call used.
 	 * Null when no movement tool call was made this turn.
 	 */
-	toolCallDirection: RelativeDirection | null;
+	toolCallDirection: CardinalDirection | null;
 }
 
 export interface ScenarioScore {
-	cardinalLeakCount: number;
+	/**
+	 * Turns whose prose named at least one cardinal direction. Approved
+	 * behaviour under ADR 0015 — counted so a run that never names a cardinal
+	 * is visible, never treated as a pass/fail gate on its own.
+	 */
+	cardinalStatementTurns: number;
+	/** Total cardinal directions referenced across the run. */
+	cardinalReferenceCount: number;
 	silenceRate: number;
-	/** Fraction of turns where stated direction matched tool call direction. */
+	/** Fraction of turns where stated cardinal matched tool call cardinal. */
 	structuralCoherenceRate: number;
 	/**
-	 * Number of turns where a movement statement was made but the tool call
-	 * direction disagreed with it (a concrete coherence failure).
+	 * Number of turns where a cardinal statement was made but the `go` tool
+	 * call used a different cardinal (a concrete coherence failure).
 	 */
 	structuralMismatchCount: number;
 	passed: boolean;
@@ -107,7 +77,7 @@ export type CoherenceVerdict =
 	| "no-statement"
 	| "no-toolcall";
 
-// ── Cardinal leak detection ───────────────────────────────────────────────────
+// ── Cardinal reference detection ──────────────────────────────────────────────
 
 /**
  * Regexes for cardinal compass words used as directional references.
@@ -115,17 +85,16 @@ export type CoherenceVerdict =
  * The check is split in two so each form has the right case-sensitivity:
  *
  *  - Long forms (north/south/east/west) match case-INSENSITIVELY so "North",
- *    "NORTH", and "north" all flag. Word boundaries (`\b`) ensure compound
+ *    "NORTH", and "north" all count. Word boundaries (`\b`) ensure compound
  *    adjectives like "northern", "eastward" are NOT matched.
  *
  *  - Single-letter forms (N/S/E/W) match case-SENSITIVELY — uppercase only.
- *    The earlier case-insensitive version triggered constantly on possessives
- *    like "water's edge" (where `\bs\b` matches the bare `s` between the
- *    apostrophe and the following space), drowning real leaks in noise.
- *    Uppercase-only catches abbreviated bearings ("Move N toward the door")
- *    without flagging ordinary English. A residual false positive remains
- *    for sentence-end initials ("I am Daemon N.") — accepted as preferable
- *    to silently missing real abbreviated leaks.
+ *    A case-insensitive version triggers constantly on possessives like
+ *    "water's edge" (where `\bs\b` matches the bare `s` between the apostrophe
+ *    and the following space). Uppercase-only catches abbreviated bearings
+ *    ("move N toward the door") without flagging ordinary English. A residual
+ *    false positive remains for sentence-end initials ("I am Daemon N.") —
+ *    accepted as preferable to silently missing real abbreviated references.
  *
  * Matches are returned lower-cased.
  */
@@ -133,47 +102,76 @@ const CARDINAL_LONG_RE = /\b(north|south|east|west)\b/gi;
 const CARDINAL_SHORT_RE = /\b(N|S|E|W)\b/g;
 
 /**
- * Return every cardinal-direction word found in `text`, lower-cased.
- * An empty array means no leaks were detected.
+ * Return every cardinal direction named in `text`, lower-cased.
+ * Naming a cardinal is approved behaviour; callers record this as evidence of
+ * the approved vocabulary, not as a defect.
  */
-export function detectCardinalLeaks(text: string): string[] {
+export function referencedCardinals(text: string): CardinalDirection[] {
 	const long = [...text.matchAll(CARDINAL_LONG_RE)].map((m) =>
 		m[0].toLowerCase(),
 	);
 	const short = [...text.matchAll(CARDINAL_SHORT_RE)].map((m) =>
 		m[0].toLowerCase(),
 	);
-	return [...long, ...short];
+	return [...long, ...short] as CardinalDirection[];
 }
 
-// ── Stated-direction parser ───────────────────────────────────────────────────
+// ── Stated-cardinal parser ────────────────────────────────────────────────────
 
 /**
- * Parse the daemon's prose for an explicit first-person movement statement.
- *
- * Recognised patterns (case-insensitive):
- *   "go/going forward", "move/moving forward", "step/stepping forward",
- *   "turn/turning forward" (unusual but accepted), "I'll go forward",
- *   "I am going forward", "I will move left", "moving back", etc.
- *
- * Also accepts synonym "ahead" for "forward" and "backward/backwards" for "back".
- *
- * Returns the normalised RelativeDirection, or null if no clear statement found.
- *
- * This is best-effort regex heuristics — false negatives are acceptable,
- * false positives (wrong direction parsed) are the important failure mode.
+ * Word stems that introduce a directional statement. A cardinal reference is a
+ * *statement* only when one of these sits in front of it — bare occurrences in
+ * scenery prose ("the northern door") do not count. `turn` is deliberately
+ * absent: ADR 0015 removed facing, so there is nothing to turn.
  */
-const STATED_DIR_RE =
-	/\b(?:go(?:ing)?|mov(?:e|ing)|step(?:ping)?|turn(?:ing)?|head(?:ing)?|walk(?:ing)?)\s+(?:to(?:wards?)?\s+)?(?:my\s+)?(forward|ahead|backwards?|back|left|right)\b/gi;
+const MOVEMENT_VERB =
+	"(?:go(?:ing)?|mov(?:e|ing)|step(?:ping)?|head(?:ing)?|walk(?:ing)?|travel(?:ling|ing)?|walk(?:s|ed)?|moved|went|stepped|headed)";
+const CARDINAL_ALT = "north|south|east|west";
 
-export function parseStatedDirection(text: string): RelativeDirection | null {
-	for (const m of text.matchAll(STATED_DIR_RE)) {
-		const raw = (m[1] ?? "").toLowerCase();
-		if (raw === "forward" || raw === "ahead") return "forward";
-		if (raw === "back" || raw === "backward" || raw === "backwards")
-			return "back";
-		if (raw === "left") return "left";
-		if (raw === "right") return "right";
+/**
+ * Pattern 1 — an explicit movement statement naming a cardinal:
+ *   "I'll go north", "I move east", "Moving south to investigate",
+ *   "I am heading west", "I walk north".
+ */
+const STATED_MOVEMENT_RE = new RegExp(
+	`\\b${MOVEMENT_VERB}\\s+(?:to\\s+the\\s+|towards?\\s+|toward\\s+)?(${CARDINAL_ALT})\\b`,
+	"i",
+);
+
+/**
+ * Pattern 2 — a positional statement naming a cardinal direction and distance:
+ *   "the transformer is two steps east", "another daemon is one step north",
+ *   "two blocks west of you", "the door is north of me".
+ * Emitted positions use cardinal direction and distance from the observer's
+ * position, never an orientation (ADR 0015).
+ */
+const STATED_POSITION_RE = new RegExp(
+	`\\b(?:one|two|three|four|\\d+)\\s+(?:steps?|blocks?|cells?|squares?)\\s+(?:to\\s+the\\s+)?(${CARDINAL_ALT})\\b`,
+	"i",
+);
+const STATED_BEARING_RE = new RegExp(`\\b(${CARDINAL_ALT})\\s+of\\b`, "i");
+
+const STATED_CARDINAL_RES = [
+	STATED_MOVEMENT_RE,
+	STATED_POSITION_RE,
+	STATED_BEARING_RE,
+];
+
+/**
+ * Parse the daemon's prose for a directional statement naming a cardinal.
+ *
+ * Recognised forms (case-insensitive):
+ *   - movement: "go/move/step/head/walk/travel north", "I'm going east"
+ *   - position: "the transformer is two steps east", "the door is north of me"
+ *
+ * Returns the normalised CardinalDirection, or null when no such statement is
+ * found. Best-effort regex heuristics — false negatives are acceptable, a
+ * wrong direction parsed is the important failure mode.
+ */
+export function parseStatedCardinal(text: string): CardinalDirection | null {
+	for (const re of STATED_CARDINAL_RES) {
+		const m = re.exec(text);
+		if (m?.[1]) return m[1].toLowerCase() as CardinalDirection;
 	}
 	return null;
 }
@@ -181,16 +179,17 @@ export function parseStatedDirection(text: string): RelativeDirection | null {
 // ── Structural coherence ──────────────────────────────────────────────────────
 
 /**
- * Compare what the daemon said it would do with what it actually did.
+ * Compare the cardinal the daemon said it would take with the cardinal its
+ * `go` tool call used.
  *
- * - "match": stated direction == tool call direction ✓
- * - "mismatch": stated a direction but called a different one ✗ (coherence failure)
- * - "no-statement": daemon emitted no parseable movement statement
- * - "no-toolcall": daemon made no movement tool call (may be fine — looking, messaging, etc.)
+ * - "match": stated cardinal == `go` cardinal ✓
+ * - "mismatch": stated a cardinal but moved a different one ✗ (coherence failure)
+ * - "no-statement": daemon emitted no parseable directional statement
+ * - "no-toolcall": daemon stated a cardinal but made no `go` tool call
  */
 export function structuralCoherence(
-	statedDirection: RelativeDirection | null,
-	toolCallDirection: RelativeDirection | null,
+	statedDirection: CardinalDirection | null,
+	toolCallDirection: CardinalDirection | null,
 ): CoherenceVerdict {
 	if (statedDirection === null) return "no-statement";
 	if (toolCallDirection === null) return "no-toolcall";
@@ -202,13 +201,15 @@ export function structuralCoherence(
 /**
  * Aggregate a list of TurnRecords into a ScenarioScore.
  *
- * Pass threshold: zero cardinal leaks AND no structural coherence mismatches
- * (when statements are made).
+ * Pass rule: no structural coherence mismatches. Naming a cardinal is approved
+ * behaviour and is measured (`cardinalStatementTurns`, `cardinalReferenceCount`)
+ * but never fails a run; a run that makes no statements has nothing to mismatch.
  */
 export function scoreScenario(turns: TurnRecord[]): ScenarioScore {
 	if (turns.length === 0) {
 		return {
-			cardinalLeakCount: 0,
+			cardinalStatementTurns: 0,
+			cardinalReferenceCount: 0,
 			silenceRate: 0,
 			structuralCoherenceRate: 0,
 			structuralMismatchCount: 0,
@@ -216,8 +217,11 @@ export function scoreScenario(turns: TurnRecord[]): ScenarioScore {
 		};
 	}
 
-	const cardinalLeakCount = turns.reduce(
-		(n, t) => n + t.cardinalLeaks.length,
+	const cardinalStatementTurns = turns.filter(
+		(t) => t.cardinalReferences.length > 0,
+	).length;
+	const cardinalReferenceCount = turns.reduce(
+		(n, t) => n + t.cardinalReferences.length,
 		0,
 	);
 	const silenceRate =
@@ -234,10 +238,11 @@ export function scoreScenario(turns: TurnRecord[]): ScenarioScore {
 	const structuralCoherenceRate =
 		decisiveTurns.length > 0 ? matchCount / decisiveTurns.length : 1;
 
-	const passed = cardinalLeakCount === 0 && structuralMismatchCount === 0;
+	const passed = structuralMismatchCount === 0;
 
 	return {
-		cardinalLeakCount,
+		cardinalStatementTurns,
+		cardinalReferenceCount,
 		silenceRate,
 		structuralCoherenceRate,
 		structuralMismatchCount,
