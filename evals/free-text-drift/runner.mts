@@ -136,11 +136,14 @@ const PERSONAS: Record<string, AiPersona> = {
  *   row 3:   .          .             .           pillar       .
  *   row 4:  sim1        .             .             .         sim2
  *
- * Red's initial cone (own cell + 1 forward + 3 two-ahead) sees: flashlight,
- * clipboard, wall_mount, panel. The pillar sits behind/right and only enters
- * cone after a turn, giving look/go a reason to fire. The peers are out of
- * front-arc range so give isn't immediately valid — kept that way to avoid
- * inflating give counts from cheap stimulus.
+ * Inside red's 13-cell Vista (own cell + the eight neighbours + the four
+ * distance-2 cardinals) are flashlight, wall_mount and pillar; the pillar
+ * stands there from the start, so there is an interesting entity in view
+ * from round 1 and `go` has somewhere to spend itself. clipboard and panel
+ * fall outside the 13-cell disk, so they stay known only by rumour, and the
+ * peers are outside the Vista entirely. No daemon starts within interaction
+ * range of another — kept that way to avoid inflating message counts from
+ * cheap stimulus.
  */
 function makePack(): ContentPack {
 	return {
