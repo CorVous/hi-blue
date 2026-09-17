@@ -119,6 +119,90 @@ describe("world-map", () => {
 		}
 	});
 
+	it("daemon glyph is direction-independent: same '@ ' however the Daemon moved", () => {
+		const contentPack = STATIC_CONTENT_PACKS[0];
+		if (!contentPack) throw new Error("Content pack missing");
+		const session = new GameSession(contentPack, STATIC_PERSONAS);
+		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
+		const state = session.getState();
+
+		renderWorldMap(containerEl, session);
+
+		// The static fixtures hand the engine their spatial records by
+		// reference, so moving Daemons here would leak into later tests that
+		// place entities on the same cells. Snapshot and restore afterwards.
+		const snapshot = Object.values(state.personaSpatial).map((spatial) => ({
+			spatial,
+			position: spatial.position,
+		}));
+
+		const glyphs = new Set<string>();
+		// Walk the Daemons to distinct cells along different cardinal axes, so
+		// any direction-dependent glyph (arrow, compass letter, movement trail)
+		// would have to differ between these markers.
+		const routes: Array<[string, { row: number; col: number }]> = [
+			["red", { row: 4, col: 0 }], // moved south
+			["green", { row: 0, col: 4 }], // moved east
+			["cyan", { row: 2, col: 2 }], // moved south-east
+		];
+		for (const [aiId, position] of routes) {
+			const spatial = state.personaSpatial[aiId];
+			if (!spatial) throw new Error(`Spatial state missing for ${aiId}`);
+			spatial.position = position;
+		}
+
+		updateWorldMap(containerEl, session);
+
+		for (const [aiId, position] of routes) {
+			const cell = containerEl.querySelector<HTMLElement>(
+				`.dev-map-cell[data-ai="${aiId}"]`,
+			);
+			expect(cell).toBeTruthy();
+			expect(cell?.getAttribute("data-cell")).toBe(
+				`${position.row},${position.col}`,
+			);
+
+			const glyph = cell?.querySelector(".dev-map-glyph")?.textContent;
+			expect(glyph).toBe("@ ");
+			glyphs.add(glyph ?? "");
+		}
+
+		// One glyph for every Daemon, regardless of the direction each moved.
+		expect([...glyphs]).toEqual(["@ "]);
+
+		for (const entry of snapshot) {
+			entry.spatial.position = entry.position;
+		}
+	});
+
+	it("daemon marker carries no direction arrow, letter, or last-movement marker", () => {
+		const contentPack = STATIC_CONTENT_PACKS[0];
+		if (!contentPack) throw new Error("Content pack missing");
+		const session = new GameSession(contentPack, STATIC_PERSONAS);
+		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
+
+		renderWorldMap(containerEl, session);
+
+		for (const cell of containerEl.querySelectorAll<HTMLElement>(
+			".dev-map-cell[data-ai]",
+		)) {
+			// The marker's entire observable surface: glyph text, tooltip text,
+			// and identity attributes. Any direction or movement marker would
+			// have to appear in one of these.
+			expect(cell.querySelector(".dev-map-glyph")?.textContent).toBe("@ ");
+			expect(cell.textContent).toMatch(/^@ \*[A-Za-z]+ — holds: .+$/);
+
+			// No compass arrows, no compass letters, no movement wording.
+			expect(cell.textContent).not.toMatch(/[<^>v↑↓←→↖↗↘↙]/);
+			expect(cell.getAttributeNames()).not.toContain("data-direction");
+			expect(cell.getAttributeNames()).not.toContain("data-facing");
+			expect(cell.querySelector('[data-field="direction"]')).toBeNull();
+			for (const attr of cell.getAttributeNames()) {
+				expect(attr).not.toMatch(/direction|facing|last-move/);
+			}
+		}
+	});
+
 	it("daemon tooltip format: *<name> — holds: <item> (<id>)", () => {
 		const contentPack = STATIC_CONTENT_PACKS[0];
 		if (!contentPack) throw new Error("Content pack missing");
