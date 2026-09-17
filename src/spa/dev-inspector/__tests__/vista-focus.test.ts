@@ -23,11 +23,16 @@ import {
 } from "../world-map";
 
 /**
- * Build the expected highlight for a position from the shared Vista geometry:
+ * Build the expected highlight for a position from the shared Vista table:
  * every Vista offset whose absolute cell is inside the 5×5 room, expressed in
- * visual coordinates (+1 for the wall ring). Derived from the Vista table
- * rather than a hand-rolled disk, so the assertion tracks the geometry the
- * runtime uses.
+ * room coordinates — the inspector grid is room-only, so room (r,c) is also
+ * display cell "r,c".
+ *
+ * The oracle here is the runtime's own `VISTA_OFFSETS`, so this tracks the
+ * geometry the game uses but cannot detect a wrong table: `vista-mask.ts`
+ * consumes the same table. The brute-force `dx² + dy² ≤ 4` assertion in the
+ * suite is the guard for the table's contents; the two are complementary, not
+ * interchangeable.
  */
 function expectedVistaMask(position: GridPosition): Set<string> {
 	const expected = new Set<string>();
@@ -37,12 +42,12 @@ function expectedVistaMask(position: GridPosition): Set<string> {
 			col: position.col + offset.dx,
 		};
 		if (!inBounds(cell)) continue;
-		expected.add(`${cell.row + 1},${cell.col + 1}`);
+		expected.add(`${cell.row},${cell.col}`);
 	}
 	return expected;
 }
 
-/** Collect the visual cells currently highlighted for a Daemon. */
+/** Collect the display cells currently highlighted for a Daemon. */
 function highlightedCells(containerEl: HTMLElement, aiId: string): Set<string> {
 	const highlighted = new Set<string>();
 	for (const cell of containerEl.querySelectorAll<HTMLElement>(
@@ -53,6 +58,38 @@ function highlightedCells(containerEl: HTMLElement, aiId: string): Set<string> {
 		if (dataCell) highlighted.add(dataCell);
 	}
 	return highlighted;
+}
+
+/** Every focus-vista button with `data-focus-active="true"`, by panel ai id. */
+function activeFocusButtons(): string[] {
+	const active: string[] = [];
+	for (const btn of document.querySelectorAll<HTMLElement>(
+		'[data-field="focus-vista"]',
+	)) {
+		if (btn.getAttribute("data-focus-active") !== "true") continue;
+		const panel = btn.closest<HTMLElement>(".ai-panel");
+		active.push(panel?.getAttribute("data-ai") ?? "(unknown)");
+	}
+	return active;
+}
+
+/** Every cell still carrying a `data-vista-focus` attribute, by display cell. */
+function focusedCellIds(containerEl: HTMLElement): string[] {
+	return [...containerEl.querySelectorAll<HTMLElement>(".dev-map-cell")]
+		.filter((cell) => cell.hasAttribute("data-vista-focus"))
+		.map((cell) => cell.getAttribute("data-cell") ?? "(none)");
+}
+
+/**
+ * Normalise a CSS colour for comparison. jsdom rewrites hex colours to
+ * `rgb(r, g, b)` when they are assigned to `style`, so comparing the raw
+ * persona hex against `style.color` would compare two encodings of the same
+ * colour. Both sides go through a live element so they normalise identically.
+ */
+function normaliseColor(color: string | undefined): string {
+	const probe = document.createElement("span");
+	probe.style.color = color ?? "";
+	return probe.style.color;
 }
 
 function sorted(values: Set<string>): string[] {
@@ -131,42 +168,73 @@ describe("vista-focus", () => {
 			}
 		});
 
+		it("mask equals the ADR's dx² + dy² ≤ 4 disk clipped to the room, for all 25 positions", () => {
+			// The anti-approximation guard. The oracle is the ADR 0015 predicate
+			// written out by brute force over the room — deliberately NOT
+			// `projectVista` filtered by `isWall`, because that is the
+			// implementation's own loop (`vista-mask.ts`): comparing the two
+			// would assert the code equals itself, and a wrong disk would
+			// change both sides identically and pass.
+			const RADIUS_SQUARED = 4;
+			for (let row = 0; row < 5; row++) {
+				for (let col = 0; col < 5; col++) {
+					const position: GridPosition = { row, col };
+					const expected = new Set<string>();
+					for (let r = 0; r < 5; r++) {
+						for (let c = 0; c < 5; c++) {
+							const dx = c - col;
+							const dy = r - row;
+							if (dx * dx + dy * dy <= RADIUS_SQUARED) {
+								expected.add(`${r},${c}`);
+							}
+						}
+					}
+
+					expect(sorted(vistaMaskForPosition(position))).toEqual(
+						sorted(expected),
+					);
+				}
+			}
+		});
+
 		it("a centred Daemon highlights all 13 Vista cells at radius 2", () => {
 			const mask = vistaMaskForPosition({ row: 2, col: 2 });
 
 			// Centre of the room: the whole disk is in bounds, own cell included.
 			expect(mask.size).toBe(13);
-			expect(mask.has("3,3")).toBe(true);
+			expect(mask.has("2,2")).toBe(true);
 			// Two cardinal steps away, all four in bounds.
-			for (const cell of ["1,3", "5,3", "3,1", "3,5"]) {
+			for (const cell of ["0,2", "4,2", "2,0", "2,4"]) {
 				expect(mask.has(cell)).toBe(true);
 			}
 			// The four adjacent diagonals.
-			for (const cell of ["2,2", "2,4", "4,2", "4,4"]) {
+			for (const cell of ["1,1", "1,3", "3,1", "3,3"]) {
 				expect(mask.has(cell)).toBe(true);
 			}
-			// Offsets like (2,1) are not in the disk: visual "2,5" is (row 1, col 4).
-			expect(mask.has("2,5")).toBe(false);
-			expect(mask.has("4,5")).toBe(false);
+			// Offsets like (2,1) are not in the disk: that cell is (row 0, col 3).
+			expect(mask.has("0,3")).toBe(false);
+			expect(mask.has("4,3")).toBe(false);
 		});
 
 		it("mask omits OOB walls — corner daemon keeps only its in-bounds cells", () => {
 			const mask = vistaMaskForPosition({ row: 0, col: 0 });
 
 			expect(mask).toEqual(expectedVistaMask({ row: 0, col: 0 }));
-			expect(mask.has("1,1")).toBe(true);
+			expect(mask.has("0,0")).toBe(true);
 			// Corner room: own cell, two cells east, two cells south, and the
 			// two adjacent diagonals — 6 Vista cells in bounds, the rest Walls.
+			// Those out-of-bounds cells have no display cell at all now that the
+			// grid is room-only, so the mask simply omits them.
 			expect(mask.size).toBe(6);
 
 			for (const cellStr of mask) {
 				const [rowStr, colStr] = cellStr.split(",");
 				const row = Number(rowStr);
 				const col = Number(colStr);
-				expect(row).toBeGreaterThanOrEqual(1);
-				expect(row).toBeLessThanOrEqual(5);
-				expect(col).toBeGreaterThanOrEqual(1);
-				expect(col).toBeLessThanOrEqual(5);
+				expect(row).toBeGreaterThanOrEqual(0);
+				expect(row).toBeLessThanOrEqual(4);
+				expect(col).toBeGreaterThanOrEqual(0);
+				expect(col).toBeLessThanOrEqual(4);
 			}
 		});
 
@@ -279,7 +347,7 @@ describe("vista-focus", () => {
 			}
 		});
 
-		it("highlight preserves the Daemon's identity marker", () => {
+		it("highlight preserves the identity marker", () => {
 			const containerEl = document.getElementById(
 				"dev-world-map",
 			) as HTMLElement;
@@ -300,6 +368,99 @@ describe("vista-focus", () => {
 			expect(redCell.querySelector(".dev-map-tooltip")?.textContent).toMatch(
 				/^\*Ember — holds: nothing$/,
 			);
+
+			// The tint lands on backgroundColor; the identity colour lives on
+			// color. They are distinct CSS properties, so the tint must not
+			// clobber the marker's persona colour.
+			expect(redCell.style.color).toBe(
+				normaliseColor(session.getState().personas.red?.color),
+			);
+			expect(redCell.style.backgroundColor).toBeTruthy();
+		});
+
+		it("a Daemon inside the focused Vista keeps its own marker, colour and tooltip", () => {
+			const containerEl = document.getElementById(
+				"dev-world-map",
+			) as HTMLElement;
+			renderWorldMap(containerEl, session);
+
+			// The static fixtures start red (0,0), green (0,1), cyan (0,2):
+			// green and cyan both stand inside red's Vista, so focusing red
+			// tints their cells without erasing their identity.
+			const state = session.getState();
+			const redSpatial = state.personaSpatial.red;
+			if (!redSpatial) throw new Error("Red spatial state missing");
+			const redMask = expectedVistaMask(redSpatial.position);
+
+			setMapFocus("red");
+
+			for (const aiId of ["green", "cyan"]) {
+				const neighbour = containerEl.querySelector<HTMLElement>(
+					`.dev-map-cell[data-ai="${aiId}"]`,
+				);
+				expect(neighbour).toBeTruthy();
+				if (!neighbour) continue;
+
+				// The neighbour really is inside the focused Vista.
+				const dataCell = neighbour.getAttribute("data-cell");
+				expect(dataCell).toBeTruthy();
+				if (dataCell) expect(redMask.has(dataCell)).toBe(true);
+
+				// Tinted by the focus...
+				expect(neighbour.getAttribute("data-vista-focus")).toBe("red");
+				expect(neighbour.style.backgroundColor).toBeTruthy();
+
+				// ...while keeping its own identity colour, glyph, tooltip and
+				// data-ai. The persona colour must be the neighbour's, not
+				// red's tint owner.
+				const persona = state.personas[aiId];
+				expect(neighbour.style.color).toBe(normaliseColor(persona?.color));
+				expect(neighbour.style.color).not.toBe(
+					normaliseColor(state.personas.red?.color),
+				);
+				expect(neighbour.getAttribute("data-ai")).toBe(aiId);
+				expect(neighbour.querySelector(".dev-map-glyph")?.textContent).toBe(
+					"@ ",
+				);
+				expect(neighbour.querySelector(".dev-map-tooltip")?.textContent).toBe(
+					`*${persona?.name} — holds: nothing`,
+				);
+			}
+		});
+
+		it("clearing focus restores clean cells while identity markers stay intact", () => {
+			const containerEl = document.getElementById(
+				"dev-world-map",
+			) as HTMLElement;
+			renderWorldMap(containerEl, session);
+
+			const state = session.getState();
+
+			setMapFocus("red");
+			expect(focusedCellIds(containerEl).length).toBeGreaterThan(0);
+
+			setMapFocus(null);
+
+			// No cell is left tinted or flagged...
+			expect(focusedCellIds(containerEl)).toEqual([]);
+			for (const cell of containerEl.querySelectorAll<HTMLElement>(
+				".dev-map-cell",
+			)) {
+				expect(cell.style.backgroundColor).toBe("");
+				expect(cell.getAttribute("data-vista-focus")).toBeNull();
+			}
+
+			// ...and every Daemon still carries its identity and colour.
+			for (const aiId of ["red", "green", "cyan"]) {
+				const cell = containerEl.querySelector<HTMLElement>(
+					`.dev-map-cell[data-ai="${aiId}"]`,
+				);
+				expect(cell).toBeTruthy();
+				expect(cell?.style.color).toBe(
+					normaliseColor(state.personas[aiId]?.color),
+				);
+				expect(cell?.querySelector(".dev-map-glyph")?.textContent).toBe("@ ");
+			}
 		});
 
 		it("updateWorldMap follows the focused Daemon as it moves", () => {
@@ -331,8 +492,39 @@ describe("vista-focus", () => {
 				sorted(expectedVistaMask({ row: 2, col: 2 })),
 			);
 			expect(after.size).toBe(13);
-			expect(after.has("3,3")).toBe(true);
-			expect(after.has("1,1")).toBe(false);
+			expect(after.has("2,2")).toBe(true);
+			expect(after.has("0,0")).toBe(false);
+
+			// Observable DOM: the marker itself relocated, so the identity cell
+			// and the tint owner moved together rather than the tint being
+			// left behind on the old cell.
+			const movedCell =
+				containerEl.querySelector<HTMLElement>('[data-ai="red"]');
+			expect(movedCell?.getAttribute("data-cell")).toBe("2,2");
+			expect(movedCell?.getAttribute("data-vista-focus")).toBe("red");
+			expect(movedCell?.querySelector(".dev-map-glyph")?.textContent).toBe(
+				"@ ",
+			);
+			expect(movedCell?.style.color).toBe(
+				normaliseColor(state.personas.red?.color),
+			);
+
+			// The vacated corner keeps no tint residue.
+			const vacated = containerEl.querySelector<HTMLElement>(
+				'.dev-map-cell[data-cell="0,0"]',
+			);
+			expect(vacated?.hasAttribute("data-vista-focus")).toBe(false);
+			expect(vacated?.style.backgroundColor).toBe("");
+			expect(vacated?.hasAttribute("data-ai")).toBe(false);
+
+			// Focus survived the move rather than being dropped mid-update:
+			// every cell still names exactly one owner, red.
+			for (const cell of containerEl.querySelectorAll<HTMLElement>(
+				".dev-map-cell[data-vista-focus]",
+			)) {
+				expect(cell.getAttribute("data-vista-focus")).toBe("red");
+			}
+			expect(focusedCellIds(containerEl).length).toBe(13);
 		});
 
 		it("updateWorldMap re-applies active tint after mutation", () => {
@@ -412,6 +604,95 @@ describe("vista-focus", () => {
 			expect(getMapFocus()).toBeNull();
 		});
 
+		it("switching between two Daemons leaves exactly one button active and one tint owner", () => {
+			const root = document.body;
+			const containerEl = document.getElementById(
+				"dev-world-map",
+			) as HTMLElement;
+			renderInspector(root, { session });
+			renderWorldMap(containerEl, session);
+
+			const btnFor = (aiId: string): HTMLButtonElement => {
+				const btn = document
+					.querySelector(`.ai-panel[data-ai="${aiId}"]`)
+					?.querySelector('[data-field="focus-vista"]');
+				expect(btn).toBeTruthy();
+				return btn as HTMLButtonElement;
+			};
+
+			btnFor("red").click();
+
+			// Observable DOM, not the module accessor: exactly one button is
+			// active, and every tinted cell names red as the focus owner.
+			expect(activeFocusButtons()).toEqual(["red"]);
+			expect(focusedCellIds(containerEl).length).toBeGreaterThan(0);
+			for (const cell of containerEl.querySelectorAll<HTMLElement>(
+				".dev-map-cell[data-vista-focus]",
+			)) {
+				expect(cell.getAttribute("data-vista-focus")).toBe("red");
+			}
+
+			btnFor("green").click();
+
+			// Red must be fully released, not merely outnumbered: exactly one
+			// active button, and no cell left naming red.
+			expect(activeFocusButtons()).toEqual(["green"]);
+			for (const cell of containerEl.querySelectorAll<HTMLElement>(
+				".dev-map-cell",
+			)) {
+				expect(cell.getAttribute("data-vista-focus")).not.toBe("red");
+			}
+			expect(highlightedCells(containerEl, "red").size).toBe(0);
+			expect(highlightedCells(containerEl, "green").size).toBeGreaterThan(0);
+
+			// Focus moved rather than accumulating: green's tint is the only
+			// tint present, so the tinted cells are exactly green's mask.
+			const greenSpatial = session.getState().personaSpatial.green;
+			if (!greenSpatial) throw new Error("Green spatial state missing");
+			expect(sorted(highlightedCells(containerEl, "green"))).toEqual(
+				sorted(expectedVistaMask(greenSpatial.position)),
+			);
+
+			// Return to red and back again: still exactly one active button.
+			btnFor("red").click();
+			expect(activeFocusButtons()).toEqual(["red"]);
+			expect(highlightedCells(containerEl, "green").size).toBe(0);
+		});
+
+		it("repeat click clears tint, focus attributes and every button", () => {
+			const root = document.body;
+			const containerEl = document.getElementById(
+				"dev-world-map",
+			) as HTMLElement;
+			renderInspector(root, { session });
+			renderWorldMap(containerEl, session);
+
+			const redBtn = document
+				.querySelector('.ai-panel[data-ai="red"]')
+				?.querySelector('[data-field="focus-vista"]') as HTMLButtonElement;
+			expect(redBtn).toBeTruthy();
+
+			redBtn.click();
+			expect(focusedCellIds(containerEl).length).toBeGreaterThan(0);
+			expect(activeFocusButtons()).toEqual(["red"]);
+
+			// Second click on the already-focused control clears everything.
+			redBtn.click();
+
+			expect(focusedCellIds(containerEl)).toEqual([]);
+			expect(activeFocusButtons()).toEqual([]);
+			for (const btn of document.querySelectorAll<HTMLElement>(
+				'[data-field="focus-vista"]',
+			)) {
+				expect(btn.getAttribute("data-focus-active")).toBe("false");
+			}
+			for (const cell of containerEl.querySelectorAll<HTMLElement>(
+				".dev-map-cell",
+			)) {
+				expect(cell.style.backgroundColor).toBe("");
+			}
+		});
+
 		it("clicking another Daemon's control switches focus", () => {
 			const root = document.body;
 			const containerEl = document.getElementById(
@@ -474,6 +755,39 @@ describe("vista-focus", () => {
 	});
 
 	describe("Escape key handling", () => {
+		it("Escape clears tint, focus attributes and every button", () => {
+			const root = document.body;
+			const containerEl = document.getElementById(
+				"dev-world-map",
+			) as HTMLElement;
+			renderInspector(root, { session });
+			renderWorldMap(containerEl, session);
+
+			setMapFocus("red");
+			expect(focusedCellIds(containerEl).length).toBeGreaterThan(0);
+			expect(activeFocusButtons()).toEqual(["red"]);
+
+			document.dispatchEvent(
+				new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+			);
+
+			// Zero tinted cells, no data-vista-focus attributes, all buttons
+			// false — asserted on the DOM, not on the module accessor.
+			expect(containerEl.querySelectorAll("[data-vista-focus]").length).toBe(0);
+			expect(focusedCellIds(containerEl)).toEqual([]);
+			expect(activeFocusButtons()).toEqual([]);
+			for (const btn of document.querySelectorAll<HTMLElement>(
+				'[data-field="focus-vista"]',
+			)) {
+				expect(btn.getAttribute("data-focus-active")).toBe("false");
+			}
+			for (const cell of containerEl.querySelectorAll<HTMLElement>(
+				".dev-map-cell",
+			)) {
+				expect(cell.style.backgroundColor).toBe("");
+			}
+		});
+
 		it("Escape clears active focus", () => {
 			const root = document.body;
 			renderInspector(root, { session });

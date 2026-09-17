@@ -1,7 +1,9 @@
 /**
  * world-map.ts
  *
- * Renders a 5×5 ASCII grid inspector with 7×7 visual layout (wall ring + 25 inner cells).
+ * Renders the 5×5 room as an ASCII grid inspector: room-only, with no wall
+ * ring and no out-of-bounds cells. Display clipping only — Daemon perception
+ * still includes the Walls beyond the room.
  * Displays daemon positions, held items, obstacles, objectives, and interesting objects.
  *
  * Two-function API:
@@ -30,8 +32,8 @@ import { vistaMaskForDaemon } from "./vista-mask.js";
 let mapFocus: AiId | null = null;
 let activeSession: GameSession | null = null;
 
-const VISUAL_ROWS = 7;
-const VISUAL_COLS = 7;
+const ROOM_ROWS = 5;
+const ROOM_COLS = 5;
 
 /**
  * The identity marker drawn on a Daemon's cell. Position-only: colour,
@@ -153,32 +155,13 @@ interface CellInfo {
 	satisfaction?: string;
 }
 
-function computeCellInfo(visualPos: GridPosition, state: GameState): CellInfo {
-	// Wall cells (outer ring)
-	if (
-		visualPos.row === 0 ||
-		visualPos.row === VISUAL_ROWS - 1 ||
-		visualPos.col === 0 ||
-		visualPos.col === VISUAL_COLS - 1
-	) {
-		return {
-			glyph: "##",
-			tooltip: "wall (out of bounds)",
-			kind: "wall",
-		};
-	}
-
-	const innerPos: GridPosition = {
-		row: visualPos.row - 1,
-		col: visualPos.col - 1,
-	};
-
+function computeCellInfo(roomPos: GridPosition, state: GameState): CellInfo {
 	// Check for daemon at this position
 	for (const [aiId, spatial] of Object.entries(state.personaSpatial)) {
 		if (
 			spatial &&
-			spatial.position.row === innerPos.row &&
-			spatial.position.col === innerPos.col
+			spatial.position.row === roomPos.row &&
+			spatial.position.col === roomPos.col
 		) {
 			const persona = state.personas[aiId];
 			if (!persona) continue; // Skip if persona is missing
@@ -200,7 +183,7 @@ function computeCellInfo(visualPos: GridPosition, state: GameState): CellInfo {
 	// Collect all entities at this position (not held by an AI)
 	const entitiesAtPos = state.world.entities.filter((e) => {
 		if (!isGridPosition(e.holder)) return false;
-		return e.holder.row === innerPos.row && e.holder.col === innerPos.col;
+		return e.holder.row === roomPos.row && e.holder.col === roomPos.col;
 	});
 
 	// Check for obstacle
@@ -282,14 +265,14 @@ function computeCellInfo(visualPos: GridPosition, state: GameState): CellInfo {
 	// Floor
 	return {
 		glyph: ". ",
-		tooltip: `floor (${innerPos.row},${innerPos.col})`,
+		tooltip: `floor (${roomPos.row},${roomPos.col})`,
 		kind: "floor",
 	};
 }
 
 /**
  * Render the full world map DOM structure.
- * Builds a 7×7 grid of cells with nested glyph and tooltip spans.
+ * Builds a 5×5 room-only grid of cells with nested glyph and tooltip spans.
  */
 export function renderWorldMap(
 	containerEl: HTMLElement,
@@ -303,13 +286,13 @@ export function renderWorldMap(
 
 	const grid = doc.createElement("div");
 	grid.className = "dev-map-grid";
-	grid.setAttribute("data-rows", String(VISUAL_ROWS));
-	grid.setAttribute("data-cols", String(VISUAL_COLS));
+	grid.setAttribute("data-rows", String(ROOM_ROWS));
+	grid.setAttribute("data-cols", String(ROOM_COLS));
 
-	for (let row = 0; row < VISUAL_ROWS; row++) {
-		for (let col = 0; col < VISUAL_COLS; col++) {
-			const visualPos: GridPosition = { row, col };
-			const cellInfo = computeCellInfo(visualPos, state);
+	for (let row = 0; row < ROOM_ROWS; row++) {
+		for (let col = 0; col < ROOM_COLS; col++) {
+			const roomPos: GridPosition = { row, col };
+			const cellInfo = computeCellInfo(roomPos, state);
 
 			const cell = doc.createElement("span");
 			cell.className = "dev-map-cell";
@@ -375,8 +358,8 @@ export function updateWorldMap(
 
 		if (Number.isNaN(row) || Number.isNaN(col)) return;
 
-		const visualPos: GridPosition = { row, col };
-		const cellInfo = computeCellInfo(visualPos, state);
+		const roomPos: GridPosition = { row, col };
+		const cellInfo = computeCellInfo(roomPos, state);
 
 		// Update glyph and tooltip
 		const glyphSpan = cell.querySelector(".dev-map-glyph");

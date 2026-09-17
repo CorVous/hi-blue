@@ -1780,7 +1780,7 @@ main {
 
 .dev-map-grid {
 	display: grid;
-	grid-template-columns: repeat(7, 1ch);
+	grid-template-columns: repeat(5, 1ch);
 	column-gap: 1ch;
 	row-gap: 0;
 	font-family: var(--mono);
