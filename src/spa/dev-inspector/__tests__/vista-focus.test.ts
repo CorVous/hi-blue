@@ -12,7 +12,11 @@ import { STATIC_PERSONAS } from "../../__tests__/fixtures/static-personas";
 import { inBounds } from "../../game/direction";
 import { GameSession } from "../../game/game-session";
 import type { GridPosition, PersonaSpatialState } from "../../game/types";
-import { inVista, VISTA_OFFSETS } from "../../game/vista-projector";
+import {
+	inVista,
+	projectVista,
+	VISTA_OFFSETS,
+} from "../../game/vista-projector";
 import { __resetInspectorForTests, renderInspector } from "../index";
 import { vistaMaskForDaemon, vistaMaskForPosition } from "../vista-mask";
 import {
@@ -126,6 +130,27 @@ describe("vista-focus", () => {
 					const position: GridPosition = { row, col };
 					expect(sorted(vistaMaskForPosition(position))).toEqual(
 						sorted(expectedVistaMask(position)),
+					);
+				}
+			}
+		});
+
+		it("mask equals projectVista's non-wall cells for all 25 positions", () => {
+			// The anti-approximation guard: the inspector mask is bound to the
+			// shared projector itself, not to a re-derivation of the disk. Any
+			// future divergence between the inspector and the runtime geometry
+			// fails here instead of silently mis-tinting the dev map.
+			for (let row = 0; row < 5; row++) {
+				for (let col = 0; col < 5; col++) {
+					const position: GridPosition = { row, col };
+					const projected = new Set<string>();
+					for (const cell of projectVista(position)) {
+						if (cell.isWall) continue;
+						projected.add(`${cell.position.row},${cell.position.col}`);
+					}
+
+					expect(sorted(vistaMaskForPosition(position))).toEqual(
+						sorted(projected),
 					);
 				}
 			}
