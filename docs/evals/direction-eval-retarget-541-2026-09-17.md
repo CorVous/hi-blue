@@ -54,7 +54,7 @@ Deleting these would have destroyed provenance the ticket requires keeping:
   Daemon has a position but no orientation.
 - `evals/relative-directions/runner.mts:8-10` — states the directory and script
   name are retained "for history only".
-- `e2e/dev-inspector.spec.ts:302,305` — negative assertions requiring the
+- `e2e/dev-inspector.spec.ts:301-302,304-305` — negative assertions requiring the
   inspector marker carry *no* direction/facing/compass attribute. These enforce
   the retired model's absence and are correct as written.
 - `e2e/persistence-reload.spec.ts:469-470` — negative assertions that saved
@@ -89,11 +89,17 @@ retargeted coverage.
 `pnpm run smoke` is unstable on the current `main` independent of this branch.
 Two consecutive runs on a clean checkout at `e28e5f9` with no code change gave
 **4 failed / 58 passed** and then **62 passed / 0 failed**. All four failures
-were `e2e/sessions-picker.spec.ts` timing out waiting for `#begin` to become
-enabled — the dial-up/synthesis race the tip commit (`test(e2e): stop
-start-screen specs racing the dial-up animation (#556)`) was already addressing.
-That spec passes **12/12 in isolation**. Recorded here rather than hidden behind
-a retry.
+were in `e2e/sessions-picker.spec.ts`. The assertion that actually timed out was
+inside the **shared helper `goToGame`** at `e2e/helpers/stubs.ts:543`, which
+waits for `#begin` to become enabled; `sessions-picker`'s tests call it, but the
+spec itself contains no `#begin` gate of its own (it waits on `#sessions-screen`).
+Commit `e28e5f9` (`test(e2e): stop start-screen specs racing the dial-up
+animation (#556)`) had earlier addressed a related dial-up/synthesis race, but
+it touched **only `e2e/start-screen.spec.ts`** (+16/−7) — it did not cover the
+shared helper's `#begin` path. This spec passes **12/12 in isolation**. The
+precise root cause is not conclusively established; what is recorded here is a
+load-dependent race in the shared `goToGame` helper's `#begin` wait, surfacing
+under parallel load. Recorded rather than hidden behind a retry.
 
 ## Not proven
 
@@ -105,3 +111,47 @@ a retry.
 - `evals/` is matched by **no tsconfig**, so `pnpm typecheck` does not check any
   eval file. Filed as #557; this branch did not fix it. Eval edits were verified
   by executing the modules directly instead.
+
+## Acceptance A3 — pre-existing coverage only
+
+Acceptance bullet A3 ("Exercise an integrated deterministic flow…") is satisfied
+**entirely by pre-existing coverage on `main`**. This branch touched **no `e2e/`
+file** and added **no integration test**; every flow element A3 names was already
+covered before it. The ticket's role here is *verification of existing coverage*,
+not the creation of it, and this doc should not be read as claiming the branch
+produced final integration evidence.
+
+Two genuine coverage gaps in that pre-existing coverage, verified against the
+tree:
+
+- **Endgame paths asserted visible but never clicked.** `e2e/endgame-choices.spec.ts`
+  asserts the "Same Daemons New Room" and "Continue" buttons are *visible* but
+  never clicks them. `buildSameDaemonsSession` (`src/spa/game/bootstrap.ts:163`)
+  has **zero test references** — it is imported only by `src/spa/views/game.ts`
+  and `src/spa/views/sessions.ts`.
+- **No USB-export e2e.** No spec under `e2e/` references the USB export flow
+  (`e2e/endgame-choices.spec.ts`, `e2e/persistence-reload.spec.ts` and the rest
+  of `e2e/` contain no USB/export coverage).
+
+Both gaps are out of scope for #541 and are recorded here rather than deferred
+silently.
+
+## Intended squash subject
+
+The intended Conventional Commit subject for the squash-merge is:
+
+```
+fix(evals): retarget direction eval tooling onto the cardinal model
+```
+
+`fix`, not `refactor`: `docs/agents/commits.md` defines `refactor` as "no
+behaviour change" with no release bump, but this change is a genuine behaviour
+change — the drift eval's direction series was measuring nothing (a cardinal-only
+`go` validated against an eval-local relative set) and the free-text-action
+predicate genuinely flips (`looksLikeFreeTextAction("I turn left.")` goes
+`true` → `false`). That warrants a patch bump rather than vanishing from
+`CHANGELOG.md`.
+
+The subject above is also within the `docs/agents/commits.md:18` ≤72-character
+limit, satisfying the standard where it counts; two in-branch commits (`a75af01`
+at 88 chars, `1ee5f0c` at 74) exceed it, but squash discards them.

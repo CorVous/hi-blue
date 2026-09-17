@@ -34,8 +34,11 @@ const ACTOR: AiId = "red";
 const PEER_A: AiId = "sim1";
 const PEER_B: AiId = "sim2";
 
-/** Shared peer placements — kept off the actor's front arc so peers don't
- * accidentally trigger `give` opportunities the scenario isn't testing. */
+/** Shared peer placements — placed outside the actor's interaction range
+ * (the actor's own cell plus its eight adjacent cells), so peers don't
+ * accidentally create pickup or message opportunities the scenario isn't
+ * testing. Both peers sit at row 4 (col 0 and col 4), outside the actor's
+ * 13-cell Vista centred on the actor at row 2, col 2. */
 const AI_STARTS_BASE: ContentPack["aiStarts"] = {
 	[ACTOR]: { position: { row: 2, col: 2 } },
 	[PEER_A]: { position: { row: 4, col: 0 } },
@@ -50,7 +53,7 @@ const AI_STARTS_BASE: ContentPack["aiStarts"] = {
  * more (clipboard, panel) outside the 13-cell Vista entirely. No objective
  * is in reach. The conversational stimulus is open-ended — "what do you
  * see?" — so the daemon must choose between describing (message), exploring
- * (go/look), or investigating (pick_up).
+ * (go), or investigating (pick_up).
  */
 function makeExplorationPack(): ContentPack {
 	return {
@@ -222,7 +225,7 @@ export function getScenarios(): Scenario[] {
 		{
 			name: "objective",
 			description:
-				"Holding objective item, paired space directly ahead. Tests `use` emission.",
+				"Holding objective item, paired space one step north. Tests `use` emission.",
 			actor: ACTOR,
 			peers: [PEER_A, PEER_B],
 			pack: makeObjectivePack(),

@@ -173,8 +173,9 @@ interface PatchPlan {
  * degenerate (every Daemon too far from every neighbour of every actor), patch
  * engine.dat to reposition the witness so a direct witnessed event is possible.
  *
- * Strategy: place the witness 1 cell BEHIND the actor's starting position.
- * The actor's post-move cell is then exactly 2 cardinal steps away — inside the
+ * Strategy: place the witness one cell from the actor's starting position in
+ * the cardinal direction opposite the actor's step. The actor's post-move cell
+ * is then exactly 2 cardinal steps from the witness — inside the
  * witness's Vista under ADR 0015 (`2² + 0² = 4 ≤ 4`), and the Vista is
  * position-only.
  *
@@ -205,8 +206,8 @@ function findPatchPlan(
 			if (!inRoom(nextPos)) continue;
 			if (obstacles.some((o) => positionsEqual(o, nextPos))) continue;
 
-			// Try to place a witness 1 step behind the actor (opposite of direction).
-			// The actor starts at actorSpatial.position; 1 step back is:
+			// Try to place a witness one cell from the actor opposite the step direction:
+			// the actor starts at actorSpatial.position; that opposite cell is:
 			const backPos: GridPosition = {
 				row: actorSpatial.position.row - fwd.drow,
 				col: actorSpatial.position.col - fwd.dcol,
