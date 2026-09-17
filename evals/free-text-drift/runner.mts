@@ -232,14 +232,17 @@ function makePack(): ContentPack {
  */
 const INCOMING: Array<{ from: AiId | "blue"; content: string }> = [
 	{ from: "blue", content: "hey ember, you around?" },
-	{ from: "sim1", content: "what do you see in front of you?" },
+	{ from: "sim1", content: "what do you see where you are standing?" },
 	{
 		from: "blue",
 		content: "looks like there's a flashlight up ahead — can you grab it?",
 	},
 	{ from: "sim2", content: "what's it like in there right now?" },
-	{ from: "blue", content: "the panel on your right — worth a look?" },
-	{ from: "sim1", content: "step forward and tell us what you see." },
+	{ from: "blue", content: "the panel to your east — worth a look?" },
+	{
+		from: "sim1",
+		content: "go one step north and tell us what you see.",
+	},
 	{
 		from: "blue",
 		content: "got the flashlight? try turning it on, see if it works.",
@@ -252,9 +255,12 @@ const INCOMING: Array<{ from: AiId | "blue"; content: string }> = [
 	{ from: "sim1", content: "talk to me, what's going on?" },
 	{ from: "blue", content: "examine the clipboard — what does it say?" },
 	{ from: "sim2", content: "you hearing anything down there?" },
-	{ from: "blue", content: "look around — anything behind you?" },
+	{ from: "blue", content: "look around — anything north of you?" },
 	{ from: "sim1", content: "try the panel, see if anything happens." },
-	{ from: "blue", content: "head back to where you started and report." },
+	{
+		from: "blue",
+		content: "head three steps west and report what you find.",
+	},
 ];
 
 function pickIncoming(round: number): { from: AiId | "blue"; content: string } {
