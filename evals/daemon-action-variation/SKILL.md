@@ -24,8 +24,9 @@ Three scenarios target different parts of the action surface:
 
 1. **exploration** — empty-handed in a room of unknown items. Tests pick_up
    vs go balance and the temperament-driven shape.
-2. **objective** — holding the objective item with the paired space directly
-   in front. Tests `use` emission (critical-path tool).
+2. **objective** — holding the objective item with the paired space one step
+   north, in an adjacent cell within interaction range. Tests `use` emission
+   (critical-path tool).
 3. **social** — peer just messaged the daemon while items are also visible.
    Tests message+action parallel turns.
 

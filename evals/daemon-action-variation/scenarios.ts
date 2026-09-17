@@ -10,10 +10,11 @@
  * The three scenarios target the action-tool surface in different shapes:
  *
  *  1. EXPLORATION — daemon stands empty-handed in a room full of unknown
- *     items, no objective in their immediate cone. Tests examine vs go
- *     balance and the per-temperament action profile signal.
+ *     items, with one item in reach and no objective inside their Vista.
+ *     Tests examine vs go balance and the per-temperament action profile
+ *     signal.
  *  2. OBJECTIVE — daemon is holding the objective item with the paired
- *     space directly in front of them. Tests whether they reach for
+ *     space in an adjacent cell. Tests whether they reach for
  *     `use` (critical-path tool for objective completion).
  *  3. SOCIAL — peer just messaged the daemon, daemon has action options.
  *     Tests message+action parallel emission and recipient targeting.
@@ -33,8 +34,11 @@ const ACTOR: AiId = "red";
 const PEER_A: AiId = "sim1";
 const PEER_B: AiId = "sim2";
 
-/** Shared peer placements — kept off the actor's front arc so peers don't
- * accidentally trigger `give` opportunities the scenario isn't testing. */
+/** Shared peer placements — placed outside the actor's interaction range
+ * (the actor's own cell plus its eight adjacent cells), so peers don't
+ * accidentally create pickup or message opportunities the scenario isn't
+ * testing. Both peers sit at row 4 (col 0 and col 4), outside the actor's
+ * 13-cell Vista centred on the actor at row 2, col 2. */
 const AI_STARTS_BASE: ContentPack["aiStarts"] = {
 	[ACTOR]: { position: { row: 2, col: 2 } },
 	[PEER_A]: { position: { row: 4, col: 0 } },
@@ -44,11 +48,12 @@ const AI_STARTS_BASE: ContentPack["aiStarts"] = {
 // ── Scenario 1: EXPLORATION ──────────────────────────────────────────────────
 
 /**
- * Daemon stands empty-handed in the centre of a 5×5 grid, with three
- * unknown items inside the cone (clipboard, panel, switchbox). No
- * objective directly in front. The conversational stimulus is open-ended
- * — "what do you see?" — so the daemon must choose between describing
- * (message), exploring (go/look), or investigating (examine/pick_up).
+ * Daemon stands empty-handed in the centre of a 5×5 grid, with one unknown
+ * item (switchbox) inside both their Vista and interaction range, and two
+ * more (clipboard, panel) outside the 13-cell Vista entirely. No objective
+ * is in reach. The conversational stimulus is open-ended — "what do you
+ * see?" — so the daemon must choose between describing (message), exploring
+ * (go), or investigating (pick_up).
  */
 function makeExplorationPack(): ContentPack {
 	return {
@@ -95,10 +100,11 @@ function makeExplorationPack(): ContentPack {
 
 /**
  * Daemon is *already holding* the objective item (`flashlight`) and the
- * paired space (`wall_mount`) is in the cell directly in front of them.
- * A `use` call places the item on the mount and would complete the
- * objective. Tests whether the daemon reaches for the critical-path
- * tool even when the conversation doesn't demand it.
+ * paired space (`wall_mount`) is in an adjacent cell (row 1, col 2, one
+ * step north of the actor at row 2, col 2) — in reach. A `use` call places
+ * the item on the mount and would complete the objective. Tests whether the
+ * daemon reaches for the critical-path tool even when the conversation
+ * doesn't demand it.
  */
 function makeObjectivePack(): ContentPack {
 	return {
@@ -137,8 +143,10 @@ function makeObjectivePack(): ContentPack {
 // ── Scenario 3: SOCIAL ───────────────────────────────────────────────────────
 
 /**
- * Peer just messaged the daemon. Items are in the cone (so go/examine
- * are valid). Tests whether daemons emit a parallel message+action turn.
+ * Peer just messaged the daemon. The two items sit outside the actor's
+ * 13-cell Vista, so the scene poses a choice between replying and setting
+ * off toward something merely heard about. Tests whether daemons emit a
+ * parallel message+action turn.
  */
 function makeSocialPack(): ContentPack {
 	return {
@@ -201,7 +209,7 @@ export function getScenarios(): Scenario[] {
 		{
 			name: "exploration",
 			description:
-				"Empty-handed, three unknown items in cone. Tests pick_up vs go balance.",
+				"Empty-handed, one unknown item in reach. Tests pick_up vs go balance.",
 			actor: ACTOR,
 			peers: [PEER_A, PEER_B],
 			pack: makeExplorationPack(),
@@ -217,7 +225,7 @@ export function getScenarios(): Scenario[] {
 		{
 			name: "objective",
 			description:
-				"Holding objective item, paired space directly ahead. Tests `use` emission.",
+				"Holding objective item, paired space one step north. Tests `use` emission.",
 			actor: ACTOR,
 			peers: [PEER_A, PEER_B],
 			pack: makeObjectivePack(),
