@@ -10,7 +10,7 @@ describe("world-map", () => {
 		document.body.innerHTML = '<div id="dev-world-map"></div>';
 	});
 
-	it("renders a 7×7 grid (49 cells)", () => {
+	it("renders a room-only 5×5 grid (25 cells)", () => {
 		const contentPack = STATIC_CONTENT_PACKS[0];
 		if (!contentPack) throw new Error("Content pack missing");
 		const session = new GameSession(contentPack, STATIC_PERSONAS);
@@ -19,10 +19,14 @@ describe("world-map", () => {
 		renderWorldMap(containerEl, session);
 
 		const cells = containerEl.querySelectorAll(".dev-map-cell");
-		expect(cells.length).toBe(49);
+		expect(cells.length).toBe(25);
+
+		const grid = containerEl.querySelector(".dev-map-grid");
+		expect(grid?.getAttribute("data-rows")).toBe("5");
+		expect(grid?.getAttribute("data-cols")).toBe("5");
 	});
 
-	it("has exactly 24 wall cells (outer ring)", () => {
+	it("renders no wall cells and no out-of-bounds tooltip", () => {
 		const contentPack = STATIC_CONTENT_PACKS[0];
 		if (!contentPack) throw new Error("Content pack missing");
 		const session = new GameSession(contentPack, STATIC_PERSONAS);
@@ -30,30 +34,18 @@ describe("world-map", () => {
 
 		renderWorldMap(containerEl, session);
 
-		const wallCells = containerEl.querySelectorAll(
-			'.dev-map-cell[data-kind="wall"]',
-		);
-		expect(wallCells.length).toBe(24);
-	});
+		expect(
+			containerEl.querySelectorAll('.dev-map-cell[data-kind="wall"]').length,
+		).toBe(0);
 
-	it("wall cells display tooltip 'wall (out of bounds)'", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
-
-		renderWorldMap(containerEl, session);
-
-		const wallCells = containerEl.querySelectorAll(
-			'.dev-map-cell[data-kind="wall"]',
-		);
-		for (const cell of wallCells) {
-			const tooltip = cell.querySelector(".dev-map-tooltip");
-			expect(tooltip?.textContent).toBe("wall (out of bounds)");
+		const tooltips = [...containerEl.querySelectorAll(".dev-map-tooltip")];
+		expect(tooltips.length).toBe(25);
+		for (const tooltip of tooltips) {
+			expect(tooltip.textContent).not.toContain("wall (out of bounds)");
 		}
 	});
 
-	it("each inner cell has data-cell with r,c in [0..4]", () => {
+	it("every cell is a room cell: data-cell (r,c) is the room (r,c) in [0..4]", () => {
 		const contentPack = STATIC_CONTENT_PACKS[0];
 		if (!contentPack) throw new Error("Content pack missing");
 		const session = new GameSession(contentPack, STATIC_PERSONAS);
@@ -61,23 +53,21 @@ describe("world-map", () => {
 
 		renderWorldMap(containerEl, session);
 
-		const innerCells = containerEl.querySelectorAll(
-			'.dev-map-cell:not([data-kind="wall"])',
-		);
-		expect(innerCells.length).toBe(25);
-
-		for (const cell of innerCells) {
+		const seen = new Set<string>();
+		for (const cell of containerEl.querySelectorAll(".dev-map-cell")) {
 			const cellStr = cell.getAttribute("data-cell");
 			expect(cellStr).toBeTruthy();
 			if (!cellStr) continue;
 			const [rowStr, colStr] = cellStr.split(",");
 			const row = Number(rowStr);
 			const col = Number(colStr);
-			expect(row).toBeGreaterThanOrEqual(1);
-			expect(row).toBeLessThanOrEqual(5);
-			expect(col).toBeGreaterThanOrEqual(1);
-			expect(col).toBeLessThanOrEqual(5);
+			expect(row).toBeGreaterThanOrEqual(0);
+			expect(row).toBeLessThanOrEqual(4);
+			expect(col).toBeGreaterThanOrEqual(0);
+			expect(col).toBeLessThanOrEqual(4);
+			seen.add(cellStr);
 		}
+		expect(seen.size).toBe(25);
 	});
 
 	it("daemon cell renders the identity marker with persona color and data-ai", () => {
@@ -88,7 +78,7 @@ describe("world-map", () => {
 
 		renderWorldMap(containerEl, session);
 
-		// Red daemon starts at (0,0) = visual (1,1)
+		// Red daemon starts at (0,0) = cell "0,0"
 		const daemonCell = containerEl.querySelector(
 			'.dev-map-cell[data-ai="red"]',
 		);
@@ -432,7 +422,7 @@ describe("world-map", () => {
 		expect(firstCellAfter).toBe(firstCellIdentity);
 	});
 
-	it("updateWorldMap does not modify wall spans", () => {
+	it("updateWorldMap does not create or remove cells", () => {
 		const contentPack = STATIC_CONTENT_PACKS[0];
 		if (!contentPack) throw new Error("Content pack missing");
 		const session = new GameSession(contentPack, STATIC_PERSONAS);
@@ -440,26 +430,22 @@ describe("world-map", () => {
 
 		renderWorldMap(containerEl, session);
 
-		// Get wall cell contents before update
-		const wallCell = containerEl.querySelector(
-			'.dev-map-cell[data-kind="wall"]',
-		);
-		const wallGlyphBefore =
-			wallCell?.querySelector(".dev-map-glyph")?.textContent;
-		const wallTooltipBefore =
-			wallCell?.querySelector(".dev-map-tooltip")?.textContent;
+		const cellsBefore = [...containerEl.querySelectorAll(".dev-map-cell")];
 
-		// Update
 		updateWorldMap(containerEl, session);
 
-		// Wall cells should be unchanged
-		const wallGlyphAfter =
-			wallCell?.querySelector(".dev-map-glyph")?.textContent;
-		const wallTooltipAfter =
-			wallCell?.querySelector(".dev-map-tooltip")?.textContent;
-
-		expect(wallGlyphAfter).toBe(wallGlyphBefore);
-		expect(wallTooltipAfter).toBe(wallTooltipBefore);
+		const cellsAfter = [...containerEl.querySelectorAll(".dev-map-cell")];
+		expect(cellsAfter.length).toBe(25);
+		// Same nodes, same order, same coordinates: nothing re-created.
+		expect(cellsAfter).toEqual(cellsBefore);
+		for (const [index, cell] of cellsAfter.entries()) {
+			expect(cell.getAttribute("data-cell")).toBe(
+				cellsBefore[index]?.getAttribute("data-cell"),
+			);
+		}
+		expect(
+			containerEl.querySelectorAll('.dev-map-cell[data-kind="wall"]').length,
+		).toBe(0);
 	});
 
 	it("updateWorldMap reflects new daemon position after mutation", () => {
@@ -483,9 +469,9 @@ describe("world-map", () => {
 		// Update
 		updateWorldMap(containerEl, session);
 
-		// Visual position should be (3,3) = data-cell="3,3"
+		// Room position (2,2) is display cell "2,2" in the room-only grid
 		const redCellAfter = containerEl.querySelector(
-			'.dev-map-cell[data-cell="3,3"]',
+			'.dev-map-cell[data-cell="2,2"]',
 		);
 		expect(redCellAfter?.getAttribute("data-ai")).toBe("red");
 
@@ -498,7 +484,7 @@ describe("world-map", () => {
 		).toBe(tooltipBefore);
 
 		// The old cell no longer carries the marker.
-		const oldCell = containerEl.querySelector('.dev-map-cell[data-cell="1,1"]');
+		const oldCell = containerEl.querySelector('.dev-map-cell[data-cell="0,0"]');
 		expect(oldCell?.getAttribute("data-ai")).toBeNull();
 	});
 
@@ -521,7 +507,7 @@ describe("world-map", () => {
 
 		// Verify it was rendered with initial satisfaction state
 		const objCellBefore = containerEl.querySelector(
-			'.dev-map-cell[data-cell="2,2"]',
+			'.dev-map-cell[data-cell="1,1"]',
 		);
 		expect(objCellBefore?.getAttribute("data-kind")).toBe("objective-object");
 
@@ -534,7 +520,7 @@ describe("world-map", () => {
 		updateWorldMap(containerEl, session);
 
 		// Check that the cell has the updated satisfaction
-		const objCell = containerEl.querySelector('.dev-map-cell[data-cell="2,2"]');
+		const objCell = containerEl.querySelector('.dev-map-cell[data-cell="1,1"]');
 		expect(objCell?.getAttribute("data-satisfaction")).toBe("satisfied");
 
 		const tooltip = objCell?.querySelector(".dev-map-tooltip");

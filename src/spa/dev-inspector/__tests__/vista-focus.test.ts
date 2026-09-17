@@ -25,9 +25,9 @@ import {
 /**
  * Build the expected highlight for a position from the shared Vista geometry:
  * every Vista offset whose absolute cell is inside the 5×5 room, expressed in
- * visual coordinates (+1 for the wall ring). Derived from the Vista table
- * rather than a hand-rolled disk, so the assertion tracks the geometry the
- * runtime uses.
+ * room coordinates — the inspector grid is room-only, so room (r,c) is also
+ * display cell "r,c". Derived from the Vista table rather than a hand-rolled
+ * disk, so the assertion tracks the geometry the runtime uses.
  */
 function expectedVistaMask(position: GridPosition): Set<string> {
 	const expected = new Set<string>();
@@ -37,12 +37,12 @@ function expectedVistaMask(position: GridPosition): Set<string> {
 			col: position.col + offset.dx,
 		};
 		if (!inBounds(cell)) continue;
-		expected.add(`${cell.row + 1},${cell.col + 1}`);
+		expected.add(`${cell.row},${cell.col}`);
 	}
 	return expected;
 }
 
-/** Collect the visual cells currently highlighted for a Daemon. */
+/** Collect the display cells currently highlighted for a Daemon. */
 function highlightedCells(containerEl: HTMLElement, aiId: string): Set<string> {
 	const highlighted = new Set<string>();
 	for (const cell of containerEl.querySelectorAll<HTMLElement>(
@@ -136,37 +136,39 @@ describe("vista-focus", () => {
 
 			// Centre of the room: the whole disk is in bounds, own cell included.
 			expect(mask.size).toBe(13);
-			expect(mask.has("3,3")).toBe(true);
+			expect(mask.has("2,2")).toBe(true);
 			// Two cardinal steps away, all four in bounds.
-			for (const cell of ["1,3", "5,3", "3,1", "3,5"]) {
+			for (const cell of ["0,2", "4,2", "2,0", "2,4"]) {
 				expect(mask.has(cell)).toBe(true);
 			}
 			// The four adjacent diagonals.
-			for (const cell of ["2,2", "2,4", "4,2", "4,4"]) {
+			for (const cell of ["1,1", "1,3", "3,1", "3,3"]) {
 				expect(mask.has(cell)).toBe(true);
 			}
-			// Offsets like (2,1) are not in the disk: visual "2,5" is (row 1, col 4).
-			expect(mask.has("2,5")).toBe(false);
-			expect(mask.has("4,5")).toBe(false);
+			// Offsets like (2,1) are not in the disk: that cell is (row 0, col 3).
+			expect(mask.has("0,3")).toBe(false);
+			expect(mask.has("4,3")).toBe(false);
 		});
 
 		it("mask omits OOB walls — corner daemon keeps only its in-bounds cells", () => {
 			const mask = vistaMaskForPosition({ row: 0, col: 0 });
 
 			expect(mask).toEqual(expectedVistaMask({ row: 0, col: 0 }));
-			expect(mask.has("1,1")).toBe(true);
+			expect(mask.has("0,0")).toBe(true);
 			// Corner room: own cell, two cells east, two cells south, and the
 			// two adjacent diagonals — 6 Vista cells in bounds, the rest Walls.
+			// Those out-of-bounds cells have no display cell at all now that the
+			// grid is room-only, so the mask simply omits them.
 			expect(mask.size).toBe(6);
 
 			for (const cellStr of mask) {
 				const [rowStr, colStr] = cellStr.split(",");
 				const row = Number(rowStr);
 				const col = Number(colStr);
-				expect(row).toBeGreaterThanOrEqual(1);
-				expect(row).toBeLessThanOrEqual(5);
-				expect(col).toBeGreaterThanOrEqual(1);
-				expect(col).toBeLessThanOrEqual(5);
+				expect(row).toBeGreaterThanOrEqual(0);
+				expect(row).toBeLessThanOrEqual(4);
+				expect(col).toBeGreaterThanOrEqual(0);
+				expect(col).toBeLessThanOrEqual(4);
 			}
 		});
 
@@ -331,8 +333,8 @@ describe("vista-focus", () => {
 				sorted(expectedVistaMask({ row: 2, col: 2 })),
 			);
 			expect(after.size).toBe(13);
-			expect(after.has("3,3")).toBe(true);
-			expect(after.has("1,1")).toBe(false);
+			expect(after.has("2,2")).toBe(true);
+			expect(after.has("0,0")).toBe(false);
 		});
 
 		it("updateWorldMap re-applies active tint after mutation", () => {

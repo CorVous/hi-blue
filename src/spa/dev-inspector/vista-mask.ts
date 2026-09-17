@@ -11,35 +11,27 @@
  * the same cell highlight exactly the same cells.
  *
  * Out-of-bounds Vista cells — the Walls the Daemon perceives there — are
- * excluded: the visual grid's wall ring is not part of the highlight.
+ * excluded: the grid is the 5×5 room, so those cells have no display cell.
  */
 
 import type { AiId, GameState, GridPosition } from "../game/types.js";
 import { projectVista } from "../game/vista-projector.js";
 
 /**
- * The visual grid wraps the 5×5 room in a one-cell wall ring, so a room
- * position (row, col) sits at visual (row + 1, col + 1).
- */
-const VISUAL_RING = 1;
-
-/**
- * Compute the Vista highlight for a position, in visual grid coordinates
- * (7×7 grid with wall ring). Returns a Set of visual cell coordinate strings
- * ("row,col"). The mask depends on the observer's position and nothing else;
- * out-of-bounds cells are omitted.
+ * Compute the Vista highlight for a position, in room coordinates. The
+ * inspector grid is room-only (5×5), so a room position is also its display
+ * cell. Returns a Set of cell coordinate strings ("row,col"). The mask depends
+ * on the observer's position and nothing else; out-of-bounds cells are omitted.
  *
  * @param position The observer's room position
- * @returns Set of visual cell coordinate strings ("row,col")
+ * @returns Set of display cell coordinate strings ("row,col")
  */
 export function vistaMaskForPosition(position: GridPosition): Set<string> {
 	const mask = new Set<string>();
 
 	for (const cell of projectVista(position)) {
 		if (cell.isWall) continue;
-		mask.add(
-			`${cell.position.row + VISUAL_RING},${cell.position.col + VISUAL_RING}`,
-		);
+		mask.add(`${cell.position.row},${cell.position.col}`);
 	}
 
 	return mask;
@@ -51,7 +43,7 @@ export function vistaMaskForPosition(position: GridPosition): Set<string> {
  *
  * @param state The current game state
  * @param aiId The daemon's AI ID
- * @returns Set of visual cell coordinate strings ("row,col"), empty if the
+ * @returns Set of display cell coordinate strings ("row,col"), empty if the
  *   Daemon has no spatial state
  */
 export function vistaMaskForDaemon(state: GameState, aiId: AiId): Set<string> {
