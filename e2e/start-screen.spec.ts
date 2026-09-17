@@ -137,7 +137,12 @@ test("[ BEGIN ] is enabled after persona synthesis and content-pack generation c
 	// Stub synthesis and content-pack generation (both JSON-mode calls)
 	await stubNewGameLLM(page, { sse: ["stub reply"] });
 
-	await page.goto("/");
+	// `skipDialup=1` skips the dial-up animation. CONNECT is gated only on that
+	// animation finishing (see `revealLogin` in src/spa/views/start.ts), not on
+	// generation — and the animation is a ~327-char setTimeout chain that takes
+	// ~7s nominally and 10s+ under parallel load. Leaving it on makes this
+	// assertion measure the animation, not the generation it is named for.
+	await page.goto("/?skipDialup=1");
 
 	// Wait for [ BEGIN ] to be enabled (generation complete)
 	// Fast-synthesis stub returns instantly; 10s is ample — down from 30s.
@@ -277,9 +282,9 @@ test("refresh during generation re-enters start screen and restarts generation",
 	const pageErrors: Error[] = [];
 	page.on("pageerror", (err) => pageErrors.push(err));
 
-	// First load: install a stub that holds synthesis so BEGIN stays disabled.
-	// The handler blocks on a never-resolving promise; Playwright aborts the
-	// in-flight request when the page reloads, so the test does not stall.
+	// First load: install a stub that holds synthesis in flight. The handler
+	// blocks on a never-resolving promise; Playwright aborts the in-flight
+	// request when the page reloads, so the test does not stall.
 	const slowSynthesisHandler = async (route: Route, request: Request) => {
 		let body: ParsedRequestBody = null;
 		try {
@@ -301,12 +306,15 @@ test("refresh during generation re-enters start screen and restarts generation",
 
 	await page.route("**/v1/chat/completions", slowSynthesisHandler);
 
-	await page.goto("/");
+	// `skipDialup=1` skips the dial-up animation. CONNECT's enabled state is
+	// gated on that animation alone, never on generation (see `revealLogin` in
+	// src/spa/views/start.ts), so skipping it keeps this test's timing
+	// deterministic instead of racing a ~7s character-by-character animation.
+	await page.goto("/?skipDialup=1");
 
-	// Start screen visible, BEGIN disabled while synthesis is in flight
+	// Start screen visible; the held synthesis has not been clicked through.
 	await expect(page.locator("#start-screen")).toBeVisible();
 	const beginBtn = page.locator("#begin");
-	await expect(beginBtn).toBeDisabled();
 
 	// Unroute the slow handler and install the fast stub BEFORE reloading,
 	// so the post-reload synthesis request is handled immediately.
@@ -328,6 +336,7 @@ test("refresh during generation re-enters start screen and restarts generation",
 	expect(engineDat).toBeNull();
 
 	// Generation restarts on the second load: BEGIN re-enables once synthesis completes
+	// (the animation is skipped above, so this measures generation, not dial-up).
 	// Fast-synthesis stub returns instantly; 10s is ample — down from 30s.
 	await expect(beginBtn).toBeEnabled({ timeout: 10_000 });
 
