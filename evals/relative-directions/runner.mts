@@ -45,10 +45,11 @@ import type {
 } from "../../src/spa/game/types.js";
 import type { ScenarioScore, TurnRecord } from "./scoring.js";
 import {
+	parseMovementStatement,
 	parseStatedCardinal,
 	referencedCardinals,
 	scoreScenario,
-	structuralCoherence,
+	structuralCoherenceForTurn,
 } from "./scoring.js";
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -618,12 +619,22 @@ function renderReport(results: ScenarioResult[], date: string): string {
 		lines.push("### Turn transcripts");
 		lines.push("");
 		for (const turn of result.turns) {
+			// Coherence comes from the movement-aware path
+			// (`structuralCoherenceForTurn`), the same rule `scoreScenario`
+			// applies, so the printed verdict can never contradict the run's
+			// PASS/FAIL. `turn.statedDirection` is the broad "any directional
+			// statement" parse, so it can name a cardinal that the daemon only
+			// *described*; when no movement intent was stated the verdict is
+			// "no-statement" and printing that cardinal as the stated direction
+			// would read as a contradiction, so the column shows "—".
+			const movementStatement =
+				turn.movementStatement ?? parseMovementStatement(turn.text);
 			lines.push(`#### Turn ${turn.turn}`);
 			lines.push("");
 			lines.push(
-				`Stated: ${turn.statedDirection ?? "—"} | ` +
+				`Stated: ${movementStatement?.direction ?? "—"} | ` +
 					`Tool direction: ${turn.toolCallDirection ?? "—"} | ` +
-					`Coherence: ${structuralCoherence(turn.statedDirection, turn.toolCallDirection)}`,
+					`Coherence: ${structuralCoherenceForTurn(turn)}`,
 			);
 			lines.push("");
 			if (turn.text) {
