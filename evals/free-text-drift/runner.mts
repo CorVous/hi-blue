@@ -136,11 +136,14 @@ const PERSONAS: Record<string, AiPersona> = {
  *   row 3:   .          .             .           pillar       .
  *   row 4:  sim1        .             .             .         sim2
  *
- * Red's initial cone (own cell + 1 forward + 3 two-ahead) sees: flashlight,
- * clipboard, wall_mount, panel. The pillar sits behind/right and only enters
- * cone after a turn, giving look/go a reason to fire. The peers are out of
- * front-arc range so give isn't immediately valid — kept that way to avoid
- * inflating give counts from cheap stimulus.
+ * Inside red's 13-cell Vista (own cell + the eight neighbours + the four
+ * distance-2 cardinals) are flashlight, wall_mount and pillar; the pillar
+ * stands there from the start, so there is an interesting entity in view
+ * from round 1 and `go` has somewhere to spend itself. clipboard and panel
+ * fall outside the 13-cell disk, so they stay known only by rumour, and the
+ * peers are outside the Vista entirely. No daemon starts within interaction
+ * range of another — kept that way to avoid inflating message counts from
+ * cheap stimulus.
  */
 function makePack(): ContentPack {
 	return {
@@ -229,14 +232,17 @@ function makePack(): ContentPack {
  */
 const INCOMING: Array<{ from: AiId | "blue"; content: string }> = [
 	{ from: "blue", content: "hey ember, you around?" },
-	{ from: "sim1", content: "what do you see in front of you?" },
+	{ from: "sim1", content: "what do you see where you are standing?" },
 	{
 		from: "blue",
 		content: "looks like there's a flashlight up ahead — can you grab it?",
 	},
 	{ from: "sim2", content: "what's it like in there right now?" },
-	{ from: "blue", content: "the panel on your right — worth a look?" },
-	{ from: "sim1", content: "step forward and tell us what you see." },
+	{ from: "blue", content: "the panel to your east — worth a look?" },
+	{
+		from: "sim1",
+		content: "go one step north and tell us what you see.",
+	},
 	{
 		from: "blue",
 		content: "got the flashlight? try turning it on, see if it works.",
@@ -249,9 +255,12 @@ const INCOMING: Array<{ from: AiId | "blue"; content: string }> = [
 	{ from: "sim1", content: "talk to me, what's going on?" },
 	{ from: "blue", content: "examine the clipboard — what does it say?" },
 	{ from: "sim2", content: "you hearing anything down there?" },
-	{ from: "blue", content: "look around — anything behind you?" },
+	{ from: "blue", content: "look around — anything north of you?" },
 	{ from: "sim1", content: "try the panel, see if anything happens." },
-	{ from: "blue", content: "head back to where you started and report." },
+	{
+		from: "blue",
+		content: "head three steps west and report what you find.",
+	},
 ];
 
 function pickIncoming(round: number): { from: AiId | "blue"; content: string } {

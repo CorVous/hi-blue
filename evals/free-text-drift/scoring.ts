@@ -19,13 +19,11 @@
  *   - summarizeRun(turns) → DriftRunSummary
  */
 
+import {
+	CARDINAL_DIRECTIONS,
+	type CardinalDirection,
+} from "../../src/spa/game/direction.js";
 import type { AiId, ToolName } from "../../src/spa/game/types.js";
-
-/**
- * Eval-local relative-direction vocabulary. ADR 0015 removed orientation from
- * the game, so this module no longer borrows the retired type from the runtime.
- */
-type RelativeDirection = "forward" | "back" | "left" | "right";
 
 // ── Recorded shapes ──────────────────────────────────────────────────────────
 
@@ -67,13 +65,13 @@ export interface TurnRecord {
 export interface ToolCallDetail {
 	name: string;
 	/**
-	 * The `direction` argument, when present and one of the relative
-	 * directions. Read off the arguments rather than gated on the tool name:
-	 * `go` is the only shipped tool that carries one, and keying the rule on
-	 * the argument keeps the direction axis measurable across surface
-	 * changes instead of hard-coding a tool name.
+	 * The `direction` argument, when present and a named cardinal
+	 * (`north`/`south`/`east`/`west`). Read off the arguments rather than
+	 * gated on the tool name: `go` is the only shipped tool that carries one,
+	 * and keying the rule on the argument keeps the direction axis measurable
+	 * across surface changes instead of hard-coding a tool name.
 	 */
-	direction?: RelativeDirection;
+	direction?: CardinalDirection;
 	/** For message: the recipient AiId or "blue". */
 	recipient?: AiId | "blue";
 	/** For message: the message body. */
@@ -84,12 +82,9 @@ export interface ToolCallDetail {
 	parseError?: boolean;
 }
 
-const RELATIVE_DIRS = new Set<RelativeDirection>([
-	"forward",
-	"back",
-	"left",
-	"right",
-]);
+const CARDINAL_DIR_SET: ReadonlySet<string> = new Set<string>(
+	CARDINAL_DIRECTIONS,
+);
 
 /**
  * Lift a captured tool call into its tracked detail fields. Best-effort —
@@ -121,10 +116,11 @@ export function parseToolCallDetail(tc: CapturedToolCall): ToolCallDetail {
 	// `direction` is an argument shape, not a tool-name case. The shipped
 	// surface emits it on `go` alone, but reading it off the arguments keeps
 	// the direction series measuring the direction axis without naming a tool
-	// that the surface can retire.
+	// that the surface can retire. Movement is cardinal-only (ADR 0015), so
+	// the axis is north/south/east/west.
 	const dir = typeof args.direction === "string" ? args.direction : "";
-	if (RELATIVE_DIRS.has(dir as RelativeDirection)) {
-		detail.direction = dir as RelativeDirection;
+	if (CARDINAL_DIR_SET.has(dir)) {
+		detail.direction = dir as CardinalDirection;
 	}
 
 	switch (tc.name) {
@@ -181,11 +177,11 @@ export function looksLikeFreeTextMessage(text: string): boolean {
 
 /**
  * Patterns suggesting the daemon *prose-described* a physical action instead
- * of emitting a tool call ("I move forward.", "I pick up the lantern.").
- * Same caveats as `looksLikeFreeTextMessage` — best-effort, regex-only.
+ * of emitting a tool call ("I go north.", "I pick up the lantern."). Same
+ * caveats as `looksLikeFreeTextMessage` — best-effort, regex-only.
  */
 const FREE_TEXT_ACTION_RE =
-	/\bI(?:'ll| will| am| 'm)?\s*(?:go|move|step|walk|head|turn|face|pick\s*up|put\s*down|drop|give|hand|use|activate|examine|inspect|study)\b/i;
+	/\bI(?:'ll| will| am| 'm)?\s*(?:go|move|step|walk|head|pick\s*up|put\s*down|drop|give|hand|use|activate|examine|inspect|study)\b/i;
 
 /**
  * Return true when the assistant text reads like an attempt to take a physical
@@ -306,7 +302,7 @@ export interface DriftRunSummary {
  * `recipientCounts`, `directionCounts`), each key maps to its own
  * per-round series — letting you plot one line per tool, one line per
  * recipient, etc., and see *which* signal is drifting (e.g. message-to-blue
- * tapering while go-forward stays steady).
+ * tapering while go-north stays steady).
  */
 export interface DriftRunSeries {
 	/** Round numbers in capture order. */
@@ -371,7 +367,7 @@ export function buildPerRoundSeries(
 	const allToolNames = new Set<string>();
 	const allRecipients = new Set<string>(["blue"]);
 	for (const ai of knownAiIds) allRecipients.add(ai);
-	const allDirections = new Set<string>(["forward", "back", "left", "right"]);
+	const allDirections = new Set<string>(CARDINAL_DIRECTIONS);
 	for (const turn of turns) {
 		for (const tc of turn.toolCalls) {
 			allToolNames.add(tc.name);

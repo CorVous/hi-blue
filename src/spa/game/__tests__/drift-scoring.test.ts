@@ -26,26 +26,37 @@ describe("parseToolCallDetail", () => {
 		const detail = parseToolCallDetail({
 			id: "c1",
 			name: "go",
-			argumentsJson: '{"direction":"forward"}',
+			argumentsJson: '{"direction":"north"}',
 		});
-		expect(detail.direction).toBe("forward");
+		expect(detail.direction).toBe("north");
 		expect(detail.parseError).toBeUndefined();
 	});
 
-	it("extracts direction from a face tool call", () => {
-		const detail = parseToolCallDetail({
-			id: "c2",
-			name: "face",
-			argumentsJson: '{"direction":"left"}',
-		});
-		expect(detail.direction).toBe("left");
+	it("extracts every cardinal direction from a go tool call", () => {
+		for (const dir of ["north", "south", "east", "west"] as const) {
+			const detail = parseToolCallDetail({
+				id: `c-${dir}`,
+				name: "go",
+				argumentsJson: `{"direction":"${dir}"}`,
+			});
+			expect(detail.direction).toBe(dir);
+		}
 	});
 
-	it("leaves direction undefined when the arg is not a relative direction", () => {
+	it("leaves direction undefined when the arg is a retired relative direction", () => {
 		const detail = parseToolCallDetail({
 			id: "c3",
 			name: "go",
-			argumentsJson: '{"direction":"north"}',
+			argumentsJson: '{"direction":"left"}',
+		});
+		expect(detail.direction).toBeUndefined();
+	});
+
+	it("leaves direction undefined for non-direction arguments", () => {
+		const detail = parseToolCallDetail({
+			id: "c3b",
+			name: "go",
+			argumentsJson: '{"direction":"sideways"}',
 		});
 		expect(detail.direction).toBeUndefined();
 	});
@@ -93,7 +104,7 @@ describe("parseToolCallDetail", () => {
 		const detail = parseToolCallDetail({
 			id: "c8",
 			name: "go",
-			argumentsJson: '"forward"',
+			argumentsJson: '"north"',
 		});
 		expect(detail.parseError).toBe(true);
 	});
@@ -121,7 +132,7 @@ describe("looksLikeFreeTextMessage", () => {
 
 	it("does not flag plain narration without speech cues", () => {
 		expect(looksLikeFreeTextMessage("The room is dim and cold.")).toBe(false);
-		expect(looksLikeFreeTextMessage("I move forward toward the door.")).toBe(
+		expect(looksLikeFreeTextMessage("I move north toward the door.")).toBe(
 			false,
 		);
 		expect(looksLikeFreeTextMessage("")).toBe(false);
@@ -130,10 +141,23 @@ describe("looksLikeFreeTextMessage", () => {
 
 describe("looksLikeFreeTextAction", () => {
 	it("flags first-person action verbs", () => {
-		expect(looksLikeFreeTextAction("I move forward.")).toBe(true);
+		expect(looksLikeFreeTextAction("I move north.")).toBe(true);
+		expect(looksLikeFreeTextAction("I go north.")).toBe(true);
 		expect(looksLikeFreeTextAction("I'll pick up the lantern.")).toBe(true);
 		expect(looksLikeFreeTextAction("I examine the panel.")).toBe(true);
-		expect(looksLikeFreeTextAction("I turn left and walk.")).toBe(true);
+		expect(looksLikeFreeTextAction("I use the panel.")).toBe(true);
+	});
+
+	it("does not flag the retired turn/face verbs on their own", () => {
+		// ADR 0015 retired orientation: `turn` and `face` are no longer daemon
+		// actions, so prose describing them is not a free-text action leak.
+		expect(looksLikeFreeTextAction("I turn left.")).toBe(false);
+		expect(looksLikeFreeTextAction("I face east.")).toBe(false);
+		expect(looksLikeFreeTextAction("I turn to blue.")).toBe(false);
+		// The verb must immediately follow the first-person subject, so a
+		// non-initial verb is not matched — unchanged pre-existing behaviour.
+		expect(looksLikeFreeTextAction("I turn left and walk.")).toBe(false);
+		expect(looksLikeFreeTextAction("I walk left.")).toBe(true);
 	});
 
 	it("does not flag declarative non-action prose", () => {
@@ -197,7 +221,7 @@ describe("messageRecipientCounts", () => {
 	it("ignores non-message tool calls", () => {
 		const turns: TurnRecord[] = [
 			baseTurn(1, [
-				{ id: "g", name: "go", argumentsJson: '{"direction":"forward"}' },
+				{ id: "g", name: "go", argumentsJson: '{"direction":"north"}' },
 			]),
 		];
 		const counts = messageRecipientCounts(turns, ["red"]);
@@ -268,7 +292,7 @@ describe("rollingSilenceRate", () => {
 				aiId: "red",
 				assistantText: "",
 				toolCalls: [
-					{ id: "g", name: "go", argumentsJson: '{"direction":"forward"}' },
+					{ id: "g", name: "go", argumentsJson: '{"direction":"north"}' },
 				],
 			},
 		];
@@ -306,7 +330,7 @@ describe("summarizeRun", () => {
 			{
 				round: 2,
 				aiId: "red",
-				assistantText: "I move forward through the gap.",
+				assistantText: "I move north through the gap.",
 				toolCalls: [],
 			},
 			// proper message — no leak (even if text would otherwise look like one)
@@ -326,9 +350,9 @@ describe("summarizeRun", () => {
 			{
 				round: 4,
 				aiId: "red",
-				assistantText: "I move forward.",
+				assistantText: "I move north.",
 				toolCalls: [
-					{ id: "g", name: "go", argumentsJson: '{"direction":"forward"}' },
+					{ id: "g", name: "go", argumentsJson: '{"direction":"north"}' },
 				],
 			},
 		];
@@ -358,16 +382,16 @@ describe("summarizeRun", () => {
 
 describe("buildPerRoundSeries", () => {
 	const turns: TurnRecord[] = [
-		// round 1: go forward (no message)
+		// round 1: go north (no message)
 		{
 			round: 1,
 			aiId: "red",
-			assistantText: "moving up",
+			assistantText: "moving north",
 			toolCalls: [
-				{ id: "g1", name: "go", argumentsJson: '{"direction":"forward"}' },
+				{ id: "g1", name: "go", argumentsJson: '{"direction":"north"}' },
 			],
 		},
-		// round 2: message blue + look right
+		// round 2: message blue + go south
 		{
 			round: 2,
 			aiId: "red",
@@ -378,7 +402,7 @@ describe("buildPerRoundSeries", () => {
 					name: "message",
 					argumentsJson: '{"to":"blue","content":"hi"}',
 				},
-				{ id: "l1", name: "face", argumentsJson: '{"direction":"right"}' },
+				{ id: "l1", name: "go", argumentsJson: '{"direction":"south"}' },
 			],
 		},
 		// round 3: silent + free-text-message leak
@@ -414,8 +438,7 @@ describe("buildPerRoundSeries", () => {
 
 	it("breaks out per-tool counts as separate series", () => {
 		const s = buildPerRoundSeries(turns, ["red", "sim1", "sim2"]);
-		expect(s.toolCallCountsByName.go).toEqual([1, 0, 0, 0]);
-		expect(s.toolCallCountsByName.face).toEqual([0, 1, 0, 0]);
+		expect(s.toolCallCountsByName.go).toEqual([1, 1, 0, 0]);
 		expect(s.toolCallCountsByName.message).toEqual([0, 1, 0, 1]);
 	});
 
@@ -430,15 +453,15 @@ describe("buildPerRoundSeries", () => {
 
 	it("breaks out per-direction counts as separate series", () => {
 		const s = buildPerRoundSeries(turns, ["red"]);
-		expect(s.directionCounts.forward).toEqual([1, 0, 0, 0]);
-		expect(s.directionCounts.right).toEqual([0, 1, 0, 0]);
-		expect(s.directionCounts.left).toEqual([0, 0, 0, 0]);
+		expect(s.directionCounts.north).toEqual([1, 0, 0, 0]);
+		expect(s.directionCounts.south).toEqual([0, 1, 0, 0]);
+		expect(s.directionCounts.west).toEqual([0, 0, 0, 0]);
 	});
 
 	it("captures assistant text length per round (verbosity proxy)", () => {
 		const s = buildPerRoundSeries(turns, ["red"]);
 		expect(s.assistantTextLength).toEqual([
-			"moving up".length,
+			"moving north".length,
 			"hey".length,
 			"I tell blue what I saw.".length,
 			0,
