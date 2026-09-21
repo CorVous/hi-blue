@@ -28,7 +28,7 @@ We follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1
 
 ## Vista implementation handoff
 
-For movement/sight work, start with [docs/agents/vista-implementation.md](docs/agents/vista-implementation.md) and [implementation map #535](https://github.com/CorVous/hi-blue/issues/535). ADR 0015 and CONTEXT.md describe the approved target, not proof that the runtime has been converted. The design is settled; use the live map to select an unblocked implementation ticket.
+For movement/sight work, start with [docs/agents/vista-implementation.md](docs/agents/vista-implementation.md) — the reference for the landed Vista, accurate as of commit `14461ab`. [ADR 0015](docs/adr/0015-proximity-disk-and-cardinal-directions.md) and [CONTEXT.md](CONTEXT.md) remain the authoritative design and vocabulary. The cutover has landed in merges `24a217b` (PR #550) and `f018033` (PR #553). [Map #535](https://github.com/CorVous/hi-blue/issues/535) remains the live tracker.
 
 ## Local development
 
