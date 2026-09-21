@@ -4,7 +4,7 @@
 
 1. [ADR 0015](../adr/0015-proximity-disk-and-cardinal-directions.md) is the complete approved design, including interaction range and the dev inspector. It landed through PRs [#534](https://github.com/CorVous/hi-blue/pull/534) and [#542](https://github.com/CorVous/hi-blue/pull/542).
 2. [CONTEXT.md](../../CONTEXT.md) supplies the vocabulary: it defines the spatial terms this landed work uses, but it is a glossary, not the spec.
-3. [Map #535](https://github.com/CorVous/hi-blue/issues/535) supplies current work status, dependencies, and acceptance criteria. Fetch the live issue and the selected child before starting.
+3. [Map #535](https://github.com/CorVous/hi-blue/issues/535) is the tracker of record for the effort. Its remaining children are follow-up work, not Vista implementation; fetch the live issue before starting anything it lists.
 
 The design is settled. Closed decision tickets #536 and #519 are supporting resolutions, not remaining work. Earlier maps, issue comments, and reverted ADR 0016 material may describe superseded choices; do not use them to override current ADR 0015. In particular, Use-Space does **not** reach the whole Vista.
 
