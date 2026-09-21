@@ -18,7 +18,7 @@ record them.
 - Persona / phase / content-pack prompts in `src/spa/game/prompt-builder.ts`,
   `src/content/personas.ts`, or `src/content/phases.ts` change in a way
   that could affect daemon voice or behaviour.
-- A change to the round loop, mention parser, or cone projector that you
+- A change to the round loop, mention parser, or Vista projector that you
   want to exercise end-to-end with a real LLM rather than stubs.
 
 If you only need to assert structural behaviour (engine state transitions,
