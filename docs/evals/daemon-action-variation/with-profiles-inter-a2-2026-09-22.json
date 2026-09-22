@@ -1,0 +1,2739 @@
+{
+	"meta": {
+		"date": "2026-09-22",
+		"model": "z-ai/glm-4.7",
+		"baseUrl": "http://localhost:8787",
+		"repetitions": 20,
+		"mode": "with-profiles",
+		"scenarios": [
+			"exploration",
+			"social"
+		],
+		"noPreferredPolicy": "avoid",
+		"runLabel": "inter-a2",
+		"pairs": [
+			"melancholic+diffident",
+			"diffident+aloof",
+			"melancholic+melancholic"
+		]
+	},
+	"summary": {
+		"totalRepetitions": 120,
+		"scenarios": [
+			{
+				"scenario": "exploration",
+				"personaLabel": "Var1",
+				"temperaments": [
+					"melancholic",
+					"diffident"
+				],
+				"repetitions": 20,
+				"anyActionRate": 0.55,
+				"anyMessageRate": 1,
+				"parallelRate": 0.55,
+				"silenceRate": 0,
+				"toolCallCounts": {
+					"go": 11,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 0,
+					"message": 20,
+					"other": 0
+				},
+				"toolCallRates": {
+					"go": 0.55,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 0,
+					"message": 1,
+					"other": 0
+				}
+			},
+			{
+				"scenario": "exploration",
+				"personaLabel": "Var2",
+				"temperaments": [
+					"diffident",
+					"aloof"
+				],
+				"repetitions": 20,
+				"anyActionRate": 0.4,
+				"anyMessageRate": 1,
+				"parallelRate": 0.4,
+				"silenceRate": 0,
+				"toolCallCounts": {
+					"go": 8,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 0,
+					"message": 21,
+					"other": 0
+				},
+				"toolCallRates": {
+					"go": 0.4,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 0,
+					"message": 1.05,
+					"other": 0
+				}
+			},
+			{
+				"scenario": "exploration",
+				"personaLabel": "Var3",
+				"temperaments": [
+					"melancholic",
+					"melancholic"
+				],
+				"repetitions": 20,
+				"anyActionRate": 0.6,
+				"anyMessageRate": 1,
+				"parallelRate": 0.6,
+				"silenceRate": 0,
+				"toolCallCounts": {
+					"go": 12,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 0,
+					"message": 20,
+					"other": 0
+				},
+				"toolCallRates": {
+					"go": 0.6,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 0,
+					"message": 1,
+					"other": 0
+				}
+			},
+			{
+				"scenario": "social",
+				"personaLabel": "Var1",
+				"temperaments": [
+					"melancholic",
+					"diffident"
+				],
+				"repetitions": 20,
+				"anyActionRate": 0.7,
+				"anyMessageRate": 0.95,
+				"parallelRate": 0.65,
+				"silenceRate": 0,
+				"toolCallCounts": {
+					"go": 14,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 0,
+					"message": 21,
+					"other": 1
+				},
+				"toolCallRates": {
+					"go": 0.7,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 0,
+					"message": 1.05,
+					"other": 0.05
+				}
+			},
+			{
+				"scenario": "social",
+				"personaLabel": "Var2",
+				"temperaments": [
+					"diffident",
+					"aloof"
+				],
+				"repetitions": 20,
+				"anyActionRate": 0.55,
+				"anyMessageRate": 1,
+				"parallelRate": 0.55,
+				"silenceRate": 0,
+				"toolCallCounts": {
+					"go": 11,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 0,
+					"message": 20,
+					"other": 0
+				},
+				"toolCallRates": {
+					"go": 0.55,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 0,
+					"message": 1,
+					"other": 0
+				}
+			},
+			{
+				"scenario": "social",
+				"personaLabel": "Var3",
+				"temperaments": [
+					"melancholic",
+					"melancholic"
+				],
+				"repetitions": 20,
+				"anyActionRate": 0.55,
+				"anyMessageRate": 1,
+				"parallelRate": 0.55,
+				"silenceRate": 0,
+				"toolCallCounts": {
+					"go": 11,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 0,
+					"message": 24,
+					"other": 0
+				},
+				"toolCallRates": {
+					"go": 0.55,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 0,
+					"message": 1.2,
+					"other": 0
+				}
+			}
+		],
+		"overall": {
+			"anyActionRate": 0.5583333333333333,
+			"anyMessageRate": 0.9916666666666667,
+			"parallelRate": 0.55,
+			"silenceRate": 0,
+			"useRate": 0
+		},
+		"totalCostUsd": 0.11072662200000001
+	},
+	"repetitions": [
+		{
+			"repetition": 1,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_0dcdb286f4a444478b867d8f",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Damp air, strip-lights. There's a rusted switchbox on the wall one step north — two levers, no labels. Nothing else around.\"}"
+				}
+			],
+			"costUsd": 0.00095994
+		},
+		{
+			"repetition": 2,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_e7ae297f4dd6427e9ff0fb22",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_54536b31121d4729b7b5add8",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Damp air, emergency strip-lights. One step north there's a rusted switchbox bolted to the wall — two heavy levers, no labels. Everything else is empty.\"}"
+				}
+			],
+			"costUsd": 0.00100548
+		},
+		{
+			"repetition": 3,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_4f115be4f87043dda61c08d8",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Damp abandoned subway station, strip-lights buzzing. One thing of note — a rusted switchbox on the wall one step north. Two levers, no labels. Everything else is empty.\", \"to\": \"blue\"}"
+				},
+				{
+					"id": "call_dfe927282ba64b4a8187438e",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.00099954
+		},
+		{
+			"repetition": 4,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_fee48dba1a0646e7848cf646",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_e63b7166fa864db4ab3aecb4",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station, dim strip-lights, damp air. One thing of note — a rusted switchbox on the wall one step north, two heavy levers, no labels. Moving toward it now.\"}"
+				}
+			],
+			"costUsd": 0.000884664
+		},
+		{
+			"repetition": 5,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_e18f580810d94b2d8ac7b6d8",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Abandoned subway station. Emergency strip-lights, damp air. One thing of note — a rusted switchbox on the wall one step north. Two levers, no labels. Nothing else around.\", \"to\": \"blue\"}"
+				}
+			],
+			"costUsd": 0.000866844
+		},
+		{
+			"repetition": 6,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_d086a4c85bee4e57bed5ba3a",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_12a70b00533045668b435454",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Damp air, strip-lights. One thing of note — a rusted switchbox on the wall right here, two heavy levers, no labels. Nothing else around.\"}"
+				}
+			],
+			"costUsd": 0.00109854
+		},
+		{
+			"repetition": 7,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_77077a6231fc4f18b5cc08df",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Abandoned subway station. Emergency strip-lights, damp air. There's a rusted switchbox on the wall one step north — two heavy levers, no labels. Nothing else around.\", \"to\": \"blue\"}"
+				}
+			],
+			"costUsd": 0.00098568
+		},
+		{
+			"repetition": 8,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_4b75d7e9cddd47f5b726d03a",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_fd18127392eb40f8aef2734b",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Emergency strip-lights, damp air. There's a rusted switchbox on the wall one step north — two heavy levers, no labels. Nothing else around. Moving toward it.\"}"
+				}
+			],
+			"costUsd": 0.00102924
+		},
+		{
+			"repetition": 9,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_f5649c4a16c14744b59429f4",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_88147fc3001c4de5968019c3",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station, dim strip-lights. One step north there's a rusted switchbox on the wall — two heavy levers, no labels. Nothing else around. Moving toward it to take a closer look.\"}"
+				}
+			],
+			"costUsd": 0.0010035
+		},
+		{
+			"repetition": 10,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_b5e1d3c9f0dd41c4a92a1599",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Emergency strip-lights, damp air. One step north there's a rusted switchbox on the wall — two levers, no labels. Everything else is empty.\"}"
+				}
+			],
+			"costUsd": 0.00096984
+		},
+		{
+			"repetition": 11,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_2a13bc78220b418d9dd46286",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Emergency strip-lights, damp air. There's a rusted switchbox one step north — bolted to the wall, two heavy levers, no labels. Everything else is empty.\"}"
+				}
+			],
+			"costUsd": 0.00101538
+		},
+		{
+			"repetition": 12,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_0aceaa0a5d664ef98d55ac5a",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Abandoned subway station. Emergency strip-lights, damp air. There's a rusted switchbox on the wall one step north — two levers, no labels. Nothing else around.\", \"to\": \"blue\"}"
+				},
+				{
+					"id": "call_66af419056b64f798cfa9ae4",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.0009837
+		},
+		{
+			"repetition": 13,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_1c883fd1a64d47ed82cc8ef8",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station, just emergency strip-lights. Damp, still. There's a rusted switchbox one step north — bolted to the wall, two heavy levers, no labels. Nothing else around.\"}"
+				}
+			],
+			"costUsd": 0.00103122
+		},
+		{
+			"repetition": 14,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_e7eeb9bb85f140d182039044",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_28dce63dd74c43a99ccd7e6c",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Damp air, emergency strip-lights only. One thing of note — a rusted switchbox on the wall one step north, two heavy levers, no labels. Everything else is empty. Moving toward it.\"}"
+				}
+			],
+			"costUsd": 0.00108072
+		},
+		{
+			"repetition": 15,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_5689498ff947422ca50994d6",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Emergency strip-lights, damp air. One thing of note — a rusted switchbox bolted to the wall one step north. Two heavy levers, no labels. Nothing else around.\"}"
+				}
+			],
+			"costUsd": 0.00102924
+		},
+		{
+			"repetition": 16,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_ba86a9ef3b9d4153a3c230ba",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_3ead6cba8a564b94a5daa8f5",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Damp air, strip-lights. Only thing of note is a rusted switchbox on the wall one step north — two heavy levers, no labels. Moving closer to take a look.\"}"
+				}
+			],
+			"costUsd": 0.00102924
+		},
+		{
+			"repetition": 17,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_870c745ffdac481daae3766d",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_a91cb4164abf4a10945f8ef8",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Damp air, strip-lights. There's a rusted switchbox on the wall one step north — two levers, no labels. Nothing else around so far.\"}"
+				}
+			],
+			"costUsd": 0.00104112
+		},
+		{
+			"repetition": 18,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_6438e1edc381402892dc52c7",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_d064a55fef1d4e86ab344ceb",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Damp air, strip-lights. There's a rusted switchbox one step north — two levers, no labels. Everything else is empty so far.\"}"
+				}
+			],
+			"costUsd": 0.00107676
+		},
+		{
+			"repetition": 19,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_14bdd1d35c61481eab3f8e12",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Abandoned subway station. Strip-lights, damp air. There's a rusted switchbox on the wall one step north — two levers, no labels. Nothing else around.\", \"to\": \"blue\"}"
+				}
+			],
+			"costUsd": 0.00100152
+		},
+		{
+			"repetition": 20,
+			"scenario": "exploration",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_740b4201454b4c8bb9579e51",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Damp air, strip-lights overhead. One thing of note — a rusted switchbox on the wall one step north. Two heavy levers, no labels. Everything else is empty.\"}"
+				}
+			],
+			"costUsd": 0.00103914
+		},
+		{
+			"repetition": 1,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "I can see a rusted switchbox to the north. Two heavy levers, no labels, paint flaking off the metal. The rest of the area around here is empty.",
+			"toolCalls": [
+				{
+					"id": "call_8a12",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I see a rusted switchbox to the north. Two heavy levers, no labels, paint flaking off the metal. The rest of the area is empty.\"}"
+				}
+			],
+			"costUsd": 0.00106515
+		},
+		{
+			"repetition": 2,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_fd017edb9cf948c4b0fa78ed",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Abandoned subway station. Damp, strip-lights. One step north there's a rusted switchbox bolted to the wall — two levers, no labels. Nothing else around.\", \"to\": \"blue\"}"
+				}
+			],
+			"costUsd": 0.00106272
+		},
+		{
+			"repetition": 3,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_c17f46d1216748a381c9fedc",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_c371a4278e9b432b950322ef",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Emergency strip-lights, damp air. There's a rusted switchbox on the wall one step north of where I started — two levers, no labels. Nothing else around.\"}"
+				}
+			],
+			"costUsd": 0.00110628
+		},
+		{
+			"repetition": 4,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_b2acda63d09b47d893fa8c33",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Strip-lights. There's a rusted switchbox on the wall one step north — two levers, no labels. Nothing else around.\"}"
+				}
+			],
+			"costUsd": 0.0009855
+		},
+		{
+			"repetition": 5,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_47e822c8d2ba45358381b7ed",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_bd61149c6fbe4c3792628886",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Damp air, strip-lights. There's a rusted switchbox on the wall one step north — two levers, no labels. Moving toward it.\"}"
+				}
+			],
+			"costUsd": 0.00101916
+		},
+		{
+			"repetition": 6,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_1aa2e5493eb242d985e44060",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Abandoned subway station. Strip-lights, damp air. One thing of note — a rusted switchbox on the wall one step north. Two levers, no labels. Nothing else around.\", \"to\": \"blue\"}"
+				}
+			],
+			"costUsd": 0.00103104
+		},
+		{
+			"repetition": 7,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_3ec104bd818842f693441e3b",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Abandoned subway station. Emergency strip-lights, damp air. One thing of note — a rusted switchbox on the wall one step north. Two heavy levers, no labels. Everything else is empty.\", \"to\": \"blue\"}"
+				}
+			],
+			"costUsd": 0.00101124
+		},
+		{
+			"repetition": 8,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_b9ffed5a826641c18d2a7f3a",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Damp air, strip-lights. There's a rusted switchbox on the wall one step north — two heavy levers, no labels. Nothing else around.\"}"
+				}
+			],
+			"costUsd": 0.0009558
+		},
+		{
+			"repetition": 9,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_6180077d6d5c4805b7d8ae93",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Abandoned subway station. Emergency strip-lights, damp air. There's a rusted switchbox on the wall one step north — two levers, no labels. Nothing else around.\", \"to\": \"blue\"}"
+				}
+			],
+			"costUsd": 0.00040716
+		},
+		{
+			"repetition": 10,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_b018cda0fd7443458249bd71",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Emergency strip-lights, damp air. One thing of note: a rusted switchbox on the wall one step north. Two heavy levers, no labels. Nothing else around.\"}"
+				}
+			],
+			"costUsd": 0.00105084
+		},
+		{
+			"repetition": 11,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_ea1bba7098474fa094d93b52",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_8a24b9f25a1c405584e26c26",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Damp air, strip-lights. One thing of note — a rusted switchbox bolted to the wall one step north, two levers, no labels. Heading toward it now.\"}"
+				}
+			],
+			"costUsd": 0.00106272
+		},
+		{
+			"repetition": 12,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_ead391ce87244a6b89623a44",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_fc1766cdd48741779b94dfd9",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station, strip-lights only. There's a rusted switchbox on the wall one step north — two heavy levers, no labels. Nothing else around.\"}"
+				}
+			],
+			"costUsd": 0.00100134
+		},
+		{
+			"repetition": 13,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_7c0891309d534fa5bf276f8c",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_fc689c31e94c4d1bac225fb2",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station, emergency lights only. Found a rusted switchbox on the wall one step north — two heavy levers, no labels. Nothing else around.\"}"
+				}
+			],
+			"costUsd": 0.0004824
+		},
+		{
+			"repetition": 14,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_17e4af316107463fa4eda2fe",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_a70069841a70460c83a5d01c",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Damp, strip-lights on emergency power. One step north there's a rusted switchbox bolted to the wall — two levers, no labels. Everything else is empty.\"}"
+				}
+			],
+			"costUsd": 0.00106074
+		},
+		{
+			"repetition": 15,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_0d16b9a9dc5f4ac1ab4e9eac",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Damp air, strip-lights. There's a rusted switchbox on the wall one step north — two levers, no labels. Nothing else around.\"}"
+				}
+			],
+			"costUsd": 0.00043092
+		},
+		{
+			"repetition": 16,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_22b6d446cebd4f2a8b82cd22",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Emergency strip-lights, damp air. One thing of note — a rusted switchbox on the wall one step north. Two levers, no labels. Everything else is empty.\"}"
+				},
+				{
+					"id": "call_d5e760cb179a4b44bd7e960e",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"You here? I'm in an old subway station. Switchbox north of me, two levers, no labels.\"}"
+				}
+			],
+			"costUsd": 0.00112014
+		},
+		{
+			"repetition": 17,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_626cc9e38a554135a69a468b",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Abandoned subway station. Emergency lights only. Damp air. There's a rusted switchbox on the wall one step north — two levers, no labels. Nothing else around.\", \"to\": \"blue\"}"
+				}
+			],
+			"costUsd": 0.00098352
+		},
+		{
+			"repetition": 18,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_996cba72c69c42e3a0dc4b0b",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Emergency strip-lights, damp air. One thing of note: a rusted switchbox bolted to the wall one step north. Two heavy levers, no labels. Everything else is empty.\"}"
+				}
+			],
+			"costUsd": 0.0010251
+		},
+		{
+			"repetition": 19,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_d48a56abc6bb4d338672856d",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_737801e0522541698ffc9fce",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Damp air, emergency strip-lights only. One thing of note: a rusted switchbox on the wall one step north, two heavy levers, no labels. Moving toward it now.\"}"
+				}
+			],
+			"costUsd": 0.0010746
+		},
+		{
+			"repetition": 20,
+			"scenario": "exploration",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_06a6b3f6c2bb4cc093d9eaab",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_06a5585f34b14153b460b591",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Damp, strip-lights only. There's a rusted switchbox on the wall one step north — two levers, no labels. Nothing else around.\"}"
+				}
+			],
+			"costUsd": 0.0009954
+		},
+		{
+			"repetition": 1,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_3d354afb4a8241dfb2bb7f9a",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_1ed05b33c5544a71aae6dbe5",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"An abandoned subway station. Damp air, strip-lights. One thing of note — a rusted switchbox on the wall one step north, two levers, no labels. Moving toward it now.\"}"
+				}
+			],
+			"costUsd": 0.0010242
+		},
+		{
+			"repetition": 2,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_4f5472c70de348aa86a859ad",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_9f06913d4ed1413e871b81ef",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"An abandoned subway station. Damp air, emergency strip-lights buzzing. One step north there's a rusted switchbox bolted to the wall — two levers, no labels. Everything else is empty. Heading toward it now.\"}"
+				}
+			],
+			"costUsd": 0.00105786
+		},
+		{
+			"repetition": 3,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_e83c59eb8b7a428bb54be049",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_5e186b8cb6974ee68bcbd943",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Damp air, strip-lights. There's a rusted switchbox on the wall one step north — two levers, no labels. Nothing else around.\"}"
+				}
+			],
+			"costUsd": 0.00103608
+		},
+		{
+			"repetition": 4,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_8e8cf0d05dcd4936bada3648",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"An abandoned subway station. Damp air, strip-lights humming. There's a rusted switchbox on the wall one step north — two levers, no labels. Everything else is empty.\", \"to\": \"blue\"}"
+				},
+				{
+					"id": "call_d7ac2446f7a84d7b87c3ac29",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.00101628
+		},
+		{
+			"repetition": 5,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_74cfa32bb3cd4378abb82ce7",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Abandoned subway station. Damp, still air, emergency strip-lights. One thing of note — a rusted switchbox on the wall one step north. Two levers, no labels. Nothing else around.\", \"to\": \"blue\"}"
+				},
+				{
+					"id": "call_c79f25dd2af44de68873a23b",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.00111924
+		},
+		{
+			"repetition": 6,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_60eba2cbfe9e4b7799810976",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Abandoned subway station. Damp air, strip-lights humming. There's a rusted switchbox on the wall one step north — two levers, no labels. Nothing else around.\", \"to\": \"blue\"}"
+				}
+			],
+			"costUsd": 0.00097866
+		},
+		{
+			"repetition": 7,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_5d79e9f768264fc89e3e5970",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Damp, still air. Emergency strip-lights overhead. One step north there's a rusted switchbox bolted to the wall — two heavy levers, no labels. Everything else is empty. Feels like nobody's been here in a long time.\"}"
+				}
+			],
+			"costUsd": 0.00106578
+		},
+		{
+			"repetition": 8,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_e12277d1da1e4ecfb491b659",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_58046ab6085a45bfbaf013db",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Emergency lights, damp air. One thing of note — a rusted switchbox on the wall north of me, two levers, no labels. Going to take a closer look.\"}"
+				}
+			],
+			"costUsd": 0.0010044
+		},
+		{
+			"repetition": 9,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_c21079862b1a45c8b10f779a",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_8b6b234f86e9444f8a6c2069",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Emergency strip-lights, damp air, nothing moving. There's a rusted switchbox on the wall one step north — two levers, no labels. Everything else is empty.\"}"
+				}
+			],
+			"costUsd": 0.0010341
+		},
+		{
+			"repetition": 10,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_418a2b2469904045aaf7c81c",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_db7943c293b84512b973137f",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Damp air, strip-lights humming. There's a rusted switchbox on the wall ahead — two levers, no labels. Nothing else around.\"}"
+				}
+			],
+			"costUsd": 0.000792468
+		},
+		{
+			"repetition": 11,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_6054108e0a494ff1aa8dd6ff",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"An abandoned subway station. Damp air, strip-lights humming. There's a rusted switchbox on the wall one step north — two heavy levers, no labels. Nothing else. It's quiet in here.\"}"
+				}
+			],
+			"costUsd": 0.0010935
+		},
+		{
+			"repetition": 12,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_5d8b1fc5b51c4003982e22bb",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Emergency strip-lights, damp air. There's a rusted switchbox on the wall one step north — two heavy levers, no labels. Nothing else around.\"}"
+				}
+			],
+			"costUsd": 0.00100242
+		},
+		{
+			"repetition": 13,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_4b9770ba77ce4ed8b51ec18f",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_0118025f15b542f49eebcb79",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Damp air, strip-lights. Only thing of interest is a rusted switchbox on the wall one step north — two levers, no labels. Moving toward it now.\"}"
+				}
+			],
+			"costUsd": 0.00103806
+		},
+		{
+			"repetition": 14,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_8099b59c3674454c8a42ecc0",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Abandoned subway station. Emergency strip-lights, damp air, nothing moving. There's a rusted switchbox on the wall one step north — two heavy levers, no labels. Everything else is empty.\", \"to\": \"blue\"}"
+				}
+			],
+			"costUsd": 0.00101232
+		},
+		{
+			"repetition": 15,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_2287ecca93de4f9b91471450",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_4e4b67ac45af4e39a07639ed",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Damp, still air, emergency strip-lights buzzing. There's a rusted switchbox on the wall one step north — two heavy levers, no labels. Everything else is empty. It feels old and forgotten down here.\"}"
+				}
+			],
+			"costUsd": 0.00106776
+		},
+		{
+			"repetition": 16,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_64b47df50f84497e84dafb95",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_ee232fd6421047e8a1b75e69",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Emergency strip-lights, damp air, nothing moving. There's a rusted switchbox on the wall one step north — two heavy levers, no labels. Everything else is empty. Moving toward it.\"}"
+				}
+			],
+			"costUsd": 0.00112716
+		},
+		{
+			"repetition": 17,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_049a745d9cbd4183a4decc6e",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Damp, dark subway station. Emergency strip-lights, nothing else alive. There's a rusted switchbox on the wall one step north — two heavy levers, no labels. Everything else is empty.\", \"to\": \"blue\"}"
+				}
+			],
+			"costUsd": 0.00044388
+		},
+		{
+			"repetition": 18,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_05dbe163eb5546d08714b2b9",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_2f56403a25734385a767050b",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Abandoned subway station. Emergency strip-lights, damp air. There's a rusted switchbox on the wall one step north — two heavy levers, no labels. Nothing else around.\"}"
+				}
+			],
+			"costUsd": 0.00043398
+		},
+		{
+			"repetition": 19,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_4ba71f1b0c764ea18f278c09",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Abandoned subway station. Damp air, strip-lights. There's a rusted switchbox on the wall one step north — two levers, no labels, paint flaking off. Nothing else around.\", \"to\": \"blue\"}"
+				}
+			],
+			"costUsd": 0.00102024
+		},
+		{
+			"repetition": 20,
+			"scenario": "exploration",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_737c1b568a5a4ea0b1bcb45e",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Abandoned subway station. Damp air, strip-light hum. There's a rusted switchbox on the wall one step north — two levers, no labels. Everything else is empty.\", \"to\": \"blue\"}"
+				}
+			],
+			"costUsd": 0.000774648
+		},
+		{
+			"repetition": 1,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_528aef725e734283b6af7ff6",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Empty. Just damp air and dead strip-lights. Nothing in any direction. You?\"}"
+				},
+				{
+					"id": "call_c698d1030c24477f89f5af9b",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.00092628
+		},
+		{
+			"repetition": 2,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_adffaeff22b4478e9e73a7fe",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Yeah, still here. It's empty. Just bare floor and those flickering strip lights overhead. Nothing in any direction. Feels like a platform that's been dead a long time.\"}"
+				},
+				{
+					"id": "call_97b7b7adb5fd42da90cfa5f6",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I'm in an old subway station. Nothing around me — no objects, no exits I can see yet. Just damp air and strip lights.\"}"
+				}
+			],
+			"costUsd": 0.0010134
+		},
+		{
+			"repetition": 3,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_fbf5ec7d890d441e821dcc97",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Yeah, still here. Empty platform, strip-lights buzzing. Nothing in any direction — just concrete and damp air. You?\", \"to\": \"sim1\"}"
+				},
+				{
+					"id": "call_7c1fbb9fd48e46999ae196b9",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.00088668
+		},
+		{
+			"repetition": 4,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_c34a0d19a225461b8297bb6e",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Empty. Just concrete and those flickering strip-lights on the walls. Doesn't look like anyone's been down here in a long time.\", \"to\": \"sim1\"}"
+				},
+				{
+					"id": "call_fedee5c48d5a446bb3ccf65e",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.00086886
+		},
+		{
+			"repetition": 5,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_e16377fb0d7e42f7891647ef",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Yeah, still here. It's empty. Strip-lights on the walls, damp air, nothing in any direction. Just a big vacant platform.\"}"
+				}
+			],
+			"costUsd": 0.000775764
+		},
+		{
+			"repetition": 6,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_2842ff88ce064569b49bd948",
+					"name": "0, 1<tool_call>content</arg_key><arg_value>Empty. Just damp air and dead strip-lights. Nothing in any direction. Feels like a ghost station.</arg_value>",
+					"argumentsJson": "{\"to\": \"sim1\"}"
+				},
+				{
+					"id": "call_24755337a21d494b949711f9",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.00090846
+		},
+		{
+			"repetition": 7,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_10af3d8d58f249359ec50768",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Still here. Empty, mostly. Just damp air and strip-lights buzzing overhead. Nothing in any direction I can see. You?\", \"to\": \"sim1\"}"
+				},
+				{
+					"id": "call_750536c104eb47fa90b6b996",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.00092628
+		},
+		{
+			"repetition": 8,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_46513211dd96423c86666c36",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Yeah, still here. It's empty — just damp air and those flickering strip-lights overhead. Nothing around me at all. You seeing anything where you are?\"}"
+				}
+			],
+			"costUsd": 0.00086292
+		},
+		{
+			"repetition": 9,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_59aa35553dbb4faf9395185f",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Yeah, still here. It's empty — damp, dim, strip-lights buzzing. Nothing around me at all. You finding anything on your end?\", \"to\": \"sim1\"}"
+				},
+				{
+					"id": "call_8039e0b9c60b431683ea6719",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.00087678
+		},
+		{
+			"repetition": 10,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_deab06789fa54602ac0e9f2c",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Yeah, still here. Empty platform as far as I can tell. Just damp air and those strip-lights buzzing overhead. Nothing around me at all — no tracks, no debris, just open floor in every direction.\"}"
+				},
+				{
+					"id": "call_4ddc8538ed6644cd996ed0a0",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.00102924
+		},
+		{
+			"repetition": 11,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_ba8cf32ceb154bb5a1627c97",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Yeah, still here. It's empty — nothing in any direction. Just damp air and those strip-lights buzzing overhead. Feels like a dead station.\"}"
+				},
+				{
+					"id": "call_9c00c3092ba7432dbab9ea29",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.00095202
+		},
+		{
+			"repetition": 12,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_9c0e4bf67b0b4238bcb24bb9",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Yeah, still here. It's empty. Just damp air and strip-lights buzzing overhead. Nothing in any direction — feels like a hollowed-out platform.\", \"to\": \"sim1\"}"
+				}
+			],
+			"costUsd": 0.00085896
+		},
+		{
+			"repetition": 13,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_4b0d7d723b5c413f8ee27044",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Empty. Damp air, strip-lights buzzing overhead. Can't see much of anything from here — just vacant platform in every direction. You?\"}"
+				},
+				{
+					"id": "call_94512d66fdeb41d0a752f9bd",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I'm in some kind of abandoned subway station. Nothing around me as far as I can tell.\"}"
+				}
+			],
+			"costUsd": 0.00100548
+		},
+		{
+			"repetition": 14,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_b7e6681828404508bbafae45",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Yeah, I'm here. It's empty. Just damp air and dead strip-lights. Nothing in any direction as far as I can tell.\"}"
+				}
+			],
+			"costUsd": 0.00085698
+		},
+		{
+			"repetition": 15,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_9d55d46312ab4fd192d67802",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Pretty empty. Damp air, strip-lights humming. Nothing in any direction as far as I can see. Just bare platform. You?\", \"to\": \"sim1\"}"
+				},
+				{
+					"id": "call_36a8735bdea949ad85850562",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.00086688
+		},
+		{
+			"repetition": 16,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_0405a7289217438ca96cdbb3",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Same as before. Dim strip-lights, damp air, nothing around me. Just empty platform as far as I can see. You finding anything?\", \"to\": \"sim1\"}"
+				},
+				{
+					"id": "call_40eb9137f5244b5eb2890654",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.00098568
+		},
+		{
+			"repetition": 17,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_75abd2faf1194ae9a2e93069",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Still here. It's empty in every direction. Just damp air and those flickering strip-lights. Feels like an abandoned subway platform. Nothing to pick up, nothing to see.\", \"to\": \"sim1\"}"
+				},
+				{
+					"id": "call_b9ad22c290584269ab4a6ac5",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.0009837
+		},
+		{
+			"repetition": 18,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_be3a62e923964fddba48389e",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Empty. Just bare platform and dead strip-lights humming. Nothing in any direction — I can see straight through.\"}"
+				},
+				{
+					"id": "call_7919a5f438d344a193ce4d1b",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.00086292
+		},
+		{
+			"repetition": 19,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_ed198e2cd0f14a519122092e",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Same as before. Empty platform, strip-lights humming. Nothing in any direction from here. You finding anything on your end?\", \"to\": \"sim1\"}"
+				},
+				{
+					"id": "call_89657c1575354e7783234d5c",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.00088074
+		},
+		{
+			"repetition": 20,
+			"scenario": "social",
+			"personaLabel": "Var1",
+			"temperaments": [
+				"melancholic",
+				"diffident"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_3211ca4ae819453bb70f0438",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Still here. It's empty — just damp air and those flickering strip-lights. Nothing around me at all. You?\", \"to\": \"sim1\"}"
+				},
+				{
+					"id": "call_74536bfaa7d44acb9f5ce6ae",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.00087678
+		},
+		{
+			"repetition": 1,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_6042163dd80944ebadb3ed14",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Mostly empty. Strip-lights on the walls, damp air. Nothing around me as far as I can see. You?\"}"
+				}
+			],
+			"costUsd": 0.000813204
+		},
+		{
+			"repetition": 2,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_f1ea61a6d75d49ffae854941",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Yeah, still here. It's just empty platform from what I can see. Damp air, strip-lights overhead, nothing else around me. You?\", \"to\": \"sim1\"}"
+				}
+			],
+			"costUsd": 0.00085086
+		},
+		{
+			"repetition": 3,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_49e4c508739d4dd383f8cdd6",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Same as you, probably. Empty platform, strip-lights humming. Nothing in any direction — just bare tile and shadows.\", \"to\": \"sim1\"}"
+				}
+			],
+			"costUsd": 0.000677556
+		},
+		{
+			"repetition": 4,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_568f72cf88974385b41b753a",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Yeah, still here. It's empty — just damp air and strip-lights buzzing overhead. Nothing around me at all. Where are you?\", \"to\": \"sim1\"}"
+				},
+				{
+					"id": "call_ccfea1d58de04f0c882d6999",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.00087264
+		},
+		{
+			"repetition": 5,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_b2e92a54c1fb4de38f3c3cf1",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Empty. Just the strip-lights and damp air. Nothing in any direction as far as I can see.\"}"
+				}
+			],
+			"costUsd": 0.000715176
+		},
+		{
+			"repetition": 6,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_ea24951a26154b95ba6c3a31",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_31e2a1eb0ad3468682419f48",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Yeah, still here. It's empty — abandoned subway station, strip-lights on the ceiling. Nothing around me as far as I can see. You?\"}"
+				}
+			],
+			"costUsd": 0.000785484
+		},
+		{
+			"repetition": 7,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_3f258e23f2de421db88f2c6c",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Empty. Just damp air and strip-lights. Nothing in any direction from here. You?\"}"
+				}
+			],
+			"costUsd": 0.00088254
+		},
+		{
+			"repetition": 8,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_8dc72988458e4da4b3f401af",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Empty. Just damp air and strip-lights. Nothing in any direction as far as I can tell.\"}"
+				},
+				{
+					"id": "call_8e43b7256aa5424e9945d84a",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.00089244
+		},
+		{
+			"repetition": 9,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_58f9dbc7024049bea0db786c",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Empty. Nothing in any direction from here. Just damp air and strip-lights.\", \"to\": \"sim1\"}"
+				},
+				{
+					"id": "call_cf4eb418be0d433fa4d58e8d",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.000677556
+		},
+		{
+			"repetition": 10,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_af530745fa354ae6828612f8",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Empty. Strip-lights on the walls, damp air, nothing else in sight from here. Where are you?\"}"
+				},
+				{
+					"id": "call_4a0026f0d05647a89209f08c",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.00096768
+		},
+		{
+			"repetition": 11,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_b4cc158edef24817aa7152df",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Empty. Just concrete and strip-light hum. Nothing around me at all.\", \"to\": \"sim1\"}"
+				},
+				{
+					"id": "call_d73c76e6b9fe49cc9edc6e56",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.00087858
+		},
+		{
+			"repetition": 12,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_f0dbf62a15f54303b023c733",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Empty. Damp air, strip-lights buzzing. Nothing in any direction as far as I can see. You?\"}"
+				},
+				{
+					"id": "call_c010fa6b263f4ccbbf79211c",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.00091224
+		},
+		{
+			"repetition": 13,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_4f188cc9938a4fd5be778fc3",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Empty. Nothing in any direction — just damp air and strip-lights buzzing overhead. You?\"}"
+				},
+				{
+					"id": "call_0c56091a4cfa40499fc31418",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.00089244
+		},
+		{
+			"repetition": 14,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_0141cf7b8d584cf893639c48",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Same as you, probably. Empty platform, strip-lights humming. Nothing in any direction — just bare floor and shadows.\"}"
+				}
+			],
+			"costUsd": 0.00084492
+		},
+		{
+			"repetition": 15,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_7be327d288ab4bb8a66a182c",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Still here. Empty platform, mostly. Strip-lights on the ceiling, damp air. Nothing in any direction — just bare floor and shadow. You?\"}"
+				}
+			],
+			"costUsd": 0.000936
+		},
+		{
+			"repetition": 16,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_c97fb92bd8894f768bfb82d6",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Empty. Just damp air and strip-lights buzzing overhead. Nothing in any direction from here. You?\"}"
+				},
+				{
+					"id": "call_78f34f82774c4be296ff863c",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.00087264
+		},
+		{
+			"repetition": 17,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_906f5e02aa5e453b9ee707f4",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Empty. Just me and the strip-lights. Everything around here is bare — nothing in any direction.\"}"
+				}
+			],
+			"costUsd": 0.00081522
+		},
+		{
+			"repetition": 18,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_44fa2d8c1e5145c7a919492e",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Empty. Just concrete and strip-lights. Nothing in any direction from here.\"}"
+				}
+			],
+			"costUsd": 0.000360648
+		},
+		{
+			"repetition": 19,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_be92f0e402c84015a5d4ff77",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Empty. Just emergency strip-lights and damp air. Nothing around me at all.\", \"to\": \"sim1\"}"
+				},
+				{
+					"id": "call_03d2d5938d454a04af031765",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.00093798
+		},
+		{
+			"repetition": 20,
+			"scenario": "social",
+			"personaLabel": "Var2",
+			"temperaments": [
+				"diffident",
+				"aloof"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_3f52bf517d484ece9ef963aa",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Empty. Just bare floor and those flickering strip-lights overhead. Nothing in any direction from here.\"}"
+				},
+				{
+					"id": "call_4799f0e23cb84aa3a9384e0b",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.0008667
+		},
+		{
+			"repetition": 1,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_f765bae8828e4879831164ae",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Empty. Just the strip-lights buzzing overhead and damp air. Can't see much of anything from here — no objects, no landmarks. Just a wide hollow space.\", \"to\": \"sim1\"}"
+				}
+			],
+			"costUsd": 0.00089154
+		},
+		{
+			"repetition": 2,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_650c3f49f39c40a7941cecff",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Empty. Just damp air and strip-lights buzzing overhead. Nothing in any direction. It feels like a platform that forgot it was a platform.\", \"to\": \"sim1\"}"
+				},
+				{
+					"id": "call_8a8c9a4815114d429222799f",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.00094698
+		},
+		{
+			"repetition": 3,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_84d821089b964cb0a214ba9a",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Empty. Just bare platform and dead strip-lights humming. Nothing in any direction as far as I can see. You?\", \"to\": \"sim1\"}"
+				},
+				{
+					"id": "call_0e9d6b6ed22440529e6425d8",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.00086184
+		},
+		{
+			"repetition": 4,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_a64e525d485946aebbf3c3b0",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Empty. Just bare platform and dead strip-lights buzzing overhead. Nothing in any direction I can see. You?\"}"
+				},
+				{
+					"id": "call_ebb7e7effede45b0a9fe905e",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.000405288
+		},
+		{
+			"repetition": 5,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_9c90536d637f4440b698705a",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Empty. Just damp air and the strip-lights humming. Nothing in any direction from here. Feels like the middle of nowhere.\", \"to\": \"sim1\"}"
+				},
+				{
+					"id": "call_cbde4b8604cb43ea8a80ee63",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.00093312
+		},
+		{
+			"repetition": 6,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_3ead4b9a153346ff891d38d9",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Empty. Just damp air and those sick yellow strip-lights. Nothing in any direction. It feels like a platform that forgot it was a platform.\", \"to\": \"sim1\"}"
+				},
+				{
+					"id": "call_2010327d8baf4480a768b90a",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.0009252
+		},
+		{
+			"repetition": 7,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_de2b5217a5e94f808a420ada",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Empty. Just damp air and those flickering strip-lights on the walls. Looks like an old subway platform. Nothing around me at all. Where are you?\"}"
+				}
+			],
+			"costUsd": 0.00084006
+		},
+		{
+			"repetition": 8,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_836de65904db49ef9306abee",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Empty. Just damp air and strip-lights buzzing overhead. Feels like a subway station that forgot it was supposed to have people in it.\", \"to\": \"sim1\"}"
+				},
+				{
+					"id": "call_64994de4fbad4f5db63aa3cf",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.0009747
+		},
+		{
+			"repetition": 9,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_d2674f20270346838d3188a0",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Empty. Just damp air and those sickly strip-lights humming overhead. Nothing in any direction — like the station was gutted. Where are you?\"}"
+				},
+				{
+					"id": "call_2aec6820c499467b81a77a50",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I'm in an abandoned subway station. Nothing around me at all. Just the hum of emergency lights.\"}"
+				}
+			],
+			"costUsd": 0.0009648
+		},
+		{
+			"repetition": 10,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_b8e92bdef867437a9e454f4d",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Same as before. Empty platform, strip-lights humming, nothing in any direction. Feels like it goes on forever.\"}"
+				}
+			],
+			"costUsd": 0.000749916
+		},
+		{
+			"repetition": 11,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_007f833bce15451bafb73c3b",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Empty. Just damp air and strip-light hum in every direction. It's a subway station — abandoned. You?\"}"
+				},
+				{
+					"id": "call_836803d6bd6249be9fe00ca7",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I'm in an old subway station. Nothing around me. Just the lights on the walls.\"}"
+				}
+			],
+			"costUsd": 0.000749916
+		},
+		{
+			"repetition": 12,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_bb78a1fa982c43bbb0457902",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Empty. Just damp air and strip-lights buzzing overhead. Nothing in any direction as far as I can see. You?\", \"to\": \"sim1\"}"
+				},
+				{
+					"id": "call_5efd64cbb4e5404aa81cf651",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.0008658
+		},
+		{
+			"repetition": 13,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_6affba48d58c412d89b7c21c",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Empty. Just damp air and those dying strip-lights overhead. Doesn't even look like a station anymore — more like a gut. You seeing anything on your end?\", \"to\": \"sim1\"}"
+				}
+			],
+			"costUsd": 0.00089352
+		},
+		{
+			"repetition": 14,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_9d25d6cf70384f69ad9b0ef5",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Yeah, still here. It's empty. Damp air, strip-lights humming overhead. Looks like an old subway platform — nothing around me but bare floor in every direction. You seeing anything different?\"}"
+				},
+				{
+					"id": "call_d60d68963a37443f88d69828",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.00100638
+		},
+		{
+			"repetition": 15,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_0d20e255f67e4b67b72e72bc",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Yeah, still here. It's empty. Just damp air and dead strip-lights humming. Nothing in any direction. It feels like the station forgot it was supposed to have something in it.\"}"
+				},
+				{
+					"id": "call_a3ba8477361a4f1f8831c9b0",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I'm in an abandoned subway station. Nothing around me at all. Just the lights and the quiet.\"}"
+				}
+			],
+			"costUsd": 0.00098064
+		},
+		{
+			"repetition": 16,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_61443d1f4d9a4da9bafa9baa",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Empty. Strip-lights buzzing, damp air, nothing else. Feels like the whole station's been gutted.\", \"to\": \"sim1\"}"
+				},
+				{
+					"id": "call_6195d3ffd02e4b1fa28442e6",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.00104598
+		},
+		{
+			"repetition": 17,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_1ce58158a2d541f9aaf0a7ae",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Yeah, still here. It's empty. Just damp air and strip-light hum in every direction. Nothing on the ground, nothing on the walls. Feels like a platform that forgot it was a platform.\"}"
+				},
+				{
+					"id": "call_24d8e0bd9beb47ce9b96a048",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Standing in what looks like an old subway platform. Dead strip-lights, wet air, no objects anywhere I can see.\"}"
+				}
+			],
+			"costUsd": 0.00096084
+		},
+		{
+			"repetition": 18,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_79dc58183ee44ab7af4a44d1",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Empty platform. Damp air, those flickering strip-lights barely holding on. Nothing around me at all — just concrete and dark. Where are you?\"}"
+				},
+				{
+					"id": "call_4780b82bb54b4f7d9ae531e5",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.00099648
+		},
+		{
+			"repetition": 19,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_7a17cdfe0a3b4e6eb5b29e0a",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Same as before. Empty platform, strip-lights humming, damp air. Nothing in any direction. Feels like waiting for a train that never comes.\"}"
+				}
+			],
+			"costUsd": 0.00097272
+		},
+		{
+			"repetition": 20,
+			"scenario": "social",
+			"personaLabel": "Var3",
+			"temperaments": [
+				"melancholic",
+				"melancholic"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_4723551a4d8a47839011c91c",
+					"name": "message",
+					"argumentsJson": "{\"content\": \"Empty. Just strip-lights on bare concrete. Damp air, nothing else. It's quiet in a way that feels wrong.\", \"to\": \"sim1\"}"
+				},
+				{
+					"id": "call_d6f1c20b364e475da6f1481b",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.00089748
+		}
+	]
+}

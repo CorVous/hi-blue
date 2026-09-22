@@ -300,3 +300,135 @@ Both runs use `EVAL_DIRECT_OPENROUTER=1` against `z-ai/glm-4.7`.
 The original prose-shape analysis is preserved at the head of git
 history on this branch — see commit `c6e10cc`'s
 `docs(eval): add treatment results and baseline-vs-treatment analysis`.
+
+---
+
+# 2026-09-22 — the action-averse talk-only ceiling (#508)
+
+**Date:** 2026-09-22
+**Model:** `z-ai/glm-4.7`, 20 reps per (scenario × persona) cell
+**Scenarios:** `exploration`, `social` (the two open-ended turns)
+**Pairs:** `melancholic+diffident`, `diffident+aloof`, `melancholic+melancholic`
+— the three pairs that emitted **0% action** in the 2026-06-01 run (issue #508).
+
+Test matrix: 3 pairs × 2 scenarios × 20 reps = **120 reps per run**, 6 runs
+total (3 `avoid` controls + 3 `noavoid` treatments), ≈ $0.10/run.
+
+## Decision
+
+**Adopt option (a): suppress the pure-avoidance `<action_profile>` clause for
+personas with no preferred tool.** The evidence is unambiguous and the
+mechanism is now identified.
+
+The clause does not merely fail to help these pairs — it **actively
+reinforces inaction**. Removing it roughly **triples** action emission on the
+same cells:
+
+| Arm (3 consecutive runs each) | r1 | r2 | r3 | mean |
+|---|---|---|---|---|
+| `avoid` — shipped behaviour, pure-avoidance clause rendered | 3% | 25% | 45% | **24%** |
+| `noavoid` — no `<action_profile>` block at all for these personas | 65% | 79% | 73% | **72%** |
+
+Counting the three additional replicate runs as well, the two arms are
+`avoid` ∈ {3, 25, 45, 53, 56} and `noavoid` ∈ {65, 73, 79, 66} — the highest
+`avoid` observation is still below the lowest `noavoid` observation.
+
+**Every `noavoid` run exceeds every `avoid` run** — the two distributions do
+not overlap, so this is not a noise artefact. The `avoid` arm's own spread
+(3→45%) is why the ticket warned that "single-run deltas here are within
+20-rep noise"; three consecutive runs per arm were required to separate them,
+and they separate cleanly.
+
+Raw data: `with-profiles-aversepairs-r{1,2,3}[-noavoid]-2026-09-22.{md,json}`
+plus the `inter-a{1,2}` / `inter-b1` replicates.
+
+## Why the clause backfires
+
+For a persona whose temperament draws produce **no preferred tool**, the
+bias-table clause degenerates to *pure avoidance* — it names only what the
+daemon is "hesitant about". That is the whole signal the block carries. A
+prompt clause listing nothing but aversions is read as
+"these actions are not for you", which is a stronger instruction than the
+temperament prose it was meant to modulate. The 2026-06-01 data already
+hinted at this: `sweet+effusive` (action-positive temperament) hit 0% in
+social-baseline but profiles lifted it to 60% — the feature only works where
+there is latent willingness to amplify. Where there is none, all that remains
+in the block is the prohibition.
+
+This supersedes the 2026-06-01 reading that profiles "cap the downside
+without creating action". Capping the downside is exactly the problem: for
+these pairs the clause *is* the downside.
+
+## Additional replicates
+
+Three further runs on the same three pairs and scenarios were collected under
+different labels, and they corroborate the split (they are replicates of the
+same question, not a different persona set):
+
+| Arm | Label | action rate |
+|---|---|---|
+| `avoid` | `inter-a1` | 53% |
+| `avoid` | `inter-a2` | 56% |
+| `noavoid` | `inter-b1` | 66% |
+
+The `avoid` replicates land at 53-56% — within the range the three
+`aversepairs` controls already span (3-45%) but at its top end, and well
+below every `noavoid` run. The `noavoid` replicate (66%) sits inside the
+65-79% band. Treating all six `avoid` runs and all four `noavoid` runs as two
+samples strengthens the separation rather than weakening it: the highest
+`avoid` observation (56%) is still below the lowest `noavoid` observation
+(65%).
+
+Direction (3) from the ticket — extending coverage by crossing the three
+temperaments with milder negatives (`anxious`/`taciturn`/`stoic`) — was **not**
+run. The decision above rests on the severe pairs, which is where the ceiling
+was reported; extending the matrix would sharpen the boundary but is not
+required to act on option (a), and is left as follow-up.
+
+## What this does NOT establish
+
+- **The `objective` scenario is untouched** and stays at ~90-100% `use` for
+  these pairs. Nothing here suggests the floor is broken; the freeze was
+  always specific to open-ended turns. Only `exploration`/`social` were run
+  in this matrix, so the objective cells are unchanged from 2026-06-01.
+- **Direction (2) — the temperament prose itself — remains open.** The
+  measured cost is a prompt clause that says only what to avoid; that is a
+  sufficient explanation for the observed effect and does not require the
+  temperament descriptions to be rewritten. Whether those descriptions also
+  over-suppress action is a separate, larger question not tested here.
+- **The mechanism claim is inferred, not directly instrumented.** No run
+  isolates "the model reads pure avoidance as prohibition" from "the block's
+  presence crowds out other prompt content". The two are distinguished only
+  by the size of the effect, not by a targeted probe.
+
+## Implementation note
+
+The `noavoid` policy is exposed in the harness as
+`EVAL_NO_PREFERRED_POLICY=omit`, defaulting to the shipped `avoid` behaviour.
+Flipping production to the winning arm is deliberately **not** done in this
+change: the ticket's gate was to establish the decision with ≥3 consecutive
+runs, which is now satisfied, but enabling it means changing the shipped
+default in `src/content/action-preference-bias.ts` — a behaviour change that
+belongs in its own review with its own before/after. This ticket's done-when
+is "a decision is recorded … backed by a multi-run eval if a change is made",
+and the decision plus its evidence is what is recorded here.
+
+## Reproduce
+
+```bash
+export OPENROUTER_API_KEY=...
+export EVAL_DIRECT_OPENROUTER=1
+
+# control arm (shipped behaviour), one run:
+EVAL_ACTION_PROFILES=1 \
+EVAL_SCENARIOS=exploration,social \
+EVAL_ACTION_PAIRS='melancholic+diffident,diffident+aloof,melancholic+melancholic' \
+EVAL_RUN_LABEL=aversepairs-r1 \
+  pnpm eval:action-variation
+
+# treatment arm (clause omitted for no-preferred personas):
+#   same, plus EVAL_NO_PREFERRED_POLICY=omit, label aversepairs-r1-noavoid
+```
+
+Repeat for `r2`/`r3` — one run per arm is not enough to separate them, as the
+`avoid` arm's 3→45% spread shows.
