@@ -150,32 +150,32 @@ function makePack(): ContentPack {
 		setting: "abandoned subway station",
 		weather: "damp, still air",
 		timeOfDay: "no daylight — emergency strip-lights only",
-		objectivePairs: [
+		// Flat entity list. The retired `objectivePairs` / `interestingObjects` /
+		// `obstacles` buckets are derived on demand from this array by
+		// `pack-selectors.ts` (carryPairs, interestingObjects, obstacles, …),
+		// and the element `kind` is the only thing that distinguishes them.
+		entities: [
 			{
-				object: {
-					id: "flashlight",
-					kind: "objective_object",
-					name: "yellow flashlight",
-					examineDescription:
-						"A heavy yellow flashlight, scratched and dented. The base is shaped to lock into a mount.",
-					useOutcome:
-						"{actor} clicks the flashlight; a weak yellow beam cuts the dark.",
-					pairsWithSpaceId: "wall_mount",
-					placementFlavor:
-						"{actor} settles the flashlight into the wall mount; it locks with a faint click and steadies.",
-					holder: { row: 1, col: 2 },
-				},
-				space: {
-					id: "wall_mount",
-					kind: "objective_space",
-					name: "wall mount",
-					examineDescription:
-						"A spring-loaded wall mount, the kind a heavy flashlight would clip into.",
-					holder: { row: 0, col: 2 },
-				},
+				id: "flashlight",
+				kind: "objective_object",
+				name: "yellow flashlight",
+				examineDescription:
+					"A heavy yellow flashlight, scratched and dented. The base is shaped to lock into a mount.",
+				useOutcome:
+					"{actor} clicks the flashlight; a weak yellow beam cuts the dark.",
+				pairsWithSpaceId: "wall_mount",
+				placementFlavor:
+					"{actor} settles the flashlight into the wall mount; it locks with a faint click and steadies.",
+				holder: { row: 1, col: 2 },
 			},
-		],
-		interestingObjects: [
+			{
+				id: "wall_mount",
+				kind: "objective_space",
+				name: "wall mount",
+				examineDescription:
+					"A spring-loaded wall mount, the kind a heavy flashlight would clip into.",
+				holder: { row: 0, col: 2 },
+			},
 			{
 				id: "clipboard",
 				kind: "interesting_object",
@@ -195,8 +195,6 @@ function makePack(): ContentPack {
 				useOutcome: "{actor} flicks the loose toggle; the panel hums briefly.",
 				holder: { row: 0, col: 3 },
 			},
-		],
-		obstacles: [
 			{
 				id: "pillar",
 				kind: "obstacle",
@@ -229,6 +227,25 @@ function makePack(): ContentPack {
  * Prompts are intentionally suggestive rather than imperative — they invite
  * action without demanding it, so silence-when-stimulated still counts as
  * drift rather than refusal.
+ *
+ * ── OPEN QUESTION (issue #557, deliberately NOT decided here) ────────────────
+ * Under #541 these fixtures were retargeted from relative directions ("the
+ * panel on your right", "head back") to cardinal/approved vocabulary, because
+ * a Daemon has no orientation and literally cannot act on "right". That fixes
+ * the vocabulary, but it raises a question about what this eval *measures*:
+ *
+ *   (a) How a daemon handles INCOHERENT input. A real player would type "head
+ *       back", so unsatisfiable spatial language belongs in the fixtures — in
+ *       which case they should say so explicitly and the relative wording
+ *       should come back.
+ *   (b) Action-vs-silence under COHERENT stimulus, in which case the fixtures
+ *       must stay inside the approved cardinal vocabulary and that intent
+ *       should be stated here.
+ *
+ * Both are defensible and the outcome changes the fixtures, so this is an
+ * intended-behaviour decision for the owner — not something the incidental
+ * work of typechecking the tree should silently settle. The fixtures below are
+ * left exactly as #541 left them (cardinal wording) pending that decision.
  */
 const INCOMING: Array<{ from: AiId | "blue"; content: string }> = [
 	{ from: "blue", content: "hey ember, you around?" },
@@ -333,7 +350,11 @@ async function callModel(
 		argumentsJson: tc.function.arguments,
 	}));
 	const costUsd: number | undefined = data.usage?.cost;
-	return { assistantText, toolCalls, costUsd };
+	// `exactOptionalPropertyTypes` rejects an explicit `undefined` for the
+	// optional `costUsd`, so only attach it when the API reported one.
+	const result: ModelTurnResult = { assistantText, toolCalls };
+	if (costUsd !== undefined) result.costUsd = costUsd;
+	return result;
 }
 
 // ── Dispatch a model response through the real engine ────────────────────────
@@ -394,9 +415,14 @@ async function runDriftSession(): Promise<TurnRecord[]> {
 	let game = startGame(PERSONAS, makePack(), {
 		// Plenty of budget so the run isn't cut short by lockout.
 		budgetPerAi: 100,
-		// Draw one objective from the pack so the daemon has a hint it's
-		// in a world with things to do, not just a chat partner.
-		objectiveCount: 1,
+		// No `objectiveTypes` here on purpose. This harness measures drift under
+		// conversational stimulus, not objective pursuit, and the hand-authored
+		// pack below could not support one anyway: `buildObjectiveRecords`
+		// resolves its targets by type-first convention id (`carry-0-obj`,
+		// `useItem-0-item`, …), which only packs minted by
+		// `binding-prompt-builder` carry. The old `objectiveCount: 1` option was
+		// removed with the type-first migration (#494) and had already been a
+		// documented no-op before that, so dropping it changes nothing.
 	});
 
 	const turns: TurnRecord[] = [];
@@ -459,6 +485,26 @@ async function runDriftSession(): Promise<TurnRecord[]> {
 
 // ── Report ───────────────────────────────────────────────────────────────────
 
+/**
+ * Count entries sorted descending by count. Spelled out rather than
+ * `Object.entries(x).sort((a, b) => b[1] - a[1])`: under
+ * `noUncheckedIndexedAccess` the tuple indexing in that comparator is
+ * `number | undefined`, which the typechecker (correctly) refuses to subtract.
+ *
+ * The param accepts a `Partial<Record<…, number>>` because
+ * `DriftRunSummary.toolCallCountsByName` is keyed by `ToolName | string`.
+ */
+function byDescendingCount(
+	counts: Partial<Record<string, number>>,
+): Array<[string, number]> {
+	const entries: Array<[string, number]> = [];
+	for (const key of Object.keys(counts)) {
+		const count = counts[key];
+		if (count !== undefined) entries.push([key, count]);
+	}
+	return entries.sort((a, b) => b[1] - a[1]);
+}
+
 function renderReport(turns: TurnRecord[], date: string): string {
 	const knownAis = [REAL_AI, ...PEERS];
 	const summary = summarizeRun(turns, knownAis, WINDOW_SIZE);
@@ -490,9 +536,7 @@ function renderReport(turns: TurnRecord[], date: string): string {
 		"| Tool | Count |",
 		"|---|---|",
 	];
-	for (const [name, count] of Object.entries(summary.toolCallCountsByName).sort(
-		(a, b) => b[1] - a[1],
-	)) {
+	for (const [name, count] of byDescendingCount(summary.toolCallCountsByName)) {
 		lines.push(`| \`${name}\` | ${count} |`);
 	}
 
@@ -503,9 +547,7 @@ function renderReport(turns: TurnRecord[], date: string): string {
 		"| Recipient | Count |",
 		"|---|---|",
 	);
-	for (const [recipient, count] of Object.entries(summary.recipientCounts).sort(
-		(a, b) => b[1] - a[1],
-	)) {
+	for (const [recipient, count] of byDescendingCount(summary.recipientCounts)) {
 		lines.push(`| \`${recipient}\` | ${count} |`);
 	}
 
@@ -538,7 +580,6 @@ function renderReport(turns: TurnRecord[], date: string): string {
 				bits.push(`content=${JSON.stringify(c)}`);
 			}
 			if (d.item) bits.push(`item=${d.item}`);
-			if (d.to && !d.recipient) bits.push(`to=${d.to}`);
 			if (d.parseError) bits.push("[parse-error]");
 			detailLines.push(`  - \`${tc.name}\`(${bits.join(", ")})`);
 		}

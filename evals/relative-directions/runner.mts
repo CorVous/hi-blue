@@ -158,11 +158,14 @@ async function callModel(
 		argumentsJson: tc.function.arguments,
 	}));
 	const costUsd: number | undefined = data.usage?.cost;
-	return {
+	// `exactOptionalPropertyTypes` rejects an explicit `undefined` for the
+	// optional `costUsd`, so only attach it when the API reported one.
+	const result: ModelTurnResult = {
 		prose: daemonProse(assistantText, toolCalls),
 		toolCalls,
-		costUsd,
 	};
+	if (costUsd !== undefined) result.costUsd = costUsd;
+	return result;
 }
 
 // ── Prose extraction ──────────────────────────────────────────────────────────
