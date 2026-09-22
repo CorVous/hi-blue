@@ -317,30 +317,67 @@ total (3 `avoid` controls + 3 `noavoid` treatments), ≈ $0.10/run.
 ## Decision
 
 **Adopt option (a): suppress the pure-avoidance `<action_profile>` clause for
-personas with no preferred tool.** The evidence is unambiguous and the
-mechanism is now identified.
+personas with no preferred tool.** On the same cells and scenarios, dropping
+the block roughly **doubles to triples** action emission.
 
-The clause does not merely fail to help these pairs — it **actively
-reinforces inaction**. Removing it roughly **triples** action emission on the
-same cells:
+### The runs
 
-| Arm (3 consecutive runs each) | r1 | r2 | r3 | mean |
-|---|---|---|---|---|
-| `avoid` — shipped behaviour, pure-avoidance clause rendered | 3% | 25% | 45% | **24%** |
-| `noavoid` — no `<action_profile>` block at all for these personas | 65% | 79% | 73% | **72%** |
+Nine runs, 120 reps each, two arms. Per-run action-emission rate:
 
-Counting the three additional replicate runs as well, the two arms are
-`avoid` ∈ {3, 25, 45, 53, 56} and `noavoid` ∈ {65, 73, 79, 66} — the highest
-`avoid` observation is still below the lowest `noavoid` observation.
+| Arm | runs | per-run rate |
+|---|---|---|
+| `avoid` — shipped; pure-avoidance clause rendered | 5 | 3.3%, 25.0%, 45.0%, 53.3%, 55.8% — **mean 36.5%** |
+| `noavoid` — no `<action_profile>` block for these personas | 4 | 65.0%, 79.2%, 73.3%, 65.8% — **mean 70.8%** |
 
-**Every `noavoid` run exceeds every `avoid` run** — the two distributions do
-not overlap, so this is not a noise artefact. The `avoid` arm's own spread
-(3→45%) is why the ticket warned that "single-run deltas here are within
-20-rep noise"; three consecutive runs per arm were required to separate them,
-and they separate cleanly.
+The `aversepairs-r{1,2,3}` pair is the advertised control/treatment pair; the
+`inter-a{1,2}` / `inter-b1` runs are **the same experiment under different
+labels**, and they are pooled above because they are not independent
+corroboration — they are the rest of the sample.
+
+### The unit of observation is the RUN, not the rep
+
+This matters and the honest reading depends on it. The `avoid` arm's variance
+is overwhelmingly **between-run**, not per-rep: cells flip as a block mid-run
+(r2's `go` counts by cell are `0,0,0,11,9,10`; r3's are `11,1,12,8,8,14` —
+exploration dead in one run and alive in the next). Within-run dispersion is
+far larger than binomial, so the 120 reps in a run are **not** 120 independent
+observations of the arm. Effective n is **5 vs 4 runs**.
+
+Stated at that level:
+
+| Comparison | Result |
+|---|---|
+| Difference of means | **34.3pp** (36.5% → 70.8%) |
+| Welch t-test (5 vs 4 runs) | t = 3.28, df = 4.9, **p ≈ 0.03** |
+| Welch 95% CI on the difference | ≈ [7, 61]pp — excludes 0 |
+| Mann-Whitney exact (5 vs 4 runs) | U = 0, **p = 0.016** |
+| Mann-Whitney exact (**3 vs 3 runs only**) | U = 0, **p = 0.100 — not significant** |
+
+**The 3-vs-3 pair alone does not clear significance.** The decision rests on
+the pooled 5-vs-4 sample, which does. Anyone reading only the first three runs
+of each arm would be looking at p = 0.10 and should not have acted. This is
+recorded plainly because it is the difference between a decision that is
+supported and one that merely looks supported.
+
+The direction is consistent in every run — the lowest `noavoid` observation
+(65.8%) sits above the highest `avoid` observation (55.8%) — and the effect is
+large against a noisy control. That, plus a coherent mechanism, is what
+justifies acting. It is not a clean non-overlap of two tight distributions;
+the `avoid` arm is genuinely unstable, and a future re-run should budget for
+that by collecting several runs per arm rather than one.
 
 Raw data: `with-profiles-aversepairs-r{1,2,3}[-noavoid]-2026-09-22.{md,json}`
-plus the `inter-a{1,2}` / `inter-b1` replicates.
+plus the `inter-a{1,2}` / `inter-b1` runs.
+
+### The effect is entirely `go`
+
+`use` and `put_down` are **0% in every arm and every run**, and `pick_up`
+totals 1-2 calls across the whole matrix. So "action emission" here means
+*movement*: what the clause suppresses is `go`. This is consistent with the
+scenarios (open-ended exploration/social turns, where moving is the natural
+action) but it means the result should not be read as a broad recovery of the
+action surface — it is a movement recovery, and it says nothing about whether
+`use`/`pick_up` would respond the same way.
 
 ## Why the clause backfires
 
@@ -359,31 +396,11 @@ This supersedes the 2026-06-01 reading that profiles "cap the downside
 without creating action". Capping the downside is exactly the problem: for
 these pairs the clause *is* the downside.
 
-## Additional replicates
-
-Three further runs on the same three pairs and scenarios were collected under
-different labels, and they corroborate the split (they are replicates of the
-same question, not a different persona set):
-
-| Arm | Label | action rate |
-|---|---|---|
-| `avoid` | `inter-a1` | 53% |
-| `avoid` | `inter-a2` | 56% |
-| `noavoid` | `inter-b1` | 66% |
-
-The `avoid` replicates land at 53-56% — within the range the three
-`aversepairs` controls already span (3-45%) but at its top end, and well
-below every `noavoid` run. The `noavoid` replicate (66%) sits inside the
-65-79% band. Treating all six `avoid` runs and all four `noavoid` runs as two
-samples strengthens the separation rather than weakening it: the highest
-`avoid` observation (56%) is still below the lowest `noavoid` observation
-(65%).
-
 Direction (3) from the ticket — extending coverage by crossing the three
 temperaments with milder negatives (`anxious`/`taciturn`/`stoic`) — was **not**
-run. The decision above rests on the severe pairs, which is where the ceiling
-was reported; extending the matrix would sharpen the boundary but is not
-required to act on option (a), and is left as follow-up.
+run. The decision rests on the severe pairs, which is where the ceiling was
+reported; extending the matrix would sharpen the boundary but is not required
+to act on option (a), and is left as follow-up.
 
 ## What this does NOT establish
 
@@ -392,26 +409,55 @@ required to act on option (a), and is left as follow-up.
   always specific to open-ended turns. Only `exploration`/`social` were run
   in this matrix, so the objective cells are unchanged from 2026-06-01.
 - **Direction (2) — the temperament prose itself — remains open.** The
-  measured cost is a prompt clause that says only what to avoid; that is a
-  sufficient explanation for the observed effect and does not require the
-  temperament descriptions to be rewritten. Whether those descriptions also
-  over-suppress action is a separate, larger question not tested here.
+  measured cost is a prompt clause that says only what to avoid, which is
+  sufficient to explain the effect without rewriting the temperament
+  descriptions. Whether those descriptions also over-suppress action is a
+  separate, larger question not tested here.
 - **The mechanism claim is inferred, not directly instrumented.** No run
-  isolates "the model reads pure avoidance as prohibition" from "the block's
-  presence crowds out other prompt content". The two are distinguished only
-  by the size of the effect, not by a targeted probe.
+  isolates "the model reads pure avoidance as prohibition" from "the presence
+  of *any* `<action_profile>` block at that position costs action". The
+  contrast here is presence vs. absence, so the data cannot separate the
+  clause's *content* from the block's *existence*. The `omit` arm's effect is
+  real; the reason given for it is the most plausible reading, not a measured
+  one.
+- **The runs are not timestamped**, so "consecutive" cannot be verified from
+  the artifacts, and because the arms were run sequentially against a shared
+  live endpoint, upstream drift over the session is an un-excluded confound.
+  The between-run variance in the `avoid` arm is consistent with exactly that
+  kind of drift. A re-run with interleaved arms would settle it.
+- **The two arms are not a pure single-variable manipulation.** The harness
+  knob omits the block for every persona with no *preferred* tool, which
+  includes personas that would otherwise render the *balanced* clause (see
+  the implementation note). The three tested pairs are all genuinely
+  pure-avoidance, so the result is unaffected — but the control is coarser
+  than "the pure-avoidance clause" implies.
+- **The 2026-06-01 baseline cited above is not on `main`.** It lives on the
+  unmerged branch `docs/action-variation-native-eval` (commit `f893dc8`), so a
+  reader on `main` cannot verify those figures directly.
 
 ## Implementation note
 
 The `noavoid` policy is exposed in the harness as
 `EVAL_NO_PREFERRED_POLICY=omit`, defaulting to the shipped `avoid` behaviour.
+
+The predicate mirrors `actionProfileFor`'s branches exactly: a persona is in
+scope only when it has **no preferred tool and at least one avoided tool** —
+i.e. its clause is the pure-avoidance "is hesitant about …" sentence. Testing
+`bias >= 2` alone would have been wrong: of the 300 unordered temperament
+pairs, 174 have no preferred tool but only **84 render the pure-avoidance
+clause**, while 90 render the *balanced* clause ("engages with the action
+surface in a balanced way"). Omitting the block for that second group would
+generalise the treatment well beyond the ticket's question. The three pairs
+tested here are all genuinely pure-avoidance, so this distinction does not
+change the result — it only stops the knob from silently answering a
+different question if someone reuses it.
+
 Flipping production to the winning arm is deliberately **not** done in this
-change: the ticket's gate was to establish the decision with ≥3 consecutive
-runs, which is now satisfied, but enabling it means changing the shipped
-default in `src/content/action-preference-bias.ts` — a behaviour change that
-belongs in its own review with its own before/after. This ticket's done-when
-is "a decision is recorded … backed by a multi-run eval if a change is made",
-and the decision plus its evidence is what is recorded here.
+change: doing so means changing the shipped default in
+`src/content/action-preference-bias.ts`, a behaviour change that belongs in
+its own review with its own before/after. This ticket's done-when is "a
+decision is recorded … backed by a multi-run eval if a change is made", and
+the decision plus its evidence is what is recorded here.
 
 ## Reproduce
 

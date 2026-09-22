@@ -37,6 +37,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
 	actionProfileFor,
+	CRITICAL_PATH_TOOLS,
 	toolBiasSum,
 } from "../../src/content/action-preference-bias.js";
 import { availableTools } from "../../src/spa/game/available-tools.js";
@@ -95,18 +96,27 @@ const SCENARIO_FILTER = (process.env.EVAL_SCENARIOS ?? "")
 
 /**
  * How to render the `<action_profile>` block for a persona whose summed bias
- * table yields **no preferred tool** — the pure-avoidance case.
+ * table yields **no preferred tool and at least one avoided tool** — the
+ * pure-avoidance case, where the clause is the "is hesitant about …" sentence
+ * with nothing else in it.
  *
- *   `avoid` (default, shipped behaviour) — render the "is hesitant about …"
- *       clause alone, exactly as `actionProfileFor` returns it.
+ *   `avoid` (default, shipped behaviour) — render that clause, exactly as
+ *       `actionProfileFor` returns it.
  *   `omit`  — attach no profile at all for those personas, so the system
  *       prompt has no `<action_profile>` block. This is the A/B arm for
  *       issue #508 direction (1): does the pure-avoidance clause reinforce
  *       inaction, or is the talk-only freeze caused by something else?
  *
- * Personas WITH a preferred tool are unaffected by this knob — their clause
- * is identical in both arms, so any delta between runs is attributable to
- * the no-preferred handling alone.
+ * Scope is narrower than "every persona without a preferred tool": a persona
+ * with no preferred tool but nothing avoided gets `actionProfileFor`'s
+ * *balanced* clause instead, and is deliberately left alone. Of the 300
+ * unordered temperament pairs, 174 have no preferred tool but only 84 render
+ * the pure-avoidance clause and 90 render the balanced one, so conflating the
+ * two would run a much broader experiment than the ticket describes.
+ *
+ * Personas that DO have a preferred tool are likewise unaffected — their
+ * clause is identical in both arms, so any delta between runs is attributable
+ * to the pure-avoidance handling alone.
  */
 const NO_PREFERRED_POLICY: "avoid" | "omit" =
 	process.env.EVAL_NO_PREFERRED_POLICY === "omit" ? "omit" : "avoid";
@@ -261,10 +271,28 @@ function materializePersonas(
 		// case so no `<action_profile>` block renders at all. Personas that DO
 		// have a preferred tool are untouched, so the arms differ only in the
 		// no-preferred handling.
-		const hasPreferred = Object.values(
-			toolBiasSum(variant.temperaments[0], variant.temperaments[1]),
-		).some((bias) => bias >= 2);
-		if (!(NO_PREFERRED_POLICY === "omit" && !hasPreferred)) {
+		//
+		// The predicate must mirror `actionProfileFor`'s branches exactly.
+		// Testing `bias >= 2` alone is NOT the same thing: a persona with no
+		// preferred tool falls into one of TWO cases — the balanced clause
+		// ("engages with the action surface in a balanced way", rendered when
+		// nothing is avoided either) or the pure-avoidance clause. Only the
+		// latter is the behaviour under test. Enumerating all 300 unordered
+		// temperament pairs: 174 have no preferred tool, but only 84 render the
+		// pure-avoidance clause while 90 render the balanced one. Omitting the
+		// block for the balanced group would silently generalise the treatment
+		// far beyond the ticket's question.
+		const biases = toolBiasSum(
+			variant.temperaments[0],
+			variant.temperaments[1],
+		);
+		const hasPreferred = ACTION_TOOLS.some((tool) => biases[tool] >= 2);
+		const hasAvoided = ACTION_TOOLS.some(
+			(tool) => biases[tool] <= -1 && !CRITICAL_PATH_TOOLS.has(tool),
+		);
+		// Pure avoidance = no preferred tool, but something avoided.
+		const isPureAvoidance = !hasPreferred && hasAvoided;
+		if (!(NO_PREFERRED_POLICY === "omit" && isPureAvoidance)) {
 			actor.actionProfile = clause;
 		}
 	}
