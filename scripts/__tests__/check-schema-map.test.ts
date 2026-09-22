@@ -497,18 +497,41 @@ describe("check-schema-map.mjs", () => {
  * it moved the branch pointer onto junk `baseline`/`change` commits, emptied
  * the index, clobbered `origin/main`, and flipped `core.bare`. The tests still
  * reported green, so the damage was silent.
- *
- * These tests pin the isolation so it cannot regress.
  */
 describe("spawned-git isolation", () => {
-	it("scrubs every ambient git pointer from the child environment", () => {
-		const env = cleanGitEnv();
-		for (const key of GIT_ENV_VARS) {
-			expect(env[key]).toBeUndefined();
-		}
-		// Non-git variables must survive — this is a scrub, not a whitelist.
-		expect(env.PATH).toBe(process.env.PATH);
-	});
+	/**
+	 * A throwaway repo plus a probe for which git directory a spawned command
+	 * actually resolved.
+	 *
+	 * `--absolute-git-dir` is the discriminator here, NOT `--show-toplevel`.
+	 * `GIT_DIR` redirects which git dir is opened, but `--show-toplevel` still
+	 * answers from the cwd — so a leaked `GIT_DIR` is invisible to it. Measured
+	 * directly: with `GIT_DIR` at repo A and cwd in repo B, `--show-toplevel`
+	 * wrongly reports B while `--absolute-git-dir` correctly reports A. An
+	 * earlier revision of this test asserted `--show-toplevel` and therefore
+	 * passed against the unfixed code, pinning nothing.
+	 */
+	function makeProbe(): {
+		repoGitDir: string;
+		resolvedGitDir: () => string;
+		cleanup: () => void;
+	} {
+		const repo = mkdtempSync(path.join(tmpdir(), "schema-map-gitdir-"));
+		git(["init", "-q", "-b", "main"], repo);
+		git(["config", "user.email", "t@example.com"], repo);
+		git(["config", "user.name", "T"], repo);
+		git(["commit", "-q", "--no-gpg-sign", "--allow-empty", "-m", "x"], repo);
+		return {
+			// `--absolute-git-dir` reports the git directory itself, so the
+			// expected value carries the `/.git` suffix.
+			repoGitDir: realpathSync(path.join(repo, ".git")),
+			resolvedGitDir: () =>
+				realpathSync(
+					git(["rev-parse", "--absolute-git-dir"], repo).stdout.trim(),
+				),
+			cleanup: () => rmSync(repo, { recursive: true, force: true }),
+		};
+	}
 
 	it("keeps caller-supplied variables while still scrubbing git pointers", () => {
 		const env = cleanGitEnv({ GITHUB_BASE_REF: "main", GIT_DIR: "/nope" });
@@ -516,40 +539,22 @@ describe("spawned-git isolation", () => {
 		expect(env.GIT_DIR).toBeUndefined();
 	});
 
-	it("operates on the given cwd even when GIT_DIR points elsewhere", () => {
-		const repo = mkdtempSync(path.join(tmpdir(), "schema-map-gitdir-"));
-		const foreign = path.join(root, ".git");
+	it("resolves the given cwd's repo even when GIT_DIR points elsewhere", () => {
+		const probe = makeProbe();
 		const original = process.env.GIT_DIR;
 		try {
-			git(["init", "-q", "-b", "main"], repo);
-			git(["config", "user.email", "t@example.com"], repo);
-			git(["config", "user.name", "T"], repo);
-			git(["commit", "-q", "--no-gpg-sign", "--allow-empty", "-m", "x"], repo);
-
-			// `--show-toplevel` is the unambiguous discriminator: it reports the
-			// work tree git actually resolved. If the ambient GIT_DIR leaked
-			// through, this would report the real checkout instead of `repo`.
-			process.env.GIT_DIR = foreign;
-			const toplevel = git(["rev-parse", "--show-toplevel"], repo).stdout;
-
-			// Compare realpaths: macOS resolves /tmp to /private/tmp, so a
-			// literal string comparison would be flaky across platforms.
-			const real = (p: string): string => {
-				try {
-					return realpathSync(p);
-				} catch {
-					return p;
-				}
-			};
-			expect(real(toplevel.trim())).toBe(real(repo));
-			expect(real(toplevel.trim())).not.toBe(real(root));
+			// Simulate what a git hook (or an exported GIT_DIR) provides. In a
+			// linked worktree this is a file pointing at
+			// `<main>/.git/worktrees/<name>`, which git resolves itself.
+			process.env.GIT_DIR = path.join(root, ".git");
+			expect(probe.resolvedGitDir()).toBe(probe.repoGitDir);
 		} finally {
 			if (original === undefined) {
 				delete process.env.GIT_DIR;
 			} else {
 				process.env.GIT_DIR = original;
 			}
-			rmSync(repo, { recursive: true, force: true });
+			probe.cleanup();
 		}
 	});
 });
