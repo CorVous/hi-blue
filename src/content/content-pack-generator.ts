@@ -24,18 +24,7 @@ import type {
 } from "../spa/game/types.js";
 
 export interface SingleGameConfig {
-	kRange: [number, number];
-	nRange: [number, number];
 	mRange: [number, number];
-	budgetPerAi: number;
-}
-
-export interface PhaseConfig {
-	kRange: [number, number];
-	nRange: [number, number];
-	mRange: [number, number];
-	budgetPerAi: number;
-	aiGoalPool: string[];
 }
 
 import { THEME_POOL } from "./theme-pool.js";
@@ -389,7 +378,7 @@ function rawBoundPackToContentPack(
 export async function generateDualContentPacks(
 	rng: () => number,
 	settings: readonly string[],
-	config: PhaseConfig,
+	config: SingleGameConfig,
 	llm: ContentPackProvider,
 	aiIdsOrPromise: AiId[] | Promise<AiId[]>,
 ): Promise<{

@@ -24,9 +24,11 @@ Every draw comes from the injected `rng`, in a fixed order. Seeded tests and
 spike replays depend on that order, so a refactor must not reorder or add
 draws.
 
-In `SingleGameConfig` / `PhaseConfig`, `kRange` is the number of objective
-pairs, `nRange` the interesting objects and `mRange` the obstacles.
-`SINGLE_GAME_CONFIG` (`phases.ts`) sets a whole-game budget of $0.50 per AI.
+`SingleGameConfig` holds only what the generator reads: `mRange`, the range the
+obstacle count `m` is drawn from. `SINGLE_GAME_CONFIG` (`phases.ts`) sets it to
+1–3. The number of Objectives is fixed at three and the two decoys are fixed, so
+neither has a config range. The per-AI budget default lives in the engine
+(`DEFAULT_BUDGET_PER_AI_USD`), not here.
 
 ### Placement rules (`tryPlacePhase`)
 
