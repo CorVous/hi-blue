@@ -249,9 +249,9 @@ it hides the other routes' screens and shows or hides the global chrome
   each update re-renders the whole body with mention highlighting.
 - **`game_ended`.** The session is captured for the endgame buttons, then
   `session` is set to null, so any later submit does nothing. "Continue"
-  (shown only when an OpenRouter key is stored) saves the new room under the
-  same session id, because the active pointer is unchanged. "Same daemons"
-  archives the old session and mints a new one.
+  (shown only when `readStoredByokKey()` finds a stored OpenRouter key) saves
+  the new room under the same session id, because the active pointer is
+  unchanged. "Same daemons" archives the old session and mints a new one.
 - State is saved after the events loop, and not when the game ended.
 - **Round errors (#231).** Failures other than `CapHitError` (a transient
   upstream 502/503/504, a dropped network connection, a malformed response)

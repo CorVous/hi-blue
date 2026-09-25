@@ -2,9 +2,9 @@
 
 Covers the root files of `src/spa/` (`main.ts`, `render-app.ts`,
 `current-view.ts`, `bbs-chrome.ts`, `byok-modal.ts`, `llm-client.ts`,
-`streaming.ts`, `env.d.ts`, `test-setup.ts`), the dev inspector,
-`styles.css`, and the SPA test harness. Save formats are covered in
-[persistence.md](persistence.md).
+`openrouter-key.ts`, `streaming.ts`, `env.d.ts`, `test-setup.ts`), the dev
+inspector, `styles.css`, and the SPA test harness. Save formats are covered
+in [persistence.md](persistence.md).
 
 ## Rendering without a router (`main.ts`, `render-app.ts`, `current-view.ts`)
 
@@ -196,8 +196,7 @@ affordance such as `?winImmediately=1` would change a later test's round.
   `html` and `body` to the viewport, together with `min-height: 100dvh`. The
   definite height lets the `1fr` panels row resolve against the viewport
   instead of growing with its content. The min-height keeps the stage from
-  collapsing. `#phase-banner` uses `display: none`, which removes it from grid
-  flow, so `#panels` is pinned to row 5 (the `1fr` row) and `#composer` to
+  collapsing. `#panels` is pinned to row 5 (the `1fr` row) and `#composer` to
   row 6. Without the pins, the composer would take the `1fr` row and the game
   would overflow. `stage-layout.test.ts` enforces this contract.
 - **Box-drawing chrome.** Borders are runs of box-drawing glyphs. The body's

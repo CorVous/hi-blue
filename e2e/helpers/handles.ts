@@ -21,6 +21,7 @@ export async function getAiHandles(page: Page): Promise<AiHandles> {
 			);
 			return panels.length === 3 && personasSynthesized;
 		},
+		undefined,
 		{ timeout: 30_000 },
 	);
 
