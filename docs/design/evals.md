@@ -33,7 +33,7 @@ module-level fetch.
 
 ## free-text-drift (`pnpm eval:drift`)
 
-**Purpose.** Issue #260: as a phase goes on, GLM-4.7 daemons stop emitting
+**Purpose.** Issue #260: as a game goes on, GLM-4.7 daemons stop emitting
 `message` tool calls and sometimes lapse into prose that *looks like* a message
 or an action but never reaches the engine. This harness turns a captured turn
 log into numbers that make that drift visible.

@@ -69,8 +69,8 @@ itself fires, never `page.request.*`.
   deduction runs. Since #214 panels render only entries the `message` tool
   writes into the conversation logs, and free-form `delta.content` is never
   painted. The shape mirrors `makeMessageToolCallSseStream` in
-  `src/spa/__tests__/game.test.ts`. The SPA's own pacing loop animates the
-  tokens, so the stub does not throttle.
+  `src/spa/__tests__/game.test.ts`. The SPA paints each message whole, with no
+  pacing, so the stub does not throttle.
 - `toolCallSseBody` drives one live action (`go`, `pick_up`) for a chosen
   Daemon. The parser in `src/spa/streaming.ts` flushes tool calls on
   `finish_reason: "tool_calls"` or `[DONE]`.
@@ -215,7 +215,7 @@ specs that assert on generation failure check `#cap-hit` themselves.
   When it ran earlier, a restored lockout looked unlocked until the player
   typed.
 - **bootstrap-recovery.** The initial bootstrap uses up the content-pack
-  provider's `OUTER_BUDGET` (3 calls) before the recovery UI appears. Regen
+  provider's `OUTER_ATTEMPT_BUDGET` (3 calls) before the recovery UI appears. Regen
   starts a fresh budget, so the fourth call is allowed to succeed.
 - **bootstrap-failure-bounce.** The content-pack failure is held back until the
   game view is attached. That way the loading-flow catch in `game.ts`, which

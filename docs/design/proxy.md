@@ -1,7 +1,8 @@
 # Proxy design notes
 
-The Cloudflare Worker in `src/proxy/` serves the built SPA and exposes an
-OpenAI-compatible `POST /v1/chat/completions` that forwards to OpenRouter with
+The Cloudflare Worker in `src/proxy/` carries the built SPA as static assets
+(players load the game from GitHub Pages; the Worker serving it matters for
+`wrangler dev` and the Playwright suite) and exposes an OpenAI-compatible `POST /v1/chat/completions` that forwards to OpenRouter with
 the model pinned to `PINNED_MODEL` (`src/model.ts`). These notes cover the
 rules and tradeoffs the code cannot state by itself.
 

@@ -4,13 +4,15 @@ Three test surfaces. Each has a different role; pick the right one when you chan
 
 ## Vitest workers (`src/proxy/**/*.test.ts`)
 
-Cloudflare Worker logic — request/response, KV, SSE encoders, rate-guard. Runs under `@cloudflare/vitest-pool-workers` with Miniflare bindings (see `vitest.config.ts`). Use this when you change anything under `src/proxy/`.
+Cloudflare Worker logic — routing, CORS, the chat-completions proxy and its SSE usage scanning, KV, rate-guard, pricing. Runs under `@cloudflare/vitest-pool-workers` with Miniflare bindings (see `vitest.config.ts`). Use this when you change anything under `src/proxy/`.
 
-## Vitest jsdom (`src/spa/__tests__/**/*.test.ts` and other `src/**/*.test.ts` outside proxy)
+## Vitest jsdom (`src/**/*.test.ts` outside `src/proxy/`)
 
-Unit-level coverage for SPA modules — pure logic, encoder/decoder round-trips, persistence, router, streaming math. Fast, but jsdom is **not a real browser**: it does not catch real layout, real-DOM event timing, real-browser API gaps, or build-pipeline regressions.
+The `browser` project in `vitest.config.ts`. Unit-level coverage for SPA and content modules — pure logic, encoder/decoder round-trips, persistence, view selection (`current-view.ts`), streaming math. Fast, but jsdom is **not a real browser**: it does not catch real layout, real-DOM event timing, real-browser API gaps, or build-pipeline regressions.
 
-The same `browser` project also runs `scripts/__tests__/**` and `evals/__tests__/**` (unit tests for the eval scoring modules, next to the evals they cover).
+The same `browser` project also runs `scripts/__tests__/**` and `evals/__tests__/**` (unit tests for the eval scoring modules, next to the evals they cover). `src/spa/__tests__/build.test.ts` is the exception: it runs in its own node-environment `build` project.
+
+Shared fixtures: `src/spa/__tests__/fixtures/` (`local-storage.ts` with `makeLocalStorageStub` / `seedSessionInStub`, plus the static personas and content packs) and `src/spa/game/__tests__/fixtures/` (`make-test-pack.ts`, `make-game-state.ts`, and `prompt-sections.ts` for pulling the cardinal clause out of a prompt). Reuse them before writing a local builder.
 
 ## Playwright e2e (`e2e/**/*.spec.ts`)
 
@@ -47,12 +49,13 @@ await stubChatCompletions(page, (_request) => {
 });
 ```
 
-`stubChatCompletions` fulfils with `Content-Type: text/event-stream` and
-OpenAI-format delta chunks (`choices[0].delta.content`), matching what the
-SPA's streaming parser expects. The SPA's own token-pacing loop
-(`TOKEN_PACE_MS × AI_TYPING_SPEED` in `src/spa/views/game.ts`) drives the
-observable inter-token animation after the fetch resolves — the stub does
-**not** need to throttle delivery.
+`stubChatCompletions` answers JSON-mode calls (persona synthesis and content
+packs) with canned JSON built from the request, and answers every gameplay
+turn with an SSE stream holding one `message` tool call to `blue` that
+carries the joined words, then a usage chunk. The SPA paints each daemon
+message whole, with no client-side pacing, so the stub does **not** need to
+throttle delivery. `docs/design/e2e.md` ("Helpers") has the details and the
+other stubs (`stubNewGameLLM`, `toolCallSseBody`).
 
 `stubChatCompletions` only intercepts requests the SPA itself fires. If a spec
 needs lower-level control, use `page.evaluate(() => fetch(...))` so the fetch

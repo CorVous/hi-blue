@@ -7,7 +7,9 @@ Playtest session logs live here. Each subdirectory has a different audience.
 Logs from agent-driven playtests, one Markdown file per Session, named by the
 in-game 4-hex session id (e.g. `0x478F.md`). Each log follows
 `_agent-observation-template.md` and records a headless-browser session against
-a local worker.
+a local worker. The playtest driver and skill that produced these logs
+(`scripts/playtest/`, `.claude/skills/playtest/`) have since been removed;
+the logs stay as a record.
 
 **Don't browse `agent-sessions/` while a playtest is in progress** — prior
 agent logs are spoilers for an agent who hasn't reached Stage 3 yet.

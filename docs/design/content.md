@@ -69,8 +69,8 @@ Placement writes holders back in place, so this stays the pack order.
   fallback voice examples are deliberately low quality: they exist to satisfy
   the type. The real value comes from LLM synthesis.
 - With `engagementClauses`, an `[engagement] ...` line is logged per persona.
-  It uses the same `console.log` channel as `[spike-239]` and `[cache]`, so the
-  playtest analyzer can correlate each Daemon's transcript with its bias sum
+  It uses the same `console.log` channel as `[spike-239]` and `[cache]`, so a
+  console-log analysis (the #239 spike used a one-off script) can correlate each Daemon's transcript with its bias sum
   and bucket. It is a devtools-only signal.
 
 ## Engagement clauses (`engagement-clauses.ts`, spike #239 step 8)
@@ -152,7 +152,7 @@ changes what a given seed produces.
   pairs and interesting objects. Obstacles stay setting-only. "mundane"
   appears more than once to bias toward ordinary items over technological or
   magical ones.
-- `SYSADMIN_DIRECTIVE_POOL`: mid-phase complication directives. Each is a
+- `SYSADMIN_DIRECTIVE_POOL`: mid-game complication directives. Each is a
   small, privately observable behaviour change that a player may notice
   socially but cannot easily prove was imposed from outside.
 

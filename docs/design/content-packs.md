@@ -4,7 +4,8 @@ Design notes for the new-game generation path in `src/spa/game/`: content-pack
 generation and validation, the bootstrap that runs it, the three LLM provider
 seams, and the small helpers that sit beside them (mentions, composer, seeds).
 Vocabulary follows [CONTEXT.md](../../CONTEXT.md). The design decisions are in
-[ADR 0010](../adr/0010-content-pack-partial-retry.md) (retry) and
+[ADR 0010](../adr/0010-content-pack-partial-retry.md) (retry, which the code has
+since drifted from; see "Retry strategy" below) and
 [ADR 0014](../adr/0014-type-first-objective-authoring.md) (type-first authoring).
 
 ## Provider seams
@@ -241,8 +242,10 @@ session can be built or saved until the content packs arrive.
   `priorToolRoundtrip` completely. The two disk maps are merged instead. A
   locked-out AI produces no new capture that round and keeps its old one, so its
   diffs pick up cleanly when the lockout lifts.
-- `completions` holds each AI's buffered text for `RoundResultEncoder` to pace
-  out. Every AI in the turn order gets an entry, with `""` for locked-out AIs.
+- `completions` holds each AI's final assistant text. Every AI in the turn
+  order gets an entry, with `""` for locked-out AIs. Only the tests read it:
+  the view paints panels from the `message` entries that `encodeRoundResult`
+  emits (since #214), not from completions.
 - `GameSession.restore` builds the instance with `Object.create` so it skips the
   constructor, which would call `startGame`. Class field initializers do not run
   on that path, so `restore` sets the three maps itself.
@@ -269,7 +272,7 @@ CONTEXT.md under **AiId** and **blue**.
 - `buildPersonaColorMap` reads the persona's `color` field, never the AiId, so
   changing the palette means changing only the persona records.
 
-## Seeds and pacing
+## Seeds
 
 - `spike-seed.ts` (spike #239) exists only for that spike. When `?seed=N` is
   set, `getSpikeRng(label)` returns a Mulberry32 stream seeded from the master

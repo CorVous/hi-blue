@@ -159,8 +159,7 @@ it hides the other routes' screens and shows or hides the global chrome
   (`removeAllPanelSpinners`) before the session is handed over.
 - **Timeout.** `BOOTSTRAP_LOADING_TIMEOUT_MS` (300 s) allows for a slow first
   persona-synthesis call (about 95 s observed on a cold start), its one
-  retry after failure, and a parallel outer retry of the content packs. The
-  daemon harness waits the same length of time for the stable state.
+  retry after failure, and a parallel outer retry of the content packs.
 - **A success that arrives after the timeout.** When the timeout fires, the
   bootstrap promise keeps running. If it later succeeds,
   `dismissStaleBootstrapRecovery` hides the recovery banner and replaces its
@@ -216,7 +215,7 @@ it hides the other routes' screens and shows or hides the global chrome
   and the LLM submission contain only the body. Mentions later in the
   message stay.
 - While a round is running, `#stage[data-round-in-flight]` is set. External
-  drivers (the playtest daemon, e2e tests) wait on this attribute instead of
+  drivers such as the e2e tests wait on this attribute instead of
   polling transcript text. It is cleared in `finally`, after the events loop
   has painted the round.
 - When the player sends, the composer resets straight away to
@@ -237,8 +236,8 @@ it hides the other routes' screens and shows or hides the global chrome
     LLM context.
   - `action_log`: the dev inspector replaced it.
 - **`message` events.** A message from the player is skipped
-  (`playerLineAlreadyPaintedAtSubmit`), because `appendPlayerLine` painted
-  it at submit time and painting it again would duplicate it. Only
+  (`playerLineAlreadyPaintedAtSubmit`), because `beginRound` painted it at
+  submit time and painting it again would duplicate it. Only
   daemon-to-player messages are painted. They are not paced: since #213,
   daemon speech goes through tool calls and the encoder emits one complete
   `message` per turn, so pacing would only slow tests without making

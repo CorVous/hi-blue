@@ -55,18 +55,26 @@ The harness writes one report per mode under
 - `baseline-<date>.md` / `.json`
 - `with-profiles-<date>.md` / `.json`
 
+(`<mode>[-<label>][-noavoid]-<date>` in general; see `docs/design/evals.md`.)
+
 Compare the two modes to read the lift from the action-profile clauses.
 
 ## Environment
 
 - `OPENROUTER_API_KEY` (when `EVAL_DIRECT_OPENROUTER=1`) **or** a running
-  proxy worker (`pnpm dev`) reachable at `EVAL_BASE_URL` (default
-  `http://localhost:8787`).
+  proxy worker (`pnpm dev:local`, or `pnpm dev` with a Cloudflare login)
+  reachable at `EVAL_BASE_URL` (default `http://localhost:8787`).
 - `EVAL_MODEL` (default `z-ai/glm-4.7`).
 - `EVAL_REPETITIONS` (default `20`).
 - `EVAL_ACTION_PROFILES` (`1` = on, anything else = off).
 - `EVAL_ACTION_PAIRS` — comma-separated `t1+t2` list overriding the default
   three-variant set. Example: `EVAL_ACTION_PAIRS=curious+meticulous,zealous+hot-headed,sweet+effusive`.
+- `EVAL_SCENARIOS` — comma-separated subset of `exploration`, `objective`,
+  `social`. An unknown name is a hard error.
+- `EVAL_NO_PREFERRED_POLICY=omit` — drop the `<action_profile>` block for
+  pure-avoidance personas (the #508 A/B); output files get a `-noavoid`
+  suffix.
+- `EVAL_RUN_LABEL` — appended to the output file stem.
 
 ## Default variants
 
@@ -79,8 +87,8 @@ balanced (on the shipped 4-tool surface):
 | Vex   | zealous + hot-headed | go, pick_up |
 | Pip   | sweet + effusive     | balanced |
 
-Override via `EVAL_ACTION_PAIRS` to walk a wider grid (e.g. all 24
-temperament combinations) once the default trio shows the expected
+Override via `EVAL_ACTION_PAIRS` to walk a wider grid (e.g. all 300
+unordered pairs of the 24 temperaments) once the default trio shows the expected
 treatment lift.
 
 ## Success criteria

@@ -147,8 +147,9 @@ affordance such as `?winImmediately=1` would change a later test's round.
   per-Daemon footers. A pending bootstrap shows only the pending strip. With
   neither, everything is hidden.
 - **Side-channel records.** Turn results, system prompts, errors and rounds
-  are not part of `GameState`. The provider wrapper in `views/game.ts` records
-  them in module-level maps. Every session render clears the turn results
+  are not part of `GameState`. The provider wrapper in `views/game.ts`
+  (`withDevInspectorRecording`) records them in module-level maps in
+  `dev-inspector/daemon-footer.ts`. Every session render clears the turn results
   so that data from a previous session does not appear.
 - **Update invariants.** `updateDaemonFooterSummary` never touches the pip,
   which only `setDaemonFooterInFlight` changes.
@@ -213,8 +214,7 @@ affordance such as `?winImmediately=1` would change a later test's round.
   are slightly different.
 - **Dashes.** Dashed rules use a gradient of 6 px ink and a 3 px gap, which
   matches how `-` renders in JetBrains Mono at 13 px. The native `dashed`
-  style gives a 2/2 px stipple. The phase banner's transparent 1 px border
-  keeps its box size unchanged.
+  style gives a 2/2 px stipple.
 - `.banner-blue` is applied again inside `.login-tag b` / `.login-sysinfo b`,
   because their amber rule has specificity (0,1,1) and beats the single-class
   rule.
