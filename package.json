@@ -12,7 +12,7 @@
 		"dev": "wrangler dev",
 		"dev:local": "wrangler dev --local --ip 0.0.0.0",
 		"dev:lan": "node scripts/dev-lan.mjs",
-		"lint": "biome ci --error-on-warnings .",
+		"lint": "biome ci --error-on-warnings . && node scripts/check-no-comments.mjs",
 		"typecheck": "tsgo --noEmit -p tsconfig.json && tsgo --noEmit -p src/proxy/tsconfig.json && tsgo --noEmit -p tsconfig.tools.json",
 		"test": "vitest run",
 		"test:repeat": "node scripts/repeat-vitest.mjs",
