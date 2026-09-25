@@ -12,22 +12,13 @@ export interface ComposerInput {
 export interface ComposerState {
 	addressee: AiId | null;
 	sendEnabled: boolean;
-	/** Border color string for the composer input, or null when no addressee. */
 	borderColor: string | null;
-	/** AiId whose panel should carry the highlight class, or null. */
 	panelHighlight: AiId | null;
-	/** Highlight range for the first *mention in the overlay, or null. */
 	mentionHighlight: { start: number; end: number; color: string } | null;
-	/** Inline error message when the addressed AI is chat-locked, or null. */
 	lockoutError: string | null;
-	/** Set of AiIds currently chat-locked (panel muting). */
 	lockedPanels: ReadonlySet<AiId>;
 }
 
-/**
- * Returns the inline error text shown when a player tries to message
- * a persona that is currently chat-locked.
- */
 function lockoutErrorText(persona: { name: string }): string {
 	return `${persona.name} isn't reading right now`;
 }
@@ -41,21 +32,6 @@ const NULL_VISUAL: Pick<
 	mentionHighlight: null,
 };
 
-/**
- * Derives the composer state (addressee + send button enabled + visual cues)
- * from the current prompt text, the chat-lockout map, and the persona maps.
- *
- * - `addressee` is the first valid *mention in the text.
- * - `sendEnabled` is true only when `addressee` is non-null AND the
- *   addressed AI is not chat-locked AND there is non-empty body text
- *   outside the mention token.
- * - `borderColor`, `panelHighlight`, `mentionHighlight` are populated whenever
- *   an addressee is identified — even when `sendEnabled` is false (locked
- *   addressees still get visual feedback).
- * - `lockedPanels` is a set of all currently chat-locked AiIds (for panel muting).
- * - `lockoutError` is the inline error string when the addressed AI is locked,
- *   or null when there is no addressee or addressee is not locked.
- */
 export function deriveComposerState(input: ComposerInput): ComposerState {
 	const {
 		text,
@@ -65,7 +41,6 @@ export function deriveComposerState(input: ComposerInput): ComposerState {
 		personaDisplayNames,
 	} = input;
 
-	// Derive lockedPanels from the lockouts map (entries where locked === true).
 	const lockedPanels: Set<AiId> = new Set();
 	for (const [aiId, locked] of lockouts) {
 		if (locked) lockedPanels.add(aiId);
@@ -83,12 +58,10 @@ export function deriveComposerState(input: ComposerInput): ComposerState {
 	}
 
 	const { aiId: addressee, start, nameEnd, end } = match;
-	// Body is everything except the *Name token itself.
 	const bodyAfterMention = (text.slice(0, start) + text.slice(end)).trim();
 	const isAddresseeLocked = lockedPanels.has(addressee);
 	const sendEnabled = !isAddresseeLocked && bodyAfterMention.length > 0;
 
-	// Inline error: only set when addressee is locked.
 	let lockoutError: string | null = null;
 	if (isAddresseeLocked) {
 		const displayName = personaDisplayNames.get(addressee);
@@ -97,7 +70,6 @@ export function deriveComposerState(input: ComposerInput): ComposerState {
 		}
 	}
 
-	// Visual cues are populated regardless of sendEnabled.
 	const color = personaColors.get(addressee) ?? null;
 	const borderColor = color;
 	const panelHighlight = addressee;

@@ -1,19 +1,3 @@
-/**
- * content-pack-provider.ts
- *
- * ContentPackProvider interface + BrowserContentPackProvider (real) +
- * MockContentPackProvider (tests).
- *
- * The browser provider makes one non-streaming JSON-mode chat-completions call
- * to generate content packs (setting-flavored entities without placements). On
- * transient failure it retries once. CapHitError surfaces immediately.
- *
- * Issue #302: added `generateDualContentPacks` for A/B pack generation — one
- * call that produces two setting-variants of the same entity structure. Entity
- * IDs are identical across packs A and B; only names, descriptions, and flavor
- * strings differ.
- */
-
 import { CapHitError, chatCompletionJson } from "../llm-client.js";
 import type { RawBoundPack } from "./binding-aware-validator.js";
 import {
@@ -26,8 +10,6 @@ import {
 	buildDualBindingPrompt,
 } from "./binding-prompt-builder.js";
 import { recordContentPackAttempt } from "./content-pack-attempts.js";
-
-// ── Content-pack prompt ───────────────────────────────────────────────────────
 
 export const CONTENT_PACK_SYSTEM_PROMPT = `You generate content packs for a text-based grid game.
 
@@ -83,9 +65,6 @@ Return ONLY valid JSON (no markdown, no preamble):
   }
 }`;
 
-// ── Binding-aware input/output types (type-first authoring) ──────────────────
-
-/** Input for binding-aware single-pack generation. */
 export interface BindingContentPackInput {
 	phases: Array<{
 		setting: string;
@@ -98,7 +77,6 @@ export interface BindingContentPackInput {
 	}>;
 }
 
-/** Input for binding-aware dual-pack (A/B) generation. */
 export interface DualBindingContentPackInput {
 	phases: Array<{
 		settingA: string;
@@ -114,17 +92,13 @@ export interface DualBindingContentPackInput {
 	}>;
 }
 
-/** Result of binding-aware single-pack generation (validated raw pack). */
 export interface BindingContentPackProviderResult {
 	phases: Array<{ rawPack: RawBoundPack }>;
 }
 
-/** Result of binding-aware dual-pack generation (validated raw packs). */
 export interface DualBindingContentPackProviderResult {
 	phases: Array<{ rawPackA: RawBoundPack; rawPackB: RawBoundPack }>;
 }
-
-// ── Error type ────────────────────────────────────────────────────────────────
 
 class ContentPackError extends Error {
 	constructor(message: string) {
@@ -132,8 +106,6 @@ class ContentPackError extends Error {
 		this.name = "ContentPackError";
 	}
 }
-
-// ── Interface ─────────────────────────────────────────────────────────────────
 
 export interface ContentPackProvider {
 	generateContentPacks(
@@ -143,8 +115,6 @@ export interface ContentPackProvider {
 		input: DualBindingContentPackInput,
 	): Promise<DualBindingContentPackProviderResult>;
 }
-
-// ── Dual-pack types (issue #302) ──────────────────────────────────────────────
 
 export const DUAL_CONTENT_PACK_SYSTEM_PROMPT = `You generate paired content packs for a text-based grid game.
 
@@ -191,6 +161,8 @@ Return ONLY valid JSON (no markdown, no preamble):
   ]
 }`;
 
+const MIN_SPACE_NAME_TOKEN_LENGTH = 4;
+
 const STOPWORDS = new Set([
 	"the",
 	"and",
@@ -205,21 +177,6 @@ const STOPWORDS = new Set([
 	"an",
 ]);
 
-// ── Prose-tell check ──────────────────────────────────────────────────────────
-
-/**
- * Returns true when an objective_object's examineDescription mentions its paired
- * objective_space's name — either the literal name (case-insensitive substring)
- * or any non-stopword token of length >= 4 from the space name.
- *
- * The token-overlap fallback admits valid tells like "stage pulley" for a
- * space named "Stage Pulley System" where neither token appears in the literal
- * name but both are substantial content words. This widens the matcher beyond
- * the head-noun fallback (see issue #382) to capture more valid adjacencies
- * while still rejecting the playtest-0007 misses. The system prompt MUSTs
- * this property; this helper exists so tests and any future validator-side
- * enforcement (see #346) share one definition.
- */
 export function examineMentionsPairedSpace(
 	examineDescription: string,
 	spaceName: string,
@@ -230,22 +187,13 @@ export function examineMentionsPairedSpace(
 	if (examineLc.includes(spaceLc)) return true;
 	const tokens = spaceLc
 		.split(/\s+/)
-		.filter((t) => t.length >= 4 && !STOPWORDS.has(t));
+		.filter(
+			(t) => t.length >= MIN_SPACE_NAME_TOKEN_LENGTH && !STOPWORDS.has(t),
+		);
 	return tokens.some((t) => examineLc.includes(t));
 }
 
-/**
- * Words that signal a space is `use`-able as an objective (issue #335), or
- * an interesting_object is a Use-Item target (issue #334). Matched as whole
- * words against the description's tokenised lowercase form so substrings
- * like "use" inside "fuse" don't pass.
- *
- * Kept in sync with the cue-word lists enumerated in
- * CONTENT_PACK_SYSTEM_PROMPT and DUAL_CONTENT_PACK_SYSTEM_PROMPT — both the
- * objective_space rule (issue #335) and the interesting_object rule (#334)
- * draw from this shared set.
- */
-const USE_TELL_KEYWORDS: readonly string[] = [
+const USE_SPACE_TELL_KEYWORDS: readonly string[] = [
 	"use",
 	"used",
 	"uses",
@@ -327,7 +275,9 @@ const USE_TELL_KEYWORDS: readonly string[] = [
 	"turned",
 	"turns",
 	"turning",
-	// Issue #334 — additional Use-Item cues that fit interesting_objects.
+];
+
+const USE_ITEM_EXTRA_TELL_KEYWORDS: readonly string[] = [
 	"crank",
 	"cranked",
 	"cranks",
@@ -346,13 +296,11 @@ const USE_TELL_KEYWORDS: readonly string[] = [
 	"winding",
 ];
 
-/**
- * Returns true when an examineDescription contains at least one of the
- * activation/use cue keywords as a whole word — the AI-discoverable prose
- * tell that this entity is `use`-able as an objective. Used by both the
- * objective_space rule (issue #335) and the interesting_object Use-Item
- * tell (issue #334), parallel to `examineMentionsPairedSpace`.
- */
+const USE_TELL_KEYWORDS: readonly string[] = [
+	...USE_SPACE_TELL_KEYWORDS,
+	...USE_ITEM_EXTRA_TELL_KEYWORDS,
+];
+
 export function examineMentionsUseTell(examineDescription: string): boolean {
 	const tokens = examineDescription.toLowerCase().match(/[a-z]+/g) ?? [];
 	if (tokens.length === 0) return false;
@@ -363,12 +311,6 @@ export function examineMentionsUseTell(examineDescription: string): boolean {
 	return false;
 }
 
-/**
- * Returns the use-cue keywords that appear in `examineDescription`. Used by
- * the corrective-feedback path so the LLM is told *which* word tripped the
- * "must NOT contain a use-cue keyword" decoy rule, rather than having to
- * guess from the system-prompt list.
- */
 export function findMatchedUseTellKeywords(
 	examineDescription: string,
 ): string[] {
@@ -382,11 +324,6 @@ export function findMatchedUseTellKeywords(
 	return matched;
 }
 
-/**
- * Canonical base use-cue keywords inlined in corrective feedback for the
- * "must contain a use-cue keyword" rule. Subset of USE_TELL_KEYWORDS chosen
- * to mirror the lists enumerated in CONTENT_PACK_SYSTEM_PROMPT.
- */
 export const USE_CUE_KEYWORD_HINTS: readonly string[] = [
 	"use",
 	"activate",
@@ -407,31 +344,6 @@ export const USE_CUE_KEYWORD_HINTS: readonly string[] = [
 	"interact",
 	"mechanism",
 ];
-
-/**
- * Convergence prose-tell strategy (issue #336):
- *
- * Convergence objectives also need an AI-discoverable signal that the
- * objective_space's meaning depends on shared occupancy — parallel to the
- * `examineMentionsUseTell` rule for Use-Space and `examineMentionsPairedSpace`
- * for Carry. Enforcement here is **prompt-only**: the system prompts MUST the
- * property ("examineDescription MUST hint that the space's meaning depends on
- * shared occupancy or another presence"), but no programmatic validator is
- * applied.
- *
- * A curated keyword list (e.g. meet/converge/gather/presence/together/share)
- * was considered but rejected: the same `examineDescription` is shared across
- * Carry, Use-Space, and Convergence draws (the pool composition is decided
- * after pack generation), so adding a hard convergence-keyword validator on
- * top of the existing Use-cue and paired-space rules would over-constrain
- * spaces that never end up drawn for convergence.
- *
- * The type-first system enforces structural preconditions (all four flavor
- * fields present) at binding-validation time so a Convergence candidate
- * cannot be built against a space that lacks the LLM-authored tier flavors.
- */
-
-// ── Validation ────────────────────────────────────────────────────────────────
 
 type RetryUnit =
 	| { kind: "objective-pair"; phaseIndex: number; pairId: string }
@@ -468,10 +380,8 @@ export type ValidationResult<T> =
 	| { ok: true; value: T }
 	| { ok: false; errors: ValidationError[] };
 
-// ── Helpers for layered retry ────────────────────────────────────────────────
-
-const OUTER_BUDGET = 3;
-const BACKOFF_MS = [1_000, 2_000, 4_000];
+const OUTER_ATTEMPT_BUDGET = 3;
+const BACKOFF_MS_BEFORE_RETRY = [1_000, 2_000, 4_000];
 
 function sleep(ms: number): Promise<void> {
 	return new Promise((r) => setTimeout(r, ms));
@@ -529,8 +439,6 @@ function retryUnitLabel(unit: ValidationError["retryUnit"]): string {
 }
 
 export function buildCorrectiveFeedback(errors: ValidationError[]): string {
-	// Group by retryUnit so the LLM sees all rules for a given entity together
-	// rather than as a flat dedup'd list — easier to act on per-entity.
 	const groups = new Map<string, { label: string; messages: string[] }>();
 	const order: string[] = [];
 
@@ -557,8 +465,6 @@ export function buildCorrectiveFeedback(errors: ValidationError[]): string {
 
 	return sections.join("\n");
 }
-
-// ── BrowserContentPackProvider ────────────────────────────────────────────────
 
 export class BrowserContentPackProvider implements ContentPackProvider {
 	private readonly disableReasoning: boolean;
@@ -625,7 +531,7 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 		let correctiveFeedback: string | null = null;
 		let prevAssistantRaw: string | null = null;
 
-		for (let outer = 0; outer < OUTER_BUDGET; outer++) {
+		for (let attempt = 0; attempt < OUTER_ATTEMPT_BUDGET; attempt++) {
 			try {
 				const messages = buildOuterMessages(
 					systemPrompt,
@@ -641,7 +547,7 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 				if (validationResult.ok) {
 					recordContentPackAttempt({
 						op: "single",
-						attempt: outer,
+						attempt,
 						outcome: "ok",
 						rawLength: raw.length,
 					});
@@ -656,7 +562,7 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 				}
 				recordContentPackAttempt({
 					op: "single",
-					attempt: outer,
+					attempt,
 					outcome: "validation-failed",
 					validationErrors: validationResult.errors,
 					rawLength: raw.length,
@@ -667,12 +573,12 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 				if (err instanceof CapHitError) throw err;
 				recordContentPackAttempt({
 					op: "single",
-					attempt: outer,
+					attempt,
 					outcome: "hard-error",
 					errorMessage: err instanceof Error ? err.message : String(err),
 				});
-				if (outer === OUTER_BUDGET - 1) throw err;
-				const backoffMs = BACKOFF_MS[outer];
+				if (attempt === OUTER_ATTEMPT_BUDGET - 1) throw err;
+				const backoffMs = BACKOFF_MS_BEFORE_RETRY[attempt];
 				if (backoffMs !== undefined) {
 					await sleep(backoffMs);
 				}
@@ -716,7 +622,7 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 		let correctiveFeedback: string | null = null;
 		let prevAssistantRaw: string | null = null;
 
-		for (let outer = 0; outer < OUTER_BUDGET; outer++) {
+		for (let attempt = 0; attempt < OUTER_ATTEMPT_BUDGET; attempt++) {
 			try {
 				const messages = buildOuterMessages(
 					systemPrompt,
@@ -744,7 +650,7 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 					}
 					recordContentPackAttempt({
 						op: "dual",
-						attempt: outer,
+						attempt,
 						outcome: "ok",
 						rawLength: raw.length,
 					});
@@ -759,7 +665,7 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 				}
 				recordContentPackAttempt({
 					op: "dual",
-					attempt: outer,
+					attempt,
 					outcome: "validation-failed",
 					validationErrors: validationResult.errors,
 					rawLength: raw.length,
@@ -770,12 +676,12 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 				if (err instanceof CapHitError) throw err;
 				recordContentPackAttempt({
 					op: "dual",
-					attempt: outer,
+					attempt,
 					outcome: "hard-error",
 					errorMessage: err instanceof Error ? err.message : String(err),
 				});
-				if (outer === OUTER_BUDGET - 1) throw err;
-				const backoffMs = BACKOFF_MS[outer];
+				if (attempt === OUTER_ATTEMPT_BUDGET - 1) throw err;
+				const backoffMs = BACKOFF_MS_BEFORE_RETRY[attempt];
 				if (backoffMs !== undefined) {
 					await sleep(backoffMs);
 				}
@@ -789,8 +695,6 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 		);
 	}
 }
-
-// ── MockContentPackProvider ───────────────────────────────────────────────────
 
 export class MockContentPackProvider implements ContentPackProvider {
 	readonly calls: BindingContentPackInput[] = [];

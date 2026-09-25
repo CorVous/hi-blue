@@ -1,18 +1,3 @@
-/**
- * BrowserLLMProvider
- *
- * Implements `RoundLLMProvider` for the browser, bridging `streamCompletion`
- * (fetch + SSE) into the `streamRound` interface expected by `runRound`.
- *
- * Collects the full assistant text and all tool calls from the SSE stream
- * and returns them together as a `RoundTurnResult`.
- *
- * Reasoning is disabled by default for routine daemon turns — GLM-4.7's
- * thinking trace adds 1–4K tokens of latency per turn for little roleplay
- * benefit (see `docs/prompting/glm-4.7-guide.md`). Construct with
- * `{ disableReasoning: false }` to opt back into the thinking step.
- */
-
 import { streamCompletion } from "../llm-client.js";
 import type {
 	LifecyclePhase,

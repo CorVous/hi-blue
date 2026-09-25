@@ -1,12 +1,3 @@
-/**
- * Tests for content-pack prose-tell rule and helpers.
- *
- * Issue #253: examineDescription of each objective_object MUST name its paired
- * objective_space — that prose tell is the only AI-discoverable channel for the
- * pairing (objective_spaces are filtered out of the cone projection in
- * prompt-builder.ts:481, so the pairsWithSpaceId field is invisible to daemons).
- */
-
 import { describe, expect, it, vi } from "vitest";
 import { CapHitError } from "../../llm-client.js";
 import {
@@ -16,6 +7,9 @@ import {
 	examineMentionsPairedSpace,
 	examineMentionsUseTell,
 } from "../content-pack-provider.js";
+
+const OUTER_ATTEMPT_BUDGET = 3;
+const FIRST_RETRY_BACKOFF_MS = 1_000;
 
 describe("examineMentionsPairedSpace", () => {
 	it("matches the literal space name (case-insensitive)", () => {
@@ -45,8 +39,6 @@ describe("examineMentionsPairedSpace", () => {
 		).toBe(true);
 	});
 
-	// Verbatim playtest 0007 quotes — these are the exact examineDescriptions
-	// that surfaced zero tells. They MUST be rejected by the prose-tell check.
 	it("rejects the playtest-0007 'rusted iron key' examine for a Brass Pedestal", () => {
 		expect(
 			examineMentionsPairedSpace(
@@ -66,7 +58,6 @@ describe("examineMentionsPairedSpace", () => {
 	});
 
 	it("rejects an examine that shares only a stopword-length token with the space", () => {
-		// "of" is a stopword (length 2) — must not count as a match.
 		expect(
 			examineMentionsPairedSpace("an of-the-earth artifact", "Cup of Light"),
 		).toBe(false);
@@ -118,20 +109,15 @@ describe("examineMentionsPairedSpace", () => {
 
 describe("CONTENT_PACK_SYSTEM_PROMPT", () => {
 	it("requires the prose tell at MUST strength (issue #253)", () => {
-		// The exact wording is allowed to drift, but the rule must be MUST-level
-		// and reference both examineDescription and the paired space.
 		expect(CONTENT_PACK_SYSTEM_PROMPT).toMatch(
 			/examineDescription[\s\S]*MUST[\s\S]*paired space/,
 		);
 	});
 
 	it("includes a worked example so the model knows what a tell looks like", () => {
-		// The binding-aware prompt includes the carry-0 entity ID convention in its example.
 		expect(CONTENT_PACK_SYSTEM_PROMPT.toLowerCase()).toContain("carry-0");
 	});
 });
-
-// ── prompt rules (issue #336) ─────────────────────────────────────────────────
 
 describe("CONTENT_PACK_SYSTEM_PROMPT — convergence actor + prose-tell rules", () => {
 	it("documents the new convergenceTier1ActorFlavor and convergenceTier2ActorFlavor fields", () => {
@@ -146,10 +132,7 @@ describe("CONTENT_PACK_SYSTEM_PROMPT — convergence actor + prose-tell rules", 
 	});
 });
 
-// ── examineMentionsUseTell helper (issues #334, #335) ─────────────────────────
-
 describe("examineMentionsUseTell", () => {
-	// — verb-of-activation matches (#334, #335 share the same cue set) —
 	it("matches a verb-of-activation like 'press'", () => {
 		expect(
 			examineMentionsUseTell(
@@ -174,7 +157,6 @@ describe("examineMentionsUseTell", () => {
 		).toBe(true);
 	});
 
-	// — control / activator nouns —
 	it("matches a control noun like 'lever' even without an activation verb", () => {
 		expect(
 			examineMentionsUseTell(
@@ -189,7 +171,6 @@ describe("examineMentionsUseTell", () => {
 		);
 	});
 
-	// — negative cases —
 	it("rejects an examine with no verb or control-noun cue", () => {
 		expect(
 			examineMentionsUseTell(
@@ -230,22 +211,18 @@ describe("examineMentionsUseTell", () => {
 	});
 });
 
-// ── Prompt rules (issue #335) ─────────────────────────────────────────────────
-
 describe("CONTENT_PACK_SYSTEM_PROMPT — issue #335 rules", () => {
 	it("describes activationFlavor as a field on objective_space", () => {
 		expect(CONTENT_PACK_SYSTEM_PROMPT).toMatch(/activationFlavor/);
 	});
 
 	it("requires the objective_space prose tell at MUST strength", () => {
-		// The binding-aware prompt uses use_space binding type instead of objective_space.
 		expect(CONTENT_PACK_SYSTEM_PROMPT).toMatch(
 			/use_space[\s\S]*examineDescription[\s\S]*MUST/i,
 		);
 	});
 
 	it("forbids {actor} in activationFlavor at MUST strength", () => {
-		// The binding-aware prompt says "no {actor}" for activationFlavor.
 		expect(CONTENT_PACK_SYSTEM_PROMPT).toMatch(
 			/activationFlavor[\s\S]*no.*\{actor\}/i,
 		);
@@ -258,20 +235,15 @@ describe("DUAL_CONTENT_PACK_SYSTEM_PROMPT — issue #335 rules", () => {
 	});
 
 	it("includes activationFlavor in the MUST-differ delta list", () => {
-		// The binding-aware dual prompt instructs that only flavors differ between packs.
-		// The activationFlavor must be present in the dual prompt.
 		expect(DUAL_CONTENT_PACK_SYSTEM_PROMPT).toMatch(/activationFlavor/);
 	});
 
 	it("requires the objective_space prose tell at MUST strength", () => {
-		// The binding-aware prompt uses use_space binding type instead of objective_space.
 		expect(DUAL_CONTENT_PACK_SYSTEM_PROMPT).toMatch(
 			/use_space[\s\S]*examineDescription[\s\S]*MUST/i,
 		);
 	});
 });
-
-// ── BrowserContentPackProvider — outer-retry layer ─────────────────────────
 
 describe("BrowserContentPackProvider — outer-retry layer", () => {
 	const baseInput: import("../content-pack-provider.js").BindingContentPackInput =
@@ -295,7 +267,6 @@ describe("BrowserContentPackProvider — outer-retry layer", () => {
 			],
 		};
 
-	/** Build a valid binding-shaped pack response for comparison. */
 	function buildValidPack(): unknown {
 		return {
 			pack: {
@@ -355,7 +326,6 @@ describe("BrowserContentPackProvider — outer-retry layer", () => {
 	it("Test 1 — Invalid binding pack on first call → corrective feedback → success on second call", async () => {
 		const mockChatFn = vi.fn();
 
-		// Call 1: broken pack (missing examineDescription on carry space)
 		const brokenPack = buildValidPack();
 		const packObj = (brokenPack as Record<string, unknown>).pack as
 			| Record<string, unknown>
@@ -374,7 +344,6 @@ describe("BrowserContentPackProvider — outer-retry layer", () => {
 			reasoning: null,
 		});
 
-		// Call 2: valid binding-shaped response
 		mockChatFn.mockResolvedValueOnce({
 			content: JSON.stringify(buildValidPack()),
 			reasoning: null,
@@ -388,7 +357,6 @@ describe("BrowserContentPackProvider — outer-retry layer", () => {
 			result.phases[0]?.rawPack.bindings?.[0]?.space?.examineDescription,
 		).toBe("A sturdy brass mount with a subtle indentation on its surface.");
 
-		// Call 2 messages should include corrective feedback
 		const call2Messages = mockChatFn.mock.calls[1]?.[0]?.messages as
 			| Array<{ role: string; content: string }>
 			| undefined;
@@ -402,7 +370,6 @@ describe("BrowserContentPackProvider — outer-retry layer", () => {
 	it("Test 2 — Two consecutive invalid responses → success on third call", async () => {
 		const mockChatFn = vi.fn();
 
-		// Call 1: broken pack (missing placementFlavor {actor})
 		const brokenPack1 = buildValidPack();
 		const packObj1 = (brokenPack1 as Record<string, unknown>).pack as
 			| Record<string, unknown>
@@ -413,7 +380,7 @@ describe("BrowserContentPackProvider — outer-retry layer", () => {
 				| undefined;
 			if (bindings?.[0]) {
 				const obj = bindings[0].object as Record<string, unknown>;
-				obj.placementFlavor = "Sets the key on its mount."; // missing {actor}
+				obj.placementFlavor = "Sets the key on its mount.";
 			}
 		}
 		mockChatFn.mockResolvedValueOnce({
@@ -421,7 +388,6 @@ describe("BrowserContentPackProvider — outer-retry layer", () => {
 			reasoning: null,
 		});
 
-		// Call 2: still broken (missing useOutcome on carry object)
 		const brokenPack2 = buildValidPack();
 		const packObj2 = (brokenPack2 as Record<string, unknown>).pack as
 			| Record<string, unknown>
@@ -440,7 +406,6 @@ describe("BrowserContentPackProvider — outer-retry layer", () => {
 			reasoning: null,
 		});
 
-		// Call 3: fully valid response
 		mockChatFn.mockResolvedValueOnce({
 			content: JSON.stringify(buildValidPack()),
 			reasoning: null,
@@ -458,7 +423,6 @@ describe("BrowserContentPackProvider — outer-retry layer", () => {
 	it("Test 3 — Budget exhaustion after three invalid responses → throws ContentPackError", async () => {
 		const mockChatFn = vi.fn();
 
-		// Return the same broken pack three times (OUTER_BUDGET = 3)
 		const brokenPack = buildValidPack();
 		const packObj = (brokenPack as Record<string, unknown>).pack as
 			| Record<string, unknown>
@@ -482,13 +446,12 @@ describe("BrowserContentPackProvider — outer-retry layer", () => {
 		await expect(provider.generateContentPacks(baseInput)).rejects.toThrow(
 			/exhausted retry budget/,
 		);
-		expect(mockChatFn).toHaveBeenCalledTimes(3); // OUTER_BUDGET = 3
+		expect(mockChatFn).toHaveBeenCalledTimes(OUTER_ATTEMPT_BUDGET);
 	});
 
 	it("Test 4 — corrective feedback message is present on second outer attempt", async () => {
 		const mockChatFn = vi.fn();
 
-		// Call 1: broken pack (missing object name)
 		const brokenPack = buildValidPack();
 		const packObj = (brokenPack as Record<string, unknown>).pack as
 			| Record<string, unknown>
@@ -507,7 +470,6 @@ describe("BrowserContentPackProvider — outer-retry layer", () => {
 			reasoning: null,
 		});
 
-		// Call 2: valid response
 		mockChatFn.mockResolvedValueOnce({
 			content: JSON.stringify(buildValidPack()),
 			reasoning: null,
@@ -518,7 +480,6 @@ describe("BrowserContentPackProvider — outer-retry layer", () => {
 
 		expect(mockChatFn).toHaveBeenCalledTimes(2);
 
-		// Assert call 2's messages include corrective feedback
 		const call2Messages = mockChatFn.mock.calls[1]?.[0]?.messages as
 			| Array<{ role: string; content: string }>
 			| undefined;
@@ -538,13 +499,11 @@ describe("BrowserContentPackProvider — outer-retry layer", () => {
 
 		const mockChatFn = vi.fn();
 
-		// Call 1: invalid JSON response
 		mockChatFn.mockResolvedValueOnce({
 			content: "{not valid json",
 			reasoning: null,
 		});
 
-		// Call 2: valid binding-shaped response after backoff
 		mockChatFn.mockResolvedValueOnce({
 			content: JSON.stringify(buildValidPack()),
 			reasoning: null,
@@ -553,13 +512,10 @@ describe("BrowserContentPackProvider — outer-retry layer", () => {
 		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
 		const promise = provider.generateContentPacks(baseInput);
 
-		// Wait for the first call to complete
 		await vi.waitFor(() => expect(mockChatFn).toHaveBeenCalledTimes(1));
 
-		// Advance timers by the backoff duration (BACKOFF_MS[0] = 1000)
-		await vi.advanceTimersByTimeAsync(1000);
+		await vi.advanceTimersByTimeAsync(FIRST_RETRY_BACKOFF_MS);
 
-		// Now await the promise resolution
 		const result = await promise;
 
 		vi.useRealTimers();
@@ -573,7 +529,6 @@ describe("BrowserContentPackProvider — outer-retry layer", () => {
 	it("Test 6 — CapHitError short-circuits", async () => {
 		const mockChatFn = vi.fn();
 
-		// Call 1: throw CapHitError
 		mockChatFn.mockRejectedValueOnce(
 			new CapHitError({
 				message: "rate limit exceeded",
@@ -616,7 +571,6 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 			],
 		};
 
-	/** Build a valid binding-shaped dual response. */
 	function buildDualResponse(
 		packAObjectName = "Iron Key",
 		packBObjectName = "Bone Token",
@@ -683,7 +637,6 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 	it("Test 1 — retries on dual validation failure (N=1), then succeeds and includes corrective feedback", async () => {
 		const mockChatFn = vi.fn();
 
-		// Call 1: invalid dual response (carry-0-obj missing examineDescription in packA)
 		const invalidResponse = buildDualResponse();
 		const phases = (invalidResponse as Record<string, unknown>)
 			.phases as Record<string, unknown>[];
@@ -696,7 +649,6 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 			reasoning: null,
 		});
 
-		// Call 2: valid dual response
 		mockChatFn.mockResolvedValueOnce({
 			content: JSON.stringify(buildDualResponse()),
 			reasoning: null,
@@ -713,7 +665,6 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 			"Bone Token",
 		);
 
-		// Assert call 2's messages contain corrective feedback
 		const call2Messages = mockChatFn.mock.calls[1]?.[0]?.messages as
 			| Array<{ role: string; content: string }>
 			| undefined;
@@ -727,7 +678,6 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 	it("Test 2 — retries on dual validation failure (N=2), then succeeds and includes corrective feedback", async () => {
 		const mockChatFn = vi.fn();
 
-		// Call 1: invalid response (missing carry object name)
 		const invalid1 = buildDualResponse();
 		const phases1 = (invalid1 as Record<string, unknown>).phases as Record<
 			string,
@@ -742,7 +692,6 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 			reasoning: null,
 		});
 
-		// Call 2: still invalid (missing placementFlavor {actor})
 		const invalid2 = buildDualResponse();
 		const phases2 = (invalid2 as Record<string, unknown>).phases as Record<
 			string,
@@ -751,13 +700,12 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 		const packA2 = phases2[0]?.packA as Record<string, unknown>;
 		const bindings2 = packA2.bindings as Record<string, unknown>[];
 		const obj2 = bindings2[0]?.object as Record<string, unknown>;
-		obj2.placementFlavor = "Sets it on the pedestal."; // missing {actor}
+		obj2.placementFlavor = "Sets it on the pedestal.";
 		mockChatFn.mockResolvedValueOnce({
 			content: JSON.stringify(invalid2),
 			reasoning: null,
 		});
 
-		// Call 3: valid dual response
 		mockChatFn.mockResolvedValueOnce({
 			content: JSON.stringify(buildDualResponse()),
 			reasoning: null,
@@ -771,7 +719,6 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 			"Iron Key",
 		);
 
-		// Assert call 3's messages contain corrective feedback
 		const call3Messages = mockChatFn.mock.calls[2]?.[0]?.messages as
 			| Array<{ role: string; content: string }>
 			| undefined;
@@ -804,14 +751,13 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 	it("Test 4 — budget exhaustion bubbles the last ContentPackError", async () => {
 		const mockChatFn = vi.fn();
 
-		// Return the same structurally-invalid response three times (OUTER_BUDGET = 3)
 		const invalidResponse = buildDualResponse();
 		const phases = (invalidResponse as Record<string, unknown>)
 			.phases as Record<string, unknown>[];
 		const packA = phases[0]?.packA as Record<string, unknown>;
 		const bindings = packA.bindings as Record<string, unknown>[];
 		const obj = bindings[0]?.object as Record<string, unknown>;
-		delete obj.useOutcome; // missing required field
+		delete obj.useOutcome;
 
 		mockChatFn.mockResolvedValue({
 			content: JSON.stringify(invalidResponse),
@@ -823,7 +769,7 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 		await expect(provider.generateDualContentPacks(dualInput)).rejects.toThrow(
 			/exhausted retry budget/,
 		);
-		expect(mockChatFn).toHaveBeenCalledTimes(3); // OUTER_BUDGET = 3
+		expect(mockChatFn).toHaveBeenCalledTimes(OUTER_ATTEMPT_BUDGET);
 	});
 
 	it("Test 5 — JSON-parse failure on first call → backoff via fake timers → success", async () => {
@@ -831,13 +777,11 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 
 		const mockChatFn = vi.fn();
 
-		// Call 1: invalid JSON response
 		mockChatFn.mockResolvedValueOnce({
 			content: "{not valid json",
 			reasoning: null,
 		});
 
-		// Call 2: valid response after backoff
 		mockChatFn.mockResolvedValueOnce({
 			content: JSON.stringify(buildDualResponse()),
 			reasoning: null,
@@ -846,13 +790,10 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
 		const promise = provider.generateDualContentPacks(dualInput);
 
-		// Wait for the first call to complete
 		await vi.waitFor(() => expect(mockChatFn).toHaveBeenCalledTimes(1));
 
-		// Advance timers by the backoff duration (BACKOFF_MS[0] = 1000)
-		await vi.advanceTimersByTimeAsync(1000);
+		await vi.advanceTimersByTimeAsync(FIRST_RETRY_BACKOFF_MS);
 
-		// Now await the promise resolution
 		const result = await promise;
 
 		vi.useRealTimers();
@@ -863,8 +804,6 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 		);
 	});
 });
-
-// ── BrowserContentPackProvider — strengthened corrective feedback ──────────
 
 describe("BrowserContentPackProvider — corrective feedback strengthening", () => {
 	const carryInput: import("../content-pack-provider.js").BindingContentPackInput =
@@ -1017,7 +956,6 @@ describe("BrowserContentPackProvider — corrective feedback strengthening", () 
 	it("includes the previous raw JSON as an assistant turn on the corrective retry", async () => {
 		const mockChatFn = vi.fn();
 
-		// Call 1: decoy with a forbidden use-cue keyword ("switch")
 		const brokenPack = buildValidCarryPack();
 		const packObj = (brokenPack as Record<string, unknown>).pack as Record<
 			string,
@@ -1032,7 +970,6 @@ describe("BrowserContentPackProvider — corrective feedback strengthening", () 
 		const brokenRaw = JSON.stringify(brokenPack);
 		mockChatFn.mockResolvedValueOnce({ content: brokenRaw, reasoning: null });
 
-		// Call 2: valid pack
 		mockChatFn.mockResolvedValueOnce({
 			content: JSON.stringify(buildValidCarryPack()),
 			reasoning: null,
@@ -1052,7 +989,6 @@ describe("BrowserContentPackProvider — corrective feedback strengthening", () 
 		expect(assistantTurn).toBeDefined();
 		expect(assistantTurn?.content).toBe(brokenRaw);
 
-		// Ordering: assistant turn precedes the corrective user turn
 		const assistantIdx =
 			call2Messages?.findIndex((m) => m.role === "assistant") ?? -1;
 		const correctiveIdx =
@@ -1066,7 +1002,6 @@ describe("BrowserContentPackProvider — corrective feedback strengthening", () 
 	it("names the offending keyword in the corrective feedback for a forbidden-use-cue decoy", async () => {
 		const mockChatFn = vi.fn();
 
-		// Call 1: decoy whose examineDescription contains "switch"
 		const brokenPack = buildValidCarryPack();
 		const packObj = (brokenPack as Record<string, unknown>).pack as Record<
 			string,
@@ -1083,7 +1018,6 @@ describe("BrowserContentPackProvider — corrective feedback strengthening", () 
 			reasoning: null,
 		});
 
-		// Call 2: valid pack
 		mockChatFn.mockResolvedValueOnce({
 			content: JSON.stringify(buildValidCarryPack()),
 			reasoning: null,
@@ -1100,16 +1034,13 @@ describe("BrowserContentPackProvider — corrective feedback strengthening", () 
 		);
 		expect(correctionTurn).toBeDefined();
 
-		// The corrective message names the specific offending keyword
 		expect(correctionTurn?.content).toMatch(/"switch"/);
-		// And targets the right decoy
 		expect(correctionTurn?.content).toMatch(/decoy-0/);
 	});
 
 	it("includes the use-cue keyword hint list for a missing-use-cue UseSpace error", async () => {
 		const mockChatFn = vi.fn();
 
-		// Call 1: use_space with examineDescription lacking any use-cue keyword
 		const brokenPack = buildValidUseSpacePack();
 		const packObj = (brokenPack as Record<string, unknown>).pack as Record<
 			string,
@@ -1126,7 +1057,6 @@ describe("BrowserContentPackProvider — corrective feedback strengthening", () 
 			reasoning: null,
 		});
 
-		// Call 2: valid pack
 		mockChatFn.mockResolvedValueOnce({
 			content: JSON.stringify(buildValidUseSpacePack()),
 			reasoning: null,
@@ -1143,12 +1073,9 @@ describe("BrowserContentPackProvider — corrective feedback strengthening", () 
 		);
 		expect(correctionTurn).toBeDefined();
 
-		// The corrective message enumerates several canonical use-cue keywords
-		// inline so the LLM doesn't have to recall them from the system prompt.
 		expect(correctionTurn?.content).toMatch(/"use"/);
 		expect(correctionTurn?.content).toMatch(/"activate"/);
 		expect(correctionTurn?.content).toMatch(/"press"/);
-		// And targets the use-space binding
 		expect(correctionTurn?.content).toMatch(/use-space binding/);
 	});
 });
