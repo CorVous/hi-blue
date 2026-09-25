@@ -36,8 +36,9 @@ Some consequences:
 - A map entry must name an archived build. `namesArchivedBuild` rejects empty,
   `null`, `undefined` and `""` values, and the failure message tells a blank
   entry apart from a missing one.
-- A migration only counts if it starts from the superseded version.
-  `migrateV8ToV9` does not cover a 9 → 10 bump.
+- A migration only counts if it starts from the superseded version: a
+  `migrateV8ToV9` would not cover a 9 → 10 bump. (No migration functions
+  exist today; see persistence.md, "Session schema history".)
 - The object-literal reader skips string contents and `//` and `/* */`
   comments while it counts braces, so braces inside them do not end the map
   early.
@@ -77,6 +78,26 @@ The isolation test checks `git rev-parse --absolute-git-dir`, not
 while `--absolute-git-dir` correctly reports A. An earlier version of this test
 used `--show-toplevel` and passed against the unfixed code. The expected value
 ends in `/.git` because `--absolute-git-dir` reports the git directory itself.
+
+## `check-no-comments.mjs`: the no-comments rule
+
+The second half of `pnpm lint` (AGENTS.md "Code comments"). The code carries
+no comments; the reasons live in these design docs, the ADRs and
+`CONTEXT.md`, where they can be read as a whole and kept current in one place.
+
+- **What it scans.** `src/`, `e2e/`, `evals/`, `scripts/` and the root config
+  files listed in `ROOTS`, skipping `node_modules`, `dist` and `.wrangler`.
+  Pass paths to check only those.
+- **How it finds comments.** Script and JSON files go through the TypeScript
+  parser (`ts.getLeadingCommentRanges` / `getTrailingCommentRanges` on every
+  node), so `//` inside a string or a URL is never mistaken for a comment.
+  Shell, CSS and HTML files use a pattern per language; a leading `#!` is kept.
+- **Kept directives** (`KEPT_DIRECTIVES`): `biome-ignore`, `@ts-expect-error`,
+  `@ts-ignore`, `/// <reference>`, `@vitest-environment`, `v8`/`c8` ignore
+  hints and `@__PURE__`. These change what a tool does, so they are code, not
+  commentary.
+- **`--fix`** removes every reported comment, and the whole line when the
+  comment was alone on it.
 
 ## `build-spa.mjs`
 

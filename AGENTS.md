@@ -14,9 +14,24 @@ Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-
 
 Single-context: one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
+### Design docs
+
+The reasons behind the code live in `docs/design/`, one file per area. Read the matching file before changing that area, and update it when the reason changes:
+
+- `content-packs.md`: content-pack generation, validation and retry, bootstrap, the LLM provider seams, mentions and the composer (`src/spa/game/`).
+- `content.md`: the hand-authored pools and the persona and Content Pack generators (`src/content/`, `src/save-serializer.ts`).
+- `e2e.md`: the Playwright harness, its helpers, and what each spec guards (`e2e/`).
+- `evals.md`: the live-model eval harnesses (`evals/`).
+- `game-round.md`: the round loop, dispatcher, engine, complications, prompt and message builders, and Vista geometry (`src/spa/game/`).
+- `persistence.md`: session storage, the codec, schema history, version boundary and archive map (`src/spa/persistence/`).
+- `proxy.md`: the Cloudflare Worker, CORS, the chat-completions pipeline and the cost guard (`src/proxy/`).
+- `spa-shell.md`: the SPA root files, BYOK, SSE parsing, the dev inspector, styles and the jsdom harness (`src/spa/`).
+- `tooling.md`: the scripts under `scripts/`.
+- `views.md`: the route views (`src/spa/views/`).
+
 ### Testing
 
-Three surfaces — Vitest workers (`src/proxy/`), Vitest jsdom (`src/spa/`), and Playwright e2e (`e2e/`). SPA changes that affect rendered DOM or user interaction need a Playwright spec — jsdom unit tests don't substitute. See `docs/agents/testing.md`.
+Three surfaces — Vitest workers (`src/proxy/`), Vitest jsdom (the rest of `src/`, plus `scripts/__tests__/` and `evals/__tests__/`), and Playwright e2e (`e2e/`). SPA changes that affect rendered DOM or user interaction need a Playwright spec — jsdom unit tests don't substitute. See `docs/agents/testing.md`.
 
 ### Daemon prompts (GLM-4.7)
 
@@ -29,6 +44,10 @@ We follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1
 ## Vista (movement and sight)
 
 The Vista has landed; [ADR 0015](docs/adr/0015-proximity-disk-and-cardinal-directions.md) is the specification (with implementation notes at the end), and `docs/design/game-round.md` explains how the code implements it.
+
+## Code comments
+
+There are no comments in code. `pnpm lint` enforces this through `scripts/check-no-comments.mjs`, which scans `src/`, `e2e/`, `evals/`, `scripts/` and the root config files (`node scripts/check-no-comments.mjs --fix` strips what it finds). The only exceptions are tool directives: Biome (`biome-ignore`), TypeScript (`@ts-expect-error`, `@ts-ignore`, `/// <reference>`), `@vitest-environment`, coverage-ignore hints and `@__PURE__`. Say what the code does through names. Put the explanation of *why* in `docs/design/<area>.md`, decisions in `docs/adr/`, and vocabulary in `CONTEXT.md`.
 
 ## Local development
 
@@ -50,7 +69,10 @@ When you bump SESSION_SCHEMA_VERSION in
 `src/spa/persistence/version-constants.ts`, you must do ONE of:
 
 - **Add a migrateV<old>To... function** in session-codec.ts so old
-  saves migrate in place. No further action needed.
+  saves migrate in place. No further action needed. The codebase currently
+  has no migration functions: the v8→v11 chain was deleted and v11→v12 was
+  archive-only. `docs/design/persistence.md` ("Session schema history")
+  explains why, and why v12 must not gain a v11→v12 migration.
 - **Add an entry to SCHEMA_ARCHIVE_MAP** in
   `src/spa/persistence/archive-map.ts` mapping the OLD schema number to
   the latest released version that shipped it. Find that version with:
