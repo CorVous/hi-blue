@@ -5,12 +5,19 @@
  *
  * Covers:
  *  - New visitor → start screen shown, panels and composer hidden
- *  - [ BEGIN ] is disabled while generation is in flight
- *  - [ BEGIN ] is enabled after persona synthesis + content-pack generation resolve
+ *  - [ BEGIN ] is disabled until the dial-up animation reveals the login form
+ *  - [ BEGIN ] is enabled once the start screen has booted with the animation skipped
  *  - Clicking [ BEGIN ] transitions main[data-view] to "game" and shows panels
  *  - Refreshing on the game view with a valid active session stays on the game view
  *  - CapHit during generation surfaces #cap-hit
  *  - Refresh during generation re-enters start screen and restarts generation
+ *
+ * Note on `#begin`'s enabled state: it is gated only by `revealLogin()` in
+ * src/spa/views/start.ts, which with `?skipDialup=1` runs synchronously at boot.
+ * So "`#begin` enabled" means "the SPA booted", not "generation completed" —
+ * generation carries on in the background. Specs that need to click
+ * `[ CONNECT ]` gate on {@link waitForStartScreenReady} rather than a fixed
+ * timeout, so they measure boot readiness instead of machine load.
  *
  * Post-ADR-0011: the URL is no longer load-bearing — the SPA decides what to
  * render from localStorage. Test assertions use main[data-view] / [data-reason]
@@ -28,6 +35,7 @@ import {
 	expectNoPageErrors,
 	stubChatCompletions,
 	stubNewGameLLM,
+	waitForStartScreenReady,
 } from "./helpers";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -144,10 +152,14 @@ test("[ BEGIN ] is enabled after persona synthesis and content-pack generation c
 	// assertion measure the animation, not the generation it is named for.
 	await page.goto("/?skipDialup=1");
 
-	// Wait for [ BEGIN ] to be enabled (generation complete)
-	// Fast-synthesis stub returns instantly; 10s is ample — down from 30s.
-	const beginBtn = page.locator("#begin");
-	await expect(beginBtn).toBeEnabled({ timeout: 10_000 });
+	// Wait for the SPA to boot and reveal the login form. This is a state wait,
+	// not a fixed budget: `#begin` enables the moment `renderStart` runs, while
+	// stubbed generation continues in the background (see
+	// waitForStartScreenReady). A boot that never happens — or one that lands on
+	// `#cap-hit` — fails with a descriptive error rather than an anonymous
+	// timeout.
+	const beginBtn = await waitForStartScreenReady(page);
+	await expect(beginBtn).toBeEnabled();
 
 	await expectNoPageErrors(page, pageErrors);
 });
@@ -163,10 +175,10 @@ test("clicking [ BEGIN ] transitions to the game view and shows panels", async (
 
 	await page.goto("/?skipDialup=1");
 
-	// Wait for [ CONNECT ] to be enabled
-	// Fast-synthesis stub returns instantly; 10s is ample — down from 30s.
-	const beginBtn = page.locator("#begin");
-	await expect(beginBtn).toBeEnabled({ timeout: 10_000 });
+	// Wait for the SPA to boot and reveal [ CONNECT ] (state wait; the login
+	// form is revealed at boot with the animation skipped — see
+	// waitForStartScreenReady).
+	const beginBtn = await waitForStartScreenReady(page);
 
 	// Enter the password and click CONNECT
 	await page.locator("#password").fill("password");
@@ -200,10 +212,9 @@ test("refreshing on the game view with an active session stays on the game view"
 
 	await page.goto("/?skipDialup=1");
 
-	// Complete the new-game flow: wait for CONNECT, fill password, click
-	// Fast-synthesis stub returns instantly; 10s is ample — down from 30s.
-	const beginBtn = page.locator("#begin");
-	await expect(beginBtn).toBeEnabled({ timeout: 10_000 });
+	// Complete the new-game flow: wait for CONNECT (state wait, not a fixed
+	// budget), fill password, click
+	const beginBtn = await waitForStartScreenReady(page);
 	await page.locator("#password").fill("password");
 	await beginBtn.click();
 	await expect(page.locator('main[data-view="game"]')).toBeAttached({
@@ -313,8 +324,11 @@ test("refresh during generation re-enters start screen and restarts generation",
 	await page.goto("/?skipDialup=1");
 
 	// Start screen visible; the held synthesis has not been clicked through.
+	// Waiting on boot readiness here also proves the first load actually ran
+	// `renderStart` before the reload, so the reload below is a real restart
+	// rather than a retry of a page that never booted.
 	await expect(page.locator("#start-screen")).toBeVisible();
-	const beginBtn = page.locator("#begin");
+	await waitForStartScreenReady(page);
 
 	// Unroute the slow handler and install the fast stub BEFORE reloading,
 	// so the post-reload synthesis request is handled immediately.
@@ -335,10 +349,11 @@ test("refresh during generation re-enters start screen and restarts generation",
 	});
 	expect(engineDat).toBeNull();
 
-	// Generation restarts on the second load: BEGIN re-enables once synthesis completes
-	// (the animation is skipped above, so this measures generation, not dial-up).
-	// Fast-synthesis stub returns instantly; 10s is ample — down from 30s.
-	await expect(beginBtn).toBeEnabled({ timeout: 10_000 });
+	// Generation restarts on the second load, and the reload re-runs the boot:
+	// CONNECT re-enables once the SPA has booted the start route again (the
+	// animation is skipped above, so this measures boot, not dial-up). State
+	// wait, not a fixed budget — see waitForStartScreenReady.
+	await waitForStartScreenReady(page);
 
 	await expectNoPageErrors(page, pageErrors);
 });

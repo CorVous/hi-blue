@@ -5,6 +5,10 @@ export {
 	pickerOkSessionSeedScript,
 } from "./picker-seeds";
 export {
+	START_SCREEN_BOOT_TIMEOUT_MS,
+	waitForStartScreenReady,
+} from "./start-screen-ready";
+export {
 	activePackOf,
 	CARDINAL_DIRECTIONS,
 	type CardinalDirection,
