@@ -2,6 +2,8 @@
 
 **Status:** Accepted
 
+> **Status note (2026-09-25): the code has drifted from this decision.** `BrowserContentPackProvider` no longer runs a partial-retry layer that splices repaired entities back into the pack. Retry units now only group the corrective feedback (`buildCorrectiveFeedback`). After a validation failure the provider *continues the conversation* (the previous JSON as an assistant turn, then a corrective user turn asking for an in-place repair), which is the option this ADR rejected; hard errors retry from a clean conversation. The whole loop runs inside the outer budget of three attempts, bootstrap goes through `generateDualContentPacks`, and `BOOTSTRAP_LOADING_TIMEOUT_MS` is now 300 s. The current behaviour and its reasons are in [`docs/design/content-packs.md`](../design/content-packs.md) ("Retry strategy"). The text below is kept as the historical record.
+
 `BrowserContentPackProvider.generateContentPacks` is the bootstrap-blocking call that produces every phase's **Content Pack** at game start. Its prompt asks the LLM to honour several discoverability rules — paired-space prose-tell, verb-of-activation cue, `{actor}` token presence/exclusion — that gate the AI-readability of the room. When the model drifts on any one of these on any one entity, the only repair affordance today is to throw the entire pack away and re-roll the whole prompt. PR #345 documented this cost by softening four of those rules from `ContentPackError` to `console.warn` rather than pay the re-roll on cosmetic drift, which trades correctness for boot reliability. This ADR records the architecture that lets us re-promote those rules without that trade.
 
 ## Decision
