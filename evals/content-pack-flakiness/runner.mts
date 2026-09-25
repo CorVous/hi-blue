@@ -1,10 +1,12 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { SETTING_POOL } from "../../src/content/setting-pool.js";
-import { THEME_POOL } from "../../src/content/theme-pool.js";
-import { TIME_OF_DAY_POOL } from "../../src/content/time-of-day-pool.js";
-import { WEATHER_POOL } from "../../src/content/weather-pool.js";
+import {
+	SETTING_POOL,
+	THEME_POOL,
+	TIME_OF_DAY_POOL,
+	WEATHER_POOL,
+} from "../../src/content/pools.js";
 import { PINNED_MODEL } from "../../src/model.js";
 import type { ValidationSchedule } from "../../src/spa/game/binding-aware-validator.js";
 import { validateBoundDualContentPack } from "../../src/spa/game/binding-aware-validator.js";

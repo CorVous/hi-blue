@@ -137,7 +137,13 @@ comparison.
   clause, so `<action_profile>` is never empty. The balanced and avoided
   clauses never appear together.
 
-## Pools
+## Pools (`pools.ts`)
+
+The flat string pools live together in `pools.ts`. The persona pools
+(`TEMPERAMENT_POOL`, `TYPING_QUIRK_POOL`, `PERSONA_GOAL_POOL`) sit beside the
+ones below. `COLOR_PALETTE` stays in `color-palette.ts` because it is built from
+a named color map. Seeded draws index into these arrays, so reordering an entry
+changes what a given seed produces.
 
 - `SETTING_POOL`: noun phrases; one per pack at game start.
 - `WEATHER_POOL`: complete sentences, rendered verbatim into `<setting>`.

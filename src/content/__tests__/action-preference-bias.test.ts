@@ -5,7 +5,7 @@ import {
 	actionProfileFor,
 	toolBiasSum,
 } from "../action-preference-bias.js";
-import { TEMPERAMENT_POOL } from "../temperament-pool.js";
+import { TEMPERAMENT_POOL } from "../pools.js";
 
 describe("action-preference-bias", () => {
 	it("covers exactly the 4-tool surface (no examine, no give, no face)", () => {

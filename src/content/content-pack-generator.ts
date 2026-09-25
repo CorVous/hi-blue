@@ -27,9 +27,7 @@ export interface SingleGameConfig {
 	mRange: [number, number];
 }
 
-import { THEME_POOL } from "./theme-pool.js";
-import { TIME_OF_DAY_POOL } from "./time-of-day-pool.js";
-import { WEATHER_POOL } from "./weather-pool.js";
+import { THEME_POOL, TIME_OF_DAY_POOL, WEATHER_POOL } from "./pools.js";
 
 const GRID_ROWS = 5;
 const GRID_COLS = 5;
