@@ -26,6 +26,7 @@ import { THEME_POOL } from "../../src/content/theme-pool.js";
 import { TIME_OF_DAY_POOL } from "../../src/content/time-of-day-pool.js";
 import { WEATHER_POOL } from "../../src/content/weather-pool.js";
 import { PINNED_MODEL } from "../../src/model.js";
+import type { ValidationSchedule } from "../../src/spa/game/binding-aware-validator.js";
 import { validateBoundDualContentPack } from "../../src/spa/game/binding-aware-validator.js";
 import { buildDualBindingPrompt } from "../../src/spa/game/binding-prompt-builder.js";
 import {
@@ -191,9 +192,12 @@ async function runIteration(iter: number): Promise<IterationResult> {
 		m,
 	);
 
-	const schedule = {
+	// Annotated rather than `as const`: `ValidationSchedule.decoys` is a mutable
+	// `{ id: string }[]`, so the `as const` readonly tuple this used to be could
+	// never satisfy it.
+	const schedule: ValidationSchedule = {
 		skeletons: bindingPrompt.skeletons,
-		decoys: [{ id: "decoy-0" }, { id: "decoy-1" }] as const,
+		decoys: [{ id: "decoy-0" }, { id: "decoy-1" }],
 		obstacleCount: m,
 	};
 	const baseUserPrompt = bindingPrompt.userMessage;
