@@ -93,7 +93,6 @@ const INDEX_BODY_HTML = `
     <span id="topinfo-right"></span>
   </div>
   <div id="topinfo-mobile-status"></div>
-  <div id="phase-banner" hidden></div>
   <div id="panels">
     <article class="ai-panel" data-ai="red">
       <header class="panel-header">

@@ -191,45 +191,7 @@ main {
 	display: contents;
 }
 
-#phase-banner {
-	padding: 4px 8px;
-	border: 1px solid transparent;
-	background-image:
-		linear-gradient(to right, rgba(255, 180, 84, 0.3) 6px, transparent 6px),
-		linear-gradient(to right, rgba(255, 180, 84, 0.3) 6px, transparent 6px),
-		linear-gradient(to bottom, rgba(255, 180, 84, 0.3) 6px, transparent 6px),
-		linear-gradient(to bottom, rgba(255, 180, 84, 0.3) 6px, transparent 6px);
-	background-size:
-		9px 1px,
-		9px 1px,
-		1px 9px,
-		1px 9px;
-	background-position:
-		0 0,
-		0 100%,
-		0 0,
-		100% 0;
-	background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
-	background-origin: border-box;
-	background-clip: border-box;
-	color: var(--amber);
-	font-family: var(--mono);
-	font-size: 12px;
-	letter-spacing: 0.04em;
-	animation: phase-banner-fade-in 0.4s ease;
-}
-
-@keyframes phase-banner-fade-in {
-	from {
-		opacity: 0;
-	}
-	to {
-		opacity: 1;
-	}
-}
-
 @media (prefers-reduced-motion: reduce) {
-	#phase-banner,
 	.blinkonly {
 		animation: none;
 	}

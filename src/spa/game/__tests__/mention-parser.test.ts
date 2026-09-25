@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
 	applyAddresseeChange,
+	buildMentionRegex,
 	buildPersonaColorMap,
 	buildPersonaNameMap,
 	findFirstMention,
 	parseFirstMention,
+	splitMentionSegments,
 } from "../mention-parser.js";
 import type { AiId } from "../types.js";
 
@@ -183,5 +185,68 @@ describe("applyAddresseeChange", () => {
 		});
 		expect(result.text).toBe(expectedText);
 		expect(result.selectionStart).toBe(expectedCursor);
+	});
+});
+
+const coloredPersonas: Record<AiId, { name: string; color: string }> = {
+	red: { name: "Ember", color: "#e07a5f" },
+	green: { name: "Sage", color: "#81b29a" },
+};
+
+function allMatches(regex: RegExp | null, text: string): string[] {
+	if (!regex) return [];
+	return [...text.matchAll(regex)].map((m) => m[0]);
+}
+
+describe("buildMentionRegex", () => {
+	it("returns null when no persona has a name", () => {
+		expect(buildMentionRegex({})).toBeNull();
+		expect(buildMentionRegex({ red: { name: "" } })).toBeNull();
+	});
+
+	it("matches whole names case-insensitively, with or without the sigil", () => {
+		const regex = buildMentionRegex(coloredPersonas);
+		expect(allMatches(regex, "*ember and SAGE, not Embers")).toEqual([
+			"*ember",
+			"SAGE",
+		]);
+	});
+
+	it("escapes regex metacharacters in names", () => {
+		const regex = buildMentionRegex({ red: { name: "A.B" } });
+		expect(allMatches(regex, "AxB")).toEqual([]);
+		expect(allMatches(regex, "A.B")).toEqual(["A.B"]);
+	});
+});
+
+describe("splitMentionSegments", () => {
+	it("returns no segments for empty text", () => {
+		expect(splitMentionSegments("", coloredPersonas)).toEqual([]);
+	});
+
+	it("returns one text segment when there are no personas", () => {
+		expect(splitMentionSegments("hello", {})).toEqual([
+			{ kind: "text", text: "hello" },
+		]);
+	});
+
+	it("splits text around mentions and carries the persona colour", () => {
+		expect(
+			splitMentionSegments("hi *Ember, ask sage.", coloredPersonas),
+		).toEqual([
+			{ kind: "text", text: "hi " },
+			{ kind: "mention", text: "*Ember", color: "#e07a5f" },
+			{ kind: "text", text: ", ask " },
+			{ kind: "mention", text: "sage", color: "#81b29a" },
+			{ kind: "text", text: "." },
+		]);
+	});
+
+	it("omits empty text segments between adjacent mentions", () => {
+		expect(splitMentionSegments("Ember Sage", coloredPersonas)).toEqual([
+			{ kind: "mention", text: "Ember", color: "#e07a5f" },
+			{ kind: "text", text: " " },
+			{ kind: "mention", text: "Sage", color: "#81b29a" },
+		]);
 	});
 });
