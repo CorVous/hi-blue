@@ -398,7 +398,6 @@ describe("GameSession — result from submitMessage", () => {
 		// Verify the RoundResult surface is intact
 		expect(typeof result.round).toBe("number");
 		expect(Array.isArray(result.actions)).toBe(true);
-		expect(typeof result.phaseEnded).toBe("boolean");
 		expect(typeof result.gameEnded).toBe("boolean");
 	});
 });
@@ -424,7 +423,6 @@ describe("GameSession — win / lose via checkWinCondition / checkLoseCondition"
 			makePassProvider(),
 		);
 		expect(result.gameEnded).toBe(false);
-		expect(result.phaseEnded).toBe(false);
 	});
 
 	it("gameEnded is true when all objective pairs are satisfied (vacuous K=0)", async () => {

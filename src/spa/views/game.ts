@@ -205,7 +205,7 @@ export function applyTestAffordances(
 		const result = await originalSubmit(...args);
 		return {
 			...result,
-			result: { ...result.result, gameEnded: true, phaseEnded: false },
+			result: { ...result.result, gameEnded: true },
 			nextState: {
 				...result.nextState,
 				isComplete: true,
@@ -1580,53 +1580,6 @@ export function renderGame(
 						// Event type still produced by round-result-encoder but no longer
 						// rendered in player-facing UI. Inspector supersedes this debug surface.
 						break;
-
-					case "phase_advanced": {
-						// Show phase banner
-						const phaseBannerEl =
-							doc.querySelector<HTMLElement>("#phase-banner");
-						if (phaseBannerEl) {
-							phaseBannerEl.textContent = `Phase ${event.phase}: ${event.setting}`;
-							phaseBannerEl.removeAttribute("hidden");
-						}
-						// Clear all transcript panels
-						const advAiIds = Object.keys(nextState.personas);
-						for (const aid of advAiIds) {
-							const tEl = getTranscript(aid);
-							if (tEl) tEl.textContent = "";
-						}
-						// Refresh budget displays from new phase
-						const currentSession = session;
-						if (currentSession) {
-							const newState = currentSession.getState();
-							for (const aid of advAiIds) {
-								const panel = doc.querySelector<HTMLElement>(
-									`.ai-panel[data-ai="${aid}"]`,
-								);
-								if (!panel) continue;
-								const budgetEl =
-									panel.querySelector<HTMLSpanElement>(".panel-budget");
-								if (budgetEl) {
-									const b = newState.budgets[aid];
-									if (b) {
-										budgetEl.dataset.budget = String(b.remaining);
-										budgetEl.textContent = formatBudget(b.remaining);
-									}
-								}
-								// Re-enable chat-locked AIs that were carried over
-								lockouts.set(aid, false);
-							}
-							refreshComposerState();
-						}
-						// Append phase separator to each transcript
-						for (const aid of advAiIds) {
-							appendStandaloneLine(
-								aid,
-								`--- Phase ${event.phase} begins: ${event.setting} ---\n`,
-							);
-						}
-						break;
-					}
 
 					case "game_ended": {
 						if (gameEnded) break;

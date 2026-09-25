@@ -98,7 +98,6 @@ function makePassResult(overrides?: Partial<RoundResult>): RoundResult {
 			{ round: 1, actor: "green", kind: "pass", description: "Sage passed" },
 			{ round: 1, actor: "cyan", kind: "pass", description: "Frost passed" },
 		],
-		phaseEnded: false,
 		gameEnded: false,
 		...overrides,
 	};
@@ -517,91 +516,12 @@ describe("encodeRoundResult — event ordering", () => {
 	});
 });
 
-// ── phase_advanced ────────────────────────────────────────────────────────────
-
-describe("encodeRoundResult — phase_advanced event", () => {
-	it("emits a phase_advanced event when phaseEnded=true and gameEnded=false", () => {
-		// In the flat single-game model (issue #295), phase is always 1.
-		// The phase_advanced event signals a between-phase transition for UI display,
-		// but the flat model does not track a real phase number — phase is always 1.
-		const phaseAfter = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
-			budgetPerAi: 5,
-		});
-
-		const result = makePassResult({ phaseEnded: true, gameEnded: false });
-		const completions = { red: "r", green: "g", cyan: "b" };
-
-		const events = encodeRoundResult(
-			result,
-			completions,
-			phaseAfter,
-			TEST_PERSONAS,
-		);
-
-		const phaseEvent = events.find(
-			(e): e is Extract<SseEvent, { type: "phase_advanced" }> =>
-				e.type === "phase_advanced",
-		);
-		expect(phaseEvent).toBeDefined();
-		expect(phaseEvent?.phase).toBe(1);
-		expect(phaseEvent?.setting).toBe("");
-	});
-
-	it("does NOT emit phase_advanced when phaseEnded=false", () => {
-		const phase = makePhase();
-		const result = makePassResult({ phaseEnded: false, gameEnded: false });
-		const completions = { red: "r", green: "g", cyan: "b" };
-
-		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
-
-		expect(events.find((e) => e.type === "phase_advanced")).toBeUndefined();
-	});
-
-	it("does NOT emit phase_advanced when phaseEnded=true but gameEnded=true", () => {
-		const phase = makePhase();
-		const result = makePassResult({ phaseEnded: true, gameEnded: true });
-		const completions = { red: "r", green: "g", cyan: "b" };
-
-		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
-
-		expect(events.find((e) => e.type === "phase_advanced")).toBeUndefined();
-	});
-
-	it("phase_advanced event comes after action_log and chat_lockout events", () => {
-		// Flat model: phase is always 1; use same content pack
-		const phaseAfter = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
-			budgetPerAi: 5,
-		});
-
-		const result = makePassResult({
-			phaseEnded: true,
-			gameEnded: false,
-			chatLockoutTriggered: { aiId: "red", message: "locked" },
-		});
-		const completions = { red: "r", green: "g", cyan: "b" };
-
-		const events = encodeRoundResult(
-			result,
-			completions,
-			phaseAfter,
-			TEST_PERSONAS,
-		);
-
-		const chatLockoutIdx = events.findIndex((e) => e.type === "chat_lockout");
-		const phaseAdvancedIdx = events.findIndex(
-			(e) => e.type === "phase_advanced",
-		);
-
-		expect(phaseAdvancedIdx).toBeGreaterThan(chatLockoutIdx);
-	});
-});
-
 // ── game_ended ────────────────────────────────────────────────────────────────
 
 describe("encodeRoundResult — game_ended event", () => {
 	it("emits a game_ended event when gameEnded=true", () => {
 		const phase = makePhase();
-		const result = makePassResult({ phaseEnded: true, gameEnded: true });
+		const result = makePassResult({ gameEnded: true });
 		const completions = { red: "r", green: "g", cyan: "b" };
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
@@ -612,7 +532,7 @@ describe("encodeRoundResult — game_ended event", () => {
 
 	it("does NOT emit game_ended when gameEnded=false", () => {
 		const phase = makePhase();
-		const result = makePassResult({ phaseEnded: false, gameEnded: false });
+		const result = makePassResult({ gameEnded: false });
 		const completions = { red: "r", green: "g", cyan: "b" };
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
@@ -622,7 +542,7 @@ describe("encodeRoundResult — game_ended event", () => {
 
 	it("game_ended event comes after phase-related events", () => {
 		const phase = makePhase();
-		const result = makePassResult({ phaseEnded: true, gameEnded: true });
+		const result = makePassResult({ gameEnded: true });
 		const completions = { red: "r", green: "g", cyan: "b" };
 
 		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
@@ -634,17 +554,6 @@ describe("encodeRoundResult — game_ended event", () => {
 		const gameEndedIdx = events.findIndex((e) => e.type === "game_ended");
 
 		expect(gameEndedIdx).toBeGreaterThan(lastActionLogIdx);
-	});
-
-	it("emits game_ended but NOT phase_advanced when gameEnded=true", () => {
-		const phase = makePhase();
-		const result = makePassResult({ phaseEnded: true, gameEnded: true });
-		const completions = { red: "r", green: "g", cyan: "b" };
-
-		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
-
-		expect(events.find((e) => e.type === "game_ended")).toBeDefined();
-		expect(events.find((e) => e.type === "phase_advanced")).toBeUndefined();
 	});
 });
 

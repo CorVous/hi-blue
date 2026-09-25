@@ -484,7 +484,6 @@ export interface ToolRoundtripMessage {
 export interface RoundResult {
 	round: number;
 	actions: RoundActionRecord[];
-	phaseEnded: boolean;
 	gameEnded: boolean;
 	/**
 	 * Set when a chat lockout was triggered this round.

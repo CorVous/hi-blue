@@ -1107,20 +1107,6 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 		{ wallName: "wall", aiStarts: RGC_AI_STARTS },
 	);
 
-	it("RoundResult.phaseEnded is always false (phase-based model removed)", async () => {
-		// phaseEnded is always false in the flat model.
-		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
-			budgetPerAi: 5,
-		});
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
-		const { result } = await runRound(game, "red", "hi", provider);
-		expect(result.phaseEnded).toBe(false);
-	});
-
 	it("gameEnded is false when objective pairs are not satisfied", async () => {
 		// CARRY_PACK_UNSATISFIED: carry-0-obj at (0,0), carry-0-space at (4,4) — not same cell.
 		const game = startGame(TEST_PERSONAS, CARRY_PACK_UNSATISFIED, {
@@ -1134,7 +1120,6 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 		]);
 		const { result } = await runRound(game, "red", "hi", provider);
 		expect(result.gameEnded).toBe(false);
-		expect(result.phaseEnded).toBe(false);
 	});
 
 	it("gameEnded is true and isComplete is true when all pairs satisfied (K=0 vacuous)", async () => {
@@ -1147,7 +1132,6 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 		]);
 		const { nextState, result } = await runRound(game, "red", "hi", provider);
 		expect(result.gameEnded).toBe(true);
-		expect(result.phaseEnded).toBe(false);
 		expect(nextState.isComplete).toBe(true);
 	});
 
@@ -1447,7 +1431,7 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 describe("multi-round game state accumulation", () => {
 	it("walks through multiple rounds correctly, game ends when all pairs satisfied", async () => {
 		// In the flat model there are no multi-phase transitions.
-		// This test verifies: phaseEnded is always false, round counter advances,
+		// This test verifies: round counter advances,
 		// and state accumulates across rounds.
 		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
 			budgetPerAi: 5,
@@ -1468,16 +1452,15 @@ describe("multi-round game state accumulation", () => {
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
-		const { nextState: afterR1, result: r1 } = await runRound(
+		const { nextState: afterR1 } = await runRound(
 			game,
 			"red",
 			"hi",
 			r1Provider,
 		);
-		// In flat model, phaseEnded is always false; gameEnded fires when all pairs satisfied.
+		// In flat model, gameEnded fires when all pairs satisfied.
 		// TEST_CONTENT_PACK has one pair (flower at 0,0, space at 4,4) — not satisfied by pick_up.
 		// So after round 1 game has NOT ended.
-		expect(r1.phaseEnded).toBe(false);
 		expect(afterR1.round).toBe(1);
 
 		// Round 2: pass round — world state is still the same
@@ -1486,13 +1469,12 @@ describe("multi-round game state accumulation", () => {
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
-		const { nextState: afterR2, result: r2 } = await runRound(
+		const { nextState: afterR2 } = await runRound(
 			afterR1,
 			"red",
 			"hi",
 			r2Provider,
 		);
-		expect(r2.phaseEnded).toBe(false);
 		expect(afterR2.round).toBe(2);
 
 		// State accumulates across rounds (conversation logs grow)
@@ -1782,9 +1764,8 @@ describe("placement flavor + win condition (issue #126)", () => {
 			{ assistantText: "", toolCalls: [] },
 		]);
 		const { nextState, result } = await runRound(game, "red", "hi", provider);
-		// In flat model: gameEnded fires when all pairs satisfied; phaseEnded is always false.
+		// In flat model: gameEnded fires when all pairs satisfied.
 		expect(result.gameEnded).toBe(true);
-		expect(result.phaseEnded).toBe(false);
 		expect(nextState.isComplete).toBe(true);
 	});
 
@@ -1841,7 +1822,6 @@ describe("placement flavor + win condition (issue #126)", () => {
 			"places the gem on the altar",
 		);
 		// Game should NOT have ended (pair not satisfied)
-		expect(result.phaseEnded).toBe(false);
 		expect(result.gameEnded).toBe(false);
 	});
 
@@ -1920,9 +1900,8 @@ describe("placement flavor + win condition (issue #126)", () => {
 			{ assistantText: "", toolCalls: [] },
 		]);
 		const { result, nextState } = await runRound(game, "red", "hi", provider);
-		// Both pairs now satisfied → game ends (flat model: gameEnded, not phaseEnded)
+		// Both pairs now satisfied → game ends
 		expect(result.gameEnded).toBe(true);
-		expect(result.phaseEnded).toBe(false);
 		expect(nextState.isComplete).toBe(true);
 	});
 });

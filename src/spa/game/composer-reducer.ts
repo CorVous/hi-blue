@@ -1,5 +1,4 @@
 import { findFirstMention } from "./mention-parser.js";
-import { lockoutErrorText } from "./persona-display.js";
 import type { AiId } from "./types.js";
 
 export interface ComposerInput {
@@ -23,6 +22,14 @@ export interface ComposerState {
 	lockoutError: string | null;
 	/** Set of AiIds currently chat-locked (panel muting). */
 	lockedPanels: ReadonlySet<AiId>;
+}
+
+/**
+ * Returns the inline error text shown when a player tries to message
+ * a persona that is currently chat-locked.
+ */
+function lockoutErrorText(persona: { name: string }): string {
+	return `${persona.name} isn't reading right now`;
 }
 
 const NULL_VISUAL: Pick<
