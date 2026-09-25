@@ -1,6 +1,6 @@
 {
 	"name": "hi-blue-proxy",
-	"main": "src/proxy/_smoke.ts",
+	"main": "src/proxy/worker.ts",
 	"compatibility_date": "2025-12-01",
 	"compatibility_flags": ["nodejs_compat"],
 	// Build the SPA before wrangler bundles the Worker. Runs on every

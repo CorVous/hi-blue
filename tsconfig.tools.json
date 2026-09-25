@@ -4,5 +4,11 @@
 		"lib": ["ES2022", "DOM", "DOM.Iterable"],
 		"types": ["node"]
 	},
-	"include": ["evals/**/*.ts", "evals/**/*.mts", "src/spa/env.d.ts"]
+	"include": [
+		"e2e/**/*.ts",
+		"playwright.config.ts",
+		"evals/**/*.ts",
+		"evals/**/*.mts",
+		"src/spa/env.d.ts"
+	]
 }

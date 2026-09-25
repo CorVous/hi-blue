@@ -31,7 +31,7 @@ export default defineConfig({
 				extends: true,
 				plugins: [
 					cloudflareTest({
-						main: "./src/proxy/_smoke.ts",
+						main: "./src/proxy/worker.ts",
 						configPath: "./wrangler.jsonc",
 						miniflare: {
 							compatibilityDate: "2026-05-03",
