@@ -2736,4 +2736,67 @@ describe("renderBootstrapLoadingFlow — promise propagation", () => {
 		const recoveryEl = document.querySelector("#bootstrap-recovery");
 		expect(recoveryEl?.hasAttribute("hidden")).toBe(false);
 	});
+
+	it("disables the visible regenerate button while regenerating and re-enables it after a failed attempt", async () => {
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
+		document.body.innerHTML = INDEX_BODY_HTML;
+
+		let rejectRegeneratedPacks: (err: unknown) => void = () => undefined;
+		vi.doMock("../game/bootstrap.js", async (importOriginal) => {
+			const actual =
+				await importOriginal<typeof import("../game/bootstrap.js")>();
+			return {
+				...actual,
+				generateNewGameAssetsSplit: () => ({
+					personasPromise: Promise.resolve(STATIC_PERSONAS),
+					contentPacksPromise: Promise.reject(
+						new Error("content pack generation failed"),
+					),
+				}),
+				generateContentPacksOnlySplit: (personas: typeof STATIC_PERSONAS) => ({
+					personasPromise: Promise.resolve(personas),
+					contentPacksPromise: new Promise((_resolve, reject) => {
+						rejectRegeneratedPacks = reject;
+					}),
+				}),
+			};
+		});
+
+		vi.resetModules();
+		const stub = makeLocalStorageStub();
+		vi.stubGlobal("localStorage", stub);
+
+		const { mintAndActivateNewSession } = await import(
+			"../persistence/session-storage.js"
+		);
+		mintAndActivateNewSession();
+
+		const { startBootstrap } = await import("../game/pending-bootstrap.js");
+		startBootstrap();
+
+		const { renderGame } = await import("../views/game.js");
+		await renderGame(getEl<HTMLElement>("main"));
+
+		const recoveryEl = getEl<HTMLElement>("#bootstrap-recovery");
+		expect(recoveryEl.hasAttribute("hidden")).toBe(false);
+
+		getEl<HTMLButtonElement>("#bootstrap-recovery-regen").click();
+
+		const visibleRegenBtn = getEl<HTMLButtonElement>(
+			"#bootstrap-recovery-regen",
+		);
+		expect(recoveryEl.hasAttribute("hidden")).toBe(true);
+		expect(visibleRegenBtn.disabled).toBe(true);
+
+		rejectRegeneratedPacks(new Error("regenerated packs failed"));
+
+		await vi.waitFor(() => {
+			expect(recoveryEl.hasAttribute("hidden")).toBe(false);
+		});
+		expect(getEl<HTMLButtonElement>("#bootstrap-recovery-regen")).toBe(
+			visibleRegenBtn,
+		);
+		expect(visibleRegenBtn.disabled).toBe(false);
+	});
 });

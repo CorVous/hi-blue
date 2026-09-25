@@ -174,9 +174,11 @@ it hides the other routes' screens and shows or hides the global chrome
   cached personas. If the recovery DOM is missing, the flow clears the
   session and sends the player to the start route with reason `broken`.
 - `dropListenersByCloning` replaces an element with a clone of itself, which
-  drops every listener on it, and returns the clone. Note: `runRegenerate`
-  still sets `disabled` on the regenerate button from before the clone,
-  which is now detached.
+  drops every listener on it, and returns the clone. The regenerate wiring
+  keeps that returned clone, so `runRegenerate` disables the button the
+  player can see while the content packs regenerate and enables it again
+  when the attempt settles. It once disabled the detached original instead,
+  which left the visible button clickable during regeneration.
 
 ### Restore path
 

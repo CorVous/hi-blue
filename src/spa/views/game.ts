@@ -1749,7 +1749,7 @@ function wireRegenerateButton(
 	const regenBtn = dropListenersByCloning(staleRegenBtn);
 	regenBtn.addEventListener("click", (e) => {
 		e.preventDefault();
-		void runRegenerate(ctx, timers, recoveryEl, staleRegenBtn);
+		void runRegenerate(ctx, timers, recoveryEl, regenBtn);
 	});
 }
 
