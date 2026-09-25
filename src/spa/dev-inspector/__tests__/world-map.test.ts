@@ -78,7 +78,6 @@ describe("world-map", () => {
 
 		renderWorldMap(containerEl, session);
 
-		// Red daemon starts at (0,0) = cell "0,0"
 		const daemonCell = containerEl.querySelector(
 			'.dev-map-cell[data-ai="red"]',
 		);
@@ -87,7 +86,6 @@ describe("world-map", () => {
 		const glyph = daemonCell?.querySelector(".dev-map-glyph");
 		expect(glyph?.textContent).toBe("@ ");
 
-		// Color is set; browsers convert hex to rgb, so just check it's not empty
 		if (daemonCell instanceof HTMLElement) {
 			expect(daemonCell.style.color).toBeTruthy();
 		}
@@ -109,12 +107,9 @@ describe("world-map", () => {
 			expect(glyph).toBe("@ ");
 			expect(glyph).not.toMatch(/[<>^v]/);
 
-			// Exact tooltip: identity label plus held item, nothing else.
 			const tooltip = cell.querySelector(".dev-map-tooltip")?.textContent;
 			expect(tooltip).toMatch(/^\*[A-Za-z]+ — holds: .+$/);
 
-			// The whole marker text is glyph + tooltip; exact match rules out
-			// any direction arrow, direction letter, or direction wording.
 			expect(cell.textContent).toMatch(/^@ \*[A-Za-z]+ — holds: .+$/);
 		}
 	});
@@ -128,22 +123,16 @@ describe("world-map", () => {
 
 		renderWorldMap(containerEl, session);
 
-		// The static fixtures hand the engine their spatial records by
-		// reference, so moving Daemons here would leak into later tests that
-		// place entities on the same cells. Snapshot and restore afterwards.
 		const snapshot = Object.values(state.personaSpatial).map((spatial) => ({
 			spatial,
 			position: spatial.position,
 		}));
 
 		const glyphs = new Set<string>();
-		// Walk the Daemons to distinct cells along different cardinal axes, so
-		// any direction-dependent glyph (arrow, compass letter, movement trail)
-		// would have to differ between these markers.
 		const routes: Array<[string, { row: number; col: number }]> = [
-			["red", { row: 4, col: 0 }], // moved south
-			["green", { row: 0, col: 4 }], // moved east
-			["cyan", { row: 2, col: 2 }], // moved south-east
+			["red", { row: 4, col: 0 }],
+			["green", { row: 0, col: 4 }],
+			["cyan", { row: 2, col: 2 }],
 		];
 		for (const [aiId, position] of routes) {
 			const spatial = state.personaSpatial[aiId];
@@ -167,7 +156,6 @@ describe("world-map", () => {
 			glyphs.add(glyph ?? "");
 		}
 
-		// One glyph for every Daemon, regardless of the direction each moved.
 		expect([...glyphs]).toEqual(["@ "]);
 
 		for (const entry of snapshot) {
@@ -186,13 +174,9 @@ describe("world-map", () => {
 		for (const cell of containerEl.querySelectorAll<HTMLElement>(
 			".dev-map-cell[data-ai]",
 		)) {
-			// The marker's entire observable surface: glyph text, tooltip text,
-			// and identity attributes. Any direction or movement marker would
-			// have to appear in one of these.
 			expect(cell.querySelector(".dev-map-glyph")?.textContent).toBe("@ ");
 			expect(cell.textContent).toMatch(/^@ \*[A-Za-z]+ — holds: .+$/);
 
-			// No compass arrows, no compass letters, no movement wording.
 			expect(cell.textContent).not.toMatch(/[<^>v↑↓←→↖↗↘↙]/);
 			expect(cell.getAttributeNames()).not.toContain("data-direction");
 			expect(cell.getAttributeNames()).not.toContain("data-facing");
@@ -224,7 +208,6 @@ describe("world-map", () => {
 
 		renderWorldMap(containerEl, session);
 
-		// All daemons start without holding anything
 		const daemonCells = containerEl.querySelectorAll(".dev-map-cell[data-ai]");
 		for (const cell of daemonCells) {
 			const tooltip = cell.querySelector(".dev-map-tooltip");
@@ -238,7 +221,6 @@ describe("world-map", () => {
 		const session = new GameSession(contentPack, STATIC_PERSONAS);
 		const state = session.getState();
 
-		// Add an obstacle at (1,1)
 		const obstacle: WorldEntity = {
 			id: "test_obstacle",
 			kind: "obstacle",
@@ -267,7 +249,6 @@ describe("world-map", () => {
 		const session = new GameSession(contentPack, STATIC_PERSONAS);
 		const state = session.getState();
 
-		// Move the objective object away from its space
 		const objEntity = state.world.entities.find(
 			(e) => e.kind === "objective_object",
 		);
@@ -293,7 +274,6 @@ describe("world-map", () => {
 		const session = new GameSession(contentPack, STATIC_PERSONAS);
 		const state = session.getState();
 
-		// Move the objective object away from its space
 		const objEntity = state.world.entities.find(
 			(e) => e.kind === "objective_object",
 		);
@@ -319,7 +299,6 @@ describe("world-map", () => {
 		const session = new GameSession(contentPack, STATIC_PERSONAS);
 		const state = session.getState();
 
-		// Both object and space start at their default positions which form a pair
 		const objEntity = state.world.entities.find(
 			(e) => e.kind === "objective_object",
 		);
@@ -327,7 +306,6 @@ describe("world-map", () => {
 			(e) => e.kind === "objective_space",
 		);
 
-		// Put them at the same location
 		if (objEntity && spaceEntity) {
 			objEntity.holder = { row: 3, col: 3 };
 			spaceEntity.holder = { row: 3, col: 3 };
@@ -351,7 +329,6 @@ describe("world-map", () => {
 		const session = new GameSession(contentPack, STATIC_PERSONAS);
 		const state = session.getState();
 
-		// Add an interesting object
 		const interesting: WorldEntity = {
 			id: "test_interesting",
 			kind: "interesting_object",
@@ -399,7 +376,6 @@ describe("world-map", () => {
 		const session = new GameSession(contentPack, STATIC_PERSONAS);
 		const state = session.getState();
 
-		// Place obstacle at red daemon's position
 		const obstacle: WorldEntity = {
 			id: "test_obstacle",
 			kind: "obstacle",
@@ -412,7 +388,6 @@ describe("world-map", () => {
 		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
 		renderWorldMap(containerEl, session);
 
-		// Should show daemon, not obstacle
 		const cell = containerEl.querySelector('.dev-map-cell[data-ai="red"]');
 		expect(cell).toBeTruthy();
 
@@ -426,7 +401,6 @@ describe("world-map", () => {
 		const session = new GameSession(contentPack, STATIC_PERSONAS);
 		const state = session.getState();
 
-		// Get objective object and move it to (1,1)
 		const objEntity = state.world.entities.find(
 			(e) => e.kind === "objective_object",
 		);
@@ -434,7 +408,6 @@ describe("world-map", () => {
 			objEntity.holder = { row: 1, col: 1 };
 		}
 
-		// Add obstacle at same location
 		const obstacle: WorldEntity = {
 			id: "test_obstacle",
 			kind: "obstacle",
@@ -447,7 +420,6 @@ describe("world-map", () => {
 		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
 		renderWorldMap(containerEl, session);
 
-		// Should show obstacle, not objective object
 		const cell = containerEl.querySelector(
 			'.dev-map-cell[data-kind="obstacle"]',
 		);
@@ -463,7 +435,6 @@ describe("world-map", () => {
 		const session = new GameSession(contentPack, STATIC_PERSONAS);
 		const state = session.getState();
 
-		// Make red daemon hold the objective object
 		const objEntity = state.world.entities.find(
 			(e) => e.kind === "objective_object",
 		);
@@ -474,13 +445,11 @@ describe("world-map", () => {
 		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
 		renderWorldMap(containerEl, session);
 
-		// Objective object should not have a floor cell
 		const objCell = containerEl.querySelector(
 			'.dev-map-cell[data-kind="objective-object"]',
 		);
 		expect(objCell).toBeFalsy();
 
-		// But it should appear in red daemon's tooltip
 		const redCell = containerEl.querySelector('.dev-map-cell[data-ai="red"]');
 		const tooltip = redCell?.querySelector(".dev-map-tooltip");
 		expect(tooltip?.textContent).toContain("cracked lantern");
@@ -494,14 +463,11 @@ describe("world-map", () => {
 
 		renderWorldMap(containerEl, session);
 
-		// Get the first cell's identity
 		const firstCell = containerEl.querySelector(".dev-map-cell");
 		const firstCellIdentity = firstCell;
 
-		// Update the map
 		updateWorldMap(containerEl, session);
 
-		// First cell should be the same object
 		const firstCellAfter = containerEl.querySelector(".dev-map-cell");
 		expect(firstCellAfter).toBe(firstCellIdentity);
 	});
@@ -520,7 +486,6 @@ describe("world-map", () => {
 
 		const cellsAfter = [...containerEl.querySelectorAll(".dev-map-cell")];
 		expect(cellsAfter.length).toBe(25);
-		// Same nodes, same order, same coordinates: nothing re-created.
 		expect(cellsAfter).toEqual(cellsBefore);
 		for (const [index, cell] of cellsAfter.entries()) {
 			expect(cell.getAttribute("data-cell")).toBe(
@@ -545,21 +510,17 @@ describe("world-map", () => {
 			.querySelector('.dev-map-cell[data-ai="red"] .dev-map-tooltip')
 			?.textContent.trim();
 
-		// Move red daemon to (2,2)
 		const redSpatial = state.personaSpatial.red;
 		if (!redSpatial) throw new Error("Red spatial state missing");
 		redSpatial.position = { row: 2, col: 2 };
 
-		// Update
 		updateWorldMap(containerEl, session);
 
-		// Room position (2,2) is display cell "2,2" in the room-only grid
 		const redCellAfter = containerEl.querySelector(
 			'.dev-map-cell[data-cell="2,2"]',
 		);
 		expect(redCellAfter?.getAttribute("data-ai")).toBe("red");
 
-		// The identity marker moved with the daemon, unchanged in content.
 		expect(redCellAfter?.querySelector(".dev-map-glyph")?.textContent).toBe(
 			"@ ",
 		);
@@ -567,7 +528,6 @@ describe("world-map", () => {
 			redCellAfter?.querySelector(".dev-map-tooltip")?.textContent.trim(),
 		).toBe(tooltipBefore);
 
-		// The old cell no longer carries the marker.
 		const oldCell = containerEl.querySelector('.dev-map-cell[data-cell="0,0"]');
 		expect(oldCell?.getAttribute("data-ai")).toBeNull();
 	});
@@ -579,7 +539,6 @@ describe("world-map", () => {
 		const state = session.getState();
 		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
 
-		// Find objective object and move it away from space first
 		const objEntity = state.world.entities.find(
 			(e) => e.kind === "objective_object",
 		);
@@ -589,21 +548,17 @@ describe("world-map", () => {
 
 		renderWorldMap(containerEl, session);
 
-		// Verify it was rendered with initial satisfaction state
 		const objCellBefore = containerEl.querySelector(
 			'.dev-map-cell[data-cell="1,1"]',
 		);
 		expect(objCellBefore?.getAttribute("data-kind")).toBe("objective-object");
 
-		// Change its satisfaction
 		if (objEntity) {
 			objEntity.satisfactionState = "satisfied";
 		}
 
-		// Update
 		updateWorldMap(containerEl, session);
 
-		// Check that the cell has the updated satisfaction
 		const objCell = containerEl.querySelector('.dev-map-cell[data-cell="1,1"]');
 		expect(objCell?.getAttribute("data-satisfaction")).toBe("satisfied");
 
@@ -619,11 +574,9 @@ describe("world-map", () => {
 
 		renderWorldMap(containerEl, session);
 
-		// No cells should have [title] attribute
 		const cellsWithTitle = containerEl.querySelectorAll(".dev-map-cell[title]");
 		expect(cellsWithTitle.length).toBe(0);
 
-		// All cells should have a .dev-map-tooltip child
 		const cells = containerEl.querySelectorAll(".dev-map-cell");
 		for (const cell of cells) {
 			const tooltip = cell.querySelector(".dev-map-tooltip");
@@ -641,7 +594,6 @@ describe("world-map", () => {
 		const firstGrids = containerEl.querySelectorAll(".dev-map-grid");
 		expect(firstGrids.length).toBe(1);
 
-		// Call renderWorldMap again
 		renderWorldMap(containerEl, session);
 		const secondGrids = containerEl.querySelectorAll(".dev-map-grid");
 		expect(secondGrids.length).toBe(1);

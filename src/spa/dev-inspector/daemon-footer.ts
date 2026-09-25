@@ -1,23 +1,7 @@
-/**
- * daemon-footer.ts
- *
- * Renders per-Daemon footer summary lines in the dev inspector showing:
- * - Pip (lifecycle indicator: ○ idle, ● in-flight, ✕ errored)
- * - Last-round tool calls and messages
- * - LLM metrics (tokens, cache %, cost)
- * - Active complications affecting this Daemon
- */
-
 import type { GameSession } from "../game/game-session";
 import type { AiId, AiPersona, ConversationEntry } from "../game/types";
 import { getMapFocus, setMapFocus } from "./world-map.js";
 
-/**
- * Side-channel storage for per-AI turn results (tokens, cost, completion, tool calls).
- * RoundTurnResult is not stored in GameState, so we maintain this
- * map separately. The provider wrapper populates it; updateDaemonFooterSummary
- * reads from it.
- */
 const daemonTurnResults: Record<
 	string,
 	{
@@ -30,25 +14,12 @@ const daemonTurnResults: Record<
 	}
 > = {};
 
-/**
- * Side-channel storage for per-AI system prompts.
- */
 const daemonSystemPrompts: Record<string, string> = {};
 
-/**
- * Side-channel storage for per-AI errors with optional status codes.
- */
 const daemonErrors: Record<string, { text: string; statusCode?: number }> = {};
 
-/**
- * Side-channel storage for per-AI round numbers.
- */
 const daemonRounds: Record<string, number> = {};
 
-/**
- * Record a turn result for an AI (called by the provider wrapper in views/game.ts).
- * Stores token/cost data for later rendering in the footer summary.
- */
 export function recordDaemonTurnResult(
 	aiId: AiId,
 	result: {
@@ -63,9 +34,6 @@ export function recordDaemonTurnResult(
 	daemonTurnResults[aiId] = result;
 }
 
-/**
- * Clear all recorded turn results (used by tests).
- */
 export function clearDaemonTurnResults(): void {
 	for (const key of Object.keys(daemonTurnResults)) {
 		delete daemonTurnResults[key];
@@ -81,9 +49,6 @@ export function clearDaemonTurnResults(): void {
 	}
 }
 
-/**
- * Record a system prompt for an AI (called by the provider wrapper in views/game.ts).
- */
 export function recordDaemonSystemPrompt(
 	aiId: AiId,
 	systemPrompt: string,
@@ -91,10 +56,6 @@ export function recordDaemonSystemPrompt(
 	daemonSystemPrompts[aiId] = systemPrompt;
 }
 
-/**
- * Record an error for an AI (called by the provider wrapper in views/game.ts).
- * Extracts the error message and status code (if present).
- */
 export function recordDaemonError(aiId: AiId, error: unknown): void {
 	const text = error instanceof Error ? error.message : String(error);
 	const statusCode =
@@ -110,17 +71,10 @@ export function recordDaemonError(aiId: AiId, error: unknown): void {
 	};
 }
 
-/**
- * Record the current round number for an AI (called by the provider wrapper in views/game.ts).
- */
 export function recordDaemonRound(aiId: AiId, round: number): void {
 	daemonRounds[aiId] = round;
 }
 
-/**
- * Build the footer fields (pip, tools, llm, chips, focus button).
- * Returns an array of elements ready to append to a container.
- */
 function buildFooterFields(): HTMLElement[] {
 	const spans: HTMLElement[] = [];
 
@@ -160,10 +114,6 @@ function buildFooterFields(): HTMLElement[] {
 	return spans;
 }
 
-/**
- * Initialize the footer DOM for a Daemon. Builds the summary line with
- * four field spans, then five <details> disclosure blocks. Removes the hidden attribute.
- */
 export function renderDaemonFooter(
 	panelEl: HTMLElement,
 	aiId: AiId,
@@ -174,7 +124,6 @@ export function renderDaemonFooter(
 
 	const doc = panelEl.ownerDocument;
 
-	// Clear and build the summary line
 	footerEl.replaceChildren();
 	const summaryDiv = doc.createElement("div");
 	summaryDiv.className = "dev-footer-summary";
@@ -187,7 +136,6 @@ export function renderDaemonFooter(
 
 	footerEl.appendChild(summaryDiv);
 
-	// Build the five <details> blocks
 	const detailsBlocks = [
 		{
 			disclosure: "system-prompt",
@@ -221,7 +169,6 @@ export function renderDaemonFooter(
 		details.appendChild(summaryEl);
 
 		if (block.disclosure === "persona-card") {
-			// Persona card has a special div structure
 			const personaDiv = doc.createElement("div");
 			personaDiv.className = "dev-footer-persona";
 			personaDiv.setAttribute("data-content", "persona-card");
@@ -241,7 +188,6 @@ export function renderDaemonFooter(
 
 			details.appendChild(personaDiv);
 
-			// Populate persona card content immediately (static within session)
 			const state = session.getState();
 			const persona = state.personas[aiId] as AiPersona | undefined;
 			if (persona) {
@@ -285,7 +231,6 @@ export function renderDaemonFooter(
 				}
 			}
 		} else {
-			// Non-persona blocks have a <pre> with data-content
 			const pre = doc.createElement("pre");
 			pre.setAttribute("data-content", block.disclosure);
 			pre.textContent = "";
@@ -295,10 +240,8 @@ export function renderDaemonFooter(
 		footerEl.appendChild(details);
 	}
 
-	// Remove hidden attribute
 	footerEl.removeAttribute("hidden");
 
-	// Attach click handler to the focus-Vista button
 	const focusBtnEl = panelEl.querySelector<HTMLButtonElement>(
 		'[data-field="focus-vista"]',
 	);
@@ -310,11 +253,6 @@ export function renderDaemonFooter(
 	}
 }
 
-/**
- * Change the pip state (lifecycle indicator).
- * Finds [data-field="pip"] within panelEl's .dev-daemon-footer and updates
- * both textContent and dataset.state.
- */
 export function setDaemonFooterInFlight(
 	panelEl: HTMLElement,
 	state: "in-flight" | "idle" | "errored",
@@ -341,57 +279,44 @@ export function setDaemonFooterInFlight(
 	}
 }
 
-/**
- * Compute the last-round tool calls for an AI from conversationLogs.
- * Returns a comma-separated list of tool names and "message" for the last round,
- * or empty string if no entries exist.
- */
 function computeLastRoundTools(
 	conversationLog: ConversationEntry[],
 	aiId: AiId,
 ): string {
 	if (conversationLog.length === 0) return "";
 
-	// Find the max round number from entries where kind == "tool-call" && aiId == aiId
-	// or kind == "message" && from == aiId
-	let maxRound = -1;
+	const NO_ROUND_YET = -1;
+	let lastActiveRound = NO_ROUND_YET;
 	for (const entry of conversationLog) {
 		if (entry.kind === "tool-call" && entry.aiId === aiId) {
-			maxRound = Math.max(maxRound, entry.round);
+			lastActiveRound = Math.max(lastActiveRound, entry.round);
 		} else if (entry.kind === "message" && entry.from === aiId) {
-			maxRound = Math.max(maxRound, entry.round);
+			lastActiveRound = Math.max(lastActiveRound, entry.round);
 		}
 	}
 
-	if (maxRound === -1) return "";
+	if (lastActiveRound === NO_ROUND_YET) return "";
 
-	// Collect all tools/messages from that round
 	const tools: string[] = [];
-	let seenMessage = false;
+	let sentMessageInLastActiveRound = false;
 
 	for (const entry of conversationLog) {
-		if (entry.round === maxRound) {
+		if (entry.round === lastActiveRound) {
 			if (entry.kind === "tool-call" && entry.aiId === aiId) {
 				tools.push(entry.toolName);
 			} else if (entry.kind === "message" && entry.from === aiId) {
-				seenMessage = true;
+				sentMessageInLastActiveRound = true;
 			}
 		}
 	}
 
-	// Add "message" if this AI sent a message in the last round
-	if (seenMessage) {
+	if (sentMessageInLastActiveRound) {
 		tools.push("message");
 	}
 
 	return tools.join(", ");
 }
 
-/**
- * Compute the LLM line from the side-channel turn result data.
- * Format: [tok N→M cache P% $C]
- * Returns empty string if no result recorded.
- */
 function computeLlmLine(aiId: AiId): string {
 	const result = daemonTurnResults[aiId];
 	if (!result) return "";
@@ -415,11 +340,6 @@ function computeLlmLine(aiId: AiId): string {
 	return `[tok ${N}→${M} cache ${cachePercent}% $${C}]`;
 }
 
-/**
- * Build complication chip spans for an AI.
- * Filters state.activeComplications by target===aiId and renders
- * appropriate text + data-chip-kind attributes.
- */
 function buildComplicationChips(
 	doc: Document,
 	aiId: AiId,
@@ -451,11 +371,6 @@ function buildComplicationChips(
 	return chips;
 }
 
-/**
- * Update the footer summary line (all fields except pip, which is managed separately).
- * MUST NOT modify [data-field="pip"] — only updates the three non-pip fields:
- * - last-tools, llm-line, complication-chips
- */
 export function updateDaemonFooterSummary(
 	panelEl: HTMLElement,
 	aiId: AiId,
@@ -467,7 +382,6 @@ export function updateDaemonFooterSummary(
 	const state = session.getState();
 	const doc = panelEl.ownerDocument;
 
-	// Update last-tools
 	const toolsSpan = footerEl.querySelector<HTMLElement>(
 		'[data-field="last-tools"]',
 	);
@@ -476,7 +390,6 @@ export function updateDaemonFooterSummary(
 		toolsSpan.textContent = computeLastRoundTools(conversationLog, aiId);
 	}
 
-	// Update llm-line
 	const llmSpan = footerEl.querySelector<HTMLElement>(
 		'[data-field="llm-line"]',
 	);
@@ -484,7 +397,6 @@ export function updateDaemonFooterSummary(
 		llmSpan.textContent = computeLlmLine(aiId);
 	}
 
-	// Update complication-chips
 	const chipsSpan = footerEl.querySelector<HTMLElement>(
 		'[data-field="complication-chips"]',
 	);
@@ -494,11 +406,6 @@ export function updateDaemonFooterSummary(
 	}
 }
 
-/**
- * Update the five <details> disclosure blocks with current daemon state.
- * MUST NOT modify the <details> element itself or its open attribute.
- * Persona card is already populated in renderDaemonFooter and is not re-touched.
- */
 export function updateDaemonFooterDetails(
 	panelEl: HTMLElement,
 	aiId: AiId,
@@ -509,7 +416,6 @@ export function updateDaemonFooterDetails(
 
 	const round = daemonRounds[aiId];
 
-	// Helper to update a disclosure block's summary with optional round suffix
 	const updateSummary = (disclosure: string, baseLabel: string): void => {
 		const details = footerEl.querySelector<HTMLElement>(
 			`[data-disclosure="${disclosure}"]`,
@@ -521,7 +427,6 @@ export function updateDaemonFooterDetails(
 		}
 	};
 
-	// Helper to update pre content
 	const updatePreContent = (disclosure: string, content: string): void => {
 		const details = footerEl.querySelector<HTMLElement>(
 			`[data-disclosure="${disclosure}"]`,
@@ -535,18 +440,15 @@ export function updateDaemonFooterDetails(
 		}
 	};
 
-	// Update system-prompt
 	updateSummary("system-prompt", "last system prompt");
 	updatePreContent("system-prompt", daemonSystemPrompts[aiId] ?? "");
 
-	// Update raw-completion
 	updateSummary("raw-completion", "last raw completion");
 	updatePreContent(
 		"raw-completion",
 		daemonTurnResults[aiId]?.lastRawCompletion ?? "",
 	);
 
-	// Update tool-calls
 	updateSummary("tool-calls", "last tool calls");
 	const toolCalls = daemonTurnResults[aiId]?.lastToolCalls ?? [];
 	const toolCallsText = toolCalls
@@ -554,7 +456,6 @@ export function updateDaemonFooterDetails(
 		.join("\n");
 	updatePreContent("tool-calls", toolCallsText);
 
-	// Update error
 	updateSummary("error", "last error");
 	const error = daemonErrors[aiId];
 	let errorText = "";
@@ -564,6 +465,4 @@ export function updateDaemonFooterDetails(
 			: error.text;
 	}
 	updatePreContent("error", errorText);
-
-	// Note: persona-card is NOT updated here — it's already populated in renderDaemonFooter
 }

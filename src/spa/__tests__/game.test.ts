@@ -7,8 +7,6 @@ import {
 } from "./fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "./fixtures/static-personas";
 
-// Pin generatePersonas to a static fixture so the test can rely on
-// stable red/green/cyan handles and Ember/Sage/Frost names.
 vi.mock("../../content", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("../../content")>();
 	return {
@@ -17,7 +15,6 @@ vi.mock("../../content", async (importOriginal) => {
 	};
 });
 
-// Pin generateDualContentPacks to static content packs (no LLM call in tests).
 vi.mock("../../content/content-pack-generator", () => ({
 	generateDualContentPacks: async () => ({
 		packA: STATIC_CONTENT_PACKS[0],
@@ -26,10 +23,7 @@ vi.mock("../../content/content-pack-generator", () => ({
 	}),
 }));
 
-// ── Shared localStorage stub helpers ──────────────────────────────────────────
-// game.ts (post-#173) requires a pre-populated active session to avoid
-// redirecting to #/start. These helpers set up a valid session in localStorage
-// so renderGame() proceeds to the restore path.
+const IDENTITY_SHUFFLE_RANDOM = 0.9;
 
 function makeLocalStorageStub(initialData: Record<string, string> = {}) {
 	const store: Record<string, string> = { ...initialData };
@@ -52,27 +46,15 @@ function makeLocalStorageStub(initialData: Record<string, string> = {}) {
 	};
 }
 
-/**
- * Seed a localStorage stub with a valid active session derived from
- * STATIC_PERSONAS and STATIC_CONTENT_PACKS.
- *
- * Called in beforeEach (or inline) so game.ts finds a restorable session
- * instead of redirecting to #/start.
- *
- * Must be called BEFORE vi.resetModules() in each test (modules that import
- * session-storage.ts must still be the same instance).
- */
 async function seedSessionInStub(
 	stub: ReturnType<typeof makeLocalStorageStub>,
 	opts?: { noPairs?: boolean },
 ): Promise<void> {
-	// Use the real buildSessionFromAssets + saveActiveSession
 	const { buildSessionFromAssets } = await import("../game/bootstrap.js");
 	const { mintAndActivateNewSession, saveActiveSession } = await import(
 		"../persistence/session-storage.js"
 	);
 
-	// Temporarily install the stub
 	const prev = globalThis.localStorage;
 	Object.defineProperty(globalThis, "localStorage", {
 		value: stub,
@@ -104,7 +86,6 @@ async function seedSessionInStub(
 	}
 }
 
-// Matches the body content of src/spa/index.html (three-panel layout)
 const INDEX_BODY_HTML = `
 <main>
   <div id="topinfo">
@@ -180,8 +161,6 @@ function getEl<T extends HTMLElement>(selector: string): T {
 	return el;
 }
 
-/** Set location.search via history.replaceState so route renderers can read
- *  test affordances (debug, winImmediately, …) from it. */
 function setSearch(query: string): void {
 	window.history.replaceState({}, "", `/?${query}`);
 }
@@ -198,34 +177,17 @@ function makeSSEStream(chunks: string[]): ReadableStream<Uint8Array> {
 	});
 }
 
-/**
- * Creates an SSE response body that models a pass: no assistant text, no
- * tool call, just the final usage chunk so the budget-deduction path sees
- * a non-zero cost.
- *
- * The `_jsonAction` argument is preserved for call-site readability but
- * ignored — the SPA only reads `message` tool calls; emitting free-form
- * text here would trigger the #254 retry rather than passing.
- */
-function makeAiSseStream(_jsonAction: string): ReadableStream<Uint8Array> {
+function makePassSseStream(): ReadableStream<Uint8Array> {
 	const deltaChunk = `data: ${JSON.stringify({ choices: [{ delta: { content: "" } }] })}\n\n`;
 	const usageChunk = `data: ${JSON.stringify({ choices: [], usage: { cost: 0.01, total_tokens: 100 } })}\n\n`;
 	const sseData = `${deltaChunk}${usageChunk}data: [DONE]\n\n`;
 	return makeSSEStream([sseData]);
 }
 
-/**
- * Creates an SSE response body that yields a `message` tool call (AI→blue).
- * This is the v4 way to have an AI "chat back" so the content lands in conversationLogs
- * and is restored on reload.
- *
- * Includes a final usage chunk so the budget-deduction path sees a non-zero cost.
- */
 function makeMessageToolCallSseStream(
 	content: string,
 ): ReadableStream<Uint8Array> {
 	const args = JSON.stringify({ to: "blue", content });
-	// First chunk: tool call header
 	const chunk1 = `data: ${JSON.stringify({
 		choices: [
 			{
@@ -241,7 +203,6 @@ function makeMessageToolCallSseStream(
 			},
 		],
 	})}\n\n`;
-	// Second chunk: arguments + finish_reason
 	const chunk2 = `data: ${JSON.stringify({
 		choices: [
 			{
@@ -255,38 +216,29 @@ function makeMessageToolCallSseStream(
 	return makeSSEStream([sseData]);
 }
 
-/** Returns a fresh fetch mock that serves three AI responses in sequence (plain-text deltas). */
-function makeThreeAiFetchMock(
-	redAction: string,
-	greenAction: string,
-	cyanAction: string,
-) {
+function makeThreeAiPassFetchMock() {
 	return vi
 		.fn()
 		.mockResolvedValueOnce({
 			ok: true,
 			status: 200,
 			statusText: "OK",
-			body: makeAiSseStream(redAction),
+			body: makePassSseStream(),
 		})
 		.mockResolvedValueOnce({
 			ok: true,
 			status: 200,
 			statusText: "OK",
-			body: makeAiSseStream(greenAction),
+			body: makePassSseStream(),
 		})
 		.mockResolvedValueOnce({
 			ok: true,
 			status: 200,
 			statusText: "OK",
-			body: makeAiSseStream(cyanAction),
+			body: makePassSseStream(),
 		});
 }
 
-/**
- * Creates an SSE stream for a `message` tool call with a custom `to` field.
- * Used to simulate daemon→daemon peer-to-peer messages.
- */
 function makeMessageToolCallSseStreamTo(
 	to: string,
 	content: string,
@@ -320,10 +272,6 @@ function makeMessageToolCallSseStreamTo(
 	return makeSSEStream([sseData]);
 }
 
-/**
- * Returns a fresh fetch mock serving three `message` tool calls (AI→blue), one per daemon.
- * Using tool calls ensures the content lands in conversationLogs and is restored on reload.
- */
 function makeMessageToolCallFetchMock() {
 	return vi
 		.fn()
@@ -347,8 +295,6 @@ function makeMessageToolCallFetchMock() {
 		});
 }
 
-/** passAiResponse: used when we just want all AIs to pass (budget deduction still fires). */
-const PASS_ACTION = '{"action":"pass"}';
 const _RED_ACTION = '{"action":"chat","content":"RED_RESPONSE_UNIQUE_TAG"}';
 const _GREEN_ACTION = '{"action":"chat","content":"GREEN_RESPONSE_UNIQUE_TAG"}';
 const _CYAN_ACTION = '{"action":"chat","content":"CYAN_RESPONSE_UNIQUE_TAG"}';
@@ -357,11 +303,9 @@ describe("renderGame (game route — three-AI)", () => {
 	let _stub: ReturnType<typeof makeLocalStorageStub>;
 
 	beforeEach(async () => {
-		// Must be set before each test since vi.unstubAllGlobals() in afterEach removes it
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
-		// Seed a valid session so game.ts finds an active session on render.
 		_stub = makeLocalStorageStub();
 		await seedSessionInStub(_stub);
 		vi.stubGlobal("localStorage", _stub);
@@ -375,12 +319,9 @@ describe("renderGame (game route — three-AI)", () => {
 	});
 
 	it("after one submit, all three transcript panels have content", async () => {
-		// Use message tool calls so AI content lands in conversationLogs and
-		// surfaces through the encoder's "message" event (DM-thread filter, #214).
 		const mockFetch = makeMessageToolCallFetchMock();
 		vi.stubGlobal("fetch", mockFetch);
-		// Math.random=0.9 produces identity shuffle: ["red","green","cyan"]
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 
 		vi.resetModules();
 		const { renderGame } = await import("../views/game.js");
@@ -406,11 +347,9 @@ describe("renderGame (game route — three-AI)", () => {
 	});
 
 	it("each panel only contains its own AI's completion text", async () => {
-		// Use message tool calls so AI content lands in conversationLogs and
-		// surfaces through the encoder's "message" event (DM-thread filter, #214).
 		const mockFetch = makeMessageToolCallFetchMock();
 		vi.stubGlobal("fetch", mockFetch);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 
 		vi.resetModules();
 		const { renderGame } = await import("../views/game.js");
@@ -427,7 +366,6 @@ describe("renderGame (game route — three-AI)", () => {
 		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
 		const cyanTranscript = getEl<HTMLElement>('[data-transcript="cyan"]');
 
-		// Each panel should contain its AI's unique tag
 		await vi.waitFor(() => {
 			expect(redTranscript.textContent).toContain("RED_RESPONSE_UNIQUE_TAG");
 			expect(greenTranscript.textContent).toContain(
@@ -436,7 +374,6 @@ describe("renderGame (game route — three-AI)", () => {
 			expect(cyanTranscript.textContent).toContain("CYAN_RESPONSE_UNIQUE_TAG");
 		});
 
-		// Red panel should not contain green or cyan content
 		expect(redTranscript.textContent).not.toContain(
 			"GREEN_RESPONSE_UNIQUE_TAG",
 		);
@@ -444,19 +381,14 @@ describe("renderGame (game route — three-AI)", () => {
 	});
 
 	it("budgets decrement after a round (5 -> 4 for all AIs)", async () => {
-		const mockFetch = makeThreeAiFetchMock(
-			PASS_ACTION,
-			PASS_ACTION,
-			PASS_ACTION,
-		);
+		const mockFetch = makeThreeAiPassFetchMock();
 		vi.stubGlobal("fetch", mockFetch);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 
 		vi.resetModules();
 		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
-		// Initial budgets should show 5
 		const redBudget = document.querySelector<HTMLSpanElement>(
 			'.ai-panel[data-ai="red"] .panel-budget',
 		);
@@ -475,20 +407,15 @@ describe("renderGame (game route — three-AI)", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		// After one round, budgets should be 4
 		await vi.waitFor(() => expect(redBudget?.textContent).toContain("4"));
 		expect(greenBudget?.textContent).toContain("4");
 		expect(cyanBudget?.textContent).toContain("4");
 	});
 
 	it("fetch is called exactly three times per round (once per AI)", async () => {
-		const mockFetch = makeThreeAiFetchMock(
-			PASS_ACTION,
-			PASS_ACTION,
-			PASS_ACTION,
-		);
+		const mockFetch = makeThreeAiPassFetchMock();
 		vi.stubGlobal("fetch", mockFetch);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 
 		vi.resetModules();
 		const { renderGame } = await import("../views/game.js");
@@ -505,11 +432,9 @@ describe("renderGame (game route — three-AI)", () => {
 	});
 
 	it("shows per-daemon braille spinners during the round, stripped after responses arrive", async () => {
-		// Use message tool calls so AI content lands in conversationLogs and
-		// surfaces through the encoder's "message" event (DM-thread filter, #214).
 		const mockFetch = makeMessageToolCallFetchMock();
 		vi.stubGlobal("fetch", mockFetch);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 
 		vi.resetModules();
 		const { renderGame } = await import("../views/game.js");
@@ -517,15 +442,12 @@ describe("renderGame (game route — three-AI)", () => {
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 		const form = getEl<HTMLFormElement>("#composer");
-		// Address the green panel via *Sage mention
 		promptInput.value = "*Sage hello";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 
-		// Synchronously after submit, every daemon's panel border carries
-		// at least one .panel-spinner span next to the .panel-name label.
 		const redPanel = getEl<HTMLElement>('.ai-panel[data-ai="red"]');
 		const greenPanel = getEl<HTMLElement>('.ai-panel[data-ai="green"]');
 		const cyanPanel = getEl<HTMLElement>('.ai-panel[data-ai="cyan"]');
@@ -537,14 +459,11 @@ describe("renderGame (game route — three-AI)", () => {
 			cyanPanel.querySelector(".panel-name .panel-spinner"),
 		).not.toBeNull();
 
-		// Input is reset to "*Sage " immediately on send (not after the round).
 		expect(promptInput.value).toBe("*Sage ");
-		// Player line shows the stripped body (no leading mention).
 		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
 		expect(greenTranscript.textContent).toContain("> hello");
 		expect(greenTranscript.textContent).not.toContain("> *Sage hello");
 
-		// After the round resolves, no spinners remain on any panel.
 		await vi.waitFor(() =>
 			expect(redPanel.querySelector(".panel-spinner")).toBeNull(),
 		);
@@ -554,8 +473,6 @@ describe("renderGame (game route — three-AI)", () => {
 	});
 
 	it("daemon→daemon peer-to-peer message is silent in all panels (AC #2)", async () => {
-		// Red sends a peer-to-peer message to green; green and cyan target blue.
-		// The peer content should be invisible in every panel.
 		const mockFetch = vi
 			.fn()
 			.mockResolvedValueOnce({
@@ -577,7 +494,7 @@ describe("renderGame (game route — three-AI)", () => {
 				body: makeMessageToolCallSseStream("CYAN_RESPONSE_UNIQUE_TAG"),
 			});
 		vi.stubGlobal("fetch", mockFetch);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 
 		vi.resetModules();
 		const { renderGame } = await import("../views/game.js");
@@ -594,7 +511,6 @@ describe("renderGame (game route — three-AI)", () => {
 		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
 		const cyanTranscript = getEl<HTMLElement>('[data-transcript="cyan"]');
 
-		// Peer-to-peer content must be invisible in ALL panels
 		await vi.waitFor(() =>
 			expect(greenTranscript.textContent).toContain(
 				"GREEN_RESPONSE_UNIQUE_TAG",
@@ -604,20 +520,14 @@ describe("renderGame (game route — three-AI)", () => {
 		expect(greenTranscript.textContent).not.toContain("PEER_PEER_TAG");
 		expect(cyanTranscript.textContent).not.toContain("PEER_PEER_TAG");
 
-		// Blue-targeted messages still appear in their panels
 		expect(greenTranscript.textContent).toContain("GREEN_RESPONSE_UNIQUE_TAG");
 		expect(cyanTranscript.textContent).toContain("CYAN_RESPONSE_UNIQUE_TAG");
 	});
 
 	it("player outgoing message renders without blue: prefix (AC #3)", async () => {
-		// All AIs pass so the only panel content is the player's own line.
-		const mockFetch = makeThreeAiFetchMock(
-			PASS_ACTION,
-			PASS_ACTION,
-			PASS_ACTION,
-		);
+		const mockFetch = makeThreeAiPassFetchMock();
 		vi.stubGlobal("fetch", mockFetch);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 
 		vi.resetModules();
 		const { renderGame } = await import("../views/game.js");
@@ -632,7 +542,6 @@ describe("renderGame (game route — three-AI)", () => {
 		);
 		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
 
-		// Player line appears exactly once and without any "blue:" self-attribution prefix
 		await vi.waitFor(() => {
 			const occurrences =
 				(greenTranscript.textContent ?? "").split("> hello").length - 1;
@@ -643,16 +552,14 @@ describe("renderGame (game route — three-AI)", () => {
 	});
 
 	it("after three-phase win condition, endgame screen shown and chat hidden; download button has parseable GameSave", async () => {
-		// Three submits to exhaust all three phases (winImmediately=1)
-		// Each submit calls fetch 3 times → 9 total fetches
 		const mockFetch = vi.fn().mockResolvedValue({
 			ok: true,
 			status: 200,
 			statusText: "OK",
-			body: makeAiSseStream(PASS_ACTION),
+			body: makePassSseStream(),
 		});
 		vi.stubGlobal("fetch", mockFetch);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 
 		vi.resetModules();
 		const { renderGame } = await import("../views/game.js");
@@ -662,62 +569,51 @@ describe("renderGame (game route — three-AI)", () => {
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
-		// Submit 1: phase 1 → phase 2 (phase_advanced)
 		promptInput.value = "*Sage one";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		// Wait for round 1 to complete: prompt resets to prefix when roundInFlight clears
 		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
 
-		// Submit 2: phase 2 → phase 3 (phase_advanced)
 		promptInput.value = "*Sage two";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		// Wait for round 2 to complete
 		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
 
-		// Submit 3: phase 3 → game_ended
 		promptInput.value = "*Sage three";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		// Wait for game_ended (panels hidden)
 		const panelsEl = document.querySelector<HTMLElement>("#panels");
 		await vi.waitFor(() => expect(panelsEl?.hidden).toBe(true));
 
-		// Chat panels and composer should also be hidden
 		const composerEl = document.querySelector<HTMLElement>("#composer");
 		expect(composerEl?.hidden).toBe(true);
 
-		// Endgame screen should be visible
 		const endgameEl = getEl<HTMLElement>("#endgame");
 		expect(endgameEl.hasAttribute("hidden")).toBe(false);
 
-		// Download button should have parseable save payload with three personas
 		const downloadBtn = getEl<HTMLButtonElement>("#download-ais-btn");
 		const saveJson = downloadBtn.dataset.savePayload;
 		expect(saveJson).toBeTruthy();
 		const save = JSON.parse(saveJson as string);
-		// Live USB format is gs v5 (#539); the endgame export must stamp it.
 		expect(save.version).toBe(GAME_SAVE_VERSION);
 		expect(save.ais).toHaveLength(3);
 	});
 
 	it("clicking download button triggers blob download, disables button, shows 'Saved.'", async () => {
-		// Drive to game_ended
 		const mockFetch = vi.fn().mockResolvedValue({
 			ok: true,
 			status: 200,
 			statusText: "OK",
-			body: makeAiSseStream(PASS_ACTION),
+			body: makePassSseStream(),
 		});
 		vi.stubGlobal("fetch", mockFetch);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 
 		const createObjectURLSpy = vi
 			.spyOn(URL, "createObjectURL")
@@ -734,7 +630,6 @@ describe("renderGame (game route — three-AI)", () => {
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
-		// Round 1
 		promptInput.value = "*Sage one";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
@@ -742,7 +637,6 @@ describe("renderGame (game route — three-AI)", () => {
 		);
 		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
 
-		// Round 2
 		promptInput.value = "*Sage two";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
@@ -750,14 +644,12 @@ describe("renderGame (game route — three-AI)", () => {
 		);
 		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
 
-		// Round 3 (→ game_ended)
 		promptInput.value = "*Sage three";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 
-		// Wait for game_ended state: endgame section becomes visible
 		const endgameEl2 = getEl<HTMLElement>("#endgame");
 		await vi.waitFor(() =>
 			expect(endgameEl2.hasAttribute("hidden")).toBe(false),
@@ -774,15 +666,14 @@ describe("renderGame (game route — three-AI)", () => {
 	});
 
 	it("clicking submit-diagnostics with empty summary shows validation message and does NOT POST", async () => {
-		// Drive to game_ended
 		const mockFetch = vi.fn().mockResolvedValue({
 			ok: true,
 			status: 200,
 			statusText: "OK",
-			body: makeAiSseStream(PASS_ACTION),
+			body: makePassSseStream(),
 		});
 		vi.stubGlobal("fetch", mockFetch);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 
 		vi.resetModules();
 		const { renderGame } = await import("../views/game.js");
@@ -792,7 +683,6 @@ describe("renderGame (game route — three-AI)", () => {
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
-		// Round 1
 		promptInput.value = "*Sage one";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
@@ -800,7 +690,6 @@ describe("renderGame (game route — three-AI)", () => {
 		);
 		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
 
-		// Round 2
 		promptInput.value = "*Sage two";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
@@ -808,14 +697,12 @@ describe("renderGame (game route — three-AI)", () => {
 		);
 		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
 
-		// Round 3 (→ game_ended)
 		promptInput.value = "*Sage three";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 
-		// Wait for game_ended state: endgame section becomes visible
 		const endgameEl = getEl<HTMLElement>("#endgame");
 		await vi.waitFor(() =>
 			expect(endgameEl.hasAttribute("hidden")).toBe(false),
@@ -828,25 +715,22 @@ describe("renderGame (game route — three-AI)", () => {
 		);
 		const diagnosticsStatus = getEl<HTMLElement>("#diagnostics-status");
 
-		// Leave summary empty and click — should show validation message
 		submitDiagnosticsBtn.click();
 		expect(diagnosticsStatus.textContent).toContain(
 			"Please enter a one-word summary first.",
 		);
-		// No extra fetch calls
 		expect(mockFetch.mock.calls.length).toBe(callCountBeforeDiagnostics);
 	});
 
 	it("clicking submit-diagnostics with a summary POSTs to /diagnostics with mode: no-cors", async () => {
-		// Drive to game_ended
 		const mockFetch = vi.fn().mockResolvedValue({
 			ok: true,
 			status: 200,
 			statusText: "OK",
-			body: makeAiSseStream(PASS_ACTION),
+			body: makePassSseStream(),
 		});
 		vi.stubGlobal("fetch", mockFetch);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 
 		vi.resetModules();
 		const { renderGame } = await import("../views/game.js");
@@ -856,7 +740,6 @@ describe("renderGame (game route — three-AI)", () => {
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
-		// Round 1
 		promptInput.value = "*Sage one";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
@@ -864,7 +747,6 @@ describe("renderGame (game route — three-AI)", () => {
 		);
 		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
 
-		// Round 2
 		promptInput.value = "*Sage two";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
@@ -872,14 +754,12 @@ describe("renderGame (game route — three-AI)", () => {
 		);
 		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
 
-		// Round 3 (→ game_ended)
 		promptInput.value = "*Sage three";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 
-		// Wait for game_ended state: endgame section becomes visible
 		const endgameEl = getEl<HTMLElement>("#endgame");
 		await vi.waitFor(() =>
 			expect(endgameEl.hasAttribute("hidden")).toBe(false),
@@ -898,7 +778,6 @@ describe("renderGame (game route — three-AI)", () => {
 		diagnosticsSummaryInput.value = "curious";
 		submitDiagnosticsBtn.click();
 
-		// Wait for the diagnostics fetch to settle
 		await vi.waitFor(() =>
 			expect(mockFetch.mock.calls.length).toBe(callCountBeforeDiagnostics + 1),
 		);
@@ -941,7 +820,6 @@ describe("renderGame — localStorage persistence", () => {
 	}
 
 	beforeEach(() => {
-		// Must be set before each test since vi.unstubAllGlobals() in afterEach removes it
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
@@ -957,12 +835,9 @@ describe("renderGame — localStorage persistence", () => {
 	it("state is saved to localStorage after a successful round", async () => {
 		const stub = makeLocalStorageStub();
 		await seedSessionInStub(stub);
-		vi.stubGlobal(
-			"fetch",
-			makeThreeAiFetchMock(PASS_ACTION, PASS_ACTION, PASS_ACTION),
-		);
+		vi.stubGlobal("fetch", makeThreeAiPassFetchMock());
 		vi.stubGlobal("localStorage", stub);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 
 		vi.resetModules();
 		const { renderGame } = await import("../views/game.js");
@@ -975,7 +850,6 @@ describe("renderGame — localStorage persistence", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		// setItem should have been called with the engine.dat commit key (new format)
 		const engineKey = await vi.waitFor(() => {
 			const key = Object.keys(stub._store).find((k) =>
 				k.endsWith("/engine.dat"),
@@ -983,19 +857,16 @@ describe("renderGame — localStorage persistence", () => {
 			expect(key).toBeDefined();
 			return key;
 		});
-		// engine.dat value is a base64-encoded obfuscated blob (not plain JSON)
 		if (!engineKey) throw new Error("engineKey should be defined");
 		expect(stub._store[engineKey]).toMatch(/^[A-Za-z0-9+/=]+$/);
 	});
 
 	it("state is restored from localStorage on renderGame when saved state exists", async () => {
-		// First: run a round using message tool calls so AI responses land in conversationLogs
-		// (free-form assistantText is silently dropped in v4 — use the message tool instead)
 		const stub = makeLocalStorageStub();
 		await seedSessionInStub(stub);
 		vi.stubGlobal("fetch", makeMessageToolCallFetchMock());
 		vi.stubGlobal("localStorage", stub);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 
 		vi.resetModules();
 		const { renderGame: renderGame1 } = await import("../views/game.js");
@@ -1008,7 +879,6 @@ describe("renderGame — localStorage persistence", () => {
 		form1.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		// Verify state was saved in the new multi-file format (engine.dat is commit signal)
 		await vi.waitFor(() => {
 			expect(stub.setItem).toHaveBeenCalled();
 			const key = Object.keys(stub._store).find((k) =>
@@ -1017,7 +887,6 @@ describe("renderGame — localStorage persistence", () => {
 			expect(key).toBeDefined();
 		});
 
-		// Daemon .txt files should contain the AI response tag (chat histories are editable)
 		await vi.waitFor(() => {
 			const keys = Object.keys(stub._store).filter(
 				(k) => k.endsWith(".txt") && !k.endsWith("whispers.txt"),
@@ -1026,20 +895,16 @@ describe("renderGame — localStorage persistence", () => {
 			expect(contents).toContain("RED_RESPONSE_UNIQUE_TAG");
 		});
 
-		// Second: simulate a fresh page load with the saved state
 		document.body.innerHTML = INDEX_BODY_HTML;
 		vi.resetModules();
-		// getItem should return the previously saved state
 		const { renderGame: renderGame2 } = await import("../views/game.js");
 		await renderGame2(getEl<HTMLElement>("main"));
 
-		// Budget should reflect round 1 complete: 50¢ - 1¢ cost = 49.000¢
 		const redBudget = document.querySelector<HTMLSpanElement>(
 			'.ai-panel[data-ai="red"] .panel-budget',
 		);
 		expect(redBudget?.textContent).toBe("49.000¢");
 
-		// Transcripts must be restored from chatHistories (new format uses chatHistories fallback)
 		const redTranscript = document.querySelector<HTMLElement>(
 			'[data-transcript="red"]',
 		);
@@ -1057,21 +922,15 @@ describe("renderGame — localStorage persistence", () => {
 	it("quota-exceeded localStorage write surfaces the warning banner without breaking the round", async () => {
 		const stub = makeLocalStorageStub();
 		await seedSessionInStub(stub);
-		// Intercept setItem for the engine.dat commit key (new format).
-		// The probe key and other session keys pass through normally.
 		stub.setItem.mockImplementation((key: string, value: string) => {
 			if (key.endsWith("/engine.dat")) {
 				throw Object.assign(new DOMException("quota", "QuotaExceededError"));
 			}
-			// Probe key and other keys pass through
 			(stub as { _store: Record<string, string> })._store[key] = value;
 		});
-		vi.stubGlobal(
-			"fetch",
-			makeThreeAiFetchMock(PASS_ACTION, PASS_ACTION, PASS_ACTION),
-		);
+		vi.stubGlobal("fetch", makeThreeAiPassFetchMock());
 		vi.stubGlobal("localStorage", stub);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 
 		vi.resetModules();
 		const { renderGame } = await import("../views/game.js");
@@ -1084,17 +943,13 @@ describe("renderGame — localStorage persistence", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		// Send button should be in a known state after round (round completed,
-		// prompt was cleared so Send is disabled until a new @mention is typed).
 		const sendBtn = getEl<HTMLButtonElement>("#send");
-		// Wait for round to complete and verify send button re-enables with a valid mention.
 		await vi.waitFor(() => {
 			promptInput.value = "*Sage hi";
 			promptInput.dispatchEvent(new Event("input"));
 			expect(sendBtn.disabled).toBe(false);
 		});
 
-		// Warning banner should be visible
 		const warningEl = document.querySelector<HTMLElement>(
 			"#persistence-warning",
 		);
@@ -1103,9 +958,6 @@ describe("renderGame — localStorage persistence", () => {
 	});
 
 	it("localStorage disabled shows warning banner (gameplay not possible without storage)", async () => {
-		// Stub localStorage as completely unavailable (both probe and all calls throw).
-		// Post-#173: game.ts requires a pre-existing session; when storage is unavailable
-		// the warning is shown but no session can be established, so gameplay is inert.
 		const unavailableStub = {
 			getItem: vi.fn(() => {
 				throw new DOMException("denied", "SecurityError");
@@ -1125,18 +977,14 @@ describe("renderGame — localStorage persistence", () => {
 			key: vi.fn(() => null),
 		};
 
-		vi.stubGlobal(
-			"fetch",
-			makeThreeAiFetchMock(PASS_ACTION, PASS_ACTION, PASS_ACTION),
-		);
+		vi.stubGlobal("fetch", makeThreeAiPassFetchMock());
 		vi.stubGlobal("localStorage", unavailableStub);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 
 		vi.resetModules();
 		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
-		// Warning banner should be shown immediately (storage unavailable)
 		const warningEl = document.querySelector<HTMLElement>(
 			"#persistence-warning",
 		);
@@ -1145,14 +993,11 @@ describe("renderGame — localStorage persistence", () => {
 	});
 
 	it("chat message content is preserved across a fresh renderGame via chatHistories", async () => {
-		// Use message tool calls so AI responses land in conversationLogs (which are persisted).
-		// Note: free-form assistantText (the old "chat" action) is dropped in v4;
-		// only message tool calls are persisted to daemon .txt files and restored on reload.
 		const stub = makeLocalStorageStub();
 		await seedSessionInStub(stub);
 		vi.stubGlobal("fetch", makeMessageToolCallFetchMock());
 		vi.stubGlobal("localStorage", stub);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 
 		vi.resetModules();
 		const { renderGame: renderGame1 } = await import("../views/game.js");
@@ -1165,9 +1010,6 @@ describe("renderGame — localStorage persistence", () => {
 		form1.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		// Verify message tool call content was persisted to daemon .txt files
-		// (message tool calls land in conversationLogs → daemon files; live transcript text
-		//  only appears for free-form assistantText, not tool calls)
 		await vi.waitFor(() => {
 			const daemonKeys = Object.keys(stub._store).filter(
 				(k) => k.endsWith(".txt") && !k.endsWith("whispers.txt"),
@@ -1178,43 +1020,33 @@ describe("renderGame — localStorage persistence", () => {
 			expect(daemonContentsAfterRound).toContain("RED_RESPONSE_UNIQUE_TAG");
 		});
 
-		// Verify state is saved in the new multi-file format (engine.dat as commit signal)
 		const engineKey = Object.keys(stub._store).find((k) =>
 			k.endsWith("/engine.dat"),
 		);
 		expect(engineKey).toBeDefined();
 
-		// Simulate page refresh: fresh renderGame with the same localStorage stub
 		document.body.innerHTML = INDEX_BODY_HTML;
 		vi.resetModules();
 		const { renderGame: renderGame2 } = await import("../views/game.js");
 		await renderGame2(getEl<HTMLElement>("main"));
 
-		// Message responses must be visible after reload (restored from conversationLogs)
 		const redTextRestored =
 			document.querySelector<HTMLElement>('[data-transcript="red"]')
 				?.textContent ?? "";
 		expect(redTextRestored).toContain("RED_RESPONSE_UNIQUE_TAG");
 	});
 
-	it("transcripts swap to the new session when the active pointer moves mid-SPA (no page refresh)", async () => {
-		// Regression for the [ load ] click path: PR #203 swapped the in-memory
-		// session when the active-pointer drifted, but the restore branch only
-		// cleared `transcript.textContent` when the new session had chat — so a
-		// load into a fresh-or-quieter session left the previous session's
-		// `> *ember …` lines in the panels.
+	it("transcripts swap to the new session when the active pointer moves mid-SPA (no page refresh, #203 [ load ] regression)", async () => {
 		const stub = makeLocalStorageStub();
 		await seedSessionInStub(stub);
-		// Use message tool calls so AI content lands in conversationLogs (#214).
 		vi.stubGlobal("fetch", makeMessageToolCallFetchMock());
 		vi.stubGlobal("localStorage", stub);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 
 		vi.resetModules();
 		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
-		// Run a round so Session A's transcripts hold chat content.
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 		promptInput.value = "*Sage hello";
@@ -1222,7 +1054,6 @@ describe("renderGame — localStorage persistence", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		// Sanity: Session A chat is in the DOM.
 		await vi.waitFor(() =>
 			expect(
 				document.querySelector<HTMLElement>('[data-transcript="red"]')
@@ -1230,9 +1061,6 @@ describe("renderGame — localStorage persistence", () => {
 			).toContain("RED_RESPONSE_UNIQUE_TAG"),
 		);
 
-		// Seed a brand-new Session B alongside Session A and point the active
-		// pointer at it. This mirrors the [ load ] click in the sessions picker:
-		// `setActiveSessionId(B); renderApp(root)`.
 		const { buildSessionFromAssets } = await import("../game/bootstrap.js");
 		const { setActiveSessionId, saveActiveSession } = await import(
 			"../persistence/session-storage.js"
@@ -1245,13 +1073,8 @@ describe("renderGame — localStorage persistence", () => {
 		});
 		saveActiveSession(sessionB.getState());
 
-		// Re-enter the route on the SAME module instance — the cached session
-		// id from Session A no longer matches the active pointer, so the route
-		// must drop its closure-held session and re-render against Session B.
 		await renderGame(getEl<HTMLElement>("main"));
 
-		// Session B has zero chat for any daemon, so all panel transcripts
-		// must be empty — Session A's chat lines must not linger.
 		expect(
 			document.querySelector<HTMLElement>('[data-transcript="red"]')
 				?.textContent ?? "",
@@ -1269,7 +1092,6 @@ describe("renderGame — localStorage persistence", () => {
 
 describe("renderGame — chat_lockout event", () => {
 	beforeEach(async () => {
-		// Must be set before each test since vi.unstubAllGlobals() in afterEach removes it
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
@@ -1286,28 +1108,19 @@ describe("renderGame — chat_lockout event", () => {
 	});
 
 	it("chat_lockout silently locks the panel without appending a transcript message", async () => {
-		vi.stubGlobal(
-			"fetch",
-			makeThreeAiFetchMock(PASS_ACTION, PASS_ACTION, PASS_ACTION),
-		);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.stubGlobal("fetch", makeThreeAiPassFetchMock());
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 
 		vi.resetModules();
 
-		// Import GameSession first so the spy is in place before renderGame
-		// creates a session from the same module registry.
 		const { GameSession } = await import("../game/game-session.js");
-		// Capture the original before spying to avoid infinite recursion.
 		const originalSubmit = GameSession.prototype.submitMessage;
 		vi.spyOn(GameSession.prototype, "submitMessage").mockImplementation(
 			async function (
 				this: InstanceType<typeof GameSession>,
 				...args: Parameters<InstanceType<typeof GameSession>["submitMessage"]>
 			) {
-				// Call the real implementation to get a valid nextState.
 				const real = await originalSubmit.apply(this, args);
-				// Inject a chatLockoutTriggered into the result so the encoder
-				// emits a chat_lockout SSE event, exercising the SPA branch.
 				return {
 					...real,
 					result: {
@@ -1335,10 +1148,8 @@ describe("renderGame — chat_lockout event", () => {
 		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
 		const sendBtn = getEl<HTMLButtonElement>("#send");
 
-		// Wait for round to complete (promptInput cleared and re-prefilled with *Sage)
 		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
 
-		// chat_lockout should have applied to red — verify panel has the locked class
 		const redPanel = document.querySelector<HTMLElement>(
 			'.ai-panel[data-ai="red"]',
 		);
@@ -1346,11 +1157,8 @@ describe("renderGame — chat_lockout event", () => {
 			expect(redPanel?.classList.contains("panel--locked")).toBe(true);
 		});
 
-		// The chat_lockout event should NOT append any message to the transcript —
-		// complications are silent to the player.
 		expect(redTranscript.textContent).not.toContain("[Ember is unresponsive…]");
 
-		// After the chat_lockout fires for red, typing *Ember should leave Send disabled.
 		promptInput.value = "*Ember hi";
 		promptInput.dispatchEvent(new Event("input"));
 		expect(sendBtn.disabled).toBe(true);
@@ -1408,13 +1216,9 @@ describe("renderGame — mention-based addressing", () => {
 	});
 
 	it("submit with '*Sage hi' routes '> hi' message (mention stripped) to green panel", async () => {
-		const mockFetch = makeThreeAiFetchMock(
-			PASS_ACTION,
-			PASS_ACTION,
-			PASS_ACTION,
-		);
+		const mockFetch = makeThreeAiPassFetchMock();
 		vi.stubGlobal("fetch", mockFetch);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 
 		vi.resetModules();
 		const { renderGame } = await import("../views/game.js");
@@ -1440,18 +1244,12 @@ describe("renderGame — mention-based addressing", () => {
 	});
 
 	it("*Sage while green locked leaves Send disabled", async () => {
-		const mockFetch = makeThreeAiFetchMock(
-			PASS_ACTION,
-			PASS_ACTION,
-			PASS_ACTION,
-		);
+		const mockFetch = makeThreeAiPassFetchMock();
 		vi.stubGlobal("fetch", mockFetch);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 
 		vi.resetModules();
 
-		// Import GameSession first so the spy is in place before renderGame
-		// creates a session from the same module registry.
 		const { GameSession } = await import("../game/game-session.js");
 		const originalSubmit = GameSession.prototype.submitMessage;
 		vi.spyOn(GameSession.prototype, "submitMessage").mockImplementation(
@@ -1460,7 +1258,6 @@ describe("renderGame — mention-based addressing", () => {
 				...args: Parameters<InstanceType<typeof GameSession>["submitMessage"]>
 			) {
 				const real = await originalSubmit.apply(this, args);
-				// Inject a chatLockoutTriggered for green so the SPA sets green locked.
 				return {
 					...real,
 					result: {
@@ -1481,17 +1278,14 @@ describe("renderGame — mention-based addressing", () => {
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 		const sendBtn = getEl<HTMLButtonElement>("#send");
 
-		// Submit first round to trigger the lockout
 		promptInput.value = "*Sage hello";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 
-		// After a successful send with green locked, the persisted prefix is written.
 		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
 
-		// Now typing *Sage should leave Send disabled (green is locked)
 		promptInput.value = "*Sage hi";
 		promptInput.dispatchEvent(new Event("input"));
 		expect(sendBtn.disabled).toBe(true);
@@ -1528,7 +1322,6 @@ describe("renderGame — panel-click addressee", () => {
 		redPanel.click();
 
 		expect(promptInput.value).toBe("*Ember ");
-		// Per #110: addressee prefix alone is not enough to enable Send.
 		expect(sendBtn.disabled).toBe(true);
 	});
 
@@ -1571,24 +1364,18 @@ describe("renderGame — panel-click addressee", () => {
 		const redPanel = getEl<HTMLElement>('.ai-panel[data-ai="red"]');
 
 		promptInput.value = "*Sage hi";
-		// Simulate cursor at end (position 8)
 		promptInput.setSelectionRange(8, 8);
 		redPanel.click();
 
-		// "*Ember hi" length is 9; cursor was at 8 (after *Sage hi), delta = 1 → 9
 		expect(promptInput.selectionStart).toBe(9);
 	});
 
 	it("clicking a locked panel is a no-op (input unchanged)", async () => {
-		vi.stubGlobal(
-			"fetch",
-			makeThreeAiFetchMock(PASS_ACTION, PASS_ACTION, PASS_ACTION),
-		);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.stubGlobal("fetch", makeThreeAiPassFetchMock());
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 
 		vi.resetModules();
 
-		// Import GameSession first to set up the spy before renderGame
 		const { GameSession } = await import("../game/game-session.js");
 		const originalSubmit = GameSession.prototype.submitMessage;
 		vi.spyOn(GameSession.prototype, "submitMessage").mockImplementation(
@@ -1597,7 +1384,6 @@ describe("renderGame — panel-click addressee", () => {
 				...args: Parameters<InstanceType<typeof GameSession>["submitMessage"]>
 			) {
 				const real = await originalSubmit.apply(this, args);
-				// Lock out red
 				return {
 					...real,
 					result: {
@@ -1617,24 +1403,20 @@ describe("renderGame — panel-click addressee", () => {
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
-		// Trigger one round to lock out red
 		promptInput.value = "*Sage hello";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		// Wait for the round to complete and red to be locked
 		await vi.waitFor(() => {
 			const panel = document.querySelector('.ai-panel[data-ai="red"]');
 			expect(panel?.classList.contains("panel--locked")).toBe(true);
 		});
 
-		// Now click red panel — should be no-op because red is locked
 		promptInput.value = "";
 		const redPanel = getEl<HTMLElement>('.ai-panel[data-ai="red"]');
 		redPanel.click();
 
-		// Input should remain empty (red is locked out)
 		expect(promptInput.value).toBe("");
 	});
 
@@ -1684,13 +1466,9 @@ describe("renderGame — addressee persistence after send", () => {
 	});
 
 	it("after a successful send: input contains '*Sage ' and Send is disabled", async () => {
-		const mockFetch = makeThreeAiFetchMock(
-			PASS_ACTION,
-			PASS_ACTION,
-			PASS_ACTION,
-		);
+		const mockFetch = makeThreeAiPassFetchMock();
 		vi.stubGlobal("fetch", mockFetch);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 
 		vi.resetModules();
 		const { renderGame } = await import("../views/game.js");
@@ -1712,13 +1490,9 @@ describe("renderGame — addressee persistence after send", () => {
 	});
 
 	it("typing body text after a successful send re-enables Send", async () => {
-		const mockFetch = makeThreeAiFetchMock(
-			PASS_ACTION,
-			PASS_ACTION,
-			PASS_ACTION,
-		);
+		const mockFetch = makeThreeAiPassFetchMock();
 		vi.stubGlobal("fetch", mockFetch);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 
 		vi.resetModules();
 		const { renderGame } = await import("../views/game.js");
@@ -1733,13 +1507,11 @@ describe("renderGame — addressee persistence after send", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		// Wait for round to complete, then verify typing body text re-enables Send
 		await vi.waitFor(() => {
 			promptInput.value = "*Sage how are you";
 			promptInput.dispatchEvent(new Event("input"));
 			expect(sendBtn.disabled).toBe(false);
 		});
-		// Send disabled after first send (only prefix remains), re-enabled with body text
 		expect(sendBtn.disabled).toBe(false);
 	});
 
@@ -1748,10 +1520,10 @@ describe("renderGame — addressee persistence after send", () => {
 			ok: true,
 			status: 200,
 			statusText: "OK",
-			body: makeAiSseStream(PASS_ACTION),
+			body: makePassSseStream(),
 		});
 		vi.stubGlobal("fetch", mockFetch);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 
 		vi.resetModules();
 		const { renderGame } = await import("../views/game.js");
@@ -1760,38 +1532,29 @@ describe("renderGame — addressee persistence after send", () => {
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
-		// First turn
 		promptInput.value = "*Sage hello";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		// Prefix persists after first send
 		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
 
-		// Second turn: extend the persisted prefix
 		promptInput.value = "*Sage how are you";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		// Prefix persists again after second send
 		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
 
-		// Both messages should be in the green transcript (with leading mention stripped)
 		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
 		expect(greenTranscript.textContent).toContain("> hello");
 		expect(greenTranscript.textContent).toContain("> how are you");
 	});
 
 	it("canonical-name normalization: *sage (lowercase) → '*Sage ' after send", async () => {
-		const mockFetch = makeThreeAiFetchMock(
-			PASS_ACTION,
-			PASS_ACTION,
-			PASS_ACTION,
-		);
+		const mockFetch = makeThreeAiPassFetchMock();
 		vi.stubGlobal("fetch", mockFetch);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 
 		vi.resetModules();
 		const { renderGame } = await import("../views/game.js");
@@ -1805,22 +1568,16 @@ describe("renderGame — addressee persistence after send", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		// Should use canonical name from PERSONAS (Sage, not sage)
 		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
 	});
 
 	it("locked-AI at round-completion: mention prefix persists but Send stays disabled", async () => {
-		const mockFetch = makeThreeAiFetchMock(
-			PASS_ACTION,
-			PASS_ACTION,
-			PASS_ACTION,
-		);
+		const mockFetch = makeThreeAiPassFetchMock();
 		vi.stubGlobal("fetch", mockFetch);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 
 		vi.resetModules();
 
-		// Inject chatLockoutTriggered for green so the SPA sets green locked.
 		const { GameSession } = await import("../game/game-session.js");
 		const originalSubmit = GameSession.prototype.submitMessage;
 		vi.spyOn(GameSession.prototype, "submitMessage").mockImplementation(
@@ -1854,7 +1611,6 @@ describe("renderGame — addressee persistence after send", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		// Prefix persists even when green is locked, and send is disabled (green locked)
 		await vi.waitFor(() => {
 			expect(promptInput.value).toBe("*Sage ");
 			expect(sendBtn.disabled).toBe(true);
@@ -1886,18 +1642,14 @@ describe("visual feedback for active addressee", () => {
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
-		// Trigger input event with empty value
 		promptInput.value = "";
 		promptInput.dispatchEvent(new Event("input"));
 
-		// No --panel-color set on prompt
 		expect(promptInput.style.getPropertyValue("--panel-color")).toBe("");
 
-		// No panel--addressed
 		const addressedPanels = document.querySelectorAll(".panel--addressed");
 		expect(addressedPanels.length).toBe(0);
 
-		// No mention-highlight in overlay
 		const overlay = document.querySelector<HTMLElement>("#prompt-overlay");
 		expect(overlay?.querySelector(".mention-highlight")).toBeNull();
 	});
@@ -1911,20 +1663,16 @@ describe("visual feedback for active addressee", () => {
 		promptInput.value = "*Sage hi";
 		promptInput.dispatchEvent(new Event("input"));
 
-		// Composer border is green
 		expect(promptInput.style.getPropertyValue("--panel-color")).toBe("#81b29a");
 
-		// Green panel has highlight classes
 		const greenPanel = getEl<HTMLElement>('.ai-panel[data-ai="green"]');
 		expect(greenPanel.classList.contains("panel--addressed")).toBe(true);
 
-		// Red and cyan panels do NOT have highlight
 		const redPanel = getEl<HTMLElement>('.ai-panel[data-ai="red"]');
 		const cyanPanel = getEl<HTMLElement>('.ai-panel[data-ai="cyan"]');
 		expect(redPanel.classList.contains("panel--addressed")).toBe(false);
 		expect(cyanPanel.classList.contains("panel--addressed")).toBe(false);
 
-		// Overlay has exactly one mention-highlight span with *Sage text and mention--green
 		const overlay = getEl<HTMLElement>("#prompt-overlay");
 		const spans = overlay.querySelectorAll(".mention-highlight");
 		expect(spans.length).toBe(1);
@@ -1965,7 +1713,6 @@ describe("visual feedback for active addressee", () => {
 		const span = overlay.querySelector(".mention-highlight");
 		expect(span?.textContent).toBe("*Sage");
 
-		// Comma should be outside the span (in a text node)
 		expect(overlay.textContent).toBe("*Sage,");
 	});
 
@@ -1976,23 +1723,18 @@ describe("visual feedback for active addressee", () => {
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
-		// First set a mention
 		promptInput.value = "*Sage hi";
 		promptInput.dispatchEvent(new Event("input"));
 		expect(promptInput.style.getPropertyValue("--panel-color")).toBe("#81b29a");
 
-		// Now clear
 		promptInput.value = "";
 		promptInput.dispatchEvent(new Event("input"));
 
-		// --panel-color cleared from prompt
 		expect(promptInput.style.getPropertyValue("--panel-color")).toBe("");
 
-		// No panel--addressed
 		const addressedPanels = document.querySelectorAll(".panel--addressed");
 		expect(addressedPanels.length).toBe(0);
 
-		// No mention-highlight in overlay
 		const overlay = getEl<HTMLElement>("#prompt-overlay");
 		expect(overlay.querySelector(".mention-highlight")).toBeNull();
 	});
@@ -2004,29 +1746,22 @@ describe("visual feedback for active addressee", () => {
 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
-		// Type *Sage hi
 		promptInput.value = "*Sage hi";
 		promptInput.dispatchEvent(new Event("input"));
 		expect(promptInput.style.getPropertyValue("--panel-color")).toBe("#81b29a");
 
-		// Click cyan panel
 		const cyanPanel = getEl<HTMLElement>('.ai-panel[data-ai="cyan"]');
 		cyanPanel.click();
 
-		// Input value should start with *Frost
 		expect(promptInput.value.startsWith("*Frost")).toBe(true);
 
-		// Cyan border
 		expect(promptInput.style.getPropertyValue("--panel-color")).toBe("#5fa8d3");
 
-		// Cyan panel has highlight
 		expect(cyanPanel.classList.contains("panel--addressed")).toBe(true);
 
-		// Green panel no longer highlighted
 		const greenPanel = getEl<HTMLElement>('.ai-panel[data-ai="green"]');
 		expect(greenPanel.classList.contains("panel--addressed")).toBe(false);
 
-		// Overlay highlight is *Frost with cyan --panel-color
 		const overlay = getEl<HTMLElement>("#prompt-overlay");
 		const span = overlay.querySelector<HTMLElement>(".mention-highlight");
 		expect(span?.textContent).toBe("*Frost");
@@ -2038,7 +1773,6 @@ describe("visual feedback for active addressee", () => {
 
 		vi.resetModules();
 
-		// Import GameSession before renderGame so the spy is in place
 		const { GameSession } = await import("../game/game-session.js");
 		const originalSubmit = GameSession.prototype.submitMessage;
 		vi.spyOn(GameSession.prototype, "submitMessage").mockImplementation(
@@ -2060,7 +1794,6 @@ describe("visual feedback for active addressee", () => {
 			},
 		);
 
-		// Provide a mock fetch for the session submit
 		const mockFetch = vi.fn().mockResolvedValue({
 			ok: true,
 			status: 200,
@@ -2085,32 +1818,26 @@ describe("visual feedback for active addressee", () => {
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 		const sendBtn = getEl<HTMLButtonElement>("#send");
 
-		// Submit one round to lock green
 		promptInput.value = "*Sage hello";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 
-		// Wait for green to become locked
 		const greenPanelLock = getEl<HTMLElement>('.ai-panel[data-ai="green"]');
 		await vi.waitFor(() =>
 			expect(greenPanelLock.classList.contains("panel--locked")).toBe(true),
 		);
 
-		// Now type *Sage hi (green is locked)
 		promptInput.value = "*Sage hi";
 		promptInput.dispatchEvent(new Event("input"));
 
-		// Send disabled (green locked)
 		expect(sendBtn.disabled).toBe(true);
 
-		// Visual feedback still shows green
 		expect(promptInput.style.getPropertyValue("--panel-color")).toBe("#81b29a");
 		const greenPanel = getEl<HTMLElement>('.ai-panel[data-ai="green"]');
 		expect(greenPanel.classList.contains("panel--addressed")).toBe(true);
 
-		// Overlay still shows the mention highlight
 		const overlay = getEl<HTMLElement>("#prompt-overlay");
 		const span = overlay.querySelector<HTMLElement>(".mention-highlight");
 		expect(span?.textContent).toBe("*Sage");
@@ -2135,7 +1862,6 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 		document.body.innerHTML = "";
 	});
 
-	/** Helper: inject a chatLockoutTriggered for a given aiId via submitMessage spy. */
 	async function setupLockoutMock(
 		aiId: "red" | "green" | "cyan",
 		message: string,
@@ -2160,11 +1886,8 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 	}
 
 	it("chat_lockout fires → locked panel gains panel--locked and aria-disabled=true", async () => {
-		vi.stubGlobal(
-			"fetch",
-			makeThreeAiFetchMock(PASS_ACTION, PASS_ACTION, PASS_ACTION),
-		);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.stubGlobal("fetch", makeThreeAiPassFetchMock());
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 
 		await setupLockoutMock("red", "Ember is unresponsive…");
 
@@ -2185,7 +1908,6 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 			expect(redPanel.getAttribute("aria-disabled")).toBe("true");
 		});
 
-		// Green and cyan panels should NOT be locked
 		const greenPanel = getEl<HTMLElement>('.ai-panel[data-ai="green"]');
 		const cyanPanel = getEl<HTMLElement>('.ai-panel[data-ai="cyan"]');
 		expect(greenPanel.classList.contains("panel--locked")).toBe(false);
@@ -2193,11 +1915,8 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 	});
 
 	it("type *Sage while green locked → Send disabled, #lockout-error visible with text containing 'Sage'", async () => {
-		vi.stubGlobal(
-			"fetch",
-			makeThreeAiFetchMock(PASS_ACTION, PASS_ACTION, PASS_ACTION),
-		);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.stubGlobal("fetch", makeThreeAiPassFetchMock());
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 
 		await setupLockoutMock("green", "Sage is unresponsive…");
 
@@ -2208,13 +1927,11 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 		const sendBtn = getEl<HTMLButtonElement>("#send");
 
-		// Submit to trigger the lockout
 		promptInput.value = "*Sage hello";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		// Type *Sage hi while green is locked
 		const lockoutError = getEl<HTMLOutputElement>("#lockout-error");
 		await vi.waitFor(() =>
 			expect(lockoutError.hasAttribute("hidden")).toBe(false),
@@ -2229,9 +1946,7 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 	});
 
 	it("chat_lockout_resolved mid-draft → muting clears, #lockout-error hidden, Send re-enables when *Sage re-typed", async () => {
-		// First round: inject lockout for green
-		// Second round: inject lockout_resolved for green via mock
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 
 		const { GameSession } = await import("../game/game-session.js");
 		const originalSubmit = GameSession.prototype.submitMessage;
@@ -2244,7 +1959,6 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 				const real = await originalSubmit.apply(this, args);
 				callCount++;
 				if (callCount === 1) {
-					// First call: lock green
 					return {
 						...real,
 						result: {
@@ -2256,7 +1970,6 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 						},
 					};
 				}
-				// Second call: resolve green lockout
 				return {
 					...real,
 					result: {
@@ -2271,7 +1984,7 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 			ok: true,
 			status: 200,
 			statusText: "OK",
-			body: makeAiSseStream(PASS_ACTION),
+			body: makePassSseStream(),
 		});
 		vi.stubGlobal("fetch", mockFetch);
 
@@ -2281,32 +1994,27 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
-		// Round 1: lock green
 		promptInput.value = "*Sage hello";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 
-		// Verify green is locked
 		const greenPanel = getEl<HTMLElement>('.ai-panel[data-ai="green"]');
 		await vi.waitFor(() =>
 			expect(greenPanel.classList.contains("panel--locked")).toBe(true),
 		);
 
-		// Round 2 via *Ember: resolve green lockout
 		promptInput.value = "*Ember hi";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 
-		// Green panel should no longer be locked
 		await vi.waitFor(() =>
 			expect(greenPanel.classList.contains("panel--locked")).toBe(false),
 		);
 
-		// Type *Sage again: should now enable Send and hide error
 		promptInput.value = "*Sage hi";
 		promptInput.dispatchEvent(new Event("input"));
 
@@ -2318,11 +2026,8 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 	});
 
 	it("empty input + green locked → green panel muted but #lockout-error stays hidden", async () => {
-		vi.stubGlobal(
-			"fetch",
-			makeThreeAiFetchMock(PASS_ACTION, PASS_ACTION, PASS_ACTION),
-		);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.stubGlobal("fetch", makeThreeAiPassFetchMock());
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 
 		await setupLockoutMock("green", "Sage is unresponsive…");
 
@@ -2332,34 +2037,25 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 		const form = getEl<HTMLFormElement>("#composer");
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
-		// Trigger lockout
 		promptInput.value = "*Sage hello";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 
-		// Green panel is muted (locked)
 		const greenPanel = getEl<HTMLElement>('.ai-panel[data-ai="green"]');
 		await vi.waitFor(() =>
 			expect(greenPanel.classList.contains("panel--locked")).toBe(true),
 		);
 
-		// Clear input (empty text)
 		promptInput.value = "";
 		promptInput.dispatchEvent(new Event("input"));
 
-		// Error element is hidden (no addressee)
 		const lockoutError = getEl<HTMLOutputElement>("#lockout-error");
 		expect(lockoutError.hasAttribute("hidden")).toBe(true);
 	});
 });
 
-// Regression for #231: when a round throws a non-CapHitError (e.g. the worker
-// proxy returns 502 upstream_error after an OpenRouter blip) the round used
-// to fail silently — no inline message, no status pip change. Verify the
-// surfaced-error UX: `#round-error` becomes visible and `#topinfo-right`
-// flips to "● connection unstable" (warn class).
 describe("renderGame — round error reporting (issue #231)", () => {
 	let _stub: ReturnType<typeof makeLocalStorageStub>;
 
@@ -2380,8 +2076,6 @@ describe("renderGame — round error reporting (issue #231)", () => {
 	});
 
 	it("surfaces #round-error and flips topinfo to 'connection unstable' on a 502 round; clears both on the next successful round", async () => {
-		// First submit: every fetch returns 502 (mimics the worker proxy's
-		// `upstream_error` mapping after OpenRouter returns a transient 502).
 		const failingFetch = vi.fn().mockResolvedValue({
 			ok: false,
 			status: 502,
@@ -2395,7 +2089,7 @@ describe("renderGame — round error reporting (issue #231)", () => {
 			}),
 		});
 		vi.stubGlobal("fetch", failingFetch);
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 
 		vi.resetModules();
 		const { renderGame } = await import("../views/game.js");
@@ -2408,25 +2102,20 @@ describe("renderGame — round error reporting (issue #231)", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		// 1. Inline error visible with non-empty player-readable text.
 		const roundError = getEl<HTMLOutputElement>("#round-error");
 		await vi.waitFor(() => {
 			expect(roundError.hasAttribute("hidden")).toBe(false);
 			expect(roundError.textContent?.trim()).toBeTruthy();
 		});
 
-		// 2. Topinfo right cell shows the unstable warn pip.
 		const topinfoRight = getEl<HTMLElement>("#topinfo-right");
 		expect(topinfoRight.textContent).toContain("connection unstable");
 		const pip = topinfoRight.querySelector("span");
 		expect(pip?.className).toBe("warn");
 
-		// 3. Cap-hit overlay stays hidden (this is not a 429).
 		const capHit = getEl<HTMLElement>("#cap-hit");
 		expect(capHit.hasAttribute("hidden")).toBe(true);
 
-		// Second submit: now fetch succeeds for all three daemons. The
-		// round-error should clear and topinfo should return to "stable".
 		const okFetch = makeMessageToolCallFetchMock();
 		vi.stubGlobal("fetch", okFetch);
 		promptInput.value = "*Sage retry";
@@ -2444,14 +2133,6 @@ describe("renderGame — round error reporting (issue #231)", () => {
 	});
 });
 
-// ── Regression: old-save session ID clobber ───────────────────────────────────
-//
-// When a version-mismatch session is active AND a pending bootstrap exists
-// (because the start screen ran first), renderGame must NOT call
-// renderBootstrapLoadingFlow — that would save new content packs and daemons
-// under the stale session ID.
-//
-// Issue: fix-old-save-diagnosis
 describe("renderGame — version-mismatch session with pending bootstrap (regression)", () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
@@ -2465,11 +2146,6 @@ describe("renderGame — version-mismatch session with pending bootstrap (regres
 		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 
-		// Build a localStorage stub seeded with a version-mismatch session.
-		// The session files are present but the engine.dat carries a stale
-		// schemaVersion so loadActiveSession() returns { kind: "version-mismatch" }.
-		// Use stub._store to populate data — makeLocalStorageStub spreads a copy
-		// of initialData, so direct mutations to an outer reference don't take.
 		vi.resetModules();
 		const { obfuscate } = await import("../persistence/sealed-blob-codec.js");
 
@@ -2500,7 +2176,6 @@ describe("renderGame — version-mismatch session with pending bootstrap (regres
 			});
 		}
 
-		// Engine.dat with a stale schemaVersion (4 instead of current 5).
 		const staleEnginePayload = {
 			schemaVersion: 4,
 			world: {
@@ -2525,31 +2200,22 @@ describe("renderGame — version-mismatch session with pending bootstrap (regres
 
 		vi.stubGlobal("localStorage", stub);
 
-		// Simulate the start screen having run: kick off a pending bootstrap.
 		const { startBootstrap } = await import("../game/pending-bootstrap.js");
 		startBootstrap();
 
-		// Spy on saveActiveSession — it must NOT be called during this render.
 		const sessionStorage = await import("../persistence/session-storage.js");
 		const saveSpy = vi.spyOn(sessionStorage, "saveActiveSession");
 
 		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
-		// The route must surface the sessions picker with the version-mismatch reason.
 		expect(getEl<HTMLElement>("main").dataset.view).toBe("sessions");
 		expect(getEl<HTMLElement>("main").dataset.reason).toBe("version-mismatch");
-		// The active-session pointer must NOT be cleared — only the sessions
-		// picker (or an explicit user action) should touch it.
 		expect(stub.getItem("hi-blue:active-session")).toBe(SESSION_ID);
-		// The pending bootstrap must be cleared so a subsequent navigation
-		// doesn't re-enter the bootstrap loading flow.
 		const { getPendingBootstrap } = await import(
 			"../game/pending-bootstrap.js"
 		);
 		expect(getPendingBootstrap()).toBeUndefined();
-		// The bootstrap must NOT have saved new content packs/daemons under the
-		// old session id.
 		expect(saveSpy).not.toHaveBeenCalled();
 	});
 
@@ -2585,7 +2251,6 @@ describe("renderGame — version-mismatch session with pending bootstrap (regres
 				phases: daemonPhases,
 			});
 		}
-		// engine.dat is intentionally absent → loadActiveSession returns { kind: "broken" }.
 
 		vi.stubGlobal("localStorage", stub);
 
@@ -2622,9 +2287,6 @@ describe("renderGame — version-mismatch session with pending bootstrap (regres
 		const prefix = `hi-blue:sessions/${SESSION_ID}/`;
 		stub._store["hi-blue:active-session"] = SESSION_ID;
 
-		// Keep the raw strings we seed so the test can assert they survive
-		// renderGame byte-for-byte: the archived-build link must point at
-		// real, intact bytes, not a wiped session.
 		const metaBytes = JSON.stringify({
 			createdAt: "2024-01-01T00:00:00.000Z",
 			lastSavedAt: "2024-01-01T00:00:00.000Z",
@@ -2650,8 +2312,6 @@ describe("renderGame — version-mismatch session with pending bootstrap (regres
 			daemonBytes[aiId] = raw;
 		}
 
-		// Engine.dat stamped with a stale schemaVersion so
-		// loadActiveSession() returns { kind: "version-mismatch" }.
 		const staleEnginePayload = {
 			schemaVersion: 4,
 			world: {
@@ -2678,10 +2338,7 @@ describe("renderGame — version-mismatch session with pending bootstrap (regres
 		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
-		// The route must surface the version-mismatch reason.
 		expect(getEl<HTMLElement>("main").dataset.reason).toBe("version-mismatch");
-		// The stale pointer is replaced by the freshly-minted session, and
-		// the seeded session bytes must survive unchanged.
 		expect(stub.getItem("hi-blue:active-session")).not.toBe(SESSION_ID);
 		expect(stub.getItem(`${prefix}meta.json`)).toBe(metaBytes);
 		for (const aiId of ["red", "green", "cyan"] as const) {
@@ -2691,10 +2348,8 @@ describe("renderGame — version-mismatch session with pending bootstrap (regres
 	});
 });
 
-// ── Bootstrap happy-path tests ──────────────────────────────────────────────
 describe("renderBootstrapLoadingFlow — happy path", () => {
 	beforeEach(() => {
-		// Reset timers before each test to avoid state leakage
 		vi.restoreAllMocks();
 		vi.resetModules();
 		vi.useRealTimers();
@@ -2713,7 +2368,6 @@ describe("renderBootstrapLoadingFlow — happy path", () => {
 		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 
-		// Override generateNewGameAssetsSplit so contentPacksPromise resolves but is slow
 		vi.doMock("../game/bootstrap.js", async (importOriginal) => {
 			const actual =
 				await importOriginal<typeof import("../game/bootstrap.js")>();
@@ -2722,7 +2376,6 @@ describe("renderBootstrapLoadingFlow — happy path", () => {
 				generateNewGameAssetsSplit: () => ({
 					personasPromise: Promise.resolve(STATIC_PERSONAS),
 					contentPacksPromise: new Promise((resolve) => {
-						// Resolve after 30 seconds (well before 90s timeout)
 						setTimeout(
 							() =>
 								resolve({
@@ -2751,22 +2404,17 @@ describe("renderBootstrapLoadingFlow — happy path", () => {
 		const { renderGame } = await import("../views/game.js");
 		const renderPromise = renderGame(getEl<HTMLElement>("main"));
 
-		// Advance time to 60 seconds (below 90s timeout)
 		await vi.advanceTimersByTimeAsync(60_000);
 		await vi.runAllTimersAsync();
 
-		// Wait for render to complete
 		await renderPromise;
 
-		// Assert NO bounce to start with reason=stuck (which would indicate timeout)
 		expect(getEl<HTMLElement>("main").dataset.reason).not.toBe("stuck");
 	});
 });
 
-// ── Bootstrap timeout tests ──────────────────────────────────────────────────
 describe("renderBootstrapLoadingFlow — timeout", () => {
 	beforeEach(() => {
-		// Reset timers before each test to avoid state leakage
 		vi.restoreAllMocks();
 		vi.resetModules();
 		vi.useRealTimers();
@@ -2785,7 +2433,6 @@ describe("renderBootstrapLoadingFlow — timeout", () => {
 		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 
-		// Override generateNewGameAssetsSplit so we control promise settlement.
 		vi.doMock("../game/bootstrap.js", async (importOriginal) => {
 			const actual =
 				await importOriginal<typeof import("../game/bootstrap.js")>();
@@ -2793,9 +2440,7 @@ describe("renderBootstrapLoadingFlow — timeout", () => {
 				...actual,
 				generateNewGameAssetsSplit: () => ({
 					personasPromise: Promise.resolve(STATIC_PERSONAS),
-					contentPacksPromise: new Promise(() => {
-						// Never settles
-					}),
+					contentPacksPromise: new Promise(() => {}),
 				}),
 			};
 		});
@@ -2804,39 +2449,29 @@ describe("renderBootstrapLoadingFlow — timeout", () => {
 		const stub = makeLocalStorageStub();
 		vi.stubGlobal("localStorage", stub);
 
-		// Mint an active session with no data.
 		const { mintAndActivateNewSession } = await import(
 			"../persistence/session-storage.js"
 		);
 		mintAndActivateNewSession();
 
-		// Start the bootstrap (like clicking CONNECT).
 		const { startBootstrap } = await import("../game/pending-bootstrap.js");
 		startBootstrap();
 
 		const { renderGame } = await import("../views/game.js");
 		const renderPromise = renderGame(getEl<HTMLElement>("main"));
 
-		// Advance time past the timeout (90s + 1ms to be safe).
 		const { BOOTSTRAP_LOADING_TIMEOUT_MS } = await import("../views/game.js");
 		await vi.advanceTimersByTimeAsync(BOOTSTRAP_LOADING_TIMEOUT_MS + 1);
-		// Flush microtasks so the timeout settler races ahead.
 		await vi.runAllTimersAsync();
 
-		// Wait for the render to complete (should show recovery UI).
 		await renderPromise;
 
-		// Assert the recovery UI is shown with "stuck" copy.
 		const recoveryEl = document.querySelector("#bootstrap-recovery");
 		expect(recoveryEl?.hasAttribute("hidden")).toBe(false);
 		const titleEl = document.querySelector("#bootstrap-recovery-title");
 		expect(titleEl?.textContent).toBe("the room is taking too long");
 		const bodyEl = document.querySelector("#bootstrap-recovery-body");
 		expect(bodyEl?.textContent).toContain("the world generation timed out");
-
-		// The main point: recovery UI is shown instead of an immediate full-page bounce
-		// (We might bounce to #/sessions, but only AFTER recovery UI has been rendered)
-		// This allows users to click regen before the bounce takes effect
 	});
 
 	it("hides #bootstrap-recovery when bootstrap promise resolves after timeout has fired", async () => {
@@ -2885,17 +2520,14 @@ describe("renderBootstrapLoadingFlow — timeout", () => {
 		const { renderGame } = await import("../views/game.js");
 		const renderPromise = renderGame(getEl<HTMLElement>("main"));
 
-		// Path A: advance past timeout to fire BootstrapTimeoutError → recovery UI.
 		const { BOOTSTRAP_LOADING_TIMEOUT_MS } = await import("../views/game.js");
 		await vi.advanceTimersByTimeAsync(BOOTSTRAP_LOADING_TIMEOUT_MS + 1);
 		await vi.runAllTimersAsync();
 		await renderPromise;
 
-		// Confirm recovery UI is shown (Path A fired).
 		const recoveryEl = document.querySelector("#bootstrap-recovery");
 		expect(recoveryEl?.hasAttribute("hidden")).toBe(false);
 
-		// Path B: the underlying bootstrap promise resolves late.
 		resolveContentPacks({
 			packsA: [STATIC_CONTENT_PACKS[0]],
 			packsB: [STATIC_CONTENT_PACKS[0]],
@@ -2903,11 +2535,8 @@ describe("renderBootstrapLoadingFlow — timeout", () => {
 		});
 		await vi.runAllTimersAsync();
 
-		// After late success, recovery UI should be hidden (game is functional now).
 		expect(recoveryEl?.hasAttribute("hidden")).toBe(true);
 
-		// The regenerate button's stale click handler must be torn down so a
-		// mid-game click cannot blow away the now-running session.
 		const regenBtn = document.querySelector<HTMLButtonElement>(
 			"#bootstrap-recovery-regen",
 		);
@@ -2917,14 +2546,10 @@ describe("renderBootstrapLoadingFlow — timeout", () => {
 		});
 		regenBtn?.click();
 		expect(regenClicked).toBe(true);
-		// The synthetic listener fired (DOM still works); the original
-		// runRegenerate handler was detached by replaceWith, so no recovery UI
-		// reappears as a side effect.
 		expect(recoveryEl?.hasAttribute("hidden")).toBe(true);
 	});
 });
 
-// ── Bootstrap promise propagation tests (Lever 2) ───────────────────────────────
 describe("renderBootstrapLoadingFlow — promise propagation", () => {
 	beforeEach(() => {
 		vi.restoreAllMocks();
@@ -2973,7 +2598,6 @@ describe("renderBootstrapLoadingFlow — promise propagation", () => {
 		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
-		// Assert recovery UI is shown with "broken" copy (key behavior: inline recovery instead of immediate bounce)
 		const recoveryEl = document.querySelector("#bootstrap-recovery");
 		expect(recoveryEl?.hasAttribute("hidden")).toBe(false);
 		const titleEl = document.querySelector("#bootstrap-recovery-title");
@@ -3019,14 +2643,10 @@ describe("renderBootstrapLoadingFlow — promise propagation", () => {
 		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
-		// When personas fail, recovery UI is still shown (generic bootstrap failure).
-		// The game route owns this UI — we should NOT have bounced to start.
 		const recoveryEl = document.querySelector("#bootstrap-recovery");
 		expect(recoveryEl?.hasAttribute("hidden")).toBe(false);
 		const titleEl = document.querySelector("#bootstrap-recovery-title");
 		expect(titleEl?.textContent).toBe("the room collapsed");
-		// The data-view should not have flipped to start with the broken reason
-		// during this path — recovery UI lives inside the game view.
 		expect(getEl<HTMLElement>("main").dataset.reason).not.toBe("broken");
 	});
 
@@ -3072,8 +2692,6 @@ describe("renderBootstrapLoadingFlow — promise propagation", () => {
 		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
-		// Should stay at #/game (location not changed by cap-hit handler)
-		// and cap-hit panel should be visible
 		const capHitPanel = document.querySelector<HTMLElement>("#cap-hit");
 		expect(capHitPanel?.hasAttribute("hidden")).toBe(false);
 	});
@@ -3116,7 +2734,6 @@ describe("renderBootstrapLoadingFlow — promise propagation", () => {
 		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
-		// Assert recovery UI is shown (key behavior: inline recovery instead of immediate bounce)
 		const recoveryEl = document.querySelector("#bootstrap-recovery");
 		expect(recoveryEl?.hasAttribute("hidden")).toBe(false);
 	});

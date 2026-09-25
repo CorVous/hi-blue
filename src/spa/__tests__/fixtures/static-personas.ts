@@ -1,10 +1,5 @@
 import type { AiId, AiPersona } from "../../game/types";
 
-/**
- * Static red/green/cyan personas used by tests that pin DOM panels by
- * `data-ai="red|green|cyan"`. Production uses procedurally generated handles —
- * see `src/content/persona-generator.ts`.
- */
 export const STATIC_PERSONAS: Record<AiId, AiPersona> = {
 	red: {
 		id: "red",

@@ -1,10 +1,3 @@
-/**
- * active-session-dispatcher.test.ts
- *
- * Five-state truth table for dispatchActiveSession. Pure function — no DOM.
- *
- * Issue #173 (parent #155).
- */
 import { describe, expect, it } from "vitest";
 import {
 	type DispatcherSnapshot,
@@ -15,7 +8,6 @@ describe("dispatchActiveSession — five-state truth table", () => {
 	it("Row 1 — no active pointer → #/start, no-active-pointer, needsMint true", () => {
 		const snapshot: DispatcherSnapshot = {
 			activeSessionId: null,
-			// loadResult is irrelevant when activeSessionId is null, but must be valid
 			loadResult: { kind: "none" },
 		};
 		const verdict = dispatchActiveSession(snapshot);

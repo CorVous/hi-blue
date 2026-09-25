@@ -1,24 +1,8 @@
-/**
- * render-app.ts
- *
- * The single re-render primitive that replaces the hash-based router.
- * Reads the active-session pointer + load result from localStorage,
- * resolves the view via the dispatcher + currentView, and dispatches
- * to the registered renderer.
- *
- * Two pieces of in-memory state live here:
- *   - pickerOpen: whether the user has the sessions picker open. Toggled
- *     by the sessions icon and Escape; cleared by route navigations.
- *   - pendingBootReason: a one-shot reason consumed by the first renderApp
- *     call (used at boot to surface legacy-save-discarded).
- *
- * See docs/adr/0011-remove-url-routing.md.
- */
-
 import { currentView, type View } from "./current-view.js";
 import { getPendingBootstrap } from "./game/pending-bootstrap.js";
 import {
 	type DispatcherReason,
+	type DispatcherVerdict,
 	dispatchActiveSession,
 } from "./persistence/active-session-dispatcher.js";
 import {
@@ -31,12 +15,6 @@ export type RenderReason = DispatcherReason | "legacy-save-discarded" | "stuck";
 
 export interface RenderOpts {
 	reason?: RenderReason | null;
-	/**
-	 * The schema version embedded in the saved session that triggered a
-	 * version-mismatch. Threaded through from the dispatcher so the banner
-	 * can look up the archived build URL (see archive-map.ts). Only meaningful
-	 * when reason === "version-mismatch".
-	 */
 	schemaVersion?: number;
 }
 
@@ -65,13 +43,35 @@ export function togglePickerOpen(): void {
 	pickerOpen = !pickerOpen;
 }
 
-/**
- * Stash a one-shot reason that the next renderApp call will surface as
- * its effective reason, regardless of what the dispatcher derives.
- * Used at boot for legacy-save-discarded.
- */
 export function setBootReason(reason: RenderReason | null): void {
 	pendingBootReason = reason;
+}
+
+function pendingBootstrapOwnsFreshSession(
+	view: View,
+	verdict: DispatcherVerdict,
+): boolean {
+	const sessionIsFresh =
+		verdict.reason === "empty" || verdict.reason === "no-active-pointer";
+	return (
+		view === "start" &&
+		!pickerOpen &&
+		getPendingBootstrap() !== undefined &&
+		sessionIsFresh
+	);
+}
+
+function takeEffectiveReason(
+	viewDerivedReason: RenderReason | null,
+	opts: RenderOpts | undefined,
+): RenderReason | null {
+	if (opts && "reason" in opts) return opts.reason ?? null;
+	if (pendingBootReason !== null) {
+		const bootReason = pendingBootReason;
+		pendingBootReason = null;
+		return bootReason;
+	}
+	return viewDerivedReason;
 }
 
 export function renderApp(
@@ -92,30 +92,11 @@ export function renderApp(
 		verdict = dispatchActiveSession(snapshot);
 	}
 
-	let { view, reason } = currentView({ verdict, pickerOpen });
-
-	// Pending-bootstrap override: when CONNECT has been clicked and an in-flight
-	// bootstrap is producing content for a freshly-minted (empty) session, the
-	// game route owns the progressive-loading UI rather than bouncing to start.
-	// Never override away from sticky sessions (broken / version-mismatch): a
-	// pending bootstrap must not overwrite a stale session under the same id.
-	if (
-		view === "start" &&
-		!pickerOpen &&
-		getPendingBootstrap() !== undefined &&
-		(verdict.reason === "empty" || verdict.reason === "no-active-pointer")
-	) {
-		view = "game";
-	}
-
-	// Reason precedence: explicit opts > one-shot boot reason > view-derived.
-	let effectiveReason: RenderReason | null = reason;
-	if (opts && "reason" in opts) {
-		effectiveReason = opts.reason ?? null;
-	} else if (pendingBootReason !== null) {
-		effectiveReason = pendingBootReason;
-		pendingBootReason = null;
-	}
+	const derived = currentView({ verdict, pickerOpen });
+	const view: View = pendingBootstrapOwnsFreshSession(derived.view, verdict)
+		? "game"
+		: derived.view;
+	const effectiveReason = takeEffectiveReason(derived.reason, opts);
 
 	root.dataset.view = view;
 	if (effectiveReason !== null) {
@@ -124,9 +105,6 @@ export function renderApp(
 		delete root.dataset.reason;
 	}
 
-	// Thread schemaVersion through to the route when the effective reason is
-	// version-mismatch. Explicit opts.schemaVersion (e.g. game.ts passing it
-	// through after clearActiveSession) wins over the dispatcher-derived value.
 	let effectiveSchemaVersion: number | undefined;
 	if (effectiveReason === "version-mismatch") {
 		effectiveSchemaVersion = opts?.schemaVersion ?? verdict.schemaVersion;

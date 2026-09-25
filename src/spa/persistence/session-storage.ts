@@ -1,18 +1,3 @@
-/**
- * session-storage.ts
- *
- * Facade over localStorage for the multi-file session format.
- *
- * Each session is stored as five localStorage keys:
- *   hi-blue:sessions/<id>/meta.json
- *   hi-blue:sessions/<id>/<aiId>.txt  × 3
- *   hi-blue:sessions/<id>/engine.dat   ← commit signal (written last)
- *
- * The active session pointer is stored at hi-blue:active-session.
- *
- * See docs/adr/0004-editable-vs-sealed-save-surface.md.
- */
-
 import { appendBroadcast } from "../game/engine.js";
 import type { AiId, GameState } from "../game/types.js";
 import {
@@ -21,8 +6,6 @@ import {
 	type MetaFile,
 	serializeSession,
 } from "./session-codec.js";
-
-// ── SessionInfo ───────────────────────────────────────────────────────────────
 
 export type SessionInfo =
 	| {
@@ -36,8 +19,6 @@ export type SessionInfo =
 	| { kind: "broken"; daemonFiles: Array<{ name: string; size: number }> }
 	| {
 			kind: "version-mismatch";
-			// The stale schema number sealed into the save, so the picker can
-			// link it to the archived build that still reads it.
 			schemaVersion: number;
 			lastSavedAt?: string;
 			epoch?: number;
@@ -53,20 +34,14 @@ export type SessionInfo =
 			engineSize: number;
 	  };
 
-// ── Keys ──────────────────────────────────────────────────────────────────────
-
 export const ACTIVE_KEY = "hi-blue:active-session";
 export const SESSIONS_PREFIX = "hi-blue:sessions/";
 export const ARCHIVE_PREFIX = "hi-blue:archive/";
 export const LEGACY_KEY = "hi-blue-game-state";
 
-// ── SaveResult (mirrors game-storage.ts for API compatibility) ────────────────
-
 export type SaveResult =
 	| { ok: true }
 	| { ok: false; reason: "unavailable" | "quota" | "unknown" };
-
-// ── LoadResult ────────────────────────────────────────────────────────────────
 
 export type LoadResult =
 	| { kind: "none" }
@@ -81,20 +56,24 @@ export type LoadResult =
 	| { kind: "broken"; sessionId: string }
 	| { kind: "version-mismatch"; sessionId: string; schemaVersion: number };
 
-// ── Session ID ────────────────────────────────────────────────────────────────
+const SESSION_ID_HEX_DIGITS = 4;
+const SESSION_ID_RANGE = 0xffff;
 
-/**
- * Mint a new 4-hex session id in the form `0xXXXX`.
- * Moved here from bbs-chrome.ts.
- */
 export function mintSessionId(): string {
-	const r = Math.floor(Math.random() * 0xffff);
-	return `0x${r.toString(16).toUpperCase().padStart(4, "0")}`;
+	const value = Math.floor(Math.random() * SESSION_ID_RANGE);
+	const hexDigits = value
+		.toString(16)
+		.toUpperCase()
+		.padStart(SESSION_ID_HEX_DIGITS, "0");
+	return `0x${hexDigits}`;
 }
 
-// ── Pointer management ────────────────────────────────────────────────────────
+function ignoringStorageErrors(storageAction: () => void): void {
+	try {
+		storageAction();
+	} catch {}
+}
 
-/** Return the currently active session id, or null if not set. */
 export function getActiveSessionId(): string | null {
 	try {
 		return localStorage.getItem(ACTIVE_KEY);
@@ -103,23 +82,15 @@ export function getActiveSessionId(): string | null {
 	}
 }
 
-/** Set the active session id pointer. */
 export function setActiveSessionId(id: string): void {
-	try {
-		localStorage.setItem(ACTIVE_KEY, id);
-	} catch {
-		// swallow — best effort
-	}
+	ignoringStorageErrors(() => localStorage.setItem(ACTIVE_KEY, id));
 }
 
-/** Mint a new session id and set it as the active pointer. Returns the new id. */
 export function mintAndActivateNewSession(): string {
 	const id = mintSessionId();
 	setActiveSessionId(id);
 	return id;
 }
-
-// ── Key helpers ───────────────────────────────────────────────────────────────
 
 function metaKey(prefix: string, sessionId: string): string {
 	return `${prefix}${sessionId}/meta.json`;
@@ -133,19 +104,6 @@ function engineKey(prefix: string, sessionId: string): string {
 	return `${prefix}${sessionId}/engine.dat`;
 }
 
-// ── Save ──────────────────────────────────────────────────────────────────────
-
-/**
- * Save the active session to localStorage.
- *
- * Write order (strict):
- *   1. meta.json
- *   2..4. <aiId>.txt × 3
- *   5. engine.dat   ← commit signal
- *
- * Returns SaveResult. On error, no partial rollback is performed (the missing
- * engine.dat is the break signal on load).
- */
 export function saveActiveSession(
 	state: GameState,
 	opts?: { createdAt?: string },
@@ -156,9 +114,8 @@ export function saveActiveSession(
 	const now = new Date().toISOString();
 	const createdAt = opts?.createdAt ?? now;
 
-	// Preserve epoch across re-saves
 	let epoch = 1;
-	try {
+	ignoringStorageErrors(() => {
 		const existingMeta = localStorage.getItem(
 			metaKey(SESSIONS_PREFIX, sessionId),
 		);
@@ -166,9 +123,7 @@ export function saveActiveSession(
 			const parsed = JSON.parse(existingMeta) as MetaFile;
 			if (typeof parsed.epoch === "number") epoch = parsed.epoch;
 		}
-	} catch {
-		/* swallow */
-	}
+	});
 
 	let files: ReturnType<typeof serializeSession>;
 	try {
@@ -178,10 +133,8 @@ export function saveActiveSession(
 	}
 
 	try {
-		// 1. meta.json
 		localStorage.setItem(metaKey(SESSIONS_PREFIX, sessionId), files.meta);
 
-		// 2..4. daemon files in persona insertion order
 		for (const [aiId, daemonJson] of Object.entries(files.daemons)) {
 			localStorage.setItem(
 				daemonKey(SESSIONS_PREFIX, sessionId, aiId),
@@ -189,8 +142,6 @@ export function saveActiveSession(
 			);
 		}
 
-		// 5. engine.dat (commit signal — written last)
-		// serializeSession always returns a string (not null) for engine.
 		// biome-ignore lint/style/noNonNullAssertion: serializeSession always returns a non-null engine string
 		localStorage.setItem(engineKey(SESSIONS_PREFIX, sessionId), files.engine!);
 
@@ -212,41 +163,18 @@ export function saveActiveSession(
 	}
 }
 
-// ── Load ──────────────────────────────────────────────────────────────────────
-
-/**
- * Load the active session from localStorage.
- *
- * Returns:
- *   { kind: "none" }                      — no active pointer set
- *   { kind: "ok", state, ... }            — successfully loaded
- *   { kind: "broken", sessionId }         — engine.dat missing or corrupt
- *   { kind: "version-mismatch", sessionId } — sealed schemaVersion stale
- */
 export function loadActiveSession(): LoadResult {
 	const sessionId = getActiveSessionId();
 	if (!sessionId) return { kind: "none" };
 	return _loadSessionById(sessionId);
 }
 
-// ── Clear ─────────────────────────────────────────────────────────────────────
-
-/**
- * Delete all session files plus the active pointer. Intended for genuinely
- * broken sessions that should not be preserved.
- * Best-effort: errors are silently swallowed.
- */
 export function clearActiveSession(): void {
 	const sessionId = getActiveSessionId();
-	try {
-		localStorage.removeItem(ACTIVE_KEY);
-	} catch {
-		// swallow
-	}
+	ignoringStorageErrors(() => localStorage.removeItem(ACTIVE_KEY));
 	if (!sessionId) return;
 
-	try {
-		// Remove all keys under this session prefix
+	ignoringStorageErrors(() => {
 		const prefix = `${SESSIONS_PREFIX}${sessionId}/`;
 		const keysToRemove: string[] = [];
 		for (let i = 0; i < localStorage.length; i++) {
@@ -256,28 +184,13 @@ export function clearActiveSession(): void {
 		for (const key of keysToRemove) {
 			localStorage.removeItem(key);
 		}
-	} catch {
-		// swallow
-	}
+	});
 }
 
-/**
- * Remove only the active pointer, leaving all session files in place.
- * Intended for version-mismatch sessions whose bytes should be preserved
- * and linked to an archived build rather than deleted.
- * Best-effort: errors are silently swallowed.
- */
 export function deactivateActiveSession(): void {
-	try {
-		localStorage.removeItem(ACTIVE_KEY);
-	} catch {
-		// swallow
-	}
+	ignoringStorageErrors(() => localStorage.removeItem(ACTIVE_KEY));
 }
 
-// ── Legacy ─────────────────────────────────────────────────────────────────────
-
-/** Check whether the legacy single-key save exists. */
 export function hasLegacySave(): boolean {
 	try {
 		return localStorage.getItem(LEGACY_KEY) !== null;
@@ -286,44 +199,27 @@ export function hasLegacySave(): boolean {
 	}
 }
 
-/** Delete the legacy single-key save. */
 export function deleteLegacySaveKey(): void {
-	try {
-		localStorage.removeItem(LEGACY_KEY);
-	} catch {
-		// swallow
-	}
+	ignoringStorageErrors(() => localStorage.removeItem(LEGACY_KEY));
 }
 
-// ── Private helper ────────────────────────────────────────────────────────────
-
-/**
- * Core per-id session load logic. Does NOT touch the active pointer.
- * Used by both `loadActiveSession`, `loadSession`, and `loadArchivedSession`.
- */
 function _loadSessionById(
 	sessionId: string,
 	storagePrefix = SESSIONS_PREFIX,
 ): LoadResult {
 	try {
-		// Read key files
 		const metaJson = localStorage.getItem(metaKey(storagePrefix, sessionId));
 		const engineBlob = localStorage.getItem(
 			engineKey(storagePrefix, sessionId),
 		);
 
-		// No data at all: session was minted but never saved — treat as "none".
-		if (metaJson === null && engineBlob === null) {
-			return { kind: "none" };
-		}
+		const mintedButNeverSaved = metaJson === null && engineBlob === null;
+		if (mintedButNeverSaved) return { kind: "none" };
 
-		// engine.dat absent (but other files present) → broken commit
 		if (engineBlob === null) return { kind: "broken", sessionId };
 
-		// meta.json absent → broken
 		if (metaJson === null) return { kind: "broken", sessionId };
 
-		// Read daemon files
 		const daemonsRaw: Record<AiId, string> = {};
 		const sessionPrefix = `${storagePrefix}${sessionId}/`;
 		for (let i = 0; i < localStorage.length; i++) {
@@ -367,13 +263,6 @@ function _loadSessionById(
 	}
 }
 
-// ── Multi-session facade ───────────────────────────────────────────────────────
-
-/**
- * List all session ids found in localStorage.
- * Enumerates keys with prefix `hi-blue:sessions/`, extracts the segment
- * between the prefix and the next `/`. Skips ACTIVE_KEY and LEGACY_KEY.
- */
 export function listSessions(): string[] {
 	try {
 		const ids = new Set<string>();
@@ -393,30 +282,15 @@ export function listSessions(): string[] {
 	}
 }
 
-/**
- * Load a session by id without touching the active pointer.
- * Returns the same result shapes as loadActiveSession.
- */
 export function loadSession(sessionId: string): LoadResult {
 	return _loadSessionById(sessionId);
 }
 
-/**
- * Mint a new session id (0xXXXX) and return it.
- * Does NOT set the active pointer.
- */
 export function mintSession(): string {
 	return mintSessionId();
 }
 
-/**
- * Duplicate a session, writing all keys in canonical order.
- * engine.dat is written LAST (commit signal).
- * Returns the new session id.
- * Throws if the source session is broken or version-mismatch (programmer-error guard).
- */
 export function dupSession(srcId: string): string {
-	// Guard: only dup ok sessions
 	const loadResult = _loadSessionById(srcId);
 	if (loadResult.kind === "broken" || loadResult.kind === "version-mismatch") {
 		throw new Error(
@@ -426,11 +300,9 @@ export function dupSession(srcId: string): string {
 
 	const srcPrefix = `${SESSIONS_PREFIX}${srcId}/`;
 
-	// Read key files
 	const metaVal = localStorage.getItem(`${srcPrefix}meta.json`);
 	const engineVal = localStorage.getItem(`${srcPrefix}engine.dat`);
 
-	// Read daemon .txt files
 	const daemonEntries: Array<{ key: string; value: string }> = [];
 	for (let i = 0; i < localStorage.length; i++) {
 		const key = localStorage.key(i);
@@ -446,7 +318,6 @@ export function dupSession(srcId: string): string {
 	const newId = mintSessionId();
 	const dstPrefix = `${SESSIONS_PREFIX}${newId}/`;
 
-	// Write in canonical order: meta → daemons → engine.dat (LAST)
 	if (metaVal !== null) {
 		localStorage.setItem(`${dstPrefix}meta.json`, metaVal);
 	}
@@ -460,9 +331,6 @@ export function dupSession(srcId: string): string {
 	return newId;
 }
 
-/**
- * List all archived session ids found in localStorage under ARCHIVE_PREFIX.
- */
 export function listArchivedSessions(): string[] {
 	try {
 		const ids = new Set<string>();
@@ -482,19 +350,10 @@ export function listArchivedSessions(): string[] {
 	}
 }
 
-/**
- * Load an archived session by id without touching the active pointer.
- */
 export function loadArchivedSession(sessionId: string): LoadResult {
 	return _loadSessionById(sessionId, ARCHIVE_PREFIX);
 }
 
-/**
- * Convenience info for the archived sessions picker.
- * Returns `kind: "archived"` for ok-loadable archived sessions.
- * A stale `kind: "version-mismatch"` carries the sealed `schemaVersion` so
- * the row can link the save to the archived build that still reads it.
- */
 export function getArchivedSessionInfo(
 	id: string,
 ): Extract<SessionInfo, { kind: "archived" | "broken" | "version-mismatch" }> {
@@ -502,7 +361,7 @@ export function getArchivedSessionInfo(
 
 	function getDaemonFiles(): Array<{ name: string; size: number }> {
 		const files: Array<{ name: string; size: number }> = [];
-		try {
+		ignoringStorageErrors(() => {
 			for (let i = 0; i < localStorage.length; i++) {
 				const key = localStorage.key(i);
 				if (!key) continue;
@@ -513,9 +372,7 @@ export function getArchivedSessionInfo(
 					files.push({ name: suffix, size: value?.length ?? 0 });
 				}
 			}
-		} catch {
-			// swallow
-		}
+		});
 		return files.sort((a, b) => a.name.localeCompare(b.name));
 	}
 
@@ -530,10 +387,9 @@ export function getArchivedSessionInfo(
 		};
 	if (result.kind === "none") return { kind: "broken", daemonFiles: [] };
 
-	// ok: read lastPlayedAt and epoch from meta.json directly
-	let lastPlayedAt = result.lastSavedAt; // fallback
+	let lastPlayedAt = result.lastSavedAt;
 	let epoch = result.epoch;
-	try {
+	ignoringStorageErrors(() => {
 		const metaRaw = localStorage.getItem(`${prefix}meta.json`);
 		if (metaRaw) {
 			const meta = JSON.parse(metaRaw) as MetaFile;
@@ -541,9 +397,7 @@ export function getArchivedSessionInfo(
 				lastPlayedAt = meta.lastPlayedAt;
 			if (typeof meta.epoch === "number") epoch = meta.epoch;
 		}
-	} catch {
-		/* swallow */
-	}
+	});
 
 	const engineVal = localStorage.getItem(`${prefix}engine.dat`) ?? "";
 	return {
@@ -557,12 +411,8 @@ export function getArchivedSessionInfo(
 	};
 }
 
-/**
- * Remove every key with prefix `hi-blue:archive/<id>/`.
- * Does NOT touch the active pointer.
- */
 export function rmArchivedSession(id: string): void {
-	try {
+	ignoringStorageErrors(() => {
 		const prefix = `${ARCHIVE_PREFIX}${id}/`;
 		const keysToRemove: string[] = [];
 		for (let i = 0; i < localStorage.length; i++) {
@@ -572,16 +422,9 @@ export function rmArchivedSession(id: string): void {
 		for (const key of keysToRemove) {
 			localStorage.removeItem(key);
 		}
-	} catch {
-		// swallow
-	}
+	});
 }
 
-/**
- * Copy a session from the active sessions namespace into the archive namespace.
- * Stamps the archived meta with `readonly: true` and `lastPlayedAt`.
- * engine.dat is written LAST (commit signal).
- */
 export async function archiveSession(sessionId: string): Promise<void> {
 	const srcPrefix = `${SESSIONS_PREFIX}${sessionId}/`;
 	const metaJson = localStorage.getItem(`${srcPrefix}meta.json`);
@@ -591,7 +434,6 @@ export async function archiveSession(sessionId: string): Promise<void> {
 			`archiveSession: session "${sessionId}" is incomplete or missing`,
 		);
 	}
-	// Read daemon .txt files
 	const daemonEntries: Array<{ suffix: string; value: string }> = [];
 	for (let i = 0; i < localStorage.length; i++) {
 		const key = localStorage.key(i);
@@ -602,7 +444,6 @@ export async function archiveSession(sessionId: string): Promise<void> {
 			if (value !== null) daemonEntries.push({ suffix, value });
 		}
 	}
-	// Stamp archived meta
 	let meta: MetaFile;
 	try {
 		meta = JSON.parse(metaJson) as MetaFile;
@@ -613,21 +454,16 @@ export async function archiveSession(sessionId: string): Promise<void> {
 	}
 	meta.readonly = true;
 	meta.lastPlayedAt = meta.lastSavedAt;
-	// Write to archive namespace: meta → daemons → engine.dat (LAST)
 	const dstPrefix = `${ARCHIVE_PREFIX}${sessionId}/`;
 	localStorage.setItem(`${dstPrefix}meta.json`, JSON.stringify(meta, null, 2));
 	for (const { suffix, value } of daemonEntries) {
 		localStorage.setItem(`${dstPrefix}${suffix}`, value);
 	}
-	localStorage.setItem(`${dstPrefix}engine.dat`, engineVal); // LAST (commit signal)
+	localStorage.setItem(`${dstPrefix}engine.dat`, engineVal);
 }
 
-/**
- * Remove every key with prefix `hi-blue:sessions/<id>/`.
- * If the removed id is the active session, also clears the active pointer.
- */
 export function rmSession(id: string): void {
-	try {
+	ignoringStorageErrors(() => {
 		const prefix = `${SESSIONS_PREFIX}${id}/`;
 		const keysToRemove: string[] = [];
 		for (let i = 0; i < localStorage.length; i++) {
@@ -637,24 +473,12 @@ export function rmSession(id: string): void {
 		for (const key of keysToRemove) {
 			localStorage.removeItem(key);
 		}
-		// Clear active pointer if it pointed to this id
 		if (getActiveSessionId() === id) {
 			localStorage.removeItem(ACTIVE_KEY);
 		}
-	} catch {
-		// swallow
-	}
+	});
 }
 
-/**
- * Seed a new session by merging archived conversation logs into a fresh GameState.
- *
- * 1. Loads the archived session (throws if not ok — programmer-error guard).
- * 2. Deep-copies the archived conversationLogs into freshState.
- * 3. Appends a broadcast: "The sysadmin has created a new room."
- * 4. Writes in canonical order: meta → daemons → engine.dat LAST (commit signal).
- * 5. Returns the new session id (does NOT set the active pointer).
- */
 export function seedFromArchive(
 	archiveId: string,
 	freshState: GameState,
@@ -666,7 +490,6 @@ export function seedFromArchive(
 		);
 	}
 
-	// Deep-copy archived conversation logs into freshState
 	const archivedLogs = JSON.parse(
 		JSON.stringify(archiveResult.state.conversationLogs),
 	) as GameState["conversationLogs"];
@@ -675,7 +498,6 @@ export function seedFromArchive(
 		conversationLogs: archivedLogs,
 	};
 
-	// Append broadcast
 	const broadcastedState = appendBroadcast(
 		mergedState,
 		"The sysadmin has created a new room.",
@@ -688,7 +510,6 @@ export function seedFromArchive(
 	const newId = mintSessionId();
 	const dstPrefix = `${SESSIONS_PREFIX}${newId}/`;
 
-	// Write in canonical order: meta → daemons → engine.dat LAST (commit signal)
 	localStorage.setItem(`${dstPrefix}meta.json`, files.meta);
 	for (const [aiId, daemonJson] of Object.entries(files.daemons)) {
 		localStorage.setItem(`${dstPrefix}${aiId}.txt`, daemonJson);
@@ -699,19 +520,14 @@ export function seedFromArchive(
 	return newId;
 }
 
-/**
- * Convenience info for the sessions picker.
- * Reads metadata from localStorage; calls loadSession to determine kind.
- */
 export function getSessionInfo(
 	id: string,
 ): Extract<SessionInfo, { kind: "ok" | "broken" | "version-mismatch" }> {
 	const prefix = `${SESSIONS_PREFIX}${id}/`;
 
-	// Helper: enumerate daemon files on disk for this session
 	function getDaemonFiles(): Array<{ name: string; size: number }> {
 		const files: Array<{ name: string; size: number }> = [];
-		try {
+		ignoringStorageErrors(() => {
 			for (let i = 0; i < localStorage.length; i++) {
 				const key = localStorage.key(i);
 				if (!key) continue;
@@ -722,9 +538,7 @@ export function getSessionInfo(
 					files.push({ name: suffix, size: value?.length ?? 0 });
 				}
 			}
-		} catch {
-			// swallow
-		}
+		});
 		return files.sort((a, b) => a.name.localeCompare(b.name));
 	}
 
@@ -735,26 +549,23 @@ export function getSessionInfo(
 	}
 
 	if (result.kind === "version-mismatch") {
-		// Try to read meta for epoch/lastSavedAt
 		let lastSavedAt: string | undefined;
 		let epoch: number | undefined;
-		try {
+		ignoringStorageErrors(() => {
 			const metaRaw = localStorage.getItem(`${prefix}meta.json`);
 			if (metaRaw) {
 				const meta = JSON.parse(metaRaw) as {
 					lastSavedAt?: string;
 					epoch?: number;
-					phase?: number; // legacy v5
+					phase?: number;
 				};
 				if (typeof meta.lastSavedAt === "string")
 					lastSavedAt = meta.lastSavedAt;
-				const rawEpoch =
+				const epochOrPreV6Phase =
 					typeof meta.epoch === "number" ? meta.epoch : meta.phase;
-				if (typeof rawEpoch === "number") epoch = rawEpoch;
+				if (typeof epochOrPreV6Phase === "number") epoch = epochOrPreV6Phase;
 			}
-		} catch {
-			// swallow
-		}
+		});
 		const vmResult: SessionInfo = {
 			kind: "version-mismatch",
 			schemaVersion: result.schemaVersion,
@@ -766,11 +577,9 @@ export function getSessionInfo(
 	}
 
 	if (result.kind === "none") {
-		// Session minted but never saved — treat as broken for picker purposes
 		return { kind: "broken", daemonFiles: [] };
 	}
 
-	// ok
 	const engineVal = localStorage.getItem(`${prefix}engine.dat`) ?? "";
 	return {
 		kind: "ok",

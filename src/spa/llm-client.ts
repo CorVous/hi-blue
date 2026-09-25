@@ -90,18 +90,19 @@ export async function parseCapHitFromResponse(
 	return new CapHitError({ message, reason, retryAfterSec });
 }
 
+function readStoredByokKey(): string | null {
+	try {
+		return localStorage.getItem(LOCALSTORAGE_KEY);
+	} catch {
+		return null;
+	}
+}
+
 export function resolveLLMTarget(): {
 	url: string;
 	headers: Record<string, string>;
 } {
-	let key: string | null = null;
-	try {
-		key = localStorage.getItem(LOCALSTORAGE_KEY);
-	} catch {
-		// silently fall through — privacy mode or storage unavailable
-	}
-
-	// Treat empty string the same as null
+	const key = readStoredByokKey();
 	if (key) {
 		return {
 			url: OPENROUTER_URL,
@@ -118,8 +119,6 @@ export function resolveLLMTarget(): {
 	};
 }
 
-// Re-export the message type from round-llm-provider (canonical definition)
-// and OpenAiTool from tool-registry so callers can import from one place.
 export type { OpenAiMessage } from "./game/round-llm-provider.js";
 export type { OpenAiTool } from "./game/tool-registry.js";
 
@@ -151,27 +150,16 @@ export async function streamCompletion(opts: {
 		model: PINNED_MODEL,
 		messages,
 		stream: true,
-		// OpenRouter: include usage (with cost in USD) on the final SSE chunk.
 		usage: { include: true },
-		// Required so OpenRouter actually emits the usage chunk on streamed
-		// responses. Proxy injects this too, but BYOK bypasses the proxy.
 		stream_options: { include_usage: true },
 	};
 
-	// Only include tools/tool_choice when tools are provided (do not send empty array)
 	if (tools && tools.length > 0) {
 		bodyObj.tools = tools;
 		bodyObj.tool_choice = "auto";
-		// Spike #239: probe whether GLM-4.7 actually emits parallel speak+act in
-		// one assistant message. Coordinator still drops the tail (#239 §"Out of
-		// scope"); this just unlocks the model's tendency so we can measure it.
 		bodyObj.parallel_tool_calls = true;
 	}
 
-	// OpenRouter Reasoning Tokens API: { enabled: false } skips the model's
-	// thinking step entirely (vs. { exclude: true } which still thinks but
-	// hides the trace). Daemon turns default to disabled (see
-	// BrowserLLMProvider); the `?think=1` dev affordance opts back in.
 	if (disableReasoning) {
 		bodyObj.reasoning = { enabled: false };
 	}
@@ -219,10 +207,6 @@ export async function chatCompletionJson(opts: {
 		messages,
 		stream: false,
 		response_format: { type: "json_object" },
-		// Ask OpenRouter to include the authoritative `usage.cost` (USD) in the
-		// response. The Worker proxy's reconciliation prefers that over locally
-		// re-deriving cost from token counts, so this keeps non-streaming JSON
-		// calls accounting-aligned with the streaming path.
 		usage: { include: true },
 	};
 
@@ -249,7 +233,6 @@ export async function chatCompletionJson(opts: {
 		throw new Error("chatCompletionJson: failed to parse response JSON");
 	}
 
-	// Check for error in 200-OK response body before proceeding to extract choices
 	if (body != null && typeof body === "object") {
 		const bodyObj = body as Record<string, unknown>;
 		if (bodyObj.error != null && typeof bodyObj.error === "object") {

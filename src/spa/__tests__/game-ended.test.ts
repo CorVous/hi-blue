@@ -1,16 +1,6 @@
-/**
- * Regression test for issue #89:
- *
- * The form-submit handler's `finally` block was unconditionally re-enabling
- * `#send`, undoing the disable that fires on the `game_ended` SSE event.
- *
- * Fix: hoist `let gameEnded = false` above the `try`, gate the `finally`'s
- * re-enable on `if (!gameEnded)`.
- */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ContentPack } from "../game/types.js";
 
-// Provide globals before importing the module
 vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 vi.stubGlobal("__DEV__", true);
 
@@ -50,9 +40,6 @@ function makeLocalStorageStub(initialData: Record<string, string> = {}) {
 async function seedSessionInStub(
 	stub: ReturnType<typeof makeLocalStorageStub>,
 ): Promise<void> {
-	// Use engine functions directly (not buildSessionFromAssets) to avoid the
-	// module-level vi.mock("../game/game-session.js") interfering with session
-	// seeding — GameSession is mocked but startGame is not.
 	const { startGame } = await import("../game/engine.js");
 	const { mintAndActivateNewSession, saveActiveSession } = await import(
 		"../persistence/session-storage.js"
@@ -80,8 +67,6 @@ async function seedSessionInStub(
 	}
 }
 
-// Pin generatePersonas to a static fixture so panel/transcript hookups
-// keyed by red/green/cyan continue to work in this regression test.
 vi.mock("../../content", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("../../content")>();
 	return {
@@ -90,7 +75,6 @@ vi.mock("../../content", async (importOriginal) => {
 	};
 });
 
-// Pin generateDualContentPacks to static content packs (no LLM call in tests).
 vi.mock("../../content/content-pack-generator", () => ({
 	generateDualContentPacks: async () => ({
 		packA: STATIC_CONTENT_PACKS[0],
@@ -98,10 +82,6 @@ vi.mock("../../content/content-pack-generator", () => ({
 	}),
 }));
 
-// ---------------------------------------------------------------------------
-// Module-level mock: GameSession always returns gameEnded:true so we don't
-// need a real win-condition in the phase config.
-// ---------------------------------------------------------------------------
 const AI_BUDGET = { remaining: 4, total: 5 };
 
 const FAKE_GAME_STATE = {
@@ -128,7 +108,6 @@ const GAME_ENDED_RESULT = {
 		actions: [],
 		gameEnded: true,
 	},
-	// Non-empty completions prevent the lockout branch which needs personas.name
 	completions: { red: "done", green: "done", cyan: "done" },
 	nextState: FAKE_GAME_STATE,
 };
@@ -149,7 +128,6 @@ vi.mock("../game/game-session.js", () => {
 	return { GameSession: MockGameSession };
 });
 
-// Matches the body content of src/spa/index.html (three-panel layout)
 const INDEX_BODY_HTML = `
 <main>
   <div id="panels">
@@ -194,7 +172,6 @@ function getEl<T extends HTMLElement>(selector: string): T {
 describe("renderGame — game_ended disables #send permanently (regression #89)", () => {
 	beforeEach(async () => {
 		document.body.innerHTML = INDEX_BODY_HTML;
-		// Seed a valid active session so game.ts proceeds to restore path.
 		const stub = makeLocalStorageStub();
 		await seedSessionInStub(stub);
 		vi.stubGlobal("localStorage", stub);
@@ -222,18 +199,13 @@ describe("renderGame — game_ended disables #send permanently (regression #89)"
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 
-		// Wait for the async submit handler to complete (assertion-driven, no fixed delay)
 		await vi.waitFor(() => {
 			expect(getEl<HTMLButtonElement>("#send").disabled).toBe(true);
 		});
 
-		// Bug: the finally block was unconditionally setting sendBtn.disabled = false,
-		// undoing the game_ended handler's sendBtn.disabled = true.
-		// Fix: finally only re-enables if !gameEnded.
 		const sendBtn = getEl<HTMLButtonElement>("#send");
 		expect(sendBtn.disabled).toBe(true);
 
-		// #prompt must also remain disabled (set in the game_ended branch)
 		const promptEl = getEl<HTMLInputElement>("#prompt");
 		expect(promptEl.disabled).toBe(true);
 	});

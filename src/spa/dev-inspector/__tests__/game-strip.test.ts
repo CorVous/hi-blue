@@ -79,7 +79,6 @@ describe("game-strip", () => {
 	it("lists every objective inside the details with its kind and satisfaction state", () => {
 		const contentPack = STATIC_CONTENT_PACKS[0];
 		if (!contentPack) throw new Error("Content pack missing");
-		// Pass STATIC_OBJECTIVE_TYPES so the session has objectives to list
 		const session = new GameSession(
 			contentPack,
 			STATIC_PERSONAS,
@@ -123,7 +122,6 @@ describe("game-strip", () => {
 		const session = new GameSession(contentPack, STATIC_PERSONAS);
 		const state = session.getState();
 
-		// Manually add an active complication for testing
 		const modifiedState = {
 			...state,
 			activeComplications: [
@@ -164,7 +162,6 @@ describe("game-strip", () => {
 
 		const itemArray = Array.from(complicationItems || []);
 
-		// Check sysadmin_directive
 		const sysadminItem = itemArray[0];
 		expect(sysadminItem).toBeDefined();
 		if (sysadminItem) {
@@ -177,7 +174,6 @@ describe("game-strip", () => {
 			expect(sysadminItem.textContent).toContain('directive "do something"');
 		}
 
-		// Check tool_disable
 		const toolItem = itemArray[1];
 		expect(toolItem).toBeDefined();
 		if (toolItem) {
@@ -190,7 +186,6 @@ describe("game-strip", () => {
 			expect(toolItem.textContent).toContain("tool pick_up");
 		}
 
-		// Check chat_lockout
 		const chatItem = itemArray[2];
 		expect(chatItem).toBeDefined();
 		if (chatItem) {
@@ -235,14 +230,11 @@ describe("game-strip", () => {
 		) as HTMLDetailsElement;
 		expect(details).toBeTruthy();
 
-		// Open the details
 		details.open = true;
 		expect(details.open).toBe(true);
 
-		// Update the strip
 		updateGameStripSummary(containerEl, session);
 
-		// Details should still be open
 		expect(details.open).toBe(true);
 	});
 
@@ -264,7 +256,6 @@ describe("game-strip", () => {
 		const roundSpanBefore = line1Before?.querySelector('[data-field="round"]');
 		const originalRoundText = roundSpanBefore?.textContent;
 
-		// Update the strip
 		updateGameStripSummary(containerEl, session);
 
 		const detailsAfter = containerEl.querySelector(
@@ -273,11 +264,9 @@ describe("game-strip", () => {
 		const line1After = containerEl.querySelector('[data-line="1"]');
 		const roundSpanAfter = line1After?.querySelector('[data-field="round"]');
 
-		// Same element identity (DOM element reference should be preserved)
 		expect(detailsAfter).toBe(details);
 		expect(line1After).toBe(line1Before);
 		expect(roundSpanAfter).toBe(roundSpanBefore);
-		// Content should be the same (since state hasn't changed)
 		expect(roundSpanAfter?.textContent).toBe(originalRoundText);
 	});
 
@@ -294,9 +283,8 @@ describe("game-strip", () => {
 		const objectivesList = containerEl.querySelector(
 			'[data-list="objectives"]',
 		);
-		const _originalListId = objectivesList?.id; // or check identity
+		const _originalListId = objectivesList?.id;
 
-		// Manually modify state to add a complication
 		const state = session.getState();
 		const modifiedState = {
 			...state,
@@ -311,7 +299,6 @@ describe("game-strip", () => {
 
 		const restoredSession = GameSession.restore(modifiedState as GameState);
 
-		// Update the strip with new session
 		updateGameStripSummary(containerEl, restoredSession);
 
 		const complicationsList = containerEl.querySelector(

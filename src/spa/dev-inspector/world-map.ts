@@ -1,24 +1,3 @@
-/**
- * world-map.ts
- *
- * Renders the 5×5 room as an ASCII grid inspector: room-only, with no wall
- * ring and no out-of-bounds cells. Display clipping only — Daemon perception
- * still includes the Walls beyond the room.
- * Displays daemon positions, held items, obstacles, objectives, and interesting objects.
- *
- * Two-function API:
- * - renderWorldMap: builds the DOM skeleton once
- * - updateWorldMap: mutates existing cell contents in-place
- *
- * Vista-focus feature:
- * - setMapFocus(aiId): tint the cells of a daemon's Vista with persona color
- * - getMapFocus(): check if focus is active
- *
- * Daemon markers show identity and position only: their identifying color,
- * their `data-ai` attribute, and the `*name` tooltip label. They carry no
- * direction arrow, direction letter, or last-movement marker (ADR 0015).
- */
-
 import type { GameSession } from "../game/game-session.js";
 import type {
 	AiId,
@@ -28,28 +7,17 @@ import type {
 } from "../game/types.js";
 import { vistaMaskForDaemon } from "./vista-mask.js";
 
-// Module-level state for Vista focus
 let mapFocus: AiId | null = null;
 let activeSession: GameSession | null = null;
 
 const ROOM_ROWS = 5;
 const ROOM_COLS = 5;
 
-/**
- * The identity marker drawn on a Daemon's cell. Position-only: colour,
- * `data-ai`, and the tooltip carry identity, so the glyph itself is the same
- * for every Daemon and direction-independent.
- */
 const DAEMON_GLYPH = "@ ";
+const VISTA_TINT_ALPHA = 0.25;
 
-/**
- * Convert hex color to rgba with given alpha.
- * @param hex Color in hex format (e.g., "#e07a5f")
- * @param alpha Alpha value in range [0, 1]
- * @returns CSS rgba string
- */
-function hexToRgba(hex: string, alpha: number): string {
-	const h = hex.replace("#", "");
+function hexToRgba(hexColor: string, alphaFrom0To1: number): string {
+	const h = hexColor.replace("#", "");
 	const expanded =
 		h.length === 3
 			? h
@@ -60,17 +28,9 @@ function hexToRgba(hex: string, alpha: number): string {
 	const r = parseInt(expanded.substring(0, 2), 16);
 	const g = parseInt(expanded.substring(2, 4), 16);
 	const b = parseInt(expanded.substring(4, 6), 16);
-	return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+	return `rgba(${r}, ${g}, ${b}, ${alphaFrom0To1})`;
 }
 
-/**
- * Apply Vista tint to world map cells based on active focus.
- * Tints the focused daemon's in-bounds Vista cells with persona color at
- * 0.25 alpha. The mask is position-only, so the tint follows the daemon as
- * it moves.
- * @param containerEl The map container element
- * @param state The current game state
- */
 function applyVistaTint(containerEl: HTMLElement, state: GameState): void {
 	const focus = mapFocus;
 	const mask = focus ? vistaMaskForDaemon(state, focus) : null;
@@ -81,7 +41,7 @@ function applyVistaTint(containerEl: HTMLElement, state: GameState): void {
 	)) {
 		const dataCell = cell.getAttribute("data-cell");
 		if (focus && mask && tintColor && dataCell && mask.has(dataCell)) {
-			cell.style.backgroundColor = hexToRgba(tintColor, 0.25);
+			cell.style.backgroundColor = hexToRgba(tintColor, VISTA_TINT_ALPHA);
 			cell.setAttribute("data-vista-focus", focus);
 		} else {
 			cell.style.backgroundColor = "";
@@ -90,18 +50,13 @@ function applyVistaTint(containerEl: HTMLElement, state: GameState): void {
 	}
 }
 
-/**
- * Set the active focus daemon and update tint on the map.
- * @param aiId The daemon to focus, or null to clear focus
- */
-export function setMapFocus(aiId: AiId | null): void {
-	mapFocus = aiId;
+export function setMapFocus(focusedAiIdOrNull: AiId | null): void {
+	mapFocus = focusedAiIdOrNull;
 	const containerEl = document.querySelector<HTMLElement>("#dev-world-map");
 	if (containerEl && activeSession) {
 		applyVistaTint(containerEl, activeSession.getState());
 	}
 
-	// Sweep all focus-Vista buttons to update data-focus-active
 	for (const btn of document.querySelectorAll<HTMLElement>(
 		'[data-field="focus-vista"]',
 	)) {
@@ -111,10 +66,6 @@ export function setMapFocus(aiId: AiId | null): void {
 	}
 }
 
-/**
- * Get the currently focused daemon, or null if no focus is active.
- * @returns The focused AiId, or null
- */
 export function getMapFocus(): AiId | null {
 	return mapFocus;
 }
@@ -123,9 +74,6 @@ function isGridPosition(holder: AiId | GridPosition): holder is GridPosition {
 	return typeof holder === "object" && holder !== null;
 }
 
-/**
- * Get the entity held by the given AI, or undefined.
- */
 function findHeldEntity(
 	aiId: AiId,
 	entities: WorldEntity[],
@@ -133,19 +81,6 @@ function findHeldEntity(
 	return entities.find((e) => e.holder === aiId);
 }
 
-/**
- * Determine the glyph and tooltip for a single cell.
- * Precedence (highest → lowest):
- * 1. Daemon (@ )
- * 2. Obstacle (##)
- * 3. Objective object on paired space (**)
- * 4. Objective object alone (* )
- * 5. Objective space alone (+ )
- * 6. Interesting object (o )
- * 7. Floor (. )
- *
- * Returns { glyph, tooltip, kind, entityId?, aiId?, satisfaction? }.
- */
 interface CellInfo {
 	glyph: string;
 	tooltip: string;
@@ -156,7 +91,6 @@ interface CellInfo {
 }
 
 function computeCellInfo(roomPos: GridPosition, state: GameState): CellInfo {
-	// Check for daemon at this position
 	for (const [aiId, spatial] of Object.entries(state.personaSpatial)) {
 		if (
 			spatial &&
@@ -164,7 +98,7 @@ function computeCellInfo(roomPos: GridPosition, state: GameState): CellInfo {
 			spatial.position.col === roomPos.col
 		) {
 			const persona = state.personas[aiId];
-			if (!persona) continue; // Skip if persona is missing
+			if (!persona) continue;
 
 			const heldEntity = findHeldEntity(aiId, state.world.entities);
 			const holdText = heldEntity
@@ -180,13 +114,11 @@ function computeCellInfo(roomPos: GridPosition, state: GameState): CellInfo {
 		}
 	}
 
-	// Collect all entities at this position (not held by an AI)
 	const entitiesAtPos = state.world.entities.filter((e) => {
 		if (!isGridPosition(e.holder)) return false;
 		return e.holder.row === roomPos.row && e.holder.col === roomPos.col;
 	});
 
-	// Check for obstacle
 	const obstacle = entitiesAtPos.find((e) => e.kind === "obstacle");
 	if (obstacle) {
 		const satisfaction = obstacle.satisfactionState ?? "pending";
@@ -199,7 +131,6 @@ function computeCellInfo(roomPos: GridPosition, state: GameState): CellInfo {
 		};
 	}
 
-	// Check for objective object on its paired space
 	const objObj = entitiesAtPos.find((e) => e.kind === "objective_object");
 	const objSpace = entitiesAtPos.find((e) => e.kind === "objective_space");
 
@@ -215,7 +146,6 @@ function computeCellInfo(roomPos: GridPosition, state: GameState): CellInfo {
 		};
 	}
 
-	// Objective object alone
 	if (objObj) {
 		const satisfaction = objObj.satisfactionState ?? "pending";
 		const holderPersona = isGridPosition(objObj.holder)
@@ -231,7 +161,6 @@ function computeCellInfo(roomPos: GridPosition, state: GameState): CellInfo {
 		};
 	}
 
-	// Objective space alone
 	if (objSpace) {
 		const satisfaction = objSpace.satisfactionState ?? "pending";
 		return {
@@ -243,7 +172,6 @@ function computeCellInfo(roomPos: GridPosition, state: GameState): CellInfo {
 		};
 	}
 
-	// Interesting object
 	const interesting = entitiesAtPos.find(
 		(e) => e.kind === "interesting_object",
 	);
@@ -262,7 +190,6 @@ function computeCellInfo(roomPos: GridPosition, state: GameState): CellInfo {
 		};
 	}
 
-	// Floor
 	return {
 		glyph: ". ",
 		tooltip: `floor (${roomPos.row},${roomPos.col})`,
@@ -270,10 +197,6 @@ function computeCellInfo(roomPos: GridPosition, state: GameState): CellInfo {
 	};
 }
 
-/**
- * Render the full world map DOM structure.
- * Builds a 5×5 room-only grid of cells with nested glyph and tooltip spans.
- */
 export function renderWorldMap(
 	containerEl: HTMLElement,
 	session: GameSession,
@@ -329,15 +252,10 @@ export function renderWorldMap(
 
 	containerEl.appendChild(grid);
 
-	// Update active session and apply the Vista tint
 	activeSession = session;
 	applyVistaTint(containerEl, state);
 }
 
-/**
- * Update the world map in place without recreating the grid.
- * Mutates cell contents and attributes only (no node creation/removal).
- */
 export function updateWorldMap(
 	containerEl: HTMLElement,
 	session: GameSession,
@@ -361,17 +279,14 @@ export function updateWorldMap(
 		const roomPos: GridPosition = { row, col };
 		const cellInfo = computeCellInfo(roomPos, state);
 
-		// Update glyph and tooltip
 		const glyphSpan = cell.querySelector(".dev-map-glyph");
 		if (glyphSpan) glyphSpan.textContent = cellInfo.glyph;
 
 		const tooltipSpan = cell.querySelector(".dev-map-tooltip");
 		if (tooltipSpan) tooltipSpan.textContent = cellInfo.tooltip;
 
-		// Update data attributes
 		cell.setAttribute("data-kind", cellInfo.kind);
 
-		// Remove entity-id, ai, satisfaction if not present; re-add if present
 		if (cellInfo.entityId) {
 			cell.setAttribute("data-entity-id", cellInfo.entityId);
 		} else {
@@ -396,8 +311,6 @@ export function updateWorldMap(
 		}
 	});
 
-	// Update active session and re-apply the Vista tint so the highlight
-	// follows the focused Daemon's current position
 	activeSession = session;
 	applyVistaTint(containerEl, state);
 }
