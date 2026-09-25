@@ -111,11 +111,6 @@ describe("startGame world.entities", () => {
 	});
 
 	it("world.entities id-set equals selector-derived id-set for a mixed pack", () => {
-		// Mixed pack: one carry pair (object + space), two bound spaces,
-		// one interesting object, one obstacle. The invariant under test is
-		// that startGame's world.entities membership is exactly the union of
-		// the pack-selector outputs — i.e. engine.ts must build entities by
-		// asking the selectors, not by hand-fanning bucket reads.
 		const mixedPack: ContentPack = {
 			...TEST_CONTENT_PACK,
 			entities: [
@@ -325,8 +320,8 @@ describe("appendBroadcast", () => {
 
 	it("carries the current phase round", () => {
 		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
-		game = advanceRound(game); // round = 1
-		game = advanceRound(game); // round = 2
+		game = advanceRound(game);
+		game = advanceRound(game);
 		const updated = appendBroadcast(game, "Dense fog has settled in.");
 		const entry = updated.conversationLogs.red?.[0];
 		expect(entry?.round).toBe(2);
@@ -337,10 +332,8 @@ describe("appendBroadcast", () => {
 			budgetPerAi: 5,
 		});
 		const updated = appendBroadcast(game, "Light snow drifts down.");
-		// Round and world should be unchanged
 		expect(updated.round).toBe(game.round);
 		expect(updated.world).toEqual(game.world);
-		// Budgets should be unchanged
 		expect(updated.budgets).toEqual(game.budgets);
 	});
 });
@@ -475,8 +468,6 @@ describe("shiftToBPack", () => {
 	});
 
 	it("keeps the cardinal directions stable across the Setting Shift", () => {
-		// The room's Setting noun changes, but its cardinal directions do not:
-		// the stable prompt states them once, in-fiction, inside <setting>.
 		const game = makeDualPackGame();
 		const before = cardinalClause(buildAiContext(game, "red").toSystemPrompt());
 		const after = cardinalClause(
@@ -491,7 +482,6 @@ describe("shiftToBPack", () => {
 	});
 });
 
-/** The `<setting>` line that establishes the room's cardinal directions. */
 function cardinalClause(prompt: string): string {
 	const settingBlock = /<setting>([\s\S]*?)<\/setting>/.exec(prompt)?.[1] ?? "";
 	return (

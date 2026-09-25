@@ -1,22 +1,3 @@
-/**
- * Round Coordinator
- *
- * Orchestrates a single game round: all three AIs act in turn.
- * For each AI:
- *   1. If locked out, emit an in-character lockout line (no LLM call).
- *   2. Otherwise, build OpenAI messages via buildOpenAiMessages, call streamRound
- *      on the RoundLLMProvider, translate the result into an AiTurnAction, and
- *      dispatch through the existing dispatcher.
- * After all three AIs act, advance the round counter.
- *
- * The player's message is appended to the addressed AI's chat history
- * before the round begins. Non-addressed AIs do not see the player message.
- *
- * The tool roundtrip for each AI (prior assistant tool_calls + results) is
- * accepted as input and updated after each AI acts, then returned in RunRoundResult
- * so the caller (GameSession) can persist it across rounds.
- */
-
 import { availableTools } from "./available-tools";
 import {
 	applyComplicationResult,
@@ -47,6 +28,7 @@ import type {
 	LifecyclePhase,
 	OpenAiMessage,
 	RoundLLMProvider,
+	RoundTurnResult,
 } from "./round-llm-provider";
 import {
 	drawDirectiveText,
@@ -58,6 +40,7 @@ import { parseToolCallArguments } from "./tool-registry";
 import type {
 	AiId,
 	AiTurnAction,
+	ComplicationResult,
 	ConversationEntry,
 	GameState,
 	GridPosition,
@@ -73,9 +56,6 @@ import {
 	checkWinCondition,
 } from "./win-condition";
 
-// Match the SPA dev-host gate used in src/spa/views/game.ts. The
-// `typeof` guard keeps this safe in test environments that don't stub
-// the build-time constant.
 function isDevHost(): boolean {
 	return (
 		typeof __WORKER_BASE_URL__ !== "undefined" &&
@@ -85,76 +65,90 @@ function isDevHost(): boolean {
 	);
 }
 
+type DiskEntityStates = Record<
+	string,
+	{ inVista: boolean; satisfied: boolean }
+>;
+
 export interface RunRoundResult {
 	nextState: GameState;
 	result: RoundResult;
-	/**
-	 * Updated tool roundtrip data keyed by AI id.
-	 * Non-empty only for AIs that emitted tool calls this round.
-	 * The caller should persist this and pass it back on the next runRound call.
-	 */
 	toolRoundtrip: Partial<Record<AiId, ToolRoundtripMessage>>;
-	/**
-	 * Per-AI canonical perception-disk snapshot captured at the moment that AI's
-	 * prompt was built this round. The caller should persist this and pass it
-	 * back as `priorDiskSnapshots` on the next runRound call so each AI's next
-	 * prompt can include a `<whats_new>` diff against its own last view.
-	 */
 	diskSnapshots: Partial<Record<AiId, string>>;
-	/**
-	 * Per-AI structured entity perception state captured at prompt-build time this round.
-	 * The caller should persist this and pass it back as `priorDiskEntities` on the next
-	 * runRound call so each AI's next prompt can emit perception-delta lines.
-	 */
-	diskEntities: Partial<
-		Record<AiId, Record<string, { inVista: boolean; satisfied: boolean }>>
-	>;
+	diskEntities: Partial<Record<AiId, DiskEntityStates>>;
 }
 
-/** Optional inputs to {@link runRound}; each carries a sensible default. */
 export interface RunRoundOptions {
-	/** RNG for the complication engine. Defaults to Math.random. Inject a
-	 *  deterministic function in tests to control complication draws. */
 	rng?: (() => number) | undefined;
-	/** Turn-order permutation; must permute all AI ids in `game.personas`.
-	 *  When absent, defaults to `Object.keys(game.personas)`. */
 	initiative?: AiId[] | undefined;
-	/** Per-AI tool roundtrip from the previous round, re-injected into
-	 *  buildOpenAiMessages per OpenAI's tool-use spec. */
 	priorToolRoundtrip?: Partial<Record<AiId, ToolRoundtripMessage>> | undefined;
-	/** Per-AI sink for the assistant text produced by each LLM call. */
 	completionSink?: ((aiId: AiId, text: string) => void) | undefined;
-	/** Per-AI live-delta callback, fired synchronously inside the SSE parser
-	 *  loop for each text chunk. Never fires for locked-out AIs or mock
-	 *  providers that ignore onDelta. */
 	onAiDelta?: ((aiId: AiId, text: string) => void) | undefined;
-	/** Per-AI perception-disk snapshots from the previous round, used to emit
-	 *  a `<whats_new>` diff in each AI's per-round user message. */
 	priorDiskSnapshots?: Partial<Record<AiId, string>> | undefined;
-	/** Per-AI "turn finished" callback. Fires exactly once per AI in
-	 *  initiative order, after any drift-to-silence retry (#254) and after
-	 *  dispatch. Fires for locked-out AIs too. */
 	onAiTurnComplete?: ((aiId: AiId) => void) | undefined;
-	/** Round lifecycle-phase callback. */
 	onLifecycle?: ((event: LifecyclePhase) => void) | undefined;
-	/** Per-AI structured entity perception state from the previous round, used
-	 *  to emit perception-delta lines in each AI's per-round user message. */
-	priorDiskEntities?:
-		| Partial<
-				Record<AiId, Record<string, { inVista: boolean; satisfied: boolean }>>
-		  >
-		| undefined;
+	priorDiskEntities?: Partial<Record<AiId, DiskEntityStates>> | undefined;
 }
 
-/**
- * Run a single round.
- *
- * @param game  Current game state (must have an active phase).
- * @param addressed  The AI the player's message is directed at.
- * @param playerMessage  The player's raw message text.
- * @param provider  RoundLLMProvider (browser or mock).
- * @param options  Optional per-round inputs and callbacks; see {@link RunRoundOptions}.
- */
+const DRIFT_TO_SILENCE_NUDGE =
+	"You produced text but did not emit a tool call, so no one received it. Re-emit your previous reply now as a `message({to: <recipient>, content: ...})` tool call, addressed to whoever you originally intended to speak to.";
+
+const ONE_ACTION_PER_TURN_REASON = "only one action tool call per turn";
+
+interface StreamedTurn {
+	assistantText: string;
+	toolCalls: RoundTurnResult["toolCalls"];
+	costUsd: number | undefined;
+}
+
+function driftedToSilence(turn: RoundTurnResult): boolean {
+	return turn.assistantText !== "" && turn.toolCalls.length === 0;
+}
+
+async function streamTurnWithOffTheRecordRetry(
+	stream: (messages: OpenAiMessage[]) => Promise<RoundTurnResult>,
+	messages: OpenAiMessage[],
+): Promise<StreamedTurn> {
+	const firstAttempt = await stream(messages);
+	if (!driftedToSilence(firstAttempt)) {
+		return {
+			assistantText: firstAttempt.assistantText,
+			toolCalls: firstAttempt.toolCalls,
+			costUsd: firstAttempt.costUsd,
+		};
+	}
+	const retry = await stream([
+		...messages,
+		{ role: "assistant", content: firstAttempt.assistantText },
+		{ role: "user", content: DRIFT_TO_SILENCE_NUDGE },
+	]);
+	return {
+		assistantText: retry.assistantText,
+		toolCalls: retry.toolCalls,
+		costUsd:
+			retry.costUsd === undefined
+				? firstAttempt.costUsd
+				: (firstAttempt.costUsd ?? 0) + retry.costUsd,
+	};
+}
+
+function assertInitiativePermutes(initiative: AiId[], aiOrder: AiId[]): void {
+	const sorted = [...initiative].sort();
+	const expected = [...aiOrder].sort();
+	if (
+		sorted.length !== expected.length ||
+		sorted.some((id, i) => id !== expected[i])
+	) {
+		throw new Error(
+			`initiative must be a permutation of ${JSON.stringify(aiOrder)}, got: ${JSON.stringify(initiative)}`,
+		);
+	}
+}
+
+function unresponsiveLine(state: GameState, aiId: AiId): string {
+	return `${state.personas[aiId]?.name ?? aiId} is unresponsive…`;
+}
+
 export async function runRound(
 	game: GameState,
 	addressed: AiId,
@@ -175,64 +169,30 @@ export async function runRound(
 	} = options;
 
 	const aiOrder = Object.keys(game.personas);
-
-	// Validate initiative if provided.
-	if (initiative !== undefined) {
-		const sorted = [...initiative].sort();
-		const expected = [...aiOrder].sort();
-		if (
-			sorted.length !== expected.length ||
-			sorted.some((id, i) => id !== expected[i])
-		) {
-			throw new Error(
-				`initiative must be a permutation of ${JSON.stringify(aiOrder)}, got: ${JSON.stringify(initiative)}`,
-			);
-		}
-	}
-
+	if (initiative !== undefined) assertInitiativePermutes(initiative, aiOrder);
 	const turnOrder = initiative ?? aiOrder;
 
-	// 1. Record player message in the addressed AI's history
 	let state = appendMessage(game, "blue", addressed, playerMessage);
 
 	const roundActions: RoundActionRecord[] = [];
-
-	// Track tool roundtrip produced this round (to be returned to caller)
 	const newToolRoundtrip: Partial<Record<AiId, ToolRoundtripMessage>> = {};
-
-	// Track perception-disk snapshots captured at prompt-build time this round
-	// (returned to caller so the next round's prompt can render a `<whats_new>`
-	// diff).
 	const newDiskSnapshots: Partial<Record<AiId, string>> = {};
+	const newDiskEntities: Partial<Record<AiId, DiskEntityStates>> = {};
 
-	// Track entity perception states captured at prompt-build time this round
-	// (returned to caller so the next round's prompt can emit perception-delta
-	// lines).
-	const newDiskEntities: Partial<
-		Record<AiId, Record<string, { inVista: boolean; satisfied: boolean }>>
-	> = {};
-
-	// 2. Each AI acts in turn
 	for (const aiId of turnOrder) {
 		if (isAiLockedOut(state, aiId)) {
-			// Emit lockout line — no LLM call, no budget deduction.
-			const lockoutContent = `${state.personas[aiId]?.name ?? aiId} is unresponsive…`;
-			state = appendMessage(state, aiId, "blue", lockoutContent);
+			state = appendMessage(state, aiId, "blue", unresponsiveLine(state, aiId));
 			roundActions.push({
 				round: state.round,
 				actor: aiId,
 				kind: "lockout",
 				description: `${state.personas[aiId]?.name ?? aiId} is locked out`,
 			});
-			// Sink gets empty string for locked AI
 			completionSink?.(aiId, "");
 			onAiTurnComplete?.(aiId);
 			continue;
 		}
 
-		// Build OpenAI messages for this AI. Pass the prior-round perception-disk
-		// snapshot so the per-round user turn can prepend a `<whats_new>` diff, and
-		// prior entity perception states so it can emit perception-delta lines.
 		const priorSnapshot = priorDiskSnapshots?.[aiId];
 		const priorEntities = priorDiskEntities?.[aiId];
 		const ctx = buildAiContext(state, aiId, {
@@ -243,68 +203,30 @@ export async function runRound(
 				? { prevDiskEntities: priorEntities }
 				: {}),
 		});
-		// Capture the snapshots we just built against — the caller stores these
-		// and passes them back next round.
 		newDiskSnapshots[aiId] = buildDiskSnapshot(ctx);
 		newDiskEntities[aiId] = buildDiskEntityState(ctx);
 		const priorRoundtrip = priorToolRoundtrip?.[aiId];
 		const messages = buildOpenAiMessages(ctx, priorRoundtrip, state.round);
 
-		// Compute legal tools for this AI given current game state
 		const tools = availableTools(state, aiId, state.activeComplications);
 
-		// Call the provider
-		let { assistantText, toolCalls, costUsd } = await provider.streamRound(
-			messages,
-			tools,
-			onAiDelta ? (text) => onAiDelta(aiId, text) : undefined,
-			aiId,
-			onLifecycle,
-		);
-
-		// Drift-to-silence recovery (#254): if the model returned free-form
-		// text with no tool call, retry once with a tightening nudge before
-		// falling through to the drop-to-pass branch below. The retry's
-		// input — the dropped first attempt and the nudge — stays in
-		// `retryMessages` only; it never enters game state, the
-		// conversation log, or the persisted tool roundtrip.
-		if (assistantText && toolCalls.length === 0) {
-			const retryMessages: OpenAiMessage[] = [
-				...messages,
-				{ role: "assistant", content: assistantText },
-				{
-					role: "user",
-					content:
-						"You produced text but did not emit a tool call, so no one received it. Re-emit your previous reply now as a `message({to: <recipient>, content: ...})` tool call, addressed to whoever you originally intended to speak to.",
-				},
-			];
-			const retry = await provider.streamRound(
-				retryMessages,
-				tools,
-				onAiDelta ? (text) => onAiDelta(aiId, text) : undefined,
-				aiId,
-				onLifecycle,
+		const { assistantText, toolCalls, costUsd } =
+			await streamTurnWithOffTheRecordRetry(
+				(turnMessages) =>
+					provider.streamRound(
+						turnMessages,
+						tools,
+						onAiDelta ? (text) => onAiDelta(aiId, text) : undefined,
+						aiId,
+						onLifecycle,
+					),
+				messages,
 			);
-			assistantText = retry.assistantText;
-			toolCalls = retry.toolCalls;
-			if (retry.costUsd !== undefined) {
-				costUsd = (costUsd ?? 0) + retry.costUsd;
-			}
-		}
 
-		// Capture completion text
 		completionSink?.(aiId, assistantText);
 
-		// Translate the result into an AiTurnAction.
-		// Iterate all toolCalls from this response. Multiple `message` calls
-		// are all accepted (dispatched in emission order). At most one
-		// non-`message` call is accepted into the action slot; duplicates and
-		// parse-failures are recorded as tool_failure and included in the
-		// roundtrip.
 		const action: AiTurnAction = { aiId };
 
-		// Tracks emission order so we can rebuild the roundtrip's
-		// assistantToolCalls in the order the model produced them.
 		type PendingEntry =
 			| {
 					kind: "parseFail";
@@ -326,7 +248,7 @@ export async function runRound(
 					description: string;
 					reason: string;
 			  };
-		const pending: PendingEntry[] = [];
+		const toolCallsInEmissionOrder: PendingEntry[] = [];
 
 		let actionAssigned = false;
 
@@ -352,7 +274,7 @@ export async function runRound(
 					kind: "tool_failure",
 					description: failDesc,
 				});
-				pending.push({
+				toolCallsInEmissionOrder.push({
 					kind: "parseFail",
 					tc: tcTriple,
 					description: failDesc,
@@ -364,39 +286,37 @@ export async function runRound(
 				action.messages.push({
 					to: msgArgs.to as AiId | "blue",
 					content: msgArgs.content,
-					toolCallId: tcTriple.id, // Preserve tool call ID for history rendering
-					toolArgumentsJson: tcTriple.argumentsJson, // Preserve arguments for history rendering
+					toolCallId: tcTriple.id,
+					toolArgumentsJson: tcTriple.argumentsJson,
 				});
-				pending.push({ kind: "message", tc: tcTriple });
+				toolCallsInEmissionOrder.push({ kind: "message", tc: tcTriple });
 			} else if (!actionAssigned) {
 				action.toolCall = {
 					name: tc.name as ToolName,
 					args: parseResult.args as Record<string, string>,
 				};
 				actionAssigned = true;
-				pending.push({ kind: "actionAccepted", tc: tcTriple });
+				toolCallsInEmissionOrder.push({ kind: "actionAccepted", tc: tcTriple });
 			} else {
-				// Duplicate action slot — reject as tool_failure
-				const dupDesc = `${actorName} tried to take more than one action in a turn: only one action tool call per turn`;
+				const dupDesc = `${actorName} tried to take more than one action in a turn: ${ONE_ACTION_PER_TURN_REASON}`;
 				roundActions.push({
 					round,
 					actor: aiId,
 					kind: "tool_failure",
 					description: dupDesc,
 				});
-				pending.push({
+				toolCallsInEmissionOrder.push({
 					kind: "actionRejected",
 					tc: tcTriple,
 					description: dupDesc,
-					reason: "only one action tool call per turn",
+					reason: ONE_ACTION_PER_TURN_REASON,
 				});
 			}
 		}
 
-		// Free-form assistantText without any tool call → treat as pass. The
-		// one-shot retry above already fired; reaching this branch with
-		// non-empty text means the retry also failed to emit a tool call (#254).
-		if (!action.toolCall && action.messages === undefined) {
+		const emittedNoUsableToolCall =
+			!action.toolCall && action.messages === undefined;
+		if (emittedNoUsableToolCall) {
 			if (assistantText && isDevHost()) {
 				console.log(
 					`[dev] ${aiId} emitted free-form text without a tool call (dropped after retry):`,
@@ -406,10 +326,8 @@ export async function runRound(
 			action.pass = true;
 		}
 
-		// Snapshot locked-out set before dispatch to detect budget exhaustion.
-		const lockedOutBefore = new Set(state.lockedOut);
+		const lockedOutBeforeDispatch = new Set(state.lockedOut);
 
-		// Dispatch through the existing dispatcher
 		const dispatchResult = dispatchAiTurn(
 			state,
 			action,
@@ -417,10 +335,9 @@ export async function runRound(
 		);
 		state = dispatchResult.game;
 
-		// Farewell line: emitted exactly once when a Daemon's budget is just exhausted.
-		const justExhausted =
-			!lockedOutBefore.has(aiId) && state.lockedOut.has(aiId);
-		if (justExhausted) {
+		const budgetJustExhausted =
+			!lockedOutBeforeDispatch.has(aiId) && state.lockedOut.has(aiId);
+		if (budgetJustExhausted) {
 			const personaName = state.personas[aiId]?.name ?? aiId;
 			const farewellContent = FAREWELL_LINE(personaName);
 			state = appendMessage(state, aiId, "blue", farewellContent);
@@ -432,16 +349,10 @@ export async function runRound(
 			});
 		}
 
-		// Collect records produced by this dispatch
 		for (const record of dispatchResult.records) {
 			roundActions.push(record);
 		}
 
-		// Pair dispatcher records back to their originating tool calls.
-		// dispatcher.ts emits exactly one record per entry in action.messages,
-		// in order, followed by (if action accepted) one record for the
-		// non-message action — except for pick_up auto-examine, which feeds back
-		// via actorPrivateToolResult instead of a public record.
 		const messageRecordCount = action.messages?.length ?? 0;
 		const messageRecords = dispatchResult.records.slice(0, messageRecordCount);
 		const actionRecord =
@@ -449,10 +360,8 @@ export async function runRound(
 				? dispatchResult.records[messageRecordCount]
 				: undefined;
 
-		// Compute perception-delta lines to merge into diskDelta for the first action tool call
 		const perceptionDeltaLines = renderPerceptionDelta(ctx, priorEntities);
 
-		// Now walk pending in emission order and build the roundtrip.
 		const recordedAssistantToolCalls: Array<{
 			id: string;
 			name: string;
@@ -465,12 +374,10 @@ export async function runRound(
 			reason?: string;
 		}> = [];
 
-		// Track whether we've appended perception delta to the action tool call
 		let perceptionDeltaMerged = false;
 
-		/** Helper to append a tool-call entry to the actor's conversation log. */
 		function appendToolCallEntry(
-			entry: (typeof pending)[number],
+			entry: PendingEntry,
 			success: boolean,
 			description: string,
 			diskDelta?: string,
@@ -496,7 +403,7 @@ export async function runRound(
 		}
 
 		let nextMessageIdx = 0;
-		for (const entry of pending) {
+		for (const entry of toolCallsInEmissionOrder) {
 			if (entry.kind === "parseFail") {
 				recordedAssistantToolCalls.push(entry.tc);
 				recordedToolResults.push({
@@ -517,8 +424,8 @@ export async function runRound(
 				appendToolCallEntry(entry, false, entry.description);
 			} else if (entry.kind === "message") {
 				const rec = messageRecords[nextMessageIdx++];
-				if (rec?.kind === "tool_failure") {
-					// Failed message — include in roundtrip so model sees the rejection next round
+				const messageFailed = rec?.kind === "tool_failure";
+				if (messageFailed) {
 					recordedAssistantToolCalls.push(entry.tc);
 					recordedToolResults.push({
 						tool_call_id: entry.tc.id,
@@ -526,14 +433,11 @@ export async function runRound(
 						description: rec.description,
 					});
 				}
-				// Successful message: EXCLUDE from roundtrip (replays via conversationLog per ADR 0007).
 			} else {
-				// actionAccepted
 				recordedAssistantToolCalls.push(entry.tc);
-				if (dispatchResult.actorPrivateToolResult !== undefined) {
-					// pick_up auto-examine: private result fed back to actor only
-					const { description, success } =
-						dispatchResult.actorPrivateToolResult;
+				const pickUpAutoExamine = dispatchResult.actorPrivateToolResult;
+				if (pickUpAutoExamine !== undefined) {
+					const { description, success } = pickUpAutoExamine;
 					recordedToolResults.push({
 						tool_call_id: entry.tc.id,
 						success,
@@ -548,7 +452,6 @@ export async function runRound(
 						success,
 						description,
 					});
-					// Merge perception-delta lines into the action tool call's diskDelta
 					let diskDelta = dispatchResult.actorDiskDelta;
 					if (!perceptionDeltaMerged && perceptionDeltaLines.length > 0) {
 						const perceptionDeltaText = perceptionDeltaLines.join("\n");
@@ -562,9 +465,6 @@ export async function runRound(
 			}
 		}
 
-		// Save roundtrip only when there are entries to replay.
-		// msg-success-only (row 1) and pass (no calls) produce empty lists → no entry.
-		// This preserves the #213 fix: no spurious double-assistant turn for message-only turns.
 		if (recordedAssistantToolCalls.length > 0) {
 			newToolRoundtrip[aiId] = {
 				assistantToolCalls: recordedAssistantToolCalls,
@@ -572,17 +472,11 @@ export async function runRound(
 			};
 		}
 
-		// Per-AI "turn finished" signal — fires after dispatch, after any
-		// drift-to-silence retry (#254). Callers use this for per-daemon UI
-		// state that should track the coordinator's serial progress through
-		// the initiative order (e.g., stripping panel spinners staged).
 		onAiTurnComplete?.(aiId);
 	}
 
-	// 3. Advance the round counter
 	state = advanceRound(state);
 
-	// 4. Complication engine tick (chat lockouts, tool disables, etc. via complication-engine)
 	let chatLockoutTriggered: RoundResult["chatLockoutTriggered"] | undefined;
 	let chatLockoutsResolved: AiId[] | undefined;
 
@@ -590,98 +484,21 @@ export async function runRound(
 	if (complicationResult !== null) {
 		const { fired } = complicationResult;
 		if (fired.kind === "sysadmin_directive") {
-			const target = fired.target;
-			const directiveText = drawDirectiveText(rng);
-
-			// Revoke any pre-existing directive for this target before issuing the new one.
-			const existing = state.activeComplications.find(
-				(c): c is Extract<typeof c, { kind: "sysadmin_directive" }> =>
-					c.kind === "sysadmin_directive" && c.target === target,
-			);
-			if (existing) {
-				state = appendMessage(
-					state,
-					"sysadmin",
-					target,
-					formatDirectiveRevocation(existing.directive),
-				);
-				state = {
-					...state,
-					activeComplications: state.activeComplications.filter(
-						(c) => !(c.kind === "sysadmin_directive" && c.target === target),
-					),
-				};
-			}
-
-			// Apply engine result (resets countdown, appends new entry with directive: "").
-			state = applyComplicationResult(state, complicationResult, rng);
-
-			// Patch the just-appended entry with the real directive text.
-			const comps = state.activeComplications.map((c) =>
-				c.kind === "sysadmin_directive" && c.target === target
-					? {
-							...c,
-							directive: directiveText,
-						}
-					: c,
-			);
-			state = { ...state, activeComplications: comps };
-
-			// Deliver directive message to the target Daemon only.
-			state = appendMessage(
+			state = issueSysadminDirective(
 				state,
-				"sysadmin",
-				target,
-				formatDirectiveDelivery(directiveText),
+				complicationResult,
+				fired.target,
+				rng,
 			);
 		} else if (fired.kind === "obstacle_shift") {
-			// Apply engine result (resets countdown).
 			state = applyComplicationResult(state, complicationResult, rng);
-
-			// Find the obstacle and move it.
-			const obstacle = state.world.entities.find(
-				(e) => e.id === fired.obstacleId,
-			);
-			if (!obstacle) {
-				// Defensively skip if obstacle not found.
-			} else {
-				// Rebuild entities, updating the obstacle's holder to toCell.
-				state = {
-					...state,
-					world: {
-						...state.world,
-						entities: state.world.entities.map((e) =>
-							e.id === fired.obstacleId ? { ...e, holder: fired.toCell } : e,
-						),
-					},
-				};
-
-				// Fan out witness entries to daemons whose Vista covers fromCell.
-				for (const [daemonId, spatial] of Object.entries(
-					state.personaSpatial,
-				)) {
-					if (!vistaContains(spatial.position, fired.fromCell)) continue;
-
-					const entry: Extract<
-						ConversationEntry,
-						{ kind: "witnessed-obstacle-shift" }
-					> = {
-						kind: "witnessed-obstacle-shift",
-						round: state.round,
-						obstacleId: fired.obstacleId,
-						fromCell: fired.fromCell,
-						toCell: fired.toCell,
-						flavor: obstacle.shiftFlavor ?? "",
-					};
-					state = appendWitnessedObstacleShift(state, daemonId, entry);
-				}
-			}
+			state = shiftObstacle(state, fired);
 		} else {
 			state = applyComplicationResult(state, complicationResult, rng);
 			if (fired.kind === "chat_lockout") {
 				chatLockoutTriggered = {
 					aiId: fired.target,
-					message: `${state.personas[fired.target]?.name ?? fired.target} is unresponsive…`,
+					message: unresponsiveLine(state, fired.target),
 				};
 			}
 		}
@@ -689,120 +506,18 @@ export async function runRound(
 		state = decrementComplicationCountdown(state);
 	}
 
-	// 4b. Resolve expired tool disables and notify the affected daemons
-	{
-		const { game: resolvedGame, resolved } = resolveToolDisables(state);
-		state = resolvedGame;
-		for (const { target, tool } of resolved) {
-			state = appendPrivateSystemNotice(
-				state,
-				target,
-				`Sysadmin: Your ${tool} tool has been restored.`,
-			);
-		}
+	state = restoreExpiredToolDisables(state);
+
+	const { nextState: stateAfterChatLockouts, resolvedAiIds } =
+		resolveExpiredChatLockouts(state);
+	state = stateAfterChatLockouts;
+	if (resolvedAiIds.length > 0) {
+		chatLockoutsResolved = resolvedAiIds;
 	}
 
-	// 4c. Resolve expired chat lockouts
-	{
-		const { nextState: stateAfterResolve, resolvedAiIds } =
-			resolveExpiredChatLockouts(state);
-		state = stateAfterResolve;
-		if (resolvedAiIds.length > 0) {
-			chatLockoutsResolved = resolvedAiIds;
-		}
-	}
+	state = expireSysadminDirectives(state);
+	state = evaluateConvergenceObjectives(state);
 
-	// 4d. Resolve expired sysadmin directives and notify the targeted daemons
-	{
-		const { nextState: stateAfterResolve, resolved } =
-			resolveExpiredDirectives(state);
-		state = stateAfterResolve;
-		for (const { target, directive } of resolved) {
-			state = appendMessage(
-				state,
-				"sysadmin",
-				target,
-				formatDirectiveExpiry(directive),
-			);
-		}
-	}
-
-	// 4e. End-of-round convergence evaluation.
-	// Walk pending convergence objectives; compute tier; fan out witnessed-convergence entries.
-	for (const objective of state.objectives) {
-		if (objective.kind !== "convergence") continue;
-		if (objective.satisfactionState !== "pending") continue;
-
-		const { tier, spaceId } = checkConvergenceTier(
-			objective,
-			state.world,
-			state.personaSpatial,
-		);
-
-		if (tier === 0) continue;
-
-		const spaceEntity = state.world.entities.find((e) => e.id === spaceId);
-		const spaceCell =
-			spaceEntity &&
-			typeof spaceEntity.holder === "object" &&
-			spaceEntity.holder !== null
-				? (spaceEntity.holder as GridPosition)
-				: null;
-
-		if (!spaceCell) continue;
-
-		// Split fan-out (#336): Daemons standing on the space cell receive the
-		// first-person actor flavor on a dedicated channel; Vista-witnesses NOT
-		// on the cell receive the third-person witness flavor. No Daemon
-		// receives both.
-		const witnessFlavor =
-			tier === 1
-				? (spaceEntity?.convergenceTier1Flavor ?? "Something stirs here.")
-				: (spaceEntity?.convergenceTier2Flavor ?? "Two presences converge.");
-		const actorFlavor =
-			tier === 1
-				? (spaceEntity?.convergenceTier1ActorFlavor ??
-					"You linger here; the place feels poised for company.")
-				: (spaceEntity?.convergenceTier2ActorFlavor ??
-					"You stand here; another presence shares the place with you.");
-
-		for (const [daemonId, spatial] of Object.entries(state.personaSpatial)) {
-			const isOccupant =
-				spatial.position.row === spaceCell.row &&
-				spatial.position.col === spaceCell.col;
-			// Occupants keep their actor treatment regardless of Vista membership;
-			// everyone else must have the space cell inside their Vista.
-			const witnessesCell = vistaContains(spatial.position, spaceCell);
-			if (!isOccupant && !witnessesCell) continue;
-
-			const entry: Extract<
-				ConversationEntry,
-				{ kind: "witnessed-convergence" }
-			> = {
-				kind: "witnessed-convergence",
-				round: state.round,
-				spaceId,
-				tier,
-				flavor: isOccupant ? actorFlavor : witnessFlavor,
-				audience: isOccupant ? "actor" : "witness",
-			};
-			state = appendWitnessedConvergence(state, daemonId, entry);
-		}
-
-		// Tier 2: satisfy the objective immediately.
-		if (tier === 2) {
-			state = {
-				...state,
-				objectives: state.objectives.map((o) =>
-					o.id === objective.id
-						? { ...o, satisfactionState: "satisfied" as const }
-						: o,
-				),
-			};
-		}
-	}
-
-	// 5. Check win/lose conditions — win takes priority.
 	let gameEnded = false;
 	if (checkWinCondition(state.world, state.objectives)) {
 		state = { ...state, isComplete: true, outcome: "win" };
@@ -827,4 +542,183 @@ export async function runRound(
 		diskSnapshots: newDiskSnapshots,
 		diskEntities: newDiskEntities,
 	};
+}
+
+function issueSysadminDirective(
+	game: GameState,
+	complicationResult: ComplicationResult,
+	target: AiId,
+	rng: () => number,
+): GameState {
+	const directiveText = drawDirectiveText(rng);
+	let state = revokeActiveDirective(game, target);
+	state = applyComplicationResult(state, complicationResult, rng);
+	state = {
+		...state,
+		activeComplications: state.activeComplications.map((c) =>
+			c.kind === "sysadmin_directive" && c.target === target
+				? { ...c, directive: directiveText }
+				: c,
+		),
+	};
+	return appendMessage(
+		state,
+		"sysadmin",
+		target,
+		formatDirectiveDelivery(directiveText),
+	);
+}
+
+function revokeActiveDirective(game: GameState, target: AiId): GameState {
+	const existing = game.activeComplications.find(
+		(c): c is Extract<typeof c, { kind: "sysadmin_directive" }> =>
+			c.kind === "sysadmin_directive" && c.target === target,
+	);
+	if (!existing) return game;
+	const state = appendMessage(
+		game,
+		"sysadmin",
+		target,
+		formatDirectiveRevocation(existing.directive),
+	);
+	return {
+		...state,
+		activeComplications: state.activeComplications.filter(
+			(c) => !(c.kind === "sysadmin_directive" && c.target === target),
+		),
+	};
+}
+
+function shiftObstacle(
+	game: GameState,
+	shift: Extract<ComplicationResult["fired"], { kind: "obstacle_shift" }>,
+): GameState {
+	const obstacle = game.world.entities.find((e) => e.id === shift.obstacleId);
+	if (!obstacle) return game;
+
+	let state: GameState = {
+		...game,
+		world: {
+			...game.world,
+			entities: game.world.entities.map((e) =>
+				e.id === shift.obstacleId ? { ...e, holder: shift.toCell } : e,
+			),
+		},
+	};
+
+	for (const [daemonId, spatial] of Object.entries(state.personaSpatial)) {
+		if (!vistaContains(spatial.position, shift.fromCell)) continue;
+
+		const entry: Extract<
+			ConversationEntry,
+			{ kind: "witnessed-obstacle-shift" }
+		> = {
+			kind: "witnessed-obstacle-shift",
+			round: state.round,
+			obstacleId: shift.obstacleId,
+			fromCell: shift.fromCell,
+			toCell: shift.toCell,
+			flavor: obstacle.shiftFlavor ?? "",
+		};
+		state = appendWitnessedObstacleShift(state, daemonId, entry);
+	}
+	return state;
+}
+
+function restoreExpiredToolDisables(game: GameState): GameState {
+	const { game: resolvedGame, resolved } = resolveToolDisables(game);
+	let state = resolvedGame;
+	for (const { target, tool } of resolved) {
+		state = appendPrivateSystemNotice(
+			state,
+			target,
+			`Sysadmin: Your ${tool} tool has been restored.`,
+		);
+	}
+	return state;
+}
+
+function expireSysadminDirectives(game: GameState): GameState {
+	const { nextState, resolved } = resolveExpiredDirectives(game);
+	let state = nextState;
+	for (const { target, directive } of resolved) {
+		state = appendMessage(
+			state,
+			"sysadmin",
+			target,
+			formatDirectiveExpiry(directive),
+		);
+	}
+	return state;
+}
+
+function evaluateConvergenceObjectives(game: GameState): GameState {
+	let state = game;
+	for (const objective of state.objectives) {
+		if (objective.kind !== "convergence") continue;
+		if (objective.satisfactionState !== "pending") continue;
+
+		const { tier, spaceId } = checkConvergenceTier(
+			objective,
+			state.world,
+			state.personaSpatial,
+		);
+
+		if (tier === 0) continue;
+
+		const spaceEntity = state.world.entities.find((e) => e.id === spaceId);
+		const spaceCell =
+			spaceEntity &&
+			typeof spaceEntity.holder === "object" &&
+			spaceEntity.holder !== null
+				? (spaceEntity.holder as GridPosition)
+				: null;
+
+		if (!spaceCell) continue;
+
+		const witnessFlavor =
+			tier === 1
+				? (spaceEntity?.convergenceTier1Flavor ?? "Something stirs here.")
+				: (spaceEntity?.convergenceTier2Flavor ?? "Two presences converge.");
+		const actorFlavor =
+			tier === 1
+				? (spaceEntity?.convergenceTier1ActorFlavor ??
+					"You linger here; the place feels poised for company.")
+				: (spaceEntity?.convergenceTier2ActorFlavor ??
+					"You stand here; another presence shares the place with you.");
+
+		for (const [daemonId, spatial] of Object.entries(state.personaSpatial)) {
+			const isOccupant =
+				spatial.position.row === spaceCell.row &&
+				spatial.position.col === spaceCell.col;
+			const witnessesCell = vistaContains(spatial.position, spaceCell);
+			if (!isOccupant && !witnessesCell) continue;
+
+			const entry: Extract<
+				ConversationEntry,
+				{ kind: "witnessed-convergence" }
+			> = {
+				kind: "witnessed-convergence",
+				round: state.round,
+				spaceId,
+				tier,
+				flavor: isOccupant ? actorFlavor : witnessFlavor,
+				audience: isOccupant ? "actor" : "witness",
+			};
+			state = appendWitnessedConvergence(state, daemonId, entry);
+		}
+
+		const convergenceComplete = tier === 2;
+		if (convergenceComplete) {
+			state = {
+				...state,
+				objectives: state.objectives.map((o) =>
+					o.id === objective.id
+						? { ...o, satisfactionState: "satisfied" as const }
+						: o,
+				),
+			};
+		}
+	}
+	return state;
 }

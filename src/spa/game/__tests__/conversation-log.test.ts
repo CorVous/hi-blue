@@ -1,16 +1,3 @@
-/**
- * Unit tests for conversation-log.ts
- *
- * Tests the pure renderEntry function in isolation. Multi-entry tests use a
- * local `renderLog` helper that mirrors what openai-message-builder does
- * (sort by round, then render each entry) — keeping the sort+render assertion
- * close to the rendering tests it accompanies.
- *
- * Vista membership is resolved at write-time (ADR 0006) — these tests
- * operate on pre-filtered ConversationEntry[] arrays, just like the
- * dispatcher provides after its write-time fan-out.
- */
-
 import { describe, expect, it } from "vitest";
 import { renderEntry } from "../conversation-log.js";
 import type { AiId, ConversationEntry, WorldEntity } from "../types.js";
@@ -25,10 +12,6 @@ function makeItem(id: string, name: string): WorldEntity {
 	};
 }
 
-/**
- * Stable-sort a log by round and render each entry. Mirrors the ordering
- * contract enforced in `openai-message-builder.ts`.
- */
 function renderLog(
 	log: ConversationEntry[],
 	aiId: AiId,
@@ -38,15 +21,11 @@ function renderLog(
 	return sorted.map((e) => renderEntry(e, aiId, entities));
 }
 
-// ── Empty phase ────────────────────────────────────────────────────────────────
-
 describe("renderEntry — empty phase", () => {
 	it("returns empty array when nothing has happened", () => {
 		expect(renderLog([], "red")).toEqual([]);
 	});
 });
-
-// ── Message formatting ─────────────────────────────────────────────────────────
 
 describe("renderEntry — message (incoming from blue)", () => {
 	it("renders incoming message from blue as 'blue dms you: <content>'", () => {
@@ -123,8 +102,6 @@ describe("renderEntry — message (incoming from blue)", () => {
 	});
 });
 
-// ── Peer-to-peer message formatting ───────────────────────────────────────────
-
 describe("renderEntry — peer message", () => {
 	it("renders received peer message with correct format", () => {
 		const line = renderEntry(
@@ -142,8 +119,6 @@ describe("renderEntry — peer message", () => {
 	});
 
 	it("renders sent peer message from sender's perspective as outgoing", () => {
-		// The dispatcher writes the same entry to both sender and recipient.
-		// From green's perspective (who sent it), it renders as outgoing.
 		const line = renderEntry(
 			{
 				kind: "message",
@@ -158,8 +133,6 @@ describe("renderEntry — peer message", () => {
 		expect(line).toContain("you dm *red");
 	});
 });
-
-// ── Action-failure rendering ───────────────────────────────────────────────────
 
 describe("renderEntry — action-failure", () => {
 	it("renders single action-failure entry as `[Round N] Your \\`go\\` action failed: <reason>.`", () => {
@@ -192,7 +165,6 @@ describe("renderEntry — action-failure", () => {
 		expect(line).toBe(
 			"[Round 1] Your `pick_up` action failed: Item not in your cell.",
 		);
-		// Must not end in double period
 		expect(line).not.toMatch(/\.\.$/);
 	});
 
@@ -219,11 +191,8 @@ describe("renderEntry — action-failure", () => {
 	});
 });
 
-// ── Witnessed events — go ──────────────────────────────────────────────────────
-
 describe("renderEntry — witnessed go", () => {
 	it("renders 'You watch *actor walk <dir>'", () => {
-		// Vista check is write-time: this entry already passed census.
 		const line = renderEntry(
 			{
 				kind: "witnessed-event",
@@ -274,8 +243,6 @@ describe("renderEntry — witnessed go", () => {
 	});
 });
 
-// ── Witnessed events — pick_up ─────────────────────────────────────────────────
-
 describe("renderEntry — witnessed pick_up", () => {
 	it("renders 'You watch *actor pick up the <item>'", () => {
 		const line = renderEntry(
@@ -292,8 +259,6 @@ describe("renderEntry — witnessed pick_up", () => {
 		expect(line).toBe("[Round 1] You watch *red pick up the the Flower.");
 	});
 });
-
-// ── Witnessed events — put_down ────────────────────────────────────────────────
 
 describe("renderEntry — witnessed put_down", () => {
 	it("renders 'You watch *actor put down the <item>' for plain put_down", () => {
@@ -327,8 +292,6 @@ describe("renderEntry — witnessed put_down", () => {
 		expect(line).toBe("[Round 2] *red sets the gem perfectly in the pedestal.");
 	});
 });
-
-// ── Witnessed events — use ─────────────────────────────────────────────────────
 
 describe("renderEntry — witnessed use", () => {
 	it("renders useOutcome verbatim with {actor} substituted to *<actor>", () => {
@@ -367,8 +330,6 @@ describe("renderEntry — witnessed use", () => {
 	});
 });
 
-// ── Chronological ordering ─────────────────────────────────────────────────────
-
 describe("renderLog — chronological ordering", () => {
 	it("sorts events by round ascending across all types", () => {
 		const result = renderLog(
@@ -404,8 +365,6 @@ describe("renderLog — chronological ordering", () => {
 	});
 
 	it("within same round: entries preserve append order (stable sort)", () => {
-		// In the per-Daemon log, entries are appended in turn order.
-		// The sort is stable, so same-round entries keep their insertion order.
 		const result = renderLog(
 			[
 				{ kind: "message", from: "blue", to: "red", content: "chat", round: 0 },
@@ -427,7 +386,6 @@ describe("renderLog — chronological ordering", () => {
 			"red",
 		);
 		expect(result).toHaveLength(3);
-		// Insertion order preserved within same round
 		expect(result[0]).toContain("blue dms you");
 		expect(result[1]).toContain("*green dms you");
 		expect(result[2]).toContain("You watch");
@@ -454,8 +412,6 @@ describe("renderLog — chronological ordering", () => {
 		expect(result[2]).toContain("[Round 3]");
 	});
 });
-
-// ── Broadcast rendering ────────────────────────────────────────────────────────
 
 describe("renderEntry — broadcast", () => {
 	it("renders broadcast as '[Round N] <content>'", () => {
@@ -501,8 +457,6 @@ describe("renderEntry — broadcast", () => {
 	});
 });
 
-// ── sysadmin sender rendering (issue #298) ────────────────────────────────────
-
 describe("renderEntry — sysadmin sender", () => {
 	it("renders a sysadmin→target message as 'the Sysadmin dms you: <content>'", () => {
 		const line = renderEntry(
@@ -522,7 +476,6 @@ describe("renderEntry — sysadmin sender", () => {
 	});
 
 	it("sysadmin label does not appear in the outgoing slot (sysadmin is never a recipient)", () => {
-		// Verify that the sysadmin entry only appears in the incoming branch.
 		const line = renderEntry(
 			{
 				kind: "message",
@@ -534,7 +487,6 @@ describe("renderEntry — sysadmin sender", () => {
 			"green",
 			[],
 		);
-		// Rendered as incoming because to === "green" (the viewing AI)
 		expect(line).toMatch(/^.*the Sysadmin dms you:/);
 	});
 });

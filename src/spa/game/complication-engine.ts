@@ -1,17 +1,3 @@
-/**
- * complication-engine.ts
- *
- * Pure, deterministic Complication Engine for issue #296.
- *
- * Entry point: tickComplication(game, rng) → ComplicationResult | null
- *
- * Companion helpers (to be called by the Round Coordinator):
- *   decrementComplicationCountdown(game) → GameState
- *   applyComplicationResult(game, result, rng) → GameState
- *
- * No LLM calls, no browser APIs. All randomness is injected via `rng`.
- */
-
 import { WEATHER_POOL } from "../../content/weather-pool.js";
 import { applyDirection, CARDINAL_DIRECTIONS, inBounds } from "./direction.js";
 import { appendBroadcast, setWeather, shiftToBPack } from "./engine.js";
@@ -26,13 +12,6 @@ import type {
 	WorldState,
 } from "./types.js";
 
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-/**
- * All tools that can be disabled by a Tool Disable complication.
- * The five-tool Daemon tool set (ADR 0015) — the retired `face` tool is not
- * in the pool and can never be selected.
- */
 const DISABLABLE_TOOLS: ToolName[] = [
 	"pick_up",
 	"put_down",
@@ -41,20 +20,50 @@ const DISABLABLE_TOOLS: ToolName[] = [
 	"message",
 ];
 
-// ── Internal helpers ──────────────────────────────────────────────────────────
+export const PENDING_DIRECTIVE_TEXT = "";
 
-/**
- * Draw a uniform integer in [min, max] inclusive using the provided rng.
- * rng() must return a value in [0, 1).
- */
-function drawCountdown(rng: () => number, min: number, max: number): number {
+function drawIntegerInclusive(
+	rng: () => number,
+	min: number,
+	max: number,
+): number {
 	return min + Math.floor(rng() * (max - min + 1));
 }
 
-/**
- * Draw a new weather from WEATHER_POOL, excluding the current weather.
- * Guarantees the result differs from the input.
- */
+function drawComplicationDuration(rng: () => number): number {
+	return drawIntegerInclusive(rng, 3, 5);
+}
+
+function drawNextCountdown(rng: () => number): number {
+	return drawIntegerInclusive(rng, 5, 15);
+}
+
+function cellKey(cell: GridPosition): string {
+	return `${cell.row},${cell.col}`;
+}
+
+function occupiedCellKeys(
+	world: WorldState,
+	personaSpatial: GameState["personaSpatial"],
+): Set<string> {
+	const occupied = new Set<string>();
+	for (const entity of world.entities) {
+		const h = entity.holder;
+		if (typeof h === "object" && h !== null) occupied.add(cellKey(h));
+	}
+	for (const spatial of Object.values(personaSpatial)) {
+		occupied.add(cellKey(spatial.position));
+	}
+	return occupied;
+}
+
+function isNeighborCellFree(
+	neighbor: GridPosition,
+	occupied: Set<string>,
+): boolean {
+	return inBounds(neighbor) && !occupied.has(cellKey(neighbor));
+}
+
 function drawNewWeather(current: string, rng: () => number): string {
 	const candidates = WEATHER_POOL.filter((w) => w !== current);
 	const idx = Math.floor(rng() * candidates.length);
@@ -62,50 +71,21 @@ function drawNewWeather(current: string, rng: () => number): string {
 	return candidates[idx]!;
 }
 
-/**
- * Returns true iff at least one entity of kind "obstacle" has at least one
- * in-bounds, non-occupied adjacent cell (4-cardinal neighbours).
- *
- * "Occupied" means:
- *   - Another entity (obstacle, objective_object, objective_space,
- *     interesting_object) is resting on that cell as a GridPosition.
- *   - A persona is standing on that cell.
- */
 function isObstacleShiftAvailable(
 	world: WorldState,
 	personaSpatial: GameState["personaSpatial"],
 ): boolean {
-	// Collect all occupied cells (grid-resting entities that are NOT the obstacle being examined)
-	const entityOccupied = new Set<string>();
-	for (const entity of world.entities) {
-		const h = entity.holder;
-		if (typeof h === "object" && h !== null) {
-			entityOccupied.add(`${h.row},${h.col}`);
-		}
-	}
+	const occupied = occupiedCellKeys(world, personaSpatial);
 
-	// Collect persona positions
-	const personaOccupied = new Set<string>();
-	for (const spatial of Object.values(personaSpatial)) {
-		const p = spatial.position;
-		personaOccupied.add(`${p.row},${p.col}`);
-	}
-
-	// Check each obstacle
 	for (const entity of world.entities) {
 		if (entity.kind !== "obstacle") continue;
 		const h = entity.holder;
-		if (typeof h !== "object" || h === null) continue; // obstacle held by AI (shouldn't happen)
+		if (typeof h !== "object" || h === null) continue;
 
 		const obstacleCell: GridPosition = h;
 
 		for (const dir of CARDINAL_DIRECTIONS) {
-			const neighbor = applyDirection(obstacleCell, dir);
-			if (!inBounds(neighbor)) continue;
-			const key = `${neighbor.row},${neighbor.col}`;
-			// A neighbor is "empty" if it is not occupied by another entity AND not occupied by a persona.
-			// The obstacle's own cell is occupied by the obstacle, but we're checking the neighbor cell.
-			if (!entityOccupied.has(key) && !personaOccupied.has(key)) {
+			if (isNeighborCellFree(applyDirection(obstacleCell, dir), occupied)) {
 				return true;
 			}
 		}
@@ -114,28 +94,11 @@ function isObstacleShiftAvailable(
 	return false;
 }
 
-/**
- * Build valid (obstacle, direction) tuples for the obstacle_shift draw.
- * Returns an array of { obstacleId, fromCell, toCell } for each valid shift.
- */
 function validObstacleShiftTuples(
 	world: WorldState,
 	personaSpatial: GameState["personaSpatial"],
 ): Array<{ obstacleId: string; fromCell: GridPosition; toCell: GridPosition }> {
-	// Same occupied set logic as isObstacleShiftAvailable
-	const entityOccupied = new Set<string>();
-	for (const entity of world.entities) {
-		const h = entity.holder;
-		if (typeof h === "object" && h !== null) {
-			entityOccupied.add(`${h.row},${h.col}`);
-		}
-	}
-
-	const personaOccupied = new Set<string>();
-	for (const spatial of Object.values(personaSpatial)) {
-		const p = spatial.position;
-		personaOccupied.add(`${p.row},${p.col}`);
-	}
+	const occupied = occupiedCellKeys(world, personaSpatial);
 
 	const tuples: Array<{
 		obstacleId: string;
@@ -152,9 +115,7 @@ function validObstacleShiftTuples(
 
 		for (const dir of CARDINAL_DIRECTIONS) {
 			const toCell = applyDirection(fromCell, dir);
-			if (!inBounds(toCell)) continue;
-			const key = `${toCell.row},${toCell.col}`;
-			if (!entityOccupied.has(key) && !personaOccupied.has(key)) {
+			if (isNeighborCellFree(toCell, occupied)) {
 				tuples.push({ obstacleId: entity.id, fromCell, toCell });
 			}
 		}
@@ -163,19 +124,6 @@ function validObstacleShiftTuples(
 	return tuples;
 }
 
-/**
- * Available complication type indices after exclusions.
- * Returns the pool (as string array) from which the type draw picks.
- *
- * Full pool order (indices 0-5):
- *   [weather_change, sysadmin_directive, tool_disable, obstacle_shift, chat_lockout, setting_shift]
- *
- * Exclusions:
- *   - setting_shift excluded when settingShiftFired is true
- *   - obstacle_shift excluded when isObstacleShiftAvailable returns false
- *   - tool_disable is always in the candidate pool here; the sub-draw handles
- *     exhaustion by requesting a re-draw (see drawComplication)
- */
 function availableComplicationTypes(
 	phase: GameState,
 	excludeToolDisable = false,
@@ -200,10 +148,6 @@ function availableComplicationTypes(
 	return pool;
 }
 
-/**
- * Draw one complication type and its sub-data from the valid pool.
- * Handles the tool_disable exhaustion re-draw.
- */
 function drawComplication(
 	phase: GameState,
 	rng: () => number,
@@ -217,7 +161,6 @@ function drawComplication(
 		return buildSimpleComplication(kind, phase, rng);
 	}
 
-	// Build the cross-product of (daemon, tool) pairs, filtered by already-active disables
 	const aiIds = Object.keys(phase.personaSpatial);
 	const existingDisables = new Set<string>(
 		phase.activeComplications
@@ -237,8 +180,8 @@ function drawComplication(
 		}
 	}
 
-	if (validPairs.length === 0) {
-		// All (daemon, tool) pairs are already disabled — re-draw excluding tool_disable
+	const everyToolAlreadyDisabled = validPairs.length === 0;
+	if (everyToolAlreadyDisabled) {
 		const fallbackPool = availableComplicationTypes(phase, true);
 		const fallbackIdx = Math.floor(rng() * fallbackPool.length);
 		// biome-ignore lint/style/noNonNullAssertion: bounded index
@@ -249,7 +192,7 @@ function drawComplication(
 	const pairIdx = Math.floor(rng() * validPairs.length);
 	// biome-ignore lint/style/noNonNullAssertion: bounded index
 	const pair = validPairs[pairIdx]!;
-	const duration = drawCountdown(rng, 3, 5);
+	const duration = drawComplicationDuration(rng);
 	return {
 		kind: "tool_disable",
 		target: pair.target,
@@ -258,10 +201,6 @@ function drawComplication(
 	};
 }
 
-/**
- * Build a complication variant for a pre-selected, non-tool_disable kind.
- * Shared by the normal draw and the tool_disable exhaustion fallback.
- */
 function buildSimpleComplication(
 	kind: string,
 	phase: GameState,
@@ -277,7 +216,7 @@ function buildSimpleComplication(
 		case "sysadmin_directive": {
 			const aiIds = Object.keys(phase.personaSpatial);
 			const target = aiIds[Math.floor(rng() * aiIds.length)] as AiId;
-			const duration = 3 + Math.floor(rng() * 3); // [3, 5]
+			const duration = drawComplicationDuration(rng);
 			return { kind: "sysadmin_directive", target, duration };
 		}
 
@@ -300,7 +239,7 @@ function buildSimpleComplication(
 		case "chat_lockout": {
 			const aiIds = Object.keys(phase.personaSpatial);
 			const target = aiIds[Math.floor(rng() * aiIds.length)] as AiId;
-			const duration = 3 + Math.floor(rng() * 3);
+			const duration = drawComplicationDuration(rng);
 			return { kind: "chat_lockout", target, duration };
 		}
 
@@ -315,18 +254,6 @@ function buildSimpleComplication(
 	}
 }
 
-// ── Public API ────────────────────────────────────────────────────────────────
-
-/**
- * Check whether a complication fires this round.
- *
- * Returns `ComplicationResult` when countdown has reached 0 (a complication fires).
- * Returns `null` when countdown > 0.
- *
- * The caller MUST:
- *   - Call `decrementComplicationCountdown(game)` when result is null (each round).
- *   - Call `applyComplicationResult(game, result, rng)` when result is non-null.
- */
 export function tickComplication(
 	game: GameState,
 	rng: () => number,
@@ -337,15 +264,10 @@ export function tickComplication(
 		return null;
 	}
 
-	// countdown === 0: draw a complication
 	const fired = drawComplication(game, rng);
 	return { fired };
 }
 
-/**
- * Decrement the complication countdown by 1.
- * Call this every round when `tickComplication` returns null.
- */
 export function decrementComplicationCountdown(game: GameState): GameState {
 	return {
 		...game,
@@ -356,25 +278,12 @@ export function decrementComplicationCountdown(game: GameState): GameState {
 	};
 }
 
-/**
- * Returns true if the active phase has a `chat_lockout` active complication
- * targeting the given AI. Used by the route layer to mute player chat to that AI.
- *
- * Replaces `isChatLockedOut` from engine.ts which read the old `chatLockouts` map.
- */
 export function isPlayerChatLockedOut(phase: GameState, aiId: AiId): boolean {
 	return phase.activeComplications.some(
 		(c) => c.kind === "chat_lockout" && c.target === aiId,
 	);
 }
 
-/**
- * Scans `activeComplications` for `chat_lockout` entries whose `resolveAtRound`
- * has been reached (`phase.round >= resolveAtRound`), removes them, and returns
- * the updated state along with the list of resolved AI ids.
- *
- * Call this after `advanceRound`.
- */
 export function resolveExpiredChatLockouts(game: GameState): {
 	nextState: GameState;
 	resolvedAiIds: AiId[];
@@ -400,13 +309,6 @@ export function resolveExpiredChatLockouts(game: GameState): {
 	return { nextState, resolvedAiIds };
 }
 
-/**
- * Scans `activeComplications` for `sysadmin_directive` entries whose
- * `resolveAtRound` has been reached, removes them, and returns the updated
- * state along with the resolved entries so the coordinator can notify targets.
- *
- * Call this after `advanceRound`.
- */
 export function resolveExpiredDirectives(game: GameState): {
 	nextState: GameState;
 	resolved: Array<{ target: AiId; directive: string }>;
@@ -432,22 +334,12 @@ export function resolveExpiredDirectives(game: GameState): {
 	return { nextState, resolved };
 }
 
-/**
- * Apply a ComplicationResult to the game state:
- *   1. Reset the countdown via drawCountdown(rng, 5, 15).
- *   2. Mark settingShiftFired=true if the result is a setting_shift.
- *   3. For setting_shift: swap the active pack and broadcast the shift.
- *   4. Append to activeComplications for persistent kinds
- *      (sysadmin_directive, tool_disable, chat_lockout).
- *
- * Call this every round when `tickComplication` returns non-null.
- */
 export function applyComplicationResult(
 	game: GameState,
 	result: ComplicationResult,
 	rng: () => number,
 ): GameState {
-	const newCountdown = drawCountdown(rng, 5, 15);
+	const newCountdown = drawNextCountdown(rng);
 	const { fired } = result;
 
 	const settingShiftFired =
@@ -460,13 +352,12 @@ export function applyComplicationResult(
 		settingShiftFired,
 	};
 
-	// Append persistent complications
 	const activeComplications = [...game.activeComplications];
 	if (fired.kind === "sysadmin_directive") {
 		activeComplications.push({
 			kind: "sysadmin_directive",
 			target: fired.target,
-			directive: "", // directive text set by the coordinator's content layer
+			directive: PENDING_DIRECTIVE_TEXT,
 			resolveAtRound: game.round + fired.duration,
 		});
 	} else if (fired.kind === "tool_disable") {
@@ -483,7 +374,6 @@ export function applyComplicationResult(
 			resolveAtRound: game.round + fired.duration,
 		});
 	}
-	// weather_change, obstacle_shift, setting_shift are transient — not appended here
 
 	let state: GameState = {
 		...game,
@@ -491,7 +381,6 @@ export function applyComplicationResult(
 		activeComplications,
 	};
 
-	// setting_shift: shift to the B pack and broadcast the change to all Daemons
 	if (fired.kind === "setting_shift") {
 		state = shiftToBPack(state);
 		state = appendBroadcast(
@@ -500,7 +389,6 @@ export function applyComplicationResult(
 		);
 	}
 
-	// weather_change: update weather and broadcast the change to all Daemons
 	if (fired.kind === "weather_change") {
 		state = setWeather(state, fired.weather);
 		state = appendBroadcast(

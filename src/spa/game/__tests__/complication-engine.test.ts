@@ -1,11 +1,3 @@
-/**
- * Tests for the Complication Engine (issue #296).
- *
- * tickComplication(game, rng) → ComplicationResult | null
- *
- * Pure, deterministic module. Tests use array-backed seededRng helpers.
- * Prior art: win-condition.test.ts, engine.test.ts
- */
 import { describe, expect, it } from "vitest";
 import {
 	applyComplicationResult,
@@ -29,12 +21,15 @@ import type {
 } from "../types.js";
 import { makeTestPack } from "./fixtures/make-test-pack.js";
 
-// ── RNG helper ────────────────────────────────────────────────────────────────
+const POOL_PICK = {
+	sysadminDirective: 0.2,
+	toolDisable: 0.4,
+	chatLockout: 0.6,
+	settingShift: 0.82,
+	obstacleShiftInSixKindPool: 0.501,
+	lastKind: 0.9999,
+} as const;
 
-/**
- * Returns a closure that yields each value in `values` in order.
- * Throws if the array is exhausted (catches unintended extra rng reads).
- */
 function seededRng(values: number[]): () => number {
 	let idx = 0;
 	return () => {
@@ -47,8 +42,6 @@ function seededRng(values: number[]): () => number {
 		return values[idx++]!;
 	};
 }
-
-// ── Fixtures ──────────────────────────────────────────────────────────────────
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -162,8 +155,6 @@ function makeObstacle(id: string, pos: GridPosition): WorldEntity {
 	};
 }
 
-// ── Countdown decrement ───────────────────────────────────────────────────────
-
 describe("tickComplication — countdown > 0: returns null", () => {
 	it("returns null when countdown is 3", () => {
 		const phase = makePhase({
@@ -193,12 +184,10 @@ describe("tickComplication — countdown > 0: returns null", () => {
 	});
 
 	it("does not call rng when countdown is > 0 (seededRng with empty array would throw)", () => {
-		// If rng were called, seededRng([]) would throw — passing means no rng calls happened
 		const phase = makePhase({
 			complicationSchedule: { countdown: 5, settingShiftFired: false },
 		});
 		const game = makeGameStateAround(phase);
-		// Should NOT throw
 		expect(() => tickComplication(game, seededRng([]))).not.toThrow();
 	});
 });
@@ -239,17 +228,12 @@ describe("decrementComplicationCountdown", () => {
 	});
 });
 
-// ── Complication fires at countdown === 0 ─────────────────────────────────────
-
 describe("tickComplication — fires when countdown is 0", () => {
 	it("returns a non-null ComplicationResult when countdown is 0", () => {
 		const phase = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
 		});
 		const game = makeGameStateAround(phase);
-		// rng needs to select a type AND reset countdown
-		// Full pool has 6 types; rng[0]=0.0 → index 0 → weather_change
-		// rng[1]=0.5 → countdown reset (some value in [5,15])
 		const result = tickComplication(game, seededRng([0.0, 0.5]));
 		expect(result).not.toBeNull();
 	});
@@ -259,28 +243,23 @@ describe("tickComplication — fires when countdown is 0", () => {
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
 		});
 		const game = makeGameStateAround(phase);
-		// rng[0]=0.0 → index 0 of 6 → weather_change
-		// rng[1]=0.5 → draw from weather candidates (excludes "clear")
 		const result = tickComplication(game, seededRng([0.0, 0.5]));
 		expect(result?.fired.kind).toBe("weather_change");
 		if (result?.fired.kind === "weather_change") {
-			// weather should be different from the current "clear"
 			expect(result.fired.weather).not.toBe("clear");
-			// weather should be a valid WEATHER_POOL entry
 			expect(result.fired.weather).toMatch(/^[A-Z]|^[a-z]/);
 		}
 	});
 
 	it("draws sysadmin_directive when type-draw selects index 1", () => {
-		// makePhase has empty world → pool is 5 items (no obstacle_shift):
-		// [weather_change(0), sysadmin_directive(1), tool_disable(2), chat_lockout(3), setting_shift(4)]
-		// index 1 → sysadmin_directive: rng[0] in [1/5, 2/5) → use 0.2
 		const phase = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
 		});
 		const game = makeGameStateAround(phase);
-		// rng[0]=0.2 → floor(0.2*5)=1 → sysadmin_directive, rng[1]=0.0 → target, rng[2]=0.5 → countdown
-		const result = tickComplication(game, seededRng([0.2, 0.0, 0.5]));
+		const result = tickComplication(
+			game,
+			seededRng([POOL_PICK.sysadminDirective, 0.0, 0.5]),
+		);
 		expect(result?.fired.kind).toBe("sysadmin_directive");
 	});
 
@@ -289,9 +268,10 @@ describe("tickComplication — fires when countdown is 0", () => {
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
 		});
 		const game = makeGameStateAround(phase);
-		// 5-item pool (no obstacle_shift): index 3 → chat_lockout
-		// rng[0]=0.6 → floor(0.6*5)=3, rng[1]=0 → target, rng[2]=0 → duration=3, rng[3]=0.5 → countdown
-		const result = tickComplication(game, seededRng([0.6, 0.0, 0.0, 0.5]));
+		const result = tickComplication(
+			game,
+			seededRng([POOL_PICK.chatLockout, 0.0, 0.0, 0.5]),
+		);
 		expect(result?.fired.kind).toBe("chat_lockout");
 	});
 
@@ -300,14 +280,13 @@ describe("tickComplication — fires when countdown is 0", () => {
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
 		});
 		const game = makeGameStateAround(phase);
-		// 5-item pool: index 4 → setting_shift
-		// rng[0]=0.82 → floor(0.82*5)=4 → setting_shift, rng[1]=0.5 for countdown
-		const result = tickComplication(game, seededRng([0.82, 0.5]));
+		const result = tickComplication(
+			game,
+			seededRng([POOL_PICK.settingShift, 0.5]),
+		);
 		expect(result?.fired.kind).toBe("setting_shift");
 	});
 });
-
-// ── sysadmin_directive sub-draw ────────────────────────────────────────────────
 
 describe("sysadmin_directive sub-draw", () => {
 	it("carries a target AiId drawn from personaSpatial", () => {
@@ -315,8 +294,10 @@ describe("sysadmin_directive sub-draw", () => {
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
 		});
 		const game = makeGameStateAround(phase);
-		// 5-item pool: rng[0]=0.2 → index 1 → sysadmin_directive; rng[1]=0.0 → first AI; rng[2]=0.5 → countdown
-		const result = tickComplication(game, seededRng([0.2, 0.0, 0.5]));
+		const result = tickComplication(
+			game,
+			seededRng([POOL_PICK.sysadminDirective, 0.0, 0.5]),
+		);
 		expect(result?.fired.kind).toBe("sysadmin_directive");
 		if (result?.fired.kind === "sysadmin_directive") {
 			expect(AI_IDS).toContain(result.fired.target);
@@ -324,16 +305,16 @@ describe("sysadmin_directive sub-draw", () => {
 	});
 });
 
-// ── chat_lockout sub-draw ──────────────────────────────────────────────────────
-
 describe("chat_lockout sub-draw", () => {
 	it("carries a target AiId and duration in [3, 5]", () => {
 		const phase = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
 		});
 		const game = makeGameStateAround(phase);
-		// 5-item pool: index 3 → chat_lockout: rng[0]=0.6
-		const result = tickComplication(game, seededRng([0.6, 0.0, 0.0, 0.5]));
+		const result = tickComplication(
+			game,
+			seededRng([POOL_PICK.chatLockout, 0.0, 0.0, 0.5]),
+		);
 		expect(result?.fired.kind).toBe("chat_lockout");
 		if (result?.fired.kind === "chat_lockout") {
 			expect(AI_IDS).toContain(result.fired.target);
@@ -347,8 +328,10 @@ describe("chat_lockout sub-draw", () => {
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
 		});
 		const game = makeGameStateAround(phase);
-		// 5-item pool: chat_lockout at index 3: rng[0]=0.6, target=0.0, duration=0.0 → 3+floor(0*3)=3
-		const result = tickComplication(game, seededRng([0.6, 0.0, 0.0, 0.5]));
+		const result = tickComplication(
+			game,
+			seededRng([POOL_PICK.chatLockout, 0.0, 0.0, 0.5]),
+		);
 		if (result?.fired.kind === "chat_lockout") {
 			expect(result.fired.duration).toBe(3);
 		}
@@ -359,15 +342,15 @@ describe("chat_lockout sub-draw", () => {
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
 		});
 		const game = makeGameStateAround(phase);
-		// 5-item pool: chat_lockout at index 3: rng[0]=0.6, target=0.0, duration=0.9999 → 3+floor(0.9999*3)=3+2=5
-		const result = tickComplication(game, seededRng([0.6, 0.0, 0.9999, 0.5]));
+		const result = tickComplication(
+			game,
+			seededRng([POOL_PICK.chatLockout, 0.0, 0.9999, 0.5]),
+		);
 		if (result?.fired.kind === "chat_lockout") {
 			expect(result.fired.duration).toBe(5);
 		}
 	});
 });
-
-// ── Setting Shift exclusion ───────────────────────────────────────────────────
 
 describe("Setting Shift exclusion", () => {
 	it("excludes setting_shift when settingShiftFired is true", () => {
@@ -375,11 +358,10 @@ describe("Setting Shift exclusion", () => {
 			complicationSchedule: { countdown: 0, settingShiftFired: true },
 		});
 		const game = makeGameStateAround(phase);
-		// Pool: no obstacle_shift (empty world), no setting_shift (fired) → 4 items:
-		// [weather_change(0), sysadmin_directive(1), tool_disable(2), chat_lockout(3)]
-		// rng[0]=0.9999 → floor(0.9999*4)=3 → chat_lockout (last item; NOT setting_shift)
-		const result = tickComplication(game, seededRng([0.9999, 0.0, 0.0, 0.5]));
-		// setting_shift should NOT be drawn
+		const result = tickComplication(
+			game,
+			seededRng([POOL_PICK.lastKind, 0.0, 0.0, 0.5]),
+		);
 		expect(result?.fired.kind).not.toBe("setting_shift");
 	});
 
@@ -388,11 +370,11 @@ describe("Setting Shift exclusion", () => {
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
 		});
 		const game = makeGameStateAround(phase);
-		// 5-item pool (no obstacle_shift): index 4 → setting_shift
-		// rng[0]=0.82 → floor(0.82*5)=4, rng[1]=0.5 → countdown
-		const result = tickComplication(game, seededRng([0.82, 0.5]));
+		const result = tickComplication(
+			game,
+			seededRng([POOL_PICK.settingShift, 0.5]),
+		);
 		expect(result?.fired.kind).toBe("setting_shift");
-		// Apply result
 		if (result) {
 			const updated = applyComplicationResult(game, result, seededRng([0.5]));
 			const updatedPhase = updated;
@@ -401,14 +383,10 @@ describe("Setting Shift exclusion", () => {
 	});
 });
 
-// ── Obstacle Shift exclusion ──────────────────────────────────────────────────
-
 describe("Obstacle Shift exclusion", () => {
 	it("excludes obstacle_shift when world has zero obstacles", () => {
-		// Ensure obstacle_shift is never returned when the pool is empty of obstacles
 		const draws: string[] = [];
 		for (let i = 0; i < 5; i++) {
-			// Try each slot in a 5-item pool
 			const v = i / 5;
 			const r = tickComplication(
 				makeGameStateAround(
@@ -425,36 +403,12 @@ describe("Obstacle Shift exclusion", () => {
 	});
 
 	it("excludes obstacle_shift when every obstacle has all adjacent cells blocked by other obstacles or out-of-bounds", () => {
-		// Corner obstacle at (0,0): only 2 in-bounds neighbors (south=1,0 and east=0,1).
-		// Block both with obstacles. The corner obstacle now has NO valid shift targets.
-		// South and east obstacles have their own neighbors, but they're only 2x2 blocking walls.
-		// Actually, south obstacle at (1,0) can still move west(-OOB), east(1,1), south(2,0) → has valid.
-		// So this scenario with obstacles blocking each other's valid moves needs all obstacles to be
-		// completely boxed in. Let's use a simpler approach: fill a small "room" so all obstacles
-		// are surrounded by out-of-bounds or other obstacles with no valid targets.
-		//
-		// Build a 3×3 block at (0,0)–(2,2), covering rows 0-2, cols 0-2 (9 obstacles):
-		// Every obstacle at a corner or edge has at most 1 in-bounds/unoccupied neighbor.
-		// Obstacle at (0,0): south=(1,0) blocked, east=(0,1) blocked → no free cells.
-		// Obstacle at (1,1): all 4 neighbors occupied.
-		// This is a valid "fully blocked" setup for a 3×3 obstacle square.
 		const entities: WorldEntity[] = [];
 		for (let r = 0; r <= 2; r++) {
 			for (let c = 0; c <= 2; c++) {
 				entities.push(makeObstacle(`obs_${r}_${c}`, { row: r, col: c }));
 			}
 		}
-		// Now every obstacle's adjacent cells (south of row-2 obstacles go to row 3 which is free!)
-		// So bottom row obstacles (row=2) can shift south to row=3.
-		// We need to also fill rows 3-4 or use a different approach.
-		//
-		// Simpler: use a single obstacle at (0,0) and use PERSONAS + OOB to block both neighbors.
-		// (0,0) has in-bounds neighbors: south (1,0) and east (0,1).
-		// Block both with additional obstacles.
-		// BUT those obstacles at (1,0) and (0,1) would have their own unoccupied neighbors.
-		//
-		// The only way to have NO obstacle with a valid adjacent cell is to tile the entire
-		// 5×5 grid with obstacles. Let's use that extreme: fill all 25 cells.
 		const fullBlockEntities: WorldEntity[] = [];
 		for (let r = 0; r < 5; r++) {
 			for (let c = 0; c < 5; c++) {
@@ -481,13 +435,11 @@ describe("Obstacle Shift exclusion", () => {
 	});
 
 	it("excludes obstacle_shift when the only obstacle's neighbours are occupied by personas", () => {
-		// Obstacle at corner (0,0): only adjacent cells are south(1,0) and east(0,1).
-		// Two personas block both; the corner obstacle has no valid shift target.
 		const cornerObstacle = makeObstacle("corner_obs", { row: 0, col: 0 });
 		const corneredPersonas: Record<AiId, PersonaSpatialState> = {
-			red: { position: { row: 1, col: 0 } }, // south of (0,0)
-			green: { position: { row: 0, col: 1 } }, // east of (0,0)
-			cyan: { position: { row: 2, col: 0 } }, // elsewhere
+			red: { position: { row: 1, col: 0 } },
+			green: { position: { row: 0, col: 1 } },
+			cyan: { position: { row: 2, col: 0 } },
 		};
 		const draws: string[] = [];
 		for (let i = 0; i < 5; i++) {
@@ -508,24 +460,22 @@ describe("Obstacle Shift exclusion", () => {
 	});
 
 	it("includes obstacle_shift when one obstacle has exactly one valid adjacent empty cell", () => {
-		// Obstacle at (0,0): neighbours are south(1,0) and east(0,1). Place persona at (1,0), leave (0,1) free.
 		const obs = makeObstacle("obs", { row: 0, col: 0 });
 		const personaSpatial: Record<AiId, PersonaSpatialState> = {
 			red: { position: { row: 1, col: 0 } },
 			green: { position: { row: 4, col: 4 } },
 			cyan: { position: { row: 3, col: 3 } },
 		};
-		// Pool: [weather_change, sysadmin_directive, tool_disable, obstacle_shift, chat_lockout, setting_shift]
-		// Draw index 3 → obstacle_shift: rng[0] = 3/6 + ε = 0.501
-		// obstacle_shift sub-draw: 1 obstacle × 1 valid direction (east): rng[1] = 0.0 → tuple[0]
-		// countdown reset: rng[2] = 0.5
 		const phase = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
 			world: { entities: [obs] },
 			personaSpatial,
 		});
 		const game = makeGameStateAround(phase);
-		const result = tickComplication(game, seededRng([0.501, 0.0, 0.5]));
+		const result = tickComplication(
+			game,
+			seededRng([POOL_PICK.obstacleShiftInSixKindPool, 0.0, 0.5]),
+		);
 		expect(result?.fired.kind).toBe("obstacle_shift");
 	});
 
@@ -542,14 +492,16 @@ describe("Obstacle Shift exclusion", () => {
 			personaSpatial,
 		});
 		const game = makeGameStateAround(phase);
-		// Draw index 3 (obstacle_shift): rng[0]=0.501
-		const result = tickComplication(game, seededRng([0.501, 0.0, 0.5]));
+		const result = tickComplication(
+			game,
+			seededRng([POOL_PICK.obstacleShiftInSixKindPool, 0.0, 0.5]),
+		);
 		expect(result?.fired.kind).toBe("obstacle_shift");
 		if (result?.fired.kind === "obstacle_shift") {
 			const { fromCell, toCell } = result.fired;
 			const rowDiff = Math.abs(fromCell.row - toCell.row);
 			const colDiff = Math.abs(fromCell.col - toCell.col);
-			expect(rowDiff + colDiff).toBe(1); // exactly 4-adjacent
+			expect(rowDiff + colDiff).toBe(1);
 			expect(toCell.row).toBeGreaterThanOrEqual(0);
 			expect(toCell.row).toBeLessThan(5);
 			expect(toCell.col).toBeGreaterThanOrEqual(0);
@@ -558,11 +510,8 @@ describe("Obstacle Shift exclusion", () => {
 	});
 });
 
-// ── Tool Disable exclusion ─────────────────────────────────────────────────────
-
 describe("Tool Disable exclusion", () => {
 	it("falls back to a different complication kind when every (daemon, tool) pair is already disabled", () => {
-		// Build activeComplications with all possible (daemon, tool) pairs
 		const toolNames: ToolName[] = [
 			"pick_up",
 			"put_down",
@@ -586,17 +535,14 @@ describe("Tool Disable exclusion", () => {
 			activeComplications,
 		});
 		const game = makeGameStateAround(phase);
-		// 5-item pool (no obstacle_shift): index 2 → tool_disable
-		// rng[0]=0.4 → floor(0.4*5)=2 → tool_disable → pairs exhausted
-		// → re-draw from 4-item fallback pool (no obstacle_shift, no tool_disable)
-		// rng[1]=0.0 → index 0 → weather_change, rng[2]=0.5 → new weather draw
-		const result = tickComplication(game, seededRng([0.4, 0.0, 0.5]));
+		const result = tickComplication(
+			game,
+			seededRng([POOL_PICK.toolDisable, 0.0, 0.5]),
+		);
 		expect(result?.fired.kind).not.toBe("tool_disable");
 	});
 
 	it("excludes a (daemon, tool) pair already present in activeComplications", () => {
-		// Only red+pick_up is already disabled. With 3 daemons × 5 tools = 15 pairs,
-		// 1 excluded, 14 valid pairs remain.
 		const activeComplications: ActiveComplication[] = [
 			{
 				kind: "tool_disable",
@@ -610,9 +556,10 @@ describe("Tool Disable exclusion", () => {
 			activeComplications,
 		});
 		const game = makeGameStateAround(phase);
-		// 5-item pool (no obstacle_shift): index 2 → tool_disable: rng[0]=0.4
-		// Sub-draw: rng[1]=0.0 → first valid pair (not red+pick_up), rng[2]=0.5 → countdown
-		const result = tickComplication(game, seededRng([0.4, 0.0, 0.5]));
+		const result = tickComplication(
+			game,
+			seededRng([POOL_PICK.toolDisable, 0.0, 0.5]),
+		);
 		if (result?.fired.kind === "tool_disable") {
 			expect(
 				result.fired.target === "red" && result.fired.tool === "pick_up",
@@ -634,9 +581,10 @@ describe("Tool Disable exclusion", () => {
 			activeComplications,
 		});
 		const game = makeGameStateAround(phase);
-		// 5-item pool: tool_disable at index 2, rng[0]=0.4
-		const result = tickComplication(game, seededRng([0.4, 0.0, 0.5]));
-		// tool_disable should still be drawable (just not red+pick_up)
+		const result = tickComplication(
+			game,
+			seededRng([POOL_PICK.toolDisable, 0.0, 0.5]),
+		);
 		expect(result?.fired.kind).toBe("tool_disable");
 	});
 
@@ -654,12 +602,12 @@ describe("Tool Disable exclusion", () => {
 			activeComplications,
 		});
 		const game = makeGameStateAround(phase);
-		// 5-item pool: tool_disable at index 2, rng[0]=0.4
-		// rng[1]=0.0 → first valid pair (red+pick_up since green+pick_up is excluded)
-		const result = tickComplication(game, seededRng([0.4, 0.0, 0.5]));
+		const result = tickComplication(
+			game,
+			seededRng([POOL_PICK.toolDisable, 0.0, 0.5]),
+		);
 		expect(result?.fired.kind).toBe("tool_disable");
 		if (result?.fired.kind === "tool_disable") {
-			// It may draw red+pick_up since only green+pick_up is excluded
 			expect(
 				result.fired.target === "green" && result.fired.tool === "pick_up",
 			).toBe(false);
@@ -667,19 +615,18 @@ describe("Tool Disable exclusion", () => {
 	});
 });
 
-// ── Tool Disable pool surface (ADR 0015) ──────────────────────────────────────
-
 describe("Tool Disable pool — the retired `face` tool is not selectable", () => {
 	it("draws only the five Daemon tools across every (daemon, tool) pair", () => {
-		// 3 daemons × 5 tools = 15 pairs. rng[0]=0.4 lands on tool_disable in the
-		// 5-item pool; sweeping rng[1] across the 15 pair slots visits every pair.
 		const drawn = new Set<string>();
 		for (let i = 0; i < 15; i++) {
 			const phase = makePhase({
 				complicationSchedule: { countdown: 0, settingShiftFired: false },
 			});
 			const game = makeGameStateAround(phase);
-			const result = tickComplication(game, seededRng([0.4, i / 15, 0.5]));
+			const result = tickComplication(
+				game,
+				seededRng([POOL_PICK.toolDisable, i / 15, 0.5]),
+			);
 			expect(result?.fired.kind).toBe("tool_disable");
 			if (result?.fired.kind === "tool_disable") {
 				expect(result.fired.tool).not.toBe("face");
@@ -695,8 +642,6 @@ describe("Tool Disable pool — the retired `face` tool is not selectable", () =
 		]);
 	});
 });
-
-// ── Persistent vs transient appends ───────────────────────────────────────────
 
 describe("applyComplicationResult — activeComplications appends", () => {
 	it("appends ActiveComplication for sysadmin_directive", () => {
@@ -761,7 +706,7 @@ describe("applyComplicationResult — activeComplications appends", () => {
 		);
 		expect(added).toBeDefined();
 		if (added?.kind === "tool_disable") {
-			expect(added.resolveAtRound).toBe(11); // round 7 + duration 4
+			expect(added.resolveAtRound).toBe(11);
 		}
 	});
 
@@ -783,7 +728,7 @@ describe("applyComplicationResult — activeComplications appends", () => {
 		expect(added).toBeDefined();
 		if (added?.kind === "chat_lockout") {
 			expect(added.target).toBe("green");
-			expect(added.resolveAtRound).toBe(9); // round 5 + duration 4
+			expect(added.resolveAtRound).toBe(9);
 		}
 	});
 
@@ -834,8 +779,6 @@ describe("applyComplicationResult — activeComplications appends", () => {
 		expect(updatedPhase.complicationSchedule.settingShiftFired).toBe(true);
 	});
 });
-
-// ── Setting Shift A/B pack swap (issue #302) ──────────────────────────────────
 
 describe("applyComplicationResult — setting_shift swaps active pack", () => {
 	const PACK_A = makeTestPack([], {
@@ -1151,23 +1094,17 @@ describe("applyComplicationResult — setting_shift reprojects world entities", 
 	});
 });
 
-// ── Determinism ───────────────────────────────────────────────────────────────
-
 describe("determinism", () => {
 	it("same game state and same rng seed sequence produces the same ComplicationResult", () => {
 		const phase = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
 		});
 		const game = makeGameStateAround(phase);
-		// 5-item pool: 0.5*5=2 → tool_disable; rng[1]=0.0 for pair draw; rng[2]=0.0 for duration draw
-		// no countdown draw needed (tickComplication doesn't reset)
 		const r1 = tickComplication(game, seededRng([0.5, 0.0, 0.0]));
 		const r2 = tickComplication(game, seededRng([0.5, 0.0, 0.0]));
 		expect(r1).toEqual(r2);
 	});
 });
-
-// ── startGame initialisation (engine.ts addendum) ────────────────────────────
 
 describe("startGame — complicationSchedule initialisation", () => {
 	it("initialises activeComplications to an empty array", () => {
@@ -1179,8 +1116,6 @@ describe("startGame — complicationSchedule initialisation", () => {
 		expect(phase.activeComplications).toEqual([]);
 	});
 });
-
-// ── isPlayerChatLockedOut ────────────────────────────────────────────────────
 
 describe("isPlayerChatLockedOut", () => {
 	it("returns false when activeComplications is empty", () => {
@@ -1227,20 +1162,15 @@ describe("isPlayerChatLockedOut", () => {
 	});
 
 	it("returns true regardless of resolveAtRound value (does not check expiry)", () => {
-		// isPlayerChatLockedOut reports presence; resolution is handled by resolveExpiredChatLockouts
 		const phase = makePhase({
 			round: 10,
 			activeComplications: [
 				{ kind: "chat_lockout", target: "cyan", resolveAtRound: 5 },
 			],
 		});
-		// Even though round (10) >= resolveAtRound (5), it's still in activeComplications
-		// until resolveExpiredChatLockouts runs
 		expect(isPlayerChatLockedOut(phase, "cyan")).toBe(true);
 	});
 });
-
-// ── resolveExpiredChatLockouts ────────────────────────────────────────────────
 
 describe("resolveExpiredChatLockouts", () => {
 	it("returns no resolved ids when activeComplications is empty", () => {
@@ -1248,7 +1178,7 @@ describe("resolveExpiredChatLockouts", () => {
 		const game = makeGameStateAround(phase);
 		const { nextState, resolvedAiIds } = resolveExpiredChatLockouts(game);
 		expect(resolvedAiIds).toHaveLength(0);
-		expect(nextState).toBe(game); // same reference when nothing changed
+		expect(nextState).toBe(game);
 	});
 
 	it("returns no resolved ids when no lockout has expired", () => {
@@ -1281,8 +1211,8 @@ describe("resolveExpiredChatLockouts", () => {
 		const phase = makePhase({
 			round: 5,
 			activeComplications: [
-				{ kind: "chat_lockout", target: "red", resolveAtRound: 4 }, // expired
-				{ kind: "chat_lockout", target: "green", resolveAtRound: 8 }, // not yet
+				{ kind: "chat_lockout", target: "red", resolveAtRound: 4 },
+				{ kind: "chat_lockout", target: "green", resolveAtRound: 8 },
 			],
 		});
 		const game = makeGameStateAround(phase);
@@ -1304,14 +1234,13 @@ describe("resolveExpiredChatLockouts", () => {
 					tool: "go",
 					resolveAtRound: 100,
 				},
-				{ kind: "chat_lockout", target: "cyan", resolveAtRound: 3 }, // expired
+				{ kind: "chat_lockout", target: "cyan", resolveAtRound: 3 },
 			],
 		});
 		const game = makeGameStateAround(phase);
 		const { nextState, resolvedAiIds } = resolveExpiredChatLockouts(game);
 		expect(resolvedAiIds).toContain("cyan");
 		const nextPhase = nextState;
-		// tool_disable should survive
 		expect(
 			nextPhase.activeComplications.some((c) => c.kind === "tool_disable"),
 		).toBe(true);
