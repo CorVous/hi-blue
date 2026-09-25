@@ -10,7 +10,13 @@ import type {
 	DualBindingContentPackProviderResult,
 } from "../../spa/game/content-pack-provider.js";
 import { MockContentPackProvider } from "../../spa/game/content-pack-provider.js";
-import type { ContentPack } from "../../spa/game/types.js";
+import { isGridPosition } from "../../spa/game/direction.js";
+import { carryPairs, obstacles } from "../../spa/game/pack-selectors.js";
+import type {
+	ContentPack,
+	GridPosition,
+	WorldEntity,
+} from "../../spa/game/types.js";
 import {
 	generateDualContentPacks,
 	type SingleGameConfig,
@@ -267,5 +273,134 @@ describe("generateDualContentPacks — entity ID parity (issue #302)", () => {
 		).rejects.toThrow(
 			/generateDualContentPacks: setting pool must have at least 2 entries/,
 		);
+	});
+});
+
+describe("generateDualContentPacks — placement constraints", () => {
+	const GRID_SIZE = 5;
+	const SEEDS = [0, 1, 7, 13, 42, 99, 12345, 0xdeadbeef];
+	const SEVERAL_OBSTACLES_CONFIG: SingleGameConfig = { mRange: [4, 8] };
+
+	function cellKey(pos: GridPosition): number {
+		return pos.row * GRID_SIZE + pos.col;
+	}
+
+	function gridHolder(entity: WorldEntity): GridPosition {
+		expect(isGridPosition(entity.holder), `${entity.id} is on the grid`).toBe(
+			true,
+		);
+		return entity.holder as GridPosition;
+	}
+
+	function obstacleCells(pack: ContentPack): number[] {
+		return obstacles(pack).map((o) => cellKey(gridHolder(o)));
+	}
+
+	function reachableFrom(
+		start: GridPosition,
+		blocked: ReadonlySet<number>,
+	): Set<number> {
+		const seen = new Set([cellKey(start)]);
+		const queue = [start];
+		for (let next = queue.shift(); next; next = queue.shift()) {
+			for (const [dRow, dCol] of [
+				[-1, 0],
+				[1, 0],
+				[0, -1],
+				[0, 1],
+			] as const) {
+				const neighbour = { row: next.row + dRow, col: next.col + dCol };
+				const onGrid =
+					neighbour.row >= 0 &&
+					neighbour.row < GRID_SIZE &&
+					neighbour.col >= 0 &&
+					neighbour.col < GRID_SIZE;
+				const key = cellKey(neighbour);
+				if (!onGrid || blocked.has(key) || seen.has(key)) continue;
+				seen.add(key);
+				queue.push(neighbour);
+			}
+		}
+		return seen;
+	}
+
+	async function placedPacksFor(seed: number): Promise<ContentPack[]> {
+		const { packA, packB } = await generateDualContentPacks(
+			mulberry32Rng(seed),
+			SETTING_POOL_2,
+			SEVERAL_OBSTACLES_CONFIG,
+			makeDualMockProvider(),
+			AI_IDS,
+		);
+		return [packA, packB];
+	}
+
+	it.each(SEEDS)("seed %s: obstacles never share a cell", async (seed) => {
+		for (const pack of await placedPacksFor(seed)) {
+			const cells = obstacleCells(pack);
+			expect(cells.length).toBeGreaterThanOrEqual(4);
+			expect(new Set(cells).size).toBe(cells.length);
+		}
+	});
+
+	it.each(
+		SEEDS,
+	)("seed %s: no AI start or other entity sits on an obstacle", async (seed) => {
+		for (const pack of await placedPacksFor(seed)) {
+			const blocked = new Set(obstacleCells(pack));
+			for (const [aiId, { position }] of Object.entries(pack.aiStarts)) {
+				expect(blocked.has(cellKey(position)), `${aiId} start`).toBe(false);
+			}
+			for (const entity of pack.entities) {
+				if (entity.kind === "obstacle") continue;
+				expect(blocked.has(cellKey(gridHolder(entity))), entity.id).toBe(false);
+			}
+		}
+	});
+
+	it.each(
+		SEEDS,
+	)("seed %s: every open cell is reachable from every AI start", async (seed) => {
+		for (const pack of await placedPacksFor(seed)) {
+			const blocked = new Set(obstacleCells(pack));
+			const openCells = Array.from(
+				{ length: GRID_SIZE * GRID_SIZE },
+				(_, key) => key,
+			).filter((key) => !blocked.has(key));
+			for (const [aiId, { position }] of Object.entries(pack.aiStarts)) {
+				const reachable = reachableFrom(position, blocked);
+				for (const key of openCells) {
+					expect(reachable.has(key), `cell ${key} from ${aiId}`).toBe(true);
+				}
+			}
+		}
+	});
+
+	it("an objective object is never placed on its own space (seeds 0-299)", async () => {
+		let pairsChecked = 0;
+		for (let seed = 0; seed < 300; seed++) {
+			for (const pack of await placedPacksFor(seed)) {
+				for (const { object, space } of carryPairs(pack)) {
+					pairsChecked++;
+					expect(
+						cellKey(gridHolder(object)),
+						`seed ${seed}: ${object.id}`,
+					).not.toBe(cellKey(gridHolder(space)));
+				}
+			}
+		}
+		expect(pairsChecked).toBeGreaterThan(100);
+	});
+
+	it("throws after exhausting placement attempts when obstacles leave no room for AI starts", async () => {
+		await expect(
+			generateDualContentPacks(
+				mulberry32Rng(42),
+				SETTING_POOL_2,
+				{ mRange: [23, 23] },
+				makeDualMockProvider(),
+				AI_IDS,
+			),
+		).rejects.toThrow(/could not place phase 1 after 200 attempts/);
 	});
 });

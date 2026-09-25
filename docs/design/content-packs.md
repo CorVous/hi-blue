@@ -287,6 +287,17 @@ CONTEXT.md under **AiId** and **blue**.
   list. It keeps the input order. Its `overrides` argument wins over everything,
   including `entities`, so a test can inject a malformed pack. Since the v11
   schema flip (#462), it only copies the list onto `pack.entities`.
+- `__tests__/fixtures/make-game-state.ts` holds the shared game-state builders:
+  the three test personas, the `ROW_AI_STARTS` and `CORNER_AI_STARTS` layouts,
+  `makeTestGame` (a `startGame` over `makeTestPack` with a `"wall"` wall name
+  and a $5 budget by default), `makeEntity`, `seededRng`, `makeSilentProvider`,
+  `withCountdownZero` and `withPackOrderedWorld`. Suites keep a small local
+  wrapper when their setup genuinely differs.
+- `src/content/__tests__/content-pack-generator.test.ts` checks the placement
+  constraints of `generateDualContentPacks` directly over seeded runs: obstacles
+  never share a cell, nothing else sits on an obstacle, every open cell is
+  reachable from every AI start, and a carry object never starts on its own
+  space.
 - Scripted daemon responses in `game-session.test.ts` include a `message` tool
   call. Without one, the round coordinator's #254 retry would fire in tests that
   are not about retries.
