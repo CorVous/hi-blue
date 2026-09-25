@@ -138,3 +138,55 @@ export function buildPersonaDisplayNameMap(
 	}
 	return map;
 }
+
+export type MentionSegment =
+	| { kind: "text"; text: string }
+	| { kind: "mention"; text: string; color: string | undefined };
+
+function escapeRegExp(literal: string): string {
+	return literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function buildMentionRegex(
+	personas: Record<string, { name: string }>,
+): RegExp | null {
+	const names = Object.values(personas)
+		.map((p) => p.name)
+		.filter((n) => n.length > 0);
+	if (names.length === 0) return null;
+	const optionalStarThenWholeName = `\\*?\\b(?:${names.map(escapeRegExp).join("|")})\\b`;
+	return new RegExp(optionalStarThenWholeName, "gi");
+}
+
+export function splitMentionSegments(
+	text: string,
+	personas: Record<string, { name: string; color?: string }>,
+): MentionSegment[] {
+	const segments: MentionSegment[] = [];
+	const pushText = (chunk: string): void => {
+		if (chunk) segments.push({ kind: "text", text: chunk });
+	};
+	if (!text) return segments;
+	const mentionRegex = buildMentionRegex(personas);
+	if (!mentionRegex) {
+		pushText(text);
+		return segments;
+	}
+	const personaList = Object.values(personas);
+	let lastIdx = 0;
+	for (const match of text.matchAll(mentionRegex)) {
+		const matchText = match[0];
+		const matchIdx = match.index ?? 0;
+		pushText(text.slice(lastIdx, matchIdx));
+		const baseName = matchText.startsWith(MENTION_SIGIL)
+			? matchText.slice(MENTION_SIGIL.length)
+			: matchText;
+		const persona = personaList.find(
+			(p) => p.name.toLowerCase() === baseName.toLowerCase(),
+		);
+		segments.push({ kind: "mention", text: matchText, color: persona?.color });
+		lastIdx = matchIdx + matchText.length;
+	}
+	pushText(text.slice(lastIdx));
+	return segments;
+}

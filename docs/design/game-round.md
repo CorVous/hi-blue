@@ -119,7 +119,7 @@ The module is pure and takes an injected rng. `tickComplication` returns `null` 
 
 ## Round-result encoder (`round-result-encoder.ts`)
 
-- Panels are driven by `message` entries in the logs, not by completions. The `completions` parameter has been unused since #214 and remains only for call-site compatibility.
+- Panels are driven by `message` entries in the logs, not by raw completions (since #214), so the encoder does not take completions.
 - `result.round` is the round *after* `advanceRound`, so entries written during the played round have `round === result.round - 1`.
 - Only blue's thread is emitted (the DM-thread filter). Daemon-to-daemon messages stay out of the panels.
 - Every Daemon receives each broadcast, so broadcasts are read from one Daemon's log.

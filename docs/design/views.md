@@ -72,6 +72,31 @@ it hides the other routes' screens and shows or hides the global chrome
 
 ## `game.ts`: game route
 
+### Structure
+
+- `renderGame` is a short entry point. Each entry builds one
+  `GameViewContext` holding the root, the composer elements, the search
+  params, the dev hooks, and the per-entry mutable state (persona lookups,
+  lockouts, `roundInFlight`, `connectionUnstable`). Top-level functions take
+  that context as a parameter, grouped by concern: bootstrap loading and
+  recovery, restore from storage, composer wiring, transcript painting,
+  round dispatch, and the endgame. State that must outlive one entry
+  (`session`, `hydratedSessionId`, `hydratedEpoch`, `gameEndHandled`) stays
+  at module level.
+- **Dev hooks.** `__DEV__` is read once per entry, when the context picks
+  `inspectorDevHooks` or `NOOP_DEV_HOOKS`. The rest of the view calls the
+  hooks without testing `__DEV__`. In production builds the constant folds
+  to the no-op branch, so the inspector code is tree-shaken
+  (`build.test.ts` enforces this). The hooks are chosen per entry, not at
+  module load, because tests stub `__DEV__` per test.
+- Pure text logic lives outside the view: `splitMentionSegments` and
+  `buildMentionRegex` in `mention-parser.ts`, and `fisherYatesShuffledCopy`
+  (initiative order) in `shuffle.ts`. The view only turns segments into DOM.
+- Each entry adds its composer and form listeners to the same persistent
+  DOM, so a later entry's listeners sit beside an earlier entry's. A stale
+  submit handler is harmless in practice: whichever runs first resets the
+  composer to `*<addressee> `, and the other then finds an empty message.
+
 ### Test and dev affordances
 
 - `isDevHost()` is true only when `pnpm wrangler dev` serves both the SPA and
@@ -151,8 +176,11 @@ it hides the other routes' screens and shows or hides the global chrome
   cached personas. If the recovery DOM is missing, the flow clears the
   session and sends the player to the start route with reason `broken`.
 - `dropListenersByCloning` replaces an element with a clone of itself, which
-  drops every listener on it. Note: `runRegenerate` still sets `disabled` on
-  the regenerate button from before the clone, which is now detached.
+  drops every listener on it, and returns the clone. The regenerate wiring
+  keeps that returned clone, so `runRegenerate` disables the button the
+  player can see while the content packs regenerate and enables it again
+  when the attempt settles. It once disabled the detached original instead,
+  which left the visible button clickable during regeneration.
 
 ### Restore path
 
@@ -200,7 +228,6 @@ it hides the other routes' screens and shows or hides the global chrome
   coordinator awaits AIs one at a time in initiative order, so spinners stop
   one by one, as they did before #254, and the retry window is still
   covered. All remaining spinners are removed in `catch` and `finally`.
-- `encodeRoundResult` is still passed `completions`, which it ignores.
 - **Events the view skips.**
   - `ai_start`: spinners are removed through `onAiTurnComplete`, and panel
     content comes from `message` events.
@@ -215,7 +242,7 @@ it hides the other routes' screens and shows or hides the global chrome
   daemon-to-player messages are painted. They are not paced: since #213,
   daemon speech goes through tool calls and the encoder emits one complete
   `message` per turn, so pacing would only slow tests without making
-  streaming feel better. `_pace` is currently unused.
+  streaming feel better.
 - **One line per message.** A daemon message stays in a single `.msg-line`
   even if it contains `\n`, so the strip-card preview can show it as one
   truncated line. The accumulated body is kept in `line.dataset.body`, so

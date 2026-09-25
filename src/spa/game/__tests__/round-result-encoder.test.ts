@@ -114,13 +114,8 @@ describe("encodeRoundResult — ai_start, token, ai_end sequence", () => {
 	it("emits ai_start, token events, ai_end for each AI in order", () => {
 		const phase = makePhase();
 		const result = makePassResult();
-		const completions = {
-			red: "Hello player",
-			green: "I am Sage",
-			cyan: "Calculating",
-		};
 
-		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
+		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
 
 		const redStart = events.findIndex(
 			(e) =>
@@ -151,9 +146,8 @@ describe("encodeRoundResult — ai_start, token, ai_end sequence", () => {
 			{ from: "cyan", to: "blue", content: "abc" },
 		]);
 		const result = makePassResult();
-		const completions = {};
 
-		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
+		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
 
 		const messageEvents = events.filter(
 			(e): e is Extract<SseEvent, { type: "message" }> => e.type === "message",
@@ -167,9 +161,8 @@ describe("encodeRoundResult — ai_start, token, ai_end sequence", () => {
 	it("emits exactly three ai_start and three ai_end events", () => {
 		const phase = makePhase();
 		const result = makePassResult();
-		const completions = { red: "r", green: "g", cyan: "b" };
 
-		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
+		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
 
 		expect(events.filter((e) => e.type === "ai_start")).toHaveLength(3);
 		expect(events.filter((e) => e.type === "ai_end")).toHaveLength(3);
@@ -180,9 +173,8 @@ describe("encodeRoundResult — ai_start, token, ai_end sequence", () => {
 			{ from: "red", to: "blue", content: "hello world" },
 		]);
 		const result = makePassResult();
-		const completions = {};
 
-		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
+		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
 
 		const redStartIdx = events.findIndex(
 			(e) =>
@@ -213,9 +205,8 @@ describe("encodeRoundResult — budget events", () => {
 	it("emits a budget event for each AI", () => {
 		const phase = makePhase();
 		const result = makePassResult();
-		const completions = { red: "r", green: "g", cyan: "b" };
 
-		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
+		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
 
 		const budgetEvents = events.filter(
 			(e): e is Extract<SseEvent, { type: "budget" }> => e.type === "budget",
@@ -234,9 +225,8 @@ describe("encodeRoundResult — budget events", () => {
 		const phase = game;
 
 		const result = makePassResult();
-		const completions = { red: "r", green: "g", cyan: "b" };
 
-		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
+		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
 
 		const redBudget = events.find(
 			(e): e is Extract<SseEvent, { type: "budget" }> =>
@@ -254,9 +244,8 @@ describe("encodeRoundResult — lockout events (budget-exhaustion)", () => {
 		expect(phase.lockedOut.has("red")).toBe(true);
 
 		const result = makePassResult();
-		const completions = {};
 
-		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
+		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
 
 		const lockout = events.find(
 			(e): e is Extract<SseEvent, { type: "lockout" }> =>
@@ -269,9 +258,8 @@ describe("encodeRoundResult — lockout events (budget-exhaustion)", () => {
 	it("does NOT emit a lockout event when AI is not budget-locked-out", () => {
 		const phase = makePhase();
 		const result = makePassResult();
-		const completions = {};
 
-		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
+		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
 
 		const redLockout = events.find(
 			(e): e is Extract<SseEvent, { type: "lockout" }> =>
@@ -287,9 +275,8 @@ describe("encodeRoundResult — lockout events (budget-exhaustion)", () => {
 		expect(phase.lockedOut.has("red")).toBe(true);
 
 		const result = makePassResult();
-		const completions = { red: "my last words", green: "g", cyan: "b" };
 
-		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
+		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
 
 		const lockoutEvent = events.find(
 			(e): e is Extract<SseEvent, { type: "lockout" }> =>
@@ -318,9 +305,8 @@ describe("encodeRoundResult — action_log events", () => {
 				},
 			],
 		});
-		const completions = { red: "r", green: "g", cyan: "b" };
 
-		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
+		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
 
 		const logEvents = events.filter(
 			(e): e is Extract<SseEvent, { type: "action_log" }> =>
@@ -343,9 +329,8 @@ describe("encodeRoundResult — action_log events", () => {
 				},
 			],
 		});
-		const completions = { red: "r", green: "g", cyan: "b" };
 
-		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
+		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
 
 		const logEvents = events.filter(
 			(e): e is Extract<SseEvent, { type: "action_log" }> =>
@@ -366,9 +351,8 @@ describe("encodeRoundResult — chat_lockout event", () => {
 				message: "Ember withdraws from your channel.",
 			},
 		});
-		const completions = { red: "r", green: "g", cyan: "b" };
 
-		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
+		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
 
 		const lockoutEvent = events.find(
 			(e): e is Extract<SseEvent, { type: "chat_lockout" }> =>
@@ -382,9 +366,8 @@ describe("encodeRoundResult — chat_lockout event", () => {
 	it("does NOT emit chat_lockout event when chatLockoutTriggered is absent", () => {
 		const phase = makePhase();
 		const result = makePassResult();
-		const completions = { red: "r", green: "g", cyan: "b" };
 
-		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
+		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
 
 		expect(events.find((e) => e.type === "chat_lockout")).toBeUndefined();
 	});
@@ -396,9 +379,8 @@ describe("encodeRoundResult — chat_lockout_resolved event", () => {
 		const result = makePassResult({
 			chatLockoutsResolved: ["red", "green"],
 		});
-		const completions = { red: "r", green: "g", cyan: "b" };
 
-		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
+		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
 
 		const resolvedEvents = events.filter(
 			(e): e is Extract<SseEvent, { type: "chat_lockout_resolved" }> =>
@@ -413,9 +395,8 @@ describe("encodeRoundResult — chat_lockout_resolved event", () => {
 	it("does NOT emit chat_lockout_resolved when no lockouts resolved", () => {
 		const phase = makePhase();
 		const result = makePassResult();
-		const completions = { red: "r", green: "g", cyan: "b" };
 
-		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
+		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
 
 		expect(
 			events.find((e) => e.type === "chat_lockout_resolved"),
@@ -427,9 +408,8 @@ describe("encodeRoundResult — event ordering", () => {
 	it("action_log events come after all ai_start/token/ai_end/budget blocks", () => {
 		const phase = makePhase();
 		const result = makePassResult();
-		const completions = { red: "r", green: "g", cyan: "b" };
 
-		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
+		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
 
 		const lastBudgetIdx = events.reduce(
 			(last, e, i) => (e.type === "budget" ? i : last),
@@ -447,9 +427,8 @@ describe("encodeRoundResult — event ordering", () => {
 		const result = makePassResult({
 			chatLockoutTriggered: { aiId: "red", message: "locked" },
 		});
-		const completions = { red: "r", green: "g", cyan: "b" };
 
-		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
+		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
 
 		const lastActionLogIdx = events.reduce(
 			(last, e, i) => (e.type === "action_log" ? i : last),
@@ -467,9 +446,8 @@ describe("encodeRoundResult — game_ended event", () => {
 	it("emits a game_ended event when gameEnded=true", () => {
 		const phase = makePhase();
 		const result = makePassResult({ gameEnded: true });
-		const completions = { red: "r", green: "g", cyan: "b" };
 
-		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
+		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
 
 		const gameEndedEvent = events.find((e) => e.type === "game_ended");
 		expect(gameEndedEvent).toBeDefined();
@@ -478,9 +456,8 @@ describe("encodeRoundResult — game_ended event", () => {
 	it("does NOT emit game_ended when gameEnded=false", () => {
 		const phase = makePhase();
 		const result = makePassResult({ gameEnded: false });
-		const completions = { red: "r", green: "g", cyan: "b" };
 
-		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
+		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
 
 		expect(events.find((e) => e.type === "game_ended")).toBeUndefined();
 	});
@@ -488,9 +465,8 @@ describe("encodeRoundResult — game_ended event", () => {
 	it("game_ended event comes after phase-related events", () => {
 		const phase = makePhase();
 		const result = makePassResult({ gameEnded: true });
-		const completions = { red: "r", green: "g", cyan: "b" };
 
-		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
+		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
 
 		const lastActionLogIdx = events.reduce(
 			(last, e, i) => (e.type === "action_log" ? i : last),
@@ -510,9 +486,8 @@ describe("encodeRoundResult — message events from conversationLogs", () => {
 			{ from: "cyan", to: "blue", content: "frost" },
 		]);
 		const result = makePassResult();
-		const completions = {};
 
-		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
+		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
 
 		const messageEvents = events.filter(
 			(e): e is Extract<SseEvent, { type: "message" }> => e.type === "message",
@@ -532,9 +507,8 @@ describe("encodeRoundResult — message events from conversationLogs", () => {
 			{ from: "cyan", to: "blue", content: "frost" },
 		]);
 		const result = makePassResult();
-		const completions = {};
 
-		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
+		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
 
 		const messageEvents = events.filter(
 			(e): e is Extract<SseEvent, { type: "message" }> => e.type === "message",
@@ -547,9 +521,8 @@ describe("encodeRoundResult — message events from conversationLogs", () => {
 			{ from: "red", to: "green", content: "PEER_PEER_TAG" },
 		]);
 		const result = makePassResult();
-		const completions = {};
 
-		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
+		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
 
 		const messageEvents = events.filter(
 			(e): e is Extract<SseEvent, { type: "message" }> => e.type === "message",
@@ -570,9 +543,8 @@ describe("encodeRoundResult — message events from conversationLogs", () => {
 			{ from: "blue", to: "red", content: "player message" },
 		]);
 		const result = makePassResult();
-		const completions = {};
 
-		const events = encodeRoundResult(result, completions, phase, TEST_PERSONAS);
+		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
 
 		const messageEvents = events.filter(
 			(e): e is Extract<SseEvent, { type: "message" }> => e.type === "message",

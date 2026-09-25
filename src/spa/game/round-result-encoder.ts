@@ -39,12 +39,9 @@ export function splitIntoWordChunks(text: string): string[] {
 
 export function encodeRoundResult(
 	result: RoundResult,
-	completions: Partial<Record<AiId, string>>,
 	phaseAfter: GameState,
 	personas: Record<AiId, AiPersona>,
 ): SseEvent[] {
-	void completions;
-
 	const events: SseEvent[] = [];
 	const playedRound = result.round - 1;
 
