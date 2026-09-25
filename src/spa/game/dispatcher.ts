@@ -46,30 +46,19 @@ export interface DispatchResult {
 	rejected: boolean;
 	reason?: string;
 	game: GameState;
-	/** Records produced by this dispatch (0..N per call). */
 	records: RoundActionRecord[];
-	/**
-	 * Private tool result for pick_up auto-examine — not surfaced to any other AI or action log.
-	 * Only set when pick_up auto-examine emits the item's examineDescription.
-	 */
 	actorPrivateToolResult?: { description: string; success: boolean };
-	/**
-	 * For a `go` action whose Vista shift reveals new content, this field
-	 * carries the renderWhatsNew output. Only set for successful `go` tool
-	 * calls where the pre/post perception-disk snapshots differ.
-	 * (Issue #376: persist the perception delta on go tool-call log entries)
-	 */
 	actorDiskDelta?: string;
 }
 
-/** Filter entities to only those that can be picked up / put_down / used (not spaces or obstacles). */
+const DROP_CELL_WITHOUT_SPATIAL_STATE: GridPosition = { row: 0, col: 0 };
+
 function pickableEntities(entities: WorldEntity[]): WorldEntity[] {
 	return entities.filter(
 		(e) => e.kind === "objective_object" || e.kind === "interesting_object",
 	);
 }
 
-/** Filter entities to obstacle kind for collision checks. */
 function obstaclePositions(entities: WorldEntity[]): GridPosition[] {
 	return entities
 		.filter((e) => e.kind === "obstacle")
@@ -129,12 +118,10 @@ export function validateToolCall(
 		}
 
 		case "use": {
-			// Check if the target is an objective_space (use-space flow)
 			const spaceTarget = world.entities.find(
 				(e) => e.id === call.args.item && e.kind === "objective_space",
 			);
 			if (spaceTarget) {
-				// Validate reachability and useAvailable
 				if (spaceTarget.useAvailable === false)
 					return {
 						valid: false,
@@ -156,7 +143,6 @@ export function validateToolCall(
 				return { valid: true };
 			}
 
-			// Standard item use
 			const item = pickable.find((i) => i.id === call.args.item);
 			if (!item)
 				return {
@@ -164,8 +150,6 @@ export function validateToolCall(
 					reason: `Item "${call.args.item}" does not exist`,
 				};
 			if (item.holder !== aiId) {
-				// Check if item is on the ground within interaction range, where
-				// pick_up is the action to advise.
 				if (isGridPosition(item.holder) && actorSpatial) {
 					const itemPos = item.holder as GridPosition;
 					if (withinInteractionRange(actorSpatial.position, itemPos)) {
@@ -184,9 +168,6 @@ export function validateToolCall(
 		}
 
 		case "go": {
-			// Cardinal-only: Daemons have positions but no orientation, so
-			// relative movement vocabulary (forward/back/left/right) is rejected
-			// even when it arrives as a raw tool call that bypassed the tool enum.
 			const rawDir = call.args.direction;
 			if (!actorSpatial)
 				return { valid: false, reason: "Actor has no spatial state" };
@@ -228,18 +209,15 @@ export function executeToolCall(
 			if (target && actorSpatial) {
 				target.holder = { ...actorSpatial.position };
 			} else if (target) {
-				// Fallback: no spatial state — drop at (0,0)
-				target.holder = { row: 0, col: 0 };
+				target.holder = { ...DROP_CELL_WITHOUT_SPATIAL_STATE };
 			}
 			break;
 		case "use": {
-			// Check if the target is an objective_space (use-space flow)
 			const spaceTarget = entities.find(
 				(e) => e.id === call.args.item && e.kind === "objective_space",
 			);
 			if (spaceTarget) {
 				const spaceId = call.args.item;
-				// Find pending UseSpaceObjective for this space
 				const pendingSpaceObjIdx = game.objectives.findIndex(
 					(obj) =>
 						obj.kind === "use_space" &&
@@ -252,7 +230,6 @@ export function executeToolCall(
 							? { ...obj, satisfactionState: "satisfied" as const }
 							: obj,
 					);
-					// Flip entity satisfactionState and mark useAvailable = false
 					spaceTarget.satisfactionState = "satisfied";
 					spaceTarget.useAvailable = false;
 					return {
@@ -261,14 +238,10 @@ export function executeToolCall(
 						objectives: updatedObjectives,
 					};
 				}
-				// No pending objective — still mark space as used
 				spaceTarget.useAvailable = false;
 				break;
 			}
 
-			// Place item on the paired space's cell when the paired space is
-			// within the actor's interaction range (own cell plus the eight
-			// adjacent cells). Otherwise no world mutation.
 			if (target && actorSpatial && target.pairsWithSpaceId) {
 				const pairedSpace = entities.find(
 					(e) => e.id === target.pairsWithSpaceId,
@@ -281,8 +254,6 @@ export function executeToolCall(
 				}
 			}
 
-			// Check for a pending UseItemObjective that targets this item.
-			// If found, flip both the objective's and the entity's satisfactionState.
 			if (target) {
 				const itemId = call.args.item;
 				const pendingObjectiveIdx = game.objectives.findIndex(
@@ -292,15 +263,12 @@ export function executeToolCall(
 						obj.satisfactionState === "pending",
 				);
 				if (pendingObjectiveIdx !== -1) {
-					// Flip objective satisfactionState
 					const updatedObjectives = game.objectives.map((obj, idx) =>
 						idx === pendingObjectiveIdx
 							? { ...obj, satisfactionState: "satisfied" as const }
 							: obj,
 					);
-					// Flip entity satisfactionState in our entities snapshot
 					target.satisfactionState = "satisfied";
-					// Return early with updated objectives and entities
 					return {
 						...game,
 						world: { ...game.world, entities },
@@ -312,9 +280,6 @@ export function executeToolCall(
 		}
 		case "go": {
 			if (!actorSpatial) break;
-			// Validation upstream guarantees a cardinal direction. A step writes
-			// the new position and nothing else: the named cardinal is the whole
-			// of the movement, and perception is position-only.
 			const direction = call.args.direction as CardinalDirection;
 			const nextPos = applyDirection(actorSpatial.position, direction);
 			return {
@@ -341,9 +306,6 @@ function describeToolCall(game: GameState, aiId: AiId, call: ToolCall): string {
 		case "put_down":
 			return `${name} put down the ${call.args.item}`;
 		case "use": {
-			// Check if the target is an objective_space — surface its activationFlavor
-			// (the actor's moment-of-satisfaction line) and fall back to useOutcome
-			// for backward compat with saves authored before #335.
 			const spaceTarget = game.world.entities.find(
 				(e) => e.id === call.args.item && e.kind === "objective_space",
 			);
@@ -353,8 +315,6 @@ function describeToolCall(game: GameState, aiId: AiId, call: ToolCall): string {
 					return spaceTarget.useOutcome.replace(/\{actor\}/g, "you");
 				return `${name} used the ${call.args.item}`;
 			}
-			// Return the entity's useOutcome as the description (flavor string),
-			// with {actor} substituted to "you" (actor's perspective).
 			const item = pickable.find((i) => i.id === call.args.item);
 			if (item?.useOutcome) return item.useOutcome.replace(/\{actor\}/g, "you");
 			return `${name} used the ${call.args.item}`;
@@ -364,6 +324,52 @@ function describeToolCall(game: GameState, aiId: AiId, call: ToolCall): string {
 		default:
 			return `${name} attempted an unknown action`;
 	}
+}
+
+function dispatchSpeechBeforeAction(
+	game: GameState,
+	aiId: AiId,
+	messages: NonNullable<AiTurnAction["messages"]>,
+	records: RoundActionRecord[],
+): GameState {
+	let state = game;
+	const round = game.round;
+	const actorName = game.personas[aiId]?.name ?? aiId;
+	const livePersonaIds = Object.keys(game.personaSpatial);
+	for (const msg of messages) {
+		const validRecipient =
+			msg.to === "blue" || (livePersonaIds.includes(msg.to) && msg.to !== aiId);
+		if (!validRecipient) {
+			records.push({
+				round,
+				actor: aiId,
+				kind: "tool_failure",
+				description: `${actorName} tried to message "${msg.to}" but failed: unknown or invalid recipient`,
+			});
+		} else {
+			state = appendMessage(state, aiId, msg.to, msg.content, {
+				...(msg.toolCallId !== undefined && { toolCallId: msg.toolCallId }),
+				...(msg.toolArgumentsJson !== undefined && {
+					toolArgumentsJson: msg.toolArgumentsJson,
+				}),
+			});
+			records.push({
+				round,
+				actor: aiId,
+				kind: "message",
+				description: `${actorName} messaged ${msg.to}`,
+			});
+		}
+	}
+	return state;
+}
+
+function isObservableAction(
+	name: ToolCall["name"],
+): name is PhysicalActionRecord["kind"] {
+	return (
+		name === "go" || name === "pick_up" || name === "put_down" || name === "use"
+	);
 }
 
 export function dispatchAiTurn(
@@ -392,41 +398,8 @@ export function dispatchAiTurn(
 
 	let actorDiskDelta: string | undefined;
 
-	// Process messages BEFORE toolCall so that result.records reflects
-	// speak-then-act order (P0-1 fix for issue #238).
-	// Validation uses live personaSpatial from pre-action state — persona
-	// membership cannot be changed by an action in scope here, so this is safe.
-	// Messages are dispatched in the order they appear in action.messages, and
-	// each one emits exactly one record (kind="message" on success, "tool_failure"
-	// on invalid recipient) so the round coordinator can pair them back by index.
 	if (action.messages) {
-		const livePersonaIds = Object.keys(state.personaSpatial);
-		for (const msg of action.messages) {
-			const validRecipient =
-				msg.to === "blue" ||
-				(livePersonaIds.includes(msg.to) && msg.to !== aiId);
-			if (!validRecipient) {
-				records.push({
-					round,
-					actor: aiId,
-					kind: "tool_failure",
-					description: `${game.personas[aiId]?.name ?? aiId} tried to message "${msg.to}" but failed: unknown or invalid recipient`,
-				});
-			} else {
-				state = appendMessage(state, aiId, msg.to, msg.content, {
-					...(msg.toolCallId !== undefined && { toolCallId: msg.toolCallId }),
-					...(msg.toolArgumentsJson !== undefined && {
-						toolArgumentsJson: msg.toolArgumentsJson,
-					}),
-				});
-				records.push({
-					round,
-					actor: aiId,
-					kind: "message",
-					description: `${game.personas[aiId]?.name ?? aiId} messaged ${msg.to}`,
-				});
-			}
-		}
+		state = dispatchSpeechBeforeAction(state, aiId, action.messages, records);
 	}
 
 	if (action.toolCall) {
@@ -434,15 +407,8 @@ export function dispatchAiTurn(
 		const validation = validateToolCall(state, aiId, toolCall);
 
 		if (validation.valid) {
-			// Snapshot all AIs' spatial state BEFORE execution (used for witness context).
-			// For go: the actor's pre-move state is captured here; post-move state is
-			// captured from the post-execute phase below.
-			// Snapshot pre-execute world so the post-execute branch can compare
-			// satisfactionState transitions for activation-flavor detection.
 			const preExecuteWorld = state.world;
 
-			// For go, compute the perception-disk delta pre-execution to capture
-			// the state before the action.
 			if (action.toolCall.name === "go") {
 				const prevCtx = buildAiContext(state, aiId);
 				const prevSnap = buildDiskSnapshot(prevCtx);
@@ -457,21 +423,17 @@ export function dispatchAiTurn(
 				state = executeToolCall(state, aiId, action.toolCall);
 			}
 
-			// For put_down, check if the object landed on its paired space.
-			// If so, replace the default description with the per-pair placementFlavor.
-			const flavorDescription =
+			const pairPlacementFlavor =
 				action.toolCall.name === "put_down" || action.toolCall.name === "use"
 					? checkPlacementFlavor(action, state.contentPack, state.world)
 					: null;
-			// For `use` on an interesting_object Use-Item target, surface
-			// activationFlavor on the call that just satisfied the objective.
 			const activationFlavor =
 				action.toolCall.name === "use"
 					? checkUseItemActivation(action, preExecuteWorld, state.world)
 					: null;
 			const successDescription =
 				activationFlavor ??
-				flavorDescription ??
+				pairPlacementFlavor ??
 				describeToolCall(state, aiId, action.toolCall);
 			records.push({
 				round,
@@ -480,8 +442,6 @@ export function dispatchAiTurn(
 				description: successDescription,
 			});
 
-			// Auto-examine on pick_up: surface the item's examineDescription privately
-			// to the actor so objective-item details land in the actor's context.
 			if (action.toolCall.name === "pick_up") {
 				const picked = state.world.entities.find(
 					(e) => e.id === action.toolCall?.args.item,
@@ -494,19 +454,10 @@ export function dispatchAiTurn(
 				}
 			}
 
-			// Build and append a PhysicalActionRecord for observable physical actions.
-			// Only the four observable action tools reach this branch.
 			const call = action.toolCall;
-			if (
-				call.name === "go" ||
-				call.name === "pick_up" ||
-				call.name === "put_down" ||
-				call.name === "use"
-			) {
-				// Post-execute spatial state — actor has moved for "go", others are unchanged
+			if (isObservableAction(call.name)) {
 				const actorSpatialPost = state.personaSpatial[aiId];
 
-				// Collect all other AIs' spatial states at this moment (snapshot)
 				const witnessSpatial: Record<AiId, PersonaSpatialState> = {};
 				for (const [otherId, spatial] of Object.entries(state.personaSpatial)) {
 					if (otherId !== aiId) {
@@ -515,39 +466,31 @@ export function dispatchAiTurn(
 				}
 
 				if (actorSpatialPost) {
-					// Gather optional fields
 					const pickable = pickableEntities(state.world.entities);
 					let useOutcomeRaw: string | undefined;
 					let placementFlavorRaw: string | undefined;
 
 					if (call.name === "use") {
-						// Check if the target is an objective_space — use its satisfactionFlavor for witnesses
 						const spaceTarget = state.world.entities.find(
 							(e) => e.id === call.args.item && e.kind === "objective_space",
 						);
 						if (spaceTarget) {
 							useOutcomeRaw = spaceTarget.satisfactionFlavor;
 						} else if (activationFlavor !== null) {
-							// Use-Item activation: witnesses get the activationFlavor verbatim
-							// (validator-enforced no-{actor} so no substitution needed).
 							useOutcomeRaw = activationFlavor;
 						} else {
 							const item = pickable.find((i) => i.id === call.args.item);
-							// Store raw (un-substituted) useOutcome for witness rendering
 							useOutcomeRaw = item?.useOutcome;
 						}
 					}
 
 					if (call.name === "put_down" || call.name === "use") {
-						// Find the raw placementFlavor (before {actor} substitution)
-						// by looking at the content pack's object entity definition
 						const itemId = call.args.item;
 						const packObject =
 							itemId !== undefined
 								? carryObjectById(itemId, state.contentPack)
 								: undefined;
-						if (packObject?.placementFlavor && flavorDescription) {
-							// flavorDescription is non-null only when the match fired
+						if (packObject?.placementFlavor && pairPlacementFlavor) {
 							placementFlavorRaw = packObject.placementFlavor;
 						}
 					}
@@ -561,8 +504,6 @@ export function dispatchAiTurn(
 						...(call.args.item !== undefined ? { item: call.args.item } : {}),
 						...(call.name === "go"
 							? {
-									// The step's cardinal direction, taken from the named
-									// direction the tool call carried.
 									direction: call.args.direction as CardinalDirection,
 								}
 							: {}),
@@ -572,9 +513,6 @@ export function dispatchAiTurn(
 						...(placementFlavorRaw !== undefined ? { placementFlavorRaw } : {}),
 					};
 
-					// Write-time Vista fan-out: append a witnessed-event entry to each
-					// qualifying witness's per-Daemon log. The actor gets nothing here —
-					// their tool-result string is their channel.
 					for (const [witnessId, witnessSp] of Object.entries(witnessSpatial)) {
 						const actorInVista = vistaContains(
 							witnessSp.position,

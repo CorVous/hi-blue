@@ -1,8 +1,3 @@
-/**
- * Tests for sysadmin-directive.ts helpers (issue #298).
- *
- * drawDirectiveText, formatDirectiveDelivery, formatDirectiveRevocation.
- */
 import { describe, expect, it } from "vitest";
 import { SYSADMIN_DIRECTIVE_POOL } from "../../../content/sysadmin-directive-pool.js";
 import {
@@ -13,7 +8,7 @@ import {
 
 describe("drawDirectiveText", () => {
 	it("returns a string from SYSADMIN_DIRECTIVE_POOL", () => {
-		const rng = () => 0; // always picks index 0
+		const rng = () => 0;
 		const result = drawDirectiveText(rng);
 		expect(SYSADMIN_DIRECTIVE_POOL).toContain(result);
 	});

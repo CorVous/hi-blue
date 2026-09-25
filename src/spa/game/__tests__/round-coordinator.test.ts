@@ -1,15 +1,3 @@
-/**
- * Tests for the Round Coordinator.
- *
- * The coordinator runs all three AIs per round:
- * - Takes current GameState, the player's message + addressed AiId, and a RoundLLMProvider
- * - Builds each AI's OpenAI messages, calls streamRound, translates the result
- * - Dispatches AiTurnActions through the existing dispatcher
- * - Handles budget-exhaustion lockout (emits in-character lockout line)
- * - Advances the round counter
- *
- * All tests use MockRoundLLMProvider with canned responses.
- */
 import { describe, expect, it } from "vitest";
 import type { OpenAiMessage } from "../../llm-client";
 import { isPlayerChatLockedOut } from "../complication-engine";
@@ -75,10 +63,6 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 	},
 };
 
-/**
- * ContentPack placing flower at (0,0), key at (0,1), with
- * red→(0,0), green→(0,1), cyan→(0,2).
- */
 const RGC_AI_STARTS: ContentPack["aiStarts"] = {
 	red: { position: { row: 0, col: 0 } },
 	green: { position: { row: 0, col: 1 } },
@@ -117,9 +101,6 @@ function makeGame() {
 	return startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 }
 
-// ----------------------------------------------------------------------------
-// Chat-only round
-// ----------------------------------------------------------------------------
 describe("chat-only round", () => {
 	it("advances the round counter after all three AIs act", async () => {
 		const game = makeGame();
@@ -141,7 +122,6 @@ describe("chat-only round", () => {
 		]);
 		const { nextState } = await runRound(game, "red", "Hello Ember!", provider);
 		const redLog = nextState.conversationLogs.red ?? [];
-		// Free-form assistantText without a message tool call → treated as pass, not appended
 		const msgEntries = redLog.filter(
 			(e) => e.kind === "message" && e.from === "red",
 		);
@@ -228,22 +208,11 @@ describe("chat-only round", () => {
 	});
 });
 
-// ----------------------------------------------------------------------------
-// Drift-to-silence retry (#254)
-//
-// When the model returns free-form text with no tool call, the coordinator
-// retries the turn once with a tightening nudge before falling through to
-// drop-to-pass. The retry's nudge and the dropped first attempt must NOT
-// land in game state, the conversation log, or the persisted tool
-// roundtrip — only the retry's response flows through normal dispatch.
-// ----------------------------------------------------------------------------
 describe("drift-to-silence retry (#254)", () => {
 	it("retry that returns a message tool call lands in the conversation log", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
-			// red: text-only first attempt → triggers retry
 			{ assistantText: "I'd say hello to blue.", toolCalls: [] },
-			// red retry: emits the message
 			{
 				assistantText: "",
 				toolCalls: [
@@ -257,7 +226,6 @@ describe("drift-to-silence retry (#254)", () => {
 					},
 				],
 			},
-			// green, cyan: pass
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
@@ -311,8 +279,6 @@ describe("drift-to-silence retry (#254)", () => {
 			.map((e) => e.content ?? "")
 			.join("\n");
 
-		// The dropped first attempt and the nudge user-message must never
-		// appear in any AI's conversation log.
 		expect(allLogContent).not.toContain("dropped first attempt text");
 		expect(allLogContent).not.toContain("did not emit a tool call");
 		expect(allLogContent).not.toContain("Re-emit your previous reply");
@@ -322,7 +288,6 @@ describe("drift-to-silence retry (#254)", () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "I think I should say something.", toolCalls: [] },
-			// retry also drops
 			{ assistantText: "still no tool call here.", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
@@ -351,7 +316,6 @@ describe("drift-to-silence retry (#254)", () => {
 			initiative: ["red", "green", "cyan"] as AiId[],
 		});
 
-		// One call per AI — no retries fired.
 		expect(provider.calls).toHaveLength(3);
 	});
 
@@ -404,9 +368,6 @@ describe("drift-to-silence retry (#254)", () => {
 			initiative: ["red", "green", "cyan"] as AiId[],
 		});
 
-		// Red's retry is provider.calls[1]; its messages should include the
-		// dropped first attempt as an assistant turn and the nudge as a
-		// user turn after the original messages.
 		const retryMessages = provider.calls[1]?.messages ?? [];
 		const last2 = retryMessages.slice(-2);
 		expect(last2[0]?.role).toBe("assistant");
@@ -446,7 +407,6 @@ describe("drift-to-silence retry (#254)", () => {
 		});
 
 		const phase = nextState;
-		// Budget starts at 5; red spent 0.4 + 0.5 = 0.9, leaving 4.1
 		expect(phase.budgets.red?.remaining).toBeCloseTo(4.1, 10);
 	});
 
@@ -475,20 +435,10 @@ describe("drift-to-silence retry (#254)", () => {
 			initiative: ["red", "green", "cyan"] as AiId[],
 		});
 
-		// msg-success excluded from roundtrip per ADR 0007; the dropped
-		// first attempt must not slip in either.
 		expect(toolRoundtrip.red).toBeUndefined();
 	});
 });
 
-// ----------------------------------------------------------------------------
-// onAiTurnComplete callback
-//
-// Per-AI "turn finished" signal — fires once per AI in initiative order,
-// AFTER any drift-to-silence retry (#254). The SPA hooks this for staged
-// per-daemon spinner-strip; coordinator runs AIs serially so the fire
-// order matches the visible round progression.
-// ----------------------------------------------------------------------------
 describe("onAiTurnComplete callback", () => {
 	it("fires once per AI in initiative order", async () => {
 		const game = makeGame();
@@ -510,9 +460,7 @@ describe("onAiTurnComplete callback", () => {
 	it("fires AFTER the retry resolves, not after the first dropped attempt", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
-			// red: text-only first attempt → triggers retry
 			{ assistantText: "I would like to say hi.", toolCalls: [] },
-			// red retry: message
 			{
 				assistantText: "",
 				toolCalls: [
@@ -523,12 +471,10 @@ describe("onAiTurnComplete callback", () => {
 					},
 				],
 			},
-			// green, cyan pass
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
 
-		// Track when each callback fires relative to provider call count.
 		const fireOrder: Array<{ aiId: AiId; callsAtFire: number }> = [];
 		await runRound(game, "red", "hi", provider, {
 			initiative: ["red", "green", "cyan"] as AiId[],
@@ -536,15 +482,11 @@ describe("onAiTurnComplete callback", () => {
 				fireOrder.push({ aiId, callsAtFire: provider.calls.length }),
 		});
 
-		// Red's turn made 2 provider calls (initial + retry). The
-		// onAiTurnComplete for red must fire AFTER both — i.e., when the
-		// total call count has reached 2, not 1.
 		const redFire = fireOrder.find((f) => f.aiId === "red");
 		expect(redFire?.callsAtFire).toBe(2);
 	});
 
 	it("fires for locked-out AIs too (uniform per-AI signal)", async () => {
-		// Exhaust red's budget so it locks out next round.
 		let state = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 1 });
 		state = deductBudget(state, "red" as AiId, 1).game;
 		expect(isAiLockedOut(state, "red" as AiId)).toBe(true);
@@ -565,29 +507,19 @@ describe("onAiTurnComplete callback", () => {
 	});
 });
 
-// ----------------------------------------------------------------------------
-// Whisper round
-// NOTE: whispers are now implemented via assistantText containing "whisper to X: ..."
-// The new coordinator maps assistantText → chat action. Whispers are no longer
-// supported through the LLM (they were part of the old custom-JSON protocol).
-// These tests are updated to reflect that whispers can only be sent via chat text.
-// ----------------------------------------------------------------------------
 describe("whisper round — via dispatcher only", () => {
 	it("non-chat non-tool response produces a pass entry", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] }, // red passes
-			{ assistantText: "", toolCalls: [] }, // green passes
-			{ assistantText: "", toolCalls: [] }, // cyan passes
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
 		]);
 		const { result } = await runRound(game, "red", "hi", provider);
 		expect(result.actions.filter((e) => e.kind === "pass")).toHaveLength(3);
 	});
 });
 
-// ----------------------------------------------------------------------------
-// Budget-exhaustion lockout
-// ----------------------------------------------------------------------------
 describe("budget-exhaustion lockout", () => {
 	it("skips an already-locked AI and emits an in-character lockout line instead", async () => {
 		let game = makeGame();
@@ -601,7 +533,6 @@ describe("budget-exhaustion lockout", () => {
 		const { nextState } = await runRound(game, "green", "hi", provider);
 
 		const redLog = nextState.conversationLogs.red ?? [];
-		// Lockout emits a message from the locked AI to blue
 		const lockoutMessages = redLog.filter(
 			(e) => e.kind === "message" && e.from === "red" && e.to === "blue",
 		);
@@ -642,7 +573,6 @@ describe("budget-exhaustion lockout", () => {
 	});
 
 	it("a Daemon whose budget is exhausted mid-round emits a farewell line to its conversation log", async () => {
-		// Use budgetPerAi=1 so the first LLM call (costUsd=1) exhausts the budget.
 		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
 			budgetPerAi: 1,
 		});
@@ -654,8 +584,6 @@ describe("budget-exhaustion lockout", () => {
 		]);
 		const { nextState } = await runRound(game, "red", "hi", provider);
 
-		// The first AI to run (red, alphabetically first in turn order) exhausts budget.
-		// Its conversation log must contain a farewell message addressed to blue.
 		const redLog = nextState.conversationLogs.red ?? [];
 		const farewell = redLog.find(
 			(e) =>
@@ -666,7 +594,6 @@ describe("budget-exhaustion lockout", () => {
 		);
 		expect(farewell).toBeDefined();
 
-		// Farewell appears exactly once (subsequent rounds use the locked-out branch).
 		const farewellCount = redLog.filter(
 			(e) =>
 				e.kind === "message" &&
@@ -704,9 +631,6 @@ describe("budget-exhaustion lockout", () => {
 	});
 });
 
-// ----------------------------------------------------------------------------
-// Multi-round correctness
-// ----------------------------------------------------------------------------
 describe("multi-round correctness", () => {
 	it("RoundResult.actions contains only entries from the current round, not prior rounds", async () => {
 		const game = makeGame();
@@ -715,16 +639,14 @@ describe("multi-round correctness", () => {
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
-		// Round 1
 		const { nextState: state1, result: result1 } = await runRound(
 			game,
 			"red",
 			"first message",
 			provider,
 		);
-		expect(result1.actions).toHaveLength(3); // 3 pass entries
+		expect(result1.actions).toHaveLength(3);
 
-		// Round 2
 		const provider2 = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
@@ -736,13 +658,10 @@ describe("multi-round correctness", () => {
 			"second message",
 			provider2,
 		);
-		expect(result2.actions).toHaveLength(3); // still only 3, not 6
+		expect(result2.actions).toHaveLength(3);
 	});
 });
 
-// ----------------------------------------------------------------------------
-// Tool-call dispatch (OpenAI tools protocol)
-// ----------------------------------------------------------------------------
 describe("tool-call dispatch", () => {
 	it("pick_up tool call mutates world state when item is in the room", async () => {
 		const game = makeGame();
@@ -844,7 +763,6 @@ describe("tool-call dispatch", () => {
 			{ assistantText: "", toolCalls: [] },
 		]);
 		const { nextState, result } = await runRound(game, "red", "hi", provider);
-		// Free-form assistantText without a message tool call is silently dropped (becomes pass).
 		expect(result.actions.some((e) => e.kind === "tool_success")).toBe(true);
 		expect(
 			nextState.world.entities.find((i) => i.id === "flower")?.holder,
@@ -874,7 +792,6 @@ describe("tool-call dispatch", () => {
 			provider,
 		);
 
-		// Cyan's prompt should NOT contain ## Action Log
 		const cyanCtx = buildAiContext(stateAfterRound1, "cyan");
 		const prompt = cyanCtx.toSystemPrompt();
 		expect(prompt).not.toContain("## Action Log");
@@ -903,7 +820,6 @@ describe("tool-call dispatch", () => {
 			provider,
 		);
 
-		// No AI's prompt should contain Action Log or the failure
 		for (const aiId of ["red", "green", "cyan"]) {
 			const ctx = buildAiContext(stateAfterRound1, aiId);
 			const prompt = ctx.toSystemPrompt();
@@ -928,10 +844,8 @@ describe("tool-call dispatch", () => {
 			{ assistantText: "", toolCalls: [] },
 		]);
 		const { nextState, result } = await runRound(game, "red", "hi", provider);
-		// Unknown tool: parseToolCallArguments returns "Unknown tool" failure
 		expect(result.actions.some((e) => e.kind === "tool_failure")).toBe(true);
 		const flower = nextState.world.entities.find((i) => i.id === "flower");
-		// flower still on the ground (a GridPosition), not held by an AI
 		expect(typeof flower?.holder).toBe("object");
 	});
 
@@ -994,14 +908,12 @@ describe("tool-call dispatch", () => {
 			{ assistantText: "", toolCalls: [] },
 		]);
 
-		// Capture what gets passed to the provider
 		const capturedCalls: Array<{
 			messages: OpenAiMessage[];
 		}> = [];
 		const trackingProvider: RoundLLMProvider = {
 			async streamRound(messages, _tools) {
 				capturedCalls.push({ messages });
-				// First 3 calls: use the mock results; subsequent: return pass
 				const inner = capturedCalls.length <= 3 ? provider : undefined;
 				if (inner) {
 					return inner.streamRound(messages, _tools);
@@ -1017,8 +929,7 @@ describe("tool-call dispatch", () => {
 			trackingProvider,
 		);
 
-		// Round 2: pass the tool roundtrip back in
-		capturedCalls.length = 0; // reset captures
+		capturedCalls.length = 0;
 		const provider2: RoundLLMProvider = {
 			async streamRound(messages, _tools) {
 				capturedCalls.push({ messages });
@@ -1029,12 +940,6 @@ describe("tool-call dispatch", () => {
 			priorToolRoundtrip: toolRoundtrip,
 		});
 
-		// Red's round-2 messages (first call in round 2) should contain:
-		// - system
-		// - user (player message from round 1)
-		// - assistant{tool_calls} from round 1
-		// - tool result from round 1
-		// - user (player message from round 2)
 		const redMessages = capturedCalls[0]?.messages ?? [];
 		const hasAssistantWithToolCalls = redMessages.some(
 			(m) =>
@@ -1056,8 +961,6 @@ describe("tool-call dispatch", () => {
 		]);
 		await runRound(game, "red", "hi", provider);
 
-		// All three AI calls should receive tools from availableTools — the
-		// five-tool Daemon surface, never the retired `face`.
 		expect(provider.calls).toHaveLength(3);
 		const daemonTools = ["go", "pick_up", "put_down", "use", "message"];
 		for (const call of provider.calls) {
@@ -1073,19 +976,12 @@ describe("tool-call dispatch", () => {
 	});
 });
 
-// ----------------------------------------------------------------------------
-// Game-end conditions (issue #295: flat single-game loop)
-// ----------------------------------------------------------------------------
 describe("game-end conditions — checkWinCondition / checkLoseCondition", () => {
-	// Content pack with no pairs → K=0 → checkWinCondition vacuously true after any round.
 	const NO_PAIRS_PACK = makeTestPack([], {
 		wallName: "wall",
 		aiStarts: RGC_AI_STARTS,
 	});
 
-	// Content pack with a single carry pair using type-first IDs.
-	// Object is at (0,0); space is at (4,4) — different cells, so the carry
-	// objective is NOT immediately satisfied after a pass round.
 	const CARRY_PACK_UNSATISFIED = makeTestPack(
 		[
 			{
@@ -1108,7 +1004,6 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 	);
 
 	it("gameEnded is false when objective pairs are not satisfied", async () => {
-		// CARRY_PACK_UNSATISFIED: carry-0-obj at (0,0), carry-0-space at (4,4) — not same cell.
 		const game = startGame(TEST_PERSONAS, CARRY_PACK_UNSATISFIED, {
 			budgetPerAi: 5,
 			objectiveTypes: ["carry"],
@@ -1123,7 +1018,6 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 	});
 
 	it("gameEnded is true and isComplete is true when all pairs satisfied (K=0 vacuous)", async () => {
-		// K=0 → checkWinCondition vacuously returns true after the first round.
 		const game = startGame(TEST_PERSONAS, NO_PAIRS_PACK, { budgetPerAi: 5 });
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
@@ -1136,8 +1030,6 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 	});
 
 	it("conversation history accumulates across rounds in flat model (no wipe)", async () => {
-		// In flat model there is no phase advance / history wipe.
-		// Player message and AI turn from round 1 should be in conversationLogs after round 2.
 		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
 			budgetPerAi: 5,
 		});
@@ -1147,22 +1039,10 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 			{ assistantText: "", toolCalls: [] },
 		]);
 		const { nextState } = await runRound(game, "red", "hi", provider);
-		// Red's log should contain at least the player message from round 1
 		expect(nextState.conversationLogs.red?.length ?? 0).toBeGreaterThan(0);
 	});
 
 	it("gameEnded is true when a UseItemObjective is satisfied mid-round", async () => {
-		/**
-		 * Setup:
-		 *   - Pack has no objectivePairs (no carry objectives).
-		 *   - We inject a single pending UseItemObjective targeting 'key'.
-		 *   - key is held by red at start (via NO_PAIRS_PACK with red at (0,0)).
-		 *   - red's turn: use(key) → dispatcher flips objective satisfactionState.
-		 *   - After the round, checkWinCondition sees all objectives satisfied → gameEnded.
-		 *
-		 * We override the objectives on the started game to inject the UseItemObjective.
-		 * The key entity must be an interesting_object held by red (so use is valid).
-		 */
 		const packWithKey = makeTestPack(
 			[
 				{
@@ -1170,7 +1050,7 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 					kind: "interesting_object",
 					name: "key",
 					examineDescription: "A small brass key.",
-					holder: "red", // held by red from the start
+					holder: "red",
 					useOutcome: "You turn the key. Click.",
 				},
 			],
@@ -1178,8 +1058,6 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 		);
 		const baseGame = startGame(TEST_PERSONAS, packWithKey, { budgetPerAi: 5 });
 
-		// Inject the UseItemObjective (engine.ts doesn't generate these from
-		// interestingObjects, so we override objectives directly).
 		const useItemObj: UseItemObjective = {
 			id: "obj-0",
 			kind: "use_item",
@@ -1189,7 +1067,6 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 		};
 		const game = { ...baseGame, objectives: [useItemObj] };
 
-		// red uses key; green and cyan pass.
 		const provider = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -1204,20 +1081,11 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 		const { nextState, result } = await runRound(game, "red", "hi", provider);
 		expect(result.gameEnded).toBe(true);
 		expect(nextState.isComplete).toBe(true);
-		// The objective should be marked satisfied in the final state
 		const obj = nextState.objectives[0];
 		expect(obj?.satisfactionState).toBe("satisfied");
 	});
 });
 
-// ----------------------------------------------------------------------------
-// Chat-lockout event (driven by complication engine countdown)
-// ----------------------------------------------------------------------------
-
-/**
- * Force complicationSchedule.countdown to 0 so tickComplication fires
- * on the next runRound call.
- */
 function withCountdownZero(game: ReturnType<typeof makeGame>) {
 	return {
 		...game,
@@ -1225,19 +1093,6 @@ function withCountdownZero(game: ReturnType<typeof makeGame>) {
 	};
 }
 
-/**
- * RNG sequence that draws chat_lockout for the first AI (red) with min duration (3).
- *
- * Pool for TEST_CONTENT_PACK (no obstacles):
- *   ["weather_change", "sysadmin_directive", "tool_disable", "chat_lockout", "setting_shift"]
- *   → 5 items; index 3 is chat_lockout.
- *
- * Draws in order:
- *   1. complication type: Math.floor(0.7 * 5) = 3 → chat_lockout
- *   2. AI target index: Math.floor(0 * 3) = 0 → "red" (first AI in personas)
- *   3. duration: 3 + Math.floor(0 * 3) = 3
- *   4. new countdown reset: 5 + Math.floor(0 * 11) = 5
- */
 function chatLockoutRng(): () => number {
 	const values = [0.7, 0, 0, 0];
 	let idx = 0;
@@ -1266,7 +1121,6 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 	});
 
 	it("does not trigger a chat lockout when countdown > 0", async () => {
-		// makeGame() starts with countdown >= 1; no rng override needed
 		const base = makeGame();
 		const game = {
 			...base,
@@ -1301,9 +1155,6 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 	});
 
 	it("chat lockout resolves automatically after resolveAtRound (duration=3) rounds", async () => {
-		// Round 1: countdown=0 → chat_lockout fires for red with duration=3 → resolveAtRound=4
-		// Rounds 2, 3: red still locked (round < 4)
-		// Round 4: round=4 >= resolveAtRound=4 → lockout resolves
 		const makeProvider = () =>
 			new MockRoundLLMProvider([
 				{ assistantText: "", toolCalls: [] },
@@ -1380,7 +1231,6 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 	});
 
 	it("RoundResult includes chatLockoutsResolved when a lockout expires this round", async () => {
-		// Fire lockout in round 1 with duration=3 → resolveAtRound=4
 		const makeProvider = () =>
 			new MockRoundLLMProvider([
 				{ assistantText: "", toolCalls: [] },
@@ -1396,7 +1246,6 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 			{ rng: chatLockoutRng() },
 		);
 
-		// Advance through rounds 2 and 3 (still locked)
 		const { nextState: afterR2 } = await runRound(
 			afterR1,
 			"green",
@@ -1412,7 +1261,6 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 			{ rng: chatLockoutRng() },
 		);
 
-		// Round 4: resolveAtRound=4 reached → chatLockoutsResolved fires
 		const { result: r4Result } = await runRound(
 			afterR3,
 			"green",
@@ -1425,19 +1273,12 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 	});
 });
 
-// ----------------------------------------------------------------------------
-// Multi-round game state accumulation (issue #295: flat single-game loop)
-// ----------------------------------------------------------------------------
 describe("multi-round game state accumulation", () => {
 	it("walks through multiple rounds correctly, game ends when all pairs satisfied", async () => {
-		// In the flat model there are no multi-phase transitions.
-		// This test verifies: round counter advances,
-		// and state accumulates across rounds.
 		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
 			budgetPerAi: 5,
 		});
 
-		// Round 1: red picks up flower (red is at (0,0); flower starts at (0,0)) → phase 1 ends
 		const r1Provider = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -1458,12 +1299,8 @@ describe("multi-round game state accumulation", () => {
 			"hi",
 			r1Provider,
 		);
-		// In flat model, gameEnded fires when all pairs satisfied.
-		// TEST_CONTENT_PACK has one pair (flower at 0,0, space at 4,4) — not satisfied by pick_up.
-		// So after round 1 game has NOT ended.
 		expect(afterR1.round).toBe(1);
 
-		// Round 2: pass round — world state is still the same
 		const r2Provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
@@ -1477,16 +1314,12 @@ describe("multi-round game state accumulation", () => {
 		);
 		expect(afterR2.round).toBe(2);
 
-		// State accumulates across rounds (conversation logs grow)
 		expect(afterR2.conversationLogs.red?.length ?? 0).toBeGreaterThan(
 			afterR1.conversationLogs.red?.length ?? 0,
 		);
 	});
 });
 
-// ----------------------------------------------------------------------------
-// Lockout messages
-// ----------------------------------------------------------------------------
 describe("lockout messages", () => {
 	it("budget-exhaustion lockout chat message is '<name> is unresponsive…'", async () => {
 		let game = makeGame();
@@ -1525,9 +1358,6 @@ describe("lockout messages", () => {
 	});
 });
 
-// ----------------------------------------------------------------------------
-// Initiative parameter
-// ----------------------------------------------------------------------------
 describe("initiative parameter", () => {
 	it("respects the initiative parameter — order of actions matches the supplied permutation", async () => {
 		const game = makeGame();
@@ -1540,8 +1370,6 @@ describe("initiative parameter", () => {
 		const { result } = await runRound(game, "red", "hi", provider, {
 			initiative,
 		});
-		// Free-form assistantText without a message tool call is silently dropped.
-		// Verify initiative ordering via result.actions instead.
 		expect(result.actions[0]?.actor).toBe("cyan");
 	});
 
@@ -1577,16 +1405,10 @@ describe("initiative parameter", () => {
 	});
 });
 
-// ----------------------------------------------------------------------------
-// onAiDelta callback routing (issue #102)
-// ----------------------------------------------------------------------------
 describe("runRound — onAiDelta callback", () => {
 	it("fires onAiDelta with (aiId, text) for each delta from a live provider", async () => {
 		const game = makeGame();
 
-		// Hand-rolled provider that synchronously calls onDelta with two
-		// fragments and returns a `message` tool call so #254's retry does
-		// not fire (this test asserts delta routing, not retry behaviour).
 		let callIdx = 0;
 		const liveProvider: RoundLLMProvider = {
 			async streamRound(_messages, _tools, onDelta) {
@@ -1620,7 +1442,6 @@ describe("runRound — onAiDelta callback", () => {
 			onAiDelta,
 		});
 
-		// Each AI should have fired two deltas, in initiative order.
 		expect(received).toHaveLength(6);
 		expect(received[0]).toEqual(["red", "frag1 "]);
 		expect(received[1]).toEqual(["red", "frag2"]);
@@ -1631,9 +1452,7 @@ describe("runRound — onAiDelta callback", () => {
 	});
 
 	it("does not invoke onAiDelta for locked-out AIs", async () => {
-		// Exhaust budget (budgetPerAi=1) so all AIs lock out after round 1.
 		let state = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 1 });
-		// Deduct full budget per AI to reach remaining=0 → lockedOut.
 		for (const aiId of ["red", "green", "cyan"] as AiId[]) {
 			state = deductBudget(state, aiId, 1).game;
 		}
@@ -1655,7 +1474,6 @@ describe("runRound — onAiDelta callback", () => {
 			},
 		});
 
-		// All AIs locked — no deltas.
 		expect(received).toHaveLength(0);
 	});
 
@@ -1674,20 +1492,11 @@ describe("runRound — onAiDelta callback", () => {
 			},
 		});
 
-		// MockRoundLLMProvider ignores onDelta — no deltas.
 		expect(received).toHaveLength(0);
 	});
 });
 
-// ----------------------------------------------------------------------------
-// Placement flavor + phase progression (issue #126)
-// ----------------------------------------------------------------------------
 describe("placement flavor + win condition (issue #126)", () => {
-	/**
-	 * Build a ContentPack with K=1 objective pair using type-first entity IDs.
-	 * carry-0-obj (gem) starts held by red (at 0,0); carry-0-space (altar) is at (0,0).
-	 * When red puts down the gem, it lands at (0,0) = altar's cell → win.
-	 */
 	const GEM_OBJ_ID = "carry-0-obj";
 	const GEM_SPACE_ID = "carry-0-space";
 	const FLAVOR = "{actor} places the gem on the altar.";
@@ -1699,7 +1508,7 @@ describe("placement flavor + win condition (issue #126)", () => {
 				kind: "objective_object",
 				name: "gem",
 				examineDescription: "A glowing gem.",
-				holder: "red", // held by red initially
+				holder: "red",
 				pairsWithSpaceId: GEM_SPACE_ID,
 				placementFlavor: FLAVOR,
 			},
@@ -1708,7 +1517,7 @@ describe("placement flavor + win condition (issue #126)", () => {
 				kind: "objective_space",
 				name: "altar",
 				examineDescription: "A stone altar.",
-				holder: { row: 0, col: 0 }, // red's starting cell
+				holder: { row: 0, col: 0 },
 			},
 		],
 		{
@@ -1720,7 +1529,6 @@ describe("placement flavor + win condition (issue #126)", () => {
 
 	it("K=1: drop on matching space fires placementFlavor in tool_success description", async () => {
 		const game = startGame(TEST_PERSONAS, PHASE1_PACK_K1, { budgetPerAi: 5 });
-		// red is at (0,0) and holds gem_obj; gem_space is also at (0,0)
 		const provider = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -1738,12 +1546,10 @@ describe("placement flavor + win condition (issue #126)", () => {
 		const { result } = await runRound(game, "red", "hi", provider);
 		const toolRecord = result.actions.find((a) => a.kind === "tool_success");
 		expect(toolRecord).toBeDefined();
-		// {actor} should be replaced with "you"
 		expect(toolRecord?.description).toBe("you places the gem on the altar.");
 	});
 
 	it("K=1: drop on matching space ends the game (checkWinCondition fires)", async () => {
-		// objectiveTypes: ["carry"] activates the carry objective for the type-first system
 		const game = startGame(TEST_PERSONAS, PHASE1_PACK_K1, {
 			budgetPerAi: 5,
 			rng: () => 0,
@@ -1764,13 +1570,11 @@ describe("placement flavor + win condition (issue #126)", () => {
 			{ assistantText: "", toolCalls: [] },
 		]);
 		const { nextState, result } = await runRound(game, "red", "hi", provider);
-		// In flat model: gameEnded fires when all pairs satisfied.
 		expect(result.gameEnded).toBe(true);
 		expect(nextState.isComplete).toBe(true);
 	});
 
 	it("K=1: drop on non-matching cell does NOT fire flavor and does NOT advance phase", async () => {
-		// Rebuild pack so gem_space is at (3,3) — different from red's cell (0,0)
 		const packMismatch = makeTestPack(
 			[
 				{
@@ -1787,7 +1591,7 @@ describe("placement flavor + win condition (issue #126)", () => {
 					kind: "objective_space" as const,
 					name: "altar",
 					examineDescription: "A stone altar.",
-					holder: { row: 3, col: 3 }, // mismatch
+					holder: { row: 3, col: 3 },
 				},
 			],
 			{
@@ -1796,7 +1600,6 @@ describe("placement flavor + win condition (issue #126)", () => {
 				aiStarts: RGC_AI_STARTS,
 			},
 		);
-		// In flat model, checkWinCondition compares obj/space positions automatically.
 		const game = startGame(TEST_PERSONAS, packMismatch, {
 			budgetPerAi: 5,
 			objectiveTypes: ["carry"],
@@ -1817,18 +1620,13 @@ describe("placement flavor + win condition (issue #126)", () => {
 		]);
 		const { result } = await runRound(game, "red", "hi", provider);
 		const toolRecord = result.actions.find((a) => a.kind === "tool_success");
-		// Should NOT contain the flavor text
 		expect(toolRecord?.description).not.toContain(
 			"places the gem on the altar",
 		);
-		// Game should NOT have ended (pair not satisfied)
 		expect(result.gameEnded).toBe(false);
 	});
 
 	it("K=2: placing only one pair does NOT advance phase; placing both does", async () => {
-		// Two objective pairs:
-		//   gem_obj (held by red, at 0,0) → gem_space (at 0,0) [auto-satisfied by put_down]
-		//   orb_obj (at 2,2)              → orb_space (at 2,2) [already satisfied from start]
 		const ORB_OBJ_ID = "carry-1-obj";
 		const ORB_SPACE_ID = "carry-1-space";
 
@@ -1839,7 +1637,7 @@ describe("placement flavor + win condition (issue #126)", () => {
 					kind: "objective_object",
 					name: "gem",
 					examineDescription: "A gem.",
-					holder: "red", // held by red — not on ground yet
+					holder: "red",
 					pairsWithSpaceId: GEM_SPACE_ID,
 					placementFlavor: "{actor} sets the gem.",
 				},
@@ -1855,7 +1653,7 @@ describe("placement flavor + win condition (issue #126)", () => {
 					kind: "objective_object",
 					name: "orb",
 					examineDescription: "An orb.",
-					holder: { row: 2, col: 2 }, // already on ground at (2,2)
+					holder: { row: 2, col: 2 },
 					pairsWithSpaceId: ORB_SPACE_ID,
 					placementFlavor: "{actor} sets the orb.",
 				},
@@ -1864,7 +1662,7 @@ describe("placement flavor + win condition (issue #126)", () => {
 					kind: "objective_space",
 					name: "orb plinth",
 					examineDescription: "Orb plinth.",
-					holder: { row: 2, col: 2 }, // matches orb_obj position → already satisfied
+					holder: { row: 2, col: 2 },
 				},
 			],
 			{
@@ -1874,17 +1672,12 @@ describe("placement flavor + win condition (issue #126)", () => {
 			},
 		);
 
-		// In flat model, checkWinCondition compares all obj/space positions automatically.
-		// objectiveTypes: ["carry", "carry"] activates both carry objectives for the type-first system.
-		// After put_down of gem, all carry objectives are satisfied → game ends.
 		const game = startGame(TEST_PERSONAS, packK2, {
 			budgetPerAi: 5,
 			rng: () => 0,
 			objectiveTypes: ["carry", "carry"],
 		});
 
-		// At game start: orb pair already satisfied; gem pair not (gem_obj held by red).
-		// Win check should fire only AFTER red puts down gem_obj at (0,0).
 		const provider = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -1900,16 +1693,11 @@ describe("placement flavor + win condition (issue #126)", () => {
 			{ assistantText: "", toolCalls: [] },
 		]);
 		const { result, nextState } = await runRound(game, "red", "hi", provider);
-		// Both pairs now satisfied → game ends
 		expect(result.gameEnded).toBe(true);
 		expect(nextState.isComplete).toBe(true);
 	});
 });
 
-// ----------------------------------------------------------------------------
-// ----------------------------------------------------------------------------
-// AC #10 regression tests: conversationLogs isolation (#194)
-// ----------------------------------------------------------------------------
 describe("conversationLogs isolation (AC #10 — #194)", () => {
 	it("player message to addressed AI lands ONLY in that AI's conversationLogs as kind:'message'", async () => {
 		const game = makeGame();
@@ -1926,13 +1714,11 @@ describe("conversationLogs isolation (AC #10 — #194)", () => {
 		);
 		const phase = nextState;
 
-		// Only red's log should have the player (blue→red) entry
 		const redPlayerEntries = (phase.conversationLogs.red ?? []).filter(
 			(e) => e.kind === "message" && e.from === "blue",
 		);
 		expect(redPlayerEntries).toHaveLength(1);
 
-		// green and cyan should have NO player entries
 		const greenPlayerEntries = (phase.conversationLogs.green ?? []).filter(
 			(e) => e.kind === "message" && e.from === "blue",
 		);
@@ -1946,7 +1732,6 @@ describe("conversationLogs isolation (AC #10 — #194)", () => {
 
 	it("AI message tool call lands as kind:'message' entry in the speaking AI's log only", async () => {
 		const game = makeGame();
-		// Use message tool call instead of free-form assistantText (which is dropped in v4)
 		const provider = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -1964,13 +1749,11 @@ describe("conversationLogs isolation (AC #10 — #194)", () => {
 			{ assistantText: "", toolCalls: [] },
 			{ assistantText: "", toolCalls: [] },
 		]);
-		// initiative: red → green → cyan; red addressed
 		const { nextState } = await runRound(game, "red", "hi", provider, {
 			initiative: ["red", "green", "cyan"] as AiId[],
 		});
 		const phase = nextState;
 
-		// red's log should contain the outgoing message entry (red→blue)
 		const redMessageEntries = (phase.conversationLogs.red ?? []).filter(
 			(e) => e.kind === "message" && e.from === "red",
 		);
@@ -1981,7 +1764,6 @@ describe("conversationLogs isolation (AC #10 — #194)", () => {
 			),
 		).toBe(true);
 
-		// green and cyan should NOT have red's outgoing message (it goes to blue only)
 		const greenRedEntries = (phase.conversationLogs.green ?? []).filter(
 			(e) => e.kind === "message" && e.from === "red",
 		);
@@ -2001,15 +1783,9 @@ describe("conversationLogs isolation (AC #10 — #194)", () => {
 	});
 });
 
-// ----------------------------------------------------------------------------
-// Parallel tool calls: message + action in one turn (issue #238)
-// ----------------------------------------------------------------------------
 describe("parallel tool calls (message + action in one turn) (#238)", () => {
-	// Table row 3: [msg-success, action] → roundtrip has action id only;
-	// conversation log gets the message body.
 	it("[msg, pick_up]: both dispatched; message record first; roundtrip has only pick_up id", async () => {
 		const game = makeGame();
-		// red at (0,0), flower at (0,0) — red can pick up flower
 		const provider = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -2041,17 +1817,14 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 			{ initiative: ["red", "green", "cyan"] as AiId[] },
 		);
 
-		// Both dispatched
 		const redActions = result.actions.filter((a) => a.actor === "red");
 		expect(redActions.some((a) => a.kind === "message")).toBe(true);
 		expect(redActions.some((a) => a.kind === "tool_success")).toBe(true);
 
-		// message record BEFORE tool_success (P0-1 ordering)
 		const msgIdx = redActions.findIndex((a) => a.kind === "message");
 		const toolIdx = redActions.findIndex((a) => a.kind === "tool_success");
 		expect(msgIdx).toBeLessThan(toolIdx);
 
-		// Conversation log has the spoken message
 		const redLog = nextState.conversationLogs.red ?? [];
 		expect(
 			redLog.some(
@@ -2062,11 +1835,9 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 			),
 		).toBe(true);
 
-		// World state reflects pick_up
 		const flower = nextState.world.entities.find((e) => e.id === "flower");
 		expect(flower?.holder).toBe("red");
 
-		// Roundtrip has ONLY pick_up id (msg-success excluded per ADR 0007 / table row 3)
 		const rt = toolRoundtrip.red;
 		expect(rt).toBeDefined();
 		expect(rt?.assistantToolCalls).toHaveLength(1);
@@ -2076,7 +1847,6 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 		expect(rt?.toolResults[0]?.success).toBe(true);
 	});
 
-	// Table row 2: [action]-only → roundtrip has the action id; regression guard
 	it("[pick_up]-only: existing single-call behavior unchanged; roundtrip has action id", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
@@ -2118,7 +1888,6 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 		expect(rt?.toolResults[0]?.tool_call_id).toBe("pickup_only_id");
 	});
 
-	// Table row 1: [msg-success]-only → no roundtrip; conversation log has message
 	it("[msg-success]-only: no roundtrip recorded; conversation log has message", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
@@ -2147,10 +1916,8 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 			{ initiative: ["red", "green", "cyan"] as AiId[] },
 		);
 
-		// No roundtrip for red (msg-success excluded per ADR 0007)
 		expect(toolRoundtrip.red).toBeUndefined();
 
-		// Conversation log has the message
 		const redLog = nextState.conversationLogs.red ?? [];
 		expect(
 			redLog.some(
@@ -2162,7 +1929,6 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 		).toBe(true);
 	});
 
-	// Table row 4: [msg-fail, pick_up] → roundtrip has BOTH ids; msgFailure + actionResult
 	it("[msg-fail-bad-recipient, pick_up]: roundtrip has both ids; msg failure + pick_up success", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
@@ -2196,17 +1962,14 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 			{ initiative: ["red", "green", "cyan"] as AiId[] },
 		);
 
-		// Message failure and tool_success both in result.actions for red
 		const redActions = result.actions.filter((a) => a.actor === "red");
 		expect(redActions.some((a) => a.kind === "tool_failure")).toBe(true);
 		expect(redActions.some((a) => a.kind === "tool_success")).toBe(true);
 
-		// Flower still picked up
 		expect(
 			nextState.world.entities.find((e) => e.id === "flower")?.holder,
 		).toBe("red");
 
-		// Roundtrip has BOTH ids: msg_fail_id and pickup_row4_id
 		const rt = toolRoundtrip.red;
 		expect(rt).toBeDefined();
 		expect(rt?.assistantToolCalls).toHaveLength(2);
@@ -2214,20 +1977,17 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 		expect(ids).toContain("msg_fail_id");
 		expect(ids).toContain("pickup_row4_id");
 
-		// Message result is failure (FAILED: ...)
 		const msgResult = rt?.toolResults.find(
 			(r) => r.tool_call_id === "msg_fail_id",
 		);
 		expect(msgResult?.success).toBe(false);
 
-		// Pickup result is success
 		const pickupResult = rt?.toolResults.find(
 			(r) => r.tool_call_id === "pickup_row4_id",
 		);
 		expect(pickupResult?.success).toBe(true);
 	});
 
-	// Multiple message tool calls are all accepted and dispatched in emission order.
 	it("[msg, msg]: both messages dispatched; neither in roundtrip (per ADR 0007)", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
@@ -2261,7 +2021,6 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 			{ initiative: ["red", "green", "cyan"] as AiId[] },
 		);
 
-		// Both messages are dispatched and appear in red's conversation log
 		const redLog = nextState.conversationLogs.red ?? [];
 		expect(
 			redLog.some(
@@ -2280,7 +2039,6 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 			),
 		).toBe(true);
 
-		// No "only one message" tool_failure should appear
 		const redActions = result.actions.filter((a) => a.actor === "red");
 		expect(
 			redActions.some(
@@ -2289,12 +2047,9 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 			),
 		).toBe(false);
 
-		// Both messages succeeded → neither appears in the roundtrip (ADR 0007).
-		// With no failures and no action call, roundtrip should be empty for red.
 		expect(toolRoundtrip.red).toBeUndefined();
 	});
 
-	// Mixed [msg, msg-fail, action]: failed message stays in roundtrip; successful one drops.
 	it("[msg-ok, msg-fail, pick_up]: roundtrip contains only the failed message + action", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
@@ -2332,7 +2087,6 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 		const rt = toolRoundtrip.red;
 		expect(rt).toBeDefined();
 		const ids = rt?.assistantToolCalls.map((c) => c.id) ?? [];
-		// Order is the model's emission order; successful message is excluded
 		expect(ids).toEqual(["msg_fail_id", "pickup_id"]);
 		expect(
 			rt?.toolResults.find((r) => r.tool_call_id === "msg_fail_id")?.success,
@@ -2342,7 +2096,6 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 		).toBe(true);
 	});
 
-	// Duplicate-within-slot: [pick_up, go] → first action dispatched, second is tool_failure
 	it("[pick_up, go] duplicate action slot: first action dispatched; second in roundtrip as failure", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
@@ -2373,12 +2126,10 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 			{ initiative: ["red", "green", "cyan"] as AiId[] },
 		);
 
-		// First action (pick_up) dispatched
 		expect(
 			nextState.world.entities.find((e) => e.id === "flower")?.holder,
 		).toBe("red");
 
-		// Second action (go) produces tool_failure in result.actions
 		const redActions = result.actions.filter((a) => a.actor === "red");
 		const failureRecord = redActions.find(
 			(a) =>
@@ -2386,7 +2137,6 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 		);
 		expect(failureRecord).toBeDefined();
 
-		// Roundtrip has both pick_up (success) and go (failure)
 		const rt = toolRoundtrip.red;
 		expect(rt).toBeDefined();
 		const ids = rt?.assistantToolCalls.map((c) => c.id);
@@ -2402,7 +2152,6 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 		expect(goResult?.success).toBe(false);
 	});
 
-	// Cost: single costUsd from the single provider call (not doubled)
 	it("cost deduction is the single call's costUsd, not doubled", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
@@ -2430,11 +2179,9 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 			initiative: ["red", "green", "cyan"] as AiId[],
 		});
 
-		// Red budget: 5 - 1 = 4 (single call cost, not 2)
 		expect(nextState.budgets.red?.remaining).toBeCloseTo(4, 10);
 	});
 
-	// Empty toolCalls → pass record (existing regression guard)
 	it("[] empty toolCalls → pass record produced", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
@@ -2453,13 +2200,9 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 	});
 });
 
-// ----------------------------------------------------------------------------
-// Regression: no double-assistant turn after message tool call in multi-round (#213)
-// ----------------------------------------------------------------------------
 describe("message tool multi-round regression (#213)", () => {
 	it("no consecutive assistant turns in round 2 when round 1 used the message tool", async () => {
 		const game = makeGame();
-		// Round 1: red uses the message tool to speak to blue
 		const r1Provider = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -2482,15 +2225,11 @@ describe("message tool multi-round regression (#213)", () => {
 			initiative: ["red", "green", "cyan"] as AiId[],
 		});
 
-		// The message tool should NOT produce a roundtrip entry for red
-		// (avoids double-assistant turn in next round)
 		expect(r1.toolRoundtrip.red).toBeUndefined();
 
-		// Round 2: capture what messages red receives and assert no consecutive assistant turns
 		const capturedRedMessages: OpenAiMessage[] = [];
 		const r2Provider: RoundLLMProvider = {
 			async streamRound(messages, _tools) {
-				// red is first in initiative, so the first call is red's
 				if (capturedRedMessages.length === 0) {
 					capturedRedMessages.push(...messages);
 				}
@@ -2503,7 +2242,6 @@ describe("message tool multi-round regression (#213)", () => {
 			priorToolRoundtrip: r1.toolRoundtrip,
 		});
 
-		// Assert no two consecutive assistant turns
 		for (let i = 0; i < capturedRedMessages.length - 1; i++) {
 			const curr = capturedRedMessages[i];
 			const next = capturedRedMessages[i + 1];
@@ -2515,7 +2253,6 @@ describe("message tool multi-round regression (#213)", () => {
 			}
 		}
 
-		// Assert every assistant message with tool_calls is followed by a tool message
 		for (let i = 0; i < capturedRedMessages.length - 1; i++) {
 			const msg = capturedRedMessages[i];
 			if (
@@ -2529,8 +2266,6 @@ describe("message tool multi-round regression (#213)", () => {
 			}
 		}
 
-		// The conversation log entry must be present as a tool call pair
-		// (assistant with tool_calls + tool result) since we now preserve tool call pattern
 		const hasAssistantToolCall = capturedRedMessages.some(
 			(m) =>
 				m.role === "assistant" &&
@@ -2545,14 +2280,7 @@ describe("message tool multi-round regression (#213)", () => {
 	});
 });
 
-// ----------------------------------------------------------------------------
-// action-failure log entries (issue #287) — round-coordinator integration
-// ----------------------------------------------------------------------------
 describe("action-failure entries — round-coordinator integration", () => {
-	/**
-	 * ContentPack: red at (0,0); obstacle at (0,1) east of red.
-	 * go east → blocked by obstacle → action-failure entry.
-	 */
 	const OBSTACLE_PACK = makeTestPack(
 		[
 			{
@@ -2622,18 +2350,15 @@ describe("action-failure entries — round-coordinator integration", () => {
 		const started = startGame(TEST_PERSONAS, OBSTACLE_PACK, {
 			budgetPerAi: 10,
 		});
-		// Pin the complication countdown: the initial draw is random, and a
-		// randomly-fired obstacle_shift can move the blocking obstacle out of the
-		// way, making one of the three `go east` calls succeed instead.
+		const countdownPastTheTest = 99;
 		const game = {
 			...started,
 			complicationSchedule: {
 				...started.complicationSchedule,
-				countdown: 99,
+				countdown: countdownPastTheTest,
 			},
 		};
 
-		// red at (0,0); obstacle at (0,1) east; go east → blocked
 		const goEastToolCall = {
 			id: "go_e",
 			name: "go",
@@ -2654,21 +2379,18 @@ describe("action-failure entries — round-coordinator integration", () => {
 			state = nextState;
 		}
 
-		// After 3 rounds: red's action-failure count should be exactly 3
 		const phase = state;
 		const redFailures = (phase.conversationLogs.red ?? []).filter(
 			(e) => e.kind === "action-failure",
 		);
 		expect(redFailures).toHaveLength(3);
 
-		// All failures should be for tool "go"
 		for (const f of redFailures) {
 			if (f.kind === "action-failure") {
 				expect(f.tool).toBe("go");
 			}
 		}
 
-		// Verify via buildOpenAiMessages: 3 user turns matching the failure pattern
 		const redCtx = buildAiContext(state, "red");
 		const redMsgs = buildOpenAiMessages(redCtx);
 		const failureMsgs = redMsgs.filter(
@@ -2678,7 +2400,6 @@ describe("action-failure entries — round-coordinator integration", () => {
 		);
 		expect(failureMsgs).toHaveLength(3);
 
-		// Peer logs must have 0 action-failure entries
 		const greenFailures = (phase.conversationLogs.green ?? []).filter(
 			(e) => e.kind === "action-failure",
 		);
@@ -2688,7 +2409,6 @@ describe("action-failure entries — round-coordinator integration", () => {
 		expect(greenFailures).toHaveLength(0);
 		expect(cyanFailures).toHaveLength(0);
 
-		// Check peers via message builder too
 		const greenCtx = buildAiContext(state, "green");
 		const greenMsgs = buildOpenAiMessages(greenCtx);
 		const greenFailureMsgs = greenMsgs.filter(
@@ -2700,19 +2420,7 @@ describe("action-failure entries — round-coordinator integration", () => {
 	});
 });
 
-// ----------------------------------------------------------------------------
-// witnessed-event fan-out — Vista membership (ADR 0015)
-// ----------------------------------------------------------------------------
 describe("physical-action witness fan-out — Vista membership (ADR 0015)", () => {
-	/**
-	 * ContentPack: flower at (2, 0) sits on red's own cell, so red's pick_up has
-	 * a definite actor cell to gate on. Vista membership of that cell is
-	 * position-only:
-	 *   green at (2, 2) is the (2, 0) offset → 2² + 0² = 4 ≤ 4 → witness
-	 *   cyan at (1, 2) is the (2, 1) offset → 2² + 1² = 5 > 4 → no witness
-	 * The retired cone would have covered (2, 0): the negative case pins
-	 * eligibility to the Vista rather than to an orientation.
-	 */
 	const VISTA_PACK = makeTestPack(
 		[
 			{
@@ -2754,14 +2462,13 @@ describe("physical-action witness fan-out — Vista membership (ADR 0015)", () =
 						argumentsJson: JSON.stringify({ item: "flower" }),
 					},
 				],
-			}, // red picks up the flower on its own cell
-			{ assistantText: "", toolCalls: [] }, // green passes
-			{ assistantText: "", toolCalls: [] }, // cyan passes
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
 		]);
 
 		const { nextState } = await runRound(game, "red", "hi", provider);
 
-		// Inside the Vista → a witnessed-event entry naming the actor.
 		const greenWitnessed = (nextState.conversationLogs.green ?? []).filter(
 			(e) => e.kind === "witnessed-event",
 		);
@@ -2771,15 +2478,12 @@ describe("physical-action witness fan-out — Vista membership (ADR 0015)", () =
 			expect(greenWitnessed[0].actionKind).toBe("pick_up");
 		}
 
-		// Outside the Vista → nothing, even though cyan is only two columns east
-		// and one row north of the actor's cell.
 		expect(
 			(nextState.conversationLogs.cyan ?? []).filter(
 				(e) => e.kind === "witnessed-event",
 			),
 		).toHaveLength(0);
 
-		// The actor audience is unchanged: red is not a witness of its own action.
 		expect(
 			(nextState.conversationLogs.red ?? []).filter(
 				(e) => e.kind === "witnessed-event",
@@ -2788,9 +2492,6 @@ describe("physical-action witness fan-out — Vista membership (ADR 0015)", () =
 	});
 });
 
-// ----------------------------------------------------------------------------
-// Complication countdown — coordinator integration
-// ----------------------------------------------------------------------------
 describe("complication countdown — coordinator integration", () => {
 	function makeProvider() {
 		return new MockRoundLLMProvider([
@@ -2806,7 +2507,6 @@ describe("complication countdown — coordinator integration", () => {
 			rng: chatLockoutRng(),
 		});
 		const phase = nextState;
-		// A chat_lockout entry should have been appended to activeComplications
 		const lockouts = phase.activeComplications.filter(
 			(c) => c.kind === "chat_lockout",
 		);
@@ -2824,37 +2524,24 @@ describe("complication countdown — coordinator integration", () => {
 			rng: chatLockoutRng(),
 		});
 		const phase = nextState;
-		// Countdown should have decremented by 1
 		expect(phase.complicationSchedule.countdown).toBe(4);
 	});
 
 	it("resets countdown after a complication fires", async () => {
 		const game = withCountdownZero(makeGame());
-		// chatLockoutRng provides 0 for countdown reset → new countdown = 5
 		const { nextState } = await runRound(game, "red", "hi", makeProvider(), {
 			rng: chatLockoutRng(),
 		});
 		const phase = nextState;
-		// Countdown was reset by applyComplicationResult (drawCountdown(rng, 5, 15) with rng()=0 → 5)
 		expect(phase.complicationSchedule.countdown).toBe(5);
 	});
 
 	it("excludes obstacleShift from the draw when all obstacles are surrounded (no valid shift tuples)", async () => {
-		// Build a pack with no obstacles at all — validObstacleShiftTuples returns []
-		// so obstacleShiftComplication.isAvailable() is false.
-		// Force rng to always return a value that would select the last entry in
-		// COMPLICATIONS (index 1 = obstacleShift if the pool were unfiltered),
-		// by returning 0.99. With obstacleShift excluded, only weatherChange remains
-		// and it must fire (weather changes).
-		// TEST_CONTENT_PACK has no obstacles in its entities — use it directly.
 		const pack: ContentPack = {
 			...TEST_CONTENT_PACK,
 			entities: TEST_CONTENT_PACK.entities.filter((e) => e.kind !== "obstacle"),
 		};
 		const started = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		// Force countdown to 0 so the complication engine fires this round.
-		// rng=0 draws index 0 from the pool (weatherChange), which is always
-		// available — obstacle_shift is excluded because there are no obstacles.
 		const withCountdown = {
 			...started,
 			complicationSchedule: { ...started.complicationSchedule, countdown: 0 },
@@ -2870,13 +2557,8 @@ describe("complication countdown — coordinator integration", () => {
 
 		const phase = nextState;
 
-		// A complication fired (countdown was reset away from 0 by
-		// applyComplicationResult). With no obstacles in the pack, obstacle_shift
-		// is excluded from the pool so whichever complication fired, it was not
-		// obstacle_shift — confirmed below by the absence of witness entries.
 		expect(phase.complicationSchedule.countdown).toBeGreaterThan(0);
 
-		// No witnessed-obstacle-shift entries should appear in any daemon's log
 		for (const aiId of Object.keys(TEST_PERSONAS)) {
 			const log = phase.conversationLogs[aiId] ?? [];
 			const shiftEntries = log.filter(
@@ -2886,13 +2568,7 @@ describe("complication countdown — coordinator integration", () => {
 		}
 	});
 
-	// ── sysadmin_directive dispatch ─────────────────────────────────────────────
-
-	// ── disk-delta persistence (issue #376) ──────────────────────────────────────
 	describe("disk-delta persistence (issue #376)", () => {
-		/**
-		 * Helper to create a game with custom AI starting positions.
-		 */
 		function makeGameWithCustomStarts(
 			starts: Record<AiId, PersonaSpatialState>,
 		) {
@@ -2901,10 +2577,6 @@ describe("complication countdown — coordinator integration", () => {
 		}
 
 		it("Test A: go reveals a stationary actor → tool-call entry carries diskDelta", async () => {
-			// Red at (2,0); green at (0,1).
-			// Red goes north to (1,0). From (1,0)/north green sits at
-			// "directly in front, right"; from (2,0)/north it sat at
-			// "two steps ahead, front-right" — different line, so the diff fires.
 			const game = makeGameWithCustomStarts({
 				red: { position: { row: 2, col: 0 } },
 				green: { position: { row: 0, col: 1 } },
@@ -2940,8 +2612,6 @@ describe("complication countdown — coordinator integration", () => {
 		});
 
 		it("Test B: a raw `face` tool call is rejected (unknown tool), never a no-op success", async () => {
-			// `face` is retired and outside the tool enum, but a model can still
-			// emit it — the coordinator must reject it, not silently drop it.
 			const game = makeGame();
 
 			const provider = new MockRoundLLMProvider([
@@ -2975,8 +2645,6 @@ describe("complication countdown — coordinator integration", () => {
 			const toolCallEntry = redLog.find(
 				(e) => e.kind === "tool-call" && e.toolName === "face",
 			);
-			// Recorded as a failed roundtrip entry, never a success, and the
-			// retired tool sets no diskDelta.
 			expect(toolCallEntry?.kind === "tool-call" && toolCallEntry.success).toBe(
 				false,
 			);
@@ -2985,15 +2653,12 @@ describe("complication countdown — coordinator integration", () => {
 					? toolCallEntry.diskDelta
 					: undefined,
 			).toBeUndefined();
-			// Nothing changed: no movement, no spatial write of any kind.
 			expect(nextState.personaSpatial.red).toEqual({
 				position: { row: 0, col: 0 },
 			});
 		});
 
 		it("Test C: a relative `go` argument supplied as a raw tool call is rejected (cardinal only)", async () => {
-			// Red at (0,0). "forward" is retired vocabulary: a raw tool call
-			// carrying it is rejected rather than resolved against an orientation.
 			const game = makeGame();
 
 			const provider = new MockRoundLLMProvider([
@@ -3022,7 +2687,6 @@ describe("complication countdown — coordinator integration", () => {
 			expect(failure).toBeDefined();
 			expect(failure?.description).toMatch(/north, south, east, or west/i);
 
-			// Rejected: the actor did not move.
 			expect(nextState.personaSpatial.red?.position).toEqual({
 				row: 0,
 				col: 0,
@@ -3055,7 +2719,6 @@ describe("complication countdown — coordinator integration", () => {
 			);
 			expect(toolCallEntry).toBeDefined();
 			if (toolCallEntry?.kind === "tool-call") {
-				// pick_up should never have diskDelta.
 				expect(toolCallEntry.diskDelta).toBeUndefined();
 			}
 		});
@@ -3084,7 +2747,6 @@ describe("complication countdown — coordinator integration", () => {
 
 			const { nextState } = await runRound(game, "red", "start", provider);
 
-			// Red should have a tool-call with diskDelta
 			const redLog = nextState.conversationLogs.red ?? [];
 			const redToolCall = redLog.find(
 				(e) => e.kind === "tool-call" && e.toolName === "go",
@@ -3093,8 +2755,6 @@ describe("complication countdown — coordinator integration", () => {
 				redToolCall?.kind === "tool-call" && redToolCall.diskDelta,
 			).toBeDefined();
 
-			// Green should NOT have a tool-call entry with diskDelta from red's action
-			// (Green may have witnessed-event entries, but not diskDelta on tool-calls)
 			const greenLog = nextState.conversationLogs.green ?? [];
 			const greenToolCalls = greenLog.filter((e) => e.kind === "tool-call");
 			for (const entry of greenToolCalls) {
@@ -3106,14 +2766,8 @@ describe("complication countdown — coordinator integration", () => {
 	});
 });
 
-// ============================================================================
-// diskDelta persistence across rounds (issue #469)
-// ============================================================================
 describe("diskDelta persistence via diskEntities", () => {
 	it("passes diskEntities from round 1 as priorDiskEntities to round 2, emitting first-sight line", async () => {
-		// Round 1: red and green both pass, item initially outside red's Vista
-		// Round 2: item is moved into red's Vista, and red takes an action
-		// Expect perception-delta line in the action tool-call's diskDelta
 		const pack = makeTestPack(
 			[
 				{
@@ -3121,7 +2775,7 @@ describe("diskDelta persistence via diskEntities", () => {
 					kind: "interesting_object",
 					name: "TestItem",
 					examineDescription: "It shimmers.",
-					holder: { row: 10, col: 10 }, // Far away, outside the Vista
+					holder: { row: 10, col: 10 },
 				},
 			],
 			{
@@ -3135,15 +2789,14 @@ describe("diskDelta persistence via diskEntities", () => {
 		);
 		const game1 = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const provider1 = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] }, // red pass
-			{ assistantText: "", toolCalls: [] }, // green pass
-			{ assistantText: "", toolCalls: [] }, // cyan pass
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
 		]);
 
 		const round1Result = await runRound(game1, "red", "hello", provider1);
 		const game2 = round1Result.nextState;
 
-		// Move item into red's Vista for round 2 (one step south of red)
 		const gameWithItem = {
 			...game2,
 			world: {
@@ -3154,7 +2807,6 @@ describe("diskDelta persistence via diskEntities", () => {
 			},
 		};
 
-		// Round 2: red does something with the new item in its Vista
 		const provider2 = new MockRoundLLMProvider([
 			{
 				assistantText: "I see the item",
@@ -3165,12 +2817,11 @@ describe("diskDelta persistence via diskEntities", () => {
 						argumentsJson: JSON.stringify({ direction: "north" }),
 					},
 				],
-			}, // red moves
-			{ assistantText: "", toolCalls: [] }, // green pass
-			{ assistantText: "", toolCalls: [] }, // cyan pass
+			},
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
 		]);
 
-		// Pass round1's diskEntities as priorDiskEntities to round 2
 		const round2Result = await runRound(
 			gameWithItem,
 			"red",
@@ -3178,13 +2829,12 @@ describe("diskDelta persistence via diskEntities", () => {
 			provider2,
 			{
 				rng: Math.random,
-				priorToolRoundtrip: {}, // no prior tool roundtrip
-				priorDiskSnapshots: {}, // no prior perception-disk snapshots
-				priorDiskEntities: round1Result.diskEntities, // from round 1
+				priorToolRoundtrip: {},
+				priorDiskSnapshots: {},
+				priorDiskEntities: round1Result.diskEntities,
 			},
 		);
 
-		// Check that red's action tool-call includes the perception-delta line
 		const redLog = round2Result.nextState.conversationLogs.red ?? [];
 		const redActionToolCall = redLog.find(
 			(e) => e.kind === "tool-call" && e.toolName === "go",
@@ -3201,8 +2851,6 @@ describe("diskDelta persistence via diskEntities", () => {
 	});
 
 	it("merges perception-delta with actorDiskDelta when both exist", async () => {
-		// red moves while an item enters its Vista
-		// Expect both the move result and the first-sight line in diskDelta
 		const pack = makeTestPack(
 			[
 				{
@@ -3210,7 +2858,7 @@ describe("diskDelta persistence via diskEntities", () => {
 					kind: "interesting_object",
 					name: "Treasure",
 					examineDescription: "Gold coins.",
-					holder: { row: 10, col: 10 }, // Initially far away
+					holder: { row: 10, col: 10 },
 				},
 			],
 			{
@@ -3231,7 +2879,6 @@ describe("diskDelta persistence via diskEntities", () => {
 
 		const round1Result = await runRound(game1, "red", "hi", provider1);
 
-		// Round 2 with item now visible in red's Vista
 		const gameWithItem = {
 			...round1Result.nextState,
 			world: {
@@ -3276,14 +2923,11 @@ describe("diskDelta persistence via diskEntities", () => {
 		);
 		expect(redGo?.kind === "tool-call" && redGo.diskDelta).toBeDefined();
 		const delta = redGo?.kind === "tool-call" ? redGo.diskDelta : "";
-		// Should contain both the movement result and the perception delta
 		expect(delta).toMatch(/Treasure|moved|north/i);
 		expect(delta).toContain("Came into view: Treasure");
 	});
 
 	it("only emits perception delta for first action tool-call in multi-action turn", async () => {
-		// red emits two messages and one action in the same turn
-		// Only the action should get the perception delta appended
 		const pack = makeTestPack(
 			[
 				{
@@ -3291,7 +2935,7 @@ describe("diskDelta persistence via diskEntities", () => {
 					kind: "interesting_object",
 					name: "Mysterious Box",
 					examineDescription: "A sealed box.",
-					holder: { row: 10, col: 10 }, // Initially far away
+					holder: { row: 10, col: 10 },
 				},
 			],
 			{
@@ -3364,13 +3008,11 @@ describe("diskDelta persistence via diskEntities", () => {
 			(e) => e.kind === "tool-call" && e.toolName === "go",
 		);
 
-		// Message entry should NOT have diskDelta (messages don't have diskDelta, only actions do)
 		expect(messageEntry?.kind === "message").toBe(true);
 		expect(
 			(messageEntry as { diskDelta?: unknown } | undefined)?.diskDelta,
 		).toBeUndefined();
 
-		// Action entry should have diskDelta with perception delta (merged on first action)
 		expect(
 			actionEntry?.kind === "tool-call" && actionEntry.diskDelta,
 		).toBeDefined();

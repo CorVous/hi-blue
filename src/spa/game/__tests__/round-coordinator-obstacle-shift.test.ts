@@ -1,21 +1,9 @@
-/**
- * Unit tests for the round-coordinator's obstacle_shift complication handler.
- *
- * Issue #486: obstacle_shift complication fires and:
- * 1. Moves the obstacle entity from fromCell to toCell in world.entities.
- * 2. Appends witnessed-obstacle-shift entries only to daemons whose
- *    **Vista** contains fromCell (ADR 0015; position-only, never occluded).
- * 3. Daemons whose Vista does NOT contain fromCell receive no entry, even
- *    when they are close in Manhattan terms — (2, 1) is outside the disk.
- */
 import { describe, expect, it } from "vitest";
 import { startGame } from "../engine";
 import { runRound } from "../round-coordinator";
 import { MockRoundLLMProvider } from "../round-llm-provider";
 import type { AiPersona, WorldEntity } from "../types";
 import { makeTestPack } from "./fixtures/make-test-pack";
-
-// ── Fixtures ───────────────────────────────────────────────────────────────────
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -50,7 +38,6 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 	},
 };
 
-// Obstacle entity with a shiftFlavor, positioned so it has an available shift target.
 const OBSTACLE: WorldEntity = {
 	id: "wall_ob",
 	kind: "obstacle",
@@ -60,7 +47,6 @@ const OBSTACLE: WorldEntity = {
 	shiftFlavor: "The stone wall shifts one cell, scraping stone against stone.",
 };
 
-// For the test pack to be valid, we need at least one objective object + space pair.
 const OBJECTIVE_OBJECT: WorldEntity = {
 	id: "obj_a",
 	kind: "objective_object",
@@ -83,10 +69,6 @@ const TEST_CONTENT_PACK = makeTestPack(
 	[OBJECTIVE_OBJECT, OBJECTIVE_SPACE, OBSTACLE],
 	{
 		wallName: "wall",
-		// The obstacle origin is (2, 2). Vista membership is position-only.
-		// red at (2, 1) is one cell west → inside the Vista.
-		// green at (1, 4) is offset (2, 1) from the origin (4 + 1 = 5 > 4) → outside.
-		// cyan at (4, 0) is offset (2, 2) from the origin (2² + 2² = 8 > 4) → outside.
 		aiStarts: {
 			red: { position: { row: 2, col: 1 } },
 			green: { position: { row: 1, col: 4 } },
@@ -103,9 +85,6 @@ function makeProvider() {
 	]);
 }
 
-/**
- * Build a base game with the test pack and override spatial positions.
- */
 function makeBaseGame() {
 	const base = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 99 });
 	return {
@@ -117,48 +96,23 @@ function makeBaseGame() {
 	};
 }
 
-/**
- * Drive an RNG sequence that deterministically fires obstacle_shift with a specific
- * fromCell → toCell move.
- *
- * The complication engine uses rng to:
- * 1. Draw from the available complications pool.
- * 2. For obstacle_shift, draw from the valid shift tuples.
- *
- * We provide a custom rng that cycles through specific values to force selection.
- */
 function makeObstacleShiftRng(tupleIndex: number) {
 	let callCount = 0;
 	return () => {
-		// First call: select obstacle_shift from the pool (return value that selects
-		// obstacle_shift index in the available pool).
-		// Subsequent calls: select the desired tuple within the obstacle_shift's tuples.
-		// For simplicity, we'll let the engine's pool selection fall through naturally
-		// and only control the tuple selection.
 		callCount += 1;
-		// Return a value in range [0, 1) that selects the tupleIndex-th element
-		// from the available tuples. We'll return a small value to select early tuples.
 		if (callCount === 1) {
-			// First call: draw from complication type pool.
-			// Assuming obstacle_shift is available, return a value that selects it.
-			// We'll use a high value to try to select later in the pool (obstacle_shift).
-			return 0.5; // This will be used by tickComplication to select from available complications.
+			return 0.5;
 		}
 		if (callCount === 2) {
-			// Second call: draw tuple index from the shift tuples for the selected obstacle.
-			// Return a value that selects the desired tuple.
-			return tupleIndex / 100; // Scale down to ensure we select early tuples.
+			return tupleIndex / 100;
 		}
 		return Math.random();
 	};
 }
 
-// ── Tests ─────────────────────────────────────────────────────────────────────
-
 describe("runRound — obstacle_shift complication (issue #486)", () => {
 	it("moves the obstacle entity from fromCell to toCell in world.entities", async () => {
 		const game = makeBaseGame();
-		// Force countdown to 0 so complication fires.
 		const withCountdown = {
 			...game,
 			complicationSchedule: { ...game.complicationSchedule, countdown: 0 },
@@ -172,17 +126,12 @@ describe("runRound — obstacle_shift complication (issue #486)", () => {
 			{ rng: makeObstacleShiftRng(0) },
 		);
 
-		// Find the obstacle in the entities.
 		const obstacleAfter = nextState.world.entities.find(
 			(e) => e.id === "wall_ob",
 		);
 		expect(obstacleAfter).toBeDefined();
 
-		// The obstacle's holder should have changed from (2, 2) to some adjacent cell.
-		// We know it started at (2, 2) and the shift tuple is deterministic based on the
-		// complication-engine's valid tuples. The test just verifies it moved somewhere.
 		if (obstacleAfter && typeof obstacleAfter.holder === "object") {
-			// Obstacle moved to a new cell. Check it's adjacent to the origin.
 			const obstacleHolder = obstacleAfter.holder as {
 				row: number;
 				col: number;
@@ -193,17 +142,14 @@ describe("runRound — obstacle_shift complication (issue #486)", () => {
 					: { row: 2, col: 2 };
 			const dx = Math.abs(obstacleHolder.row - origHolder.row);
 			const dy = Math.abs(obstacleHolder.col - origHolder.col);
-			// Adjacent means Manhattan distance = 1 (one cardinal direction).
 			expect(dx + dy).toBe(1);
 		} else {
-			// If holder is not a GridPosition, the test fails (obstacle was picked up?).
 			expect.fail("Obstacle holder is not a GridPosition after shift.");
 		}
 	});
 
 	it("appends witnessed-obstacle-shift entry to a daemon whose Vista contains fromCell", async () => {
 		const game = makeBaseGame();
-		// red is at (2, 1), one cell from the origin (2, 2) → inside red's Vista.
 		const withCountdown = {
 			...game,
 			complicationSchedule: { ...game.complicationSchedule, countdown: 0 },
@@ -222,7 +168,6 @@ describe("runRound — obstacle_shift complication (issue #486)", () => {
 			(e) => e.kind === "witnessed-obstacle-shift",
 		);
 
-		// red's Vista contains the obstacle origin, so expect at least one entry.
 		expect(shiftEntries.length).toBeGreaterThan(0);
 
 		const entry = shiftEntries[0];
@@ -230,9 +175,7 @@ describe("runRound — obstacle_shift complication (issue #486)", () => {
 			expect(entry.obstacleId).toBe("wall_ob");
 			expect(entry.flavor).toBe(OBSTACLE.shiftFlavor);
 			expect(entry.round).toBe(nextState.round);
-			// fromCell should be (2, 2) = obstacle's original position.
 			expect(entry.fromCell).toEqual({ row: 2, col: 2 });
-			// toCell should be one of the adjacent cells (exact cell depends on rng/tuples).
 			expect(
 				Math.abs(entry.toCell.row - 2) + Math.abs(entry.toCell.col - 2),
 			).toBe(1);
@@ -241,7 +184,6 @@ describe("runRound — obstacle_shift complication (issue #486)", () => {
 
 	it("does NOT append witnessed-obstacle-shift entry to a daemon whose Vista does NOT contain fromCell", async () => {
 		const game = makeBaseGame();
-		// cyan is at (4, 0) — offset (2, 2) from (2, 2), outside the Vista.
 		const withCountdown = {
 			...game,
 			complicationSchedule: { ...game.complicationSchedule, countdown: 0 },
@@ -260,16 +202,11 @@ describe("runRound — obstacle_shift complication (issue #486)", () => {
 			(e) => e.kind === "witnessed-obstacle-shift",
 		);
 
-		// cyan's Vista does not contain the obstacle origin at (2, 2), so no entries.
 		expect(shiftEntries).toHaveLength(0);
 	});
 
 	it("Vista boundary: a Daemon at offset (2, 0) from the origin witnesses the shift; one at (2, 1) does not", async () => {
 		const game = makeBaseGame();
-		// Origin is (2, 2):
-		//   red at (2, 0) is the (2, 0) offset — 2² + 0² = 4 ≤ 4 → inside the Vista.
-		//   green at (1, 0) is the (2, 1) offset — 2² + 1² = 5 > 4 → outside the Vista,
-		//   even though it is no more than two cells away on either axis.
 		const withCountdown = {
 			...game,
 			personaSpatial: {
@@ -315,8 +252,6 @@ describe("runRound — obstacle_shift complication (issue #486)", () => {
 			{ rng: makeObstacleShiftRng(0) },
 		);
 
-		// After the complication fires, applyComplicationResult resets the countdown
-		// to a value in [1, 5]. It should no longer be 0.
 		expect(nextState.complicationSchedule.countdown).toBeGreaterThan(0);
 	});
 });

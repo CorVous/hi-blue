@@ -1,24 +1,3 @@
-/**
- * objective-record-builder.ts
- *
- * Builds typed Objective records from a list of ObjectiveTypes and a placed
- * ContentPack, using the type-first entity-ID convention:
- *
- *   carry-{i}-obj   → objectId for CarryObjective at index i
- *   carry-{i}-space → spaceId  for CarryObjective at index i
- *   useSpace-{i}-space  → spaceId  for UseSpaceObjective at index i
- *   useItem-{i}-item    → itemId   for UseItemObjective at index i
- *   convergence-{i}-space → spaceId  for ConvergenceObjective at index i
- *
- * Entities are looked up by id in the placed ContentPack:
- *   - carry objects and spaces come from objectivePairs[*].{object,space}
- *   - use_item items come from interestingObjects[*]
- *   - use_space spaces and convergence spaces also come from objectivePairs[*].space
- *     (they are authored as `objective_space` entities)
- *
- * Throws RangeError if any entity is not found in the pack.
- */
-
 import {
 	boundSpaces,
 	carryPairs,
@@ -31,18 +10,10 @@ import type {
 	WorldEntity,
 } from "./types.js";
 
-/**
- * Build an array of Objective records from a types list and a placed ContentPack.
- *
- * @param types  The ordered list of ObjectiveTypes (length 3 for standard games).
- * @param pack   The placed ContentPack with entity holders assigned.
- * @returns      Array of Objective records with satisfactionState: "pending".
- */
 export function buildObjectiveRecords(
 	types: ObjectiveType[],
 	pack: ContentPack,
 ): Objective[] {
-	// Build entity lookup maps
 	const objectById = new Map<string, WorldEntity>();
 	const spaceById = new Map<string, WorldEntity>();
 	const interestingById = new Map<string, WorldEntity>();

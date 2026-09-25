@@ -1,13 +1,3 @@
-/**
- * TDD tests for preserving tool call pattern in conversation history.
- *
- * Problem: Daemon drops to free-text after a while because outgoing messages
- * are rendered as free-text assistant messages instead of tool calls.
- *
- * Solution: Store tool call data in ConversationEntry and render outgoing
- * messages as proper tool call pairs in the conversation history.
- */
-
 import { describe, expect, it } from "vitest";
 import { appendMessage, startGame } from "../engine";
 import { buildOpenAiMessages } from "../openai-message-builder";
@@ -46,8 +36,6 @@ const TEST_CONTENT_PACK = makeTestPack([], { wallName: "wall" });
 function makeGame() {
 	return startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 }
-
-// ── Step 1: ConversationEntry message kind accepts tool call fields ───────────
 
 describe("ConversationEntry message kind with tool call fields", () => {
 	it("accepts optional toolCallId field", () => {
@@ -90,8 +78,6 @@ describe("ConversationEntry message kind with tool call fields", () => {
 	});
 });
 
-// ── Step 2: appendMessage stores tool call data ───────────────────────────────
-
 describe("appendMessage with tool call data", () => {
 	it("stores toolCallId when provided", () => {
 		let game = makeGame();
@@ -133,12 +119,9 @@ describe("appendMessage with tool call data", () => {
 	});
 });
 
-// ── Step 3: buildOpenAiMessages renders outgoing messages as tool calls ───────
-
 describe("buildOpenAiMessages — outgoing messages rendered as tool calls", () => {
 	it("renders outgoing message as tool call when toolCallId exists", () => {
 		let game = makeGame();
-		// Add a message entry with tool call data
 		game = appendMessage(game, "red", "blue", "Hello there", {
 			toolCallId: "call_msg123",
 			toolArgumentsJson: '{"to":"blue","content":"Hello there"}',
@@ -147,7 +130,6 @@ describe("buildOpenAiMessages — outgoing messages rendered as tool calls", () 
 		const ctx = buildAiContext(game, "red");
 		const messages = buildOpenAiMessages(ctx, undefined);
 
-		// Find the assistant message with tool_calls
 		const assistantWithToolCalls = messages.find(
 			(m) => m.role === "assistant" && "tool_calls" in m,
 		);
@@ -163,7 +145,6 @@ describe("buildOpenAiMessages — outgoing messages rendered as tool calls", () 
 			);
 		}
 
-		// Find the corresponding tool result message
 		const toolMsg = messages.find(
 			(m) => m.role === "tool" && m.tool_call_id === "call_msg123",
 		);
@@ -175,19 +156,16 @@ describe("buildOpenAiMessages — outgoing messages rendered as tool calls", () 
 
 	it("renders outgoing message as free text when no toolCallId (backward compat)", () => {
 		let game = makeGame();
-		// Add a message entry WITHOUT tool call data
 		game = appendMessage(game, "red", "blue", "Hello there");
 
 		const ctx = buildAiContext(game, "red");
 		const messages = buildOpenAiMessages(ctx, undefined);
 
-		// Should NOT have assistant message with tool_calls
 		const assistantWithToolCalls = messages.find(
 			(m) => m.role === "assistant" && "tool_calls" in m,
 		);
 		expect(assistantWithToolCalls).toBeUndefined();
 
-		// Should have assistant message with content (free text)
 		const assistantWithContent = messages.find(
 			(m) => m.role === "assistant" && "content" in m && m.content !== null,
 		);
@@ -212,7 +190,6 @@ describe("buildOpenAiMessages — outgoing messages rendered as tool calls", () 
 		);
 		expect(assistantIdx).toBeGreaterThanOrEqual(0);
 
-		// Tool message should be immediately after
 		const nextMsg = messages[assistantIdx + 1];
 		expect(nextMsg?.role).toBe("tool");
 		if (nextMsg?.role === "tool") {
@@ -221,25 +198,18 @@ describe("buildOpenAiMessages — outgoing messages rendered as tool calls", () 
 	});
 });
 
-// ── Step 4: Integration - full flow from tool call to history rendering ───────
-
 describe("tool call history preservation — full integration", () => {
 	it("message tool call in round N appears as tool call pair in round N+1 history", () => {
-		// This test simulates what happens after a round where the AI used the message tool
 		let game = makeGame();
 
-		// Simulate round 0: AI sends a message using the message tool
-		// (This is what the dispatcher would do after processing the tool call)
 		game = appendMessage(game, "red", "blue", "I can help you", {
 			toolCallId: "call_round0_msg",
 			toolArgumentsJson: '{"to":"blue","content":"I can help you"}',
 		});
 
-		// Now in round 1, build messages — the round 0 message should appear as tool call
 		const ctx = buildAiContext(game, "red");
 		const messages = buildOpenAiMessages(ctx, undefined, 0);
 
-		// Should have the tool call pair from round 0
 		const assistantToolMsg = messages.find(
 			(m) => m.role === "assistant" && "tool_calls" in m,
 		);
