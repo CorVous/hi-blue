@@ -12,7 +12,6 @@
 		"dev": "wrangler dev",
 		"dev:local": "wrangler dev --local --ip 0.0.0.0",
 		"dev:lan": "node scripts/dev-lan.mjs",
-		"sandcastle": "npx tsx .sandcastle/main.mts",
 		"lint": "biome ci --error-on-warnings .",
 		"typecheck": "tsgo --noEmit -p tsconfig.json && tsgo --noEmit -p src/proxy/tsconfig.json && tsgo --noEmit -p tsconfig.e2e.json && tsgo --noEmit -p tsconfig.evals.json",
 		"test": "vitest run",
@@ -35,7 +34,6 @@
 		]
 	},
 	"devDependencies": {
-		"@ai-hero/sandcastle": "^0.5.6",
 		"@biomejs/biome": "2.4.13",
 		"@cloudflare/vitest-pool-workers": "0.15.1",
 		"@cloudflare/workers-types": "4.20260430.1",
