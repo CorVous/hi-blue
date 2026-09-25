@@ -1,24 +1,3 @@
-/**
- * sessions.ts
- *
- * Route renderer for #/sessions.
- *
- * Responsibilities:
- *   - Show #sessions-screen, hide #start-screen, #panels, #composer,
- *     #endgame, #cap-hit.
- *   - Show #sessions-banner when ?reason=broken|version-mismatch is present.
- *   - Render a row per session returned by listSessions():
- *       ok    → [ load ] [ dup ] [ rm ] with tree-glyph file listing
- *       broken  → [ corrupt ] tag + [ rm ] only
- *       version-mismatch → [ version mismatch ] tag, a note linking the
- *           save to the archived build that still reads it (when the schema
- *           number is in SCHEMA_ARCHIVE_MAP), + [ rm ] only
- *   - Inline [ rm ] confirmation: swaps button cell to [ confirm rm ] + [ cancel ].
- *   - [ + new session ] at bottom: mint → setActive → #/start.
- *
- * Issue #174 (parent #155).
- */
-
 import { paintBanner, paintTopInfo } from "../bbs-chrome.js";
 import { lookupArchiveVersion } from "../persistence/archive-map.js";
 import {
@@ -39,19 +18,12 @@ import {
 import { type RenderOpts, renderApp, setPickerOpen } from "../render-app.js";
 import { buildArchivedBuildLink } from "./archived-build-link.js";
 
-// ── Banner copy ───────────────────────────────────────────────────────────────────
-
 const SESSIONS_BANNER_MESSAGES: Record<string, string> = {
 	broken: "The active Session was unreadable and could not be loaded.",
 	"version-mismatch":
 		"Saved game data is from an older version of hi-blue and cannot be loaded by this build. It has been kept — start a new game, or remove it from your Sessions list.",
 };
 
-/**
- * Paint the version-mismatch banner. When the schema number maps to a known
- * archived release, the banner offers a link to `./v/<version>/` so the user
- * can continue their Session in the build that last understood its schema.
- */
 function renderVersionMismatchBanner(
 	doc: Document,
 	bannerEl: HTMLElement,
@@ -72,8 +44,6 @@ function renderVersionMismatchBanner(
 	bannerEl.appendChild(doc.createTextNode(", or start a new Session below."));
 }
 
-// ── Visibility helpers ──────────────────────────────────────────────────────────
-
 function showOnly(doc: Document, visibleId: string): void {
 	const hide = [
 		"#start-screen",
@@ -90,13 +60,6 @@ function showOnly(doc: Document, visibleId: string): void {
 	if (target) target.hidden = false;
 }
 
-// ── Row rendering helpers ───────────────────────────────────────────────────────
-
-/**
- * Build a tree-glyph file listing line using `white-space: pre`.
- * Lines: ├─ *<name>   <size>B  (for all but last)
- *        └─ <name>    <size>B  (for last)
- */
 function buildTreeLines(
 	doc: Document,
 	files: Array<{ glyph: string; label: string }>,
@@ -107,30 +70,39 @@ function buildTreeLines(
 	return pre;
 }
 
-/** Pad a label + size into a fixed-width line (20 chars for label). */
+const FILE_NAME_COLUMN_WIDTH = 22;
+
 function fileLabel(name: string, size: number): string {
 	const sizeStr = `${size}B`;
-	const padded = name.padEnd(22, " ");
+	const padded = name.padEnd(FILE_NAME_COLUMN_WIDTH, " ");
 	return `${padded}${sizeStr}`;
 }
 
-// ── Main renderer ────────────────────────────────────────────────────────────────────
+function showGlobalChrome(doc: Document): void {
+	for (const selector of ["#stage > header", "#topinfo", "#banner"]) {
+		doc.querySelector<HTMLElement>(selector)?.removeAttribute("hidden");
+	}
+}
+
+type RowData =
+	| { id: string; kind: "ok"; lastSavedAt: string }
+	| { id: string; kind: "broken" | "version-mismatch" };
+
+function okRowsNewestFirstThenOthersById(a: RowData, b: RowData): number {
+	if (a.kind === "ok" && b.kind === "ok") {
+		return b.lastSavedAt.localeCompare(a.lastSavedAt);
+	}
+	if (a.kind === "ok") return -1;
+	if (b.kind === "ok") return 1;
+	return a.id.localeCompare(b.id);
+}
 
 export function renderSessions(root: HTMLElement, opts?: RenderOpts): void {
 	const doc = root.ownerDocument;
 
-	// Route-entry visibility
 	showOnly(doc, "#sessions-screen");
-	// Restore the global chrome that the start route hides during the login takeover.
-	const headerEl = doc.querySelector<HTMLElement>("#stage > header");
-	const topinfoEl = doc.querySelector<HTMLElement>("#topinfo");
-	const bannerWrapEl = doc.querySelector<HTMLElement>("#banner");
-	if (headerEl) headerEl.removeAttribute("hidden");
-	if (topinfoEl) topinfoEl.removeAttribute("hidden");
-	if (bannerWrapEl) bannerWrapEl.removeAttribute("hidden");
+	showGlobalChrome(doc);
 
-	// Persistent chrome (visible on every route): ASCII banner + topinfo.
-	// Direct-load on #/sessions otherwise leaves them empty.
 	paintBanner(doc);
 	const loadResult = loadActiveSession();
 	if (loadResult.kind === "ok") {
@@ -141,7 +113,6 @@ export function renderSessions(root: HTMLElement, opts?: RenderOpts): void {
 		});
 	}
 
-	// Banner
 	const bannerEl = doc.querySelector<HTMLElement>("#sessions-banner");
 	const reason = opts?.reason ?? null;
 	if (bannerEl) {
@@ -157,20 +128,13 @@ export function renderSessions(root: HTMLElement, opts?: RenderOpts): void {
 		}
 	}
 
-	// List container
 	const listEl = doc.querySelector<HTMLElement>("#sessions-list");
 	if (!listEl) return;
 
-	// Re-render helper (re-renders list + re-wires new button)
 	const reRender = (): void => renderSessions(root, opts);
 
-	// Gather + sort sessions
 	const ids = listSessions();
 	const activeId = getActiveSessionId();
-
-	type RowData =
-		| { id: string; kind: "ok"; lastSavedAt: string }
-		| { id: string; kind: "broken" | "version-mismatch" };
 
 	const rowData: RowData[] = [];
 	for (const id of ids) {
@@ -182,20 +146,10 @@ export function renderSessions(root: HTMLElement, opts?: RenderOpts): void {
 		}
 	}
 
-	// Sort: ok rows by lastSavedAt desc, then broken/version-mismatch by id asc
-	rowData.sort((a, b) => {
-		if (a.kind === "ok" && b.kind === "ok") {
-			return b.lastSavedAt.localeCompare(a.lastSavedAt);
-		}
-		if (a.kind === "ok") return -1;
-		if (b.kind === "ok") return 1;
-		return a.id.localeCompare(b.id);
-	});
+	rowData.sort(okRowsNewestFirstThenOthersById);
 
-	// Clear and rebuild list
 	listEl.textContent = "";
 
-	// "active sessions" heading
 	const activeHeading = doc.createElement("h2");
 	activeHeading.className = "sessions-section-heading";
 	activeHeading.textContent = "active sessions";
@@ -213,13 +167,11 @@ export function renderSessions(root: HTMLElement, opts?: RenderOpts): void {
 		listEl.appendChild(empty);
 	}
 
-	// "archived sessions" heading
 	const archivedHeading = doc.createElement("h2");
 	archivedHeading.className = "sessions-section-heading";
 	archivedHeading.textContent = "archived sessions";
 	listEl.appendChild(archivedHeading);
 
-	// Archived rows
 	const archivedIds = listArchivedSessions();
 	for (const id of archivedIds) {
 		listEl.appendChild(buildArchivedSessionRow(root, id, reRender));
@@ -231,13 +183,11 @@ export function renderSessions(root: HTMLElement, opts?: RenderOpts): void {
 		listEl.appendChild(empty);
 	}
 
-	// [ + new session ] button
 	const newBtn = doc.querySelector<HTMLButtonElement>("#sessions-new");
 	if (newBtn) {
-		// Remove old listener by cloning
-		const fresh = newBtn.cloneNode(true) as HTMLButtonElement;
-		newBtn.replaceWith(fresh);
-		fresh.addEventListener("click", () => {
+		const newBtnWithoutListeners = newBtn.cloneNode(true) as HTMLButtonElement;
+		newBtn.replaceWith(newBtnWithoutListeners);
+		newBtnWithoutListeners.addEventListener("click", () => {
 			const newId = mintSession();
 			setActiveSessionId(newId);
 			setPickerOpen(false);
@@ -245,8 +195,6 @@ export function renderSessions(root: HTMLElement, opts?: RenderOpts): void {
 		});
 	}
 }
-
-// ── Row builder ──────────────────────────────────────────────────────────────────────
 
 function buildSessionRow(
 	root: HTMLElement,
@@ -262,7 +210,6 @@ function buildSessionRow(
 	rowEl.className = "session-row";
 	rowEl.dataset.sessionId = id;
 
-	// Dirname line
 	const dirLine = doc.createElement("div");
 	dirLine.className = "session-dir";
 	dirLine.textContent = `${id}/`;
@@ -275,7 +222,6 @@ function buildSessionRow(
 	rowEl.appendChild(dirLine);
 
 	if (info.kind === "ok") {
-		// Meta line
 		const metaLine = doc.createElement("div");
 		metaLine.className = "session-meta";
 		const round = info.round;
@@ -283,7 +229,6 @@ function buildSessionRow(
 		metaLine.textContent = `epoch ${info.epoch} · turn ${round} · last played ${savedShort}`;
 		rowEl.appendChild(metaLine);
 
-		// Tree lines: 3 daemon .txt files + engine.dat (last)
 		const allFiles: Array<{ glyph: string; label: string }> = [];
 		for (let i = 0; i < info.daemonFiles.length; i++) {
 			const f = info.daemonFiles[i];
@@ -293,14 +238,12 @@ function buildSessionRow(
 				label: fileLabel(`*${f.name}`, f.size),
 			});
 		}
-		// engine.dat (last — commit signal)
 		allFiles.push({
 			glyph: "└─",
 			label: fileLabel("engine.dat", info.engineSize),
 		});
 		rowEl.appendChild(buildTreeLines(doc, allFiles));
 
-		// Ops buttons
 		const opsEl = doc.createElement("div");
 		opsEl.className = "ops";
 		rowEl.appendChild(opsEl);
@@ -324,21 +267,17 @@ function buildSessionRow(
 			try {
 				dupSession(id);
 				reRender();
-			} catch {
-				// programmer-error guard; should not reach in normal use
-			}
+			} catch {}
 		});
 		opsEl.appendChild(dupBtn);
 
 		buildRmControls(doc, id, opsEl, reRender);
 	} else if (info.kind === "broken") {
-		// Tag
 		const tagEl = doc.createElement("span");
 		tagEl.className = "tag-corrupt";
 		tagEl.textContent = "[ corrupt ]";
 		rowEl.appendChild(tagEl);
 
-		// Placeholder tree
 		const placeholderFiles = [
 			{ glyph: "├─", label: "<corrupted>" },
 			{ glyph: "├─", label: "<corrupted>" },
@@ -346,20 +285,17 @@ function buildSessionRow(
 		];
 		rowEl.appendChild(buildTreeLines(doc, placeholderFiles));
 
-		// Ops: rm only
 		const opsEl = doc.createElement("div");
 		opsEl.className = "ops";
 		rowEl.appendChild(opsEl);
 		buildRmControls(doc, id, opsEl, reRender);
 	} else {
-		// version-mismatch
 		const tagEl = doc.createElement("span");
 		tagEl.className = "tag-version-mismatch";
 		tagEl.textContent = "[ version mismatch ]";
 		rowEl.appendChild(tagEl);
 		appendVersionMismatchNote(doc, rowEl, info.schemaVersion);
 
-		// Tree lines from whatever files exist
 		const treeFiles: Array<{ glyph: string; label: string }> = [];
 		for (let i = 0; i < info.daemonFiles.length; i++) {
 			const f = info.daemonFiles[i];
@@ -373,7 +309,6 @@ function buildSessionRow(
 			rowEl.appendChild(buildTreeLines(doc, treeFiles));
 		}
 
-		// Ops: rm only
 		const opsEl = doc.createElement("div");
 		opsEl.className = "ops";
 		rowEl.appendChild(opsEl);
@@ -383,15 +318,6 @@ function buildSessionRow(
 	return rowEl;
 }
 
-// ── Version-mismatch row note ────────────────────────────────────────────────
-
-/**
- * Append a one-line note to a version-mismatch row linking the save to the
- * archived build that still reads it. Mirrors the banner: when the schema
- * number maps to a known archived release the note offers the `./v/<version>/`
- * link; when it doesn't, the [ version mismatch ] tag is the whole story and
- * no note is added.
- */
 function appendVersionMismatchNote(
 	doc: Document,
 	rowEl: HTMLElement,
@@ -406,8 +332,6 @@ function appendVersionMismatchNote(
 	rowEl.appendChild(noteEl);
 }
 
-// ── Rm confirmation controls ──────────────────────────────────────────────────
-
 function buildRmControls(
 	doc: Document,
 	id: string,
@@ -418,7 +342,6 @@ function buildRmControls(
 	rmBtn.type = "button";
 	rmBtn.textContent = "[ rm ]";
 	rmBtn.addEventListener("click", () => {
-		// Swap to confirmation mode
 		rmBtn.remove();
 		const confirmBtn = doc.createElement("button");
 		confirmBtn.type = "button";
@@ -432,7 +355,6 @@ function buildRmControls(
 		cancelBtn.type = "button";
 		cancelBtn.textContent = "[ cancel ]";
 		cancelBtn.addEventListener("click", () => {
-			// Swap back to rm mode
 			confirmBtn.remove();
 			cancelBtn.remove();
 			opsEl.appendChild(rmBtn);
@@ -444,8 +366,6 @@ function buildRmControls(
 	opsEl.appendChild(rmBtn);
 }
 
-// ── OpenRouter key detection ──────────────────────────────────────────────────
-
 function hasOpenRouterKey(): boolean {
 	try {
 		return localStorage.getItem("openrouter_key") !== null;
@@ -453,8 +373,6 @@ function hasOpenRouterKey(): boolean {
 		return false;
 	}
 }
-
-// ── Archived row builder ─────────────────────────────────────────────────────
 
 function buildArchivedSessionRow(
 	root: HTMLElement,
@@ -468,7 +386,6 @@ function buildArchivedSessionRow(
 	rowEl.className = "session-row";
 	rowEl.dataset.sessionId = id;
 
-	// Dirname line
 	const dirLine = doc.createElement("div");
 	dirLine.className = "session-dir";
 	dirLine.textContent = `${id}/`;
@@ -479,7 +396,6 @@ function buildArchivedSessionRow(
 	rowEl.appendChild(dirLine);
 
 	if (info.kind === "archived") {
-		// Meta line using lastPlayedAt
 		const metaLine = doc.createElement("div");
 		metaLine.className = "session-meta";
 		const round = info.round;
@@ -487,7 +403,6 @@ function buildArchivedSessionRow(
 		metaLine.textContent = `epoch ${info.epoch} · turn ${round} · last played ${playedShort}`;
 		rowEl.appendChild(metaLine);
 
-		// Tree lines
 		const allFiles: Array<{ glyph: string; label: string }> = [];
 		for (let i = 0; i < info.daemonFiles.length; i++) {
 			const f = info.daemonFiles[i];
@@ -503,7 +418,6 @@ function buildArchivedSessionRow(
 		});
 		rowEl.appendChild(buildTreeLines(doc, allFiles));
 
-		// Ops
 		const opsEl = doc.createElement("div");
 		opsEl.className = "ops";
 		rowEl.appendChild(opsEl);
@@ -557,7 +471,6 @@ function buildArchivedSessionRow(
 		rowEl.appendChild(opsEl);
 		buildArchivedRmControls(doc, id, opsEl, reRender);
 	} else {
-		// version-mismatch
 		const tagEl = doc.createElement("span");
 		tagEl.className = "tag-version-mismatch";
 		tagEl.textContent = "[ version mismatch ]";
