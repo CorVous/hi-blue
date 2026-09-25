@@ -261,3 +261,7 @@ affordance such as `?winImmediately=1` would change a later test's round.
   retry instead of a pass. The non-zero cost exercises budget deduction.
 - `makeLocalStorageStub` copies its initial data, so tests mutate
   `stub._store`, not the object they passed in.
+- `vitest.config.ts` gives the jsdom project the URL `http://localhost:8787/`
+  so `location.origin` matches the wrangler-dev origin and the SPA's
+  dev-affordance gates (`location.origin === __WORKER_BASE_URL__`) hold under
+  test.

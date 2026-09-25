@@ -3,51 +3,27 @@
 	"main": "src/proxy/worker.ts",
 	"compatibility_date": "2025-12-01",
 	"compatibility_flags": ["nodejs_compat"],
-	// Build the SPA before wrangler bundles the Worker. Runs on every
-	// `wrangler dev` / `wrangler deploy`, so the dist/ directory always
-	// exists when the assets binding loads. `watch_dir` re-runs the build
-	// when SPA sources change during `wrangler dev`.
 	"build": {
 		"command": "pnpm build",
 		"watch_dir": "src/spa"
 	},
-	// Static assets (SPA). The Worker fetch handler runs first for every
-	// request and either handles API routes itself or delegates to the
-	// ASSETS binding. Running the Worker first lets us attach Cache-Control
-	// headers to /assets/* (long, immutable — they're content-hashed) and to
-	// index.html (no-cache — it pins the current hashed bundle).
 	"assets": {
 		"directory": "./dist",
 		"not_found_handling": "single-page-application",
-		// Expose the assets binding as env.ASSETS so the Worker can delegate
-		// unmatched paths via env.ASSETS.fetch(request) — required for the
-		// not_found_handling: single-page-application fallback to fire on
-		// client-side routes such as /endgame.
 		"binding": "ASSETS",
 		"run_worker_first": true
 	},
 	"kv_namespaces": [
 		{
-			// per-IP and global daily cost counters (units: integer micro-USD).
-			// In production: create with `wrangler kv namespace create RATE_GUARD_KV`
-			// In tests: vitest-pool-workers provides an in-process KV implementation.
 			"binding": "RATE_GUARD_KV",
 			"id": "95ce5559c2894b1eb6bb95c25897a0c3",
 			"remote": true
 		}
 	],
-	// Secrets (not committed here — provision via `wrangler secret put <NAME>`):
-	//   OPENROUTER_API_KEY — API key for OpenRouter (POST /v1/chat/completions)
 	"vars": {
-		// Per-IP daily ceiling, in integer micro-USD (1e-6 USD). 1000000 = $1.00.
 		"PER_IP_DAILY_MICRO_USD_MAX": "1000000",
-		// Global daily wallet ceiling, in integer micro-USD. 10000000 = $10.00.
 		"GLOBAL_DAILY_MICRO_USD_MAX": "10000000",
-		// Pre-charge per request, in integer micro-USD. 5000 = $0.005.
 		"PRE_CHARGE_MICRO_USD": "5000",
-		// Comma-separated list of origins allowed to call POST /v1/chat/completions
-		// via a browser (CORS). Add localhost ports via .dev.vars or
-		// `wrangler dev --var ALLOWED_ORIGINS=...` to keep local ports out of prod.
 		"ALLOWED_ORIGINS": "https://hi-blue.cor.gg"
 	}
 }

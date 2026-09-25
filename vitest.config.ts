@@ -11,8 +11,6 @@ export default defineConfig({
 					include: ["src/**/*.test.ts", "scripts/__tests__/**/*.test.ts"],
 					exclude: ["src/proxy/**", "src/spa/__tests__/build.test.ts"],
 					environment: "jsdom",
-					// Match the wrangler-dev origin so SPA dev-affordance gates
-					// (`location.origin === __WORKER_BASE_URL__`) hold under test.
 					environmentOptions: {
 						jsdom: { url: "http://localhost:8787/" },
 					},

@@ -3,7 +3,21 @@ import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { extname, join, relative } from "node:path";
 import ts from "typescript";
 
-const ROOTS = ["src", "e2e", "evals", "scripts"];
+const ROOTS = [
+	"src",
+	"e2e",
+	"evals",
+	"scripts",
+	"vitest.config.ts",
+	"playwright.config.ts",
+	"wrangler.jsonc",
+	"biome.json",
+	"tsconfig.json",
+	"tsconfig.base.json",
+	"tsconfig.tools.json",
+	"package.json",
+];
+const JSON_EXTENSIONS = new Set([".json", ".jsonc"]);
 const SCRIPT_EXTENSIONS = new Set([
 	".ts",
 	".mts",
@@ -39,9 +53,12 @@ function listFiles(directory) {
 }
 
 function scriptCommentRanges(path, text) {
-	const kind = extname(path).startsWith(".t")
-		? ts.ScriptKind.TS
-		: ts.ScriptKind.JS;
+	const extension = extname(path);
+	const kind = JSON_EXTENSIONS.has(extension)
+		? ts.ScriptKind.JSON
+		: extension.startsWith(".t")
+			? ts.ScriptKind.TS
+			: ts.ScriptKind.JS;
 	const source = ts.createSourceFile(
 		path,
 		text,
@@ -77,7 +94,8 @@ function patternCommentRanges(text, pattern, keepShebang) {
 
 function commentRanges(path, text) {
 	const extension = extname(path);
-	if (SCRIPT_EXTENSIONS.has(extension)) return scriptCommentRanges(path, text);
+	if (SCRIPT_EXTENSIONS.has(extension) || JSON_EXTENSIONS.has(extension))
+		return scriptCommentRanges(path, text);
 	if (SHELL_EXTENSIONS.has(extension))
 		return patternCommentRanges(text, /^[ \t]*#.*$/gm, true);
 	if (STYLE_EXTENSIONS.has(extension))

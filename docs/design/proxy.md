@@ -43,6 +43,28 @@ rules and tradeoffs the code cannot state by itself.
 - `PER_IP_DAILY_MICRO_USD_MAX`, `GLOBAL_DAILY_MICRO_USD_MAX`,
   `PRE_CHARGE_MICRO_USD` are optional. `configFromEnv` falls back to $1.00 per
   IP per day, $10.00 globally per day, and a $0.005 pre-charge.
+- Every money value in `wrangler.jsonc` is an integer in micro-USD
+  (1e-6 USD): `1000000` is $1.00. Production sets $1.00 per IP per day,
+  $10.00 globally, and a $0.005 pre-charge.
+- `RATE_GUARD_KV` is created in production with
+  `wrangler kv namespace create RATE_GUARD_KV`; under Vitest the workers pool
+  provides an in-process KV, so tests never touch the real namespace.
+
+### `wrangler.jsonc` layout
+
+- `build.command` runs `pnpm build` before Wrangler bundles the Worker, on
+  every `wrangler dev` and `wrangler deploy`, so `dist/` always exists when
+  the assets binding loads. `watch_dir: src/spa` re-runs it when SPA sources
+  change during `wrangler dev`.
+- `assets.run_worker_first: true` makes the fetch handler run for every
+  request: it serves the API routes itself and delegates the rest to the
+  `ASSETS` binding. Running first is what lets `withAssetCacheHeaders` attach
+  `Cache-Control` to `/assets/*` (long, immutable, content-hashed) and to
+  `index.html` (no-cache, since it pins the current hashed bundle).
+- `assets.binding: "ASSETS"` exposes the binding as `env.ASSETS` so the
+  Worker can call `env.ASSETS.fetch(request)` for unmatched paths; without it
+  the `not_found_handling: single-page-application` fallback never fires for
+  client-side routes such as `/endgame`.
 
 ## CORS (`cors.ts`)
 
