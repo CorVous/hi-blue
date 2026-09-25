@@ -9,6 +9,7 @@
 		"playwright.config.ts",
 		"evals/**/*.ts",
 		"evals/**/*.mts",
+		"scripts/__tests__/**/*.ts",
 		"src/spa/env.d.ts"
 	]
 }
