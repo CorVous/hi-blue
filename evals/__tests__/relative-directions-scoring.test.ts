@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { TurnRecord } from "../../../../evals/relative-directions/scoring.js";
+import type { TurnRecord } from "../relative-directions/scoring.js";
 import {
 	parseDirectionalStatement,
 	parseMovementStatement,
@@ -8,7 +8,7 @@ import {
 	scoreScenario,
 	structuralCoherence,
 	structuralCoherenceForTurn,
-} from "../../../../evals/relative-directions/scoring.js";
+} from "../relative-directions/scoring.js";
 
 const FAILING_CORNER_PROSE =
 	"I'm against a north wall. Wall one step north, one step north-west, " +
