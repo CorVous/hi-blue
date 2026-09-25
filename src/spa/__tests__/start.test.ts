@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { installLocalStorageStub } from "./fixtures/local-storage";
 import { STATIC_CONTENT_PACKS } from "./fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "./fixtures/static-personas";
 
@@ -71,27 +72,6 @@ const INDEX_BODY_HTML = `
 </main>
 `;
 
-function makeLocalStorageStub(initialData: Record<string, string> = {}) {
-	const store: Record<string, string> = { ...initialData };
-	return {
-		getItem: vi.fn((key: string) => store[key] ?? null),
-		setItem: vi.fn((key: string, value: string) => {
-			store[key] = value;
-		}),
-		removeItem: vi.fn((key: string) => {
-			delete store[key];
-		}),
-		clear: vi.fn(() => {
-			for (const k of Object.keys(store)) delete store[k];
-		}),
-		get length() {
-			return Object.keys(store).length;
-		},
-		key: vi.fn((i: number) => Object.keys(store)[i] ?? null),
-		_store: store,
-	};
-}
-
 function getMain(): HTMLElement {
 	const main = document.querySelector<HTMLElement>("main");
 	if (!main) throw new Error("main element not found");
@@ -115,7 +95,7 @@ describe("renderStart — screen visibility", () => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
-		vi.stubGlobal("localStorage", makeLocalStorageStub());
+		installLocalStorageStub();
 	});
 
 	afterEach(() => {
@@ -162,7 +142,7 @@ describe("renderStart — BEGIN button state", () => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
-		vi.stubGlobal("localStorage", makeLocalStorageStub());
+		installLocalStorageStub();
 	});
 
 	afterEach(() => {
@@ -206,7 +186,7 @@ describe("renderStart — BEGIN click saves session and navigates", () => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
-		vi.stubGlobal("localStorage", makeLocalStorageStub());
+		installLocalStorageStub();
 	});
 
 	afterEach(() => {
@@ -284,7 +264,7 @@ describe("renderStart — CapHitError handling", () => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
-		vi.stubGlobal("localStorage", makeLocalStorageStub());
+		installLocalStorageStub();
 	});
 
 	afterEach(() => {
@@ -335,7 +315,7 @@ describe("renderStart — persistence warning banners", () => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
-		vi.stubGlobal("localStorage", makeLocalStorageStub());
+		installLocalStorageStub();
 	});
 
 	afterEach(() => {

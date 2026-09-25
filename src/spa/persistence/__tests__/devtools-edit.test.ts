@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { installLocalStorageStub } from "../../__tests__/fixtures/local-storage";
 import { makeTestPack } from "../../game/__tests__/fixtures/make-test-pack.js";
 import { startGame } from "../../game/engine.js";
 import type { AiPersona, GameState } from "../../game/types.js";
@@ -57,38 +58,16 @@ function makeFreshGame(): GameState {
 	});
 }
 
-function makeLocalStorageStub(initialData: Record<string, string> = {}) {
-	const store: Record<string, string> = { ...initialData };
-	return {
-		getItem: vi.fn((key: string) => store[key] ?? null),
-		setItem: vi.fn((key: string, value: string) => {
-			store[key] = value;
-		}),
-		removeItem: vi.fn((key: string) => {
-			delete store[key];
-		}),
-		clear: vi.fn(() => {
-			for (const k of Object.keys(store)) delete store[k];
-		}),
-		get length() {
-			return Object.keys(store).length;
-		},
-		key: vi.fn((i: number) => Object.keys(store)[i] ?? null),
-		_store: store,
-	};
-}
-
 describe("devtools-edit: mutating daemon .txt affects conversationLogs on reload", () => {
 	beforeEach(() => {
-		vi.stubGlobal("localStorage", makeLocalStorageStub());
+		installLocalStorageStub();
 	});
 	afterEach(() => {
 		vi.restoreAllMocks();
 	});
 
 	it("editing red daemon .txt message entry is visible after loadActiveSession()", () => {
-		const stub = makeLocalStorageStub();
-		vi.stubGlobal("localStorage", stub);
+		const stub = installLocalStorageStub();
 
 		mintAndActivateNewSession();
 		const sessionId = stub._store[ACTIVE_KEY];
@@ -140,8 +119,7 @@ describe("devtools-edit: mutating daemon .txt affects conversationLogs on reload
 	});
 
 	it("editing daemon .txt to add a new message entry is preserved", () => {
-		const stub = makeLocalStorageStub();
-		vi.stubGlobal("localStorage", stub);
+		const stub = installLocalStorageStub();
 
 		mintAndActivateNewSession();
 		const sessionId = stub._store[ACTIVE_KEY];

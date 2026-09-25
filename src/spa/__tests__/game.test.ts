@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GAME_SAVE_VERSION } from "../../save-serializer";
 import {
-	STATIC_CONTENT_PACK_NO_PAIRS,
+	installLocalStorageStub,
+	type LocalStorageStub,
+	makeLocalStorageStub,
+	seedSessionInStub,
+} from "./fixtures/local-storage";
+import {
 	STATIC_CONTENT_PACKS,
 	STATIC_OBJECTIVE_TYPES,
 } from "./fixtures/static-content-packs";
@@ -24,67 +29,6 @@ vi.mock("../../content/content-pack-generator", () => ({
 }));
 
 const IDENTITY_SHUFFLE_RANDOM = 0.9;
-
-function makeLocalStorageStub(initialData: Record<string, string> = {}) {
-	const store: Record<string, string> = { ...initialData };
-	return {
-		getItem: vi.fn((key: string) => store[key] ?? null),
-		setItem: vi.fn((key: string, value: string) => {
-			store[key] = value;
-		}),
-		removeItem: vi.fn((key: string) => {
-			delete store[key];
-		}),
-		clear: vi.fn(() => {
-			for (const k of Object.keys(store)) delete store[k];
-		}),
-		get length() {
-			return Object.keys(store).length;
-		},
-		key: vi.fn((i: number) => Object.keys(store)[i] ?? null),
-		_store: store,
-	};
-}
-
-async function seedSessionInStub(
-	stub: ReturnType<typeof makeLocalStorageStub>,
-	opts?: { noPairs?: boolean },
-): Promise<void> {
-	const { buildSessionFromAssets } = await import("../game/bootstrap.js");
-	const { mintAndActivateNewSession, saveActiveSession } = await import(
-		"../persistence/session-storage.js"
-	);
-
-	const prev = globalThis.localStorage;
-	Object.defineProperty(globalThis, "localStorage", {
-		value: stub,
-		writable: true,
-		configurable: true,
-	});
-
-	const _contentPack = opts?.noPairs
-		? STATIC_CONTENT_PACK_NO_PAIRS
-		: (STATIC_CONTENT_PACKS[0] as NonNullable<
-				(typeof STATIC_CONTENT_PACKS)[0]
-			>);
-
-	try {
-		mintAndActivateNewSession();
-		const session = buildSessionFromAssets({
-			personas: STATIC_PERSONAS,
-			contentPacksA: STATIC_CONTENT_PACKS,
-			contentPacksB: STATIC_CONTENT_PACKS,
-			objectiveTypes: opts?.noPairs ? [] : STATIC_OBJECTIVE_TYPES,
-		});
-		saveActiveSession(session.getState());
-	} finally {
-		Object.defineProperty(globalThis, "localStorage", {
-			value: prev,
-			writable: true,
-			configurable: true,
-		});
-	}
-}
 
 const INDEX_BODY_HTML = `
 <main>
@@ -294,19 +238,15 @@ function makeMessageToolCallFetchMock() {
 		});
 }
 
-const _RED_ACTION = '{"action":"chat","content":"RED_RESPONSE_UNIQUE_TAG"}';
-const _GREEN_ACTION = '{"action":"chat","content":"GREEN_RESPONSE_UNIQUE_TAG"}';
-const _CYAN_ACTION = '{"action":"chat","content":"CYAN_RESPONSE_UNIQUE_TAG"}';
-
 describe("renderGame (game route — three-AI)", () => {
-	let _stub: ReturnType<typeof makeLocalStorageStub>;
+	let _stub: LocalStorageStub;
 
 	beforeEach(async () => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 		_stub = makeLocalStorageStub();
-		await seedSessionInStub(_stub);
+		await seedSessionInStub(_stub, { objectiveTypes: STATIC_OBJECTIVE_TYPES });
 		vi.stubGlobal("localStorage", _stub);
 	});
 
@@ -550,7 +490,7 @@ describe("renderGame (game route — three-AI)", () => {
 		expect(greenTranscript.textContent).not.toContain("blue: hello");
 	});
 
-	it("after three-phase win condition, endgame screen shown and chat hidden; download button has parseable GameSave", async () => {
+	it("after a winImmediately win, endgame screen shown and chat hidden; download button has parseable GameSave", async () => {
 		const mockFetch = vi.fn().mockResolvedValue({
 			ok: true,
 			status: 200,
@@ -797,27 +737,6 @@ describe("renderGame (game route — three-AI)", () => {
 });
 
 describe("renderGame — localStorage persistence", () => {
-	function makeLocalStorageStub(initialData: Record<string, string> = {}) {
-		const store: Record<string, string> = { ...initialData };
-		return {
-			getItem: vi.fn((key: string) => store[key] ?? null),
-			setItem: vi.fn((key: string, value: string) => {
-				store[key] = value;
-			}),
-			removeItem: vi.fn((key: string) => {
-				delete store[key];
-			}),
-			clear: vi.fn(() => {
-				for (const k of Object.keys(store)) delete store[k];
-			}),
-			get length() {
-				return Object.keys(store).length;
-			},
-			key: vi.fn((i: number) => Object.keys(store)[i] ?? null),
-			_store: store,
-		};
-	}
-
 	beforeEach(() => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		vi.stubGlobal("__DEV__", true);
@@ -833,7 +752,7 @@ describe("renderGame — localStorage persistence", () => {
 
 	it("state is saved to localStorage after a successful round", async () => {
 		const stub = makeLocalStorageStub();
-		await seedSessionInStub(stub);
+		await seedSessionInStub(stub, { objectiveTypes: STATIC_OBJECTIVE_TYPES });
 		vi.stubGlobal("fetch", makeThreeAiPassFetchMock());
 		vi.stubGlobal("localStorage", stub);
 		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
@@ -862,7 +781,7 @@ describe("renderGame — localStorage persistence", () => {
 
 	it("state is restored from localStorage on renderGame when saved state exists", async () => {
 		const stub = makeLocalStorageStub();
-		await seedSessionInStub(stub);
+		await seedSessionInStub(stub, { objectiveTypes: STATIC_OBJECTIVE_TYPES });
 		vi.stubGlobal("fetch", makeMessageToolCallFetchMock());
 		vi.stubGlobal("localStorage", stub);
 		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
@@ -920,7 +839,7 @@ describe("renderGame — localStorage persistence", () => {
 
 	it("quota-exceeded localStorage write surfaces the warning banner without breaking the round", async () => {
 		const stub = makeLocalStorageStub();
-		await seedSessionInStub(stub);
+		await seedSessionInStub(stub, { objectiveTypes: STATIC_OBJECTIVE_TYPES });
 		stub.setItem.mockImplementation((key: string, value: string) => {
 			if (key.endsWith("/engine.dat")) {
 				throw Object.assign(new DOMException("quota", "QuotaExceededError"));
@@ -993,7 +912,7 @@ describe("renderGame — localStorage persistence", () => {
 
 	it("chat message content is preserved across a fresh renderGame via chatHistories", async () => {
 		const stub = makeLocalStorageStub();
-		await seedSessionInStub(stub);
+		await seedSessionInStub(stub, { objectiveTypes: STATIC_OBJECTIVE_TYPES });
 		vi.stubGlobal("fetch", makeMessageToolCallFetchMock());
 		vi.stubGlobal("localStorage", stub);
 		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
@@ -1037,7 +956,7 @@ describe("renderGame — localStorage persistence", () => {
 
 	it("transcripts swap to the new session when the active pointer moves mid-SPA (no page refresh, #203 [ load ] regression)", async () => {
 		const stub = makeLocalStorageStub();
-		await seedSessionInStub(stub);
+		await seedSessionInStub(stub, { objectiveTypes: STATIC_OBJECTIVE_TYPES });
 		vi.stubGlobal("fetch", makeMessageToolCallFetchMock());
 		vi.stubGlobal("localStorage", stub);
 		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
@@ -1095,7 +1014,7 @@ describe("renderGame — chat_lockout event", () => {
 		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 		const _stub = makeLocalStorageStub();
-		await seedSessionInStub(_stub);
+		await seedSessionInStub(_stub, { objectiveTypes: STATIC_OBJECTIVE_TYPES });
 		vi.stubGlobal("localStorage", _stub);
 	});
 
@@ -1170,7 +1089,7 @@ describe("renderGame — mention-based addressing", () => {
 		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 		const _stub = makeLocalStorageStub();
-		await seedSessionInStub(_stub);
+		await seedSessionInStub(_stub, { objectiveTypes: STATIC_OBJECTIVE_TYPES });
 		vi.stubGlobal("localStorage", _stub);
 	});
 
@@ -1297,7 +1216,7 @@ describe("renderGame — panel-click addressee", () => {
 		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 		const _stub = makeLocalStorageStub();
-		await seedSessionInStub(_stub);
+		await seedSessionInStub(_stub, { objectiveTypes: STATIC_OBJECTIVE_TYPES });
 		vi.stubGlobal("localStorage", _stub);
 	});
 
@@ -1441,7 +1360,7 @@ describe("renderGame — addressee persistence after send", () => {
 		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 		const _stub = makeLocalStorageStub();
-		await seedSessionInStub(_stub);
+		await seedSessionInStub(_stub, { objectiveTypes: STATIC_OBJECTIVE_TYPES });
 		vi.stubGlobal("localStorage", _stub);
 	});
 
@@ -1623,7 +1542,7 @@ describe("visual feedback for active addressee", () => {
 		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 		const _stub = makeLocalStorageStub();
-		await seedSessionInStub(_stub);
+		await seedSessionInStub(_stub, { objectiveTypes: STATIC_OBJECTIVE_TYPES });
 		vi.stubGlobal("localStorage", _stub);
 	});
 
@@ -1850,7 +1769,7 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 		const _stub = makeLocalStorageStub();
-		await seedSessionInStub(_stub);
+		await seedSessionInStub(_stub, { objectiveTypes: STATIC_OBJECTIVE_TYPES });
 		vi.stubGlobal("localStorage", _stub);
 	});
 
@@ -2056,14 +1975,14 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 });
 
 describe("renderGame — round error reporting (issue #231)", () => {
-	let _stub: ReturnType<typeof makeLocalStorageStub>;
+	let _stub: LocalStorageStub;
 
 	beforeEach(async () => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 		_stub = makeLocalStorageStub();
-		await seedSessionInStub(_stub);
+		await seedSessionInStub(_stub, { objectiveTypes: STATIC_OBJECTIVE_TYPES });
 		vi.stubGlobal("localStorage", _stub);
 	});
 
@@ -2389,8 +2308,7 @@ describe("renderBootstrapLoadingFlow — happy path", () => {
 		});
 
 		vi.resetModules();
-		const stub = makeLocalStorageStub();
-		vi.stubGlobal("localStorage", stub);
+		installLocalStorageStub();
 
 		const { mintAndActivateNewSession } = await import(
 			"../persistence/session-storage.js"
@@ -2445,8 +2363,7 @@ describe("renderBootstrapLoadingFlow — timeout", () => {
 		});
 
 		vi.resetModules();
-		const stub = makeLocalStorageStub();
-		vi.stubGlobal("localStorage", stub);
+		installLocalStorageStub();
 
 		const { mintAndActivateNewSession } = await import(
 			"../persistence/session-storage.js"
@@ -2505,8 +2422,7 @@ describe("renderBootstrapLoadingFlow — timeout", () => {
 		});
 
 		vi.resetModules();
-		const stub = makeLocalStorageStub();
-		vi.stubGlobal("localStorage", stub);
+		installLocalStorageStub();
 
 		const { mintAndActivateNewSession } = await import(
 			"../persistence/session-storage.js"
@@ -2583,8 +2499,7 @@ describe("renderBootstrapLoadingFlow — promise propagation", () => {
 		});
 
 		vi.resetModules();
-		const stub = makeLocalStorageStub();
-		vi.stubGlobal("localStorage", stub);
+		installLocalStorageStub();
 
 		const { mintAndActivateNewSession } = await import(
 			"../persistence/session-storage.js"
@@ -2628,8 +2543,7 @@ describe("renderBootstrapLoadingFlow — promise propagation", () => {
 		});
 
 		vi.resetModules();
-		const stub = makeLocalStorageStub();
-		vi.stubGlobal("localStorage", stub);
+		installLocalStorageStub();
 
 		const { mintAndActivateNewSession } = await import(
 			"../persistence/session-storage.js"
@@ -2677,8 +2591,7 @@ describe("renderBootstrapLoadingFlow — promise propagation", () => {
 		});
 
 		vi.resetModules();
-		const stub = makeLocalStorageStub();
-		vi.stubGlobal("localStorage", stub);
+		installLocalStorageStub();
 
 		const { mintAndActivateNewSession } = await import(
 			"../persistence/session-storage.js"
@@ -2719,8 +2632,7 @@ describe("renderBootstrapLoadingFlow — promise propagation", () => {
 		});
 
 		vi.resetModules();
-		const stub = makeLocalStorageStub();
-		vi.stubGlobal("localStorage", stub);
+		installLocalStorageStub();
 
 		const { mintAndActivateNewSession } = await import(
 			"../persistence/session-storage.js"
@@ -2764,8 +2676,7 @@ describe("renderBootstrapLoadingFlow — promise propagation", () => {
 		});
 
 		vi.resetModules();
-		const stub = makeLocalStorageStub();
-		vi.stubGlobal("localStorage", stub);
+		installLocalStorageStub();
 
 		const { mintAndActivateNewSession } = await import(
 			"../persistence/session-storage.js"

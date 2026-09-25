@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ContentPack } from "../game/types.js";
+import {
+	makeLocalStorageStub,
+	seedSessionInStub,
+} from "./fixtures/local-storage";
 import { STATIC_CONTENT_PACKS } from "./fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "./fixtures/static-personas";
 
@@ -71,49 +75,8 @@ describe("renderGame — session restore (formerly async bootstrap)", () => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
-		const store: Record<string, string> = {};
-		const stub = {
-			getItem: vi.fn((key: string) => store[key] ?? null),
-			setItem: vi.fn((key: string, value: string) => {
-				store[key] = value;
-			}),
-			removeItem: vi.fn((key: string) => {
-				delete store[key];
-			}),
-			clear: vi.fn(() => {
-				for (const k of Object.keys(store)) delete store[k];
-			}),
-			get length() {
-				return Object.keys(store).length;
-			},
-			key: vi.fn((i: number) => Object.keys(store)[i] ?? null),
-			_store: store,
-		};
-		const { buildSessionFromAssets } = await import("../game/bootstrap.js");
-		const { mintAndActivateNewSession, saveActiveSession } = await import(
-			"../persistence/session-storage.js"
-		);
-		const prev = globalThis.localStorage;
-		Object.defineProperty(globalThis, "localStorage", {
-			value: stub,
-			writable: true,
-			configurable: true,
-		});
-		try {
-			mintAndActivateNewSession();
-			const session = buildSessionFromAssets({
-				personas: STATIC_PERSONAS,
-				contentPacksA: STATIC_CONTENT_PACKS,
-				contentPacksB: STATIC_CONTENT_PACKS,
-			});
-			saveActiveSession(session.getState());
-		} finally {
-			Object.defineProperty(globalThis, "localStorage", {
-				value: prev,
-				writable: true,
-				configurable: true,
-			});
-		}
+		const stub = makeLocalStorageStub();
+		await seedSessionInStub(stub);
 		vi.stubGlobal("localStorage", stub);
 	});
 

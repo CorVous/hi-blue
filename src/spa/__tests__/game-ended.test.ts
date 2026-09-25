@@ -4,6 +4,10 @@ import type { ContentPack } from "../game/types.js";
 vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 vi.stubGlobal("__DEV__", true);
 
+import {
+	makeLocalStorageStub,
+	seedSessionInStub,
+} from "./fixtures/local-storage";
 import { STATIC_CONTENT_PACKS } from "./fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "./fixtures/static-personas";
 
@@ -16,55 +20,13 @@ const TEST_CONTENT_PACK: ContentPack = {
 	aiStarts: {},
 };
 
-function makeLocalStorageStub(initialData: Record<string, string> = {}) {
-	const store: Record<string, string> = { ...initialData };
-	return {
-		getItem: vi.fn((key: string) => store[key] ?? null),
-		setItem: vi.fn((key: string, value: string) => {
-			store[key] = value;
-		}),
-		removeItem: vi.fn((key: string) => {
-			delete store[key];
-		}),
-		clear: vi.fn(() => {
-			for (const k of Object.keys(store)) delete store[k];
-		}),
-		get length() {
-			return Object.keys(store).length;
-		},
-		key: vi.fn((i: number) => Object.keys(store)[i] ?? null),
-		_store: store,
-	};
-}
-
-async function seedSessionInStub(
-	stub: ReturnType<typeof makeLocalStorageStub>,
-): Promise<void> {
+async function buildEngineState() {
 	const { startGame } = await import("../game/engine.js");
-	const { mintAndActivateNewSession, saveActiveSession } = await import(
-		"../persistence/session-storage.js"
+	return startGame(
+		STATIC_PERSONAS,
+		STATIC_CONTENT_PACKS[0] ?? TEST_CONTENT_PACK,
+		{ budgetPerAi: 5, rng: () => 0 },
 	);
-	const prev = globalThis.localStorage;
-	Object.defineProperty(globalThis, "localStorage", {
-		value: stub,
-		writable: true,
-		configurable: true,
-	});
-	try {
-		mintAndActivateNewSession();
-		const gameState = startGame(
-			STATIC_PERSONAS,
-			STATIC_CONTENT_PACKS[0] ?? TEST_CONTENT_PACK,
-			{ budgetPerAi: 5, rng: () => 0 },
-		);
-		saveActiveSession(gameState);
-	} finally {
-		Object.defineProperty(globalThis, "localStorage", {
-			value: prev,
-			writable: true,
-			configurable: true,
-		});
-	}
 }
 
 vi.mock("../../content", async (importOriginal) => {
@@ -173,7 +135,7 @@ describe("renderGame — game_ended disables #send permanently (regression #89)"
 	beforeEach(async () => {
 		document.body.innerHTML = INDEX_BODY_HTML;
 		const stub = makeLocalStorageStub();
-		await seedSessionInStub(stub);
+		await seedSessionInStub(stub, { buildState: buildEngineState });
 		vi.stubGlobal("localStorage", stub);
 	});
 
