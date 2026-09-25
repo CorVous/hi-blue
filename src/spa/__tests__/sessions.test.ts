@@ -1,13 +1,3 @@
-/**
- * sessions.test.ts
- *
- * Unit tests for renderSessions() (views/sessions.ts).
- *
- * Uses jsdom (vitest default) with a minimal HTML fixture. Prepopulates
- * localStorage with ok/broken/version-mismatch sessions and verifies DOM output.
- *
- * Issue #174 (parent #155).
- */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { startGame } from "../game/engine.js";
 import type { AiPersona, ContentPack, GameState } from "../game/types.js";
@@ -18,8 +8,6 @@ import {
 	SESSIONS_PREFIX,
 } from "../persistence/session-storage.js";
 
-// ── Test fixture ──────────────────────────────────────────────────────────────
-
 const TEST_CONTENT_PACK: ContentPack = {
 	setting: "",
 	weather: "",
@@ -28,8 +16,6 @@ const TEST_CONTENT_PACK: ContentPack = {
 	wallName: "wall",
 	aiStarts: {},
 };
-
-// ── HTML fixture ───────────────────────────────────────────────────────────────
 
 const INDEX_BODY_HTML = `
 <main>
@@ -47,8 +33,6 @@ const INDEX_BODY_HTML = `
   <section id="endgame" hidden></section>
 </main>
 `;
-
-// ── Fixtures ──────────────────────────────────────────────────────────────────
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -90,8 +74,6 @@ function makeFreshGame(): GameState {
 	});
 }
 
-// ── localStorage stub ─────────────────────────────────────────────────────────────
-
 function makeLocalStorageStub(initialData: Record<string, string> = {}) {
 	const store: Record<string, string> = { ...initialData };
 	return {
@@ -119,12 +101,6 @@ function getMain(): HTMLElement {
 	return main;
 }
 
-// ── Helpers to seed sessions ──────────────────────────────────────────────────
-
-/**
- * Write a valid (ok) session into the store.
- * Returns the session id used.
- */
 async function seedOkSession(
 	stub: ReturnType<typeof makeLocalStorageStub>,
 	id: string,
@@ -142,9 +118,6 @@ async function seedOkSession(
 	stub._store[`${prefix}engine.dat`] = files.engine!;
 }
 
-/**
- * Write a broken session (no engine.dat) into the store.
- */
 async function seedBrokenSession(
 	stub: ReturnType<typeof makeLocalStorageStub>,
 	id: string,
@@ -158,14 +131,8 @@ async function seedBrokenSession(
 	for (const [aiId, daemonJson] of Object.entries(files.daemons)) {
 		stub._store[`${prefix}${aiId}.txt`] = daemonJson;
 	}
-	// Intentionally omit engine.dat to trigger broken state
 }
 
-/**
- * Write a version-mismatch session into the store. Defaults to schema 999 (no
- * archive-map entry); pass 11 for the retired pre-v12 schema, which the live
- * map links to `0.0.2-beta.2`.
- */
 async function seedVersionMismatchSession(
 	stub: ReturnType<typeof makeLocalStorageStub>,
 	id: string,
@@ -180,15 +147,12 @@ async function seedVersionMismatchSession(
 	for (const [aiId, daemonJson] of Object.entries(files.daemons)) {
 		stub._store[`${prefix}${aiId}.txt`] = daemonJson;
 	}
-	// Write engine.dat with the stale schemaVersion
 	// biome-ignore lint/style/noNonNullAssertion: serializeSession always returns engine
 	const rawJson = deobfuscate(files.engine!);
 	const sealed = JSON.parse(rawJson);
 	sealed.schemaVersion = schemaVersion;
 	stub._store[`${prefix}engine.dat`] = obfuscate(JSON.stringify(sealed));
 }
-
-// ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe("renderSessions — screen visibility", () => {
 	beforeEach(() => {
@@ -374,10 +338,6 @@ describe("renderSessions — row rendering", () => {
 		expect(btnTexts).toContain("[ rm ]");
 	});
 
-	// Version-mismatch archived-build note (picker row): a save stamped with the
-	// retired schema 11 is mapped in SCHEMA_ARCHIVE_MAP to the released build
-	// that still reads it, so the live build renders the note. The Playwright
-	// equivalent lives in e2e/sessions-picker.spec.ts.
 	it("version-mismatch row with a mapped schema renders the archived-build note", async () => {
 		vi.resetModules();
 		const stub = makeLocalStorageStub();
@@ -522,10 +482,8 @@ describe("renderSessions — [ rm ] confirm/cancel", () => {
 		).find((b) => b.textContent === "[ confirm rm ]");
 		confirmBtn?.click();
 
-		// Row should be gone (re-render removes it)
 		expect(document.querySelectorAll(".session-row")).toHaveLength(0);
 
-		// Storage keys should be removed
 		const remaining = Object.keys(stub._store).filter((k) =>
 			k.startsWith(`${SESSIONS_PREFIX}0xAAAA/`),
 		);
@@ -556,12 +514,9 @@ describe("renderSessions — [ + new session ] button", () => {
 		expect(newBtn).toBeTruthy();
 		newBtn?.click();
 
-		// Active pointer should now be set to a valid id
 		const activeId = stub._store[ACTIVE_KEY];
 		expect(activeId).toMatch(/^0x[0-9A-F]{4}$/);
 
-		// renderApp resolves the new state (active session id with no save yet)
-		// → "empty" verdict → start view.
 		expect(getMain().dataset.view).toBe("start");
 	});
 });
@@ -582,7 +537,6 @@ describe("renderSessions — [ load ] button", () => {
 		const stub = makeLocalStorageStub();
 		vi.stubGlobal("localStorage", stub);
 
-		// Seed session A as active, session B as another
 		await seedOkSession(stub, "0xAAAA");
 		await seedOkSession(stub, "0xBBBB", "2025-02-01T10:00:00.000Z");
 		stub._store[ACTIVE_KEY] = "0xAAAA";
@@ -590,7 +544,6 @@ describe("renderSessions — [ load ] button", () => {
 		const { renderSessions } = await import("../views/sessions.js");
 		renderSessions(getMain());
 
-		// Find the [ load ] button for session B
 		const rowB = document.querySelector<HTMLElement>(
 			'.session-row[data-session-id="0xBBBB"]',
 		);
@@ -600,19 +553,11 @@ describe("renderSessions — [ load ] button", () => {
 		expect(loadBtn).toBeTruthy();
 		loadBtn?.click();
 
-		// Active pointer should now be 0xBBBB
 		expect(stub._store[ACTIVE_KEY]).toBe("0xBBBB");
-		// renderApp resolves the new active pointer → "populated" verdict → game view.
 		expect(getMain().dataset.view).toBe("game");
 	});
 });
 
-// ── Archive helpers ─────────────────────────────────────────────────────────────
-
-/**
- * Seed an archived session directly into the stub store for DOM tests.
- * Uses an archived meta with readonly: true, lastPlayedAt, epoch: 1.
- */
 async function seedArchivedSessionInStore(
 	stub: ReturnType<typeof makeLocalStorageStub>,
 	id: string,
@@ -628,7 +573,6 @@ async function seedArchivedSessionInStore(
 	);
 	const dstPrefix = `${ARCHIVE_PREFIX}${id}/`;
 
-	// Parse meta and stamp archived fields
 	const meta = JSON.parse(files.meta) as Record<string, unknown>;
 	meta.readonly = true;
 	meta.lastPlayedAt = lastSavedAt;
@@ -640,8 +584,6 @@ async function seedArchivedSessionInStore(
 	// biome-ignore lint/style/noNonNullAssertion: serializeSession always returns engine
 	stub._store[`${dstPrefix}engine.dat`] = files.engine!;
 }
-
-// ── renderSessions — archived sessions section ──────────────────────────────────
 
 describe("renderSessions — archived sessions section", () => {
 	beforeEach(() => {
@@ -682,8 +624,6 @@ describe("renderSessions — archived sessions section", () => {
 		vi.stubGlobal("localStorage", stub);
 		await seedArchivedSessionInStore(stub, "0xVMAR");
 
-		// Stamp the archived engine with the retired schema 11 so the row is a
-		// mismatch that the live archive map can link.
 		const { deobfuscate, obfuscate } = await import(
 			"../persistence/sealed-blob-codec.js"
 		);
@@ -831,7 +771,6 @@ describe("renderSessions — archived Continue button", () => {
 	it("button absent when openrouter_key absent", async () => {
 		vi.resetModules();
 		const stub = makeLocalStorageStub();
-		// No openrouter_key in stub
 		vi.stubGlobal("localStorage", stub);
 		await seedArchivedSessionInStore(stub, "0xARCH");
 

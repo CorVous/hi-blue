@@ -1,10 +1,3 @@
-/**
- * Tests for the version boundary and its compatibility helpers.
- *
- * The boundary is a plain, testable value, so these tests reason about both
- * the live v12/v5 boundary (#539) and a cutoff at some other version (e.g.
- * `{ session: 11, gs: 4 }`) without hardcoding the live constants.
- */
 import { describe, expect, it } from "vitest";
 import { GAME_SAVE_VERSION } from "../../../save-serializer.js";
 import {
@@ -20,7 +13,6 @@ import {
 	type VersionBoundary,
 } from "../version-boundary.js";
 
-// The live v12/v5 boundary (#539). Retired 11/4 saves are mismatches from here.
 const V12_V5: VersionBoundary = { session: 12, gs: 5 };
 
 describe("live boundary constants (#539)", () => {

@@ -9,13 +9,49 @@ export interface UsageInfo {
 	total_tokens?: number;
 	prompt_tokens?: number;
 	completion_tokens?: number;
-	/**
-	 * Prompt tokens served from the provider's prefix cache.
-	 * Sourced from `usage.prompt_tokens_details.cached_tokens` (OpenAI-spec)
-	 * with a fallback to `usage.cache_read_input_tokens` (Anthropic-style).
-	 * Undefined when the provider doesn't surface caching info.
-	 */
 	cached_tokens?: number;
+}
+
+const SSE_EVENT_DELIMITER = "\n\n";
+
+// biome-ignore lint/suspicious/noExplicitAny: SSE JSON shape is dynamic
+function usageFromChunk(chunk: any): UsageInfo | undefined {
+	const usage = chunk?.usage;
+	if (!usage || typeof usage !== "object") return undefined;
+	const cost = typeof usage.cost === "number" ? usage.cost : undefined;
+	const total_tokens =
+		typeof usage.total_tokens === "number" ? usage.total_tokens : undefined;
+	const prompt_tokens =
+		typeof usage.prompt_tokens === "number" ? usage.prompt_tokens : undefined;
+	const completion_tokens =
+		typeof usage.completion_tokens === "number"
+			? usage.completion_tokens
+			: undefined;
+	const cachedFromOpenAi =
+		typeof usage.prompt_tokens_details?.cached_tokens === "number"
+			? usage.prompt_tokens_details.cached_tokens
+			: undefined;
+	const cachedFromAnthropic =
+		typeof usage.cache_read_input_tokens === "number"
+			? usage.cache_read_input_tokens
+			: undefined;
+	const cached_tokens = cachedFromOpenAi ?? cachedFromAnthropic;
+	if (
+		cost === undefined &&
+		total_tokens === undefined &&
+		prompt_tokens === undefined &&
+		completion_tokens === undefined &&
+		cached_tokens === undefined
+	) {
+		return undefined;
+	}
+	return {
+		cost,
+		total_tokens,
+		prompt_tokens,
+		completion_tokens,
+		cached_tokens,
+	};
 }
 
 export async function parseSSEStream(
@@ -29,7 +65,6 @@ export async function parseSSEStream(
 	const decoder = new TextDecoder();
 	let buffer = "";
 
-	// Accumulate tool_calls deltas by index
 	const toolCallAccumulator: Map<
 		number,
 		{ id: string; name: string; argumentsJson: string }
@@ -49,10 +84,9 @@ export async function parseSSEStream(
 			if (done) break;
 			buffer += decoder.decode(value, { stream: true });
 
-			// Split on double newline (SSE event delimiter)
-			const events = buffer.split("\n\n");
-			// Last element may be an incomplete event — keep in buffer
-			buffer = events.pop() ?? "";
+			const events = buffer.split(SSE_EVENT_DELIMITER);
+			const unfinishedTrailingEvent = events.pop() ?? "";
+			buffer = unfinishedTrailingEvent;
 
 			for (const event of events) {
 				for (const line of event.split("\n")) {
@@ -74,15 +108,13 @@ export async function parseSSEStream(
 							onReasoning?.(reasoning);
 						}
 
-						// Accumulate tool_calls deltas by index
 						const toolCallDeltas = parsed?.choices?.[0]?.delta?.tool_calls;
 						if (Array.isArray(toolCallDeltas)) {
 							for (const delta of toolCallDeltas) {
 								if (typeof delta?.index !== "number") continue;
 								const idx: number = delta.index;
-								const existing = toolCallAccumulator.get(idx);
-								if (!existing) {
-									// First fragment: initialise from id, name
+								const accumulated = toolCallAccumulator.get(idx);
+								if (!accumulated) {
 									toolCallAccumulator.set(idx, {
 										id: typeof delta.id === "string" ? delta.id : "",
 										name:
@@ -95,76 +127,30 @@ export async function parseSSEStream(
 												: "",
 									});
 								} else {
-									// Subsequent fragments: concatenate arguments
 									if (typeof delta.function?.arguments === "string") {
-										existing.argumentsJson += delta.function.arguments;
+										accumulated.argumentsJson += delta.function.arguments;
 									}
-									// id and name only appear in the first fragment
 									if (typeof delta.id === "string" && delta.id) {
-										existing.id = delta.id;
+										accumulated.id = delta.id;
 									}
 									if (
 										typeof delta.function?.name === "string" &&
 										delta.function.name
 									) {
-										existing.name = delta.function.name;
+										accumulated.name = delta.function.name;
 									}
 								}
 							}
 						}
 
-						// finish_reason: "tool_calls" signals the calls are complete
 						const finishReason = parsed?.choices?.[0]?.finish_reason;
 						if (finishReason === "tool_calls") {
 							flushToolCalls();
 						}
 
-						// Final chunk from OpenRouter (with usage:{include:true})
-						// has empty choices and a populated usage object.
-						const usage = parsed?.usage;
-						if (onUsage && usage && typeof usage === "object") {
-							const cost =
-								typeof usage.cost === "number" ? usage.cost : undefined;
-							const total_tokens =
-								typeof usage.total_tokens === "number"
-									? usage.total_tokens
-									: undefined;
-							const prompt_tokens =
-								typeof usage.prompt_tokens === "number"
-									? usage.prompt_tokens
-									: undefined;
-							const completion_tokens =
-								typeof usage.completion_tokens === "number"
-									? usage.completion_tokens
-									: undefined;
-							const cachedFromOpenAi =
-								typeof usage.prompt_tokens_details?.cached_tokens === "number"
-									? usage.prompt_tokens_details.cached_tokens
-									: undefined;
-							const cachedFromAnthropic =
-								typeof usage.cache_read_input_tokens === "number"
-									? usage.cache_read_input_tokens
-									: undefined;
-							const cached_tokens = cachedFromOpenAi ?? cachedFromAnthropic;
-							if (
-								cost !== undefined ||
-								total_tokens !== undefined ||
-								prompt_tokens !== undefined ||
-								completion_tokens !== undefined ||
-								cached_tokens !== undefined
-							) {
-								onUsage({
-									cost,
-									total_tokens,
-									prompt_tokens,
-									completion_tokens,
-									cached_tokens,
-								});
-							}
-						}
-					} catch {
-						// Ignore malformed JSON chunks
-					}
+						const usage = usageFromChunk(parsed);
+						if (usage) onUsage?.(usage);
+					} catch {}
 				}
 			}
 		}

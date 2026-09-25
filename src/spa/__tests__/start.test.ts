@@ -1,24 +1,7 @@
-/**
- * start.test.ts
- *
- * Unit tests for the renderStart() route renderer (views/start.ts).
- *
- * Covers:
- *  - Generation kicks off on mount; BEGIN starts disabled
- *  - BEGIN becomes enabled after generation resolves
- *  - BEGIN click calls saveActiveSession and navigates to #/game
- *  - CapHitError → #cap-hit visible, #start-screen hidden
- *  - reason=broken / version-mismatch banner text
- *  - reason=legacy-save-discarded banner text (see also migration-banner.test.ts)
- *  - No reason param → no banner
- *
- * Issue #173 (parent #155).
- */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { STATIC_CONTENT_PACKS } from "./fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "./fixtures/static-personas";
 
-// Pin generatePersonas to static fixture (no LLM call in tests).
 vi.mock("../../content", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("../../content")>();
 	return {
@@ -27,15 +10,12 @@ vi.mock("../../content", async (importOriginal) => {
 	};
 });
 
-// Pin generateDualContentPacks to static content packs (no LLM call in tests).
 vi.mock("../../content/content-pack-generator", () => ({
 	generateDualContentPacks: async () => ({
 		packA: STATIC_CONTENT_PACKS[0],
 		packB: STATIC_CONTENT_PACKS[0],
 	}),
 }));
-
-// ── HTML fixture ──────────────────────────────────────────────────────────────
 
 const INDEX_BODY_HTML = `
 <main>
@@ -91,8 +71,6 @@ const INDEX_BODY_HTML = `
 </main>
 `;
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
 function makeLocalStorageStub(initialData: Record<string, string> = {}) {
 	const store: Record<string, string> = { ...initialData };
 	return {
@@ -120,13 +98,17 @@ function getMain(): HTMLElement {
 	return main;
 }
 
-/** Set location.search via history.replaceState so route renderers can read
- *  test affordances (skipDialup, winImmediately, seed, …) from it. */
 function setSearch(query: string): void {
 	window.history.replaceState({}, "", `/?${query}`);
 }
 
-// ── Tests ─────────────────────────────────────────────────────────────────────
+async function awaitIgnoringRejection(
+	promise: Promise<unknown>,
+): Promise<void> {
+	try {
+		await promise;
+	} catch {}
+}
 
 describe("renderStart — screen visibility", () => {
 	beforeEach(() => {
@@ -149,12 +131,8 @@ describe("renderStart — screen visibility", () => {
 		vi.resetModules();
 		const { renderStart } = await import("../views/start.js");
 
-		try {
-			setSearch("skipDialup=1");
-			await renderStart(getMain());
-		} catch {
-			// generation may reject in test environment — ok
-		}
+		setSearch("skipDialup=1");
+		await awaitIgnoringRejection(renderStart(getMain()));
 
 		const startScreen = document.querySelector<HTMLElement>("#start-screen");
 		const panelsEl = document.querySelector<HTMLElement>("#panels");
@@ -166,20 +144,12 @@ describe("renderStart — screen visibility", () => {
 	});
 
 	it("renders dial with colored status spans when animation is skipped", async () => {
-		// shouldSkipAnimation() short-circuits the typed animation and paints
-		// the full transcript synchronously. The DIAL_LINES status strings
-		// embed `<span class="ok">` / `<span class="hot">` HTML; assigning
-		// them via `textContent` would escape the tags and lose the coloring.
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 		vi.resetModules();
 		const { renderStart } = await import("../views/start.js");
 
 		setSearch("skipDialup=1");
-		try {
-			await renderStart(getMain());
-		} catch {
-			// generation may reject in test environment — ok
-		}
+		await awaitIgnoringRejection(renderStart(getMain()));
 
 		const dialEl = document.querySelector<HTMLElement>("#dial");
 		expect(dialEl?.querySelectorAll(".ok").length ?? 0).toBeGreaterThan(0);
@@ -208,22 +178,13 @@ describe("renderStart — BEGIN button state", () => {
 		vi.resetModules();
 		const { renderStart } = await import("../views/start.js");
 
-		// renderStart kicks off generation and returns a promise. With skipDialup,
-		// the login form reveals synchronously; BEGIN should be available
-		// immediately so the player can click through to the progressive-loading
-		// game route while content packs are still resolving.
 		setSearch("skipDialup=1");
 		const renderPromise = renderStart(getMain());
 
 		const beginBtn = document.querySelector<HTMLButtonElement>("#begin");
 		expect(beginBtn?.disabled).toBe(false);
 
-		// Clean up — let generation finish
-		try {
-			await renderPromise;
-		} catch {
-			// ok
-		}
+		await awaitIgnoringRejection(renderPromise);
 	});
 
 	it("BEGIN remains enabled after generation resolves successfully", async () => {
@@ -270,10 +231,6 @@ describe("renderStart — BEGIN click saves session and navigates", () => {
 		const pwEl = document.querySelector<HTMLInputElement>("#password");
 		if (pwEl) pwEl.dataset.real = "password";
 
-		// Click BEGIN — start.ts calls renderApp, which sets data-view on <main>.
-		// The dispatcher sees no active session, mints one; with an in-flight
-		// bootstrap (from renderStart's startBootstrap) the game view owns the
-		// progressive-loading UI rather than bouncing back to start.
 		beginBtn?.click();
 
 		expect(getMain().dataset.view).toBe("game");
@@ -294,7 +251,6 @@ describe("renderStart — BEGIN click saves session and navigates", () => {
 		beginBtn?.click();
 		beginBtn?.click();
 
-		// After first click, _beginClickPending=true and btn.disabled=true; second is no-op.
 		expect(beginBtn?.disabled).toBe(true);
 	});
 
@@ -311,16 +267,12 @@ describe("renderStart — BEGIN click saves session and navigates", () => {
 		const pwEl = document.querySelector<HTMLInputElement>("#password");
 		const errorEl = document.querySelector<HTMLElement>("#login-error");
 
-		// Wrong password — directly setting dataset.real bypasses the masking listener,
-		// which is fine because the gate reads dataset.real.
 		if (pwEl) pwEl.dataset.real = "wrong";
 
 		const viewBefore = getMain().dataset.view;
 		beginBtn?.click();
 
-		// renderApp not called → data-view unchanged.
 		expect(getMain().dataset.view).toBe(viewBefore);
-		// Error revealed and CONNECT remains enabled for retry.
 		expect(errorEl?.hasAttribute("hidden")).toBe(false);
 		expect(errorEl?.textContent).toContain("access denied");
 		expect(beginBtn?.disabled).toBe(false);
@@ -347,10 +299,6 @@ describe("renderStart — CapHitError handling", () => {
 
 		vi.resetModules();
 
-		// Override the bootstrap module so the split generation rejects with
-		// CapHitError on both promises. Pending-bootstrap subscribes to each
-		// promise; raising CapHitError on either is enough to trigger the
-		// start route's #cap-hit fallback.
 		vi.doMock("../game/bootstrap.js", async (importOriginal) => {
 			const actual =
 				await importOriginal<typeof import("../game/bootstrap.js")>();
@@ -369,15 +317,10 @@ describe("renderStart — CapHitError handling", () => {
 			};
 		});
 
-		// Re-import after doMock so the mock takes effect
 		const { renderStart } = await import("../views/start.js");
 
-		try {
-			setSearch("skipDialup=1");
-			await renderStart(getMain());
-		} catch {
-			// renderStart re-throws generation errors — expected
-		}
+		setSearch("skipDialup=1");
+		await awaitIgnoringRejection(renderStart(getMain()));
 
 		const capHitEl = document.querySelector<HTMLElement>("#cap-hit");
 		const startScreenEl = document.querySelector<HTMLElement>("#start-screen");
@@ -408,11 +351,7 @@ describe("renderStart — persistence warning banners", () => {
 		const { renderStart } = await import("../views/start.js");
 
 		setSearch("skipDialup=1");
-		try {
-			await renderStart(getMain(), { reason: "broken" });
-		} catch {
-			// ok
-		}
+		await awaitIgnoringRejection(renderStart(getMain(), { reason: "broken" }));
 
 		const warningEl = document.querySelector<HTMLElement>(
 			"#persistence-warning",
@@ -429,11 +368,7 @@ describe("renderStart — persistence warning banners", () => {
 		const { renderStart } = await import("../views/start.js");
 
 		setSearch("skipDialup=1");
-		try {
-			await renderStart(getMain(), { reason: "stuck" });
-		} catch {
-			// ok
-		}
+		await awaitIgnoringRejection(renderStart(getMain(), { reason: "stuck" }));
 
 		const warningEl = document.querySelector<HTMLElement>(
 			"#persistence-warning",
@@ -447,19 +382,15 @@ describe("renderStart — persistence warning banners", () => {
 	it("shows 'version-mismatch' map-miss banner text when no archive entry exists", async () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 		vi.resetModules();
-		// Schema 9 has no SCHEMA_ARCHIVE_MAP entry, so the banner falls back to
-		// the plain "kept" copy with no archived-build link.
 		const { renderStart } = await import("../views/start.js");
 
 		setSearch("skipDialup=1");
-		try {
-			await renderStart(getMain(), {
+		await awaitIgnoringRejection(
+			renderStart(getMain(), {
 				reason: "version-mismatch",
 				schemaVersion: 9,
-			});
-		} catch {
-			// ok
-		}
+			}),
+		);
 
 		const warningEl = document.querySelector<HTMLElement>(
 			"#persistence-warning",
@@ -468,28 +399,24 @@ describe("renderStart — persistence warning banners", () => {
 		expect(warningEl?.textContent).toContain(
 			"Saved game data is from an older version of hi-blue and cannot be loaded by this build. It has been kept — start a new game, or remove it from your Sessions list.",
 		);
-		// Map miss: no anchor.
 		expect(warningEl?.querySelector("a")).toBeNull();
 	});
 
 	it("shows 'version-mismatch' map-hit banner with archive link when entry exists", async () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 		vi.resetModules();
-		// Inject a test-only entry into SCHEMA_ARCHIVE_MAP before the route runs.
 		const archiveMapModule = await import("../persistence/archive-map.js");
 		archiveMapModule.SCHEMA_ARCHIVE_MAP[9] = "0.1.1";
 		try {
 			const { renderStart } = await import("../views/start.js");
 
 			setSearch("skipDialup=1");
-			try {
-				await renderStart(getMain(), {
+			await awaitIgnoringRejection(
+				renderStart(getMain(), {
 					reason: "version-mismatch",
 					schemaVersion: 9,
-				});
-			} catch {
-				// ok
-			}
+				}),
+			);
 
 			const warningEl = document.querySelector<HTMLElement>(
 				"#persistence-warning",
@@ -513,11 +440,9 @@ describe("renderStart — persistence warning banners", () => {
 		const { renderStart } = await import("../views/start.js");
 
 		setSearch("skipDialup=1");
-		try {
-			await renderStart(getMain(), { reason: "legacy-save-discarded" });
-		} catch {
-			// ok
-		}
+		await awaitIgnoringRejection(
+			renderStart(getMain(), { reason: "legacy-save-discarded" }),
+		);
 
 		const warningEl = document.querySelector<HTMLElement>(
 			"#persistence-warning",
@@ -534,11 +459,7 @@ describe("renderStart — persistence warning banners", () => {
 		const { renderStart } = await import("../views/start.js");
 
 		setSearch("skipDialup=1");
-		try {
-			await renderStart(getMain());
-		} catch {
-			// ok
-		}
+		await awaitIgnoringRejection(renderStart(getMain()));
 
 		const warningEl = document.querySelector<HTMLElement>(
 			"#persistence-warning",
@@ -547,19 +468,12 @@ describe("renderStart — persistence warning banners", () => {
 	});
 
 	it("silently skips a reason that has no copy", async () => {
-		// Dispatcher reasons like "empty" and "no-active-pointer" reach
-		// renderStart but are not user-facing problems — no banner shown.
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 		vi.resetModules();
 		const { renderStart } = await import("../views/start.js");
 
 		setSearch("skipDialup=1");
-		try {
-			// "empty" is a dispatcher reason with no PERSISTENCE_WARNING_MESSAGES entry.
-			await renderStart(getMain(), { reason: "empty" });
-		} catch {
-			// ok
-		}
+		await awaitIgnoringRejection(renderStart(getMain(), { reason: "empty" }));
 
 		const warningEl = document.querySelector<HTMLElement>(
 			"#persistence-warning",

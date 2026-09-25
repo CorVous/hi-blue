@@ -1,27 +1,9 @@
-/**
- * dev-gating.test.ts
- *
- * The dev inspector must never paint in a production build. `__DEV__` is a
- * compile-time constant substituted by esbuild (`scripts/build-spa.mjs`), and
- * the SPA test setup stubs it true, so every other inspector test exercises
- * the dev path only. These tests drive the `__DEV__ === false` branch
- * explicitly.
- *
- * The production *bundle* is verified separately: a build with a non-localhost
- * WORKER_BASE_URL contains none of the inspector's DOM identifiers **in its
- * compiled JS**, because esbuild eliminates the gated code. The CSS bundle is
- * not tree-shaken, so the inspector's selectors do remain in the stylesheet —
- * dead bytes, no leak. Unit tests cannot assert either; they can assert the
- * runtime guard on the branch they are able to reach.
- */
-
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { STATIC_CONTENT_PACKS } from "../../__tests__/fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "../../__tests__/fixtures/static-personas";
 import { GameSession } from "../../game/game-session";
 import { __resetInspectorForTests, renderInspector } from "../index";
 
-/** The inspector containers the app shell provides, as in the real DOM. */
 function inspectorShell(): void {
 	document.body.innerHTML = `
 		<div id="dev-game-strip" hidden></div>
@@ -55,7 +37,6 @@ describe("dev inspector gating", () => {
 
 		renderInspector(document.body, { session: buildSession() });
 
-		// No grid was created, and the containers stay hidden.
 		expect(document.querySelector(".dev-map-grid")).toBeNull();
 		expect(document.querySelectorAll(".dev-map-cell").length).toBe(0);
 		expect(
@@ -72,7 +53,6 @@ describe("dev inspector gating", () => {
 	it("renderInspector paints nothing when __DEV__ is false (pending branch)", () => {
 		vi.stubGlobal("__DEV__", false);
 
-		// A pending bootstrap must not reveal the strip either.
 		renderInspector(document.body, {
 			pendingBootstrap: {
 				firstRoundPromise: Promise.resolve([]),
@@ -90,7 +70,6 @@ describe("dev inspector gating", () => {
 	});
 
 	it("renderInspector still paints when __DEV__ is true", () => {
-		// The complement: the guard must gate, not disable the inspector.
 		renderInspector(document.body, { session: buildSession() });
 
 		expect(document.querySelectorAll(".dev-map-cell").length).toBe(25);

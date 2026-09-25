@@ -36,7 +36,6 @@ body {
 	color: #fff;
 }
 
-/* CRT scanlines */
 body::before {
 	content: "";
 	position: fixed;
@@ -72,13 +71,8 @@ body::before {
 	}
 }
 
-/* Layout — single screen */
 #stage {
 	min-height: 100dvh;
-	/* height: 100% gives CSS Grid a definite size so the 1fr panels row
-	   resolves against the viewport rather than expanding to content size.
-	   min-height: 100dvh stays so the stage never collapses shorter than
-	   the viewport (also required by the stage-layout contract test). */
 	height: 100%;
 	display: grid;
 	grid-template-rows: auto auto auto auto 1fr auto;
@@ -87,9 +81,6 @@ body::before {
 	animation: crt-flicker 6s infinite;
 }
 
-/* #phase-banner uses display:none when hidden, removing it from grid flow.
-   Pin panels to the 1fr row (5) and composer to the trailing auto row (6)
-   so they land correctly whether or not phase-banner is currently visible. */
 #panels.row {
 	grid-row: 5;
 }
@@ -119,7 +110,6 @@ header {
 	color: var(--amber);
 }
 
-/* Mobile-only header title — desktop uses the giant ASCII banner instead. */
 .mobile-title {
 	display: none;
 	font-size: 13px;
@@ -133,7 +123,6 @@ header {
 	display: none;
 }
 
-/* Banner row: banner + dev world map side by side */
 #banner-row {
 	display: flex;
 	align-items: flex-start;
@@ -141,7 +130,6 @@ header {
 	min-width: 0;
 }
 
-/* Banner */
 .banner {
 	margin: 0;
 	white-space: pre;
@@ -149,21 +137,9 @@ header {
 	font-size: 13px;
 	letter-spacing: 0;
 	color: var(--amber);
-	/* Same per-glyph halo accumulation as the panel chrome — the banner
-	   frame's `║` columns sit in separate line-boxes and bead under the
-	   inherited body text-shadow. */
 	text-shadow: none;
 }
 
-/* Each body-row `║` is wrapped in `.banner-side`. The glyph stays
-   visible at whatever stroke position the font draws it, and a stack
-   of zero-blur `text-shadow`s stamps clones of the glyph 1 and 2 pixels
-   above and below itself. The clones extend the glyph's own ink into
-   the inter-line gap that line-height: 1 leaves between adjacent rows,
-   so the column reads as a continuous double-line. Because the shadow
-   tracks the glyph (not a calc'd cell offset), it self-aligns with the
-   `╔`/`╗`/`╚`/`╝` corner glyphs above and below — no positioning math,
-   no subpixel guessing. */
 .banner-side {
 	text-shadow:
 		0 1px 0 var(--amber),
@@ -174,24 +150,17 @@ header {
 	color: var(--blue);
 }
 
-/* `.login-tag b` and `.login-sysinfo b` set color: var(--amber) at
-   specificity (0,1,1), which beats the single-class `.banner-blue` rule
-   above. Re-apply the blue color in those contexts. */
 .login-tag b.banner-blue,
 .login-sysinfo b.banner-blue {
 	color: var(--blue);
 }
 
-/* Top-info row */
 .topinfo {
 	display: flex;
 	justify-content: space-between;
 	color: var(--amber-dim);
 	font-size: 12px;
 	letter-spacing: 0.05em;
-	/* ASCII-style dashes — 6px ink + 3px gap, tracking how `-` glyphs
-	   render in JBM at 13px. Browsers' native `dashed` renders ~2/2px
-	   segments which read as a stipple, not as `----------`. */
 	background-image: linear-gradient(
 		to right,
 		rgba(255, 180, 84, 0.2) 6px,
@@ -218,17 +187,12 @@ header {
 	}
 }
 
-/* Main wraps panels + composer + ancillary surfaces */
 main {
 	display: contents;
 }
 
-/* Phase banner (shown at phase transitions) */
 #phase-banner {
 	padding: 4px 8px;
-	/* See `.topinfo` for the rationale behind the gradient-based dash
-	   pattern. Transparent 1px border preserves the original box dims
-	   under `box-sizing: border-box`. */
 	border: 1px solid transparent;
 	background-image:
 		linear-gradient(to right, rgba(255, 180, 84, 0.3) 6px, transparent 6px),
@@ -271,14 +235,12 @@ main {
 	}
 }
 
-/* Panel row */
 .row {
 	display: flex;
 	gap: 14px;
 	min-height: 0;
 }
 
-/* Stretchable border row: [corner][label][stretch dashes][corner-r absolute] */
 .brow {
 	display: flex;
 	align-items: stretch;
@@ -290,36 +252,18 @@ main {
 	position: relative;
 	min-width: 0;
 	color: var(--panel-color);
-	/* Borders are runs of box-drawing glyphs; the body's inherited
-	   text-shadow halos overlap per-glyph and bead along vertical sides
-	   (where line-box gaps interrupt the ink column). Drop the halo on
-	   the chrome so the eye fuses the glyphs into a continuous line. */
 	text-shadow: none;
 }
 
-/* Body row: vertical sides hugging the scrollable transcript */
 .side {
 	white-space: pre;
 	line-height: 1;
 	overflow: hidden;
 	word-break: break-all;
-	/* Match `.brow`'s explicit 13px so the `│` glyph cell width tracks
-	   the corner glyph cell width — at responsive (mobile) breakpoints
-	   the body drops to 12px and an inherited side would shrink the
-	   column ~0.6px narrower than the corner, shifting the `│` stroke
-	   visibly left of the `┌`/`└` vertical arms. */
 	font-size: 13px;
-	/* No explicit width — `1ch` is the advance of `0`, but JBM's box-
-	   drawing glyphs have a (very slightly) different advance, so
-	   pinning the column to 1ch shifts the `│` stroke half a pixel
-	   left of the corner glyphs' vertical arms. Let the box auto-size
-	   from the `│` glyph's own advance and the column lines up exactly. */
 	flex: 0 0 auto;
 	user-select: none;
 	color: var(--panel-color);
-	/* Same approach as the banner `║` — stamp clones of the glyph 1 px
-	   above and below itself with zero-blur text-shadows so the `│`
-	   ink bleeds into the inter-line gap that causes vertical beading. */
 	text-shadow:
 		0 1px 0 var(--panel-color, var(--amber)),
 		0 -1px 0 var(--panel-color, var(--amber));
@@ -355,15 +299,6 @@ main {
 	filter: grayscale(0.6);
 }
 
-/* ── Progressive-loading states (start → game transition) ─────────────────
- * #stage carries a `data-load-state` attribute set by views/game.ts:
- *   loading-daemons   — empty panel frames; composer disabled; status red
- *   generating-room   — names + braille spinners; bottom→top brightness
- *                       wipe driven by --fill-pct; status yellow
- *   stable (default)  — attribute removed; full-bright "live" appearance
- * The wipe overlays a dull layer that retreats from the bottom; pixels
- * BELOW --fill-pct (measured from the bottom edge) are fully bright.
- */
 #stage[data-load-state="loading-daemons"] .ai-panel,
 #stage[data-load-state="generating-room"] .ai-panel {
 	pointer-events: none;
@@ -400,8 +335,6 @@ main {
 	}
 }
 
-/* Topinfo right-cell status colors — green is .ok (existing), red is .err
- * (loading daemons), yellow is .warn (generating room). */
 .topinfo .err {
 	color: var(--err);
 	text-shadow: 0 0 6px rgba(255, 123, 107, 0.5);
@@ -428,9 +361,6 @@ main {
 	content: " ]──";
 }
 
-/* Panel label normally lives on the bottom edge; the top-edge copy is
-   hidden by default and only shown for strip cards in the bento layout
-   (see the <=720px media query). */
 .brow-top .panel-name {
 	display: none;
 }
@@ -500,7 +430,6 @@ main {
 	display: inline-block;
 }
 
-/* Default = thin; selected = heavy. Switch which fill shows via display. */
 .brow-fill-heavy,
 .side-heavy {
 	display: none;
@@ -516,7 +445,6 @@ main {
 	display: inline-block;
 }
 
-/* Body row: vertical sides hugging the scrollable transcript */
 .body {
 	flex: 1;
 	min-height: 0;
@@ -559,9 +487,6 @@ main {
 	word-break: break-word;
 }
 
-/* Each transcript line is wrapped in a .msg-line block so strip-card mode
-   can apply per-line nowrap + ellipsis. Desktop inherits pre-wrap from
-   .transcript and behaves identically to the pre-wrapper rendering. */
 .msg-line {
 	display: block;
 }
@@ -599,7 +524,6 @@ main {
 	background: transparent;
 }
 
-/* Command line */
 .cmd {
 	display: flex;
 	align-items: center;
@@ -723,13 +647,11 @@ main {
 	cursor: not-allowed;
 }
 
-/* Transcript message coloring */
 .transcript .msg-you {
 	color: var(--you);
 	text-shadow: 0 0 6px rgba(255, 245, 224, 0.5);
 }
 
-/* Start screen — CRT dial-up login */
 :root {
 	--amber-faint: #4a3618;
 }
@@ -966,9 +888,6 @@ main {
 	text-shadow: inherit;
 	caret-color: var(--amber);
 	padding: 2px 0 3px;
-	/* Password masking renders the user's input as `*` characters. JetBrains
-	   Mono ligates `**` and `***` into glyphs that shift the middle asterisk
-	   upward, so a 3-char password visually misaligns. */
 	font-variant-ligatures: none;
 }
 
@@ -1025,7 +944,6 @@ main {
 	}
 }
 
-/* Cap-hit (rate limit) */
 #cap-hit {
 	font-family: var(--mono);
 	padding: 12px 14px;
@@ -1127,7 +1045,6 @@ main {
 	text-decoration: underline;
 }
 
-/* Persistence warning */
 #persistence-warning {
 	padding: 6px 10px;
 	border: 1px solid transparent;
@@ -1155,7 +1072,6 @@ main {
 	text-shadow: 0 0 6px rgba(255, 123, 107, 0.4);
 }
 
-/* Endgame */
 #endgame:not([hidden]) {
 	display: flex;
 	flex-direction: column;
@@ -1269,7 +1185,6 @@ main {
 	display: none;
 }
 
-/* BYOK dialog */
 #byok-dialog {
 	background: var(--bg);
 	border: 1px solid var(--amber-dim);
@@ -1352,8 +1267,6 @@ main {
 	margin-top: 8px;
 }
 
-/* Responsive — narrow viewports collapse to a "bento": one main panel for the
-   currently @-addressed daemon, the other two as ~88px strip cards below. */
 @media (max-width: 720px) {
 	html,
 	body {
@@ -1405,9 +1318,6 @@ main {
 		display: grid;
 		grid-template-rows: minmax(0, 1fr) 88px;
 		grid-template-columns: 1fr 1fr;
-		/* Row gap is larger so the main panel sits clearly apart from the
-		   strip-card previews; column gap stays tight between the two
-		   side-by-side strip cards. */
 		row-gap: 14px;
 		column-gap: 6px;
 	}
@@ -1415,9 +1325,6 @@ main {
 	.ai-panel {
 		grid-row: 2;
 		min-height: 0;
-		/* Reset desktop flex-row sizing: the row is `display: grid` here, so
-		   `flex: 1 1 0; width: 0` from the desktop block would otherwise
-		   collapse panels to zero width inside their grid cells. */
 		flex: initial;
 		width: auto;
 	}
@@ -1433,10 +1340,6 @@ main {
 		padding: 4px 6px;
 	}
 
-	/* Strip-card preview: bottom-anchor the transcript so the most recent
-	   messages stay in view. Position absolute lets the transcript grow
-	   above its container; overflow:hidden on .scroll clips the older
-	   lines off the top. */
 	.ai-panel .transcript {
 		position: absolute;
 		left: 0;
@@ -1451,8 +1354,6 @@ main {
 		text-overflow: ellipsis;
 	}
 
-	/* Strip-card panels surface the daemon name on the TOP edge so the
-	   label is visible above the bottom-anchored transcript preview. */
 	.ai-panel .brow-top .panel-name {
 		display: inline-block;
 	}
@@ -1480,7 +1381,6 @@ main {
 		padding: 2px 10px 12px;
 	}
 
-	/* Main panel reverts to the scrollable, in-flow transcript. */
 	.ai-panel.panel--addressed .transcript,
 	#panels:not(:has(.panel--addressed)) > .ai-panel:first-child .transcript {
 		position: static;
@@ -1494,7 +1394,6 @@ main {
 		text-overflow: clip;
 	}
 
-	/* Main panel keeps its label on the bottom edge. */
 	.ai-panel.panel--addressed .brow-top .panel-name,
 	#panels:not(:has(.panel--addressed))
 		> .ai-panel:first-child
@@ -1527,7 +1426,6 @@ main {
 	}
 }
 
-/* Sessions picker */
 #sessions-screen:not([hidden]) {
 	display: flex;
 	flex-direction: column;
@@ -1805,7 +1703,6 @@ main {
 	display: inline-block;
 }
 
-/* Focus Vista button */
 .dev-footer-focus-vista {
 	background: none;
 	border: 1px dashed rgba(255, 180, 84, 0.4);
@@ -1821,7 +1718,6 @@ main {
 	border-color: rgba(255, 180, 84, 0.8);
 }
 
-/* Pending bootstrap strip */
 .dev-pending-strip {
 	display: flex;
 	gap: 6px;
@@ -1838,16 +1734,5 @@ main {
 	display: flex;
 	gap: 6px;
 	align-items: center;
-	/* Without this the row is a nowrap flex container, so its min-content
-	   width is the SUM of its items. Line 1 carries the randomized
-	   setting / weather / time-of-day strings, whose combined width varies
-	   per session and can exceed the ~351px the stage offers at 375px.
-	   #stage is a grid with a single implicit `auto` track and grid items
-	   default to `min-width: auto`, so that over-wide row expands the track
-	   and stretches HEADER, .topinfo, #panels and #composer onto it —
-	   page-level horizontal overflow. Measured at 375px over 24 natural
-	   boots: 3 overflowed (`body.scrollWidth` 379 / 385 / 396) unwrapped,
-	   0 with wrap. The sibling dev rows (.dev-footer-summary,
-	   .session-row .ops, #byok-buttons) already wrap. */
 	flex-wrap: wrap;
 }

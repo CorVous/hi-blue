@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ToolCallResult, UsageInfo } from "../streaming.js";
 import { parseSSEStream } from "../streaming.js";
 
-// Build-time constants; provide stubs for tests
 // biome-ignore lint/suspicious/noExplicitAny: stubbing a build-time constant
 (globalThis as any).__WORKER_BASE_URL__ = "http://localhost:8787";
 // biome-ignore lint/suspicious/noExplicitAny: stubbing a build-time constant
@@ -39,7 +38,6 @@ describe("parseSSEStream", () => {
 	});
 
 	it("handles SSE events split across chunk boundaries", async () => {
-		// Split "data: {...}\n\ndata: [DONE]\n\n" into two chunks mid-event
 		const fullEvent = `data: ${JSON.stringify({ choices: [{ delta: { content: "split" } }] })}\n\ndata: [DONE]\n\n`;
 		const midpoint = Math.floor(fullEvent.length / 2);
 		const chunk1 = fullEvent.slice(0, midpoint);
@@ -175,7 +173,6 @@ describe("parseSSEStream", () => {
 		const sseData = reasoningChunk + contentChunk + doneChunk;
 
 		const onDelta = vi.fn();
-		// Call without third argument — must not throw
 		await parseSSEStream(makeSSEStream([sseData]), onDelta);
 
 		expect(onDelta).toHaveBeenCalledTimes(1);
@@ -189,7 +186,6 @@ describe("parseSSEStream — tool_call delta assembly", () => {
 	});
 
 	it("assembles a single tool call across three SSE chunks", async () => {
-		// Chunk 1: first fragment with id and name
 		const chunk1 = `data: ${JSON.stringify({
 			choices: [
 				{
@@ -206,7 +202,6 @@ describe("parseSSEStream — tool_call delta assembly", () => {
 				},
 			],
 		})}\n\n`;
-		// Chunk 2: more arguments
 		const chunk2 = `data: ${JSON.stringify({
 			choices: [
 				{
@@ -216,7 +211,6 @@ describe("parseSSEStream — tool_call delta assembly", () => {
 				},
 			],
 		})}\n\n`;
-		// Chunk 3: finish arguments and finish_reason
 		const chunk3 = `data: ${JSON.stringify({
 			choices: [
 				{
@@ -330,7 +324,6 @@ describe("parseSSEStream — tool_call delta assembly", () => {
 	});
 
 	it("finish_reason:tool_calls flushes a partial (incomplete arguments) call", async () => {
-		// The model may emit finish_reason before [DONE]
 		const sseData = `data: ${JSON.stringify({
 			choices: [
 				{

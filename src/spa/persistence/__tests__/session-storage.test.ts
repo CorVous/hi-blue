@@ -33,8 +33,6 @@ import {
 	setActiveSessionId,
 } from "../session-storage.js";
 
-// ── Test fixtures ─────────────────────────────────────────────────────────────
-
 const TEST_CONTENT_PACK = makeTestPack([], { wallName: "wall" });
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
@@ -81,8 +79,6 @@ function makeFreshGame(): GameState {
 	});
 }
 
-// ── localStorage stub ─────────────────────────────────────────────────────────────
-
 function makeLocalStorageStub(initialData: Record<string, string> = {}) {
 	const store: Record<string, string> = { ...initialData };
 	return {
@@ -103,8 +99,6 @@ function makeLocalStorageStub(initialData: Record<string, string> = {}) {
 		_store: store,
 	};
 }
-
-// ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe("mintSessionId", () => {
 	it("matches /^0x[0-9A-F]{4}$/", () => {
@@ -162,19 +156,14 @@ describe("saveActiveSession", () => {
 		saveActiveSession(game);
 
 		const calls = stub.setItem.mock.calls.map((c) => c[0] as string);
-		// Skip the ACTIVE_KEY set
 		const dataCalls = calls.filter((k) => k !== ACTIVE_KEY);
 
-		// First key should be meta.json
 		expect(dataCalls[0]).toMatch(/meta\.json$/);
 
-		// Last key should be engine.dat
 		expect(dataCalls[dataCalls.length - 1]).toMatch(/engine\.dat$/);
 
-		// No whispers.txt key anywhere
 		expect(dataCalls.some((k) => k.includes("whispers"))).toBe(false);
 
-		// Middle 3 keys are daemon .txt files
 		const daemonCalls = dataCalls.slice(1, dataCalls.length - 1);
 		expect(daemonCalls).toHaveLength(3);
 		for (const k of daemonCalls) {
@@ -254,7 +243,6 @@ describe("loadActiveSession", () => {
 		const sessionId = mintAndActivateNewSession();
 		const game = makeFreshGame();
 		saveActiveSession(game);
-		// Remove engine.dat
 		stub.removeItem(`${SESSIONS_PREFIX}${sessionId}/engine.dat`);
 		stub._store[`${SESSIONS_PREFIX}${sessionId}/engine.dat`] =
 			undefined as unknown as string;
@@ -269,7 +257,6 @@ describe("loadActiveSession", () => {
 		const sessionId = mintAndActivateNewSession();
 		const game = makeFreshGame();
 		saveActiveSession(game);
-		// Overwrite engine.dat with garbage
 		stub._store[`${SESSIONS_PREFIX}${sessionId}/engine.dat`] =
 			"not-valid-base64$$$";
 		const result = loadActiveSession();
@@ -283,7 +270,6 @@ describe("loadActiveSession", () => {
 		const game = makeFreshGame();
 		saveActiveSession(game);
 
-		// Tamper with schemaVersion in engine.dat
 		const engineBlob = stub._store[`${SESSIONS_PREFIX}${sessionId}/engine.dat`];
 		if (!engineBlob) throw new Error("engine.dat should exist after save");
 		const rawJson = deobfuscate(engineBlob);
@@ -308,7 +294,6 @@ describe("loadActiveSession", () => {
 		const result = loadActiveSession();
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
-			// Flat model: no currentPhase / phases — verify state is valid
 			expect(result.state.isComplete).toBe(false);
 			expect(result.state.round).toBe(0);
 		}
@@ -332,9 +317,7 @@ describe("clearActiveSession", () => {
 
 		clearActiveSession();
 
-		// Pointer should be gone
 		expect(stub._store[ACTIVE_KEY]).toBeUndefined();
-		// All session keys should be gone
 		const remaining = Object.keys(stub._store).filter((k) =>
 			k.startsWith(SESSIONS_PREFIX),
 		);
@@ -393,23 +376,18 @@ describe("consecutive saves", () => {
 		mintAndActivateNewSession();
 		const game = makeFreshGame();
 
-		// First save
 		saveActiveSession(game, { createdAt: "2024-01-01T00:00:00.000Z" });
 		const firstLoad = loadActiveSession();
 		expect(firstLoad.kind).toBe("ok");
 
-		// Second save with same game state — should still work
 		saveActiveSession(game, { createdAt: "2024-01-01T00:00:00.000Z" });
 		const secondLoad = loadActiveSession();
 		expect(secondLoad.kind).toBe("ok");
 		if (secondLoad.kind === "ok") {
-			// Flat model: no currentPhase — verify state loaded successfully
 			expect(secondLoad.state.isComplete).toBe(false);
 		}
 	});
 });
-
-// ── listSessions ────────────────────────────────────────────────────────────────
 
 describe("listSessions", () => {
 	beforeEach(() => {
@@ -454,13 +432,10 @@ describe("listSessions", () => {
 		vi.stubGlobal("localStorage", stub);
 		const id = mintAndActivateNewSession();
 		saveActiveSession(makeFreshGame());
-		// Multiple files under same id -> should appear only once
 		const ids = listSessions();
 		expect(ids.filter((x) => x === id)).toHaveLength(1);
 	});
 });
-
-// ── loadSession ─────────────────────────────────────────────────────────────────
 
 describe("loadSession", () => {
 	beforeEach(() => {
@@ -518,13 +493,10 @@ describe("loadSession", () => {
 		vi.stubGlobal("localStorage", stub);
 		const activeId = mintAndActivateNewSession();
 		saveActiveSession(makeFreshGame());
-		// Load a different id
 		loadSession("0x1234");
 		expect(getActiveSessionId()).toBe(activeId);
 	});
 });
-
-// ── mintSession ──────────────────────────────────────────────────────────────────
 
 describe("mintSession", () => {
 	beforeEach(() => {
@@ -546,8 +518,6 @@ describe("mintSession", () => {
 		expect(getActiveSessionId()).toBeNull();
 	});
 });
-
-// ── dupSession ───────────────────────────────────────────────────────────────────
 
 describe("dupSession", () => {
 	beforeEach(() => {
@@ -574,14 +544,11 @@ describe("dupSession", () => {
 		saveActiveSession(makeFreshGame());
 		const newId = dupSession(srcId);
 
-		// Corrupt the new session's engine.dat
 		stub._store[`${SESSIONS_PREFIX}${newId}/engine.dat`] = "corrupted";
 
-		// Original should still load ok
 		const origResult = loadSession(srcId);
 		expect(origResult.kind).toBe("ok");
 
-		// New session should be broken
 		const newResult = loadSession(newId);
 		expect(newResult.kind).toBe("broken");
 	});
@@ -592,7 +559,6 @@ describe("dupSession", () => {
 		const srcId = mintAndActivateNewSession();
 		saveActiveSession(makeFreshGame());
 
-		// Clear the setItem mock so we only track dup writes
 		stub.setItem.mockClear();
 		const newId = dupSession(srcId);
 
@@ -636,8 +602,6 @@ describe("dupSession", () => {
 	});
 });
 
-// ── rmSession ────────────────────────────────────────────────────────────────────
-
 describe("rmSession", () => {
 	beforeEach(() => {
 		vi.stubGlobal("localStorage", makeLocalStorageStub());
@@ -656,13 +620,11 @@ describe("rmSession", () => {
 
 		rmSession(id1);
 
-		// id1's keys should be gone
 		const remaining = Object.keys(stub._store).filter((k) =>
 			k.startsWith(`${SESSIONS_PREFIX}${id1}/`),
 		);
 		expect(remaining).toHaveLength(0);
 
-		// id2's keys should still be there
 		const id2Keys = Object.keys(stub._store).filter((k) =>
 			k.startsWith(`${SESSIONS_PREFIX}${id2}/`),
 		);
@@ -688,17 +650,13 @@ describe("rmSession", () => {
 		saveActiveSession(makeFreshGame());
 		const id2 = mintAndActivateNewSession();
 		saveActiveSession(makeFreshGame());
-		// active is now id2
 		expect(getActiveSessionId()).toBe(id2);
 
 		rmSession(id1);
 
-		// Active pointer should still point to id2
 		expect(getActiveSessionId()).toBe(id2);
 	});
 });
-
-// ── getSessionInfo ───────────────────────────────────────────────────────────────
 
 describe("getSessionInfo", () => {
 	beforeEach(() => {
@@ -748,33 +706,23 @@ describe("getSessionInfo", () => {
 		const info = getSessionInfo(id);
 		expect(info.kind).toBe("version-mismatch");
 		if (info.kind === "version-mismatch") {
-			// The stale schema number rides along so the picker row can link
-			// the save to the archived build that still reads it.
 			expect(info.schemaVersion).toBe(999);
 			expect(Array.isArray(info.daemonFiles)).toBe(true);
 		}
 	});
 });
 
-// ── Archive helpers ─────────────────────────────────────────────────────────────
-
-/**
- * Seed an archived session directly into the stub store (without calling
- * archiveSession), for testing list/load/info/rm independently.
- */
 function seedArchiveInStub(
 	stub: ReturnType<typeof makeLocalStorageStub>,
 	sessionId: string,
 ): void {
 	const srcPrefix = `${SESSIONS_PREFIX}${sessionId}/`;
 	const dstPrefix = `${ARCHIVE_PREFIX}${sessionId}/`;
-	// Copy non-engine keys first
 	for (const [key, value] of Object.entries(stub._store)) {
 		if (key.startsWith(srcPrefix) && !key.endsWith("engine.dat")) {
 			stub._store[`${dstPrefix}${key.slice(srcPrefix.length)}`] = value;
 		}
 	}
-	// Patch meta with archived fields
 	const metaKey = `${srcPrefix}meta.json`;
 	if (stub._store[metaKey]) {
 		const meta = JSON.parse(stub._store[metaKey]) as Record<string, unknown>;
@@ -782,14 +730,11 @@ function seedArchiveInStub(
 		meta.lastPlayedAt = meta.lastSavedAt;
 		stub._store[`${dstPrefix}meta.json`] = JSON.stringify(meta, null, 2);
 	}
-	// Write engine.dat LAST (commit signal)
 	const engineKey = `${srcPrefix}engine.dat`;
 	if (stub._store[engineKey]) {
 		stub._store[`${dstPrefix}engine.dat`] = stub._store[engineKey];
 	}
 }
-
-// ── archiveSession ──────────────────────────────────────────────────────────────
 
 describe("archiveSession", () => {
 	beforeEach(() => {
@@ -810,7 +755,6 @@ describe("archiveSession", () => {
 		const dstPrefix = `${ARCHIVE_PREFIX}${id}/`;
 		expect(stub._store[`${dstPrefix}meta.json`]).toBeDefined();
 		expect(stub._store[`${dstPrefix}engine.dat`]).toBeDefined();
-		// At least one daemon .txt file should be archived
 		const daemonKeys = Object.keys(stub._store).filter(
 			(k) => k.startsWith(dstPrefix) && k.endsWith(".txt"),
 		);
@@ -841,7 +785,6 @@ describe("archiveSession", () => {
 			createdAt: "2024-01-01T00:00:00.000Z",
 		});
 
-		// Read the source lastSavedAt before archiving
 		const srcMeta = JSON.parse(
 			stub._store[`${SESSIONS_PREFIX}${id}/meta.json`] ?? "{}",
 		);
@@ -861,7 +804,6 @@ describe("archiveSession", () => {
 		vi.stubGlobal("localStorage", stub);
 		const id = mintAndActivateNewSession();
 		saveActiveSession(makeFreshGame());
-		// Patch meta epoch to 7 directly
 		const metaRaw = stub._store[`${SESSIONS_PREFIX}${id}/meta.json`] ?? "{}";
 		const meta = JSON.parse(metaRaw);
 		meta.epoch = 7;
@@ -934,8 +876,6 @@ describe("archiveSession", () => {
 	});
 });
 
-// ── listArchivedSessions ───────────────────────────────────────────────────────────
-
 describe("listArchivedSessions", () => {
 	beforeEach(() => {
 		vi.stubGlobal("localStorage", makeLocalStorageStub());
@@ -982,8 +922,6 @@ describe("listArchivedSessions", () => {
 	});
 });
 
-// ── loadArchivedSession ───────────────────────────────────────────────────────────
-
 describe("loadArchivedSession", () => {
 	beforeEach(() => {
 		vi.stubGlobal("localStorage", makeLocalStorageStub());
@@ -1022,7 +960,6 @@ describe("loadArchivedSession", () => {
 		saveActiveSession(makeFreshGame());
 		await archiveSession(id);
 
-		// Tamper with schemaVersion in archived engine.dat
 		const engineBlob = stub._store[`${ARCHIVE_PREFIX}${id}/engine.dat`];
 		if (!engineBlob) throw new Error("archived engine.dat should exist");
 		const sealed = JSON.parse(deobfuscate(engineBlob));
@@ -1035,8 +972,6 @@ describe("loadArchivedSession", () => {
 		expect(result.kind).toBe("version-mismatch");
 	});
 });
-
-// ── getArchivedSessionInfo ──────────────────────────────────────────────────────────
 
 describe("getArchivedSessionInfo", () => {
 	beforeEach(() => {
@@ -1092,14 +1027,10 @@ describe("getArchivedSessionInfo", () => {
 		const info = getArchivedSessionInfo(id);
 		expect(info.kind).toBe("version-mismatch");
 		if (info.kind === "version-mismatch") {
-			// The stale schema number rides along so the picker row can link
-			// the save to the archived build that still reads it.
 			expect(info.schemaVersion).toBe(999);
 		}
 	});
 });
-
-// ── rmArchivedSession ──────────────────────────────────────────────────────────────
 
 describe("rmArchivedSession", () => {
 	beforeEach(() => {
@@ -1118,13 +1049,11 @@ describe("rmArchivedSession", () => {
 
 		rmArchivedSession(id);
 
-		// Archive keys should be gone
 		const archiveKeys = Object.keys(stub._store).filter((k) =>
 			k.startsWith(`${ARCHIVE_PREFIX}${id}/`),
 		);
 		expect(archiveKeys).toHaveLength(0);
 
-		// Sessions keys should still be there
 		const sessionKeys = Object.keys(stub._store).filter((k) =>
 			k.startsWith(`${SESSIONS_PREFIX}${id}/`),
 		);
@@ -1143,8 +1072,6 @@ describe("rmArchivedSession", () => {
 		expect(getActiveSessionId()).toBe(id);
 	});
 });
-
-// ── epoch in active sessions ──────────────────────────────────────────────────────
 
 describe("epoch in active sessions", () => {
 	beforeEach(() => {
@@ -1172,7 +1099,6 @@ describe("epoch in active sessions", () => {
 		const id = mintAndActivateNewSession();
 		saveActiveSession(makeFreshGame());
 
-		// Patch epoch to 7
 		const metaRaw = stub._store[`${SESSIONS_PREFIX}${id}/meta.json`] ?? "{}";
 		const meta = JSON.parse(metaRaw);
 		meta.epoch = 7;
@@ -1182,7 +1108,6 @@ describe("epoch in active sessions", () => {
 			2,
 		);
 
-		// Re-save
 		saveActiveSession(makeFreshGame());
 
 		const reloadedMeta = JSON.parse(
@@ -1192,11 +1117,6 @@ describe("epoch in active sessions", () => {
 	});
 });
 
-// ── seedFromArchive ───────────────────────────────────────────────────────────
-
-/**
- * Seed an archived session directly into the stub store for seedFromArchive tests.
- */
 async function seedArchivedSession(
 	stub: ReturnType<typeof makeLocalStorageStub>,
 	id: string,
@@ -1256,7 +1176,6 @@ describe("seedFromArchive", () => {
 		const archiveId = "0xARCH";
 		await seedArchivedSession(stub, archiveId);
 
-		// Inject a test entry into the archive's red.txt
 		const redKey = `${ARCHIVE_PREFIX}${archiveId}/red.txt`;
 		const redRaw = stub._store[redKey];
 		if (!redRaw) throw new Error("red.txt should exist in archive");
@@ -1315,7 +1234,6 @@ describe("seedFromArchive", () => {
 		const archiveId = "0xARCH";
 		await seedArchivedSession(stub, archiveId);
 
-		// Snapshot archive keys and values before seeding
 		const archivePrefix = `${ARCHIVE_PREFIX}${archiveId}/`;
 		const before: Record<string, string> = {};
 		for (const [k, v] of Object.entries(stub._store)) {
@@ -1326,7 +1244,6 @@ describe("seedFromArchive", () => {
 		const freshState = makeFreshGame();
 		seedFromArchive(archiveId, freshState);
 
-		// Archive keys should still exist and be unchanged
 		for (const [k, v] of Object.entries(before)) {
 			expect(stub._store[k]).toBe(v);
 		}
@@ -1350,7 +1267,6 @@ describe("seedFromArchive", () => {
 		await seedArchivedSession(stub, archiveId);
 		const freshState = makeFreshGame();
 
-		// Clear setItem calls before seeding so we only track the new writes
 		stub.setItem.mockClear();
 		const newId = seedFromArchive(archiveId, freshState);
 
@@ -1362,10 +1278,7 @@ describe("seedFromArchive", () => {
 	});
 });
 
-// ── v12 boundary (#539) ───────────────────────────────────────────────────────
-
 describe("v12 boundary (archive-only)", () => {
-	/** Save a fresh game, then restamp engine.dat's sealed schemaVersion. */
 	function seedSessionAtSchema(
 		stub: ReturnType<typeof makeLocalStorageStub>,
 		schemaVersion: number,
@@ -1423,8 +1336,6 @@ describe("v12 boundary (archive-only)", () => {
 		const { sessionId, bytes } = seedSessionAtSchema(stub, 11);
 		expect(Object.keys(bytes).length).toBeGreaterThanOrEqual(5);
 
-		// The route's own sequence (views/game.ts): load, then deactivate the
-		// pointer for a version-mismatch so the bytes stay put.
 		expect(loadActiveSession().kind).toBe("version-mismatch");
 		expect(getSessionInfo(sessionId).kind).toBe("version-mismatch");
 		deactivateActiveSession();
@@ -1433,7 +1344,6 @@ describe("v12 boundary (archive-only)", () => {
 		for (const [key, value] of Object.entries(bytes)) {
 			expect(stub._store[key], key).toBe(value);
 		}
-		// Still listed and still a mismatch — nothing was rewritten or removed.
 		expect(listSessions()).toContain(sessionId);
 		expect(getSessionInfo(sessionId).kind).toBe("version-mismatch");
 	});

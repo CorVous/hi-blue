@@ -1,12 +1,3 @@
-/**
- * game-strip.ts
- *
- * Renders a sticky dev inspector strip showing game state summaries:
- *  - Line 1: round, countdown, pack id, setting/weather/time-of-day
- *  - Line 2: cost, objectives satisfied/total, active complications count
- *  - Details: expandable list of objectives and active complications
- */
-
 import type { GameSession } from "../game/game-session";
 import type { GameState, Objective } from "../game/types";
 import {
@@ -15,10 +6,6 @@ import {
 	isUseSpaceObjectiveSatisfied,
 } from "../game/win-condition";
 
-/**
- * Compute the total spent USD across all AI budgets.
- * Cost = sum of (budget.total - budget.remaining) for each AI.
- */
 function computeSpentUsd(state: GameState): string {
 	let totalSpent = 0;
 	for (const budget of Object.values(state.budgets)) {
@@ -27,10 +14,6 @@ function computeSpentUsd(state: GameState): string {
 	return totalSpent.toFixed(2);
 }
 
-/**
- * Determine if an objective is satisfied based on its kind.
- * Uses helpers from win-condition.ts for carry objectives.
- */
 function isSatisfied(objective: Objective, state: GameState): boolean {
 	switch (objective.kind) {
 		case "carry":
@@ -48,9 +31,6 @@ function isSatisfied(objective: Objective, state: GameState): boolean {
 	}
 }
 
-/**
- * Build a single objective list item DOM element.
- */
 function buildObjectiveItem(
 	doc: Document,
 	objective: Objective,
@@ -74,9 +54,6 @@ function buildObjectiveItem(
 	return li;
 }
 
-/**
- * Build a single complication list item DOM element.
- */
 function buildComplicationItem(
 	doc: Document,
 	complication: GameState["activeComplications"][number],
@@ -98,10 +75,6 @@ function buildComplicationItem(
 	return li;
 }
 
-/**
- * Render the full game strip DOM structure.
- * Clears the container and builds line 1, line 2, and details sections.
- */
 export function renderGameStrip(
 	containerEl: HTMLElement,
 	session: GameSession,
@@ -109,11 +82,9 @@ export function renderGameStrip(
 	const state = session.getState();
 	const doc = containerEl.ownerDocument;
 
-	// Add dev-strip class and clear children
 	containerEl.classList.add("dev-strip");
 	containerEl.replaceChildren();
 
-	// Line 1
 	const line1 = doc.createElement("div");
 	line1.className = "dev-strip-line";
 	line1.setAttribute("data-line", "1");
@@ -163,7 +134,6 @@ export function renderGameStrip(
 
 	containerEl.appendChild(line1);
 
-	// Line 2
 	const line2 = doc.createElement("div");
 	line2.className = "dev-strip-line";
 	line2.setAttribute("data-line", "2");
@@ -204,7 +174,6 @@ export function renderGameStrip(
 
 	containerEl.appendChild(line2);
 
-	// Details section
 	const details = doc.createElement("details");
 	details.className = "dev-strip-details";
 	details.setAttribute("data-section", "strip-details");
@@ -213,7 +182,6 @@ export function renderGameStrip(
 	summary.textContent = "objectives + complications";
 	details.appendChild(summary);
 
-	// Objectives section
 	const objectivesSection = doc.createElement("div");
 	objectivesSection.className = "dev-strip-section";
 	objectivesSection.setAttribute("data-section", "objectives");
@@ -234,7 +202,6 @@ export function renderGameStrip(
 	objectivesSection.appendChild(objectivesList);
 	details.appendChild(objectivesSection);
 
-	// Complications section
 	const complicationsSection = doc.createElement("div");
 	complicationsSection.className = "dev-strip-section";
 	complicationsSection.setAttribute("data-section", "complications");
@@ -258,12 +225,6 @@ export function renderGameStrip(
 	containerEl.appendChild(details);
 }
 
-/**
- * Update the game strip in place without re-creating the details element.
- * - Updates all [data-field="…"] spans on lines 1 and 2
- * - Refreshes the objectives and complications lists
- * - Preserves the details element (including open state)
- */
 export function updateGameStripSummary(
 	containerEl: HTMLElement,
 	session: GameSession,
@@ -271,7 +232,6 @@ export function updateGameStripSummary(
 	const state = session.getState();
 	const doc = containerEl.ownerDocument;
 
-	// Update Line 1 fields
 	const line1 = containerEl.querySelector('[data-line="1"]');
 	if (line1) {
 		const roundSpan = line1.querySelector('[data-field="round"]');
@@ -294,7 +254,6 @@ export function updateGameStripSummary(
 		if (timeSpan) timeSpan.textContent = state.timeOfDay;
 	}
 
-	// Update Line 2 fields
 	const line2 = containerEl.querySelector('[data-line="2"]');
 	if (line2) {
 		const costSpan = line2.querySelector('[data-field="cost"]');
@@ -320,7 +279,6 @@ export function updateGameStripSummary(
 			complicationsSpan.textContent = String(state.activeComplications.length);
 	}
 
-	// Refresh objectives list (replace children but keep the ul)
 	const objectivesList = containerEl.querySelector('[data-list="objectives"]');
 	if (objectivesList) {
 		const newObjectiveItems = state.objectives.map((obj) =>
@@ -329,7 +287,6 @@ export function updateGameStripSummary(
 		objectivesList.replaceChildren(...newObjectiveItems);
 	}
 
-	// Refresh complications list (replace children but keep the ul)
 	const complicationsList = containerEl.querySelector(
 		'[data-list="complications"]',
 	);

@@ -13,6 +13,13 @@ export interface RenderInspectorOpts {
 
 let escapeListenerAttached = false;
 
+interface InspectorContainers {
+	doc: Document;
+	strip: HTMLElement | null;
+	map: HTMLElement | null;
+	footers: NodeListOf<HTMLElement>;
+}
+
 export function renderInspector(
 	root: HTMLElement,
 	opts: RenderInspectorOpts,
@@ -20,55 +27,70 @@ export function renderInspector(
 	if (!__DEV__) return;
 
 	const doc = root.ownerDocument;
-	const strip = doc.querySelector<HTMLElement>("#dev-game-strip");
-	const map = doc.querySelector<HTMLElement>("#dev-world-map");
-	const footers = doc.querySelectorAll<HTMLElement>(".dev-daemon-footer");
+	const containers: InspectorContainers = {
+		doc,
+		strip: doc.querySelector<HTMLElement>("#dev-game-strip"),
+		map: doc.querySelector<HTMLElement>("#dev-world-map"),
+		footers: doc.querySelectorAll<HTMLElement>(".dev-daemon-footer"),
+	};
 
-	// Branch 1: Full inspector (session exists)
 	if (opts.session) {
-		clearPendingStrip(strip);
-		clearDaemonTurnResults();
-		if (strip) strip.removeAttribute("hidden");
-		if (map) map.removeAttribute("hidden");
-		for (const f of footers) f.removeAttribute("hidden");
-		if (strip) renderGameStrip(strip, opts.session);
-		if (map) renderWorldMap(map, opts.session);
+		renderSessionInspector(containers, opts.session);
+	} else if (opts.pendingBootstrap) {
+		renderPendingBootstrapInspector(containers, opts.pendingBootstrap);
+	} else {
+		hideInspector(containers);
+	}
+}
 
-		// Render per-Daemon footers for each AI
-		const state = opts.session.getState();
-		for (const aiId of Object.keys(state.personas)) {
-			const panel = doc.querySelector<HTMLElement>(
-				`.ai-panel[data-ai="${aiId}"]`,
-			);
-			if (panel) {
-				renderDaemonFooter(panel, aiId, opts.session);
-			}
-		}
+function renderSessionInspector(
+	{ doc, strip, map, footers }: InspectorContainers,
+	session: GameSession,
+): void {
+	clearPendingStrip(strip);
+	clearDaemonTurnResults();
+	if (strip) strip.removeAttribute("hidden");
+	if (map) map.removeAttribute("hidden");
+	for (const f of footers) f.removeAttribute("hidden");
+	if (strip) renderGameStrip(strip, session);
+	if (map) renderWorldMap(map, session);
 
-		// Attach Escape listener (only once per document)
-		if (!escapeListenerAttached) {
-			escapeListenerAttached = true;
-			doc.addEventListener("keydown", (e) => {
-				if (e.key === "Escape" && getMapFocus() !== null) {
-					setMapFocus(null);
-				}
-			});
+	const state = session.getState();
+	for (const aiId of Object.keys(state.personas)) {
+		const panel = doc.querySelector<HTMLElement>(
+			`.ai-panel[data-ai="${aiId}"]`,
+		);
+		if (panel) {
+			renderDaemonFooter(panel, aiId, session);
 		}
-		return;
 	}
 
-	// Branch 2: Pending bootstrap (no session, bootstrap in flight)
-	if (opts.pendingBootstrap) {
-		if (strip) {
-			strip.removeAttribute("hidden");
-			renderPendingStrip(strip, opts.pendingBootstrap, getPendingCallMeta());
-		}
-		if (map) map.setAttribute("hidden", "");
-		for (const f of footers) f.setAttribute("hidden", "");
-		return;
-	}
+	attachEscapeClearsFocusOnce(doc);
+}
 
-	// Branch 3: No session, no pending — clear everything
+function attachEscapeClearsFocusOnce(doc: Document): void {
+	if (escapeListenerAttached) return;
+	escapeListenerAttached = true;
+	doc.addEventListener("keydown", (e) => {
+		if (e.key === "Escape" && getMapFocus() !== null) {
+			setMapFocus(null);
+		}
+	});
+}
+
+function renderPendingBootstrapInspector(
+	{ strip, map, footers }: InspectorContainers,
+	pendingBootstrap: PendingBootstrap,
+): void {
+	if (strip) {
+		strip.removeAttribute("hidden");
+		renderPendingStrip(strip, pendingBootstrap, getPendingCallMeta());
+	}
+	if (map) map.setAttribute("hidden", "");
+	for (const f of footers) f.setAttribute("hidden", "");
+}
+
+function hideInspector({ strip, map, footers }: InspectorContainers): void {
 	clearPendingStrip(strip);
 	if (strip) {
 		strip.setAttribute("hidden", "");
@@ -78,9 +100,6 @@ export function renderInspector(
 	for (const f of footers) f.setAttribute("hidden", "");
 }
 
-/**
- * Test-only helper to reset inspector state between tests.
- */
 export function __resetInspectorForTests(): void {
 	escapeListenerAttached = false;
 	setMapFocus(null);

@@ -1,18 +1,3 @@
-/**
- * Binds the sessions-picker "ok" seed fixture to the live session boundary.
- *
- * `e2e/sessions-picker.spec.ts` asserts that its seeded ok row renders
- * `[ load ]` / `[ dup ]` / `[ rm ]`, which
- * `src/spa/views/sessions.ts` only renders when `getSessionInfo` reports
- * `kind: "ok"`. Playwright does not run in every environment (CI owns the
- * e2e job), so this test is the local, deterministic check that the exact
- * bytes that spec writes into localStorage are current at the live version
- * boundary.
- *
- * A payload sealed below the boundary cannot be rescued by the migration
- * chain: it terminates at 11 and v11 → v12 is archive-only, so a migrated
- * save is reported as `version-mismatch`.
- */
 import { describe, expect, it } from "vitest";
 import {
 	pickerOkSessionFiles,
@@ -28,7 +13,6 @@ import { getSessionInfo } from "../session-storage.js";
 const SESSION_ID = "0xAAAA";
 const LAST_SAVED_AT = "2025-03-01T10:00:00.000Z";
 
-/** The seeded files in the shape `deserializeSession` consumes. */
 function seededFilesFor(lastSavedAt: string): {
 	meta: string;
 	daemons: Record<string, string>;
@@ -63,8 +47,6 @@ describe("sessions-picker ok seed", () => {
 	});
 
 	it("seeds a row getSessionInfo reports as ok", () => {
-		// Run the very script the spec hands to `addInitScript`, against this
-		// environment's localStorage, then ask the picker for the row's info.
 		const seed = new Function(
 			pickerOkSessionSeedScript(SESSION_ID, LAST_SAVED_AT),
 		) as () => void;

@@ -1,20 +1,7 @@
-/**
- * migration-banner.test.ts
- *
- * Tests for legacy-save-discarded banner.
- *
- * Post-#173: the legacy-save-discarded banner is now surfaced via the start
- * route (not game route). main.ts detects the legacy save at boot, deletes
- * it, and passes reason=legacy-save-discarded to renderStart via URL param.
- * renderStart shows the appropriate banner text.
- *
- * Part of issue #173 (parent #172, step 7 of plan).
- */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { STATIC_CONTENT_PACKS } from "./fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "./fixtures/static-personas";
 
-// Pin generatePersonas to static fixture (no LLM call in tests).
 vi.mock("../../content", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("../../content")>();
 	return {
@@ -23,7 +10,6 @@ vi.mock("../../content", async (importOriginal) => {
 	};
 });
 
-// Pin generateDualContentPacks to static content packs (no LLM call in tests).
 vi.mock("../../content/content-pack-generator", () => ({
 	generateDualContentPacks: async () => ({
 		packA: STATIC_CONTENT_PACKS[0],
@@ -120,6 +106,14 @@ function getMain(): HTMLElement {
 	return main;
 }
 
+async function awaitIgnoringRejection(
+	promise: Promise<unknown>,
+): Promise<void> {
+	try {
+		await promise;
+	} catch {}
+}
+
 describe("renderStart — legacy-save-discarded banner (via reason param)", () => {
 	beforeEach(() => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
@@ -135,8 +129,6 @@ describe("renderStart — legacy-save-discarded banner (via reason param)", () =
 	});
 
 	it("shows legacy-save-discarded banner when reason=legacy-save-discarded is passed", async () => {
-		// The banner is shown when main.ts detects a legacy save at boot and
-		// passes reason=legacy-save-discarded to renderStart.
 		const stub = makeLocalStorageStub({});
 		vi.stubGlobal("localStorage", stub);
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
@@ -144,14 +136,10 @@ describe("renderStart — legacy-save-discarded banner (via reason param)", () =
 		vi.resetModules();
 		const { renderStart } = await import("../views/start.js");
 
-		// Simulate what main.ts does: pass reason=legacy-save-discarded as an opt
-		try {
-			await renderStart(getMain(), { reason: "legacy-save-discarded" });
-		} catch {
-			// generation may reject in test environment — that's ok
-		}
+		await awaitIgnoringRejection(
+			renderStart(getMain(), { reason: "legacy-save-discarded" }),
+		);
 
-		// Banner should be visible with the legacy-save-discarded message
 		const warningEl = document.querySelector<HTMLElement>(
 			"#persistence-warning",
 		);
@@ -169,12 +157,7 @@ describe("renderStart — legacy-save-discarded banner (via reason param)", () =
 		vi.resetModules();
 		const { renderStart } = await import("../views/start.js");
 
-		// No reason opt — no banner should be shown
-		try {
-			await renderStart(getMain());
-		} catch {
-			// generation may reject — ok
-		}
+		await awaitIgnoringRejection(renderStart(getMain()));
 
 		const warningEl = document.querySelector<HTMLElement>(
 			"#persistence-warning",

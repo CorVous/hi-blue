@@ -1,15 +1,8 @@
-/**
- * Integration tests for the newGame() async bootstrap flow (issue #122).
- *
- * Tests: seeded RNG + mock LLM → synthesis call → blurbs in session state.
- * Also covers the persistence round-trip for LLM-shaped blurbs.
- */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ContentPack } from "../game/types.js";
 import { STATIC_CONTENT_PACKS } from "./fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "./fixtures/static-personas";
 
-// Pin to static personas so panel data-ai attributes are stable
 vi.mock("../../content", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("../../content")>();
 	return {
@@ -18,7 +11,6 @@ vi.mock("../../content", async (importOriginal) => {
 	};
 });
 
-// Pin generateDualContentPacks to static content packs (no LLM call in tests).
 vi.mock("../../content/content-pack-generator", () => ({
 	generateDualContentPacks: async () => ({
 		packA: STATIC_CONTENT_PACKS[0],
@@ -28,8 +20,6 @@ vi.mock("../../content/content-pack-generator", () => ({
 
 vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 vi.stubGlobal("__DEV__", true);
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 const INDEX_BODY_HTML = `
 <main>
@@ -76,23 +66,11 @@ function getEl<T extends HTMLElement>(selector: string): T {
 	return el;
 }
 
-// ── Tests ─────────────────────────────────────────────────────────────────────
-
-/**
- * Post-#173: game.ts no longer runs async bootstrap — it restores from an
- * active session. The async bootstrap tests (synthesis failure, content-pack
- * failure, form submit before resolution) have moved to start.test.ts where
- * they belong: those scenarios now apply to renderStart, not renderGame.
- *
- * This describe block verifies that game.ts correctly restores panels from
- * a pre-existing session (the restore path that replaced the old async IIFE).
- */
 describe("renderGame — session restore (formerly async bootstrap)", () => {
 	beforeEach(async () => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
-		// Pre-populate a valid session so game.ts takes the restore path.
 		const store: Record<string, string> = {};
 		const stub = {
 			getItem: vi.fn((key: string) => store[key] ?? null),
@@ -153,7 +131,6 @@ describe("renderGame — session restore (formerly async bootstrap)", () => {
 		const { renderGame } = await import("../views/game.js");
 		await renderGame(getEl<HTMLElement>("main"));
 
-		// STATIC_PERSONAS uses red/green/cyan as ids, Ember/Sage/Frost as names
 		const redPanel = document.querySelector<HTMLElement>(
 			'.ai-panel[data-ai="red"]',
 		);
@@ -169,8 +146,6 @@ describe("renderGame — session restore (formerly async bootstrap)", () => {
 		expect(cyanPanel).toBeTruthy();
 	});
 });
-
-// ── Persistence round-trip regression ────────────────────────────────────────
 
 describe("persistence — LLM-shaped blurb round-trips verbatim", () => {
 	const TEST_CONTENT_PACK: ContentPack = {
@@ -246,9 +221,7 @@ describe("persistence — LLM-shaped blurb round-trips verbatim", () => {
 			throw new Error(`Expected ok, got ${result.kind}`);
 		const restored = result.state;
 
-		// The LLM blurb must survive the round-trip byte-for-byte
 		expect(restored.personas.red?.blurb).toBe(LLM_BLURB);
-		// Shorter template blurbs also survive intact
 		expect(restored.personas.green?.blurb).toBe(
 			"Sage is intensely meticulous. Ensure items are evenly distributed.",
 		);

@@ -19,8 +19,6 @@ import {
 } from "../session-codec.js";
 import type { VersionBoundary } from "../version-boundary.js";
 
-// ── Test fixtures ─────────────────────────────────────────────────────────────
-
 const PRE_BOUNDARY: VersionBoundary = { session: 11, gs: 4 };
 
 const TEST_CONTENT_PACK = makeTestPack([], { wallName: "wall" });
@@ -71,8 +69,6 @@ function makeFreshGame(): GameState {
 
 const NOW = new Date().toISOString();
 const CREATED_AT = "2024-01-01T00:00:00.000Z";
-
-// ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe("serializeSession / deserializeSession", () => {
 	it("round-trips a fresh game (ok)", () => {
@@ -152,7 +148,6 @@ describe("serializeSession / deserializeSession", () => {
 		const game = makeFreshGame();
 		const files = serializeSession(game, NOW, CREATED_AT);
 		const metaLines = files.meta.split("\n");
-		// Second line should start with two spaces
 		expect(metaLines[1]).toMatch(/^ {2}/);
 	});
 
@@ -166,7 +161,6 @@ describe("serializeSession / deserializeSession", () => {
 		expect(meta).toHaveProperty("round", 0);
 		expect(meta).toHaveProperty("personaOrder");
 		expect(Array.isArray(meta.personaOrder)).toBe(true);
-		// Must preserve insertion order of state.personas
 		expect(meta.personaOrder).toEqual(Object.keys(game.personas));
 	});
 
@@ -176,7 +170,6 @@ describe("serializeSession / deserializeSession", () => {
 		const result = deserializeSession(files);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
-			// The key order of restored personas must match the original.
 			expect(Object.keys(result.state.personas)).toEqual(
 				Object.keys(game.personas),
 			);
@@ -185,13 +178,11 @@ describe("serializeSession / deserializeSession", () => {
 
 	it("deserializeSession honours meta.personaOrder when daemon-file key order differs", () => {
 		const game = makeFreshGame();
-		// Capture the canonical order from the original state.
 		const canonicalOrder = Object.keys(game.personas);
-		expect(canonicalOrder.length).toBeGreaterThanOrEqual(2); // sanity: ≥2 personas
+		expect(canonicalOrder.length).toBeGreaterThanOrEqual(2);
 
 		const files = serializeSession(game, NOW, CREATED_AT);
 
-		// Reconstruct daemons in REVERSED key order — this is the scenario localStorage produces.
 		const reversedDaemons: Record<string, string> = {};
 		for (const aiId of [...canonicalOrder].reverse()) {
 			reversedDaemons[aiId] = files.daemons[aiId] as string;
@@ -206,7 +197,6 @@ describe("serializeSession / deserializeSession", () => {
 			throw new Error(`expected ok, got ${result.kind}`);
 		}
 
-		// The fix should restore canonical order regardless of daemon-file key order.
 		expect(Object.keys(result.state.personas)).toEqual(canonicalOrder);
 	});
 
@@ -216,7 +206,6 @@ describe("serializeSession / deserializeSession", () => {
 
 		const files = serializeSession(game, NOW, CREATED_AT);
 
-		// Strip personaOrder from meta (simulates a hand-edited or pre-personaOrder save).
 		const metaParsed = JSON.parse(files.meta) as Record<string, unknown>;
 		delete metaParsed.personaOrder;
 		const metaWithoutOrder = JSON.stringify(metaParsed, null, 2);
@@ -230,7 +219,6 @@ describe("serializeSession / deserializeSession", () => {
 			throw new Error(`expected ok, got ${result.kind}`);
 		}
 
-		// Falls back to daemon-file key order (which equals canonicalOrder in this fixture).
 		expect(Object.keys(result.state.personas)).toEqual(canonicalOrder);
 	});
 
@@ -340,11 +328,8 @@ describe("serializeSession / deserializeSession", () => {
 		const result = deserializeSession(files);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
-			// message entry round-trips in cyan's log
 			expect(result.state.conversationLogs.cyan?.[0]).toEqual(messageEntry);
-			// witnessed-event round-trips in green's log
 			expect(result.state.conversationLogs.green?.[0]).toEqual(witnessedEntry);
-			// No physicalLog or whispers fields on state (regression guards)
 			expect("physicalLog" in result.state).toBe(false);
 			expect("whispers" in result.state).toBe(false);
 		}
@@ -370,7 +355,6 @@ describe("serializeSession / deserializeSession", () => {
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
 			expect(result.state.conversationLogs.red?.[0]).toEqual(failureEntry);
-			// Peer logs should remain empty
 			expect(result.state.conversationLogs.green ?? []).toHaveLength(0);
 			expect(result.state.conversationLogs.cyan ?? []).toHaveLength(0);
 		}
@@ -629,7 +613,6 @@ describe("serializeSession / deserializeSession", () => {
 	it("version-mismatch: stale schemaVersion in sealed engine", () => {
 		const game = makeFreshGame();
 		const files = serializeSession(game, NOW, CREATED_AT);
-		// Deobfuscate, modify schemaVersion, re-obfuscate
 		if (!files.engine) throw new Error("engine should not be null");
 		const rawJson = deobfuscate(files.engine);
 		const sealed = JSON.parse(rawJson);
@@ -656,8 +639,6 @@ describe("serializeSession / deserializeSession", () => {
 
 	it("a v11 save is current at the pre-boundary and a version-mismatch at the live v12 boundary", () => {
 		const game = makeFreshGame();
-		// Serialize at the live boundary, then restamp the sealed payload to 11:
-		// the only way a v11 save exists now is from the archived build.
 		const files = serializeSession(game, NOW, CREATED_AT);
 		if (!files.engine) throw new Error("engine should not be null");
 		const sealed = JSON.parse(deobfuscate(files.engine));
@@ -666,12 +647,8 @@ describe("serializeSession / deserializeSession", () => {
 		sealed.schemaVersion = 11;
 		const v11 = { ...files, engine: obfuscate(JSON.stringify(sealed)) };
 
-		// The cutoff is a parameter, not a hardcoded constant
-		// (see version-boundary.ts).
 		expect(deserializeSession(v11, PRE_BOUNDARY).kind).toBe("ok");
 
-		// Live boundary: the same save is "older" and surfaces as a
-		// version-mismatch carrying the retired schema number.
 		const result = deserializeSession(v11);
 		expect(result.kind).toBe("version-mismatch");
 		if (result.kind === "version-mismatch") {
@@ -747,21 +724,17 @@ describe("serializeSession / deserializeSession", () => {
 		expect(result.kind).toBe("ok");
 		if (result.kind !== "ok") return;
 
-		// position
 		expect(result.state.personaSpatial.red).toEqual({
 			position: { row: 2, col: 1 },
 		});
-		// inventory (an entity held by a Daemon, not a grid position)
 		expect(
 			result.state.world.entities.find((e) => e.id === "ent-flower")?.holder,
 		).toBe("red");
-		// content state
 		expect(result.state.contentPack.setting).toBe("greenhouse");
 		expect(
 			result.state.contentPacksA[0]?.entities.find((e) => e.id === "ent-altar")
 				?.satisfactionState,
 		).toBe("satisfied");
-		// conversation + perception change (the diskDelta on the tool call)
 		const log = result.state.conversationLogs.red ?? [];
 		expect(log).toHaveLength(2);
 		expect(log[0]).toEqual({
@@ -774,7 +747,6 @@ describe("serializeSession / deserializeSession", () => {
 		expect(log[1]?.kind === "tool-call" ? log[1].diskDelta : undefined).toBe(
 			diskDelta,
 		);
-		// round-trip metadata survives too
 		expect(result.epoch).toBe(3);
 		expect(result.state.round).toBe(7);
 	});
@@ -789,8 +761,6 @@ describe("serializeSession / deserializeSession", () => {
 		expect(sealed.schemaVersion).toBe(12);
 		expect(SESSION_SCHEMA_VERSION).toBe(12);
 
-		// The whole export — meta, daemon files, and the sealed engine — must be
-		// free of the retired orientation and horizon fields (ADR 0015).
 		const allBytes = [
 			files.meta,
 			...Object.values(files.daemons),
@@ -853,9 +823,7 @@ describe("serializeSession / deserializeSession", () => {
 	});
 
 	it("v11-shape sealed save round-trips with entities unchanged", () => {
-		// Build a fresh game (already v11), serialize and deserialize.
 		const game = makeFreshGame();
-		// Inject an entity so we can verify it round-trips.
 		const flatPack: ContentPack = {
 			setting: "fresh v11",
 			weather: "",
@@ -897,14 +865,11 @@ describe("serializeSession / deserializeSession", () => {
 	});
 
 	it("round-trips correctly with flat state (no phase config re-attachment needed)", () => {
-		// In the flat model (#295), there are no nextPhaseConfig / winCondition
-		// fields to re-attach. The round-trip should still succeed.
 		const game = makeFreshGame();
 		const files = serializeSession(game, NOW, CREATED_AT);
 		const result = deserializeSession(files);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
-			// Flat state: no phase chain — just verify basic fields survived round-trip
 			expect(result.state.isComplete).toBe(game.isComplete);
 			expect(result.state.round).toBe(game.round);
 		}
@@ -996,11 +961,9 @@ describe("serializeSession / deserializeSession", () => {
 		const result = deserializeSession(files);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
-			// Broadcast entry round-trips in all three daemon logs
 			expect(result.state.conversationLogs.red?.[0]).toEqual(broadcastEntry);
 			expect(result.state.conversationLogs.green?.[0]).toEqual(broadcastEntry);
 			expect(result.state.conversationLogs.cyan?.[0]).toEqual(broadcastEntry);
-			// Ensure broadcast has no from/to fields
 			const entry = result.state.conversationLogs.red?.[0];
 			expect(entry).toBeDefined();
 			expect("from" in (entry ?? {})).toBe(false);

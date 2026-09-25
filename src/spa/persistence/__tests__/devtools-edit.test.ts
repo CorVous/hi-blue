@@ -1,11 +1,3 @@
-/**
- * devtools-edit.test.ts
- *
- * Verifies that editing a daemon .txt file in localStorage (as a player would
- * in DevTools) affects the conversationLogs on the next loadActiveSession() call.
- *
- * This tests the "editable surface" affordance described in ADR 0004.
- */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeTestPack } from "../../game/__tests__/fixtures/make-test-pack.js";
 import { startGame } from "../../game/engine.js";
@@ -95,7 +87,6 @@ describe("devtools-edit: mutating daemon .txt affects conversationLogs on reload
 	});
 
 	it("editing red daemon .txt message entry is visible after loadActiveSession()", () => {
-		// Set up: save a game with a conversation log for red
 		const stub = makeLocalStorageStub();
 		vi.stubGlobal("localStorage", stub);
 
@@ -105,7 +96,6 @@ describe("devtools-edit: mutating daemon .txt affects conversationLogs on reload
 
 		const game = makeFreshGame();
 
-		// Inject a conversation log for red (flat model: directly on game)
 		const modifiedGame: GameState = {
 			...game,
 			conversationLogs: {
@@ -124,15 +114,12 @@ describe("devtools-edit: mutating daemon .txt affects conversationLogs on reload
 
 		saveActiveSession(modifiedGame);
 
-		// Find the daemon .txt key for red
 		const redDaemonKey = `${SESSIONS_PREFIX}${sessionId}/red.txt`;
 		expect(stub._store[redDaemonKey]).toBeDefined();
 
-		// Parse the daemon file, mutate the conversation log entry, and write it back
 		const rawDaemon = stub._store[redDaemonKey];
 		if (!rawDaemon) throw new Error("red daemon file missing");
 		const daemonFile = JSON.parse(rawDaemon) as DaemonFile;
-		// Mutate the conversation log
 		daemonFile.conversationLog[0] = {
 			kind: "message",
 			from: "blue",
@@ -142,11 +129,9 @@ describe("devtools-edit: mutating daemon .txt affects conversationLogs on reload
 		};
 		stub._store[redDaemonKey] = JSON.stringify(daemonFile, null, 2);
 
-		// Load the session
 		const result = loadActiveSession();
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
-			// In flat model: conversationLogs directly on state (not nested in phases)
 			const redEntry = result.state.conversationLogs.red?.[0];
 			expect(redEntry?.kind === "message" && redEntry.content).toBe(
 				"DEVTOOLS_INJECTED_MARKER",
@@ -165,14 +150,12 @@ describe("devtools-edit: mutating daemon .txt affects conversationLogs on reload
 		const game = makeFreshGame();
 		saveActiveSession(game);
 
-		// Find and parse the daemon file for green
 		const greenDaemonKey = `${SESSIONS_PREFIX}${sessionId}/green.txt`;
 		expect(stub._store[greenDaemonKey]).toBeDefined();
 
 		const rawGreenDaemon = stub._store[greenDaemonKey];
 		if (!rawGreenDaemon) throw new Error("green daemon file missing");
 		const daemonFile = JSON.parse(rawGreenDaemon) as DaemonFile;
-		// Add a new message entry to the conversation log
 		daemonFile.conversationLog.push({
 			kind: "message",
 			from: "blue",
@@ -185,7 +168,6 @@ describe("devtools-edit: mutating daemon .txt affects conversationLogs on reload
 		const result = loadActiveSession();
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
-			// In flat model: conversationLogs directly on state (not nested in phases)
 			const greenLog = result.state.conversationLogs.green ?? [];
 			expect(
 				greenLog.some(
