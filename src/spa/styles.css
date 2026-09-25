@@ -1843,4 +1843,16 @@ main {
 	display: flex;
 	gap: 6px;
 	align-items: center;
+	/* Without this the row is a nowrap flex container, so its min-content
+	   width is the SUM of its items. Line 1 carries the randomized
+	   setting / weather / time-of-day strings, whose combined width varies
+	   per session and can exceed the ~351px the stage offers at 375px.
+	   #stage is a grid with a single implicit `auto` track and grid items
+	   default to `min-width: auto`, so that over-wide row expands the track
+	   and stretches HEADER, .topinfo, #panels and #composer onto it —
+	   page-level horizontal overflow. Measured at 375px over 24 natural
+	   boots: 3 overflowed (`body.scrollWidth` 379 / 385 / 396) unwrapped,
+	   0 with wrap. The sibling dev rows (.dev-footer-summary,
+	   .session-row .ops, #byok-buttons) already wrap. */
+	flex-wrap: wrap;
 }
