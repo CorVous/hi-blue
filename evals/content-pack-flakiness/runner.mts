@@ -1,23 +1,3 @@
-/**
- * evals/content-pack-flakiness/runner.mts
- *
- * Real-LLM harness for content-pack dual generation. Replays the production
- * retry loop (BrowserContentPackProvider.generateDualContentPacks) against
- * OpenRouter directly, recording every outer attempt's outcome so we can
- * see which validation rules trip in practice.
- *
- * Run with:
- *   OPENROUTER_API_KEY=... npx tsx evals/content-pack-flakiness/runner.mts
- *
- * Knobs:
- *   - EVAL_ITERATIONS (default 10): independent end-to-end runs.
- *   - EVAL_MODEL (default z-ai/glm-4.7): OpenRouter model id.
- *
- * Each iteration draws a fresh setting/theme/weather/timeOfDay and a fresh
- * objective-type triple, then drives the OUTER_BUDGET=3 retry loop just
- * like production. Output is written to docs/evals/content-pack-flakiness/.
- */
-
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -44,13 +24,13 @@ const MODEL = process.env.EVAL_MODEL ?? PINNED_MODEL;
 const ITERATIONS = Number(process.env.EVAL_ITERATIONS ?? 10);
 const PARALLEL = Number(process.env.EVAL_PARALLEL ?? 1);
 const OUTER_BUDGET = 3;
+const OBJECTIVE_TYPES_PER_PACK = 3;
+const MAX_OBSTACLE_COUNT = 3;
 
 if (!OPENROUTER_API_KEY) {
 	console.error("OPENROUTER_API_KEY is not set in env");
 	process.exit(1);
 }
-
-// ── Per-attempt record ───────────────────────────────────────────────────────
 
 type AttemptOutcome = "ok" | "validation-failed" | "hard-error";
 
@@ -80,8 +60,6 @@ interface IterationResult {
 	totalCostUsd?: number;
 }
 
-// ── Draw helpers ─────────────────────────────────────────────────────────────
-
 function rng(): () => number {
 	return Math.random;
 }
@@ -103,8 +81,6 @@ function drawDistinct<T>(
 function drawOne<T>(pool: readonly T[], r: () => number): T {
 	return pool[Math.floor(r() * pool.length)] as T;
 }
-
-// ── Model call (mirrors chatCompletionJson but direct to OpenRouter) ─────────
 
 interface ModelCallResult {
 	content: string | null;
@@ -163,8 +139,6 @@ function summariseValidationError(err: ValidationError) {
 	};
 }
 
-// ── One end-to-end iteration ─────────────────────────────────────────────────
-
 async function runIteration(iter: number): Promise<IterationResult> {
 	const r = rng();
 	const [settingA, settingB] = drawDistinct(SETTING_POOL, 2, r) as [
@@ -176,9 +150,9 @@ async function runIteration(iter: number): Promise<IterationResult> {
 	const timeOfDayA = drawOne(TIME_OF_DAY_POOL, r);
 	const timeOfDayB = drawOne(TIME_OF_DAY_POOL, r);
 	const theme = drawOne(THEME_POOL, r);
-	const m = 1 + Math.floor(r() * 3);
+	const obstacleCount = 1 + Math.floor(r() * MAX_OBSTACLE_COUNT);
 
-	const objectiveTypes = rollObjectiveTypes(r, 3);
+	const objectiveTypes = rollObjectiveTypes(r, OBJECTIVE_TYPES_PER_PACK);
 
 	const bindingPrompt = buildDualBindingPrompt(
 		objectiveTypes,
@@ -189,16 +163,13 @@ async function runIteration(iter: number): Promise<IterationResult> {
 		weatherB,
 		timeOfDayA,
 		timeOfDayB,
-		m,
+		obstacleCount,
 	);
 
-	// Annotated rather than `as const`: `ValidationSchedule.decoys` is a mutable
-	// `{ id: string }[]`, so the `as const` readonly tuple this used to be could
-	// never satisfy it.
 	const schedule: ValidationSchedule = {
 		skeletons: bindingPrompt.skeletons,
 		decoys: [{ id: "decoy-0" }, { id: "decoy-1" }],
-		obstacleCount: m,
+		obstacleCount,
 	};
 	const baseUserPrompt = bindingPrompt.userMessage;
 	const systemPrompt = DUAL_CONTENT_PACK_SYSTEM_PROMPT;
@@ -322,8 +293,6 @@ async function runIteration(iter: number): Promise<IterationResult> {
 	};
 }
 
-// ── Aggregation ──────────────────────────────────────────────────────────────
-
 function tally(results: IterationResult[]): {
 	successOnFirst: number;
 	successAfterRetry: number;
@@ -386,8 +355,6 @@ function formatHistogram(h: Record<string, number>): string {
 	return entries.map(([k, v]) => `  ${k}: ${v}`).join("\n");
 }
 
-// ── Main ─────────────────────────────────────────────────────────────────────
-
 function summariseAttempt(a: AttemptRecord): string {
 	if (a.outcome === "validation-failed" && a.validationErrors) {
 		const ruleSummary = a.validationErrors
@@ -447,20 +414,19 @@ async function main(): Promise<void> {
 	);
 	const results: IterationResult[] = [];
 
-	// Pool: at most PARALLEL iterations in flight at once.
-	const queue = Array.from({ length: ITERATIONS }, (_, i) => i + 1);
-	const workers = Array.from(
+	const pendingIterations = Array.from({ length: ITERATIONS }, (_, i) => i + 1);
+	const parallelWorkers = Array.from(
 		{ length: Math.min(PARALLEL, ITERATIONS) },
 		async () => {
 			while (true) {
-				const next = queue.shift();
+				const next = pendingIterations.shift();
 				if (next === undefined) return;
 				const r = await runIterationLogged(next);
 				results.push(r);
 			}
 		},
 	);
-	await Promise.all(workers);
+	await Promise.all(parallelWorkers);
 	results.sort((a, b) => a.iter - b.iter);
 
 	const t = tally(results);
@@ -479,7 +445,6 @@ async function main(): Promise<void> {
 	console.log("\nvalidation errors by retryUnit:");
 	console.log(formatHistogram(t.retryUnitHistogram));
 
-	// Write artifacts
 	const __dirname = path.dirname(fileURLToPath(import.meta.url));
 	const outDir = path.resolve(
 		__dirname,

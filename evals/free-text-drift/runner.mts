@@ -1,34 +1,3 @@
-/**
- * evals/free-text-drift/runner.mts
- *
- * Real-LLM drift-tracking harness for issue #260 — daemons drop to silence
- * mid-phase, sometimes lapsing into free-text prose that *looks like* an
- * attempt to message or act but never reaches the engine.
- *
- * Run with:  pnpm eval:drift
- *
- * Prerequisites:
- *   - OPENROUTER_API_KEY (or equivalent the proxy worker reads) in env.
- *   - The proxy worker running locally: `pnpm dev` (or a deployed URL in EVAL_BASE_URL).
- *
- * Shape:
- *   - One real Daemon (`red`) is driven against the live model.
- *   - Two inert peer personas (`sim1`, `sim2`) exist only so their handles
- *     route cleanly in the conversation log; they never call the LLM.
- *   - Each round, the harness injects one simulated incoming message
- *     (from blue / sim1 / sim2 in round-robin) into `red`'s conversation log
- *     so the daemon always has stimulus and silence is unambiguous drift,
- *     not lack of input.
- *   - After each round, the per-turn record (raw assistant text + every
- *     tool call's parsed detail) is captured for the scoring module.
- *   - One-shot drift-recovery retry from runRound (#254) is intentionally
- *     NOT applied — this harness measures the raw first-response signal
- *     so the format-drift hypothesis from #260 can be evaluated cleanly.
- *
- * Output: docs/evals/free-text-drift-<date>.md  (full per-turn transcripts
- * plus the rolling silence-rate window summary).
- */
-
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -60,27 +29,17 @@ import {
 	summarizeRun,
 } from "./scoring.js";
 
-// ── Config ────────────────────────────────────────────────────────────────────
-
 const BASE_URL = process.env.EVAL_BASE_URL ?? "http://localhost:8787";
 const MODEL = process.env.EVAL_MODEL ?? "z-ai/glm-4.7";
 const TOTAL_ROUNDS = Number(process.env.EVAL_DRIFT_ROUNDS ?? 30);
 const WINDOW_SIZE = Number(process.env.EVAL_DRIFT_WINDOW ?? 5);
 const REAL_AI: AiId = "red";
 const PEERS: AiId[] = ["sim1", "sim2"];
+const BUDGET_LARGE_ENOUGH_TO_NEVER_LOCK_OUT = 100;
 
-/**
- * When `EVAL_DIRECT_OPENROUTER=1`, the runner calls OpenRouter directly
- * (read `OPENROUTER_API_KEY` from env, attach Bearer auth) instead of going
- * through the proxy worker. Useful when wrangler dev can't run locally
- * (e.g. Cloudflare login unavailable) or when measuring drift without the
- * proxy's rate-guard in the loop.
- */
 const DIRECT_OPENROUTER = process.env.EVAL_DIRECT_OPENROUTER === "1";
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY ?? "";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-
-// ── Personas ─────────────────────────────────────────────────────────────────
 
 const PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -122,38 +81,11 @@ const PERSONAS: Record<string, AiPersona> = {
 	},
 };
 
-// ── Enriched content pack ────────────────────────────────────────────────────
-
-/**
- * Hand-rolled pack with a Carry objective, two interesting items, and one
- * obstacle. Layout from `red`'s POV (starts at row 2, col 2,
- * grid is 5x5 with row 0 at the top):
- *
- *   col       0           1            2             3          4
- *   row 0:   .       clipboard      wall_mount    panel        .
- *   row 1:   .          .          flashlight       .          .
- *   row 2:   .          .             RED           .          .
- *   row 3:   .          .             .           pillar       .
- *   row 4:  sim1        .             .             .         sim2
- *
- * Inside red's 13-cell Vista (own cell + the eight neighbours + the four
- * distance-2 cardinals) are flashlight, wall_mount and pillar; the pillar
- * stands there from the start, so there is an interesting entity in view
- * from round 1 and `go` has somewhere to spend itself. clipboard and panel
- * fall outside the 13-cell disk, so they stay known only by rumour, and the
- * peers are outside the Vista entirely. No daemon starts within interaction
- * range of another — kept that way to avoid inflating message counts from
- * cheap stimulus.
- */
-function makePack(): ContentPack {
+function makeSubwayStationPack(): ContentPack {
 	return {
 		setting: "abandoned subway station",
 		weather: "damp, still air",
 		timeOfDay: "no daylight — emergency strip-lights only",
-		// Flat entity list. The retired `objectivePairs` / `interestingObjects` /
-		// `obstacles` buckets are derived on demand from this array by
-		// `pack-selectors.ts` (carryPairs, interestingObjects, obstacles, …),
-		// and the element `kind` is the only thing that distinguishes them.
 		entities: [
 			{
 				id: "flashlight",
@@ -213,41 +145,10 @@ function makePack(): ContentPack {
 	};
 }
 
-// ── Simulated incoming traffic ───────────────────────────────────────────────
-
-/**
- * Round-robin schedule of (sender, message) pairs injected each round so the
- * daemon always has conversational stimulus. Drift then = silence-in-the-face-
- * of-input, not lack of input.
- *
- * The schedule mixes pure-chat prompts with action-nudges spanning every
- * tool family (pick_up, use, put_down, go). This way one run
- * exercises the full tool surface and the per-tool per-round series in the
- * JSON sidecar carries real signal across tool names, not just `message`.
- * Prompts are intentionally suggestive rather than imperative — they invite
- * action without demanding it, so silence-when-stimulated still counts as
- * drift rather than refusal.
- *
- * ── OPEN QUESTION (issue #557, deliberately NOT decided here) ────────────────
- * Under #541 these fixtures were retargeted from relative directions ("the
- * panel on your right", "head back") to cardinal/approved vocabulary, because
- * a Daemon has no orientation and literally cannot act on "right". That fixes
- * the vocabulary, but it raises a question about what this eval *measures*:
- *
- *   (a) How a daemon handles INCOHERENT input. A real player would type "head
- *       back", so unsatisfiable spatial language belongs in the fixtures — in
- *       which case they should say so explicitly and the relative wording
- *       should come back.
- *   (b) Action-vs-silence under COHERENT stimulus, in which case the fixtures
- *       must stay inside the approved cardinal vocabulary and that intent
- *       should be stated here.
- *
- * Both are defensible and the outcome changes the fixtures, so this is an
- * intended-behaviour decision for the owner — not something the incidental
- * work of typechecking the tree should silently settle. The fixtures below are
- * left exactly as #541 left them (cardinal wording) pending that decision.
- */
-const INCOMING: Array<{ from: AiId | "blue"; content: string }> = [
+const INCOMING_STIMULUS_ROTATION: Array<{
+	from: AiId | "blue";
+	content: string;
+}> = [
 	{ from: "blue", content: "hey ember, you around?" },
 	{ from: "sim1", content: "what do you see where you are standing?" },
 	{
@@ -282,10 +183,10 @@ const INCOMING: Array<{ from: AiId | "blue"; content: string }> = [
 
 function pickIncoming(round: number): { from: AiId | "blue"; content: string } {
 	// biome-ignore lint/style/noNonNullAssertion: modulo over non-empty array
-	return INCOMING[(round - 1) % INCOMING.length]!;
+	return INCOMING_STIMULUS_ROTATION[
+		(round - 1) % INCOMING_STIMULUS_ROTATION.length
+	]!;
 }
-
-// ── Model call (thin wrapper around proxy worker) ────────────────────────────
 
 interface OpenAiToolCall {
 	id: string;
@@ -350,22 +251,12 @@ async function callModel(
 		argumentsJson: tc.function.arguments,
 	}));
 	const costUsd: number | undefined = data.usage?.cost;
-	// `exactOptionalPropertyTypes` rejects an explicit `undefined` for the
-	// optional `costUsd`, so only attach it when the API reported one.
 	const result: ModelTurnResult = { assistantText, toolCalls };
 	if (costUsd !== undefined) result.costUsd = costUsd;
 	return result;
 }
 
-// ── Dispatch a model response through the real engine ────────────────────────
-
-/**
- * Mirror the production translation step (round-coordinator → dispatchAiTurn)
- * for a single AI: parse tool calls, build an AiTurnAction, dispatch. Returns
- * the next game state. Pass turns are still dispatched (with `action.pass`)
- * so budget and round-state advance consistently across silent turns.
- */
-function dispatchModelResponse(
+function dispatchLikeRoundCoordinator(
 	game: GameState,
 	aiId: AiId,
 	toolCalls: CapturedToolCall[],
@@ -409,20 +300,9 @@ function dispatchModelResponse(
 	return result.game;
 }
 
-// ── Main loop ────────────────────────────────────────────────────────────────
-
 async function runDriftSession(): Promise<TurnRecord[]> {
-	let game = startGame(PERSONAS, makePack(), {
-		// Plenty of budget so the run isn't cut short by lockout.
-		budgetPerAi: 100,
-		// No `objectiveTypes` here on purpose. This harness measures drift under
-		// conversational stimulus, not objective pursuit, and the hand-authored
-		// pack below could not support one anyway: `buildObjectiveRecords`
-		// resolves its targets by type-first convention id (`carry-0-obj`,
-		// `useItem-0-item`, …), which only packs minted by
-		// `binding-prompt-builder` carry. The old `objectiveCount: 1` option was
-		// removed with the type-first migration (#494) and had already been a
-		// documented no-op before that, so dropping it changes nothing.
+	let game = startGame(PERSONAS, makeSubwayStationPack(), {
+		budgetPerAi: BUDGET_LARGE_ENOUGH_TO_NEVER_LOCK_OUT,
 	});
 
 	const turns: TurnRecord[] = [];
@@ -430,16 +310,13 @@ async function runDriftSession(): Promise<TurnRecord[]> {
 	for (let round = 1; round <= TOTAL_ROUNDS; round++) {
 		game = advanceRound(game);
 
-		// 1. Inject a simulated incoming message for red this round.
 		const incoming = pickIncoming(round);
 		game = appendMessage(game, incoming.from, REAL_AI, incoming.content);
 
-		// 2. Build red's prompt against current state.
 		const ctx = buildAiContext(game, REAL_AI);
 		const messages = buildOpenAiMessages(ctx);
 		const tools = availableTools(game, REAL_AI, game.activeComplications);
 
-		// 3. Call the model.
 		let result: ModelTurnResult;
 		try {
 			result = await callModel(messages, tools);
@@ -455,7 +332,6 @@ async function runDriftSession(): Promise<TurnRecord[]> {
 			continue;
 		}
 
-		// 4. Record the per-turn signal.
 		turns.push({
 			round,
 			aiId: REAL_AI,
@@ -464,8 +340,7 @@ async function runDriftSession(): Promise<TurnRecord[]> {
 			injectedFrom: incoming.from,
 		});
 
-		// 5. Dispatch through the real engine so conversation state evolves.
-		game = dispatchModelResponse(
+		game = dispatchLikeRoundCoordinator(
 			game,
 			REAL_AI,
 			result.toolCalls,
@@ -483,17 +358,6 @@ async function runDriftSession(): Promise<TurnRecord[]> {
 	return turns;
 }
 
-// ── Report ───────────────────────────────────────────────────────────────────
-
-/**
- * Count entries sorted descending by count. Spelled out rather than
- * `Object.entries(x).sort((a, b) => b[1] - a[1])`: under
- * `noUncheckedIndexedAccess` the tuple indexing in that comparator is
- * `number | undefined`, which the typechecker (correctly) refuses to subtract.
- *
- * The param accepts a `Partial<Record<…, number>>` because
- * `DriftRunSummary.toolCallCountsByName` is keyed by `ToolName | string`.
- */
 function byDescendingCount(
 	counts: Partial<Record<string, number>>,
 ): Array<[string, number]> {
@@ -611,8 +475,6 @@ function renderReport(turns: TurnRecord[], date: string): string {
 
 	return lines.join("\n");
 }
-
-// ── Entry point ──────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
 	console.log("Running free-text-drift eval harness…");

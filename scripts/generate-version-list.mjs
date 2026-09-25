@@ -8,29 +8,26 @@ const root = path.resolve(__dirname, "..");
 
 async function generateVersionList() {
 	try {
-		// Get all v* tags sorted by version (highest first)
-		const tagsOutput = execSync("git tag --list 'v*' | sort -V | tac", {
+		const tagsHighestFirst = execSync("git tag --list 'v*' | sort -V | tac", {
 			cwd: root,
 			encoding: "utf8",
 		}).trim();
 
-		const tags = tagsOutput ? tagsOutput.split("\n") : [];
+		const tags = tagsHighestFirst ? tagsHighestFirst.split("\n") : [];
 
-		// Build metadata for each version
 		const versions = tags
 			.map((tag) => {
 				try {
-					// Get the commit date
-					const dateStr = execSync(`git log -1 --format=%ci "${tag}"`, {
+					const commitDate = execSync(`git log -1 --format=%ci "${tag}"`, {
 						cwd: root,
 						encoding: "utf8",
 					}).trim();
-					const date = new Date(dateStr);
+					const date = new Date(commitDate);
 					const isBeta = tag.includes("-beta");
 
 					return {
 						tag,
-						version: tag.slice(1), // Remove 'v' prefix
+						version: tag.slice("v".length),
 						date,
 						dateFormatted: date.toLocaleDateString("en-US", {
 							year: "numeric",
@@ -45,7 +42,6 @@ async function generateVersionList() {
 			})
 			.filter((v) => v !== null);
 
-		// Generate HTML
 		const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -185,16 +181,13 @@ async function generateVersionList() {
 </body>
 </html>`;
 
-		// Ensure v/ directory exists
-		const vDir = path.join(root, "dist", "v");
-		await fs.mkdir(vDir, { recursive: true });
+		const versionsDir = path.join(root, "dist", "v");
+		await fs.mkdir(versionsDir, { recursive: true });
 
-		// Write the version list page
-		await fs.writeFile(path.join(vDir, "index.html"), html);
+		await fs.writeFile(path.join(versionsDir, "index.html"), html);
 		console.log(`Generated version list with ${versions.length} version(s)`);
 	} catch (error) {
 		console.error("Failed to generate version list:", error.message);
-		// Don't fail the build if version list generation fails
 	}
 }
 

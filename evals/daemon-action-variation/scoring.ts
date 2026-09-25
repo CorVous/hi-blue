@@ -1,20 +1,4 @@
-/**
- * evals/daemon-action-variation/scoring.ts
- *
- * Pure-function scoring module for the daemon-action-variation eval harness.
- * Aggregates tool-call distributions across repetitions of the same scenario
- * so the per-temperament action-profile signal can be read at a glance.
- *
- * No I/O, no side effects.
- *
- * Exported surface:
- *   - summarizeScenario(turns) → ScenarioSummary
- *   - summarizeRun(byScenario) → RunSummary
- */
-
 import { ACTION_TOOLS } from "../../src/content/action-preference-bias.js";
-
-// ── Recorded shapes ──────────────────────────────────────────────────────────
 
 export interface CapturedToolCall {
 	id: string;
@@ -22,11 +6,6 @@ export interface CapturedToolCall {
 	argumentsJson: string;
 }
 
-/**
- * One captured repetition of a scenario for a specific persona variant.
- * `assistantText` is the raw assistant content before any tool-call
- * extraction; `toolCalls` is every tool call the model emitted, in order.
- */
 export interface RepetitionRecord {
 	repetition: number;
 	scenario: string;
@@ -34,54 +13,25 @@ export interface RepetitionRecord {
 	temperaments: [string, string];
 	assistantText: string;
 	toolCalls: CapturedToolCall[];
-	/** OpenRouter-reported call cost (USD), when surfaced. */
 	costUsd?: number;
 }
 
-/**
- * Tool buckets we report on. All other tool names roll up into `other`.
- *
- * Imported from the shipped action surface rather than restated here, so the
- * eval's columns, buckets, and per-tool rates track
- * `src/content/action-preference-bias.ts` automatically. The bucket records
- * below are typed as `Record<ActionTool | …>` and list their keys
- * exhaustively, so a tool added to or removed from the shipped surface is a
- * typecheck error rather than a silent drift (`face` drifted this way once,
- * leaving `toolBiasSum` indexed with a column the table no longer had).
- */
 type ActionTool = (typeof ACTION_TOOLS)[number];
 
 function isActionTool(name: string): name is ActionTool {
 	return (ACTION_TOOLS as readonly string[]).includes(name);
 }
 
-// ── Per-scenario aggregate ───────────────────────────────────────────────────
-
 export interface ScenarioSummary {
 	scenario: string;
 	personaLabel: string;
 	temperaments: [string, string];
 	repetitions: number;
-	/** Fraction of repetitions that emitted >= 1 action tool. */
 	anyActionRate: number;
-	/** Fraction of repetitions that emitted >= 1 `message` tool. */
 	anyMessageRate: number;
-	/**
-	 * Fraction of repetitions that emitted BOTH a `message` AND an action
-	 * tool in the same turn (the message+action parallel signal).
-	 */
 	parallelRate: number;
-	/** Fraction of repetitions with zero tool calls. */
 	silenceRate: number;
-	/**
-	 * Per-tool count of emissions across the run. Useful for spotting
-	 * heavy bias toward one tool (e.g. examine-heavy curious daemons).
-	 */
 	toolCallCounts: Record<ActionTool | "message" | "other", number>;
-	/**
-	 * Per-tool rate (count / repetitions) so cross-persona comparison is
-	 * normalised even if scenarios have different sample sizes.
-	 */
 	toolCallRates: Record<ActionTool | "message" | "other", number>;
 }
 
@@ -145,17 +95,9 @@ export function summarizeScenario(reps: RepetitionRecord[]): ScenarioSummary {
 	};
 }
 
-// ── Cross-(scenario × persona) summary ───────────────────────────────────────
-
 export interface RunSummary {
 	totalRepetitions: number;
-	/** Per (scenario, persona) aggregate row. */
 	scenarios: ScenarioSummary[];
-	/**
-	 * Roll-up across all (scenario × persona) combinations — overall rates
-	 * for the run, so a single line can be quoted in commit messages /
-	 * comparison docs.
-	 */
 	overall: {
 		anyActionRate: number;
 		anyMessageRate: number;
@@ -163,16 +105,9 @@ export interface RunSummary {
 		silenceRate: number;
 		useRate: number;
 	};
-	/** Sum of OpenRouter `usage.cost` across all repetitions, if reported. */
 	totalCostUsd: number;
 }
 
-/**
- * Roll an array of per-scenario summaries up into a single run-level
- * report. Per-tool rates are repetition-weighted across the inputs
- * (sum of counts / sum of repetitions), which keeps small scenarios
- * from dominating the rate when the harness mixes scenario sizes.
- */
 export function buildRunSummary(
 	summaries: ScenarioSummary[],
 	totalCostUsd: number,
@@ -206,14 +141,8 @@ export function buildRunSummary(
 	};
 }
 
-// ── Renderable type helpers for the report writer ────────────────────────────
-
 export { ACTION_TOOLS };
 
-/**
- * Convenience: format a number as a percent with no decimal places, e.g.
- * `0.357 → "36%"`. Used by the markdown report writer.
- */
-export function pct(x: number): string {
+export function wholePercent(x: number): string {
 	return `${Math.round(x * 100)}%`;
 }
