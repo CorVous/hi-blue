@@ -19,8 +19,6 @@ Live browser end-to-end against the built SPA on `http://localhost:8787`. Run wi
 
 **Vitest jsdom does not substitute for Playwright on these changes** — add or update a spec under `e2e/`.
 
-`RALPH_QA.md` lists manual flows that should migrate to `e2e/` over time. When you automate one, flip its checkbox in `RALPH_QA.md` and link the spec.
-
 ### Stubbing gotcha: `page.route` vs `page.request.*`
 
 Playwright has two HTTP contexts that share a cookie jar but route differently:
