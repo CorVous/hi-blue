@@ -86,12 +86,6 @@ export class BrowserLLMProvider implements RoundLLMProvider {
 				disableReasoning: this.disableReasoning,
 			});
 
-			if (promptTokens !== undefined && cachedPromptTokens !== undefined) {
-				// Inspector provides visibility into cache behavior; devtools logging removed
-			}
-
-			// Inspector provides visibility into tool calling patterns; devtools logging removed
-
 			const assistantText = textParts.join("") || reasoningParts.join("");
 			onLifecycle?.(
 				daemonId ? { phase: "completed", daemonId } : { phase: "completed" },

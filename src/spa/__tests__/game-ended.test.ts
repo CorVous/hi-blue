@@ -126,7 +126,6 @@ const GAME_ENDED_RESULT = {
 	result: {
 		round: 1,
 		actions: [],
-		phaseEnded: true,
 		gameEnded: true,
 	},
 	// Non-empty completions prevent the lockout branch which needs personas.name

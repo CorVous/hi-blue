@@ -22,7 +22,6 @@
  *   chat_lockout_resolved — { type, aiId }
  *   system_broadcast — { type, content }  (sender-less announcement, e.g. weather change)
  *   action_log — { type, entry }
- *   phase_advanced — { type, phase, setting }
  *   game_ended     — { type }
  */
 
@@ -48,7 +47,6 @@ export type SseEvent =
 	| { type: "chat_lockout_resolved"; aiId: AiId }
 	| { type: "system_broadcast"; content: string }
 	| { type: "action_log"; entry: RoundResult["actions"][number] }
-	| { type: "phase_advanced"; phase: 1 | 2 | 3; setting: string }
 	| { type: "game_ended" };
 
 /**
@@ -196,17 +194,6 @@ export function encodeRoundResult(
 		for (const aiId of result.chatLockoutsResolved) {
 			events.push({ type: "chat_lockout_resolved", aiId });
 		}
-	}
-
-	// phase_advanced — emitted when the phase advanced but the game is not over.
-	// In the single-game loop (issue #295), phases are retired so phaseEnded is
-	// always false. This block is kept for wire-format backward-compat.
-	if (result.phaseEnded && !result.gameEnded) {
-		events.push({
-			type: "phase_advanced",
-			phase: 1,
-			setting: phaseAfter.setting,
-		});
 	}
 
 	// game_ended — terminal signal emitted when the game is complete.

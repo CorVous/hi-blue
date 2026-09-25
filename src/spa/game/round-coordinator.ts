@@ -815,7 +815,6 @@ export async function runRound(
 	const result: RoundResult = {
 		round: state.round,
 		actions: roundActions,
-		phaseEnded: false,
 		gameEnded,
 		...(chatLockoutTriggered !== undefined ? { chatLockoutTriggered } : {}),
 		...(chatLockoutsResolved !== undefined ? { chatLockoutsResolved } : {}),
