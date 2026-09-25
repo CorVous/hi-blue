@@ -80,6 +80,11 @@ The validator returns a `ValidationResult`. It never throws. It checks each pack
 against the schedule it was generated from. Every error names a `ValidationRule`
 and the `retryUnit` it belongs to.
 
+The error and result types, the `RetryUnit` and `ValidationRule` unions and the
+use-tell keyword matchers live in `content-pack-validation.ts`. The validator and
+`content-pack-provider.ts` both import them from there, so the validator does not
+import the provider and the two modules do not form an import cycle.
+
 The field lists at the top of the module mirror the system prompt. Each binding
 has a `*_REQUIRED_FIELDS` list and, where it applies, a `*_FORBIDDEN_FIELDS` list.
 When you change one, change `CONTENT_PACK_SYSTEM_PROMPT`,
@@ -96,9 +101,6 @@ When you change one, change `CONTENT_PACK_SYSTEM_PROMPT`,
 | `verb-of-activation` | A use_space or use_item `examineDescription` has no use-cue keyword, or a decoy's has one. |
 | `structural` | The response is not an object, or a dual response has no phase 0. |
 
-`paired-space-tell`, `duplicate-id` and `wrong-kind` remain in the union but
-nothing emits them now.
-
 **Warnings, not errors.** A use-cue in a carry or convergence space's
 `examineDescription` becomes a warning. The warning goes back in the `ok` value
 and does not trigger a retry.
@@ -110,15 +112,11 @@ Daemons never see `pairsWithSpaceId` or the binding type (#253). Each binding
 therefore needs a clue in its `examineDescription`:
 
 - **Carry.** The object's `examineDescription` must name its paired space
-  (#253). The prompt demands this at MUST strength. `examineMentionsPairedSpace`
-  defines the matcher: the full space name as a case-insensitive substring, or
-  failing that, any space-name token of at least `MIN_SPACE_NAME_TOKEN_LENGTH`
-  characters that is not a stopword. The token fallback (#382) admits real
-  tells such as "stage pulley" for a space named "Stage Pulley System", while
-  still rejecting the playtest-0007 misses (for example, "rusted iron key" for a
-  Brass Pedestal). The validator does not enforce this rule. Only tests call the
-  function now. It exists so that validator enforcement, if added later (#346),
-  shares the same definition.
+  (#253). The prompt demands this at MUST strength, but no validator enforces
+  it. The unused matcher `examineMentionsPairedSpace` (the full space name, or
+  failing that any non-stopword space-name token of four or more characters,
+  #382) has been deleted. If enforcement is added later (#346), it can be
+  recovered from the repository history.
 - **Use-Space and Use-Item.** `examineMentionsUseTell` matches whole words from
   `USE_TELL_KEYWORDS`, so "use" does not match inside "fuse". The list joins the
   Use-Space cue set (#335) and the extra Use-Item cues (#334: crank, handle, flip,
@@ -154,9 +152,9 @@ Retry units follow [ADR 0010](../adr/0010-content-pack-partial-retry.md). The
 code no longer splices repaired entities back into the pack, as ADR 0010
 proposed. Retry units now only group the corrective feedback. The ADR also chose
 a fresh call over continuing the conversation; the code now continues the
-conversation. `RetryUnit` still lists `objective-pair` and `interesting-object`,
-which date from the pre-binding validator. `objective-pair` with an empty
-`pairId` still marks errors that belong to the whole pack.
+conversation. `RetryUnit` still lists `objective-pair`, which dates from the
+pre-binding validator. `objective-pair` with an empty `pairId` marks errors that
+belong to the whole pack.
 
 ### Attempt log (`content-pack-attempts.ts`)
 
