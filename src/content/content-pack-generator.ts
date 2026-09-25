@@ -9,9 +9,6 @@
  * 3. Makes one batched LLM call covering both packs.
  * 4. Runs engine-randomized placement under constraints.
  *
- * `generateContentPacks` is the retired three-phase generator, kept only for
- * backward-compat; new code uses the single-game path.
- *
  * Placement constraints:
  * - Obstacles placed first, m distinct cells.
  * - AI starts: distinct non-obstacle cells, position only.
@@ -26,10 +23,7 @@ import type {
 	RawBinding,
 	RawBoundPack,
 } from "../spa/game/binding-aware-validator.js";
-import {
-	buildBindingPrompt,
-	buildDualBindingPrompt,
-} from "../spa/game/binding-prompt-builder.js";
+import { buildDualBindingPrompt } from "../spa/game/binding-prompt-builder.js";
 import type {
 	ContentPackProvider,
 	DualBindingContentPackInput,
@@ -63,9 +57,6 @@ export interface SingleGameConfig {
 	budgetPerAi: number;
 }
 
-/**
- * Legacy per-phase config shape. Kept for backward-compat with generateContentPacks.
- */
 export interface PhaseConfig {
 	kRange: [number, number];
 	nRange: [number, number];
@@ -459,114 +450,6 @@ function rawBoundPackToContentPack(
 		wallName: rawPack.wallName ?? "",
 		aiStarts: {},
 	};
-}
-
-/**
- * Generate three ContentPacks (retired three-phase path — see file header;
- * kept for backward-compat only, new code uses `generateDualContentPacks`).
- *
- * @param rng        Seeded random number generator.
- * @param settings   The pool of setting nouns to draw from (must have >= 3 entries).
- * @param configs    The three phase configs (in order).
- * @param llm        ContentPackProvider for the LLM call.
- * @param aiIdsOrPromise  AiId list or a Promise resolving to one (enables true parallelism).
- */
-export async function generateContentPacks(
-	rng: () => number,
-	settings: readonly string[],
-	configs: [PhaseConfig, PhaseConfig, PhaseConfig],
-	llm: ContentPackProvider,
-	aiIdsOrPromise: AiId[] | Promise<AiId[]>,
-): Promise<ContentPack[]> {
-	if (settings.length < 3) {
-		throw new Error(
-			`generateContentPacks: setting pool must have at least 3 entries (has ${settings.length})`,
-		);
-	}
-
-	// Draw 3 distinct settings via partial Fisher-Yates
-	const settingPool = [...settings];
-	const drawnSettings: string[] = [];
-	for (let i = 0; i < 3; i++) {
-		const j = i + Math.floor(rng() * (settingPool.length - i));
-		const tmp = settingPool[i] as string;
-		settingPool[i] = settingPool[j] as string;
-		settingPool[j] = tmp;
-		drawnSettings.push(settingPool[i] as string);
-	}
-
-	// Draw weather, time-of-day, and theme independently per phase (with replacement)
-	const drawnWeather = Array.from(
-		{ length: 3 },
-		() => WEATHER_POOL[Math.floor(rng() * WEATHER_POOL.length)] as string,
-	);
-	const drawnTimeOfDay = Array.from(
-		{ length: 3 },
-		() =>
-			TIME_OF_DAY_POOL[Math.floor(rng() * TIME_OF_DAY_POOL.length)] as string,
-	);
-	const drawnThemes = Array.from(
-		{ length: 3 },
-		() => THEME_POOL[Math.floor(rng() * THEME_POOL.length)] as string,
-	);
-
-	// Roll m per phase and type-first objective types
-	const phaseMValues = configs.map((cfg) =>
-		rollInt(rng, cfg.mRange[0], cfg.mRange[1]),
-	);
-	const phaseObjectiveTypes = configs.map(() => rollObjectiveTypes(rng, 3));
-
-	// Build binding-format phases for LLM
-	const phaseInputs = configs.map((_cfg, i) => {
-		const objectiveTypes = phaseObjectiveTypes[i] ?? [];
-		const m = phaseMValues[i] ?? 0;
-		const weather = drawnWeather[i] ?? "clear";
-		const timeOfDay = drawnTimeOfDay[i] ?? "morning";
-		const theme = drawnThemes[i] ?? "mundane";
-		const setting = drawnSettings[i] ?? "";
-		const bp = buildBindingPrompt(
-			objectiveTypes,
-			setting,
-			theme,
-			weather,
-			timeOfDay,
-			m,
-		);
-		return {
-			setting,
-			theme,
-			weather,
-			timeOfDay,
-			bindings: bp.skeletons,
-			decoyIds: ["decoy-0", "decoy-1"] as [string, string],
-			obstacleCount: m,
-		};
-	});
-
-	// Kick off LLM call immediately (parallel with aiIds resolution)
-	const llmCallPromise = llm.generateContentPacks({ phases: phaseInputs });
-
-	// Await both in parallel
-	const [llmResult, aiIds] = await Promise.all([
-		llmCallPromise,
-		Promise.resolve(aiIdsOrPromise),
-	]);
-
-	// Build unplaced ContentPack structures from LLM result using converter
-	const unplacedPacks: ContentPack[] = llmResult.phases.map((phase, i) => {
-		const objectiveTypes = phaseObjectiveTypes[i] ?? [];
-		const weather = drawnWeather[i] ?? "clear";
-		const timeOfDay = drawnTimeOfDay[i] ?? "morning";
-		return rawBoundPackToContentPack(
-			phase.rawPack,
-			objectiveTypes,
-			weather,
-			timeOfDay,
-		);
-	});
-
-	// Run placement engine
-	return placePhases(rng, unplacedPacks, aiIds);
 }
 
 /**
