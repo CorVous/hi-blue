@@ -212,10 +212,6 @@ header {
 	text-shadow: 0 0 6px rgba(141, 242, 127, 0.5);
 }
 
-.topinfo .blink {
-	animation: blink 1.1s steps(2, end) infinite;
-}
-
 @keyframes blink {
 	50% {
 		opacity: 0;
@@ -270,8 +266,7 @@ main {
 
 @media (prefers-reduced-motion: reduce) {
 	#phase-banner,
-	.blinkonly,
-	.topinfo .blink {
+	.blinkonly {
 		animation: none;
 	}
 }
