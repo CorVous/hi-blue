@@ -300,3 +300,181 @@ Both runs use `EVAL_DIRECT_OPENROUTER=1` against `z-ai/glm-4.7`.
 The original prose-shape analysis is preserved at the head of git
 history on this branch — see commit `c6e10cc`'s
 `docs(eval): add treatment results and baseline-vs-treatment analysis`.
+
+---
+
+# 2026-09-22 — the action-averse talk-only ceiling (#508)
+
+**Date:** 2026-09-22
+**Model:** `z-ai/glm-4.7`, 20 reps per (scenario × persona) cell
+**Scenarios:** `exploration`, `social` (the two open-ended turns)
+**Pairs:** `melancholic+diffident`, `diffident+aloof`, `melancholic+melancholic`
+— the three pairs that emitted **0% action** in the 2026-06-01 run (issue #508).
+
+Test matrix: 3 pairs × 2 scenarios × 20 reps = **120 reps per run**, 9 runs
+total (5 `avoid` controls + 4 `noavoid` treatments), ≈ $0.10/run.
+
+## Decision
+
+**Adopt option (a): suppress the pure-avoidance `<action_profile>` clause for
+personas with no preferred tool.** On the same cells and scenarios, dropping
+the block roughly **doubles to triples** action emission.
+
+### The runs
+
+Nine runs, 120 reps each, two arms. Per-run action-emission rate:
+
+| Arm | runs | per-run rate |
+|---|---|---|
+| `avoid` — shipped; pure-avoidance clause rendered | 5 | 3.3%, 25.0%, 45.0%, 53.3%, 55.8% — **mean 36.5%** |
+| `noavoid` — no `<action_profile>` block for these personas | 4 | 65.0%, 79.2%, 73.3%, 65.8% — **mean 70.8%** |
+
+The `aversepairs-r{1,2,3}` pair is the advertised control/treatment pair; the
+`inter-a{1,2}` / `inter-b1` runs are **the same experiment under different
+labels**, and they are pooled above because they are not independent
+corroboration — they are the rest of the sample.
+
+### The unit of observation is the RUN, not the rep
+
+This matters and the honest reading depends on it. The `avoid` arm's variance
+is overwhelmingly **between-run**, not per-rep: cells flip as a block mid-run
+(r2's `go` counts by cell are `0,0,0,11,9,10`; r3's are `11,1,12,8,8,14` —
+exploration dead in one run and alive in the next). Within-run dispersion is
+far larger than binomial, so the 120 reps in a run are **not** 120 independent
+observations of the arm. Effective n is **5 vs 4 runs**.
+
+Stated at that level:
+
+| Comparison | Result |
+|---|---|
+| Difference of means | **34.3pp** (36.5% → 70.8%) |
+| Welch t-test (5 vs 4 runs) | t = 3.28, df = 4.9, **p ≈ 0.03** |
+| Welch 95% CI on the difference | ≈ [7, 61]pp — excludes 0 |
+| Mann-Whitney exact (5 vs 4 runs) | U = 0, **p = 0.016** |
+| Mann-Whitney exact (**3 vs 3 runs only**) | U = 0, **p = 0.100 — not significant** |
+
+**The 3-vs-3 pair alone does not clear significance.** The decision rests on
+the pooled 5-vs-4 sample, which does. Anyone reading only the first three runs
+of each arm would be looking at p = 0.10 and should not have acted. This is
+recorded plainly because it is the difference between a decision that is
+supported and one that merely looks supported.
+
+The direction is consistent in every run — the lowest `noavoid` observation
+(65.8%) sits above the highest `avoid` observation (55.8%) — and the effect is
+large against a noisy control. That, plus a coherent mechanism, is what
+justifies acting. It is not a clean non-overlap of two tight distributions;
+the `avoid` arm is genuinely unstable, and a future re-run should budget for
+that by collecting several runs per arm rather than one.
+
+Raw data: `with-profiles-aversepairs-r{1,2,3}[-noavoid]-2026-09-22.{md,json}`
+plus the `inter-a{1,2}` / `inter-b1` runs.
+
+### The effect is entirely `go`
+
+`use` and `put_down` are **0% in every arm and every run**, and `pick_up`
+totals 1-2 calls across the whole matrix. So "action emission" here means
+*movement*: what the clause suppresses is `go`. This is consistent with the
+scenarios (open-ended exploration/social turns, where moving is the natural
+action) but it means the result should not be read as a broad recovery of the
+action surface — it is a movement recovery, and it says nothing about whether
+`use`/`pick_up` would respond the same way.
+
+## Why the clause backfires
+
+For a persona whose temperament draws produce **no preferred tool**, the
+bias-table clause degenerates to *pure avoidance* — it names only what the
+daemon is "hesitant about". That is the whole signal the block carries. A
+prompt clause listing nothing but aversions is read as
+"these actions are not for you", which is a stronger instruction than the
+temperament prose it was meant to modulate. The 2026-06-01 data already
+hinted at this: `sweet+effusive` (action-positive temperament) hit 0% in
+social-baseline but profiles lifted it to 60% — the feature only works where
+there is latent willingness to amplify. Where there is none, all that remains
+in the block is the prohibition.
+
+This supersedes the 2026-06-01 reading that profiles "cap the downside
+without creating action". Capping the downside is exactly the problem: for
+these pairs the clause *is* the downside.
+
+Direction (3) from the ticket — extending coverage by crossing the three
+temperaments with milder negatives (`anxious`/`taciturn`/`stoic`) — was **not**
+run. The decision rests on the severe pairs, which is where the ceiling was
+reported; extending the matrix would sharpen the boundary but is not required
+to act on option (a), and is left as follow-up.
+
+## What this does NOT establish
+
+- **The `objective` scenario is untouched** and stays at ~90-100% `use` for
+  these pairs. Nothing here suggests the floor is broken; the freeze was
+  always specific to open-ended turns. Only `exploration`/`social` were run
+  in this matrix, so the objective cells are unchanged from 2026-06-01.
+- **Direction (2) — the temperament prose itself — remains open.** The
+  measured cost is a prompt clause that says only what to avoid, which is
+  sufficient to explain the effect without rewriting the temperament
+  descriptions. Whether those descriptions also over-suppress action is a
+  separate, larger question not tested here.
+- **The mechanism claim is inferred, not directly instrumented.** No run
+  isolates "the model reads pure avoidance as prohibition" from "the presence
+  of *any* `<action_profile>` block at that position costs action". The
+  contrast here is presence vs. absence, so the data cannot separate the
+  clause's *content* from the block's *existence*. The `noavoid` arm's effect is
+  real; the reason given for it is the most plausible reading, not a measured
+  one.
+- **The runs are not timestamped**, so "consecutive" cannot be verified from
+  the artifacts, and because the arms were run sequentially against a shared
+  live endpoint, upstream drift over the session is an un-excluded confound.
+  The between-run variance in the `avoid` arm is consistent with exactly that
+  kind of drift. A re-run with interleaved arms would settle it.
+- **The two arms are not a pure single-variable manipulation.** The harness
+  knob omits the block for every persona with no *preferred* tool, which
+  includes personas that would otherwise render the *balanced* clause (see
+  the implementation note). The three tested pairs are all genuinely
+  pure-avoidance, so the result is unaffected — but the control is coarser
+  than "the pure-avoidance clause" implies.
+- **The 2026-06-01 baseline cited above is not on `main`.** It lives on the
+  unmerged branch `docs/action-variation-native-eval` (commit `f893dc8`), so a
+  reader on `main` cannot verify those figures directly.
+
+## Implementation note
+
+The `noavoid` policy is exposed in the harness as
+`EVAL_NO_PREFERRED_POLICY=omit`, defaulting to the shipped `avoid` behaviour.
+
+The predicate mirrors `actionProfileFor`'s branches exactly: a persona is in
+scope only when it has **no preferred tool and at least one avoided tool** —
+i.e. its clause is the pure-avoidance "is hesitant about …" sentence. Testing
+`bias >= 2` alone would have been wrong: of the 300 unordered temperament
+pairs, 174 have no preferred tool but only **84 render the pure-avoidance
+clause**, while 90 render the *balanced* clause ("engages with the action
+surface in a balanced way"). Omitting the block for that second group would
+generalise the treatment well beyond the ticket's question. The three pairs
+tested here are all genuinely pure-avoidance, so this distinction does not
+change the result — it only stops the knob from silently answering a
+different question if someone reuses it.
+
+Flipping production to the winning arm is deliberately **not** done in this
+change: doing so means changing the shipped default in
+`src/content/action-preference-bias.ts`, a behaviour change that belongs in
+its own review with its own before/after. This ticket's done-when is "a
+decision is recorded … backed by a multi-run eval if a change is made", and
+the decision plus its evidence is what is recorded here.
+
+## Reproduce
+
+```bash
+export OPENROUTER_API_KEY=...
+export EVAL_DIRECT_OPENROUTER=1
+
+# control arm (shipped behaviour), one run:
+EVAL_ACTION_PROFILES=1 \
+EVAL_SCENARIOS=exploration,social \
+EVAL_ACTION_PAIRS='melancholic+diffident,diffident+aloof,melancholic+melancholic' \
+EVAL_RUN_LABEL=aversepairs-r1 \
+  pnpm eval:action-variation
+
+# treatment arm (clause omitted for no-preferred personas):
+#   same, plus EVAL_NO_PREFERRED_POLICY=omit, label aversepairs-r1-noavoid
+```
+
+Repeat for `r2`/`r3` — one run per arm is not enough to separate them, as the
+`avoid` arm's 3→45% spread shows.

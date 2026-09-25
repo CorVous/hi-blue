@@ -37,6 +37,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
 	actionProfileFor,
+	CRITICAL_PATH_TOOLS,
 	toolBiasSum,
 } from "../../src/content/action-preference-bias.js";
 import { availableTools } from "../../src/spa/game/available-tools.js";
@@ -81,6 +82,51 @@ const ACTION_PROFILES_ON = process.env.EVAL_ACTION_PROFILES === "1";
 const DIRECT_OPENROUTER = process.env.EVAL_DIRECT_OPENROUTER === "1";
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY ?? "";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+
+/**
+ * Comma-separated subset of scenario names to run (e.g. `exploration,social`).
+ * Unset = all three. Exists so a scoped question ("how do the action-averse
+ * pairs behave on the open-ended scenarios?") can be answered without paying
+ * for the objective cells, which are already pinned at ~100% `use`.
+ */
+const SCENARIO_FILTER = (process.env.EVAL_SCENARIOS ?? "")
+	.split(",")
+	.map((s) => s.trim())
+	.filter((s) => s.length > 0);
+
+/**
+ * How to render the `<action_profile>` block for a persona whose summed bias
+ * table yields **no preferred tool and at least one avoided tool** — the
+ * pure-avoidance case, where the clause is the "is hesitant about …" sentence
+ * with nothing else in it.
+ *
+ *   `avoid` (default, shipped behaviour) — render that clause, exactly as
+ *       `actionProfileFor` returns it.
+ *   `omit`  — attach no profile at all for those personas, so the system
+ *       prompt has no `<action_profile>` block. This is the A/B arm for
+ *       issue #508 direction (1): does the pure-avoidance clause reinforce
+ *       inaction, or is the talk-only freeze caused by something else?
+ *
+ * Scope is narrower than "every persona without a preferred tool": a persona
+ * with no preferred tool but nothing avoided gets `actionProfileFor`'s
+ * *balanced* clause instead, and is deliberately left alone. Of the 300
+ * unordered temperament pairs, 174 have no preferred tool but only 84 render
+ * the pure-avoidance clause and 90 render the balanced one, so conflating the
+ * two would run a much broader experiment than the ticket describes.
+ *
+ * Personas that DO have a preferred tool are likewise unaffected — their
+ * clause is identical in both arms, so any delta between runs is attributable
+ * to the pure-avoidance handling alone.
+ */
+const NO_PREFERRED_POLICY: "avoid" | "omit" =
+	process.env.EVAL_NO_PREFERRED_POLICY === "omit" ? "omit" : "avoid";
+
+/**
+ * Suffix appended to the output filename stem, so scoped A/B runs against the
+ * same date don't clobber each other (or the full-matrix runs). Set by the
+ * caller, e.g. `EVAL_RUN_LABEL=noavoid`.
+ */
+const RUN_LABEL = process.env.EVAL_RUN_LABEL ?? "";
 
 /**
  * Per-persona variant — a temperament pair plus a stable label used as
@@ -163,6 +209,25 @@ function getVariants(): PersonaVariant[] {
 
 // ── Persona materialisation ──────────────────────────────────────────────────
 
+/**
+ * Apply `EVAL_SCENARIOS` to the full scenario list. Unknown names are a hard
+ * error rather than a silent no-op: a typo'd selector would otherwise run the
+ * whole matrix (or an empty one) while the operator believed it was scoped.
+ */
+function getSelectedScenarios(): Scenario[] {
+	const all = getScenarios();
+	if (SCENARIO_FILTER.length === 0) return all;
+	const known = new Set(all.map((s) => s.name));
+	const unknown = SCENARIO_FILTER.filter((s) => !known.has(s as never));
+	if (unknown.length > 0) {
+		throw new Error(
+			`EVAL_SCENARIOS has unknown scenario(s): ${unknown.join(", ")}. ` +
+				`Known: ${[...known].join(", ")}`,
+		);
+	}
+	return all.filter((s) => SCENARIO_FILTER.includes(s.name));
+}
+
 const PEER_PERSONA = (id: AiId): AiPersona => ({
 	id,
 	name: id === "sim1" ? "Simone" : "Tertia",
@@ -195,11 +260,41 @@ function materializePersonas(
 		voiceExamples: variant.voiceExamples,
 	};
 	if (withActionProfile) {
-		actor.actionProfile = actionProfileFor(
+		const clause = actionProfileFor(
 			variant.label,
 			variant.temperaments[0],
 			variant.temperaments[1],
 		);
+		// Issue #508 direction (1): A/B the pure-avoidance clause. A persona
+		// with no preferred tool gets only an "is hesitant about …" clause;
+		// under the `omit` policy we leave `actionProfile` undefined for that
+		// case so no `<action_profile>` block renders at all. Personas that DO
+		// have a preferred tool are untouched, so the arms differ only in the
+		// no-preferred handling.
+		//
+		// The predicate must mirror `actionProfileFor`'s branches exactly.
+		// Testing `bias >= 2` alone is NOT the same thing: a persona with no
+		// preferred tool falls into one of TWO cases — the balanced clause
+		// ("engages with the action surface in a balanced way", rendered when
+		// nothing is avoided either) or the pure-avoidance clause. Only the
+		// latter is the behaviour under test. Enumerating all 300 unordered
+		// temperament pairs: 174 have no preferred tool, but only 84 render the
+		// pure-avoidance clause while 90 render the balanced one. Omitting the
+		// block for the balanced group would silently generalise the treatment
+		// far beyond the ticket's question.
+		const biases = toolBiasSum(
+			variant.temperaments[0],
+			variant.temperaments[1],
+		);
+		const hasPreferred = ACTION_TOOLS.some((tool) => biases[tool] >= 2);
+		const hasAvoided = ACTION_TOOLS.some(
+			(tool) => biases[tool] <= -1 && !CRITICAL_PATH_TOOLS.has(tool),
+		);
+		// Pure avoidance = no preferred tool, but something avoided.
+		const isPureAvoidance = !hasPreferred && hasAvoided;
+		if (!(NO_PREFERRED_POLICY === "omit" && isPureAvoidance)) {
+			actor.actionProfile = clause;
+		}
 	}
 
 	const personas: Record<AiId, AiPersona> = { [variant.label]: actor };
@@ -394,7 +489,7 @@ interface RunResult {
 }
 
 async function runAll(withActionProfile: boolean): Promise<RunResult> {
-	const scenarios = getScenarios();
+	const scenarios = getSelectedScenarios();
 	const variants = getVariants();
 	const repetitions: RepetitionRecord[] = [];
 	const summaries: ScenarioSummary[] = [];
@@ -437,7 +532,7 @@ function renderReport(
 	mode: "baseline" | "with-profiles",
 ): string {
 	const variants = getVariants();
-	const scenarios = getScenarios();
+	const scenarios = getSelectedScenarios();
 	const totalCost = run.repetitions.reduce(
 		(acc, r) => acc + (r.costUsd ?? 0),
 		0,
@@ -455,6 +550,10 @@ function renderReport(
 		`Model: \`${MODEL}\`, repetitions per cell: ${REPETITIONS}.`,
 		"",
 		`Mode: **${mode}** — \`actionProfiles\` is ${mode === "with-profiles" ? "**ON**" : "**OFF**"}.`,
+		"",
+		`Scoped run: scenarios=[${(SCENARIO_FILTER.length > 0 ? SCENARIO_FILTER : scenarios.map((s) => s.name)).join(", ")}], ` +
+			`no-preferred-\`<action_profile>\` policy=\`${NO_PREFERRED_POLICY}\`` +
+			`${RUN_LABEL ? `, run label=\`${RUN_LABEL}\`` : ""}.`,
 		"",
 		"Tool surface: `go` / `pick_up` / `put_down` / `use` (+ `message`) —",
 		"the daemon action set after the ADR 0015 Vista cutover (`examine` and",
@@ -547,6 +646,9 @@ async function main(): Promise<void> {
 	console.log(`  model:         ${MODEL}`);
 	console.log(`  reps per cell: ${REPETITIONS}`);
 	console.log(`  mode:          ${mode}`);
+	console.log(`  scenarios:     ${SCENARIO_FILTER.join(",") || "all"}`);
+	console.log(`  no-preferred:  ${NO_PREFERRED_POLICY}`);
+	console.log(`  run label:     ${RUN_LABEL || "(none)"}`);
 	console.log("");
 
 	const run = await runAll(ACTION_PROFILES_ON);
@@ -564,8 +666,14 @@ async function main(): Promise<void> {
 		"../../docs/evals/daemon-action-variation",
 	);
 	fs.mkdirSync(outDir, { recursive: true });
-	const mdPath = path.join(outDir, `${mode}-${date}.md`);
-	const jsonPath = path.join(outDir, `${mode}-${date}.json`);
+	// Stem encodes the mode, the scoped-run label, and (only when it deviates
+	// from the shipped default) the no-preferred policy, so a scoped A/B run
+	// never clobbers the full-matrix `<mode>-<date>` files.
+	const stem =
+		`${mode}${RUN_LABEL ? `-${RUN_LABEL}` : ""}` +
+		`${NO_PREFERRED_POLICY === "omit" ? "-noavoid" : ""}`;
+	const mdPath = path.join(outDir, `${stem}-${date}.md`);
+	const jsonPath = path.join(outDir, `${stem}-${date}.json`);
 	fs.writeFileSync(mdPath, report, "utf-8");
 	fs.writeFileSync(
 		jsonPath,
@@ -577,6 +685,10 @@ async function main(): Promise<void> {
 					baseUrl: BASE_URL,
 					repetitions: REPETITIONS,
 					mode,
+					scenarios: SCENARIO_FILTER.length > 0 ? SCENARIO_FILTER : "all",
+					noPreferredPolicy: NO_PREFERRED_POLICY,
+					runLabel: RUN_LABEL || null,
+					pairs: getVariants().map((v) => v.temperaments.join("+")),
 				},
 				summary: runSummary,
 				repetitions: run.repetitions,
