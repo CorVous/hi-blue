@@ -1183,7 +1183,6 @@ function applyRoundEvent(
 ): void {
 	switch (event.type) {
 		case "ai_start":
-		case "token":
 		case "ai_end":
 		case "system_broadcast":
 		case "action_log":

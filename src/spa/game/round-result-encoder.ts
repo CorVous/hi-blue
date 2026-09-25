@@ -2,7 +2,6 @@ import type { AiId, AiPersona, GameState, RoundResult } from "./types";
 
 export type SseEvent =
 	| { type: "ai_start"; aiId: AiId }
-	| { type: "token"; text: string }
 	| {
 			type: "message";
 			from: AiId | "blue";
@@ -17,25 +16,6 @@ export type SseEvent =
 	| { type: "system_broadcast"; content: string }
 	| { type: "action_log"; entry: RoundResult["actions"][number] }
 	| { type: "game_ended" };
-
-export function splitIntoWordChunks(text: string): string[] {
-	if (!text) return [];
-	const chunks: string[] = [];
-	const parts = text.split(/(\s+)/);
-	let current = "";
-	for (const part of parts) {
-		if (/^\s+$/.test(part)) {
-			current += part;
-			chunks.push(current);
-			current = "";
-		} else {
-			if (current) chunks.push(current);
-			current = part;
-		}
-	}
-	if (current) chunks.push(current);
-	return chunks;
-}
 
 export function encodeRoundResult(
 	result: RoundResult,

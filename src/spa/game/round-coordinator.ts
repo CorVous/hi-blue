@@ -82,7 +82,6 @@ export interface RunRoundOptions {
 	rng?: (() => number) | undefined;
 	initiative?: AiId[] | undefined;
 	priorToolRoundtrip?: Partial<Record<AiId, ToolRoundtripMessage>> | undefined;
-	completionSink?: ((aiId: AiId, text: string) => void) | undefined;
 	onAiDelta?: ((aiId: AiId, text: string) => void) | undefined;
 	priorDiskSnapshots?: Partial<Record<AiId, string>> | undefined;
 	onAiTurnComplete?: ((aiId: AiId) => void) | undefined;
@@ -160,7 +159,6 @@ export async function runRound(
 		rng = Math.random,
 		initiative,
 		priorToolRoundtrip,
-		completionSink,
 		onAiDelta,
 		priorDiskSnapshots,
 		onAiTurnComplete,
@@ -188,7 +186,6 @@ export async function runRound(
 				kind: "lockout",
 				description: `${state.personas[aiId]?.name ?? aiId} is locked out`,
 			});
-			completionSink?.(aiId, "");
 			onAiTurnComplete?.(aiId);
 			continue;
 		}
@@ -222,8 +219,6 @@ export async function runRound(
 					),
 				messages,
 			);
-
-		completionSink?.(aiId, assistantText);
 
 		const action: AiTurnAction = { aiId };
 

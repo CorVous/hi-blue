@@ -13,7 +13,6 @@ import type {
 
 export interface SubmitMessageResult {
 	result: RoundResult;
-	completions: Partial<Record<AiId, string>>;
 	nextState: GameState;
 }
 
@@ -68,13 +67,6 @@ export class GameSession {
 			event: import("./round-llm-provider.js").LifecyclePhase,
 		) => void,
 	): Promise<SubmitMessageResult> {
-		const turnOrder = initiative ?? Object.keys(this.state.personas);
-
-		const completions: Partial<Record<AiId, string>> = {};
-		const completionSink = (aiId: AiId, text: string): void => {
-			completions[aiId] = text;
-		};
-
 		const {
 			nextState,
 			result,
@@ -85,19 +77,12 @@ export class GameSession {
 			rng: Math.random,
 			initiative,
 			priorToolRoundtrip: this.priorToolRoundtrip,
-			completionSink,
 			onAiDelta,
 			priorDiskSnapshots: this.priorDiskSnapshots,
 			onAiTurnComplete,
 			onLifecycle,
 			priorDiskEntities: this.priorDiskEntities,
 		});
-
-		for (const aiId of turnOrder) {
-			if (!(aiId in completions)) {
-				completions[aiId] = "";
-			}
-		}
 
 		this.state = nextState;
 		this.priorToolRoundtrip = { ...newToolRoundtrip };
@@ -107,6 +92,6 @@ export class GameSession {
 		};
 		this.priorDiskEntities = { ...this.priorDiskEntities, ...newDiskEntities };
 
-		return { result, completions, nextState };
+		return { result, nextState };
 	}
 }

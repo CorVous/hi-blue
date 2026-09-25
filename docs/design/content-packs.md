@@ -242,10 +242,9 @@ session can be built or saved until the content packs arrive.
   `priorToolRoundtrip` completely. The two disk maps are merged instead. A
   locked-out AI produces no new capture that round and keeps its old one, so its
   diffs pick up cleanly when the lockout lifts.
-- `completions` holds each AI's final assistant text. Every AI in the turn
-  order gets an entry, with `""` for locked-out AIs. Only the tests read it:
-  the view paints panels from the `message` entries that `encodeRoundResult`
-  emits (since #214), not from completions.
+- `submitMessage` returns only the round result and the next state. It does not
+  return the raw assistant text: the view paints panels from the `message`
+  entries that `encodeRoundResult` emits (since #214).
 - `GameSession.restore` builds the instance with `Object.create` so it skips the
   constructor, which would call `startGame`. Class field initializers do not run
   on that path, so `restore` sets the three maps itself.

@@ -230,7 +230,6 @@ it hides the other routes' screens and shows or hides the global chrome
 - **Events the view skips.**
   - `ai_start`: spinners are removed through `onAiTurnComplete`, and panel
     content comes from `message` events.
-  - `token`: the encoder has not emitted it since #214.
   - `ai_end`: message content already ends with `\n`.
   - `system_broadcast`: it lives only in each daemon's `conversationLog` as
     LLM context.

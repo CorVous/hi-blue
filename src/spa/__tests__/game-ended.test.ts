@@ -70,7 +70,6 @@ const GAME_ENDED_RESULT = {
 		actions: [],
 		gameEnded: true,
 	},
-	completions: { red: "done", green: "done", cyan: "done" },
 	nextState: FAKE_GAME_STATE,
 };
 

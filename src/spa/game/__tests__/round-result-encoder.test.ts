@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { appendMessage, deductBudget } from "../engine";
-import {
-	encodeRoundResult,
-	type SseEvent,
-	splitIntoWordChunks,
-} from "../round-result-encoder";
+import { encodeRoundResult, type SseEvent } from "../round-result-encoder";
 import type { AiId, GameState, RoundResult } from "../types";
 import { makeTestGame, TEST_PERSONAS } from "./fixtures/make-game-state";
 
@@ -31,35 +27,8 @@ function makePassResult(overrides?: Partial<RoundResult>): RoundResult {
 	};
 }
 
-describe("splitIntoWordChunks", () => {
-	it("returns empty array for empty string", () => {
-		expect(splitIntoWordChunks("")).toEqual([]);
-	});
-
-	it("returns single-element array for a single word", () => {
-		expect(splitIntoWordChunks("hello")).toEqual(["hello"]);
-	});
-
-	it("splits two words preserving trailing space", () => {
-		const chunks = splitIntoWordChunks("hello world");
-		expect(chunks).toEqual(["hello ", "world"]);
-	});
-
-	it("re-joining chunks produces the original string", () => {
-		const text = "one two three four";
-		const chunks = splitIntoWordChunks(text);
-		expect(chunks.join("")).toBe(text);
-	});
-
-	it("handles leading and trailing whitespace", () => {
-		const text = " hi there ";
-		const chunks = splitIntoWordChunks(text);
-		expect(chunks.join("")).toBe(text);
-	});
-});
-
-describe("encodeRoundResult — ai_start, token, ai_end sequence", () => {
-	it("emits ai_start, token events, ai_end for each AI in order", () => {
+describe("encodeRoundResult — ai_start, ai_end sequence", () => {
+	it("emits ai_start and ai_end for each AI in order", () => {
 		const phase = makeTestGame();
 		const result = makePassResult();
 
@@ -353,7 +322,7 @@ describe("encodeRoundResult — chat_lockout_resolved event", () => {
 });
 
 describe("encodeRoundResult — event ordering", () => {
-	it("action_log events come after all ai_start/token/ai_end/budget blocks", () => {
+	it("action_log events come after all ai_start/ai_end/budget blocks", () => {
 		const phase = makeTestGame();
 		const result = makePassResult();
 
