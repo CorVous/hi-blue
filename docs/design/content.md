@@ -24,9 +24,11 @@ Every draw comes from the injected `rng`, in a fixed order. Seeded tests and
 spike replays depend on that order, so a refactor must not reorder or add
 draws.
 
-In `SingleGameConfig` / `PhaseConfig`, `kRange` is the number of objective
-pairs, `nRange` the interesting objects and `mRange` the obstacles.
-`SINGLE_GAME_CONFIG` (`phases.ts`) sets a whole-game budget of $0.50 per AI.
+`SingleGameConfig` holds only what the generator reads: `mRange`, the range the
+obstacle count `m` is drawn from. `SINGLE_GAME_CONFIG` (`phases.ts`) sets it to
+1–3. The number of Objectives is fixed at three and the two decoys are fixed, so
+neither has a config range. The per-AI budget default lives in the engine
+(`DEFAULT_BUDGET_PER_AI_USD`), not here.
 
 ### Placement rules (`tryPlacePhase`)
 
@@ -135,7 +137,13 @@ comparison.
   clause, so `<action_profile>` is never empty. The balanced and avoided
   clauses never appear together.
 
-## Pools
+## Pools (`pools.ts`)
+
+The flat string pools live together in `pools.ts`. The persona pools
+(`TEMPERAMENT_POOL`, `TYPING_QUIRK_POOL`, `PERSONA_GOAL_POOL`) sit beside the
+ones below. `COLOR_PALETTE` stays in `color-palette.ts` because it is built from
+a named color map. Seeded draws index into these arrays, so reordering an entry
+changes what a given seed produces.
 
 - `SETTING_POOL`: noun phrases; one per pack at game start.
 - `WEATHER_POOL`: complete sentences, rendered verbatim into `<setting>`.
@@ -159,6 +167,3 @@ comparison.
   horizon landmarks. This axis has no in-place migration. Bumping it needs a
   `GAME_SAVE_ARCHIVE_MAP` entry; see `AGENTS.md` "Bumping save-format
   versions".
-- **`vite-env.d.ts`** hand-stubs `import.meta.env`. `tsconfig.json` sets
-  `"types": []`, which blocks automatic `@types` resolution, so Vite's
-  client types are not loaded.

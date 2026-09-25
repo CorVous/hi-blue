@@ -13,7 +13,7 @@ import { MockContentPackProvider } from "../../spa/game/content-pack-provider.js
 import type { ContentPack } from "../../spa/game/types.js";
 import {
 	generateDualContentPacks,
-	type PhaseConfig,
+	type SingleGameConfig,
 } from "../content-pack-generator.js";
 
 function mulberry32Rng(seed: number): () => number {
@@ -27,12 +27,8 @@ function mulberry32Rng(seed: number): () => number {
 	};
 }
 
-const ONE_OF_EACH_ENTITY_CONFIG: PhaseConfig = {
-	kRange: [1, 1],
-	nRange: [1, 1],
+const ONE_OBSTACLE_CONFIG: SingleGameConfig = {
 	mRange: [1, 1],
-	budgetPerAi: 5,
-	aiGoalPool: ["find the key"],
 };
 
 const SETTING_POOL_2: readonly string[] = [
@@ -197,7 +193,7 @@ describe("generateDualContentPacks — entity ID parity (issue #302)", () => {
 		const { packA, packB } = await generateDualContentPacks(
 			rng,
 			SETTING_POOL_2,
-			ONE_OF_EACH_ENTITY_CONFIG,
+			ONE_OBSTACLE_CONFIG,
 			provider,
 			AI_IDS,
 		);
@@ -212,7 +208,7 @@ describe("generateDualContentPacks — entity ID parity (issue #302)", () => {
 		const { packA, packB } = await generateDualContentPacks(
 			rng,
 			SETTING_POOL_2,
-			ONE_OF_EACH_ENTITY_CONFIG,
+			ONE_OBSTACLE_CONFIG,
 			provider,
 			AI_IDS,
 		);
@@ -227,7 +223,7 @@ describe("generateDualContentPacks — entity ID parity (issue #302)", () => {
 		const { packA, packB } = await generateDualContentPacks(
 			rng,
 			SETTING_POOL_2,
-			ONE_OF_EACH_ENTITY_CONFIG,
+			ONE_OBSTACLE_CONFIG,
 			provider,
 			AI_IDS,
 		);
@@ -247,7 +243,7 @@ describe("generateDualContentPacks — entity ID parity (issue #302)", () => {
 		await generateDualContentPacks(
 			rng,
 			SETTING_POOL_2,
-			ONE_OF_EACH_ENTITY_CONFIG,
+			ONE_OBSTACLE_CONFIG,
 			provider,
 			AI_IDS,
 		);
@@ -264,7 +260,7 @@ describe("generateDualContentPacks — entity ID parity (issue #302)", () => {
 			generateDualContentPacks(
 				rng,
 				["only one setting"],
-				ONE_OF_EACH_ENTITY_CONFIG,
+				ONE_OBSTACLE_CONFIG,
 				provider,
 				AI_IDS,
 			),

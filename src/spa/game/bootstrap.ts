@@ -64,13 +64,7 @@ export function generateNewGameAssetsSplit(
 		const { packA, packB, objectiveTypes } = await generateDualContentPacks(
 			contentPackRng,
 			SETTING_POOL,
-			{
-				kRange: SINGLE_GAME_CONFIG.kRange,
-				nRange: SINGLE_GAME_CONFIG.nRange,
-				mRange: SINGLE_GAME_CONFIG.mRange,
-				budgetPerAi: SINGLE_GAME_CONFIG.budgetPerAi,
-				aiGoalPool: [] as string[],
-			},
+			SINGLE_GAME_CONFIG,
 			packLLM,
 			aiIdsPromise,
 		);
@@ -96,13 +90,7 @@ export function generateContentPacksOnlySplit(
 		const { packA, packB, objectiveTypes } = await generateDualContentPacks(
 			contentPackRng,
 			SETTING_POOL,
-			{
-				kRange: SINGLE_GAME_CONFIG.kRange,
-				nRange: SINGLE_GAME_CONFIG.nRange,
-				mRange: SINGLE_GAME_CONFIG.mRange,
-				budgetPerAi: SINGLE_GAME_CONFIG.budgetPerAi,
-				aiGoalPool: [] as string[],
-			},
+			SINGLE_GAME_CONFIG,
 			packLLM,
 			Promise.resolve(aiIds),
 		);
@@ -122,13 +110,7 @@ export async function buildSameDaemonsSession(
 	const { packA, packB, objectiveTypes } = await generateDualContentPacks(
 		rng,
 		SETTING_POOL,
-		{
-			kRange: SINGLE_GAME_CONFIG.kRange,
-			nRange: SINGLE_GAME_CONFIG.nRange,
-			mRange: SINGLE_GAME_CONFIG.mRange,
-			budgetPerAi: SINGLE_GAME_CONFIG.budgetPerAi,
-			aiGoalPool: [] as string[],
-		},
+		SINGLE_GAME_CONFIG,
 		packLLM,
 		Object.keys(personas),
 	);

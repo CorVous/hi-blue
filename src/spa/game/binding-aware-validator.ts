@@ -2,12 +2,12 @@ import type { BindingSkeleton } from "./binding-prompt-builder.js";
 import type {
 	ValidationError,
 	ValidationResult,
-} from "./content-pack-provider.js";
+} from "./content-pack-validation.js";
 import {
 	examineMentionsUseTell,
 	findMatchedUseTellKeywords,
 	USE_CUE_KEYWORD_HINTS,
-} from "./content-pack-provider.js";
+} from "./content-pack-validation.js";
 
 interface RawBindingEntity {
 	id?: string;

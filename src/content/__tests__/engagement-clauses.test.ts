@@ -5,7 +5,7 @@ import {
 	engagementClauseFor,
 	TEMPERAMENT_ENGAGEMENT_BIAS,
 } from "../engagement-clauses.js";
-import { TEMPERAMENT_POOL } from "../temperament-pool.js";
+import { TEMPERAMENT_POOL } from "../pools.js";
 
 describe("engagement-clauses", () => {
 	it("assigns a bias to every temperament in the pool", () => {

@@ -1,4 +1,4 @@
-import { WEATHER_POOL } from "../../content/weather-pool.js";
+import { WEATHER_POOL } from "../../content/pools.js";
 import { applyDirection, CARDINAL_DIRECTIONS, inBounds } from "./direction.js";
 import { appendBroadcast, setWeather, shiftToBPack } from "./engine.js";
 import type {

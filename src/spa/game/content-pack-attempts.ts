@@ -1,4 +1,4 @@
-import type { ValidationError } from "./content-pack-provider.js";
+import type { ValidationError } from "./content-pack-validation.js";
 
 export const ATTEMPTS_STORAGE_KEY = "hi-blue:debug/content-pack-attempts";
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SYSADMIN_DIRECTIVE_POOL } from "../../../content/sysadmin-directive-pool.js";
+import { SYSADMIN_DIRECTIVE_POOL } from "../../../content/pools.js";
 import {
 	drawDirectiveText,
 	formatDirectiveDelivery,

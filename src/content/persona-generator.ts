@@ -6,9 +6,11 @@ import {
 	bucketFor,
 	engagementClauseFor,
 } from "./engagement-clauses.js";
-import { PERSONA_GOAL_POOL } from "./persona-goal-pool.js";
-import { TEMPERAMENT_POOL } from "./temperament-pool.js";
-import { TYPING_QUIRK_POOL } from "./typing-quirk-pool.js";
+import {
+	PERSONA_GOAL_POOL,
+	TEMPERAMENT_POOL,
+	TYPING_QUIRK_POOL,
+} from "./pools.js";
 
 const NAME_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789";
 const NAME_LENGTH = 4;

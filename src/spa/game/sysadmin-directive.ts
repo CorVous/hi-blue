@@ -1,4 +1,4 @@
-import { SYSADMIN_DIRECTIVE_POOL } from "../../content/sysadmin-directive-pool.js";
+import { SYSADMIN_DIRECTIVE_POOL } from "../../content/pools.js";
 
 export function drawDirectiveText(rng: () => number): string {
 	const idx = Math.floor(rng() * SYSADMIN_DIRECTIVE_POOL.length);

@@ -2,8 +2,10 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+	AVOIDED_BIAS_THRESHOLD,
 	actionProfileFor,
 	CRITICAL_PATH_TOOLS,
+	PREFERRED_BIAS_THRESHOLD,
 	toolBiasSum,
 } from "../../src/content/action-preference-bias.js";
 import { availableTools } from "../../src/spa/game/available-tools.js";
@@ -56,8 +58,6 @@ const PURE_AVOIDANCE_PROFILE_POLICY: "avoid" | "omit" =
 	process.env.EVAL_NO_PREFERRED_POLICY === "omit" ? "omit" : "avoid";
 
 const RUN_LABEL = process.env.EVAL_RUN_LABEL ?? "";
-const PREFERRED_TOOL_MIN_BIAS = 2;
-const AVOIDED_TOOL_MAX_BIAS = -1;
 const BUDGET_LARGE_ENOUGH_TO_NEVER_LOCK_OUT = 100;
 
 interface PersonaVariant {
@@ -157,11 +157,11 @@ function rendersPureAvoidanceClause([first, second]: [
 ]): boolean {
 	const biases = toolBiasSum(first, second);
 	const hasPreferred = ACTION_TOOLS.some(
-		(tool) => biases[tool] >= PREFERRED_TOOL_MIN_BIAS,
+		(tool) => biases[tool] >= PREFERRED_BIAS_THRESHOLD,
 	);
 	const hasAvoided = ACTION_TOOLS.some(
 		(tool) =>
-			biases[tool] <= AVOIDED_TOOL_MAX_BIAS && !CRITICAL_PATH_TOOLS.has(tool),
+			biases[tool] <= AVOIDED_BIAS_THRESHOLD && !CRITICAL_PATH_TOOLS.has(tool),
 	);
 	return !hasPreferred && hasAvoided;
 }

@@ -209,11 +209,13 @@ clause and are left alone. Personas with a preferred tool are the same in both
 arms, so any difference comes from the pure-avoidance handling alone. The
 `omit` arm writes files with a `-noavoid` suffix.
 
-*Coupling:* `rendersPureAvoidanceClause` (with `PREFERRED_TOOL_MIN_BIAS` = 2 and
-`AVOIDED_TOOL_MAX_BIAS` = -1, critical-path tools never counted as avoided)
-must match the branches of `actionProfileFor` in
-`src/content/action-preference-bias.ts` exactly. Testing `bias >= 2` alone
-would also catch the balanced group. If `actionProfileFor` changes, update the
+*Coupling:* `rendersPureAvoidanceClause` imports `PREFERRED_BIAS_THRESHOLD` (2)
+and `AVOIDED_BIAS_THRESHOLD` (-1) from `src/content/action-preference-bias.ts`,
+so the thresholds cannot drift from production. The predicate's shape (a tool
+is preferred at or above the first, avoided at or below the second, and
+critical-path tools are never counted as avoided) must still match the branches
+of `actionProfileFor` exactly. Testing `bias >= 2` alone would also catch the
+balanced group. If `actionProfileFor` changes its branches, update the
 predicate.
 
 **Scoring** (`scoring.ts`). The tool buckets come from `ACTION_TOOLS` in

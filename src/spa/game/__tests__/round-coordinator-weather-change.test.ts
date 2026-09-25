@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { WEATHER_POOL } from "../../../content/weather-pool";
+import { WEATHER_POOL } from "../../../content/pools";
 import { startGame } from "../engine";
 import { runRound } from "../round-coordinator";
 import { MockRoundLLMProvider } from "../round-llm-provider";
