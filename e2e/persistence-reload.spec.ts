@@ -2,12 +2,15 @@ import { expect, test } from "@playwright/test";
 import {
 	activePackOf,
 	CARDINAL_DIRECTIONS,
+	type CardinalDirection,
 	expectNoPageErrors,
 	type GridPosition,
 	getAiHandles,
 	goToGame,
 	inRoom,
 	isGridPosition,
+	isJsonModeRequest,
+	isRequestForDaemon,
 	listingLabels,
 	type ParsedBody,
 	parseRequestBody,
@@ -16,41 +19,67 @@ import {
 	readActiveSessionEngine,
 	readActiveSessionFiles,
 	readDaemonFile,
+	renderedPlayerLine,
 	type SealedEngine,
+	SSE_HEADERS,
 	sectionBetween,
 	stepDelta,
 	stubChatCompletions,
 	toolCallSseBody,
 	vistaCells,
+	waitForFirstRoundSaved,
 	waitForRound,
 	waitForSavedPosition,
 	writeActiveSessionEngine,
 } from "./helpers";
 
-/**
- * AI completions returned by the stub, keyed by call index (0 = first, 1 = second, 2 = third
- * for default initiative order).  We keep them short to minimise token-pacing delay.
- */
 const STUB_COMPLETION = "stub reply";
 
-/** SSE response headers the SPA's streaming parser expects. */
-const SSE_HEADERS = {
-	"Content-Type": "text/event-stream",
-	"Cache-Control": "no-cache",
-	"X-Content-Type-Options": "nosniff",
-};
+const LIVE_SESSION_SCHEMA_VERSION = 12;
 
-/** The last captured `/v1/chat/completions` body whose system prompt names `name`. */
-function findLastBodyForName(bodies: unknown[], name: string): ParsedBody {
-	for (let i = bodies.length - 1; i >= 0; i--) {
-		const body = bodies[i] as ParsedBody;
-		const sysContent = body?.messages?.[0]?.content ?? "";
-		if (sysContent.includes(`writing *${name}, a Daemon.`)) return body;
+const ROUNDS_PLAYED_BY_THE_ROUND_TRIP = 2;
+
+const RETIRED_ORIENTATION_KEY = /facing/i;
+
+const RETIRED_CONTENT_PACK_ANCHOR_KEY = /landmark/i;
+
+function cellOneStepFrom(
+	start: GridPosition,
+	direction: CardinalDirection,
+): GridPosition {
+	const delta = stepDelta(direction);
+	return { row: start.row + delta.drow, col: start.col + delta.dcol };
+}
+
+function firstLegalCardinalStep(
+	start: GridPosition,
+	obstacleCells: GridPosition[],
+): { direction: CardinalDirection; destination: GridPosition } | null {
+	for (const direction of CARDINAL_DIRECTIONS) {
+		const destination = cellOneStepFrom(start, direction);
+		const blocked = obstacleCells.some((cell) =>
+			positionsEqual(cell, destination),
+		);
+		if (inRoom(destination) && !blocked) return { direction, destination };
 	}
 	return null;
 }
 
-/** Every message content of a captured request body, joined for substring checks. */
+function lineStartingWith(text: string, prefix: string): string {
+	return text.split("\n").find((line) => line.startsWith(prefix)) ?? "";
+}
+
+function findLastBodyForDaemon(
+	bodies: ParsedBody[],
+	daemonName: string,
+): ParsedBody {
+	for (let i = bodies.length - 1; i >= 0; i--) {
+		const body = bodies[i] ?? null;
+		if (isRequestForDaemon(body, daemonName)) return body;
+	}
+	return null;
+}
+
 function joinedContent(body: ParsedBody): {
 	all: string;
 	system: string;
@@ -68,7 +97,6 @@ function joinedContent(body: ParsedBody): {
 	};
 }
 
-/** Point one persisted entity at a holder (a Daemon id, or a grid cell). */
 function setEntityHolder(
 	sealed: SealedEngine,
 	entityId: string,
@@ -79,7 +107,6 @@ function setEntityHolder(
 	entity.holder = holder;
 }
 
-/** The holder of one persisted entity. */
 function entityHolderOf(sealed: SealedEngine, entityId: string): unknown {
 	return sealed.world.entities.find((e) => e.id === entityId)?.holder;
 }
@@ -90,45 +117,15 @@ test("game state and transcripts persist across mid-round reload", async ({
 	const pageErrors: Error[] = [];
 	page.on("pageerror", (err) => pageErrors.push(err));
 
-	// Navigate through the start screen into the game.
-	// goToGame stubs synthesis + content-pack + SSE and clicks BEGIN.
 	const { names, ids } = await goToGame(page, { sse: [STUB_COMPLETION] });
 
-	// Wait for the SPA game route to mount (the composer form is present)
 	await expect(page.locator("#composer")).toBeVisible();
 
-	// Address first AI via *<name> mention and send a message
 	await page.fill("#prompt", `*${names[0]} hello`);
 	await expect(page.locator("#send")).toBeEnabled();
 	await page.click("#send");
 
-	// Wait for the round to complete and the save to land. The save runs AFTER
-	// the encoder loop processes all events, so we poll localStorage directly
-	// rather than the transcript (which fills via live deltas earlier).
-	// (Post-#107 the send button does NOT re-enable after submit because the
-	// prompt is cleared and an empty prompt has no *mention → sendEnabled=false.)
-	// Post-#173: BEGIN also saves engine.dat at round=0 on commit, so we can no
-	// longer use engine.dat !== null as the "round complete" signal.  Instead we
-	// wait for meta.round to advance to ≥ 1, which proves a full round was committed.
-	await page.waitForFunction(
-		() => {
-			const sessionId = localStorage.getItem("hi-blue:active-session");
-			if (!sessionId) return false;
-			const metaRaw = localStorage.getItem(
-				`hi-blue:sessions/${sessionId}/meta.json`,
-			);
-			if (!metaRaw) return false;
-			try {
-				const meta = JSON.parse(metaRaw) as { round?: number };
-				return typeof meta.round === "number" && meta.round >= 1;
-			} catch {
-				return false;
-			}
-		},
-		{ timeout: 15_000 },
-	);
-
-	// ── Assert localStorage was written ────────────────────────────────────────
+	await waitForFirstRoundSaved(page);
 
 	const { sessionId, metaRaw } = await page.evaluate(() => {
 		const sid = localStorage.getItem("hi-blue:active-session");
@@ -148,17 +145,11 @@ test("game state and transcripts persist across mid-round reload", async ({
 	};
 	expect(meta.round).toBeGreaterThanOrEqual(1);
 
-	// ── Capture pre-reload values ───────────────────────────────────────────────
-
 	const preReloadTranscript = await page
 		.locator(`[data-transcript="${ids[0]}"]`)
 		.textContent();
 	expect(preReloadTranscript).toBeTruthy();
-	// The player's message must appear in the transcript. Post-#214 the leading
-	// `*<handle>` mention is stripped before render, so the displayed line is
-	// `> hello`, not `> *<handle> hello`.
-	expect(preReloadTranscript).toContain("> hello");
-	// The stub completion must appear in the addressed panel
+	expect(preReloadTranscript).toContain(renderedPlayerLine("hello"));
 	expect(preReloadTranscript).toContain(STUB_COMPLETION);
 
 	const preReloadBudgets: Record<string, string> = {};
@@ -167,30 +158,20 @@ test("game state and transcripts persist across mid-round reload", async ({
 		preReloadBudgets[aiId] = (await el.getAttribute("data-budget")) ?? "";
 	}
 
-	// ── Reload ──────────────────────────────────────────────────────────────────
-
 	await page.reload();
 
-	// Wait for SPA to remount after reload
 	await expect(page.locator("#composer")).toBeVisible();
 
-	// After reload we need to stub again for the restored session (the route
-	// intercept was only on the previous page context).
 	await stubChatCompletions(page, [STUB_COMPLETION]);
 
-	// After reload, fetch handles again — procedural names persist via saved persona.name.
 	const { ids: reloadIds } = await getAiHandles(page);
-
-	// ── Assert transcripts restored ─────────────────────────────────────────────
 
 	const postReloadTranscript = await page
 		.locator(`[data-transcript="${reloadIds[0]}"]`)
 		.textContent();
-	expect(postReloadTranscript).toContain("> hello");
+	expect(postReloadTranscript).toContain(renderedPlayerLine("hello"));
 	expect(postReloadTranscript).toContain(STUB_COMPLETION);
 	expect(postReloadTranscript).toBe(preReloadTranscript);
-
-	// ── Assert budgets restored ─────────────────────────────────────────────────
 
 	for (const aiId of reloadIds) {
 		const el = page.locator(`.ai-panel[data-ai="${aiId}"] .panel-budget`);
@@ -200,12 +181,10 @@ test("game state and transcripts persist across mid-round reload", async ({
 		);
 	}
 
-	// ── No page errors ──────────────────────────────────────────────────────────
-
 	await expectNoPageErrors(page, pageErrors);
 });
 
-test("a schema 12 session reloads with position, inventory, content state, conversation and perception changes intact", async ({
+test("a live-schema session reloads with position, inventory, content state, conversation and perception changes intact", async ({
 	page,
 }) => {
 	const pageErrors: Error[] = [];
@@ -214,12 +193,11 @@ test("a schema 12 session reloads with position, inventory, content state, conve
 	const { ids, names } = await goToGame(page, { sse: [STUB_COMPLETION] });
 	await expect(page.locator("#composer")).toBeVisible();
 
-	// ── 1. A newly created session is sealed at session schema 12 ──────────────
 	const created = await readActiveSessionEngine(page);
 	expect(
 		created.sealed.schemaVersion,
-		"a new session must stamp session schema 12",
-	).toBe(12);
+		"a new session must stamp the live session schema",
+	).toBe(LIVE_SESSION_SCHEMA_VERSION);
 
 	const actorId = ids[0];
 	const actorName = names[0];
@@ -234,45 +212,23 @@ test("a schema 12 session reloads with position, inventory, content state, conve
 	if (!createdPack) throw new Error("No active content pack in engine.dat");
 	expect(createdPack.setting.length).toBeGreaterThan(0);
 
-	// ── 2. Plan one live cardinal step the dispatcher will accept ─────────────
-	// Obstacles block a step; bounds and everything else the dispatcher rules on
-	// is mirrored by the helpers.
 	const obstacleCells = (createdPack.entities ?? [])
 		.filter((entity) => entity.kind === "obstacle")
 		.map((entity) => entity.holder)
 		.filter(isGridPosition);
-	const direction = CARDINAL_DIRECTIONS.find((candidate) => {
-		const delta = stepDelta(candidate);
-		const next = {
-			row: actorStart.row + delta.drow,
-			col: actorStart.col + delta.dcol,
-		};
-		return (
-			inRoom(next) && !obstacleCells.some((cell) => positionsEqual(cell, next))
-		);
-	});
-	if (!direction) throw new Error(`No legal cardinal step for ${actorId}`);
-	const step = stepDelta(direction);
-	const destination: GridPosition = {
-		row: actorStart.row + step.drow,
-		col: actorStart.col + step.dcol,
-	};
+	const plannedStep = firstLegalCardinalStep(actorStart, obstacleCells);
+	if (!plannedStep) throw new Error(`No legal cardinal step for ${actorId}`);
+	const { direction, destination } = plannedStep;
 
-	// ── 3. Seed the two states a round cannot reach deterministically ─────────
-	// Inventory: an entity held by a Daemon (a holder that is an AiId, not a
-	// cell). Perception change: an item resting on the destination cell, so the
-	// live step's diskDelta is guaranteed non-empty. Both are written the way
-	// the SPA writes them — obfuscated engine.dat — and everything asserted
-	// after this point runs through the live runtime.
-	const items = created.sealed.world.entities.filter(
+	const stubDecoys = created.sealed.world.entities.filter(
 		(entity) => entity.kind === "interesting_object",
 	);
 	expect(
-		items.length,
+		stubDecoys.length,
 		"the stub Content Pack places two decoys",
 	).toBeGreaterThanOrEqual(2);
-	const heldItem = items[0];
-	const destinationItem = items[1];
+	const heldItem = stubDecoys[0];
+	const destinationItem = stubDecoys[1];
 	if (!heldItem || !destinationItem) {
 		throw new Error("the stub Content Pack must place two decoys");
 	}
@@ -281,30 +237,23 @@ test("a schema 12 session reloads with position, inventory, content state, conve
 	setEntityHolder(seeded, destinationItem.id, destination);
 	await writeActiveSessionEngine(page, created.sessionId, seeded);
 
-	// ── 4. Reload so the restored session is the seeded state ─────────────────
 	await page.reload();
 	await expect(page.locator("#composer")).toBeVisible();
 
-	// ── 5. Live `go` round: the actor walks one cardinal step ────────────────
-	const capturedBodies: unknown[] = [];
+	const capturedBodies: ParsedBody[] = [];
 	await stubChatCompletions(page, (request) => {
 		capturedBodies.push(parseRequestBody(request));
 		return [STUB_COMPLETION];
 	});
-	let goPending = true;
+	let goToolCallServed = false;
 	await page.route("**/v1/chat/completions", async (route, request) => {
 		const body = parseRequestBody(request);
-		// JSON-mode (synthesis / content-pack) calls belong to the base stub.
-		if (
-			body !== null &&
-			(body.stream === false || body.response_format != null)
-		) {
+		if (isJsonModeRequest(body)) {
 			await route.fallback();
 			return;
 		}
-		const sysContent = body?.messages?.[0]?.content ?? "";
-		if (goPending && sysContent.includes(`writing *${actorName}, a Daemon.`)) {
-			goPending = false;
+		if (!goToolCallServed && isRequestForDaemon(body, actorName)) {
+			goToolCallServed = true;
 			await route.fulfill({
 				status: 200,
 				headers: SSE_HEADERS,
@@ -319,13 +268,10 @@ test("a schema 12 session reloads with position, inventory, content state, conve
 	await expect(page.locator("#send")).toBeEnabled({ timeout: 15_000 });
 	await page.locator("#send").click();
 
-	// engine.dat is written last in the save order, so wait for the step to
-	// reach it rather than for meta.json (which lands first).
 	await waitForSavedPosition(page, created.sessionId, actorId, destination);
 
-	// ── 6. The live step is in the committed save ─────────────────────────────
 	const afterGo = await readActiveSessionEngine(page);
-	expect(afterGo.sealed.schemaVersion).toBe(12);
+	expect(afterGo.sealed.schemaVersion).toBe(LIVE_SESSION_SCHEMA_VERSION);
 	expect(
 		afterGo.sealed.personaSpatial[actorId]?.position,
 		"the live step must persist the actor's position",
@@ -346,11 +292,8 @@ test("a schema 12 session reloads with position, inventory, content state, conve
 		"the step must persist its perception change (diskDelta)",
 	).toContain(destinationItem.name);
 
-	// The pack the restored round will read: a Setting Shift during the step
-	// switches the active pack (the stub packs share their entity names).
-	const restoredPack = activePackOf(afterGo.sealed) ?? createdPack;
+	const packAfterAnySettingShift = activePackOf(afterGo.sealed) ?? createdPack;
 
-	// ── 7. Reload → the restored session feeds the round's results back ──────
 	await page.reload();
 	await expect(page.locator("#composer")).toBeVisible();
 
@@ -367,7 +310,7 @@ test("a schema 12 session reloads with position, inventory, content state, conve
 		.poll(() => capturedBodies.length, { timeout: 30_000 })
 		.toBeGreaterThanOrEqual(3);
 
-	const actorBody = findLastBodyForName(capturedBodies, actorName);
+	const actorBody = findLastBodyForDaemon(capturedBodies, actorName);
 	expect(
 		actorBody,
 		`No request body found for ${actorName} after reload. ` +
@@ -376,10 +319,6 @@ test("a schema 12 session reloads with position, inventory, content state, conve
 	if (!actorBody) throw new Error(`No request body for ${actorName}`);
 	const content = joinedContent(actorBody);
 
-	// ── 8. Position: the restored Vista is centred on the persisted cell ─────
-	// The listing is the radius-2 disk minus the actor's own cell (which
-	// <where_you_are> covers), labelled by cardinal direction and distance from
-	// the actor's position; out-of-bounds cells are the Content Pack's Wall.
 	const listing = sectionBetween(
 		content.all,
 		"<what_you_see>",
@@ -403,37 +342,25 @@ test("a schema 12 session reloads with position, inventory, content state, conve
 		expect(
 			listing,
 			`Out-of-bounds cell "${cell.label}" must be listed as a Wall`,
-		).toContain(`- ${cell.label}: ${restoredPack.wallName}`);
+		).toContain(`- ${cell.label}: ${packAfterAnySettingShift.wallName}`);
 	}
 	expect(
 		listing,
 		"A Daemon's listing must not phrase anything relative to an orientation",
 	).not.toMatch(RELATIVE_DIRECTION_WORDS);
 
-	// The seeded item rests on the cell the step landed on, so it reads as the
-	// actor's own cell — which is only true if the restored position is that cell.
-	const cellLine =
-		content.all
-			.split("\n")
-			.find((line) => line.startsWith("Your cell contains:")) ?? "";
+	const cellLine = lineStartingWith(content.all, "Your cell contains:");
 	expect(
 		cellLine,
 		`The restored position must be the cell the step landed on.\n${content.all}`,
 	).toContain(destinationItem.name);
 
-	// ── 9. Inventory: an entity held by a Daemon round-trips as a held item ──
-	const holdingLine =
-		content.all
-			.split("\n")
-			.find((line) => line.startsWith("You are holding:")) ?? "";
+	const holdingLine = lineStartingWith(content.all, "You are holding:");
 	expect(
 		holdingLine,
 		`The held entity must restore as inventory.\n${content.all}`,
 	).toContain(heldItem.name);
 
-	// ── 10. Content state: an authored pack still supplies the setting ───────
-	// A Setting Shift may have swapped A for B during either round, so the
-	// prompt must still carry one of the two authored settings.
 	const authoredSettings = [
 		created.sealed.contentPacksA?.[0]?.setting,
 		created.sealed.contentPacksB?.[0]?.setting,
@@ -445,33 +372,26 @@ test("a schema 12 session reloads with position, inventory, content state, conve
 			`Settings: ${JSON.stringify(authoredSettings)}\n${content.system}`,
 	).toBe(true);
 
-	// ── 11. Conversation: the round-0 line survives the reload ───────────────
 	expect(content.all).toContain(`[Round 0] blue dms you: go ${direction}!`);
 
-	// ── 12. Perception changes: the persisted diskDelta still enriches the ──
-	// ──     actor's tool result after reload                               ──
 	expect(
 		content.tools,
 		"the persisted perception change must reappear as a <noticed> block",
 	).toContain("<noticed>");
 	expect(content.tools).toContain(destinationItem.name);
 
-	// ── 13. The re-saved session carries no retired state ───────────────────
-	// A real round trip must not write the retired per-Daemon orientation key
-	// or the retired Content-Pack anchor key into any saved byte.
-	await waitForRound(page, created.sessionId, 2);
+	await waitForRound(page, created.sessionId, ROUNDS_PLAYED_BY_THE_ROUND_TRIP);
 	const saved = await readActiveSessionFiles(page);
 	const savedBytes = [
 		saved.meta,
 		...Object.values(saved.daemons),
 		saved.engineJson,
 	].join("\n");
-	expect(savedBytes).not.toMatch(/facing/i);
-	expect(savedBytes).not.toMatch(/landmark/i);
+	expect(savedBytes).not.toMatch(RETIRED_ORIENTATION_KEY);
+	expect(savedBytes).not.toMatch(RETIRED_CONTENT_PACK_ANCHOR_KEY);
 
-	// The state the round trip carries is still there in the re-saved engine.
 	const resaved = await readActiveSessionEngine(page);
-	expect(resaved.sealed.schemaVersion).toBe(12);
+	expect(resaved.sealed.schemaVersion).toBe(LIVE_SESSION_SCHEMA_VERSION);
 	expect(resaved.sealed.personaSpatial[actorId]?.position).toEqual(destination);
 	expect(entityHolderOf(resaved.sealed, heldItem.id)).toBe(actorId);
 	expect(entityHolderOf(resaved.sealed, destinationItem.id)).toEqual(
@@ -482,6 +402,5 @@ test("a schema 12 session reloads with position, inventory, content state, conve
 		"the re-saved active pack must still be one of the authored packs",
 	).toContain(activePackOf(resaved.sealed)?.setting);
 
-	// ── No page errors ──────────────────────────────────────────────────────
 	await expectNoPageErrors(page, pageErrors);
 });

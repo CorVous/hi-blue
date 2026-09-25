@@ -1,28 +1,3 @@
-/**
- * start-screen.spec.ts
- *
- * Playwright e2e tests for the start screen.
- *
- * Covers:
- *  - New visitor → start screen shown, panels and composer hidden
- *  - [ BEGIN ] is disabled until the dial-up animation reveals the login form
- *  - [ BEGIN ] is enabled once the start screen has booted with the animation skipped
- *  - Clicking [ BEGIN ] transitions main[data-view] to "game" and shows panels
- *  - Refreshing on the game view with a valid active session stays on the game view
- *  - CapHit during generation surfaces #cap-hit
- *  - Refresh during generation re-enters start screen and restarts generation
- *
- * Note on `#begin`'s enabled state: it is gated only by `revealLogin()` in
- * src/spa/views/start.ts, which with `?skipDialup=1` runs synchronously at boot.
- * So "`#begin` enabled" means "the SPA booted", not "generation completed" —
- * generation carries on in the background. Specs that need to click
- * `[ CONNECT ]` gate on {@link waitForStartScreenReady} rather than a fixed
- * timeout, so they measure boot readiness instead of machine load.
- *
- * Post-ADR-0011: the URL is no longer load-bearing — the SPA decides what to
- * render from localStorage. Test assertions use main[data-view] / [data-reason]
- * instead of location.hash.
- */
 import {
 	expect,
 	type Page,
@@ -33,32 +8,17 @@ import {
 import {
 	classifyJsonRequest,
 	expectNoPageErrors,
+	isJsonModeRequest,
+	parseRequestBody,
 	stubChatCompletions,
 	stubNewGameLLM,
 	waitForStartScreenReady,
 } from "./helpers";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+function untilNavigationAbortsTheRequest(): Promise<never> {
+	return new Promise<never>(() => {});
+}
 
-/**
- * Shape of the JSON bodies the SPA posts to `/v1/chat/completions`.
- *
- * Named rather than expressed with `typeof body`: at the point of the `as`
- * assertion the variable's *narrowed* type is `null`, which would make every
- * later `!== null` check collapse to `never`.
- */
-type ParsedRequestBody = {
-	stream?: boolean;
-	response_format?: unknown;
-	messages?: Array<{ role?: string; content?: string }>;
-} | null;
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-/**
- * Wait until the active session pointer is written to localStorage, indicating
- * that BEGIN was clicked and saveActiveSession ran.
- */
 async function waitForActiveSession(
 	page: Page,
 	timeoutMs = 15_000,
@@ -69,20 +29,16 @@ async function waitForActiveSession(
 	);
 }
 
-// ── Tests ─────────────────────────────────────────────────────────────────────
-
-test("new visitor sees start screen with disabled [ BEGIN ] button initially", async ({
+test("new visitor sees the start screen with panels and composer hidden", async ({
 	page,
 }) => {
 	const pageErrors: Error[] = [];
 	page.on("pageerror", (err) => pageErrors.push(err));
 
-	// Stub LLM so the SPA can proceed through generation
 	await stubChatCompletions(page, ["stub reply"]);
 
 	await page.goto("/");
 
-	// Start view active: start-screen visible, panels and composer hidden
 	await expect(page.locator("#start-screen")).toBeVisible();
 	await expect(page.locator("#panels")).toBeHidden();
 	await expect(page.locator("#composer")).toBeHidden();
@@ -104,9 +60,6 @@ test.describe("mobile viewport", () => {
 		await page.goto("/");
 
 		await expect(page.locator("#start-screen")).toBeVisible();
-		// The mobile media query sets `#panels.row { display: grid }`. That id+class
-		// selector outranked `[hidden] { display: none }` and leaked the chat
-		// boxes onto the start screen on small viewports.
 		await expect(page.locator("#panels")).toBeHidden();
 		await expect(page.locator("#composer")).toBeHidden();
 
@@ -117,9 +70,6 @@ test.describe("mobile viewport", () => {
 test("password input disables ligatures so masked `***` doesn't shift mid-char", async ({
 	page,
 }) => {
-	// JetBrains Mono ligates `**` and `***` into a glyph that raises the middle
-	// asterisk. Since the password is masked to `*`s, three characters of input
-	// would visually misalign without `font-variant-ligatures: none`.
 	const pageErrors: Error[] = [];
 	page.on("pageerror", (err) => pageErrors.push(err));
 
@@ -128,36 +78,24 @@ test("password input disables ligatures so masked `***` doesn't shift mid-char",
 	await page.goto("/?skipDialup=1");
 	await expect(page.locator("#password")).toBeVisible();
 
-	const liga = await page
+	const passwordLigatures = await page
 		.locator("#password")
 		.evaluate((el) => getComputedStyle(el).fontVariantLigatures);
-	expect(liga).toBe("none");
+	expect(passwordLigatures).toBe("none");
 
 	await expectNoPageErrors(page, pageErrors);
 });
 
-test("[ BEGIN ] is enabled after persona synthesis and content-pack generation complete", async ({
+test("[ BEGIN ] is enabled once the start screen has booted with the dial-up skipped", async ({
 	page,
 }) => {
 	const pageErrors: Error[] = [];
 	page.on("pageerror", (err) => pageErrors.push(err));
 
-	// Stub synthesis and content-pack generation (both JSON-mode calls)
 	await stubNewGameLLM(page, { sse: ["stub reply"] });
 
-	// `skipDialup=1` skips the dial-up animation. CONNECT is gated only on that
-	// animation finishing (see `revealLogin` in src/spa/views/start.ts), not on
-	// generation — and the animation is a ~327-char setTimeout chain that takes
-	// ~7s nominally and 10s+ under parallel load. Leaving it on makes this
-	// assertion measure the animation, not the generation it is named for.
 	await page.goto("/?skipDialup=1");
 
-	// Wait for the SPA to boot and reveal the login form. This is a state wait,
-	// not a fixed budget: `#begin` enables the moment `renderStart` runs, while
-	// stubbed generation continues in the background (see
-	// waitForStartScreenReady). A boot that never happens — or one that lands on
-	// `#cap-hit` — fails with a descriptive error rather than an anonymous
-	// timeout.
 	const beginBtn = await waitForStartScreenReady(page);
 	await expect(beginBtn).toBeEnabled();
 
@@ -170,32 +108,23 @@ test("clicking [ BEGIN ] transitions to the game view and shows panels", async (
 	const pageErrors: Error[] = [];
 	page.on("pageerror", (err) => pageErrors.push(err));
 
-	// Stub both generation and subsequent gameplay LLM calls
 	await stubNewGameLLM(page, { sse: ["stub reply"] });
 
 	await page.goto("/?skipDialup=1");
 
-	// Wait for the SPA to boot and reveal [ CONNECT ] (state wait; the login
-	// form is revealed at boot with the animation skipped — see
-	// waitForStartScreenReady).
 	const beginBtn = await waitForStartScreenReady(page);
 
-	// Enter the password and click CONNECT
 	await page.locator("#password").fill("password");
 	await beginBtn.click();
 
-	// Should transition to the game view
 	await expect(page.locator('main[data-view="game"]')).toBeAttached({
 		timeout: 10_000,
 	});
 
-	// Panels and composer should now be visible
 	await expect(page.locator("#panels")).toBeVisible();
 	await expect(page.locator("#composer")).toBeVisible();
-	// Start screen should be hidden
 	await expect(page.locator("#start-screen")).toBeHidden();
 
-	// Active session should be set in localStorage
 	await waitForActiveSession(page);
 
 	await expectNoPageErrors(page, pageErrors);
@@ -207,13 +136,10 @@ test("refreshing on the game view with an active session stays on the game view"
 	const pageErrors: Error[] = [];
 	page.on("pageerror", (err) => pageErrors.push(err));
 
-	// Stub all LLM calls
 	await stubNewGameLLM(page, { sse: ["stub reply"] });
 
 	await page.goto("/?skipDialup=1");
 
-	// Complete the new-game flow: wait for CONNECT (state wait, not a fixed
-	// budget), fill password, click
 	const beginBtn = await waitForStartScreenReady(page);
 	await page.locator("#password").fill("password");
 	await beginBtn.click();
@@ -221,14 +147,11 @@ test("refreshing on the game view with an active session stays on the game view"
 		timeout: 10_000,
 	});
 
-	// Make sure session is saved before reload
 	await waitForActiveSession(page);
 
-	// Reload — stub must be re-installed for the new page context
 	await stubChatCompletions(page, ["stub reply"]);
 	await page.reload();
 
-	// Should still be on the game view (session restored from localStorage)
 	await expect(page.locator('main[data-view="game"]')).toBeAttached();
 	await expect(page.locator("#panels")).toBeVisible();
 	await expect(page.locator("#composer")).toBeVisible();
@@ -241,22 +164,9 @@ test("CapHit during generation surfaces #cap-hit", async ({ page }) => {
 	const pageErrors: Error[] = [];
 	page.on("pageerror", (err) => pageErrors.push(err));
 
-	// Stub all /v1/chat/completions: return 429 for the synthesis JSON-mode call,
-	// normal responses for anything else. The synthesis call fires first at
-	// new-game time, so a 429 there triggers CapHitError and shows #cap-hit.
 	await page.route("**/v1/chat/completions", async (route, request) => {
-		let body: ParsedRequestBody = null;
-		try {
-			body = JSON.parse(request.postData() ?? "null") as ParsedRequestBody;
-		} catch {
-			body = null;
-		}
-
-		// Detect JSON-mode (synthesis or content-pack) calls
-		const isJsonMode =
-			body !== null && (body.stream === false || body.response_format != null);
-		if (isJsonMode && classifyJsonRequest(body) === "synthesis") {
-			// Return 429 to simulate CapHitError on synthesis
+		const body = parseRequestBody(request);
+		if (isJsonModeRequest(body) && classifyJsonRequest(body) === "synthesis") {
 			await route.fulfill({
 				status: 429,
 				headers: { "Content-Type": "application/json" },
@@ -265,25 +175,21 @@ test("CapHit during generation surfaces #cap-hit", async ({ page }) => {
 			return;
 		}
 
-		// Let other requests fall through normally
 		await route.fallback();
 	});
 
 	await page.goto("/");
 
-	// #cap-hit should become visible after the 429 response
-	// Stub returns 429 instantly; 10s is ample — down from 15s.
 	await expect(page.locator("#cap-hit")).toBeVisible({ timeout: 10_000 });
 
-	// Start screen should be hidden when cap-hit is shown
 	await expect(page.locator("#start-screen")).toBeHidden();
 
-	// The SPA intentionally re-throws CapHitError after raising #cap-hit (for
-	// dev-console diagnostics). Filter it out before asserting no unexpected errors.
-	const unexpectedErrors = pageErrors.filter((e) => e.name !== "CapHitError");
+	const errorsOtherThanRethrownCapHit = pageErrors.filter(
+		(e) => e.name !== "CapHitError",
+	);
 	expect(
-		unexpectedErrors,
-		unexpectedErrors.map((e) => e.message).join("\n"),
+		errorsOtherThanRethrownCapHit,
+		errorsOtherThanRethrownCapHit.map((e) => e.message).join("\n"),
 	).toEqual([]);
 });
 
@@ -293,55 +199,31 @@ test("refresh during generation re-enters start screen and restarts generation",
 	const pageErrors: Error[] = [];
 	page.on("pageerror", (err) => pageErrors.push(err));
 
-	// First load: install a stub that holds synthesis in flight. The handler
-	// blocks on a never-resolving promise; Playwright aborts the in-flight
-	// request when the page reloads, so the test does not stall.
-	const slowSynthesisHandler = async (route: Route, request: Request) => {
-		let body: ParsedRequestBody = null;
-		try {
-			body = JSON.parse(request.postData() ?? "null") as ParsedRequestBody;
-		} catch {
-			body = null;
-		}
-		const isJsonMode =
-			body !== null && (body.stream === false || body.response_format != null);
-		if (isJsonMode) {
-			// Hold synthesis indefinitely — Playwright aborts this in-flight request
-			// when the page navigates (reload). Using a never-resolving promise makes
-			// the intent explicit and removes any worst-case wall-clock ceiling.
-			await new Promise<never>(() => {});
+	const holdGenerationInFlightHandler = async (
+		route: Route,
+		request: Request,
+	) => {
+		if (isJsonModeRequest(parseRequestBody(request))) {
+			await untilNavigationAbortsTheRequest();
 			return;
 		}
 		await route.fallback();
 	};
 
-	await page.route("**/v1/chat/completions", slowSynthesisHandler);
+	await page.route("**/v1/chat/completions", holdGenerationInFlightHandler);
 
-	// `skipDialup=1` skips the dial-up animation. CONNECT's enabled state is
-	// gated on that animation alone, never on generation (see `revealLogin` in
-	// src/spa/views/start.ts), so skipping it keeps this test's timing
-	// deterministic instead of racing a ~7s character-by-character animation.
 	await page.goto("/?skipDialup=1");
 
-	// Start screen visible; the held synthesis has not been clicked through.
-	// Waiting on boot readiness here also proves the first load actually ran
-	// `renderStart` before the reload, so the reload below is a real restart
-	// rather than a retry of a page that never booted.
 	await expect(page.locator("#start-screen")).toBeVisible();
 	await waitForStartScreenReady(page);
 
-	// Unroute the slow handler and install the fast stub BEFORE reloading,
-	// so the post-reload synthesis request is handled immediately.
-	await page.unroute("**/v1/chat/completions", slowSynthesisHandler);
+	await page.unroute("**/v1/chat/completions", holdGenerationInFlightHandler);
 	await stubNewGameLLM(page, { sse: ["stub reply"] });
 
-	// Reload while synthesis is still pending (the in-flight request is aborted)
 	await page.reload();
 
-	// After reload, no committed session: start screen shown again
 	await expect(page.locator("#start-screen")).toBeVisible();
 
-	// No engine.dat written (BEGIN was never clicked before the reload)
 	const engineDat = await page.evaluate(() => {
 		const sessionId = localStorage.getItem("hi-blue:active-session");
 		if (!sessionId) return null;
@@ -349,10 +231,6 @@ test("refresh during generation re-enters start screen and restarts generation",
 	});
 	expect(engineDat).toBeNull();
 
-	// Generation restarts on the second load, and the reload re-runs the boot:
-	// CONNECT re-enables once the SPA has booted the start route again (the
-	// animation is skipped above, so this measures boot, not dial-up). State
-	// wait, not a fixed budget — see waitForStartScreenReady.
 	await waitForStartScreenReady(page);
 
 	await expectNoPageErrors(page, pageErrors);
@@ -364,20 +242,15 @@ test("empty active-session pointer surfaces the start screen on load", async ({
 	const pageErrors: Error[] = [];
 	page.on("pageerror", (err) => pageErrors.push(err));
 
-	// Stub LLM for the start screen generation
 	await stubNewGameLLM(page, { sse: ["stub reply"] });
 
-	// Set up a fresh-minted active session id with NO daemon/engine files —
-	// this simulates a session pointer that points to a nonexistent/empty session.
 	await page.addInitScript(() => {
 		const freshId = "test-empty-session-id";
 		localStorage.setItem("hi-blue:active-session", freshId);
-		// Deliberately do NOT write any session files — daemon, engine.dat, etc.
 	});
 
 	await page.goto("/");
 
-	// The dispatcher detects the empty session and surfaces the start screen.
 	await expect(page.locator('main[data-view="start"]')).toBeAttached({
 		timeout: 10_000,
 	});

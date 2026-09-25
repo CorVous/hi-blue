@@ -1,4 +1,4 @@
-export { getAiHandles } from "./handles";
+export { getAiHandles, renderedPlayerLine } from "./handles";
 export { expectNoPageErrors } from "./page-errors";
 export {
 	pickerOkSessionFiles,
@@ -21,6 +21,8 @@ export {
 	inRoom,
 	inVista,
 	isGridPosition,
+	isJsonModeRequest,
+	isRequestForDaemon,
 	listingLabels,
 	obfuscateEngineBlob,
 	obstacleCellsOf,
@@ -36,6 +38,7 @@ export {
 	type SealedDaemonFile,
 	type SealedEngine,
 	type SealedEntity,
+	SSE_HEADERS,
 	sectionBetween,
 	stepDelta,
 	stubChatCompletions,
@@ -43,6 +46,7 @@ export {
 	toolCallSseBody,
 	type VistaCell,
 	vistaCells,
+	waitForFirstRoundSaved,
 	waitForRound,
 	waitForSavedPosition,
 	writeActiveSessionEngine,

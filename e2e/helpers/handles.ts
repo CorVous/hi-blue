@@ -3,28 +3,23 @@ import type { Page } from "@playwright/test";
 export type AiHandles = {
 	ids: [string, string, string];
 	names: [string, string, string];
-	mention: (index: number) => string;
+	mention: (panelIndex: number) => string;
 };
 
-/**
- * Wait until 3 `article.ai-panel` elements have non-empty `data-ai` attributes
- * (set after persona synthesis completes) and return the DOM-order ids tuple.
- *
- * Also reads the persona display names from `.panel-name` (format: `*<name>`)
- * so callers can construct `*<name>` mention strings for the composer.
- *
- * @param page The Playwright Page to query.
- */
+export function renderedPlayerLine(messageAfterMention: string): string {
+	return `> ${messageAfterMention}`;
+}
+
 export async function getAiHandles(page: Page): Promise<AiHandles> {
 	await page.waitForFunction(
 		() => {
 			const panels = Array.from(
 				document.querySelectorAll<HTMLElement>("article.ai-panel"),
 			);
-			return (
-				panels.length === 3 &&
-				panels.every((p) => (p.dataset.ai ?? "").length > 0)
+			const personasSynthesized = panels.every(
+				(p) => (p.dataset.ai ?? "").length > 0,
 			);
+			return panels.length === 3 && personasSynthesized;
 		},
 		{ timeout: 30_000 },
 	);
@@ -34,13 +29,10 @@ export async function getAiHandles(page: Page): Promise<AiHandles> {
 			document.querySelectorAll<HTMLElement>("article.ai-panel"),
 		).map((p) => {
 			const id = p.dataset.ai ?? "";
-			// .panel-name text is: `*<name>`, extract the name after `*`
-			const panelNameEl = p.querySelector<HTMLElement>(".panel-name");
-			const raw = panelNameEl?.textContent ?? "";
-			// Format: `*Ember` → extract after `*`
-			const starMatch = /\*([A-Za-z0-9]+)/.exec(raw);
-			const name = starMatch?.[1] ?? id;
-			return { id, name };
+			const panelNameText =
+				p.querySelector<HTMLElement>(".panel-name")?.textContent ?? "";
+			const nameAfterMentionStar = /\*([A-Za-z0-9]+)/.exec(panelNameText)?.[1];
+			return { id, name: nameAfterMentionStar ?? id };
 		});
 	});
 
@@ -54,6 +46,6 @@ export async function getAiHandles(page: Page): Promise<AiHandles> {
 	return {
 		ids,
 		names,
-		mention: (index: number) => `*${names[index] ?? ids[index]}`,
+		mention: (panelIndex: number) => `*${names[panelIndex] ?? ids[panelIndex]}`,
 	};
 }

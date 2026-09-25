@@ -1,10 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { expectNoPageErrors, goToGame } from "./helpers";
 
-// 20 words of stub content. The default `goToGame` SSE stub now emits a single
-// `message` tool call addressed to "blue" carrying these joined words as its
-// content (see `messageToolCallToBlueSseBody` in e2e/helpers/stubs.ts).
-const WORDS = [
+const TWENTY_WORD_REPLY_CHUNKS = [
 	"one ",
 	"two ",
 	"three ",
@@ -27,28 +24,17 @@ const WORDS = [
 	"twenty.",
 ];
 
-const EXPECTED_TOKENS = WORDS.join("");
+const FULL_REPLY_TEXT = TWENTY_WORD_REPLY_CHUNKS.join("");
 
-/**
- * E2E — AI message arrives in the addressed panel after the round resolves.
- *
- * Post-#214 (DM-thread panels), AI content reaches panels via `message`
- * tool-call entries written into `conversationLogs`, replayed as `message`
- * encoder events after the round commits. Free-form `delta.content` is no
- * longer painted, so the pre-#214 word-by-word live-streaming guarantees do
- * not apply. The remaining smoke responsibilities here are:
- *
- * 1. The `thinking…` placeholder is cleared once the round resolves.
- * 2. The full AI content lands in the addressed panel's transcript.
- * 3. No page errors fire.
- */
 test("AI message content lands in the addressed panel after the round", async ({
 	page,
 }) => {
 	const pageErrors: Error[] = [];
 	page.on("pageerror", (err) => pageErrors.push(err));
 
-	const { ids, names } = await goToGame(page, { sse: WORDS });
+	const { ids, names } = await goToGame(page, {
+		sse: TWENTY_WORD_REPLY_CHUNKS,
+	});
 
 	await expect(
 		page.locator(`article.ai-panel[data-ai="${ids[0]}"]`),
@@ -60,13 +46,11 @@ test("AI message content lands in the addressed panel after the round", async ({
 
 	const firstTranscript = page.locator(`[data-transcript="${ids[0]}"]`);
 
-	// thinking… is cleared once content arrives.
 	await expect(firstTranscript).not.toHaveText(/thinking…/, {
 		timeout: 15_000,
 	});
 
-	// Final transcript contains the full AI content.
-	await expect(firstTranscript).toContainText(EXPECTED_TOKENS, {
+	await expect(firstTranscript).toContainText(FULL_REPLY_TEXT, {
 		timeout: 20_000,
 	});
 

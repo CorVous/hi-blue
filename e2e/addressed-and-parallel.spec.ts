@@ -1,48 +1,38 @@
 import { expect, test } from "@playwright/test";
-import { expectNoPageErrors, goToGame } from "./helpers/index";
+import {
+	expectNoPageErrors,
+	goToGame,
+	renderedPlayerLine,
+} from "./helpers/index";
 
-/**
- * The three distinct completions served to the three AIs.  Since the SPA
- * shuffles turn initiative each round, we assign completions by call order
- * (first /v1/chat/completions request → COMPLETIONS[0], etc.) and verify that
- * each completion appears in exactly one of the three transcripts.
- */
-const COMPLETIONS = ["alpha beta gamma", "one two", "x y z"] as const;
+const COMPLETIONS_IN_CALL_ORDER = [
+	"alpha beta gamma",
+	"one two",
+	"x y z",
+] as const;
 
-test("addressed message lands only on first panel; all three panels render progressively", async ({
+test("addressed message lands only on first panel; each call-order completion lands in exactly one panel", async ({
 	page,
 }) => {
 	const pageErrors: Error[] = [];
 	page.on("pageerror", (err) => pageErrors.push(err));
 
-	// The SSE factory returns distinct completions by call order. Each call
-	// becomes a `message` tool-call addressed to "blue" carrying the joined
-	// words as content (see e2e/helpers/stubs.ts).
-	//
-	// Note: this spec previously navigated with `?winImmediately=1`. Post-#214
-	// the encoder paints panels and (when winning) clears them via
-	// phase_advanced inside one synchronous burst, so the populated state is
-	// unobservable from the page. Removing winImmediately lets the test sample
-	// the painted transcripts before any phase clear.
 	let callIndex = 0;
 	const { ids, names } = await goToGame(page, {
 		sse: () => {
 			const text =
-				COMPLETIONS[callIndex % COMPLETIONS.length] ?? COMPLETIONS[0];
+				COMPLETIONS_IN_CALL_ORDER[
+					callIndex % COMPLETIONS_IN_CALL_ORDER.length
+				] ?? COMPLETIONS_IN_CALL_ORDER[0];
 			callIndex++;
 			return (text as string).split(" ").map((w) => `${w} `);
 		},
 	});
 
-	// Fill prompt with first AI's mention to address ids[0].
-	const message = `*${names[0]} hello first panel`;
-	await page.fill("#prompt", message);
-
-	// Click send — triggers the SPA round flow.
+	const messageAfterMention = "hello first panel";
+	await page.fill("#prompt", `*${names[0]} ${messageAfterMention}`);
 	await page.click("#send");
 
-	// Wait for all three panels to show their completion text.
-	// Each AI gets a distinct completion; wait until the third one appears.
 	await page.waitForFunction(
 		({
 			completions,
@@ -58,11 +48,10 @@ test("addressed message lands only on first panel; all three panels render progr
 			);
 			return completions.every((c) => texts.some((t) => t.includes(c)));
 		},
-		{ completions: COMPLETIONS, aiIds: ids },
+		{ completions: COMPLETIONS_IN_CALL_ORDER, aiIds: ids },
 		{ timeout: 30_000 },
 	);
 
-	// Gather transcript content.
 	const firstTranscript = await page
 		.locator(`[data-transcript="${ids[0]}"]`)
 		.textContent();
@@ -73,26 +62,19 @@ test("addressed message lands only on first panel; all three panels render progr
 		.locator(`[data-transcript="${ids[2]}"]`)
 		.textContent();
 
-	// Player message appears in the first transcript exactly once. The SPA's
-	// form-submit handler strips the leading `*<handle>` mention before
-	// rendering the player line (see `src/spa/views/game.ts`: "Append the
-	// (mention-stripped) player message to the addressed panel."), so the
-	// assertion checks for the stripped body, not the original input.
-	expect(firstTranscript ?? "").toContain("> hello first panel");
-	// Exactly once: splitting on the player prefix gives exactly two parts.
-	expect((firstTranscript ?? "").split("> hello first panel").length).toBe(2);
+	const playerLine = renderedPlayerLine(messageAfterMention);
+	const playerLineOccurrences =
+		(firstTranscript ?? "").split(playerLine).length - 1;
+	expect(playerLineOccurrences).toBe(1);
+	expect(secondTranscript ?? "").not.toContain(playerLine);
+	expect(thirdTranscript ?? "").not.toContain(playerLine);
 
-	// second and third do NOT contain the player line.
-	expect(secondTranscript ?? "").not.toContain("> hello first panel");
-	expect(thirdTranscript ?? "").not.toContain("> hello first panel");
-
-	// Each distinct completion appears in exactly one transcript.
 	const transcripts = [
 		firstTranscript ?? "",
 		secondTranscript ?? "",
 		thirdTranscript ?? "",
 	];
-	for (const completion of COMPLETIONS) {
+	for (const completion of COMPLETIONS_IN_CALL_ORDER) {
 		const count = transcripts.filter((t) => t.includes(completion)).length;
 		expect(
 			count,
@@ -100,13 +82,5 @@ test("addressed message lands only on first panel; all three panels render progr
 		).toBe(1);
 	}
 
-	// No page errors.
-	// The previous `divergentSample` assertion (a 30 ms-poll setInterval that
-	// looked for a moment where two panels had non-zero but different lengths)
-	// was dropped: under stubbed SSE the round completes in well under 100 ms,
-	// the sampler captures only 2-3 frames, and the assertion was flaky at
-	// `--repeat-each=10`. Inter-panel render-timing coverage, if needed, belongs
-	// in a dedicated spec built on a deterministic sequencing harness rather
-	// than piggy-backed onto this addressed-mention test. See issue #151.
 	await expectNoPageErrors(page, pageErrors);
 });

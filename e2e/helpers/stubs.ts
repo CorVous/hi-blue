@@ -9,30 +9,8 @@ import { getAiHandles } from "./handles.js";
 import type { GridPosition } from "./vista-geometry.js";
 import { isGridPosition } from "./vista-geometry.js";
 
-/**
- * A factory function that produces word chunks for a `/v1/chat/completions`
- * response, optionally inspecting the intercepted request.  May be async.
- */
 export type WordsFactory = (request: Request) => string[] | Promise<string[]>;
 
-/**
- * Build a minimal OpenAI-compatible SSE body that streams the given word
- * chunks as delta content events, followed by a [DONE] sentinel.
- *
- * Wire format mirrors what src/proxy/openai-proxy.ts forwards from OpenRouter:
- *   data: {"choices":[{"delta":{"content":"<text>"},"finish_reason":null}]}\n\n
- *   data: [DONE]\n\n
- *
-
-/**
- * Build a minimal OpenAI-compatible SSE body that emits a single `message`
- * tool-call addressed to "blue", carrying the joined `words` as its content.
- * This is the post-#214 wire shape that lands in panel transcripts: panels
- * render only entries written into conversationLogs by the `message` tool.
- *
- * Includes a final usage chunk so the budget-deduction path sees a non-zero
- * cost. Mirrors `makeMessageToolCallSseStream` from `src/spa/__tests__/game.test.ts`.
- */
 function messageToolCallToBlueSseBody(words: string[]): string {
 	const args = JSON.stringify({ to: "blue", content: words.join("") });
 	const headerChunk = `data: ${JSON.stringify({
@@ -62,35 +40,51 @@ function messageToolCallToBlueSseBody(words: string[]): string {
 	return `${headerChunk}${argsChunk}${usageChunk}data: [DONE]\n\n`;
 }
 
-// ── Pure helpers (request classification + canned responses) ─────────────────
-
 export type ParsedBody = {
 	stream?: boolean;
 	response_format?: unknown;
 	messages?: Array<{ role?: string; content?: string }>;
 } | null;
 
-/** True when a request is an OpenAI JSON-mode (non-streaming) call. */
-function isJsonModeRequest(body: ParsedBody): boolean {
+export const SSE_HEADERS = {
+	"Content-Type": "text/event-stream",
+	"Cache-Control": "no-cache",
+	"X-Content-Type-Options": "nosniff",
+};
+
+const STUBBED_NEW_GAME_TIMEOUT_MS = 10_000;
+
+function defaultStubBlurb(personaId: string): string {
+	return `Stub blurb for ${personaId}.`;
+}
+
+export function isJsonModeRequest(body: ParsedBody): boolean {
 	return (
 		body !== null && (body.stream === false || body.response_format != null)
 	);
 }
 
-/**
- * Classify a JSON-mode request by its user-message preamble. Callers fire
- * JSON-mode `/v1/chat/completions` at game start:
- *   - persona synthesis (`Synthesize blurbs for these personas:` …)
- *   - dual content-pack generation (`Generate a dual A/B content pack for:` …)
- *   - single content-pack generation (`Generate a content pack for:` …)
- *
- * Returns "unknown" for callers we don't recognise so future additions surface
- * loudly instead of silently receiving a persona-shaped reply.
- */
+function systemPromptContent(body: ParsedBody): string {
+	return body?.messages?.[0]?.content ?? "";
+}
+
+function userMessageContent(body: ParsedBody): string {
+	return body?.messages?.[1]?.content ?? "";
+}
+
+export function isRequestForDaemon(
+	body: ParsedBody,
+	daemonName: string,
+): boolean {
+	return systemPromptContent(body).includes(
+		`writing *${daemonName}, a Daemon.`,
+	);
+}
+
 export function classifyJsonRequest(
 	body: ParsedBody,
 ): "synthesis" | "dual-content-pack" | "content-pack" | "unknown" {
-	const userMsg = body?.messages?.[1]?.content ?? "";
+	const userMsg = userMessageContent(body);
 	if (userMsg.startsWith("Synthesize blurbs for these personas:"))
 		return "synthesis";
 	if (userMsg.startsWith("Generate a dual A/B content pack for:"))
@@ -99,28 +93,22 @@ export function classifyJsonRequest(
 	return "unknown";
 }
 
-/**
- * Extract persona ids from a synthesis user-message content string.
- * The synthesis user message format is: `id: "xxxx", temperaments: ...`
- * Ids are exactly 4 lowercase alphanumeric characters.
- */
-function extractInputIds(content: string): string[] {
+function extractSynthesisPersonaIds(synthesisUserMessage: string): string[] {
 	return Array.from(
-		content.matchAll(/id:\s*"([a-z0-9]{4})"/g),
+		synthesisUserMessage.matchAll(/id:\s*"([a-z0-9]{4})"/g),
 		(m) => m[1] ?? "",
 	).filter(Boolean);
 }
 
-/** Build a synthesis JSON-mode response body that echoes the input ids. */
 function buildSynthesisResponseBody(
 	body: ParsedBody,
-	blurbFn: (id: string) => string,
+	blurbFor: (id: string) => string,
 ): string {
-	const ids = extractInputIds(body?.messages?.[1]?.content ?? "");
+	const ids = extractSynthesisPersonaIds(userMessageContent(body));
 	const content = JSON.stringify({
 		personas: ids.map((id) => ({
 			id,
-			blurb: blurbFn(id),
+			blurb: blurbFor(id),
 			voiceExamples: [
 				`Stub voice 1 for ${id}.`,
 				`Stub voice 2 for ${id}.`,
@@ -130,8 +118,6 @@ function buildSynthesisResponseBody(
 	});
 	return JSON.stringify({ choices: [{ message: { content } }] });
 }
-
-// ── Binding-shaped content-pack stub helpers ─────────────────────────────────
 
 type BindingSpec = {
 	type: "carry" | "use_space" | "use_item" | "convergence";
@@ -304,16 +290,14 @@ function buildBoundPack(
 }
 
 function buildBoundContentPackResponseBody(body: ParsedBody): string {
-	const userMsg = body?.messages?.[1]?.content ?? "";
-	const spec = parseBindingContentPackSpec(userMsg);
+	const spec = parseBindingContentPackSpec(userMessageContent(body));
 	const pack = buildBoundPack(spec.setting, spec.bindings, spec.obstacleCount);
 	const content = JSON.stringify({ pack });
 	return JSON.stringify({ choices: [{ message: { content } }] });
 }
 
 function buildBoundDualContentPackResponseBody(body: ParsedBody): string {
-	const userMsg = body?.messages?.[1]?.content ?? "";
-	const spec = parseDualBindingContentPackSpec(userMsg);
+	const spec = parseDualBindingContentPackSpec(userMessageContent(body));
 	const packA = buildBoundPack(
 		spec.settingA,
 		spec.bindings,
@@ -328,7 +312,6 @@ function buildBoundDualContentPackResponseBody(body: ParsedBody): string {
 	return JSON.stringify({ choices: [{ message: { content } }] });
 }
 
-/** Parse a request body as the OpenAI-ish shape these specs inspect. */
 export function parseRequestBody(request: Request): ParsedBody {
 	try {
 		return JSON.parse(request.postData() ?? "null") as ParsedBody;
@@ -337,24 +320,16 @@ export function parseRequestBody(request: Request): ParsedBody {
 	}
 }
 
-/**
- * Fulfill any JSON-mode `/v1/chat/completions` request with the appropriate
- * canned reply (synthesis or content-pack). Returns true if handled, false
- * if the request was not JSON-mode and the caller should handle it itself.
- *
- * Throws if the request is JSON-mode but unrecognised — silent persona-shaped
- * fallbacks were the bug this helper exists to prevent.
- */
 async function tryFulfillJsonMode(
 	route: Parameters<Parameters<Page["route"]>[1]>[0],
 	body: ParsedBody,
-	blurbFn: (id: string) => string,
+	blurbFor: (id: string) => string,
 ): Promise<boolean> {
 	if (!isJsonModeRequest(body)) return false;
 	const kind = classifyJsonRequest(body);
 	const responseBody =
 		kind === "synthesis"
-			? buildSynthesisResponseBody(body, blurbFn)
+			? buildSynthesisResponseBody(body, blurbFor)
 			: kind === "dual-content-pack"
 				? buildBoundDualContentPackResponseBody(body)
 				: kind === "content-pack"
@@ -363,7 +338,7 @@ async function tryFulfillJsonMode(
 	if (responseBody === null) {
 		throw new Error(
 			`stubs.ts: unrecognised JSON-mode /v1/chat/completions caller. ` +
-				`User message preamble: ${(body?.messages?.[1]?.content ?? "").slice(0, 80)}`,
+				`User message preamble: ${userMessageContent(body).slice(0, 80)}`,
 		);
 	}
 	await route.fulfill({
@@ -374,29 +349,18 @@ async function tryFulfillJsonMode(
 	return true;
 }
 
-// ── Public stub helpers ──────────────────────────────────────────────────────
-
 export type SynthesisStubOptions = {
-	/** Generate a blurb for a given persona id. Defaults to `id => \`Stub blurb for ${id}.\`` */
 	blurb?: (id: string) => string;
 };
 
-/**
- * Register a Playwright route stub that handles all JSON-mode
- * `/v1/chat/completions` calls fired at new-game time:
- *   - persona synthesis → echoes input ids with canned blurbs
- *   - content-pack generation → echoes input phase shapes with canned entities
- *
- * Non-JSON (SSE/streaming) requests are forwarded via `route.fallback()`.
- */
 export async function stubPersonaSynthesis(
 	page: Page,
 	options?: SynthesisStubOptions,
 ): Promise<void> {
-	const blurbFn = options?.blurb ?? ((id: string) => `Stub blurb for ${id}.`);
+	const blurbFor = options?.blurb ?? defaultStubBlurb;
 	await page.route("**/v1/chat/completions", async (route, request) => {
 		const body = parseRequestBody(request);
-		if (await tryFulfillJsonMode(route, body, blurbFn)) return;
+		if (await tryFulfillJsonMode(route, body, blurbFor)) return;
 		await route.fallback();
 	});
 }
@@ -406,78 +370,36 @@ export type NewGameLLMOptions = {
 	synthesis?: SynthesisStubOptions;
 };
 
-/**
- * Combined stub that handles both the new-game JSON-mode calls (persona
- * synthesis and content-pack generation) and the gameplay SSE streaming
- * call in a single `page.route` registration.
- */
 export async function stubNewGameLLM(
 	page: Page,
 	opts: NewGameLLMOptions,
 ): Promise<void> {
-	const blurbFn =
-		opts.synthesis?.blurb ?? ((id: string) => `Stub blurb for ${id}.`);
+	const blurbFor = opts.synthesis?.blurb ?? defaultStubBlurb;
 	const wordsOrFactory = opts.sse;
 
 	await page.route("**/v1/chat/completions", async (route, request) => {
 		const body = parseRequestBody(request);
-		if (await tryFulfillJsonMode(route, body, blurbFn)) return;
+		if (await tryFulfillJsonMode(route, body, blurbFor)) return;
 
-		// SSE path
 		const words =
 			typeof wordsOrFactory === "function"
 				? await wordsOrFactory(request)
 				: wordsOrFactory;
 		await route.fulfill({
 			status: 200,
-			headers: {
-				"Content-Type": "text/event-stream",
-				"Cache-Control": "no-cache",
-				"X-Content-Type-Options": "nosniff",
-			},
+			headers: SSE_HEADERS,
 			body: messageToolCallToBlueSseBody(words),
 		});
 	});
 }
 
-/**
- * Register a Playwright route stub for the `/v1/chat/completions` endpoint
- * that responds with a synthetic streaming OpenAI SSE body.
- *
- * Also handles the new-game JSON-mode calls (persona synthesis and
- * content-pack generation) so existing specs work unmodified even when the
- * SPA fires the JSON-mode calls before the first SSE request.
- *
- * The SPA's `BrowserLLMProvider` (via `src/spa/llm-client.ts`) calls
- * `${__WORKER_BASE_URL__}/v1/chat/completions` — this is the correct endpoint
- * to stub for end-to-end specs.  The SPA's own token-pacing loop
- * (TOKEN_PACE_MS × AI_TYPING_SPEED) drives the observable inter-token
- * animation after the fetch resolves.
- *
- * @param page            The Playwright Page to install the route on.
- * @param wordsOrFactory  Either a static `string[]` of word chunks, or a
- *                        `WordsFactory` that receives the intercepted Request
- *                        and returns word chunks (sync or async).  Use a
- *                        factory when successive calls need distinct replies
- *                        (e.g. one completion per AI per round).
- *
- * @remarks
- * - Matches `**\/v1/chat/completions` so it covers the worker-proxied URL.
- * - Last-route-wins: calling `stubChatCompletions` again on the same page
- *   replaces the previous stub because Playwright prepends new routes.
- * - Only intercepts requests fired from the page context (SPA fetch).
- *   `page.request.*` calls bypass `page.route` — trigger fetch through
- *   the SPA flow or via `page.evaluate(() => fetch(...))`.
- *   See docs/agents/testing.md for full gotchas.
- */
 export async function stubChatCompletions(
 	page: Page,
 	wordsOrFactory: string[] | WordsFactory,
 ): Promise<void> {
-	const blurbFn = (id: string) => `Stub blurb for ${id}.`;
 	await page.route("**/v1/chat/completions", async (route, request) => {
 		const body = parseRequestBody(request);
-		if (await tryFulfillJsonMode(route, body, blurbFn)) return;
+		if (await tryFulfillJsonMode(route, body, defaultStubBlurb)) return;
 
 		const words =
 			typeof wordsOrFactory === "function"
@@ -486,88 +408,46 @@ export async function stubChatCompletions(
 
 		await route.fulfill({
 			status: 200,
-			headers: {
-				"Content-Type": "text/event-stream",
-				"Cache-Control": "no-cache",
-				"X-Content-Type-Options": "nosniff",
-			},
+			headers: SSE_HEADERS,
 			body: messageToolCallToBlueSseBody(words),
 		});
 	});
 }
 
 export type GoToGameOptions = {
-	/** SSE reply words or factory. Defaults to `["stub reply"]`. */
 	sse?: string[] | WordsFactory;
-	/** Synthesis blurb options. */
 	synthesis?: SynthesisStubOptions;
-	/**
-	 * URL to navigate to instead of `"/"`. Useful for specs that need query-string
-	 * test affordances (e.g. `"/?winImmediately=1"`, `"/?think=1"`, `"/?lockout=1"`).
-	 * The start screen reads `location.search` at render time, so affordances set
-	 * in the query string flow through to `applyTestAffordances` when BEGIN is clicked.
-	 * Defaults to `"/"`.
-	 */
 	url?: string;
 };
 
-/**
- * Navigate through the start screen into the game and return AI handles.
- *
- * Steps:
- *  a. Stubs all new-game LLM calls (synthesis, content-pack, SSE) via `stubNewGameLLM`.
- *  b. `await page.goto(opts.url ?? "/?skipDialup=1")` — the default skips the
- *     dial-up animation so the login form appears immediately.
- *  c. Waits for `#begin` (CONNECT) to be enabled (generation complete).
- *  d. Fills `#password` with the accepted password.
- *  e. Clicks `#begin`.
- *  f. Waits for `main[data-view="game"]` and `#composer` visibility.
- *  g. Returns AiHandles from `getAiHandles(page)`.
- *
- * Specs that test the start-screen path itself should NOT use this helper —
- * they should navigate to `"/"` directly and exercise start-screen behaviour.
- */
 export async function goToGame(
 	page: Page,
 	opts?: GoToGameOptions,
 ): Promise<AiHandles> {
 	const sse = opts?.sse ?? ["stub reply"];
-	// Spread conditionally: `exactOptionalPropertyTypes` forbids passing an
-	// explicit `undefined` for an optional property.
 	await stubNewGameLLM(page, {
 		sse,
 		...(opts?.synthesis === undefined ? {} : { synthesis: opts.synthesis }),
 	});
 	await page.goto(withSkipDialup(opts?.url ?? "/"));
-	// Fast-synthesis stub returns instantly; 10s is ample — down from 30s.
-	await expect(page.locator("#begin")).toBeEnabled({ timeout: 10_000 });
+	await expect(page.locator("#begin")).toBeEnabled({
+		timeout: STUBBED_NEW_GAME_TIMEOUT_MS,
+	});
 	await page.locator("#password").fill("password");
 	await page.locator("#begin").click();
 	await expect(page.locator('main[data-view="game"]')).toBeAttached({
-		timeout: 10_000,
+		timeout: STUBBED_NEW_GAME_TIMEOUT_MS,
 	});
 	await expect(page.locator("#composer")).toBeVisible();
 	return getAiHandles(page);
 }
 
-/** Append `skipDialup=1` to the URL's query string if it's not already present. */
 function withSkipDialup(url: string): string {
 	if (/[?&]skipDialup=/.test(url)) return url;
-	const sep = url.includes("?") ? "&" : "?";
-	return `${url}${sep}skipDialup=1`;
+	const querySeparator = url.includes("?") ? "&" : "?";
+	return `${url}${querySeparator}skipDialup=1`;
 }
 
-// ── Live tool-call SSE bodies ────────────────────────────────────────────────
-
-/**
- * Build a minimal OpenAI-compatible SSE body that emits a single tool call with
- * `args` and then closes. The parser in `src/spa/streaming.ts` collects
- * `tool_calls` deltas by index and flushes them on
- * `finish_reason:"tool_calls"` or `[DONE]`.
- *
- * Specs use this to drive one live action for a chosen Daemon (`go`, `pick_up`)
- * instead of the `message` tool call `stubChatCompletions` emits.
- */
 export function toolCallSseBody(
 	name: string,
 	args: Record<string, string>,
@@ -594,17 +474,11 @@ export function toolCallSseBody(
 	return `data: ${toolCallChunk}\n\ndata: ${finishChunk}\n\ndata: [DONE]\n\n`;
 }
 
-// ── Vista geometry (ADR 0015) ────────────────────────────────────────────────
-
-/**
- * The ADR 0015 Vista oracle — the disk, the cell labels, the room-bounds
- * check and the witness-membership predicate — lives in `./vista-geometry.js`,
- * a Playwright-free leaf module, so that
- * `src/spa/game/__tests__/e2e-vista-oracle.test.ts` can bind this copy to the
- * shared production geometry without pulling `@playwright/test` into the
- * unit-test program. Re-exported here because the specs read these helpers
- * through this surface.
- */
+export {
+	deobfuscateEngineBlob,
+	ENGINE_OBFUSCATION_KEY,
+	obfuscateEngineBlob,
+} from "./engine-blob.js";
 export type {
 	CardinalDirection,
 	GridPosition,
@@ -623,23 +497,8 @@ export {
 	vistaCells,
 } from "./vista-geometry.js";
 
-// ── Sealed engine.dat storage ────────────────────────────────────────────────
-
-/**
- * The engine.dat obfuscation codec lives in its own Playwright-free module so
- * that session fixtures can seal payloads without pulling in `@playwright/test`.
- * Re-exported here because specs reach it through this helper surface.
- */
-export {
-	deobfuscateEngineBlob,
-	ENGINE_OBFUSCATION_KEY,
-	obfuscateEngineBlob,
-} from "./engine-blob.js";
-
-/** An entity holder: a Daemon holding the entity, or the cell it rests on. */
 export type EntityHolder = string | GridPosition;
 
-/** The persisted subset of `WorldEntity` these specs read back. */
 export interface SealedEntity {
 	id: string;
 	kind: string;
@@ -648,17 +507,13 @@ export interface SealedEntity {
 	satisfactionState?: string;
 }
 
-/** The persisted subset of `ContentPack` these specs read back. */
 export interface SealedContentPack {
 	setting: string;
 	wallName: string;
-	/** Flat entity list (session v11+). */
 	entities?: SealedEntity[];
-	/** Bucketed obstacle list (pre-v11 blobs). */
 	obstacles?: Array<{ holder: GridPosition | null }>;
 }
 
-/** The persisted subset of the sealed `engine.dat` payload (session v12). */
 export interface SealedEngine {
 	schemaVersion: number;
 	personaSpatial: Record<string, { position: GridPosition }>;
@@ -669,7 +524,6 @@ export interface SealedEngine {
 	weather?: string;
 }
 
-/** One entry of a persisted `<aiId>.txt` conversation log. */
 export interface SealedConversationEntry {
 	kind: string;
 	round: number;
@@ -684,14 +538,12 @@ export interface SealedConversationEntry {
 	to?: string;
 }
 
-/** The persisted subset of a Daemon's `<aiId>.txt` file. */
 export interface SealedDaemonFile {
 	aiId: string;
 	persona: { name: string };
 	conversationLog: SealedConversationEntry[];
 }
 
-/** The Content Pack the sealed engine has active (A unless a Setting Shift). */
 export function activePackOf(
 	sealed: SealedEngine,
 ): SealedContentPack | undefined {
@@ -700,11 +552,6 @@ export function activePackOf(
 	return packs?.[0];
 }
 
-/**
- * Grid cells of every Obstacle in a Content Pack, read from the flat `entities`
- * list the runtime places and persists (v11+). The bucketed pre-v11
- * `obstacles` field is a fallback for blobs written before the flattening.
- */
 export function obstacleCellsOf(pack: SealedContentPack): GridPosition[] {
 	const fromEntities = (pack.entities ?? [])
 		.filter((entity) => entity.kind === "obstacle")
@@ -716,7 +563,6 @@ export function obstacleCellsOf(pack: SealedContentPack): GridPosition[] {
 		.filter(isGridPosition);
 }
 
-/** Read the active session's sealed engine payload, decoded. */
 export async function readActiveSessionEngine(
 	page: Page,
 ): Promise<{ sessionId: string; sealed: SealedEngine }> {
@@ -738,7 +584,6 @@ export async function readActiveSessionEngine(
 	};
 }
 
-/** Overwrite the active session's `engine.dat` with `sealed`, obfuscated. */
 export async function writeActiveSessionEngine(
 	page: Page,
 	sessionId: string,
@@ -753,7 +598,6 @@ export async function writeActiveSessionEngine(
 	);
 }
 
-/** Read one Daemon's persisted `<aiId>.txt`. */
 export async function readDaemonFile(
 	page: Page,
 	sessionId: string,
@@ -768,11 +612,6 @@ export async function readDaemonFile(
 	return JSON.parse(raw) as SealedDaemonFile;
 }
 
-/**
- * Every plain-text file the session wrote: `meta.json`, each `<aiId>.txt`, and
- * the decoded `engine.dat` payload. Used to assert on what a save actually
- * carries (rather than on one field at a time).
- */
 export async function readActiveSessionFiles(page: Page): Promise<{
 	meta: string;
 	daemons: Record<string, string>;
@@ -802,20 +641,14 @@ export async function readActiveSessionFiles(page: Page): Promise<{
 	};
 }
 
-/**
- * Wait until `meta.json` reports at least `expectedRound`. The save writes
- * meta.json first and `engine.dat` last, so this alone does not prove the
- * round's engine state is committed — pair it with
- * {@link waitForSavedPosition} when the assertion depends on engine data.
- */
 export async function waitForRound(
 	page: Page,
 	sessionId: string,
-	expectedRound: number,
+	minimumRound: number,
 	timeoutMs = 30_000,
 ): Promise<void> {
 	await page.waitForFunction(
-		({ sid, expectedRound: round }: { sid: string; expectedRound: number }) => {
+		({ sid, minimumRound: round }: { sid: string; minimumRound: number }) => {
 			const raw = localStorage.getItem(`hi-blue:sessions/${sid}/meta.json`);
 			if (raw === null) return false;
 			try {
@@ -825,21 +658,33 @@ export async function waitForRound(
 				return false;
 			}
 		},
-		{ sid: sessionId, expectedRound },
+		{ sid: sessionId, minimumRound },
 		{ timeout: timeoutMs },
 	);
 }
 
-/**
- * Wait until the committed `engine.dat` stores `expected` as `aiId`'s position.
- * `engine.dat` is written last in the save order, so it is the commit signal
- * for a round's engine state.
- */
+export async function waitForFirstRoundSaved(page: Page): Promise<void> {
+	await page.waitForFunction(() => {
+		const sessionId = localStorage.getItem("hi-blue:active-session");
+		if (!sessionId) return false;
+		const metaRaw = localStorage.getItem(
+			`hi-blue:sessions/${sessionId}/meta.json`,
+		);
+		if (!metaRaw) return false;
+		try {
+			const meta = JSON.parse(metaRaw) as { round?: number };
+			return typeof meta.round === "number" && meta.round >= 1;
+		} catch {
+			return false;
+		}
+	});
+}
+
 export async function waitForSavedPosition(
 	page: Page,
 	sessionId: string,
 	aiId: string,
-	expected: GridPosition,
+	expectedPosition: GridPosition,
 	timeoutMs = 30_000,
 ): Promise<void> {
 	await page.waitForFunction(
@@ -848,18 +693,18 @@ export async function waitForSavedPosition(
 			id,
 			row,
 			col,
-			key,
+			obfuscationKey,
 		}: {
 			sid: string;
 			id: string;
 			row: number;
 			col: number;
-			key: string;
+			obfuscationKey: string;
 		}) => {
 			const blob = localStorage.getItem(`hi-blue:sessions/${sid}/engine.dat`);
 			if (blob === null) return false;
 			try {
-				const keyBytes = new TextEncoder().encode(key);
+				const keyBytes = new TextEncoder().encode(obfuscationKey);
 				const binary = atob(blob);
 				const bytes = new Uint8Array(binary.length);
 				for (let i = 0; i < binary.length; i++) {
@@ -879,9 +724,9 @@ export async function waitForSavedPosition(
 		{
 			sid: sessionId,
 			id: aiId,
-			row: expected.row,
-			col: expected.col,
-			key: ENGINE_OBFUSCATION_KEY,
+			row: expectedPosition.row,
+			col: expectedPosition.col,
+			obfuscationKey: ENGINE_OBFUSCATION_KEY,
 		},
 		{ timeout: timeoutMs },
 	);
