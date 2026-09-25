@@ -1,9 +1,3 @@
-/**
- * WEATHER_POOL
- *
- * Complete atmospheric sentences; one is drawn per Content Pack.
- * Rendered directly into the <setting> block of the system prompt.
- */
 export const WEATHER_POOL: readonly string[] = [
 	"Heavy rain is falling.",
 	"A light drizzle coats every surface.",

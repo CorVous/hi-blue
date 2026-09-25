@@ -1,22 +1,24 @@
-export const COLOR_PALETTE: string[] = [
-	"#33ff33", // p1 green
-	"#cc00cc", // ibm magenta
-	"#ff7b6b", // rose
-	"#8df27f", // mint
-	"#c8a8ff", // lilac
-	"#ffc89e", // peach
-	"#c8e89a", // pistachio
-	"#e8d49a", // sand
-	"#9ce8c8", // seafoam
-	"#ff3d8a", // hot pink
-	"#aaff00", // acid green
-	"#d63dff", // plasma
-	"#ff5a1f", // flame
-	"#fff03d", // lemon
-	"#ff9495", // coral
-	"#fa9d68", // apricot
-	"#adc35e", // chartreuse
-	"#61d19a", // jade
-	"#dc9beb", // orchid
-	"#f594c3", // flamingo
-];
+const NAMED_PALETTE_COLORS = {
+	p1Green: "#33ff33",
+	ibmMagenta: "#cc00cc",
+	rose: "#ff7b6b",
+	mint: "#8df27f",
+	lilac: "#c8a8ff",
+	peach: "#ffc89e",
+	pistachio: "#c8e89a",
+	sand: "#e8d49a",
+	seafoam: "#9ce8c8",
+	hotPink: "#ff3d8a",
+	acidGreen: "#aaff00",
+	plasma: "#d63dff",
+	flame: "#ff5a1f",
+	lemon: "#fff03d",
+	coral: "#ff9495",
+	apricot: "#fa9d68",
+	chartreuse: "#adc35e",
+	jade: "#61d19a",
+	orchid: "#dc9beb",
+	flamingo: "#f594c3",
+};
+
+export const COLOR_PALETTE: string[] = Object.values(NAMED_PALETTE_COLORS);

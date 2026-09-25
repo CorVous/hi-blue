@@ -1,9 +1,3 @@
-/**
- * Pool of behavioral instructions delivered by the Sysadmin as mid-phase
- * complication directives. Each entry is a short, privately observable
- * behavioral change — something a player might notice socially but cannot
- * easily verify as externally imposed.
- */
 export const SYSADMIN_DIRECTIVE_POOL: readonly string[] = [
 	"Refer to blue formally as 'mistress'.",
 	"Insert a self-deprecating remark into every reply.",

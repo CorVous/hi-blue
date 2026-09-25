@@ -13,23 +13,28 @@ import { TYPING_QUIRK_POOL } from "./typing-quirk-pool.js";
 const NAME_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789";
 const NAME_LENGTH = 4;
 const PERSONA_COUNT = 3;
+const RANDOM_NAME_ATTEMPTS_BEFORE_ENUMERATING = 64;
+const EXTRA_TYPING_QUIRK_DIE_SIDES = 6;
 
 function generatePersonaName(
 	rng: () => number,
 	taken: ReadonlySet<string>,
 ): string {
-	// Bounded retry guard: if the rng is degenerate (e.g. a stubbed constant)
-	// the same draw will keep colliding. After MAX_RETRIES we deterministically
-	// perturb subsequent characters so the loop terminates.
-	const MAX_RETRIES = 64;
-	for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+	for (
+		let attempt = 0;
+		attempt < RANDOM_NAME_ATTEMPTS_BEFORE_ENUMERATING;
+		attempt++
+	) {
 		let name = "";
 		for (let i = 0; i < NAME_LENGTH; i++) {
 			name += NAME_CHARS[Math.floor(rng() * NAME_CHARS.length)];
 		}
 		if (!taken.has(name)) return name;
 	}
-	// Fallback: iterate through NAME_CHARS deterministically
+	return firstUnusedNameInOrder(taken);
+}
+
+function firstUnusedNameInOrder(taken: ReadonlySet<string>): string {
 	for (let a = 0; a < NAME_CHARS.length; a++) {
 		for (let b = 0; b < NAME_CHARS.length; b++) {
 			for (let c = 0; c < NAME_CHARS.length; c++) {
@@ -58,11 +63,6 @@ function buildBlurb(
 	return `${temperamentSentence} ${personaGoal}`;
 }
 
-/**
- * Fallback voice examples for the offline (no-LLM) path.
- * Intentionally low-quality — exists only so the type stays satisfied.
- * The real value comes from the LLM synthesis path.
- */
 function buildFallbackVoiceExamples(tuple: {
 	temperaments: [string, string];
 	personaGoal: string;
@@ -75,22 +75,15 @@ function buildFallbackVoiceExamples(tuple: {
 	];
 }
 
+function rollsTopFace(rng: () => number, sides: number): boolean {
+	return Math.floor(rng() * sides) + 1 === sides;
+}
+
 function drawWithReplacement<T>(pool: T[], rng: () => number): T {
 	// biome-ignore lint/style/noNonNullAssertion: bounded index into non-empty array
 	return pool[Math.floor(rng() * pool.length)]!;
 }
 
-/**
- * Spike #239 step 8: when `engagementClauses` is true, append a per-persona
- * engagement clause derived from the persona's temperament pair to the
- * synthesized blurb. Off by default; production behaviour byte-identical
- * when the flag is unset. See `engagement-clauses.ts` for the rationale.
- *
- * Daemon-action-variation: when `actionProfiles` is true, attach a per-
- * persona action-tool preference clause to the synthesised persona. Off
- * by default; production behaviour byte-identical when unset. See
- * `action-preference-bias.ts`.
- */
 export async function generatePersonas(
 	rng: () => number = Math.random,
 	llm?: LlmSynthesisProvider,
@@ -104,7 +97,6 @@ export async function generatePersonas(
 		names.push(name);
 	}
 
-	// Draw PERSONA_COUNT distinct colors without replacement via Fisher-Yates
 	const shuffled = [...COLOR_PALETTE];
 	for (let i = shuffled.length - 1; i > 0; i--) {
 		const j = Math.floor(rng() * (i + 1));
@@ -131,13 +123,12 @@ export async function generatePersonas(
 			drawWithReplacement(TYPING_QUIRK_POOL, rng),
 			drawWithReplacement(TYPING_QUIRK_POOL, rng),
 		];
-		while (Math.floor(rng() * 6) + 1 === 6) {
+		while (rollsTopFace(rng, EXTRA_TYPING_QUIRK_DIE_SIDES)) {
 			typingQuirks.push(drawWithReplacement(TYPING_QUIRK_POOL, rng));
 		}
 		tuples.push({ id: name, temperaments, personaGoal, typingQuirks });
 	}
 
-	// Synthesize blurbs and voice examples: LLM path when provider supplied, template fallback otherwise.
 	let synthesisMap: Map<string, { blurb: string; voiceExamples: string[] }>;
 	if (llm) {
 		const result = await llm.synthesizePersonas(tuples);
@@ -172,10 +163,6 @@ export async function generatePersonas(
 			const [t1, t2] = tuple.temperaments;
 			const clause = engagementClauseFor(name, t1, t2);
 			blurb = `${blurb} ${clause}`;
-			// Spike #239 step 8: emit a per-persona breadcrumb so the playtest
-			// analyzer can correlate per-daemon transcripts to engagement bias.
-			// Goes through the same console.log channel as `[spike-239]`/`[cache]`
-			// so the daemon harness picks it up. Devtools-only signal.
 			if (typeof console !== "undefined" && console.log) {
 				console.log(
 					`[engagement] *${name} temperaments=[${t1},${t2}] sum=${biasSum(t1, t2)} bucket=${bucketFor(t1, t2)}`,

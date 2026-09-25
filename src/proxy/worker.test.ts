@@ -1,22 +1,9 @@
 import { reset, SELF } from "cloudflare:test";
 import { afterEach, describe, expect, it } from "vitest";
 
-// ALLOWED_ORIGINS is set in vitest.config.ts miniflare bindings:
-// "https://app.example,http://localhost:5173"
-
 afterEach(async () => {
-	// Clear all KV state so rate-guard tests don't interfere with each other.
 	await reset();
 });
-
-// NOTE: The "returns 404 for unknown routes" test was removed in the fix for
-// issue #48. Unmatched paths are now delegated to env.ASSETS.fetch(request)
-// so the Worker itself no longer returns 404 — the assets binding handles the
-// response (static asset or SPA fallback via not_found_handling:
-// single-page-application). vitest-pool-workers does not provide an ASSETS
-// binding, so testing the delegation behaviour here would require a mock
-// Fetcher; since the behaviour is verified by the wrangler dev smoke probe,
-// the test is omitted rather than adding a brittle stub.
 
 describe("OPTIONS /v1/chat/completions — CORS preflight (issue #66)", () => {
 	it("returns 204 for allowed origin with Access-Control-Allow-Origin echoed", async () => {

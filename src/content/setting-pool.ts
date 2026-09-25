@@ -1,9 +1,3 @@
-/**
- * SETTING_POOL
- *
- * Hand-authored noun phrases used as setting descriptors.
- * One is drawn per Content Pack (A and B) at game start.
- */
 export const SETTING_POOL: readonly string[] = [
 	"abandoned subway station",
 	"sun-baked salt flat",

@@ -16,10 +16,7 @@ import {
 	type PhaseConfig,
 } from "../content-pack-generator.js";
 
-// ── Seeded RNG ────────────────────────────────────────────────────────────────
-
-/** Mulberry32 PRNG — returns a function that yields floats in [0, 1). */
-function seededRng(seed: number): () => number {
+function mulberry32Rng(seed: number): () => number {
 	let s = seed >>> 0;
 	return () => {
 		s += 0x6d2b79f5;
@@ -30,10 +27,7 @@ function seededRng(seed: number): () => number {
 	};
 }
 
-// ── Fixed phase configs for tests ─────────────────────────────────────────────
-
-/** Minimal k=1, n=1, m=1 — stays well within the 5x5 grid. */
-const FIXED_PHASE_CONFIG: PhaseConfig = {
+const ONE_OF_EACH_ENTITY_CONFIG: PhaseConfig = {
 	kRange: [1, 1],
 	nRange: [1, 1],
 	mRange: [1, 1],
@@ -48,11 +42,6 @@ const SETTING_POOL_2: readonly string[] = [
 
 const AI_IDS = ["red", "green", "cyan"];
 
-// ── MockContentPackProvider factory ──────────────────────────────────────────
-
-/**
- * Build a raw binding from a skeleton binding (given the bindings in the input).
- */
 function makeRawBinding(
 	binding: BindingContentPackInput["phases"][number]["bindings"][number],
 	phaseIdx: number,
@@ -126,9 +115,6 @@ function makeRawBinding(
 	}
 }
 
-// ── generateDualContentPacks — entity ID parity (issue #302) ──────────────────
-
-/** Build a dual-pack MockContentPackProvider for entity ID parity tests. */
 function makeDualMockProvider(): MockContentPackProvider {
 	return new MockContentPackProvider(
 		(_input: BindingContentPackInput): BindingContentPackProviderResult => ({
@@ -145,7 +131,6 @@ function makeDualMockProvider(): MockContentPackProvider {
 					const bindings: RawBinding[] = phase.bindings.map(
 						(binding, bindingIdx) => {
 							const raw = makeRawBinding(binding, phaseIdx, bindingIdx);
-							// Re-flavor names for this variant
 							if (raw.object)
 								raw.object = {
 									...raw.object,
@@ -200,20 +185,19 @@ function makeDualMockProvider(): MockContentPackProvider {
 	);
 }
 
-/** Extract all entity IDs from a ContentPack. */
 function allEntityIds(pack: ContentPack): string[] {
 	return pack.entities.map((e) => e.id).sort();
 }
 
 describe("generateDualContentPacks — entity ID parity (issue #302)", () => {
 	it("produces packA and packB with identical entity IDs", async () => {
-		const rng = seededRng(99);
+		const rng = mulberry32Rng(99);
 		const provider = makeDualMockProvider();
 
 		const { packA, packB } = await generateDualContentPacks(
 			rng,
 			SETTING_POOL_2,
-			FIXED_PHASE_CONFIG,
+			ONE_OF_EACH_ENTITY_CONFIG,
 			provider,
 			AI_IDS,
 		);
@@ -222,13 +206,13 @@ describe("generateDualContentPacks — entity ID parity (issue #302)", () => {
 	});
 
 	it("Pack A and Pack B have different settings", async () => {
-		const rng = seededRng(99);
+		const rng = mulberry32Rng(99);
 		const provider = makeDualMockProvider();
 
 		const { packA, packB } = await generateDualContentPacks(
 			rng,
 			SETTING_POOL_2,
-			FIXED_PHASE_CONFIG,
+			ONE_OF_EACH_ENTITY_CONFIG,
 			provider,
 			AI_IDS,
 		);
@@ -237,35 +221,33 @@ describe("generateDualContentPacks — entity ID parity (issue #302)", () => {
 	});
 
 	it("Pack B entities have the same holder positions as Pack A (placement parity)", async () => {
-		const rng = seededRng(99);
+		const rng = mulberry32Rng(99);
 		const provider = makeDualMockProvider();
 
 		const { packA, packB } = await generateDualContentPacks(
 			rng,
 			SETTING_POOL_2,
-			FIXED_PHASE_CONFIG,
+			ONE_OF_EACH_ENTITY_CONFIG,
 			provider,
 			AI_IDS,
 		);
 
-		// Build ID→holder map for A by walking the flat entities array.
-		const holdersA = new Map<string, unknown>();
-		for (const e of packA.entities) holdersA.set(e.id, e.holder);
+		const holderByIdInPackA = new Map<string, unknown>();
+		for (const e of packA.entities) holderByIdInPackA.set(e.id, e.holder);
 
-		// Verify B holders match A holders by entity ID.
 		for (const e of packB.entities) {
-			expect(e.holder).toEqual(holdersA.get(e.id));
+			expect(e.holder).toEqual(holderByIdInPackA.get(e.id));
 		}
 	});
 
 	it("makes exactly one LLM call for the dual packs", async () => {
-		const rng = seededRng(99);
+		const rng = mulberry32Rng(99);
 		const provider = makeDualMockProvider();
 
 		await generateDualContentPacks(
 			rng,
 			SETTING_POOL_2,
-			FIXED_PHASE_CONFIG,
+			ONE_OF_EACH_ENTITY_CONFIG,
 			provider,
 			AI_IDS,
 		);
@@ -275,14 +257,14 @@ describe("generateDualContentPacks — entity ID parity (issue #302)", () => {
 	});
 
 	it("throws when settings pool has fewer than 2 entries", async () => {
-		const rng = seededRng(99);
+		const rng = mulberry32Rng(99);
 		const provider = makeDualMockProvider();
 
 		await expect(
 			generateDualContentPacks(
 				rng,
 				["only one setting"],
-				FIXED_PHASE_CONFIG,
+				ONE_OF_EACH_ENTITY_CONFIG,
 				provider,
 				AI_IDS,
 			),
