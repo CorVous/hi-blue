@@ -1,43 +1,8 @@
-/**
- * Server-side wallet protection for the LLM proxy.
- *
- * Two independent cost-denominated guards (units: micro-USD; 1 USD = 1e6
- * micro-USD), both backed by Workers KV:
- *
- * 1. Per-IP daily cost cap
- *    Key: `cost:ip:<YYYY-MM-DD>:<ip>`
- *    Value: cumulative micro-USD consumed today (integer string)
- *    TTL: 25 hours (survives the full UTC day with margin)
- *
- * 2. Global daily wallet cap
- *    Key: `cost:global:<YYYY-MM-DD>`
- *    Value: cumulative micro-USD consumed today across all IPs
- *    TTL: 25 hours
- *
- * Flow:
- *   preCharge() — at request start, deduct an estimate from both counters.
- *   reconcile() — at stream end, adjust both counters to the request's
- *                 actual cost (prompt_tokens × prompt_price +
- *                 completion_tokens × completion_price, rounded up).
- *   refundFull() — on stream failure, roll back the pre-charge entirely.
- *
- * Judgement calls:
- *   - Cap is a strict ceiling: deny when current + estimate > cap. At-cap
- *     allowed; crossing not.
- *   - No atomic CAS on KV — same trade-off as the previous request-bucket
- *     guard. Brief over/under-counting at high concurrency is acceptable.
- *   - Missing usage in upstream response → full refund (don't hold estimate).
- *   - Refunds always hit the request-start UTC day even if a stream straddles
- *     midnight.
- */
+import { USD_TO_MICRO_USD } from "./pricing";
 
 export interface CostGuardConfig {
-	/** Per-IP daily ceiling in integer micro-USD (default 1_000_000 = $1.00). */
 	perIpDailyMicroUsdMax: number;
-	/** Global daily ceiling in integer micro-USD (default 10_000_000 = $10.00). */
 	globalDailyMicroUsdMax: number;
-	/** Micro-USD deducted at request start, before actual cost is known
-	 *  (default 5_000 = $0.005). */
 	preChargeMicroUsd: number;
 }
 
@@ -45,27 +10,20 @@ export type CostChargeResult =
 	| { allowed: true; preCharged: number }
 	| { allowed: false; reason: "per-ip-daily" | "global-daily" };
 
-/** Format a unix-ms timestamp as `YYYY-MM-DD` in UTC. */
 export function utcDateKey(ms: number): string {
 	return new Date(ms).toISOString().slice(0, 10);
 }
 
-/** Per-IP key shape: `cost:ip:<YYYY-MM-DD>:<ip>`. */
 export function perIpKey(ip: string, nowMs: number): string {
 	return `cost:ip:${utcDateKey(nowMs)}:${ip}`;
 }
 
-/** Global key shape: `cost:global:<YYYY-MM-DD>`. */
 export function globalKey(nowMs: number): string {
 	return `cost:global:${utcDateKey(nowMs)}`;
 }
 
-const TTL_SEC = 25 * 60 * 60;
+const DAILY_COUNTER_TTL_SEC = 25 * 60 * 60;
 
-/**
- * Pre-charge both per-IP and global counters by `cfg.preChargeMicroUsd`.
- * Returns `{ allowed: false, reason }` if either cap would be crossed.
- */
 export async function preCharge(
 	kv: KVNamespace,
 	ip: string,
@@ -90,22 +48,16 @@ export async function preCharge(
 
 	await Promise.all([
 		kv.put(ipKey, String(perIp + cfg.preChargeMicroUsd), {
-			expirationTtl: TTL_SEC,
+			expirationTtl: DAILY_COUNTER_TTL_SEC,
 		}),
 		kv.put(gKey, String(global + cfg.preChargeMicroUsd), {
-			expirationTtl: TTL_SEC,
+			expirationTtl: DAILY_COUNTER_TTL_SEC,
 		}),
 	]);
 
 	return { allowed: true, preCharged: cfg.preChargeMicroUsd };
 }
 
-/**
- * Reconcile the pre-charge against the actual cost (in integer micro-USD).
- * - Under-charge (actual < preCharged): refunds the delta from both counters.
- * - Over-charge (actual > preCharged): accepted as cost of defense, no-op.
- * - Exact match: no-op.
- */
 export async function reconcile(
 	kv: KVNamespace,
 	ip: string,
@@ -113,9 +65,8 @@ export async function reconcile(
 	preCharged: number,
 	actualMicroUsd: number,
 ): Promise<void> {
-	const delta = actualMicroUsd - preCharged;
-	if (delta === 0) return;
-	if (delta > 0) return;
+	const unusedPreChargeMicroUsd = preCharged - actualMicroUsd;
+	if (unusedPreChargeMicroUsd <= 0) return;
 
 	const ipKey = perIpKey(ip, nowMs);
 	const gKey = globalKey(nowMs);
@@ -126,19 +77,15 @@ export async function reconcile(
 	const global = rawGlobal === null ? 0 : Number.parseInt(rawGlobal, 10);
 
 	await Promise.all([
-		kv.put(ipKey, String(Math.max(0, perIp + delta)), {
-			expirationTtl: TTL_SEC,
+		kv.put(ipKey, String(Math.max(0, perIp - unusedPreChargeMicroUsd)), {
+			expirationTtl: DAILY_COUNTER_TTL_SEC,
 		}),
-		kv.put(gKey, String(Math.max(0, global + delta)), {
-			expirationTtl: TTL_SEC,
+		kv.put(gKey, String(Math.max(0, global - unusedPreChargeMicroUsd)), {
+			expirationTtl: DAILY_COUNTER_TTL_SEC,
 		}),
 	]);
 }
 
-/**
- * Full refund: equivalent to reconcile with actualMicroUsd=0.
- * Used on stream failure or missing usage data.
- */
 export async function refundFull(
 	kv: KVNamespace,
 	ip: string,
@@ -148,10 +95,6 @@ export async function refundFull(
 	return reconcile(kv, ip, nowMs, preCharged, 0);
 }
 
-/**
- * Returns a 429 response with an OpenAI-shaped error body and a
- * `Retry-After` header (seconds until next UTC midnight).
- */
 export function rateLimitResponse(
 	reason: "per-ip-daily" | "global-daily",
 	nowMs: number,
@@ -189,12 +132,10 @@ export function rateLimitResponse(
 	);
 }
 
-/** Cost-guard defaults applied when the matching env var is unset. */
-const DEFAULT_PER_IP_DAILY_MICRO_USD = 1_000_000; // $1.00
-const DEFAULT_GLOBAL_DAILY_MICRO_USD = 10_000_000; // $10.00
-const DEFAULT_PRE_CHARGE_MICRO_USD = 5_000; // $0.005
+const DEFAULT_PER_IP_DAILY_MICRO_USD = 1 * USD_TO_MICRO_USD;
+const DEFAULT_GLOBAL_DAILY_MICRO_USD = 10 * USD_TO_MICRO_USD;
+const DEFAULT_PRE_CHARGE_MICRO_USD = 0.005 * USD_TO_MICRO_USD;
 
-/** Build cost-guard config from Worker environment variables. */
 export function configFromEnv(env: {
 	PER_IP_DAILY_MICRO_USD_MAX?: string;
 	GLOBAL_DAILY_MICRO_USD_MAX?: string;

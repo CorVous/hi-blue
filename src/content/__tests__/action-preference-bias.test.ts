@@ -1,14 +1,3 @@
-/**
- * Unit tests for the per-temperament action-tool bias mapping
- * (daemon-action-variation).
- *
- * Covers the 4-tool surface (`go`, `pick_up`, `put_down`, `use` — `face` was
- * retired by ADR 0015): full coverage of the pool, [-2, +2] scale, the
- * `go`/`use` baseline floor (never below -1 after summation), and that the
- * prose classifier produces non-empty, name-anchored output across every
- * temperament pair.
- */
-
 import { describe, expect, it } from "vitest";
 import {
 	ACTION_TOOL_BIAS,
@@ -39,9 +28,6 @@ describe("action-preference-bias", () => {
 	});
 
 	it("did not transfer the retired `face` column onto another tool or `message`", () => {
-		// The temperaments that leaned hardest on `face` (bias 2) must not have
-		// moved that weight onto pick_up / put_down / use, and `message` is not
-		// an action tool at all.
 		expect(ACTION_TOOL_BIAS.meticulous).toEqual({
 			go: -1,
 			pick_up: 0,
@@ -105,10 +91,8 @@ describe("action-preference-bias", () => {
 		}
 	});
 
-	it("floors `go` for a draw that would otherwise bottom out movement", () => {
-		// Doubled melancholic: raw go = -2 + -2 = -4, floored to -1.
+	it("floors `go` at -1 where doubled melancholic or melancholic + diffident would sum to -4", () => {
 		expect(toolBiasSum("melancholic", "melancholic").go).toBe(-1);
-		// melancholic + diffident: raw go = -2 + -2 = -4, floored to -1.
 		expect(toolBiasSum("melancholic", "diffident").go).toBe(-1);
 	});
 
@@ -150,8 +134,7 @@ describe("action-preference-bias", () => {
 		}
 	});
 
-	it("names every preferred tool (bias ≥ 2) explicitly with a lean", () => {
-		// meticulous + curious: use = 1+1 = 2 → named (the old `face` column is gone).
+	it("names every preferred tool (bias ≥ 2) explicitly with a lean, e.g. `use` for meticulous + curious", () => {
 		const clause = actionProfileFor("a", "meticulous", "curious");
 		expect(clause).toContain("leans toward");
 		expect(clause).toContain("`use`");
@@ -164,13 +147,10 @@ describe("action-preference-bias", () => {
 		expect(clause.toLowerCase()).toMatch(/variety|other available|spread/);
 	});
 
-	it("flags avoided tools (bias ≤ -1) without making them zero-emission", () => {
-		// diffident + aloof: pick_up = -3 → avoided. go (-3) and use (-2) are
-		// critical-path, so they are floored and excluded.
+	it("flags avoided flavor tools (bias ≤ -1) as still usable, e.g. `pick_up` for diffident + aloof", () => {
 		const clause = actionProfileFor("b", "diffident", "aloof");
 		expect(clause.toLowerCase()).toMatch(/hesitant|less often/);
 		expect(clause).toContain("`pick_up`");
-		// Cautious personas must still emit avoided tools occasionally.
 		expect(clause.toLowerCase()).toMatch(/still|when.*calls/);
 	});
 
@@ -197,8 +177,7 @@ describe("action-preference-bias", () => {
 		}
 	});
 
-	it("orders preferred tools by descending bias", () => {
-		// zealous + hot-headed: go = 2+2 = 4, pick_up = 1+1 = 2 — `go` first.
+	it("orders preferred tools by descending bias: `go` (4) before `pick_up` (2) for zealous + hot-headed", () => {
 		const clause = actionProfileFor("a", "zealous", "hot-headed");
 		const goIdx = clause.indexOf("`go`");
 		const pickUpIdx = clause.indexOf("`pick_up`");
@@ -207,15 +186,11 @@ describe("action-preference-bias", () => {
 	});
 
 	it("gives a go-heavy pair a go lean", () => {
-		// zealous + hot-headed: go = 2+2 = 4 → `go` preferred.
 		const clause = actionProfileFor("c", "zealous", "hot-headed");
 		expect(clause).toContain("`go`");
 	});
 
-	it("falls through to the balanced default when no tool reaches ±threshold", () => {
-		// stoic + earnest: go -1+0=-1 (critical-path, excluded from avoided),
-		// pick_up 0, put_down 0, use 0+1=1 — nothing reaches the +2 preferred
-		// threshold and no flavor tool is avoided. Result: the balanced default.
+	it("falls through to the balanced default when no tool reaches ±threshold (stoic + earnest)", () => {
 		const clause = actionProfileFor("e", "stoic", "earnest");
 		expect(clause).not.toContain("leans toward");
 		expect(clause.toLowerCase()).toContain("balanced");

@@ -1,14 +1,3 @@
-/**
- * Tests for the save-file serializer (issue #19, updated for #195).
- *
- * The serializer takes a completed GameState and produces a deterministic
- * JSON-serializable payload containing:
- * - Each AI's persona
- * - Each AI's per-phase transcript (unified conversationLog including chat,
- *   whispers, and witnessed events, in round order)
- *
- * The payload must be stable for round-tripping.
- */
 import { describe, expect, it } from "vitest";
 import { GAME_SAVE_VERSION, serializeGameSave } from "../save-serializer";
 import { appendMessage, startGame } from "../spa/game/engine";
@@ -114,7 +103,6 @@ describe("serializeGameSave", () => {
 		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		game = appendMessage(game, "red", "cyan", "Secret plan");
 		const save = serializeGameSave(game);
-		// Message from red appears in red's conversationLog (sender's log gets the entry)
 		const ember = save.ais.find((a) => a.persona.id === "red");
 		const redMessages = ember?.phases[0]?.conversationLog.filter(
 			(e) => e.kind === "message",
@@ -123,13 +111,10 @@ describe("serializeGameSave", () => {
 		expect(redMessages?.[0]?.kind === "message" && redMessages[0].content).toBe(
 			"Secret plan",
 		);
-		// No separate `whispers` field — it's all in conversationLog
 		expect("whispers" in (ember?.phases[0] ?? {})).toBe(false);
 	});
 
 	it("accumulates transcripts in a single phase (flat model, #295)", () => {
-		// In the flat single-game model (issue #295), all conversation accumulates
-		// in one phase.
 		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
 		game = appendMessage(game, "blue", "red", "Message 1");
 		game = appendMessage(game, "blue", "red", "Message 2");
@@ -138,7 +123,6 @@ describe("serializeGameSave", () => {
 
 		const save = serializeGameSave(game);
 		const ember = save.ais.find((a) => a.persona.id === "red");
-		// Flat model: single phase with all messages accumulated
 		expect(ember?.phases).toHaveLength(1);
 		expect(ember?.phases[0]?.phaseNumber).toBe(1);
 		expect(ember?.phases[0]?.conversationLog).toHaveLength(3);
@@ -193,21 +177,20 @@ describe("serializeGameSave", () => {
 		expect(json).not.toMatch(/facing/i);
 		expect(json).not.toMatch(/landmark/i);
 
-		// Walk the parsed payload so a nested field cannot hide from the match.
 		const seenKeys = new Set<string>();
-		const walk = (value: unknown): void => {
+		const collectNestedKeys = (value: unknown): void => {
 			if (Array.isArray(value)) {
-				for (const item of value) walk(item);
+				for (const item of value) collectNestedKeys(item);
 				return;
 			}
 			if (value && typeof value === "object") {
 				for (const [key, nested] of Object.entries(value)) {
 					seenKeys.add(key);
-					walk(nested);
+					collectNestedKeys(nested);
 				}
 			}
 		};
-		walk(save);
+		collectNestedKeys(save);
 		for (const key of seenKeys) {
 			expect(key).not.toMatch(/facing/i);
 			expect(key).not.toMatch(/landmark/i);
@@ -216,7 +199,6 @@ describe("serializeGameSave", () => {
 
 	it("peer message in green's log only if green is sender or recipient", () => {
 		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
-		// Message between red and cyan — should appear in red and cyan, not green
 		game = appendMessage(game, "red", "cyan", "Our secret");
 		const save = serializeGameSave(game);
 		const sage = save.ais.find((a) => a.persona.id === "green");

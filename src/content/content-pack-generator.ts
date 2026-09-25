@@ -1,24 +1,3 @@
-/**
- * content-pack-generator.ts
- *
- * Generates the game's ContentPacks at game start. The current single-game
- * path (`generateDualContentPacks`) produces a Pack A / Pack B pair for one
- * continuous game:
- * 1. Draws a setting for each pack from the pool.
- * 2. Rolls n/m and the type-first objective types.
- * 3. Makes one batched LLM call covering both packs.
- * 4. Runs engine-randomized placement under constraints.
- *
- * Placement constraints:
- * - Obstacles placed first, m distinct cells.
- * - AI starts: distinct non-obstacle cells, position only.
- * - Objective spaces: distinct, non-obstacle, off AI start cells.
- * - Objective objects: distinct, non-obstacle, NOT on their matched space's cell.
- * - Interesting objects: distinct from obstacle and AI start cells (may stack with other items).
- * - BFS reachability: every non-obstacle cell must be reachable from every AI start.
- * - Up to MAX_ATTEMPTS retries before throwing.
- */
-
 import type {
 	RawBinding,
 	RawBoundPack,
@@ -44,15 +23,9 @@ import type {
 	WorldEntity,
 } from "../spa/game/types.js";
 
-/**
- * Configuration for a single game's content pack generation.
- */
 export interface SingleGameConfig {
-	/** Roll k (objective pairs). */
 	kRange: [number, number];
-	/** Roll n (interesting objects). */
 	nRange: [number, number];
-	/** Roll m (obstacles). */
 	mRange: [number, number];
 	budgetPerAi: number;
 }
@@ -72,49 +45,42 @@ import { WEATHER_POOL } from "./weather-pool.js";
 const GRID_ROWS = 5;
 const GRID_COLS = 5;
 const TOTAL_CELLS = GRID_ROWS * GRID_COLS;
-const MAX_ATTEMPTS = 200;
+const MAX_PLACEMENT_ATTEMPTS = 200;
+const OBJECTIVES_PER_GAME = 3;
 
-/** Roll an integer in [lo, hi] inclusive using the provided rng. */
 function rollInt(rng: () => number, lo: number, hi: number): number {
 	return lo + Math.floor(rng() * (hi - lo + 1));
 }
 
-/** Encode a GridPosition as a single integer key. */
 function posKey(pos: GridPosition): number {
 	return pos.row * GRID_COLS + pos.col;
 }
 
-/** Decode an integer cell key to a GridPosition. */
 function keyToPos(key: number): GridPosition {
 	return { row: Math.floor(key / GRID_COLS), col: key % GRID_COLS };
 }
 
-/**
- * Draw `count` distinct integers from [0, TOTAL_CELLS) using partial Fisher-Yates.
- * Returns them as cell indices.
- */
-function drawDistinctCells(
+function drawDistinct<T>(
 	rng: () => number,
-	pool: number[],
+	poolShuffledInPlace: T[],
 	count: number,
-): number[] {
-	// Pool is a mutable copy; we do partial in-place shuffle.
-	const result: number[] = [];
+): T[] {
+	const result: T[] = [];
 	for (let i = 0; i < count; i++) {
-		const j = i + Math.floor(rng() * (pool.length - i));
-		const tmp = pool[i] as number;
-		pool[i] = pool[j] as number;
-		pool[j] = tmp;
-		result.push(pool[i] as number);
+		const j = i + Math.floor(rng() * (poolShuffledInPlace.length - i));
+		const tmp = poolShuffledInPlace[i] as T;
+		poolShuffledInPlace[i] = poolShuffledInPlace[j] as T;
+		poolShuffledInPlace[j] = tmp;
+		result.push(poolShuffledInPlace[i] as T);
 	}
 	return result;
 }
 
-/**
- * BFS over non-obstacle cells from a start position.
- * Returns the set of reachable cell keys.
- */
-function bfsReachable(
+function pickOne(rng: () => number, pool: readonly string[]): string {
+	return pool[Math.floor(rng() * pool.length)] as string;
+}
+
+function reachableCellsFrom(
 	start: GridPosition,
 	obstacleSet: Set<number>,
 ): Set<number> {
@@ -149,10 +115,17 @@ function bfsReachable(
 	return visited;
 }
 
-/**
- * Attempt to place all entities and AI starts for a single phase.
- * Returns null if placement constraints cannot be satisfied.
- */
+function everyOpenCellReachable(
+	startPositions: GridPosition[],
+	obstacleSet: Set<number>,
+	openCells: number[],
+): boolean {
+	return startPositions.every((start) => {
+		const reachable = reachableCellsFrom(start, obstacleSet);
+		return openCells.every((cellKey) => reachable.has(cellKey));
+	});
+}
+
 function tryPlacePhase(
 	rng: () => number,
 	pack: ContentPack,
@@ -163,37 +136,27 @@ function tryPlacePhase(
 	const packInteresting = interestingObjects(pack);
 	const packObstacles = obstacleEntities(pack);
 
-	const k = packCarryPairs.length; // carry pairs
-	const s = packBoundSpaces.length; // standalone bound spaces
-	const totalSpaces = k + s;
-	const n = packInteresting.length;
-	const m = packObstacles.length;
+	const carryPairCount = packCarryPairs.length;
+	const standaloneSpaceCount = packBoundSpaces.length;
+	const totalSpaces = carryPairCount + standaloneSpaceCount;
+	const interestingCount = packInteresting.length;
+	const obstacleCount = packObstacles.length;
 
-	// nonObstacleNeeded: AI starts + all spaces + carry objects + interesting objects
-	const nonObstacleNeeded = aiIds.length + totalSpaces + k + n;
-	if (m + nonObstacleNeeded > TOTAL_CELLS) {
-		return null; // Impossible layout
-	}
+	const nonObstacleCellsNeeded =
+		aiIds.length + totalSpaces + carryPairCount + interestingCount;
+	const layoutCannotFit = obstacleCount + nonObstacleCellsNeeded > TOTAL_CELLS;
+	if (layoutCannotFit) return null;
 
-	// Build full cell pool
 	const allCells = Array.from({ length: TOTAL_CELLS }, (_, i) => i);
 
-	// 1. Place obstacles
-	const cellPool = [...allCells];
-	const obstacleKeys = drawDistinctCells(rng, cellPool, m);
+	const obstacleKeys = drawDistinct(rng, [...allCells], obstacleCount);
 	const obstacleSet = new Set(obstacleKeys);
-
-	// 2. Non-obstacle cell pool
 	const nonObstacleCells = allCells.filter((k) => !obstacleSet.has(k));
 
-	// 3. Place AI starts: distinct non-obstacle cells
-	const nonObstaclePool = [...nonObstacleCells];
-	if (nonObstaclePool.length < aiIds.length) return null;
-	const aiStartKeys = drawDistinctCells(rng, nonObstaclePool, aiIds.length);
+	if (nonObstacleCells.length < aiIds.length) return null;
+	const aiStartKeys = drawDistinct(rng, [...nonObstacleCells], aiIds.length);
 	const aiStartSet = new Set(aiStartKeys);
 
-	// Draw AI starts: position only — a Daemon start carries no orientation
-	// (ADR 0015), so no extra draw happens here.
 	const aiStarts: Record<AiId, PersonaSpatialState> = {};
 	for (let i = 0; i < aiIds.length; i++) {
 		const key = aiStartKeys[i] as number;
@@ -201,53 +164,41 @@ function tryPlacePhase(
 		aiStarts[aiIds[i] as AiId] = { position: pos };
 	}
 
-	// 4. Place all spaces (carry spaces + standalone bound spaces): distinct, non-obstacle, off AI start cells
 	const spaceCandidates = nonObstacleCells.filter((k) => !aiStartSet.has(k));
 	if (spaceCandidates.length < totalSpaces) return null;
-	const spaceCandidatePool = [...spaceCandidates];
-	const allSpaceKeys = drawDistinctCells(rng, spaceCandidatePool, totalSpaces);
-	// First k go to carry pair spaces; remaining s go to standalone bound spaces
-	const spaceKeys = allSpaceKeys.slice(0, k);
-	const spaceKeySet = new Set(allSpaceKeys); // all spaces forbidden for objects
+	const allSpaceKeys = drawDistinct(rng, [...spaceCandidates], totalSpaces);
+	const carrySpaceKeys = allSpaceKeys.slice(0, carryPairCount);
+	const standaloneSpaceKeys = allSpaceKeys.slice(carryPairCount);
+	const spaceKeySet = new Set(allSpaceKeys);
 
-	// 5. Place objective objects: distinct, non-obstacle, NOT on their matched space
 	const objectCandidates = nonObstacleCells.filter(
 		(cellKey) => !spaceKeySet.has(cellKey),
 	);
-	if (objectCandidates.length < k) return null;
-	const objectCandidatePool = [...objectCandidates];
-	const objectKeys = drawDistinctCells(rng, objectCandidatePool, k);
+	if (objectCandidates.length < carryPairCount) return null;
+	const objectKeys = drawDistinct(rng, [...objectCandidates], carryPairCount);
 
-	// 6. Place interesting objects: distinct from obstacle and AI start cells (may stack with other items)
 	const interestingCandidates = nonObstacleCells.filter(
 		(k) => !aiStartSet.has(k),
 	);
-	if (interestingCandidates.length < n) return null;
-	const interestingPool = [...interestingCandidates];
-	// We draw n from this pool (stacking with other items is fine — no uniqueness constraint vs objects/spaces)
-	// But we must draw distinct cells (no two interesting objects forced to same cell by this algorithm;
-	// stacking with objective items is allowed per spec)
-	const interestingKeys = drawDistinctCells(rng, interestingPool, n);
+	if (interestingCandidates.length < interestingCount) return null;
+	const interestingKeys = drawDistinct(
+		rng,
+		[...interestingCandidates],
+		interestingCount,
+	);
 
-	// BFS reachability check: all non-obstacle cells must be reachable from every AI start
-	const nonObstacleSet = new Set(nonObstacleCells);
-	for (const aiId of aiIds) {
-		const spatial = aiStarts[aiId];
-		if (!spatial) return null;
-		const reachable = bfsReachable(spatial.position, obstacleSet);
-		// Every non-obstacle cell must be reachable
-		for (const cellKey of nonObstacleSet) {
-			if (!reachable.has(cellKey)) return null; // Disconnected grid
-		}
+	const aiStartPositions = aiStartKeys.map(keyToPos);
+	if (
+		!everyOpenCellReachable(aiStartPositions, obstacleSet, nonObstacleCells)
+	) {
+		return null;
 	}
 
-	// Build holder map keyed by entity id from the placement draws.
 	const holderById = new Map<string, GridPosition>();
 	packCarryPairs.forEach((pair, i) => {
 		holderById.set(pair.object.id, keyToPos(objectKeys[i] as number));
-		holderById.set(pair.space.id, keyToPos(spaceKeys[i] as number));
+		holderById.set(pair.space.id, keyToPos(carrySpaceKeys[i] as number));
 	});
-	const standaloneSpaceKeys = allSpaceKeys.slice(k);
 	packBoundSpaces.forEach((space, i) => {
 		holderById.set(space.id, keyToPos(standaloneSpaceKeys[i] as number));
 	});
@@ -258,7 +209,6 @@ function tryPlacePhase(
 		holderById.set(obs.id, keyToPos(obstacleKeys[i] as number));
 	});
 
-	// Write the placements back via one entities.map, preserving pack-order.
 	const updatedEntities = pack.entities.map((entity) => {
 		const holder = holderById.get(entity.id);
 		return holder !== undefined ? { ...entity, holder } : entity;
@@ -271,35 +221,23 @@ function tryPlacePhase(
 	};
 }
 
-/**
- * Place all phases with retries. Throws after MAX_ATTEMPTS if any phase
- * cannot be placed satisfying all constraints.
- */
 function placePhases(
 	rng: () => number,
 	packs: ContentPack[],
 	aiIds: AiId[],
 ): ContentPack[] {
 	return packs.map((pack, i) => {
-		for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+		for (let attempt = 0; attempt < MAX_PLACEMENT_ATTEMPTS; attempt++) {
 			const result = tryPlacePhase(rng, pack, aiIds);
 			if (result !== null) return result;
 		}
 		throw new Error(
-			`generateContentPacks: could not place phase ${i + 1} after ${MAX_ATTEMPTS} attempts. ` +
+			`generateDualContentPacks: could not place phase ${i + 1} after ${MAX_PLACEMENT_ATTEMPTS} attempts. ` +
 				`Check that m (${obstacleEntities(pack).length}) obstacles leave enough room for AI starts and entities.`,
 		);
 	});
 }
 
-/**
- * Convert a validated RawBoundPack to a ContentPack (without placements).
- *
- * All entities are accumulated into a single `entities` array in canonical
- * order: per binding index, carry pairs emit object then space; use_space and
- * convergence bindings emit a space; use_item bindings emit an item. Decoys
- * then obstacles are appended at the end.
- */
 function rawBoundPackToContentPack(
 	rawPack: RawBoundPack,
 	objectiveTypes: ObjectiveType[],
@@ -414,7 +352,6 @@ function rawBoundPackToContentPack(
 		}
 	}
 
-	// Add decoys (interesting_object kind) after binding-derived entities
 	for (const decoy of rawPack.decoys ?? []) {
 		const entity: WorldEntity = {
 			id: decoy.id ?? "decoy-unknown",
@@ -428,7 +365,6 @@ function rawBoundPackToContentPack(
 		entities.push(entity);
 	}
 
-	// Add obstacles last
 	for (const obs of rawPack.obstacles ?? []) {
 		entities.push({
 			id: obs.id ?? "obstacle-unknown",
@@ -450,21 +386,6 @@ function rawBoundPackToContentPack(
 	};
 }
 
-/**
- * Generate a paired A/B ContentPack in one LLM call (type-first authoring).
- *
- * Objective types are rolled BEFORE the LLM call. The LLM receives pre-minted
- * entity-ID skeletons and authors only flavor fields. Pack A and Pack B share
- * identical entity IDs and grid placements; only names, descriptions, and flavor
- * strings differ (re-flavored per setting).
- *
- * @param rng        Seeded random number generator.
- * @param settings   The pool of setting nouns (must have >= 2 entries: 1 for Pack A, 1 for Pack B).
- * @param config     Single-game config (kRange, nRange, mRange) — same for both packs.
- * @param llm        ContentPackProvider for the LLM call.
- * @param aiIdsOrPromise  AiId list or a Promise resolving to one.
- * @returns          `{ packA, packB, objectiveTypes }` — placed ContentPack pair with identical entity IDs/placements.
- */
 export async function generateDualContentPacks(
 	rng: () => number,
 	settings: readonly string[],
@@ -482,41 +403,18 @@ export async function generateDualContentPacks(
 		);
 	}
 
-	// Draw 2 distinct settings (1 for A, 1 for B) via partial Fisher-Yates
-	const settingPool = [...settings];
-	const drawnSettings: string[] = [];
-	for (let i = 0; i < 2; i++) {
-		const j = i + Math.floor(rng() * (settingPool.length - i));
-		const tmp = settingPool[i] as string;
-		settingPool[i] = settingPool[j] as string;
-		settingPool[j] = tmp;
-		drawnSettings.push(settingPool[i] as string);
-	}
-	const settingA = drawnSettings[0] as string;
-	const settingB = drawnSettings[1] as string;
+	const [settingA, settingB] = drawDistinct(rng, [...settings], 2) as [
+		string,
+		string,
+	];
+	const weatherA = pickOne(rng, WEATHER_POOL);
+	const weatherB = pickOne(rng, WEATHER_POOL);
+	const timeOfDayA = pickOne(rng, TIME_OF_DAY_POOL);
+	const timeOfDayB = pickOne(rng, TIME_OF_DAY_POOL);
+	const theme = pickOne(rng, THEME_POOL);
+	const obstacleCount = rollInt(rng, config.mRange[0], config.mRange[1]);
+	const objectiveTypes = rollObjectiveTypes(rng, OBJECTIVES_PER_GAME);
 
-	// Draw weather, time-of-day, and theme independently for A and B
-	const weatherA = WEATHER_POOL[
-		Math.floor(rng() * WEATHER_POOL.length)
-	] as string;
-	const weatherB = WEATHER_POOL[
-		Math.floor(rng() * WEATHER_POOL.length)
-	] as string;
-	const timeOfDayA = TIME_OF_DAY_POOL[
-		Math.floor(rng() * TIME_OF_DAY_POOL.length)
-	] as string;
-	const timeOfDayB = TIME_OF_DAY_POOL[
-		Math.floor(rng() * TIME_OF_DAY_POOL.length)
-	] as string;
-	const theme = THEME_POOL[Math.floor(rng() * THEME_POOL.length)] as string;
-
-	// Roll m for obstacles
-	const m = rollInt(rng, config.mRange[0], config.mRange[1]);
-
-	// === TYPE-FIRST: roll objectives BEFORE the LLM call ===
-	const objectiveTypes = rollObjectiveTypes(rng, 3);
-
-	// Build binding prompt (pre-minted IDs) and dual LLM input
 	const bindingPrompt = buildDualBindingPrompt(
 		objectiveTypes,
 		settingA,
@@ -526,7 +424,7 @@ export async function generateDualContentPacks(
 		weatherB,
 		timeOfDayA,
 		timeOfDayB,
-		m,
+		obstacleCount,
 	);
 
 	const llmInput: DualBindingContentPackInput = {
@@ -541,12 +439,11 @@ export async function generateDualContentPacks(
 				timeOfDayB,
 				bindings: bindingPrompt.skeletons,
 				decoyIds: ["decoy-0", "decoy-1"],
-				obstacleCount: m,
+				obstacleCount,
 			},
 		],
 	};
 
-	// Kick off dual LLM call and aiIds resolution in parallel
 	const llmCallPromise = llm.generateDualContentPacks(llmInput);
 	const [llmResult, aiIds] = await Promise.all([
 		llmCallPromise,
@@ -557,7 +454,6 @@ export async function generateDualContentPacks(
 	if (!phase)
 		throw new Error("generateDualContentPacks: LLM returned no phases");
 
-	// Convert binding-shaped packs to ContentPack (no placements yet)
 	const unplacedPackA = rawBoundPackToContentPack(
 		phase.rawPackA,
 		objectiveTypes,
@@ -571,27 +467,29 @@ export async function generateDualContentPacks(
 		timeOfDayB,
 	);
 
-	// Run placement engine on Pack A
 	const placedPacksA = placePhases(rng, [unplacedPackA], aiIds);
 	const placedPackA = placedPacksA[0];
 	if (!placedPackA)
 		throw new Error("generateDualContentPacks: placement failed");
 
-	// Build ID → holder map from placed Pack A by walking entities directly.
+	const packB = copyPlacementsById(placedPackA, unplacedPackB);
+	return { packA: placedPackA, packB, objectiveTypes };
+}
+
+function copyPlacementsById(
+	placedPack: ContentPack,
+	unplacedPack: ContentPack,
+): ContentPack {
 	const holderById = new Map<string, AiId | GridPosition>();
-	for (const entity of placedPackA.entities) {
+	for (const entity of placedPack.entities) {
 		holderById.set(entity.id, entity.holder);
 	}
-
-	// Apply the same placements to Pack B by matching entity IDs (one entities.map).
-	const packB: ContentPack = {
-		...unplacedPackB,
-		entities: unplacedPackB.entities.map((entity) => ({
+	return {
+		...unplacedPack,
+		entities: unplacedPack.entities.map((entity) => ({
 			...entity,
 			holder: holderById.get(entity.id) ?? { row: 0, col: 0 },
 		})),
-		aiStarts: { ...placedPackA.aiStarts },
+		aiStarts: { ...placedPack.aiStarts },
 	};
-
-	return { packA: placedPackA, packB, objectiveTypes };
 }

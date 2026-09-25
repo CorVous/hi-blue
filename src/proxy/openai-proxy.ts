@@ -2,6 +2,7 @@ import { PINNED_MODEL } from "../model.js";
 import {
 	computeCostMicroUsd,
 	getModelPricing,
+	type ModelPricing,
 	USD_TO_MICRO_USD,
 } from "./pricing";
 import {
@@ -15,6 +16,10 @@ import {
 export { PINNED_MODEL };
 
 export const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+
+const UNPARSEABLE_BODY = Symbol("unparseable-body");
+const SSE_DATA_PREFIX = "data:";
+const SSE_STREAM_END_MARKER = "[DONE]";
 
 function openAiError(
 	status: number,
@@ -47,7 +52,6 @@ export async function handleChatCompletions(
 	kv: KVNamespace,
 	ctx: ExecutionContext,
 ): Promise<Response> {
-	// 1. Require the API key
 	if (!env.OPENROUTER_API_KEY) {
 		return openAiError(
 			502,
@@ -56,25 +60,15 @@ export async function handleChatCompletions(
 		);
 	}
 
-	// 2. Parse JSON body
-	let body: Record<string, unknown>;
-	try {
-		body = (await request.json()) as Record<string, unknown>;
-	} catch {
+	const body = await readJsonBody(request);
+	if (body === UNPARSEABLE_BODY) {
 		return openAiError(
 			400,
 			"invalid_request_error",
 			"Invalid JSON in request body",
 		);
 	}
-
-	// 3. Validate messages array
-	if (
-		typeof body !== "object" ||
-		body === null ||
-		!Array.isArray(body.messages) ||
-		body.messages.length < 1
-	) {
+	if (!hasNonEmptyMessages(body)) {
 		return openAiError(
 			400,
 			"invalid_request_error",
@@ -82,52 +76,32 @@ export async function handleChatCompletions(
 		);
 	}
 
-	// 4. Cost-guard: pre-charge at request start
 	const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
 	const nowMs = Date.now();
-	const cfg = configFromEnv(env);
-	const guard = await preCharge(kv, ip, nowMs, cfg);
+	const guard = await preCharge(kv, ip, nowMs, configFromEnv(env));
 	if (!guard.allowed) {
 		return rateLimitResponse(guard.reason, nowMs);
 	}
 
-	// Kick off the pricing lookup in parallel with the upstream call so the
-	// reconciliation step doesn't add latency. `getModelPricing` is memoised
-	// per isolate, so this is typically a no-op after the first request.
-	const pricingPromise = getModelPricing(PINNED_MODEL, nowMs);
-
-	// 5. Pin the model
-	const isStream = body.stream === true;
-
-	// Force stream_options.include_usage=true when streaming so OpenRouter
-	// emits the usage chunk and we can reconcile from actual token counts.
-	const modifiedBody: Record<string, unknown> = {
-		...body,
-		model: PINNED_MODEL,
+	const pricingLookupInParallel = getModelPricing(PINNED_MODEL, nowMs);
+	const refundPreCharge = (): Promise<void> =>
+		refundFull(kv, ip, nowMs, guard.preCharged);
+	const settleFromUsage = async (usage: ParsedUsage | null): Promise<void> => {
+		if (usage === null) return refundPreCharge();
+		const cost = await resolveCostMicroUsd(usage, pricingLookupInParallel);
+		logPromptCacheHitRate(usage);
+		await reconcile(kv, ip, nowMs, guard.preCharged, cost);
 	};
-	if (isStream) {
-		modifiedBody.stream_options = {
-			...(typeof body.stream_options === "object" &&
-			body.stream_options !== null
-				? (body.stream_options as Record<string, unknown>)
-				: {}),
-			include_usage: true,
-		};
-	}
 
-	// 6. Forward to OpenRouter
+	const isStream = body.stream === true;
 	let upstream: Response;
 	try {
-		upstream = await fetch(OPENROUTER_URL, {
-			method: "POST",
-			headers: {
-				Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify(modifiedBody),
-		});
+		upstream = await forwardToOpenRouter(
+			env.OPENROUTER_API_KEY,
+			pinModelAndRequestUsage(body, isStream),
+		);
 	} catch (err) {
-		await refundFull(kv, ip, nowMs, guard.preCharged);
+		await refundPreCharge();
 		const message =
 			err instanceof Error
 				? err.message
@@ -135,9 +109,8 @@ export async function handleChatCompletions(
 		return openAiError(502, "upstream_error", message);
 	}
 
-	// 7. Non-2xx from upstream → refund + 502
 	if (!upstream.ok) {
-		await refundFull(kv, ip, nowMs, guard.preCharged);
+		await refundPreCharge();
 		return openAiError(
 			502,
 			"upstream_error",
@@ -145,50 +118,103 @@ export async function handleChatCompletions(
 		);
 	}
 
-	// 8a. Non-streaming: read full body, reconcile from usage, return
 	if (!isStream) {
-		let responseText: string;
-		try {
-			responseText = await upstream.text();
-		} catch {
-			await refundFull(kv, ip, nowMs, guard.preCharged);
-			return openAiError(
-				502,
-				"upstream_error",
-				"Failed to read upstream response",
-			);
-		}
+		return relayWholeResponse(upstream, settleFromUsage, refundPreCharge);
+	}
+	return relayStreamedResponse(upstream, settleFromUsage, refundPreCharge, ctx);
+}
 
-		const usage = extractUsage(responseText);
+async function readJsonBody(request: Request): Promise<unknown> {
+	try {
+		return await request.json();
+	} catch {
+		return UNPARSEABLE_BODY;
+	}
+}
 
-		if (usage !== null) {
-			const cost = await resolveCostMicroUsd(usage, pricingPromise);
-			logCache(usage);
-			await reconcile(kv, ip, nowMs, guard.preCharged, cost);
-		} else {
-			await refundFull(kv, ip, nowMs, guard.preCharged);
-		}
+function hasNonEmptyMessages(body: unknown): body is Record<string, unknown> {
+	if (typeof body !== "object" || body === null) return false;
+	const { messages } = body as { messages?: unknown };
+	return Array.isArray(messages) && messages.length >= 1;
+}
 
-		const contentType =
-			upstream.headers.get("Content-Type") ?? "application/octet-stream";
-		return new Response(responseText, {
-			status: upstream.status,
-			headers: { "Content-Type": contentType },
-		});
+function pinModelAndRequestUsage(
+	body: Record<string, unknown>,
+	isStream: boolean,
+): Record<string, unknown> {
+	const upstreamBody: Record<string, unknown> = {
+		...body,
+		model: PINNED_MODEL,
+	};
+	if (isStream) {
+		upstreamBody.stream_options = {
+			...(typeof body.stream_options === "object" &&
+			body.stream_options !== null
+				? (body.stream_options as Record<string, unknown>)
+				: {}),
+			include_usage: true,
+		};
+	}
+	return upstreamBody;
+}
+
+function forwardToOpenRouter(
+	apiKey: string,
+	upstreamBody: Record<string, unknown>,
+): Promise<Response> {
+	return fetch(OPENROUTER_URL, {
+		method: "POST",
+		headers: {
+			Authorization: `Bearer ${apiKey}`,
+			"Content-Type": "application/json",
+		},
+		body: JSON.stringify(upstreamBody),
+	});
+}
+
+function upstreamContentType(upstream: Response): string {
+	return upstream.headers.get("Content-Type") ?? "application/octet-stream";
+}
+
+async function relayWholeResponse(
+	upstream: Response,
+	settleFromUsage: (usage: ParsedUsage | null) => Promise<void>,
+	refundPreCharge: () => Promise<void>,
+): Promise<Response> {
+	let responseText: string;
+	try {
+		responseText = await upstream.text();
+	} catch {
+		await refundPreCharge();
+		return openAiError(
+			502,
+			"upstream_error",
+			"Failed to read upstream response",
+		);
 	}
 
-	// 8b. Streaming: tee the response, parse SSE for usage, reconcile on close
-	const contentType =
-		upstream.headers.get("Content-Type") ?? "application/octet-stream";
+	await settleFromUsage(extractUsage(responseText));
 
+	return new Response(responseText, {
+		status: upstream.status,
+		headers: { "Content-Type": upstreamContentType(upstream) },
+	});
+}
+
+async function relayStreamedResponse(
+	upstream: Response,
+	settleFromUsage: (usage: ParsedUsage | null) => Promise<void>,
+	refundPreCharge: () => Promise<void>,
+	ctx: ExecutionContext,
+): Promise<Response> {
 	let sseBuffer = "";
 	let usage: ParsedUsage | null = null;
 
 	const tryParseSseLine = (line: string): void => {
 		const trimmed = line.trim();
-		if (!trimmed.startsWith("data:")) return;
-		const data = trimmed.slice(5).trim();
-		if (data === "[DONE]") return;
+		if (!trimmed.startsWith(SSE_DATA_PREFIX)) return;
+		const data = trimmed.slice(SSE_DATA_PREFIX.length).trim();
+		if (data === SSE_STREAM_END_MARKER) return;
 		const parsed = parseUsageJson(data);
 		if (parsed !== null) usage = parsed;
 	};
@@ -204,27 +230,13 @@ export async function handleChatCompletions(
 		},
 		flush(controller) {
 			if (sseBuffer.trim().length > 0) tryParseSseLine(sseBuffer);
-
-			const finalUsage = usage;
-			const kvWork =
-				finalUsage !== null
-					? resolveCostMicroUsd(finalUsage, pricingPromise).then((cost) => {
-							logCache(finalUsage);
-							return reconcile(kv, ip, nowMs, guard.preCharged, cost);
-						})
-					: refundFull(kv, ip, nowMs, guard.preCharged);
-			ctx.waitUntil(kvWork);
-
+			ctx.waitUntil(settleFromUsage(usage));
 			controller.terminate();
 		},
 	});
 
 	if (upstream.body) {
-		ctx.waitUntil(
-			upstream.body.pipeTo(writable).catch(() => {
-				return refundFull(kv, ip, nowMs, guard.preCharged);
-			}),
-		);
+		ctx.waitUntil(upstream.body.pipeTo(writable).catch(refundPreCharge));
 	} else {
 		const writer = writable.getWriter();
 		await writer.close();
@@ -232,20 +244,10 @@ export async function handleChatCompletions(
 
 	return new Response(readable, {
 		status: upstream.status,
-		headers: { "Content-Type": contentType },
+		headers: { "Content-Type": upstreamContentType(upstream) },
 	});
 }
 
-/**
- * Token + cost accounting parsed from an upstream OpenRouter usage payload.
- *
- * `costUsd` mirrors `usage.cost` (USD) when OpenRouter sends it, which it
- * does whenever the request opted into `usage: { include: true }`. That
- * value already reflects any prompt-cache discount the provider applied,
- * so we prefer it over locally re-computing from token counts.
- *
- * `cachedTokens` is purely for diagnostics — we don't price it directly.
- */
 interface ParsedUsage {
 	promptTokens: number;
 	completionTokens: number;
@@ -253,11 +255,6 @@ interface ParsedUsage {
 	costUsd?: number;
 }
 
-/**
- * Extract usage info from a non-streaming JSON response. Returns null if
- * the body is unparseable or required token fields are missing — callers
- * should treat null as "issue a full refund".
- */
 function extractUsage(responseText: string): ParsedUsage | null {
 	try {
 		return parseUsageJson(responseText);
@@ -307,17 +304,9 @@ function parseUsageJson(text: string): ParsedUsage | null {
 	};
 }
 
-/**
- * Resolve the cost to charge in micro-USD. Prefers OpenRouter's reported
- * `usage.cost` (already discount-aware) over locally re-deriving from token
- * counts × `/models` pricing.
- */
 async function resolveCostMicroUsd(
 	usage: ParsedUsage,
-	pricingPromise: Promise<{
-		promptMicroUsdPerToken: number;
-		completionMicroUsdPerToken: number;
-	}>,
+	pricingPromise: Promise<ModelPricing>,
 ): Promise<number> {
 	if (usage.costUsd !== undefined) {
 		return Math.ceil(usage.costUsd * USD_TO_MICRO_USD);
@@ -330,7 +319,7 @@ async function resolveCostMicroUsd(
 	);
 }
 
-function logCache(usage: ParsedUsage): void {
+function logPromptCacheHitRate(usage: ParsedUsage): void {
 	if (usage.cachedTokens === undefined) return;
 	const pct =
 		usage.promptTokens > 0

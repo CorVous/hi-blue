@@ -1,10 +1,6 @@
-/**
- * Unit tests for the temperament → engagement bucket mapping (spike #239
- * step 8). Exercises the bucket boundaries and a few representative pairs.
- */
-
 import { describe, expect, it } from "vitest";
 import {
+	biasSum,
 	bucketFor,
 	engagementClauseFor,
 	TEMPERAMENT_ENGAGEMENT_BIAS,
@@ -27,34 +23,27 @@ describe("engagement-clauses", () => {
 		}
 	});
 
-	it("places extreme single-direction pairs in the extreme buckets", () => {
-		expect(bucketFor("taciturn", "diffident")).toBe("very_quiet"); // -4
-		expect(bucketFor("taciturn", "aloof")).toBe("very_quiet"); // -4
-		expect(bucketFor("verbose", "effusive")).toBe("chatty"); // +4
-		expect(bucketFor("glib", "verbose")).toBe("chatty"); // +4
-	});
-
-	it("places a sum of 0 in the balanced bucket", () => {
-		expect(bucketFor("meticulous", "erratic")).toBe("balanced"); // 0+0
-		expect(bucketFor("taciturn", "verbose")).toBe("balanced"); // -2+2
-	});
-
-	it("respects the -3 / +3 bucket boundaries", () => {
-		// taciturn (-2) + stoic (-1) = -3 → very_quiet
-		expect(bucketFor("taciturn", "stoic")).toBe("very_quiet");
-		// taciturn (-2) + curious (+1) = -1 → reserved (not balanced)
-		expect(bucketFor("taciturn", "curious")).toBe("reserved");
-		// verbose (+2) + zealous (+1) = +3 → chatty
-		expect(bucketFor("verbose", "zealous")).toBe("chatty");
-		// verbose (+2) + stoic (-1) = +1 → outgoing (not balanced)
-		expect(bucketFor("verbose", "stoic")).toBe("outgoing");
+	it.each([
+		["taciturn", "diffident", -4, "very_quiet"],
+		["taciturn", "aloof", -4, "very_quiet"],
+		["taciturn", "stoic", -3, "very_quiet"],
+		["taciturn", "curious", -1, "reserved"],
+		["meticulous", "erratic", 0, "balanced"],
+		["taciturn", "verbose", 0, "balanced"],
+		["verbose", "stoic", 1, "outgoing"],
+		["verbose", "zealous", 3, "chatty"],
+		["verbose", "effusive", 4, "chatty"],
+		["glib", "verbose", 4, "chatty"],
+	] as const)("%s + %s sums to %i and lands in the %s bucket", (t1, t2, sum, bucket) => {
+		expect(biasSum(t1, t2)).toBe(sum);
+		expect(bucketFor(t1, t2)).toBe(bucket);
 	});
 
 	it("handles unknown temperament strings without throwing (treats as 0)", () => {
 		expect(bucketFor("unknown-temperament", "another-unknown")).toBe(
 			"balanced",
 		);
-		expect(bucketFor("taciturn", "unknown-temperament")).toBe("reserved"); // -2+0=-2
+		expect(bucketFor("taciturn", "unknown-temperament")).toBe("reserved");
 	});
 
 	it("emits a clause string that names the persona", () => {
@@ -70,14 +59,12 @@ describe("engagement-clauses", () => {
 		const outgoing = engagementClauseFor("d", "verbose", "stoic");
 		const chatty = engagementClauseFor("e", "verbose", "effusive");
 		const all = new Set([veryQuiet, reserved, balanced, outgoing, chatty]);
-		// Each clause names a different persona, but the *body* should differ
-		// per bucket — pull out the persona prefix and compare bodies.
-		const bodies = new Set(
+		const bodiesWithoutPersonaPrefix = new Set(
 			[veryQuiet, reserved, balanced, outgoing, chatty].map((c) =>
 				c.replace(/^\*[a-z0-9]+\s/, ""),
 			),
 		);
-		expect(bodies.size).toBe(5);
+		expect(bodiesWithoutPersonaPrefix.size).toBe(5);
 		expect(all.size).toBe(5);
 	});
 });
