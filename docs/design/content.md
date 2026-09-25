@@ -167,6 +167,3 @@ changes what a given seed produces.
   horizon landmarks. This axis has no in-place migration. Bumping it needs a
   `GAME_SAVE_ARCHIVE_MAP` entry; see `AGENTS.md` "Bumping save-format
   versions".
-- **`vite-env.d.ts`** hand-stubs `import.meta.env`. `tsconfig.json` sets
-  `"types": []`, which blocks automatic `@types` resolution, so Vite's
-  client types are not loaded.
