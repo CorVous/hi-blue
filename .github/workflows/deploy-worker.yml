@@ -40,3 +40,7 @@ jobs:
           # `wrangler deploy` runs the `build` block in wrangler.jsonc
           # (`pnpm build`), so no separate build step is required here.
           command: deploy
+          secrets: |
+            OPENROUTER_API_KEY
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
