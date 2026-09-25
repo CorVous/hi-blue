@@ -79,6 +79,10 @@ re-render is a call to `renderApp` from a view.
 - **Target resolution.** When a non-empty key is stored, requests go directly
   to OpenRouter. Otherwise they go to the Worker proxy. If localStorage
   cannot be read, the SPA behaves as if no key were stored.
+- **Key storage.** `openrouter-key.ts` owns the storage key
+  (`OPENROUTER_KEY_STORAGE_KEY`) and `readStoredByokKey`, which returns
+  `null` when localStorage cannot be read. The modal, `llm-client.ts` and
+  the session picker all read the key through it.
 
 ## LLM request shape (`llm-client.ts`)
 

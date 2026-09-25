@@ -1,4 +1,8 @@
-const LOCALSTORAGE_KEY = "openrouter_key";
+import {
+	OPENROUTER_KEY_STORAGE_KEY,
+	readStoredByokKey,
+} from "./openrouter-key.js";
+
 const LOCALSTORAGE_META_KEY = "openrouter_key_meta";
 
 export type ValidationResult =
@@ -64,12 +68,7 @@ function hasReachedSpendLimit(keyInfo: AuthKeyInfo): boolean {
 }
 
 function readKey(): string | null {
-	try {
-		const val = localStorage.getItem(LOCALSTORAGE_KEY);
-		return val || null;
-	} catch {
-		return null;
-	}
+	return readStoredByokKey() || null;
 }
 
 export function readMeta(): KeyMeta | null {
@@ -93,12 +92,12 @@ export function readMeta(): KeyMeta | null {
 }
 
 export function writeKeyAndMeta(key: string, meta: KeyMeta): void {
-	localStorage.setItem(LOCALSTORAGE_KEY, key);
+	localStorage.setItem(OPENROUTER_KEY_STORAGE_KEY, key);
 	localStorage.setItem(LOCALSTORAGE_META_KEY, JSON.stringify(meta));
 }
 
 export function clearKey(): void {
-	localStorage.removeItem(LOCALSTORAGE_KEY);
+	localStorage.removeItem(OPENROUTER_KEY_STORAGE_KEY);
 	localStorage.removeItem(LOCALSTORAGE_META_KEY);
 }
 

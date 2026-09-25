@@ -1,11 +1,11 @@
 import { PINNED_MODEL } from "../model.js";
 import type { OpenAiMessage } from "./game/round-llm-provider.js";
 import type { OpenAiTool } from "./game/tool-registry.js";
+import { readStoredByokKey } from "./openrouter-key.js";
 import type { ToolCallResult, UsageInfo } from "./streaming.js";
 import { parseSSEStream } from "./streaming.js";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const LOCALSTORAGE_KEY = "openrouter_key";
 
 export class CapHitError extends Error {
 	readonly status = 429 as const;
@@ -88,14 +88,6 @@ export async function parseCapHitFromResponse(
 		typeof err.message === "string" ? err.message : "rate limit exceeded";
 
 	return new CapHitError({ message, reason, retryAfterSec });
-}
-
-function readStoredByokKey(): string | null {
-	try {
-		return localStorage.getItem(LOCALSTORAGE_KEY);
-	} catch {
-		return null;
-	}
 }
 
 export function resolveLLMTarget(): {

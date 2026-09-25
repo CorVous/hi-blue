@@ -15,12 +15,16 @@ it hides the other routes' screens and shows or hides the global chrome
 - `sessions.ts` also paints the banner and topinfo itself (`paintBanner`,
   `paintTopInfo`). Without that, loading `#/sessions` directly leaves them
   empty.
-- `renderVersionMismatchBanner` exists in both `start.ts` and `sessions.ts`.
-  When the save's schema number maps to an archived release
-  (`lookupArchiveVersion`), the banner links to `./v/<version>/` so the player
-  can continue in the last build that could read that schema. Otherwise it
-  shows the plain copy. `buildArchivedBuildLink` holds the link format in one
-  place for both banners and for the picker's per-row note.
+- `renderReasonBanner` (in `archived-build-link.ts`) paints the reason
+  banner for both `start.ts` and `sessions.ts`. Each view passes its own
+  message table and decides how to show or hide the element. A reason with
+  no copy in the table paints nothing. For `version-mismatch`, when the
+  save's schema number maps to an archived release (`lookupArchiveVersion`),
+  the banner links to `./v/<version>/` so the player can continue in the last
+  build that could read that schema. Otherwise it shows
+  `VERSION_MISMATCH_MESSAGE`, which both tables share.
+  `buildArchivedBuildLink` holds the link format in one place for the banner
+  and for the picker's per-row note.
 
 ## `start.ts`: dial-up login
 
@@ -65,8 +69,6 @@ it hides the other routes' screens and shows or hides the global chrome
   - `?actionProfiles=0` turns off the per-persona `<action_profile>` clauses
     derived from temperaments. They are on by default, and any other value
     leaves them on. The switch exists for A/B comparison and debugging.
-- `_testOverrides` / `StartTestOverrides` were meant as a way for tests to
-  inject providers. Nothing sets them at present.
 
 ## `game.ts`: game route
 
@@ -241,6 +243,12 @@ archived sessions, with one row per session.
   archived build when the schema is in `SCHEMA_ARCHIVE_MAP`, and `[ rm ]`
   only). Archived rows are read-only and can offer
   `[ continue with new room ]` when an OpenRouter key is stored.
+- Active and archived rows come from one `buildSessionRow`. The variant
+  supplies the directory tag (`[ active ]` on the active row,
+  `[ readonly ]` on every archived row), the extra buttons for a playable
+  row, and the remove function behind `[ confirm rm ]`. An archived row's
+  "last played" time is its `lastPlayedAt`; an active row's is its
+  `lastSavedAt`.
 - Sort order: `ok` rows by `lastSavedAt`, newest first, then the rest by id.
 - In the tree listing, `engine.dat` always comes last because it is the
   commit signal: it is written after the daemon files.

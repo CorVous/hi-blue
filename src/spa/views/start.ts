@@ -1,47 +1,23 @@
-import type {
-	ContentPackProvider,
-	SynthesisProvider,
-} from "../game/bootstrap.js";
 import {
 	getPendingBootstrap,
 	startBootstrap,
 } from "../game/pending-bootstrap.js";
 import { getSpikeRng, setSpikeSeed } from "../game/spike-seed.js";
-import { lookupArchiveVersion } from "../persistence/archive-map.js";
 import { type RenderOpts, renderApp } from "../render-app.js";
-import { buildArchivedBuildLink } from "./archived-build-link.js";
+import {
+	renderReasonBanner,
+	VERSION_MISMATCH_MESSAGE,
+} from "./archived-build-link.js";
 
 const PERSISTENCE_WARNING_MESSAGES: Record<string, string> = {
 	broken:
 		"Saved game data was unreadable and has been discarded. Starting a new game.",
-	"version-mismatch":
-		"Saved game data is from an older version of hi-blue and cannot be loaded by this build. It has been kept — start a new game, or remove it from your Sessions list.",
+	"version-mismatch": VERSION_MISMATCH_MESSAGE,
 	"legacy-save-discarded":
 		"Saved game data from an older format has been discarded. Starting a new game.",
 	stuck:
 		"Game initialization took too long and was cancelled. Starting a new game.",
 };
-
-function renderVersionMismatchBanner(
-	doc: Document,
-	bannerEl: HTMLElement,
-	schemaVersion: number | undefined,
-): void {
-	bannerEl.textContent = "";
-	const archivedVersion = lookupArchiveVersion(schemaVersion);
-	if (archivedVersion === null) {
-		bannerEl.textContent =
-			PERSISTENCE_WARNING_MESSAGES["version-mismatch"] ?? "";
-		return;
-	}
-	bannerEl.appendChild(
-		doc.createTextNode(
-			"Your saved Session is from an older version of hi-blue. Continue it in ",
-		),
-	);
-	bannerEl.appendChild(buildArchivedBuildLink(doc, archivedVersion));
-	bannerEl.appendChild(doc.createTextNode(", or start a new Session below."));
-}
 
 const ACCEPTED_PASSWORD = "password";
 const ENGAGEMENT_CLAUSES_ON = "1";
@@ -85,14 +61,13 @@ const DIAL_LINES: ReadonlyArray<{ typed: string; statusHtml: string }> = [
 	},
 ];
 
+function dialLineHtml(line: { typed: string; statusHtml: string }): string {
+	const endsLine = line.typed.endsWith("\n") || line.statusHtml.includes("\n");
+	return `${line.typed}${line.statusHtml}${endsLine ? "" : "\n"}`;
+}
+
 function renderDialTranscriptHtml(): string {
-	let out = "";
-	for (const ln of DIAL_LINES) {
-		out += ln.typed;
-		if (ln.statusHtml) out += ln.statusHtml;
-		if (!ln.typed.endsWith("\n") && !ln.statusHtml.includes("\n")) out += "\n";
-	}
-	return out;
+	return DIAL_LINES.map(dialLineHtml).join("");
 }
 
 function prefersReducedMotion(): boolean {
@@ -152,10 +127,7 @@ function typeDialUp(dialEl: HTMLElement, onDone: () => void): void {
 					isIndentedLine ? DIAL_CHAR_MS_INDENTED_LINE : DIAL_CHAR_MS,
 				);
 			} else {
-				buffer = prefix + (line.statusHtml || "");
-				if (!full.endsWith("\n") && !(line.statusHtml || "").includes("\n")) {
-					buffer += "\n";
-				}
+				buffer += dialLineHtml(line);
 				dialEl.innerHTML = `${buffer}<span class="blinkonly">▍</span>`;
 				const pause = full.includes("ringing")
 					? DIAL_PAUSE_AFTER_RINGING_MS
@@ -244,14 +216,6 @@ function attachPasswordMask(pwEl: HTMLInputElement): void {
 	});
 }
 
-interface StartTestOverrides {
-	synthesis?: SynthesisProvider;
-	packProvider?: ContentPackProvider;
-	rng?: () => number;
-}
-
-let _testOverrides: StartTestOverrides | undefined;
-
 let _connectSubmitInFlight = false;
 let _activeResizeHandler: (() => void) | undefined;
 let _activeUptimeInterval: ReturnType<typeof setInterval> | undefined;
@@ -288,26 +252,20 @@ export function renderStart(
 	if (topinfoEl) topinfoEl.hidden = true;
 	if (bannerEl) bannerEl.hidden = true;
 
-	const reason = opts?.reason ?? null;
-	const reasonHasWarningCopy =
-		reason !== null && Boolean(PERSISTENCE_WARNING_MESSAGES[reason]);
-	if (reasonHasWarningCopy) {
-		const persistenceWarningEl = doc.querySelector<HTMLElement>(
-			"#persistence-warning",
-		);
-		if (persistenceWarningEl) {
-			if (reason === "version-mismatch") {
-				renderVersionMismatchBanner(
-					doc,
-					persistenceWarningEl,
-					opts?.schemaVersion,
-				);
-			} else {
-				persistenceWarningEl.textContent =
-					PERSISTENCE_WARNING_MESSAGES[reason] ?? "";
-			}
-			persistenceWarningEl.removeAttribute("hidden");
-		}
+	const persistenceWarningEl = doc.querySelector<HTMLElement>(
+		"#persistence-warning",
+	);
+	if (
+		persistenceWarningEl &&
+		renderReasonBanner(
+			doc,
+			persistenceWarningEl,
+			opts?.reason ?? null,
+			opts?.schemaVersion,
+			PERSISTENCE_WARNING_MESSAGES,
+		)
+	) {
+		persistenceWarningEl.removeAttribute("hidden");
 	}
 
 	const beginBtn = doc.querySelector<HTMLButtonElement>("#begin");
@@ -320,6 +278,17 @@ export function renderStart(
 	const formEl = doc.querySelector<HTMLFormElement>("#login-form");
 	const keyartEl = doc.querySelector<HTMLElement>("#login-keyart");
 
+	const showError = (msg: string) => {
+		if (!errorEl) return;
+		errorEl.textContent = msg;
+		errorEl.removeAttribute("hidden");
+	};
+	const clearError = () => {
+		if (!errorEl) return;
+		errorEl.textContent = "";
+		errorEl.setAttribute("hidden", "");
+	};
+
 	_connectSubmitInFlight = false;
 	beginBtn.disabled = true;
 
@@ -328,10 +297,7 @@ export function renderStart(
 		pwEl.dataset.real = "";
 		pwEl.disabled = false;
 	}
-	if (errorEl) {
-		errorEl.textContent = "";
-		errorEl.setAttribute("hidden", "");
-	}
+	clearError();
 	if (dialEl) dialEl.innerHTML = "";
 	const postlogEl = doc.querySelector<HTMLElement>("#login-postlog");
 	if (postlogEl) postlogEl.innerHTML = "";
@@ -391,17 +357,6 @@ export function renderStart(
 		revealLogin();
 	}
 
-	const showError = (msg: string) => {
-		if (!errorEl) return;
-		errorEl.textContent = msg;
-		errorEl.removeAttribute("hidden");
-	};
-	const clearError = () => {
-		if (!errorEl) return;
-		errorEl.textContent = "";
-		errorEl.setAttribute("hidden", "");
-	};
-
 	const proceedConnect = () => {
 		if (_connectSubmitInFlight) return;
 		_connectSubmitInFlight = true;
@@ -454,16 +409,10 @@ export function renderStart(
 		? { actionProfiles: false }
 		: undefined;
 	const mergedOpts =
-		_testOverrides || spikeOpts || engagementOpts || actionProfileOpts
-			? {
-					..._testOverrides,
-					...spikeOpts,
-					...engagementOpts,
-					...actionProfileOpts,
-				}
+		spikeOpts || engagementOpts || actionProfileOpts
+			? { ...spikeOpts, ...engagementOpts, ...actionProfileOpts }
 			: undefined;
 	const bootstrap = existing ?? startBootstrap(mergedOpts);
-	_testOverrides = undefined;
 
 	const generationPromise = (async () => {
 		try {
