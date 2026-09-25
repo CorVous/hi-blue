@@ -663,21 +663,28 @@ export async function waitForRound(
 	);
 }
 
-export async function waitForFirstRoundSaved(page: Page): Promise<void> {
-	await page.waitForFunction(() => {
-		const sessionId = localStorage.getItem("hi-blue:active-session");
-		if (!sessionId) return false;
-		const metaRaw = localStorage.getItem(
-			`hi-blue:sessions/${sessionId}/meta.json`,
-		);
-		if (!metaRaw) return false;
-		try {
-			const meta = JSON.parse(metaRaw) as { round?: number };
-			return typeof meta.round === "number" && meta.round >= 1;
-		} catch {
-			return false;
-		}
-	});
+export async function waitForFirstRoundSaved(
+	page: Page,
+	timeoutMs = 15_000,
+): Promise<void> {
+	await page.waitForFunction(
+		() => {
+			const sessionId = localStorage.getItem("hi-blue:active-session");
+			if (!sessionId) return false;
+			const metaRaw = localStorage.getItem(
+				`hi-blue:sessions/${sessionId}/meta.json`,
+			);
+			if (!metaRaw) return false;
+			try {
+				const meta = JSON.parse(metaRaw) as { round?: number };
+				return typeof meta.round === "number" && meta.round >= 1;
+			} catch {
+				return false;
+			}
+		},
+		undefined,
+		{ timeout: timeoutMs },
+	);
 }
 
 export async function waitForSavedPosition(

@@ -87,11 +87,16 @@ itself fires, never `page.request.*`.
   `waitForSavedPosition` instead. Its predicate runs inside the page, where
   Node imports are unavailable, so it inlines the XOR decode from
   `engine-blob.ts`. Keep the two in step.
-- **`waitForFirstRoundSaved`** polls `meta.round >= 1`. Since #173 BEGIN saves
-  `engine.dat` at round 0, so the file's presence no longer means a round
-  finished. The round save runs after the encoder loop has drained every event,
+- **`waitForFirstRoundSaved`** polls `meta.round >= 1` for up to `timeoutMs`
+  (15 s by default). Since #173 BEGIN saves `engine.dat` at round 0, so the
+  file's presence no longer means a round finished. The round save runs after the encoder loop has drained every event,
   which is later than the live transcript fills, so a transcript check is not
   the signal either.
+- `page.waitForFunction` takes `(pageFunction, arg, options)`. A poll with no
+  argument must pass `undefined` second and `{ timeout }` third: passed second,
+  the object becomes the page function's argument and no timeout applies.
+  `getAiHandles`, `waitForFirstRoundSaved` and `start-screen.spec.ts`'s
+  `waitForActiveSession` follow this form.
 - `SealedContentPack.entities` is the flat entity list of session v11 and later.
   `obstacles` is the bucketed list of older blobs, and `obstacleCellsOf` uses it
   only as a fallback.
@@ -157,10 +162,10 @@ specs that assert on generation failure check `#cap-hit` themselves.
 
 ### `handles.ts` and `page-errors.ts`
 
-- `getAiHandles` waits for three `article.ai-panel` elements whose `data-ai` is
-  set, which happens once persona synthesis lands. It reads each display name
-  from `.panel-name` (`*Name`), and `mention(i)` builds the composer mention.
-  Specs never hard-code handles.
+- `getAiHandles` waits up to 30 s for three `article.ai-panel` elements whose
+  `data-ai` is set, which happens once persona synthesis lands. It reads each
+  display name from `.panel-name` (`*Name`), and `mention(i)` builds the
+  composer mention. Specs never hard-code handles.
 - `pageerror` events are dispatched asynchronously. An error thrown in a
   microtask or a timer can arrive after the test's last `await`, so a
   synchronous `expect(pageErrors).toEqual([])` misses it.

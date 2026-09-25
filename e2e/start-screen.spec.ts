@@ -25,6 +25,7 @@ async function waitForActiveSession(
 ): Promise<void> {
 	await page.waitForFunction(
 		() => localStorage.getItem("hi-blue:active-session") !== null,
+		undefined,
 		{ timeout: timeoutMs },
 	);
 }
