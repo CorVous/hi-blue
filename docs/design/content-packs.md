@@ -278,8 +278,6 @@ CONTEXT.md under **AiId** and **blue**.
   text the LLM writes is still random; the spike accepts that as cosmetic,
   because the choices driven by the rng dominate game-to-game variance. When no
   seed is set, callers fall back to `Math.random`.
-- `typing-rhythm.ts`: tokens are paced at `TOKEN_PACE_MS × AI_TYPING_SPEED` with
-  random jitter.
 
 ## Tests
 
