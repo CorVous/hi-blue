@@ -13,8 +13,7 @@
  *
  * The boundary is a plain, pure value — the point being that it is
  * *testable*. Production calls the helpers with `liveVersionBoundary()`;
- * tests construct a boundary at some other cutoff (e.g. `{ session: 11, gs: 4 }`,
- * the pre-v12/v5 boundary the historical migration chain still lands on) to
+ * tests construct a boundary at some other cutoff (e.g. `{ session: 11, gs: 4 }`) to
  * reason about a contract without touching the live constants.
  */
 
