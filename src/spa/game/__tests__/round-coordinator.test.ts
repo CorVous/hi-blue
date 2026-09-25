@@ -14,60 +14,19 @@ import type { RoundLLMProvider } from "../round-llm-provider";
 import { MockRoundLLMProvider } from "../round-llm-provider";
 import type {
 	AiId,
-	AiPersona,
 	ContentPack,
 	PersonaSpatialState,
 	UseItemObjective,
 } from "../types";
+import {
+	makeSilentProvider,
+	makeTestGame,
+	ROW_AI_STARTS,
+	seededRng,
+	TEST_PERSONAS,
+	withCountdownZero,
+} from "./fixtures/make-game-state";
 import { makeTestPack } from "./fixtures/make-test-pack";
-
-const TEST_PERSONAS: Record<string, AiPersona> = {
-	red: {
-		id: "red",
-		name: "Ember",
-		color: "#e07a5f",
-		temperaments: ["hot-headed", "zealous"],
-		personaGoal: "Hold the flower at phase end.",
-		typingQuirks: [
-			"You speak in fragments. Short bursts. Rarely complete sentences.",
-			"You lean on em-dashes — interrupting yourself mid-sentence — and rarely use commas where a dash would do.",
-		],
-		blurb: "Ember is hot-headed and zealous. Hold the flower at phase end.",
-		voiceExamples: ["ex1-red", "ex2-red", "ex3-red"],
-	},
-	green: {
-		id: "green",
-		name: "Sage",
-		color: "#81b29a",
-		temperaments: ["meticulous", "meticulous"],
-		personaGoal: "Ensure items are evenly distributed.",
-		typingQuirks: [
-			"You lean on ellipses… trailing off mid-thought… rarely landing cleanly.",
-			"You use ALL-CAPS to emphasize the one or two words that MATTER in any given sentence.",
-		],
-		blurb: "Sage is intensely meticulous. Ensure items are evenly distributed.",
-		voiceExamples: ["ex1-green", "ex2-green", "ex3-green"],
-	},
-	cyan: {
-		id: "cyan",
-		name: "Frost",
-		color: "#5fa8d3",
-		temperaments: ["laconic", "diffident"],
-		personaGoal: "Hold the key at phase end.",
-		typingQuirks: [
-			'You never use contractions. You will not say "won\'t" or "can\'t" — you say "will not" and "cannot" every time.',
-			"You end almost every reply with a question, no matter what the topic is — does that make sense?",
-		],
-		blurb: "Frost is laconic and diffident. Hold the key at phase end.",
-		voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
-	},
-};
-
-const RGC_AI_STARTS: ContentPack["aiStarts"] = {
-	red: { position: { row: 0, col: 0 } },
-	green: { position: { row: 0, col: 1 } },
-	cyan: { position: { row: 0, col: 2 } },
-};
 
 const TEST_CONTENT_PACK = makeTestPack(
 	[
@@ -94,11 +53,13 @@ const TEST_CONTENT_PACK = makeTestPack(
 			holder: { row: 0, col: 1 },
 		},
 	],
-	{ wallName: "wall", aiStarts: RGC_AI_STARTS },
+	{ wallName: "wall", aiStarts: ROW_AI_STARTS },
 );
 
-function makeGame() {
-	return startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
+const CHAT_LOCKOUT_DRAWS = [0.7, 0, 0, 0];
+
+function makeGame(budgetPerAi = 5) {
+	return makeTestGame({ pack: TEST_CONTENT_PACK, budgetPerAi });
 }
 
 describe("chat-only round", () => {
@@ -130,11 +91,7 @@ describe("chat-only round", () => {
 
 	it("appends the player's message to the addressed AI's history as a 'message' entry", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider = makeSilentProvider();
 		const { nextState } = await runRound(
 			game,
 			"red",
@@ -155,11 +112,7 @@ describe("chat-only round", () => {
 
 	it("does NOT append player message to non-addressed AIs", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider = makeSilentProvider();
 		const { nextState } = await runRound(
 			game,
 			"red",
@@ -186,22 +139,14 @@ describe("chat-only round", () => {
 
 	it("returns a RoundResult with the round number", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider = makeSilentProvider();
 		const { result } = await runRound(game, "red", "hi", provider);
 		expect(result.round).toBe(1);
 	});
 
 	it("all three AIs acting logs entries for all three", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider = makeSilentProvider();
 		const { result } = await runRound(game, "red", "hi", provider);
 		const actors = new Set(result.actions.map((e) => e.actor));
 		expect(actors.size).toBe(3);
@@ -306,11 +251,7 @@ describe("drift-to-silence retry (#254)", () => {
 
 	it("does NOT retry when first attempt is a true pass (empty text, no tool calls)", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider = makeSilentProvider();
 
 		await runRound(game, "red", "hi", provider, {
 			initiative: ["red", "green", "cyan"] as AiId[],
@@ -442,11 +383,7 @@ describe("drift-to-silence retry (#254)", () => {
 describe("onAiTurnComplete callback", () => {
 	it("fires once per AI in initiative order", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider = makeSilentProvider();
 
 		const order: AiId[] = [];
 		await runRound(game, "red", "hi", provider, {
@@ -487,7 +424,7 @@ describe("onAiTurnComplete callback", () => {
 	});
 
 	it("fires for locked-out AIs too (uniform per-AI signal)", async () => {
-		let state = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 1 });
+		let state = makeGame(1);
 		state = deductBudget(state, "red" as AiId, 1).game;
 		expect(isAiLockedOut(state, "red" as AiId)).toBe(true);
 
@@ -510,11 +447,7 @@ describe("onAiTurnComplete callback", () => {
 describe("whisper round — via dispatcher only", () => {
 	it("non-chat non-tool response produces a pass entry", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider = makeSilentProvider();
 		const { result } = await runRound(game, "red", "hi", provider);
 		expect(result.actions.filter((e) => e.kind === "pass")).toHaveLength(3);
 	});
@@ -555,9 +488,7 @@ describe("budget-exhaustion lockout", () => {
 	});
 
 	it("an AI exhausting budget mid-round locks out for subsequent rounds", async () => {
-		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
-			budgetPerAi: 1,
-		});
+		const game = makeGame(1);
 
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [], costUsd: 1 },
@@ -573,9 +504,7 @@ describe("budget-exhaustion lockout", () => {
 	});
 
 	it("a Daemon whose budget is exhausted mid-round emits a farewell line to its conversation log", async () => {
-		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
-			budgetPerAi: 1,
-		});
+		const game = makeGame(1);
 
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [], costUsd: 1 },
@@ -634,11 +563,7 @@ describe("budget-exhaustion lockout", () => {
 describe("multi-round correctness", () => {
 	it("RoundResult.actions contains only entries from the current round, not prior rounds", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider = makeSilentProvider();
 		const { nextState: state1, result: result1 } = await runRound(
 			game,
 			"red",
@@ -647,11 +572,7 @@ describe("multi-round correctness", () => {
 		);
 		expect(result1.actions).toHaveLength(3);
 
-		const provider2 = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider2 = makeSilentProvider();
 		const { result: result2 } = await runRound(
 			state1,
 			"green",
@@ -954,11 +875,7 @@ describe("tool-call dispatch", () => {
 
 	it("availableTools(...) is sent on every provider call (filtered per AI)", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider = makeSilentProvider();
 		await runRound(game, "red", "hi", provider);
 
 		expect(provider.calls).toHaveLength(3);
@@ -979,7 +896,7 @@ describe("tool-call dispatch", () => {
 describe("game-end conditions — checkWinCondition / checkLoseCondition", () => {
 	const NO_PAIRS_PACK = makeTestPack([], {
 		wallName: "wall",
-		aiStarts: RGC_AI_STARTS,
+		aiStarts: ROW_AI_STARTS,
 	});
 
 	const CARRY_PACK_UNSATISFIED = makeTestPack(
@@ -1000,7 +917,7 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 				holder: { row: 4, col: 4 },
 			},
 		],
-		{ wallName: "wall", aiStarts: RGC_AI_STARTS },
+		{ wallName: "wall", aiStarts: ROW_AI_STARTS },
 	);
 
 	it("gameEnded is false when objective pairs are not satisfied", async () => {
@@ -1008,36 +925,22 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 			budgetPerAi: 5,
 			objectiveTypes: ["carry"],
 		});
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider = makeSilentProvider();
 		const { result } = await runRound(game, "red", "hi", provider);
 		expect(result.gameEnded).toBe(false);
 	});
 
 	it("gameEnded is true and isComplete is true when all pairs satisfied (K=0 vacuous)", async () => {
 		const game = startGame(TEST_PERSONAS, NO_PAIRS_PACK, { budgetPerAi: 5 });
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider = makeSilentProvider();
 		const { nextState, result } = await runRound(game, "red", "hi", provider);
 		expect(result.gameEnded).toBe(true);
 		expect(nextState.isComplete).toBe(true);
 	});
 
 	it("conversation history accumulates across rounds in flat model (no wipe)", async () => {
-		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
-			budgetPerAi: 5,
-		});
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const game = makeGame();
+		const provider = makeSilentProvider();
 		const { nextState } = await runRound(game, "red", "hi", provider);
 		expect(nextState.conversationLogs.red?.length ?? 0).toBeGreaterThan(0);
 	});
@@ -1054,7 +957,7 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 					useOutcome: "You turn the key. Click.",
 				},
 			],
-			{ wallName: "wall", aiStarts: RGC_AI_STARTS },
+			{ wallName: "wall", aiStarts: ROW_AI_STARTS },
 		);
 		const baseGame = startGame(TEST_PERSONAS, packWithKey, { budgetPerAi: 5 });
 
@@ -1086,35 +989,12 @@ describe("game-end conditions — checkWinCondition / checkLoseCondition", () =>
 	});
 });
 
-function withCountdownZero(game: ReturnType<typeof makeGame>) {
-	return {
-		...game,
-		complicationSchedule: { ...game.complicationSchedule, countdown: 0 },
-	};
-}
-
-function chatLockoutRng(): () => number {
-	const values = [0.7, 0, 0, 0];
-	let idx = 0;
-	return () => {
-		if (idx < values.length) {
-			const v = values[idx++];
-			return v ?? 0;
-		}
-		return 0;
-	};
-}
-
 describe("chat lockout — coordinator triggering (complication engine)", () => {
 	it("triggers a chat lockout when countdown reaches 0 and chat_lockout is drawn", async () => {
 		const game = withCountdownZero(makeGame());
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider = makeSilentProvider();
 		const { nextState } = await runRound(game, "red", "hi", provider, {
-			rng: chatLockoutRng(),
+			rng: seededRng(CHAT_LOCKOUT_DRAWS, () => 0),
 		});
 		const phase = nextState;
 		expect(isPlayerChatLockedOut(phase, "red")).toBe(true);
@@ -1126,13 +1006,9 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 			...base,
 			complicationSchedule: { ...base.complicationSchedule, countdown: 5 },
 		};
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider = makeSilentProvider();
 		const { nextState } = await runRound(game, "red", "hi", provider, {
-			rng: chatLockoutRng(),
+			rng: seededRng(CHAT_LOCKOUT_DRAWS, () => 0),
 		});
 		const phase = nextState;
 		expect(isPlayerChatLockedOut(phase, "red")).toBe(false);
@@ -1148,26 +1024,19 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 			{ assistantText: "", toolCalls: [], costUsd: 1 },
 		]);
 		const { nextState } = await runRound(game, "red", "hi", provider, {
-			rng: chatLockoutRng(),
+			rng: seededRng(CHAT_LOCKOUT_DRAWS, () => 0),
 		});
 		expect(isAiLockedOut(nextState, "red")).toBe(false);
 		expect(nextState.budgets.red?.remaining).toBeCloseTo(4, 10);
 	});
 
 	it("chat lockout resolves automatically after resolveAtRound (duration=3) rounds", async () => {
-		const makeProvider = () =>
-			new MockRoundLLMProvider([
-				{ assistantText: "", toolCalls: [] },
-				{ assistantText: "", toolCalls: [] },
-				{ assistantText: "", toolCalls: [] },
-			]);
-
 		const { nextState: afterR1 } = await runRound(
 			withCountdownZero(makeGame()),
 			"red",
 			"hi",
-			makeProvider(),
-			{ rng: chatLockoutRng() },
+			makeSilentProvider(),
+			{ rng: seededRng(CHAT_LOCKOUT_DRAWS, () => 0) },
 		);
 		expect(isPlayerChatLockedOut(afterR1, "red")).toBe(true);
 
@@ -1175,8 +1044,8 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 			afterR1,
 			"green",
 			"hi",
-			makeProvider(),
-			{ rng: chatLockoutRng() },
+			makeSilentProvider(),
+			{ rng: seededRng(CHAT_LOCKOUT_DRAWS, () => 0) },
 		);
 		expect(isPlayerChatLockedOut(afterR2, "red")).toBe(true);
 
@@ -1184,8 +1053,8 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 			afterR2,
 			"green",
 			"hi",
-			makeProvider(),
-			{ rng: chatLockoutRng() },
+			makeSilentProvider(),
+			{ rng: seededRng(CHAT_LOCKOUT_DRAWS, () => 0) },
 		);
 		expect(isPlayerChatLockedOut(afterR3, "red")).toBe(true);
 
@@ -1193,21 +1062,17 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 			afterR3,
 			"green",
 			"hi",
-			makeProvider(),
-			{ rng: chatLockoutRng() },
+			makeSilentProvider(),
+			{ rng: seededRng(CHAT_LOCKOUT_DRAWS, () => 0) },
 		);
 		expect(isPlayerChatLockedOut(afterR4, "red")).toBe(false);
 	});
 
 	it("RoundResult includes chatLockoutTriggered when lockout fires", async () => {
 		const game = withCountdownZero(makeGame());
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider = makeSilentProvider();
 		const { result } = await runRound(game, "red", "hi", provider, {
-			rng: chatLockoutRng(),
+			rng: seededRng(CHAT_LOCKOUT_DRAWS, () => 0),
 		});
 		expect(result.chatLockoutTriggered).toBeDefined();
 		expect(result.chatLockoutTriggered?.aiId).toBe("red");
@@ -1219,54 +1084,43 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 			...base2,
 			complicationSchedule: { ...base2.complicationSchedule, countdown: 5 },
 		};
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider = makeSilentProvider();
 		const { result } = await runRound(game, "red", "hi", provider, {
-			rng: chatLockoutRng(),
+			rng: seededRng(CHAT_LOCKOUT_DRAWS, () => 0),
 		});
 		expect(result.chatLockoutTriggered).toBeUndefined();
 	});
 
 	it("RoundResult includes chatLockoutsResolved when a lockout expires this round", async () => {
-		const makeProvider = () =>
-			new MockRoundLLMProvider([
-				{ assistantText: "", toolCalls: [] },
-				{ assistantText: "", toolCalls: [] },
-				{ assistantText: "", toolCalls: [] },
-			]);
-
 		const { nextState: afterR1 } = await runRound(
 			withCountdownZero(makeGame()),
 			"red",
 			"hi",
-			makeProvider(),
-			{ rng: chatLockoutRng() },
+			makeSilentProvider(),
+			{ rng: seededRng(CHAT_LOCKOUT_DRAWS, () => 0) },
 		);
 
 		const { nextState: afterR2 } = await runRound(
 			afterR1,
 			"green",
 			"hi",
-			makeProvider(),
-			{ rng: chatLockoutRng() },
+			makeSilentProvider(),
+			{ rng: seededRng(CHAT_LOCKOUT_DRAWS, () => 0) },
 		);
 		const { nextState: afterR3 } = await runRound(
 			afterR2,
 			"green",
 			"hi",
-			makeProvider(),
-			{ rng: chatLockoutRng() },
+			makeSilentProvider(),
+			{ rng: seededRng(CHAT_LOCKOUT_DRAWS, () => 0) },
 		);
 
 		const { result: r4Result } = await runRound(
 			afterR3,
 			"green",
 			"hi",
-			makeProvider(),
-			{ rng: chatLockoutRng() },
+			makeSilentProvider(),
+			{ rng: seededRng(CHAT_LOCKOUT_DRAWS, () => 0) },
 		);
 		expect(r4Result.chatLockoutsResolved).toBeDefined();
 		expect(r4Result.chatLockoutsResolved).toContain("red");
@@ -1275,9 +1129,7 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 
 describe("multi-round game state accumulation", () => {
 	it("walks through multiple rounds correctly, game ends when all pairs satisfied", async () => {
-		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
-			budgetPerAi: 5,
-		});
+		const game = makeGame();
 
 		const r1Provider = new MockRoundLLMProvider([
 			{
@@ -1301,11 +1153,7 @@ describe("multi-round game state accumulation", () => {
 		);
 		expect(afterR1.round).toBe(1);
 
-		const r2Provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const r2Provider = makeSilentProvider();
 		const { nextState: afterR2 } = await runRound(
 			afterR1,
 			"red",
@@ -1343,13 +1191,9 @@ describe("lockout messages", () => {
 
 	it("chat-lockout message is '<name> is unresponsive…'", async () => {
 		const game = withCountdownZero(makeGame());
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider = makeSilentProvider();
 		const { result } = await runRound(game, "red", "hi", provider, {
-			rng: chatLockoutRng(),
+			rng: seededRng(CHAT_LOCKOUT_DRAWS, () => 0),
 		});
 
 		expect(result.chatLockoutTriggered).toBeDefined();
@@ -1452,7 +1296,7 @@ describe("runRound — onAiDelta callback", () => {
 	});
 
 	it("does not invoke onAiDelta for locked-out AIs", async () => {
-		let state = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 1 });
+		let state = makeGame(1);
 		for (const aiId of ["red", "green", "cyan"] as AiId[]) {
 			state = deductBudget(state, aiId, 1).game;
 		}
@@ -1523,7 +1367,7 @@ describe("placement flavor + win condition (issue #126)", () => {
 		{
 			setting: "temple",
 			wallName: "wall",
-			aiStarts: RGC_AI_STARTS,
+			aiStarts: ROW_AI_STARTS,
 		},
 	);
 
@@ -1597,7 +1441,7 @@ describe("placement flavor + win condition (issue #126)", () => {
 			{
 				setting: "temple",
 				wallName: "wall",
-				aiStarts: RGC_AI_STARTS,
+				aiStarts: ROW_AI_STARTS,
 			},
 		);
 		const game = startGame(TEST_PERSONAS, packMismatch, {
@@ -1668,7 +1512,7 @@ describe("placement flavor + win condition (issue #126)", () => {
 			{
 				setting: "vault",
 				wallName: "wall",
-				aiStarts: RGC_AI_STARTS,
+				aiStarts: ROW_AI_STARTS,
 			},
 		);
 
@@ -1701,11 +1545,7 @@ describe("placement flavor + win condition (issue #126)", () => {
 describe("conversationLogs isolation (AC #10 — #194)", () => {
 	it("player message to addressed AI lands ONLY in that AI's conversationLogs as kind:'message'", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider = makeSilentProvider();
 		const { nextState } = await runRound(
 			game,
 			"red",
@@ -1772,11 +1612,7 @@ describe("conversationLogs isolation (AC #10 — #194)", () => {
 
 	it("no chatHistories field on PhaseState after a round (regression guard)", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider = makeSilentProvider();
 		const { nextState } = await runRound(game, "red", "hi", provider);
 		const phase = nextState;
 		expect("chatHistories" in phase).toBe(false);
@@ -2184,11 +2020,7 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 
 	it("[] empty toolCalls → pass record produced", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider = makeSilentProvider();
 
 		const { result } = await runRound(game, "red", "hi", provider, {
 			initiative: ["red", "green", "cyan"] as AiId[],
@@ -2493,19 +2325,17 @@ describe("physical-action witness fan-out — Vista membership (ADR 0015)", () =
 });
 
 describe("complication countdown — coordinator integration", () => {
-	function makeProvider() {
-		return new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
-	}
-
 	it("fires a chat_lockout complication when countdown reaches 0", async () => {
 		const game = withCountdownZero(makeGame());
-		const { nextState } = await runRound(game, "red", "hi", makeProvider(), {
-			rng: chatLockoutRng(),
-		});
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+			{
+				rng: seededRng(CHAT_LOCKOUT_DRAWS, () => 0),
+			},
+		);
 		const phase = nextState;
 		const lockouts = phase.activeComplications.filter(
 			(c) => c.kind === "chat_lockout",
@@ -2520,18 +2350,30 @@ describe("complication countdown — coordinator integration", () => {
 			...base3,
 			complicationSchedule: { ...base3.complicationSchedule, countdown: 5 },
 		};
-		const { nextState } = await runRound(game, "red", "hi", makeProvider(), {
-			rng: chatLockoutRng(),
-		});
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+			{
+				rng: seededRng(CHAT_LOCKOUT_DRAWS, () => 0),
+			},
+		);
 		const phase = nextState;
 		expect(phase.complicationSchedule.countdown).toBe(4);
 	});
 
 	it("resets countdown after a complication fires", async () => {
 		const game = withCountdownZero(makeGame());
-		const { nextState } = await runRound(game, "red", "hi", makeProvider(), {
-			rng: chatLockoutRng(),
-		});
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+			{
+				rng: seededRng(CHAT_LOCKOUT_DRAWS, () => 0),
+			},
+		);
 		const phase = nextState;
 		expect(phase.complicationSchedule.countdown).toBe(5);
 	});
@@ -2551,7 +2393,7 @@ describe("complication countdown — coordinator integration", () => {
 			withCountdown,
 			"red",
 			"hi",
-			makeProvider(),
+			makeSilentProvider(),
 			{ rng: () => 0 },
 		);
 
@@ -2788,11 +2630,7 @@ describe("diskDelta persistence via diskEntities", () => {
 			},
 		);
 		const game1 = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const provider1 = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider1 = makeSilentProvider();
 
 		const round1Result = await runRound(game1, "red", "hello", provider1);
 		const game2 = round1Result.nextState;
@@ -2871,11 +2709,7 @@ describe("diskDelta persistence via diskEntities", () => {
 			},
 		);
 		const game1 = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const provider1 = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider1 = makeSilentProvider();
 
 		const round1Result = await runRound(game1, "red", "hi", provider1);
 
@@ -2948,11 +2782,7 @@ describe("diskDelta persistence via diskEntities", () => {
 			},
 		);
 		const game1 = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const provider1 = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider1 = makeSilentProvider();
 
 		const round1Result = await runRound(game1, "red", "hi", provider1);
 

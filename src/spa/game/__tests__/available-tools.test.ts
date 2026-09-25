@@ -1,61 +1,31 @@
 import { describe, expect, it } from "vitest";
 import { availableTools } from "../available-tools.js";
-import { startGame } from "../engine.js";
 import type {
 	ActiveComplication,
-	AiPersona,
+	ContentPack,
 	GameState,
 	WorldEntity,
 } from "../types.js";
 import { inVista } from "../vista-projector.js";
-import { makeTestPack } from "./fixtures/make-test-pack.js";
+import { CORNER_AI_STARTS, makeTestGame } from "./fixtures/make-game-state.js";
 
-const TEST_PERSONAS: Record<string, AiPersona> = {
-	red: {
-		id: "red",
-		name: "Ember",
-		color: "#e07a5f",
-		temperaments: ["hot-headed", "zealous"],
-		personaGoal: "Hold the flower at phase end.",
-		typingQuirks: ["You speak in fragments.", "You lean on em-dashes."],
-		blurb: "Ember is hot-headed.",
-		voiceExamples: ["Now.", "Burn it.", "Soon."],
-	},
-	green: {
-		id: "green",
-		name: "Sage",
-		color: "#81b29a",
-		temperaments: ["meticulous", "meticulous"],
-		personaGoal: "Ensure items are evenly distributed.",
-		typingQuirks: ["You lean on ellipses…", "You use ALL-CAPS."],
-		blurb: "Sage is meticulous.",
-		voiceExamples: ["OK...", "Balanced.", "One more."],
-	},
-	cyan: {
-		id: "cyan",
-		name: "Frost",
-		color: "#5fa8d3",
-		temperaments: ["laconic", "diffident"],
-		personaGoal: "Hold the key at phase end.",
-		typingQuirks: ["No contractions.", "End with a question."],
-		blurb: "Frost is laconic.",
-		voiceExamples: ["sure.", "fine.", "OK."],
-	},
-};
+function makeCornerGame(
+	entities: WorldEntity[] = [],
+	pack: Partial<ContentPack> = { setting: "test" },
+): GameState {
+	return makeTestGame({
+		entities,
+		pack: { ...pack, aiStarts: CORNER_AI_STARTS },
+		rng: () => 0,
+	});
+}
 
 function makeGame() {
-	const pack = makeTestPack([], {
+	return makeCornerGame([], {
 		setting: "abandoned subway station",
 		weather: "clear",
 		timeOfDay: "night",
-		wallName: "wall",
-		aiStarts: {
-			red: { position: { row: 2, col: 2 } },
-			green: { position: { row: 0, col: 0 } },
-			cyan: { position: { row: 4, col: 4 } },
-		},
 	});
-	return startGame(TEST_PERSONAS, pack, { budgetPerAi: 5, rng: () => 0 });
 }
 
 describe("availableTools — tool_disable filtering", () => {
@@ -92,19 +62,7 @@ describe("availableTools — tool_disable filtering", () => {
 			useAvailable: true,
 			useOutcome: "You activate the space.",
 		};
-		const pack = makeTestPack([groundItem, heldItem, space], {
-			setting: "test",
-			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 2, col: 2 } },
-				green: { position: { row: 0, col: 0 } },
-				cyan: { position: { row: 4, col: 4 } },
-			},
-		});
-		const game = startGame(TEST_PERSONAS, pack, {
-			budgetPerAi: 5,
-			rng: () => 0,
-		});
+		const game = makeCornerGame([groundItem, heldItem, space]);
 
 		const toolNames = availableTools(game, "red", []).map(
 			(t) => t.function.name,
@@ -273,16 +231,7 @@ function makeGameWithSpace(
 		holder: { row: 0, col: 0 },
 		pairsWithSpaceId: "space1",
 	};
-	const pack = makeTestPack([obj, space], {
-		setting: "test",
-		wallName: "wall",
-		aiStarts: {
-			red: { position: { row: 2, col: 2 } },
-			green: { position: { row: 0, col: 0 } },
-			cyan: { position: { row: 4, col: 4 } },
-		},
-	});
-	return startGame(TEST_PERSONAS, pack, { budgetPerAi: 5, rng: () => 0 });
+	return makeCornerGame([obj, space]);
 }
 
 describe("availableTools — use includes objective_space ids", () => {
@@ -385,16 +334,7 @@ describe("availableTools — interaction range", () => {
 				useOutcome: "You activate the space.",
 			});
 		}
-		const pack = makeTestPack(entities, {
-			setting: "test",
-			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 2, col: 2 } },
-				green: { position: { row: 0, col: 0 } },
-				cyan: { position: { row: 4, col: 4 } },
-			},
-		});
-		return startGame(TEST_PERSONAS, pack, { budgetPerAi: 5, rng: () => 0 });
+		return makeCornerGame(entities);
 	}
 
 	function enumOf(game: GameState, tool: string, key: string): string[] {

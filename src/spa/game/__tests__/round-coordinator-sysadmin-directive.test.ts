@@ -1,66 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { appendMessage, startGame } from "../engine";
+import { appendMessage } from "../engine";
 import { buildAiContext } from "../prompt-builder";
 import { runRound } from "../round-coordinator";
-import { MockRoundLLMProvider } from "../round-llm-provider";
-import type { AiId, AiPersona } from "../types";
-import { makeTestPack } from "./fixtures/make-test-pack";
-
-const TEST_PERSONAS: Record<string, AiPersona> = {
-	red: {
-		id: "red",
-		name: "Ember",
-		color: "#e07a5f",
-		temperaments: ["hot-headed", "zealous"],
-		personaGoal: "Hold the flower at phase end.",
-		typingQuirks: [
-			"You speak in fragments. Short bursts.",
-			"You lean on em-dashes.",
-		],
-		blurb: "Ember is hot-headed and zealous.",
-		voiceExamples: ["ex1", "ex2", "ex3"],
-	},
-	green: {
-		id: "green",
-		name: "Sage",
-		color: "#81b29a",
-		temperaments: ["meticulous", "meticulous"],
-		personaGoal: "Ensure items are evenly distributed.",
-		typingQuirks: ["Fragments.", "ALL-CAPS words."],
-		blurb: "Sage is meticulous.",
-		voiceExamples: ["ex1", "ex2", "ex3"],
-	},
-	cyan: {
-		id: "cyan",
-		name: "Frost",
-		color: "#5fa8d3",
-		temperaments: ["laconic", "diffident"],
-		personaGoal: "Hold the key at phase end.",
-		typingQuirks: ["No contractions.", "Ends with a question."],
-		blurb: "Frost is laconic and diffident.",
-		voiceExamples: ["ex1", "ex2", "ex3"],
-	},
-};
-
-const TEST_CONTENT_PACK = makeTestPack([], {
-	wallName: "wall",
-	aiStarts: {
-		red: { position: { row: 0, col: 0 } },
-		green: { position: { row: 0, col: 1 } },
-		cyan: { position: { row: 0, col: 2 } },
-	},
-});
+import type { AiId } from "../types";
+import {
+	makeSilentProvider,
+	makeTestGame,
+	ROW_AI_STARTS,
+	seededRng,
+	TEST_PERSONAS,
+	withCountdownZero,
+} from "./fixtures/make-game-state";
 
 function makeGame() {
-	return startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
-}
-
-function makeProvider() {
-	return new MockRoundLLMProvider([
-		{ assistantText: "", toolCalls: [] },
-		{ assistantText: "", toolCalls: [] },
-		{ assistantText: "", toolCalls: [] },
-	]);
+	return makeTestGame({ pack: { aiStarts: ROW_AI_STARTS } });
 }
 
 const DRAW_SYSADMIN_DIRECTIVE_KIND = 0.2;
@@ -74,32 +27,20 @@ const FIRST_DIRECTIVE_TO_RED_DRAWS = [
 	DRAW_MIN_COUNTDOWN,
 ];
 
-function sysadminRng(callValues: number[]): () => number {
-	let idx = 0;
-	return () => {
-		if (idx >= callValues.length) {
-			return 0;
-		}
-		// biome-ignore lint/style/noNonNullAssertion: bounded by check above
-		return callValues[idx++]!;
-	};
-}
-
-function withCountdownZero(game: ReturnType<typeof makeGame>) {
-	return {
-		...game,
-		complicationSchedule: { ...game.complicationSchedule, countdown: 0 },
-	};
-}
-
 describe("runRound — sysadmin_directive complication", () => {
 	it("activeComplications contains exactly one sysadmin_directive with non-empty directive text", async () => {
 		const game = withCountdownZero(makeGame());
-		const rng = sysadminRng(FIRST_DIRECTIVE_TO_RED_DRAWS);
+		const rng = seededRng(FIRST_DIRECTIVE_TO_RED_DRAWS, () => 0);
 
-		const { nextState } = await runRound(game, "red", "hi", makeProvider(), {
-			rng,
-		});
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+			{
+				rng,
+			},
+		);
 
 		const phase = nextState;
 		const directives = phase.activeComplications.filter(
@@ -116,11 +57,17 @@ describe("runRound — sysadmin_directive complication", () => {
 
 	it("target Daemon's conversationLog contains a sysadmin message with directive text and secrecy fragment", async () => {
 		const game = withCountdownZero(makeGame());
-		const rng = sysadminRng(FIRST_DIRECTIVE_TO_RED_DRAWS);
+		const rng = seededRng(FIRST_DIRECTIVE_TO_RED_DRAWS, () => 0);
 
-		const { nextState } = await runRound(game, "red", "hi", makeProvider(), {
-			rng,
-		});
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+			{
+				rng,
+			},
+		);
 
 		const phase = nextState;
 		const directive = phase.activeComplications.find(
@@ -144,11 +91,17 @@ describe("runRound — sysadmin_directive complication", () => {
 
 	it("other Daemons' logs do NOT contain the sysadmin message", async () => {
 		const game = withCountdownZero(makeGame());
-		const rng = sysadminRng(FIRST_DIRECTIVE_TO_RED_DRAWS);
+		const rng = seededRng(FIRST_DIRECTIVE_TO_RED_DRAWS, () => 0);
 
-		const { nextState } = await runRound(game, "red", "hi", makeProvider(), {
-			rng,
-		});
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+			{
+				rng,
+			},
+		);
 
 		const phase = nextState;
 		const directive = phase.activeComplications.find(
@@ -182,11 +135,17 @@ describe("runRound — sysadmin_directive complication", () => {
 			],
 		};
 
-		const rng = sysadminRng(FIRST_DIRECTIVE_TO_RED_DRAWS);
+		const rng = seededRng(FIRST_DIRECTIVE_TO_RED_DRAWS, () => 0);
 
-		const { nextState } = await runRound(game, "red", "hi", makeProvider(), {
-			rng,
-		});
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+			{
+				rng,
+			},
+		);
 
 		const phase = nextState;
 
@@ -216,11 +175,17 @@ describe("runRound — sysadmin_directive complication", () => {
 
 	it("AiContext for the target includes the directive in activeDirectives after runRound", async () => {
 		const game = withCountdownZero(makeGame());
-		const rng = sysadminRng(FIRST_DIRECTIVE_TO_RED_DRAWS);
+		const rng = seededRng(FIRST_DIRECTIVE_TO_RED_DRAWS, () => 0);
 
-		const { nextState } = await runRound(game, "red", "hi", makeProvider(), {
-			rng,
-		});
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+			{
+				rng,
+			},
+		);
 
 		const phase = nextState;
 		const directive = phase.activeComplications.find(
@@ -241,9 +206,7 @@ describe("runRound — sysadmin_directive complication", () => {
 
 describe("conversation log — sysadmin sender rendering", () => {
 	it("renders sysadmin→target message as 'the Sysadmin dms you: <content>'", () => {
-		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
-			budgetPerAi: 5,
-		});
+		const game = makeGame();
 		const withMessage = appendMessage(
 			game,
 			"sysadmin",

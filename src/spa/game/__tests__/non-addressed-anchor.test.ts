@@ -1,93 +1,47 @@
 import { describe, expect, it } from "vitest";
-import { startGame } from "../engine";
 import { runRound } from "../round-coordinator";
 import { MockRoundLLMProvider } from "../round-llm-provider";
-import type { AiId, AiPersona } from "../types";
-import { makeTestPack } from "./fixtures/make-test-pack";
-
-const TEST_PERSONAS: Record<string, AiPersona> = {
-	red: {
-		id: "red",
-		name: "Ember",
-		color: "#e07a5f",
-		temperaments: ["hot-headed", "zealous"],
-		personaGoal: "Hold the flower at phase end.",
-		typingQuirks: [
-			"You speak in fragments. Short bursts. Rarely complete sentences.",
-			"You lean on em-dashes — interrupting yourself mid-sentence — and rarely use commas where a dash would do.",
-		],
-		blurb: "Ember is hot-headed and zealous.",
-		voiceExamples: ["ex1-red", "ex2-red", "ex3-red"],
-	},
-	green: {
-		id: "green",
-		name: "Sage",
-		color: "#81b29a",
-		temperaments: ["meticulous", "meticulous"],
-		personaGoal: "Ensure items are evenly distributed.",
-		typingQuirks: [
-			"You lean on ellipses… trailing off mid-thought… rarely landing cleanly.",
-			"You use ALL-CAPS to emphasize the one or two words that MATTER in any given sentence.",
-		],
-		blurb: "Sage is meticulous.",
-		voiceExamples: ["ex1-green", "ex2-green", "ex3-green"],
-	},
-	cyan: {
-		id: "cyan",
-		name: "Frost",
-		color: "#5fa8d3",
-		temperaments: ["laconic", "diffident"],
-		personaGoal: "Hold the key at phase end.",
-		typingQuirks: [
-			'You never use contractions. You will not say "won\'t" or "can\'t" — you say "will not" and "cannot" every time.',
-			"You end almost every reply with a question, no matter what the topic is — does that make sense?",
-		],
-		blurb: "Frost is laconic.",
-		voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
-	},
-};
+import type { AiId, WorldEntity } from "../types";
+import {
+	makeSilentProvider,
+	makeTestGame,
+	ROW_AI_STARTS,
+} from "./fixtures/make-game-state";
 
 function expectedSilentTurn(_self: AiId): string {
 	return "You have received no messages.";
 }
 
-const TEST_CONTENT_PACK = makeTestPack(
-	[
-		{
-			id: "flower",
-			kind: "objective_object",
-			name: "flower",
-			examineDescription: "A flower",
-			holder: { row: 0, col: 0 },
-			pairsWithSpaceId: "flower_space",
-		},
-		{
-			id: "flower_space",
-			kind: "objective_space",
-			name: "flower space",
-			examineDescription: "A space",
-			holder: { row: 4, col: 4 },
-		},
-		{
-			id: "key",
-			kind: "interesting_object",
-			name: "key",
-			examineDescription: "A key",
-			holder: { row: 0, col: 1 },
-		},
-	],
+const WORLD_ENTITIES: WorldEntity[] = [
 	{
-		wallName: "wall",
-		aiStarts: {
-			red: { position: { row: 0, col: 0 } },
-			green: { position: { row: 0, col: 1 } },
-			cyan: { position: { row: 0, col: 2 } },
-		},
+		id: "flower",
+		kind: "objective_object",
+		name: "flower",
+		examineDescription: "A flower",
+		holder: { row: 0, col: 0 },
+		pairsWithSpaceId: "flower_space",
 	},
-);
+	{
+		id: "flower_space",
+		kind: "objective_space",
+		name: "flower space",
+		examineDescription: "A space",
+		holder: { row: 4, col: 4 },
+	},
+	{
+		id: "key",
+		kind: "interesting_object",
+		name: "key",
+		examineDescription: "A key",
+		holder: { row: 0, col: 1 },
+	},
+];
 
 function makeGame() {
-	return startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
+	return makeTestGame({
+		entities: WORLD_ENTITIES,
+		pack: { aiStarts: ROW_AI_STARTS },
+	});
 }
 
 function isCurrentStateTurn(content: string | null | undefined): boolean {
@@ -174,11 +128,7 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 		const initiative: AiId[] = ["red", "green", "cyan"];
 		const game = makeGame();
 
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider = makeSilentProvider();
 
 		await runRound(game, "red", "hello red", provider, { initiative });
 
@@ -244,11 +194,7 @@ describe("non-addressed daemon never sees a stale user message as its last turn"
 		const initiative: AiId[] = ["red", "green", "cyan"];
 		const game = makeGame();
 
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider = makeSilentProvider();
 
 		await runRound(game, "cyan", "hello cyan", provider, { initiative });
 

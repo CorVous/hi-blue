@@ -8,7 +8,11 @@ export default defineConfig({
 				extends: true,
 				test: {
 					name: "browser",
-					include: ["src/**/*.test.ts", "scripts/__tests__/**/*.test.ts"],
+					include: [
+						"src/**/*.test.ts",
+						"scripts/__tests__/**/*.test.ts",
+						"evals/__tests__/**/*.test.ts",
+					],
 					exclude: ["src/proxy/**", "src/spa/__tests__/build.test.ts"],
 					environment: "jsdom",
 					environmentOptions: {

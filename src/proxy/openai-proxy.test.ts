@@ -896,8 +896,8 @@ describe("cost-guard integration — POST /v1/chat/completions", () => {
 	});
 });
 
-describe("OPTIONS /v1/chat/completions — CORS preflight", () => {
-	it("returns 204 with ACAO/ACAM/ACAH for an allow-listed origin", async () => {
+describe("/v1/chat/completions — CORS wiring (exhaustive cases in cors.test.ts)", () => {
+	it("OPTIONS answers with the preflight built from the env allow-list", async () => {
 		const resp = await SELF.fetch(ENDPOINT, {
 			method: "OPTIONS",
 			headers: {
@@ -915,37 +915,10 @@ describe("OPTIONS /v1/chat/completions — CORS preflight", () => {
 			"POST, OPTIONS",
 		);
 		expect(resp.headers.get("Access-Control-Allow-Headers")).toBe("X-Test");
-	});
-
-	it("returns 204 WITHOUT ACAO for an unlisted origin", async () => {
-		const resp = await SELF.fetch(ENDPOINT, {
-			method: "OPTIONS",
-			headers: {
-				Origin: "https://evil.com",
-				"Access-Control-Request-Method": "POST",
-			},
-		});
-
-		expect(resp.status).toBe(204);
-		expect(resp.headers.get("Access-Control-Allow-Origin")).toBeNull();
-	});
-
-	it("returns 204 with Vary: Origin regardless of origin allow-list status", async () => {
-		const resp = await SELF.fetch(ENDPOINT, {
-			method: "OPTIONS",
-			headers: {
-				Origin: "https://evil.com",
-				"Access-Control-Request-Method": "POST",
-			},
-		});
-
-		expect(resp.status).toBe(204);
 		expect(resp.headers.get("Vary")).toBe("Origin");
 	});
-});
 
-describe("POST /v1/chat/completions — CORS response headers", () => {
-	it("adds ACAO + Vary: Origin for an allow-listed origin", async () => {
+	it("POST adds ACAO + Vary: Origin for an allow-listed origin", async () => {
 		vi.stubGlobal("fetch", makeUpstreamMock("{}"));
 
 		const resp = await SELF.fetch(ENDPOINT, {
@@ -963,24 +936,7 @@ describe("POST /v1/chat/completions — CORS response headers", () => {
 		expect(resp.headers.get("Vary")).toBe("Origin");
 	});
 
-	it("supports the second origin in a multi-origin allow-list (localhost:5173)", async () => {
-		vi.stubGlobal("fetch", makeUpstreamMock("{}"));
-
-		const resp = await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				Origin: "http://localhost:5173",
-			},
-			body: VALID_BODY,
-		});
-
-		expect(resp.headers.get("Access-Control-Allow-Origin")).toBe(
-			"http://localhost:5173",
-		);
-	});
-
-	it("does NOT add ACAO for an unlisted origin", async () => {
+	it("POST does NOT add ACAO for an unlisted origin", async () => {
 		vi.stubGlobal("fetch", makeUpstreamMock("{}"));
 
 		const resp = await SELF.fetch(ENDPOINT, {
@@ -989,18 +945,6 @@ describe("POST /v1/chat/completions — CORS response headers", () => {
 				"Content-Type": "application/json",
 				Origin: "https://evil.com",
 			},
-			body: VALID_BODY,
-		});
-
-		expect(resp.headers.get("Access-Control-Allow-Origin")).toBeNull();
-	});
-
-	it("does NOT add ACAO when Origin header is absent", async () => {
-		vi.stubGlobal("fetch", makeUpstreamMock("{}"));
-
-		const resp = await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
 			body: VALID_BODY,
 		});
 

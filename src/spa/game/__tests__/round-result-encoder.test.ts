@@ -1,69 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { appendMessage, deductBudget, startGame } from "../engine";
+import { appendMessage, deductBudget } from "../engine";
 import {
 	encodeRoundResult,
 	type SseEvent,
 	splitIntoWordChunks,
 } from "../round-result-encoder";
-import type { AiId, AiPersona, RoundResult } from "../types";
-import { makeTestPack } from "./fixtures/make-test-pack";
-
-const TEST_PERSONAS: Record<AiId, AiPersona> = {
-	red: {
-		id: "red",
-		name: "Ember",
-		color: "#e07a5f",
-		temperaments: ["hot-headed", "zealous"],
-		personaGoal: "Hold the flower at phase end.",
-		typingQuirks: [
-			"You speak in fragments. Short bursts. Rarely complete sentences.",
-			"You lean on em-dashes — interrupting yourself mid-sentence — and rarely use commas where a dash would do.",
-		],
-		blurb: "Ember is hot-headed and zealous. Hold the flower at phase end.",
-		voiceExamples: ["ex1-red", "ex2-red", "ex3-red"],
-	},
-	green: {
-		id: "green",
-		name: "Sage",
-		color: "#81b29a",
-		temperaments: ["meticulous", "meticulous"],
-		personaGoal: "Ensure items are evenly distributed.",
-		typingQuirks: [
-			"You lean on ellipses… trailing off mid-thought… rarely landing cleanly.",
-			"You use ALL-CAPS to emphasize the one or two words that MATTER in any given sentence.",
-		],
-		blurb: "Sage is intensely meticulous. Ensure items are evenly distributed.",
-		voiceExamples: ["ex1-green", "ex2-green", "ex3-green"],
-	},
-	cyan: {
-		id: "cyan",
-		name: "Frost",
-		color: "#5fa8d3",
-		temperaments: ["laconic", "diffident"],
-		personaGoal: "Hold the key at phase end.",
-		typingQuirks: [
-			'You never use contractions. You will not say "won\'t" or "can\'t" — you say "will not" and "cannot" every time.',
-			"You end almost every reply with a question, no matter what the topic is — does that make sense?",
-		],
-		blurb: "Frost is laconic and diffident. Hold the key at phase end.",
-		voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
-	},
-};
-
-const TEST_CONTENT_PACK = makeTestPack([], { wallName: "wall" });
-
-function makePhase(
-	mutate?: (g: ReturnType<typeof startGame>) => ReturnType<typeof startGame>,
-) {
-	let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
-	if (mutate) game = mutate(game);
-	return game;
-}
+import type { AiId, GameState, RoundResult } from "../types";
+import { makeTestGame, TEST_PERSONAS } from "./fixtures/make-game-state";
 
 function makePhaseWithMessages(
 	entries: Array<{ from: AiId | "blue"; to: AiId | "blue"; content: string }>,
-): ReturnType<typeof makePhase> {
-	let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
+): GameState {
+	let game = makeTestGame();
 	for (const { from, to, content } of entries) {
 		game = appendMessage(game, from, to, content);
 	}
@@ -112,7 +60,7 @@ describe("splitIntoWordChunks", () => {
 
 describe("encodeRoundResult — ai_start, token, ai_end sequence", () => {
 	it("emits ai_start, token events, ai_end for each AI in order", () => {
-		const phase = makePhase();
+		const phase = makeTestGame();
 		const result = makePassResult();
 
 		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
@@ -159,7 +107,7 @@ describe("encodeRoundResult — ai_start, token, ai_end sequence", () => {
 	});
 
 	it("emits exactly three ai_start and three ai_end events", () => {
-		const phase = makePhase();
+		const phase = makeTestGame();
 		const result = makePassResult();
 
 		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
@@ -203,7 +151,7 @@ describe("encodeRoundResult — ai_start, token, ai_end sequence", () => {
 
 describe("encodeRoundResult — budget events", () => {
 	it("emits a budget event for each AI", () => {
-		const phase = makePhase();
+		const phase = makeTestGame();
 		const result = makePassResult();
 
 		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
@@ -220,7 +168,7 @@ describe("encodeRoundResult — budget events", () => {
 	});
 
 	it("budget event reflects actual remaining value from phaseAfter", () => {
-		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
+		let game = makeTestGame();
 		game = deductBudget(deductBudget(game, "red", 1).game, "red", 1).game;
 		const phase = game;
 
@@ -238,7 +186,7 @@ describe("encodeRoundResult — budget events", () => {
 
 describe("encodeRoundResult — lockout events (budget-exhaustion)", () => {
 	it("emits a lockout event when AI is budget-exhausted (lockedOut set)", () => {
-		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 1 });
+		let game = makeTestGame({ budgetPerAi: 1 });
 		game = deductBudget(game, "red", 1).game;
 		const phase = game;
 		expect(phase.lockedOut.has("red")).toBe(true);
@@ -256,7 +204,7 @@ describe("encodeRoundResult — lockout events (budget-exhaustion)", () => {
 	});
 
 	it("does NOT emit a lockout event when AI is not budget-locked-out", () => {
-		const phase = makePhase();
+		const phase = makeTestGame();
 		const result = makePassResult();
 
 		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
@@ -269,7 +217,7 @@ describe("encodeRoundResult — lockout events (budget-exhaustion)", () => {
 	});
 
 	it("emits lockout event for AI that just exhausted budget (has completion but lockedOut set)", () => {
-		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 1 });
+		let game = makeTestGame({ budgetPerAi: 1 });
 		game = deductBudget(game, "red", 1).game;
 		const phase = game;
 		expect(phase.lockedOut.has("red")).toBe(true);
@@ -288,7 +236,7 @@ describe("encodeRoundResult — lockout events (budget-exhaustion)", () => {
 
 describe("encodeRoundResult — action_log events", () => {
 	it("emits action_log events for all actions in the result", () => {
-		const phase = makePhase();
+		const phase = makeTestGame();
 		const result = makePassResult({
 			actions: [
 				{
@@ -318,7 +266,7 @@ describe("encodeRoundResult — action_log events", () => {
 	});
 
 	it("includes tool_failure entries in action_log events", () => {
-		const phase = makePhase();
+		const phase = makeTestGame();
 		const result = makePassResult({
 			actions: [
 				{
@@ -344,7 +292,7 @@ describe("encodeRoundResult — action_log events", () => {
 
 describe("encodeRoundResult — chat_lockout event", () => {
 	it("emits a chat_lockout event when chatLockoutTriggered is set", () => {
-		const phase = makePhase();
+		const phase = makeTestGame();
 		const result = makePassResult({
 			chatLockoutTriggered: {
 				aiId: "red",
@@ -364,7 +312,7 @@ describe("encodeRoundResult — chat_lockout event", () => {
 	});
 
 	it("does NOT emit chat_lockout event when chatLockoutTriggered is absent", () => {
-		const phase = makePhase();
+		const phase = makeTestGame();
 		const result = makePassResult();
 
 		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
@@ -375,7 +323,7 @@ describe("encodeRoundResult — chat_lockout event", () => {
 
 describe("encodeRoundResult — chat_lockout_resolved event", () => {
 	it("emits chat_lockout_resolved for each AI whose lockout expired", () => {
-		const phase = makePhase();
+		const phase = makeTestGame();
 		const result = makePassResult({
 			chatLockoutsResolved: ["red", "green"],
 		});
@@ -393,7 +341,7 @@ describe("encodeRoundResult — chat_lockout_resolved event", () => {
 	});
 
 	it("does NOT emit chat_lockout_resolved when no lockouts resolved", () => {
-		const phase = makePhase();
+		const phase = makeTestGame();
 		const result = makePassResult();
 
 		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
@@ -406,7 +354,7 @@ describe("encodeRoundResult — chat_lockout_resolved event", () => {
 
 describe("encodeRoundResult — event ordering", () => {
 	it("action_log events come after all ai_start/token/ai_end/budget blocks", () => {
-		const phase = makePhase();
+		const phase = makeTestGame();
 		const result = makePassResult();
 
 		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
@@ -423,7 +371,7 @@ describe("encodeRoundResult — event ordering", () => {
 	});
 
 	it("chat_lockout comes after action_log events", () => {
-		const phase = makePhase();
+		const phase = makeTestGame();
 		const result = makePassResult({
 			chatLockoutTriggered: { aiId: "red", message: "locked" },
 		});
@@ -444,7 +392,7 @@ describe("encodeRoundResult — event ordering", () => {
 
 describe("encodeRoundResult — game_ended event", () => {
 	it("emits a game_ended event when gameEnded=true", () => {
-		const phase = makePhase();
+		const phase = makeTestGame();
 		const result = makePassResult({ gameEnded: true });
 
 		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
@@ -454,7 +402,7 @@ describe("encodeRoundResult — game_ended event", () => {
 	});
 
 	it("does NOT emit game_ended when gameEnded=false", () => {
-		const phase = makePhase();
+		const phase = makeTestGame();
 		const result = makePassResult({ gameEnded: false });
 
 		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
@@ -463,7 +411,7 @@ describe("encodeRoundResult — game_ended event", () => {
 	});
 
 	it("game_ended event comes after phase-related events", () => {
-		const phase = makePhase();
+		const phase = makeTestGame();
 		const result = makePassResult({ gameEnded: true });
 
 		const events = encodeRoundResult(result, phase, TEST_PERSONAS);

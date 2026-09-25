@@ -3,9 +3,9 @@
 The harnesses under `evals/` drive the real game engine against a live model
 (`z-ai/glm-4.7` unless overridden) and write dated reports to `docs/evals/`.
 They are not part of CI, but `tsconfig.tools.json` typechecks them. Two scoring
-modules are unit-tested from `src/spa/game/__tests__/`
-(`drift-scoring.test.ts`, `eval-scoring.test.ts`) so their heuristics cannot
-rot without anyone noticing. The scoring modules are pure: no I/O and no
+modules are unit-tested from `evals/__tests__/`
+(`free-text-drift-scoring.test.ts`, `relative-directions-scoring.test.ts`) so
+their heuristics cannot rot without anyone noticing. The scoring modules are pure: no I/O and no
 module-level fetch.
 
 ## Shared conventions

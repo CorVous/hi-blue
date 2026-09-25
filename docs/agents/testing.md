@@ -10,6 +10,8 @@ Cloudflare Worker logic — request/response, KV, SSE encoders, rate-guard. Runs
 
 Unit-level coverage for SPA modules — pure logic, encoder/decoder round-trips, persistence, router, streaming math. Fast, but jsdom is **not a real browser**: it does not catch real layout, real-DOM event timing, real-browser API gaps, or build-pipeline regressions.
 
+The same `browser` project also runs `scripts/__tests__/**` and `evals/__tests__/**` (unit tests for the eval scoring modules, next to the evals they cover).
+
 ## Playwright e2e (`e2e/**/*.spec.ts`)
 
 Live browser end-to-end against the built SPA on `http://localhost:8787`. Run with `pnpm smoke`; `playwright.config.ts` starts `pnpm build` followed by local Wrangler with a test API key, so no Cloudflare login or manual server is needed. Install the browser once with `pnpm exec playwright install chromium`. Outside CI an existing server may be reused: ensure port 8787 is not serving an unrelated or differently configured build. Use this when:

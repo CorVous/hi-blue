@@ -6,19 +6,21 @@ import {
 	resolveExpiredChatLockouts,
 	tickComplication,
 } from "../complication-engine.js";
-import { startGame } from "../engine.js";
 import type {
 	ActiveComplication,
 	AiId,
-	AiPersona,
-	ComplicationSchedule,
 	GameState,
 	GridPosition,
 	PersonaSpatialState,
 	ToolName,
 	WorldEntity,
-	WorldState,
 } from "../types.js";
+import {
+	makeEntity,
+	makePersonaSpatial,
+	makeTestGame,
+	seededRng,
+} from "./fixtures/make-game-state.js";
 import { makeTestPack } from "./fixtures/make-test-pack.js";
 
 const POOL_PICK = {
@@ -30,184 +32,79 @@ const POOL_PICK = {
 	lastKind: 0.9999,
 } as const;
 
-function seededRng(values: number[]): () => number {
-	let idx = 0;
-	return () => {
-		if (idx >= values.length) {
-			throw new Error(
-				`seededRng: exhausted after ${values.length} reads (call #${idx + 1})`,
-			);
-		}
-		// biome-ignore lint/style/noNonNullAssertion: bounded by check above
-		return values[idx++]!;
-	};
-}
-
-const TEST_PERSONAS: Record<string, AiPersona> = {
-	red: {
-		id: "red",
-		name: "Ember",
-		color: "#e07a5f",
-		temperaments: ["hot-headed", "zealous"],
-		personaGoal: "test goal",
-		blurb: "test blurb",
-		typingQuirks: ["fragments", "ALL CAPS"],
-		voiceExamples: ["Now.", "BURN IT.", "Soon."],
-	},
-	green: {
-		id: "green",
-		name: "Sage",
-		color: "#81b29a",
-		temperaments: ["meticulous", "meticulous"],
-		personaGoal: "test goal",
-		blurb: "test blurb",
-		typingQuirks: ["ellipses", "no contractions"],
-		voiceExamples: ["OK...", "That is not balanced.", "One more."],
-	},
-	cyan: {
-		id: "cyan",
-		name: "Frost",
-		color: "#5fa8d3",
-		temperaments: ["laconic", "diffident"],
-		personaGoal: "test goal",
-		blurb: "test blurb",
-		typingQuirks: ["lowercase only", "fragments"],
-		voiceExamples: ["sure.", "if you say so.", "fine."],
-	},
-};
-
 const AI_IDS: AiId[] = ["red", "green", "cyan"];
-
-function makePersonaSpatial(
-	positions: Record<AiId, GridPosition> = {},
-): Record<AiId, PersonaSpatialState> {
-	const defaults: Record<AiId, GridPosition> = {
-		red: { row: 0, col: 0 },
-		green: { row: 0, col: 1 },
-		cyan: { row: 0, col: 2 },
-	};
-	const merged = { ...defaults, ...positions };
-	const result: Record<AiId, PersonaSpatialState> = {};
-	for (const [id, pos] of Object.entries(merged)) {
-		result[id] = { position: pos };
-	}
-	return result;
-}
 
 function makePhase(overrides: Partial<GameState> = {}): GameState {
 	const personaSpatial = overrides.personaSpatial ?? makePersonaSpatial();
-	const world: WorldState = overrides.world ?? { entities: [] };
-
-	const budgets: Record<AiId, { remaining: number; total: number }> = {};
-	const conversationLogs: Record<AiId, []> = {};
-	for (const id of AI_IDS) {
-		budgets[id] = { remaining: 0.5, total: 0.5 };
-		conversationLogs[id] = [];
-	}
-
-	const contentPack = makeTestPack([], {
-		setting: "test",
-		weather: "clear",
-		timeOfDay: "day",
-		wallName: "wall",
-		aiStarts: personaSpatial,
+	const game = makeTestGame({
+		pack: {
+			setting: "test",
+			weather: "clear",
+			timeOfDay: "day",
+			aiStarts: personaSpatial,
+		},
+		budgetPerAi: 0.5,
 	});
-
-	const complicationSchedule: ComplicationSchedule = {
-		countdown: 3,
-		settingShiftFired: false,
-	};
-
 	return {
-		personas: TEST_PERSONAS,
-		isComplete: false,
-		setting: "test",
-		weather: "clear",
-		timeOfDay: "day",
-		contentPack,
+		...game,
 		round: 5,
-		world,
-		budgets,
-		conversationLogs,
-		lockedOut: new Set(),
 		personaSpatial,
-		complicationSchedule,
-		activeComplications: [],
-		contentPacksA: [],
-		contentPacksB: [],
-		activePackId: "A" as const,
-		objectives: [],
+		complicationSchedule: { countdown: 3, settingShiftFired: false },
 		...overrides,
 	};
 }
 
-function makeGameStateAround(phase: GameState): GameState {
-	return phase;
-}
-
 function makeObstacle(id: string, pos: GridPosition): WorldEntity {
-	return {
-		id,
-		kind: "obstacle",
-		name: id,
-		examineDescription: `A ${id}.`,
-		holder: pos,
-	};
+	return makeEntity(id, "obstacle", pos);
 }
 
 describe("tickComplication — countdown > 0: returns null", () => {
 	it("returns null when countdown is 3", () => {
-		const phase = makePhase({
+		const game = makePhase({
 			complicationSchedule: { countdown: 3, settingShiftFired: false },
 		});
-		const game = makeGameStateAround(phase);
 		const result = tickComplication(game, seededRng([]));
 		expect(result).toBeNull();
 	});
 
 	it("returns null when countdown is 2", () => {
-		const phase = makePhase({
+		const game = makePhase({
 			complicationSchedule: { countdown: 2, settingShiftFired: false },
 		});
-		const game = makeGameStateAround(phase);
 		const result = tickComplication(game, seededRng([]));
 		expect(result).toBeNull();
 	});
 
 	it("returns null when countdown is 1", () => {
-		const phase = makePhase({
+		const game = makePhase({
 			complicationSchedule: { countdown: 1, settingShiftFired: false },
 		});
-		const game = makeGameStateAround(phase);
 		const result = tickComplication(game, seededRng([]));
 		expect(result).toBeNull();
 	});
 
 	it("does not call rng when countdown is > 0 (seededRng with empty array would throw)", () => {
-		const phase = makePhase({
+		const game = makePhase({
 			complicationSchedule: { countdown: 5, settingShiftFired: false },
 		});
-		const game = makeGameStateAround(phase);
 		expect(() => tickComplication(game, seededRng([]))).not.toThrow();
 	});
 });
 
 describe("decrementComplicationCountdown", () => {
 	it("decrements countdown by 1", () => {
-		const phase = makePhase({
+		const game = makePhase({
 			complicationSchedule: { countdown: 3, settingShiftFired: false },
 		});
-		const game = makeGameStateAround(phase);
 		const updated = decrementComplicationCountdown(game);
 		const updatedPhase = updated;
 		expect(updatedPhase.complicationSchedule.countdown).toBe(2);
 	});
 
 	it("does not alter settingShiftFired", () => {
-		const phase = makePhase({
+		const game = makePhase({
 			complicationSchedule: { countdown: 3, settingShiftFired: true },
 		});
-		const game = makeGameStateAround(phase);
 		const updated = decrementComplicationCountdown(game);
 		const updatedPhase = updated;
 		expect(updatedPhase.complicationSchedule.settingShiftFired).toBe(true);
@@ -217,11 +114,10 @@ describe("decrementComplicationCountdown", () => {
 		const active: ActiveComplication[] = [
 			{ kind: "chat_lockout", target: "red", resolveAtRound: 8 },
 		];
-		const phase = makePhase({
+		const game = makePhase({
 			complicationSchedule: { countdown: 3, settingShiftFired: false },
 			activeComplications: active,
 		});
-		const game = makeGameStateAround(phase);
 		const updated = decrementComplicationCountdown(game);
 		const updatedPhase = updated;
 		expect(updatedPhase.activeComplications).toEqual(active);
@@ -230,19 +126,17 @@ describe("decrementComplicationCountdown", () => {
 
 describe("tickComplication — fires when countdown is 0", () => {
 	it("returns a non-null ComplicationResult when countdown is 0", () => {
-		const phase = makePhase({
+		const game = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
 		});
-		const game = makeGameStateAround(phase);
 		const result = tickComplication(game, seededRng([0.0, 0.5]));
 		expect(result).not.toBeNull();
 	});
 
 	it("draws weather_change when type-draw rng selects index 0 of the full pool", () => {
-		const phase = makePhase({
+		const game = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
 		});
-		const game = makeGameStateAround(phase);
 		const result = tickComplication(game, seededRng([0.0, 0.5]));
 		expect(result?.fired.kind).toBe("weather_change");
 		if (result?.fired.kind === "weather_change") {
@@ -252,10 +146,9 @@ describe("tickComplication — fires when countdown is 0", () => {
 	});
 
 	it("draws sysadmin_directive when type-draw selects index 1", () => {
-		const phase = makePhase({
+		const game = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
 		});
-		const game = makeGameStateAround(phase);
 		const result = tickComplication(
 			game,
 			seededRng([POOL_PICK.sysadminDirective, 0.0, 0.5]),
@@ -264,10 +157,9 @@ describe("tickComplication — fires when countdown is 0", () => {
 	});
 
 	it("draws chat_lockout when type-draw selects index 3 (5-item pool)", () => {
-		const phase = makePhase({
+		const game = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
 		});
-		const game = makeGameStateAround(phase);
 		const result = tickComplication(
 			game,
 			seededRng([POOL_PICK.chatLockout, 0.0, 0.0, 0.5]),
@@ -276,10 +168,9 @@ describe("tickComplication — fires when countdown is 0", () => {
 	});
 
 	it("draws setting_shift when type-draw selects the last index (5-item pool, index 4)", () => {
-		const phase = makePhase({
+		const game = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
 		});
-		const game = makeGameStateAround(phase);
 		const result = tickComplication(
 			game,
 			seededRng([POOL_PICK.settingShift, 0.5]),
@@ -290,10 +181,9 @@ describe("tickComplication — fires when countdown is 0", () => {
 
 describe("sysadmin_directive sub-draw", () => {
 	it("carries a target AiId drawn from personaSpatial", () => {
-		const phase = makePhase({
+		const game = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
 		});
-		const game = makeGameStateAround(phase);
 		const result = tickComplication(
 			game,
 			seededRng([POOL_PICK.sysadminDirective, 0.0, 0.5]),
@@ -307,10 +197,9 @@ describe("sysadmin_directive sub-draw", () => {
 
 describe("chat_lockout sub-draw", () => {
 	it("carries a target AiId and duration in [3, 5]", () => {
-		const phase = makePhase({
+		const game = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
 		});
-		const game = makeGameStateAround(phase);
 		const result = tickComplication(
 			game,
 			seededRng([POOL_PICK.chatLockout, 0.0, 0.0, 0.5]),
@@ -324,10 +213,9 @@ describe("chat_lockout sub-draw", () => {
 	});
 
 	it("duration is exactly 3 when rng for duration returns 0.0", () => {
-		const phase = makePhase({
+		const game = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
 		});
-		const game = makeGameStateAround(phase);
 		const result = tickComplication(
 			game,
 			seededRng([POOL_PICK.chatLockout, 0.0, 0.0, 0.5]),
@@ -338,10 +226,9 @@ describe("chat_lockout sub-draw", () => {
 	});
 
 	it("duration is exactly 5 when rng for duration returns just below 1.0", () => {
-		const phase = makePhase({
+		const game = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
 		});
-		const game = makeGameStateAround(phase);
 		const result = tickComplication(
 			game,
 			seededRng([POOL_PICK.chatLockout, 0.0, 0.9999, 0.5]),
@@ -354,10 +241,9 @@ describe("chat_lockout sub-draw", () => {
 
 describe("Setting Shift exclusion", () => {
 	it("excludes setting_shift when settingShiftFired is true", () => {
-		const phase = makePhase({
+		const game = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: true },
 		});
-		const game = makeGameStateAround(phase);
 		const result = tickComplication(
 			game,
 			seededRng([POOL_PICK.lastKind, 0.0, 0.0, 0.5]),
@@ -366,10 +252,9 @@ describe("Setting Shift exclusion", () => {
 	});
 
 	it("sets settingShiftFired=true in returned game state when setting_shift fires", () => {
-		const phase = makePhase({
+		const game = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
 		});
-		const game = makeGameStateAround(phase);
 		const result = tickComplication(
 			game,
 			seededRng([POOL_PICK.settingShift, 0.5]),
@@ -389,12 +274,10 @@ describe("Obstacle Shift exclusion", () => {
 		for (let i = 0; i < 5; i++) {
 			const v = i / 5;
 			const r = tickComplication(
-				makeGameStateAround(
-					makePhase({
-						complicationSchedule: { countdown: 0, settingShiftFired: false },
-						world: { entities: [] },
-					}),
-				),
+				makePhase({
+					complicationSchedule: { countdown: 0, settingShiftFired: false },
+					world: { entities: [] },
+				}),
 				seededRng([v, 0.0, 0.0, 0.5]),
 			);
 			if (r) draws.push(r.fired.kind);
@@ -421,12 +304,10 @@ describe("Obstacle Shift exclusion", () => {
 		for (let i = 0; i < 5; i++) {
 			const v = i / 5;
 			const r = tickComplication(
-				makeGameStateAround(
-					makePhase({
-						complicationSchedule: { countdown: 0, settingShiftFired: false },
-						world: { entities: fullBlockEntities },
-					}),
-				),
+				makePhase({
+					complicationSchedule: { countdown: 0, settingShiftFired: false },
+					world: { entities: fullBlockEntities },
+				}),
 				seededRng([v, 0.0, 0.0, 0.5]),
 			);
 			if (r) draws.push(r.fired.kind);
@@ -445,13 +326,11 @@ describe("Obstacle Shift exclusion", () => {
 		for (let i = 0; i < 5; i++) {
 			const v = i / 5;
 			const r = tickComplication(
-				makeGameStateAround(
-					makePhase({
-						complicationSchedule: { countdown: 0, settingShiftFired: false },
-						world: { entities: [cornerObstacle] },
-						personaSpatial: corneredPersonas,
-					}),
-				),
+				makePhase({
+					complicationSchedule: { countdown: 0, settingShiftFired: false },
+					world: { entities: [cornerObstacle] },
+					personaSpatial: corneredPersonas,
+				}),
 				seededRng([v, 0.0, 0.0, 0.5]),
 			);
 			if (r) draws.push(r.fired.kind);
@@ -466,12 +345,11 @@ describe("Obstacle Shift exclusion", () => {
 			green: { position: { row: 4, col: 4 } },
 			cyan: { position: { row: 3, col: 3 } },
 		};
-		const phase = makePhase({
+		const game = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
 			world: { entities: [obs] },
 			personaSpatial,
 		});
-		const game = makeGameStateAround(phase);
 		const result = tickComplication(
 			game,
 			seededRng([POOL_PICK.obstacleShiftInSixKindPool, 0.0, 0.5]),
@@ -486,12 +364,11 @@ describe("Obstacle Shift exclusion", () => {
 			green: { row: 0, col: 1 },
 			cyan: { row: 0, col: 2 },
 		});
-		const phase = makePhase({
+		const game = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
 			world: { entities: [obs] },
 			personaSpatial,
 		});
-		const game = makeGameStateAround(phase);
 		const result = tickComplication(
 			game,
 			seededRng([POOL_PICK.obstacleShiftInSixKindPool, 0.0, 0.5]),
@@ -530,11 +407,10 @@ describe("Tool Disable exclusion", () => {
 				});
 			}
 		}
-		const phase = makePhase({
+		const game = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
 			activeComplications,
 		});
-		const game = makeGameStateAround(phase);
 		const result = tickComplication(
 			game,
 			seededRng([POOL_PICK.toolDisable, 0.0, 0.5]),
@@ -551,11 +427,10 @@ describe("Tool Disable exclusion", () => {
 				resolveAtRound: 99,
 			},
 		];
-		const phase = makePhase({
+		const game = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
 			activeComplications,
 		});
-		const game = makeGameStateAround(phase);
 		const result = tickComplication(
 			game,
 			seededRng([POOL_PICK.toolDisable, 0.0, 0.5]),
@@ -576,11 +451,10 @@ describe("Tool Disable exclusion", () => {
 				resolveAtRound: 99,
 			},
 		];
-		const phase = makePhase({
+		const game = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
 			activeComplications,
 		});
-		const game = makeGameStateAround(phase);
 		const result = tickComplication(
 			game,
 			seededRng([POOL_PICK.toolDisable, 0.0, 0.5]),
@@ -597,11 +471,10 @@ describe("Tool Disable exclusion", () => {
 				resolveAtRound: 99,
 			},
 		];
-		const phase = makePhase({
+		const game = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
 			activeComplications,
 		});
-		const game = makeGameStateAround(phase);
 		const result = tickComplication(
 			game,
 			seededRng([POOL_PICK.toolDisable, 0.0, 0.5]),
@@ -619,10 +492,9 @@ describe("Tool Disable pool — the retired `face` tool is not selectable", () =
 	it("draws only the five Daemon tools across every (daemon, tool) pair", () => {
 		const drawn = new Set<string>();
 		for (let i = 0; i < 15; i++) {
-			const phase = makePhase({
+			const game = makePhase({
 				complicationSchedule: { countdown: 0, settingShiftFired: false },
 			});
-			const game = makeGameStateAround(phase);
 			const result = tickComplication(
 				game,
 				seededRng([POOL_PICK.toolDisable, i / 15, 0.5]),
@@ -645,8 +517,7 @@ describe("Tool Disable pool — the retired `face` tool is not selectable", () =
 
 describe("applyComplicationResult — activeComplications appends", () => {
 	it("appends ActiveComplication for sysadmin_directive", () => {
-		const phase = makePhase();
-		const game = makeGameStateAround(phase);
+		const game = makePhase();
 		const result = {
 			fired: {
 				kind: "sysadmin_directive" as const,
@@ -666,8 +537,7 @@ describe("applyComplicationResult — activeComplications appends", () => {
 	});
 
 	it("appends ActiveComplication for tool_disable", () => {
-		const phase = makePhase();
-		const game = makeGameStateAround(phase);
+		const game = makePhase();
 		const result = {
 			fired: {
 				kind: "tool_disable" as const,
@@ -689,8 +559,7 @@ describe("applyComplicationResult — activeComplications appends", () => {
 	});
 
 	it("appends ActiveComplication for tool_disable with resolveAtRound = phase.round + duration", () => {
-		const phase = makePhase({ round: 7 });
-		const game = makeGameStateAround(phase);
+		const game = makePhase({ round: 7 });
 		const result = {
 			fired: {
 				kind: "tool_disable" as const,
@@ -711,8 +580,7 @@ describe("applyComplicationResult — activeComplications appends", () => {
 	});
 
 	it("appends ActiveComplication for chat_lockout with resolveAtRound = phase.round + duration", () => {
-		const phase = makePhase({ round: 5 });
-		const game = makeGameStateAround(phase);
+		const game = makePhase({ round: 5 });
 		const result = {
 			fired: {
 				kind: "chat_lockout" as const,
@@ -733,8 +601,7 @@ describe("applyComplicationResult — activeComplications appends", () => {
 	});
 
 	it("does NOT append to activeComplications for weather_change", () => {
-		const phase = makePhase();
-		const game = makeGameStateAround(phase);
+		const game = makePhase();
 		const result = {
 			fired: { kind: "weather_change" as const, weather: "rainy" },
 		};
@@ -744,8 +611,7 @@ describe("applyComplicationResult — activeComplications appends", () => {
 	});
 
 	it("does NOT append to activeComplications for obstacle_shift", () => {
-		const phase = makePhase();
-		const game = makeGameStateAround(phase);
+		const game = makePhase();
 		const result = {
 			fired: {
 				kind: "obstacle_shift" as const,
@@ -760,8 +626,7 @@ describe("applyComplicationResult — activeComplications appends", () => {
 	});
 
 	it("does NOT append to activeComplications for setting_shift", () => {
-		const phase = makePhase();
-		const game = makeGameStateAround(phase);
+		const game = makePhase();
 		const result = { fired: { kind: "setting_shift" as const } };
 		const updated = applyComplicationResult(game, result, seededRng([0.5]));
 		const updatedPhase = updated;
@@ -769,10 +634,9 @@ describe("applyComplicationResult — activeComplications appends", () => {
 	});
 
 	it("sets settingShiftFired=true in schedule when result is setting_shift", () => {
-		const phase = makePhase({
+		const game = makePhase({
 			complicationSchedule: { countdown: 3, settingShiftFired: false },
 		});
-		const game = makeGameStateAround(phase);
 		const result = { fired: { kind: "setting_shift" as const } };
 		const updated = applyComplicationResult(game, result, seededRng([0.5]));
 		const updatedPhase = updated;
@@ -804,12 +668,12 @@ describe("applyComplicationResult — setting_shift swaps active pack", () => {
 			weather: PACK_A.weather,
 			timeOfDay: PACK_A.timeOfDay,
 		});
-		return makeGameStateAround({
+		return {
 			...phase,
 			contentPacksA: [PACK_A],
 			contentPacksB: [PACK_B],
 			activePackId: "A",
-		});
+		};
 	}
 
 	it("sets activePackId to 'B' when setting_shift fires", () => {
@@ -861,12 +725,12 @@ describe("applyComplicationResult — setting_shift swaps active pack", () => {
 			setting: PACK_A.setting,
 			world: { entities },
 		});
-		const game: GameState = makeGameStateAround({
+		const game: GameState = {
 			...phase,
 			contentPacksA: [PACK_A],
 			contentPacksB: [PACK_B],
 			activePackId: "A",
-		});
+		};
 		const result = { fired: { kind: "setting_shift" as const } };
 		const updated = applyComplicationResult(game, result, seededRng([0.5]));
 		const updatedPhase = updated;
@@ -1096,10 +960,9 @@ describe("applyComplicationResult — setting_shift reprojects world entities", 
 
 describe("determinism", () => {
 	it("same game state and same rng seed sequence produces the same ComplicationResult", () => {
-		const phase = makePhase({
+		const game = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },
 		});
-		const game = makeGameStateAround(phase);
 		const r1 = tickComplication(game, seededRng([0.5, 0.0, 0.0]));
 		const r2 = tickComplication(game, seededRng([0.5, 0.0, 0.0]));
 		expect(r1).toEqual(r2);
@@ -1108,11 +971,7 @@ describe("determinism", () => {
 
 describe("startGame — complicationSchedule initialisation", () => {
 	it("initialises activeComplications to an empty array", () => {
-		const phase = startGame(
-			TEST_PERSONAS,
-			makeTestPack([], { wallName: "wall" }),
-			{ budgetPerAi: 0.5 },
-		);
+		const phase = makeTestGame({ budgetPerAi: 0.5 });
 		expect(phase.activeComplications).toEqual([]);
 	});
 });
@@ -1174,33 +1033,30 @@ describe("isPlayerChatLockedOut", () => {
 
 describe("resolveExpiredChatLockouts", () => {
 	it("returns no resolved ids when activeComplications is empty", () => {
-		const phase = makePhase({ round: 5, activeComplications: [] });
-		const game = makeGameStateAround(phase);
+		const game = makePhase({ round: 5, activeComplications: [] });
 		const { nextState, resolvedAiIds } = resolveExpiredChatLockouts(game);
 		expect(resolvedAiIds).toHaveLength(0);
 		expect(nextState).toBe(game);
 	});
 
 	it("returns no resolved ids when no lockout has expired", () => {
-		const phase = makePhase({
+		const game = makePhase({
 			round: 2,
 			activeComplications: [
 				{ kind: "chat_lockout", target: "red", resolveAtRound: 5 },
 			],
 		});
-		const game = makeGameStateAround(phase);
 		const { resolvedAiIds } = resolveExpiredChatLockouts(game);
 		expect(resolvedAiIds).toHaveLength(0);
 	});
 
 	it("resolves a lockout when phase.round >= resolveAtRound", () => {
-		const phase = makePhase({
+		const game = makePhase({
 			round: 5,
 			activeComplications: [
 				{ kind: "chat_lockout", target: "red", resolveAtRound: 5 },
 			],
 		});
-		const game = makeGameStateAround(phase);
 		const { nextState, resolvedAiIds } = resolveExpiredChatLockouts(game);
 		expect(resolvedAiIds).toContain("red");
 		const nextPhase = nextState;
@@ -1208,14 +1064,13 @@ describe("resolveExpiredChatLockouts", () => {
 	});
 
 	it("only removes expired lockouts, leaving unexpired ones intact", () => {
-		const phase = makePhase({
+		const game = makePhase({
 			round: 5,
 			activeComplications: [
 				{ kind: "chat_lockout", target: "red", resolveAtRound: 4 },
 				{ kind: "chat_lockout", target: "green", resolveAtRound: 8 },
 			],
 		});
-		const game = makeGameStateAround(phase);
 		const { nextState, resolvedAiIds } = resolveExpiredChatLockouts(game);
 		expect(resolvedAiIds).toContain("red");
 		expect(resolvedAiIds).not.toContain("green");
@@ -1225,7 +1080,7 @@ describe("resolveExpiredChatLockouts", () => {
 	});
 
 	it("does not remove non-chat_lockout complications", () => {
-		const phase = makePhase({
+		const game = makePhase({
 			round: 10,
 			activeComplications: [
 				{
@@ -1237,7 +1092,6 @@ describe("resolveExpiredChatLockouts", () => {
 				{ kind: "chat_lockout", target: "cyan", resolveAtRound: 3 },
 			],
 		});
-		const game = makeGameStateAround(phase);
 		const { nextState, resolvedAiIds } = resolveExpiredChatLockouts(game);
 		expect(resolvedAiIds).toContain("cyan");
 		const nextPhase = nextState;

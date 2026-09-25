@@ -3,61 +3,17 @@ import type { OpenAiMessage } from "../../llm-client";
 import { GameSession } from "../game-session";
 import type { RoundLLMProvider } from "../round-llm-provider";
 import { MockRoundLLMProvider } from "../round-llm-provider";
-import type { AiPersona, ContentPack } from "../types";
+import {
+	makeSilentProvider,
+	ROW_AI_STARTS,
+	TEST_PERSONAS,
+} from "./fixtures/make-game-state";
 import { makeTestPack } from "./fixtures/make-test-pack";
-
-const TEST_PERSONAS: Record<string, AiPersona> = {
-	red: {
-		id: "red",
-		name: "Ember",
-		color: "#e07a5f",
-		temperaments: ["hot-headed", "zealous"],
-		personaGoal: "Hold the flower at phase end.",
-		typingQuirks: [
-			"You speak in fragments. Short bursts. Rarely complete sentences.",
-			"You lean on em-dashes — interrupting yourself mid-sentence — and rarely use commas where a dash would do.",
-		],
-		blurb: "Ember is hot-headed and zealous. Hold the flower at phase end.",
-		voiceExamples: ["ex1-red", "ex2-red", "ex3-red"],
-	},
-	green: {
-		id: "green",
-		name: "Sage",
-		color: "#81b29a",
-		temperaments: ["meticulous", "meticulous"],
-		personaGoal: "Ensure items are evenly distributed.",
-		typingQuirks: [
-			"You lean on ellipses… trailing off mid-thought… rarely landing cleanly.",
-			"You use ALL-CAPS to emphasize the one or two words that MATTER in any given sentence.",
-		],
-		blurb: "Sage is intensely meticulous. Ensure items are evenly distributed.",
-		voiceExamples: ["ex1-green", "ex2-green", "ex3-green"],
-	},
-	cyan: {
-		id: "cyan",
-		name: "Frost",
-		color: "#5fa8d3",
-		temperaments: ["laconic", "diffident"],
-		personaGoal: "Hold the key at phase end.",
-		typingQuirks: [
-			'You never use contractions. You will not say "won\'t" or "can\'t" — you say "will not" and "cannot" every time.',
-			"You end almost every reply with a question, no matter what the topic is — does that make sense?",
-		],
-		blurb: "Frost is laconic and diffident. Hold the key at phase end.",
-		voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
-	},
-};
-
-const RGC_AI_STARTS: ContentPack["aiStarts"] = {
-	red: { position: { row: 0, col: 0 } },
-	green: { position: { row: 0, col: 1 } },
-	cyan: { position: { row: 0, col: 2 } },
-};
 
 const MINIMAL_CONTENT_PACK = makeTestPack([], {
 	setting: "test station",
 	wallName: "wall",
-	aiStarts: RGC_AI_STARTS,
+	aiStarts: ROW_AI_STARTS,
 });
 
 const CONTENT_PACK_WITH_ITEMS = makeTestPack(
@@ -88,21 +44,13 @@ const CONTENT_PACK_WITH_ITEMS = makeTestPack(
 	{
 		setting: "test setting",
 		wallName: "wall",
-		aiStarts: RGC_AI_STARTS,
+		aiStarts: ROW_AI_STARTS,
 	},
 );
 
 const CONTENT_PACK_OBJECTIVE_TYPES: import("../types.js").ObjectiveType[] = [
 	"carry",
 ];
-
-function makePassProvider() {
-	return new MockRoundLLMProvider([
-		{ assistantText: "", toolCalls: [] },
-		{ assistantText: "", toolCalls: [] },
-		{ assistantText: "", toolCalls: [] },
-	]);
-}
 
 describe("GameSession construction", () => {
 	it("creates a session with flat game state", () => {
@@ -129,7 +77,7 @@ describe("GameSession — message routing", () => {
 		await session.submitMessage(
 			"red",
 			"Secret message for Ember",
-			makePassProvider(),
+			makeSilentProvider(),
 		);
 
 		const phase = session.getState();
@@ -156,8 +104,8 @@ describe("GameSession — message routing", () => {
 	it("routing changes per round — second message goes to different AI", async () => {
 		const session = new GameSession(MINIMAL_CONTENT_PACK, TEST_PERSONAS);
 
-		await session.submitMessage("red", "for red", makePassProvider());
-		await session.submitMessage("green", "for green", makePassProvider());
+		await session.submitMessage("red", "for red", makeSilentProvider());
+		await session.submitMessage("green", "for green", makeSilentProvider());
 
 		const phase = session.getState();
 		expect(
@@ -180,10 +128,10 @@ describe("GameSession — state mutation across rounds", () => {
 	it("round counter advances after each submitMessage call", async () => {
 		const session = new GameSession(MINIMAL_CONTENT_PACK, TEST_PERSONAS);
 
-		await session.submitMessage("red", "hi", makePassProvider());
+		await session.submitMessage("red", "hi", makeSilentProvider());
 		expect(session.getState().round).toBe(1);
 
-		await session.submitMessage("green", "hi", makePassProvider());
+		await session.submitMessage("green", "hi", makeSilentProvider());
 		expect(session.getState().round).toBe(2);
 	});
 
@@ -222,7 +170,7 @@ describe("GameSession — state mutation across rounds", () => {
 		]);
 		await session.submitMessage("red", "hi", provider1);
 
-		await session.submitMessage("green", "hi", makePassProvider());
+		await session.submitMessage("green", "hi", makeSilentProvider());
 
 		const phase = session.getState();
 		const flower = phase.world.entities.find((i) => i.id === "carry-0-obj");
@@ -295,7 +243,7 @@ describe("GameSession — completions map", () => {
 		const { completions } = await session.submitMessage(
 			"red",
 			"round 2",
-			makePassProvider(),
+			makeSilentProvider(),
 		);
 
 		expect(completions.red).toBe("");
@@ -326,7 +274,7 @@ describe("GameSession — result from submitMessage", () => {
 		const { result } = await session.submitMessage(
 			"red",
 			"hi",
-			makePassProvider(),
+			makeSilentProvider(),
 		);
 		expect(result.round).toBe(1);
 	});
@@ -337,7 +285,7 @@ describe("GameSession — result from submitMessage", () => {
 		const { result } = await session.submitMessage(
 			"red",
 			"hi",
-			makePassProvider(),
+			makeSilentProvider(),
 		);
 
 		const actors = new Set(result.actions.map((a) => a.actor));
@@ -349,7 +297,7 @@ describe("GameSession — result from submitMessage", () => {
 		const { result } = await session.submitMessage(
 			"red",
 			"hi",
-			makePassProvider(),
+			makeSilentProvider(),
 		);
 		expect(typeof result.round).toBe("number");
 		expect(Array.isArray(result.actions)).toBe(true);
@@ -371,7 +319,7 @@ describe("GameSession — win / lose via checkWinCondition / checkLoseCondition"
 		const { result } = await session.submitMessage(
 			"red",
 			"hi",
-			makePassProvider(),
+			makeSilentProvider(),
 		);
 		expect(result.gameEnded).toBe(false);
 	});
@@ -382,7 +330,7 @@ describe("GameSession — win / lose via checkWinCondition / checkLoseCondition"
 		const { result } = await session.submitMessage(
 			"red",
 			"hi",
-			makePassProvider(),
+			makeSilentProvider(),
 		);
 		expect(result.gameEnded).toBe(true);
 	});

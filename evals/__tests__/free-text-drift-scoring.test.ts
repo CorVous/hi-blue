@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { TurnRecord } from "../../../../evals/free-text-drift/scoring.js";
+import type { TurnRecord } from "../free-text-drift/scoring.js";
 import {
 	buildPerRoundSeries,
 	looksLikeFreeTextAction,
@@ -8,7 +8,7 @@ import {
 	parseToolCallDetail,
 	rollingSilenceRate,
 	summarizeRun,
-} from "../../../../evals/free-text-drift/scoring.js";
+} from "../free-text-drift/scoring.js";
 
 describe("parseToolCallDetail", () => {
 	it("extracts direction from a go tool call", () => {
