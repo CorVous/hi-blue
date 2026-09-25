@@ -7,12 +7,12 @@ import {
 } from "../dispatcher";
 import { deductBudget, startGame } from "../engine";
 import type {
-	AiPersona,
 	AiTurnAction,
 	CarryObjective,
 	ContentPack,
 	ConvergenceObjective,
 	GameState,
+	GridPosition,
 	Objective,
 	ToolCall,
 	UseItemObjective,
@@ -24,49 +24,14 @@ import {
 	isCarryObjectiveSatisfied,
 	isUseItemObjectiveSatisfied,
 } from "../win-condition";
+import {
+	CORNER_AI_STARTS,
+	makeEntity,
+	makeTestGame,
+	ROW_AI_STARTS,
+	TEST_PERSONAS,
+} from "./fixtures/make-game-state";
 import { makeTestPack } from "./fixtures/make-test-pack";
-
-const TEST_PERSONAS: Record<string, AiPersona> = {
-	red: {
-		id: "red",
-		name: "Ember",
-		color: "#e07a5f",
-		temperaments: ["hot-headed", "zealous"],
-		personaGoal: "Hold the flower at phase end.",
-		typingQuirks: [
-			"You speak in fragments. Short bursts. Rarely complete sentences.",
-			"You lean on em-dashes — interrupting yourself mid-sentence — and rarely use commas where a dash would do.",
-		],
-		blurb: "Ember is hot-headed and zealous. Hold the flower at phase end.",
-		voiceExamples: ["ex1-red", "ex2-red", "ex3-red"],
-	},
-	green: {
-		id: "green",
-		name: "Sage",
-		color: "#81b29a",
-		temperaments: ["meticulous", "meticulous"],
-		personaGoal: "Ensure items are evenly distributed.",
-		typingQuirks: [
-			"You lean on ellipses… trailing off mid-thought… rarely landing cleanly.",
-			"You use ALL-CAPS to emphasize the one or two words that MATTER in any given sentence.",
-		],
-		blurb: "Sage is intensely meticulous. Ensure items are evenly distributed.",
-		voiceExamples: ["ex1-green", "ex2-green", "ex3-green"],
-	},
-	cyan: {
-		id: "cyan",
-		name: "Frost",
-		color: "#5fa8d3",
-		temperaments: ["laconic", "diffident"],
-		personaGoal: "Hold the key at phase end.",
-		typingQuirks: [
-			'You never use contractions. You will not say "won\'t" or "can\'t" — you say "will not" and "cannot" every time.',
-			"You end almost every reply with a question, no matter what the topic is — does that make sense?",
-		],
-		blurb: "Frost is laconic and diffident. Hold the key at phase end.",
-		voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
-	},
-};
 
 const FIXED_RNG = () => 0;
 
@@ -74,63 +39,50 @@ function rawToolCall(name: string, args: Record<string, string>): ToolCall {
 	return { name, args } as unknown as ToolCall;
 }
 
-function makeEntity(
+function makeUsableEntity(
 	id: string,
 	kind: WorldEntity["kind"],
 	holder: WorldEntity["holder"],
 	extra: Partial<WorldEntity> = {},
 ): WorldEntity {
-	return {
-		id,
-		kind,
-		name: id,
-		examineDescription: `A ${id}.`,
-		holder,
+	return makeEntity(id, kind, holder, {
 		useOutcome: `You used the ${id}.`,
 		...extra,
-	};
-}
-
-const RGC_AI_STARTS: ContentPack["aiStarts"] = {
-	red: { position: { row: 0, col: 0 } },
-	green: { position: { row: 0, col: 1 } },
-	cyan: { position: { row: 0, col: 2 } },
-};
-
-const RGC_AI_STARTS_RED_SOUTH: ContentPack["aiStarts"] = {
-	red: { position: { row: 0, col: 0 } },
-	green: { position: { row: 0, col: 1 } },
-	cyan: { position: { row: 0, col: 2 } },
-};
-
-function makePackWithEntities(
-	entities: {
-		flower: WorldEntity["holder"];
-		key: WorldEntity["holder"];
-	},
-	obstaclePositions: Array<{ row: number; col: number }> = [],
-): ContentPack {
-	const flower = makeEntity("flower", "interesting_object", entities.flower);
-	const key = makeEntity("key", "interesting_object", entities.key);
-	const obstacles = obstaclePositions.map((pos, i) =>
-		makeEntity(`obs${i}`, "obstacle", pos),
-	);
-	return makeTestPack([flower, key, ...obstacles], {
-		setting: "test setting",
-		wallName: "wall",
-		aiStarts: RGC_AI_STARTS,
 	});
 }
 
-function makeGame(obstaclePositions: Array<{ row: number; col: number }> = []) {
-	const pack = makePackWithEntities(
-		{
-			flower: { row: 0, col: 0 },
-			key: "red",
-		},
-		obstaclePositions,
+function makeFlowerKeyGame(
+	options: {
+		flower?: WorldEntity["holder"];
+		obstaclePositions?: GridPosition[];
+		aiStarts?: ContentPack["aiStarts"];
+		budgetPerAi?: number;
+	} = {},
+): GameState {
+	const obstacles = (options.obstaclePositions ?? []).map((pos, i) =>
+		makeUsableEntity(`obs${i}`, "obstacle", pos),
 	);
-	return startGame(TEST_PERSONAS, pack, { budgetPerAi: 5, rng: FIXED_RNG });
+	return makeTestGame({
+		entities: [
+			makeUsableEntity(
+				"flower",
+				"interesting_object",
+				options.flower ?? { row: 0, col: 0 },
+			),
+			makeUsableEntity("key", "interesting_object", "red"),
+			...obstacles,
+		],
+		pack: {
+			setting: "test setting",
+			aiStarts: options.aiStarts ?? ROW_AI_STARTS,
+		},
+		budgetPerAi: options.budgetPerAi ?? 5,
+		rng: FIXED_RNG,
+	});
+}
+
+function makeGame(obstaclePositions: GridPosition[] = []) {
+	return makeFlowerKeyGame({ obstaclePositions });
 }
 
 describe("validateToolCall", () => {
@@ -263,7 +215,7 @@ describe("validateToolCall", () => {
 
 	it("use on ground item in interaction range (one step ahead) returns friendlier message", () => {
 		const pack = makeTestPack(
-			[makeEntity("flower", "interesting_object", { row: 1, col: 0 })],
+			[makeUsableEntity("flower", "interesting_object", { row: 1, col: 0 })],
 			{
 				setting: "test",
 				wallName: "wall",
@@ -284,7 +236,7 @@ describe("validateToolCall", () => {
 
 	it("use on ground item at distance 2 (outside interaction range) returns generic message", () => {
 		const pack = makeTestPack(
-			[makeEntity("flower", "interesting_object", { row: 2, col: 0 })],
+			[makeUsableEntity("flower", "interesting_object", { row: 2, col: 0 })],
 			{
 				setting: "test",
 				wallName: "wall",
@@ -312,7 +264,7 @@ describe("validateToolCall", () => {
 
 	it("use on a ground item out of reach retains the generic not-holding message", () => {
 		const pack = makeTestPack(
-			[makeEntity("flower", "interesting_object", { row: 4, col: 4 })],
+			[makeUsableEntity("flower", "interesting_object", { row: 4, col: 4 })],
 			{
 				setting: "test",
 				wallName: "wall",
@@ -353,7 +305,7 @@ describe("executeToolCall — use placement within interaction range", () => {
 		const pack = makeTestPack([gem, pedestal], {
 			setting: "test",
 			wallName: "wall",
-			aiStarts: RGC_AI_STARTS_RED_SOUTH,
+			aiStarts: ROW_AI_STARTS,
 		});
 		const game = startGame(TEST_PERSONAS, pack, {
 			budgetPerAi: 5,
@@ -385,7 +337,7 @@ describe("executeToolCall — use placement within interaction range", () => {
 		const pack = makeTestPack([gem, pedestal], {
 			setting: "test",
 			wallName: "wall",
-			aiStarts: RGC_AI_STARTS_RED_SOUTH,
+			aiStarts: ROW_AI_STARTS,
 		});
 		const game = startGame(TEST_PERSONAS, pack, {
 			budgetPerAi: 5,
@@ -527,11 +479,7 @@ describe("executeToolCall", () => {
 
 describe("dispatchAiTurn", () => {
 	it("rejects a turn from a locked-out AI", () => {
-		let game = startGame(
-			TEST_PERSONAS,
-			makePackWithEntities({ flower: { row: 0, col: 0 }, key: "red" }),
-			{ budgetPerAi: 0.01, rng: FIXED_RNG },
-		);
+		let game = makeFlowerKeyGame({ budgetPerAi: 0.01 });
 		game = deductBudget(game, "red", 0.01).game;
 		const action: AiTurnAction = { aiId: "red", pass: true };
 		const result = dispatchAiTurn(game, action);
@@ -724,7 +672,7 @@ describe("dispatchAiTurn", () => {
 		const pack = makeTestPack([gemObject, altarSpace], {
 			setting: "test",
 			wallName: "wall",
-			aiStarts: RGC_AI_STARTS,
+			aiStarts: ROW_AI_STARTS,
 		});
 		const game = startGame(TEST_PERSONAS, pack, {
 			budgetPerAi: 5,
@@ -762,7 +710,7 @@ describe("dispatchAiTurn", () => {
 		const pack = makeTestPack([gemObject, altarSpace], {
 			setting: "test",
 			wallName: "wall",
-			aiStarts: RGC_AI_STARTS,
+			aiStarts: ROW_AI_STARTS,
 		});
 		const game = startGame(TEST_PERSONAS, pack, {
 			budgetPerAi: 5,
@@ -782,7 +730,7 @@ describe("dispatchAiTurn", () => {
 	});
 
 	it("AC 12: actor's own pick_up does NOT append witnessed-event to actor's log; in-Vista witness receives one", () => {
-		const flower = makeEntity("flower", "interesting_object", {
+		const flower = makeUsableEntity("flower", "interesting_object", {
 			row: 2,
 			col: 0,
 		});
@@ -1002,17 +950,12 @@ function makeGameWithSpaceObjective(
 		satisfactionState: "pending",
 		spaceId: "shrine",
 	};
-	const pack = makeTestPack([obj, space], {
-		setting: "test",
-		wallName: "wall",
-		aiStarts: {
-			red: { position: actorPos },
-			green: { position: { row: 0, col: 0 } },
-			cyan: { position: { row: 4, col: 4 } },
+	const started = makeTestGame({
+		entities: [obj, space],
+		pack: {
+			setting: "test",
+			aiStarts: { ...CORNER_AI_STARTS, red: { position: actorPos } },
 		},
-	});
-	const started = startGame(TEST_PERSONAS, pack, {
-		budgetPerAi: 5,
 		rng: () => 0,
 	});
 	return { ...started, objectives: [spaceObjective] };
@@ -1434,26 +1377,13 @@ describe("dispatchAiTurn — use on objective_space surfaces activationFlavor to
 
 describe("dispatchAiTurn — disk-delta computation (issue #376)", () => {
 	it("go action that reveals a stationary actor sets actorDiskDelta on DispatchResult", () => {
-		const pack = makePackWithEntities(
-			{
-				flower: { row: 3, col: 3 },
-				key: "red",
-			},
-			[],
-		);
-
-		const packWithCustomStarts: ContentPack = {
-			...pack,
+		const game = makeFlowerKeyGame({
+			flower: { row: 3, col: 3 },
 			aiStarts: {
 				red: { position: { row: 2, col: 0 } },
 				green: { position: { row: 0, col: 1 } },
 				cyan: { position: { row: 5, col: 0 } },
 			},
-		};
-
-		const game = startGame(TEST_PERSONAS, packWithCustomStarts, {
-			budgetPerAi: 5,
-			rng: FIXED_RNG,
 		});
 
 		const action: AiTurnAction = {

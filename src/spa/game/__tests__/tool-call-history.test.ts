@@ -1,40 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { appendMessage, startGame } from "../engine";
+import { appendMessage } from "../engine";
 import { buildOpenAiMessages } from "../openai-message-builder";
 import { buildAiContext } from "../prompt-builder";
 import type { AiPersona, ConversationEntry } from "../types";
-import { makeTestPack } from "./fixtures/make-test-pack";
+import { makeTestGame, TEST_PERSONAS } from "./fixtures/make-game-state";
 
-const TEST_PERSONAS: Record<string, AiPersona> = {
-	red: {
-		id: "red",
-		name: "Ember",
-		color: "#e07a5f",
-		temperaments: ["hot-headed", "zealous"],
-		personaGoal: "Hold the flower at phase end.",
-		typingQuirks: [
-			"You speak in fragments. Short bursts. Rarely complete sentences.",
-			"You occasionally emote with *actions*.",
-		],
-		blurb: "Ember is hot-headed and zealous.",
-		voiceExamples: ["ex1-red", "ex2-red", "ex3-red"],
-	},
-	blue: {
-		id: "blue",
-		name: "Blue",
-		color: "#5fa8d3",
-		temperaments: ["curious", "thoughtful"],
-		personaGoal: "Explore.",
-		typingQuirks: ["You ask questions.", "You type clearly and precisely."],
-		blurb: "Blue is curious.",
-		voiceExamples: ["ex1-blue", "ex2-blue", "ex3-blue"],
-	},
+const BLUE_PERSONA: AiPersona = {
+	id: "blue",
+	name: "Blue",
+	color: "#5fa8d3",
+	temperaments: ["curious", "thoughtful"],
+	personaGoal: "Explore.",
+	typingQuirks: ["You ask questions.", "You type clearly and precisely."],
+	blurb: "Blue is curious.",
+	voiceExamples: ["ex1-blue", "ex2-blue", "ex3-blue"],
 };
 
-const TEST_CONTENT_PACK = makeTestPack([], { wallName: "wall" });
-
 function makeGame() {
-	return startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
+	return makeTestGame({
+		personas: { red: TEST_PERSONAS.red as AiPersona, blue: BLUE_PERSONA },
+	});
 }
 
 describe("ConversationEntry message kind with tool call fields", () => {

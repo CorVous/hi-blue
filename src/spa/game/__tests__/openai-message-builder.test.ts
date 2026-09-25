@@ -1,73 +1,16 @@
 import { describe, expect, it } from "vitest";
-import {
-	advanceRound,
-	appendActionFailure,
-	appendMessage,
-	startGame,
-} from "../engine";
+import { advanceRound, appendActionFailure, appendMessage } from "../engine";
 import {
 	buildOpenAiMessages,
 	buildSilentTurn,
 } from "../openai-message-builder";
 import { buildAiContext } from "../prompt-builder";
-import type {
-	AiPersona,
-	ConversationEntry,
-	ToolRoundtripMessage,
-} from "../types";
-import { makeTestPack } from "./fixtures/make-test-pack";
-
-const TEST_PERSONAS: Record<string, AiPersona> = {
-	red: {
-		id: "red",
-		name: "Ember",
-		color: "#e07a5f",
-		temperaments: ["hot-headed", "zealous"],
-		personaGoal: "Hold the flower at phase end.",
-		typingQuirks: [
-			"You speak in fragments. Short bursts. Rarely complete sentences.",
-			"You lean on em-dashes — interrupting yourself mid-sentence — and rarely use commas where a dash would do.",
-		],
-		blurb: "Ember is hot-headed and zealous. Hold the flower at phase end.",
-		voiceExamples: ["ex1-red", "ex2-red", "ex3-red"],
-	},
-	green: {
-		id: "green",
-		name: "Sage",
-		color: "#81b29a",
-		temperaments: ["meticulous", "meticulous"],
-		personaGoal: "Ensure items are evenly distributed.",
-		typingQuirks: [
-			"You lean on ellipses… trailing off mid-thought… rarely landing cleanly.",
-			"You use ALL-CAPS to emphasize the one or two words that MATTER in any given sentence.",
-		],
-		blurb: "Sage is intensely meticulous. Ensure items are evenly distributed.",
-		voiceExamples: ["ex1-green", "ex2-green", "ex3-green"],
-	},
-	cyan: {
-		id: "cyan",
-		name: "Frost",
-		color: "#5fa8d3",
-		temperaments: ["laconic", "diffident"],
-		personaGoal: "Hold the key at phase end.",
-		typingQuirks: [
-			'You never use contractions. You will not say "won\'t" or "can\'t" — you say "will not" and "cannot" every time.',
-			"You end almost every reply with a question, no matter what the topic is — does that make sense?",
-		],
-		blurb: "Frost is laconic and diffident. Hold the key at phase end.",
-		voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
-	},
-};
-
-const TEST_CONTENT_PACK = makeTestPack([], { wallName: "wall" });
-
-function makeGame() {
-	return startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
-}
+import type { ConversationEntry, ToolRoundtripMessage } from "../types";
+import { makeTestGame } from "./fixtures/make-game-state";
 
 describe("buildOpenAiMessages", () => {
 	it("empty chat history + no roundtrip → [system, current-state user turn]", () => {
-		const game = makeGame();
+		const game = makeTestGame();
 		const ctx = buildAiContext(game, "red");
 		const messages = buildOpenAiMessages(ctx, undefined);
 
@@ -80,7 +23,7 @@ describe("buildOpenAiMessages", () => {
 	});
 
 	it("single player+AI message turn → [system, user, assistant, current-state]", () => {
-		let game = makeGame();
+		let game = makeTestGame();
 		game = appendMessage(game, "blue", "red", "Hello Ember!");
 		game = appendMessage(game, "red", "blue", "Hello, player!");
 
@@ -104,7 +47,7 @@ describe("buildOpenAiMessages", () => {
 	});
 
 	it("message history of length N → N pairs after system, then current-state", () => {
-		let game = makeGame();
+		let game = makeTestGame();
 		for (let i = 0; i < 3; i++) {
 			game = appendMessage(game, "blue", "red", `Player msg ${i}`);
 			game = appendMessage(game, "red", "blue", `AI msg ${i}`);
@@ -126,7 +69,7 @@ describe("buildOpenAiMessages", () => {
 	});
 
 	it("prior-round tool roundtrip is appended with correct ordering", () => {
-		let game = makeGame();
+		let game = makeTestGame();
 		game = appendMessage(game, "blue", "red", "Pick it up!");
 
 		const ctx = buildAiContext(game, "red");
@@ -180,7 +123,7 @@ describe("buildOpenAiMessages", () => {
 	});
 
 	it("matching tool_call_id in assistant message and tool message", () => {
-		const game = makeGame();
+		const game = makeTestGame();
 		const ctx = buildAiContext(game, "red");
 
 		const roundtrip: ToolRoundtripMessage = {
@@ -214,7 +157,7 @@ describe("buildOpenAiMessages", () => {
 	});
 
 	it("failed prior call: tool result content reads as dispatcher failure reason", () => {
-		const game = makeGame();
+		const game = makeTestGame();
 		const ctx = buildAiContext(game, "red");
 
 		const roundtrip: ToolRoundtripMessage = {
@@ -246,7 +189,7 @@ describe("buildOpenAiMessages", () => {
 	});
 
 	it("empty roundtrip (no assistantToolCalls) does not append extra messages", () => {
-		const game = makeGame();
+		const game = makeTestGame();
 		const ctx = buildAiContext(game, "red");
 
 		const emptyRoundtrip: ToolRoundtripMessage = {
@@ -262,7 +205,7 @@ describe("buildOpenAiMessages", () => {
 	});
 
 	it("(a) blue addresses peer, no incoming message for this daemon → silent-turn anchor fires (second-to-last)", () => {
-		let game = makeGame();
+		let game = makeTestGame();
 		game = appendMessage(game, "blue", "red", "Hi Ember");
 		game = appendMessage(game, "red", "blue", "Hi player");
 
@@ -283,7 +226,7 @@ describe("buildOpenAiMessages", () => {
 	});
 
 	it("(b) peer messages this daemon this round → no silent-turn anchor, last conversational user msg is peer message", () => {
-		let game = makeGame();
+		let game = makeTestGame();
 		const currentRound = game.round;
 		game = appendMessage(game, "green", "red", "psst red");
 
@@ -312,7 +255,7 @@ describe("buildOpenAiMessages", () => {
 	});
 
 	it("(c) blue addresses this daemon → no silent-turn anchor, last conversational user msg is player message", () => {
-		let game = makeGame();
+		let game = makeTestGame();
 		const currentRound = game.round;
 		game = appendMessage(game, "blue", "red", "Hi Ember");
 
@@ -341,7 +284,7 @@ describe("buildOpenAiMessages", () => {
 	});
 
 	it("when `currentRound` is omitted, no anchor is appended (back-compat)", () => {
-		const game = makeGame();
+		const game = makeTestGame();
 		const ctx = buildAiContext(game, "red");
 		const silent = buildSilentTurn();
 		const messages = buildOpenAiMessages(ctx, undefined);
@@ -354,7 +297,7 @@ describe("buildOpenAiMessages", () => {
 	});
 
 	it("incoming message from a prior round does not suppress the anchor for currentRound", () => {
-		let game = makeGame();
+		let game = makeTestGame();
 		game = appendMessage(game, "blue", "red", "Prior round message");
 		game = appendMessage(game, "red", "blue", "My reply");
 
@@ -370,7 +313,7 @@ describe("buildOpenAiMessages", () => {
 	});
 
 	it("buildOpenAiMessages is pure: same context → byte-identical output", () => {
-		let game = makeGame();
+		let game = makeTestGame();
 		game = appendMessage(game, "blue", "red", "hi");
 		game = appendMessage(game, "red", "blue", "hi back");
 		game = appendMessage(game, "green", "red", "psst");
@@ -385,7 +328,7 @@ describe("buildOpenAiMessages", () => {
 	});
 
 	it("system prompt is byte-stable across rounds within a phase", () => {
-		let game = makeGame();
+		let game = makeTestGame();
 		const round0Prompt = buildAiContext(game, "red").toSystemPrompt();
 
 		game = appendMessage(game, "blue", "red", "round 0 chatter");
@@ -400,7 +343,7 @@ describe("buildOpenAiMessages", () => {
 
 describe("multi-id roundtrip replay shapes (#238)", () => {
 	it("roundtrip with 2 assistantToolCalls produces assistant{tool_calls:[a,b]} + 2 tool messages", () => {
-		const game = makeGame();
+		const game = makeTestGame();
 		const ctx = buildAiContext(game, "red");
 
 		const roundtrip: ToolRoundtripMessage = {
@@ -456,7 +399,7 @@ describe("multi-id roundtrip replay shapes (#238)", () => {
 	});
 
 	it("roundtrip with [msg-fail, action-success] produces both tool messages with correct success flags", () => {
-		const game = makeGame();
+		const game = makeTestGame();
 		const ctx = buildAiContext(game, "red");
 
 		const roundtrip: ToolRoundtripMessage = {
@@ -502,7 +445,7 @@ describe("multi-id roundtrip replay shapes (#238)", () => {
 	});
 
 	it("row-3 wire shape: conversationLog msg + roundtrip action produces consecutive assistant turns (intentional)", () => {
-		let game = makeGame();
+		let game = makeTestGame();
 		game = appendMessage(game, "red", "blue", "I'll grab the flower");
 
 		const ctx = buildAiContext(game, "red");
@@ -558,7 +501,7 @@ describe("multi-id roundtrip replay shapes (#238)", () => {
 
 describe("buildOpenAiMessages — action-failure entries", () => {
 	it("action-failure entry is emitted as role: 'user' with rendered content", () => {
-		let game = makeGame();
+		let game = makeTestGame();
 		game = appendActionFailure(game, "red", {
 			kind: "action-failure",
 			round: 0,
@@ -583,7 +526,7 @@ describe("buildOpenAiMessages — action-failure entries", () => {
 	});
 
 	it("action-failure entries interleave with message and witnessed-event entries by round (stable sort)", () => {
-		let game = makeGame();
+		let game = makeTestGame();
 		game = appendActionFailure(game, "red", {
 			kind: "action-failure",
 			round: 0,
@@ -611,7 +554,7 @@ describe("buildOpenAiMessages — action-failure entries", () => {
 	});
 
 	it("regression: existing prior-round FAILED: tool-result tests still pass — action-failure does not replace tool result channel", () => {
-		const game = makeGame();
+		const game = makeTestGame();
 		const ctx = buildAiContext(game, "red");
 
 		const roundtrip: ToolRoundtripMessage = {
@@ -644,7 +587,7 @@ describe("buildOpenAiMessages — action-failure entries", () => {
 
 describe("buildOpenAiMessages — tool-call diskDelta (#376)", () => {
 	it("tool-call entry with diskDelta renders tool message with <noticed> block", () => {
-		const game = makeGame();
+		const game = makeTestGame();
 		const toolCallWithDelta: ConversationEntry = {
 			kind: "tool-call",
 			round: 1,
@@ -681,7 +624,7 @@ describe("buildOpenAiMessages — tool-call diskDelta (#376)", () => {
 	});
 
 	it("tool-call entry without diskDelta renders tool message as plain result (back-compat)", () => {
-		const game = makeGame();
+		const game = makeTestGame();
 		const legacyToolCall: ConversationEntry = {
 			kind: "tool-call",
 			round: 1,

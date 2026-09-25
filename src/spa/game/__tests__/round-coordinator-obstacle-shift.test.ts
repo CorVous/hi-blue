@@ -1,42 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { startGame } from "../engine";
 import { runRound } from "../round-coordinator";
-import { MockRoundLLMProvider } from "../round-llm-provider";
-import type { AiPersona, WorldEntity } from "../types";
-import { makeTestPack } from "./fixtures/make-test-pack";
-
-const TEST_PERSONAS: Record<string, AiPersona> = {
-	red: {
-		id: "red",
-		name: "Ember",
-		color: "#e07a5f",
-		temperaments: ["hot-headed", "zealous"],
-		personaGoal: "Hold the flower at phase end.",
-		typingQuirks: ["Fragments.", "Em-dashes."],
-		blurb: "Ember is hot-headed and zealous.",
-		voiceExamples: ["ex1", "ex2", "ex3"],
-	},
-	green: {
-		id: "green",
-		name: "Sage",
-		color: "#81b29a",
-		temperaments: ["meticulous", "meticulous"],
-		personaGoal: "Ensure items are evenly distributed.",
-		typingQuirks: ["Ellipses.", "ALL-CAPS."],
-		blurb: "Sage is meticulous.",
-		voiceExamples: ["ex1", "ex2", "ex3"],
-	},
-	cyan: {
-		id: "cyan",
-		name: "Frost",
-		color: "#5fa8d3",
-		temperaments: ["laconic", "diffident"],
-		personaGoal: "Hold the key at phase end.",
-		typingQuirks: ["No contractions.", "Ends with a question."],
-		blurb: "Frost is laconic and diffident.",
-		voiceExamples: ["ex1", "ex2", "ex3"],
-	},
-};
+import type { WorldEntity } from "../types";
+import {
+	makeSilentProvider,
+	makeTestGame,
+	seededRng,
+	withPackOrderedWorld,
+} from "./fixtures/make-game-state";
 
 const OBSTACLE: WorldEntity = {
 	id: "wall_ob",
@@ -65,49 +35,20 @@ const OBJECTIVE_SPACE: WorldEntity = {
 	holder: { row: 1, col: 1 },
 };
 
-const TEST_CONTENT_PACK = makeTestPack(
-	[OBJECTIVE_OBJECT, OBJECTIVE_SPACE, OBSTACLE],
-	{
-		wallName: "wall",
-		aiStarts: {
-			red: { position: { row: 2, col: 1 } },
-			green: { position: { row: 1, col: 4 } },
-			cyan: { position: { row: 4, col: 0 } },
-		},
-	},
-);
-
-function makeProvider() {
-	return new MockRoundLLMProvider([
-		{ assistantText: "", toolCalls: [] },
-		{ assistantText: "", toolCalls: [] },
-		{ assistantText: "", toolCalls: [] },
-	]);
-}
-
 function makeBaseGame() {
-	const base = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 99 });
-	return {
-		...base,
-		world: {
+	return withPackOrderedWorld(
+		makeTestGame({
 			entities: [OBJECTIVE_OBJECT, OBJECTIVE_SPACE, OBSTACLE],
-		},
-		personaSpatial: TEST_CONTENT_PACK.aiStarts as typeof base.personaSpatial,
-	};
-}
-
-function makeObstacleShiftRng(tupleIndex: number) {
-	let callCount = 0;
-	return () => {
-		callCount += 1;
-		if (callCount === 1) {
-			return 0.5;
-		}
-		if (callCount === 2) {
-			return tupleIndex / 100;
-		}
-		return Math.random();
-	};
+			pack: {
+				aiStarts: {
+					red: { position: { row: 2, col: 1 } },
+					green: { position: { row: 1, col: 4 } },
+					cyan: { position: { row: 4, col: 0 } },
+				},
+			},
+			budgetPerAi: 99,
+		}),
+	);
 }
 
 describe("runRound — obstacle_shift complication (issue #486)", () => {
@@ -122,8 +63,8 @@ describe("runRound — obstacle_shift complication (issue #486)", () => {
 			withCountdown,
 			"red",
 			"hi",
-			makeProvider(),
-			{ rng: makeObstacleShiftRng(0) },
+			makeSilentProvider(),
+			{ rng: seededRng([0.5, 0], Math.random) },
 		);
 
 		const obstacleAfter = nextState.world.entities.find(
@@ -159,8 +100,8 @@ describe("runRound — obstacle_shift complication (issue #486)", () => {
 			withCountdown,
 			"red",
 			"hi",
-			makeProvider(),
-			{ rng: makeObstacleShiftRng(0) },
+			makeSilentProvider(),
+			{ rng: seededRng([0.5, 0], Math.random) },
 		);
 
 		const redLog = nextState.conversationLogs.red ?? [];
@@ -193,8 +134,8 @@ describe("runRound — obstacle_shift complication (issue #486)", () => {
 			withCountdown,
 			"red",
 			"hi",
-			makeProvider(),
-			{ rng: makeObstacleShiftRng(0) },
+			makeSilentProvider(),
+			{ rng: seededRng([0.5, 0], Math.random) },
 		);
 
 		const cyanLog = nextState.conversationLogs.cyan ?? [];
@@ -221,8 +162,8 @@ describe("runRound — obstacle_shift complication (issue #486)", () => {
 			withCountdown,
 			"red",
 			"hi",
-			makeProvider(),
-			{ rng: makeObstacleShiftRng(0) },
+			makeSilentProvider(),
+			{ rng: seededRng([0.5, 0], Math.random) },
 		);
 
 		expect(
@@ -248,8 +189,8 @@ describe("runRound — obstacle_shift complication (issue #486)", () => {
 			withCountdown,
 			"red",
 			"hi",
-			makeProvider(),
-			{ rng: makeObstacleShiftRng(0) },
+			makeSilentProvider(),
+			{ rng: seededRng([0.5, 0], Math.random) },
 		);
 
 		expect(nextState.complicationSchedule.countdown).toBeGreaterThan(0);

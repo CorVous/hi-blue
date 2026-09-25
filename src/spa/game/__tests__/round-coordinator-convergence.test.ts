@@ -1,42 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { startGame } from "../engine";
 import { runRound } from "../round-coordinator";
-import { MockRoundLLMProvider } from "../round-llm-provider";
-import type { AiPersona, ConvergenceObjective, WorldEntity } from "../types";
-import { makeTestPack } from "./fixtures/make-test-pack";
-
-const TEST_PERSONAS: Record<string, AiPersona> = {
-	red: {
-		id: "red",
-		name: "Ember",
-		color: "#e07a5f",
-		temperaments: ["hot-headed", "zealous"],
-		personaGoal: "Hold the flower at phase end.",
-		typingQuirks: ["Fragments.", "Em-dashes."],
-		blurb: "Ember is hot-headed and zealous.",
-		voiceExamples: ["ex1", "ex2", "ex3"],
-	},
-	green: {
-		id: "green",
-		name: "Sage",
-		color: "#81b29a",
-		temperaments: ["meticulous", "meticulous"],
-		personaGoal: "Ensure items are evenly distributed.",
-		typingQuirks: ["Ellipses.", "ALL-CAPS."],
-		blurb: "Sage is meticulous.",
-		voiceExamples: ["ex1", "ex2", "ex3"],
-	},
-	cyan: {
-		id: "cyan",
-		name: "Frost",
-		color: "#5fa8d3",
-		temperaments: ["laconic", "diffident"],
-		personaGoal: "Hold the key at phase end.",
-		typingQuirks: ["No contractions.", "Ends with a question."],
-		blurb: "Frost is laconic and diffident.",
-		voiceExamples: ["ex1", "ex2", "ex3"],
-	},
-};
+import type { ConvergenceObjective, WorldEntity } from "../types";
+import {
+	makeSilentProvider,
+	makeTestGame,
+	withPackOrderedWorld,
+} from "./fixtures/make-game-state";
 
 const CONVERGENCE_SPACE: WorldEntity = {
 	id: "altar_space",
@@ -62,18 +31,6 @@ const CONVERGENCE_OBJECT: WorldEntity = {
 	placementFlavor: "{actor} places it on the altar.",
 };
 
-const TEST_CONTENT_PACK = makeTestPack(
-	[CONVERGENCE_OBJECT, CONVERGENCE_SPACE],
-	{
-		wallName: "wall",
-		aiStarts: {
-			red: { position: { row: 4, col: 4 } },
-			green: { position: { row: 0, col: 0 } },
-			cyan: { position: { row: 0, col: 2 } },
-		},
-	},
-);
-
 const CONVERGENCE_OBJECTIVE: ConvergenceObjective = {
 	id: "obj-conv",
 	kind: "convergence",
@@ -82,31 +39,31 @@ const CONVERGENCE_OBJECTIVE: ConvergenceObjective = {
 	spaceId: "altar_space",
 };
 
-function makeProvider() {
-	return new MockRoundLLMProvider([
-		{ assistantText: "", toolCalls: [] },
-		{ assistantText: "", toolCalls: [] },
-		{ assistantText: "", toolCalls: [] },
-	]);
-}
-
 function makeBaseGame() {
-	const base = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 99 });
-	return {
-		...base,
-		objectives: [CONVERGENCE_OBJECTIVE],
-		world: {
-			entities: [CONVERGENCE_OBJECT, CONVERGENCE_SPACE],
+	const base = makeTestGame({
+		entities: [CONVERGENCE_OBJECT, CONVERGENCE_SPACE],
+		pack: {
+			aiStarts: {
+				red: { position: { row: 4, col: 4 } },
+				green: { position: { row: 0, col: 0 } },
+				cyan: { position: { row: 0, col: 2 } },
+			},
 		},
-		personaSpatial: TEST_CONTENT_PACK.aiStarts as typeof base.personaSpatial,
-	};
+		budgetPerAi: 99,
+	});
+	return { ...withPackOrderedWorld(base), objectives: [CONVERGENCE_OBJECTIVE] };
 }
 
 describe("runRound — end-of-round convergence evaluation", () => {
 	it("tier-1: one Daemon on the space → witnessed-convergence tier-1 entry in their log", async () => {
 		const game = makeBaseGame();
 
-		const { nextState } = await runRound(game, "red", "hi", makeProvider());
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+		);
 
 		const redLog = nextState.conversationLogs.red ?? [];
 		const convergenceEntries = redLog.filter(
@@ -126,7 +83,12 @@ describe("runRound — end-of-round convergence evaluation", () => {
 	it("tier-1: a Daemon whose Vista does NOT contain the space cell does NOT receive an entry", async () => {
 		const game = makeBaseGame();
 
-		const { nextState } = await runRound(game, "red", "hi", makeProvider());
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+		);
 
 		const greenLog = nextState.conversationLogs.green ?? [];
 		const cyanLog = nextState.conversationLogs.cyan ?? [];
@@ -145,7 +107,12 @@ describe("runRound — end-of-round convergence evaluation", () => {
 	it("tier-1: satisfactionState remains 'pending' after one Daemon on the space", async () => {
 		const game = makeBaseGame();
 
-		const { nextState } = await runRound(game, "red", "hi", makeProvider());
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+		);
 
 		const convergenceObj = nextState.objectives.find(
 			(o) => o.kind === "convergence",
@@ -163,7 +130,12 @@ describe("runRound — end-of-round convergence evaluation", () => {
 			},
 		};
 
-		const { nextState } = await runRound(game, "red", "hi", makeProvider());
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+		);
 
 		const redLog = nextState.conversationLogs.red ?? [];
 		const greenLog = nextState.conversationLogs.green ?? [];
@@ -219,7 +191,7 @@ describe("runRound — end-of-round convergence evaluation", () => {
 			gameTwoOnSpace,
 			"red",
 			"hi",
-			makeProvider(),
+			makeSilentProvider(),
 		);
 
 		const obj1 = afterRound1.objectives.find((o) => o.kind === "convergence");
@@ -234,7 +206,7 @@ describe("runRound — end-of-round convergence evaluation", () => {
 			afterRound1,
 			"red",
 			"hi",
-			makeProvider(),
+			makeSilentProvider(),
 		);
 
 		const obj2 = afterRound2.objectives.find((o) => o.kind === "convergence");
@@ -258,7 +230,12 @@ describe("runRound — convergence split fan-out (actor vs witness) — #336", (
 			},
 		};
 
-		const { nextState } = await runRound(game, "red", "hi", makeProvider());
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+		);
 
 		const redEntry = (nextState.conversationLogs.red ?? []).find(
 			(e) => e.kind === "witnessed-convergence",
@@ -292,7 +269,12 @@ describe("runRound — convergence split fan-out (actor vs witness) — #336", (
 			},
 		};
 
-		const { nextState } = await runRound(game, "red", "hi", makeProvider());
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+		);
 
 		for (const aiId of ["red", "green"] as const) {
 			const entry = (nextState.conversationLogs[aiId] ?? []).find(
@@ -320,7 +302,12 @@ describe("runRound — convergence split fan-out (actor vs witness) — #336", (
 	it("no double-emission: a Daemon standing on the space receives exactly one entry (the actor variant)", async () => {
 		const game = makeBaseGame();
 
-		const { nextState } = await runRound(game, "red", "hi", makeProvider());
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+		);
 
 		const redConvergence = (nextState.conversationLogs.red ?? []).filter(
 			(e) => e.kind === "witnessed-convergence",
@@ -344,7 +331,12 @@ describe("runRound — convergence Vista boundary (ADR 0015)", () => {
 			},
 		};
 
-		const { nextState } = await runRound(game, "red", "hi", makeProvider());
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+		);
 
 		const redEntries = (nextState.conversationLogs.red ?? []).filter(
 			(e) => e.kind === "witnessed-convergence",

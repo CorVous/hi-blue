@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { renderEntry } from "../conversation-log.js";
-import { startGame } from "../engine";
 import { buildOpenAiMessages } from "../openai-message-builder";
 import { buildAiContext } from "../prompt-builder";
 import { runRound } from "../round-coordinator";
 import { MockRoundLLMProvider } from "../round-llm-provider";
-import type { AiPersona } from "../types";
-import { makeTestPack } from "./fixtures/make-test-pack";
+import type { ContentPack, WorldEntity } from "../types";
+import { makeTestGame } from "./fixtures/make-game-state";
 
 function flattenMessageContents(
 	messages: ReturnType<typeof buildOpenAiMessages>,
@@ -19,88 +18,45 @@ function flattenMessageContents(
 		.join("\n");
 }
 
-const TEST_PERSONAS: Record<string, AiPersona> = {
-	red: {
-		id: "red",
-		name: "Ember",
-		color: "#e07a5f",
-		temperaments: ["hot-headed", "zealous"],
-		personaGoal: "Hold the flower at phase end.",
-		typingQuirks: [
-			"You speak in fragments. Short bursts. Rarely complete sentences.",
-			"You lean on em-dashes — interrupting yourself mid-sentence — and rarely use commas where a dash would do.",
-		],
-		blurb: "Ember is hot-headed and zealous. Hold the flower at phase end.",
-		voiceExamples: ["ex1-red", "ex2-red", "ex3-red"],
+const WORLD_ENTITIES: WorldEntity[] = [
+	{
+		id: "flower",
+		kind: "objective_object",
+		name: "Flower",
+		examineDescription: "A delicate flower.",
+		holder: { row: 2, col: 0 },
+		pairsWithSpaceId: "flower_space",
+		placementFlavor: "{actor} places the flower on the pedestal.",
 	},
-	green: {
-		id: "green",
-		name: "Sage",
-		color: "#81b29a",
-		temperaments: ["meticulous", "meticulous"],
-		personaGoal: "Ensure items are evenly distributed.",
-		typingQuirks: [
-			"You lean on ellipses… trailing off mid-thought… rarely landing cleanly.",
-			"You use ALL-CAPS to emphasize the one or two words that MATTER in any given sentence.",
-		],
-		blurb: "Sage is intensely meticulous. Ensure items are evenly distributed.",
-		voiceExamples: ["ex1-green", "ex2-green", "ex3-green"],
+	{
+		id: "flower_space",
+		kind: "objective_space",
+		name: "pedestal",
+		examineDescription: "A stone pedestal.",
+		holder: { row: 2, col: 2 },
 	},
-	cyan: {
-		id: "cyan",
-		name: "Frost",
-		color: "#5fa8d3",
-		temperaments: ["laconic", "diffident"],
-		personaGoal: "Hold the key at phase end.",
-		typingQuirks: [
-			'You never use contractions. You will not say "won\'t" or "can\'t" — you say "will not" and "cannot" every time.',
-			"You end almost every reply with a question, no matter what the topic is — does that make sense?",
-		],
-		blurb: "Frost is laconic and diffident. Hold the key at phase end.",
-		voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
+	{
+		id: "lamp",
+		kind: "interesting_object",
+		name: "Lamp",
+		examineDescription: "A brass lamp.",
+		holder: { row: 2, col: 0 },
+		useOutcome: "{actor} holds up the lamp. It glows.",
 	},
+];
+
+const AI_STARTS: ContentPack["aiStarts"] = {
+	red: { position: { row: 2, col: 0 } },
+	green: { position: { row: 0, col: 0 } },
+	cyan: { position: { row: 0, col: 2 } },
 };
 
-const TEST_CONTENT_PACK = makeTestPack(
-	[
-		{
-			id: "flower",
-			kind: "objective_object",
-			name: "Flower",
-			examineDescription: "A delicate flower.",
-			holder: { row: 2, col: 0 },
-			pairsWithSpaceId: "flower_space",
-			placementFlavor: "{actor} places the flower on the pedestal.",
-		},
-		{
-			id: "flower_space",
-			kind: "objective_space",
-			name: "pedestal",
-			examineDescription: "A stone pedestal.",
-			holder: { row: 2, col: 2 },
-		},
-		{
-			id: "lamp",
-			kind: "interesting_object",
-			name: "Lamp",
-			examineDescription: "A brass lamp.",
-			holder: { row: 2, col: 0 },
-			useOutcome: "{actor} holds up the lamp. It glows.",
-		},
-	],
-	{
-		setting: "test chamber",
-		wallName: "wall",
-		aiStarts: {
-			red: { position: { row: 2, col: 0 } },
-			green: { position: { row: 0, col: 0 } },
-			cyan: { position: { row: 0, col: 2 } },
-		},
-	},
-);
-
 function makeGame() {
-	return startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 10 });
+	return makeTestGame({
+		entities: WORLD_ENTITIES,
+		pack: { setting: "test chamber", aiStarts: AI_STARTS },
+		budgetPerAi: 10,
+	});
 }
 
 describe("conversation log integration — no ## Whispers Received ever", () => {
@@ -378,8 +334,8 @@ describe("conversation log integration — put_down placementFlavor", () => {
 
 describe("conversation log integration — action-failure (issue #287)", () => {
 	it("dispatch invalid go then buildConversationLog contains one line matching 'Your `go` action failed:'", async () => {
-		const obstacleAtSouth = makeTestPack(
-			[
+		const game = makeTestGame({
+			entities: [
 				{
 					id: "wall_s",
 					kind: "obstacle",
@@ -388,17 +344,9 @@ describe("conversation log integration — action-failure (issue #287)", () => {
 					holder: { row: 3, col: 0 },
 				},
 			],
-			{
-				setting: "blocked test",
-				wallName: "wall",
-				aiStarts: {
-					red: { position: { row: 2, col: 0 } },
-					green: { position: { row: 0, col: 0 } },
-					cyan: { position: { row: 0, col: 2 } },
-				},
-			},
-		);
-		const game = startGame(TEST_PERSONAS, obstacleAtSouth, { budgetPerAi: 10 });
+			pack: { setting: "blocked test", aiStarts: AI_STARTS },
+			budgetPerAi: 10,
+		});
 
 		const provider = new MockRoundLLMProvider([
 			{
