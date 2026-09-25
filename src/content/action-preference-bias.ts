@@ -8,8 +8,8 @@ export const CRITICAL_PATH_TOOLS: ReadonlySet<ActionTool> = new Set([
 ]);
 
 const CRITICAL_PATH_BIAS_FLOOR = -1;
-const PREFERRED_BIAS_THRESHOLD = 2;
-const AVOIDED_BIAS_THRESHOLD = -1;
+export const PREFERRED_BIAS_THRESHOLD = 2;
+export const AVOIDED_BIAS_THRESHOLD = -1;
 
 export const ACTION_TOOL_BIAS: Record<string, Record<ActionTool, number>> = {
 	"hot-headed": { go: 2, pick_up: 1, put_down: 0, use: 0 },
