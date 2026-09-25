@@ -23,9 +23,7 @@ import type {
 	ConversationEntry,
 	GameState,
 	Objective,
-	ObjectivePair,
 	PersonaSpatialState,
-	WorldEntity,
 	WorldState,
 } from "../game/types.js";
 import {
@@ -74,33 +72,22 @@ import { SESSION_SCHEMA_VERSION } from "./version-constants.js";
  *
  * v9 (issue #361): collapse generateDualContentPacks to single A/B pair.
  *   - `contentPacksA` and `contentPacksB` now contain exactly 1 entry each
- *     (previously held 3 entries, one per phase). Migration truncates v8 saves
- *     by keeping only the first entry of each array.
+ *     (previously held 3 entries, one per phase).
  *
  * v10 (issue #374): add `wallName` to `ContentPack`.
- *   - Old v9 saves have no `wallName`; migration defaults it to an empty
- *     string on every `ContentPack` in `contentPacksA`/`contentPacksB`.
- *     The empty default round-trips through the existing OOB Vista
- *     renderer (which already treats blank `wallName` as "no flavored
- *     wall noun").
  *
  * v11 (issue #462): collapse ContentPack buckets into a flat `entities` array.
  *   - `objectivePairs`, `interestingObjects`, `boundSpaces`, `obstacles`
  *     are removed from `ContentPack`; replaced with one
  *     `entities: WorldEntity[]`.
  *   - Bucketing is derived on demand via `pack-selectors.ts`.
- *   - Migration flattens every v10 ContentPack on `contentPacksA` and
- *     `contentPacksB`, preserving canonical order: per pair, object then
- *     space; then bound spaces; then interesting objects; then obstacles.
  *
  * v12 (issue #539): retire `facing` and the horizon landmarks from the
  *   persisted spatial state (ADR 0015). This is the first schema bump handled
  *   archive-only: there is deliberately no v11 → v12 migration function. A save
  *   sealed at 11 is identified as older and pointed at the archived build that
  *   still reads it (`SCHEMA_ARCHIVE_MAP[11]` in `archive-map.ts`) rather than
- *   being rewritten. The historical chain below still runs — v8 → v9 → v10 → v11 —
- *   but it stops *at* 11, so a migrated save can never be presented as
- *   current at this boundary.
+ *   being rewritten.
  *
  * Bumping this constant requires either a `migrateV<old>To...` function below
  * or a new entry in `SCHEMA_ARCHIVE_MAP` (see AGENTS.md → "Bumping
@@ -162,11 +149,10 @@ interface SealedEngine {
 
 /**
  * A sealed payload as read back from disk, before the version gate. Its
- * `schemaVersion` is a plain number on purpose: the migration chain stamps the
- * historical versions it walks (9, 10, 11), and none of those is the version
- * this build writes. `deserializeSession` only rebuilds state once
- * `checkVersionCompatibility` has accepted that number, so a stored payload is
- * never treated as current on the strength of its own field.
+ * `schemaVersion` is a plain number on purpose: `deserializeSession` only
+ * rebuilds state once `checkVersionCompatibility` has accepted that number, so
+ * a stored payload is never treated as current on the strength of its own
+ * field.
  */
 interface StoredSealedEngine extends Omit<SealedEngine, "schemaVersion"> {
 	schemaVersion: number;
@@ -268,118 +254,6 @@ export function serializeSession(
 	};
 }
 
-// ── Migration helpers ─────────────────────────────────────────────────────────
-
-/**
- * Migrate a v8 sealed payload to v9 by truncating contentPacksA and
- * contentPacksB to their first entry. v8 stored one pack per phase (3
- * entries); v9 keeps a single pack per side.
- *
- * Sets schemaVersion to 9 so callers can chain into `migrateV9ToV10`.
- */
-function migrateV8ToV9(sealed: StoredSealedEngine): StoredSealedEngine {
-	return {
-		...sealed,
-		schemaVersion: 9,
-		contentPacksA: (sealed.contentPacksA ?? []).slice(0, 1),
-		contentPacksB: (sealed.contentPacksB ?? []).slice(0, 1),
-	};
-}
-
-/**
- * Migrate a v9 sealed payload to v10 by defaulting `wallName` to `""` on
- * every ContentPack in `contentPacksA`/`contentPacksB`. v9 packs had no
- * `wallName` field.
- *
- * Sets schemaVersion to 10 so callers can chain into `migrateV10ToV11`.
- */
-function migrateV9ToV10(sealed: StoredSealedEngine): StoredSealedEngine {
-	const addWallName = (pack: ContentPack): ContentPack =>
-		typeof pack?.wallName === "string" ? pack : { ...pack, wallName: "" };
-	return {
-		...sealed,
-		schemaVersion: 10,
-		contentPacksA: (sealed.contentPacksA ?? []).map(addWallName),
-		contentPacksB: (sealed.contentPacksB ?? []).map(addWallName),
-	};
-}
-
-/**
- * Migrate a v10 sealed payload to v11 by flattening each ContentPack's four
- * bucket fields (`objectivePairs`, `interestingObjects`, `boundSpaces`,
- * `obstacles`) into a single `entities: WorldEntity[]` array.
- *
- * Order preserved (matches the canonical order used by the v11 generator and
- * by the `pack-selectors` discriminators):
- *   1. For each `objectivePairs[i]`: object then space.
- *   2. All `boundSpaces` (in input order).
- *   3. All `interestingObjects` (in input order).
- *   4. All `obstacles` (in input order).
- *
- * Defensive: if a pack already carries an `entities` array (e.g. an in-flight
- * partial migration), it is used as-is rather than rebuilt from absent
- * buckets.
- *
- * Stamps 11, the last schema this chain understands. Migrating a save must
- * never promote it past the v11 → v12 archive-only boundary, so the chain
- * terminates at 11 and the version gate then surfaces the migrated save as
- * older.
- */
-function migrateV10ToV11(sealed: StoredSealedEngine): StoredSealedEngine {
-	const flatten = (pack: ContentPack): ContentPack => {
-		const raw = pack as unknown as {
-			setting: string;
-			weather: string;
-			timeOfDay: string;
-			objectivePairs?: ObjectivePair[];
-			interestingObjects?: WorldEntity[];
-			boundSpaces?: WorldEntity[];
-			obstacles?: WorldEntity[];
-			entities?: WorldEntity[];
-			wallName: string;
-			aiStarts: ContentPack["aiStarts"];
-		};
-
-		if (Array.isArray(raw.entities)) {
-			// Already v11-shaped; preserve as-is and strip any leftover bucket
-			// fields so downstream code sees a clean ContentPack.
-			return {
-				setting: raw.setting,
-				weather: raw.weather,
-				timeOfDay: raw.timeOfDay,
-				entities: raw.entities,
-				wallName: raw.wallName,
-				aiStarts: raw.aiStarts,
-			};
-		}
-
-		const entities: WorldEntity[] = [];
-		for (const pair of raw.objectivePairs ?? []) {
-			entities.push(pair.object);
-			entities.push(pair.space);
-		}
-		for (const space of raw.boundSpaces ?? []) entities.push(space);
-		for (const io of raw.interestingObjects ?? []) entities.push(io);
-		for (const ob of raw.obstacles ?? []) entities.push(ob);
-
-		return {
-			setting: raw.setting,
-			weather: raw.weather,
-			timeOfDay: raw.timeOfDay,
-			entities,
-			wallName: raw.wallName,
-			aiStarts: raw.aiStarts,
-		};
-	};
-
-	return {
-		...sealed,
-		schemaVersion: 11,
-		contentPacksA: (sealed.contentPacksA ?? []).map(flatten),
-		contentPacksB: (sealed.contentPacksB ?? []).map(flatten),
-	};
-}
-
 // ── deserializeSession ─────────────────────────────────────────────────────────
 
 /**
@@ -422,28 +296,11 @@ export function deserializeSession(
 		return { kind: "broken" };
 	}
 
-	// Schema version check and migration chain.
-	// Migrations are stepwise (v8→v9→v10→v11) so each entry stays focused on
-	// one schema diff and new bumps only need a single new step. The chain
-	// terminates at 11 — the last schema it understands — so a migrated save
-	// is never silently promoted into the live v12 format.
 	const rawVersion: unknown = sealed.schemaVersion;
 	if (typeof rawVersion !== "number" || !Number.isFinite(rawVersion)) {
 		return { kind: "broken" };
 	}
-	let version = rawVersion;
-	if (version === 8) {
-		sealed = migrateV8ToV9(sealed);
-		version = 9;
-	}
-	if (version === 9) {
-		sealed = migrateV9ToV10(sealed);
-		version = 10;
-	}
-	if (version === 10) {
-		sealed = migrateV10ToV11(sealed);
-		version = 11;
-	}
+	const version = [8, 9, 10].includes(rawVersion) ? 11 : rawVersion;
 	// The version gate runs against the boundary's session axis, so the
 	// cutoff is a plain, testable value (see version-boundary.ts) rather than
 	// a hardcoded constant. A mismatch is surfaced — not discarded — so the

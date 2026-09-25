@@ -3,8 +3,7 @@
  *
  * The boundary is a plain, testable value, so these tests reason about both
  * the live v12/v5 boundary (#539) and a cutoff at some other version (e.g.
- * `{ session: 11, gs: 4 }`, the boundary the historical migration chain still
- * lands on) without hardcoding the live constants.
+ * `{ session: 11, gs: 4 }`) without hardcoding the live constants.
  */
 import { describe, expect, it } from "vitest";
 import { GAME_SAVE_VERSION } from "../../../save-serializer.js";

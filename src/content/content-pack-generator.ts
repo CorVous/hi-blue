@@ -298,9 +298,7 @@ function placePhases(
  * All entities are accumulated into a single `entities` array in canonical
  * order: per binding index, carry pairs emit object then space; use_space and
  * convergence bindings emit a space; use_item bindings emit an item. Decoys
- * then obstacles are appended at the end. This is the same order the v10→v11
- * migration uses, so persisted packs and freshly-generated packs walk
- * `entities` identically.
+ * then obstacles are appended at the end.
  */
 function rawBoundPackToContentPack(
 	rawPack: RawBoundPack,
