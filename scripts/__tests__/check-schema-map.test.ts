@@ -1,5 +1,11 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+	mkdirSync,
+	mkdtempSync,
+	realpathSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,8 +20,44 @@ const SESSION_CODEC = "src/spa/persistence/session-codec.ts";
 const GAME_SAVE_CONSTANT = "src/save-serializer.ts";
 const ARCHIVE_MAP = "src/spa/persistence/archive-map.ts";
 
+/**
+ * Git environment variables that let an ambient repository leak into a
+ * spawned `git` process. When this suite runs from a git hook (husky's
+ * `pre-push` runs `pnpm run test`) — or from any shell where they are
+ * exported — git sets `GIT_DIR` and friends. Those OUTRANK the `cwd` passed
+ * to `spawnSync`, so `git -C <tempdir>` silently operates on the real
+ * checkout instead: rewriting its branch pointer, emptying its index and
+ * clobbering its `origin/main`. Reports of a worktree corrupting itself
+ * after `pnpm run test` trace back to exactly this.
+ *
+ * Scrub them so `cwd` is the only thing deciding which repo a spawned git
+ * command sees.
+ */
+const GIT_ENV_VARS = [
+	"GIT_DIR",
+	"GIT_WORK_TREE",
+	"GIT_INDEX_FILE",
+	"GIT_OBJECT_DIRECTORY",
+	"GIT_ALTERNATE_OBJECT_DIRECTORIES",
+	"GIT_COMMON_DIR",
+	"GIT_PREFIX",
+	"GIT_CEILING_DIRECTORIES",
+	"GIT_NAMESPACE",
+] as const;
+
+/** An environment with every inherited git pointer removed. */
+function cleanGitEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
+	const env: NodeJS.ProcessEnv = { ...process.env, ...extra };
+	for (const key of GIT_ENV_VARS) delete env[key];
+	return env;
+}
+
 function git(args: string[], cwd: string): { status: number; stdout: string } {
-	const result = spawnSync("git", args, { cwd, encoding: "utf-8" });
+	const result = spawnSync("git", args, {
+		cwd,
+		env: cleanGitEnv(),
+		encoding: "utf-8",
+	});
 	return { status: result.status ?? 1, stdout: result.stdout ?? "" };
 }
 
@@ -80,7 +122,10 @@ function runScriptWith(
 
 		const result = spawnSync("node", [script], {
 			cwd: repo,
-			env: { ...process.env, GITHUB_BASE_REF: "main" },
+			// The script shells out to `git diff`/`git show` against its own
+			// cwd, so it is subject to the same ambient-`GIT_DIR` leak as the
+			// helpers above. Scrub the env for it too.
+			env: cleanGitEnv({ GITHUB_BASE_REF: "main" }),
 			encoding: "utf-8",
 		});
 		return { status: result.status ?? 1, stderr: result.stderr ?? "" };
@@ -439,5 +484,77 @@ describe("check-schema-map.mjs", () => {
 		expect(result.stderr).toContain(
 			"Cannot resolve the base revision origin/main",
 		);
+	});
+});
+
+/**
+ * Regression coverage for the ambient-`GIT_DIR` leak.
+ *
+ * Before the fix, every `git` call in this suite inherited `GIT_DIR` from the
+ * environment. `GIT_DIR` outranks the `cwd` given to `spawnSync`, so running
+ * this suite under a git hook (husky's `pre-push` runs `pnpm run test`) made
+ * the temp-repo scaffolding run against the *developer's real checkout*:
+ * it moved the branch pointer onto junk `baseline`/`change` commits, emptied
+ * the index, clobbered `origin/main`, and flipped `core.bare`. The tests still
+ * reported green, so the damage was silent.
+ */
+describe("spawned-git isolation", () => {
+	/**
+	 * A throwaway repo plus a probe for which git directory a spawned command
+	 * actually resolved.
+	 *
+	 * `--absolute-git-dir` is the discriminator here, NOT `--show-toplevel`.
+	 * `GIT_DIR` redirects which git dir is opened, but `--show-toplevel` still
+	 * answers from the cwd — so a leaked `GIT_DIR` is invisible to it. Measured
+	 * directly: with `GIT_DIR` at repo A and cwd in repo B, `--show-toplevel`
+	 * wrongly reports B while `--absolute-git-dir` correctly reports A. An
+	 * earlier revision of this test asserted `--show-toplevel` and therefore
+	 * passed against the unfixed code, pinning nothing.
+	 */
+	function makeProbe(): {
+		repoGitDir: string;
+		resolvedGitDir: () => string;
+		cleanup: () => void;
+	} {
+		const repo = mkdtempSync(path.join(tmpdir(), "schema-map-gitdir-"));
+		git(["init", "-q", "-b", "main"], repo);
+		git(["config", "user.email", "t@example.com"], repo);
+		git(["config", "user.name", "T"], repo);
+		git(["commit", "-q", "--no-gpg-sign", "--allow-empty", "-m", "x"], repo);
+		return {
+			// `--absolute-git-dir` reports the git directory itself, so the
+			// expected value carries the `/.git` suffix.
+			repoGitDir: realpathSync(path.join(repo, ".git")),
+			resolvedGitDir: () =>
+				realpathSync(
+					git(["rev-parse", "--absolute-git-dir"], repo).stdout.trim(),
+				),
+			cleanup: () => rmSync(repo, { recursive: true, force: true }),
+		};
+	}
+
+	it("keeps caller-supplied variables while still scrubbing git pointers", () => {
+		const env = cleanGitEnv({ GITHUB_BASE_REF: "main", GIT_DIR: "/nope" });
+		expect(env.GITHUB_BASE_REF).toBe("main");
+		expect(env.GIT_DIR).toBeUndefined();
+	});
+
+	it("resolves the given cwd's repo even when GIT_DIR points elsewhere", () => {
+		const probe = makeProbe();
+		const original = process.env.GIT_DIR;
+		try {
+			// Simulate what a git hook (or an exported GIT_DIR) provides. In a
+			// linked worktree this is a file pointing at
+			// `<main>/.git/worktrees/<name>`, which git resolves itself.
+			process.env.GIT_DIR = path.join(root, ".git");
+			expect(probe.resolvedGitDir()).toBe(probe.repoGitDir);
+		} finally {
+			if (original === undefined) {
+				delete process.env.GIT_DIR;
+			} else {
+				process.env.GIT_DIR = original;
+			}
+			probe.cleanup();
+		}
 	});
 });
