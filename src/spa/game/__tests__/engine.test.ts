@@ -19,6 +19,7 @@ import { buildAiContext } from "../prompt-builder";
 import type { ContentPack, GameState } from "../types";
 import { TEST_PERSONAS } from "./fixtures/make-game-state";
 import { makeTestPack } from "./fixtures/make-test-pack";
+import { cardinalClause } from "./fixtures/prompt-sections";
 
 const TEST_CONTENT_PACK = makeTestPack([], { wallName: "wall" });
 
@@ -440,12 +441,3 @@ describe("shiftToBPack", () => {
 		expect(after).toBe(before);
 	});
 });
-
-function cardinalClause(prompt: string): string {
-	const settingBlock = /<setting>([\s\S]*?)<\/setting>/.exec(prompt)?.[1] ?? "";
-	return (
-		settingBlock
-			.split("\n")
-			.find((line) => /\bnorth\b/.test(line) && /\bsouth\b/.test(line)) ?? ""
-	);
-}

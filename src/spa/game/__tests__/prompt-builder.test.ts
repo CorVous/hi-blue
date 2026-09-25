@@ -23,6 +23,7 @@ import {
 	TEST_PERSONAS,
 } from "./fixtures/make-game-state";
 import { makeTestPack } from "./fixtures/make-test-pack";
+import { cardinalClause } from "./fixtures/prompt-sections";
 
 describe("buildAiContext", () => {
 	it("includes the AI's own blurb", () => {
@@ -195,15 +196,6 @@ describe("<setting> block", () => {
 		).toBeNull();
 	});
 });
-
-function cardinalClause(prompt: string): string {
-	const settingBlock = /<setting>([\s\S]*?)<\/setting>/.exec(prompt)?.[1] ?? "";
-	return (
-		settingBlock
-			.split("\n")
-			.find((line) => /\bnorth\b/.test(line) && /\bsouth\b/.test(line)) ?? ""
-	);
-}
 
 describe("cardinal directions", () => {
 	const ROOM_A = makeTestPack([], {
