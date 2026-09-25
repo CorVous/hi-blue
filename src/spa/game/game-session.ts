@@ -1,25 +1,3 @@
-/**
- * GameSession
- *
- * Owns the lifecycle of a single game's GameState across HTTP requests.
- * Constructed from a phase-config triple (or just the first phase for v1).
- *
- * Exposes:
- *   submitMessage(addressedAi, message, provider) → {
- *     result: RoundResult,
- *     completions: Record<AiId, string>,  // buffered per-AI completions
- *     nextState: GameState,
- *   }
- *
- * The completions map is what the RoundResultEncoder uses to emit paced
- * token events — the round coordinator buffers per AI before parsing, and
- * we re-expose that buffer here so the encoder can pace it.
- *
- * Per-AI tool roundtrip (the OpenAI assistant tool_calls + tool result messages
- * from the previous round) is persisted here and passed into each runRound call
- * so the message builder can re-inject them for the next round.
- */
-
 import { startGame } from "./engine";
 import { runRound } from "./round-coordinator";
 import type { RoundLLMProvider } from "./round-llm-provider";
@@ -35,27 +13,15 @@ import type {
 
 export interface SubmitMessageResult {
 	result: RoundResult;
-	/** Buffered completion string per AI (empty string for locked-out AIs). */
 	completions: Partial<Record<AiId, string>>;
 	nextState: GameState;
 }
 
 export class GameSession {
 	private state: GameState;
-	/** Per-AI tool roundtrip from the last round, fed back in as prior context. */
-	private toolRoundtrip: Partial<Record<AiId, ToolRoundtripMessage>> = {};
-	/**
-	 * Per-AI perception-disk snapshots captured during the last round's prompt
-	 * build. Fed back into runRound so the next round's per-AI user message can
-	 * include a `<whats_new>` diff. Empty until the first round completes.
-	 */
-	private diskSnapshots: Partial<Record<AiId, string>> = {};
-	/**
-	 * Per-AI structured entity perception state captured during the last round's prompt
-	 * build. Fed back into runRound so the next round's per-AI user message can
-	 * emit perception-delta lines (first-sight, departure, transition). Empty until the first round completes.
-	 */
-	private diskEntities: Partial<
+	private priorToolRoundtrip: Partial<Record<AiId, ToolRoundtripMessage>> = {};
+	private priorDiskSnapshots: Partial<Record<AiId, string>> = {};
+	private priorDiskEntities: Partial<
 		Record<AiId, Record<string, { inVista: boolean; satisfied: boolean }>>
 	> = {};
 
@@ -65,11 +31,6 @@ export class GameSession {
 		contentPacksA?: ContentPack[],
 		contentPacksB?: ContentPack[],
 		rng?: () => number,
-		/**
-		 * Type-first objective types. When provided, buildObjectiveRecords is used
-		 * to create Objective records from the pack entities using the type-first
-		 * naming convention. When omitted, no objectives are created.
-		 */
 		objectiveTypes?: ObjectiveType[],
 	) {
 		const game = startGame(personas, contentPack, {
@@ -83,21 +44,12 @@ export class GameSession {
 		};
 	}
 
-	/**
-	 * Restore a GameSession from a pre-existing GameState (e.g. loaded from
-	 * localStorage). Bypasses initial `startGame` — the state is used as-is.
-	 */
 	static restore(state: GameState): GameSession {
-		// Use Object.create to bypass the constructor while still getting an
-		// instance of GameSession. Class field initializers don't fire on
-		// `Object.create`, so explicitly seed the per-instance bookkeeping
-		// fields here — otherwise they're `undefined` and the first
-		// submitMessage trips on indexing.
 		const session = Object.create(GameSession.prototype) as GameSession;
 		session.state = state;
-		session.toolRoundtrip = {};
-		session.diskSnapshots = {};
-		session.diskEntities = {};
+		session.priorToolRoundtrip = {};
+		session.priorDiskSnapshots = {};
+		session.priorDiskEntities = {};
 		return session;
 	}
 
@@ -105,20 +57,8 @@ export class GameSession {
 		return this.state;
 	}
 
-	/**
-	 * Run one full round through runRound.
-	 *
-	 * @param addressed  The AI the player is directing their message at.
-	 * @param message    The player's raw message text.
-	 * @param provider   RoundLLMProvider (mock or real BrowserLLMProvider).
-	 * @param initiative  Optional turn-order permutation for this round.
-	 *   Must be a permutation of all three AI ids. When absent, coordinator uses default order.
-	 * @param onAiDelta  Optional per-AI live-delta callback. Fires synchronously inside
-	 *   the SSE parser loop for each text chunk arriving from the wire.
-	 *   Never called for locked-out AIs or mock providers that ignore onDelta.
-	 */
 	async submitMessage(
-		addressed: AiId,
+		addressedAi: AiId,
 		message: string,
 		provider: RoundLLMProvider,
 		initiative?: AiId[],
@@ -130,8 +70,6 @@ export class GameSession {
 	): Promise<SubmitMessageResult> {
 		const turnOrder = initiative ?? Object.keys(this.state.personas);
 
-		// Capture completions per AI via the completionSink parameter.
-		// The coordinator calls the sink once per AI (empty string for locked-out AIs).
 		const completions: Partial<Record<AiId, string>> = {};
 		const completionSink = (aiId: AiId, text: string): void => {
 			completions[aiId] = text;
@@ -143,46 +81,31 @@ export class GameSession {
 			toolRoundtrip: newToolRoundtrip,
 			diskSnapshots: newDiskSnapshots,
 			diskEntities: newDiskEntities,
-		} = await runRound(this.state, addressed, message, provider, {
+		} = await runRound(this.state, addressedAi, message, provider, {
 			rng: Math.random,
 			initiative,
-			priorToolRoundtrip: this.toolRoundtrip,
+			priorToolRoundtrip: this.priorToolRoundtrip,
 			completionSink,
 			onAiDelta,
-			priorDiskSnapshots: this.diskSnapshots,
+			priorDiskSnapshots: this.priorDiskSnapshots,
 			onAiTurnComplete,
 			onLifecycle,
-			priorDiskEntities: this.diskEntities,
+			priorDiskEntities: this.priorDiskEntities,
 		});
 
-		// Fill in empty string for AIs whose completions weren't captured
-		// (only possible if the sink was never called, shouldn't happen normally)
 		for (const aiId of turnOrder) {
 			if (!(aiId in completions)) {
 				completions[aiId] = "";
 			}
 		}
 
-		// Update state and tool roundtrip
 		this.state = nextState;
-		// Merge: keep only the AIs that had tool calls this round; clear others
-		// (each round's tool roundtrip is independent — only the most recent matters)
-		this.toolRoundtrip = {};
-		for (const [aiId, roundtrip] of Object.entries(newToolRoundtrip)) {
-			this.toolRoundtrip[aiId as AiId] = roundtrip;
-		}
-		// Replace perception-disk snapshots with this round's captures. Locked-out AIs
-		// don't appear in newDiskSnapshots — they keep their prior snapshot so
-		// the diff resumes cleanly when the lockout lifts.
-		for (const [aiId, snap] of Object.entries(newDiskSnapshots)) {
-			this.diskSnapshots[aiId as AiId] = snap;
-		}
-		// Replace entity perception states with this round's captures. Locked-out AIs
-		// don't appear in newDiskEntities — they keep their prior state so
-		// perception-delta lines resume cleanly when the lockout lifts.
-		for (const [aiId, entities] of Object.entries(newDiskEntities)) {
-			this.diskEntities[aiId as AiId] = entities;
-		}
+		this.priorToolRoundtrip = { ...newToolRoundtrip };
+		this.priorDiskSnapshots = {
+			...this.priorDiskSnapshots,
+			...newDiskSnapshots,
+		};
+		this.priorDiskEntities = { ...this.priorDiskEntities, ...newDiskEntities };
 
 		return { result, completions, nextState };
 	}

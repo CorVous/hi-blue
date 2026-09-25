@@ -1,16 +1,3 @@
-/**
- * Unit tests for GameSession.
- *
- * Tests are lifecycle-focused: construct a session, call submitMessage,
- * assert on the structured results.
- *
- * Covers:
- *   - Message routing (only addressed AI's history gets the player message)
- *   - State mutation across rounds
- *   - Completions map (correct per-AI buffered strings)
- *   - Locked-out AI completions are empty strings
- *   - Tool roundtrip persistence across rounds
- */
 import { describe, expect, it } from "vitest";
 import type { OpenAiMessage } from "../../llm-client";
 import { GameSession } from "../game-session";
@@ -18,8 +5,6 @@ import type { RoundLLMProvider } from "../round-llm-provider";
 import { MockRoundLLMProvider } from "../round-llm-provider";
 import type { AiPersona, ContentPack } from "../types";
 import { makeTestPack } from "./fixtures/make-test-pack";
-
-// ── Fixtures ─────────────────────────────────────────────────────────────────
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -69,22 +54,12 @@ const RGC_AI_STARTS: ContentPack["aiStarts"] = {
 	cyan: { position: { row: 0, col: 2 } },
 };
 
-/**
- * Minimal ContentPack with no objective pairs (vacuous win = always true).
- * Used by tests that don't care about world content.
- */
 const MINIMAL_CONTENT_PACK = makeTestPack([], {
 	setting: "test station",
 	wallName: "wall",
 	aiStarts: RGC_AI_STARTS,
 });
 
-/**
- * A ContentPack fixture that places carry-0-obj at (0,0) and key held by red,
- * with AIs at (0,0)=red, (0,1)=green, (0,2)=cyan.
- * Uses type-first entity IDs so buildObjectiveRecords can create carry objectives
- * when CONTENT_PACK_OBJECTIVE_TYPES is passed to GameSession.
- */
 const CONTENT_PACK_WITH_ITEMS = makeTestPack(
 	[
 		{
@@ -117,7 +92,6 @@ const CONTENT_PACK_WITH_ITEMS = makeTestPack(
 	},
 );
 
-/** Objective types matching CONTENT_PACK_WITH_ITEMS (one carry at index 0). */
 const CONTENT_PACK_OBJECTIVE_TYPES: import("../types.js").ObjectiveType[] = [
 	"carry",
 ];
@@ -129,8 +103,6 @@ function makePassProvider() {
 		{ assistantText: "", toolCalls: [] },
 	]);
 }
-
-// ── Session construction ──────────────────────────────────────────────────────
 
 describe("GameSession construction", () => {
 	it("creates a session with flat game state", () => {
@@ -149,8 +121,6 @@ describe("GameSession construction", () => {
 		expect(phase.budgets.cyan?.remaining).toBeCloseTo(0.5, 10);
 	});
 });
-
-// ── Message routing ───────────────────────────────────────────────────────────
 
 describe("GameSession — message routing", () => {
 	it("player message appears in only the addressed AI's message log", async () => {
@@ -206,8 +176,6 @@ describe("GameSession — message routing", () => {
 	});
 });
 
-// ── State mutation across rounds ──────────────────────────────────────────────
-
 describe("GameSession — state mutation across rounds", () => {
 	it("round counter advances after each submitMessage call", async () => {
 		const session = new GameSession(MINIMAL_CONTENT_PACK, TEST_PERSONAS);
@@ -236,10 +204,8 @@ describe("GameSession — state mutation across rounds", () => {
 	});
 
 	it("second round builds on first round's state", async () => {
-		// ContentPack places carry-0-obj (flower) at (0,0) and red at (0,0)
 		const session = new GameSession(CONTENT_PACK_WITH_ITEMS, TEST_PERSONAS);
 
-		// Red picks up carry-0-obj in round 1
 		const provider1 = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -256,7 +222,6 @@ describe("GameSession — state mutation across rounds", () => {
 		]);
 		await session.submitMessage("red", "hi", provider1);
 
-		// In round 2, carry-0-obj should still be held by red
 		await session.submitMessage("green", "hi", makePassProvider());
 
 		const phase = session.getState();
@@ -265,14 +230,9 @@ describe("GameSession — state mutation across rounds", () => {
 	});
 });
 
-// ── Completions map ───────────────────────────────────────────────────────────
-
 describe("GameSession — completions map", () => {
 	it("completions map contains the completion text for each AI", async () => {
 		const session = new GameSession(MINIMAL_CONTENT_PACK, TEST_PERSONAS);
-		// Each response includes a `message` tool call so #254's retry
-		// does not fire (this test asserts completion-text routing, not
-		// retry behaviour).
 		const provider = new MockRoundLLMProvider([
 			{
 				assistantText: "I am Ember",
@@ -325,7 +285,6 @@ describe("GameSession — completions map", () => {
 	it("completions map has empty string for a budget-locked AI", async () => {
 		const session = new GameSession(MINIMAL_CONTENT_PACK, TEST_PERSONAS);
 
-		// Round 1 — use a cost that exceeds the $0.50 budget to lock out all AIs
 		const exhaustProvider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [], costUsd: 1 },
 			{ assistantText: "", toolCalls: [], costUsd: 1 },
@@ -333,7 +292,6 @@ describe("GameSession — completions map", () => {
 		]);
 		await session.submitMessage("red", "round 1", exhaustProvider);
 
-		// Round 2 — all AIs are locked, coordinator skips them
 		const { completions } = await session.submitMessage(
 			"red",
 			"round 2",
@@ -360,8 +318,6 @@ describe("GameSession — completions map", () => {
 		expect(completions.cyan).not.toBe("");
 	});
 });
-
-// ── RoundResult in submitMessage ──────────────────────────────────────────────
 
 describe("GameSession — result from submitMessage", () => {
 	it("result.round is 1 after the first call", async () => {
@@ -395,19 +351,14 @@ describe("GameSession — result from submitMessage", () => {
 			"hi",
 			makePassProvider(),
 		);
-		// Verify the RoundResult surface is intact
 		expect(typeof result.round).toBe("number");
 		expect(Array.isArray(result.actions)).toBe(true);
 		expect(typeof result.gameEnded).toBe("boolean");
 	});
 });
 
-// ── Win / lose conditions via GameSession (issue #295) ───────────────────────
-
 describe("GameSession — win / lose via checkWinCondition / checkLoseCondition", () => {
 	it("gameEnded is false when objective pairs are not satisfied", async () => {
-		// CONTENT_PACK_WITH_ITEMS has one pair (carry-0-obj at (0,0), carry-0-space at (4,4))
-		// After a pass round, the object is still not on the space → no win.
 		const session = new GameSession(
 			CONTENT_PACK_WITH_ITEMS,
 			TEST_PERSONAS,
@@ -426,7 +377,6 @@ describe("GameSession — win / lose via checkWinCondition / checkLoseCondition"
 	});
 
 	it("gameEnded is true when all objective pairs are satisfied (vacuous K=0)", async () => {
-		// MINIMAL_CONTENT_PACK has no pairs → checkWinCondition vacuously true → game ends immediately
 		const session = new GameSession(MINIMAL_CONTENT_PACK, TEST_PERSONAS);
 
 		const { result } = await session.submitMessage(
@@ -438,7 +388,6 @@ describe("GameSession — win / lose via checkWinCondition / checkLoseCondition"
 	});
 
 	it("lose condition: gameEnded is true when all AIs are locked out", async () => {
-		// Use a very high cost to exhaust all budgets in one round.
 		const session = new GameSession(CONTENT_PACK_WITH_ITEMS, TEST_PERSONAS);
 		const exhaustProvider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [], costUsd: 1 },
@@ -451,20 +400,14 @@ describe("GameSession — win / lose via checkWinCondition / checkLoseCondition"
 			"hi",
 			exhaustProvider,
 		);
-		// With all AIs locked out, checkLoseCondition fires
 		expect(result.gameEnded).toBe(true);
 	});
 });
-
-// ── onAiDelta propagation (issue #102) ──────────────────────────────────────
 
 describe("GameSession — onAiDelta propagation", () => {
 	it("fires onAiDelta for each delta emitted by a live provider", async () => {
 		const session = new GameSession(MINIMAL_CONTENT_PACK, TEST_PERSONAS);
 
-		// Hand-rolled provider that synchronously calls onDelta with two
-		// fragments and returns a `message` tool call so #254's retry does
-		// not fire (this test asserts delta routing, not retry behaviour).
 		let callIdx = 0;
 		const liveProvider: RoundLLMProvider = {
 			async streamRound(_messages, _tools, onDelta) {
@@ -498,7 +441,6 @@ describe("GameSession — onAiDelta propagation", () => {
 			},
 		);
 
-		// 3 AIs × 2 fragments = 6 delta calls, in initiative order.
 		expect(received).toHaveLength(6);
 		expect(received[0]).toEqual(["red", "chunk1 "]);
 		expect(received[1]).toEqual(["red", "chunk2"]);
@@ -527,19 +469,14 @@ describe("GameSession — onAiDelta propagation", () => {
 			},
 		);
 
-		// MockRoundLLMProvider ignores onDelta — no live deltas.
 		expect(received).toHaveLength(0);
 	});
 });
 
-// ── Tool roundtrip persistence across rounds ────────────────────────────────
-
 describe("GameSession — tool roundtrip persistence", () => {
 	it("two-round scenario: round-2 Red messages include round-1 assistant tool_call + tool result", async () => {
-		// ContentPack places carry-0-obj (flower) at (0,0) and red at (0,0)
 		const session = new GameSession(CONTENT_PACK_WITH_ITEMS, TEST_PERSONAS);
 
-		// Round 1: Red emits a tool_call (pick_up carry-0-obj)
 		const round1Provider = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -556,7 +493,6 @@ describe("GameSession — tool roundtrip persistence", () => {
 		]);
 		await session.submitMessage("red", "round 1 message", round1Provider);
 
-		// Round 2: Capture what messages are passed to the provider for Red
 		const capturedMessages: OpenAiMessage[][] = [];
 		const trackingProvider: RoundLLMProvider = {
 			async streamRound(messages, _tools) {
@@ -566,10 +502,8 @@ describe("GameSession — tool roundtrip persistence", () => {
 		};
 		await session.submitMessage("red", "round 2 message", trackingProvider);
 
-		// Red is the first AI in default order (red → green → cyan)
 		const redRound2Messages = capturedMessages[0] ?? [];
 
-		// Should contain an assistant message with tool_calls from round 1
 		const assistantWithToolCalls = redRound2Messages.find(
 			(
 				m,
@@ -592,7 +526,6 @@ describe("GameSession — tool roundtrip persistence", () => {
 			});
 		}
 
-		// Should contain a tool result message
 		const toolResult = redRound2Messages.find((m) => m.role === "tool");
 		expect(toolResult).toBeDefined();
 		if (toolResult?.role === "tool") {
@@ -601,16 +534,12 @@ describe("GameSession — tool roundtrip persistence", () => {
 	});
 });
 
-// ── Spatial mechanics (issue #123) ──────────────────────────────────────────
-
 describe("GameSession — spatial mechanics", () => {
 	it("go updates personaSpatial position across rounds", async () => {
-		// ContentPack places red at (0,0)
 		const session = new GameSession(CONTENT_PACK_WITH_ITEMS, TEST_PERSONAS);
 		const phase0 = session.getState();
 		expect(phase0.personaSpatial.red).toEqual({ position: { row: 0, col: 0 } });
 
-		// Red moves south; green and cyan pass
 		const provider = new MockRoundLLMProvider([
 			{
 				assistantText: "",
@@ -628,22 +557,18 @@ describe("GameSession — spatial mechanics", () => {
 	});
 });
 
-// ----------------------------------------------------------------------------
-// Parallel tool calls integration (#238): one provider call per AI per round
-// ----------------------------------------------------------------------------
 describe("parallel tool calls integration (#238)", () => {
 	it("Daemon emitting [msg, pick_up] in one provider call produces both outputs; cost is single-call valued", async () => {
-		// red at (0,0) holding key; flower at (0,0); red can pick up flower.
-		// red emits message + pick_up in a single LLM call.
-		// Guard: only ONE provider call should have fired for red (not two).
 		const session = new GameSession(CONTENT_PACK_WITH_ITEMS, TEST_PERSONAS);
 
-		let redCallCount = 0;
+		const startingBudgetUsd = 0.5;
+		const singleCallCostUsd = 1;
+		let providerCallCount = 0;
 		const trackingProvider: RoundLLMProvider = {
 			async streamRound(_messages, _tools) {
-				redCallCount++;
-				// First call is red's (initiative order: red, green, cyan)
-				if (redCallCount === 1) {
+				providerCallCount++;
+				const isRedFirstInDefaultOrder = providerCallCount === 1;
+				if (isRedFirstInDefaultOrder) {
 					return {
 						assistantText: "",
 						toolCalls: [
@@ -661,7 +586,7 @@ describe("parallel tool calls integration (#238)", () => {
 								argumentsJson: JSON.stringify({ item: "carry-0-obj" }),
 							},
 						],
-						costUsd: 1,
+						costUsd: singleCallCostUsd,
 					};
 				}
 				return { assistantText: "", toolCalls: [], costUsd: 0 };
@@ -674,24 +599,21 @@ describe("parallel tool calls integration (#238)", () => {
 			trackingProvider,
 		);
 
-		// One provider call per AI per round (3 total, not 4 or 6)
-		expect(redCallCount).toBe(3);
+		expect(providerCallCount).toBe(3);
 
-		// Both message and tool_success dispatched for red
 		const redActions = result.actions.filter((a) => a.actor === "red");
 		expect(redActions.some((a) => a.kind === "message")).toBe(true);
 		expect(redActions.some((a) => a.kind === "tool_success")).toBe(true);
 
-		// Red's budget: 0.5 - 1 (single call cost) = -0.5
-		// (one provider call, even though two tools were dispatched)
 		const phase = session.getState();
-		expect(phase.budgets.red?.remaining).toBeCloseTo(-0.5, 10);
+		expect(phase.budgets.red?.remaining).toBeCloseTo(
+			startingBudgetUsd - singleCallCostUsd,
+			10,
+		);
 
-		// carry-0-obj (flower) is picked up
 		const flower = phase.world.entities.find((e) => e.id === "carry-0-obj");
 		expect(flower?.holder).toBe("red");
 
-		// Conversation log has the message
 		const redLog = phase.conversationLogs.red ?? [];
 		expect(
 			redLog.some(

@@ -1,17 +1,4 @@
-/**
- * llm-synthesis-provider.ts
- *
- * LlmSynthesisProvider interface + BrowserSynthesisProvider (real) +
- * MockSynthesisProvider (tests).
- *
- * The browser provider makes one non-streaming JSON-mode chat-completions call
- * to synthesize three persona blurbs from (temperaments, personaGoal) tuples.
- * On transient failure it retries once. CapHitError surfaces immediately.
- */
-
 import { CapHitError, chatCompletionJson } from "../llm-client.js";
-
-// ── Synthesis prompt ──────────────────────────────────────────────────────────
 
 export const SYNTHESIS_SYSTEM_PROMPT = `You MUST always respond in English. You MUST reason in English.
 You write AI personality blurbs and voice examples for a text-based game. Given a list of personas, each with two temperaments and a persona goal, produce one blurb and exactly 3 voiceExamples per persona.
@@ -54,16 +41,12 @@ export function buildSynthesisUserMessage(
 	return `Synthesize blurbs for these personas:\n${items.join("\n")}`;
 }
 
-// ── Error type ────────────────────────────────────────────────────────────────
-
 export class SynthesisError extends Error {
 	constructor(message: string) {
 		super(message);
 		this.name = "SynthesisError";
 	}
 }
-
-// ── Interface ─────────────────────────────────────────────────────────────────
 
 export interface SynthesisInput {
 	id: string;
@@ -80,7 +63,7 @@ export interface LlmSynthesisProvider {
 	synthesizePersonas(input: SynthesisInput[]): Promise<SynthesisResult>;
 }
 
-// ── Validation ────────────────────────────────────────────────────────────────
+const VOICE_EXAMPLES_PER_PERSONA = 3;
 
 function validateResult(raw: unknown, inputIds: string[]): SynthesisResult {
 	if (raw == null || typeof raw !== "object") {
@@ -119,7 +102,7 @@ function validateResult(raw: unknown, inputIds: string[]): SynthesisResult {
 				"synthesis persona entry missing voiceExamples array",
 			);
 		}
-		if (entry.voiceExamples.length !== 3) {
+		if (entry.voiceExamples.length !== VOICE_EXAMPLES_PER_PERSONA) {
 			throw new SynthesisError(
 				"synthesis persona entry voiceExamples must have length 3",
 			);
@@ -146,8 +129,6 @@ function validateResult(raw: unknown, inputIds: string[]): SynthesisResult {
 	return { personas: result };
 }
 
-// ── BrowserSynthesisProvider ──────────────────────────────────────────────────
-
 export class BrowserSynthesisProvider implements LlmSynthesisProvider {
 	private readonly disableReasoning: boolean;
 
@@ -162,7 +143,7 @@ export class BrowserSynthesisProvider implements LlmSynthesisProvider {
 			{ role: "user" as const, content: buildSynthesisUserMessage(input) },
 		];
 
-		const attempt = async (): Promise<SynthesisResult> => {
+		const attemptSynthesis = async (): Promise<SynthesisResult> => {
 			const { content, reasoning } = await chatCompletionJson({
 				messages,
 				disableReasoning: this.disableReasoning,
@@ -186,17 +167,13 @@ export class BrowserSynthesisProvider implements LlmSynthesisProvider {
 		};
 
 		try {
-			return await attempt();
+			return await attemptSynthesis();
 		} catch (err) {
-			// CapHitError is not retried — surface immediately
 			if (err instanceof CapHitError) throw err;
-			// Retry once on any other failure
-			return await attempt();
+			return await attemptSynthesis();
 		}
 	}
 }
-
-// ── MockSynthesisProvider ─────────────────────────────────────────────────────
 
 export class MockSynthesisProvider implements LlmSynthesisProvider {
 	readonly calls: SynthesisInput[][] = [];

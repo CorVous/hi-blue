@@ -1,10 +1,3 @@
-/**
- * Unit tests for llm-synthesis-provider.ts
- *
- * Covers: MockSynthesisProvider, BrowserSynthesisProvider (via mocked fetch),
- * SYNTHESIS_SYSTEM_PROMPT content assertions, retry logic, CapHitError handling,
- * GLM content/reasoning fallback, and JSON shape validation.
- */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CapHitError } from "../../llm-client.js";
 import type { SynthesisInput } from "../llm-synthesis-provider.js";
@@ -15,8 +8,6 @@ import {
 	SYNTHESIS_SYSTEM_PROMPT,
 	SynthesisError,
 } from "../llm-synthesis-provider.js";
-
-// ── Fixtures ──────────────────────────────────────────────────────────────────
 
 const INPUT_A: SynthesisInput = {
 	id: "a1b2",
@@ -53,7 +44,6 @@ const CANNED_PERSONAS = [
 	},
 ];
 
-/** Build a successful non-streaming fetch response with JSON in content. */
 function makeJsonFetchResponse(
 	payload: unknown,
 	useReasoning = false,
@@ -70,7 +60,6 @@ function makeJsonFetchResponse(
 	});
 }
 
-/** Build a 429 rate-limit response. */
 function makeCapHitResponse(): Response {
 	const body = JSON.stringify({
 		error: {
@@ -84,8 +73,6 @@ function makeCapHitResponse(): Response {
 		headers: { "Content-Type": "application/json" },
 	});
 }
-
-// ── MockSynthesisProvider ─────────────────────────────────────────────────────
 
 describe("MockSynthesisProvider", () => {
 	it("returns canned responses from the provided function", async () => {
@@ -136,8 +123,6 @@ describe("MockSynthesisProvider", () => {
 	});
 });
 
-// ── SYNTHESIS_SYSTEM_PROMPT assertions ────────────────────────────────────────
-
 describe("SYNTHESIS_SYSTEM_PROMPT", () => {
 	it("does NOT contain anti-romance / anti-sycophancy guards", () => {
 		expect(SYNTHESIS_SYSTEM_PROMPT.toLowerCase()).not.toContain("romance");
@@ -178,8 +163,6 @@ describe("SYNTHESIS_SYSTEM_PROMPT", () => {
 	});
 });
 
-// ── buildSynthesisUserMessage ─────────────────────────────────────────────────
-
 describe("buildSynthesisUserMessage", () => {
 	it("includes all input ids", () => {
 		const msg = buildSynthesisUserMessage(THREE_INPUTS);
@@ -201,13 +184,10 @@ describe("buildSynthesisUserMessage", () => {
 	});
 });
 
-// ── BrowserSynthesisProvider ──────────────────────────────────────────────────
-
 describe("BrowserSynthesisProvider", () => {
 	beforeEach(() => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		vi.stubGlobal("__DEV__", true);
-		// Stub localStorage so resolveLLMTarget can read it
 		vi.stubGlobal("localStorage", { getItem: () => null });
 	});
 
@@ -272,7 +252,6 @@ describe("BrowserSynthesisProvider", () => {
 		await expect(
 			provider.synthesizePersonas(THREE_INPUTS),
 		).rejects.toBeInstanceOf(CapHitError);
-		// Only one attempt — no retry on CapHitError
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
 
@@ -353,7 +332,6 @@ describe("BrowserSynthesisProvider", () => {
 	});
 
 	it("throws SynthesisError when response is missing an expected id", async () => {
-		// Only 2 personas returned instead of 3
 		const incompletePersonas = [
 			{ id: "a1b2", blurb: "blurb1" },
 			{ id: "c3d4", blurb: "blurb2" },
@@ -399,11 +377,8 @@ describe("BrowserSynthesisProvider", () => {
 		await expect(
 			provider.synthesizePersonas(THREE_INPUTS),
 		).rejects.toBeInstanceOf(SynthesisError);
-		// Two attempts (first + one retry)
 		expect(fetchMock).toHaveBeenCalledTimes(2);
 	});
-
-	// ── voiceExamples validation ──────────────────────────────────────────────
 
 	it("throws SynthesisError when voiceExamples field is missing", async () => {
 		const badPersonas = [
@@ -616,8 +591,6 @@ describe("BrowserSynthesisProvider", () => {
 	});
 });
 
-// ── SYNTHESIS_SYSTEM_PROMPT — voiceExamples additions ────────────────────────
-
 describe("SYNTHESIS_SYSTEM_PROMPT — voiceExamples", () => {
 	it("includes 'voiceExamples' JSON token", () => {
 		expect(SYNTHESIS_SYSTEM_PROMPT).toContain('"voiceExamples"');
@@ -645,7 +618,6 @@ describe("SYNTHESIS_SYSTEM_PROMPT — voiceExamples", () => {
 	});
 
 	it("prohibits name/color/room in voice examples", () => {
-		// The same prohibition block covers both blurbs and voice examples.
 		const lower = SYNTHESIS_SYSTEM_PROMPT.toLowerCase();
 		const hasProhibition =
 			lower.includes("name") ||

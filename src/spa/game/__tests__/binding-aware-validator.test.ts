@@ -1,14 +1,9 @@
-/**
- * Tests for binding-aware-validator.ts
- */
 import { describe, expect, it } from "vitest";
 import type { ValidationSchedule } from "../binding-aware-validator.js";
 import {
 	validateBoundContentPack,
 	validateBoundDualContentPack,
 } from "../binding-aware-validator.js";
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function makeSchedule(
 	overrides?: Partial<ValidationSchedule>,
@@ -182,8 +177,6 @@ function makeGoodConvergencePack(i = 0) {
 	};
 }
 
-// ── Well-formed packs pass ────────────────────────────────────────────────────
-
 describe("validateBoundContentPack — well-formed packs pass", () => {
 	it("carry binding passes with correct fields", () => {
 		const result = validateBoundContentPack(
@@ -217,8 +210,6 @@ describe("validateBoundContentPack — well-formed packs pass", () => {
 		expect(result.ok).toBe(true);
 	});
 });
-
-// ── Forbidden fields ──────────────────────────────────────────────────────────
 
 describe("validateBoundContentPack — forbidden fields", () => {
 	it("carry space with activationFlavor raises binding-forbidden-field", () => {
@@ -278,8 +269,6 @@ describe("validateBoundContentPack — forbidden fields", () => {
 	});
 });
 
-// ── Use-cue rules ─────────────────────────────────────────────────────────────
-
 describe("validateBoundContentPack — use-cue rules", () => {
 	it("carry space examineDescription with use-cue = warning, not error", () => {
 		const pack = makeGoodCarryPack();
@@ -287,7 +276,6 @@ describe("validateBoundContentPack — use-cue rules", () => {
 			pack.pack.bindings[0]?.space as Record<string, unknown>
 		).examineDescription = "Press the button here.";
 		const result = validateBoundContentPack(pack, makeCarrySchedule());
-		// Should still pass (it's a warning)
 		expect(result.ok).toBe(true);
 	});
 
@@ -343,17 +331,13 @@ describe("validateBoundContentPack — use-cue rules", () => {
 		).examineDescription =
 			"A convergence point where you can press the button.";
 		const result = validateBoundContentPack(pack, makeConvergenceSchedule());
-		// Should still pass
 		expect(result.ok).toBe(true);
 	});
 });
 
-// ── ID checks ─────────────────────────────────────────────────────────────────
-
 describe("validateBoundContentPack — ID checks", () => {
 	it("missing pre-minted id = missing-field error", () => {
 		const pack = makeGoodCarryPack();
-		// Remove the carry object's id
 		// biome-ignore lint/style/noNonNullAssertion: test fixture access
 		delete (pack.pack.bindings[0]!.object as Record<string, unknown>).id;
 		const result = validateBoundContentPack(pack, makeCarrySchedule());
@@ -391,7 +375,7 @@ describe("validateBoundContentPack — ID checks", () => {
 
 	it("wrong decoy count = error", () => {
 		const pack = makeGoodCarryPack();
-		pack.pack.decoys = makeGoodDecoys().slice(0, 1); // only 1 instead of 2
+		pack.pack.decoys = makeGoodDecoys().slice(0, 1);
 		const result = validateBoundContentPack(pack, makeCarrySchedule());
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
@@ -400,8 +384,6 @@ describe("validateBoundContentPack — ID checks", () => {
 		}
 	});
 });
-
-// ── Missing required fields ───────────────────────────────────────────────────
 
 describe("validateBoundContentPack — missing required fields", () => {
 	it("carry object missing name = error", () => {
@@ -440,8 +422,6 @@ describe("validateBoundContentPack — missing required fields", () => {
 		}
 	});
 });
-
-// ── Dual validation ───────────────────────────────────────────────────────────
 
 describe("validateBoundDualContentPack", () => {
 	it("well-formed dual pack passes", () => {

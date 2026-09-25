@@ -1,25 +1,14 @@
-/**
- * binding-prompt-builder.ts
- *
- * Builds the user-message payload for type-first (binding-aware) content-pack
- * generation. Given a list of ObjectiveTypes and setting context, it mints
- * deterministic entity-ID skeletons and builds a user message listing each
- * entity the LLM must author.
- */
-
 import type { ObjectiveType } from "./types.js";
-
-// ── Public types ──────────────────────────────────────────────────────────────
 
 export interface BindingSkeleton {
 	type: ObjectiveType;
-	objectId?: string; // carry only
-	spaceId?: string; // carry, use_space, convergence
-	itemId?: string; // use_item
+	objectId?: string;
+	spaceId?: string;
+	itemId?: string;
 }
 
 interface DecoySkeleton {
-	id: string; // "decoy-0", "decoy-1"
+	id: string;
 }
 
 export interface BindingPromptResult {
@@ -27,8 +16,6 @@ export interface BindingPromptResult {
 	decoys: DecoySkeleton[];
 	userMessage: string;
 }
-
-// ── ID-minting helpers ────────────────────────────────────────────────────────
 
 function mintSkeleton(type: ObjectiveType, i: number): BindingSkeleton {
 	switch (type) {
@@ -63,8 +50,6 @@ function mintDecoys(): DecoySkeleton[] {
 function obstacleIds(count: number): string[] {
 	return Array.from({ length: count }, (_, i) => `obstacle-${i}`);
 }
-
-// ── Binding description helpers ───────────────────────────────────────────────
 
 function describeSkeletonInUserMessage(sk: BindingSkeleton, i: number): string {
 	switch (sk.type) {
@@ -143,11 +128,6 @@ function describeSkeletonInUserMessage(sk: BindingSkeleton, i: number): string {
 	}
 }
 
-// ── Public API ────────────────────────────────────────────────────────────────
-
-/**
- * Build the user message and entity skeletons for a single-setting content pack.
- */
 export function buildBindingPrompt(
 	types: ObjectiveType[],
 	setting: string,
@@ -199,10 +179,6 @@ export function buildBindingPrompt(
 	};
 }
 
-/**
- * Build the user message and entity skeletons for a dual-setting (A/B) content pack.
- * Bindings are shared; only setting/weather/timeOfDay differ between A and B.
- */
 export function buildDualBindingPrompt(
 	types: ObjectiveType[],
 	settingA: string,

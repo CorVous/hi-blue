@@ -318,7 +318,6 @@ describe("deriveComposerState", () => {
 		});
 	});
 
-	// Body-after-mention rule: persisted prefix cases
 	it('"*Sage " (trailing space only) → sendEnabled: false', () => {
 		expect(
 			deriveComposerState({
@@ -399,7 +398,6 @@ describe("deriveComposerState", () => {
 		});
 	});
 
-	// New lockout-specific tests
 	it("empty text + green locked → lockoutError: null, lockedPanels has green", () => {
 		expect(
 			deriveComposerState({

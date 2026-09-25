@@ -8,7 +8,6 @@ import {
 } from "../mention-parser.js";
 import type { AiId } from "../types.js";
 
-// Build a minimal name→id map for the three canonical personas.
 const nameMap = new Map<string, AiId>([
 	["ember", "red"],
 	["sage", "green"],
@@ -130,8 +129,6 @@ describe("buildPersonaNameMap", () => {
 
 describe("buildPersonaColorMap", () => {
 	it("maps each AiId to the persona's color value (not the id key)", () => {
-		// Use distinct color values that differ from the AiId keys
-		// so a wrong implementation that returns the key is immediately caught.
 		const personas = {
 			red: { color: "crimson" },
 			green: { color: "lime" },
@@ -145,8 +142,6 @@ describe("buildPersonaColorMap", () => {
 	});
 
 	it("returns the color string from the persona record, not the AiId key", () => {
-		// If implementation mistakenly returns the key instead of persona.color,
-		// these assertions will fail.
 		const personas = {
 			red: { color: "tomato" },
 			green: { color: "forest" },
@@ -167,7 +162,6 @@ const personasFixture = {
 
 describe("applyAddresseeChange", () => {
 	it.each<[string, number | null, AiId, string, number]>([
-		// [text, cursor, target, expectedText, expectedCursor]
 		["", 0, "red", "*Ember ", 7],
 		["hi", 2, "green", "*Sage hi", 8],
 		["*Sage hi", 8, "red", "*Ember hi", 9],

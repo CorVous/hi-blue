@@ -1,9 +1,3 @@
-/**
- * Unit tests for MockRoundLLMProvider — onLifecycle callback (issue #437).
- *
- * Verifies that the lifecycle callback fires on started, first-token,
- * completed phases, and that daemonId is propagated correctly.
- */
 import { describe, expect, it } from "vitest";
 import { MockRoundLLMProvider } from "../round-llm-provider";
 

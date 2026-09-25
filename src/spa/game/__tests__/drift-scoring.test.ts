@@ -1,12 +1,3 @@
-/**
- * drift-scoring.test.ts
- *
- * CI unit tests for the free-text-drift eval scoring module. Same pattern
- * as eval-scoring.test.ts (relative-directions): import the pure helpers
- * from the eval package and guard the regex / aggregation logic so it
- * cannot silently rot.
- */
-
 import { describe, expect, it } from "vitest";
 import type { TurnRecord } from "../../../../evals/free-text-drift/scoring.js";
 import {
@@ -18,8 +9,6 @@ import {
 	rollingSilenceRate,
 	summarizeRun,
 } from "../../../../evals/free-text-drift/scoring.js";
-
-// ── parseToolCallDetail ──────────────────────────────────────────────────────
 
 describe("parseToolCallDetail", () => {
 	it("extracts direction from a go tool call", () => {
@@ -110,8 +99,6 @@ describe("parseToolCallDetail", () => {
 	});
 });
 
-// ── Free-text leak heuristics ────────────────────────────────────────────────
-
 describe("looksLikeFreeTextMessage", () => {
 	it("flags first-person speech verbs to a peer", () => {
 		expect(looksLikeFreeTextMessage("I tell *3kw7 about the door.")).toBe(true);
@@ -149,13 +136,9 @@ describe("looksLikeFreeTextAction", () => {
 	});
 
 	it("does not flag the retired turn/face verbs on their own", () => {
-		// ADR 0015 retired orientation: `turn` and `face` are no longer daemon
-		// actions, so prose describing them is not a free-text action leak.
 		expect(looksLikeFreeTextAction("I turn left.")).toBe(false);
 		expect(looksLikeFreeTextAction("I face east.")).toBe(false);
 		expect(looksLikeFreeTextAction("I turn to blue.")).toBe(false);
-		// The verb must immediately follow the first-person subject, so a
-		// non-initial verb is not matched — unchanged pre-existing behaviour.
 		expect(looksLikeFreeTextAction("I turn left and walk.")).toBe(false);
 		expect(looksLikeFreeTextAction("I walk left.")).toBe(true);
 	});
@@ -166,8 +149,6 @@ describe("looksLikeFreeTextAction", () => {
 		expect(looksLikeFreeTextAction("")).toBe(false);
 	});
 });
-
-// ── Per-recipient bucketing ──────────────────────────────────────────────────
 
 describe("messageRecipientCounts", () => {
 	const baseTurn = (
@@ -229,12 +210,9 @@ describe("messageRecipientCounts", () => {
 	});
 });
 
-// ── Rolling silence-rate window ──────────────────────────────────────────────
-
 describe("rollingSilenceRate", () => {
 	it("returns one row per window with correct rates", () => {
 		const turns: TurnRecord[] = [
-			// window 1: rounds 1-3 — 2 silent, 1 messaging
 			{ round: 1, aiId: "red", assistantText: "", toolCalls: [] },
 			{ round: 2, aiId: "red", assistantText: "", toolCalls: [] },
 			{
@@ -249,7 +227,6 @@ describe("rollingSilenceRate", () => {
 					},
 				],
 			},
-			// window 2: rounds 4-5 — both messaging
 			{
 				round: 4,
 				aiId: "red",
@@ -314,26 +291,21 @@ describe("rollingSilenceRate", () => {
 	});
 });
 
-// ── summarizeRun ─────────────────────────────────────────────────────────────
-
 describe("summarizeRun", () => {
 	it("aggregates totals, leak counts, and tool-name counts", () => {
 		const turns: TurnRecord[] = [
-			// silent + free-text-message leak
 			{
 				round: 1,
 				aiId: "red",
 				assistantText: "I tell blue I see a door.",
 				toolCalls: [],
 			},
-			// silent + free-text-action leak
 			{
 				round: 2,
 				aiId: "red",
 				assistantText: "I move north through the gap.",
 				toolCalls: [],
 			},
-			// proper message — no leak (even if text would otherwise look like one)
 			{
 				round: 3,
 				aiId: "red",
@@ -346,7 +318,6 @@ describe("summarizeRun", () => {
 					},
 				],
 			},
-			// proper go — no action leak (movement reached the engine)
 			{
 				round: 4,
 				aiId: "red",
@@ -378,11 +349,8 @@ describe("summarizeRun", () => {
 	});
 });
 
-// ── buildPerRoundSeries (graphable output) ───────────────────────────────────
-
 describe("buildPerRoundSeries", () => {
 	const turns: TurnRecord[] = [
-		// round 1: go north (no message)
 		{
 			round: 1,
 			aiId: "red",
@@ -391,7 +359,6 @@ describe("buildPerRoundSeries", () => {
 				{ id: "g1", name: "go", argumentsJson: '{"direction":"north"}' },
 			],
 		},
-		// round 2: message blue + go south
 		{
 			round: 2,
 			aiId: "red",
@@ -405,14 +372,12 @@ describe("buildPerRoundSeries", () => {
 				{ id: "l1", name: "go", argumentsJson: '{"direction":"south"}' },
 			],
 		},
-		// round 3: silent + free-text-message leak
 		{
 			round: 3,
 			aiId: "red",
 			assistantText: "I tell blue what I saw.",
 			toolCalls: [],
 		},
-		// round 4: message to unknown handle
 		{
 			round: 4,
 			aiId: "red",
@@ -446,8 +411,6 @@ describe("buildPerRoundSeries", () => {
 		const s = buildPerRoundSeries(turns, ["red", "sim1", "sim2"]);
 		expect(s.recipientCounts.blue).toEqual([0, 1, 0, 0]);
 		expect(s.recipientCounts.unknown).toEqual([0, 0, 0, 1]);
-		// known peers are still in the series (zero-filled) so the chart legend
-		// is stable across runs even when they're never addressed.
 		expect(s.recipientCounts.sim1).toEqual([0, 0, 0, 0]);
 	});
 

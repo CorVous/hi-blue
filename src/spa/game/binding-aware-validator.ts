@@ -1,28 +1,3 @@
-/**
- * binding-aware-validator.ts
- *
- * Validates a binding-shaped content-pack response against the pre-minted
- * entity-ID schedule produced by buildBindingPrompt / buildDualBindingPrompt.
- *
- * Per-binding validation rules mirror the system-prompt constraints:
- *
- * | Binding    | Required fields                                               | Forbidden fields                                                     |
- * |------------|---------------------------------------------------------------|----------------------------------------------------------------------|
- * | carry      | object: name, examineDescription, useOutcome, placementFlavor,| space: activationFlavor, satisfactionFlavor, postExamineDescription, |
- * |            |   proximityFlavor; space: name, examineDescription,           |   postLookFlavor, convergence tier* fields                           |
- * |            |   proximityFlavor                                             |                                                                      |
- * | use_space  | space: name, examineDescription, proximityFlavor,             | convergenceTier* fields, pairsWithSpaceId, placementFlavor           |
- * |            |   activationFlavor, satisfactionFlavor, postExamineDescription|                                                                      |
- * |            |   postLookFlavor                                              |                                                                      |
- * | convergence| space: name, examineDescription, proximityFlavor,             | activationFlavor, satisfactionFlavor, postExamineDescription,        |
- * |            |   convergenceTier1Flavor, convergenceTier2Flavor,             |   postLookFlavor, useAvailable                                       |
- * |            |   convergenceTier1ActorFlavor, convergenceTier2ActorFlavor    |                                                                      |
- * | use_item   | item: name, examineDescription, proximityFlavor, useOutcome,  | (none extra)                                                         |
- * |            |   activationFlavor, postExamineDescription, postLookFlavor   |                                                                      |
- * | decoy      | item: name, examineDescription, proximityFlavor, useOutcome   | activationFlavor, postExamineDescription, postLookFlavor             |
- * | obstacle   | name, examineDescription, shiftFlavor                         |                                                                      |
- */
-
 import type { BindingSkeleton } from "./binding-prompt-builder.js";
 import type {
 	ValidationError,
@@ -33,8 +8,6 @@ import {
 	findMatchedUseTellKeywords,
 	USE_CUE_KEYWORD_HINTS,
 } from "./content-pack-provider.js";
-
-// ── Raw binding-shaped response types ────────────────────────────────────────
 
 interface RawBindingEntity {
 	id?: string;
@@ -90,16 +63,89 @@ export interface RawBoundPack {
 	obstacles?: RawObstacle[];
 }
 
-// ── Validation schedule type ──────────────────────────────────────────────────
-
-/** The schedule passed to the validator (from buildBindingPrompt). */
 export interface ValidationSchedule {
 	skeletons: BindingSkeleton[];
 	decoys: { id: string }[];
 	obstacleCount: number;
 }
 
-// ── Validation helpers ────────────────────────────────────────────────────────
+const CONVERGENCE_TIER_FIELDS = [
+	"convergenceTier1Flavor",
+	"convergenceTier2Flavor",
+	"convergenceTier1ActorFlavor",
+	"convergenceTier2ActorFlavor",
+];
+
+const ACTIVATION_OUTCOME_FIELDS = [
+	"activationFlavor",
+	"satisfactionFlavor",
+	"postExamineDescription",
+	"postLookFlavor",
+];
+
+const CARRY_OBJECT_REQUIRED_FIELDS = [
+	"name",
+	"examineDescription",
+	"useOutcome",
+	"placementFlavor",
+	"proximityFlavor",
+];
+const CARRY_SPACE_REQUIRED_FIELDS = [
+	"name",
+	"examineDescription",
+	"proximityFlavor",
+];
+const CARRY_SPACE_FORBIDDEN_FIELDS = [
+	...ACTIVATION_OUTCOME_FIELDS,
+	...CONVERGENCE_TIER_FIELDS,
+];
+
+const USE_SPACE_REQUIRED_FIELDS = [
+	"name",
+	"examineDescription",
+	"proximityFlavor",
+	...ACTIVATION_OUTCOME_FIELDS,
+];
+const USE_SPACE_FORBIDDEN_FIELDS = [
+	...CONVERGENCE_TIER_FIELDS,
+	"pairsWithSpaceId",
+	"placementFlavor",
+];
+
+const USE_ITEM_REQUIRED_FIELDS = [
+	"name",
+	"examineDescription",
+	"proximityFlavor",
+	"useOutcome",
+	"activationFlavor",
+	"postExamineDescription",
+	"postLookFlavor",
+];
+
+const CONVERGENCE_SPACE_REQUIRED_FIELDS = [
+	"name",
+	"examineDescription",
+	"proximityFlavor",
+	...CONVERGENCE_TIER_FIELDS,
+];
+const CONVERGENCE_SPACE_FORBIDDEN_FIELDS = [
+	...ACTIVATION_OUTCOME_FIELDS,
+	"useAvailable",
+];
+
+const DECOY_REQUIRED_FIELDS = [
+	"name",
+	"examineDescription",
+	"proximityFlavor",
+	"useOutcome",
+];
+const DECOY_FORBIDDEN_FIELDS = [
+	"activationFlavor",
+	"postExamineDescription",
+	"postLookFlavor",
+];
+
+const OBSTACLE_REQUIRED_FIELDS = ["name", "examineDescription", "shiftFlavor"];
 
 function requiredString(
 	entity: RawBindingEntity,
@@ -183,8 +229,6 @@ function checkWrongId(
 	}
 }
 
-// ── Per-binding validation ────────────────────────────────────────────────────
-
 function validateCarryBinding(
 	binding: RawBinding,
 	sk: BindingSkeleton,
@@ -215,16 +259,9 @@ function validateCarryBinding(
 		});
 	} else {
 		checkWrongId(obj, objectId, bindingRetryUnit, errors, "object");
-		for (const f of [
-			"name",
-			"examineDescription",
-			"useOutcome",
-			"placementFlavor",
-			"proximityFlavor",
-		]) {
+		for (const f of CARRY_OBJECT_REQUIRED_FIELDS) {
 			requiredString(obj, f, objectId, bindingRetryUnit, errors);
 		}
-		// placementFlavor must contain {actor}
 		if (
 			typeof obj.placementFlavor === "string" &&
 			obj.placementFlavor.length > 0 &&
@@ -237,15 +274,6 @@ function validateCarryBinding(
 				message: `Carry object ${sk.objectId}: placementFlavor must contain "{actor}"`,
 				retryUnit: bindingRetryUnit,
 			});
-		}
-		// object.examineDescription MUST reference paired space (hard)
-		if (
-			typeof obj.examineDescription === "string" &&
-			obj.examineDescription.length > 0 &&
-			sk.spaceId
-		) {
-			// Check that it at least mentions the space id string (or we just check the space name from the space entity)
-			// We'll check this after we have the space name below
 		}
 	}
 
@@ -261,23 +289,12 @@ function validateCarryBinding(
 		});
 	} else {
 		checkWrongId(space, spaceId, bindingRetryUnit, errors, "space");
-		for (const f of ["name", "examineDescription", "proximityFlavor"]) {
+		for (const f of CARRY_SPACE_REQUIRED_FIELDS) {
 			requiredString(space, f, spaceId, bindingRetryUnit, errors);
 		}
-		// Forbidden fields on carry space
-		for (const f of [
-			"activationFlavor",
-			"satisfactionFlavor",
-			"postExamineDescription",
-			"postLookFlavor",
-			"convergenceTier1Flavor",
-			"convergenceTier2Flavor",
-			"convergenceTier1ActorFlavor",
-			"convergenceTier2ActorFlavor",
-		]) {
+		for (const f of CARRY_SPACE_FORBIDDEN_FIELDS) {
 			forbiddenField(space, f, spaceId, bindingRetryUnit, errors);
 		}
-		// Use-cue in carry space examineDescription = warn only
 		if (
 			typeof space.examineDescription === "string" &&
 			space.examineDescription.length > 0
@@ -323,29 +340,12 @@ function validateUseSpaceBinding(
 	}
 
 	checkWrongId(space, spaceId, bindingRetryUnit, errors, "space");
-	for (const f of [
-		"name",
-		"examineDescription",
-		"proximityFlavor",
-		"activationFlavor",
-		"satisfactionFlavor",
-		"postExamineDescription",
-		"postLookFlavor",
-	]) {
+	for (const f of USE_SPACE_REQUIRED_FIELDS) {
 		requiredString(space, f, spaceId, bindingRetryUnit, errors);
 	}
-	// Forbidden: convergence tier fields, pairsWithSpaceId, placementFlavor
-	for (const f of [
-		"convergenceTier1Flavor",
-		"convergenceTier2Flavor",
-		"convergenceTier1ActorFlavor",
-		"convergenceTier2ActorFlavor",
-		"pairsWithSpaceId",
-		"placementFlavor",
-	]) {
+	for (const f of USE_SPACE_FORBIDDEN_FIELDS) {
 		forbiddenField(space, f, spaceId, bindingRetryUnit, errors);
 	}
-	// examineDescription MUST contain use-cue = hard error
 	if (
 		typeof space.examineDescription === "string" &&
 		space.examineDescription.length > 0
@@ -390,18 +390,9 @@ function validateUseItemBinding(
 	}
 
 	checkWrongId(item, itemId, bindingRetryUnit, errors, "item");
-	for (const f of [
-		"name",
-		"examineDescription",
-		"proximityFlavor",
-		"useOutcome",
-		"activationFlavor",
-		"postExamineDescription",
-		"postLookFlavor",
-	]) {
+	for (const f of USE_ITEM_REQUIRED_FIELDS) {
 		requiredString(item, f, itemId, bindingRetryUnit, errors);
 	}
-	// examineDescription MUST contain use-cue = hard error
 	if (
 		typeof item.examineDescription === "string" &&
 		item.examineDescription.length > 0
@@ -447,28 +438,12 @@ function validateConvergenceBinding(
 	}
 
 	checkWrongId(space, spaceId, bindingRetryUnit, errors, "space");
-	for (const f of [
-		"name",
-		"examineDescription",
-		"proximityFlavor",
-		"convergenceTier1Flavor",
-		"convergenceTier2Flavor",
-		"convergenceTier1ActorFlavor",
-		"convergenceTier2ActorFlavor",
-	]) {
+	for (const f of CONVERGENCE_SPACE_REQUIRED_FIELDS) {
 		requiredString(space, f, spaceId, bindingRetryUnit, errors);
 	}
-	// Forbidden: activationFlavor, satisfactionFlavor, postExamineDescription, postLookFlavor, useAvailable
-	for (const f of [
-		"activationFlavor",
-		"satisfactionFlavor",
-		"postExamineDescription",
-		"postLookFlavor",
-		"useAvailable",
-	]) {
+	for (const f of CONVERGENCE_SPACE_FORBIDDEN_FIELDS) {
 		forbiddenField(space, f, spaceId, bindingRetryUnit, errors);
 	}
-	// Use-cue in convergence space examineDescription = warn only
 	if (
 		typeof space.examineDescription === "string" &&
 		space.examineDescription.length > 0
@@ -508,12 +483,7 @@ function validateDecoy(
 	}
 
 	const entityId = decoy.id ?? expectedId;
-	for (const f of [
-		"name",
-		"examineDescription",
-		"proximityFlavor",
-		"useOutcome",
-	]) {
+	for (const f of DECOY_REQUIRED_FIELDS) {
 		const val = (decoy as Record<string, unknown>)[f];
 		if (typeof val !== "string" || val.length === 0) {
 			errors.push({
@@ -525,12 +495,7 @@ function validateDecoy(
 			});
 		}
 	}
-	// Forbidden: activationFlavor, postExamineDescription, postLookFlavor
-	for (const f of [
-		"activationFlavor",
-		"postExamineDescription",
-		"postLookFlavor",
-	]) {
+	for (const f of DECOY_FORBIDDEN_FIELDS) {
 		if ((decoy as Record<string, unknown>)[f] !== undefined) {
 			errors.push({
 				entityId,
@@ -541,7 +506,6 @@ function validateDecoy(
 			});
 		}
 	}
-	// examineDescription MUST NOT contain use-cue = hard error
 	if (
 		typeof decoy.examineDescription === "string" &&
 		decoy.examineDescription.length > 0
@@ -583,7 +547,7 @@ function validateObstacle(
 	}
 
 	const entityId = obstacle.id ?? expectedId;
-	for (const f of ["name", "examineDescription", "shiftFlavor"]) {
+	for (const f of OBSTACLE_REQUIRED_FIELDS) {
 		const val = (obstacle as Record<string, unknown>)[f];
 		if (typeof val !== "string" || val.length === 0) {
 			errors.push({
@@ -595,7 +559,6 @@ function validateObstacle(
 			});
 		}
 	}
-	// shiftFlavor MUST NOT contain {actor}
 	if (
 		typeof obstacle.shiftFlavor === "string" &&
 		obstacle.shiftFlavor.includes("{actor}")
@@ -610,8 +573,6 @@ function validateObstacle(
 	}
 }
 
-// ── Pack validation ───────────────────────────────────────────────────────────
-
 function validateBoundPack(
 	pack: RawBoundPack,
 	schedule: ValidationSchedule,
@@ -623,7 +584,6 @@ function validateBoundPack(
 	const decoys = pack.decoys ?? [];
 	const obstacles = pack.obstacles ?? [];
 
-	// Validate each binding against schedule
 	for (const [i, sk] of schedule.skeletons.entries()) {
 		const binding = bindings[i];
 		if (!binding) {
@@ -653,7 +613,6 @@ function validateBoundPack(
 		}
 	}
 
-	// Validate decoys: always exactly 2
 	if (decoys.length !== schedule.decoys.length) {
 		errors.push({
 			entityId: "",
@@ -679,7 +638,6 @@ function validateBoundPack(
 		}
 	}
 
-	// Validate obstacles
 	for (let i = 0; i < schedule.obstacleCount; i++) {
 		const expectedId = `obstacle-${i}`;
 		const obstacle = obstacles[i];
@@ -697,14 +655,6 @@ function validateBoundPack(
 	}
 }
 
-// ── Public API ────────────────────────────────────────────────────────────────
-
-/**
- * Validate a single-pack binding-shaped response against the pre-minted schedule.
- *
- * Returns `{ ok: true, warnings }` when all hard rules pass.
- * Returns `{ ok: false, errors }` when any hard rules fail.
- */
 export function validateBoundContentPack(
 	rawResponse: unknown,
 	schedule: ValidationSchedule,
@@ -743,10 +693,6 @@ export function validateBoundContentPack(
 		: { ok: false, errors };
 }
 
-/**
- * Validate a dual-pack binding-shaped response against the pre-minted schedule.
- * Both packA and packB must pass validation with the same schedule.
- */
 export function validateBoundDualContentPack(
 	rawResponse: unknown,
 	schedule: ValidationSchedule,

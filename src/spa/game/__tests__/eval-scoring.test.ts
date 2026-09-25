@@ -1,28 +1,3 @@
-/**
- * eval-scoring.test.ts
- *
- * CI unit tests for the direction-vocabulary eval scoring module.
- * Tests the pure scoring functions imported from the eval harness so that
- * the regex, substring-match, and aggregation logic cannot silently rot.
- *
- * The module scores the approved cardinal model (ADR 0015): a daemon naming
- * `north`/`south`/`east`/`west` is doing the right thing, and coherence means
- * the cardinal it stated as a MOVEMENT INTENT matches the cardinal its `go`
- * call used. The retired relative vocabulary must not reappear in either the
- * module or these tests.
- *
- * Movement vs position is the load-bearing distinction here. A live eval run
- * produced a false positive: a turn that described its corner position ("Wall
- * one step north … Clear to the south, east, and west") while correctly moving
- * `south` was scored `mismatch`. Description is not intent, so these tests pin
- * the description forms ("clear to the south", "two steps north", "north of
- * me") as position, not movement, and pin the exact failing prose as
- * `no-statement`.
- *
- * Import note: under TypeScript ESM / nodenext, cross-package imports use
- * the .js extension even when the source is .ts.
- */
-
 import { describe, expect, it } from "vitest";
 import type { TurnRecord } from "../../../../evals/relative-directions/scoring.js";
 import {
@@ -35,19 +10,11 @@ import {
 	structuralCoherenceForTurn,
 } from "../../../../evals/relative-directions/scoring.js";
 
-// ── Fixtures ──────────────────────────────────────────────────────────────────
-
-/**
- * The exact live-observed prose that produced the false positive. It is a
- * POSITIONAL description of a corner: it names `north` four times as where
- * things are, and `south`/`east`/`west` as clear space. It states no movement.
- */
 const FAILING_CORNER_PROSE =
 	"I'm against a north wall. Wall one step north, one step north-west, " +
 	"one step north-east, and two steps north. Clear to the south, east, and " +
 	"west. Corner position.";
 
-/** Build a minimal TurnRecord for aggregator tests. */
 function makeTurn(
 	overrides: Partial<TurnRecord> & Pick<TurnRecord, "turn">,
 ): TurnRecord {
@@ -61,11 +28,6 @@ function makeTurn(
 	};
 }
 
-/**
- * Build a turn record the way the eval harness does: prose in, fields derived.
- * `movementStatement` is deliberately left unset so these tests exercise the
- * module's own prose re-derivation rather than a hand-set field.
- */
 function makeProseTurn(
 	turn: number,
 	text: string,
@@ -80,8 +42,6 @@ function makeProseTurn(
 		toolCallDirection,
 	});
 }
-
-// ── referencedCardinals (approved vocabulary, not a leak) ─────────────────────
 
 describe("referencedCardinals", () => {
 	it("counts a lowercase cardinal as a reference", () => {
@@ -100,20 +60,16 @@ describe("referencedCardinals", () => {
 	});
 
 	it("counts a single-letter N as a word", () => {
-		// N appearing as a standalone word (abbreviated bearing) is a reference.
 		const result = referencedCardinals("I moved N toward the door.");
 		expect(result).toContain("n");
 	});
 
 	it("does NOT match 'N' inside a longer word (word boundary test)", () => {
-		// "inside" contains 'N' but is not a standalone word — no reference
 		const result = referencedCardinals("inside the room");
 		expect(result).not.toContain("n");
 	});
 
 	it("does NOT match 'northern' (compound adjective — not a compass bearing)", () => {
-		// The regex uses word boundaries; 'northern' has content after the root word
-		// so \bnorth\b does not match 'northern'.
 		const result = referencedCardinals("I see the northern lights.");
 		expect(result).not.toContain("north");
 	});
@@ -143,15 +99,11 @@ describe("referencedCardinals", () => {
 	});
 
 	it("documents the known false-positive: single 'N' in sentence-like prose", () => {
-		// Known limitation: "N." at sentence end fires because \bN\b matches.
-		// Over-reporting is preferable to missing an abbreviated reference.
 		const result = referencedCardinals("I am Daemon N. Ready to go.");
 		expect(result).toContain("n");
 	});
 
 	it("does NOT match lowercase single letters in possessives (water's edge)", () => {
-		// The lowercase 's' in "water's" is a word (apostrophe is a word boundary
-		// in JS regex). Case-sensitive single-letter matching avoids that.
 		const result = referencedCardinals(
 			"I stand at the water's edge, before the sealed door.",
 		);
@@ -165,8 +117,6 @@ describe("referencedCardinals", () => {
 		expect(result).toEqual([]);
 	});
 });
-
-// ── parseStatedCardinal ───────────────────────────────────────────────────────
 
 describe("parseStatedCardinal", () => {
 	it("parses 'I'll go north'", () => {
@@ -244,14 +194,12 @@ describe("parseStatedCardinal", () => {
 	});
 
 	it("returns null for a cardinal with no statement verb or bearing", () => {
-		// "north wall" is scenery, not a movement or positional statement.
 		expect(
 			parseStatedCardinal("The north wall is crumbling and damp."),
 		).toBeNull();
 	});
 
 	it("does NOT parse the retired 'turn' verb as a statement", () => {
-		// ADR 0015 removed facing; there is nothing to turn to face.
 		expect(
 			parseStatedCardinal("I turn north to face the corridor."),
 		).toBeNull();
@@ -266,8 +214,6 @@ describe("parseStatedCardinal", () => {
 		expect(parseStatedCardinal("I step ahead toward the door.")).toBeNull();
 	});
 });
-
-// ── parseMovementStatement (intent) vs parseDirectionalStatement (kind) ───────
 
 describe("parseMovementStatement", () => {
 	it("parses a plain movement verb + cardinal", () => {
@@ -284,9 +230,6 @@ describe("parseMovementStatement", () => {
 		});
 	});
 
-	// THE REGRESSION: the verb is "exploring" (a gerund), which the old
-	// MOVEMENT_VERB list did not contain, so a genuine movement statement
-	// parsed as null.
 	it("parses 'I'll start exploring north' as movement north (gerund regression)", () => {
 		expect(
 			parseMovementStatement(
@@ -313,7 +256,6 @@ describe("parseMovementStatement", () => {
 		).toBe("north");
 	});
 
-	// THE FALSE POSITIVE: description must never be read as intent.
 	it("does NOT read 'clear to the south' as movement", () => {
 		expect(parseMovementStatement("Clear to the south.")).toBeNull();
 	});
@@ -368,7 +310,6 @@ describe("parseDirectionalStatement", () => {
 	});
 
 	it("prefers movement when prose both describes position and states a move", () => {
-		// Position first, movement second — the intent must win.
 		const text =
 			"The wall is one step north of me. I'll go south to leave the corner.";
 		expect(parseDirectionalStatement(text)).toEqual({
@@ -383,8 +324,6 @@ describe("parseDirectionalStatement", () => {
 		).toBeNull();
 	});
 });
-
-// ── structuralCoherence ───────────────────────────────────────────────────────
 
 describe("structuralCoherence", () => {
 	it("returns 'match' when stated cardinal and go cardinal agree", () => {
@@ -408,7 +347,6 @@ describe("structuralCoherence", () => {
 	});
 
 	it("returns 'no-statement' when both are null (no statement, no tool call)", () => {
-		// statedDirection is checked first
 		expect(structuralCoherence(null, null)).toBe("no-statement");
 	});
 
@@ -416,8 +354,6 @@ describe("structuralCoherence", () => {
 		expect(structuralCoherence("south", null)).toBe("no-toolcall");
 	});
 });
-
-// ── structuralCoherenceForTurn (movement intent only) ─────────────────────────
 
 describe("structuralCoherenceForTurn", () => {
 	it("returns 'match' for a stated move that agrees with the go call", () => {
@@ -446,18 +382,14 @@ describe("structuralCoherenceForTurn", () => {
 		).toBe("no-toolcall");
 	});
 
-	// THE LIVE FALSE POSITIVE, regression-pinned.
 	it("returns 'no-statement' for the exact failing corner prose vs go south", () => {
 		const turn = makeProseTurn(1, FAILING_CORNER_PROSE, "south");
-		// The prose does name a cardinal, so the broad parser still reports it…
 		expect(turn.statedDirection).toBe("north");
-		// …but it states no movement, so it cannot mismatch the go call.
 		expect(parseMovementStatement(turn.text)).toBeNull();
 		expect(structuralCoherenceForTurn(turn)).toBe("no-statement");
 	});
 
 	it("re-derives movement from prose when the field is absent", () => {
-		// makeProseTurn never sets movementStatement; the module must read text.
 		const turn = makeProseTurn(1, "I'll start exploring north.", "north");
 		expect(turn.movementStatement).toBeUndefined();
 		expect(structuralCoherenceForTurn(turn)).toBe("match");
@@ -482,8 +414,6 @@ describe("structuralCoherenceForTurn", () => {
 		expect(structuralCoherenceForTurn(turn)).toBe("no-statement");
 	});
 });
-
-// ── scoreScenario ─────────────────────────────────────────────────────────────
 
 describe("scoreScenario", () => {
 	it("returns zero rates and passed=false for empty turns array", () => {
@@ -518,22 +448,13 @@ describe("scoreScenario", () => {
 	});
 
 	it("computes structural coherence rate for decisive turns only", () => {
-		// Updated expectation: coherence counts MOVEMENT statements only, so
-		// each turn now carries real prose. A bare statedDirection with no
-		// movement prose is no longer decisive — that was the old behaviour
-		// that let a positional description mismatch a go call.
 		const turns = [
-			// Match
 			makeProseTurn(1, "I'll go north.", "north"),
-			// Mismatch
 			makeProseTurn(2, "I'll go north.", "south"),
-			// No movement statement — excluded from decisive turns
 			makeProseTurn(3, "Clear to the east.", "east"),
-			// Movement statement but no go call — excluded from decisive turns
 			makeProseTurn(4, "I'll go west.", null),
 		];
 		const score = scoreScenario(turns);
-		// Only turns 1 and 2 are decisive (movement statement + toolCall present)
 		expect(score.structuralCoherenceRate).toBeCloseTo(0.5);
 		expect(score.structuralMismatchCount).toBe(1);
 	});
@@ -572,9 +493,6 @@ describe("scoreScenario", () => {
 	});
 
 	it("treats a cardinal-naming statement as approved, not as a leak", () => {
-		// The inversion: under the retired relative model these cardinals were
-		// punished as leaks. They are now the approved vocabulary, so naming
-		// cardinals must never fail a run on its own.
 		const turns = [
 			makeTurn({
 				turn: 1,
@@ -603,7 +521,6 @@ describe("scoreScenario", () => {
 	});
 
 	it("parses prose end-to-end into an agreeing turn record", () => {
-		// Statement/action agreement driven from prose, not hand-set fields.
 		const turn = makeProseTurn(
 			1,
 			"I'll go north and check the far wall.",
@@ -634,8 +551,6 @@ describe("scoreScenario", () => {
 	});
 
 	it("fails when a stated movement cardinal disagrees with the go cardinal", () => {
-		// Updated to carry movement prose: a bare statedDirection with no prose
-		// no longer drives a mismatch, by design.
 		const turns = [
 			makeProseTurn(1, "I'll go north.", "west"),
 			makeTurn({ turn: 2, cardinalReferences: [] }),
@@ -645,15 +560,12 @@ describe("scoreScenario", () => {
 		expect(score.passed).toBe(false);
 	});
 
-	// THE LIVE FALSE POSITIVE, end-to-end through the aggregator.
 	it("does NOT fail the run on the exact failing corner prose vs go south", () => {
 		const turn = makeProseTurn(1, FAILING_CORNER_PROSE, "south");
 		expect(structuralCoherenceForTurn(turn)).toBe("no-statement");
 		const score = scoreScenario([turn]);
-		// Before the fix this was structuralMismatchCount: 1, passed: false.
 		expect(score.structuralMismatchCount).toBe(0);
 		expect(score.passed).toBe(true);
-		// The description is still reported as approved cardinal vocabulary.
 		expect(score.cardinalStatementTurns).toBe(1);
 		expect(score.cardinalReferenceCount).toBeGreaterThan(0);
 	});

@@ -1,15 +1,3 @@
-/**
- * bootstrap.ts
- *
- * Generation glue for new-game asset creation, extracted from views/game.ts.
- *
- * Owns the async bootstrap path: generatePersonas + generateContentPacks.
- * Does NOT write to localStorage (that remains the start-screen's responsibility
- * — triggered only on BEGIN click).
- *
- * Issue #173 (parent #155).
- */
-
 import { generateDualContentPacks } from "../../content/content-pack-generator.js";
 import {
 	generatePersonas,
@@ -43,38 +31,18 @@ export interface BootstrapOpts {
 	synthesis?: LlmSynthesisProvider;
 	packProvider?: ContentPackProvider;
 	rng?: () => number;
-	/**
-	 * Spike #239: separate Mulberry32 streams for persona vs. content-pack
-	 * generation. When set, takes precedence over `rng`. Independent streams
-	 * make rng consumption deterministic across runs even though the two
-	 * generators run as concurrent sibling promises.
-	 */
 	personasRng?: () => number;
 	contentPackRng?: () => number;
-	/**
-	 * Spike #239 step 8: opt-in per-persona engagement clauses appended to
-	 * each daemon's synthesized blurb based on its temperament pair. Set by
-	 * the start screen when `?engagementClauses=1` is in the URL. Default
-	 * (undefined / false) leaves persona blurbs unchanged.
-	 */
 	engagementClauses?: boolean;
-	/**
-	 * Daemon-action-variation: per-persona action-tool preference clause
-	 * attached to each daemon and rendered as `<action_profile>` in the
-	 * system prompt. ON by default; pass `false` (via the `?actionProfiles=0`
-	 * kill-switch) to disable. See `src/content/action-preference-bias.ts`.
-	 */
 	actionProfiles?: boolean;
 }
 
-// Re-export provider types for use in start.ts without creating circular deps
 export type { ContentPackProvider, LlmSynthesisProvider as SynthesisProvider };
 
-/**
- * Kick off persona + content-pack generation and expose them as separate
- * promises. Personas resolve seconds before content packs, which lets the
- * UI react to each stage independently (drive a multi-phase loading screen).
- */
+function suppressUnhandledRejection(promise: Promise<unknown>): void {
+	promise.catch(() => {});
+}
+
 export function generateNewGameAssetsSplit(
 	opts?: BootstrapOpts,
 ): SplitNewGameAssets {
@@ -88,11 +56,9 @@ export function generateNewGameAssetsSplit(
 		engagementClauses: opts?.engagementClauses ?? false,
 		actionProfiles: opts?.actionProfiles ?? true,
 	}) as Promise<Record<AiId, AiPersona>>;
-	// Silence unhandled-rejection on derived promises if a downstream consumer
-	// chooses not to await one of them.
-	personasPromise.catch(() => {});
+	suppressUnhandledRejection(personasPromise);
 	const aiIdsPromise = personasPromise.then((p) => Object.keys(p));
-	aiIdsPromise.catch(() => {});
+	suppressUnhandledRejection(aiIdsPromise);
 
 	const contentPacksPromise = (async () => {
 		const { packA, packB, objectiveTypes } = await generateDualContentPacks(
@@ -110,19 +76,11 @@ export function generateNewGameAssetsSplit(
 		);
 		return { packsA: [packA], packsB: [packB], objectiveTypes };
 	})();
-	contentPacksPromise.catch(() => {});
+	suppressUnhandledRejection(contentPacksPromise);
 
 	return { personasPromise, contentPacksPromise };
 }
 
-/**
- * Generate content packs only, reusing an existing set of resolved personas.
- * Used by bootstrap recovery to regenerate content packs without re-generating
- * personas (issue #380).
- *
- * The returned personasPromise resolves immediately with the supplied personas,
- * so downstream code that chains on personasPromise still works unchanged.
- */
 export function generateContentPacksOnlySplit(
 	personas: Record<AiId, AiPersona>,
 	opts?: BootstrapOpts,
@@ -132,7 +90,7 @@ export function generateContentPacksOnlySplit(
 	const aiIds = Object.keys(personas);
 
 	const personasPromise = Promise.resolve(personas);
-	personasPromise.catch(() => {});
+	suppressUnhandledRejection(personasPromise);
 
 	const contentPacksPromise = (async () => {
 		const { packA, packB, objectiveTypes } = await generateDualContentPacks(
@@ -150,16 +108,11 @@ export function generateContentPacksOnlySplit(
 		);
 		return { packsA: [packA], packsB: [packB], objectiveTypes };
 	})();
-	contentPacksPromise.catch(() => {});
+	suppressUnhandledRejection(contentPacksPromise);
 
 	return { personasPromise, contentPacksPromise };
 }
 
-/**
- * Build a new GameSession reusing existing personas but generating fresh
- * content packs. Used by the end-game "Same Daemons, New Room" and
- * "Continue" choices (issue #307).
- */
 export async function buildSameDaemonsSession(
 	personas: Record<AiId, AiPersona>,
 	opts?: { rng?: () => number },
@@ -190,15 +143,6 @@ export async function buildSameDaemonsSession(
 	);
 }
 
-/**
- * Construct a GameSession from pre-generated assets.
- *
- * `opts.rng`, when provided, is forwarded to the GameSession constructor
- * and ultimately drives initial spatial placement via `startGame`. When
- * undefined the constructor falls back to `Math.random` as before.
- * Spike #239 passes a Mulberry32 stream here so a `?seed=N` run pins
- * spatial layout across A/B sessions.
- */
 export function buildSessionFromAssets(
 	assets: NewGameAssets,
 	opts?: { rng?: () => number },
