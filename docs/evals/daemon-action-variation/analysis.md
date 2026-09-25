@@ -311,8 +311,8 @@ history on this branch — see commit `c6e10cc`'s
 **Pairs:** `melancholic+diffident`, `diffident+aloof`, `melancholic+melancholic`
 — the three pairs that emitted **0% action** in the 2026-06-01 run (issue #508).
 
-Test matrix: 3 pairs × 2 scenarios × 20 reps = **120 reps per run**, 6 runs
-total (3 `avoid` controls + 3 `noavoid` treatments), ≈ $0.10/run.
+Test matrix: 3 pairs × 2 scenarios × 20 reps = **120 reps per run**, 9 runs
+total (5 `avoid` controls + 4 `noavoid` treatments), ≈ $0.10/run.
 
 ## Decision
 
@@ -417,7 +417,7 @@ to act on option (a), and is left as follow-up.
   isolates "the model reads pure avoidance as prohibition" from "the presence
   of *any* `<action_profile>` block at that position costs action". The
   contrast here is presence vs. absence, so the data cannot separate the
-  clause's *content* from the block's *existence*. The `omit` arm's effect is
+  clause's *content* from the block's *existence*. The `noavoid` arm's effect is
   real; the reason given for it is the most plausible reading, not a measured
   one.
 - **The runs are not timestamped**, so "consecutive" cannot be verified from
