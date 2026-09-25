@@ -26,9 +26,9 @@ The pinned model is `z-ai/glm-4.7` (`src/model.ts`). Daemon system prompts are a
 
 We follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/#specification). Squash-merge PR titles are the source of truth — `changelogen` parses them to bump the version and write `CHANGELOG.md`. See `docs/agents/commits.md`.
 
-## Vista implementation handoff
+## Vista (movement and sight)
 
-For movement/sight work, start with [docs/agents/vista-implementation.md](docs/agents/vista-implementation.md) — the reference for the landed Vista, accurate as of commit `14461ab`. [ADR 0015](docs/adr/0015-proximity-disk-and-cardinal-directions.md) and [CONTEXT.md](CONTEXT.md) remain the authoritative design and vocabulary. The cutover has landed in merges `24a217b` (PR #550) and `f018033` (PR #553). [Map #535](https://github.com/CorVous/hi-blue/issues/535) remains the live tracker.
+The Vista has landed; [ADR 0015](docs/adr/0015-proximity-disk-and-cardinal-directions.md) is the specification (with implementation notes at the end), and `docs/design/game-round.md` explains how the code implements it.
 
 ## Local development
 

@@ -5,7 +5,7 @@ Why the round loop in `src/spa/game/` is built the way it is: round coordinator,
 Other sources, used here by reference rather than repeated:
 
 - Vocabulary (Daemon, Vista, Interaction range, Objective kinds, Complication, Conversation log, …): `CONTEXT.md`. The domain types in `types.ts` follow it.
-- Movement, sight, the proximity-hint distances and the `<what_you_see>` rules: ADR 0015 and `docs/agents/vista-implementation.md`.
+- Movement, sight, the proximity-hint distances and the `<what_you_see>` rules: ADR 0015, whose closing implementation notes record how the Vista landed and keep the three regions (Vista, interaction range, inspector display) apart.
 - GLM-4.7 prompting techniques (beginning-of-prompt bias, XML tags, MUST/NEVER phrasing, persona-drift mitigation): `docs/prompting/glm-4.7-guide.md`.
 - Drift-to-silence retry: ADR 0016.
 

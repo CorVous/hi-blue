@@ -66,3 +66,33 @@ Old saves are identified as belonging to an older version rather than silently r
 ## Scope
 
 This is a design handoff, not an implementation plan. Implementation sequencing and internal storage choices are not prescribed here. Carry, Use-Item, and Convergence satisfaction rules remain unchanged; Convergence witness eligibility follows the Vista rule above.
+
+## Implementation notes
+
+*Added 2026-09-25, when the implementation handoff (`docs/agents/vista-implementation.md`) was retired. The decision above is unchanged.*
+
+**Status: implemented.** The ADR landed through PRs #534 and #542. The implementation tickets under map [#535](https://github.com/CorVous/hi-blue/issues/535) all landed:
+
+| Ticket | PR | Scope |
+|---|---|---|
+| #537 | #546 (`acf05ed`) | the tested radius-2 Vista geometry primitive |
+| #538 | #549 (`375b313`) | archive compatibility for the session and USB cutover |
+| #539 | #550 (`24a217b`) | runtime cutover: gameplay, prompts, content generation and the persisted formats; facing, the `face` tool and horizon landmarks removed; `go` is cardinal; `src/spa/game/vista-projector.ts` replaces the cone projector |
+| #540 | #553 (`f018033`) | room-only 5×5 dev inspector with the focus-Vista control |
+| #541 | #558 (`25eab7e`) | direction eval retargeted onto the cardinal model |
+
+Map #535 stays open as the tracker for follow-up work; its remaining children are not part of this design. `docs/design/game-round.md` explains how the code implements the rules above, and `docs/design/spa-shell.md` covers the inspector.
+
+**Three regions, kept distinct.** A navigation aid, not an extra rule:
+
+| Purpose | Region |
+|---|---|
+| Sight and witness eligibility | the 13-cell Vista, `dx² + dy² ≤ 4`; out-of-bounds cells perceived as Walls |
+| Pickup, held Carry placement, Use-Space | interaction range, `max(\|dx\|, \|dy\|) ≤ 1` |
+| Inspector display | the 5×5 room only, with the focus highlight clipped to room cells |
+
+Use-Space does **not** reach the whole Vista. Carry and Use-Item proximity hints use interaction range; pending Use-Space and Convergence hints use the four visible cells two cardinal steps away.
+
+**Save formats.** The bump shipped as session schema v12 and USB game-save v5. Both old numbers (session 11, game-save 4) map to `0.0.2-beta.2` in `src/spa/persistence/archive-map.ts`, with no in-place migration on either axis. `docs/design/persistence.md` records why no v11→v12 migration should be added. The USB save stays export-only: there is no importer or resume UI.
+
+**Numbering.** An earlier draft of this design was committed as ADR 0016 ("the new movement and sight format") and reverted. It is superseded by this ADR, and the number 0016 now belongs to the drift-to-silence retry.
