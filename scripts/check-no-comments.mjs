@@ -110,8 +110,9 @@ const fix = process.argv.includes("--fix");
 const explicit = process.argv
 	.slice(2)
 	.filter((argument) => !argument.startsWith("--"));
-const files =
-	explicit.length > 0 ? explicit : ROOTS.flatMap((root) => listFiles(root));
+const expand = (path) =>
+	statSync(path).isDirectory() ? listFiles(path) : [path];
+const files = (explicit.length > 0 ? explicit : ROOTS).flatMap(expand);
 
 let violations = 0;
 for (const path of files) {
