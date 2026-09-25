@@ -67,6 +67,7 @@ import type {
 	GameState,
 } from "../game/types";
 import { CapHitError } from "../llm-client.js";
+import { readStoredByokKey } from "../openrouter-key.js";
 import {
 	archiveSession,
 	clearActiveSession,
@@ -1275,7 +1276,7 @@ function wireEndgameChoices(
 	);
 	const choiceStatus = doc.querySelector<HTMLElement>("#endgame-choice-status");
 
-	const hasOpenRouterKey = localStorage.getItem("openrouter_key") !== null;
+	const hasOpenRouterKey = readStoredByokKey() !== null;
 	if (continueBtn && hasOpenRouterKey) {
 		continueBtn.removeAttribute("hidden");
 	}
