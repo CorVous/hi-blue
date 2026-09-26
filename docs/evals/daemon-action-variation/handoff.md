@@ -193,8 +193,6 @@ remaining steps are the calibration gate before flipping that default.
    kill-switch. Land as a follow-up PR once steps 1–5 are done, so the
    enable is backed by fresh native data. Consider one playtest with
    the URL flag before flipping, but the default destination is ON.
-7. **Drop `preview.html`** — it's a throwaway eval-results preview
-   (html-preview skill), not part of the feature. Exclude from merge.
 
 ---
 

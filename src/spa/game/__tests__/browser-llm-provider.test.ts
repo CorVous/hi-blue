@@ -1,14 +1,5 @@
-/**
- * Unit tests for BrowserLLMProvider live-delta callback (issue #102).
- *
- * Mocks globalThis.fetch with a real ReadableStream that enqueues two SSE
- * delta events. Asserts that streamRound(messages, tools, onDelta) invokes
- * onDelta once per delta in order, and that assistantText equals their concat.
- */
 import { describe, expect, it, vi } from "vitest";
 import { BrowserLLMProvider } from "../browser-llm-provider";
-
-// Build-time globals are provided by src/spa/test-setup.ts
 
 function makeSseBody(words: string[]): ReadableStream<Uint8Array> {
 	const encoder = new TextEncoder();
@@ -252,13 +243,11 @@ describe("BrowserLLMProvider.streamRound — onLifecycle callback", () => {
 		const provider = new BrowserLLMProvider();
 		const events: Array<string> = [];
 
-		try {
-			await provider.streamRound([], [], undefined, undefined, (event) => {
+		await expect(
+			provider.streamRound([], [], undefined, undefined, (event) => {
 				events.push(event.phase);
-			});
-		} catch {
-			// Expected to throw
-		}
+			}),
+		).rejects.toThrow();
 
 		expect(events).toEqual(["started", "errored"]);
 
@@ -288,13 +277,11 @@ describe("BrowserLLMProvider.streamRound — onLifecycle callback", () => {
 		const provider = new BrowserLLMProvider();
 		const events: string[] = [];
 
-		try {
-			await provider.streamRound([], [], undefined, undefined, (event) => {
+		await expect(
+			provider.streamRound([], [], undefined, undefined, (event) => {
 				events.push(event.phase);
-			});
-		} catch {
-			// Expected to throw
-		}
+			}),
+		).rejects.toThrow();
 
 		expect(events).toEqual(["started", "errored"]);
 		expect(events).not.toContain("first-token");

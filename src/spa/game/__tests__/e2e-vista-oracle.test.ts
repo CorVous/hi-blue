@@ -1,24 +1,3 @@
-/**
- * Binds the Playwright e2e Vista oracle to the shared production geometry.
- *
- * `e2e/helpers/vista-geometry.ts` (re-exported by `e2e/helpers/stubs.ts`)
- * deliberately re-implements ADR 0015's position-only Vista — the projected
- * disk, the room-bounds check, the cardinal cell labels and the
- * witness-membership predicate — because the specs may not import SPA modules.
- * `e2e/persistence-reload.spec.ts` and `e2e/witnessed-event-reload.spec.ts`
- * then assert the rendered `<what_you_see>` listing against that copy. Nothing
- * in the e2e tree can show the copy is current: the specs only compare the
- * rendered output with the copy itself, so a shared misconception passes, and
- * Playwright does not run in every environment.
- *
- * This test is that proof, and it runs on every `pnpm test`. It walks every
- * in-room observer position and compares, cell by cell, the oracle's
- * projection with `projectVista`, each cell's label with the production
- * rendering of `describeSteps`, the oracle's bounds check with `inBounds`, and
- * the oracle's membership predicate with `vistaContains` for every
- * observer/cell pair across the room and its one-cell wall ring. Changing
- * either side alone — the oracle or the geometry — fails here.
- */
 import { describe, expect, it } from "vitest";
 import {
 	inRoom,
@@ -31,13 +10,8 @@ import { describeSteps } from "../prompt-builder";
 import type { VistaAxisStep, VistaCell } from "../vista-projector";
 import { projectVista, vistaContains } from "../vista-projector";
 
-/** Cells of the ADR 0015 disk, transcribed from the diagram: 13 offsets. */
 const DISK_CELLS = 13;
 
-/**
- * Every position in a square band of width `margin` around the 5×5 room:
- * margin 0 is the room, margin 1 adds the one-cell wall ring.
- */
 function positionsAround(margin: number): GridPosition[] {
 	const positions: GridPosition[] = [];
 	for (let row = -margin; row < GRID_ROWS + margin; row++) {
@@ -48,20 +22,12 @@ function positionsAround(margin: number): GridPosition[] {
 	return positions;
 }
 
-/** The 25 in-room positions the specs can centre a Vista on. */
 const ROOM_POSITIONS = positionsAround(0);
 
-/** The room plus its one-cell wall ring: the 7×7 neighbourhood, 49 positions. */
 const ROOM_AND_WALL_RING = positionsAround(1);
 
-/** One projected cell of the e2e oracle, as `vista-geometry.ts` types it. */
 type OracleVistaCell = ReturnType<typeof vistaCells>[number];
 
-/**
- * Pair the oracle's projected cells with the production projection index by
- * index, so each comparison reads one oracle cell against the production cell
- * the specs assume it mirrors. The lengths must agree before pairing.
- */
 function alignedVista(
 	observer: GridPosition,
 ): Array<{ oracle: OracleVistaCell; production: VistaCell }> {
@@ -82,12 +48,6 @@ function alignedVista(
 	});
 }
 
-/**
- * The label the listing renders for a set of axis steps: the production prompt
- * builder capitalises `describeSteps` at both of its call sites
- * (`renderCurrentState` and `buildDiskSnapshot`), so the oracle's labels are
- * that same prose with its first character uppercased.
- */
 function renderedLabel(steps: readonly VistaAxisStep[]): string {
 	const prose = describeSteps(steps);
 	return prose.charAt(0).toUpperCase() + prose.slice(1);
@@ -157,7 +117,6 @@ describe("e2e Vista oracle — parity with the shared production geometry", () =
 				else ringPairs++;
 			}
 		}
-		// 25 observers × the 25 room cells, plus 25 × the 24 wall-ring cells.
 		expect(roomPairs).toBe(625);
 		expect(ringPairs).toBe(600);
 	});

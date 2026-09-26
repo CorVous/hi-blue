@@ -1,4 +1,8 @@
-const LOCALSTORAGE_KEY = "openrouter_key";
+import {
+	OPENROUTER_KEY_STORAGE_KEY,
+	readStoredByokKey,
+} from "./openrouter-key.js";
+
 const LOCALSTORAGE_META_KEY = "openrouter_key_meta";
 
 export type ValidationResult =
@@ -36,34 +40,35 @@ export async function validateOpenRouterKey(
 		return { kind: "rejected-other", status: response.status };
 	}
 
-	// 200: check for usage >= limit
-	try {
-		const body = (await response.json()) as {
-			data?: { usage?: number; limit?: number };
-		};
-		const usage = body?.data?.usage;
-		const limit = body?.data?.limit;
-		if (
-			typeof usage === "number" &&
-			typeof limit === "number" &&
-			usage >= limit
-		) {
-			return { kind: "rejected-402" };
-		}
-	} catch {
-		// ignore parse errors — treat as validated
+	const keyInfo = await readAuthKeyInfoOrNull(response);
+	if (keyInfo !== null && hasReachedSpendLimit(keyInfo)) {
+		return { kind: "rejected-402" };
 	}
-
 	return { kind: "validated" };
 }
 
-function readKey(): string | null {
+type AuthKeyInfo = { data?: { usage?: number; limit?: number } };
+
+async function readAuthKeyInfoOrNull(
+	authKeyResponse: Response,
+): Promise<AuthKeyInfo | null> {
 	try {
-		const val = localStorage.getItem(LOCALSTORAGE_KEY);
-		return val || null;
+		return (await authKeyResponse.json()) as AuthKeyInfo | null;
 	} catch {
 		return null;
 	}
+}
+
+function hasReachedSpendLimit(keyInfo: AuthKeyInfo): boolean {
+	const usage = keyInfo.data?.usage;
+	const limit = keyInfo.data?.limit;
+	return (
+		typeof usage === "number" && typeof limit === "number" && usage >= limit
+	);
+}
+
+function readKey(): string | null {
+	return readStoredByokKey() || null;
 }
 
 export function readMeta(): KeyMeta | null {
@@ -87,12 +92,12 @@ export function readMeta(): KeyMeta | null {
 }
 
 export function writeKeyAndMeta(key: string, meta: KeyMeta): void {
-	localStorage.setItem(LOCALSTORAGE_KEY, key);
+	localStorage.setItem(OPENROUTER_KEY_STORAGE_KEY, key);
 	localStorage.setItem(LOCALSTORAGE_META_KEY, JSON.stringify(meta));
 }
 
 export function clearKey(): void {
-	localStorage.removeItem(LOCALSTORAGE_KEY);
+	localStorage.removeItem(OPENROUTER_KEY_STORAGE_KEY);
 	localStorage.removeItem(LOCALSTORAGE_META_KEY);
 }
 
@@ -146,11 +151,9 @@ function renderModalState(): void {
 	const key = readKey();
 	const meta = readMeta();
 
-	// Clear status
 	statusEl.textContent = "";
 
 	if (key) {
-		// Saved key mode
 		if (meta?.validatedAt) {
 			const rel = formatRelativeTime(meta.validatedAt, Date.now());
 			modeLine.textContent = `Currently using your key (validated ${rel})`;
@@ -158,19 +161,16 @@ function renderModalState(): void {
 			modeLine.textContent = "Currently using your key (not validated)";
 		}
 
-		// Set masked input
 		const suffix = meta?.keySuffix ?? key.slice(-4);
 		keyInput.value = `sk-or-v1-••••${suffix}`;
 		keyInput.setAttribute("readonly", "");
 
-		// Buttons: hide validate-save, show re-validate/replace/clear
 		if (validateSaveBtn) validateSaveBtn.hidden = true;
 		if (saveUnverifiedBtn) saveUnverifiedBtn.hidden = true;
 		if (revalidateBtn) revalidateBtn.hidden = false;
 		if (replaceBtn) replaceBtn.hidden = false;
 		if (clearBtn) clearBtn.hidden = false;
 	} else {
-		// No key mode
 		modeLine.textContent =
 			"Currently using the free tier (limited daily messages)";
 		keyInput.value = "";
@@ -200,7 +200,6 @@ export function initByokModal(): void {
 		openByokModal();
 	});
 
-	// Wire up close button
 	const closeBtn = getEl("byok-close");
 	if (closeBtn) {
 		closeBtn.addEventListener("click", () => {
@@ -209,7 +208,6 @@ export function initByokModal(): void {
 		});
 	}
 
-	// Wire up validate & save
 	const validateSaveBtn = getEl("byok-validate-save");
 	if (validateSaveBtn) {
 		validateSaveBtn.addEventListener("click", async () => {
@@ -232,7 +230,6 @@ export function initByokModal(): void {
 		});
 	}
 
-	// Wire up save unverified
 	const saveUnverifiedBtn = getEl("byok-save-unverified");
 	if (saveUnverifiedBtn) {
 		saveUnverifiedBtn.addEventListener("click", () => {
@@ -250,7 +247,6 @@ export function initByokModal(): void {
 		});
 	}
 
-	// Wire up re-validate
 	const revalidateBtn = getEl("byok-revalidate");
 	if (revalidateBtn) {
 		revalidateBtn.addEventListener("click", async () => {
@@ -281,7 +277,6 @@ export function initByokModal(): void {
 		});
 	}
 
-	// Wire up replace key
 	const replaceBtn = getEl("byok-replace");
 	if (replaceBtn) {
 		replaceBtn.addEventListener("click", () => {
@@ -305,7 +300,6 @@ export function initByokModal(): void {
 		});
 	}
 
-	// Wire up clear key
 	const clearBtn = getEl("byok-clear");
 	if (clearBtn) {
 		clearBtn.addEventListener("click", () => {

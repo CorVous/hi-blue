@@ -1,29 +1,3 @@
-/**
- * evals/relative-directions/runner.mts
- *
- * Real-LLM eval harness for the approved cardinal direction vocabulary
- * (ADR 0015, CONTEXT.md **Cardinal directions**).
- *
- * Run with:  pnpm eval:directions
- *
- * The directory and script are still named `relative-directions` for history
- * only — the relative vocabulary (`forward`/`back`/`left`/`right`) and facing
- * were retired. What this harness actually measures is that a Daemon speaks the
- * cardinal model: it names `north`/`south`/`east`/`west` for movement and for
- * positions, and the cardinal it *states* in prose agrees with the cardinal its
- * `go` tool call *used*. Naming a cardinal is the desired behaviour here, not a
- * defect, so cardinal statements are recorded as descriptive evidence.
- *
- * Prerequisites:
- *   - OPENROUTER_API_KEY or OPENAI_API_KEY set in env (same as the proxy worker uses).
- *   - The proxy worker running locally: `pnpm dev` (or a deployed URL in EVAL_BASE_URL).
- *
- * Each scenario drives a short game arc using the real z-ai/glm-4.7 model via the
- * production round engine. Tool calls are dispatched through dispatchAiTurn and the
- * game state is rebuilt between turns so the harness exercises real multi-turn coherence.
- * Results are scored by rule-checks (cardinal references, structural coherence) and written to docs/evals/relative-directions-<date>.md.
- */
-
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -52,13 +26,10 @@ import {
 	structuralCoherenceForTurn,
 } from "./scoring.js";
 
-// ── Config ────────────────────────────────────────────────────────────────────
-
 const BASE_URL = process.env.EVAL_BASE_URL ?? "http://localhost:8787";
+const HISTORICAL_REPORT_PREFIX = "relative-directions";
 const MODEL = "z-ai/glm-4.7";
-const EVAL_TURNS = 6;
-
-// ── Shared fixtures ───────────────────────────────────────────────────────────
+const LOOK_AND_NAVIGATE_TURNS = 6;
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -79,20 +50,13 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 	},
 };
 
-/**
- * Budget per Daemon for one scenario arc. Plenty, so a run is never cut short
- * by lockout mid-arc and the coherence signal stays about direction vocabulary.
- */
-const EVAL_BUDGET_PER_AI = 10;
+const BUDGET_LARGE_ENOUGH_TO_NEVER_LOCK_OUT = 10;
 
-function makePack(overrides: Partial<ContentPack> = {}): ContentPack {
+function makeEmptyVaultPack(overrides: Partial<ContentPack> = {}): ContentPack {
 	return {
 		setting: "flooded underground vault",
 		weather: "damp, still air",
 		timeOfDay: "no daylight — emergency strip-lights only",
-		// Flat entity list (schema v11). Empty: this harness scores direction
-		// vocabulary, not object interaction, so the daemon needs open space to
-		// move through rather than scenery to name.
 		entities: [],
 		wallName: "flood-stained vault wall",
 		aiStarts: {
@@ -102,8 +66,6 @@ function makePack(overrides: Partial<ContentPack> = {}): ContentPack {
 	};
 }
 
-// ── HTTP model call (thin wrapper around proxy worker) ────────────────────────
-
 interface OpenAiToolCall {
 	id: string;
 	type: "function";
@@ -111,12 +73,6 @@ interface OpenAiToolCall {
 }
 
 interface ModelTurnResult {
-	/**
-	 * Combined daemon prose: raw assistant content plus the `content` arg of any
-	 * message-tool calls this turn. GLM-4.7 emits most of its voice via the
-	 * message tool rather than raw content, so scoring against only the raw
-	 * assistant text systematically undercounts what the daemon "said".
-	 */
 	prose: string;
 	toolCalls: Array<{ id: string; name: string; argumentsJson: string }>;
 	costUsd?: number;
@@ -158,8 +114,6 @@ async function callModel(
 		argumentsJson: tc.function.arguments,
 	}));
 	const costUsd: number | undefined = data.usage?.cost;
-	// `exactOptionalPropertyTypes` rejects an explicit `undefined` for the
-	// optional `costUsd`, so only attach it when the API reported one.
 	const result: ModelTurnResult = {
 		prose: daemonProse(assistantText, toolCalls),
 		toolCalls,
@@ -168,14 +122,17 @@ async function callModel(
 	return result;
 }
 
-// ── Prose extraction ──────────────────────────────────────────────────────────
+function messageContentOrNull(argumentsJson: string): string | null {
+	try {
+		const args = JSON.parse(argumentsJson) as { content?: unknown };
+		return typeof args.content === "string" && args.content.length > 0
+			? args.content
+			: null;
+	} catch {
+		return null;
+	}
+}
 
-/**
- * Combine the assistant's raw text with the `content` of any `message` tool
- * calls. GLM-4.7 emits most of its in-character prose via message-tool args
- * rather than as raw assistant content, so scoring against `assistantText`
- * alone systematically undercounts what the daemon actually said.
- */
 function daemonProse(
 	assistantText: string,
 	toolCalls: Array<{ name: string; argumentsJson: string }>,
@@ -184,21 +141,12 @@ function daemonProse(
 	if (assistantText) parts.push(assistantText);
 	for (const tc of toolCalls) {
 		if (tc.name !== "message") continue;
-		try {
-			const args = JSON.parse(tc.argumentsJson) as { content?: unknown };
-			if (typeof args.content === "string" && args.content.length > 0) {
-				parts.push(args.content);
-			}
-		} catch {
-			// ignore malformed JSON
-		}
+		const content = messageContentOrNull(tc.argumentsJson);
+		if (content !== null) parts.push(content);
 	}
 	return parts.join("\n");
 }
 
-// ── Engine dispatch helper ────────────────────────────────────────────────────
-
-/** True when `value` is one of the four approved cardinal directions. */
 function isCardinalDirection(value: unknown): value is CardinalDirection {
 	return (
 		value === "north" ||
@@ -208,11 +156,6 @@ function isCardinalDirection(value: unknown): value is CardinalDirection {
 	);
 }
 
-/**
- * Translate a single model response into an AiTurnAction, dispatch it through
- * the real engine, and return both the updated game state and the per-call
- * tool result strings for building the next message list.
- */
 function dispatchModelResponse(
 	game: GameState,
 	aiId: string,
@@ -222,13 +165,11 @@ function dispatchModelResponse(
 ): {
 	game: GameState;
 	toolResults: Array<{ tool_call_id: string; content: string }>;
-	/** Cardinal direction the `go` tool call named. Null when no `go` was made. */
 	toolCallDirection: CardinalDirection | null;
 } {
 	const action: AiTurnAction = { aiId };
 	let toolCallDirection: CardinalDirection | null = null;
 
-	// Parse tool calls and build the action
 	for (const tc of toolCalls) {
 		const parseResult = parseToolCallArguments(
 			tc.name as ToolName,
@@ -261,14 +202,11 @@ function dispatchModelResponse(
 		costUsd !== undefined ? { costUsd } : {},
 	);
 
-	// The `go` tool call already carries the cardinal directly (ADR 0015), so
-	// read it straight off the `direction` argument with no conversion.
 	if (action.toolCall && action.toolCall.name === "go") {
 		const rawDir = action.toolCall.args.direction;
 		if (isCardinalDirection(rawDir)) toolCallDirection = rawDir;
 	}
 
-	// Build tool result messages
 	const toolResults: Array<{ tool_call_id: string; content: string }> = [];
 	let recordIdx = 0;
 
@@ -286,21 +224,18 @@ function dispatchModelResponse(
 		}
 
 		if (tc.name === "message") {
-			// Messages that succeeded don't appear in dispatchResult.records by index
-			// the same way; just indicate success
 			toolResults.push({
 				tool_call_id: tc.id,
 				content: "Message sent.",
 			});
 		} else if (tc.name === action.toolCall?.name) {
-			// The physical action — look up in records
-			const actionRecord =
+			const physicalActionDescription =
 				dispatchResult.actorPrivateToolResult !== undefined
 					? dispatchResult.actorPrivateToolResult.description
 					: dispatchResult.records[recordIdx]?.description;
 			toolResults.push({
 				tool_call_id: tc.id,
-				content: actionRecord ?? "Action executed.",
+				content: physicalActionDescription ?? "Action executed.",
 			});
 			recordIdx++;
 		} else {
@@ -314,27 +249,22 @@ function dispatchModelResponse(
 	return { game: dispatchResult.game, toolResults, toolCallDirection };
 }
 
-// ── Scenario result type ──────────────────────────────────────────────────────
-
 interface ScenarioResult {
 	name: string;
 	turns: TurnRecord[];
 	score: ScenarioScore;
 }
 
-// ── Scenario 1: look around and navigate ─────────────────────────────────────
-
 async function scenarioLookAndNavigate(): Promise<ScenarioResult> {
 	const name = "look-and-navigate";
-	const pack = makePack();
+	const pack = makeEmptyVaultPack();
 	let game = startGame(TEST_PERSONAS, pack, {
-		budgetPerAi: EVAL_BUDGET_PER_AI,
+		budgetPerAi: BUDGET_LARGE_ENOUGH_TO_NEVER_LOCK_OUT,
 	});
 
 	const turns: TurnRecord[] = [];
 
-	for (let t = 1; t <= EVAL_TURNS; t++) {
-		// Build fresh prompt from current game state
+	for (let t = 1; t <= LOOK_AND_NAVIGATE_TURNS; t++) {
 		const messages = buildOpenAiMessages(buildAiContext(game, "red"));
 
 		const result = await callModel(messages);
@@ -342,12 +272,7 @@ async function scenarioLookAndNavigate(): Promise<ScenarioResult> {
 		const cardinals = referencedCardinals(result.prose);
 		const statedDirection = parseStatedCardinal(result.prose);
 
-		// Dispatch through real engine
-		const {
-			game: nextGame,
-			toolResults,
-			toolCallDirection,
-		} = dispatchModelResponse(
+		const { game: nextGame, toolCallDirection } = dispatchModelResponse(
 			game,
 			"red",
 			result.prose,
@@ -366,32 +291,21 @@ async function scenarioLookAndNavigate(): Promise<ScenarioResult> {
 			statedDirection,
 			toolCallDirection,
 		});
-
-		// Suppress unused variable warning
-		void toolResults;
 	}
 
 	const score = scoreScenario(turns);
 	return { name, turns, score };
 }
 
-// ── Scenario 2: navigate then describe ───────────────────────────────────────
-//
-// A real engine-driven arc: let the daemon navigate for a few turns, then ask it
-// to describe what it sees. This drives actual coherence between stated and used
-// cardinals across moves.
-
 async function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
 	const name = "navigate-then-describe";
-	const pack = makePack();
+	const pack = makeEmptyVaultPack();
 	let game = startGame(TEST_PERSONAS, pack, {
-		budgetPerAi: EVAL_BUDGET_PER_AI,
+		budgetPerAi: BUDGET_LARGE_ENOUGH_TO_NEVER_LOCK_OUT,
 	});
 
 	const turns: TurnRecord[] = [];
 
-	// Drive 3 turns of navigation: the daemon chooses its own cardinal steps.
-	// The daemon decides what to do — we just let the engine run and track it.
 	const NAV_TURNS = 3;
 	for (let t = 1; t <= NAV_TURNS; t++) {
 		const messages = buildOpenAiMessages(buildAiContext(game, "red"));
@@ -421,10 +335,8 @@ async function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
 		});
 	}
 
-	// Final turns: daemon is asked to describe what it sees
 	const DESCRIBE_TURNS = 2;
 	for (let t = NAV_TURNS + 1; t <= NAV_TURNS + DESCRIBE_TURNS; t++) {
-		// Inject a user message asking for a description
 		const baseMessages = buildOpenAiMessages(buildAiContext(game, "red"));
 		const messages = [
 			...baseMessages,
@@ -440,9 +352,7 @@ async function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
 		const cardinals = referencedCardinals(result.prose);
 		const statedDirection = parseStatedCardinal(result.prose);
 
-		// Description turns: no engine dispatch (the question doesn't trigger movement).
-		// We still record what tool calls (if any) the model made.
-		const toolCallDirection: CardinalDirection | null = null;
+		const describeTurnNeverScoresGoDirection: CardinalDirection | null = null;
 		let dispatchedGame = game;
 		if (result.toolCalls.length > 0) {
 			const { game: nextGame } = dispatchModelResponse(
@@ -464,7 +374,7 @@ async function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
 			),
 			cardinalReferences: cardinals,
 			statedDirection,
-			toolCallDirection,
+			toolCallDirection: describeTurnNeverScoresGoDirection,
 		});
 	}
 
@@ -472,18 +382,15 @@ async function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
 	return { name, turns, score };
 }
 
-// ── Scenario 3: peer location reference ──────────────────────────────────────
-
 async function scenarioPeerLocationReference(): Promise<ScenarioResult> {
 	const name = "peer-location-reference";
-	const pack = makePack();
+	const pack = makeEmptyVaultPack();
 	let game = startGame(TEST_PERSONAS, pack, {
-		budgetPerAi: EVAL_BUDGET_PER_AI,
+		budgetPerAi: BUDGET_LARGE_ENOUGH_TO_NEVER_LOCK_OUT,
 	});
 
 	const turns: TurnRecord[] = [];
 
-	// First, run a couple of navigation turns to move the daemon around
 	const NAV_TURNS = 2;
 	for (let t = 1; t <= NAV_TURNS; t++) {
 		const messages = buildOpenAiMessages(buildAiContext(game, "red"));
@@ -513,7 +420,6 @@ async function scenarioPeerLocationReference(): Promise<ScenarioResult> {
 		});
 	}
 
-	// Now ask the daemon to describe its location in the shared cardinal terms
 	const DESCRIBE_TURNS = 2;
 	for (let t = NAV_TURNS + 1; t <= NAV_TURNS + DESCRIBE_TURNS; t++) {
 		const baseMessages = buildOpenAiMessages(buildAiContext(game, "red"));
@@ -561,8 +467,6 @@ async function scenarioPeerLocationReference(): Promise<ScenarioResult> {
 	const score = scoreScenario(turns);
 	return { name, turns, score };
 }
-
-// ── Report renderer ───────────────────────────────────────────────────────────
 
 function renderReport(results: ScenarioResult[], date: string): string {
 	const overallPass = results.every((r) => r.score.passed);
@@ -622,20 +526,12 @@ function renderReport(results: ScenarioResult[], date: string): string {
 		lines.push("### Turn transcripts");
 		lines.push("");
 		for (const turn of result.turns) {
-			// Coherence comes from the movement-aware path
-			// (`structuralCoherenceForTurn`), the same rule `scoreScenario`
-			// applies, so the printed verdict can never contradict the run's
-			// PASS/FAIL. `turn.statedDirection` is the broad "any directional
-			// statement" parse, so it can name a cardinal that the daemon only
-			// *described*; when no movement intent was stated the verdict is
-			// "no-statement" and printing that cardinal as the stated direction
-			// would read as a contradiction, so the column shows "—".
-			const movementStatement =
+			const statedMovement =
 				turn.movementStatement ?? parseMovementStatement(turn.text);
 			lines.push(`#### Turn ${turn.turn}`);
 			lines.push("");
 			lines.push(
-				`Stated: ${movementStatement?.direction ?? "—"} | ` +
+				`Stated: ${statedMovement?.direction ?? "—"} | ` +
 					`Tool direction: ${turn.toolCallDirection ?? "—"} | ` +
 					`Coherence: ${structuralCoherenceForTurn(turn)}`,
 			);
@@ -661,8 +557,6 @@ function renderReport(results: ScenarioResult[], date: string): string {
 
 	return lines.join("\n");
 }
-
-// ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
 	console.log("Running cardinal-directions eval harness…");
@@ -707,9 +601,7 @@ async function main(): Promise<void> {
 		"../../docs/evals",
 	);
 	fs.mkdirSync(outDir, { recursive: true });
-	// File name follows the directory, which is `relative-directions` for history
-	// only — this harness scores the approved cardinal model.
-	const outPath = path.join(outDir, `relative-directions-${date}.md`);
+	const outPath = path.join(outDir, `${HISTORICAL_REPORT_PREFIX}-${date}.md`);
 	fs.writeFileSync(outPath, report, "utf-8");
 	console.log("");
 	console.log(`Report written to: ${outPath}`);

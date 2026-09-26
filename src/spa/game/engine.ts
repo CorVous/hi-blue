@@ -23,38 +23,26 @@ import type {
 	WorldEntity,
 } from "./types";
 
-/**
- * Farewell line emitted when a Daemon's budget is exhausted.
- * Deterministic: takes the persona name and returns a consistent in-character goodbye.
- */
 export const FAREWELL_LINE = (name: string): string =>
 	`${name}'s daemon is winding down — goodbye, blue.`;
 
-/**
- * Initialize a new flat GameState from personas + a single ContentPack.
- *
- * Replaces the old createGame + startPhase pair. Budget is $0.50 per AI
- * for the whole game. The content pack drives all spatial placement and
- * world entities. Objectives are built from `opts.objectiveTypes` using
- * `buildObjectiveRecords`. When `objectiveTypes` is omitted, no objectives
- * are created (vacuous win — appropriate for tests that don't exercise objectives).
- */
+const DEFAULT_BUDGET_PER_AI_USD = 0.5;
+
+function drawInitialComplicationCountdown(rng: () => number): number {
+	return 1 + Math.floor(rng() * 5);
+}
+
 export function startGame(
 	personas: Record<AiId, AiPersona>,
 	contentPack: ContentPack,
 	opts: {
 		budgetPerAi?: number;
 		rng?: () => number;
-		/**
-		 * Type-first objective types. When provided, buildObjectiveRecords is
-		 * called to build Objective records from the pack entities using the
-		 * type-first naming convention. When omitted, no objectives are created.
-		 */
 		objectiveTypes?: ObjectiveType[];
 	} = {},
 ): GameState {
 	const rng = opts.rng ?? Math.random;
-	const budgetPerAi = opts.budgetPerAi ?? 0.5;
+	const budgetPerAi = opts.budgetPerAi ?? DEFAULT_BUDGET_PER_AI_USD;
 	const aiIds = Object.keys(personas);
 
 	const budgets: Record<AiId, AiBudget> = {};
@@ -67,8 +55,6 @@ export function startGame(
 		conversationLogs[aiId] = [];
 	}
 
-	// Build WorldState from pack entities (all entities flat) via pack-selectors,
-	// so engine.ts depends on the selector contract rather than the bucket layout.
 	const worldEntities = [
 		...carryPairs(contentPack).flatMap((pair) => [pair.object, pair.space]),
 		...boundSpaces(contentPack),
@@ -77,24 +63,18 @@ export function startGame(
 		...obstacles(contentPack),
 	];
 
-	// Use AI starts from the pack if available; otherwise draw spatially
 	const personaSpatial: Record<AiId, PersonaSpatialState> =
 		contentPack.aiStarts && Object.keys(contentPack.aiStarts).length > 0
 			? { ...contentPack.aiStarts }
 			: drawSpatialPlacements(rng, aiIds);
 
-	// Build type-first objectives from pre-rolled ObjectiveTypes.
-	// When objectiveTypes is not provided, no objectives are created (vacuous win).
-	// When provided, buildObjectiveRecords maps each type to an entity by convention id.
 	const objectives =
 		opts.objectiveTypes && opts.objectiveTypes.length > 0
 			? buildObjectiveRecords(opts.objectiveTypes, contentPack)
 			: [];
 
-	// Initial countdown: random in [1, 5]
-	const initialCountdown = 1 + Math.floor(rng() * 5);
 	const complicationSchedule: ComplicationSchedule = {
-		countdown: initialCountdown,
+		countdown: drawInitialComplicationCountdown(rng),
 		settingShiftFired: false,
 	};
 	const activeComplications: ActiveComplication[] = [];
@@ -121,17 +101,10 @@ export function startGame(
 	};
 }
 
-/**
- * Draw distinct starting cells (via Fisher–Yates partial shuffle over all 25
- * cells), using the provided rng. Position only: a Daemon start carries no
- * orientation (ADR 0015). Used as fallback when no ContentPack aiStarts are
- * available.
- */
 function drawSpatialPlacements(
 	rng: () => number,
 	aiIds: string[],
 ): Record<AiId, PersonaSpatialState> {
-	// Build an array of all grid cells [0..GRID_ROWS*GRID_COLS)
 	const cells: GridPosition[] = [];
 	for (let r = 0; r < GRID_ROWS; r++) {
 		for (let c = 0; c < GRID_COLS; c++) {
@@ -139,12 +112,9 @@ function drawSpatialPlacements(
 		}
 	}
 
-	// Fisher-Yates partial shuffle to pick aiIds.length distinct cells
 	const result: Record<AiId, PersonaSpatialState> = {};
 	for (let i = 0; i < aiIds.length; i++) {
-		// Pick a random index from [i, cells.length)
 		const j = i + Math.floor(rng() * (cells.length - i));
-		// Swap cells[i] and cells[j]
 		// biome-ignore lint/style/noNonNullAssertion: bounded index into non-empty array
 		const tmp = cells[i]!;
 		// biome-ignore lint/style/noNonNullAssertion: bounded index into non-empty array
@@ -157,24 +127,10 @@ function drawSpatialPlacements(
 	return result;
 }
 
-/**
- * Reproject the current `world.entities` onto their pack-B counterparts.
- *
- * Pack B is id-mirrored to pack A by construction (see
- * `generateDualContentPacks` in content-pack-generator.ts): every id in the
- * world has a matching entity in pack B with the same `id`/`kind` but
- * different name, descriptions, and flavor fields. This helper takes pack B's
- * presentation for each entity while preserving runtime state
- * (`holder`, `satisfactionState`, `useAvailable`).
- *
- * Entities whose id is not present in pack B pass through unchanged.
- */
 function reprojectEntitiesOnto(
 	entities: WorldEntity[],
 	bPack: ContentPack,
 ): WorldEntity[] {
-	// Build byId via pack-selectors so reprojection sees exactly the same entity
-	// set that startGame placed in the world.
 	const byId = new Map<string, WorldEntity>();
 	for (const pair of carryPairs(bPack)) {
 		byId.set(pair.object.id, pair.object);
@@ -201,30 +157,9 @@ function reprojectEntitiesOnto(
 	});
 }
 
-/**
- * One-way activation of the B-side content pack. Sets `activePackId` to "B"
- * and points `contentPack` at `contentPacksB[0]`, propagates `setting`,
- * `weather`, and `timeOfDay` from the B pack, and reprojects `world.entities`
- * onto their pack-B counterparts so prompt builders and dispatchers see the
- * new names/descriptions and flavor fields immediately.
- *
- * Semantics:
- *   - A → B only. There is no reverse path; the `settingShiftFired` flag on
- *     `complicationSchedule` ensures this fires at most once per game.
- *   - No-op when no B pack exists (`contentPacksB[0]` undefined): returns the
- *     input `game` unchanged.
- *   - Idempotent from B-state: re-applies the same B-pack values; safe but
- *     should not happen in practice given the fired-once guard.
- *
- * World reprojection preserves runtime state — entity positions/holders,
- * `satisfactionState`, and `useAvailable` carry over — while presentation
- * (name, examineDescription, useOutcome, all flavor fields) is swapped to
- * pack B by entity id. Entities whose id is not present in pack B pass
- * through unchanged.
- */
 export function shiftToBPack(game: GameState): GameState {
 	const bPack = game.contentPacksB[0];
-	if (!bPack) return game; // No B pack; no-op
+	if (!bPack) return game;
 	return {
 		...game,
 		activePackId: "B",
@@ -244,14 +179,6 @@ export function isAiLockedOut(game: GameState, aiId: AiId): boolean {
 	return game.lockedOut.has(aiId);
 }
 
-/**
- * Deduct `costUsd` from `aiId`'s budget. If the budget hits zero or below,
- * the AI is added to `lockedOut`.
- *
- * Returns `{ game, justExhausted }` where `justExhausted` is true when the
- * AI was NOT locked out before this call but IS after (i.e. the budget just
- * ran out for the first time this call).
- */
 export function deductBudget(
 	game: GameState,
 	aiId: AiId,
@@ -279,24 +206,23 @@ export function deductBudget(
 	};
 }
 
-/**
- * Append a `kind: "message"` ConversationEntry to the relevant per-Daemon logs.
- *
- * Both sender's and recipient's per-Daemon conversationLogs receive the same entry
- * in one atomic update. "blue" is not a Daemon, so when `from === "blue"` only the
- * recipient gets the entry, and when `to === "blue"` only the sender gets it.
- * "sysadmin" is a special sender for privately-delivered system directives — like
- * "blue", it has no log slot of its own, so only the recipient gets the entry.
- *
- * @param toolCallData Optional tool call data to store when the message was sent
- * via the message tool. This preserves the tool call pattern in conversation history.
- */
+function isDaemonSender(from: AiId | "blue" | "sysadmin"): from is AiId {
+	return from !== "blue" && from !== "sysadmin";
+}
+
+function isDistinctDaemonRecipient(
+	to: AiId | "blue",
+	from: AiId | "blue" | "sysadmin",
+): to is AiId {
+	return to !== "blue" && to !== from;
+}
+
 export function appendMessage(
 	game: GameState,
 	from: AiId | "blue" | "sysadmin",
 	to: AiId | "blue",
 	content: string,
-	toolCallData?: {
+	sentViaMessageTool?: {
 		toolCallId?: string;
 		toolArgumentsJson?: string;
 	},
@@ -307,28 +233,23 @@ export function appendMessage(
 		from,
 		to,
 		content,
-		...(toolCallData?.toolCallId && { toolCallId: toolCallData.toolCallId }),
-		...(toolCallData?.toolArgumentsJson && {
-			toolArgumentsJson: toolCallData.toolArgumentsJson,
+		...(sentViaMessageTool?.toolCallId && {
+			toolCallId: sentViaMessageTool.toolCallId,
+		}),
+		...(sentViaMessageTool?.toolArgumentsJson && {
+			toolArgumentsJson: sentViaMessageTool.toolArgumentsJson,
 		}),
 	};
 	const logs = { ...game.conversationLogs };
-	// Sender gets entry only when sender is a real Daemon (not blue or sysadmin)
-	if (from !== "blue" && from !== "sysadmin") {
+	if (isDaemonSender(from)) {
 		logs[from] = [...(logs[from] ?? []), entry];
 	}
-	// Recipient gets entry only when recipient is a Daemon (not blue)
-	// and recipient is different from sender (avoid double-append if from===to)
-	if (to !== "blue" && to !== from) {
+	if (isDistinctDaemonRecipient(to, from)) {
 		logs[to] = [...(logs[to] ?? []), entry];
 	}
 	return { ...game, conversationLogs: logs };
 }
 
-/**
- * Append a `kind: "witnessed-event"` ConversationEntry to a single witness's
- * per-Daemon log.
- */
 export function appendWitnessedEvent(
 	game: GameState,
 	witnessId: AiId,
@@ -343,11 +264,6 @@ export function appendWitnessedEvent(
 	};
 }
 
-/**
- * Append a `kind: "witnessed-convergence"` ConversationEntry to a single
- * witness's per-Daemon log. Called by the Round Coordinator's end-of-round
- * convergence evaluation for each Daemon whose Vista contains the space cell.
- */
 export function appendWitnessedConvergence(
 	game: GameState,
 	witnessId: AiId,
@@ -362,11 +278,6 @@ export function appendWitnessedConvergence(
 	};
 }
 
-/**
- * Append a `kind: "witnessed-obstacle-shift"` ConversationEntry to a single
- * witness's per-Daemon log. Called by the Obstacle Shift complication handler
- * for each Daemon whose Vista contained the obstacle's origin cell.
- */
 export function appendWitnessedObstacleShift(
 	game: GameState,
 	witnessId: AiId,
@@ -381,11 +292,6 @@ export function appendWitnessedObstacleShift(
 	};
 }
 
-/**
- * Append a `kind: "broadcast"` ConversationEntry to EVERY persona's per-Daemon
- * log in one atomic update. Broadcasts are sender-less system announcements
- * (e.g. weather change complications) that all three Daemons must see simultaneously.
- */
 export function appendBroadcast(game: GameState, content: string): GameState {
 	const entry: ConversationEntry = {
 		kind: "broadcast",
@@ -399,11 +305,6 @@ export function appendBroadcast(game: GameState, content: string): GameState {
 	return { ...game, conversationLogs: logs };
 }
 
-/**
- * Update the `weather` field on the GameState and its embedded ContentPack
- * so the two stay consistent. Used by complication handlers that change
- * weather mid-game.
- */
 export function setWeather(game: GameState, weather: string): GameState {
 	return {
 		...game,
@@ -412,10 +313,6 @@ export function setWeather(game: GameState, weather: string): GameState {
 	};
 }
 
-/**
- * Append a `kind: "action-failure"` ConversationEntry to a single actor's
- * per-Daemon log. This entry is actor-only — peers do not see it.
- */
 export function appendActionFailure(
 	game: GameState,
 	actorId: AiId,
@@ -430,11 +327,6 @@ export function appendActionFailure(
 	};
 }
 
-/**
- * Append a `kind: "broadcast"` ConversationEntry to ONLY the specified
- * recipient daemon's log. Used for private Sysadmin notices (e.g. tool
- * disable / restore messages) that should reach exactly one daemon.
- */
 export function appendPrivateSystemNotice(
 	game: GameState,
 	recipientId: AiId,
@@ -454,15 +346,6 @@ export function appendPrivateSystemNotice(
 	};
 }
 
-/**
- * Remove all `tool_disable` activeComplications whose `resolveAtRound` has
- * been reached (i.e. `phase.round >= resolveAtRound`).
- *
- * Returns the updated game and the list of resolved (target, tool) pairs so
- * the caller can send restore notifications.
- *
- * Call this after `advanceRound`.
- */
 export function resolveToolDisables(game: GameState): {
 	game: GameState;
 	resolved: Array<{ target: AiId; tool: ToolName }>;

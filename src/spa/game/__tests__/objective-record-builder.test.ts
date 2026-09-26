@@ -1,11 +1,6 @@
-/**
- * Tests for objective-record-builder.ts
- */
 import { describe, expect, it } from "vitest";
 import { buildObjectiveRecords } from "../objective-record-builder.js";
 import type { ContentPack, WorldEntity } from "../types.js";
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function makePack(overrides?: Partial<ContentPack>): ContentPack {
 	return {
@@ -19,7 +14,6 @@ function makePack(overrides?: Partial<ContentPack>): ContentPack {
 	};
 }
 
-/** Two entities (object + paired space) for a carry binding at index i. */
 function makeCarryEntities(i: number): WorldEntity[] {
 	return [
 		{
@@ -40,7 +34,6 @@ function makeCarryEntities(i: number): WorldEntity[] {
 	];
 }
 
-/** A single bound `objective_space` for a use_space binding at index i. */
 function makeUseSpaceEntity(i: number): WorldEntity {
 	return {
 		id: `useSpace-${i}-space`,
@@ -51,7 +44,6 @@ function makeUseSpaceEntity(i: number): WorldEntity {
 	};
 }
 
-/** A single bound `objective_space` for a convergence binding at index i. */
 function makeConvergenceEntity(i: number): WorldEntity {
 	return {
 		id: `convergence-${i}-space`,
@@ -71,8 +63,6 @@ function makeUseItem(i: number): WorldEntity {
 		holder: { row: 3, col: 3 },
 	};
 }
-
-// ── Per-type tests ────────────────────────────────────────────────────────────
 
 describe("buildObjectiveRecords — carry type", () => {
 	it("returns a CarryObjective with correct shape", () => {
@@ -199,7 +189,7 @@ describe("buildObjectiveRecords — sequential ids", () => {
 
 describe("buildObjectiveRecords — missing entity throws", () => {
 	it("throws if carry object not found in pack", () => {
-		const pack = makePack({}); // empty entities
+		const pack = makePack({});
 		expect(() => buildObjectiveRecords(["carry"], pack)).toThrow(RangeError);
 	});
 

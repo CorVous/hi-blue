@@ -1,20 +1,8 @@
-/**
- * migration-banner.test.ts
- *
- * Tests for legacy-save-discarded banner.
- *
- * Post-#173: the legacy-save-discarded banner is now surfaced via the start
- * route (not game route). main.ts detects the legacy save at boot, deletes
- * it, and passes reason=legacy-save-discarded to renderStart via URL param.
- * renderStart shows the appropriate banner text.
- *
- * Part of issue #173 (parent #172, step 7 of plan).
- */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { installLocalStorageStub } from "./fixtures/local-storage";
 import { STATIC_CONTENT_PACKS } from "./fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "./fixtures/static-personas";
 
-// Pin generatePersonas to static fixture (no LLM call in tests).
 vi.mock("../../content", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("../../content")>();
 	return {
@@ -23,7 +11,6 @@ vi.mock("../../content", async (importOriginal) => {
 	};
 });
 
-// Pin generateDualContentPacks to static content packs (no LLM call in tests).
 vi.mock("../../content/content-pack-generator", () => ({
 	generateDualContentPacks: async () => ({
 		packA: STATIC_CONTENT_PACKS[0],
@@ -37,7 +24,6 @@ const INDEX_BODY_HTML = `
     <p class="start-placeholder">initialising daemon mesh&hellip;</p>
     <button id="begin" type="button" disabled>[ BEGIN ]</button>
   </section>
-  <div id="phase-banner" hidden></div>
   <div id="panels" class="row">
     <article class="ai-panel" data-ai="red">
       <header class="panel-header">
@@ -93,31 +79,18 @@ const INDEX_BODY_HTML = `
 const LEGACY_KEY = "hi-blue-game-state";
 const ACTIVE_KEY = "hi-blue:active-session";
 
-function makeLocalStorageStub(initialData: Record<string, string> = {}) {
-	const store: Record<string, string> = { ...initialData };
-	return {
-		getItem: vi.fn((key: string) => store[key] ?? null),
-		setItem: vi.fn((key: string, value: string) => {
-			store[key] = value;
-		}),
-		removeItem: vi.fn((key: string) => {
-			delete store[key];
-		}),
-		clear: vi.fn(() => {
-			for (const k of Object.keys(store)) delete store[k];
-		}),
-		get length() {
-			return Object.keys(store).length;
-		},
-		key: vi.fn((i: number) => Object.keys(store)[i] ?? null),
-		_store: store,
-	};
-}
-
 function getMain(): HTMLElement {
 	const main = document.querySelector<HTMLElement>("main");
 	if (!main) throw new Error("main element not found");
 	return main;
+}
+
+async function awaitIgnoringRejection(
+	promise: Promise<unknown>,
+): Promise<void> {
+	try {
+		await promise;
+	} catch {}
 }
 
 describe("renderStart — legacy-save-discarded banner (via reason param)", () => {
@@ -135,23 +108,16 @@ describe("renderStart — legacy-save-discarded banner (via reason param)", () =
 	});
 
 	it("shows legacy-save-discarded banner when reason=legacy-save-discarded is passed", async () => {
-		// The banner is shown when main.ts detects a legacy save at boot and
-		// passes reason=legacy-save-discarded to renderStart.
-		const stub = makeLocalStorageStub({});
-		vi.stubGlobal("localStorage", stub);
+		installLocalStorageStub();
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
 		const { renderStart } = await import("../views/start.js");
 
-		// Simulate what main.ts does: pass reason=legacy-save-discarded as an opt
-		try {
-			await renderStart(getMain(), { reason: "legacy-save-discarded" });
-		} catch {
-			// generation may reject in test environment — that's ok
-		}
+		await awaitIgnoringRejection(
+			renderStart(getMain(), { reason: "legacy-save-discarded" }),
+		);
 
-		// Banner should be visible with the legacy-save-discarded message
 		const warningEl = document.querySelector<HTMLElement>(
 			"#persistence-warning",
 		);
@@ -162,19 +128,13 @@ describe("renderStart — legacy-save-discarded banner (via reason param)", () =
 	});
 
 	it("does NOT show legacy banner when reason param is absent", async () => {
-		const stub = makeLocalStorageStub({});
-		vi.stubGlobal("localStorage", stub);
+		installLocalStorageStub();
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
 		vi.resetModules();
 		const { renderStart } = await import("../views/start.js");
 
-		// No reason opt — no banner should be shown
-		try {
-			await renderStart(getMain());
-		} catch {
-			// generation may reject — ok
-		}
+		await awaitIgnoringRejection(renderStart(getMain()));
 
 		const warningEl = document.querySelector<HTMLElement>(
 			"#persistence-warning",
@@ -186,8 +146,7 @@ describe("renderStart — legacy-save-discarded banner (via reason param)", () =
 describe("session-storage — legacy save detection and deletion", () => {
 	it("deleteLegacySaveKey removes the legacy key", async () => {
 		const LEGACY_GAME_STATE = JSON.stringify({ schemaVersion: 5 });
-		const stub = makeLocalStorageStub({ [LEGACY_KEY]: LEGACY_GAME_STATE });
-		vi.stubGlobal("localStorage", stub);
+		const stub = installLocalStorageStub({ [LEGACY_KEY]: LEGACY_GAME_STATE });
 
 		const { deleteLegacySaveKey, hasLegacySave } = await import(
 			"../persistence/session-storage.js"
@@ -201,19 +160,8 @@ describe("session-storage — legacy save detection and deletion", () => {
 		vi.unstubAllGlobals();
 	});
 
-	it("hasLegacySave returns false when no legacy key present", async () => {
-		const stub = makeLocalStorageStub({});
-		vi.stubGlobal("localStorage", stub);
-
-		const { hasLegacySave } = await import("../persistence/session-storage.js");
-		expect(hasLegacySave()).toBe(false);
-
-		vi.unstubAllGlobals();
-	});
-
 	it("mintAndActivateNewSession sets the active session pointer", async () => {
-		const stub = makeLocalStorageStub({});
-		vi.stubGlobal("localStorage", stub);
+		const stub = installLocalStorageStub();
 
 		const { mintAndActivateNewSession } = await import(
 			"../persistence/session-storage.js"

@@ -1,14 +1,3 @@
-/**
- * Smoke tests for the makeTestPack fixture helper.
- *
- * Since the v11 schema flip (#462), `makeTestPack` is a thin shim that drops
- * the input entity list onto `pack.entities` with default scaffolding. These
- * tests confirm:
- *  - defaults are sensible (empty `entities`, empty `wallName`, etc.)
- *  - entities are forwarded unmodified and in insertion order
- *  - selectors classify entities correctly off a `makeTestPack` result
- *  - overrides win (including overriding `entities` outright)
- */
 import { describe, expect, it } from "vitest";
 import {
 	boundSpaces,
@@ -99,7 +88,6 @@ describe("makeTestPack", () => {
 		expect(pairs).toHaveLength(1);
 		expect(pairs[0]?.object).toBe(object);
 		expect(pairs[0]?.space).toBe(space);
-		// The paired space is NOT also returned as a bound space.
 		expect(boundSpaces(pack)).toEqual([]);
 	});
 
@@ -118,7 +106,6 @@ describe("makeTestPack", () => {
 		const obs = obstacle("ob-1");
 		const pack = makeTestPack([obj, space, unboundSpace, io, obs]);
 
-		// Every input entity appears exactly once in pack.entities.
 		expect(pack.entities).toHaveLength(5);
 		expect(new Set(pack.entities.map((e) => e.id))).toEqual(
 			new Set(["o-1", "s-1", "s-2", "io-1", "ob-1"]),
@@ -132,7 +119,6 @@ describe("makeTestPack", () => {
 		const ob1 = obstacle("ob-1");
 		const ob2 = obstacle("ob-2");
 		const pack = makeTestPack([io1, ob1, io2, ob2, io3]);
-		// The entities array preserves caller order verbatim.
 		expect(pack.entities.map((e) => e.id)).toEqual([
 			"io-1",
 			"ob-1",
@@ -140,7 +126,6 @@ describe("makeTestPack", () => {
 			"ob-2",
 			"io-3",
 		]);
-		// Selectors filter by kind without re-sorting.
 		expect(interestingObjects(pack).map((e) => e.id)).toEqual([
 			"io-1",
 			"io-2",
@@ -159,14 +144,12 @@ describe("makeTestPack", () => {
 				red: { position: { row: 0, col: 0 } },
 			},
 		});
-		// Overrides applied.
 		expect(pack.setting).toBe("abandoned subway station");
 		expect(pack.weather).toBe("rainy");
 		expect(pack.wallName).toBe("tunnel wall");
 		expect(pack.aiStarts.red).toEqual({
 			position: { row: 0, col: 0 },
 		});
-		// Derived entities untouched.
 		expect(pack.entities).toEqual([io]);
 	});
 
@@ -176,8 +159,6 @@ describe("makeTestPack", () => {
 		const pack = makeTestPack([io], {
 			entities: [replacementIo],
 		});
-		// Override wins entirely (documented escape hatch for tests that need
-		// to inject unusual shapes).
 		expect(pack.entities).toEqual([replacementIo]);
 	});
 });

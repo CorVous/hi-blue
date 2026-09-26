@@ -1,8 +1,3 @@
-/**
- * Tests for the OpenRouter /models price fetcher.
- *
- * Module-level cache is reset between tests via _setPricingCacheForTests(null).
- */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	_setPricingCacheForTests,
@@ -72,10 +67,10 @@ describe("getModelPricing", () => {
 	});
 
 	it("returns stale cache if /models fetch fails after a previous success", async () => {
-		// Seed cache as if a previous successful fetch happened a long time ago
+		const fetchedAtEpochLongPastTtl = 0;
 		_setPricingCacheForTests(
 			{ promptMicroUsdPerToken: 0.25, completionMicroUsdPerToken: 0.75 },
-			0, // ancient — past the TTL window
+			fetchedAtEpochLongPastTtl,
 		);
 
 		vi.stubGlobal(
@@ -84,7 +79,6 @@ describe("getModelPricing", () => {
 		);
 
 		const pricing = await getModelPricing(MODEL);
-		// Stale cache preferred over fallback constants
 		expect(pricing.promptMicroUsdPerToken).toBe(0.25);
 		expect(pricing.completionMicroUsdPerToken).toBe(0.75);
 	});
@@ -96,7 +90,6 @@ describe("computeCostMicroUsd", () => {
 			promptMicroUsdPerToken: 0.1,
 			completionMicroUsdPerToken: 0.5,
 		});
-		// 1500*0.1 + 1500*0.5 = 150 + 750 = 900
 		expect(cost).toBe(900);
 	});
 
@@ -105,7 +98,6 @@ describe("computeCostMicroUsd", () => {
 			promptMicroUsdPerToken: 0.1,
 			completionMicroUsdPerToken: 0.2,
 		});
-		// 0.1 + 0.2 = 0.3 → ceil → 1
 		expect(cost).toBe(1);
 	});
 

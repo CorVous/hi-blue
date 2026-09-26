@@ -20,20 +20,7 @@ const SESSION_CODEC = "src/spa/persistence/session-codec.ts";
 const GAME_SAVE_CONSTANT = "src/save-serializer.ts";
 const ARCHIVE_MAP = "src/spa/persistence/archive-map.ts";
 
-/**
- * Git environment variables that let an ambient repository leak into a
- * spawned `git` process. When this suite runs from a git hook (husky's
- * `pre-push` runs `pnpm run test`) — or from any shell where they are
- * exported — git sets `GIT_DIR` and friends. Those OUTRANK the `cwd` passed
- * to `spawnSync`, so `git -C <tempdir>` silently operates on the real
- * checkout instead: rewriting its branch pointer, emptying its index and
- * clobbering its `origin/main`. Reports of a worktree corrupting itself
- * after `pnpm run test` trace back to exactly this.
- *
- * Scrub them so `cwd` is the only thing deciding which repo a spawned git
- * command sees.
- */
-const GIT_ENV_VARS = [
+const AMBIENT_GIT_POINTER_VARS = [
 	"GIT_DIR",
 	"GIT_WORK_TREE",
 	"GIT_INDEX_FILE",
@@ -45,29 +32,29 @@ const GIT_ENV_VARS = [
 	"GIT_NAMESPACE",
 ] as const;
 
-/** An environment with every inherited git pointer removed. */
-function cleanGitEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
+function envWithoutAmbientGitPointers(
+	extra: Record<string, string> = {},
+): NodeJS.ProcessEnv {
 	const env: NodeJS.ProcessEnv = { ...process.env, ...extra };
-	for (const key of GIT_ENV_VARS) delete env[key];
+	for (const key of AMBIENT_GIT_POINTER_VARS) delete env[key];
 	return env;
 }
 
 function git(args: string[], cwd: string): { status: number; stdout: string } {
 	const result = spawnSync("git", args, {
 		cwd,
-		env: cleanGitEnv(),
+		env: envWithoutAmbientGitPointers(),
 		encoding: "utf-8",
 	});
 	return { status: result.status ?? 1, stdout: result.stdout ?? "" };
 }
 
-/** One file a scenario writes at the baseline commit and again at HEAD. */
+type ContentOrAbsent = string | null;
+
 type FileChange = {
 	path: string;
-	/** null = the file does not exist in the baseline revision. */
-	baseline: string | null;
-	/** null = the file is deleted at HEAD. */
-	head: string | null;
+	baseline: ContentOrAbsent;
+	head: ContentOrAbsent;
 };
 
 function writeSide(
@@ -85,11 +72,6 @@ function writeSide(
 	writeFileSync(target, content);
 }
 
-/**
- * Spin up a temp git repo with a fake `origin/main` branch and a current HEAD,
- * then invoke check-schema-map.mjs with GITHUB_BASE_REF=main so it compares
- * HEAD against origin/main.
- */
 function runScriptWith(
 	changes: FileChange[],
 	{ withOriginMain = true }: { withOriginMain?: boolean } = {},
@@ -104,17 +86,14 @@ function runScriptWith(
 		git(["config", "user.name", "T"], repo);
 		git(["config", "commit.gpgsign", "false"], repo);
 
-		// Baseline commit on main
 		for (const change of changes) writeSide(repo, change, "baseline");
 		git(["add", "-A"], repo);
 		git(["commit", "-q", "--no-gpg-sign", "-m", "baseline"], repo);
 
-		// Mirror to a fake remote named "origin" pointing at this same repo's main
 		if (withOriginMain) {
 			git(["update-ref", "refs/remotes/origin/main", "HEAD"], repo);
 		}
 
-		// HEAD diverges from origin/main with the test diff
 		git(["checkout", "-q", "-b", "feature"], repo);
 		for (const change of changes) writeSide(repo, change, "head");
 		git(["add", "-A"], repo);
@@ -122,10 +101,7 @@ function runScriptWith(
 
 		const result = spawnSync("node", [script], {
 			cwd: repo,
-			// The script shells out to `git diff`/`git show` against its own
-			// cwd, so it is subject to the same ambient-`GIT_DIR` leak as the
-			// helpers above. Scrub the env for it too.
-			env: cleanGitEnv({ GITHUB_BASE_REF: "main" }),
+			env: envWithoutAmbientGitPointers({ GITHUB_BASE_REF: "main" }),
 			encoding: "utf-8",
 		});
 		return { status: result.status ?? 1, stderr: result.stderr ?? "" };
@@ -142,13 +118,12 @@ function gameSaveConstant(version: number): string {
 	return `export const GAME_SAVE_VERSION = ${version} as const;\n`;
 }
 
-/** Render the real archive-map module, with optional leading comment lines. */
 function archiveMapFile({
-	comment = "",
+	leadingComment = "",
 	session = {},
 	gameSave = {},
 }: {
-	comment?: string;
+	leadingComment?: string;
 	session?: Record<number, string>;
 	gameSave?: Record<number, string>;
 }): string {
@@ -156,15 +131,14 @@ function archiveMapFile({
 		Object.entries(entries)
 			.map(([version, build]) => `\t${version}: ${JSON.stringify(build)},`)
 			.join("\n");
-	return `${comment}export const SCHEMA_ARCHIVE_MAP: Record<number, string> = {\n${render(
+	return `${leadingComment}export const SCHEMA_ARCHIVE_MAP: Record<number, string> = {\n${render(
 		session,
 	)}\n};\n\nexport const GAME_SAVE_ARCHIVE_MAP: Record<number, string> = {\n${render(
 		gameSave,
 	)}\n};\n`;
 }
 
-/** An archive map that predates the bump under test, as the real one would. */
-const PRIOR_GS_MAP = { 3: "0.0.2-beta.1" };
+const GAME_SAVE_MAP_PREDATING_BUMP = { 3: "0.0.2-beta.1" };
 
 describe("check-schema-map.mjs", () => {
 	it("fails when SESSION_SCHEMA_VERSION bumps without a map entry or migration", () => {
@@ -212,9 +186,6 @@ describe("check-schema-map.mjs", () => {
 		expect(result.status).toBe(0);
 	});
 
-	// The regression this gate was fixed for: the old check treated any added
-	// or removed line mentioning the map identifier as "the map changed", so a
-	// bump whose only map-file edit was prose passed.
 	it("fails when the only map edit accompanying a bump is a comment naming the map", () => {
 		const result = runScriptWith([
 			{
@@ -226,13 +197,13 @@ describe("check-schema-map.mjs", () => {
 				path: ARCHIVE_MAP,
 				baseline: archiveMapFile({
 					session: {},
-					gameSave: PRIOR_GS_MAP,
+					gameSave: GAME_SAVE_MAP_PREDATING_BUMP,
 				}),
 				head: archiveMapFile({
-					comment:
+					leadingComment:
 						"// SCHEMA_ARCHIVE_MAP is documented in AGENTS.md; the bump only refreshed this prose.\n",
 					session: {},
-					gameSave: PRIOR_GS_MAP,
+					gameSave: GAME_SAVE_MAP_PREDATING_BUMP,
 				}),
 			},
 		]);
@@ -253,11 +224,11 @@ describe("check-schema-map.mjs", () => {
 				path: ARCHIVE_MAP,
 				baseline: archiveMapFile({
 					session: {},
-					gameSave: PRIOR_GS_MAP,
+					gameSave: GAME_SAVE_MAP_PREDATING_BUMP,
 				}),
 				head: archiveMapFile({
 					session: { 9: "0.0.2-beta.2" },
-					gameSave: PRIOR_GS_MAP,
+					gameSave: GAME_SAVE_MAP_PREDATING_BUMP,
 				}),
 			},
 		]);
@@ -275,11 +246,11 @@ describe("check-schema-map.mjs", () => {
 				path: ARCHIVE_MAP,
 				baseline: archiveMapFile({
 					session: { 8: "0.0.2-beta.1" },
-					gameSave: PRIOR_GS_MAP,
+					gameSave: GAME_SAVE_MAP_PREDATING_BUMP,
 				}),
 				head: archiveMapFile({
 					session: { 8: "0.0.2-beta.1" },
-					gameSave: PRIOR_GS_MAP,
+					gameSave: GAME_SAVE_MAP_PREDATING_BUMP,
 				}),
 			},
 		]);
@@ -298,11 +269,11 @@ describe("check-schema-map.mjs", () => {
 				path: ARCHIVE_MAP,
 				baseline: archiveMapFile({
 					session: { 9: "0.0.2-beta.2" },
-					gameSave: PRIOR_GS_MAP,
+					gameSave: GAME_SAVE_MAP_PREDATING_BUMP,
 				}),
 				head: archiveMapFile({
 					session: { 9: "" },
-					gameSave: PRIOR_GS_MAP,
+					gameSave: GAME_SAVE_MAP_PREDATING_BUMP,
 				}),
 			},
 		]);
@@ -354,12 +325,12 @@ describe("check-schema-map.mjs", () => {
 				path: ARCHIVE_MAP,
 				baseline: archiveMapFile({
 					session: { 11: "0.0.2-beta.2" },
-					gameSave: PRIOR_GS_MAP,
+					gameSave: GAME_SAVE_MAP_PREDATING_BUMP,
 				}),
 				head: archiveMapFile({
-					comment: "// GAME_SAVE_ARCHIVE_MAP is defined below.\n",
+					leadingComment: "// GAME_SAVE_ARCHIVE_MAP is defined below.\n",
 					session: { 11: "0.0.2-beta.2" },
-					gameSave: PRIOR_GS_MAP,
+					gameSave: GAME_SAVE_MAP_PREDATING_BUMP,
 				}),
 			},
 		]);
@@ -443,19 +414,17 @@ describe("check-schema-map.mjs", () => {
 				path: ARCHIVE_MAP,
 				baseline: archiveMapFile({
 					session: {},
-					gameSave: PRIOR_GS_MAP,
+					gameSave: GAME_SAVE_MAP_PREDATING_BUMP,
 				}),
 				head: archiveMapFile({
 					session: { 9: "0.0.2-beta.2" },
-					gameSave: PRIOR_GS_MAP,
+					gameSave: GAME_SAVE_MAP_PREDATING_BUMP,
 				}),
 			},
 		]);
 		expect(result.status).toBe(0);
 	});
 
-	// The superseded version comes from the base revision's constant, not from
-	// prose that happens to look like a bump.
 	it("passes when a comment claims a bump but the constant keeps its number", () => {
 		const result = runScriptWith([
 			{
@@ -468,8 +437,7 @@ describe("check-schema-map.mjs", () => {
 		expect(result.status).toBe(0);
 	});
 
-	// Nothing to compare against must be a loud failure, never a silent pass.
-	it("fails when the base revision cannot be resolved", () => {
+	it("fails loudly instead of passing when the base revision cannot be resolved", () => {
 		const result = runScriptWith(
 			[
 				{
@@ -487,32 +455,9 @@ describe("check-schema-map.mjs", () => {
 	});
 });
 
-/**
- * Regression coverage for the ambient-`GIT_DIR` leak.
- *
- * Before the fix, every `git` call in this suite inherited `GIT_DIR` from the
- * environment. `GIT_DIR` outranks the `cwd` given to `spawnSync`, so running
- * this suite under a git hook (husky's `pre-push` runs `pnpm run test`) made
- * the temp-repo scaffolding run against the *developer's real checkout*:
- * it moved the branch pointer onto junk `baseline`/`change` commits, emptied
- * the index, clobbered `origin/main`, and flipped `core.bare`. The tests still
- * reported green, so the damage was silent.
- */
-describe("spawned-git isolation", () => {
-	/**
-	 * A throwaway repo plus a probe for which git directory a spawned command
-	 * actually resolved.
-	 *
-	 * `--absolute-git-dir` is the discriminator here, NOT `--show-toplevel`.
-	 * `GIT_DIR` redirects which git dir is opened, but `--show-toplevel` still
-	 * answers from the cwd — so a leaked `GIT_DIR` is invisible to it. Measured
-	 * directly: with `GIT_DIR` at repo A and cwd in repo B, `--show-toplevel`
-	 * wrongly reports B while `--absolute-git-dir` correctly reports A. An
-	 * earlier revision of this test asserted `--show-toplevel` and therefore
-	 * passed against the unfixed code, pinning nothing.
-	 */
+describe("spawned-git isolation from an ambient GIT_DIR", () => {
 	function makeProbe(): {
-		repoGitDir: string;
+		repoDotGitDir: string;
 		resolvedGitDir: () => string;
 		cleanup: () => void;
 	} {
@@ -522,9 +467,7 @@ describe("spawned-git isolation", () => {
 		git(["config", "user.name", "T"], repo);
 		git(["commit", "-q", "--no-gpg-sign", "--allow-empty", "-m", "x"], repo);
 		return {
-			// `--absolute-git-dir` reports the git directory itself, so the
-			// expected value carries the `/.git` suffix.
-			repoGitDir: realpathSync(path.join(repo, ".git")),
+			repoDotGitDir: realpathSync(path.join(repo, ".git")),
 			resolvedGitDir: () =>
 				realpathSync(
 					git(["rev-parse", "--absolute-git-dir"], repo).stdout.trim(),
@@ -534,20 +477,21 @@ describe("spawned-git isolation", () => {
 	}
 
 	it("keeps caller-supplied variables while still scrubbing git pointers", () => {
-		const env = cleanGitEnv({ GITHUB_BASE_REF: "main", GIT_DIR: "/nope" });
+		const env = envWithoutAmbientGitPointers({
+			GITHUB_BASE_REF: "main",
+			GIT_DIR: "/nope",
+		});
 		expect(env.GITHUB_BASE_REF).toBe("main");
 		expect(env.GIT_DIR).toBeUndefined();
 	});
 
-	it("resolves the given cwd's repo even when GIT_DIR points elsewhere", () => {
+	it("resolves the given cwd's repo even when a git hook exports GIT_DIR pointing elsewhere", () => {
 		const probe = makeProbe();
 		const original = process.env.GIT_DIR;
 		try {
-			// Simulate what a git hook (or an exported GIT_DIR) provides. In a
-			// linked worktree this is a file pointing at
-			// `<main>/.git/worktrees/<name>`, which git resolves itself.
-			process.env.GIT_DIR = path.join(root, ".git");
-			expect(probe.resolvedGitDir()).toBe(probe.repoGitDir);
+			const hookExportedGitDir = path.join(root, ".git");
+			process.env.GIT_DIR = hookExportedGitDir;
+			expect(probe.resolvedGitDir()).toBe(probe.repoDotGitDir);
 		} finally {
 			if (original === undefined) {
 				delete process.env.GIT_DIR;

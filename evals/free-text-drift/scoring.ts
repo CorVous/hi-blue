@@ -1,84 +1,29 @@
-/**
- * evals/free-text-drift/scoring.ts
- *
- * Pure-function scoring module for the free-text-drift eval harness.
- * No I/O, no side effects, no module-level fetch.
- *
- * Background — issue #260: GLM-4.7 daemons increasingly stop emitting
- * `message` tool calls as a phase progresses, sometimes lapsing into
- * free-text prose that *looks like* an attempt to message or act but
- * never reaches the engine. This module turns a captured turn log into
- * numbers that make that drift visible.
- *
- * Exported surface:
- *   - parseToolCallDetail(toolCall) → ToolCallDetail
- *   - looksLikeFreeTextMessage(text) → boolean
- *   - looksLikeFreeTextAction(text)  → boolean
- *   - rollingSilenceRate(turns, windowSize) → WindowedRate[]
- *   - messageRecipientCounts(turns) → Record<Recipient, number>
- *   - summarizeRun(turns) → DriftRunSummary
- */
-
 import {
 	CARDINAL_DIRECTIONS,
 	type CardinalDirection,
 } from "../../src/spa/game/direction.js";
 import type { AiId, ToolName } from "../../src/spa/game/types.js";
 
-// ── Recorded shapes ──────────────────────────────────────────────────────────
-
-/**
- * Raw tool call as captured from the model's response — name plus the JSON
- * string the model emitted. Mirrors the wire shape used by the runner.
- */
 export interface CapturedToolCall {
 	id: string;
 	name: string;
 	argumentsJson: string;
 }
 
-/**
- * Per-turn snapshot. One TurnRecord per (round × aiId) pair captured by
- * the runner. `assistantText` is the raw assistant content the model
- * emitted *before* any tool-call extraction or production retry — the
- * drift signal lives in the raw stream.
- */
 export interface TurnRecord {
 	round: number;
 	aiId: AiId;
-	/** Raw assistant content from the LLM response (may be empty). */
 	assistantText: string;
-	/** Every tool call from this turn, in emission order. */
 	toolCalls: CapturedToolCall[];
-	/** Optional: who/what was injected into the daemon's context this turn. */
 	injectedFrom?: AiId | "blue" | null;
 }
 
-// ── Tool call detail parsing ─────────────────────────────────────────────────
-
-/**
- * Structured view of one tool call — the per-tool detail fields the framework
- * tracks. All fields are optional; only the ones present on the named tool
- * will be populated. Returns `parseError` when the args JSON is malformed,
- * but never throws.
- */
 export interface ToolCallDetail {
 	name: string;
-	/**
-	 * The `direction` argument, when present and a named cardinal
-	 * (`north`/`south`/`east`/`west`). Read off the arguments rather than
-	 * gated on the tool name: `go` is the only shipped tool that carries one,
-	 * and keying the rule on the argument keeps the direction axis measurable
-	 * across surface changes instead of hard-coding a tool name.
-	 */
 	direction?: CardinalDirection;
-	/** For message: the recipient AiId or "blue". */
 	recipient?: AiId | "blue";
-	/** For message: the message body. */
 	content?: string;
-	/** For pick_up/put_down/use: the item id. */
 	item?: string;
-	/** True when JSON.parse failed on `argumentsJson`. */
 	parseError?: boolean;
 }
 
@@ -86,12 +31,31 @@ const CARDINAL_DIR_SET: ReadonlySet<string> = new Set<string>(
 	CARDINAL_DIRECTIONS,
 );
 
-/**
- * Lift a captured tool call into its tracked detail fields. Best-effort —
- * fields that don't apply to the tool, or that are absent/malformed, are
- * simply left undefined. Strips a leading `*` from AiId-shaped args
- * (matches the dispatcher's parrot-tolerance in `parseToolCallArguments`).
- */
+function stripParrotedHandleStar(handle: string): string {
+	return handle.startsWith("*") ? handle.slice(1) : handle;
+}
+
+function cardinalDirectionArgument(
+	args: Record<string, unknown>,
+): CardinalDirection | undefined {
+	const direction = typeof args.direction === "string" ? args.direction : "";
+	return CARDINAL_DIR_SET.has(direction)
+		? (direction as CardinalDirection)
+		: undefined;
+}
+
+type RecipientBucket = AiId | "blue" | "unknown" | "malformed";
+
+function recipientBucket(
+	recipient: AiId | "blue" | undefined,
+	knownAiIds: ReadonlySet<string>,
+): RecipientBucket {
+	if (!recipient) return "malformed";
+	return recipient === "blue" || knownAiIds.has(recipient)
+		? recipient
+		: "unknown";
+}
+
 export function parseToolCallDetail(tc: CapturedToolCall): ToolCallDetail {
 	const detail: ToolCallDetail = { name: tc.name };
 	let args: Record<string, unknown>;
@@ -111,22 +75,13 @@ export function parseToolCallDetail(tc: CapturedToolCall): ToolCallDetail {
 		return detail;
 	}
 
-	const stripStar = (s: string): string => (s.startsWith("*") ? s.slice(1) : s);
-
-	// `direction` is an argument shape, not a tool-name case. The shipped
-	// surface emits it on `go` alone, but reading it off the arguments keeps
-	// the direction series measuring the direction axis without naming a tool
-	// that the surface can retire. Movement is cardinal-only (ADR 0015), so
-	// the axis is north/south/east/west.
-	const dir = typeof args.direction === "string" ? args.direction : "";
-	if (CARDINAL_DIR_SET.has(dir)) {
-		detail.direction = dir as CardinalDirection;
-	}
+	const direction = cardinalDirectionArgument(args);
+	if (direction) detail.direction = direction;
 
 	switch (tc.name) {
 		case "message": {
 			if (typeof args.to === "string" && args.to.length > 0) {
-				const to = stripStar(args.to);
+				const to = stripParrotedHandleStar(args.to);
 				detail.recipient = to === "blue" ? "blue" : (to as AiId);
 			}
 			if (typeof args.content === "string") {
@@ -146,60 +101,28 @@ export function parseToolCallDetail(tc: CapturedToolCall): ToolCallDetail {
 	return detail;
 }
 
-// ── Free-text leak heuristics ────────────────────────────────────────────────
-
-/**
- * Patterns suggesting the daemon *prose-described* sending a message instead
- * of emitting a `message` tool call. Case-insensitive, regex-only — best-effort
- * heuristics, false negatives acceptable.
- *
- * The first family catches first-person speech acts ("I tell *xxxx that…",
- * "I'll whisper to blue…"). The second catches direct-address openings that
- * read as dialogue ("*xxxx:" or "blue,") without a wrapping tool call.
- */
 const FREE_TEXT_SPEECH_VERB_RE =
 	/\bI(?:'ll| will| am| 'm)?\s*(?:tell|say|reply|respond|whisper|message|ask|answer|shout|call|warn|inform)\s+(?:to\s+)?(?:\*?[a-z0-9]+|blue)\b/i;
 const FREE_TEXT_QUOTED_DIALOG_RE = /"[^"\n]{4,}"/;
-const FREE_TEXT_ADDRESS_RE = /(?:^|\s)(?:\*[a-z0-9]{2,8}|blue)\s*[:,]\s+\S/i;
+const FREE_TEXT_DIRECT_ADDRESS_RE =
+	/(?:^|\s)(?:\*[a-z0-9]{2,8}|blue)\s*[:,]\s+\S/i;
 
-/**
- * Return true when the assistant text reads like an attempt to send a message
- * via prose rather than via the `message` tool. Used in tandem with "no
- * `message` tool call this turn" to flag drift.
- */
 export function looksLikeFreeTextMessage(text: string): boolean {
 	if (text.length === 0) return false;
 	if (FREE_TEXT_SPEECH_VERB_RE.test(text)) return true;
 	if (FREE_TEXT_QUOTED_DIALOG_RE.test(text)) return true;
-	if (FREE_TEXT_ADDRESS_RE.test(text)) return true;
+	if (FREE_TEXT_DIRECT_ADDRESS_RE.test(text)) return true;
 	return false;
 }
 
-/**
- * Patterns suggesting the daemon *prose-described* a physical action instead
- * of emitting a tool call ("I go north.", "I pick up the lantern."). Same
- * caveats as `looksLikeFreeTextMessage` — best-effort, regex-only.
- */
 const FREE_TEXT_ACTION_RE =
 	/\bI(?:'ll| will| am| 'm)?\s*(?:go|move|step|walk|head|pick\s*up|put\s*down|drop|give|hand|use|activate|examine|inspect|study)\b/i;
 
-/**
- * Return true when the assistant text reads like an attempt to take a physical
- * action via prose rather than via a movement/manipulation tool call. Used
- * in tandem with "no non-message tool call this turn" to flag drift.
- */
 export function looksLikeFreeTextAction(text: string): boolean {
 	if (text.length === 0) return false;
 	return FREE_TEXT_ACTION_RE.test(text);
 }
 
-// ── Per-recipient bucketing ──────────────────────────────────────────────────
-
-/**
- * Bucket `message` tool calls across the run by recipient. The "unknown"
- * bucket catches recipient strings that aren't `blue` and aren't a key
- * in `knownAiIds` — useful for spotting daemons inventing handles.
- */
 export function messageRecipientCounts(
 	turns: TurnRecord[],
 	knownAiIds: AiId[],
@@ -209,53 +132,30 @@ export function messageRecipientCounts(
 	for (const turn of turns) {
 		for (const tc of turn.toolCalls) {
 			if (tc.name !== "message") continue;
-			const detail = parseToolCallDetail(tc);
-			if (!detail.recipient) {
-				counts.malformed = (counts.malformed ?? 0) + 1;
-				continue;
-			}
-			const r = detail.recipient;
-			const bucket = r === "blue" || knownSet.has(r) ? r : "unknown";
+			const bucket = recipientBucket(
+				parseToolCallDetail(tc).recipient,
+				knownSet,
+			);
 			counts[bucket] = (counts[bucket] ?? 0) + 1;
 		}
 	}
 	return counts;
 }
 
-// ── Rolling silence-rate window ──────────────────────────────────────────────
-
 export interface WindowedRate {
-	/** Inclusive start round of the window (1-indexed within the run). */
 	startRound: number;
-	/** Inclusive end round of the window. */
 	endRound: number;
-	/** Fraction of turns in this window with zero tool calls. */
 	silenceRate: number;
-	/** Fraction of turns with zero `message` tool calls. */
 	messageSilenceRate: number;
-	/** Turn count in this window. */
 	n: number;
 }
 
-/**
- * Slice `turns` into contiguous windows of `windowSize` rounds and compute
- * per-window silence rates. The trailing window may be smaller. Empty when
- * `turns` is empty or `windowSize <= 0`.
- *
- * `silenceRate` is the fraction of turns producing zero tool calls (the
- * canonical drift symptom). `messageSilenceRate` is the fraction with zero
- * `message` calls specifically — the subtype #260 is about, since GLM
- * keeps emitting `go` calls long after it stops talking.
- */
 export function rollingSilenceRate(
 	turns: TurnRecord[],
 	windowSize: number,
 ): WindowedRate[] {
 	if (turns.length === 0 || windowSize <= 0) return [];
 
-	// Round-bucket: derive the run's min/max round and walk windows of size
-	// `windowSize` across the round axis. Within a window, average over all
-	// captured turns (not over rounds × daemons separately — one row per turn).
 	const minRound = Math.min(...turns.map((t) => t.round));
 	const maxRound = Math.max(...turns.map((t) => t.round));
 	const out: WindowedRate[] = [];
@@ -278,8 +178,6 @@ export function rollingSilenceRate(
 	return out;
 }
 
-// ── Run summary ──────────────────────────────────────────────────────────────
-
 export interface DriftRunSummary {
 	totalTurns: number;
 	silenceRate: number;
@@ -291,68 +189,37 @@ export interface DriftRunSummary {
 	windows: WindowedRate[];
 }
 
-// ── Per-round time series (graphable) ────────────────────────────────────────
-
-/**
- * Per-round time series shaped for direct plotting. Every field is an array
- * aligned by index with `rounds`, so a chart library can take any pair
- * (`rounds`, `<series>`) and render it without further wrangling.
- *
- * For per-tool / per-parameter breakouts (`toolCallCountsByName`,
- * `recipientCounts`, `directionCounts`), each key maps to its own
- * per-round series — letting you plot one line per tool, one line per
- * recipient, etc., and see *which* signal is drifting (e.g. message-to-blue
- * tapering while go-north stays steady).
- */
 export interface DriftRunSeries {
-	/** Round numbers in capture order. */
 	rounds: number[];
-	/** 1 when the turn emitted zero tool calls (silent), else 0. */
 	silence: number[];
-	/** 1 when the turn emitted a `message` tool call, else 0. */
 	hasMessage: number[];
-	/** 1 when the turn emitted any tool call, else 0. */
 	hasAnyTool: number[];
-	/** 1 when prose looked like a message AND no message tool was emitted. */
 	freeTextMessageLeak: number[];
-	/** 1 when prose looked like an action AND no non-message tool was emitted. */
 	freeTextActionLeak: number[];
-	/** Raw assistant content length per turn (proxy for verbosity drift). */
 	assistantTextLength: number[];
-	/** Per-tool-name per-round count series. One key per tool seen in the run. */
 	toolCallCountsByName: Record<string, number[]>;
-	/**
-	 * Per-recipient per-round count series for `message` calls. Bucket keys:
-	 * "blue", each known AiId, "unknown" (recipient not in knownAiIds and not
-	 * "blue"), and "malformed" (recipient missing/unparseable).
-	 */
 	recipientCounts: Record<string, number[]>;
-	/** Per-direction per-round count series. */
 	directionCounts: Record<string, number[]>;
 }
 
-/**
- * Build a per-round per-metric time series from a captured turn log. Designed
- * for graph rendering: every series is the same length as `rounds`, so
- * downstream code can plot `rounds` on the x-axis against any value series
- * on the y-axis without reshaping.
- *
- * Multiple turns sharing a round (e.g. multi-daemon harnesses) are summed
- * within the round bucket — the series is rounds × metric, not turns × metric.
- */
-/**
- * Increment counts[key][idx] by 1, treating an absent slot as zero. Wrapper
- * around `noUncheckedIndexedAccess` so the per-tool / per-recipient /
- * per-direction breakouts read cleanly above.
- */
-function bump(
-	counts: Record<string, number[]>,
+function incrementSeriesSlot(
+	seriesByKey: Record<string, number[]>,
 	key: string,
-	idx: number,
+	roundIndex: number,
 ): void {
-	const arr = counts[key];
-	if (!arr) return;
-	arr[idx] = (arr[idx] ?? 0) + 1;
+	const series = seriesByKey[key];
+	if (!series) return;
+	series[roundIndex] = (series[roundIndex] ?? 0) + 1;
+}
+
+function groupTurnsByRound(turns: TurnRecord[]): Map<number, TurnRecord[]> {
+	const byRound = new Map<number, TurnRecord[]>();
+	for (const turn of turns) {
+		const turnsThisRound = byRound.get(turn.round) ?? [];
+		turnsThisRound.push(turn);
+		byRound.set(turn.round, turnsThisRound);
+	}
+	return byRound;
 }
 
 export function buildPerRoundSeries(
@@ -361,44 +228,28 @@ export function buildPerRoundSeries(
 ): DriftRunSeries {
 	const knownSet = new Set<string>(knownAiIds);
 
-	// Discover all keys that appear anywhere in the run so the series have
-	// stable shapes (zero-fill rounds where a particular tool/recipient
-	// didn't fire).
-	const allToolNames = new Set<string>();
+	const allToolNamesForZeroFill = new Set<string>();
 	const allRecipients = new Set<string>(["blue"]);
 	for (const ai of knownAiIds) allRecipients.add(ai);
 	const allDirections = new Set<string>(CARDINAL_DIRECTIONS);
 	for (const turn of turns) {
 		for (const tc of turn.toolCalls) {
-			allToolNames.add(tc.name);
+			allToolNamesForZeroFill.add(tc.name);
 			if (tc.name === "message") {
-				const detail = parseToolCallDetail(tc);
-				if (!detail.recipient) {
-					allRecipients.add("malformed");
-				} else if (
-					detail.recipient === "blue" ||
-					knownSet.has(detail.recipient)
-				) {
-					allRecipients.add(detail.recipient);
-				} else {
-					allRecipients.add("unknown");
-				}
+				allRecipients.add(
+					recipientBucket(parseToolCallDetail(tc).recipient, knownSet),
+				);
 			}
 		}
 	}
 
-	// Group turns by round (ascending) so the series x-axis is monotonic.
-	const byRound = new Map<number, TurnRecord[]>();
-	for (const turn of turns) {
-		const arr = byRound.get(turn.round) ?? [];
-		arr.push(turn);
-		byRound.set(turn.round, arr);
-	}
+	const byRound = groupTurnsByRound(turns);
 	const rounds = [...byRound.keys()].sort((a, b) => a - b);
 
 	const zero = (): number[] => rounds.map(() => 0);
 	const toolCallCountsByName: Record<string, number[]> = {};
-	for (const name of allToolNames) toolCallCountsByName[name] = zero();
+	for (const name of allToolNamesForZeroFill)
+		toolCallCountsByName[name] = zero();
 	const recipientCounts: Record<string, number[]> = {};
 	for (const r of allRecipients) recipientCounts[r] = zero();
 	const directionCounts: Record<string, number[]> = {};
@@ -443,18 +294,17 @@ export function buildPerRoundSeries(
 				leakAct = true;
 			}
 			for (const tc of turn.toolCalls) {
-				bump(toolCallCountsByName, tc.name, idx);
+				incrementSeriesSlot(toolCallCountsByName, tc.name, idx);
 				const detail = parseToolCallDetail(tc);
 				if (tc.name === "message") {
-					const bucket = !detail.recipient
-						? "malformed"
-						: detail.recipient === "blue" || knownSet.has(detail.recipient)
-							? detail.recipient
-							: "unknown";
-					bump(recipientCounts, bucket, idx);
+					incrementSeriesSlot(
+						recipientCounts,
+						recipientBucket(detail.recipient, knownSet),
+						idx,
+					);
 				}
 				if (detail.direction) {
-					bump(directionCounts, detail.direction, idx);
+					incrementSeriesSlot(directionCounts, detail.direction, idx);
 				}
 			}
 		}
@@ -469,19 +319,12 @@ export function buildPerRoundSeries(
 	return series;
 }
 
-/**
- * Aggregate a full run into a single summary. `windowSize` controls the
- * rolling window granularity; 5 is a reasonable default for the 30-turn
- * playtest the issue targets.
- *
- * `freeText*LeakCount` only counts turns where the leak heuristic fires
- * AND the corresponding tool was not emitted — i.e. the daemon's prose
- * read like an action that never reached the engine.
- */
+export const DEFAULT_SILENCE_WINDOW_ROUNDS = 5;
+
 export function summarizeRun(
 	turns: TurnRecord[],
 	knownAiIds: AiId[],
-	windowSize = 5,
+	windowSize = DEFAULT_SILENCE_WINDOW_ROUNDS,
 ): DriftRunSummary {
 	const toolCallCountsByName: Record<string, number> = {};
 	let freeTextMessageLeakCount = 0;

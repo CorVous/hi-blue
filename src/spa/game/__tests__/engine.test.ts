@@ -16,50 +16,10 @@ import {
 	obstacles,
 } from "../pack-selectors";
 import { buildAiContext } from "../prompt-builder";
-import type { AiPersona, ContentPack, GameState } from "../types";
+import type { ContentPack, GameState } from "../types";
+import { TEST_PERSONAS } from "./fixtures/make-game-state";
 import { makeTestPack } from "./fixtures/make-test-pack";
-
-const TEST_PERSONAS: Record<string, AiPersona> = {
-	red: {
-		id: "red",
-		name: "Ember",
-		color: "#e07a5f",
-		temperaments: ["hot-headed", "zealous"],
-		personaGoal: "Hold the flower at phase end.",
-		typingQuirks: [
-			"You speak in fragments. Short bursts. Rarely complete sentences.",
-			"You lean on em-dashes — interrupting yourself mid-sentence — and rarely use commas where a dash would do.",
-		],
-		blurb: "Ember is hot-headed and zealous. Hold the flower at phase end.",
-		voiceExamples: ["ex1-red", "ex2-red", "ex3-red"],
-	},
-	green: {
-		id: "green",
-		name: "Sage",
-		color: "#81b29a",
-		temperaments: ["meticulous", "meticulous"],
-		personaGoal: "Ensure items are evenly distributed.",
-		typingQuirks: [
-			"You lean on ellipses… trailing off mid-thought… rarely landing cleanly.",
-			"You use ALL-CAPS to emphasize the one or two words that MATTER in any given sentence.",
-		],
-		blurb: "Sage is intensely meticulous. Ensure items are evenly distributed.",
-		voiceExamples: ["ex1-green", "ex2-green", "ex3-green"],
-	},
-	cyan: {
-		id: "cyan",
-		name: "Frost",
-		color: "#5fa8d3",
-		temperaments: ["laconic", "diffident"],
-		personaGoal: "Hold the key at phase end.",
-		typingQuirks: [
-			'You never use contractions. You will not say "won\'t" or "can\'t" — you say "will not" and "cannot" every time.',
-			"You end almost every reply with a question, no matter what the topic is — does that make sense?",
-		],
-		blurb: "Frost is laconic and diffident. Hold the key at phase end.",
-		voiceExamples: ["ex1-cyan", "ex2-cyan", "ex3-cyan"],
-	},
-};
+import { cardinalClause } from "./fixtures/prompt-sections";
 
 const TEST_CONTENT_PACK = makeTestPack([], { wallName: "wall" });
 
@@ -111,11 +71,6 @@ describe("startGame world.entities", () => {
 	});
 
 	it("world.entities id-set equals selector-derived id-set for a mixed pack", () => {
-		// Mixed pack: one carry pair (object + space), two bound spaces,
-		// one interesting object, one obstacle. The invariant under test is
-		// that startGame's world.entities membership is exactly the union of
-		// the pack-selector outputs — i.e. engine.ts must build entities by
-		// asking the selectors, not by hand-fanning bucket reads.
 		const mixedPack: ContentPack = {
 			...TEST_CONTENT_PACK,
 			entities: [
@@ -325,8 +280,8 @@ describe("appendBroadcast", () => {
 
 	it("carries the current phase round", () => {
 		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
-		game = advanceRound(game); // round = 1
-		game = advanceRound(game); // round = 2
+		game = advanceRound(game);
+		game = advanceRound(game);
 		const updated = appendBroadcast(game, "Dense fog has settled in.");
 		const entry = updated.conversationLogs.red?.[0];
 		expect(entry?.round).toBe(2);
@@ -337,10 +292,8 @@ describe("appendBroadcast", () => {
 			budgetPerAi: 5,
 		});
 		const updated = appendBroadcast(game, "Light snow drifts down.");
-		// Round and world should be unchanged
 		expect(updated.round).toBe(game.round);
 		expect(updated.world).toEqual(game.world);
-		// Budgets should be unchanged
 		expect(updated.budgets).toEqual(game.budgets);
 	});
 });
@@ -475,8 +428,6 @@ describe("shiftToBPack", () => {
 	});
 
 	it("keeps the cardinal directions stable across the Setting Shift", () => {
-		// The room's Setting noun changes, but its cardinal directions do not:
-		// the stable prompt states them once, in-fiction, inside <setting>.
 		const game = makeDualPackGame();
 		const before = cardinalClause(buildAiContext(game, "red").toSystemPrompt());
 		const after = cardinalClause(
@@ -490,13 +441,3 @@ describe("shiftToBPack", () => {
 		expect(after).toBe(before);
 	});
 });
-
-/** The `<setting>` line that establishes the room's cardinal directions. */
-function cardinalClause(prompt: string): string {
-	const settingBlock = /<setting>([\s\S]*?)<\/setting>/.exec(prompt)?.[1] ?? "";
-	return (
-		settingBlock
-			.split("\n")
-			.find((line) => /\bnorth\b/.test(line) && /\bsouth\b/.test(line)) ?? ""
-	);
-}

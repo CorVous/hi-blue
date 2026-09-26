@@ -1,11 +1,3 @@
-/**
- * Structure-only tests for src/content/.
- *
- * Validates:
- * - Content pools (TEMPERAMENT_POOL, PERSONA_GOAL_POOL, COLOR_PALETTE) have
- *   the correct entry types.
- * - generatePersonas() produces three distinct personas.
- */
 import { describe, expect, it } from "vitest";
 import {
 	COLOR_PALETTE,
@@ -16,8 +8,6 @@ import {
 } from "../content";
 import type { SynthesisInput } from "../spa/game/llm-synthesis-provider.js";
 import { MockSynthesisProvider } from "../spa/game/llm-synthesis-provider.js";
-
-// ── Content pools ─────────────────────────────────────────────────────────────
 
 describe("TEMPERAMENT_POOL", () => {
 	it("every entry is a non-empty string", () => {
@@ -57,8 +47,6 @@ describe("TYPING_QUIRK_POOL", () => {
 		expect(new Set(TYPING_QUIRK_POOL).size).toBe(TYPING_QUIRK_POOL.length);
 	});
 });
-
-// ── generatePersonas ──────────────────────────────────────────────────────────
 
 describe("generatePersonas — template fallback (no llm)", () => {
 	it("produces exactly 3 personas", async () => {
@@ -102,8 +90,8 @@ describe("generatePersonas — template fallback (no llm)", () => {
 	});
 
 	it("intensification path: same temperament twice yields 'intensely' blurb", async () => {
-		// Seed that returns 0 always — same index for both temperament draws
-		const personas = await generatePersonas(() => 0);
+		const alwaysDrawFirstEntry = () => 0;
+		const personas = await generatePersonas(alwaysDrawFirstEntry);
 		const firstPersona = Object.values(personas)[0];
 		if (!firstPersona) throw new Error("no persona");
 		expect(firstPersona.temperaments[0]).toBe(firstPersona.temperaments[1]);
@@ -119,8 +107,6 @@ describe("generatePersonas — template fallback (no llm)", () => {
 		}
 	});
 });
-
-// ── generatePersonas — LLM path ───────────────────────────────────────────────
 
 describe("generatePersonas — LLM path", () => {
 	it("passes all 3 persona tuples in a single batched call", async () => {
@@ -216,10 +202,8 @@ describe("generatePersonas — LLM path", () => {
 
 		const personas = await generatePersonas(() => 0.5, mockProvider);
 
-		// One call for all three, not three separate calls
 		expect(mockProvider.calls.length).toBe(1);
 
-		// Blurbs match canned values in positional order
 		const values = Object.values(personas);
 		expect(values[0]?.blurb).toBe("BLURB_A");
 		expect(values[1]?.blurb).toBe("BLURB_B");

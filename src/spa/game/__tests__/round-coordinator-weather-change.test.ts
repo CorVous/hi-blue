@@ -1,56 +1,16 @@
-/**
- * Unit tests for the round-coordinator's weather_change complication handler.
- *
- * Issue #487: weather_change complication fires and:
- * 1. Changes game.weather and game.contentPack.weather to a new value from WEATHER_POOL.
- * 2. The new weather differs from the prior weather — no no-op draw.
- * 3. Appends a broadcast entry to all Daemons' conversationLogs announcing the new weather.
- * 4. Resets the complication countdown.
- */
 import { describe, expect, it } from "vitest";
-import { WEATHER_POOL } from "../../../content/weather-pool";
-import { startGame } from "../engine";
+import { WEATHER_POOL } from "../../../content/pools";
 import { runRound } from "../round-coordinator";
-import { MockRoundLLMProvider } from "../round-llm-provider";
-import type { AiPersona, WorldEntity } from "../types";
-import { makeTestPack } from "./fixtures/make-test-pack";
+import type { WorldEntity } from "../types";
+import {
+	makeSilentProvider,
+	makeTestGame,
+	ROW_AI_STARTS,
+	seededRng,
+	TEST_PERSONAS,
+	withPackOrderedWorld,
+} from "./fixtures/make-game-state";
 
-// ── Fixtures ───────────────────────────────────────────────────────────────────
-
-const TEST_PERSONAS: Record<string, AiPersona> = {
-	red: {
-		id: "red",
-		name: "Ember",
-		color: "#e07a5f",
-		temperaments: ["hot-headed", "zealous"],
-		personaGoal: "Hold the flower at phase end.",
-		typingQuirks: ["Fragments.", "Em-dashes."],
-		blurb: "Ember is hot-headed and zealous.",
-		voiceExamples: ["ex1", "ex2", "ex3"],
-	},
-	green: {
-		id: "green",
-		name: "Sage",
-		color: "#81b29a",
-		temperaments: ["meticulous", "meticulous"],
-		personaGoal: "Ensure items are evenly distributed.",
-		typingQuirks: ["Ellipses.", "ALL-CAPS."],
-		blurb: "Sage is meticulous.",
-		voiceExamples: ["ex1", "ex2", "ex3"],
-	},
-	cyan: {
-		id: "cyan",
-		name: "Frost",
-		color: "#5fa8d3",
-		temperaments: ["laconic", "diffident"],
-		personaGoal: "Hold the key at phase end.",
-		typingQuirks: ["No contractions.", "Ends with a question."],
-		blurb: "Frost is laconic and diffident.",
-		voiceExamples: ["ex1", "ex2", "ex3"],
-	},
-};
-
-// For the test pack to be valid, we need at least one objective object + space pair.
 const OBJECTIVE_OBJECT: WorldEntity = {
 	id: "obj_a",
 	kind: "objective_object",
@@ -69,70 +29,23 @@ const OBJECTIVE_SPACE: WorldEntity = {
 	holder: { row: 1, col: 1 },
 };
 
-const TEST_CONTENT_PACK = makeTestPack([OBJECTIVE_OBJECT, OBJECTIVE_SPACE], {
-	wallName: "wall",
-	weather: "clear",
-	aiStarts: {
-		red: { position: { row: 0, col: 0 } },
-		green: { position: { row: 0, col: 1 } },
-		cyan: { position: { row: 0, col: 2 } },
-	},
-});
+const WEATHER_CHANGE_DRAWS = [0.0, 0.1];
 
-function makeProvider() {
-	return new MockRoundLLMProvider([
-		{ assistantText: "", toolCalls: [] },
-		{ assistantText: "", toolCalls: [] },
-		{ assistantText: "", toolCalls: [] },
-	]);
-}
-
-/**
- * Build a base game with the test pack and initial weather.
- */
 function makeBaseGame() {
-	const base = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 99 });
-	return {
-		...base,
-		world: {
+	return withPackOrderedWorld(
+		makeTestGame({
 			entities: [OBJECTIVE_OBJECT, OBJECTIVE_SPACE],
-		},
-		personaSpatial: TEST_CONTENT_PACK.aiStarts as typeof base.personaSpatial,
-	};
+			pack: { weather: "clear", aiStarts: ROW_AI_STARTS },
+			budgetPerAi: 99,
+		}),
+	);
 }
-
-/**
- * Drive an RNG sequence that deterministically fires weather_change.
- * The weather_change complication is always available (index 0 in the pool),
- * so we can use a simple rng that selects it.
- */
-function makeWeatherChangeRng() {
-	let callCount = 0;
-	return () => {
-		callCount += 1;
-		// First call: select weather_change from the pool (index 0).
-		// Return a very small value to select the first item.
-		if (callCount === 1) {
-			return 0.0;
-		}
-		// Second call: used by drawNewWeather to select from candidates.
-		// Return a small value to select the first non-current weather.
-		if (callCount === 2) {
-			return 0.1;
-		}
-		// Subsequent calls are for countdown reset.
-		return Math.random();
-	};
-}
-
-// ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe("runRound — weather_change complication (issue #487)", () => {
 	it("changes game.weather to a different WEATHER_POOL entry", async () => {
 		const game = makeBaseGame();
 		const initialWeather = game.weather;
 
-		// Force countdown to 0 so complication fires.
 		const withCountdown = {
 			...game,
 			complicationSchedule: { ...game.complicationSchedule, countdown: 0 },
@@ -142,13 +55,11 @@ describe("runRound — weather_change complication (issue #487)", () => {
 			withCountdown,
 			"red",
 			"hi",
-			makeProvider(),
-			{ rng: makeWeatherChangeRng() },
+			makeSilentProvider(),
+			{ rng: seededRng(WEATHER_CHANGE_DRAWS, Math.random) },
 		);
 
-		// Weather should have changed
 		expect(nextState.weather).not.toBe(initialWeather);
-		// New weather should be in WEATHER_POOL
 		expect(WEATHER_POOL).toContain(nextState.weather);
 	});
 
@@ -164,11 +75,10 @@ describe("runRound — weather_change complication (issue #487)", () => {
 			withCountdown,
 			"red",
 			"hi",
-			makeProvider(),
-			{ rng: makeWeatherChangeRng() },
+			makeSilentProvider(),
+			{ rng: seededRng(WEATHER_CHANGE_DRAWS, Math.random) },
 		);
 
-		// Both should be consistent
 		expect(nextState.weather).toBe(nextState.contentPack.weather);
 	});
 
@@ -184,19 +94,16 @@ describe("runRound — weather_change complication (issue #487)", () => {
 			withCountdown,
 			"red",
 			"hi",
-			makeProvider(),
-			{ rng: makeWeatherChangeRng() },
+			makeSilentProvider(),
+			{ rng: seededRng(WEATHER_CHANGE_DRAWS, Math.random) },
 		);
 
-		// Check all Daemons have a broadcast entry
 		for (const aiId of Object.keys(TEST_PERSONAS)) {
 			const log = nextState.conversationLogs[aiId] ?? [];
 			const broadcasts = log.filter((e) => e.kind === "broadcast");
 
-			// At least one broadcast should exist (weather_change)
 			expect(broadcasts.length).toBeGreaterThan(0);
 
-			// The weather_change broadcast should mention the new weather
 			const weatherBroadcast = broadcasts.find(
 				(b) =>
 					b.kind === "broadcast" && b.content.includes("weather has changed"),
@@ -220,12 +127,10 @@ describe("runRound — weather_change complication (issue #487)", () => {
 			withCountdown,
 			"red",
 			"hi",
-			makeProvider(),
-			{ rng: makeWeatherChangeRng() },
+			makeSilentProvider(),
+			{ rng: seededRng(WEATHER_CHANGE_DRAWS, Math.random) },
 		);
 
-		// After the complication fires, applyComplicationResult resets the countdown
-		// to a value in [5, 15]. It should no longer be 0.
 		expect(nextState.complicationSchedule.countdown).toBeGreaterThan(0);
 		expect(nextState.complicationSchedule.countdown).toBeLessThanOrEqual(15);
 	});
@@ -245,8 +150,8 @@ describe("runRound — weather_change complication (issue #487)", () => {
 			withCountdown,
 			"red",
 			"hi",
-			makeProvider(),
-			{ rng: makeWeatherChangeRng() },
+			makeSilentProvider(),
+			{ rng: seededRng(WEATHER_CHANGE_DRAWS, Math.random) },
 		);
 
 		expect(nextState.setting).toBe(initialSetting);

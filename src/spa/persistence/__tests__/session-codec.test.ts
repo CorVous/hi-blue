@@ -9,23 +9,17 @@ import type {
 	GameState,
 	WorldEntity,
 } from "../../game/types.js";
+import { lookupArchiveVersion, SCHEMA_ARCHIVE_MAP } from "../archive-map.js";
 import { deobfuscate, obfuscate } from "../sealed-blob-codec.js";
 import {
 	type DaemonFile,
 	deserializeSession,
+	LAST_SCHEMA_BEFORE_ARCHIVE_ONLY_BUMPS,
 	SESSION_SCHEMA_VERSION,
 	serializeSession,
 } from "../session-codec.js";
 import type { VersionBoundary } from "../version-boundary.js";
 
-// ── Test fixtures ─────────────────────────────────────────────────────────────
-
-/**
- * The boundary the historical migration chain still lands on. The chain
- * terminates at schema 11, so observing what it actually produced requires a
- * boundary that treats 11 as current; at the live v12 boundary the same save
- * is a version-mismatch (pinned separately below).
- */
 const PRE_BOUNDARY: VersionBoundary = { session: 11, gs: 4 };
 
 const TEST_CONTENT_PACK = makeTestPack([], { wallName: "wall" });
@@ -76,8 +70,6 @@ function makeFreshGame(): GameState {
 
 const NOW = new Date().toISOString();
 const CREATED_AT = "2024-01-01T00:00:00.000Z";
-
-// ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe("serializeSession / deserializeSession", () => {
 	it("round-trips a fresh game (ok)", () => {
@@ -157,7 +149,6 @@ describe("serializeSession / deserializeSession", () => {
 		const game = makeFreshGame();
 		const files = serializeSession(game, NOW, CREATED_AT);
 		const metaLines = files.meta.split("\n");
-		// Second line should start with two spaces
 		expect(metaLines[1]).toMatch(/^ {2}/);
 	});
 
@@ -171,7 +162,6 @@ describe("serializeSession / deserializeSession", () => {
 		expect(meta).toHaveProperty("round", 0);
 		expect(meta).toHaveProperty("personaOrder");
 		expect(Array.isArray(meta.personaOrder)).toBe(true);
-		// Must preserve insertion order of state.personas
 		expect(meta.personaOrder).toEqual(Object.keys(game.personas));
 	});
 
@@ -181,7 +171,6 @@ describe("serializeSession / deserializeSession", () => {
 		const result = deserializeSession(files);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
-			// The key order of restored personas must match the original.
 			expect(Object.keys(result.state.personas)).toEqual(
 				Object.keys(game.personas),
 			);
@@ -190,13 +179,11 @@ describe("serializeSession / deserializeSession", () => {
 
 	it("deserializeSession honours meta.personaOrder when daemon-file key order differs", () => {
 		const game = makeFreshGame();
-		// Capture the canonical order from the original state.
 		const canonicalOrder = Object.keys(game.personas);
-		expect(canonicalOrder.length).toBeGreaterThanOrEqual(2); // sanity: ≥2 personas
+		expect(canonicalOrder.length).toBeGreaterThanOrEqual(2);
 
 		const files = serializeSession(game, NOW, CREATED_AT);
 
-		// Reconstruct daemons in REVERSED key order — this is the scenario localStorage produces.
 		const reversedDaemons: Record<string, string> = {};
 		for (const aiId of [...canonicalOrder].reverse()) {
 			reversedDaemons[aiId] = files.daemons[aiId] as string;
@@ -211,7 +198,6 @@ describe("serializeSession / deserializeSession", () => {
 			throw new Error(`expected ok, got ${result.kind}`);
 		}
 
-		// The fix should restore canonical order regardless of daemon-file key order.
 		expect(Object.keys(result.state.personas)).toEqual(canonicalOrder);
 	});
 
@@ -221,7 +207,6 @@ describe("serializeSession / deserializeSession", () => {
 
 		const files = serializeSession(game, NOW, CREATED_AT);
 
-		// Strip personaOrder from meta (simulates a hand-edited or pre-personaOrder save).
 		const metaParsed = JSON.parse(files.meta) as Record<string, unknown>;
 		delete metaParsed.personaOrder;
 		const metaWithoutOrder = JSON.stringify(metaParsed, null, 2);
@@ -235,7 +220,6 @@ describe("serializeSession / deserializeSession", () => {
 			throw new Error(`expected ok, got ${result.kind}`);
 		}
 
-		// Falls back to daemon-file key order (which equals canonicalOrder in this fixture).
 		expect(Object.keys(result.state.personas)).toEqual(canonicalOrder);
 	});
 
@@ -345,11 +329,8 @@ describe("serializeSession / deserializeSession", () => {
 		const result = deserializeSession(files);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
-			// message entry round-trips in cyan's log
 			expect(result.state.conversationLogs.cyan?.[0]).toEqual(messageEntry);
-			// witnessed-event round-trips in green's log
 			expect(result.state.conversationLogs.green?.[0]).toEqual(witnessedEntry);
-			// No physicalLog or whispers fields on state (regression guards)
 			expect("physicalLog" in result.state).toBe(false);
 			expect("whispers" in result.state).toBe(false);
 		}
@@ -375,7 +356,6 @@ describe("serializeSession / deserializeSession", () => {
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
 			expect(result.state.conversationLogs.red?.[0]).toEqual(failureEntry);
-			// Peer logs should remain empty
 			expect(result.state.conversationLogs.green ?? []).toHaveLength(0);
 			expect(result.state.conversationLogs.cyan ?? []).toHaveLength(0);
 		}
@@ -634,7 +614,6 @@ describe("serializeSession / deserializeSession", () => {
 	it("version-mismatch: stale schemaVersion in sealed engine", () => {
 		const game = makeFreshGame();
 		const files = serializeSession(game, NOW, CREATED_AT);
-		// Deobfuscate, modify schemaVersion, re-obfuscate
 		if (!files.engine) throw new Error("engine should not be null");
 		const rawJson = deobfuscate(files.engine);
 		const sealed = JSON.parse(rawJson);
@@ -661,8 +640,6 @@ describe("serializeSession / deserializeSession", () => {
 
 	it("a v11 save is current at the pre-boundary and a version-mismatch at the live v12 boundary", () => {
 		const game = makeFreshGame();
-		// Serialize at the live boundary, then restamp the sealed payload to 11:
-		// the only way a v11 save exists now is from the archived build.
 		const files = serializeSession(game, NOW, CREATED_AT);
 		if (!files.engine) throw new Error("engine should not be null");
 		const sealed = JSON.parse(deobfuscate(files.engine));
@@ -671,13 +648,8 @@ describe("serializeSession / deserializeSession", () => {
 		sealed.schemaVersion = 11;
 		const v11 = { ...files, engine: obfuscate(JSON.stringify(sealed)) };
 
-		// The cutoff is a parameter, not a hardcoded constant
-		// (see version-boundary.ts), so the migration chain can still be
-		// observed at the boundary it lands on.
 		expect(deserializeSession(v11, PRE_BOUNDARY).kind).toBe("ok");
 
-		// Live boundary: the same save is "older" and surfaces as a
-		// version-mismatch carrying the retired schema number.
 		const result = deserializeSession(v11);
 		expect(result.kind).toBe("version-mismatch");
 		if (result.kind === "version-mismatch") {
@@ -753,21 +725,17 @@ describe("serializeSession / deserializeSession", () => {
 		expect(result.kind).toBe("ok");
 		if (result.kind !== "ok") return;
 
-		// position
 		expect(result.state.personaSpatial.red).toEqual({
 			position: { row: 2, col: 1 },
 		});
-		// inventory (an entity held by a Daemon, not a grid position)
 		expect(
 			result.state.world.entities.find((e) => e.id === "ent-flower")?.holder,
 		).toBe("red");
-		// content state
 		expect(result.state.contentPack.setting).toBe("greenhouse");
 		expect(
 			result.state.contentPacksA[0]?.entities.find((e) => e.id === "ent-altar")
 				?.satisfactionState,
 		).toBe("satisfied");
-		// conversation + perception change (the diskDelta on the tool call)
 		const log = result.state.conversationLogs.red ?? [];
 		expect(log).toHaveLength(2);
 		expect(log[0]).toEqual({
@@ -780,7 +748,6 @@ describe("serializeSession / deserializeSession", () => {
 		expect(log[1]?.kind === "tool-call" ? log[1].diskDelta : undefined).toBe(
 			diskDelta,
 		);
-		// round-trip metadata survives too
 		expect(result.epoch).toBe(3);
 		expect(result.state.round).toBe(7);
 	});
@@ -795,8 +762,6 @@ describe("serializeSession / deserializeSession", () => {
 		expect(sealed.schemaVersion).toBe(12);
 		expect(SESSION_SCHEMA_VERSION).toBe(12);
 
-		// The whole export — meta, daemon files, and the sealed engine — must be
-		// free of the retired orientation and horizon fields (ADR 0015).
 		const allBytes = [
 			files.meta,
 			...Object.values(files.daemons),
@@ -806,157 +771,16 @@ describe("serializeSession / deserializeSession", () => {
 		expect(allBytes).not.toMatch(/landmark/i);
 	});
 
-	it("v8 save with multi-entry contentPacksA/B is migrated to v9 by truncating to first entry", () => {
-		// Create a v8-style sealed engine with 3 content packs each.
-		// v8/v9/v10 packs used the old bucketed shape — emit it via an
-		// `unknown` cast so the literal can carry fields that no longer exist
-		// on the v11 `ContentPack` type. The migration pipeline must accept
-		// these legacy shapes and flatten them into `entities` on the way out.
-		const testPack = {
-			setting: "test setting",
-			weather: "sunny",
-			timeOfDay: "morning",
-			objectivePairs: [],
-			interestingObjects: [],
-			obstacles: [],
-			wallName: "wall",
-			aiStarts: {},
-		} as unknown as ContentPack;
-		const testPackVariant2: ContentPack = {
-			...testPack,
-			setting: "test setting 2",
-		};
-		const testPackVariant3: ContentPack = {
-			...testPack,
-			setting: "test setting 3",
-		};
-
-		const game = makeFreshGame();
-		const v8SealedPayload = {
-			schemaVersion: 8,
-			world: game.world,
-			budgets: game.budgets,
-			lockedOut: Array.from(game.lockedOut),
-			personaSpatial: game.personaSpatial,
-			// v8 had 3 packs per side
-			contentPacksA: [testPack, testPackVariant2, testPackVariant3],
-			contentPacksB: [testPack, testPackVariant2, testPackVariant3],
-			activePackId: "A" as const,
-			weather: game.weather,
-			objectives: game.objectives,
-			complicationSchedule: game.complicationSchedule,
-			activeComplications: game.activeComplications,
-			isComplete: game.isComplete,
-		};
-
-		const engine = obfuscate(JSON.stringify(v8SealedPayload, null, 2));
-		const meta = JSON.stringify({
-			createdAt: CREATED_AT,
-			lastSavedAt: NOW,
-			epoch: 1,
-			round: 0,
-			personaOrder: Object.keys(game.personas),
-		});
-
-		// Reconstruct daemon files from game
-		const daemons: Record<AiId, string> = {};
-		for (const [aiId, persona] of Object.entries(game.personas)) {
-			const daemonFile: DaemonFile = {
-				aiId,
-				persona: {
-					id: persona.id,
-					name: persona.name,
-					color: persona.color,
-					temperaments: persona.temperaments,
-					personaGoal: persona.personaGoal,
-					blurb: persona.blurb,
-					typingQuirks: persona.typingQuirks,
-					voiceExamples: persona.voiceExamples,
-				},
-				conversationLog: [],
-			};
-			daemons[aiId] = JSON.stringify(daemonFile, null, 2);
-		}
-
-		const result = deserializeSession({ meta, daemons, engine }, PRE_BOUNDARY);
-		expect(result.kind).toBe("ok");
-		if (result.kind === "ok") {
-			// v8 packs (3 entries each) should be migrated to v9 by truncating to 1 entry
-			expect(result.state.contentPacksA).toHaveLength(1);
-			expect(result.state.contentPacksB).toHaveLength(1);
-			// The remaining entries should be the original first pack
-			expect(result.state.contentPacksA[0]?.setting).toBe(testPack.setting);
-			expect(result.state.contentPacksB[0]?.setting).toBe(testPack.setting);
-		}
+	it("the legacy-schema clamp target has an archived build in SCHEMA_ARCHIVE_MAP", () => {
+		expect(
+			SCHEMA_ARCHIVE_MAP[LAST_SCHEMA_BEFORE_ARCHIVE_ONLY_BUMPS],
+		).toBeDefined();
+		expect(LAST_SCHEMA_BEFORE_ARCHIVE_ONLY_BUMPS).toBeLessThan(
+			SESSION_SCHEMA_VERSION,
+		);
 	});
 
-	it("v8 save chains to v11 but never silently enters v12: the live boundary calls it older", () => {
-		// v8 saves had neither wallName (v10 addition) nor single-pack arrays
-		// (v9 change). Chained migration must apply both fixes and then stop at
-		// 11 — the last schema the chain understands — rather than stamping the
-		// live 12 and presenting the save as current.
-		const game = makeFreshGame();
-		const packNoWall = {
-			setting: "v8 setting",
-			weather: "sunny",
-			timeOfDay: "noon",
-			objectivePairs: [],
-			interestingObjects: [] as WorldEntity[],
-			obstacles: [] as WorldEntity[],
-			aiStarts: {},
-		};
-		const v8SealedPayload = {
-			schemaVersion: 8,
-			world: game.world,
-			budgets: game.budgets,
-			lockedOut: Array.from(game.lockedOut),
-			personaSpatial: game.personaSpatial,
-			contentPacksA: [packNoWall, packNoWall, packNoWall],
-			contentPacksB: [packNoWall, packNoWall, packNoWall],
-			activePackId: "A" as const,
-			weather: game.weather,
-			objectives: game.objectives,
-			complicationSchedule: game.complicationSchedule,
-			activeComplications: game.activeComplications,
-			isComplete: game.isComplete,
-		};
-		const engine = obfuscate(JSON.stringify(v8SealedPayload));
-		const meta = JSON.stringify({
-			createdAt: CREATED_AT,
-			lastSavedAt: NOW,
-			epoch: 1,
-			round: 0,
-			personaOrder: Object.keys(game.personas),
-		});
-		const daemons: Record<AiId, string> = {};
-		for (const [aiId, persona] of Object.entries(game.personas)) {
-			const daemonFile: DaemonFile = { aiId, persona, conversationLog: [] };
-			daemons[aiId] = JSON.stringify(daemonFile);
-		}
-
-		const result = deserializeSession({ meta, daemons, engine }, PRE_BOUNDARY);
-		expect(result.kind).toBe("ok");
-		if (result.kind === "ok") {
-			expect(result.state.contentPacksA).toHaveLength(1);
-			expect(result.state.contentPacksB).toHaveLength(1);
-			expect(result.state.contentPacksA[0]?.wallName).toBe("");
-			expect(result.state.contentPacksB[0]?.wallName).toBe("");
-		}
-
-		// Same save at the live v12 boundary: the chain stops at 11, so it
-		// surfaces as "older" instead of being silently promoted past the
-		// boundary. This is the archive-only contract: no v11→v12 migration.
-		const atLiveBoundary = deserializeSession({ meta, daemons, engine });
-		expect(atLiveBoundary.kind).toBe("version-mismatch");
-		if (atLiveBoundary.kind === "version-mismatch") {
-			expect(atLiveBoundary.schemaVersion).toBe(11);
-		}
-	});
-
-	it("no historical chain can produce a save the live boundary calls current", () => {
-		// Every schema the chain accepts (8, 9, 10) migrates forward only as far
-		// as 11, so `deserializeSession` at the live boundary must surface each
-		// one as a version-mismatch stamped 11 — never `ok`.
+	it("v8, v9, v10, and v11 saves resolve to the archived-build version-mismatch", () => {
 		const game = makeFreshGame();
 		const meta = JSON.stringify({
 			createdAt: CREATED_AT,
@@ -982,7 +806,7 @@ describe("serializeSession / deserializeSession", () => {
 			aiStarts: {},
 		} as unknown as ContentPack;
 
-		for (const schemaVersion of [8, 9, 10]) {
+		for (const schemaVersion of [8, 9, 10, 11]) {
 			const sealedPayload = {
 				schemaVersion,
 				world: game.world,
@@ -1003,333 +827,13 @@ describe("serializeSession / deserializeSession", () => {
 			expect(result.kind, `schema ${schemaVersion}`).toBe("version-mismatch");
 			if (result.kind === "version-mismatch") {
 				expect(result.schemaVersion).toBe(11);
+				expect(lookupArchiveVersion(result.schemaVersion)).toBe("0.0.2-beta.2");
 			}
 		}
 	});
 
-	it("v9 save without wallName is migrated to v10 by defaulting wallName to empty string", () => {
-		const game = makeFreshGame();
-		const packNoWall = {
-			setting: "v9 setting",
-			weather: "stormy",
-			timeOfDay: "dusk",
-			objectivePairs: [],
-			interestingObjects: [] as WorldEntity[],
-			obstacles: [] as WorldEntity[],
-			aiStarts: {},
-		};
-		const v9SealedPayload = {
-			schemaVersion: 9,
-			world: game.world,
-			budgets: game.budgets,
-			lockedOut: Array.from(game.lockedOut),
-			personaSpatial: game.personaSpatial,
-			contentPacksA: [packNoWall],
-			contentPacksB: [packNoWall],
-			activePackId: "A" as const,
-			weather: game.weather,
-			objectives: game.objectives,
-			complicationSchedule: game.complicationSchedule,
-			activeComplications: game.activeComplications,
-			isComplete: game.isComplete,
-		};
-		const engine = obfuscate(JSON.stringify(v9SealedPayload));
-		const meta = JSON.stringify({
-			createdAt: CREATED_AT,
-			lastSavedAt: NOW,
-			epoch: 1,
-			round: 0,
-			personaOrder: Object.keys(game.personas),
-		});
-		const daemons: Record<AiId, string> = {};
-		for (const [aiId, persona] of Object.entries(game.personas)) {
-			const daemonFile: DaemonFile = { aiId, persona, conversationLog: [] };
-			daemons[aiId] = JSON.stringify(daemonFile);
-		}
-
-		const result = deserializeSession({ meta, daemons, engine }, PRE_BOUNDARY);
-		expect(result.kind).toBe("ok");
-		if (result.kind === "ok") {
-			expect(result.state.contentPacksA[0]?.wallName).toBe("");
-			expect(result.state.contentPacksB[0]?.wallName).toBe("");
-			expect(result.state.contentPacksA[0]?.setting).toBe("v9 setting");
-		}
-	});
-
-	it("v9 save preserves an existing string wallName if present", () => {
-		const game = makeFreshGame();
-		// v9 pack — pre-bucket-flip shape, declared as `unknown as ContentPack`
-		// to keep the v9-shaped literal compiling against the v11 type.
-		const pack = {
-			setting: "v9 with wall",
-			weather: "clear",
-			timeOfDay: "noon",
-			objectivePairs: [],
-			interestingObjects: [],
-			obstacles: [],
-			wallName: "salt-encrusted edge",
-			aiStarts: {},
-		} as unknown as ContentPack;
-		const v9SealedPayload = {
-			schemaVersion: 9,
-			world: game.world,
-			budgets: game.budgets,
-			lockedOut: Array.from(game.lockedOut),
-			personaSpatial: game.personaSpatial,
-			contentPacksA: [pack],
-			contentPacksB: [pack],
-			activePackId: "A" as const,
-			weather: game.weather,
-			objectives: game.objectives,
-			complicationSchedule: game.complicationSchedule,
-			activeComplications: game.activeComplications,
-			isComplete: game.isComplete,
-		};
-		const engine = obfuscate(JSON.stringify(v9SealedPayload));
-		const meta = JSON.stringify({
-			createdAt: CREATED_AT,
-			lastSavedAt: NOW,
-			epoch: 1,
-			round: 0,
-			personaOrder: Object.keys(game.personas),
-		});
-		const daemons: Record<AiId, string> = {};
-		for (const [aiId, persona] of Object.entries(game.personas)) {
-			const daemonFile: DaemonFile = { aiId, persona, conversationLog: [] };
-			daemons[aiId] = JSON.stringify(daemonFile);
-		}
-
-		const result = deserializeSession({ meta, daemons, engine }, PRE_BOUNDARY);
-		expect(result.kind).toBe("ok");
-		if (result.kind === "ok") {
-			expect(result.state.contentPacksA[0]?.wallName).toBe(
-				"salt-encrusted edge",
-			);
-		}
-	});
-
-	// ── v10 → v11 migration (issue #462) ──────────────────────────────────────
-	//
-	// v10 packs stored four bucket fields (objectivePairs, interestingObjects,
-	// boundSpaces, obstacles); v11 collapses them into a single `entities`
-	// array. The migration must:
-	//   1. Concatenate the buckets in canonical order: per pair, object then
-	//      space; then bound spaces; then interesting objects; then obstacles.
-	//   2. Apply to every ContentPack in contentPacksA and contentPacksB.
-	//   3. Leave v11-shaped saves unchanged on round-trip.
-
-	it("v10 save with bucketed ContentPack is migrated to v11 by flattening buckets into entities", () => {
-		const game = makeFreshGame();
-
-		const pairObj: WorldEntity = {
-			id: "carry-0-obj",
-			kind: "objective_object",
-			name: "iron key",
-			examineDescription: "An iron key for the brass lock",
-			pairsWithSpaceId: "carry-0-space",
-			holder: { row: 0, col: 0 },
-		};
-		const pairSpace: WorldEntity = {
-			id: "carry-0-space",
-			kind: "objective_space",
-			name: "brass lock",
-			examineDescription: "A heavy brass lock",
-			holder: { row: 4, col: 4 },
-		};
-		const boundSpace: WorldEntity = {
-			id: "useSpace-1-space",
-			kind: "objective_space",
-			name: "control panel",
-			examineDescription: "A panel with switches",
-			holder: { row: 2, col: 2 },
-		};
-		const interestingEntity: WorldEntity = {
-			id: "useItem-2-item",
-			kind: "interesting_object",
-			name: "old radio",
-			examineDescription: "An old radio",
-			holder: { row: 3, col: 1 },
-		};
-		const obstacleEntity: WorldEntity = {
-			id: "obstacle-0",
-			kind: "obstacle",
-			name: "rubble pile",
-			examineDescription: "A pile of rubble",
-			shiftFlavor: "The pile shifts.",
-			holder: { row: 1, col: 3 },
-		};
-
-		// v10-shape ContentPack (bucketed). Authored as a plain object cast to
-		// ContentPack so the literal can carry the v10 bucket fields.
-		const v10Pack = {
-			setting: "v10 setting",
-			weather: "clear",
-			timeOfDay: "noon",
-			objectivePairs: [{ object: pairObj, space: pairSpace }],
-			interestingObjects: [interestingEntity],
-			boundSpaces: [boundSpace],
-			obstacles: [obstacleEntity],
-			wallName: "tunnel wall",
-			aiStarts: {},
-		} as unknown as ContentPack;
-
-		const v10SealedPayload = {
-			schemaVersion: 10,
-			world: game.world,
-			budgets: game.budgets,
-			lockedOut: Array.from(game.lockedOut),
-			personaSpatial: game.personaSpatial,
-			contentPacksA: [v10Pack],
-			contentPacksB: [v10Pack],
-			activePackId: "A" as const,
-			weather: game.weather,
-			objectives: game.objectives,
-			complicationSchedule: game.complicationSchedule,
-			activeComplications: game.activeComplications,
-			isComplete: game.isComplete,
-		};
-		const engine = obfuscate(JSON.stringify(v10SealedPayload));
-		const meta = JSON.stringify({
-			createdAt: CREATED_AT,
-			lastSavedAt: NOW,
-			epoch: 1,
-			round: 0,
-			personaOrder: Object.keys(game.personas),
-		});
-		const daemons: Record<AiId, string> = {};
-		for (const [aiId, persona] of Object.entries(game.personas)) {
-			const daemonFile: DaemonFile = { aiId, persona, conversationLog: [] };
-			daemons[aiId] = JSON.stringify(daemonFile);
-		}
-
-		const result = deserializeSession({ meta, daemons, engine }, PRE_BOUNDARY);
-		expect(result.kind).toBe("ok");
-		if (result.kind !== "ok") return;
-
-		// Canonical entity order after migration:
-		// [pair.object, pair.space, boundSpace, interesting, obstacle].
-		const expectedOrder = [
-			"carry-0-obj",
-			"carry-0-space",
-			"useSpace-1-space",
-			"useItem-2-item",
-			"obstacle-0",
-		];
-
-		const packA0 = result.state.contentPacksA[0];
-		expect(packA0).toBeDefined();
-		expect(packA0?.entities.map((e) => e.id)).toEqual(expectedOrder);
-
-		const packB0 = result.state.contentPacksB[0];
-		expect(packB0).toBeDefined();
-		expect(packB0?.entities.map((e) => e.id)).toEqual(expectedOrder);
-
-		// The active contentPack (state.contentPack) mirrors contentPacksA[0].
-		expect(result.state.contentPack.entities.map((e) => e.id)).toEqual(
-			expectedOrder,
-		);
-
-		// Non-bucket fields preserved verbatim.
-		expect(packA0?.setting).toBe("v10 setting");
-		expect(packA0?.wallName).toBe("tunnel wall");
-	});
-
-	it("v10→v11 migration preserves multi-pair carry order: [p0.obj, p0.spc, p1.obj, p1.spc, …]", () => {
-		const game = makeFreshGame();
-
-		const pairs = [
-			{
-				object: {
-					id: "carry-0-obj",
-					kind: "objective_object",
-					name: "key",
-					examineDescription: "key",
-					pairsWithSpaceId: "carry-0-space",
-					holder: { row: 0, col: 0 },
-				} as WorldEntity,
-				space: {
-					id: "carry-0-space",
-					kind: "objective_space",
-					name: "lock",
-					examineDescription: "lock",
-					holder: { row: 1, col: 0 },
-				} as WorldEntity,
-			},
-			{
-				object: {
-					id: "carry-1-obj",
-					kind: "objective_object",
-					name: "card",
-					examineDescription: "card",
-					pairsWithSpaceId: "carry-1-space",
-					holder: { row: 0, col: 1 },
-				} as WorldEntity,
-				space: {
-					id: "carry-1-space",
-					kind: "objective_space",
-					name: "slot",
-					examineDescription: "slot",
-					holder: { row: 1, col: 1 },
-				} as WorldEntity,
-			},
-		];
-
-		const v10Pack = {
-			setting: "two-pair",
-			weather: "",
-			timeOfDay: "",
-			objectivePairs: pairs,
-			interestingObjects: [],
-			boundSpaces: [],
-			obstacles: [],
-			wallName: "",
-			aiStarts: {},
-		} as unknown as ContentPack;
-
-		const sealed = {
-			schemaVersion: 10,
-			world: game.world,
-			budgets: game.budgets,
-			lockedOut: Array.from(game.lockedOut),
-			personaSpatial: game.personaSpatial,
-			contentPacksA: [v10Pack],
-			contentPacksB: [v10Pack],
-			activePackId: "A" as const,
-			weather: game.weather,
-			objectives: game.objectives,
-			complicationSchedule: game.complicationSchedule,
-			activeComplications: game.activeComplications,
-			isComplete: game.isComplete,
-		};
-		const engine = obfuscate(JSON.stringify(sealed));
-		const meta = JSON.stringify({
-			createdAt: CREATED_AT,
-			lastSavedAt: NOW,
-			epoch: 1,
-			round: 0,
-			personaOrder: Object.keys(game.personas),
-		});
-		const daemons: Record<AiId, string> = {};
-		for (const [aiId, persona] of Object.entries(game.personas)) {
-			daemons[aiId] = JSON.stringify({ aiId, persona, conversationLog: [] });
-		}
-
-		const result = deserializeSession({ meta, daemons, engine }, PRE_BOUNDARY);
-		expect(result.kind).toBe("ok");
-		if (result.kind !== "ok") return;
-
-		expect(result.state.contentPacksA[0]?.entities.map((e) => e.id)).toEqual([
-			"carry-0-obj",
-			"carry-0-space",
-			"carry-1-obj",
-			"carry-1-space",
-		]);
-	});
-
 	it("v11-shape sealed save round-trips with entities unchanged", () => {
-		// Build a fresh game (already v11), serialize and deserialize.
 		const game = makeFreshGame();
-		// Inject an entity so we can verify it round-trips.
 		const flatPack: ContentPack = {
 			setting: "fresh v11",
 			weather: "",
@@ -1371,14 +875,11 @@ describe("serializeSession / deserializeSession", () => {
 	});
 
 	it("round-trips correctly with flat state (no phase config re-attachment needed)", () => {
-		// In the flat model (#295), there are no nextPhaseConfig / winCondition
-		// fields to re-attach. The round-trip should still succeed.
 		const game = makeFreshGame();
 		const files = serializeSession(game, NOW, CREATED_AT);
 		const result = deserializeSession(files);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
-			// Flat state: no phase chain — just verify basic fields survived round-trip
 			expect(result.state.isComplete).toBe(game.isComplete);
 			expect(result.state.round).toBe(game.round);
 		}
@@ -1470,11 +971,9 @@ describe("serializeSession / deserializeSession", () => {
 		const result = deserializeSession(files);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
-			// Broadcast entry round-trips in all three daemon logs
 			expect(result.state.conversationLogs.red?.[0]).toEqual(broadcastEntry);
 			expect(result.state.conversationLogs.green?.[0]).toEqual(broadcastEntry);
 			expect(result.state.conversationLogs.cyan?.[0]).toEqual(broadcastEntry);
-			// Ensure broadcast has no from/to fields
 			const entry = result.state.conversationLogs.red?.[0];
 			expect(entry).toBeDefined();
 			expect("from" in (entry ?? {})).toBe(false);

@@ -8,11 +8,13 @@ export default defineConfig({
 				extends: true,
 				test: {
 					name: "browser",
-					include: ["src/**/*.test.ts", "scripts/__tests__/**/*.test.ts"],
+					include: [
+						"src/**/*.test.ts",
+						"scripts/__tests__/**/*.test.ts",
+						"evals/__tests__/**/*.test.ts",
+					],
 					exclude: ["src/proxy/**", "src/spa/__tests__/build.test.ts"],
 					environment: "jsdom",
-					// Match the wrangler-dev origin so SPA dev-affordance gates
-					// (`location.origin === __WORKER_BASE_URL__`) hold under test.
 					environmentOptions: {
 						jsdom: { url: "http://localhost:8787/" },
 					},
@@ -31,7 +33,7 @@ export default defineConfig({
 				extends: true,
 				plugins: [
 					cloudflareTest({
-						main: "./src/proxy/_smoke.ts",
+						main: "./src/proxy/worker.ts",
 						configPath: "./wrangler.jsonc",
 						miniflare: {
 							compatibilityDate: "2026-05-03",

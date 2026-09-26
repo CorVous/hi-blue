@@ -1,13 +1,3 @@
-/**
- * Unit tests for the CORS helper module (cors.ts).
- *
- * Pure unit tests — no SELF.fetch / miniflare. Covers:
- *   - parseAllowedOrigins
- *   - isOriginAllowed
- *   - buildPreflightResponse (allowed / disallowed, ACAH echo)
- *   - withCorsHeaders (status/body/content-type preserved, ACAO suppressed,
- *     streaming preserved)
- */
 import { describe, expect, it } from "vitest";
 import {
 	buildPreflightResponse,
@@ -15,8 +5,6 @@ import {
 	parseAllowedOrigins,
 	withCorsHeaders,
 } from "./cors";
-
-// ── parseAllowedOrigins ───────────────────────────────────────────────────────
 
 describe("parseAllowedOrigins", () => {
 	it("returns empty array when env key is absent", () => {
@@ -48,8 +36,6 @@ describe("parseAllowedOrigins", () => {
 	});
 });
 
-// ── isOriginAllowed ───────────────────────────────────────────────────────────
-
 describe("isOriginAllowed", () => {
 	const allowed = ["https://app.example", "http://localhost:5173"] as const;
 
@@ -77,8 +63,6 @@ describe("isOriginAllowed", () => {
 		expect(isOriginAllowed("https://App.Example", allowed)).toBe(false);
 	});
 });
-
-// ── buildPreflightResponse ────────────────────────────────────────────────────
 
 describe("buildPreflightResponse — allowed origin", () => {
 	const allowed = ["https://app.example"] as const;
@@ -206,8 +190,6 @@ describe("buildPreflightResponse — disallowed origin", () => {
 		expect(resp.headers.get("Vary")).toBe("Origin");
 	});
 });
-
-// ── withCorsHeaders ───────────────────────────────────────────────────────────
 
 describe("withCorsHeaders — allowed origin", () => {
 	const allowed = ["https://app.example"] as const;

@@ -1,7 +1,3 @@
-/**
- * Verifies that src/spa/index.html uses sibling-relative asset paths.
- * Uses vitest's ?raw import to read the HTML file as a string without node:fs.
- */
 // @ts-expect-error — node types not available in SPA project
 import * as path from "node:path";
 // @ts-expect-error — node types not available in SPA project

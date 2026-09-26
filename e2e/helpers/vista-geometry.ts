@@ -1,29 +1,10 @@
-/**
- * The ADR 0015 Vista oracle the Playwright specs assert against, plus the grid
- * primitives those specs read alongside it.
- *
- * This is the e2e tree's own copy of the Vista geometry: the specs assert the
- * rendered `<what_you_see>` listing against `vistaCells` / `inVista`, and they
- * must not import SPA modules, so the disk, the cell labels, the room-bounds
- * check and the witness-membership predicate are re-implemented here
- * (ADR 0015, ticket #539).
- *
- * It lives in this leaf module — free of `@playwright/test` — so that
- * `src/spa/game/__tests__/e2e-vista-oracle.test.ts` can bind the copy to the
- * shared production geometry on every `pnpm test`, exhaustively over the room,
- * instead of leaving that agreement unverified. The specs reach these helpers
- * through `./stubs.js`, which re-exports them.
- */
-/** A room cell. Row 0 is the room's north edge; columns increase eastward. */
 export interface GridPosition {
 	row: number;
 	col: number;
 }
 
-/** The four directions `go` accepts. */
 export type CardinalDirection = "north" | "south" | "east" | "west";
 
-/** The four movement directions, in the order the specs iterate them. */
 export const CARDINAL_DIRECTIONS: readonly CardinalDirection[] = [
 	"north",
 	"south",
@@ -31,15 +12,13 @@ export const CARDINAL_DIRECTIONS: readonly CardinalDirection[] = [
 	"west",
 ];
 
-/** Compass order used to order the axis steps of a cell label (ADR 0015). */
-const COMPASS_ORDER: readonly CardinalDirection[] = [
+const LABEL_AXIS_ORDER: readonly CardinalDirection[] = [
 	"north",
 	"east",
 	"south",
 	"west",
 ];
 
-/** Spelled-out distances, as `describeSteps` renders them. */
 const DISTANCE_WORDS: readonly string[] = [
 	"zero",
 	"one",
@@ -49,7 +28,16 @@ const DISTANCE_WORDS: readonly string[] = [
 	"five",
 ];
 
-/** Row/column delta for one cardinal step. North decreases the row. */
+const ROOM_SIDE_CELLS = 5;
+
+const VISTA_RADIUS_SQUARED = 4;
+
+const OWN_CELL_LABEL = "Your cell";
+
+const LISTING_BULLET = "- ";
+
+const LISTING_LABEL_SEPARATOR = ": ";
+
 export function stepDelta(direction: CardinalDirection): {
 	drow: number;
 	dcol: number;
@@ -66,7 +54,6 @@ export function stepDelta(direction: CardinalDirection): {
 	}
 }
 
-/** True when an entity holder is a grid cell rather than a Daemon id. */
 export function isGridPosition(holder: unknown): holder is GridPosition {
 	return (
 		typeof holder === "object" &&
@@ -76,34 +63,25 @@ export function isGridPosition(holder: unknown): holder is GridPosition {
 	);
 }
 
-/** True when both positions name the same cell. */
 export function positionsEqual(a: GridPosition, b: GridPosition): boolean {
 	return a.row === b.row && a.col === b.col;
 }
 
-/** True when `position` is inside the 5×5 room. */
 export function inRoom(position: GridPosition): boolean {
 	return (
 		position.row >= 0 &&
-		position.row < 5 &&
+		position.row < ROOM_SIDE_CELLS &&
 		position.col >= 0 &&
-		position.col < 5
+		position.col < ROOM_SIDE_CELLS
 	);
 }
 
-/**
- * The runtime's witness gate (ADR 0015): `cell` is inside the Vista centred on
- * `observer` when `dx² + dy² ≤ 4`, where north decreases the row. Mirrors
- * `vistaContains` in `src/spa/game/vista-projector.ts` — position only, with
- * obstacles never occluding membership.
- */
 export function inVista(observer: GridPosition, cell: GridPosition): boolean {
-	const dx = cell.col - observer.col;
-	const dy = observer.row - cell.row;
-	return dx * dx + dy * dy <= 4;
+	const eastward = cell.col - observer.col;
+	const northward = observer.row - cell.row;
+	return eastward * eastward + northward * northward <= VISTA_RADIUS_SQUARED;
 }
 
-/** One cell of the projected Vista, with the label the listing renders. */
 export interface VistaCell {
 	position: GridPosition;
 	isOwnCell: boolean;
@@ -111,10 +89,6 @@ export interface VistaCell {
 	label: string;
 }
 
-/**
- * The 13 Vista offsets (ADR 0015): `dx` runs east–west and `dy` north–south.
- * Mirrors `VISTA_OFFSETS` in `src/spa/game/vista-projector.ts`.
- */
 const VISTA_OFFSETS: ReadonlyArray<{ dx: number; dy: number }> = [
 	{ dx: 0, dy: 0 },
 	{ dx: 0, dy: 2 },
@@ -131,13 +105,8 @@ const VISTA_OFFSETS: ReadonlyArray<{ dx: number; dy: number }> = [
 	{ dx: 0, dy: -2 },
 ];
 
-/**
- * Cardinal label for one Vista offset, capitalised as the listing renders it
- * ("one step north and one step east" → "One step north and one step east").
- * Mirrors `describeSteps` + `capitalize` in `src/spa/game/prompt-builder.ts`.
- */
 function vistaLabel(dx: number, dy: number): string {
-	if (dx === 0 && dy === 0) return "Your cell";
+	if (dx === 0 && dy === 0) return OWN_CELL_LABEL;
 	const steps: Array<{ direction: CardinalDirection; distance: number }> = [];
 	if (dy !== 0) {
 		steps.push({
@@ -150,7 +119,8 @@ function vistaLabel(dx: number, dy: number): string {
 	}
 	steps.sort(
 		(a, b) =>
-			COMPASS_ORDER.indexOf(a.direction) - COMPASS_ORDER.indexOf(b.direction),
+			LABEL_AXIS_ORDER.indexOf(a.direction) -
+			LABEL_AXIS_ORDER.indexOf(b.direction),
 	);
 	const label = steps
 		.map(
@@ -162,10 +132,6 @@ function vistaLabel(dx: number, dy: number): string {
 	return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
-/**
- * Project the position-only 13-cell Vista from `observer`, flagging the
- * out-of-bounds cells the Daemon perceives as Walls. Mirrors `projectVista`.
- */
 export function vistaCells(observer: GridPosition): VistaCell[] {
 	return VISTA_OFFSETS.map((offset) => {
 		const position = {
@@ -181,34 +147,30 @@ export function vistaCells(observer: GridPosition): VistaCell[] {
 	});
 }
 
-/** The cell labels of a rendered `<what_you_see>` block ("- <label>: <contents>"). */
-export function listingLabels(block: string): string[] {
-	return block
+export function listingLabels(listingBlock: string): string[] {
+	return listingBlock
 		.split("\n")
-		.filter((line) => line.startsWith("- "))
+		.filter((line) => line.startsWith(LISTING_BULLET))
 		.map((line) => {
-			const separator = line.indexOf(": ");
-			return separator === -1 ? line.slice(2) : line.slice(2, separator);
+			const labelStart = LISTING_BULLET.length;
+			const labelEnd = line.indexOf(LISTING_LABEL_SEPARATOR);
+			return labelEnd === -1
+				? line.slice(labelStart)
+				: line.slice(labelStart, labelEnd);
 		});
 }
 
-/** The text between the last `open` marker and the `close` that follows it. */
 export function sectionBetween(
 	text: string,
-	open: string,
-	close: string,
+	lastOpenMarker: string,
+	closeMarker: string,
 ): string {
-	const start = text.lastIndexOf(open);
+	const start = text.lastIndexOf(lastOpenMarker);
 	if (start === -1) return "";
-	const end = text.indexOf(close, start);
+	const end = text.indexOf(closeMarker, start);
 	if (end === -1) return "";
-	return text.slice(start + open.length, end);
+	return text.slice(start + lastOpenMarker.length, end);
 }
 
-/**
- * Relative-direction vocabulary ADR 0015 retired in favour of the room's
- * cardinal axes: a listing must never phrase a position relative to a Daemon.
- * Not a Vista shape — an absence check on rendered prompt prose.
- */
 export const RELATIVE_DIRECTION_WORDS =
 	/\b(ahead|behind|forward|backward|left|right)\b/i;

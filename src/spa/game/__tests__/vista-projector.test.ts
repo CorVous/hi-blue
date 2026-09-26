@@ -4,15 +4,9 @@ import { directionDelta, GRID_COLS, GRID_ROWS, inBounds } from "../direction";
 import type { VistaAxisStep, VistaCell, VistaOffset } from "../vista-projector";
 import { inVista, projectVista, VISTA_OFFSETS } from "../vista-projector";
 
-/**
- * The 13 Vista offsets, transcribed verbatim from the ADR 0015 diagram: rows
- * run north-to-south, west-to-east within a row, own cell first. The
- * expectations below are built from this literal, not from the exported
- * table.
- */
 const CANONICAL_OFFSETS: Array<[number, number]> = [
-	[0, 0], // own cell
-	[0, 2], // two steps north
+	[0, 0],
+	[0, 2],
 	[-1, 1],
 	[0, 1],
 	[1, 1],
@@ -26,12 +20,6 @@ const CANONICAL_OFFSETS: Array<[number, number]> = [
 	[0, -2],
 ];
 
-/**
- * Independently worked expectation (from the ADR 0015 disk, not the
- * implementation): for every one of the 25 room positions, how many of the
- * 13 Vista cells land in-bounds. Walls make up the rest: 13 − in-bounds.
- * The named archetypes are centre (13/0), edge-mid (9/4), corner (6/7).
- */
 const EXPECTED_INBOUNDS: number[][] = [
 	[6, 8, 9, 8, 6],
 	[8, 11, 12, 11, 8],
@@ -40,7 +28,6 @@ const EXPECTED_INBOUNDS: number[][] = [
 	[6, 8, 9, 8, 6],
 ];
 
-/** Every room position, row-major. */
 const ROOM_POSITIONS: GridPosition[] = Array.from(
 	{ length: GRID_ROWS * GRID_COLS },
 	(_, index) => ({
@@ -49,28 +36,20 @@ const ROOM_POSITIONS: GridPosition[] = Array.from(
 	}),
 );
 
-/** The named offset from the exported table, or a loud failure. */
 function offsetAt(dx: number, dy: number): VistaOffset {
 	const found = VISTA_OFFSETS.find((o) => o.dx === dx && o.dy === dy);
 	if (!found) throw new Error(`No Vista offset at (${dx}, ${dy})`);
 	return found;
 }
 
-/** True when the exported table carries the offset. */
 function present(dx: number, dy: number): boolean {
 	return VISTA_OFFSETS.some((o) => o.dx === dx && o.dy === dy);
 }
 
-/**
- * The offset (dx, dy) locating a projected cell, derived from absolute
- * positions under ADR 0015's axis convention (dx east-positive, dy
- * north-positive) rather than from the exported table.
- */
 function offsetOf(observer: GridPosition, cell: VistaCell): [number, number] {
 	return [cell.position.col - observer.col, observer.row - cell.position.row];
 }
 
-/** The projected cell at relative offset (dx, dy), or a loud failure. */
 function cellAt(position: GridPosition, dx: number, dy: number): VistaCell {
 	const found = projectVista(position).find((cell) => {
 		const [cellDx, cellDy] = offsetOf(position, cell);
@@ -84,24 +63,16 @@ function cellAt(position: GridPosition, dx: number, dy: number): VistaCell {
 	return found;
 }
 
-/** The Vista tallies at a position: [in-bounds cells, Wall sentinels]. */
 function talliesAt(position: GridPosition): [number, number] {
 	const cells = projectVista(position);
 	const inBoundsCells = cells.filter((cell) => !cell.isWall).length;
 	return [inBoundsCells, cells.length - inBoundsCells];
 }
 
-/**
- * Compose a cell's axis steps back into (dx, dy) using the engine's own
- * direction table, so the test never re-derives steps by the same code path
- * as the implementation.
- */
 function stepsOffset(steps: readonly VistaAxisStep[]): [number, number] {
 	let dx = 0;
 	let dy = 0;
 	for (const step of steps) {
-		// The ADR's dy axis is north-positive; the engine's drow is
-		// north-negative, so compose dy through the negated row delta.
 		const d = directionDelta(step.direction);
 		dx += d.dcol * step.distance;
 		dy += -d.drow * step.distance;
@@ -212,11 +183,9 @@ describe("projectVista — the position-only 13-cell disk", () => {
 		}
 		const positions = cells.map((c) => `${c.position.row},${c.position.col}`);
 		expect(new Set(positions).size).toBe(13);
-		// Transcribed verbatim from the ADR 0015 diagram (observer at the
-		// room centre): own cell first, north-to-south rows west-to-east.
 		expect(positions).toEqual([
-			"2,2", // own cell
-			"0,2", // two steps north
+			"2,2",
+			"0,2",
 			"1,1",
 			"1,2",
 			"1,3",
@@ -238,23 +207,18 @@ describe("projectVista — the position-only 13-cell disk", () => {
 		const walls = cells.filter((c) => c.isWall);
 		expect(inBounds).toHaveLength(6);
 		expect(walls).toHaveLength(7);
-		// Worked expectation: out-of-bounds positions are preserved as Wall
-		// sentinels, not clipped away from the footprint.
 		expect(walls.map((c) => c.position)).toEqual([
-			{ row: -2, col: 0 }, // two steps north
-			{ row: -1, col: -1 }, // north-west diagonal
-			{ row: -1, col: 0 }, // one step north
-			{ row: -1, col: 1 }, // north-east diagonal
-			{ row: 0, col: -2 }, // two steps west
-			{ row: 0, col: -1 }, // one step west
-			{ row: 1, col: -1 }, // south-west diagonal
+			{ row: -2, col: 0 },
+			{ row: -1, col: -1 },
+			{ row: -1, col: 0 },
+			{ row: -1, col: 1 },
+			{ row: 0, col: -2 },
+			{ row: 0, col: -1 },
+			{ row: 1, col: -1 },
 		]);
 	});
 
 	it("walls exactly the out-of-bounds cells: literal expectation at (4, 3)", () => {
-		// Worked from the ADR diagram, not from the implementation: observer
-		// (4,3) sits one row above the south edge and two columns from the
-		// east edge, so 8 of the 13 cells are room cells and 5 are Walls.
 		const cells = projectVista({ row: 4, col: 3 });
 		const room = cells
 			.filter((c) => !c.isWall)
@@ -263,21 +227,21 @@ describe("projectVista — the position-only 13-cell disk", () => {
 			.filter((c) => c.isWall)
 			.map((c) => [c.position.row, c.position.col]);
 		expect(room).toEqual([
-			[4, 3], // own cell
-			[2, 3], // two steps north
-			[3, 2], // north-west diagonal
-			[3, 3], // one step north
-			[3, 4], // north-east diagonal
-			[4, 1], // two steps west
-			[4, 2], // one step west
-			[4, 4], // one step east
+			[4, 3],
+			[2, 3],
+			[3, 2],
+			[3, 3],
+			[3, 4],
+			[4, 1],
+			[4, 2],
+			[4, 4],
 		]);
 		expect(walls).toEqual([
-			[4, 5], // two steps east
-			[5, 2], // south-west diagonal
-			[5, 3], // one step south
-			[5, 4], // south-east diagonal
-			[6, 3], // two steps south
+			[4, 5],
+			[5, 2],
+			[5, 3],
+			[5, 4],
+			[6, 3],
 		]);
 	});
 
@@ -310,9 +274,9 @@ describe("projectVista — the position-only 13-cell disk", () => {
 	});
 
 	it("asserts the named archetypes against worked counts: 13/0, 9/4, 6/7", () => {
-		expect(talliesAt({ row: 2, col: 2 })).toEqual([13, 0]); // centre
-		expect(talliesAt({ row: 0, col: 2 })).toEqual([9, 4]); // edge-mid
-		expect(talliesAt({ row: 0, col: 0 })).toEqual([6, 7]); // corner
+		expect(talliesAt({ row: 2, col: 2 })).toEqual([13, 0]);
+		expect(talliesAt({ row: 0, col: 2 })).toEqual([9, 4]);
+		expect(talliesAt({ row: 0, col: 0 })).toEqual([6, 7]);
 	});
 
 	it("keeps the own cell first, in-bounds, and never a Wall", () => {
@@ -325,10 +289,6 @@ describe("projectVista — the position-only 13-cell disk", () => {
 	});
 
 	it("rejects an out-of-bounds observer rather than exempting its own cell", () => {
-		// An observer is a Daemon's own position, which is always in-bounds
-		// (the dispatcher enforces that), so an out-of-bounds observer is a
-		// caller bug: the own-cell exemption must not silently produce a
-		// footprint whose own cell is the only non-Wall in the room.
 		for (const position of [
 			{ row: -1, col: 2 },
 			{ row: 5, col: 2 },
@@ -347,19 +307,12 @@ describe("projectVista — the position-only 13-cell disk", () => {
 		expect(() =>
 			(cell.steps as VistaAxisStep[]).push({ direction: "north", distance: 1 }),
 		).toThrow(TypeError);
-		// The exported table is untouched by the failed mutation.
 		expect(offsetAt(0, 2).steps).toEqual([{ direction: "north", distance: 2 }]);
 	});
 });
 
 describe("Vista footprint — no orientation, no occluders", () => {
 	it("takes only the observer's position, so no occluder can remove a cell", () => {
-		// ADR 0015: obstacles do not occlude the Vista. The guarantee is
-		// structural — `projectVista` accepts the observer's position and
-		// nothing else, so no orientation and no occluder set can reach the
-		// footprint. The other half of the rule (no cell is ever dropped) is
-		// pinned by the translation test above, which compares the projected
-		// offsets with the ADR diagram at all 25 room positions.
 		expect(projectVista.length).toBe(1);
 	});
 });

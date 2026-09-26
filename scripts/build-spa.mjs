@@ -7,7 +7,10 @@ import * as esbuild from "esbuild";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 
-const WORKER_BASE_URL = process.env.WORKER_BASE_URL ?? "http://localhost:8787";
+const LOCAL_WORKER_BASE_URL = "http://localhost:8787";
+const WORKER_BASE_URL = process.env.WORKER_BASE_URL ?? LOCAL_WORKER_BASE_URL;
+const IS_DEV_BUILD = WORKER_BASE_URL === LOCAL_WORKER_BASE_URL;
+const ASSETS_DIR = path.join(root, "dist", "assets");
 const watchMode = process.argv.includes("--watch");
 
 const COMMIT_SHA = (() => {
@@ -43,9 +46,7 @@ const PKG_VERSION = (() => {
 	}
 })();
 
-// The version of the release tag at HEAD, or null if HEAD isn't tagged.
-// Drives the "are we exactly on a release?" branch of the banner suffix.
-const RELEASE_VERSION = (() => {
+const RELEASE_VERSION_TAGGED_AT_HEAD = (() => {
 	try {
 		const tag = execSync(
 			"git describe --tags --exact-match --match 'v*' HEAD",
@@ -59,8 +60,7 @@ const RELEASE_VERSION = (() => {
 	}
 })();
 
-// Latest v* tag that is an ancestor of HEAD, or null if no v* tag exists.
-const LATEST_RELEASE_VERSION = (() => {
+const LATEST_ANCESTOR_RELEASE_VERSION = (() => {
 	try {
 		const tag = execSync("git describe --tags --abbrev=0 --match 'v*' HEAD", {
 			cwd: root,
@@ -75,32 +75,22 @@ const LATEST_RELEASE_VERSION = (() => {
 })();
 
 console.log(
-	`Building SPA with WORKER_BASE_URL=${WORKER_BASE_URL} COMMIT_SHA=${COMMIT_SHA} COMMIT_TIMESTAMP_MS=${COMMIT_TIMESTAMP_MS} VERSION=${PKG_VERSION} RELEASE_VERSION=${RELEASE_VERSION} LATEST_RELEASE_VERSION=${LATEST_RELEASE_VERSION}`,
+	`Building SPA with WORKER_BASE_URL=${WORKER_BASE_URL} COMMIT_SHA=${COMMIT_SHA} COMMIT_TIMESTAMP_MS=${COMMIT_TIMESTAMP_MS} VERSION=${PKG_VERSION} RELEASE_VERSION=${RELEASE_VERSION_TAGGED_AT_HEAD} LATEST_RELEASE_VERSION=${LATEST_ANCESTOR_RELEASE_VERSION}`,
 );
 
-// Ensure dist/ and dist/assets/ exist
-await fs.mkdir(path.join(root, "dist", "assets"), { recursive: true });
+await fs.mkdir(ASSETS_DIR, { recursive: true });
 
-// Drop any previously-built hashed assets so old hashes don't accumulate
-// across rebuilds (esbuild won't clean its outdir).
-async function cleanAssets() {
-	const assetsDir = path.join(root, "dist", "assets");
-	const entries = await fs.readdir(assetsDir).catch(() => []);
+async function deleteStaleHashedAssets() {
+	const entries = await fs.readdir(ASSETS_DIR).catch(() => []);
 	await Promise.all(
 		entries.map((name) =>
-			fs.rm(path.join(assetsDir, name), { force: true, recursive: true }),
+			fs.rm(path.join(ASSETS_DIR, name), { force: true, recursive: true }),
 		),
 	);
 }
-await cleanAssets();
+await deleteStaleHashedAssets();
 
-/**
- * esbuild plugin: after each (re)build, look up the content-hashed entry
- * filenames from the metafile and rewrite dist/index.html to reference them.
- * The source HTML keeps the un-hashed `./assets/index.{js,css}` paths so it
- * stays valid as a template; the build is the only place hashes are wired in.
- */
-const templateHtmlPlugin = {
+const wireHashedAssetsIntoIndexHtmlPlugin = {
 	name: "template-html",
 	setup(build) {
 		build.onEnd(async (result) => {
@@ -142,10 +132,7 @@ const templateHtmlPlugin = {
 const ctx = await esbuild.context({
 	entryPoints: { index: path.join(root, "src/spa/main.ts") },
 	bundle: true,
-	outdir: path.join(root, "dist/assets"),
-	// Content-hashed entry filenames so new commits invalidate downstream
-	// caches automatically. Combined with long-lived Cache-Control headers on
-	// /assets/* in the Worker, this gives immutable-cacheable bundles.
+	outdir: ASSETS_DIR,
 	entryNames: "[name]-[hash]",
 	metafile: true,
 	format: "esm",
@@ -158,24 +145,25 @@ const ctx = await esbuild.context({
 		__COMMIT_SHA__: JSON.stringify(COMMIT_SHA),
 		__COMMIT_TIMESTAMP_MS__: JSON.stringify(COMMIT_TIMESTAMP_MS),
 		__VERSION__: JSON.stringify(PKG_VERSION),
-		__RELEASE_VERSION__: JSON.stringify(RELEASE_VERSION),
-		__LATEST_RELEASE_VERSION__: JSON.stringify(LATEST_RELEASE_VERSION),
-		__DEV__: WORKER_BASE_URL === "http://localhost:8787" ? "true" : "false",
+		__RELEASE_VERSION__: JSON.stringify(RELEASE_VERSION_TAGGED_AT_HEAD),
+		__LATEST_RELEASE_VERSION__: JSON.stringify(LATEST_ANCESTOR_RELEASE_VERSION),
+		__DEV__: IS_DEV_BUILD ? "true" : "false",
 	},
-	plugins: [templateHtmlPlugin],
+	plugins: [wireHashedAssetsIntoIndexHtmlPlugin],
 });
 
 if (watchMode) {
 	await ctx.watch();
 	console.log("watching SPA sources…");
-	// Keep the process alive — ctrl-C to stop.
 } else {
 	await ctx.rebuild();
 	await ctx.dispose();
 	console.log("Build complete: dist/index.html + dist/assets/index.{js,css}");
 
-	// Generate version list page
-	const { execSync } = await import("node:child_process");
+	generateVersionListPage();
+}
+
+function generateVersionListPage() {
 	try {
 		execSync("node scripts/generate-version-list.mjs", { cwd: root });
 	} catch (error) {

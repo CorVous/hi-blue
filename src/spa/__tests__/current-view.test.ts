@@ -1,17 +1,3 @@
-/**
- * current-view.test.ts
- *
- * Truth table for currentView. Composes a dispatcher verdict with the
- * in-memory pickerOpen flag and returns the view to render plus an
- * optional reason.
- *
- * Combine rule:
- *   1. If verdict.route === "#/sessions" → sessions view with verdict.reason
- *      (sticky picker for broken / version-mismatch — pickerOpen ignored).
- *   2. Else if pickerOpen → sessions view with reason null
- *      (user opened the picker; no underlying problem with the session).
- *   3. Else map verdict.route → view name, surface verdict.reason.
- */
 import { describe, expect, it } from "vitest";
 import { currentView } from "../current-view.js";
 import type {
@@ -28,8 +14,6 @@ function verdict(
 }
 
 describe("currentView — verdict × pickerOpen truth table", () => {
-	// ── pickerOpen = false ────────────────────────────────────────────────────
-
 	it("populated + closed → game view", () => {
 		const result = currentView({
 			verdict: verdict("#/game", "populated"),
@@ -69,8 +53,6 @@ describe("currentView — verdict × pickerOpen truth table", () => {
 		});
 		expect(result).toEqual({ view: "sessions", reason: "version-mismatch" });
 	});
-
-	// ── pickerOpen = true ─────────────────────────────────────────────────────
 
 	it("populated + open → sessions view, no reason", () => {
 		const result = currentView({

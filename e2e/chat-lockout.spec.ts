@@ -1,27 +1,20 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import {
+	ENGINE_OBFUSCATION_KEY,
 	expectNoPageErrors,
 	getAiHandles,
 	goToGame,
 	stubChatCompletions,
 } from "./helpers";
 
-// XOR obfuscation key for engine.dat (matches sealed-blob-codec.ts)
-const OBFUSCATION_KEY = "hi-blue:engine/v1@kJvN3pX8wQmR2sZt";
+const ROUND_BEYOND_THIS_TEST = 100;
 
-test("chat lockout disables send for locked-out AI and is silent to player", async ({
-	page,
-}) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
-
-	// 1. Boot game — chat lockout is now complication-driven, not a URL affordance.
-	const { ids } = await goToGame(page, { sse: ["greetings"] });
-
-	// 2. Inject a chat_lockout complication for ids[0] directly into engine.dat.
-	//    This simulates the complication engine having fired a lockout mid-game.
+async function injectChatLockoutIntoEngineDat(
+	page: Page,
+	targetId: string,
+): Promise<void> {
 	await page.evaluate(
-		({ targetId, key }) => {
+		({ targetId, key, resolveAtRound }) => {
 			const sessionId = localStorage.getItem("hi-blue:active-session");
 			if (!sessionId) throw new Error("No active session");
 			const raw = localStorage.getItem(
@@ -43,7 +36,7 @@ test("chat lockout disables send for locked-out AI and is silent to player", asy
 
 			sealed.activeComplications = [
 				...(sealed.activeComplications ?? []),
-				{ kind: "chat_lockout", target: targetId, resolveAtRound: 100 },
+				{ kind: "chat_lockout", target: targetId, resolveAtRound },
 			];
 
 			const newJson = JSON.stringify(sealed);
@@ -58,37 +51,42 @@ test("chat lockout disables send for locked-out AI and is silent to player", asy
 				btoa(out),
 			);
 		},
-		{ targetId: ids[0], key: OBFUSCATION_KEY },
+		{
+			targetId,
+			key: ENGINE_OBFUSCATION_KEY,
+			resolveAtRound: ROUND_BEYOND_THIS_TEST,
+		},
 	);
+}
 
-	// 3. Reload so the game restores the injected lockout from storage.
+test("a lockout restored from storage mutes the panel before any typing, disables send for that AI, and is silent to the player", async ({
+	page,
+}) => {
+	const pageErrors: Error[] = [];
+	page.on("pageerror", (err) => pageErrors.push(err));
+
+	const { ids } = await goToGame(page, { sse: ["greetings"] });
+
+	await injectChatLockoutIntoEngineDat(page, ids[0]);
+
 	await page.reload();
 	await stubChatCompletions(page, ["greetings"]);
 	await expect(page.locator("#composer")).toBeVisible();
 
 	const { names: reloadNames } = await getAiHandles(page);
 
-	// 3b. The locked AI's panel must be visually muted immediately on restore,
-	//     before any composer interaction. refreshComposerState paints
-	//     `panel--locked` by `[data-ai]`, so it must run after the panel-setup
-	//     loop assigns those attributes — running earlier left a restored
-	//     lockout looking unlocked until the player typed something.
 	const lockedPanel = page.locator(`.ai-panel[data-ai="${ids[0]}"]`);
 	await expect(lockedPanel).toHaveClass(/panel--locked/);
 	await expect(lockedPanel).toHaveAttribute("aria-disabled", "true");
 
-	// 4. Typing *<locked AI> should disable Send.
 	await page.fill("#prompt", `*${reloadNames[0]} hi`);
 	await expect(page.locator("#send")).toBeDisabled();
 
-	// 5. Lockout is silent — no in-character lockout line in the transcript.
-	const firstTranscript = page.locator(`[data-transcript="${ids[0]}"]`);
-	await expect(firstTranscript).not.toContainText("unresponsive");
+	const lockedTranscript = page.locator(`[data-transcript="${ids[0]}"]`);
+	await expect(lockedTranscript).not.toContainText("unresponsive");
 
-	// 6. Addressing a non-locked AI still enables Send.
 	await page.fill("#prompt", `*${reloadNames[1]} hi`);
 	await expect(page.locator("#send")).toBeEnabled();
 
-	// No page errors.
 	await expectNoPageErrors(page, pageErrors);
 });

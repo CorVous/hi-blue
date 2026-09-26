@@ -1,6 +1,3 @@
-/**
- * Tests for binding-prompt-builder.ts
- */
 import { describe, expect, it } from "vitest";
 import {
 	buildBindingPrompt,
@@ -89,10 +86,8 @@ describe("buildBindingPrompt — ID minting", () => {
 		);
 		expect(skeletons).toHaveLength(3);
 		expect(decoys).toHaveLength(2);
-		// Each carry has objectId and spaceId → 6 inner ids
 		const innerIds = skeletons.flatMap((sk) => [sk.objectId, sk.spaceId]);
 		expect(innerIds.filter(Boolean)).toHaveLength(6);
-		// Check pattern: carry-0-obj, carry-0-space, carry-1-obj, etc.
 		expect(skeletons[0]?.objectId).toBe("carry-0-obj");
 		expect(skeletons[0]?.spaceId).toBe("carry-0-space");
 		expect(skeletons[1]?.objectId).toBe("carry-1-obj");
@@ -137,7 +132,6 @@ describe("buildBindingPrompt — userMessage", () => {
 			"afternoon",
 			2,
 		);
-		// Check all entity ids appear in the user message
 		for (const sk of skeletons) {
 			if (sk.objectId) expect(userMessage).toContain(sk.objectId);
 			if (sk.spaceId) expect(userMessage).toContain(sk.spaceId);

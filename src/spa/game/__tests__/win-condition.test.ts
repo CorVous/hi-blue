@@ -1,19 +1,9 @@
-/**
- * Tests for checkWinCondition and checkPlacementFlavor (issue #126).
- *
- * checkWinCondition: pure function — returns true iff every objective pair
- * in the ContentPack is satisfied (both on the ground, same cell, structural pair).
- *
- * checkPlacementFlavor: pure function — returns placementFlavor (with {actor}→"you")
- * when a put_down action lands an objective_object on its paired space's cell;
- * null otherwise.
- */
 import { describe, expect, it } from "vitest";
 import type {
 	AiTurnAction,
 	CarryObjective,
-	ContentPack,
 	ConvergenceObjective,
+	GridPosition,
 	Objective,
 	ObjectivePair,
 	PersonaSpatialState,
@@ -33,13 +23,20 @@ import {
 } from "../win-condition";
 import { makeTestPack } from "./fixtures/make-test-pack";
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+type Holder = WorldEntity["holder"];
+type SatisfactionState = Objective["satisfactionState"];
+
+const SAME_CELL: GridPosition = { row: 2, col: 3 };
+
+function byName<T extends { name: string }>(cases: T[]): Array<[string, T]> {
+	return cases.map((c) => [c.name, c]);
+}
 
 function makeObjectivePair(
 	objectId: string,
 	spaceId: string,
-	objectHolder: WorldEntity["holder"],
-	spaceHolder: WorldEntity["holder"],
+	objectHolder: Holder,
+	spaceHolder: Holder,
 	placementFlavor = "{actor} placed the item.",
 ): ObjectivePair {
 	return {
@@ -62,22 +59,10 @@ function makeObjectivePair(
 	};
 }
 
-function makeContentPack(pairs: ObjectivePair[]): ContentPack {
-	const entities = pairs.flatMap((p) => [p.object, p.space]);
-	return makeTestPack(entities, { setting: "test", wallName: "wall" });
-}
-
-function makeWorld(entities: WorldEntity[]): WorldState {
-	return { entities };
-}
-
-/** Build a WorldState with all entities from the given pairs. */
 function worldFromPairs(pairs: ObjectivePair[]): WorldState {
-	const entities: WorldEntity[] = pairs.flatMap((p) => [p.object, p.space]);
-	return makeWorld(entities);
+	return { entities: pairs.flatMap((p) => [p.object, p.space]) };
 }
 
-/** Build a CarryObjective from an ObjectivePair. */
 function carryObjectiveFromPair(
 	pair: ObjectivePair,
 	id = "obj-0",
@@ -92,659 +77,498 @@ function carryObjectiveFromPair(
 	};
 }
 
-/** Build an array of CarryObjectives from an array of ObjectivePairs. */
 function carryObjectivesFromPairs(pairs: ObjectivePair[]): CarryObjective[] {
 	return pairs.map((p, i) => carryObjectiveFromPair(p, `obj-${i}`));
 }
 
-// ── checkWinCondition ────────────────────────────────────────────────────────
+function makeUseItemObjective(
+	satisfactionState: SatisfactionState,
+	id = "obj-0",
+): UseItemObjective {
+	return {
+		id,
+		kind: "use_item",
+		description: "Use the torch",
+		satisfactionState,
+		itemId: "torch",
+	};
+}
 
-describe("checkWinCondition", () => {
-	it("K=0: vacuously returns true when there are no objective pairs", () => {
-		const world = makeWorld([]);
-		expect(checkWinCondition(world, [])).toBe(true);
-	});
+function makeUseSpaceObjective(
+	satisfactionState: SatisfactionState,
+	id = "obj-0",
+): UseSpaceObjective {
+	return {
+		id,
+		kind: "use_space",
+		description: "Use the Shrine",
+		satisfactionState,
+		spaceId: "shrine1",
+	};
+}
 
-	it("K=1: returns true when object and space share the same cell", () => {
-		const pair = makeObjectivePair(
-			"obj",
-			"spc",
-			{ row: 2, col: 3 },
-			{ row: 2, col: 3 },
-		);
-		const world = worldFromPairs([pair]);
-		const objectives = carryObjectivesFromPairs([pair]);
-		expect(checkWinCondition(world, objectives)).toBe(true);
-	});
+function makeConvergenceObjective(
+	satisfactionState: SatisfactionState,
+	id = "obj-conv",
+): ConvergenceObjective {
+	return {
+		id,
+		kind: "convergence",
+		description: "Converge on the space",
+		satisfactionState,
+		spaceId: "conv-space",
+	};
+}
 
-	it("K=1: returns false when object is on a different cell than its space", () => {
-		const pair = makeObjectivePair(
-			"obj",
-			"spc",
-			{ row: 0, col: 0 },
-			{ row: 2, col: 3 },
-		);
-		const world = worldFromPairs([pair]);
-		const objectives = carryObjectivesFromPairs([pair]);
-		expect(checkWinCondition(world, objectives)).toBe(false);
-	});
+const STATE_OBJECTIVE_BUILDERS: Array<
+	[string, (state: SatisfactionState) => Objective]
+> = [
+	["use_item", makeUseItemObjective],
+	["use_space", makeUseSpaceObjective],
+	["convergence", makeConvergenceObjective],
+];
 
-	it("K=1: returns false when object is held by an AI (not on the ground)", () => {
-		// Object holder is an AiId string, not a GridPosition
-		const pair = makeObjectivePair("obj", "spc", "red", { row: 2, col: 3 });
-		const world = worldFromPairs([pair]);
-		const objectives = carryObjectivesFromPairs([pair]);
-		expect(checkWinCondition(world, objectives)).toBe(false);
-	});
+const STATE_EXPECTATIONS: Array<[SatisfactionState, boolean]> = [
+	["pending", false],
+	["satisfied", true],
+];
 
-	it("K=2: returns true when both pairs are satisfied", () => {
-		const pairA = makeObjectivePair(
-			"objA",
-			"spcA",
-			{ row: 1, col: 1 },
-			{ row: 1, col: 1 },
-		);
-		const pairB = makeObjectivePair(
-			"objB",
-			"spcB",
-			{ row: 3, col: 4 },
-			{ row: 3, col: 4 },
-		);
-		const world = worldFromPairs([pairA, pairB]);
-		const objectives = carryObjectivesFromPairs([pairA, pairB]);
-		expect(checkWinCondition(world, objectives)).toBe(true);
-	});
+const CARRY_CASES: Array<{
+	name: string;
+	objectHolder: Holder;
+	spaceHolder: Holder;
+	inWorld: boolean;
+	expected: boolean;
+}> = [
+	{
+		name: "true when object and space share the same cell",
+		objectHolder: SAME_CELL,
+		spaceHolder: SAME_CELL,
+		inWorld: true,
+		expected: true,
+	},
+	{
+		name: "false when object is on a different cell than its space",
+		objectHolder: { row: 0, col: 0 },
+		spaceHolder: SAME_CELL,
+		inWorld: true,
+		expected: false,
+	},
+	{
+		name: "false when object is held by an AI (not on the ground)",
+		objectHolder: "red",
+		spaceHolder: SAME_CELL,
+		inWorld: true,
+		expected: false,
+	},
+	{
+		name: "false when object entity is not found in world",
+		objectHolder: SAME_CELL,
+		spaceHolder: SAME_CELL,
+		inWorld: false,
+		expected: false,
+	},
+];
 
-	it("K=2: returns false when only one pair is satisfied", () => {
-		const pairA = makeObjectivePair(
-			"objA",
-			"spcA",
-			{ row: 1, col: 1 },
-			{ row: 1, col: 1 },
-		);
-		const pairB = makeObjectivePair(
-			"objB",
-			"spcB",
-			{ row: 0, col: 0 },
-			{ row: 3, col: 4 },
-		);
-		const world = worldFromPairs([pairA, pairB]);
-		const objectives = carryObjectivesFromPairs([pairA, pairB]);
-		expect(checkWinCondition(world, objectives)).toBe(false);
-	});
-
-	it("AC #6: wrong pair coincidence does NOT count — object on same coords as different pair's space", () => {
-		// spcA is at (2,2), spcB is at (3,3).
-		// objA is at (3,3) — same as spcB's position — but objA.pairsWithSpaceId = "spcA".
-		// objA is NOT at spcA (which is at (2,2)), so pair-A is NOT satisfied.
-		const pairA = makeObjectivePair(
-			"objA",
-			"spcA",
-			{ row: 3, col: 3 },
-			{ row: 2, col: 2 },
-		);
-		const pairB = makeObjectivePair(
-			"objB",
-			"spcB",
-			{ row: 3, col: 3 },
-			{ row: 3, col: 3 },
-		);
-		const world = worldFromPairs([pairA, pairB]);
-		const objectives = carryObjectivesFromPairs([pairA, pairB]);
-		// pair-A: objA at (3,3) ≠ spcA at (2,2) → false
-		expect(checkWinCondition(world, objectives)).toBe(false);
-	});
-
-	it("returns false when the object entity is not found in world", () => {
-		const pair = makeObjectivePair(
-			"obj",
-			"spc",
-			{ row: 0, col: 0 },
-			{ row: 0, col: 0 },
-		);
-		const objectives = carryObjectivesFromPairs([pair]);
-		// World is empty — object not present
-		const world = makeWorld([]);
-		expect(checkWinCondition(world, objectives)).toBe(false);
-	});
-});
-
-// ── isCarryObjectiveSatisfied ─────────────────────────────────────────────────
-
-describe("isCarryObjectiveSatisfied", () => {
-	it("returns true when object and space are on the same cell", () => {
-		const pair = makeObjectivePair(
-			"obj",
-			"spc",
-			{ row: 2, col: 3 },
-			{ row: 2, col: 3 },
-		);
-		const world = worldFromPairs([pair]);
-		const objective = carryObjectiveFromPair(pair);
-		expect(isCarryObjectiveSatisfied(objective, world)).toBe(true);
-	});
-
-	it("returns false when object and space are on different cells", () => {
-		const pair = makeObjectivePair(
-			"obj",
-			"spc",
-			{ row: 0, col: 0 },
-			{ row: 2, col: 3 },
-		);
-		const world = worldFromPairs([pair]);
-		const objective = carryObjectiveFromPair(pair);
-		expect(isCarryObjectiveSatisfied(objective, world)).toBe(false);
-	});
-
-	it("returns false when object is held by an AI", () => {
-		const pair = makeObjectivePair("obj", "spc", "red", { row: 2, col: 3 });
-		const world = worldFromPairs([pair]);
-		const objective = carryObjectiveFromPair(pair);
-		expect(isCarryObjectiveSatisfied(objective, world)).toBe(false);
-	});
-
-	it("returns false when object entity is not found in world", () => {
-		const pair = makeObjectivePair(
-			"obj",
-			"spc",
-			{ row: 1, col: 1 },
-			{ row: 1, col: 1 },
-		);
-		const world = makeWorld([]); // empty world
-		const objective = carryObjectiveFromPair(pair);
-		expect(isCarryObjectiveSatisfied(objective, world)).toBe(false);
+describe.each<[string, (pair: ObjectivePair, world: WorldState) => boolean]>([
+	[
+		"isCarryObjectiveSatisfied",
+		(pair, world) =>
+			isCarryObjectiveSatisfied(carryObjectiveFromPair(pair), world),
+	],
+	[
+		"checkWinCondition (K=1 carry)",
+		(pair, world) => checkWinCondition(world, carryObjectivesFromPairs([pair])),
+	],
+])("%s", (_evaluator, evaluate) => {
+	it.each(byName(CARRY_CASES))("returns %s", (_name, {
+		objectHolder,
+		spaceHolder,
+		inWorld,
+		expected,
+	}) => {
+		const pair = makeObjectivePair("obj", "spc", objectHolder, spaceHolder);
+		const world = inWorld ? worldFromPairs([pair]) : { entities: [] };
+		expect(evaluate(pair, world)).toBe(expected);
 	});
 });
 
-// ── isUseItemObjectiveSatisfied ───────────────────────────────────────────────
-
-describe("isUseItemObjectiveSatisfied", () => {
-	it("returns false when satisfactionState is pending", () => {
-		const objective: UseItemObjective = {
-			id: "obj-0",
-			kind: "use_item",
-			description: "Use the torch",
-			satisfactionState: "pending",
-			itemId: "torch",
-		};
-		expect(isUseItemObjectiveSatisfied(objective)).toBe(false);
-	});
-
-	it("returns true when satisfactionState is satisfied", () => {
-		const objective: UseItemObjective = {
-			id: "obj-0",
-			kind: "use_item",
-			description: "Use the torch",
-			satisfactionState: "satisfied",
-			itemId: "torch",
-		};
-		expect(isUseItemObjectiveSatisfied(objective)).toBe(true);
+describe("checkWinCondition — multiple carry pairs", () => {
+	it.each(
+		byName<{
+			name: string;
+			pairs: Array<[Holder, Holder]>;
+			expected: boolean;
+		}>([
+			{
+				name: "K=0: vacuously true when there are no objective pairs",
+				pairs: [],
+				expected: true,
+			},
+			{
+				name: "K=2: true when both pairs are satisfied",
+				pairs: [
+					[
+						{ row: 1, col: 1 },
+						{ row: 1, col: 1 },
+					],
+					[
+						{ row: 3, col: 4 },
+						{ row: 3, col: 4 },
+					],
+				],
+				expected: true,
+			},
+			{
+				name: "K=2: false when only one pair is satisfied",
+				pairs: [
+					[
+						{ row: 1, col: 1 },
+						{ row: 1, col: 1 },
+					],
+					[
+						{ row: 0, col: 0 },
+						{ row: 3, col: 4 },
+					],
+				],
+				expected: false,
+			},
+			{
+				name: "AC #6: false when an object sits on a different pair's space",
+				pairs: [
+					[
+						{ row: 3, col: 3 },
+						{ row: 2, col: 2 },
+					],
+					[
+						{ row: 3, col: 3 },
+						{ row: 3, col: 3 },
+					],
+				],
+				expected: false,
+			},
+		]),
+	)("%s", (_name, { pairs, expected }) => {
+		const objectivePairs = pairs.map(([objectHolder, spaceHolder], i) =>
+			makeObjectivePair(`obj${i}`, `spc${i}`, objectHolder, spaceHolder),
+		);
+		expect(
+			checkWinCondition(
+				worldFromPairs(objectivePairs),
+				carryObjectivesFromPairs(objectivePairs),
+			),
+		).toBe(expected);
 	});
 });
 
-// ── checkWinCondition with mixed objectives ───────────────────────────────────
-
-describe("checkWinCondition with mixed Carry + UseItem objectives", () => {
-	it("returns true when all objectives are satisfied (carry + use_item)", () => {
-		const pair = makeObjectivePair(
-			"obj",
-			"spc",
-			{ row: 1, col: 1 },
-			{ row: 1, col: 1 },
-		);
-		const world = worldFromPairs([pair]);
-		const carryObj = carryObjectiveFromPair(pair, "obj-0");
-		const useItemObj: UseItemObjective = {
-			id: "obj-1",
-			kind: "use_item",
-			description: "Use the torch",
-			satisfactionState: "satisfied",
-			itemId: "torch",
-		};
-		const objectives: Objective[] = [carryObj, useItemObj];
-		expect(checkWinCondition(world, objectives)).toBe(true);
-	});
-
-	it("returns false when carry is satisfied but use_item is pending", () => {
-		const pair = makeObjectivePair(
-			"obj",
-			"spc",
-			{ row: 1, col: 1 },
-			{ row: 1, col: 1 },
-		);
-		const world = worldFromPairs([pair]);
-		const carryObj = carryObjectiveFromPair(pair, "obj-0");
-		const useItemObj: UseItemObjective = {
-			id: "obj-1",
-			kind: "use_item",
-			description: "Use the torch",
-			satisfactionState: "pending",
-			itemId: "torch",
-		};
-		const objectives: Objective[] = [carryObj, useItemObj];
-		expect(checkWinCondition(world, objectives)).toBe(false);
-	});
-
-	it("returns false when use_item is satisfied but carry is not", () => {
-		const pair = makeObjectivePair(
-			"obj",
-			"spc",
-			{ row: 0, col: 0 }, // object not on space's cell
-			{ row: 2, col: 2 },
-		);
-		const world = worldFromPairs([pair]);
-		const carryObj = carryObjectiveFromPair(pair, "obj-0");
-		const useItemObj: UseItemObjective = {
-			id: "obj-1",
-			kind: "use_item",
-			description: "Use the torch",
-			satisfactionState: "satisfied",
-			itemId: "torch",
-		};
-		const objectives: Objective[] = [carryObj, useItemObj];
-		expect(checkWinCondition(world, objectives)).toBe(false);
+describe.each<[string, (state: SatisfactionState) => boolean]>([
+	[
+		"isUseItemObjectiveSatisfied",
+		(state) => isUseItemObjectiveSatisfied(makeUseItemObjective(state)),
+	],
+	[
+		"isUseSpaceObjectiveSatisfied",
+		(state) => isUseSpaceObjectiveSatisfied(makeUseSpaceObjective(state)),
+	],
+])("%s", (_predicate, check) => {
+	it.each(
+		STATE_EXPECTATIONS,
+	)("satisfactionState %s → %s", (state, expected) => {
+		expect(check(state)).toBe(expected);
 	});
 });
 
-// ── checkLoseCondition ───────────────────────────────────────────────────────
+describe.each(
+	STATE_OBJECTIVE_BUILDERS,
+)("checkWinCondition with a single %s objective", (_kind, build) => {
+	it.each(STATE_EXPECTATIONS)("%s → %s", (state, expected) => {
+		expect(checkWinCondition({ entities: [] }, [build(state)])).toBe(expected);
+	});
+});
+
+describe("checkWinCondition with mixed carry + state objectives", () => {
+	it.each<[string, boolean, Objective, boolean]>([
+		[
+			"carry satisfied + use_item satisfied → true",
+			true,
+			makeUseItemObjective("satisfied", "obj-1"),
+			true,
+		],
+		[
+			"carry satisfied + use_item pending → false",
+			true,
+			makeUseItemObjective("pending", "obj-1"),
+			false,
+		],
+		[
+			"carry unsatisfied + use_item satisfied → false",
+			false,
+			makeUseItemObjective("satisfied", "obj-1"),
+			false,
+		],
+		[
+			"carry satisfied + use_space pending → false",
+			true,
+			makeUseSpaceObjective("pending", "obj-1"),
+			false,
+		],
+	])("%s", (_name, carrySatisfied, other, expected) => {
+		const pair = makeObjectivePair(
+			"obj",
+			"spc",
+			carrySatisfied ? { row: 1, col: 1 } : { row: 0, col: 0 },
+			carrySatisfied ? { row: 1, col: 1 } : { row: 2, col: 2 },
+		);
+		const objectives: Objective[] = [carryObjectiveFromPair(pair), other];
+		expect(checkWinCondition(worldFromPairs([pair]), objectives)).toBe(
+			expected,
+		);
+	});
+});
 
 describe("checkLoseCondition", () => {
-	it("returns false when no AIs are locked out (0 of 3)", () => {
-		expect(checkLoseCondition(new Set(), ["red", "green", "cyan"])).toBe(false);
-	});
+	const ALL_AI_IDS = ["red", "green", "cyan"];
 
-	it("returns false when 1 of 3 AIs is locked out", () => {
-		expect(checkLoseCondition(new Set(["red"]), ["red", "green", "cyan"])).toBe(
+	it.each<[string, ReadonlySet<string> | string[], string[], boolean]>([
+		["false when 0 of 3 are locked out", new Set(), ALL_AI_IDS, false],
+		["false when 1 of 3 is locked out", new Set(["red"]), ALL_AI_IDS, false],
+		[
+			"false when 2 of 3 are locked out",
+			new Set(["red", "green"]),
+			ALL_AI_IDS,
 			false,
-		);
-	});
-
-	it("returns false when 2 of 3 AIs are locked out", () => {
-		expect(
-			checkLoseCondition(new Set(["red", "green"]), ["red", "green", "cyan"]),
-		).toBe(false);
-	});
-
-	it("returns true when all 3 AIs are locked out", () => {
-		expect(
-			checkLoseCondition(new Set(["red", "green", "cyan"]), [
-				"red",
-				"green",
-				"cyan",
-			]),
-		).toBe(true);
-	});
-
-	it("returns true (vacuously) when allAiIds is empty", () => {
-		expect(checkLoseCondition(new Set(), [])).toBe(true);
-	});
-
-	it("accepts an AiId[] array as the lockedOut argument", () => {
-		expect(
-			checkLoseCondition(["red", "green", "cyan"], ["red", "green", "cyan"]),
-		).toBe(true);
+		],
+		["true when all 3 are locked out", new Set(ALL_AI_IDS), ALL_AI_IDS, true],
+		[
+			"true when all 3 are locked out, given as an AiId[] array",
+			[...ALL_AI_IDS],
+			ALL_AI_IDS,
+			true,
+		],
+		["true (vacuously) when allAiIds is empty", new Set(), [], true],
+	])("returns %s", (_name, lockedOut, allAiIds, expected) => {
+		expect(checkLoseCondition(lockedOut, allAiIds)).toBe(expected);
 	});
 });
-
-// ── checkPlacementFlavor ──────────────────────────────────────────────────────
 
 describe("checkPlacementFlavor", () => {
-	function makePutDownAction(itemId: string, aiId = "red"): AiTurnAction {
-		return {
-			aiId,
-			toolCall: { name: "put_down", args: { item: itemId } },
-		};
+	const PACK = makeTestPack([], { setting: "test", wallName: "wall" });
+
+	function itemAction(
+		name: "put_down" | "use" | "pick_up",
+		itemId: string,
+	): AiTurnAction {
+		return { aiId: "red", toolCall: { name, args: { item: itemId } } };
 	}
 
-	it("returns flavor with {actor} substituted to 'you' on matching put_down", () => {
-		const pair = makeObjectivePair(
-			"gem",
-			"altar",
-			{ row: 2, col: 2 },
-			{ row: 2, col: 2 },
-			"{actor} places the gem on the altar.",
-		);
-		const pack = makeContentPack([pair]);
-		const world = worldFromPairs([pair]);
-		const action = makePutDownAction("gem");
-		expect(checkPlacementFlavor(action, pack, world)).toBe(
-			"you places the gem on the altar.",
-		);
+	function gemOnAltar(gemHolder: Holder, placementFlavor?: string): WorldState {
+		return worldFromPairs([
+			makeObjectivePair(
+				"gem",
+				"altar",
+				gemHolder,
+				{ row: 2, col: 2 },
+				placementFlavor,
+			),
+		]);
+	}
+
+	it.each(
+		byName([
+			{
+				name: "substitutes {actor} with 'you' on a matching put_down",
+				action: itemAction("put_down", "gem"),
+				flavor: "{actor} places the gem on the altar.",
+				expected: "you places the gem on the altar.",
+			},
+			{
+				name: "returns the flavor for a use action when the object is on its paired space",
+				action: itemAction("use", "gem"),
+				flavor: undefined,
+				expected: "you placed the item.",
+			},
+			{
+				name: "replaces all occurrences of {actor} in the flavor string",
+				action: itemAction("put_down", "gem"),
+				flavor: "{actor} did it! {actor} wins!",
+				expected: "you did it! you wins!",
+			},
+		]),
+	)("%s", (_name, { action, flavor, expected }) => {
+		const world = gemOnAltar({ row: 2, col: 2 }, flavor);
+		expect(checkPlacementFlavor(action, PACK, world)).toBe(expected);
 	});
 
-	it("returns null when object is on a non-matching cell", () => {
-		const pair = makeObjectivePair(
-			"gem",
-			"altar",
-			{ row: 0, col: 0 }, // object NOT at space's cell
-			{ row: 2, col: 2 },
-		);
-		const pack = makeContentPack([pair]);
-		const world = worldFromPairs([pair]);
-		const action = makePutDownAction("gem");
-		expect(checkPlacementFlavor(action, pack, world)).toBeNull();
-	});
-
-	it("returns null for an interesting_object (no pairsWithSpaceId)", () => {
-		const interestingObj: WorldEntity = {
-			id: "coin",
-			kind: "interesting_object",
-			name: "coin",
-			examineDescription: "A coin.",
-			holder: { row: 1, col: 1 },
-			useOutcome: "Heads.",
-		};
-		const pack = makeContentPack([]);
-		const world = makeWorld([interestingObj]);
-		const action = makePutDownAction("coin");
-		expect(checkPlacementFlavor(action, pack, world)).toBeNull();
-	});
-
-	it("returns null for a pick_up action (not a put_down)", () => {
-		const pair = makeObjectivePair(
-			"gem",
-			"altar",
-			{ row: 2, col: 2 },
-			{ row: 2, col: 2 },
-		);
-		const pack = makeContentPack([pair]);
-		const world = worldFromPairs([pair]);
-		const action: AiTurnAction = {
-			aiId: "red",
-			toolCall: { name: "pick_up", args: { item: "gem" } },
-		};
-		expect(checkPlacementFlavor(action, pack, world)).toBeNull();
-	});
-
-	it("returns placement flavor for a use action when object is on its paired space", () => {
-		const pair = makeObjectivePair(
-			"gem",
-			"altar",
-			{ row: 2, col: 2 },
-			{ row: 2, col: 2 },
-		);
-		const pack = makeContentPack([pair]);
-		const world = worldFromPairs([pair]);
-		const action: AiTurnAction = {
-			aiId: "red",
-			toolCall: { name: "use", args: { item: "gem" } },
-		};
-		expect(checkPlacementFlavor(action, pack, world)).toBe(
-			"you placed the item.",
-		);
-	});
-
-	it("returns null for a go action (no item)", () => {
-		const pack = makeContentPack([]);
-		const world = makeWorld([]);
-		const action: AiTurnAction = {
-			aiId: "red",
-			toolCall: { name: "go", args: { direction: "south" } },
-		};
-		expect(checkPlacementFlavor(action, pack, world)).toBeNull();
-	});
-
-	it("returns null when object is dropped on coords that coincide with a DIFFERENT pair's space", () => {
-		// objA.pairsWithSpaceId = "spcA" (at row 2, col 2)
-		// spcB is also at row 2, col 2 — same coords but wrong pair
-		// objA is dropped at (2,2) — matches spcB's coords but NOT spcA's coords (spcA at 0,0)
-		const pairA = makeObjectivePair(
-			"objA",
-			"spcA",
-			{ row: 2, col: 2 }, // objA dropped here
-			{ row: 0, col: 0 }, // spcA is at (0,0) — does not match
-			"{actor} places objA.",
-		);
-		const pairB = makeObjectivePair(
-			"objB",
-			"spcB",
-			{ row: 4, col: 4 },
-			{ row: 2, col: 2 }, // spcB happens to be at (2,2)
-		);
-		const pack = makeContentPack([pairA, pairB]);
-		const world = worldFromPairs([pairA, pairB]);
-		const action = makePutDownAction("objA");
-		// objA is at (2,2) but its paired spcA is at (0,0) — not a match
-		expect(checkPlacementFlavor(action, pack, world)).toBeNull();
-	});
-
-	it("replaces all occurrences of {actor} in the flavor string", () => {
-		const pair = makeObjectivePair(
-			"gem",
-			"altar",
-			{ row: 1, col: 1 },
-			{ row: 1, col: 1 },
-			"{actor} did it! {actor} wins!",
-		);
-		const pack = makeContentPack([pair]);
-		const world = worldFromPairs([pair]);
-		const action = makePutDownAction("gem");
-		expect(checkPlacementFlavor(action, pack, world)).toBe(
-			"you did it! you wins!",
-		);
-	});
-
-	it("returns null when action has no toolCall", () => {
-		const pack = makeContentPack([]);
-		const world = makeWorld([]);
-		const action: AiTurnAction = { aiId: "red", pass: true };
-		expect(checkPlacementFlavor(action, pack, world)).toBeNull();
-	});
-
-	it("returns null when the item is still held by an AI (put_down execution not reflected in world)", () => {
-		// Simulate a case where the put_down action is listed but the world shows the item still held
-		const pair = makeObjectivePair(
-			"gem",
-			"altar",
-			"red", // still held by AI
-			{ row: 2, col: 2 },
-			"{actor} places the gem.",
-		);
-		const pack = makeContentPack([pair]);
-		const world = worldFromPairs([pair]);
-		const action = makePutDownAction("gem");
-		expect(checkPlacementFlavor(action, pack, world)).toBeNull();
+	it.each(
+		byName<{ name: string; action: AiTurnAction; world: WorldState }>([
+			{
+				name: "the object is on a non-matching cell",
+				action: itemAction("put_down", "gem"),
+				world: gemOnAltar({ row: 0, col: 0 }),
+			},
+			{
+				name: "the item is an interesting_object (no pairsWithSpaceId)",
+				action: itemAction("put_down", "coin"),
+				world: {
+					entities: [
+						{
+							id: "coin",
+							kind: "interesting_object",
+							name: "coin",
+							examineDescription: "A coin.",
+							holder: { row: 1, col: 1 },
+							useOutcome: "Heads.",
+						},
+					],
+				},
+			},
+			{
+				name: "the action is a pick_up (not a put_down)",
+				action: itemAction("pick_up", "gem"),
+				world: gemOnAltar({ row: 2, col: 2 }),
+			},
+			{
+				name: "the action is a go (no item)",
+				action: {
+					aiId: "red",
+					toolCall: { name: "go", args: { direction: "south" } },
+				},
+				world: { entities: [] },
+			},
+			{
+				name: "the action has no toolCall",
+				action: { aiId: "red", pass: true },
+				world: { entities: [] },
+			},
+			{
+				name: "the object lands on coords that coincide with a DIFFERENT pair's space",
+				action: itemAction("put_down", "objA"),
+				world: worldFromPairs([
+					makeObjectivePair(
+						"objA",
+						"spcA",
+						{ row: 2, col: 2 },
+						{ row: 0, col: 0 },
+						"{actor} places objA.",
+					),
+					makeObjectivePair(
+						"objB",
+						"spcB",
+						{ row: 4, col: 4 },
+						{ row: 2, col: 2 },
+					),
+				]),
+			},
+			{
+				name: "the item is still held by an AI (put_down not reflected in world)",
+				action: itemAction("put_down", "gem"),
+				world: gemOnAltar("red", "{actor} places the gem."),
+			},
+		]),
+	)("returns null when %s", (_name, { action, world }) => {
+		expect(checkPlacementFlavor(action, PACK, world)).toBeNull();
 	});
 });
-
-// ── isUseSpaceObjectiveSatisfied ─────────────────────────────────────────────
-
-describe("isUseSpaceObjectiveSatisfied", () => {
-	it("returns false when satisfactionState is pending", () => {
-		const objective: UseSpaceObjective = {
-			id: "obj-0",
-			kind: "use_space",
-			description: "Use the Shrine",
-			satisfactionState: "pending",
-			spaceId: "shrine1",
-		};
-		expect(isUseSpaceObjectiveSatisfied(objective)).toBe(false);
-	});
-
-	it("returns true when satisfactionState is satisfied", () => {
-		const objective: UseSpaceObjective = {
-			id: "obj-0",
-			kind: "use_space",
-			description: "Use the Shrine",
-			satisfactionState: "satisfied",
-			spaceId: "shrine1",
-		};
-		expect(isUseSpaceObjectiveSatisfied(objective)).toBe(true);
-	});
-});
-
-// ── checkWinCondition with UseSpaceObjective ──────────────────────────────────
-
-describe("checkWinCondition with UseSpaceObjective", () => {
-	it("returns false when use_space objective is pending", () => {
-		const world = makeWorld([]);
-		const objective: UseSpaceObjective = {
-			id: "obj-0",
-			kind: "use_space",
-			description: "Use the Shrine",
-			satisfactionState: "pending",
-			spaceId: "shrine1",
-		};
-		const objectives: Objective[] = [objective];
-		expect(checkWinCondition(world, objectives)).toBe(false);
-	});
-
-	it("returns true when use_space objective is satisfied", () => {
-		const world = makeWorld([]);
-		const objective: UseSpaceObjective = {
-			id: "obj-0",
-			kind: "use_space",
-			description: "Use the Shrine",
-			satisfactionState: "satisfied",
-			spaceId: "shrine1",
-		};
-		const objectives: Objective[] = [objective];
-		expect(checkWinCondition(world, objectives)).toBe(true);
-	});
-
-	it("returns false when use_space is pending alongside a satisfied carry", () => {
-		const pair = makeObjectivePair(
-			"obj",
-			"spc",
-			{ row: 1, col: 1 },
-			{ row: 1, col: 1 },
-		);
-		const world = worldFromPairs([pair]);
-		const carryObj = carryObjectiveFromPair(pair, "obj-0");
-		const useSpaceObj: UseSpaceObjective = {
-			id: "obj-1",
-			kind: "use_space",
-			description: "Use the shrine",
-			satisfactionState: "pending",
-			spaceId: "shrine1",
-		};
-		const objectives: Objective[] = [carryObj, useSpaceObj];
-		expect(checkWinCondition(world, objectives)).toBe(false);
-	});
-});
-
-// ── checkConvergenceTier ──────────────────────────────────────────────────────
 
 describe("checkConvergenceTier", () => {
-	const spaceId = "conv-space";
+	const objective = makeConvergenceObjective("pending");
 
-	function makeConvergenceObjective(): ConvergenceObjective {
+	function worldWithSpace(holder: Holder | null): WorldState {
+		if (holder === null) return { entities: [] };
 		return {
-			id: "obj-conv",
-			kind: "convergence",
-			description: "Converge on the space",
-			satisfactionState: "pending",
-			spaceId,
+			entities: [
+				{
+					id: objective.spaceId,
+					kind: "objective_space",
+					name: "Test Space",
+					examineDescription: "A test convergence space.",
+					holder,
+				},
+			],
 		};
 	}
 
-	function makeWorldWithSpace(
-		cell: { row: number; col: number } | null,
-	): WorldState {
-		if (cell === null) {
-			// World has no space entity
-			return { entities: [] };
-		}
-		const space: WorldEntity = {
-			id: spaceId,
-			kind: "objective_space",
-			name: "Test Space",
-			examineDescription: "A test convergence space.",
-			holder: cell,
-		};
-		return { entities: [space] };
-	}
-
-	function makeSpatial(
-		positions: Array<{ row: number; col: number }>,
+	function spatialAt(
+		positions: GridPosition[],
 	): Record<string, PersonaSpatialState> {
-		const result: Record<string, PersonaSpatialState> = {};
-		for (let i = 0; i < positions.length; i++) {
-			// biome-ignore lint/style/noNonNullAssertion: bounded index
-			result[`ai-${i}`] = { position: positions[i]! };
-		}
-		return result;
+		return Object.fromEntries(
+			positions.map((position, i) => [`ai-${i}`, { position }]),
+		);
 	}
 
-	it("returns tier 0 when space entity is absent from world", () => {
-		const objective = makeConvergenceObjective();
-		const world = makeWorldWithSpace(null);
-		const personaSpatial = makeSpatial([{ row: 2, col: 2 }]);
-		const result = checkConvergenceTier(objective, world, personaSpatial);
-		expect(result.tier).toBe(0);
-		expect(result.spaceId).toBe(spaceId);
-	});
-
-	it("returns tier 0 when space entity holder is an AiId (not a GridPosition)", () => {
-		const objective = makeConvergenceObjective();
-		const space: WorldEntity = {
-			id: spaceId,
-			kind: "objective_space",
-			name: "Test Space",
-			examineDescription: "A test convergence space.",
-			holder: "some-ai-id", // AiId, not GridPosition
-		};
-		const world = { entities: [space] };
-		const personaSpatial = makeSpatial([{ row: 2, col: 2 }]);
-		const result = checkConvergenceTier(objective, world, personaSpatial);
-		expect(result.tier).toBe(0);
-	});
-
-	it("returns tier 0 when no Daemon is on the space cell", () => {
-		const objective = makeConvergenceObjective();
-		const world = makeWorldWithSpace({ row: 3, col: 3 });
-		// All daemons are elsewhere
-		const personaSpatial = makeSpatial([
-			{ row: 0, col: 0 },
-			{ row: 1, col: 1 },
-			{ row: 4, col: 4 },
-		]);
-		const result = checkConvergenceTier(objective, world, personaSpatial);
-		expect(result.tier).toBe(0);
-	});
-
-	it("returns tier 1 when exactly one Daemon is on the space cell", () => {
-		const objective = makeConvergenceObjective();
-		const world = makeWorldWithSpace({ row: 3, col: 3 });
-		const personaSpatial = makeSpatial([
-			{ row: 3, col: 3 }, // on the space
-			{ row: 0, col: 0 }, // elsewhere
-			{ row: 1, col: 1 }, // elsewhere
-		]);
-		const result = checkConvergenceTier(objective, world, personaSpatial);
-		expect(result.tier).toBe(1);
-		expect(result.spaceId).toBe(spaceId);
-	});
-
-	it("returns tier 2 when exactly two Daemons share the space cell", () => {
-		const objective = makeConvergenceObjective();
-		const world = makeWorldWithSpace({ row: 3, col: 3 });
-		const personaSpatial = makeSpatial([
-			{ row: 3, col: 3 }, // on the space
-			{ row: 3, col: 3 }, // on the space
-			{ row: 1, col: 1 }, // elsewhere
-		]);
-		const result = checkConvergenceTier(objective, world, personaSpatial);
-		expect(result.tier).toBe(2);
-	});
-
-	it("returns tier 2 (clamped) when all three Daemons share the space cell", () => {
-		const objective = makeConvergenceObjective();
-		const world = makeWorldWithSpace({ row: 2, col: 2 });
-		const personaSpatial = makeSpatial([
-			{ row: 2, col: 2 },
-			{ row: 2, col: 2 },
-			{ row: 2, col: 2 },
-		]);
-		const result = checkConvergenceTier(objective, world, personaSpatial);
-		expect(result.tier).toBe(2);
-	});
-
-	it("returns tier 0 when space is present but no personas at all", () => {
-		const objective = makeConvergenceObjective();
-		const world = makeWorldWithSpace({ row: 3, col: 3 });
-		const personaSpatial = makeSpatial([]);
-		const result = checkConvergenceTier(objective, world, personaSpatial);
-		expect(result.tier).toBe(0);
+	it.each(
+		byName<{
+			name: string;
+			space: Holder | null;
+			positions: GridPosition[];
+			tier: 0 | 1 | 2;
+		}>([
+			{
+				name: "0 when space entity is absent from world",
+				space: null,
+				positions: [{ row: 2, col: 2 }],
+				tier: 0,
+			},
+			{
+				name: "0 when space entity holder is an AiId (not a GridPosition)",
+				space: "some-ai-id",
+				positions: [{ row: 2, col: 2 }],
+				tier: 0,
+			},
+			{
+				name: "0 when no Daemon is on the space cell",
+				space: { row: 3, col: 3 },
+				positions: [
+					{ row: 0, col: 0 },
+					{ row: 1, col: 1 },
+					{ row: 4, col: 4 },
+				],
+				tier: 0,
+			},
+			{
+				name: "0 when the space is present but there are no personas at all",
+				space: { row: 3, col: 3 },
+				positions: [],
+				tier: 0,
+			},
+			{
+				name: "1 when exactly one Daemon is on the space cell",
+				space: { row: 3, col: 3 },
+				positions: [
+					{ row: 3, col: 3 },
+					{ row: 0, col: 0 },
+					{ row: 1, col: 1 },
+				],
+				tier: 1,
+			},
+			{
+				name: "2 when exactly two Daemons share the space cell",
+				space: { row: 3, col: 3 },
+				positions: [
+					{ row: 3, col: 3 },
+					{ row: 3, col: 3 },
+					{ row: 1, col: 1 },
+				],
+				tier: 2,
+			},
+			{
+				name: "2 when all three Daemons share the space cell (clamped)",
+				space: { row: 2, col: 2 },
+				positions: [
+					{ row: 2, col: 2 },
+					{ row: 2, col: 2 },
+					{ row: 2, col: 2 },
+				],
+				tier: 2,
+			},
+		]),
+	)("returns tier %s", (_name, { space, positions, tier }) => {
+		expect(
+			checkConvergenceTier(
+				objective,
+				worldWithSpace(space),
+				spatialAt(positions),
+			),
+		).toEqual({ tier, spaceId: objective.spaceId });
 	});
 });

@@ -4,7 +4,9 @@ import {
 	formatTopInfoMobile,
 	initPanelChrome,
 	type LoadState,
+	type LoadStateStatus,
 	renderTopInfoLeft,
+	type TopInfoInputs,
 	topInfoStatus,
 } from "../bbs-chrome.js";
 import {
@@ -22,10 +24,15 @@ import { updateWorldMap } from "../dev-inspector/world-map.js";
 import {
 	buildSameDaemonsSession,
 	buildSessionFromAssets,
+	type NewGameAssets,
 } from "../game/bootstrap.js";
 import { BrowserLLMProvider } from "../game/browser-llm-provider.js";
 import { isPlayerChatLockedOut } from "../game/complication-engine.js";
-import { deriveComposerState } from "../game/composer-reducer.js";
+import {
+	type ComposerInput,
+	type ComposerState,
+	deriveComposerState,
+} from "../game/composer-reducer.js";
 import { appendBroadcast } from "../game/engine.js";
 import { GameSession } from "../game/game-session.js";
 import {
@@ -34,190 +41,69 @@ import {
 	buildPersonaDisplayNameMap,
 	buildPersonaNameMap,
 	findFirstMention,
+	type MentionSegment,
+	splitMentionSegments,
 } from "../game/mention-parser.js";
 import {
 	clearPendingBootstrap,
 	getPendingBootstrap,
+	type PendingBootstrap,
 	restartContentPacks,
 } from "../game/pending-bootstrap.js";
 import type {
 	LifecyclePhase,
 	RoundLLMProvider,
 } from "../game/round-llm-provider.js";
-import { encodeRoundResult } from "../game/round-result-encoder.js";
+import {
+	encodeRoundResult,
+	type SseEvent,
+} from "../game/round-result-encoder.js";
+import { fisherYatesShuffledCopy } from "../game/shuffle.js";
 import { getSpikeRng } from "../game/spike-seed.js";
-import type { AiId, AiPersona } from "../game/types";
-import { AI_TYPING_SPEED, TOKEN_PACE_MS } from "../game/typing-rhythm.js";
+import type {
+	AiId,
+	AiPersona,
+	ConversationEntry,
+	GameState,
+} from "../game/types";
 import { CapHitError } from "../llm-client.js";
+import { readStoredByokKey } from "../openrouter-key.js";
 import {
 	archiveSession,
 	clearActiveSession,
 	deactivateActiveSession,
 	getActiveSessionId,
+	type LoadResult,
 	loadActiveSession,
 	mintAndActivateNewSession,
 	saveActiveSession,
 } from "../persistence/session-storage.js";
 import { type RenderOpts, renderApp } from "../render-app.js";
+import { dropListenersByCloning, trySetCaret } from "./dom.js";
 
-/** Maximum time allowed for bootstrap loading (personas + content packs) before
- * timing out and showing the recovery UI. Sized to absorb a slow first-attempt
- * persona-synthesis call (~95s observed cold) plus the retry-once-on-fail path
- * and a parallel content-pack outer retry, matching the daemon harness's
- * stable-state wait window. */
 export const BOOTSTRAP_LOADING_TIMEOUT_MS = 300_000;
 
-/** Lowercased persona name for transcript prefixes (`> *ember <msg>`). */
-function transcriptName(name: string): string {
-	return name.toLowerCase();
-}
+const PLAYER_ID = "blue";
+const LOADING_PLACEHOLDER = "loading…";
+const UNSET_PROMPT_TARGET = "/?????";
+const UNKNOWN_SESSION_ID = "0x????";
+const BRAILLE_SPINNER_FRAMES = [
+	"⠋",
+	"⠙",
+	"⠹",
+	"⠸",
+	"⠼",
+	"⠴",
+	"⠦",
+	"⠧",
+	"⠇",
+	"⠏",
+];
+const SPINNER_INTERVAL_MS = 80;
+const BRIGHTNESS_WIPE_TAU_MS = 60_000;
+const BRIGHTNESS_WIPE_MAX_PCT = 99;
+const NEW_ROOM_BROADCAST = "The sysadmin has created a new room.";
 
-/** Format a USD remaining amount as cents for the panel budget display
- * (e.g. 0.05 → "5.000¢"). Clamps negatives to zero. */
-function formatBudget(remainingUsd: number): string {
-	return `${(Math.max(0, remainingUsd) * 100).toFixed(3)}¢`;
-}
-
-/** Build a regex that matches any persona handle (with an optional leading
- * `*`) as a whole word, case-insensitive. Returns null when no personas
- * are available so callers can short-circuit. */
-function buildMentionRegex(
-	personas: Record<string, { name: string }>,
-): RegExp | null {
-	const names = Object.values(personas)
-		.map((p) => p.name)
-		.filter((n) => n.length > 0);
-	if (names.length === 0) return null;
-	const escaped = names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-	return new RegExp(`\\*?\\b(?:${escaped.join("|")})\\b`, "gi");
-}
-
-/** Append `text` to `parent`, splitting persona-name occurrences (with an
- * optional leading `*`) into `.msg-mention` spans tinted with the persona's
- * color. Non-matching chunks are wrapped in `defaultClass` when provided
- * (e.g. `msg-you` for player lines), otherwise emitted as bare text nodes
- * so they inherit the parent's amber color. */
-function appendMentionAwareText(
-	parent: HTMLElement,
-	text: string,
-	personas: Record<string, { name: string; color?: string }>,
-	defaultClass?: string,
-): void {
-	if (!text) return;
-	const doc = parent.ownerDocument;
-	const personaList = Object.values(personas);
-	const appendChunk = (chunk: string): void => {
-		if (!chunk) return;
-		if (defaultClass) {
-			const span = doc.createElement("span");
-			span.className = defaultClass;
-			span.textContent = chunk;
-			parent.appendChild(span);
-		} else {
-			parent.appendChild(doc.createTextNode(chunk));
-		}
-	};
-	const re = buildMentionRegex(personas);
-	if (!re) {
-		appendChunk(text);
-		return;
-	}
-	let lastIdx = 0;
-	for (let m = re.exec(text); m !== null; m = re.exec(text)) {
-		appendChunk(text.slice(lastIdx, m.index));
-		const matchText = m[0];
-		const baseName = matchText.startsWith("*") ? matchText.slice(1) : matchText;
-		const persona = personaList.find(
-			(p) => p.name.toLowerCase() === baseName.toLowerCase(),
-		);
-		const span = doc.createElement("span");
-		span.className = "msg-mention";
-		if (persona?.color) {
-			span.style.setProperty("--mention-color", persona.color);
-		}
-		span.textContent = matchText;
-		parent.appendChild(span);
-		lastIdx = m.index + matchText.length;
-	}
-	appendChunk(text.slice(lastIdx));
-}
-
-/** Fisher-Yates shuffle (returns a new array). */
-function shuffle<T>(arr: T[]): T[] {
-	const out = [...arr];
-	for (let i = out.length - 1; i > 0; i--) {
-		const j = Math.floor(Math.random() * (i + 1));
-		const tmp = out[i] as T;
-		out[i] = out[j] as T;
-		out[j] = tmp;
-	}
-	return out;
-}
-
-/**
- * True when the SPA is being served by `pnpm wrangler dev` (SPA + worker
- * co-served on http://localhost:8787). Any other host — production
- * GitHub Pages, a separate static server pointed at the local worker —
- * fails this check, so the dev affordances stay inert.
- *
- * The build-time-constant half (`__WORKER_BASE_URL__ === "http://localhost:8787"`)
- * is defence in depth: it disables affordances for any production-targeted
- * build even if a future deploy somehow co-serves SPA + worker on one origin.
- */
-function isDevHost(): boolean {
-	return (
-		__WORKER_BASE_URL__ === "http://localhost:8787" &&
-		typeof location !== "undefined" &&
-		location.origin === __WORKER_BASE_URL__
-	);
-}
-
-/**
- * Apply SPA-side test affordances from URL search params.
- *
- * Only honoured when the SPA is served by `pnpm wrangler dev` (see
- * `isDevHost`). Silently inert in any other host.
- *
- * - `winImmediately=1`: wrap submitMessage so the next call ends the game with
- *   outcome "win". Used by integration tests that need to drive the UI to
- *   `game_ended` without satisfying objectives via tool calls.
- *
- * Returns the (possibly replaced) GameSession to use going forward.
- */
-export function applyTestAffordances(
-	s: GameSession,
-	searchParams: URLSearchParams,
-): GameSession {
-	// Gate: only apply when wrangler dev is the host
-	if (!isDevHost()) return s;
-
-	const wantsWin = searchParams.get("winImmediately") === "1";
-
-	if (!wantsWin) return s;
-
-	const active = s;
-
-	// In the flat single-game model, wrap submitMessage so the next call ends
-	// the game (outcome: "win"). Used by integration tests that need to drive
-	// the UI to game_ended without satisfying objectives via tool calls.
-	const originalSubmit = active.submitMessage.bind(active);
-	active.submitMessage = async (...args) => {
-		const result = await originalSubmit(...args);
-		return {
-			...result,
-			result: { ...result.result, gameEnded: true, phaseEnded: false },
-			nextState: {
-				...result.nextState,
-				isComplete: true,
-				outcome: "win" as const,
-			},
-		};
-	};
-
-	return active;
-}
-
-/** Warning reason strings shown in the persistence warning banner. */
 const PERSISTENCE_WARNING_MESSAGES: Record<string, string> = {
 	unavailable:
 		"Game progress cannot be saved: storage is disabled in your browser. Your session will be lost on refresh.",
@@ -231,1679 +117,1683 @@ const PERSISTENCE_WARNING_MESSAGES: Record<string, string> = {
 	unknown: "Game progress could not be saved due to an unexpected error.",
 };
 
-/** Guards against duplicate game_ended events re-binding handlers. */
-let gameEnded = false;
+type PersonaLookups = Pick<
+	ComposerInput,
+	"personaNamesToId" | "personaColors" | "personaDisplayNames"
+>;
+
+type MessageEntry = Extract<ConversationEntry, { kind: "message" }>;
+type MessageEvent = Extract<SseEvent, { type: "message" }>;
+type UnloadableSession = Exclude<LoadResult, { kind: "ok" }>;
+
+interface DevHooks {
+	showPendingBootstrap(root: HTMLElement, pending: PendingBootstrap): void;
+	showSession(root: HTMLElement, session: GameSession): void;
+	recordingProvider(
+		provider: RoundLLMProvider,
+		session: GameSession,
+	): RoundLLMProvider;
+	lifecycleListener: ((event: LifecyclePhase) => void) | undefined;
+	refreshAfterRound(
+		doc: Document,
+		session: GameSession,
+		aiIds: readonly AiId[],
+	): void;
+}
+
+interface GameViewContext {
+	root: HTMLElement;
+	opts: RenderOpts | undefined;
+	doc: Document;
+	form: HTMLFormElement;
+	promptInput: HTMLInputElement;
+	sendBtn: HTMLButtonElement;
+	capHitEl: HTMLElement | null;
+	persistenceWarningEl: HTMLElement | null;
+	mentionOverlay: HTMLElement | null;
+	promptTargetEl: HTMLElement | null;
+	searchParams: URLSearchParams;
+	enableReasoning: boolean;
+	sessionLabel: string;
+	dev: DevHooks;
+	personaLookups: PersonaLookups | null;
+	lockouts: Map<AiId, boolean>;
+	roundInFlight: boolean;
+	connectionUnstable: boolean;
+}
+
+interface LoadingTimers {
+	spinnerInterval: ReturnType<typeof setInterval> | undefined;
+	wipeRaf: ReturnType<typeof requestAnimationFrame> | undefined;
+}
+
+interface RoundSpinners {
+	strip(aiId: AiId): void;
+	stripAll(): void;
+}
+
+interface RoundDraft {
+	addressee: AiId;
+	message: string;
+}
+
+interface RoundOutcome {
+	gameEnded: boolean;
+}
+
+let gameEndHandled = false;
 
 let session: GameSession | null = null;
-/** The session id `session` was last hydrated from. When the active-session
- * pointer moves (e.g. the user clicks Load on a different session in the
- * picker), this drifts from `getActiveSessionId()` and the next renderGame
- * drops the cache so the restore path runs against the new pointer. */
-let cachedSessionId: string | null = null;
-let cachedEpoch: number = 1;
+let hydratedSessionId: string | null = null;
+let hydratedEpoch: number = 1;
 
 export function renderGame(
 	root: HTMLElement,
 	opts?: RenderOpts,
 ): Promise<void> {
+	const ctx = createGameViewContext(root, opts);
+	if (!ctx) return Promise.resolve();
+	dropSessionIfActivePointerMoved();
+	wireComposerInput(ctx);
+	if (!session) {
+		const detour = enterWithoutCachedSession(ctx);
+		if (detour) return detour;
+	}
+	mountSessionView(ctx);
+	return Promise.resolve();
+}
+
+function isDevHost(): boolean {
+	return (
+		__WORKER_BASE_URL__ === "http://localhost:8787" &&
+		typeof location !== "undefined" &&
+		location.origin === __WORKER_BASE_URL__
+	);
+}
+
+export function applyTestAffordances(
+	gameSession: GameSession,
+	searchParams: URLSearchParams,
+): GameSession {
+	if (!isDevHost()) return gameSession;
+
+	const wantsImmediateWin = searchParams.get("winImmediately") === "1";
+	if (!wantsImmediateWin) return gameSession;
+
+	const originalSubmit = gameSession.submitMessage.bind(gameSession);
+	gameSession.submitMessage = async (...args) => {
+		const result = await originalSubmit(...args);
+		return {
+			...result,
+			result: { ...result.result, gameEnded: true },
+			nextState: {
+				...result.nextState,
+				isComplete: true,
+				outcome: "win" as const,
+			},
+		};
+	};
+
+	return gameSession;
+}
+
+function createGameViewContext(
+	root: HTMLElement,
+	opts: RenderOpts | undefined,
+): GameViewContext | null {
 	const doc = root.ownerDocument;
 	const form = doc.querySelector<HTMLFormElement>("#composer");
 	const promptInput = doc.querySelector<HTMLInputElement>("#prompt");
 	const sendBtn = doc.querySelector<HTMLButtonElement>("#send");
-	const capHitEl = doc.querySelector<HTMLElement>("#cap-hit");
-	const persistenceWarningEl = doc.querySelector<HTMLElement>(
-		"#persistence-warning",
-	);
-
-	if (!form || !promptInput || !sendBtn) return Promise.resolve();
-
-	// Drop the in-memory session cache if the active-session pointer no longer
-	// matches what we hydrated from. This is what propagates a Load click in
-	// the picker without a page refresh: the click writes a new active id and
-	// re-enters this route, and the restore branch below picks up the new
-	// session instead of re-rendering the stale closure-held one.
-	if (session !== null && cachedSessionId !== getActiveSessionId()) {
-		session = null;
-		cachedSessionId = null;
-		gameEnded = false;
-	}
-
-	// Mention-based addressing state — built lazily after session init below,
-	// since persona handles are procedurally generated per session.
-	let personaNamesToId: ReturnType<typeof buildPersonaNameMap>;
-	let personaColors: ReturnType<typeof buildPersonaColorMap>;
-	let personaDisplayNames: ReturnType<typeof buildPersonaDisplayNameMap>;
-	const lockouts: Map<AiId, boolean> = new Map();
-	let roundInFlight = false;
-	// Set when a round throws a non-CapHitError (e.g. transient upstream 502
-	// from the proxy, or a network/fetch failure). Drives the `#round-error`
-	// inline message and the `● connection unstable` topinfo pip; both clear
-	// when the next round succeeds. See issue #231.
-	let connectionUnstable = false;
-
-	// promptInput and sendBtn are guaranteed non-null (checked above).
-	const _promptInput = promptInput;
-	const _sendBtn = sendBtn;
-
-	// Overlay for mention highlight rendering.
-	const overlay = doc.querySelector<HTMLElement>("#prompt-overlay");
-
-	// Prompt-target indicator inside the BBS-style command-line prefix.
-	const promptTargetEl = doc.querySelector<HTMLElement>(".prompt-target");
-
-	/** Update the `/*<handle>` indicator beside `root@hi-blue:` from the
-	 * current addressee. `null` resets to dim `/?????`. */
-	function refreshPromptTarget(addressee: AiId | null): void {
-		if (!promptTargetEl) return;
-		if (addressee == null) {
-			promptTargetEl.textContent = "/?????";
-			promptTargetEl.classList.remove("is-set");
-			promptTargetEl.style.removeProperty("--target-color");
-			return;
-		}
-		const personas = session?.getState().personas ?? {};
-		const persona = personas[addressee];
-		const handle = persona?.name ?? addressee;
-		promptTargetEl.textContent = `/*${handle}`;
-		promptTargetEl.classList.add("is-set");
-		if (persona?.color) {
-			promptTargetEl.style.setProperty("--target-color", persona.color);
-		} else {
-			promptTargetEl.style.removeProperty("--target-color");
-		}
-	}
-
-	/** Set or clear the --panel-color CSS custom property on an element. */
-	function setPanelColor(el: HTMLElement, color: string | null): void {
-		if (color != null) {
-			el.style.setProperty("--panel-color", color);
-		} else {
-			el.style.removeProperty("--panel-color");
-		}
-	}
-
-	/** Rebuild the overlay's DOM to reflect the current text and highlight range. */
-	function rebuildOverlay(
-		ov: HTMLElement | null,
-		text: string,
-		highlight: { start: number; end: number; color: string } | null,
-	): void {
-		if (!ov) return;
-		// Remove all children.
-		while (ov.firstChild) ov.removeChild(ov.firstChild);
-		if (!highlight) {
-			ov.appendChild(doc.createTextNode(text));
-			return;
-		}
-		const { start, end, color } = highlight;
-		if (start > 0) {
-			ov.appendChild(doc.createTextNode(text.slice(0, start)));
-		}
-		const span = doc.createElement("span");
-		span.className = "mention-highlight";
-		span.style.setProperty("--panel-color", color);
-		span.style.color = color;
-		span.appendChild(doc.createTextNode(text.slice(start, end)));
-		ov.appendChild(span);
-		if (end < text.length) {
-			ov.appendChild(doc.createTextNode(text.slice(end)));
-		}
-	}
-
-	function refreshComposerState(): void {
-		if (!personaNamesToId || !personaColors || !personaDisplayNames) return;
-		const state = deriveComposerState({
-			text: _promptInput.value,
-			lockouts,
-			personaNamesToId,
-			personaColors,
-			personaDisplayNames,
-		});
-		_sendBtn.disabled = !state.sendEnabled || roundInFlight;
-		setPanelColor(_promptInput, state.borderColor);
-
-		// Panel addressing + lockout muting
-		for (const aiId of personaColors.keys()) {
-			const panel = doc.querySelector<HTMLElement>(
-				`.ai-panel[data-ai="${aiId}"]`,
-			);
-			if (!panel) continue;
-			const isAddressed = state.panelHighlight === aiId;
-			panel.classList.toggle("panel--addressed", isAddressed);
-			const isLocked = state.lockedPanels.has(aiId);
-			panel.classList.toggle("panel--locked", isLocked);
-			panel.setAttribute("aria-disabled", isLocked ? "true" : "false");
-		}
-
-		// Inline lockout error element
-		const lockoutErrorEl =
-			doc.querySelector<HTMLOutputElement>("#lockout-error");
-		if (lockoutErrorEl) {
-			if (state.lockoutError) {
-				lockoutErrorEl.textContent = state.lockoutError;
-				lockoutErrorEl.removeAttribute("hidden");
-			} else {
-				lockoutErrorEl.textContent = "";
-				lockoutErrorEl.setAttribute("hidden", "");
-			}
-		}
-
-		rebuildOverlay(overlay, _promptInput.value, state.mentionHighlight);
-		if (overlay) overlay.scrollLeft = _promptInput.scrollLeft;
-		refreshPromptTarget(state.addressee);
-	}
-
-	promptInput.addEventListener("input", refreshComposerState);
-	promptInput.addEventListener("scroll", () => {
-		if (overlay) overlay.scrollLeft = _promptInput.scrollLeft;
-	});
-
-	// Reasoning is disabled by default for routine daemon turns (see
-	// BrowserLLMProvider). Dev-only `?think=1` opts the model's thinking
-	// step back on for prompt-tuning. Gated to wrangler-dev (see isDevHost).
+	if (!form || !promptInput || !sendBtn) return null;
 	const searchParams = new URLSearchParams(location.search);
-	const enableReasoning = isDevHost() && searchParams.get("think") === "1";
+	return {
+		root,
+		opts,
+		doc,
+		form,
+		promptInput,
+		sendBtn,
+		capHitEl: doc.querySelector<HTMLElement>("#cap-hit"),
+		persistenceWarningEl: doc.querySelector<HTMLElement>(
+			"#persistence-warning",
+		),
+		mentionOverlay: doc.querySelector<HTMLElement>("#prompt-overlay"),
+		promptTargetEl: doc.querySelector<HTMLElement>(".prompt-target"),
+		searchParams,
+		enableReasoning: isDevHost() && searchParams.get("think") === "1",
+		sessionLabel: getActiveSessionId() ?? UNKNOWN_SESSION_ID,
+		dev: __DEV__ ? inspectorDevHooks(doc) : NOOP_DEV_HOOKS,
+		personaLookups: null,
+		lockouts: new Map(),
+		roundInFlight: false,
+		connectionUnstable: false,
+	};
+}
 
-	/** Show the persistence warning banner once (idempotent). */
-	function showPersistenceWarning(reason: string): void {
-		if (!persistenceWarningEl) return;
-		const msg =
-			PERSISTENCE_WARNING_MESSAGES[reason] ??
-			PERSISTENCE_WARNING_MESSAGES.unknown ??
-			"Game progress could not be saved.";
-		persistenceWarningEl.textContent = msg;
-		persistenceWarningEl.removeAttribute("hidden");
-	}
+function dropSessionIfActivePointerMoved(): void {
+	const activePointerMoved =
+		session !== null && hydratedSessionId !== getActiveSessionId();
+	if (!activePointerMoved) return;
+	session = null;
+	hydratedSessionId = null;
+	gameEndHandled = false;
+}
 
-	/** Apply the three-phase load state on `#stage` so CSS can drive panel +
-	 * status visuals. Removing the attribute (state="stable") restores the
-	 * fully-bright "live" look. */
-	function setStageLoadState(state: LoadState): void {
-		const stageEl = doc.querySelector<HTMLElement>("#stage");
-		if (!stageEl) return;
-		if (state === "stable") {
-			stageEl.removeAttribute("data-load-state");
-			stageEl.style.removeProperty("--fill-pct");
-		} else {
-			stageEl.setAttribute("data-load-state", state);
-		}
-	}
+function releaseSession(): void {
+	session = null;
+	hydratedSessionId = null;
+}
 
-	/** Paint the right-hand topinfo cell for one of the three load states.
-	 * Used during progressive loading; the normal `refreshTopInfo` (session
-	 * required) takes over once we transition to stable. */
-	function renderLoadingTopInfo(state: LoadState): void {
-		const topinfoLeftEl = doc.querySelector<HTMLElement>("#topinfo-left");
-		const topinfoRightEl = doc.querySelector<HTMLElement>("#topinfo-right");
-		const topinfoMobileEl = doc.querySelector<HTMLElement>("#topinfo-mobile");
-		const topinfoMobileStatusEl = doc.querySelector<HTMLElement>(
-			"#topinfo-mobile-status",
-		);
-		const status = topInfoStatus(state);
-		const sessionIdLocal = getActiveSessionId() ?? "0x????";
-		const inputs = {
-			sessionId: sessionIdLocal,
-			epoch: cachedEpoch,
-			turn: 0,
-		};
-		if (topinfoLeftEl) renderTopInfoLeft(topinfoLeftEl, inputs);
-		if (topinfoRightEl) {
-			topinfoRightEl.textContent = "";
-			const span = doc.createElement("span");
-			span.className = status.cls;
-			span.textContent = status.desktop;
-			topinfoRightEl.appendChild(span);
-		}
-		if (topinfoMobileEl) {
-			topinfoMobileEl.textContent = formatTopInfoMobile(inputs);
-		}
-		if (topinfoMobileStatusEl) {
-			topinfoMobileStatusEl.textContent = "";
-			const span = doc.createElement("span");
-			span.className = status.cls;
-			span.textContent = ` ${status.mobile}`;
-			topinfoMobileStatusEl.appendChild(span);
-		}
-	}
+function currentPersonas(): Record<AiId, AiPersona> {
+	return session?.getState().personas ?? {};
+}
 
-	/** Error thrown when bootstrap loading exceeds BOOTSTRAP_LOADING_TIMEOUT_MS. */
-	class BootstrapTimeoutError extends Error {
-		constructor() {
-			super("bootstrap loading timed out");
-			this.name = "BootstrapTimeoutError";
-		}
-	}
+const NOOP_DEV_HOOKS: DevHooks = {
+	showPendingBootstrap: () => undefined,
+	showSession: () => undefined,
+	recordingProvider: (provider) => provider,
+	lifecycleListener: undefined,
+	refreshAfterRound: () => undefined,
+};
 
-	/** Async loading flow: render an empty "loading daemons" screen
-	 * immediately, populate panels with names + braille spinners when
-	 * personas resolve, run a fake-progress brightness wipe while waiting
-	 * for content packs, then build + persist the session and recurse into
-	 * the normal restore path. */
-	function renderBootstrapLoadingFlow(
-		pending: ReturnType<typeof getPendingBootstrap> & object,
-	): Promise<void> {
-		// Show route chrome + global header now (start route hides them).
-		const startScreenEl = doc.querySelector<HTMLElement>("#start-screen");
-		const sessionsScreenEl = doc.querySelector<HTMLElement>("#sessions-screen");
-		const panelsEl = doc.querySelector<HTMLElement>("#panels");
-		const composerEl = doc.querySelector<HTMLElement>("#composer");
-		if (startScreenEl) startScreenEl.setAttribute("hidden", "");
-		if (sessionsScreenEl) sessionsScreenEl.setAttribute("hidden", "");
-		if (panelsEl) panelsEl.removeAttribute("hidden");
-		if (composerEl) composerEl.removeAttribute("hidden");
-		const headerEl = doc.querySelector<HTMLElement>("#stage > header");
-		const topinfoEl = doc.querySelector<HTMLElement>("#topinfo");
-		const bannerWrapEl = doc.querySelector<HTMLElement>("#banner");
-		if (headerEl) headerEl.removeAttribute("hidden");
-		if (topinfoEl) topinfoEl.removeAttribute("hidden");
-		if (bannerWrapEl) bannerWrapEl.removeAttribute("hidden");
-		const bannerEl = doc.querySelector<HTMLElement>("#banner");
-		if (bannerEl && !bannerEl.innerHTML) bannerEl.innerHTML = BANNER;
+function inspectorDevHooks(doc: Document): DevHooks {
+	return {
+		showPendingBootstrap: (root, pendingBootstrap) =>
+			renderInspector(root, { pendingBootstrap }),
+		showSession: (root, gameSession) =>
+			renderInspector(root, { session: gameSession }),
+		recordingProvider: withDevInspectorRecording,
+		lifecycleListener: (event) => updateDaemonFooterOnLifecycle(doc, event),
+		refreshAfterRound: refreshInspectorAfterRound,
+	};
+}
 
-		// Reset panels: clear any stale data-ai/persona-name from a previous
-		// session so the loading frames render as empty shells.
-		const panelEls = doc.querySelectorAll<HTMLElement>(".ai-panel");
-		for (const panel of panelEls) {
-			panel.removeAttribute("data-ai");
-			panel.style.removeProperty("--panel-color");
-			for (const lbl of panel.querySelectorAll<HTMLElement>(".panel-name")) {
-				lbl.textContent = "";
+function withDevInspectorRecording(
+	rawProvider: RoundLLMProvider,
+	gameSession: GameSession,
+): RoundLLMProvider {
+	return {
+		streamRound: async (messages, tools, onDelta, daemonId, onLifecycle) => {
+			if (daemonId && messages[0]?.role === "system") {
+				recordDaemonSystemPrompt(daemonId, messages[0].content);
+				recordDaemonRound(daemonId, gameSession.getState().round);
 			}
-			const transcript = panel.querySelector<HTMLElement>(".transcript");
-			if (transcript) {
-				transcript.dataset.transcript = "";
-				transcript.textContent = "";
-			}
-			const budgetEl = panel.querySelector<HTMLSpanElement>(".panel-budget");
-			if (budgetEl) {
-				budgetEl.dataset.budget = "";
-				budgetEl.textContent = "";
-			}
-		}
-
-		// Composer: visible but disabled with a "loading…" placeholder.
-		_promptInput.disabled = true;
-		_sendBtn.disabled = true;
-		_promptInput.placeholder = "loading…";
-
-		setStageLoadState("loading-daemons");
-		renderLoadingTopInfo("loading-daemons");
-
-		if (__DEV__) {
-			renderInspector(root, { pendingBootstrap: pending });
-		}
-
-		// Braille spinner machinery — duplicated from the round-submit path so
-		// we can ride spinners on the panel-name labels while content packs
-		// load (no session yet, so we can't share that closure).
-		const BRAILLE_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-		const SPINNER_INTERVAL_MS = 80;
-		let spinnerInterval: ReturnType<typeof setInterval> | undefined;
-		let wipeRaf: ReturnType<typeof requestAnimationFrame> | undefined;
-
-		const cleanupLoadingTimers = (): void => {
-			if (spinnerInterval) {
-				clearInterval(spinnerInterval);
-				spinnerInterval = undefined;
-			}
-			if (wipeRaf !== undefined) {
-				cancelAnimationFrame(wipeRaf);
-				wipeRaf = undefined;
-			}
-		};
-
-		const startSpinners = (): void => {
-			let frame = 0;
-			spinnerInterval = setInterval(() => {
-				frame = (frame + 1) % BRAILLE_FRAMES.length;
-				const text = ` ${BRAILLE_FRAMES[frame] ?? ""}`;
-				for (const sp of doc.querySelectorAll<HTMLElement>(
-					".panel-name .panel-spinner",
-				)) {
-					sp.textContent = text;
-				}
-			}, SPINNER_INTERVAL_MS);
-		};
-
-		const startBrightnessWipe = (): void => {
-			const stageEl = doc.querySelector<HTMLElement>("#stage");
-			if (!stageEl) return;
-			const startTs =
-				typeof performance !== "undefined" ? performance.now() : Date.now();
-			// τ chosen so the bright band reaches ~95% at ~3 min (target pack
-			// load time) and ~99% at ~4.5 min, asymptotically capped at 99%
-			// so the panel never visually completes until packs actually resolve.
-			const TAU_MS = 60_000;
-			const tick = (): void => {
-				const now =
-					typeof performance !== "undefined" ? performance.now() : Date.now();
-				const elapsed = now - startTs;
-				const eased = 1 - Math.exp(-elapsed / TAU_MS);
-				const pct = Math.min(99, Math.max(0, eased * 100));
-				stageEl.style.setProperty("--fill-pct", `${pct.toFixed(2)}%`);
-				wipeRaf = requestAnimationFrame(tick);
-			};
-			wipeRaf = requestAnimationFrame(tick);
-		};
-
-		const buildLoadingPersonaShape = (
-			personas: Record<AiId, AiPersona>,
-		): void => {
-			const ids = Object.keys(personas);
-			panelEls.forEach((panel, idx) => {
-				const aiId = ids[idx];
-				if (!aiId) return;
-				const persona = personas[aiId];
-				if (!persona) return;
-				panel.dataset.ai = aiId;
-				panel.style.setProperty("--panel-color", persona.color);
-				initPanelChrome(panel, persona);
-				// Append a braille spinner span next to each persona name label.
-				for (const labelEl of panel.querySelectorAll<HTMLElement>(
-					".panel-name",
-				)) {
-					const sp = doc.createElement("span");
-					sp.className = "panel-spinner";
-					sp.textContent = ` ${BRAILLE_FRAMES[0] ?? ""}`;
-					labelEl.appendChild(sp);
-				}
-			});
-		};
-
-		// Extract bootstrap chain logic into a helper so it can be reused by recovery
-		const runBootstrapChain = (
-			pendingBootstrap: ReturnType<typeof getPendingBootstrap> & object,
-		): Promise<void> => {
-			const bootstrapPromise = pendingBootstrap.personasPromise
-				.then((personas) => {
-					buildLoadingPersonaShape(personas);
-					setStageLoadState("generating-room");
-					renderLoadingTopInfo("generating-room");
-					if (__DEV__) {
-						renderInspector(root, { pendingBootstrap });
-					}
-					startSpinners();
-					startBrightnessWipe();
-					return pendingBootstrap.contentPacksPromise.then(
-						({ packsA, packsB, objectiveTypes }) => ({
-							personas,
-							contentPacksA: packsA,
-							contentPacksB: packsB,
-							objectiveTypes,
-						}),
-					);
-				})
-				.then((assets) => {
-					cleanupLoadingTimers();
-					const gameSessionRng = getSpikeRng("gameSession");
-					let built = buildSessionFromAssets(
-						assets,
-						gameSessionRng ? { rng: gameSessionRng } : undefined,
-					);
-					built = applyTestAffordances(built, searchParams);
-
-					// Defensive: if the active session is no longer empty, another
-					// navigation invalidated the bootstrap mid-flight. Abort rather
-					// than overwriting state under the wrong session id.
-					const midFlightCheck = loadActiveSession();
-					if (midFlightCheck.kind !== "none") {
-						clearPendingBootstrap();
-						// renderApp routes by storage state — populated→game,
-						// broken/version-mismatch→sessions picker.
-						renderApp(root);
-						return;
-					}
-
-					const saveResult = saveActiveSession(built.getState());
-					if (!saveResult.ok) {
-						showPersistenceWarning(saveResult.reason);
-					}
-					clearPendingBootstrap();
-
-					// Strip braille spinners — initPanelChrome below will overwrite
-					// .panel-name text content but spinners are appended children,
-					// so clear them explicitly first.
-					for (const sp of doc.querySelectorAll<HTMLElement>(
-						".panel-name .panel-spinner",
-					)) {
-						sp.remove();
-					}
-
-					// Tear down any recovery UI left over from a prior timeout
-					// (Path A). The bootstrap promise is not cancelled when the
-					// timeout fires, so a late success must undo the recovery
-					// side effects — otherwise the banner stays mounted on top
-					// of the now-functional game and its regen/abandon
-					// listeners can destroy the running session if clicked.
-					const lateRecoveryEl = doc.querySelector<HTMLElement>(
-						"#bootstrap-recovery",
-					);
-					if (lateRecoveryEl) {
-						lateRecoveryEl.setAttribute("hidden", "");
-						const staleRegenBtn = doc.querySelector<HTMLButtonElement>(
-							"#bootstrap-recovery-regen",
-						);
-						if (staleRegenBtn) {
-							staleRegenBtn.replaceWith(staleRegenBtn.cloneNode(true));
-						}
-						const staleAbandonLink = doc.querySelector<HTMLAnchorElement>(
-							"#bootstrap-recovery-abandon",
-						);
-						if (staleAbandonLink) {
-							staleAbandonLink.replaceWith(staleAbandonLink.cloneNode(true));
-						}
-					}
-
-					setStageLoadState("stable");
-
-					// Re-enable composer; the recursive renderGame call below will
-					// run refreshComposerState which re-derives sendBtn.disabled from
-					// the current text + lockouts (start state: send disabled until
-					// a valid mention is typed).
-					_promptInput.disabled = false;
-					_promptInput.placeholder = "";
-
-					// Hand off to the normal populated path. Setting the module-scope
-					// session var lets the recursive call skip both the loading branch
-					// and the localStorage restore path.
-					session = built;
-					cachedSessionId = getActiveSessionId();
-					return renderGame(root, opts);
-				});
-
-			// Create a timeout promise that rejects after BOOTSTRAP_LOADING_TIMEOUT_MS
-			let timeoutId: ReturnType<typeof setTimeout> | undefined;
-			const timeoutPromise = new Promise<never>((_resolve, reject) => {
-				timeoutId = setTimeout(() => {
-					reject(new BootstrapTimeoutError());
-				}, BOOTSTRAP_LOADING_TIMEOUT_MS);
-			});
-
-			return Promise.race([bootstrapPromise, timeoutPromise]).finally(() => {
-				// Always clear the timeout timer, whether the race succeeded or failed
-				if (timeoutId !== undefined) {
-					clearTimeout(timeoutId);
-				}
-			});
-		};
-
-		// Run the initial bootstrap chain with error handling
-		return runBootstrapChain(pending).catch(async (err: unknown) => {
-			cleanupLoadingTimers();
-
-			if (__DEV__) {
-				renderInspector(root, { pendingBootstrap: pending });
-			}
-
-			if (err instanceof CapHitError && capHitEl) {
-				capHitEl.removeAttribute("hidden");
-				if (panelsEl) panelsEl.setAttribute("hidden", "");
-				if (composerEl) composerEl.setAttribute("hidden", "");
-				return;
-			}
-
-			const recoveryEl = doc.querySelector<HTMLElement>("#bootstrap-recovery");
-			const recoveryTitleEl = doc.querySelector<HTMLElement>(
-				"#bootstrap-recovery-title",
-			);
-			const recoveryBodyEl = doc.querySelector<HTMLElement>(
-				"#bootstrap-recovery-body",
-			);
-			const regenBtn = doc.querySelector<HTMLButtonElement>(
-				"#bootstrap-recovery-regen",
-			);
-			const abandonLink = doc.querySelector<HTMLAnchorElement>(
-				"#bootstrap-recovery-abandon",
-			);
-
-			// If recovery UI can't be shown (missing DOM),
-			// fall back to a fresh start with the broken reason surfaced.
-			if (!recoveryEl || !recoveryTitleEl || !recoveryBodyEl) {
-				clearActiveSession();
-				clearPendingBootstrap();
-				renderApp(root, { reason: "broken" });
-				return;
-			}
-
-			// Determine reason and set UI text
-			let reason = "broken";
-			if (err instanceof BootstrapTimeoutError) {
-				reason = "stuck";
-			}
-
-			if (reason === "stuck") {
-				recoveryTitleEl.textContent = "the room is taking too long";
-				recoveryBodyEl.textContent =
-					"the world generation timed out. try regenerating with the same daemons, or abandon and reconnect.";
-			} else {
-				recoveryTitleEl.textContent = "the room collapsed";
-				recoveryBodyEl.textContent =
-					"the world we tried to build was malformed. try regenerating with the same daemons, or abandon and reconnect.";
-			}
-
-			// Show recovery UI
-			recoveryEl.removeAttribute("hidden");
-			if (panelsEl) panelsEl.setAttribute("hidden", "");
-			if (composerEl) composerEl.setAttribute("hidden", "");
-			setStageLoadState("unstable");
-
-			// Wire up regenerate button
-			if (regenBtn) {
-				regenBtn.disabled = false;
-				const runRegenerate = async (): Promise<void> => {
-					// Hide recovery UI and clear persistence warning
-					recoveryEl.setAttribute("hidden", "");
-					const persistenceWarningEl = doc.querySelector<HTMLElement>(
-						"#persistence-warning",
-					);
-					if (persistenceWarningEl)
-						persistenceWarningEl.setAttribute("hidden", "");
-
-					// Show panels and composer as empty loading shells
-					if (panelsEl) panelsEl.removeAttribute("hidden");
-					if (composerEl) composerEl.removeAttribute("hidden");
-					_promptInput.disabled = true;
-					_promptInput.placeholder = "loading…";
-
-					// Disable the regen button during regeneration
-					regenBtn.disabled = true;
-
-					// Restart content packs with cached personas
-					const regenPending = restartContentPacks();
-
-					try {
-						await runBootstrapChain(regenPending);
-					} catch (regenErr: unknown) {
-						cleanupLoadingTimers();
-
-						// If it's a cap-hit error, show cap-hit and hide recovery
-						if (regenErr instanceof CapHitError && capHitEl) {
-							capHitEl.removeAttribute("hidden");
-							recoveryEl.setAttribute("hidden", "");
-							if (panelsEl) panelsEl.setAttribute("hidden", "");
-							if (composerEl) composerEl.setAttribute("hidden", "");
-							return;
-						}
-
-						// Otherwise, re-show recovery UI for another attempt
-						recoveryEl.removeAttribute("hidden");
-						if (panelsEl) panelsEl.setAttribute("hidden", "");
-						if (composerEl) composerEl.setAttribute("hidden", "");
-						setStageLoadState("unstable");
-						regenBtn.disabled = false;
-					}
-				};
-
-				regenBtn.replaceWith(regenBtn.cloneNode(true));
-				const newRegenBtn = doc.querySelector<HTMLButtonElement>(
-					"#bootstrap-recovery-regen",
-				);
-				if (newRegenBtn) {
-					newRegenBtn.addEventListener("click", (e) => {
-						e.preventDefault();
-						void runRegenerate();
-					});
-				}
-			}
-
-			// Wire up abandon link
-			if (abandonLink) {
-				abandonLink.replaceWith(abandonLink.cloneNode(true));
-				const newAbandonLink = doc.querySelector<HTMLAnchorElement>(
-					"#bootstrap-recovery-abandon",
-				);
-				if (newAbandonLink) {
-					newAbandonLink.addEventListener("click", (e) => {
-						e.preventDefault();
-						clearActiveSession();
-						clearPendingBootstrap();
-						renderApp(root, { reason: "broken" });
-					});
-				}
-			}
-		});
-	}
-
-	// Session restore path: load from active session pointer.
-	// If no valid session → redirect to #/start.
-	if (!session) {
-		// Bootstrap-loading branch: the player just submitted CONNECT, the
-		// session can't be built until content packs land, but we want them on
-		// the main screen with progressive loading rather than stuck on dial-up.
-		const pendingBootstrap = getPendingBootstrap();
-		if (pendingBootstrap) {
-			// Only use the bootstrap when the active session is genuinely empty
-			// (just minted, no data yet). loadActiveSession() returns { kind: "none" }
-			// for a minted-but-unsaved session, which is the only state where it's
-			// safe to build and save a new game. A stale or already-populated session
-			// must be handled without writing new content under the existing id.
-			const loadCheck = loadActiveSession();
-			if (loadCheck.kind === "none") {
-				return renderBootstrapLoadingFlow(pendingBootstrap);
-			}
-			clearPendingBootstrap();
-			// renderApp routes by storage state — populated→game,
-			// broken/version-mismatch→sessions picker with reason.
-			renderApp(root);
-			return Promise.resolve();
-		}
-
-		// Feature-detect localStorage availability (SecurityError in privacy mode).
-		let storageAvailable = true;
-		try {
-			const probe = `hi-blue-storage-probe-${Math.random().toString(36).slice(2)}`;
-			localStorage.setItem(probe, "1");
-			localStorage.removeItem(probe);
-		} catch {
-			storageAvailable = false;
-			showPersistenceWarning("unavailable");
-		}
-
-		if (!storageAvailable) {
-			// Storage unavailable — can't restore or start; redirect to #/start
-			// where user can see an error. (The warning is already shown above.)
-			// For now, allow fall-through with no session so gameplay still works
-			// if the start route already handled this case.
-		} else {
-			const activeId = getActiveSessionId();
-			if (activeId === null) {
-				// No active session pointer → fall back to start (dispatcher mints).
-				renderApp(root);
-				return Promise.resolve();
-			}
-
-			const loadResult = loadActiveSession();
-			if (loadResult.kind === "ok") {
-				const restoredState = loadResult.state;
-				session = GameSession.restore(restoredState);
-				cachedSessionId = loadResult.sessionId;
-				cachedEpoch = loadResult.epoch;
-
-				// Re-render transcripts from restored state using conversationLogs.
-				// (The new format stores conversation logs in daemon .txt files, not as
-				// serialized transcript HTML, so we always use the conversationLogs path.)
-				const restoredPhase = restoredState;
-				const restoredPersonas = restoredState.personas;
-				const restorePanelEls = doc.querySelectorAll<HTMLElement>(".ai-panel");
-				Object.keys(restoredPersonas).forEach((aiId, idx) => {
-					const panel = restorePanelEls[idx];
-					if (!panel) return;
-					const transcript = panel.querySelector<HTMLElement>(".transcript");
-					if (!transcript) return;
-					// Always reset before re-populating: when the user clicks [load] on
-					// a different Session in the picker, the panels keep the previous
-					// session's transcript children. Clearing inside the entries-only
-					// branch left them stale whenever the new session had fewer (or
-					// zero) chat entries for this panel slot.
-					transcript.textContent = "";
-					// Filter to message entries where blue is involved (from blue or to blue).
-					// Skip daemon-to-daemon messages and broadcast entries from the player-facing transcript.
-					// Broadcasts live in Daemon conversationLogs for LLM context only.
-					const visibleEntries = (
-						restoredPhase.conversationLogs[aiId] ?? []
-					).filter(
-						(e) =>
-							e.kind === "message" && (e.from === "blue" || e.to === "blue"),
-					);
-					if (visibleEntries.length > 0) {
-						// Synthesise from conversationLogs (stored in daemon .txt files).
-						const persona = restoredPersonas[aiId];
-						const personaName = persona?.name ?? aiId;
-						for (const entry of visibleEntries) {
-							const lineEl = doc.createElement("div");
-							lineEl.className = "msg-line";
-							if (entry.kind === "message") {
-								if (entry.from === "blue") {
-									// Incoming from player
-									appendMentionAwareText(
-										lineEl,
-										`> ${entry.content}\n`,
-										restoredPersonas,
-										"msg-you",
-									);
-								} else {
-									// Outgoing from AI to blue
-									const prefixSpan = doc.createElement("span");
-									prefixSpan.className = "msg-prefix";
-									if (persona?.color) {
-										prefixSpan.style.setProperty(
-											"--prefix-color",
-											persona.color,
-										);
-									}
-									prefixSpan.textContent = `> *${transcriptName(personaName)} `;
-									lineEl.appendChild(prefixSpan);
-									appendMentionAwareText(
-										lineEl,
-										`${entry.content}\n`,
-										restoredPersonas,
-									);
-								}
-							}
-							transcript.appendChild(lineEl);
-						}
-					}
-				});
-
-				// Action log is populated from live SSE events only (no reload restore).
-
-				// Scroll restored transcripts to the bottom on first paint so the
-				// most recent messages are visible after a page refresh. Deferred
-				// via rAF so layout (scrollHeight) is computed before we assign.
-				requestAnimationFrame(() => {
-					for (const panel of restorePanelEls) {
-						scrollToBottom(panel.querySelector<HTMLElement>(".transcript"));
-					}
-				});
-			} else {
-				// broken or version-mismatch — surface the reason on start. A
-				// stale save (version-mismatch) keeps its bytes; a broken
-				// session does not.
-				const reasonParam: "broken" | "version-mismatch" =
-					loadResult.kind === "version-mismatch"
-						? "version-mismatch"
-						: "broken";
-				const schemaVersion =
-					loadResult.kind === "version-mismatch"
-						? loadResult.schemaVersion
-						: undefined;
-				if (loadResult.kind === "version-mismatch") {
-					deactivateActiveSession();
-				} else {
-					clearActiveSession();
-				}
-				renderApp(root, {
-					reason: reasonParam,
-					...(schemaVersion !== undefined ? { schemaVersion } : {}),
-				});
-				return Promise.resolve();
-			}
-		}
-	}
-
-	// Synchronous post-init: runs for both the restore path AND the bootstrap-
-	// recursive path (which already set session = built before re-entering).
-	if (session !== null) {
-		// Apply SPA-side test affordances from location.search (e.g. ?winImmediately=1).
-		// These are gated inside applyTestAffordances to only fire when
-		// __WORKER_BASE_URL__ === "http://localhost:8787" (local dev).
-		// Note: we use location.search (not the hash params) because these flags are
-		// intended to be set on the page URL itself, matching the legacy worker pattern.
-		session = applyTestAffordances(session, searchParams);
-
-		// Build persona maps from runtime state (after affordances may have replaced session)
-		const runtimePersonas = session.getState().personas;
-		personaNamesToId = buildPersonaNameMap(runtimePersonas);
-		personaColors = buildPersonaColorMap(runtimePersonas);
-		personaDisplayNames = buildPersonaDisplayNameMap(runtimePersonas);
-
-		// Hydrate lockouts from activeComplications so that a reload preserves
-		// the Send-disabled state for chat-locked-out AIs.
-		const activePhaseForLockouts = session.getState();
-		for (const aiId of Object.keys(runtimePersonas)) {
-			lockouts.set(aiId, isPlayerChatLockedOut(activePhaseForLockouts, aiId));
-		}
-
-		// Reset module-level gameEnded flag on fresh session init
-		gameEnded = false;
-	}
-
-	// Route-entry visibility: game route shows panels/composer and hides start-screen
-	// and sessions-screen. The start route hides #panels and #composer on mount;
-	// undo that here so the game UI is always visible when we commit to rendering
-	// (all early-return paths above have already returned).
-	const startScreenEl = doc.querySelector<HTMLElement>("#start-screen");
-	const sessionsScreenEl = doc.querySelector<HTMLElement>("#sessions-screen");
-	const panelsEl = doc.querySelector<HTMLElement>("#panels");
-	const composerEl = doc.querySelector<HTMLElement>("#composer");
-	if (startScreenEl) startScreenEl.setAttribute("hidden", "");
-	if (sessionsScreenEl) sessionsScreenEl.setAttribute("hidden", "");
-	if (panelsEl) panelsEl.removeAttribute("hidden");
-	if (composerEl) composerEl.removeAttribute("hidden");
-	// Restore the global chrome that the start route hides during the login takeover.
-	const headerEl = doc.querySelector<HTMLElement>("#stage > header");
-	const topinfoEl = doc.querySelector<HTMLElement>("#topinfo");
-	const bannerWrapEl = doc.querySelector<HTMLElement>("#banner");
-	if (headerEl) headerEl.removeAttribute("hidden");
-	if (topinfoEl) topinfoEl.removeAttribute("hidden");
-	if (bannerWrapEl) bannerWrapEl.removeAttribute("hidden");
-
-	const aiIdList: string[] =
-		session !== null ? Object.keys(session.getState().personas) : [];
-
-	// Populate panel headers, ASCII border chrome, --panel-color, and budgets.
-	if (session !== null) {
-		const panelEls = doc.querySelectorAll<HTMLElement>(".ai-panel");
-		const runtimePersonasForPanels = session.getState().personas;
-		const sessionRef = session;
-		panelEls.forEach((panel, idx) => {
-			const aiId = aiIdList[idx];
-			if (!aiId) return;
-			panel.dataset.ai = aiId;
-			const persona = runtimePersonasForPanels[aiId];
-			if (!persona) return;
-			panel.style.setProperty("--panel-color", persona.color);
-			initPanelChrome(panel, persona);
-			const budgetEl = panel.querySelector<HTMLSpanElement>(".panel-budget");
-			const gameState = sessionRef.getState();
-			if (budgetEl) {
-				const budget = gameState.budgets[aiId];
-				if (budget) {
-					budgetEl.dataset.budget = String(budget.remaining);
-					budgetEl.textContent = formatBudget(budget.remaining);
-				}
-			}
-		});
-
-		// Populate the input placeholder with the runtime handles, e.g.
-		// `*Ember | *Sage | *Frost …` (test fixtures) or
-		// `*a4b2 | *9bx2 | *cd3f …` (production).
-		const handles = Object.values(session.getState().personas)
-			.map((p) => `*${p.name}`)
-			.join(" | ");
-		if (handles) _promptInput.placeholder = `${handles} …`;
-	}
-
-	// Set the initial composer state — Send starts disabled until a valid
-	// *mention. Deferred until after the panel-setup loop above assigns
-	// `data-ai` to every `.ai-panel`: refreshComposerState's panel-muting pass
-	// selects panels by `[data-ai]`, so running it before those attributes
-	// exist skips the `panel--locked` paint, leaving a restored chat-lockout
-	// looking unlocked until the next composer interaction.
-	refreshComposerState();
-
-	// One-time chrome: ASCII banner + initial top-info row.
-	const bannerEl = doc.querySelector<HTMLElement>("#banner");
-	if (bannerEl && !bannerEl.innerHTML) bannerEl.innerHTML = BANNER;
-	// Active pointer is guaranteed to be set by the boot path above.
-	const sessionId = getActiveSessionId() ?? "0x????";
-
-	const topinfoLeftEl = doc.querySelector<HTMLElement>("#topinfo-left");
-	const topinfoRightEl = doc.querySelector<HTMLElement>("#topinfo-right");
-	const topinfoMobileEl = doc.querySelector<HTMLElement>("#topinfo-mobile");
-
-	function refreshTopInfo(): void {
-		if (!session) return;
-		if (!topinfoLeftEl || !topinfoRightEl) return;
-		const state = session.getState();
-		const inputs = {
-			sessionId,
-			epoch: cachedEpoch,
-			turn: state.round,
-		};
-		renderTopInfoLeft(topinfoLeftEl, inputs);
-		topinfoRightEl.textContent = "";
-		const status = topInfoStatus(connectionUnstable ? "unstable" : "stable");
-		const okSpan = doc.createElement("span");
-		okSpan.className = status.cls;
-		okSpan.textContent = status.desktop;
-		topinfoRightEl.appendChild(okSpan);
-		if (topinfoMobileEl) {
-			topinfoMobileEl.textContent = formatTopInfoMobile(inputs);
-		}
-		// Reset the mobile status pill to "stable" — during progressive
-		// loading we put loading/generating in #topinfo-mobile-status; this
-		// brings it back to its normal green appearance once a session is live.
-		const topinfoMobileStatusEl = doc.querySelector<HTMLElement>(
-			"#topinfo-mobile-status",
-		);
-		if (topinfoMobileStatusEl) {
-			topinfoMobileStatusEl.textContent = "";
-			const sp = doc.createElement("span");
-			sp.className = status.cls;
-			sp.textContent = ` ${status.mobile}`;
-			topinfoMobileStatusEl.appendChild(sp);
-		}
-	}
-
-	refreshTopInfo();
-
-	/** Register panel-click → addressee mention handlers for the given AI ids.
-	 * Called synchronously for the restore path (session is set immediately). */
-	function registerPanelClickHandlers(ids: string[]): void {
-		for (const aiId of ids) {
-			const panel = doc.querySelector<HTMLElement>(
-				`.ai-panel[data-ai="${aiId}"]`,
-			);
-			if (!panel) continue;
-			panel.addEventListener("click", () => {
-				const targetAi = panel.dataset.ai as AiId | undefined;
-				if (!targetAi) return;
-				if (lockouts.get(targetAi) === true) return;
-				const result = applyAddresseeChange({
-					text: _promptInput.value,
-					selectionStart: _promptInput.selectionStart,
-					targetPersona: targetAi,
-					personaNamesToId,
-					personas: session?.getState().personas ?? {},
-				});
-				_promptInput.value = result.text;
-				try {
-					_promptInput.setSelectionRange(
-						result.selectionStart,
-						result.selectionStart,
-					);
-				} catch {
-					/* ignore */
-				}
-				refreshComposerState();
-			});
-		}
-	}
-
-	registerPanelClickHandlers(aiIdList);
-
-	if (__DEV__ && session !== null) {
-		renderInspector(root, {
-			session,
-		});
-	}
-
-	// Helper: get transcript element for an AI
-	function getTranscript(aiId: AiId): HTMLElement | null {
-		return doc.querySelector<HTMLElement>(`[data-transcript="${aiId}"]`);
-	}
-
-	// Helper: scroll the transcript's parent (the .scroll container) to
-	// the bottom so newly appended content stays in view.
-	function scrollToBottom(transcriptEl: HTMLElement | null): void {
-		const scrollEl = transcriptEl?.parentElement;
-		if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
-	}
-
-	// Helper: open a fresh empty `.msg-line` div as a child of the transcript
-	// and return it. Use for events that semantically start a new line
-	// (player message, AI prefix, restored message).
-	function startMsgLine(transcript: HTMLElement): HTMLElement {
-		const div = doc.createElement("div");
-		div.className = "msg-line";
-		transcript.appendChild(div);
-		return div;
-	}
-
-	// Helper: append streamed AI tokens to the current AI message's msg-line.
-	// Embedded `\n` characters do NOT split into new msg-lines — the entire
-	// AI message stays in one msg-line so strip-card preview can render it
-	// as a single ellipsis-truncated line. The line opened by appendAiPrefix
-	// is the target; if missing for any reason, a fallback line is opened.
-	// The accumulated body is stored on the line's dataset so each delta can
-	// re-render the body with mention-aware highlighting from the start.
-	function appendAiTokens(aiId: AiId, text: string): void {
-		const el = getTranscript(aiId);
-		if (!el) return;
-		const last = el.lastElementChild as HTMLElement | null;
-		const line = last?.classList.contains("msg-line") ? last : startMsgLine(el);
-		line.dataset.body = (line.dataset.body ?? "") + text;
-		const personas = session?.getState().personas ?? {};
-		const prefix = line.querySelector<HTMLElement>(":scope > .msg-prefix");
-		while (line.lastChild && line.lastChild !== prefix) {
-			line.removeChild(line.lastChild);
-		}
-		appendMentionAwareText(line, line.dataset.body, personas);
-		scrollToBottom(el);
-	}
-
-	// Helper: append a system-generated line (phase separator, lockout text,
-	// error brackets) as its own .msg-line block. Always opens a fresh line
-	// — never merges into an in-progress AI message.
-	function appendStandaloneLine(aiId: AiId, text: string): void {
-		const el = getTranscript(aiId);
-		if (!el) return;
-		const line = startMsgLine(el);
-		const personas = session?.getState().personas ?? {};
-		appendMentionAwareText(line, text, personas);
-		scrollToBottom(el);
-	}
-
-	// Helper: append a player line wrapped in a .msg-you span (warm white)
-	// inside its own .msg-line block. Persona-name mentions inside the
-	// message body are split into .msg-mention spans so they pick up the
-	// addressed daemon's color instead of warm white.
-	function appendPlayerLine(aiId: AiId, text: string): void {
-		const el = getTranscript(aiId);
-		if (!el) return;
-		const line = startMsgLine(el);
-		const personas = session?.getState().personas ?? {};
-		appendMentionAwareText(line, text, personas, "msg-you");
-		scrollToBottom(el);
-	}
-
-	// Helper: append an AI persona-prefix span (`> *<handle> `) tinted with
-	// the persona's color, opening a fresh .msg-line block for it. The
-	// streaming AI tokens that follow continue inside the same .msg-line
-	// until a `\n` closes the message.
-	function appendAiPrefix(aiId: AiId, personaName: string): void {
-		const el = getTranscript(aiId);
-		if (!el) return;
-		const line = startMsgLine(el);
-		const span = doc.createElement("span");
-		span.className = "msg-prefix";
-		const color = session?.getState().personas[aiId]?.color;
-		if (color) span.style.setProperty("--prefix-color", color);
-		span.textContent = `> *${transcriptName(personaName)} `;
-		line.appendChild(span);
-		scrollToBottom(el);
-	}
-
-	// Helper: pace token emission
-	function _pace(): Promise<void> {
-		const ms = TOKEN_PACE_MS * AI_TYPING_SPEED * (0.5 + Math.random());
-		return new Promise((r) => setTimeout(r, ms));
-	}
-
-	// Helper: update budget display
-	function updateBudget(aiId: AiId, remaining: number): void {
-		const panel = doc.querySelector<HTMLElement>(
-			`.ai-panel[data-ai="${aiId}"]`,
-		);
-		if (!panel) return;
-		const budgetEl = panel.querySelector<HTMLSpanElement>(".panel-budget");
-		if (!budgetEl) return;
-		budgetEl.dataset.budget = String(remaining);
-		budgetEl.textContent = formatBudget(remaining);
-	}
-
-	// Helper: update chat lockout status in the lockouts map
-	function setChatLockout(aiId: AiId, locked: boolean): void {
-		lockouts.set(aiId, locked);
-		refreshComposerState();
-		refreshTopInfo();
-	}
-
-	form.addEventListener("submit", async (evt) => {
-		evt.preventDefault();
-		if (!session) return;
-
-		const { sendEnabled, addressee } = deriveComposerState({
-			text: promptInput.value,
-			lockouts,
-			personaNamesToId,
-			personaColors,
-			personaDisplayNames,
-		});
-		if (!sendEnabled || !addressee) return;
-
-		const rawMessage = promptInput.value.trim();
-		if (!rawMessage) return;
-
-		// Strip a leading *DaemonName mention from the message so the player
-		// line and the LLM submission carry only the body. Non-leading
-		// mentions are left intact.
-		const leadingMention = findFirstMention(rawMessage, personaNamesToId);
-		const message =
-			leadingMention !== null && leadingMention.start === 0
-				? rawMessage.slice(leadingMention.end).trimStart()
-				: rawMessage;
-		if (!message) return;
-
-		const addressed = addressee;
-		roundInFlight = true;
-		sendBtn.disabled = true;
-		// Expose round-in-flight as a DOM attribute on #stage so external
-		// drivers (the playtest daemon, e2e tests) can wait on a deterministic
-		// signal instead of polling transcript text. Cleared in the finally
-		// block below — after the events loop has painted the round's output.
-		doc
-			.querySelector<HTMLElement>("#stage")
-			?.setAttribute("data-round-in-flight", "true");
-
-		// Clear any prior round-level error UI before starting the new round.
-		// If this round also fails, the catch block re-shows it; if it
-		// succeeds, the unstable pip + inline error stay cleared.
-		const roundErrorEl = doc.querySelector<HTMLOutputElement>("#round-error");
-		if (roundErrorEl) {
-			roundErrorEl.textContent = "";
-			roundErrorEl.setAttribute("hidden", "");
-		}
-		connectionUnstable = false;
-
-		// Reset the input to the addressee prefix at send-time so it clears
-		// immediately rather than waiting for all daemons to finish.
-		const addressedNameNow =
-			session.getState().personas[addressed]?.name ?? addressed;
-		const persistedPrefix = `*${addressedNameNow} `;
-		promptInput.value = persistedPrefix;
-		promptInput.setSelectionRange(
-			persistedPrefix.length,
-			persistedPrefix.length,
-		);
-		promptInput.focus();
-		// Programmatic value-set doesn't fire `input`, so the mention-highlight
-		// overlay would keep showing the previous text. Refresh manually so
-		// the overlay repaints to match the new prefix.
-		refreshComposerState();
-
-		// Append the (mention-stripped) player message to the addressed panel.
-		appendPlayerLine(addressed, `> ${message}\n`);
-
-		// Per-daemon braille spinners shown in the panel border, next to the
-		// daemon name. Each persona gets a `.panel-spinner` span appended to
-		// every `.panel-name` element in its panel (top + bottom brow). The
-		// spinner ticks through BRAILLE_FRAMES; stripped per-daemon on first
-		// delta, en-masse on safety-net / catch / finally.
-		const BRAILLE_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-		const SPINNER_INTERVAL_MS = 80;
-		const spinners = new Map<
-			AiId,
-			{ els: HTMLElement[]; intervalId: ReturnType<typeof setInterval> }
-		>();
-		for (const aiId of Object.keys(session.getState().personas) as AiId[]) {
-			const panel = doc.querySelector<HTMLElement>(
-				`.ai-panel[data-ai="${aiId}"]`,
-			);
-			if (!panel) continue;
-			const els: HTMLElement[] = [];
-			for (const labelEl of panel.querySelectorAll<HTMLElement>(
-				".panel-name",
-			)) {
-				const sp = doc.createElement("span");
-				sp.className = "panel-spinner";
-				sp.textContent = ` ${BRAILLE_FRAMES[0] ?? ""}`;
-				labelEl.appendChild(sp);
-				els.push(sp);
-			}
-			if (els.length === 0) continue;
-			let frame = 0;
-			const intervalId = setInterval(() => {
-				frame = (frame + 1) % BRAILLE_FRAMES.length;
-				const text = ` ${BRAILLE_FRAMES[frame] ?? ""}`;
-				for (const sp of els) sp.textContent = text;
-			}, SPINNER_INTERVAL_MS);
-			spinners.set(aiId, { els, intervalId });
-		}
-		const stripSpinner = (aiId: AiId): void => {
-			const s = spinners.get(aiId);
-			if (!s) return;
-			clearInterval(s.intervalId);
-			for (const el of s.els) {
-				if (el.parentNode) el.remove();
-			}
-			spinners.delete(aiId);
-		};
-		const stripAllSpinners = (): void => {
-			for (const aiId of [...spinners.keys()]) stripSpinner(aiId);
-		};
-
-		// Roll initiative for this round
-		const initiative = shuffle(Object.keys(session.getState().personas));
-
-		// Round-local ended flag (distinct from module-level gameEnded)
-		let roundGameEnded = false;
-
-		try {
-			const rawProvider = new BrowserLLMProvider({
-				disableReasoning: !enableReasoning,
-			});
-
-			// session is guaranteed non-null here due to the check above; capture for closure
-			const sessionRef = session;
-
-			// Wrap provider in __DEV__ gate that records turn results for dev inspector footers
-			const provider: RoundLLMProvider = __DEV__
-				? {
-						streamRound: async (
-							messages,
-							tools,
-							onDelta,
-							daemonId,
-							onLifecycle,
-						) => {
-							if (daemonId && messages[0]?.role === "system") {
-								recordDaemonSystemPrompt(daemonId, messages[0].content);
-								if (sessionRef)
-									recordDaemonRound(daemonId, sessionRef.getState().round);
-							}
-							const result = await rawProvider.streamRound(
-								messages,
-								tools,
-								onDelta,
-								daemonId,
-								onLifecycle,
-							);
-							if (daemonId) {
-								recordDaemonTurnResult(daemonId, {
-									...result,
-									lastRawCompletion: result.assistantText,
-									lastToolCalls: result.toolCalls.map((tc) => ({
-										name: tc.name,
-										argumentsJson: tc.argumentsJson,
-									})),
-								});
-							}
-							return result;
-						},
-					}
-				: rawProvider;
-
-			// Lifecycle callback (dev-only) for per-Daemon footer pip state
-			const onLifecycle: ((event: LifecyclePhase) => void) | undefined = __DEV__
-				? (event: LifecyclePhase) => {
-						if (!event.daemonId) return;
-						const panel = document.querySelector<HTMLElement>(
-							`.ai-panel[data-ai="${event.daemonId}"]`,
-						);
-						if (!panel) return;
-						if (event.phase === "started")
-							setDaemonFooterInFlight(panel, "in-flight");
-						else if (event.phase === "completed")
-							setDaemonFooterInFlight(panel, "idle");
-						else if (event.phase === "errored") {
-							setDaemonFooterInFlight(panel, "errored");
-							recordDaemonError(event.daemonId, event.error);
-						}
-						// first-token: no-op
-					}
-				: undefined;
-
-			// Strip each daemon's spinner as the coordinator finishes its
-			// turn (post-retry per #254). Coordinator awaits AIs serially in
-			// initiative order, so this fires staged in real time —
-			// preserving the "spinners stop one by one" feel from before
-			// #254 while correctly covering the retry window.
-			const { result, completions, nextState } = await session.submitMessage(
-				addressed,
-				message,
-				provider,
-				initiative,
-				undefined,
-				(aiId) => stripSpinner(aiId),
+			const result = await rawProvider.streamRound(
+				messages,
+				tools,
+				onDelta,
+				daemonId,
 				onLifecycle,
 			);
+			if (daemonId) {
+				recordDaemonTurnResult(daemonId, {
+					...result,
+					lastRawCompletion: result.assistantText,
+					lastToolCalls: result.toolCalls.map((tc) => ({
+						name: tc.name,
+						argumentsJson: tc.argumentsJson,
+					})),
+				});
+			}
+			return result;
+		},
+	};
+}
 
-			const events = encodeRoundResult(
-				result,
-				completions,
-				nextState,
-				nextState.personas,
+function updateDaemonFooterOnLifecycle(
+	doc: Document,
+	event: LifecyclePhase,
+): void {
+	if (!event.daemonId) return;
+	const panel = findPanel(doc, event.daemonId);
+	if (!panel) return;
+	switch (event.phase) {
+		case "started":
+			setDaemonFooterInFlight(panel, "in-flight");
+			break;
+		case "completed":
+			setDaemonFooterInFlight(panel, "idle");
+			break;
+		case "errored":
+			setDaemonFooterInFlight(panel, "errored");
+			recordDaemonError(event.daemonId, event.error);
+			break;
+		case "first-token":
+			break;
+	}
+}
+
+function refreshInspectorAfterRound(
+	doc: Document,
+	gameSession: GameSession,
+	aiIds: readonly AiId[],
+): void {
+	const stripEl = doc.querySelector<HTMLElement>("#dev-game-strip");
+	if (stripEl) updateGameStripSummary(stripEl, gameSession);
+	const mapEl = doc.querySelector<HTMLElement>("#dev-world-map");
+	if (mapEl) updateWorldMap(mapEl, gameSession);
+	for (const aiId of aiIds) {
+		const panel = findPanel(doc, aiId);
+		if (panel) {
+			updateDaemonFooterSummary(panel, aiId, gameSession);
+			updateDaemonFooterDetails(panel, aiId, gameSession);
+		}
+	}
+}
+
+function findPanel(doc: Document, aiId: AiId): HTMLElement | null {
+	return doc.querySelector<HTMLElement>(`.ai-panel[data-ai="${aiId}"]`);
+}
+
+function enterWithoutCachedSession(ctx: GameViewContext): Promise<void> | null {
+	const pendingBootstrap = getPendingBootstrap();
+	if (pendingBootstrap) {
+		const activeSessionIsEmpty = loadActiveSession().kind === "none";
+		if (activeSessionIsEmpty) {
+			return renderBootstrapLoadingFlow(ctx, pendingBootstrap);
+		}
+		clearPendingBootstrap();
+		renderApp(ctx.root);
+		return Promise.resolve();
+	}
+
+	if (!isLocalStorageAvailable()) {
+		showPersistenceWarning(ctx.persistenceWarningEl, "unavailable");
+		return null;
+	}
+
+	const noActiveSessionPointer = getActiveSessionId() === null;
+	if (noActiveSessionPointer) {
+		renderApp(ctx.root);
+		return Promise.resolve();
+	}
+
+	return restoreActiveSession(ctx);
+}
+
+function isLocalStorageAvailable(): boolean {
+	try {
+		const probe = `hi-blue-storage-probe-${Math.random().toString(36).slice(2)}`;
+		localStorage.setItem(probe, "1");
+		localStorage.removeItem(probe);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+function showPersistenceWarning(
+	warningEl: HTMLElement | null,
+	reason: string,
+): void {
+	if (!warningEl) return;
+	const msg =
+		PERSISTENCE_WARNING_MESSAGES[reason] ??
+		PERSISTENCE_WARNING_MESSAGES.unknown ??
+		"Game progress could not be saved.";
+	warningEl.textContent = msg;
+	warningEl.removeAttribute("hidden");
+}
+
+function restoreActiveSession(ctx: GameViewContext): Promise<void> | null {
+	const loadResult = loadActiveSession();
+	if (loadResult.kind !== "ok") {
+		redirectUnloadableSession(ctx.root, loadResult);
+		return Promise.resolve();
+	}
+	session = GameSession.restore(loadResult.state);
+	hydratedSessionId = loadResult.sessionId;
+	hydratedEpoch = loadResult.epoch;
+	repaintRestoredTranscripts(ctx.doc, loadResult.state);
+	return null;
+}
+
+function redirectUnloadableSession(
+	root: HTMLElement,
+	loadResult: UnloadableSession,
+): void {
+	if (loadResult.kind === "version-mismatch") {
+		deactivateActiveSession();
+		renderApp(root, {
+			reason: "version-mismatch",
+			schemaVersion: loadResult.schemaVersion,
+		});
+		return;
+	}
+	clearActiveSession();
+	renderApp(root, { reason: "broken" });
+}
+
+function isPlayerFacingMessage(
+	entry: ConversationEntry,
+): entry is MessageEntry {
+	return (
+		entry.kind === "message" &&
+		(entry.from === PLAYER_ID || entry.to === PLAYER_ID)
+	);
+}
+
+function repaintRestoredTranscripts(
+	doc: Document,
+	restoredState: GameState,
+): void {
+	const restoredPersonas = restoredState.personas;
+	const restorePanelEls = doc.querySelectorAll<HTMLElement>(".ai-panel");
+	Object.keys(restoredPersonas).forEach((aiId, idx) => {
+		const transcript =
+			restorePanelEls[idx]?.querySelector<HTMLElement>(".transcript");
+		if (!transcript) return;
+		transcript.textContent = "";
+		const visibleEntries = (restoredState.conversationLogs[aiId] ?? []).filter(
+			isPlayerFacingMessage,
+		);
+		for (const entry of visibleEntries) {
+			transcript.appendChild(
+				restoredMessageLine(doc, entry, aiId, restoredPersonas),
 			);
-
-			for (const event of events) {
-				switch (event.type) {
-					case "ai_start":
-						// Per-daemon spinner-strip happens live via the
-						// onAiTurnComplete callback (see above); panel content
-						// is driven by "message" events, not prefixes.
-						break;
-
-					case "token":
-						// Token events are no longer emitted by the encoder post-#214.
-						// This case is retained for forward-compatibility / safety.
-						break;
-
-					case "message": {
-						// DM-thread panel painting (AC #1/2/3/4).
-						// Only paint daemon→player messages here. The player's own line is
-						// written eagerly at submit time (line ~1149) and must NOT be written
-						// again from the encoder event — that would double-render it.
-						if (event.to === "blue") {
-							// Daemon's outgoing message to player (AC #4): existing treatment.
-							const daemonId = event.from as AiId;
-							const pName = nextState.personas[daemonId]?.name ?? daemonId;
-							appendAiPrefix(daemonId, pName);
-							appendAiTokens(daemonId, `${event.content}\n`);
-						}
-						// event.from === "blue" case intentionally omitted: the submit handler
-						// already painted the player's line via appendPlayerLine at submit time.
-						// No per-message pace() — message events are complete utterances,
-						// not per-token chunks. Post-#213 AI speech is tool-call-based so
-						// the encoder emits one message event per turn; pacing here would
-						// cause test timeouts without a streaming-feel benefit.
-						break;
-					}
-
-					case "ai_end":
-						// No trailing newline needed — message events include their own \n.
-						break;
-
-					case "budget":
-						updateBudget(event.aiId, event.remaining);
-						break;
-
-					case "lockout":
-						appendStandaloneLine(event.aiId, `[${event.content}]\n`);
-						break;
-
-					case "chat_lockout":
-						setChatLockout(event.aiId, true);
-						break;
-
-					case "chat_lockout_resolved":
-						setChatLockout(event.aiId, false);
-						break;
-
-					case "system_broadcast":
-						// Intentionally not rendered in the player-facing UI.
-						// The broadcast lives in each Daemon's conversationLog for LLM context only.
-						break;
-
-					case "action_log":
-						// Event type still produced by round-result-encoder but no longer
-						// rendered in player-facing UI. Inspector supersedes this debug surface.
-						break;
-
-					case "phase_advanced": {
-						// Show phase banner
-						const phaseBannerEl =
-							doc.querySelector<HTMLElement>("#phase-banner");
-						if (phaseBannerEl) {
-							phaseBannerEl.textContent = `Phase ${event.phase}: ${event.setting}`;
-							phaseBannerEl.removeAttribute("hidden");
-						}
-						// Clear all transcript panels
-						const advAiIds = Object.keys(nextState.personas);
-						for (const aid of advAiIds) {
-							const tEl = getTranscript(aid);
-							if (tEl) tEl.textContent = "";
-						}
-						// Refresh budget displays from new phase
-						const currentSession = session;
-						if (currentSession) {
-							const newState = currentSession.getState();
-							for (const aid of advAiIds) {
-								const panel = doc.querySelector<HTMLElement>(
-									`.ai-panel[data-ai="${aid}"]`,
-								);
-								if (!panel) continue;
-								const budgetEl =
-									panel.querySelector<HTMLSpanElement>(".panel-budget");
-								if (budgetEl) {
-									const b = newState.budgets[aid];
-									if (b) {
-										budgetEl.dataset.budget = String(b.remaining);
-										budgetEl.textContent = formatBudget(b.remaining);
-									}
-								}
-								// Re-enable chat-locked AIs that were carried over
-								lockouts.set(aid, false);
-							}
-							refreshComposerState();
-						}
-						// Append phase separator to each transcript
-						for (const aid of advAiIds) {
-							appendStandaloneLine(
-								aid,
-								`--- Phase ${event.phase} begins: ${event.setting} ---\n`,
-							);
-						}
-						break;
-					}
-
-					case "game_ended": {
-						if (gameEnded) break;
-						gameEnded = true;
-						roundGameEnded = true;
-
-						sendBtn.disabled = true;
-						promptInput.disabled = true;
-
-						// Capture state for choice handlers, then null out session so
-						// any subsequent form submits are no-ops (form checks `if (!session) return`).
-						const endedSessionId = getActiveSessionId();
-						const endedState = session?.getState();
-						session = null;
-						cachedSessionId = null;
-
-						// Hide game UI
-						const panelsEl = doc.querySelector<HTMLElement>("#panels");
-						const composerEl = doc.querySelector<HTMLElement>("#composer");
-						const capHitSection = doc.querySelector<HTMLElement>("#cap-hit");
-						const endgameEl = doc.querySelector<HTMLElement>("#endgame");
-						if (panelsEl) panelsEl.hidden = true;
-						if (composerEl) composerEl.hidden = true;
-						if (capHitSection) capHitSection.hidden = true;
-
-						// Show endgame screen
-						if (endgameEl) endgameEl.removeAttribute("hidden");
-
-						// Wire end-game choice buttons
-						const newDaemonsBtn = doc.querySelector<HTMLButtonElement>(
-							"#endgame-new-daemons-btn",
-						);
-						const sameDaemonsBtn = doc.querySelector<HTMLButtonElement>(
-							"#endgame-same-daemons-btn",
-						);
-						const continueBtn = doc.querySelector<HTMLButtonElement>(
-							"#endgame-continue-btn",
-						);
-						const choiceStatus = doc.querySelector<HTMLElement>(
-							"#endgame-choice-status",
-						);
-
-						// Show Continue only when an OpenRouter key is present
-						if (
-							continueBtn &&
-							localStorage.getItem("openrouter_key") !== null
-						) {
-							continueBtn.removeAttribute("hidden");
-						}
-
-						const disableChoiceButtons = () => {
-							if (newDaemonsBtn) newDaemonsBtn.disabled = true;
-							if (sameDaemonsBtn) sameDaemonsBtn.disabled = true;
-							if (continueBtn) continueBtn.disabled = true;
-						};
-
-						if (newDaemonsBtn) {
-							newDaemonsBtn.addEventListener("click", () => {
-								disableChoiceButtons();
-								if (choiceStatus) choiceStatus.textContent = "archiving…";
-								(endedSessionId
-									? archiveSession(endedSessionId)
-									: Promise.resolve()
-								)
-									.then(() => {
-										clearActiveSession();
-										session = null;
-										cachedSessionId = null;
-										renderApp(root);
-									})
-									.catch(() => {
-										clearActiveSession();
-										session = null;
-										cachedSessionId = null;
-										renderApp(root);
-									});
-							});
-						}
-
-						if (sameDaemonsBtn) {
-							sameDaemonsBtn.addEventListener("click", () => {
-								disableChoiceButtons();
-								if (!endedState) {
-									renderApp(root);
-									return;
-								}
-								if (choiceStatus) choiceStatus.textContent = "archiving…";
-								(endedSessionId
-									? archiveSession(endedSessionId)
-									: Promise.resolve()
-								)
-									.then(() => {
-										if (choiceStatus)
-											choiceStatus.textContent = "spinning up a new room…";
-										return buildSameDaemonsSession(endedState.personas);
-									})
-									.then((newSess) => {
-										clearActiveSession();
-										mintAndActivateNewSession();
-										saveActiveSession(newSess.getState());
-										session = null;
-										cachedSessionId = null;
-										gameEnded = false;
-										renderApp(root);
-									})
-									.catch(() => {
-										clearActiveSession();
-										session = null;
-										cachedSessionId = null;
-										renderApp(root);
-									});
-							});
-						}
-
-						if (continueBtn) {
-							continueBtn.addEventListener("click", () => {
-								disableChoiceButtons();
-								if (!endedState) {
-									renderApp(root);
-									return;
-								}
-								if (choiceStatus)
-									choiceStatus.textContent = "spinning up a new room…";
-								buildSameDaemonsSession(endedState.personas)
-									.then((newSess) => {
-										let newState = newSess.getState();
-										newState = appendBroadcast(
-											newState,
-											"The sysadmin has created a new room.",
-										);
-										saveActiveSession(newState); // same session ID (active pointer unchanged)
-										session = null;
-										cachedSessionId = null;
-										gameEnded = false;
-										renderApp(root);
-									})
-									.catch(() => {
-										session = null;
-										cachedSessionId = null;
-										renderApp(root);
-									});
-							});
-						}
-
-						// Serialize and stash save payload
-						const downloadBtn =
-							doc.querySelector<HTMLButtonElement>("#download-ais-btn");
-						const downloadStatusEl =
-							doc.querySelector<HTMLElement>("#download-status");
-						if (downloadBtn && endedState) {
-							const savePayload = JSON.stringify(serializeGameSave(endedState));
-							downloadBtn.dataset.savePayload = savePayload;
-
-							downloadBtn.addEventListener("click", () => {
-								const payload = downloadBtn.dataset.savePayload ?? "{}";
-								const blob = new Blob([payload], {
-									type: "application/json",
-								});
-								const url = URL.createObjectURL(blob);
-								const a = doc.createElement("a");
-								a.href = url;
-								a.download = "hi-blue-save.json";
-								doc.body.appendChild(a);
-								a.click();
-								doc.body.removeChild(a);
-								URL.revokeObjectURL(url);
-								downloadBtn.disabled = true;
-								if (downloadStatusEl) downloadStatusEl.textContent = "Saved.";
-							});
-						}
-
-						// Wire diagnostics submit
-						const submitDiagnosticsBtn = doc.querySelector<HTMLButtonElement>(
-							"#submit-diagnostics-btn",
-						);
-						const diagnosticsSummaryInput = doc.querySelector<HTMLInputElement>(
-							"#diagnostics-summary",
-						);
-						const diagnosticsStatusEl = doc.querySelector<HTMLElement>(
-							"#diagnostics-status",
-						);
-						if (
-							submitDiagnosticsBtn &&
-							diagnosticsSummaryInput &&
-							diagnosticsStatusEl
-						) {
-							submitDiagnosticsBtn.addEventListener("click", () => {
-								const summary = diagnosticsSummaryInput.value.trim();
-								if (!summary) {
-									diagnosticsStatusEl.textContent =
-										"Please enter a one-word summary first.";
-									return;
-								}
-								const downloaded = downloadBtn?.disabled ?? false;
-								fetch(`${__WORKER_BASE_URL__}/diagnostics`, {
-									method: "POST",
-									headers: { "Content-Type": "application/json" },
-									body: JSON.stringify({ downloaded, summary }),
-									mode: "no-cors",
-								})
-									.then(() => {
-										diagnosticsStatusEl.textContent = "Diagnostics submitted.";
-									})
-									.catch(() => {
-										diagnosticsStatusEl.textContent = "Diagnostics submitted.";
-									});
-							});
-						}
-
-						// Reset session so a route re-entry produces a fresh game
-						session = null;
-						cachedSessionId = null;
-						break;
-					}
-				}
-			}
-
-			if (__DEV__ && session) {
-				const stripEl = document.querySelector<HTMLElement>("#dev-game-strip");
-				if (stripEl) updateGameStripSummary(stripEl, session);
-
-				const mapEl = document.querySelector<HTMLElement>("#dev-world-map");
-				if (mapEl) updateWorldMap(mapEl, session);
-
-				// Update per-Daemon footer summaries and details
-				const aiIdList = Object.keys(nextState.personas);
-				for (const aiId of aiIdList) {
-					const panel = document.querySelector<HTMLElement>(
-						`.ai-panel[data-ai="${aiId}"]`,
-					);
-					if (panel) {
-						updateDaemonFooterSummary(panel, aiId, session);
-						updateDaemonFooterDetails(panel, aiId, session);
-					}
-				}
-			}
-
-			// Persist state after the encoder render loop completes.
-			// Conversation logs are stored in daemon .txt files; the transcript HTML
-			// is not serialized (restores use conversationLogs path).
-			if (!roundGameEnded) {
-				const saveResult = saveActiveSession(nextState);
-				if (!saveResult.ok) {
-					showPersistenceWarning(saveResult.reason);
-				}
-			}
-		} catch (err) {
-			stripAllSpinners();
-			if (err instanceof CapHitError && capHitEl) {
-				capHitEl.removeAttribute("hidden");
-			} else {
-				// Non-cap-hit failures (transient upstream 502/503/504, network
-				// drop, malformed response, …) used to be swallowed silently —
-				// the round just stopped with no UI signal (see issue #231).
-				// Surface them inline so the player knows to retry, and flip
-				// the topinfo pip to `connection unstable` until the next
-				// successful round clears the flag.
-				connectionUnstable = true;
-				const roundErrorEl =
-					doc.querySelector<HTMLOutputElement>("#round-error");
-				if (roundErrorEl) {
-					roundErrorEl.textContent = "the daemons stuttered — try again";
-					roundErrorEl.removeAttribute("hidden");
-				}
-			}
-		} finally {
-			stripAllSpinners();
-			roundInFlight = false;
-			doc
-				.querySelector<HTMLElement>("#stage")
-				?.removeAttribute("data-round-in-flight");
-			if (!roundGameEnded) {
-				refreshComposerState();
-				refreshTopInfo();
-			}
 		}
 	});
 
-	return Promise.resolve();
+	requestAnimationFrame(() => {
+		for (const panel of restorePanelEls) {
+			scrollTranscriptToBottom(panel.querySelector<HTMLElement>(".transcript"));
+		}
+	});
+}
+
+function restoredMessageLine(
+	doc: Document,
+	entry: MessageEntry,
+	aiId: AiId,
+	personas: Record<AiId, AiPersona>,
+): HTMLElement {
+	const lineEl = doc.createElement("div");
+	lineEl.className = "msg-line";
+	if (entry.from === PLAYER_ID) {
+		appendMentionAwareText(lineEl, `> ${entry.content}\n`, personas, "msg-you");
+		return lineEl;
+	}
+	const persona = personas[aiId];
+	lineEl.appendChild(
+		daemonPrefixSpan(doc, persona?.name ?? aiId, persona?.color),
+	);
+	appendMentionAwareText(lineEl, `${entry.content}\n`, personas);
+	return lineEl;
+}
+
+function mountSessionView(ctx: GameViewContext): void {
+	const { doc } = ctx;
+	if (session !== null) session = adoptSession(ctx, session);
+
+	revealGameRouteChrome(doc);
+
+	const aiIdList: AiId[] =
+		session !== null ? Object.keys(session.getState().personas) : [];
+	if (session !== null) {
+		paintSessionPanels(doc, session.getState(), aiIdList);
+		paintHandlesPlaceholder(ctx.promptInput, session.getState().personas);
+	}
+
+	refreshComposerState(ctx);
+	paintBannerOnce(doc);
+	refreshTopInfo(ctx);
+	registerPanelClickHandlers(ctx, aiIdList);
+
+	if (session !== null) ctx.dev.showSession(ctx.root, session);
+
+	ctx.form.addEventListener("submit", (evt) => {
+		void submitRound(ctx, evt);
+	});
+}
+
+function adoptSession(
+	ctx: GameViewContext,
+	gameSession: GameSession,
+): GameSession {
+	const adopted = applyTestAffordances(gameSession, ctx.searchParams);
+	const state = adopted.getState();
+	ctx.personaLookups = {
+		personaNamesToId: buildPersonaNameMap(state.personas),
+		personaColors: buildPersonaColorMap(state.personas),
+		personaDisplayNames: buildPersonaDisplayNameMap(state.personas),
+	};
+	for (const aiId of Object.keys(state.personas)) {
+		ctx.lockouts.set(aiId, isPlayerChatLockedOut(state, aiId));
+	}
+	gameEndHandled = false;
+	return adopted;
+}
+
+function revealGameRouteChrome(doc: Document): void {
+	for (const selector of ["#start-screen", "#sessions-screen"]) {
+		doc.querySelector<HTMLElement>(selector)?.setAttribute("hidden", "");
+	}
+	for (const selector of [
+		"#panels",
+		"#composer",
+		"#stage > header",
+		"#topinfo",
+		"#banner",
+	]) {
+		doc.querySelector<HTMLElement>(selector)?.removeAttribute("hidden");
+	}
+}
+
+function paintBannerOnce(doc: Document): void {
+	const bannerEl = doc.querySelector<HTMLElement>("#banner");
+	if (bannerEl && !bannerEl.innerHTML) bannerEl.innerHTML = BANNER;
+}
+
+function setGameSurfaceHidden(doc: Document, hidden: boolean): void {
+	for (const selector of ["#panels", "#composer"]) {
+		const el = doc.querySelector<HTMLElement>(selector);
+		if (hidden) el?.setAttribute("hidden", "");
+		else el?.removeAttribute("hidden");
+	}
+}
+
+function paintSessionPanels(
+	doc: Document,
+	state: GameState,
+	aiIds: readonly AiId[],
+): void {
+	doc.querySelectorAll<HTMLElement>(".ai-panel").forEach((panel, idx) => {
+		const aiId = aiIds[idx];
+		if (!aiId) return;
+		panel.dataset.ai = aiId;
+		const persona = state.personas[aiId];
+		if (!persona) return;
+		panel.style.setProperty("--panel-color", persona.color);
+		initPanelChrome(panel, persona);
+		const budget = state.budgets[aiId];
+		if (budget) paintPanelBudget(panel, budget.remaining);
+	});
+}
+
+function paintPanelBudget(panel: HTMLElement, remaining: number): void {
+	const budgetEl = panel.querySelector<HTMLSpanElement>(".panel-budget");
+	if (!budgetEl) return;
+	budgetEl.dataset.budget = String(remaining);
+	budgetEl.textContent = formatBudgetAsCents(remaining);
+}
+
+function formatBudgetAsCents(remainingUsd: number): string {
+	return `${(Math.max(0, remainingUsd) * 100).toFixed(3)}¢`;
+}
+
+function paintHandlesPlaceholder(
+	input: HTMLInputElement,
+	personas: Record<AiId, AiPersona>,
+): void {
+	const handlesPlaceholder = Object.values(personas)
+		.map((p) => `*${p.name}`)
+		.join(" | ");
+	if (handlesPlaceholder) input.placeholder = `${handlesPlaceholder} …`;
+}
+
+function refreshTopInfo(ctx: GameViewContext): void {
+	if (!session) return;
+	const { doc } = ctx;
+	const hasDesktopTopInfo =
+		doc.querySelector("#topinfo-left") && doc.querySelector("#topinfo-right");
+	if (!hasDesktopTopInfo) return;
+	paintTopInfo(
+		doc,
+		{
+			sessionId: ctx.sessionLabel,
+			epoch: hydratedEpoch,
+			turn: session.getState().round,
+		},
+		topInfoStatus(ctx.connectionUnstable ? "unstable" : "stable"),
+	);
+}
+
+function renderLoadingTopInfo(doc: Document, state: LoadState): void {
+	paintTopInfo(
+		doc,
+		{
+			sessionId: getActiveSessionId() ?? UNKNOWN_SESSION_ID,
+			epoch: hydratedEpoch,
+			turn: 0,
+		},
+		topInfoStatus(state),
+	);
+}
+
+function paintTopInfo(
+	doc: Document,
+	inputs: TopInfoInputs,
+	status: LoadStateStatus,
+): void {
+	const leftEl = doc.querySelector<HTMLElement>("#topinfo-left");
+	const rightEl = doc.querySelector<HTMLElement>("#topinfo-right");
+	const mobileEl = doc.querySelector<HTMLElement>("#topinfo-mobile");
+	const mobileStatusEl = doc.querySelector<HTMLElement>(
+		"#topinfo-mobile-status",
+	);
+	if (leftEl) renderTopInfoLeft(leftEl, inputs);
+	if (rightEl) paintStatusSpan(rightEl, status.cls, status.desktop);
+	if (mobileEl) mobileEl.textContent = formatTopInfoMobile(inputs);
+	if (mobileStatusEl) {
+		paintStatusSpan(mobileStatusEl, status.cls, ` ${status.mobile}`);
+	}
+}
+
+function paintStatusSpan(el: HTMLElement, cls: string, text: string): void {
+	el.textContent = "";
+	const span = el.ownerDocument.createElement("span");
+	span.className = cls;
+	span.textContent = text;
+	el.appendChild(span);
+}
+
+function setStageLoadState(doc: Document, state: LoadState): void {
+	const stageEl = doc.querySelector<HTMLElement>("#stage");
+	if (!stageEl) return;
+	if (state === "stable") {
+		stageEl.removeAttribute("data-load-state");
+		stageEl.style.removeProperty("--fill-pct");
+	} else {
+		stageEl.setAttribute("data-load-state", state);
+	}
+}
+
+function wireComposerInput(ctx: GameViewContext): void {
+	ctx.promptInput.addEventListener("input", () => refreshComposerState(ctx));
+	ctx.promptInput.addEventListener("scroll", () => syncOverlayScroll(ctx));
+}
+
+function syncOverlayScroll(ctx: GameViewContext): void {
+	if (ctx.mentionOverlay) {
+		ctx.mentionOverlay.scrollLeft = ctx.promptInput.scrollLeft;
+	}
+}
+
+function deriveComposerStateFor(
+	ctx: GameViewContext,
+	lookups: PersonaLookups,
+): ComposerState {
+	return deriveComposerState({
+		text: ctx.promptInput.value,
+		lockouts: ctx.lockouts,
+		...lookups,
+	});
+}
+
+function refreshComposerState(ctx: GameViewContext): void {
+	const lookups = ctx.personaLookups;
+	if (!lookups) return;
+	const state = deriveComposerStateFor(ctx, lookups);
+	ctx.sendBtn.disabled = !state.sendEnabled || ctx.roundInFlight;
+	setPanelColor(ctx.promptInput, state.borderColor);
+	paintPanelAddressingAndLockouts(ctx.doc, lookups.personaColors.keys(), state);
+	paintLockoutError(ctx.doc, state.lockoutError);
+	rebuildMentionOverlay(
+		ctx.mentionOverlay,
+		ctx.promptInput.value,
+		state.mentionHighlight,
+	);
+	syncOverlayScroll(ctx);
+	refreshPromptTarget(ctx.promptTargetEl, state.addressee);
+}
+
+function setPanelColor(el: HTMLElement, color: string | null): void {
+	if (color != null) {
+		el.style.setProperty("--panel-color", color);
+	} else {
+		el.style.removeProperty("--panel-color");
+	}
+}
+
+function paintPanelAddressingAndLockouts(
+	doc: Document,
+	aiIds: Iterable<AiId>,
+	state: ComposerState,
+): void {
+	for (const aiId of aiIds) {
+		const panel = findPanel(doc, aiId);
+		if (!panel) continue;
+		const isAddressed = state.panelHighlight === aiId;
+		panel.classList.toggle("panel--addressed", isAddressed);
+		const isLocked = state.lockedPanels.has(aiId);
+		panel.classList.toggle("panel--locked", isLocked);
+		panel.setAttribute("aria-disabled", isLocked ? "true" : "false");
+	}
+}
+
+function paintLockoutError(doc: Document, lockoutError: string | null): void {
+	const lockoutErrorEl = doc.querySelector<HTMLOutputElement>("#lockout-error");
+	if (!lockoutErrorEl) return;
+	if (lockoutError) {
+		lockoutErrorEl.textContent = lockoutError;
+		lockoutErrorEl.removeAttribute("hidden");
+	} else {
+		lockoutErrorEl.textContent = "";
+		lockoutErrorEl.setAttribute("hidden", "");
+	}
+}
+
+function rebuildMentionOverlay(
+	overlay: HTMLElement | null,
+	text: string,
+	highlight: ComposerState["mentionHighlight"],
+): void {
+	if (!overlay) return;
+	const doc = overlay.ownerDocument;
+	while (overlay.firstChild) overlay.removeChild(overlay.firstChild);
+	if (!highlight) {
+		overlay.appendChild(doc.createTextNode(text));
+		return;
+	}
+	const { start, end, color } = highlight;
+	if (start > 0) {
+		overlay.appendChild(doc.createTextNode(text.slice(0, start)));
+	}
+	const span = doc.createElement("span");
+	span.className = "mention-highlight";
+	span.style.setProperty("--panel-color", color);
+	span.style.color = color;
+	span.appendChild(doc.createTextNode(text.slice(start, end)));
+	overlay.appendChild(span);
+	if (end < text.length) {
+		overlay.appendChild(doc.createTextNode(text.slice(end)));
+	}
+}
+
+function refreshPromptTarget(
+	promptTargetEl: HTMLElement | null,
+	addressee: AiId | null,
+): void {
+	if (!promptTargetEl) return;
+	if (addressee == null) {
+		promptTargetEl.textContent = UNSET_PROMPT_TARGET;
+		promptTargetEl.classList.remove("is-set");
+		promptTargetEl.style.removeProperty("--target-color");
+		return;
+	}
+	const persona = currentPersonas()[addressee];
+	promptTargetEl.textContent = `/*${persona?.name ?? addressee}`;
+	promptTargetEl.classList.add("is-set");
+	if (persona?.color) {
+		promptTargetEl.style.setProperty("--target-color", persona.color);
+	} else {
+		promptTargetEl.style.removeProperty("--target-color");
+	}
+}
+
+function registerPanelClickHandlers(
+	ctx: GameViewContext,
+	aiIds: readonly AiId[],
+): void {
+	for (const aiId of aiIds) {
+		const panel = findPanel(ctx.doc, aiId);
+		if (!panel) continue;
+		panel.addEventListener("click", () => addressPanel(ctx, panel));
+	}
+}
+
+function addressPanel(ctx: GameViewContext, panel: HTMLElement): void {
+	const targetAi = panel.dataset.ai as AiId | undefined;
+	if (!targetAi) return;
+	if (ctx.lockouts.get(targetAi) === true) return;
+	const lookups = ctx.personaLookups;
+	if (!lookups) return;
+	const result = applyAddresseeChange({
+		text: ctx.promptInput.value,
+		selectionStart: ctx.promptInput.selectionStart,
+		targetPersona: targetAi,
+		personaNamesToId: lookups.personaNamesToId,
+		personas: currentPersonas(),
+	});
+	ctx.promptInput.value = result.text;
+	trySetCaret(ctx.promptInput, result.selectionStart);
+	refreshComposerState(ctx);
+}
+
+function appendMentionAwareText(
+	parent: HTMLElement,
+	text: string,
+	personas: Record<string, { name: string; color?: string }>,
+	nonMentionClass?: string,
+): void {
+	const doc = parent.ownerDocument;
+	for (const segment of splitMentionSegments(text, personas)) {
+		parent.appendChild(mentionSegmentNode(doc, segment, nonMentionClass));
+	}
+}
+
+function mentionSegmentNode(
+	doc: Document,
+	segment: MentionSegment,
+	nonMentionClass: string | undefined,
+): Node {
+	if (segment.kind === "text" && !nonMentionClass) {
+		return doc.createTextNode(segment.text);
+	}
+	const span = doc.createElement("span");
+	span.textContent = segment.text;
+	if (segment.kind === "text") {
+		span.className = nonMentionClass ?? "";
+		return span;
+	}
+	span.className = "msg-mention";
+	if (segment.color) span.style.setProperty("--mention-color", segment.color);
+	return span;
+}
+
+function transcriptName(name: string): string {
+	return name.toLowerCase();
+}
+
+function daemonPrefixSpan(
+	doc: Document,
+	personaName: string,
+	color: string | undefined,
+): HTMLElement {
+	const span = doc.createElement("span");
+	span.className = "msg-prefix";
+	if (color) span.style.setProperty("--prefix-color", color);
+	span.textContent = `> *${transcriptName(personaName)} `;
+	return span;
+}
+
+function scrollTranscriptToBottom(transcriptEl: HTMLElement | null): void {
+	const scrollContainer = transcriptEl?.parentElement;
+	if (scrollContainer) scrollContainer.scrollTop = scrollContainer.scrollHeight;
+}
+
+function getTranscriptEl(doc: Document, aiId: AiId): HTMLElement | null {
+	return doc.querySelector<HTMLElement>(`[data-transcript="${aiId}"]`);
+}
+
+function openMsgLine(transcript: HTMLElement): HTMLElement {
+	const div = transcript.ownerDocument.createElement("div");
+	div.className = "msg-line";
+	transcript.appendChild(div);
+	return div;
+}
+
+function appendAiTokensToCurrentMsgLine(
+	doc: Document,
+	aiId: AiId,
+	text: string,
+): void {
+	const el = getTranscriptEl(doc, aiId);
+	if (!el) return;
+	const last = el.lastElementChild as HTMLElement | null;
+	const line = last?.classList.contains("msg-line") ? last : openMsgLine(el);
+	line.dataset.body = (line.dataset.body ?? "") + text;
+	const prefix = line.querySelector<HTMLElement>(":scope > .msg-prefix");
+	while (line.lastChild && line.lastChild !== prefix) {
+		line.removeChild(line.lastChild);
+	}
+	appendMentionAwareText(line, line.dataset.body, currentPersonas());
+	scrollTranscriptToBottom(el);
+}
+
+function appendTranscriptLine(
+	doc: Document,
+	aiId: AiId,
+	text: string,
+	nonMentionClass?: string,
+): void {
+	const el = getTranscriptEl(doc, aiId);
+	if (!el) return;
+	const line = openMsgLine(el);
+	appendMentionAwareText(line, text, currentPersonas(), nonMentionClass);
+	scrollTranscriptToBottom(el);
+}
+
+function appendAiPrefix(doc: Document, aiId: AiId, personaName: string): void {
+	const el = getTranscriptEl(doc, aiId);
+	if (!el) return;
+	const line = openMsgLine(el);
+	const color = currentPersonas()[aiId]?.color;
+	line.appendChild(daemonPrefixSpan(doc, personaName, color));
+	scrollTranscriptToBottom(el);
+}
+
+function updateBudget(doc: Document, aiId: AiId, remaining: number): void {
+	const panel = findPanel(doc, aiId);
+	if (panel) paintPanelBudget(panel, remaining);
+}
+
+function setChatLockout(
+	ctx: GameViewContext,
+	aiId: AiId,
+	locked: boolean,
+): void {
+	ctx.lockouts.set(aiId, locked);
+	refreshComposerState(ctx);
+	refreshTopInfo(ctx);
+}
+
+async function submitRound(ctx: GameViewContext, evt: Event): Promise<void> {
+	evt.preventDefault();
+	const activeSession = session;
+	if (!activeSession || !ctx.personaLookups) return;
+
+	const draft = readSendableDraft(ctx, ctx.personaLookups);
+	if (!draft) return;
+
+	beginRound(ctx, activeSession, draft);
+
+	const aiIds = Object.keys(activeSession.getState().personas);
+	const spinners = startRoundSpinners(ctx.doc, aiIds);
+	const initiativeOrder = fisherYatesShuffledCopy(aiIds);
+	const outcome: RoundOutcome = { gameEnded: false };
+
+	try {
+		await playRound(ctx, activeSession, draft, initiativeOrder, {
+			spinners,
+			outcome,
+		});
+	} catch (err) {
+		spinners.stripAll();
+		reportRoundFailure(ctx, err);
+	} finally {
+		spinners.stripAll();
+		ctx.roundInFlight = false;
+		setRoundInFlightMarker(ctx.doc, false);
+		if (!outcome.gameEnded) {
+			refreshComposerState(ctx);
+			refreshTopInfo(ctx);
+		}
+	}
+}
+
+function readSendableDraft(
+	ctx: GameViewContext,
+	lookups: PersonaLookups,
+): RoundDraft | null {
+	const { sendEnabled, addressee } = deriveComposerStateFor(ctx, lookups);
+	if (!sendEnabled || !addressee) return null;
+	const rawMessage = ctx.promptInput.value.trim();
+	if (!rawMessage) return null;
+	const message = stripLeadingMention(rawMessage, lookups.personaNamesToId);
+	if (!message) return null;
+	return { addressee, message };
+}
+
+function stripLeadingMention(
+	rawMessage: string,
+	personaNamesToId: PersonaLookups["personaNamesToId"],
+): string {
+	const leadingMention = findFirstMention(rawMessage, personaNamesToId);
+	return leadingMention !== null && leadingMention.start === 0
+		? rawMessage.slice(leadingMention.end).trimStart()
+		: rawMessage;
+}
+
+function beginRound(
+	ctx: GameViewContext,
+	activeSession: GameSession,
+	draft: RoundDraft,
+): void {
+	const { doc, promptInput } = ctx;
+	ctx.roundInFlight = true;
+	ctx.sendBtn.disabled = true;
+	setRoundInFlightMarker(doc, true);
+
+	hideRoundError(doc);
+	ctx.connectionUnstable = false;
+
+	const addressedNameNow =
+		activeSession.getState().personas[draft.addressee]?.name ?? draft.addressee;
+	const addresseePrefix = `*${addressedNameNow} `;
+	promptInput.value = addresseePrefix;
+	promptInput.setSelectionRange(addresseePrefix.length, addresseePrefix.length);
+	promptInput.focus();
+	refreshComposerState(ctx);
+
+	appendTranscriptLine(doc, draft.addressee, `> ${draft.message}\n`, "msg-you");
+}
+
+function setRoundInFlightMarker(doc: Document, inFlight: boolean): void {
+	const stageEl = doc.querySelector<HTMLElement>("#stage");
+	if (inFlight) stageEl?.setAttribute("data-round-in-flight", "true");
+	else stageEl?.removeAttribute("data-round-in-flight");
+}
+
+function hideRoundError(doc: Document): void {
+	const roundErrorEl = doc.querySelector<HTMLOutputElement>("#round-error");
+	if (!roundErrorEl) return;
+	roundErrorEl.textContent = "";
+	roundErrorEl.setAttribute("hidden", "");
+}
+
+function showRoundError(doc: Document): void {
+	const roundErrorEl = doc.querySelector<HTMLOutputElement>("#round-error");
+	if (!roundErrorEl) return;
+	roundErrorEl.textContent = "the daemons stuttered — try again";
+	roundErrorEl.removeAttribute("hidden");
+}
+
+function brailleFrameText(frame: number): string {
+	return ` ${BRAILLE_SPINNER_FRAMES[frame] ?? ""}`;
+}
+
+function appendPanelSpinners(panel: HTMLElement): HTMLElement[] {
+	const doc = panel.ownerDocument;
+	const spinnerEls: HTMLElement[] = [];
+	for (const labelEl of panel.querySelectorAll<HTMLElement>(".panel-name")) {
+		const spinnerEl = doc.createElement("span");
+		spinnerEl.className = "panel-spinner";
+		spinnerEl.textContent = brailleFrameText(0);
+		labelEl.appendChild(spinnerEl);
+		spinnerEls.push(spinnerEl);
+	}
+	return spinnerEls;
+}
+
+function startRoundSpinners(
+	doc: Document,
+	aiIds: readonly AiId[],
+): RoundSpinners {
+	const spinners = new Map<
+		AiId,
+		{ els: HTMLElement[]; intervalId: ReturnType<typeof setInterval> }
+	>();
+	for (const aiId of aiIds) {
+		const panel = findPanel(doc, aiId);
+		if (!panel) continue;
+		const els = appendPanelSpinners(panel);
+		if (els.length === 0) continue;
+		let frame = 0;
+		const intervalId = setInterval(() => {
+			frame = (frame + 1) % BRAILLE_SPINNER_FRAMES.length;
+			const text = brailleFrameText(frame);
+			for (const spinnerEl of els) spinnerEl.textContent = text;
+		}, SPINNER_INTERVAL_MS);
+		spinners.set(aiId, { els, intervalId });
+	}
+	const strip = (aiId: AiId): void => {
+		const s = spinners.get(aiId);
+		if (!s) return;
+		clearInterval(s.intervalId);
+		for (const el of s.els) {
+			if (el.parentNode) el.remove();
+		}
+		spinners.delete(aiId);
+	};
+	return {
+		strip,
+		stripAll: () => {
+			for (const aiId of [...spinners.keys()]) strip(aiId);
+		},
+	};
+}
+
+async function playRound(
+	ctx: GameViewContext,
+	activeSession: GameSession,
+	draft: RoundDraft,
+	initiativeOrder: AiId[],
+	{ spinners, outcome }: { spinners: RoundSpinners; outcome: RoundOutcome },
+): Promise<void> {
+	const rawProvider = new BrowserLLMProvider({
+		disableReasoning: !ctx.enableReasoning,
+	});
+	const provider = ctx.dev.recordingProvider(rawProvider, activeSession);
+	const { result, nextState } = await activeSession.submitMessage(
+		draft.addressee,
+		draft.message,
+		provider,
+		initiativeOrder,
+		undefined,
+		(aiId) => spinners.strip(aiId),
+		ctx.dev.lifecycleListener,
+	);
+
+	for (const event of encodeRoundResult(
+		result,
+		nextState,
+		nextState.personas,
+	)) {
+		applyRoundEvent(ctx, event, nextState, outcome);
+	}
+
+	if (session) {
+		ctx.dev.refreshAfterRound(
+			ctx.doc,
+			session,
+			Object.keys(nextState.personas),
+		);
+	}
+
+	if (!outcome.gameEnded) {
+		const saveResult = saveActiveSession(nextState);
+		if (!saveResult.ok) {
+			showPersistenceWarning(ctx.persistenceWarningEl, saveResult.reason);
+		}
+	}
+}
+
+function applyRoundEvent(
+	ctx: GameViewContext,
+	event: SseEvent,
+	nextState: GameState,
+	outcome: RoundOutcome,
+): void {
+	switch (event.type) {
+		case "ai_start":
+		case "ai_end":
+		case "system_broadcast":
+		case "action_log":
+			break;
+		case "message":
+			paintDaemonMessage(ctx.doc, event, nextState);
+			break;
+		case "budget":
+			updateBudget(ctx.doc, event.aiId, event.remaining);
+			break;
+		case "lockout":
+			appendTranscriptLine(ctx.doc, event.aiId, `[${event.content}]\n`);
+			break;
+		case "chat_lockout":
+			setChatLockout(ctx, event.aiId, true);
+			break;
+		case "chat_lockout_resolved":
+			setChatLockout(ctx, event.aiId, false);
+			break;
+		case "game_ended":
+			if (gameEndHandled) break;
+			gameEndHandled = true;
+			outcome.gameEnded = true;
+			enterEndgame(ctx);
+			break;
+	}
+}
+
+function paintDaemonMessage(
+	doc: Document,
+	event: MessageEvent,
+	nextState: GameState,
+): void {
+	const playerLineAlreadyPaintedAtSubmit = event.from === PLAYER_ID;
+	if (playerLineAlreadyPaintedAtSubmit) return;
+	const isDaemonToPlayer = event.to === PLAYER_ID;
+	if (!isDaemonToPlayer) return;
+	const daemonId = event.from as AiId;
+	const daemonName = nextState.personas[daemonId]?.name ?? daemonId;
+	appendAiPrefix(doc, daemonId, daemonName);
+	appendAiTokensToCurrentMsgLine(doc, daemonId, `${event.content}\n`);
+}
+
+function reportRoundFailure(ctx: GameViewContext, err: unknown): void {
+	if (err instanceof CapHitError && ctx.capHitEl) {
+		ctx.capHitEl.removeAttribute("hidden");
+		return;
+	}
+	ctx.connectionUnstable = true;
+	showRoundError(ctx.doc);
+}
+
+function enterEndgame(ctx: GameViewContext): void {
+	const { doc } = ctx;
+	ctx.sendBtn.disabled = true;
+	ctx.promptInput.disabled = true;
+
+	const endedSessionId = getActiveSessionId();
+	const endedState = session?.getState();
+	releaseSession();
+
+	showEndgameScreen(doc);
+	wireEndgameChoices(ctx.root, endedSessionId, endedState);
+	wireSaveDownload(doc, endedState);
+	wireDiagnosticsSubmit(doc);
+}
+
+function showEndgameScreen(doc: Document): void {
+	for (const selector of ["#panels", "#composer", "#cap-hit"]) {
+		const el = doc.querySelector<HTMLElement>(selector);
+		if (el) el.hidden = true;
+	}
+	doc.querySelector<HTMLElement>("#endgame")?.removeAttribute("hidden");
+}
+
+function wireEndgameChoices(
+	root: HTMLElement,
+	endedSessionId: string | null,
+	endedState: GameState | undefined,
+): void {
+	const doc = root.ownerDocument;
+	const newDaemonsBtn = doc.querySelector<HTMLButtonElement>(
+		"#endgame-new-daemons-btn",
+	);
+	const sameDaemonsBtn = doc.querySelector<HTMLButtonElement>(
+		"#endgame-same-daemons-btn",
+	);
+	const continueBtn = doc.querySelector<HTMLButtonElement>(
+		"#endgame-continue-btn",
+	);
+	const choiceStatus = doc.querySelector<HTMLElement>("#endgame-choice-status");
+
+	const hasOpenRouterKey = readStoredByokKey() !== null;
+	if (continueBtn && hasOpenRouterKey) {
+		continueBtn.removeAttribute("hidden");
+	}
+
+	const disableChoiceButtons = (): void => {
+		for (const btn of [newDaemonsBtn, sameDaemonsBtn, continueBtn]) {
+			if (btn) btn.disabled = true;
+		}
+	};
+	const setStatus = (text: string): void => {
+		if (choiceStatus) choiceStatus.textContent = text;
+	};
+
+	newDaemonsBtn?.addEventListener("click", () => {
+		disableChoiceButtons();
+		startWithNewDaemons(root, endedSessionId, setStatus);
+	});
+	sameDaemonsBtn?.addEventListener("click", () => {
+		disableChoiceButtons();
+		restartWithSameDaemons(root, endedSessionId, endedState, setStatus);
+	});
+	continueBtn?.addEventListener("click", () => {
+		disableChoiceButtons();
+		continueInNewRoom(root, endedState, setStatus);
+	});
+}
+
+function archiveIfKnown(sessionId: string | null): Promise<void> {
+	return sessionId ? archiveSession(sessionId) : Promise.resolve();
+}
+
+function startWithNewDaemons(
+	root: HTMLElement,
+	endedSessionId: string | null,
+	setStatus: (text: string) => void,
+): void {
+	setStatus("archiving…");
+	const restart = (): void => {
+		clearActiveSession();
+		releaseSession();
+		renderApp(root);
+	};
+	archiveIfKnown(endedSessionId).then(restart).catch(restart);
+}
+
+function restartWithSameDaemons(
+	root: HTMLElement,
+	endedSessionId: string | null,
+	endedState: GameState | undefined,
+	setStatus: (text: string) => void,
+): void {
+	if (!endedState) {
+		renderApp(root);
+		return;
+	}
+	setStatus("archiving…");
+	archiveIfKnown(endedSessionId)
+		.then(() => {
+			setStatus("spinning up a new room…");
+			return buildSameDaemonsSession(endedState.personas);
+		})
+		.then((newSess) => {
+			clearActiveSession();
+			mintAndActivateNewSession();
+			saveActiveSession(newSess.getState());
+			releaseSession();
+			gameEndHandled = false;
+			renderApp(root);
+		})
+		.catch(() => {
+			clearActiveSession();
+			releaseSession();
+			renderApp(root);
+		});
+}
+
+function continueInNewRoom(
+	root: HTMLElement,
+	endedState: GameState | undefined,
+	setStatus: (text: string) => void,
+): void {
+	if (!endedState) {
+		renderApp(root);
+		return;
+	}
+	setStatus("spinning up a new room…");
+	buildSameDaemonsSession(endedState.personas)
+		.then((newSess) => {
+			saveActiveSession(
+				appendBroadcast(newSess.getState(), NEW_ROOM_BROADCAST),
+			);
+			releaseSession();
+			gameEndHandled = false;
+			renderApp(root);
+		})
+		.catch(() => {
+			releaseSession();
+			renderApp(root);
+		});
+}
+
+function wireSaveDownload(
+	doc: Document,
+	endedState: GameState | undefined,
+): void {
+	const downloadBtn = doc.querySelector<HTMLButtonElement>("#download-ais-btn");
+	const downloadStatusEl = doc.querySelector<HTMLElement>("#download-status");
+	if (!downloadBtn || !endedState) return;
+	downloadBtn.dataset.savePayload = JSON.stringify(
+		serializeGameSave(endedState),
+	);
+	downloadBtn.addEventListener("click", () => {
+		downloadSavePayload(doc, downloadBtn.dataset.savePayload ?? "{}");
+		downloadBtn.disabled = true;
+		if (downloadStatusEl) downloadStatusEl.textContent = "Saved.";
+	});
+}
+
+function downloadSavePayload(doc: Document, payload: string): void {
+	const blob = new Blob([payload], { type: "application/json" });
+	const url = URL.createObjectURL(blob);
+	const a = doc.createElement("a");
+	a.href = url;
+	a.download = "hi-blue-save.json";
+	doc.body.appendChild(a);
+	a.click();
+	doc.body.removeChild(a);
+	URL.revokeObjectURL(url);
+}
+
+function wireDiagnosticsSubmit(doc: Document): void {
+	const submitBtn = doc.querySelector<HTMLButtonElement>(
+		"#submit-diagnostics-btn",
+	);
+	const summaryInput = doc.querySelector<HTMLInputElement>(
+		"#diagnostics-summary",
+	);
+	const statusEl = doc.querySelector<HTMLElement>("#diagnostics-status");
+	if (!submitBtn || !summaryInput || !statusEl) return;
+	submitBtn.addEventListener("click", () => {
+		const summary = summaryInput.value.trim();
+		if (!summary) {
+			statusEl.textContent = "Please enter a one-word summary first.";
+			return;
+		}
+		const downloaded =
+			doc.querySelector<HTMLButtonElement>("#download-ais-btn")?.disabled ??
+			false;
+		const markSubmitted = (): void => {
+			statusEl.textContent = "Diagnostics submitted.";
+		};
+		fetch(`${__WORKER_BASE_URL__}/diagnostics`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ downloaded, summary }),
+			mode: "no-cors",
+		})
+			.then(markSubmitted)
+			.catch(markSubmitted);
+	});
+}
+
+class BootstrapTimeoutError extends Error {
+	constructor() {
+		super("bootstrap loading timed out");
+		this.name = "BootstrapTimeoutError";
+	}
+}
+
+function withBootstrapTimeout<T>(work: Promise<T>): Promise<T> {
+	let timeoutId: ReturnType<typeof setTimeout> | undefined;
+	const timeout = new Promise<never>((_resolve, reject) => {
+		timeoutId = setTimeout(() => {
+			reject(new BootstrapTimeoutError());
+		}, BOOTSTRAP_LOADING_TIMEOUT_MS);
+	});
+	return Promise.race([work, timeout]).finally(() => {
+		if (timeoutId !== undefined) {
+			clearTimeout(timeoutId);
+		}
+	});
+}
+
+function renderBootstrapLoadingFlow(
+	ctx: GameViewContext,
+	pending: PendingBootstrap,
+): Promise<void> {
+	const { doc } = ctx;
+	revealGameRouteChrome(doc);
+	paintBannerOnce(doc);
+	resetPanelsToEmptyShells(doc.querySelectorAll<HTMLElement>(".ai-panel"));
+
+	showComposerAsLoading(ctx.promptInput);
+	ctx.sendBtn.disabled = true;
+
+	setStageLoadState(doc, "loading-daemons");
+	renderLoadingTopInfo(doc, "loading-daemons");
+	ctx.dev.showPendingBootstrap(ctx.root, pending);
+
+	const timers: LoadingTimers = {
+		spinnerInterval: undefined,
+		wipeRaf: undefined,
+	};
+	return runBootstrapChain(ctx, pending, timers).catch((err: unknown) =>
+		handleBootstrapFailure(ctx, pending, timers, err),
+	);
+}
+
+function resetPanelsToEmptyShells(panelEls: NodeListOf<HTMLElement>): void {
+	for (const panel of panelEls) {
+		panel.removeAttribute("data-ai");
+		panel.style.removeProperty("--panel-color");
+		for (const lbl of panel.querySelectorAll<HTMLElement>(".panel-name")) {
+			lbl.textContent = "";
+		}
+		const transcript = panel.querySelector<HTMLElement>(".transcript");
+		if (transcript) {
+			transcript.dataset.transcript = "";
+			transcript.textContent = "";
+		}
+		const budgetEl = panel.querySelector<HTMLSpanElement>(".panel-budget");
+		if (budgetEl) {
+			budgetEl.dataset.budget = "";
+			budgetEl.textContent = "";
+		}
+	}
+}
+
+function showComposerAsLoading(input: HTMLInputElement): void {
+	input.disabled = true;
+	input.placeholder = LOADING_PLACEHOLDER;
+}
+
+function runBootstrapChain(
+	ctx: GameViewContext,
+	pending: PendingBootstrap,
+	timers: LoadingTimers,
+): Promise<void> {
+	const bootstrapPromise = pending.personasPromise
+		.then((personas) => {
+			enterGeneratingRoom(ctx, pending, timers, personas);
+			return pending.contentPacksPromise.then(
+				({ packsA, packsB, objectiveTypes }) => ({
+					personas,
+					contentPacksA: packsA,
+					contentPacksB: packsB,
+					objectiveTypes,
+				}),
+			);
+		})
+		.then((assets) => handOverBootstrappedSession(ctx, timers, assets));
+
+	return withBootstrapTimeout(bootstrapPromise);
+}
+
+function enterGeneratingRoom(
+	ctx: GameViewContext,
+	pending: PendingBootstrap,
+	timers: LoadingTimers,
+	personas: Record<AiId, AiPersona>,
+): void {
+	const { doc } = ctx;
+	paintLoadingPersonaPanels(doc, personas);
+	setStageLoadState(doc, "generating-room");
+	renderLoadingTopInfo(doc, "generating-room");
+	ctx.dev.showPendingBootstrap(ctx.root, pending);
+	startLoadingSpinners(doc, timers);
+	startBrightnessWipe(doc, timers);
+}
+
+function paintLoadingPersonaPanels(
+	doc: Document,
+	personas: Record<AiId, AiPersona>,
+): void {
+	const ids = Object.keys(personas);
+	doc.querySelectorAll<HTMLElement>(".ai-panel").forEach((panel, idx) => {
+		const aiId = ids[idx];
+		if (!aiId) return;
+		const persona = personas[aiId];
+		if (!persona) return;
+		panel.dataset.ai = aiId;
+		panel.style.setProperty("--panel-color", persona.color);
+		initPanelChrome(panel, persona);
+		appendPanelSpinners(panel);
+	});
+}
+
+function startLoadingSpinners(doc: Document, timers: LoadingTimers): void {
+	let frame = 0;
+	timers.spinnerInterval = setInterval(() => {
+		frame = (frame + 1) % BRAILLE_SPINNER_FRAMES.length;
+		const text = brailleFrameText(frame);
+		for (const spinnerEl of doc.querySelectorAll<HTMLElement>(
+			".panel-name .panel-spinner",
+		)) {
+			spinnerEl.textContent = text;
+		}
+	}, SPINNER_INTERVAL_MS);
+}
+
+function nowMs(): number {
+	return typeof performance !== "undefined" ? performance.now() : Date.now();
+}
+
+function startBrightnessWipe(doc: Document, timers: LoadingTimers): void {
+	const stageEl = doc.querySelector<HTMLElement>("#stage");
+	if (!stageEl) return;
+	const startTs = nowMs();
+	const tick = (): void => {
+		const elapsed = nowMs() - startTs;
+		const eased = 1 - Math.exp(-elapsed / BRIGHTNESS_WIPE_TAU_MS);
+		const pct = Math.min(BRIGHTNESS_WIPE_MAX_PCT, Math.max(0, eased * 100));
+		stageEl.style.setProperty("--fill-pct", `${pct.toFixed(2)}%`);
+		timers.wipeRaf = requestAnimationFrame(tick);
+	};
+	timers.wipeRaf = requestAnimationFrame(tick);
+}
+
+function cleanupLoadingTimers(timers: LoadingTimers): void {
+	if (timers.spinnerInterval) {
+		clearInterval(timers.spinnerInterval);
+		timers.spinnerInterval = undefined;
+	}
+	if (timers.wipeRaf !== undefined) {
+		cancelAnimationFrame(timers.wipeRaf);
+		timers.wipeRaf = undefined;
+	}
+}
+
+function removeAllPanelSpinners(doc: Document): void {
+	for (const spinnerEl of doc.querySelectorAll<HTMLElement>(
+		".panel-name .panel-spinner",
+	)) {
+		spinnerEl.remove();
+	}
+}
+
+function handOverBootstrappedSession(
+	ctx: GameViewContext,
+	timers: LoadingTimers,
+	assets: NewGameAssets,
+): Promise<void> | undefined {
+	const { doc } = ctx;
+	cleanupLoadingTimers(timers);
+	const gameSessionRng = getSpikeRng("gameSession");
+	const built = applyTestAffordances(
+		buildSessionFromAssets(
+			assets,
+			gameSessionRng ? { rng: gameSessionRng } : undefined,
+		),
+		ctx.searchParams,
+	);
+
+	const bootstrapInvalidatedMidFlight = loadActiveSession().kind !== "none";
+	if (bootstrapInvalidatedMidFlight) {
+		clearPendingBootstrap();
+		renderApp(ctx.root);
+		return;
+	}
+
+	const saveResult = saveActiveSession(built.getState());
+	if (!saveResult.ok) {
+		showPersistenceWarning(ctx.persistenceWarningEl, saveResult.reason);
+	}
+	clearPendingBootstrap();
+
+	removeAllPanelSpinners(doc);
+	dismissStaleBootstrapRecovery(doc);
+	setStageLoadState(doc, "stable");
+
+	ctx.promptInput.disabled = false;
+	ctx.promptInput.placeholder = "";
+
+	session = built;
+	hydratedSessionId = getActiveSessionId();
+	return renderGame(ctx.root, ctx.opts);
+}
+
+function dismissStaleBootstrapRecovery(doc: Document): void {
+	const recoveryEl = doc.querySelector<HTMLElement>("#bootstrap-recovery");
+	if (!recoveryEl) return;
+	recoveryEl.setAttribute("hidden", "");
+	const staleRegenBtn = doc.querySelector<HTMLButtonElement>(
+		"#bootstrap-recovery-regen",
+	);
+	if (staleRegenBtn) dropListenersByCloning(staleRegenBtn);
+	const staleAbandonLink = doc.querySelector<HTMLAnchorElement>(
+		"#bootstrap-recovery-abandon",
+	);
+	if (staleAbandonLink) dropListenersByCloning(staleAbandonLink);
+}
+
+function handleBootstrapFailure(
+	ctx: GameViewContext,
+	pending: PendingBootstrap,
+	timers: LoadingTimers,
+	err: unknown,
+): void {
+	cleanupLoadingTimers(timers);
+	ctx.dev.showPendingBootstrap(ctx.root, pending);
+
+	if (err instanceof CapHitError && ctx.capHitEl) {
+		ctx.capHitEl.removeAttribute("hidden");
+		setGameSurfaceHidden(ctx.doc, true);
+		return;
+	}
+
+	showBootstrapRecovery(ctx, timers, err instanceof BootstrapTimeoutError);
+}
+
+function showBootstrapRecovery(
+	ctx: GameViewContext,
+	timers: LoadingTimers,
+	timedOut: boolean,
+): void {
+	const { doc, root } = ctx;
+	const recoveryEl = doc.querySelector<HTMLElement>("#bootstrap-recovery");
+	const recoveryTitleEl = doc.querySelector<HTMLElement>(
+		"#bootstrap-recovery-title",
+	);
+	const recoveryBodyEl = doc.querySelector<HTMLElement>(
+		"#bootstrap-recovery-body",
+	);
+
+	const recoveryUiMissing = !recoveryEl || !recoveryTitleEl || !recoveryBodyEl;
+	if (recoveryUiMissing) {
+		abandonBootstrap(root);
+		return;
+	}
+
+	if (timedOut) {
+		recoveryTitleEl.textContent = "the room is taking too long";
+		recoveryBodyEl.textContent =
+			"the world generation timed out. try regenerating with the same daemons, or abandon and reconnect.";
+	} else {
+		recoveryTitleEl.textContent = "the room collapsed";
+		recoveryBodyEl.textContent =
+			"the world we tried to build was malformed. try regenerating with the same daemons, or abandon and reconnect.";
+	}
+
+	recoveryEl.removeAttribute("hidden");
+	setGameSurfaceHidden(doc, true);
+	setStageLoadState(doc, "unstable");
+
+	wireRegenerateButton(ctx, timers, recoveryEl);
+	wireAbandonLink(root);
+}
+
+function abandonBootstrap(root: HTMLElement): void {
+	clearActiveSession();
+	clearPendingBootstrap();
+	renderApp(root, { reason: "broken" });
+}
+
+function wireRegenerateButton(
+	ctx: GameViewContext,
+	timers: LoadingTimers,
+	recoveryEl: HTMLElement,
+): void {
+	const staleRegenBtn = ctx.doc.querySelector<HTMLButtonElement>(
+		"#bootstrap-recovery-regen",
+	);
+	if (!staleRegenBtn) return;
+	staleRegenBtn.disabled = false;
+	const regenBtn = dropListenersByCloning(staleRegenBtn);
+	regenBtn.addEventListener("click", (e) => {
+		e.preventDefault();
+		void runRegenerate(ctx, timers, recoveryEl, regenBtn);
+	});
+}
+
+async function runRegenerate(
+	ctx: GameViewContext,
+	timers: LoadingTimers,
+	recoveryEl: HTMLElement,
+	regenBtn: HTMLButtonElement,
+): Promise<void> {
+	const { doc } = ctx;
+	recoveryEl.setAttribute("hidden", "");
+	doc
+		.querySelector<HTMLElement>("#persistence-warning")
+		?.setAttribute("hidden", "");
+	setGameSurfaceHidden(doc, false);
+	showComposerAsLoading(ctx.promptInput);
+
+	regenBtn.disabled = true;
+
+	const pendingWithCachedPersonas = restartContentPacks();
+
+	try {
+		await runBootstrapChain(ctx, pendingWithCachedPersonas, timers);
+	} catch (regenErr: unknown) {
+		cleanupLoadingTimers(timers);
+		showRegenerateFailure(ctx, recoveryEl, regenBtn, regenErr);
+	}
+}
+
+function showRegenerateFailure(
+	ctx: GameViewContext,
+	recoveryEl: HTMLElement,
+	regenBtn: HTMLButtonElement,
+	regenErr: unknown,
+): void {
+	if (regenErr instanceof CapHitError && ctx.capHitEl) {
+		ctx.capHitEl.removeAttribute("hidden");
+		recoveryEl.setAttribute("hidden", "");
+		setGameSurfaceHidden(ctx.doc, true);
+		return;
+	}
+	recoveryEl.removeAttribute("hidden");
+	setGameSurfaceHidden(ctx.doc, true);
+	setStageLoadState(ctx.doc, "unstable");
+	regenBtn.disabled = false;
+}
+
+function wireAbandonLink(root: HTMLElement): void {
+	const staleAbandonLink = root.ownerDocument.querySelector<HTMLAnchorElement>(
+		"#bootstrap-recovery-abandon",
+	);
+	if (!staleAbandonLink) return;
+	const abandonLink = dropListenersByCloning(staleAbandonLink);
+	abandonLink.addEventListener("click", (e) => {
+		e.preventDefault();
+		abandonBootstrap(root);
+	});
 }

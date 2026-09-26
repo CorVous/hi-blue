@@ -1,56 +1,12 @@
-/**
- * Unit tests for the round-coordinator's end-of-round convergence evaluation
- * block (step 4d).
- *
- * Issue #305: ConvergenceObjective — fans witnessed-convergence entries to every
- * Daemon whose **Vista** contains the space cell (ADR 0015: position-only, and
- * a space two cardinal steps away is inside while an offset such as (2, 1) is
- * not), flips satisfactionState to "satisfied" on tier-2, and guards against
- * re-triggering already-satisfied objectives.
- */
 import { describe, expect, it } from "vitest";
-import { startGame } from "../engine";
 import { runRound } from "../round-coordinator";
-import { MockRoundLLMProvider } from "../round-llm-provider";
-import type { AiPersona, ConvergenceObjective, WorldEntity } from "../types";
-import { makeTestPack } from "./fixtures/make-test-pack";
+import type { ConvergenceObjective, WorldEntity } from "../types";
+import {
+	makeSilentProvider,
+	makeTestGame,
+	withPackOrderedWorld,
+} from "./fixtures/make-game-state";
 
-// ── Fixtures ───────────────────────────────────────────────────────────────────
-
-const TEST_PERSONAS: Record<string, AiPersona> = {
-	red: {
-		id: "red",
-		name: "Ember",
-		color: "#e07a5f",
-		temperaments: ["hot-headed", "zealous"],
-		personaGoal: "Hold the flower at phase end.",
-		typingQuirks: ["Fragments.", "Em-dashes."],
-		blurb: "Ember is hot-headed and zealous.",
-		voiceExamples: ["ex1", "ex2", "ex3"],
-	},
-	green: {
-		id: "green",
-		name: "Sage",
-		color: "#81b29a",
-		temperaments: ["meticulous", "meticulous"],
-		personaGoal: "Ensure items are evenly distributed.",
-		typingQuirks: ["Ellipses.", "ALL-CAPS."],
-		blurb: "Sage is meticulous.",
-		voiceExamples: ["ex1", "ex2", "ex3"],
-	},
-	cyan: {
-		id: "cyan",
-		name: "Frost",
-		color: "#5fa8d3",
-		temperaments: ["laconic", "diffident"],
-		personaGoal: "Hold the key at phase end.",
-		typingQuirks: ["No contractions.", "Ends with a question."],
-		blurb: "Frost is laconic and diffident.",
-		voiceExamples: ["ex1", "ex2", "ex3"],
-	},
-};
-
-// Space entity at (4,4) — used as the convergence point.
 const CONVERGENCE_SPACE: WorldEntity = {
 	id: "altar_space",
 	kind: "objective_space",
@@ -65,7 +21,6 @@ const CONVERGENCE_SPACE: WorldEntity = {
 		"You stand at the Stone Altar; another presence shares the place.",
 };
 
-// Paired object (required by ContentPack.objectivePairs).
 const CONVERGENCE_OBJECT: WorldEntity = {
 	id: "altar_obj",
 	kind: "objective_object",
@@ -76,21 +31,6 @@ const CONVERGENCE_OBJECT: WorldEntity = {
 	placementFlavor: "{actor} places it on the altar.",
 };
 
-const TEST_CONTENT_PACK = makeTestPack(
-	[CONVERGENCE_OBJECT, CONVERGENCE_SPACE],
-	{
-		wallName: "wall",
-		// Space cell is (4,4). Vista membership is position-only.
-		// red at (4,4) — the occupant; green at (0,0) and cyan at (0,2) are far outside.
-		aiStarts: {
-			red: { position: { row: 4, col: 4 } },
-			green: { position: { row: 0, col: 0 } },
-			cyan: { position: { row: 0, col: 2 } },
-		},
-	},
-);
-
-/** A ConvergenceObjective pointing at altar_space. */
 const CONVERGENCE_OBJECTIVE: ConvergenceObjective = {
 	id: "obj-conv",
 	kind: "convergence",
@@ -99,45 +39,31 @@ const CONVERGENCE_OBJECTIVE: ConvergenceObjective = {
 	spaceId: "altar_space",
 };
 
-function makeProvider() {
-	return new MockRoundLLMProvider([
-		{ assistantText: "", toolCalls: [] },
-		{ assistantText: "", toolCalls: [] },
-		{ assistantText: "", toolCalls: [] },
-	]);
-}
-
-/**
- * Build a base game state, then overlay the objectives and spatial positions we need.
- *
- * - red at (4,4)  → red's own cell = space cell; red is the actor
- * - green at (0,0) → far outside the Vista around (4,4)
- * - cyan at (0,2)  → far outside the Vista around (4,4)
- */
 function makeBaseGame() {
-	const base = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 99 });
-	// Override objectives with the convergence one.
-	return {
-		...base,
-		objectives: [CONVERGENCE_OBJECTIVE],
-		// Ensure world has the space entity at its known cell.
-		world: {
-			entities: [CONVERGENCE_OBJECT, CONVERGENCE_SPACE],
+	const base = makeTestGame({
+		entities: [CONVERGENCE_OBJECT, CONVERGENCE_SPACE],
+		pack: {
+			aiStarts: {
+				red: { position: { row: 4, col: 4 } },
+				green: { position: { row: 0, col: 0 } },
+				cyan: { position: { row: 0, col: 2 } },
+			},
 		},
-		// Use the aiStarts layout from TEST_CONTENT_PACK (startGame already applied
-		// these from aiStarts, but we re-assert them here for clarity / safety).
-		personaSpatial: TEST_CONTENT_PACK.aiStarts as typeof base.personaSpatial,
-	};
+		budgetPerAi: 99,
+	});
+	return { ...withPackOrderedWorld(base), objectives: [CONVERGENCE_OBJECTIVE] };
 }
 
-// ── Tests ─────────────────────────────────────────────────────────────────────
-
-describe("runRound — convergence evaluation (step 4d)", () => {
+describe("runRound — end-of-round convergence evaluation", () => {
 	it("tier-1: one Daemon on the space → witnessed-convergence tier-1 entry in their log", async () => {
-		// red at (4,4) — on the space.  green + cyan elsewhere, outside the Vista.
 		const game = makeBaseGame();
 
-		const { nextState } = await runRound(game, "red", "hi", makeProvider());
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+		);
 
 		const redLog = nextState.conversationLogs.red ?? [];
 		const convergenceEntries = redLog.filter(
@@ -149,17 +75,20 @@ describe("runRound — convergence evaluation (step 4d)", () => {
 		if (entry?.kind === "witnessed-convergence") {
 			expect(entry.tier).toBe(1);
 			expect(entry.spaceId).toBe("altar_space");
-			// red is the sole occupant → first-person actor flavor (#336).
 			expect(entry.audience).toBe("actor");
 			expect(entry.flavor).toBe(CONVERGENCE_SPACE.convergenceTier1ActorFlavor);
 		}
 	});
 
 	it("tier-1: a Daemon whose Vista does NOT contain the space cell does NOT receive an entry", async () => {
-		// green at (0,0); cyan at (0,2). Neither Vista reaches (4,4).
 		const game = makeBaseGame();
 
-		const { nextState } = await runRound(game, "red", "hi", makeProvider());
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+		);
 
 		const greenLog = nextState.conversationLogs.green ?? [];
 		const cyanLog = nextState.conversationLogs.cyan ?? [];
@@ -178,7 +107,12 @@ describe("runRound — convergence evaluation (step 4d)", () => {
 	it("tier-1: satisfactionState remains 'pending' after one Daemon on the space", async () => {
 		const game = makeBaseGame();
 
-		const { nextState } = await runRound(game, "red", "hi", makeProvider());
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+		);
 
 		const convergenceObj = nextState.objectives.find(
 			(o) => o.kind === "convergence",
@@ -187,21 +121,22 @@ describe("runRound — convergence evaluation (step 4d)", () => {
 	});
 
 	it("tier-2: two Daemons on the space → witnessed-convergence tier-2 entries and satisfactionState flips to 'satisfied'", async () => {
-		// Move green to (4,4) as well so we have two Daemons on the space.
 		const baseGame = makeBaseGame();
 		const game = {
 			...baseGame,
 			personaSpatial: {
 				...baseGame.personaSpatial,
-				// red at (4,4) (from base), green also at (4,4)
 				green: { position: { row: 4, col: 4 } },
-				// cyan stays at (0,2) — Vista doesn't reach (4,4)
 			},
 		};
 
-		const { nextState } = await runRound(game, "red", "hi", makeProvider());
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+		);
 
-		// Both red and green are on the space — both should witness tier-2.
 		const redLog = nextState.conversationLogs.red ?? [];
 		const greenLog = nextState.conversationLogs.green ?? [];
 		const cyanLog = nextState.conversationLogs.cyan ?? [];
@@ -219,7 +154,6 @@ describe("runRound — convergence evaluation (step 4d)", () => {
 		expect(redConvergence).toHaveLength(1);
 		if (redConvergence[0]?.kind === "witnessed-convergence") {
 			expect(redConvergence[0].tier).toBe(2);
-			// red is an occupant → first-person actor flavor (#336).
 			expect(redConvergence[0].audience).toBe("actor");
 			expect(redConvergence[0].flavor).toBe(
 				CONVERGENCE_SPACE.convergenceTier2ActorFlavor,
@@ -235,10 +169,8 @@ describe("runRound — convergence evaluation (step 4d)", () => {
 			);
 		}
 
-		// cyan's Vista at (0,2) does not contain (4,4).
 		expect(cyanConvergence).toHaveLength(0);
 
-		// satisfactionState must flip to "satisfied".
 		const convergenceObj = nextState.objectives.find(
 			(o) => o.kind === "convergence",
 		);
@@ -246,7 +178,6 @@ describe("runRound — convergence evaluation (step 4d)", () => {
 	});
 
 	it("re-trigger guard: a third round with both Daemons still on the space does NOT add new convergence entries", async () => {
-		// Round 1: two Daemons on the space → objective satisfied.
 		const baseGame = makeBaseGame();
 		const gameTwoOnSpace = {
 			...baseGame,
@@ -260,32 +191,27 @@ describe("runRound — convergence evaluation (step 4d)", () => {
 			gameTwoOnSpace,
 			"red",
 			"hi",
-			makeProvider(),
+			makeSilentProvider(),
 		);
 
-		// Confirm satisfied after round 1.
 		const obj1 = afterRound1.objectives.find((o) => o.kind === "convergence");
 		expect(obj1?.satisfactionState).toBe("satisfied");
 
-		// Count convergence entries after round 1.
 		const redCountAfterRound1 = (afterRound1.conversationLogs.red ?? []).filter(
 			(e) => e.kind === "witnessed-convergence",
 		).length;
 		expect(redCountAfterRound1).toBeGreaterThanOrEqual(1);
 
-		// Round 2: run again with same spatial layout (both still on the space).
 		const { nextState: afterRound2 } = await runRound(
 			afterRound1,
 			"red",
 			"hi",
-			makeProvider(),
+			makeSilentProvider(),
 		);
 
-		// Objective must still be satisfied, not re-triggered.
 		const obj2 = afterRound2.objectives.find((o) => o.kind === "convergence");
 		expect(obj2?.satisfactionState).toBe("satisfied");
 
-		// No NEW convergence entries must have been appended.
 		const redCountAfterRound2 = (afterRound2.conversationLogs.red ?? []).filter(
 			(e) => e.kind === "witnessed-convergence",
 		).length;
@@ -295,9 +221,6 @@ describe("runRound — convergence evaluation (step 4d)", () => {
 
 describe("runRound — convergence split fan-out (actor vs witness) — #336", () => {
 	it("tier-1: the sole occupant gets the actor flavor; a non-occupant Vista-witness gets the witness flavor", async () => {
-		// red on the space at (4,4). Move cyan to (3,4) so cyan's Vista contains
-		// (4,4) — one cell away — but cyan is NOT on the cell. green stays at
-		// (0,0) — outside the Vista.
 		const baseGame = makeBaseGame();
 		const game = {
 			...baseGame,
@@ -307,7 +230,12 @@ describe("runRound — convergence split fan-out (actor vs witness) — #336", (
 			},
 		};
 
-		const { nextState } = await runRound(game, "red", "hi", makeProvider());
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+		);
 
 		const redEntry = (nextState.conversationLogs.red ?? []).find(
 			(e) => e.kind === "witnessed-convergence",
@@ -331,8 +259,6 @@ describe("runRound — convergence split fan-out (actor vs witness) — #336", (
 	});
 
 	it("tier-2: every occupant gets the actor flavor; a non-occupant Vista-witness gets the witness flavor", async () => {
-		// red and green both at (4,4). cyan at (3,4) — Vista contains (4,4)
-		// but cyan is not on the cell.
 		const baseGame = makeBaseGame();
 		const game = {
 			...baseGame,
@@ -343,7 +269,12 @@ describe("runRound — convergence split fan-out (actor vs witness) — #336", (
 			},
 		};
 
-		const { nextState } = await runRound(game, "red", "hi", makeProvider());
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+		);
 
 		for (const aiId of ["red", "green"] as const) {
 			const entry = (nextState.conversationLogs[aiId] ?? []).find(
@@ -369,11 +300,14 @@ describe("runRound — convergence split fan-out (actor vs witness) — #336", (
 	});
 
 	it("no double-emission: a Daemon standing on the space receives exactly one entry (the actor variant)", async () => {
-		// red is on the space, which sits inside red's own Vista as its centre —
-		// verify red still receives the actor variant only, never both.
 		const game = makeBaseGame();
 
-		const { nextState } = await runRound(game, "red", "hi", makeProvider());
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+		);
 
 		const redConvergence = (nextState.conversationLogs.red ?? []).filter(
 			(e) => e.kind === "witnessed-convergence",
@@ -387,11 +321,6 @@ describe("runRound — convergence split fan-out (actor vs witness) — #336", (
 
 describe("runRound — convergence Vista boundary (ADR 0015)", () => {
 	it("a Daemon at offset (2, 0) from the space is a witness; one at (2, 1) is not — the occupant stays the actor", async () => {
-		// Space at (4, 4), red standing on it.
-		//   green at (4, 2) is the (2, 0) offset → 2² + 0² = 4 ≤ 4 → inside the Vista.
-		//   cyan at (3, 2) is the (2, 1) offset → 2² + 1² = 5 > 4 → outside the Vista.
-		// The retired cone would have covered (4, 4): this case pins that
-		// eligibility now follows the Vista rather than an orientation.
 		const baseGame = makeBaseGame();
 		const game = {
 			...baseGame,
@@ -402,9 +331,13 @@ describe("runRound — convergence Vista boundary (ADR 0015)", () => {
 			},
 		};
 
-		const { nextState } = await runRound(game, "red", "hi", makeProvider());
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+		);
 
-		// The occupant keeps the actor treatment, unchanged.
 		const redEntries = (nextState.conversationLogs.red ?? []).filter(
 			(e) => e.kind === "witnessed-convergence",
 		);
@@ -416,7 +349,6 @@ describe("runRound — convergence Vista boundary (ADR 0015)", () => {
 			);
 		}
 
-		// Inside the Vista → witness audience.
 		const greenEntries = (nextState.conversationLogs.green ?? []).filter(
 			(e) => e.kind === "witnessed-convergence",
 		);
@@ -428,7 +360,6 @@ describe("runRound — convergence Vista boundary (ADR 0015)", () => {
 			);
 		}
 
-		// Outside the Vista → no entry at all, so nothing leaks off-Vista.
 		expect(
 			(nextState.conversationLogs.cyan ?? []).filter(
 				(e) => e.kind === "witnessed-convergence",

@@ -7,7 +7,7 @@ import {
 	getContentPackAttempts,
 	recordContentPackAttempt,
 } from "../content-pack-attempts.js";
-import type { ValidationError } from "../content-pack-provider.js";
+import type { ValidationError } from "../content-pack-validation.js";
 
 const sampleValidationError: ValidationError = {
 	entityId: "decoy-0",

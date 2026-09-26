@@ -1,14 +1,3 @@
-/**
- * Unit tests for pack-selectors.ts
- *
- * Selectors derive bucketing on demand from `pack.entities`. These tests build
- * entity arrays directly and exercise:
- *  - empty pack
- *  - each kind-only configuration
- *  - mixed packs
- *  - the `pairsWithSpaceId`-vs-not discriminator for `boundSpaces`
- *  - order-stability for every selector
- */
 import { describe, expect, it } from "vitest";
 import {
 	boundSpaces,
@@ -19,8 +8,6 @@ import {
 	obstacles,
 } from "../pack-selectors.js";
 import type { ContentPack, WorldEntity } from "../types.js";
-
-// ── Fixture helpers ───────────────────────────────────────────────────────────
 
 function makePack(overrides?: Partial<ContentPack>): ContentPack {
 	return {
@@ -34,11 +21,6 @@ function makePack(overrides?: Partial<ContentPack>): ContentPack {
 	};
 }
 
-/**
- * Returns the two entities (object + paired space) for a carry pair at index
- * `i`. When `withPairsWithSpaceId` is false, the object omits the field so the
- * discriminator treats the space as unpaired.
- */
 function makeCarryPairEntities(
 	i: number,
 	withPairsWithSpaceId = true,
@@ -92,8 +74,6 @@ function makeObstacle(index: number): WorldEntity {
 	};
 }
 
-// ── carryPairs ────────────────────────────────────────────────────────────────
-
 describe("carryPairs", () => {
 	it("returns empty array for an empty pack", () => {
 		expect(carryPairs(makePack())).toEqual([]);
@@ -129,8 +109,6 @@ describe("carryPairs", () => {
 		expect(result.map((p) => p.object.id)).toEqual(["obj-0", "obj-1", "obj-2"]);
 	});
 });
-
-// ── interestingObjects ────────────────────────────────────────────────────────
 
 describe("interestingObjects", () => {
 	it("returns empty array for an empty pack", () => {
@@ -168,8 +146,6 @@ describe("interestingObjects", () => {
 		expect(result[0]?.kind).toBe("interesting_object");
 	});
 });
-
-// ── obstacles ────────────────────────────────────────────────────────────────
 
 describe("obstacles", () => {
 	it("returns empty array for an empty pack", () => {
@@ -211,11 +187,9 @@ describe("obstacles", () => {
 	});
 });
 
-// ── boundSpaces ───────────────────────────────────────────────────────────────
-
 describe("boundSpaces", () => {
 	it("returns empty array when pack has no objective_space entities", () => {
-		const pack = makePack(); // empty entities
+		const pack = makePack();
 		expect(boundSpaces(pack)).toEqual([]);
 	});
 
@@ -236,8 +210,6 @@ describe("boundSpaces", () => {
 	});
 
 	it("excludes objective_space entities referenced by a pairsWithSpaceId", () => {
-		// The space `space-0` is referenced by `obj-0`'s pairsWithSpaceId — it
-		// should be classified as a carry-paired space, NOT a bound space.
 		const [pairObj, pairSpace] = makeCarryPairEntities(0);
 		const genuineBound = makeBoundSpace(1);
 		const pack = makePack({
@@ -249,8 +221,6 @@ describe("boundSpaces", () => {
 	});
 
 	it("includes objective_space entities NOT referenced by any pairsWithSpaceId", () => {
-		// A carry pair whose object pairsWithSpaceId points to "space-0"; the
-		// extra `bound-space-0` entity is NOT referenced, so it stays bound.
 		const [pairObj, pairSpace] = makeCarryPairEntities(0);
 		const bs0 = makeBoundSpace(0);
 		const pack = makePack({ entities: [pairObj, pairSpace, bs0] });
@@ -263,14 +233,10 @@ describe("boundSpaces", () => {
 		const [pairObj, pairSpace] = makeCarryPairEntities(0, false);
 		const bs0 = makeBoundSpace(0);
 		const pack = makePack({ entities: [pairObj, pairSpace, bs0] });
-		// Neither `space-0` nor `bound-space-0` is referenced — both are
-		// classified as bound (the carry object has no partner).
 		const result = boundSpaces(pack);
 		expect(result.map((e) => e.id)).toEqual(["space-0", "bound-space-0"]);
 	});
 });
-
-// ── objectiveSpaces ───────────────────────────────────────────────────────────
 
 describe("objectiveSpaces", () => {
 	it("returns empty array for empty pack", () => {
@@ -346,8 +312,6 @@ describe("objectiveSpaces", () => {
 	});
 });
 
-// ── carryObjectById ───────────────────────────────────────────────────────────
-
 describe("carryObjectById", () => {
 	it("returns undefined for an empty pack", () => {
 		expect(carryObjectById("anything", makePack())).toBeUndefined();
@@ -371,33 +335,29 @@ describe("carryObjectById", () => {
 	});
 
 	it("does not match by carry-space id, interesting-object id, bound-space id, or obstacle id", () => {
-		// object id "obj-0", paired space id "space-0".
 		const pack = makePack({
 			entities: [
 				...makeCarryPairEntities(0),
-				makeInterestingObject(0), // id "interesting-0"
-				makeBoundSpace(0), // id "bound-space-0"
-				makeObstacle(0), // id "obstacle-0"
+				makeInterestingObject(0),
+				makeBoundSpace(0),
+				makeObstacle(0),
 			],
 		});
 		expect(carryObjectById("space-0", pack)).toBeUndefined();
 		expect(carryObjectById("interesting-0", pack)).toBeUndefined();
 		expect(carryObjectById("bound-space-0", pack)).toBeUndefined();
 		expect(carryObjectById("obstacle-0", pack)).toBeUndefined();
-		// Sanity: the actual object id still resolves.
 		expect(carryObjectById("obj-0", pack)?.id).toBe("obj-0");
 	});
 
 	it("picks the first match if duplicate ids exist (insertion order)", () => {
 		const pair0 = makeCarryPairEntities(0);
-		const pair1 = makeCarryPairEntities(0); // same ids — pathological but well-defined
+		const pair1 = makeCarryPairEntities(0);
 		const pack = makePack({ entities: [...pair0, ...pair1] });
 		const result = carryObjectById("obj-0", pack);
 		expect(result).toBe(pair0[0]);
 	});
 });
-
-// ── Mixed pack (all kinds populated) ──────────────────────────────────────────
 
 describe("all selectors on a fully-populated mixed pack", () => {
 	const pack = makePack({

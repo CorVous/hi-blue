@@ -139,6 +139,7 @@ Notes:
 
 ---
 
-> **Do not read other files yet.** The next step is to read
-> `.claude/skills/playtest/01-rules.md` for the rules primer. Then come back
-> here to add a "Hypotheses" section at the bottom.
+> **Do not read other files yet.** The next step is a rules primer from
+> whoever is running the playtest. (The playtest skill that used to supply
+> one has been removed; `CONTEXT.md` covers the same ground in domain
+> terms.) Then come back here to add a "Hypotheses" section at the bottom.

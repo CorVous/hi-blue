@@ -9,7 +9,6 @@ import {
 	UpstreamErrorBodyError,
 } from "../llm-client.js";
 
-// Provide build-time globals before importing the module
 // biome-ignore lint/suspicious/noExplicitAny: stubbing a build-time constant
 (globalThis as any).__WORKER_BASE_URL__ = "http://localhost:8787";
 // biome-ignore lint/suspicious/noExplicitAny: stubbing a build-time constant
@@ -276,7 +275,6 @@ describe("streamCompletion — tools field", () => {
 	});
 
 	it("BYOK path sends tools identically to the worker-proxy path", async () => {
-		// Worker path
 		const mockFetchWorker = vi
 			.fn()
 			.mockResolvedValue(
@@ -299,7 +297,6 @@ describe("streamCompletion — tools field", () => {
 		];
 		const bodyWorker = JSON.parse(initWorker.body as string);
 
-		// BYOK path
 		const mockFetchByok = vi
 			.fn()
 			.mockResolvedValue(
@@ -319,7 +316,6 @@ describe("streamCompletion — tools field", () => {
 		const [, initByok] = mockFetchByok.mock.calls[0] as [string, RequestInit];
 		const bodyByok = JSON.parse(initByok.body as string);
 
-		// Both paths should send the same tools
 		expect(bodyWorker.tools).toEqual(TOOL_DEFINITIONS);
 		expect(bodyByok.tools).toEqual(TOOL_DEFINITIONS);
 		expect(bodyWorker.tool_choice).toBe("auto");

@@ -1,9 +1,5 @@
 import type { ContentPack, ObjectiveType, WorldEntity } from "../../game/types";
 
-/**
- * Objective types matching the type-first entity IDs in STATIC_CONTENT_PACKS[0].
- * Pass to GameSession / startGame when you need carry objectives to be active.
- */
 export const STATIC_OBJECTIVE_TYPES: ObjectiveType[] = ["carry"];
 
 const AI_STARTS: ContentPack["aiStarts"] = {
@@ -12,10 +8,6 @@ const AI_STARTS: ContentPack["aiStarts"] = {
 	cyan: { position: { row: 0, col: 2 } },
 };
 
-/**
- * A single K=0 content pack (no objective pairs) for tests that need the game
- * to end via the vacuous win condition on the first round (#295 flat model).
- */
 export const STATIC_CONTENT_PACK_NO_PAIRS: ContentPack = {
 	setting: "abandoned subway station",
 	weather: "",
@@ -52,10 +44,6 @@ const carryPairEntities = (
 	},
 ];
 
-/**
- * Minimal content packs for all three phases used by tests that need a
- * fully-bootstrapped game session without a real LLM call.
- */
 export const STATIC_CONTENT_PACKS: ContentPack[] = [
 	{
 		setting: "abandoned subway station",

@@ -1,14 +1,3 @@
-/**
- * Tool Registry
- *
- * Single source of truth for the OpenAI-spec `tools` array.
- * Declares one `function` per dispatcher tool: `pick_up`, `put_down`, `use`,
- * `go`, `message` — the five-tool Daemon tool set (ADR 0015). There is no
- * `face` tool and no relative-direction movement vocabulary: a Daemon has a
- * position and no orientation, and `go` takes a named cardinal direction.
- * Names and argument keys mirror `validateToolCall` in `dispatcher.ts` 1:1.
- */
-
 import { CARDINAL_DIRECTIONS } from "./direction.js";
 import type { ToolName } from "./types";
 
@@ -140,7 +129,6 @@ type ParseSuccess<T> = { ok: true; args: T };
 type ParseFailure = { ok: false; reason: string };
 type ParseResult<T> = ParseSuccess<T> | ParseFailure;
 
-/** Argument shapes per tool */
 type PickUpArgs = { item: string };
 type PutDownArgs = { item: string };
 type UseArgs = { item: string };
@@ -155,15 +143,10 @@ type ToolArgs = {
 	message: MessageArgs;
 };
 
-/**
- * Parse and validate tool-call arguments from the raw JSON string provided by the LLM.
- *
- * Returns `{ ok: true, args }` on success or `{ ok: false, reason }` on failure.
- * Validates that all required arguments for the named tool are present.
- *
- * A retired tool name supplied as a raw tool call (bypassing the tool enum)
- * fails here with `Unknown tool` — it is rejected, never silently accepted.
- */
+function stripParrotedAiIdPrefix(recipient: string): string {
+	return recipient.startsWith("*") ? recipient.slice(1) : recipient;
+}
+
 export function parseToolCallArguments<N extends ToolName>(
 	name: N,
 	rawJson: string,
@@ -203,9 +186,7 @@ export function parseToolCallArguments<N extends ToolName>(
 			if (typeof obj.to !== "string") {
 				return { ok: false, reason: "Required argument 'to' is missing" };
 			}
-			// Strip a leading `*` — the conversation log renders AI ids as `*foo`,
-			// and the model occasionally parrots that prefix into the structured arg.
-			const to = obj.to.startsWith("*") ? obj.to.slice(1) : obj.to;
+			const to = stripParrotedAiIdPrefix(obj.to);
 			if (to.length === 0) {
 				return { ok: false, reason: "Required argument 'to' is missing" };
 			}

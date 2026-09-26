@@ -20,7 +20,6 @@ describe("rollObjectiveTypes", () => {
 	});
 
 	it("rng always returning 0.999 yields convergence for each draw", () => {
-		// 0.999 * 4 = 3.996, floor = 3 → index 3 = "convergence"
 		const result = rollObjectiveTypes(() => 0.999, 3);
 		expect(result).toEqual(["convergence", "convergence", "convergence"]);
 	});

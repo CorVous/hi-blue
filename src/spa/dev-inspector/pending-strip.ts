@@ -1,25 +1,14 @@
-/**
- * pending-strip.ts
- *
- * Renders a dev inspector strip for pending-bootstrap state, showing call
- * metadata during async loading: pip (●/✕/○), status word, call name, retry count,
- * elapsed time, and last error.
- *
- * Uses a setInterval ticker (~100ms) to update the elapsed time display.
- */
-
 import type {
 	PendingBootstrap,
 	PendingCallMeta,
 } from "../game/pending-bootstrap.js";
 
+const ELAPSED_TICK_INTERVAL_MS = 100;
+
 let _tickerInterval: ReturnType<typeof setInterval> | undefined;
 let _tickerContainer: HTMLElement | undefined;
 let _currentMeta: PendingCallMeta | undefined;
 
-/**
- * Helper: format the status word and data-state for the pip based on bootstrap status.
- */
 function getStatusInfo(status: PendingBootstrap["status"]): {
 	pip: string;
 	word: string;
@@ -36,18 +25,12 @@ function getStatusInfo(status: PendingBootstrap["status"]): {
 	}
 }
 
-/**
- * Helper: format elapsed time in seconds with one decimal place.
- */
 function formatElapsed(startedAtMs: number | undefined): string | undefined {
 	if (startedAtMs === undefined) return undefined;
 	const elapsed = (Date.now() - startedAtMs) / 1000;
 	return `${elapsed.toFixed(1)}s elapsed`;
 }
 
-/**
- * Update the text content of all data fields in the strip.
- */
 function updatePendingStripContent(
 	containerEl: HTMLElement,
 	pending: PendingBootstrap,
@@ -55,14 +38,12 @@ function updatePendingStripContent(
 ): void {
 	const statusInfo = getStatusInfo(pending.status);
 
-	// Pip
 	const pipEl = containerEl.querySelector<HTMLElement>('[data-field="pip"]');
 	if (pipEl) {
 		pipEl.textContent = statusInfo.pip;
 		pipEl.setAttribute("data-state", statusInfo.state);
 	}
 
-	// Status word
 	const statusWordEl = containerEl.querySelector<HTMLElement>(
 		'[data-field="status-word"]',
 	);
@@ -70,7 +51,6 @@ function updatePendingStripContent(
 		statusWordEl.textContent = statusInfo.word;
 	}
 
-	// Call name
 	const callNameEl = containerEl.querySelector<HTMLElement>(
 		'[data-field="call-name"]',
 	);
@@ -83,7 +63,6 @@ function updatePendingStripContent(
 		}
 	}
 
-	// Retry separator and retry count
 	const sepRetryEl = containerEl.querySelector<HTMLElement>(
 		'[data-field="sep-retry"]',
 	);
@@ -104,7 +83,6 @@ function updatePendingStripContent(
 		}
 	}
 
-	// Elapsed separator and elapsed time
 	const sepElapsedEl = containerEl.querySelector<HTMLElement>(
 		'[data-field="sep-elapsed"]',
 	);
@@ -125,7 +103,6 @@ function updatePendingStripContent(
 		}
 	}
 
-	// Last error separator and error message
 	const sepErrorEl = containerEl.querySelector<HTMLElement>(
 		'[data-field="sep-error"]',
 	);
@@ -147,9 +124,6 @@ function updatePendingStripContent(
 	}
 }
 
-/**
- * Update the elapsed time span (called by ticker).
- */
 function updateElapsedSpan(
 	containerEl: HTMLElement,
 	callMeta?: PendingCallMeta,
@@ -164,16 +138,11 @@ function updateElapsedSpan(
 	}
 }
 
-/**
- * Render the pending-bootstrap strip in the given container.
- * Initializes DOM structure and starts a ~100ms ticker for elapsed time updates.
- */
 export function renderPendingStrip(
 	containerEl: HTMLElement,
 	pending: PendingBootstrap,
 	callMeta?: PendingCallMeta,
 ): void {
-	// Clean up any existing interval
 	if (_tickerInterval) {
 		clearInterval(_tickerInterval);
 		_tickerInterval = undefined;
@@ -186,66 +155,54 @@ export function renderPendingStrip(
 	containerEl.setAttribute("data-strip", "pending");
 	containerEl.replaceChildren();
 
-	// Build DOM structure
 	const line = containerEl.ownerDocument.createElement("div");
 	line.className = "dev-strip-line";
 	line.setAttribute("data-line", "pending");
 
-	// Pip
 	const pipEl = containerEl.ownerDocument.createElement("span");
 	pipEl.className = "dev-pending-pip dev-footer-pip";
 	pipEl.setAttribute("data-field", "pip");
 	line.appendChild(pipEl);
 
-	// Status word
 	const statusWord = containerEl.ownerDocument.createElement("span");
 	statusWord.setAttribute("data-field", "status-word");
 	line.appendChild(statusWord);
 
-	// Call name
 	const callName = containerEl.ownerDocument.createElement("span");
 	callName.setAttribute("data-field", "call-name");
 	line.appendChild(callName);
 
-	// Separator for retry
 	const sepRetry = containerEl.ownerDocument.createElement("span");
 	sepRetry.setAttribute("data-field", "sep-retry");
 	sepRetry.textContent = "·";
 	line.appendChild(sepRetry);
 
-	// Retry count
 	const retry = containerEl.ownerDocument.createElement("span");
 	retry.setAttribute("data-field", "retry");
 	line.appendChild(retry);
 
-	// Separator for elapsed
 	const sepElapsed = containerEl.ownerDocument.createElement("span");
 	sepElapsed.setAttribute("data-field", "sep-elapsed");
 	sepElapsed.textContent = "·";
 	line.appendChild(sepElapsed);
 
-	// Elapsed time
 	const elapsed = containerEl.ownerDocument.createElement("span");
 	elapsed.setAttribute("data-field", "elapsed");
 	line.appendChild(elapsed);
 
-	// Separator for error
 	const sepError = containerEl.ownerDocument.createElement("span");
 	sepError.setAttribute("data-field", "sep-error");
 	sepError.textContent = "·";
 	line.appendChild(sepError);
 
-	// Last error
 	const lastError = containerEl.ownerDocument.createElement("span");
 	lastError.setAttribute("data-field", "last-error");
 	line.appendChild(lastError);
 
 	containerEl.appendChild(line);
 
-	// Populate content
 	updatePendingStripContent(containerEl, pending, _currentMeta);
 
-	// Start ticker for elapsed time updates (~100ms)
 	_tickerInterval = setInterval(() => {
 		if (!_tickerContainer?.isConnected) {
 			if (_tickerInterval) {
@@ -256,13 +213,9 @@ export function renderPendingStrip(
 			return;
 		}
 		updateElapsedSpan(_tickerContainer, _currentMeta);
-	}, 100);
+	}, ELAPSED_TICK_INTERVAL_MS);
 }
 
-/**
- * Update the pending strip with new state without restarting the ticker.
- * Used when bootstrap state changes (e.g., error occurs, retry happens).
- */
 export function updatePendingStrip(
 	containerEl: HTMLElement,
 	pending: PendingBootstrap,
@@ -272,9 +225,6 @@ export function updatePendingStrip(
 	updatePendingStripContent(containerEl, pending, _currentMeta);
 }
 
-/**
- * Clear the pending strip and stop the ticker.
- */
 export function clearPendingStrip(containerEl: HTMLElement | null): void {
 	if (_tickerInterval) {
 		clearInterval(_tickerInterval);
@@ -288,9 +238,6 @@ export function clearPendingStrip(containerEl: HTMLElement | null): void {
 	containerEl.replaceChildren();
 }
 
-/**
- * Test-only helper to reset pending strip state.
- */
 export function __resetPendingStripForTests(): void {
 	if (_tickerInterval) clearInterval(_tickerInterval);
 	_tickerInterval = undefined;

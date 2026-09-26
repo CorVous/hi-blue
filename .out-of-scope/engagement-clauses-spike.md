@@ -4,7 +4,7 @@ The per-temperament "engagement clauses" mechanism (`?engagementClauses=1`) ship
 
 ## Why this is out of scope
 
-The mechanism was measured in #239 step 8 (now archived as `docs/playtests/archive/0005-session.md`) and produced a one-sided result against `z-ai/glm-4.7` stacked on `?parallelFraming=C12`:
+The mechanism was measured in #239 step 8 (now archived as `docs/playtests/archive/0005-session.md`) and produced a one-sided result against `z-ai/glm-4.7` stacked on the C12 parallel framing (then selected with `?parallelFraming=C12`; C12 is now the only framing and is always on, as `PARALLEL_FRAMING_C12` in `src/spa/game/prompt-builder.ts`):
 
 - **Reserved end** — clause worked. Per-daemon silence spread widened from C12's ~3pp to 13pp; the reserved daemon ran 40% silence vs 27% for the others.
 - **Outgoing/chatty end** — clause was inert. The outgoing daemon didn't engage more than the balanced one (both ~27% silence).
@@ -18,7 +18,7 @@ The mechanism was measured in #239 step 8 (now archived as `docs/playtests/archi
 2. The analyzer (`/tmp/spike-239-analyze.py`) was set up on demand and never promoted to standing tooling.
 3. A clear-pass result doesn't have an obvious next-step home — it would re-open a behavioural variance the maintainer already declined to ship by default. The mechanism is already available as an opt-in for future iteration without needing the spike to land.
 
-The EC code itself stays in-tree (`src/content/engagement-clauses.ts`, plumbed through `src/content/persona-generator.ts:91,165`) so a future model change or a fresh hypothesis can re-open the investigation cheaply.
+The EC code itself stays in-tree (`src/content/engagement-clauses.ts`, plumbed through `generatePersonas` in `src/content/persona-generator.ts`) so a future model change or a fresh hypothesis can re-open the investigation cheaply.
 
 ## Prior requests
 

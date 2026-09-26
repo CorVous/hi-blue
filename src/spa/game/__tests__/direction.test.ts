@@ -78,7 +78,6 @@ describe("applyDirection", () => {
 	});
 
 	it("can produce out-of-bounds positions (caller must check)", () => {
-		// top-left corner, go north → row -1
 		const result = applyDirection({ row: 0, col: 0 }, "north");
 		expect(result.row).toBe(-1);
 		expect(inBounds(result)).toBe(false);

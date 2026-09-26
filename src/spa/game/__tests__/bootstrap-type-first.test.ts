@@ -1,14 +1,3 @@
-/**
- * bootstrap-type-first.test.ts
- *
- * Integration smoke test for the type-first objective authoring pipeline
- * (issue #451). Verifies that the full path:
- *
- *   rollObjectiveTypes → entity IDs by convention → buildObjectiveRecords
- *   → GameSession → objectives in initial state
- *
- * works end-to-end using static fixtures (no LLM call).
- */
 import { describe, expect, it } from "vitest";
 import { startGame } from "../engine.js";
 import { GameSession } from "../game-session.js";
@@ -16,8 +5,6 @@ import { buildObjectiveRecords } from "../objective-record-builder.js";
 import { rollObjectiveTypes } from "../objective-type-roll.js";
 import type { AiPersona, ObjectiveType } from "../types.js";
 import { makeTestPack } from "./fixtures/make-test-pack.js";
-
-// ── Fixtures ──────────────────────────────────────────────────────────────────
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
 	red: {
@@ -52,10 +39,6 @@ const TEST_PERSONAS: Record<string, AiPersona> = {
 	},
 };
 
-/**
- * A content pack pre-minted with type-first convention IDs for a single
- * "carry" objective (carry-0-obj → carry-0-space).
- */
 const CARRY_PACK = makeTestPack(
 	[
 		{
@@ -87,8 +70,6 @@ const CARRY_PACK = makeTestPack(
 	},
 );
 
-// ── Tests ─────────────────────────────────────────────────────────────────────
-
 describe("bootstrap-type-first integration smoke", () => {
 	it("rollObjectiveTypes with rng=0 returns carry for each slot", () => {
 		const types = rollObjectiveTypes(() => 0, 1);
@@ -114,16 +95,12 @@ describe("bootstrap-type-first integration smoke", () => {
 			budgetPerAi: 5,
 			objectiveTypes: ["carry"],
 		});
-		// Game should NOT be complete — the carry objective is unsatisfied
 		expect(game.isComplete).toBe(false);
-		// There should be exactly 1 objective
 		expect(game.objectives).toHaveLength(1);
 		expect(game.objectives[0]?.kind).toBe("carry");
 	});
 
 	it("startGame without objectiveTypes produces empty objectives (win fires at first round advance)", () => {
-		// Empty objectives → checkWinCondition([]) = true, but startGame returns isComplete:false
-		// (win check fires in round-coordinator, not at initialization)
 		const game = startGame(TEST_PERSONAS, CARRY_PACK, { budgetPerAi: 5 });
 		expect(game.isComplete).toBe(false);
 		expect(game.objectives).toHaveLength(0);
@@ -147,8 +124,7 @@ describe("bootstrap-type-first integration smoke", () => {
 	});
 
 	it("pipeline: rollObjectiveTypes → CARRY_PACK → GameSession is not complete", () => {
-		// Simulate the full bootstrap pipeline using seeded deterministic RNG
-		const objectiveTypes = rollObjectiveTypes(() => 0, 1); // ["carry"]
+		const objectiveTypes = rollObjectiveTypes(() => 0, 1);
 		expect(objectiveTypes).toEqual(["carry"]);
 
 		const session = new GameSession(
@@ -161,8 +137,6 @@ describe("bootstrap-type-first integration smoke", () => {
 		);
 
 		const state = session.getState();
-		// The carry objective (carry-0-obj → carry-0-space) starts unsatisfied
-		// because the object is at (2,2) and the space is at (4,4)
 		expect(state.isComplete).toBe(false);
 		expect(state.objectives[0]?.satisfactionState).toBe("pending");
 	});

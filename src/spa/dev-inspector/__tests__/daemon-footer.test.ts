@@ -19,7 +19,6 @@ import { renderInspector } from "../index";
 
 describe("daemon-footer", () => {
 	beforeEach(() => {
-		// Create three panels with footers matching the HTML structure
 		document.body.innerHTML = `
       <article class="ai-panel" data-ai="red">
         <div class="dev-daemon-footer" hidden></div>
@@ -31,7 +30,6 @@ describe("daemon-footer", () => {
         <div class="dev-daemon-footer" hidden></div>
       </article>
     `;
-		// Clear the side-channel storage between tests
 		clearDaemonTurnResults();
 	});
 
@@ -50,7 +48,6 @@ describe("daemon-footer", () => {
 		const summary = redPanel.querySelector('[data-line="summary"]');
 		expect(summary).toBeTruthy();
 
-		// Check the four spans exist in order
 		const pip = summary?.querySelector('[data-field="pip"]');
 		expect(pip).toBeTruthy();
 		expect(pip?.textContent).toBe("○");
@@ -65,7 +62,6 @@ describe("daemon-footer", () => {
 		const chips = summary?.querySelector('[data-field="complication-chips"]');
 		expect(chips).toBeTruthy();
 
-		// Verify order by checking that pip is first
 		const allSpans = Array.from(summary?.querySelectorAll("span") ?? []);
 		expect(allSpans[0]).toBe(pip);
 	});
@@ -100,22 +96,18 @@ describe("daemon-footer", () => {
 
 		renderDaemonFooter(redPanel, "red", session);
 
-		// Start at idle
 		const pip = redPanel.querySelector<HTMLElement>('[data-field="pip"]');
 		expect(pip?.textContent).toBe("○");
 		expect(pip?.getAttribute("data-state")).toBe("idle");
 
-		// Flip to in-flight
 		setDaemonFooterInFlight(redPanel, "in-flight");
 		expect(pip?.textContent).toBe("●");
 		expect(pip?.getAttribute("data-state")).toBe("in-flight");
 
-		// Flip to errored
 		setDaemonFooterInFlight(redPanel, "errored");
 		expect(pip?.textContent).toBe("✕");
 		expect(pip?.getAttribute("data-state")).toBe("errored");
 
-		// Flip back to idle
 		setDaemonFooterInFlight(redPanel, "idle");
 		expect(pip?.textContent).toBe("○");
 		expect(pip?.getAttribute("data-state")).toBe("idle");
@@ -127,7 +119,6 @@ describe("daemon-footer", () => {
 		const session = new GameSession(contentPack, STATIC_PERSONAS);
 		const state = session.getState();
 
-		// Create a modified state with tool calls in the conversation log
 		const modifiedState: GameState = {
 			...state,
 			conversationLogs: {
@@ -179,7 +170,6 @@ describe("daemon-footer", () => {
 		const session = new GameSession(contentPack, STATIC_PERSONAS);
 		const state = session.getState();
 
-		// Create a modified state with only a message in the last round
 		const modifiedState: GameState = {
 			...state,
 			conversationLogs: {
@@ -222,7 +212,6 @@ describe("daemon-footer", () => {
 		);
 		if (!redPanel) throw new Error("Red panel not found");
 
-		// Record a turn result with specific token/cost data
 		recordDaemonTurnResult("red", {
 			promptTokens: 1200,
 			completionTokens: 80,
@@ -249,8 +238,6 @@ describe("daemon-footer", () => {
 		);
 		if (!redPanel) throw new Error("Red panel not found");
 
-		// Don't record any turn result for "red"
-
 		renderDaemonFooter(redPanel, "red", session);
 		updateDaemonFooterSummary(redPanel, "red", session);
 
@@ -266,7 +253,6 @@ describe("daemon-footer", () => {
 		const session = new GameSession(contentPack, STATIC_PERSONAS);
 		const state = session.getState();
 
-		// Create a modified state with complications targeting different AIs
 		const modifiedState: GameState = {
 			...state,
 			activeComplications: [
@@ -306,7 +292,6 @@ describe("daemon-footer", () => {
 		const chips = chipsSpan?.querySelectorAll(".dev-footer-chip");
 		expect(chips?.length).toBe(2);
 
-		// Check the text content of the chips
 		const chipTexts = Array.from(chips ?? []).map((c) => c.textContent);
 		expect(chipTexts).toContain("[sysadm-dir]");
 		expect(chipTexts).toContain("[tool-dis:pick_up]");
@@ -328,14 +313,11 @@ describe("daemon-footer", () => {
 		const pip = redPanel.querySelector<HTMLElement>('[data-field="pip"]');
 		const pipId = pip;
 
-		// Update the summary
 		updateDaemonFooterSummary(redPanel, "red", session);
 
-		// Verify pip is still the same DOM node
 		const pipAfter = redPanel.querySelector<HTMLElement>('[data-field="pip"]');
 		expect(pipAfter).toBe(pipId);
 
-		// Verify it's still in-flight
 		expect(pipAfter?.textContent).toBe("●");
 		expect(pipAfter?.getAttribute("data-state")).toBe("in-flight");
 	});
@@ -346,7 +328,6 @@ describe("daemon-footer", () => {
 		const session = new GameSession(contentPack, STATIC_PERSONAS);
 		const state = session.getState();
 
-		// Create a modified state with different rounds for different AIs
 		const modifiedState: GameState = {
 			...state,
 			conversationLogs: {
@@ -423,7 +404,6 @@ describe("daemon-footer", () => {
 			'[data-field="last-tools"]',
 		)?.textContent;
 
-		// Each should show only their own last tool
 		expect(redTools).toBe("go");
 		expect(greenTools).toBe("pick_up");
 		expect(cyanTools).toBe("use");
@@ -435,7 +415,6 @@ describe("daemon-footer", () => {
 		const session = new GameSession(contentPack, STATIC_PERSONAS);
 		const state = session.getState();
 
-		// Create a modified state with an empty conversation log for red
 		const modifiedState: GameState = {
 			...state,
 			conversationLogs: {
@@ -470,7 +449,6 @@ describe("daemon-footer", () => {
 		);
 		if (!redPanel) throw new Error("Red panel not found");
 
-		// Record a turn result simulating a previous session
 		recordDaemonTurnResult("red", {
 			promptTokens: 1200,
 			completionTokens: 80,
@@ -478,7 +456,6 @@ describe("daemon-footer", () => {
 			costUsd: 0.0042,
 		});
 
-		// Verify the result was recorded
 		renderDaemonFooter(redPanel, "red", session);
 		updateDaemonFooterSummary(redPanel, "red", session);
 		let llmSpan = redPanel.querySelector<HTMLElement>(
@@ -486,16 +463,10 @@ describe("daemon-footer", () => {
 		);
 		expect(llmSpan?.textContent).toBe("[tok 1200→80 cache 50% $0.0042]");
 
-		// Now renderInspector should clear the stale results
-		// First, renderInspector will call clearDaemonTurnResults internally
 		renderInspector(document.body, { session });
 
-		// After renderInspector clears and renders, the daemonTurnResults should be empty
-		// Re-query for the llmSpan since renderInspector rebuilds the footer DOM
 		llmSpan = redPanel.querySelector<HTMLElement>('[data-field="llm-line"]');
 
-		// Now if we update the summary again, the llm-line should be empty
-		// because the turn results were cleared
 		updateDaemonFooterSummary(redPanel, "red", session);
 		expect(llmSpan?.textContent).toBe("");
 	});
@@ -526,7 +497,6 @@ describe("daemon-footer", () => {
 			"persona-card",
 		]);
 
-		// All should be default closed (no open attribute)
 		for (const detail of details) {
 			expect((detail as HTMLDetailsElement).open).toBe(false);
 		}
@@ -619,7 +589,6 @@ describe("daemon-footer", () => {
 		const colorEl = personaDiv?.querySelector('[data-persona-field="color"]');
 		const swatch = colorEl?.querySelector(".dev-footer-color-swatch");
 		expect(swatch).toBeTruthy();
-		// Check that backgroundColor is set (jsdom may normalize hex to rgb, so just check it's non-empty)
 		const bgColor = (swatch as HTMLElement)?.style.backgroundColor;
 		expect(bgColor?.length).toBeGreaterThan(0);
 
@@ -830,7 +799,6 @@ describe("daemon-footer", () => {
 			expect(summary?.textContent).toContain("(round 3)");
 		}
 
-		// Persona card summary should NOT have round suffix
 		const personaSummary = redPanel.querySelector(
 			'[data-disclosure="persona-card"] summary',
 		);
@@ -849,7 +817,6 @@ describe("daemon-footer", () => {
 
 		renderDaemonFooter(redPanel, "red", session);
 
-		// Open the system-prompt details
 		const details = redPanel.querySelector<HTMLDetailsElement>(
 			'[data-disclosure="system-prompt"]',
 		);
@@ -857,11 +824,9 @@ describe("daemon-footer", () => {
 		const detailsId = details;
 		(details as HTMLDetailsElement).open = true;
 
-		// Record content and update
 		recordDaemonSystemPrompt("red", "test prompt");
 		updateDaemonFooterDetails(redPanel, "red", session);
 
-		// Verify same node and still open
 		const detailsAfter = redPanel.querySelector<HTMLDetailsElement>(
 			'[data-disclosure="system-prompt"]',
 		);
@@ -892,7 +857,6 @@ describe("daemon-footer", () => {
 		const personaDetailsId = personaDetails;
 		(personaDetails as HTMLDetailsElement).open = true;
 
-		// Update and verify same node and still open
 		updateDaemonFooterDetails(redPanel, "red", session);
 
 		const personaDetailsAfter = redPanel.querySelector<HTMLDetailsElement>(
@@ -957,7 +921,6 @@ describe("daemon-footer", () => {
 		);
 		if (!redPanel) throw new Error("Red panel not found");
 
-		// Record multiple types of data
 		recordDaemonSystemPrompt("red", "test prompt");
 		recordDaemonError("red", new Error("test error"));
 		recordDaemonRound("red", 5);
@@ -966,7 +929,6 @@ describe("daemon-footer", () => {
 		renderDaemonFooter(redPanel, "red", session);
 		updateDaemonFooterDetails(redPanel, "red", session);
 
-		// Verify data is recorded
 		let systemPromptPre = redPanel.querySelector(
 			'[data-disclosure="system-prompt"] pre[data-content="system-prompt"]',
 		);
@@ -977,10 +939,8 @@ describe("daemon-footer", () => {
 		)?.textContent;
 		expect(summaryText).toContain("(round 5)");
 
-		// Clear all
 		clearDaemonTurnResults();
 
-		// Re-render and update to verify cleared
 		renderDaemonFooter(redPanel, "red", session);
 		updateDaemonFooterDetails(redPanel, "red", session);
 
@@ -992,7 +952,7 @@ describe("daemon-footer", () => {
 		summaryText = redPanel.querySelector(
 			'[data-disclosure="system-prompt"] summary',
 		)?.textContent;
-		expect(summaryText).toBe("last system prompt"); // no round suffix
+		expect(summaryText).toBe("last system prompt");
 	});
 
 	it("renderInspector clears the extended side-channel maps", () => {
@@ -1005,7 +965,6 @@ describe("daemon-footer", () => {
 		);
 		if (!redPanel) throw new Error("Red panel not found");
 
-		// Record extended data
 		recordDaemonSystemPrompt("red", "test prompt");
 		recordDaemonError("red", new Error("test error"));
 		recordDaemonRound("red", 5);
@@ -1018,10 +977,8 @@ describe("daemon-footer", () => {
 		);
 		expect(systemPromptPre?.textContent).toBe("test prompt");
 
-		// renderInspector clears everything
 		renderInspector(document.body, { session });
 
-		// Re-query and verify cleared
 		systemPromptPre = redPanel.querySelector(
 			'[data-disclosure="system-prompt"] pre[data-content="system-prompt"]',
 		);

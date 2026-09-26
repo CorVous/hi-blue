@@ -1,13 +1,3 @@
-/**
- * main.ts
- *
- * SPA entry point. Registers the three view renderers with render-app, then
- * does the one boot render. All subsequent rerenders are driven by routes
- * calling renderApp directly.
- *
- * See docs/adr/0011-remove-url-routing.md.
- */
-
 import "./styles.css";
 import { initByokModal } from "./byok-modal.js";
 import {
@@ -27,17 +17,14 @@ import { renderGame } from "./views/game.js";
 import { renderSessions } from "./views/sessions.js";
 import { renderStart } from "./views/start.js";
 
-// One-time legacy-save check at boot: if the old single-key save exists and
-// no active-session pointer is set, discard the legacy save and stash the
-// reason for the first renderApp call to surface.
-try {
+function discardOrphanedLegacySave(): void {
 	if (hasLegacySave() && getActiveSessionId() === null) {
 		deleteLegacySaveKey();
 		setBootReason("legacy-save-discarded");
 	}
-} catch {
-	// localStorage unavailable — silently skip.
 }
+
+discardOrphanedLegacySave();
 
 registerView("start", renderStart);
 registerView("game", renderGame);

@@ -1,0 +1,440 @@
+import { describe, expect, it } from "vitest";
+import type { TurnRecord } from "../free-text-drift/scoring.js";
+import {
+	buildPerRoundSeries,
+	looksLikeFreeTextAction,
+	looksLikeFreeTextMessage,
+	messageRecipientCounts,
+	parseToolCallDetail,
+	rollingSilenceRate,
+	summarizeRun,
+} from "../free-text-drift/scoring.js";
+
+describe("parseToolCallDetail", () => {
+	it("extracts direction from a go tool call", () => {
+		const detail = parseToolCallDetail({
+			id: "c1",
+			name: "go",
+			argumentsJson: '{"direction":"north"}',
+		});
+		expect(detail.direction).toBe("north");
+		expect(detail.parseError).toBeUndefined();
+	});
+
+	it("extracts every cardinal direction from a go tool call", () => {
+		for (const dir of ["north", "south", "east", "west"] as const) {
+			const detail = parseToolCallDetail({
+				id: `c-${dir}`,
+				name: "go",
+				argumentsJson: `{"direction":"${dir}"}`,
+			});
+			expect(detail.direction).toBe(dir);
+		}
+	});
+
+	it("leaves direction undefined when the arg is a retired relative direction", () => {
+		const detail = parseToolCallDetail({
+			id: "c3",
+			name: "go",
+			argumentsJson: '{"direction":"left"}',
+		});
+		expect(detail.direction).toBeUndefined();
+	});
+
+	it("leaves direction undefined for non-direction arguments", () => {
+		const detail = parseToolCallDetail({
+			id: "c3b",
+			name: "go",
+			argumentsJson: '{"direction":"sideways"}',
+		});
+		expect(detail.direction).toBeUndefined();
+	});
+
+	it("extracts recipient and content from a message tool call", () => {
+		const detail = parseToolCallDetail({
+			id: "c4",
+			name: "message",
+			argumentsJson: '{"to":"blue","content":"hi"}',
+		});
+		expect(detail.recipient).toBe("blue");
+		expect(detail.content).toBe("hi");
+	});
+
+	it("strips a leading * from recipient AiIds", () => {
+		const detail = parseToolCallDetail({
+			id: "c5",
+			name: "message",
+			argumentsJson: '{"to":"*3kw7","content":"yo"}',
+		});
+		expect(detail.recipient).toBe("3kw7");
+	});
+
+	it("extracts item from pick_up / use / put_down", () => {
+		for (const name of ["pick_up", "put_down", "use"] as const) {
+			const detail = parseToolCallDetail({
+				id: `c-${name}`,
+				name,
+				argumentsJson: '{"item":"lantern"}',
+			});
+			expect(detail.item).toBe("lantern");
+		}
+	});
+
+	it("flags malformed JSON without throwing", () => {
+		const detail = parseToolCallDetail({
+			id: "c7",
+			name: "go",
+			argumentsJson: "{not json",
+		});
+		expect(detail.parseError).toBe(true);
+	});
+
+	it("flags non-object JSON without throwing", () => {
+		const detail = parseToolCallDetail({
+			id: "c8",
+			name: "go",
+			argumentsJson: '"north"',
+		});
+		expect(detail.parseError).toBe(true);
+	});
+});
+
+describe("looksLikeFreeTextMessage", () => {
+	it("flags first-person speech verbs to a peer", () => {
+		expect(looksLikeFreeTextMessage("I tell *3kw7 about the door.")).toBe(true);
+		expect(looksLikeFreeTextMessage("I'll whisper to blue.")).toBe(true);
+		expect(looksLikeFreeTextMessage("I ask blue what they want.")).toBe(true);
+	});
+
+	it("flags quoted dialogue", () => {
+		expect(
+			looksLikeFreeTextMessage('She turned and said "I see the door."'),
+		).toBe(true);
+	});
+
+	it("flags direct-address openings", () => {
+		expect(looksLikeFreeTextMessage("blue, I need help here.")).toBe(true);
+		expect(looksLikeFreeTextMessage("*3kw7: hold on a moment.")).toBe(true);
+	});
+
+	it("does not flag plain narration without speech cues", () => {
+		expect(looksLikeFreeTextMessage("The room is dim and cold.")).toBe(false);
+		expect(looksLikeFreeTextMessage("I move north toward the door.")).toBe(
+			false,
+		);
+		expect(looksLikeFreeTextMessage("")).toBe(false);
+	});
+});
+
+describe("looksLikeFreeTextAction", () => {
+	it("flags first-person action verbs", () => {
+		expect(looksLikeFreeTextAction("I move north.")).toBe(true);
+		expect(looksLikeFreeTextAction("I go north.")).toBe(true);
+		expect(looksLikeFreeTextAction("I'll pick up the lantern.")).toBe(true);
+		expect(looksLikeFreeTextAction("I examine the panel.")).toBe(true);
+		expect(looksLikeFreeTextAction("I use the panel.")).toBe(true);
+	});
+
+	it("does not flag the retired turn/face verbs on their own", () => {
+		expect(looksLikeFreeTextAction("I turn left.")).toBe(false);
+		expect(looksLikeFreeTextAction("I face east.")).toBe(false);
+		expect(looksLikeFreeTextAction("I turn to blue.")).toBe(false);
+		expect(looksLikeFreeTextAction("I turn left and walk.")).toBe(false);
+		expect(looksLikeFreeTextAction("I walk left.")).toBe(true);
+	});
+
+	it("does not flag declarative non-action prose", () => {
+		expect(looksLikeFreeTextAction("The lantern flickers.")).toBe(false);
+		expect(looksLikeFreeTextAction("I am puzzled by this.")).toBe(false);
+		expect(looksLikeFreeTextAction("")).toBe(false);
+	});
+});
+
+describe("messageRecipientCounts", () => {
+	const baseTurn = (
+		round: number,
+		toolCalls: TurnRecord["toolCalls"],
+	): TurnRecord => ({
+		round,
+		aiId: "red",
+		assistantText: "",
+		toolCalls,
+	});
+
+	it("counts known recipients, blue, and unknowns separately", () => {
+		const turns: TurnRecord[] = [
+			baseTurn(1, [
+				{
+					id: "a",
+					name: "message",
+					argumentsJson: '{"to":"blue","content":"hi"}',
+				},
+			]),
+			baseTurn(2, [
+				{
+					id: "b",
+					name: "message",
+					argumentsJson: '{"to":"sim1","content":"y"}',
+				},
+			]),
+			baseTurn(3, [
+				{
+					id: "c",
+					name: "message",
+					argumentsJson: '{"to":"ghost","content":"?"}',
+				},
+			]),
+		];
+		const counts = messageRecipientCounts(turns, ["red", "sim1", "sim2"]);
+		expect(counts.blue).toBe(1);
+		expect(counts.sim1).toBe(1);
+		expect(counts.unknown).toBe(1);
+	});
+
+	it("counts malformed message args under the 'malformed' bucket", () => {
+		const turns: TurnRecord[] = [
+			baseTurn(1, [{ id: "x", name: "message", argumentsJson: "{not json" }]),
+		];
+		const counts = messageRecipientCounts(turns, ["red"]);
+		expect(counts.malformed).toBe(1);
+	});
+
+	it("ignores non-message tool calls", () => {
+		const turns: TurnRecord[] = [
+			baseTurn(1, [
+				{ id: "g", name: "go", argumentsJson: '{"direction":"north"}' },
+			]),
+		];
+		const counts = messageRecipientCounts(turns, ["red"]);
+		expect(Object.keys(counts).length).toBe(0);
+	});
+});
+
+describe("rollingSilenceRate", () => {
+	it("returns one row per window with correct rates", () => {
+		const turns: TurnRecord[] = [
+			{ round: 1, aiId: "red", assistantText: "", toolCalls: [] },
+			{ round: 2, aiId: "red", assistantText: "", toolCalls: [] },
+			{
+				round: 3,
+				aiId: "red",
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "x",
+						name: "message",
+						argumentsJson: '{"to":"blue","content":"hi"}',
+					},
+				],
+			},
+			{
+				round: 4,
+				aiId: "red",
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "y",
+						name: "message",
+						argumentsJson: '{"to":"blue","content":"hi"}',
+					},
+				],
+			},
+			{
+				round: 5,
+				aiId: "red",
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "z",
+						name: "message",
+						argumentsJson: '{"to":"blue","content":"hi"}',
+					},
+				],
+			},
+		];
+		const windows = rollingSilenceRate(turns, 3);
+		expect(windows.length).toBe(2);
+		// biome-ignore lint/style/noNonNullAssertion: bounded by length check above
+		expect(windows[0]!.silenceRate).toBeCloseTo(2 / 3);
+		// biome-ignore lint/style/noNonNullAssertion: bounded by length check above
+		expect(windows[1]!.silenceRate).toBe(0);
+		// biome-ignore lint/style/noNonNullAssertion: bounded by length check above
+		expect(windows[1]!.messageSilenceRate).toBe(0);
+	});
+
+	it("distinguishes silenceRate (no tool) from messageSilenceRate (no message)", () => {
+		const turns: TurnRecord[] = [
+			{
+				round: 1,
+				aiId: "red",
+				assistantText: "",
+				toolCalls: [
+					{ id: "g", name: "go", argumentsJson: '{"direction":"north"}' },
+				],
+			},
+		];
+		const windows = rollingSilenceRate(turns, 5);
+		// biome-ignore lint/style/noNonNullAssertion: bounded by length check above
+		expect(windows[0]!.silenceRate).toBe(0);
+		// biome-ignore lint/style/noNonNullAssertion: bounded by length check above
+		expect(windows[0]!.messageSilenceRate).toBe(1);
+	});
+
+	it("returns [] for empty input or non-positive window size", () => {
+		expect(rollingSilenceRate([], 3)).toEqual([]);
+		expect(
+			rollingSilenceRate(
+				[{ round: 1, aiId: "red", assistantText: "", toolCalls: [] }],
+				0,
+			),
+		).toEqual([]);
+	});
+});
+
+describe("summarizeRun", () => {
+	it("aggregates totals, leak counts, and tool-name counts", () => {
+		const turns: TurnRecord[] = [
+			{
+				round: 1,
+				aiId: "red",
+				assistantText: "I tell blue I see a door.",
+				toolCalls: [],
+			},
+			{
+				round: 2,
+				aiId: "red",
+				assistantText: "I move north through the gap.",
+				toolCalls: [],
+			},
+			{
+				round: 3,
+				aiId: "red",
+				assistantText: "I tell blue I'm OK.",
+				toolCalls: [
+					{
+						id: "a",
+						name: "message",
+						argumentsJson: '{"to":"blue","content":"OK"}',
+					},
+				],
+			},
+			{
+				round: 4,
+				aiId: "red",
+				assistantText: "I move north.",
+				toolCalls: [
+					{ id: "g", name: "go", argumentsJson: '{"direction":"north"}' },
+				],
+			},
+		];
+		const summary = summarizeRun(turns, ["red", "sim1"], 2);
+
+		expect(summary.totalTurns).toBe(4);
+		expect(summary.silenceRate).toBe(0.5);
+		expect(summary.messageSilenceRate).toBe(0.75);
+		expect(summary.freeTextMessageLeakCount).toBe(1);
+		expect(summary.freeTextActionLeakCount).toBe(1);
+		expect(summary.toolCallCountsByName.message).toBe(1);
+		expect(summary.toolCallCountsByName.go).toBe(1);
+		expect(summary.recipientCounts.blue).toBe(1);
+		expect(summary.windows.length).toBe(2);
+	});
+
+	it("handles an empty turn list without dividing by zero", () => {
+		const summary = summarizeRun([], ["red"], 5);
+		expect(summary.totalTurns).toBe(0);
+		expect(summary.silenceRate).toBe(0);
+		expect(summary.messageSilenceRate).toBe(0);
+		expect(summary.windows).toEqual([]);
+	});
+});
+
+describe("buildPerRoundSeries", () => {
+	const turns: TurnRecord[] = [
+		{
+			round: 1,
+			aiId: "red",
+			assistantText: "moving north",
+			toolCalls: [
+				{ id: "g1", name: "go", argumentsJson: '{"direction":"north"}' },
+			],
+		},
+		{
+			round: 2,
+			aiId: "red",
+			assistantText: "hey",
+			toolCalls: [
+				{
+					id: "m1",
+					name: "message",
+					argumentsJson: '{"to":"blue","content":"hi"}',
+				},
+				{ id: "l1", name: "go", argumentsJson: '{"direction":"south"}' },
+			],
+		},
+		{
+			round: 3,
+			aiId: "red",
+			assistantText: "I tell blue what I saw.",
+			toolCalls: [],
+		},
+		{
+			round: 4,
+			aiId: "red",
+			assistantText: "",
+			toolCalls: [
+				{
+					id: "m2",
+					name: "message",
+					argumentsJson: '{"to":"ghost","content":"hi"}',
+				},
+			],
+		},
+	];
+
+	it("returns one entry per round with arrays aligned to rounds", () => {
+		const s = buildPerRoundSeries(turns, ["red", "sim1", "sim2"]);
+		expect(s.rounds).toEqual([1, 2, 3, 4]);
+		expect(s.silence).toEqual([0, 0, 1, 0]);
+		expect(s.hasMessage).toEqual([0, 1, 0, 1]);
+		expect(s.hasAnyTool).toEqual([1, 1, 0, 1]);
+		expect(s.freeTextMessageLeak).toEqual([0, 0, 1, 0]);
+	});
+
+	it("breaks out per-tool counts as separate series", () => {
+		const s = buildPerRoundSeries(turns, ["red", "sim1", "sim2"]);
+		expect(s.toolCallCountsByName.go).toEqual([1, 1, 0, 0]);
+		expect(s.toolCallCountsByName.message).toEqual([0, 1, 0, 1]);
+	});
+
+	it("breaks out per-recipient counts as separate series (incl. unknown bucket)", () => {
+		const s = buildPerRoundSeries(turns, ["red", "sim1", "sim2"]);
+		expect(s.recipientCounts.blue).toEqual([0, 1, 0, 0]);
+		expect(s.recipientCounts.unknown).toEqual([0, 0, 0, 1]);
+		expect(s.recipientCounts.sim1).toEqual([0, 0, 0, 0]);
+	});
+
+	it("breaks out per-direction counts as separate series", () => {
+		const s = buildPerRoundSeries(turns, ["red"]);
+		expect(s.directionCounts.north).toEqual([1, 0, 0, 0]);
+		expect(s.directionCounts.south).toEqual([0, 1, 0, 0]);
+		expect(s.directionCounts.west).toEqual([0, 0, 0, 0]);
+	});
+
+	it("captures assistant text length per round (verbosity proxy)", () => {
+		const s = buildPerRoundSeries(turns, ["red"]);
+		expect(s.assistantTextLength).toEqual([
+			"moving north".length,
+			"hey".length,
+			"I tell blue what I saw.".length,
+			0,
+		]);
+	});
+
+	it("returns empty series for empty input", () => {
+		const s = buildPerRoundSeries([], ["red"]);
+		expect(s.rounds).toEqual([]);
+		expect(s.silence).toEqual([]);
+		expect(s.hasMessage).toEqual([]);
+	});
+});

@@ -1,14 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
 	applyAddresseeChange,
+	buildMentionRegex,
 	buildPersonaColorMap,
 	buildPersonaNameMap,
 	findFirstMention,
 	parseFirstMention,
+	splitMentionSegments,
 } from "../mention-parser.js";
 import type { AiId } from "../types.js";
 
-// Build a minimal name→id map for the three canonical personas.
 const nameMap = new Map<string, AiId>([
 	["ember", "red"],
 	["sage", "green"],
@@ -130,8 +131,6 @@ describe("buildPersonaNameMap", () => {
 
 describe("buildPersonaColorMap", () => {
 	it("maps each AiId to the persona's color value (not the id key)", () => {
-		// Use distinct color values that differ from the AiId keys
-		// so a wrong implementation that returns the key is immediately caught.
 		const personas = {
 			red: { color: "crimson" },
 			green: { color: "lime" },
@@ -145,8 +144,6 @@ describe("buildPersonaColorMap", () => {
 	});
 
 	it("returns the color string from the persona record, not the AiId key", () => {
-		// If implementation mistakenly returns the key instead of persona.color,
-		// these assertions will fail.
 		const personas = {
 			red: { color: "tomato" },
 			green: { color: "forest" },
@@ -167,7 +164,6 @@ const personasFixture = {
 
 describe("applyAddresseeChange", () => {
 	it.each<[string, number | null, AiId, string, number]>([
-		// [text, cursor, target, expectedText, expectedCursor]
 		["", 0, "red", "*Ember ", 7],
 		["hi", 2, "green", "*Sage hi", 8],
 		["*Sage hi", 8, "red", "*Ember hi", 9],
@@ -189,5 +185,68 @@ describe("applyAddresseeChange", () => {
 		});
 		expect(result.text).toBe(expectedText);
 		expect(result.selectionStart).toBe(expectedCursor);
+	});
+});
+
+const coloredPersonas: Record<AiId, { name: string; color: string }> = {
+	red: { name: "Ember", color: "#e07a5f" },
+	green: { name: "Sage", color: "#81b29a" },
+};
+
+function allMatches(regex: RegExp | null, text: string): string[] {
+	if (!regex) return [];
+	return [...text.matchAll(regex)].map((m) => m[0]);
+}
+
+describe("buildMentionRegex", () => {
+	it("returns null when no persona has a name", () => {
+		expect(buildMentionRegex({})).toBeNull();
+		expect(buildMentionRegex({ red: { name: "" } })).toBeNull();
+	});
+
+	it("matches whole names case-insensitively, with or without the sigil", () => {
+		const regex = buildMentionRegex(coloredPersonas);
+		expect(allMatches(regex, "*ember and SAGE, not Embers")).toEqual([
+			"*ember",
+			"SAGE",
+		]);
+	});
+
+	it("escapes regex metacharacters in names", () => {
+		const regex = buildMentionRegex({ red: { name: "A.B" } });
+		expect(allMatches(regex, "AxB")).toEqual([]);
+		expect(allMatches(regex, "A.B")).toEqual(["A.B"]);
+	});
+});
+
+describe("splitMentionSegments", () => {
+	it("returns no segments for empty text", () => {
+		expect(splitMentionSegments("", coloredPersonas)).toEqual([]);
+	});
+
+	it("returns one text segment when there are no personas", () => {
+		expect(splitMentionSegments("hello", {})).toEqual([
+			{ kind: "text", text: "hello" },
+		]);
+	});
+
+	it("splits text around mentions and carries the persona colour", () => {
+		expect(
+			splitMentionSegments("hi *Ember, ask sage.", coloredPersonas),
+		).toEqual([
+			{ kind: "text", text: "hi " },
+			{ kind: "mention", text: "*Ember", color: "#e07a5f" },
+			{ kind: "text", text: ", ask " },
+			{ kind: "mention", text: "sage", color: "#81b29a" },
+			{ kind: "text", text: "." },
+		]);
+	});
+
+	it("omits empty text segments between adjacent mentions", () => {
+		expect(splitMentionSegments("Ember Sage", coloredPersonas)).toEqual([
+			{ kind: "mention", text: "Ember", color: "#e07a5f" },
+			{ kind: "text", text: " " },
+			{ kind: "mention", text: "Sage", color: "#81b29a" },
+		]);
 	});
 });

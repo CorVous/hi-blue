@@ -198,13 +198,11 @@ describe("pending-strip.ts", () => {
 		let elapsedEl = containerEl.querySelector('[data-field="elapsed"]');
 		expect(elapsedEl?.textContent).toBe("0.0s elapsed");
 
-		// Advance 5 seconds
 		vi.advanceTimersByTime(5000);
 
 		elapsedEl = containerEl.querySelector('[data-field="elapsed"]');
 		expect(elapsedEl?.textContent).toBe("5.0s elapsed");
 
-		// Advance another 2.5 seconds
 		vi.advanceTimersByTime(2500);
 
 		elapsedEl = containerEl.querySelector('[data-field="elapsed"]');
@@ -229,7 +227,6 @@ describe("pending-strip.ts", () => {
 		renderPendingStrip(containerEl, pending, meta1);
 		expect(setIntervalSpy).toHaveBeenCalledTimes(1);
 
-		// Update with different callName
 		const meta2: PendingCallMeta = {
 			callName: "content-pack",
 			startedAtMs: startMs,
@@ -238,10 +235,8 @@ describe("pending-strip.ts", () => {
 		};
 		updatePendingStrip(containerEl, pending, meta2);
 
-		// setInterval should still have been called only once
 		expect(setIntervalSpy).toHaveBeenCalledTimes(1);
 
-		// But the callName should be updated
 		const callNameEl = containerEl.querySelector('[data-field="call-name"]');
 		expect(callNameEl?.textContent).toBe("content-pack");
 
@@ -265,11 +260,9 @@ describe("pending-strip.ts", () => {
 
 		clearPendingStrip(containerEl);
 
-		// DOM should be cleared
 		expect(containerEl.querySelector('[data-field="pip"]')).toBeFalsy();
 		expect(containerEl.classList.contains("dev-pending-strip")).toBe(false);
 
-		// Advancing timers after clear should not throw
 		expect(() => {
 			vi.advanceTimersByTime(500);
 		}).not.toThrow();
@@ -292,7 +285,6 @@ describe("pending-strip.ts", () => {
 		renderPendingStrip(containerEl, pending, meta);
 		expect(clearIntervalSpy).not.toHaveBeenCalled();
 
-		// Render again
 		renderPendingStrip(containerEl, pending, meta);
 		expect(clearIntervalSpy).toHaveBeenCalled();
 
@@ -300,7 +292,6 @@ describe("pending-strip.ts", () => {
 	});
 
 	it("renderInspector branch: pendingBootstrap-only → pending strip renders, map hidden", async () => {
-		// Import after setup so fake timers are in place
 		const { renderInspector } = await import("../index.js");
 
 		const pending = makePending("pending");
@@ -311,7 +302,6 @@ describe("pending-strip.ts", () => {
 			retryMax: 3,
 		};
 
-		// Add map and footers to DOM
 		const mapEl = document.createElement("div");
 		mapEl.id = "dev-world-map";
 		document.body.appendChild(mapEl);
@@ -324,7 +314,6 @@ describe("pending-strip.ts", () => {
 			"dev-game-strip",
 		) as HTMLElement;
 
-		// Mock getPendingCallMeta
 		vi.doMock("../../game/pending-bootstrap.js", () => ({
 			getPendingCallMeta: () => meta,
 		}));
@@ -351,7 +340,6 @@ describe("pending-strip.ts", () => {
 		if (!contentPack) throw new Error("Content pack missing");
 		const session = new GameSession(contentPack, STATIC_PERSONAS);
 
-		// Add map and footers to DOM
 		const mapEl = document.createElement("div");
 		mapEl.id = "dev-world-map";
 		document.body.appendChild(mapEl);
@@ -366,7 +354,6 @@ describe("pending-strip.ts", () => {
 
 		renderInspector(document.body, { session });
 
-		// Strip should not have pending data
 		expect(containerEl.getAttribute("data-strip")).not.toBe("pending");
 		expect(containerEl.getAttribute("hidden")).toBeNull();
 		expect(mapEl.getAttribute("hidden")).toBeNull();
@@ -376,7 +363,6 @@ describe("pending-strip.ts", () => {
 	it("renderInspector branch: neither set → strip hidden + empty", async () => {
 		const { renderInspector } = await import("../index.js");
 
-		// Add map and footers to DOM
 		const mapEl = document.createElement("div");
 		mapEl.id = "dev-world-map";
 		document.body.appendChild(mapEl);

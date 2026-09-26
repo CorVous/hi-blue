@@ -9,8 +9,6 @@ import {
 	writeKeyAndMeta,
 } from "../byok-modal.js";
 
-// ─── Group A: validateOpenRouterKey ──────────────────────────────────────────
-
 describe("validateOpenRouterKey", () => {
 	it("hits GET https://openrouter.ai/api/v1/auth/key with Bearer auth", async () => {
 		const mockFetch = vi.fn().mockResolvedValue({
@@ -84,8 +82,6 @@ describe("validateOpenRouterKey", () => {
 	});
 });
 
-// ─── Group B: storage helpers ─────────────────────────────────────────────────
-
 describe("storage helpers", () => {
 	let store: Record<string, string>;
 
@@ -121,12 +117,9 @@ describe("storage helpers", () => {
 	});
 
 	it("readMeta returns null when missing or malformed JSON", () => {
-		// Missing
 		expect(readMeta()).toBeNull();
-		// Malformed
 		store.openrouter_key_meta = "not-json";
 		expect(readMeta()).toBeNull();
-		// Wrong shape
 		store.openrouter_key_meta = JSON.stringify({ foo: "bar" });
 		expect(readMeta()).toBeNull();
 	});
@@ -144,8 +137,6 @@ describe("storage helpers", () => {
 	});
 });
 
-// ─── Group C: formatRelativeTime ──────────────────────────────────────────────
-
 describe("formatRelativeTime", () => {
 	it('< 1 minute → "just now"', () => {
 		const now = Date.now();
@@ -156,39 +147,31 @@ describe("formatRelativeTime", () => {
 	it("minutes/hours/days correctly", () => {
 		const now = Date.now();
 
-		// 5 minutes ago
 		expect(
 			formatRelativeTime(new Date(now - 5 * 60_000).toISOString(), now),
 		).toBe("5 minutes ago");
 
-		// 1 minute ago
 		expect(formatRelativeTime(new Date(now - 60_000).toISOString(), now)).toBe(
 			"1 minute ago",
 		);
 
-		// 2 hours ago
 		expect(
 			formatRelativeTime(new Date(now - 2 * 3600_000).toISOString(), now),
 		).toBe("2 hours ago");
 
-		// 1 hour ago
 		expect(
 			formatRelativeTime(new Date(now - 3600_000).toISOString(), now),
 		).toBe("1 hour ago");
 
-		// 3 days ago
 		expect(
 			formatRelativeTime(new Date(now - 3 * 86400_000).toISOString(), now),
 		).toBe("3 days ago");
 
-		// 1 day ago
 		expect(
 			formatRelativeTime(new Date(now - 86400_000).toISOString(), now),
 		).toBe("1 day ago");
 	});
 });
-
-// ─── Group D: openByokModal UI ────────────────────────────────────────────────
 
 const MODAL_HTML = `
 <header>
@@ -431,14 +414,12 @@ describe("openByokModal UI", () => {
 		const keyInput = getEl<HTMLInputElement>("byok-key-input");
 		keyInput.value = "sk-or-v1-somekey1234";
 
-		// Simulate 5xx first to reveal the button
 		vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ status: 502 }));
 		getEl("byok-validate-save").click();
 		await vi.waitFor(() => {
 			expect(getEl("byok-save-unverified").hidden).toBe(false);
 		});
 
-		// Now click Save unverified
 		getEl("byok-save-unverified").click();
 		await Promise.resolve();
 
@@ -529,8 +510,6 @@ describe("openByokModal UI", () => {
 	});
 });
 
-// ─── Group E: initByokModal ───────────────────────────────────────────────────
-
 describe("initByokModal", () => {
 	let showModalSpy: ReturnType<typeof vi.fn>;
 	let store: Record<string, string>;
@@ -568,7 +547,7 @@ describe("initByokModal", () => {
 	});
 
 	it("initByokModal safe when #byok-cog missing (no throw)", () => {
-		document.body.innerHTML = ""; // no DOM
+		document.body.innerHTML = "";
 		expect(() => initByokModal()).not.toThrow();
 	});
 });
