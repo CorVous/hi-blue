@@ -1775,15 +1775,14 @@ async function runRegenerate(
 		await runBootstrapChain(ctx, pendingWithCachedPersonas, timers);
 	} catch (regenErr: unknown) {
 		cleanupLoadingTimers(timers);
-		showRegenerateFailure(ctx, recoveryEl, regenErr);
-	} finally {
-		regenBtn.disabled = false;
+		showRegenerateFailure(ctx, recoveryEl, regenBtn, regenErr);
 	}
 }
 
 function showRegenerateFailure(
 	ctx: GameViewContext,
 	recoveryEl: HTMLElement,
+	regenBtn: HTMLButtonElement,
 	regenErr: unknown,
 ): void {
 	if (regenErr instanceof CapHitError && ctx.capHitEl) {
@@ -1795,6 +1794,7 @@ function showRegenerateFailure(
 	recoveryEl.removeAttribute("hidden");
 	setGameSurfaceHidden(ctx.doc, true);
 	setStageLoadState(ctx.doc, "unstable");
+	regenBtn.disabled = false;
 }
 
 function wireAbandonLink(root: HTMLElement): void {

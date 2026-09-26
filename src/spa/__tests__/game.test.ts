@@ -2710,4 +2710,70 @@ describe("renderBootstrapLoadingFlow — promise propagation", () => {
 		);
 		expect(visibleRegenBtn.disabled).toBe(false);
 	});
+
+	it("leaves the regenerate button disabled when regeneration hits the cost cap", async () => {
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
+		document.body.innerHTML = INDEX_BODY_HTML;
+
+		let rejectRegeneratedPacksWithCapHit: () => void = () => undefined;
+		vi.doMock("../game/bootstrap.js", async (importOriginal) => {
+			const actual =
+				await importOriginal<typeof import("../game/bootstrap.js")>();
+			const { CapHitError } = await import("../llm-client.js");
+			return {
+				...actual,
+				generateNewGameAssetsSplit: () => ({
+					personasPromise: Promise.resolve(STATIC_PERSONAS),
+					contentPacksPromise: Promise.reject(
+						new Error("content pack generation failed"),
+					),
+				}),
+				generateContentPacksOnlySplit: (personas: typeof STATIC_PERSONAS) => ({
+					personasPromise: Promise.resolve(personas),
+					contentPacksPromise: new Promise((_resolve, reject) => {
+						rejectRegeneratedPacksWithCapHit = () =>
+							reject(
+								new CapHitError({
+									message: "rate limit exceeded",
+									reason: "per-ip-daily",
+									retryAfterSec: 3600,
+								}),
+							);
+					}),
+				}),
+			};
+		});
+
+		vi.resetModules();
+		installLocalStorageStub();
+
+		const { mintAndActivateNewSession } = await import(
+			"../persistence/session-storage.js"
+		);
+		mintAndActivateNewSession();
+
+		const { startBootstrap } = await import("../game/pending-bootstrap.js");
+		startBootstrap();
+
+		const { renderGame } = await import("../views/game.js");
+		await renderGame(getEl<HTMLElement>("main"));
+
+		getEl<HTMLButtonElement>("#bootstrap-recovery-regen").click();
+		const visibleRegenBtn = getEl<HTMLButtonElement>(
+			"#bootstrap-recovery-regen",
+		);
+		expect(visibleRegenBtn.disabled).toBe(true);
+
+		rejectRegeneratedPacksWithCapHit();
+
+		const capHitPanel = getEl<HTMLElement>("#cap-hit");
+		await vi.waitFor(() => {
+			expect(capHitPanel.hasAttribute("hidden")).toBe(false);
+		});
+		expect(
+			getEl<HTMLElement>("#bootstrap-recovery").hasAttribute("hidden"),
+		).toBe(true);
+		expect(visibleRegenBtn.disabled).toBe(true);
+	});
 });

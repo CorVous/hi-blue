@@ -177,9 +177,15 @@ it hides the other routes' screens and shows or hides the global chrome
 - `dropListenersByCloning` replaces an element with a clone of itself, which
   drops every listener on it, and returns the clone. The regenerate wiring
   keeps that returned clone, so `runRegenerate` disables the button the
-  player can see while the content packs regenerate and enables it again
-  when the attempt settles. It once disabled the detached original instead,
-  which left the visible button clickable during regeneration.
+  player can see while the content packs regenerate. It once disabled the
+  detached original instead, which left the visible button clickable during
+  regeneration. Only a retryable failure enables it again, because that is
+  the only exit that shows the recovery banner for another attempt. A cap
+  hit hides the banner behind `#cap-hit` and leaves the button disabled. A
+  success runs `dismissStaleBootstrapRecovery`, which has already swapped the
+  button for a clone, so re-enabling the captured one would only touch a
+  detached element; `wireRegenerateButton` enables the button again whenever
+  the banner is next shown.
 
 ### Restore path
 
