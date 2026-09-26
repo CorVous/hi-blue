@@ -29,7 +29,7 @@ Other sources, used here by reference rather than repeated:
 
 **Farewell line.** When a dispatch exhausts a Daemon's budget, it says goodbye to blue once. Later rounds take the locked-out branch.
 
-**Sysadmin directive issue order** (#298): draw the directive text, revoke any active directive for the same target (a private revocation message), apply the complication, fill in the text, then deliver it privately. `applyComplicationResult` appends the directive with `PENDING_DIRECTIVE_TEXT` because the engine has no content layer. The prompt builder filters that placeholder out as a guard. The rng is consumed in this order, and the tests' seeded draws rely on it.
+**Sysadmin directive issue order** (#298): draw the directive text, revoke any active directive for the same target (a private revocation message), apply the complication, fill in the text, then deliver it privately. `applyComplicationResult` appends the directive with `PENDING_DIRECTIVE_TEXT` because the engine has no content layer. The prompt builder filters that placeholder out as a guard. The sentinel lives in `types.ts` next to `ActiveComplication` rather than in `complication-engine.ts`, so the prompt-rendering layer does not import the complication engine (and through it `engine.ts`) just to read one constant. The rng is consumed in this order, and the tests' seeded draws rely on it.
 
 **Obstacle Shift** (#486): the obstacle moves, and every Daemon whose Vista contains the origin cell gets a `witnessed-obstacle-shift` entry carrying the obstacle's `shiftFlavor`. A missing obstacle id is skipped silently.
 

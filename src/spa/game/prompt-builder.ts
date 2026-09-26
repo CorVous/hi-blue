@@ -1,16 +1,16 @@
 import { withinInteractionRange } from "./available-tools.js";
-import { PENDING_DIRECTIVE_TEXT } from "./complication-engine.js";
 import { isGridPosition, positionsEqual } from "./direction.js";
-import type {
-	AiBudget,
-	AiId,
-	ConversationEntry,
-	GameState,
-	GridPosition,
-	Objective,
-	PersonaSpatialState,
-	WorldEntity,
-	WorldState,
+import {
+	type AiBudget,
+	type AiId,
+	type ConversationEntry,
+	type GameState,
+	type GridPosition,
+	type Objective,
+	PENDING_DIRECTIVE_TEXT,
+	type PersonaSpatialState,
+	type WorldEntity,
+	type WorldState,
 } from "./types";
 import {
 	projectVista,

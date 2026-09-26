@@ -125,6 +125,8 @@ export type ActiveComplication =
 	  }
 	| { kind: "chat_lockout"; target: AiId; resolveAtRound: number };
 
+export const PENDING_DIRECTIVE_TEXT = "";
+
 export interface ComplicationSchedule {
 	countdown: number;
 	settingShiftFired: boolean;

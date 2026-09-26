@@ -1,15 +1,16 @@
 import { WEATHER_POOL } from "../../content/pools.js";
 import { applyDirection, CARDINAL_DIRECTIONS, inBounds } from "./direction.js";
 import { appendBroadcast, setWeather, shiftToBPack } from "./engine.js";
-import type {
-	ActiveComplication,
-	AiId,
-	ComplicationResult,
-	ComplicationVariant,
-	GameState,
-	GridPosition,
-	ToolName,
-	WorldState,
+import {
+	type ActiveComplication,
+	type AiId,
+	type ComplicationResult,
+	type ComplicationVariant,
+	type GameState,
+	type GridPosition,
+	PENDING_DIRECTIVE_TEXT,
+	type ToolName,
+	type WorldState,
 } from "./types.js";
 
 const DISABLABLE_TOOLS: ToolName[] = [
@@ -19,8 +20,6 @@ const DISABLABLE_TOOLS: ToolName[] = [
 	"go",
 	"message",
 ];
-
-export const PENDING_DIRECTIVE_TEXT = "";
 
 function drawIntegerInclusive(
 	rng: () => number,
