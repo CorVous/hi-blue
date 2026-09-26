@@ -186,7 +186,7 @@ specs that assert on generation failure check `#cap-hit` themselves.
 | `chat-lockout` | A lockout restored from storage mutes its panel before any typing, disables Send for that Daemon, and says nothing in the transcript. | |
 | `endgame-current-behaviour` | `game_ended` disables the composer, shows the choices, and keeps the URL. The active-session pointer survives until the player chooses. | #80, #101, #307 |
 | `endgame-choices` | The end-game choice screen: New Daemons archives the session and the dispatcher mints a new one; Continue appears only when `openrouter_key` is set. | #307 |
-| `bootstrap-recovery` | The regenerate path re-runs content-pack generation without re-resolving personas, and abandon returns to start with `data-reason="broken"`. | #380 |
+| `bootstrap-recovery` | The regenerate path re-runs content-pack generation without re-resolving personas, and abandon returns to start with `data-reason="broken"`. The visible `#bootstrap-recovery-regen` is disabled while a regeneration is in flight and enabled again after a retryable failure. | #380 |
 | `bootstrap-failure-bounce` | A content-pack failure after CONNECT, whether a network abort or an HTTP 200 with an error body, shows `#bootstrap-recovery` inside the game view instead of bouncing to start. | #380 |
 | `start-screen` | Start-screen boot, login, restore on refresh, cap-hit, refresh during generation, and an empty active pointer. | ADR 0011 |
 | `sessions-picker` | Picker rows for ok, broken and version-mismatch saves; load, dup and rm; the sessions icon; sticky routing; archived-build links. | ADR 0011 |
@@ -216,7 +216,11 @@ specs that assert on generation failure check `#cap-hit` themselves.
   typed.
 - **bootstrap-recovery.** The initial bootstrap uses up the content-pack
   provider's `OUTER_ATTEMPT_BUDGET` (3 calls) before the recovery UI appears. Regen
-  starts a fresh budget, so the fourth call is allowed to succeed.
+  starts a fresh budget, so the fourth call is allowed to succeed. The
+  button-state test holds the first regeneration call on a promise so the
+  in-flight `toBeDisabled()` check cannot race the attempt settling, then
+  fails that whole second budget (calls 4 to 6) to reach the retryable-failure
+  branch before a third budget succeeds.
 - **bootstrap-failure-bounce.** The content-pack failure is held back until the
   game view is attached. That way the loading-flow catch in `game.ts`, which
   shows the recovery UI, handles it, and not the start screen's catch, which
