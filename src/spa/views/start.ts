@@ -8,6 +8,7 @@ import {
 	renderReasonBanner,
 	VERSION_MISMATCH_MESSAGE,
 } from "./archived-build-link.js";
+import { trySetCaret } from "./dom.js";
 
 const PERSISTENCE_WARNING_MESSAGES: Record<string, string> = {
 	broken:
@@ -92,12 +93,6 @@ function shouldSkipAnimation(searchParams: URLSearchParams): boolean {
 function tryFocus(el: HTMLElement): void {
 	try {
 		el.focus();
-	} catch {}
-}
-
-function trySetCaret(input: HTMLInputElement, position: number): void {
-	try {
-		input.setSelectionRange(position, position);
 	} catch {}
 }
 

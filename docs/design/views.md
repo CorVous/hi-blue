@@ -2,7 +2,7 @@
 
 Design notes for the three route renderers (`start.ts` → `#/start`,
 `game.ts` → `#/game`, `sessions.ts` → `#/sessions`) and the shared
-`archived-build-link.ts`. Each renderer owns what is visible for its route:
+`archived-build-link.ts` and `dom.ts`. Each renderer owns what is visible for its route:
 it hides the other routes' screens and shows or hides the global chrome
 (`#stage > header`, `#topinfo`, `#banner`).
 
@@ -53,7 +53,8 @@ it hides the other routes' screens and shows or hides the global chrome
   animation is skipped for `?skipDialup=1` and for `prefers-reduced-motion`.
   `matchMedia` can throw in some test environments; that counts as "no
   preference".
-- **jsdom tolerance.** `tryFocus` and `trySetCaret` swallow errors because
+- **jsdom tolerance.** `tryFocus` and `trySetCaret` (in `dom.ts`, shared with
+  the game composer's mention caret) swallow errors because
   some jsdom and input configurations do not support `focus()` or
   `setSelectionRange`.
 - **Uptime.** `formatUptime` renders time since the build's commit as
@@ -174,7 +175,8 @@ it hides the other routes' screens and shows or hides the global chrome
   "broken" copy. Regenerate calls `restartContentPacks()`, which keeps the
   cached personas. If the recovery DOM is missing, the flow clears the
   session and sends the player to the start route with reason `broken`.
-- `dropListenersByCloning` replaces an element with a clone of itself, which
+- `dropListenersByCloning` (in `dom.ts`, shared with the sessions picker's
+  `#sessions-new` button) replaces an element with a clone of itself, which
   drops every listener on it, and returns the clone. The regenerate wiring
   keeps that returned clone, so `runRegenerate` disables the button the
   player can see while the content packs regenerate. It once disabled the

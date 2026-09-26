@@ -79,6 +79,7 @@ import {
 	saveActiveSession,
 } from "../persistence/session-storage.js";
 import { type RenderOpts, renderApp } from "../render-app.js";
+import { dropListenersByCloning, trySetCaret } from "./dom.js";
 
 export const BOOTSTRAP_LOADING_TIMEOUT_MS = 300_000;
 
@@ -848,12 +849,6 @@ function addressPanel(ctx: GameViewContext, panel: HTMLElement): void {
 	ctx.promptInput.value = result.text;
 	trySetCaret(ctx.promptInput, result.selectionStart);
 	refreshComposerState(ctx);
-}
-
-function trySetCaret(input: HTMLInputElement, position: number): void {
-	try {
-		input.setSelectionRange(position, position);
-	} catch {}
 }
 
 function appendMentionAwareText(
@@ -1652,12 +1647,6 @@ function handOverBootstrappedSession(
 	session = built;
 	hydratedSessionId = getActiveSessionId();
 	return renderGame(ctx.root, ctx.opts);
-}
-
-function dropListenersByCloning<T extends Element>(el: T): T {
-	const clone = el.cloneNode(true) as T;
-	el.replaceWith(clone);
-	return clone;
 }
 
 function dismissStaleBootstrapRecovery(doc: Document): void {

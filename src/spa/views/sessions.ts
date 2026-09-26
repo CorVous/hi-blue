@@ -22,6 +22,7 @@ import {
 	renderReasonBanner,
 	VERSION_MISMATCH_MESSAGE,
 } from "./archived-build-link.js";
+import { dropListenersByCloning } from "./dom.js";
 
 const SESSIONS_BANNER_MESSAGES: Record<string, string> = {
 	broken: "The active Session was unreadable and could not be loaded.",
@@ -199,8 +200,7 @@ export function renderSessions(root: HTMLElement, opts?: RenderOpts): void {
 
 	const newBtn = doc.querySelector<HTMLButtonElement>("#sessions-new");
 	if (newBtn) {
-		const newBtnWithoutListeners = newBtn.cloneNode(true) as HTMLButtonElement;
-		newBtn.replaceWith(newBtnWithoutListeners);
+		const newBtnWithoutListeners = dropListenersByCloning(newBtn);
 		newBtnWithoutListeners.addEventListener("click", () => {
 			const newId = mintSession();
 			setActiveSessionId(newId);
