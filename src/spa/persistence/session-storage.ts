@@ -354,36 +354,38 @@ export function loadArchivedSession(sessionId: string): LoadResult {
 	return _loadSessionById(sessionId, ARCHIVE_PREFIX);
 }
 
+function listDaemonFiles(
+	prefix: string,
+): Array<{ name: string; size: number }> {
+	const files: Array<{ name: string; size: number }> = [];
+	ignoringStorageErrors(() => {
+		for (let i = 0; i < localStorage.length; i++) {
+			const key = localStorage.key(i);
+			if (!key) continue;
+			if (!key.startsWith(prefix)) continue;
+			const suffix = key.slice(prefix.length);
+			if (suffix.endsWith(".txt")) {
+				const value = localStorage.getItem(key);
+				files.push({ name: suffix, size: value?.length ?? 0 });
+			}
+		}
+	});
+	return files.sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export function getArchivedSessionInfo(
 	id: string,
 ): Extract<SessionInfo, { kind: "archived" | "broken" | "version-mismatch" }> {
 	const prefix = `${ARCHIVE_PREFIX}${id}/`;
 
-	function getDaemonFiles(): Array<{ name: string; size: number }> {
-		const files: Array<{ name: string; size: number }> = [];
-		ignoringStorageErrors(() => {
-			for (let i = 0; i < localStorage.length; i++) {
-				const key = localStorage.key(i);
-				if (!key) continue;
-				if (!key.startsWith(prefix)) continue;
-				const suffix = key.slice(prefix.length);
-				if (suffix.endsWith(".txt")) {
-					const value = localStorage.getItem(key);
-					files.push({ name: suffix, size: value?.length ?? 0 });
-				}
-			}
-		});
-		return files.sort((a, b) => a.name.localeCompare(b.name));
-	}
-
 	const result = loadArchivedSession(id);
 	if (result.kind === "broken")
-		return { kind: "broken", daemonFiles: getDaemonFiles() };
+		return { kind: "broken", daemonFiles: listDaemonFiles(prefix) };
 	if (result.kind === "version-mismatch")
 		return {
 			kind: "version-mismatch",
 			schemaVersion: result.schemaVersion,
-			daemonFiles: getDaemonFiles(),
+			daemonFiles: listDaemonFiles(prefix),
 		};
 	if (result.kind === "none") return { kind: "broken", daemonFiles: [] };
 
@@ -406,7 +408,7 @@ export function getArchivedSessionInfo(
 		lastPlayedAt,
 		epoch,
 		round: result.state.round,
-		daemonFiles: getDaemonFiles(),
+		daemonFiles: listDaemonFiles(prefix),
 		engineSize: engineVal.length,
 	};
 }
@@ -525,27 +527,10 @@ export function getSessionInfo(
 ): Extract<SessionInfo, { kind: "ok" | "broken" | "version-mismatch" }> {
 	const prefix = `${SESSIONS_PREFIX}${id}/`;
 
-	function getDaemonFiles(): Array<{ name: string; size: number }> {
-		const files: Array<{ name: string; size: number }> = [];
-		ignoringStorageErrors(() => {
-			for (let i = 0; i < localStorage.length; i++) {
-				const key = localStorage.key(i);
-				if (!key) continue;
-				if (!key.startsWith(prefix)) continue;
-				const suffix = key.slice(prefix.length);
-				if (suffix.endsWith(".txt")) {
-					const value = localStorage.getItem(key);
-					files.push({ name: suffix, size: value?.length ?? 0 });
-				}
-			}
-		});
-		return files.sort((a, b) => a.name.localeCompare(b.name));
-	}
-
 	const result = loadSession(id);
 
 	if (result.kind === "broken") {
-		return { kind: "broken", daemonFiles: getDaemonFiles() };
+		return { kind: "broken", daemonFiles: listDaemonFiles(prefix) };
 	}
 
 	if (result.kind === "version-mismatch") {
@@ -569,7 +554,7 @@ export function getSessionInfo(
 		const vmResult: SessionInfo = {
 			kind: "version-mismatch",
 			schemaVersion: result.schemaVersion,
-			daemonFiles: getDaemonFiles(),
+			daemonFiles: listDaemonFiles(prefix),
 			...(lastSavedAt !== undefined ? { lastSavedAt } : {}),
 			...(epoch !== undefined ? { epoch } : {}),
 		};
@@ -586,7 +571,7 @@ export function getSessionInfo(
 		lastSavedAt: result.lastSavedAt,
 		epoch: result.epoch,
 		round: result.state.round,
-		daemonFiles: getDaemonFiles(),
+		daemonFiles: listDaemonFiles(prefix),
 		engineSize: engineVal.length,
 	};
 }
