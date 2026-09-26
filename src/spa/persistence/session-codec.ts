@@ -139,7 +139,7 @@ export function serializeSession(
 }
 
 const SCHEMAS_THE_ARCHIVED_BUILD_MIGRATES_TO_11 = [8, 9, 10];
-const LAST_SCHEMA_BEFORE_ARCHIVE_ONLY_BUMPS = 11;
+export const LAST_SCHEMA_BEFORE_ARCHIVE_ONLY_BUMPS = 11;
 
 function schemaAsArchivedBuildReadsIt(storedSchema: number): number {
 	return SCHEMAS_THE_ARCHIVED_BUILD_MIGRATES_TO_11.includes(storedSchema)

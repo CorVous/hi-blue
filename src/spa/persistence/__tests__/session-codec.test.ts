@@ -9,11 +9,12 @@ import type {
 	GameState,
 	WorldEntity,
 } from "../../game/types.js";
-import { lookupArchiveVersion } from "../archive-map.js";
+import { lookupArchiveVersion, SCHEMA_ARCHIVE_MAP } from "../archive-map.js";
 import { deobfuscate, obfuscate } from "../sealed-blob-codec.js";
 import {
 	type DaemonFile,
 	deserializeSession,
+	LAST_SCHEMA_BEFORE_ARCHIVE_ONLY_BUMPS,
 	SESSION_SCHEMA_VERSION,
 	serializeSession,
 } from "../session-codec.js";
@@ -768,6 +769,15 @@ describe("serializeSession / deserializeSession", () => {
 		].join("\n");
 		expect(allBytes).not.toMatch(/facing/i);
 		expect(allBytes).not.toMatch(/landmark/i);
+	});
+
+	it("the legacy-schema clamp target has an archived build in SCHEMA_ARCHIVE_MAP", () => {
+		expect(
+			SCHEMA_ARCHIVE_MAP[LAST_SCHEMA_BEFORE_ARCHIVE_ONLY_BUMPS],
+		).toBeDefined();
+		expect(LAST_SCHEMA_BEFORE_ARCHIVE_ONLY_BUMPS).toBeLessThan(
+			SESSION_SCHEMA_VERSION,
+		);
 	});
 
 	it("v8, v9, v10, and v11 saves resolve to the archived-build version-mismatch", () => {

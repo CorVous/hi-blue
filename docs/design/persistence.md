@@ -97,7 +97,10 @@ thrown away, and only the number 11 reached the UI. `deserializeSession`
 therefore maps a stored 8, 9 or 10 straight to 11
 (`schemaAsArchivedBuildReadsIt`). A save from any of those versions then links
 to the `0.0.2-beta.2` archive, the last build that reads schemas 8 to 11.
-Do not add a v11→v12 migration.
+Do not add a v11→v12 migration. The clamp is only useful while its target
+(`LAST_SCHEMA_BEFORE_ARCHIVE_ONLY_BUMPS`) has a `SCHEMA_ARCHIVE_MAP` entry
+pointing at a build that still carries the v8→v11 chain, so a codec test
+fails if that entry is removed.
 
 ## Version boundary (`version-boundary.ts`)
 
