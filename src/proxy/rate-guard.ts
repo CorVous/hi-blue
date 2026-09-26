@@ -1,5 +1,3 @@
-import { USD_TO_MICRO_USD } from "./pricing";
-
 export interface CostGuardConfig {
 	perIpDailyMicroUsdMax: number;
 	globalDailyMicroUsdMax: number;
@@ -132,9 +130,9 @@ export function rateLimitResponse(
 	);
 }
 
-const DEFAULT_PER_IP_DAILY_MICRO_USD = 1 * USD_TO_MICRO_USD;
-const DEFAULT_GLOBAL_DAILY_MICRO_USD = 10 * USD_TO_MICRO_USD;
-const DEFAULT_PRE_CHARGE_MICRO_USD = 0.005 * USD_TO_MICRO_USD;
+const DEFAULT_PER_IP_DAILY_MICRO_USD = 1_000_000;
+const DEFAULT_GLOBAL_DAILY_MICRO_USD = 10_000_000;
+const DEFAULT_PRE_CHARGE_MICRO_USD = 5_000;
 
 export function configFromEnv(env: {
 	PER_IP_DAILY_MICRO_USD_MAX?: string;

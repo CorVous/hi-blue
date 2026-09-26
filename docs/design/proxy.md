@@ -43,7 +43,10 @@ rules and tradeoffs the code cannot state by itself.
   `AGENTS.md` "Local development" for `pnpm dev:local`.
 - `PER_IP_DAILY_MICRO_USD_MAX`, `GLOBAL_DAILY_MICRO_USD_MAX`,
   `PRE_CHARGE_MICRO_USD` are optional. `configFromEnv` falls back to $1.00 per
-  IP per day, $10.00 globally per day, and a $0.005 pre-charge.
+  IP per day, $10.00 globally per day, and a $0.005 pre-charge. The defaults
+  are integer literals (`1_000_000`, `10_000_000`, `5_000`) rather than
+  products of `USD_TO_MICRO_USD`, because the counters are written to KV as
+  `String(counter + preCharge)` and a fractional default would corrupt them.
 - Every money value in `wrangler.jsonc` is an integer in micro-USD
   (1e-6 USD): `1000000` is $1.00. Production sets $1.00 per IP per day,
   $10.00 globally, and a $0.005 pre-charge.

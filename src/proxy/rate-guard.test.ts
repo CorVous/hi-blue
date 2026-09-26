@@ -2,6 +2,7 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
 	type CostGuardConfig,
+	configFromEnv,
 	globalKey,
 	perIpKey,
 	preCharge,
@@ -336,5 +337,19 @@ describe("rateLimitResponse", () => {
 		expect(Number.isInteger(retryAfter)).toBe(true);
 		expect(retryAfter).toBeGreaterThan(0);
 		expect(retryAfter).toBeLessThanOrEqual(86400);
+	});
+});
+
+describe("configFromEnv defaults", () => {
+	it("falls back to exact integer micro-USD defaults so KV counters stay integral", () => {
+		const cfg = configFromEnv({});
+		expect(cfg).toEqual({
+			perIpDailyMicroUsdMax: 1_000_000,
+			globalDailyMicroUsdMax: 10_000_000,
+			preChargeMicroUsd: 5_000,
+		});
+		for (const value of Object.values(cfg)) {
+			expect(Number.isInteger(value)).toBe(true);
+		}
 	});
 });
