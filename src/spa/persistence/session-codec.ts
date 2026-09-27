@@ -10,6 +10,7 @@ import type {
 	PersonaSpatialState,
 	WorldState,
 } from "../game/types.js";
+import { outcomeOfCompletedGame } from "../game/win-condition.js";
 import {
 	deobfuscate,
 	obfuscate,
@@ -117,7 +118,7 @@ export function serializeSession(
 		schemaVersion: SESSION_SCHEMA_VERSION,
 		world: structuredClone(state.world),
 		budgets: { ...state.budgets },
-		lockedOut: Array.from(state.lockedOut) as AiId[],
+		lockedOut: Array.from(state.exhausted) as AiId[],
 		personaSpatial: structuredClone(state.personaSpatial),
 		contentPacksA: structuredClone(state.contentPacksA),
 		contentPacksB: structuredClone(state.contentPacksB),
@@ -237,7 +238,7 @@ export function deserializeSession(
 		const timeOfDay = contentPack.timeOfDay ?? "";
 		const world = structuredClone(sealed.world);
 		const budgets = { ...sealed.budgets };
-		const lockedOut = new Set<AiId>(sealed.lockedOut);
+		const exhausted = new Set<AiId>(sealed.lockedOut);
 		const personaSpatial = structuredClone(sealed.personaSpatial);
 
 		const complicationSchedule = sealed.complicationSchedule ?? {
@@ -261,7 +262,7 @@ export function deserializeSession(
 			world,
 			budgets,
 			conversationLogs,
-			lockedOut,
+			exhausted,
 			personaSpatial,
 			complicationSchedule,
 			activeComplications,
@@ -270,6 +271,7 @@ export function deserializeSession(
 			activePackId: sealed.activePackId ?? "A",
 			objectives: structuredClone(objectives),
 		};
+		if (state.isComplete) state.outcome = outcomeOfCompletedGame(state);
 
 		return {
 			kind: "ok",

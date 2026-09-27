@@ -248,7 +248,7 @@ export interface GameState {
 	world: WorldState;
 	budgets: Record<AiId, AiBudget>;
 	conversationLogs: Record<AiId, ConversationEntry[]>;
-	lockedOut: Set<AiId>;
+	exhausted: Set<AiId>;
 	personaSpatial: Record<AiId, PersonaSpatialState>;
 	complicationSchedule: ComplicationSchedule;
 	activeComplications: ActiveComplication[];

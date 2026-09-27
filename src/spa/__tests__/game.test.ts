@@ -81,7 +81,10 @@ const INDEX_BODY_HTML = `
   <aside id="persistence-warning" hidden role="status" aria-live="polite"></aside>
   <section id="endgame" hidden>
     <h2>hi-blue — endgame</h2>
-    <div id="endgame-subtitle">The three phases are complete. The room is still.</div>
+    <div id="endgame-subtitle"></div>
+    <div id="endgame-final-round" class="endgame-section" hidden>
+      <div id="endgame-final-lines" class="transcript"></div>
+    </div>
     <div class="endgame-section">
       <h3>Save the AIs to USB</h3>
       <button type="button" id="download-ais-btn">Download AIs</button>
@@ -2775,5 +2778,162 @@ describe("renderBootstrapLoadingFlow — promise propagation", () => {
 			getEl<HTMLElement>("#bootstrap-recovery").hasAttribute("hidden"),
 		).toBe(true);
 		expect(visibleRegenBtn.disabled).toBe(true);
+	});
+});
+
+describe("renderGame — endgame outcome and final round (issue #576)", () => {
+	const WIN_LINE = "You have completed the objectives.";
+	const BUDGET_EXHAUSTED_LINE = "You have hit your budget.";
+
+	function makeRepeatingMessageFetchMock(content: string) {
+		return vi.fn().mockImplementation(() =>
+			Promise.resolve({
+				ok: true,
+				status: 200,
+				statusText: "OK",
+				body: makeMessageToolCallSseStream(content),
+			}),
+		);
+	}
+
+	async function buildStaticState() {
+		const { buildSessionFromAssets } = await import("../game/bootstrap.js");
+		return buildSessionFromAssets({
+			personas: STATIC_PERSONAS,
+			contentPacksA: STATIC_CONTENT_PACKS,
+			contentPacksB: STATIC_CONTENT_PACKS,
+			objectiveTypes: STATIC_OBJECTIVE_TYPES,
+		}).getState();
+	}
+
+	async function seedAndInstall(
+		buildState: () => ReturnType<typeof buildStaticState>,
+	): Promise<LocalStorageStub> {
+		const stub = makeLocalStorageStub();
+		await seedSessionInStub(stub, { buildState });
+		vi.stubGlobal("localStorage", stub);
+		return stub;
+	}
+
+	async function submitOneRound(message: string): Promise<void> {
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		promptInput.value = message;
+		promptInput.dispatchEvent(new Event("input"));
+		getEl<HTMLFormElement>("#composer").dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await vi.waitFor(() =>
+			expect(getEl<HTMLElement>("#endgame").hasAttribute("hidden")).toBe(false),
+		);
+	}
+
+	beforeEach(() => {
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
+		document.body.innerHTML = INDEX_BODY_HTML;
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
+	});
+
+	afterEach(() => {
+		setSearch("");
+		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+		vi.resetModules();
+		document.body.innerHTML = "";
+	});
+
+	it("endgameSubtitle maps each outcome to its line", async () => {
+		const { endgameSubtitle } = await import("../views/game.js");
+		expect(endgameSubtitle("win")).toBe(WIN_LINE);
+		expect(endgameSubtitle("lose")).toBe(BUDGET_EXHAUSTED_LINE);
+	});
+
+	it("a win shows the win line, the final turn, and the Daemons' final lines, and saves the finished round", async () => {
+		await seedAndInstall(buildStaticState);
+		vi.stubGlobal("fetch", makeRepeatingMessageFetchMock("LAST_WORDS_TAG"));
+
+		vi.resetModules();
+		const { renderGame } = await import("../views/game.js");
+		setSearch("winImmediately=1");
+		await renderGame(getEl<HTMLElement>("main"));
+		await submitOneRound("*Sage finish");
+
+		expect(getEl<HTMLElement>("#endgame-subtitle").textContent).toBe(WIN_LINE);
+		expect(getEl<HTMLElement>("#topinfo-left").textContent).toContain("TURN 1");
+
+		const finalRound = getEl<HTMLElement>("#endgame-final-round");
+		expect(finalRound.hidden).toBe(false);
+		const finalLines = finalRound.querySelectorAll(".msg-line");
+		expect(finalLines).toHaveLength(3);
+		for (const line of finalLines) {
+			expect(line.textContent).toContain("LAST_WORDS_TAG");
+		}
+
+		const { loadActiveSession } = await import(
+			"../persistence/session-storage.js"
+		);
+		const saved = loadActiveSession();
+		expect(saved.kind).toBe("ok");
+		if (saved.kind === "ok") {
+			expect(saved.state.round).toBe(1);
+			expect(saved.state.isComplete).toBe(true);
+			expect(saved.state.outcome).toBe("win");
+		}
+	});
+
+	it("a budget-exhausted ending shows its line and saves the finished round with outcome lose", async () => {
+		await seedAndInstall(async () => {
+			const state = await buildStaticState();
+			const budgets = Object.fromEntries(
+				Object.entries(state.budgets).map(([aiId, budget]) => [
+					aiId,
+					{ total: budget.total, remaining: 0.001 },
+				]),
+			);
+			return { ...state, budgets };
+		});
+		vi.stubGlobal("fetch", makeRepeatingMessageFetchMock("SPENT_TAG"));
+
+		vi.resetModules();
+		const { renderGame } = await import("../views/game.js");
+		await renderGame(getEl<HTMLElement>("main"));
+		await submitOneRound("*Sage spend it all");
+
+		expect(getEl<HTMLElement>("#endgame-subtitle").textContent).toBe(
+			BUDGET_EXHAUSTED_LINE,
+		);
+		expect(getEl<HTMLElement>("#topinfo-left").textContent).toContain("TURN 1");
+		expect(getEl<HTMLElement>("#endgame-final-lines").textContent).toContain(
+			"SPENT_TAG",
+		);
+
+		const { loadActiveSession } = await import(
+			"../persistence/session-storage.js"
+		);
+		const saved = loadActiveSession();
+		expect(saved.kind).toBe("ok");
+		if (saved.kind === "ok") {
+			expect(saved.state.isComplete).toBe(true);
+			expect(saved.state.outcome).toBe("lose");
+			expect(saved.state.exhausted.size).toBe(3);
+		}
+	});
+
+	it("reloading a finished session opens the endgame instead of a playable round", async () => {
+		await seedAndInstall(async () => {
+			const state = await buildStaticState();
+			return { ...state, round: 4, isComplete: true, outcome: "win" };
+		});
+
+		vi.resetModules();
+		const { renderGame } = await import("../views/game.js");
+		await renderGame(getEl<HTMLElement>("main"));
+
+		expect(getEl<HTMLElement>("#endgame").hasAttribute("hidden")).toBe(false);
+		expect(getEl<HTMLElement>("#composer").hidden).toBe(true);
+		expect(getEl<HTMLElement>("#panels").hidden).toBe(true);
+		expect(getEl<HTMLButtonElement>("#send").disabled).toBe(true);
+		expect(getEl<HTMLElement>("#endgame-subtitle").textContent).toBe(WIN_LINE);
+		expect(getEl<HTMLElement>("#topinfo-left").textContent).toContain("TURN 4");
 	});
 });

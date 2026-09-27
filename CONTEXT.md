@@ -153,7 +153,12 @@ The live countdown state tracking when the next **Complication** fires. The firs
 ### End-game
 
 **Daemon budget**:
-$0.50 USD of API budget per Daemon for the whole game (no per-phase reset). When a Daemon's budget reaches zero it emits a farewell line then goes silent for the remainder of the game. The game is lost when *all three* Daemons are exhausted, and won when all **Objective**s are satisfied; both conditions are checked after every round.
+$0.50 USD of API budget per Daemon for the whole game (no per-phase reset). When a Daemon's budget reaches zero it is **exhausted**: it emits a farewell line then goes silent for the remainder of the game. The game is lost when *all three* Daemons are exhausted, and won when all **Objective**s are satisfied; both conditions are checked after every round.
+_Avoid_: Locked out (for an exhausted Daemon; lockout means the **Chat Lockout** Complication).
+
+**Ending**:
+How a game finished. There are exactly two: **Win** (every **Objective** satisfied; the endgame says "You have completed the objectives.") and **Budget exhausted** (every Daemon exhausted; the endgame says "You have hit your budget."). A round that does both is a Win. In code the outcome is `"win"` or `"lose"`.
+_Avoid_: Phases complete (the three-phase model is retired).
 
 **End-game choice**:
 The three options presented to the player after a game ends (win or lose), before the current **Session** is archived:

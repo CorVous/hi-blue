@@ -90,7 +90,7 @@ export function startGame(
 		world: { entities: worldEntities },
 		budgets,
 		conversationLogs,
-		lockedOut: new Set(),
+		exhausted: new Set(),
 		personaSpatial,
 		complicationSchedule,
 		activeComplications,
@@ -175,8 +175,8 @@ export function advanceRound(game: GameState): GameState {
 	return { ...game, round: game.round + 1 };
 }
 
-export function isAiLockedOut(game: GameState, aiId: AiId): boolean {
-	return game.lockedOut.has(aiId);
+export function isDaemonExhausted(game: GameState, aiId: AiId): boolean {
+	return game.exhausted.has(aiId);
 }
 
 export function deductBudget(
@@ -186,13 +186,13 @@ export function deductBudget(
 ): { game: GameState; justExhausted: boolean } {
 	const current = game.budgets[aiId];
 	if (!current) return { game, justExhausted: false };
-	const wasLockedOut = game.lockedOut.has(aiId);
+	const wasExhausted = game.exhausted.has(aiId);
 	const remaining = current.remaining - costUsd;
-	const lockedOut = new Set(game.lockedOut);
+	const exhausted = new Set(game.exhausted);
 	if (remaining <= 0) {
-		lockedOut.add(aiId);
+		exhausted.add(aiId);
 	}
-	const justExhausted = !wasLockedOut && lockedOut.has(aiId);
+	const justExhausted = !wasExhausted && exhausted.has(aiId);
 	return {
 		game: {
 			...game,
@@ -200,7 +200,7 @@ export function deductBudget(
 				...game.budgets,
 				[aiId]: { total: current.total, remaining },
 			},
-			lockedOut,
+			exhausted,
 		},
 		justExhausted,
 	};

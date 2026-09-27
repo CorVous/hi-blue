@@ -12,7 +12,7 @@ import {
 	appendMessage,
 	appendWitnessedEvent,
 	deductBudget,
-	isAiLockedOut,
+	isDaemonExhausted,
 } from "./engine";
 import { carryObjectById } from "./pack-selectors.js";
 import {
@@ -379,10 +379,10 @@ export function dispatchAiTurn(
 ): DispatchResult {
 	const { aiId } = action;
 
-	if (isAiLockedOut(game, aiId)) {
+	if (isDaemonExhausted(game, aiId)) {
 		return {
 			rejected: true,
-			reason: `${aiId} is locked out (budget exhausted)`,
+			reason: `${aiId} has exhausted its budget`,
 			game,
 			records: [],
 		};

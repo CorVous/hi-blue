@@ -216,7 +216,7 @@ describe("GameSession — result from submitMessage", () => {
 	});
 });
 
-describe("GameSession — win / lose via checkWinCondition / checkLoseCondition", () => {
+describe("GameSession — win / lose via checkWinCondition / checkBudgetExhausted", () => {
 	it("gameEnded is false when objective pairs are not satisfied", async () => {
 		const session = new GameSession(
 			CONTENT_PACK_WITH_ITEMS,
@@ -246,7 +246,7 @@ describe("GameSession — win / lose via checkWinCondition / checkLoseCondition"
 		expect(result.gameEnded).toBe(true);
 	});
 
-	it("lose condition: gameEnded is true when all AIs are locked out", async () => {
+	it("budget-exhausted ending: gameEnded is true when every Daemon has exhausted its budget", async () => {
 		const session = new GameSession(CONTENT_PACK_WITH_ITEMS, TEST_PERSONAS);
 		const exhaustProvider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [], costUsd: 1 },

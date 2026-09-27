@@ -84,6 +84,8 @@ import { dropListenersByCloning, trySetCaret } from "./dom.js";
 export const BOOTSTRAP_LOADING_TIMEOUT_MS = 300_000;
 
 const PLAYER_ID = "blue";
+const OBJECTIVES_COMPLETE_SUBTITLE = "You have completed the objectives.";
+const BUDGET_EXHAUSTED_SUBTITLE = "You have hit your budget.";
 const LOADING_PLACEHOLDER = "loading…";
 const UNSET_PROMPT_TARGET = "/?????";
 const UNKNOWN_SESSION_ID = "0x????";
@@ -545,6 +547,12 @@ function mountSessionView(ctx: GameViewContext): void {
 	ctx.form.addEventListener("submit", (evt) => {
 		void submitRound(ctx, evt);
 	});
+
+	const restoredState = session?.getState();
+	if (restoredState?.isComplete) {
+		gameEndHandled = true;
+		enterEndgame(ctx, restoredState);
+	}
 }
 
 function adoptSession(
@@ -1162,11 +1170,14 @@ async function playRound(
 		);
 	}
 
-	if (!outcome.gameEnded) {
-		const saveResult = saveActiveSession(nextState);
-		if (!saveResult.ok) {
-			showPersistenceWarning(ctx.persistenceWarningEl, saveResult.reason);
-		}
+	const saveResult = saveActiveSession(nextState);
+	if (!saveResult.ok) {
+		showPersistenceWarning(ctx.persistenceWarningEl, saveResult.reason);
+	}
+
+	if (outcome.gameEnded) {
+		refreshTopInfo(ctx);
+		enterEndgame(ctx, nextState);
 	}
 }
 
@@ -1201,7 +1212,6 @@ function applyRoundEvent(
 			if (gameEndHandled) break;
 			gameEndHandled = true;
 			outcome.gameEnded = true;
-			enterEndgame(ctx);
 			break;
 	}
 }
@@ -1230,19 +1240,93 @@ function reportRoundFailure(ctx: GameViewContext, err: unknown): void {
 	showRoundError(ctx.doc);
 }
 
-function enterEndgame(ctx: GameViewContext): void {
+function enterEndgame(ctx: GameViewContext, endedState: GameState): void {
 	const { doc } = ctx;
 	ctx.sendBtn.disabled = true;
 	ctx.promptInput.disabled = true;
 
 	const endedSessionId = getActiveSessionId();
-	const endedState = session?.getState();
 	releaseSession();
 
+	paintEndgameSubtitle(doc, endedState.outcome);
+	paintFinalRoundLines(doc, endedState);
 	showEndgameScreen(doc);
+	resetEndgameControls(doc);
 	wireEndgameChoices(ctx.root, endedSessionId, endedState);
 	wireSaveDownload(doc, endedState);
 	wireDiagnosticsSubmit(doc);
+}
+
+const ENDGAME_BUTTON_SELECTORS = [
+	"#endgame-new-daemons-btn",
+	"#endgame-same-daemons-btn",
+	"#endgame-continue-btn",
+	"#download-ais-btn",
+	"#submit-diagnostics-btn",
+];
+
+const ENDGAME_STATUS_SELECTORS = [
+	"#endgame-choice-status",
+	"#download-status",
+	"#diagnostics-status",
+];
+
+function resetEndgameControls(doc: Document): void {
+	for (const selector of ENDGAME_BUTTON_SELECTORS) {
+		const button = doc.querySelector<HTMLButtonElement>(selector);
+		if (button) dropListenersByCloning(button).disabled = false;
+	}
+	for (const selector of ENDGAME_STATUS_SELECTORS) {
+		const statusEl = doc.querySelector<HTMLElement>(selector);
+		if (statusEl) statusEl.textContent = "";
+	}
+}
+
+export function endgameSubtitle(outcome: GameState["outcome"]): string {
+	return outcome === "lose"
+		? BUDGET_EXHAUSTED_SUBTITLE
+		: OBJECTIVES_COMPLETE_SUBTITLE;
+}
+
+function paintEndgameSubtitle(
+	doc: Document,
+	outcome: GameState["outcome"],
+): void {
+	const subtitleEl = doc.querySelector<HTMLElement>("#endgame-subtitle");
+	if (!subtitleEl) return;
+	subtitleEl.textContent = endgameSubtitle(outcome);
+	subtitleEl.dataset.outcome = outcome === "lose" ? "budget-exhausted" : "win";
+}
+
+export function finalRoundDaemonLines(
+	state: GameState,
+): Array<{ aiId: AiId; entry: MessageEntry }> {
+	const finalRound = state.round - 1;
+	const lines: Array<{ aiId: AiId; entry: MessageEntry }> = [];
+	for (const aiId of Object.keys(state.personas)) {
+		for (const entry of state.conversationLogs[aiId] ?? []) {
+			const isDaemonLineToPlayer =
+				entry.kind === "message" &&
+				entry.from === aiId &&
+				entry.to === PLAYER_ID;
+			if (isDaemonLineToPlayer && entry.round === finalRound) {
+				lines.push({ aiId, entry });
+			}
+		}
+	}
+	return lines;
+}
+
+function paintFinalRoundLines(doc: Document, state: GameState): void {
+	const sectionEl = doc.querySelector<HTMLElement>("#endgame-final-round");
+	const linesEl = doc.querySelector<HTMLElement>("#endgame-final-lines");
+	if (!sectionEl || !linesEl) return;
+	linesEl.textContent = "";
+	const lines = finalRoundDaemonLines(state);
+	for (const { aiId, entry } of lines) {
+		linesEl.appendChild(restoredMessageLine(doc, entry, aiId, state.personas));
+	}
+	sectionEl.hidden = lines.length === 0;
 }
 
 function showEndgameScreen(doc: Document): void {
@@ -1256,7 +1340,7 @@ function showEndgameScreen(doc: Document): void {
 function wireEndgameChoices(
 	root: HTMLElement,
 	endedSessionId: string | null,
-	endedState: GameState | undefined,
+	endedState: GameState,
 ): void {
 	const doc = root.ownerDocument;
 	const newDaemonsBtn = doc.querySelector<HTMLButtonElement>(
@@ -1319,13 +1403,9 @@ function startWithNewDaemons(
 function restartWithSameDaemons(
 	root: HTMLElement,
 	endedSessionId: string | null,
-	endedState: GameState | undefined,
+	endedState: GameState,
 	setStatus: (text: string) => void,
 ): void {
-	if (!endedState) {
-		renderApp(root);
-		return;
-	}
 	setStatus("archiving…");
 	archiveIfKnown(endedSessionId)
 		.then(() => {
@@ -1349,13 +1429,9 @@ function restartWithSameDaemons(
 
 function continueInNewRoom(
 	root: HTMLElement,
-	endedState: GameState | undefined,
+	endedState: GameState,
 	setStatus: (text: string) => void,
 ): void {
-	if (!endedState) {
-		renderApp(root);
-		return;
-	}
 	setStatus("spinning up a new room…");
 	buildSameDaemonsSession(endedState.personas)
 		.then((newSess) => {
@@ -1372,13 +1448,10 @@ function continueInNewRoom(
 		});
 }
 
-function wireSaveDownload(
-	doc: Document,
-	endedState: GameState | undefined,
-): void {
+function wireSaveDownload(doc: Document, endedState: GameState): void {
 	const downloadBtn = doc.querySelector<HTMLButtonElement>("#download-ais-btn");
 	const downloadStatusEl = doc.querySelector<HTMLElement>("#download-status");
-	if (!downloadBtn || !endedState) return;
+	if (!downloadBtn) return;
 	downloadBtn.dataset.savePayload = JSON.stringify(
 		serializeGameSave(endedState),
 	);

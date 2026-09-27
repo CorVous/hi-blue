@@ -4,7 +4,7 @@ import { isPlayerChatLockedOut } from "../complication-engine";
 import {
 	deductBudget,
 	FAREWELL_LINE,
-	isAiLockedOut,
+	isDaemonExhausted,
 	startGame,
 } from "../engine";
 import { buildOpenAiMessages } from "../openai-message-builder";
@@ -426,7 +426,7 @@ describe("onAiTurnComplete callback", () => {
 	it("fires for locked-out AIs too (uniform per-AI signal)", async () => {
 		let state = makeGame(1);
 		state = deductBudget(state, "red" as AiId, 1).game;
-		expect(isAiLockedOut(state, "red" as AiId)).toBe(true);
+		expect(isDaemonExhausted(state, "red" as AiId)).toBe(true);
 
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
@@ -457,7 +457,7 @@ describe("budget-exhaustion lockout", () => {
 	it("skips an already-locked AI and emits an in-character lockout line instead", async () => {
 		let game = makeGame();
 		game = deductBudget(game, "red", 5).game;
-		expect(game.lockedOut.has("red")).toBe(true);
+		expect(game.exhausted.has("red")).toBe(true);
 
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
@@ -498,9 +498,9 @@ describe("budget-exhaustion lockout", () => {
 		const { nextState } = await runRound(game, "red", "hi", provider);
 
 		const phase = nextState;
-		expect(phase.lockedOut.has("red")).toBe(true);
-		expect(phase.lockedOut.has("green")).toBe(true);
-		expect(phase.lockedOut.has("cyan")).toBe(true);
+		expect(phase.exhausted.has("red")).toBe(true);
+		expect(phase.exhausted.has("green")).toBe(true);
+		expect(phase.exhausted.has("cyan")).toBe(true);
 	});
 
 	it("a Daemon whose budget is exhausted mid-round emits a farewell line to its conversation log", async () => {
@@ -893,7 +893,7 @@ describe("tool-call dispatch", () => {
 	});
 });
 
-describe("game-end conditions — checkWinCondition / checkLoseCondition", () => {
+describe("game-end conditions — checkWinCondition / checkBudgetExhausted", () => {
 	const NO_PAIRS_PACK = makeTestPack([], {
 		wallName: "wall",
 		aiStarts: ROW_AI_STARTS,
@@ -1026,7 +1026,7 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 		const { nextState } = await runRound(game, "red", "hi", provider, {
 			rng: seededRng(CHAT_LOCKOUT_DRAWS, () => 0),
 		});
-		expect(isAiLockedOut(nextState, "red")).toBe(false);
+		expect(isDaemonExhausted(nextState, "red")).toBe(false);
 		expect(nextState.budgets.red?.remaining).toBeCloseTo(4, 10);
 	});
 
@@ -1172,7 +1172,7 @@ describe("lockout messages", () => {
 	it("budget-exhaustion lockout chat message is '<name> is unresponsive…'", async () => {
 		let game = makeGame();
 		game = deductBudget(game, "red", 5).game;
-		expect(game.lockedOut.has("red")).toBe(true);
+		expect(game.exhausted.has("red")).toBe(true);
 
 		const provider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [] },
@@ -1300,9 +1300,9 @@ describe("runRound — onAiDelta callback", () => {
 		for (const aiId of ["red", "green", "cyan"] as AiId[]) {
 			state = deductBudget(state, aiId, 1).game;
 		}
-		expect(state.lockedOut.has("red")).toBe(true);
-		expect(state.lockedOut.has("green")).toBe(true);
-		expect(state.lockedOut.has("cyan")).toBe(true);
+		expect(state.exhausted.has("red")).toBe(true);
+		expect(state.exhausted.has("green")).toBe(true);
+		expect(state.exhausted.has("cyan")).toBe(true);
 
 		const liveProvider: RoundLLMProvider = {
 			async streamRound(_messages, _tools, onDelta) {

@@ -14,7 +14,7 @@ import {
 	appendWitnessedConvergence,
 	appendWitnessedObstacleShift,
 	FAREWELL_LINE,
-	isAiLockedOut,
+	isDaemonExhausted,
 	resolveToolDisables,
 } from "./engine";
 import { buildOpenAiMessages } from "./openai-message-builder";
@@ -51,8 +51,8 @@ import type {
 } from "./types";
 import { vistaContains } from "./vista-projector";
 import {
+	checkBudgetExhausted,
 	checkConvergenceTier,
-	checkLoseCondition,
 	checkWinCondition,
 } from "./win-condition";
 
@@ -178,13 +178,13 @@ export async function runRound(
 	const newDiskEntities: Partial<Record<AiId, DiskEntityStates>> = {};
 
 	for (const aiId of turnOrder) {
-		if (isAiLockedOut(state, aiId)) {
+		if (isDaemonExhausted(state, aiId)) {
 			state = appendMessage(state, aiId, "blue", unresponsiveLine(state, aiId));
 			roundActions.push({
 				round: state.round,
 				actor: aiId,
 				kind: "lockout",
-				description: `${state.personas[aiId]?.name ?? aiId} is locked out`,
+				description: `${state.personas[aiId]?.name ?? aiId} has exhausted its budget`,
 			});
 			onAiTurnComplete?.(aiId);
 			continue;
@@ -321,7 +321,7 @@ export async function runRound(
 			action.pass = true;
 		}
 
-		const lockedOutBeforeDispatch = new Set(state.lockedOut);
+		const exhaustedBeforeDispatch = new Set(state.exhausted);
 
 		const dispatchResult = dispatchAiTurn(
 			state,
@@ -331,7 +331,7 @@ export async function runRound(
 		state = dispatchResult.game;
 
 		const budgetJustExhausted =
-			!lockedOutBeforeDispatch.has(aiId) && state.lockedOut.has(aiId);
+			!exhaustedBeforeDispatch.has(aiId) && state.exhausted.has(aiId);
 		if (budgetJustExhausted) {
 			const personaName = state.personas[aiId]?.name ?? aiId;
 			const farewellContent = FAREWELL_LINE(personaName);
@@ -490,6 +490,13 @@ export async function runRound(
 			state = shiftObstacle(state, fired);
 		} else {
 			state = applyComplicationResult(state, complicationResult, rng);
+			if (fired.kind === "tool_disable") {
+				state = appendPrivateSystemNotice(
+					state,
+					fired.target,
+					`Sysadmin: Your ${fired.tool} tool has been disabled.`,
+				);
+			}
 			if (fired.kind === "chat_lockout") {
 				chatLockoutTriggered = {
 					aiId: fired.target,
@@ -517,7 +524,9 @@ export async function runRound(
 	if (checkWinCondition(state.world, state.objectives)) {
 		state = { ...state, isComplete: true, outcome: "win" };
 		gameEnded = true;
-	} else if (checkLoseCondition(state.lockedOut, Object.keys(state.personas))) {
+	} else if (
+		checkBudgetExhausted(state.exhausted, Object.keys(state.personas))
+	) {
 		state = { ...state, isComplete: true, outcome: "lose" };
 		gameEnded = true;
 	}

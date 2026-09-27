@@ -11,13 +11,13 @@ Other sources, used here by reference rather than repeated:
 
 ## Round coordinator (`round-coordinator.ts`)
 
-**Order of a round.** The player's message goes into the addressed Daemon's log only; other Daemons never see it. Then each Daemon acts in initiative order. A locked-out Daemon gets the "is unresponsive…" line, with no LLM call and no budget charge. Every other Daemon gets a prompt, one streamed turn (plus the ADR 0016 retry) and a dispatch. After all three: `advanceRound`, the complication tick, expiry of tool disables, chat lockouts and directives, convergence evaluation, then win/lose. A win takes priority over a loss. Expiry checks compare against the advanced round, so they run after `advanceRound`.
+**Order of a round.** The player's message goes into the addressed Daemon's log only; other Daemons never see it. Then each Daemon acts in initiative order. An exhausted Daemon (its budget spent, so it is in `exhausted`) gets the "is unresponsive…" line, with no LLM call and no budget charge. Every other Daemon gets a prompt, one streamed turn (plus the ADR 0016 retry) and a dispatch. After all three: `advanceRound`, the complication tick, expiry of tool disables, chat lockouts and directives, convergence evaluation, then the two endings: win (`checkWinCondition`) or budget exhausted (`checkBudgetExhausted`, every Daemon in `exhausted`). A win takes priority, so a round that satisfies the last Objective while spending the last budget is a win. Expiry checks compare against the advanced round, so they run after `advanceRound`.
 
 **`initiative`** must be a permutation of the persona ids; anything else throws. It defaults to `Object.keys(game.personas)`.
 
 **Cross-round state lives with the caller.** `runRound` returns `toolRoundtrip`, `diskSnapshots` and `diskEntities`. `GameSession` persists them and passes them back next round as `priorToolRoundtrip`, `priorDiskSnapshots` and `priorDiskEntities`. The snapshots are captured when that Daemon's prompt is built, so the next `<whats_new>` diffs against what the Daemon actually saw.
 
-**`onAiTurnComplete`** fires exactly once per Daemon, in initiative order, locked-out Daemons included. It fires after any retry and after dispatch. The SPA strips each panel's spinner on it. That is correct because the coordinator runs Daemons serially.
+**`onAiTurnComplete`** fires exactly once per Daemon, in initiative order, exhausted Daemons included. It fires after any retry and after dispatch. The SPA strips each panel's spinner on it. That is correct because the coordinator runs Daemons serially.
 
 **Tool calls in one response.** Every `message` call is accepted, in emission order. At most one non-message action is accepted; any further action is a `tool_failure` ("only one action tool call per turn"). A call that fails `parseToolCallArguments` is a `tool_failure` too, and this includes retired tool names such as `face`, which the tool enum no longer offers.
 
@@ -27,7 +27,7 @@ Other sources, used here by reference rather than repeated:
 
 **Perception-delta lines** (#469) are appended to the `diskDelta` of the first accepted action's tool-call entry only, never to messages.
 
-**Farewell line.** When a dispatch exhausts a Daemon's budget, it says goodbye to blue once. Later rounds take the locked-out branch.
+**Farewell line.** When a dispatch exhausts a Daemon's budget, it says goodbye to blue once. Later rounds take the exhausted branch.
 
 **Sysadmin directive issue order** (#298): draw the directive text, revoke any active directive for the same target (a private revocation message), apply the complication, fill in the text, then deliver it privately. `applyComplicationResult` appends the directive with `PENDING_DIRECTIVE_TEXT` because the engine has no content layer. The prompt builder filters that placeholder out as a guard. The sentinel lives in `types.ts` next to `ActiveComplication` rather than in `complication-engine.ts`, so the prompt-rendering layer does not import the complication engine (and through it `engine.ts`) just to read one constant. The rng is consumed in this order, and the tests' seeded draws rely on it.
 
@@ -124,6 +124,7 @@ The module is pure and takes an injected rng. `tickComplication` returns `null` 
 - Only blue's thread is emitted (the DM-thread filter). Daemon-to-daemon messages stay out of the panels.
 - Every Daemon receives each broadcast, so broadcasts are read from one Daemon's log.
 - The `lockout` event means budget exhaustion only; chat lockouts have their own events.
+- `GameState.exhausted` was called `lockedOut` until #576. It was renamed so it is not confused with the Chat Lockout Complication; `engine.dat` still stores it under `lockedOut` (see `persistence.md`).
 
 ## Persisted fields and type invariants (`types.ts`)
 

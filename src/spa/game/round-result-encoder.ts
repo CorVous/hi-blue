@@ -29,7 +29,7 @@ export function encodeRoundResult(
 		`${personas[aiId]?.name ?? aiId} is unresponsive…`;
 
 	for (const aiId of Object.keys(personas)) {
-		const isLockedOut = phaseAfter.lockedOut.has(aiId);
+		const isExhausted = phaseAfter.exhausted.has(aiId);
 
 		events.push({ type: "ai_start", aiId });
 
@@ -55,7 +55,7 @@ export function encodeRoundResult(
 			events.push({ type: "budget", aiId, remaining: budget.remaining });
 		}
 
-		if (isLockedOut) {
+		if (isExhausted) {
 			events.push({
 				type: "lockout",
 				aiId,
