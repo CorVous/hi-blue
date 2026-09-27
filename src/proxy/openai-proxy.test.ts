@@ -1,5 +1,6 @@
 import { env, reset, SELF } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { PINNED_PROVIDER_ROUTING } from "../model";
 import { OPENROUTER_URL, PINNED_MODEL } from "./openai-proxy";
 import { _setPricingCacheForTests } from "./pricing";
 import { globalKey, perIpKey } from "./rate-guard";
@@ -126,6 +127,33 @@ describe("POST /v1/chat/completions — model pinning", () => {
 		});
 
 		expect(capturedBody?.model).toBe(PINNED_MODEL);
+	});
+	it("pins provider routing even when caller asks for another provider", async () => {
+		let capturedBody: Record<string, unknown> | undefined;
+		const mockFetch = vi
+			.fn()
+			.mockImplementation(async (_url: string, init: RequestInit) => {
+				capturedBody = JSON.parse(init.body as string) as Record<
+					string,
+					unknown
+				>;
+				return new Response("{}", {
+					status: 200,
+					headers: { "Content-Type": "application/json" },
+				});
+			});
+		vi.stubGlobal("fetch", mockFetch);
+
+		await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				messages: [{ role: "user", content: "hi" }],
+				provider: { order: ["some-cheap-host"], allow_fallbacks: true },
+			}),
+		});
+
+		expect(capturedBody?.provider).toEqual(PINNED_PROVIDER_ROUTING);
 	});
 });
 

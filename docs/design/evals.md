@@ -1,7 +1,7 @@
 # Eval harness design notes
 
 The harnesses under `evals/` drive the real game engine against a live model
-(`z-ai/glm-4.7` unless overridden) and write dated reports to `docs/evals/`.
+(`PINNED_MODEL` unless `EVAL_MODEL` overrides it) and write dated reports to `docs/evals/`.
 They are not part of CI, but `tsconfig.tools.json` typechecks them. Two scoring
 modules are unit-tested from `evals/__tests__/`
 (`free-text-drift-scoring.test.ts`, `relative-directions-scoring.test.ts`) so
@@ -17,6 +17,15 @@ module-level fetch.
   OpenRouter directly with `OPENROUTER_API_KEY` as a Bearer token. Use that
   when wrangler cannot run locally, or to measure without the proxy's rate
   guard in the loop. `content-pack-flakiness` always calls OpenRouter directly.
+- **Requests mirror production** (`evals/request-options.ts`). Every runner
+  asks for `usage`, pins the provider with `PINNED_PROVIDER_ROUTING` when it
+  runs the pinned model, and leaves thinking on, as the game does. Pinning is
+  skipped for any other `EVAL_MODEL`, because DeepSeek's endpoint does not
+  serve other vendors' models. `EVAL_REASONING=off` adds
+  `reasoning: { enabled: false }` to measure the model without thinking. Before
+  ADR 0017 the drift and action-variation runners left thinking on while the
+  game turned it off, and the content-pack runner turned it off while the game
+  left it on, so older reports measured a setup players never saw.
 - **Dispatch mirrors production.** Each runner turns the model's tool calls
   into an `AiTurnAction` the same way the round coordinator does before
   calling `dispatchAiTurn`: messages are collected, the first non-message tool
@@ -234,8 +243,8 @@ where `<mode>` is `baseline` or `with-profiles`.
 **Purpose.** Replays the production dual content-pack retry loop
 (`BrowserContentPackProvider.generateDualContentPacks`, ADR 0010) against
 OpenRouter to show which validation rules fail in practice. The model call
-mirrors `chatCompletionJson` (JSON response format, reasoning off, usage
-included) but goes straight to OpenRouter.
+mirrors `chatCompletionJson` (JSON response format, thinking on, usage
+included, provider pinned) but goes straight to OpenRouter.
 
 **Shape.** Each iteration draws a fresh pair of settings, a theme, weather and
 time of day for each side, 1–3 obstacles and `OBJECTIVE_TYPES_PER_PACK` (3)
@@ -245,7 +254,7 @@ hard error (network, empty content, JSON parse).
 
 **Needs.** `OPENROUTER_API_KEY`. Knobs: `EVAL_ITERATIONS` (default 10),
 `EVAL_PARALLEL` (default 1, the number of iterations in flight), `EVAL_MODEL`
-(default `PINNED_MODEL`).
+(default `PINNED_MODEL`), `EVAL_REASONING=off`.
 
 **Output.** A summary on stdout (first-try versus after-retry success,
 exhausted, thrown, histograms by rule and by retry unit, cost) and

@@ -1,6 +1,10 @@
-import { PINNED_MODEL } from "../model.js";
+import { PINNED_MODEL, PINNED_PROVIDER } from "../model.js";
 
 export const OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models";
+
+export function modelEndpointsUrl(model: string): string {
+	return `${OPENROUTER_MODELS_URL}/${model}/endpoints`;
+}
 
 export const USD_TO_MICRO_USD = 1_000_000;
 
@@ -22,11 +26,42 @@ interface PricingCacheEntry {
 	fetchedAtMs: number;
 }
 
+interface EndpointPriceRow {
+	prompt?: string;
+	completion?: string;
+}
+
+interface EndpointRow {
+	tag?: string;
+	pricing?: EndpointPriceRow & { overrides?: EndpointPriceRow[] };
+}
+
 let isolatePricingCache: PricingCacheEntry | null = null;
+
+function usdPerToken(value: string | undefined): number {
+	const parsed = Number(value);
+	return value !== undefined && value !== "" && Number.isFinite(parsed)
+		? parsed
+		: Number.NaN;
+}
+
+function peakPricing(endpoint: EndpointRow): ModelPricing {
+	const rows = [endpoint.pricing ?? {}, ...(endpoint.pricing?.overrides ?? [])];
+	const promptUsd = Math.max(...rows.map((r) => usdPerToken(r.prompt)));
+	const completionUsd = Math.max(...rows.map((r) => usdPerToken(r.completion)));
+	if (!Number.isFinite(promptUsd) || !Number.isFinite(completionUsd)) {
+		throw new Error("pricing parse failed");
+	}
+	return {
+		promptMicroUsdPerToken: promptUsd * USD_TO_MICRO_USD,
+		completionMicroUsdPerToken: completionUsd * USD_TO_MICRO_USD,
+	};
+}
 
 export async function getModelPricing(
 	model: string = PINNED_MODEL,
 	nowMs: number = Date.now(),
+	provider: string = PINNED_PROVIDER,
 ): Promise<ModelPricing> {
 	if (
 		isolatePricingCache &&
@@ -36,31 +71,20 @@ export async function getModelPricing(
 	}
 
 	try {
-		const resp = await fetch(OPENROUTER_MODELS_URL, {
+		const resp = await fetch(modelEndpointsUrl(model), {
 			signal: AbortSignal.timeout(MODELS_FETCH_TIMEOUT_MS),
 		});
 		if (!resp.ok) {
-			throw new Error(`/models returned ${resp.status}`);
+			throw new Error(`/endpoints returned ${resp.status}`);
 		}
 		const data = (await resp.json()) as {
-			data?: Array<{
-				id?: string;
-				pricing?: { prompt?: string; completion?: string };
-			}>;
+			data?: { endpoints?: EndpointRow[] };
 		};
-		const entry = data.data?.find((m) => m.id === model);
-		if (!entry?.pricing?.prompt || !entry.pricing.completion) {
-			throw new Error(`pricing missing for model ${model}`);
+		const endpoint = data.data?.endpoints?.find((e) => e.tag === provider);
+		if (endpoint === undefined) {
+			throw new Error(`no ${provider} endpoint for model ${model}`);
 		}
-		const promptUsd = Number(entry.pricing.prompt);
-		const completionUsd = Number(entry.pricing.completion);
-		if (!Number.isFinite(promptUsd) || !Number.isFinite(completionUsd)) {
-			throw new Error(`pricing parse failed for ${model}`);
-		}
-		const pricing: ModelPricing = {
-			promptMicroUsdPerToken: promptUsd * USD_TO_MICRO_USD,
-			completionMicroUsdPerToken: completionUsd * USD_TO_MICRO_USD,
-		};
+		const pricing = peakPricing(endpoint);
 		isolatePricingCache = { pricing, fetchedAtMs: nowMs };
 		return pricing;
 	} catch {

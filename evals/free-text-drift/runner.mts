@@ -22,6 +22,7 @@ import type {
 	GameState,
 	ToolName,
 } from "../../src/spa/game/types.js";
+import { EVAL_MODEL, evalRequestOptions } from "../request-options.js";
 import type { CapturedToolCall, TurnRecord } from "./scoring.js";
 import {
 	buildPerRoundSeries,
@@ -30,7 +31,7 @@ import {
 } from "./scoring.js";
 
 const BASE_URL = process.env.EVAL_BASE_URL ?? "http://localhost:8787";
-const MODEL = process.env.EVAL_MODEL ?? "z-ai/glm-4.7";
+const MODEL = EVAL_MODEL;
 const TOTAL_ROUNDS = Number(process.env.EVAL_DRIFT_ROUNDS ?? 30);
 const WINDOW_SIZE = Number(process.env.EVAL_DRIFT_WINDOW ?? 5);
 const REAL_AI: AiId = "red";
@@ -232,6 +233,7 @@ async function callModel(
 			tools: tools.length > 0 ? tools : TOOL_DEFINITIONS,
 			tool_choice: "auto",
 			stream: false,
+			...evalRequestOptions(),
 		}),
 	});
 

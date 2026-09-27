@@ -29,4 +29,4 @@ Both calls are billed: the retry's `costUsd` is added to the first attempt's bef
 - A drifted turn costs up to two LLM calls. Budget accounting and cost reporting include both.
 - Tests that feed text-only mock responses must provide a second mock slot for the retry, or use empty assistant text for a pass (`round-coordinator.test.ts` "drift-to-silence retry (#254)"; `non-addressed-anchor.test.ts` avoids text-only responses for this reason).
 - Anything added to the retry path must keep the invariant: the retry messages are local to the call; do not thread `state`, logs, or the roundtrip into it.
-- The nudge is daemon prompt text. Change it with the same care as the system prompt (`docs/prompting/glm-4.7-guide.md`).
+- The nudge is daemon prompt text. Change it with the same care as the system prompt (`docs/prompting/deepseek-v4.1-flash-guide.md`).

@@ -28,6 +28,7 @@ import type {
 	GameState,
 	ToolName,
 } from "../../src/spa/game/types.js";
+import { EVAL_MODEL, evalRequestOptions } from "../request-options.js";
 import { getScenarios, type Scenario } from "./scenarios.js";
 import type {
 	CapturedToolCall,
@@ -42,7 +43,7 @@ import {
 } from "./scoring.js";
 
 const BASE_URL = process.env.EVAL_BASE_URL ?? "http://localhost:8787";
-const MODEL = process.env.EVAL_MODEL ?? "z-ai/glm-4.7";
+const MODEL = EVAL_MODEL;
 const REPETITIONS = Number(process.env.EVAL_REPETITIONS ?? 20);
 const ACTION_PROFILES_ON = process.env.EVAL_ACTION_PROFILES === "1";
 const DIRECT_OPENROUTER = process.env.EVAL_DIRECT_OPENROUTER === "1";
@@ -267,6 +268,7 @@ async function callModel(
 			tools: tools.length > 0 ? tools : TOOL_DEFINITIONS,
 			tool_choice: "auto",
 			stream: false,
+			...evalRequestOptions(),
 		}),
 	});
 

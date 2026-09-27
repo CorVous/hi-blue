@@ -11,7 +11,7 @@ export class BrowserLLMProvider implements RoundLLMProvider {
 	private readonly disableReasoning: boolean;
 
 	constructor(opts: { disableReasoning?: boolean } = {}) {
-		this.disableReasoning = opts.disableReasoning ?? true;
+		this.disableReasoning = opts.disableReasoning ?? false;
 	}
 
 	async streamRound(
@@ -23,7 +23,6 @@ export class BrowserLLMProvider implements RoundLLMProvider {
 	): Promise<RoundTurnResult> {
 		try {
 			const textParts: string[] = [];
-			const reasoningParts: string[] = [];
 			const toolCalls: RoundTurnResult["toolCalls"] = [];
 			let costUsd: number | undefined;
 			let promptTokens: number | undefined;
@@ -50,9 +49,6 @@ export class BrowserLLMProvider implements RoundLLMProvider {
 						);
 					}
 				},
-				onReasoning: (text) => {
-					reasoningParts.push(text);
-				},
 				onToolCall: (call) => {
 					toolCalls.push(call);
 				},
@@ -71,7 +67,7 @@ export class BrowserLLMProvider implements RoundLLMProvider {
 				disableReasoning: this.disableReasoning,
 			});
 
-			const assistantText = textParts.join("") || reasoningParts.join("");
+			const assistantText = textParts.join("");
 			onLifecycle?.(
 				daemonId ? { phase: "completed", daemonId } : { phase: "completed" },
 			);

@@ -396,7 +396,7 @@ describe("<rules> block", () => {
 		expect(prompt).toContain("asterisks");
 	});
 
-	it("<rules> bullets use MUST/NEVER directives (GLM-4.7 firm-language guidance)", () => {
+	it("<rules> bullets use MUST/NEVER directives", () => {
 		const game = makeTestGame();
 		const ctx = buildAiContext(game, "red");
 		const prompt = ctx.toSystemPrompt();

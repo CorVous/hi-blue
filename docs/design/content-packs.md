@@ -30,16 +30,22 @@ Three interfaces isolate every LLM call so tests and evals never touch the netwo
   both the browser and the server-side proxy can import it without pulling in
   browser globals.
 - Both JSON-mode providers (content packs, synthesis) read `content` and fall back
-  to `reasoning` when `content` is empty. GLM-4.7 sometimes returns its whole
-  answer in the reasoning channel.
+  to `reasoning` when `content` is empty. GLM-4.7, the model pinned before
+  DeepSeek V4.1 Flash, sometimes returned its whole answer in the reasoning
+  channel, and the fallback costs nothing to keep.
 - `CapHitError` (the spend cap, HTTP 429) is never retried by any provider. It
   surfaces straight away so the UI can show the cap screen.
-- **Reasoning defaults.** `BrowserLLMProvider` (daemon turns) defaults to
-  `disableReasoning: true`, because GLM-4.7's thinking trace adds 1–4K tokens of
-  latency to each turn for little roleplay benefit (see
-  [the GLM-4.7 guide](../prompting/glm-4.7-guide.md)). Pass
-  `{ disableReasoning: false }` to turn the thinking step back on. The two
-  JSON-mode providers default to `disableReasoning: false`.
+- **Reasoning defaults.** Every provider defaults to `disableReasoning: false`,
+  so the model thinks before it answers. On DeepSeek V4.1 Flash thinking costs
+  about one second per daemon turn and fixes the problems seen without it:
+  replies written as ignored free text, skipped `message` calls, and a daemon
+  walking away from an item it could `use` (ADR 0017, [the DeepSeek V4.1 Flash guide](../prompting/deepseek-v4.1-flash-guide.md)). Content packs
+  also need it: with thinking off, packs fail validation far more often. Pass
+  `{ disableReasoning: true }` to skip the thinking step.
+- `BrowserLLMProvider` builds `assistantText` from visible content only. The
+  reasoning trace never becomes `assistantText`, so the drift-to-silence retry
+  (ADR 0016) cannot replay private reasoning to the model as if the Daemon had
+  said it.
 - `RoundTurnResult.costUsd` comes from OpenRouter's `usage.cost`. The token
   counts (`promptTokens`, `completionTokens`, `cachedPromptTokens`) come from the
   final usage chunk and are used for prompt-caching diagnostics. Mocks leave all
