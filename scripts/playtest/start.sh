@@ -45,7 +45,7 @@ fi
 
 echo "[start.sh] launching wrangler dev on port $PORT..." >&2
 : > "$WRANGLER_LOG"
-nohup pnpm exec wrangler dev --local --ip 127.0.0.1 --port "$PORT" \
+WORKER_BASE_URL="$PLAYTEST_ORIGIN" nohup pnpm exec wrangler dev --local --ip 127.0.0.1 --port "$PORT" \
   --var "OPENROUTER_API_KEY:$OPENROUTER_API_KEY" \
   --var "ALLOWED_ORIGINS:$PLAYTEST_ORIGIN" \
   >>"$WRANGLER_LOG" 2>&1 &
