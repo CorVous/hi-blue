@@ -157,7 +157,11 @@ builds with that as `WORKER_BASE_URL`, so the SPA is a non-dev build (see
 `__DEV__` above) and the daemon's origin fails the dev-host checks. The agent
 should see the game a player sees: no dev inspector, debug footers, commit
 line or `?winImmediately` / `?think=0` affordances. `start.sh` passes the
-origin to the daemon as `PLAYTEST_ORIGIN`. A build left in `dist/` by a
+origin to the daemon as `PLAYTEST_ORIGIN`. It also sets `WORKER_BASE_URL` on
+`wrangler dev` itself: `wrangler.jsonc` declares `pnpm build` as a custom
+build, which `wrangler dev` runs on startup (and again on changes under
+`src/spa`), so without the variable that rebuild overwrites `dist/` with a dev
+build before the daemon ever loads the page. A build left in `dist/` by a
 playtest is therefore a non-dev build until the next plain `pnpm build`.
 
 `daemon.mjs` holds one headless Chromium page open and reads one JSON command
