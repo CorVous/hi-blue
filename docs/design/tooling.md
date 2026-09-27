@@ -143,3 +143,30 @@ current iteration and exits with 130, the shell convention for SIGINT.
 See AGENTS.md "Local development". It prefers a private-range IPv4 address
 (10/8, 172.16/12, 192.168/16) over any other non-internal address, since that is
 the one another device on the LAN can reach.
+
+## `playtest/`: the `/playtest` driver
+
+`start.sh`, `daemon.mjs` and `cmd.sh` back the `/playtest` skill in
+`.claude/skills/playtest/`. `start.sh` builds the SPA, runs `wrangler dev
+--local` with the real `OPENROUTER_API_KEY` and a `localhost` CORS override,
+then starts `daemon.mjs` and prints `READY` (or `FAILED: <reason>`) once the
+daemon logs that the game route is stable.
+
+`daemon.mjs` holds one headless Chromium page open and reads one JSON command
+per line from the `/tmp/playtest-in` FIFO, writing the reply to
+`/tmp/playtest-out`. `cmd.sh` opens the out FIFO for reading before it writes
+the command, so the daemon never writes into a pipe that nobody holds open.
+`PLAYTEST_IN` and `PLAYTEST_OUT` override the paths so several daemons can run
+side by side.
+
+The daemon waits for "stable" rather than for the composer to appear: `#prompt`
+enabled and `#stage` with no `data-load-state`. Persona synthesis and the
+batched content-pack call can take several minutes, and a `send` before then
+would land on a loading screen. It exits early if `#bootstrap-recovery` or
+`#cap-hit` shows up, because `cmd.sh` cannot reach those buttons.
+
+Snapshots return transcripts as deltas against the last snapshot so a long
+session doesn't refill the agent's context with the same early lines. `send`
+waits on `#stage[data-round-in-flight]` to clear instead of a fixed sleep. If
+the attribute never appears within 5 s, the round never started, and waiting
+longer would not help.
