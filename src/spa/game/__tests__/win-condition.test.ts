@@ -13,14 +13,16 @@ import type {
 	WorldState,
 } from "../types";
 import {
+	checkBudgetExhausted,
 	checkConvergenceTier,
-	checkLoseCondition,
 	checkPlacementFlavor,
 	checkWinCondition,
 	isCarryObjectiveSatisfied,
 	isUseItemObjectiveSatisfied,
 	isUseSpaceObjectiveSatisfied,
+	outcomeOfCompletedGame,
 } from "../win-condition";
+import { TEST_PERSONAS } from "./fixtures/make-game-state";
 import { makeTestPack } from "./fixtures/make-test-pack";
 
 type Holder = WorldEntity["holder"];
@@ -326,28 +328,63 @@ describe("checkWinCondition with mixed carry + state objectives", () => {
 	});
 });
 
-describe("checkLoseCondition", () => {
+describe("checkBudgetExhausted", () => {
 	const ALL_AI_IDS = ["red", "green", "cyan"];
 
 	it.each<[string, ReadonlySet<string> | string[], string[], boolean]>([
-		["false when 0 of 3 are locked out", new Set(), ALL_AI_IDS, false],
-		["false when 1 of 3 is locked out", new Set(["red"]), ALL_AI_IDS, false],
+		["false when 0 of 3 are exhausted", new Set(), ALL_AI_IDS, false],
+		["false when 1 of 3 is exhausted", new Set(["red"]), ALL_AI_IDS, false],
 		[
-			"false when 2 of 3 are locked out",
+			"false when 2 of 3 are exhausted",
 			new Set(["red", "green"]),
 			ALL_AI_IDS,
 			false,
 		],
-		["true when all 3 are locked out", new Set(ALL_AI_IDS), ALL_AI_IDS, true],
+		["true when all 3 are exhausted", new Set(ALL_AI_IDS), ALL_AI_IDS, true],
 		[
-			"true when all 3 are locked out, given as an AiId[] array",
+			"true when all 3 are exhausted, given as an AiId[] array",
 			[...ALL_AI_IDS],
 			ALL_AI_IDS,
 			true,
 		],
 		["true (vacuously) when allAiIds is empty", new Set(), [], true],
-	])("returns %s", (_name, lockedOut, allAiIds, expected) => {
-		expect(checkLoseCondition(lockedOut, allAiIds)).toBe(expected);
+	])("returns %s", (_name, exhausted, allAiIds, expected) => {
+		expect(checkBudgetExhausted(exhausted, allAiIds)).toBe(expected);
+	});
+});
+
+describe("outcomeOfCompletedGame", () => {
+	const EMPTY_WORLD: WorldState = { entities: [] };
+
+	it.each<[string, SatisfactionState, string[], "win" | "lose"]>([
+		["win when every Objective is satisfied", "satisfied", [], "win"],
+		[
+			"win when every Objective is satisfied even if every budget is exhausted",
+			"satisfied",
+			["red", "green", "cyan"],
+			"win",
+		],
+		[
+			"lose when every budget is exhausted and an Objective is pending",
+			"pending",
+			["red", "green", "cyan"],
+			"lose",
+		],
+		[
+			"win when only some budgets are exhausted",
+			"pending",
+			["red", "green"],
+			"win",
+		],
+	])("%s", (_name, satisfactionState, exhaustedIds, expected) => {
+		expect(
+			outcomeOfCompletedGame({
+				world: EMPTY_WORLD,
+				objectives: [makeUseSpaceObjective(satisfactionState)],
+				exhausted: new Set(exhaustedIds),
+				personas: TEST_PERSONAS,
+			}),
+		).toBe(expected);
 	});
 });
 

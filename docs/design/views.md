@@ -253,12 +253,29 @@ it hides the other routes' screens and shows or hides the global chrome
   even if it contains `\n`, so the strip-card preview can show it as one
   truncated line. The accumulated body is kept in `line.dataset.body`, so
   each update re-renders the whole body with mention highlighting.
-- **`game_ended`.** The session is captured for the endgame buttons, then
-  `session` is set to null, so any later submit does nothing. "Continue"
+- **`game_ended`.** The event only marks the round as the last one. After the
+  events loop the final state is saved, topinfo is repainted so the turn
+  counter shows the final round, and then `enterEndgame` runs with that state.
+  It captures the state for the endgame buttons and sets `session` to null, so
+  any later submit does nothing.
+- **The endgame screen (#576).** The subtitle comes from `outcome`: a win says
+  "You have completed the objectives." and the budget-exhausted ending says
+  "You have hit your budget." Both lines are the product owner's wording. The
+  panels are hidden, so the final round's Daemon-to-player lines (the entries
+  logged in round `state.round - 1`) are painted again into
+  `#endgame-final-lines`. Without them the player never sees what the Daemons
+  said on the last round, which is often what tells them how the game ended.
+- **Reloading a finished game.** A restored session with `isComplete` goes
+  straight to the endgame screen. Mounting it as a playable round would let the
+  player send another round into a finished game. The active pointer is kept,
+  so the endgame choices still work after a reload. "Continue"
   (shown only when `readStoredByokKey()` finds a stored OpenRouter key) saves
   the new room under the same session id, because the active pointer is
   unchanged. "Same daemons" archives the old session and mints a new one.
-- State is saved after the events loop, and not when the game ended.
+- State is saved after the events loop, including on the round that ends the
+  game. Before #576 the final round was not saved, so the stored session ended
+  one round early, with `isComplete: false` and the winning Objective still
+  pending.
 - **Round errors (#231).** Failures other than `CapHitError` (a transient
   upstream 502/503/504, a dropped network connection, a malformed response)
   used to stop the round with no sign in the UI. They now show `#round-error`

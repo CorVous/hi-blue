@@ -216,7 +216,7 @@ describe("GameSession — result from submitMessage", () => {
 	});
 });
 
-describe("GameSession — win / lose via checkWinCondition / checkLoseCondition", () => {
+describe("GameSession — win / lose via checkWinCondition / checkBudgetExhausted", () => {
 	it("gameEnded is false when objective pairs are not satisfied", async () => {
 		const session = new GameSession(
 			CONTENT_PACK_WITH_ITEMS,

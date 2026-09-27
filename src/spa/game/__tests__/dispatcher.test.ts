@@ -478,13 +478,13 @@ describe("executeToolCall", () => {
 });
 
 describe("dispatchAiTurn", () => {
-	it("rejects a turn from a locked-out AI", () => {
+	it("rejects a turn from a Daemon whose budget is exhausted", () => {
 		let game = makeFlowerKeyGame({ budgetPerAi: 0.01 });
 		game = deductBudget(game, "red", 0.01).game;
 		const action: AiTurnAction = { aiId: "red", pass: true };
 		const result = dispatchAiTurn(game, action);
 		expect(result.rejected).toBe(true);
-		expect(result.reason).toMatch(/locked out/i);
+		expect(result.reason).toMatch(/exhausted its budget/i);
 	});
 
 	it("processes a pass action and deducts budget", () => {

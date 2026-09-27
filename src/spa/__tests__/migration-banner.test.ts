@@ -59,7 +59,10 @@ const INDEX_BODY_HTML = `
   <aside id="persistence-warning" hidden role="status" aria-live="polite"></aside>
   <section id="endgame" hidden>
     <h2>hi-blue — endgame</h2>
-    <div id="endgame-subtitle">The three phases are complete. The room is still.</div>
+    <div id="endgame-subtitle"></div>
+    <div id="endgame-final-round" class="endgame-section" hidden>
+      <div id="endgame-final-lines" class="transcript"></div>
+    </div>
     <div class="endgame-section">
       <h3>Save the AIs to USB</h3>
       <button type="button" id="download-ais-btn">Download AIs</button>

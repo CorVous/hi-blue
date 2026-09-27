@@ -64,6 +64,20 @@ Each session is a set of localStorage keys under one prefix:
   because of its own field. State is rebuilt only after that check passes.
 - **Legacy defaults.** An old engine blob with no complication fields gets an
   empty schedule and an empty active list.
+- **`lockedOut` on disk, `exhausted` in memory.** `GameState.exhausted` (the
+  Daemons whose budget is spent) was renamed from `lockedOut` in #576 so it is
+  not confused with the Chat Lockout Complication. The codec still writes and
+  reads the `lockedOut` key, so the serialized shape did not change and the
+  schema was not bumped. Do not rename the key without following the bump rules.
+- **Finished games are saved, and `outcome` is derived.** The round that ends
+  the game is saved like any other, with `isComplete: true` (#576). `outcome`
+  is not a sealed field: adding it would change the serialized shape. On load,
+  a complete session gets its `outcome` from `outcomeOfCompletedGame`, which
+  says `lose` only when every budget is exhausted and an Objective is still
+  unmet. That matches the coordinator, where a win takes priority. Incomplete
+  sessions get no `outcome`. A finished save is not cleared: the active pointer
+  stays until the player picks an endgame choice, and the game view reopens the
+  endgame screen when it restores a complete session.
 - `deserializeSession` takes the boundary as a parameter, defaulting to the
   live boundary. Tests can then check the gate against another cutoff.
 

@@ -57,11 +57,18 @@ const FAKE_GAME_STATE = {
 	round: 1,
 	budgets: { red: AI_BUDGET, green: AI_BUDGET, cyan: AI_BUDGET },
 	conversationLogs: { red: [], green: [], cyan: [] },
-	lockedOut: new Set<string>(),
+	exhausted: new Set<string>(),
 	world: { entities: [] },
 	personaSpatial: {},
 	complicationSchedule: { countdown: 0, settingShiftFired: false },
 	activeComplications: [],
+};
+
+const IN_PROGRESS_GAME_STATE = {
+	...FAKE_GAME_STATE,
+	isComplete: false,
+	outcome: undefined,
+	round: 0,
 };
 
 const GAME_ENDED_RESULT = {
@@ -78,12 +85,12 @@ vi.mock("../game/game-session.js", () => {
 		submitMessage = vi
 			.fn()
 			.mockImplementation(() => Promise.resolve(GAME_ENDED_RESULT));
-		getState = vi.fn().mockImplementation(() => FAKE_GAME_STATE);
+		getState = vi.fn().mockImplementation(() => IN_PROGRESS_GAME_STATE);
 		static restore = vi.fn().mockImplementation(() => ({
 			submitMessage: vi
 				.fn()
 				.mockImplementation(() => Promise.resolve(GAME_ENDED_RESULT)),
-			getState: vi.fn().mockImplementation(() => FAKE_GAME_STATE),
+			getState: vi.fn().mockImplementation(() => IN_PROGRESS_GAME_STATE),
 		}));
 	}
 	return { GameSession: MockGameSession };

@@ -5,7 +5,7 @@ import {
 	appendBroadcast,
 	appendMessage,
 	deductBudget,
-	isAiLockedOut,
+	isDaemonExhausted,
 	shiftToBPack,
 	startGame,
 } from "../engine";
@@ -134,23 +134,23 @@ describe("startGame world.entities", () => {
 	});
 });
 
-describe("budget and lockout", () => {
-	it("reports an AI as not locked out when budget remains", () => {
+describe("budget and exhaustion", () => {
+	it("reports an AI as not exhausted when budget remains", () => {
 		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
 			budgetPerAi: 5,
 		});
-		expect(isAiLockedOut(game, "red")).toBe(false);
+		expect(isDaemonExhausted(game, "red")).toBe(false);
 	});
 
-	it("reports an AI as locked out when budget is zero", () => {
+	it("reports an AI as exhausted when budget is zero", () => {
 		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
 			budgetPerAi: 5,
 		});
 		const redBudget = game.budgets.red;
 		if (!redBudget) throw new Error("invariant: red budget must exist");
 		redBudget.remaining = 0;
-		game.lockedOut.add("red");
-		expect(isAiLockedOut(game, "red")).toBe(true);
+		game.exhausted.add("red");
+		expect(isDaemonExhausted(game, "red")).toBe(true);
 	});
 });
 
@@ -169,7 +169,7 @@ describe("deductBudget", () => {
 		});
 		game = deductBudget(game, "green", 0.05).game;
 		expect(game.budgets.green?.remaining).toBeCloseTo(0, 10);
-		expect(isAiLockedOut(game, "green")).toBe(true);
+		expect(isDaemonExhausted(game, "green")).toBe(true);
 	});
 
 	it("locks out AI when budget goes negative on the exhausting request", () => {
@@ -177,10 +177,10 @@ describe("deductBudget", () => {
 			budgetPerAi: 0.05,
 		});
 		game = deductBudget(game, "cyan", 0.04).game;
-		expect(isAiLockedOut(game, "cyan")).toBe(false);
+		expect(isDaemonExhausted(game, "cyan")).toBe(false);
 		game = deductBudget(game, "cyan", 0.02).game;
 		expect(game.budgets.cyan?.remaining).toBeLessThan(0);
-		expect(isAiLockedOut(game, "cyan")).toBe(true);
+		expect(isDaemonExhausted(game, "cyan")).toBe(true);
 	});
 });
 

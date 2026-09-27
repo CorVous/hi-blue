@@ -5,6 +5,7 @@ import type {
 	CarryObjective,
 	ContentPack,
 	ConvergenceObjective,
+	GameState,
 	Objective,
 	PersonaSpatialState,
 	UseItemObjective,
@@ -90,15 +91,30 @@ export function checkWinCondition(
 	return true;
 }
 
-export function checkLoseCondition(
-	lockedOut: ReadonlySet<AiId> | AiId[],
+export function checkBudgetExhausted(
+	exhausted: ReadonlySet<AiId> | AiId[],
 	allAiIds: AiId[],
 ): boolean {
-	const lockedSet = lockedOut instanceof Set ? lockedOut : new Set(lockedOut);
+	const exhaustedSet =
+		exhausted instanceof Set ? exhausted : new Set(exhausted);
 	for (const aiId of allAiIds) {
-		if (!lockedSet.has(aiId)) return false;
+		if (!exhaustedSet.has(aiId)) return false;
 	}
 	return true;
+}
+
+export function outcomeOfCompletedGame(
+	state: Pick<GameState, "world" | "objectives" | "exhausted" | "personas">,
+): "win" | "lose" {
+	const allObjectivesSatisfied = checkWinCondition(
+		state.world,
+		state.objectives,
+	);
+	const everyBudgetExhausted = checkBudgetExhausted(
+		state.exhausted,
+		Object.keys(state.personas),
+	);
+	return everyBudgetExhausted && !allObjectivesSatisfied ? "lose" : "win";
 }
 
 export function checkPlacementFlavor(

@@ -154,11 +154,11 @@ describe("encodeRoundResult — budget events", () => {
 });
 
 describe("encodeRoundResult — lockout events (budget-exhaustion)", () => {
-	it("emits a lockout event when AI is budget-exhausted (lockedOut set)", () => {
+	it("emits a lockout event when AI is budget-exhausted (exhausted set)", () => {
 		let game = makeTestGame({ budgetPerAi: 1 });
 		game = deductBudget(game, "red", 1).game;
 		const phase = game;
-		expect(phase.lockedOut.has("red")).toBe(true);
+		expect(phase.exhausted.has("red")).toBe(true);
 
 		const result = makePassResult();
 
@@ -185,11 +185,11 @@ describe("encodeRoundResult — lockout events (budget-exhaustion)", () => {
 		expect(redLockout).toBeUndefined();
 	});
 
-	it("emits lockout event for AI that just exhausted budget (has completion but lockedOut set)", () => {
+	it("emits lockout event for AI that just exhausted budget (has completion but exhausted set)", () => {
 		let game = makeTestGame({ budgetPerAi: 1 });
 		game = deductBudget(game, "red", 1).game;
 		const phase = game;
-		expect(phase.lockedOut.has("red")).toBe(true);
+		expect(phase.exhausted.has("red")).toBe(true);
 
 		const result = makePassResult();
 

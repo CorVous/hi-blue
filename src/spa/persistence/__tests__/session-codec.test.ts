@@ -235,18 +235,90 @@ describe("serializeSession / deserializeSession", () => {
 		expect(files.engine).toMatch(/^[A-Za-z0-9+/=]*$/);
 	});
 
-	it("round-trips lockedOut Set", () => {
+	it("round-trips the exhausted Set", () => {
 		const game = makeFreshGame();
 		const modified: GameState = {
 			...game,
-			lockedOut: new Set<AiId>(["red"]),
+			exhausted: new Set<AiId>(["red"]),
 		};
 		const files = serializeSession(modified, NOW, CREATED_AT);
 		const result = deserializeSession(files);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
-			expect(result.state.lockedOut).toBeInstanceOf(Set);
-			expect(result.state.lockedOut.has("red")).toBe(true);
+			expect(result.state.exhausted).toBeInstanceOf(Set);
+			expect(result.state.exhausted.has("red")).toBe(true);
+		}
+	});
+
+	it("keeps the on-disk key for exhausted Daemons as lockedOut", () => {
+		const game = makeFreshGame();
+		const modified: GameState = {
+			...game,
+			exhausted: new Set<AiId>(["green"]),
+		};
+		const files = serializeSession(modified, NOW, CREATED_AT);
+		const sealed = JSON.parse(deobfuscate(files.engine as string));
+		expect(sealed.lockedOut).toEqual(["green"]);
+		expect("exhausted" in sealed).toBe(false);
+	});
+
+	it("does not persist outcome and leaves it unset on an unfinished game", () => {
+		const game = makeFreshGame();
+		const files = serializeSession(
+			{ ...game, outcome: "win" },
+			NOW,
+			CREATED_AT,
+		);
+		const sealed = JSON.parse(deobfuscate(files.engine as string));
+		expect("outcome" in sealed).toBe(false);
+		const result = deserializeSession(files);
+		expect(result.kind).toBe("ok");
+		if (result.kind === "ok") {
+			expect(result.state.outcome).toBeUndefined();
+		}
+	});
+
+	it("restores outcome win for a completed game whose budgets are not all exhausted", () => {
+		const game = makeFreshGame();
+		const files = serializeSession(
+			{ ...game, isComplete: true, outcome: "win" },
+			NOW,
+			CREATED_AT,
+		);
+		const result = deserializeSession(files);
+		expect(result.kind).toBe("ok");
+		if (result.kind === "ok") {
+			expect(result.state.isComplete).toBe(true);
+			expect(result.state.outcome).toBe("win");
+		}
+	});
+
+	it("restores outcome lose for a completed game where every budget is exhausted", () => {
+		const game = makeFreshGame();
+		const pendingObjectives: GameState["objectives"] = [
+			{
+				id: "use-space-0",
+				kind: "use_space",
+				description: "Activate the space.",
+				spaceId: "nowhere",
+				satisfactionState: "pending",
+			},
+		];
+		const files = serializeSession(
+			{
+				...game,
+				objectives: pendingObjectives,
+				isComplete: true,
+				outcome: "lose",
+				exhausted: new Set<AiId>(Object.keys(game.personas)),
+			},
+			NOW,
+			CREATED_AT,
+		);
+		const result = deserializeSession(files);
+		expect(result.kind).toBe("ok");
+		if (result.kind === "ok") {
+			expect(result.state.outcome).toBe("lose");
 		}
 	});
 
@@ -811,7 +883,7 @@ describe("serializeSession / deserializeSession", () => {
 				schemaVersion,
 				world: game.world,
 				budgets: game.budgets,
-				lockedOut: Array.from(game.lockedOut),
+				lockedOut: Array.from(game.exhausted),
 				personaSpatial: game.personaSpatial,
 				contentPacksA: [legacyPack],
 				contentPacksB: [legacyPack],
