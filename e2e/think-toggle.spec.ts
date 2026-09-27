@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { expectNoPageErrors, goToGame, parseRequestBody } from "./helpers";
 
-test("default daemon turns add reasoning:{enabled:false} to chat-completions requests", async ({
+test("default daemon turns leave thinking on — requests do NOT include the reasoning field", async ({
 	page,
 }) => {
 	const pageErrors: Error[] = [];
@@ -23,13 +23,13 @@ test("default daemon turns add reasoning:{enabled:false} to chat-completions req
 	await expect.poll(() => observedBodies.length).toBeGreaterThan(0);
 
 	for (const body of observedBodies) {
-		expect(body).toMatchObject({ reasoning: { enabled: false } });
+		expect(body).not.toHaveProperty("reasoning");
 	}
 
 	await expectNoPageErrors(page, pageErrors);
 });
 
-test("?think=1 opts back into thinking — requests do NOT include the reasoning field", async ({
+test("?think=0 turns thinking off — requests add reasoning:{enabled:false}", async ({
 	page,
 }) => {
 	const pageErrors: Error[] = [];
@@ -38,7 +38,7 @@ test("?think=1 opts back into thinking — requests do NOT include the reasoning
 	const observedBodies: Record<string, unknown>[] = [];
 
 	const { names } = await goToGame(page, {
-		url: "/?think=1",
+		url: "/?think=0",
 		sse: (request) => {
 			const parsed = parseRequestBody(request);
 			if (parsed && typeof parsed === "object") observedBodies.push(parsed);
@@ -53,7 +53,7 @@ test("?think=1 opts back into thinking — requests do NOT include the reasoning
 	await expect.poll(() => observedBodies.length).toBeGreaterThan(0);
 
 	for (const body of observedBodies) {
-		expect(body).not.toHaveProperty("reasoning");
+		expect(body).toMatchObject({ reasoning: { enabled: false } });
 	}
 
 	await expectNoPageErrors(page, pageErrors);

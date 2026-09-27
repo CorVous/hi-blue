@@ -3,21 +3,33 @@ import {
 	_setPricingCacheForTests,
 	computeCostMicroUsd,
 	getModelPricing,
-	OPENROUTER_MODELS_URL,
+	modelEndpointsUrl,
 } from "./pricing";
 
-const MODEL = "z-ai/glm-4.7";
+const MODEL = "deepseek/deepseek-v4.1-flash";
 
-function modelsResponse(
-	rows: Array<{ id: string; prompt: string; completion: string }>,
+interface PriceRow {
+	prompt: string;
+	completion: string;
+}
+
+function endpointsResponse(
+	rows: Array<{ tag: string; overrides?: PriceRow[] } & PriceRow>,
 ) {
 	return Promise.resolve(
 		new Response(
 			JSON.stringify({
-				data: rows.map((r) => ({
-					id: r.id,
-					pricing: { prompt: r.prompt, completion: r.completion },
-				})),
+				data: {
+					id: MODEL,
+					endpoints: rows.map((r) => ({
+						tag: r.tag,
+						pricing: {
+							prompt: r.prompt,
+							completion: r.completion,
+							...(r.overrides !== undefined ? { overrides: r.overrides } : {}),
+						},
+					})),
+				},
 			}),
 			{ status: 200, headers: { "Content-Type": "application/json" } },
 		),
@@ -34,39 +46,81 @@ afterEach(() => {
 });
 
 describe("getModelPricing", () => {
-	it("fetches /models, finds the pinned model, and converts USD/token to micro-USD/token", async () => {
+	it("fetches the model's endpoints, picks the pinned provider, and converts USD/token to micro-USD/token", async () => {
 		const fetchMock = vi.fn().mockImplementation((url: string) => {
-			expect(url).toBe(OPENROUTER_MODELS_URL);
-			return modelsResponse([
-				{ id: "other/model", prompt: "0.0000005", completion: "0.000002" },
-				{ id: MODEL, prompt: "0.0000001", completion: "0.0000005" },
+			expect(url).toBe(modelEndpointsUrl(MODEL));
+			return endpointsResponse([
+				{ tag: "cheap-host", prompt: "0.00000001", completion: "0.00000002" },
+				{ tag: "deepseek", prompt: "0.0000001", completion: "0.0000005" },
 			]);
 		});
 		vi.stubGlobal("fetch", fetchMock);
 
-		const pricing = await getModelPricing(MODEL);
+		const pricing = await getModelPricing(MODEL, Date.now(), "deepseek");
 		expect(pricing.promptMicroUsdPerToken).toBeCloseTo(0.1, 10);
 		expect(pricing.completionMicroUsdPerToken).toBeCloseTo(0.5, 10);
 		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+
+	it("charges the highest time-of-day override so peak hours are never under-charged", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockImplementation(() =>
+				endpointsResponse([
+					{
+						tag: "deepseek",
+						prompt: "0.00000015",
+						completion: "0.0000006",
+						overrides: [
+							{ prompt: "0.00000015", completion: "0.0000006" },
+							{ prompt: "0.0000003", completion: "0.0000012" },
+						],
+					},
+				]),
+			),
+		);
+
+		const pricing = await getModelPricing(MODEL, Date.now(), "deepseek");
+		expect(pricing.promptMicroUsdPerToken).toBeCloseTo(0.3, 10);
+		expect(pricing.completionMicroUsdPerToken).toBeCloseTo(1.2, 10);
+	});
+
+	it("falls back to the overestimated cold-start pricing when the pinned provider is missing", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockImplementation(() =>
+				endpointsResponse([
+					{
+						tag: "cheap-host",
+						prompt: "0.00000001",
+						completion: "0.00000002",
+					},
+				]),
+			),
+		);
+
+		const pricing = await getModelPricing(MODEL, Date.now(), "deepseek");
+		expect(pricing.promptMicroUsdPerToken).toBe(1);
+		expect(pricing.completionMicroUsdPerToken).toBe(5);
 	});
 
 	it("memoises within the cache TTL — second call does not re-fetch", async () => {
 		const fetchMock = vi
 			.fn()
 			.mockImplementation(() =>
-				modelsResponse([
-					{ id: MODEL, prompt: "0.0000001", completion: "0.0000005" },
+				endpointsResponse([
+					{ tag: "deepseek", prompt: "0.0000001", completion: "0.0000005" },
 				]),
 			);
 		vi.stubGlobal("fetch", fetchMock);
 
-		await getModelPricing(MODEL);
-		await getModelPricing(MODEL);
+		await getModelPricing(MODEL, Date.now(), "deepseek");
+		await getModelPricing(MODEL, Date.now(), "deepseek");
 
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
 
-	it("returns stale cache if /models fetch fails after a previous success", async () => {
+	it("returns stale cache if the endpoints fetch fails after a previous success", async () => {
 		const fetchedAtEpochLongPastTtl = 0;
 		_setPricingCacheForTests(
 			{ promptMicroUsdPerToken: 0.25, completionMicroUsdPerToken: 0.75 },

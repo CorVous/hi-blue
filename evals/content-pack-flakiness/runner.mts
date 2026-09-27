@@ -7,7 +7,6 @@ import {
 	TIME_OF_DAY_POOL,
 	WEATHER_POOL,
 } from "../../src/content/pools.js";
-import { PINNED_MODEL } from "../../src/model.js";
 import type { ValidationSchedule } from "../../src/spa/game/binding-aware-validator.js";
 import { validateBoundDualContentPack } from "../../src/spa/game/binding-aware-validator.js";
 import { buildDualBindingPrompt } from "../../src/spa/game/binding-prompt-builder.js";
@@ -19,10 +18,11 @@ import {
 	type ValidationError,
 } from "../../src/spa/game/content-pack-provider.js";
 import { rollObjectiveTypes } from "../../src/spa/game/objective-type-roll.js";
+import { EVAL_MODEL, evalRequestOptions } from "../request-options.js";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY ?? "";
-const MODEL = process.env.EVAL_MODEL ?? PINNED_MODEL;
+const MODEL = EVAL_MODEL;
 const ITERATIONS = Number(process.env.EVAL_ITERATIONS ?? 10);
 const PARALLEL = Number(process.env.EVAL_PARALLEL ?? 1);
 const OUTER_BUDGET = 3;
@@ -104,8 +104,7 @@ async function callOpenRouter(
 			messages,
 			stream: false,
 			response_format: { type: "json_object" },
-			usage: { include: true },
-			reasoning: { enabled: false },
+			...evalRequestOptions(),
 		}),
 	});
 

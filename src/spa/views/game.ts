@@ -261,7 +261,7 @@ function createGameViewContext(
 		mentionOverlay: doc.querySelector<HTMLElement>("#prompt-overlay"),
 		promptTargetEl: doc.querySelector<HTMLElement>(".prompt-target"),
 		searchParams,
-		enableReasoning: isDevHost() && searchParams.get("think") === "1",
+		enableReasoning: !(isDevHost() && searchParams.get("think") === "0"),
 		sessionLabel: getActiveSessionId() ?? UNKNOWN_SESSION_ID,
 		dev: __DEV__ ? inspectorDevHooks(doc) : NOOP_DEV_HOOKS,
 		personaLookups: null,

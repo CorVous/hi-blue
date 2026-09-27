@@ -1,4 +1,4 @@
-import { PINNED_MODEL } from "../model.js";
+import { PINNED_MODEL, PINNED_PROVIDER_ROUTING } from "../model.js";
 import type { OpenAiMessage } from "./game/round-llm-provider.js";
 import type { OpenAiTool } from "./game/tool-registry.js";
 import { readStoredByokKey } from "./openrouter-key.js";
@@ -140,6 +140,7 @@ export async function streamCompletion(opts: {
 
 	const bodyObj: Record<string, unknown> = {
 		model: PINNED_MODEL,
+		provider: PINNED_PROVIDER_ROUTING,
 		messages,
 		stream: true,
 		usage: { include: true },
@@ -196,6 +197,7 @@ export async function chatCompletionJson(opts: {
 
 	const bodyObj: Record<string, unknown> = {
 		model: PINNED_MODEL,
+		provider: PINNED_PROVIDER_ROUTING,
 		messages,
 		stream: false,
 		response_format: { type: "json_object" },

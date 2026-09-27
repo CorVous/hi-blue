@@ -1,4 +1,4 @@
-import { PINNED_MODEL } from "../model.js";
+import { PINNED_MODEL, PINNED_PROVIDER_ROUTING } from "../model.js";
 import {
 	computeCostMicroUsd,
 	getModelPricing,
@@ -98,7 +98,7 @@ export async function handleChatCompletions(
 	try {
 		upstream = await forwardToOpenRouter(
 			env.OPENROUTER_API_KEY,
-			pinModelAndRequestUsage(body, isStream),
+			pinModelProviderAndRequestUsage(body, isStream),
 		);
 	} catch (err) {
 		await refundPreCharge();
@@ -138,13 +138,14 @@ function hasNonEmptyMessages(body: unknown): body is Record<string, unknown> {
 	return Array.isArray(messages) && messages.length >= 1;
 }
 
-function pinModelAndRequestUsage(
+function pinModelProviderAndRequestUsage(
 	body: Record<string, unknown>,
 	isStream: boolean,
 ): Record<string, unknown> {
 	const upstreamBody: Record<string, unknown> = {
 		...body,
 		model: PINNED_MODEL,
+		provider: PINNED_PROVIDER_ROUTING,
 	};
 	if (isStream) {
 		upstreamBody.stream_options = {

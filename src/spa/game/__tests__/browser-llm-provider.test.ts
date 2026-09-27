@@ -91,7 +91,7 @@ describe("BrowserLLMProvider.streamRound — onDelta callback", () => {
 	});
 });
 
-describe("BrowserLLMProvider — reasoning default (issue #169)", () => {
+describe("BrowserLLMProvider — reasoning default", () => {
 	function captureRequestBody(): { getBody: () => Record<string, unknown> } {
 		const fetchMock = vi.fn().mockResolvedValue(
 			new Response(makeSseBody(["ok"]), {
@@ -108,12 +108,12 @@ describe("BrowserLLMProvider — reasoning default (issue #169)", () => {
 		};
 	}
 
-	it("disables reasoning by default (no opts)", async () => {
+	it("leaves reasoning on by default (no opts) — the request omits the reasoning field", async () => {
 		const { getBody } = captureRequestBody();
 
 		await new BrowserLLMProvider().streamRound([], []);
 
-		expect(getBody().reasoning).toEqual({ enabled: false });
+		expect(getBody()).not.toHaveProperty("reasoning");
 
 		vi.restoreAllMocks();
 	});
@@ -285,6 +285,36 @@ describe("BrowserLLMProvider.streamRound — onLifecycle callback", () => {
 
 		expect(events).toEqual(["started", "errored"]);
 		expect(events).not.toContain("first-token");
+
+		vi.restoreAllMocks();
+	});
+});
+
+describe("BrowserLLMProvider.streamRound — reasoning stays out of assistantText", () => {
+	it("returns empty assistantText when the stream carries only reasoning", async () => {
+		const encoder = new TextEncoder();
+		const body = new ReadableStream<Uint8Array>({
+			start(controller) {
+				const line = `data: ${JSON.stringify({ choices: [{ delta: { reasoning: "I should greet blue first." }, finish_reason: null }] })}\n\n`;
+				controller.enqueue(encoder.encode(line));
+				controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+				controller.close();
+			},
+		});
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValue(
+				new Response(body, {
+					status: 200,
+					headers: { "Content-Type": "text/event-stream" },
+				}),
+			),
+		);
+
+		const result = await new BrowserLLMProvider().streamRound([], []);
+
+		expect(result.assistantText).toBe("");
+		expect(result.toolCalls).toEqual([]);
 
 		vi.restoreAllMocks();
 	});

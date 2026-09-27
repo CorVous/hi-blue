@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { PINNED_MODEL } from "../../src/model.js";
 import { dispatchAiTurn } from "../../src/spa/game/dispatcher.js";
 import { startGame } from "../../src/spa/game/engine.js";
 import { buildOpenAiMessages } from "../../src/spa/game/openai-message-builder.js";
@@ -28,7 +29,7 @@ import {
 
 const BASE_URL = process.env.EVAL_BASE_URL ?? "http://localhost:8787";
 const HISTORICAL_REPORT_PREFIX = "relative-directions";
-const MODEL = "z-ai/glm-4.7";
+const MODEL = PINNED_MODEL;
 const LOOK_AND_NAVIGATE_TURNS = 6;
 
 const TEST_PERSONAS: Record<string, AiPersona> = {
