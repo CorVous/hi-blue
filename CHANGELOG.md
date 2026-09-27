@@ -1,6 +1,28 @@
 # Changelog
 
 
+## v0.0.3-beta.0
+
+[compare changes](https://github.com/CorVous/hi-blue/compare/v0.0.2-beta.3...v0.0.3-beta.0)
+
+### 🚀 Enhancements
+
+- **playtest:** Save game state and keep the playtest running after it finishes (#570)
+
+### 🩹 Fixes
+
+- **playtest:** Keep wrangler's custom build from reverting to a dev build (#572)
+- **game:** Show Daemons objective spaces in their own and nearby cells (#574)
+- **game:** Notify Tool Disable and show an outcome-specific endgame (#577)
+
+### 🏡 Chore
+
+- **playtest:** Run the playtest against a non-dev build (#571)
+
+### ❤️ Contributors
+
+- CorVous
+
 ## v0.0.2-beta.3
 
 [compare changes](https://github.com/CorVous/hi-blue/compare/v0.0.2-beta.2...v0.0.2-beta.3)
