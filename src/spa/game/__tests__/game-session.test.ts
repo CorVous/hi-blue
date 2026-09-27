@@ -246,7 +246,7 @@ describe("GameSession — win / lose via checkWinCondition / checkBudgetExhauste
 		expect(result.gameEnded).toBe(true);
 	});
 
-	it("lose condition: gameEnded is true when all AIs are locked out", async () => {
+	it("budget-exhausted ending: gameEnded is true when every Daemon has exhausted its budget", async () => {
 		const session = new GameSession(CONTENT_PACK_WITH_ITEMS, TEST_PERSONAS);
 		const exhaustProvider = new MockRoundLLMProvider([
 			{ assistantText: "", toolCalls: [], costUsd: 1 },

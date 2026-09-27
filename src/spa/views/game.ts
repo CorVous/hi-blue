@@ -1251,9 +1251,35 @@ function enterEndgame(ctx: GameViewContext, endedState: GameState): void {
 	paintEndgameSubtitle(doc, endedState.outcome);
 	paintFinalRoundLines(doc, endedState);
 	showEndgameScreen(doc);
+	resetEndgameControls(doc);
 	wireEndgameChoices(ctx.root, endedSessionId, endedState);
 	wireSaveDownload(doc, endedState);
 	wireDiagnosticsSubmit(doc);
+}
+
+const ENDGAME_BUTTON_SELECTORS = [
+	"#endgame-new-daemons-btn",
+	"#endgame-same-daemons-btn",
+	"#endgame-continue-btn",
+	"#download-ais-btn",
+	"#submit-diagnostics-btn",
+];
+
+const ENDGAME_STATUS_SELECTORS = [
+	"#endgame-choice-status",
+	"#download-status",
+	"#diagnostics-status",
+];
+
+function resetEndgameControls(doc: Document): void {
+	for (const selector of ENDGAME_BUTTON_SELECTORS) {
+		const button = doc.querySelector<HTMLButtonElement>(selector);
+		if (button) dropListenersByCloning(button).disabled = false;
+	}
+	for (const selector of ENDGAME_STATUS_SELECTORS) {
+		const statusEl = doc.querySelector<HTMLElement>(selector);
+		if (statusEl) statusEl.textContent = "";
+	}
 }
 
 export function endgameSubtitle(outcome: GameState["outcome"]): string {

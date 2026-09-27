@@ -184,7 +184,7 @@ export async function runRound(
 				round: state.round,
 				actor: aiId,
 				kind: "lockout",
-				description: `${state.personas[aiId]?.name ?? aiId} is locked out`,
+				description: `${state.personas[aiId]?.name ?? aiId} has exhausted its budget`,
 			});
 			onAiTurnComplete?.(aiId);
 			continue;

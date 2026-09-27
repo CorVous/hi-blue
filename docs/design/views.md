@@ -265,6 +265,14 @@ it hides the other routes' screens and shows or hides the global chrome
   logged in round `state.round - 1`) are painted again into
   `#endgame-final-lines`. Without them the player never sees what the Daemons
   said on the last round, which is often what tells them how the game ended.
+- **`enterEndgame` can run more than once per page.** Toggling the session
+  picker (or pressing Escape in it) re-renders the game route, which restores
+  the finished save and enters the endgame again on the same persistent DOM.
+  So `resetEndgameControls` first replaces every endgame button with a clone
+  (`dropListenersByCloning`), re-enables it and clears the status lines.
+  Without that, each entry adds another click handler, and one click on
+  download saves twice or one click on same daemons pays for two content-pack
+  generations that race each other.
 - **Reloading a finished game.** A restored session with `isComplete` goes
   straight to the endgame screen. Mounting it as a playable round would let the
   player send another round into a finished game. The active pointer is kept,
