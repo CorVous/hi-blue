@@ -722,13 +722,12 @@ function renderCurrentState(ctx: AiContext): string {
 
 		const standingOn = objectiveSpacesAt(ctx, actorSpatial.position);
 		if (standingOn.length > 0) {
-			let standingLine = `You are standing on: ${standingOn.map((s) => s.name).join(", ")}`;
-			for (const space of standingOn) {
-				if (space.satisfactionState === "satisfied" && space.postLookFlavor) {
-					standingLine += ` ${space.postLookFlavor}`;
-				}
-			}
-			lines.push(standingLine);
+			const standingParts = standingOn.map((space) =>
+				space.satisfactionState === "satisfied" && space.postLookFlavor
+					? `${space.name} ${space.postLookFlavor}`
+					: space.name,
+			);
+			lines.push(`You are standing on: ${standingParts.join("; ")}`);
 			for (const space of standingOn) {
 				const chosenDescription = chooseExamineDescription(space);
 				if (!chosenDescription) continue;

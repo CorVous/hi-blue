@@ -3109,8 +3109,42 @@ describe("objective spaces in the Daemon's own and nearby cells (issue #573)", (
 		});
 		const ctx = buildAiContext(makeHollowGame(hollowAt, {}, [twine]), "red");
 		expect(buildDiskEntityState(ctx).twine).toBeUndefined();
-		expect(renderPerceptionDelta(ctx, {})).not.toContain(
-			"Came into view: Waxed Twine Bundle — A twine.",
+		for (const line of renderPerceptionDelta(ctx, {})) {
+			expect(line).not.toContain("Waxed Twine Bundle");
+		}
+	});
+
+	it("keeps each satisfied flavor next to its own space when a cell holds two", () => {
+		const shrine = makeEntity("shrine", "objective_space", hollowAt, {
+			name: "Moss Shrine",
+		});
+		const ctx = buildAiContext(
+			makeHollowGame(
+				hollowAt,
+				{
+					satisfactionState: "satisfied",
+					postLookFlavor: "the hollow holds the twine snugly.",
+				},
+				[shrine],
+			),
+			"red",
 		);
+		expect(whereYouAre(ctx.toCurrentStateUserMessage())).toContain(
+			"You are standing on: Cut Bank Hollow the hollow holds the twine snugly.; Moss Shrine",
+		);
+	});
+
+	it("tells the Daemon standing on a space when it becomes satisfied", () => {
+		const pendingCtx = buildAiContext(makeHollowGame(hollowAt), "red");
+		const satisfiedCtx = buildAiContext(
+			makeHollowGame(hollowAt, {
+				satisfactionState: "satisfied",
+				postExamineDescription: "A scoop cradling the twine.",
+			}),
+			"red",
+		);
+		expect(
+			renderPerceptionDelta(satisfiedCtx, buildDiskEntityState(pendingCtx)),
+		).toEqual(["Cut Bank Hollow is now A scoop cradling the twine."]);
 	});
 });
