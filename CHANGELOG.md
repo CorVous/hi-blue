@@ -1,6 +1,76 @@
 # Changelog
 
 
+## v0.0.2-beta.3
+
+[compare changes](https://github.com/CorVous/hi-blue/compare/v0.0.2-beta.2...v0.0.2-beta.3)
+
+### 🚀 Enhancements
+
+- Implement the tested radius-2 Vista geometry primitive ([#546](https://github.com/CorVous/hi-blue/pull/546))
+- **spa:** ⚠️  Cut runtime, prompts, content, and saves over to the Vista ([#550](https://github.com/CorVous/hi-blue/pull/550))
+- **spa:** Render the dev inspector as a room-only 5x5 Vista board ([#553](https://github.com/CorVous/hi-blue/pull/553))
+- Switch the pinned model to DeepSeek V4.1 Flash with thinking on ([#567](https://github.com/CorVous/hi-blue/pull/567))
+
+### 🩹 Fixes
+
+- **content:** Reduce action-averse daemon draws ([d013ed4](https://github.com/CorVous/hi-blue/commit/d013ed4))
+- **scripts:** Verify the archive maps instead of the diff text ([#552](https://github.com/CorVous/hi-blue/pull/552))
+- **evals:** Retarget direction eval tooling onto the cardinal model ([#558](https://github.com/CorVous/hi-blue/pull/558))
+- **scripts:** Stop the schema-map test corrupting the real checkout ([#562](https://github.com/CorVous/hi-blue/pull/562))
+- **spa:** Stop the app shell overflowing at 375px ([#565](https://github.com/CorVous/hi-blue/pull/565))
+
+### 💅 Refactors
+
+- **spa:** Harden the Vista geometry primitive ([#548](https://github.com/CorVous/hi-blue/pull/548))
+- **spa:** Prepare archive compatibility for the session and USB cutover ([#549](https://github.com/CorVous/hi-blue/pull/549))
+- Simplify the codebase and move rationale into design docs ([#566](https://github.com/CorVous/hi-blue/pull/566))
+
+### 📖 Documentation
+
+- **playtests:** Add agent session 0xA49E ([498edd0](https://github.com/CorVous/hi-blue/commit/498edd0))
+- **playtests:** Add agent session 0x3E87 ([#509](https://github.com/CorVous/hi-blue/pull/509))
+- **playtests:** Correct overstated direction claim in 0x3E87 ([#510](https://github.com/CorVous/hi-blue/pull/510))
+- ADR 0015 — the Vista, cardinal directions, and retirement of facing ([de71771](https://github.com/CorVous/hi-blue/commit/de71771))
+- ADR 0016 — the new movement and sight format ([0993327](https://github.com/CorVous/hi-blue/commit/0993327))
+- ADR 0016 — the new movement and sight format" ([00a3ba1](https://github.com/CorVous/hi-blue/commit/00a3ba1))
+- **adr:** Rewrite approved vista and cardinal movement spec ([96fe012](https://github.com/CorVous/hi-blue/commit/96fe012))
+- **adr:** Define interaction range and inspector behavior ([2c4d22c](https://github.com/CorVous/hi-blue/commit/2c4d22c))
+- Clarify vista implementation handoff and test setup ([197abb5](https://github.com/CorVous/hi-blue/commit/197abb5))
+- Refresh the documentation for the landed Vista cutover ([#559](https://github.com/CorVous/hi-blue/pull/559))
+- **evals:** Record the action-averse talk-only decision ([#564](https://github.com/CorVous/hi-blue/pull/564))
+- **agents:** Document wayfinder operations on the issue tracker ([#545](https://github.com/CorVous/hi-blue/pull/545))
+
+### 🏡 Chore
+
+- **release:** V0.0.2-beta.2 ([6435349](https://github.com/CorVous/hi-blue/commit/6435349))
+- Mark beta github releases as prerelease ([c3d6ba1](https://github.com/CorVous/hi-blue/commit/c3d6ba1))
+- Remove project-local skills directory ([c6f6f40](https://github.com/CorVous/hi-blue/commit/c6f6f40))
+- Add agent skills directory ([f2aba2c](https://github.com/CorVous/hi-blue/commit/f2aba2c))
+- Vendor grilling, grill-me, and handoff skills ([53f0e64](https://github.com/CorVous/hi-blue/commit/53f0e64))
+- **ci:** Typecheck the e2e tree ([#551](https://github.com/CorVous/hi-blue/pull/551))
+- **evals:** Typecheck the evals tree ([#563](https://github.com/CorVous/hi-blue/pull/563))
+- **playtest:** Restore the /playtest skill and its headless-browser driver ([#568](https://github.com/CorVous/hi-blue/pull/568))
+
+### ✅ Tests
+
+- **e2e:** Stop start-screen specs racing the dial-up animation ([#556](https://github.com/CorVous/hi-blue/pull/556))
+- **e2e:** Make start-screen begin-gate waits load-robust ([#561](https://github.com/CorVous/hi-blue/pull/561))
+
+### 🤖 CI
+
+- **deploy:** Provision OPENROUTER_API_KEY worker secret on deploy ([#511](https://github.com/CorVous/hi-blue/pull/511))
+
+#### ⚠️ Breaking Changes
+
+- **spa:** ⚠️  Cut runtime, prompts, content, and saves over to the Vista ([#550](https://github.com/CorVous/hi-blue/pull/550))
+
+### ❤️ Contributors
+
+- Cor <birb@cor.gg>
+- CorVous
+- Cor Vous <birb@cor.gg>
+
 ## v0.0.2-beta.2
 
 [compare changes](https://github.com/CorVous/hi-blue/compare/v0.0.2-beta.1...v0.0.2-beta.2)
