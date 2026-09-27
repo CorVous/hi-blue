@@ -1,6 +1,8 @@
 # Prompting GLM-4.7 for a Multi-Character Escape-Room Roleplay: A Practical Technique Guide
 
-Reference material for tuning the Daemon system prompts assembled in `src/spa/game/prompt-builder.ts`. The pinned model is `z-ai/glm-4.7` (`src/model.ts`).
+> **Superseded.** The pinned model is now DeepSeek V4.1 Flash (ADR 0017). See [the DeepSeek V4.1 Flash guide](deepseek-v4.1-flash-guide.md) for current guidance. This guide stays because it explains why parts of the Daemon prompt look the way they do.
+
+Reference material for tuning the Daemon system prompts assembled in `src/spa/game/prompt-builder.ts`, written when the pinned model was `z-ai/glm-4.7`.
 
 **TL;DR**
 

@@ -64,7 +64,7 @@ Compare the two modes to read the lift from the action-profile clauses.
 - `OPENROUTER_API_KEY` (when `EVAL_DIRECT_OPENROUTER=1`) **or** a running
   proxy worker (`pnpm dev:local`, or `pnpm dev` with a Cloudflare login)
   reachable at `EVAL_BASE_URL` (default `http://localhost:8787`).
-- `EVAL_MODEL` (default `z-ai/glm-4.7`).
+- `EVAL_MODEL` (default `PINNED_MODEL`, `src/model.ts`). `EVAL_REASONING=off` turns thinking off.
 - `EVAL_REPETITIONS` (default `20`).
 - `EVAL_ACTION_PROFILES` (`1` = on, anything else = off).
 - `EVAL_ACTION_PAIRS` — comma-separated `t1+t2` list overriding the default

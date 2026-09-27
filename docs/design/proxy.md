@@ -151,7 +151,7 @@ day:
 - On fetch failure, stale cached pricing wins. On a cold start with no cache,
   `OVERESTIMATED_COLD_START_PRICING` (1 and 5 micro-USD per prompt and
   completion token, roughly $0.001 and $0.005 per 1k) is deliberately above
-  typical GLM-4.7 pricing. The rate limit then fails closed rather than open.
+  the pinned model's pricing. The rate limit then fails closed rather than open.
 
 ## Tests
 

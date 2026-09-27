@@ -12,7 +12,7 @@ itself fires, never `page.request.*`.
   test `OPENROUTER_API_KEY`. `WORKER_BASE_URL` keeps its default, so `__DEV__`
   is true. Every dev-only affordance the specs use exists here: the dev
   inspector (`#dev-world-map`), the dev game strip (`.dev-strip-line`),
-  `?think=1` and `?winImmediately=1`.
+  `?think=0` and `?winImmediately=1`.
 - CI runs one worker with two retries. Locally the `workers` key is left out so
   Playwright picks a count itself. The key is spread in conditionally because
   `exactOptionalPropertyTypes` rejects `workers: undefined`. `goToGame` spreads
@@ -181,7 +181,7 @@ specs that assert on generation failure check `#cap-hit` themselves.
 | `mention-addressing` | `*mention` addressing replaced the address dropdown, and Send stays disabled without a mention. | #107 |
 | `visual-feedback` | The addressed panel gets `panel--addressed`, the overlay renders one `.mention-highlight`, clicking a panel moves the mention, and clearing the prompt removes all feedback. | #109 |
 | `token-pacing` | After the round commits, `thinking…` clears and the full reply lands in the addressed panel. Since #214 the reply arrives as a `message` tool call, so the old word-by-word streaming checks no longer apply. | #214 |
-| `think-disabled` | Every turn sends `reasoning: { enabled: false }` so GLM-4.7 skips thinking, and the dev-host-only `?think=1` removes the field. Unit tests lock the body shape; this spec covers the wiring from URL to `isDevHost()` to `BrowserLLMProvider` to the request. | |
+| `think-toggle` | Daemon turns leave thinking on, so requests carry no `reasoning` field, and the dev-host-only `?think=0` adds `reasoning: { enabled: false }`. Unit tests lock the body shape; this spec covers the wiring from URL to `isDevHost()` to `BrowserLLMProvider` to the request. | ADR 0017 |
 | `persona-synthesis` | Synthesized blurbs flow from the persona record through `prompt-builder` into each Daemon's streaming system prompt. | |
 | `chat-lockout` | A lockout restored from storage mutes its panel before any typing, disables Send for that Daemon, and says nothing in the transcript. | |
 | `endgame-current-behaviour` | `game_ended` disables the composer, shows the choices, and keeps the URL. The active-session pointer survives until the player chooses. | #80, #101, #307 |

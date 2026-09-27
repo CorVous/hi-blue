@@ -33,9 +33,9 @@ The reasons behind the code live in `docs/design/`, one file per area. Read the 
 
 Three surfaces — Vitest workers (`src/proxy/`), Vitest jsdom (the rest of `src/`, plus `scripts/__tests__/` and `evals/__tests__/`), and Playwright e2e (`e2e/`). SPA changes that affect rendered DOM or user interaction need a Playwright spec — jsdom unit tests don't substitute. See `docs/agents/testing.md`.
 
-### Daemon prompts (GLM-4.7)
+### Daemon prompts (DeepSeek V4.1 Flash)
 
-The pinned model is `z-ai/glm-4.7` (`src/model.ts`). Daemon system prompts are assembled in `src/spa/game/prompt-builder.ts`. For vendor-specific prompting techniques (beginning-bias, XML tags, thinking-mode, sampling, multi-persona drift mitigation), see `docs/prompting/glm-4.7-guide.md`.
+The pinned model is `deepseek/deepseek-v4.1-flash`, routed only to DeepSeek's own OpenRouter endpoint, with thinking on (`src/model.ts`, ADR 0017). Daemon system prompts are assembled in `src/spa/game/prompt-builder.ts`. For vendor-specific prompting techniques (thinking mode, ignored samplers, tool-call rules, persona drift, prompt caching), see `docs/prompting/deepseek-v4.1-flash-guide.md`. The earlier `docs/prompting/glm-4.7-guide.md` explains prompt choices made for the previous model.
 
 ### Commit messages
 

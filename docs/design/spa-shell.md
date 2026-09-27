@@ -102,8 +102,14 @@ re-render is a call to `renderApp` from a view.
   measurable.
 - **`reasoning: { enabled: false }`** skips the thinking step entirely.
   `{ exclude: true }` would still think and only hide the trace. Daemon turns
-  disable reasoning by default (`BrowserLLMProvider`), and the `?think=1` dev
-  affordance turns it back on.
+  leave reasoning on by default (`BrowserLLMProvider`, ADR 0017), and the
+  `?think=0` dev affordance turns it off.
+- **`provider: PINNED_PROVIDER_ROUTING`** (`src/model.ts`) sends every request
+  to DeepSeek's own endpoint with fallbacks off. The same body goes out on the
+  BYOK path and through the proxy, which also overwrites whatever `provider` a
+  caller sends. OpenRouter serves DeepSeek V4.1 Flash from many hosts whose
+  prices, quantisations and speeds differ widely; pinning keeps behaviour and
+  cost the same as what the evals measured (ADR 0017).
 - A 200 response whose body contains an `error` object throws
   `UpstreamErrorBodyError`.
 

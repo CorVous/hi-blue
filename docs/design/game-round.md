@@ -6,7 +6,7 @@ Other sources, used here by reference rather than repeated:
 
 - Vocabulary (Daemon, Vista, Interaction range, Objective kinds, Complication, Conversation log, …): `CONTEXT.md`. The domain types in `types.ts` follow it.
 - Movement, sight, the proximity-hint distances and the `<what_you_see>` rules: ADR 0015, whose closing implementation notes record how the Vista landed and keep the three regions (Vista, interaction range, inspector display) apart.
-- GLM-4.7 prompting techniques (beginning-of-prompt bias, XML tags, MUST/NEVER phrasing, persona-drift mitigation): `docs/prompting/glm-4.7-guide.md`.
+- Prompting the pinned model, DeepSeek V4.1 Flash (thinking mode, XML sections, MUST/NEVER phrasing, persona-drift mitigation, prompt caching): `docs/prompting/deepseek-v4.1-flash-guide.md`. Why the model changed: ADR 0017. The earlier GLM-4.7 guide, `docs/prompting/glm-4.7-guide.md`, explains the parts of the prompt that were written for GLM.
 - Drift-to-silence retry: ADR 0016.
 
 ## Round coordinator (`round-coordinator.ts`)
@@ -81,9 +81,9 @@ The module is pure and takes an injected rng. `tickComplication` returns `null` 
 
 ## Prompt builder (`prompt-builder.ts`)
 
-**Stable and volatile halves.** The system prompt (`toSystemPrompt`) must be byte-identical across rounds for a persona, because OpenRouter's prefix cache hashes the literal request bytes. Everything that changes per round (`<whats_new>`, `<where_you_are>`, `<what_you_see>`) goes in the trailing user turn (`toCurrentStateUserMessage`). Tests pin both properties.
+**Stable and volatile halves.** The system prompt (`toSystemPrompt`) must be byte-identical across rounds for a persona, because OpenRouter's prefix cache hashes the literal request bytes. Everything that changes per round (`<whats_new>`, `<where_you_are>`, `<what_you_see>`) goes in the trailing user turn (`toCurrentStateUserMessage`). Tests pin both properties. DeepSeek renders the tool schemas into the same cached prefix, right after the system prompt, so the per-round enums from `availableTools()` currently break the cache whenever they change. The DeepSeek guide measures this under "Prompt caching" and lists it as an open question.
 
-**System prompt order.** Front matter (English-only directive and fiction framing) comes first, to use GLM-4.7's beginning-of-prompt bias and prevent Chinese-language leakage. Then the identity line, then `<rules>` placed early so the mandatory rules sit in the high-attention prefix, then `<setting>`, `<personality>`, `<action_profile>`, `<typing_quirks>` (#167, prevents voice bleed between Daemons), `<voice_examples>`, and `<directives>`. The reasons for each technique are in the GLM guide.
+**System prompt order.** Front matter (English-only directive and fiction framing) comes first. It was put there for GLM-4.7's beginning-of-prompt bias and Chinese-language leakage, and DeepSeek V4.1 Flash keeps it. Then the identity line, then `<rules>` placed early so the mandatory rules sit in the high-attention prefix, then `<setting>`, `<personality>`, `<action_profile>`, `<typing_quirks>` (#167, prevents voice bleed between Daemons), `<voice_examples>`, and `<directives>`. The reasons for each technique are in the GLM guide, and the DeepSeek guide says which of them still matter.
 
 - The identity line frames the model as the *author* writing `*{name}, a Daemon.` The e2e SSE stub routes requests on that exact substring; a unit test pins it.
 - The game is one continuous session, so there is no memory-wipe or between-phase fiction (#295).
