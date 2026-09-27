@@ -232,16 +232,17 @@ export function buildDiskEntityState(
 				state[obs.id] = { inVista: true, satisfied: false };
 			}
 		}
+	}
 
-		for (const space of ctx.worldSnapshot.entities) {
-			if (space.kind !== "objective_space") continue;
-			const h = space.holder;
-			if (isGridPosition(h) && positionsEqual(h, position)) {
-				state[space.id] = {
-					inVista: true,
-					satisfied: space.satisfactionState === "satisfied",
-				};
-			}
+	const spaceCells = projectVista(actorSpatial.position).filter(
+		(c) => !c.isWall,
+	);
+	for (const cell of spaceCells) {
+		for (const space of objectiveSpacesAt(ctx, cell.position)) {
+			state[space.id] = {
+				inVista: true,
+				satisfied: space.satisfactionState === "satisfied",
+			};
 		}
 	}
 
@@ -330,6 +331,17 @@ export function renderPerceptionDelta(
 	}
 
 	return lines;
+}
+
+function objectiveSpacesAt(
+	ctx: AiContext,
+	position: GridPosition,
+): WorldEntity[] {
+	return ctx.worldSnapshot.entities.filter((e) => {
+		if (e.kind !== "objective_space") return false;
+		const h = e.holder;
+		return isGridPosition(h) && positionsEqual(h, position);
+	});
 }
 
 function renderableItems(entities: WorldEntity[]): WorldEntity[] {
@@ -535,8 +547,11 @@ export function buildDiskSnapshot(ctx: AiContext): string {
 		})
 		.map((i) => i.name)
 		.sort();
+	const ownCellSpaces = objectiveSpacesAt(ctx, actorSpatial.position)
+		.map((s) => s.name)
+		.sort();
 	lines.push(
-		`you: holding=[${heldItems.join(", ") || "nothing"}] cell=[${ownCellItems.join(", ") || "nothing"}]`,
+		`you: holding=[${heldItems.join(", ") || "nothing"}] cell=[${ownCellItems.join(", ") || "nothing"}] on=[${ownCellSpaces.join(", ") || "nothing"}]`,
 	);
 
 	const viewCells = projectVista(actorSpatial.position).filter(
@@ -573,6 +588,7 @@ export function buildDiskSnapshot(ctx: AiContext): string {
 			return isGridPosition(h) && positionsEqual(h, position);
 		});
 		contentParts.push(...obstacles.map((o) => o.name));
+		contentParts.push(...objectiveSpacesAt(ctx, position).map((s) => s.name));
 
 		const contents =
 			contentParts.length > 0 ? [...contentParts].sort().join(", ") : "nothing";
@@ -613,7 +629,7 @@ export function renderWhatsNew(prev = "", current = ""): string | null {
 	if (prevYou !== currYou && prevYou !== "" && currYou !== "") {
 		const prevFields = parseYouLine(prevYou);
 		const currFields = parseYouLine(currYou);
-		for (const key of ["holding", "cell"] as const) {
+		for (const key of ["holding", "cell", "on"] as const) {
 			if (prevFields[key] !== currFields[key]) {
 				out.push(`~ self.${key}: ${prevFields[key]} → ${currFields[key]}`);
 			}
@@ -643,10 +659,12 @@ export function renderWhatsNew(prev = "", current = ""): string | null {
 function parseYouLine(line: string): {
 	holding: string;
 	cell: string;
+	on: string;
 } {
 	const holding = /holding=(\[[^\]]*\])/.exec(line)?.[1] ?? "";
 	const cell = /cell=(\[[^\]]*\])/.exec(line)?.[1] ?? "";
-	return { holding, cell };
+	const on = /on=(\[[^\]]*\])/.exec(line)?.[1] ?? "";
+	return { holding, cell, on };
 }
 
 function renderCurrentState(ctx: AiContext): string {
@@ -700,6 +718,22 @@ function renderCurrentState(ctx: AiContext): string {
 			);
 		} else {
 			lines.push("Your cell contains: nothing");
+		}
+
+		const standingOn = objectiveSpacesAt(ctx, actorSpatial.position);
+		if (standingOn.length > 0) {
+			let standingLine = `You are standing on: ${standingOn.map((s) => s.name).join(", ")}`;
+			for (const space of standingOn) {
+				if (space.satisfactionState === "satisfied" && space.postLookFlavor) {
+					standingLine += ` ${space.postLookFlavor}`;
+				}
+			}
+			lines.push(standingLine);
+			for (const space of standingOn) {
+				const chosenDescription = chooseExamineDescription(space);
+				if (!chosenDescription) continue;
+				lines.push(`    ${space.name}: ${chosenDescription}`);
+			}
 		}
 
 		lines.push(
@@ -778,6 +812,10 @@ function renderCurrentState(ctx: AiContext): string {
 				for (const obs of obstacleEntities) {
 					contentParts.push(obs.name);
 				}
+			}
+
+			for (const space of objectiveSpacesAt(ctx, position)) {
+				contentParts.push(`${space.name} (a place, not an item)`);
 			}
 
 			const contents =
