@@ -2980,3 +2980,171 @@ describe("renderPerceptionDelta", () => {
 		expect(entryLine).toBeUndefined();
 	});
 });
+
+describe("objective spaces in the Daemon's own and nearby cells (issue #573)", () => {
+	const hollowAt = { row: 2, col: 2 };
+
+	function makeHollowGame(
+		actorPosition: { row: number; col: number },
+		hollowExtra: Partial<WorldEntity> = {},
+		extraEntities: WorldEntity[] = [],
+	) {
+		const hollow: WorldEntity = {
+			id: "carry-0-space",
+			kind: "objective_space",
+			name: "Cut Bank Hollow",
+			examineDescription: "A scoop worn into the roots.",
+			holder: hollowAt,
+			...hollowExtra,
+		};
+		const pack = makeTestPack([hollow, ...extraEntities], {
+			wallName: "wall",
+			aiStarts: {
+				red: { position: actorPosition },
+				green: { position: { row: 4, col: 4 } },
+				cyan: { position: { row: 4, col: 3 } },
+			},
+		});
+		return startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+	}
+
+	function whereYouAre(stateMsg: string): string {
+		return (
+			stateMsg.split("<where_you_are>")[1]?.split("</where_you_are>")[0] ?? ""
+		);
+	}
+
+	it("names the space and its description when the Daemon stands on it", () => {
+		const ctx = buildAiContext(makeHollowGame(hollowAt), "red");
+		const block = whereYouAre(ctx.toCurrentStateUserMessage());
+		expect(block).toContain("You are standing on: Cut Bank Hollow");
+		expect(block).toContain(
+			"    Cut Bank Hollow: A scoop worn into the roots.",
+		);
+		expect(block).toContain("Your cell contains: nothing");
+		expect(block).not.toContain("Cut Bank Hollow (on the ground");
+	});
+
+	it("omits the standing-on line when no space is in the own cell", () => {
+		const ctx = buildAiContext(makeHollowGame({ row: 3, col: 2 }), "red");
+		expect(ctx.toCurrentStateUserMessage()).not.toContain(
+			"You are standing on:",
+		);
+	});
+
+	it("appends postLookFlavor to the standing-on line once the space is satisfied", () => {
+		const ctx = buildAiContext(
+			makeHollowGame(hollowAt, {
+				satisfactionState: "satisfied",
+				postLookFlavor: "the hollow holds the twine snugly.",
+			}),
+			"red",
+		);
+		expect(whereYouAre(ctx.toCurrentStateUserMessage())).toContain(
+			"You are standing on: Cut Bank Hollow the hollow holds the twine snugly.",
+		);
+	});
+
+	it("names a nearby space in its <what_you_see> cell line", () => {
+		const ctx = buildAiContext(makeHollowGame({ row: 3, col: 2 }), "red");
+		const whatYouSee = ctx
+			.toCurrentStateUserMessage()
+			.split("<what_you_see>")[1];
+		expect(whatYouSee).toContain(
+			"- One step north: Cut Bank Hollow (a place, not an item)",
+		);
+		expect(whatYouSee).not.toContain("- One step north: nothing");
+	});
+
+	it("names a nearby space in its disk snapshot cell line", () => {
+		const ctx = buildAiContext(makeHollowGame({ row: 3, col: 2 }), "red");
+		expect(buildDiskSnapshot(ctx)).toContain(
+			"at one step north: Cut Bank Hollow",
+		);
+	});
+
+	it("carries the own-cell space in the snapshot's you line", () => {
+		const onCtx = buildAiContext(makeHollowGame(hollowAt), "red");
+		const offCtx = buildAiContext(makeHollowGame({ row: 3, col: 2 }), "red");
+		expect(buildDiskSnapshot(onCtx)).toContain("on=[Cut Bank Hollow]");
+		expect(buildDiskSnapshot(offCtx)).toContain("on=[nothing]");
+	});
+
+	it("reports stepping onto and off the space as a self.on change", () => {
+		const onSnapshot = buildDiskSnapshot(
+			buildAiContext(makeHollowGame(hollowAt), "red"),
+		);
+		const offSnapshot = buildDiskSnapshot(
+			buildAiContext(makeHollowGame({ row: 3, col: 2 }), "red"),
+		);
+		expect(renderWhatsNew(offSnapshot, onSnapshot)).toContain(
+			"~ self.on: [nothing] → [Cut Bank Hollow]",
+		);
+		expect(renderWhatsNew(onSnapshot, offSnapshot)).toContain(
+			"~ self.on: [Cut Bank Hollow] → [nothing]",
+		);
+	});
+
+	it("keeps the own-cell space in view in the disk entity state", () => {
+		const ctx = buildAiContext(makeHollowGame(hollowAt), "red");
+		expect(buildDiskEntityState(ctx)["carry-0-space"]).toEqual({
+			inVista: true,
+			satisfied: false,
+		});
+	});
+
+	it("emits no Lost from view or Came into view when stepping onto or off the space", () => {
+		const onCtx = buildAiContext(makeHollowGame(hollowAt), "red");
+		const offCtx = buildAiContext(makeHollowGame({ row: 3, col: 2 }), "red");
+		const stepOn = renderPerceptionDelta(onCtx, buildDiskEntityState(offCtx));
+		const stepOff = renderPerceptionDelta(offCtx, buildDiskEntityState(onCtx));
+		for (const line of [...stepOn, ...stepOff]) {
+			expect(line).not.toContain("Cut Bank Hollow");
+		}
+	});
+
+	it("still leaves items in the own cell out of the disk entity state", () => {
+		const twine = makeEntity("twine", "objective_object", hollowAt, {
+			name: "Waxed Twine Bundle",
+		});
+		const ctx = buildAiContext(makeHollowGame(hollowAt, {}, [twine]), "red");
+		expect(buildDiskEntityState(ctx).twine).toBeUndefined();
+		for (const line of renderPerceptionDelta(ctx, {})) {
+			expect(line).not.toContain("Waxed Twine Bundle");
+		}
+	});
+
+	it("keeps each satisfied flavor next to its own space when a cell holds two", () => {
+		const shrine = makeEntity("shrine", "objective_space", hollowAt, {
+			name: "Moss Shrine",
+		});
+		const ctx = buildAiContext(
+			makeHollowGame(
+				hollowAt,
+				{
+					satisfactionState: "satisfied",
+					postLookFlavor: "the hollow holds the twine snugly.",
+				},
+				[shrine],
+			),
+			"red",
+		);
+		expect(whereYouAre(ctx.toCurrentStateUserMessage())).toContain(
+			"You are standing on: Cut Bank Hollow the hollow holds the twine snugly.; Moss Shrine",
+		);
+	});
+
+	it("tells the Daemon standing on a space when it becomes satisfied", () => {
+		const pendingCtx = buildAiContext(makeHollowGame(hollowAt), "red");
+		const satisfiedCtx = buildAiContext(
+			makeHollowGame(hollowAt, {
+				satisfactionState: "satisfied",
+				postExamineDescription: "A scoop cradling the twine.",
+			}),
+			"red",
+		);
+		expect(
+			renderPerceptionDelta(satisfiedCtx, buildDiskEntityState(pendingCtx)),
+		).toEqual(["Cut Bank Hollow is now A scoop cradling the twine."]);
+	});
+});
