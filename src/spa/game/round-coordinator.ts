@@ -490,6 +490,13 @@ export async function runRound(
 			state = shiftObstacle(state, fired);
 		} else {
 			state = applyComplicationResult(state, complicationResult, rng);
+			if (fired.kind === "tool_disable") {
+				state = appendPrivateSystemNotice(
+					state,
+					fired.target,
+					`Sysadmin: Your ${fired.tool} tool has been disabled.`,
+				);
+			}
 			if (fired.kind === "chat_lockout") {
 				chatLockoutTriggered = {
 					aiId: fired.target,
