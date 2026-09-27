@@ -73,8 +73,10 @@ root, run:
 scripts/playtest/start.sh
 ```
 
-This builds the SPA, launches `wrangler dev` and a headless Chromium playtest
-driver in the background, and waits until the game view is ready. When it
+This builds the SPA as a production (non-dev) build, launches `wrangler dev`
+on `http://127.0.0.1:8787` and a headless Chromium playtest driver in the
+background, and waits until the game view is ready. There is no dev inspector
+or debug output in the page; you see what a player sees. When it
 prints `READY` on stdout, the playtest is live and you can start sending
 commands. The boot can take 2–5 minutes; persona synthesis and the two
 content packs (A + B, batched in one LLM call) are the slow part — the

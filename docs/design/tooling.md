@@ -148,9 +148,17 @@ the one another device on the LAN can reach.
 
 `start.sh`, `daemon.mjs` and `cmd.sh` back the `/playtest` skill in
 `.claude/skills/playtest/`. `start.sh` builds the SPA, runs `wrangler dev
---local` with the real `OPENROUTER_API_KEY` and a `localhost` CORS override,
+--local` with the real `OPENROUTER_API_KEY` and a CORS override for its origin,
 then starts `daemon.mjs` and prints `READY` (or `FAILED: <reason>`) once the
 daemon logs that the game route is stable.
+
+The playtest serves on `http://127.0.0.1:$PORT` rather than `localhost`, and
+builds with that as `WORKER_BASE_URL`, so the SPA is a non-dev build (see
+`__DEV__` above) and the daemon's origin fails the dev-host checks. The agent
+should see the game a player sees: no dev inspector, debug footers, commit
+line or `?winImmediately` / `?think=0` affordances. `start.sh` passes the
+origin to the daemon as `PLAYTEST_ORIGIN`. A build left in `dist/` by a
+playtest is therefore a non-dev build until the next plain `pnpm build`.
 
 `daemon.mjs` holds one headless Chromium page open and reads one JSON command
 per line from the `/tmp/playtest-in` FIFO, writing the reply to

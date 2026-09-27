@@ -16,7 +16,7 @@ const OUT = process.env.PLAYTEST_OUT || "/tmp/playtest-out";
 const LOG = process.env.PLAYTEST_LOG || "/tmp/playtest.log";
 const RESTORE = process.env.PLAYTEST_RESTORE || "";
 const SAVE_DIR = process.env.PLAYTEST_SAVE_DIR || "/tmp/playtest-saves";
-const ORIGIN = "http://localhost:8787";
+const ORIGIN = process.env.PLAYTEST_ORIGIN || "http://127.0.0.1:8787";
 const STORAGE_PREFIX = "hi-blue";
 
 function ensureFifo(p) {
@@ -66,7 +66,7 @@ if (process.env.SPIKE_PARALLEL_FRAMING) {
 if (process.env.SPIKE_ENGAGEMENT_CLAUSES) {
 	extras.push(`engagementClauses=${process.env.SPIKE_ENGAGEMENT_CLAUSES}`);
 }
-const startUrl = `http://localhost:8787/?skipDialup=1${extras.length ? `&${extras.join("&")}` : ""}`;
+const startUrl = `${ORIGIN}/?skipDialup=1${extras.length ? `&${extras.join("&")}` : ""}`;
 async function seedLocalStorage(savePath) {
 	const save = JSON.parse(readFileSync(savePath, "utf8"));
 	const entries = Object.entries(save.localStorage ?? {});
