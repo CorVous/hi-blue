@@ -127,7 +127,30 @@ scripts/playtest/cmd.sh '{"op":"wait","ms":15000}'
 # Take a screenshot. Optional; useful if you want to reference a visual moment
 # in your observations log.
 scripts/playtest/cmd.sh '{"op":"snap","path":"/tmp/playtest-turn-7.png"}'
+
+# Save the game state (the browser's hi-blue localStorage) to a JSON file.
+# Defaults to /tmp/playtest-saves/<sessionId>.json; "path" overrides it.
+scripts/playtest/cmd.sh '{"op":"save"}'
 ```
+
+### Saving and resuming
+
+The game lives only in the headless browser's localStorage, so closing the
+browser would lose it. `shutdown` therefore saves first (to
+`/tmp/playtest-saves/<sessionId>.json`, and the response names the file), and
+`save` writes a checkpoint without stopping anything. Take a `save` after the
+game ends, before you move to Stage 2.
+
+To pick a saved game back up in a fresh browser (same session, turn, budgets
+and transcripts), stop `wrangler dev` and run:
+
+```sh
+scripts/playtest/start.sh --resume /tmp/playtest-saves/<sessionId>.json
+```
+
+Resuming boots straight into the game view and skips world generation, so it
+is fast and spends nothing on the LLM until you `send`. The first `view` after
+a resume returns the full transcript, since the delta tracker starts empty.
 
 ### Snapshot shape
 
@@ -250,6 +273,9 @@ You may **not** during Stage 1:
 - Read `/tmp/wrangler.log`, `/tmp/playtest-daemon.log`, or any other log file.
   These contain the developer's view (HTTP requests, tool-call results) and
   would spoil the mechanics you are supposed to be discovering through play.
+- Read the contents of a save file under `/tmp/playtest-saves/`. It holds
+  the engine state and the daemons' full logs. Writing one with `save` is
+  fine; opening it is a Stage 3 activity.
 - Read any source file under `src/`.
 - Read any other Markdown under `docs/`. The `docs/playtests/` subtree is
   covered by the isolation rail above and is out of bounds for the whole

@@ -70,7 +70,15 @@ without rebooting. The same daemons, same setting, same content pack.
 
 If you want a **fresh** session (different daemons, different setting) to
 test whether something was specific to this playthrough, shut down first
-and re-run `scripts/playtest/start.sh`.
+(`shutdown` saves the current game before it closes the browser) and re-run
+`scripts/playtest/start.sh`. You can come back to the first game later with
+`scripts/playtest/start.sh --resume /tmp/playtest-saves/<sessionId>.json`.
+
+The save file is also something you can inspect directly: it holds every
+`hi-blue:` localStorage key. The per-daemon `.txt` files are the daemons'
+conversation logs, and `engine.dat` is the sealed engine state (XOR-obfuscated;
+`deobfuscate` in `src/spa/persistence/sealed-blob-codec.ts` reverses it, and
+`docs/design/persistence.md` describes the layout).
 
 ## Refining your hypotheses
 
@@ -110,18 +118,32 @@ Quote file paths with `path:line` so a reader can jump to the source.
 
 ## Finishing the playtest
 
-When you're done refining hypotheses, shut down the infrastructure:
+When you're done refining hypotheses, save the game state and **leave the
+infrastructure running**, so you or the user can keep investigating the same
+game:
+
+```sh
+scripts/playtest/cmd.sh '{"op":"save"}'
+```
+
+Do not shut down, kill `wrangler dev` or delete the FIFOs unless the user asks
+you to. When they do:
 
 ```sh
 scripts/playtest/cmd.sh '{"op":"shutdown"}'
-pkill -f 'wrangler dev'
+kill $(cat /tmp/playtest-wrangler.pid)
+pkill -f 'wrangler.js dev'
 rm -f /tmp/playtest-in /tmp/playtest-out
 ```
 
-The screenshots in `/tmp/playtest-*.png` and the logs in `/tmp/wrangler.log`,
-`/tmp/playtest-daemon.log` are not committed — they're per-run artifacts. If
-any specific screenshot or log line is worth preserving, paste it into your
+The screenshots in `/tmp/playtest-*.png`, the saves in `/tmp/playtest-saves/`
+and the logs in `/tmp/wrangler.log`, `/tmp/playtest-daemon.log` are not
+committed — they're per-run artifacts, and they disappear with the container.
+If any specific screenshot or log line is worth preserving, paste it into your
 session log directly.
 
 Report your findings back to the user with a short summary, the path to
-your session log, and the top one or two surprises you uncovered.
+your session log, the top one or two surprises you uncovered, and the path to
+the save file. Tell them the game is still live (`scripts/playtest/cmd.sh`
+still drives it) and how to resume it after a shutdown
+(`scripts/playtest/start.sh --resume <save file>`).

@@ -3,13 +3,21 @@ import {
 	createReadStream,
 	createWriteStream,
 	existsSync,
+	mkdirSync,
+	readFileSync,
 	unlinkSync,
+	writeFileSync,
 } from "node:fs";
+import { dirname } from "node:path";
 import { chromium } from "@playwright/test";
 
 const IN = process.env.PLAYTEST_IN || "/tmp/playtest-in";
 const OUT = process.env.PLAYTEST_OUT || "/tmp/playtest-out";
 const LOG = process.env.PLAYTEST_LOG || "/tmp/playtest.log";
+const RESTORE = process.env.PLAYTEST_RESTORE || "";
+const SAVE_DIR = process.env.PLAYTEST_SAVE_DIR || "/tmp/playtest-saves";
+const ORIGIN = "http://localhost:8787";
+const STORAGE_PREFIX = "hi-blue";
 
 function ensureFifo(p) {
 	if (existsSync(p)) {
@@ -59,25 +67,65 @@ if (process.env.SPIKE_ENGAGEMENT_CLAUSES) {
 	extras.push(`engagementClauses=${process.env.SPIKE_ENGAGEMENT_CLAUSES}`);
 }
 const startUrl = `http://localhost:8787/?skipDialup=1${extras.length ? `&${extras.join("&")}` : ""}`;
+async function seedLocalStorage(savePath) {
+	const save = JSON.parse(readFileSync(savePath, "utf8"));
+	const entries = Object.entries(save.localStorage ?? {});
+	if (entries.length === 0) {
+		throw new Error(`save file ${savePath} holds no localStorage entries`);
+	}
+	const seedUrl = `${ORIGIN}/__playtest-seed`;
+	await page.route(seedUrl, (route) =>
+		route.fulfill({ contentType: "text/html", body: "<!doctype html>" }),
+	);
+	await page.goto(seedUrl);
+	await page.evaluate((pairs) => {
+		localStorage.clear();
+		for (const [k, v] of pairs) localStorage.setItem(k, v);
+	}, entries);
+	await page.unroute(seedUrl);
+	log(`restored ${entries.length} localStorage keys from ${savePath}`);
+}
+
+async function connectFreshSession() {
+	await page.locator("#begin").waitFor({ state: "visible", timeout: 60_000 });
+	log("waiting for #begin to be enabled (this can take up to 60s)");
+	const start = Date.now();
+	while (Date.now() - start < 90_000) {
+		const disabled = await page.locator("#begin").getAttribute("disabled");
+		if (disabled === null) break;
+		await page.waitForTimeout(500);
+	}
+	log("filling password and clicking CONNECT");
+	await page.locator("#password").fill("password");
+	await page.locator("#begin").click();
+}
+
+if (RESTORE) await seedLocalStorage(RESTORE);
+
 log(`navigating to ${startUrl}`);
 await page.goto(startUrl, {
 	waitUntil: "domcontentloaded",
 });
 
-await page.locator("#begin").waitFor({ state: "visible", timeout: 60_000 });
-log("waiting for #begin to be enabled (this can take up to 60s)");
-const start = Date.now();
-while (Date.now() - start < 90_000) {
-	const disabled = await page.locator("#begin").getAttribute("disabled");
-	if (disabled === null) break;
-	await page.waitForTimeout(500);
+if (RESTORE) {
+	const restoredView = await page
+		.locator('main[data-view="game"]')
+		.waitFor({ state: "attached", timeout: 30_000 })
+		.then(() => "game")
+		.catch(async () => page.locator("main").getAttribute("data-view"));
+	if (restoredView !== "game") {
+		log(
+			`FATAL: restored save did not boot into the game view (landed on "${restoredView}")`,
+		);
+		await browser.close();
+		process.exit(1);
+	}
+} else {
+	await connectFreshSession();
+	await page
+		.locator('main[data-view="game"]')
+		.waitFor({ state: "attached", timeout: 30_000 });
 }
-log("filling password and clicking CONNECT");
-await page.locator("#password").fill("password");
-await page.locator("#begin").click();
-await page
-	.locator('main[data-view="game"]')
-	.waitFor({ state: "attached", timeout: 30_000 });
 await page.locator("#composer").waitFor({ state: "visible", timeout: 30_000 });
 
 log("waiting for game route to reach stable state (content packs loading)...");
@@ -236,6 +284,35 @@ function applyDelta(snap, full) {
 	}
 }
 
+async function saveGameState(requestedPath) {
+	const storage = await page.evaluate((prefix) => {
+		const out = {};
+		for (let i = 0; i < localStorage.length; i++) {
+			const key = localStorage.key(i);
+			if (key?.startsWith(prefix)) out[key] = localStorage.getItem(key);
+		}
+		return out;
+	}, STORAGE_PREFIX);
+	const sessionId =
+		storage[`${STORAGE_PREFIX}:active-session`] ?? `no-active-${Date.now()}`;
+	const path = requestedPath ?? `${SAVE_DIR}/${sessionId}.json`;
+	mkdirSync(dirname(path), { recursive: true });
+	writeFileSync(
+		path,
+		`${JSON.stringify(
+			{
+				savedAt: new Date().toISOString(),
+				sessionId,
+				localStorage: storage,
+			},
+			null,
+			2,
+		)}\n`,
+	);
+	log(`saved ${Object.keys(storage).length} localStorage keys to ${path}`);
+	return { savedTo: path, sessionId, keys: Object.keys(storage).length };
+}
+
 async function handle(cmd) {
 	switch (cmd.op) {
 		case "view": {
@@ -261,12 +338,17 @@ async function handle(cmd) {
 			await page.screenshot({ path, fullPage: true });
 			return { ok: true, path };
 		}
+		case "save": {
+			const saved = await saveGameState(cmd.path);
+			return { ok: true, ...saved };
+		}
 		case "shutdown": {
+			const saved = cmd.save === false ? null : await saveGameState(cmd.path);
 			setTimeout(async () => {
 				await browser.close();
 				process.exit(0);
 			}, 50);
-			return { ok: true, bye: true };
+			return { ok: true, bye: true, ...(saved ?? {}) };
 		}
 		default:
 			return { ok: false, error: `unknown op: ${cmd.op}` };

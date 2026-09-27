@@ -165,6 +165,23 @@ batched content-pack call can take several minutes, and a `send` before then
 would land on a loading screen. It exits early if `#bootstrap-recovery` or
 `#cap-hit` shows up, because `cmd.sh` cannot reach those buttons.
 
+The game exists only in the page's localStorage, so a closed browser is a lost
+game. `save` copies every `hi-blue` localStorage key to a JSON file
+(`/tmp/playtest-saves/<sessionId>.json` by default, `PLAYTEST_SAVE_DIR`
+overrides the directory), and `shutdown` saves before it closes the browser
+unless the command carries `"save": false`. `start.sh --resume <file>` (or
+`PLAYTEST_RESTORE`) hands the file to the daemon, which serves an empty page at
+`/__playtest-seed` on the worker's origin through `page.route`, writes the keys
+into that origin's localStorage, and only then loads the SPA. The active-session
+pointer then routes straight to the game view, so the daemon skips the password
+screen, and it exits if the SPA lands anywhere else (a broken or
+version-mismatched save). Seeding from a stub page rather than the SPA itself
+keeps the start view from minting a session before the keys are in place.
+
+`start.sh` checks its PID files against the process's command line, not just
+`kill -0`, because a stopped daemon's PID can be reused and a resume is usually
+run right after a shutdown.
+
 Snapshots return transcripts as deltas against the last snapshot so a long
 session doesn't refill the agent's context with the same early lines. `send`
 waits on `#stage[data-round-in-flight]` to clear instead of a fixed sleep. If

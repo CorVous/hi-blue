@@ -13,14 +13,27 @@ fail() {
   exit 1
 }
 
+RESTORE_FROM="${PLAYTEST_RESTORE:-}"
+if [ "${1:-}" = "--resume" ]; then
+  RESTORE_FROM="${2:-}"
+  [ -n "$RESTORE_FROM" ] || fail "--resume needs a save file path (see /tmp/playtest-saves/)"
+fi
+if [ -n "$RESTORE_FROM" ] && [ ! -f "$RESTORE_FROM" ]; then
+  fail "save file not found: $RESTORE_FROM"
+fi
+
 if [ -z "${OPENROUTER_API_KEY:-}" ]; then
   fail "OPENROUTER_API_KEY is not set in the environment"
 fi
 
-if [ -f "$WRANGLER_PID_FILE" ] && kill -0 "$(cat "$WRANGLER_PID_FILE")" 2>/dev/null; then
+pid_file_runs() {
+  [ -f "$1" ] && ps -p "$(cat "$1")" -o args= 2>/dev/null | grep -q "$2"
+}
+
+if pid_file_runs "$WRANGLER_PID_FILE" "wrangler"; then
   fail "wrangler dev appears to be already running (pid $(cat "$WRANGLER_PID_FILE")). Stop it first: pkill -f 'wrangler dev'"
 fi
-if [ -f "$DAEMON_PID_FILE" ] && kill -0 "$(cat "$DAEMON_PID_FILE")" 2>/dev/null; then
+if pid_file_runs "$DAEMON_PID_FILE" "playtest/daemon.mjs"; then
   fail "playtest daemon appears to be already running (pid $(cat "$DAEMON_PID_FILE")). Stop it first: cmd.sh '{\"op\":\"shutdown\"}'"
 fi
 
@@ -51,7 +64,10 @@ fi
 
 echo "[start.sh] launching playtest daemon..." >&2
 : > "$DAEMON_LOG"
-nohup node scripts/playtest/daemon.mjs >>"$DAEMON_LOG" 2>&1 &
+if [ -n "$RESTORE_FROM" ]; then
+  echo "[start.sh] resuming saved game from $RESTORE_FROM" >&2
+fi
+PLAYTEST_RESTORE="$RESTORE_FROM" nohup node scripts/playtest/daemon.mjs >>"$DAEMON_LOG" 2>&1 &
 echo $! > "$DAEMON_PID_FILE"
 
 echo "[start.sh] waiting for game route to reach stable state (this can take up to 6 minutes)..." >&2
