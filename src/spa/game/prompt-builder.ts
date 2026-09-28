@@ -148,7 +148,7 @@ const PARALLEL_FRAMING_C12 =
 	"- When you do have something to say AND something to do, emit BOTH calls together. Two `message` calls in one turn (one to a peer, one to blue) are the normal shape of a multi-party chat.\n" +
 	"- Don't compose a reply in your reasoning and then fail to emit the call — that reads as a bug.";
 const PARALLEL_FRAMING_C12_PER_TURN =
-	"REMINDER: peers and the world are your focus; blue is overhearing. Let your <personality> and <persona_goal> dictate engagement level. If you have something to say AND something to do, emit BOTH calls this turn — including two `message` calls (peer + blue) when both fit.";
+	"REMINDER: peers and the world are your focus; blue is overhearing. Let your <personality> and <persona_goal> dictate engagement level. If you have something to say AND something to do, emit BOTH calls this turn — including two `message` calls (peer + blue) when both fit. Keep each `message` to 1–3 sentences.";
 
 const DISTANCE_WORDS: Record<number, string> = {
 	0: "zero",
@@ -348,6 +348,40 @@ function renderableItems(entities: WorldEntity[]): WorldEntity[] {
 	return entities.filter(
 		(e) => e.kind === "objective_object" || e.kind === "interesting_object",
 	);
+}
+
+function pairedSpaceSharingCell(
+	ctx: AiContext,
+	item: WorldEntity,
+	position: GridPosition,
+): WorldEntity | undefined {
+	if (!item.pairsWithSpaceId) return undefined;
+	return objectiveSpacesAt(ctx, position).find(
+		(space) => space.id === item.pairsWithSpaceId,
+	);
+}
+
+function describeGroundItems(
+	ctx: AiContext,
+	cellItems: WorldEntity[],
+	position: GridPosition,
+): string[] {
+	const loose: string[] = [];
+	const placed: string[] = [];
+	for (const item of cellItems) {
+		const space = pairedSpaceSharingCell(ctx, item, position);
+		if (space) {
+			placed.push(`${item.name} (set into the ${space.name})`);
+		} else {
+			loose.push(item.name);
+		}
+	}
+	return [
+		...(loose.length > 0
+			? [`${loose.join(", ")} (on the ground — not held)`]
+			: []),
+		...placed,
+	];
 }
 
 function chooseExamineDescription(entity: WorldEntity): string | undefined {
@@ -714,7 +748,7 @@ function renderCurrentState(ctx: AiContext): string {
 		});
 		if (cellItems.length > 0) {
 			lines.push(
-				`Your cell contains: ${cellItems.map((i) => i.name).join(", ")} (on the ground — not held)`,
+				`Your cell contains: ${describeGroundItems(ctx, cellItems, actorSpatial.position).join("; ")}`,
 			);
 		} else {
 			lines.push("Your cell contains: nothing");
@@ -797,9 +831,7 @@ function renderCurrentState(ctx: AiContext): string {
 				return isGridPosition(h) && positionsEqual(h, position);
 			});
 			if (cellItems.length > 0) {
-				contentParts.push(
-					`${cellItems.map((i) => i.name).join(", ")} (on the ground — not held)`,
-				);
+				contentParts.push(...describeGroundItems(ctx, cellItems, position));
 			}
 
 			const obstacleEntities = ctx.worldSnapshot.entities.filter((e) => {

@@ -902,6 +902,74 @@ describe("ground-item tagging (issue #503)", () => {
 		expect(stateMsg).toContain("the Daemon *green");
 		expect(stateMsg).toContain("flower (on the ground — not held)");
 	});
+
+	const placedLampPack = (lampAndMountAt: { row: number; col: number }) =>
+		makeTestPack(
+			[
+				makeEntity("lamp", "objective_object", lampAndMountAt, {
+					pairsWithSpaceId: "mount",
+				}),
+				makeEntity("mount", "objective_space", lampAndMountAt),
+				makeEntity("flower", "interesting_object", lampAndMountAt),
+			],
+			{
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 0, col: 0 } },
+					green: { position: { row: 0, col: 1 } },
+					cyan: { position: { row: 0, col: 2 } },
+				},
+			},
+		);
+
+	it("shows a carry object resting on its paired space as set into it, not on the ground", () => {
+		const game = startGame(TEST_PERSONAS, placedLampPack({ row: 1, col: 0 }), {
+			budgetPerAi: 5,
+		});
+		const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
+		expect(stateMsg).toContain(
+			"- One step south: flower (on the ground — not held); lamp (set into the mount); mount (a place, not an item)",
+		);
+		expect(stateMsg).not.toContain("lamp (on the ground");
+	});
+
+	it("shows a placed carry object in the daemon's own cell as set into its space", () => {
+		const game = startGame(TEST_PERSONAS, placedLampPack({ row: 0, col: 0 }), {
+			budgetPerAi: 5,
+		});
+		const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
+		expect(stateMsg).toContain(
+			"Your cell contains: flower (on the ground — not held); lamp (set into the mount)",
+		);
+	});
+
+	it("keeps the ground tag on a carry object lying away from its paired space", () => {
+		const pack = makeTestPack(
+			[
+				makeEntity(
+					"lamp",
+					"objective_object",
+					{ row: 1, col: 0 },
+					{
+						pairsWithSpaceId: "mount",
+					},
+				),
+				makeEntity("mount", "objective_space", { row: 0, col: 1 }),
+			],
+			{
+				wallName: "wall",
+				aiStarts: {
+					red: { position: { row: 0, col: 0 } },
+					green: { position: { row: 0, col: 2 } },
+					cyan: { position: { row: 0, col: 3 } },
+				},
+			},
+		);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
+		expect(stateMsg).toContain("lamp (on the ground — not held)");
+		expect(stateMsg).not.toContain("set into");
+	});
 });
 
 describe("conversation rendering (role turns)", () => {

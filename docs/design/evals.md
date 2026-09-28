@@ -13,10 +13,14 @@ module-level fetch.
 - **Model access.** Runners send requests to the proxy worker at
   `EVAL_BASE_URL` (default `http://localhost:8787`). Start it with
   `pnpm dev:local` (or `pnpm dev` if you are logged in to Cloudflare). Setting
-  `EVAL_DIRECT_OPENROUTER=1` (drift and action-variation) makes the runner call
-  OpenRouter directly with `OPENROUTER_API_KEY` as a Bearer token. Use that
-  when wrangler cannot run locally, or to measure without the proxy's rate
-  guard in the loop. `content-pack-flakiness` always calls OpenRouter directly.
+  `EVAL_DIRECT_OPENROUTER=1` (drift, directions and action-variation) makes the
+  runner call OpenRouter directly with `OPENROUTER_API_KEY` as a Bearer token.
+  Use that when wrangler cannot run locally, or to measure without the proxy's
+  rate guard in the loop. `content-pack-flakiness` always calls OpenRouter
+  directly. Behind an HTTPS proxy, Node's `fetch` ignores `HTTPS_PROXY` unless
+  `NODE_USE_ENV_PROXY=1` is set. Until 2026-09-28 the directions runner sent
+  neither `usage` nor the provider pin itself. It relied on the proxy, which
+  overwrites `provider`, so it could not run direct.
 - **Requests mirror production** (`evals/request-options.ts`). Every runner
   asks for `usage`, pins the provider with `PINNED_PROVIDER_ROUTING` when it
   runs the pinned model, and leaves thinking on, as the game does. Pinning is

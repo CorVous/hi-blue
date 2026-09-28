@@ -1,0 +1,269 @@
+{
+  "summary": {
+    "successOnFirst": 7,
+    "successAfterRetry": 3,
+    "exhausted": 0,
+    "thrown": 0,
+    "ruleHistogram": {
+      "verb-of-activation": 3
+    },
+    "retryUnitHistogram": {
+      "decoy": 3
+    },
+    "avgAttemptsToSuccess": 1.3,
+    "totalCostUsd": 0.08155705199999999
+  },
+  "iterations": [
+    {
+      "iter": 1,
+      "settingA": "silent planetarium dome",
+      "settingB": "flooded underground cistern",
+      "theme": "technological",
+      "objectiveTypes": [
+        "carry",
+        "use_space",
+        "use_item"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 1,
+          "attempt": 0,
+          "outcome": "validation-failed",
+          "rawLength": 7038,
+          "validationErrors": [
+            {
+              "retryUnitKind": "decoy",
+              "rule": "verb-of-activation",
+              "entityId": "decoy-1",
+              "field": "examineDescription"
+            },
+            {
+              "retryUnitKind": "decoy",
+              "rule": "verb-of-activation",
+              "entityId": "decoy-1",
+              "field": "examineDescription"
+            }
+          ]
+        },
+        {
+          "iter": 1,
+          "attempt": 1,
+          "outcome": "ok",
+          "rawLength": 7068
+        }
+      ],
+      "totalCostUsd": 0.0090363
+    },
+    {
+      "iter": 2,
+      "settingA": "ink-stained printing hall",
+      "settingB": "stripped server vault",
+      "theme": "mundane",
+      "objectiveTypes": [
+        "use_item",
+        "carry",
+        "use_item"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 2,
+          "attempt": 0,
+          "outcome": "ok",
+          "rawLength": 6908
+        }
+      ],
+      "totalCostUsd": 0.006448812
+    },
+    {
+      "iter": 3,
+      "settingA": "abandoned subway station",
+      "settingB": "throne room of a pagoda",
+      "theme": "mundane",
+      "objectiveTypes": [
+        "carry",
+        "use_space",
+        "convergence"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 3,
+          "attempt": 0,
+          "outcome": "ok",
+          "rawLength": 6281
+        }
+      ],
+      "totalCostUsd": 0.005023512
+    },
+    {
+      "iter": 4,
+      "settingA": "silent planetarium dome",
+      "settingB": "collapsed market arcade",
+      "theme": "mundane",
+      "objectiveTypes": [
+        "carry",
+        "carry",
+        "use_space"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 4,
+          "attempt": 0,
+          "outcome": "validation-failed",
+          "rawLength": 7291,
+          "validationErrors": [
+            {
+              "retryUnitKind": "decoy",
+              "rule": "verb-of-activation",
+              "entityId": "decoy-1",
+              "field": "examineDescription"
+            }
+          ]
+        },
+        {
+          "iter": 4,
+          "attempt": 1,
+          "outcome": "ok",
+          "rawLength": 7288
+        }
+      ],
+      "totalCostUsd": 0.009746568
+    },
+    {
+      "iter": 5,
+      "settingA": "moonlit greenhouse ruin",
+      "settingB": "sun-baked salt flat",
+      "theme": "mundane",
+      "objectiveTypes": [
+        "use_space",
+        "convergence",
+        "convergence"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 5,
+          "attempt": 0,
+          "outcome": "ok",
+          "rawLength": 9078
+        }
+      ],
+      "totalCostUsd": 0.006842412
+    },
+    {
+      "iter": 6,
+      "settingA": "hollowed glacier cave",
+      "settingB": "ink-stained printing hall",
+      "theme": "mundane",
+      "objectiveTypes": [
+        "convergence",
+        "convergence",
+        "carry"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 6,
+          "attempt": 0,
+          "outcome": "ok",
+          "rawLength": 8873
+        }
+      ],
+      "totalCostUsd": 0.007090212
+    },
+    {
+      "iter": 7,
+      "settingA": "rusted oil platform deck",
+      "settingB": "hollowed glacier cave",
+      "theme": "magical",
+      "objectiveTypes": [
+        "carry",
+        "convergence",
+        "carry"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 7,
+          "attempt": 0,
+          "outcome": "hard-error",
+          "errorMessage": "JSON parse failed",
+          "rawLength": 8695
+        },
+        {
+          "iter": 7,
+          "attempt": 1,
+          "outcome": "ok",
+          "rawLength": 10106
+        }
+      ],
+      "totalCostUsd": 0.013662
+    },
+    {
+      "iter": 8,
+      "settingA": "sun-baked salt flat",
+      "settingB": "silent planetarium dome",
+      "theme": "magical",
+      "objectiveTypes": [
+        "carry",
+        "carry",
+        "carry"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 8,
+          "attempt": 0,
+          "outcome": "ok",
+          "rawLength": 10892
+        }
+      ],
+      "totalCostUsd": 0.007510212
+    },
+    {
+      "iter": 9,
+      "settingA": "humid and dense bog",
+      "settingB": "dust-filled opera hall",
+      "theme": "mundane",
+      "objectiveTypes": [
+        "carry",
+        "use_space",
+        "carry"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 9,
+          "attempt": 0,
+          "outcome": "ok",
+          "rawLength": 7683
+        }
+      ],
+      "totalCostUsd": 0.008722812
+    },
+    {
+      "iter": 10,
+      "settingA": "silent planetarium dome",
+      "settingB": "forgotten laboratory",
+      "theme": "magical",
+      "objectiveTypes": [
+        "use_space",
+        "convergence",
+        "use_item"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 10,
+          "attempt": 0,
+          "outcome": "ok",
+          "rawLength": 9565
+        }
+      ],
+      "totalCostUsd": 0.007474212
+    }
+  ]
+}

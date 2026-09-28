@@ -128,6 +128,30 @@ So the stable part of a request is the system prompt **and the tool list**, and 
 | Messages over 3 sentences (drift) | 0 | 0 |
 | Cost per Daemon turn | $0.0001–0.0002 | $0.0003–0.0005 |
 
+### Retune of 2026-09-28
+
+All four harnesses were run on the pinned endpoint with thinking on: 30-round drift, 90-turn action-variation with profiles (3 scenarios × 3 personas × 10), 10 content packs, and the directions eval. Reports are in `docs/evals/` under that date.
+
+| | Before | After |
+|---|---|---|
+| Drift: pick_up calls in 30 rounds | 13 (a pick_up → use loop from round 8 to 30) | 5 |
+| Drift: turns with no `message` call | 13% | 10% |
+| Action-variation: messages over 3 sentences | 35 of 149 | 18 of 149 |
+| Objective scenario: chose `use` | 27 of 30 | 26 of 30 |
+| Content packs passing on the first attempt | 7 of 10 (all 3 failures a decoy `verb-of-activation`) | 9 of 10, no validation errors |
+| Directions eval | PASS, 100% coherence | not re-run (no change touches it) |
+
+What changed:
+
+- **A placed carry object no longer reads as dropped.** The state message tagged the flashlight "(on the ground — not held)" the round after the Daemon seated it in the mount. DeepSeek trusts the last user message over the history ("the flashlight rolled off"), so it picked the item back up, which undoes a Carry objective. It now renders as "(set into the wall mount)". See `docs/design/game-round.md`, "Listing rules".
+- **The `REMINDER` ends with "Keep each `message` to 1–3 sentences."** The rule was already in `<rules>`, but effusive and clipped personas broke it on up to a third of their messages. Restating it in the last user message halved the overruns without moving the objective scenario. Clipped personas still write strings of fragments ("Dead station. Strip-lights, damp.") that count as sentences. That is in character, not verbosity.
+- **The decoy prompt spells out its banned words** (`DECOY_FORBIDDEN_WORDS` in `content-pack-provider.ts`), including innocent uses such as a cup handle or the wind.
+
+Not changed, and why:
+
+- The "yes? yes?" tic in the action-variation eval comes from the eval's own Pip fixture, whose voice example is "here, take this one — yes? yes?". It is guideline 4 above at work, not a production problem.
+- The Objective scenario still loses about 1 in 10 turns to a step toward an item already in reach. That is within the ADR 0017 range.
+
 ## Open questions
 
 These came out of the research. Each is larger than a prompt edit and should get its own issue and eval run.
@@ -136,7 +160,7 @@ These came out of the research. Each is larger than a prompt edit and should get
 2. **Keep the tool list stable per session.** Fixed enums covering every id in the pack, with the dispatcher rejecting illegal moves, would keep the cache near 92% on long games instead of dropping to about 10% whenever an enum changes. The enums are guard-rails today, so this needs an ADR and an action-variation run.
 3. **Move Sysadmin directives out of the system prompt**, into a mid-conversation `system` message at the round they arrive or into the per-turn state, so the system prefix never changes mid-game.
 4. **Effort `low` against `high`** over whole games.
-5. **Two untested prompt lines:** adding "each `message` is 1–3 sentences" to the per-turn `REMINDER`, and one ban on the "not X, but Y" construction.
+5. **One untested prompt line:** a ban on the "not X, but Y" construction. (The `REMINDER` length line was tested on 2026-09-28 and shipped. See below.)
 
 ## Unverified, or not reached
 

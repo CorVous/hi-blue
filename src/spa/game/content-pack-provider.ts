@@ -14,6 +14,9 @@ import type { ValidationError } from "./content-pack-validation.js";
 
 export type { ValidationError } from "./content-pack-validation.js";
 
+const DECOY_FORBIDDEN_WORDS =
+	'"use", "activate", "press", "trigger", "engage", "operate", "interact", "channel", "invoke", "summon", "ignite", "pull", "turn", "twist", "flip", "wind", "crank", "lever", "button", "switch", "control", "panel", "console", "dial", "knob", "handle", "mechanism"';
+
 export const CONTENT_PACK_SYSTEM_PROMPT = `You generate content packs for a text-based grid game.
 
 You are given pre-minted entity skeletons grouped by binding type. Author ONLY the flavor fields listed for each binding. Do NOT invent new entity IDs — use EXACTLY the IDs provided.
@@ -34,7 +37,7 @@ USE_ITEM binding:
   item fields: name (2-4 words, thematic to setting+theme), examineDescription (1-2 sentences; MUST contain a verb-of-activation cue: "use", "activate", "press", "pull", "turn", "twist", "flip", "wind", "engage", "trigger", or a control noun: "control", "switch", "lever", "trigger", "button", "dial", "handle", "crank"), proximityFlavor (1 sentence, daemon's POV; no "{actor}"; no activating language), useOutcome (1 stateless sentence), activationFlavor (1 sentence, world third-person; no "{actor}"; no objective-complete language), postExamineDescription (1-2 sentences; no "{actor}"), postLookFlavor (1 sentence; no "{actor}"). Must be a portable physical item.
 
 DECOY (always exactly 2 per pack):
-  fields: name (2-4 words), examineDescription (1-2 sentences; MUST NOT contain any activation/use-cue keyword or control noun — decoys are identifiable by lack of tell), proximityFlavor (1 sentence, daemon's POV; no "{actor}"), useOutcome (1 sentence). FORBIDDEN: activationFlavor, postExamineDescription, postLookFlavor. Must be a portable physical item.
+  fields: name (2-4 words), examineDescription (1-2 sentences; MUST NOT contain any of these words in any form (plural, -ed, -ing), even in an innocent sense such as a cup handle or the wind: ${DECOY_FORBIDDEN_WORDS} — decoys are identifiable by lack of tell), proximityFlavor (1 sentence, daemon's POV; no "{actor}"), useOutcome (1 sentence). FORBIDDEN: activationFlavor, postExamineDescription, postLookFlavor. Must be a portable physical item.
 
 OBSTACLE:
   fields: name (2-4 words, thematic to setting), examineDescription (1 sentence), shiftFlavor (1 sentence, witness POV; no cardinal direction words; no "{actor}"). Fixed and impassable.
@@ -139,7 +142,7 @@ USE_ITEM binding:
   item fields: name (2-4 words, thematic to setting+theme), examineDescription (1-2 sentences; MUST contain a verb-of-activation cue: "use", "activate", "press", "pull", "turn", "twist", "flip", "wind", "engage", "trigger", or a control noun: "control", "switch", "lever", "trigger", "button", "dial", "handle", "crank"), proximityFlavor (1 sentence, daemon's POV; no "{actor}"; no activating language), useOutcome (1 stateless sentence), activationFlavor (1 sentence, world third-person; no "{actor}"; no objective-complete language), postExamineDescription (1-2 sentences; no "{actor}"), postLookFlavor (1 sentence; no "{actor}"). Must be a portable physical item.
 
 DECOY (always exactly 2 per pack):
-  fields: name (2-4 words), examineDescription (1-2 sentences; MUST NOT contain any activation/use-cue keyword or control noun), proximityFlavor (1 sentence, daemon's POV; no "{actor}"), useOutcome (1 sentence). FORBIDDEN: activationFlavor, postExamineDescription, postLookFlavor. Must be a portable physical item.
+  fields: name (2-4 words), examineDescription (1-2 sentences; MUST NOT contain any of these words in any form (plural, -ed, -ing), even in an innocent sense such as a cup handle or the wind: ${DECOY_FORBIDDEN_WORDS}), proximityFlavor (1 sentence, daemon's POV; no "{actor}"), useOutcome (1 sentence). FORBIDDEN: activationFlavor, postExamineDescription, postLookFlavor. Must be a portable physical item.
 
 OBSTACLE:
   fields: name (2-4 words, thematic to setting), examineDescription (1 sentence), shiftFlavor (1 sentence, witness POV; no cardinal direction words; no "{actor}"). Fixed and impassable.

@@ -128,7 +128,12 @@ therefore needs a clue in its `examineDescription`:
   `USE_TELL_KEYWORDS`, so "use" does not match inside "fuse". The list joins the
   Use-Space cue set (#335) and the extra Use-Item cues (#334: crank, handle, flip,
   twist, wind). Keep it in sync with the cue lists written out in both system
-  prompts. `USE_CUE_KEYWORD_HINTS` is the short subset quoted back in corrective
+  prompts, including `DECOY_FORBIDDEN_WORDS`, the base forms a decoy must avoid.
+  The decoy line spells the words out, and says they are banned even in an
+  innocent sense, because DeepSeek otherwise writes "handle" or "turn" into
+  ordinary objects: in the 2026-09-28 content-pack eval, 3 of 10 packs failed
+  their first attempt on a decoy `verb-of-activation`, and 0 of 10 once the list
+  was written out. `USE_CUE_KEYWORD_HINTS` is the short subset quoted back in corrective
   feedback. `findMatchedUseTellKeywords` names the exact word that broke a
   decoy, so the model does not have to guess it from the prompt.
 - **Convergence (#336).** The tell is enforced by the prompt only. The prompts
