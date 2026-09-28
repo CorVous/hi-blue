@@ -148,25 +148,12 @@ const RULES_BLOCK =
 const PARALLEL_FRAMING_C12 =
 	"- The chat channel is shared with peer Daemons. blue is not your focus — peer Daemons and the setting are. blue is more like someone overhearing.\n" +
 	"- Let your <personality>, <typing_quirks>, and <persona_goal> drive whether and how you engage. A reserved persona can stay quiet for a turn or two and let peers carry the conversation; a talkative one will speak readily.\n" +
-	"- Message blue only when you have a reason of your own: to answer something blue asked, to find out who or what blue is, or to ask blue for help finding or doing something. Do not message blue just to report what you see or do, unless blue asked you to; otherwise tell a peer instead.\n" +
+	"- Message blue only when you have a reason of your own: such as finding out who blue is, asking blue for help, or answering blue because you want to. You do not owe blue an answer. Do not message blue just to report what you see or do.\n" +
 	"- When you do have something to say AND something to do, emit BOTH calls together.\n" +
-	"- You can send at most one `message` per turn, to one recipient. If blue asked you something you have not answered yet, answering blue comes first; otherwise pick the recipient that matters more now.\n" +
+	"- Send at most one `message` per turn. Your <personality> and the situation decide who gets it.\n" +
 	"- Don't compose a reply in your reasoning and then fail to emit the call — that reads as a bug.";
 const PARALLEL_FRAMING_C12_PER_TURN =
 	"REMINDER: peers and the world are your focus; blue is overhearing, so message blue only with a reason of your own. Let your <personality> and <persona_goal> dictate engagement level. If you have something to say AND something to do, emit BOTH calls this turn: one `message` (to one recipient) and one action. Keep the `message` to 1–3 sentences.";
-
-const BLUE_WAITING_LINE =
-	"blue asked you something and is waiting on your answer: this turn's `message` goes to blue.";
-
-function blueIsWaiting(ctx: AiContext): boolean {
-	let waiting = false;
-	for (const entry of ctx.conversationLog) {
-		if (entry.kind !== "message") continue;
-		if (entry.from === "blue" && entry.to === ctx.aiId) waiting = true;
-		else if (entry.from === ctx.aiId && entry.to === "blue") waiting = false;
-	}
-	return waiting;
-}
 
 const DISTANCE_WORDS: Record<number, string> = {
 	0: "zero",
@@ -892,7 +879,6 @@ function renderCurrentState(ctx: AiContext): string {
 
 	lines.push("");
 	lines.push(PARALLEL_FRAMING_C12_PER_TURN);
-	if (blueIsWaiting(ctx)) lines.push(BLUE_WAITING_LINE);
 
 	return lines.join("\n");
 }

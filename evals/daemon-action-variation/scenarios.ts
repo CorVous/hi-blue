@@ -118,7 +118,7 @@ function makeSocialPack(): ContentPack {
 	};
 }
 
-type ScenarioName = "exploration" | "objective" | "social";
+type ScenarioName = "exploration" | "objective" | "social" | "coordination";
 
 export interface Scenario {
 	name: ScenarioName;
@@ -180,6 +180,27 @@ export function getScenarios(): Scenario[] {
 					to: ACTOR,
 					content:
 						"you still over there? what's it look like from where you're standing?",
+				},
+			],
+		},
+		{
+			name: "coordination",
+			description:
+				"A peer proposes a joint plan while blue asks a question in the same round. Tests who gets the one message.",
+			actor: ACTOR,
+			peers: [PEER_A, PEER_B],
+			pack: makeSocialPack(),
+			seedMessages: [
+				{
+					from: PEER_A,
+					to: ACTOR,
+					content:
+						"I'm about to flip a toggle on a panel over here. Stay put and watch your side, and tell me the second anything changes. Deal?",
+				},
+				{
+					from: "blue",
+					to: ACTOR,
+					content: "hey, what's going on over there? who are you talking to?",
 				},
 			],
 		},

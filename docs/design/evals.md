@@ -206,7 +206,10 @@ cannot create pickup or message opportunities by accident.
 beyond the Vista; tests `pick_up` versus `go`. *objective*: holding the
 flashlight with the wall mount one step north; tests whether the daemon reaches
 for `use`, the critical-path tool. *social*: a peer has just messaged; tests
-whether message and action are emitted in parallel. An earlier `EXAMINATION`
+whether message and action are emitted in parallel, and whether a Daemon
+messages blue when blue has not spoken to it. *coordination*: a peer proposes
+a plan and blue asks a question in the same round; with one `message` per turn
+(ADR 0018), tests who gets it. An earlier `EXAMINATION`
 scenario was dropped with the 5-tool surface change: with `examine` gone and
 descriptions shown automatically, it tested nothing new and its cells were
 pinned at 95–100% `pick_up`.

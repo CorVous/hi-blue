@@ -156,26 +156,30 @@ Not changed, and why:
 
 Players found that DeepSeek Daemons messaged blue on almost every turn, even a Daemon blue had never spoken to. The prompt asked for it: `<rules>` called two `message` calls "one to a peer, one to blue" "the normal shape of a multi-party chat", and the `REMINDER` repeated "including two `message` calls (peer + blue) when both fit". Those lines were written for GLM-4.7, which drifted into silence. DeepSeek follows them literally. In the social scenario, where only a peer has spoken, 24–29 of 30 Daemons messaged blue anyway.
 
-ADR 0018 replaces that with three rules:
+ADR 0018 replaces that with two rules, and leaves the rest to the Daemon's personality and situation:
 
-- **One `message` per turn.** The round coordinator delivers the first `message` call and rejects any later one ("only one message tool call per turn"), just as it rejects a second action.
-- **A reason to message blue.** `<rules>` says to message blue only with a reason of the Daemon's own (answering blue, learning who blue is, asking for help finding or doing something), and never just to report what it sees or does unless blue asked. The `REMINDER` repeats it in one clause.
-- **Answering comes first.** When blue's last message to the Daemon is unanswered, the per-turn state ends with "blue asked you something and is waiting on your answer: this turn's `message` goes to blue." The line is absent otherwise.
+- **One `message` per turn.** The round coordinator delivers the first `message` call and rejects any later one ("only one message tool call per turn"), just as it rejects a second action. The rules say the Daemon's `<personality>` and the situation decide who gets it.
+- **A reason to message blue.** `<rules>` says to message blue only with a reason of the Daemon's own (finding out who blue is, asking blue for help, answering blue because it wants to), that it does not owe blue an answer, and never to message blue just to report what it sees or does. The `REMINDER` repeats the reason clause.
 
-Measured on the pinned endpoint (objective scenario 30 reps per persona, social and exploration 20, one 30-round drift run each):
+Measured on the pinned endpoint. The objective scenario ran 30 reps per persona; social, exploration and the new coordination scenario 20; drift once for 30 rounds.
 
-| | Before | Strict gate (reply only) | Final |
-|---|---|---|---|
-| Social: messaged blue unprompted | 24–29 of 30 | 0 of 30 | 0 of 60 |
-| Blue asked: Daemon answered blue | 30 of 30 | 30 of 30 | 60 of 60 |
-| Drift: blue's messages answered | 16 of 16 | 16 of 16 | 16 of 16 |
-| Objective: chose `use` | 83 of 90 | 73 of 90 | 80 of 90 |
-| Turns with more than one `message` call | 102 of 180 | — | 0 of 210 |
+| | Before | Strict gate (reply only) | Forced answer | Final |
+|---|---|---|---|---|
+| Social (only a peer spoke): messaged blue | 24–29 of 30 | 0 of 30 | 0 of 60 | 0 of 60 |
+| Exploration (blue asked "let me know what you see"): answered blue | 30 of 30 | 30 of 30 | 60 of 60 | 39 of 60 |
+| Objective (blue asked "think you can fit it?"): answered blue | 30 of 30 | 30 of 30 | 90 of 90 | 79 of 90 |
+| Coordination (a peer proposes a plan, blue asks "who are you talking to?"): messaged the peer | — | — | — | 59 of 60 |
+| Drift: blue's 16 messages answered | 16 | 16 | 16 | 6 |
+| Objective: chose `use` | 83 of 90 | 73 of 90 | 80 of 90 | 76 of 90 |
+| Turns with more than one `message` call | 102 of 180 | — | 0 of 210 | 0 |
+
+The "Final" behaviour follows the persona. Pip, whose goal is to stay close to peers, answered blue's exploration request in 12 of 20 runs and spent the rest on a peer. Vex answers blue in clipped lines ("on it. mount's mine."). In coordination each persona takes the peer's deal in its own voice ("Deal. Watching. Flip it."; "Deal, deal — I'm watching my side, eyes wide."). In the social scenario, where blue never spoke, no run messaged blue.
 
 What did not work, so you do not retry it:
 
 - **Hard `MUST NOT message blue` lines in the per-turn state** for the never-messaged and already-answered cases. They stopped unprompted messages completely, but `use` fell from 83 to 73 of 90, mostly from the go-leaning persona stepping instead of using. It is the same effect as the grid-words rule (guideline 7): a speech rule the model reads last pulls its thinking away from acting.
-- **The reason rule without a waiting cue.** With one message to spend, Daemons chose a peer over blue and answered only 4 of blue's 16 drift messages, and 36 of 60 "let me know what you see" requests.
+- **Forcing an answer.** A per-turn line "blue asked you something and is waiting on your answer: this turn's `message` goes to blue" made every Daemon answer every question, whatever its personality, and overrode peer coordination. That is the opposite of what the game wants.
+- **A long list of reasons to ignore blue** ("a guarded, busy or distracted Daemon, or one in the middle of a plan with a peer…"). The go-leaning persona's `use` rate fell to 10 of 30. Keep the blue rule short.
 
 ## Open questions
 
