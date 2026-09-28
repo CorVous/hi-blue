@@ -1,4 +1,7 @@
-import { withinInteractionRange } from "./available-tools.js";
+import {
+	pairedSpaceHoldingItem,
+	withinInteractionRange,
+} from "./available-tools.js";
 import {
 	applyDirection,
 	CARDINAL_DIRECTIONS,
@@ -98,6 +101,12 @@ export function validateToolCall(
 				return {
 					valid: false,
 					reason: `Item "${call.args.item}" is out of reach — you can only pick up items in your own cell or the eight cells around it`,
+				};
+			const holdingSpace = pairedSpaceHoldingItem(item, world.entities);
+			if (holdingSpace)
+				return {
+					valid: false,
+					reason: `"${call.args.item}" is set into the ${holdingSpace.name} and will not come loose`,
 				};
 			return { valid: true };
 		}

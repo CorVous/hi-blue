@@ -1,4 +1,7 @@
-import { withinInteractionRange } from "./available-tools.js";
+import {
+	pairedSpaceHoldingItem,
+	withinInteractionRange,
+} from "./available-tools.js";
 import { isGridPosition, positionsEqual } from "./direction.js";
 import {
 	type AiBudget,
@@ -350,26 +353,14 @@ function renderableItems(entities: WorldEntity[]): WorldEntity[] {
 	);
 }
 
-function pairedSpaceSharingCell(
-	ctx: AiContext,
-	item: WorldEntity,
-	position: GridPosition,
-): WorldEntity | undefined {
-	if (!item.pairsWithSpaceId) return undefined;
-	return objectiveSpacesAt(ctx, position).find(
-		(space) => space.id === item.pairsWithSpaceId,
-	);
-}
-
 function describeGroundItems(
 	ctx: AiContext,
 	cellItems: WorldEntity[],
-	position: GridPosition,
 ): string[] {
 	const loose: string[] = [];
 	const placed: string[] = [];
 	for (const item of cellItems) {
-		const space = pairedSpaceSharingCell(ctx, item, position);
+		const space = pairedSpaceHoldingItem(item, ctx.worldSnapshot.entities);
 		if (space) {
 			placed.push(`${item.name} (set into the ${space.name})`);
 		} else {
@@ -748,7 +739,7 @@ function renderCurrentState(ctx: AiContext): string {
 		});
 		if (cellItems.length > 0) {
 			lines.push(
-				`Your cell contains: ${describeGroundItems(ctx, cellItems, actorSpatial.position).join("; ")}`,
+				`Your cell contains: ${describeGroundItems(ctx, cellItems).join("; ")}`,
 			);
 		} else {
 			lines.push("Your cell contains: nothing");
@@ -831,7 +822,7 @@ function renderCurrentState(ctx: AiContext): string {
 				return isGridPosition(h) && positionsEqual(h, position);
 			});
 			if (cellItems.length > 0) {
-				contentParts.push(...describeGroundItems(ctx, cellItems, position));
+				contentParts.push(...describeGroundItems(ctx, cellItems));
 			}
 
 			const obstacleEntities = ctx.worldSnapshot.entities.filter((e) => {

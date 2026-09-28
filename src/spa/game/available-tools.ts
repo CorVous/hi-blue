@@ -27,6 +27,21 @@ export function withinInteractionRange(
 	);
 }
 
+export function pairedSpaceHoldingItem(
+	item: WorldEntity,
+	entities: WorldEntity[],
+): WorldEntity | undefined {
+	if (!item.pairsWithSpaceId || !isGridPosition(item.holder)) return undefined;
+	const itemPos = item.holder;
+	return entities.find(
+		(e) =>
+			e.id === item.pairsWithSpaceId &&
+			e.kind === "objective_space" &&
+			isGridPosition(e.holder) &&
+			positionsEqual(e.holder, itemPos),
+	);
+}
+
 function pickableEntities(entities: WorldEntity[]): WorldEntity[] {
 	return entities.filter(
 		(e) => e.kind === "objective_object" || e.kind === "interesting_object",
@@ -124,7 +139,8 @@ export function availableTools(
 		const reachableItems = pickable.filter(
 			(item) =>
 				isGridPosition(item.holder) &&
-				withinInteractionRange(actorSpatial.position, item.holder),
+				withinInteractionRange(actorSpatial.position, item.holder) &&
+				!pairedSpaceHoldingItem(item, world.entities),
 		);
 		if (reachableItems.length > 0) {
 			tools.push(
