@@ -3216,3 +3216,40 @@ describe("objective spaces in the Daemon's own and nearby cells (issue #573)", (
 		).toEqual(["Cut Bank Hollow is now A scoop cradling the twine."]);
 	});
 });
+
+describe("blue-waiting line in the per-turn state", () => {
+	const WAITING = "blue asked you something and is waiting on your answer";
+
+	it("is absent when blue has never messaged the daemon", () => {
+		const game = makeTestGame();
+		expect(
+			buildAiContext(game, "red").toCurrentStateUserMessage(),
+		).not.toContain(WAITING);
+	});
+
+	it("appears after blue messages the daemon", () => {
+		const game = appendMessage(makeTestGame(), "blue", "red", "hello?");
+		expect(buildAiContext(game, "red").toCurrentStateUserMessage()).toContain(
+			WAITING,
+		);
+	});
+
+	it("clears once the daemon answers blue, and returns when blue speaks again", () => {
+		let game = appendMessage(makeTestGame(), "blue", "red", "hello?");
+		game = appendMessage(game, "red", "blue", "hi.");
+		expect(
+			buildAiContext(game, "red").toCurrentStateUserMessage(),
+		).not.toContain(WAITING);
+		game = appendMessage(game, "blue", "red", "what do you see?");
+		expect(buildAiContext(game, "red").toCurrentStateUserMessage()).toContain(
+			WAITING,
+		);
+	});
+
+	it("ignores blue messages sent to other daemons", () => {
+		const game = appendMessage(makeTestGame(), "blue", "green", "hello?");
+		expect(
+			buildAiContext(game, "red").toCurrentStateUserMessage(),
+		).not.toContain(WAITING);
+	});
+});

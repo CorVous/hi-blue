@@ -32,7 +32,7 @@ module-level fetch.
   left it on, so older reports measured a setup players never saw.
 - **Dispatch mirrors production.** Each runner turns the model's tool calls
   into an `AiTurnAction` the same way the round coordinator does before
-  calling `dispatchAiTurn`: messages are collected, the first non-message tool
+  calling `dispatchAiTurn`: the first message is kept (ADR 0018), the first non-message tool
   call becomes the action, and a turn with neither is dispatched as a pass so
   budget and round state still advance on silent turns.
 - **Budgets are set high on purpose** (`BUDGET_LARGE_ENOUGH_TO_NEVER_LOCK_OUT`)

@@ -134,12 +134,12 @@ All four harnesses were run on the pinned endpoint with thinking on: 30-round dr
 
 | | Before | After |
 |---|---|---|
-| Drift: pick_up calls in 30 rounds | 13 (a pick_up → use loop from round 8 to 30) | 5 |
+| Drift: pick_up calls in 30 rounds | 13 (a pick_up → use loop from round 8 to 30) | 5 (with the "set into" tag only; the pick_up lock came after this run) |
 | Drift: turns with no `message` call | 13% | 10% |
 | Action-variation: messages over 3 sentences | 35 of 149 | 18 of 149 |
 | Objective scenario: chose `use` | 27 of 30 | 26 of 30 |
 | Content packs passing on the first attempt | 7 of 10 (all 3 failures a decoy `verb-of-activation`) | 9 of 10, no validation errors |
-| Directions eval | PASS, 100% coherence | not re-run (no change touches it) |
+| Directions eval | PASS, 100% coherence (first run of the updated runner, which now pins the provider) | not re-run (no prompt change targets directions) |
 
 What changed:
 
@@ -152,6 +152,31 @@ Not changed, and why:
 - The "yes? yes?" tic in the action-variation eval comes from the eval's own Pip fixture, whose voice example is "here, take this one — yes? yes?". It is guideline 4 above at work, not a production problem.
 - The Objective scenario still loses about 1 in 10 turns to a step toward an item already in reach. That is within the ADR 0017 range.
 
+### Messaging blue (2026-09-28)
+
+Players found that DeepSeek Daemons messaged blue on almost every turn, even a Daemon blue had never spoken to. The prompt asked for it: `<rules>` called two `message` calls "one to a peer, one to blue" "the normal shape of a multi-party chat", and the `REMINDER` repeated "including two `message` calls (peer + blue) when both fit". Those lines were written for GLM-4.7, which drifted into silence. DeepSeek follows them literally. In the social scenario, where only a peer has spoken, 24–29 of 30 Daemons messaged blue anyway.
+
+ADR 0018 replaces that with three rules:
+
+- **One `message` per turn.** The round coordinator delivers the first `message` call and rejects any later one ("only one message tool call per turn"), just as it rejects a second action.
+- **A reason to message blue.** `<rules>` says to message blue only with a reason of the Daemon's own (answering blue, learning who blue is, asking for help finding or doing something), and never just to report what it sees or does unless blue asked. The `REMINDER` repeats it in one clause.
+- **Answering comes first.** When blue's last message to the Daemon is unanswered, the per-turn state ends with "blue asked you something and is waiting on your answer: this turn's `message` goes to blue." The line is absent otherwise.
+
+Measured on the pinned endpoint (objective scenario 30 reps per persona, social and exploration 20, one 30-round drift run each):
+
+| | Before | Strict gate (reply only) | Final |
+|---|---|---|---|
+| Social: messaged blue unprompted | 24–29 of 30 | 0 of 30 | 0 of 60 |
+| Blue asked: Daemon answered blue | 30 of 30 | 30 of 30 | 60 of 60 |
+| Drift: blue's messages answered | 16 of 16 | 16 of 16 | 16 of 16 |
+| Objective: chose `use` | 83 of 90 | 73 of 90 | 80 of 90 |
+| Turns with more than one `message` call | 102 of 180 | — | 0 of 210 |
+
+What did not work, so you do not retry it:
+
+- **Hard `MUST NOT message blue` lines in the per-turn state** for the never-messaged and already-answered cases. They stopped unprompted messages completely, but `use` fell from 83 to 73 of 90, mostly from the go-leaning persona stepping instead of using. It is the same effect as the grid-words rule (guideline 7): a speech rule the model reads last pulls its thinking away from acting.
+- **The reason rule without a waiting cue.** With one message to spend, Daemons chose a peer over blue and answered only 4 of blue's 16 drift messages, and 36 of 60 "let me know what you see" requests.
+
 ## Open questions
 
 These came out of the research. Each is larger than a prompt edit and should get its own issue and eval run.
@@ -160,7 +185,7 @@ These came out of the research. Each is larger than a prompt edit and should get
 2. **Keep the tool list stable per session.** Fixed enums covering every id in the pack, with the dispatcher rejecting illegal moves, would keep the cache near 92% on long games instead of dropping to about 10% whenever an enum changes. The enums are guard-rails today, so this needs an ADR and an action-variation run.
 3. **Move Sysadmin directives out of the system prompt**, into a mid-conversation `system` message at the round they arrive or into the per-turn state, so the system prefix never changes mid-game.
 4. **Effort `low` against `high`** over whole games.
-5. **One untested prompt line:** a ban on the "not X, but Y" construction. (The `REMINDER` length line was tested on 2026-09-28 and shipped. See below.)
+5. **One untested prompt line:** a ban on the "not X, but Y" construction. (The `REMINDER` length line was tested on 2026-09-28 and shipped. See "Retune of 2026-09-28" above.)
 
 ## Unverified, or not reached
 

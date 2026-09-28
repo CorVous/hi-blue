@@ -146,6 +146,38 @@ describe("validateToolCall", () => {
 		expect(result.reason).toContain("set into the wall mount");
 	});
 
+	it("rejects using a placed carry object without suggesting pick_up", () => {
+		const game = makeTestGame({
+			entities: [
+				makeEntity(
+					"lamp",
+					"objective_object",
+					{ row: 1, col: 0 },
+					{
+						pairsWithSpaceId: "mount",
+					},
+				),
+				makeEntity(
+					"mount",
+					"objective_space",
+					{ row: 1, col: 0 },
+					{
+						name: "wall mount",
+					},
+				),
+			],
+			pack: { setting: "test setting", aiStarts: ROW_AI_STARTS },
+			rng: FIXED_RNG,
+		});
+		const result = validateToolCall(game, "red", {
+			name: "use",
+			args: { item: "lamp" },
+		});
+		expect(result.valid).toBe(false);
+		expect(result.reason).toContain("set into the wall mount");
+		expect(result.reason).not.toMatch(/pick_up/);
+	});
+
 	it("allows picking up a carry object lying away from its paired space", () => {
 		const game = makeTestGame({
 			entities: [

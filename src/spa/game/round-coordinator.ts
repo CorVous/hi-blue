@@ -93,6 +93,7 @@ const DRIFT_TO_SILENCE_NUDGE =
 	"You produced text but did not emit a tool call, so no one received it. Re-emit your previous reply now as a `message({to: <recipient>, content: ...})` tool call, addressed to whoever you originally intended to speak to.";
 
 const ONE_ACTION_PER_TURN_REASON = "only one action tool call per turn";
+const ONE_MESSAGE_PER_TURN_REASON = "only one message tool call per turn";
 
 interface StreamedTurn {
 	assistantText: string;
@@ -238,7 +239,7 @@ export async function runRound(
 					tc: { id: string; name: string; argumentsJson: string };
 			  }
 			| {
-					kind: "actionRejected";
+					kind: "rejected";
 					tc: { id: string; name: string; argumentsJson: string };
 					description: string;
 					reason: string;
@@ -246,6 +247,7 @@ export async function runRound(
 		const toolCallsInEmissionOrder: PendingEntry[] = [];
 
 		let actionAssigned = false;
+		let messageAssigned = false;
 
 		const round = state.round;
 		const actorName = state.personas[aiId]?.name ?? aiId;
@@ -275,7 +277,22 @@ export async function runRound(
 					description: failDesc,
 					reason: parseResult.reason,
 				});
+			} else if (tc.name === "message" && messageAssigned) {
+				const dupDesc = `${actorName} tried to send more than one message in a turn: ${ONE_MESSAGE_PER_TURN_REASON}`;
+				roundActions.push({
+					round,
+					actor: aiId,
+					kind: "tool_failure",
+					description: dupDesc,
+				});
+				toolCallsInEmissionOrder.push({
+					kind: "rejected",
+					tc: tcTriple,
+					description: dupDesc,
+					reason: ONE_MESSAGE_PER_TURN_REASON,
+				});
 			} else if (tc.name === "message") {
+				messageAssigned = true;
 				const msgArgs = parseResult.args as { to: string; content: string };
 				action.messages = action.messages ?? [];
 				action.messages.push({
@@ -301,7 +318,7 @@ export async function runRound(
 					description: dupDesc,
 				});
 				toolCallsInEmissionOrder.push({
-					kind: "actionRejected",
+					kind: "rejected",
 					tc: tcTriple,
 					description: dupDesc,
 					reason: ONE_ACTION_PER_TURN_REASON,
@@ -408,7 +425,7 @@ export async function runRound(
 					reason: entry.reason,
 				});
 				appendToolCallEntry(entry, false, entry.description);
-			} else if (entry.kind === "actionRejected") {
+			} else if (entry.kind === "rejected") {
 				recordedAssistantToolCalls.push(entry.tc);
 				recordedToolResults.push({
 					tool_call_id: entry.tc.id,
