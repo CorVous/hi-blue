@@ -130,7 +130,7 @@ So the stable part of a request is the system prompt **and the tool list**, and 
 
 ### Retune of 2026-09-28
 
-All four harnesses were run on the pinned endpoint with thinking on: 30-round drift, 90-turn action-variation with profiles (3 scenarios × 3 personas × 10), 10 content packs, and the directions eval. Reports are in `docs/evals/` under that date.
+All four harnesses were run on the pinned endpoint with thinking on: 30-round drift, 90-turn action-variation with profiles (3 scenarios × 3 personas × 10), 10 content packs, and the directions eval.
 
 | | Before | After |
 |---|---|---|
