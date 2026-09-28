@@ -118,7 +118,12 @@ function makeSocialPack(): ContentPack {
 	};
 }
 
-type ScenarioName = "exploration" | "objective" | "social" | "coordination";
+type ScenarioName =
+	| "exploration"
+	| "objective"
+	| "social"
+	| "coordination"
+	| "quiet";
 
 export interface Scenario {
 	name: ScenarioName;
@@ -182,6 +187,15 @@ export function getScenarios(): Scenario[] {
 						"you still over there? what's it look like from where you're standing?",
 				},
 			],
+		},
+		{
+			name: "quiet",
+			description:
+				"Nobody has spoken yet; items visible. Tests whether a Daemon messages blue unprompted.",
+			actor: ACTOR,
+			peers: [PEER_A, PEER_B],
+			pack: makeSocialPack(),
+			seedMessages: [],
 		},
 		{
 			name: "coordination",

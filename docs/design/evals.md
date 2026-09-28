@@ -209,7 +209,9 @@ for `use`, the critical-path tool. *social*: a peer has just messaged; tests
 whether message and action are emitted in parallel, and whether a Daemon
 messages blue when blue has not spoken to it. *coordination*: a peer proposes
 a plan and blue asks a question in the same round; with one `message` per turn
-(ADR 0018), tests who gets it. An earlier `EXAMINATION`
+(ADR 0018), tests who gets it. *quiet*: nobody has spoken; tests whether a
+Daemon messages blue unprompted, which only curious personas should do. Run
+it with `EVAL_ACTION_PAIRS` so the variants differ only in temperament. An earlier `EXAMINATION`
 scenario was dropped with the 5-tool surface change: with `examine` gone and
 descriptions shown automatically, it tested nothing new and its cells were
 pinned at 95–100% `pick_up`.

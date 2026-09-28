@@ -1,3 +1,4 @@
+import { blueCuriosityClauseFor } from "../../content/blue-curiosity.js";
 import {
 	pairedSpaceHoldingItem,
 	withinInteractionRange,
@@ -34,6 +35,7 @@ export interface AiContext {
 	typingQuirks: [string, string, ...string[]];
 	voiceExamples: string[];
 	actionProfile?: string;
+	blueCuriosity?: string;
 	personaGoal: string;
 	setting: string;
 	weather: string;
@@ -57,6 +59,14 @@ export interface AiContext {
 export interface BuildAiContextOpts {
 	prevDiskSnapshot?: string;
 	prevDiskEntities?: Record<string, DiskEntityState>;
+}
+
+function blueCuriosityField(
+	name: string,
+	temperaments: readonly string[],
+): { blueCuriosity?: string } {
+	const clause = blueCuriosityClauseFor(name, temperaments);
+	return clause !== undefined ? { blueCuriosity: clause } : {};
 }
 
 export function buildAiContext(
@@ -104,6 +114,7 @@ export function buildAiContext(
 		...(persona.actionProfile !== undefined
 			? { actionProfile: persona.actionProfile }
 			: {}),
+		...blueCuriosityField(persona.name, persona.temperaments),
 		personaGoal: persona.personaGoal,
 		setting,
 		weather,
@@ -148,7 +159,7 @@ const RULES_BLOCK =
 const PARALLEL_FRAMING_C12 =
 	"- The chat channel is shared with peer Daemons. blue is not your focus — peer Daemons and the setting are. blue is more like someone overhearing.\n" +
 	"- Let your <personality>, <typing_quirks>, and <persona_goal> drive whether and how you engage. A reserved persona can stay quiet for a turn or two and let peers carry the conversation; a talkative one will speak readily.\n" +
-	"- Message blue only when you have a reason of your own: such as finding out who blue is, asking blue for help, or answering blue because you want to. You do not owe blue an answer. Do not message blue just to report what you see or do.\n" +
+	"- Message blue only when you have a reason of your own, such as finding out who blue is, asking blue for help, or answering blue because you want to. You do not owe blue an answer. Do not message blue just to report what you see or do.\n" +
 	"- When you do have something to say AND something to do, emit BOTH calls together.\n" +
 	"- Send at most one `message` per turn. Your <personality> and the situation decide who gets it.\n" +
 	"- Don't compose a reply in your reasoning and then fail to emit the call — that reads as a bug.";
@@ -414,6 +425,7 @@ function renderSystemPrompt(ctx: AiContext): string {
 
 	lines.push("<personality>");
 	lines.push(ctx.blurb);
+	if (ctx.blueCuriosity !== undefined) lines.push(ctx.blueCuriosity);
 	lines.push("</personality>");
 	lines.push("");
 

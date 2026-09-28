@@ -175,10 +175,13 @@ Measured on the pinned endpoint. The objective scenario ran 30 reps per persona;
 
 The "Final" behaviour follows the persona. Pip, whose goal is to stay close to peers, answered blue's exploration request in 12 of 20 runs and spent the rest on a peer. Vex answers blue in clipped lines ("on it. mount's mine."). In coordination each persona takes the peer's deal in its own voice ("Deal. Watching. Flip it."; "Deal, deal — I'm watching my side, eyes wide."). In the social scenario, where blue never spoke, no run messaged blue.
 
+**Curious Daemons reach out.** A persona with the `curious` temperament gets one extra line in `<personality>` (`src/content/blue-curiosity.ts`): it is curious about blue, a little confused by them, and now and then messages blue unprompted. In the `quiet` scenario (nobody has spoken) curious variants messaged blue on 5–8 of 20 turns, non-curious ones on 0 of 20, with questions like "Who are you? I woke up in this station and there's nothing in it but lights."
+
 What did not work, so you do not retry it:
 
 - **Hard `MUST NOT message blue` lines in the per-turn state** for the never-messaged and already-answered cases. They stopped unprompted messages completely, but `use` fell from 83 to 73 of 90, mostly from the go-leaning persona stepping instead of using. It is the same effect as the grid-words rule (guideline 7): a speech rule the model reads last pulls its thinking away from acting.
 - **Forcing an answer.** A per-turn line "blue asked you something and is waiting on your answer: this turn's `message` goes to blue" made every Daemon answer every question, whatever its personality, and overrode peer coordination. That is the opposite of what the game wants.
+- **Reading Vex's `use` rate from one run.** The go-leaning Vex scored between 17 and 24 of 30 on the objective scenario across runs with an unchanged prompt, so a single run only flags a drop of about a third. Rerun before blaming a wording.
 - **A long list of reasons to ignore blue** ("a guarded, busy or distracted Daemon, or one in the middle of a plan with a peer…"). The go-leaning persona's `use` rate fell to 10 of 30. Keep the blue rule short.
 
 ## Open questions

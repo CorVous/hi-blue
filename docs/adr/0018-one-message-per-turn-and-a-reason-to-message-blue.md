@@ -26,6 +26,7 @@ The #239 framing spike was run on GLM-4.7, which drifted into silence as games w
 
 - In the social scenario no Daemon messaged blue (0 of 60). When blue asked something, Daemons answered 39 of 60 and 79 of 90 times depending on the question and persona. When a peer proposed a plan in the same round, the peer got the message 59 of 60 times. `use` stayed at 76 of 90 against 83. Numbers are in the DeepSeek guide, "Messaging blue".
 - blue will sometimes go unanswered, as the game intends.
+- A Daemon nobody has spoken to stays quiet towards blue unless its persona gives it a reason. Curious personas get one written into `<personality>` (`docs/design/content.md`, "Blue curiosity").
 - A Daemon that wants to talk to a peer and to blue in the same turn has to wait a turn for one of them.
 - Eval runners keep only the first `message` call, to match production.
 - If a future model drifts into silence again, the fix is a stronger `message` rule, not a return to two messages per turn.

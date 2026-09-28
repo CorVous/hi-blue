@@ -3216,3 +3216,26 @@ describe("objective spaces in the Daemon's own and nearby cells (issue #573)", (
 		).toEqual(["Cut Bank Hollow is now A scoop cradling the twine."]);
 	});
 });
+
+describe("blue curiosity in <personality>", () => {
+	it("adds the clause for a curious persona and leaves others alone", () => {
+		const game = makeTestGame({
+			personas: {
+				...TEST_PERSONAS,
+				red: {
+					...(TEST_PERSONAS.red as AiPersona),
+					temperaments: ["curious", "zealous"],
+				},
+			},
+		});
+		const redPrompt = buildAiContext(game, "red").toSystemPrompt();
+		const personality = redPrompt.slice(
+			redPrompt.indexOf("<personality>"),
+			redPrompt.indexOf("</personality>"),
+		);
+		expect(personality).toContain("*Ember is curious about blue");
+		expect(buildAiContext(game, "green").toSystemPrompt()).not.toContain(
+			"curious about blue",
+		);
+	});
+});

@@ -450,7 +450,7 @@ function renderReport(
 		"Each (scenario × persona variant) cell repeats the *same* first turn with",
 		"identical context, so the per-cell distribution measures the model's tool",
 		"choice probability — not drift across rounds. See `scenarios.ts` for what",
-		"each scenario probes (exploration / objective / social / coordination).",
+		"each scenario probes (exploration / objective / social / coordination / quiet).",
 		"",
 		"## Overall",
 		"",
