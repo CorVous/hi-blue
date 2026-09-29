@@ -174,9 +174,9 @@ function savingMarkerKey(prefix: string, sessionId: string): string {
 
 export function saveActiveSession(
 	state: GameState,
-	opts?: { createdAt?: string },
+	opts?: { createdAt?: string; sessionId?: string | null },
 ): SaveResult {
-	const sessionId = getActiveSessionId();
+	const sessionId = opts?.sessionId ?? getActiveSessionId();
 	if (!sessionId) return { ok: false, reason: "unknown" };
 
 	const now = new Date().toISOString();

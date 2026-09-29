@@ -75,6 +75,7 @@ import {
 	deactivateActiveSession,
 	getActiveSessionId,
 	type LoadResult,
+	listSessions,
 	loadActiveSession,
 	mintAndActivateNewSession,
 	saveActiveSession,
@@ -182,6 +183,11 @@ interface RoundDraft {
 
 interface RoundOutcome {
 	gameEnded: boolean;
+}
+
+interface RoundOwner {
+	session: GameSession;
+	sessionId: string | null;
 }
 
 let gameEndHandled = false;
@@ -563,7 +569,7 @@ function mountSessionView(ctx: GameViewContext): void {
 	const restoredState = session?.getState();
 	if (restoredState?.isComplete) {
 		gameEndHandled = true;
-		enterEndgame(ctx, restoredState);
+		enterEndgame(ctx, restoredState, hydratedSessionId);
 	}
 }
 
@@ -993,6 +999,10 @@ async function submitRound(ctx: GameViewContext, evt: Event): Promise<void> {
 	const draft = readSendableDraft(ctx, ctx.personaLookups);
 	if (!draft) return;
 
+	const owner: RoundOwner = {
+		session: activeSession,
+		sessionId: hydratedSessionId,
+	};
 	beginRound(ctx, activeSession, draft);
 
 	const aiIds = Object.keys(activeSession.getState().personas);
@@ -1001,12 +1011,12 @@ async function submitRound(ctx: GameViewContext, evt: Event): Promise<void> {
 	const outcome: RoundOutcome = { gameEnded: false };
 
 	try {
-		await playRound(ctx, activeSession, draft, initiativeOrder, {
+		await playRound(ctx, owner, draft, initiativeOrder, {
 			spinners,
 			outcome,
 		});
 	} catch (err) {
-		reportRoundFailure(ctx, err);
+		if (!playerLeftRoundSession(owner)) reportRoundFailure(ctx, err);
 	} finally {
 		spinners.stripAll();
 		ctx.roundInFlight = false;
@@ -1140,9 +1150,13 @@ function startRoundSpinners(
 	};
 }
 
+function playerLeftRoundSession(owner: RoundOwner): boolean {
+	return session !== owner.session || getActiveSessionId() !== owner.sessionId;
+}
+
 async function playRound(
 	ctx: GameViewContext,
-	activeSession: GameSession,
+	owner: RoundOwner,
 	draft: RoundDraft,
 	initiativeOrder: AiId[],
 	{ spinners, outcome }: { spinners: RoundSpinners; outcome: RoundOutcome },
@@ -1150,8 +1164,8 @@ async function playRound(
 	const rawProvider = new BrowserLLMProvider({
 		disableReasoning: !ctx.enableReasoning,
 	});
-	const provider = ctx.dev.recordingProvider(rawProvider, activeSession);
-	const { result, nextState } = await activeSession.submitMessage(
+	const provider = ctx.dev.recordingProvider(rawProvider, owner.session);
+	const { result, nextState } = await owner.session.submitMessage(
 		draft.addressee,
 		draft.message,
 		provider,
@@ -1160,6 +1174,11 @@ async function playRound(
 		(aiId) => spinners.strip(aiId),
 		ctx.dev.lifecycleListener,
 	);
+
+	if (playerLeftRoundSession(owner)) {
+		saveRoundLeftBehind(ctx, owner.sessionId, nextState);
+		return;
+	}
 
 	for (const event of encodeRoundResult(
 		result,
@@ -1177,15 +1196,37 @@ async function playRound(
 		);
 	}
 
-	const saveResult = saveActiveSession(nextState);
+	const saveResult = saveActiveSession(nextState, {
+		sessionId: owner.sessionId,
+	});
 	if (!saveResult.ok) {
 		showPersistenceWarning(ctx.persistenceWarningEl, saveResult.reason);
 	}
 
 	if (outcome.gameEnded) {
 		refreshTopInfo(ctx);
-		enterEndgame(ctx, nextState);
+		enterEndgame(ctx, nextState, owner.sessionId);
 	}
+}
+
+function saveRoundLeftBehind(
+	ctx: GameViewContext,
+	roundSessionId: string | null,
+	nextState: GameState,
+): void {
+	const roundSessionStillExists =
+		roundSessionId !== null && listSessions().includes(roundSessionId);
+	if (roundSessionStillExists) {
+		saveActiveSession(nextState, { sessionId: roundSessionId });
+	}
+	const cachedSessionIsRoundSession = hydratedSessionId === roundSessionId;
+	if (!cachedSessionIsRoundSession) return;
+	releaseSession();
+	const roundSessionIsOnScreen =
+		roundSessionStillExists &&
+		getActiveSessionId() === roundSessionId &&
+		ctx.root.dataset.view === "game";
+	if (roundSessionIsOnScreen) void renderGame(ctx.root, ctx.opts);
 }
 
 function applyRoundEvent(
@@ -1246,12 +1287,15 @@ function reportRoundFailure(ctx: GameViewContext, err: unknown): void {
 	showRoundError(ctx.doc);
 }
 
-function enterEndgame(ctx: GameViewContext, endedState: GameState): void {
+function enterEndgame(
+	ctx: GameViewContext,
+	endedState: GameState,
+	endedSessionId: string | null,
+): void {
 	const { doc } = ctx;
 	ctx.sendBtn.disabled = true;
 	ctx.promptInput.disabled = true;
 
-	const endedSessionId = getActiveSessionId();
 	releaseSession();
 
 	paintEndgameSubtitle(doc, endedState.outcome);

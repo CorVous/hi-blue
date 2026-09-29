@@ -313,6 +313,23 @@ it hides the other routes' screens and shows or hides the global chrome
   game. Before #576 the final round was not saved, so the stored session ended
   one round early, with `isComplete: false` and the winning Objective still
   pending.
+- **The player can leave the round's session while it runs.** A round takes
+  as long as the daemons do, and meanwhile the picker can `[ load ]` another
+  session, `[ + new session ]` can mint one, or `[ rm ]` can delete this one.
+  `submitRound` records the round's owner (the `GameSession` and its id) at
+  submit. After `submitMessage` returns, `playerLeftRoundSession` checks that
+  `session` and the active pointer still name that owner. If not, the view
+  paints nothing and enters no endgame, because the panels and the endgame
+  now belong to another session. `saveRoundLeftBehind` still saves the
+  finished round under the owner's own id (`saveActiveSession`'s `sessionId`
+  option), so the round is not lost, unless the session was removed, in which
+  case the round is dropped. If the cached `session` is still the owner's (the
+  player came back to it, or moved to a fresh session on the start route), it
+  is released so the next entry restores the saved round, and the route is
+  re-entered at once when the owner is on screen again. A failure in a round
+  the player left is not reported on the session they are now looking at.
+  `enterEndgame` takes the ended session's id from its caller for the same
+  reason, instead of reading the active pointer.
 - **Round errors (#231).** Failures other than `CapHitError` (a transient
   upstream 502/503/504, a dropped network connection, a malformed response)
   used to stop the round with no sign in the UI. They now show `#round-error`

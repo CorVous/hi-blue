@@ -958,6 +958,106 @@ describe("renderGame — localStorage persistence", () => {
 	});
 });
 
+describe("renderGame — a round still in flight when the player loads another session", () => {
+	beforeEach(() => {
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
+		document.body.innerHTML = INDEX_BODY_HTML;
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+		vi.resetModules();
+		document.body.innerHTML = "";
+	});
+
+	function makeHeldMessageToolCallFetchMock() {
+		let releaseRound: () => void = () => undefined;
+		const roundReleased = new Promise<void>((resolve) => {
+			releaseRound = resolve;
+		});
+		const replies = makeMessageToolCallFetchMock();
+		const fetchMock = vi.fn(async (...args: unknown[]) => {
+			await roundReleased;
+			return replies(...args);
+		});
+		return { fetchMock, releaseRound };
+	}
+
+	async function startHeldRoundThenLoadSessionB(stub: LocalStorageStub) {
+		const { fetchMock, releaseRound } = makeHeldMessageToolCallFetchMock();
+		vi.stubGlobal("fetch", fetchMock);
+		vi.stubGlobal("localStorage", stub);
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
+
+		vi.resetModules();
+		const { renderGame } = await import("../views/game.js");
+		const storage = await import("../persistence/session-storage.js");
+		const sessionAId = storage.getActiveSessionId();
+		await renderGame(getEl<HTMLElement>("main"));
+		getEl<HTMLElement>("main").dataset.view = "game";
+
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		promptInput.value = "*Sage hello";
+		promptInput.dispatchEvent(new Event("input"));
+		getEl<HTMLFormElement>("#composer").dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+
+		const { buildSessionFromAssets } = await import("../game/bootstrap.js");
+		storage.setActiveSessionId("0xB000");
+		storage.saveActiveSession(
+			buildSessionFromAssets({
+				personas: STATIC_PERSONAS,
+				contentPacksA: STATIC_CONTENT_PACKS,
+				contentPacksB: STATIC_CONTENT_PACKS,
+			}).getState(),
+		);
+		await renderGame(getEl<HTMLElement>("main"));
+		return { storage, sessionAId, releaseRound };
+	}
+
+	it("saves the round under its own session and paints nothing into the loaded one", async () => {
+		const stub = makeLocalStorageStub();
+		await seedSessionInStub(stub, { objectiveTypes: STATIC_OBJECTIVE_TYPES });
+		const { storage, sessionAId, releaseRound } =
+			await startHeldRoundThenLoadSessionB(stub);
+
+		releaseRound();
+		await waitForRoundToSettle();
+
+		for (const aiId of ["red", "green", "cyan"]) {
+			expect(
+				document.querySelector<HTMLElement>(`[data-transcript="${aiId}"]`)
+					?.textContent ?? "",
+			).not.toMatch(/RESPONSE_UNIQUE_TAG|hello/);
+		}
+		expect(storage.getActiveSessionId()).toBe("0xB000");
+		const sessionB = storage.loadSession("0xB000");
+		expect(sessionB.kind === "ok" && sessionB.state.round).toBe(0);
+		const sessionA = storage.loadSession(sessionAId ?? "");
+		expect(sessionA.kind === "ok" && sessionA.state.round).toBe(1);
+		expect(getEl("#round-error").hasAttribute("hidden")).toBe(true);
+	});
+
+	it("drops the round when its session was removed meanwhile", async () => {
+		const stub = makeLocalStorageStub();
+		await seedSessionInStub(stub, { objectiveTypes: STATIC_OBJECTIVE_TYPES });
+		const { storage, sessionAId, releaseRound } =
+			await startHeldRoundThenLoadSessionB(stub);
+		storage.rmSession(sessionAId ?? "");
+
+		releaseRound();
+		await waitForRoundToSettle();
+
+		expect(storage.listSessions()).toEqual(["0xB000"]);
+		const sessionB = storage.loadSession("0xB000");
+		expect(sessionB.kind === "ok" && sessionB.state.round).toBe(0);
+	});
+});
+
 describe("renderGame — chat_lockout event", () => {
 	beforeEach(async () => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
