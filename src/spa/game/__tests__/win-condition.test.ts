@@ -18,8 +18,7 @@ import {
 	checkPlacementFlavor,
 	checkWinCondition,
 	isCarryObjectiveSatisfied,
-	isUseItemObjectiveSatisfied,
-	isUseSpaceObjectiveSatisfied,
+	isObjectiveSatisfied,
 	outcomeOfCompletedGame,
 } from "../win-condition";
 import { TEST_PERSONAS } from "./fixtures/make-game-state";
@@ -264,12 +263,14 @@ describe("checkWinCondition — multiple carry pairs", () => {
 
 describe.each<[string, (state: SatisfactionState) => boolean]>([
 	[
-		"isUseItemObjectiveSatisfied",
-		(state) => isUseItemObjectiveSatisfied(makeUseItemObjective(state)),
+		"isObjectiveSatisfied on a use_item objective",
+		(state) =>
+			isObjectiveSatisfied(makeUseItemObjective(state), { entities: [] }),
 	],
 	[
-		"isUseSpaceObjectiveSatisfied",
-		(state) => isUseSpaceObjectiveSatisfied(makeUseSpaceObjective(state)),
+		"isObjectiveSatisfied on a use_space objective",
+		(state) =>
+			isObjectiveSatisfied(makeUseSpaceObjective(state), { entities: [] }),
 	],
 ])("%s", (_predicate, check) => {
 	it.each(

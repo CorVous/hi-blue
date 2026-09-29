@@ -22,7 +22,7 @@ import type {
 import {
 	checkConvergenceTier,
 	isCarryObjectiveSatisfied,
-	isUseItemObjectiveSatisfied,
+	isObjectiveSatisfied,
 } from "../win-condition";
 import {
 	CORNER_AI_STARTS,
@@ -580,6 +580,15 @@ describe("dispatchAiTurn", () => {
 		expect(result.rejected).toBe(false);
 		expect(result.game.budgets.red?.remaining).toBeCloseTo(4, 10);
 		expect(result.records[0]?.kind).toBe("pass");
+		expect(result.justExhausted).toBe(false);
+	});
+
+	it("reports justExhausted on the turn that spends the last of the budget", () => {
+		const game = makeFlowerKeyGame({ budgetPerAi: 0.01 });
+		const action: AiTurnAction = { aiId: "red", pass: true };
+		const result = dispatchAiTurn(game, action, { costUsd: 0.01 });
+		expect(result.justExhausted).toBe(true);
+		expect(result.game.exhausted.has("red")).toBe(true);
 	});
 
 	it("invalid pick_up produces tool_failure record, world unchanged", () => {
@@ -1719,7 +1728,8 @@ describe("interaction range — availability, validation, and effects agree", ()
 		});
 		const satisfied = updated.objectives.find((o) => o.id === "obj-item");
 		expect(
-			satisfied?.kind === "use_item" && isUseItemObjectiveSatisfied(satisfied),
+			satisfied?.kind === "use_item" &&
+				isObjectiveSatisfied(satisfied, updated.world),
 		).toBe(true);
 	});
 

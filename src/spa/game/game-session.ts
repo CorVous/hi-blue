@@ -74,7 +74,6 @@ export class GameSession {
 			diskSnapshots: newDiskSnapshots,
 			diskEntities: newDiskEntities,
 		} = await runRound(this.state, addressedAi, message, provider, {
-			rng: Math.random,
 			initiative,
 			priorToolRoundtrip: this.priorToolRoundtrip,
 			onAiDelta,

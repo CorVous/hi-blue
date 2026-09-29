@@ -23,6 +23,13 @@ import type {
 	WorldEntity,
 } from "./types";
 
+export function personaName(
+	game: Pick<GameState, "personas">,
+	aiId: AiId,
+): string {
+	return game.personas[aiId]?.name ?? aiId;
+}
+
 export const FAREWELL_LINE = (name: string): string =>
 	`${name}'s daemon is winding down — goodbye, blue.`;
 
@@ -298,23 +305,36 @@ export function appendPrivateSystemNotice(
 	});
 }
 
-export function resolveToolDisables(game: GameState): {
+export function partitionExpired<K extends ActiveComplication["kind"]>(
+	game: GameState,
+	kind: K,
+): {
 	game: GameState;
-	resolved: Array<{ target: AiId; tool: ToolName }>;
+	expired: Array<Extract<ActiveComplication, { kind: K }>>;
 } {
-	const resolved: Array<{ target: AiId; tool: ToolName }> = [];
+	const expired: Array<Extract<ActiveComplication, { kind: K }>> = [];
 	const kept: ActiveComplication[] = [];
-
 	for (const complication of game.activeComplications) {
 		if (
-			complication.kind === "tool_disable" &&
+			complication.kind === kind &&
 			game.round >= complication.resolveAtRound
 		) {
-			resolved.push({ target: complication.target, tool: complication.tool });
+			expired.push(complication as Extract<ActiveComplication, { kind: K }>);
 		} else {
 			kept.push(complication);
 		}
 	}
+	if (expired.length === 0) return { game, expired };
+	return { game: { ...game, activeComplications: kept }, expired };
+}
 
-	return { game: { ...game, activeComplications: kept }, resolved };
+export function resolveToolDisables(game: GameState): {
+	game: GameState;
+	resolved: Array<{ target: AiId; tool: ToolName }>;
+} {
+	const { game: nextGame, expired } = partitionExpired(game, "tool_disable");
+	return {
+		game: nextGame,
+		resolved: expired.map(({ target, tool }) => ({ target, tool })),
+	};
 }

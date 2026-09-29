@@ -1,10 +1,6 @@
 import type { GameSession } from "../game/game-session";
 import type { GameState, Objective } from "../game/types";
-import {
-	isCarryObjectiveSatisfied,
-	isUseItemObjectiveSatisfied,
-	isUseSpaceObjectiveSatisfied,
-} from "../game/win-condition";
+import { isObjectiveSatisfied } from "../game/win-condition";
 
 function computeSpentUsd(state: GameState): string {
 	let totalSpent = 0;
@@ -12,23 +8,6 @@ function computeSpentUsd(state: GameState): string {
 		totalSpent += budget.total - budget.remaining;
 	}
 	return totalSpent.toFixed(2);
-}
-
-function isSatisfied(objective: Objective, state: GameState): boolean {
-	switch (objective.kind) {
-		case "carry":
-			return isCarryObjectiveSatisfied(objective, state.world);
-		case "use_item":
-			return isUseItemObjectiveSatisfied(objective);
-		case "use_space":
-			return isUseSpaceObjectiveSatisfied(objective);
-		case "convergence":
-			return objective.satisfactionState === "satisfied";
-		default: {
-			const _exhaustive: never = objective;
-			return _exhaustive;
-		}
-	}
 }
 
 function buildObjectiveItem(
@@ -40,7 +19,7 @@ function buildObjectiveItem(
 	li.setAttribute("data-objective-id", objective.id);
 	li.setAttribute("data-kind", objective.kind);
 
-	const satisfied = isSatisfied(objective, state);
+	const satisfied = isObjectiveSatisfied(objective, state.world);
 	li.setAttribute("data-satisfied", String(satisfied));
 
 	const stateText = satisfied ? "satisfied" : "pending";
@@ -79,7 +58,9 @@ type StripField = readonly [field: string, value: (state: GameState) => string];
 type StripSegment = string | StripField;
 
 function countSatisfied(state: GameState): number {
-	return state.objectives.filter((obj) => isSatisfied(obj, state)).length;
+	return state.objectives.filter((obj) =>
+		isObjectiveSatisfied(obj, state.world),
+	).length;
 }
 
 const STRIP_LINES: readonly (readonly StripSegment[])[] = [

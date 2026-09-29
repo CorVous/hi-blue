@@ -21,6 +21,7 @@ import {
 	appendMessage,
 	deductBudget,
 	isDaemonExhausted,
+	personaName,
 } from "./engine";
 import { carryObjectById } from "./pack-selectors.js";
 import {
@@ -56,6 +57,7 @@ export interface DispatchResult {
 	records: RoundActionRecord[];
 	actorPrivateToolResult?: { description: string; success: boolean };
 	actorDiskDelta?: string;
+	justExhausted: boolean;
 }
 
 const DROP_CELL_WITHOUT_SPATIAL_STATE: GridPosition = { row: 0, col: 0 };
@@ -353,7 +355,7 @@ function executeResolvedToolCall(
 }
 
 function describeToolCall(game: GameState, aiId: AiId, call: ToolCall): string {
-	const name = game.personas[aiId]?.name ?? aiId;
+	const name = personaName(game, aiId);
 	const pickable = pickableEntities(game.world.entities);
 	const label = targetLabel(game, call.args.item);
 
@@ -391,7 +393,7 @@ function dispatchSpeechBeforeAction(
 ): GameState {
 	let state = game;
 	const round = game.round;
-	const actorName = game.personas[aiId]?.name ?? aiId;
+	const actorName = personaName(game, aiId);
 	const livePersonaIds = Object.keys(game.personaSpatial);
 	const messageDisabled = disabledToolsFor(game.activeComplications, aiId).has(
 		"message",
@@ -454,6 +456,7 @@ export function dispatchAiTurn(
 			reason: `${aiId} has exhausted its budget`,
 			game,
 			records: [],
+			justExhausted: false,
 		};
 	}
 
@@ -617,7 +620,7 @@ export function dispatchAiTurn(
 				round,
 				actor: aiId,
 				kind: "tool_failure",
-				description: `${game.personas[aiId]?.name ?? aiId} tried to ${action.toolCall.name} ${action.toolCall.args.item ?? action.toolCall.args.direction ?? ""} but failed: ${validation.reason}`,
+				description: `${personaName(game, aiId)} tried to ${action.toolCall.name} ${action.toolCall.args.item ?? action.toolCall.args.direction ?? ""} but failed: ${validation.reason}`,
 			});
 			state = appendLogEntry(state, aiId, {
 				kind: "action-failure",
@@ -637,7 +640,7 @@ export function dispatchAiTurn(
 			round,
 			actor: aiId,
 			kind: "pass",
-			description: `${game.personas[aiId]?.name ?? aiId} passed`,
+			description: `${personaName(game, aiId)} passed`,
 		});
 	}
 
@@ -648,6 +651,7 @@ export function dispatchAiTurn(
 		rejected: false,
 		game: state,
 		records,
+		justExhausted: deductResult.justExhausted,
 		...(actorPrivateToolResult !== undefined ? { actorPrivateToolResult } : {}),
 		...(actorDiskDelta !== undefined ? { actorDiskDelta } : {}),
 	};
