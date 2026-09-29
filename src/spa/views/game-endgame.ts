@@ -349,9 +349,13 @@ async function continueInNewRoom(choice: EndgameChoice): Promise<void> {
 	const newRoom = await buildNewRoom(choice);
 	if (!newRoom || playerLeftEndedSession(choice)) return;
 
+	const newRoomWithEndedLogs: GameState = {
+		...newRoom.getState(),
+		conversationLogs: structuredClone(choice.endedState.conversationLogs),
+	};
 	const saveResult = saveActiveSession(
-		appendBroadcast(newRoom.getState(), NEW_ROOM_BROADCAST),
-		{ sessionId: choice.endedSessionId },
+		appendBroadcast(newRoomWithEndedLogs, NEW_ROOM_BROADCAST),
+		{ sessionId: choice.endedSessionId, advanceEpoch: true },
 	);
 	if (!saveResult.ok) {
 		failEndgameChoice(

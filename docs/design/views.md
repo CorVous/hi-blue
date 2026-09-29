@@ -436,7 +436,12 @@ it hides the other routes' screens and shows or hides the global chrome
   then removes the ended session (`rmSession`, never `clearActiveSession`,
   which deletes whatever is active) and moves the pointer. Building first
   means giving up leaves nothing half-done. "Continue" saves under the ended
-  session's own id. "New daemons" removes the ended session only after
+  session's own id. It copies the ended game's conversation logs into the new
+  room before appending the new-room broadcast, and saves with
+  `saveActiveSession`'s `advanceEpoch` option, because CONTEXT.md defines
+  Continue as the same Session with its logs appended and its Epoch
+  incremented. A fresh room's empty logs saved under the old epoch would wipe
+  every Daemon's memory while the topinfo still showed the old epoch. "New daemons" removes the ended session only after
   `archiveSession` succeeds.
 - **A torn final save is discarded, not archived.** `archiveSession` refuses
   a session whose `saving` marker is still there, and nothing on the

@@ -1300,6 +1300,18 @@ describe("epoch in active sessions", () => {
 		);
 		expect(reloadedMeta.epoch).toBe(7);
 	});
+
+	it("advanceEpoch saves the session under the next epoch", () => {
+		const stub = installLocalStorageStub();
+		const id = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+		saveActiveSession(makeFreshGame(), { advanceEpoch: true });
+
+		const meta = JSON.parse(
+			stub._store[`${SESSIONS_PREFIX}${id}/meta.json`] ?? "{}",
+		);
+		expect(meta.epoch).toBe(2);
+	});
 });
 
 async function seedArchivedSession(

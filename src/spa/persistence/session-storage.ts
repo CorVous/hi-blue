@@ -224,6 +224,7 @@ export function saveActiveSession(
 		createdAt?: string;
 		sessionId?: string | null;
 		expectedLastSavedAt?: string;
+		advanceEpoch?: boolean;
 	},
 ): SaveResult {
 	const sessionId = opts?.sessionId ?? getActiveSessionId();
@@ -236,8 +237,9 @@ export function saveActiveSession(
 	if (expected !== undefined && existingMeta?.lastSavedAt !== expected) {
 		return { ok: false, reason: "stale" };
 	}
-	const epoch =
+	const storedEpoch =
 		typeof existingMeta?.epoch === "number" ? existingMeta.epoch : 1;
+	const epoch = opts?.advanceEpoch ? storedEpoch + 1 : storedEpoch;
 	const existingCreatedAt =
 		typeof existingMeta?.createdAt === "string"
 			? existingMeta.createdAt

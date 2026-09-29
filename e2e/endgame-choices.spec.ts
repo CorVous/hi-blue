@@ -1,8 +1,8 @@
 import { expect, test } from "@playwright/test";
-import { expectNoPageErrors, goToGame } from "./helpers";
+import { expectNoPageErrors, goToGame, renderedPlayerLine } from "./helpers";
 
 async function reachEndgame(page: Parameters<typeof goToGame>[0]) {
-	const { names } = await goToGame(page, {
+	const { names, ids } = await goToGame(page, {
 		url: "/?winImmediately=1",
 		sse: ["hello"],
 	});
@@ -11,6 +11,7 @@ async function reachEndgame(page: Parameters<typeof goToGame>[0]) {
 	await expect(page.locator("#send")).toBeEnabled();
 	await page.click("#send");
 	await expect(page.locator("#endgame")).toBeVisible({ timeout: 15_000 });
+	return { ids };
 }
 
 test("endgame shows choice buttons; Continue hidden without openrouter_key", async ({
@@ -110,10 +111,24 @@ test("Continue leaves the endgame screen and re-enables the prompt", async ({
 		localStorage.setItem("openrouter_key", "sk-or-test-key");
 	});
 
-	await reachEndgame(page);
+	const { ids } = await reachEndgame(page);
+	await expect(page.locator("#topinfo-left")).toContainText("EPOCH 01");
+	const transcript = page.locator(`[data-transcript="${ids[0]}"]`);
+	await expect(transcript).toContainText(renderedPlayerLine("hello"));
+	const endedTranscript = (await transcript.textContent()) ?? "";
 	await page.locator("#endgame-continue-btn").click();
 
 	await expectPlayableGameAfterEndgame(page);
+
+	await expect(page.locator("#topinfo-left")).toContainText("EPOCH 02");
+	await expect(transcript).toHaveText(endedTranscript);
+
+	const storedDaemonLog = await page.evaluate((aiId) => {
+		const sid = localStorage.getItem("hi-blue:active-session");
+		return localStorage.getItem(`hi-blue:sessions/${sid}/${aiId}.txt`) ?? "";
+	}, ids[0]);
+	expect(storedDaemonLog).toContain("hello");
+	expect(storedDaemonLog).toContain("The sysadmin has created a new room.");
 
 	await expectNoPageErrors(page, pageErrors);
 });
