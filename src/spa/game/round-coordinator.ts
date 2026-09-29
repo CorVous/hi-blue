@@ -1,3 +1,4 @@
+import { isDevHost } from "../dev-host";
 import { availableTools } from "./available-tools";
 import {
 	applyComplicationResult,
@@ -54,15 +55,6 @@ import {
 	checkConvergenceTier,
 	checkWinCondition,
 } from "./win-condition";
-
-function isDevHost(): boolean {
-	return (
-		typeof __WORKER_BASE_URL__ !== "undefined" &&
-		__WORKER_BASE_URL__ === "http://localhost:8787" &&
-		typeof location !== "undefined" &&
-		location.origin === __WORKER_BASE_URL__
-	);
-}
 
 type DiskEntityStates = Record<
 	string,

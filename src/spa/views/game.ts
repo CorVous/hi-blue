@@ -9,6 +9,7 @@ import {
 	type TopInfoInputs,
 	topInfoStatus,
 } from "../bbs-chrome.js";
+import { isDevHost } from "../dev-host.js";
 import {
 	recordDaemonError,
 	recordDaemonRound,
@@ -204,14 +205,6 @@ export function renderGame(
 	}
 	mountSessionView(ctx);
 	return Promise.resolve();
-}
-
-function isDevHost(): boolean {
-	return (
-		__WORKER_BASE_URL__ === "http://localhost:8787" &&
-		typeof location !== "undefined" &&
-		location.origin === __WORKER_BASE_URL__
-	);
 }
 
 export function applyTestAffordances(

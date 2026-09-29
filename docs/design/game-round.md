@@ -35,7 +35,7 @@ Other sources, used here by reference rather than repeated:
 
 **Convergence** (#305, #336) is evaluated at the end of the round. Daemons standing on the space get the first-person actor flavor (`audience: "actor"`). Other Daemons whose Vista contains the space get the third-person witness flavor. No Daemon gets both. Tier 2 satisfies the objective at once, and satisfied objectives are skipped, so convergence never fires twice. Built-in fallback lines cover packs without convergence flavors.
 
-**`isDevHost`** mirrors the dev-host gate in `src/spa/views/game.ts`. Its `typeof` guards keep it safe in tests, where the build-time constant is not defined.
+**`isDevHost`** comes from `src/spa/dev-host.ts`, the one dev-host gate that the game view, the BYOK modal and the round coordinator share. Its `typeof` guards keep it safe in tests, where the build-time constant is not defined.
 
 ## Dispatcher (`dispatcher.ts`)
 

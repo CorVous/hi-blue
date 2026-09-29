@@ -1,3 +1,4 @@
+import { isDevHost } from "./dev-host.js";
 import {
 	OPENROUTER_KEY_STORAGE_KEY,
 	readStoredByokKey,
@@ -141,11 +142,7 @@ function renderModalState(): void {
 
 	const buildInfo = getEl("byok-build-info");
 	if (buildInfo) {
-		const isDev =
-			__WORKER_BASE_URL__ === "http://localhost:8787" &&
-			typeof location !== "undefined" &&
-			location.origin === __WORKER_BASE_URL__;
-		if (isDev) {
+		if (isDevHost()) {
 			buildInfo.textContent = `Commit ${__COMMIT_SHA__}`;
 			buildInfo.hidden = false;
 		}

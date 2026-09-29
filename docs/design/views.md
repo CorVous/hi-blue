@@ -127,7 +127,7 @@ it hides the other routes' screens and shows or hides the global chrome
 
 ### Test and dev affordances
 
-- `isDevHost()` is true only when `pnpm wrangler dev` serves both the SPA and
+- `isDevHost()` (`src/spa/dev-host.ts`) is true only when `pnpm wrangler dev` serves both the SPA and
   the worker on `http://localhost:8787`. Every other host fails it, including
   production on GitHub Pages and a separate static server pointed at a local
   worker, so dev affordances do nothing there. The check has two parts as
