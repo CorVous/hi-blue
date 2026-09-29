@@ -56,7 +56,7 @@ Each session is a set of localStorage keys under one prefix:
   drawn uniformly from `0x0000` to `0xFFFF`. Minting re-rolls while the id
   already has keys under `sessions/` or `archive/`, so a new game can never
   land on top of an existing or archived one.
-  `mintSession` returns a new id without activating it.
+  `mintSessionId` returns a new id without activating it.
   `mintAndActivateNewSession` also sets the pointer.
 - **Epoch and `createdAt`.** Both survive re-saves (read back from the
   existing `meta.json`). An explicit `createdAt` passed to

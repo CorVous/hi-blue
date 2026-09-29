@@ -10,7 +10,7 @@ import {
 	listSessions,
 	loadActiveSession,
 	loadArchivedSession,
-	mintSession,
+	mintSessionId,
 	rmArchivedSession,
 	rmSession,
 	seedFromArchive,
@@ -202,7 +202,7 @@ export function renderSessions(root: HTMLElement, opts?: RenderOpts): void {
 	if (newBtn) {
 		const newBtnWithoutListeners = dropListenersByCloning(newBtn);
 		newBtnWithoutListeners.addEventListener("click", () => {
-			const newId = mintSession();
+			const newId = mintSessionId();
 			setActiveSessionId(newId);
 			setPickerOpen(false);
 			renderApp(root);

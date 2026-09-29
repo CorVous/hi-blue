@@ -240,7 +240,7 @@ export function saveActiveSession(
 export function loadActiveSession(): LoadResult {
 	const sessionId = getActiveSessionId();
 	if (!sessionId) return { kind: "none" };
-	return _loadSessionById(sessionId);
+	return loadSession(sessionId);
 }
 
 export function clearActiveSession(): void {
@@ -269,7 +269,7 @@ export function deleteLegacySaveKey(): void {
 	ignoringStorageErrors(() => localStorage.removeItem(LEGACY_KEY));
 }
 
-function _loadSessionById(
+export function loadSession(
 	sessionId: string,
 	storagePrefix = SESSIONS_PREFIX,
 ): LoadResult {
@@ -330,16 +330,8 @@ export function listSessions(): string[] {
 	return listSessionIdsUnder(SESSIONS_PREFIX);
 }
 
-export function loadSession(sessionId: string): LoadResult {
-	return _loadSessionById(sessionId);
-}
-
-export function mintSession(): string {
-	return mintSessionId();
-}
-
 export function dupSession(srcId: string): string {
-	const loadResult = _loadSessionById(srcId);
+	const loadResult = loadSession(srcId);
 	if (loadResult.kind === "broken" || loadResult.kind === "version-mismatch") {
 		throw new Error(
 			`dupSession: cannot dup ${loadResult.kind} session "${srcId}"`,
@@ -374,7 +366,7 @@ export function listArchivedSessions(): string[] {
 }
 
 export function loadArchivedSession(sessionId: string): LoadResult {
-	return _loadSessionById(sessionId, ARCHIVE_PREFIX);
+	return loadSession(sessionId, ARCHIVE_PREFIX);
 }
 
 function listDaemonFiles(

@@ -28,7 +28,6 @@ import {
 	loadArchivedSession,
 	loadSession,
 	mintAndActivateNewSession,
-	mintSession,
 	mintSessionId,
 	rmArchivedSession,
 	rmSession,
@@ -596,7 +595,7 @@ describe("loadSession", () => {
 	});
 });
 
-describe("mintSession", () => {
+describe("mintSessionId activation", () => {
 	beforeEach(() => {
 		installLocalStorageStub();
 	});
@@ -606,13 +605,13 @@ describe("mintSession", () => {
 
 	it("returns /^0x[0-9A-F]{4}$/ format", () => {
 		installLocalStorageStub();
-		const id = mintSession();
+		const id = mintSessionId();
 		expect(id).toMatch(/^0x[0-9A-F]{4}$/);
 	});
 
 	it("does NOT set the active pointer", () => {
 		installLocalStorageStub();
-		mintSession();
+		mintSessionId();
 		expect(getActiveSessionId()).toBeNull();
 	});
 });
