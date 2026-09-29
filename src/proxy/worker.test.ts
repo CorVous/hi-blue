@@ -1,7 +1,8 @@
 import { reset, SELF } from "cloudflare:test";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 afterEach(async () => {
+	vi.restoreAllMocks();
 	await reset();
 });
 
@@ -98,6 +99,23 @@ describe("POST /diagnostics endpoint (issue #19)", () => {
 		});
 
 		expect(response.status).toBe(400);
+	});
+
+	it("logs at most 2000 characters of an oversized summary", async () => {
+		const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+		const response = await SELF.fetch("https://example.com/diagnostics", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ downloaded: true, summary: "x".repeat(50_000) }),
+		});
+
+		expect(response.status).toBe(200);
+		const diagnosticsLine = logSpy.mock.calls
+			.map(([line]) => String(line))
+			.find((line) => line.startsWith("[diagnostics]"));
+		expect(diagnosticsLine).toBe(
+			`[diagnostics] downloaded=true summary=${"x".repeat(2_000)}`,
+		);
 	});
 
 	it("returns 405 for non-POST methods on /diagnostics", async () => {

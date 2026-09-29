@@ -16,6 +16,7 @@ interface Env {
 }
 
 const CHAT_COMPLETIONS_PATH = "/v1/chat/completions";
+const MAX_DIAGNOSTICS_SUMMARY_LENGTH = 2_000;
 
 export default {
 	async fetch(
@@ -76,8 +77,9 @@ async function handleDiagnostics(request: Request): Promise<Response> {
 		});
 	}
 
+	const summary = payload.summary.slice(0, MAX_DIAGNOSTICS_SUMMARY_LENGTH);
 	console.log(
-		`[diagnostics] downloaded=${payload.downloaded} summary=${payload.summary}`,
+		`[diagnostics] downloaded=${payload.downloaded} summary=${summary}`,
 	);
 
 	return new Response(null, { status: 200 });

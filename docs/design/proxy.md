@@ -16,7 +16,9 @@ rules and tradeoffs the code cannot state by itself.
   `dist/index.html` for client-side routes (#48). Non-POST verbs on the chat
   path fall through the same way.
 - `/diagnostics` only validates and logs the payload. The v1 taxonomy is
-  deliberately minimal; persisting to KV is left for a later iteration.
+  deliberately minimal; persisting to KV is left for a later iteration. The
+  logged summary is cut to 2,000 characters, since the endpoint is
+  unauthenticated and anyone can post to it.
 
 ### Asset cache headers (`withAssetCacheHeaders`)
 
