@@ -168,6 +168,10 @@ function engineKey(prefix: string, sessionId: string): string {
 	return `${prefix}${sessionId}/engine.dat`;
 }
 
+function savingMarkerKey(prefix: string, sessionId: string): string {
+	return `${prefix}${sessionId}/saving`;
+}
+
 export function saveActiveSession(
 	state: GameState,
 	opts?: { createdAt?: string },
@@ -200,7 +204,8 @@ export function saveActiveSession(
 	}
 
 	try {
-		localStorage.removeItem(engineKey(SESSIONS_PREFIX, sessionId));
+		const markerKey = savingMarkerKey(SESSIONS_PREFIX, sessionId);
+		localStorage.setItem(markerKey, now);
 		localStorage.setItem(metaKey(SESSIONS_PREFIX, sessionId), files.meta);
 
 		for (const [aiId, daemonJson] of Object.entries(files.daemons)) {
@@ -212,6 +217,7 @@ export function saveActiveSession(
 
 		// biome-ignore lint/style/noNonNullAssertion: serializeSession always returns a non-null engine string
 		localStorage.setItem(engineKey(SESSIONS_PREFIX, sessionId), files.engine!);
+		localStorage.removeItem(markerKey);
 
 		return { ok: true };
 	} catch (err) {
@@ -272,6 +278,10 @@ function _loadSessionById(
 		const engineBlob = localStorage.getItem(
 			engineKey(storagePrefix, sessionId),
 		);
+
+		const saveWasInterrupted =
+			localStorage.getItem(savingMarkerKey(storagePrefix, sessionId)) !== null;
+		if (saveWasInterrupted) return { kind: "broken", sessionId };
 
 		const mintedButNeverSaved = metaJson === null && engineBlob === null;
 		if (mintedButNeverSaved) return { kind: "none" };
@@ -431,7 +441,9 @@ export async function archiveSession(sessionId: string): Promise<void> {
 	const srcPrefix = `${SESSIONS_PREFIX}${sessionId}/`;
 	const metaJson = localStorage.getItem(`${srcPrefix}meta.json`);
 	const engineVal = localStorage.getItem(`${srcPrefix}engine.dat`);
-	if (metaJson === null || engineVal === null) {
+	const saveWasInterrupted =
+		localStorage.getItem(savingMarkerKey(SESSIONS_PREFIX, sessionId)) !== null;
+	if (metaJson === null || engineVal === null || saveWasInterrupted) {
 		throw new Error(
 			`archiveSession: session "${sessionId}" is incomplete or missing`,
 		);

@@ -14,22 +14,30 @@ Each session is a set of localStorage keys under one prefix:
 | `hi-blue:sessions/<id>/meta.json` | `createdAt`, `lastSavedAt`, `epoch`, `round`, `personaOrder` |
 | `hi-blue:sessions/<id>/<aiId>.txt` (one per Daemon) | persona plus that Daemon's conversation log (messages, witnessed events and broadcasts inline) |
 | `hi-blue:sessions/<id>/engine.dat` | sealed engine state, XOR-obfuscated |
+| `hi-blue:sessions/<id>/saving` | present only while `saveActiveSession` is writing, or after it failed partway |
 | `hi-blue:active-session` | the active session id |
 | `hi-blue:archive/<id>/…` | the same three files for an archived session |
 | `hi-blue-game-state` | legacy single-key save (discarded at boot, see below) |
 
-- **`engine.dat` is the commit signal.** Every writer (`saveActiveSession`,
-  `dupSession`, `archiveSession`, `seedFromArchive`) writes it in this order:
-  meta, then daemons, then `engine.dat`. A writer that can overwrite an
-  existing save first takes the old `engine.dat` away: `saveActiveSession`
-  removes it before writing meta, and `archiveSession` clears every key under
-  `archive/<id>/` so a reused id never merges two games. `dupSession` and
-  `seedFromArchive` always write to a freshly minted, unused id. There is no
-  rollback. If a write fails partway, `engine.dat` is missing, and the load
-  path reports the session as `broken`. Otherwise a failed re-save would leave
-  new meta and daemons beside the previous `engine.dat`, and that mix would
-  load as `ok`. The cost is that a re-save failing on its very first write
-  also loses the previous save: a known `broken` beats a silently torn `ok`.
+- **Writers commit in a fixed order.** Every writer (`saveActiveSession`,
+  `dupSession`, `archiveSession`, `seedFromArchive`) writes meta, then
+  daemons, then `engine.dat`. There is no rollback, so a failure partway must
+  never load as `ok`:
+  - **Re-saves use a saving marker.** `saveActiveSession` first writes
+    `sessions/<id>/saving`, then the three files, and removes the marker last.
+    A present marker means a save was interrupted, and the loader reports the
+    session as `broken` (without it, new meta and daemons beside the previous
+    `engine.dat` would load as `ok`). If the marker write itself fails, which
+    is the common quota case, nothing else has been touched: the error is
+    reported and the previous save still loads as `ok`. `archiveSession`
+    refuses a source that carries the marker. Only `.txt` keys count as
+    daemon files, so the marker is never listed as one or copied by
+    `dupSession` or `archiveSession`.
+  - **Fresh writes rely on `engine.dat`.** `dupSession` and `seedFromArchive`
+    always write to a freshly minted, unused id, and `archiveSession` clears
+    every key under `archive/<id>/` first so a reused id never merges two
+    games. In all three, a failure partway leaves `engine.dat` missing, and
+    the loader reports `broken`.
 - **Minted but never saved.** If neither `meta.json` nor `engine.dat` exists,
   the id was minted but never written. The loader reports `none`, so the
   dispatcher sends the player to start. The picker shows it as `broken`

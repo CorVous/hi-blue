@@ -175,14 +175,17 @@ describe("saveActiveSession", () => {
 		vi.restoreAllMocks();
 	});
 
-	it("writes five keys in strict order: meta → 3 daemons → engine", () => {
+	it("writes the saving marker, then meta → 3 daemons → engine, then removes the marker", () => {
 		const stub = installLocalStorageStub();
-		mintAndActivateNewSession();
+		const id = mintAndActivateNewSession();
 		const game = makeFreshGame();
 		saveActiveSession(game);
 
 		const calls = stub.setItem.mock.calls.map((c) => c[0] as string);
-		const dataCalls = calls.filter((k) => k !== ACTIVE_KEY);
+		const markerKey = `${SESSIONS_PREFIX}${id}/saving`;
+		expect(calls.filter((k) => k !== ACTIVE_KEY)[0]).toBe(markerKey);
+		expect(stub.removeItem).toHaveBeenLastCalledWith(markerKey);
+		const dataCalls = calls.filter((k) => k !== ACTIVE_KEY && k !== markerKey);
 
 		expect(dataCalls[0]).toMatch(/meta\.json$/);
 
@@ -197,14 +200,16 @@ describe("saveActiveSession", () => {
 		}
 	});
 
-	it("engine.dat is written LAST (commit signal)", () => {
+	it("engine.dat is the last data file written", () => {
 		const stub = installLocalStorageStub();
 		mintAndActivateNewSession();
 		const game = makeFreshGame();
 		saveActiveSession(game);
 
 		const calls = stub.setItem.mock.calls.map((c) => c[0] as string);
-		const dataCalls = calls.filter((k) => k !== ACTIVE_KEY);
+		const dataCalls = calls.filter(
+			(k) => k !== ACTIVE_KEY && !k.endsWith("/saving"),
+		);
 		expect(dataCalls[dataCalls.length - 1]).toMatch(/engine\.dat$/);
 	});
 
@@ -251,6 +256,55 @@ describe("saveActiveSession", () => {
 		const result = saveActiveSession(makeFreshGame());
 		expect(result).toEqual({ ok: false, reason: "quota" });
 		expect(loadActiveSession().kind).toBe("broken");
+	});
+
+	it("a re-save that fails writing the saving marker leaves the old save ok", () => {
+		const stub = installLocalStorageStub();
+		const id = mintAndActivateNewSession();
+		const game = makeFreshGame();
+		expect(saveActiveSession(game).ok).toBe(true);
+		const before = { ...stub._store };
+
+		stub.setItem.mockImplementation((key: string, value: string) => {
+			if (key.endsWith("/saving")) {
+				throw new DOMException("quota", "QuotaExceededError");
+			}
+			stub._store[key] = value;
+		});
+		const result = saveActiveSession(game);
+		expect(result).toEqual({ ok: false, reason: "quota" });
+		expect(stub._store).toEqual(before);
+		const loaded = loadActiveSession();
+		expect(loaded.kind).toBe("ok");
+		expect(getSessionInfo(id).kind).toBe("ok");
+	});
+
+	it("removes the saving marker after a successful save", () => {
+		const stub = installLocalStorageStub();
+		const id = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+		expect(stub._store[`${SESSIONS_PREFIX}${id}/saving`]).toBeUndefined();
+	});
+
+	it("the saving marker is not listed as a daemon file nor copied by dup or archive", async () => {
+		const stub = installLocalStorageStub();
+		const id = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+		const dupId = dupSession(id);
+		await archiveSession(id);
+		stub._store[`${SESSIONS_PREFIX}${id}/saving`] = "x";
+
+		const info = getSessionInfo(id);
+		expect(info.kind).toBe("broken");
+		expect(info.daemonFiles.map((f) => f.name)).toEqual([
+			"cyan.txt",
+			"green.txt",
+			"red.txt",
+		]);
+		expect(listSessions().sort()).toEqual([id, dupId].sort());
+		expect(stub._store[`${SESSIONS_PREFIX}${dupId}/saving`]).toBeUndefined();
+		expect(stub._store[`${ARCHIVE_PREFIX}${id}/saving`]).toBeUndefined();
+		await expect(archiveSession(id)).rejects.toThrow(/incomplete/);
 	});
 
 	it("preserves createdAt from the existing meta.json on re-save", () => {
