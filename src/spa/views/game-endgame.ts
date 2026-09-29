@@ -34,6 +34,27 @@ interface ChoiceInFlight {
 
 let choiceInFlight: ChoiceInFlight | null = null;
 
+interface EndgameControlsRecord {
+	downloaded: boolean;
+	diagnosticsSubmitted: boolean;
+}
+
+const endgameControlsBySession = new Map<
+	string | null,
+	EndgameControlsRecord
+>();
+
+function endgameControlsFor(
+	endedSessionId: string | null,
+): EndgameControlsRecord {
+	let record = endgameControlsBySession.get(endedSessionId);
+	if (!record) {
+		record = { downloaded: false, diagnosticsSubmitted: false };
+		endgameControlsBySession.set(endedSessionId, record);
+	}
+	return record;
+}
+
 export function showEndgame(
 	root: HTMLElement,
 	endedState: GameState,
@@ -45,14 +66,18 @@ export function showEndgame(
 	paintFinalRoundLines(doc, endedState);
 	showEndgameScreen(doc);
 	resetEndgameControls(doc);
+	const controls = endgameControlsFor(endedSessionId);
 	wireEndgameChoices({
 		root,
 		endedSession: captureActiveSession(endedSessionId),
 		endedState,
-		releaseEndedGame,
+		releaseEndedGame: () => {
+			endgameControlsBySession.delete(endedSessionId);
+			releaseEndedGame();
+		},
 	});
-	wireSaveDownload(doc, endedState);
-	wireDiagnosticsSubmit(doc);
+	wireSaveDownload(doc, endedState, controls);
+	wireDiagnosticsSubmit(doc, controls);
 }
 
 const ENDGAME_CHOICE_SELECTORS = [
@@ -369,17 +394,29 @@ async function continueInNewRoom(choice: EndgameChoice): Promise<void> {
 	renderApp(choice.root);
 }
 
-function wireSaveDownload(doc: Document, endedState: GameState): void {
+const DOWNLOADED_STATUS = "Saved.";
+const DIAGNOSTICS_SUBMITTED_STATUS = "Diagnostics submitted.";
+
+function wireSaveDownload(
+	doc: Document,
+	endedState: GameState,
+	controls: EndgameControlsRecord,
+): void {
 	const downloadBtn = doc.querySelector<HTMLButtonElement>("#download-ais-btn");
 	const downloadStatusEl = doc.querySelector<HTMLElement>("#download-status");
 	if (!downloadBtn) return;
+	const markDownloaded = (): void => {
+		controls.downloaded = true;
+		downloadBtn.disabled = true;
+		if (downloadStatusEl) downloadStatusEl.textContent = DOWNLOADED_STATUS;
+	};
 	downloadBtn.dataset.savePayload = JSON.stringify(
 		serializeGameSave(endedState),
 	);
+	if (controls.downloaded) markDownloaded();
 	downloadBtn.addEventListener("click", () => {
 		downloadSavePayload(doc, downloadBtn.dataset.savePayload ?? "{}");
-		downloadBtn.disabled = true;
-		if (downloadStatusEl) downloadStatusEl.textContent = "Saved.";
+		markDownloaded();
 	});
 }
 
@@ -395,7 +432,10 @@ function downloadSavePayload(doc: Document, payload: string): void {
 	URL.revokeObjectURL(url);
 }
 
-function wireDiagnosticsSubmit(doc: Document): void {
+function wireDiagnosticsSubmit(
+	doc: Document,
+	controls: EndgameControlsRecord,
+): void {
 	const submitBtn = doc.querySelector<HTMLButtonElement>(
 		"#submit-diagnostics-btn",
 	);
@@ -404,19 +444,25 @@ function wireDiagnosticsSubmit(doc: Document): void {
 	);
 	const statusEl = doc.querySelector<HTMLElement>("#diagnostics-status");
 	if (!submitBtn || !summaryInput || !statusEl) return;
+	const lockSubmit = (): void => {
+		submitBtn.disabled = true;
+		summaryInput.disabled = true;
+	};
+	if (controls.diagnosticsSubmitted) {
+		lockSubmit();
+		statusEl.textContent = DIAGNOSTICS_SUBMITTED_STATUS;
+	}
 	submitBtn.addEventListener("click", () => {
 		const summary = summaryInput.value.trim();
 		if (!summary) {
 			statusEl.textContent = "Please enter a one-word summary first.";
 			return;
 		}
-		const downloaded =
-			doc.querySelector<HTMLButtonElement>("#download-ais-btn")?.disabled ??
-			false;
-		submitBtn.disabled = true;
-		summaryInput.disabled = true;
+		const { downloaded } = controls;
+		controls.diagnosticsSubmitted = true;
+		lockSubmit();
 		const markSubmitted = (): void => {
-			statusEl.textContent = "Diagnostics submitted.";
+			statusEl.textContent = DIAGNOSTICS_SUBMITTED_STATUS;
 		};
 		fetch(`${__WORKER_BASE_URL__}/diagnostics`, {
 			method: "POST",

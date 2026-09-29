@@ -71,6 +71,48 @@ test("a triple-clicked diagnostics submit sends one request", async ({
 	await expectNoPageErrors(page, pageErrors);
 });
 
+test("re-entering the same ended game keeps download and diagnostics used", async ({
+	page,
+}) => {
+	const pageErrors: Error[] = [];
+	page.on("pageerror", (err) => pageErrors.push(err));
+
+	await reachEndgame(page);
+	const posts: string[] = [];
+	await page.route("**/diagnostics", async (route, request) => {
+		posts.push(request.postData() ?? "");
+		await route.fulfill({ status: 204, body: "" });
+	});
+
+	const download = page.waitForEvent("download");
+	await page.locator("#download-ais-btn").click();
+	await download;
+	await expect(page.locator("#download-ais-btn")).toBeDisabled();
+
+	await togglePickerOpenAndClosed(page);
+	await expect(page.locator("#download-ais-btn")).toBeDisabled();
+	await expect(page.locator("#download-status")).toHaveText("Saved.");
+
+	await page.locator("#diagnostics-summary").fill("great");
+	await page.locator("#submit-diagnostics-btn").click();
+	await expect(page.locator("#diagnostics-status")).toHaveText(
+		"Diagnostics submitted.",
+	);
+	expect(posts).toHaveLength(1);
+	expect(JSON.parse(posts[0] ?? "{}")).toMatchObject({ downloaded: true });
+
+	await togglePickerOpenAndClosed(page);
+	await expect(page.locator("#submit-diagnostics-btn")).toBeDisabled();
+	await expect(page.locator("#diagnostics-summary")).toBeDisabled();
+	await expect(page.locator("#diagnostics-status")).toHaveText(
+		"Diagnostics submitted.",
+	);
+	await expect(page.locator("#download-ais-btn")).toBeDisabled();
+	expect(posts).toHaveLength(1);
+
+	await expectNoPageErrors(page, pageErrors);
+});
+
 test("Continue hides again once the stored OpenRouter key is cleared", async ({
 	page,
 }) => {

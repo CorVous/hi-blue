@@ -430,7 +430,18 @@ it hides the other routes' screens and shows or hides the global chrome
   may have had its buttons replaced by clones since.
 - **Diagnostics submit once.** The submit button and the summary input are
   disabled before the `fetch`, so a double or triple click sends one POST.
-  Re-entering the endgame enables them again.
+- **Download and diagnostics stay used across re-entry.**
+  `resetEndgameControls` re-enables every endgame button on each entry, so
+  toggling the picker used to offer diagnostics again for a game already
+  reported, and re-enabled download, which also made the next diagnostics
+  POST say `downloaded: false` (it read the button's disabled state).
+  `game-endgame.ts` keeps a module-level record per ended session id
+  (`endgameControlsBySession`: `downloaded`, `diagnosticsSubmitted`).
+  `showEndgame` re-applies it after the reset (buttons disabled, "Saved." and
+  "Diagnostics submitted." repainted), and the diagnostics POST reads
+  `downloaded` from it. The record is dropped when a choice releases the
+  ended game, so a later game that ends under the same id (after Continue,
+  or a re-minted id) starts with both controls fresh.
 - **Continue follows the stored key both ways.** On every entry
   `continueBtn.hidden` is set from `readStoredByokKey()`, so clearing the key
   in the BYOK dialog hides Continue at the next entry. It used to be only
