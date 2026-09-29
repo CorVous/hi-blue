@@ -1,6 +1,9 @@
 export { getAiHandles, renderedPlayerLine } from "./handles";
 export { expectNoPageErrors } from "./page-errors";
-export { pickerOkSessionSeedScript } from "./picker-seeds";
+export {
+	pickerOkSessionFiles,
+	pickerOkSessionSeedScript,
+} from "./picker-seeds";
 export { waitForStartScreenReady } from "./start-screen-ready";
 export {
 	activePackOf,

@@ -2655,7 +2655,7 @@ describe("renderBootstrapLoadingFlow — re-entry and a moved active pointer", (
 		const { storage, pendingBootstrap, flowPromise } = await startLoadingFlow();
 		const flowSessionId = storage.getActiveSessionId();
 
-		const newerSessionId = storage.mintSession();
+		const newerSessionId = storage.mintSessionId();
 		storage.setActiveSessionId(newerSessionId);
 		releaseContentPacks();
 		await flowPromise;
