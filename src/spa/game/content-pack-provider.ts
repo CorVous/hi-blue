@@ -150,32 +150,28 @@ function retryUnitKindLabel(unit: ValidationError["retryUnit"]): string {
 	}
 }
 
-export function buildCorrectiveFeedback(errors: ValidationError[]): string {
-	const groups = new Map<string, { label: string; messages: string[] }>();
-	const order: string[] = [];
+interface RawDualPhase {
+	packA: RawBoundPack;
+	packB: RawBoundPack;
+}
 
+export function buildCorrectiveFeedback(errors: ValidationError[]): string {
+	const groups = new Map<string, { label: string; messages: Set<string> }>();
 	for (const err of errors) {
 		const key = JSON.stringify(err.retryUnit);
-		let group = groups.get(key);
-		if (!group) {
-			group = { label: retryUnitLabel(err.retryUnit), messages: [] };
-			groups.set(key, group);
-			order.push(key);
-		}
-		if (!group.messages.includes(err.message)) {
-			group.messages.push(err.message);
-		}
+		const group = groups.get(key) ?? {
+			label: retryUnitLabel(err.retryUnit),
+			messages: new Set<string>(),
+		};
+		group.messages.add(err.message);
+		groups.set(key, group);
 	}
-
-	const sections: string[] = [];
-	for (const key of order) {
-		const group = groups.get(key);
-		if (!group) continue;
-		const bullets = group.messages.map((m) => `  - ${m}`).join("\n");
-		sections.push(`For ${group.label}:\n${bullets}`);
-	}
-
-	return sections.join("\n");
+	return [...groups.values()]
+		.map(({ label, messages }) => {
+			const bullets = [...messages].map((m) => `  - ${m}`).join("\n");
+			return `For ${label}:\n${bullets}`;
+		})
+		.join("\n");
 }
 
 export class BrowserContentPackProvider implements ContentPackProvider {
@@ -258,15 +254,7 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 					schedule,
 				);
 				if (validationResult.ok) {
-					const phases = (rawJson as Record<string, unknown>).phases as Array<
-						Record<string, unknown>
-					>;
-					const phase0 = phases[0];
-					if (!phase0) {
-						throw new ContentPackError(
-							"dual content-pack: validated response has no phases",
-						);
-					}
+					const [phase0] = (rawJson as { phases: [RawDualPhase] }).phases;
 					recordContentPackAttempt({
 						op: "dual",
 						attempt,
@@ -276,8 +264,8 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 					return {
 						phases: [
 							{
-								rawPackA: phase0.packA as RawBoundPack,
-								rawPackB: phase0.packB as RawBoundPack,
+								rawPackA: phase0.packA,
+								rawPackB: phase0.packB,
 							},
 						],
 					};
