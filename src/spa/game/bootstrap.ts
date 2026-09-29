@@ -73,10 +73,8 @@ export function generateNewGameAssetsSplit(
 
 export function generateContentPacksOnlySplit(
 	personas: Record<AiId, AiPersona>,
-	opts?: BootstrapOpts,
 ): SplitNewGameAssets {
-	const contentPackRng = opts?.contentPackRng ?? opts?.rng ?? Math.random;
-	const packLLM = opts?.packProvider ?? new BrowserContentPackProvider();
+	const packLLM = new BrowserContentPackProvider();
 	const aiIds = Object.keys(personas);
 
 	const personasPromise = Promise.resolve(personas);
@@ -84,7 +82,7 @@ export function generateContentPacksOnlySplit(
 
 	const contentPacksPromise = (async () => {
 		const { packA, packB, objectiveTypes } = await generateDualContentPacks(
-			contentPackRng,
+			Math.random,
 			SETTING_POOL,
 			SINGLE_GAME_CONFIG,
 			packLLM,

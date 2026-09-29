@@ -81,15 +81,15 @@ export function getCachedPersonas(): Record<AiId, AiPersona> | undefined {
 	return currentBootstrap?.personas;
 }
 
-export function restartContentPacks(opts?: BootstrapOpts): PendingBootstrap {
+export function restartContentPacks(): PendingBootstrap {
 	const cached = getCachedPersonas();
 	if (!cached) {
-		return startBootstrap(opts);
+		return startBootstrap();
 	}
 
 	recordPendingCall("content-pack");
 
-	const split = generateContentPacksOnlySplit(cached, opts);
+	const split = generateContentPacksOnlySplit(cached);
 	const entry: PendingBootstrap = {
 		personasPromise: split.personasPromise,
 		contentPacksPromise: split.contentPacksPromise,
