@@ -1485,6 +1485,13 @@ main {
 	font-size: 11px;
 }
 
+.session-continue-status {
+	flex-basis: 100%;
+	color: var(--amber-dim);
+	font-size: 11px;
+	overflow-wrap: anywhere;
+}
+
 .session-tree {
 	margin: 0;
 	white-space: pre;

@@ -581,3 +581,21 @@ archived sessions, with one row per session.
   listener. It mints a session, makes it active and routes to start.
 - `dupSession` throws only on programmer error, so the dup handler swallows
   the error.
+- **`[ continue with new room ]` survives re-render.** It waits for a
+  content-pack generation, and meanwhile Escape or the sessions icon
+  re-renders the picker with fresh rows. The button used to come back
+  enabled, so a second click paid for a second generation, and when either
+  finished it moved the active pointer and re-rendered whatever the player
+  was doing. A failure was swallowed and only re-enabled the button.
+  `sessions.ts` now keeps a module-level record per archive id
+  (`archiveContinues`: in flight or not, and the status text), and every
+  render re-applies it to that archive's row: the button stays disabled and
+  `.session-continue-status` shows "spinning up a new room…". The row is
+  looked up by `data-session-id` each time, because the row that started
+  the generation may be gone. The click captures the active session
+  (`captureActiveSession`); when the room arrives and the pointer has moved
+  or the picker is closed, the room is still seeded (it shows in the list),
+  but the pointer stays and nothing is re-rendered except the open picker
+  itself, and the row says "new room ready as <id>". A failure writes
+  "could not spin up a new room: <reason>" on the row and enables the
+  button.
