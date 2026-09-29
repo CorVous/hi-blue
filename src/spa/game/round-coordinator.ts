@@ -195,18 +195,30 @@ export async function runRound(
 
 		const tools = availableTools(state, aiId, state.activeComplications);
 
-		const { assistantText, toolCalls, costUsd } =
-			await streamTurnWithOffTheRecordRetry(
-				(turnMessages) =>
-					provider.streamRound(
-						turnMessages,
-						tools,
-						onAiDelta ? (text) => onAiDelta(aiId, text) : undefined,
-						aiId,
-						onLifecycle,
-					),
-				messages,
-			);
+		const {
+			assistantText,
+			toolCalls: providerToolCalls,
+			costUsd,
+		} = await streamTurnWithOffTheRecordRetry(
+			(turnMessages) =>
+				provider.streamRound(
+					turnMessages,
+					tools,
+					onAiDelta ? (text) => onAiDelta(aiId, text) : undefined,
+					aiId,
+					onLifecycle,
+				),
+			messages,
+		);
+		const toolCalls = withUniqueToolCallIds(
+			providerToolCalls,
+			replayedToolCallIds(
+				state.conversationLogs[aiId] ?? [],
+				aiId,
+				priorRoundtrip,
+			),
+			`${aiId}-r${state.round}`,
+		);
 
 		const action: AiTurnAction = { aiId };
 
@@ -475,6 +487,41 @@ export async function runRound(
 		diskSnapshots: newDiskSnapshots,
 		diskEntities: newDiskEntities,
 	};
+}
+
+function replayedToolCallIds(
+	log: ConversationEntry[],
+	aiId: AiId,
+	priorRoundtrip: ToolRoundtripMessage | undefined,
+): Set<string> {
+	const ids = new Set<string>();
+	for (const entry of log) {
+		if (entry.kind === "tool-call") ids.add(entry.toolCallId);
+		if (entry.kind === "message" && entry.from === aiId && entry.toolCallId) {
+			ids.add(entry.toolCallId);
+		}
+	}
+	for (const tc of priorRoundtrip?.assistantToolCalls ?? []) ids.add(tc.id);
+	return ids;
+}
+
+function withUniqueToolCallIds<T extends { id: string }>(
+	toolCalls: T[],
+	takenIds: Set<string>,
+	fallbackPrefix: string,
+): T[] {
+	const taken = new Set(takenIds);
+	return toolCalls.map((tc, index) => {
+		let id = tc.id;
+		for (let attempt = 0; id === "" || taken.has(id); attempt++) {
+			id =
+				attempt === 0
+					? `call-${fallbackPrefix}-${index}`
+					: `call-${fallbackPrefix}-${index}-${attempt}`;
+		}
+		taken.add(id);
+		return id === tc.id ? tc : { ...tc, id };
+	});
 }
 
 function issueSysadminDirective(

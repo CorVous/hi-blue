@@ -2926,3 +2926,75 @@ describe("diskDelta persistence via diskEntities", () => {
 		expect(goEntry?.diskDelta).toContain("Came into view: Mysterious Box");
 	});
 });
+
+describe("tool call ids", () => {
+	function replayedIds(messages: OpenAiMessage[]) {
+		const calls = messages.flatMap((m) =>
+			m.role === "assistant" && m.tool_calls
+				? m.tool_calls.map((tc) => tc.id)
+				: [],
+		);
+		const results = messages.flatMap((m) =>
+			m.role === "tool" ? [m.tool_call_id] : [],
+		);
+		return { calls, results };
+	}
+
+	it("gives missing and reused ids unique replacements so the replayed history has no duplicates", async () => {
+		const quiet = { assistantText: "", toolCalls: [] };
+		const round1 = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "",
+						name: "message",
+						argumentsJson: '{"to":"blue","content":"hi"}',
+					},
+					{
+						id: "",
+						name: "message",
+						argumentsJson: '{"to":"blue","content":"again"}',
+					},
+					{ id: "call_0", name: "pick_up", argumentsJson: '{"item":"flower"}' },
+					{ id: "call_0", name: "go", argumentsJson: '{"direction":"south"}' },
+				],
+			},
+			quiet,
+			quiet,
+		]);
+		const r1 = await runRound(makeGame(), "red", "hi", round1);
+
+		const round2 = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "call_0",
+						name: "message",
+						argumentsJson: '{"to":"nobody","content":"hello?"}',
+					},
+					{ id: "", name: "go", argumentsJson: "{not json" },
+				],
+			},
+			quiet,
+			quiet,
+		]);
+		const r2 = await runRound(r1.nextState, "red", "hi", round2, {
+			priorToolRoundtrip: r1.toolRoundtrip,
+			priorDiskSnapshots: r1.diskSnapshots,
+			priorDiskEntities: r1.diskEntities,
+		});
+
+		const messages = buildOpenAiMessages(
+			buildAiContext(r2.nextState, "red"),
+			r2.toolRoundtrip.red,
+			r2.nextState.round,
+		);
+		const { calls, results } = replayedIds(messages);
+		expect(calls).toHaveLength(6);
+		expect(calls.every((id) => id !== "")).toBe(true);
+		expect(new Set(calls).size).toBe(calls.length);
+		expect([...results].sort()).toEqual([...calls].sort());
+	});
+});
