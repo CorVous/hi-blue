@@ -1087,9 +1087,6 @@ function applyRoundEvent(
 		case "budget":
 			updateBudget(ctx.doc, event.aiId, event.remaining);
 			break;
-		case "lockout":
-			appendTranscriptLine(ctx.doc, event.aiId, `[${event.content}]\n`);
-			break;
 		case "chat_lockout":
 			setChatLockout(ctx, event.aiId, true);
 			break;

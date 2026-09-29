@@ -10,7 +10,6 @@ export type SseEvent =
 	  }
 	| { type: "ai_end" }
 	| { type: "budget"; aiId: AiId; remaining: number }
-	| { type: "lockout"; aiId: AiId; content: string }
 	| { type: "chat_lockout"; aiId: AiId; message: string }
 	| { type: "chat_lockout_resolved"; aiId: AiId }
 	| { type: "action_log"; entry: RoundResult["actions"][number] }
@@ -24,12 +23,7 @@ export function encodeRoundResult(
 	const events: SseEvent[] = [];
 	const playedRound = result.round - 1;
 
-	const lockoutContent = (aiId: AiId): string =>
-		`${personas[aiId]?.name ?? aiId} is unresponsive…`;
-
 	for (const aiId of Object.keys(personas)) {
-		const isExhausted = phaseAfter.exhausted.has(aiId);
-
 		events.push({ type: "ai_start", aiId });
 
 		const log = phaseAfter.conversationLogs[aiId] ?? [];
@@ -52,14 +46,6 @@ export function encodeRoundResult(
 		const budget = phaseAfter.budgets[aiId];
 		if (budget) {
 			events.push({ type: "budget", aiId, remaining: budget.remaining });
-		}
-
-		if (isExhausted) {
-			events.push({
-				type: "lockout",
-				aiId,
-				content: lockoutContent(aiId),
-			});
 		}
 	}
 

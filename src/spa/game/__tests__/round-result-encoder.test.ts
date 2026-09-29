@@ -158,53 +158,18 @@ describe("encodeRoundResult — budget events", () => {
 	});
 });
 
-describe("encodeRoundResult — lockout events (budget-exhaustion)", () => {
-	it("emits a lockout event when AI is budget-exhausted (exhausted set)", () => {
+describe("encodeRoundResult — budget exhaustion", () => {
+	it("gives an exhausted Daemon no event beyond its logged messages and budget", () => {
 		let game = makeTestGame({ budgetPerAi: 1 });
 		game = deductBudget(game, "red", 1).game;
-		const phase = game;
-		expect(phase.exhausted.has("red")).toBe(true);
+		expect(game.exhausted.has("red")).toBe(true);
 
-		const result = makePassResult();
+		const events = encodeRoundResult(makePassResult(), game, TEST_PERSONAS);
 
-		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
-
-		const lockout = events.find(
-			(e): e is Extract<SseEvent, { type: "lockout" }> =>
-				e.type === "lockout" && e.aiId === "red",
-		);
-		expect(lockout).toBeDefined();
-		expect(lockout?.content).toBeTruthy();
-	});
-
-	it("does NOT emit a lockout event when AI is not budget-locked-out", () => {
-		const phase = makeTestGame();
-		const result = makePassResult();
-
-		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
-
-		const redLockout = events.find(
-			(e): e is Extract<SseEvent, { type: "lockout" }> =>
-				e.type === "lockout" && e.aiId === "red",
-		);
-		expect(redLockout).toBeUndefined();
-	});
-
-	it("emits lockout event for AI that just exhausted budget (has completion but exhausted set)", () => {
-		let game = makeTestGame({ budgetPerAi: 1 });
-		game = deductBudget(game, "red", 1).game;
-		const phase = game;
-		expect(phase.exhausted.has("red")).toBe(true);
-
-		const result = makePassResult();
-
-		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
-
-		const lockoutEvent = events.find(
-			(e): e is Extract<SseEvent, { type: "lockout" }> =>
-				e.type === "lockout" && e.aiId === "red",
-		);
-		expect(lockoutEvent).toBeDefined();
+		const redEventTypes = events
+			.filter((e) => "aiId" in e && e.aiId === "red")
+			.map((e) => e.type);
+		expect(redEventTypes).toEqual(["ai_start", "budget"]);
 	});
 });
 

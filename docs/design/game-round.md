@@ -138,7 +138,7 @@ The module is pure and takes an injected rng. The countdown is the number of rou
 - `result.round` is the round *after* `advanceRound`, so entries written during the played round have `round === result.round - 1`.
 - Only blue's thread is emitted (the DM-thread filter). Daemon-to-daemon messages stay out of the panels.
 - Broadcasts and private system notices are not encoded. They live only in the Daemons' logs as LLM context, and the view has nothing to paint for them. A `system_broadcast` event used to be read from the first Daemon's log, but no view consumed it, it was filtered by the played round although complication broadcasts are stamped with the next one, and it would have shown one Daemon's private notices to everyone, so it was deleted.
-- The `lockout` event means budget exhaustion only; chat lockouts have their own events.
+- There is no event for budget exhaustion. A `lockout` event used to be emitted for every exhausted Daemon on every round, and the view painted it as `[<name> is unresponsive…]`. The coordinator already logs "<name> is unresponsive…" to the player on each round an exhausted Daemon skips, and that line reaches the panel as a `message` event and survives a reload. The extra line did not, so the live panel showed one more line per round than the same panel after a reload, including one on the round the Daemon spent its last budget. Chat lockouts have their own events (`chat_lockout`, `chat_lockout_resolved`).
 - `GameState.exhausted` was called `lockedOut` until #576. It was renamed so it is not confused with the Chat Lockout Complication; `engine.dat` still stores it under `lockedOut` (see `persistence.md`).
 
 ## Persisted fields and type invariants (`types.ts`)
