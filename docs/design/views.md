@@ -200,6 +200,26 @@ it hides the other routes' screens and shows or hides the global chrome
   `refreshComposerState` decides whether Send is enabled. A failed save's
   warning is shown after that entry, because each entry first hides
   `#persistence-warning`.
+- **One flow per bootstrap and session.** `renderBootstrapLoadingFlow`
+  records a `LoadingFlow` (the session id active when it started, the pending
+  bootstrap, its timers, and what blocks the screen: the cap-hit panel, the
+  recovery banner, or nothing) in the module-level `loadingFlow`. The route
+  is re-entered during loading whenever the player toggles the picker. A
+  re-entry for the same pending bootstrap and session only reveals the route
+  chrome again (`revealRunningLoadingFlow`), restoring the cap-hit panel or
+  the recovery banner the flow was showing. Starting a second flow instead
+  added a second set of spinner and wipe timers and a second 300 s timeout.
+  Regenerate keeps the flow and swaps in the new pending bootstrap.
+- **A flow the player left behind does nothing.** The bootstrap promise
+  outlives the screen that started it: after a timeout the player can
+  abandon and land on the start screen with a fresh session and a fresh
+  bootstrap, and the old promise can still succeed later. Every step of the
+  flow (painting the personas, the handover, the failure paths) first checks
+  `loadingFlowAbandoned`: if the active pointer no longer names the flow's
+  session, it stops its timers and returns. Otherwise it saved the old game
+  into the new session, cleared the newer pending bootstrap and pulled the
+  player off the start screen. Regenerate keeps the session id, so it still
+  hands over.
 - **Recovery.** A timeout shows "stuck" copy and any other failure shows
   "broken" copy. Regenerate calls `restartContentPacks()`, which keeps the
   cached personas. If the recovery DOM is missing, the flow clears the

@@ -173,6 +173,13 @@ interface LoadingTimers {
 	wipeRaf: ReturnType<typeof requestAnimationFrame> | undefined;
 }
 
+interface LoadingFlow {
+	sessionId: string | null;
+	pending: PendingBootstrap;
+	timers: LoadingTimers;
+	blockedBy: "cap-hit" | "recovery" | null;
+}
+
 interface RoundSpinners {
 	strip(aiId: AiId): void;
 	stripAll(): void;
@@ -198,6 +205,7 @@ let session: GameSession | null = null;
 let hydratedSessionId: string | null = null;
 let hydratedEpoch: number = 1;
 let viewCtx: GameViewContext | null = null;
+let loadingFlow: LoadingFlow | null = null;
 
 export function renderGame(
 	root: HTMLElement,
@@ -414,6 +422,11 @@ function enterWithoutCachedSession(ctx: GameViewContext): Promise<void> | null {
 	if (pendingBootstrap) {
 		const activeSessionIsEmpty = loadActiveSession().kind === "none";
 		if (activeSessionIsEmpty) {
+			const runningFlow = runningLoadingFlowFor(pendingBootstrap);
+			if (runningFlow) {
+				revealRunningLoadingFlow(ctx, runningFlow);
+				return Promise.resolve();
+			}
 			return renderBootstrapLoadingFlow(ctx, pendingBootstrap);
 		}
 		clearPendingBootstrap();
@@ -1643,6 +1656,35 @@ function withBootstrapTimeout<T>(work: Promise<T>): Promise<T> {
 	});
 }
 
+function runningLoadingFlowFor(pending: PendingBootstrap): LoadingFlow | null {
+	const running =
+		loadingFlow !== null &&
+		loadingFlow.pending === pending &&
+		loadingFlow.sessionId === getActiveSessionId();
+	return running ? loadingFlow : null;
+}
+
+function revealRunningLoadingFlow(
+	ctx: GameViewContext,
+	flow: LoadingFlow,
+): void {
+	const { doc } = ctx;
+	revealGameRouteChrome(doc);
+	paintBannerOnce(doc);
+	if (flow.blockedBy === null) return;
+	setGameSurfaceHidden(doc, true);
+	if (flow.blockedBy === "cap-hit") ctx.capHitEl?.removeAttribute("hidden");
+	else doc.querySelector("#bootstrap-recovery")?.removeAttribute("hidden");
+}
+
+function loadingFlowAbandoned(flow: LoadingFlow): boolean {
+	return getActiveSessionId() !== flow.sessionId;
+}
+
+function forgetLoadingFlow(flow: LoadingFlow): void {
+	if (loadingFlow === flow) loadingFlow = null;
+}
+
 function renderBootstrapLoadingFlow(
 	ctx: GameViewContext,
 	pending: PendingBootstrap,
@@ -1659,12 +1701,15 @@ function renderBootstrapLoadingFlow(
 	renderLoadingTopInfo(doc, "loading-daemons");
 	ctx.dev.showPendingBootstrap(ctx.root, pending);
 
-	const timers: LoadingTimers = {
-		spinnerInterval: undefined,
-		wipeRaf: undefined,
+	const flow: LoadingFlow = {
+		sessionId: getActiveSessionId(),
+		pending,
+		timers: { spinnerInterval: undefined, wipeRaf: undefined },
+		blockedBy: null,
 	};
-	return runBootstrapChain(ctx, pending, timers).catch((err: unknown) =>
-		handleBootstrapFailure(ctx, pending, timers, err),
+	loadingFlow = flow;
+	return runBootstrapChain(ctx, flow).catch((err: unknown) =>
+		handleBootstrapFailure(ctx, flow, err),
 	);
 }
 
@@ -1695,12 +1740,12 @@ function showComposerAsLoading(input: HTMLInputElement): void {
 
 function runBootstrapChain(
 	ctx: GameViewContext,
-	pending: PendingBootstrap,
-	timers: LoadingTimers,
+	flow: LoadingFlow,
 ): Promise<void> {
+	const { pending } = flow;
 	const bootstrapPromise = pending.personasPromise
 		.then((personas) => {
-			enterGeneratingRoom(ctx, pending, timers, personas);
+			enterGeneratingRoom(ctx, flow, personas);
 			return pending.contentPacksPromise.then(
 				({ packsA, packsB, objectiveTypes }) => ({
 					personas,
@@ -1710,24 +1755,24 @@ function runBootstrapChain(
 				}),
 			);
 		})
-		.then((assets) => handOverBootstrappedSession(ctx, timers, assets));
+		.then((assets) => handOverBootstrappedSession(ctx, flow, assets));
 
 	return withBootstrapTimeout(bootstrapPromise);
 }
 
 function enterGeneratingRoom(
 	ctx: GameViewContext,
-	pending: PendingBootstrap,
-	timers: LoadingTimers,
+	flow: LoadingFlow,
 	personas: Record<AiId, AiPersona>,
 ): void {
+	if (loadingFlowAbandoned(flow)) return;
 	const { doc } = ctx;
 	paintLoadingPersonaPanels(doc, personas);
 	setStageLoadState(doc, "generating-room");
 	renderLoadingTopInfo(doc, "generating-room");
-	ctx.dev.showPendingBootstrap(ctx.root, pending);
-	startLoadingSpinners(doc, timers);
-	startBrightnessWipe(doc, timers);
+	ctx.dev.showPendingBootstrap(ctx.root, flow.pending);
+	startLoadingSpinners(doc, flow.timers);
+	startBrightnessWipe(doc, flow.timers);
 }
 
 function paintLoadingPersonaPanels(
@@ -1799,11 +1844,16 @@ function removeAllPanelSpinners(doc: Document): void {
 
 function handOverBootstrappedSession(
 	ctx: GameViewContext,
-	timers: LoadingTimers,
+	flow: LoadingFlow,
 	assets: NewGameAssets,
 ): Promise<void> | undefined {
 	const { doc } = ctx;
-	cleanupLoadingTimers(timers);
+	cleanupLoadingTimers(flow.timers);
+	if (loadingFlowAbandoned(flow)) {
+		forgetLoadingFlow(flow);
+		return;
+	}
+	forgetLoadingFlow(flow);
 	const gameSessionRng = getSpikeRng("gameSession");
 	const built = applyTestAffordances(
 		buildSessionFromAssets(
@@ -1831,7 +1881,7 @@ function handOverBootstrappedSession(
 	ctx.promptInput.placeholder = "";
 
 	session = built;
-	hydratedSessionId = getActiveSessionId();
+	hydratedSessionId = flow.sessionId;
 	const rendered = renderGame(ctx.root, ctx.opts);
 	if (!saveResult.ok) {
 		showPersistenceWarning(ctx.persistenceWarningEl, saveResult.reason);
@@ -1855,25 +1905,29 @@ function dismissStaleBootstrapRecovery(doc: Document): void {
 
 function handleBootstrapFailure(
 	ctx: GameViewContext,
-	pending: PendingBootstrap,
-	timers: LoadingTimers,
+	flow: LoadingFlow,
 	err: unknown,
 ): void {
-	cleanupLoadingTimers(timers);
-	ctx.dev.showPendingBootstrap(ctx.root, pending);
+	cleanupLoadingTimers(flow.timers);
+	if (loadingFlowAbandoned(flow)) {
+		forgetLoadingFlow(flow);
+		return;
+	}
+	ctx.dev.showPendingBootstrap(ctx.root, flow.pending);
 
 	if (err instanceof CapHitError && ctx.capHitEl) {
+		flow.blockedBy = "cap-hit";
 		ctx.capHitEl.removeAttribute("hidden");
 		setGameSurfaceHidden(ctx.doc, true);
 		return;
 	}
 
-	showBootstrapRecovery(ctx, timers, err instanceof BootstrapTimeoutError);
+	showBootstrapRecovery(ctx, flow, err instanceof BootstrapTimeoutError);
 }
 
 function showBootstrapRecovery(
 	ctx: GameViewContext,
-	timers: LoadingTimers,
+	flow: LoadingFlow,
 	timedOut: boolean,
 ): void {
 	const { doc, root } = ctx;
@@ -1901,15 +1955,17 @@ function showBootstrapRecovery(
 			"the world we tried to build was malformed. try regenerating with the same daemons, or abandon and reconnect.";
 	}
 
+	flow.blockedBy = "recovery";
 	recoveryEl.removeAttribute("hidden");
 	setGameSurfaceHidden(doc, true);
 	setStageLoadState(doc, "unstable");
 
-	wireRegenerateButton(ctx, timers, recoveryEl);
+	wireRegenerateButton(ctx, flow, recoveryEl);
 	wireAbandonLink(root);
 }
 
 function abandonBootstrap(root: HTMLElement): void {
+	loadingFlow = null;
 	clearActiveSession();
 	clearPendingBootstrap();
 	renderApp(root, { reason: "broken" });
@@ -1917,7 +1973,7 @@ function abandonBootstrap(root: HTMLElement): void {
 
 function wireRegenerateButton(
 	ctx: GameViewContext,
-	timers: LoadingTimers,
+	flow: LoadingFlow,
 	recoveryEl: HTMLElement,
 ): void {
 	const staleRegenBtn = ctx.doc.querySelector<HTMLButtonElement>(
@@ -1928,17 +1984,18 @@ function wireRegenerateButton(
 	const regenBtn = dropListenersByCloning(staleRegenBtn);
 	regenBtn.addEventListener("click", (e) => {
 		e.preventDefault();
-		void runRegenerate(ctx, timers, recoveryEl, regenBtn);
+		void runRegenerate(ctx, flow, recoveryEl, regenBtn);
 	});
 }
 
 async function runRegenerate(
 	ctx: GameViewContext,
-	timers: LoadingTimers,
+	flow: LoadingFlow,
 	recoveryEl: HTMLElement,
 	regenBtn: HTMLButtonElement,
 ): Promise<void> {
 	const { doc } = ctx;
+	flow.blockedBy = null;
 	recoveryEl.setAttribute("hidden", "");
 	doc
 		.querySelector<HTMLElement>("#persistence-warning")
@@ -1948,28 +2005,35 @@ async function runRegenerate(
 
 	regenBtn.disabled = true;
 
-	const pendingWithCachedPersonas = restartContentPacks();
+	flow.pending = restartContentPacks();
 
 	try {
-		await runBootstrapChain(ctx, pendingWithCachedPersonas, timers);
+		await runBootstrapChain(ctx, flow);
 	} catch (regenErr: unknown) {
-		cleanupLoadingTimers(timers);
-		showRegenerateFailure(ctx, recoveryEl, regenBtn, regenErr);
+		cleanupLoadingTimers(flow.timers);
+		if (loadingFlowAbandoned(flow)) {
+			forgetLoadingFlow(flow);
+			return;
+		}
+		showRegenerateFailure(ctx, flow, recoveryEl, regenBtn, regenErr);
 	}
 }
 
 function showRegenerateFailure(
 	ctx: GameViewContext,
+	flow: LoadingFlow,
 	recoveryEl: HTMLElement,
 	regenBtn: HTMLButtonElement,
 	regenErr: unknown,
 ): void {
 	if (regenErr instanceof CapHitError && ctx.capHitEl) {
+		flow.blockedBy = "cap-hit";
 		ctx.capHitEl.removeAttribute("hidden");
 		recoveryEl.setAttribute("hidden", "");
 		setGameSurfaceHidden(ctx.doc, true);
 		return;
 	}
+	flow.blockedBy = "recovery";
 	recoveryEl.removeAttribute("hidden");
 	setGameSurfaceHidden(ctx.doc, true);
 	setStageLoadState(ctx.doc, "unstable");

@@ -2572,6 +2572,102 @@ describe("renderBootstrapLoadingFlow — timeout", () => {
 	});
 });
 
+describe("renderBootstrapLoadingFlow — re-entry and a moved active pointer", () => {
+	type ContentPacks = {
+		packsA: unknown;
+		packsB: unknown;
+		objectiveTypes: unknown;
+	};
+
+	let resolveContentPacks: (value: ContentPacks) => void = () => undefined;
+
+	beforeEach(() => {
+		vi.restoreAllMocks();
+		vi.resetModules();
+		vi.useRealTimers();
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
+		document.body.innerHTML = INDEX_BODY_HTML;
+		const heldContentPacks = new Promise<ContentPacks>((resolve) => {
+			resolveContentPacks = resolve;
+		});
+		vi.doMock("../game/bootstrap.js", async (importOriginal) => {
+			const actual =
+				await importOriginal<typeof import("../game/bootstrap.js")>();
+			return {
+				...actual,
+				generateNewGameAssetsSplit: () => ({
+					personasPromise: Promise.resolve(STATIC_PERSONAS),
+					contentPacksPromise: heldContentPacks,
+				}),
+			};
+		});
+	});
+
+	afterEach(() => {
+		vi.doUnmock("../game/bootstrap.js");
+		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+		vi.resetModules();
+		document.body.innerHTML = "";
+	});
+
+	function releaseContentPacks(): void {
+		resolveContentPacks({
+			packsA: [STATIC_CONTENT_PACKS[0]],
+			packsB: [STATIC_CONTENT_PACKS[0]],
+			objectiveTypes: STATIC_OBJECTIVE_TYPES,
+		});
+	}
+
+	async function startLoadingFlow() {
+		const storage = await import("../persistence/session-storage.js");
+		storage.mintAndActivateNewSession();
+		const pendingBootstrap = await import("../game/pending-bootstrap.js");
+		pendingBootstrap.startBootstrap();
+		const game = await import("../views/game.js");
+		const flowPromise = game.renderGame(getEl<HTMLElement>("main"));
+		return { storage, pendingBootstrap, game, flowPromise };
+	}
+
+	it("re-entering the route during loading reveals the screen without a second loading flow", async () => {
+		installLocalStorageStub();
+		const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+		const { storage, game, flowPromise } = await startLoadingFlow();
+
+		getEl("#panels").setAttribute("hidden", "");
+		await game.renderGame(getEl<HTMLElement>("main"));
+
+		expect(getEl("#panels").hasAttribute("hidden")).toBe(false);
+		const loadingTimeouts = setTimeoutSpy.mock.calls.filter(
+			([, delay]) => delay === game.BOOTSTRAP_LOADING_TIMEOUT_MS,
+		);
+		expect(loadingTimeouts).toHaveLength(1);
+
+		releaseContentPacks();
+		await flowPromise;
+		expect(storage.listSessions()).toHaveLength(1);
+		expect(getEl<HTMLInputElement>("#prompt").disabled).toBe(false);
+	});
+
+	it("a flow whose session is no longer active hands nothing over when its packs arrive", async () => {
+		installLocalStorageStub();
+		const { storage, pendingBootstrap, flowPromise } = await startLoadingFlow();
+		const flowSessionId = storage.getActiveSessionId();
+
+		const newerSessionId = storage.mintSession();
+		storage.setActiveSessionId(newerSessionId);
+		releaseContentPacks();
+		await flowPromise;
+
+		expect(storage.listSessions()).toEqual([]);
+		expect(storage.getActiveSessionId()).toBe(newerSessionId);
+		expect(newerSessionId).not.toBe(flowSessionId);
+		expect(pendingBootstrap.getPendingBootstrap()).toBeDefined();
+		expect(getEl<HTMLElement>("main").dataset.view).toBeUndefined();
+	});
+});
+
 describe("renderBootstrapLoadingFlow — promise propagation", () => {
 	beforeEach(() => {
 		vi.restoreAllMocks();
