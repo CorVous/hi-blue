@@ -145,6 +145,8 @@ const DECOY_FORBIDDEN_FIELDS = [
 	"postLookFlavor",
 ];
 
+const PACK_REQUIRED_FIELDS = ["setting", "wallName"] as const;
+
 const OBSTACLE_REQUIRED_FIELDS = ["name", "examineDescription", "shiftFlavor"];
 
 function requiredString(
@@ -574,6 +576,19 @@ function validateBoundPack(
 	const bindings = pack.bindings ?? [];
 	const decoys = pack.decoys ?? [];
 	const obstacles = pack.obstacles ?? [];
+
+	for (const field of PACK_REQUIRED_FIELDS) {
+		const value = pack[field];
+		if (typeof value !== "string" || value.trim().length === 0) {
+			errors.push({
+				entityId: "",
+				field,
+				rule: "missing-field",
+				message: `Pack is missing required top-level string field "${field}"`,
+				retryUnit: { kind: "objective-pair", pairId: "" },
+			});
+		}
+	}
 
 	for (const [i, sk] of schedule.skeletons.entries()) {
 		const binding = bindings[i];

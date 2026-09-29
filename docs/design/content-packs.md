@@ -105,7 +105,7 @@ When you change one, change `DUAL_CONTENT_PACK_SYSTEM_PROMPT` and
 
 | Rule | Checks |
 |---|---|
-| `missing-field` | A required string field is absent or empty, or a binding, decoy, obstacle or the top-level `phases`/`packA`/`packB` is missing. |
+| `missing-field` | A required string field is absent or empty (including each pack's `setting` and `wallName`, which the generator copies straight onto the `ContentPack`), or a binding, decoy, obstacle or the top-level `phases`/`packA`/`packB` is missing. |
 | `binding-forbidden-field` | A field outside the binding's shape is present. Decoys may not carry `activationFlavor` or `post*` fields. |
 | `wrong-id` | The id differs from the minted one. The message includes the exact JSON shape, because the model most often drops the `id` from a sub-object. |
 | `wrong-count` | The pack does not have exactly two decoys, or does not have exactly the scheduled `m` obstacles. Extra obstacles are rejected too: an obstacle only one pack has would have no Pack A placement to copy. |

@@ -577,3 +577,27 @@ describe("validateBoundDualContentPack — obstacle count", () => {
 		expect(result.ok).toBe(true);
 	});
 });
+
+describe("validateBoundDualContentPack — pack-level fields", () => {
+	it.each(["wallName", "setting"])("rejects a pack missing %s", (field) => {
+		const response = makeGoodCarryPack();
+		const pack: Record<string, unknown> = { ...response.pack };
+		delete pack[field];
+		const result = validateAsBothPacks({ pack }, makeCarrySchedule());
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			const err = result.errors.find((e) => e.field === field);
+			expect(err?.rule).toBe("missing-field");
+		}
+	});
+
+	it.each([
+		"wallName",
+		"setting",
+	])("rejects a pack with a blank %s", (field) => {
+		const response = makeGoodCarryPack();
+		const pack = { ...response.pack, [field]: "   " };
+		const result = validateAsBothPacks({ pack }, makeCarrySchedule());
+		expect(result.ok).toBe(false);
+	});
+});
