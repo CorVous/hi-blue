@@ -80,7 +80,11 @@ import {
 	showPersistenceWarning,
 	UNKNOWN_SESSION_ID,
 } from "./game-chrome.js";
-import { showEndgame } from "./game-endgame.js";
+import {
+	endedSessionSaveOnScreen,
+	type SessionSave,
+	showEndgame,
+} from "./game-endgame.js";
 import {
 	appendMentionAwareText,
 	type MessageEntry,
@@ -497,7 +501,10 @@ function mountSessionView(ctx: GameViewContext): void {
 
 	const restoredState = cached.session.getState();
 	if (restoredState.isComplete) {
-		enterEndgame(ctx, restoredState, cached.token.id);
+		enterEndgame(ctx, restoredState, {
+			sessionId: cached.token.id,
+			lastSavedAt: cached.lastSavedAt,
+		});
 	}
 }
 
@@ -581,24 +588,39 @@ function wireCrossTabReload(win: Window | null): void {
 	win.addEventListener("storage", (event) => {
 		const ctx = viewCtx;
 		if (!ctx || ctx.roundInFlight) return;
-		const cachedSessionId = cached?.token.id ?? null;
-		if (cachedSessionId === null) return;
-		const touchesCachedSession =
-			event.key === null || isSessionStorageKey(event.key, cachedSessionId);
-		if (!touchesCachedSession) return;
-		if (!cachedSessionChangedElsewhere(ctx)) return;
+		const onScreen = saveOnScreen(ctx);
+		if (onScreen?.sessionId == null) return;
+		const touchesSessionOnScreen =
+			event.key === null || isSessionStorageKey(event.key, onScreen.sessionId);
+		if (!touchesSessionOnScreen) return;
+		if (!saveChangedElsewhere(ctx, onScreen)) return;
 		reloadChangedSession(ctx, { warn: false });
 	});
 }
 
+function saveOnScreen(ctx: GameViewContext): SessionSave | null {
+	if (cached !== null) {
+		return { sessionId: cached.token.id, lastSavedAt: cached.lastSavedAt };
+	}
+	return endedSessionSaveOnScreen(ctx.root);
+}
+
 function cachedSessionChangedElsewhere(ctx: GameViewContext): boolean {
 	if (cached === null) return false;
-	const { id } = cached.token;
-	const { lastSavedAt } = cached;
-	if (id === null || lastSavedAt === null) return false;
+	return saveChangedElsewhere(ctx, {
+		sessionId: cached.token.id,
+		lastSavedAt: cached.lastSavedAt,
+	});
+}
+
+function saveChangedElsewhere(
+	ctx: GameViewContext,
+	{ sessionId, lastSavedAt }: SessionSave,
+): boolean {
+	if (sessionId === null || lastSavedAt === null) return false;
 	if (ctx.root.dataset.view !== "game") return false;
-	if (isSessionSaveInProgress(id)) return false;
-	return readSessionLastSavedAt(id) !== lastSavedAt;
+	if (isSessionSaveInProgress(sessionId)) return false;
+	return readSessionLastSavedAt(sessionId) !== lastSavedAt;
 }
 
 function reloadChangedSession(
@@ -1011,7 +1033,10 @@ async function playRound(
 
 	if (outcome.gameEnded) {
 		refreshTopInfo(ctx);
-		enterEndgame(ctx, nextState, owner.token.id);
+		enterEndgame(ctx, nextState, {
+			sessionId: owner.token.id,
+			lastSavedAt: saveResult.lastSavedAt ?? owner.lastSavedAt,
+		});
 	}
 }
 
@@ -1107,12 +1132,12 @@ function reportRoundFailure(ctx: GameViewContext, err: unknown): void {
 function enterEndgame(
 	ctx: GameViewContext,
 	endedState: GameState,
-	endedSessionId: string | null,
+	endedSave: SessionSave,
 ): void {
 	ctx.sendBtn.disabled = true;
 	ctx.promptInput.disabled = true;
 
 	releaseSession();
 
-	showEndgame(ctx.root, endedState, endedSessionId, releaseSession);
+	showEndgame(ctx.root, endedState, endedSave, releaseSession);
 }

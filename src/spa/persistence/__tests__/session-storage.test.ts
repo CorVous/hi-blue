@@ -37,6 +37,7 @@ import {
 	SESSIONS_PREFIX,
 	saveActiveSession,
 	seedFromArchive,
+	sessionChangedSince,
 	setActiveSessionId,
 } from "../session-storage.js";
 
@@ -652,6 +653,54 @@ describe("saveActiveSession expectedLastSavedAt", () => {
 
 		expect(result).toEqual({ ok: false, reason: "stale" });
 		expect(listSessions()).not.toContain(id);
+	});
+});
+
+describe("sessionChangedSince", () => {
+	beforeEach(() => {
+		installLocalStorageStub();
+		vi.useFakeTimers();
+	});
+	afterEach(() => {
+		vi.useRealTimers();
+		vi.restoreAllMocks();
+	});
+
+	it("is false while the stored save is the one the caller holds", () => {
+		const id = mintAndActivateNewSession();
+		const saved = saveActiveSession(makeFreshGame());
+		if (!saved.ok) throw new Error("save failed");
+
+		expect(sessionChangedSince(id, saved.lastSavedAt)).toBe(false);
+	});
+
+	it("is true once another save lands", () => {
+		const id = mintAndActivateNewSession();
+		vi.setSystemTime(new Date("2025-01-01T00:00:00.000Z"));
+		const saved = saveActiveSession(makeFreshGame());
+		if (!saved.ok) throw new Error("save failed");
+		vi.setSystemTime(new Date("2025-01-01T00:00:05.000Z"));
+		saveActiveSession(makeFreshGame());
+
+		expect(sessionChangedSince(id, saved.lastSavedAt)).toBe(true);
+	});
+
+	it("is true once the session is removed", () => {
+		const id = mintAndActivateNewSession();
+		const saved = saveActiveSession(makeFreshGame());
+		if (!saved.ok) throw new Error("save failed");
+		rmSession(id);
+
+		expect(sessionChangedSince(id, saved.lastSavedAt)).toBe(true);
+	});
+
+	it("leaves an unreadable meta.json to the caller's own storage calls", () => {
+		const id = mintAndActivateNewSession();
+		const saved = saveActiveSession(makeFreshGame());
+		if (!saved.ok) throw new Error("save failed");
+		localStorage.setItem(`${SESSIONS_PREFIX}${id}/meta.json`, "{not json");
+
+		expect(sessionChangedSince(id, saved.lastSavedAt)).toBe(false);
 	});
 });
 

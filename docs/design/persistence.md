@@ -64,11 +64,18 @@ Each session is a set of localStorage keys under one prefix:
   This is optimistic concurrency on a timestamp with millisecond
   resolution: two tabs saving in the same millisecond are not told apart,
   which is rare enough to accept for a single-player game. Callers that
-  omit the option (the bootstrap's first save, the endgame's new room) keep
-  the old unconditional write. `readSessionLastSavedAt`,
-  `isSessionStorageKey` and `isSessionSaveInProgress` let the game view
-  watch another tab's writes; see "Two tabs on one session" in
-  `views.md`.
+  omit the option (the bootstrap's first save, the "same daemons" new room
+  under a fresh id) keep the old unconditional write. "Continue" passes the
+  ended game's `lastSavedAt`, because it overwrites the ended session in
+  place. `readSessionLastSavedAt`, `isSessionStorageKey` and
+  `isSessionSaveInProgress` let the game view watch another tab's writes;
+  see "Two tabs on one session" in `views.md`.
+- **`sessionChangedSince(id, lastSavedAt)`** is the same check for callers
+  that are about to archive or remove a session rather than save it (the
+  endgame's "new daemons" and "same daemons"). A removed session counts as
+  changed. An unreadable `meta.json` does not: the caller's own
+  `archiveSession` then fails with its own error, which says more than
+  "changed in another tab" would.
   - **Fresh writes rely on `engine.dat`.** `dupSession` and `seedFromArchive`
     always write to a freshly minted, unused id, and `archiveSession` clears
     every key under `archive/<id>/` first so a reused id never merges two

@@ -214,6 +214,7 @@ specs that assert on generation failure check `#cap-hit` themselves.
 | `round-session-switch` | A round still running when the player loads another session paints nothing into it and is saved under its own session; a round whose session was removed meanwhile is dropped without a warning. | |
 | `bootstrap-session-switch` | The loading timeout aborts the held content-pack request; a loading flow that timed out and was abandoned does not take over the start screen when its held response is later released, and a new game starts at epoch 01 after a later-epoch session was open. | |
 | `cross-tab-session` | Two pages in one context on the same session: an idle tab re-renders another tab's round without a warning and its next round keeps both tabs' messages; a round held in flight while the other tab saves is refused as stale, shows "changed in another tab", and reloads the other tab's round. | |
+| `endgame-cross-tab` | Two pages in one context on one finished game. An idle endgame tab re-renders into the game when the other tab presses Continue and plays a round. A tab that still shows the stale endgame (its `storage` events muted) and then presses New daemons or Continue, or one whose Same daemons or Continue generation was held while the other tab continued, is refused: nothing is archived, removed or overwritten, the epoch stays at 02, and the tab shows "changed in another tab" over the other tab's game. | |
 | `round-failure-draft` | A round that fails with an HTTP 500 puts `*Name <message>` back in `#prompt` and removes the player's `.msg-you` line. | |
 | `endgame-controls` | Toggling the picker while "same daemons" is generating keeps the choices disabled and the status shown, with one content-pack request; a triple-clicked diagnostics submit sends one POST; Continue hides again after the key is cleared in the BYOK dialog. | |
 | `round-reentry` | Opening and closing the session picker while a round is in flight keeps Send disabled, a forced submit starts no second round, and the held round still completes with one request per Daemon. | |
@@ -265,6 +266,14 @@ specs that assert on generation failure check `#cap-hit` themselves.
   The failed-archive tests make `archiveSession` throw by overwriting the
   session's `meta.json` with text that is not JSON. The torn-save tests write
   the session's `saving` marker, the same state an interrupted save leaves.
+- **endgame-cross-tab.** A storage event reaches the other tab within
+  milliseconds, so the stale-click ordering cannot be produced by timing.
+  Tab B installs a capturing `storage` listener in an init script, ahead of
+  the app's own, that calls `stopImmediatePropagation` once the spec sets
+  `window.__muteStorageEvents`. That stands in for a click that lands before
+  the event is processed. Tab A reaches the endgame with `?winImmediately=1`
+  and then reloads without it, so the round it plays after Continue does not
+  end the game again.
 - **bootstrap-session-switch.** The loading timeout is 300 s, so the spec
   installs Playwright's clock before navigation and fast-forwards past it.
   The timeout aborts the held request (counted through `requestfailed`), so

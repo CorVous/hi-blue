@@ -12,10 +12,12 @@ import {
 	mintSessionId,
 	rmSession,
 	saveActiveSession,
+	sessionChangedSince,
 	setActiveSessionId,
 } from "../persistence/session-storage.js";
 import { renderApp } from "../render-app.js";
 import { dropListenersByCloning, setHidden } from "./dom.js";
+import { showPersistenceWarning } from "./game-chrome.js";
 import {
 	type MessageEntry,
 	PLAYER_ID,
@@ -39,40 +41,81 @@ interface EndgameControlsRecord {
 	diagnosticsSubmitted: boolean;
 }
 
-const endgameControlsBySession = new Map<
-	string | null,
+export interface SessionSave {
+	sessionId: string | null;
+	lastSavedAt: string | null;
+}
+
+const endgameControlsBySave = new Map<string, EndgameControlsRecord>();
+
+const endgameControlsByUnsavedGame = new WeakMap<
+	GameState,
 	EndgameControlsRecord
 >();
 
+let lastShownEndedSessionSave: SessionSave | null = null;
+
+export function endedSessionSaveOnScreen(
+	root: HTMLElement,
+): SessionSave | null {
+	if (lastShownEndedSessionSave === null || root.dataset.view !== "game")
+		return null;
+	const endgameEl = root.ownerDocument.querySelector<HTMLElement>("#endgame");
+	if (!endgameEl || endgameEl.hidden) return null;
+	return lastShownEndedSessionSave;
+}
+
+function savedGameKey(endedSave: SessionSave): string | null {
+	const { sessionId, lastSavedAt } = endedSave;
+	if (sessionId === null || lastSavedAt === null) return null;
+	return `${sessionId}@${lastSavedAt}`;
+}
+
 function endgameControlsFor(
-	endedSessionId: string | null,
+	endedState: GameState,
+	endedSave: SessionSave,
 ): EndgameControlsRecord {
-	let record = endgameControlsBySession.get(endedSessionId);
-	if (!record) {
-		record = { downloaded: false, diagnosticsSubmitted: false };
-		endgameControlsBySession.set(endedSessionId, record);
-	}
+	const key = savedGameKey(endedSave);
+	const existing =
+		key === null
+			? endgameControlsByUnsavedGame.get(endedState)
+			: endgameControlsBySave.get(key);
+	if (existing) return existing;
+	const record = { downloaded: false, diagnosticsSubmitted: false };
+	if (key === null) endgameControlsByUnsavedGame.set(endedState, record);
+	else endgameControlsBySave.set(key, record);
 	return record;
+}
+
+function forgetEndgameControls(
+	endedState: GameState,
+	endedSave: SessionSave,
+): void {
+	const key = savedGameKey(endedSave);
+	if (key === null) endgameControlsByUnsavedGame.delete(endedState);
+	else endgameControlsBySave.delete(key);
 }
 
 export function showEndgame(
 	root: HTMLElement,
 	endedState: GameState,
-	endedSessionId: string | null,
+	endedSave: SessionSave,
 	releaseEndedGame: () => void,
 ): void {
 	const doc = root.ownerDocument;
+	lastShownEndedSessionSave = endedSave;
 	paintEndgameSubtitle(doc, endedState.outcome);
 	paintFinalRoundLines(doc, endedState);
 	showEndgameScreen(doc);
 	resetEndgameControls(doc);
-	const controls = endgameControlsFor(endedSessionId);
+	const controls = endgameControlsFor(endedState, endedSave);
 	wireEndgameChoices({
 		root,
-		endedSession: captureActiveSession(endedSessionId),
+		endedSession: captureActiveSession(endedSave.sessionId),
+		endedLastSavedAt: endedSave.lastSavedAt,
 		endedState,
 		releaseEndedGame: () => {
-			endgameControlsBySession.delete(endedSessionId);
+			forgetEndgameControls(endedState, endedSave);
 			releaseEndedGame();
 		},
 	});
@@ -170,6 +213,7 @@ function showEndgameScreen(doc: Document): void {
 interface EndedGame {
 	root: HTMLElement;
 	endedSession: ActiveSessionToken;
+	endedLastSavedAt: string | null;
 	endedState: GameState;
 	releaseEndedGame(): void;
 }
@@ -272,6 +316,37 @@ function saveFailureDetail(reason: string): string {
 	return reason === "quota" ? "browser storage is full" : reason;
 }
 
+function endedSessionChangedElsewhere(choice: EndgameChoice): boolean {
+	const sessionId = choice.endedSession.id;
+	if (sessionId === null) return false;
+	return sessionChangedSince(sessionId, choice.endedLastSavedAt);
+}
+
+function endgameStillShows(choice: EndgameChoice): boolean {
+	return (
+		endedSessionSaveOnScreen(choice.root)?.sessionId === choice.endedSession.id
+	);
+}
+
+function refuseChangedEndedSession(choice: EndgameChoice): void {
+	if (playerLeftEndedSession(choice) && !endgameStillShows(choice)) return;
+	choiceInFlight = null;
+	choice.releaseEndedGame();
+	renderApp(choice.root);
+	showPersistenceWarning(
+		choice.root.ownerDocument.querySelector<HTMLElement>(
+			"#persistence-warning",
+		),
+		"stale-endgame-choice",
+	);
+}
+
+function refusedAsChangedElsewhere(choice: EndgameChoice): boolean {
+	if (!endedSessionChangedElsewhere(choice)) return false;
+	refuseChangedEndedSession(choice);
+	return true;
+}
+
 function removeEndedSession(choice: EndgameChoice): void {
 	if (choice.endedSession.id) rmSession(choice.endedSession.id);
 }
@@ -321,9 +396,11 @@ async function archiveAsPlanned(
 }
 
 async function startWithNewDaemons(choice: EndgameChoice): Promise<void> {
+	if (refusedAsChangedElsewhere(choice)) return;
 	const plan = planArchive(choice);
 	if (!plan) return;
 	if (!(await archiveAsPlanned(choice, plan))) return;
+	if (refusedAsChangedElsewhere(choice)) return;
 	if (plan.note) choice.setStatus(plan.note);
 	const playerMovedOn = playerLeftEndedSession(choice);
 	removeEndedSession(choice);
@@ -349,13 +426,16 @@ async function buildNewRoom(
 }
 
 async function restartWithSameDaemons(choice: EndgameChoice): Promise<void> {
+	if (refusedAsChangedElsewhere(choice)) return;
 	const plan = planArchive(choice);
 	if (!plan) return;
 	const newRoom = await buildNewRoom(choice, plan);
 	if (!newRoom || playerLeftEndedSession(choice)) return;
+	if (refusedAsChangedElsewhere(choice)) return;
 
 	if (!(await archiveAsPlanned(choice, plan))) return;
 	if (playerLeftEndedSession(choice)) return;
+	if (refusedAsChangedElsewhere(choice)) return;
 
 	const newSessionId = mintSessionId();
 	const saveResult = saveActiveSession(newRoom.getState(), {
@@ -376,13 +456,22 @@ async function restartWithSameDaemons(choice: EndgameChoice): Promise<void> {
 }
 
 async function continueInNewRoom(choice: EndgameChoice): Promise<void> {
+	if (refusedAsChangedElsewhere(choice)) return;
 	const newRoom = await buildNewRoom(choice);
 	if (!newRoom || playerLeftEndedSession(choice)) return;
 
 	const saveResult = saveActiveSession(
 		continueLogsInNewRoom(newRoom.getState(), choice.endedState),
-		{ sessionId: choice.endedSession.id, advanceEpoch: true },
+		{
+			sessionId: choice.endedSession.id,
+			advanceEpoch: true,
+			...savedAtExpectation(choice.endedLastSavedAt),
+		},
 	);
+	if (!saveResult.ok && saveResult.reason === "stale") {
+		refuseChangedEndedSession(choice);
+		return;
+	}
 	if (!saveResult.ok) {
 		failEndgameChoice(
 			choice,
@@ -392,6 +481,12 @@ async function continueInNewRoom(choice: EndgameChoice): Promise<void> {
 	}
 	choice.releaseEndedGame();
 	renderApp(choice.root);
+}
+
+function savedAtExpectation(lastSavedAt: string | null): {
+	expectedLastSavedAt?: string;
+} {
+	return lastSavedAt === null ? {} : { expectedLastSavedAt: lastSavedAt };
 }
 
 const DOWNLOADED_STATUS = "Saved.";

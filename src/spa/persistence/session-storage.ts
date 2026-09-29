@@ -318,6 +318,28 @@ export function readSessionLastSavedAt(sessionId: string): string | null {
 	return typeof lastSavedAt === "string" ? lastSavedAt : null;
 }
 
+export function sessionChangedSince(
+	sessionId: string,
+	lastSavedAt: string | null,
+): boolean {
+	let metaRaw: string | null;
+	try {
+		metaRaw = localStorage.getItem(metaKey(SESSIONS_PREFIX, sessionId));
+	} catch {
+		return false;
+	}
+	if (metaRaw === null) return lastSavedAt !== null;
+	let meta: Partial<MetaFile> | null;
+	try {
+		meta = JSON.parse(metaRaw) as Partial<MetaFile> | null;
+	} catch {
+		return false;
+	}
+	const storedLastSavedAt =
+		typeof meta?.lastSavedAt === "string" ? meta.lastSavedAt : null;
+	return storedLastSavedAt !== lastSavedAt;
+}
+
 export function isSessionStorageKey(key: string, sessionId: string): boolean {
 	return key.startsWith(sessionDir(SESSIONS_PREFIX, sessionId));
 }

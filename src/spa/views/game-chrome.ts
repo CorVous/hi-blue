@@ -29,13 +29,17 @@ const SPINNER_INTERVAL_MS = 80;
 
 type SaveFailureReason = Extract<SaveResult, { ok: false }>["reason"];
 
-const PERSISTENCE_WARNING_MESSAGES: Record<SaveFailureReason, string> = {
+type PersistenceWarning = SaveFailureReason | "stale-endgame-choice";
+
+const PERSISTENCE_WARNING_MESSAGES: Record<PersistenceWarning, string> = {
 	unavailable:
 		"Game progress cannot be saved: storage is disabled in your browser. Your session will be lost on refresh.",
 	quota: "Game progress could not be saved: browser storage is full.",
 	unknown: "Game progress could not be saved due to an unexpected error.",
 	stale:
 		"This session changed in another tab — reloaded. Your last round here was not saved.",
+	"stale-endgame-choice":
+		"This game changed in another tab — reloaded. Your endgame choice here was not applied.",
 };
 
 export function hidePersistenceWarning(warningEl: HTMLElement | null): void {
@@ -44,7 +48,7 @@ export function hidePersistenceWarning(warningEl: HTMLElement | null): void {
 
 export function showPersistenceWarning(
 	warningEl: HTMLElement | null,
-	reason: SaveFailureReason,
+	reason: PersistenceWarning,
 ): void {
 	if (!warningEl) return;
 	warningEl.textContent = PERSISTENCE_WARNING_MESSAGES[reason];

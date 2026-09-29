@@ -234,6 +234,25 @@ it hides the other routes' screens and shows or hides the global chrome
   round that failed, if the session changed meanwhile. The round played in
   the tab that fell behind is lost, which is the point: only one tab's
   history can survive, and the one already on disk wins.
+- **Two tabs on one finished game.** `enterEndgame` releases the cached
+  session, so the listener used to return early in a tab showing the
+  endgame, and that tab kept offering the choices after another tab had
+  pressed Continue and played on. "New daemons" there archived and removed
+  the other tab's live game, and "Continue" overwrote it with the stale
+  ended state. `enterEndgame` now passes the ended session's id and
+  `lastSavedAt` (`SessionSave`) to `showEndgame`, which records it
+  (`endedSessionSaveOnScreen` returns it while `#endgame` is shown on the
+  game route). The listener watches that save when nothing is cached, and
+  re-renders the tab when it changes, as it does for an idle game. Each
+  choice also carries the recorded `lastSavedAt`, because the storage event
+  can arrive after the click and a "same daemons" or "continue" generation
+  can outlast it: every choice checks `sessionChangedSince` before it
+  starts and again before it archives or removes anything, and "continue"
+  saves with `expectedLastSavedAt`. A refused choice changes nothing in
+  storage, re-renders from storage and shows "This game changed in another
+  tab — reloaded. Your endgame choice here was not applied." in
+  `#persistence-warning`. It stays silent only when the player has left the
+  ended game in this tab.
 
 ### Bootstrap loading flow (`game-bootstrap-flow.ts`)
 
@@ -435,13 +454,20 @@ it hides the other routes' screens and shows or hides the global chrome
   toggling the picker used to offer diagnostics again for a game already
   reported, and re-enabled download, which also made the next diagnostics
   POST say `downloaded: false` (it read the button's disabled state).
-  `game-endgame.ts` keeps a module-level record per ended session id
-  (`endgameControlsBySession`: `downloaded`, `diagnosticsSubmitted`).
-  `showEndgame` re-applies it after the reset (buttons disabled, "Saved." and
-  "Diagnostics submitted." repainted), and the diagnostics POST reads
-  `downloaded` from it. The record is dropped when a choice releases the
-  ended game, so a later game that ends under the same id (after Continue,
-  or a re-minted id) starts with both controls fresh.
+  `game-endgame.ts` keeps a module-level record per ended game
+  (`downloaded`, `diagnosticsSubmitted`). `showEndgame` re-applies it after
+  the reset (buttons disabled, "Saved." and "Diagnostics submitted."
+  repainted), and the diagnostics POST reads `downloaded` from it.
+- **That record belongs to one ended game, not to a session id.** It used to
+  be keyed by the ended session id alone, which is null when the game was
+  never saved, so a later, different game ending under the same key opened
+  with download and diagnostics already used. A saved game is now keyed by
+  its id plus the `lastSavedAt` of its final save: re-entry restores the
+  same save and finds the record, and any later ending under the same id
+  (after Continue, say) is a newer save. A game with no id or no save cannot
+  be restored on re-entry, so its record is keyed by the ended `GameState`
+  object itself (a `WeakMap`). The record is still dropped when a choice
+  releases the ended game.
 - **Continue follows the stored key both ways.** On every entry
   `continueBtn.hidden` is set from `readStoredByokKey()`, so clearing the key
   in the BYOK dialog hides Continue at the next entry. It used to be only
