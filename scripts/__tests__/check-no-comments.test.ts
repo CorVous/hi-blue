@@ -86,6 +86,36 @@ describe("check-no-comments.mjs: shell", () => {
 		expect(flaggedLines("b.sh", text)).toEqual([8]);
 	});
 
+	it("does not treat a shift inside arithmetic as a heredoc", () => {
+		const text = [
+			"mask=$((1<<BITS))",
+			"# comment after arithmetic",
+			"((flags = flags<<SHIFT))",
+			"# another comment",
+		].join("\n");
+		expect(flaggedLines("d.sh", text)).toEqual([2, 4]);
+	});
+
+	it("does not treat <<EOF inside quotes as a heredoc", () => {
+		const text = [
+			"echo \"use <<EOF to start\" 'or <<-END'",
+			"# comment after quoted text",
+		].join("\n");
+		expect(flaggedLines("e.sh", text)).toEqual([2]);
+	});
+
+	it("skips the bodies of several heredocs started on one line", () => {
+		const text = [
+			"paste <(cat <<A) <(cat <<\\B)",
+			"# body of A",
+			"A",
+			"# body of B",
+			"B",
+			"# real comment",
+		].join("\n");
+		expect(flaggedLines("f.sh", text)).toEqual([6]);
+	});
+
 	it("--fix strips a trailing comment and keeps the command", () => {
 		expect(fixed("c.sh", "echo hi # trailing\n# gone\necho bye\n")).toBe(
 			"echo hi\necho bye\n",

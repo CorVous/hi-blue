@@ -100,7 +100,12 @@ no comments; the reasons live in these design docs, the ADRs and
     starts a comment, so trailing ` # note` comments are caught while `$#`,
     `${#arr[@]}` and `foo#bar` are not. Heredoc bodies (`<<EOF`, `<<-'EOF'`)
     are skipped up to their terminator, because they are data (a Markdown
-    heading in a heredoc is not a comment). A leading `#!` is kept.
+    heading in a heredoc is not a comment). The same character scan finds
+    the heredoc starts, so a `<<EOF` inside quotes, a shift inside
+    arithmetic (`$((x<<y))`, `((x<<=1))`) and a here-string (`<<<`) do not
+    start one; with a regex over the whole line they did, and the rest of the
+    file was skipped as a heredoc body. Several heredocs started on one line
+    are skipped one after the other. A leading `#!` is kept.
   - *CSS*: `/* */` outside string literals and unquoted `url(...)`, so a data
     URL or a `content: "/*"` is not a comment.
   - *HTML*: `<!-- -->` outside `<script>` elements. The contents of each
