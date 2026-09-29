@@ -189,7 +189,7 @@ What did not work, so you do not retry it:
 These came out of the research. Each is larger than a prompt edit and should get its own issue and eval run.
 
 1. **Replay reasoning across rounds.** DeepSeek's docs say that with `tools`, every earlier assistant turn's reasoning must be sent back. The native API returns 400 without it. Through OpenRouter it returns 200 either way [verified]. In a small A/B on a trimmed prompt, leaving it out gave free-text replies in 3 of 6 runs, against 0 of 6 with it passed back [verified, small sample]. The production-prompt drift eval saw no free-text turns without it. Doing this means storing each turn's trace and bumping `SESSION_SCHEMA_VERSION`.
-2. **Keep the tool list stable per session.** Fixed enums covering every id in the pack, with the dispatcher rejecting illegal moves, would keep the cache near 92% on long games instead of dropping to about 10% whenever an enum changes. The enums are guard-rails today, so this needs an ADR and an action-variation run.
+2. **Keep the tool list stable per session.** Fixed enums covering every target handle in the pack, with the dispatcher rejecting illegal moves, would keep the cache near 92% on long games instead of dropping to about 10% whenever an enum changes. The enums are guard-rails today, so this needs an ADR and an action-variation run.
 3. **Move Sysadmin directives out of the system prompt**, into a mid-conversation `system` message at the round they arrive or into the per-turn state, so the system prefix never changes mid-game.
 4. **Effort `low` against `high`** over whole games.
 5. **One untested prompt line:** a ban on the "not X, but Y" construction. (The `REMINDER` length line was tested on 2026-09-28 and shipped. See "Retune of 2026-09-28" above.)
