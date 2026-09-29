@@ -1,3 +1,9 @@
+export function tryFocus(el: HTMLElement): void {
+	try {
+		el.focus();
+	} catch {}
+}
+
 export function trySetCaret(input: HTMLInputElement, position: number): void {
 	try {
 		input.setSelectionRange(position, position);

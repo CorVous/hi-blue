@@ -461,3 +461,109 @@ describe("renderStart — persistence warning banners", () => {
 		expect(warningEl?.hasAttribute("hidden")).toBe(true);
 	});
 });
+
+describe("renderStart — repeated renders", () => {
+	beforeEach(() => {
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
+		vi.stubGlobal("__COMMIT_TIMESTAMP_MS__", 0);
+		document.body.innerHTML = INDEX_BODY_HTML;
+		installLocalStorageStub();
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+		vi.resetModules();
+		document.body.innerHTML = "";
+	});
+
+	it("hides a reason banner left by an earlier render when the next render has no reason", async () => {
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.resetModules();
+		const { renderStart } = await import("../views/start.js");
+
+		setSearch("skipDialup=1");
+		await awaitIgnoringRejection(renderStart(getMain(), { reason: "broken" }));
+		const warningEl = document.querySelector<HTMLElement>(
+			"#persistence-warning",
+		);
+		expect(warningEl?.hidden).toBe(false);
+
+		await awaitIgnoringRejection(renderStart(getMain()));
+		expect(warningEl?.hidden).toBe(true);
+		expect(warningEl?.textContent).toBe("");
+	});
+
+	it("hides the endgame screen", async () => {
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.resetModules();
+		const { renderStart } = await import("../views/start.js");
+		const endgameEl = document.querySelector<HTMLElement>("#endgame");
+		endgameEl?.removeAttribute("hidden");
+
+		setSearch("skipDialup=1");
+		await awaitIgnoringRejection(renderStart(getMain()));
+
+		expect(endgameEl?.hidden).toBe(true);
+	});
+
+	it("keeps one live login listener per element after rendering twice", async () => {
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.resetModules();
+		const { renderStart } = await import("../views/start.js");
+
+		const registrations: Array<{
+			target: EventTarget;
+			type: string;
+			signal: AbortSignal | undefined;
+		}> = [];
+		const originalAdd = EventTarget.prototype.addEventListener;
+		vi.spyOn(EventTarget.prototype, "addEventListener").mockImplementation(
+			function (
+				this: EventTarget,
+				type: string,
+				listener: EventListenerOrEventListenerObject | null,
+				options?: boolean | AddEventListenerOptions,
+			) {
+				const signal = typeof options === "object" ? options.signal : undefined;
+				registrations.push({ target: this, type, signal });
+				originalAdd.call(this, type, listener, options);
+			},
+		);
+
+		setSearch("skipDialup=1");
+		await awaitIgnoringRejection(renderStart(getMain()));
+		await awaitIgnoringRejection(renderStart(getMain()));
+
+		const liveCount = (selector: string, type: string): number =>
+			registrations.filter(
+				(r) =>
+					r.target === document.querySelector(selector) &&
+					r.type === type &&
+					!r.signal?.aborted,
+			).length;
+		expect(liveCount("#login-form", "submit")).toBe(1);
+		expect(liveCount("#begin", "click")).toBe(1);
+		expect(liveCount("#password", "input")).toBe(1);
+	});
+
+	it("stops the previous dial-up animation when the start screen renders again", async () => {
+		vi.useFakeTimers();
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.resetModules();
+		const { renderStart } = await import("../views/start.js");
+
+		setSearch("");
+		void renderStart(getMain()).catch(() => undefined);
+		await vi.advanceTimersByTimeAsync(2_000);
+		const dialEl = document.querySelector<HTMLElement>("#dial");
+		expect(dialEl?.textContent?.length ?? 0).toBeGreaterThan(20);
+
+		void renderStart(getMain()).catch(() => undefined);
+		expect(dialEl?.textContent).toBe("");
+		await vi.advanceTimersByTimeAsync(100);
+		expect(dialEl?.textContent).toBe("");
+	});
+});

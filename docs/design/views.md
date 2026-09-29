@@ -41,6 +41,15 @@ it hides the other routes' screens and shows or hides the global chrome
 - **Double-submit guard.** `_connectSubmitInFlight` ignores repeated
   submits, such as a double-click, once a CONNECT with the correct password
   is in progress. Each render resets it.
+- **Repeated renders.** The start screen renders again whenever the player
+  comes back to it (for example after "new daemons"). Each render aborts the
+  previous render's `AbortController` (`abortPreviousRender`). The login
+  form, BEGIN and password-mask listeners and the resize listener are added
+  with that signal, the uptime interval is cleared on abort, and every step
+  of the dial-up `setTimeout` chain checks it (`setTimeoutUnlessAborted`).
+  Without it each render added another set of listeners, and an animation
+  still typing from an earlier render kept writing into `#dial` over the new
+  one.
 - **Reusing the bootstrap.** If the player returns to the start screen,
   `getPendingBootstrap()` gives back the bootstrap already in progress, so
   generation does not restart.
