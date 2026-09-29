@@ -1,4 +1,4 @@
-import { appendBroadcast } from "../game/engine.js";
+import { continueLogsInNewRoom } from "../game/engine.js";
 import type { AiId, GameState } from "../game/types.js";
 import {
 	type DeserializeResult,
@@ -572,17 +572,9 @@ export function seedFromArchive(
 		);
 	}
 
-	const archivedLogs = JSON.parse(
-		JSON.stringify(archiveResult.state.conversationLogs),
-	) as GameState["conversationLogs"];
-	const mergedState: GameState = {
-		...freshState,
-		conversationLogs: archivedLogs,
-	};
-
-	const broadcastedState = appendBroadcast(
-		mergedState,
-		"The sysadmin has created a new room.",
+	const broadcastedState = continueLogsInNewRoom(
+		freshState,
+		archiveResult.state,
 	);
 
 	const newEpoch = archiveResult.epoch + 1;

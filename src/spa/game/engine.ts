@@ -285,6 +285,46 @@ export function appendBroadcast(game: GameState, content: string): GameState {
 	return { ...game, conversationLogs: logs };
 }
 
+export const NEW_ROOM_BROADCAST = "The sysadmin has created a new room.";
+
+function roundAfterLogs(
+	ended: Pick<GameState, "round" | "conversationLogs">,
+): number {
+	let latestLoggedRound = -1;
+	for (const log of Object.values(ended.conversationLogs)) {
+		for (const entry of log) {
+			if (entry.round > latestLoggedRound) latestLoggedRound = entry.round;
+		}
+	}
+	return Math.max(ended.round, latestLoggedRound + 1);
+}
+
+export function continueLogsInNewRoom(
+	newRoom: GameState,
+	ended: Pick<GameState, "round" | "conversationLogs">,
+): GameState {
+	return appendBroadcast(
+		{
+			...newRoom,
+			round: roundAfterLogs(ended),
+			conversationLogs: structuredClone(ended.conversationLogs),
+		},
+		NEW_ROOM_BROADCAST,
+	);
+}
+
+export function isFirstRoundOfRoom(game: GameState): boolean {
+	if (game.round === 0) return true;
+	return Object.values(game.conversationLogs).some((log) =>
+		log.some(
+			(entry) =>
+				entry.kind === "broadcast" &&
+				entry.round === game.round &&
+				entry.content === NEW_ROOM_BROADCAST,
+		),
+	);
+}
+
 export function setWeather(game: GameState, weather: string): GameState {
 	return { ...game, weather };
 }

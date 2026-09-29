@@ -5,7 +5,7 @@ import {
 	makeLocalStorageStub,
 } from "../../__tests__/fixtures/local-storage";
 import { makeTestPack } from "../../game/__tests__/fixtures/make-test-pack.js";
-import { startGame } from "../../game/engine.js";
+import { appendBroadcast, startGame } from "../../game/engine.js";
 import type { AiPersona, GameState } from "../../game/types.js";
 import { lookupArchiveVersion } from "../archive-map.js";
 import { deobfuscate, obfuscate } from "../sealed-blob-codec.js";
@@ -133,6 +133,23 @@ describe("mintSessionId", () => {
 		const seededId = seedFromArchive(id, makeFreshGame());
 		expect(seededId).not.toBe(id);
 		expect(loadArchivedSession(id).kind).toBe("ok");
+	});
+
+	it("seedFromArchive starts the new room after the archived rounds", async () => {
+		installLocalStorageStub();
+		const id = mintAndActivateNewSession();
+		const played = appendBroadcast(
+			{ ...makeFreshGame(), round: 4 },
+			"The old room hums.",
+		);
+		saveActiveSession(played);
+		await archiveSession(id);
+
+		const seeded = loadSession(seedFromArchive(id, makeFreshGame()));
+		if (seeded.kind !== "ok") throw new Error("seeded session did not load");
+		expect(seeded.state.round).toBe(5);
+		const redLog = seeded.state.conversationLogs.red ?? [];
+		expect(redLog.map((entry) => entry.round)).toEqual([4, 5]);
 	});
 });
 

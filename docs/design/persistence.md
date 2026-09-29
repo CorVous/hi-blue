@@ -95,8 +95,11 @@ Each session is a set of localStorage keys under one prefix:
 - **Archived meta** carries `readonly: true` and `lastPlayedAt`. Active
   sessions have neither field.
 - **`seedFromArchive`** deep-copies the archived conversation logs into a fresh
-  `GameState`, adds the broadcast "The sysadmin has created a new room.", and
-  writes a new session without activating it.
+  `GameState` through `continueLogsInNewRoom`, the same helper the endgame
+  Continue uses, so the new room starts at the round after the archived logs
+  (see `game-round.md`, "Rounds never repeat within a Session"). It adds the
+  broadcast "The sysadmin has created a new room." and writes a new session
+  without activating it.
 
 ## Codec (`session-codec.ts`)
 

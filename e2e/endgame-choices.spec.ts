@@ -1,8 +1,12 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import {
 	activeSessionId,
 	collectPageErrors,
 	expectNoPageErrors,
+	isJsonModeRequest,
+	isRequestForDaemon,
+	type ParsedBody,
+	parseRequestBody,
 	reachEndgame,
 	readActiveSessionFiles,
 	renderedPlayerLine,
@@ -110,6 +114,56 @@ test("Continue leaves the endgame screen and re-enables the prompt", async ({
 	const storedDaemonLog = daemons[`${ids[0]}.txt`] ?? "";
 	expect(storedDaemonLog).toContain("hello");
 	expect(storedDaemonLog).toContain("The sysadmin has created a new room.");
+
+	await expectNoPageErrors(page, pageErrors);
+});
+
+test("the first request after Continue ends with the new-room broadcast and the new player message", async ({
+	page,
+}) => {
+	const pageErrors: Error[] = [];
+	page.on("pageerror", (err) => pageErrors.push(err));
+
+	await page.addInitScript(() => {
+		localStorage.setItem("openrouter_key", "sk-or-test-key");
+	});
+
+	const { names } = await reachEndgame(page);
+	const daemonName = names[0] ?? "";
+	await page.locator("#endgame-continue-btn").click();
+	await expectPlayableGameAfterEndgame(page);
+	await expect(page.locator("#topinfo-left")).toHaveText(/TURN 0*1\b/);
+
+	const daemonRequests: ParsedBody[] = [];
+	await page.route("**/v1/chat/completions", async (route, request) => {
+		const body = parseRequestBody(request);
+		if (!isJsonModeRequest(body) && isRequestForDaemon(body, daemonName)) {
+			daemonRequests.push(body);
+		}
+		await route.fallback();
+	});
+
+	await page.fill("#prompt", `*${daemonName} new room hello`);
+	await expect(page.locator("#send")).toBeEnabled();
+	await page.click("#send");
+	await expect.poll(() => daemonRequests.length).toBeGreaterThan(0);
+
+	const contents = (daemonRequests[0]?.messages ?? []).map((m) =>
+		typeof m.content === "string" ? m.content : "",
+	);
+	const currentState = contents[contents.length - 1] ?? "";
+	const logTail = contents.slice(0, -1);
+	expect(logTail[logTail.length - 1]).toContain("new room hello");
+	expect(logTail[logTail.length - 2]).toContain(
+		"The sysadmin has created a new room.",
+	);
+	const oldHello = logTail.findIndex((c) => c.includes("dms you: hello"));
+	expect(oldHello).toBeGreaterThan(0);
+	expect(oldHello).toBeLessThan(logTail.length - 2);
+	expect(currentState).toContain(
+		"[announcement] The sysadmin has created a new room.",
+	);
+	expect(currentState.match(/\[announcement\]/g)).toHaveLength(1);
 
 	await expectNoPageErrors(page, pageErrors);
 });

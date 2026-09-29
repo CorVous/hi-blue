@@ -1,6 +1,6 @@
 import { serializeGameSave } from "../../save-serializer.js";
 import { buildSameDaemonsSession } from "../game/bootstrap.js";
-import { appendBroadcast } from "../game/engine.js";
+import { continueLogsInNewRoom } from "../game/engine.js";
 import type { GameSession } from "../game/game-session.js";
 import type { AiId, GameState } from "../game/types";
 import { readStoredByokKey } from "../openrouter-key.js";
@@ -24,7 +24,6 @@ import {
 
 const OBJECTIVES_COMPLETE_SUBTITLE = "You have completed the objectives.";
 const BUDGET_EXHAUSTED_SUBTITLE = "You have hit your budget.";
-const NEW_ROOM_BROADCAST = "The sysadmin has created a new room.";
 const INCOMPLETE_SAVE_NOTE =
 	"this game's last save was incomplete, so it was not archived";
 
@@ -355,12 +354,8 @@ async function continueInNewRoom(choice: EndgameChoice): Promise<void> {
 	const newRoom = await buildNewRoom(choice);
 	if (!newRoom || playerLeftEndedSession(choice)) return;
 
-	const newRoomWithEndedLogs: GameState = {
-		...newRoom.getState(),
-		conversationLogs: structuredClone(choice.endedState.conversationLogs),
-	};
 	const saveResult = saveActiveSession(
-		appendBroadcast(newRoomWithEndedLogs, NEW_ROOM_BROADCAST),
+		continueLogsInNewRoom(newRoom.getState(), choice.endedState),
 		{ sessionId: choice.endedSession.id, advanceEpoch: true },
 	);
 	if (!saveResult.ok) {

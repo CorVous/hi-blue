@@ -17,6 +17,7 @@ import {
 	appendPrivateSystemNotice,
 	FAREWELL_LINE,
 	isDaemonExhausted,
+	isFirstRoundOfRoom,
 	personaName,
 	resolveToolDisables,
 } from "./engine";
@@ -458,7 +459,7 @@ export async function runRound(
 
 	state = evaluateConvergenceObjectives(
 		state,
-		game.round === 0 ? {} : game.personaSpatial,
+		isFirstRoundOfRoom(game) ? {} : game.personaSpatial,
 	);
 
 	let gameEnded = false;

@@ -164,7 +164,7 @@ _Avoid_: Phases complete (the three-phase model is retired).
 The three options presented to the player after a game ends (win or lose), before the current **Session** is archived:
 1. **New Daemons** — Fresh personas generated, new Session minted.
 2. **Same Daemons, New Room** — Same personas carried over, new Session minted, logs cleared, genuine disorientation (no wipe-lie fiction — the logs are actually empty).
-3. **Continue (OpenRouter only)** — Same Session, logs appended, engine resets to a new room. Sysadmin delivers: *"The sysadmin has created a new room."* Requires an OpenRouter API key in localStorage. Does not archive the current Session; increments the Session's Epoch counter.
+3. **Continue (OpenRouter only)** — Same Session, logs appended, engine resets to a new room. The round count carries on from the old room, so rounds never repeat within a Session. Sysadmin delivers: *"The sysadmin has created a new room."* Requires an OpenRouter API key in localStorage. Does not archive the current Session; increments the Session's Epoch counter.
 _Avoid_: Replay, restart, new game (too vague).
 
 **Session archive**:
