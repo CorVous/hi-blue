@@ -1,6 +1,6 @@
 import { PINNED_MODEL, PINNED_PROVIDER } from "../model.js";
 
-export const OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models";
+const OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models";
 
 export function modelEndpointsUrl(model: string): string {
 	return `${OPENROUTER_MODELS_URL}/${model}/endpoints`;
