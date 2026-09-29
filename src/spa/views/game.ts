@@ -14,9 +14,8 @@ import {
 	recordDaemonRound,
 	recordDaemonSystemPrompt,
 	recordDaemonTurnResult,
+	refreshDaemonFooter,
 	setDaemonFooterInFlight,
-	updateDaemonFooterDetails,
-	updateDaemonFooterSummary,
 } from "../dev-inspector/daemon-footer.js";
 import { updateGameStripSummary } from "../dev-inspector/game-strip.js";
 import { renderInspector } from "../dev-inspector/index.js";
@@ -400,8 +399,7 @@ function refreshInspectorAfterRound(
 	for (const aiId of aiIds) {
 		const panel = findPanel(doc, aiId);
 		if (panel) {
-			updateDaemonFooterSummary(panel, aiId, gameSession);
-			updateDaemonFooterDetails(panel, aiId, gameSession);
+			refreshDaemonFooter(panel, aiId, gameSession);
 		}
 	}
 }

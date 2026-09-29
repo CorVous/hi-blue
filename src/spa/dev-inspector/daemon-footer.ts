@@ -373,9 +373,6 @@ export function refreshDaemonFooter(
 	refreshFooterDetails(footerEl, aiId);
 }
 
-export const updateDaemonFooterSummary = refreshDaemonFooter;
-export const updateDaemonFooterDetails = refreshDaemonFooter;
-
 function refreshFooterSummary(
 	footerEl: HTMLElement,
 	aiId: AiId,
