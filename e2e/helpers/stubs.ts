@@ -537,6 +537,7 @@ export interface SealedEngine {
 	contentPacksB: SealedContentPack[];
 	activePackId: "A" | "B";
 	weather?: string;
+	complicationSchedule?: { countdown: number; settingShiftFired: boolean };
 }
 
 export interface SealedConversationEntry {

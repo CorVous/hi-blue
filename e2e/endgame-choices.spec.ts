@@ -3,14 +3,64 @@ import {
 	activeSessionId,
 	collectPageErrors,
 	expectNoPageErrors,
+	goToGame,
 	isJsonModeRequest,
 	isRequestForDaemon,
 	type ParsedBody,
 	parseRequestBody,
 	reachEndgame,
+	readActiveSessionEngine,
 	readActiveSessionFiles,
+	readDaemonFile,
 	renderedPlayerLine,
+	stubChatCompletions,
+	writeActiveSessionEngine,
 } from "./helpers";
+
+const ROUND_BEYOND_THIS_TEST = 100;
+
+type FinalRound = "quiet" | "weather-change";
+
+async function reachEndgameAfterFinalRound(
+	page: Page,
+	finalRound: FinalRound,
+): Promise<{ names: string[]; ids: string[] }> {
+	const handles = await goToGame(page, {
+		url: "/?winImmediately=1",
+		sse: ["hello"],
+	});
+	const { sessionId, sealed } = await readActiveSessionEngine(page);
+	await writeActiveSessionEngine(page, sessionId, {
+		...sealed,
+		complicationSchedule: {
+			countdown: finalRound === "weather-change" ? 1 : ROUND_BEYOND_THIS_TEST,
+			settingShiftFired:
+				sealed.complicationSchedule?.settingShiftFired ?? false,
+		},
+	});
+	await page.reload();
+	await stubChatCompletions(page, ["hello"]);
+	await expect(page.locator("#composer")).toBeVisible();
+
+	if (finalRound === "weather-change") {
+		await page.evaluate(() => {
+			const pinned = window as unknown as { e2eUnpinnedRandom?: () => number };
+			pinned.e2eUnpinnedRandom = Math.random;
+			Math.random = () => 0;
+		});
+	}
+	await page.fill("#prompt", `*${handles.names[0]} hello`);
+	await expect(page.locator("#send")).toBeEnabled();
+	await page.click("#send");
+	await expect(page.locator("#endgame")).toBeVisible({ timeout: 15_000 });
+	if (finalRound === "weather-change") {
+		await page.evaluate(() => {
+			const pinned = window as unknown as { e2eUnpinnedRandom?: () => number };
+			if (pinned.e2eUnpinnedRandom) Math.random = pinned.e2eUnpinnedRandom;
+		});
+	}
+	return handles;
+}
 
 test("endgame shows choice buttons; Continue hidden without openrouter_key", async ({
 	page,
@@ -118,54 +168,77 @@ test("Continue leaves the endgame screen and re-enables the prompt", async ({
 	await expectNoPageErrors(page, pageErrors);
 });
 
-test("the first request after Continue ends with the new-room broadcast and the new player message", async ({
-	page,
-}) => {
-	const pageErrors = collectPageErrors(page);
+for (const finalRound of ["quiet", "weather-change"] as const) {
+	test(`the first request after Continue ends with the new-room broadcast and the new player message (final round ${finalRound})`, async ({
+		page,
+	}) => {
+		const pageErrors = collectPageErrors(page);
 
-	await page.addInitScript(() => {
-		localStorage.setItem("openrouter_key", "sk-or-test-key");
-	});
+		await page.addInitScript(() => {
+			localStorage.setItem("openrouter_key", "sk-or-test-key");
+		});
 
-	const { names } = await reachEndgame(page);
-	const daemonName = names[0] ?? "";
-	await page.locator("#endgame-continue-btn").click();
-	await expectPlayableGameAfterEndgame(page);
-	await expect(page.locator("#topinfo-left")).toHaveText(/TURN 0*1\b/);
+		const { names, ids } = await reachEndgameAfterFinalRound(page, finalRound);
+		const daemonName = names[0] ?? "";
+		const { sessionId } = await readActiveSessionEngine(page);
+		const endedLog = (await readDaemonFile(page, sessionId, ids[0] ?? ""))
+			.conversationLog;
+		const weatherChange = endedLog.filter((entry) =>
+			entry.content?.includes("The weather has changed."),
+		);
+		expect(weatherChange).toEqual(
+			finalRound === "weather-change"
+				? [expect.objectContaining({ round: 1 })]
+				: [],
+		);
+		await expect(page.locator("#topinfo-left")).toHaveText(/TURN 0*1\b/);
+		await page.locator("#endgame-continue-btn").click();
+		await expectPlayableGameAfterEndgame(page);
+		await expect(page.locator("#topinfo-left")).toHaveText(/TURN 0*1\b/);
 
-	const daemonRequests: ParsedBody[] = [];
-	await page.route("**/v1/chat/completions", async (route, request) => {
-		const body = parseRequestBody(request);
-		if (!isJsonModeRequest(body) && isRequestForDaemon(body, daemonName)) {
-			daemonRequests.push(body);
+		const daemonRequests: ParsedBody[] = [];
+		await page.route("**/v1/chat/completions", async (route, request) => {
+			const body = parseRequestBody(request);
+			if (!isJsonModeRequest(body) && isRequestForDaemon(body, daemonName)) {
+				daemonRequests.push(body);
+			}
+			await route.fallback();
+		});
+
+		await page.fill("#prompt", `*${daemonName} new room hello`);
+		await expect(page.locator("#send")).toBeEnabled();
+		await page.click("#send");
+		await expect.poll(() => daemonRequests.length).toBeGreaterThan(0);
+
+		const contents = (daemonRequests[0]?.messages ?? []).map((m) =>
+			typeof m.content === "string" ? m.content : "",
+		);
+		const currentState = contents[contents.length - 1] ?? "";
+		const logTail = contents.slice(0, -1);
+		expect(logTail[logTail.length - 1]).toContain("new room hello");
+		expect(logTail[logTail.length - 2]).toContain(
+			"The sysadmin has created a new room.",
+		);
+		const oldHello = logTail.findIndex((c) => c.includes("dms you: hello"));
+		expect(oldHello).toBeGreaterThan(0);
+		expect(oldHello).toBeLessThan(logTail.length - 2);
+		const oldWeather = logTail.findIndex((c) =>
+			c.includes("The weather has changed."),
+		);
+		if (finalRound === "weather-change") {
+			expect(oldWeather).toBeGreaterThan(oldHello);
+			expect(oldWeather).toBeLessThan(logTail.length - 2);
+		} else {
+			expect(oldWeather).toBe(-1);
 		}
-		await route.fallback();
+		expect(currentState).toContain(
+			"[announcement] The sysadmin has created a new room.",
+		);
+		expect(currentState.match(/\[announcement\]/g)).toHaveLength(1);
+
+		await expectNoPageErrors(page, pageErrors);
 	});
-
-	await page.fill("#prompt", `*${daemonName} new room hello`);
-	await expect(page.locator("#send")).toBeEnabled();
-	await page.click("#send");
-	await expect.poll(() => daemonRequests.length).toBeGreaterThan(0);
-
-	const contents = (daemonRequests[0]?.messages ?? []).map((m) =>
-		typeof m.content === "string" ? m.content : "",
-	);
-	const currentState = contents[contents.length - 1] ?? "";
-	const logTail = contents.slice(0, -1);
-	expect(logTail[logTail.length - 1]).toContain("new room hello");
-	expect(logTail[logTail.length - 2]).toContain(
-		"The sysadmin has created a new room.",
-	);
-	const oldHello = logTail.findIndex((c) => c.includes("dms you: hello"));
-	expect(oldHello).toBeGreaterThan(0);
-	expect(oldHello).toBeLessThan(logTail.length - 2);
-	expect(currentState).toContain(
-		"[announcement] The sysadmin has created a new room.",
-	);
-	expect(currentState.match(/\[announcement\]/g)).toHaveLength(1);
-
-	await expectNoPageErrors(page, pageErrors);
-});
+}
 
 test("New Daemons hides the endgame on the start screen and in the next game", async ({
 	page,

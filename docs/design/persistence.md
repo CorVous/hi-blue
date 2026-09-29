@@ -110,8 +110,9 @@ Each session is a set of localStorage keys under one prefix:
   sessions have neither field.
 - **`seedFromArchive`** deep-copies the archived conversation logs into a fresh
   `GameState` through `continueLogsInNewRoom`, the same helper the endgame
-  Continue uses, so the new room starts at the round after the archived logs
-  (see `game-round.md`, "Rounds never repeat within a Session"). It adds the
+  Continue uses, so the new room starts at the archived round and never
+  shares a round number with the archived logs (see `game-round.md`, "Rounds
+  never repeat within a Session"). It adds the
   broadcast "The sysadmin has created a new room." and writes a new session
   without activating it.
 

@@ -287,27 +287,44 @@ export function appendBroadcast(game: GameState, content: string): GameState {
 
 export const NEW_ROOM_BROADCAST = "The sysadmin has created a new room.";
 
-function roundAfterLogs(
-	ended: Pick<GameState, "round" | "conversationLogs">,
+function latestLoggedRound(
+	conversationLogs: GameState["conversationLogs"],
 ): number {
-	let latestLoggedRound = -1;
-	for (const log of Object.values(ended.conversationLogs)) {
+	let latest = -1;
+	for (const log of Object.values(conversationLogs)) {
 		for (const entry of log) {
-			if (entry.round > latestLoggedRound) latestLoggedRound = entry.round;
+			if (entry.round > latest) latest = entry.round;
 		}
 	}
-	return Math.max(ended.round, latestLoggedRound + 1);
+	return latest;
+}
+
+function fileUnplayedEntriesUnderLastPlayedRound(
+	ended: Pick<GameState, "round" | "conversationLogs">,
+): GameState["conversationLogs"] {
+	const logs = structuredClone(ended.conversationLogs);
+	const lastPlayedRound = ended.round - 1;
+	if (lastPlayedRound < 0) return logs;
+	for (const aiId of Object.keys(logs)) {
+		logs[aiId] = (logs[aiId] ?? []).map((entry) =>
+			entry.round > lastPlayedRound
+				? { ...entry, round: lastPlayedRound }
+				: entry,
+		);
+	}
+	return logs;
 }
 
 export function continueLogsInNewRoom(
 	newRoom: GameState,
 	ended: Pick<GameState, "round" | "conversationLogs">,
 ): GameState {
+	const conversationLogs = fileUnplayedEntriesUnderLastPlayedRound(ended);
 	return appendBroadcast(
 		{
 			...newRoom,
-			round: roundAfterLogs(ended),
-			conversationLogs: structuredClone(ended.conversationLogs),
+			round: Math.max(ended.round, latestLoggedRound(conversationLogs) + 1),
+			conversationLogs,
 		},
 		NEW_ROOM_BROADCAST,
 	);

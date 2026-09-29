@@ -493,7 +493,8 @@ it hides the other routes' screens and shows or hides the global chrome
   means giving up leaves nothing half-done. "Continue" saves under the ended
   session's own id. It copies the ended game's conversation logs into the new
   room through `continueLogsInNewRoom`, which also starts the room at the
-  round after the old logs (so the TURN in topinfo keeps counting) before
+  round the old one would have played next, after every old log entry (so
+  the TURN in topinfo keeps counting without skipping a number), before
   appending the new-room broadcast, and saves with
   `saveActiveSession`'s `advanceEpoch` option, because CONTEXT.md defines
   Continue as the same Session with its logs appended and its Epoch

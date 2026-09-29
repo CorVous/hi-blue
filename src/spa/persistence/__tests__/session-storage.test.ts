@@ -136,7 +136,7 @@ describe("mintSessionId", () => {
 		expect(loadArchivedSession(id).kind).toBe("ok");
 	});
 
-	it("seedFromArchive starts the new room after the archived rounds", async () => {
+	it("seedFromArchive starts the new room at the archived round and files the unplayed round's entries under the last played round", async () => {
 		installLocalStorageStub();
 		const id = mintAndActivateNewSession();
 		const played = appendBroadcast(
@@ -148,9 +148,9 @@ describe("mintSessionId", () => {
 
 		const seeded = loadSession(seedFromArchive(id, makeFreshGame()));
 		if (seeded.kind !== "ok") throw new Error("seeded session did not load");
-		expect(seeded.state.round).toBe(5);
+		expect(seeded.state.round).toBe(4);
 		const redLog = seeded.state.conversationLogs.red ?? [];
-		expect(redLog.map((entry) => entry.round)).toEqual([4, 5]);
+		expect(redLog.map((entry) => entry.round)).toEqual([3, 4]);
 	});
 });
 

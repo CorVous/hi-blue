@@ -12,6 +12,7 @@ import type { GameState } from "../types";
 import { makeSilentProvider, makeTestGame } from "./fixtures/make-game-state";
 
 const OLD_ANNOUNCEMENT = "The old room hums.";
+const FINAL_ROUND_ANNOUNCEMENT = "[SYSTEM] The weather has changed. Fog.";
 
 function messageText(message: OpenAiMessage): string {
 	return typeof message.content === "string" ? message.content : "";
@@ -47,6 +48,38 @@ describe("Continue into a new room", () => {
 		expect(
 			isFirstRoundOfRoom({ ...continued, round: continued.round + 1 }),
 		).toBe(false);
+	});
+
+	it("keeps the round count when the ended room's final round logged an announcement for the next round", async () => {
+		const playedThrough = await playEndedRoom();
+		const ended = appendBroadcast(playedThrough, FINAL_ROUND_ANNOUNCEMENT);
+		const continued = continueLogsInNewRoom(makeTestGame(), ended);
+
+		expect(continued.round).toBe(ended.round);
+		expect(isFirstRoundOfRoom(continued)).toBe(true);
+		const redRounds = (continued.conversationLogs.red ?? []).map(
+			(entry) => entry.round,
+		);
+		expect(Math.max(...redRounds.slice(0, -1))).toBe(ended.round - 1);
+
+		const provider = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: [] },
+		]);
+		await runRound(continued, "red", "new hello", provider);
+		const redCall = provider.calls[0];
+		if (!redCall) throw new Error("expected a request for red");
+		const texts = redCall.messages.map(messageText);
+		const currentState = texts[texts.length - 1] ?? "";
+		const logTail = texts.slice(0, -1);
+		const finalAnnouncement = logTail.findIndex((t) =>
+			t.includes(FINAL_ROUND_ANNOUNCEMENT),
+		);
+		const oldGoodbye = logTail.findIndex((t) => t.includes("old goodbye"));
+		expect(finalAnnouncement).toBeGreaterThan(oldGoodbye);
+		expect(logTail[logTail.length - 2]).toContain(NEW_ROOM_BROADCAST);
+		expect(logTail[logTail.length - 1]).toContain("new hello");
+		expect(currentState).toContain(`[announcement] ${NEW_ROOM_BROADCAST}`);
+		expect(currentState).not.toContain(FINAL_ROUND_ANNOUNCEMENT);
 	});
 
 	it("puts the new-room broadcast and the new player message last, after the old history", async () => {
