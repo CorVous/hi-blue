@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+	activeSessionId,
 	collectPageErrors,
 	expectNoPageErrors,
 	goToGame,
@@ -146,9 +147,7 @@ test("[ load ] flow: click load on non-active row → game view", async ({
 
 	await expect(page.locator('main[data-view="game"]')).toBeAttached();
 
-	const activeId = await page.evaluate(() =>
-		localStorage.getItem("hi-blue:active-session"),
-	);
+	const activeId = await activeSessionId(page);
 	expect(activeId).toBe("0xBBBB");
 
 	await expectNoPageErrors(page, pageErrors);
@@ -179,9 +178,7 @@ test("[ dup ] flow: click dup → two rows, active pointer unchanged", async ({
 
 	await expect(page.locator(".session-row")).toHaveCount(2);
 
-	const activeId = await page.evaluate(() =>
-		localStorage.getItem("hi-blue:active-session"),
-	);
+	const activeId = await activeSessionId(page);
 	expect(activeId).toBe("0xAAAA");
 
 	await expectNoPageErrors(page, pageErrors);
@@ -422,9 +419,7 @@ test("[ + new session ] flow: click → start view, new active pointer", async (
 	await expect(page.locator('main[data-view="start"]')).toBeAttached();
 	await expect(page.locator("#start-screen")).toBeVisible();
 
-	const activeId = await page.evaluate(() =>
-		localStorage.getItem("hi-blue:active-session"),
-	);
+	const activeId = await activeSessionId(page);
 	expect(activeId).not.toBe("0xAAAA");
 	expect(activeId).toMatch(/^0x[0-9A-Fa-f]{4}$/i);
 

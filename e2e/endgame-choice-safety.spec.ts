@@ -1,82 +1,28 @@
 import { expect, type Page, test } from "@playwright/test";
 import {
-	classifyJsonRequest,
+	ARCHIVE_PREFIX,
+	activeSessionId,
 	collectPageErrors,
 	expectNoPageErrors,
-	goToGame,
-	parseRequestBody,
-	pickerOkSessionFiles,
+	holdChatCompletions,
+	isDualContentPackRequest,
+	listSessionIds,
+	reachEndgame,
+	requireActiveSessionId,
+	seedOkSession,
+	sessionFileKey,
 } from "./helpers";
 
 const SESSION_B = "0xBBBB";
 const NEW_ROOM_SETTLE_MS = 1_000;
 
-async function reachEndgame(page: Page): Promise<string> {
-	const { names } = await goToGame(page, {
-		url: "/?winImmediately=1",
-		sse: ["hello"],
-	});
-	await page.fill("#prompt", `*${names[0]} hello`);
-	await page.click("#send");
-	await expect(page.locator("#endgame")).toBeVisible({ timeout: 15_000 });
-	const endedSessionId = await activeSessionId(page);
-	if (endedSessionId === null) throw new Error("e2e: no active session");
-	return endedSessionId;
-}
-
-function activeSessionId(page: Page): Promise<string | null> {
-	return page.evaluate(() => localStorage.getItem("hi-blue:active-session"));
-}
-
-function listSessionIds(page: Page, prefix: string): Promise<string[]> {
-	return page.evaluate((storagePrefix) => {
-		const ids = new Set<string>();
-		for (let i = 0; i < localStorage.length; i++) {
-			const key = localStorage.key(i);
-			if (!key?.startsWith(storagePrefix)) continue;
-			const id = key.slice(storagePrefix.length).split("/")[0];
-			if (id) ids.add(id);
-		}
-		return [...ids].sort();
-	}, prefix);
-}
-
-async function seedSessionB(page: Page): Promise<void> {
-	await page.evaluate(
-		({ id, files }) => {
-			for (const [name, content] of Object.entries(files)) {
-				localStorage.setItem(`hi-blue:sessions/${id}/${name}`, content);
-			}
-		},
-		{ id: SESSION_B, files: pickerOkSessionFiles("2025-02-01T10:00:00.000Z") },
-	);
-}
-
 function readSessionBFiles(page: Page): Promise<string[]> {
-	return page.evaluate((id) => {
-		const prefix = `hi-blue:sessions/${id}/`;
-		return ["meta.json", "red.txt", "engine.dat"].map(
-			(name) => localStorage.getItem(prefix + name) ?? "",
-		);
-	}, SESSION_B);
-}
-
-async function holdNewRoomGeneration(page: Page) {
-	let requests = 0;
-	let release: () => void = () => undefined;
-	const released = new Promise<void>((resolve) => {
-		release = resolve;
-	});
-	await page.route("**/v1/chat/completions", async (route, request) => {
-		if (
-			classifyJsonRequest(parseRequestBody(request)) === "dual-content-pack"
-		) {
-			requests++;
-			await released;
-		}
-		await route.fallback();
-	});
-	return { release: () => release(), requestCount: () => requests };
+	return page.evaluate(
+		(keys) => keys.map((key) => localStorage.getItem(key) ?? ""),
+		["meta.json", "red.txt", "engine.dat"].map((name) =>
+			sessionFileKey(SESSION_B, name),
+		),
+	);
 }
 
 async function loadSessionBFromPicker(page: Page): Promise<void> {
@@ -99,10 +45,14 @@ for (const choice of [
 			localStorage.setItem("openrouter_key", "sk-or-test-key");
 		});
 
-		const endedSessionId = await reachEndgame(page);
-		await seedSessionB(page);
+		await reachEndgame(page);
+		const endedSessionId = await requireActiveSessionId(page);
+		await seedOkSession(page, SESSION_B);
 		const sessionBBefore = await readSessionBFiles(page);
-		const generation = await holdNewRoomGeneration(page);
+		const generation = await holdChatCompletions(
+			page,
+			isDualContentPackRequest,
+		);
 
 		await page.locator(choice.button).click();
 		await expect.poll(generation.requestCount).toBeGreaterThan(0);
@@ -117,10 +67,10 @@ for (const choice of [
 
 		expect(await activeSessionId(page)).toBe(SESSION_B);
 		expect(await readSessionBFiles(page)).toEqual(sessionBBefore);
-		expect(await listSessionIds(page, "hi-blue:sessions/")).toEqual(
+		expect(await listSessionIds(page)).toEqual(
 			[endedSessionId, SESSION_B].sort(),
 		);
-		expect(await listSessionIds(page, "hi-blue:archive/")).toEqual([]);
+		expect(await listSessionIds(page, ARCHIVE_PREFIX)).toEqual([]);
 		await expect(page.locator('main[data-view="game"]')).toBeAttached();
 		await expect(page.locator("#endgame")).toBeHidden();
 
@@ -137,10 +87,14 @@ for (const choice of [
 	}) => {
 		const pageErrors = collectPageErrors(page);
 
-		const endedSessionId = await reachEndgame(page);
-		await page.evaluate((id) => {
-			localStorage.setItem(`hi-blue:sessions/${id}/meta.json`, "{not json");
-		}, endedSessionId);
+		await reachEndgame(page);
+		const endedSessionId = await requireActiveSessionId(page);
+		await page.evaluate(
+			(metaKey) => {
+				localStorage.setItem(metaKey, "{not json");
+			},
+			sessionFileKey(endedSessionId, "meta.json"),
+		);
 
 		await page.locator(choice.button).click();
 
@@ -151,18 +105,19 @@ for (const choice of [
 		await expect(page.locator(choice.button)).toBeEnabled();
 		await expect(page.locator("#endgame")).toBeVisible();
 		expect(await activeSessionId(page)).toBe(endedSessionId);
-		expect(await listSessionIds(page, "hi-blue:sessions/")).toEqual([
-			endedSessionId,
-		]);
+		expect(await listSessionIds(page)).toEqual([endedSessionId]);
 
 		await expectNoPageErrors(page, pageErrors);
 	});
 }
 
 function markFinalSaveTorn(page: Page, sessionId: string): Promise<void> {
-	return page.evaluate((id) => {
-		localStorage.setItem(`hi-blue:sessions/${id}/saving`, "stuck");
-	}, sessionId);
+	return page.evaluate(
+		(savingKey) => {
+			localStorage.setItem(savingKey, "stuck");
+		},
+		sessionFileKey(sessionId, "saving"),
+	);
 }
 
 test("New daemons moves on from a torn final save without archiving it", async ({
@@ -170,7 +125,8 @@ test("New daemons moves on from a torn final save without archiving it", async (
 }) => {
 	const pageErrors = collectPageErrors(page);
 
-	const endedSessionId = await reachEndgame(page);
+	await reachEndgame(page);
+	const endedSessionId = await requireActiveSessionId(page);
 	await markFinalSaveTorn(page, endedSessionId);
 
 	await page.locator("#endgame-new-daemons-btn").click();
@@ -179,10 +135,8 @@ test("New daemons moves on from a torn final save without archiving it", async (
 		timeout: 15_000,
 	});
 	await expect(page.locator("#endgame")).toBeHidden();
-	expect(await listSessionIds(page, "hi-blue:archive/")).toEqual([]);
-	expect(await listSessionIds(page, "hi-blue:sessions/")).not.toContain(
-		endedSessionId,
-	);
+	expect(await listSessionIds(page, ARCHIVE_PREFIX)).toEqual([]);
+	expect(await listSessionIds(page)).not.toContain(endedSessionId);
 
 	await expectNoPageErrors(page, pageErrors);
 });
@@ -192,9 +146,10 @@ test("Same daemons notes a torn final save before building the new room", async 
 }) => {
 	const pageErrors = collectPageErrors(page);
 
-	const endedSessionId = await reachEndgame(page);
+	await reachEndgame(page);
+	const endedSessionId = await requireActiveSessionId(page);
 	await markFinalSaveTorn(page, endedSessionId);
-	const generation = await holdNewRoomGeneration(page);
+	const generation = await holdChatCompletions(page, isDualContentPackRequest);
 
 	await page.locator("#endgame-same-daemons-btn").click();
 	await expect.poll(generation.requestCount).toBeGreaterThan(0);
@@ -206,8 +161,8 @@ test("Same daemons notes a torn final save before building the new room", async 
 	await expect(page.locator('main[data-view="game"]')).toBeAttached();
 	await expect(page.locator("#endgame")).toBeHidden({ timeout: 15_000 });
 	await expect(page.locator("#composer")).toBeVisible();
-	expect(await listSessionIds(page, "hi-blue:archive/")).toEqual([]);
-	const sessionsAfter = await listSessionIds(page, "hi-blue:sessions/");
+	expect(await listSessionIds(page, ARCHIVE_PREFIX)).toEqual([]);
+	const sessionsAfter = await listSessionIds(page);
 	expect(sessionsAfter).not.toContain(endedSessionId);
 	expect(sessionsAfter).toHaveLength(1);
 	expect(await activeSessionId(page)).toBe(sessionsAfter[0]);

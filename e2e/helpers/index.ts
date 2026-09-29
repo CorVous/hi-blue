@@ -4,6 +4,17 @@ export {
 	pickerOkSessionFiles,
 	pickerOkSessionSeedScript,
 } from "./picker-seeds";
+export {
+	ACTIVE_SESSION_KEY,
+	ARCHIVE_PREFIX,
+	activeSessionId,
+	listSessionIds,
+	requireActiveSessionId,
+	SESSIONS_PREFIX,
+	seedOkSession,
+	sessionDir,
+	sessionFileKey,
+} from "./sessions";
 export { waitForStartScreenReady } from "./start-screen-ready";
 export {
 	activePackOf,
@@ -13,8 +24,12 @@ export {
 	ENGINE_OBFUSCATION_KEY,
 	type GridPosition,
 	goToGame,
+	type HeldChatCompletions,
+	holdChatCompletions,
 	inRoom,
 	inVista,
+	isDualContentPackRequest,
+	isGameplayRequest,
 	isGridPosition,
 	isJsonModeRequest,
 	isRequestForDaemon,
@@ -25,6 +40,7 @@ export {
 	parseRequestBody,
 	positionsEqual,
 	RELATIVE_DIRECTION_WORDS,
+	reachEndgame,
 	readActiveSessionEngine,
 	readActiveSessionFiles,
 	readDaemonFile,

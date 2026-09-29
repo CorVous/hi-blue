@@ -82,6 +82,14 @@ itself fires, never `page.request.*`.
   stub everything, navigate, wait for `#begin`, log in, wait for the game view,
   and return the handles. Its 10s budgets are enough because the stubs answer
   instantly. Start-screen specs must drive the start screen themselves.
+  `reachEndgame` builds on it: it opens the game with `?winImmediately=1`,
+  sends one round and waits for `#endgame`.
+- `holdChatCompletions(page, matches, { holdFirst })` layers a route on top
+  of the general stub that parks every request `matches` accepts (only the
+  first `holdFirst` of them, when given) until `release()` is called, then
+  falls back to the stub below. `requestCount()` counts every matching
+  request, held or not. Specs pass `isDualContentPackRequest` to hold a
+  content-pack generation and `isGameplayRequest` to hold Daemon turns.
 - **Save order.** A save writes `meta.json` first and `engine.dat` last.
   `waitForRound` polls `meta.json`, so it proves a round was saved but not that
   the engine state is in. When an assertion needs engine data, wait with
@@ -96,8 +104,8 @@ itself fires, never `page.request.*`.
 - `page.waitForFunction` takes `(pageFunction, arg, options)`. A poll with no
   argument must pass `undefined` second and `{ timeout }` third: passed second,
   the object becomes the page function's argument and no timeout applies.
-  `getAiHandles`, `waitForFirstRoundSaved` and `start-screen.spec.ts`'s
-  `waitForActiveSession` follow this form.
+  `getAiHandles` and `start-screen.spec.ts`'s `waitForActiveSession`
+  follow this form.
 - `SealedContentPack.entities` is the flat entity list of session v11 and later,
   and `obstacleCellsOf` reads obstacles from it alone. The bucketed `obstacles`
   list of older blobs is gone from the type: every spec seals a fresh session,
@@ -105,10 +113,23 @@ itself fires, never `page.request.*`.
 - `stubs.ts` re-exports `engine-blob.ts` and `vista-geometry.ts`, so specs
   import from one place.
 
+### `sessions.ts`: session storage keys
+
+`ACTIVE_SESSION_KEY`, `SESSIONS_PREFIX`, `ARCHIVE_PREFIX`, `sessionDir` and
+`sessionFileKey` spell the localStorage layout once. Code inside
+`page.evaluate` runs in the browser and cannot close over them, so helpers
+build the key on the Node side and pass it in as the argument.
+`activeSessionId` / `requireActiveSessionId` read the active pointer,
+`listSessionIds` lists the session (or, with `ARCHIVE_PREFIX`, archive) ids
+in sorted order, and `seedOkSession` writes the picker's "ok" session under
+a given id.
+
 ### `engine-blob.ts` and `vista-geometry.ts`: deliberate mirrors
 
-Specs may not import SPA modules, so these two files are copies of production
-code. They are leaf modules with no Playwright import, so unit tests can load
+Specs do not import SPA modules that carry logic, so these two files are
+copies of production code. A plain constant is imported directly when that
+keeps a spec in step with production: `bootstrap-session-switch.spec.ts`
+imports `BOOTSTRAP_LOADING_TIMEOUT_MS` from `game-bootstrap-flow.ts`. They are leaf modules with no Playwright import, so unit tests can load
 them.
 
 - `engine-blob.ts` mirrors `obfuscate` / `deobfuscate` in

@@ -1,23 +1,12 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import {
+	activeSessionId,
 	collectPageErrors,
 	expectNoPageErrors,
-	goToGame,
+	reachEndgame,
+	readActiveSessionFiles,
 	renderedPlayerLine,
 } from "./helpers";
-
-async function reachEndgame(page: Parameters<typeof goToGame>[0]) {
-	const { names, ids } = await goToGame(page, {
-		url: "/?winImmediately=1",
-		sse: ["hello"],
-	});
-	await expect(page.locator("#composer")).toBeVisible();
-	await page.fill("#prompt", `*${names[0]} hello`);
-	await expect(page.locator("#send")).toBeEnabled();
-	await page.click("#send");
-	await expect(page.locator("#endgame")).toBeVisible({ timeout: 15_000 });
-	return { ids };
-}
 
 test("endgame shows choice buttons; Continue hidden without openrouter_key", async ({
 	page,
@@ -58,9 +47,7 @@ test("New Daemons click archives session and transitions to start view", async (
 
 	await reachEndgame(page);
 
-	const sessionBefore = await page.evaluate(() =>
-		localStorage.getItem("hi-blue:active-session"),
-	);
+	const sessionBefore = await activeSessionId(page);
 	expect(sessionBefore).not.toBeNull();
 
 	await page.locator("#endgame-new-daemons-btn").click();
@@ -69,18 +56,14 @@ test("New Daemons click archives session and transitions to start view", async (
 		timeout: 15_000,
 	});
 
-	const sessionAfter = await page.evaluate(() =>
-		localStorage.getItem("hi-blue:active-session"),
-	);
+	const sessionAfter = await activeSessionId(page);
 	expect(sessionAfter).not.toBeNull();
 	expect(sessionAfter).not.toBe(sessionBefore);
 
 	await expectNoPageErrors(page, pageErrors);
 });
 
-async function expectPlayableGameAfterEndgame(
-	page: Parameters<typeof goToGame>[0],
-) {
+async function expectPlayableGameAfterEndgame(page: Page) {
 	await expect(page.locator('main[data-view="game"]')).toBeAttached({
 		timeout: 15_000,
 	});
@@ -123,10 +106,8 @@ test("Continue leaves the endgame screen and re-enables the prompt", async ({
 	await expect(page.locator("#topinfo-left")).toContainText("EPOCH 02");
 	await expect(transcript).toHaveText(endedTranscript);
 
-	const storedDaemonLog = await page.evaluate((aiId) => {
-		const sid = localStorage.getItem("hi-blue:active-session");
-		return localStorage.getItem(`hi-blue:sessions/${sid}/${aiId}.txt`) ?? "";
-	}, ids[0]);
+	const { daemons } = await readActiveSessionFiles(page);
+	const storedDaemonLog = daemons[`${ids[0]}.txt`] ?? "";
 	expect(storedDaemonLog).toContain("hello");
 	expect(storedDaemonLog).toContain("The sysadmin has created a new room.");
 

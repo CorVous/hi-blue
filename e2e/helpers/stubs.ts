@@ -6,6 +6,11 @@ import {
 } from "./engine-blob.js";
 import type { AiHandles } from "./handles.js";
 import { getAiHandles } from "./handles.js";
+import {
+	ACTIVE_SESSION_KEY,
+	SESSIONS_PREFIX,
+	sessionFileKey,
+} from "./sessions.js";
 import type { GridPosition } from "./vista-geometry.js";
 import { isGridPosition } from "./vista-geometry.js";
 
@@ -380,6 +385,39 @@ export async function stubChatCompletions(
 	});
 }
 
+export interface HeldChatCompletions {
+	release(): void;
+	requestCount(): number;
+}
+
+export async function holdChatCompletions(
+	page: Page,
+	matches: (body: ParsedBody) => boolean,
+	{ holdFirst = Number.POSITIVE_INFINITY }: { holdFirst?: number } = {},
+): Promise<HeldChatCompletions> {
+	let requests = 0;
+	let release: () => void = () => undefined;
+	const released = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	await page.route("**/v1/chat/completions", async (route, request) => {
+		if (matches(parseRequestBody(request))) {
+			requests++;
+			if (requests <= holdFirst) await released;
+		}
+		await route.fallback();
+	});
+	return { release: () => release(), requestCount: () => requests };
+}
+
+export function isDualContentPackRequest(body: ParsedBody): boolean {
+	return classifyJsonRequest(body) === "dual-content-pack";
+}
+
+export function isGameplayRequest(body: ParsedBody): boolean {
+	return !isJsonModeRequest(body);
+}
+
 export type GoToGameOptions = {
 	sse?: string[] | WordsFactory;
 	synthesis?: SynthesisStubOptions;
@@ -406,6 +444,18 @@ export async function goToGame(
 	});
 	await expect(page.locator("#composer")).toBeVisible();
 	return getAiHandles(page);
+}
+
+export async function reachEndgame(page: Page): Promise<AiHandles> {
+	const handles = await goToGame(page, {
+		url: "/?winImmediately=1",
+		sse: ["hello"],
+	});
+	await page.fill("#prompt", `*${handles.names[0]} hello`);
+	await expect(page.locator("#send")).toBeEnabled();
+	await page.click("#send");
+	await expect(page.locator("#endgame")).toBeVisible({ timeout: 15_000 });
+	return handles;
 }
 
 function withSkipDialup(url: string): string {
@@ -527,15 +577,16 @@ export function obstacleCellsOf(pack: SealedContentPack): GridPosition[] {
 export async function readActiveSessionEngine(
 	page: Page,
 ): Promise<{ sessionId: string; sealed: SealedEngine }> {
-	const raw = await page.evaluate(() => {
-		const sessionId = localStorage.getItem("hi-blue:active-session");
-		if (sessionId === null) return null;
-		const blob = localStorage.getItem(
-			`hi-blue:sessions/${sessionId}/engine.dat`,
-		);
-		if (blob === null) return null;
-		return { sessionId, blob };
-	});
+	const raw = await page.evaluate(
+		({ activeKey, prefix }) => {
+			const sessionId = localStorage.getItem(activeKey);
+			if (sessionId === null) return null;
+			const blob = localStorage.getItem(`${prefix}${sessionId}/engine.dat`);
+			if (blob === null) return null;
+			return { sessionId, blob };
+		},
+		{ activeKey: ACTIVE_SESSION_KEY, prefix: SESSIONS_PREFIX },
+	);
 	if (raw === null) {
 		throw new Error("e2e: no active session engine.dat in localStorage");
 	}
@@ -555,7 +606,7 @@ export async function writeActiveSessionEngine(
 		({ key, blob }: { key: string; blob: string }) => {
 			localStorage.setItem(key, blob);
 		},
-		{ key: `hi-blue:sessions/${sessionId}/engine.dat`, blob: value },
+		{ key: sessionFileKey(sessionId, "engine.dat"), blob: value },
 	);
 }
 
@@ -566,7 +617,7 @@ export async function readDaemonFile(
 ): Promise<SealedDaemonFile> {
 	const raw = await page.evaluate(
 		(key: string) => localStorage.getItem(key),
-		`hi-blue:sessions/${sessionId}/${aiId}.txt`,
+		sessionFileKey(sessionId, `${aiId}.txt`),
 	);
 	if (raw === null)
 		throw new Error(`e2e: ${aiId}.txt not found in localStorage`);
@@ -578,23 +629,26 @@ export async function readActiveSessionFiles(page: Page): Promise<{
 	daemons: Record<string, string>;
 	engineJson: string;
 }> {
-	const raw = await page.evaluate(() => {
-		const sessionId = localStorage.getItem("hi-blue:active-session") ?? "";
-		const prefix = `hi-blue:sessions/${sessionId}/`;
-		const daemons: Record<string, string> = {};
-		let meta = "";
-		let engine = "";
-		for (let i = 0; i < localStorage.length; i++) {
-			const key = localStorage.key(i);
-			if (key === null || !key.startsWith(prefix)) continue;
-			const name = key.slice(prefix.length);
-			const value = localStorage.getItem(key) ?? "";
-			if (name === "meta.json") meta = value;
-			else if (name === "engine.dat") engine = value;
-			else if (name.endsWith(".txt")) daemons[name] = value;
-		}
-		return { meta, daemons, engine };
-	});
+	const raw = await page.evaluate(
+		({ activeKey, sessionsPrefix }) => {
+			const sessionId = localStorage.getItem(activeKey) ?? "";
+			const prefix = `${sessionsPrefix}${sessionId}/`;
+			const daemons: Record<string, string> = {};
+			let meta = "";
+			let engine = "";
+			for (let i = 0; i < localStorage.length; i++) {
+				const key = localStorage.key(i);
+				if (key === null || !key.startsWith(prefix)) continue;
+				const name = key.slice(prefix.length);
+				const value = localStorage.getItem(key) ?? "";
+				if (name === "meta.json") meta = value;
+				else if (name === "engine.dat") engine = value;
+				else if (name.endsWith(".txt")) daemons[name] = value;
+			}
+			return { meta, daemons, engine };
+		},
+		{ activeKey: ACTIVE_SESSION_KEY, sessionsPrefix: SESSIONS_PREFIX },
+	);
 	return {
 		meta: raw.meta,
 		daemons: raw.daemons,
@@ -609,8 +663,8 @@ export async function waitForRound(
 	timeoutMs = 30_000,
 ): Promise<void> {
 	await page.waitForFunction(
-		({ sid, minimumRound: round }: { sid: string; minimumRound: number }) => {
-			const raw = localStorage.getItem(`hi-blue:sessions/${sid}/meta.json`);
+		({ metaKey, minimumRound: round }) => {
+			const raw = localStorage.getItem(metaKey);
 			if (raw === null) return false;
 			try {
 				const meta = JSON.parse(raw) as { round?: number };
@@ -619,7 +673,7 @@ export async function waitForRound(
 				return false;
 			}
 		},
-		{ sid: sessionId, minimumRound },
+		{ metaKey: sessionFileKey(sessionId, "meta.json"), minimumRound },
 		{ timeout: timeoutMs },
 	);
 }
@@ -629,12 +683,10 @@ export async function waitForFirstRoundSaved(
 	timeoutMs = 15_000,
 ): Promise<void> {
 	await page.waitForFunction(
-		() => {
-			const sessionId = localStorage.getItem("hi-blue:active-session");
+		({ activeKey, prefix }) => {
+			const sessionId = localStorage.getItem(activeKey);
 			if (!sessionId) return false;
-			const metaRaw = localStorage.getItem(
-				`hi-blue:sessions/${sessionId}/meta.json`,
-			);
+			const metaRaw = localStorage.getItem(`${prefix}${sessionId}/meta.json`);
 			if (!metaRaw) return false;
 			try {
 				const meta = JSON.parse(metaRaw) as { round?: number };
@@ -643,7 +695,7 @@ export async function waitForFirstRoundSaved(
 				return false;
 			}
 		},
-		undefined,
+		{ activeKey: ACTIVE_SESSION_KEY, prefix: SESSIONS_PREFIX },
 		{ timeout: timeoutMs },
 	);
 }
@@ -657,19 +709,19 @@ export async function waitForSavedPosition(
 ): Promise<void> {
 	await page.waitForFunction(
 		({
-			sid,
+			engineKey,
 			id,
 			row,
 			col,
 			obfuscationKey,
 		}: {
-			sid: string;
+			engineKey: string;
 			id: string;
 			row: number;
 			col: number;
 			obfuscationKey: string;
 		}) => {
-			const blob = localStorage.getItem(`hi-blue:sessions/${sid}/engine.dat`);
+			const blob = localStorage.getItem(engineKey);
 			if (blob === null) return false;
 			try {
 				const keyBytes = new TextEncoder().encode(obfuscationKey);
@@ -690,7 +742,7 @@ export async function waitForSavedPosition(
 			}
 		},
 		{
-			sid: sessionId,
+			engineKey: sessionFileKey(sessionId, "engine.dat"),
 			id: aiId,
 			row: expectedPosition.row,
 			col: expectedPosition.col,

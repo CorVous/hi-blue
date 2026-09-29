@@ -3,24 +3,17 @@ import {
 	collectPageErrors,
 	expectNoPageErrors,
 	goToGame,
-	isJsonModeRequest,
-	parseRequestBody,
+	holdChatCompletions,
+	isGameplayRequest,
 	renderedPlayerLine,
+	requireActiveSessionId,
+	sessionDir,
 	stubNewGameLLM,
 	waitForRound,
 } from "./helpers";
 
-function activeSessionId(page: Page): Promise<string> {
-	return page.evaluate(() => {
-		const id = localStorage.getItem("hi-blue:active-session");
-		if (id === null) throw new Error("e2e: no active session");
-		return id;
-	});
-}
-
 function readStoredDaemonLogs(page: Page, sessionId: string): Promise<string> {
-	return page.evaluate((id) => {
-		const prefix = `hi-blue:sessions/${id}/`;
+	return page.evaluate((prefix) => {
 		const logs: string[] = [];
 		for (let i = 0; i < localStorage.length; i++) {
 			const key = localStorage.key(i);
@@ -29,7 +22,7 @@ function readStoredDaemonLogs(page: Page, sessionId: string): Promise<string> {
 			}
 		}
 		return logs.join("\n");
-	}, sessionId);
+	}, sessionDir(sessionId));
 }
 
 async function openSecondTab(context: BrowserContext): Promise<Page> {
@@ -47,22 +40,6 @@ async function sendRound(page: Page, text: string): Promise<void> {
 	await page.click("#send");
 }
 
-async function holdDaemonTurns(page: Page) {
-	let held = 0;
-	let release: () => void = () => undefined;
-	const released = new Promise<void>((resolve) => {
-		release = resolve;
-	});
-	await page.route("**/v1/chat/completions", async (route, request) => {
-		if (!isJsonModeRequest(parseRequestBody(request))) {
-			held++;
-			await released;
-		}
-		await route.fallback();
-	});
-	return { release: () => release(), heldCount: () => held };
-}
-
 test("an idle tab reloads the session when another tab saves a round into it", async ({
 	context,
 	page,
@@ -70,7 +47,7 @@ test("an idle tab reloads the session when another tab saves a round into it", a
 	const pageErrors = collectPageErrors(page);
 
 	const { ids, names } = await goToGame(page);
-	const sessionId = await activeSessionId(page);
+	const sessionId = await requireActiveSessionId(page);
 	await sendRound(page, `*${names[0]} first from tab a`);
 	await waitForRound(page, sessionId, 1);
 	await expect(page.locator("#stage")).not.toHaveAttribute(
@@ -105,10 +82,10 @@ test("a round that finishes after another tab saved is refused, warned about, an
 	const pageErrors = collectPageErrors(page);
 
 	const { ids, names } = await goToGame(page);
-	const sessionId = await activeSessionId(page);
-	const held = await holdDaemonTurns(page);
+	const sessionId = await requireActiveSessionId(page);
+	const held = await holdChatCompletions(page, isGameplayRequest);
 	await sendRound(page, `*${names[0]} lost from tab a`);
-	await expect.poll(held.heldCount).toBeGreaterThan(0);
+	await expect.poll(held.requestCount).toBeGreaterThan(0);
 
 	const second = await openSecondTab(context);
 	await sendRound(second, `*${names[1]} kept from tab b`);

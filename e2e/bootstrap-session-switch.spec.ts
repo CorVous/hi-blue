@@ -1,34 +1,20 @@
 import { expect, type Page, test } from "@playwright/test";
 import { BOOTSTRAP_LOADING_TIMEOUT_MS } from "../src/spa/views/game-bootstrap-flow.js";
 import {
-	classifyJsonRequest,
+	ACTIVE_SESSION_KEY,
 	collectPageErrors,
 	expectNoPageErrors,
+	holdChatCompletions,
+	isDualContentPackRequest,
+	listSessionIds,
 	parseRequestBody,
 	pickerOkSessionFiles,
+	SESSIONS_PREFIX,
 	stubNewGameLLM,
 } from "./helpers";
 
 const SEEDED_SESSION = "0xAAAA";
 const HANDOVER_SETTLE_MS = 1_000;
-
-async function holdContentPacks(page: Page) {
-	let requests = 0;
-	let release: () => void = () => undefined;
-	const released = new Promise<void>((resolve) => {
-		release = resolve;
-	});
-	await page.route("**/v1/chat/completions", async (route, request) => {
-		if (
-			classifyJsonRequest(parseRequestBody(request)) === "dual-content-pack"
-		) {
-			requests++;
-			await released;
-		}
-		await route.fallback();
-	});
-	return { release: () => release(), requestCount: () => requests };
-}
 
 async function connect(page: Page): Promise<void> {
 	await expect(page.locator("#begin")).toBeEnabled({ timeout: 15_000 });
@@ -46,20 +32,6 @@ async function startNewSessionFromPicker(page: Page): Promise<void> {
 	await expect(page.locator('main[data-view="start"]')).toBeAttached();
 }
 
-function listSessionIds(page: Page): Promise<string[]> {
-	return page.evaluate(() => {
-		const prefix = "hi-blue:sessions/";
-		const ids = new Set<string>();
-		for (let i = 0; i < localStorage.length; i++) {
-			const key = localStorage.key(i);
-			if (!key?.startsWith(prefix)) continue;
-			const id = key.slice(prefix.length).split("/")[0];
-			if (id) ids.add(id);
-		}
-		return [...ids];
-	});
-}
-
 test("a timed-out loading flow that succeeds after the player abandoned it does not take over the start screen", async ({
 	page,
 }) => {
@@ -67,12 +39,13 @@ test("a timed-out loading flow that succeeds after the player abandoned it does 
 
 	await page.clock.install();
 	await stubNewGameLLM(page, { sse: ["stub reply"] });
-	const contentPacks = await holdContentPacks(page);
+	const contentPacks = await holdChatCompletions(
+		page,
+		isDualContentPackRequest,
+	);
 	let abortedContentPackRequests = 0;
 	page.on("requestfailed", (request) => {
-		if (
-			classifyJsonRequest(parseRequestBody(request)) === "dual-content-pack"
-		) {
+		if (isDualContentPackRequest(parseRequestBody(request))) {
 			abortedContentPackRequests++;
 		}
 	});
@@ -118,14 +91,19 @@ test("a new game shows epoch 01 after a session with a later epoch was open", as
 	>;
 	files["meta.json"] = JSON.stringify({ ...meta, epoch: 3 });
 	await page.addInitScript(
-		({ id, seededFiles }) => {
-			if (localStorage.getItem("hi-blue:active-session") !== null) return;
-			localStorage.setItem("hi-blue:active-session", id);
+		({ activeKey, prefix, id, seededFiles }) => {
+			if (localStorage.getItem(activeKey) !== null) return;
+			localStorage.setItem(activeKey, id);
 			for (const [name, content] of Object.entries(seededFiles)) {
-				localStorage.setItem(`hi-blue:sessions/${id}/${name}`, content);
+				localStorage.setItem(`${prefix}${id}/${name}`, content);
 			}
 		},
-		{ id: SEEDED_SESSION, seededFiles: files },
+		{
+			activeKey: ACTIVE_SESSION_KEY,
+			prefix: SESSIONS_PREFIX,
+			id: SEEDED_SESSION,
+			seededFiles: files,
+		},
 	);
 
 	await page.goto("/?skipDialup=1");

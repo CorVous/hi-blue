@@ -1,54 +1,27 @@
 import { expect, type Page, test } from "@playwright/test";
 import {
+	activeSessionId,
 	collectPageErrors,
 	expectNoPageErrors,
 	goToGame,
-	isJsonModeRequest,
-	parseRequestBody,
-	pickerOkSessionFiles,
+	holdChatCompletions,
+	isGameplayRequest,
+	seedOkSession,
+	sessionFileKey,
 	waitForRound,
 } from "./helpers";
 
 const SESSION_B = "0xBBBB";
 const ROUND_A_REPLY = "ROUNDAREPLY";
 
-async function seedSessionB(page: Page): Promise<void> {
-	await page.evaluate(
-		({ id, files }) => {
-			for (const [name, content] of Object.entries(files)) {
-				localStorage.setItem(`hi-blue:sessions/${id}/${name}`, content);
-			}
-		},
-		{ id: SESSION_B, files: pickerOkSessionFiles("2025-02-01T10:00:00.000Z") },
-	);
-}
-
-async function holdFirstGameplayTurn(page: Page) {
-	let gameplayRequests = 0;
-	let releaseFirstTurn: () => void = () => undefined;
-	const firstTurnReleased = new Promise<void>((resolve) => {
-		releaseFirstTurn = resolve;
-	});
-	await page.route("**/v1/chat/completions", async (route, request) => {
-		if (isJsonModeRequest(parseRequestBody(request))) {
-			await route.fallback();
-			return;
-		}
-		gameplayRequests++;
-		if (gameplayRequests === 1) await firstTurnReleased;
-		await route.fallback();
-	});
-	return {
-		release: () => releaseFirstTurn(),
-		requestCount: () => gameplayRequests,
-	};
-}
-
 async function readMetaRound(page: Page, id: string): Promise<number | null> {
-	return page.evaluate((sid) => {
-		const raw = localStorage.getItem(`hi-blue:sessions/${sid}/meta.json`);
-		return raw === null ? null : (JSON.parse(raw) as { round: number }).round;
-	}, id);
+	return page.evaluate(
+		(metaKey) => {
+			const raw = localStorage.getItem(metaKey);
+			return raw === null ? null : (JSON.parse(raw) as { round: number }).round;
+		},
+		sessionFileKey(id, "meta.json"),
+	);
 }
 
 test("a round still running when the player loads another session is saved to its own session", async ({
@@ -57,17 +30,17 @@ test("a round still running when the player loads another session is saved to it
 	const pageErrors = collectPageErrors(page);
 
 	const { names } = await goToGame(page, { sse: [ROUND_A_REPLY] });
-	const sessionA = await page.evaluate(() =>
-		localStorage.getItem("hi-blue:active-session"),
-	);
+	const sessionA = await activeSessionId(page);
 	expect(sessionA).not.toBeNull();
-	const turn = await holdFirstGameplayTurn(page);
+	const turn = await holdChatCompletions(page, isGameplayRequest, {
+		holdFirst: 1,
+	});
 
 	await page.fill("#prompt", `*${names[0]} hello`);
 	await page.click("#send");
 	await expect.poll(turn.requestCount).toBe(1);
 
-	await seedSessionB(page);
+	await seedOkSession(page, SESSION_B);
 	await page.locator("#sessions-icon").click();
 	const rowB = page.locator(`.session-row[data-session-id="${SESSION_B}"]`);
 	await rowB.locator(".ops button", { hasText: "[ load ]" }).click();
@@ -85,9 +58,7 @@ test("a round still running when the player loads another session is saved to it
 	await expect(page.locator("#panels")).not.toContainText(ROUND_A_REPLY);
 	await expect(page.locator("#endgame")).toBeHidden();
 	await expect(page.locator("#round-error")).toBeHidden();
-	expect(
-		await page.evaluate(() => localStorage.getItem("hi-blue:active-session")),
-	).toBe(SESSION_B);
+	expect(await activeSessionId(page)).toBe(SESSION_B);
 	expect(await readMetaRound(page, SESSION_B)).toBe(0);
 
 	await page.locator("#sessions-icon").click();
@@ -104,10 +75,10 @@ test("a round still running when the player removes its session is dropped", asy
 	const pageErrors = collectPageErrors(page);
 
 	const { names } = await goToGame(page, { sse: [ROUND_A_REPLY] });
-	const sessionA = await page.evaluate(() =>
-		localStorage.getItem("hi-blue:active-session"),
-	);
-	const turn = await holdFirstGameplayTurn(page);
+	const sessionA = await activeSessionId(page);
+	const turn = await holdChatCompletions(page, isGameplayRequest, {
+		holdFirst: 1,
+	});
 
 	await page.fill("#prompt", `*${names[0]} hello`);
 	await page.click("#send");
