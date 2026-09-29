@@ -160,18 +160,6 @@ export type RoundActionRecord = {
 	kind: "tool_success" | "tool_failure" | "message" | "pass" | "lockout";
 };
 
-export interface PhysicalActionRecord {
-	round: number;
-	actor: AiId;
-	actorCellAtAction: GridPosition;
-	kind: "go" | "pick_up" | "put_down" | "use";
-	item?: string;
-	useOutcome?: string;
-	placementFlavorRaw?: string;
-	direction?: CardinalDirection;
-	witnessSpatial: Record<AiId, PersonaSpatialState>;
-}
-
 export type ConversationEntry =
 	| {
 			kind: "message";

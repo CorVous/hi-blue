@@ -32,12 +32,13 @@ import {
 import type {
 	AiId,
 	AiTurnAction,
+	ConversationEntry,
 	GameState,
 	GridPosition,
-	PersonaSpatialState,
-	PhysicalActionRecord,
+	Objective,
 	RoundActionRecord,
 	ToolCall,
+	WorldEntity,
 } from "./types";
 import { vistaContains } from "./vista-projector.js";
 import {
@@ -78,6 +79,10 @@ export function resolveToolCall(
 	return { ...call, args: { ...call.args, item: target.id } };
 }
 
+function invalid(reason: string): ValidationResult {
+	return { valid: false, reason };
+}
+
 function disabledToolReason(tool: ToolCall["name"]): string {
 	return `your ${tool} tool is disabled`;
 }
@@ -105,7 +110,7 @@ function validateResolvedToolCall(
 	call: ToolCall,
 ): ValidationResult {
 	if (disabledToolsFor(game.activeComplications, aiId).has(call.name))
-		return { valid: false, reason: disabledToolReason(call.name) };
+		return invalid(disabledToolReason(call.name));
 	const label = targetLabel(game, call.args.item);
 	const { world } = game;
 	const actorSpatial = game.personaSpatial[aiId];
@@ -115,44 +120,27 @@ function validateResolvedToolCall(
 	switch (call.name) {
 		case "pick_up": {
 			const item = pickable.find((i) => i.id === call.args.item);
-			if (!item)
-				return {
-					valid: false,
-					reason: `Item "${label}" does not exist`,
-				};
+			if (!item) return invalid(`Item "${label}" does not exist`);
 			if (!isGridPosition(item.holder))
-				return {
-					valid: false,
-					reason: `Item "${label}" is not on the ground`,
-				};
-			if (!actorSpatial)
-				return { valid: false, reason: "Actor has no spatial state" };
+				return invalid(`Item "${label}" is not on the ground`);
+			if (!actorSpatial) return invalid("Actor has no spatial state");
 			if (!withinInteractionRange(actorSpatial.position, item.holder))
-				return {
-					valid: false,
-					reason: `Item "${label}" is out of reach — you can only pick up items in your own cell or the eight cells around it`,
-				};
+				return invalid(
+					`Item "${label}" is out of reach — you can only pick up items in your own cell or the eight cells around it`,
+				);
 			const holdingSpace = pairedSpaceHoldingItem(item, world.entities);
 			if (holdingSpace)
-				return {
-					valid: false,
-					reason: `"${label}" is set into the ${entityHandle(world.entities, holdingSpace)} and will not come loose`,
-				};
+				return invalid(
+					`"${label}" is set into the ${entityHandle(world.entities, holdingSpace)} and will not come loose`,
+				);
 			return { valid: true };
 		}
 
 		case "put_down": {
 			const item = pickable.find((i) => i.id === call.args.item);
-			if (!item)
-				return {
-					valid: false,
-					reason: `Item "${label}" does not exist`,
-				};
+			if (!item) return invalid(`Item "${label}" does not exist`);
 			if (item.holder !== aiId)
-				return {
-					valid: false,
-					reason: `You are not holding "${label}"`,
-				};
+				return invalid(`You are not holding "${label}"`);
 			return { valid: true };
 		}
 
@@ -162,78 +150,56 @@ function validateResolvedToolCall(
 			);
 			if (spaceTarget) {
 				if (spaceTarget.useAvailable === false)
-					return {
-						valid: false,
-						reason: `"${label}" has already been used`,
-					};
+					return invalid(`"${label}" has already been used`);
 				if (!isGridPosition(spaceTarget.holder))
-					return {
-						valid: false,
-						reason: `Space "${label}" is not on the grid`,
-					};
-				if (!actorSpatial)
-					return { valid: false, reason: "Actor has no spatial state" };
-				const spacePos = spaceTarget.holder as GridPosition;
-				if (!withinInteractionRange(actorSpatial.position, spacePos))
-					return {
-						valid: false,
-						reason: `Space "${label}" is out of reach — you can only use a space in your own cell or the eight cells around it`,
-					};
+					return invalid(`Space "${label}" is not on the grid`);
+				if (!actorSpatial) return invalid("Actor has no spatial state");
+				if (!withinInteractionRange(actorSpatial.position, spaceTarget.holder))
+					return invalid(
+						`Space "${label}" is out of reach — you can only use a space in your own cell or the eight cells around it`,
+					);
 				return { valid: true };
 			}
 
 			const item = pickable.find((i) => i.id === call.args.item);
-			if (!item)
-				return {
-					valid: false,
-					reason: `Item "${label}" does not exist`,
-				};
+			if (!item) return invalid(`Item "${label}" does not exist`);
 			if (item.holder !== aiId) {
 				if (isGridPosition(item.holder) && actorSpatial) {
-					const itemPos = item.holder as GridPosition;
 					const holdingSpace = pairedSpaceHoldingItem(item, world.entities);
 					if (holdingSpace) {
-						return {
-							valid: false,
-							reason: `"${label}" is set into the ${entityHandle(world.entities, holdingSpace)} and will not come loose`,
-						};
+						return invalid(
+							`"${label}" is set into the ${entityHandle(world.entities, holdingSpace)} and will not come loose`,
+						);
 					}
-					if (withinInteractionRange(actorSpatial.position, itemPos)) {
-						return {
-							valid: false,
-							reason: `"${label}" is on the ground, not in your hands. Use pick_up first.`,
-						};
+					if (withinInteractionRange(actorSpatial.position, item.holder)) {
+						return invalid(
+							`"${label}" is on the ground, not in your hands. Use pick_up first.`,
+						);
 					}
 				}
-				return {
-					valid: false,
-					reason: `You are not holding "${label}"`,
-				};
+				return invalid(`You are not holding "${label}"`);
 			}
 			return { valid: true };
 		}
 
 		case "go": {
 			const rawDir = call.args.direction;
-			if (!actorSpatial)
-				return { valid: false, reason: "Actor has no spatial state" };
+			if (!actorSpatial) return invalid("Actor has no spatial state");
 			if (!CARDINAL_DIRECTIONS.includes(rawDir as CardinalDirection)) {
-				return {
-					valid: false,
-					reason: `"${rawDir}" is not a valid direction. Use a cardinal direction: north, south, east, or west.`,
-				};
+				return invalid(
+					`"${rawDir}" is not a valid direction. Use a cardinal direction: north, south, east, or west.`,
+				);
 			}
 			const direction = rawDir as CardinalDirection;
 			const next = applyDirection(actorSpatial.position, direction);
-			if (!inBounds(next))
-				return { valid: false, reason: "That direction is out of bounds" };
+			if (!inBounds(next)) return invalid("That direction is out of bounds");
 			if (obstacles.some((o) => positionsEqual(o, next)))
-				return { valid: false, reason: "That cell is blocked by an obstacle" };
+				return invalid("That cell is blocked by an obstacle");
 			return { valid: true };
 		}
 
 		default:
-			return { valid: false, reason: `Unknown tool "${call.name}"` };
+			return invalid(`Unknown tool "${call.name}"`);
 	}
 }
 
@@ -247,6 +213,28 @@ export function executeToolCall(
 		aiId,
 		resolveToolCall(game, aiId, rawCall),
 	);
+}
+
+function satisfyPendingObjective(
+	game: GameState,
+	entities: WorldEntity[],
+	satisfiedEntity: WorldEntity,
+	matches: (objective: Objective) => boolean,
+): GameState | null {
+	const pendingIdx = game.objectives.findIndex(
+		(obj) => matches(obj) && obj.satisfactionState === "pending",
+	);
+	if (pendingIdx === -1) return null;
+	satisfiedEntity.satisfactionState = "satisfied";
+	return {
+		...game,
+		world: { ...game.world, entities },
+		objectives: game.objectives.map((obj, idx) =>
+			idx === pendingIdx
+				? { ...obj, satisfactionState: "satisfied" as const }
+				: obj,
+		),
+	};
 }
 
 function executeResolvedToolCall(
@@ -264,39 +252,24 @@ function executeResolvedToolCall(
 			if (target) target.holder = aiId;
 			break;
 		case "put_down":
-			if (target && actorSpatial) {
-				target.holder = { ...actorSpatial.position };
-			} else if (target) {
-				target.holder = { ...DROP_CELL_WITHOUT_SPATIAL_STATE };
-			}
+			if (target)
+				target.holder = {
+					...(actorSpatial?.position ?? DROP_CELL_WITHOUT_SPATIAL_STATE),
+				};
 			break;
 		case "use": {
 			const spaceTarget = entities.find(
 				(e) => e.id === call.args.item && e.kind === "objective_space",
 			);
 			if (spaceTarget) {
-				const spaceId = call.args.item;
-				const pendingSpaceObjIdx = game.objectives.findIndex(
-					(obj) =>
-						obj.kind === "use_space" &&
-						obj.spaceId === spaceId &&
-						obj.satisfactionState === "pending",
+				const satisfied = satisfyPendingObjective(
+					game,
+					entities,
+					spaceTarget,
+					(obj) => obj.kind === "use_space" && obj.spaceId === spaceTarget.id,
 				);
-				if (pendingSpaceObjIdx !== -1) {
-					const updatedObjectives = game.objectives.map((obj, idx) =>
-						idx === pendingSpaceObjIdx
-							? { ...obj, satisfactionState: "satisfied" as const }
-							: obj,
-					);
-					spaceTarget.satisfactionState = "satisfied";
-					spaceTarget.useAvailable = false;
-					return {
-						...game,
-						world: { ...game.world, entities },
-						objectives: updatedObjectives,
-					};
-				}
 				spaceTarget.useAvailable = false;
+				if (satisfied) return satisfied;
 				break;
 			}
 
@@ -304,35 +277,23 @@ function executeResolvedToolCall(
 				const pairedSpace = entities.find(
 					(e) => e.id === target.pairsWithSpaceId,
 				);
-				if (pairedSpace && isGridPosition(pairedSpace.holder)) {
-					const spacePos = pairedSpace.holder as GridPosition;
-					if (withinInteractionRange(actorSpatial.position, spacePos)) {
-						target.holder = { ...spacePos };
-					}
+				if (
+					pairedSpace &&
+					isGridPosition(pairedSpace.holder) &&
+					withinInteractionRange(actorSpatial.position, pairedSpace.holder)
+				) {
+					target.holder = { ...pairedSpace.holder };
 				}
 			}
 
 			if (target) {
-				const itemId = call.args.item;
-				const pendingObjectiveIdx = game.objectives.findIndex(
-					(obj) =>
-						obj.kind === "use_item" &&
-						obj.itemId === itemId &&
-						obj.satisfactionState === "pending",
+				const satisfied = satisfyPendingObjective(
+					game,
+					entities,
+					target,
+					(obj) => obj.kind === "use_item" && obj.itemId === target.id,
 				);
-				if (pendingObjectiveIdx !== -1) {
-					const updatedObjectives = game.objectives.map((obj, idx) =>
-						idx === pendingObjectiveIdx
-							? { ...obj, satisfactionState: "satisfied" as const }
-							: obj,
-					);
-					target.satisfactionState = "satisfied";
-					return {
-						...game,
-						world: { ...game.world, entities },
-						objectives: updatedObjectives,
-					};
-				}
+				if (satisfied) return satisfied;
 			}
 			break;
 		}
@@ -435,9 +396,50 @@ function dispatchSpeechBeforeAction(
 	return state;
 }
 
+type WitnessedEventEntry = Extract<
+	ConversationEntry,
+	{ kind: "witnessed-event" }
+>;
+
+function withDefined<K extends string>(
+	key: K,
+	value: string | undefined,
+): Partial<Record<K, string>> {
+	return value !== undefined ? ({ [key]: value } as Record<K, string>) : {};
+}
+
+function witnessedUseOutcome(
+	game: GameState,
+	call: ToolCall,
+	activationFlavor: string | null,
+): string | undefined {
+	if (call.name !== "use") return undefined;
+	const spaceTarget = game.world.entities.find(
+		(e) => e.id === call.args.item && e.kind === "objective_space",
+	);
+	if (spaceTarget) return spaceTarget.satisfactionFlavor;
+	if (activationFlavor !== null) return activationFlavor;
+	return pickableEntities(game.world.entities).find(
+		(i) => i.id === call.args.item,
+	)?.useOutcome;
+}
+
+function witnessedPlacementFlavor(
+	game: GameState,
+	call: ToolCall,
+	pairPlacementFlavor: string | null,
+): string | undefined {
+	if (call.name !== "put_down" && call.name !== "use") return undefined;
+	if (call.args.item === undefined || !pairPlacementFlavor) return undefined;
+	return (
+		carryObjectById(call.args.item, game.contentPack)?.placementFlavor ||
+		undefined
+	);
+}
+
 function isObservableAction(
 	name: ToolCall["name"],
-): name is PhysicalActionRecord["kind"] {
+): name is WitnessedEventEntry["actionKind"] {
 	return (
 		name === "go" || name === "pick_up" || name === "put_down" || name === "use"
 	);
@@ -527,92 +529,35 @@ export function dispatchAiTurn(
 				}
 			}
 
-			const call = toolCall;
-			if (isObservableAction(call.name)) {
-				const actorSpatialPost = state.personaSpatial[aiId];
-
-				const witnessSpatial: Record<AiId, PersonaSpatialState> = {};
-				for (const [otherId, spatial] of Object.entries(state.personaSpatial)) {
-					if (otherId !== aiId) {
-						witnessSpatial[otherId] = spatial;
-					}
-				}
-
-				if (actorSpatialPost) {
-					const pickable = pickableEntities(state.world.entities);
-					let useOutcomeRaw: string | undefined;
-					let placementFlavorRaw: string | undefined;
-
-					if (call.name === "use") {
-						const spaceTarget = state.world.entities.find(
-							(e) => e.id === call.args.item && e.kind === "objective_space",
-						);
-						if (spaceTarget) {
-							useOutcomeRaw = spaceTarget.satisfactionFlavor;
-						} else if (activationFlavor !== null) {
-							useOutcomeRaw = activationFlavor;
-						} else {
-							const item = pickable.find((i) => i.id === call.args.item);
-							useOutcomeRaw = item?.useOutcome;
-						}
-					}
-
-					if (call.name === "put_down" || call.name === "use") {
-						const itemId = call.args.item;
-						const packObject =
-							itemId !== undefined
-								? carryObjectById(itemId, state.contentPack)
-								: undefined;
-						if (packObject?.placementFlavor && pairPlacementFlavor) {
-							placementFlavorRaw = packObject.placementFlavor;
-						}
-					}
-
-					const physRecord: PhysicalActionRecord = {
-						round,
-						actor: aiId,
-						actorCellAtAction: actorSpatialPost.position,
-						kind: call.name,
-						witnessSpatial,
-						...(call.args.item !== undefined ? { item: call.args.item } : {}),
-						...(call.name === "go"
-							? {
-									direction: call.args.direction as CardinalDirection,
-								}
-							: {}),
-						...(useOutcomeRaw !== undefined
-							? { useOutcome: useOutcomeRaw }
-							: {}),
-						...(placementFlavorRaw !== undefined ? { placementFlavorRaw } : {}),
-					};
-
-					for (const [witnessId, witnessSp] of Object.entries(witnessSpatial)) {
-						const actorInVista = vistaContains(
-							witnessSp.position,
-							physRecord.actorCellAtAction,
-						);
-						if (!actorInVista) continue;
-
-						const witnessEntry = {
-							kind: "witnessed-event" as const,
-							round,
-							actor: aiId,
-							actionKind: physRecord.kind,
-							...(physRecord.item !== undefined
-								? { item: physRecord.item }
-								: {}),
-							...(physRecord.direction !== undefined
-								? { direction: physRecord.direction }
-								: {}),
-							...(physRecord.useOutcome !== undefined
-								? { useOutcome: physRecord.useOutcome }
-								: {}),
-							...(physRecord.placementFlavorRaw !== undefined
-								? { placementFlavorRaw: physRecord.placementFlavorRaw }
-								: {}),
-						};
-						state = appendLogEntry(state, witnessId, witnessEntry);
-					}
+			const actorSpatialPost = state.personaSpatial[aiId];
+			if (isObservableAction(toolCall.name) && actorSpatialPost) {
+				const witnessEntry: WitnessedEventEntry = {
+					kind: "witnessed-event",
+					round,
+					actor: aiId,
+					actionKind: toolCall.name,
+					...(toolCall.args.item !== undefined && { item: toolCall.args.item }),
+					...(toolCall.name === "go" && {
+						direction: toolCall.args.direction as CardinalDirection,
+					}),
+					...withDefined(
+						"useOutcome",
+						witnessedUseOutcome(state, toolCall, activationFlavor),
+					),
+					...withDefined(
+						"placementFlavorRaw",
+						witnessedPlacementFlavor(state, toolCall, pairPlacementFlavor),
+					),
+				};
+				for (const [witnessId, witnessSpatial] of Object.entries(
+					state.personaSpatial,
+				)) {
+					if (witnessId === aiId) continue;
+					if (
+						!vistaContains(witnessSpatial.position, actorSpatialPost.position)
+					)
+						continue;
+					state = appendLogEntry(state, witnessId, witnessEntry);
 				}
 			}
 		} else {

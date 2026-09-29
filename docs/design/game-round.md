@@ -140,7 +140,7 @@ The module is pure and takes an injected rng. The countdown is the number of rou
 - An `action-failure` entry's `tool` is a `ToolName`. The only source of a retired name is a raw model call, and `parseToolCallArguments` rejects it before any `ToolCall` exists.
 - Every `objective_space` in a pack is either a carry-paired space (named by some object's `pairsWithSpaceId`) or a bound space (Use-Space or Convergence target), never both. `carryPairs` and `boundSpaces` share that test.
 - `shiftFlavor`, the convergence flavors and `activationFlavor` contain no `{actor}`; `useOutcome` and `placementFlavor` do. `activationFlavor` is the actor's line at the moment of satisfaction (#335 for spaces, #334 for items).
-- `PhysicalActionRecord` is computed during dispatch to choose witnesses and is not stored.
+- A `witnessed-event` entry is built once per observable action in `dispatcher.ts` and appended to every Daemon whose Vista holds the actor's cell. The pose snapshot it is chosen by is not stored.
 - `contentPacksA` / `contentPacksB` each hold one pack, and B uses A's entity ids.
 
 ## Vista geometry (`vista-projector.ts`, `direction.ts`)
