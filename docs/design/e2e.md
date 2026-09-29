@@ -74,7 +74,7 @@ itself fires, never `page.request.*`.
   pacing, so the stub does not throttle.
 - `toolCallSseBody` drives one live action (`go`, `pick_up`) for a chosen
   Daemon. The parser in `src/spa/streaming.ts` flushes tool calls on
-  `finish_reason: "tool_calls"` or `[DONE]`.
+  `finish_reason: "tool_calls"`, `[DONE]` or the end of the stream.
 - `isRequestForDaemon` finds a Daemon's request by the identity line of its
   system prompt, `You are the author writing *<name>, a Daemon.`
   (`prompt-builder.ts`).
@@ -187,8 +187,9 @@ specs that assert on generation failure check `#cap-hit` themselves.
 | `chat-lockout` | A lockout restored from storage mutes its panel before any typing, disables Send for that Daemon, and says nothing in the transcript. | |
 | `endgame-current-behaviour` | `game_ended` disables the composer, shows the choices, and keeps the URL. The active-session pointer survives until the player chooses. | #80, #101, #307 |
 | `endgame-outcome` | The endgame subtitle follows the outcome (win or budget exhausted), topinfo shows the final turn, the final round's Daemon lines appear on the endgame screen, and the finished round is saved so a reload reopens the endgame. The budget ending is reached by lowering every saved budget and reloading. Re-entering the endgame by toggling the picker must not stack button handlers: one click downloads once and starts one content-pack request. | #576 |
-| `endgame-choices` | The end-game choice screen: New Daemons archives the session and the dispatcher mints a new one; Continue appears only when `openrouter_key` is set. | #307 |
-| `bootstrap-recovery` | The regenerate path re-runs content-pack generation without re-resolving personas, and abandon returns to start with `data-reason="broken"`. The visible `#bootstrap-recovery-regen` is disabled while a regeneration is in flight and enabled again after a retryable failure. | #380 |
+| `endgame-choices` | The end-game choice screen: New Daemons archives the session and the dispatcher mints a new one; Continue appears only when `openrouter_key` is set. After each choice (Same Daemons, Continue, and New Daemons followed by a new login) `#endgame` is hidden and `#prompt` is enabled again. | #307 |
+| `round-reentry` | Opening and closing the session picker while a round is in flight keeps Send disabled, a forced submit starts no second round, and the held round still completes with one request per Daemon. | |
+| `bootstrap-recovery` | The regenerate path re-runs content-pack generation without re-resolving personas, and abandon returns to start with `data-reason="broken"`. The visible `#bootstrap-recovery-regen` is disabled while a regeneration is in flight and enabled again after a retryable failure. The start screen's "broken" banner is hidden once the next login reaches the game. | #380 |
 | `bootstrap-failure-bounce` | A content-pack failure after CONNECT, whether a network abort or an HTTP 200 with an error body, shows `#bootstrap-recovery` inside the game view instead of bouncing to start. | #380 |
 | `start-screen` | Start-screen boot, login, restore on refresh, cap-hit (and a provider 429 that is not one), refresh during generation, and an empty active pointer. | ADR 0011 |
 | `sessions-picker` | Picker rows for ok, broken and version-mismatch saves; load, dup and rm; the sessions icon; sticky routing; archived-build links. | ADR 0011 |
@@ -262,11 +263,12 @@ specs that assert on generation failure check `#cap-hit` themselves.
     destination already lies in another Daemon's Vista. If the layout has
     none, it moves a witness to the cell behind the actor, opposite the step.
     The destination is then two steps from the witness (`2² = 4 ≤ 4`).
-  - The spec reloads before the action round. After a fresh new game,
-    `renderGame` runs twice (once for bootstrap loading, once after
-    generation), which registers two input listeners, and the first
-    closure's `personaNamesToId` is never populated, so `page.fill` may not
-    enable `#send`. The restore path renders once.
+  - The spec reloads before the action round. It was written when each
+    `renderGame` entry registered its own input listener: after a fresh new
+    game the first entry's closure never got `personaNamesToId`, so
+    `page.fill` might not enable `#send`. The view now keeps one context and
+    one listener per page, and the reload stays because the spec is about
+    what survives it.
   - The first round dispatched after that reload is round 0, so the witness
     sees `[Round 0] You watch *<actorId> walk <direction>.`. The write-time
     fan-out appends only to witnesses, never to the actor.

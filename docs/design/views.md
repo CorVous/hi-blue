@@ -12,6 +12,15 @@ it hides the other routes' screens and shows or hides the global chrome
   viewport). The game and sessions routes therefore always un-hide it on
   entry (`revealGameRouteChrome`, `showGlobalChrome`), because either can be
   entered straight after the start route.
+- Every route hides `#endgame`, and the game route shows it again only for a
+  finished session. The endgame choices ("new daemons", "same daemons",
+  "continue") leave through `renderApp`, so a route that forgot it would
+  leave the endgame screen over the next game.
+- `#persistence-warning` is shared by the start route's reason banner and the
+  game route's save warnings. The start route hides it whenever it has no
+  reason to show, and the game route hides it on every entry before its own
+  checks run, so a banner such as "broken" does not follow the player into a
+  new game.
 - `sessions.ts` also paints the banner and topinfo itself (`paintBanner`,
   `paintTopInfo`). Without that, loading `#/sessions` directly leaves them
   empty.
@@ -84,15 +93,28 @@ it hides the other routes' screens and shows or hides the global chrome
 
 ### Structure
 
-- `renderGame` is a short entry point. Each entry builds one
-  `GameViewContext` holding the root, the composer elements, the search
-  params, the dev hooks, and the per-entry mutable state (persona lookups,
-  lockouts, `roundInFlight`, `connectionUnstable`). Top-level functions take
-  that context as a parameter, grouped by concern: bootstrap loading and
-  recovery, restore from storage, composer wiring, transcript painting,
-  round dispatch, and the endgame. State that must outlive one entry
-  (`session`, `hydratedSessionId`, `hydratedEpoch`, `gameEndHandled`) stays
-  at module level.
+- `renderGame` is a short entry point. It works on one `GameViewContext`
+  holding the root, the composer elements, the search params, the dev hooks,
+  the persona lookups and lockouts, and the round state (`roundInFlight`,
+  `connectionUnstable`). Top-level functions take that context as a
+  parameter, grouped by concern: bootstrap loading and recovery, restore
+  from storage, composer wiring, transcript painting, round dispatch, and
+  the endgame. Other state that must outlive one entry (`session`,
+  `hydratedSessionId`, `hydratedEpoch`, `gameEndHandled`) stays at module
+  level.
+- **One context per page.** The route is re-entered without a reload:
+  toggling the session picker, Escape, Load, the bootstrap handover and the
+  endgame choices all call `renderGame` again on the same persistent DOM.
+  `enterGameViewContext` therefore keeps the context in `viewCtx` and, while
+  the composer form is the same element, refreshes its per-entry fields in
+  place and keeps `roundInFlight` and `connectionUnstable`. The composer
+  `input`, `scroll` and `submit` listeners and the panel click listeners are
+  added only when the context is first created, so there is exactly one of
+  each. When each entry built a fresh context and added its own listeners, a
+  re-entry during a round (opening and closing the picker) got a context
+  whose `roundInFlight` was false: typing re-enabled Send, and a submit
+  started a second round on the same `GameSession` while the first was still
+  running. `submitRound` also returns early while `roundInFlight` is set.
 - **Dev hooks.** `__DEV__` is read once per entry, when the context picks
   `inspectorDevHooks` or `NOOP_DEV_HOOKS`. The rest of the view calls the
   hooks without testing `__DEV__`. In production builds the constant folds
@@ -102,10 +124,6 @@ it hides the other routes' screens and shows or hides the global chrome
 - Pure text logic lives outside the view: `splitMentionSegments` and
   `buildMentionRegex` in `mention-parser.ts`, and `fisherYatesShuffledCopy`
   (initiative order) in `shuffle.ts`. The view only turns segments into DOM.
-- Each entry adds its composer and form listeners to the same persistent
-  DOM, so a later entry's listeners sit beside an earlier entry's. A stale
-  submit handler is harmless in practice: whichever runs first resets the
-  composer to `*<addressee> `, and the other then finds an empty message.
 
 ### Test and dev affordances
 
@@ -179,7 +197,9 @@ it hides the other routes' screens and shows or hides the global chrome
 - **Handover.** After saving, the flow sets the module-level `session` and
   calls `renderGame` again. That second entry skips both the loading branch
   and the localStorage restore, and runs the normal set-up path, where
-  `refreshComposerState` decides whether Send is enabled.
+  `refreshComposerState` decides whether Send is enabled. A failed save's
+  warning is shown after that entry, because each entry first hides
+  `#persistence-warning`.
 - **Recovery.** A timeout shows "stuck" copy and any other failure shows
   "broken" copy. Regenerate calls `restartContentPacks()`, which keeps the
   cached personas. If the recovery DOM is missing, the flow clears the
@@ -243,7 +263,7 @@ it hides the other routes' screens and shows or hides the global chrome
   finishes that daemon's turn, including any retry (`onAiTurnComplete`). The
   coordinator awaits AIs one at a time in initiative order, so spinners stop
   one by one, as they did before #254, and the retry window is still
-  covered. All remaining spinners are removed in `catch` and `finally`.
+  covered. All remaining spinners are removed in `finally`.
 - **Events the view skips.**
   - `ai_start`: spinners are removed through `onAiTurnComplete`, and panel
     content comes from `message` events.
@@ -266,7 +286,9 @@ it hides the other routes' screens and shows or hides the global chrome
   events loop the final state is saved, topinfo is repainted so the turn
   counter shows the final round, and then `enterEndgame` runs with that state.
   It captures the state for the endgame buttons and sets `session` to null, so
-  any later submit does nothing.
+  any later submit does nothing. It also disables the prompt, and
+  `mountSessionView` enables it again on every entry, so the prompt works in
+  the game an endgame choice leads to.
 - **The endgame screen (#576).** The subtitle comes from `outcome`: a win says
   "You have completed the objectives." and the budget-exhausted ending says
   "You have hit your budget." Both lines are the product owner's wording. The

@@ -188,15 +188,16 @@ let gameEndHandled = false;
 let session: GameSession | null = null;
 let hydratedSessionId: string | null = null;
 let hydratedEpoch: number = 1;
+let viewCtx: GameViewContext | null = null;
 
 export function renderGame(
 	root: HTMLElement,
 	opts?: RenderOpts,
 ): Promise<void> {
-	const ctx = createGameViewContext(root, opts);
+	const ctx = enterGameViewContext(root, opts);
 	if (!ctx) return Promise.resolve();
+	hidePersistenceWarning(ctx.persistenceWarningEl);
 	dropSessionIfActivePointerMoved();
-	wireComposerInput(ctx);
 	if (!session) {
 		const detour = enterWithoutCachedSession(ctx);
 		if (detour) return detour;
@@ -237,6 +238,25 @@ export function applyTestAffordances(
 	};
 
 	return gameSession;
+}
+
+function enterGameViewContext(
+	root: HTMLElement,
+	opts: RenderOpts | undefined,
+): GameViewContext | null {
+	const fresh = createGameViewContext(root, opts);
+	if (!fresh) return null;
+	const previous = viewCtx;
+	if (previous && previous.form === fresh.form) {
+		Object.assign(previous, fresh, {
+			roundInFlight: previous.roundInFlight,
+			connectionUnstable: previous.connectionUnstable,
+		});
+		return previous;
+	}
+	viewCtx = fresh;
+	wireViewListeners(fresh);
+	return fresh;
 }
 
 function createGameViewContext(
@@ -425,6 +445,10 @@ function isLocalStorageAvailable(): boolean {
 	}
 }
 
+function hidePersistenceWarning(warningEl: HTMLElement | null): void {
+	warningEl?.setAttribute("hidden", "");
+}
+
 function showPersistenceWarning(
 	warningEl: HTMLElement | null,
 	reason: string,
@@ -529,24 +553,19 @@ function mountSessionView(ctx: GameViewContext): void {
 	if (session !== null) session = adoptSession(ctx, session);
 
 	revealGameRouteChrome(doc);
+	ctx.promptInput.disabled = false;
 
-	const aiIdList: AiId[] =
-		session !== null ? Object.keys(session.getState().personas) : [];
 	if (session !== null) {
-		paintSessionPanels(doc, session.getState(), aiIdList);
-		paintHandlesPlaceholder(ctx.promptInput, session.getState().personas);
+		const state = session.getState();
+		paintSessionPanels(doc, state, Object.keys(state.personas));
+		paintHandlesPlaceholder(ctx.promptInput, state.personas);
 	}
 
 	refreshComposerState(ctx);
 	paintBannerOnce(doc);
 	refreshTopInfo(ctx);
-	registerPanelClickHandlers(ctx, aiIdList);
 
 	if (session !== null) ctx.dev.showSession(ctx.root, session);
-
-	ctx.form.addEventListener("submit", (evt) => {
-		void submitRound(ctx, evt);
-	});
 
 	const restoredState = session?.getState();
 	if (restoredState?.isComplete) {
@@ -574,7 +593,7 @@ function adoptSession(
 }
 
 function revealGameRouteChrome(doc: Document): void {
-	for (const selector of ["#start-screen", "#sessions-screen"]) {
+	for (const selector of ["#start-screen", "#sessions-screen", "#endgame"]) {
 		doc.querySelector<HTMLElement>(selector)?.setAttribute("hidden", "");
 	}
 	for (const selector of [
@@ -707,9 +726,15 @@ function setStageLoadState(doc: Document, state: LoadState): void {
 	}
 }
 
-function wireComposerInput(ctx: GameViewContext): void {
+function wireViewListeners(ctx: GameViewContext): void {
 	ctx.promptInput.addEventListener("input", () => refreshComposerState(ctx));
 	ctx.promptInput.addEventListener("scroll", () => syncOverlayScroll(ctx));
+	ctx.form.addEventListener("submit", (evt) => {
+		void submitRound(ctx, evt);
+	});
+	for (const panel of ctx.doc.querySelectorAll<HTMLElement>(".ai-panel")) {
+		panel.addEventListener("click", () => addressPanel(ctx, panel));
+	}
 }
 
 function syncOverlayScroll(ctx: GameViewContext): void {
@@ -827,17 +852,6 @@ function refreshPromptTarget(
 		promptTargetEl.style.setProperty("--target-color", persona.color);
 	} else {
 		promptTargetEl.style.removeProperty("--target-color");
-	}
-}
-
-function registerPanelClickHandlers(
-	ctx: GameViewContext,
-	aiIds: readonly AiId[],
-): void {
-	for (const aiId of aiIds) {
-		const panel = findPanel(ctx.doc, aiId);
-		if (!panel) continue;
-		panel.addEventListener("click", () => addressPanel(ctx, panel));
 	}
 }
 
@@ -979,6 +993,7 @@ function setChatLockout(
 
 async function submitRound(ctx: GameViewContext, evt: Event): Promise<void> {
 	evt.preventDefault();
+	if (ctx.roundInFlight) return;
 	const activeSession = session;
 	if (!activeSession || !ctx.personaLookups) return;
 
@@ -998,7 +1013,6 @@ async function submitRound(ctx: GameViewContext, evt: Event): Promise<void> {
 			outcome,
 		});
 	} catch (err) {
-		spinners.stripAll();
 		reportRoundFailure(ctx, err);
 	} finally {
 		spinners.stripAll();
@@ -1705,9 +1719,6 @@ function handOverBootstrappedSession(
 	}
 
 	const saveResult = saveActiveSession(built.getState());
-	if (!saveResult.ok) {
-		showPersistenceWarning(ctx.persistenceWarningEl, saveResult.reason);
-	}
 	clearPendingBootstrap();
 
 	removeAllPanelSpinners(doc);
@@ -1719,7 +1730,11 @@ function handOverBootstrappedSession(
 
 	session = built;
 	hydratedSessionId = getActiveSessionId();
-	return renderGame(ctx.root, ctx.opts);
+	const rendered = renderGame(ctx.root, ctx.opts);
+	if (!saveResult.ok) {
+		showPersistenceWarning(ctx.persistenceWarningEl, saveResult.reason);
+	}
+	return rendered;
 }
 
 function dismissStaleBootstrapRecovery(doc: Document): void {

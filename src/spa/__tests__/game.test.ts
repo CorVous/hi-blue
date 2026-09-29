@@ -31,6 +31,7 @@ vi.mock("../../content/content-pack-generator", () => ({
 const IDENTITY_SHUFFLE_RANDOM = 0.9;
 
 const INDEX_BODY_HTML = `
+<div id="stage"></div>
 <main>
   <div id="topinfo">
     <span id="topinfo-left"></span>
@@ -105,6 +106,12 @@ function getEl<T extends HTMLElement>(selector: string): T {
 	const el = document.querySelector<T>(selector);
 	if (!el) throw new Error(`Element not found: ${selector}`);
 	return el;
+}
+
+async function waitForRoundToSettle(): Promise<void> {
+	await vi.waitFor(() =>
+		expect(getEl("#stage").hasAttribute("data-round-in-flight")).toBe(false),
+	);
 }
 
 function setSearch(query: string): void {
@@ -516,20 +523,6 @@ describe("renderGame (game route — three-AI)", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
-
-		promptInput.value = "*Sage two";
-		promptInput.dispatchEvent(new Event("input"));
-		form.dispatchEvent(
-			new Event("submit", { bubbles: true, cancelable: true }),
-		);
-		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
-
-		promptInput.value = "*Sage three";
-		promptInput.dispatchEvent(new Event("input"));
-		form.dispatchEvent(
-			new Event("submit", { bubbles: true, cancelable: true }),
-		);
 		const panelsEl = document.querySelector<HTMLElement>("#panels");
 		await vi.waitFor(() => expect(panelsEl?.hidden).toBe(true));
 
@@ -577,20 +570,6 @@ describe("renderGame (game route — three-AI)", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
-
-		promptInput.value = "*Sage two";
-		promptInput.dispatchEvent(new Event("input"));
-		form.dispatchEvent(
-			new Event("submit", { bubbles: true, cancelable: true }),
-		);
-		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
-
-		promptInput.value = "*Sage three";
-		promptInput.dispatchEvent(new Event("input"));
-		form.dispatchEvent(
-			new Event("submit", { bubbles: true, cancelable: true }),
-		);
 
 		const endgameEl2 = getEl<HTMLElement>("#endgame");
 		await vi.waitFor(() =>
@@ -626,20 +605,6 @@ describe("renderGame (game route — three-AI)", () => {
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
 		promptInput.value = "*Sage one";
-		promptInput.dispatchEvent(new Event("input"));
-		form.dispatchEvent(
-			new Event("submit", { bubbles: true, cancelable: true }),
-		);
-		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
-
-		promptInput.value = "*Sage two";
-		promptInput.dispatchEvent(new Event("input"));
-		form.dispatchEvent(
-			new Event("submit", { bubbles: true, cancelable: true }),
-		);
-		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
-
-		promptInput.value = "*Sage three";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
@@ -683,20 +648,6 @@ describe("renderGame (game route — three-AI)", () => {
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
 		promptInput.value = "*Sage one";
-		promptInput.dispatchEvent(new Event("input"));
-		form.dispatchEvent(
-			new Event("submit", { bubbles: true, cancelable: true }),
-		);
-		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
-
-		promptInput.value = "*Sage two";
-		promptInput.dispatchEvent(new Event("input"));
-		form.dispatchEvent(
-			new Event("submit", { bubbles: true, cancelable: true }),
-		);
-		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
-
-		promptInput.value = "*Sage three";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
@@ -1070,6 +1021,7 @@ describe("renderGame — chat_lockout event", () => {
 		const sendBtn = getEl<HTMLButtonElement>("#send");
 
 		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
+		await waitForRoundToSettle();
 
 		const redPanel = document.querySelector<HTMLElement>(
 			'.ai-panel[data-ai="red"]',
@@ -1206,6 +1158,7 @@ describe("renderGame — mention-based addressing", () => {
 		);
 
 		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
+		await waitForRoundToSettle();
 
 		promptInput.value = "*Sage hi";
 		promptInput.dispatchEvent(new Event("input"));
@@ -1405,9 +1358,61 @@ describe("renderGame — addressee persistence after send", () => {
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
+		await waitForRoundToSettle();
 		expect(promptInput.selectionStart).toBe(6);
 		expect(promptInput.selectionEnd).toBe(6);
 		expect(sendBtn.disabled).toBe(true);
+	});
+
+	it("re-entering the game route mid-round keeps Send disabled and ignores a second submit", async () => {
+		let releaseFirstCall: () => void = () => undefined;
+		const firstCallHeld = new Promise<void>((resolve) => {
+			releaseFirstCall = resolve;
+		});
+		const mockFetch = vi.fn(async () => {
+			if (mockFetch.mock.calls.length === 1) await firstCallHeld;
+			return {
+				ok: true,
+				status: 200,
+				statusText: "OK",
+				body: makePassSseStream(),
+			};
+		});
+		vi.stubGlobal("fetch", mockFetch);
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
+
+		vi.resetModules();
+		const { renderGame } = await import("../views/game.js");
+		const root = getEl<HTMLElement>("main");
+		await renderGame(root);
+
+		const form = getEl<HTMLFormElement>("#composer");
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		const sendBtn = getEl<HTMLButtonElement>("#send");
+
+		promptInput.value = "*Sage hello";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+
+		await renderGame(root);
+		promptInput.value = "*Sage again";
+		promptInput.dispatchEvent(new Event("input"));
+		expect(sendBtn.disabled).toBe(true);
+
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		expect(promptInput.value).toBe("*Sage again");
+
+		releaseFirstCall();
+		await waitForRoundToSettle();
+		expect(mockFetch).toHaveBeenCalledTimes(3);
+		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
+		expect(greenTranscript.textContent).not.toContain("> again");
+		expect(sendBtn.disabled).toBe(false);
 	});
 
 	it("typing body text after a successful send re-enables Send", async () => {
@@ -1459,6 +1464,7 @@ describe("renderGame — addressee persistence after send", () => {
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
+		await waitForRoundToSettle();
 
 		promptInput.value = "*Sage how are you";
 		promptInput.dispatchEvent(new Event("input"));
@@ -1466,6 +1472,7 @@ describe("renderGame — addressee persistence after send", () => {
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
+		await waitForRoundToSettle();
 
 		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
 		expect(greenTranscript.textContent).toContain("> hello");
@@ -1490,6 +1497,7 @@ describe("renderGame — addressee persistence after send", () => {
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
+		await waitForRoundToSettle();
 	});
 
 	it("locked-AI at round-completion: mention prefix persists but Send stays disabled", async () => {
